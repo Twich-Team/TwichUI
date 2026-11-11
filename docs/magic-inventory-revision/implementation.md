@@ -31,7 +31,7 @@ Page reset is disabled during a draft and remains available in the manager, dist
 | Movement | Existing `flow`; not applicable to keep/never/mail or guild design rules |
 | Keep field and steppers | Draft `keep`, bounded by the existing MAX_KEEP; zero retains its original meaning |
 | Exclusions and limits | Existing `exclude`, keep and guild stack/design controls |
-| More item filters | Original category/quality/equipment/binding/inclusion editor, preserving advanced capabilities |
+| Item filters | Focused Filters / Categories / Also include panel; original schema and all supported predicates preserved |
 | Review | Existing CleanRule/Problem/Sentence; incomplete rules can save disabled and cannot be enabled |
 
 The main item and exclusion wells show the first sorted identity by name, artwork and remove action, with a count of
@@ -211,3 +211,91 @@ disclosures; narrow review flows below the two-column grid. Native font metrics,
 and masks, pointer/keyboard focus and dragging, combat, reload/profile persistence, and real bank/mail/guild reviews
 remain **not real-client-tested**. No actual inventory action occurred. Status remains Substantially modernized,
 not Verified; no pixel-identical or real-client visual acceptance is claimed.
+
+## Focused item selection editor — 2026-11-11
+
+Supersedes the expanding item-form workflow and its scrolled-category poses above. **Item filters** now opens a
+bounded panel inside the existing settings body viewport. The builder remains behind it, its main card and review
+update with the same draft, and its scroll position/height are unchanged. The editor owns only transient tab/search
+state and pooled controls; it is not another settings window or saved configuration layer.
+
+- **Filters:** quality uses six illustrated tiles: Any plus exactly the five supported qualities (0–4). Qualities are
+  multi-select; Any assigns the existing empty quality set. Equipment selects `any` / `equipment` / `other`; binding
+  selects `any` / `boe` / `nobind`. Checks and painted selection relief identify selected choices. BoE help states the
+  existing requirement that the item be known unbound.
+- **Categories:** searchable, illustrated multi-select tiles; search never drops chosen categories. Two-column rows
+  and an independent scroll region replace the long category/filter grid below the builder.
+- **Also include:** named item rows, removable identities, bag selection and ID/link input. The explanation states
+  that these entries bypass ordinary filters. Unresolved identities remain visible by ID. The primary card uses this
+  same existing set for specific-item rules and explicitly labels the bypass behavior when filters are present.
+- **Never include:** remains in What should stay and retains precedence over explicit inclusions. Global protection
+  lists and plan-level safeguards remain distinct. No predicate or precedence change, migration or new stored field.
+- **Done/close/Escape:** retain the parent rule draft, with no persistence. **Save rule / Cancel rule:** delegate to
+  the builder's canonical actions. Escape goes through the existing settings proxy, closes filters before Settings,
+  and leaves an open bag picker to its own close path. Page hide/profile application clean up the focused surface.
+
+The main card now offers Categories and Specific items entry points, concise active quality/equipment/binding labels,
+named selected items and explicit inclusion guidance. The summary headline names a single item where accurate and
+short; long names remain bounded with full-name help. Manager names use a stronger 15-unit serif treatment, and the
+grip uses six aligned dots; row density, chips, filtering and actual priorities remain intact.
+
+All artwork is reused: canonical SettingsCraft cards/segments/buttons, reagent, pack, shield, scroll, stone and check
+illustrations. Quality/binding/category help reuses `SettingsMaterial.ContextTip`, bound once per control. No generated or new
+runtime assets were necessary. The central Escape change is limited to this editor and its existing bag picker.
+
+### Verification and visual corrections
+
+**Unit-tested:** `test_magic_inventory_settings.lua` covers multi-quality/Any, exclusive choices, category search,
+Done/reopen, parent Cancel and Save, unresolved IDs, inclusion/exclusion precedence and an untouched legacy-shaped
+rule's complete value round trip. `test_settings_window.lua` covers Escape ordering and deferral to the picker.
+`./tests/run.sh`: **189 passed, 0 failed** during implementation; focused UI tests and syntax checks rerun after final
+refinements. Existing defaults/settings contract, engine/plan/run and profile tests passed. No gameplay transaction
+or live player SavedVariables were used.
+
+**Simulator-tested:** the existing settings scenario now exercises the actual focused controls and canonical
+Save/Cancel/reopen. Comparisons use a local recursive value digest, including numeric keys; the generic lab digest
+was shallow and could compare table addresses or miss array changes. Fixtures retain explicit inclusions and exclusions.
+Checks establish unchanged parent position, selected indicators, category no-result feedback, retained item sets,
+saved-data round trip, Escape cleanup, nested picker ownership and constrained scroll bounds. Input remains handler-level.
+
+**Screenshot-reviewed:** every capture in this table was opened; paths are relative to `../wow-ui-sim-lab/artifacts/`.
+These are current-state captures, not approved golden baselines; all remain untracked and out of production packages.
+
+| Folder (`settings-20261111-…`), file `magicInventory.png` | Pose | Checks |
+|---|---|---|
+| `114915` → `115048` | First popup review corrected inclusion rows missing BackdropTemplate, layering bleed-through, and shallow round-trip assertions | First failed; corrected 57 passed |
+| `115406` | Manager, selected/context, enabled/disabled; compared with approved manager mockup | 31 |
+| `115421` | 40-rule constrained manager, long title and compact metadata | 142 |
+| `115438` | Main builder without advanced filters, selected specific item; compared with approved builder | 58 |
+| `115454` | Focused filter editor with several selections | 59 |
+| `115511` | Main builder with active filters and a separate named exclusion | 59 |
+| `115527` | Constrained explicit-inclusion tab, long item name | 59 |
+| `115543` | Incomplete mail rule, honest readiness and disabled enablement | 57 |
+| `115616` | Existing bag picker above the focused editor | 61 |
+| `115710` | Final constrained category editor, search and independent scrolling | 61 |
+| `120336` | Category tiles retain the game-provided class group as a secondary caption; final constrained layout | 61 |
+| `115743` | Main builder with long selected name; headline fallback prevents overflow | 61 |
+| `115726` → `115854` | End-scroll review caught blank content after tab switching; native range included inactive pooled controls. Bound input/bar to the active content height and reused shared wheel motion. Final screenshot shows equipment/binding and fixed footer | Final 63 passed |
+| `120424` | Final constrained end-scroll regression; editor remains open during quality changes and Done restores a nonzero parent scroll position | 64 |
+| `115759` → `120031` | Cramped native quality tooltip replaced with shared bounded art-backed context help | Final 61 passed |
+
+The newly exposed end-scroll defect is fixed in page code, not in the simulator. Scroll hooks are installed once;
+wheel motion is finite and stops on hide. No new gameplay events, timers or polling were introduced. No additional
+diagnostic scope was added: this is a small, user-driven settings composition using the existing coalesced redraw and
+control pool, with no recurring work beyond the shared finite wheel animation.
+
+Focused reruns (the `data` values are Lua strings, following the existing runner convention):
+
+```sh
+SIMLAB_SETTINGS_FILLED=true SIMLAB_SETTINGS_CATEGORIES=true bash tools/simlab/settings.sh magicInventory
+SIMLAB_SETTINGS_FILLED=true SIMLAB_SETTINGS_EDITOR='"existing"' SIMLAB_SETTINGS_TASK=5 SIMLAB_SETTINGS_DATA='"filters"' bash tools/simlab/settings.sh magicInventory
+# Substitute active, include, long, popup or hover for the data pose above.
+SIMLAB_SETTINGS_FILLED=true SIMLAB_SETTINGS_EDITOR='"existing"' SIMLAB_SETTINGS_TASK=5 SIMLAB_SETTINGS_CATEGORIES=true SIMLAB_SETTINGS_POSE=narrow bash tools/simlab/settings.sh magicInventory
+SIMLAB_SETTINGS_FILLED=true SIMLAB_SETTINGS_EDITOR='"existing"' SIMLAB_SETTINGS_TASK=5 SIMLAB_SETTINGS_DATA='"advanced"' SIMLAB_SETTINGS_POSE=narrow bash tools/simlab/settings.sh magicInventory
+SIMLAB_SETTINGS_FILLED=true SIMLAB_SETTINGS_EDITOR=true bash tools/simlab/settings.sh magicInventory
+```
+
+Remaining acceptance: native fonts/localization and item/category names, real pointer/keyboard and scrollbar hit
+regions, nested picker/Escape behavior, reload/profile persistence and actual inventory review still need WoW Forever.
+The standalone bag picker retains its existing distinct FrameLook treatment; it was not broadly redesigned here.
+No real-client visual acceptance is claimed. Magic Inventory remains **Substantially modernized**, not Verified.

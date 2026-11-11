@@ -2,6 +2,15 @@
 local R = TwichUI
 local params = SIMLAB_PARAMS or {}
 local key = params.page or "overview"
+-- Nested rule fixtures need value comparison, including numeric keys; Lab.Digest is intentionally shallow.
+local function RuleDigest(value)
+    if type(value) ~= "table" then return type(value) .. ":" .. tostring(value) end
+    local keys, parts = {}, {}
+    for k in pairs(value) do keys[#keys + 1] = k end
+    table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+    for _, k in ipairs(keys) do parts[#parts + 1] = RuleDigest(k) .. "=" .. RuleDigest(value[k]) end
+    return "{" .. table.concat(parts, ";") .. "}"
+end
 A_Admin.SetManualClock(GetTime())
 Lab.Solo()
 UnitClass = function() return "Mage", "MAGE" end
@@ -195,7 +204,7 @@ Lab.Step("disclosures and navigation", function()
         if params.task then page.SetTask(({ "rules", "destinations", "guild", "protected" })[params.task] or "rules"); Lab.Settle(.2) end
         if params.editor then
             if params.editor == "existing" then
-                R.MagicInventory.SaveRule({ name = "Bank supply rule", kind = "bank", flow = "balance", keep = 5, include = { [2589] = true }, enabled = false })
+                R.MagicInventory.SaveRule({ name = "Bank supply rule", kind = "bank", flow = "balance", keep = 5, include = { [2589] = true }, exclude = { [2447] = true }, enabled = false })
                 Lab.Settle(.2)
                 page.Control("rule" .. #R.MagicInventory.Rules() .. "edit"):Click()
             else page.NewFromTemplate("cloth") end
@@ -206,15 +215,16 @@ Lab.Step("disclosures and navigation", function()
                 local originalFacts = R.MagicInventory.ItemFacts
                 R.MagicInventory.ItemFacts = function(id)
                     local facts = originalFacts(id)
-                    if id ~= 2589 then return facts end
+                    if id ~= 2589 and id ~= 2447 then return facts end
                     local copy = {}; for k, v in pairs(facts or {}) do copy[k] = v end
-                    copy.id, copy.name, copy.icon = id, "Linen Cloth", R.PATH .. [[media\npcs\cloth-bolts]]
+                    copy.id, copy.name, copy.icon = id, (params.data == "include" or params.data == "long") and "Linen Cloth for expedition supplies with a very long descriptive item name" or "Linen Cloth", R.PATH .. [[media\npcs\cloth-bolts]]
+                    if id == 2447 then copy.name, copy.icon = "Peacebloom", R.PATH .. [[media\icons\magicReagents-small]] end
                     return copy
                 end
                 page.QueueRefresh(); Lab.Settle(.2)
             end
             local draft, mi = page.Editing(), R.MagicInventory
-            local saved = Lab.Digest(mi.Rules())
+            local saved = RuleDigest(mi.Rules())
             local kind, flow, dest, keep = draft.kind, draft.flow, draft.dest, draft.keep
             for _, choice in ipairs(mi.KIND_ORDER) do
                 page.Control("destinationChoice" .. choice):Click(); Lab.Settle(.1)
@@ -237,24 +247,93 @@ Lab.Step("disclosures and navigation", function()
             Lab.Check("construct", "banner owns its headline", page.Control("summaryBanner"), page.Control("builderSummary"):GetParent())
             Lab.Check("construct", "readiness owns its label", page.Control("reviewStatusFace"), page.Control("builderReady"):GetParent())
             if params.task == 5 then
-                Lab.Check("state", "named item is visible", "Linen Cloth", page.Control("selectedIncludename"):GetText())
+                Lab.Check("state", "named item is visible", true, page.Control("selectedIncludename"):GetText():find("Linen Cloth", 1, true) ~= nil)
                 page.Control("selectedIncluderemove"):Click(); Lab.Settle(.1)
                 Lab.Check("interact", "remove selected item from draft", nil, next(draft.include))
                 draft.include[2589] = true; page.QueueRefresh(); Lab.Settle(.1)
             end
-            Lab.Check("state", "builder choices never write saved rules", saved, Lab.Digest(mi.Rules()))
+            Lab.Check("state", "builder choices never write saved rules", saved, RuleDigest(mi.Rules()))
+            if params.narrow then scroll:SetVerticalScroll(36); Lab.Settle(.1) end
+            local builderHeight, parentScroll = page.Height(), scroll:GetVerticalScroll()
             page.Control("moreItemFilters"):Click(); Lab.Settle(.2)
-            local choose = assert(page.Control("e1chooseCats"))
-            choose:Click(); Lab.Settle(.2)
-            local cats = R.MagicInventory.Categories()
-            for i = 1, #cats - 3 do
-                local label, nextRow = page.Control("e1cat" .. i .. "t"), page.Control("e1cat" .. (i + 3))
-                Lab.Check("construct", "category rows do not overlap " .. i, true, label:GetBottom() >= nextRow:GetTop() + 5)
+            Lab.Check("construct", "focused filter editor opens", true, page.Control("filterEditor"):IsShown())
+            Lab.Check("state", "filters do not expand builder", builderHeight, page.Height())
+            local inclusions, exclusions = RuleDigest(draft.include), RuleDigest(draft.exclude)
+            local originalQuality, originalEquip, originalBind, originalCats = {}, draft.equip, draft.bind, {}
+            for q, v in pairs(draft.qualities) do originalQuality[q] = v end
+            for i, cat in ipairs(draft.cats) do originalCats[i] = cat end
+            page.Control("e1q1"):Click(); Lab.Settle(.1)
+            page.Control("e1q5"):Click(); page.Control("e1q6"):Click(); Lab.Settle(.2)
+            Lab.Check("interact", "multiple qualities selected", true, draft.qualities[3] and draft.qualities[4])
+            Lab.Check("state", "filter editing stays open", true, page.Control("filterEditor"):IsShown())
+            page.Control("e1eq2"):Click(); page.Control("e1b2"):Click(); Lab.Settle(.2)
+            Lab.Check("state", "exclusive equipment value", "equipment", draft.equip)
+            Lab.Check("state", "exclusive binding value", "boe", draft.bind)
+            page.Control("e1q1"):Click(); Lab.Settle(.1)
+            Lab.Check("interact", "Any quality clears quality only", true, next(draft.qualities) == nil and draft.equip == "equipment" and draft.bind == "boe")
+            page.Control("e1q5"):Click(); page.Control("e1q6"):Click(); page.Control("e1eq3"):Click(); page.Control("e1b3"):Click(); Lab.Settle(.2)
+            Lab.Check("state", "quality selection has a check indicator", true, page.Control("e1q5mark"):IsShown())
+            Lab.Check("state", "main card summarizes filters", true, page.Control("activeItemFilters"):GetText():find("Rare", 1, true) ~= nil)
+            page.Control("filterTabcategories"):Click(); Lab.Settle(.2)
+            local selectedCats = RuleDigest(draft.cats)
+            local search = page.Control("filterCategorySearch")
+            search:SetText("zzzznoexistingcategory"); Lab.Settle(.1)
+            Lab.Check("interact", "category search has empty feedback", true, page.Control("filterNoCategories"):IsShown())
+            Lab.Check("state", "category search preserves choices", selectedCats, RuleDigest(draft.cats))
+            search:SetText(""); Lab.Settle(.1)
+            page.Control("e1cat1"):Click(); Lab.Settle(.1)
+            Lab.Check("interact", "category tile updates draft", true, selectedCats ~= RuleDigest(draft.cats))
+            page.Control("e1cat1"):Click(); Lab.Settle(.1)
+            Lab.Check("state", "category toggling restores choices", selectedCats, RuleDigest(draft.cats))
+            Lab.Check("construct", "category list can scroll", true, page.Control("filterScroll"):GetVerticalScrollRange() > 0)
+            page.Control("filterTabinclude"):Click(); Lab.Settle(.1)
+            Lab.Check("state", "filter changes preserve explicit inclusions", inclusions, RuleDigest(draft.include))
+            Lab.Check("state", "filter changes preserve explicit exclusions", exclusions, RuleDigest(draft.exclude))
+            page.Control("filterDone"):Click(); Lab.Settle(.2)
+            Lab.Check("interact", "Done returns to builder", false, page.Control("filterEditor"):IsShown())
+            Lab.Check("state", "Done restores parent position", parentScroll, scroll:GetVerticalScroll())
+            Lab.Check("state", "filter changes are unsaved", saved, RuleDigest(mi.Rules()))
+            page.OpenItemFilters("filters"); Lab.Settle(.1)
+            TwichUISettingsEsc:Hide(); Lab.Settle(.1)
+            Lab.Check("interact", "Escape closes filters before settings", true, UI.IsShown() and not page.Control("filterEditor"):IsShown() and page.Editing() ~= nil)
+            if params.data ~= "active" and params.data ~= "filters" and params.data ~= "hover" and params.data ~= "advanced" then
+                draft.qualities, draft.equip, draft.bind, draft.cats = originalQuality, originalEquip, originalBind, originalCats
+                page.QueueRefresh(); Lab.Settle(.1)
             end
-            choose:Click(); Lab.Settle(.2)
-            Lab.Check("state", "category disclosure retains draft", true, page.Editing() ~= nil)
-            if params.categories then choose:Click(); Lab.Settle(.2)
-            else page.Control("moreItemFilters"):Click(); Lab.Settle(.2) end
+            -- Save/Cancel/reopen through actual builder controls, with disposable rules only.
+            local oldId = draft.id
+            page.OpenItemFilters("filters"); Lab.Settle(.1)
+            page.Control("filterSaveRule"):Click(); Lab.Settle(.2)
+            Lab.Check("interact", "filter Save delegates to rule Save", nil, page.Editing())
+            local savedRule = oldId and mi.Rule(oldId) or mi.Rules()[#mi.Rules()]
+            local index
+            for i, rule in ipairs(mi.Rules()) do if rule.id == savedRule.id then index = i end end
+            page.Control("rule" .. index .. "edit"):Click(); Lab.Settle(.2)
+            Lab.Check("state", "saved filters round trip", RuleDigest(savedRule), RuleDigest(page.Editing()))
+            local persisted = RuleDigest(mi.Rules())
+            page.OpenItemFilters("filters"); Lab.Settle(.1)
+            page.Control("e1q1"):Click(); page.Control("e1eq1"):Click(); Lab.Settle(.1)
+            page.Control("filterCancelRule"):Click(); Lab.Settle(.2)
+            Lab.Check("state", "Cancel discards filter draft", persisted, RuleDigest(mi.Rules()))
+            page.Control("rule" .. index .. "edit"):Click(); Lab.Settle(.2)
+            Lab.Check("state", "reopen after Cancel retains saved criteria", RuleDigest(savedRule), RuleDigest(page.Editing()))
+            if params.categories or params.data == "categories" then page.OpenItemFilters("categories")
+            elseif params.data == "include" or params.data == "popup" then page.OpenItemFilters("include")
+            elseif params.data == "filters" or params.data == "hover" or params.data == "advanced" then page.OpenItemFilters("filters") end
+            Lab.Settle(.2)
+            if params.narrow and params.data == "advanced" then
+                local inner = page.Control("filterScroll")
+                inner:SetVerticalScroll(inner:GetVerticalScrollRange()); Lab.Settle(.1)
+                Lab.Check("interact", "narrow filter contents scroll", true, inner:GetVerticalScroll() > 0)
+                Lab.Check("state", "narrow filter end matches active content", inner.content:GetHeight() - inner:GetHeight(), inner:GetVerticalScroll())
+            end
+            if params.data == "popup" then
+                page.Control("e1incPick"):Click(); Lab.Settle(.2)
+                Lab.Check("interact", "bag picker opens from filters", true, mi.Picker.IsShown())
+                Lab.Check("state", "Escape defers to bag picker", false, TwichUISettingsEsc:IsShown())
+            end
+            if params.data == "hover" then local b = page.Control("e1q5"); local enter = b:GetScript("OnEnter"); if enter then enter(b) end end
+
         end
     elseif params.editor and key == "chatCleanRules" then
         R.ChatCleanRulesPage.Open(nil)
@@ -273,15 +352,6 @@ Lab.Step("disclosures and navigation", function()
     Lab.Settle(2.6)
     scroll:SetVerticalScroll(0)
     Lab.Settle(.2)
-    if key == "magicInventory" and params.editor and params.data == "advanced" then
-        local label = R.MagicInventoryPage.Control("e1cats")
-        local target = math.min(scroll:GetVerticalScrollRange(), scroll:GetTop() - label:GetTop())
-        scroll:SetVerticalScroll(target)
-        Lab.Settle(.2)
-        -- Bounds remain in content coordinates after scrolling here. Visibility is screenshot-reviewed,
-        -- not asserted from those bounds; this check establishes only the requested scroll state.
-        Lab.Check("interact", "advanced catalog scroll pose", target, scroll:GetVerticalScroll())
-    end
     if params.search then
         UI.Frame().craftElements.search:SetText("sound")
         Lab.Settle(.3)
@@ -460,7 +530,7 @@ end
 if key == "magicInventory" and not params.editor then
     Lab.Step("rule search and draft safety", function()
         local page, mi = R.MagicInventoryPage, R.MagicInventory
-        local before = Lab.Digest(mi.Rules())
+        local before = RuleDigest(mi.Rules())
         for i = 1, #mi.Rules() do
             local label, badge = page.Control("rule" .. i .. "action"), page.Control("rule" .. i .. "actionbadge")
             Lab.Check("construct", "behavior text above badge " .. i, badge, label:GetParent())
@@ -484,11 +554,11 @@ if key == "magicInventory" and not params.editor then
             Lab.Check("state", "filtered reordering refused", false, page.Drag.Active())
             find:SetText(""); Lab.Settle(.3)
         end
-        Lab.Check("state", "search and filter preserve priority", before, Lab.Digest(mi.Rules()))
+        Lab.Check("state", "search and filter preserve priority", before, RuleDigest(mi.Rules()))
         page.NewFromTemplate("custom"); Lab.Settle(.3)
         page.Control("eName"):SetText("Unsaved draft")
         page.Control("eCancel"):Click(); Lab.Settle(.3)
-        Lab.Check("state", "cancel is transactional", before, Lab.Digest(mi.Rules()))
+        Lab.Check("state", "cancel is transactional", before, RuleDigest(mi.Rules()))
         if #mi.Rules() > 0 and params.categories then
             page.Control("rule1edit"):Click(); Lab.Settle(.2)
             page.Control("eCancel"):Click(); Lab.Settle(.2)
@@ -502,7 +572,7 @@ if key == "magicInventory" and not params.editor then
             GetCursorPosition = function() return (row:GetLeft() + 30) * scale, (row:GetTop() - 20) * scale end
             page.StartRuleDrag(row); Lab.Settle(.1)
             Lab.Check("interact", "unfiltered drag starts", true, page.Drag.Active())
-            Lab.Check("state", "drag picture does not reorder", before, Lab.Digest(mi.Rules()))
+            Lab.Check("state", "drag picture does not reorder", before, RuleDigest(mi.Rules()))
         end
     end)
 end

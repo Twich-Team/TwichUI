@@ -982,6 +982,16 @@ assert(Wg.MenuShown(), "the list opens")
 assert(PressEsc() and not Wg.MenuShown() and win.shown, "Esc puts the list away and leaves the window")
 c.ColorPickerFrame = Fake("Frame")
 assert(PressEsc() and not c.ColorPickerFrame:IsShown() and win.shown, "with the color picker open, Esc closes the picker only")
+do
+  local originalPage, originalMI = R.MagicInventoryPage, R.MagicInventory
+  local focused, picker = true, false
+  R.MagicInventoryPage = { CloseItemFilters = function() if focused then focused = false; return true end return false end }
+  R.MagicInventory = { Picker = { IsShown = function() return picker end } }
+  assert(PressEsc() and not focused and win.shown, "Escape closes the focused item editor before its parent settings window")
+  picker = true
+  assert(not PressEsc() and win.shown, "the settings Escape proxy leaves a native bag picker to its own close path")
+  R.MagicInventoryPage, R.MagicInventory = originalPage, originalMI
+end
 local closed = 0
 R.OnSettingsClosed(function() closed = closed + 1 end)
 assert(PressEsc() and not win.shown and closed == 1, "then the window, and its previews are told")

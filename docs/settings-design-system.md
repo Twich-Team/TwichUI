@@ -164,3 +164,13 @@ rows), a 64-unit illustrated live banner, 34–36-unit item/destination/movement
 label/value review. Existing selection/field/chip/button sheets supply all surfaces; no independent material family was
 introduced. The bank-vault illustration is `media/icons/magicBank{,-small}.tga`, from `assets/magic-bank-source.png` through
 `tools/make_magic_reagents_art.py`. Both 64/32 files preserve genuine alpha and the existing bleed/resampling convention.
+
+Magic Inventory's focused item editor is a panel inside the settings body viewport, with its own scrolling contents
+and fixed draft actions. It uses the same card face, segment sheets, native labels and elevated illustration/check
+frames as the builder. Quality tiles are multi-select with an explicit unrestricted choice; equipment and binding
+are exclusive groups. Group selection is shown by both relief and a check, never color alone. Categories and explicit
+inclusions have separate tabs. This is a page-local composition, not another material family or settings window.
+Its popup sits on DIALOG strata above the dimmed builder; the existing bag picker raises above it. The central settings
+Escape proxy closes the focused editor first and defers to the picker while it is open. Done retains the rule draft;
+the explicit Save rule / Cancel rule actions use the parent transaction. Bound reused scroll content to the active
+tab's logical height so hidden controls from another tab cannot create a blank tail.

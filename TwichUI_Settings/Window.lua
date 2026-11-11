@@ -1970,12 +1970,16 @@ local ESC_NAME = "TwichUISettingsEsc"
 local escape = {}
 function escape:IsShown()
     if Wg.ColorPicker.Shown() then return false end
+    local picker = R.MagicInventory and R.MagicInventory.Picker
+    if picker and picker.IsShown() then return false end -- its own special frame closes first
     return Wg.MenuShown() or UI.IsShown()
 end
 function escape:Hide()
     local catalog, designer = R.RemindersCatalog, R.RemindersDesigner
     if Wg.MenuShown() then
         Wg.CloseMenu()
+    elseif R.MagicInventoryPage and R.MagicInventoryPage.CloseItemFilters and R.MagicInventoryPage.CloseItemFilters() then
+        -- The focused editor closes without saving or closing its parent rule draft.
     elseif catalog and catalog.Shown() then
         catalog.Hide()
     elseif designer and designer.Shown() then

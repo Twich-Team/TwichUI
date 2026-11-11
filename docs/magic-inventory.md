@@ -13,6 +13,14 @@ chooser), `tests/test_magic_inventory_settings.lua` (the page), `tests/test_magi
 
 **Nothing here has been tried in the game.** No mail has been sent and no item moved by it. See "In-game checklist".
 
+The current rule builder's **Item filters** action opens a focused panel inside Settings, rather than extending the
+page with a legacy form. Filters, Categories and Also include have separate tabs. Quality supports several selections
+and an explicit Any quality (the existing empty quality set); equipment/binding each select one stored value. Done or
+Escape keeps edits in the private rule draft. Save rule and Cancel rule invoke the builder's existing transaction.
+Inclusions bypass all ordinary filters; exclusions and global protections retain precedence. No rule-schema migration
+is involved. Layout, evidence, reusable scenario commands and client limits are in the
+[workspace implementation record](magic-inventory-revision/implementation.md#focused-item-selection-editor--2026-11-11).
+
 ## What it does
 
 The player makes rules: which items (categories as the game files them, quality, equipment or not, binding, and lists
