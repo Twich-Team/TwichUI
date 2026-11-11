@@ -690,6 +690,37 @@ Settle()
 Check(ST.Snapshot().keys == 0 and not Shown(gid), "deleted: nothing read")
 
 ---------------------------------------------------------------------------
+-- The builder's transaction preserves imported predicates and only applies validated edits.
+---------------------------------------------------------------------------
+local _, ruleId = RM.Create("shield")
+local rule = RM.Get(ruleId).raw
+rule.conditions[2] = { type = "otherVersion", extra = { key = 42 } }
+RM.Invalidate()
+local handle = RM.BeginRuleEdit(ruleId)
+local rev = RM.Rev()
+Check(RM.ChangeRuleEdit(handle, RM.MoveNode, 2, {}, 1), "an imported condition can be moved in the draft")
+Check(RM.Rev() == rev and rule.conditions[2].extra.key == 42, "the saved order is isolated")
+Check(RM.SaveRuleEdit(handle) and RM.Get(ruleId).raw == rule and rule.conditions[1].extra.key == 42,
+  "Save preserves the imported condition and its data")
+Check(not RM.SetEnabled(ruleId, true), "the preserved unknown predicate still prevents enabling")
+handle = RM.BeginRuleEdit(ruleId)
+local conditions = rule.conditions
+Check(RM.ChangeRuleEdit(handle, RM.SetScope, "who", "all") and RM.SaveRuleEdit(handle)
+    and rule.conditions == conditions, "a scope-only save leaves the existing rule tables alone")
+RM.Delete(ruleId)
+
+local _, itemId = RM.Create("item")
+handle = RM.BeginRuleEdit(itemId)
+Check(RM.ChangeRuleEdit(handle, function(draft)
+  local ok, why = RM.SetCondition(draft, 1, { type = "equipment", slot = "any", what = "item", item = 6948, negate = true })
+  if ok then RM.StageRuleItem(draft, 6948) end
+  return ok, why
+end), "a draft can set an inferred item icon")
+Check(RM.ChangeRuleEdit(handle, RM.RemoveNode, 1) and RM.SaveRuleEdit(handle)
+    and not RM.Get(itemId).display.item, "a removed draft condition cannot leave behind a stale inferred icon")
+RM.Delete(itemId)
+
+---------------------------------------------------------------------------
 -- P. Nothing acts in the game
 ---------------------------------------------------------------------------
 Check(#acted == 0, "no item equipped or used, nothing cast or sent: " .. table.concat(acted, ","))

@@ -203,7 +203,7 @@ end
 ---------------------------------------------------------------------------
 do
   local new = P.New()
-  Check(Pl.CondSentence(new) == "You are not Well Fed", "sentence: " .. tostring(Pl.CondSentence(new)))
+  Check(Pl.CondSentence(new) == "You are not well fed", "sentence: " .. tostring(Pl.CondSentence(new)))
   Check(not Pl.HasOperator(new) and not Pl.NeedsItem(new), "no is/is-not choice and no item")
   local subject, label = Pl.SubjectOf(new)
   Check(subject == "wellFed" and label == "Well Fed buff", "its subject: " .. tostring(subject))
@@ -217,7 +217,7 @@ do
   Check(Pl.ValueLabel(new) == "Is not Well Fed", "value label: " .. Pl.ValueLabel(new))
   local found
   for _, e in ipairs(Pl.Entries()) do if e.kind == "wellFed" then found = e end end
-  Check(found and found.category == "Character" and found.make().type == "wellFed", "the picker offers it under Character")
+  Check(found and found.category == "Other" and found.make().type == "wellFed", "the picker offers the same Well Fed predicate under Other")
   local subjects = {}
   for _, s in ipairs(Pl.Subjects()) do subjects[s.value] = true end
   Check(subjects.wellFed, "the subject choices list it")

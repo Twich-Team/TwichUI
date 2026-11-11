@@ -14,9 +14,12 @@ R.RemindersPage = P
 
 local W_MIN = 644            -- the settings window's content width at its first size
 local W = W_MIN              -- the width the window gives this frame now (FitWidth): the list and the name panel follow it
-local PAD, GAP = 14, 12
-local ROW_H, THUMB = 44, 30
-local QUESTION = "Interface\\Icons\\INV_Misc_QuestionMark"
+local PAD, GAP = 12, 9
+local ROW_H, THUMB = 66, 30
+local LIST_H, LIST_SCROLLBAR = 420, 8
+local LIST_W, EDIT_MIN = 220, 415
+local EDIT_ORDER = { 1, 2, 4, 3, 5 }
+local listWidth, editWidth, editorX = W_MIN, W_MIN, 0
 
 local f, built
 local rows = {}
@@ -24,6 +27,7 @@ local sections
 local selected               -- the reminder open in the editor (this session only)
 local height = 420           -- what the window gives this frame (P.Height); follows the content
 local queued, relayoutQueued = false, false
+local editorEpoch = 0
 
 -- A reminder's state in a word or two, for its list row (the words carry the meaning; the color only agrees).
 local SHORT = {
@@ -50,10 +54,18 @@ end
 ---------------------------------------------------------------------------
 -- Redrawing: many changes at once are one redraw; a change of height asks the window to place things again
 ---------------------------------------------------------------------------
+function P.EditorActive()
+    local UI = R.SettingsUI
+    return f ~= nil and f:IsVisible() and not (R.RemindersPlacement and R.RemindersPlacement.Active()) and UI ~= nil and UI.IsPageActive("reminders")
+end
+
 function P.QueueRefresh(delay)
+    if not P.EditorActive() then return end
     if queued then return end
     queued = true
+    local epoch = editorEpoch
     C_Timer.After(delay or 0, function()
+        if epoch ~= editorEpoch then return end
         queued = false
         P.Refresh()
     end)
@@ -62,10 +74,12 @@ end
 local function QueueRelayout()
     if relayoutQueued then return end
     relayoutQueued = true
+    local epoch = editorEpoch
     C_Timer.After(0, function()
+        if epoch ~= editorEpoch then return end
         relayoutQueued = false
         local UI = R.SettingsUI
-        if UI and UI.Refresh then UI.Refresh() end
+        if P.EditorActive() and UI.Refresh then UI.Refresh() end
     end)
 end
 
@@ -74,6 +88,7 @@ function P.Height() return height end
 -- The line under the chosen reminder's name: what just happened, or why it didn't.
 function P.Say(text, tone)
     P.lastSaid, P.lastTone = text, tone
+    if R.RemindersDesigner then R.RemindersDesigner.Say(text, tone) end
     if f and f.say then
         f.say:SetText(text or "")
         Tone(f.say, tone)
@@ -84,7 +99,16 @@ end
 function P.Selected() return selected end
 -- What has been built, read only (for the tests): the list rows and the editor's sections.
 function P.Parts() return { frame = f, rows = rows, sections = sections } end
+function P.ListAnchor()
+    return f and editorX > 0 and f.list and f.list:IsVisible() and f.list or nil
+end
 function P.Select(id)
+    local designer = R.RemindersDesigner
+    if selected ~= id and designer and designer.Shown() and designer.HasUnsaved() then
+        designer.RequestClose(function() P.Select(id) end)
+        return
+    end
+    if selected ~= id and R.RemindersEditor then R.RemindersEditor.ClearReveal() end
     selected = id
     P.lastSaid = nil
     P.QueueRefresh()
@@ -94,6 +118,7 @@ end
 function P.Create(kind)
     local ok, id = RM().Create(kind)
     if not ok then P.Say(id, "warn") return false, id end
+    R.RemindersEditor.ClearReveal()
     selected = id
     local v = RM().Get(id)
     P.Say(("Made \"%s\". It stays off until you turn it on%s."):format(v.name, v.valid and "" or ", once what is listed below is done"), "ok")
@@ -119,71 +144,59 @@ end
 ---------------------------------------------------------------------------
 -- The list
 ---------------------------------------------------------------------------
-local function Thumb(tex, v)
-    local d = v.display
-    local m = d.mode
-    tex:SetVertexColor(1, 1, 1, 1)
-    tex:SetAlpha(1)
-    if (m == "artwork" or m == "artworkText") and RM().Art(d.art) then
-        local file, l, r, t, b, aspect = RM().ArtTexture(d.art, THUMB)
-        tex:SetTexture(file)
-        tex:SetTexCoord(l, r, t, b)
-        tex:SetSize(math.max(1, math.floor(THUMB * math.min(1, aspect) + 0.5)), math.floor(THUMB / math.max(1, aspect) + 0.5))
-        return
-    end
-    tex:SetSize(THUMB, THUMB)
-    if (m == "icon" or m == "iconText") and d.iconSource == "item" then
-        local icon = d.item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(d.item)
-        tex:SetTexture(icon or QUESTION)
-        tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    elseif (m == "icon" or m == "iconText") and R.Icons then
-        R.Icons.Apply(tex, d.icon, THUMB)
-    elseif R.Icons then
-        R.Icons.Apply(tex, "reminders", THUMB)   -- words only: the feature's bell, quieter
-        tex:SetAlpha(0.55)
-    end
+local Delete
+local function Duplicate(id)
+    local ok, copy = RM().Duplicate(id)
+    if not ok then P.Say(copy, "warn"); return end
+    P.Select(copy)
+    P.Say("Made an independent copy. It starts off.", "ok")
 end
 
 local function Row(i)
     if rows[i] then return rows[i] end
     local G = Wg()
-    local pal = G.pal
-    local row = CreateFrame("Button", nil, f.list)
-    row:SetSize(W - PAD * 2, ROW_H)
-    Mat().SelectedRow(row)   -- row.sel: the chosen row's chestnut surface
-    row.bar = G.Solid(row, "ARTWORK", pal.bronzeText, 1)
-    row.bar:SetWidth(2)
-    row.bar:SetPoint("TOPLEFT", 0, 0)
-    row.bar:SetPoint("BOTTOMLEFT", 0, 0)
-    G.Hover(row, pal.text, 0.05)
+    local row = CreateFrame("Button", nil, f.listRows)
+    row:SetSize(listWidth - 14 - LIST_SCROLLBAR, ROW_H)
+    Mat().ReminderRow(row)
+    Mat().MaterialHover(row)
     row.thumb = row:CreateTexture(nil, "ARTWORK")
     row.thumb:SetPoint("CENTER", row, "LEFT", 8 + THUMB / 2, 0)
     row.name = G.Text(row, "body")
-    row.name:SetPoint("TOPLEFT", 16 + THUMB, -6)
+    row.name:SetPoint("TOPLEFT", 12 + THUMB, -6)
+    Mat().ReminderFont(row.name, 13, true)
     row.name:SetWidth(330)
-    row.name:SetWordWrap(false)
-    row.rule = G.Text(row, "meta")
-    row.rule:SetPoint("TOPLEFT", 16 + THUMB, -24)
-    row.rule:SetWidth(400)
-    row.rule:SetWordWrap(false)
-    row.check = G.Checkbox(row, function(on)
+    row.name:SetWordWrap(true)
+    row.name:SetMaxLines(2)
+    R.Interact.Tip(row, "Reminder", function() return row.name:GetText() .. "\n" .. (row.ruleText or "") end)
+    row.check = Mat().Pill(row, function(on)
         if not row.id then return end
         local ok, why = RM().SetEnabled(row.id, on)
         if not ok then
             selected = row.id
             P.Say(why, "warn")
         end
-    end)
-    row.check:SetPoint("RIGHT", -8, 0)
+    end, true)
+    row.check:SetPoint("BOTTOMRIGHT", -5, 6)
     R.Interact.Tip(row.check, "Turned on", function()
         local v = row.id and RM().Get(row.id)
         if v and not v.valid then return "Turns this reminder on or off.", "It can't be turned on yet: " .. (v.problems[1] or "") end
         return "Turns this reminder on or off. Off, it never shows and reads nothing; on, it shows while its conditions are true."
     end)
     row.state = G.Text(row, "small")
-    row.state:SetPoint("RIGHT", row.check, "LEFT", -10, 0)
-    row.state:SetJustifyH("RIGHT")
-    row:SetScript("OnClick", function() if row.id then P.Select(row.id) end end)
+    row.state:SetPoint("BOTTOMLEFT", 12 + THUMB, 8)
+    row.state:SetWidth(74)
+    row.state:SetWordWrap(false)
+    row.state:SetJustifyH("LEFT")
+    row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    row:SetScript("OnClick", function(_, button)
+        if not row.id then return end
+        if button == "RightButton" then
+            local id = row.id -- actions belong to the invoked row, even if selection changes
+            G.ContextMenu(row, { { value = "copy", label = "Duplicate" }, { value = "delete", label = "Delete…" } }, function(action)
+                if action == "copy" then Duplicate(id) elseif action == "delete" then Delete(id) end
+            end)
+        else G.CloseMenu(); P.Select(row.id) end
+    end)
     rows[i] = row
     return row
 end
@@ -193,11 +206,9 @@ local function LayoutList(list, y)
     local CT, E = R.ReminderController, R.ReminderEval
     local card = f.list
     local h = 12
-    f.count:SetText(("%d of %d"):format(#list, RM().MAX))
-    h = h + 26
-    Put(f.newButton, card, PAD, h + 4)
-    f.newButton:SetShown(true)
-    h = h + 32
+    f.count:SetText(("%d of %d reminders"):format(#list, RM().MAX))
+    Put(f.newButton, card, listWidth - PAD - 60, 9)
+    h = h + 28
     if not RM().Writable() then
         f.newer:SetText(RM().PROBLEM.newer)
         Tone(f.newer, "warn")
@@ -207,50 +218,61 @@ local function LayoutList(list, y)
         f.newer:Hide()
     end
     if #list == 0 then
-        f.empty:SetText("No reminders yet. Choose New reminder above: \"Missing shield\", \"Ammunition\", \"Missing weapon enchant\" and \"Well Fed ran out\" are ready to use once you turn them on; the others are starting points to finish. Each starts turned off, so nothing appears until you say so.")
+        f.empty:SetText("No reminders yet. Choose New reminder to start with a template. Each starts off.")
         Put(f.empty, card, PAD, h)
         h = h + (f.empty:GetStringHeight() or 24) + 10
     else
         f.empty:Hide()
     end
+    f.listScroll:ClearAllPoints()
+    f.listScroll:SetPoint("TOPLEFT", card, "TOPLEFT", 7, -h)
+    f.listScroll:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -(7 + LIST_SCROLLBAR), 28)
+    f.listScroll:SetShown(#list > 0)
+    local rowY, selectedY = 0
     for i, v in ipairs(list) do
         local row = Row(i)
         row.id = v.id
-        Thumb(row.thumb, v)
+        R.RemindersEditor.Thumb(row.thumb, v.display, THUMB)
         row.name:SetText(v.name)
         local status = CT.Status(v.id)
-        if v.valid then
-            row.rule:SetText(E.RuleSentence(v))
-            Tone(row.rule, "quiet")
-        else
-            row.rule:SetText(v.problems[1] and Friendly(v, v.problems[1]) or "")
-            Tone(row.rule, "warn")
-        end
+        row.ruleText = v.valid and E.RuleSentence(v) or (v.problems[1] and Friendly(v, v.problems[1]) or "")
+        row.name:SetWidth(listWidth - 14 - LIST_SCROLLBAR - THUMB - 16)
         row.state:SetText(SHORT[status] or "")
         Tone(row.state, (status == "showing" or status == "holding") and "ok" or (status == "invalid" and "warn" or "quiet"))
         row.check:SetChecked(v.enabled)
         row.check:SetActive(RM().Writable())
         local isSel = v.id == selected
         row.sel:SetShown(isSel)
-        row.bar:SetShown(isSel)
         G.Color(row.name, isSel and G.pal.text or G.pal.textDim)
-        Put(row, card, PAD, h)
-        h = h + ROW_H + 2
+        Put(row, f.listRows, 0, rowY)
+        if isSel then selectedY = rowY end
+        rowY = rowY + ROW_H + 3
     end
     for i = #list + 1, #rows do
         rows[i].id = nil
         rows[i]:Hide()
     end
-    h = h + 8
-    card:SetHeight(h)
+    local height = #list > 0 and math.max(h + 106, LIST_H) or h + 35
+    if editorX == 0 then height = math.min(height, 214) end
+    card:SetHeight(height)
+    f.listRows:SetHeight(math.max(1, rowY))
+    if f.fitListRail then f.fitListRail(math.max(1, rowY)) end
+    local visible = math.max(1, height - h - 28)
+    if f.lastListSelection ~= selected and selectedY then
+        local scroll = f.listScroll:GetVerticalScroll() or 0
+        if selectedY < scroll then scroll = selectedY
+        elseif selectedY + ROW_H > scroll + visible then scroll = selectedY + ROW_H - visible end
+        f.listScroll:SetVerticalScroll(math.max(0, math.min(scroll, rowY - visible)))
+    end
+    f.lastListSelection = selected
     Put(card, f, 0, y)
-    return h
+    return height
 end
 
 ---------------------------------------------------------------------------
 -- The chosen reminder's head: its name, its switch, copy and delete, and what is wrong with it
 ---------------------------------------------------------------------------
-local function Delete(id)
+Delete = function(id)
     local v = RM().Get(id)
     if not v then return end
     local text = ("Delete the reminder \"%s\"?\n\nOnly this reminder is removed (it is taken off the screen at once). Your other reminders and settings are not changed. This can't be undone."):format(v.name)
@@ -270,30 +292,38 @@ end
 
 local function LayoutHead(v, y)
     local head = f.head
-    local h = 14
-    Put(f.nameLabel, head, PAD, h + 4)
+    local h = 12
     if not f.nameBox:HasFocus() then f.nameBox:SetText(v.name) end
-    Put(f.nameBox, head, PAD + 60, h)
+    f.nameBox:SetWidth(editWidth - 150)
+    Put(f.nameBox, head, PAD, h)
     f.onBox:SetChecked(v.enabled)
     f.onBox:SetActive(RM().Writable() and not v.broken)
     f.onText:SetText(v.enabled and "On" or (v.valid and "Off" or "Off (not ready)"))
     Tone(f.onText, v.enabled and "ok" or "quiet")
-    Put(f.onBox, head, PAD + 330, h + 2)
-    Put(f.onText, head, PAD + 356, h + 6)
-    Put(f.delete, head, W - PAD - 90, h)
-    Put(f.duplicate, head, W - PAD - 90 - 8 - 100, h)
+    Put(f.onBox, head, editWidth - 122, h + 2)
+    Put(f.onText, head, editWidth - 74, h + 6)
+    h = h + 32
+    Put(f.place, head, PAD, h)
+    f.previewBox:SetChecked(R.RemindersPreview.Enabled())
+    Put(f.previewBox, head, editWidth - PAD - 34, h + 3)
+    Put(f.previewLabel, head, editWidth - PAD - 120, h + 5)
     h = h + 32
     if #v.problems > 0 then
-        local lines = {}
-        for i, p in ipairs(v.problems) do lines[i] = "-  " .. Friendly(v, p) end
-        f.problems:SetText((v.enabled and "It is turned on but can't show until this is fixed:\n" or "Before it can be turned on:\n") .. table.concat(lines, "\n"))
+        local reason = Friendly(v, v.problems[1])
+        if v.problems[1]:find("has no conditions in it", 1, true) then reason = "Complete the empty condition group" end
+        f.problems:SetText("Needs attention · " .. reason:gsub("^Condition [%d%.]+: ", ""))
+        local ruleProblem = v.problems[1]:match("^Condition ") or v.problems[1]:match("^Group ")
+        f.problems:SetWidth(editWidth - PAD * 2 - (ruleProblem and 132 or 0))
+        f.fix:SetShown(ruleProblem ~= nil)
+        if ruleProblem then Put(f.fix, head, editWidth - PAD - 126, h - 3) end
         Tone(f.problems, "warn")
         Put(f.problems, head, PAD, h)
-        h = h + (f.problems:GetStringHeight() or 12) + 8
+        h = h + math.max(f.problems:GetStringHeight() or 12, ruleProblem and 24 or 0) + 6
     else
         f.problems:Hide()
+        f.fix:Hide()
     end
-    if P.lastSaid then
+    if P.lastSaid and P.lastTone == "warn" and not R.RemindersDesigner.Shown() then
         f.say:SetText(P.lastSaid)
         Tone(f.say, P.lastTone)
         Put(f.say, head, PAD, h)
@@ -303,7 +333,7 @@ local function LayoutHead(v, y)
     end
     h = h + 4
     head:SetHeight(h)
-    Put(head, f, 0, y)
+    Put(head, f.editor, 0, y)
     return h
 end
 
@@ -318,32 +348,36 @@ local function Build()
     -- your reminders, and ways to start one
     f.list = CreateFrame("Frame", nil, f, "BackdropTemplate")
     f.list:SetWidth(W)
-    Mat().Card(f.list, G.Panel(f.list))
+    Mat().PanelFace(f.list, "espresso")
+    f.listScroll, f.listRows = G.Scroll(f.list, listWidth - 14 - LIST_SCROLLBAR)
+    f.fitListRail = Mat().ScrollRail(f.listScroll)
     f.listTitle = G.Text(f.list, "heading")
     f.listTitle:SetPoint("TOPLEFT", PAD, -14)
     f.listTitle:SetText("Your reminders")
+    Mat().ReminderFont(f.listTitle, 14, true)
+    f.listTitle:SetWidth(112)
     f.count = G.Text(f.list, "meta")
-    f.count:SetPoint("TOPRIGHT", -PAD, -16)
+    f.count:SetPoint("BOTTOMLEFT", PAD, 9)
     f.count:SetJustifyH("RIGHT")
-    f.newButton = G.Button(f.list, "New reminder", 130, "primary", function()
+    f.newButton = G.Button(f.list, "+ New", 60, "primary", function()
         if R.RemindersCatalog then R.RemindersCatalog.Toggle() end
     end)
-    Mat().Face(f.newButton, "primary")
     I.Tip(f.newButton, "New reminder", "Opens the templates beside this window. A new reminder starts turned off, so nothing appears until you say so.")
+    Mat().ReminderControl(f.newButton, "primary")
     f.newer = G.Text(f.list, "small")
     f.newer:SetWidth(W - PAD * 2)
     f.empty = G.Text(f.list, "small")
     f.empty:SetWidth(W - PAD * 2)
 
+    f.editor = CreateFrame("Frame", nil, f)
+    f.editor:SetSize(W, 1)
+
     -- the chosen one's head
-    f.head = CreateFrame("Frame", nil, f, "BackdropTemplate")
+    f.head = CreateFrame("Frame", nil, f.editor, "BackdropTemplate")
     f.head:SetWidth(W)
-    Mat().Card(f.head, G.Panel(f.head))
-    f.nameLabel = G.Text(f.head, "body")
-    f.nameLabel:SetText("Name")
+    Mat().PanelFace(f.head, "walnut")
     f.nameBox = G.EditBox(f.head, 250, 22)
     f.nameBox:SetMaxLetters(RM().NAME_MAX * 4)
-    Mat().Field(f.nameBox)
     local function SaveName(self)
         if not selected then return end
         local ok, why = RM().SetName(selected, self:GetText())
@@ -355,37 +389,44 @@ local function Build()
     f.nameBox:SetScript("OnEnterPressed", function(self) SaveName(self); self:ClearFocus() end)
     f.nameBox:HookScript("OnEditFocusLost", SaveName)
     I.Tip(f.nameBox, "Name", "Only for you, in this list. It is never shown on screen and never sent anywhere.")
-    f.onBox = G.Checkbox(f.head, function(on)
+    Mat().ReminderControl(f.nameBox, "field")
+    f.onBox = Mat().Pill(f.head, function(on)
         if not selected then return end
         local ok, why = RM().SetEnabled(selected, on)
         if not ok then P.Say(why, "warn") end
     end)
     I.Tip(f.onBox, "Turned on", "On, it shows while its conditions are true (Test below says what they see now). A new reminder starts off, so it never covers the world before it is ready.")
     f.onText = G.Text(f.head, "body")
-    f.duplicate = G.Button(f.head, "Duplicate", 100, "secondary", function()
+    f.duplicate = G.Button(f.editor, "Duplicate", 100, "secondary", function()
         if not selected then return end
-        local ok, id = RM().Duplicate(selected)
-        if not ok then P.Say(id, "warn") return end
-        local name = RM().Get(id).name
-        selected = id
-        P.Say(("Made a copy, \"%s\". It is off until you turn it on; the original is unchanged."):format(name), "ok")
+        Duplicate(selected)
     end)
-    Mat().Face(f.duplicate, "secondary")
     I.Tip(f.duplicate, "Duplicate", "A copy with its own identity, right after this one, turned off. Changing either never changes the other.")
-    f.delete = G.Button(f.head, "Delete", 90, "danger", function() if selected then Delete(selected) end end)
-    Mat().Face(f.delete, "danger")
+    Mat().ReminderControl(f.duplicate, "secondary")
+    f.delete = G.Button(f.editor, "Delete", 90, "danger", function() if selected then Delete(selected) end end)
+    Mat().ReminderControl(f.delete, "danger")
     I.Tip(f.delete, "Delete", "Removes this reminder, after asking. Nothing else changes.")
+    f.previewBox = Mat().Pill(f.head, function(on) R.RemindersPreview.SetEnabled(on) end, true)
+    f.previewLabel = G.Text(f.head, "body")
+    f.previewLabel:SetText("Live preview")
+    Mat().ContextTip(f.previewBox, "Live preview", "Shows the editing companion while this page is open. This preference lasts for this session.")
     f.problems = G.Text(f.head, "small")
+    f.fix = G.Button(f.head, "Edit conditions", 126, "secondary", function() R.RemindersDesigner.Open() end)
+    Mat().ReminderControl(f.fix)
     f.problems:SetWidth(W - PAD * 2)
     f.say = G.Text(f.head, "small")
     f.say:SetWidth(W - PAD * 2)
 
-    sections = R.RemindersEditor.Build(f, {
+    sections = R.RemindersEditor.Build(f.editor, {
         id = function() return selected end,
         view = function() return selected and RM().Get(selected) end,
         Say = P.Say,
         Changed = function() P.QueueRefresh() end,
     })
+    -- Promote the existing placement control; its callback and transaction stay shared.
+    f.place = sections[3].move
+    f.place:SetParent(f.head)
+    f.place.text:SetText("Place on screen")
 end
 
 -- The window sets this frame's width (the same the feature card above it has, scrollbar and page insets already taken off), so the
@@ -393,40 +434,77 @@ end
 local function FitWidth()
     local w = f:GetWidth()
     W = (type(w) == "number" and w > W_MIN) and w or W_MIN
-    f.list:SetWidth(W)
-    f.head:SetWidth(W)
-    f.newer:SetWidth(W - PAD * 2)
-    f.empty:SetWidth(W - PAD * 2)
-    f.problems:SetWidth(W - PAD * 2)
-    f.say:SetWidth(W - PAD * 2)
-    for _, row in ipairs(rows) do row:SetWidth(W - PAD * 2) end
+    local split = W >= LIST_W + GAP + EDIT_MIN
+    listWidth = split and math.min(W - GAP - EDIT_MIN, 280, math.max(LIST_W, math.floor(W * 0.32))) or W
+    editWidth = split and (W - listWidth - GAP) or W
+    editorX = split and (listWidth + GAP) or 0
+    f.list:SetWidth(listWidth)
+    f.editor:SetWidth(editWidth)
+    f.head:SetWidth(editWidth)
+    f.listRows:SetWidth(listWidth - 14 - LIST_SCROLLBAR)
+    f.newer:SetWidth(listWidth - PAD * 2)
+    f.empty:SetWidth(listWidth - PAD * 2)
+    f.problems:SetWidth(editWidth - PAD * 2)
+    f.say:SetWidth(editWidth - PAD * 2)
+    for _, row in ipairs(rows) do row:SetWidth(listWidth - 14 - LIST_SCROLLBAR) end
+    R.RemindersEditor.FitWidth(editWidth)
 end
 
 function P.Refresh()
-    if not (f and built and f:IsShown()) then return end
+    if not (built and P.EditorActive()) then
+        if R.RemindersPreview then R.RemindersPreview.Hide() end
+        return
+    end
     FitWidth()
     local list = RM().List()
     if selected and not RM().Get(selected) then selected = nil end
     if not selected and list[1] then selected = list[1].id end
-    local y = LayoutList(list, 0) + GAP
+    local listHeight = LayoutList(list, 0)
+    local y = editorX > 0 and 0 or (listHeight + GAP)
+    Put(f.editor, f, editorX, y)
+    local editorTop = y
+    y = 0
     local v = selected and RM().Get(selected)
     if v then
         y = y + LayoutHead(v, y) + GAP
-        for _, s in ipairs(sections) do y = y + s:Layout(v, y) + GAP end
+        for _, i in ipairs(EDIT_ORDER) do
+            local sectionHeight = sections[i]:Layout(v, y)
+            if sectionHeight > 0 then y = y + sectionHeight + GAP end
+        end
+        Put(f.duplicate, f.editor, 0, y)
+        Put(f.delete, f.editor, 108, y)
+        y = y + 30
     else
         f.head:Hide()
-        for _, s in ipairs(sections) do s:Hide() end
+        f.place:Hide()
+        f.duplicate:Hide()
+        f.delete:Hide()
+        f.previewBox:Hide()
+        f.previewLabel:Hide()
+        for _, s in ipairs(sections) do s:Hide(); if s.summary then s.summary:Hide() end end
+        if R.RemindersDesigner and R.RemindersDesigner.Shown() then R.RemindersDesigner.Close() end
     end
-    -- the live preview beside the window, unless the template catalog has that place
+    f.editor:SetHeight(math.max(1, y))
+    if v and editorX > 0 then
+        -- Align the list well with the primary editing stack, without following a long diagnostics expansion.
+        listHeight = math.max(listHeight, math.min(560, y - 30 - GAP))
+        f.list:SetHeight(listHeight)
+    end
+    -- the live preview beside the window, unless another companion has that place
     local PV = R.RemindersPreview
     if PV then
-        if v and not (R.RemindersCatalog and R.RemindersCatalog.Shown()) then
-            PV.Show(v, { Changed = P.QueueRefresh, Say = P.Say })
+        local catalog = R.RemindersCatalog
+        if catalog and catalog.Shown() then
+            PV.Hide()
+            PV.Place(catalog.Frame())
+        elseif v
+            and not (R.RemindersDesigner and R.RemindersDesigner.Shown()) then
+            PV.Show(v, { Changed = P.QueueRefresh, Say = P.Say, Reveal = R.RemindersEditor.Reveal })
         else
             PV.Hide()
         end
     end
-    local h = math.max(1, y - GAP)
+    local h = math.max(listHeight, editorTop + y - GAP, 1)
     f:SetHeight(h)
     if h ~= height then
         height = h
@@ -437,7 +515,8 @@ end
 -- Only while the page is shown: the game telling of changes the Test section's "Right now" reads (for a reminder that
 -- isn't running it is read when drawn), and answers about items named here.
 local EVENTS = { "PLAYER_EQUIPMENT_CHANGED", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "PLAYER_DEAD", "PLAYER_ALIVE",
-    "PLAYER_UNGHOST", "PLAYER_MOUNT_DISPLAY_CHANGED", "BAG_UPDATE_DELAYED", "GET_ITEM_INFO_RECEIVED", "ITEM_DATA_LOAD_RESULT" }
+    "PLAYER_UNGHOST", "PLAYER_MOUNT_DISPLAY_CHANGED", "PLAYER_UPDATE_RESTING", "ZONE_CHANGED_NEW_AREA",
+    "BAG_UPDATE_DELAYED", "GET_ITEM_INFO_RECEIVED", "ITEM_DATA_LOAD_RESULT" }
 
 -- The page's frame (the settings window shows it under the Reminders card). Built the first time it is shown.
 function P.Frame()
@@ -452,15 +531,27 @@ function P.Frame()
         P.Refresh()
     end)
     f:SetScript("OnHide", function(self)
+        if R.RemindersPlacement and R.RemindersPlacement.Active() then return end
+        editorEpoch = editorEpoch + 1
+        queued, relayoutQueued = false, false
         for _, e in ipairs(EVENTS) do self:UnregisterEvent(e) end
         if f.nameBox then f.nameBox:ClearFocus() end
         if R.RemindersCatalog then R.RemindersCatalog.Hide() end   -- the templates and the preview belong to this page
         if R.RemindersPreview then R.RemindersPreview.Hide() end
+        if R.ReminderDisplay then R.ReminderDisplay.PreviewStop() end
+        if R.RemindersEditor then R.RemindersEditor.ClearReveal() end
+        if R.RemindersPreview then R.RemindersPreview.RestoreAnchor() end
         if R.RemindersDesigner then R.RemindersDesigner.Reset() end   -- an open editor, picker or undo is put away
     end)
     f:SetScript("OnEvent", function() P.QueueRefresh(0.2) end)
     return f
 end
+
+if R.OnSettingsClosed then R.OnSettingsClosed(function()
+    editorEpoch = editorEpoch + 1
+    queued, relayoutQueued = false, false
+    if R.RemindersPreview then R.RemindersPreview.Hide() end
+end) end
 
 -- A change made anywhere (here, a profile change, a decision of the live reminders) redraws the page if it is shown.
 -- Registered once: this file is loaded once a session.
@@ -478,7 +569,7 @@ end
 
 K.Page({
     key = "reminders", icon = "reminders", name = "Reminders", order = 22, group = "everyday",
-    description = "Artwork, an icon or a few words on screen while conditions you choose are true, such as an empty off hand. Nothing appears until you make a reminder and turn it on.",
+    description = "", compact = true, materialHeader = true,
     keywords = "reminder reminders shield equip equipment gear off hand offhand main hand weapon two-handed fishing pole item missing artwork icon picture words text alert notice condition conditions rule rules when combat dead ghost alive mounted mount resting rested inn city dungeon raid instance preview test simulate simulation position move character class ammo ammunition arrows bullets quiver ranged bow gun crossbow hunter out of ammo no ammo wrong ammo talent talents specialization spec tree weapon oil wizard oil mana oil sharpening stone weightstone poison enchant enchantment imbue temporary well fed food buff eat sound sounds alert audio play",
     overview = {
         label = "Reminders", tip = "Artwork, an icon or words on screen while conditions you choose are true, such as a missing shield.",
@@ -493,19 +584,10 @@ K.Page({
     when = function() return R.Reminders ~= nil and R.ReminderController ~= nil and R.RemindersEditor ~= nil and R.RemindersDesigner ~= nil and R.RemindersPlain ~= nil end,
     build = function()
         K.Card({
-            title = "Reminders", icon = "reminders",
+            title = "Reminders", icon = "reminders", compact = true, inPageHeader = true,
+            switchLabels = { "Enabled", "Disabled" },
             what = "Shows artwork, an icon or a few words while conditions you choose are true, such as an empty off hand, and hides it the rest of the time.",
-            summary = function()
-                local n, on = Count()
-                if n == 0 then return "None made yet." end
-                return ("%d made, %d turned on."):format(n, on)
-            end,
-            consequence = "A reminder only reads what is equipped, whether your weapons have a temporary enchant, whether you are Well Fed, what you carry as ammunition and what you are doing: TwichUI never equips, uses or casts anything for you, says nothing in chat and sends nothing. Each reminder can play a sound of your choosing when it appears. Each new reminder starts turned off. Turning this off hides every reminder at once and stops listening; your reminders are kept.",
-            details = {
-                { "What can a reminder watch?", "Your equipment: a slot that is empty or not, a specific item equipped or not, or the kind of item in a slot (a shield, a weapon, a two-handed weapon, an item held in the off hand, a fishing pole). Whether the weapon in each hand has a temporary enchant (a weapon oil, sharpening stone or poison; the game says whether one is on, not which). The ammunition for your ranged weapon: none selected, used up, or the wrong kind. Whether you have a Well Fed buff, so a reminder can show when it runs out (not readable while the game hides your buffs from addons). And you: in combat, alive or dead (a ghost counts as dead), mounted, resting (an inn or a city), inside a dungeon, inside a raid." },
-                { "Why would one wait instead of showing?", "Right after logging in, or with an item the game hasn't described yet, a condition can't be checked. The reminder then stays hidden rather than guess, and its Test section says what it is waiting for." },
-                { "Who sees them?", "Only you. Reminders are saved in your profile; each one can be limited to some of your characters, or to a class." },
-            },
+            help = "Choose a template or start from scratch. Set its appearance, edit its conditions, then turn it on.",
         })
         K.Toggle("reminders", "Show my reminders",
             "On: each reminder you turned on appears while its conditions are true. Off: none appears and nothing is listened for. Your reminders are kept either way.")

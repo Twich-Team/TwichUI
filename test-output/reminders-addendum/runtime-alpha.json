@@ -1,0 +1,50 @@
+{
+  "!!!TwichUI/media/reminders/conditions/combat-small.tga": {
+    "size": [
+      32,
+      32
+    ],
+    "clear": 634,
+    "partial": 390
+  },
+  "!!!TwichUI/media/reminders/conditions/combat.tga": {
+    "size": [
+      64,
+      64
+    ],
+    "clear": 2664,
+    "partial": 1432
+  },
+  "!!!TwichUI/media/reminders/conditions/enchant.tga": {
+    "size": [
+      64,
+      64
+    ],
+    "clear": 2770,
+    "partial": 1326
+  },
+  "!!!TwichUI/media/reminders/conditions/enchant-small.tga": {
+    "size": [
+      32,
+      32
+    ],
+    "clear": 679,
+    "partial": 345
+  },
+  "!!!TwichUI/media/npcs/horse-head.tga": {
+    "size": [
+      64,
+      64
+    ],
+    "clear": 2197,
+    "partial": 1899
+  },
+  "!!!TwichUI/media/npcs/horse-head-small.tga": {
+    "size": [
+      32,
+      32
+    ],
+    "clear": 523,
+    "partial": 501
+  }
+}

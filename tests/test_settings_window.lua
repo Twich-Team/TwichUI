@@ -73,12 +73,15 @@ local function Fake(kind, parent, template)
     ClearFocus = function(s) if s.focus then s.focus = false; Fire(s, "OnEditFocusLost") end end,
     HasFocus = function(s) return s.focus end,
     SetScrollChild = function(s, child) s.child = child end,
+    GetScrollChild = function(s) return s.child end,
     SetVerticalScroll = function(s, v) s.scroll = v end,
     GetVerticalScroll = function(s) return s.scroll end,
     GetVerticalScrollRange = function(s) return math.max(0, (s.child and s.child.h or 0) - s.h) end,
     IsMouseOver = function() return false end,
     GetEffectiveScale = function() return 1 end, GetScale = function() return 1 end,
     GetFrameLevel = function() return 1 end,
+    GetFrameStrata = function(s) return s.strata or "MEDIUM" end,
+    SetFrameStrata = function(s, value) s.strata = value end,
     IsOwned = function() return false end,
     GetOwner = function(s) return s.owner end,
     SetOwner = function(s, o) s.owner = o end,
@@ -1468,5 +1471,101 @@ do
   assert(made == frames, "opening, folding and switching Home's views make no new frames: " .. (made - frames))
   assert(not W.ReloadPending(), "card tests leave nothing pending")
 end
+
+UI.Open("reminders")
+assert(UI.IsPageActive("reminders") and win.quietMaterials[1]:IsShown(), "Reminders explicitly owns its scoped materials")
+assert(win.quietFrame.parts[1]:IsShown() and win.shell.corner.tl:GetAlpha() == 0,
+  "the pilot shows painted frame art instead of stacking the old fittings")
+assert(win.craftElements.crest:GetWidth() == 44 and win.craftElements.search:GetHeight() == 30,
+  "the pilot uses the larger emblem and search geometry")
+UI.SetQuery("reminder")
+assert(not UI.IsPageActive("reminders") and win.craftElements.search:GetHeight() == 30,
+  "search suppresses the active editor without resizing the focused painted search field")
+UI.SetQuery("")
+assert(UI.IsPageActive("reminders"), "clearing search restores the originating editor context")
+local workspacePage = UI.Selected()
+UI.SetWorkspaceVisible(true)
+assert(UI.IsShown() and win:GetAlpha() == 0 and win:GetFrameStrata() == "LOW" and UI.Selected() == workspacePage,
+  "a page workspace preserves the mounted Settings page")
+UI.SetWorkspaceVisible(true)
+UI.SetWorkspaceVisible(false)
+assert(win:GetAlpha() == 1 and win:GetFrameStrata() == "HIGH" and UI.Selected() == workspacePage,
+  "closing the workspace restores the same Settings page")
+UI.Navigate("notifications")
+assert(not UI.IsPageActive("reminders") and not win.quietMaterials[1]:IsShown(), "other pages restore their existing materials")
+assert(not win.quietFrame.parts[1]:IsShown() and win.shell.corner.tl:GetAlpha() == 1,
+  "ordinary pages restore the original frame fittings")
+assert(win.craftElements.crest:GetWidth() == 24 and win.craftElements.search:GetHeight() == 24
+  and not win.craftElements.searchArt.parts[1]:IsShown(), "ordinary pages restore header and search styling")
+UI.Close()
+assert(not UI.IsPageActive("notifications"), "an individually mounted page is inactive while Settings is closed")
+
+-- Reminders alone pins its chrome outside the body viewport, including after search/navigation.
+UI.Open("reminders")
+local reminderView = UI.View("reminders")
+local bodyScroll = reminderView.frame.parent.parent
+assert(reminderView.chrome and reminderView.title.parent == reminderView.chrome
+  and reminderView.tabs.parent == reminderView.chrome, "page heading and tabs belong to fixed chrome")
+assert(reminderView.chrome.parent == bodyScroll.parent, "fixed header is a sibling of the scrolling viewport")
+assert(bodyScroll.points[1][5] == -reminderView.headerHeight - 1,
+  "the real scroll viewport begins below the fixed header")
+local headerPoint = reminderView.chrome.points[1]
+bodyScroll:SetVerticalScroll(100)
+UI.Refresh()
+assert(reminderView.chrome.points[1] == headerPoint, "scrolling/redraw leaves header geometry fixed")
+bodyScroll:SetVerticalScroll(10000)
+UI.Refresh()
+assert(bodyScroll:GetVerticalScroll() == bodyScroll:GetVerticalScrollRange(),
+  "scoped accordion reflow clamps a stale scroll offset to the new content bottom")
+UI.SetQuery("reminder")
+assert(not reminderView.chrome:IsShown() and bodyScroll.points[1][5] == -1, "search uses its own full-height viewport")
+UI.SetQuery("")
+assert(reminderView.chrome:IsShown() and bodyScroll.points[1][5] == -reminderView.headerHeight - 1,
+  "clearing search restores the bounded Reminders body")
+UI.Navigate("ammoCustom")
+local ammoView = UI.View("ammoCustom")
+assert(ammoView.chrome:IsShown() and not reminderView.chrome:IsShown()
+  and bodyScroll.points[1][5] == -ammoView.headerHeight - 1, "Known ammunition pins the same family tabs above its own body")
+UI.Navigate("notifications")
+assert(not reminderView.chrome:IsShown() and not ammoView.chrome:IsShown() and bodyScroll.points[1][5] == -1, "other pages keep their original viewport")
+
+-- Actual window ownership during placement: close, reopen and Esc do not leak companions.
+UI.Open("reminders")
+local RM, RP, PV, placement = R.Reminders, R.RemindersPage, R.RemindersPreview, R.RemindersPlacement
+local function Flush() for _ = 1, 6 do FlushTimers() end end
+RP.Create("enchant"); RP.Refresh(); Flush()
+local rid = RP.Selected()
+assert(placement.Start(RM.Get(rid)) and not win:IsShown(), "placement really hides Settings instead of leaving an invisible input surface")
+assert(not RP.EditorActive() and not PV.Shown() and placement.Parts():IsShown(), "toolbar owns the explicit positioning context")
+for _ = 1, 3 do RP.Refresh(); RP.QueueRefresh(); Flush(); assert(not PV.Shown(), "refresh cannot reopen a companion during placement") end
+placement.Cancel(true); Flush()
+assert(win:IsShown() and UI.IsPageActive("reminders") and RP.Selected() == rid and not placement.Active(), "Cancel restores the same editing page and selection")
+placement.Start(RM.Get(rid)); UI.Close(); Flush()
+assert(not win:IsShown() and not placement.Active() and not PV.Shown(), "explicit Settings close cancels placement and stays closed")
+UI.Open("reminders"); RP.Refresh(); Flush() -- this mock does not deliver inherited child OnShow
+assert(win:IsShown() and PV.Shown(), "reopening after placement close restores the preview normally")
+placement.Start(RM.Get(rid)); assert(PressEsc(), "placement participates in the established Escape path"); Flush()
+assert(win:IsShown() and not placement.Active(), "closing the placement toolbar safely cancels and restores settings")
+UI.Close()
+for _ = 1, 3 do RP.Refresh(); PV.SetBackground("landscape"); Flush(); assert(not PV.Shown(), "background requests cannot show a gameplay companion") end
+
+-- Only the pilot Reset button adopts the art-backed destructive state family.
+UI.Open("reminders")
+local reset = UI.View("reminders").reset.button
+assert(reset.twichReminderMaterial and reset.twichCraft.skin == "danger", "Reminders reset uses painted danger artwork")
+reset:Fire("OnEnter"); assert(reset.twichCraft.skin == "danger-hot", "Reset hover retains destructive semantics")
+reset:Fire("OnMouseDown"); assert(reset.twichCraft.skin == "danger-down", "Reset has a pressed art state")
+reset:Fire("OnMouseUp"); reset:Fire("OnLeave")
+local countBefore = #R.Reminders.List()
+R:SetEnabled("reminders", false)
+reset:Fire("OnClick")
+assert(asked.key == "TWICHUI_SETTINGS_RESET_PAGE" and not R:Enabled("reminders"), "the painted reset still asks before changing settings")
+asked.dlg.OnCancel()
+assert(not R:Enabled("reminders") and #R.Reminders.List() == countBefore, "canceling reset preserves feature state and reminders")
+reset:Fire("OnClick"); asked.dlg.OnAccept()
+assert(R:Enabled("reminders") and #R.Reminders.List() == countBefore, "confirmed reset keeps its original page-only scope")
+UI.Navigate("food")
+assert(not UI.View("food").reset.button.twichCraft, "unrelated pages keep their existing Reset appearance")
+UI.Close()
 
 print("PASSED")

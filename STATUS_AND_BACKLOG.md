@@ -2,15 +2,36 @@
 
 One short entry per feature that has a continuing handoff. Details live in the feature's doc; keep this current instead of adding session notes.
 
-## Reminders style upgrade - functional part committed on feature/style (2e0c5fe5); styling, compact editor and interactive preview NOT built
+## Reminders style upgrade on feature/style (2026-11-11)
 
-Reference: [docs/reminders-style-upgrade.md](docs/reminders-style-upgrade.md) (code map, reusable styling, blockers, milestones, verification, first Codex prompt); behavior in [docs/reminders.md](docs/reminders.md).
+- Final Advanced correction: Position no longer shares Opacity's anchor; it is a separate secondary-placement row.
+  Consistent control spacing/right padding and bounded scroll after collapse are unit-tested, simulator-tested and
+  screenshot-reviewed (six final poses, 103 checks each). Suite 187/0; construction 56/56. See the revision record
+  for native comparison crops and remaining real-client font/pointer checks. Existing material/art direction retained.
 
-- **Built:** template catalog (`pages/RemindersCatalog.lua`, creation through `P.Create` -> `RM.Create`, independent disabled copies, refusals keep it open) and an attached preview companion (`pages/RemindersPreview.lua`, drawn by the reminder's own layout code, Show on screen). The player confirms the preview works in the real client; catalog, Esc, edge flipping and scaling are not confirmed. Style v2 material (`Material.lua`) exists for the settings window and is applied to the page cards; the companion frames still use the plain guild-bank frame look.
-- **Not built:** warm styled companions/cards/editor, compact editor (shorter section blurbs, diagnostics secondary), clickable preview elements that navigate to and highlight settings (no scroll/highlight helper exists), illustrated catalog cards (art exists only for shield, ammo, well fed), catalog search/category filters (deferred, separate scope), any When-editor change (already built inline; only visual consistency remains).
-- **References:** the three approved renders are stored in `docs/reminders-style-references/` (`REMINDERS_PREVIEW.png`, `REMINDERS_TEMPLATE_CATALOG.jpg`, `REMINDERS_WHEN_BUILDER.png`), excluded from packages with the rest of `docs/`. No preparation blocker. Preview click handling and scroll/highlight are milestone 2 dependencies; bespoke template artwork (enchant, item, custom) is a separate, unrequested item.
-- **Checked (historical, reported earlier, not rerun):** 187 tests, Lua syntax, simulator construction smoke. **Run 2026-11-10 for this brief:** `test_reminders_settings`, `test_settings_window`, `test_settings_window_size` pass; `luac5.1 -p` clean on `Reminders*.lua` and `Material.lua`.
-- **Next recommended small task:** milestone 1 of the brief (shared styling foundation and compact editor).
+- Addendum: primary Place on screen beside Live preview reuses the existing transaction; its Advanced duplicate is removed.
+  Reset uses scoped destructive artwork without changing confirmation/scope. Dedicated enchanted-blade and combat-sword
+  art plus the reused painted horse replace duplicated/game-tile condition icons through one resolver. All 13 condition
+  entries were audited; native sizes, alpha and actual integrated captures are in the [revision record](docs/reminders-revision/implementation.md).
+  Unit suite 187/0; real-pointer/font/client checks remain pending.
+
+- Interaction polish: fixed Reminders-family header/body scroll ownership, shared painted scroll rails, bounded wheel easing,
+  compact contextual actions, scroll-aware popup placement, font option previews, structured summaries and readable diagnostics.
+  Private on-screen placement supports Finish/Cancel/Esc with no intermediate writes; preview backgrounds/highlights preserve
+  lifecycle guards. Two generated preview paintings add Landscape/Parchment, including real-alpha parchment in the builder.
+  Exact checks, screenshots/crops, preserved work and remaining real-client acceptance are in the [revision record](docs/reminders-revision/implementation.md).
+
+- Art-backed craftsmanship: inspected `SETTINGS_HOME.png` plus all three Reminders targets. Three built-in generations supply frame/button/selection sources; 28 prepared TGAs and the opt-in `SettingsCraft` helpers are integrated into all three surfaces. Quiet leather, existing art/hinge, rules and lifecycle guards are retained. Header/search styling restores on other pages; search keeps stable geometry while typing. No Home content or wider navigation rollout.
+- Proofs and repeated captures corrected clipping, history-label alignment, chip curvature, selected/primary emphasis and the dashed target. Full suites: 187/0 twice; all eighteen standard poses plus proof/item/artwork alternatives passed, followed by targeted recaptures. Latest smoke passed 56/56 construction. Remaining sculpting/font/client differences, source/prompts, comparisons and exact checks are in the [revision record](docs/reminders-revision/implementation.md); real-client acceptance remains pending.
+
+- P0 preview reappearance: active-editor visibility is authoritative; content updates cannot show the companion. Close/navigation invalidate queued work. Repeated closed refreshes, configuration/gameplay events, disabled preference and world-preview isolation are unit-tested and simulator handler-tested. Sustained client gameplay confirmation remains required.
+- Component fidelity: retained quiet materials; added transparent rounded rim sheets, grouped Appearance controls, bounded wider-list proportions, recessed preview sizing controls and clearer status/footer alignment. Dropdown hover preserves its value-text inset. Component crops compare reference/before/after; painted corner detail and real font/pointer verification remain open in the revision record.
+- Precision calibration: fine derived leather, distinct tonal roles, mixed-case serif headings, readable controls, larger Appearance tile/Choose, restrained Save emphasis and adaptive preview height. Settings material adoption is opt-in and reverses on navigation. The bronze hinge is retained. Latest captures, crop samples and limitations are in the revision record.
+- The compact editor puts the master switch in its header, groups Appearance around an artwork tile and shares one row for Advanced and Diagnostics. Its preview remains silent and supports Actual size and Fit. The illustrated catalog keeps search, categories and validated disabled drafts.
+- When uses a dedicated two-frame workspace with a reminder rail, bronze hinge and shared neutral materials. Flat All rules have type-aware trigger and restriction cards. Positive location alternatives have chips over the original Any group. Other nested and Any rules use Advanced logic. Conditions, targeting and drag moves are staged with draft Undo/Redo. Save applies them together and Cancel discards the draft.
+- The modal correction lowers invisible Settings below the workspace, restores its original strata on close and aligns help and drag coordinates with effective scale. A generated transparent bronze fitting joins the workspace and preview. Sliders, menus and hover rims use opt-in materials; native wheel steps are smaller.
+- The revision reuses existing artwork and game icons. Its panel faces and optional header switch are reusable through opt-in settings components. Reminders is the first adopter.
+- The component pass covered all eighteen existing simulator poses plus item/artwork-only alternatives, with 65–68 handler/state checks per pose and follow-up clean/dirty footer captures. Full unit suite: 187/0. Latest smoke passed 56/56 page construction without captured errors. The [revision record](docs/reminders-revision/implementation.md) retains screenshot anomalies, exact commands, component comparisons, remaining visual differences and client checks; visual acceptance is still pending.
 
 ## Workshop (TwichUI_Workshop) - milestones 1 to 3 built, uncommitted on feature/workbench; the window opens and works in game (player-confirmed); milestone 2 reported complete by the player (not itemized); milestone 3 not tried in game
 

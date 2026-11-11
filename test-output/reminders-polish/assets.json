@@ -1,0 +1,24 @@
+{
+  "landscape": {
+    "runtime": "!!!TwichUI/media/reminders/preview-landscape.tga",
+    "dimensions": [
+      512,
+      512
+    ],
+    "format": "uncompressed 32-bit RGBA TGA",
+    "clear": 0,
+    "opaque": 262144,
+    "partial": 0
+  },
+  "parchment": {
+    "runtime": "!!!TwichUI/media/reminders/preview-parchment.tga",
+    "dimensions": [
+      512,
+      256
+    ],
+    "format": "uncompressed 32-bit RGBA TGA",
+    "clear": 18917,
+    "opaque": 0,
+    "partial": 112155
+  }
+}

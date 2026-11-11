@@ -532,6 +532,7 @@ function Wg.EditBox(parent, w, h)
     Wg.Recess(eb)
     -- keyboard focus: a teal edge and a faint inner ring (the only thing in the window that takes the keys)
     local ring = Wg.Shade(eb, { pal.teal, 0.35 }, { pal.teal, 0.35 }, { pal.teal, 0.35 }, { pal.teal, 0.35 }, 1, "OVERLAY")
+    eb.twichFieldRing = ring   -- opt-in painted controls can hide this rim after the native focus handler
     local function Edge()
         local focused = eb:HasFocus()
         local c = focused and pal.teal or (eb:IsMouseOver() and pal.tealHi or pal.control)

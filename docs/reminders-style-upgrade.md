@@ -1,34 +1,128 @@
-# Reminders style upgrade: brief for the next implementation session
+# Reminders style upgrade
 
-Read this first. It is a starting point, not a design to re-derive: the functional work (template catalog, attached
-preview) is built and must be kept. What remains is **styling, a compact editor and an interactive preview**. Feature
-behavior, saved data and tests are described in [reminders.md](reminders.md); the rule set is in `CLAUDE.md` (summarized
-in `AGENTS.md`). Nothing here has been implemented as styling yet.
+The approved upgrade covers the compact editor, interactive preview, illustrated catalog and When companion end to end
+on `feature/style`. Feature behavior and saved data are described in [reminders.md](reminders.md). Follow `AGENTS.md`,
+`CLAUDE.md` and the applicable sections of `docs/dev-rules.md`.
 
-Written 2026-11-10, from reading the code. No runtime code was changed to write it. Rechecked 2026-11-10 (second pass):
-branch `feature/style`, HEAD `2e0c5fe5` "Create templates frame and preview window", which is also the last commit touching
-`RemindersCatalog.lua` and `RemindersPreview.lua`; the tree held no uncommitted Reminders changes. Re-run `git log -1 --
-TwichUI_Settings/pages/RemindersCatalog.lua` before starting; do not assume these still hold.
+The complete revision uses the supplied requirements handoff and [original mockups](reminders-revision/).
+See the [requirement and visual verification record](reminders-revision/implementation.md) for the baseline, final captures,
+remaining visual differences and real-client checks.
 
-## Approved visual targets (the three renders)
+## Usability and condition artwork addendum (2026-11-11)
+
+Final Advanced polish removes the zero-height Position row that overlapped Opacity. Position now has its own row
+inside secondary placement options; primary/nested controls align with consistent spacing and right padding.
+Scoped fixed-header layout clamps stale scroll offsets after disclosure collapse. Six final renders, comparison crops,
+103 handler/state checks per pose, 187/0 unit results and 56/56 construction are recorded in the revision record.
+Real-client input/font checks remain pending; current materials and functionality are retained.
+
+Place on screen now appears in the selected-reminder header beside Live preview. It is the original placement control,
+removed from Advanced's layout; both primary and companion entries use the existing private Finish/Cancel transaction.
+Reset adopts the existing destructive art family only on scoped material pages, with confirmation and reset scope intact.
+Condition artwork now distinguishes a broad enchanted blade, crossed combat swords and a reused painted horse head.
+One resolver supplies palette/cards/summaries/diagnostics/drag ghosts, separately from reminder and template artwork.
+Three bounded built-in calls include one targeted sword refinement; source/prompts, alpha checks, all-condition audit,
+actual simulator captures and verification are in the [revision record](reminders-revision/implementation.md).
+
+## Interaction polish (2026-11-11)
+
+The current pass preserves the quiet leather and painted component family. Reminders and Known ammunition now own
+fixed title/tab chrome above a real body viewport; other pages retain their original scroll geometry. Scoped scroll
+rails and popup sliders share painted art, with cancelable 120 ms / 24-unit wheel movement and reduced-motion support.
+Reminder rows fill their well and offer canonical Duplicate/Delete actions through compact menus and confirmation.
+Popup/help placement accounts for nested scroll transforms as well as effective scale.
+
+Placement is an explicit private coordinate transaction with a small Finish/Cancel toolbar and hidden Settings;
+stale releases, combat, deletion and concurrent position changes are guarded. Four session-only preview backgrounds,
+painted hover/navigation emphasis, font-name previews, illustrated complex-rule summaries, readable diagnostic result
+rows and separate simulation/technical disclosures are integrated. The focused builder drops its redundant Edit
+conditions button and uses original parchment behind its isolated appearance renderer.
+
+Two built-in image-generation calls produced landscape and parchment sources. Runtime files and exact prompts,
+comparison crops, final captures, regression results and client-only acceptance are in the
+[existing revision record](reminders-revision/implementation.md). No new material overhaul, saved schema or wider rollout.
+
+## Earlier implementation status (2026-11-11)
+
+The art-backed pass uses `docs/reminders-revision/SETTINGS_HOME.png` as the shared shell/selection reference. Three
+built-in image-generation calls produced standalone frame, button and selection sources; `tools/make_craft_art.py`
+prepares 28 runtime textures. `SettingsCraft` supplies opt-in fixed-corner frames and painted control states, integrated
+through Material into the editor, preview, builder and catalog. Quiet large-area materials, hinge and existing artwork
+are retained. Header/search proportions improve only in the pilot context, including stable geometry during search;
+other pages restore their previous shell. The reminder list now aligns with the primary editing stack.
+
+Native component proofs preceded integration; repeated actual captures corrected label clipping, history alignment,
+chip curvature and the dashed target. See the revision record for exact screenshots, comparisons, tests and remaining
+client acceptance. No Home content or global navigation-row migration was implemented.
+
+The component-fidelity pass retains those materials and adds hollow rounded bronze rims over the existing fills,
+painted rails and hinge. Appearance groups the larger artwork/Choose area and integrates text color with Size.
+Wide editors give the reminder list a bounded share of the extra width. Preview sizing controls share a recessed well;
+visibility has its own icon. Cards, grip dots, disclosures and footer actions have locally refined alignment and relief.
+The reference/before/after component crops and outstanding visual differences are in the revision record.
+
+The material foundation uses scoped fine leather and baked rounded faces, distinct header/editor/card/control
+roles, mixed-case Spectral headings and readable sans controls. Reminders alone opts into the new Settings shell
+materials; leaving the page restores existing materials. The hinge is retained, condition artwork is separated from
+chosen reminder artwork, and the preview follows a taller editor. Source/inspection artifacts stay out of packages.
+
+The P0 spontaneous-preview regression is corrected by an authoritative active-editor visibility predicate. Refreshing
+content cannot show a hidden companion; close/navigation invalidate queued refreshes. Live preview is a session toggle,
+separate from the explicit temporary world preview. Tests repeat closed refreshes and gameplay/configuration events.
+Client confirmation remains required. See the revision record for comparisons, exact checks and limitations.
+
+The UX refinement moves the master switch into the page header, gives Appearance an artwork tile, and consolidates
+Advanced and Diagnostics. Flat All rules open with directly editable trigger and restriction cards. Positive Dungeon/Raid alternatives have lossless chip editing. Other grouped, Any and
+unsupported rules open Advanced logic with their stored tree intact. The revision record compares the supplied client
+captures, original mockups, baseline and final simulator renders.
+
+- `TwichUI_Settings/pages/Reminders.lua` and `RemindersEditor.lua` put the list beside the editor, use a compact feature
+  card with pill switches, and put placement, effects and test diagnostics behind disclosures. Long row names and rules are available in
+  tooltips. `Material.lua` reuses the style-v2 leather, rounded slices and bronze edge for the Reminders controls and
+  companions. The compact feature card is opt-in in `Cards.lua` and `Window.lua`.
+- `RemindersPreview.lua` attaches hit targets to the existing renderer's art and text regions. They scroll to and
+  highlight the matching field. The preview remains usable for disabled reminders, offers Actual size and Fit controls,
+  and keeps the explicit Show on screen action. At narrow widths, a click to edit minimizes an overlaid
+  preview so the field can be reached.
+- `RemindersCatalog.lua` shows five illustrated cards and a Custom row, with search and category filtering. Creation still uses `P.Create` and `RM.Create`.
+  Missing equipment or item needs an item for the condition and display, and the existing validation blocks enabling an
+  unfinished draft. The catalog reports refusals and stays open. New enchant drafts use the bundled oil artwork.
+- `RemindersDesigner.lua` keeps type-specific controls on basic cards and uses a dedicated When workspace.
+  `RemindersBuilderRail.lua` supplies the reminder list, selection, summary and isolated sample beside the rule panel.
+  Both frames reuse the existing illustrated bronze rails and neutral espresso material. Location alternatives use chips.
+  Other grouped or Any rules retain their Advanced logic presentation.
+  The When companion has a recessed search, divided palette, bronze scrollbar, contextual actions, a For dropdown,
+  illustrated drag ghost and dashed restriction target. Its summary, current visibility and situation testing have
+  separate roles, with controlled bottom disclosures and a persistent action footer. `Config.lua` keeps conditions and targeting in a private draft with Undo/Redo and validates a single
+  Save. Cancel discards the draft and restores the preview.
+- `PV.Place` positions the preview and catalog. The When workspace temporarily covers Settings and fits the complete
+  paired frames to the screen without writing the saved placement. `PV.Place` tries either side for the preview and catalog, and can temporarily shift the settings window to fit
+  both panels, and centers a companion when side-by-side placement is too narrow. Leaving the page closes the
+  companions and world preview and restores the temporarily shifted anchor. The settings addon still loads on demand.
+  Its Reminders controls are built when the page or catalog is first used and reused on redraw.
+
+The simulator screenshots show the two-column editor, attached preview, two-column illustrated catalog and the
+When palette beside the rule cards. The supported item template adds a third catalog row. At the default settings
+height, Advanced and Duplicate/Delete are below the fold. The simulator substitutes fonts. Pointer delivery, typography,
+scaling, Escape order and reload persistence still need a real-client pass.
+
+## Approved visual targets
 
 Stored as documentation references (not runtime artwork; `docs` is excluded from the package by `.pkgmeta`), original image
 content unchanged, named as supplied:
 
 | Path | Role |
 |---|---|
-| `docs/reminders-style-references/REMINDERS_PREVIEW.png` (1586x992) | Compact settings window with the Reminders page (list, name and switch, Appearance, When summary, Sound, collapsed Advanced, Duplicate/Delete) and the attached **Live preview** panel (preview well, "Click an element to edit", an element's **Edit icon** chip, Actual size / Fit, Visibility, Preview toggle). Target for milestones 1 and 2. |
-| `docs/reminders-style-references/REMINDERS_TEMPLATE_CATALOG.jpg` (1586x992) | Settings window with Reminders and the **Create a reminder** catalog beside it: illustrated cards (Weapon enchant, Well Fed, Missing shield, Ammunition) with name, one line and **Use template**, a **Custom reminder** row, and the "Creates your own editable copy. Starts off." footer. Target for milestone 3. |
-| `docs/reminders-style-references/REMINDERS_WHEN_BUILDER.png` (1586x992) | The condition-editing design: reminder list, a condition palette (search, categories, click or drag to add), the rule as cards ("Show a reminder when", "Only while", Add restriction, Advanced logic), a plain-language result with Hidden now / Details, Try a situation, Undo/Redo, Cancel/Save. Target for milestone 4. |
+| `docs/reminders-revision/SETTINGS_HOME.png` | Primary shared-shell, frame, header, material and premium selection reference; no Home content implementation. |
+| `docs/reminders-revision/REMINDERS_PREVIEW.PNG` | Compact settings window, reminder list, Appearance, When, Sound, Advanced and attached preview with Actual size and Fit. |
+| `docs/reminders-revision/REMINDERS_TEMPLATE_CATALOG.jpeg` | Illustrated template cards with search, categories, Use template actions and a Custom reminder row. |
+| `docs/reminders-revision/REMINDERS_WHEN_BUILDER.png` | Condition palette, rule cards, targeting, live feedback, insertion feedback and edit actions. |
 
-These are **approved targets**. Any screenshot of the current client or simulator is **before-state evidence only** and
-never a target. The renders are mockups: where they show things outside the approved requirements (the Search templates box
-and All / Preparation / Equipment tabs, faction icons and the profile footer, a global search box, new artwork for each
-template, drag-to-add in the palette, a separate Save step) those are **not** implied scope. Treat the filters as the
-deferred item in C; take the rest as styling guidance and confirm with the owner before building behavior the code does not
-have. Where a render and CLAUDE.md or the safety rules differ, the rules win.
+The complete revision authorizes search, category filtering, preview sizing and rule drag-and-drop.
+The When editor applies conditions and targeting together on Save. Global navigation, faction chrome,
+profile workflow and supported condition types continue to follow the addon contracts.
 
-## A. Current implementation (verified by reading the code)
+## A. Before the upgrade (historical source inspection, commit `2e0c5fe5`)
 
 Everything is in the load-on-demand `TwichUI_Settings/` addon (load order: `TwichUI_Settings/TwichUI_Settings.toc`) except the
 reminder model and drawing, which are core.
@@ -47,7 +141,8 @@ reminder model and drawing, which are core.
 
 ### Shared styling components that exist
 
-Two separate looks exist and **must not be mixed up**:
+Two reusable treatments existed at this baseline. The dedicated When workspace now combines the illustrated outer frame
+with the opt-in leather interiors and controls described below.
 
 1. **Settings "style v2"** (leather and bronze), `TwichUI_Settings/Material.lua` (`R.SettingsMaterial`, built in commit 29819a33).
    Header comment lists the API: `M.Window`, `M.Band`, `M.Nav`, `M.NavItem`, `M.Header`, `M.Well`, `M.Slice(host, "recess"|"raised")`,
@@ -71,8 +166,21 @@ Kit (`Kit.lua`) is the page/registration layer, not needed for a visual pass.
 - `Material.lua` was written for the settings window and its pages ("THIS window only"); applying it to the companion frames
   is new use, so check each function against a frame that is a child of `UIParent` at `HIGH` strata (it assumes nothing about
   the parent, but it was not written for that).
-- The approved renders are targets, not assets: nothing is cut from them. The only artwork of the Reminders feature
-  is in `media/reminders/` (see "Missing bespoke template artwork" below).
+- The approved renders are targets, not assets: nothing is cut from them. The runtime paintings that existed at the start are listed in the table above.
+
+### Artwork produced and integrated
+
+The scope permits producing missing standalone assets while reusing suitable existing art. One built-in generation call
+produced the leather gauntlet for the item template. The earlier capability-test oil vial was reused for enchant, and the
+existing unlettered Golden-Bound Parchment Scroll was reused for Custom. The shield, arrows and plate paintings remain in
+use. The PNG sources are `assets/reminder-art-{enchant,item,custom}-source.png`, and the runtime TGAs are under
+`!!!TwichUI/media/reminders/`. `assets/` and the reference images under `docs/` are excluded by `.pkgmeta`.
+
+All three source PNGs have real alpha. The runtime artwork was screenshot-reviewed at 48 and 76 pixels on espresso and
+lighter stone backgrounds. The catalog has no placeholder artwork. An unset item in a draft still has the existing
+question-mark preview until the player chooses an item. New asset work uses the built-in route with bounded authorization.
+Stop after two unsuccessful substantive attempts at the same asset and record the gap. An API fallback or credit purchase
+requires separate authorization.
 
 ### Preparation blockers: none
 
@@ -94,38 +202,33 @@ The three approved renders are stored (above). Nothing blocks starting milestone
 4. Catalog and preview frames are fixed-size (420 and 360 wide) and place only at `SettingsAnchor` right or left; narrow
    screens and large scales are unverified (docs/reminders.md checks 27-28).
 
-### Missing bespoke template artwork (separate from design references)
+### Starting point for the condition designer
 
-The renders show per-template illustrations (oil and sword, soup and bread, shield, quiver, scroll and quill). Runtime
-artwork exists only for shield, ammo and well fed (`media/reminders/`, painted at 64 px for rows; not necessarily the
-render's illustration style or size). Weapon enchant, item and custom have none. New artwork is **not** produced by this
-brief; it needs a source image and a `tools/make_*` cut when requested. Until then the catalog uses icons for those cards
-(milestone 3 may ship with that fallback; ask before generating art).
+The inline designer already had pooled controls, a searchable condition picker, copy-on-edit, Undo and the explanation
+view. The upgrade reuses those pieces inside the companion and keeps their existing save and validation behavior.
 
-### When designer
+## B. Verification evidence
 
-The inline When designer (`RemindersDesigner.lua`, `RemindersPlain.lua`) is built and tested. **Reuse and adapt it; do not
-rebuild it** unless the owner decides otherwise. The render shows a fuller layout (palette beside the rule, plain result,
-Undo/Redo, Cancel/Save); compare it with the designer's existing picker (search, categories), copy-on-edit (Done/Cancel),
-Undo and "Why would it show?" before changing anything, and change only what milestone 4 needs.
+- **Unit-tested:** focused Reminders settings, designer, groups and enchant/sound tests and the settings window and size
+  tests passed. The settings contract test also passed. Preview click checks compare the stored draft and revision and
+  count calls to the display setter and condition inspection. `./tests/run.sh` finished with **187 passed, 0 failed**.
+  `luac5.1 -p` passed on every edited or new Lua file.
+- **Simulator construction-tested:** `SIMLAB_PAGE=reminders SIMLAB_TITLE=Reminders bash tools/simlab/smoke.sh`
+  opened Reminders and constructed all 56 settings pages without a captured Lua error.
+- **Simulator interaction-tested:** `bash tools/simlab/reminders.sh` passed 20 editor, 20 catalog, 21 When and 22 narrow
+  handler/state checks. The scenario opens the real settings page, changes the companion through its controls, exercises
+  an invalid item draft and verifies a disabled on-screen preview is removed on close.
+- **Screenshot-reviewed:** `../wow-ui-sim-lab/artifacts/reminders-20261110-154138/{editor,catalog,when,narrow}.png`.
+  The before-state capture is `../wow-ui-sim-lab/artifacts/smoke-20261110-150530/settings.png`.
+- **Not tested in the real client:** visual acceptance, pointer interactions, UI scale, Escape order, combat cleanup and
+  reload. The simulator's font substitution and handler-level interaction limit what its captures prove.
 
-## B. Evidence
-
-| Claim | Label |
-|---|---|
-| Items in section A (file paths, symbols, line numbers, relationships) | **Verified by this inspection** (read code, 2026-11-10) |
-| 187 passing tests, Lua syntax checks, simulator construction smoke success | **Previously reported, not rerun**: historical |
-| `test_reminders_settings.lua`, `test_settings_window.lua`, `test_settings_window_size.lua` each print `PASSED`; `luac5.1 -p` clean on `Reminders*.lua` (6 files) and `Material.lua` | **Fresh, run in this task** (offline unit tests only; the full `./tests/run.sh` and simulator were **not** run: documentation-only task) |
-| The attached preview now works in the real client | **User-confirmed**. Not inferred: catalog behavior, Esc, close box, edge flipping, scaling, clamp, combat/cleanup and one-preview-after-reopen are **not** confirmed (docs/reminders.md checks 27-28 remain open) |
-| Catalog in the real client | **Not tested** (no user confirmation recorded) |
-| Warm styling of Reminders (companions, cards, editor), interactive preview, search/category filters, companion When editor | **Requested, not implemented** |
-
-## C. Approved remaining requirements
+## C. Approved requirements
 
 - Reminders is the **prototype** for the shared polished settings style. It is not authorization to restyle other pages or
   windows. `Material.lua` stays settings-window-only; do not edit `Look.lua`/`FrameLook.lua` for other consumers.
 - Look: warm espresso/walnut leather, chestnut surfaces, aged bronze, ivory text, selective antique gold, restrained depth,
-  rounded controls, readable text. Targets are the three approved renders in `docs/reminders-style-references/` (top of this document).
+  rounded controls, readable text. Targets are the three approved renders listed above.
 - Compact editor: cut redundant introductory prose (the `Section` blurbs, the catalog/preview subtitles where they repeat
   the title), keep advanced diagnostics (Test, "Why would it show?", Try a situation) secondary.
 - The preview stays usable beside the editor while editing.
@@ -134,20 +237,20 @@ Undo and "Why would it show?" before changing anything, and change only what mil
 - The catalog uses distinct illustrated cards in a consistent layout.
 - Keep independent, initially disabled template creation (`P.Create` -> `RM.Create`). Keep validation, unknown-condition
   semantics (three answers, groups), profile compatibility and saved data unchanged. No schema change.
-- Preview, catalog and a future When editor share the companion position and never show as competing frames.
-- Search and category filters stay requested but **deferred**: a separate scope item, not a prerequisite for the visual work
-  (the picker in the designer already has search and categories; the catalog has neither).
-- When editor: inspected state above (already built, inline, pooled frames). Its remaining work is only visual consistency
-  with the new style and, optionally, the companion placement (D4). Do not rebuild it.
+- Preview, catalog and the When editor share the companion position and never show as competing frames.
+- Search and category filters are in scope for both the catalog and the condition palette.
+- The When editor adapts the existing condition designer to the companion layout and preserves its pooled controls,
+  All/Any grouping and validation. Drag-and-drop uses the existing tree. A validated Save applies the draft, Cancel
+  discards it, and Undo and Redo apply to draft changes.
 
-## D. Milestones (each is one request)
+## D. Implementation checkpoints
 
 1. **Shared styling foundation and compact editor.** Apply `Material` (cards, fields, button faces) consistently across the
    Reminders page and `Section` cards; shorten/remove `Section` blurbs and duplicate prose in `Reminders.lua`/`RemindersEditor.lua`;
    fold Test and "Why would it show?" behind secondary treatment (collapsed or last, no behavior change). Smallest set of
    shared helpers only if two files need the same function (e.g. a companion-frame dressing function in `Material.lua` or a
    local file): no new framework.
-   Acceptance: `Reminders*.lua` unchanged in behavior (`test_reminders_settings.lua`, `test_reminders_designer.lua`,
+   Acceptance: preserve reminder behavior and validation (`test_reminders_settings.lua`, `test_reminders_designer.lua`,
    `test_settings_window*.lua`, `./tests/run.sh` pass); no new frames per redraw; blurbs gone or shortened with the tests that
    read them updated deliberately; `simlab/smoke.sh` constructs the page; screenshot reviewed structurally; real-client check
    of readability.
@@ -156,19 +259,19 @@ Undo and "Why would it show?" before changing anything, and change only what mil
    goes through the editor's section frames; highlight is a transient texture and writes nothing.
    Acceptance: clicking a part reveals the right control and writes no saved value (unit test asserting `RM.Get` unchanged
    and no `Set*` call); preview still never plays sound or reads a condition; Show on screen unchanged; `PV` still makes its
-   frame once; Esc/close/page-hide cleanup unchanged; real-client: click targets, scroll, highlight.
+   frame once and cleans up when settings close or the player leaves the page. Real-client checks cover click targets, scroll and highlight.
 3. **Styled template catalog.** Cards with consistent layout and artwork per template (supply or decide art for `enchant`,
    `item`, `custom`, see F), same companion look as the preview, `Use template` primary, close box. Keep `Use` -> `P.Create`.
    Acceptance: the existing section 10 tests pass (independent copies and ids, starts off, refusals keep it open, cancel
    makes nothing); text fits at the real card size (screenshot, then real client); placement is the shared `PV.Place`.
-4. **When editor consistency and companion sharing, only if needed.** Restyle the designer's cards to the finished style;
-   decide whether it stays inline (recommended: yes, until a render says otherwise). If it becomes a companion, route it
-   through the same placement and one-at-a-time rule with a test for the handoff.
+4. **When editor and companion sharing.** Restyle the existing designer and use the shared companion placement.
+   The page keeps a rule summary and opens the editor through Edit conditions.
    Acceptance: `test_reminders_designer.lua`, `test_reminders_groups.lua` unchanged in behavior; unknown-condition cards,
    Edit/Cancel copy semantics intact.
 
 Order is by dependency: milestone 1 supplies the style the next two use; 2 before 3 because the placement/handoff rules the
-catalog also follows are exercised first by the preview. Filters (catalog search/category) are outside all four.
+catalog also follows are exercised first by the preview. Preview sizing, catalog filtering and pointer operations are
+verified with their corresponding surfaces.
 
 ## E. Verification map
 
@@ -178,47 +281,48 @@ Run from the repository root; the test harness also needs `lua5.1` + `bit`.
 |---|---|---|
 | Syntax | `luac5.1 -p '<file>'` after each Lua edit | parses |
 | Focused behavior (unit) | `(cd tests && lua5.1 -e 'require("bit"); ROOT="../!!!TwichUI/"; REPO="../"; TESTS="./"' test_reminders_settings.lua)`; same for `test_reminders_designer.lua`, `test_reminders_groups.lua`, `test_settings_window.lua`, `test_settings_window_size.lua`, `test_reminders.lua` | creation path, selection, catalog (section 10), preview handoff (section 11), settings window sizing |
-| Full suite | `./tests/run.sh` (about 10 s) | required for code changes by `CLAUDE.md` |
+| Full suite | `./tests/run.sh` | required for code changes by `CLAUDE.md` |
 | Simulator construction | `bash tools/simlab/smoke.sh` (all pages construct; run with bash, not zsh) | the page and companions build without a Lua error |
-| Simulator interaction | `bash tools/simlab/interact.sh` drives only `notificationsLook`; **no Reminders scenario exists** | nothing for Reminders; do not claim it |
+| Simulator interaction | `bash tools/simlab/reminders.sh` | Reminders companion transitions, preview navigation, item validation and close cleanup through handlers |
 | Screenshot review | the simulator's page screenshot (`docs/simulator-lab.md`) | structure only (columns, fit); fonts fall back; **not** visual validation |
 | Real client | `docs/reminders.md` in-game checklist, items 27-28 plus new items you add for the style | appearance, placement, scaling, Esc, click targets, taint-free behavior |
 
-Limitations (not to be repaired in this work): the simulator cannot show real appearance, pointer input, combat or
-reload persistence; companion frames and the preview surface are only constructed there.
+The simulator exercises companion handlers and produces structural screenshots. Real-client typography, pointer input,
+combat and reload persistence need client checks. Simulator infrastructure is outside this upgrade.
 
-## F. References and unresolved decisions
+## F. Real-client acceptance
 
-- References: the three renders in `docs/reminders-style-references/` (top of this document). No other design reference is
-  needed; no guild-bank mockup is required. Guild-bank code and art (`FrameLook.lua`, `media/guildbank/`) are optional
-  implementation reuse, not a competing target.
-- Other images, unrelated to layout, for reuse only: `../assets/reminders.png`, `../assets/style-v2-assets.png`,
-  `../assets/reminder-art-{ammo,shield,wellfed}-source.png`, `../assets/reminder-designer-source.png` (`../assets/` is a sibling
-  folder outside the repository).
-- Consequential questions only:
-  1. Bespoke artwork for the Weapon enchant, item and custom cards (and whether to match the render's illustrations): new
-     painted art, or icons for now? Not blocking milestones 1 and 2.
-  2. Which render elements outside the approved requirements (see the table note) to build, if any.
-  3. Does the When editor stay inline? (Recommended: yes, restyled, unless the owner wants the render's companion layout.)
-- Not decided here, because the code already answers it: creation path, initial disabled state, companion position
-  (`PV.Place`), preview safety rules, profile/schema (none).
+1. Open a disabled weapon enchant draft. Check the list, rounded controls, oil artwork and text at normal and higher UI
+   scales. Click the artwork and words and confirm each field scrolls into view and gets a short highlight.
+2. Use Show on screen and Hide preview. Check that the draft remains off and silent, then close settings or leave the
+   Reminders page and confirm the sample disappears. Check that combat ends an explicit world preview.
+3. Open the catalog, check the artwork and long labels, and close it with Escape. Confirm selection returns. Create two
+   copies and check they start off. Try enabling the equipment/item draft before and after supplying required inputs.
+4. Open When at normal and constrained widths. Check scrollbar and close/back access, edit and cancel a nested condition,
+   and switch between companions. Verify Escape with a dropdown open, then with a dirty draft. Save a different rule
+   and targeting together and verify them after `/reload`. Reopen settings after moving the window.
 
-## First Codex session prompt (copy and paste)
-
-Model: choose the strongest available Codex coding model in your client, at **Medium** reasoning effort.
+## Codex implementation prompt (copy and paste)
 
 ```
-Read AGENTS.md and docs/reminders-style-upgrade.md first, then CLAUDE.md sections the task touches.
-Implement only milestone 1 of that brief: shared styling foundation and compact Reminders editor
-(Material.lua, pages/Reminders.lua, pages/RemindersEditor.lua; no other pages).
-Keep the existing template creation path (P.Create -> RM.Create), the preview and catalog behavior, saved data,
-validation and unknown-condition semantics unchanged. Preserve all existing user work; do not touch unrelated files.
-Visual targets are the three approved renders in docs/reminders-style-references/ (REMINDERS_PREVIEW.png is the one for
-this milestone; the other two are for later). Do not invent a design, generate artwork or add behavior the renders imply but
-the brief does not approve (filters, drag-to-add).
-Verify with luac5.1 -p on edited files, the focused tests listed in section E, ./tests/run.sh and bash tools/simlab/smoke.sh;
-label each claim unit-tested / simulator-tested / screenshot-reviewed / not tested, and list the in-game checks still needed.
-No plan-approval step is needed. Stop and ask before any material scope expansion, and after two substantive failed
-approaches to one blocker, report what you know and the smallest next action. Do not commit, push, publish or change
-.toc interface/version. Report as: Changed / Verified / Limitations / In-game checks / Follow-up, briefly.
+Read AGENTS.md, the applicable CLAUDE.md and dev-rules sections, and this brief. Confirm the branch is feature/style
+and report if it differs. Preserve existing work and implement or finish the approved Reminders style upgrade end to end.
+Use the three supplied renders as visual targets. Treat the checkpoints as internal sequencing without approval gates.
+
+Deliver the compact editor, interactive preview, illustrated catalog and When companion. Reuse the existing renderer,
+validated template creation path and condition designer. Preserve disabled defaults, independent copies, input validation,
+unknown states, All/Any grouping, saved configuration and world-preview cleanup. Make preview navigation write-free.
+Implement Actual size and Fit, catalog search and categories, and pointer drag-and-drop for existing rule nodes and
+palette entries. Preserve menu alternatives and the When draft with Save, Cancel, Undo and Redo. Keep companion placement usable at
+supported sizes, including a narrow-width fallback. Scope visual changes to the Reminders surfaces.
+
+Reuse suitable artwork and style-v2 materials. Generate only missing standalone assets with the authorized built-in tool.
+Verify alpha, actual-size readability and source/runtime packaging separation. Keep text in code. Do not purchase credits,
+use a separately billed API or change credentials. Stop after two unsuccessful substantive attempts at one asset or blocker
+and continue independent work. Preserve all repo and simulator isolation rules. Do not install dependencies, deploy, commit,
+push, publish, change TOC metadata or touch the live install and saved variables.
+
+Run Lua 5.1 syntax checks, focused tests, the full suite, Reminders simulator interaction and construction smoke.
+Inspect the actual screenshots and compare each surface with its approved reference. Update this brief and backlog with
+verified progress and remaining gaps. Report evidence levels, screenshot paths, artwork and the real-client checklist.
 ```

@@ -1,0 +1,234 @@
+{
+  "fixed-header": [
+    {
+      "label": "reference",
+      "path": "/home/rich/dev/personal/TwichUI/docs/reminders-revision/REMINDERS_PREVIEW.PNG",
+      "crop": [
+        298,
+        106,
+        1151,
+        187
+      ]
+    },
+    {
+      "label": "before",
+      "path": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/reminders-20261111-054335/editorTall.png",
+      "crop": [
+        566,
+        319,
+        1245,
+        399
+      ]
+    },
+    {
+      "label": "after",
+      "path": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/reminders-20261111-061540/editorTall.png",
+      "crop": [
+        566,
+        319,
+        1245,
+        399
+      ]
+    }
+  ],
+  "selected-row": [
+    {
+      "label": "reference",
+      "path": "/home/rich/dev/personal/TwichUI/docs/reminders-revision/SETTINGS_HOME.png",
+      "crop": [
+        32,
+        111,
+        316,
+        176
+      ]
+    },
+    {
+      "label": "before",
+      "path": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/reminders-20261111-054335/editorTall.png",
+      "crop": [
+        585,
+        441,
+        777,
+        512
+      ]
+    },
+    {
+      "label": "after",
+      "path": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/reminders-20261111-061540/editorTall.png",
+      "crop": [
+        580,
+        450,
+        786,
+        520
+      ]
+    }
+  ],
+  "builder-parchment": [
+    {
+      "label": "reference",
+      "path": "/home/rich/dev/personal/TwichUI/docs/reminders-revision/REMINDERS_WHEN_BUILDER.png",
+      "crop": [
+        53,
+        620,
+        360,
+        733
+      ]
+    },
+    {
+      "label": "before",
+      "path": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/reminders-20261111-054335/when.png",
+      "crop": [
+        198,
+        756,
+        448,
+        870
+      ]
+    },
+    {
+      "label": "after",
+      "path": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/reminders-20261111-061540/when.png",
+      "crop": [
+        198,
+        756,
+        448,
+        870
+      ]
+    }
+  ],
+  "diagnostics": [
+    {
+      "label": "before-client",
+      "path": "/home/rich/dev/personal/TwichUI/docs/reminders-revision/actual screenshots/ChatGPT Image Nov 11, 2026, 05_37_27 AM.png",
+      "crop": [
+        0,
+        0,
+        545,
+        593
+      ]
+    },
+    {
+      "label": "after",
+      "path": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/reminders-20261111-061540/editorDiagnostics.png",
+      "crop": [
+        803,
+        506,
+        1223,
+        837
+      ]
+    }
+  ],
+  "destination": [
+    {
+      "label": "before-client",
+      "path": "/home/rich/dev/personal/TwichUI/docs/reminders-revision/actual screenshots/ChatGPT Image Nov 11, 2026, 05_37_19 AM.png",
+      "crop": [
+        263,
+        246,
+        660,
+        286
+      ]
+    },
+    {
+      "label": "after",
+      "path": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/reminders-20261111-061329/destination.png",
+      "crop": [
+        874,
+        632,
+        1208,
+        671
+      ]
+    }
+  ],
+  "preview-hover": [
+    {
+      "label": "reference",
+      "path": "/home/rich/dev/personal/TwichUI/docs/reminders-revision/REMINDERS_PREVIEW.PNG",
+      "crop": [
+        1226,
+        300,
+        1543,
+        429
+      ]
+    },
+    {
+      "label": "after",
+      "path": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/reminders-20261111-061329/previewHover.png",
+      "crop": [
+        1098,
+        395,
+        1545,
+        535
+      ]
+    }
+  ],
+  "preview-modes": [
+    {
+      "label": "dark",
+      "path": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/reminders-20261111-061120/fontMenu.png",
+      "crop": [
+        1270,
+        249,
+        1588,
+        918
+      ]
+    },
+    {
+      "label": "transparent",
+      "path": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/reminders-20261111-061540/previewTransparent.png",
+      "crop": [
+        1270,
+        249,
+        1588,
+        918
+      ]
+    },
+    {
+      "label": "landscape",
+      "path": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/reminders-20261111-060322/previewLandscape.png",
+      "crop": [
+        1270,
+        249,
+        1588,
+        918
+      ]
+    },
+    {
+      "label": "parchment",
+      "path": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/reminders-20261111-060322/previewParchment.png",
+      "crop": [
+        1270,
+        249,
+        1588,
+        918
+      ]
+    }
+  ],
+  "font-popup": {
+    "path": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/reminders-20261111-061120/fontMenu.png",
+    "crop": [
+      829,
+      813,
+      1155,
+      1088
+    ]
+  },
+  "condition-menu": {
+    "path": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/reminders-20261111-061329/conditionMenu.png",
+    "crop": [
+      1080,
+      374,
+      1370,
+      468
+    ]
+  },
+  "diagnostics-final": {
+    "path": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/reminders-20261111-062314/editorDiagnostics.png",
+    "crop": [
+      803,
+      506,
+      1223,
+      837
+    ],
+    "before": "diagnostics-before-client.png"
+  }
+}

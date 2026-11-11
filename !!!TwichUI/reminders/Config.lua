@@ -95,8 +95,9 @@ RM.ART = {
     shield = { label = "Shield", size = 256, width = 182, height = 256, smallSize = 64, smallWidth = 46, smallHeight = 64 },
     ammo = { label = "Arrows", size = 256, width = 217, height = 256, smallSize = 64, smallWidth = 54, smallHeight = 64 },
     wellfed = { label = "Plate and cutlery", size = 256, width = 256, height = 186, smallSize = 64, smallWidth = 64, smallHeight = 47 },
+    enchant = { label = "Weapon oil", size = 256, width = 129, height = 256, smallSize = 64, smallWidth = 33, smallHeight = 64 },
 }
-RM.ART_ORDER = { "shield", "ammo", "wellfed" }
+RM.ART_ORDER = { "shield", "ammo", "wellfed", "enchant" }
 
 function RM.Art(id) return type(id) == "string" and RM.ART[id] or nil end
 
@@ -249,11 +250,18 @@ local function ValidCharacter(v) return type(v) == "string" and #v >= 3 and #v <
 ---------------------------------------------------------------------------
 local subscribers = {}
 local rev = 0
+local ruleEdits = setmetatable({}, { __mode = "k" })
 
 function RM.Subscribe(fn) subscribers[#subscribers + 1] = fn end
 function RM.Rev() return rev end
 
 local function Tell(id, what)
+    local draft = ruleEdits[id]
+    if draft then
+        draft.revision = draft.revision + 1
+        draft.view = nil
+        return
+    end
     rev = rev + 1
     for _, fn in ipairs(subscribers) do
         local ok, err = pcall(fn, id, what)
@@ -530,6 +538,200 @@ local function Locate(id)
     return nil, REFUSE.missing
 end
 
+-- The designer edits only these fields. Its handle is never a live reminder ID.
+local function CopyRule(value, seen)
+    if type(value) ~= "table" then return value end
+    seen = seen or {}
+    if seen[value] then return seen[value] end
+    local copy = {}
+    seen[value] = copy
+    for key, entry in pairs(value) do copy[key] = CopyRule(entry, seen) end
+    return copy
+end
+
+local function SameRule(a, b, seen)
+    if a == b then return true end
+    if type(a) ~= "table" or type(b) ~= "table" then return false end
+    seen = seen or {}
+    if seen[a] then return seen[a] == b end
+    seen[a] = b
+    for key, value in pairs(a) do
+        if not SameRule(value, b[key], seen) then return false end
+    end
+    for key in pairs(b) do if a[key] == nil then return false end end
+    return true
+end
+
+local function RuleFields(raw)
+    return { match = raw.match, conditions = raw.conditions, scope = raw.scope }
+end
+
+local function RuleItem(view, item)
+    if not item then return nil end
+    for _, entry in ipairs(view.leaves) do
+        local cond = entry.cond
+        if cond and cond.type == "equipment" and cond.what == "item" and cond.item == item then return item end
+    end
+end
+
+function RM.BeginRuleEdit(id)
+    local raw, why, _, _, view = Locate(id)
+    if not raw then return nil, why end
+    if view.broken then return nil, REFUSE.broken end
+    local handle = {}
+    local baseline = CopyRule(RuleFields(raw))
+    ruleEdits[handle] = { id = id, original = raw, baseline = baseline, current = CopyRule(baseline),
+        revision = 0, undo = {}, redo = {} }
+    return handle
+end
+
+function RM.RuleEditView(handle)
+    local edit = handle and ruleEdits[handle]
+    if not edit then return nil end
+    if edit.view and edit.liveRev == rev then return edit.view end
+    local saved = RM.Get(edit.id)
+    if not saved or saved.raw ~= edit.original then return nil end
+    local raw = RuleFields(edit.current)
+    local source = edit.original
+    raw.id, raw.name, raw.enabled = source.id, source.name, source.enabled
+    raw.display, raw.place, raw.sound = source.display, source.place, source.sound
+    local view = MakeView(raw, saved.index, nil, not RM.Writable())
+    local item = RuleItem(view, edit.current.item)
+    if item and saved.display.iconSource == "item" and not saved.display.item then
+        raw.display = DeepCopy(raw.display) or {}
+        raw.display.item = item
+        view = MakeView(raw, saved.index, nil, not RM.Writable())
+    end
+    edit.view = view
+    edit.liveRev = rev
+    return edit.view
+end
+
+local function LocateRule(id, readOnly)
+    if type(id) ~= "table" then return Locate(id) end
+    local edit = ruleEdits[id]
+    local view = edit and RM.RuleEditView(id)
+    if not RM.Writable() then return nil, REFUSE.newer end
+    if not (view and (edit.changing or readOnly)) then return nil, REFUSE.missing end
+    return edit.current, nil, view.index, nil, view
+end
+
+function RM.RuleEditRevision(handle)
+    local edit = handle and ruleEdits[handle]
+    return edit and edit.revision
+end
+
+function RM.RuleEditState(handle)
+    local edit = handle and ruleEdits[handle]
+    if not edit then return false, false, false end
+    return not SameRule(edit.baseline, edit.current), #edit.undo > 0, #edit.redo > 0
+end
+
+function RM.ChangeRuleEdit(handle, action, ...)
+    local edit = handle and ruleEdits[handle]
+    if not (edit and not edit.changing) then return false, REFUSE.missing end
+    local before, revision = CopyRule(edit.current), edit.revision
+    edit.changing = true
+    local ran, ok, why = pcall(action, handle, ...)
+    edit.changing = nil
+    if not ran then R.Fault("reminder rule edit", ok); ok, why = false, REFUSE.value end
+    if not SameRule(before, edit.current) then
+        if edit.revision == revision then edit.revision = revision + 1 end
+        edit.view = nil
+        if not ok then
+            edit.current = before
+        else
+            edit.undo[#edit.undo + 1] = before
+            if #edit.undo > 32 then table.remove(edit.undo, 1) end
+            edit.redo = {}
+        end
+    end
+    return ok, why
+end
+
+function RM.StepRuleEdit(handle, redo)
+    local edit = handle and ruleEdits[handle]
+    if not (edit and not edit.changing) then return false end
+    local from, to = edit.undo, edit.redo
+    if redo then from, to = to, from end
+    if #from == 0 then return false end
+    to[#to + 1] = edit.current
+    edit.current, edit.view = table.remove(from), nil
+    edit.revision = edit.revision + 1
+    return true
+end
+
+-- Item reminders can fill an empty display icon as part of the same rule transaction.
+function RM.StageRuleItem(handle, item)
+    local edit = ruleEdits[handle]
+    local saved = edit and edit.changing and RM.Get(edit.id)
+    if saved and saved.display.iconSource == "item" and not saved.display.item and RM.ValidItem(item) then
+        edit.current.item = item
+        Tell(handle, "rule")
+    end
+end
+
+-- Imported predicates can be retained or moved even if this version can't read them.
+local function NewRuleProblem(saved, view)
+    local inherited = {}
+    for _, entry in ipairs(saved.leaves) do
+        if entry.why then inherited[#inherited + 1] = entry end
+    end
+    for _, entry in ipairs(view.flat) do
+        if entry.why then
+            local kept
+            if not entry.group then
+                for i, old in ipairs(inherited) do
+                    if old.why == entry.why and SameRule(old.raw, entry.raw) then
+                        table.remove(inherited, i)
+                        kept = true
+                        break
+                    end
+                end
+            end
+            if not kept then
+                return ("%s %s: %s"):format(entry.group and "Group" or "Condition", table.concat(entry.path, "."), entry.why)
+            end
+        end
+    end
+end
+
+function RM.SaveRuleEdit(handle)
+    local edit = handle and ruleEdits[handle]
+    if not (edit and not edit.changing) then return false, REFUSE.missing end
+    local raw, why, _, _, saved = Locate(edit.id)
+    if not raw then return false, why end
+    if raw ~= edit.original or not SameRule(RuleFields(raw), edit.baseline) then
+        return false, "The saved rule changed. Cancel and reopen the builder."
+    end
+    if SameRule(edit.baseline, edit.current) then ruleEdits[handle] = nil; return true end
+    local view = RM.RuleEditView(handle)
+    local ruleChanged = not SameRule(edit.baseline.conditions, edit.current.conditions) or edit.baseline.match ~= edit.current.match
+    local scopeChanged = not SameRule(edit.baseline.scope, edit.current.scope)
+    local newProblem = ruleChanged and NewRuleProblem(saved, view)
+    if newProblem then return false, newProblem end
+    for _, problem in ipairs(view.problems) do
+        if (ruleChanged and (problem == PROBLEM.tooMany or problem == PROBLEM.tooManyGroups
+            or (problem == PROBLEM.noConditions and saved.enabled)))
+            or (scopeChanged and problem == PROBLEM.noCharacters) then
+            return false, problem
+        end
+    end
+    local nextRule = CopyRule(edit.current)
+    local display
+    local item = RuleItem(view, nextRule.item)
+    if item and saved.display.iconSource == "item" and not saved.display.item then
+        display = DeepCopy(raw.display) or {}
+        display.item = item
+    end
+    if ruleChanged then raw.match, raw.conditions = nextRule.match, nextRule.conditions end
+    if scopeChanged then raw.scope = nextRule.scope end
+    if display then raw.display = display end
+    ruleEdits[handle] = nil
+    Tell(edit.id, "rule")
+    return true
+end
+
 local function Sub(raw, key)
     if type(raw[key]) ~= "table" then raw[key] = {} end
     return raw[key]
@@ -578,7 +780,7 @@ local function Template(kind)
         return {
             name = "Weapon enchant reminder", match = "all", scope = mine,
             conditions = { { type = "weaponEnchant", hand = "mainHand", what = "missing" } },
-            display = { mode = "iconText", iconSource = "bundled", icon = "reminders", text = "Apply your weapon oil" },
+            display = { mode = "artworkText", art = "enchant", text = "Apply your weapon oil", textPlace = "right" },
             place = { preset = "belowCenter" },
         }
     elseif kind == "wellFed" then
@@ -726,7 +928,7 @@ end
 
 -- Whether the top level (no path) or the group at the path matches on all or on any of what it holds.
 function RM.SetMatch(id, match, groupPath)
-    local raw, why, _, _, v = Locate(id)
+    local raw, why, _, _, v = LocateRule(id)
     if not raw then return false, why end
     if match ~= "all" and match ~= "any" then return false, REFUSE.value end
     local path = ReadPath(groupPath)
@@ -748,9 +950,9 @@ end
 -- Adds a new condition of a kind at the end of the group at groupPath (the top level when nil). `cond` (optional) is a
 -- condition of that kind already made (the designer's picker asks for its values first); the provider checks it, and one
 -- it can't use at all is refused. Without it the kind's own starting condition is added.
-function RM.AddCondition(id, kind, groupPath, cond)
+function RM.AddCondition(id, kind, groupPath, cond, index)
     local C = R.ReminderConditions
-    local raw, why, _, _, v = Locate(id)
+    local raw, why, _, _, v = LocateRule(id)
     if not raw then return false, why end
     local p = C and C.Get(kind)
     local path = ReadPath(groupPath)
@@ -768,9 +970,10 @@ function RM.AddCondition(id, kind, groupPath, cond)
     end
     local list = ListAt(raw, path)
     if not list then return false, REFUSE.value end
-    list[#list + 1] = node
+    index = Whole(index) and math.max(1, math.min(index, #list + 1)) or #list + 1
+    table.insert(list, index, node)
     Tell(id, "rule")
-    return true, #list
+    return true, index
 end
 
 -- Adds an empty group at the end of the group at groupPath (the top level when nil). It starts with the opposite
@@ -778,7 +981,7 @@ end
 -- until a condition is put in it. `match` ("all" | "any", optional) says which it starts as instead. Returns true and the
 -- new group's path.
 function RM.AddGroup(id, groupPath, match)
-    local raw, why, _, _, v = Locate(id)
+    local raw, why, _, _, v = LocateRule(id)
     if not raw then return false, why end
     local path = ReadPath(groupPath)
     if not path then return false, REFUSE.value end
@@ -802,9 +1005,9 @@ end
 
 -- Replaces the condition at a path with cond, checked by its provider. An unfinished one (no item yet) is kept; the
 -- view says what it still needs. One that isn't a condition of a known kind, or a path that leads to a group, is refused.
-function RM.SetCondition(id, path, cond)
+function RM.SetCondition(id, path, cond, keepIdentity)
     local C = R.ReminderConditions
-    local raw, why = Locate(id)
+    local raw, why = LocateRule(id)
     if not raw then return false, why end
     path = ReadPath(path)
     if not path or #path == 0 then return false, REFUSE.value end
@@ -814,14 +1017,21 @@ function RM.SetCondition(id, path, cond)
     if not old or (type(old) == "table" and old.type == "group") then return false, REFUSE.value end
     local clean, problem = C.Check(cond)
     if not clean then return false, problem or REFUSE.value end
-    list[last] = clean
+    -- Inline edits keep the node and any extension fields the current provider does not own.
+    local previous = keepIdentity and type(old) == "table" and old.type == clean.type and C.Check(old)
+    if previous then
+        for key in pairs(previous) do if clean[key] == nil then old[key] = nil end end
+        for key, value in pairs(clean) do old[key] = value end
+    else
+        list[last] = clean
+    end
     Tell(id, "rule")
     return true, problem
 end
 
 -- Removes the condition or the group (with everything in it) at a path.
 function RM.RemoveCondition(id, path)
-    local raw, why = Locate(id)
+    local raw, why = LocateRule(id)
     if not raw then return false, why end
     path = ReadPath(path)
     if not path or #path == 0 then return false, REFUSE.value end
@@ -900,16 +1110,16 @@ end
 -- list afterwards (the end when nil). Within a list that is a reorder and never changes what the rule says; into another
 -- group it changes what the node is combined with, and the caller says so. A group can't go into itself or what is in it.
 -- Returns true and the node's new path.
-function RM.MoveNode(id, path, toGroup, toIndex)
-    local raw, why, _, _, v = Locate(id)
-    if not raw then return false, why end
+local function PlanMove(id, path, toGroup, toIndex, readOnly)
+    local raw, why, _, _, v = LocateRule(id, readOnly)
+    if not raw then return nil, why end
     path, toGroup = ReadPath(path), ReadPath(toGroup)
-    if not path or #path == 0 or not toGroup then return false, REFUSE.value end
+    if not path or #path == 0 or not toGroup then return nil, REFUSE.value end
     local node = RM.Node(v, path)
-    if not node then return false, REFUSE.value end
+    if not node then return nil, REFUSE.value end
     local stats = NodeStats(node.raw)
-    if not stats then return false, REFUSE.value end
-    if node.group and SamePrefix(toGroup, path) then return false, "A group can't be moved into itself." end
+    if not stats then return nil, REFUSE.value end
+    if node.group and SamePrefix(toGroup, path) then return nil, "A group can't be moved into itself." end
     -- where it sits now, and where the destination list is once it has left
     local last = path[#path]
     local from = { unpack(path, 1, #path - 1) }
@@ -918,30 +1128,37 @@ function RM.MoveNode(id, path, toGroup, toIndex)
     local dest = { unpack(toGroup) }
     if #from < #dest and SamePrefix(dest, from) and dest[#from + 1] > last then dest[#from + 1] = dest[#from + 1] - 1 end
     local ok, reason = CheckPlace(v, toGroup, stats, 0, 0)
-    if not ok then return false, reason end
+    if not ok then return nil, reason end
     local source = ListAt(raw, from)
-    if not (source and source[last] == node.raw) then return false, REFUSE.value end
+    if not (source and source[last] == node.raw) then return nil, REFUSE.value end
     local target = ListAt(raw, toGroup)
-    if not target then return false, REFUSE.value end
+    if not target then return nil, REFUSE.value end
     local want = Clamp(toIndex, target)
-    if sameList then
-        if want > #source then want = #source end
-        if want == last then return true, path end
-    end
-    table.remove(source, last)
-    target = ListAt(raw, dest)
-    if not target then table.insert(source, last, node.raw) return false, REFUSE.value end   -- can't happen: checked above
-    if not sameList then want = Clamp(toIndex, target) else want = math.min(want, #target + 1) end
-    table.insert(target, want, node.raw)
+    if sameList then want = math.min(want, #source) end
+    return { node = node.raw, source = source, target = target, from = last, to = want,
+        path = path, destination = dest }
+end
+
+-- Also used by the builder's drag feedback. Resolves the same validation as MoveNode without editing.
+function RM.CanMoveNode(id, path, toGroup, toIndex)
+    local plan, why = PlanMove(id, path, toGroup, toIndex, true)
+    return plan ~= nil, why
+end
+
+function RM.MoveNode(id, path, toGroup, toIndex)
+    local plan, why = PlanMove(id, path, toGroup, toIndex)
+    if not plan then return false, why end
+    if plan.source == plan.target and plan.from == plan.to then return true, plan.path end
+    table.remove(plan.source, plan.from)
+    table.insert(plan.target, plan.to, plan.node)
     Tell(id, "rule")
-    local at = { unpack(dest) }
-    at[#at + 1] = want
-    return true, at
+    plan.destination[#plan.destination + 1] = plan.to
+    return true, plan.destination
 end
 
 -- A copy of the condition or group at `path`, right after it. Returns true and the copy's path.
 function RM.DuplicateNode(id, path)
-    local raw, why, _, _, v = Locate(id)
+    local raw, why, _, _, v = LocateRule(id)
     if not raw then return false, why end
     path = ReadPath(path)
     if not path or #path == 0 then return false, REFUSE.value end
@@ -965,7 +1182,7 @@ end
 -- Puts a node (one RemoveNode took out: the very table that was removed, so a screen's hold on it stays good) back as the
 -- index-th of the group at groupPath. Returns true and its path.
 function RM.InsertNode(id, groupPath, index, node)
-    local raw, why, _, _, v = Locate(id)
+    local raw, why, _, _, v = LocateRule(id)
     if not raw then return false, why end
     local stats = NodeStats(node)
     if not stats then return false, REFUSE.value end
@@ -1046,7 +1263,7 @@ end
 
 -- who: "all" or "characters"; class: nil (any class) or a class token.
 function RM.SetScope(id, key, value)
-    local raw, why = Locate(id)
+    local raw, why = LocateRule(id)
     if not raw then return false, why end
     local s = Sub(raw, "scope")
     if key == "who" then
@@ -1065,7 +1282,7 @@ function RM.SetScope(id, key, value)
 end
 
 function RM.AddCharacter(id, who)
-    local raw, why, _, _, v = Locate(id)
+    local raw, why, _, _, v = LocateRule(id)
     if not raw then return false, why end
     if not ValidCharacter(who) then return false, REFUSE.value end
     for _, c in ipairs(v.scope.characters) do if c == who then return true end end
@@ -1080,7 +1297,7 @@ function RM.AddCharacter(id, who)
 end
 
 function RM.RemoveCharacter(id, who)
-    local raw, why, _, _, v = Locate(id)
+    local raw, why, _, _, v = LocateRule(id)
     if not raw then return false, why end
     local list, found = {}, false
     for _, c in ipairs(v.scope.characters) do

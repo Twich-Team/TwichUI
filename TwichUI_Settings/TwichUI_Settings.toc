@@ -18,8 +18,11 @@ pages\Gear.lua
 pages\Notifications.lua
 pages\RemindersPlain.lua
 pages\RemindersEditor.lua
+pages\RemindersBuilderRail.lua
 pages\RemindersDesigner.lua
+pages\RemindersRuleDrag.lua
 pages\RemindersPreview.lua
+pages\RemindersPlacement.lua
 pages\RemindersCatalog.lua
 pages\Reminders.lua
 pages\HealerWatch.lua
@@ -71,6 +74,7 @@ pages\Troubleshooting.lua
 Search.lua
 Widgets.lua
 Material.lua
+Craft.lua
 Previews.lua
 previews\QoL.lua
 Cards.lua

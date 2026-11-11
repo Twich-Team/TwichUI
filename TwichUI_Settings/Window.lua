@@ -56,7 +56,7 @@ local TAB_H = 28
 local HOST_H = 540
 local HIGHLIGHT_SECONDS = 2.5
 
-local win, nav, scroll, content, resultsView, footer, searchBox
+local win, nav, scroll, content, resultsView, footer, searchBox, pageArea
 local state = { views = {}, results = {}, selected = 1, suspend = 0, navItems = {}, scrollOf = {}, w = CONTENT_W }
 
 -- The profile in use and who else uses it, in words: the footer and the top of a page of feature cards say the
@@ -433,16 +433,27 @@ end
 -- A feature's tabs: one per page of the family (Look's Tab: the shown one has a faint bronze fill and a bar on
 -- the rule below). Choosing one goes to that page (a stable page key, as search and direct links use); its rows
 -- are made the first time.
-local function TabStrip(parent, tabs, current)
+local function TabStrip(parent, tabs, current, compact)
     local strip = CreateFrame("Frame", nil, parent)
     strip:SetHeight(TAB_H)
     strip:SetWidth(CONTENT_W)
     local x = 0
     for _, tab in ipairs(tabs) do
         local selected = tab.key == current
-        local b = Wg.Tab(strip, K.TabLabel(tab), 24, not selected and function() UI.Navigate(tab.key) end or nil)
-        b:SetSize(b.text:GetStringWidth() + 24, TAB_H)
-        b:SetPoint("BOTTOMLEFT", strip, "BOTTOMLEFT", x, 0)
+        local label = K.TabLabel(tab)
+        local navigate = not selected and function() UI.Navigate(tab.key) end or nil
+        local b
+        if compact then
+            b = Wg.Button(strip, label, 24, "secondary", navigate)
+            M.ReminderControl(b, "segment")
+            b.text:SetWidth(0)
+            b:SetWidth(b.text:GetStringWidth() + 28)
+            b.text:SetWidth(b:GetWidth() - 12)
+        else
+            b = Wg.Tab(strip, label, 24, navigate)
+            b:SetSize(b.text:GetStringWidth() + 24, TAB_H)
+        end
+        b:SetPoint("BOTTOMLEFT", strip, "BOTTOMLEFT", x, compact and 2 or 0)
         b:SetSelected(selected)
         x = x + b:GetWidth() + 2
     end
@@ -457,6 +468,7 @@ local function ApplyWidth(view)
     local w = state.w
     view.w = w
     view.frame:SetWidth(w)
+    if view.chrome then view.chrome:SetWidth(w) end
     view.desc:SetWidth(w - 8)
     if view.failed then view.failed:SetWidth(w - 8) end
     if view.tabs then view.tabs:SetWidth(w) end
@@ -525,19 +537,31 @@ local function BuildView(page)
     -- describes the tab shown.
     local tabs = K.Tabs(page.key)
     local root = K.Root(page.key)
-    view.header = M.Header(frame, content, SHIFT_Y)   -- the leather band behind the title and tabs
-    view.title = Wg.Text(frame, "title")
+    if page.def.materialHeader then
+        view.chrome = CreateFrame("Frame", nil, pageArea)
+        view.chrome:SetPoint("TOPLEFT", SHIFT_X + 1, -SHIFT_Y - 1)
+        view.chrome:SetWidth(state.w)
+        view.chrome:SetHeight(76)
+    end
+    local chrome = view.chrome or frame
+    view.header = M.Header(chrome, view.chrome or content, view.chrome and 0 or SHIFT_Y, page.def.materialHeader)   -- the leather band behind the title and tabs
+    view.title = Wg.Text(chrome, "title")
+    if page.def.materialHeader then M.ReminderFont(view.title, 25, true, "serif") end
     view.title:SetPoint("TOPLEFT", 2, -4)
     view.title:SetText(#tabs > 0 and root.name or (page.group == "home" and page.nav or page.name))
-    if #tabs > 0 then view.tabs = TabStrip(frame, tabs, page.key) end
+    if #tabs > 0 then view.tabs = TabStrip(chrome, tabs, page.key, root.def.compact) end
 
-    view.status = Wg.Text(frame, "small")
+    view.status = Wg.Text(chrome, "small")
     view.status:SetPoint("TOPRIGHT", -4, -8)
     view.status:SetJustifyH("RIGHT")
-    view.desc = Wg.Text(frame, "small")
+    view.desc = Wg.Text(chrome, "small")
     view.desc:SetWidth(CONTENT_W - 8)
     view.desc:SetText(page.def.description or (page.def.overview and page.def.overview.tip) or "")
-    view.rule = Wg.Solid(frame, "BORDER", pal.bronzeLo, 0.75)
+    if page.def.compact then
+        M.ReminderFont(view.title, 23, true)
+        view.title:SetWidth(240)
+    end
+    view.rule = Wg.Solid(chrome, "BORDER", pal.bronzeLo, 0.75)
     view.rule:SetHeight(1)
     view.rule:SetPoint("LEFT", frame, "LEFT", 0, 0)
     view.rule:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
@@ -644,7 +668,7 @@ local function BuildView(page)
         })
     end
     -- a page of feature cards says which profile its changes are saved in, and who else that profile is for
-    if view.hasCards then
+    if view.hasCards and not page.def.compact then
         view.scope = Wg.Text(frame, "meta")
         view.scope:SetWidth(CONTENT_W - 8)
     end
@@ -681,6 +705,12 @@ local function BuildView(page)
                 end, { accept = "Reset" })
         end)
         button:SetPoint("TOPRIGHT", -2, -12)
+        view.reset.button = button
+        if page.def.materialHeader then
+            M.ReminderControl(button, "danger")
+            M.ReminderFont(button.text, 14)
+            button:SetHeight(28)
+        end
     end
 
     -- What arrives when the page does: the cards, the hosted frame, Reset. The title and tabs stay put, so
@@ -701,11 +731,12 @@ end
 function Layout(view)
     local pt = Perf.on and Perf.Start("settings.page.layout")
     if view.w ~= state.w then ApplyWidth(view) end
-    local frame, page = view.frame, view.page
+    local body, page = view.frame, view.page
+    local frame = view.chrome or body
     local ok, status = true, ""
     if page.def.overview and page.def.overview.status then ok, status = pcall(page.def.overview.status) end
     view.status:SetText(ok and status or "")
-    local y = 4 + (view.title:GetStringHeight() or 18) + 6
+    local y = page.def.compact and 31 or (4 + (view.title:GetStringHeight() or 18) + 6)
     local titleBottom = y
     local hasDesc = view.desc:GetText() ~= ""
     local function Desc()
@@ -743,6 +774,17 @@ function Layout(view)
         Rule()
         y = y + 14
     end
+    -- Reminders owns a fixed title/tab band. Its body is a distinct scroll child below it.
+    if view.chrome then
+        view.chrome:SetHeight(y)
+        view.headerHeight = y + SHIFT_Y
+        if state.page == page.key and not state.searching then
+            scroll:ClearAllPoints()
+            scroll:SetPoint("TOPLEFT", pageArea, "TOPLEFT", 1, -view.headerHeight - 1)
+            scroll:SetPoint("BOTTOMRIGHT", pageArea, "BOTTOMRIGHT", -1, WELL_T)
+        end
+        y, frame = 0, body
+    end
     if view.notice then
         view.notice:ClearAllPoints()
         view.notice:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -y)
@@ -771,7 +813,10 @@ function Layout(view)
         local card, inner = sec.card, SECTION_PAD
         local visible = 0
         sec.top = y
-        if sec.isCard then
+        local inHeader = sec.isCard and sec.header.card.inPageHeader and sec.primaryView
+        if inHeader then
+            Cards.PlaceInHeader(view, sec, UI.cardEnv)
+        elseif sec.isCard then
             inner = Cards.Layout(view, sec, inner, UI.cardEnv)
             visible = 1
         elseif sec.header and sec.titled then
@@ -814,7 +859,7 @@ function Layout(view)
             visible = visible + shown
         end
         inner = inner + SECTION_PAD - 6
-        local empty = visible == 0 and not sec.header
+        local empty = inHeader or (visible == 0 and not sec.header)
         card:SetShown(not empty)
         if not empty then
             card:ClearAllPoints()
@@ -841,6 +886,16 @@ function Layout(view)
     -- exactly what is drawn, so the scroll range (and its bar) is there only when something is out of view
     frame:SetHeight(y + PAGE_BOTTOM)
     content:SetHeight(y + PAGE_BOTTOM + SHIFT_Y)
+    if view.chrome then
+        -- An accordion can shrink the content while its old bottom is still in view.
+        -- Keep the scoped body inside its new bounds instead of retaining blank scroll space.
+        local most = math.max(0, content:GetHeight() - scroll:GetHeight())
+        if scroll:GetVerticalScroll() > most then
+            if scroll.StopMotion then scroll:StopMotion() end
+            scroll:SetVerticalScroll(most)
+        end
+    end
+    if view.chrome and scroll.materialRail then scroll.materialRail.Fit(content:GetHeight()) end
     if pt then Perf.Stop(pt) end
 end
 UI.Layout = Layout
@@ -866,7 +921,20 @@ end
 
 local function ScrollTo(offset)
     local most = math.max(0, (content:GetHeight() or 0) - (scroll:GetHeight() or 0))
+    if scroll.StopMotion then scroll:StopMotion() end
     scroll:SetVerticalScroll(math.max(0, math.min(offset, most)))
+end
+
+-- A hosted editor can reveal one of its controls without navigating away or changing a value.
+function UI.RevealFrame(frame)
+    if not (UI.IsShown() and frame and frame.IsVisible and frame:IsVisible()) then return false end
+    local top, base = frame:GetTop(), content:GetTop()
+    if type(top) ~= "number" or type(base) ~= "number" then return false end
+    local scale = frame:GetEffectiveScale() / content:GetEffectiveScale()
+    local y = base - top * scale
+    local h, visible, now = frame:GetHeight() * scale, scroll:GetHeight(), scroll:GetVerticalScroll()
+    if h > visible or y < now then ScrollTo(y - 12) elseif y + h > now + visible then ScrollTo(y + h - visible + 12) end
+    return true
 end
 
 -- Marks a row once: a gold band for a few seconds that then fades (at once where motion is reduced). A newer mark
@@ -887,8 +955,18 @@ end
 
 local function ShowResults(on)
     state.searching = on
+    if on then
+        scroll:ClearAllPoints()
+        scroll:SetPoint("TOPLEFT", pageArea, "TOPLEFT", 1, -1)
+        scroll:SetPoint("BOTTOMRIGHT", pageArea, "BOTTOMRIGHT", -1, WELL_T)
+    end
+    -- Search keeps the originating shell geometry; typing must not resize the focused field.
+    M.CalibrateSettings(win, K.pages[state.page] and K.pages[state.page].def.materialHeader)
     resultsView:SetShown(on)
-    for key, view in pairs(state.views) do view.frame:SetShown(not on and key == state.page) end
+    for key, view in pairs(state.views) do
+        view.frame:SetShown(not on and key == state.page)
+        if view.chrome then view.chrome:SetShown(not on and key == state.page) end
+    end
     PaintNav()
 end
 
@@ -916,9 +994,17 @@ function UI.Navigate(key, rowId)
     -- (the page's offset was kept when the search began: what is scrolled now is the results)
     if state.page ~= page.key and state.page and not leavingSearch then state.scrollOf[state.page] = scroll:GetVerticalScroll() end
     state.page = page.key
+    M.CalibrateSettings(win, page.def.materialHeader)
+    if not page.def.materialHeader then
+        scroll:ClearAllPoints()
+        scroll:SetPoint("TOPLEFT", pageArea, "TOPLEFT", 1, -1)
+        scroll:SetPoint("BOTTOMRIGHT", pageArea, "BOTTOMRIGHT", -1, WELL_T)
+    end
+    if scroll.materialRail then scroll.materialRail:SetShown(page.def.materialHeader == true) end
     local view = state.views[page.key] or Perf.Call("settings.page.build", BuildView, page)
     for k, other in pairs(state.views) do
         other.frame:SetShown(k == page.key)
+        if other.chrome then other.chrome:SetShown(k == page.key) end
         -- a page left (or interrupted mid-arrival) goes back to full opacity, so it is never found dim later
         if k ~= page.key and other.fade then other.fade:Set(1) end
     end
@@ -1297,6 +1383,7 @@ local function BuildSearch(header)
     end)
     I.Tip(searchBox, "Search settings", "Finds settings on every page by their name, their page and the words in their description. Enter opens the highlighted result; Esc clears the search.")
     Hints()
+    return hint
 end
 
 ---------------------------------------------------------------------------
@@ -1465,7 +1552,8 @@ local function BuildWindow()
     local close = F.Close(header, function() UI.Close() end)
     close:SetPoint("RIGHT", header, "RIGHT", -10, 0)
     I.Tip(close, "Close", "Closes the settings. Your changes are already saved.")
-    BuildSearch(header)
+    local searchHint = BuildSearch(header)
+    win.craftElements = { crest = crest, brand = brand, subtitle = sub, search = searchBox, hint = searchHint, close = close }
 
     nav = CreateFrame("Frame", nil, win, "BackdropTemplate")
     nav:SetPoint("TOPLEFT", PAD, -PAGE_TOP)
@@ -1481,6 +1569,7 @@ local function BuildWindow()
     M.Well(well)
     local area = CreateFrame("Frame", nil, win)
     area:SetAllPoints(well)
+    pageArea = area
     scroll, content = Wg.Scroll(area, CONTENT_W + SHIFT_X + EDGE_R)
     scroll:SetPoint("TOPLEFT", 1, -1)
     scroll:SetPoint("BOTTOMRIGHT", -1, WELL_T)
@@ -1492,6 +1581,7 @@ local function BuildWindow()
         bar:SetPoint("BOTTOMRIGHT", scroll, "BOTTOMRIGHT", -4, 18)
     end
 
+    M.ScrollRail(scroll, function() return win.craftActive == true end)
     resultsView = CreateFrame("Frame", nil, content)
     resultsView:SetPoint("TOPLEFT", SHIFT_X, -SHIFT_Y)
     resultsView:SetWidth(CONTENT_W)
@@ -1506,13 +1596,15 @@ local function BuildWindow()
 
     BuildNav()
     BuildFooter()
+    win.materialHosts = { { win.shell, "outer", -3, win.shell.interior }, { header, "header", -2 },
+        { nav, "outer", 2 }, { well, "editor", 3 }, { footer, "header", -2 } }
     BuildGrip()
 
     -- The window fades in as it opens (opacity only: its position, anchors and scale are the game's and the
     -- player's). Opening is not delayed: the content is built and answering from the first frame.
-    state.winFade = Motion.Fader(function(a) win:SetAlpha(a) end, 1)
+    state.winFade = Motion.Fader(function(a) win:SetAlpha(state.workspaceVisible and 0 or a) end, 1)
     win:SetScript("OnShow", function()
-        Fit(false)
+        Fit(state.placementRestoring == true)
         UI.RefreshFooter()
         if Motion.Enabled() then
             state.winFade:Set(0)
@@ -1522,6 +1614,7 @@ local function BuildWindow()
         end
     end)
     win:SetScript("OnHide", function()
+        if state.placementSuspended then return end
         -- Closing is immediate; whatever was easing is put where it was going, so a reopened window is never
         -- found dim, and no hover is left lit for a pointer that has gone.
         Motion.Settle()
@@ -1544,6 +1637,9 @@ end
 -- What the rest of TwichUI calls (SettingsLauncher.lua)
 ---------------------------------------------------------------------------
 function UI.IsShown() return win ~= nil and win:IsShown() end
+function UI.IsPageActive(key)
+    return UI.IsShown() and not state.searching and state.page == key
+end
 
 -- Where the window is: the page shown (a tab, for a feature with tabs) and the left-hand row it sits under.
 function UI.Selected()
@@ -1551,6 +1647,44 @@ function UI.Selected()
     return state.page, root and root.key or nil
 end
 function UI.Frame() return win end
+
+-- An opt-in page workspace covers Settings while its page and scroll state remain mounted.
+-- Placement deliberately unmounts only visibility, retaining selection and scroll offsets.
+function UI.SuspendForPlacement(on, reopen)
+    if not win then return end
+    if on then
+        Wg.CloseMenu(); Wg.ColorPicker.Cancel()
+        state.placementSuspended = true
+        win:Hide()
+    else
+        state.placementSuspended = nil
+        state.placementRestoring = true
+        win:Show()
+        state.placementRestoring = nil
+        if reopen == false then win:Hide() else UI.Refresh() end
+    end
+end
+
+function UI.SetWorkspaceVisible(shown)
+    if not win then return end
+    if shown and not state.workspaceVisible then
+        state.workspaceStrata = win:GetFrameStrata()
+        win:SetFrameStrata("LOW")
+    elseif not shown and state.workspaceVisible then
+        win:SetFrameStrata(state.workspaceStrata or "HIGH")
+        state.workspaceStrata = nil
+    end
+    if shown then
+        Wg.CloseMenu()
+        Wg.ColorPicker.Cancel()
+        local focus = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
+        local owner = focus
+        while owner and owner ~= win do owner = owner:GetParent() end
+        if owner == win then focus:ClearFocus() end
+    end
+    state.workspaceVisible = shown and true or nil
+    state.winFade:Set(1)
+end
 -- A page as drawn (its sections, rows, cards, Home's ways in), or nil before it is first shown. Read only: for
 -- tests and diagnostics.
 function UI.View(key) return state.views[key] end
@@ -1566,6 +1700,7 @@ end
 -- page: a page key (unknown or nil: the start page, or the page shown last time); setting: a setting's name
 -- (TWICHUI_ prefix optional) or a row id, to go to and mark.
 function UI.Open(page, setting)
+    if R.RemindersPlacement and R.RemindersPlacement.Active() then R.RemindersPlacement.Cancel(true) end
     if not K.described then Perf.Call("settings.describe", K.Describe) end
     if not win then Perf.Call("settings.window.build", BuildWindow) end
     if type(setting) == "string" then setting = setting:gsub("^TWICHUI_", "") end
@@ -1581,6 +1716,7 @@ function UI.Open(page, setting)
 end
 
 function UI.Close()
+    if R.RemindersPlacement and R.RemindersPlacement.Active() then R.RemindersPlacement.Cancel(false) end
     if win and win:IsShown() then win:Hide() end
 end
 
@@ -1636,7 +1772,7 @@ R.Switches.OnChange(function()
 end)
 
 ---------------------------------------------------------------------------
--- Esc: the open list, then the window. Through the game's list of frames Esc closes (UISpecialFrames), as an
+-- Esc: the open list, then the Reminders companion, then the window. Through the game's UISpecialFrames, as an
 -- addon's window should: RegisterGameMenuEscHandler is the game's own, and an addon calling it writes into the
 -- game's handler table and re-sorts it from insecure code, which taints the Esc path (SpellStopCasting then
 -- reports ADDON_ACTION_FORBIDDEN). The one entry is a stand-in answering the two calls the game makes of a
@@ -1650,8 +1786,13 @@ function escape:IsShown()
     return Wg.MenuShown() or UI.IsShown()
 end
 function escape:Hide()
+    local catalog, designer = R.RemindersCatalog, R.RemindersDesigner
     if Wg.MenuShown() then
         Wg.CloseMenu()
+    elseif catalog and catalog.Shown() then
+        catalog.Hide()
+    elseif designer and designer.Shown() then
+        if not designer.CancelDrag() then designer.RequestClose() end
     else
         UI.Close()
     end

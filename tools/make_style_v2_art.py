@@ -285,6 +285,31 @@ def nine(sheet, w, h, bg):
     return out
 
 
+def switch_art(width, height):
+    """Antialiased capsule or circular thumb, with a narrow bevel. The UI supplies the state tint."""
+    radius = height / 2 - 1
+    rows = []
+    for y in range(height):
+        row = bytearray()
+        for x in range(width):
+            shade, covered = 0, 0
+            for dy in (0.125, 0.375, 0.625, 0.875):
+                for dx in (0.125, 0.375, 0.625, 0.875):
+                    across = max(0, abs(x + dx - width / 2) - (width - height) / 2)
+                    distance = (across ** 2 + (y + dy - height / 2) ** 2) ** 0.5
+                    if distance <= radius:
+                        covered += 1
+                        top = 1 - (y + dy) / height
+                        if width == height:
+                            shade += (0.61 + 0.29 * top) if distance > radius - 2 else (0.91 + 0.09 * top)
+                        else:
+                            shade += (0.40 + 0.42 * top) if distance > radius - 2 else (0.30 + 0.20 * top)
+            gray = round(255 * shade / covered) if covered else 0
+            row.extend((gray, gray, gray, round(255 * covered / 16)))
+        rows.append(row)
+    return rows
+
+
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     root = os.path.dirname(here)
@@ -293,7 +318,14 @@ def main():
     ap.add_argument("--out", default=os.path.join(root, "!!!TwichUI", "media", "style-v2"))
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--preview")
+    ap.add_argument("--switches-only", action="store_true", help="Build only the scoped pill switch textures")
     args = ap.parse_args()
+    if not args.check:
+        os.makedirs(args.out, exist_ok=True)
+        for name, width in (("switch-track", 64), ("switch-thumb", 32)):
+            write_tga_rgba(os.path.join(args.out, name + ".tga"), switch_art(width, 32))
+    if args.switches_only:
+        return
     w, h, px, _ = read_png(args.src)
     if (w, h) != (1254, 1254):
         sys.exit("unexpected atlas size %dx%d (expected 1254x1254)" % (w, h))

@@ -1,22 +1,8 @@
 -- TwichUI settings: Reminders, the "When" designer
--- The reminder's rule as something to read: who it is for, its conditions as cards inside bounded groups, and why it would
--- or would not show. It draws and edits the rule the evaluator already reads (reminders/Config.lua's tree, Evaluate.lua's
--- decision); nothing here decides anything or keeps a rule of its own, and every change goes through Config.lua's functions,
--- which check it. RemindersPlain.lua says it in words.
---
---   * Who is this for?     one line, and Edit for the characters and the class (applied as you choose, like every other
---                          setting here).
---   * Show this reminder when...   the tree: a group is a bounded box with "All of these must be true" or "At least one of
---                          these must be true", a condition a card (a sentence, Edit, and a More menu: Duplicate, Move up
---                          and down, Move into another group, Remove). A card opens one editor under it, which works on a
---                          copy: Done writes it, Cancel leaves the saved condition as it was. Add a condition opens a
---                          picker (search, categories) and then the same editor; nothing is saved until Add.
---   * Why would it show?   the rule as short lines, and on request what each condition and group sees right now.
---
--- A node is held by its stored table (the same table wherever it moves to, so a fold or an open editor survives a reorder)
--- and found again by RM.NodeByRaw whenever it is used; nothing keeps a row number. Frames are pooled: a card for each
--- condition a reminder can have, a box for each group, one editor, one picker, one targeting panel. What is open is kept for
--- the session only and is put away when the page is hidden.
+-- A draft over the existing Reminders rule tree and targeting. Flat All rules use a trigger and restrictions.
+-- Advanced logic exposes other tree structures. Config.lua validates edits and commits the whole draft on Save.
+-- Cards and groups follow their draft nodes through reorders, and the page pools frames for the bounded rule tree.
+-- The bottom visibility line reflects the running reminder, while cards and situation testing observe the draft.
 
 local R = TwichUI
 local Dz = {}
@@ -27,33 +13,84 @@ local function RM() return R.Reminders end
 local function Pl() return R.RemindersPlain end
 local function Kit() return R.RemindersEditor.Kit end
 
-local W, PAD = 644, 14
+local W, PAD, PALETTE_W = 640, 16, 228
+local PALETTE_PAD = 10
+local companion
+local function Button(parent, label, width, kind, action)
+    local b = Wg().Button(parent, label, width, kind, action)
+    if R.SettingsMaterial then R.SettingsMaterial.ReminderControl(b, kind) end
+    return b
+end
+local function Dropdown(...)
+    local b = Wg().Dropdown(...)
+    if R.SettingsMaterial then R.SettingsMaterial.ReminderControl(b, "dropdown") end
+    return b
+end
 local RAIL, INSET = 3, 11       -- a group's left rail, and how far what is in it moves in from its edge
 local HEAD_H = 30
 local GAP, SEP_H = 6, 14
 local ICON = 20
-local LINES = 26                -- summary lines (a heading and a line for each condition and group, with room over)
-local EDIT_W = 52           -- a card's right side: the Edit button, and More beside it (MORE_W)
-local MORE_W = 64
+local MORE_W = 84
 
 -- What is open. The reminder it belongs to (ui.id) decides whether it still applies.
 local ui = {}
 local folded = setmetatable({}, { __mode = "k" })   -- stored group table -> true (kept for the session)
-local undo                                           -- the last removal: { id, node, parentRaw, index, label }
+local session
 local explainOpen = false
 local stats = { cards = 0, groups = 0, pickerRows = 0 }
 
 local function Reset(id)
     ui = { id = id }
-    undo = nil
+    session = nil
+    if not id then explainOpen = false end
+    if Dz.CancelDrag then Dz.CancelDrag() end
 end
 
-function Dz.Reset() Reset(nil) end
-function Dz.State() return ui, undo, explainOpen end
+function Dz.Reset()
+    Reset(nil)
+    if companion then companion:Hide() end
+end
+function Dz.Shown() return companion ~= nil and companion:IsShown() end
+function Dz.Frame() return companion end
+function Dz.Say(text, tone)
+    if not Dz.Shown() then return end
+    companion.message:SetText(text or "")
+    Kit().Tone(companion.message, tone)
+end
+function Dz.Close()
+    Reset(nil)
+    if companion then companion:Hide() end
+    if R.RemindersPage then R.RemindersPage.QueueRefresh() end
+end
+function Dz.Open()
+    if not companion then return end
+    if R.RemindersCatalog then R.RemindersCatalog.Hide() end
+    if R.RemindersPreview then R.RemindersPreview.Hide() end
+    companion.workspace:Show()
+    companion:Show()
+    Dz.Say(nil)
+    if R.RemindersPage then R.RemindersPage.QueueRefresh() end
+end
+function Dz.State() return ui, nil, explainOpen end
+function Dz.DraftView() return RM().RuleEditView(session) end
+
+function Dz.HasUnsaved() return RM().RuleEditState(session) or ui.draft ~= nil end
+
+function Dz.RequestClose(after)
+    local function Close()
+        Dz.Close()
+        if type(after) == "function" then after() end
+    end
+    if not Dz.HasUnsaved() then Close(); return end
+    local current = session
+    R.Interact.Confirm("TWICHUI_DISCARD_REMINDER_RULE", "Discard unsaved changes to this reminder's conditions?",
+        function() if session == current then Close() end end, { accept = "Discard" })
+end
 
 -- For TwichUI Diagnostics and the tests: what has been built (pools only grow to the sizes a reminder is limited to) and what
 -- is open. Counts only: it reads, builds and changes nothing, and names nothing.
 function Dz.Snapshot()
+    local _, undo = RM().RuleEditState(session)
     return { cards = stats.cards, groups = stats.groups, pickerRows = stats.pickerRows,
         open = ui.mode and 1 or 0, explain = explainOpen and 1 or 0, undo = undo and 1 or 0 }
 end
@@ -61,12 +98,12 @@ end
 ---------------------------------------------------------------------------
 -- Small pieces
 ---------------------------------------------------------------------------
--- The color of a state (a word beside it always says the same thing): met teal, not met amber, can't tell grey, needs attention red.
+-- Evaluation colors accompany read-only state text.
 local function StateColor(state)
     local pal = Wg().pal
     if state == "met" then return pal.sage
-    elseif state == "unmet" then return pal.bronzeText
-    elseif state == "invalid" then return pal.danger.text end
+    elseif state == "unmet" then return pal.danger.text
+    elseif state == "invalid" then return pal.bronzeText end
     return pal.stone
 end
 local function Color(fs, tone)
@@ -76,45 +113,7 @@ end
 
 -- A tooltip that leaves the control's own hover scripts alone (a tab repaints itself on enter and leave).
 local function TipHook(frame, title, text)
-    frame:HookScript("OnEnter", function(self)
-        if not GameTooltip then return end
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText(title, 1, 1, 1)
-        GameTooltip:AddLine(text, nil, nil, nil, true)
-        GameTooltip:Show()
-    end)
-    frame:HookScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
-end
-
--- A small framed mark that agrees with a word beside it: a check, a dash, a question mark, an exclamation mark.
-local function Indicator(parent)
-    local G = Wg()
-    local pal = G.pal
-    local f = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-    f:SetSize(16, 16)
-    f:EnableMouse(true)
-    G.Surface(f, pal.well, 1, pal.control, 0.9)
-    f.check = f:CreateTexture(nil, "OVERLAY")
-    f.check:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
-    f.check:SetPoint("CENTER", 0, 0)
-    f.check:SetSize(20, 20)
-    f.dash = G.Solid(f, "OVERLAY", pal.bronzeText, 1)
-    f.dash:SetSize(8, 2)
-    f.dash:SetPoint("CENTER", 0, 0)
-    f.mark = G.Text(f, "small")
-    f.mark:SetPoint("CENTER", 0, 0)
-    function f:Set(state)
-        local c = StateColor(state)
-        self.check:SetShown(state == "met")
-        self.dash:SetShown(state == "unmet")
-        self.mark:SetShown(state == "unknown" or state == "invalid")
-        self.mark:SetText(state == "invalid" and "!" or "?")
-        self.check:SetVertexColor(c[1], c[2], c[3], 1)
-        self.dash:SetColorTexture(c[1], c[2], c[3], 1)
-        G.Color(self.mark, c)
-        self:SetBackdropBorderColor(c[1], c[2], c[3], 0.8)
-    end
-    return f
+    R.SettingsMaterial.ContextTip(frame, title, text)
 end
 
 local function Truncate(text, n)
@@ -153,87 +152,369 @@ function Dz.Build(parent, env)
     local G = Wg()
     local pal = G.pal
     local I = R.Interact
-    local s = K.Section(parent, R.Icons and R.Icons.Get("reminderDesigner") and "reminderDesigner" or "reminderWhen", "When",
-        "Who it is for, and the conditions that decide when it shows. A reminder shows while its conditions hold, and is hidden the rest of the time.")
-    local parts = {}
+    local M = R.SettingsMaterial
+    local function View() return Dz.DraftView() end
+    local function Revision() return RM().RuleEditRevision(session) end
+    local s = CreateFrame("Frame", nil, parent)
+    local summary = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    M.PanelFace(summary, "espresso")
+    summary.title = M.ReminderFont(G.Text(summary, "heading"), 17, true, "serif")
+    summary.title:SetPoint("TOPLEFT", PAD, -12); summary.title:SetText("When")
+    summary.rule = G.Text(summary, "body")
+    summary.rule:SetPoint("TOPLEFT", PAD, -36)
+    summary.restriction = G.Text(summary, "small")
+    summary.status = G.Text(summary, "small")
+    summary.edit = Button(summary, "Edit conditions", 140, "secondary", Dz.Open)
+    s.summary = summary
+
+    companion = R.RemindersBuilderRail.Build(W + PALETTE_W + 64, 800, function(id)
+        local page = R.RemindersPage
+        if page.Selected() == id then return end
+        if Dz.HasUnsaved() then
+            Dz.RequestClose(function() page.Select(id); Dz.Open() end)
+        else
+            page.Select(id)
+        end
+    end, function()
+        if s.picker.search:IsShown() then s.picker.search:SetFocus() end
+    end)
+    companion:Hide()
+    companion:SetScript("OnShow", function()
+        R.RemindersPreview.RestoreAnchor()
+        R.SettingsUI.SetWorkspaceVisible(true)
+    end)
+    M.HeaderBand(companion, 96)
+    companion.title = G.Text(companion, "title")
+    companion.title:SetPoint("TOPLEFT", 23, -18); companion.title:SetWidth(W + PALETTE_W - 45)
+    companion.title:SetMaxLines(1)
+    M.ReminderFont(companion.title, 26, true)
+    companion.subtitle = M.ReminderFont(G.Text(companion, "body"), 14)
+    companion.subtitle:SetPoint("TOPLEFT", 23, -53)
+    companion.subtitle:SetText("Choose when this reminder appears.")
+    companion.close = R.FrameLook.Close(companion, Dz.RequestClose)
+    companion.close:SetSize(27, 27)
+    M.ReminderControl(companion.close, "action")
+    companion.close:SetPoint("TOPRIGHT", -17, -16)
+    local function Disclosure(parent, label, width, click)
+        local button = CreateFrame("Button", nil, parent, "BackdropTemplate")
+        button:SetSize(width, 26)
+        G.Hover(button, pal.bronzeText, 0.12)
+        button.mark = M.ReminderFont(G.Text(button, "heading"), 19)
+        button.mark:SetPoint("LEFT", 6, 0)
+        button.text = M.ReminderFont(G.Text(button, "body"), 14)
+        button.text:SetPoint("LEFT", 23, 0)
+        button.text:SetText(label)
+        button.down = G.Chevron(button, button, "LEFT", 10, 0, true, pal.bronzeText)
+        button:SetScript("OnClick", click)
+        function button:Paint(open)
+            self.mark:SetText(open and "" or "›")
+            for _, piece in ipairs(self.down) do piece:SetShown(open and true or false) end
+            G.Color(self.mark, pal.bronzeText)
+            G.Color(self.text, self:IsEnabled() and pal.textDim or pal.stone)
+        end
+        button:Paint(false)
+        return button
+    end
+
+    local function Band(parent)
+        local line = G.Solid(parent, "ARTWORK", { 0.53, 0.41, 0.26 }, 0.63)
+        line:SetHeight(1)
+        line:SetPoint("TOPLEFT")
+        line:SetPoint("TOPRIGHT")
+    end
+    local footer = CreateFrame("Frame", nil, companion)
+    footer:SetPoint("BOTTOMLEFT", 10, 11)
+    footer:SetPoint("BOTTOMRIGHT", -10, 11)
+    footer:SetHeight(56)
+    M.QuietTile(footer, "header")
+    Band(footer)
+    local function Action(label, width, kind, callback)
+        local button = Button(footer, label, width, kind, callback)
+        button:SetHeight(38)
+        M.ReminderFont(button.text, 14)
+        return button
+    end
+    companion.cancel = Action("Cancel", 108, "action", Dz.Close)
+    companion.save = Action("Save", 116, "confirmation", function() Dz.Save() end)
+    companion.save:SetPoint("RIGHT", -13, 0)
+    companion.cancel:SetPoint("RIGHT", companion.save, "LEFT", -10, 0)
+    companion.dirty = M.ReminderFont(G.Text(footer, "small"), 13)
+    companion.dirty:SetPoint("CENTER")
+    M.ContextTip(companion.cancel, "Cancel", "Discards the unsaved conditions and targeting changes.")
+    M.ContextTip(companion.save, "Save", "Applies conditions and targeting together.")
+
+    local feedback = CreateFrame("Frame", nil, companion)
+    feedback:SetHeight(116)
+    M.PanelFace(feedback, "espresso")
+    Band(feedback)
+    companion.message = M.ReminderFont(G.Text(feedback, "small"), 13)
+    companion.message:SetPoint("TOPLEFT", 165, -84)
+    companion.message:SetWidth(W + PALETTE_W - 144)
+    companion.message:SetMaxLines(2)
+    companion.result = M.ReminderFont(G.Text(feedback, "body"), 15, true)
+    companion.result:SetPoint("TOPLEFT", 45, -11)
+    companion.result:SetWidth(W + PALETTE_W - 1)
+    companion.result:SetMaxLines(2)
+    local summaryEye = feedback:CreateTexture(nil, "ARTWORK")
+    summaryEye:SetSize(22, 22)
+    summaryEye:SetPoint("TOPLEFT", 16, -10)
+    summaryEye:SetTexture(R.PATH .. [[media\guildloc\eye-open-small.tga]])
+    companion.eye = feedback:CreateTexture(nil, "ARTWORK")
+    companion.eye:SetSize(22, 22)
+    companion.eye:SetPoint("TOPLEFT", 16, -44)
+    companion.live = M.ReminderFont(G.Text(feedback, "heading"), 15, true)
+    companion.live:SetPoint("TOPLEFT", 45, -47)
+    companion.live:SetWidth(124)
+    companion.reason = M.ReminderFont(G.Text(feedback, "body"), 14)
+    companion.reason:SetPoint("TOPLEFT", 178, -48)
+    companion.reason:SetWidth(350)
+    companion.reason:SetMaxLines(2)
+    companion.try = Disclosure(feedback, "Try a situation", 146, function()
+        ui.try = not ui.try
+        explainOpen = false
+        companion.diagnosticsScroll:SetVerticalScroll(0)
+        env.Changed()
+    end)
+    companion.try:SetPoint("TOPLEFT", 12, -76)
+
+    local function Pane(x, right)
+        local pane = CreateFrame("Frame", nil, companion)
+        pane:SetPoint("TOPLEFT", x, -96)
+        M.PanelFace(pane, "editor")
+        return pane, right
+    end
+    local palettePane, paletteRight = Pane(14, PALETTE_W + 21)
+    local rulePane, ruleRight = Pane(PALETTE_W + 28, W + PALETTE_W + 50)
+    companion.paletteScroll, companion.paletteContent = G.Scroll(companion, PALETTE_W)
+    companion.paletteScroll:SetPoint("TOPLEFT", 16, -97)
+    local paletteHelp = G.Text(companion, "small")
+    paletteHelp:SetText("Click or drag into the rule")
+    G.Color(paletteHelp, pal.stone)
+    companion.scroll, companion.content = G.Scroll(companion, W)
+    companion.scroll:SetPoint("TOPLEFT", PALETTE_W + 30, -97)
+    local diagnostics = CreateFrame("Frame", nil, companion)
+    diagnostics:SetPoint("BOTTOMLEFT", footer, "TOPLEFT", 0, 0)
+    diagnostics:SetPoint("BOTTOMRIGHT", footer, "TOPRIGHT", 0, 0)
+    diagnostics:SetHeight(150)
+    M.PanelFace(diagnostics, "espresso")
+    companion.diagnostics = diagnostics
+    local diagWidth = W + PALETTE_W + 4
+    local diagnosticScroll, diagnosticContent = G.Scroll(diagnostics, diagWidth)
+    diagnosticScroll:SetPoint("TOPLEFT", 11, -8)
+    diagnosticScroll:SetPoint("BOTTOMRIGHT", -23, 8)
+    companion.diagnosticsScroll = diagnosticScroll
+    local fitDiagnosticRail = M.ScrollRail(diagnosticScroll)
+    local baseline = CreateFrame("Frame", nil, companion)
+    baseline:SetSize(1, 1)
+    palettePane:SetPoint("BOTTOMRIGHT", baseline, "BOTTOMLEFT", paletteRight, 0)
+    rulePane:SetPoint("BOTTOMRIGHT", baseline, "BOTTOMLEFT", ruleRight, 0)
+    companion.paletteScroll:SetPoint("BOTTOMRIGHT", baseline, "BOTTOMLEFT", PALETTE_W + 12, 30)
+    companion.scroll:SetPoint("BOTTOMRIGHT", baseline, "BOTTOMLEFT", W + PALETTE_W + 31, 32)
+    paletteHelp:SetPoint("BOTTOMLEFT", baseline, "BOTTOMLEFT", 28, 11)
+    local revealHeight = 0
+    local function PlaceFeedback(extra)
+        if extra ~= nil then revealHeight = extra end
+        extra = revealHeight
+        diagnostics:SetShown(extra > 0)
+        diagnostics:SetHeight(math.max(1, extra))
+        feedback:ClearAllPoints()
+        feedback:SetPoint("BOTTOMLEFT", footer, "TOPLEFT", 0, extra)
+        feedback:SetPoint("BOTTOMRIGHT", footer, "TOPRIGHT", 0, extra)
+        baseline:ClearAllPoints()
+        baseline:SetPoint("BOTTOMLEFT", companion, "BOTTOMLEFT", 0, 75 + feedback:GetHeight() + extra)
+    end
+    local fitPaletteRail = M.ScrollRail(companion.paletteScroll)
+    local fitRuleRail = M.ScrollRail(companion.scroll)
+    s:SetParent(companion.content)
+    companion:SetScript("OnHide", function()
+        companion.workspace:Hide()
+        R.SettingsUI.SetWorkspaceVisible(false)
+        G.CloseMenu()
+        Reset(nil)
+        if R.RemindersPage then R.RemindersPage.QueueRefresh() end
+    end)
+    local parts, drag, pickInline = {}, nil, nil
     local function Add(el) parts[#parts + 1] = el return el end
 
     local function Did(ok, why)
-        if not ok then env.Say(why, "warn") end
+        if not ok then Dz.Say(why, "warn") end
         return ok
     end
     local function Poke() env.Changed() end
+    local function Mutate(action, ...)
+        local ok, why = RM().ChangeRuleEdit(session, action, ...)
+        if not Did(ok, why) then Poke(); return false end
+        Dz.Say(nil)
+        Poke()
+        return true, why
+    end
+    function Dz.Save()
+        if ui.draft then Dz.Say("Finish or cancel the condition first.", "warn"); return false end
+        if not Did(RM().SaveRuleEdit(session)) then return false end
+        Dz.Close()
+        return true
+    end
+    function Dz.SetAdvanced(on)
+        ui.advanced = on and true or nil
+        companion.scroll:SetVerticalScroll(0)
+        Poke()
+    end
+    s.advanced = Disclosure(companion, "Advanced logic", 168, function()
+        local v = View()
+        if v and Pl().Basic(v) and not ui.draft then Dz.SetAdvanced(not ui.advanced) end
+    end)
+    s.advanced:SetPoint("BOTTOMLEFT", baseline, "BOTTOMLEFT", PALETTE_W + 44, 5)
+    M.ContextTip(s.advanced, "Advanced logic", "Edit All/Any groups and nested conditions.")
 
     ---------------------------------------------------------------- the three block headings
-    s.whoHead = Add(G.Text(s, "heading"))
-    s.whoHead:SetText("Who is this for?")
-    s.ruleHead = Add(G.Text(s, "heading"))
-    s.ruleHead:SetText("Show this reminder when...")
-    s.whyHead = Add(G.Text(s, "heading"))
-    s.whyHead:SetText("Why would it show?")
-    s.divs = {}
-    for i = 1, 2 do s.divs[i] = Add(G.Solid(s, "ARTWORK", pal.bronzeLo, 0.5)) end
+    s.ruleHead = Add(G.Text(s, "title"))
+    s.ruleHead:SetText("Show a reminder when")
+    R.SettingsMaterial.ReminderFont(s.ruleHead, 18, true)
+    s.ruleHead:SetWidth(300)
+    s.onlyHead = Add(M.ReminderFont(G.Text(s, "title"), 18, true))
+    s.onlyHead:SetWidth(270)
+    s.onlyHead:SetText("Only while")
 
     ---------------------------------------------------------------- who
     s.who = Add(G.Text(s, "body"))
     s.who:SetWidth(W - PAD * 2 - 90)
     s.who:SetWordWrap(true)
-    s.whoEdit = Add(G.Button(s, "Edit", 64, "secondary", function()
-        if ui.mode == "target" then ui.mode = nil else ui.mode = "target" end
-        Poke()
-    end))
-    I.Tip(s.whoEdit, "Who is this for?", "Which characters this reminder is for, and whether it is only for one class. A reminder for someone else never looks at anything.")
+    local function SetWho(value)
+        if ui.draft then return end
+        if value == "manage" then
+            if ui.mode == "target" then ui.mode = nil else ui.mode = "target" end
+            companion.scroll:SetVerticalScroll(0)
+            Poke()
+            return
+        end
+        if value ~= "all" and value ~= "me" and value ~= "chosen" then return end
+        local me = RM().CharacterKey()
+        local function Apply(handle)
+            if value == "all" then return RM().SetScope(handle, "who", "all") end
+            local view = View()
+            if value == "me" then
+                if not me then return false, "Your character is not available yet." end
+                for _, c in ipairs(view.scope.characters) do
+                    if c ~= me then
+                        local ok, why = RM().RemoveCharacter(handle, c)
+                        if not ok then return false, why end
+                    end
+                end
+            end
+            if value == "me" or #view.scope.characters == 0 then
+                local ok, why = RM().AddCharacter(handle, me)
+                if not ok then return false, why end
+            end
+            return RM().SetScope(handle, "who", "characters")
+        end
+        if Mutate(Apply) and value == "chosen" then ui.mode = "target" end
+    end
+    s.whoLabel = M.ReminderFont(G.Text(companion, "body"), 14, true)
+    s.whoLabel:SetPoint("TOPRIGHT", -260, -52)
+    s.whoLabel:SetWidth(24)
+    s.whoLabel:SetText("For")
+    s.whoEdit = Dropdown(companion, 226, SetWho)
+    s.whoEdit:SetHeight(32)
+    M.ReminderFont(s.whoEdit.text, 14, true)
+    M.Edge(s.whoEdit, "control", 8):SetBackdropBorderColor(0.57, 0.47, 0.33, 0.8)
+    s.whoEdit:SetPoint("TOPRIGHT", -21, -44)
+    s.whoEdit:SetChoices(function()
+        return { { value = "all", label = "Every character" }, { value = "me", label = "This character" },
+            { value = "chosen", label = "Chosen characters" }, { value = "manage", label = "Targeting options..." } }
+    end)
+    M.ContextTip(s.whoEdit, "Who can see this reminder?", function() return s.who:GetText() end)
 
     local tp = CreateFrame("Frame", nil, s, "BackdropTemplate")
     tp:SetWidth(W - PAD * 2)
-    G.Surface(tp, pal.band, 1, pal.teal, 0.55)
+    M.PanelFace(tp, "card")
     Add(tp)
     s.target = tp
-    tp.chips = {}
-    local WHO = {
-        { "all", "Every character", "Every character using this profile." },
-        { "me", "This character only", "Only the character you are playing now." },
-        { "chosen", "Characters I choose", "Only the characters you add here: log in on each one and press Add this character." },
-    }
-    local function SetWho(value)
-        local id, me = env.id(), RM().CharacterKey()
-        if value == "all" then Did(RM().SetScope(id, "who", "all")) return end
-        if not me then env.Say("The game hasn't said which character this is yet. Try again in a moment.", "warn") return end
-        if value == "me" then
-            local view = env.view()
-            for _, c in ipairs(view.scope.characters) do if c ~= me then RM().RemoveCharacter(id, c) end end
-        end
-        Did(RM().AddCharacter(id, me))
-        Did(RM().SetScope(id, "who", "characters"))
-    end
-    for i, w in ipairs(WHO) do
-        local chip = G.Tab(tp, w[2], 150, function() SetWho(w[1]) end)
-        TipHook(chip, w[2], w[3])
-        tp.chips[i] = chip
-    end
     tp.names = G.Text(tp, "small")
     tp.names:SetWidth(W - PAD * 4)
-    tp.addMe = G.Button(tp, "Add this character", 150, "secondary", function() Did(RM().AddCharacter(env.id(), RM().CharacterKey())) end)
-    tp.removeMe = G.Button(tp, "Remove this character", 170, "secondary", function() Did(RM().RemoveCharacter(env.id(), RM().CharacterKey())) end)
+    tp.addMe = Button(tp, "Add this character", 150, "secondary", function() Mutate(RM().AddCharacter, RM().CharacterKey()) end)
+    tp.removeMe = Button(tp, "Remove this character", 170, "secondary", function() Mutate(RM().RemoveCharacter, RM().CharacterKey()) end)
     tp.classLabel = G.Text(tp, "body")
     tp.classLabel:SetText("Only for class")
-    tp.class = G.Dropdown(tp, 200, function(v) Did(RM().SetScope(env.id(), "class", v ~= "" and v or nil)) end)
+    tp.class = Dropdown(tp, 200, function(v) Mutate(RM().SetScope, "class", v ~= "" and v or nil) end)
     tp.class:SetChoices(function()
         local out = { { value = "", label = "Any class" } }
         for _, c in ipairs(RM().CLASSES) do out[#out + 1] = { value = c, label = RM().ClassName(c) } end
         return out
     end)
-    I.Tip(tp.class, "Only for class", "Limits which characters this reminder runs for, whatever its conditions: a reminder for another class never looks at anything. To show for several classes, or for a class only in some situations, add \"Your class\" conditions to the rule instead.")
+    M.ContextTip(tp.class, "Only for class", "Limits which characters this reminder runs for, whatever its conditions: a reminder for another class never looks at anything. To show for several classes, or for a class only in some situations, add \"Your class\" conditions to the rule instead.")
     tp.note = G.Text(tp, "small")
     tp.note:SetWidth(W - PAD * 4)
-    tp.note:SetText("This decides whether the reminder runs at all. A \"Your class\" condition in the rule is part of the rule instead, and is never moved here.")
-    tp.done = G.Button(tp, "Done", 90, "primary", function() ui.mode = nil; Poke() end)
+    tp.note:SetText("Sets who can see this reminder. Class conditions stay in the rule.")
+    tp.done = Button(tp, "Done", 90, "primary", function() ui.mode = nil; Poke() end)
+
+    local function Payload(raw, entry, label)
+        if not Dz.Shown() or ui.draft or not RM().Writable() or not (raw or entry) then return end
+        local node = raw and RM().NodeByRaw(View(), raw)
+        return { id = env.id(), rev = Revision(), raw = raw, entry = entry,
+            condition = entry and entry.make() or (node and (node.cond
+                or (Pl().LocationValues(node) and { type = "player", state = "dungeon" }))) }, label
+    end
+
+    local function Grip(parent, raw, label)
+        local grip = CreateFrame("Button", nil, parent)
+        grip:SetSize(20, 24)
+        for i = 1, 6 do
+            local dot = G.Solid(grip, "ARTWORK", pal.bronzeText, 0.8)
+            dot:SetTexture(R.PATH .. [[media\style-v2\switch-thumb.tga]])
+            dot:SetVertexColor(0.64, 0.52, 0.34, 0.85)
+            dot:SetSize(3, 3)
+            dot:SetPoint("CENTER", i % 2 == 0 and 2 or -2, 5 - 5 * math.floor((i - 1) / 2))
+        end
+        G.Hover(grip, pal.text, 0.12)
+        M.ContextTip(grip, "Move condition or group", "Drag to a highlighted edge or into a group. You can also move it through Actions.")
+        grip:RegisterForDrag("LeftButton")
+        grip:SetScript("OnDragStart", function()
+            local payload, name = Payload(raw(), nil, label())
+            drag:Start(payload, name)
+        end)
+        grip:SetScript("OnDragStop", function() drag:Stop() end)
+        return grip
+    end
+
+    function Dz.LocationPick(raw, state, remove)
+        local function Apply(handle)
+            local view = RM().RuleEditView(handle)
+            local entry = RM().NodeByRaw(view, raw)
+            local values = Pl().LocationValues(entry)
+            if not values or (state ~= "dungeon" and state ~= "raid") then return false, RM().REFUSE.value end
+            local exists
+            for _, value in ipairs(values) do if value == state then exists = true end end
+            if remove then
+                if not exists then return false, RM().REFUSE.value end
+                if not entry.group or #entry.children == 1 then return RM().RemoveNode(handle, entry.path) end
+                for _, child in ipairs(entry.children) do
+                    if child.cond.state == state then return RM().RemoveNode(handle, child.path) end
+                end
+            else
+                if exists or (entry.cond and entry.cond.negate) then return false, RM().REFUSE.value end
+                local cond = { type = "player", state = state, negate = false }
+                if entry.group then return RM().AddCondition(handle, "player", entry.path, cond) end
+                local at = entry.path[1]
+                local ok, groupPath = RM().AddGroup(handle, nil, "any")
+                if not ok then return false, groupPath end
+                local groupRaw = RM().Node(RM().RuleEditView(handle), groupPath).raw
+                local why
+                ok, why = RM().MoveNode(handle, entry.path, groupPath)
+                if not ok then return false, why end
+                local group = RM().NodeByRaw(RM().RuleEditView(handle), groupRaw)
+                ok, why = RM().AddCondition(handle, "player", group.path, cond)
+                if not ok then return false, why end
+                return RM().MoveNode(handle, group.path, {}, at)
+            end
+        end
+        return Mutate(Apply)
+    end
 
     ---------------------------------------------------------------- the tree: group boxes, then cards
     local function MakeGroup(top)
         local g = {}
-        g.box = CreateFrame("Frame", nil, s, "BackdropTemplate")
-        G.Surface(g.box, pal.ink, 0.12, pal.bronzeLo, 0.5)
+        g.box = CreateFrame("Frame", nil, s)
+        M.PanelFace(g.box, top and "espresso" or "well")
         Add(g.box)
         g.rail = G.Solid(g.box, "ARTWORK", pal.bronzeText, 0.6)
         g.rail:SetWidth(RAIL)
@@ -243,43 +524,44 @@ function Dz.Build(parent, env)
         g.heading:SetWordWrap(false)
         g.folded = Add(G.Text(g.box, "small"))
         g.folded:SetWordWrap(false)
-        g.outcome = Add(G.Text(g.box, "small"))
-        g.outcome:SetWordWrap(true)
         g.problem = Add(G.Text(g.box, "small"))
         g.problem:SetWordWrap(true)
         g.empty = Add(G.Text(g.box, "small"))
         g.empty:SetWordWrap(true)
         g.top = top
         if not top then
+            g.grip = Add(Grip(g.box, function() return g.raw end, function() return g.heading:GetText() end))
             g.fold = Add(CreateFrame("Button", nil, g.box))
             g.fold:SetSize(20, 20)
             g.fold.down = G.Chevron(g.fold, g.fold, "CENTER", 0, 0, true, pal.tealHi)
             g.fold.up = G.Chevron(g.fold, g.fold, "CENTER", 0, 0, false, pal.tealHi)
             G.Hover(g.fold, pal.text, 0.06)
             g.fold:SetScript("OnClick", function()
-                if not g.raw then return end
+                if not g.raw or ui.draft then return end
                 folded[g.raw] = (not folded[g.raw]) or nil
                 ui.mode, ui.nodeRaw, ui.groupRaw, ui.draft = nil, nil, nil, nil   -- what was open inside it is put away
                 Poke()
             end)
-            I.Tip(g.fold, "Fold this group", "Folds the group to one line, or opens it again. Nothing in it changes.")
-            g.more = Add(G.Dropdown(g.box, MORE_W, function(value) Dz.MenuPick(g, value) end))
+            M.ContextTip(g.fold, "Fold this group", "Folds the group to one line, or opens it again. Nothing in it changes.")
+            g.more = Add(Dropdown(g.box, MORE_W, function(value) Dz.MenuPick(g, value) end))
             g.more:SetValue(nil, "More")
             g.more.menuWidth, g.more.menuAlignRight = 340, true
             g.more:SetChoices(function() return Dz.MenuFor(g.raw) end)
-            I.Tip(g.more, "More", "Duplicate this group, move it up or down or into another group, or remove it with what is in it.")
+            M.ContextTip(g.more, "More", "Duplicate this group, move it up or down or into another group, or remove it with what is in it.")
         end
         for _, match in ipairs({ "all", "any" }) do
-            local seg = Add(G.Tab(g.box, Pl().Words(match).short, 46, function()
-                local e = g.raw and RM().NodeByRaw(env.view(), g.raw)
-                if top then Did(RM().SetMatch(env.id(), match)) elseif e then Did(RM().SetMatch(env.id(), match, e.path)) end
+            local seg = Add(R.SettingsMaterial.Segment(g.box, Pl().Words(match).short, 46, function()
+                local e = g.raw and RM().NodeByRaw(View(), g.raw)
+                if top then Mutate(RM().SetMatch, match) elseif e then Mutate(RM().SetMatch, match, e.path) end
             end))
             TipHook(seg, Pl().Words(match).technical, Pl().Words(match).tip)
             g["seg" .. match] = seg
         end
-        g.add = Add(G.Button(g.box, "Add a condition", 140, "secondary", function()
+        g.add = Add(Button(g.box, "Add a condition", 140, "secondary", function()
+            if ui.draft then return end
             ui.mode, ui.groupRaw, ui.nodeRaw, ui.draft = "pick", g.raw or "top", nil, nil
-            ui.query = ""
+            ui.query, ui.category = "", nil
+            companion.paletteScroll:SetVerticalScroll(0)
             Poke()
         end))
         return g
@@ -295,73 +577,150 @@ function Dz.Build(parent, env)
     s.cards = {}
     for i = 1, RM().MAX_CONDITIONS do
         local card = CreateFrame("Button", nil, s, "BackdropTemplate")
-        G.Surface(card, pal.bg, 0.95, pal.control, 0.55)
-        G.Hover(card, pal.text, 0.04)
+        M.PanelFace(card, "walnut")
+        M.MaterialHover(card)
         Add(card)
         card.icon = card:CreateTexture(nil, "ARTWORK")
         card.icon:SetSize(ICON, ICON)
-        card.icon:SetPoint("TOPLEFT", 10, -9)
+        card.icon:SetPoint("TOPLEFT", 28, -9)
+        card.grip = Grip(card, function() return card.raw end, function() return card.title:IsShown() and card.title:GetText() or card.text:GetText() end)
+        card.grip:SetPoint("TOPLEFT", 3, -6)
         card.text = G.Text(card, "body")
+        card.title = M.ReminderFont(G.Text(card, "title"), 18, true)
+        card.title:SetWidth(196)
         card.text:SetWordWrap(true)
-        card.note = G.Text(card, "small")
+        card.note = M.ReminderFont(G.Text(card, "heading"), 15, true, "strong")
         card.note:SetWordWrap(true)
-        card.state = Indicator(card)
-        I.Tip(card.state, "Why", function() return card.stateTip end)
-        card.edit = G.Button(card, "Edit", EDIT_W, "secondary", function() Dz.Edit(card.raw) end)
-        card.more = G.Dropdown(card, MORE_W, function(value) Dz.MenuPick(card, value) end)
-        card.more:SetValue(nil, "More")
+        card.more = Dropdown(card, 28, function(value) Dz.MenuPick(card, value) end, true)
+        card.more:SetValue(nil, "···")
         card.more.menuWidth, card.more.menuAlignRight = 340, true
         card.more:SetChoices(function() return Dz.MenuFor(card.raw) end)
-        card:SetScript("OnClick", function() Dz.Edit(card.raw) end)
-        I.Tip(card, "Edit this condition", function()
-            local e = card.raw and RM().NodeByRaw(env.view(), card.raw)
-            if e and not e.cond then return "This condition can't be edited here.", Pl().Technical(e) end
-            return "Click to change it. Nothing is saved until you press Done."
+        card.artWell = CreateFrame("Frame", nil, card)
+        M.PanelFace(card.artWell, "canvas")
+        card.artWell:SetSize(58, 58)
+        card.artWell:SetPoint("TOPLEFT", 30, -18)
+        M.Rim(card.artWell):SetTint(1, 1, 1, 0.55)
+        card.art = card.artWell:CreateTexture(nil, "OVERLAY")
+        card.art:SetPoint("CENTER", 0, 0)
+        card.fields = {}
+        card.item = Button(card, "Choose item", 119, "secondary", function() Dz.Edit(card.raw) end)
+        for j = 1, 3 do
+            local field = Dropdown(card, 110, function(value) pickInline(card, j, value) end)
+            field:SetChoices(function() return card.inline and card.inline[j] and card.inline[j].choices or {} end)
+            card.fields[j] = field
+        end
+        card.chips = {}
+        for j = 1, 2 do
+            local chip = Button(card, "", 108, "chip", function()
+                local value = card.locations and card.locations[j]
+                if value then Dz.LocationPick(card.raw, value, true) end
+            end)
+            chip:SetHeight(28)
+            M.ReminderFont(chip.text, 14, true)
+            card.chips[j] = chip
+        end
+        card.choose = Dropdown(card, 102, function(value) Dz.LocationPick(card.raw, value) end, true)
+        card.choose:SetHeight(28)
+        M.ContextTip(card.choose, "Choose locations", "Dungeon and Raid are the supported location checks. Both are selected when this control is unavailable.")
+        card.choose:SetChoices(function()
+            local choices, have = {}, {}
+            for _, value in ipairs(card.locations or {}) do have[value] = true end
+            for _, place in ipairs({ { "dungeon", "Dungeon" }, { "raid", "Raid" } }) do
+                if not have[place[1]] then choices[#choices + 1] = { value = place[1], label = place[2] } end
+            end
+            return choices
         end)
-        I.Tip(card.more, "More", "Duplicate this condition, move it up or down or into another group, or remove it.")
+        card.locationNote = M.ReminderFont(G.Text(card, "small"), 12)
+        card:RegisterForClicks("RightButtonUp")
+        card:SetScript("OnClick", function(_, mouse)
+            if mouse == "RightButton" and not ui.draft then
+                card.more:Show()
+                card.more:OpenMenu()
+            end
+        end)
+        M.ContextTip(card, "Condition actions", "Right-click to remove, duplicate or move.")
+        card:HookScript("OnEnter", function()
+            if not ui.draft and RM().Writable() then card.more:Show() end
+        end)
+        card:HookScript("OnLeave", function()
+            if not card:IsMouseOver() and not card.more:IsMouseOver() then card.more:Hide() end
+        end)
+        card.more:HookScript("OnLeave", function()
+            if not card:IsMouseOver() then card.more:Hide() end
+        end)
+        M.ContextTip(card.more, "Condition actions", "Remove, duplicate or move.")
         s.cards[i] = card
     end
     stats.cards = RM().MAX_CONDITIONS
+    s.addBasic = Add(G.Button(s, "+ Add restriction", W - PAD * 2, "secondary", function()
+        ui.mode, ui.groupRaw = "pick", "top"
+        companion.paletteScroll:SetVerticalScroll(0)
+        s.picker.search:SetFocus()
+        Poke()
+    end))
+    M.ReminderControl(s.addBasic, "target")
+    s.addBasic:SetHeight(42)
+    M.ReminderFont(s.addBasic.text, 14)
+    M.DashedBorder(s.addBasic, W - PAD * 2, 42)
 
-    s.note = Add(G.Text(s, "small"))
-    s.note:SetWidth(W - PAD * 2)
     s.limit = Add(G.Text(s, "small"))
     s.limit:SetWidth(W - PAD * 2)
-    s.undoText = Add(G.Text(s, "small"))
-    s.undoText:SetWidth(W - PAD * 2 - 90)
-    s.undo = Add(G.Button(s, "Undo", 70, "secondary", function() Dz.Undo() end))
-    I.Tip(s.undo, "Undo", "Puts back what you just removed, where it was, if that place is still there.")
+    local function HistoryButton(label, reverse, callback)
+        local button = Action(label, 98, "action", callback)
+        button.craftLabelInset = 35
+        local icon = button:CreateTexture(nil, "OVERLAY")
+        icon:SetAtlas("common-icon-undo")
+        if reverse then
+            local ulx, uly, llx, lly, urx, ury, lrx, lry = icon:GetTexCoord()
+            if lry then icon:SetTexCoord(urx, ury, lrx, lry, ulx, uly, llx, lly) end
+        end
+        icon:SetSize(17, 17)
+        icon:SetPoint("LEFT", 12, 0)
+        button.text:ClearAllPoints()
+        button.text:SetWidth(0)
+        button.text:SetPoint("LEFT", 35, 0)
+        function button:PaintIcon()
+            local c = self:IsEnabled() and pal.bronzeText or pal.stone
+            icon:SetVertexColor(c[1], c[2], c[3], self:IsEnabled() and 1 or 0.55)
+        end
+        return button
+    end
+    s.undo = HistoryButton("Undo", false, function() Dz.Undo() end)
+    s.undo:SetPoint("LEFT", 13, 0)
+    s.redo = HistoryButton("Redo", true, function() Dz.Redo() end)
+    s.redo:SetPoint("LEFT", s.undo, "RIGHT", 10, 0)
+    M.ContextTip(s.undo, "Undo", "Reverses the most recent draft change.")
 
     ---------------------------------------------------------------- the one editor
     local ep = CreateFrame("Frame", nil, s, "BackdropTemplate")
-    G.Surface(ep, pal.band, 1, pal.teal, 0.7)
+    R.SettingsMaterial.Card(ep, G.Panel(ep))
     Add(ep)
     s.editor = ep
     ep.title = G.Text(ep, "heading")
-    ep.subjectLabel = G.Text(ep, "small")
-    ep.subjectLabel:SetText("What to check")
-    ep.subject = G.Dropdown(ep, 190, function(value)
-        if not ui.draft then return end
-        local new = Pl().WithSubject(ui.draft, value)
-        if new then ui.draft = new end
-        Poke()
-    end)
-    ep.subject:SetChoices(function() return Pl().Subjects() end)
-    ep.op = G.Dropdown(ep, 86, function(value)
-        if ui.draft then ui.draft = Pl().WithNegate(ui.draft, value == "isnot") end
-        Poke()
-    end)
-    ep.op:SetChoices(function() return { { value = "is", label = "is" }, { value = "isnot", label = "is not" } } end)
-    ep.value = G.Dropdown(ep, 200, function(value)
-        if ui.draft then ui.draft = Pl().WithValue(ui.draft, value) end
-        Poke()
-    end)
-    ep.value:SetChoices(function() return ui.draft and Pl().ValueChoices(ui.draft) or {} end)
+    local function DraftField(key)
+        return ui.draft and Pl().EditField(ui.draft, key)
+    end
+    local function DraftControl(key, width)
+        local control = Dropdown(ep, width, function(value)
+            local spec = DraftField(key)
+            local nextCond = spec and Pl().WithCardField(ui.draft, spec, value)
+            if nextCond then ui.draft = nextCond; Poke() end
+        end)
+        control:SetChoices(function()
+            local spec = DraftField(key)
+            return spec and spec.choices or {}
+        end)
+        return control
+    end
+    ep.subject = DraftControl("subject", 166)
+    ep.op = DraftControl("op", 122)
+    ep.value = DraftControl("value", 178)
+    M.ContextTip(ep.value, "Condition value", function() return ui.draft and Pl().Help(ui.draft) end)
     ep.item = G.EditBox(ep, 110, 22)
     ep.item:SetMaxLetters(200)
     local function TakeItem(text)
         local id = RM().ParseItem(text)
-        if not id then env.Say("That isn't an item ID. Type the number from the item's link, paste the link, or drop the item on the box.", "warn") return end
+        if not id then Dz.Say("That isn't an item ID. Type the number from the item's link, paste the link, or drop the item on the box.", "warn") return end
         ep.item:ClearFocus()
         if ui.draft then ui.draft = Pl().WithItem(ui.draft, id) end
         Poke()
@@ -373,58 +732,77 @@ function Dz.Build(parent, env)
         ClearCursor()   -- the item goes straight back where it came from; only its ID is noted
         TakeItem(tostring(id or ""))
     end)
-    I.Tip(ep.item, "Item", "Its item ID, its link pasted here, or the item dropped here from your bags (it goes straight back). Press Enter.")
+    M.ContextTip(ep.item, "Item", "Its item ID, its link pasted here, or the item dropped here from your bags (it goes straight back). Press Enter.")
     ep.itemInfo = G.Text(ep, "small")
-    ep.help = G.Text(ep, "small")
-    ep.help:SetWordWrap(true)
     ep.reads = G.Text(ep, "body")
     ep.reads:SetWordWrap(true)
     ep.problem = G.Text(ep, "small")
     ep.problem:SetWordWrap(true)
-    ep.done = G.Button(ep, "Done", 100, "primary", function() Dz.Commit() end)
-    ep.cancel = G.Button(ep, "Cancel", 90, "secondary", function() ui.mode, ui.nodeRaw, ui.draft = nil, nil, nil; Poke() end)
-    I.Tip(ep.cancel, "Cancel", "Closes this without changing anything: the saved condition stays as it was.")
+    ep.done = Button(ep, "Done", 100, "primary", function() Dz.Commit() end)
+    ep.cancel = Button(ep, "Cancel", 90, "secondary", function()
+        ui.mode, ui.nodeRaw, ui.draft = nil, nil, nil
+        Dz.Say(nil)
+        Poke()
+    end)
+    M.ContextTip(ep.cancel, "Cancel", "Closes this without changing anything: the saved condition stays as it was.")
 
     ---------------------------------------------------------------- the one picker
-    local pp = CreateFrame("Frame", nil, s, "BackdropTemplate")
-    G.Surface(pp, pal.band, 1, pal.teal, 0.7)
-    Add(pp)
+    local pp = CreateFrame("Frame", nil, companion.paletteContent, "BackdropTemplate")
     s.picker = pp
-    pp.title = G.Text(pp, "heading")
+    pp.title = M.ReminderFont(G.Text(pp, "title"), 18, true)
     pp.where = G.Text(pp, "small")
     pp.where:SetWordWrap(true)
-    pp.search = G.EditBox(pp, 220, 22)
+    pp.search = G.EditBox(pp, PALETTE_W - PALETTE_PAD * 2, 30)
+    M.ReminderControl(pp.search, "field")
+    pp.searchHint = M.SearchDecoration(pp.search, "Search...")
     pp.search:SetMaxLetters(40)
     pp.search:SetScript("OnTextChanged", function(self, user)
         if user == false then return end
         ui.query = self:GetText()
+        companion.paletteScroll:SetVerticalScroll(0)
         Poke()
     end)
+    pp.search:HookScript("OnEditFocusGained", function() pp.searchHint:Hide() end)
+    pp.search:HookScript("OnEditFocusLost", function() pp.searchHint:SetShown(pp.search:GetText() == "") end)
     pp.search:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-    I.Tip(pp.search, "Search", "A few letters of what you want to check: combat, ammunition, shield, class...")
-    pp.cats = {}
+    pp.search:HookScript("OnHide", function(self) self:ClearFocus() end)
+    M.ContextTip(pp.search, "Search", "A few letters of what you want to check: combat, ammunition, shield, class...")
+    pp.categories, pp.dividers = {}, {}
+    pp.category = Dropdown(pp, PALETTE_W - PALETTE_PAD * 2, function(value)
+        ui.category = value ~= "all" and value or nil
+        companion.paletteScroll:SetVerticalScroll(0)
+        Poke()
+    end)
+    pp.category:SetHeight(27)
+    M.ReminderFont(pp.category.text, 13)
+    pp.category:SetChoices(function()
+        local options = { { value = "all", label = "All categories" } }
+        for _, category in ipairs(Pl().CATEGORIES) do options[#options + 1] = { value = category, label = category } end
+        return options
+    end)
     pp.rows = {}
     pp.none = G.Text(pp, "small")
-    pp.cancel = G.Button(pp, "Cancel", 90, "secondary", function() ui.mode, ui.groupRaw = nil, nil; Poke() end)
-    pp.back = G.Button(pp, "Back", 90, "secondary", function() ui.mode = "pick"; Poke() end)
-    pp.newAny = G.Button(pp, "Allow either condition", 190, "secondary", function() Dz.AddGroup("any") end)
-    pp.newAll = G.Button(pp, "Require several together", 190, "secondary", function() Dz.AddGroup("all") end)
+    pp.cancel = Button(pp, "Cancel", 90, "secondary", function() ui.mode, ui.groupRaw = nil, nil; Poke() end)
+    pp.back = Button(pp, "Back", 90, "secondary", function() ui.mode = "pick"; Poke() end)
+    pp.newAny = Button(pp, "Allow either condition", PALETTE_W - PALETTE_PAD * 2, "secondary", function() Dz.AddGroup("any") end)
+    pp.newAll = Button(pp, "Require several together", PALETTE_W - PALETTE_PAD * 2, "secondary", function() Dz.AddGroup("all") end)
     pp.newNote = G.Text(pp, "small")
     pp.newNote:SetWordWrap(true)
-    I.Tip(pp.newAny, "Allow either condition", "A new group where at least one of its conditions must be true: \"this, or that\".")
-    I.Tip(pp.newAll, "Require several together", "A new group where all of its conditions must be true.")
+    M.ContextTip(pp.newAny, "Allow either condition", "A new group where at least one of its conditions must be true: \"this, or that\".")
+    M.ContextTip(pp.newAll, "Require several together", "A new group where all of its conditions must be true.")
 
     local function PickRow(i)
         if pp.rows[i] then return pp.rows[i] end
         local row = CreateFrame("Button", nil, pp, "BackdropTemplate")
-        G.Surface(row, pal.bg, 0.9, pal.control, 0.4)
-        G.Hover(row, pal.text, 0.05)
-        row.icon = row:CreateTexture(nil, "ARTWORK")
-        row.icon:SetSize(ICON, ICON)
-        row.icon:SetPoint("LEFT", 10, 0)
-        row.name = G.Text(row, "body")
-        row.name:SetPoint("TOPLEFT", ICON + 20, -6)
-        row.name:SetWordWrap(false)
+        M.MaterialHover(row)
+        row.icon = row:CreateTexture(nil, "OVERLAY")
+        row.icon:SetSize(30, 30)
+        row.icon:SetPoint("CENTER", row, "LEFT", 20, 0)
+        row.name = M.ReminderFont(G.Text(row, "body"), 14, true)
+        row.name:SetPoint("LEFT", 43, 0)
+        row.name:SetWidth(PALETTE_W - 2 * PALETTE_PAD - 45)
+        row.name:SetWordWrap(true)
+        row.name:SetMaxLines(2)
         row.blurb = G.Text(row, "small")
         row.blurb:SetPoint("TOPLEFT", ICON + 20, -22)
         row.blurb:SetWordWrap(true)
@@ -432,68 +810,203 @@ function Dz.Build(parent, env)
         row.note:SetWordWrap(true)
         row:SetScript("OnClick", function(self)
             if self.entry then Dz.Pick(self.entry)
-            elseif self.isGroup then ui.mode = "newgroup"; Poke() end
+            elseif self.isGroup then ui.groupRaw = ui.groupRaw or "top"; ui.mode = "newgroup"; Poke() end
         end)
+        M.ContextTip(row, "Condition palette", function(self)
+            local e = self.entry
+            if e then return e.name .. "\n" .. e.blurb, e.note end
+            return "Combine conditions with All or Any."
+        end)
+        drag:Bind(row, function() return Payload(nil, row.entry, row.name:GetText()) end)
         pp.rows[i] = row
         stats.pickerRows = #pp.rows
         return row
     end
 
     ---------------------------------------------------------------- why
-    s.lines = {}
-    for i = 1, LINES do s.lines[i] = Add(G.Text(s, "small")) end
-    s.explain = Add(CreateFrame("Button", nil, s))
-    s.explain:SetSize(320, 22)
-    s.explain.text = G.Text(s.explain, "small")
-    s.explain.text:SetPoint("LEFT", 16, 0)
-    G.Color(s.explain.text, pal.tealHi)
-    s.explain.down = G.Chevron(s.explain, s.explain, "LEFT", 7, 0, true, pal.tealHi)
-    s.explain.up = G.Chevron(s.explain, s.explain, "LEFT", 7, 0, false, pal.tealHi)
-    s.explain:SetScript("OnClick", function() explainOpen = not explainOpen; Poke() end)
-    I.Tip(s.explain, "Would this show now?", "Checks the rule against what the game reports right now, condition by condition. It only reads: nothing is shown on screen and nothing about you changes. While this is closed, nothing is checked for it.")
-    s.exMark = Indicator(s)
-    Add(s.exMark)
-    s.exHead = Add(G.Text(s, "body"))
-    s.exReason = Add(G.Text(s, "small"))
-    s.exReason:SetWidth(W - PAD * 2 - 22)
-    s.exScope = Add(G.Text(s, "small"))
-    s.exScope:SetWidth(W - PAD * 2 - 22)
-    s.exStatus = Add(G.Text(s, "small"))
-    s.exStatus:SetWidth(W - PAD * 2 - 22)
-    s.exNote = Add(G.Text(s, "small"))
-    s.exNote:SetWidth(W - PAD * 2 - 22)
+    s.explain = Disclosure(feedback, "Details", 88, function()
+        explainOpen = not explainOpen
+        ui.try = nil
+        diagnosticScroll:SetVerticalScroll(0)
+        Poke()
+    end)
+    M.ReminderControl(s.explain, "drop")
+    s.explain:SetHeight(28)
+    s.explain.text:SetWidth(58)
+    s.explain:SetPoint("TOPLEFT", 541, -40)
+    local function DiagnosticText(kind, size, width)
+        local fs = Add(M.ReminderFont(G.Text(diagnosticContent, kind), size))
+        fs:SetWidth(width or diagWidth - 2 * PAD)
+        fs:SetWordWrap(true)
+        return fs
+    end
+    s.exHead = DiagnosticText("heading", 15)
+    s.exReason = DiagnosticText("body", 13)
+    s.exScope = DiagnosticText("body", 13)
+    s.exStatus = DiagnosticText("body", 13)
+    local detailRows = {}
+    for i = 1, RM().MAX_CONDITIONS + RM().MAX_GROUPS do
+        detailRows[i] = Add(R.RemindersEditor.ResultRow(diagnosticContent))
+    end
+    diagnosticContent.editorWidth = diagWidth
+
+    local samples = { rows = {} }
+    samples.result = DiagnosticText("body", 14)
+    for i = 1, RM().MAX_CONDITIONS do
+        local row = {}
+        row.label = DiagnosticText("body", 13, 330)
+        row.label:SetMaxLines(2)
+        row.pick = Add(Dropdown(diagnosticContent, diagWidth - 348 - 2 * PAD, function(value)
+            ui.picks = ui.picks or {}
+            ui.picks[i] = value
+            Poke()
+        end))
+        row.pick:SetHeight(28)
+        row.pick:SetChoices(function() return row.choices or {} end)
+        samples.rows[i] = row
+    end
+
+    local function LayoutSamples(v, h)
+        local E = R.ReminderEval
+        for i, input in ipairs(E.SimInputs(v)) do
+            local row = samples.rows[i]
+            row.choices = {}
+            local chosen = input.scenarios[1]
+            for _, option in ipairs(input.scenarios) do
+                row.choices[#row.choices + 1] = { value = option.key, label = option.label }
+                if ui.picks and ui.picks[i] == option.key then chosen = option end
+            end
+            if chosen then
+                row.pick:SetValue(chosen.key, chosen.label)
+                K.Text(row.label, input.label or E.Summary(input.entry), nil, PAD, h + 4, diagnosticContent)
+                K.Put(row.pick, diagnosticContent, PAD + 348, h)
+                h = h + 30
+            end
+        end
+        local out = E.Simulate(v, ui.picks)
+        h = h + K.Text(samples.result, "Simulated · " .. (E.STATUS_WORDS[out.status] or out.status), "quiet", PAD, h + 5, diagnosticContent) + 16
+        return R.RemindersEditor.DrawResults(diagnosticContent, detailRows, out, "Simulated", h)
+    end
+
+    local function LayoutDiagnostics(v, ex, out)
+        if not (ui.try or explainOpen) then return 0 end
+        local h = 5
+        if ui.try then
+            h = LayoutSamples(v, h)
+        else
+            local tone = ex.state == "hidden" and "unmet" or (ex.state == "invalid" and "invalid"
+                or (ex.state == "unknown" and "unknown" or "met"))
+            h = h + K.Text(s.exHead, ex.head, nil, PAD, h, diagnosticContent) + 8
+            Color(s.exHead, tone)
+            if ex.reason then h = h + K.Text(s.exReason, ex.reason, "quiet", PAD, h, diagnosticContent) + 5 end
+            h = h + K.Text(s.exScope, ex.scope, "quiet", PAD, h, diagnosticContent) + 5
+            h = h + K.Text(s.exStatus, ex.status, "quiet", PAD, h, diagnosticContent) + 9
+            h = R.RemindersEditor.DrawResults(diagnosticContent, detailRows, out, "Observed", h)
+        end
+        diagnosticContent:SetHeight(h + 6)
+        if fitDiagnosticRail then fitDiagnosticRail(h + 6) end
+        return math.min(150, h + 22)
+    end
 
     ---------------------------------------------------------------- everything that is placed is hidden first
     local function HideAll()
         for _, el in ipairs(parts) do el:Hide() end
         for _, row in ipairs(pp.rows) do row:Hide() end
-        for _, c in ipairs(pp.cats) do c:Hide() end
+        for _, c in pairs(pp.categories) do c:Hide() end
+        for _, c in pairs(pp.dividers) do c:Hide() end
         for _, c in ipairs(s.cards) do
-            for _, k in ipairs({ "text", "note", "state", "edit", "more", "icon" }) do c[k]:Hide() end
+            for _, k in ipairs({ "text", "title", "note", "more", "icon", "artWell", "item" }) do c[k]:Hide() end
+            for _, field in ipairs(c.fields) do field:Hide() end
+            for _, chip in ipairs(c.chips) do chip:Hide() end
+            c.choose:Hide(); c.locationNote:Hide()
+            c.inline, c.locations = nil, nil
         end
-        for _, c in ipairs(tp.chips) do c:Hide() end
         for _, el in ipairs({ tp.names, tp.addMe, tp.removeMe, tp.classLabel, tp.class, tp.note, tp.done }) do el:Hide() end
-        for _, el in ipairs({ ep.title, ep.subjectLabel, ep.subject, ep.op, ep.value, ep.item, ep.itemInfo, ep.help, ep.reads, ep.problem, ep.done, ep.cancel }) do el:Hide() end
-        for _, el in ipairs({ pp.title, pp.where, pp.search, pp.none, pp.cancel, pp.back, pp.newAny, pp.newAll, pp.newNote }) do el:Hide() end
+        for _, el in ipairs({ ep.title, ep.subject, ep.op, ep.value, ep.item, ep.itemInfo, ep.reads, ep.problem, ep.done, ep.cancel }) do el:Hide() end
+        for _, el in ipairs({ pp.none, pp.cancel, pp.back, pp.newAny, pp.newAll, pp.newNote }) do el:Hide() end
     end
 
     ---------------------------------------------------------------- actions (the cards' and groups' menus)
     local menuDests   -- the groups the last Move into list offered, by its position
-    local function Entry(raw) return raw and RM().NodeByRaw(env.view(), raw) end
+    local function Entry(raw) return raw and RM().NodeByRaw(View(), raw) end
+
+    pickInline = function(card, index, value)
+        local entry = Entry(card.raw)
+        local field = card.inline and card.inline[index]
+        if not (entry and entry.cond and field) or value == field.value or ui.draft then return end
+        local Pln = Pl()
+        local nextCond = Pln.WithCardField(entry.cond, field, value)
+        if not nextCond then return end
+        if Pln.NeedsItem(nextCond) and not nextCond.item then
+            Dz.Edit(card.raw)
+            ui.draft = nextCond
+            return
+        end
+        local clean, problem = R.ReminderConditions.Check(nextCond)
+        if not clean or (problem and not Pln.Capability({ cond = clean })) then
+            Dz.Say(problem or RM().REFUSE.value, "warn")
+        else
+            Mutate(RM().SetCondition, entry.path, clean, true)
+        end
+    end
 
     function Dz.Edit(raw)
         local e = Entry(raw)
         if not e then return end
         if not e.cond then
-            env.Say(e.provider and "That condition's settings can't be read, so it can't be edited: remove it and add it again." or
+            Dz.Say(e.provider and "That condition's settings can't be read, so it can't be edited: remove it and add it again." or
                 "That kind of condition isn't known to this version of TwichUI, so it is kept as it is. Remove it if you don't want it.", "warn")
             return
         end
         ui.mode, ui.nodeRaw, ui.groupRaw = "edit", raw, nil
         ui.draft = RM().DeepCopy(e.cond)
-        ui.before = RM().DeepCopy(e.cond)
-        env.Say(nil)
+        Dz.Say(nil)
         Poke()
+    end
+
+    local function GroupPath(v, raw)
+        if raw == "top" then return {} end
+        local entry = RM().NodeByRaw(v, raw)
+        return entry and entry.group and entry.path or nil
+    end
+
+    local function RememberMove(raw, destination, position)
+        local v, entry = View(), Entry(raw)
+        local path = v and GroupPath(v, destination)
+        if not (entry and path) then return false end
+        return Mutate(RM().MoveNode, entry.path, path, position)
+    end
+
+    local function DropPosition(src, destination, slot)
+        if not Dz.Shown() or env.id() ~= src.id or Revision() ~= src.rev or ui.draft then return end
+        local v = View()
+        local path = v and GroupPath(v, destination)
+        if not path then return end
+        if src.entry then
+            if v.counts.conditions < RM().MAX_CONDITIONS then return slot end
+            return
+        end
+        local entry = Entry(src.raw)
+        if not entry then return end
+        local parent, _, index = ParentOf(v, entry)
+        if (parent and parent.raw or "top") == destination then
+            if index < slot then slot = slot - 1 end
+            if index == slot then return end
+        end
+        if RM().CanMoveNode(session, entry.path, path, slot) then return slot end
+    end
+
+    drag = R.RemindersRuleDrag.New(companion.scroll, DropPosition, function(src, destination, slot)
+        local position = DropPosition(src, destination, slot)
+        if not position then return end
+        if src.entry then Dz.Pick(src.entry, destination, position)
+        elseif RememberMove(src.raw, destination, position) then Dz.Say(nil) end
+    end)
+    companion.ruleDrag = drag
+    function Dz.CancelDrag()
+        local active = drag.source ~= nil
+        drag:Cancel()
+        return active
     end
 
     local function DestLabel(g, v)
@@ -502,12 +1015,12 @@ function Dz.Build(parent, env)
     end
 
     function Dz.MenuFor(raw)
-        local v = env.view()
+        local v = View()
         local e = Entry(raw)
         if not (v and e) then return {} end
         local owner, list, index = ParentOf(v, e)
         local out, dests = {}, {}
-        if not e.group and e.cond then out[#out + 1] = { value = "edit", label = "Edit" } end
+        if not e.group and e.cond and s.isAdvanced then out[#out + 1] = { value = "edit", label = "Edit condition" } end
         out[#out + 1] = { value = "dup", label = e.group and "Duplicate group" or "Duplicate" }
         if index and index > 1 then out[#out + 1] = { value = "up", label = "Move up" } end
         if index and list and index < #list then out[#out + 1] = { value = "down", label = "Move down" } end
@@ -525,7 +1038,9 @@ function Dz.Build(parent, env)
             if #gpath + 1 + need > RM().MAX_DEPTH then return end
             local key = "to:" .. (#dests + 1)
             dests[#dests + 1] = g or "top"
-            out[#out + 1] = { value = key, label = "Move into: " .. DestLabel(g, v) }
+            local label = g and Pl().LocationValues(g) and "Move into Location"
+                or "Move into: " .. Truncate(DestLabel(g, v), 24)
+            out[#out + 1] = { value = key, label = label, tooltip = g and Pl().GroupLine(g) or Pl().Words(v.match).heading }
         end
         if owner then Reach(nil, {}) end
         for _, g in ipairs(v.groups) do Reach(g, g.path) end   -- an empty group included: it is where a condition is wanted
@@ -535,16 +1050,9 @@ function Dz.Build(parent, env)
     end
 
     local function Remove(e)
-        local v = env.view()
-        local id = env.id()
-        local owner, _, index = ParentOf(v, e)
-        local record = { id = id, node = e.raw, parentRaw = owner and owner.raw or "top", index = index, label = e.group and "a group" or Pl().Sentence(e) }
-        local ok, why = RM().RemoveNode(id, e.path)
-        if not ok then env.Say(why, "warn") return end
-        undo = record
+        if not Mutate(RM().RemoveNode, e.path) then return end
         if ui.nodeRaw == e.raw then ui.mode, ui.nodeRaw, ui.draft = nil, nil, nil end
         if ui.groupRaw == e.raw then ui.mode, ui.groupRaw = nil, nil end
-        Poke()
     end
 
     -- the number of conditions in a group, those in groups inside it included
@@ -555,18 +1063,16 @@ function Dz.Build(parent, env)
     end
 
     function Dz.MenuPick(owner, value)
-        local v = env.view()
+        local v = View()
         local e = Entry(owner.raw)
-        if not (v and e) then return end
-        local id = env.id()
+        if not (v and e) or ui.draft then return end
         local parent, _, index = ParentOf(v, e)
-        local parentPath = parent and parent.path or {}
         if value == "edit" then
             Dz.Edit(owner.raw)
         elseif value == "dup" then
-            if Did(RM().DuplicateNode(id, e.path)) then env.Say("Made a copy right after it.", "ok") end
+            Mutate(RM().DuplicateNode, e.path)
         elseif value == "up" or value == "down" then
-            Did(RM().MoveNode(id, e.path, parentPath, index + (value == "up" and -1 or 1)))
+            RememberMove(e.raw, parent and parent.raw or "top", index + (value == "up" and -1 or 1))
         elseif value == "remove" then
             local n = e.group and CountIn(e) or 0
             if e.group and n > 0 then
@@ -586,86 +1092,63 @@ function Dz.Build(parent, env)
             local at = tonumber(value:match("^to:(%d+)$"))
             local dest = at and menuDests and menuDests[at]
             if not dest then return end
-            local destPath = {}
             local destGroup
             if dest ~= "top" then
                 local d = RM().NodeByRaw(v, dest.raw)
                 if not d then return end
-                destPath, destGroup = d.path, d
+                destGroup = d
             end
-            if Did(RM().MoveNode(id, e.path, destPath, nil)) then
-                local words = Pl().Words(destGroup and destGroup.match or v.match).heading:lower()
-                env.Say(("Moved into the %s, where %s. Where a condition sits changes what it is combined with."):format(destGroup and "group" or "whole rule", words), "ok")
-            end
+            RememberMove(e.raw, destGroup and destGroup.raw or "top")
         end
     end
 
-    function Dz.Undo()
-        local u = undo
-        undo = nil
-        if not u or u.id ~= env.id() then Poke() return end
-        local v = env.view()
-        local dest
-        if u.parentRaw == "top" then
-            dest = {}
-        else
-            local g = RM().NodeByRaw(v, u.parentRaw)
-            dest = g and g.path
-        end
-        if not dest then env.Say("It can't be put back: the group it was in is gone.", "warn") Poke() return end
-        if Did(RM().InsertNode(u.id, dest, u.index, u.node)) then env.Say("Put back.", "ok") end
+    local function History(redo)
+        if ui.draft or not RM().StepRuleEdit(session, redo) then return end
+        ui.mode, ui.nodeRaw, ui.groupRaw = nil, nil, nil
+        Dz.Say(nil)
         Poke()
     end
 
-    -- Writes the editor's copy: a new condition is added to its group, an edited one replaces the saved one. A copy that
-    -- isn't finished, or can't be used, is not written; what is saved stays as it was.
+    function Dz.Undo() History(false) end
+    function Dz.Redo() History(true) end
+
+    -- Accepting a secondary editor stages a single change in the builder.
     function Dz.Commit()
         local draft = ui.draft
         if not draft then return end
-        local CT = R.ReminderConditions
-        local clean, problem = CT.Check(draft)
-        if not clean then env.Say(Pl().Problem({ provider = true, why = problem }) or RM().REFUSE.value, "warn") return end
-        if problem and not Pl().Capability({ cond = clean }) then env.Say(problem:gsub("^%l", string.upper), "warn") return end
-        local id = env.id()
-        local v = env.view()
-        if ui.mode == "edit" then
-            local e = Entry(ui.nodeRaw)
-            if not e then
-                ui.mode, ui.nodeRaw, ui.draft = nil, nil, nil
-                env.Say("That condition has changed since it was opened, so nothing was saved.", "warn")
-                Poke()
-                return
-            end
-            local same = true
-            for k, val in pairs(clean) do if (ui.before or {})[k] ~= val then same = false end end
-            for k, val in pairs(ui.before or {}) do if clean[k] ~= val then same = false end end
-            if not same and not Did(RM().SetCondition(id, e.path, clean)) then return end
-        else
-            local path
-            if ui.groupRaw ~= "top" then
-                local g = Entry(ui.groupRaw)
-                if not g then
-                    ui.mode, ui.groupRaw, ui.draft = nil, nil, nil
-                    env.Say("The group it was for has changed since, so nothing was added.", "warn")
-                    Poke()
-                    return
-                end
-                path = g.path
-            end
-            if not Did(RM().AddCondition(id, clean.type, path, clean)) then return end
+        local clean, problem = R.ReminderConditions.Check(draft)
+        if not clean or (problem and not Pl().Capability({ cond = clean })) then
+            Dz.Say(problem or RM().REFUSE.value, "warn")
+            return
         end
-        -- a reminder that shows an item's icon and has none yet uses this one (it can be changed in Show)
-        if clean.type == "equipment" and clean.what == "item" and clean.item then
-            local d = v and v.display
-            if d and d.iconSource == "item" and not d.item then RM().SetDisplay(id, "item", clean.item) end
+        local editing = ui.mode == "edit"
+        local entry = editing and Entry(ui.nodeRaw)
+        local path = not editing and GroupPath(View(), ui.groupRaw)
+        if (editing and not entry) or (not editing and (not path or (ui.insertRev and ui.insertRev ~= Revision()))) then
+            Dz.Say("The rule changed. Cancel this edit and try again.", "warn")
+            return
         end
+        local function Apply(handle)
+            local ok, why
+            if editing then
+                ok, why = RM().SetCondition(handle, entry.path, clean, true)
+            else
+                ok, why = RM().AddCondition(handle, clean.type, path, clean, ui.insert)
+            end
+            if ok and clean.type == "equipment" and clean.what == "item" then RM().StageRuleItem(handle, clean.item) end
+            return ok, why
+        end
+        if not Mutate(Apply) then return end
         ui.mode, ui.nodeRaw, ui.draft, ui.groupRaw = nil, nil, nil, nil
-        Poke()
     end
 
-    function Dz.Pick(entry)
+    function Dz.Pick(entry, destination, index)
+        if ui.draft then Dz.Say("Finish or cancel the current condition first.", "warn"); return end
+        ui.groupRaw = destination or ui.groupRaw or "top"
         ui.mode, ui.draft, ui.pickedName = "new", entry.make(), entry.name
-        ui.entry = entry
+        ui.insert = index
+        ui.insertRev = index and Revision()
+        if s.picker.search:HasFocus() then s.picker.search:ClearFocus() end
         Poke()
     end
 
@@ -676,10 +1159,9 @@ function Dz.Build(parent, env)
             if not g then ui.mode, ui.groupRaw = nil, nil Poke() return end
             path = g.path
         end
-        local ok, newPath = RM().AddGroup(env.id(), path, match)
-        if not Did(ok, newPath) then return end
+        if not Mutate(RM().AddGroup, path, match) then return end
         ui.mode, ui.groupRaw = nil, nil
-        env.Say(("Added an empty group where %s. Add its conditions next: it can't be used until it has one."):format(Pl().Words(match).heading:lower()), "ok")
+        Dz.Say(nil)
         Poke()
     end
 
@@ -687,19 +1169,10 @@ function Dz.Build(parent, env)
     local function LayoutTarget(self, v, x, y, w)
         local me = RM().CharacterKey()
         local sc = v.scope
-        local who = "all"
-        if sc.who == "characters" then who = (#sc.characters == 1 and sc.characters[1] == me) and "me" or "chosen" end
         tp:SetWidth(w)
         K.Put(tp, self, x, y)
         local h = 10
-        local cx = 10
-        for i, chip in ipairs(tp.chips) do
-            chip:SetSelected(WHO[i][1] == who)
-            K.Put(chip, tp, cx, h)
-            cx = cx + 158
-        end
-        h = h + 32
-        if who == "chosen" then
+        if sc.who == "characters" then
             local names = #sc.characters > 0 and table.concat(sc.characters, ", ") or "No character added yet."
             h = h + K.Text(tp.names, names, #sc.characters == 0 and "warn" or nil, 10, h, tp) + 6
             local mine = false
@@ -723,27 +1196,20 @@ function Dz.Build(parent, env)
         ep:SetWidth(w)
         K.Put(ep, self, x, y)
         local isNew = ui.mode == "new"
+        local itemOnly = not isNew and not self.isAdvanced and Pl().NeedsItem(draft)
         local h = 10
-        K.Text(ep.title, isNew and ("Add: " .. (ui.pickedName or "a condition")) or "Edit this condition", nil, 12, h, ep)
+        K.Text(ep.title, isNew and ("Add: " .. (ui.pickedName or "a condition")) or (itemOnly and "Choose the item" or "Edit this condition"), nil, 12, h, ep)
         G.Color(ep.title, pal.bronzeText)
         h = h + 22
         local cx = 12
-        if not isNew then
-            K.Put(ep.subjectLabel, ep, cx, h)
-            h = h + 14
-            local sv, sl = Pl().SubjectOf(draft)
-            ep.subject:SetValue(sv, sl)
-            K.Put(ep.subject, ep, cx, h)
-            cx = cx + 198
+        for _, spec in ipairs(itemOnly and {} or Pl().CardFields(draft)) do
+            local control = ep[spec.key]
+            if cx + control:GetWidth() + 12 > w then cx, h = 12, h + 29 end
+            control:SetValue(spec.value, spec.label)
+            K.Put(control, ep, cx, h)
+            cx = cx + control:GetWidth() + 8
         end
-        if Pl().HasOperator(draft) then
-            ep.op:SetValue(draft.negate and "isnot" or "is", draft.negate and "is not" or "is")
-            K.Put(ep.op, ep, cx, h)
-            cx = cx + 94
-        end
-        ep.value:SetValue(Pl().ValueKey(draft), Pl().ValueLabel(draft))
-        K.Put(ep.value, ep, cx, h)
-        h = h + 32
+        if not itemOnly then h = h + 32 end
         if Pl().NeedsItem(draft) then
             if not ep.item:HasFocus() then ep.item:SetText(draft.item and tostring(draft.item) or "") end
             K.Put(ep.item, ep, 12, h)
@@ -751,17 +1217,15 @@ function Dz.Build(parent, env)
             K.Text(ep.itemInfo, text, tone, 132, h + 5, ep)
             h = h + 30
         end
-        ep.help:SetWidth(w - 24)
-        h = h + K.Text(ep.help, Pl().Help(draft), "quiet", 12, h, ep) + 8
         ep.reads:SetWidth(w - 24)
         local sentence = Pl().CondSentence(draft) or "(not finished)"
         h = h + K.Text(ep.reads, "Reads as: " .. sentence, nil, 12, h, ep) + 6
         local clean, problem = R.ReminderConditions.Check(draft)
-        local short, long = Pl().Capability({ cond = clean })
+        local short = Pl().Capability({ cond = clean })
         local blocked = (not clean) or (problem and not short)
         ep.problem:SetWidth(w - 24)
         if short then
-            h = h + K.Text(ep.problem, short .. " " .. long .. " A reminder that uses it can't be turned on here.", "warn", 12, h, ep) + 6
+            h = h + K.Text(ep.problem, short, "warn", 12, h, ep) + 6
         elseif problem then
             h = h + K.Text(ep.problem, problem:gsub("^%l", string.upper), "warn", 12, h, ep) + 6
         end
@@ -770,119 +1234,112 @@ function Dz.Build(parent, env)
         ep.done:SetEnabled(not blocked)
         K.Put(ep.done, ep, 12, h)
         K.Put(ep.cancel, ep, 12 + (isNew and 138 or 108), h)
-        h = h + 34
+        h = h + 37
         ep:SetHeight(h)
         return h
     end
 
-    local function PickerHeight(self, v, x, y, w, groupEntry)
+    local function LayoutPalette(v)
+        local w, pad = PALETTE_W, PALETTE_PAD
+        local group = ui.groupRaw ~= "top" and Entry(ui.groupRaw)
+        local match = group and group.match or v.match
+        local picking = ui.mode == "pick" or ui.mode == "newgroup"
+        local title = "Add a condition"
         pp:SetWidth(w)
-        K.Put(pp, self, x, y)
-        local match = groupEntry and groupEntry.match or v.match
-        local h = 10
-        K.Text(pp.title, match == "any" and "Allow another condition" or "Require another condition", nil, 12, h, pp)
-        G.Color(pp.title, pal.bronzeText)
-        h = h + 20
-        pp.where:SetWidth(w - 24)
-        h = h + K.Text(pp.where, ("Adding to the group where %s."):format(Pl().Words(match).heading:lower()), "quiet", 12, h, pp) + 8
-        if ui.mode == "newgroup" then
-            local words = Pl().Words(match).heading
-            pp.newNote:SetWidth(w - 24)
-            h = h + K.Text(pp.newNote, ("A new group will be added inside \"%s\". It starts empty, and can't be used until you add a condition to it. Choose how its conditions combine:"):format(words), nil, 12, h, pp) + 8
-            K.Put(pp.newAny, pp, 12, h)
-            K.Put(pp.newAll, pp, 210, h)
-            h = h + 32
-            K.Put(pp.back, pp, 12, h)
-            h = h + 34
-            pp:SetHeight(h)
-            return h
-        end
-        K.Put(pp.search, pp, 12, h)
-        if not pp.search:HasFocus() then pp.search:SetText(ui.query or "") end
-        -- categories that have something to offer
-        local entries = Pl().Entries()
-        local present, order = {}, {}
-        for _, e in ipairs(entries) do
-            if not present[e.category] then present[e.category] = true end
-        end
-        for _, c in ipairs(Pl().CATEGORIES) do if present[c] then order[#order + 1] = c end end
-        local cx = 244
-        local all = pp.cats[1]
-        if not all then
-            all = G.Tab(pp, "All", 56, function() ui.category = nil; Poke() end)
-            pp.cats[1] = all
-        end
-        all:SetSelected(ui.category == nil)
-        K.Put(all, pp, cx, h - 2)
-        cx = cx + 60
-        for i, c in ipairs(order) do
-            local tab = pp.cats[i + 1]
-            if not tab then
-                tab = G.Tab(pp, c, 84, function(self) ui.category = self.category; Poke() end)
-                pp.cats[i + 1] = tab
-            end
-            tab.category = c
-            tab.text:SetText(c)
-            tab:SetSelected(ui.category == c)
-            K.Put(tab, pp, cx, h - 2)
-            cx = cx + 88
-        end
-        h = h + 32
-        local shown = 0
-        for _, e in ipairs(entries) do
-            if (ui.category == nil or e.category == ui.category) and Pl().Matches(e, ui.query) then
-                shown = shown + 1
-                local row = PickRow(shown)
-                row.entry, row.isGroup = e, false
-                R.Icons.Apply(row.icon, e.icon, ICON)
-                row.name:SetText(e.name .. "  -  " .. e.category)
-                row.blurb:SetWidth(w - 24 - ICON - 20)
-                row.blurb:SetText(e.blurb)
-                local bh = row.blurb:GetStringHeight() or 12
-                local nh = 0
-                if e.note then
-                    row.note:SetWidth(w - 24 - ICON - 20)
-                    row.note:SetText(e.note)
-                    row.note:ClearAllPoints()
-                    row.note:SetPoint("TOPLEFT", ICON + 20, -(24 + bh))
-                    Color(row.note, "unmet")
-                    row.note:Show()
-                    nh = (row.note:GetStringHeight() or 12) + 2
-                else
-                    row.note:Hide()
-                end
-                row:SetSize(w - 24, 30 + bh + nh)
-                K.Put(row, pp, 12, h)
-                h = h + 30 + bh + nh + 4
-            end
-        end
-        if shown == 0 then
-            h = h + K.Text(pp.none, "Nothing matches. Try fewer letters, or All.", "quiet", 12, h, pp) + 6
-        end
-        -- a group is a structure, so it is offered apart from the conditions, and says what it will be
-        local limit
-        local at = groupEntry and #groupEntry.path or 0
-        if at + 2 > RM().MAX_DEPTH then limit = RM().REFUSE.tooDeep
-        elseif v.counts.groups >= RM().MAX_GROUPS then limit = RM().REFUSE.groupsFull end
-        if not limit then
-            local row = PickRow(shown + 1)
-            row.entry, row.isGroup = nil, true
-            R.Icons.Apply(row.icon, "reminderWhen", ICON)
-            row.name:SetText("Create a condition group")
-            row.blurb:SetWidth(w - 24 - ICON - 20)
-            row.blurb:SetText("A group counts as one item inside this one: for \"this, or that\", or \"both of these\". You choose how it combines next.")
-            local bh = row.blurb:GetStringHeight() or 12
-            row.note:Hide()
-            row:SetSize(w - 24, 30 + bh)
-            K.Put(row, pp, 12, h)
-            h = h + 30 + bh + 4
+        pp.title:SetWidth(w - pad * 2)
+        local h = 12 + K.Text(pp.title, title, nil, pad, 10, pp) + 5
+        pp.where:SetWidth(w - pad * 2)
+        if picking then
+            local context = group and "Adding to this group" or "Choose a condition"
+            h = h + K.Text(pp.where, context, "quiet", pad, h, pp) + 8
         else
-            h = h + K.Text(pp.newNote, limit, "quiet", 12, h, pp) + 6
+            pp.where:Hide()
         end
-        K.Put(pp.cancel, pp, 12, h)
-        h = h + 34
-        pp:SetHeight(h)
-        return h
+        if ui.mode == "newgroup" then
+            pp.search:Hide()
+            pp.category:Hide()
+            pp.newNote:SetWidth(w - pad * 2)
+            local words = Pl().Words(match).heading
+            h = h + K.Text(pp.newNote, ("Create a group inside \"%s\". Choose how its conditions combine."):format(words), nil, pad, h, pp) + 8
+            K.Put(pp.newAny, pp, pad, h)
+            K.Put(pp.newAll, pp, pad, h + 30)
+            K.Put(pp.back, pp, pad, h + 62)
+            h = h + 94
+        else
+            K.Put(pp.search, pp, pad, h)
+            if not pp.search:HasFocus() and pp.search:GetText() ~= (ui.query or "") then pp.search:SetText(ui.query or "") end
+            pp.searchHint:SetShown((ui.query or "") == "" and not pp.search:HasFocus())
+            pp.category:SetValue(ui.category or "all", ui.category or "All categories")
+            K.Put(pp.category, pp, pad, h + 36)
+            h = h + 74
+            local depth = group and #group.path or 0
+            local canGroup = s.isAdvanced and depth + 2 <= RM().MAX_DEPTH and v.counts.groups < RM().MAX_GROUPS
+            if canGroup then
+                local row = PickRow(1)
+                row.entry, row.isGroup = nil, true
+                R.Icons.Apply(row.icon, "reminderWhen", ICON)
+                row.name:SetText("Create a condition group")
+                row.blurb:Hide(); row.note:Hide()
+                row:SetSize(w - pad * 2, 36)
+                K.Put(row, pp, pad, h)
+                h = h + 43
+            elseif picking and s.isAdvanced then
+                local why = depth + 2 > RM().MAX_DEPTH and RM().REFUSE.tooDeep or RM().REFUSE.groupsFull
+                pp.newNote:SetWidth(w - pad * 2)
+                h = h + K.Text(pp.newNote, why, "quiet", pad, h, pp) + 6
+            end
+            local entries, shown, locationShown = Pl().Entries(), 0, false
+            local priority = { weaponEnchant = 1, equipment = 2, ammunition = 3, ["player:dungeon"] = 4,
+                ["player:raid"] = 5, class = 6, talent = 7 }
+            table.sort(entries, function(a, b)
+                local x, y = priority[a.key] or 8, priority[b.key] or 8
+                if x ~= y then return x < y end
+                return a.name < b.name
+            end)
+            for _, category in ipairs({ "Equipment", "Character", "Combat", "Other" }) do
+                local header
+                if not ui.category or ui.category == category then
+                    for _, e in ipairs(entries) do
+                        local location = e.key == "player:dungeon" or e.key == "player:raid"
+                        if e.category == category and Pl().Matches(e, ui.query) and not (location and locationShown) then
+                            if location then locationShown = true end
+                            if not header then
+                                if not pp.categories[category] then
+                                    pp.categories[category] = M.ReminderFont(G.Text(pp, "title"), 16, true)
+                                    pp.categories[category]:SetWidth(w - pad * 2)
+                                    pp.dividers[category] = G.Solid(pp, "ARTWORK", { 0.42, 0.34, 0.24 }, 0.65)
+                                    pp.dividers[category]:SetSize(w - pad * 2, 1)
+                                end
+                                header = pp.categories[category]
+                                K.Put(pp.dividers[category], pp, pad, h + 1)
+                                h = h + K.Text(header, category, nil, pad, h + 7, pp) + 13
+                                G.Color(header, { 0.85, 0.76, 0.62 })
+                            end
+                            shown = shown + 1
+                            local row = PickRow(shown + (canGroup and 1 or 0))
+                            row.entry, row.isGroup = e, false
+                            local cond = e.make()
+                            Pl().ApplyArt(row.icon, cond, 30)
+                            local title = Pl().CardTitle(cond)
+                            row.name:SetText(title or e.name)
+                            row.blurb:Hide(); row.note:Hide()
+                            row:SetSize(w - pad * 2, 34)
+                            K.Put(row, pp, pad, h)
+                            h = h + 37
+                        end
+                    end
+                end
+            end
+            if shown == 0 then
+                pp.none:SetWidth(w - pad * 2)
+                h = h + K.Text(pp.none, "No matching conditions.", "quiet", pad, h, pp) + 6
+            end
+            if picking then K.Put(pp.cancel, pp, pad, h); h = h + 32 end
+        end
+        pp:SetHeight(h + 8)
+        K.Put(pp, companion.paletteContent, 0, 0)
+        companion.paletteContent:SetHeight(h + 8)
+        if fitPaletteRail then fitPaletteRail(h + 8) end
     end
 
     ---------------------------------------------------------------- the tree
@@ -910,6 +1367,8 @@ function Dz.Build(parent, env)
         if showHead then
             local hx = 10
             if g.fold then
+                K.Put(g.grip, g.box, hx - 5, Rel(cur) + 1)
+                hx = hx + 19
                 K.Put(g.fold, g.box, hx - 2, Rel(cur) + 4)
                 for _, t in ipairs(g.fold.down) do t:SetShown(isFolded and true or false) end
                 for _, t in ipairs(g.fold.up) do t:SetShown(not isFolded) end
@@ -930,10 +1389,11 @@ function Dz.Build(parent, env)
                 right = right - MORE_W - 8
                 K.Put(g.more, g.box, right, Rel(cur) + 4)
             end
-            g.rail:SetColorTexture((match == "any" and pal.teal or pal.bronzeText)[1], (match == "any" and pal.teal or pal.bronzeText)[2], (match == "any" and pal.teal or pal.bronzeText)[3], 0.6)
+            local rail = match == "any" and { 0.46, 0.53, 0.42 } or { 0.57, 0.46, 0.32 }
+            g.rail:SetColorTexture(rail[1], rail[2], rail[3], 0.63)
             cur = cur + HEAD_H + 2
         else
-            g.rail:SetColorTexture(pal.bronzeText[1], pal.bronzeText[2], pal.bronzeText[3], 0.6)
+            g.rail:SetColorTexture(0.57, 0.46, 0.32, 0.63)
         end
         if isFolded then
             K.Text(g.folded, Pl().GroupLine(owner), "quiet", 10 + 22, Rel(cur), g.box)
@@ -942,25 +1402,17 @@ function Dz.Build(parent, env)
             g.box:SetWidth(w)
             g.box:SetHeight(cur - boxTop + 4)
             K.Put(g.box, self, x, boxTop)
+            drag:Group(g.box, owner.raw, n, depth)
             return cur + 4
         end
-        if ex and ex.groups then
-            local line = top and ex.groups.top or ex.groups[owner.raw]
-            if line and n > 0 then
-                g.outcome:SetWidth(w - 30)
-                local state = top and ex.state or (ex.cards[owner.raw] and ex.cards[owner.raw].state)
-                local met = state == "met" or state == "show" or state == "match"
-                cur = cur + K.Text(g.outcome, line, met and "ok" or "quiet", 12, Rel(cur), g.box) + 6
-            end
-        end
-        if owner and owner.why then
+        if owner and owner.why and n > 0 then
             g.problem:SetWidth(w - 30)
             cur = cur + K.Text(g.problem, Pl().Problem(owner) or "", "warn", 12, Rel(cur), g.box) + 4
         end
         if n == 0 then
             g.empty:SetWidth(w - 30)
             local text = top and "Nothing yet. A reminder with no conditions never shows: add the first one below."
-                or "This group is empty, so the reminder can't be turned on until you add a condition to it or remove the group."
+                or "Add a condition or remove this group."
             cur = cur + K.Text(g.empty, text, top and "quiet" or "warn", 12, Rel(cur), g.box) + 6
         end
         for i, entry in ipairs(entries) do
@@ -974,7 +1426,9 @@ function Dz.Build(parent, env)
                 cur = cur + SEP_H
             end
             if entry.group then
+                local groupBox = self.groups[st.group + 1]
                 cur = LayoutGroup(self, v, entry, depth + 1, inner, cw, cur, st, ex) + 2
+                if groupBox then drag:Row(groupBox.box, owner and owner.raw or "top", i, true) end
             else
                 st.card = st.card + 1
                 local card = self.cards[st.card]
@@ -982,51 +1436,45 @@ function Dz.Build(parent, env)
                 card.raw = entry.raw
                 local sentence = Pl().Sentence(entry)
                 local capabilityShort = Pl().Capability(entry)
-                local textW = cw - (10 + ICON + 10) - (EDIT_W + MORE_W + 8 + 24)
+                local textW = cw - (28 + ICON + 10) - (MORE_W + 24)
                 card.text:SetWidth(textW)
                 card.text:SetText(sentence)
                 G.Color(card.text, entry.cond and pal.text or pal.stone)
                 local th = card.text:GetStringHeight() or 14
                 card.text:ClearAllPoints()
-                card.text:SetPoint("TOPLEFT", ICON + 20, -9)
+                card.text:SetPoint("TOPLEFT", ICON + 38, -9)
                 card.text:Show()
-                R.Icons.Apply(card.icon, entry.cond and Pl().Icon(entry.cond) or "reminderTest", ICON)
+                card.grip:ClearAllPoints()
+                card.grip:SetPoint("TOPLEFT", 3, -6)
+                Pl().ApplyArt(card.icon, entry.cond, ICON)
                 card.icon:Show()
                 -- a second line: what is wrong with it, or (when asked) what it sees now
                 local ch = 9 + th
                 local cx = ex and ex.cards and ex.cards[entry.raw]
-                local line, lineTone, mark
-                card.stateTip = nil
+                local line, lineTone
                 if entry.why or capabilityShort then
-                    -- a short state; the longer words are on the mark's tooltip
-                    local _, long = Pl().Capability(entry)
-                    line, lineTone, mark = Pl().Problem(entry), "invalid", "invalid"
-                    card.stateTip = long or Pl().Technical(entry)
+                    line, lineTone = Pl().Problem(entry), "invalid"
                 elseif cx then
-                    mark, lineTone = cx.state, cx.state
-                    line = cx.word
-                    if cx.seen then line = line .. "  -  Sees: " .. cx.seen elseif cx.detail then line = line .. "  -  " .. cx.detail end
-                    card.stateTip = cx.detail
+                    line, lineTone = cx.state == "unknown" and "Unknown" or cx.word, cx.state
                 end
                 if line then
-                    card.state:Set(mark)
-                    card.state:ClearAllPoints()
-                    card.state:SetPoint("TOPLEFT", card, "TOPLEFT", ICON + 20, -(ch + 5))
-                    card.state:Show()
-                    card.note:SetWidth(textW - 22)
+                    card.note:SetWidth(textW)
                     card.note:SetText(line)
                     Color(card.note, lineTone)
                     card.note:ClearAllPoints()
-                    card.note:SetPoint("TOPLEFT", card, "TOPLEFT", ICON + 20 + 22, -(ch + 6))
+                    card.note:SetPoint("TOPLEFT", card, "TOPLEFT", ICON + 38, -(ch + 6))
                     card.note:Show()
                     ch = ch + 6 + math.max(16, card.note:GetStringHeight() or 12)
                 end
                 ch = math.max(ch + 10, 38)
                 card:SetSize(cw, ch)
                 K.Put(card, self, inner, cur)
-                K.Put(card.more, card, cw - MORE_W - 10, 7)
-                K.Put(card.edit, card, cw - MORE_W - 10 - 8 - EDIT_W, 7)
-                if not entry.cond then card.edit:SetEnabled(false) else card.edit:SetEnabled(true) end
+                drag:Row(card, owner and owner.raw or "top", i)
+                card.more:SetWidth(28)
+                card.more:SetValue(nil, "···")
+                card.more:ClearAllPoints()
+                card.more:SetPoint("TOPRIGHT", -10, -7)
+                card.more:SetShown(card:IsMouseOver() and not ui.draft)
                 cur = cur + ch + GAP
                 if ui.mode == "edit" and ui.nodeRaw == entry.raw and ui.draft then
                     cur = cur + LayoutEditor(self, inner, cur, cw) + GAP
@@ -1034,13 +1482,12 @@ function Dz.Build(parent, env)
             end
         end
         -- where the next one goes
-        if ui.groupRaw == (owner and owner.raw or "top") and (ui.mode == "pick" or ui.mode == "newgroup") then
-            cur = cur + PickerHeight(self, v, inner, cur, cw, owner) + GAP
-        elseif ui.groupRaw == (owner and owner.raw or "top") and ui.mode == "new" and ui.draft then
+        if ui.groupRaw == (owner and owner.raw or "top") and ui.mode == "new" and ui.draft then
             cur = cur + LayoutEditor(self, inner, cur, cw) + GAP
         else
             local limit = v.counts.conditions >= RM().MAX_CONDITIONS
             K.Put(g.add, g.box, RAIL + INSET, Rel(cur))
+            g.add.text:SetText(top and match == "all" and n > 0 and "Add restriction" or "Add a condition")
             g.add:SetEnabled(not limit)
             if limit then
                 cur = cur + 30 + K.Text(g.empty, RM().REFUSE.conditionsFull, "quiet", RAIL + INSET + 150, Rel(cur) + 6, g.box) - 12
@@ -1051,97 +1498,259 @@ function Dz.Build(parent, env)
         g.box:SetWidth(w)
         g.box:SetHeight(cur - boxTop + 4)
         K.Put(g.box, self, x, boxTop)
+        drag:Group(g.box, owner and owner.raw or "top", n, depth)
         return cur + 4
+    end
+
+    local function LayoutBasic(self, v, y, w, ex)
+        local n = #v.conditions
+        local h = y
+        local function Draft(index)
+            if ui.mode == "new" and ui.draft and (ui.insert or n + 1) == index then
+                h = h + LayoutEditor(self, PAD, h, w) + 8
+                return true
+            end
+        end
+        for i, entry in ipairs(v.conditions) do
+            if i == 2 then
+                K.Put(self.onlyHead, self, PAD, h + 6)
+                h = h + 37
+            end
+            Draft(i)
+            local card = self.cards[i]
+            local locations = Pl().LocationValues(entry)
+            local cond = entry.cond or { type = "player", state = locations and locations[1] }
+            card.raw, card.locations = entry.raw, locations
+            card:SetSize(w, locations and 128 or 96)
+            K.Put(card, self, PAD, h)
+            card.grip:ClearAllPoints()
+            card.grip:SetPoint("LEFT", 3, 0)
+            card.artWell:Show()
+            Pl().ApplyArt(card.art, cond, 45)
+            K.Text(card.title, Pl().CardTitle(cond), nil, 99, 20, card)
+            local observed = ex and ex.cards[entry.raw]
+            local state = entry.why and "invalid" or (observed and observed.state or "unknown")
+            local word = state == "unknown" and "Unknown" or Pl().STATE_WORDS[state]
+            K.Text(card.note, word, nil, 99, 46, card)
+            card.note:SetWidth(110)
+            Color(card.note, state)
+            card.more:SetWidth(28)
+            card.more:SetValue(nil, "···")
+            card.more:ClearAllPoints()
+            card.more:SetPoint("TOPRIGHT", -10, -9)
+            card.more:SetShown(card:IsMouseOver() and not ui.draft)
+            local needsItem = Pl().NeedsItem(cond)
+            if needsItem then
+                card.item.text:SetText(cond.item and "Change item" or "Choose item")
+                K.Put(card.item, card, 300, 11)
+            end
+            if locations then
+                local x = 99
+                for j, value in ipairs(locations) do
+                    local chip = card.chips[j]
+                    chip.text:SetText((value == "dungeon" and "Dungeon" or "Raid") .. "  ×")
+                    chip:SetEnabled(not ui.draft and RM().Writable())
+                    K.Put(chip, card, x, 69)
+                    x = x + 115
+                end
+                if not cond.negate then
+                    card.choose:SetValue(nil, "+ Choose")
+                    card.choose:SetActive(#locations < 2 and not ui.draft and RM().Writable())
+                    K.Put(card.choose, card, x, 69)
+                end
+                if entry.group then
+                    K.Text(card.locationNote, "Any selected location", "quiet", 99, 105, card)
+                elseif cond.negate then
+                    K.Text(card.locationNote, "Outside the selected location", "quiet", 99, 105, card)
+                end
+                if not entry.group then
+                    local field = Pl().EditField(cond, "op")
+                    card.inline = { field }
+                    card.fields[1]:SetSize(105, 26)
+                    card.fields[1]:SetValue(field.value, field.label)
+                    card.fields[1]:SetActive(not ui.draft and RM().Writable())
+                    K.Put(card.fields[1], card, w - 132, 21)
+                end
+            else
+                local fields = Pl().CardFields(cond)
+                card.inline = fields
+                local x = 300
+                local fieldWidth = math.floor((w - x - 18 - (#fields - 1) * 7) / #fields)
+                for j, spec in ipairs(fields) do
+                    local field = card.fields[j]
+                    field:SetSize(fieldWidth, 30)
+                    field:SetValue(spec.value, spec.label)
+                    field:SetActive(RM().Writable() and not ui.draft)
+                    K.Put(field, card, x, needsItem and 49 or 33)
+                    M.ReminderFont(field.text, 14, true)
+                    x = x + fieldWidth + 7
+                end
+            end
+            drag:Row(card, "top", i)
+            h = h + (locations and 141 or 109)
+            if ui.mode == "edit" and ui.nodeRaw == entry.raw and ui.draft then
+                h = h + LayoutEditor(self, PAD, h, w) + 8
+            end
+        end
+        if n == 1 then
+            K.Put(self.onlyHead, self, PAD, h + 6)
+            h = h + 37
+        end
+        if not Draft(n + 1) then
+            local available = v.counts.conditions < RM().MAX_CONDITIONS
+            self.addBasic.text:SetText(available and (n > 0 and "+ Add restriction" or "+ Add a condition") or "Condition limit reached")
+            self.addBasic:SetEnabled(available and not ui.draft and RM().Writable())
+            G.Color(self.addBasic.text, self.addBasic:IsEnabled() and pal.bronzeText or pal.stone)
+            K.Put(self.addBasic, self, PAD, h)
+            drag:Row(self.addBasic, "top", n + 1, nil, true)
+            h = h + 50
+        end
+        return h
     end
 
     ---------------------------------------------------------------- the whole section
     local function Layout(self, v, y)
         if ui.id ~= v.id then Reset(v.id) end
         HideAll()
+        drag:ClearTargets()
         local me = RM().CharacterKey()
-        local h = K.Top(self)
+        local canUseBasic = Pl().Basic(v)
+        self.isAdvanced = not canUseBasic or ui.advanced == true
+        local h = 14
         local inner = W - PAD * 2
 
         -- who
-        K.Put(self.whoHead, self, PAD, h)
-        h = h + 20
-        local th = K.Text(self.who, Pl().Targeting(v, me), (v.scope.who == "characters" and #v.scope.characters == 0) and "warn" or nil, PAD, h + 4, self)
-        self.whoEdit.text:SetText(ui.mode == "target" and "Close" or "Edit")
-        K.Put(self.whoEdit, self, W - PAD - 64, h)
-        h = h + math.max(th + 8, 30)
+        local target = Pl().Targeting(v, me)
+        self.who:SetText(target)
+        local scope = v.scope
+        local choice = scope.who == "all" and "all" or (#scope.characters == 1 and scope.characters[1] == me and "me" or "chosen")
+        local whoLabel = choice == "all" and "Every character" or (choice == "me" and "This character" or "Chosen characters")
+        if scope.class then
+            local class = RM().ClassName(scope.class)
+            whoLabel = choice == "all" and (class .. " characters") or (whoLabel .. " · " .. class)
+        end
+        self.whoEdit:SetValue(choice, whoLabel)
+        self.whoEdit:SetActive(not ui.draft and RM().Writable())
         if ui.mode == "target" then h = h + LayoutTarget(self, v, PAD, h, inner) + 8 end
-        K.Put(self.divs[1], self, PAD, h)
-        self.divs[1]:SetSize(inner, 1)
-        h = h + 12
 
-        -- the rule
+        -- Observe the isolated draft. The controller continues to run the saved rule.
+        local ST, E = R.ReminderState, R.ReminderEval
+        local context = ST.Context()
+        local out = E.Run(v, ST.Peek(v), context)
+        local dirty, undo, redo = RM().RuleEditState(session)
+        local status = dirty and out.status or R.ReminderController.Status(v.id)
+        local ex = Pl().Explain(v, out, status, context)
+        self.ruleHead:SetText(self.isAdvanced and "Advanced logic" or "Show a reminder when")
         K.Put(self.ruleHead, self, PAD, h)
-        h = h + 22
-        -- what each condition sees right now, only while asked for
-        local ex
-        if explainOpen then
-            local CT = R.ReminderController
-            local out, status = CT.Inspect(v.id)
-            ex = Pl().Explain(v, out, status, R.ReminderState and R.ReminderState.Context and R.ReminderState.Context())
+        h = h + 32
+        if self.isAdvanced then
+            h = LayoutGroup(self, v, nil, 1, PAD, inner, h, { card = 0, group = 0, sep = 0 }, ex)
+        else
+            h = LayoutBasic(self, v, h, inner, ex)
         end
-        h = LayoutGroup(self, v, nil, 1, PAD, inner, h, { card = 0, group = 0, sep = 0 }, ex)
-        if undo and undo.id == v.id then
-            h = h + K.Text(self.undoText, ("Removed %s."):format(undo.label), "quiet", PAD, h + 6, self) + 6
-            K.Put(self.undo, self, W - PAD - 70, h - (self.undoText:GetStringHeight() or 12) - 8)
-            h = h + 6
-        end
-        -- the shield template's own explanation, while its one condition is what the template made
-        local c1 = #v.conditions == 1 and v.conditions[1].cond
-        if c1 and c1.type == "equipment" and c1.slot == "offHand" and c1.what == "shield" and c1.negate then
-            h = h + K.Text(self.note, RM().SHIELD_NOTE, nil, PAD, h + 4, self) + 8
-        end
+        self.advanced.text:SetText(self.isAdvanced and (canUseBasic and "Basic view" or "Uses Advanced logic") or "Advanced logic")
+        self.advanced:SetEnabled(canUseBasic and not ui.draft)
+        self.advanced:Paint(self.isAdvanced)
+        self.undo:SetEnabled(undo and not ui.draft)
+        self.redo:SetEnabled(redo and not ui.draft)
+        self.undo:PaintIcon(); self.redo:PaintIcon()
+        companion.save:SetEnabled(dirty and not ui.draft and RM().Writable())
+        companion.dirty:SetText(dirty and "Unsaved changes" or "No unsaved changes")
+        G.Color(companion.dirty, dirty and pal.bronzeText or pal.stone)
+        companion.subtitle:SetText("Choose what matters. See when it will show.")
+        companion.try:Paint(ui.try)
+        self.explain:Paint(explainOpen)
+        PlaceFeedback(LayoutDiagnostics(v, ex, out))
         for _, p in ipairs(v.problems) do
             if p == RM().PROBLEM.tooMany or p == RM().PROBLEM.tooManyGroups then
                 h = h + K.Text(self.limit, p .. " The rest are kept exactly as saved, and are not shown here.", "warn", PAD, h + 4, self) + 8
                 break
             end
         end
-        K.Put(self.divs[2], self, PAD, h)
-        self.divs[2]:SetSize(inner, 1)
-        h = h + 12
-
-        -- why
-        K.Put(self.whyHead, self, PAD, h)
-        h = h + 22
-        local lines = Pl().SummaryLines(v)
-        for i, line in ipairs(lines) do
-            local fs = self.lines[i]
-            if not fs then break end
-            fs:SetWidth(inner - 12 * line.depth)
-            h = h + K.Text(fs, (line.bullet and "-  " or "") .. line.text, line.depth == 0 and (#v.conditions == 0 and "warn" or nil) or nil, PAD + 12 * line.depth, h, self) + 3
-        end
-        h = h + 8
-        self.explain.text:SetText("Would this show now?")
-        for _, t in ipairs(self.explain.down) do t:SetShown(not explainOpen) end
-        for _, t in ipairs(self.explain.up) do t:SetShown(explainOpen) end
-        K.Put(self.explain, self, PAD - 4, h)
-        h = h + 28
-        if explainOpen and ex then
-            local tone = ex.state == "show" and "met" or (ex.state == "match" and "met" or (ex.state == "hidden" and "unmet" or (ex.state == "unknown" and "unknown" or "invalid")))
-            self.exMark:Set(tone)
-            K.Put(self.exMark, self, PAD, h + 1)
-            K.Text(self.exHead, ex.head, nil, PAD + 24, h, self)
-            Color(self.exHead, tone)
-            h = h + 22
-            if ex.reason then h = h + K.Text(self.exReason, ex.reason, "quiet", PAD + 22, h, self) + 4 end
-            h = h + K.Text(self.exScope, ex.scope, "quiet", PAD + 22, h, self) + 4
-            h = h + K.Text(self.exStatus, ex.status, "quiet", PAD + 22, h, self) + 4
-            h = h + K.Text(self.exNote, "Conditions matching is not the same as the reminder being on screen: it also needs to be turned on and for this character. To see how it looks, use the preview beside this window; a preview doesn't mean the conditions match.", "quiet", PAD + 22, h, self) + 6
-        end
         h = h + 10
         self:SetHeight(h)
-        K.Put(self, parent, 0, y)
+        K.Put(self, companion.content, 0, y)
         return h
     end
     function s:Layout(v, y)
+        local width = parent:GetWidth()
+        summary:SetWidth(width)
+        summary.rule:SetWidth(width - PAD * 2)
+        local trigger, restriction = Pl().CompactRule(v)
+        summary.rule:SetText(trigger)
+        summary.edit:ClearAllPoints()
+        summary.edit:SetPoint("TOPRIGHT", summary, "TOPRIGHT", -PAD, -7)
+        summary.edit:Show()
+        local h = 37 + (summary.rule:GetStringHeight() or 14)
+        summary.explanation = summary.explanation or {}
+        for _, row in ipairs(summary.explanation) do row:Hide() end
+        local structured = Pl().Basic(v) and #v.conditions > 2
+        if structured then
+            summary.rule:Hide()
+            summary.restriction:Hide()
+            summary.explanationHost = summary.explanationHost or CreateFrame("Frame", nil, summary)
+            summary.explanationHost:ClearAllPoints()
+            summary.explanationHost:SetPoint("TOPLEFT", PAD, -37)
+            summary.explanationHost:SetWidth(width - PAD * 2)
+            h = 37 + Pl().DrawExplanation(summary.explanationHost, summary.explanation, v, width - PAD * 2, 0)
+            summary.explanationHost:SetHeight(h - 37)
+        else summary.rule:Show() end
+        if restriction and not structured then
+            summary.restriction:SetWidth(width - PAD * 2)
+            h = h + K.Text(summary.restriction, "Only while · " .. restriction, "quiet", PAD, h + 3, summary) + 6
+        else
+            summary.restriction:Hide()
+        end
+        local live, tone = Pl().Visibility(v.id)
+        summary.status:SetWidth(width - PAD * 2)
+        h = h + K.Text(summary.status, live, tone, PAD, h + 3, summary) + 10
+        summary:SetHeight(h); K.Put(summary, parent, 0, y)
+        if not Dz.Shown() then self:Hide(); return h end
+        self:SetWidth(W)
+        companion.title:SetText("When — " .. v.name)
+        if companion.reminderRaw ~= v.raw or not session then
+            Reset(v.id)
+            local why
+            session, why = RM().BeginRuleEdit(v.id)
+            if not session then Dz.Close(); env.Say(why, "warn"); return h end
+            companion.reminderRaw = v.raw; companion.scroll:SetVerticalScroll(0)
+            companion.paletteScroll:SetVerticalScroll(0)
+        end
+        local saved = v
+        v = View()
+        if not v then Dz.Close(); return h end
         local Perf = R.Perf
-        if Perf and Perf.Call then return Perf.Call("reminders.designer.layout", Layout, self, v, y) end
-        return Layout(self, v, y)
+        local full
+        if Perf and Perf.Call then full = Perf.Call("reminders.designer.layout", Layout, self, v, 0)
+        else full = Layout(self, v, 0) end
+        companion.content:SetHeight(full)
+        if fitRuleRail then fitRuleRail(full) end
+        LayoutPalette(v)
+        companion.result:SetText(Pl().RuleSummary(v))
+        local label, state, reason, visible = Pl().LiveFeedback(saved)
+        companion.live:SetText(label)
+        Color(companion.live, state)
+        companion.reason:SetText(reason or "")
+        local liveTop = math.max(47, 18 + (companion.result:GetStringHeight() or 18))
+        companion.live:ClearAllPoints()
+        companion.live:SetPoint("TOPLEFT", feedback, "TOPLEFT", 45, -liveTop)
+        companion.reason:ClearAllPoints()
+        companion.reason:SetPoint("TOPLEFT", feedback, "TOPLEFT", 178, -(liveTop + 1))
+        companion.eye:ClearAllPoints()
+        companion.eye:SetPoint("TOPLEFT", feedback, "TOPLEFT", 16, -(liveTop - 3))
+        local detailX = 178 + math.min(350, companion.reason:GetStringWidth() or 0) + 18
+        self.explain:ClearAllPoints()
+        self.explain:SetPoint("TOPLEFT", feedback, "TOPLEFT", detailX, -(liveTop - 7))
+        companion.try:ClearAllPoints()
+        companion.try:SetPoint("TOPLEFT", feedback, "TOPLEFT", 12, -(liveTop + 29))
+        companion.message:ClearAllPoints()
+        companion.message:SetPoint("TOPLEFT", feedback, "TOPLEFT", 165, -(liveTop + 37))
+        feedback:SetHeight(liveTop + 69)
+        PlaceFeedback()
+        companion.eye:SetVertexColor(unpack(StateColor(state)))
+        companion.eye:SetTexture(R.PATH .. [[media\guildloc\]] .. (visible and "eye-open-small.tga" or "eye-hidden-small.tga"))
+        companion.rail:Draw(saved, v)
+        return h
     end
     s.Reset = Dz.Reset
     return s

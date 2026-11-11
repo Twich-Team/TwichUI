@@ -109,7 +109,7 @@ KIND.wellFed = {
     sentence = function(cond)
         local c = C().WellFedChoice(cond.what)
         if not c then return nil end
-        return "You " .. c[3]
+        return "You " .. c[3]:gsub("Well Fed", "well fed")
     end,
 }
 
@@ -131,6 +131,13 @@ end
 -- The condition of an entry as a sentence. A kind this version doesn't know, and a condition whose data can't be read,
 -- are said so (they are kept as saved).
 function Pl.Sentence(entry)
+    if Pl.LocationValues and Pl.LocationValues(entry) then
+        local values = Pl.LocationValues(entry)
+        local places = {}
+        for _, value in ipairs(values) do places[#places + 1] = value == "dungeon" and "a dungeon" or "a raid" end
+        local negative = entry.cond and entry.cond.negate
+        return (negative and "You are outside " or "You are in ") .. table.concat(places, " or ")
+    end
     if entry.group then return Pl.Words(entry.match).heading end
     if not entry.provider then return "Unsupported condition" end
     if not entry.cond then return "A condition TwichUI can't read" end
@@ -175,12 +182,138 @@ end
 Pl.CATEGORIES = { "Combat", "Character", "Equipment", "Other" }
 
 -- an icon (R.Icons id) for a kind of condition, drawn small beside it
-local ICON = { equipment = "gearComparison", ammunition = "ammunition", class = "profiles", talent = "profiles", weaponEnchant = "gearComparison", wellFed = "foodAndDrink" }
-local PLAYER_ICON = { combat = "hazardAlerts", dead = "resurrection", ghost = "resurrection", mounted = "navigation", resting = "reminderTest", dungeon = "hazardAlerts", raid = "hazardAlerts" }
+local ICON = { equipment = "gearComparison", ammunition = "ammunition", class = "profiles", talent = "classResources", weaponEnchant = "reminders", wellFed = "foodAndDrink" }
+local PLAYER_ICON = { combat = "hazardAlerts", dead = "resurrection", ghost = "releaseSpirit", mounted = "navigation", resting = "sleepingBag", dungeon = "mapsNavigation", raid = "mapsNavigation" }
+-- Condition identity never changes a reminder's selected art or a template illustration.
+local CONDITION_ART = {
+    weaponEnchant = [[media\reminders\conditions\enchant]],
+    combat = [[media\reminders\conditions\combat]],
+    mounted = [[media\npcs\horse-head]],
+}
+function Pl.ArtFile(cond, size)
+    local key = cond and (cond.type == "player" and cond.state or cond.type)
+    local path = CONDITION_ART[key]
+    return path and (R.PATH .. path .. ((size or 64) <= 26 and "-small.tga" or ".tga")) or nil
+end
 function Pl.Icon(cond)
     if type(cond) ~= "table" then return "reminderTest" end
     if cond.type == "player" then return PLAYER_ICON[cond.state] or "reminderTest" end
     return ICON[cond.type] or "reminderTest"
+end
+
+function Pl.ApplyArt(texture, cond, size)
+    local dedicated = Pl.ArtFile(cond, size)
+    texture:SetVertexColor(1, 1, 1, 1)
+    texture:SetSize(size, size)
+    if dedicated and texture:SetTexture(dedicated) ~= false then
+        texture:SetTexCoord(0, 1, 0, 1)
+        return
+    end
+    local art = cond and cond.type == "wellFed" and "wellfed"
+    local file, l, r, t, b, aspect
+    if art then file, l, r, t, b, aspect = RM().ArtTexture(art, size) end
+    texture:SetVertexColor(1, 1, 1, 1)
+    texture:SetSize(size, size)
+    if file and texture:SetTexture(file) ~= false then
+        texture:SetTexCoord(l, r, t, b)
+        texture:SetSize(size * math.min(1, aspect), size / math.max(1, aspect))
+        return
+    end
+    R.Icons.Apply(texture, Pl.Icon(cond), size)
+end
+
+local CARD_TITLE = { equipment = "Equipment slot", ammunition = "Ammunition", class = "Class",
+    talent = "Specialization", weaponEnchant = "Weapon enchant", wellFed = "Well Fed" }
+local PLAYER_TITLE = { combat = "Combat", dead = "Alive or dead", ghost = "Ghost", mounted = "Mounted",
+    resting = "Resting", dungeon = "Location", raid = "Location" }
+local PLAYER_LABEL = { dungeon = "Dungeon", raid = "Raid" }
+
+function Pl.CardTitle(cond)
+    return cond.type == "player" and PLAYER_TITLE[cond.state] or CARD_TITLE[cond.type]
+end
+
+-- Only this lossless OR of supported positive location predicates has a chip presentation.
+function Pl.LocationValues(entry)
+    if not entry or entry.why then return nil end
+    if not entry.group then
+        local cond = entry.cond
+        if cond and cond.type == "player" and PLAYER_LABEL[cond.state] then return { cond.state } end
+        return nil
+    end
+    if entry.match ~= "any" or #entry.children == 0 then return nil end
+    local seen, values = {}, {}
+    for _, child in ipairs(entry.children) do
+        local cond = child.cond
+        if child.why or child.group or not cond or cond.type ~= "player" or not PLAYER_LABEL[cond.state]
+            or cond.negate or seen[cond.state] then return nil end
+        seen[cond.state] = true
+        values[#values + 1] = cond.state
+    end
+    return values
+end
+
+-- A flat conjunction can show its first stored leaf as the trigger. The remaining leaves
+-- are required restrictions. Presentation never changes the order, scope or operators.
+function Pl.Basic(view)
+    if view.match ~= "all" or view.broken then return false end
+    for i, entry in ipairs(view.conditions) do
+        if entry.group then
+            if i == 1 or not Pl.LocationValues(entry) then return false end
+        elseif not entry.cond or not Pl.CardTitle(entry.cond) then return false end
+    end
+    for _, problem in ipairs(view.problems) do
+        if problem == RM().PROBLEM.tooMany or problem == RM().PROBLEM.tooManyGroups then return false end
+    end
+    return true
+end
+
+function Pl.CompactRule(view)
+    if not Pl.Basic(view) then return "Uses Advanced logic" end
+    local conditions = view.conditions
+    if #conditions == 0 then return "Add a condition to start" end
+    local trigger = Pl.Sentence(conditions[1])
+    if #conditions == 1 then return trigger end
+    local more = #conditions > 2 and (" +%d"):format(#conditions - 2) or ""
+    return trigger, Pl.Sentence(conditions[2]) .. more
+end
+
+local VISIBILITY = {
+    hidden = "Conditions not met", disabled = "Reminder off", off = "Reminders off",
+    notApplicable = "Other character", invalid = "Needs attention", pending = "Waiting for delay",
+    waiting = "Waiting for information", world = "Waiting to enter the world",
+}
+
+function Pl.Visibility(id)
+    local ct = R.ReminderController
+    if ct.Visible(id) then return "Visible in game", "ok" end
+    local status = ct.Status(id)
+    local reason = VISIBILITY[status]
+    return reason and ("Hidden in game · " .. reason) or "Hidden in game", status == "invalid" and "warn" or "quiet"
+end
+
+function Pl.LiveFeedback(view)
+    local controller = R.ReminderController
+    local status = controller.Status(view.id)
+    if controller.Visible(view.id) then return "Showing now", "met", status == "holding" and "Minimum display time" or "Conditions met", true end
+    if status == "invalid" then return "Needs attention", "invalid", view.problems[1] or "Review this reminder." end
+    if status == "waiting" or status == "world" then return "Unknown", "unknown", VISIBILITY[status] end
+    if status == "hidden" then
+        local out = controller.Inspect(view.id)
+        if view.match == "all" and out and out.conditions then
+            for _, row in ipairs(out.conditions) do
+                local entry = row.entry
+                if row.result == "nomatch" and entry and #entry.path == 1 then
+                    local cond, observed = entry.cond, row.observed
+                    if cond and cond.type == "player" and PLAYER_LABEL[cond.state] then
+                        return "Hidden now", "unmet", "Your location does not match."
+                    end
+                    local reason = observed and observed ~= "" and ("Observed: " .. observed) or "A required condition is not met."
+                    return "Hidden now", "unmet", reason
+                end
+            end
+        end
+    end
+    return "Hidden now", "unmet", VISIBILITY[status] or "Waiting to show"
 end
 
 local PLAYER_BLURB = {
@@ -205,7 +338,8 @@ function Pl.Entries()
             for _, st in ipairs(CT.STATES) do
                 local make = function() return { type = "player", state = st[1], negate = false } end
                 local supported = CT.StateSupported(st[1])
-                out[#out + 1] = { key = "player:" .. st[1], kind = "player", category = st[1] == "combat" and "Combat" or "Character",
+                local category = st[1] == "combat" and "Combat" or (PLAYER_LABEL[st[1]] and "Character" or "Other")
+                out[#out + 1] = { key = "player:" .. st[1], kind = "player", category = category,
                     name = Pl.CondSentence(make()), blurb = PLAYER_BLURB[st[1]] or "Something about you.", icon = Pl.Icon(make()), make = make,
                     note = (not supported) and "This client doesn't report it, so a reminder using it can't be turned on here." or nil }
             end
@@ -222,7 +356,7 @@ function Pl.Entries()
                 blurb = "Whether the weapon in a hand has a weapon oil, sharpening stone or poison on it. The game says whether one is on, not which.",
                 icon = Pl.Icon({ type = "weaponEnchant" }), make = function() return p.New() end }
         elseif p.type == "wellFed" then
-            out[#out + 1] = { key = "wellFed", kind = "wellFed", category = "Character", name = "Your Well Fed buff",
+            out[#out + 1] = { key = "wellFed", kind = "wellFed", category = "Other", name = "Your Well Fed buff",
                 blurb = "Whether you have a Well Fed buff from eating good food, so a reminder can appear when it runs out. Not readable while the game hides your buffs from addons.",
                 icon = Pl.Icon({ type = "wellFed" }), make = function() return p.New() end }
         elseif p.type == "ammunition" then
@@ -244,8 +378,10 @@ end
 function Pl.Matches(entry, query)
     if not query or query == "" then return true end
     query = query:lower()
+    local state = entry.kind == "player" and entry.key:match("^player:(.+)$")
+    local title = CARD_TITLE[entry.kind] or PLAYER_TITLE[state] or ""
     return (entry.name:lower():find(query, 1, true) or entry.blurb:lower():find(query, 1, true)
-        or entry.category:lower():find(query, 1, true)) ~= nil
+        or entry.category:lower():find(query, 1, true) or title:lower():find(query, 1, true)) ~= nil
 end
 
 ---------------------------------------------------------------------------
@@ -385,6 +521,65 @@ function Pl.WithItem(cond, id)
     return new
 end
 
+function Pl.CardFields(cond)
+    local fields = {}
+    if cond.type == "weaponEnchant" or cond.type == "equipment" then
+        local value, label = Pl.SubjectOf(cond)
+        local prefix = cond.type == "equipment" and "slot:" or "enchant:"
+        local choices = {}
+        for _, c in ipairs(Pl.Subjects()) do
+            if c.value:sub(1, #prefix) == prefix then
+                choices[#choices + 1] = { value = c.value, label = c.label:gsub(" weapon enchant$", "") }
+            end
+        end
+        fields[#fields + 1] = { key = "subject", value = value, label = label:gsub(" weapon enchant$", ""), choices = choices }
+    end
+    if Pl.HasOperator(cond) then
+        local location = cond.type == "player" and PLAYER_LABEL[cond.state]
+        local yes, no = location and "In" or "Is", location and "Outside" or "Is not"
+        local binary = cond.type == "player" and not location and C().State(cond.state)
+        if binary then
+            yes, no = Upper1(binary[3]), Upper1(binary[4])
+            if cond.state == "mounted" then yes, no = "Is mounted", "Is not mounted" end
+            if cond.state == "combat" then yes, no = "In combat", "Out of combat" end
+        end
+        fields[#fields + 1] = { key = "op", value = cond.negate and "not" or "is", label = cond.negate and no or yes,
+            choices = { { value = "is", label = yes }, { value = "not", label = no } } }
+        if binary then return fields end
+    end
+    local key, choices = Pl.ValueKey(cond), Pl.ValueChoices(cond)
+    if cond.type == "player" then
+        local locations = {}
+        for _, choice in ipairs(choices) do
+            local name = PLAYER_LABEL[choice.value]
+            if name then locations[#locations + 1] = { value = choice.value, label = name } end
+        end
+        choices = locations
+    elseif cond.type == "weaponEnchant" then
+        for _, choice in ipairs(choices) do choice.label = choice.value == "missing" and "Is missing" or "Is applied" end
+    elseif cond.type == "wellFed" then
+        for _, choice in ipairs(choices) do choice.label = choice.value == "missing" and "Not well fed" or "Well fed" end
+    end
+    local label
+    for _, choice in ipairs(choices) do if choice.value == key then label = choice.label end end
+    fields[#fields + 1] = { key = "value", value = key, label = label or Pl.ValueLabel(cond), choices = choices }
+    return fields
+end
+
+function Pl.EditField(cond, key)
+    for _, field in ipairs(Pl.CardFields(cond)) do if field.key == key then return field end end
+end
+
+function Pl.WithCardField(cond, field, value)
+    for _, option in ipairs(field.choices) do
+        if option.value == value then
+            if field.key == "subject" then return Pl.WithSubject(cond, value) end
+            if field.key == "op" then return Pl.WithNegate(cond, value == "not") end
+            return Pl.WithValue(cond, value)
+        end
+    end
+end
+
 -- A line of help for the editor, about what the condition looks at.
 function Pl.Help(cond)
     if type(cond) ~= "table" then return "" end
@@ -511,6 +706,36 @@ function Pl.SummaryLines(view)
     end
     if not HasItemName(view) then cache[view] = lines end
     return lines
+end
+
+function Pl.RuleSummary(view)
+    local function Lower(text) return (text:gsub("^%u", string.lower)) end
+    local function Join(entries, match)
+        local words = {}
+        for _, item in ipairs(Items(entries, match)) do
+            if item.group then
+                words[#words + 1] = "(" .. Join(item.group.children, item.group.match) .. ")"
+            else
+                words[#words + 1] = Lower(item.text)
+            end
+        end
+        return table.concat(words, match == "any" and " or " or " and ")
+    end
+    local entries = view.conditions
+    if #entries == 0 then return "Add a condition to decide when this reminder appears." end
+    for _, group in ipairs(view.groups) do
+        if #group.children == 0 then return "Complete or remove the empty condition group." end
+    end
+    if Pl.Basic(view) and #entries > 1 then
+        local restrictions = {}
+        for i = 2, #entries do
+            local words = Lower(Pl.Sentence(entries[i]))
+            if entries[i].group and #entries > 2 then words = "(" .. words .. ")" end
+            restrictions[#restrictions + 1] = words
+        end
+        return "Shows when " .. Lower(Pl.Sentence(entries[1])) .. ", but only while " .. table.concat(restrictions, " and ") .. "."
+    end
+    return "Shows when " .. Join(entries, view.match) .. "."
 end
 
 -- A group's contents in one line, for a group that is folded away: what it holds, nothing left out.
@@ -682,4 +907,66 @@ function Pl.Explain(view, out, status, ctx)
         ex.reason = "The conditions don't all hold right now."
     end
     return ex
+end
+
+
+-- Lossless presentation rows over the existing normalized tree. Headings retain the
+-- conjunction at every level; only a flat All rule gets trigger/restriction language.
+function Pl.Explanation(view)
+    local rows = {}
+    local function Add(text, entry, depth, heading)
+        rows[#rows + 1] = { text = text, entry = entry, depth = depth or 0, heading = heading }
+    end
+    if Pl.Basic(view) and #view.conditions > 0 then
+        Add("Show when", nil, 0, true)
+        Add(Pl.Sentence(view.conditions[1]), view.conditions[1])
+        if #view.conditions > 1 then Add("Only while · all must match", nil, 0, true) end
+        for i = 2, #view.conditions do Add(Pl.Sentence(view.conditions[i]), view.conditions[i]) end
+    else
+        local function Walk(entries, match, depth)
+            Add(match == "any" and "Any of these" or "All of these", nil, depth, true)
+            if #entries == 0 then Add("Empty group · needs attention", nil, depth + 1) end
+            for _, entry in ipairs(entries) do
+                if entry.group then Walk(entry.children, entry.match, depth + 1)
+                else Add(Pl.Sentence(entry), entry, depth + 1) end
+            end
+        end
+        Walk(view.conditions, view.match, 0)
+    end
+    return rows
+end
+
+function Pl.DrawExplanation(parent, pool, view, width, y, compact)
+    local G, M = R.SettingsWidgets, R.SettingsMaterial
+    local start, data = y, Pl.Explanation(view)
+    if compact and Pl.Basic(view) and #view.conditions <= 2 then
+        data = { { text = Pl.RuleSummary(view), depth = 0, plain = true } }
+    end
+    for i, item in ipairs(data) do
+        local row = pool[i]
+        if not row then
+            row = CreateFrame("Frame", nil, parent)
+            row.icon = row:CreateTexture(nil, "ARTWORK")
+            row.icon:SetSize(22, 22); row.icon:SetPoint("TOPLEFT", 0, -1)
+            row.text = M.ReminderFont(G.Text(row, "body"), 13)
+            pool[i] = row
+        end
+        local inset = math.min(4, item.depth) * 12
+        row:SetWidth(width - inset)
+        row:ClearAllPoints(); row:SetPoint("TOPLEFT", parent, "TOPLEFT", inset, -y)
+        row.text:ClearAllPoints(); row.text:SetPoint("TOPLEFT", (item.heading or item.plain) and 0 or 29, -2)
+        row.text:SetWidth(width - inset - ((item.heading or item.plain) and 0 or 29))
+        row.text:SetText(item.text)
+        M.ReminderFont(row.text, item.heading and 13 or 14, item.heading)
+        G.Color(row.text, item.heading and G.pal.textDim or G.pal.text)
+        row.icon:SetShown(not item.heading and not item.plain and item.entry ~= nil)
+        if item.entry then
+            local cond = item.entry.cond or (item.entry.children and item.entry.children[1] and item.entry.children[1].cond)
+            Pl.ApplyArt(row.icon, cond, 22)
+        end
+        local h = math.max(item.heading and 19 or 27, (row.text:GetStringHeight() or 14) + 7)
+        row:SetHeight(h); row:Show(); y = y + h + (item.heading and 2 or 4)
+    end
+    for i = #data + 1, #pool do pool[i]:Hide() end
+    return y - start
 end

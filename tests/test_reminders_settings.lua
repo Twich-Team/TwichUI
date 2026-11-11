@@ -10,6 +10,7 @@ dofile(TESTS .. "settings_mock.lua")
 -- Stand-in frames keep their scripts, text, focus and shown state; nothing here is the game.
 
 local made = 0
+local created = {}
 local function Fake(kind, parent)
   made = made + 1
   local f = { kind = kind, parent = parent, scripts = {}, hooks = {}, points = {}, shown = true, w = 0, h = 0,
@@ -19,6 +20,7 @@ local function Fake(kind, parent)
     if self.scripts[name] then self.scripts[name](self, ...) end
     for _, h in ipairs(self.hooks[name] or {}) do h(self, ...) end
   end
+  created[#created + 1] = f
   f.Fire = Fire
   local methods = {
     SetScript = function(s, n, fn) s.scripts[n] = fn; s.hooks[n] = nil end,
@@ -45,7 +47,12 @@ local function Fake(kind, parent)
     IsMouseOver = function() return false end,
     GetEffectiveScale = function() return 1 end, GetScale = function() return 1 end,
     GetOwner = function(s) return s.owner end, SetOwner = function(s, o) s.owner = o end,
-    GetFont = function() return "Fonts\\FRIZQT__.TTF", 12, "" end, SetFont = function() return true end,
+    GetFont = function(s) return unpack(s.font or { "Fonts\\FRIZQT__.TTF", 12, "" }) end,
+    SetFont = function(s, file, size, flags) s.font = { file, size, flags }; return true end,
+    SetScrollChild = function(s, child) s.child = child end,
+    GetScrollChild = function(s) return s.child end,
+    SetVerticalScroll = function(s, value) s.scroll = value end,
+    GetVerticalScroll = function(s) return s.scroll or 0 end,
     SetAlpha = function(s, a) s.alpha = a end, GetAlpha = function(s) return s.alpha or 1 end,
     SetScale = function(s, v) s.scale = v end,
     SetTexture = function(s, t) s.texture = t; return true end,
@@ -97,6 +104,12 @@ local c, S = SettingsClient({ name = "Rich", beforeInit = World })
 local R = c.TwichUI
 local K, RM, CT, D, ST = S.K, R.Reminders, R.ReminderController, R.ReminderDisplay, R.ReminderState
 local P = R.RemindersPage
+local editorOpen, editorPage = true, "reminders"
+R.SettingsUI.IsPageActive = function(key) return editorOpen and editorPage == key end
+R.SettingsUI.SuspendForPlacement = function(on, reopen)
+  editorOpen = not on and reopen ~= false
+  if not on and editorOpen then P.Refresh() end
+end
 local function Flush() for _ = 1, 6 do FlushTimers() end end
 local function Deep(v)   -- a string for a whole stored value, to see that nothing changed
   if type(v) ~= "table" then return tostring(v) end
@@ -141,30 +154,57 @@ local v = RM.Get(id)
 Check(v and v.name == "Shield reminder" and not v.enabled, "a draft, opened")
 local row = parts.rows[1]
 Check(row.shown and row.name.text == "Shield reminder" and row.state.text == "Off" and not row.check:GetChecked(), "its row: name, Off, unchecked")
-Check(row.rule.text == "Shows when: Off hand is not Shield.", "its rule in a sentence: " .. row.rule.text)
+Check(row.ruleText == "Shows when: Off hand is not Shield.", "its rule in a sentence: " .. row.ruleText)
 Check(not f.empty.shown and f.head.shown and f.nameBox.text == "Shield reminder", "the editor's head")
-Check(f.say.shown and f.say.text:find("stays off until you turn it on"), "it says it is off: " .. f.say.text)
+Check(not f.say.shown, "the Off switch and row convey the draft state without a success paragraph")
 
 -- the list and the name panel are as wide as the frame the window gives the page (the feature card's width), and never narrower than 644
-Check(f.list.w == 644 and f.head.w == 644 and row.w == 644 - 28, "at the first size the panels are 644 wide")
+Check(f.list.w == 220 and f.head.w == 415 and row.w == 198, "at the first size the list and editor share the available width")
 f:SetWidth(780); P.Refresh(); Flush()
-Check(f.list.w == 780 and f.head.w == 780 and row.w == 780 - 28, "a wider window widens the list and the name panel: " .. tostring(f.list.w))
+Check(f.list.w > 220 and f.list.w <= 280 and f.head.w > 415 and row.w == f.list.w - 22, "a wider window balances both panes without shrinking the editor")
 f:SetWidth(500); P.Refresh(); Flush()
-Check(f.list.w == 644, "never narrower than the first size")
+Check(f.list.w == 220 and f.head.w == 415, "the page respects its minimum width")
 f:SetWidth(644); P.Refresh(); Flush()
 
 local show, when, place, sound, test = unpack(parts.sections)
 local PV = R.RemindersPreview
-Check(show.shown and show.mode.text.text == "Artwork with text" and show.art.text.text == "Shield" and show.textBox.text == "Equip your shield", "Show: artwork with text")
+local DZ = R.RemindersDesigner
+local function Click(button, ...)
+  button:Fire("OnClick", ...)
+  Flush()
+end
+local function Open()
+  DZ.Open()
+  Flush()
+end
+local function Advanced()
+  DZ.SetAdvanced(true)
+  Flush()
+end
+local function Draft() return DZ.DraftView() end
+Check(not when.shown and when.summary:IsShown(), "When starts as a compact summary")
+local original = RM.Get(id).conditions[1].raw
+original.extension = "keep"
+Open()
+Check(not R.RemindersPlacement.Start(RM.Get(id)), "an exclusive When workspace cannot start competing placement")
+Check(show.shown and show.mode.text.text == "Artwork with text" and show.art.value == "shield" and show.art.text.text == "Choose..." and show.artLabel.text == "Shield" and show.textBox.text == "Equip your shield", "Show: artwork with text")
+Check(DZ.Frame().workspace.shown and DZ.Frame().rail.rows[1].name.text == "Shield reminder",
+    "the dedicated builder rail follows reminder selection")
 Check(not show.icon.shown and not show.itemBox.shown, "Show: no icon choices for artwork")
 local cd = when.cards[1]
-Check(cd.shown and cd.text.text == "Your off hand is not a shield" and cd.edit.shown and cd.more.shown, "When: the condition is a card, a sentence with Edit and More")
-Check(not when.rootGroup.heading.shown and not when.rootGroup.segall.shown, "one condition: no group heading and no all or any choice")
-Check(when.who.text == "This character only" and when.whoEdit.shown and not when.target.shown, "who it is for: one line, Edit closed")
-Check(when.lines[1].text == "Shows when: Your off hand is not a shield." and not when.lines[2].shown, "why: the rule in one line")
-Check(not when.exHead.shown and not when.editor.shown and not when.picker.shown, "nothing else is open: no explanation, no editor, no picker")
-Check(when.note.shown and when.note.text == RM.SHIELD_NOTE, "the template's explanation")
-Check(when.rootGroup.add.shown and when.rootGroup.add.text.text == "Add a condition", "Add a condition belongs to the group")
+Check(not when.isAdvanced and cd.title.text == "Equipment slot" and cd.fields[1].shown and cd.fields[3].shown
+    and cd.note.shown and not cd.more.shown and when.addBasic.shown, "flat rule with inline controls, read-only state and contextual actions")
+local draftRaw, revision = Draft().conditions[1].raw, RM.Rev()
+cd.fields[2].onPick("is"); Flush()
+Check(Draft().conditions[1].raw == draftRaw and not Draft().conditions[1].cond.negate and draftRaw.extension == "keep",
+    "inline editing preserves draft node identity and extension data")
+Check(RM.Rev() == revision and original.negate and RM.Get(id).conditions[1].raw == original,
+    "inline editing leaves the live condition alone")
+Check(not when.editor.shown and DZ.Frame().save.enabled and DZ.Frame().dirty.shown, "no duplicate editor; the footer shows an unsaved change")
+Click(DZ.Frame().cancel)
+Check(RM.Rev() == revision and original.negate and PV.Shown() and not DZ.Shown(), "Cancel discards draft and restores the preview")
+Check(not DZ.Frame().workspace.shown, "Cancel puts away the dedicated workspace")
+original.extension = nil
 local OFFHAND = {}
 for _, ch in ipairs(R.RemindersPlain.ValueChoices(RM.Get(id).conditions[1].cond)) do OFFHAND[#OFFHAND + 1] = ch.label end
 Check(table.concat(OFFHAND, ",") == "Empty,Shield,Weapon,Held in off hand,A specific item", "the off hand's own choices only: " .. table.concat(OFFHAND, ","))
@@ -173,19 +213,21 @@ Check(table.concat(OFFHAND, ",") == "Empty,Shield,Weapon,Held in off hand,A spec
 -- 3. Test: right now, and simulated
 ---------------------------------------------------------------------------
 EQUIP[17] = nil
+test.toggle.scripts.OnClick(test.toggle); Flush()
 P.Refresh()
-Check(test.live[1].text == "Off hand is not Shield  -  Match  -  Observed: Empty", "right now, for a draft: " .. test.live[1].text)
-Check(test.liveResult.text:find("^Result: Disabled") and test.liveResult.text:find("Turn it on"), "the result says why: " .. test.liveResult.text)
+Check(test.live[1].title.text == "Your off hand is not a shield" and test.live[1].state.text == "Met" and test.live[1].observation.text == "Observed: Empty", "a diagnostic separates condition, state and observation")
+Check(test.liveHead.text == "Hidden now" and test.liveResult.text == "Reminder off", "overall result explains disabled state")
 f.onBox.scripts.OnClick(f.onBox)
 Flush()
 Check(RM.Get(id).enabled and CT.Status(id) == "showing" and parts.rows[1].state.text == "Showing", "turned on: showing")
-Check(test.liveResult.text:find("^Result: Showing") and test.liveResult.text:find("All conditions match"), "live result: " .. test.liveResult.text)
+Check(test.liveHead.text == "Showing now" and test.liveResult.text == "Conditions met", "overall live result")
+Click(test.try)
 Check(test.simTag.shown and test.picks[1].shown and test.picks[1].text.text == "Shield equipped", "a simulated situation per condition")
 local liveObs = ST.Observations().slots[17]
 test.picks[1].onPick("match")
 Flush()
 Check(test.simResult.text:find("^Simulated result: Hidden"), "simulated shield: hidden: " .. test.simResult.text)
-Check(test.sim[1].text:find("No match") and test.sim[1].text:find("Simulated: A shield"), "simulated line: " .. test.sim[1].text)
+Check(test.sim[1].state.text == "Not met" and test.sim[1].observation.text:find("Simulated: A shield"), "simulation observations remain separately labeled")
 Check(CT.Status(id) == "showing" and ST.Observations().slots[17] == liveObs, "the live state is untouched")
 test.picks[1].onPick("unknown")
 Flush()
@@ -196,523 +238,265 @@ Flush()
 local tid = P.Selected()
 RM.AddCondition(tid, "equipment")
 Flush()
-Check(test.live[1].text:find("^Off hand is empty  %-  Match"), "a draft's live line: " .. test.live[1].text)
+Check(test.live[1].title.text == "Your off hand is empty" and test.live[1].state.text == "Met", "live draft condition result")
 EQUIP[17] = 1201
 f.scripts.OnEvent(f, "PLAYER_EQUIPMENT_CHANGED", 17)
 Flush()
-Check(test.live[1].text:find("No match") and test.live[1].text:find("Shield"), "after the event it reads again: " .. test.live[1].text)
+Check(test.live[1].state.text == "Not met" and test.live[1].observation.text:find("Shield"), "live observations refresh after equipment events")
 Check(ST.Observations().slots[17] ~= nil and ST.Snapshot().keys == 1, "the draft's look never adds to what the live reminders read")
 RM.Delete(tid)
 P.Select(id)
 Flush()
-
 ---------------------------------------------------------------------------
--- 4. Editing the rule: a card opens one editor that works on a copy; Done writes it, Cancel leaves it
+-- 4. The rule transaction, type-aware controls, history and targeting
 ---------------------------------------------------------------------------
-local ed, pk = when.editor, when.picker
-local function Click(b) b.scripts.OnClick(b); Flush() end
-local function X(frame) return frame.points[1] and frame.points[1][4] end
--- opens a group's picker and chooses what it offers by its key; false when it isn't there
-local picked   -- what the picker said when it was open: its title and where it adds
-local function Pick(group, key)
-  Click(group.add)
-  picked = { title = pk.title.text, where = pk.where.text, shown = pk.shown }
-  for _, row in ipairs(pk.rows) do
-    if row.shown and row.entry and row.entry.key == key then Click(row) return true end
+Open()
+local ed, pk, builder = when.editor, when.picker, DZ.Frame()
+local function Pick(key)
+  for _, choice in ipairs(pk.rows) do
+    if choice.shown and choice.entry and choice.entry.key == key then Click(choice) return true end
   end
   return false
 end
-local function Line(i) local fs = when.lines[i] return fs and fs.shown and (fs.text:gsub("^%-  ", "")) or nil end   -- a summary line without its dash
-local function Shown()   -- the sentences of the cards that are on screen, in order
-  local out = {}
-  for _, card in ipairs(when.cards) do if card.shown then out[#out + 1] = card.text.text end end
-  return out
-end
-local function Menu(owner)
-  local out = {}
-  for _, ch in ipairs(owner.more.choices()) do out[#out + 1] = ch.label end
-  return table.concat(out, " | ")
-end
-
-local rev0 = RM.Rev()
-Click(cd.edit)
-Check(ed.shown and ed.title.text == "Edit this condition" and ed.subject.shown and ed.subject.text.text == "Off hand" and ed.op.text.text == "is not" and ed.value.text.text == "Shield", "Edit: the editor opens under the card with its fields")
-Check(ed.reads.text == "Reads as: Your off hand is not a shield" and ed.help.text:find("one equipment slot"), "it reads the condition back, with a line of help: " .. ed.reads.text)
-Check(ed.done.text.text == "Done" and ed.cancel.shown and RM.Rev() == rev0, "Done and Cancel; opening it changes nothing")
-ed.subject.onPick("slot:mainHand")
-Flush()
-Check(ed.reads.text == "Reads as: Your main hand is not empty" and ed.value.text.text == "Empty", "a change shows in the editor at once: " .. ed.reads.text)
-Check(RM.Get(id).conditions[1].cond.slot == "offHand" and RM.Rev() == rev0, "and is saved only on Done: nothing has been written")
-Click(ed.cancel)
-Check(not ed.shown and RM.Get(id).conditions[1].cond.slot == "offHand" and RM.Rev() == rev0, "Cancel: the saved condition is as it was and nothing was written")
-Click(cd.edit)
-Click(ed.done)
-Check(not ed.shown and RM.Rev() == rev0, "Done on a condition that was not changed writes nothing")
-Click(cd.edit)
-ed.subject.onPick("slot:mainHand")
-ed.value.onPick("weapon")
-Flush()
-Click(ed.done)
-local c1 = RM.Get(id).conditions[1].cond
-Check(not ed.shown and c1.slot == "mainHand" and c1.what == "weapon" and c1.negate == true and cd.text.text == "Your main hand is not a weapon", "Done: written, and the card says it: " .. cd.text.text)
-Click(cd.edit)
-ed.subject.onPick("slot:offHand")
-ed.value.onPick("shield")
-Flush()
-Click(ed.done)
-Check(RM.Get(id).conditions[1].cond.slot == "offHand" and RM.Get(id).conditions[1].cond.what == "shield", "and back to the shield")
-
--- a second condition: picked, set up, and only then added
-Check(Pick(when.rootGroup, "player:combat"), "Add a condition opens a picker, and the player's combat state is one of its choices")
-Check(picked.shown and picked.title == "Require another condition" and picked.where == "Adding to the group where all of these must be true.", "the picker says it is for the group where all must be true: " .. tostring(picked.where))
-Check(ed.shown and ed.title.text == "Add: You are in combat" and not ed.subject.shown and ed.op.shown and ed.value.text.text == "In combat" and ed.done.text.text == "Add condition", "after choosing, only the values it needs are asked for")
-Check(#RM.Get(id).conditions == 1, "nothing is added until Add condition")
-Click(ed.cancel)
-Check(not ed.shown and #RM.Get(id).conditions == 1, "Cancel adds nothing")
-Pick(when.rootGroup, "player:combat")
-Click(ed.done)
-local v2 = RM.Get(id)
-Check(#v2.conditions == 2 and v2.conditions[2].cond.state == "combat" and not ed.shown and not pk.shown, "added, and the picker and editor are put away")
-Check(when.cards[2].shown and when.cards[2].text.text == "You are in combat", "its card")
-Check(when.rootGroup.heading.shown and when.rootGroup.heading.text == "All of these must be true" and when.rootGroup.segall.shown, "two conditions: the group has its heading and the All and Any choice")
-Check(when.seps[1].shown and when.seps[1].text == "and", "joined by a quiet \"and\"")
-Check(Line(1) == "Shows when all of these are true:" and Line(2) == "Your off hand is not a shield" and Line(3) == "You are in combat", "the summary: a heading and a line each")
-Click(when.rootGroup.segany)
-Check(RM.Get(id).match == "any" and when.rootGroup.heading.text == "At least one of these must be true" and when.seps[1].text == "or" and Line(1) == "Shows when at least one of these is true:", "Any: the heading, the separator and the summary follow")
-Click(cd.edit)
-Click(when.cards[2].edit)
-Check(ed.shown and ed.title.text == "Edit this condition", "opening another card moves the one editor")
-ed.op.onPick("isnot")
-Flush()
-Click(ed.done)
-Check(RM.Get(id).conditions[2].cond.negate == true and when.cards[2].text.text == "You are not in combat", "is not")
--- the More menu
-Check(Menu(when.cards[2]) == "Edit | Duplicate | Move up | Remove", "More on the last card: Edit, Duplicate, Move up, Remove: " .. Menu(when.cards[2]))
-Check(Menu(cd) == "Edit | Duplicate | Move down | Remove", "and on the first: Move down, no Move up: " .. Menu(cd))
-cd.more.onPick("down")
-Flush()
-Check(Shown()[1] == "You are not in combat" and Shown()[2] == "Your off hand is not a shield", "Move down reorders")
-Check(RM.Get(id).match == "any", "(and the match stays as it was)")
-when.cards[1].more.onPick("up")
-Flush()
-when.cards[2].more.onPick("up")
-Flush()
-Check(Shown()[1] == "Your off hand is not a shield", "Move up reorders (back)")
-when.cards[2].more.onPick("dup")
-Flush()
-Check(#RM.Get(id).conditions == 3 and Shown()[3] == "You are not in combat" and f.say.text:find("copy"), "Duplicate: a copy right after it")
-when.cards[3].more.onPick("remove")
-Flush()
-Check(#RM.Get(id).conditions == 2 and when.undoText.shown and when.undoText.text == "Removed You are not in combat." and when.undo.shown, "Remove, and it says what was removed and offers Undo")
-Click(when.undo)
-Check(#RM.Get(id).conditions == 3 and not when.undo.shown, "Undo puts it back")
-when.cards[3].more.onPick("remove")
-Flush()
-when.cards[2].more.onPick("remove")
-Flush()
-Check(#RM.Get(id).conditions == 1 and Shown()[1] == "Your off hand is not a shield", "removed down to the shield")
-Check(Line(1) == "Shows when: Your off hand is not a shield." and not when.rootGroup.heading.shown, "back to the single line and the simple card")
-
--- ammunition: no "is not", four choices that read as a sentence
-Check(Pick(when.rootGroup, "ammunition"), "ranged ammunition is offered")
-Check(ed.title.text == "Add: Your ranged ammunition" and not ed.op.shown and ed.value.text.text == "has a problem", "ammunition reads as a sentence on its own: no \"is not\"")
-local ammoChoices = ed.value.choices()
-Check(#ammoChoices == 4 and ammoChoices[3].value == "outOfAmmo" and ammoChoices[3].label == "is used up" and ammoChoices[3].tooltip, "four choices, each explained")
-Check(ed.reads.text == "Reads as: Ranged ammunition needs attention", "reads: " .. ed.reads.text)
-ed.value.onPick("outOfAmmo")
-Flush()
-Click(ed.done)
-Check(RM.Get(id).conditions[2].cond.what == "outOfAmmo" and when.cards[2].text.text == "Ranged ammunition is used up", "the choice is stored and read back")
--- (this test client has no way to say whether a weapon takes ammunition: the card, the page and the picker say so in a line)
-Check(when.cards[2].state.shown and when.cards[2].note.text == "Cannot check ammunition on this client." and when.cards[2].stateTip == "The client does not report whether this ranged weapon uses ammunition.",
-  "a limit of the client is one short line on the card, with the longer words on its mark: " .. tostring(when.cards[2].note.text))
-Check(f.problems.shown and f.problems.text:find("Cannot check ammunition on this client.", 1, true) and not f.problems.text:find("Condition 2", 1, true) and not f.problems.text:find("game client doesn't say", 1, true),
-  "and the list of what needs attention says the same, not the technical paragraph: " .. f.problems.text)
-Check(parts.rows[1].rule.text == "Cannot check ammunition on this client.", "and so does the list row: " .. parts.rows[1].rule.text)
-Click(when.cards[2].edit)
-ed.subject.onPick("player")
-Flush()
-Click(ed.done)
-Check(RM.Get(id).conditions[2].cond.type == "player", "the subject changes the kind")
-Click(when.cards[2].edit)
-ed.subject.onPick("ammo")
-Flush()
-Click(ed.done)
-Check(RM.Get(id).conditions[2].cond.type == "ammunition", "and back")
-when.cards[2].more.onPick("remove")
-Flush()
-Check(#RM.Get(id).conditions == 1, "removed")
-
----------------------------------------------------------------------------
--- 5. A missing item: by link, and its icon follows
----------------------------------------------------------------------------
-P.Create("item")
-Flush()
-local iid = P.Selected()
-Check(f.problems.shown and f.problems.text:find("Before it can be turned on") and f.problems.text:find("item"), "its problems are listed: " .. f.problems.text)
-f.onBox.scripts.OnClick(f.onBox)
-Flush()
-Check(not RM.Get(iid).enabled and f.say.text:find("item"), "it can't be turned on yet, and says why")
-local ic = when.cards[1]
-Check(ic.text.text == "You don't have an item equipped" and ic.state.shown and ic.note.text:find("Choose the item"), "its card says what is missing: " .. tostring(ic.note.text))
-Click(ic.edit)
-Check(ed.shown and ed.item.shown and ed.subject.text.text == "Any equipment slot", "any slot, with an item box")
-local anyLabels = {}
-for _, ch in ipairs(ed.value.choices()) do anyLabels[#anyLabels + 1] = ch.label end
-Check(table.concat(anyLabels, ",") == "A specific item", "any slot offers only a specific item")
-Check(ed.problem.shown and ed.problem.text:find("Choose the item") and ed.done.enabled == false, "Done waits for the item, and says why")
-ed.item:SetText("|cffffffff|Hitem:6948::::::::60:::::|h[Hearthstone]|h|r")
-ed.item.scripts.OnEnterPressed(ed.item)
-Flush()
-Check(ed.itemInfo.text:find("Hearthstone") and ed.reads.text == "Reads as: You don't have Hearthstone equipped" and ed.done.enabled == true, "the item is named in the editor: " .. ed.itemInfo.text)
-Check(RM.Get(iid).conditions[1].cond.item == nil, "and not saved yet")
-Click(ed.done)
-local iv = RM.Get(iid)
-Check(iv.conditions[1].cond.item == 6948 and iv.display.item == 6948 and iv.valid, "Done: the link's item, and the icon uses it")
-Check(ic.text.text == "You don't have Hearthstone equipped" and Line(1) == "Shows when: You don't have Hearthstone equipped.", "its sentence and summary: " .. tostring(Line(1)))
-Click(ic.edit)
-ed.item:SetText("not an item")
-ed.item.scripts.OnEnterPressed(ed.item)
-Flush()
-Check(f.say.text:find("isn't an item ID") and RM.Get(iid).conditions[1].cond.item == 6948, "a bad item is refused, nothing changes")
-Click(ed.cancel)
-Check(show.src.shown and show.src.text.text == "An item's icon" and show.itemInfo.text:find("Hearthstone"), "Show: an item's icon, named")
-
----------------------------------------------------------------------------
--- 5b. Groups: a class, a group that allows either, which group receives what
----------------------------------------------------------------------------
-P.Create("custom")
-Flush()
-local gid = P.Selected()
-Check(when.rootGroup.empty.shown and when.rootGroup.empty.text:find("never shows") and not when.cards[1].shown and when.rootGroup.add.shown, "a new custom reminder: an empty rule says it never shows, and where to start")
-Check(Line(1):find("add a condition") and not when.rootGroup.heading.shown, "and the summary says to add one")
-Check(Pick(when.rootGroup, "class"), "Your class is offered")
-Check(ed.title.text == "Add: Your class" and ed.value.text.text == "Choose a class" and ed.done.enabled == false and ed.problem.shown, "a class starts unfinished, and Add waits for it: " .. tostring(ed.problem.text))
-Click(ed.done)
-Check(#RM.Get(gid).conditions == 0, "pressing it anyway adds nothing")
-local classChoices = ed.value.choices()
-Check(#classChoices == 9 and classChoices[1].value == "WARRIOR" and classChoices[1].label == "Warrior", "nine classes, stored as tokens and shown as names")
-ed.value.onPick("WARRIOR")
-Flush()
-Click(ed.done)
-Check(RM.Get(gid).conditions[1].cond.class == "WARRIOR" and when.cards[1].text.text == "Your class is Warrior" and RM.Get(gid).valid, "chosen: Warrior")
--- a group, with what it will be said before it is made
-Click(when.rootGroup.add)
-Check(pk.shown and pk.title.text == "Require another condition", "the picker")
-local groupRow
-for _, row in ipairs(pk.rows) do if row.shown and row.isGroup then groupRow = row end end
-Check(groupRow and groupRow.name.text == "Create a condition group", "a group is offered apart from the conditions")
-Click(groupRow)
-Check(pk.newNote.shown and pk.newNote.text:find("inside \"All of these must be true\"") and pk.newAny.shown and pk.newAll.shown and pk.back.shown, "it says where the group goes and offers how it combines")
-Check(#RM.Get(gid).conditions == 1, "nothing has been added yet")
-Click(pk.back)
-Check(pk.shown and not pk.newAny.shown, "Back returns to the picker")
-Click(groupRow)
-Click(pk.newAny)
-local g1 = when.groups[1]
-Check(RM.Get(gid).conditions[2].group and RM.Get(gid).conditions[2].match == "any" and g1.heading.shown and g1.heading.text == "At least one of these must be true", "a group that allows either: " .. tostring(g1.heading.text))
-Check(f.say.text:find("Added an empty group") and f.say.text:find("at least one"), "and it says what it did: " .. f.say.text)
-Check(when.rootGroup.heading.shown and when.rootGroup.heading.text == "All of these must be true", "the top level did not change its all or any because something was added")
-Check(g1.empty.shown and g1.empty.text:find("can't be turned on") and g1.problem.shown, "an empty group says it needs a condition")
-Check(f.problems.text:find("Group 2"), "and the reminder lists it")
-Check(g1.add.shown and g1.segany.shown and g1.more.shown and g1.fold.shown, "a group has its own Add, its All and Any, its More and its fold")
--- conditions go into the group they were asked for
-Check(Pick(g1, "class"), "the group's own picker")
-Check(pk.title.text == "Allow another condition", "for a group where at least one must be true, it says Allow: " .. pk.title.text)
-ed.value.onPick("WARRIOR")
-Flush()
-Click(ed.done)
-for _, token in ipairs({ "HUNTER", "ROGUE" }) do
-  Pick(g1, "class")
-  ed.value.onPick(token)
+local function Search(text)
+  pk.search:SetText(text)
+  pk.search:Fire("OnTextChanged", true)
   Flush()
-  Click(ed.done)
 end
-local raw = RM.Get(gid).raw
-Check(#raw.conditions == 2 and #raw.conditions[2].conditions == 3, "added to the group, not the top level")
-local cards = when.cards
-Check(X(cards[2]) > X(cards[1]), "a group's cards are indented under its box")
-Check(when.seps[1].text == "and" and when.seps[2].text == "or" and when.seps[3].text == "or", "joined by and between the two, or inside the group that allows either")
-Check(g1.outcome and not g1.outcome.shown, "(and no result lines while nothing is being explained)")
-Check(RM.Get(gid).valid and Line(1) == "Shows when all of these are true:" and Line(2) == "Your class is Warrior" and Line(3) == "Your class is Warrior, Hunter or Rogue", "the summary follows the tree: " .. tostring(Line(3)))
--- the first becomes "in combat": the example in the request
-Click(cards[1].edit)
-ed.subject.onPick("player")
-Flush()
+local saved, revision = Deep(RM.Get(id).raw), RM.Rev()
+Check(pk.searchHint.text == "Search..." and pk.categories.Equipment.shown, "the palette starts with search and category headings")
+Search("mounted")
+Check(Pick("player:mounted"), "search finds Mounted in the palette")
+Check(ed.op.shown and ed.op.text.text == "Is mounted" and not ed.subject.shown and not ed.value.shown,
+    "Mounted has a single relevant binary control even during setup")
+ed.op.onPick("not"); Flush()
 Click(ed.done)
-Check(RM.Get(gid).conditions[1].cond.type == "player" and cards[1].text.text == "You are in combat", "the first is now \"You are in combat\"")
-Check(Line(2) == "You are in combat" and Line(3) == "Your class is Warrior, Hunter or Rogue", "(Warrior or Hunter or Rogue) and in combat: " .. tostring(Line(3)))
--- is not, in the group
-Click(cards[3].edit)
-ed.op.onPick("isnot")
-Flush()
-Click(ed.done)
-local joined = table.concat({ Line(1) or "", Line(2) or "", Line(3) or "", Line(4) or "", Line(5) or "" }, "|")
-Check(RM.Get(gid).raw.conditions[2].conditions[2].negate == true and joined:find("Your class is not Hunter"), "is not inside a group: " .. joined)
-Click(cards[3].edit)
-ed.op.onPick("is")
-Flush()
-Click(ed.done)
--- the Test section: one choice for the three classes, a line for the group and for each condition
-Check(test.picks[1].shown and test.picks[2].shown and not test.picks[3].shown, "Test: one choice for combat and one for the three classes")
-Check(test.pickLabels[2].text:find("Player class") and test.pickLabels[2].text:find("3 conditions"), "labelled as shared: " .. test.pickLabels[2].text)
-Check(test.live[1].shown and test.live[2].text:find("^Match any %- OR  %-  "), "Right now has a line for the group: " .. tostring(test.live[2].text))
-Check(X(test.live[3]) > X(test.live[2]) and X(test.live[3]) > X(test.live[1]), "its conditions a step in")
-test.picks[2].onPick("ROGUE")
-test.picks[1].onPick("on")
-Flush()
-Check(test.simResult.text:find("^Simulated result: Showing"), "simulated Rogue in combat: " .. test.simResult.text)
-Check(test.sim[2].text:find("^Match any %- OR  %-  Match"), "the group's simulated result: " .. test.sim[2].text)
-test.picks[2].onPick("MAGE")
-Flush()
-Check(test.simResult.text:find("^Simulated result: Hidden") and test.sim[2].text:find("No match"), "simulated Mage: hidden")
-Check(RM.Get(gid).enabled == false and CT.Status(gid) == "disabled", "simulating changed nothing")
-
--- moving: within a group, and into another, with the meaning said
-cards[2].more.onPick("down")
-Flush()
-Check(RM.Get(gid).raw.conditions[2].conditions[2].class == "WARRIOR" and RM.Get(gid).raw.conditions[2].conditions[1].class == "HUNTER", "Move down inside the group")
-local menu3 = Menu(cards[3])
-Check(menu3:find("Move into: the whole rule: All of these must be true") and menu3:find("Move up") and menu3:find("Move down"), "a card in a group offers Move into the whole rule, with what that is: " .. menu3)
-cards[3].more.onPick("to:1")
-Flush()
-Check(#RM.Get(gid).raw.conditions == 3 and #RM.Get(gid).raw.conditions[2].conditions == 2, "moved out into the whole rule")
-Check(f.say.text:find("Moved into the whole rule, where all of these must be true") and f.say.text:find("changes what it is combined with"), "and it says that what it is combined with changes: " .. f.say.text)
-Check(Menu(cards[4]):find("Move into: Any of: "), "and the group is offered as a place to go back to, as the group where any must be true")
-cards[4].more.onPick("to:1")
-Flush()
-Check(#RM.Get(gid).raw.conditions == 2 and #RM.Get(gid).raw.conditions[2].conditions == 3, "moved back")
-
--- an empty group is a place a condition can be moved into
-Click(when.rootGroup.add)
-for _, row in ipairs(pk.rows) do if row.shown and row.isGroup then Click(row) break end end
-Click(pk.newAll)
-local emptyRaw = RM.Get(gid).raw.conditions[#RM.Get(gid).raw.conditions]
-local combatCard
-for _, card in ipairs(when.cards) do if card.shown and card.text.text == "You are in combat" then combatCard = combatCard or card end end
-Check(emptyRaw.type == "group" and #emptyRaw.conditions == 0 and Menu(combatCard):find("Move into: All of: Nothing in it yet", 1, true), "an empty group is offered as a place to move into: " .. Menu(combatCard))
-for _, ch in ipairs(combatCard.more.choices()) do if ch.label:find("Nothing in it yet", 1, true) then combatCard.more.onPick(ch.value) end end
-Flush()
-Check(#emptyRaw.conditions == 1 and emptyRaw.conditions[1].state == "combat" and RM.Get(gid).valid, "moving into it fills it, and the rule is whole again")
-for i, node in ipairs(RM.Get(gid).raw.conditions) do   -- and back: the condition returns to the top level, the extra group goes
-  if node == emptyRaw then RM.MoveNode(gid, { i, 1 }, {}, 1) RM.RemoveCondition(gid, { i + 1 }) break end
-end
-Flush()
-Check(#RM.Get(gid).raw.conditions == 2 and RM.Get(gid).raw.conditions[1].state == "combat" and RM.Get(gid).raw.conditions[2].type == "group", "(the rule is as it was)")
-
--- folding keeps everything, and what is open keeps its place while others move
-Click(g1.fold)
-Check(g1.folded.shown and g1.folded.text:find("Warrior") and g1.folded.text:find("Hunter") and not cards[3].shown and not g1.add.shown, "folded: one line saying what is in it, its cards and Add away")
-Check(#RM.Get(gid).raw.conditions[2].conditions == 3, "nothing in it changed")
-Click(g1.fold)
-Check(not g1.folded.shown and cards[3].shown and g1.add.shown, "opened again")
-Click(cards[2].edit)
-local reading = ed.reads.text
-RM.MoveNode(gid, { 2, 1 }, { 2 }, 3)
-Flush()
-Check(ed.shown and ed.reads.text == reading, "an editor stays on its own condition when another is moved: " .. ed.reads.text)
-Click(ed.cancel)
-
--- the depth limit is explained, not just missing
-Click(g1.add)
-local row3
-for _, row in ipairs(pk.rows) do if row.shown and row.isGroup then row3 = row end end
-Click(row3)
-Click(pk.newAll)
-Check(RM.Get(gid).raw.conditions[2].conditions[4].type == "group" and RM.Get(gid).raw.conditions[2].conditions[4].match == "all", "a group in the group that requires all")
-local g2 = when.groups[2]
-Check(g2.heading.shown and g2.heading.text == "All of these must be true", "it is its own box")
-Click(g2.add)
-local deepGroupRow
-for _, row in ipairs(pk.rows) do if row.shown and row.isGroup then deepGroupRow = row end end
-Check(deepGroupRow == nil and pk.newNote.shown and pk.newNote.text:find("levels deep"), "no third level, and it says so: " .. tostring(pk.newNote.text))
-Click(pk.cancel)
-Check(not pk.shown, "Cancel closes the picker")
--- removing: an empty group goes without asking; a full one asks, and can be undone
-S.popup = nil
-g2.more.onPick("remove")
-Flush()
-Check(S.popup == nil and #RM.Get(gid).raw.conditions[2].conditions == 3, "an empty group is removed without asking")
+local mounted = when.cards[2]
+Check(mounted.title.text == "Mounted" and mounted.fields[1].text.text == "Is not mounted"
+    and not mounted.fields[2].shown and not ed.shown, "the mounted card edits its own subject directly")
+mounted.fields[1].onPick("slot:trinket1"); Flush()
+Check(Draft().conditions[2].cond.state == "mounted" and Draft().conditions[2].cond.negate,
+    "a nonsensical equipment option is rejected")
+mounted:Fire("OnClick", "RightButton")
+Check(R.SettingsWidgets.MenuShown(), "right-click opens the contextual actions")
+R.SettingsWidgets.CloseMenu()
+mounted.more.onPick("dup"); Flush()
+Check(#Draft().conditions == 3 and Draft().conditions[3].raw ~= Draft().conditions[2].raw, "duplicating creates a distinct draft node")
+when.cards[3].more.onPick("remove"); Flush()
+Check(#Draft().conditions == 2, "a condition can be removed through Actions")
 Click(when.undo)
-Check(#RM.Get(gid).raw.conditions[2].conditions == 4 and RM.Get(gid).raw.conditions[2].conditions[4].type == "group" and when.groups[2].heading.shown, "and Undo brings the empty group back, in its place")
-g2.more.onPick("remove")
-Flush()
-local savedRaw = RM.Get(gid).raw.conditions[2]
+Check(#Draft().conditions == 3, "Undo restores a removed condition")
+Click(when.redo)
+Check(#Draft().conditions == 2, "Redo reapplies removal")
+mounted.more.onPick("up"); Flush()
+Check(Draft().conditions[1].cond.state == "mounted", "menu reorder works without a drag")
+Click(when.undo)
+Check(Draft().conditions[2].cond.state == "mounted", "Undo reverses a reorder")
 S.popup = nil
-g1.more.onPick("remove")
-Flush()
-Check(S.popup and S.popup.key == "TWICHUI_REMINDER_GROUP_DELETE" and S.popup.text:find("3 conditions") and RM.Get(gid).raw.conditions[2], "a group with conditions asks first, and says how many")
+R.RemindersCatalog.Toggle()
+Check(S.popup and S.popup.key == "TWICHUI_DISCARD_REMINDER_RULE" and not R.RemindersCatalog.Shown(),
+    "the catalog asks before it takes the place of a dirty builder")
+c.StaticPopupDialogs[S.popup.key].OnCancel()
+Check(DZ.Shown() and #Draft().conditions == 2, "declining to discard leaves the draft open")
+
+Search("dungeon")
+Check(Pick("player:dungeon"), "search finds a location")
+Click(ed.done)
+local loc = when.cards[3]
+Check(loc.title.text == "Location" and loc.chips[1].text.text == "Dungeon  ×" and loc.choose.shown,
+    "a location has a selected token and additive choice")
+loc.choose.onPick("raid"); Flush()
+Check(#Draft().conditions[3].children == 2 and Draft().conditions[3].match == "any" and not when.isAdvanced,
+    "adding a second location uses the existing Any group and stays in the simple presentation")
+Check(builder.result.text:find("raid") and builder.result.text:find("or"),
+    "the chip summary retains OR semantics")
+Click(loc.chips[1])
+Check(#Draft().conditions[3].children == 1 and Draft().conditions[3].children[1].cond.state == "raid",
+    "removing a location removes only that selected predicate")
+Click(when.undo)
+Check(#Draft().conditions[3].children == 2, "Undo restores the selected location")
+Check(loc.raw == Draft().conditions[3].raw and loc.chips[2].shown, "Undo refreshes chip bindings to the restored draft")
+
+when.whoEdit.onPick("all"); Flush()
+Check(Draft().scope.who == "all" and #Draft().conditions == 3 and not when.target.shown, "For changes only draft targeting")
+Click(when.undo)
+Check(Draft().scope.who == "characters", "Undo restores targeting")
+Click(when.redo)
+when.whoEdit.onPick("manage"); Flush()
+Check(when.target.shown and #Draft().conditions == 3, "advanced targeting has separate controls")
+when.target.class.onPick("MAGE"); Flush()
+Click(when.target.done)
+Click(builder.try)
+Check(DZ.State().try, "Try a situation exposes the draft simulation")
+Check(builder.diagnostics.shown and builder.diagnosticsScroll.parent == builder.diagnostics,
+    "situation testing stays in the bottom evaluation region")
+Check(RM.Rev() == revision and Deep(RM.Get(id).raw) == saved and CT.Status(id) == "hidden",
+    "conditions, targeting and simulation leave live state and saved configuration alone")
+S.popup = nil
+DZ.RequestClose()
+Check(S.popup and S.popup.key == "TWICHUI_DISCARD_REMINDER_RULE" and DZ.Shown(), "closing asks before discarding edits")
 c.StaticPopupDialogs[S.popup.key].OnAccept()
 Flush()
-Check(#RM.Get(gid).raw.conditions == 1 and RM.Get(gid).valid and not g1.heading.shown, "removed with what was in it; the rest stays")
-Check(when.undo.shown and when.undoText.text:find("Removed a group"), "and Undo is offered")
-Click(when.undo)
-Check(#RM.Get(gid).raw.conditions == 2 and RM.Get(gid).raw.conditions[2] == savedRaw and #savedRaw.conditions == 3, "Undo: the same group with everything in it, where it was")
--- a group that was already removed in the meantime is not removed again
+Check(not DZ.Shown() and PV.Shown() and RM.Rev() == revision, "accepting discard restores the same reminder")
+Check(not builder.workspace.shown, "discard closes both builder panels")
+
+Open()
+Advanced()
+Click(when.rootGroup.add)
+DZ.AddGroup("any")
+Flush()
+Check(#Draft().groups == 1 and #Draft().groups[1].children == 0, "an empty Any group can be drafted")
+Check(not DZ.Save() and RM.Rev() == revision and Deep(RM.Get(id).raw) == saved and DZ.Shown(),
+    "Save rejects an incomplete group atomically")
+Click(when.groups[1].add)
+Check(Pick("player:dungeon"), "a nested group can add dungeon")
+Click(ed.done)
+Click(when.groups[1].add)
+Search("raid")
+Check(Pick("player:raid"), "a nested group can add raid")
+Click(ed.done)
+Check(builder.result.text:find(" or "), "summary retains the actual nested OR")
+when.groups[1].add:Fire("OnClick"); Flush()
+Search("")
+Check(Pick("player:combat"), "an arbitrary nested rule stays available")
+Click(ed.done)
+local oldRaw = RM.Get(id).raw
+when.whoEdit.onPick("all"); Flush()
+RM.SetDisplay(id, "text", "Equip your shield now")
+Flush()
+local beforeSave = RM.Rev()
+Click(builder.save)
+local applied = RM.Get(id)
+Check(not DZ.Shown() and applied.raw == oldRaw and RM.Rev() == beforeSave + 1 and applied.enabled
+    and applied.scope.who == "all" and applied.groups[1].match == "any" and #applied.groups[1].children == 3
+    and applied.display.text == "Equip your shield now", "Save commits rule and scope once, preserving identity, enabled state and unrelated concurrent edits")
+Open()
+Check(when.isAdvanced and not when.advanced.enabled, "an existing nested rule opens advanced without flattening")
+local nested = Deep(RM.Get(id).raw)
+Click(when.groups[1].fold)
+Check(when.groups[1].folded.shown and not when.cards[2].shown, "a folded group hides its children while keeping the saved rule")
+Click(when.groups[1].fold)
 S.popup = nil
-when.groups[1].more.onPick("remove")
-local popup = S.popup
-RM.RemoveCondition(gid, { 2 })
+when.groups[1].more.onPick("remove"); Flush()
+Check(S.popup and S.popup.key == "TWICHUI_REMINDER_GROUP_DELETE" and #Draft().groups == 1,
+    "removing a populated group requires confirmation")
+c.StaticPopupDialogs[S.popup.key].OnAccept()
 Flush()
-local before = #RM.Get(gid).raw.conditions
-c.StaticPopupDialogs[popup.key].OnAccept()
-Flush()
-Check(#RM.Get(gid).raw.conditions == before, "confirming for a group that is already gone changes nothing")
-
--- a condition this version doesn't know is shown, kept, movable and removable, never edited
-RM.Get(gid).raw.conditions[#RM.Get(gid).raw.conditions + 1] = { type = "futureKind", secret = { 1, 2 } }
-RM.Invalidate()
-Flush()
-local fcard
-for _, card in ipairs(when.cards) do if card.shown and card.text.text == "Unsupported condition" then fcard = card end end
-Check(fcard and fcard.state.shown and fcard.note.text:find("kept as saved") and fcard.edit.enabled == false, "an unsupported condition: its own card, kept, with Edit unavailable")
-Check(not Menu(fcard):find("Edit") and Menu(fcard):find("Remove") and Menu(fcard):find("Move"), "its menu has no Edit: " .. Menu(fcard))
-local revF = RM.Rev()
-Click(fcard)
-Check(not ed.shown and RM.Rev() == revF and f.say.text:find("isn't known"), "clicking it doesn't open an editor, and says why")
-fcard.more.onPick("remove")
-Flush()
+Check(#Draft().groups == 0 and Deep(RM.Get(id).raw) == nested, "confirmed group removal changes only the draft")
 Click(when.undo)
-Check(RM.Get(gid).raw.conditions[#RM.Get(gid).raw.conditions].type == "futureKind" and RM.Get(gid).raw.conditions[#RM.Get(gid).raw.conditions].secret[2] == 2, "removed and put back: its data is intact")
-RM.RemoveCondition(gid, { #RM.Get(gid).raw.conditions })
+Check(#Draft().groups == 1 and #Draft().groups[1].children == 3, "Undo restores the entire group")
+when.whoEdit.onPick("me"); Flush()
+RM.SetMatch(id, "any")
 Flush()
+Check(not DZ.Save() and DZ.Shown() and RM.Get(id).scope.who == "all" and RM.Get(id).match == "any",
+    "a concurrent rule edit refuses Save without partially applying targeting")
+Click(builder.cancel)
+RM.SetMatch(id, "all")
+Check(Deep(RM.Get(id).raw) == nested, "discard and restoration preserve the saved nested rule")
+RM.RemoveNode(id, 2)
+RM.SetScope(id, "who", "characters")
 
--- who it is for: a line, chips, and the class kept apart from the rule
-Click(when.whoEdit)
-Check(when.target.shown and when.whoEdit.text.text == "Close" and when.target.chips[1].shown and when.target.chips[3].shown, "Edit opens who it is for")
-Check(when.who.text == "Every character" and when.target.chips[1].bar.shown and not when.target.chips[2].bar.shown, "every character is selected, in words and by the chip")
-Click(when.target.chips[2])
-Check(RM.Get(gid).scope.who == "characters" and #RM.Get(gid).scope.characters == 1 and when.who.text == "This character only" and when.target.chips[2].bar.shown, "This character only")
-when.target.class.onPick("HUNTER")
-Flush()
-Check(RM.Get(gid).scope.class == "HUNTER" and when.who.text == "This character only, only for Hunters", "a class: " .. when.who.text)
-Check(#RM.Get(gid).raw.conditions == 1 and RM.Get(gid).raw.conditions[1].type == "player", "the rule is as it was: no class condition was made from the class above, and none changed")
-Check(when.target.note.text:find("never moved here"), "the panel says a class condition stays in the rule")
-when.target.class.onPick("")
-Click(when.target.chips[1])
-Check(RM.Get(gid).scope.who == "all" and RM.Get(gid).scope.class == nil and when.who.text == "Every character", "back to every character")
-Click(when.whoEdit)
-Check(not when.target.shown, "Close puts it away")
-
-RM.Delete(gid)
-P.Select(iid)
-Flush()
-
----------------------------------------------------------------------------
--- 5c. Why it would show, kept to what is asked for; the designer never shows a reminder; opened and closed again and again
----------------------------------------------------------------------------
-P.Select(id)
-Flush()
-local shows0 = CT.Snapshot().shows
-local inspected = 0
-local realInspect = CT.Inspect
-CT.Inspect = function(...) inspected = inspected + 1 return realInspect(...) end
-P.Refresh()
-inspected = 0
-P.Refresh()
-local whileClosed = inspected
-Check(not when.exHead.shown and not when.exMark.shown and not when.cards[1].state.shown, "closed: no result, no marks on the cards")
-Click(when.explain)
-inspected = 0
-P.Refresh()
-Check(inspected == whileClosed + 1, "open: one look at the rule more, and only then: " .. inspected .. " against " .. whileClosed)
-local status = CT.Status(id)
-Check(when.exHead.shown and when.exHead.text == (status == "showing" and "Would show now" or "Would stay hidden"), "the headline follows what the reminder is doing: " .. tostring(when.exHead.text) .. " / " .. tostring(status))
-Check(when.exMark.shown and when.exStatus.text == (status == "showing" and "It is showing on screen." or "It is hidden."), "and what it is doing: " .. tostring(when.exStatus.text))
-Check(when.exScope.text == "This character is one it is for.", "and whether it is for this character")
-Check(when.exNote.text:find("not the same as the reminder being on screen") and when.exNote.text:find("preview beside"), "conditions matching is kept apart from being on screen, and preview from both")
-Check(when.cards[1].state.shown and (when.cards[1].note.text:find("^Met") or when.cards[1].note.text:find("^Not met")) and when.cards[1].note.text:find("Sees:"), "each card says Met or Not met, and what it sees: " .. when.cards[1].note.text)
-Check(PV.Shown() and PV.Parts().title.text == RM.Get(P.Selected()).name, "the preview companion is up for the chosen reminder")
--- a reminder that is turned off: the conditions can match, and nothing appears
-P.Select(iid)
-Flush()
-Check(CT.Status(iid) == "disabled" and when.exHead.text == "Conditions match now" and when.exStatus.text:find("turned off"), "turned off: the conditions match, and it says nothing appears: " .. tostring(when.exHead.text))
-Check(when.exHead.shown and when.cards[1].note.text:find("^Met"), "the card agrees")
--- closing it stops the looking
-Click(when.explain)
-inspected = 0
-P.Refresh()
-Check(inspected == whileClosed and not when.exHead.shown, "closed again: back to what it was")
-Click(when.explain)
-f:Hide()
-inspected = 0
-P.Refresh()
-Check(inspected == 0, "the page hidden: nothing is looked at")
-f:Show()
-Flush()
-CT.Inspect = realInspect
-Click(when.explain)
-Check(CT.Snapshot().shows == shows0 and D.PreviewId() == nil and not D.Positioning(), "none of this showed a reminder or started a preview")
-
--- opened and put away again and again: no new frames, nothing left open
-P.Select(id)
-Flush()
+Open()
 local function Cycle()
-  Click(when.cards[1].edit)
+  Advanced()
+  when.cards[1].more.onPick("edit"); Flush()
   Click(ed.cancel)
   Click(when.rootGroup.add)
   Click(pk.cancel)
-  Click(when.whoEdit)
-  Click(when.whoEdit)
+  when.whoEdit.onPick("manage"); Flush()
+  Click(when.target.done)
   Click(when.explain)
   Click(when.explain)
 end
 Cycle()
 local madeBefore = made
-for _ = 1, 6 do Cycle() end
-Check(made == madeBefore, "the editor, picker, targeting and explanation opened and closed six times make nothing new: " .. (made - madeBefore))
-local dsnap = R.RemindersDesigner.Snapshot()
-Check(dsnap.cards == RM.MAX_CONDITIONS and dsnap.groups == RM.MAX_GROUPS + 1 and dsnap.pickerRows >= 1 and dsnap.pickerRows <= 20 and dsnap.open == 0 and dsnap.explain == 0,
-  "the designer reports its pools (bounded by what a reminder can hold) and that nothing is open, for TwichUI Diagnostics")
-Click(when.rootGroup.add)
-Check(pk.shown, "(a picker is open)")
-f:Hide()
-f:Show()
-Flush()
-Check(not pk.shown and not ed.shown and not when.target.shown, "hidden and shown again: nothing is left open")
-local snapId = Deep(RM.Get(id).raw)
-for _, card in ipairs(when.cards) do
-  if card.shown then Click(card.edit); Click(ed.done); Click(card.edit); Click(ed.cancel) end
-end
-Check(Deep(RM.Get(id).raw) == snapId, "opening and closing every card, with Done or Cancel, left the saved rule exactly as it was")
+for _ = 1, 4 do Cycle() end
+Check(made == madeBefore, "repeated editor and picker cycles do not allocate duplicate frames")
+cd.more.onPick("dup"); Flush()
+f:Hide(); f:Show(); Flush()
+Check(not DZ.Shown() and PV.Shown() and #RM.Get(id).conditions == 1, "page exit discards draft and cleans up the companion")
 
--- a full rule on three levels, as large as a reminder can be: every card fits, nothing is clipped
+-- The maximum-sized nested rule fits the existing scroll content and pooled cards.
 P.Create("custom")
 Flush()
 local bid = P.Selected()
 for _ = 1, 4 do RM.AddCondition(bid, "player") end
-RM.AddGroup(bid, nil, "any")                                  -- 5: group A
+RM.AddGroup(bid, nil, "any")
 for _ = 1, 5 do RM.AddCondition(bid, "player", { 5 }) end
-RM.AddGroup(bid, { 5 }, "all")                                -- A's sixth: group B
+RM.AddGroup(bid, { 5 }, "all")
 for _ = 1, 4 do RM.AddCondition(bid, "class", { 5, 6 }) end
-RM.AddGroup(bid, nil, "all")                                  -- 6: group C
+RM.AddGroup(bid, nil, "all")
 for _ = 1, 3 do RM.AddCondition(bid, "equipment", { 6 }) end
-Flush()
-local bv = RM.Get(bid)
-Check(bv.counts.conditions == 16 and bv.counts.groups == 3, "the rule is as large as it can be: " .. bv.counts.conditions .. " conditions, " .. bv.counts.groups .. " groups")
-local widest, shownCards = 0, 0
+Open()
+local shown, widest = 0, 0
 for _, card in ipairs(when.cards) do
   if card.shown then
-    shownCards = shownCards + 1
-    widest = math.max(widest, X(card) + card.w)
+    shown = shown + 1
+    widest = math.max(widest, card.points[1][4] + card.w)
   end
 end
-Check(shownCards == 16, "every condition has a card: " .. shownCards)
-Check(widest <= 644 - 14, "none passes the right edge, three levels down: " .. widest)
-Check(when.rootGroup.add.enabled == false and when.rootGroup.empty.text == RM.REFUSE.conditionsFull, "at the limit, Add a condition is unavailable, and says why: " .. tostring(when.rootGroup.empty.text))
-local deepest = when.groups[2]
-Check(deepest.heading.shown and deepest.add.shown and (deepest.box.w or 0) > 300, "the inner group keeps a readable width: " .. tostring(deepest.box.w))
-Check(P.Height() > 800 and P.Height() < 6000, "the page grows to hold it: " .. P.Height())
-local before16 = Deep(RM.Get(bid).raw)
-Click(when.groups[1].fold)
-local function CardsShown() local n = 0 for _, card in ipairs(when.cards) do if card.shown then n = n + 1 end end return n end
-Check(when.groups[1].folded.shown and CardsShown() == 7, "a group folds with everything inside it (its nine conditions' cards go, seven stay): " .. CardsShown())
-Check(Deep(RM.Get(bid).raw) == before16, "folding changed nothing")
-Click(when.groups[1].fold)
-Check(CardsShown() == 16, "and opens again")
+Check(shown == RM.MAX_CONDITIONS and widest <= when:GetWidth(), "every card fits even at maximum count and depth")
+Check(not when.rootGroup.add.enabled, "the condition limit is enforced from the builder")
+Click(builder.cancel)
 RM.Delete(bid)
-P.Select(iid)
+P.Select(id)
 Flush()
+
+P.Create("custom"); Flush()
+local fullId = P.Selected()
+RM.AddCondition(fullId, "weaponEnchant")
+RM.AddCondition(fullId, "player", nil, { type = "player", state = "dungeon" })
+for _ = 1, RM.MAX_CONDITIONS - 2 do RM.AddCondition(fullId, "player") end
+Open()
+local fullBefore = Deep(RM.Get(fullId).raw)
+when.cards[2].choose.onPick("raid"); Flush()
+Check(#Draft().groups == 0 and not DZ.HasUnsaved() and Deep(RM.Get(fullId).raw) == fullBefore,
+    "a refused additive location rolls back its entire draft operation at the limit")
+Check(when.cards[2].raw == Draft().conditions[2].raw,
+    "a refused compound edit refreshes the card bindings after rollback")
+Click(builder.cancel)
+RM.Delete(fullId)
+P.Select(id); Flush()
+
+---------------------------------------------------------------------------
+-- 5. Required item input and display artwork in the same draft
+---------------------------------------------------------------------------
+P.Create("item")
+Flush()
+local iid = P.Selected()
+Check(f.problems.shown and f.problems.text:find("Needs attention") and f.fix.shown and f.problems.text:find("item"),
+    "the incomplete reminder exposes an actionable problem")
+Click(f.onBox)
+Check(not RM.Get(iid).enabled and f.say.text:find("item"), "the incomplete item reminder cannot enable")
+Open()
+local ic = when.cards[1]
+Check(ic.item.shown and ic.item.text.text == "Choose item", "the card exposes its required item directly")
+Click(ic.item)
+Check(ed.shown and ed.item.shown and not ed.subject.shown and not ed.op.shown and not ed.value.shown and not ed.done.enabled,
+    "the secondary item editor shows just the missing input")
+ed.item:SetText("|cffffffff|Hitem:6948::::::::60:::::|h[Hearthstone]|h|r")
+ed.item:Fire("OnEnterPressed")
+Flush()
+Check(ed.itemInfo.text:find("Hearthstone") and ed.done.enabled, "a pasted link resolves and can be staged")
+Click(ed.done)
+Check(Draft().conditions[1].cond.item == 6948 and Draft().display.item == 6948 and not RM.Get(iid).valid,
+    "condition and inferred display icon are isolated until Save")
+Click(when.undo)
+Check(not Draft().conditions[1].cond.item and not Draft().display.item, "Undo reverts item and inferred icon together")
+Click(when.redo)
+Click(builder.save)
+local iv = RM.Get(iid)
+Check(iv.conditions[1].cond.item == 6948 and iv.display.item == 6948 and iv.valid and not iv.enabled,
+    "Save applies item and icon together and keeps the reminder off")
+Check(show.src.shown and show.src.text.text == "An item's icon" and show.itemInfo.text:find("Hearthstone"), "the editor shows the saved item icon")
+Open()
+Click(ic.item)
+ed.item:SetText("not an item")
+ed.item:Fire("OnEnterPressed")
+Flush()
+Check(builder.message.text:find("isn't an item ID") and RM.Get(iid).conditions[1].cond.item == 6948, "a bad item leaves the saved condition alone")
+Click(ed.cancel)
+Click(builder.cancel)
 
 ---------------------------------------------------------------------------
 -- 6. Name, duplicate, delete
@@ -739,21 +523,23 @@ Check(RM.Get(did) == nil and RM.Get(iid) and P.Selected() ~= did, "deleted; the 
 ---------------------------------------------------------------------------
 -- 7. Preview and moving, through the buttons
 ---------------------------------------------------------------------------
+R.RemindersDesigner.Close(); Flush()
+place.toggle.scripts.OnClick(place.toggle); Flush()
 P.Select(id)
 Flush()
 PV.Parts().show.scripts.OnClick(PV.Parts().show)
 Flush()
-Check(D.PreviewId() == id and PV.Parts().show.text.text == "Hide preview" and PV.Parts().state.text:find("On screen"), "on-screen preview")
+Check(D.PreviewId() == id and PV.Parts().show:GetChecked() and PV.Parts().state.text:find("On screen"), "on-screen preview")
 Check(CT.Status(id) == "hidden", "the preview leaves the live decision as it was (a shield is on)")
 PV.Parts().show.scripts.OnClick(PV.Parts().show)
 Flush()
-Check(D.PreviewId() == nil and PV.Parts().show.text.text == "Show on screen", "preview hidden again")
+Check(D.PreviewId() == nil and not PV.Parts().show:GetChecked(), "preview hidden again")
 place.move.scripts.OnClick(place.move)
 Flush()
-Check(D.Positioning() and place.move.text.text == "Done", "moving")
-place.move.scripts.OnClick(place.move)
+Check(D.Positioning() and R.RemindersPlacement.Active() and not PV.Shown(), "focused placement hides the editing companion")
+R.RemindersPlacement.Parts().finish:Fire("OnClick")
 Flush()
-Check(not D.Positioning(), "done moving")
+Check(not D.Positioning() and editorOpen and PV.Shown(), "Finish restores the editor and its preview")
 D.PreviewStop()
 Check(PV.Parts().surface.art.texture and PV.Parts().surface.art.texture:find("shield"), "the preview draws with the reminder's own layout")
 
@@ -761,10 +547,31 @@ Check(PV.Parts().surface.art.texture and PV.Parts().surface.art.texture:find("sh
 -- 8. More options, height, nothing made twice
 ---------------------------------------------------------------------------
 Check(not place.width.shown and not place.strata.shown, "more options are closed at first")
+Check(place.opacity.shown and not place.preset.shown and not place.presetLabel.shown,
+  "Opacity owns the first Advanced row; Position stays in secondary placement options")
+local function RowPoint(control) return control.points[1] end
+Check(RowPoint(place.textSize)[5] < RowPoint(place.opacity)[5]
+  and RowPoint(place.textPlace)[5] < RowPoint(place.textSize)[5], "Advanced's primary rows occupy separate ordered anchors")
+Check(RowPoint(place.opacity)[4] == RowPoint(place.textSize)[4]
+  and RowPoint(place.textPlace)[4] == RowPoint(place.opacity)[4], "Advanced controls share one left column")
+Check(place.opacity:GetWidth() == place.textSize:GetWidth()
+  and RowPoint(place.opacity)[4] + place.opacity:GetWidth() <= place:GetWidth() - 14,
+  "sliders and equal numeric boxes stay within Advanced's right padding")
+local beforeDisplay = RM.Get(id).display
+local diagnosticsWasOpen = R.RemindersEditor.testOpen
+local oldOpacity, oldTextSize, oldTextPlace = beforeDisplay.opacity, beforeDisplay.textSize, beforeDisplay.textPlace
+place.opacity.slider:Fire("OnValueChanged", 73); Flush()
+place.textSize.slider:Fire("OnValueChanged", 24); Flush()
+place.textPlace.onPick("below"); Flush()
+Check(RM.Get(id).display.opacity == 73 and RM.Get(id).display.textSize == 24
+  and RM.Get(id).display.textPlace == "below", "Advanced sliders and Words go still save through Config")
+RM.SetDisplay(id, "opacity", oldOpacity); RM.SetDisplay(id, "textSize", oldTextSize); RM.SetDisplay(id, "textPlace", oldTextPlace); Flush()
 local h1 = P.Height()
 place.more.scripts.OnClick(place.more)
 Flush()
 Check(place.strata.shown and place.fade.shown and place.delay.shown and place.x.shown, "opened: the rest is there")
+Check(place.preset.shown and place.presetLabel.shown and RowPoint(place.preset)[5] < RowPoint(place.panel)[5]
+  and RowPoint(place.point)[5] < RowPoint(place.preset)[5], "Position keeps a separate row beside the other placement settings")
 Check(P.Height() > h1, "the frame grows, and the window is asked to place it again")
 place.keep.scripts.OnClick(place.keep)
 Flush()
@@ -775,6 +582,16 @@ Flush()
 Check(RM.Get(id).place.preset == "custom" and RM.Get(id).place.x == 40, "a typed offset makes a place of its own")
 place.more.scripts.OnClick(place.more)
 Flush()
+Check(not place.preset.shown and not place.presetLabel.shown and P.Height() < h1 + 50,
+  "collapsing secondary placement hides its labels and restores the shorter content height")
+local Ed = R.RemindersEditor
+Ed.testOpen = true; P.Refresh(); Flush()
+local diagnosticsHeight = P.Height()
+Check(test:IsShown() and test.live[1]:IsShown(), "Diagnostics expansion includes visible result rows")
+Ed.testOpen = false; Ed.placementOpen = false; P.Refresh(); Flush()
+Check(not test:IsShown() and not place.opacity:IsShown() and not place.more:IsShown()
+  and P.Height() < diagnosticsHeight, "closing both disclosures hides descendants and shrinks the page")
+Ed.placementOpen = true; Ed.testOpen = diagnosticsWasOpen; P.Refresh(); Flush()
 local count = made
 for _ = 1, 5 do P.Refresh(); Flush() end
 Check(made == count, "redrawing makes nothing new: " .. (made - count))
@@ -785,7 +602,7 @@ Check(made == count, "redrawing makes nothing new: " .. (made - count))
 R:SetEnabled("reminders", false)
 Flush()
 P.Refresh()
-Check(test.liveResult.text:find("^Result: Off"), "with Reminders off the result says so: " .. test.liveResult.text)
+Check(test.liveHead.text == "Hidden now" and test.liveResult.text == "Reminders off", "master disabled reason remains visible")
 R:SetEnabled("reminders", true)
 Flush()
 f:Hide()
@@ -887,12 +704,12 @@ do
   Check(x and y, "two reminders to move between")
   RM.SetEnabled(x.id, false)
   P.Select(x.id); Flush()
-  Check(pf.title.text == RM.Get(x.id).name and not RM.Get(x.id).enabled, "a turned-off reminder is previewed, and stays off")
+  Check(pf.sub.text == RM.Get(x.id).name and not RM.Get(x.id).enabled, "a turned-off reminder is previewed, and stays off")
   local shows0 = CT.Snapshot().shows
   P.Select(y.id); Flush()
-  Check(pf.title.text == RM.Get(y.id).name, "selecting another redraws the preview for it")
+  Check(pf.sub.text == RM.Get(y.id).name, "selecting another redraws the preview for it")
   RM.SetName(y.id, "Renamed here"); Flush()
-  Check(pf.title.text == "Renamed here", "an edit updates the preview")
+  Check(pf.sub.text == "Renamed here", "an edit updates the preview")
   Check(CT.Snapshot().shows == shows0 and D.PreviewId() == nil, "previewing shows nothing in the world")
 
   -- the catalog takes the place, cancel gives it back for the same selection
@@ -903,7 +720,7 @@ do
   P.Refresh()
   Check(CAT.Shown() and not PV.Shown(), "a redraw while it is open leaves the preview away")
   CAT.Hide(); Flush()
-  Check(not CAT.Shown() and PV.Shown() and pf.title.text == "Renamed here" and P.Selected() == y.id, "cancel: the preview is back for the same reminder")
+  Check(not CAT.Shown() and PV.Shown() and pf.sub.text == "Renamed here" and P.Selected() == y.id, "cancel: the preview is back for the same reminder")
   Check(Deep(RM.List()) == cfg, "and nothing was changed")
 
   -- creation: the preview is for the new, turned-off reminder
@@ -911,7 +728,7 @@ do
   local card = CAT.Frame().cards[1]
   card.use.scripts.OnClick(card.use); Flush()
   local new = P.Selected()
-  Check(new ~= y.id and not RM.Get(new).enabled and not CAT.Shown() and PV.Shown() and pf.title.text == RM.Get(new).name, "creation: the catalog goes, the preview shows the new disabled reminder")
+  Check(new ~= y.id and not RM.Get(new).enabled and not CAT.Shown() and PV.Shown() and pf.sub.text == RM.Get(new).name, "creation: the catalog goes, the preview shows the new disabled reminder")
   RM.Delete(new); Flush()
 
   -- a refusal keeps the catalog, with no preview
@@ -934,6 +751,399 @@ do
   for _ = 1, 4 do f:Hide(); f:Show(); Flush() end
   Check(made == count, "reopening makes no new frames: " .. (made - count))
   Check(PV.Parts().events == nil or next(PV.Parts().events) == nil, "the preview listens to nothing")
+end
+
+-- Preview navigation reveals the matching control without saving or asking the controller for a decision.
+do
+  Check(P.Create("enchant"), "enchant template with bundled oil artwork")
+  Flush()
+  local rid = P.Selected()
+  local pv, editor = PV.Parts(), R.RemindersEditor
+  local saved, rev = Deep(RM.Get(rid).raw), RM.Rev()
+  local writes, inspections = 0, 0
+  local setDisplay, inspect = RM.SetDisplay, CT.Inspect
+  RM.SetDisplay = function(...) writes = writes + 1; return setDisplay(...) end
+  CT.Inspect = function(...) inspections = inspections + 1; return inspect(...) end
+  local reveal = R.SettingsUI.RevealFrame
+  local target
+  R.SettingsUI.RevealFrame = function(frame) target = frame end
+  pv.visualHit.scripts.OnClick(pv.visualHit)
+  Check(target == show.art and editor.revealed == show.art, "artwork click reveals and highlights its artwork picker")
+  pv.textHit.scripts.OnClick(pv.textHit)
+  Check(target == show.textBox and editor.revealed == show.textBox, "words click reveals and highlights its text field")
+  Check(writes == 0 and inspections == 0 and RM.Rev() == rev and Deep(RM.Get(rid).raw) == saved,
+    "preview navigation writes nothing and reads no conditions")
+  Check(not RM.Get(rid).enabled and D.PreviewId() == nil, "navigation leaves the draft off and the world preview closed")
+  R.SettingsUI.RevealFrame, RM.SetDisplay, CT.Inspect = reveal, setDisplay, inspect
+
+  local place = Fake("Frame")
+  place:SetSize(612, 600)
+  local anchor = Fake("Frame")
+  anchor:SetSize(936, 480)
+  anchor.GetPoint = function(self) return unpack(self.points[1] or {}) end
+  anchor.GetLeft, anchor.GetRight, anchor.GetTop = function() return 44 end, function() return 980 end, function() return 680 end
+  local getAnchor = R.SettingsAnchor
+  R.SettingsAnchor = function() return anchor end
+  PV.Place(place)
+  Check(place.placement == "overlay" and place.points[1][1] == "CENTER", "narrow screens center the whole companion")
+  R.SettingsAnchor = getAnchor
+end
+
+-- Geometry is checked in physical cursor units across owner and UIParent scales.
+do
+  local originalScale, originalCursor = c.UIParent.GetEffectiveScale, c.GetCursorPosition
+  c.UIParent.GetEffectiveScale = function() return 0.8 end
+  for _, scale in ipairs({ 0.6, 0.95, 1.2 }) do
+    local clip, target = Fake("Frame"), Fake("Frame")
+    clip.GetLeft, clip.GetRight = function() return 100 end, function() return 700 end
+    clip.GetBottom, clip.GetTop = function() return 100 end, function() return 600 end
+    target.GetLeft, target.GetRight = function() return 150 end, function() return 500 end
+    target.GetBottom, target.GetTop = function() return 200 end, function() return 300 end
+    clip.GetEffectiveScale, target.GetEffectiveScale = function() return scale end, function() return scale end
+    local drag = R.RemindersRuleDrag.New(clip, function() return true end, function() end)
+    drag:Row(target, "top", 1)
+    drag.source = {}
+    Check(drag:Find(200 * scale, 290 * scale).index == 1, "upper physical edge inserts before at scale " .. scale)
+    Check(drag:Find(200 * scale, 210 * scale).index == 2, "lower physical edge inserts after at scale " .. scale)
+    Check(not drag:Find(200 * scale, 99 * scale), "the clipped physical boundary rejects a drop")
+    drag.ghost.GetEffectiveScale = function(self) return (self.scale or 1) * 0.8 end
+    c.GetCursorPosition = function() return 240, 360 end
+    drag:Start({ condition = { type = "player", state = "combat" } }, "Combat")
+    local point = drag.ghost.points[1]
+    Check(point[1] == "CENTER" and math.abs(point[4] * scale - 240) < 0.01
+      and math.abs(point[5] * scale - 360) < 0.01, "the ghost stays centered on physical cursor coordinates")
+    drag:Cancel()
+    local owner = Fake("Button", c.UIParent)
+    owner.GetEffectiveScale = function() return scale end
+    R.SettingsMaterial.ContextTip(owner, "Condition", "Help")
+    owner:Fire("OnEnter")
+    local tip
+    for _, child in ipairs(c.UIParent.children) do if child.owner == owner and child.body then tip = child end end
+    Check(tip and math.abs(tip.scale * 0.8 - scale) < 0.01 and tip.points[1][2] == owner,
+      "context help anchors to its owner at the same effective scale")
+    owner:Fire("OnLeave")
+  end
+  c.UIParent.GetEffectiveScale, c.GetCursorPosition = originalScale, originalCursor
+end
+
+-- Opening a material dropdown must not leak its look into the next ordinary Settings menu.
+do
+  local G, M = R.SettingsWidgets, R.SettingsMaterial
+  local selected
+  local b = G.Dropdown(c.UIParent, 180, function(value) selected = value end)
+  b:SetChoices(function() return { { value = "a", label = "Main hand" }, { value = "b", label = "Off hand" } } end)
+  b:SetValue("a", "Main hand")
+  M.ReminderControl(b, "dropdown")
+  b:Fire("OnEnter")
+  Check(#b.text.points == 2 and b.text.points[1][1] == "LEFT" and b.text.points[2][1] == "RIGHT",
+    "material dropdown values keep their inset alignment during hover")
+  b:Fire("OnLeave")
+  b:OpenMenu()
+  local menu = c.TwichUISettingsMenu
+  Check(menu.materialMode and menu.materialBackground:IsShown() and menu.rows[1].mark:IsShown(),
+    "the material menu paints the current choice")
+  menu.rows[2]:Fire("OnClick")
+  Check(selected == "b" and not G.MenuShown(), "a material menu row still picks and closes normally")
+  local plain = G.Dropdown(c.UIParent, 180)
+  plain:SetChoices(b.choices)
+  plain:OpenMenu()
+  Check(not menu.materialMode and not menu.materialBackground:IsShown(),
+    "ordinary dropdowns restore their own menu presentation")
+  local hooks = #menu.rows[1].hooks.OnEnter
+  G.CloseMenu()
+  b:OpenMenu()
+  Check(#menu.rows[1].hooks.OnEnter == hooks, "reopening the material menu does not add listeners")
+  G.CloseMenu()
+end
+
+-- Painted states preserve the control's callback, layout and configuration isolation.
+do
+  local G, M = R.SettingsWidgets, R.SettingsMaterial
+  local calls, revision = 0, RM.Rev()
+  local button = G.Button(c.UIParent, "Save", 116, "secondary", function() calls = calls + 1 end)
+  local callback = button:GetScript("OnClick")
+  M.ReminderControl(button, "confirmation")
+  local sheet = button.twichCraft
+  button:Fire("OnEnter"); button:Fire("OnMouseDown")
+  Check(sheet.skin == "primary-down", "painted primary press has a recessed state")
+  button:Fire("OnMouseUp"); button:Fire("OnLeave")
+  button:SetEnabled(false); button:Fire("OnDisable"); button:Fire("OnEnter")
+  Check(sheet.skin == "button-off", "a disabled primary never paints an active highlight")
+  button:SetEnabled(true); button:Fire("OnEnable"); button:Fire("OnClick")
+  Check(calls == 1 and button:GetScript("OnClick") == callback and RM.Rev() == revision,
+    "painted states preserve the native callback and never change configuration")
+  button.craftLabelInset = 35; button:Fire("OnEnable")
+  Check(#button.text.points == 2 and button.text.points[1][1] == "LEFT" and button.text.points[2][1] == "RIGHT",
+    "icon buttons retain their label inset after native state repaint")
+  local field = G.EditBox(c.UIParent, 120, 28)
+  M.ReminderControl(field, "field")
+  field:SetEnabled(false); field:Fire("OnDisable")
+  Check(field.twichCraft.skin == "field-off", "numeric/input fields repaint immediately when disabled")
+  local primary = G.Button(c.UIParent, "Confirm", 116, "secondary", function() end)
+  R.SettingsCraft.Control(primary, "primary")
+  Check(primary.twichCraft.skin == "primary", "the reusable component's primary role selects the gold action")
+end
+
+-- P0: the hosted frame can remain individually shown under a hidden Settings ancestor.
+-- Repeated subscriptions/events after closing must never restore the UIParent companion.
+do
+  local PV, CAT, DZ = R.RemindersPreview, R.RemindersCatalog, R.RemindersDesigner
+  local rid = P.Selected()
+  local savedName = RM.Get(rid).name
+  PV.SetEnabled(true); editorOpen, editorPage = true, "reminders"
+  P.Refresh(); Flush()
+  local preview = PV.Parts()
+  Check(PV.Shown(), "the active editor reconciles its enabled preview")
+  P.QueueRefresh(0.2)
+  editorOpen = false
+  R.SettingsLauncher.Closed()
+  Check(f:IsShown() and not PV.Shown(), "close hides the companion even if the hosted frame remains individually shown")
+  for i = 1, 4 do
+    RM.SetName(rid, "Closed reminder " .. i)
+    c.FireEvent("PLAYER_EQUIPMENT_CHANGED", 16)
+    c.FireEvent("ZONE_CHANGED_NEW_AREA")
+    P.QueueRefresh(); P.Refresh(); Flush()
+    PV.Show(RM.Get(rid)); PV.Update(RM.Get(rid))
+    Check(not PV.Shown(), "closed subscriptions, deferred refresh and direct show stay hidden, cycle " .. i)
+  end
+  editorOpen, editorPage = true, "notifications"
+  P.Refresh(); Flush()
+  PV.Show(RM.Get(rid))
+  Check(not PV.Shown(), "another active Settings page cannot open the companion")
+  editorPage = "reminders"; P.Refresh(); Flush()
+  Check(PV.Shown() and PV.Parts() == preview, "reopening restores the same companion")
+  PV.Hide(); PV.Update(RM.Get(rid))
+  Check(not PV.Shown(), "content update alone never shows a hidden companion")
+  P.Refresh(); Flush()
+  DZ.Open(); Flush()
+  for _ = 1, 3 do P.Refresh(); Flush(); Check(not PV.Shown(), "When keeps exclusive ownership") end
+  DZ.Close(); Flush()
+  Check(PV.Shown(), "closing When restores the active editor preview")
+  CAT.Toggle(); Flush()
+  for _ = 1, 3 do P.Refresh(); Flush(); Check(not PV.Shown(), "catalog keeps exclusive ownership") end
+  CAT.Hide(); Flush()
+  Check(PV.Shown(), "canceling the catalog restores the active editor preview")
+  PV.SetEnabled(false); Flush()
+  for _ = 1, 3 do P.Refresh(); Flush(); PV.Show(RM.Get(rid)); Check(not PV.Shown(), "disabled companion stays disabled on refresh") end
+  Check(D.PreviewStart(RM.Get(rid), false), "explicit on-screen preview still starts independently")
+  P.Refresh(); Flush()
+  Check(D.PreviewId() == rid and not PV.Shown(), "world preview does not reopen the disabled editor companion")
+  editorOpen = false; R.SettingsLauncher.Closed(); Flush()
+  Check(D.PreviewId() == nil and not PV.Shown(), "Settings close also ends the explicit temporary world preview")
+  for _ = 1, 3 do
+    PV.SetEnabled(false); Flush()
+    editorOpen = true; P.Refresh(); Flush()
+    Check(not PV.Shown(), "disabled preference survives editor reopening")
+    PV.SetEnabled(true); Flush()
+    Check(PV.Shown() and PV.Parts() == preview, "explicit re-enable reuses the existing companion")
+    editorOpen = false; R.SettingsLauncher.Closed(); Flush()
+    for _ = 1, 3 do P.Refresh(); P.QueueRefresh(); Flush(); Check(not PV.Shown(), "repeated close cannot be undone by refresh") end
+  end
+  RM.SetName(rid, savedName)
+  editorOpen = true; P.Refresh(); Flush()
+end
+
+-- Contextual actions belong to the invoked reminder, not the selected one.
+do
+  DZ.Close(); R.RemindersCatalog.Hide(); editorOpen, editorPage = true, "reminders"
+  P.Select(id); P.Refresh(); Flush()
+  local source = parts.rows[1]
+  local originalId, selectedBefore, rev = source.id, P.Selected(), RM.Rev()
+  source:Fire("OnClick", "RightButton")
+  local menu = c.TwichUISettingsMenu
+  Check(RM.Rev() == rev and P.Selected() == selectedBefore and menu.shown, "right-click opens actions without selecting or toggling")
+  Check(menu.w >= 112 and menu.w < 180, "context menu width follows its short labels")
+  source:Fire("OnClick", "LeftButton"); Flush()
+  Check(not menu.shown and P.Selected() == originalId and RM.Rev() == rev, "left-click dismisses the popup and selects without toggling")
+  source:Fire("OnClick", "RightButton")
+  menu.rows[1]:Fire("OnClick"); Flush()
+  local copy = P.Selected()
+  Check(copy ~= originalId and RM.Get(copy) and not RM.Get(copy).enabled, "context Duplicate creates a new disabled reminder")
+  RM.SetName(copy, "Independent copy")
+  Check(RM.Get(originalId).name ~= "Independent copy", "context duplicate owns its mutable configuration")
+  local invoked
+  for _, row in ipairs(parts.rows) do if row.id == copy then invoked = row end end
+  invoked:Fire("OnClick", "RightButton"); menu.rows[2]:Fire("OnClick")
+  Check(S.popup.text:find("Independent copy", 1, true) and RM.Get(copy), "context Delete identifies its target before mutation")
+  c.StaticPopupDialogs[S.popup.key].OnCancel(); Flush()
+  Check(RM.Get(copy), "canceling context deletion preserves the reminder")
+  invoked:Fire("OnClick", "RightButton"); menu.rows[2]:Fire("OnClick")
+  c.StaticPopupDialogs[S.popup.key].OnAccept(); Flush()
+  Check(not RM.Get(copy) and RM.Get(originalId), "confirmed context deletion removes only its target")
+end
+
+-- Four backgrounds are session-only, including a genuinely hollow well; hidden refreshes cannot reopen it.
+do
+  P.Select(id); P.Refresh(); Flush()
+  local preview, rev = PV.Parts(), RM.Rev()
+  for _, mode in ipairs({ "landscape", "parchment", "transparent", "dark" }) do
+    Check(PV.SetBackground(mode) and preview.background == mode and PV.Shown(), "active editor accepts " .. mode .. " background")
+    Check(preview.boxFace.parts[1].shown == (mode == "dark"), "opaque well is removed outside Dark")
+  end
+  Check(RM.Rev() == rev, "background selection never edits display, position or live rules")
+  editorOpen = false; R.SettingsLauncher.Closed(); Flush()
+  for _, mode in ipairs({ "transparent", "landscape", "parchment", "dark" }) do
+    PV.SetBackground(mode); P.Refresh(); Flush()
+    Check(not PV.Shown(), "background refresh cannot reopen a closed companion")
+  end
+  editorOpen = true; P.Refresh(); Flush()
+end
+
+-- A focused placement transaction never saves intermediate drags, and survives gameplay refreshes safely.
+do
+  local placement = R.RemindersPlacement
+  local function Move()
+    local frame = D.Frame(id)
+    frame.GetLeft, frame.GetRight = function() return 160 end, function() return 260 end
+    frame.GetTop, frame.GetBottom = function() return 350 end, function() return 300 end
+    frame.handle:Fire("OnDragStop")
+  end
+  local before, rev = Deep(RM.Get(id).place), RM.Rev()
+  Check(placement.Start(RM.Get(id)) and not editorOpen and not PV.Shown(), "placement hides settings and its editing companion")
+  Move()
+  local moved = D.PlacementDraft()
+  Check(moved and Deep(RM.Get(id).place) == before and RM.Rev() == rev, "drag changes only private coordinates")
+  for _ = 1, 3 do CT.Refresh(); P.Refresh(); Flush(); Check(not PV.Shown(), "gameplay refresh cannot show editor during placement") end
+  placement.Cancel(true); Flush()
+  Check(editorOpen and not placement.Active() and Deep(RM.Get(id).place) == before and RM.Rev() == rev, "Cancel discards draft coordinates and restores context")
+  D.Frame(id).handle:Fire("OnDragStop"); Flush()
+  Check(Deep(RM.Get(id).place) == before and RM.Rev() == rev, "a late mouse release after Cancel cannot write placement")
+  Check(placement.Start(RM.Get(id)), "placement can reopen")
+  Move(); moved = D.PlacementDraft()
+  Check(D.PlacementFinish(true), "Finish accepts valid draft coordinates")
+  Flush()
+  Check(RM.Get(id).place.x == moved.x and RM.Get(id).place.y == moved.y and RM.Rev() == rev + 1 and PV.Shown(), "Finish commits exactly once and restores the companion")
+  local live = Deep(RM.Get(id).place)
+  placement.Start(RM.Get(id)); Move()
+  for _, frame in ipairs(created) do if frame.events.PLAYER_REGEN_DISABLED then frame:Fire("OnEvent", "PLAYER_REGEN_DISABLED") end end
+  Flush()
+  Check(not placement.Active() and not D.Positioning() and Deep(RM.Get(id).place) == live, "combat ends placement without saving the draft")
+  placement.Start(RM.Get(id)); Move()
+  local current = RM.Get(id).place
+  RM.SetPosition(id, current.point, current.x + 5, current.y + 7)
+  local changed, revision = Deep(RM.Get(id).place), RM.Rev()
+  Check(not D.PlacementFinish(true), "Finish refuses a position changed by another writer")
+  Check(RM.Rev() == revision and Deep(RM.Get(id).place) == changed, "a rejected placement preserves the newer position")
+  placement.Cancel(true); Flush()
+  P.Create("enchant"); Flush()
+  local deleted = P.Selected()
+  placement.Start(RM.Get(deleted))
+  RM.Delete(deleted); Flush()
+  Check(not placement.Active() and editorOpen and D.PreviewId() == nil, "deletion cancels placement and restores safe editing context")
+  P.Select(id); P.Refresh(); Flush()
+end
+
+-- Scroll easing is bounded, clamped, cancelable, and bypassed with reduced motion.
+do
+  local G = R.SettingsWidgets
+  local scroll = Fake("ScrollFrame", c.UIParent)
+  local child = Fake("Frame", scroll); child:SetHeight(700)
+  scroll:SetHeight(200); scroll:SetScrollChild(child)
+  G.ScrollMotion(scroll)
+  scroll:Fire("OnMouseWheel", -1)
+  Check(scroll.motionDriver:GetScript("OnUpdate") ~= nil, "wheel starts a finite easing interval")
+  scroll.motionDriver:Fire("OnUpdate", .12)
+  Check(scroll:GetVerticalScroll() == 24 and not scroll.motionDriver:GetScript("OnUpdate"), "one wheel notch reaches 24 units and stops updating")
+  c.TwichUIDB.ui = c.TwichUIDB.ui or {}; c.TwichUIDB.ui.reduceSettingsMotion = true
+  scroll:Fire("OnMouseWheel", -100)
+  Check(scroll:GetVerticalScroll() == 500 and not scroll.motionDriver:GetScript("OnUpdate"), "reduced motion jumps precisely to the clamped destination")
+  child:SetHeight(100); scroll:Fire("OnMouseWheel", 1)
+  Check(scroll:GetVerticalScroll() == 0, "short content cannot scroll past its bounds")
+  c.TwichUIDB.ui.reduceSettingsMotion = nil
+end
+
+-- Font names use their own supported files and selection still goes through Config.
+do
+  P.Select(id); local Ed = R.RemindersEditor
+  Ed.placementOpen, Ed.moreOpen = true, true; P.Refresh(); Flush()
+  local old = RM.Get(id).display.font
+  local font = place.font
+  font:OpenMenu()
+  local menu = c.TwichUISettingsMenu
+  for _, row in ipairs(menu.rows) do
+    if row.choice then Check(row.choice.font and row.text.font[1] == row.choice.font, "each font option renders only its label in the resolved typeface") end
+  end
+  local choices = font.choices()
+  if #choices > 1 then
+    font.onPick(choices[2].value); Flush()
+    Check(RM.Get(id).display.font == choices[2].value, "font preview options retain normal persisted selection")
+    font.onPick(old); Flush()
+  end
+  R.SettingsWidgets.CloseMenu()
+  Ed.placementOpen, Ed.moreOpen = false, false; P.Refresh(); Flush()
+end
+
+-- UIParent popups need scroll transforms once, in the owner's scale.
+do
+  local outer = Fake("ScrollFrame", c.UIParent)
+  outer.IsObjectType = function(_, kind) return kind == "ScrollFrame" end
+  outer.GetHorizontalScroll = function() return 3 end
+  outer:SetVerticalScroll(80)
+  local inner = Fake("Frame", outer)
+  local owner = Fake("Button", inner)
+  owner.GetParent = function() return inner end; inner.GetParent = function() return outer end
+  outer.GetParent = function() return nil end
+  owner.GetLeft, owner.GetRight = function() return 100 end, function() return 200 end
+  owner.GetBottom, owner.GetTop = function() return 50 end, function() return 70 end
+  local l, r, b, t = R.SettingsWidgets.VisibleRect(owner)
+  Check(l == 97 and r == 197 and b == 130 and t == 150, "popup rectangle includes scrolling in both axes")
+end
+
+-- Structured summaries retain Any grouping, negated leaves and every supported nested condition.
+do
+  P.Create("custom"); Flush()
+  local rid = P.Selected()
+  local ok, group = RM.AddGroup(rid, nil, "any")
+  RM.AddCondition(rid, "player", group, { type = "player", state = "mounted", negate = true })
+  RM.AddCondition(rid, "player", group, { type = "player", state = "combat" })
+  local v, before = RM.Get(rid), Deep(RM.Get(rid).raw)
+  local rows = R.RemindersPlain.Explanation(v)
+  Check(rows[2].text == "Any of these" and rows[3].text:find("not mounted", 1, true)
+    and rows[4].text:find("in combat", 1, true), "advanced summary keeps nested Any and negation")
+  Check(Deep(RM.Get(rid).raw) == before and not R.RemindersPlain.Basic(v), "summary presentation preserves the advanced tree")
+  RM.Delete(rid); P.Select(id); Flush()
+end
+
+-- The promoted control reuses the existing transaction; both entry points stay equivalent.
+do
+  local placement = R.RemindersPlacement
+  P.Select(id); R.RemindersEditor.placementOpen = false; P.Refresh(); Flush()
+  Check(f.place == place.move and f.place.shown and f.place.text.text == "Place on screen"
+    and f.place.points[1][2] == f.head, "placement is a primary header action with Advanced closed")
+  local start, calls = placement.Start, 0
+  placement.Start = function(view) calls = calls + 1; return start(view) end
+  local before, enabled = Deep(RM.Get(id).place), RM.Get(id).enabled
+  for _, entry in ipairs({ f.place, PV.Parts().place }) do
+    entry:Fire("OnClick"); Flush()
+    Check(placement.Active() and D.PreviewId() == id and not PV.Shown(), "a Place entry uses focused placement")
+    placement.Cancel(true); Flush()
+    Check(Deep(RM.Get(id).place) == before and RM.Get(id).enabled == enabled and PV.Shown(), "Place/Cancel preserves data and restores the editor")
+  end
+  Check(calls == 2, "main editor and companion both call the same placement API")
+  placement.Start = start
+end
+
+-- Distinct condition-type art reaches every consumer through the same resolver.
+do
+  local Pl = R.RemindersPlain
+  local conditions = { {type="weaponEnchant"}, {type="player",state="combat"}, {type="player",state="mounted"} }
+  local seen = {}
+  for _, cond in ipairs(conditions) do
+    local texture = Fake("Texture", c.UIParent)
+    for _, size in ipairs({22,30,45}) do
+      Pl.ApplyArt(texture, cond, size)
+      Check(texture.texture == Pl.ArtFile(cond,size) and texture.w == size and texture.h == size, "dedicated condition art uses balanced square runtime files")
+    end
+    Check(not seen[texture.texture], "unrelated conditions do not share artwork")
+    seen[texture.texture] = true
+  end
+  local choices = Pl.Entries()
+  for _, entry in ipairs(choices) do
+    local texture = Fake("Texture", c.UIParent)
+    Pl.ApplyArt(texture, entry.make(),30)
+    Check(texture.texture ~= nil, "every supported palette entry retains artwork: " .. entry.key)
+  end
+  Check(Pl.ArtFile({type="player",state="mounted"},22):find("horse%-head%-small.tga"), "Mounted reuses original painted horse art")
 end
 
 if failures == 0 then print("PASSED") else print(failures .. " FAILED") end

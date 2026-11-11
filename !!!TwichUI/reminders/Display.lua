@@ -36,13 +36,14 @@ local GAP, MAX_TEXT_W = 6, 420
 local PANEL_PAD = { none = 0, shade = 8, framed = 10 }
 local PANEL_BG = { 0.08, 0.065, 0.05 }      -- warm charcoal
 local PANEL_EDGE = { 0.55, 0.43, 0.22 }     -- aged bronze
-local MARK = { 0.58, 0.78, 0.76 }           -- the preview outline: the settings window's accent
+local MARK = { 0.62, 0.49, 0.30 }           -- the preview outline: the settings window's accent
 local MAX_ICON_ASK = 2
 
 local frames = {}          -- [id] = frame
 local spare = {}           -- frames of deleted reminders, for the next one
 local made = 0
 local preview = { id = nil, positioning = false }
+local placement -- private coordinates; never read by the live rule evaluator
 local layoutRev = 1        -- bumped when something every frame is drawn from changed
 local iconAsk, iconWait = {}, {}   -- [itemID] = times asked to load; [itemID] = true while a frame waits for its icon
 local evf
@@ -392,23 +393,34 @@ local function BuildMark(f)
     h:SetFrameStrata("DIALOG")
     h:SetAllPoints(f)
     h:SetBackdrop({ bgFile = [[Interface\Buttons\WHITE8x8]] })
-    h:SetBackdropColor(0.18, 0.33, 0.33, 0.35)
+    h:SetBackdropColor(0.32, 0.24, 0.13, 0.20)
     h:RegisterForDrag("LeftButton")
     h:EnableMouse(false)
     h:Hide()
     h:SetScript("OnDragStart", function()
-        if InCombatLockdown() then return end
+        if InCombatLockdown() or not (f.view and preview.id == f.view.id and preview.positioning) then return end
+        preview.dragging = true
         f:StartMoving()
     end)
     h:SetScript("OnDragStop", function()
         f:StopMovingOrSizing()
+        preview.dragging = false
         local v = f.view
-        if v then
+        -- A mouse release arriving after Cancel/combat/profile cleanup is stale.
+        if v and preview.id == v.id and preview.positioning then
             local x, y = OffsetFor(f, v.place.point)
-            if x then RM.SetPosition(v.id, v.place.point, x, y) end
+            if x then
+                if placement and placement.id == v.id then
+                    placement.place = { point = v.place.point, x = x, y = y }
+                else RM.SetPosition(v.id, v.place.point, x, y) end
+            end
             local now = RM.Get(v.id)
             if now then f.view = now end
-            Place(f, f.view)   -- StartMoving re-anchored the frame: put it back on the saved place
+            local draw = f.view
+            if placement and placement.id == v.id then
+                draw = setmetatable({ place = placement.place }, { __index = draw })
+            end
+            Place(f, draw)   -- StartMoving re-anchored the frame: put it back on the saved place
         end
     end)
     h:SetScript("OnMouseUp", function(_, button)
@@ -463,13 +475,14 @@ function D.Render(id)
     local f = frames[id]
     if not f then return end
     local v = f.view
+    if v and placement and placement.id == id then v = setmetatable({ place = placement.place }, { __index = v }) end
     local previewing = preview.id == id
     if v and ((f.live and not Quiet()) or previewing) then
         if f.drawnRev ~= v.rev or f.drawnLayout ~= layoutRev then
             D.Layout(f, v)
             f.drawnRev, f.drawnLayout = v.rev, layoutRev
         end
-        Place(f, v)
+        if not (previewing and preview.dragging) then Place(f, v) end
         ShowMark(f, previewing, previewing and preview.positioning, v)
         Appear(f, v)
     else
@@ -500,6 +513,7 @@ function D.SetLive(view, on, immediate)
 end
 
 function D.Update(view)
+    if placement and placement.id == view.id and placement.raw ~= view.raw then D.PreviewStop() end
     local f = frames[view.id]
     if not f then return end
     f.view = view
@@ -510,6 +524,7 @@ function D.Release(id)
     local f = frames[id]
     if not f then return end
     if preview.id == id then
+        D.PreviewStop()
         preview.id, preview.positioning = nil, false
         SyncEvents()
     end
@@ -563,6 +578,7 @@ MS.Fonts.Subscribe(function() D.Invalidate() end)
 ---------------------------------------------------------------------------
 function D.PreviewStart(view, moving)
     if InCombatLockdown() then return false, "combat" end
+    if placement then D.PreviewStop() end
     local old = preview.id
     preview.id, preview.positioning = view.id, moving and true or false
     local f = Acquire(view.id)
@@ -578,22 +594,58 @@ function D.PreviewStart(view, moving)
 end
 
 function D.PreviewStop()
+    local draft = placement
+    placement = nil
     local old = preview.id
     if not old then return end
-    preview.id, preview.positioning = nil, false
+    preview.id, preview.positioning, preview.dragging = nil, false, false
     SyncEvents()
     local f = frames[old]
     if f then
+        f:StopMovingOrSizing()
         f.immediate = true
         D.Render(old)
     end
+    if draft and draft.closed then draft.closed(false) end
 end
 
 function D.PositionEnd()
+    if placement then return D.PlacementFinish(true) end
     if not (preview.id and preview.positioning) then return end
     preview.positioning = false
     D.Render(preview.id)
 end
+
+function D.PlacementStart(view, closed)
+    if InCombatLockdown() then return false, "combat" end
+    D.PreviewStop()
+    local ok, why = D.PreviewStart(view, true)
+    if not ok then return false, why end
+    placement = { id = view.id, raw = view.raw, original = { point = view.place.point, x = view.place.x, y = view.place.y },
+        place = { point = view.place.point, x = view.place.x, y = view.place.y }, closed = closed }
+    D.Render(view.id)
+    return true
+end
+
+function D.PlacementFinish(save)
+    local draft = placement
+    if not draft then return false end
+    local now = RM.Get(draft.id)
+    if save then
+        if InCombatLockdown() then D.PreviewStop(); return false, "combat" end
+        if not now or now.raw ~= draft.raw or now.place.point ~= draft.original.point or now.place.x ~= draft.original.x or now.place.y ~= draft.original.y then
+            return false, "The reminder position changed elsewhere. Cancel and try again."
+        end
+        local ok, why = RM.SetPosition(draft.id, draft.place.point, draft.place.x, draft.place.y)
+        if not ok then return false, why end
+    end
+    placement = nil
+    D.PreviewStop()
+    if draft.closed then draft.closed(save and true or false) end
+    return true
+end
+
+function D.PlacementDraft() return placement and { point = placement.place.point, x = placement.place.x, y = placement.place.y } end
 
 function D.PreviewId() return preview.id end
 function D.Positioning() return preview.id ~= nil and preview.positioning end
@@ -609,10 +661,10 @@ function D.NewSurface(parent)
     return s
 end
 
-function D.DrawSurface(s, view, maxW, maxH)
+function D.DrawSurface(s, view, maxW, maxH, maxScale)
     local w, h = D.Layout(s, view)
-    local scale = math.min(1, maxW / w, maxH / h)
-    s:SetScale(math.max(0.2, scale))
+    local scale = math.min(maxScale or 1, maxW / w, maxH / h)
+    s:SetScale(scale)
     s:SetAlpha(view.display.opacity / 100)
     return w, h, scale
 end

@@ -407,6 +407,7 @@ end
 
 K.Page({
     key = "ammoCustom", name = "Known ammunition", nav = "Known ammunition", parent = "reminders", order = 23,
+    materialHeader = true, compact = true,
     description = "Ammunition you register yourself, such as an item a server added, as arrows or bullets, for reminders about ammunition.",
     keywords = "ammo ammunition custom known register arrows bullets item id link server hunter quiver list reminder reminders",
     when = function() return R.AmmoItems ~= nil end,
