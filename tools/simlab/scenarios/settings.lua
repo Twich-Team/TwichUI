@@ -6,6 +6,19 @@ A_Admin.SetManualClock(GetTime())
 Lab.Solo()
 UnitClass = function() return "Mage", "MAGE" end
 TwichUIDB.ui.settingsWindow = { w = params.narrow and 936 or 1240, h = params.narrow and 660 or 960 }
+-- UI contract fixtures only: real integration engines are covered by their dedicated unit tests.
+-- These fixtures never call the third-party addon or claim real-addon compatibility.
+if params.integration and (key == "speakstone" or key == "restedxp") then
+    local skin = key == "speakstone" and R.SpeakStoneSkin or R.RestedXPSkin
+    local state = params.integration
+    R:SetEnabled(key == "speakstone" and "speakstoneSkin" or "restedxpSkin", state ~= "disabled")
+    skin.Status = function()
+        local available = state ~= "absent"
+        return { code = state == "disabled" and "off" or available and "active" or key .. "-missing",
+            addon = available and "ready" or "missing", loaded = available, integrated = available,
+            switchOn = available, conflict = false }
+    end
+end
 Lab.Step("open", function()
     Lab.Check("init", "open settings", true, Lab.Open(key))
     local K, UI = R.SettingsKit, R.SettingsUI
@@ -261,6 +274,69 @@ if key == "ammoCustom" or key == "restockItems" or key == "chatCleanChannels" th
                 elseif key == "restockItems" and row.id == 17020 then
                     row.target:SetFocus()
                     Lab.Check("interact", "quantity field focused", true, row.target:HasFocus())
+                end
+            end
+        end
+    end)
+end
+if key == "statWeights" then
+    Lab.Step("stat group browsing", function()
+        local frame = R.GearWindow.Frame()
+        local group, mode
+        for _, control in ipairs({ frame:GetChildren() }) do
+            if type(control.choices) == "function" then
+                for _, choice in ipairs(control.choices()) do
+                    if choice.value == "all" then group = control end
+                    if choice.value == "weights" then mode = control end
+                end
+            end
+        end
+        Lab.Check("construct", "stat group selector", true, group ~= nil)
+        mode.onPick("weights")
+        local choices = group.choices()
+        group.onPick(choices[2].value)
+        Lab.Check("interact", "selected stat group", choices[2].value, group.value)
+        group.onPick("all")
+        Lab.Check("interact", "all groups restored", "all", group.value)
+        local class = UnitClass
+        UnitClass = function() return "Unsupported", "UNSUPPORTED" end
+        R.GearWindow:Refresh()
+        Lab.Check("state", "unsupported class explained", true, frame.noClass:IsShown())
+        UnitClass = class
+        R.GearWindow:Refresh()
+        Lab.Check("state", "class controls restored", false, frame.noClass:IsShown())
+        if params.editor then group.onPick(choices[2].value); group:Click() end
+    end)
+end
+if key == "speakstone" or key == "restedxp" then
+    Lab.Step("integration preferences", function()
+        local skin = key == "speakstone" and R.SpeakStoneSkin or R.RestedXPSkin
+        local style = skin.Style or skin.Text
+        local property = key == "speakstone" and "textSize" or "lineSpacing"
+        local before = style.Get(property)
+        style.Set(property, before + 1)
+        Lab.Check("state", "appearance preference saved", before + 1, style.Get(property))
+        style.Set(property, before)
+        Lab.Check("state", "preference restored", before, style.Get(property))
+        local view = R.SettingsUI.View(key)
+        local status
+        for _, row in ipairs(R.SettingsKit.pages[key].rows) do
+            if row.kind == "status" and row:GetName():find("availability", 1, true) then status = row end
+        end
+        Lab.Check("construct", "integration status row", true, status ~= nil)
+        if params.integration then
+            Lab.Check("state", "availability is accurate", params.integration ~= "absent" and "Loaded" or "Not installed", status.value())
+        end
+        R.SettingsUI.Navigate("overview")
+        R.SettingsUI.Navigate(key)
+        Lab.Check("state", "navigation reuses integration page", view, R.SettingsUI.View(key))
+        if params.editor then
+            for _, row in ipairs(R.SettingsKit.pages[key].rows) do
+                if row.kind == "dropdown" and row:Enabled() then
+                    R.SettingsUI.Navigate(key, row.id)
+                    view.rows[row.id].control:Click()
+                    Lab.Check("interact", "appearance menu opens", true, R.SettingsWidgets.MenuShown())
+                    break
                 end
             end
         end

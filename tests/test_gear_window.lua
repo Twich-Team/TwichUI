@@ -92,7 +92,18 @@ end
 Radios()
 local labels = {}
 for _, r in ipairs(radios) do labels[#labels + 1] = r.label end
-assert(#radios == 5, "three trees and two modes: " .. table.concat(labels, ", "))
+assert(#radios == 6 + #R.GearWeights.EDITOR, "trees, modes and stat groups: " .. table.concat(labels, ", "))
+-- Browsing one group hides unrelated fields and preserves their saved values.
+local savedWeights = P.CustomWeights("MAGE", R.GearData.Trees()[1].skillLine)
+for _, r in ipairs(radios) do if r.label == "Attributes" then r.setSelected() end end
+local total, visible = 0, 0
+for _, object in ipairs(made) do
+  if rawget(object, "stat") then total = total + 1; if object:IsShown() then visible = visible + 1 end end
+end
+assert(visible > 0 and visible < total, "group filter shows a focused subset")
+assert(P.CustomWeights("MAGE", R.GearData.Trees()[1].skillLine) == savedWeights, "browsing does not write weights")
+for _, r in ipairs(radios) do if r.label == "All stat groups" then r.setSelected() end end
+for _, object in ipairs(made) do if rawget(object, "stat") then assert(object:IsShown(), "all stat fields restored") end end
 for _, r in ipairs(radios) do if r.label == "Stat priority" then r.setSelected() end end
 local trees = R.GearData.Trees()
 local edited

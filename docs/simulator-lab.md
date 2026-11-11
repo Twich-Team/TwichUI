@@ -626,3 +626,5 @@ rm -rf tools/simlab docs/simulator-lab.md
 ```
 
 The first line does not touch the repository, the game or `wow-ui-source`. Nothing in the addons refers to the lab.
+
+Specialized page state fixtures and focused commands: [Batch 2 coverage](settings-batch-2.md).

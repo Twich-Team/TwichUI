@@ -41,10 +41,18 @@ K.Page({
                 return base .. "\n\nStatus: " .. status .. (detail and ("\n" .. detail) or "")
             end
         end
+        K.Status("SpeakStone availability", function()
+            local state = SS.Status()
+            if state.loaded then return "Loaded" end
+            return ({ missing = "Not installed", disabled = "Disabled in AddOns" })[state.addon] or "Not loaded"
+        end, function() return "Appearance preferences are kept even when SpeakStone is unavailable." end)
+        K.Status("Speech frame look", function() return (SkinStatus()) end,
+            function() local _, detail = SkinStatus(); return detail end)
         local function On() return R:Enabled("speakstoneSkin") end
+        local function CanPreview() return On() and SS.Status().loaded and type(SlashCmdList and SlashCmdList.SPEAKSTONE) == "function" end
 
         Under(Button("Sample line", "Show or hide", function() SS.TogglePreview() end,
-            "Shows SpeakStone's own sample line (the one /ss frame shows), so you can see the look as you change it. No narration is played and nothing is recorded. While SpeakStone is speaking it says so in chat and shows nothing."), toggle, On)
+            "Shows SpeakStone's own sample line (the one /ss frame shows), so you can see the look as you change it. No narration is played and nothing is recorded. While SpeakStone is speaking it says so in chat and shows nothing."), toggle, CanPreview, "Enable the look and load SpeakStone to show its sample.")
 
         Header("Frame", "The speech frame's background and border, and the room inside it.")
         local resettable = K.Appearance(SS.Look, "speakstoneLook", "speech frame", nil, nil, nil, nil, toggle, On, {
@@ -100,6 +108,7 @@ K.Page({
             "The size of the dialogue. The text area keeps its four lines (or all of the text, with SpeakStone's \"Show all the text\"), at this size.")
         Swatch("TextColor", "textColor", "Dialogue color", "The color of the dialogue.")
         Slider("LineSpacing", "lineSpacing", "Line spacing", "Extra pixels between the dialogue's lines. SpeakStone's own is 2.")
+        Header("Playback text", "Optional styling for the playback time and queue position.")
         Choice("TimeFont", "timeFont", "Playback time font", "The font of the time and the queue position.", SS.FontChoices)
         Slider("TimeSize", "timeSize", "Playback time size", "The size of the time and the queue position. Kept readable at SpeakStone's smallest size.")
         Swatch("TimeColor", "timeColor", "Playback time color",

@@ -11,7 +11,7 @@ pose="${SIMLAB_SETTINGS_POSE:-wide}"
 capture() {
     local key="$1" narrow=false
     [ "$pose" != narrow ] || narrow=true
-    { printf 'SIMLAB_PARAMS = { page = "%s", narrow = %s, search = %s, filled = %s, task = %s, editor = %s, categories = %s }\n' "$key" "$narrow" "${SIMLAB_SETTINGS_SEARCH:-false}" "${SIMLAB_SETTINGS_FILLED:-false}" "${SIMLAB_SETTINGS_TASK:-nil}" "${SIMLAB_SETTINGS_EDITOR:-false}" "${SIMLAB_SETTINGS_CATEGORIES:-false}"; cat "$SIMLAB_DIR/scenarios/lib.lua" "$SIMLAB_DIR/scenarios/settings.lua"; } > "$LAB/fixtures/settings.lua"
+    { printf 'SIMLAB_PARAMS = { page = "%s", narrow = %s, search = %s, filled = %s, task = %s, editor = %s, categories = %s, integration = %s }\n' "$key" "$narrow" "${SIMLAB_SETTINGS_SEARCH:-false}" "${SIMLAB_SETTINGS_FILLED:-false}" "${SIMLAB_SETTINGS_TASK:-nil}" "${SIMLAB_SETTINGS_EDITOR:-false}" "${SIMLAB_SETTINGS_CATEGORIES:-false}" "${SIMLAB_SETTINGS_INTEGRATION:-nil}"; cat "$SIMLAB_DIR/scenarios/lib.lua" "$SIMLAB_DIR/scenarios/settings.lua"; } > "$LAB/fixtures/settings.lua"
     timeout 280 "$SIMLAB_DIR/sim.sh" --no-saved-vars --addons-path "$ROOT" --exec-lua "@$LAB/fixtures/settings.lua" \
         screenshot --png -o "$RUN/$key.png" --width 1600 --height 1200 \
         > "$RUN/$key.stdout" 2> "$RUN/$key.stderr"
