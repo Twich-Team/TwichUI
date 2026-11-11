@@ -97,7 +97,19 @@ RM.ART = {
     wellfed = { label = "Plate and cutlery", size = 256, width = 256, height = 186, smallSize = 64, smallWidth = 64, smallHeight = 47 },
     enchant = { label = "Weapon oil", size = 256, width = 129, height = 256, smallSize = 64, smallWidth = 33, smallHeight = 64 },
 }
-RM.ART_ORDER = { "shield", "ammo", "wellfed", "enchant" }
+RM.ART_ORDER = { "shield", "ammo", "wellfed", "enchant" }   -- the four that were here first (RM.CHOICES.art); the picker's catalog is Gallery.lua's
+
+-- The artwork library (ArtData.lua, made by tools/make_reminder_gallery.py): square pictures in media\reminders\gallery\, each at one
+-- large and one small size, the whole canvas used (the picture is centred in it with a clear margin). They are artwork like the four
+-- above, found by the same RM.Art / RM.ArtTexture, so a reminder keeps one of them as display.art and nothing else knows the difference.
+local GALLERY_PATH = R.PATH .. [[media\reminders\gallery\]]
+local DATA = R.ReminderArtData
+if DATA then
+    for _, e in ipairs(DATA.gallery) do
+        RM.ART[e[1]] = { label = e[2], dir = GALLERY_PATH, size = DATA.large, width = DATA.large, height = DATA.large,
+            smallSize = DATA.small, smallWidth = DATA.small, smallHeight = DATA.small }
+    end
+end
 
 function RM.Art(id) return type(id) == "string" and RM.ART[id] or nil end
 
@@ -107,7 +119,7 @@ function RM.ArtTexture(id, drawn)
     if not a then return nil end
     local small = drawn and drawn <= RM.SMALL_AT
     local side, w, h = a.size, a.width, a.height
-    local file = ART_PATH .. id
+    local file = (a.dir or ART_PATH) .. id
     if small then side, w, h, file = a.smallSize, a.smallWidth, a.smallHeight, file .. "-small" end
     -- the used part less its 1 px clear margin on each side
     return file, 1 / side, (w - 1) / side, 1 / side, (h - 1) / side, (a.width - 2) / (a.height - 2)
@@ -1217,6 +1229,32 @@ function RM.SetDisplay(id, key, value)
     if d[key] == value then return true end
     d[key] = value
     Tell(id, "display")
+    return true
+end
+
+-- Several display values as one change, checked all together before any is written (one picture chosen in the picker sets the mode,
+-- the picture and where it comes from: either all of it or none). `values` is { key = value }; a key set to nil is cleared only for
+-- values. Told once. Returns true, or false and a reason.
+function RM.SetDisplayMany(id, values)
+    local raw, why = Locate(id)
+    if not raw then return false, why end
+    for key, value in pairs(values) do
+        if key == "item" then
+            if value ~= nil and not RM.ValidItem(value) then return false, REFUSE.value end
+        elseif key == "text" then
+            local text = RM.PlainText(value, RM.TEXT_MAX, true)
+            if not text then return false, REFUSE.text end
+            values[key] = text
+        elseif not RM.ValidDisplay(key, value) then
+            return false, REFUSE.value
+        end
+    end
+    local d = Sub(raw, "display")
+    local changed
+    for key, value in pairs(values) do
+        if d[key] ~= value then d[key] = value; changed = true end
+    end
+    if changed then Tell(id, "display") end
     return true
 end
 

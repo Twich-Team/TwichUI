@@ -324,9 +324,12 @@ hazard\Alerts.lua
 # loaded first so a profile change reaches it before the reminders), Evaluate.lua the decision (pure), State.lua reads the game
 # (Auras, Supplies, Character and Context.lua each add kinds of condition with the sources that read them),
 # Display.lua draws, Controller.lua puts them together. It never equips, uses or casts anything. The settings are in
-# TwichUI_Settings; the artwork is made by tools/make_reminder_art.py.
+# TwichUI_Settings; the artwork is made by tools/make_reminder_art.py and the artwork library (ArtData.lua, generated; Gallery.lua, its catalog and
+# the three display modes) by tools/make_reminder_gallery.py.
 reminders\AmmoItems.lua
+reminders\ArtData.lua
 reminders\Config.lua
+reminders\Gallery.lua
 reminders\Conditions.lua
 reminders\Ammunition.lua
 reminders\Evaluate.lua

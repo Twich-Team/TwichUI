@@ -93,7 +93,7 @@ function SettingsClient(opts)
     "chronicle/Style.lua", "Look.lua", "FrameLook.lua", "Icons.lua", "chronicle/Appearance.lua", "modules/NotifyLook.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua", "modules/RefreshmentsShares.lua",
     "modules/RefreshmentsTrade.lua", "modules/RefreshmentsBroker.lua", "modules/EllesmereJunk.lua", "modules/MageSell.lua", "modules/MageSellWindow.lua", "modules/Restock.lua", "modules/RestockPrompt.lua", "inventory/Rules.lua", "inventory/Items.lua", "inventory/Plan.lua", "inventory/Design.lua", "inventory/GuildBank.lua", "inventory/GuildPlan.lua", "inventory/Run.lua", "inventory/Window.lua", "inventory/Picker.lua", "modules/ChatCleanMatch.lua", "modules/ChatClean.lua",
     "classbars/Anim.lua", "classbars/Resources.lua", "classbars/Config.lua", "classbars/Bar.lua", "classbars/Effects.lua", "classbars/Controller.lua",
-    "reminders/AmmoItems.lua", "reminders/Config.lua", "reminders/Conditions.lua", "reminders/Ammunition.lua", "reminders/Evaluate.lua", "reminders/State.lua", "reminders/Display.lua", "reminders/Controller.lua",
+    "reminders/AmmoItems.lua", "reminders/ArtData.lua", "reminders/Config.lua", "reminders/Gallery.lua", "reminders/Conditions.lua", "reminders/Ammunition.lua", "reminders/Evaluate.lua", "reminders/State.lua", "reminders/Display.lua", "reminders/Controller.lua",
     "healer/Config.lua", "healer/Logic.lua", "healer/Drinks.lua", "healer/Particles.lua", "healer/Display.lua", "healer/Watch.lua",
     "buffback/Config.lua", "buffback/Spells.lua", "buffback/Watch.lua", "buffback/List.lua", "buffback/Unlock.lua",
     "glows/Catalog.lua", "glows/Config.lua", "glows/Logic.lua", "glows/Buttons.lua", "glows/State.lua", "glows/Draw.lua", "glows/Notice.lua", "glows/Controller.lua",
