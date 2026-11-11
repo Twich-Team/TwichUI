@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare the original Magic Inventory reagent illustration with the established alpha-aware icon pipeline."""
+"""Prepare Magic Inventory's original reagent/bank art with the established alpha-aware icon pipeline."""
 from pathlib import Path
 from make_map_tool_icons import read_png, content_box, resample
 from make_settings_icons import bleed, write_tga
@@ -7,8 +7,8 @@ from make_settings_icons import bleed, write_tga
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def main():
-    width, height, pixels, alpha = read_png(str(ROOT / "assets/magic-reagents-source.png"))
+def build(source, name):
+    width, height, pixels, alpha = read_png(str(ROOT / "assets" / source))
     assert alpha, "the source needs real transparency"
     box = content_box(width, height, pixels)
     assert box, "the painting must be visible"
@@ -21,10 +21,11 @@ def main():
         for row in range(h):
             canvas[y + row][x * 4:(x + w) * 4] = body[row]
         bleed(canvas, side)
-        target = ROOT / ("!!!TwichUI/media/icons/magicReagents" + suffix + ".tga")
+        target = ROOT / ("!!!TwichUI/media/icons/" + name + suffix + ".tga")
         write_tga(str(target), canvas, side)
         print(target.relative_to(ROOT))
 
 
 if __name__ == "__main__":
-    main()
+    build("magic-reagents-source.png", "magicReagents")
+    build("magic-bank-source.png", "magicBank")

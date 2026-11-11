@@ -5,6 +5,17 @@
 --     can be turned on; the Never transfer list and a rule's lists come from the bag chooser without moving anything;
 --   * deleting asks first; redrawing again and again makes no new controls.
 dofile(TESTS .. "mi_mock.lua")
+-- Record native ownership changes for the chip draw-order regression. Layering itself is simulator/client evidence.
+local OriginalFake = MIFake
+MIFake = function(kind, parent)
+  local object = OriginalFake(kind, parent)
+  object.SetParent = function(self, owner) self.parent = owner end
+  object.GetParent = function(self) return self.parent end
+  object.CreateMaskTexture = function(self) return MIFake("MaskTexture", self) end
+  object.AddMaskTexture = function(self, mask) self.appliedMask = mask end
+  object.RemoveMaskTexture = function(self) self.appliedMask = nil end
+  return object
+end
 
 local failures = 0
 local function Check(cond, msg) if not cond then failures = failures + 1; print("FAIL: " .. msg) end end
@@ -58,7 +69,10 @@ Check(Has(f, "^Never transfer$"), "protected items have their own view")
 P.SetTask("rules"); Flush()
 
 -- a template opens the editor
-P.NewFromTemplate("cloth")
+Click("newRule")
+Check(#P.Control("newRule").choices() == #MI.TEMPLATES, "primary New rule retains every supported template")
+P.Control("newRule").onPick("cloth")
+R.SettingsWidgets.CloseMenu()
 Flush()
 Check(P.Editing() ~= nil and Has(f, "^New rule$"), "the editor opens")
 Check(Has(f, "^What items%?$") and Has(f, "^Rule review$"), "cohesive builder sections")
@@ -71,7 +85,7 @@ Check(Has(f, "^Cloth"), "named as the game names it")
 Click("e1chooseCats")
 Check(not P.Control("e1cat1").shown and P.Editing() ~= nil, "closing the catalog retains the private rule")
 Click("advancedDestination")
-Check(Has(f, "Destination: Bank alt") and Has(f, "Needs attention"), "the review names the destination and what is missing")
+Check(P.Control("reviewValue2").text == "Bank alt" and Has(f, "Needs attention"), "the review names the destination and what is missing")
 Check(Has(f, "Needs attention"), "and says it can't be turned on yet")
 TIP = {}; P.Control("reviewPanel").scripts.OnEnter(P.Control("reviewPanel"))
 Check(table.concat(TIP, " "):find("Whether a player can receive these", 1, true), "review help is honest about recipients")
@@ -82,6 +96,8 @@ Check(rule and rule.name == "Cloth to bank alt" and rule.enabled == false and ru
 Check(Has(f, "Cloth to bank alt") and Has(f, "^Cloth") and Has(f, "Keep 20"), "a rule card says what it matches and what it keeps")
 Check(Has(f, "Mail") and Has(f, "Bank alt"), "the destination and missing configuration are visible without hover")
 local row1 = P.Control("tr1")
+Check(P.Control("rule1action"):GetParent() == P.Control("rule1actionbadge"), "chip text is owned by its surface, above the surface artwork")
+Check(P.Control("rule1action").text == "Mail", "disabled rule behavior remains readable")
 row1.scripts.OnEnter(row1)
 local tipText = table.concat(TIP, "\n")
 Check(tipText:find("Items: Cloth") and tipText:find("Keep: 20 of each matching item") and tipText:find("choose the recipient on this character"), "the row's tooltip says it plainly, and what it needs")
@@ -214,7 +230,7 @@ Click("advancedLimits")
 Check(Has(f, "^Target in bags$") and Has(f, "never goes over"), "the keep amount is the target, and it says it never goes over")
 Flush()
 TIP = {}; P.Control("reviewPanel").scripts.OnEnter(P.Control("reviewPanel"))
-Check(Has(f, "Behavior: Withdraw") and table.concat(TIP, " "):find("never more", 1, true), "structured review and help describe withdrawal limits")
+Check(P.Control("reviewValue3").text == "Withdraw" and table.concat(TIP, " "):find("never more", 1, true), "structured review and help describe withdrawal limits")
 Click("eCancel")
 do
   local wid = MI.SaveRule({ kind = "bank", name = "Keep 40 milk", enabled = false, cats = { "0:5" }, flow = "balance", keep = 40 })
@@ -276,6 +292,13 @@ Click("destinationChoicebank"); Click("flowChoicebalance")
 Check(P.Editing().kind == "bank" and P.Editing().flow == "balance", "destination and movement selectors edit the draft")
 local originalKeep = P.Editing().keep
 Click("keepPlus"); Check(P.Editing().keep == originalKeep + 1, "quantity stepper edits the draft")
+P.Editing().include[2589] = true; P.QueueRefresh(); Flush()
+Check(P.Control("summaryArt").appliedMask ~= nil, "native item artwork uses the existing portrait silhouette")
+Check(P.Control("selectedIncludename").text:find("Linen"), "selected item row includes the resolved name")
+Click("excludePick"); MI.Picker.Toggle(2589); MI.Picker.Done(); Flush()
+Check(P.Editing().include[2589] and P.Editing().exclude[2589], "rule exclusion overrides without dropping the separate inclusion")
+Click("selectedIncluderemove")
+Check(not P.Editing().include[2589] and P.Control("summaryArt").appliedMask == nil, "removal restores transparent category art without a stale mask")
 Check(#MI.Rules() == savedCount, "draft changes do not allocate a rule")
 Click("eCancel"); Check(#MI.Rules() == savedCount, "cancel discards the private changes")
 

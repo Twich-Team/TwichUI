@@ -194,11 +194,55 @@ Lab.Step("disclosures and navigation", function()
         end
         if params.task then page.SetTask(({ "rules", "destinations", "guild", "protected" })[params.task] or "rules"); Lab.Settle(.2) end
         if params.editor then
-            page.NewFromTemplate("cloth"); Lab.Settle(.2)
+            if params.editor == "existing" then
+                R.MagicInventory.SaveRule({ name = "Bank supply rule", kind = "bank", flow = "balance", keep = 5, include = { [2589] = true }, enabled = false })
+                Lab.Settle(.2)
+                page.Control("rule" .. #R.MagicInventory.Rules() .. "edit"):Click()
+            else page.NewFromTemplate("cloth") end
+            Lab.Settle(.2)
             if params.task == 5 then
                 local draft = page.Editing(); draft.name = "Bank supply rule"; draft.kind = "bank"; draft.dest = nil; draft.flow = "balance"; draft.keep = 5
+                draft.include = { [2589] = true }
+                local originalFacts = R.MagicInventory.ItemFacts
+                R.MagicInventory.ItemFacts = function(id)
+                    local facts = originalFacts(id)
+                    if id ~= 2589 then return facts end
+                    local copy = {}; for k, v in pairs(facts or {}) do copy[k] = v end
+                    copy.id, copy.name, copy.icon = id, "Linen Cloth", R.PATH .. [[media\npcs\cloth-bolts]]
+                    return copy
+                end
                 page.QueueRefresh(); Lab.Settle(.2)
             end
+            local draft, mi = page.Editing(), R.MagicInventory
+            local saved = Lab.Digest(mi.Rules())
+            local kind, flow, dest, keep = draft.kind, draft.flow, draft.dest, draft.keep
+            for _, choice in ipairs(mi.KIND_ORDER) do
+                page.Control("destinationChoice" .. choice):Click(); Lab.Settle(.1)
+                Lab.Check("interact", "destination choice " .. choice, choice, draft.kind)
+                if mi.HAS_FLOW[choice] then
+                    for _, direction in ipairs(mi.FLOW_ORDER) do
+                        page.Control("flowChoice" .. direction):Click(); Lab.Settle(.1)
+                        Lab.Check("interact", choice .. " movement " .. direction, direction, draft.flow)
+                    end
+                else
+                    Lab.Check("state", choice .. " hides movement", true, page.Control("noFlow"):IsShown())
+                end
+            end
+            draft.kind, draft.flow, draft.dest, draft.keep = kind, flow, dest, keep
+            page.QueueRefresh(); Lab.Settle(.1)
+            page.Control("keepPlus"):Click(); Lab.Settle(.1)
+            Lab.Check("interact", "keep stepper", keep + 1, draft.keep)
+            page.Control("keepMinus"):Click(); Lab.Settle(.1)
+            Lab.Check("state", "keep restored", keep, draft.keep)
+            Lab.Check("construct", "banner owns its headline", page.Control("summaryBanner"), page.Control("builderSummary"):GetParent())
+            Lab.Check("construct", "readiness owns its label", page.Control("reviewStatusFace"), page.Control("builderReady"):GetParent())
+            if params.task == 5 then
+                Lab.Check("state", "named item is visible", "Linen Cloth", page.Control("selectedIncludename"):GetText())
+                page.Control("selectedIncluderemove"):Click(); Lab.Settle(.1)
+                Lab.Check("interact", "remove selected item from draft", nil, next(draft.include))
+                draft.include[2589] = true; page.QueueRefresh(); Lab.Settle(.1)
+            end
+            Lab.Check("state", "builder choices never write saved rules", saved, Lab.Digest(mi.Rules()))
             page.Control("moreItemFilters"):Click(); Lab.Settle(.2)
             local choose = assert(page.Control("e1chooseCats"))
             choose:Click(); Lab.Settle(.2)
@@ -229,6 +273,15 @@ Lab.Step("disclosures and navigation", function()
     Lab.Settle(2.6)
     scroll:SetVerticalScroll(0)
     Lab.Settle(.2)
+    if key == "magicInventory" and params.editor and params.data == "advanced" then
+        local label = R.MagicInventoryPage.Control("e1cats")
+        local target = math.min(scroll:GetVerticalScrollRange(), scroll:GetTop() - label:GetTop())
+        scroll:SetVerticalScroll(target)
+        Lab.Settle(.2)
+        -- Bounds remain in content coordinates after scrolling here. Visibility is screenshot-reviewed,
+        -- not asserted from those bounds; this check establishes only the requested scroll state.
+        Lab.Check("interact", "advanced catalog scroll pose", target, scroll:GetVerticalScroll())
+    end
     if params.search then
         UI.Frame().craftElements.search:SetText("sound")
         Lab.Settle(.3)
@@ -408,6 +461,12 @@ if key == "magicInventory" and not params.editor then
     Lab.Step("rule search and draft safety", function()
         local page, mi = R.MagicInventoryPage, R.MagicInventory
         local before = Lab.Digest(mi.Rules())
+        for i = 1, #mi.Rules() do
+            local label, badge = page.Control("rule" .. i .. "action"), page.Control("rule" .. i .. "actionbadge")
+            Lab.Check("construct", "behavior text above badge " .. i, badge, label:GetParent())
+            Lab.Check("construct", "behavior label visible " .. i, true, label:IsShown() and label:GetText() ~= "")
+            Lab.Check("construct", "compact row height " .. i, true, page.Control("tr" .. i):GetHeight() <= 70)
+        end
         if params.count and params.count > 0 then
             local title = page.Control("rule1name")
             Lab.Check("construct", "long name fits row", true, title:GetStringHeight() <= title:GetHeight() + .1)
@@ -435,6 +494,15 @@ if key == "magicInventory" and not params.editor then
             page.Control("eCancel"):Click(); Lab.Settle(.2)
             page.Control("rule1more"):Click(); Lab.Settle(.2)
             Lab.Check("interact", "rule context menu opens", true, R.SettingsWidgets.MenuShown())
+        end
+        if #mi.Rules() > 0 and params.data == "drag" then
+            local row = page.Control("tr1")
+            local scale = row:GetEffectiveScale()
+            -- Deterministic cursor coordinates for the drag handler; this is not native pointer injection.
+            GetCursorPosition = function() return (row:GetLeft() + 30) * scale, (row:GetTop() - 20) * scale end
+            page.StartRuleDrag(row); Lab.Settle(.1)
+            Lab.Check("interact", "unfiltered drag starts", true, page.Drag.Active())
+            Lab.Check("state", "drag picture does not reorder", before, Lab.Digest(mi.Rules()))
         end
     end)
 end

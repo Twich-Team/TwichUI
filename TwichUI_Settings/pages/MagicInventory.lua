@@ -464,7 +464,7 @@ end
 ---------------------------------------------------------------------------
 -- The rules table: one row a rule, in priority order, with columns, banding and drag to reorder
 ---------------------------------------------------------------------------
-local ROW_H = 75
+local ROW_H = 70
 local query, ruleFilter = "", "all"
 local priorities, filtered = {}, false
 local COL = {                    -- x, width (left edge of the page frame); the buttons start at BTN_X
@@ -497,14 +497,35 @@ end
 
 local function RuleArtwork(rule)
     local id = next(rule.include or {})
-    local icon = id and C_Item.GetItemIconByID(id)
+    local facts = id and MI().ItemFacts(id)
+    local icon = facts and facts.icon or (id and C_Item.GetItemIconByID(id))
     if icon then return icon end
     if rule.kind == "never" or rule.equip == "equipment" then return R.PATH .. [[media\npcs\sword-and-shield]] end
     if rule.kind == "keep" then return R.PATH .. [[media\npcs\leather-backpack]] end
     for _, key in ipairs(rule.cats or {}) do
-        if key:match("^0:") then return [[Interface\Icons\INV_Potion_51]] end
+        if key:match("^0:") then return R.PATH .. [[media\healerwatch\vessel-small]] end
     end
     return R.PATH .. [[media\icons\magicReagents]]
+end
+
+-- Native item art has an opaque square tile. Keep the recognizable item in a portrait silhouette;
+-- the transparent TwichUI illustrations retain their own shape. Item-picker wells keep the full icon.
+local function PaintRuleArtwork(texture, rule)
+    local path = RuleArtwork(rule)
+    texture:SetTexture(path)
+    local native = type(path) == "number" or (type(path) == "string" and path:sub(1, #R.PATH) ~= R.PATH)
+    if native and not texture.itemMask then
+        local mask = texture:GetParent():CreateMaskTexture(nil, "ARTWORK")
+        if mask then
+            mask:SetTexture([[Interface\CharacterFrame\TempPortraitAlphaMask]], "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+            mask:SetAllPoints(texture)
+            texture.itemMask = mask
+        end
+    end
+    if texture.itemMask and native ~= texture.maskApplied then
+        if native then texture:AddMaskTexture(texture.itemMask) else texture:RemoveMaskTexture(texture.itemMask) end
+        texture.maskApplied = native
+    end
 end
 
 local function RowTip(self)
@@ -545,7 +566,7 @@ local function RowFrame(i)
             StartEdit(MI().Rule(self.rule.id))
         end)
         row:RegisterForDrag("LeftButton")
-        row:SetScript("OnEnter", function(self) self.hover:Show(); RowTip(self) end)
+        row:SetScript("OnEnter", function(self) if self.sel then self.sel:Show() end; RowTip(self) end)
         row:SetScript("OnLeave", function(self) self.hover:Hide(); if self.sel then self.sel:SetShown(selectedRule == (self.rule and self.rule.id)) end; GameTooltip:Hide() end)
         row:SetScript("OnDragStart", function(self) if self.rule then P.StartRuleDrag(self) end end)
         row:SetScript("OnDragStop", function() P.Drag.Stop() end)
@@ -615,15 +636,42 @@ function P.StartRuleDrag(row)
         if not ruleGhost then
             ruleGhost = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
             if R.SettingsMaterial then R.SettingsMaterial.PanelFace(ruleGhost, "walnut") end
+            if R.SettingsCraft then R.SettingsCraft.Sheet(ruleGhost, "selection", { layer = "BACKGROUND", sub = 1, corner = 12 }) end
             ruleGhost:SetFrameStrata("TOOLTIP"); ruleGhost:EnableMouse(false)
-            ruleGhost.icon = ruleGhost:CreateTexture(nil, "ARTWORK"); ruleGhost.icon:SetPoint("LEFT", 6, 0); ruleGhost.icon:SetSize(32, 32)
-            ruleGhost.name = Wg().Text(ruleGhost, "body"); ruleGhost.name:SetPoint("TOPLEFT", 42, -10)
-            ruleGhost.detail = Wg().Text(ruleGhost, "small"); ruleGhost.detail:SetPoint("TOPLEFT", 42, -34)
+            ruleGhost.icon = ruleGhost:CreateTexture(nil, "ARTWORK"); ruleGhost.icon:SetPoint("LEFT", 45, 0); ruleGhost.icon:SetSize(36, 36)
+            ruleGhost.priority = Wg().Text(ruleGhost, "small"); ruleGhost.priority:SetPoint("LEFT", 22, 0)
+            ruleGhost.name = Wg().Text(ruleGhost, "body"); ruleGhost.name:SetPoint("TOPLEFT", 85, -2); ruleGhost.name:SetHeight(32)
+            ruleGhost.detail = Wg().Text(ruleGhost, "small"); ruleGhost.detail:SetPoint("TOPLEFT", 85, -36)
+            ruleGhost.badges = {}
+            for _, suffix in ipairs({ "action", "to", "keep" }) do
+                local badge = CreateFrame("Frame", nil, ruleGhost)
+                if R.SettingsCraft then R.SettingsCraft.Sheet(badge, "chip", { layer = "BACKGROUND", corner = 6 }) end
+                badge.label = Wg().Text(badge, "small"); badge.label:SetPoint("LEFT", 23, 0); badge.label:SetWordWrap(false)
+                badge.icon = badge:CreateTexture(nil, "ARTWORK"); badge.icon:SetPoint("LEFT", 4, 0); badge.icon:SetSize(18, 18)
+                ruleGhost.badges[suffix] = badge
+            end
         end
         ruleGhost:SetSize(row:GetWidth(), row:GetHeight()); ruleGhost:SetAlpha(.9)
-        ruleGhost.icon:SetTexture(RuleArtwork(rule))
-        ruleGhost.name:SetText(from .. ".  " .. rule.name)
-        ruleGhost.detail:SetText(P.ItemsText(rule) .. " · " .. P.DestText(rule))
+        PaintRuleArtwork(ruleGhost.icon, rule)
+        ruleGhost.priority:SetText(from)
+        ruleGhost.name:SetText(rule.name)
+        local sourceName = pool["rule" .. from .. "name"]
+        ruleGhost.name:SetFont(sourceName:GetFont())
+        ruleGhost.name:SetWidth(sourceName:GetWidth()); ruleGhost.detail:SetWidth(sourceName:GetWidth())
+        ruleGhost.detail:SetText(P.ItemsText(rule))
+        for suffix, badge in pairs(ruleGhost.badges) do
+            local key = "rule" .. from .. suffix
+            local source, label, icon = pool[key .. "badge"], pool[key], pool[key .. "icon"]
+            local visible = source and source:IsShown()
+            badge:SetShown(visible)
+            if visible then
+                badge:ClearAllPoints(); badge:SetPoint("TOPLEFT", ruleGhost, "TOPLEFT", source:GetLeft() - left, source:GetTop() - top)
+                badge:SetSize(source:GetWidth(), source:GetHeight())
+                badge.label:SetText(label:GetText()); badge.label:SetWidth(label:GetWidth()); badge.label:SetFont(label:GetFont()); badge.label:SetTextColor(label:GetTextColor())
+                badge.icon:SetTexture(icon:GetTexture())
+                badge.icon:SetRotation(suffix == "action" and MI().HAS_FLOW[rule.kind] and rule.flow ~= "balance" and (rule.flow == "withdraw" and math.pi / 2 or -math.pi / 2) or 0)
+            end
+        end
         ghost = ruleGhost
         local scale = ghost:GetEffectiveScale()
         offset = { left - x / scale, top - y / scale }
@@ -666,14 +714,15 @@ local function DrawTable(y, rules)
         end
         Label("priority", tostring(priority), 22, 26, 24)
         local art = Get(key .. "art", function() return row:CreateTexture(nil, "ARTWORK") end)
-        art:SetParent(row); art:ClearAllPoints(); art:SetPoint("LEFT", row, "LEFT", 45, 0); art:SetSize(40, 40)
-        art:SetTexture(RuleArtwork(rule))
+        art:SetParent(row); art:ClearAllPoints(); art:SetPoint("LEFT", row, "LEFT", 45, 0); art:SetSize(36, 36)
+        PaintRuleArtwork(art, rule)
         local chipX = width >= 850 and math.floor(width * .44) or 85
-        local title = Label("name", rule.name, 85, 4, width >= 850 and chipX - 100 or width - 270, "body")
-        title:SetWordWrap(true); title:SetHeight(34)
-        Label("items", P.ItemsText(rule) .. (MI().Problem(rule, false) and " · Needs attention" or ""), 85, 40, width >= 850 and chipX - 100 or width - 270)
+        local title = Label("name", rule.name, 85, 2, width >= 850 and chipX - 100 or width - 270, "body")
+        if R.SettingsMaterial then R.SettingsMaterial.ReminderFont(title, 14, rule.enabled) end
+        title:SetWordWrap(true); title:SetHeight(32)
+        Label("items", P.ItemsText(rule) .. (MI().Problem(rule, false) and " · Needs attention" or ""), 85, 36, width >= 850 and chipX - 100 or width - 270)
         local action, to, keep = P.RowCells(rule)
-        local chipY = width >= 850 and 26 or 54
+        local chipY = width >= 850 and 23 or 50
         local function Badge(suffix, text, x, w)
             if text == "" then return end
             local badge = Get(key .. suffix .. "badge", function()
@@ -681,12 +730,29 @@ local function DrawTable(y, rules)
                 if R.SettingsCraft then R.SettingsCraft.Sheet(b, "chip", { layer = "BACKGROUND", corner = 6 }) end
                 return b
             end)
-            badge:SetParent(row); badge:ClearAllPoints(); badge:SetPoint("TOPLEFT", row, "TOPLEFT", x, -chipY); badge:SetSize(w, 19)
-            Label(suffix, text, x + 6, chipY + 2, w - 12)
+            badge:SetParent(row); badge:ClearAllPoints(); badge:SetPoint("TOPLEFT", row, "TOPLEFT", x, -chipY); badge:SetSize(w, width >= 850 and 25 or 19)
+            local label = Label(suffix, text, x + 6, chipY + 2, w - 26)
+            label:SetParent(badge); label:ClearAllPoints(); label:SetPoint("LEFT", badge, "LEFT", 23, 0)
+            label:SetAlpha(1); label:SetDrawLayer("OVERLAY", 7)
+            if R.SettingsMaterial then R.SettingsMaterial.ReminderFont(label, 12, false) end
+            local icon = Get(key .. suffix .. "icon", function() return badge:CreateTexture(nil, "ARTWORK") end)
+            icon:ClearAllPoints(); icon:SetPoint("LEFT", badge, "LEFT", 4, 0); icon:SetSize(width >= 850 and 18 or 15, width >= 850 and 18 or 15)
+            local image = suffix == "keep" and "leather-backpack" or suffix == "to" and (rule.kind == "guild" and "tabard" or rule.kind == "mail" and "sealed-scroll" or "coins") or rule.kind == "never" and "sword-and-shield" or rule.kind == "keep" and "leather-backpack" or rule.kind == "mail" and "sealed-scroll" or "balance-scales"
+            icon:SetTexture(R.PATH .. "media\\npcs\\" .. image .. "-small")
+            if suffix == "to" and rule.kind == "bank" then icon:SetTexture(R.PATH .. [[media\icons\magicBank-small]]) end
+            icon:SetRotation(0)
+            if suffix == "action" and MI().HAS_FLOW[rule.kind] and rule.flow ~= "balance" then
+                icon:SetTexture(R.PATH .. [[media\guides\status-current-small]])
+                icon:SetRotation(rule.flow == "withdraw" and math.pi / 2 or -math.pi / 2)
+            end
+            if suffix == "action" and rule.enabled then
+                if rule.flow == "balance" or rule.flow == "withdraw" then label:SetTextColor(.72, .83, .86)
+                elseif MI().Deposits(rule) then label:SetTextColor(.80, .84, .62) end
+            end
         end
-        Badge("action", action, chipX, 90)
+        Badge("action", rule.kind == "keep" and "Keep in bags" or rule.kind == "never" and "Never transfer" or action, chipX, (rule.kind == "keep" or rule.kind == "never") and 146 or 90)
         Badge("to", to ~= "-" and to or "", chipX + 96, 100)
-        Badge("keep", keep ~= "-" and ("Keep " .. keep) or "", chipX + 202, 78)
+        Badge("keep", rule.kind ~= "never" and keep ~= "-" and ("Keep " .. keep) or "", chipX + 202, 78)
         local box = Check(key .. "on", function(v)
             local ok, why = mi.SetRuleEnabled(rule.id, v); if not ok then Say(why, "warn") end
         end)
@@ -740,33 +806,33 @@ local function DrawList(y)
     local d = Text("listText", "small"); Wide(d, PAD, y, full)
     d:SetText(("%d of %d rules on. First matching rule wins. Nothing moves until you review and confirm."):format(enabled, #all))
     Tone(d, "dim"); y = y + H(d) + 12
-    local findWidth = full - 438
-    local new = Get("newRule", function()
-        local dd = Wg().Dropdown(f, 200, function(v) NewFromTemplate(v) end)
-        return dd
+    local findWidth = full - 386
+    local new = Button("newRule", "+ New rule", 180, "primary", function()
+        Wg().ContextMenu(pool.newRule, TemplateChoices(), function(value) NewFromTemplate(value) end)
     end)
-    new:SetChoices(TemplateChoices)
-    new:SetValue(nil, "New rule...")
-    new:SetWidth(180); At(new, PAD, y)
-    Button("preview", "Preview", 84, "secondary", function() mi.Window.Show(true) end)
-    At(pool.preview, PAD + full - 84, y)
-    R.Interact.Tip(pool.preview, "Preview", "Opens the review with what your rules would move from your bags now, and what stays and why. Nothing moves from the preview.")
+    new:SetHeight(32); At(new, PAD, y)
+    Button("rulesHelp", "?", 32, "secondary", function() local enter = pool.rulesHelp:GetScript("OnEnter"); if enter then enter(pool.rulesHelp) end end)
+    At(pool.rulesHelp, PAD + full - 32, y)
+    R.Interact.Tip(pool.rulesHelp, "Rule priority", "The first matching rule wins. Keep safeguards still apply. Clear filters before reordering; nothing moves until you review and confirm.")
     local find = Edit("findRule", findWidth)
     find:SetWidth(findWidth)
     At(find, PAD + 188, y)
+    find:SetHeight(32); find:SetTextInsets(24, 6, 0, 0)
+    local glass = Get("findGlass", function() return find:CreateTexture(nil, "OVERLAY") end)
+    glass:SetAtlas("common-search-magnifyingglass"); glass:ClearAllPoints(); glass:SetPoint("LEFT", find, "LEFT", 6, 0); glass:SetSize(14, 14)
     if not find:HasFocus() then find:SetText(query) end
     find:SetScript("OnTextChanged", function(self)
         local value = (self:GetText() or ""):lower()
         if value ~= query then query = value; P.QueueRefresh() end
     end)
-    if query == "" then local hint = Text("findHint", "small"); Wide(hint, PAD + 196, y + 4, findWidth - 12); hint:SetText("Find a rule..."); Tone(hint, "quiet") end
+    if query == "" then local hint = Text("findHint", "small"); hint:SetParent(find); hint:ClearAllPoints(); hint:SetPoint("LEFT", find, "LEFT", 24, 0); hint:SetWidth(findWidth - 30); hint:SetText("Find a rule..."); Tone(hint, "quiet") end
     R.Interact.Tip(find, "Find a rule", "Search rule names, item criteria and destinations. Priority stays unchanged.")
     local filter = Get("ruleFilter", function() return Wg().Dropdown(f, 180, function(value) ruleFilter = value; P.QueueRefresh() end) end)
     filter:SetChoices(function() return { { value = "all", label = "All rules" }, { value = "enabled", label = "Enabled rules" }, { value = "disabled", label = "Disabled rules" } } end)
     filter:SetValue(ruleFilter, ruleFilter == "all" and "All rules" or ruleFilter == "enabled" and "Enabled rules" or "Disabled rules")
-    filter:SetWidth(150); At(filter, PAD + full - 242, y)
+    filter:SetWidth(150); filter:SetHeight(32); At(filter, PAD + full - 190, y)
     R.Interact.Tip(new, "Rule priority", "Keep amounts from every matching rule still count. Templates start turned off. Clear search and filters before reordering.")
-    y = y + 36
+    y = y + 42
     if #rules == 0 then
         local none = Text("listNone", "body")
         Wide(none, PAD, y)
@@ -775,7 +841,10 @@ local function DrawList(y)
         y = y + 28
     end
     if #rules > 0 then y = DrawTable(y, rules) end
-    return y
+    Button("preview", "Review items", 116, "secondary", #all > 0 and function() mi.Window.Show(true) end or nil)
+    At(pool.preview, PAD, y + 8)
+    R.Interact.Tip(pool.preview, "Review items", "Opens the existing read-only item review. Nothing moves until you confirm an action there.")
+    return y + 46
 end
 
 ---------------------------------------------------------------------------
@@ -1153,14 +1222,25 @@ local function DrawEditor(y)
         if editing and editing.name ~= self:GetText() then editing.name = self:GetText(); P.QueueRefresh() end
     end)
     local full = math.max(W, f:GetWidth() or W) - PAD * 2
-    if full >= 870 then
-        local live = Text("builderSummary", "small"); Wide(live, 380, y, full - 386)
-        local criteria = P.ItemsText(r)
-        live:SetText(P.KindLabel(r) .. " · " .. (#criteria > 100 and "Multiple item criteria" or criteria) .. " · " .. P.KeepText(r)); live:SetHeight(32); Tone(live, "head")
-    end
-    local cols = full >= 870 and 3 or 2
+    local wide = full >= 870
+    local bannerX, bannerY, bannerW = wide and 380 or PAD, wide and y - 8 or y + 30, wide and full - 386 or full
+    local banner = Get("summaryBanner", function()
+        local frame = CreateFrame("Frame", nil, f)
+        if R.SettingsMaterial then R.SettingsMaterial.PanelFace(frame, "card") end
+        if R.SettingsCraft then R.SettingsCraft.Sheet(frame, "selection", { layer = "BACKGROUND", sub = 1, corner = 12 }) end
+        return frame
+    end)
+    At(banner, bannerX, bannerY); banner:SetSize(bannerW, 64); banner:SetFrameLevel(f:GetFrameLevel() + 1)
+    local art = Get("summaryArt", function() return banner:CreateTexture(nil, "ARTWORK") end)
+    art:ClearAllPoints(); art:SetPoint("LEFT", banner, "LEFT", 10, 0); art:SetSize(40, 40); PaintRuleArtwork(art, r)
+    local live = Text("builderSummary", "heading"); live:SetParent(banner); live:ClearAllPoints(); live:SetPoint("TOPLEFT", banner, "TOPLEFT", 60, -9); live:SetWidth(bannerW - 74)
+    live:SetText((r.kind == "keep" or MI().Withdraws(r)) and ("Carry up to " .. (r.keep or 0) .. " of each matching item") or P.KindLabel(r)); live:SetHeight(22)
+    local detail = Text("summaryDetail", "small"); detail:SetParent(banner); detail:ClearAllPoints(); detail:SetPoint("TOPLEFT", banner, "TOPLEFT", 60, -34); detail:SetWidth(bannerW - 74); detail:SetHeight(25)
+    detail:SetText(P.ItemsText(r) .. " · " .. P.DestText(r):gsub(" \226\134\146 ", ": "))
+    R.Interact.Tip(banner, "Rule summary", P.Sentence(r))
+    local cols = wide and 3 or 2
     local col = math.floor((full - (cols - 1) * 12) / cols)
-    y = y + 38
+    y = y + (wide and 68 or 106)
     local top = y
     local function Panel(key, title, x, py, w, h)
         local panel = Get(key, function()
@@ -1168,11 +1248,14 @@ local function DrawEditor(y)
         end)
         At(panel, x, py); panel:SetSize(w, h)
         panel:SetFrameLevel(f:GetFrameLevel())
-        local t = Text(key .. "title", "heading"); Wide(t, x + 12, py + 12, w - 24); t:SetText(title); Tone(t, "head")
+        local art = Get(key .. "headingArt", function() return panel:CreateTexture(nil, "ARTWORK") end)
+        local icons = { itemsPanel = [[media\npcs\leather-backpack-small]], destinationPanel = [[media\icons\magicBank-small]], flowPanel = [[media\guides\status-current-small]], limitsPanel = [[media\npcs\coins-small]], reviewPanel = [[media\npcs\sealed-scroll-small]] }
+        art:ClearAllPoints(); art:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -10); art:SetSize(23, 23); art:SetTexture(R.PATH .. icons[key])
+        local t = Text(key .. "title", "heading"); t:SetParent(panel); Wide(t, x + 40, py + 12, w - 50); t:SetText(title); Tone(t, "head")
         return py + 44
     end
     local left, mid = PAD, PAD + col + 12
-    local iy = Panel("itemsPanel", "What items?", left, top, col, 292)
+    local iy = Panel("itemsPanel", "What items?", left, top, col, 320)
     local it = Text("itemsSummary", "small"); Wide(it, left + 12, iy, col - 24)
     local criteria = P.ItemsText(r)
     it:SetText(#criteria > 120 and "Multiple item criteria: see filters and review." or criteria); it:SetHeight(32); Tone(it, "dim")
@@ -1180,9 +1263,9 @@ local function DrawEditor(y)
     iy = iy + 42
     local quick = {
         { "Cloth / herbs", R.PATH .. [[media\icons\magicReagents-small]], "categories" },
-        { "Consumables", [[Interface\Icons\INV_Potion_51]], "consumables" },
-        { "Equipment", [[Interface\Icons\INV_Chest_Chain]], "equipment" },
-        { "Specific items", [[Interface\Icons\INV_Scroll_03]], "specific" },
+        { "Consumables", R.PATH .. [[media\healerwatch\vessel-small]], "consumables" },
+        { "Equipment", R.PATH .. [[media\npcs\sword-and-shield-small]], "equipment" },
+        { "Specific items", R.PATH .. [[media\npcs\sealed-scroll-small]], "specific" },
     }
     for i, choice in ipairs(quick) do
         local button = Get("quickCategory" .. i, function() return Wg().Tab(f, "", math.floor((col - 30) / 2), function() end) end)
@@ -1211,43 +1294,73 @@ local function DrawEditor(y)
             end
             P.QueueRefresh()
         end)
-        At(button, left + 12 + ((i - 1) % 2) * math.floor((col - 6) / 2), iy + math.floor((i - 1) / 2) * 32)
+        button:SetHeight(34)
+        At(button, left + 12 + ((i - 1) % 2) * math.floor((col - 6) / 2), iy + math.floor((i - 1) / 2) * 40)
         local artFrame = Get("quickArtFrame" .. i, function()
             local frame = CreateFrame("Frame", nil, button); frame.tex = frame:CreateTexture(nil, "ARTWORK"); frame.tex:SetAllPoints(); return frame
         end)
         artFrame:SetFrameLevel(button:GetFrameLevel() + 4); artFrame:ClearAllPoints(); artFrame:SetPoint("LEFT", button, "LEFT", 4, 0); artFrame:SetSize(20, 20)
         artFrame.tex:SetTexture(choice[2])
-        button.text:ClearAllPoints(); button.text:SetPoint("LEFT", button, "LEFT", 26, 0); button.text:SetPoint("RIGHT", button, "RIGHT", -4, 0)
+        local mark = Get("quickSelected" .. i, function() return artFrame:CreateTexture(nil, "OVERLAY") end)
+        mark:SetTexture(R.PATH .. [[media\guides\status-done-small]]); mark:ClearAllPoints(); mark:SetPoint("RIGHT", button, "RIGHT", -4, 0); mark:SetSize(14, 14); mark:SetShown(selected == true)
+        button.text:ClearAllPoints(); button.text:SetPoint("LEFT", button, "LEFT", 26, 0); button.text:SetPoint("RIGHT", button, "RIGHT", selected and -20 or -4, 0)
     end
-    iy = iy + 72
-    local visibleItems, ids = {}, {}
-    for id in pairs(r.include) do ids[#ids + 1] = id end
-    table.sort(ids)
-    for i = 1, math.min(6, #ids) do visibleItems[ids[i]] = true end
-    local strip = ItemStrip("builderInclude", visibleItems, left + 12, iy, "Remove from included items", function(id) r.include[id] = nil; P.QueueRefresh() end)
-    iy = iy + math.min(strip, 32) + 4
+    iy = iy + 84
+    local function SelectedItem(prefix, set, x, py, width, empty)
+        local ids = {}; for id in pairs(set) do ids[#ids + 1] = id end; table.sort(ids)
+        local id = ids[1]
+        local face = Get(prefix .. "face", function()
+            local frame = CreateFrame("Frame", nil, f)
+            if R.SettingsMaterial then R.SettingsMaterial.PanelFace(frame, "canvas") end
+            return frame
+        end)
+        At(face, x, py); face:SetSize(width, 34); face:SetFrameLevel(f:GetFrameLevel())
+        local name = Text(prefix .. "name", "small"); name:SetParent(face); name:ClearAllPoints(); name:SetPoint("LEFT", face, "LEFT", id and 38 or 8, 0); name:SetWidth(width - (id and 76 or 16)); name:SetHeight(30)
+        if id then
+            local facts = MI().ItemFacts(id)
+            name:SetText((facts and facts.name or ("Item " .. id)) .. (#ids > 1 and (" (+" .. (#ids - 1) .. " more)") or ""))
+            local icon = Icon(prefix .. "icon"); At(icon, x + 4, py + 4); icon.tex:SetTexture(facts and facts.icon or QUESTION); icon.itemID = id
+            Button(prefix .. "remove", "x", 26, "secondary", function() set[id] = nil; P.QueueRefresh() end); At(pool[prefix .. "remove"], x + width - 30, py + 5)
+        else name:SetText(empty) end
+    end
+    SelectedItem("selectedInclude", r.include, left + 12, iy, col - 24, "Choose categories or add specific items.")
+    iy = iy + 42
     Button("builderPick", "Choose from bags", col - 24, "secondary", function()
         MI().Picker.Open({ purpose = "Include specific items", selected = r.include, onDone = function(set)
             r.include = set; for id in pairs(set) do r.exclude[id] = nil end; P.QueueRefresh() end })
     end); At(pool.builderPick, left + 12, iy)
     local idBox = Edit("builderId", col - 108); At(idBox, left + 12, iy + 30)
+    R.Interact.Tip(idBox, "Add item", "Enter an item ID or paste an item link. Unresolved references keep their identity.")
+    if idBox:GetText() == "" then
+        local hint = Text("builderIdHint", "small"); hint:SetParent(idBox); hint:ClearAllPoints(); hint:SetPoint("LEFT", idBox, "LEFT", 6, 0); hint:SetText("Item ID or link"); Tone(hint, "quiet")
+    end
+    if not idBox.hintHook then
+        idBox.hintHook = true
+        idBox:HookScript("OnTextChanged", function(self) if pool.builderIdHint then pool.builderIdHint:SetShown(self:GetText() == "" and editing ~= nil) end end)
+    end
     local function Add(id) r.include[id] = true; r.exclude[id] = nil; P.QueueRefresh() end
     idBox:SetScript("OnEnterPressed", function(self) AddById(self, Add) end)
     Button("builderAdd", "Add item", 74, "secondary", function() AddById(idBox, Add) end); At(pool.builderAdd, left + col - 86, iy + 30)
     Button("moreItemFilters", itemAdvanced and "Hide item filters" or "More item filters", col - 24, "secondary", function() itemAdvanced = not itemAdvanced; P.QueueRefresh() end)
-    At(pool.moreItemFilters, left + 12, top + 256)
+    At(pool.moreItemFilters, left + 12, top + 284)
     local function Illustrate(key, button, texture)
         local art = Get(key, function()
             local frame = CreateFrame("Frame", nil, button); frame.tex = frame:CreateTexture(nil, "ARTWORK"); frame.tex:SetAllPoints(); return frame
         end)
         art:SetFrameLevel(button:GetFrameLevel() + 4); art:ClearAllPoints(); art:SetPoint("LEFT", button, "LEFT", 6, 0); art:SetSize(22, 22); art.tex:SetTexture(texture)
         button.text:ClearAllPoints(); button.text:SetPoint("LEFT", button, "LEFT", 34, 0); button.text:SetPoint("RIGHT", button, "RIGHT", -6, 0)
+        local mark = Get(key .. "selected", function() return art:CreateTexture(nil, "OVERLAY") end)
+        mark:SetTexture(R.PATH .. [[media\guides\status-done-small]]); mark:ClearAllPoints(); mark:SetPoint("RIGHT", button, "RIGHT", -8, 0); mark:SetSize(18, 18)
+        mark:SetShown(button.twichSelected == true or (button.IsSelected and button:IsSelected()))
+        button.text:SetPoint("RIGHT", button, "RIGHT", -30, 0)
         return art
     end
-    local dy = Panel("destinationPanel", "Where should they go?", mid, top, col, 292)
-    for i, kind in ipairs(MI().KIND_ORDER) do
+    local dy = Panel("destinationPanel", "Where should they go?", mid, top, col, 320)
+    -- Presentation order follows the player's destination choices; the stored kind and engine order are unchanged.
+    for i, kind in ipairs({ "bank", "guild", "mail", "keep", "never" }) do
         local b = Get("destinationChoice" .. kind, function() return Wg().Tab(f, "", col - 24, function() end) end)
-        b.text:SetText(kind == "bank" and "My bank" or MI().KIND_LABEL[kind]); b:SetSelected(r.kind == kind)
+        local labels = { bank = "My bank", guild = "Guild bank", mail = "Mail to recipient..." }
+        b.text:SetText(labels[kind] or MI().KIND_LABEL[kind]); b:SetSelected(r.kind == kind)
         b:SetScript("OnClick", function()
             r.kind = kind
             if MI().HAS_FLOW[kind] then r.flow = r.flow or "deposit" end
@@ -1255,14 +1368,15 @@ local function DrawEditor(y)
             elseif r.dest then local d = MI().Dest(r.dest); if not d or d.kind ~= kind then r.dest = nil end end
             P.QueueRefresh()
         end)
-        At(b, mid + 12, dy + (i - 1) * 34)
+        b:SetHeight(36); At(b, mid + 12, dy + (i - 1) * 40)
         local icons = { bank = "coins", guild = "tabard", mail = "sealed-scroll", keep = "leather-backpack", never = "sword-and-shield" }
-        Illustrate("destinationArt" .. kind, b, R.PATH .. "media\\npcs\\" .. icons[kind] .. "-small")
+        b.twichSelected = r.kind == kind
+        Illustrate("destinationArt" .. kind, b, kind == "bank" and R.PATH .. [[media\icons\magicBank-small]] or R.PATH .. "media\\npcs\\" .. icons[kind] .. "-small")
     end
     Button("advancedDestination", "Destination details", col - 24, "secondary", function() destAdvanced = not destAdvanced; P.QueueRefresh() end)
-    At(pool.advancedDestination, mid + 12, top + 256)
-    local bottom = top + 304
-    local fy = Panel("flowPanel", "How should they move?", left, bottom, col, 208)
+    At(pool.advancedDestination, mid + 12, top + 284)
+    local bottom = top + 332
+    local fy = Panel("flowPanel", "How should they move?", left, bottom, col, 244)
     if MI().HAS_FLOW[r.kind] and not r.design then
         for i, flow in ipairs(MI().FLOW_ORDER) do
             local b = Get("flowChoice" .. flow, function() return Wg().Tab(f, "", col - 24, function() end) end)
@@ -1270,7 +1384,8 @@ local function DrawEditor(y)
             b:SetScript("OnClick", function()
                 r.flow = flow; if flow ~= "deposit" and (r.keep or 0) <= 0 then r.keep = 20 end; P.QueueRefresh()
             end)
-            At(b, left + 12, fy + (i - 1) * 38)
+            b:SetHeight(34); At(b, left + 12, fy + (i - 1) * 40)
+            b.twichSelected = (r.flow or "deposit") == flow
             local art = Illustrate("flowArt" .. flow, b, flow == "balance" and R.PATH .. [[media\npcs\balance-scales-small]] or R.PATH .. [[media\guides\status-current-small]])
             if flow ~= "balance" then art.tex:SetRotation(flow == "deposit" and -math.pi / 2 or math.pi / 2) end
         end
@@ -1278,12 +1393,15 @@ local function DrawEditor(y)
         local t = Text("noFlow", "small"); Wide(t, left + 12, fy, col - 24)
         t:SetText("This action has no transfer direction. No items move while editing.")
     end
-    local ky = Panel("limitsPanel", "What should stay?", mid, bottom, col, 208)
-    local qty = Edit("builderKeep", 72); At(qty, mid + 48, ky)
+    local flowHelp = Text("selectedFlowHelp", "small"); Wide(flowHelp, left + 12, bottom + 170, col - 24)
+    local flowWords = { deposit = "Deposit extras above the keep amount.", withdraw = "Withdraw whole stacks up to the target, never over it.", balance = "Deposit extras and withdraw whole stacks up to the target." }
+    flowHelp:SetText(MI().HAS_FLOW[r.kind] and not r.design and flowWords[r.flow or "deposit"] or "")
+    local ky = Panel("limitsPanel", "What should stay?", mid, bottom, col, 244)
+    local qty = Edit("builderKeep", 72); At(qty, mid + 140, ky); qty:SetWidth(60)
     Button("keepMinus", "-", 28, "secondary", r.kind ~= "never" and function() if pool.builderKeep:HasFocus() then pool.builderKeep:ClearFocus() end; r.keep = math.max(0, (r.keep or 0) - 1); P.QueueRefresh() end or nil)
-    At(pool.keepMinus, mid + 12, ky)
+    At(pool.keepMinus, mid + 108, ky)
     Button("keepPlus", "+", 28, "secondary", r.kind ~= "never" and function() if pool.builderKeep:HasFocus() then pool.builderKeep:ClearFocus() end; r.keep = math.min(MI().MAX_KEEP, (r.keep or 0) + 1); P.QueueRefresh() end or nil)
-    At(pool.keepPlus, mid + 128, ky)
+    At(pool.keepPlus, mid + 208, ky)
     qty:SetEnabled(r.kind ~= "never")
     if not qty:HasFocus() then qty:SetText(tostring(r.keep or 0)) end
     qty.read = function(self)
@@ -1296,32 +1414,59 @@ local function DrawEditor(y)
     qty:SetScript("OnEnterPressed", function(self) self:read(); self:ClearFocus() end)
     qty:SetScript("OnEscapePressed", function(self) self:SetText(tostring(editing.keep or 0)); self:ClearFocus() end)
     if not qty.builderHook then qty.builderHook = true; qty:HookScript("OnEditFocusLost", function(self) self:read() end) end
-    local unit = Text("builderKeepUnit", "small"); Wide(unit, mid + 12, ky + 30, col - 24); unit:SetText("Keep in bags (each item)")
-    local exclusion = Text("builderExclusions", "small"); Wide(exclusion, mid + 12, ky + 60, col - 24)
-    local n = 0; for _ in pairs(r.exclude) do n = n + 1 end
-    exclusion:SetText(n .. " excluded item types")
+    local unit = Text("builderKeepUnit", "small"); Wide(unit, mid + 12, ky + 4, 94); unit:SetText("Keep in bags:")
+    local exclusion = Text("builderExclusions", "small"); Wide(exclusion, mid + 12, ky + 40, col - 24)
+    exclusion:SetText("Never include these:")
     Button("advancedLimits", "Exclusions and limits", col - 24, "secondary", function() limitsAdvanced = not limitsAdvanced; P.QueueRefresh() end)
-    At(pool.advancedLimits, mid + 12, bottom + 132)
-    local safe = Text("builderSafety", "small"); Wide(safe, mid + 12, bottom + 166, col - 24)
-    safe:SetText("Existing protections and whole-stack limits still apply.")
-    local rx, ry, rw = cols == 3 and (mid + col + 12) or PAD, cols == 3 and top or (bottom + 220), cols == 3 and col or full
-    local reviewY = Panel("reviewPanel", "Rule review", rx, ry, rw, cols == 3 and 512 or 210)
+    At(pool.advancedLimits, mid + 12, bottom + 188)
+    local safe = Text("builderSafety", "small"); Wide(safe, mid + 12, bottom + 214, col - 24)
+    safe:SetText("Existing item protections still apply.")
+    SelectedItem("selectedExclude", r.exclude, mid + 12, bottom + 105, col - 24, "No rule-specific exclusions")
+    Button("excludePick", "Choose exclusions...", col - 24, "secondary", function()
+        MI().Picker.Open({ purpose = "Exclude item types from this rule", selected = r.exclude, onDone = function(set)
+            r.exclude = set; P.QueueRefresh() end })
+    end); At(pool.excludePick, mid + 12, bottom + 148)
+    local rx, ry, rw = cols == 3 and (mid + col + 12) or PAD, cols == 3 and top or (bottom + 256), cols == 3 and col or full
+    local reviewY = Panel("reviewPanel", "Rule review", rx, ry, rw, cols == 3 and 576 or 210)
     local actionLabel, destinationLabel = P.RowCells(r)
     destinationLabel = r.kind == "bank" and "My bank" or r.kind == "keep" and "Bags" or r.kind == "never" and "No transfers" or destinationLabel
-    local summary = Text("builderReview", "body"); Wide(summary, rx + 12, reviewY, rw - 24); summary:SetText("Items: " .. P.ItemsText(r) .. "\n\nDestination: " .. destinationLabel .. "\n\nBehavior: " .. actionLabel .. "\n\nKeep: " .. P.KeepText(r))
+    local reviewArt = Get("reviewIdentityArt", function() return pool.reviewPanel:CreateTexture(nil, "ARTWORK") end)
+    reviewArt:ClearAllPoints(); reviewArt:SetPoint("TOPLEFT", pool.reviewPanel, "TOPLEFT", 12, -44); reviewArt:SetSize(40, 40); PaintRuleArtwork(reviewArt, r)
+    local identity = Text("reviewIdentity", "body"); Wide(identity, rx + 62, reviewY + 8, rw - 74); identity:SetParent(pool.reviewPanel); identity:SetText(r.name or "New rule"); identity:SetHeight(32)
+    reviewY = reviewY + 60
+    local summaryHeight = 0
+    local fields = { { "Applies to", P.ItemsText(r) }, { "Destination", destinationLabel }, { "Behavior", actionLabel }, { "Keep in bags", r.kind == "never" and "All matching items" or r.keep > 0 and (r.keep .. " of each") or P.KeepText(r) } }
+    for i, field in ipairs(fields) do
+        local label = Text("reviewLabel" .. i, "small"); label:SetParent(pool.reviewPanel); Wide(label, rx + 12, reviewY + summaryHeight, 88); label:SetText(field[1] .. ":"); Tone(label, "dim")
+        local value = Text("reviewValue" .. i, "body"); value:SetParent(pool.reviewPanel); Wide(value, rx + 108, reviewY + summaryHeight, rw - 120); value:SetText(field[2])
+        summaryHeight = summaryHeight + math.max(H(label), H(value)) + 12
+    end
     R.Interact.Tip(pool.reviewPanel, "Rule review", P.Sentence(r))
     local probe = MI().CleanRule((function() local copy = {} for k, v in pairs(r) do copy[k] = v end copy.id = copy.id or "rnew" return copy end)())
     local code, why = MI().Problem(probe, false)
-    local ready = Text("builderReady", "body"); Wide(ready, rx + 12, reviewY + H(summary) + 18, rw - 24)
+    local ready = Text("builderReady", "body"); Wide(ready, rx + 12, reviewY + summaryHeight + 18, rw - 24)
     ready:SetText(code and ("Needs attention: " .. (why or code)) or "Ready to save"); Tone(ready, code and "warn" or "head")
-    local reviewHeight = math.max(cols == 3 and 512 or 260, 44 + H(summary) + 18 + H(ready) + 76)
+    ready:SetParent(pool.reviewPanel)
+    local statusFace = Get("reviewStatusFace", function()
+        local frame = CreateFrame("Frame", nil, pool.reviewPanel)
+        if R.SettingsCraft then R.SettingsCraft.Sheet(frame, "field", { layer = "BACKGROUND", corner = 8 }) end
+        return frame
+    end)
+    At(statusFace, rx + 10, reviewY + summaryHeight + 10); statusFace:SetSize(rw - 20, H(ready) + 30)
+    ready:SetParent(statusFace)
+    local stateArt = Get("reviewStateArt", function() return statusFace:CreateTexture(nil, "ARTWORK") end)
+    stateArt:SetTexture(R.PATH .. (code and [[media\guides\status-current-small]] or [[media\guides\status-done-small]])); stateArt:ClearAllPoints(); stateArt:SetPoint("LEFT", statusFace, "LEFT", 5, 0); stateArt:SetSize(22, 22)
+    ready:ClearAllPoints(); ready:SetPoint("LEFT", statusFace, "LEFT", 34, 0); ready:SetWidth(rw - 62); statusFace:SetHeight(H(ready) + 24)
+    local reviewHeight = math.max(cols == 3 and 576 or 260, 104 + summaryHeight + 18 + H(ready) + 104)
     pool.reviewPanel:SetHeight(reviewHeight)
+    local safety = Text("reviewSafety", "small"); Wide(safety, rx + 14, ry + reviewHeight - 104, rw - 28); safety:SetParent(pool.reviewPanel)
+    safety:SetText("Nothing moves automatically. Transfers still require review and your action.")
     local enabled = Check("e4on", function(v) turnOn = v; P.QueueRefresh() end)
     enabled:SetChecked(turnOn and not code); enabled:SetActive(not code)
     At(enabled, rx + 12, ry + reviewHeight - 48)
     local enText = Text("e4onT", "small"); Wide(enText, rx + 52, ry + reviewHeight - 46, rw - 64); enText:SetText("Enable when saved")
     if code then turnOn = false end
-    y = math.max(bottom + 220, ry + reviewHeight + 12)
+    y = math.max(bottom + 256, ry + reviewHeight + 12)
     if itemAdvanced then y = DrawItemsStep(y) + 16 end
     if destAdvanced then y = DrawDestStep(y) + 16 end
     if limitsAdvanced then y = DrawKeepStep(y) + 16 end
@@ -1331,10 +1476,15 @@ local function DrawEditor(y)
             R.Interact.Confirm("TWICHUI_MI_RULE_DELETE", "Delete the saved rule and discard this draft? No items move.", function()
                 MI().DeleteRule(id); editing = nil; P.QueueRefresh(); QueueRelayout()
             end, { accept = "Delete" })
-        end); At(pool.builderDelete, PAD, y)
-        Button("builderDuplicate", "Duplicate", 96, "secondary", function()
+        end); At(pool.builderDelete, PAD, y); pool.builderDelete:SetHeight(32)
+        Button("builderDuplicate", "Duplicate", 120, "secondary", function()
             local copy = MI().CleanRule(r); copy.id = nil; copy.name = (copy.name .. " copy"):sub(1, MI().MAX_NAME); copy.enabled = false; StartEdit(copy)
-        end); At(pool.builderDuplicate, PAD + 92, y)
+        end); At(pool.builderDuplicate, PAD + 92, y); pool.builderDuplicate:SetHeight(32)
+        local copyArt = Get("builderDuplicateArt", function()
+            local frame = CreateFrame("Frame", nil, pool.builderDuplicate); frame.tex = frame:CreateTexture(nil, "ARTWORK"); frame.tex:SetAllPoints(); return frame
+        end)
+        copyArt:SetFrameLevel(pool.builderDuplicate:GetFrameLevel() + 4); copyArt:ClearAllPoints(); copyArt:SetPoint("LEFT", pool.builderDuplicate, "LEFT", 6, 0); copyArt:SetSize(20, 20); copyArt.tex:SetTexture(R.PATH .. [[media\npcs\sealed-scroll-small]])
+        pool.builderDuplicate.text:ClearAllPoints(); pool.builderDuplicate.text:SetPoint("LEFT", pool.builderDuplicate, "LEFT", 30, 0); pool.builderDuplicate.text:SetPoint("RIGHT", pool.builderDuplicate, "RIGHT", -6, 0)
     end
     Button("eCancel", "Cancel", 90, "secondary", function()
         editing = nil
@@ -1343,6 +1493,7 @@ local function DrawEditor(y)
         QueueRelayout()
     end)
     At(pool.eCancel, full + PAD - 190, y)
+    pool.eCancel:SetHeight(32)
     Button("eSave", "Save", 90, "primary", function()
         if pool.builderKeep and pool.builderKeep:HasFocus() then pool.builderKeep:ClearFocus() end
         local rule = editing
@@ -1356,6 +1507,7 @@ local function DrawEditor(y)
         QueueRelayout()
     end)
     At(pool.eSave, full + PAD - 90, y)
+    pool.eSave:SetHeight(32)
     R.Interact.Tip(pool.eSave, "Save", "Saves the rule. It starts moving items only when you open a mailbox, bank or guild bank, review and press the action yourself.")
     return y + 34
 end
@@ -1388,13 +1540,13 @@ function P.Refresh()
             local b = Get("task" .. entry[1], function()
                 return Wg().Tab(f, entry[2], entry[3], function() P.SetTask(entry[1]) end)
             end)
-            b:SetWidth(tabWidth)
+            b:SetSize(tabWidth, 36)
             b.text:SetText(entry[1] == "guild" and tabWidth < 200 and "Guild layout" or entry[2])
             local art = Get("taskArt" .. entry[1], function()
                 local holder = CreateFrame("Frame", nil, b); holder.tex = holder:CreateTexture(nil, "ARTWORK"); holder.tex:SetAllPoints(); return holder
             end)
             art:SetFrameLevel(b:GetFrameLevel() + 4); art:ClearAllPoints(); art:SetPoint("LEFT", b, "LEFT", 6, 0); art:SetSize(20, 20)
-            art.tex:SetTexture(R.PATH .. "media\\npcs\\" .. tabIcons[entry[1]] .. "-small")
+            art.tex:SetTexture(entry[1] == "destinations" and R.PATH .. [[media\icons\magicBank-small]] or R.PATH .. "media\\npcs\\" .. tabIcons[entry[1]] .. "-small")
             b.text:ClearAllPoints(); b.text:SetPoint("LEFT", b, "LEFT", 32, 0); b.text:SetPoint("RIGHT", b, "RIGHT", -4, 0)
             At(b, x, y); b:SetSelected(task == entry[1]); x = x + tabWidth + 6
         end

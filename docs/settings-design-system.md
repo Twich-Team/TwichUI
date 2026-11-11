@@ -152,3 +152,15 @@ Magic Inventory's rule badges use the shared `chip` sheet; compact rows use waln
 sheet. Illustrated button contents sit in a child frame above the button shell so shell artwork cannot cover icons.
 The new reagent illustration is `media/icons/magicReagents{,-small}.tga`, sourced from
 `assets/magic-reagents-source.png`; conversion follows the existing alpha-aware icon pipeline.
+
+For raised child surfaces, parent their native text to the surface itself. A font string on the row/page behind a
+child badge can be obscured even when its draw layer is OVERLAY. Magic Inventory now uses badge-owned text, banner-owned
+headline/detail, named item wells and a readiness surface with its own native label. Its regression checks record this
+ownership; screenshots provide separate rendering evidence. Keep icons in the control's elevated child frame when
+ARTWORK-layer button sheets would otherwise cover them.
+
+Magic Inventory extends the same component family with 70-unit rows, 25-unit wide-view metadata badges (19 in constrained
+rows), a 64-unit illustrated live banner, 34–36-unit item/destination/movement choices with check indicators, and a
+label/value review. Existing selection/field/chip/button sheets supply all surfaces; no independent material family was
+introduced. The bank-vault illustration is `media/icons/magicBank{,-small}.tga`, from `assets/magic-bank-source.png` through
+`tools/make_magic_reagents_art.py`. Both 64/32 files preserve genuine alpha and the existing bleed/resampling convention.
