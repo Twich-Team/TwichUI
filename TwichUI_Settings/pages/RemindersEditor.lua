@@ -182,36 +182,18 @@ end
 ---------------------------------------------------------------------------
 -- Show: what appears
 ---------------------------------------------------------------------------
-local MODE_H, IMG = 58, 72   -- a display mode's button, and the image tile's side
+local MODE_H, IMG = 78, 72   -- a display mode's button, and the image tile's side
+local MODE_ART_W, MODE_ART_H = 96, 48   -- the picture on a display-mode button (the TGAs are 128 x 64)
 
--- The little drawing on a display-mode button: a picture frame and a line of words, a picture frame, lines of words. Plain
--- rectangles in the settings' ivory, so no bitmap is needed and it takes the button's own hover and selection.
+-- The picture on a display-mode button: media/reminders/mode-<mode>.tga (assets cut by tools/make_reminder_modes_art.py from
+-- the rendered sheet), a framed painting with words beside it, the painting alone, bars of words. It is a texture on the
+-- button, so it takes the button's own hover and selection.
 local function ModeGlyph(button, ui)
-    local G = Wg()
-    local pieces = {}
-    local function Bar(x, y, w, h)
-        local t = G.Solid(button, "OVERLAY", G.pal.text, 0.9)
-        t:SetSize(w, h)
-        t:SetPoint("TOP", button, "TOP", x, -y)
-        pieces[#pieces + 1] = t
-    end
-    local function Frame(x, y, w, h)
-        Bar(x, y, w, 2); Bar(x, y + h - 2, w, 2)
-        -- the sides sit on the top bar's ends: x is the frame's centre
-        local side = G.Solid(button, "OVERLAY", G.pal.text, 0.9)
-        side:SetSize(2, h - 4); side:SetPoint("TOP", button, "TOP", x - w / 2 + 1, -(y + 2)); pieces[#pieces + 1] = side
-        local side2 = G.Solid(button, "OVERLAY", G.pal.text, 0.9)
-        side2:SetSize(2, h - 4); side2:SetPoint("TOP", button, "TOP", x + w / 2 - 1, -(y + 2)); pieces[#pieces + 1] = side2
-    end
-    if ui == "imageText" then
-        Frame(-9, 10, 18, 14); Bar(-9, 15, 6, 2)
-        Bar(13, 12, 14, 2); Bar(13, 18, 11, 2)
-    elseif ui == "image" then
-        Frame(0, 9, 26, 17); Bar(-5, 19, 9, 3); Bar(5, 15, 3, 3)
-    else
-        Bar(0, 10, 28, 2); Bar(-3, 17, 22, 2); Bar(0, 24, 28, 2)
-    end
-    return pieces
+    local t = button:CreateTexture(nil, "OVERLAY")
+    t:SetTexture(R.PATH .. [[media\reminders\mode-]] .. ui .. ".tga")
+    t:SetSize(MODE_ART_W, MODE_ART_H)
+    t:SetPoint("TOP", button, "TOP", 0, -6)
+    return t
 end
 
 local function ShowSection(parent, env)
