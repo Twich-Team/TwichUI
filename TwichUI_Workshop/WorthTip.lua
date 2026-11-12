@@ -17,7 +17,7 @@
 
 local R = TwichUI
 local W = R.Workshop
-local WO, WL, PR, S = W.Worth, W.WorthLayout, W.Prices, W.Session
+local WO, WL, PR, S, MK = W.Worth, W.WorthLayout, W.Prices, W.Session, W.Market
 local Plain, Int = W.Plain, W.Int
 local T = {}
 W.WorthTip = T
@@ -71,7 +71,7 @@ function T.Read(data)
     local market = src.market
     if market then
         f.market = { label = src.label, side = market.side, at = market.at, complete = market.complete }
-        f.price = PR.Lookup(market, id)
+        f.price = MK.Price(id, { market = market, variant = f.variant ~= nil })   -- the one price service; a variant is never given the base item's price
         f.rate = PR.CutRate(market.side)
     end
     return f

@@ -5,6 +5,7 @@
 ## Version: 1.0.0
 ## RequiredDeps: !!!TwichUI
 ## LoadOnDemand: 1
+## SavedVariables: TwichUIWorkshopDB
 ## IconTexture: Interface\AddOns\!!!TwichUI\media\icon
 ## X-License: MIT (code); see !!!TwichUI\LICENSE
 ## Category: Interface Enhancements
@@ -13,7 +14,7 @@
 Data.lua
 # The combined materials and what is still needed (pure)
 Materials.lua
-# The saved queue of the current character (TwichUIDB.workshop; this addon has no saved variables of its own)
+# The saved queue of the current character (TwichUIDB.workshop; the market data has its own saved variables, TwichUIWorkshopDB)
 Queue.lua
 # The recipes a character knows, remembered between sessions (TwichUIDB.workshop, per character)
 Known.lua
@@ -23,7 +24,9 @@ Observe.lua
 Storage.lua
 # The material-availability service: bags, bank and guild bank kept apart, one allocation for every view (pure)
 Stock.lua
-# Auction prices: the price service, what one craft costs and earns (saved in TwichUIDB.workshop.prices; no game calls, no frames)
+# The price history of one item: a compact, bounded string per item (pure)
+History.lua
+# Auction prices: collecting a scan, the saved markets (TwichUIWorkshopDB), what one craft costs and earns (no game calls, no frames)
 Prices.lua
 # The Opportunities list: rows, filter, sort, the basis text (pure)
 Opportunities.lua
@@ -37,6 +40,8 @@ Worth.lua
 WorthLayout.lua
 # The price scan of the open auction house (started only by the player's click)
 Scan.lua
+# The market data API: current prices, history, quotes, markets (one source for every feature; reads saved data only)
+Market.lua
 # What the window shows and does, without any frame
 Session.lua
 # Remembers the player's own professions' recipes while the window is closed (after load only; reads, never opens anything)

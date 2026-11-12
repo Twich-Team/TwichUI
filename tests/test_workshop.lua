@@ -7,7 +7,7 @@ dofile(TESTS .. "mi_mock.lua")
 local function Check(cond, msg) if not cond then error(msg, 2) end end
 local function Same(a, b, msg) if a ~= b then error((msg or "") .. " expected " .. tostring(b) .. ", got " .. tostring(a), 2) end end
 
-local WORKSHOP_FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Session.lua" }
+local WORKSHOP_FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua" }
 
 local function Load(c, file)
   local chunk = assert(loadfile(ROOT .. "../TwichUI_Workshop/" .. file))
@@ -574,7 +574,7 @@ do
   local toc = Read(REPO .. "TwichUI_Workshop/TwichUI_Workshop.toc")
   Check(toc:find("## LoadOnDemand: 1", 1, true), "load on demand")
   Check(toc:find("## RequiredDeps: !!!TwichUI", 1, true), "needs the core")
-  Check(not toc:find("## SavedVariables", 1, true), "no saved variables of its own")
+  Check(toc:match("\n## SavedVariables: ([^\r\n]+)") == "TwichUIWorkshopDB", "the market data (and nothing else) has saved variables of its own")
   local last
   for line in toc:gmatch("[^\r\n]+") do
     if line:match("%.lua$") and not line:match("^#") then

@@ -11,8 +11,8 @@ dofile(TESTS .. "mi_mock.lua")
 local function Check(cond, msg) if not cond then error(msg, 2) end end
 local function Same(a, b, msg) if a ~= b then error((msg or "") .. " expected " .. tostring(b) .. ", got " .. tostring(a), 2) end end
 
-local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "Prices.lua", "Opportunities.lua",
-  "Vendor.lua", "Shopping.lua", "Worth.lua", "WorthLayout.lua", "Scan.lua", "Session.lua" }
+local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Prices.lua", "Opportunities.lua",
+  "Vendor.lua", "Shopping.lua", "Worth.lua", "WorthLayout.lua", "Scan.lua", "Market.lua", "Session.lua" }
 
 local function Load(c, file)
   local chunk = assert(loadfile(ROOT .. "../TwichUI_Workshop/" .. file))
@@ -490,12 +490,11 @@ end
 do
   local g = Game()
   g.items[111] = { name = "Rough Bracers", quality = 1, class = 7, bind = 0, sell = 50 }
-  g.W.Prices.Market("Realm|Alliance")
-  g.c.TwichUIDB.workshop.prices.markets = {}
+  g.c.TwichUIWorkshopDB = nil
   g.load()
   Hover(g, 111)
   Check(Texts(g):find("Auction | not scanned yet", 1, true) and Texts(g):find("[50]", 1, true), "no scan: the vendor value still shows")
-  g.W.Prices.Commit("Realm|Alliance", { realm = "Realm", side = "Alliance", at = NOW - 3 * 86400, complete = true, read = 1, used = 1, n = 1, items = { [111] = { 200, 1, 1, 1 } } })
+  g.W.Prices.Commit("Realm|Alliance", { realm = "Realm", side = "Alliance", at = NOW - 3 * 86400, complete = true, read = 1, used = 1, n = 1, items = { [111] = "200,1,1,1,0" } })
   Hover(g, 111)
   Check(Texts(g):find("old prices", 1, true), "old prices are marked: " .. Texts(g))
 end

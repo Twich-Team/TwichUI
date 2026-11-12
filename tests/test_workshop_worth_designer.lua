@@ -41,7 +41,7 @@ for _, file in ipairs({ "../TwichUI_Settings/Kit.lua", "../TwichUI_Settings/Widg
   LoadAs("TwichUI_Settings", file)
 end
 local D = R.WorkshopWorthDesigner
-local WORKSHOP_FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "Prices.lua", "Opportunities.lua",
+local WORKSHOP_FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Prices.lua", "Opportunities.lua",
   "Vendor.lua", "Shopping.lua", "Worth.lua", "WorthLayout.lua" }
 -- the launcher: loading the Workshop is what makes R.Workshop exist (the real one calls LoadAddOn)
 local loads, refuse = 0, nil

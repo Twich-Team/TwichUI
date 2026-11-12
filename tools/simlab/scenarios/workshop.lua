@@ -410,20 +410,21 @@ Lab.Step("opportunities: scan against the fake auction house", function()
     Lab.Settle(3)
     local res = R.Workshop.Scan.result or {}
     Check("state", "scan finished", "done", R.Workshop.Scan.state)
-    -- 17 listings are read; 2 do not count: a bid-only Peacebloom (buyout 0) and an item no recipe uses (55555) -> 15 used.
-    -- Wanted items with a usable listing: 13 wanted (2447 765 3371 2450 2770 2771 2841 2320 118 3382 3390 9999 2851) minus Coarse Thread (no listing) = 12.
-    Check("state", "records read / used / items priced / complete", "17/15/12/true", ("%s/%s/%s/%s"):format(res.read, res.used, res.items, tostring(res.complete)))
-    Check("display", "status line after the scan", "Scan finished. Prices found for 12 of your items.", Txt(Opps().status))
+    -- 17 listings are read; 1 does not count: a bid-only Peacebloom (buyout 0) -> 16 used. Every item with a usable listing is kept, whether
+    -- or not a recipe uses it: the 12 recipe items with a listing (2447 765 3371 2450 2770 2771 2841 118 3382 3390 9999 2851; Coarse Thread
+    -- 2320 has none) plus 55555 = 13.
+    Check("state", "records read / used / items priced / complete", "17/16/13/true", ("%s/%s/%s/%s"):format(res.read, res.used, res.items, tostring(res.complete)))
+    Check("display", "status line after the scan", "Scan finished. Prices found for 13 items.", Txt(Opps().status))
     Check("display", "button back to Scan prices", "Scan prices/true", Txt(Opps().scan.text) .. "/" .. tostring(Opps().scan:IsEnabled()))
     Check("display", "progress bar hidden after the scan", false, Opps().bar:IsShown())
     Check("display", "price source line", "Prices: the auction house on SimulatedRealm \194\183 just now", Txt(Opps().source))
     -- the saved cheapest unit prices (hand arithmetic: stack buyout / stack count, rounded up)
-    local items = TwichUIDB.workshop.prices.markets["SimulatedRealm|unknown"].items
-    local function P(id) local t = items[id] return t and ("%d/%d/%d/%d"):format(t[1], t[2], t[3], t[4]) or "none" end
+    local items = TwichUIWorkshopDB.markets["SimulatedRealm|unknown"].items
+    local function P(id) local e = items[id] local a, b, c, d = (e or ""):match("^(%d+),(%d+),(%d+),(%d+),%d+$") return a and ("%d/%d/%d/%d"):format(a, b, c, d) or "none" end
     Check("state", "Peacebloom cheapest 5c (100/20), 20 at that price, 2 buyout listings, 30 items", "5/20/2/30", P(2447))
     Check("state", "Bronze Bar cheapest 400c (800/2), 2 at that price, 2 listings, 5 items", "400/2/2/5", P(2841))
     Check("state", "Coarse Thread has no price", "none", P(2320))
-    Check("state", "the unwanted item was not kept", "none", P(55555))
+    Check("state", "an item no recipe uses is priced too: 3 for 999 is 333c each", "333/3/1/3", P(55555))
 end)
 
 Lab.Step("opportunities: rows, ordering, filtering, unknowns", function()

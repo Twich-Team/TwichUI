@@ -4,6 +4,8 @@ For anyone changing the feature. This is the one current reference and handoff f
 **Real-client status:** the player confirmed (2026-11-09) that after the anchor fix the window opens and works in game, and later reported the auction scanning / pricing / profitability milestone (2) complete.
 That report was not itemized: which of the checks below were run, and what they showed, is **not recorded here**. **Nothing in milestone 3 (shopping list, vendor prices, making) has been tried in the game.**
 Evidence labels (CLAUDE.md) are used throughout: unit-tested, simulator-tested, real-client-tested, not tested.
+**2026-11-11, branch `feature/workshop-foundation`: the market data foundation** (full-house scans, price history, the `Market` API, the Workshop's own saved variables) replaced the recipe-only price collection. It is described in **"Market data foundation"** below; where an older section still says
+prices come from the "recipes read at scan time" or "2000 items", that section is superseded. **Unit-tested and simulator-tested only; nothing of it has run in the real client.**
 
 ## What it does (milestones 1 to 3)
 
@@ -50,8 +52,7 @@ The **Scan prices** button (top right of the view) starts a scan only when press
 
 **On the auction house window** (`AuctionButton.lua`): the same **Scan prices** button sits under the window's lower right corner, with the same progress bar and message beside it while a scan runs and the last message
 (not shown again after the window has been closed) afterwards. It is the same scan (`Session.StartScan`), so either button shows the other's progress. It exists once the Workshop has been loaded this session (the addon is
-load on demand, nothing is built at login) and when Blizzard's auction house UI exists; the one event it waits for is dropped once it is made. **Limit:** the scan prices the Workshop's known
-recipes (read this session or remembered from earlier ones), so the button works with the Workshop window closed once each profession has been read (with the addon loaded: the window may be hidden); until then it answers "Open the Workshop and one of your professions first".
+load on demand, nothing is built at login) and when Blizzard's auction house UI exists; the one event it waits for is dropped once it is made. Since the market data foundation the scan needs **no professions or recipes**: it prices every item the auction house lists, so the button works as soon as the Workshop addon is loaded.
 
 ### Bank and guild bank materials (2026-11-09)
 
@@ -73,7 +74,7 @@ Materials the player keeps in the personal bank or the guild bank are planned wi
 | Where | What |
 |---|---|
 | `!!!TwichUI/WorkshopLauncher.lua` | core: `R.WorkshopLauncher` (`Load`, `Open`, `Toggle`, `Command`, `Snapshot`); loads the addon on first use, never at login, never in combat (`COMBAT`), plain-words failures like `DiagnosticsLauncher.lua`; scope `workshop.load` |
-| `TwichUI_Workshop/` | the addon (`## LoadOnDemand: 1`, `RequiredDeps: !!!TwichUI`, no SavedVariables of its own) |
+| `TwichUI_Workshop/` | the addon (`## LoadOnDemand: 1`, `RequiredDeps: !!!TwichUI`, `## SavedVariables: TwichUIWorkshopDB`: the market data only, loaded by the game when the Workshop loads) |
 | `Data.lua` | `R.Workshop` (W): limits, `Plain` (drops secret values), `Int`, `Text`, difficulty words, `PerCraft`, `Expected` (pure) |
 | `Materials.lua` | `W.Materials.Rows`: combine first, then apply bag counts once per item; states empty/partial/short/ready (pure) |
 | `Queue.lua` | the saved queue (`TwichUIDB.workshop`), checking every record, `Refresh` from an observation |
@@ -83,22 +84,24 @@ Materials the player keeps in the personal bank or the guild bank are planned wi
 | `Storage.lua` | the remembered bank and guild bank counts (`TwichUIDB.workshop.storage`): checked on the way in and out, bounded, per character (bank) and per guild (guild bank, one record per tab), `u` (uncertain) marks (pure) |
 | `Stock.lua` | **the material-availability service** (`W.Stock`): `Sources` (the view: what is planned with, what is information and why), `Counted`/`Fn`, `Craft` (one craft: ready / collect / short / unknown), `Notes`, `Scope`, `Lines` (tooltips) (pure) |
 | `Bank.lua` | the recorder: reads the open character bank (tabs are bags) and the shown guild bank tab, only while open, events registered only while open; marks stock pending/uncertain on bag changes; `Pending()`, `Events()`; scope `workshop.bank` |
-| `Prices.lua` | **the price service**: stack-to-unit price, the batch that turns auction records into the cheapest buyout per item, the saved scans (`TwichUIDB.workshop.prices`), lookups, price age, the cut table, `Estimate` (cost, sell price and profit of one craft) and `Quote` (what buying n of an item costs: exact / estimate / few / none) |
+| `History.lua` | **the price history of one item** (pure): a compact string per item, `Add` / `Decode` / `Window` / `Trim` / `Newest`; the only code that knows its shape |
+| `Prices.lua` | **price collection and storage**: stack-to-unit price, the batch that turns every auction record into the cheapest buyout per item, the saved markets (`TwichUIWorkshopDB`, legacy `TwichUIDB.workshop.prices` read-only), the stepped commit job (`BeginCommit` / `Step` / `Apply`), `Lookup`, price age, the cut table, `Estimate` (cost, sell price and profit of one craft) and `Quote` (what buying n of an item costs: exact / estimate / few / none) |
+| `Market.lua` | **the market data API** (`W.Market`): `Source`, `Info`, `Markets`, `Price`, `Quote`, `Stats`, `Trend`, `Compare`, `Observed`, with a reason for every "no". Every view and the tooltip read prices only through it (reads saved data, changes nothing) |
 | `Vendor.lua` | saved vendor **purchase** prices (`TwichUIDB.workshop.vendor`), `Quote` (whole stacks, limited stock), and `Sellers`/`Places` (merchants of the NPC collection that were seen to sell an item) (pure) |
 | `Shopping.lua` | the planner `Plan`: one list of what to get and where, the shared pool, making, totals; `Explain`, `Basis`, `Choices` (pure) |
 | `Opportunities.lua` | the list: rows, summary, filter, sort, "why unknown" words and the basis lines for the tooltip (pure) |
 | `Worth.lua` | **"What's it worth?"** (pure): `Evaluate` (vendor / auction / disenchant for one item, unavailable vs unknown), `Recommend` (the one short suggestion, or why none), `LinkVariant` |
 | `WorthLayout.lua` | **the tooltip section as the player arranged it** (pure): the eight line types, the saved layout (`TwichUIDB.ui.workshopWorth`, profile), the layout operations (`Add`/`Remove`/`Move`/`Step`/`SetWhen`), the preview examples, and the ONE builder (`Rows`/`Lines`/`Style`) the live tooltip and the designer share |
 | `WorthTip.lua` | the tooltip hook (`TooltipDataProcessor` post call on `GameTooltip`, registered when the addon loads), game reads (item location, binding, stack, info), draws `WorthLayout`'s lines, Shift rebuild, late item information; scope `workshop.worth` |
-| `Scan.lua` | the price scan of the open auction house (`W.Scan`): state machine, event frame (registered only during a scan), bounded batches, plain-word messages |
+| `Scan.lua` | the price scan of the open auction house (`W.Scan`): state machine, event frame (registered only during a scan), bounded batches, the stepped saving, plain-word messages |
 | `AuctionButton.lua` | the progress bar (`W.NewBar`) and the Scan prices button on `AuctionHouseFrame` (`W.AuctionButton`); follows `Scan.Listen` |
-| `Session.lua` | in-memory lists per profession, actions and their messages, the rows the window draws, the Opportunities glue (`S.Opportunities`, `S.StartScan`, `S.Wanted`, `S.PriceSource`) and the Shopping glue (`S.Shopping`, `S.PickSource`, `S.CycleSource`, `S.AddSubcraft`, `S.ShowVendor`, `S.ReadMerchant`) (no frames) |
+| `Session.lua` | in-memory lists per profession, actions and their messages, the rows the window draws, the Opportunities glue (`S.Opportunities`, `S.StartScan`, `S.Wanted` (the recipes' items: priority only), `S.PriceSource` = `Market.Source`) and the Shopping glue (`S.Shopping`, `S.PickSource`, `S.CycleSource`, `S.AddSubcraft`, `S.ShowVendor`, `S.ReadMerchant`) (no frames) |
 | `Window.lua` | the window (FrameLook, `L.EditBox`, pooled scroll lists); events registered only while shown; marks `W.ready` last |
 | `TwichUI_Settings/pages/Workshop.lua` | settings page: works before the addon loads, through the launcher; hosts the tooltip designer |
 | `TwichUI_Settings/pages/WorkshopWorth.lua` | **the "What's it worth?" tooltip designer** (`R.WorkshopWorthDesigner`): list of lines, tooltip mockup, drag/click editing; reuses Magic Inventory's virtual drag (`MagicInventoryDrag.lua`) |
-| `TwichUI_Diagnostics/*` | memory row, scopes `workshop.load/read/render/scan`, gauges `workshop.*` incl. `workshop.prices` (see `docs/diagnostics.md`) |
+| `TwichUI_Diagnostics/*` | memory row, scopes `workshop.load/read/render/scan`, gauges `workshop.*` incl. `workshop.prices` and `workshop.history` (see `docs/diagnostics.md`) |
 | `.pkgmeta`, `tools/release.py` | packaging (seven folders); `tests/test_release_tools.py` fixtures include it |
-| `tests/test_workshop.lua`, `tests/test_workshop_window.lua`, `tests/test_workshop_prices.lua`, `tests/test_workshop_shopping.lua`, `tests/test_workshop_memory.lua`, `tests/test_workshop_storage.lua`, `tests/test_workshop_worth.lua`, `tests/test_workshop_worth_layout.lua`, `tests/test_workshop_worth_designer.lua` | the tests |
+| `tests/test_workshop.lua`, `tests/test_workshop_window.lua`, `tests/test_workshop_prices.lua`, `tests/test_workshop_market.lua`, `tests/test_workshop_market_scale.lua`, `tests/test_workshop_shopping.lua`, `tests/test_workshop_memory.lua`, `tests/test_workshop_storage.lua`, `tests/test_workshop_worth.lua`, `tests/test_workshop_worth_layout.lua`, `tests/test_workshop_worth_designer.lua` | the tests |
 
 ## Saved data
 
@@ -124,14 +127,8 @@ absence from a list is never evidence. An empty or not-yet-loaded list ("empty"/
 a newer `v` is never written. Remembered recipes are not re-read from the game while their profession is closed (the game may not give the details of one that isn't open): they stand until it is read again.
 profession is closed (the game may not give the details of one that isn't open): they stand until it is read.
 
-**Prices** (milestone 2), in the same `workshop` key (so also never in a profile, share or backup; `v` stays 1 because the addition is compatible):
-`prices = { v = 1, markets = { ["Realm|Side"] = { realm, side, at, complete, read, used, n, items = { [itemID] = { p, q, l, t } } } } }`
-- `Side` is the auctioneer's faction from `UnitFactionGroup("npc")` at scan time, or `unknown` when the game gives none: a market of its own. Markets are never merged; the view uses the open
-  auction house's market, or (house closed) the most recently scanned market of the current realm, and says which in words.
-- `p` cheapest unit price in whole copper, `q` items listed at that exact price, `l` buyout listings seen, `t` items in them. Only items the recipes read **at scan time** are kept
-  (`S.Wanted`: outputs and materials of this session's recipes), at most 2000 per market and 4 markets (the longest-ago scan goes first). `at` is the scan time; `complete` is the completeness.
-- A scan that is not complete never replaces an older complete one (`Commit` answers "kept"); a failed or interrupted scan writes nothing. A newer `prices.v` or `workshop.v` makes everything read-only.
-- Not saved: individual auctions, owners, bid-only listings, sale history. Nothing is collected at login or in the background.
+**Prices** moved out of `TwichUIDB` (2026-11-11): see "Market data foundation > Saved data". The earlier record, `workshop.prices = { v = 1, markets = { ["Realm|Side"] = { realm, side, at, complete, read, used, n, items = { [itemID] = { p, q, l, t } } } } }`
+holding only the items of the recipes known at scan time, is still **read** (never rewritten) and is classified `scope = "recipes"`; the first full scan of the same market replaces it.
 
 **Vendor prices** (milestone 3), `workshop.vendor = { v = 1, items = { [itemID] = { p, s, a, at, npc } } }` (also never in a profile, share or backup): `p` copper for **one purchase of `s` items**, `a` how many the merchant had (-1 unlimited, 0 sold out),
 `at` when seen, `npc` the merchant's creature id. Written only while the **Workshop window is shown** (it listens for `MERCHANT_SHOW`/`MERCHANT_UPDATE` only then, and reads a merchant window already open when it opens), only for items that are materials of the queue or of
@@ -171,12 +168,12 @@ Target client: Forever 1.60.1, UI source `forever` branch. Forever has no classi
 ## Prices: the exact basis (milestone 2)
 
 - **Latest-listing estimate.** A price is the **cheapest buyout among the listings the newest scan of that auction house saw**, per single item: stack buyout / stack count, rounded **up** to whole copper, never
-  below 1. It is a **listing** price, not a sale price, not a "market value", not a sale rate; no history, no averages, no external data.
+  below 1. It is a **listing** price, not a sale price, not a "market value", not a sale rate; no external data. Since 2026-11-11 the scans also build a **history** of these listing prices (see below); it is still not a sales history.
 - Bid-only auctions (buyout 0) are ignored. A price, count or item id that is not a whole number in range (or is a secret value) is an invalid record and is skipped. A missing or invalid price is **unknown**
   (`nil`), never 0; any unknown input makes the whole cost, and so the profit, unknown. If the cheapest listing holds fewer than a craft needs the price is still used and flagged "cheapest listing only";
   if the whole market lists fewer than a craft needs, that material counts as having no price.
 - **One craft**, with the **full** material list (owning the materials does not make them free; bags are not consulted). **Cost to make** = sum of quantity x unit price. **Sell price** = unit price of the
-  recipe's output item x the output per craft; an output range (`quantityMin`..`quantityMax`) gives a low and a high, and the profit is a range. **Estimated profit** = sell price - auction house cut - cost.
+  recipe's output item x the output per craft; an output range (`quantityMin`..`quantityMax`) gives a low and a high, and the profit is a range. **Estimated profit** = sell price - auction house cut - cost. (Unchanged by the market data foundation: the same `Estimate`, now fed by `Market.Price`.)
 - **Cut.** The Forever UI source states no auction house cut anywhere (searched `Blizzard_AuctionHouseUI`, the API documentation and the mail invoice strings), and other versions differ between auction
   houses, so **no cut is assumed**: `Prices.CUT` is an empty table keyed by auction house side. Until a side is confirmed in the game, profit is shown **before the cut** and the view, the notes and the
   tooltip say so. When a side is added (read the sale invoice in the mailbox: sale price versus "House cut"), the cut is rounded to whole copper and shown on its own tooltip line.
@@ -184,7 +181,7 @@ Target client: Forever 1.60.1, UI source `forever` branch. Forever has no classi
   may not be every recipe.
 - **Supported recipes:** those the window read this session whose materials were supported by milestone 1's rules (basic reagents, one item per slot, fixed quantities) **and** that make a single item
   (`outputItemID`) in a known quantity. Enchants (no item), recipes with item choices, required extra reagents or variable quantities, and recipes whose output isn't known are listed as **Unknown**
-  with the reason. Items with random properties are priced by the cheapest listing of their item id only (no variant matching).
+  with the reason. A full scan keeps one price per **item id**: items with random properties are priced by the cheapest listing of their item id, so `Market.Price` refuses an item the caller marks as a variant (below).
 - **Vendor prices:** Opportunities still uses none (it prices from the auction scan only; using the vendor prices there is a possible next task). The NPC collection stores item ids only ("no names, prices or counts"); the vendor **purchase** prices the
   Shopping view uses are the Workshop's own record (Saved data above). A vendor **sell** value is never used as a cost.
 
@@ -204,16 +201,93 @@ Target client: Forever 1.60.1, UI source `forever` branch. Forever has no classi
 - **What the code does about that:** sends only when the game says its throttled-message system is ready (else waits up to 30 s, then "wasn't ready"); waits up to 90 s for the first update ("didn't send its
   listings"); reads only after the update has been quiet for 2 s (a steady stream of updates holds the read back at most 10 s); reads records **0 .. n-1** in batches of 400 on timer ticks. **Updates during the read
   never stop or restart it** (the first version treated them as "the listings changed" and failed with "kept changing" after three). Only a different **count** at the end of the read starts it over (at most 3 times); if the
-  count never holds still the read is kept as **not complete** (never a failure). If a **wanted** record said it lacked information, waits 4 s and reads again (at most twice) and otherwise **saves the scan as not complete**
-  (records of items nobody asked about no longer count). A scan is **complete** only if no wanted record lacked information, the count held still, nothing was cut off (250,000 records,
-  the wanted list, 2000 items) and the scan finished. This is a full-house request, **not** a partial search presented as a market scan; if the game refuses it, the scan fails or is unavailable.
-- Starts only on the button. Refused (state **unavailable**, nothing sent): auction house not open (`AuctionHouseFrame` shown), API missing, nothing to price (no recipes read), the posting page's own
+  count never holds still the read is kept as **not complete** (never a failure). If a record said it lacked information, waits 4 s and reads again (at most twice) and otherwise **saves the scan as not complete**
+  (every record counts since the market data foundation). A scan is **complete** only if no record lacked information, the count held still, nothing was cut off (250,000 records,
+  40,000 items) and the scan finished. This is a full-house request, **not** a partial search presented as a market scan; if the game refuses it, the scan fails or is unavailable.
+- Starts only on the button. Refused (state **unavailable**, nothing sent): auction house not open (`AuctionHouseFrame` shown), API missing, the posting page's own
   search running (`R.AuctionScan.Busy()`), realm unknown, saved prices held by a newer TwichUI. A click while a scan runs does nothing. The posting page is **not changed**: it can still start its own search
   during a scan (it checks the throttle itself); the scan then only waits or fails on the throttle.
 - Ends once. **Interrupted** (auction house closed or disabled, mid-wait or mid-read); **failed** (no response, dropped by the throttle, never ready, none, unreadable, request error,
   not saved, not complete while a complete scan exists); **done**. Every timer and step carries a token that ends with the scan, so a callback from an earlier scan never touches a later one. Events are
   registered only while a scan runs. Hiding the Workshop window does not stop a scan; closing the auction house does.
 - It never buys, bids, cancels or posts, and calls no function other than the read-only ones above.
+
+## Market data foundation (2026-11-11, `feature/workshop-foundation`)
+
+One infrastructure milestone: **a full-house price scan that keeps every priceable item, a bounded price history that survives scans and sessions, and one documented API that every Workshop feature reads prices through.** Unit-tested and simulator-tested; **not real-client-tested**.
+
+### What was wrong before (verified in the code)
+`Session.Wanted()` listed only the outputs and materials of recipes the player's professions had shown; `Batch:Add` threw every other record away; `MAX_ITEMS = 2000` cut that list by item number; `Scan.Start` refused with "Open the Workshop and one of your professions first" when no recipe was known; a "complete" saved scan only meant complete *for those items*; nothing was kept between scans (no history); the market data sat in `TwichUIDB` (resident at login whether or not the Workshop was ever opened). Also found: the tooltip and the views each called `Prices.Lookup` directly, so there was no single place to put variant handling, notes or history.
+
+### Collection (`Prices.lua` Batch, `Scan.lua`)
+- The player-started `C_AuctionHouse.ReplicateItems()` snapshot is read as before (same throttle/settle/restart/re-read rules, 400 records per timer tick, 250,000 records at most), but **every record with a valid item id, count and buyout counts**: no professions, no recipes. Bid-only (buyout 0), unreadable, secret, fractional, negative or out-of-range records are counted and skipped, never priced as 0.
+- Per item the batch keeps the cheapest unit price (exact fraction compare, rounded up to whole copper), the items at exactly that price, the number of buyout listings, the items in them, and **the next higher unit price** (`x`, 0 when none or when it rounds to the same copper). Transient memory: one small table per distinct item (11 MB for 30,000 items), released after the commit.
+- **Item limit:** 40,000 items per market (`Prices.MAX_ITEMS`; the cap exists to bound saved text and memory, see Performance). If a house lists more, the kept items are the **recipe items first** (`Session.Wanted`, now only a priority hint), then the items with **the most listings**, then the lowest item numbers; the scan is marked `cut` and **not complete**, and the message says so. Never a cut by item number alone.
+- **Saving** (`Scan.lua` phase `saving`): after the read the result is merged into the saved market in steps of 120 items on timer ticks (`Prices.BeginCommit` job: `Step` merges, `Apply` writes everything at once). Nothing is written before `Apply`; a failing step, a held database or a dropped job leaves prices and history exactly as they were (the scan ends "failed / couldn't be saved"). The auction house closing, more `REPLICATE_ITEM_LIST_UPDATE`s or a second click during the saving change nothing (the listings were already read). The progress bar's last 12% is the saving.
+- `complete` keeps its meaning (a whole read with every record's information loaded). New flags on the saved market: `cut` (listings may be missing: cut off at a limit, or the listing count kept changing) and `partial` (how many records lacked item information; their prices were used all the same). A new scan that is not complete still **never replaces a complete one** (`kept`), except that a recipe-only legacy scan never blocks anything.
+
+### Saved data
+`TwichUIWorkshopDB = { v = 1, markets = { ["Realm|Side"] = market } }` in the Workshop's **own SavedVariables** (`## SavedVariables: TwichUIWorkshopDB` in the Workshop `.toc`): the game loads it only when the Workshop is loaded, so it is not resident at login, and it is outside `TwichUIDB`, so it is never in a profile, share or backup (nothing in `Persist`/`Restore`/`TwichConfig` needs to know it). It is read lazily (the game fills the global after the addon's files have run) and created at the first committed scan. A `v` above 1 is *held*: read as far as understood, never changed (a scan is refused with "held"). `TwichUIDB.workshop.v` being newer holds it too (as before).
+```
+market = { f = 2, scope = "full", realm, side, at, complete, cut, read, used, partial, n, hn,
+           items = { [itemID] = "p,q,l,t,x" },      -- the newest accepted scan: cheapest unit price, items at it, listings, items, next higher price
+           hist  = { [itemID] = "d,p;d,p|b,lo,hi,sum,n;..." },   -- see History
+           sd    = { day, ... } }                   -- the days of the scans that fed the history (newest last, at most 32)
+```
+`n` items kept, `hn` items with history. Entries are text because a string costs about half a table (measured: 91 vs 165 bytes per 4-number entry in Lua 5.1) and needs no escaping in the saved file. At most **3 markets** (`MAX_MARKETS`, was 4; the one scanned longest ago goes). Realm and side form the key and are never merged (the side comes from `UnitFactionGroup("npc")`; `unknown` is a market of its own).
+
+**Migration (legacy, deterministic, repeatable, non-destructive):** `TwichUIDB.workshop.prices` (the earlier recipe-only record) is **read, never rewritten**, as long as its own `v` is 1 (a newer one is ignored). A market found only there is classified **`scope = "recipes"`** whatever its `complete` says: `complete` meant "of the recipes' items", so `Market.Price` answers `outofscope` (not "unlisted") for an item it does not hold, history questions answer `outofscope`, and every price carries the note `recipes`. The first committed full scan of the same market key replaces it and deletes the legacy copy. Nothing else in `TwichUIDB.workshop` (queue, known recipes, vendor prices, storage, tooltip layout) is touched.
+
+### History (`History.lua`)
+- **What is recorded:** per item and market, the cheapest buyout *listing* (per single item) that a **whole-read full scan** saw, **one value per UTC day** (`floor(time / 86400)`); a later scan on the same day replaces that day's value. A day with no scan, or a scan that did not list the item, has **no value and never gets one**. A cut scan, or one whose listing count kept changing, updates the current prices (if it is allowed to replace the saved scan) and adds **nothing** to history. A whole read in which some records' item information had not loaded **does** feed history (their prices were used; the `partial` count is on the market).
+- **Two tiers, both bounded:** the newest **7 observed days** are kept exactly (`d,p`); an eighth folds the oldest into a **28-day bucket** (`day // 28`) that keeps only its lowest value, highest value, the sum of its values and the number of days. At most **3 buckets**; nothing older than **120 days** before the newest scan; an item whose history has expired is dropped; an observation older than the newest kept one is ignored (clock moved back); a malformed string is treated as no history and replaced by the next observation (never repaired by guessing). Measured: a history string is 72 bytes on average and **never above 136 bytes** after 150 more days; the worst case by construction is about 175 bytes.
+- **What it can answer:** exact low/high/mean and the daily path for the last 7 observed days; low, high and mean per 28-day bucket for roughly the 120 days before; the number of observed days and of scan days. **What it cannot:** sales, volume, demand, intraday movement (a day holds its last scan), the individual days inside a bucket, anything for a day without a scan, anything older than the retention. An average of observed minimum listings is **not** a market value; a single day is not a trend.
+- **Not built, on purpose:** a "typical market value" model (needs more than minimums), sale prices, per-variant history, charts.
+
+### The API (`Market.lua`, `W.Market`, all read-only; every function takes an optional last table `{ market = key or Source result, now = time, variant = bool }`)
+| Call | Answers |
+|---|---|
+| `Source()` | `{ open, key, market, label }`: the market the views use (auction house open: only its own; closed: this realm's newest) |
+| `Info(opt)` / `Markets(opt)` | scope (`full` or `recipes`), `at`, `age`, `old`, `complete`, `cut`, `partial`, `items`, `read`, `used`, `scans` (history scan days), `legacy` |
+| `Price(item, opt)` | `{ price, qty, listings, total, next, at, age, old, complete, scope, cut, partial, market, label, notes }` or `nil, reason`. `notes` are plain facts: `recipes`, `partial`, `cut`, `old` (over a day), `thin` (one listing) |
+| `Quote(item, qty, opt)` | `Prices.Quote`'s states: `exact` (only up to the items at the cheapest price), `estimate` (the least it could cost), `few` (not enough listed, no cost), `none` (+ `why`) |
+| `Stats(item, period, opt)` | for `"week"` (7 days), a number of days (1..120) or `"retained"`: `n` observed days, `scans`, `low`, `high`, `average` (mean of the observed days' cheapest listings), `newest`, `exact`, `limited` (days in a bucket straddling the period's start were not counted), `single` |
+| `Trend(item, days, opt)` | `up` / `down` / `flat` between the first and last observed day of the last `days` (default 7; two days needed), `change`, `percent` |
+| `Compare(item, period, opt)` | the current price against the mean of the observed days **before** the current scan's day (so the scan does not vote on its own reference): `above` / `below` / `same`, `difference`, `ratio` |
+| `Observed(item, day or time, opt)` | the exact value of one retained day, or why not (`notobserved`, `notretained`) |
+
+Every `Price`, `Stats`, `Trend` and `Compare` answer carries a `basis` sentence (`Market.BASIS`) saying what was measured: the cheapest buyout *listing*, and for history the mean/low/high of the *daily cheapest listings* on observed days; **never a market value, a sale price or an expected selling price**. `Info.complete` is true only for a `full` scope market that was a whole read; a legacy recipe-only scan reports `complete = false` there (its own flag only meant "of the recipes' items"; the views' "Partial scan" label still follows the old flag, and every legacy price carries the note `recipes`), and a market with `cut` is never complete even if its saved flag says so.
+
+Reasons (`Market.REASONS` has a sentence for each): `baditem`, `badqty`, `nomarket`, `variant`, `unlisted` (the newest full scan saw no buyout: not "worth nothing"), `outofscope` (legacy recipe-only scan), `nodata`, `insufficient`, `badperiod`. No call changes saved data, returns saved tables or makes a score; **there is no confidence number** because there is no defensible model: the qualifications are the facts in `notes` and the coverage fields. Consumers: `Session.Opportunities` and `Session.Shopping` (their lookups are `Market.Price`), `WorthTip` (price for a non-variant item), `Session.PriceSource` (= `Source`). Disenchant remains unknown; `Price` is how its materials will be priced when a validated data source exists.
+
+### Variants
+`GetReplicateItemInfo` returns the item id, not a link, so a full scan cannot tell variants apart, and the cheapest variant sets the price for the id. `Market.Price(item, { variant = true })` therefore answers `nil, "variant"` (the tooltip passes it for suffix/bonus-id/item-level variants), and nothing assigns a base price to a variant. **Variant-specific pricing is feasible:** the documented `C_AuctionHouse.GetReplicateItemLink(index)` (same `AuctionHouseDocumentation.lua`) returns the link; it would cost one more call and a string per record (100,000+), so it is *not* enabled. A future key such as `itemID:variantKey` in a parallel table would fit this database without a redesign; no other consumer would change. Not built, not measured.
+
+### Performance (plain Lua 5.1 on the development machine; WoW's interpreter and the cost of `GetReplicateItemInfo` itself are not included; `tests/test_workshop_market_scale.lua` prints these)
+- Reading 250,000 synthetic records: 0.2 s of Lua in all, **worst 400-record step 1 ms**; 29,860 distinct items; transient memory 11 MB. Turning them into entries: 0.07 s.
+- Committing 29,860 items: first scan 0.06 s; later scans (history to decode and extend) about 0.5 s in total, **worst single 120-item step about 11 ms (18 ms with 250-item steps, which is why the step was halved; the saving of 30,000 items is then about 250 frames)**, final write about 2 ms. The interface gets a frame between steps.
+- One market with 23,439 items and nine scan days: **8.3 MB of Lua memory** and about **3.2 MB of saved text**; by construction at most 40,000 items x (about 30 bytes of entry + about 175 of history) = about 8 MB of text per market, 3 markets at most. Loaded **only when the Workshop is loaded** (it used to be resident at login).
+- Lookups: a current price 5 us, week statistics 7 us (a few to about 20 us in other runs); tooltips never scan history, they decode one short string only when asked.
+- No new always-on event, timer or frame. Diagnostics: scope `workshop.scan` (read batches and saving steps), gauges `workshop.prices` (items priced) and `workshop.history` (items with history).
+- Reload: `test_workshop_market.lua` hands a deep copy of the saved database to a fresh client (what `/reload` does) and checks the same prices, statistics and an unchanged database, a further scan extending the same history, and that nothing is read or created before the game fills the global in. That is a model of a reload, not a real one.
+- Limits of this evidence: synthetic data, no real client, no GC pause measurement in WoW, no measurement of a real saved-variables load.
+
+### Known limitations / decisions to confirm
+- Whether real records report `hasAllInfo = false` often is unknown; if routine, scans will be saved as "not complete" and a complete one will block later incomplete ones (`kept`). The rule is unchanged from before and can be relaxed once the game shows the rate.
+- A day holds only its last scan; "lowest buyout" in history is per day. Intraday lows are not kept.
+- The 40,000-item and 3-market limits are sized from the measurements above, not from a real Forever auction house; if a house lists more, the scan says so and keeps the most useful items.
+- `TwichUIWorkshopDB` is new saved data: **removing the addon's folder with its saved file loses the market history**; the legacy `TwichUIDB.workshop.prices` is left in place until a full scan replaces each market.
+- Disenchant, a typical-value model, sales and charts are not part of this milestone.
+
+### In-game checks for the market data foundation (none done)
+1. Open the auction house, press **Scan prices** on a character with **no profession read**: it should start. After it ends the line should say "Scan finished. Prices found for N items." with N in the thousands; note N, how long it took, and whether the window stuttered (especially the "Saving prices..." stretch).
+2. Hover a looted, non-profession item in the bags: the tooltip's Auction line should show a price and "Scanned | just now" on Shift. Hover a suffix item ("of the Bear"): still "this variant isn't priced".
+3. `/reload`, hover again (price persists). Check `WTF/Account/.../SavedVariables/TwichUIWorkshopDB.lua` exists and its size (it should be a few MB, not tens).
+4. Scan again the next day: `/tui perf` gauge `workshop.history` should be near `workshop.prices`; the Opportunities and Shopping numbers must be unchanged for the same prices.
+5. Does a full scan often end "not complete" (message about listings not fully loaded)? Note how often, and whether a second scan a minute later is complete.
+6. Press Scan prices, then close the auction house during "Saving prices...": the scan should still finish and save.
+7. What `UnitFactionGroup("npc")` returns at a neutral auctioneer (market key `Realm|Neutral` or `Realm|unknown`).
+8. Whether `ReplicateItems` can be requested again within 15 minutes (other addons claim not): the message when it cannot.
 
 ## The shopping list: the exact rules (milestone 3)
 
@@ -272,8 +346,9 @@ Pure code (`Shopping.lua`), same inputs always give the same plan; `tests/test_w
   other guild / same name with another id / not in a guild / id not known yet; records (bounds, oversized and bad tabs refused whole, junk saved data, newer version held, two characters of one guild keep one snapshot per tab, banks per character, a tab the game stops listing goes, partial reads keep the old tab and mark uncertain, an empty tab list erases nothing, at most 3 guilds); the saved choice; Shopping collect rows (bank first, then guild bank, nothing to buy, partial buy priced for what is missing,
   one pool for a queue and its subcraft with exactly the bank's stock spent once, economic cost and cash equal whether the reagent lies in the bags or the bank); Opportunities estimates identical with and without stock and the ready/collect words; the recorder against a fake `C_Bank`/`C_Container`/guild bank API (events registered only while open, no timers or reads while closed, two stacks added, partial tab, delayed update, withdrawal and deposit, close before the read,
   no tab list, bank not viewable, warband bank ignored, bank/guild bank already open at load, guild: empty-after-switch not believed, non-empty believed, unviewable tab, unidentifiable slot, bag change before and after the answer, unanswered bag change, close, another guild, no guild) and a new client on the saved data (times back, ages, the choice, corrupt records). All with a fake game; none against the real client.
+- **Unit-tested (market data foundation, 2026-11-11, `tests/test_workshop_market.lua`, `tests/test_workshop_market_scale.lua`, and the updated `test_workshop_prices.lua` / `_window.lua` / `_worth.lua`):** the history string (first observation, same-day replacement, missing days, folding into 28-day buckets, bounded buckets and retention over 400 days, expiry, out-of-order and malformed strings); the stepped commit (nothing written before `Apply`, a dropped or failing job changes nothing, items a scan did not list keep their history until it expires, cut and changed scans feed no history, a whole read with partial-information records does); legacy recipe-only prices (classified `recipes`, `outofscope`, replaced and removed by the first full scan, newer-version legacy ignored); the API (price and notes, quote states, statistics, trend, comparison, observed day, markets kept apart, every reason, invalid arguments, read-only, copies, same figures for Opportunities and the views); full scans against a fake auction house (no professions, 5000 distinct items, stacks, bid-only and invalid records, saving in steps, closing and updates and a second click during the saving, a failing save, a held database, interruption, stale timers, a cut scan); a synthetic 250,000-record / ~30,000-item house, eight daily scans, 150 further days, three markets, a house over the item limit.
 - **Mocked, not real:** all auction results above come from a fake. They show our logic, not what the real auction house returns. The simulator scenario below runs the real scan against a fake listing table, which shows the same thing.
-- **Real-client-tested:** only that the window opens and works after the anchor fix (reported by the player). Nothing else.
+- **Real-client-tested:** only that the window opens and works after the anchor fix (reported by the player). Nothing else. **Nothing of the market data foundation has been tried in the game.**
 
 ## Simulator coverage (the window itself, 2026-11-09; bank steps added the same day)
 
@@ -427,7 +502,7 @@ That is the **default layout**; the player can change which lines show, their or
   3. otherwise **"Suggested: Vendor"** / **"Suggested: Auction house"** / **"Suggested: Disenchant"** (the last only if a disenchant value were ever supplied; no code produces one); equal best values: **"Similar value"**; with the cut unconfirmed the auction value is only a ceiling, so the vendor is suggested when it is at least that ceiling and an auction that looks higher gives **"No suggestion: auction fee unknown"** (a before-fees figure is never presented as take-home proceeds);
   4. one real option and nothing unknown: no line (nothing to compare). Old prices or a partial scan are added in brackets when the line leans on the auction figure.
 - **Unavailable vs unknown:** a bound item (`C_Item.IsBound`) or bind-on-pickup / quest item (`bindType` 1 / 4) **cannot be listed** ("can't be listed (bound)"): that is unavailable and blocks nothing. A missing price, an unscanned realm, an unrecognised binding or a variant is **unknown** ("no price", "not scanned yet", "can't tell if it can be listed", "this variant isn't priced") and blocks a best option. Nothing unknown is ever zero.
-- **Variants:** the scan keeps **one price per item id** (`Scan.lua` reads `ReplicateItems`, which has no variant key), so an item with a suffix ("of the Bear"), bonus IDs in its link, or an item level that differs from the base is **not priced** from the base item's listings.
+- **Variants:** the scan keeps **one price per item id** (`Scan.lua` reads the record's item id only; see "Variants" under Market data foundation), so an item with a suffix ("of the Bear"), bonus IDs in its link, or an item level that differs from the base is **not priced** from the base item's listings.
 - **Shift (details):** the default layout's Hold Shift lines, label/value rows rather than paragraphs: age ("Scanned | 3 days ago", ", partial scan"), the market name once ("Prices from | ..."), and the one exclusion note (only when there is an auction estimate). Hidden when irrelevant (no scan, a variant or an unlistable item shows no price details). Pressing or releasing Shift rebuilds the open tooltip once (`GameTooltip:RefreshData`); Ctrl/Alt do nothing.
 - **Repeated updates / tooltip reuse:** the post call runs on every rebuild and a rebuild starts from an empty tooltip, so lines are never added twice; the section is dropped when the tooltip moves to something else. A fault inside the section is caught (`pcall`) so the item's own tooltip and other addons' lines survive, and is reported **once** through `R.Fault`.
 - **Late item information:** if `GetItemInfo` has nothing yet, no lines are added, the item is asked for (`RequestLoadItemDataByID`) and `GET_ITEM_INFO_RECEIVED` is registered **only while a tooltip waits** for that one item; it rebuilds once when it arrives (or gives up quietly on a failed load).
@@ -489,6 +564,8 @@ On the **Workshop** page of the TwichUI settings window, below the "What's it wo
 Disenchant is not estimated (above), so "Suggested: Disenchant" can never appear and the disenchant outcomes line is always empty; the auction figure is before fees until `Prices.CUT` is filled, so "Suggested: Auction house" can't appear until then either (the examples show the real state); the designer's mockup is a close imitation, not the game's tooltip (fixed width, wrapping where the game widens); real pointer-driven dragging is untested; only items in bags or the bank, only `GameTooltip`; only after the Workshop has been loaded in the session; prices are the last scan's cheapest buyout (not sales, not per-variant); no deposit or failed-listing arithmetic (stated once in the details); the vendor and auction comparison is advice and assumes a vendor and a posting are available now.
 
 ## Next small tasks (each its own request)
+
+**Handoff after the market data foundation (2026-11-11).** Done and unit/simulator-tested: full scans, `TwichUIWorkshopDB`, history, `Market` API, legacy migration, consumers on the API. **Next, in order:** (1) the in-game checks of "Market data foundation" (nothing has run in the game); (2) if the real `hasAllInfo` rate or the saved-file size says so, tune `Prices.MAX_ITEMS` / `MAX_MARKETS` / `History.POINTS`; (3) a first *use* of history (a "below its usual price" note or a history-based sell-price option in Opportunities, via `Market.Compare` / `Stats`, as an explicitly labelled option, never silently replacing the latest-listing estimate); (4) variant-aware prices via `GetReplicateItemLink`, measured first. Files: `History.lua`, `Prices.lua`, `Market.lua`, `Scan.lua`, `tests/test_workshop_market*.lua`. Decisions already made: day-level history with one value per day, 7 exact days + 3 buckets of 28 days, 120 days retention, no confidence score, no variant guess, separate SavedVariables.
 
 0. **Run the milestone 2 checks above if they have not been itemized, then the milestone 3 checks; fix what they show. Then fill `Prices.CUT` from the invoice.**
 0c. (Candidate, small) Use the saved vendor prices in Opportunities' "Cost to make", with the same age and "vendor price" labels; mark unlearned recipes (a way to forget remembered ones) so Make can't suggest one the character no longer knows.

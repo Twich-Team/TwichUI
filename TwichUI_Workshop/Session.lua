@@ -7,7 +7,7 @@
 local R = TwichUI
 local W = R.Workshop
 local Q, M, O, KN = W.Queue, W.Materials, W.Observe, W.Known
-local PR, Op, SC = W.Prices, W.Opps, W.Scan
+local PR, Op, SC, MK = W.Prices, W.Opps, W.Scan, W.Market
 local V, Sh = W.Vendor, W.Shopping
 local St, K = W.Storage, W.Stock
 local S = { filter = "", observations = 0 }
@@ -409,7 +409,8 @@ function S.FillSome(n)
     return left
 end
 
--- The items worth a saved price: what the known recipes make and need. Returns the set, how many, and whether it was cut.
+-- The items of the known recipes: what a full scan keeps FIRST should the auction house list more items than a market holds. It limits
+-- nothing (a scan prices every item, with or without recipes). Returns the set, how many, and whether it was cut.
 function S.Wanted()
     Ensure()
     local set, n, cut = {}, 0, false
@@ -430,30 +431,20 @@ function S.Wanted()
     return set, n, cut
 end
 
--- The player's click on Scan prices. Returns true, or false and why (Scan.lua says it in words).
+-- The player's click on Scan prices. Returns true, or false and why (Scan.lua says it in words). Needs no profession: the scan prices
+-- every item the auction house lists.
 function S.StartScan()
     S.FillSome(math.huge)
-    local set, _, cut = S.Wanted()
-    return SC.Start(set, cut)
+    local set = S.Wanted()
+    return SC.Start(set)
 end
 
--- Which saved prices the view uses: with an auction house open, only that one; otherwise the one of this realm scanned last
-function S.PriceSource()
-    local open = SC.AuctionOpen()
-    local key, market
-    if open then
-        key = SC.Market()
-        market = key and PR.Market(key) or nil
-    else
-        local realm = SC.Realm()
-        market = realm and PR.Newest(realm) or nil
-    end
-    return { open = open, key = key, market = market, label = market and PR.Label(market) or nil }
-end
+-- Which saved prices the view uses (Market.Source): with an auction house open, only that one; otherwise the one of this realm scanned last
+function S.PriceSource() return MK.Source() end
 
 local EMPTY = {
     norecipes = "Open one of your professions to see which crafts could be worth making.",
-    noprices = "None of your recipes could be priced from the last scan. Some materials or products had no listings, or a profession wasn't open when you scanned.",
+    noprices = "None of your recipes could be priced from the last scan. Some materials or products had no listings.",
     noprofit = "No profitable crafts at the scanned prices. Turn off Profitable only to see them all.",
     nofilter = "No recipes match this profession.",
 }
@@ -464,7 +455,7 @@ function S.Opportunities()
     local recipes = S.AllRecipes()
     local market = src.market
     local rate = market and PR.CutRate(market.side) or nil
-    local lookup = function(item) return market and PR.Lookup(market, item) or nil end
+    local lookup = function(item) return market and MK.Price(item, { market = market }) or nil end
     local all = Op.Rows(recipes, lookup, rate)
     local rows = Op.Select(all, S.opp)
     -- Whether one craft's materials are in the bags or in storage, asked only for the rows the window draws (each answer reads bag counts) and kept
@@ -556,7 +547,7 @@ function S.Shopping()
     local inp = {
         rows = mrows, picks = S.picks, have = O.BagCount, stock = stock,
         stockMeta = function(item, where) return K.Meta(view, item, where) end,
-        auction = function(item) return market and PR.Lookup(market, item) or nil end,
+        auction = function(item) return market and MK.Price(item, { market = market }) or nil end,
         vendor = V.Entry,
         sells = function(item) return sellers[item] ~= nil end,
         recipes = function(item) return byOut[item] or {} end,
@@ -672,5 +663,5 @@ function S.Snapshot()
     local picks = 0
     for _ in pairs(S.picks) do picks = picks + 1 end
     return { professions = #order, recipes = n, queue = Q.Count(), cache = O.CacheSize(), observations = S.observations,
-        prices = market and market.n or 0, vendor = V.Count(), picks = picks, scan = SC.state, stored = St.Counts() }
+        prices = market and market.n or 0, history = market and market.histItems or 0, vendor = V.Count(), picks = picks, scan = SC.state, stored = St.Counts() }
 end

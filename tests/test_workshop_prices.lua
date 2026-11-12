@@ -8,7 +8,10 @@ dofile(TESTS .. "mi_mock.lua")
 local function Check(cond, msg) if not cond then error(msg, 2) end end
 local function Same(a, b, msg) if a ~= b then error((msg or "") .. " expected " .. tostring(b) .. ", got " .. tostring(a), 2) end end
 
-local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Session.lua" }
+-- an item entry "p,q,l,t,x" as numbers
+local function Parse(e) local p, q, l, t, x = e:match("^(%d+),(%d+),(%d+),(%d+),(%d+)$"); return { tonumber(p), tonumber(q), tonumber(l), tonumber(t), tonumber(x) } end
+
+local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua" }
 
 -- a virtual clock and timers, a fake auction house
 local function Setup()
@@ -91,7 +94,7 @@ do
   Same(PR.Unit(100000000000, 1), nil, "above the game's maximum"); Same(PR.Unit(100, 10001), nil)
   Same(PR.Unit(0 / 0, 1), nil, "NaN")
 
-  local b = PR.NewBatch({ [10] = true, [11] = true })
+  local b = PR.NewBatch()
   Check(b:Add(10, 20, 2000), "20 for 20 silver: 100 each")
   Check(b:Add(10, 5, 400), "5 for 4 silver: 80 each, the cheaper unit price")
   Check(b:Add(10, 10, 800), "another at exactly 80 each")
@@ -99,32 +102,42 @@ do
   Check(not b:Add(10, 1, 0), "bid only: no buyout"); Same(b.noBuyout, 1)
   Check(not b:Add(10, 0, 100), "a stack of none"); Check(not b:Add(10, 1, -5)); Check(not b:Add(10, 1, 1.5)); Check(not b:Add("x", 1, 1))
   Check(not b:Add(nil)); Check(not b:Add(10, 1, nil), "an unreadable price is invalid, not free")
-  Check(not b:Add(99, 1, 1), "an item nobody asked for"); Same(b.unwanted, 1)
+  Check(b:Add(99, 1, 1), "every item counts, whether or not a recipe uses it")
   Check(b:Add(11, 3, 1), "1 copper for 3: rounds up to 1, never 0")
-  Same(b.invalid, 6); Same(b.used, 5); Same(b.read, 13)
-  local items, n = b:Items()
-  Same(n, 2)
-  Same(items[10][1], 80, "cheapest unit price"); Same(items[10][2], 15, "items at that exact price (5 + 10)")
-  Same(items[10][3], 4, "buyout listings seen"); Same(items[10][4], 39, "items in those listings")
-  Same(items[11][1], 1); Same(items[99], nil)
+  Same(b.invalid, 6); Same(b.used, 6); Same(b.read, 13)
+  local items, n, over, dropped = b:Items()
+  Same(n, 3); Same(over, false); Same(dropped, 0)
+  local e10 = Parse(items[10])
+  Same(e10[1], 80, "cheapest unit price"); Same(e10[2], 15, "items at that exact price (5 + 10)")
+  Same(e10[3], 4, "buyout listings seen"); Same(e10[4], 39, "items in those listings")
+  Same(e10[5], 100, "the next higher unit price listed (100, then 250)")
+  Same(Parse(items[11])[1], 1); Same(Parse(items[99])[1], 1); Same(items[98], nil)
+  Same(Parse(items[11])[5], 0, "a single listing has no next price")
   -- a price that is only cheaper per item is found without division error: 7 for 700 (100 each) vs 3 for 299 (99.67 each)
-  b = PR.NewBatch({ [5] = true }); b:Add(5, 7, 700); b:Add(5, 3, 299)
-  local it = b:Items()
-  Same(it[5][1], 100, "299/3 = 99.67 rounds up to 100"); Same(it[5][2], 3, "the 3-stack is the cheaper one (99.67 < 100) so it holds the lowest")
+  b = PR.NewBatch(); b:Add(5, 7, 700); b:Add(5, 3, 299)
+  local it = Parse(b:Items()[5])
+  Same(it[1], 100, "299/3 = 99.67 rounds up to 100"); Same(it[2], 3, "the 3-stack is the cheaper one (99.67 < 100) so it holds the lowest")
+  Same(it[5], 0, "the next price rounds to the same copper: not a different price")
+  -- the next higher price is the lowest ABOVE the cheapest, however the listings arrive
+  b = PR.NewBatch(); b:Add(6, 1, 500); b:Add(6, 1, 300); b:Add(6, 1, 400); b:Add(6, 1, 300); b:Add(6, 1, 900)
+  it = Parse(b:Items()[6]); Same(it[1], 300); Same(it[2], 2); Same(it[3], 5); Same(it[5], 400)
   -- explicit false means the game had not loaded the record
-  b = PR.NewBatch({ [5] = true }); b:Add(5, 1, 10, false); b:Add(5, 1, 10, true); b:Add(5, 1, 10, nil)
+  b = PR.NewBatch(); b:Add(5, 1, 10, false); b:Add(5, 1, 10, true); b:Add(5, 1, 10, nil)
   Same(b.partialInfo, 1, "only an explicit false counts")
-  b = PR.NewBatch({ [5] = true }); b:Add(77, 1, 10, false); b:Add(5, 1, 10, true)
-  Same(b.partialInfo, 0, "a record of an item nobody asked about doesn't make the scan incomplete")
+  b = PR.NewBatch(); b:Add(77, 1, 10, false); b:Add(5, 1, 10, true)
+  Same(b.partialInfo, 1, "a record of ANY item can say it lacked information: every item is kept now")
   -- secret values are dropped, never compared
   t.c.issecretvalue = function(v) return v == "SECRET" end
-  b = PR.NewBatch({ [5] = true })
+  b = PR.NewBatch()
   Check(not b:Add(5, 1, "SECRET")); Check(not b:Add("SECRET", 1, 5)); Same(b.invalid, 2)
-  -- more than the limit: the highest item numbers are dropped and it says so
-  b = PR.NewBatch(setmetatable({}, { __index = function() return true end }))
+  -- more than the limit: the recipe items first, then the items with the most listings, then the lowest item numbers
+  b = PR.NewBatch({ [PR.MAX_ITEMS + 3] = true })
   for i = 1, PR.MAX_ITEMS + 3 do b:Add(i, 1, 10) end
-  local _, count, cut = b:Items()
-  Same(count, PR.MAX_ITEMS); Check(cut, "cut off")
+  b:Add(PR.MAX_ITEMS + 2, 1, 10)   -- a second listing: more listings than the rest
+  local kept, count, cut, lost = b:Items()
+  Same(count, PR.MAX_ITEMS); Check(cut, "cut off"); Same(lost, 3)
+  Check(kept[PR.MAX_ITEMS + 3], "a recipe item is kept first"); Check(kept[PR.MAX_ITEMS + 2], "then the item with most listings")
+  Check(kept[1] and kept[PR.MAX_ITEMS - 2], "then the lowest item numbers"); Check(not kept[PR.MAX_ITEMS - 1] and not kept[PR.MAX_ITEMS] and not kept[PR.MAX_ITEMS + 1], "and these three did not fit")
 end
 
 ---------------------------------------------------------------------------
@@ -133,13 +146,14 @@ end
 do
   local t = Setup()
   local PR, Q = t.W.Prices, t.W.Queue
-  local function Scan(at, complete, price, side) return { realm = "Realm", side = side or "Alliance", at = at, complete = complete, read = 5, used = 5, n = 1, items = { [10] = { price, 3, 2, 8 } } } end
+  local function Scan(at, complete, price, side) return { realm = "Realm", side = side or "Alliance", at = at, complete = complete, read = 5, used = 5, n = 1, items = { [10] = ("%d,3,2,8,0"):format(price) } } end
+  Same(PR.MAX_MARKETS, 3, "three auction houses are kept by default"); PR.MAX_MARKETS = 4   -- (the cases below use four)
   Same(PR.Key("Realm", "Alliance"), "Realm|Alliance"); Same(PR.Key("Realm", nil), "Realm|unknown", "a side the game didn't give is its own market")
   Same(PR.Key(nil, "Alliance"), nil)
   Same(PR.Market("Realm|Alliance"), nil, "nothing saved yet")
   Check(PR.Commit("Realm|Alliance", Scan(5000, true, 100)))
   Check(PR.Commit("Realm|Horde", Scan(6000, true, 900, "Horde")))
-  Check(PR.Commit("Other|Alliance", { realm = "Other", side = "Alliance", at = 9000, complete = true, n = 1, items = { [10] = { 7, 1, 1, 1 } } }))
+  Check(PR.Commit("Other|Alliance", { realm = "Other", side = "Alliance", at = 9000, complete = true, n = 1, items = { [10] = "7,1,1,1,0" } }))
   local a, h = PR.Market("Realm|Alliance"), PR.Market("Realm|Horde")
   Same(PR.Lookup(a, 10).price, 100, "the Alliance market"); Same(PR.Lookup(h, 10).price, 900, "the Horde market is separate, never merged")
   Same(PR.Lookup(a, 11), nil)
@@ -162,36 +176,37 @@ do
   Check(PR.Commit("Realm|Neutral", Scan(300, true, 7))); Same(PR.Market("Realm|Neutral").complete, true)
   -- bounded: a fifth market pushes out the one scanned longest ago
   local keys = 0
-  for k in pairs(t.c.TwichUIDB.workshop.prices.markets) do keys = keys + 1 end
+  for k in pairs(t.c.TwichUIWorkshopDB.markets) do keys = keys + 1 end
   Check(keys <= PR.MAX_MARKETS, "at most " .. PR.MAX_MARKETS .. " markets: " .. keys)
   Check(PR.Commit("Realm|New", Scan(99999, true, 1)))
   Same(PR.Market("Realm|Horde") ~= nil, true, "a recent market stays")
   keys = 0
-  for k in pairs(t.c.TwichUIDB.workshop.prices.markets) do keys = keys + 1 end
+  for k in pairs(t.c.TwichUIWorkshopDB.markets) do keys = keys + 1 end
   Same(keys, PR.MAX_MARKETS); Same(PR.Market("Realm|Neutral"), nil, "the one scanned longest ago went")
   -- bad input and bad saved entries are not prices
   Check(not PR.Commit("k", { items = {} })); Check(not PR.Commit(nil, Scan(1, true, 1))); Check(not PR.Commit("k", { at = 0, items = {} }))
-  local m = t.c.TwichUIDB.workshop.prices.markets["Realm|Alliance"]
-  m.items[20] = "bad"; m.items[21] = { 0, 1, 1, 1 }; m.items[22] = { -5, 1, 1, 1 }; m.items[23] = { 1.5 }; m.items[24] = { 100 }; m.items[25] = {}
+  local m = t.c.TwichUIWorkshopDB.markets["Realm|Alliance"]
+  m.items[20] = "bad"; m.items[21] = "0,1,1,1,0"; m.items[22] = "-5,1,1,1,0"; m.items[23] = "1.5,1,1,1,0"; m.items[24] = "100,x,1,1"; m.items[25] = ""; m.items[26] = { 0, 1, 1, 1 }; m.items[27] = 12
   local mk = PR.Market("Realm|Alliance")
-  for _, id in ipairs({ 20, 21, 22, 23, 25 }) do Same(PR.Lookup(mk, id), nil, "item " .. id .. ": a bad saved entry is missing, never a zero price") end
-  Same(PR.Lookup(mk, 24).price, 100); Same(PR.Lookup(mk, 24).qty, nil, "bad quantity details are dropped, the price stays")
-  t.c.TwichUIDB.workshop.prices.markets["Realm|Alliance"] = "junk"
+  for _, id in ipairs({ 20, 21, 22, 23, 25, 26, 27 }) do Same(PR.Lookup(mk, id), nil, "item " .. id .. ": a bad saved entry is missing, never a zero price") end
+  Same(PR.Lookup(mk, 24), nil, "an entry that does not parse is missing")
+  m.items[28] = "100,2,1,5"; Same(PR.Lookup(mk, 28).price, 100, "an entry without the next price still reads"); Same(PR.Lookup(mk, 28).next, nil)
+  t.c.TwichUIWorkshopDB.markets["Realm|Alliance"] = "junk"
   Same(PR.Market("Realm|Alliance"), nil, "a market that isn't a table is not read")
-  t.c.TwichUIDB.workshop.prices.markets["Realm|Alliance"] = { at = "yesterday", items = {} }
+  t.c.TwichUIWorkshopDB.markets["Realm|Alliance"] = { at = "yesterday", items = {} }
   Same(PR.Market("Realm|Alliance"), nil, "no usable scan time: not used")
   -- a newer TwichUI wrote this: read, never changed
-  t.c.TwichUIDB.workshop.prices.v = 2
+  t.c.TwichUIWorkshopDB.v = 2
   local ok2, why2 = PR.Commit("Realm|Horde", Scan(123456, true, 1))
   Check(not ok2 and why2 == "held", "held"); Same(PR.Lookup(PR.Market("Realm|Horde"), 10).price, 900)
-  t.c.TwichUIDB.workshop.prices.v = 1
-  t.c.TwichUIDB.workshop.v = 2
+  t.c.TwichUIWorkshopDB.v = 1
+  t.c.TwichUIDB.workshop = { v = 2 }
   Check(Q.Held() and PR.Held(), "the workshop data being newer holds the prices too")
   -- prices share the workshop key, so they are never in a profile, share or backup, and do not disturb the queue
   t.c.TwichUIDB.workshop.v = 1
   Check(Q.Add({ id = 1, name = "R", mats = { { item = 10, qty = 1 } } })); Same(#Q.Entries(), 1)
   Q.Unload(); Same(#Q.Entries(), 1, "the queue still loads beside the prices")
-  Check(t.c.TwichUIDB.workshop.prices ~= nil and t.c.TwichUIDB.workshop.chars ~= nil)
+  Check(t.c.TwichUIWorkshopDB ~= nil and t.c.TwichUIDB.workshop.chars ~= nil and t.c.TwichUIDB.workshop.prices == nil, "the market data is not in TwichUIDB")
 end
 
 ---------------------------------------------------------------------------
@@ -370,9 +385,6 @@ do
   Check(not ok and why == "closed" and SC.state == "unavailable"); Same(t.ah.sent, 0, "nothing is sent while the auction house is closed")
   Check(SC.Message():find("Open the auction house", 1, true))
   t.c.AuctionHouseFrame:Show()
-  -- nothing to price
-  ok, why = SC.Start({}); Check(not ok and why == "nothing"); Same(t.ah.sent, 0)
-  ok, why = SC.Start(nil); Check(not ok and why == "nothing")
   -- the posting page's search is running
   t.c.TwichUI.AuctionScan = { Busy = function() return true end }
   ok, why = SC.Start(want); Check(not ok and why == "posting"); Same(t.ah.sent, 0, "never competes with the posting page's search")
@@ -386,9 +398,9 @@ do
   ok, why = SC.Start(want); Check(not ok and why == "api"); Check(SC.Message():find("doesn't offer", 1, true))
   t.c.C_AuctionHouse.ReplicateItems = api
   -- saved prices written by a newer TwichUI
-  t.c.TwichUIDB.workshop = { v = 1, prices = { v = 5, markets = {} } }
+  t.c.TwichUIWorkshopDB = { v = 5, markets = {} }
   ok, why = SC.Start(want); Check(not ok and why == "held"); Same(t.ah.sent, 0)
-  t.c.TwichUIDB.workshop = nil
+  t.c.TwichUIWorkshopDB = nil
   Same(t.Listening(), 0, "no event is listened to while no scan runs")
   -- the request itself errors
   t.ah.sendFails = true
@@ -428,15 +440,15 @@ do
   Check(pr > 0.08 and pr < 0.5, "a third of the way through the reading: " .. tostring(pr))
   Check(t.Tick()); Same(t.ah.infoCalls, 800)
   Check(t.Tick()); Same(t.ah.infoCalls, 1003, "the last, smaller batch (records past the end aren't asked for)")
-  Same(SC.state, "done"); Check(SC.result.complete); Same(SC.result.items, 2); Same(SC.result.used, 1001)
+  Same(SC.state, "done"); Check(SC.result.complete); Same(SC.result.items, 3, "every item, wanted or not"); Same(SC.result.used, 1002)
   Same(t.ah.outOfRange, nil, "records 0 .. n-1 are read, nothing outside them")
   Same(PR.Lookup(PR.Market("Realm|Alliance"), 10).qty, 1, "the record at index 0 (101 copper) counts")
   Same(t.Listening(), 0, "listening ends with the scan")
   local m = PR.Market("Realm|Alliance")
-  Check(m and m.complete and m.n == 2, "saved as a complete scan of the Alliance market")
-  Same(PR.Lookup(m, 10).price, 101); Same(PR.Lookup(m, 11).price, 100); Same(PR.Lookup(m, 77), nil, "only wanted items are kept")
+  Check(m and m.complete and m.n == 3 and m.scope == "full", "saved as a complete full scan of the Alliance market")
+  Same(PR.Lookup(m, 10).price, 101); Same(PR.Lookup(m, 11).price, 100); Same(PR.Lookup(m, 77).price, 1, "an item no recipe uses is priced too")
   Same(PR.Lookup(m, 11).total, 20, "the bid-only listing is not counted")
-  Check(SC.Message():find("Prices found for 2 of your items", 1, true)); Check(changes > 5, "the window is told as it goes")
+  Check(SC.Message():find("Prices found for 3 items", 1, true), SC.Message()); Check(changes > 5, "the window is told as it goes")
   Same(m.at, t.c.time())
   -- the old response timeout does nothing
   t.Advance(200); Same(SC.state, "done")
@@ -528,7 +540,7 @@ do
   t.ah.records[#t.ah.records + 1] = { item = 10, count = 1, buyout = 50 }   -- one more listing appeared mid-read
   t.Advance(10)   -- the read ends, sees 1001 against 1000, reads again once
   Same(SC.state, "done"); Check(SC.result.complete); Same(SC.result.restarts, 1); Same(PR.Lookup(PR.Market("Realm|Alliance"), 10).price, 50)
-  t.c.TwichUIDB.workshop.prices = nil   -- (an incomplete scan never replaces a complete one: that is "kept", tested below)
+  t.c.TwichUIWorkshopDB = nil   -- (an incomplete scan never replaces a complete one: that is "kept", tested below)
   Check(SC.Start(want)); t.Fire("REPLICATE_ITEM_LIST_UPDATE"); ToReading()
   local grow = 0
   local numOf = t.c.C_AuctionHouse.GetNumReplicateItems
@@ -578,11 +590,16 @@ do
   Check(SC.Start(want)); t.Fire("REPLICATE_ITEM_LIST_UPDATE"); t.Advance(30)
   Same(SC.state, "failed"); Same(SC.why, "kept"); Check(SC.Message():find("earlier complete prices were kept", 1, true))
   Same(PR.Lookup(PR.Market("Realm|Alliance"), 10).price, 101, "the complete scan stands")
-  -- a wanted list that had to be cut can't be a complete scan
+  -- more items than a market holds: the scan is saved as cut, never complete
   t.ah.records = Records(3, 10)
-  t.c.TwichUIDB.workshop.prices = nil
-  Check(SC.Start(want, true)); t.Fire("REPLICATE_ITEM_LIST_UPDATE"); t.Advance(3)
-  Same(SC.state, "done"); Check(not SC.result.complete)
+  t.c.TwichUIWorkshopDB = nil
+  local was = PR.MAX_ITEMS
+  PR.MAX_ITEMS = 2
+  t.ah.records[2].item = 11; t.ah.records[3].item = 12
+  Check(SC.Start(want)); t.Fire("REPLICATE_ITEM_LIST_UPDATE"); t.Advance(3)
+  PR.MAX_ITEMS = was
+  Same(SC.state, "done"); Check(not SC.result.complete and SC.result.cut and SC.result.dropped == 1); Check(SC.Message():find("lists more than TwichUI keeps", 1, true), SC.Message())
+  Check(PR.Market("Realm|Alliance").cut, "saved as cut")
   -- the market follows the auctioneer; an unreadable side is its own market
   t.ah.side = nil
   Check(SC.Start(want)); t.Fire("REPLICATE_ITEM_LIST_UPDATE"); t.Advance(3)

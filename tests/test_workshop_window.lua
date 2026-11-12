@@ -76,7 +76,7 @@ c.C_Item = {
 c.InCombatLockdown = function() return false end
 c.IsShiftKeyDown = function() return false end
 
-for _, f in ipairs({ "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Session.lua", "AuctionButton.lua", "Window.lua" }) do
+for _, f in ipairs({ "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua", "AuctionButton.lua", "Window.lua" }) do
   local chunk = assert(loadfile(ROOT .. "../TwichUI_Workshop/" .. f)); setfenv(chunk, c); chunk("TwichUI_Workshop", {})
 end
 local W = R.Workshop
@@ -290,10 +290,10 @@ do
   Advance(7)
   Same(W.Scan.state, "done")
   Check(not ahBar:IsShown() and not opps.bar:IsShown(), "the bars go when the scan ends")
-  Check(AB.Status():IsShown() and AB.Status():GetText():find("Prices found for 4 of your items", 1, true), "the auction house window says how it went")
+  Check(AB.Status():IsShown() and AB.Status():GetText():find("Prices found for 5 items", 1, true), "the auction house window says how it went")
   Same(ahBtn.text:GetText(), "Scan prices"); Check(ahBtn.enabled)
   Same(opps.scan.text:GetText(), "Scan prices"); Check(opps.scan.enabled)
-  Check(opps.status:GetText():find("Prices found for 4 of your items", 1, true), opps.status:GetText())
+  Check(opps.status:GetText():find("Prices found for 5 items", 1, true), opps.status:GetText())
   Check(opps.source:GetText():find("Alliance auction house on Realm \194\183 just now", 1, true), opps.source:GetText())
   Same(#L_.data, 2)
   local r1, r2 = L_.rows[1], L_.rows[2]
@@ -434,8 +434,8 @@ do
   }
   g.filtered = { 1, 3 }
   g.bags = { [10] = 0, [12] = 0 }
-  c.TwichUIDB.workshop.prices = { v = 1, markets = { ["Realm|Alliance"] = { realm = "Realm", side = "Alliance", at = os.time() - 90000, complete = true, read = 1, used = 1, n = 2,
-    items = { [10] = { 100, 9, 9, 9 }, [12] = { 10, 9, 9, 9 } } } } }
+  c.TwichUIWorkshopDB = { v = 1, markets = { ["Realm|Alliance"] = { f = 2, scope = "full", realm = "Realm", side = "Alliance", at = os.time() - 90000, complete = true, read = 1, used = 1, n = 2,
+    items = { [10] = "100,9,9,9,0", [12] = "10,9,9,9,0" }, hist = {}, sd = {} } } }
   f:Show()
   Check(S.Add(S.AllRecipes()[1]), "queued the potion")
   f.tabShop:GetScript("OnClick")(f.tabShop)
@@ -526,12 +526,12 @@ do
   -- a material with no price: a known subtotal and a clear message, never a complete-looking total
   Q.Remove(3)
   g.bags[10] = 0
-  c.TwichUIDB.workshop.prices.markets["Realm|Alliance"].items[12] = nil
+  c.TwichUIWorkshopDB.markets["Realm|Alliance"].items[12] = nil
   c.TwichUIDB.workshop.vendor = nil
   Win.Render()
   Same(#SL.data, 1); Same(SL.rows[1].name:GetText(), "Peacebloom"); Same(SL.rows[1].spend.a:GetText(), "200c")
   Check(shop.total:GetText():find("Estimated spending: 200c", 1, true) and not shop.total:GetText():find("missing", 1, true), shop.total:GetText())
-  c.TwichUIDB.workshop.prices.markets["Realm|Alliance"].items[10] = nil
+  c.TwichUIWorkshopDB.markets["Realm|Alliance"].items[10] = nil
   Win.Render()
   Same(SL.rows[1].spend.a:GetText(), "Unknown", "unknown cost is not zero")
   Check(shop.total:GetText():find("Some prices missing", 1, true), shop.total:GetText())

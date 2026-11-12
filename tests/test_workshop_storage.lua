@@ -7,8 +7,8 @@ dofile(TESTS .. "mi_mock.lua")
 local function Check(cond, msg) if not cond then error(msg, 2) end end
 local function Same(a, b, msg) if a ~= b then error((msg or "") .. " expected " .. tostring(b) .. ", got " .. tostring(a), 2) end end
 
-local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "Prices.lua", "Opportunities.lua",
-  "Vendor.lua", "Shopping.lua", "Scan.lua", "Session.lua", "Watch.lua", "Bank.lua" }
+local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Prices.lua", "Opportunities.lua",
+  "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua", "Watch.lua", "Bank.lua" }
 
 local ORE, BAR, SWORD, HERB = 10, 20, 90, 11
 
