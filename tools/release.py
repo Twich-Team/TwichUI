@@ -296,7 +296,7 @@ def stamp(version, root=None):
 # ---------------------------------------------------------------------------
 
 FORBIDDEN = {".git", ".github", ".release", ".continue", ".clinerules", ".pkgmeta", ".gitignore", ".env",
-             ".DS_Store", "tests", "tools", "assets", "CLAUDE.md", "RELEASING.md", "TASK_NOTES.md", "luac.out"}
+             ".DS_Store", "tests", "tools", "assets", "TwichUI_TestLab", "CLAUDE.md", "RELEASING.md", "TASK_NOTES.md", "luac.out"}
 TEXT = (".lua", ".toc", ".xml", ".md", ".txt")
 MACHINE_PATH = re.compile(r"/home/[A-Za-z]|/Users/[A-Za-z]|[A-Za-z]:\\+Users\\+", re.I)
 SECRET = re.compile(r"CF_API_KEY|WAGO_API_TOKEN|ghp_[A-Za-z0-9]{20}|github_pat_|-----BEGIN [A-Z ]*PRIVATE KEY")

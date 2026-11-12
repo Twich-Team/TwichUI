@@ -425,9 +425,23 @@ class ArchiveTests(unittest.TestCase):
                 rel.TOCS[rel.WORKSHOP]: WORKSHOP_TOC.replace("1.0.0", self.VERSION).replace("\n", "\r\n")}
         self.assertEqual(self.make(crlf), [])
 
+    def test_test_lab_is_excluded_from_every_package(self):
+        # the development-only Test Lab (TwichUI_TestLab/) is refused wherever it lands, and the packager is told to leave it out
+        for name in ("TwichUI_TestLab/Lab.lua", "!!!TwichUI/TwichUI_TestLab/TwichUI_TestLab.toc"):
+            with self.subTest(name):
+                self.assertTrue(any("TwichUI_TestLab" in p for p in self.make({name: "-- lab\n"})), name)
+        pkgmeta = (Path(__file__).resolve().parent.parent / ".pkgmeta").read_text(encoding="utf-8")
+        ignore = pkgmeta.split("\nignore:", 1)[1]
+        self.assertIn("\n  - TwichUI_TestLab\n", ignore + "\n")
+        moved = pkgmeta.split("move-folders:", 1)[1].split("enable-nolib-creation", 1)[0]
+        self.assertNotIn("TwichUI_TestLab", moved, "the Lab is never one of the folders the packager moves into the zip")
+        self.assertNotIn("TwichUI_TestLab", rel.ADDONS)
+
     def test_problems_are_found(self):
         cases = {
             "top-level": {"TwichUI/Core.lua": ""},
+            "test lab beside the addons": {"TwichUI_TestLab/Lab.lua": "-- lab\n"},
+            "test lab inside the core": {"!!!TwichUI/TwichUI_TestLab/Lab.lua": "-- lab\n"},
             "nested addon": {"!!!TwichUI/TwichUI_Settings/Kit.lua": ""},
             "misspelled": {"TwitchUI_Settings/x.lua": ""},
             "development file": {"!!!TwichUI/tests/test.lua": ""},
@@ -436,7 +450,8 @@ class ArchiveTests(unittest.TestCase):
         }
         for what, extra in cases.items():
             with self.subTest(what):
-                self.assertTrue(any(what in p for p in self.make(extra)), self.make(extra))
+                key = "top-level" if what == "test lab beside the addons" else ("development file" if what == "test lab inside the core" else what)
+                self.assertTrue(any(key in p for p in self.make(extra)), self.make(extra))
         self.assertTrue(any("Version" in p for p in self.make(version="1.0.0")))
         self.assertTrue(any("loads Core.lua" in p for p in self.make(drop=("!!!TwichUI/Core.lua",))))
         lod = SETTINGS_TOC.replace("## LoadOnDemand: 1\n", "").replace("1.0.0", self.VERSION)
