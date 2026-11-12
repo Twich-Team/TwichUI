@@ -6,13 +6,13 @@ It is not a player feature. It is never packaged and never offered to players (s
 
 ## Installation (development only)
 
-Copy the folder `TwichUI_TestLab/` from the repository into your development client's `Interface/AddOns/` folder, beside `!!!TwichUI`. It needs `!!!TwichUI` turned on. It is marked load-on-demand, so it does nothing at login. There is no deploy-script option yet (a convenient opt-in local one is a later decision).
+Copy the folder `TwichUI_TestLab/` from the repository into your development client's `Interface/AddOns/` folder, beside `!!!TwichUI`. It needs `!!!TwichUI` turned on. It is marked load-on-demand, so it does nothing at login. The machine-local, gitignored `tools/deploy.sh` also copies it (and adds the extra interface number to its `.toc`, as for the other addons), so a normal deploy to the development client installs the Lab. That script is never part of a release.
 
-Nothing in `!!!TwichUI`, `TwichUI_Workshop` or any released addon was changed for it.
+The only change to a released addon is one row in the TwichUI data bar menu (`!!!TwichUI/modules/SettingsBrokerMenu.lua`): **Test Lab (development)...**. It is drawn only while the `TwichUI_TestLab` folder is installed (`C_AddOns.DoesAddOnExist`), so a standard release, which never contains the folder, shows nothing. The first click loads the addon (which opens its window); after that it opens and closes the window. If the load fails it says why in chat. The shipped code is that one row and about ten lines; `TwichUI_Workshop` is unchanged.
 
 ## Opening and running
 
-1. In game: `/run C_AddOns.LoadAddOn("TwichUI_TestLab")`. Loading opens the window once. Afterwards `/tuilab` opens and closes it.
+1. In game: click the TwichUI data bar entry and choose **Test Lab (development)...** (or `/run C_AddOns.LoadAddOn("TwichUI_TestLab")`). Loading opens the window once. Afterwards the menu row and `/tuilab` open and close it.
 2. Tick the categories to run (both are on by default) and press **Run**.
 3. Watch the progress line (case *n* of *m*, the case id, elapsed time), the counts and one row per case.
 4. **Stop** is enabled while a run is going. **Copy report** fills the box at the bottom and selects it; press **Ctrl+C**, then paste the text where it is needed (the game gives addons no clipboard).
@@ -109,7 +109,7 @@ facts: client.api.GetTimePreciseSec=function client.lua.div_zero_value=inf ...
 
 Four, by hand, in the development client:
 
-1. **Load:** `/run C_AddOns.LoadAddOn("TwichUI_TestLab")` opens the window with no Lua error; `/tuilab` closes and reopens it.
+1. **Load:** the data bar menu's **Test Lab (development)...** row appears (and does not appear with the folder removed), and clicking it opens the window with no Lua error; the row and `/tuilab` close and reopen it.
 2. **Run both categories:** every core case passes; the client category passes; the report's `facts:` line shows what this client has (note especially `client.lua.div_zero_*`, `client.lua.yield_across_pcall` and the API presence values).
 3. **Stop mid-run:** run both, then press Stop while the progress line reads `client.runner.pause-probe` (it waits about 2 s). The remaining rows must read `stopped`, the pause-probe row `stopped ... not resumed`, and Run must be enabled again.
 4. **Copy the report:** after a run, Copy report selects the text; Ctrl+C and paste it elsewhere; it should start `TWICHUI-TESTLAB REPORT schema 1` and contain no names.

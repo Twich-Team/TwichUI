@@ -326,6 +326,38 @@ do
   assert(#lines == 5 and lines[4] == "Quiet screen: Off." and lines[5] == "Leave me alone: Off.", table.concat(lines, "|"))
 end
 
+-- 15b. The development Test Lab has a row only while its folder is installed (never in a standard release); clicking it loads the
+--      addon the first time and opens or closes its window after that.
+do
+  local c = MenuClient()
+  local _, rows = OpenMenu(c)
+  assert(not (rows["Test Lab (development)..."] and rows["Test Lab (development)..."].shown), "no Lab installed, no row")
+  c.TwichUI.SettingsBrokerMenu.Close()
+  local loads, toggles = {}, 0
+  c.C_AddOns.DoesAddOnExist = function(name) return name == "TwichUI_TestLab" end
+  c.C_AddOns.LoadAddOn = function(name) loads[#loads + 1] = name; return true end
+  local menu
+  menu, rows = OpenMenu(c)
+  local row = rows["Test Lab (development)..."]
+  assert(row and row.shown and row.enabled, "installed: the row is there")
+  Click(row)
+  assert(#loads == 1 and loads[1] == "TwichUI_TestLab", "the first click loads the addon")
+  assert(not menu.shown, "and closes the menu")
+  c.TwichUI.TestLab = { Window = { Toggle = function() toggles = toggles + 1 end } }
+  menu, rows = OpenMenu(c)
+  Click(rows["Test Lab (development)..."])
+  assert(toggles == 1 and #loads == 1, "once loaded, the click toggles its window and loads nothing")
+  -- a load that fails says so, once, in chat, and breaks nothing
+  c.TwichUI.TestLab = nil
+  c.C_AddOns.LoadAddOn = function() return false, "DISABLED" end
+  local printed = {}
+  c.print = function(text) printed[#printed + 1] = tostring(text) end
+  menu, rows = OpenMenu(c)
+  Click(rows["Test Lab (development)..."])
+  assert(#printed == 1 and printed[1]:find("test lab: couldn't load it (DISABLED).", 1, true), "it says why: " .. table.concat(printed, "|"))
+  assert(not menu.shown)
+end
+
 -- 5. Without a data bar's LibDataBroker nothing is made and nothing breaks; a data bar addon that loads later brings the
 --    library and the launcher is made then, once.
 do
