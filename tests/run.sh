@@ -27,8 +27,12 @@ if command -v python3 >/dev/null; then
   # the Reminders artwork library is a reproducible build of the two painted sheets in docs/reminders-revision/
   if python3 -B -m unittest -q test_reminder_gallery >/dev/null 2>&1; then pass=$((pass+1)); echo "ok   test_reminder_gallery.py"
   else fail=$((fail+1)); echo "FAIL test_reminder_gallery.py"; python3 -B -m unittest test_reminder_gallery 2>&1 | tail -5; fi
+  # tools/mutate.py (the Workshop mutation runner): only the runner's own harness tests run here, on a tiny fake repository (a few
+  # seconds). A mutation campaign itself is run by hand (bash tools/mutate.sh --help); it is never part of this suite.
+  if python3 -B -m unittest -q test_mutate >/dev/null 2>&1; then pass=$((pass+1)); echo "ok   test_mutate.py"
+  else fail=$((fail+1)); echo "FAIL test_mutate.py"; python3 -B -m unittest test_mutate 2>&1 | tail -5; fi
 else
-  echo "skip test_sv_inspect.py, test_release_tools.py, test_wizard_art.py, test_reminder_gallery.py (no python3)"
+  echo "skip test_sv_inspect.py, test_release_tools.py, test_wizard_art.py, test_reminder_gallery.py, test_mutate.py (no python3)"
 fi
 echo "$pass passed, $fail failed"
 [ $fail -eq 0 ]

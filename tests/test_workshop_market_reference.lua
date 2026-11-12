@@ -489,6 +489,16 @@ local function CompareQueries(seed, index, cal, model, key, id, now)
       Expect("stats", seed, index, tag .. " figures", input,
         { want.n, want.scans, want.low, want.high, want.average, want.newest.day, want.newest.price, want.exact, want.limited, want.single, want.from, want.to },
         { got.n, got.scans, got.low, got.high, got.average, got.newest and got.newest.day, got.newest and got.newest.price, got.exact, got.limited, got.single, got.from, got.to })
+      -- the raw window behind Stats (History.Window), including `skipped`: how many observed days the buckets that overhang the window hide.
+      -- Stats shows that only as the boolean `limited`, so the count itself needs its own comparison (the mutation catalog's
+      -- market.history.window-skipped survived until this was added)
+      local win, mwin = H.Window(PR.Market(key).hist[id], got.from, got.to), it:Window(got.from, got.to)
+      if win and mwin then
+        Expect("stats", seed, index, tag .. " raw window", input, { mwin.n, mwin.sum, mwin.lo, mwin.hi, mwin.exact, mwin.skipped },
+          { win.n, win.sum, win.lo, win.hi, win.exact, win.skipped })
+      else
+        Expect("stats", seed, index, tag .. " raw window exists", input, mwin ~= nil, win ~= nil)
+      end
       -- where the window begins at or after the oldest exact day nothing was compacted: the answer is the full history's
       local pts = it:Points()
       if pts[1] and got.from >= pts[1].day then

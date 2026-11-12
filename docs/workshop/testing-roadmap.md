@@ -252,7 +252,7 @@ Each milestone is one request. **Tests** lists the evidence the milestone must p
 - **Objective:** independent models for the batch (sorted exact fractions) and the history and statistics (a full daily list).
 - **Files:** `TwichUI_TestLab/Fixtures.lua` (PRNG + generators), `cases/Market.lua`, a regression case for the two Trend survivors.
 - **Accept:** about 200 seeded calendars per run; the models agree with production; a failure prints its seed.
-- **Tests:** the two Trend mutants from section A are killed (by hand until M4 exists).
+- **Tests:** the two Trend mutants from section A are killed (by hand until M4; now the catalog entries `market.trend.window-first-day` and `market.trend.negative-rounding`).
 - **Depends on:** M1.
 - **Out of scope:** changing Trend unless the model shows a real defect. Report it first.
 
@@ -263,9 +263,9 @@ Each milestone is one request. **Tests** lists the evidence the milestone must p
 - **Depends on:** M2's PRNG.
 - **Out of scope:** the multilevel planner.
 
-**M4. Mutation runner**
-- **Objective:** turn the probe described in section A into a reusable runner. Stage a copy of `TwichUI_Workshop/` beside a folder of symlinks to the core's entries, so that `ROOT .. "../TwichUI_Workshop/"` resolves to the copy. The path must be absolute.
-- **Files:** `tools/mutate.sh` (bash) plus a mutant list per file, staged in a temporary folder outside the repository.
+**M4. Mutation runner** (built 2026-11-12, see H)
+- **Objective:** turn the probe described in section A into a reusable runner. Stage a copy of `TwichUI_Workshop/` beside a copy of the core's code files, so that `ROOT .. "../TwichUI_Workshop/"` resolves to the copy (the plan said symlinks; copies were chosen so that nothing in a copy can reach the checkout).
+- **Files:** `tools/mutate.sh` (bash wrapper), `tools/mutate.py` (the runner), `tools/mutations/workshop.py` (the catalog), `tests/test_mutate.py` (the runner's own tests).
 - **Accept:** a baseline-must-pass guard; the report lists killed and survived mutants and which tests killed them; about 20 mutants take under 2 min.
 - **Depends on:** none (more valuable after M2 and M3).
 - **Out of scope:** automatic mutant generation.
@@ -323,7 +323,7 @@ Each milestone is one request. **Tests** lists the evidence the milestone must p
 
 | Change | Required evidence | Not required |
 |---|---|---|
-| Pure algorithm | deterministic cases with hand arithmetic + a property test over seeds; rerun the mutants for that file | simulator |
+| Pure algorithm | deterministic cases with hand arithmetic + a property test over seeds; `bash tools/mutate.sh --group market` or `--group crafting` (add a catalog entry for a realistic new defect model; section H, M4) | simulator |
 | Money, cost or profit | the above + agreement with an independent reference model | simulator |
 | Saved data | bounds/held/corrupt cases + a text round trip; a migration that is ordered, repeatable and idempotent; a real-client `/reload` check listed | — |
 | UI | handler tests + `Press`-style reachability + `workshop.sh` (or its relevant group after M8) + a screenshot reviewed by a person; hover and pointer listed for the real client or run as a guided Lab case | benchmarks |
@@ -426,7 +426,7 @@ Out of scope: benchmarks, fixtures/PRNG, UI or pointer probes, guided cases, a /
 4. `Trend` has no upper bound at `now`, `Stats` and `Compare` do: with `now` before the newest observation, `Trend` counts days after `now`.
 5. `partialInfo` counts a record with a valid item and `info == false` even when its count or buyout is invalid (the header says "their prices were used").
 
-**Remaining gaps:** `Quote`, `Estimate` and the Opportunities arithmetic (M3); `Shopping.Plan` and `Materials` (M3); the text round trip and the eviction order of markets when `at` ties (M9); the scan state machine; the new Lab cases have not yet run in the real client (the offline run shows the cases pass in plain Lua 5.1, not in the client's interpreter); the mutation probe is a script outside the repository (M4).
+**Remaining gaps:** `Quote`, `Estimate` and the Opportunities arithmetic (M3); `Shopping.Plan` and `Materials` (M3); the text round trip and the eviction order of markets when `at` ties (M9); the scan state machine; the new Lab cases have not yet run in the real client (the offline run shows the cases pass in plain Lua 5.1, not in the client's interpreter); the mutation probe was a script outside the repository (now `tools/mutate.sh`, M4).
 
 **Handoff to M3 (crafting and shopping reference models):** reuse `TL.Fixtures.Rng` and the pattern of `Reference.lua` (a model built from the documented contract, with whole-number arithmetic, compared with production after every step, failures printing model, seed, scenario and input; known-gap characterization tests for contract corners). Add queue/recipe/stock generators to `Fixtures.lua` (bounded by the planner's limits: 30 recipes, 16 materials, 4 candidates), a brute-force planner for at most 6 materials against `Shopping.Plan`, invariants for `Materials.Rows`, `W.Split` (bags + bank + guild + still needed = need; no layer negative or above what it holds) and an independent craft-estimate model against `Prices.Estimate/Quote` (the profit bound with `cheapest` set is a product decision, see "Unresolved decisions" 3). Seeds: continue at `7500000+i`. Never call `Prices.<commit>`-type writes in Lab cases; keep the large suites offline.
 
@@ -459,9 +459,66 @@ Out of scope: benchmarks, fixtures/PRNG, UI or pointer probes, guided cases, a /
 
 **Product questions found:** (a) should a lost pick keep deciding first? (b) should the combined purchase re-pick the cheapest source at the combined quantity? (c) should a recipe whose cash cost is known and zero be offered when an owned reagent has no price? (d) which way a half copper of the cut rounds, once the invoice is seen.
 
-**Remaining gaps:** the new Lab cases have not run in the real client; the stock cases need the storage records, so they stay offline; depth-aware purchase costing and the multilevel planner (later milestones) have no model yet (`REF.MakeOption`/`REF.Plan` are one-level); mutation is still a script outside the repository (M4).
+**Remaining gaps:** the new Lab cases have not run in the real client; the stock cases need the storage records, so they stay offline; depth-aware purchase costing and the multilevel planner (later milestones) have no model yet (`REF.MakeOption`/`REF.Plan` are one-level); mutation was still a script outside the repository (now `tools/mutate.sh`, M4).
 
 **Handoff to M4/M5:** `REF.Enumerate`, `REF.Plan`, `REF.MakeOption` and `FX.PlanInput` are the pieces a multilevel planner's model would extend (a deeper `MakeOption`, a graph instead of the one-level chain rule). The mutant list above (64 entries, each a single exact-text edit) is the starting list for `tools/mutate.sh`.
+
+**M4, mutation runner (2026-11-12):** offline verification tooling, no player-facing change, **no production file changed**. One test file gained a comparison (below).
+
+| Part | Where |
+|---|---|
+| Entry point (`bash`, from any folder) and the runner (stdlib Python only) | `tools/mutate.sh`, `tools/mutate.py` |
+| The catalog: 102 explicit entries, each with an id, one exact-text edit of one file, the defect it stands for, the tests that must catch it, and an expected result | `tools/mutations/workshop.py` |
+| The runner's own tests: 29 harness tests on a fake repository (also run by `./tests/run.sh`, about 5 s) | `tests/test_mutate.py` |
+
+**What it does.** Every mutation gets its own copy under a fresh folder in the system temp directory (never inside the checkout): the core's code files (`.lua .toc .xml`), `TwichUI_Workshop/`, `TwichUI_TestLab/`, the `.lua` test helpers and the tests that mutation names. The source set is read from the checkout once, at the start, and every copy is written from those bytes (so every mutant is compared with the same baseline source); the mutation is applied only inside the copy (the pattern must occur **exactly once**; zero or several is `invalid`), the mutated file must still pass `luac5.1 -p` (else `invalid`), and the focused tests run there with a minimal environment (no inherited seeds or `LUA_INIT`, a private `HOME` and `TMPDIR`) in their own process group. A baseline of every needed test on an unmodified copy runs first; if it fails, the campaign stops. At the end the live files are compared with what was read; any difference is an infrastructure error. Copies are removed on every exit Python can see, including Ctrl-C and SIGTERM (child process groups are killed first); a SIGKILL of the runner itself cannot be caught and would leave a `twichui-mutate-*` folder in the temp directory (delete it). A mutation may only edit a file under `TwichUI_Workshop/`.
+
+**Outcomes** (never merged): `killed` (a relevant test failed; labelled `assertion`, `runtime-error` when the code crashed, `caught-error` when the addon handed an error to the error handler as `run.sh` also treats it, or `no-pass-marker`), `survived`, `invalid`, `timeout` (a hang is never a kill; limit = 6 x the test's baseline time + 5 s, at most 120 s, or `--timeout`), `infra` (the test command could not run, died from a signal, exit 126/127, a missing module or file). The score line always says how many applied mutations were killed and, if anything was excluded, that it is **not a clean score**. A documented known survivor (`expect="survived"` with a required note) is expected and listed.
+
+**Exit status:** 0 every mutation ended as the catalog expects | 1 an unexpected survivor, an unexpected kill of a known survivor, an invalid mutation or a timeout | 2 an infrastructure error (also a checkout that changed during the run) | 3 the baseline failed | 64 bad arguments or a bad catalog | 130/143 interrupted.
+
+**Commands** (from any folder; the full list is `--help`):
+
+```
+bash tools/mutate.sh                                 # the smoke group (16 mutations, a few of each kind)
+bash tools/mutate.sh --group market                  # prices, history, statistics, quotes, the craft estimate
+bash tools/mutate.sh --group crafting                # materials, stock, shopping, vendor, Opportunities
+bash tools/mutate.sh --group market.trend            # any id prefix
+bash tools/mutate.sh --id market.trend.window-first-day
+bash tools/mutate.sh --all --jobs 4                  # the whole catalog, four copies at a time (4 is the best measured; more is slower)
+bash tools/mutate.sh --list [--verbose]              # what exists, and the exact edits
+bash tools/mutate.sh --check                         # do all patterns still match exactly once and parse? (runs no test)
+bash tools/mutate.sh --keep-failed                   # keep the copy (+ MUTATION.txt, OUTPUT.txt, REPRODUCE.txt) of anything unexpected
+bash tools/mutate.sh --broad --id <survivor>         # also try the older broad Workshop tests on a survivor
+bash tools/mutate.sh --all --json result.json
+```
+
+**Catalog coverage (102).** *Market and pricing (46):* the batch (compare unit prices as fractions, cheapest, quantity at the cheapest tier and its reset, next higher price and its same-copper rule, items and listings, bid-only, the item limit's priority and ordering), history (bucket index, fold low/sum/count, seven exact days, both expiry boundaries, same-day overwrite, stale boundary, window first and last day, partly covered bucket, `skipped`), Stats (week length, rounding), Trend (window start, negative and positive rounding, flat, start point), Compare (reference excludes today, equal is not above), Quote (exact and few boundaries, cost beyond the cheapest tier), the craft estimate (cheapest flag, missing price, sell range, cut on both ends, profit range and sign, inverted output range) and the cut's rounding. *Crafting (56):* `W.Split` (order, negative counts, remainder), Materials (crafts multiplier, output credit, cycles, credit subtraction, unreadable bags as zero, unknown recipes, row order, guild-only collect), Stock (uncertain bank, tab sums, pending guild read, another character's tab, unseen rights, allowance expiry boundary, the guild-bank policy, craft state), Shopping (vendor/auction tie, suggestion tie, an unusable make pick honoured, picks first, crafts rounding and the 999-craft limit, surplus, range and circular recipes, reagent multiplication, make cost with and without owned value, owned-value rounding and unit, dearest recipe, bags/bank/reagents counted twice, reagent buys, unpriced and estimate totals, cash accumulation, unknown bags), Vendor (whole stacks, cost basis, sold out, stock check) and Opportunities (zero profit counted and filtered, unknown order, direction, tie order). Of these, 34 are caught by `test_workshop_market_reference.lua` and 68 by `test_workshop_crafting_reference.lua` (the quote, estimate and cut entries sit in `market.*` but are caught by the crafting model).
+
+**Measured** (this machine, WSL2, 2026-11-12; the whole catalog was run twice serially and twice with four jobs, and the pairs agree within a second): baseline 0.6 s (crafting model) + 5.4 s (market model); smoke group 9 s; `--group market` 20 s; `--group crafting` 10 s; **all 102: 29 s serial, 14 s with `--jobs 4`** (8 jobs 19 s, 16 jobs 21 s: Python's file writes and process spawns contend, so 4 is the sweet spot). A kill stops at the first failing assertion, so most mutations take 0.2 to 0.6 s; the slowest took 5.5 s. `--check` takes under a second. The runner's own tests take about 5 s.
+
+**Detection results.** First full run: **100 of 102 killed, 2 survived**, both investigated rather than excused:
+1. `market.history.window-skipped` (counting the days a partly covered bucket hides as one): **a real test gap.** The model computed the exact `skipped` count, but the comparison suite checked only `Stats.limited`, a boolean. `test_workshop_market_reference.lua` now also compares the raw `History.Window` result (`n`, `sum`, `lo`, `hi`, `exact`, `skipped`) with the model for every Stats window; the mutation is killed.
+2. `crafting.shopping.unusable-make-suggested` (dropping the `state == "ok"` guard in `Suggest`): **equivalent**, not a gap. A make option that is not `ok` returns from `EvalMake` before it is given a `cost`, and `Suggest` needs one. It was removed from the catalog and is listed with the other examined equivalents at the end of the catalog file.
+
+Final catalog: **102 selected, 102 killed, 0 survived, 0 invalid, 0 timeouts, 0 infrastructure errors**; 101 killed by a failed assertion and 1 by a crash in the mutated code (`crafting.shopping.unusable-make-pick-honoured`: the mutant dereferences a missing reagent list; a crash is still a detection, and the report labels it). The four earlier manual survivors are all entries now: `market.trend.window-first-day` and `market.trend.negative-rounding` (M2), `crafting.opps.zero-profit-counted` and `crafting.shopping.make-crafts-limit-boundary` (M3). The runner's own defects were checked the same way: planting seven defects, one at a time, in a scratch copy of `mutate.py` (a timeout counted as a kill, no cleanup of the copies, an ambiguous pattern accepted, a failed baseline ignored, an infrastructure failure counted as a kill, the live checkout never re-checked, the mutation applied to the live file instead of the copy) each makes `tests/test_mutate.py` fail.
+
+**Not carried over from the 64-mutant M3 list:** the hand list was a starting point, not a specification; entries that differed only in an operand of an already covered line, or that turned out to be equivalent, were not rebuilt. Entries for the Lab-only paths and for `Session.lua` do not exist.
+
+**Known limitations.**
+- A mutant is judged by the offline tests only: nothing is learned about the real client's Lua, taint, timing or the auction house.
+- Exact-text patterns are brittle by design. A refactor of a mutated line makes its entry `invalid` (`--check` finds all of them in under a second; `test_real_catalog_matches_the_source` in `tests/test_mutate.py` fails `./tests/run.sh` until the entry is updated).
+- The catalog holds single-line or few-line edits chosen for a realistic story. It is not an exhaustive mutation score: 102 killed says these 102 mistakes are noticed, not that no mistake goes unnoticed. The reference models and the mutants were written by the same hands, so a blind spot they share would show up in neither.
+- The runner passes none of the caller's environment to the tests (so `MARKET_SEED`, `MARKET_SCENARIOS` and similar overrides are ignored on purpose): a campaign always runs the default seeds, which is what makes a result reproducible.
+- A SIGKILL of the runner leaves its temp folder; the checkout is never touched either way. Edits to the checkout while a campaign runs are reported at its end (exit 2), but the results then describe the files as they were when it started.
+- The core addon's media is not copied (only `.lua .toc .xml`), so a test that needs a texture file would fail its baseline; none of the Workshop tests does.
+- `--jobs` runs copies side by side; time limits are derived from serial baseline times, so a heavily loaded machine can produce a `timeout`, which is reported as such and never as a kill.
+
+**Found in passing (not fixed, unrelated to M4).** `tests/test_workshop_window.lua` is flaky: it fails about 3 % of the time (2 of 60 standalone runs, and once in a full `./tests/run.sh`) at the assertion "and navigating wrote nothing to the saved data", because a recipe record's `at` is stamped with the real `os.time()` and differs by one second when the clock ticks over during the test. The test (or the code under it) needs a fixed clock; a rerun passes.
+
+**Extending the catalog.** Add an `m(id, file, find, replace, why, tests, ...)` line to `tools/mutations/workshop.py` (the file's header says how): pick a defect someone could really write, copy enough of the line to make it unique, then `bash tools/mutate.sh --check --id <id>` and `bash tools/mutate.sh --id <id>`. A survivor is information: either add the missing test case (do not change `expect`) or, when the edit changes nothing observable, delete the entry and list it under "examined and left out". Use the catalog selectively: when a Workshop task changes money, quantity, rounding, ordering or eligibility logic, run the matching group and add the entry for the mistake that change makes possible; it is not a substitute for the model comparison or for hand-calculated cases.
+
+**Handoff to M5 (reachability).** M4 leaves the offline arithmetic with a repeatable check; the remaining blind spot is the UI. For M5: (1) an opt-in `Press(btn)` in the test kit that refuses hidden, disabled or mouse-disabled controls (the observed button and hover failures of section A: a control that looks clickable and is not); (2) a Lab `cases/UI.lua` reachability scan (rects, strata, frame levels, insets, `IsMouseEnabled`) plus a guided `GetMouseFoci` probe over the Add button and a row, to be run in the real client by the player; (3) a planted overlay as the negative control that must fail all three. The pointer and hover facts stay **not tested** until a real-client run: nothing in M1 to M4 proves them. The mutation runner can be reused for M5's own helpers (for example, mutate `Press`'s refusal rules) but should not be pointed at the view files, whose behaviour is layout, not arithmetic.
 
 ## Unresolved decisions (product input needed)
 
