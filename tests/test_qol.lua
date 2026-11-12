@@ -286,9 +286,9 @@ On("qolDuelsToDeath", true); Apply(D.feature); assert(not Listening("DUEL_TO_THE
 ---------------------------------------------------------------------------
 -- Accept group invitations
 ---------------------------------------------------------------------------
--- PARTY_INVITE_REQUEST(name, isTank, isHealer, isDamage, isNativeRealm, allowMultipleRoles, inviterGUID, questSessionActive)
+-- PARTY_INVITE_REQUEST(name, isTank, isHealer, isDamage, isNativeRealm, isCrossShard, allowMultipleRoles, inviterGUID, questSessionActive)
 local function Invite(name, tank, healer, damage, quest)
-  c.FireEvent("PARTY_INVITE_REQUEST", name, tank or false, healer or false, damage or false, true, false, "Player-1-ABC", quest or false)
+  c.FireEvent("PARTY_INVITE_REQUEST", name, tank or false, healer or false, damage or false, true, false, false, "Player-1-ABC", quest or false)
 end
 local function Accepted() return calls.acceptGroup or 0 end
 Reset(); W.friends = { "Ann" }; W.guild = { "Cy" }

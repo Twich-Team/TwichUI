@@ -2,8 +2,8 @@
 -- Joins the group when a friend or guild member invites you (as the player chose). Off until turned on.
 --
 -- What the game gives us (WoW: Forever UI source and API documentation):
---   PARTY_INVITE_REQUEST(name, isTank, isHealer, isDamage, isNativeRealm, allowMultipleRoles,
---   inviterGUID, questSessionActive) shows the "invites you to a group" pop-up (StaticPopup
+--   PARTY_INVITE_REQUEST(name, isTank, isHealer, isDamage, isNativeRealm, isCrossShard,
+--   allowMultipleRoles, inviterGUID, questSessionActive) shows the "invites you to a group" pop-up (StaticPopup
 --   PARTY_INVITE). AcceptGroup() joins; DeclineGroup() refuses. PARTY_INVITE_CANCEL fires when the
 --   invitation is withdrawn. WillAcceptInviteRemoveQueues() is true when joining would drop a queue.
 --   The pop-up's OnHide declines the invitation unless the dialog's inviteAccepted field is set, so
@@ -48,7 +48,7 @@ local function Accept(plan)
     StaticPopup_Hide("PARTY_INVITE")
 end
 
-local function OnInvite(name, isTank, isHealer, isDamage, _, _, _, questSessionActive)
+local function OnInvite(name, isTank, isHealer, isDamage, _, _, _, _, questSessionActive)
     generation = generation + 1
     if isTank or isHealer or isDamage or questSessionActive then return end
     if InGroup() or WouldLeaveQueue() then return end

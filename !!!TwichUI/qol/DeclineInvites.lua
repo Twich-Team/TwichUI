@@ -2,8 +2,8 @@
 -- Declines a group invitation, except from the people the player chose. Off until turned on.
 --
 -- What the game gives us (WoW: Forever UI source and API documentation):
---   PARTY_INVITE_REQUEST(name, isTank, isHealer, isDamage, isNativeRealm, allowMultipleRoles,
---   inviterGUID, questSessionActive) shows the "invites you to a group" pop-up (StaticPopup
+--   PARTY_INVITE_REQUEST(name, isTank, isHealer, isDamage, isNativeRealm, isCrossShard,
+--   allowMultipleRoles, inviterGUID, questSessionActive) shows the "invites you to a group" pop-up (StaticPopup
 --   PARTY_INVITE). DeclineGroup() refuses it, which is what the pop-up's own Decline button calls.
 --   PARTY_INVITE_CANCEL fires when the invitation is withdrawn.
 -- Left to the player, always, with the pop-up untouched:
@@ -32,7 +32,7 @@ local function Decline(plan)
     StaticPopup_Hide("PARTY_INVITE")
 end
 
-local function OnInvite(name, isTank, isHealer, isDamage, _, _, _, questSessionActive)
+local function OnInvite(name, isTank, isHealer, isDamage, _, _, _, _, questSessionActive)
     generation = generation + 1
     if isTank or isHealer or isDamage or questSessionActive then return end
     if Q.Allowed(name, Q.Get("declineInvitesFrom")) then return end
