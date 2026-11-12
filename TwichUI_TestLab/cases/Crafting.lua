@@ -79,8 +79,8 @@ Pure("crafting.reference.shopping", function(t)
             for _, r in ipairs(plan.rows) do if r.pickLost ~= nil then lost = true end end
             if ref.feasible then
                 local tot = plan.totals
-                t:Same(("%d,%d,%d,%s,%s,%d"):format(tot.cash, tot.priced, tot.missing, tostring(tot.estimate), tostring(tot.incomplete), tot.makes),
-                    ("%d,%d,%d,%s,%s,%d"):format(ref.cash, ref.priced, ref.missing, tostring(ref.estimate), tostring(ref.incomplete), ref.makes), "seed " .. seed .. ": totals")
+                t:Same(("%.0f,%d,%d,%s,%s,%d"):format(tot.cash, tot.priced, tot.missing, tostring(tot.estimate), tostring(tot.incomplete), tot.makes),
+                    ("%.0f,%d,%d,%s,%s,%d"):format(ref.cash, ref.priced, ref.missing, tostring(ref.estimate), tostring(ref.incomplete), ref.makes), "seed " .. seed .. ": totals")
                 t:Check(not lost, "seed " .. seed .. ": every choice that can be done is followed")
             else
                 t:Check(lost, "seed " .. seed .. ": a choice that cannot be done is not followed (" .. tostring(ref.why) .. ")")

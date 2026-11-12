@@ -15,7 +15,7 @@ local DAY = 86400
 
 local function Pure(id, run) TL.Case{ id = id, cat = "core", class = "pure", needs = { "workshop" }, budget = 5, run = run } end
 
-local function EntryOf(p) return ("%d,1,1,1,0"):format(p) end
+local function EntryOf(p) return ("%.0f,1,1,1,0"):format(p) end   -- %.0f for money: the client's %d refuses numbers beyond 32 bits
 
 ---------------------------------------------------------------------------
 -- The auction batch against the model
@@ -136,8 +136,8 @@ Pure("market.trend.window-and-percent", function(t)
     -- percent of the first price to one decimal, ties away from zero, the same for falls as for rises
     for _, k in ipairs({ { 1000, 900, -10 }, { 1000, 1100, 10 }, { 300, 200, -33.3 }, { 7, 6, -14.3 }, { 7, 8, 14.3 }, { 3, 1, -66.7 }, { 2000, 1999, -0.1 },
         { 2000, 2001, 0.1 }, { 99999999999, 1, -100 } }) do
-        local r = Trend(("150,%d;200,%d|"):format(k[1], k[2]), 60, 200)
-        t:Same(r and r.percent, k[3], ("%d -> %d"):format(k[1], k[2]))
+        local r = Trend(("150,%.0f;200,%.0f|"):format(k[1], k[2]), 60, 200)
+        t:Same(r and r.percent, k[3], ("%.0f -> %.0f"):format(k[1], k[2]))
     end
     -- a fall of d from a is exactly the negative of a rise of d
     local rng = FX.Rng(7400000)

@@ -4,6 +4,7 @@
 -- Synthetic: it proves our logic, not what the game's Lua or API does (the Lab's client cases and docs/testlab.md cover that), and not how
 -- the window looks. The Lab never touches the saved roots; a static scan of its files enforces that.
 dofile(TESTS .. "mi_mock.lua")
+dofile(TESTS .. "client_format.lua")   -- string.format refuses what the client refuses (%d beyond 32 bits, NaN)
 
 local function Check(cond, msg) if not cond then error(msg or "check failed", 2) end end
 local function Same(a, b, msg) if a ~= b then error((msg or "") .. " expected " .. tostring(b) .. ", got " .. tostring(a), 2) end end

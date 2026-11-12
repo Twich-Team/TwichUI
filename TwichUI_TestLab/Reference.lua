@@ -144,7 +144,7 @@ function REF.ExpectBatch(records)
 end
 
 -- The text production saves for an item: "p,q,l,t,x"
-function REF.EntryText(e) return ("%d,%d,%d,%d,%d"):format(e.p, e.q, e.l, e.t, e.x) end
+function REF.EntryText(e) return ("%.0f,%.0f,%.0f,%.0f,%.0f"):format(e.p, e.q, e.l, e.t, e.x) end   -- %.0f, not %d: the client's %d refuses numbers beyond 32 bits (copper reaches 99999999999)
 
 -- Which items a market keeps when more than `limit` were found: the priority items first, then the most listings, then the lowest item
 -- number. Picked one at a time (not sorted). Returns { [id] = true }, how many were dropped.

@@ -39,9 +39,14 @@ local floor = math.floor
 local Rng = {}
 Rng.__index = Rng
 
-function FX.Rng(seed)
+-- a seed as a whole number below 2^52 (a NaN, infinity or non-number is 0); the same rule for the generator and for anything printed from a seed
+local function Whole(seed)
     if type(seed) ~= "number" or seed ~= seed or seed == math.huge or seed == -math.huge then seed = 0 end
-    seed = math.abs(floor(seed)) % 4503599627370496   -- 2^52
+    return math.abs(floor(seed)) % 4503599627370496   -- 2^52
+end
+
+function FX.Rng(seed)
+    seed = Whole(seed)
     local self = setmetatable({}, Rng)
     -- three states, each in 1 .. modulus-1, from different linear maps of the seed; twelve draws are thrown away
     self.a = (seed * 7919 + 11) % 30268 + 1
@@ -203,7 +208,7 @@ function FX.Calendar(seed, opt)
             if rng:Chance(0.5) then scans[i].cut = true else scans[i].changed = true end
         end
     end
-    return { seed = seed, key = ("Realm%d|%s"):format(seed % 1000, rng:Pick({ "Alliance", "Horde", "unknown" })), items = ids, scans = scans,
+    return { seed = seed, key = ("Realm%d|%s"):format(Whole(seed) % 1000, rng:Pick({ "Alliance", "Horde", "unknown" })), items = ids, scans = scans,
         last = scans[#scans].day }
 end
 

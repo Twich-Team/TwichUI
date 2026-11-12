@@ -12,6 +12,7 @@
 -- RERUN one failing seed:   MARKET_SEED=7200042 (cd tests && lua5.1 -e 'require("bit"); ROOT="../!!!TwichUI/"; REPO="../"; TESTS="./"' test_workshop_market_reference.lua)
 -- STRESS (optional, not part of ./tests/run.sh's time budget):  MARKET_SCENARIOS=3000   MARKET_ALL=1 reports every difference instead of the first.
 dofile(TESTS .. "mi_mock.lua")
+dofile(TESTS .. "client_format.lua")   -- string.format refuses what the client refuses (%d beyond 32 bits, NaN)
 
 local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Prices.lua", "Opportunities.lua",
     "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua" }
@@ -182,9 +183,9 @@ do
     { 1, 99999999999, 9999999999800, "up" }, -- the largest rise: (99999999999 - 1) / 1 = 99999999998 = 9,999,999,999,800 %
   }
   for _, k in ipairs(cases) do
-    local t = Trend(("150,%d;200,%d|"):format(k[1], k[2]), 60, 200)
+    local t = Trend(("150,%.0f;200,%.0f|"):format(k[1], k[2]), 60, 200)
     Check(t, "a trend for " .. k[1] .. " -> " .. k[2])
-    Same(t.percent, k[3], ("%d -> %d"):format(k[1], k[2])); Same(t.direction, k[4], ("%d -> %d direction"):format(k[1], k[2]))
+    Same(t.percent, k[3], ("%.0f -> %.0f"):format(k[1], k[2])); Same(t.direction, k[4], ("%.0f -> %.0f direction"):format(k[1], k[2]))
     Same(t.change, k[2] - k[1])
   end
   -- fall and rise are mirror images: for any first price a and difference d, a -> a-d is exactly the negative of a -> a+d
@@ -313,7 +314,7 @@ local function CheckBatch(seed, index)
     local items3 = BatchOf(twice):Items()
     for item, entry in pairs(items) do
       local p, q, l, t, x = Parse(entry)
-      local want = ("%d,%d,%d,%d,%d"):format(p, q * 2, l * 2, t * 2, x)
+      local want = ("%.0f,%.0f,%.0f,%.0f,%.0f"):format(p, q * 2, l * 2, t * 2, x)
       if items3[item] ~= want then Differ("batch", seed, index, "item " .. item .. " with every record added twice", RecordsOf(records, item), want, items3[item]) end
     end
   end
@@ -375,7 +376,7 @@ end
 ---------------------------------------------------------------------------
 -- 4. The history and the statistics against the full-history model
 ---------------------------------------------------------------------------
-local function EntryOf(p) return ("%d,1,1,1,0"):format(p) end
+local function EntryOf(p) return ("%.0f,1,1,1,0"):format(p) end
 local function ScanFor(cal, s)
   local items = {}
   for id, p in pairs(s.items) do items[id] = EntryOf(p) end

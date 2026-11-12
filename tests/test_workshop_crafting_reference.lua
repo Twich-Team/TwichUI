@@ -16,6 +16,7 @@
 -- RERUN one failing seed:  CRAFT_SEED=7510042 (cd tests && lua5.1 -e 'require("bit"); ROOT="../!!!TwichUI/"; REPO="../"; TESTS="./"' test_workshop_crafting_reference.lua)
 -- STRESS (optional, not part of ./tests/run.sh's time budget):  CRAFT_SCENARIOS=2000   CRAFT_ALL=1 reports every difference instead of the first.
 dofile(TESTS .. "mi_mock.lua")
+dofile(TESTS .. "client_format.lua")   -- string.format refuses what the client refuses (%d beyond 32 bits, NaN)
 
 local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Prices.lua", "Opportunities.lua",
     "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua" }
