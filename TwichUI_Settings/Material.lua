@@ -23,20 +23,11 @@ local Wg = R.SettingsWidgets
 local pal = Wg.pal
 local M = {}
 R.SettingsMaterial = M
+-- The primitives a load-on-demand window shares (tile, slice, quiet grain, panel face, fonts, nav row, segment, switch, search, scroll
+-- rail) live in the core's CraftLook.lua so the Workshop can use them without this addon; this table keeps its names for them.
+local CL = R.CraftLook
 
-local DIR = R.PATH .. [[media\style-v2\]]
-local FILE = {
-    dark = DIR .. "dark.tga", warm = DIR .. "warm.tga",
-    window = DIR .. "window-edge.tga", control = DIR .. "control-edge.tga",
-    recess = DIR .. "round-recess.tga", raised = DIR .. "round-raised.tga",   -- rounded nine-slice sheets (tools/make_style_v2_art.py)
-}
-local QUIET_DIR = R.PATH .. [[media\reminders\materials\]]
-for _, role in ipairs({ "outer", "header", "editor", "card", "recess", "button", "selected", "primary", "viewport", "chip" }) do
-    FILE["quiet-" .. role] = QUIET_DIR .. "face-" .. role .. ".tga"
-    FILE["grain-" .. role] = QUIET_DIR .. "grain-" .. role .. ".tga"
-end
-FILE.controlRim = QUIET_DIR .. "control-rim.tga"
-FILE.frameRim = QUIET_DIR .. "frame-rim.tga"
+local FILE = CL.FILE
 M.FILE = FILE
 
 -- Texture contribution, tint and base colour are set apart on purpose. The material's own grain is gentle (about +-4 of 255 at full
@@ -61,17 +52,7 @@ local LEVEL = {
 M.LEVEL = LEVEL
 local CORNER = 6   -- a rounded container's corner, in units (12 texels of its 32 texel sheet)
 
-function M.Tile(host, layer, sub, which, alpha, tint)
-    local t = host:CreateTexture(nil, layer, nil, sub)
-    t:SetTexture(FILE[which], "REPEAT", "REPEAT")
-    t:SetHorizTile(true)
-    t:SetVertTile(true)
-    t:SetAllPoints(host)
-    if type(tint) == "number" then tint = { tint, tint, tint } end
-    tint = tint or { 1, 1, 1 }
-    t:SetVertexColor(tint[1], tint[2], tint[3], alpha or 1)
-    return t
-end
+M.Tile = CL.Tile
 
 -- A frame of its own (a texture cannot draw a backdrop edge) laid over the host (a child frame sits above its parent); it takes no mouse. `size` is the edge's units.
 function M.Edge(host, which, size)
@@ -84,26 +65,7 @@ end
 -- A rounded container drawn from a nine-slice sheet (`kind`: "recess" or "raised"): four corners at their own size and the edges and
 -- middle stretched. The sheet's fill is part of its alpha shape, so no square fill shows at a corner and nothing assumes the colour
 -- behind it. `ins` = { left, top, right, bottom } sets it that many units inside the host. Returns the nine textures.
-function M.Slice(host, kind, layer, sub, ins, radius)
-    local C, u, parts = radius or CORNER, { 0, 12 / 32, 20 / 32, 1 }, {}
-    local il, it, ir, ib = 0, 0, 0, 0
-    if ins then il, it, ir, ib = ins[1], ins[2], ins[3], ins[4] end
-    -- per column: where its left and right edges are, as { side of the host, offset from it }
-    local cols = { { { "LEFT", il }, { "LEFT", il + C } }, { { "LEFT", il + C }, { "RIGHT", -(ir + C) } }, { { "RIGHT", -(ir + C) }, { "RIGHT", -ir } } }
-    local rows = { { { "TOP", -it }, { "TOP", -(it + C) } }, { { "TOP", -(it + C) }, { "BOTTOM", ib + C } }, { { "BOTTOM", ib + C }, { "BOTTOM", ib } } }
-    for r = 1, 3 do
-        for c = 1, 3 do
-            local t = host:CreateTexture(nil, layer, nil, sub)
-            t:SetTexture(FILE[kind])
-            t:SetTexCoord(u[c], u[c + 1], u[r], u[r + 1])
-            local x1, x2, y1, y2 = cols[c][1], cols[c][2], rows[r][1], rows[r][2]
-            t:SetPoint("TOPLEFT", host, y1[1] .. x1[1], x1[2], y1[2])
-            t:SetPoint("BOTTOMRIGHT", host, y2[1] .. x2[1], x2[2], y2[2])
-            parts[#parts + 1] = t
-        end
-    end
-    return parts
-end
+M.Slice = CL.Slice
 
 -- Grain over a rounded container: three tiled rectangles in a plus shape (the corners' squares are left out), inside its 1 unit line.
 -- Grain at a corner's outer square would stand outside the curve, so none is drawn there. `ins` as for Slice.
@@ -125,14 +87,6 @@ function M.Grain(host, which, alpha, tint, sub, ins, layer)
     return parts
 end
 
--- Several textures moved as one (a hover fader's SetAlpha, a selection's SetShown).
-local function Group(parts)
-    local g = {}
-    function g.SetAlpha(_, a) for _, p in ipairs(parts) do p:SetAlpha(a) end end
-    function g.SetShown(_, v) for _, p in ipairs(parts) do p:SetShown(v) end end
-    g.parts = parts
-    return g
-end
 
 -- Hollow nine-slice rims add relief without repainting the material or changing input geometry.
 function M.Rim(host, frame, corner, ins)
@@ -169,15 +123,7 @@ end
 -- (walnut, a light along its upper edge, a darker lower edge) with the same sheet laid again with ADD blending in antique gold: that
 -- warms the face to chestnut and lifts the sheet's baked outline to a richer bronze, so one rounded shape carries all of it.
 -- item.sel and item.hover are Groups (SetShown / SetAlpha); Window.lua drives them.
-local NAV_INSET = { 4, 1, 4, 1 }
-function M.NavItem(item)
-    item.sel = R.SettingsCraft.Sheet(item, "selection", { layer = "BACKGROUND", sub = 2,
-        corner = 10, inset = NAV_INSET })
-    item.sel:SetShown(false)
-    item.hover = R.SettingsCraft.Sheet(item, "selection-hot", { layer = "BACKGROUND", sub = 1,
-        corner = 10, inset = NAV_INSET })
-    item.hover:SetAlpha(0)
-end
+M.NavItem = CL.NavItem
 
 -- The header of a page: a band of leather across the top of the page area (it is part of the scrolling page, so it goes with it),
 -- with the two top corners stepped to the well's curve (a 2 unit and a 1 unit inset, the inner radius being 4), and a quiet
@@ -285,9 +231,7 @@ function M.Companion(frame, neutral)
 end
 
 -- These materials are opt-in; original style-v2 files and unrelated consumers are untouched.
-function M.QuietTile(host, role, layer, sub)
-    return M.Tile(host, layer or "BACKGROUND", sub or 0, "grain-" .. role, 1)
-end
+M.QuietTile = CL.QuietTile
 
 function M.HeaderBand(frame, height)
     local band = M.QuietTile(frame, "header", "BACKGROUND", -5)
@@ -451,122 +395,13 @@ end
 
 -- Reminders uses darker editing wells and warmer movable cards over the same leather.
 -- Non-overlapping strips preserve the rounded corners and avoid multiple grain layers.
-function M.QuietGrain(frame, role)
-    local pieces = {}
-    local middle = M.QuietTile(frame, role, "BACKGROUND", 1)
-    middle:ClearAllPoints()
-    middle:SetPoint("TOPLEFT", 1, -CORNER)
-    middle:SetPoint("BOTTOMRIGHT", -1, CORNER)
-    pieces[#pieces + 1] = middle
-    for _, side in ipairs({ "TOP", "BOTTOM" }) do
-        local tile = M.QuietTile(frame, role, "BACKGROUND", 1)
-        pieces[#pieces + 1] = tile
-        tile:ClearAllPoints()
-        tile:SetPoint(side .. "LEFT", CORNER, side == "TOP" and -1 or 1)
-        tile:SetPoint(side .. "RIGHT", -CORNER, side == "TOP" and -1 or 1)
-        tile:SetHeight(CORNER - 1)
-    end
-    return pieces
-end
+M.QuietGrain = CL.QuietGrain
+M.PanelFace = CL.PanelFace
+M.SearchDecoration = CL.SearchDecoration
 
-function M.PanelFace(frame, kind)
-    local role = (kind == "card" or kind == "walnut") and "card"
-        or kind == "canvas" and "viewport" or kind == "espresso" and "outer" or "editor"
-    local pieces = M.Slice(frame, "quiet-" .. role, "BACKGROUND", 0)
-    for _, tile in ipairs(M.QuietGrain(frame, role)) do pieces[#pieces + 1] = tile end
-    local fill = Group(pieces)
-    fill.rim = R.SettingsCraft.Sheet(frame, role == "card" and "card-rim" or "inset-rim", { layer = "BORDER", sub = 3 })
-    return fill
-end
-
-function M.SearchDecoration(box, placeholder)
-    box:SetTextInsets(26, 8, 0, 0)
-    local icon = box:CreateTexture(nil, "OVERLAY")
-    icon:SetAtlas("common-search-magnifyingglass")
-    icon:SetSize(14, 14)
-    icon:SetPoint("LEFT", 8, 0)
-    icon:SetVertexColor(0.78, 0.71, 0.60)
-    local hint = M.ReminderFont(Wg.Text(box, "small"), 14)
-    hint:SetPoint("LEFT", 26, 0)
-    hint:SetWidth(box:GetWidth() - 34)
-    hint:SetText(placeholder)
-    local function Paint()
-        local focus = box:HasFocus()
-        hint:SetShown(not focus and box:GetText() == "")
-    end
-    for _, event in ipairs({ "OnEnter", "OnLeave", "OnEditFocusGained", "OnEditFocusLost" }) do box:HookScript(event, Paint) end
-    Paint()
-    return hint
-end
-
--- Skin the existing slider geometry. The native bar retains its full hit and drag region.
+-- Skin the existing slider geometry. The native bar retains its full hit and drag region; the settings window adds its wheel easing.
 function M.ScrollRail(scroll, active)
-    if scroll.materialRail then return scroll.materialRail.Fit end
-    local bar = scroll.ScrollBar
-    if type(bar) ~= "table" then return end
-    bar.scrollStep = 16
-    Wg.ScrollMotion(scroll, active)
-    local thumb = bar.ThumbTexture or (bar.GetThumbTexture and bar:GetThumbTexture())
-    if not thumb then return end
-    local track = Wg.Solid(bar, "BACKGROUND", { 0.070, 0.059, 0.048 }, 1)
-    track:SetWidth(5)
-    track:SetPoint("TOP", 0, -2)
-    track:SetPoint("BOTTOM", 0, 2)
-    thumb:SetAlpha(0)
-    local face = Wg.Solid(bar, "OVERLAY", { 0.43, 0.36, 0.27 }, 0.9)
-    R.SettingsCraft.Thumb(face)
-    face:SetVertexColor(0.80, 0.80, 0.80, 0.9)
-    face:SetPoint("TOP", thumb, "TOP", 0, 0)
-    face:SetPoint("BOTTOM", thumb, "BOTTOM", 0, 0)
-    face:SetWidth(5)
-    local bevel = Wg.Solid(bar, "OVERLAY", { 0.73, 0.64, 0.50 }, 0.44)
-    bevel:SetWidth(1)
-    bevel:SetPoint("TOPLEFT", face, "TOPLEFT")
-    bevel:SetPoint("BOTTOMLEFT", face, "BOTTOMLEFT")
-    local arrows = {}
-    for i, arrow in pairs({ bar.ScrollUpButton, bar.ScrollDownButton }) do
-        if type(arrow) == "table" then
-            local old = {}
-            for _, getter in ipairs({ "GetNormalTexture", "GetPushedTexture", "GetHighlightTexture", "GetDisabledTexture" }) do
-                local texture = arrow[getter] and arrow[getter](arrow)
-                if type(texture) == "table" then old[#old + 1] = texture; texture:SetAlpha(0) end
-            end
-            local art = R.SettingsCraft.Sheet(arrow, "button", { layer = "BACKGROUND", corner = 4 })
-            local function Paint()
-                local on = not active or active()
-                art:SetShown(on)
-                if on then art:SetSkin(not arrow:IsEnabled() and "button-off" or arrow:IsMouseOver() and "button-hot" or "button") end
-            end
-            for _, event in ipairs({ "OnEnter", "OnLeave", "OnEnable", "OnDisable" }) do arrow:HookScript(event, Paint) end
-            arrow:HookScript("OnMouseDown", function() if not active or active() then art:SetSkin("button-down") end end)
-            arrow:HookScript("OnMouseUp", Paint)
-            Paint()
-            local chevron = Wg.Chevron(arrow, arrow, "CENTER", 0, 0, i == 2, pal.bronzeText)
-            arrow:SetAlpha(.7)
-            arrows[#arrows + 1] = { button = arrow, old = old, chevron = chevron, art = art }
-        end
-    end
-    bar:HookScript("OnEnter", function() face:SetAlpha(1); bevel:SetAlpha(0.8) end)
-    bar:HookScript("OnLeave", function() face:SetAlpha(0.9); bevel:SetAlpha(0.44) end)
-    local full = 0
-    local function Fit()
-        local height = scroll:GetHeight()
-        if height and height > 0 then bar:SetShown(full > height + 1) end
-    end
-    scroll:HookScript("OnSizeChanged", Fit)
-    local rail = { Fit = function(contentHeight) full = contentHeight; Fit() end }
-    function rail:SetShown(on)
-        for _, piece in ipairs({ track, face, bevel }) do piece:SetShown(on) end
-        thumb:SetAlpha(on and 0 or 1)
-        for _, arrow in ipairs(arrows) do
-            arrow.button:SetAlpha(on and .7 or 1)
-            for _, texture in ipairs(arrow.old) do texture:SetAlpha(on and 0 or 1) end
-            for _, piece in ipairs(arrow.chevron) do piece:SetShown(on) end
-            arrow.art:SetShown(on)
-        end
-    end
-    scroll.materialRail = rail
-    return rail.Fit
+    return CL.ScrollRail(scroll, active, Wg.ScrollMotion)
 end
 
 function M.DashedBorder(frame, width, height)
@@ -608,22 +443,7 @@ function M.Disclosure(button)
 end
 
 -- Rounded Reminders controls, opt-in: keep their existing scripts, labels and state handling.
-function M.ReminderControl(control, kind)
-    if not control or (control.twichReminderMaterial and not control.twichSharedDefault) then return end
-    control.twichSharedDefault = nil
-    control.twichReminderMaterial = true
-    -- This adapter historically uses "primary" for quiet discovery actions; confirmation is the gold action.
-    R.SettingsCraft.Control(control, kind == "primary" and "action" or kind)
-    if kind == "field" then
-        control:SetJustifyH("LEFT")
-        M.ReminderFont(control, 14)
-    end
-    if control.text and type(control.text) ~= "string" then
-        M.ReminderFont(control.text, 14)
-        if kind == "dropdown" then control.text:SetWordWrap(false)
-        else control.text:SetWidth(math.max(1, control:GetWidth() - 12)) end
-    end
-end
+M.ReminderControl = CL.Dress
 
 -- A local help surface for opt-in material controls. It does not alter the game's tooltip.
 -- It sits at the mouse pointer and follows it while shown (only when the pointer moves; nothing runs while hidden). The
@@ -682,80 +502,11 @@ function M.ContextTip(owner, title, body)
     owner:HookScript("OnHide", Hide)
 end
 
-function M.ReminderFont(text, size, ivory, role)
-    local file, _, flags = text:GetFont()
-    local locale = GetLocale and GetLocale()
-    local western = locale ~= "koKR" and locale ~= "zhCN" and locale ~= "zhTW" and locale ~= "ruRU"
-    if western then
-        local serif = role == "serif" or size >= 17 or (file and file:find("Cinzel", 1, true))
-        local name = serif and "Spectral-SemiBold.ttf" or role == "strong" and "AlegreyaSans-Bold.ttf" or "AlegreyaSans-Medium.ttf"
-        local chosen = R.PATH .. [[media\fonts\]] .. name
-        if text:SetFont(chosen, size, "") == false and file then text:SetFont(file, size, flags or "") end
-    elseif file then text:SetFont(file, size, flags or "") end
-    if ivory then Wg.Color(text, pal.text) end
-    return text
-end
-
-function M.Segment(parent, label, width, onClick)
-    -- Choose the segment silhouette before any generic button adapter can claim the control.
-    local b = R.FrameLook.Button(parent, label, width, "secondary", onClick)
-    M.ReminderControl(b, "segment")
-    return b
-end
+M.ReminderFont = CL.Font
+M.Segment = CL.Segment
 
 -- Same contract as the settings checkbox, with separate hit, track and thumb regions.
-function M.Pill(parent, onToggle, small)
-    local b = CreateFrame("Button", nil, parent)
-    local w, h = small and 32 or 42, small and 16 or 21
-    b:SetSize(w, h)
-    local track = b:CreateTexture(nil, "ARTWORK")
-    track:SetTexture(DIR .. "switch-track.tga")
-    track:SetAllPoints()
-    local thumb = b:CreateTexture(nil, "OVERLAY")
-    thumb:SetTexture(DIR .. "switch-thumb.tga")
-    thumb:SetSize(h - 4, h - 4)
-    local checked, active, hot, down = false, true, false, false
-    local function Paint()
-        -- Dense tables retain their small square hit regions. A checkmark is clearer than squeezing a pill.
-        local width = tonumber(b:GetWidth()) or w
-        local dense = width < 26
-        track:SetShown(not dense); thumb:SetShown(not dense)
-        if dense and not b.denseFace then
-            b.denseFace = R.SettingsCraft.Sheet(b, "field", { layer = "ARTWORK", sub = 2, corner = 4 })
-            b.denseMark = b:CreateTexture(nil, "OVERLAY")
-            b.denseMark:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
-            b.denseMark:SetPoint("TOPLEFT", 1, -1); b.denseMark:SetPoint("BOTTOMRIGHT", -1, 1)
-        end
-        if b.denseFace then
-            b.denseFace:SetShown(dense)
-            b.denseMark:SetShown(dense and checked)
-        end
-        if dense then
-            b.denseFace:SetSkin(not active and "field-off" or hot and "field-hot" or "field")
-            b.denseMark:SetVertexColor(.99, .93, .81, active and 1 or .5)
-            return
-        end
-        local c = checked and { 0.93, 0.69, 0.36 } or { 0.55, 0.49, 0.43 }
-        local light = down and 0.77 or (hot and 1 or 0.86)
-        track:SetVertexColor(c[1] * light, c[2] * light, c[3] * light, active and 1 or 0.62)
-        thumb:SetVertexColor(0.99, 0.93, 0.81, active and 1 or 0.62)
-        thumb:ClearAllPoints()
-        local side = checked and "RIGHT" or "LEFT"
-        thumb:SetPoint(side, b, side, checked and -3 or 3, 0)
-    end
-    function b:SetChecked(v) checked = not not v; Paint() end
-    function b:GetChecked() return checked end
-    function b:SetActive(v) active = not not v; Paint() end
-    function b:SetHot(v) hot = not not v; Paint() end
-    b:HookScript("OnEnter", function() b:SetHot(true) end)
-    b:HookScript("OnLeave", function() down = false; b:SetHot(false) end)
-    b:HookScript("OnMouseDown", function() down = active; Paint() end)
-    b:HookScript("OnMouseUp", function() down = false; Paint() end)
-    b:HookScript("OnSizeChanged", Paint)
-    b:SetScript("OnClick", function() if active and onToggle then onToggle(not checked) end end)
-    Paint()
-    return b
-end
+M.Pill = CL.Pill
 
 function M.ReminderRow(row)
     row.sel = R.SettingsCraft.Sheet(row, "selection", { layer = "BACKGROUND", sub = 1, corner = 12 })

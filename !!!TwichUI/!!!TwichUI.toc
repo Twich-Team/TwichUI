@@ -91,6 +91,9 @@ chronicle\Style.lua
 Look.lua
 # The framed look (illustrated frame, espresso interior, beveled buttons) that Magic Inventory, the settings window and the other standalone windows share (docs/dev-rules.md); needs Look.lua and chronicle\Style.lua only
 FrameLook.lua
+# The crafted look's shared pieces (painted sheets, quiet leather, fonts, nav rows, segments, switches, scroll rails): the settings window's
+# approved look, in the core so load-on-demand windows (the Workshop) draw with it without loading TwichUI_Settings; needs Look.lua and FrameLook.lua
+CraftLook.lua
 # Feature icons beside names in TwichUI's own windows (media\icons, cut from assets\settings-icons-source.png)
 Icons.lua
 chronicle\Appearance.lua

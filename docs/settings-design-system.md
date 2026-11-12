@@ -21,7 +21,10 @@ preview visibility and condition behavior remain feature-owned. This rollout cha
 | Primary action | Antique gold; reserved for an explicit confirmation | `primary*.tga` |
 | Destructive action | Muted rust and bronze, alongside its scope / confirmation | `danger*.tga` |
 
-All paths above are relative to `!!!TwichUI/`. `Material.FILE`, `Material.LEVEL` and `Look.pal` own shared material
+All paths above are relative to `!!!TwichUI/`. The painted-sheet and quiet-material primitives (`Craft.Sheet/Control/Frame`, `Material.Tile/Slice/
+QuietTile/QuietGrain/PanelFace/ReminderFont/NavItem/ReminderControl/Segment/Pill/SearchDecoration/ScrollRail`) live in the core's
+`CraftLook.lua` (`R.CraftLook`, 2026-11-11) so load-on-demand windows (the Workshop) share them without loading this addon; the settings
+names are aliases of it. `Material.FILE`, `Material.LEVEL` and `Look.pal` own shared material
 and semantic roles. Large areas use the quiet materials; no new page-specific tint or grain family is needed.
 `Material.PanelFace` adds a hollow rim over a face and three non-overlapping leather strips. `Craft.Sheet` makes nine
 textures with independent source cuts and fixed UI corners. Stretch edges along their length; do not stretch a whole
