@@ -18,7 +18,7 @@ TwichUI is a World of Warcraft addon for **WoW: Forever** (Lua 5.1): a focused, 
 
 - Syntax check after a Lua edit: `luac5.1 -p '<file>'`. No linter exists.
 - One test: `(cd tests && lua5.1 -e 'require("bit"); ROOT="../!!!TwichUI/"; REPO="../"; TESTS="./"' test_x.lua)`
-- Project suite (about 10 s): `./tests/run.sh`
+- Project suite (about 5 min; run focused tests first, the suite once at the end): `./tests/run.sh`
 - Simulator (optional, `docs/simulator-lab.md`): `bash tools/simlab/smoke.sh` (load order, construction), `bash tools/simlab/interact.sh`, `bash tools/simlab/diagnose.sh`, guard check `bash tools/simlab/tests/lab_guard.sh`. Run with bash, never zsh.
 - Do not invent other commands. Unless asked: no `tools/` generators, deploys, `git commit` or `git push`.
 

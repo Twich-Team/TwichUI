@@ -24,7 +24,7 @@ Spelling: TwichUI (T-w-i-c-h, never "Twitch"). The core addon folder is `!!!Twic
 ## Commands (from the repo root; verified)
 - After every Lua edit: `luac5.1 -p '<file>'` (no output means OK). Never run plain `luac`.
 - One test (any `tests/test_*.lua`): `(cd tests && lua5.1 -e 'require("bit"); ROOT="../!!!TwichUI/"; REPO="../"; TESTS="./"' test_qol.lua)`
-- All tests (about 10 s): `./tests/run.sh`
+- All tests (about 5 min): `./tests/run.sh`
 - No lint exists. Unless the user asks, never run `tools/` scripts, deploys, `git commit` or `git push`.
 
 ## Hard rules
