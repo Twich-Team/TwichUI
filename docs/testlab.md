@@ -1,6 +1,6 @@
 # TwichUI Test Lab
 
-A **development-only** addon, `TwichUI_TestLab/`, that runs selected TwichUI code inside the real WoW: Forever client and produces a report you can copy. It is milestone 1 of `docs/workshop/testing-roadmap.md` (sections C, F, G); later milestones only add case files.
+A **development-only** addon, `TwichUI_TestLab/`, that runs selected TwichUI code inside the real WoW: Forever client and produces a report you can copy. It is milestone 1 of `docs/workshop/testing-roadmap.md` (sections C, F, G); later milestones only add case files (milestone 2 added `Fixtures.lua`, `Reference.lua` and `cases/Market.lua`, below).
 
 It is not a player feature. It is never packaged and never offered to players (see "Not in releases").
 
@@ -26,6 +26,8 @@ Nothing runs by itself: not at login, not at load, not on a timer.
 |---|---|---|---|
 | Core calculations (`core`) | `pure` | **synthetic** | Production Workshop code (`Prices`, `History`, `Market`, `W.Split`) in the client's Lua, on made-up data handed in as arguments. The same file, `cases/Core.lua`, is run offline by `tests/test_testlab.lua`. |
 | Client facts (`client`) | `readonly` | **client** | Lua number behaviour (exactness below 2^53, `%.0f`, division by zero, yielding across `pcall`), which API names exist (`GetTimePreciseSec`, `C_AddOnProfiler`, `GetMouseFoci`, `EnumerateFrames`), and a 2-second pause probe of the Lab's own runner. Values the client is not documented to give are *reported* as facts, not asserted. |
+
+**Fixtures and reference models (milestone 2).** `Fixtures.lua` makes deterministic synthetic markets from a seed (its own Wichmann-Hill generator, so a seed gives the same data in plain Lua and in the client): `FX.Listings` (auction records, with deliberately malformed ones marked by `intent`), `FX.Calendar` (a market's scans over days, with gaps, repeats, clock moves and cut scans), `FX.Markets`; every size is clamped to `FX.LIMITS`. `Reference.lua` holds independent models of the batch and of the history and statistics (how they differ from the production code is in the file's header). `cases/Market.lua` adds three bounded `pure` cases to the core category (`market.reference.batch` 16 seeds, `market.reference.history` 6 seeds, `market.trend.window-and-percent`); they call `History.Add/Trim` and `Market.*` with a market table handed in, and never the saved markets or `Prices.<commit>`. The large randomized suite (200 scenarios per model) stays offline: `tests/test_workshop_market_reference.lua`.
 
 Evidence labels in the report: **client** = observed in this game client; **synthetic** = production code in the client's Lua on made-up data; **guided** = observed with the player's help (no guided case exists yet); **not run** = never started.
 
@@ -103,7 +105,7 @@ facts: client.api.GetTimePreciseSec=function client.lua.div_zero_value=inf ...
 - The offline run proves the cases and the runner's logic in plain Lua 5.1. It cannot prove WoW's interpreter agrees (that is what running the Lab in the client is for), or how the window looks.
 - The fingerprint cannot tell a case's change from the game's own in the same moment.
 - Facts are observations of one client at one moment.
-- The Lab is not a benchmark tool and has no UI probes, fixtures/PRNG, guided cases, simulator support or `/tui lab` command (later milestones, and the last one is an owner decision).
+- The Lab is not a benchmark tool and has no UI probes, guided cases, simulator support or `/tui lab` command (later milestones, and the last one is an owner decision). The new market cases have been run offline through the real runner only; their first real-client run is still to do.
 
 ## Real-client checks for initial acceptance
 

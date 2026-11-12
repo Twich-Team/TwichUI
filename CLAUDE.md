@@ -11,6 +11,7 @@ TwichUI is a World of Warcraft addon for **WoW: Forever** (Lua 5.1): a focused, 
 - `!!!TwichUI/!!!TwichUI.toc`: load order (a core file not listed never loads). `Core.lua`: namespace `R`, events, `DEFAULT_MODULES`, `/tui` `COMMANDS`. `Switches.lua`: what each switch does.
 - Feature folders in `!!!TwichUI/`: `modules/ qol/ pins/ setup/ chronicle/ gear/ auction/ diag/` and more; `Libs/` is third-party (never edit).
 - Sibling addons in the repo (load on demand): `TwichUI_Settings/` (the settings window: `Kit.lua`, `pages/`), `TwichUI_NavData/`, `TwichUI_Diagnostics/`, `TwichUI_Layouts/`, `TwichUI_LayoutWizard/`, `TwichUI_Workshop/` (recipes, craft queue, materials; `docs/workshop.md`, status in `STATUS_AND_BACKLOG.md`). Packaging: `.pkgmeta` (ignores `tests tools docs CLAUDE.md .clinerules`).
+- Workshop verification policy (what evidence a Workshop change needs; the market reference models, `tests/test_workshop_market_reference.lua`, and the in-game Test Lab `TwichUI_TestLab/`, `docs/testlab.md`): **[docs/workshop/testing-roadmap.md](docs/workshop/testing-roadmap.md)**, section F "Verification policy" and H (status and findings). Read it before changing Workshop prices, history, statistics, costs or saved data.
 - `tests/`: offline tests. `tools/`: dev scripts, `tools/simlab/` the simulator lab. `docs/`: per-feature docs; `.clinerules` + `docs/recipes/` are the separate, shorter rule set for local models (keep it consistent with this file).
 - Shell: single-quote paths containing `!!!` (`'!!!TwichUI/Core.lua'`); unquoted, the shell rewrites `!!`.
 

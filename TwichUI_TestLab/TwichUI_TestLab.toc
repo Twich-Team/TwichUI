@@ -14,8 +14,12 @@ Lab.lua
 Runner.lua
 # The plain-text report
 Report.lua
+# Deterministic synthetic market data and the independent reference models (also loaded by tests/test_workshop_market_reference.lua)
+Fixtures.lua
+Reference.lua
 # The cases: the same pure definitions tests/test_testlab.lua runs offline
 cases\Core.lua
+cases\Market.lua
 cases\Client.lua
 # The window (last: it opens once when the addon loads and registers /tuilab)
 Window.lua

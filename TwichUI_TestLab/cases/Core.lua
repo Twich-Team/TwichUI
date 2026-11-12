@@ -318,10 +318,10 @@ Pure("market.trend.percent", function(t)
     -- item 30: 1200 on day 102 to 1800 on day 108, +600: 600 / 1200 = 50.0%
     local up = Trend(30)
     t:Same(up.direction, "up", "direction"); t:Same(up.change, 600, "change"); t:Same(up.percent, 50, "percent"); t:Same(up.n, 7, "days")
-    -- item 41: 3000 on day 103 to 2000 on day 106: -1000 / 3000 = -33.33%, to one decimal -33.3, rounded the way the code states: -33.4
-    -- (floor(-333.33 - 0.5) = -334, / 10)
+    -- item 41: 3000 on day 103 to 2000 on day 106: -1000 / 3000 = -33.33%, to one decimal -33.3. (M1 expected -33.4 here, "the way the
+    -- code states": the value was copied from the code, whose negative rounding was wrong by one tenth; fixed in M2, see the roadmap.)
     local down = Trend(41)
-    t:Same(down.direction, "down", "direction"); t:Same(down.change, -1000, "change"); t:Same(down.percent, -33.4, "negative percent")
+    t:Same(down.direction, "down", "direction"); t:Same(down.change, -1000, "change"); t:Same(down.percent, -33.3, "negative percent")
     t:Same(down.fromDay, 103, "first day"); t:Same(down.toDay, 106, "last day")
     -- item 42: 300 to 401: +101 / 300 = 33.67%, floor(336.67 + 0.5) = 337, / 10 = 33.7
     t:Same(Trend(42).percent, 33.7, "positive percent")

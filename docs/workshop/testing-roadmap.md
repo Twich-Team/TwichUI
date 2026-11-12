@@ -1,6 +1,6 @@
 # Workshop testing roadmap
 
-This plan covers how TwichUI Workshop's correctness, regressions, performance and real-client behaviour are verified. It is for anyone, person or agent, who implements the milestones below. It records what exists on `feature/workshop` at `d09e6dcb` (2026-11-12) and what to build next. Nothing in it is built yet. `docs/workshop.md` remains the feature reference, and `docs/simulator-lab.md` and `docs/diagnostics.md` remain the tool references.
+This plan covers how TwichUI Workshop's correctness, regressions, performance and real-client behaviour are verified. It is for anyone, person or agent, who implements the milestones below. It records what existed on `feature/workshop` at `d09e6dcb` (2026-11-12) and what to build next. Sections A to G are the plan as written then; **section H records what has been built (M1, M2) and found.** `docs/workshop.md` remains the feature reference, and `docs/simulator-lab.md` and `docs/diagnostics.md` remain the tool references.
 
 **Baseline checked 2026-11-12.** `feature/workshop` is the same commit as `origin/feature/workshop` and `origin/main`, and it descends from the `v1.3.0` tag. Every `feature/workshop-foundation` commit (86fea359 market foundation … b34476a7 third UI pass, 57e767fd art) is contained in it, so nothing is missing and no integration is needed.
 
@@ -22,7 +22,7 @@ This plan covers how TwichUI Workshop's correctness, regressions, performance an
 
 - **The expected values are independent of the code.** They are literals typed from hand arithmetic, often with the arithmetic in the comment. No test checked here takes its expected value from production code.
 - **The boundaries are covered.** Unknown values are never zero, as are secret, NaN, negative, fractional and out-of-range values. Held newer versions, bounds, corrupt saved records, legacy recipe-only prices, the scan's refusal, throttle, interruption and stale-timer paths, the commit job's all-or-nothing behaviour, and the window's events (registered only while it is shown) and pool bounds are all tested.
-- **A mutation probe.** On 2026-11-12, 19 hand-picked mutants were run against throwaway copies of the Workshop folder (rounding, allocation order, quote boundaries, cut, history folding, the Compare reference window, Trend, ties, stacks, batch accounting). One could not be applied because its pattern was not unique. **16 of the other 18 were killed and 2 survived.** Both survivors are in `Market.Trend`: changing the window's first day from `>=` to `>`, and rounding negative percentages one way. `Trend` has no production consumer yet. Ten of the 16 killed mutants were caught by only one test file, so most of these rules have a single line of defence.
+- **A mutation probe.** On 2026-11-12, 19 hand-picked mutants were run against throwaway copies of the Workshop folder (rounding, allocation order, quote boundaries, cut, history folding, the Compare reference window, Trend, ties, stacks, batch accounting). One could not be applied because its pattern was not unique. **16 of the other 18 were killed and 2 survived.** Both survivors are in `Market.Trend`: changing the window's first day from `>=` to `>`, and rounding negative percentages one way. `Trend` has no production consumer yet. (M2 killed both, and found the second one was a real defect: see H.) Ten of the 16 killed mutants were caught by only one test file, so most of these rules have a single line of defence.
 
 ### Limitations, and why the button and hover failures got through
 
@@ -248,7 +248,7 @@ Each milestone is one request. **Tests** lists the evidence the milestone must p
 - **Depends on:** nothing.
 - **Out of scope:** benchmarks, UI probes, a core command, the simulator.
 
-**M2. Market reference models**
+**M2. Market reference models** (built 2026-11-12, see H)
 - **Objective:** independent models for the batch (sorted exact fractions) and the history and statistics (a full daily list).
 - **Files:** `TwichUI_TestLab/Fixtures.lua` (PRNG + generators), `cases/Market.lua`, a regression case for the two Trend survivors.
 - **Accept:** about 200 seeded calendars per run; the models agree with production; a failure prints its seed.
@@ -319,7 +319,7 @@ Each milestone is one request. **Tests** lists the evidence the milestone must p
 
 **M10** (with the AH-replacement work, not before). **Transaction harness:** a fake auction-house state machine shared by the unit tests and the simulator (S4), with explicit-confirmation flows, failure and throttle injection, and Ledger replay fixtures. Real-client checks are always listed and never automated.
 
-### Verification policy for future Workshop tasks (put a pointer to it in CLAUDE.md once M1 lands)
+### Verification policy for future Workshop tasks (CLAUDE.md points here)
 
 | Change | Required evidence | Not required |
 |---|---|---|
@@ -397,6 +397,38 @@ Out of scope: benchmarks, fixtures/PRNG, UI or pointer probes, guided cases, a /
 ```
 
 ---
+
+## H. Status: what is built
+
+**M1 (27d8f668):** the Test Lab. First real-client run (Forever 1.60.1, build 70888): 23 of 23 cases passed, no error or timeout, worst slice 1.0 ms.
+
+**M2, market reference models (2026-11-12):** offline verification, no player-facing change. One production fix (below).
+
+| Part | Where |
+|---|---|
+| Deterministic fixtures: Wichmann-Hill generator (all products below 2^23, so doubles are exact and nothing depends on `math.random`), `Listings`, `Calendar`, `Markets`, every size clamped to `FX.LIMITS` | `TwichUI_TestLab/Fixtures.lua` |
+| Independent models: the batch (every valid listing kept, prices compared as **mixed numbers** instead of cross-products), the history (every observed day kept in a map, the two tiers as sets, buckets computed from their days), and `Stats/Trend/Compare/Observed/Series` in whole-number arithmetic (means half up, percentages half away from zero, no floating point) | `TwichUI_TestLab/Reference.lua` |
+| The comparison suite, properties and regressions | `tests/test_workshop_market_reference.lua` (about 7 s) |
+| 3 bounded in-game cases (16 + 6 seeds, a Trend window/percent regression), also run offline by `test_testlab.lua` | `TwichUI_TestLab/cases/Market.lua` |
+
+**Seeds (fixed):** batch `7100000+i`, history `7200000+i`, three-market sets `7300000+i`, `i = 1..200` (sets: 1..60); Trend mirror property `7400000`. Rerun one: `MARKET_SEED=7200042 <the one-test command>`; more: `MARKET_SCENARIOS=2000` (60 s, optional); every difference instead of the first: `MARKET_ALL=1`. A failure prints the model, seed, scenario, item, the item's observation trace, expected and actual.
+
+**What is compared (default run):** 200 batch houses (12,503 records), 200 calendars, 60 sets of 3 markets, 9,480 scans each compared with the model **after every scan** (the tiers of every item), and 239,167 query comparisons at 8 query times each (Stats for 8 periods, Trend for 7 lengths, Compare for 5, Price, Observed for about 9 days, Series; bad periods and absent items included). Properties: record accounting, nothing counted twice, shuffled order, an item priced alone, every record added twice, the item limit with priority, stored-string invariants (7 exact days, 3 buckets, `lo <= mean <= hi`, buckets made of observed days, nothing older than the retention, never more days than were observed), a window that starts inside the exact days equals the full history, another market's scans change nothing, a listing is never presented as a sale. Stress (2,000 scenarios of each, 2.55 million queries): no difference.
+
+**Mutation probe (disposable copy, `ROOT` resolving to the copy):** 35 hand-picked mutants of `Market.lua` (Trend window and rounding, Stats, Compare, Observed, Series), `Prices.lua` (rounding, comparison, tie, next price, counters, item limit, feeding, scan-day cap) and `History.lua` (fold, both expiries, bucket count, stale rule, bucket sum and high, window edges, skipped, bucket index). **35 of 35 killed by the new test**, including both former survivors; reverting the rounding fix is also killed by the Lab case. The existing `test_workshop_market.lua` and `test_workshop_prices.lua` together killed 23 of the 35. A hand list run by a throwaway script, not an automatic mutation run (M4).
+
+**Defect fixed.** `Market.Trend` rounded a negative change as `floor(x - 0.5)`, one tenth too far for every fall that is not an exact tie: 1000 to 900 read **-10.1 %** (true -10.0), 300 to 200 read **-33.4 %** (true -33.3). Rises were right, so a rise and the same fall were not mirror images. `Trend` had no consumer yet. The fix is whole-number arithmetic, ties away from zero for both signs (`PercentTenths` in `Market.lua`). **The M1 Core case `market.trend.percent` had expected -33.4**, copied from the code ("rounded the way the code states"); it now expects -33.3. That case had passed in the real client, which shows only that the client runs the same arithmetic.
+
+**Reported, not changed** (each is pinned by a characterization test in section 7 of the new test, or counted there, so changing it is a conscious step):
+1. `x` (the next higher price) is `0` when the next exact price rounds to the cheapest copper even though a dearer listing exists (`299/3`, `100`, `150` gives `x = 0`, the literal next copper price is `150`). The default run has 261 items like that across its 200 houses. `Quote` does not use `x`.
+2. A scan dated **before** the observation a bucket holds is accepted when no exact day is left (`Add` compares only with exact days; the model refuses it as stale). It needs the clock to go back over 120 days.
+3. With only buckets left, `Stats.newest.day` is the bucket's last calendar day (not an observed one) and has no price.
+4. `Trend` has no upper bound at `now`, `Stats` and `Compare` do: with `now` before the newest observation, `Trend` counts days after `now`.
+5. `partialInfo` counts a record with a valid item and `info == false` even when its count or buyout is invalid (the header says "their prices were used").
+
+**Remaining gaps:** `Quote`, `Estimate` and the Opportunities arithmetic (M3); `Shopping.Plan` and `Materials` (M3); the text round trip and the eviction order of markets when `at` ties (M9); the scan state machine; the new Lab cases have not yet run in the real client (the offline run shows the cases pass in plain Lua 5.1, not in the client's interpreter); the mutation probe is a script outside the repository (M4).
+
+**Handoff to M3 (crafting and shopping reference models):** reuse `TL.Fixtures.Rng` and the pattern of `Reference.lua` (a model built from the documented contract, with whole-number arithmetic, compared with production after every step, failures printing model, seed, scenario and input; known-gap characterization tests for contract corners). Add queue/recipe/stock generators to `Fixtures.lua` (bounded by the planner's limits: 30 recipes, 16 materials, 4 candidates), a brute-force planner for at most 6 materials against `Shopping.Plan`, invariants for `Materials.Rows`, `W.Split` (bags + bank + guild + still needed = need; no layer negative or above what it holds) and an independent craft-estimate model against `Prices.Estimate/Quote` (the profit bound with `cheapest` set is a product decision, see "Unresolved decisions" 3). Seeds: continue at `7500000+i`. Never call `Prices.<commit>`-type writes in Lab cases; keep the large suites offline.
 
 ## Unresolved decisions (product input needed)
 

@@ -245,8 +245,20 @@ function MK.Series(item, opt)
     return { item = item, points = points, groups = groups, today = H.Day(Now(opt)), market = m.key, label = PR.Label(m), basis = MK.BASIS.stats }
 end
 
+-- The change from a to b as a percentage of a, in whole TENTHS of a percent, rounded to the nearest with a tie going AWAY from zero, the
+-- same for a fall as for a rise (1000 -> 900 is exactly -100, never -101). Whole-number arithmetic only: prices are below 10^11, so every
+-- intermediate value is exact and a tie is never decided by floating-point noise.
+local function PercentTenths(a, b)
+    local num, den = 1000 * math.abs(b - a), a
+    local r = (2 * num + den) % (2 * den)
+    local tenths = (2 * num + den - r) / (2 * den)
+    if tenths == 0 then return 0 end
+    return b < a and -tenths or tenths
+end
+
 -- The direction between the first and the last observed day of the last `days` days (default 7, exact days only):
---   direction "up", "down" or "flat", from / to (the two prices), change (copper, signed), percent (of the first, one decimal), n (days)
+--   direction "up", "down" or "flat", from / to (the two prices), change (copper, signed), percent (of the first, one decimal, a tie away
+--   from zero), n (days)
 -- Two observed days are needed: nil, "insufficient" otherwise. It says where the price went, not why, and not where it goes next.
 function MK.Trend(item, days, opt)
     item = Int(item, 1, W.MAX_ID)
@@ -271,7 +283,7 @@ function MK.Trend(item, days, opt)
     if n < 2 then return nil, "insufficient" end
     local a, b = pts[first + 1], pts[last + 1]
     local dir = b > a and "up" or (b < a and "down" or "flat")
-    return { item = item, direction = dir, from = a, to = b, change = b - a, percent = math.floor((b - a) / a * 1000 + (b >= a and 0.5 or -0.5)) / 10,
+    return { item = item, direction = dir, from = a, to = b, change = b - a, percent = PercentTenths(a, b) / 10,
         n = n, fromDay = pts[first], toDay = pts[last], basis = MK.BASIS.trend }
 end
 
