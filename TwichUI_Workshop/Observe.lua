@@ -169,6 +169,35 @@ function O.OpenRecipe(id)
 end
 
 ---------------------------------------------------------------------------
+-- The player's professions and their skill (read only; nothing is polled: the window asks when it draws the Overview)
+---------------------------------------------------------------------------
+-- Game calls (Forever UI source, Blizzard_ProfessionsBook/Camelot/Blizzard_ProfessionsBook.lua, which makes the same two): GetProfessions()
+-- returns the indexes of the character's professions (nil for a slot it hasn't), GetProfessionInfo(index) returns name, texture, rank,
+-- maxRank, ...; the game announces a change with SKILL_LINES_CHANGED (SkillInfoDocumentation.lua), which the window redraws on while shown.
+-- Returns { { name, icon, rank, max } ... } in the order the game lists them (rank and max are nil when the game gave no usable number: shown
+-- as unavailable, never as zero), an empty list when the character has none, or nil and "api" when this game version has no such call.
+function O.Skills()
+    if type(GetProfessions) ~= "function" or type(GetProfessionInfo) ~= "function" then return nil, "api" end
+    local got = { pcall(GetProfessions) }
+    if not got[1] then return nil, "api" end
+    local out, seen = {}, {}
+    for i = 2, 8 do
+        local index = Int(got[i], 1, 1000)
+        if index and not seen[index] then
+            seen[index] = true
+            local ok, name, icon, rank, max = pcall(GetProfessionInfo, index)
+            name = ok and Text(name, 60) or nil
+            if name then
+                rank, max = Int(rank, 0, 100000), Int(max, 1, 100000)
+                if not (rank and max and rank <= max) then rank, max = nil, nil end   -- not usable as a pair: unavailable
+                out[#out + 1] = { name = name, icon = Int(icon, 0, W.MAX_ID) or (type(Plain(icon)) == "string" and Plain(icon)) or nil, rank = rank, max = max }
+            end
+        end
+    end
+    return out
+end
+
+---------------------------------------------------------------------------
 -- Items (names and icons come from the game; nothing of them is saved)
 ---------------------------------------------------------------------------
 -- How many the bags hold, or nil when the game can't say. The bank, other characters and the guild bank are NOT counted, and this must never be

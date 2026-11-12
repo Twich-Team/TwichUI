@@ -47,6 +47,7 @@ local RESPONSE_WAIT = 90     -- seconds to wait for the listings after the reque
 local DROP_WINDOW = 5        -- a dropped message this soon after the request is taken as ours
 
 SC.state, SC.phase, SC.why = "idle", nil, nil
+SC.ended = 0                   -- how many scans (or refused starts) have ended this session: a watcher records each once
 SC.OnChange = function() end   -- set by Window.lua
 local listeners = {}           -- more watchers (the auction house button): SC.Listen(fn); each is told whenever the state or progress changes
 
@@ -133,6 +134,7 @@ local function End(state, why)
     Listen(false)
     run = nil
     SC.state, SC.phase, SC.why, SC.progress = state, nil, why, nil
+    SC.ended = SC.ended + 1
     Changed()
 end
 
@@ -322,6 +324,7 @@ function SC.Start(priority)
     if SC.Busy() then return false, "busy" end
     local function Refuse(why)
         SC.state, SC.phase, SC.why, SC.progress = "unavailable", nil, why, nil
+        SC.ended = SC.ended + 1
         Changed()
         return false, why
     end

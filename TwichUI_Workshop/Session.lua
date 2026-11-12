@@ -26,6 +26,37 @@ local lastWhy          -- why the last read gave nothing, or nil
 local note             -- the last thing an action said, until the next action
 
 ---------------------------------------------------------------------------
+-- What happened this session (memory only, never saved: the Overview's "Recent activity" shows real events, not a history)
+---------------------------------------------------------------------------
+local activity = {}    -- newest last: { at, text, tone ("done" | "current" | "failed") }
+local MAX_ACTIVITY = 8
+local lastEnded = 0    -- the scan end (Scan.ended) already recorded
+
+local function Log(text, tone, scan)
+    activity[#activity + 1] = { at = Q.Now(), text = text, tone = tone or "done", scan = scan or nil }
+    if #activity > MAX_ACTIVITY then table.remove(activity, 1) end
+end
+
+-- The player's own actions this session and what the scans did, newest first, at most `n`
+function S.Activity(n)
+    local out = {}
+    for i = #activity, math.max(1, #activity - (n or MAX_ACTIVITY) + 1), -1 do out[#out + 1] = activity[i] end
+    return out
+end
+
+-- Forgets what was recorded (the tests start each section from nothing; the window never calls it)
+function S.ClearActivity() activity = {}; lastEnded = SC.ended end
+
+-- Records a scan that ended (a scan watcher, whether or not the window is open). One entry per end, in the scan's own plain words.
+function S.NoteScan()
+    if SC.ended == lastEnded then return end
+    lastEnded = SC.ended
+    local text, tone = SC.Message()
+    if text then Log(text, tone == "good" and "done" or (tone == "warn" and "failed" or "current"), true) end
+end
+SC.Listen(S.NoteScan)
+
+---------------------------------------------------------------------------
 -- What is remembered (Known.lua)
 ---------------------------------------------------------------------------
 -- Brings the remembered professions in, once per time the window has been open (Reset forgets them from memory again; they stay saved).
@@ -152,6 +183,10 @@ function S.Professions()
     return out
 end
 
+-- The character's professions and their skill, read from the game when asked (the Overview draws them; nothing is polled). Returns the list
+-- (see Observe.Skills: rank and max are nil when unusable) or nil and "api" when the game has no such call.
+function S.Skills() return O.Skills() end
+
 function S.Select(id)
     Ensure()
     if profs[id] then current = id end
@@ -226,6 +261,7 @@ function S.Add(rec)
         return false
     end
     note = e.mats and ("Added " .. e.name .. ".") or ("Added " .. e.name .. ". Its materials aren't known yet: open its profession to update.")
+    Log("Added " .. e.name .. " to plan")
     return true
 end
 
@@ -245,7 +281,9 @@ end
 function S.Remove(id)
     local e = Q.Find(id)
     local ok, why = Q.Remove(id)
-    if ok then note = e and ("Removed " .. e.name .. ".") or nil
+    if ok then
+        note = e and ("Removed " .. e.name .. ".") or nil
+        if e then Log("Removed " .. e.name .. " from plan", "current") end
     else note = ACTION_WHY[why] or ACTION_WHY.bad end
     return ok
 end
@@ -496,6 +534,49 @@ function S.FilterProfession(id)
 end
 
 function S.ToggleProfitOnly() S.opp.profitOnly = not S.opp.profitOnly end
+
+-- What the queue's crafts are estimated to cost and earn: the Opportunities estimate of each queued recipe (one craft) times its crafts,
+-- by recipe id, and the totals over those that could be priced. Nothing is estimated here: a recipe the estimate can't price is counted
+-- in `unpriced` and left out of the totals, never taken as free. `v` may be a draw's S.Opportunities() so nothing is priced twice.
+--   byId[id] = { crafts, cost, sellLow, sellHigh, profitLow, profitHigh } or nil (not priced)
+--   totals   { entries, priced, unpriced, crafts, cost, sellLow, sellHigh, profitLow, profitHigh, rate }
+function S.PlanEstimates(v)
+    local entries = Q.Entries()
+    local byId, t = {}, { entries = #entries, priced = 0, unpriced = 0, crafts = 0, cost = 0, sellLow = 0, sellHigh = 0, profitLow = 0, profitHigh = 0 }
+    if #entries == 0 then return byId, t end
+    v = v or S.Opportunities()
+    t.rate = v.rate
+    local rows = {}
+    for _, r in ipairs(v.all) do rows[r.rec.id] = r.est end
+    for _, e in ipairs(entries) do
+        t.crafts = t.crafts + e.crafts
+        local est = rows[e.id]
+        if est and est.state == "ok" then
+            local x = { crafts = e.crafts, cost = est.cost * e.crafts, sellLow = est.sellLow * e.crafts, sellHigh = est.sellHigh * e.crafts,
+                profitLow = est.profitLow * e.crafts, profitHigh = est.profitHigh * e.crafts }
+            byId[e.id] = x
+            t.priced = t.priced + 1
+            t.cost, t.sellLow, t.sellHigh = t.cost + x.cost, t.sellLow + x.sellLow, t.sellHigh + x.sellHigh
+            t.profitLow, t.profitHigh = t.profitLow + x.profitLow, t.profitHigh + x.profitHigh
+        else
+            t.unpriced = t.unpriced + 1
+        end
+    end
+    return byId, t
+end
+
+-- The names of the queued recipes that use an item as a material, for "needed for ..." lines (the queue's own materials; one level, no search)
+function S.NeededFor(item)
+    local out = {}
+    for _, e in ipairs(Q.Entries()) do
+        if e.mats then
+            for _, m in ipairs(e.mats) do
+                if m.item == item then out[#out + 1] = e.name break end
+            end
+        end
+    end
+    return out
+end
 
 ---------------------------------------------------------------------------
 -- The shopping list (Shopping.lua): the materials still needed, where to get each, and what it may cost

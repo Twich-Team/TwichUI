@@ -222,6 +222,29 @@ function MK.Observed(item, when, opt)
     return nil, "notobserved"
 end
 
+-- The history as it can be drawn: the exact observed days of an item and the older 28-day groups behind them, nothing in between made up.
+--   points   { { day, price } ... } oldest first: the last observed days (at most H.POINTS), each one a day a full scan listed the item
+--   groups   { { from, to, low, high, average, n } ... } oldest first: older observed days kept only as a low, a high and a mean per group
+--   today    the day number of now (opt.now), so a caller can say how long ago a day was
+-- A day on which no scan listed the item is simply not in the list: the picture has a gap there, not a line. nil and a reason (nomarket,
+-- baditem, outofscope, nodata) when there is nothing to draw.
+function MK.Series(item, opt)
+    item = Int(item, 1, W.MAX_ID)
+    if not item then return nil, "baditem" end
+    local m = Resolve(opt)
+    if not m then return nil, "nomarket" end
+    if m.scope ~= "full" then return nil, "outofscope" end
+    local pts, bks = H.Decode(HistoryOf(m, item))
+    if not pts then return nil, "nodata" end
+    local points, groups = {}, {}
+    for i = 1, #pts, 2 do points[#points + 1] = { day = pts[i], price = pts[i + 1] } end
+    for i = 1, #bks, 5 do
+        groups[#groups + 1] = { from = bks[i] * H.BUCKET_DAYS, to = bks[i] * H.BUCKET_DAYS + H.BUCKET_DAYS - 1, low = bks[i + 1], high = bks[i + 2],
+            average = math.floor(bks[i + 3] / bks[i + 4] + 0.5), n = bks[i + 4] }
+    end
+    return { item = item, points = points, groups = groups, today = H.Day(Now(opt)), market = m.key, label = PR.Label(m), basis = MK.BASIS.stats }
+end
+
 -- The direction between the first and the last observed day of the last `days` days (default 7, exact days only):
 --   direction "up", "down" or "flat", from / to (the two prices), change (copper, signed), percent (of the first, one decimal), n (days)
 -- Two observed days are needed: nil, "insufficient" otherwise. It says where the price went, not why, and not where it goes next.

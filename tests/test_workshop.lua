@@ -215,6 +215,32 @@ do
 end
 
 ---------------------------------------------------------------------------
+-- The character's professions and their skill (Observe.Skills: the Overview's progress bars)
+---------------------------------------------------------------------------
+do
+  local c, g, W = Setup()
+  local O = W.Observe
+  Check(select(2, O.Skills()) == "api", "this game version has no such call: unavailable, nothing invented")
+  local info = { { "Tailoring", 1001, 125, 150 }, { "Fishing", 1002, 0, 75 }, { "Broken", 1003, 80, 50 }, { "Odd", 1004, "x", 10 }, { "", 1005, 5, 10 } }
+  local calls = 0
+  c.GetProfessions = function() return 1, nil, 2, 3, 4, 5, 1 end
+  c.GetProfessionInfo = function(i) calls = calls + 1; local k = info[i] if k then return k[1], k[2], k[3], k[4] end end
+  local list = assert(O.Skills())
+  Same(#list, 4, "a name is needed (the empty one goes); a repeated index counts once; an empty slot is skipped")
+  Same(list[1].name, "Tailoring"); Same(list[1].rank, 125); Same(list[1].max, 150); Same(list[1].icon, 1001)
+  Same(list[2].name, "Fishing"); Same(list[2].rank, 0, "a real zero is kept"); Same(list[2].max, 75)
+  Check(list[3].name == "Broken" and list[3].rank == nil and list[3].max == nil, "more than the maximum is not a pair: unavailable, not clamped")
+  Check(list[4].name == "Odd" and list[4].rank == nil, "a rank that is not a number is unavailable")
+  c.GetProfessions = function() return nil end
+  Same(#assert(O.Skills()), 0, "a character with no professions: an empty list, not an error")
+  c.GetProfessions = function() error("boom") end
+  Same(select(2, O.Skills()), "api", "a failing call is unavailable")
+  c.GetProfessions = function() return 1 end
+  c.GetProfessionInfo = function() error("boom") end
+  Same(#assert(O.Skills()), 0, "a failing info call skips that profession")
+end
+
+---------------------------------------------------------------------------
 -- Reading the profession window
 ---------------------------------------------------------------------------
 do

@@ -257,6 +257,34 @@ do
   Check(d14.limited and d14.n == 7, "14 days reaches into a bucket that straddles the start: only what lies entirely inside is counted, and it says so: " .. d14.n)
 end
 
+-- Series: what the chart may draw (the exact observed days, in order, with their real day numbers; older days only as groups; nothing between)
+do
+  local t = Setup()
+  local PR, MK = t.W.Prices, t.W.Market
+  local KEY = "Realm|Alliance"
+  for _, day in ipairs({ 100, 102, 103 }) do Check(PR.Commit(KEY, ScanOf(day * D + 100, { [7] = 400 + day })), "scan " .. day) end
+  local sr = MK.Series(7, { market = KEY, now = 103 * D + 5 })
+  Same(#sr.points, 3, "three observed days, no more"); Same(sr.points[1].day, 100); Same(sr.points[2].day, 102); Same(sr.points[3].day, 103)
+  Same(sr.points[1].price, 500); Same(sr.points[3].price, 503); Same(sr.today, 103)
+  Check(not sr.points[4] and #sr.groups == 0, "day 101 has no value and gets none; no older group yet")
+  Check(sr.basis:find("Not a sale price", 1, true), "it says what it is")
+  -- the older days become groups (low, high, mean, how many), the exact days stay exact
+  for day = 104, 135 do Check(PR.Commit(KEY, ScanOf(day * D + 100, { [7] = 400 + day })), "scan " .. day) end
+  sr = MK.Series(7, { market = KEY, now = 135 * D + 5 })
+  Same(#sr.points, 7, "the newest seven observed days"); Same(sr.points[7].day, 135); Same(sr.points[1].day, 129)
+  Check(#sr.groups >= 1 and sr.groups[1].n >= 1 and sr.groups[1].low <= sr.groups[1].average and sr.groups[1].average <= sr.groups[1].high, "older days are a low, a high and a mean")
+  for i = 2, #sr.groups do Check(sr.groups[i].from > sr.groups[i - 1].to, "groups are in order and do not overlap") end
+  Check(sr.groups[#sr.groups].to < sr.points[1].day + 28, "groups lie behind the exact days' start")
+  -- the reasons
+  Same(select(2, MK.Series("x", { market = KEY })), "baditem"); Same(select(2, MK.Series(8, { market = KEY, now = 135 * D })), "nodata", "an item never observed")
+  Same(select(2, MK.Series(7, { market = "Nowhere|Alliance" })), "nomarket")
+  -- a cut scan feeds no history, so nothing is drawn for an item only it listed
+  Same(select(2, MK.Series(7, { market = "Realm|Alliance", now = 135 * D })) == nil, true)
+  local before = Ser(PR.Market(KEY))
+  MK.Series(7, { market = KEY, now = 135 * D }); MK.Series(7, { market = KEY, now = 136 * D })
+  Same(Ser(PR.Market(KEY)), before, "reading the series changes nothing")
+end
+
 ---------------------------------------------------------------------------
 -- Prices saved before the market data foundation
 ---------------------------------------------------------------------------
