@@ -653,30 +653,13 @@ local function BuildTop(main)
     -- the seven cards
     win.cards = {}
     for i, def in ipairs(CARDS) do
-        local card = K.Card(main, 100, CARD_H, (def[3] == "check" or def[3] == "cross") and "stack" or def[3], def[2])
+        local card = K.Card(main, 100, CARD_H, (def[3] == "check" or def[3] == "cross") and "stack" or def[3], def[2], def[1])
         win.cards[def[1]] = card
         card.def = def
         card:EnableMouse(true)
         K.Tip(card, def[2], def[4])
     end
     K.CL.Font(win.cards.duration.value, 20, false, "serif")   -- a time is longer than a count
-    -- the Passed and Failed cards carry the shared status art instead of a drawn shape
-    for key, art in pairs({ pass = "done", fail = "failed" }) do
-        local card = win.cards[key]
-        card.glyph:Hide()
-        card.art = card:CreateTexture(nil, "OVERLAY")
-        card.art:SetSize(28, 28)
-        card.art:SetPoint("LEFT", 14, 0)
-        card.art:SetTexture(R.PATH .. [[media\guides\status-]] .. art)
-        card.glyph:Hide()
-        local set = card.Set
-        card.Set = function(self, value, tone, note, lit)
-            set(self, value, tone, note, lit)
-            self.art:SetDesaturated(not lit)
-            self.art:SetAlpha(lit and 1 or 0.55)
-        end
-        card:Set("-", K.P.stone, nil, false)
-    end
     local function LayoutCards()
         local w = main:GetWidth() or 700
         local gap = 8

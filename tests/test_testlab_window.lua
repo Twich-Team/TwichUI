@@ -345,6 +345,30 @@ do
   Same(nBoxes, n, "no category invented and none left out")
   -- before a run: not run is not zero failures
   for _, key in ipairs({ "total", "pass", "fail", "skipped", "error", "timeout", "duration" }) do Same(win.cards[key].value.text, "-", key .. " shows a dash before a run") end
+  -- the painted summary icons (TwichUI_TestLab/media/summary, cut by tools/make_testlab_art.py): every card wears its own, and each file is real
+  local K = t.c.TwichUI.TestLab.Kit
+  local expect = { total = "total", pass = "passed", fail = "failed", skipped = "skipped", error = "errors", timeout = "timeouts", duration = "duration" }
+  local seen = {}
+  for key, file in pairs(expect) do
+    local card = win.cards[key]
+    Same(K.SUMMARY_ART[key], file, key .. " maps to " .. file)
+    Check(card.art, key .. " has painted art"); Same(card.art.texture, [[Interface\AddOns\TwichUI_TestLab\media\summary\]] .. file, key .. " texture path")
+    Check(not card.glyph:IsShown(), key .. " no longer draws the shape")
+    Check(card.art.w == K.SUMMARY_SIZE and card.art.h == K.SUMMARY_SIZE and K.SUMMARY_SIZE >= 24 and K.SUMMARY_SIZE <= 32, key .. " art is square, 24 to 32 units")
+    Check(not seen[file], file .. " is used once"); seen[file] = true
+    -- the file: an uncompressed 32-bit TGA, 64 x 64, clear corners and a solid centre (genuine transparency, no baked background)
+    local f = assert(io.open(LAB .. "media/summary/" .. file .. ".tga", "rb"), file .. ".tga exists")
+    local data = f:read("*a"); f:close()
+    local itype, w, h, bpp, desc = data:byte(3), data:byte(13) + data:byte(14) * 256, data:byte(15) + data:byte(16) * 256, data:byte(17), data:byte(18)
+    Same(itype, 2, file .. " is an uncompressed true-colour TGA"); Same(w, 64, file .. " width"); Same(h, 64, file .. " height"); Same(bpp, 32, file .. " bits per pixel"); Same(desc, 8, file .. " alpha bits")
+    Same(#data, 18 + 64 * 64 * 4, file .. " size")
+    local function Alpha(x, y) return data:byte(18 + (y * 64 + x) * 4 + 4) end   -- rows are stored bottom-up; for these checks any row will do
+    Same(Alpha(0, 0), 0, file .. ": a corner is clear"); Same(Alpha(63, 63), 0, file .. ": the other corner is clear"); Same(Alpha(0, 63), 0, file .. ": and the third")
+    Same(Alpha(32, 32), 255, file .. ": the centre is solid")
+    local clear, solid = 0, 0
+    for y = 0, 63 do for x = 0, 63 do local a = Alpha(x, y) if a == 0 then clear = clear + 1 elseif a == 255 then solid = solid + 1 end end end
+    Check(clear > 64 * 64 * 0.05 and solid > 64 * 64 * 0.35, file .. " has real transparency around opaque artwork (" .. clear .. " clear, " .. solid .. " solid)")
+  end
   Same(win.stateText.text, "Not run yet")
   Check(win.list.empty:IsShown() and win.list.empty.text:find("Nothing has run yet", 1, true), win.list.empty.text)
   Check(win.det.empty:IsShown() and win.det.empty.text:find("Run the cases", 1, true), "the details panel explains itself")

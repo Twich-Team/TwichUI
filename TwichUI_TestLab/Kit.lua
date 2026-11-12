@@ -398,7 +398,15 @@ end
 -- A summary card: a drawn mark, a small label and a large value, on a leather face with a tint and a thin accent line in the result's tone.
 -- :Set(value, tone, note) paints it (note: a short line under the label; empty for none).
 ---------------------------------------------------------------------------
-function K.Card(parent, w, h, glyph, label)
+-- The painted artwork of the seven summary cards: TwichUI_TestLab/media/summary/<name>.tga, 64 x 64 with real transparency, cut by
+-- tools/make_testlab_art.py. The Lab loads on its own, so the path is its own folder's, not the core's. K.SUMMARY_ART is the one list (a test
+-- checks that every file exists).
+K.SUMMARY_PATH = [[Interface\AddOns\TwichUI_TestLab\media\summary\]]
+K.SUMMARY_ART = { total = "total", pass = "passed", fail = "failed", skipped = "skipped", error = "errors", timeout = "timeouts", duration = "duration" }
+K.SUMMARY_SIZE = 32   -- UI units; the artwork keeps its square shape, and the card's own size is unchanged
+
+-- key: the card's key in K.SUMMARY_ART (a card without one keeps its drawn shape)
+function K.Card(parent, w, h, glyph, label, key)
     local card = CreateFrame("Frame", nil, parent)
     card:SetSize(w, h)
     K.Panel(card, "card")
@@ -410,8 +418,18 @@ function K.Card(parent, w, h, glyph, label)
     card.accent:SetPoint("BOTTOMLEFT", 6, 4); card.accent:SetPoint("BOTTOMRIGHT", -6, 4)
     card.glyph = K.Glyph(card, glyph, 26, P.text)
     card.glyph:SetPoint("LEFT", 14, 0)
+    local file = key and K.SUMMARY_ART[key]
+    if file then
+        -- the painted icon replaces the drawn shape; the (hidden) shape stays only so the label keeps its anchor and offset
+        card.glyph:Hide()
+        card.art = card:CreateTexture(nil, "OVERLAY")
+        card.art:SetSize(K.SUMMARY_SIZE, K.SUMMARY_SIZE)
+        card.art:SetPoint("CENTER", card.glyph, "CENTER", 0, 0)
+        card.art:SetTexture(K.SUMMARY_PATH .. file)
+        card.artFile = file
+    end
     card.label = K.Text(card, 14, P.textDim)
-    card.label:SetPoint("TOPLEFT", card.glyph, "TOPRIGHT", 12, 5)
+    card.label:SetPoint("TOPLEFT", card.glyph, "TOPRIGHT", file and 14 or 12, 5)
     card.label:SetPoint("RIGHT", card, "RIGHT", -8, 0)
     card.label:SetText(label)
     card.value = K.Text(card, 28, P.text, "serif")
@@ -424,10 +442,10 @@ function K.Card(parent, w, h, glyph, label)
         if self.compact == on then return end
         self.compact = on
         self.baseLabel = on and (short or self.longLabel) or self.longLabel
-        self.glyph:SetShown(not on and not self.art)   -- a card with painted art (Passed, Failed) draws that instead of the shape
+        self.glyph:SetShown(not on and not self.art)   -- a card with painted art draws that instead of the shape
         if self.art then self.art:SetShown(not on) end
         self.label:ClearAllPoints()
-        if on then self.label:SetPoint("TOPLEFT", self, "TOPLEFT", 12, -12) else self.label:SetPoint("TOPLEFT", self.glyph, "TOPRIGHT", 12, 5) end
+        if on then self.label:SetPoint("TOPLEFT", self, "TOPLEFT", 12, -12) else self.label:SetPoint("TOPLEFT", self.glyph, "TOPRIGHT", self.art and 14 or 12, 5) end
         self.label:SetPoint("RIGHT", self, "RIGHT", -6, 0)
         self.sigNote = nil
         self.label:SetText(self.baseLabel)
@@ -439,6 +457,7 @@ function K.Card(parent, w, h, glyph, label)
         K.Paint(self.label, P.textDim)
         self.label:SetText(note and note ~= "" and (self.baseLabel .. " (" .. note .. ")") or self.baseLabel)
         self.glyph:SetColor(c, lit and 1 or 0.7)
+        if self.art then self.art:SetAlpha(lit and 1 or 0.6) end   -- the painted icon keeps its own colours; with nothing to show (or before a run) it is only quieter
         self.tint:SetColorTexture(c[1], c[2], c[3], lit and 0.10 or 0)
         self.accent:SetColorTexture(c[1], c[2], c[3], lit and 0.55 or 0)
     end
