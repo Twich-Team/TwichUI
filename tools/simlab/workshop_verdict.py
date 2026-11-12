@@ -33,7 +33,8 @@ STEPS = [
     "shopping: combined list, sources, total, warning", "shopping: source choices", "shopping: Show vendor",
     "shopping: add the suggested subcraft", "shopping: bags change", "close and reopen", "remembered recipes: closed window, background read, nothing open",
     "bank and guild bank: remembered while the window is closed", "bank and guild bank: planned with, collected not bought, labelled, profit unchanged",
-    "bank and guild bank: the guild choice, permissions and limits", "bank and guild bank: a withdrawal and a deposit never count twice", "third pass: hit test, hover, fit, tooltips, status", "pose for the screenshot",
+    "bank and guild bank: the guild choice, permissions and limits", "bank and guild bank: a withdrawal and a deposit never count twice", "third pass: hit test, hover, fit, tooltips, status",
+    "reachability: planted overlay, hover rows, insets, clipping, tooltip", "pose for the screenshot",
 ]
 LAYERS = ("init", "display", "click", "direct", "event", "state")
 VIEWS = {"overview": "TwichUIWorkshop", "craft": "TwichUIWorkshop", "opps": "TwichUIWorkshop", "shop": "TwichUIWorkshop", "design": "TwichUISettings",
@@ -85,6 +86,16 @@ def main():
               d and int(d.group(3)) == len(r["checks"]) - len(failed) and int(d.group(4)) == len(failed))
         layers = {c[1] for c in r["checks"]}
         check(f"{n}: every evidence layer was exercised", set(LAYERS) <= layers, ", ".join(sorted(layers)))
+        # the reachability negative control (testing roadmap M5): the same button reads reachable, then BLOCKED by the planted frame, then
+        # reachable again. A check that is missing or out of order is a failure, never a pass by omission.
+        names = [c[2] for c in r["checks"]]
+        order = ["REACH: the Add button is reachable at its hit point", "NEGATIVE CONTROL: with a mouse-enabled frame planted over it",
+                 "NEGATIVE CONTROL: with the overlay removed, the Add button is reachable again"]
+        at = [next((i for i, x in enumerate(names) if x.startswith(o)), -1) for o in order]
+        passed_neg = [c for c in r["checks"] if c[2].startswith("NEGATIVE CONTROL")]
+        check(f"{n}: the planted overlay was seen: reachable, blocked, reachable (in that order)", all(i >= 0 for i in at) and at == sorted(at),
+              f"positions {at}")
+        check(f"{n}: every negative-control check held ({len(passed_neg)} of them)", len(passed_neg) >= 7 and all(c[0] == "PASS" for c in passed_neg))
         check(f"{n}: no Lua error outside the classified rules", not r["errors"], r["errors"][0][:150] if r["errors"] else "")
 
     print("Reproducibility, from a new empty install each time:")

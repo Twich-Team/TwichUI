@@ -42,6 +42,13 @@ end
 
 local function InCombat() return InCombatLockdown and InCombatLockdown() and true or false end
 
+-- A guided case may hold a temporary key binding and a prompt (Guided.lua). Whatever ends a case or the run, they are released. Cleanup only:
+-- it schedules nothing and never changes a case's result.
+local function ReleaseGuided()
+    local G = TL.Guided
+    if G and G.End then pcall(G.End) end
+end
+
 ---------------------------------------------------------------------------
 -- Finishing
 ---------------------------------------------------------------------------
@@ -68,6 +75,7 @@ local function Finish(reason)
     -- no more work is scheduled: the frame stops updating and stops listening before anything else
     frame:SetScript("OnUpdate", nil)
     frame:UnregisterEvent("PLAYER_REGEN_DISABLED")
+    ReleaseGuided()
     local why = STOP_TEXT[reason]
     if s.cur then
         local r = s.cur.r
@@ -95,6 +103,7 @@ end
 local function Verdict(cur)
     local t, r = cur.t, cur.r
     r.facts = t.facts
+    r.notes = t.notes
     r.checks = t.checks
     if t.skipped then
         r.status, r.detail = "skipped", t.skipped
@@ -146,10 +155,11 @@ end
 local function Abandon(s, cur, total)
     local r = cur.r
     s.cur = nil
+    ReleaseGuided()
     r.status = "timeout"
     r.detail = ("abandoned at a yield point after %.1f s (budget %.0f s); it was not resumed"):format(total, cur.case.budget)
     r.ms = total * 1000
-    r.facts, r.checks = cur.t.facts, cur.t.checks
+    r.facts, r.checks, r.notes = cur.t.facts, cur.t.checks, cur.t.notes
 end
 
 -- Resumes the active case once and settles it if it ended, was abandoned or overran
@@ -167,15 +177,17 @@ local function Step(s, cur)
     r.ms = total * 1000
     if not ok then
         s.cur = nil
+        ReleaseGuided()
         if err == TL.SKIP then
             r.status, r.detail = "skipped", cur.t.skipped
-            r.facts, r.checks = cur.t.facts, cur.t.checks
+            r.facts, r.checks, r.notes = cur.t.facts, cur.t.checks, cur.t.notes
         else
             r.status, r.detail = "error", tostring(err)
-            r.facts, r.checks = cur.t.facts, cur.t.checks
+            r.facts, r.checks, r.notes = cur.t.facts, cur.t.checks, cur.t.notes
         end
     elseif dead then
         s.cur = nil
+        ReleaseGuided()
         Verdict(cur)
         if total > cur.case.budget then
             r.detail = (r.detail and (r.detail .. "; ") or "") .. ("late: it took %.1f s of its %.0f s budget, and could not be interrupted"):format(total, cur.case.budget)

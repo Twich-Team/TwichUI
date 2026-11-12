@@ -3,6 +3,7 @@
 -- recipes, queue and materials, and its buttons queue, change and remove. Synthetic: it proves what is drawn and kept, not how
 -- the game draws it.
 dofile(TESTS .. "mi_mock.lua")
+local Press = dofile(TESTS .. "press.lua")   -- opt-in (M5): frames record the mouse state, and Press refuses a control that could not take a click
 
 local function Check(cond, msg) if not cond then error(msg, 2) end end
 local function Same(a, b, msg) if a ~= b then error((msg or "") .. " expected " .. tostring(b) .. ", got " .. tostring(a), 2) end end
@@ -28,7 +29,6 @@ local c = MIClient("Rich", {
       fr.SetTextInsets = function() end
       fr.SetJustifyV = function() end
       fr.SetWordWrap = function() end
-      fr.EnableMouse = function() end
       fr.SetToplevel = function() end
       fr.SetMovable = function() end
       fr.SetClampedToScreen = function() end
@@ -39,6 +39,7 @@ local c = MIClient("Rich", {
       fr.SetMotionScriptsWhileDisabled = function() end
       fr.CreateTexture = function(s) local t = MIFake("Texture", s); t.SetColorTexture = function() end t.SetVertexColor = function() end t.SetTexCoord = function() end t.SetTexture = function(x, v) x.texture = v end return t end
       fr.CreateFontString = function(s) local t = MIFake("FontString", s); t.SetFont = function() return true end t.SetJustifyV = function() end t.SetWordWrap = function() end t.SetTextColor = function() end return t end
+      Press.Instrument(fr, name)   -- last, so it replaces the no-op EnableMouse above with one that records
       if name then cl[name] = fr end
       return fr
     end
@@ -127,9 +128,14 @@ Check(rows[1].sub:GetText() == "Makes 1-2", rows[1].sub:GetText())
 Check(rows[2].diff:GetText() == "Orange")
 
 -- queue it with the row's own button, then change and remove
-rows[1].add:GetScript("OnClick")(rows[1].add)
+Press.Must(rows[1].add)   -- the row's own Add button: shown, enabled, mouse on, in a shown window (Press refuses otherwise)
 Same(#Q.Entries(), 1); Same(Q.Entries()[1].name, "Healing Potion")
 Check(rows[1].mark:IsShown() and rows[1].mark.text:GetText() == "Queued" and not rows[1].add:IsShown(), "a queued recipe says Queued (in the compact mark, not on a stretched button) and can't be added twice")
+do
+  local again = Press(rows[1].add)
+  Check(not again.invoked and again.reasons[1] == "hidden", "and its Add button is not a live control any more: " .. again.text)
+  Same(#Q.Entries(), 1, "so a second press adds nothing")
+end
 local qrow = Win.Lists().queue.rows[1]
 Check(qrow:IsShown() and qrow.name:GetText() == "Healing Potion")
 local detail = Win.Craft().detail
@@ -169,7 +175,7 @@ remove:GetScript("OnClick")(remove)
 Same(#Q.Entries(), 0); Check(f.note:GetText():find("Removed", 1, true))
 
 -- events: a burst of changes is one redraw, a stale one is dropped, hidden stops everything
-rows[2].add:GetScript("OnClick")(rows[2].add)
+Press.Must(rows[2].add)
 local before = W.Snapshot().renders
 Fire("BAG_UPDATE_DELAYED"); Fire("BAG_UPDATE_DELAYED"); Fire("GET_ITEM_INFO_RECEIVED")
 Same(W.Snapshot().renders, before, "nothing is drawn until the burst settles")
@@ -360,7 +366,7 @@ do
   local add1 = opps.detail.add
   Same(opps.detail.name:GetText(), "Healing Potion", "the chosen row's details")
   Check(add1.text:GetText() == "Add to crafting plan" and add1.enabled)
-  add1:GetScript("OnClick")(add1)
+  Press.Must(add1)   -- pressed as a player would: the control must be eligible first
   Same(#Q.Entries(), queued + 1); Check(Q.Find(1), "Healing Potion is in the one queue")
   Same(opps.detail.add.text:GetText(), "In your queue"); Check(opps.detail.add.enabled == false)
   Check(L_.rows[1].sub:GetText():find("In your queue", 1, true), "and the row says so")
@@ -997,12 +1003,18 @@ do
   Check(chosenId and not Q.Find(chosenId), "a recipe is chosen and is not queued")
   Same(add.text:GetText(), "Add to crafting plan"); Check(add:IsEnabled() and add:IsShown() and add.check:IsShown() == false)
   Check(#add.artParts == 2 and add.artParts[1]:IsShown() and add.artParts[2]:IsShown(), "the plus is drawn")
-  local scripts = add:GetScript("OnClick")
-  Check(type(scripts) == "function", "the button has a click handler")
-  scripts(add, "LeftButton")   -- the control's own handler, not Session.Add
+  Check(type(add:GetScript("OnClick")) == "function", "the button has a click handler")
+  local pressed = Press(add)   -- the control's own handler, run only if the button could take a click (shown, enabled, mouse on, in a shown window)
+  Check(pressed.invoked, pressed.text)
+  Same(pressed.calls[1], "OnClick"); Same(pressed.button, "LeftButton")
   Check(Q.Find(chosenId), "the chosen recipe is in the queue")
   Same(Q.Find(chosenId).crafts, 1, "queued once")
   Same(add.text:GetText(), "In your queue"); Check(add:IsEnabled() == false and add.check:IsShown() and not add.artParts[1]:IsShown(), "the button says it, with a check in place of the plus")
+  do
+    local again = Press(add)
+    Check(not again.invoked and again.reasons[1] == "disabled", "a queued recipe's Add button is disabled, and Press refuses it: " .. again.text)
+    Same(Q.Find(chosenId).crafts, 1, "so pressing it again did not queue a second craft")
+  end
   Check(f.note:GetText():find("Added ", 1, true), "the footer says what happened: " .. f.note:GetText())
   Check(first.sub:GetText():find("In your queue", 1, true), "the list row says so too")
   Check(add.twichuiTip.body(add):find("in your crafting plan", 1, true), "and the button's tooltip explains")
@@ -1348,6 +1360,10 @@ end
 ---------------------------------------------------------------------------
 do
   local f = Win.Frame()
+  -- A fixed clock for this block: the Workshop stamps saved records through Q.Now (a recipe record's `at`), which reads the real
+  -- time(). With the wall clock a tick between the two comparisons below made "wrote nothing" fail about 3 % of runs. Restored at the end.
+  local realNow = Q.Now
+  Q.Now = function() return 1700000000 end
   local function Dump(v, out)   -- a stable text of a saved table, to compare before and after
     out = out or {}
     if type(v) ~= "table" then out[#out + 1] = tostring(v) return out end
@@ -1391,6 +1407,7 @@ do
     Check(#l.rows <= math.ceil(l.minH / l.rowH) + 1, ("the %s pool is bounded by what it can show (%d rows)"):format(name, #l.rows))
   end
   Same(table.concat(Dump(c.TwichUIDB.workshop), " "), saved, "and navigating wrote nothing to the saved data")
+  Q.Now = realNow
   Same(Events(f), 0, "closed: no events")
   f:Show()
   Same(Win.Mode(), "overview", "the page shown is kept while the game runs")

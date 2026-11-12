@@ -482,7 +482,7 @@ do
   wire(RN)
   t.c.C_AddOns.GetAddOnMetadata = function(name, field) if field == "Version" then return name == "TwichUI_Workshop" and "1.2.3" or "9.9.9" end end
   local done
-  Check(RN.Start(TL.Select(), { cats = { "core", "client" }, clock = t.Clock, onDone = function(s) done = s end }))
+  Check(RN.Start(TL.Select({ core = true, client = true }), { cats = { "core", "client" }, clock = t.Clock, onDone = function(s) done = s end }))
   local frames = Drive(RN, 500, 0.016, t)
   Check(frames >= 120, "the 2 s pause probe took its frames (" .. frames .. ")")
   local all = {}
@@ -549,9 +549,11 @@ do
   -- Copy before any run
   Check(not Win.Copy(), "no report yet")
   -- no category chosen
-  for _, box in pairs(win.boxes) do box:GetScript("OnClick")(box) end   -- clears both
+  -- the guided category starts unticked (it asks things of the player); the others start ticked
+  Check(win.boxes.pointer:GetChecked() == false, "the guided category is not ticked for the player")
+  for _, box in pairs(win.boxes) do if box:GetChecked() then box:GetScript("OnClick")(box) end end   -- clears every box
   Check(not Win.Run(), "nothing chosen, nothing runs"); Check(not RN.Active())
-  for _, box in pairs(win.boxes) do box:GetScript("OnClick")(box) end   -- chooses both again
+  for _, id in ipairs({ "core", "client" }) do local box = win.boxes[id]; box:GetScript("OnClick")(box) end   -- chooses the two the rest of this section runs
 
   Check(Win.Run(), "Run starts a run")
   Check(RN.Active() and not win.run:IsEnabled() and win.stop:IsEnabled(), "Run is off and Stop is on while it runs")
@@ -602,7 +604,7 @@ do
   local p = io.popen('find "' .. LAB .. '" -name "*.lua" | sort')
   for path in p:lines() do files[#files + 1] = path end
   p:close()
-  Check(#files == 10, "the scan found the Lab's files (" .. #files .. ")")
+  Check(#files == 13, "the scan found the Lab's files (" .. #files .. ")")
   -- every file the .toc loads is scanned, and nothing is loaded that is not
   local scanned = {}
   for _, path in ipairs(files) do scanned[path:sub(#LAB + 1)] = true end
@@ -618,6 +620,8 @@ do
     "SendAddonMessage", "SendChatMessage", "SendCommMessage", "SetCVar",
     -- taint, hooks, loading data as code, the game menu's Esc handler
     "hooksecurefunc", "securecall", "setfenv", "getfenv", "loadstring", "RegisterGameMenuEscHandler", "rawset", "load(", "dofile", "require",
+    -- input: nothing persistent (a saved binding), no keyboard capture; the one temporary override binding lives in Guided.lua alone (checked below)
+    "SaveBindings", "SetBinding", "LoadBindings", "EnableKeyboard", "SetPropagateKeyboardInput", "OnKeyDown", "OnKeyUp", "OnChar",
   }
   for _, path in ipairs(files) do
     local f = assert(io.open(path)); local src = f:read("*a"); f:close()
@@ -631,6 +635,24 @@ do
     end
     Check(not code:find("_G%s*%[[^%]]*%]%s*=[^=]"), path:sub(#LAB + 1) .. " assigns through _G[...]")
     Check(not code:find("[^%w_]_G%.[%w_]+%s*=[^=]"), path:sub(#LAB + 1) .. " assigns a global through _G")
+  end
+  -- the temporary key binding: only Guided.lua has it, owned by its own button, and it is only ever cleared for that owner
+  for _, path in ipairs(files) do
+    local f = assert(io.open(path)); local src = f:read("*a"); f:close()
+    local code = src:gsub("%-%-[^\n]*", "")
+    local isGuided = path:sub(#LAB + 1) == "Guided.lua"
+    -- elsewhere a name may appear only as a quoted string (the API presence report asks whether the function exists; it never calls it)
+    local uses = (isGuided and code or code:gsub('"[^"\n]*"', '""')):find("OverrideBinding", 1, true) ~= nil
+    Check(uses == isGuided, path:sub(#LAB + 1) .. (uses and " uses an override binding and is not Guided.lua" or " should use the override binding"))
+  end
+  do
+    local f = assert(io.open(LAB .. "Guided.lua")); local code = f:read("*a"):gsub("%-%-[^\n]*", ""); f:close()
+    local _, binds = code:gsub("SetOverrideBindingClick%(", "")
+    local _, clears = code:gsub("ClearOverrideBindings", "")
+    Check(code:find("pcall(SetOverrideBindingClick, p, true, key, G.NAME", 1, true), "the binding is made for the Lab's own button, with the one key")
+    Check(code:find("pcall(ClearOverrideBindings, proxy)", 1, true), "and cleared for that owner")
+    Check(not code:find("ClearOverrideBindings, UIParent", 1, true) and not code:find("ClearOverrideBindings(UIParent", 1, true), "never cleared for UIParent")
+    Check(binds == 0 and clears <= 4, "no other override-binding calls: " .. binds .. " direct binds, " .. clears .. " mentions of the clear")
   end
   -- the scan itself works: a planted violation is found
   local planted = "TwichUIWorkshopDB = {}"

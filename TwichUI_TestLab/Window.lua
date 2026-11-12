@@ -18,6 +18,9 @@ local ICON = { pass = R.PATH .. [[media\guides\status-done-small]], fail = R.PAT
     error = R.PATH .. [[media\guides\status-failed-small]], timeout = R.PATH .. [[media\guides\status-failed-small]],
     running = R.PATH .. [[media\guides\status-current-small]] }
 local WORD = { pass = "pass", fail = "FAIL", error = "ERROR", skipped = "skip", timeout = "TIMEOUT", stopped = "stopped", pending = "waiting", running = "running" }
+-- A guided case is not a function that is running: it is waiting for a person, or the person skipped it, or the observation was cancelled
+-- part way. The rows say which, in words, so a skipped step is never mistaken for a completed measurement.
+local GUIDED_WORD = { running = "your turn", skipped = "skipped", stopped = "cancelled", pass = "measured" }
 
 local win
 local chosen = {}        -- category id -> true
@@ -68,10 +71,15 @@ local function Paint(results)
         local icon = ICON[r.status]
         row.icon:SetShown(icon ~= nil)
         if icon then row.icon:SetTexture(icon) end
-        row.word:SetText(WORD[r.status] or r.status)
+        local guided = r.class == "guided"
+        local word = guided and GUIDED_WORD[r.status] or WORD[r.status] or r.status
+        if guided and r.status == "stopped" and r.ms == nil then word = "not run" end
+        row.word:SetText(word)
         row.id:SetText(r.id)
         row.label:SetText(r.status == "pending" and "" or r.label)
-        row.detail:SetText(r.detail and RP.Clean(r.detail, 160) or (r.ms and ("%.1f ms"):format(r.ms)) or "")
+        local detail = r.detail and RP.Clean(r.detail, 160) or (r.ms and ("%.1f ms"):format(r.ms)) or ""
+        if guided and r.status == "running" then detail = "waiting for you: follow the prompt at the top of the screen" end
+        row.detail:SetText(detail)
         row:Show()
     end
     for i = #results + 1, #rows do rows[i]:Hide() end
@@ -119,6 +127,8 @@ function W.Run()
     if #list == 0 then Say("Choose at least one category.") return false end
     local cats = {}
     for _, id in ipairs(TL.categoryOrder) do if chosen[id] then cats[#cats + 1] = id end end
+    local asks = false
+    for _, c in ipairs(list) do if c.class == "guided" then asks = true end end
     local ok, why = RN.Start(list, { cats = cats, onProgress = Progress, onDone = Done })
     if not ok then
         Say(why == "combat" and "Not during combat. Try again when combat ends." or "It cannot start now (" .. tostring(why) .. ").")
@@ -128,7 +138,8 @@ function W.Run()
     win.edit:SetText("")
     win.fill:SetWidth(1)
     win.progress:SetText("starting")
-    Say("Running. Stop is available; it prevents further steps but cannot interrupt one that is running.")
+    Say(asks and "Running. A prompt at the top of the screen asks for you: drag this window away from the Workshop first. Cancel there or Stop here ends it and removes the key."
+        or "Running. Stop is available; it prevents further steps but cannot interrupt one that is running.")
     Buttons()
     return true
 end
@@ -202,10 +213,10 @@ local function Build()
     win.boxes = {}
     for i, id in ipairs(TL.categoryOrder) do
         local cat = TL.categories[id]
-        chosen[id] = true
+        chosen[id] = not cat.guided   -- a guided category asks things of the player: it is never ticked for them
         local box = L.Checkbox(cats, function(on) chosen[id] = on; win.boxes[id]:SetChecked(on) end)
         box:SetPoint("TOPLEFT", 12, -(10 + i * 24))
-        box:SetChecked(true)
+        box:SetChecked(chosen[id])
         local label = L.Text(cats, "body"); label:SetPoint("LEFT", box, "RIGHT", 8, 0)
         label:SetText(("%s  (%d cases)"):format(cat.label, TL.Count(id)))
         local blurb = L.Text(cats, "small"); blurb:SetPoint("LEFT", label, "RIGHT", 10, 0); blurb:SetText(cat.blurb)
@@ -255,7 +266,7 @@ local function Build()
     local rh = L.Text(win, "heading"); rh:SetPoint("TOPLEFT", PAD, -y); rh:SetText("Report")
     local legend = L.Text(win, "small")
     legend:SetPoint("LEFT", rh, "RIGHT", 10, 0)
-    legend:SetText("synthetic: our code on made-up data  |  client: observed in this game")
+    legend:SetText("synthetic: our code on made-up data  |  client: observed in this game  |  guided: with your help")
     y = y + 18
     local box = CreateFrame("Frame", nil, win, "BackdropTemplate")
     box:SetPoint("TOPLEFT", PAD, -y)

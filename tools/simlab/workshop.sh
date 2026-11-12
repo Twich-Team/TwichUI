@@ -37,7 +37,10 @@ export SIMLAB_EXTRA="TwichUI_Workshop"
 export SIMLAB_FORWARD="WOW_SIM_SOFTWARE_RENDER=1 WOW_SIM_NO_PARTY=1"
 
 fixture() {  # name params
-  { printf 'SIMLAB_PARAMS = %s\n' "$2"; cat "$SIMLAB_DIR/scenarios/lib.lua" "$SIMLAB_DIR/scenarios/workshop.lua"; } > "$LAB/fixtures/workshop-$1.lua"
+  # TwichUI_TestLab/Reach.lua is the reachability analysis the scenario's hit test and negative control use. It is wrapped in do..end so its
+  # locals stay its own, and is read from the repository (the Lab addon is never loaded into the simulator).
+  { printf 'SIMLAB_PARAMS = %s\n' "$2"; cat "$SIMLAB_DIR/scenarios/lib.lua"; printf 'do\n'; cat "$REPO/TwichUI_TestLab/Reach.lua"; printf '\nend\n'
+    cat "$SIMLAB_DIR/scenarios/workshop.lua"; } > "$LAB/fixtures/workshop-$1.lua"
 }
 fixture overview '{ view = "overview" }'
 fixture craft '{ view = "craft" }'

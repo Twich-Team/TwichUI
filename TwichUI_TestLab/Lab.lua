@@ -9,7 +9,8 @@
 --             pure      calls production functions with EXPLICIT inputs only, on made-up data (never saved data, never the game)
 --             readonly  reads live game state or real saved data and must leave it unchanged (bracketed by TL.Fingerprint)
 --             owned     creates and reuses Lab-owned frames only (not used yet)
---             guided    asks the player to do something and observes it read only (not used yet)
+--             guided    asks the player to put the pointer somewhere and observes what the client reports, read only (Guided.lua). Its category
+--                       is never part of an unqualified run: TL.Select(nil) leaves it out, and the window leaves its box unticked.
 --   needs   { "workshop" } to get t.W = R.Workshop (loaded through the core's launcher, which refuses in combat)
 --   budget  seconds the case may take across frames before it is abandoned (default 10, at most 60)
 --   run     function(t): the case API below
@@ -19,6 +20,7 @@
 --   t:Check(condition, what)         record a failure unless the condition is true
 --   t:Skip(reason)                   end the case as skipped
 --   t:Fact(key, value)               a reported number or word; not an assertion
+--   t:Note(text)                     one line of evidence for the report, printed under the case (at most 16, each cut at 400 characters)
 --   t:Yield()                        a cooperative slice boundary (never inside a pcall: Lua 5.1 cannot yield across one)
 --   t:Wait(seconds)                  a pause across frames; nothing of this case is scheduled meanwhile
 --
@@ -33,6 +35,7 @@ TL.VERSION = "0.1.0-dev"
 TL.CLASSES = { pure = true, readonly = true, owned = true, guided = true }
 TL.SAVED_ROOTS = { "TwichUIDB", "TwichUIWorkshopDB", "TwichUIDiagnosticsDB" }
 TL.MAX_BUDGET = 60
+TL.MAX_GUIDED_BUDGET = 150   -- a person takes longer than a function
 TL.DEFAULT_BUDGET = 10
 
 TL.categories, TL.categoryOrder = TL.categories or {}, TL.categoryOrder or {}
@@ -41,10 +44,11 @@ TL.cases, TL.caseOrder, TL.rejected = TL.cases or {}, TL.caseOrder or {}, TL.rej
 ---------------------------------------------------------------------------
 -- Registry
 ---------------------------------------------------------------------------
--- { id, label, blurb }: a group of cases the window offers as one checkbox
+-- { id, label, blurb, guided }: a group of cases the window offers as one checkbox. A guided category asks things of the player, so it
+-- starts unticked and only runs when it is chosen by name.
 function TL.Category(def)
     if type(def) ~= "table" or type(def.id) ~= "string" or TL.categories[def.id] then return false end
-    TL.categories[def.id] = { id = def.id, label = def.label or def.id, blurb = def.blurb or "" }
+    TL.categories[def.id] = { id = def.id, label = def.label or def.id, blurb = def.blurb or "", guided = def.guided == true }
     TL.categoryOrder[#TL.categoryOrder + 1] = def.id
     return true
 end
@@ -64,19 +68,25 @@ function TL.Case(def)
     if not TL.categories[def.cat] then return Reject(def, "unknown category") end
     if type(def.run) ~= "function" then return Reject(def, "no run function") end
     local budget = tonumber(def.budget) or TL.DEFAULT_BUDGET
+    local top = def.class == "guided" and TL.MAX_GUIDED_BUDGET or TL.MAX_BUDGET
     local case = { id = def.id, cat = def.cat, class = def.class, needs = def.needs or {}, run = def.run,
-        budget = math.max(0.1, math.min(TL.MAX_BUDGET, budget)) }
+        budget = math.max(0.1, math.min(top, budget)) }
     TL.cases[case.id] = case
     TL.caseOrder[#TL.caseOrder + 1] = case.id
     return case
 end
 
--- The registered cases of the chosen categories ({ core = true }), in registration order; nil chooses every category
+-- The registered cases of the chosen categories ({ core = true }), in registration order; nil chooses every category EXCEPT guided ones,
+-- which run only when named: nothing asks the player for anything unless the player (or a test) chose it.
 function TL.Select(chosen)
     local out = {}
     for _, id in ipairs(TL.caseOrder) do
         local c = TL.cases[id]
-        if not chosen or chosen[c.cat] then out[#out + 1] = c end
+        if chosen then
+            if chosen[c.cat] then out[#out + 1] = c end
+        elseif c.class ~= "guided" then
+            out[#out + 1] = c
+        end
     end
     return out
 end
@@ -186,6 +196,10 @@ function T:Fact(key, value)
     self.facts[#self.facts + 1] = { k, v }
 end
 
+function T:Note(text)
+    if #self.notes < 16 then self.notes[#self.notes + 1] = tostring(text):sub(1, 400) end
+end
+
 function T:Yield()
     if coroutine.running() then coroutine.yield() end
 end
@@ -198,5 +212,5 @@ function T:Wait(seconds)
 end
 
 function TL.NewT(case, W)
-    return setmetatable({ id = case.id, class = case.class, W = W, R = R, fails = {}, facts = {}, checks = 0 }, T)
+    return setmetatable({ id = case.id, class = case.class, W = W, R = R, fails = {}, facts = {}, notes = {}, checks = 0 }, T)
 end

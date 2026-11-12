@@ -1345,77 +1345,45 @@ end)
 
 ---------------------------------------------------------------------------------------------------------------------------
 -- Third pass: what the owner found in the real client, as far as the simulator can show it
---   hit test   EMULATED from frame rectangles, strata, levels and the mouse flag (the simulator has no pointer): it says whether any other
---              mouse-enabled frame is stacked over a control's centre. It cannot say how the real client orders equal levels.
+--   hit test   EMULATED by TwichUI_TestLab/Reach.lua (loaded into this chunk by workshop.sh) from every frame's rectangle, hit-rect insets,
+--              strata, level, mouse flags, visibility, scroll clipping and parent chain (the simulator has no pointer, and its GetMouseFoci only
+--              returns what a scenario forced). It says whether any other mouse-enabled frame is stacked over a control's hit point and, if so,
+--              which. It cannot say how the real client orders equal levels (it reports those as ambiguous). The next step plants an overlay.
 --   hover      the row's own OnEnter, run by the scenario: the painted art's state (shown, alpha, parent visible). Not a pointer, not how it looks.
 --   fit        measured string widths against the control's rectangle (the simulator draws addon fonts in Friz Quadrata: a structural check)
 ---------------------------------------------------------------------------------------------------------------------------
 Lab.Step("third pass: hit test, hover, fit, tooltips, status", function()
     local W = R.Workshop
-    local STRATA = { BACKGROUND = 1, LOW = 2, MEDIUM = 3, HIGH = 4, DIALOG = 5, FULLSCREEN = 6, FULLSCREEN_DIALOG = 7, TOOLTIP = 8 }
-    local function InWorkshop(fr)
-        local p = fr
-        while p do
-            if p == TwichUIWorkshop then return true end
-            p = p.GetParent and p:GetParent() or nil
+    local RC = R.TestLab.Reach
+    local function Label(fr)   -- a frame's name, else a button's own text (synthetic text here), else its type
+        local name = fr.GetName and fr:GetName()
+        if name then return name end
+        local tx = fr.text
+        if type(tx) == "table" and tx.GetText then
+            local t = tx:GetText()
+            if t and t ~= "" then return t end
         end
-        return false
+        return nil
     end
-    local function Rect(fr)   -- left, bottom, right, top in screen units
-        local l, b, w, h = fr:GetRect()
-        if not l then return nil end
-        local s = fr:GetEffectiveScale()
-        return l * s, b * s, (l + w) * s, (b + h) * s
+    local function Look(fr, kind, extra)   -- one analysis of a control, against every frame the simulator has
+        local o = { kind = kind or "click", label = Label, evidence = "simulator-geometry", limit = 1000000 }
+        for k, v in pairs(extra or {}) do o[k] = v end
+        return RC.Analyze(fr, o)
     end
-    -- every mouse-enabled shown frame of the window, in creation order
-    local function Targets()
-        local out, order = {}, 0
-        local fr = EnumerateFrames()
-        while fr do
-            order = order + 1
-            if fr.IsMouseEnabled and fr:IsMouseEnabled() and fr:IsVisible() and InWorkshop(fr) then
-                local l, b, r, t = Rect(fr)
-                if l then out[#out + 1] = { f = fr, l = l, b = b, r = r, t = t, key = (STRATA[fr:GetFrameStrata()] or 3) * 1e9 + fr:GetFrameLevel() * 1e4 + order } end
-            end
-            fr = EnumerateFrames(fr)
-        end
-        return out
-    end
-    local function TopAt(targets, x, y)
-        local best
-        for _, tg in ipairs(targets) do
-            if x >= tg.l and x <= tg.r and y >= tg.b and y <= tg.t and (not best or tg.key > best.key) then best = tg end
-        end
-        return best and best.f or nil
-    end
-    local function Under(fr, ancestor)
-        while fr do if fr == ancestor then return true end fr = fr:GetParent() end
-        return false
-    end
-    local function Label(fr) return (fr:GetName() or (fr.text and fr.text.GetText and fr.text:GetText()) or fr:GetObjectType()) end
-    -- every shown button is the top mouse target at its own centre (a row only when its centre is inside its scroll area)
+    -- every shown, enabled button of the window with a click script is the topmost mouse frame at its hit point (a row only where the scroll
+    -- frame shows it)
     local function CoveredButtons()
-        local targets, bad = Targets(), {}
-        for _, tg in ipairs(targets) do
-            local fr = tg.f
-            if fr:GetObjectType() == "Button" then
-                local cx, cy = (tg.l + tg.r) / 2, (tg.b + tg.t) / 2
-                local clipped = false
-                local p = fr:GetParent()
-                while p and p ~= TwichUIWorkshop do
-                    if p:GetObjectType() == "ScrollFrame" then
-                        local l, b, r, t = Rect(p)
-                        if l and not (cx >= l and cx <= r and cy >= b and cy <= t) then clipped = true end
-                    end
-                    p = p:GetParent()
-                end
-                if not clipped then
-                    local top = TopAt(targets, cx, cy)
-                    if top and not Under(top, fr) then bad[#bad + 1] = Label(fr) .. " under " .. Label(top) end
-                end
+        local col, bad, n = RC.Collect({ limit = 1000000 }), {}, 0
+        for _, c in ipairs(col.list) do
+            local fr = c.frame
+            local kind = fr:GetObjectType()
+            if (kind == "Button" or kind == "CheckButton") and RC.Within(fr, TwichUIWorkshop) and fr:IsEnabled() and type(fr:GetScript("OnClick")) == "function" then
+                n = n + 1
+                local res = RC.Analyze(fr, { kind = "click", collected = col, label = Label, evidence = "simulator-geometry", limit = 1000000 })
+                if res.verdict ~= "reachable" and res.verdict ~= "clipped" then bad[#bad + 1] = (res.text:gsub("\n%s*", " | ")) end
             end
         end
-        return #bad == 0 and "none covered" or table.concat(bad, "; ")
+        return #bad == 0 and "none covered" or table.concat(bad, "; "), n
     end
     local function Hover(row) row:GetScript("OnEnter")(row) Lab.Settle(0.15) end
     local function Unhover(row) row:GetScript("OnLeave")(row) Lab.Settle(0.15) end
@@ -1423,7 +1391,7 @@ Lab.Step("third pass: hit test, hover, fit, tooltips, status", function()
 
     -- 1. Opportunities: the Add button, through its real control, with the real queue
     Tab("Opportunities")
-    Check("state", "the hit test sees the window's mouse targets (it is not passing on an empty list)", true, #Targets() > 20)
+    Check("state", "the hit test sees the window's mouse targets (it is not passing on an empty list)", true, select(2, CoveredButtons()) > 8)
     local add = Opps().detail.add
     local rows = Rows(Lists().opps)
     local pick
@@ -1433,10 +1401,8 @@ Lab.Step("third pass: hit test, hover, fit, tooltips, status", function()
     local rec = Opps().detail.rec
     Check("display", "its details are shown, and Add is offered", "Add to crafting plan/true", Txt(add.text) .. "/" .. tostring(add:IsEnabled()))
     do
-        local cx, cy = add:GetCenter()
-        local s = add:GetEffectiveScale()
-        local top = TopAt(Targets(), cx * s, cy * s)
-        Check("display", "HIT TEST (emulated): the Add button is the top mouse target at its centre", "Add to crafting plan", top and Label(top) or "nothing")
+        local res = Look(add)
+        Check("display", "HIT TEST (emulated): the Add button is the top mouse target at its centre", "Add to crafting plan", res.verdict == "reachable" and res.top.label or res.text)
     end
     Check("display", "HIT TEST (emulated): no button on Opportunities has another mouse frame stacked over its centre", "none covered", CoveredButtons())
     local before = #W.Queue.Entries()
@@ -1599,6 +1565,197 @@ Lab.Step("third pass: hit test, hover, fit, tooltips, status", function()
     Check("state", "four more rounds of navigation and redraws made no frame (the change in the count)", 0, CountFrames() - settled)
     Win().SetMode("overview")
     W.Session.ClearNote()   -- the step's own removal message is not the pose's
+    Win().Render()
+end)
+
+---------------------------------------------------------------------------------------------------------------------------
+-- Reachability (testing roadmap M5): can the pointer reach the controls, and does the check SEE it when it cannot?
+--   The geometry is TwichUI_TestLab/Reach.lua's EMULATION over the simulator's frames: rectangles, hit-rect insets, strata, levels, mouse flags,
+--   visibility, scroll clipping and parents. It is not input: the simulator has no pointer, and its GetMouseFoci only returns what a scenario
+--   forces (checked below, so nobody mistakes it for a hit test). What it can do is catch an obstruction we put there on purpose:
+--   NEGATIVE CONTROL: a mouse-enabled frame planted over a working button by THIS SCENARIO (never by the Workshop's code). The same button
+--   must read reachable, then blocked (naming the planted frame), then reachable again once the frame is gone. The same for a hoverable row.
+--   A working handler is not a reachable button: the planted overlay leaves the button enabled with its click script, and Click() still runs it.
+---------------------------------------------------------------------------------------------------------------------------
+Lab.Step("reachability: planted overlay, hover rows, insets, clipping, tooltip", function()
+    local W = R.Workshop
+    local RC = R.TestLab.Reach
+    local function Label(fr)
+        local name = fr.GetName and fr:GetName()
+        if name then return name end
+        local tx = fr.text
+        if type(tx) == "table" and tx.GetText then
+            local t = tx:GetText()
+            if t and t ~= "" then return t end
+        end
+        return nil
+    end
+    local function Look(fr, kind, extra)
+        local o = { kind = kind or "click", label = Label, evidence = "simulator-geometry", limit = 1000000 }
+        for k, v in pairs(extra or {}) do o[k] = v end
+        return RC.Analyze(fr, o)
+    end
+    local function Verdict(res) return res.verdict .. (res.blocker and ("/" .. res.blocker.label) or "") end
+    -- the planted obstruction: made here, over a given control's hit point, in a strata above the Workshop; the Workshop never sees it
+    local ov
+    local function Plant(over, mouse)   -- over: the control whose hit point is covered
+        local hit = RC.HitRect(over).hit
+        local cx, cy = (hit[1] + hit[3]) / 2, (hit[2] + hit[4]) / 2
+        if not ov then
+            ov = CreateFrame("Frame", "SimlabPlantedOverlay", UIParent)
+            ov:SetFrameStrata("TOOLTIP")
+        end
+        ov:ClearAllPoints()
+        ov:SetSize(60, 40)
+        ov:SetPoint("CENTER", UIParent, "BOTTOMLEFT", cx / UIParent:GetEffectiveScale(), cy / UIParent:GetEffectiveScale())
+        ov:EnableMouse(mouse ~= false)
+        ov:Show()
+    end
+    local function Unplant() if ov then ov:EnableMouse(false); ov:Hide() end end
+
+    -- 0. the simulator's own pointer API, so its limits are written down by a check: GetMouseFoci answers what was forced, not a position
+    Tab("Opportunities")
+    local add = Opps().detail.add
+    local pick
+    for _, r in ipairs(Rows(Lists().opps)) do if r.rec and not W.Queue.Find(r.rec.id) then pick = r break end end
+    Check("display", "REACH: an unqueued recipe is listed", true, pick ~= nil)
+    Click(pick, "choose an unqueued recipe")
+    A_Admin.SetMouseOverFrame(add)
+    local forced = RC.Sample()
+    Check("display", "REACH: the simulator's GetMouseFoci returns the frame the scenario FORCED (SetMouseOverFrame), as a list", "true/1/true",
+        tostring(forced.ok) .. "/" .. tostring(forced.count) .. "/" .. tostring(forced.foci[1] and forced.foci[1].frame == add))
+    pcall(A_Admin.SetMouseOverFrame, nil)
+    A_Admin.SetMousePosition(5, 5)
+    Check("display", "REACH: and it names no frame from a position (the pointer is at 5,5, nowhere near; the forced frame is not a hit test)", "0",
+        tostring(#GetMouseFoci() > 0 and #GetMouseFoci() or 0))
+
+    -- 1. the Add button, then the planted overlay, then removal
+    local before = Look(add)
+    Check("display", "REACH: the Add button is reachable at its hit point", "reachable", Verdict(before))
+    Check("display", "REACH: its own state is eligible: shown, enabled, mouse on, clicks on, a click script", "true/true/true/true/true/true",
+        tostring(before.eligibility.state.shown) .. "/" .. tostring(before.eligibility.state.enabled) .. "/" .. tostring(before.eligibility.state.mouse)
+        .. "/" .. tostring(before.eligibility.state.click) .. "/" .. tostring(before.eligibility.state.handler) .. "/" .. tostring(before.eligibility.ok))
+    Plant(add)
+    local blocked = Look(add)
+    Check("display", "NEGATIVE CONTROL: with a mouse-enabled frame planted over it, the Add button reads BLOCKED and names the planted frame",
+        "blocked/SimlabPlantedOverlay", Verdict(blocked))
+    Check("display", "NEGATIVE CONTROL: the report says what, where and why", "true/true/true/true/true/true", (function()
+        local t = blocked.text
+        return tostring(t:find("BLOCKED click on Add to crafting plan", 1, true) ~= nil) .. "/" .. tostring(t:find("hierarchy: ", 1, true) ~= nil)
+            .. "/" .. tostring(t:find("expected hit point: x ", 1, true) ~= nil) .. "/" .. tostring(t:find("blocking frame: SimlabPlantedOverlay [Frame, TOOLTIP level", 1, true) ~= nil)
+            .. "/" .. tostring(t:find("effective hit rect: x ", 1, true) ~= nil) .. "/" .. tostring(t:find("evidence: simulator-geometry", 1, true) ~= nil)
+    end)())
+    Check("display", "NEGATIVE CONTROL: the blocked button is still ELIGIBLE (enabled, a click script): its handler would work, the pointer would not reach it", "true/true",
+        tostring(blocked.eligibility.ok) .. "/" .. tostring(type(add:GetScript("OnClick")) == "function"))
+    local queued = #W.Queue.Entries()
+    add:Click()   -- handler level: it still runs, which is exactly why a handler test cannot see the obstruction
+    Check("click", "NEGATIVE CONTROL: Button:Click() still runs the blocked button's handler (a passing handler test proves nothing about the pointer)", queued + 1, #W.Queue.Entries())
+    W.Session.Remove(pick.rec.id)   -- put the queue back
+    Win().Render()
+    Unplant()
+    Check("display", "NEGATIVE CONTROL: with the overlay removed, the Add button is reachable again", "reachable", Verdict(Look(add)))
+    -- a decorative frame (mouse off) over the button is no obstruction
+    Plant(add, false)
+    Check("display", "REACH: a decorative frame with the mouse off over the button does not block it", "reachable", Verdict(Look(add)))
+    Unplant()
+
+    -- 2. a hoverable row: the row, a planted overlay, removal; its picture (a child that takes the pointer); a chosen row is as reachable
+    local row = pick   -- the unqueued recipe's row chosen above
+    Check("display", "REACH: the row is reachable for hover at its centre", "reachable", Verdict(Look(row, "hover")))
+    Plant(row)
+    Check("display", "NEGATIVE CONTROL: a planted frame over the row blocks its hover", "blocked/SimlabPlantedOverlay", Verdict(Look(row, "hover")))
+    Unplant()
+    Check("display", "NEGATIVE CONTROL: and hover reaches the row again once it is gone", "reachable", Verdict(Look(row, "hover")))
+    local pic = row.iconBtn
+    Check("display", "REACH: the row's picture is reachable for hover", "reachable", Verdict(Look(pic, "hover")))
+    local ph = RC.HitRect(pic).hit
+    local onPic = Look(row, "hover", { point = { (ph[1] + ph[3]) / 2, (ph[2] + ph[4]) / 2 } })
+    Check("display", "REACH: at the picture the row is NOT the frame under the pointer: its child is (so the row must follow the child to stay lit)", "blocked/" .. RC.Label(pic, { label = Label }) .. "/child",
+        Verdict(onPic) .. "/" .. onPic.relation)
+    pic:GetScript("OnEnter")(pic)
+    Check("display", "REACH: the picture's own enter keeps the row lit (Follow)", "true", tostring(row.hovered))
+    pic:GetScript("OnLeave")(pic)
+    Check("display", "REACH: leaving the picture puts it out", "false", tostring(row.hovered))
+    Click(row, "choose the row")
+    Check("display", "REACH: a chosen row is still reachable for hover (selection is painting, not input)", "true/reachable", tostring(row.selected) .. "/" .. Verdict(Look(row, "hover")))
+    -- a disabled button: reachable geometry, ineligible state; the handler (Click) refuses it
+    Click(add, "Add to crafting plan")   -- queued: the button turns into "In your queue", disabled
+    local disabled = Look(add)
+    Check("display", "REACH: a queued recipe's Add button is disabled: ineligible, and still the topmost frame there", "ineligible/self", disabled.verdict .. "/" .. tostring(disabled.relation))
+    W.Session.Remove(pick.rec.id)
+    Win().Render()
+
+    -- 3. hit-rect insets: the switch's label is part of its hit area
+    Tab("Crafting")
+    local sw = Frame().useGuild   -- "Use guild bank" in the Crafting materials card (the window frame keeps it)
+    local hr = RC.HitRect(sw)
+    Check("display", "REACH: the switch's hit rectangle reaches past its frame, over its label (SetHitRectInsets with a negative left)", true, hr.hit[1] < hr.rect[1] and hr.insets[1] < 0)
+    local cyS = (hr.rect[2] + hr.rect[4]) / 2
+    Check("display", "REACH: a point on the label is reachable for the switch", "reachable", Verdict(Look(sw, "click", { point = { hr.rect[1] - 5, cyS } })))
+    Check("display", "REACH: a point further left than the hit rectangle is not the switch's", "outside", Verdict(Look(sw, "click", { point = { hr.hit[1] - 4, cyS } })))
+    hr = nil
+
+    -- 4. scroll clipping: a scroll frame the scenario owns, scrolled; and the Opportunities pool
+    local sf = CreateFrame("ScrollFrame", "SimlabReachScroll", UIParent)
+    sf:SetSize(200, 100); sf:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 20, 20); sf:SetFrameStrata("TOOLTIP")
+    local child = CreateFrame("Frame", nil, sf)
+    child:SetSize(200, 400)
+    sf:SetScrollChild(child)
+    local btns = {}
+    for i = 1, 8 do
+        local b = CreateFrame("Button", "SimlabReachRow" .. i, child)
+        b:SetSize(200, 50); b:SetPoint("TOPLEFT", child, "TOPLEFT", 0, -(i - 1) * 50)
+        b:SetScript("OnClick", function() end)
+        btns[i] = b
+    end
+    local function Seen() local out = {} for i = 1, 8 do out[#out + 1] = Verdict(Look(btns[i])):sub(1, 1) end return table.concat(out) end
+    Check("display", "REACH: a scroll frame at the top shows rows 1-2: reachable (r), the rest clipped (c)", "rrcccccc", (Seen():gsub("[^rc]", "?")))
+    -- SIMULATOR LIMIT, written down as a check: SetVerticalScroll stores the offset (GetVerticalScroll answers it) but the simulator does not
+    -- move the scroll child's rows (GetRect is unchanged, GetVerticalScrollRange stays 0). The real engine does move them. A scrolled list is
+    -- therefore modelled here by anchoring the child where the engine would put it at that offset.
+    local y0 = select(2, btns[3]:GetRect())
+    sf:SetVerticalScroll(100)
+    Check("state", "SIMULATOR LIMIT: SetVerticalScroll does not move the rows' rectangles (so scrolling is modelled by anchoring)", "stored 100, rect unchanged",
+        "stored " .. sf:GetVerticalScroll() .. ", rect " .. (select(2, btns[3]:GetRect()) == y0 and "unchanged" or "MOVED: the simulator now scrolls; use it"))
+    sf:SetVerticalScroll(0)
+    child:ClearAllPoints()
+    child:SetPoint("TOPLEFT", sf, "TOPLEFT", 0, 100)   -- the child 100 higher: two rows scrolled out of the top
+    Check("display", "REACH: scrolled by two rows (the child 100 higher), rows 3-4 are reachable and 1-2 are clipped", "ccrrcccc", (Seen():gsub("[^rc]", "?")))
+    sf:Hide()
+    Check("display", "REACH: a hidden scroll frame hides every row (ineligible, none reachable)", "iiiiiiii", (Seen():gsub("[^i]", "?")))
+    -- the pooled Opportunities rows: only the SHOWN ones take the pointer; recycled (hidden) rows never do
+    Tab("Opportunities")
+    local list = Lists().opps
+    local shown, pooled, taking = 0, #list.rows, 0
+    local col = RC.Collect({ limit = 1000000 })
+    local takes = {}
+    for _, c in ipairs(col.list) do takes[c.frame] = true end
+    for _, r in ipairs(list.rows) do
+        if r:IsShown() then shown = shown + 1 end
+        if takes[r] then taking = taking + 1 end
+    end
+    Check("display", "REACH: the Opportunities pool: the rows that take the pointer are exactly the shown ones", shown .. "/" .. shown, taking .. "/" .. shown)
+    local worst = "all reachable or scrolled out"
+    for _, r in ipairs(Rows(list)) do
+        local res = Look(r, "hover", { collected = col })
+        if res.verdict ~= "reachable" and res.verdict ~= "clipped" then worst = r.rec and Verdict(res) or res.verdict end
+    end
+    Check("display", "REACH: each shown Opportunities row is reachable for hover or scrolled out of view", "all reachable or scrolled out", worst)
+    Check("state", "REACH: the pool is not smaller than what it shows", true, pooled >= shown)
+
+    -- 5. a tooltip does not take the pointer from what it covers
+    GameTooltip:SetOwner(add, "ANCHOR_TOP")
+    GameTooltip:AddLine("Simlab reachability tooltip")
+    GameTooltip:Show()
+    local tipMouse = GameTooltip:IsMouseEnabled()
+    Check("display", "REACH: with the game tooltip shown beside the button, the Add button is reachable; the tooltip's own mouse flag is reported", "reachable/" .. tostring(tipMouse),
+        Verdict(Look(add)) .. "/" .. tostring(tipMouse))
+    GameTooltip:Hide()
+
+    sf:Hide()
+    Unplant()
+    Win().SetMode("overview")
+    W.Session.ClearNote()
     Win().Render()
 end)
 

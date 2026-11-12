@@ -60,10 +60,13 @@ function RP.Build(sum)
     local lines = Header(sum)
     for _, r in ipairs(sum.results) do
         local label = (r.status == "stopped" and r.ms == nil) and "not run" or r.label
+        local word = WORD[r.status] or r.status
+        if r.class == "guided" and r.status == "stopped" and r.ms ~= nil then word = "CANCEL" end   -- the player's observation was cancelled part way
         local timing = r.ms and ("%.1f ms"):format(r.ms) or ""
         local detail = r.detail and Clean(r.detail) or ""
-        lines[#lines + 1] = ("%-8s%s  %-9s %s%s"):format(WORD[r.status] or r.status, Clean(r.id, 80), label, timing,
+        lines[#lines + 1] = ("%-8s%s  %-9s %s%s"):format(word, Clean(r.id, 80), label, timing,
             detail ~= "" and ("  " .. detail) or "")
+        for _, note in ipairs(r.notes or {}) do lines[#lines + 1] = "        " .. Clean(note, 400) end
     end
     if #sum.overruns > 0 then
         lines[#lines + 1] = "overruns (a step ran longer than the slice; it could not be interrupted):"
