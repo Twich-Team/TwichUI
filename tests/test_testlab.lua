@@ -601,7 +601,7 @@ do
   local p = io.popen('find "' .. LAB .. '" -name "*.lua" | sort')
   for path in p:lines() do files[#files + 1] = path end
   p:close()
-  Check(#files == 9, "the scan found the Lab's files (" .. #files .. ")")
+  Check(#files == 10, "the scan found the Lab's files (" .. #files .. ")")
   -- every file the .toc loads is scanned, and nothing is loaded that is not
   local scanned = {}
   for _, path in ipairs(files) do scanned[path:sub(#LAB + 1)] = true end

@@ -20,6 +20,7 @@ Reference.lua
 # The cases: the same pure definitions tests/test_testlab.lua runs offline
 cases\Core.lua
 cases\Market.lua
+cases\Crafting.lua
 cases\Client.lua
 # The window (last: it opens once when the addon loads and registers /tuilab)
 Window.lua

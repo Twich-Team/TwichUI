@@ -1,6 +1,6 @@
 # Workshop testing roadmap
 
-This plan covers how TwichUI Workshop's correctness, regressions, performance and real-client behaviour are verified. It is for anyone, person or agent, who implements the milestones below. It records what existed on `feature/workshop` at `d09e6dcb` (2026-11-12) and what to build next. Sections A to G are the plan as written then; **section H records what has been built (M1, M2) and found.** `docs/workshop.md` remains the feature reference, and `docs/simulator-lab.md` and `docs/diagnostics.md` remain the tool references.
+This plan covers how TwichUI Workshop's correctness, regressions, performance and real-client behaviour are verified. It is for anyone, person or agent, who implements the milestones below. It records what existed on `feature/workshop` at `d09e6dcb` (2026-11-12) and what to build next. Sections A to G are the plan as written then; **section H records what has been built (M1, M2, M3) and found.** `docs/workshop.md` remains the feature reference, and `docs/simulator-lab.md` and `docs/diagnostics.md` remain the tool references.
 
 **Baseline checked 2026-11-12.** `feature/workshop` is the same commit as `origin/feature/workshop` and `origin/main`, and it descends from the `v1.3.0` tag. Every `feature/workshop-foundation` commit (86fea359 market foundation … b34476a7 third UI pass, 57e767fd art) is contained in it, so nothing is missing and no integration is needed.
 
@@ -256,7 +256,7 @@ Each milestone is one request. **Tests** lists the evidence the milestone must p
 - **Depends on:** M1.
 - **Out of scope:** changing Trend unless the model shows a real defect. Report it first.
 
-**M3. Crafting and shopping reference models**
+**M3. Crafting and shopping reference models** (built 2026-11-12, see H)
 - **Objective:** a brute-force planner on ≤ 6 materials; invariants for `Materials.Rows`, `W.Split` and `Shopping.Plan`; a reference for the craft estimate.
 - **Files:** `cases/Crafting.lua`, `Fixtures.lua` queue generators.
 - **Accept:** the invariants hold over about 300 generated queues; the cases agree with the brute force; shrinking is just "print the seed and the size".
@@ -429,6 +429,39 @@ Out of scope: benchmarks, fixtures/PRNG, UI or pointer probes, guided cases, a /
 **Remaining gaps:** `Quote`, `Estimate` and the Opportunities arithmetic (M3); `Shopping.Plan` and `Materials` (M3); the text round trip and the eviction order of markets when `at` ties (M9); the scan state machine; the new Lab cases have not yet run in the real client (the offline run shows the cases pass in plain Lua 5.1, not in the client's interpreter); the mutation probe is a script outside the repository (M4).
 
 **Handoff to M3 (crafting and shopping reference models):** reuse `TL.Fixtures.Rng` and the pattern of `Reference.lua` (a model built from the documented contract, with whole-number arithmetic, compared with production after every step, failures printing model, seed, scenario and input; known-gap characterization tests for contract corners). Add queue/recipe/stock generators to `Fixtures.lua` (bounded by the planner's limits: 30 recipes, 16 materials, 4 candidates), a brute-force planner for at most 6 materials against `Shopping.Plan`, invariants for `Materials.Rows`, `W.Split` (bags + bank + guild + still needed = need; no layer negative or above what it holds) and an independent craft-estimate model against `Prices.Estimate/Quote` (the profit bound with `cheapest` set is a product decision, see "Unresolved decisions" 3). Seeds: continue at `7500000+i`. Never call `Prices.<commit>`-type writes in Lab cases; keep the large suites offline.
+
+**M3, crafting and shopping reference models (2026-11-12):** offline verification, no player-facing change, **no production file changed**.
+
+| Part | Where |
+|---|---|
+| Generators (same Wichmann-Hill generator): `FX.Crafting` (3 to 6 materials, 1 to 4 queued recipes, bags/bank/guild counts with unreadable bag counts, auction price lists with stale and partial scans, vendor offers incl. sold out and price never seen, up to 3 make recipes per material incl. circular, range, unknown-output and empty ones), `FX.Economy` (recipes as the window reads them, some malformed, a price lookup, a cut), `FX.StockObs` (bank and guild observations: other characters' tabs, rights, allowance ages around 6 h, uncertain tabs) | `TwichUI_TestLab/Fixtures.lua` |
+| Models: one-item-at-a-time allocation, combined materials and rows, the stock rules, the cost of any sourcing choice (vendor stacks by counting, exact copper, owned reagents valued by exact fractions), an **exhaustive enumeration** of the sourcing choices, the craft estimate (whole-number cut), the Opportunities order | `TwichUI_TestLab/Reference.lua` section 4 |
+| The suite (about 1 s) | `tests/test_workshop_crafting_reference.lua` |
+| 3 bounded in-game cases (24 + 8 + 20 seeds), also run offline by `test_testlab.lua` | `TwichUI_TestLab/cases/Crafting.lua` |
+
+**Seeds (fixed):** materials 7500000+i, shopping 7510000+i, economics 7520000+i, stock 7530000+i, `i = 1..200`. Rerun one: `CRAFT_SCENARIOS=1000 CRAFT_SEED=7510042 <the one-test command>`; stress `CRAFT_SCENARIOS=9000` (26 s); every difference instead of the first: `CRAFT_ALL=1`. A failure prints the model, seed, input, the contract violated, expected, actual.
+
+**What is compared (default run):** 200 `W.Split` calls and 200 queues (720 rows, 75 with a crafting circle) against the model and against invariants (demand conserved, net need = bags + bank + guild + short, layers used in order, queue order irrelevant, unknown stays unknown); 200 stock scenarios (412 guild tabs, every tab state covered) through the real storage records, plus the guild-bank on/off policy; 200 shopping scenarios, **1,643 sourcing choices each forced through the player's picks and compared with production (totals, collect rows, every made material's crafts, leftover, cash, economic cost and reagent lines)**, 825 of them infeasible (both refuse); production's own decisions (options, suggestion, recipe choice) replayed from the contract; 786 estimates (471 fully priced, 228 at a loss) and every Opportunities order for 10 option sets. Stress (9,000 of each): 73,277 choices, 20,774 priced estimates, no difference. Hand-calculated examples: Split, Rows, Stock, Quote, Estimate (cut, range, loss, missing, few), vendor vs auction, ties, stacks, overrides, quantity-aware estimate, make vs buy, every unusable-recipe reason, chain, shared demand, incomplete/stale/partial prices, known vs unknown zero, collect.
+
+**Shopping against the exhaustive best (149 comparisons at default, 7,177 at 9,000):** the model enumerates every combination of vendor, auction and one known recipe per short material and compares (unpriced items, then cash). A difference is **classified, not called a bug**: *same cost* 85 %; *documented basis* (owned reagents are valued at what they would cost, so it buys where making would cost no cash) 3 %; *one material at a time* (an earlier choice changes a later one, or the source chosen at a material's turn is kept for the combined purchase) 2 %; *economic cost unknown* (a recipe whose owned reagent has no price is never preferred, even at zero cash) 8 %; plans that leave a material **undecided** because no option has a known cost are counted and not compared. In every case the better combination is reachable with the player's picks and production computes its cost exactly as the model does. Production never beat the exhaustive best (a hard check).
+
+**Mutation probe (disposable copy, hand-picked, not automatic; M4):** 64 mutants in `Data.lua`, `Materials.lua`, `Stock.lua`, `Prices.lua`, `Opportunities.lua`, `Shopping.lua`, `Vendor.lua` (reversed allocation priority, off-by-one quantities, ignored output counts, shared stock counted twice, missing price as zero, tie handling, make-vs-buy valuation, misapplied cut, loss clamped, the next-higher-price estimate the owner decided against, ...). **Two survived the first run (profit exactly 0 counted as profitable; exactly 999 crafts refused); each now has a hand-calculated boundary case and is killed: 64 of 64 killed.** 15 mutants are killed only by the new test or Lab; the existing Workshop tests killed 49 of the 64 and none that the new test missed.
+
+**Defects:** none confirmed; production is unchanged. **Characterized limits** (each pinned by a test, changing one is a conscious step):
+1. `Quote`'s estimate is the least it could cost, flagged (`estimate`, `cheapest`, `totals.estimate`, the row's `uncertain`); the saved next-higher price is not used (owner decision).
+2. The planner decides one material at a time. The source chosen at a material's turn is kept for the combined purchase even when a made material's reagents raise the quantity to where another source is cheaper (hand example 16 against 13 copper); the exhaustive best can be a few copper lower (404 against 400).
+3. Making is valued at what the reagents would cost, owned ones included: it buys when that is cheaper, though making costs no cash. A recipe with an owned reagent that has no saved price has no economic cost and is not preferred over a recipe that has one.
+4. A pick that can no longer be used is reported (`pickLost`) but still moves its item to the front of the decision order, which can change the rest of the plan.
+5. `PR.Cut` and the valuation of owned reagents round half up in floating point: an amount exactly halfway between two coppers can come out **one copper low** for some rates and stack sizes (35 %: 90 x 0.35 = 31.5 gives 31; value of 27 items at 13 per stack of 6 = 58.5 gives 58). 5, 10, 15, 20, 25 and 30 % are exact to 20,000,000 copper. The real tie rule is unknown (the real cut is unconfirmed).
+6. A zero total does not tell known from unknown: unreadable bag counts leave `totals` at 0 and are carried only by `plan.unknownBags` (the view shows it).
+7. A recipe output given only as a maximum is a fixed output; a maximum below the minimum is no output (`Estimate`).
+8. The queue credit looks at no more than 60 entries; the queue holds 30.
+
+**Product questions found:** (a) should a lost pick keep deciding first? (b) should the combined purchase re-pick the cheapest source at the combined quantity? (c) should a recipe whose cash cost is known and zero be offered when an owned reagent has no price? (d) which way a half copper of the cut rounds, once the invoice is seen.
+
+**Remaining gaps:** the new Lab cases have not run in the real client; the stock cases need the storage records, so they stay offline; depth-aware purchase costing and the multilevel planner (later milestones) have no model yet (`REF.MakeOption`/`REF.Plan` are one-level); mutation is still a script outside the repository (M4).
+
+**Handoff to M4/M5:** `REF.Enumerate`, `REF.Plan`, `REF.MakeOption` and `FX.PlanInput` are the pieces a multilevel planner's model would extend (a deeper `MakeOption`, a graph instead of the one-level chain rule). The mutant list above (64 entries, each a single exact-text edit) is the starting list for `tools/mutate.sh`.
 
 ## Unresolved decisions (product input needed)
 
