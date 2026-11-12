@@ -113,7 +113,8 @@ end
 
 local function Paint()
     if not (prompt and state) then return end
-    prompt.title:SetText(state.title or "Pointer probe")
+    local run = TL.Runner and TL.Runner.Progress and TL.Runner.Progress()   -- where this step stands in the run
+    prompt.title:SetText((state.title or "Pointer probe") .. (run and (" (case %d of %d)"):format(run.at, run.n) or ""))
     local lines = {}
     for i, line in ipairs(state.lines or {}) do lines[i] = i .. ". " .. line end
     lines[#lines + 1] = (#lines + 1) .. ". " .. KeyText()

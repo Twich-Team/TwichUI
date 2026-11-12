@@ -55,19 +55,22 @@ local function Header(sum)
     return lines
 end
 
+-- One case as the report writes it: its line, then its evidence notes
+local function CaseLines(r, out)
+    local label = (r.status == "stopped" and r.ms == nil) and "not run" or r.label
+    local word = WORD[r.status] or r.status
+    if r.class == "guided" and r.status == "stopped" and r.ms ~= nil then word = "CANCEL" end   -- the player's observation was cancelled part way
+    local timing = r.ms and ("%.1f ms"):format(r.ms) or ""
+    local detail = r.detail and Clean(r.detail) or ""
+    out[#out + 1] = ("%-8s%s  %-9s %s%s"):format(word, Clean(r.id, 80), label, timing,
+        detail ~= "" and ("  " .. detail) or "")
+    for _, note in ipairs(r.notes or {}) do out[#out + 1] = "        " .. Clean(note, 400) end
+end
+
 -- sum: Runner's summary ({ results, counts, cats, seconds, slices, worstSlice, worstFrame, overruns, overrunCount, ended, clock })
 function RP.Build(sum)
     local lines = Header(sum)
-    for _, r in ipairs(sum.results) do
-        local label = (r.status == "stopped" and r.ms == nil) and "not run" or r.label
-        local word = WORD[r.status] or r.status
-        if r.class == "guided" and r.status == "stopped" and r.ms ~= nil then word = "CANCEL" end   -- the player's observation was cancelled part way
-        local timing = r.ms and ("%.1f ms"):format(r.ms) or ""
-        local detail = r.detail and Clean(r.detail) or ""
-        lines[#lines + 1] = ("%-8s%s  %-9s %s%s"):format(word, Clean(r.id, 80), label, timing,
-            detail ~= "" and ("  " .. detail) or "")
-        for _, note in ipairs(r.notes or {}) do lines[#lines + 1] = "        " .. Clean(note, 400) end
-    end
+    for _, r in ipairs(sum.results) do CaseLines(r, lines) end
     if #sum.overruns > 0 then
         lines[#lines + 1] = "overruns (a step ran longer than the slice; it could not be interrupted):"
         for _, o in ipairs(sum.overruns) do
@@ -83,4 +86,21 @@ function RP.Build(sum)
     local text = table.concat(lines, "\n")
     if #text > RP.MAX_BYTES then text = text:sub(1, RP.MAX_BYTES) .. "\n... (cut at " .. RP.MAX_BYTES .. " bytes)" end
     return text
+end
+
+-- The cases that did not pass (fail, error, timeout), with their evidence, under a header that says it is an excerpt. It is NOT a schema 1
+-- report (its first line says so): the full report stays the one to paste when the whole run matters. Returns the text and how many cases.
+function RP.BuildFailures(sum)
+    local head = Header(sum)
+    local lines = { "TWICHUI-TESTLAB FAILURES (an excerpt of a schema " .. RP.SCHEMA .. " report: only the cases that did not pass)", head[2], head[3] }
+    local n = 0
+    for _, r in ipairs(sum.results) do
+        if r.status == "fail" or r.status == "error" or r.status == "timeout" then
+            n = n + 1
+            CaseLines(r, lines)
+            for _, f in ipairs(r.fails or {}) do lines[#lines + 1] = "        failed: " .. Clean(f, 400) end
+        end
+    end
+    if n == 0 then lines[#lines + 1] = "no case failed, raised an error or timed out" end
+    return table.concat(lines, "\n"), n
 end

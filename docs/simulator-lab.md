@@ -29,6 +29,7 @@ tools/simlab/smoke.sh            # copies the working tree in, opens a page, con
 tools/simlab/interact.sh         # drives one real settings page through its controls, from a clean profile (below)
 tools/simlab/diagnose.sh         # the clock over a 12 s window: baseline, solo, grouped, and the addon-message contract (below)
 tools/simlab/workshop.sh         # the real Workshop window through Crafting, Opportunities and Shopping over fake game data (below)
+tools/simlab/testlab.sh          # the Test Lab window (TwichUI_TestLab) in nine states over synthetic recorded results (docs/testlab.md "The window")
 bash tools/simlab/settings.sh    # capture the actual current settings catalog; handler checks and human screenshot review (below)
 bash tools/simlab/tests/lab_guard.sh   # the lab-path safety check's rejection paths, in disposable folders (below)
 ```
@@ -53,6 +54,7 @@ build and show their rows, nothing more.
 | `tools/simlab/interact.sh` | After touching `NotifyLook`, the settings Kit or the controls it uses: handler-level behaviour and in-memory state (about 23 s) |
 | `tools/simlab/diagnose.sh` | Only for group/share/timer work: the clock window and message contract (about 15 s) |
 | `tools/simlab/workshop.sh` | After touching the Workshop window, session, planner, prices or scan: values and controls of its three views and the tooltip designer (about 30 s) |
+| `tools/simlab/testlab.sh` | After touching the Test Lab window (`Window.lua`, `Kit.lua`, `View.lua`): nine launches with a screenshot each, the emulated hit test over its controls and a text-fit check (about 1 minute); it loads the Lab with `LoadAddOn` and gives it synthetic results, no case runs |
 | `tests/run.sh` | The project's offline suite; still the main check, and the only one for most logic |
 | `bash tools/simlab/tests/lab_guard.sh` | After touching `lib.sh`, `setup.sh` or `sim.sh` |
 

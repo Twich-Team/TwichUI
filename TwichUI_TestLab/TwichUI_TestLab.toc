@@ -14,6 +14,8 @@ Lab.lua
 Runner.lua
 # The plain-text report
 Report.lua
+# What the window shows: pure presentation logic over the runner's records (counts, filters, search, details)
+View.lua
 # Reachability analysis: can a control take the pointer? (also run by the simulator scenario and the offline tests)
 Reach.lua
 # The guided-case mechanism: one temporary key binding, a small prompt, released when a case or the run ends
@@ -27,5 +29,6 @@ cases\Market.lua
 cases\Crafting.lua
 cases\Client.lua
 cases\UI.lua
-# The window (last: it opens once when the addon loads and registers /tuilab)
+# The window's controls, then the window (last: it opens once when the addon loads and registers /tuilab)
+Kit.lua
 Window.lua

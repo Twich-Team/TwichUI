@@ -596,8 +596,8 @@ do
   Check(not Win.Run(), "a second Run is refused")
   Drive(RN, 500, 0.016, t)
   Check(not RN.Active() and win.run:IsEnabled() and not win.stop:IsEnabled() and win.copy:IsEnabled(), "buttons after the run")
-  Check(win.counts:GetText():find("Failed 0", 1, true) and win.counts:GetText():find("Error 0", 1, true), win.counts:GetText())
-  Check(win.progress:GetText():find("finished", 1, true), win.progress:GetText())
+  Check(win.cards.fail.value:GetText() == "0" and win.cards.error.value:GetText() == "0", "the cards count no failure and no error")
+  Check(win.stateText:GetText():find("Finished", 1, true), win.stateText:GetText())
   Check(Win.Copy(), "Copy works after a run")
   Check(win.edit:GetText():find("^TWICHUI%-TESTLAB REPORT schema 1"), "the box holds the report")
   Check(win.edit.focus, "and has focus (the player presses Ctrl+C)")
@@ -613,7 +613,7 @@ do
   Check(RN.Active(), "still running after one frame")
   win.stop:GetScript("OnClick")(win.stop)
   Check(not RN.Active() and not fr.scripts.OnUpdate, "Stop ends the run and the OnUpdate")
-  Check(win.progress:GetText():find("stopped", 1, true), win.progress:GetText())
+  Check(win.stateText:GetText() == "Stopped", win.stateText:GetText())
   Check(win.note:GetText():find("could not have been interrupted", 1, true), "the window does not claim it interrupted a step: " .. win.note:GetText())
 
   -- closing the window stops a run
@@ -640,7 +640,7 @@ do
   local p = io.popen('find "' .. LAB .. '" -name "*.lua" | sort')
   for path in p:lines() do files[#files + 1] = path end
   p:close()
-  Check(#files == 13, "the scan found the Lab's files (" .. #files .. ")")
+  Check(#files == 15, "the scan found the Lab's files (" .. #files .. ")")
   -- every file the .toc loads is scanned, and nothing is loaded that is not
   local scanned = {}
   for _, path in ipairs(files) do scanned[path:sub(#LAB + 1)] = true end

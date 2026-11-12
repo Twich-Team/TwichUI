@@ -105,6 +105,7 @@ local function Verdict(cur)
     r.facts = t.facts
     r.notes = t.notes
     r.checks = t.checks
+    r.fails, r.failed = t.fails, t.failed   -- the failure lines (at most 8) and how many checks failed; read by the window's details panel
     if t.skipped then
         r.status, r.detail = "skipped", t.skipped
     elseif t.failed then

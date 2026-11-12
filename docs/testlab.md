@@ -13,9 +13,9 @@ The only change to a released addon is one row in the TwichUI data bar menu (`!!
 ## Opening and running
 
 1. In game: click the TwichUI data bar entry and choose **Test Lab (development)...** (or `/run C_AddOns.LoadAddOn("TwichUI_TestLab")`). Loading opens the window once. Afterwards the menu row and `/tuilab` open and close it.
-2. Tick the categories to run (every category is on by default except **Pointer probe (guided)**, which asks things of you and runs only when you tick it) and press **Run**.
-3. Watch the progress line (case *n* of *m*, the case id, elapsed time), the counts and one row per case.
-4. **Stop** is enabled while a run is going. **Copy report** fills the box at the bottom and selects it; press **Ctrl+C**, then paste the text where it is needed (the game gives addons no clipboard).
+2. Tick the groups to run on the left (every group is on by default except **Pointer probe (guided)**, which asks things of you and runs only when you tick it) and press **Run**.
+3. Watch the run state beside the buttons (case *n* of *m*, the case id, elapsed time), the cards, the bar and the table, which fills as cases finish.
+4. **Stop** is enabled while a run is going. **Copy report** and **Copy failures** fill the report box at the bottom and select it; press **Ctrl+C**, then paste the text where it is needed (the game gives addons no clipboard, so the window never says it "copied" anything).
 5. Esc or the close button closes the window, and **closing it stops a run in progress**.
 
 Nothing runs by itself: not at login, not at load, not on a timer.
@@ -61,6 +61,36 @@ Enforced:
 - No Blizzard function is wrapped or hooked; nothing is sent; Esc uses `UISpecialFrames`.
 - **One side effect to know:** a case that `needs` the Workshop loads it through the core's `WorkshopLauncher.Load()` (refused in combat; the case is then skipped with the launcher's reason). Loading the Workshop is the normal load: the game loads its saved variables and the Workshop initialises as it always does. The Lab does that *before* a case's fingerprint, and does nothing more.
 - A run is refused in combat; `PLAYER_REGEN_DISABLED` (registered only during a run) and a check each frame stop one.
+
+## The window
+
+Redesigned (2026-11-12) after the approved mockup, `docs/test-lab/lab-mockup.png`: a larger landscape window in the Workshop's materials (espresso and chestnut leather, aged bronze, ivory text; the core's shared `Look`, `FrameLook` and `CraftLook`). The mockup is a **visual target only**: its numbers, market name, seed and "suggested next step" are illustrative, and nothing in the window is made up to match them. It is a presentation layer; the runner, the registry, the safety classes and the report are unchanged (the runner now also keeps each case's failure lines, `fails` and `failed`, so the details panel can list them; the report does not use them).
+
+**Layout, four zones.**
+
+- **What to run** (left): one check per registered group, with its name, its case count and what it is for, read from the registry (`View.Categories`), so a new group appears by registering it. The whole entry is the click target. A guided group is never ticked for you. Checks are off while a run is going. The list scrolls.
+- **Summary cards and the toolbar** (top): Total cases, Passed, Failed, Skipped, Errors, Timeouts, Duration, each with a mark and a word (never colour alone), from the runner's own records. Before a run every card shows a dash (not run is not zero failures). While running they count only the cases that have **finished**; an unfinished case is never counted as passed. After a stopped run the Total card says how many did not run. Then **Run**, **Stop**, **Copy report**, **Copy failures** and the run state (Not run yet, Running, Waiting for you, Finished: all passed, Finished with problems, Stopped, with why). **Run** is off while a run is going or when nothing is chosen; **Stop** only while a run is going; **Copy report** after a run; **Copy failures** only when the last run had a failure, an error or a timeout. The bar shows cases finished out of the cases chosen, not time spent waiting for you at a guided step.
+- **Filters, search, the table and the details** (middle): chips for All, Failed, Passed, Guided, Synthetic and Client, with real counts; **Skipped, Errors, Timeouts and Stopped** chips appear when the run has some, so none is hidden. A filter only chooses which records the table shows: it never changes which groups run, the report or your selection. The search field matches every word you type (any order, any case, plain text, never a pattern) against the case id, its kind, its status word and the start of its message, and combines with the chosen filter. The table has Status (a mark and a word), Case, Type (Synthetic, Client or Guided), Duration and Message, with alternating rows and a painted hover and selection; a guided case reads Your turn, Measured, Skipped, Cancelled or Not run, never "running". Click a row to choose it.
+- **Details** (right): for the chosen result its full id, evidence type, outcome, the headline (the first failed check, "N checks passed", the skip reason, the error text, the timeout note, ...), every failed check, what the evidence type means, the duration, the checks made, any seed the case's own text names (quoted, not guessed), the case's evidence lines and the facts it recorded. A case that recorded only a message shows that message and nothing else; no root cause, market, recommendation, seed or expected value is ever added.
+- **Report** (bottom): the full report, written once when the run ends, selectable and scrollable. **Copy report** puts the whole schema 1 report there. **Copy failures** puts only the cases that did not pass, with all their evidence, under a header that says it is an excerpt (`TWICHUI-TESTLAB FAILURES ...`, not a schema 1 report). Typing in the box puts the text back.
+
+**Choosing a result.** When a run ends with a failure, the first failed case (else the first error, else the first timeout) is chosen for you. A result you chose yourself, by clicking its row, is kept. A new run clears the choice.
+
+**Empty states** each have a sentence: nothing chosen, nothing run yet, a filter or search that matches nothing (it names the search and the filter), no failures, no passes yet, a stopped run, every case skipped.
+
+**Guided runs.** The window is big, so it **steps aside** while a run that includes a guided group is going: its content is hidden and it takes no pointer, so the Workshop and the prompt at the top of the screen are not covered and the pointer cannot land on the Lab. It is still open (the run goes on), and it comes back when the run ends or is stopped, or by closing it, which ends the run as before. The prompt's title now says where the step stands (case *n* of *m*). Cancel on the prompt or **Stop** ends the run and removes the key as before.
+
+**A small screen.** The window is sized from the screen (at most 1280 by 780, at least 940 by 600) and scaled to fit by the core's `FitToScreen`. Below 1100 wide it narrows: a narrower sidebar without descriptions (they are tooltips), smaller buttons, and a table that drops the Message and then the Type column (the details panel has them). Cards use short labels and no mark when they are narrow. A window shorter than 680 gets a shorter report box.
+
+**Cost.** Frames are built once, when the window first opens. The table is a pooled list: only the rows that can show exist (a 300-case run uses about nine), scrolling and filtering reuse them, and nothing allocates once the window has settled (a test counts every frame, texture and text made). The runner calls the window at most once per frame while running; the window redraws only what changed (a card, the run state, the chips and the table when a status changed). The report is built once, at the end. Nothing animates except the row hover and the existing bounded fades, which honour the reduced-motion choice. The window has no `OnUpdate` and no timer, and is idle when closed.
+
+Offline, `tests/test_testlab_window.lua` tests `View.lua`, the failures excerpt and the window under the mock; `tools/simlab/testlab.sh` draws every state in the simulator (below).
+
+### Simulator scenario (`tools/simlab/testlab.sh`)
+
+Loads `TwichUI_TestLab` with `LoadAddOn` and hands the window **synthetic recorded results** (`Window.OnProgress` / `OnDone`) in nine launches, each ending in a screenshot: `idle`, `running` (the scenario makes the runner read as active; no case runs), `allpass`, `mixed` (one failure chosen, its details shown), `failfilter`, `problems` (a failure, a skip, an error and a timeout), `long` (300 cases, scrolled), `guided` (the window stepped aside, only the prompt shows) and `small` (1000 by 700). It checks the displayed text and state, that the cards, chips, run state, bar, table and details agree with the records, the emulated hit test (`Reach.lua`, M5) for Run, Copy, Stop (not eligible when idle), the chips, a group's check and entry, the Close button, the search field and the rows in view, and that no card label, value, chip or button text is wider than its box. `testlab_verdict.py` fails the run on any check, any unclassified Lua error, a missing step, a wrong-size or blank screenshot, or opening checks that differ between launches. **Limits:** nothing here is real input, the clipboard, or how it looks in the game: addon fonts are drawn in Friz Quadrata (wider than the game's), the simulator's multi-line edit box draws the report's lines on top of each other (the text is read back with `GetText`), and a stand-in "Issue report" widget the simulator places mid-screen appears in every capture. The first captures led to these changes: the Passed and Failed cards drew the wrong mark, group names were cut, the details headline did not wrap, the filter chips ran into the search field when a run had every kind of outcome, and the narrow window cut its run-state text.
+
+**Visual differences from the mockup that remain:** fonts (see above); the selected row uses the shared gold-leather selection rather than the mockup's red wash; the status column carries a word beside each mark (an accessibility choice); the Passed and Failed cards use the shared status art while the other five marks are drawn shapes (stack, skip, shield, warning, hourglass), not painted icons; column headings have no sort arrows (not requested); the mockup's Market and Crafting groups are not shown because the registry has no such groups (the sidebar lists the real ones); and the mockup's "Suggested next step" and Market/Query evidence lines are not reproduced because no case records them. **Nothing of the redesign has been seen in the game yet.**
 
 ## Cooperative cancellation: what Stop does and does not do
 
@@ -124,6 +154,16 @@ Four, by hand, in the development client:
 
 Also worth one look: that `/reload` afterwards shows no change in the Workshop's data (the Lab changed none by design; the offline test checks the roots are deep-equal).
 
+### Real-client checks for the redesigned window (not done yet)
+
+1. Open it: the layout matches `docs/test-lab/lab-mockup.png` in composition (header, four zones, seven cards, toolbar, bar, chips and search, table and details, report), nothing is cut off, and the sidebar lists every group with its true count. The fonts are the game's (Spectral and Alegreya Sans), not the simulator's.
+2. Run **Core**, **Client facts** and **Interface reachability**: the cards fill as cases finish; Total, Passed and so on agree with the report's `run:` line; the table scrolls smoothly; the first failure (if any) is chosen with its details; **Copy failures** is only available when something failed.
+3. Try each filter chip and the search (`batch`, `guided`, two words, nothing); a filter keeps your row selected and the report unchanged.
+4. **Copy report** and **Copy failures**: the box fills and selects; **Ctrl+C** and paste; the text starts `TWICHUI-TESTLAB REPORT schema 1` or `TWICHUI-TESTLAB FAILURES`.
+5. Tick the guided group and Run: the window steps aside, the prompt shows "case *n* of *m*", F9 samples, and the window returns with the results (and also returns on Stop, Cancel and closing).
+6. Resize your screen or UI scale (or run on a small one): the window fits, and below about 1100 wide the table drops its Message column and the sidebar drops its descriptions.
+7. Watch the frame time while the table scrolls and a run is in progress: it should not rise (the redesign makes no per-frame work).
+
 ## Reachability and the pointer probe (milestone 5)
 
 **Why it exists.** The Workshop's tests call a control's handler (`btn:GetScript("OnClick")(btn)`), which skips everything between the player and the handler: the control must be shown, enabled and take the mouse, and nothing may sit on top of it. In the third pass the player found a nonworking Add button and missing row hover; the tests and the simulator had passed. These are four different levels of evidence, and the report and the docs never merge them:
@@ -175,12 +215,12 @@ Opt-in: its box starts **unticked**, and `TL.Select()` without a category leaves
 
 1. Copy `TwichUI_TestLab/` into the development client's `Interface/AddOns/`, as always; `/reload`.
 2. Open the Workshop (`/tui workshop`), go to **Opportunities**, wait for the list, **choose a recipe** (click a row; the details panel shows "Add to crafting plan").
-3. Open the Test Lab (data bar menu, **Test Lab (development)...**, or `/tuilab`). **Drag the Lab window aside** so it does not cover the Workshop's right-hand details or the list (the Lab frames are movable; if one is under the pointer the sample is *not counted* and says so).
-4. Tick **Pointer probe (guided)** and **Interface reachability**; press **Run**. The read-only cases finish at once. A small **prompt** appears at the top of the screen with the first step.
+3. Open the Test Lab (data bar menu, **Test Lab (development)...**, or `/tuilab`). You no longer need to drag it aside: while a run that includes the guided group is going the window steps aside by itself (see "The window"), so the Workshop is uncovered and the Lab cannot be under the pointer. (If the Lab's prompt is under the pointer anyway, the sample is *not counted* and says so.)
+4. Tick **Pointer probe (guided)** (and **Interface reachability** if you want the scan too) and press **Run**. The read-only cases finish at once. The Lab window disappears and a small **prompt** appears at the top of the screen with the first step and "case *n* of *m*".
 5. **Step 1, the Add button.** Put the pointer over **Add to crafting plan** (do not click) and press **F9**. If the pointer was not over it, the sample is not counted and the prompt tells you how far off it was; try again. Then the next prompt appears.
 6. **Step 2, a row.** Move the pointer onto a recipe row's **name**, hold it still for a second, press **F9**. (A selected row is fine; try both.)
 7. **Step 3, a row's picture.** Move onto the little recipe picture at a row's left, hold still, press **F9**. The row must stay lit (it follows the picture).
-8. Press **Copy report**, then **Ctrl+C**, and paste it where it is needed. Skip a step with the prompt's **Skip this step**; **Cancel** (prompt) or **Stop** ends it all.
+8. When the run ends the window comes back with the report in its box and the first failure, if any, chosen. Press **Copy report**, then **Ctrl+C**, and paste it where it is needed. Skip a step with the prompt's **Skip this step**; **Cancel** (prompt) ends it all.
 9. Afterwards check that F9 does whatever it did before (nothing is left bound), and that `/reload` is not needed for anything.
 
 Look at the row yourself in step 2 as well: the probe reads the highlight's alpha, it cannot tell you whether the animation *looks* right.
