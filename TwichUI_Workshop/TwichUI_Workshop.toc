@@ -1,0 +1,63 @@
+## Interface: 16001
+## Title: |cffC9A24ATwich|rUI Workshop
+## Notes: Browse the recipes of your professions, queue crafts, see the combined materials still needed, and scan auction prices to see which crafts may be worth making. Loaded only when you open it (/tui workshop); keep it turned on alongside TwichUI.
+## Author: twichie
+## Version: 1.0.0
+## RequiredDeps: !!!TwichUI
+## LoadOnDemand: 1
+## SavedVariables: TwichUIWorkshopDB
+## IconTexture: Interface\AddOns\!!!TwichUI\media\icon
+## X-License: MIT (code); see !!!TwichUI\LICENSE
+## Category: Interface Enhancements
+
+# Names, limits and small checks (no game calls, no frames); it creates R.Workshop
+Data.lua
+# The combined materials and what is still needed (pure)
+Materials.lua
+# The saved queue of the current character (TwichUIDB.workshop; the market data has its own saved variables, TwichUIWorkshopDB)
+Queue.lua
+# The recipes a character knows, remembered between sessions (TwichUIDB.workshop, per character)
+Known.lua
+# What the profession window offers: the player's own recipes, their output and materials (game reads only)
+Observe.lua
+# What the player's bank and the guild bank were last seen to hold (saved in TwichUIDB.workshop.storage; no game calls, no frames)
+Storage.lua
+# The material-availability service: bags, bank and guild bank kept apart, one allocation for every view (pure)
+Stock.lua
+# The price history of one item: a compact, bounded string per item (pure)
+History.lua
+# Auction prices: collecting a scan, the saved markets (TwichUIWorkshopDB), what one craft costs and earns (no game calls, no frames)
+Prices.lua
+# The Opportunities list: rows, filter, sort, the basis text (pure)
+Opportunities.lua
+# What vendors were seen to charge, and where they are (saved in TwichUIDB.workshop.vendor; no game calls, no frames)
+Vendor.lua
+# The shopping list: where to get each missing material, or whether to make it (pure)
+Shopping.lua
+# "What's it worth?": vendor, auction and disenchant for one item (pure; disenchant has no outcome data, so it is only ever "no data")
+Worth.lua
+# The "What's it worth?" lines the player chose and their order: the saved layout and the one builder the tooltip and the designer share (pure)
+WorthLayout.lua
+# The price scan of the open auction house (started only by the player's click)
+Scan.lua
+# The market data API: current prices, history, quotes, markets (one source for every feature; reads saved data only)
+Market.lua
+# What the window shows and does, without any frame
+Session.lua
+# Remembers the player's own professions' recipes while the window is closed (after load only; reads, never opens anything)
+Watch.lua
+# Remembers the bank and the guild bank while they are open, window hidden or not (after load only; reads, never moves anything)
+Bank.lua
+# The "What's it worth?" lines on the tooltip of an item in the bags or bank (after load only; reads saved prices, never the auction house)
+WorthTip.lua
+# The progress bar and the Scan prices button on the auction house window (the click goes through Session)
+AuctionButton.lua
+# The window's presentation helpers: the settings window's crafted look through the core's CraftLook.lua (TwichUI_Settings is never loaded)
+Style.lua
+# The pages, in the order the page list shows them (each builds once and draws what Session.lua says)
+ViewOverview.lua
+ViewOpportunities.lua
+ViewCrafting.lua
+ViewShopping.lua
+# The window: the shell, the page list and the events (last: it tells TwichUI the addon is ready)
+Window.lua

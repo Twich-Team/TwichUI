@@ -28,7 +28,8 @@ tools/simlab/setup.sh            # once: downloads and builds the lab
 tools/simlab/smoke.sh            # copies the working tree in, opens a page, constructs every page, judges the result
 tools/simlab/interact.sh         # drives one real settings page through its controls, from a clean profile (below)
 tools/simlab/diagnose.sh         # the clock over a 12 s window: baseline, solo, grouped, and the addon-message contract (below)
-```
+tools/simlab/workshop.sh         # the real Workshop window through Crafting, Opportunities and Shopping over fake game data (below)
+bash tools/simlab/settings.sh    # capture the actual current settings catalog; handler checks and human screenshot review (below)
 bash tools/simlab/tests/lab_guard.sh   # the lab-path safety check's rejection paths, in disposable folders (below)
 ```
 
@@ -51,6 +52,7 @@ build and show their rows, nothing more.
 | `tools/simlab/smoke.sh` | After touching settings pages, Kit/widgets, the TOC or load order: does everything still load and construct (about 12 s) |
 | `tools/simlab/interact.sh` | After touching `NotifyLook`, the settings Kit or the controls it uses: handler-level behaviour and in-memory state (about 23 s) |
 | `tools/simlab/diagnose.sh` | Only for group/share/timer work: the clock window and message contract (about 15 s) |
+| `tools/simlab/workshop.sh` | After touching the Workshop window, session, planner, prices or scan: values and controls of its three views and the tooltip designer (about 30 s) |
 | `tests/run.sh` | The project's offline suite; still the main check, and the only one for most logic |
 | `bash tools/simlab/tests/lab_guard.sh` | After touching `lib.sh`, `setup.sh` or `sim.sh` |
 
@@ -138,6 +140,9 @@ Errors TwichUI catches do count, because `R.Fault` hands them to the error handl
 tools/simlab/interact.sh         # about 20 s here; SIMLAB_SHIM=0 and SIMLAB_ASSETS=0 work as for smoke.sh
 ```
 
+The Notifications fixture explicitly turns Guild Locations off through its real setter before watching sends. Solo mode
+alone does not isolate its default synthetic guild announcements. Production defaults and communication are unchanged.
+
 **The page:** Notifications → Appearance (`notificationsLook`, `TwichUI_Settings/pages/Notifications.lua`, saved by
 `modules/NotifyLook.lua` in `TwichUIDB.ui.notifyLook*`). It is the first one because it is all appearance (no gameplay
 action, no combat rule, no protected frame, no other addon, nothing sent), it has one of each control (drop-downs, a
@@ -188,6 +193,51 @@ a packaged install.
 checks that nothing was sent and the page is unchanged. The scenario used to stop at 2.5 s to stay clear of two errors; both
 are now classified instead (next section), and the only limit left is a 30 s resource guard in `scenarios/lib.lua`. Changes
 in the page are synchronous and need no simulated time; only the window's fade does.
+
+## Current settings catalog captures
+
+`bash tools/simlab/settings.sh` stages once, enumerates the actual registered catalog from a synthetic Mage with the
+optional Workshop launcher, then opens/captures every page. `bash tools/simlab/settings.sh profiles magicInventory`
+captures Home plus the named subset. `SIMLAB_SETTINGS_POSE=narrow` uses 936×660 instead of 1240×960;
+`SIMLAB_SETTINGS_SEARCH=true` finishes with `sound` entered through the actual search edit field.
+
+Second-pass review options: `SIMLAB_SETTINGS_FILLED=true` adds three synthetic Magic Inventory rules (keep, bank and
+an unresolved mail destination). `SIMLAB_SETTINGS_TASK=2` captures the second task of an ordinary task strip or Magic
+Inventory's Destinations. `SIMLAB_SETTINGS_EDITOR=true` opens the Magic items, chat/hazard New rule or glow look editor.
+`SIMLAB_SETTINGS_CATEGORIES=true` also opens Magic's category catalog; `SIMLAB_SETTINGS_EDITOR='"pattern"'` captures
+the chat editor's expert mode. Editor fixtures check every chat mode's text bounds and Magic's wrapped category-row
+separation, without changing the simulator engine or writing real saved data.
+
+For the hosted item and channel pages, run `SIMLAB_SETTINGS_FILLED=true bash tools/simlab/settings.sh ammoCustom
+chatCleanChannels restockItems`; omit `SIMLAB_SETTINGS_FILLED` for empty item lists, and add
+`SIMLAB_SETTINGS_POSE=narrow` for the constrained window. The scenario exercises ammunition registration and type,
+restock quantity validation, channel filters, an empty channel list, navigation and reopening. It uses disposable
+settings; it also checks scroll ranges with synthetic long lists. The simulator's item data may display Unknown.
+Real pointer input and native item art still require client coverage.
+With `SIMLAB_SETTINGS_FILLED=true SIMLAB_SETTINGS_EDITOR=true`, the ammunition type menu or restock quantity field
+is left open for an editing-state capture.
+
+Task choices, direct row reveal and settings-only companion dismissal/restoration, clickable appearance navigation and
+search/close ownership are checked where present. Companion samples use private real renderers or style helpers and
+synthetic content. They do not start routes, pin notifications, read journal history or enable a feature. All input remains
+handler-level, including `Button:Click()`; this is not evidence of actual pointer or keyboard delivery.
+
+This adds fixtures and a runner only; it does not change the simulator engine. Existing controls are exercised at handler
+level: available disclosures, direct reveals, one enabled dropdown per ordinary page where present, global no-results,
+cached reopen and unchanged settings-change count. Home adds local filtering and real catalog/appearance/default actions.
+Screenshots require inspection. Neither a successful construction nor these generic handlers proves all feature controls
+or actual pointer delivery. See [the second-pass workflow review](settings-second-pass.md) and [rollout report](settings-modernization.md) for page-by-page review, populated
+scenarios, exact run IDs, discrepancies and native-client gaps. The older 49-page coverage summary above is historical.
+
+## The Workshop scenario
+
+`tools/simlab/workshop.sh` (a few minutes): thirteen launches from fresh empty installs (the Overview with four professions, Crafting, Opportunities and Shopping pages, the settings window's "What's it worth?" tooltip designer, Opportunities and the Overview on a 1000x700 screen, the Overview's empty states, the price-history chart, a long crafting queue and two Shopping poses (Collect with Buy and Make rows, and only Collect rows), each ending in its own screenshot, and a negative control with one wrong expectation). The designer step drives the real designer controls with `Button:Click()` and calls the drag handlers with a faked pointer position: handler level, not pointer-driven drag-and-drop. It stages `TwichUI_Workshop` with `SIMLAB_EXTRA=TwichUI_Workshop`
+(an opt-in list of `TwichUI_*` folders for `simlab_stage`; unset for every other command), opens the window with `/tui workshop`, and drives it at handler level over deterministic fake game data. What is fake, what each check is evidence of, the checks, the
+screenshots and what is not covered are in **docs/workshop.md "Simulator coverage"**; the scenario file's header lists the fakes. Notes that belong to the lab:
+- **Third-pass checks** (one step, run in every launch): an EMULATED hit test (from `GetRect`, strata, levels and `IsMouseEnabled`, over the Workshop's frames only: it says whether another mouse-enabled frame is stacked over a button's centre, never how the real client orders frames of equal level), the hover art's state after the row's own OnEnter (alpha, shown, parent visible), measured text fit (`GetStringWidth` against the control's rectangle, in Friz Quadrata), the queue pictures' tooltip bindings (a recorder over `GameTooltip.SetItemByID`), the profession card, the footer chip and Shopping's suggestion tags. `SIMLAB step-time` lines in the log say how many simulated seconds each step used (the budget is 30 s; where it goes is in those lines: the scan, the remembered-recipe and guild-bank steps wait on the product's own timers). `SIMLAB_ONLY="opps craft" bash tools/simlab/workshop.sh` runs only those launches for a quick look; its verdict is incomplete by design.
+- The simulator cannot run Blizzard's world map (opening it raises many Blizzard Lua errors: `IsFilteredOut`, `GetBountiesForMapID`, `GetGameRuleAsFrameStrata`... are missing), so the Show vendor step replaces `ToggleWorldMap` and `NpcMap.Locate` with recorders.
+- A merchant window noted by the real NPC collection makes it share the find; the simulator refuses that addon message (the known string rule, `npcs/Share.lua`). `workshop_verdict.py` permits that one error only from that file.
+- `GetMoneyString` coins are inline textures the simulator does not draw; the scenario turns them into `1s 50c` text to compare, and screenshots show bare numbers.
 
 ## The Magic Inventory guild bank arrangement scenario
 
@@ -577,3 +627,7 @@ rm -rf tools/simlab docs/simulator-lab.md
 ```
 
 The first line does not touch the repository, the game or `wow-ui-source`. Nothing in the addons refers to the lab.
+
+Specialized page state fixtures and focused commands: [Batch 2 coverage](settings-batch-2.md).
+Item/channel stress, unavailable data and empty states: [Batch 3 coverage](settings-batch-3.md).
+Magic Inventory count, filter/context and new builder fixtures: [rule-workspace coverage](magic-inventory-revision/implementation.md).

@@ -33,6 +33,8 @@ SettingsLauncher.lua
 SettingsBroker.lua
 DiagnosticsLauncher.lua
 LayoutsLauncher.lua
+# The Workshop (recipes, a craft queue, combined materials) is an addon of its own, loaded the first time it is opened (docs/workshop.md)
+WorkshopLauncher.lua
 # First-install setup: offers the layout setup on a new installation and coordinates EllesmereUI's own first run (docs/onboarding.md)
 Onboarding.lua
 # The welcome shown while that setup gets ready (presentation only; Onboarding.lua calls it)
@@ -89,6 +91,9 @@ chronicle\Style.lua
 Look.lua
 # The framed look (illustrated frame, espresso interior, beveled buttons) that Magic Inventory, the settings window and the other standalone windows share (docs/dev-rules.md); needs Look.lua and chronicle\Style.lua only
 FrameLook.lua
+# The crafted look's shared pieces (painted sheets, quiet leather, fonts, nav rows, segments, switches, scroll rails): the settings window's
+# approved look, in the core so load-on-demand windows (the Workshop) draw with it without loading TwichUI_Settings; needs Look.lua and FrameLook.lua
+CraftLook.lua
 # Feature icons beside names in TwichUI's own windows (media\icons, cut from assets\settings-icons-source.png)
 Icons.lua
 chronicle\Appearance.lua
@@ -319,15 +324,23 @@ hazard\Alerts.lua
 # Reminders: artwork, an icon or words on screen while conditions you set are true (an empty off hand, a missing item,
 # combat, being mounted, ammunition missing or used up ...). Nothing exists until you make one, and each starts turned off. Config.lua is what is stored
 # and checked, Conditions.lua and Ammunition.lua the kinds of condition (pure; AmmoItems.lua is what counts as ammunition,
-# loaded first so a profile change reaches it before the reminders), Evaluate.lua the decision (pure), State.lua reads the game,
+# loaded first so a profile change reaches it before the reminders), Evaluate.lua the decision (pure), State.lua reads the game
+# (Auras, Supplies, Character and Context.lua each add kinds of condition with the sources that read them),
 # Display.lua draws, Controller.lua puts them together. It never equips, uses or casts anything. The settings are in
-# TwichUI_Settings; the artwork is made by tools/make_reminder_art.py.
+# TwichUI_Settings; the artwork is made by tools/make_reminder_art.py and the artwork library (ArtData.lua, generated; Gallery.lua, its catalog and
+# the three display modes) by tools/make_reminder_gallery.py.
 reminders\AmmoItems.lua
+reminders\ArtData.lua
 reminders\Config.lua
+reminders\Gallery.lua
 reminders\Conditions.lua
 reminders\Ammunition.lua
 reminders\Evaluate.lua
 reminders\State.lua
+reminders\Auras.lua
+reminders\Supplies.lua
+reminders\Character.lua
+reminders\Context.lua
 reminders\Display.lua
 reminders\Controller.lua
 

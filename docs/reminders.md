@@ -10,9 +10,9 @@ Code: `!!!TwichUI/reminders/`; settings: `TwichUI_Settings/pages/Reminders.lua`,
 A reminder only reads. It never equips, uses, moves or casts anything, prints nothing in chat and sends nothing to
 anyone. None exists until the player makes one, and each starts turned off.
 
-Nothing here has been seen in the game. "Verified" below means read from the Forever UI source (`../wow-ui-source`,
-branch `forever`) or exercised by the offline tests against a stand-in for the game. The checks still to make in a real
-client are at the end.
+Supplied client screenshots show earlier revisions. This agent has not exercised the WoW client. Evidence below is
+identified as repository-inspected, unit-tested, simulator handler-tested or screenshot-reviewed; client checks remain
+at the end.
 
 ## What the client provides
 
@@ -59,6 +59,32 @@ as labels in the settings window and never in what is stored.
 | `weaponEnchant` | `hand` (`mainHand` or `offHand`), `what` (no `negate`: it reads as a sentence) | `missing` (a weapon is held in that hand and has no temporary enchant) or `applied` (a weapon there has one). A hand with nothing that can take an enchant (empty, a shield, an item held in the off hand, a fishing pole) is **never** `missing` or `applied`. An item the game has not described yet, or an answer that cannot be read, is **unknown**, never `missing` |
 | `wellFed` | `what` (no `negate`: it reads as a sentence) | `missing` (the game listed your helpful auras and none is Well Fed) or `applied` (one is). Auras hidden from addons, or a list longer than the 40 looked at with no Well Fed in it, are **unknown**, never `missing` |
 | `ammunition` | `what` (no `negate`: it reads as a sentence) | `problem` (any of the next three), `noAmmo` (nothing selected, some carried), `outOfAmmo` (nothing selected and none carried, or the selected stack is empty), `wrong` (arrows for a gun, bullets for a bow). Offered only while the client has `UnitUsesAmmo` |
+
+**The condition library** (2026-11-11; per-kind decisions, API references and real-client checks in
+[reminders-condition-expansion.md](reminders-condition-expansion.md)). Files: `reminders/Auras.lua`, `Supplies.lua`,
+`Character.lua`, `Context.lua`, each a provider with the source that reads it.
+
+| Kind (`type`) | Stored fields | Choices |
+|---|---|---|
+| `aura` | `spells` (1 to 8 spell IDs; any counts), `harmful`, `what`, `seconds` / `compare` + `stacks` | `present`, `missing`, `expiring` (less than `seconds` left), `stacks` (below / at least). Self only |
+| `itemCount` | `item`, `compare`, `count` | carried bags only (`C_Item.GetItemCount`, bank excluded) |
+| `bagSpace` | `compare`, `count` | free general-family slots, bags 0 to `NUM_BAG_SLOTS` |
+| `durability` | `what`, `percent` | `broken`; `below` a share. Item by item, never averaged |
+| `power` | `power` (`MANA`, `RAGE`, `ENERGY`), `compare`, `percent` | no pool never matches; secret is unknown |
+| `spellKnown` | `spell`, `negate` | a spell the game doesn't have is unknown |
+| `form` | `form` (spell ID) or `state = "none"`, `negate` | the character's own forms, or none |
+| `level` | `compare`, `level` | 1 to 999 |
+| `cooldown` | `spell`, `what`, `seconds` | `ready`, `cooling`, `within` |
+| `groupType` | `what`, `negate` | `solo`, `party`, `raid` (a raid group, not a raid instance), `grouped` |
+| `zone` | `map` or `instance`, `negate` | a map and every map inside it, or one instance |
+| `target` | `what`, `negate` | `exists`, `attackable`, `friendly`, `dead`; with no target only `exists` can match |
+
+Anything that asks for an item or a spell can be given one by dragging it from the bags or spellbook onto its card or the
+open editor (see the tracker); typing an ID or pasting a link still works.
+
+`weaponEnchant` gained `expiring` (`seconds`); `player` gained `moving` and `taxi`. Thresholds: "below" is strictly less,
+"at least" includes the number. A condition whose answer changes with time alone says when (`NextChange`); the
+controller keeps one timer per running reminder for the soonest such moment and reads again then.
 
 `negate` is "is not". "Player is not dead or a ghost" reads as "Player is alive". Categories are judged from the item's
 class, subclass and equip location only; an item with no details is **unknown**, never a match. For the shield example:
@@ -185,7 +211,7 @@ The one exception is the ammunition you registered, `ui.ammoCustom` (above), whi
 ## Making and editing (settings > Everyday > Reminders)
 
 The card holds the switch. Under it: **Your reminders** (thumbnail, name, the rule as a sentence or what is wrong, what it
-is doing now, and its own switch) and **Start a new one**: **Missing shield** (name "Shield reminder", "Off hand is not
+is doing now, and its own switch) and **New reminder**, which opens the template catalog (below). The templates are **Missing shield** (name "Shield reminder", "Off hand is not
 Shield", the shield artwork with "Equip your shield", no sound, no pulse, below the middle, this character only),
 **Ammunition** (name "Ammunition reminder", "Ranged ammunition has a problem", the arrows artwork with "Check your
 ammunition", the same place and scope; it does nothing for a weapon that takes no ammunition),
@@ -197,98 +223,164 @@ When), **Missing equipment or item** (any slot is not an item you choose; shows 
 chosen) and **Custom reminder** (your words; needs a condition). Each is an ordinary reminder once made: nothing about
 the template is remembered.
 
+### The preview companion (`pages/RemindersPreview.lua`)
+
+The editor companion has one visibility predicate: Settings is open, Reminders is the active page (not search),
+the hosted editor is visible, Live preview is enabled for this session, the selected reminder still exists, and
+neither When nor the catalog owns the companion slot. A gameplay/configuration refresh cannot bypass it.
+`PV.Update` updates content and placement without showing a hidden frame. Only guarded editor reconciliation can
+show it. Closing or leaving invalidates queued page refreshes, hides immediately and clears the held view.
+
+**Live preview**, beside Duplicate/Delete, enables the companion for this session without changing the reminder or
+profile. The companion's minus control still minimizes it. Artwork/text clicks reveal the corresponding setting;
+Actual size/Fit never changes saved scale. The window follows taller Settings geometry through one resize hook,
+which only updates an existing visible preview and uses the same visibility guard. There is no continuous polling.
+
+**Show on screen** remains the independent explicit temporary world preview. It does not enable the editing
+companion. Closing Settings or entering combat ends the temporary world preview through its existing lifecycle.
+When and catalog replace the companion exclusively; cancel/close restores it only for an active enabled editor.
+Reopening uses the current selection and the same pooled frame.
+
+Evidence: **unit-tested** with an individually shown host under inactive Settings, repeated subsequent subscriptions,
+configuration changes, equipment/zone events, direct Update/Show calls, stale deferred work, other-page navigation,
+exclusive companion transitions, disable/re-enable, repeated close/reopen and explicit world-preview separation.
+**Simulator handler-tested** for closed refresh attempts, navigation, disable/re-enable, Save/Cancel and taller window
+updates. **Not real-client-tested:** sustained gameplay after close, actual pointer delivery, installed fonts and UI scale.
+
+### The template catalog (`pages/RemindersCatalog.lua`)
+
+**New reminder** opens a frame beside the settings window (`R.SettingsAnchor`, as the sample previews do; centred if the
+window isn't up): the templates as cards (existing artwork or the feature's icon, name, one line, **Use template**; the
+long description is its tooltip) and **Custom reminder** under them. Choosing goes through the page's `P.Create`, so the
+reminder is made by `RM.Create`, the one checked path: a fresh table each time (two uses are independent copies, with
+their own ids), turned off, named by the template; the catalog then goes away, the new reminder is selected and its editor
+is open. A refusal (24 reminders in a profile, a newer-format profile) leaves the catalog open with the reason in its own
+line and creates nothing. The close box, Esc, the settings closing, or leaving the Reminders page closes it and changes
+nothing. Every template here already used a supported condition; none was added. A preview already on screen is not
+touched by making another reminder. Not yet: search and category filters, per-template artwork beyond what exists.
+
+Evidence: **unit-tested** (`tests/test_reminders_settings.lua` section 10: cards, independent copies and ids, starts off,
+selection and editor, cancel, limit refusal, preview kept, page hide); **simulator-tested** only for construction
+(`tools/simlab/smoke.sh`). **Not tested**: how it looks and is placed in the real client, Esc, the close box, tooltips.
+
 The chosen reminder: its name, its switch (refused, with the reason, while it has problems), **Duplicate** (a fresh id,
 turned off, right after it; the original is untouched) and **Delete** (asks, names it; its frame goes at once). Then:
 
-- **Show**: Display (artwork with text, artwork, icon with text, icon, text only); Artwork (the gallery); Icon from (a
-  TwichUI icon, or an item's icon by ID, link or a drop from the bags: the item needn't be equipped); Words.
+- **Appearance**: Display (three illustrated choices: Image + text, Image only, Text only), then Image (the picture
+  shown now, its name and where it comes from, and **Choose image...**), Text, Text color and Size. Only the controls that
+  matter for the chosen mode appear; the ones that are hidden keep their values. See "Appearance and the image picker".
 - **When**: the condition designer, in three blocks (`TwichUI_Settings/pages/RemindersDesigner.lua`; the words are
   `RemindersPlain.lua`; see "The When designer" below).
-- **Placement**: Position (below the middle, above the middle, middle, top, bottom, where I put it); Move on screen /
-  Done; Size; Opacity; Text size; Words go (below, above, right, left). **More placement and appearance options**
+- **Placement**: Position (below the middle, above the middle, middle, top, bottom, where I put it); Size; Opacity; Text size; Words go (below, above, right, left). **More placement and appearance options**
   (closed at first, for the session): keep proportions or width and height; font, outline, text color; background
   (none, soft shade, framed panel); anchor point and x / y offsets (typed values follow drags and the reverse); layer
   (low, medium, high); fade in and out; pulse; wait before showing; keep up at least.
 - **Sound**: an optional sound for when it appears (a dropdown of None, TwichUI's own sounds and every LibSharedMedia
   sound) and **Play** to hear it. A chosen sound that is not installed stays chosen, is said so, and plays nothing.
-- **Preview appearance**: the reminder drawn in the page by its own layout code, scaled to fit, marked PREVIEW; **Show on screen**.
-- **Test**: **Right now** (each group and condition, a group before what is in it and what is in it a step in: summary,
-  Match / No match / Unavailable / Invalid, what was observed, and why when unavailable; then the result and why; every one
-  is read, so none says "not evaluated"). **Try a situation** (SIMULATED): a choice per thing asked about, generated by
-  its provider; conditions that ask about the same thing share one choice ("Player class (3 conditions)"), so made-up facts
-  can't contradict each other (for the shield: Shield equipped, Empty off hand, Off-hand weapon equipped, Equipment information
-  unavailable; for combat: In combat, Out of combat, Not read yet), and the simulated decision. **Check it in the game**.
+- **Preview** (no longer a section of the page): see "The preview companion" below.
+- **Diagnostics**: overall Showing / Hidden / Needs attention / Unknown result, a concise reason, then illustrated
+  condition-result rows with Met / Not met / Unknown and separate observed values. All/Any groups retain their order
+  and indentation. **Technical details** discloses full troubleshooting information. **Try a situation** is a separate
+  disclosure with clearly labelled SIMULATED sample inputs and results; shared observations still use one consistent
+  input. Neither disclosure changes the live rule or the game's observations.
 
 Words carry every state; colour only agrees.
 
+The Appearance image tile and Choose control share an inset group. Text color and the existing numeric Size slider sit
+in one quieter row; the slider still edits the original size value. List width grows within bounds when the workspace
+widens, preserving minimum editor width. The preview's inset sizing well, eye status and rounded rims are cosmetic:
+Actual size/Fit still changes presentation only, and the active-editor visibility guard remains authoritative.
+
+Reusable opt-in artwork components live in `SettingsCraft` (`Craft.lua`): fixed-corner `Sheet`/`Frame`, native-control
+state paint through `Control`, and the painted slider `Thumb`. Runtime art is under `media/style-v2/craft/`; original
+standalone frame/button/selection sources are `assets/craft-*-source.png`, prepared with `tools/make_craft_art.py`.
+Button states share identical alpha silhouettes; selected surfaces use their own painted source, and chips retain
+capsule geometry. Primary, normal/secondary, hover, depressed, disabled and restrained destructive treatments are distinct.
+The generic helpers own no reminder state or callbacks. `SettingsMaterial` remains the surface/font/scrollbar facade:
+`Rim`, `ReminderControl`, `PanelFace`, `HeaderBand`, `ScrollRail`, `ReminderFont`. Its quiet large-area grain is retained.
+The source references are design specifications, never runtime backgrounds.
+
+Only Reminders opts into the new shared shell/header/search. Search keeps its geometry while typing, while the active-editor
+predicate still suppresses the companion during search. Ordinary pages restore their original rails, fonts, emblem/search
+dimensions and control materials. The list well aligns with the primary editing stack, capped for long diagnostics.
+Adoption on other Settings pages can be incremental; standalone windows need a later load-owner decision because these
+helpers currently load with Settings. Wider rollout and real-client visual acceptance remain pending.
+
+
+### Appearance and the image picker (`pages/RemindersEditor.lua`, `pages/RemindersImagePicker.lua`, `reminders/Gallery.lua`)
+
+The player sees three display modes and one place to choose a picture; the five stored modes and the fields they use do not change.
+
+- **Modes.** Image + text = `artworkText` | `iconText`, Image only = `artwork` | `icon`, Text only = `text`. Choosing a mode changes only
+  the stored mode (`RM.SetDisplay`): the words, colour, size and the picture's values (`art`, `iconSource`, `icon`, `item`) are kept, so Text
+  only keeps the picture and Image only keeps the words. Coming back from Text only finds the same kind of picture (an item, or an icon other
+  than the default with the default artwork, was last an icon; otherwise artwork). A reminder saved before this keeps its mode, picture and
+  values exactly; nothing is migrated.
+- **Choose image...** opens the picker in the companion place beside the settings window (one companion at a time: it replaces the live preview,
+  which returns when it closes, as it does after the template catalog). Opening it draws nothing on screen and starts no preview.
+- **TwichUI artwork** lists every picture TwichUI has made for reminders: the library (`docs/reminders-art.md`), the four artworks that were here
+  first (`shield`, `ammo`, `wellfed`, `enchant`) and the eight TwichUI icons a reminder could already show, in six categories (Equipment, Buffs &
+  Effects, Supplies, Character, Adventure, General) with search by name, category or keyword. Thumbnails are drawn at 78 units from the large texture; the grid scrolls. A hovered tile gets a faint bronze rim; the chosen one the selection skin, a warm gold wash and the full gold rim, all under the picture. An empty search says so and offers **Show all pictures**.
+- **Game icons** is the other source: the icon of an item by ID, link or a drop from the bags (it goes straight back), as before. The item needn't be
+  carried or equipped.
+- **Transaction.** A click only marks a *candidate* and shows it in the details strip (name, description, category, source). **Apply** commits it as
+  one checked change (`Gallery.Choose`: `RM.SetDisplayMany` sets the mode, the picture and where it comes from, all or none, one notification) and
+  closes the picker. **Cancel**, the X, Esc (the window's special-frames entry asks the picker first), choosing another reminder, leaving the page and
+  closing settings discard the candidate and write nothing.
+- **Compatibility.** Artwork is stored as `display.art` (an unknown id from a newer version is kept and reported "Artwork unavailable"), a TwichUI icon
+  as `iconSource = "bundled"`, `icon = <id>`, an item as `iconSource = "item"`, `item = <id>`: what the old editor wrote.
+
+Cost and diagnostics: the catalog is static (80 entries, built once from `ArtData.lua`), the picker's frames are built the first time it opens and are
+bounded by the catalog (one tile per picture, reused), and a texture loads only while its tile is shown. It registers no event, timer or `OnUpdate`, so it
+has no TwichUI Diagnostics scope or gauge: there is nothing recurring to measure.
+
+Evidence: **unit-tested** (`tests/test_reminder_gallery.lua`, `tests/test_reminder_gallery.py`, `tests/test_reminders_settings.lua`);
+**simulator-tested** (`bash tools/simlab/reminders.sh appearance appearanceImage appearanceText appearanceLegacy picker pickerSearch pickerGame pickerGameApply pickerNarrow pickerEquipment pickerCharacter pickerRender`; `pickerRender` chooses every catalogued picture and checks the real renderer's live preview draws it:
+handler-level clicks, typing and Esc; screenshot-reviewed against `docs/reminders-revision/artwork-selector-mockup.png`). **Not tested**: how it
+looks and feels in the real client (fonts, texture filtering at small sizes, the scroll bar, hover tips, the companion's placement at other scales),
+real pointer input, drag and drop of an item onto the box.
 
 ## The When designer
 
-A structured designer for the rule, not a node graph. It draws and edits the same tree the evaluator reads; it keeps no
-rule of its own and adds nothing to what is saved (`version` stays 1, no new keys).
+The When builder edits the existing reminder tree through a private draft. It stores the same rule and targeting
+fields as before. It uses the same condition providers, All/Any evaluation and three evaluation outcomes.
+Opening When shows a dedicated reminder rail and rule panel joined by a bronze hinge. The main Settings page stays
+mounted beneath the workspace, preserving its selection, scroll position and open sections. Its frame moves below the modal for input isolation; Save or Cancel restores its prior strata and opacity. Tooltips, popup menus and the centered drag ghost follow the workspace effective scale.
+The workspace fits the screen at the current UI scale. The rail holds a scrollable reminder list, selected reminder,
+concise When summary and an isolated appearance sample.
 
-- **Who is this for?** One line (Every character, This character only, 2 chosen characters, ", only for Hunters") and
-  **Edit**: chips for every character / this character only / characters I choose, Add or Remove this character, and the
-  class. Who it is for is applied as you choose (like every setting in this window) and is kept apart from the rule: a
-  "Your class is Warrior" condition is a condition and is never moved up into who it is for, and one class in who it is for
-  never becomes a condition. Several classes are therefore several conditions in a group where at least one must be true,
-  because the stored scope holds one class.
-- **Show this reminder when...** The tree. A group is a bounded box (a rail on its left, teal for "any", bronze for
-  "all") headed **All of these must be true** or **At least one of these must be true**, with a compact All / Any choice
-  (the tooltip says AND / OR), a fold button (the folded line says everything in it) and **More** (Duplicate group, Move up,
-  Move down, Move into another group, Remove). A condition is a **card**: a sentence ("You are in combat", "Your off hand
-  is not a shield", "Ranged ammunition needs attention"), an icon, **Edit** and **More** (Edit, Duplicate, Move up, Move
-  down, Move into..., Remove). Quiet "and" / "or" words separate siblings; the group's heading already says which. Each
-  group has its own **Add a condition**.
-  - **Edit** opens one editor under the card. It works on a copy: Done writes it (and writes nothing if nothing changed),
-    Cancel leaves the saved condition as it was; one that isn't finished or can't be used is not written and says why.
-  - **Add a condition** opens one picker for that group: a search box, categories (Combat, Character, Equipment, Other)
-    and a choice per kind, from the registry (the player's combat, dead, ghost and mounted states one each), each with a
-    line saying what it checks, an icon and, where this client can't report it, a note. Choosing one opens the same editor
-    with only the values it needs; nothing is added until **Add condition**. The picker's title says what it means for the
-    group: "Require another condition" in a group where all must be true, "Allow another condition" where one is enough.
-    Adding never changes a group's all or any.
-  - **Create a condition group** (at the foot of the picker) says where the group will go and what it starts as, and asks
-    whether its conditions combine as "Allow either condition" or "Require several together"; the depth and group limits are
-    said in words when they stop it.
-  - **Moving.** Move up / down reorders inside a list and never changes what the rule says. **Move into** another group
-    changes what a condition is combined with, so each destination is named as the group it is ("Any of: Your class is
-    Warrior or Hunter", "the whole rule: All of these must be true") and the page says what changed afterwards. A group
-    can't go into itself or what is in it, nor deeper than the limit. Nothing is lost by a move: the same stored table
-    moves, and a refusal leaves the rule exactly as it was.
-  - **Removing** a group that holds conditions asks first; every removal says what was removed and offers **Undo**, which
-    puts back the same stored table in the same place (until the group it was in is gone or the page is left).
-  - **Unsupported conditions** (a kind this version doesn't know, from an import or a newer version) are a card that says
-    "Unsupported condition", with the kind in its detail line; they are kept exactly as saved, can be moved, copied and
-    removed, and are never edited or rewritten. The reminder can't be turned on while one is there, as before.
-  - **Over the limits** (more conditions or groups than are read) the rest are kept as saved and a line says they aren't shown.
-- **Why would it show?** The rule as short lines, never leaving a condition out ("Shows when all of these are true:" and a
-  line each; a run of classes said once; a group with one thing says that thing), and **Would this show now?**, closed
-  until asked for (nothing is read for it while it is closed). Open, it reads the rule against the game's current facts
-  through the same `Evaluate.Run` the live reminder uses (`Controller.Inspect`, which never changes the live decision):
-  a headline (**Would show now**, **Conditions match now** when it isn't on screen, **Would stay hidden**, **Cannot
-  determine**), whether it is for this character, what it is doing (showing, turned off, waiting out a delay...), and on
-  each card and group Met / Not met / Cannot check yet / Needs attention with a mark (a check, a dash, ?, !), what was
-  seen, and for a group which condition decided it. Unknown is shown as unknown: a group where one condition decides the
-  answer says that another that can't be checked yet doesn't change it. A limit of the client is a short line ("Cannot
-  check ammunition on this client."), with the longer explanation on the mark's tooltip; the runtime treats such a reminder
-  as it always did (it can't be turned on). Nothing is shown on screen and no preview is started by looking.
+- **Show a reminder when** presents the first condition of a flat All rule. **Only while** presents the other
+  conditions in the same conjunction. The card fields use the condition's own subjects and values. A mounted
+  check offers mounted and not mounted. An equipment check offers valid equipment slots and their supported
+  values. A specific item can be chosen by item ID or link.
+- **Location chips** present Dungeon and Raid selections. Adding an alternative creates an ordinary Any group through
+  the existing rule APIs. Removing a token removes its predicate. A single remaining alternative retains its group.
+  Duplicate values, negated alternatives, mixed groups and nested structures use Advanced logic. The adapter reads
+  the original structure without converting existing rules on opening.
+- **Advanced logic** opens for a root Any, other grouped rules or unsupported predicates. All/Any controls, folding,
+  grouping and contextual editing use the original tree. Imported predicates this version cannot read can be moved or removed. A reminder with an unreadable
+  predicate cannot be enabled.
+- **For** changes character scope independently of the conditions. The header offers every character, this character
+  and a chosen character list. Targeting options provide list and class settings. A class condition inside the tree
+  remains an ordinary predicate.
+- **Search...** and the category filter narrow the palette. Click or drag an entry to set it up. Drag cards or
+  groups to a highlighted insertion position. A drag outside a valid target leaves the draft alone. Right-click a
+  card or hover to reveal the compact contextual menu. It offers removal, duplication and movement through ordinary controls.
+  Location has one default catalog entry with both alternatives available in its editor. Searching Raid can also find
+  the corresponding predicate directly. Well Fed is in Other.
+- **Current visibility** reflects the saved reminder. Card states and Details can inspect the draft. **Try a situation**
+  tests the draft against chosen inputs without changing the live observations or displaying a reminder. Details and
+  situation inputs expand in their own scrollable bottom region, above the persistent footer.
+- **Save** validates and applies conditions and targeting together. **Undo** and **Redo** operate on the draft
+  and cover changes such as edits, moves, additions, removals and targeting. **Cancel** discards the draft.
+  The close button, Escape after closing menus or drags, switching reminders and opening the template catalog
+  ask before discarding unsaved work.
+  Leaving the settings page or closing settings discards the draft. A rule changed elsewhere while the builder was open
+  must be reopened before it can be edited again.
 
-Decisions:
-
-- **Stable ids.** The saved tree has none and gets none. A node is held by its stored table (`RM.NodeByRaw`), which stays
-  the same through moves, folds and edits of other nodes; paths are only used for the call that follows. A fold is
-  remembered for the session by that table.
-- **Drag and drop is deferred.** There is no list-drag infrastructure to reuse, and a hand-made framework would be fragile
-  with pooled frames and a scrolling window. Move up / down and Move into do everything it would, with the meaning of each
-  move named. It can be added later on the same `RM.MoveNode`.
-- **No second engine.** `Plain.Explain` only phrases the `Evaluate.Run` nodes; the three answers and the group rules are the
-  evaluator's.
-- **Frames.** One card per condition a reminder can have (16), one box per group (6) and the top level, one editor, one
-  picker (its rows grow once, to the number of kinds), one targeting panel; reopening makes nothing new, and a hidden page
-  puts away what was open. Diagnostics: scope `reminders.designer.layout`, gauges for the pools and whether one is open.
-- **The emblem** (`reminderDesigner`, a bronze ring with a check mark) heads the section where its files are; otherwise
-  the three-nodes icon does.
+The saved schema is unchanged. Draft changes retain a node's data and identify it by table while dragging.
+The tree and palette reuse bounded frame pools. The designer reports layout work through
+`reminders.designer.layout` and counts its pools in Diagnostics.
 
 ## Display
 
@@ -298,7 +390,8 @@ outline in ivory below the picture, no panel, medium layer, no fade, no pulse, n
 Text is plain (no `|`, no control characters, up to 120 characters), wraps at 420 units, and is never read as markup or
 an expression. A missing item icon shows a question mark while the game is asked for it (at most twice).
 
-Artwork gallery: `RM.ART` in `reminders/Config.lua`, files in `media/reminders/`: `shield.tga` and `ammo.tga` (a bundle of arrows; 256 px canvas, shield 180 x 254
+Artwork gallery: `RM.ART` in `reminders/Config.lua` (the first four) and the generated `reminders/ArtData.lua` (the library of 67 pictures in `media/reminders/gallery/`,
+see `docs/reminders-art.md`), files in `media/reminders/`: `shield.tga` and `ammo.tga` (a bundle of arrows; 256 px canvas, shield 180 x 254
 used) and `shield-small.tga` (64 px canvas, 44 x 62 used) for 64 units and under. Uncompressed 32-bit TGA, bottom-left
 origin; only the used part is drawn. `wellfed.tga` / `wellfed-small.tga` (a plate with crumbs, a fork and a knife; 256 x 186 and
 64 x 47 used) is the Well Fed template's artwork, built by `tools/make_reminder_art.py` from `assets/reminder-art-wellfed-source.png`.
@@ -322,12 +415,27 @@ that is not installed plays nothing and is counted in `/tui diagnostics` (sounds
 
 ## Preview, moving, diagnostics
 
-An on-screen preview shows one reminder where it sits, marked "Preview: <name>", whatever its rules say, with no
-duplicate (it is the reminder's own frame). It changes no rule, observation or decision, and ends when the settings
-close (unless moving), in combat, when the reminder is deleted or Reminders is switched off, or on a profile change.
-Moving adds a drag handle; the place is saved as "Where I put it" with offsets from the chosen anchor point; right-click
-or Done ends it. A reminder that isn't running (a draft, for another character) is inspected by reading what its
-conditions need into a table of its own (`State.Peek`): nothing is added to what the live reminders read or listen for.
+An on-screen preview shows one reminder where it sits, marked "Preview: <name>", whatever its rules say, without a
+second live frame. It changes no enable state, rule, observation or decision. Closing settings, combat, deletion,
+disabling Reminders or a profile change ends temporary previews.
+
+**Place on screen** beside Live preview in the selected-reminder header, or **Place…** in the companion, enters the
+same explicit placement transaction. Advanced retains presets, offsets and effects, without a duplicate placement row. Settings and its companions hide completely;
+a small toolbar remains. Dragging changes private coordinates. **Finish** (or right-clicking the handle) validates
+and saves the position once; **Cancel / Esc** keeps the original position. Both restore the prior page, selection,
+scroll position and current window dimensions. Combat or deletion cancels. Closing settings while placing cancels
+and stays closed. A changed source identity or a newer external position prevents a stale Finish from overwriting it;
+a late drag-stop callback after cancellation cannot save anything.
+
+The editing companion remains separately guarded by the active Reminders context and session preview toggle.
+Its **Background** menu offers Dark, Transparent, Landscape and Parchment for this session only. Transparent removes
+the entire well's fill, including the shell underneath it; it is not a checkerboard. Actual size/Fit and background
+switching do not change display values. Artwork/text hover has a painted rim; clicking reveals and briefly highlights
+the corresponding field without editing it. The builder's parchment sample uses the isolated renderer with ink for
+presentation; it does not change the saved reminder background or text color.
+
+A reminder that isn't running (disabled or for another character) can be inspected through `State.Peek` without adding
+to what live reminders read or listen for.
 The Test section's simulations go through the same `Evaluate.Run` on a table built from the scenarios
 (`Evaluate.Simulate`) and never see the live one. `/tui diagnostics` has a Reminders section with counts only (including the sound counts, never a sound's name).
 
@@ -338,6 +446,7 @@ The Test section's simulations go through the same `Evaluate.Run` on a table bui
 | Switched off | no event, every frame hidden, every timer stale |
 | On, no reminder turned on for this character | `PLAYER_ENTERING_WORLD` only |
 | On, reminders running | the observation keys their conditions read, in every branch of every group, once each (`slot:17`, `combat`, `life`, `mounted`, `class`, `ammo`, `enchant`, `wellFed`), and only those sources' events (`class` has none: it is read when wanted and on entering the world): `PLAYER_EQUIPMENT_CHANGED` for equipment, `WEAPON_ENCHANT_CHANGED`, `WEAPON_SLOT_CHANGED` (and a change of slot 16 or 17) for weapon enchants, the regen events for combat, the three life events, the mount event, for ammunition `PLAYER_EQUIPMENT_CHANGED`, `BAG_UPDATE_DELAYED` and `UNIT_INVENTORY_CHANGED`, and for Well Fed `UNIT_AURA` for the player only |
+| The condition library's kinds | the same rule: each kind's source registers its events (listed per kind in reminders-condition-expansion.md) only while a running reminder uses it; unit events for the player or target only (`RegisterUnitEvent`). A time boundary (a buff or enchant running down, a cooldown ending) is one `C_Timer.After` per running reminder, replaced at each decision |
 | An ammunition reminder, weapon takes none (or none equipped) | only a change of the ranged or ammo slot is acted on; bag and inventory events are dropped before any read. A look is up to six values from the character, and the bags only when nothing is selected |
 | An item without details in a wanted slot | asked for at most twice; `GET_ITEM_INFO_RECEIVED` / `ITEM_DATA_LOAD_RESULT` only while that lasts |
 | An event | marks its key; one 0.1 s timer reads each marked key once; only keys whose facts changed re-decide, and only the reminders that read them (an index by key) |
@@ -363,7 +472,10 @@ choice) and `Merge(match, conds)` (say a run of them in one phrase in the rule's
 value choices (`Subjects`, `ValueChoices`, `WithSubject` in `TwichUI_Settings/pages/RemindersPlain.lua`), its sentence
 (`KIND` there; without one the picker offers it under Other and the provider's own `Summary` is the card's sentence), a
 test in `tests/test_reminders.lua`, and its facts and checks here. The `ammunition` kind (`reminders/Ammunition.lua` and State.lua's `ammo` source) is the worked
-example of a kind with a file of its own. Buff, cooldown, health, inventory-count and target conditions are not in this release.
+example of a kind with a file of its own. The condition library's kinds go further: each file registers providers *and*
+their sources (`ST.Source` after State.lua, with `ST.Plain` / `ST.Number` / `ST.Set`), a provider may say `Supported()` and
+`NextChange(cond, obs)`, and the builder's fields for it are a `FIELDS` entry in `RemindersPlain.lua` (each field has its own
+`set`; a number field gets quick choices and the editor's typed box). Health is not offered: `UnitHealth` is always secret to addons.
 
 **A new picture.** Put the PNG (real transparency) in `assets/`, add a line to `ART` in `tools/make_reminder_art.py`, run
 `python3 tools/make_reminder_art.py` (it prints the numbers), and add that line, with a label, to `RM.ART` and
@@ -383,13 +495,12 @@ example of a kind with a file of its own. Buff, cooldown, health, inventory-coun
 - A character listed by name and realm: a renamed character, or one moved to another realm, has to be added again.
 - Groups: three levels, 6 groups, 16 conditions (see "Three answers, groups and composition"). No drag and drop (Move up,
   Move down and Move into instead), no typed expressions. Who it is for holds one class, so several classes are conditions.
-- Weapon enchants: only whether a hand has one, not which, and not how long it has left (the game does give the time and
-  charges; a condition on them is not built). The off hand and the main hand only; no ranged slot. A fishing pole counts as
-  nothing to enchant.
-- Well Fed: only whether the buff is there, not how long it has left (a condition on the time left is not built) and not
-  which food gave it. It is unknown, so nothing shows, while the game hides your buffs from addons.
-- Not in this release: Lua, dynamic clones, a volume or channel per sound, sharing, buff/cooldown/health/inventory/target
-  conditions, automation of any kind.
+- Weapon enchants: whether a hand has one and how long it has left, not which, and not its charges (0 can't be told
+  from "doesn't use charges"). The off hand and the main hand only; no ranged slot. A fishing pole counts as nothing to enchant.
+- Well Fed: only whether the buff is there, not which food gave it (a buff condition, `aura`, can ask how long a chosen
+  buff has left). It is unknown, so nothing shows, while the game hides your buffs from addons.
+- Not in this release: Lua, dynamic clones, a volume or channel per sound, sharing, health (always secret to addons),
+  swimming (no event), a talent's rank, automation of any kind.
 
 ## In-game checklist
 
@@ -403,8 +514,9 @@ example of a kind with a file of its own. Buff, cooldown, health, inventory-coun
 5. Dead and a ghost, mounted and dismounted (note whether the mount event fires on Forever).
 6. **Missing equipment or item**: paste an item link (shift-click into the box), drop an item, type an ID; the icon shows
    that item; a server item that the game has no details for shows a question mark and says so.
-7. Preview, Show on screen, Move on screen, drag, Done; the offsets follow; reload: the place is kept. Each preset.
-   Close the settings during a preview: it ends; during a move: it stays until Done. Enter combat: both end.
+7. Show on screen, then Place / Move on screen. Drag and Cancel: old coordinates remain. Repeat and Finish: the new
+   position survives reload. Esc restores settings; closing settings stays closed. Combat cancels without saving.
+   Repeat with each preset and UI scale; release the mouse after cancellation to check stale drag cleanup.
 8. Every display mode, both proportions, a long text on the right, the framed panel, each layer, at UI scale 0.64 and
    1.15. Fade and pulse on: short and calm; Notifications > Reduced motion: neither.
 9. Delay 5 with a quick swap: nothing shows; a minimum of 10: it stays, then goes; turn it off during the minimum: gone.
@@ -453,18 +565,36 @@ example of a kind with a file of its own. Buff, cooldown, health, inventory-coun
     (refused with a reason). Open the settings with a large UI scale and a long list: the rows and buttons stay inside the page.
 23. `/tui diagnostics`: the Reminders section lists how many conditions and groups run; with no reminder turned on nothing is
     listened for.
-24. **The When designer.** Open a reminder's When: a card per condition, groups as boxes with their own heading. Edit a card:
-    change it, press Cancel (nothing changes), then change and press Done. Add a condition from the picker: search, filter
-    by category, choose "You are in combat"; Cancel adds nothing, Add condition adds it to that group. Make "Warrior or
-    Hunter" with Create a condition group > Allow either condition, and put the ammunition condition above it in an All
-    group: the page reads "Shows when all of these are true: Ranged ammunition needs attention, Your class is Warrior or
-    Hunter". Move up, Move down, Move into another group (the message says what it is combined with now), fold a group,
-    remove a group and press Undo. At a large UI scale and a small window check that nothing is clipped, the More menus open
-    inside the window, and Tab and the mouse reach every button.
-25. **Would this show now?** Open it with a reminder turned on and off: "Would show now" only while it is on screen,
-    "Conditions match now" with the reason when it is turned off or waiting out a delay. On a client with no `UnitUsesAmmo`,
-    an ammunition condition says "Cannot check ammunition on this client." and the reminder can't be turned on. Close it:
-    the marks on the cards go. Hover the mark on a card for the longer explanation.
+24. **The When designer.** At normal and higher UI scale, check visible field edges and centers, help anchors and
+    dropdown rows against the actual cursor; no invisible Settings row should react. Check that the centered drag ghost
+    and insertion markers agree with the pointer. Check smaller wheel steps, scrollbar thumb dragging and typed size values.
+    In a flat All rule, edit a card field and change For. Cancel and reopen to verify both original
+    values. Change them again, exercise Undo/Redo, Save, and verify the result after `/reload`. Add from the search and
+    category-filtered palette. Drag a card to an insertion edge and into an Any group. Drop outside to cancel. Try the
+    same movements with the contextual menu, fold the group, then remove it and Undo. At high UI scale verify the footer,
+    menus and both scrollbars remain reachable with the mouse and keyboard.
+25. **Current visibility.** With a disabled reminder whose conditions match, the card can say Met while visibility says
+    Hidden now. With an enabled reminder, check showing, hidden and unknown outcomes. Use Details and Try a situation
+    and verify the live display is unchanged. On a client without `UnitUsesAmmo`, check that the capability message
+    appears and the unusable reminder cannot be enabled.
 26. Open the settings with the When designer's picker or an editor open, close and reopen the window: nothing is left open.
     `/tui perf` with the Settings window shown lists `reminders.designer.layout` and the designer's pools; they stay level
     over repeated opening.
+27. Settings > Reminders > **New reminder**: the catalog opens beside the window. Close box, Esc and closing the settings
+    each shut it and make nothing. **Use template** twice on one card: two reminders, both "Off", the editor open on the
+    second; rename one, the other is unchanged. With a preview showing, use a template: the preview stays. With 24
+    reminders, **Use template** and **Custom reminder** say the limit in the catalog and it stays open. Check the cards'
+    pictures, the text fitting, and that the catalog doesn't cover the window or fall off the screen.
+28. Edit a reminder with the page scrolled anywhere: the preview stays beside the window and follows the selection, the
+    name, the picture, the words and the place. A turned-off reminder previews and stays off. **Show on screen** and **Hide
+    preview** work as before. **New reminder** swaps the preview for the catalog; the close box or Esc brings the preview
+    back for the same reminder; **Use template** shows it for the new one. Drag the window to the right edge of the screen
+    and at a larger window scale: the companion flips to the left or stays on screen, and never overlaps the window.
+    Close the settings and reopen: one preview, none left behind.
+
+
+Condition-type art is resolved centrally by `RemindersPlain.ApplyArt`: enchanted blade for weapon enchant, separate
+crossed dark-steel swords for combat, and the existing painted NPC horse head for Mounted. These identities are reused
+in the palette, cards, summaries, diagnostics and drag ghosts, and are independent of the reminder's selected artwork
+and template illustration. New source/prompts and preparation are `assets/reminder-condition-*` and
+`tools/make_reminder_condition_art.py`; 64/32-pixel TGAs live under `media/reminders/conditions/`.

@@ -65,7 +65,7 @@ function P.Strip()
     strip:SetSize(W - 8, STRIP_H)
     strip:Hide()
     local G = R.SettingsWidgets
-    if G and G.Surface then G.Surface(strip, G.pal.well, 0.9, G.pal.bronzeLo, 0.5) end
+    if G and G.Well then G.Well(strip) end
     painter = R.NavPaint.New(strip)
     tag = strip:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     tag:SetPoint("TOPRIGHT", strip, "TOPRIGHT", -6, -4)

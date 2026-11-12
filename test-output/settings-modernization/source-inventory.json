@@ -1,0 +1,615 @@
+[
+  {
+    "key": "barGlowsSpells",
+    "name": "Action bar glow spells and looks",
+    "file": "TwichUI_Settings/pages/BarGlowsSpells.lua",
+    "headers": [],
+    "host": true
+  },
+  {
+    "key": "cozyBag",
+    "name": "Cozy Sleeping Bag",
+    "file": "TwichUI_Settings/pages/CozyBag.lua",
+    "headers": [
+      "Cozy Sleeping Bag",
+      "When the bag becomes available",
+      "Previews"
+    ],
+    "host": false
+  },
+  {
+    "key": "navigation",
+    "name": "Navigation",
+    "file": "TwichUI_Settings/pages/Navigation.lua",
+    "headers": [
+      "Navigation",
+      "How to start",
+      "What it shows",
+      "Getting there",
+      "Arriving and leaving the route"
+    ],
+    "host": false
+  },
+  {
+    "key": "navigationLook",
+    "name": "Navigation appearance",
+    "file": "TwichUI_Settings/pages/Navigation.lua",
+    "headers": [
+      "Preview",
+      "Frame and arrow",
+      "Text",
+      "The trail",
+      "Frame theme",
+      "Frame background and border"
+    ],
+    "host": true
+  },
+  {
+    "key": "hazardRules",
+    "name": "Hazard alert rules",
+    "file": "TwichUI_Settings/pages/HazardRules.lua",
+    "headers": [],
+    "host": true
+  },
+  {
+    "key": "auction",
+    "name": "Auction House",
+    "file": "TwichUI_Settings/pages/Auction.lua",
+    "headers": [
+      "Sell from Bags",
+      "Mailbox"
+    ],
+    "host": false
+  },
+  {
+    "key": "classBars",
+    "name": "Class resource bars",
+    "file": "TwichUI_Settings/pages/ClassBars.lua",
+    "headers": [
+      "Class resource bars",
+      "When to show",
+      "Place and preview",
+      "Reset"
+    ],
+    "host": false
+  },
+  {
+    "key": "classBarsLayout",
+    "name": "Class resource bar layout",
+    "file": "TwichUI_Settings/pages/ClassBars.lua",
+    "headers": [
+      "The whole display",
+      "Reset"
+    ],
+    "host": false
+  },
+  {
+    "key": "classBarsLook",
+    "name": "Class resource bar appearance",
+    "file": "TwichUI_Settings/pages/ClassBars.lua",
+    "headers": [
+      "Fill",
+      "Text",
+      "Background and border",
+      "Reset"
+    ],
+    "host": false
+  },
+  {
+    "key": "classBarsEffects",
+    "name": "Class resource bar effects",
+    "file": "TwichUI_Settings/pages/ClassBars.lua",
+    "headers": [
+      "Effects",
+      "Try it",
+      "Reset"
+    ],
+    "host": false
+  },
+  {
+    "key": "campingRest",
+    "name": "Sleeping bag bar",
+    "file": "TwichUI_Settings/pages/CampingRest.lua",
+    "headers": [
+      "Sleeping bag bar",
+      "The bar",
+      "Notches",
+      "Border",
+      "Text",
+      "When it ends"
+    ],
+    "host": false
+  },
+  {
+    "key": "speakstone",
+    "name": "SpeakStone speech frame",
+    "file": "TwichUI_Settings/pages/SpeakStone.lua",
+    "headers": [
+      "SpeakStone speech frame",
+      "Frame",
+      "Text",
+      "Controls",
+      "Portrait",
+      "Progress line"
+    ],
+    "host": false
+  },
+  {
+    "key": "ammoCustom",
+    "name": "Known ammunition",
+    "file": "TwichUI_Settings/pages/AmmoItems.lua",
+    "headers": [],
+    "host": true
+  },
+  {
+    "key": "workshop",
+    "name": "Workshop",
+    "file": "TwichUI_Settings/pages/Workshop.lua",
+    "headers": [
+      "Workshop",
+      "What it does",
+      "Shopping",
+      "Opportunities",
+      "What's it worth?"
+    ],
+    "host": true
+  },
+  {
+    "key": "food",
+    "name": "Food and drink",
+    "file": "TwichUI_Settings/pages/FoodDrink.lua",
+    "headers": [
+      "Food and Drink buttons",
+      "Appearance"
+    ],
+    "host": false
+  },
+  {
+    "key": "sharing",
+    "name": "Configuration sharing",
+    "file": "TwichUI_Settings/pages/Sharing.lua",
+    "headers": [
+      "Addon configurations"
+    ],
+    "host": false
+  },
+  {
+    "key": "troubleshooting",
+    "name": "Troubleshooting",
+    "file": "TwichUI_Settings/pages/Troubleshooting.lua",
+    "headers": [
+      "Status",
+      "Optional integrations",
+      "Performance and support",
+      "Layout setup",
+      "Full report",
+      "Temporary tracing"
+    ],
+    "host": false
+  },
+  {
+    "key": "camping",
+    "name": "Camping bar",
+    "file": "TwichUI_Settings/pages/Camping.lua",
+    "headers": [
+      "Camping bar",
+      "What is on the bar",
+      "Eat button",
+      "When it shows",
+      "Appearance"
+    ],
+    "host": false
+  },
+  {
+    "key": "reminders",
+    "name": "Reminders",
+    "file": "TwichUI_Settings/pages/Reminders.lua",
+    "headers": [],
+    "host": true
+  },
+  {
+    "key": "chatCleanLive",
+    "name": "Chat cleaning live view",
+    "file": "TwichUI_Settings/pages/ChatCleanLive.lua",
+    "headers": [],
+    "host": true
+  },
+  {
+    "key": "pins",
+    "name": "Pins and Pings",
+    "file": "TwichUI_Settings/pages/Pins.lua",
+    "headers": [
+      "Party pins",
+      "Waypoint commands",
+      "Placing and showing",
+      "Data bar",
+      "Sound",
+      "Appearance"
+    ],
+    "host": false
+  },
+  {
+    "key": "pings",
+    "name": "Map pings",
+    "file": "TwichUI_Settings/pages/Pins.lua",
+    "headers": [
+      "Map pings"
+    ],
+    "host": false
+  },
+  {
+    "key": "pinsLook",
+    "name": "Pin appearance",
+    "file": "TwichUI_Settings/pages/Pins.lua",
+    "headers": [
+      "Data bar menu appearance",
+      "Map text",
+      "Window appearance",
+      "New pin window appearance"
+    ],
+    "host": false
+  },
+  {
+    "key": "overview",
+    "name": "TwichUI",
+    "file": "TwichUI_Settings/pages/Overview.lua",
+    "headers": [
+      "Help",
+      "Interface layout",
+      "General"
+    ],
+    "host": false
+  },
+  {
+    "key": "mage",
+    "name": "Mage",
+    "file": "TwichUI_Settings/pages/Mage.lua",
+    "headers": [
+      "Mage Travel",
+      "Mage Conjuring",
+      "Mage refreshments",
+      "Sell ordinary food and drink",
+      "Broker menu appearance",
+      "Refreshments panel appearance"
+    ],
+    "host": false
+  },
+  {
+    "key": "refreshmentShares",
+    "name": "Refreshment shares",
+    "file": "TwichUI_Settings/pages/Mage.lua",
+    "headers": [],
+    "host": true
+  },
+  {
+    "key": "mapToolbar",
+    "name": "Map Toolbar",
+    "file": "TwichUI_Settings/pages/MapToolbar.lua",
+    "headers": [
+      "Map tools bar",
+      "NPC search",
+      "NPC filters"
+    ],
+    "host": false
+  },
+  {
+    "key": "buffBack",
+    "name": "Return the Favor",
+    "file": "TwichUI_Settings/pages/ReturnTheFavor.lua",
+    "headers": [],
+    "host": false
+  },
+  {
+    "key": "chatCleanChannels",
+    "name": "Chat cleaning channels",
+    "file": "TwichUI_Settings/pages/ChatCleanChannels.lua",
+    "headers": [],
+    "host": true
+  },
+  {
+    "key": "chronicle",
+    "name": "Journey Chronicle",
+    "file": "TwichUI_Settings/pages/Chronicle.lua",
+    "headers": [
+      "Automatic entries",
+      "Appearance"
+    ],
+    "host": false
+  },
+  {
+    "key": "chronicleLook",
+    "name": "Chronicle appearance",
+    "file": "TwichUI_Settings/pages/Chronicle.lua",
+    "headers": [
+      "The Chronicle window",
+      "Background",
+      "Border",
+      "Typography",
+      "Controls and accents"
+    ],
+    "host": false
+  },
+  {
+    "key": "restockItems",
+    "name": "Restock items",
+    "file": "TwichUI_Settings/pages/RestockItems.lua",
+    "headers": [],
+    "host": true
+  },
+  {
+    "key": "chatCleanRules",
+    "name": "Chat cleaning rules",
+    "file": "TwichUI_Settings/pages/ChatCleanRules.lua",
+    "headers": [],
+    "host": true
+  },
+  {
+    "key": "magicInventory",
+    "name": "Magic Inventory",
+    "file": "TwichUI_Settings/pages/MagicInventory.lua",
+    "headers": [],
+    "host": true
+  },
+  {
+    "key": "markersBar",
+    "name": "Marker bar",
+    "file": "TwichUI_Settings/pages/MarkerBar.lua",
+    "headers": [
+      "Marker bar",
+      "Markers on the bar",
+      "Where it appears",
+      "Size and look"
+    ],
+    "host": true
+  },
+  {
+    "key": "restock",
+    "name": "Vendor restocking",
+    "file": "TwichUI_Settings/pages/Restock.lua",
+    "headers": [
+      "Vendor restocking",
+      "Restock items",
+      "Question window appearance"
+    ],
+    "host": false
+  },
+  {
+    "key": "skins",
+    "name": "Addon skins",
+    "file": "TwichUI_Settings/pages/Skins.lua",
+    "headers": [
+      "EllesmereUI look",
+      "RestedXP guide window",
+      "SpeakStone speech frame"
+    ],
+    "host": false
+  },
+  {
+    "key": "gear",
+    "name": "Gear comparison",
+    "file": "TwichUI_Settings/pages/Gear.lua",
+    "headers": [
+      "Upgrade hints",
+      "Bag marks",
+      "Loot rolls"
+    ],
+    "host": false
+  },
+  {
+    "key": "statWeights",
+    "name": "Stat weights",
+    "file": "TwichUI_Settings/pages/Gear.lua",
+    "headers": [],
+    "host": true
+  },
+  {
+    "key": "hazard",
+    "name": "Hazard alerts",
+    "file": "TwichUI_Settings/pages/Hazard.lua",
+    "headers": [
+      "Hazard alerts",
+      "Alert categories",
+      "Volume",
+      "Built-in rules",
+      "Reset"
+    ],
+    "host": false
+  },
+  {
+    "key": "guildLocations",
+    "name": "Guild Locations",
+    "file": "TwichUI_Settings/pages/GuildLocations.lua",
+    "headers": [
+      "Your location",
+      "Right now"
+    ],
+    "host": false
+  },
+  {
+    "key": "worldMap",
+    "name": "World map",
+    "file": "TwichUI_Settings/pages/WorldMap.lua",
+    "headers": [
+      "World map",
+      "Zoom and panning",
+      "Detail"
+    ],
+    "host": false
+  },
+  {
+    "key": "worldMapPlaces",
+    "name": "World map places",
+    "file": "TwichUI_Settings/pages/WorldMap.lua",
+    "headers": [
+      "Places"
+    ],
+    "host": false
+  },
+  {
+    "key": "chatClean",
+    "name": "Chat cleaning",
+    "file": "TwichUI_Settings/pages/ChatClean.lua",
+    "headers": [
+      "Chat cleaning",
+      "Built-in filters",
+      "Custom rules",
+      "Live view and test"
+    ],
+    "host": false
+  },
+  {
+    "key": "healerWatch",
+    "name": "Healer Watch",
+    "file": "TwichUI_Settings/pages/HealerWatch.lua",
+    "headers": [],
+    "host": true
+  },
+  {
+    "key": "notifications",
+    "name": "Notifications",
+    "file": "TwichUI_Settings/pages/Notifications.lua",
+    "headers": [
+      "Accessibility",
+      "Zone arrival",
+      "New training",
+      "Friend login",
+      "Party deaths",
+      "Notification previews",
+      "Appearance"
+    ],
+    "host": false
+  },
+  {
+    "key": "notificationsLook",
+    "name": "Notification appearance",
+    "file": "TwichUI_Settings/pages/Notifications.lua",
+    "headers": [
+      "Notification appearance",
+      "Divider",
+      "Preview",
+      "Text",
+      "Accent and backdrop",
+      "Reset"
+    ],
+    "host": false
+  },
+  {
+    "key": "markers",
+    "name": "Markers",
+    "file": "TwichUI_Settings/pages/Markers.lua",
+    "headers": [
+      "Markers"
+    ],
+    "host": false
+  },
+  {
+    "key": "markersTarget",
+    "name": "Target markers",
+    "file": "TwichUI_Settings/pages/Markers.lua",
+    "headers": [
+      "Target markers",
+      "Target marker keys"
+    ],
+    "host": true
+  },
+  {
+    "key": "markersWorld",
+    "name": "World markers",
+    "file": "TwichUI_Settings/pages/Markers.lua",
+    "headers": [
+      "World markers",
+      "World marker keys"
+    ],
+    "host": true
+  },
+  {
+    "key": "npcsKnowledge",
+    "name": "World Knowledge",
+    "file": "TwichUI_Settings/pages/NpcKnowledge.lua",
+    "headers": [],
+    "host": true
+  },
+  {
+    "key": "profiles",
+    "name": "Profiles",
+    "file": "TwichUI_Settings/pages/Profiles.lua",
+    "headers": [
+      "Profiles",
+      "Make a profile",
+      "Delete or reset"
+    ],
+    "host": false
+  },
+  {
+    "key": "npcs",
+    "name": "Vendors and trainers",
+    "file": "TwichUI_Settings/pages/Npcs.lua",
+    "headers": [
+      "Vendors and trainers",
+      "How they show"
+    ],
+    "host": false
+  },
+  {
+    "key": "npcsList",
+    "name": "Vendors and trainers: your list",
+    "file": "TwichUI_Settings/pages/Npcs.lua",
+    "headers": [
+      "Your list",
+      "Sharing",
+      "Checking what the game reports",
+      "Remove"
+    ],
+    "host": false
+  },
+  {
+    "key": "restedxp",
+    "name": "RestedXP",
+    "file": "TwichUI_Settings/pages/RestedXP.lua",
+    "headers": [
+      "Map waypoint",
+      "Show and hide automatically",
+      "EllesmereUI quest tracker",
+      "RestedXP guide window",
+      "Window background and border",
+      "Text",
+      "Current step",
+      "Header and footer",
+      "Text size",
+      "Spacing",
+      "Scroll bar",
+      "Waypoint arrow",
+      "Timer bars",
+      "Timer bar background and border"
+    ],
+    "host": false
+  },
+  {
+    "key": "qol",
+    "name": "Quality of life",
+    "file": "TwichUI_Settings/pages/QoL.lua",
+    "headers": [],
+    "host": false
+  },
+  {
+    "key": "barGlows",
+    "name": "Action bar glows",
+    "file": "TwichUI_Settings/pages/BarGlows.lua",
+    "headers": [],
+    "host": false
+  },
+  {
+    "key": "targetArt",
+    "name": "Target dragon artwork",
+    "file": "TwichUI_Settings/pages/TargetArt.lua",
+    "headers": [
+      "Target dragon artwork",
+      "Artwork for each kind of enemy",
+      "Appearance",
+      "Preview",
+      "Fine-tune each artwork",
+      "Reset"
+    ],
+    "host": true
+  }
+]

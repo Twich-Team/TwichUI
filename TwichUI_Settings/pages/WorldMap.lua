@@ -126,18 +126,30 @@ K.Page({
             return K.Slider(setting, MXP.LIMITS[key][1], MXP.LIMITS[key][2], tooltip)
         end
 
-        Header("Places", "Small round markers, apart from your pins (diamonds). Left-click does the place's main thing; right-click lists its actions, Pin this place and Navigate here among them. Alt, Shift and Ctrl clicks on a place are the map's shortcuts, as anywhere else.")
-        Under(K.Status("What is known", Coverage, nil, "Only places and maps checked against WoW: Forever's own files are listed: a cave's or dungeon's map is shown only where its building is the same in Forever's client, and an entrance only where the buildings round it are."), toggle, On2)
+        K.Card({ title = "Choose places to show", icon = "mapPins", switch = false, inline = true,
+            what = "Show built-in entrances, caves and transport stops. Your saved pins are separate.",
+            summary = Status,
+            consequence = "Layer choices apply when map exploration is on. Changing a layer never starts navigation or moves your character.",
+        })
+        K.Button("Map exploration", "Open map setup", function() R:OpenSettings("worldMap") end,
+            "Opens the Zoom tab to enable map exploration; it does not open or move the map.")
         Under(Check("mapExploreDungeons", "dungeons", "Dungeon and raid entrances",
             "Where a dungeon or raid is entered (where a ghost comes back to). Click for the dungeon's own map, one floor at a time, where one is known. Your position isn't shown on a dungeon's map. Level ranges and entry requirements aren't shown."), toggle, On2)
         Under(Check("mapExploreCaves", "caves", "Caves",
             "Caves and underground places with a map of their own. Zoom in on one (or click its marker) and its map surfaces where the cave is, with its floors, and your arrow stays on it. The marker is at the middle of the cave's map, not at its entrance. Off, caves never surface and their markers are hidden."), toggle, On2)
         Under(Check("mapExploreTravel", "travel", "Boat and zeppelin docks",
             "Where boats and zeppelins leave from, and where they go, from the game's own routes. Click one and the map glides to the other end; Back returns. Whether you can board (faction, a learned route) isn't checked."), toggle, On2)
+        Header("Marker readability", "Names, size and opacity apply to all place markers.")
         Under(Check("mapExploreLabels", "labels", "Names when zoomed in",
             "A place's name under it once you zoom in, never where two names would overlap (dungeons keep theirs first)."), toggle, On2)
         Under(Number("mapExploreIconSize", "iconSize", "Marker size", "In percent. The same size on screen at every zoom."), toggle, On2)
         Under(Number("mapExploreIconOpacity", "iconOpacity", "Marker opacity", "In percent."), toggle, On2)
+        local help = Header("Map actions and coverage", "Use the actual world map to inspect a place.")
+        help.settingsSecondary = true
+        K.Status("Built-in coverage", function() return R.MapExploreData and "Forever data" or "Unavailable" end, Coverage)
+        K.Status("Inspect a place", function() return "Left-click" end, function() return "Entrances open known dungeon maps; caves reveal their maps; docks show the other end of the route." end)
+        K.Status("Pin or navigate", function() return "Right-click" end, function() return "Open a place's action menu on the map. Saved pins and navigation are managed there, not by these layer switches." end)
+        K.Status("Cave markers", function() return "Map center" end, function() return "Cave markers show the middle of a cave map, not its entrance. Transport availability is not checked." end)
         K.ResetButton("Reset places", reset, function() R.MapExplorePrefs.Reset("places") end,
             "Puts which places show, their names, size and opacity back to the defaults. Nothing else changes.")
     end,

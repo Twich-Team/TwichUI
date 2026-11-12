@@ -13,7 +13,7 @@ local P = {}
 R.RestockItemsPage = P
 
 local W = 644                  -- the settings window's content width
-local ROW_H, VISIBLE = 32, 6
+local ROW_H, VISIBLE = 56, 5
 local LIST_TOP = -140
 local LIST_H = ROW_H * VISIBLE + 8
 local LIST_W = W - 12 - 26     -- inside the well, less the scroll bar
@@ -83,7 +83,7 @@ local function Added(id, how)
     if how == "exists" then
         P.Say(("%s is already on your list, so nothing was added. Here it is."):format(name), "ok")
     else
-        P.Say(("Added %s. Set how many to keep; it is bought when a merchant sells it and you have fewer."):format(name), "ok")
+        P.Say("Item added. Set how many to keep in your bags.", "ok")
     end
     P.Refresh()
     P.Focus(id)
@@ -164,8 +164,7 @@ local function Row(i)
     local row = CreateFrame("Button", nil, f.content)
     row:SetSize(LIST_W, ROW_H)
     row:SetPoint("TOPLEFT", 0, -(i - 1) * ROW_H)
-    row.bg = G.Solid(row, "BACKGROUND", pal.text, (i % 2 == 0) and 0.035 or 0)
-    row.bg:SetAllPoints()
+
     row.flash = G.Solid(row, "BACKGROUND", pal.teal, 0.22)
     row.flash:SetAllPoints()
     row.flashFade = G.Motion.Fader(function(a) row.flash:SetAlpha(a) end, 0)
@@ -174,16 +173,17 @@ local function Row(i)
     row.icon:SetPoint("LEFT", 6, 0)
     row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     row.name = G.Text(row, "body")
-    row.name:SetPoint("TOPLEFT", 38, -3)
+    row.name:SetPoint("TOPLEFT", 38, -7)
     row.name:SetWidth(NAME_W)
-    row.name:SetWordWrap(false)
+    row.name:SetWordWrap(true)
+    row.name:SetHeight(30)
     row.status = G.Text(row, "meta")
-    row.status:SetPoint("TOPLEFT", 38, -18)
+    row.status:SetPoint("TOPLEFT", 38, -39)
     row.status:SetWidth(NAME_W)
     row.status:SetWordWrap(false)
     row:SetScript("OnEnter", function(self)
         if not self.id then return end
-        ItemTip(self, self.id, { self.status:GetText() })
+        ItemTip(self, self.id, { self.name:GetText(), self.status:GetText() })
     end)
     row:SetScript("OnLeave", function(self) I.HideTip(self) end)
     row:SetScript("OnHide", function(self) I.HideTip(self) end)
@@ -234,12 +234,12 @@ local function Row(i)
 end
 
 local function Status(rule, carried, state)
-    if state == "missing" then return ("The game has no item with the ID %d. Remove it, or check the number."):format(rule.id), "warn" end
+    if state == "missing" then return "Item unavailable · check its ID", "warn" end
     if state == "loading" then return "Loading the item's details...", nil end
     if carried == nil then return "Couldn't count it in your bags right now.", nil end
-    if not rule.enabled then return ("Off: you carry %d. Kept on the list, not bought."):format(carried), nil end
-    if carried >= rule.target then return ("You carry %d: at your target."):format(carried), "ok" end
-    return ("You carry %d: buys up to %d more at a merchant that sells it."):format(carried, rule.target - carried), nil
+    if not rule.enabled then return ("Paused · carrying %d"):format(carried), nil end
+    if carried >= rule.target then return ("Carrying %d · target met"):format(carried), "ok" end
+    return ("Carrying %d · need %d more"):format(carried, rule.target - carried), nil
 end
 
 ---------------------------------------------------------------------------
@@ -254,6 +254,8 @@ local function SugButton(i)
     local col, line = (i - 1) % 2, math.floor((i - 1) / 2)
     b:SetPoint("TOPLEFT", col * SUG_W, f.sugGridTop - line * SUG_H)
     G.Surface(b, pal.well, 0.7, pal.bronzeLo, 0.7)
+    b:SetBackdropColor(0, 0, 0, 0); b:SetBackdropBorderColor(0, 0, 0, 0)
+    R.SettingsMaterial.PanelFace(b, "card")
     G.Hover(b, pal.text, 0.05)
     b.icon = b:CreateTexture(nil, "ARTWORK")
     b.icon:SetSize(18, 18)
@@ -395,7 +397,8 @@ local function Build()
     f.help = G.Text(f, "small")
     f.help:SetPoint("TOPLEFT", 4, -2)
     f.help:SetWidth(W - 8)
-    f.help:SetText("Each item has a target: how many to keep in your carried bags. Keep 20: if you have 7 and a merchant sells it, TwichUI tries to buy 13. Higher in the list is bought first when money or your spending limit runs short.")
+    f.help:SetText("Set how many to keep in your bags. Items higher in the list are bought first.")
+    I.Tip(f, "Restock targets", "Keep 20: if you have 7 and a merchant sells it, TwichUI tries to buy 13. Higher items are bought first when money or your spending limit runs short.")
 
     -- the add area: a box to drop an item on, or its item ID
     G.Card(f, 0, -38, W, -98)
@@ -461,11 +464,11 @@ local function Build()
         return t
     end
     Column("Item", 38)
-    Column("Keep", TARGET_X + 12)
+    Column("Keep in bags", TARGET_X)
     Column("On", CHECK_X)
     Column("Order", UP_X)
     f.count = G.Text(f, "meta")
-    f.count:SetPoint("TOPRIGHT", -8, -124)
+    f.count:SetPoint("TOPRIGHT", f, "TOPLEFT", W - 8, -124)
     f.count:SetJustifyH("RIGHT")
     f.well = CreateFrame("Frame", nil, f, "BackdropTemplate")
     f.well:SetPoint("TOPLEFT", 0, LIST_TOP)
@@ -488,12 +491,12 @@ local function Build()
         P.Refresh()
     end)
     f.sugClass:SetChoices(SugChoices)
-    f.sugClass:SetPoint("TOPRIGHT", -2, SUG_TOP + 4)
+    f.sugClass:SetPoint("TOPRIGHT", f, "TOPLEFT", W - 2, SUG_TOP + 4)
     I.Tip(f.sugClass, "Class", "Shows your class's reagents first. Choose another class to see theirs.")
     f.sugHelp = G.Text(f, "small")
     f.sugHelp:SetPoint("TOPLEFT", 4, SUG_TOP - 20)
     f.sugHelp:SetWidth(W - 8)
-    f.sugHelp:SetText("Add the ones you use; each starts with a suggested target you can change. Which you need depends on your spells and their ranks, which these don't check.")
+    f.sugHelp:SetText("Add a suggested reagent, then adjust its target quantity for your spells.")
     f.sugGridTop = SUG_TOP - 48
     f.sugNone = G.Text(f, "small")
     f.sugNone:SetPoint("TOPLEFT", 4, f.sugGridTop)

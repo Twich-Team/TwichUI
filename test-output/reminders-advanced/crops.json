@@ -1,0 +1,11 @@
+{
+  "before-after": {
+    "columns": [
+      "baseline",
+      "corrected"
+    ],
+    "baseline": "reminders-20261111-071326/scrollHeader.png",
+    "corrected": "reminders-20261111-072004/advancedExpanded.png",
+    "native_scale": true
+  }
+}

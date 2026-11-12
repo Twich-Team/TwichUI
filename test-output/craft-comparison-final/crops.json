@@ -1,0 +1,414 @@
+{
+  "home-shell-header": {
+    "columns": [
+      "reference",
+      "before",
+      "after"
+    ],
+    "pose": "editorTall",
+    "reference": "/home/rich/dev/personal/TwichUI/docs/reminders-revision/SETTINGS_HOME.png",
+    "baseline": "../wow-ui-sim-lab/artifacts/reminders-20261111-042437/editorTall.png",
+    "current": "../wow-ui-sim-lab/artifacts/reminders-20261111-045911/editorTall.png",
+    "reference_box": [
+      4,
+      4,
+      1440,
+      100
+    ],
+    "actual_box": [
+      326,
+      249,
+      1262,
+      316
+    ]
+  },
+  "home-frame-corner": {
+    "columns": [
+      "reference",
+      "before",
+      "after"
+    ],
+    "pose": "editorTall",
+    "reference": "/home/rich/dev/personal/TwichUI/docs/reminders-revision/SETTINGS_HOME.png",
+    "baseline": "../wow-ui-sim-lab/artifacts/reminders-20261111-042437/editorTall.png",
+    "current": "../wow-ui-sim-lab/artifacts/reminders-20261111-045911/editorTall.png",
+    "reference_box": [
+      5,
+      3,
+      42,
+      40
+    ],
+    "actual_box": [
+      326,
+      249,
+      363,
+      286
+    ]
+  },
+  "selected-reminder-row": {
+    "columns": [
+      "reference",
+      "before",
+      "after"
+    ],
+    "pose": "editorTall",
+    "reference": "/home/rich/dev/personal/TwichUI/docs/reminders-revision/SETTINGS_HOME.png",
+    "baseline": "../wow-ui-sim-lab/artifacts/reminders-20261111-042437/editorTall.png",
+    "current": "../wow-ui-sim-lab/artifacts/reminders-20261111-045911/editorTall.png",
+    "reference_box": [
+      32,
+      111,
+      316,
+      176
+    ],
+    "actual_box": [
+      586,
+      442,
+      774,
+      511
+    ]
+  },
+  "selected-builder-row": {
+    "columns": [
+      "reference",
+      "before",
+      "after"
+    ],
+    "pose": "when",
+    "reference": "/home/rich/dev/personal/TwichUI/docs/reminders-revision/SETTINGS_HOME.png",
+    "baseline": "../wow-ui-sim-lab/artifacts/reminders-20261111-042437/when.png",
+    "current": "../wow-ui-sim-lab/artifacts/reminders-20261111-045911/when.png",
+    "reference_box": [
+      32,
+      111,
+      316,
+      176
+    ],
+    "actual_box": [
+      198,
+      275,
+      436,
+      319
+    ]
+  },
+  "primary-button": {
+    "columns": [
+      "reference",
+      "before",
+      "after"
+    ],
+    "pose": "dirty",
+    "reference": "/home/rich/dev/personal/TwichUI/docs/reminders-revision/REMINDERS_WHEN_BUILDER.png",
+    "baseline": "../wow-ui-sim-lab/artifacts/reminders-20261111-042437/dirty.png",
+    "current": "../wow-ui-sim-lab/artifacts/reminders-20261111-045911/dirty.png",
+    "reference_box": [
+      1400,
+      883,
+      1527,
+      924
+    ],
+    "actual_box": [
+      1283,
+      941,
+      1401,
+      981
+    ]
+  },
+  "secondary-button": {
+    "columns": [
+      "reference",
+      "before",
+      "after"
+    ],
+    "pose": "dirty",
+    "reference": "/home/rich/dev/personal/TwichUI/docs/reminders-revision/REMINDERS_WHEN_BUILDER.png",
+    "baseline": "../wow-ui-sim-lab/artifacts/reminders-20261111-042437/dirty.png",
+    "current": "../wow-ui-sim-lab/artifacts/reminders-20261111-045911/dirty.png",
+    "reference_box": [
+      1262,
+      883,
+      1390,
+      924
+    ],
+    "actual_box": [
+      1165,
+      941,
+      1275,
+      981
+    ]
+  },
+  "slider-numeric": {
+    "columns": [
+      "reference",
+      "before",
+      "after"
+    ],
+    "pose": "editorTall",
+    "reference": "/home/rich/dev/personal/TwichUI/docs/reminders-revision/REMINDERS_PREVIEW.PNG",
+    "baseline": "../wow-ui-sim-lab/artifacts/reminders-20261111-042437/editorTall.png",
+    "current": "../wow-ui-sim-lab/artifacts/reminders-20261111-045911/editorTall.png",
+    "reference_box": [
+      781,
+      484,
+      1138,
+      539
+    ],
+    "actual_box": [
+      946,
+      666,
+      1203,
+      697
+    ]
+  },
+  "when-header-frame": {
+    "columns": [
+      "reference",
+      "before",
+      "after"
+    ],
+    "pose": "when",
+    "reference": "/home/rich/dev/personal/TwichUI/docs/reminders-revision/REMINDERS_WHEN_BUILDER.png",
+    "baseline": "../wow-ui-sim-lab/artifacts/reminders-20261111-042437/when.png",
+    "current": "../wow-ui-sim-lab/artifacts/reminders-20261111-045911/when.png",
+    "reference_box": [
+      415,
+      33,
+      1558,
+      138
+    ],
+    "actual_box": [
+      490,
+      200,
+      1423,
+      300
+    ]
+  },
+  "when-condition-card": {
+    "columns": [
+      "reference",
+      "before",
+      "after"
+    ],
+    "pose": "when",
+    "reference": "/home/rich/dev/personal/TwichUI/docs/reminders-revision/REMINDERS_WHEN_BUILDER.png",
+    "baseline": "../wow-ui-sim-lab/artifacts/reminders-20261111-042437/when.png",
+    "current": "../wow-ui-sim-lab/artifacts/reminders-20261111-045911/when.png",
+    "reference_box": [
+      731,
+      187,
+      1528,
+      296
+    ],
+    "actual_box": [
+      764,
+      342,
+      1375,
+      440
+    ]
+  },
+  "when-location-controls": {
+    "columns": [
+      "reference",
+      "before",
+      "after"
+    ],
+    "pose": "when",
+    "reference": "/home/rich/dev/personal/TwichUI/docs/reminders-revision/REMINDERS_WHEN_BUILDER.png",
+    "baseline": "../wow-ui-sim-lab/artifacts/reminders-20261111-042437/when.png",
+    "current": "../wow-ui-sim-lab/artifacts/reminders-20261111-045911/when.png",
+    "reference_box": [
+      732,
+      352,
+      1528,
+      506
+    ],
+    "actual_box": [
+      764,
+      488,
+      1375,
+      620
+    ]
+  },
+  "when-status-footer": {
+    "columns": [
+      "reference",
+      "before",
+      "after"
+    ],
+    "pose": "dirty",
+    "reference": "/home/rich/dev/personal/TwichUI/docs/reminders-revision/REMINDERS_WHEN_BUILDER.png",
+    "baseline": "../wow-ui-sim-lab/artifacts/reminders-20261111-042437/dirty.png",
+    "current": "../wow-ui-sim-lab/artifacts/reminders-20261111-045911/dirty.png",
+    "reference_box": [
+      422,
+      740,
+      1552,
+      935
+    ],
+    "actual_box": [
+      500,
+      816,
+      1414,
+      990
+    ]
+  },
+  "editor-header-frame": {
+    "columns": [
+      "reference",
+      "before",
+      "after"
+    ],
+    "pose": "editorTall",
+    "reference": "/home/rich/dev/personal/TwichUI/docs/reminders-revision/REMINDERS_PREVIEW.PNG",
+    "baseline": "../wow-ui-sim-lab/artifacts/reminders-20261111-042437/editorTall.png",
+    "current": "../wow-ui-sim-lab/artifacts/reminders-20261111-045911/editorTall.png",
+    "reference_box": [
+      20,
+      25,
+      1185,
+      186
+    ],
+    "actual_box": [
+      326,
+      249,
+      1262,
+      392
+    ]
+  },
+  "editor-appearance-controls": {
+    "columns": [
+      "reference",
+      "before",
+      "after"
+    ],
+    "pose": "editorTall",
+    "reference": "/home/rich/dev/personal/TwichUI/docs/reminders-revision/REMINDERS_PREVIEW.PNG",
+    "baseline": "../wow-ui-sim-lab/artifacts/reminders-20261111-042437/editorTall.png",
+    "current": "../wow-ui-sim-lab/artifacts/reminders-20261111-045911/editorTall.png",
+    "reference_box": [
+      587,
+      254,
+      1145,
+      551
+    ],
+    "actual_box": [
+      805,
+      459,
+      1222,
+      714
+    ]
+  },
+  "editor-status-footer": {
+    "columns": [
+      "reference",
+      "before",
+      "after"
+    ],
+    "pose": "editorTall",
+    "reference": "/home/rich/dev/personal/TwichUI/docs/reminders-revision/REMINDERS_PREVIEW.PNG",
+    "baseline": "../wow-ui-sim-lab/artifacts/reminders-20261111-042437/editorTall.png",
+    "current": "../wow-ui-sim-lab/artifacts/reminders-20261111-045911/editorTall.png",
+    "reference_box": [
+      587,
+      550,
+      1145,
+      893
+    ],
+    "actual_box": [
+      805,
+      721,
+      1222,
+      970
+    ]
+  },
+  "preview-header-frame": {
+    "columns": [
+      "reference",
+      "before",
+      "after"
+    ],
+    "pose": "editorTall",
+    "reference": "/home/rich/dev/personal/TwichUI/docs/reminders-revision/REMINDERS_PREVIEW.PNG",
+    "baseline": "../wow-ui-sim-lab/artifacts/reminders-20261111-042437/editorTall.png",
+    "current": "../wow-ui-sim-lab/artifacts/reminders-20261111-045911/editorTall.png",
+    "reference_box": [
+      1202,
+      26,
+      1568,
+      120
+    ],
+    "actual_box": [
+      1270,
+      249,
+      1587,
+      327
+    ]
+  },
+  "preview-controls-status": {
+    "columns": [
+      "reference",
+      "before",
+      "after"
+    ],
+    "pose": "editorTall",
+    "reference": "/home/rich/dev/personal/TwichUI/docs/reminders-revision/REMINDERS_PREVIEW.PNG",
+    "baseline": "../wow-ui-sim-lab/artifacts/reminders-20261111-042437/editorTall.png",
+    "current": "../wow-ui-sim-lab/artifacts/reminders-20261111-045911/editorTall.png",
+    "reference_box": [
+      1223,
+      588,
+      1548,
+      921
+    ],
+    "actual_box": [
+      1282,
+      868,
+      1577,
+      1060
+    ]
+  },
+  "when-expanded-dropdown": {
+    "columns": [
+      "reference",
+      "after"
+    ],
+    "pose": "menu",
+    "reference": "/home/rich/dev/personal/TwichUI/docs/reminders-revision/REMINDERS_WHEN_BUILDER.png",
+    "baseline": "../wow-ui-sim-lab/artifacts/reminders-20261111-042437/menu.png",
+    "current": "../wow-ui-sim-lab/artifacts/reminders-20261111-045309/menu.png",
+    "reference_box": [
+      1310,
+      84,
+      1542,
+      125
+    ],
+    "actual_box": [
+      1174,
+      244,
+      1407,
+      370
+    ]
+  },
+  "control-rim": {
+    "path": "/home/rich/dev/personal/TwichUI/!!!TwichUI/media/reminders/materials/control-rim.tga",
+    "format": "32-bit uncompressed TGA",
+    "dimensions": [
+      64,
+      64
+    ],
+    "transparent": 2280,
+    "partial": 688,
+    "opaque": 1128
+  },
+  "frame-rim": {
+    "path": "/home/rich/dev/personal/TwichUI/!!!TwichUI/media/reminders/materials/frame-rim.tga",
+    "format": "32-bit uncompressed TGA",
+    "dimensions": [
+      64,
+      64
+    ],
+    "transparent": 1824,
+    "partial": 1144,
+    "opaque": 1128
+  }
+}

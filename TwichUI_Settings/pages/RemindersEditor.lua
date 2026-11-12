@@ -1,7 +1,6 @@
 -- TwichUI settings: Reminders, the editor's sections (Reminders.lua draws the list and puts these under it)
 -- Show (what appears), When (who it is for and its conditions, as cards inside groups, with the rule in plain words), Placement (where, how big, and
--- behind "More placement and appearance options" the rest), Preview (drawn here by the reminder's own layout code, or on
--- the screen where it sits) and Test (what it sees right now, and the same decision for situations you pick). Each
+-- behind "More placement and appearance options" the rest) and Test (what it sees right now, and the same decision for situations you pick). Each
 -- section's widgets are made once, the first time the page is shown, and only placed and filled after that; condition
 -- cards, group boxes and test lines come from pools bounded by RM.MAX_CONDITIONS and RM.MAX_GROUPS. Every change goes through
 -- Config.lua's functions, which check it; nothing here writes saved data, reads the game's equipment for itself or changes it.
@@ -15,13 +14,32 @@ R.RemindersEditor = Ed
 
 local W = 644              -- the settings window's content width
 local PAD, ICON = 14, 28
-local LABEL_X, CTRL_X = 14, 190
+local LABEL_X, CTRL_X = 14, 126
 local ROW = 30
 local QUESTION = "Interface\\Icons\\INV_Misc_QuestionMark"
 local MAX_REQUESTS = 2
 
 local function Wg() return R.SettingsWidgets end
 local function RM() return R.Reminders end
+
+function Ed.Thumb(tex, d, size)
+    local mode = d.mode
+    tex:SetVertexColor(1, 1, 1, 1)
+    tex:SetAlpha(1)
+    tex:SetSize(size, size)
+    if (mode == "artwork" or mode == "artworkText") and RM().Art(d.art) then
+        local file, l, r, t, b, aspect = RM().ArtTexture(d.art, size)
+        tex:SetTexture(file)
+        tex:SetTexCoord(l, r, t, b)
+        tex:SetSize(size * math.min(1, aspect), size / math.max(1, aspect))
+    elseif (mode == "icon" or mode == "iconText") and d.iconSource == "item" then
+        local icon = d.item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(d.item)
+        tex:SetTexture(icon or QUESTION)
+        tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    else
+        R.Icons.Apply(tex, (mode == "icon" or mode == "iconText") and d.icon or "reminders", size)
+    end
+end
 
 local function Choices(list)
     local out = {}
@@ -66,35 +84,32 @@ end
 ---------------------------------------------------------------------------
 -- Pieces
 ---------------------------------------------------------------------------
-local function Section(parent, icon, title, blurb)
+local function Section(parent, icon, title)
     local G = Wg()
     local s = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     s:SetWidth(W)
-    G.Panel(s)
+    local M = R.SettingsMaterial
+    if M then M.PanelFace(s, "walnut") else G.Panel(s) end
     s.icon = s:CreateTexture(nil, "ARTWORK")
     s.icon:SetSize(ICON, ICON)
     s.icon:SetPoint("TOPLEFT", PAD - 2, -10)
-    if not (R.Icons and R.Icons.Apply(s.icon, icon, ICON) ~= "fallback") then s.icon:Hide() end
+    if not (icon and R.Icons and R.Icons.Apply(s.icon, icon, ICON) ~= "fallback") then s.icon:Hide() end
     s.title = G.Text(s, "heading")
-    s.title:SetPoint("TOPLEFT", PAD + ICON + 8, -12)
+    s.title:SetPoint("TOPLEFT", icon and PAD + ICON + 8 or PAD, -12)
+    s.title:SetWidth(230)
     s.title:SetText(title)
-    s.blurb = G.Text(s, "small")
-    s.blurb:SetPoint("TOPLEFT", PAD + ICON + 8, -30)
-    s.blurb:SetWidth(W - PAD * 2 - ICON - 8)
-    s.blurb:SetText(blurb)
+    if M then M.ReminderFont(s.title, 17, true, "serif") end
     s:Hide()
     return s
 end
 
--- Where a section's rows start: under its title and its blurb, however many lines that takes.
-local function Top(s)
-    s.top = math.max(ICON + 16, 30 + (s.blurb:GetStringHeight() or 12) + 12)
-    return s.top
-end
+-- Space for the heading and its icon.
+local function Top() return ICON + 16 end
 
 local function Label(parent, text)
     local fs = Wg().Text(parent, "body")
     fs:SetText(text)
+    R.SettingsMaterial.ReminderFont(fs, 14, true)
     fs:SetWidth(CTRL_X - LABEL_X - 8)
     fs:SetWordWrap(false)
     return fs
@@ -115,6 +130,7 @@ end
 
 local function Note(parent, width)
     local fs = Wg().Text(parent, "small")
+    fs.noteWidth = width
     fs:SetWidth(width or (W - LABEL_X - PAD))
     fs:SetWordWrap(true)
     return fs
@@ -129,6 +145,9 @@ end
 -- Text on a row, placed, its height returned.
 local function Text(fs, text, tone, x, y, parent)
     fs:SetText(text or "")
+    if parent.editorWidth then
+        fs:SetWidth(math.min(fs.noteWidth or W, math.max(80, parent.editorWidth - x - PAD)))
+    end
     Tone(fs, tone)
     Put(fs, parent, x, y)
     return fs:GetStringHeight() or 12
@@ -140,6 +159,7 @@ local function Dropdown(parent, w, choices, onPick, tipTitle, tip)
     local d = Wg().Dropdown(parent, w, onPick)
     d:SetChoices(choices)
     if tip then R.Interact.Tip(d, tipTitle, tip) end
+    if R.SettingsMaterial then R.SettingsMaterial.ReminderControl(d, "dropdown") end
     return d
 end
 
@@ -152,9 +172,9 @@ local function Checkbox(parent, label, onToggle, tip)
     return box
 end
 
-local function Slider(parent, key, onSet)
+local function Slider(parent, key, onSet, width)
     local lim = RM().LIMITS[key]
-    local s = Wg().Slider(parent, 300, onSet)
+    local s = Wg().Slider(parent, width or 280, onSet, true)
     s:SetRange(lim[1], lim[2], 1)
     return s
 end
@@ -162,42 +182,99 @@ end
 ---------------------------------------------------------------------------
 -- Show: what appears
 ---------------------------------------------------------------------------
-local function ShowSection(parent, env)
-    local s = Section(parent, "reminderShow", "Show", "What appears on screen: a picture from TwichUI's gallery, an icon, your words, or a picture or icon with words.")
-    local function Set(key, value) local ok, why = RM().SetDisplay(env.id(), key, value) if not ok then env.Say(why, "warn") end end
+local MODE_H, IMG = 58, 72   -- a display mode's button, and the image tile's side
 
-    s.modeLabel = Label(s, "Display")
-    s.mode = Dropdown(s, 220, function() return Choices(RM().CHOICES.mode) end, function(v) Set("mode", v) end,
-        "Display", "A picture, an icon, your words, or a picture or icon with words. What it shows is separate from when it shows.")
-    s.artLabel = Label(s, "Artwork")
-    s.art = Dropdown(s, 220, function() return Choices(RM().CHOICES.art) end, function(v) Set("art", v) end,
-        "Artwork", "Pictures that come with TwichUI. New ones are added to TwichUI itself (tools/make_reminder_art.py); pictures can't be imported in the game.")
-    s.srcLabel = Label(s, "Icon from")
-    s.src = Dropdown(s, 220, function() return Choices(RM().CHOICES.iconSource) end, function(v) Set("iconSource", v) end,
-        "Icon from", "One of TwichUI's own icons, or the icon of an item you choose. The item doesn't need to be equipped or carried: a reminder about a missing shield can't use the icon of a shield that isn't there.")
-    s.iconLabel = Label(s, "Icon")
-    s.icon = Dropdown(s, 220, function() return Choices(RM().CHOICES.icon) end, function(v) Set("icon", v) end)
-    s.itemLabel = Label(s, "Item")
-    s.itemBox = Wg().EditBox(s, 120, 22)
-    s.itemBox:SetMaxLetters(200)
-    local function TakeItem(text)
-        local id = RM().ParseItem(text)
-        if not id then env.Say("That isn't an item ID. Type the number from the item's link, paste the link, or drop the item on the box.", "warn") return end
-        s.itemBox:SetText("")
-        s.itemBox:ClearFocus()
-        Set("item", id)
+-- The little drawing on a display-mode button: a picture frame and a line of words, a picture frame, lines of words. Plain
+-- rectangles in the settings' ivory, so no bitmap is needed and it takes the button's own hover and selection.
+local function ModeGlyph(button, ui)
+    local G = Wg()
+    local pieces = {}
+    local function Bar(x, y, w, h)
+        local t = G.Solid(button, "OVERLAY", G.pal.text, 0.9)
+        t:SetSize(w, h)
+        t:SetPoint("TOP", button, "TOP", x, -y)
+        pieces[#pieces + 1] = t
     end
-    s.itemBox:SetScript("OnEnterPressed", function(self) TakeItem(self:GetText()) end)
-    s.itemBox:SetScript("OnReceiveDrag", function()
-        local kind, id = GetCursorInfo()
-        if kind ~= "item" then return end
-        ClearCursor()   -- the item goes straight back where it came from; only its ID is noted
-        TakeItem(tostring(Plain(id) or ""))
-    end)
-    R.Interact.Tip(s.itemBox, "Item", "Type its item ID, paste its link, or drop it here from your bags (it goes straight back). Press Enter.")
-    s.itemInfo = Note(s, W - CTRL_X - 140 - PAD)
-    s.textLabel = Label(s, "Words")
-    s.textBox = Wg().EditBox(s, 300, 22)
+    local function Frame(x, y, w, h)
+        Bar(x, y, w, 2); Bar(x, y + h - 2, w, 2)
+        -- the sides sit on the top bar's ends: x is the frame's centre
+        local side = G.Solid(button, "OVERLAY", G.pal.text, 0.9)
+        side:SetSize(2, h - 4); side:SetPoint("TOP", button, "TOP", x - w / 2 + 1, -(y + 2)); pieces[#pieces + 1] = side
+        local side2 = G.Solid(button, "OVERLAY", G.pal.text, 0.9)
+        side2:SetSize(2, h - 4); side2:SetPoint("TOP", button, "TOP", x + w / 2 - 1, -(y + 2)); pieces[#pieces + 1] = side2
+    end
+    if ui == "imageText" then
+        Frame(-9, 10, 18, 14); Bar(-9, 15, 6, 2)
+        Bar(13, 12, 14, 2); Bar(13, 18, 11, 2)
+    elseif ui == "image" then
+        Frame(0, 9, 26, 17); Bar(-5, 19, 9, 3); Bar(5, 15, 3, 3)
+    else
+        Bar(0, 10, 28, 2); Bar(-3, 17, 22, 2); Bar(0, 24, 28, 2)
+    end
+    return pieces
+end
+
+local function ShowSection(parent, env)
+    local s = Section(parent, nil, "Appearance")
+    local function Set(key, value) local ok, why = RM().SetDisplay(env.id(), key, value) if not ok then env.Say(why, "warn") end end
+    local G, M = Wg(), R.SettingsMaterial
+
+    s.subtitle = M.ReminderFont(G.Text(s, "body"), 14)
+    s.subtitle:SetText("Customize how this reminder looks when it appears.")
+    s.subtitle:SetPoint("TOPLEFT", PAD, -36)
+    s.subtitle:SetWidth(W - PAD * 2)
+
+    -- Display: Image + text, Image only, Text only. A view of the five stored modes (reminders/Gallery.lua); only the stored mode changes.
+    s.modeLabel = Label(s, "Display")
+    s.modes = {}
+    for i, m in ipairs(RM().Gallery.UI_MODES) do
+        local ui, label, tip = m[1], m[2], m[3]
+        local b = M.Segment(s, "", 100, function()
+            local ok, why = RM().Gallery.SetUIMode(env.id(), ui)
+            if not ok then env.Say(why, "warn") end
+        end)
+        b:SetHeight(MODE_H)
+        b.ui = ui
+        b.glyph = ModeGlyph(b, ui)
+        b.text = G.Text(b, "body")
+        M.ReminderFont(b.text, 14, true)
+        b.text:ClearAllPoints()
+        b.text:SetPoint("BOTTOM", 0, 8)
+        b.text:SetText(label)
+        R.Interact.Tip(b, label, tip)
+        s.modes[i] = b
+    end
+
+    -- Image: what it shows now, and the one button that changes it (the picker is RemindersImagePicker.lua)
+    s.imageLabel = M.ReminderFont(G.Text(s, "heading"), 15, true)
+    s.imageLabel:SetText("Image")
+    s.imageBox = CreateFrame("Frame", nil, s)
+    s.imageBox:SetFrameLevel(s:GetFrameLevel() or 0)
+    M.PanelFace(s.imageBox, "espresso")
+    s.artTile = CreateFrame("Button", nil, s.imageBox)
+    M.PanelFace(s.artTile, "canvas")
+    s.artTile:SetSize(IMG, IMG)
+    s.artTile:SetPoint("LEFT", 10, 0)
+    s.artTile.thumb = s.artTile:CreateTexture(nil, "OVERLAY")
+    s.artTile.thumb:SetPoint("CENTER", 0, 0)
+    G.Hover(s.artTile, G.pal.bronzeText, 0.12)
+    local function OpenPicker() R.RemindersImagePicker.Open(env.id(), env) end
+    s.artTile:SetScript("OnClick", OpenPicker)
+    R.Interact.Tip(s.artTile, "Choose image", "Choose the picture or icon this reminder shows.")
+    s.imageName = M.ReminderFont(G.Text(s.imageBox, "heading"), 16, true)
+    s.imageName:SetPoint("TOPLEFT", IMG + 26, -14)
+    s.imageName:SetMaxLines(1)
+    s.imageSource = M.ReminderFont(G.Text(s.imageBox, "body"), 13)
+    s.imageSource:SetPoint("TOPLEFT", s.imageName, "BOTTOMLEFT", 0, -3)
+    s.imageSource:SetMaxLines(1)
+    s.choose = G.Button(s.imageBox, "Choose image...", 150, "secondary", OpenPicker)
+    s.choose:SetHeight(28)
+    M.ReminderControl(s.choose, "secondary")
+    s.choose:SetPoint("BOTTOMRIGHT", -12, 12)
+    R.Interact.Tip(s.choose, "Choose image", "Opens the picture list: TwichUI's artwork by kind, or the icon of any item. Nothing changes until you press Apply.")
+
+    s.textLabel = Label(s, "Text")
+    s.textBox = G.EditBox(s, 280, 22)
     s.textBox:SetMaxLetters(RM().TEXT_MAX * 4)
     local function SaveText(self)
         local ok, why = RM().SetDisplay(env.id(), "text", self:GetText())
@@ -206,39 +283,85 @@ local function ShowSection(parent, env)
     s.textBox:SetScript("OnEnterPressed", function(self) SaveText(self); self:ClearFocus() end)
     s.textBox:HookScript("OnEditFocusLost", SaveText)
     R.Interact.Tip(s.textBox, "Words", ("Plain text, up to %d characters. Shown as you type it: nothing in it is read as a command or a code."):format(RM().TEXT_MAX))
-    s.parts = { s.modeLabel, s.mode, s.artLabel, s.art, s.srcLabel, s.src, s.iconLabel, s.icon, s.itemLabel, s.itemBox, s.itemInfo, s.textLabel, s.textBox }
+    s.sizeLabel = Label(s, "Size")
+    s.size = Slider(s, "size", function(v) Set("size", math.floor(v + 0.5)) end, 154)
+    s.colorLabel = Label(s, "Color")
+    s.colorLabel:SetWidth(42)
+    s.color = G.Swatch(s, function(hex) Set("textColor", hex) end)
+    s.textOptions = CreateFrame("Frame", nil, s)
+    s.textOptions:SetFrameLevel(s:GetFrameLevel() or 0)
+    M.PanelFace(s.textOptions, "espresso")
+    s.parts = { s.subtitle, s.modeLabel, s.imageLabel, s.imageBox, s.artTile, s.imageName, s.imageSource, s.choose,
+        s.textLabel, s.textBox, s.sizeLabel, s.size, s.colorLabel, s.color, s.textOptions }
+    for _, b in ipairs(s.modes) do s.parts[#s.parts + 1] = b end
 
     function s:Layout(v, y)
         HideAll(self.parts)
         local d = v.display
-        local C = RM().CHOICES
-        local h = Top(self)
-        self.mode:SetValue(d.mode, LabelOf(C.mode, d.mode))
-        h = Line(self, self.modeLabel, self.mode, h)
-        local m = d.mode
-        if m == "artwork" or m == "artworkText" then
-            self.art:SetValue(d.art, RM().Art(d.art) and LabelOf(C.art, d.art) or (tostring(d.art) .. " (not available)"))
-            h = Line(self, self.artLabel, self.art, h)
+        local width = self:GetWidth()
+        local Gal = RM().Gallery
+        local ui = Gal.UIMode(d.mode)
+        local h = 64
+        self.subtitle:SetWidth(width - PAD * 2)
+        self.subtitle:Show()
+
+        -- the three modes, side by side beside their label
+        local x0 = 88
+        local bw = math.floor((width - x0 - PAD - 2 * 8) / 3)
+        Put(self.modeLabel, self, LABEL_X, h + MODE_H / 2 - 9)
+        for i, b in ipairs(self.modes) do
+            b:SetWidth(bw)
+            b:SetSelected(b.ui == ui)
+            Put(b, self, x0 + (i - 1) * (bw + 8), h)
         end
-        if m == "icon" or m == "iconText" then
-            self.src:SetValue(d.iconSource, LabelOf(C.iconSource, d.iconSource))
-            h = Line(self, self.srcLabel, self.src, h)
-            if d.iconSource == "item" then
-                Put(self.itemLabel, self, LABEL_X, h + 4)
-                Put(self.itemBox, self, CTRL_X, h)
-                local text, tone = ItemLine(d.item)
-                Text(self.itemInfo, text, tone, CTRL_X + 130, h + 4, self)
-                h = h + ROW
-            else
-                self.icon:SetValue(d.icon, LabelOf(C.icon, d.icon))
-                h = Line(self, self.iconLabel, self.icon, h)
-            end
+        h = h + MODE_H + 14
+
+        local visual = ui ~= "text"
+        local words = ui ~= "image"
+        if visual then
+            Put(self.imageLabel, self, PAD, h)
+            h = h + 24
+            self.imageBox:SetSize(width - PAD * 2, IMG + 22)
+            Put(self.imageBox, self, PAD, h)
+            Ed.Thumb(self.artTile.thumb, d, IMG - 10)
+            local _, _, name, from = Gal.Current(d)
+            self.imageName:SetWidth(width - PAD * 2 - IMG - 40)
+            self.imageSource:SetWidth(width - PAD * 2 - IMG - 40)
+            self.imageName:SetText(name)
+            self.imageSource:SetText(from)
+            self.imageName:Show(); self.imageSource:Show(); self.choose:Show(); self.artTile:Show()
+            h = h + IMG + 22 + 12
         end
-        if m == "text" or m == "artworkText" or m == "iconText" then
+        if words then
             if not self.textBox:HasFocus() then self.textBox:SetText(d.text) end
-            h = Line(self, self.textLabel, self.textBox, h)
+            self.textBox:SetSize(width - 72 - PAD, 28)
+            Put(self.textLabel, self, LABEL_X, h + 6)
+            Put(self.textBox, self, 72, h)
+            h = h + 38
         end
-        h = h + 6
+        local size = visual and d.keepAspect
+        if words or size then
+            self.textOptions:SetSize(width - PAD * 2, 36)
+            Put(self.textOptions, self, PAD, h)
+            if words then
+                self.color:SetValue(d.textColor)
+                self.colorLabel:SetText("Text color")
+                self.colorLabel:SetWidth(70)
+                Put(self.colorLabel, self, LABEL_X + 8, h + 9)
+                Put(self.color, self, 92, h + 6)
+            end
+            if size then
+                local lx = words and 146 or LABEL_X + 8
+                local sx = words and 188 or 64
+                self.sizeLabel:SetText("Size")
+                self.size:SetWidth(math.max(130, width - sx - PAD - 4))
+                self.size:SetValue(d.size)
+                Put(self.sizeLabel, self, lx, h + 9)
+                Put(self.size, self, sx, h + 6)
+            end
+            h = h + 36
+        end
+        h = h + 12
         self:SetHeight(h)
         Put(self, parent, 0, y)
         return h
@@ -263,7 +386,12 @@ end
 -- Placement: where, how big; the rest behind one disclosure
 ---------------------------------------------------------------------------
 local function PlacementSection(parent, env)
-    local s = Section(parent, "reminderPlacement", "Placement", "Where it sits and how big it is. It never takes a click, so it can't get in the way of the world.")
+    local s = Section(parent, "reminderPlacement", "Advanced")
+    s.toggle = Wg().Button(s, "Placement and effects", 220, "secondary", function()
+        Ed.placementOpen = not Ed.placementOpen; env.Changed()
+    end)
+    R.SettingsMaterial.Disclosure(s.toggle)
+    s.title:Hide(); s.icon:Hide()
     local function Set(key, value) local ok, why = RM().SetDisplay(env.id(), key, value) if not ok then env.Say(why, "warn") end end
     local function Whole(fn) return function(v) fn(math.floor(v + 0.5)) end end
     local D = R.ReminderDisplay
@@ -277,17 +405,15 @@ local function PlacementSection(parent, env)
         local ok, why = RM().SetPreset(env.id(), v)
         if not ok then env.Say(why, "warn") end
     end, "Position", "A place on the screen, or where you moved it. Below the middle sits under your character, clear of it.")
-    s.move = Wg().Button(s, "Move on screen", 150, "secondary", function()
+    s.move = Wg().Button(s, "Place on screen", 150, "secondary", function()
         local v = env.view()
         if not v then return end
         if D.Positioning() and D.PreviewId() == v.id then D.PositionEnd() env.Changed() return end
-        local ok = D.PreviewStart(v, true)
+        local ok = R.RemindersPlacement.Start(v)
         if not ok then env.Say("It can be moved when you are out of combat.", "warn") end
         env.Changed()
     end)
-    R.Interact.Tip(s.move, "Move on screen", "Shows it where it sits, with a handle to drag. Right-click the handle, or press Done, to finish. Moving ends by itself in combat. The offsets below follow.")
-    s.sizeLabel = Label(s, "Size")
-    s.size = Slider(s, "size", Whole(function(v) Set("size", v) end))
+    R.Interact.Tip(s.move, "Place on screen", "Hides settings while you drag the reminder. Finish saves its position; Cancel keeps its old position. Settings returns afterward. Combat cancels placement.")
     s.opacityLabel = Label(s, "Opacity")
     s.opacity = Slider(s, "opacity", Whole(function(v) Set("opacity", v) end))
     s.textSizeLabel = Label(s, "Text size")
@@ -316,14 +442,14 @@ local function PlacementSection(parent, env)
         local v = env.view()
         local out = {}
         for i, c in ipairs(R.MenuStyle.Fonts.Choices(v and v.display.font or "default", { { "default", "Game font (default)" } })) do
-            out[i] = { value = c[1], label = c[2] }
+            out[i] = { value = c[1], label = c[2],
+                font = R.MenuStyle.Fonts.Resolve(c[1], STANDARD_TEXT_FONT or [[Fonts\FRIZQT__.TTF]]) }
         end
         return out
     end, function(v) Set("font", v) end, "Font", "Fonts come from LibSharedMedia, so TwichUI's, EllesmereUI's and any other addon's are listed. A font that has gone is drawn with the game's own and stays chosen.")
+    s.font.menuWidth, s.font.menuAlignRight = 320, true
     s.outlineLabel = Label(s, "Outline")
     s.outline = Dropdown(s, 220, function() return Choices(RM().CHOICES.outline) end, function(v) Set("outline", v) end)
-    s.colorLabel = Label(s, "Text color")
-    s.color = Wg().Swatch(s, function(hex) Set("textColor", hex) end)
     s.panelLabel = Label(s, "Background")
     s.panel = Dropdown(s, 220, function() return Choices(RM().CHOICES.panel) end, function(v) Set("panel", v) end)
     s.pointLabel = Label(s, "Anchored to")
@@ -363,16 +489,16 @@ local function PlacementSection(parent, env)
         "A quarter-second fade as it appears and goes. Off: it simply appears and goes. Off while Notifications' Reduced motion is on.")
     s.pulse = Checkbox(s, "Pulse gently when it appears", function(on) Set("pulse", on and true or false) end,
         "Three slow breaths of its opacity when it appears, then still. Off while Notifications' Reduced motion is on.")
-    s.delayLabel = Label(s, "Wait before showing")
+    s.delayLabel = Label(s, "Show after")
     s.delay = Slider(s, "delay", Whole(function(v) Set("delay", v) end))
-    s.minLabel = Label(s, "Keep up at least")
+    s.minLabel = Label(s, "Keep for")
     s.min = Slider(s, "minShow", Whole(function(v) Set("minShow", v) end))
     s.timing = Note(s)
     s.motion = Note(s)
 
-    s.parts = { s.presetLabel, s.preset, s.move, s.sizeLabel, s.size, s.opacityLabel, s.opacity, s.textSizeLabel, s.textSize,
+    s.parts = { s.presetLabel, s.preset, s.opacityLabel, s.opacity, s.textSizeLabel, s.textSize,
         s.placeLabel, s.textPlace, s.more, s.keep, s.keep.label, s.widthLabel, s.width, s.heightLabel, s.height, s.fontLabel, s.font,
-        s.outlineLabel, s.outline, s.colorLabel, s.color, s.panelLabel, s.panel, s.pointLabel, s.point, s.offsetLabel, s.x, s.y,
+        s.outlineLabel, s.outline, s.panelLabel, s.panel, s.pointLabel, s.point, s.offsetLabel, s.x, s.y,
         s.strataLabel, s.strata, s.fade, s.fade.label, s.pulse, s.pulse.label, s.delayLabel, s.delay, s.minLabel, s.min, s.timing, s.motion }
 
     function s:Layout(v, y)
@@ -381,135 +507,96 @@ local function PlacementSection(parent, env)
         local m = d.mode
         local visual = m ~= "text"
         local words = m == "text" or m == "artworkText" or m == "iconText"
-        local h = Top(self)
-        local presetLabel
-        for _, pr in ipairs(RM().PRESETS) do if pr[1] == p.preset then presetLabel = pr[2] end end
-        self.preset:SetValue(p.preset, presetLabel)
-        h = Line(self, self.presetLabel, self.preset, h, 0)
-        local moving = D.Positioning() and D.PreviewId() == v.id
-        self.move.text:SetText(moving and "Done" or "Move on screen")
-        Put(self.move, self, CTRL_X + 232, h)
-        h = h + ROW
-        if visual and d.keepAspect then
-            self.size:SetValue(d.size)
-            h = Line(self, self.sizeLabel, self.size, h)
+        local h = 8
+        self.toggle.text:SetText("Advanced")
+        self.toggle:SetExpanded(Ed.placementOpen)
+        Put(self.toggle, self, PAD, h)
+        Put(self.diagnostics, self, self:GetWidth() - self.diagnostics:GetWidth() - PAD, h)
+        h = h + 32
+        if not Ed.placementOpen then
+            self:SetHeight(h); Put(self, parent, 0, y); return h
         end
+        -- Each visible control owns a full row. Position belongs with the secondary
+        -- placement controls, rather than sharing Opacity's first-row anchor.
+        local controlWidth = math.min(280, self:GetWidth() - CTRL_X - PAD)
+        for _, control in ipairs({ self.opacity, self.textSize, self.width, self.height, self.delay, self.min }) do
+            control:SetWidth(controlWidth)
+        end
+        for _, control in ipairs({ self.textPlace, self.preset, self.font, self.outline, self.panel, self.point, self.strata }) do
+            control:SetWidth(math.min(220, controlWidth))
+        end
+        local rowHeight = 32
+        h = h + 8
         self.opacity:SetValue(d.opacity)
-        h = Line(self, self.opacityLabel, self.opacity, h)
+        h = Line(self, self.opacityLabel, self.opacity, h, rowHeight)
         if words then
             self.textSize:SetValue(d.textSize)
-            h = Line(self, self.textSizeLabel, self.textSize, h)
+            h = Line(self, self.textSizeLabel, self.textSize, h, rowHeight)
         end
         if visual and words then
             self.textPlace:SetValue(d.textPlace, LabelOf(RM().CHOICES.textPlace, d.textPlace))
-            h = Line(self, self.placeLabel, self.textPlace, h)
+            h = Line(self, self.placeLabel, self.textPlace, h, rowHeight)
         end
 
         local open = Ed.moreOpen and true or false
         for _, t in ipairs(self.more.down) do t:SetShown(not open) end
         for _, t in ipairs(self.more.up) do t:SetShown(open) end
         self.more.text:SetText(open and "Fewer options" or "More placement and appearance options")
-        Put(self.more, self, LABEL_X - 4, h + 2)
-        h = h + 28
+        self.more:SetWidth(math.min(320, self:GetWidth() - LABEL_X - PAD))
+        Put(self.more, self, LABEL_X - 4, h + 8)
+        h = h + 38
         if open then
             if visual then
                 self.keep:SetChecked(d.keepAspect)
                 Put(self.keep, self, CTRL_X, h + 2)
                 self.keep.label:Show()
-                h = h + ROW
+                h = h + rowHeight
                 if not d.keepAspect then
                     self.width:SetValue(d.width)
-                    h = Line(self, self.widthLabel, self.width, h)
+                    h = Line(self, self.widthLabel, self.width, h, rowHeight)
                     self.height:SetValue(d.height)
-                    h = Line(self, self.heightLabel, self.height, h)
+                    h = Line(self, self.heightLabel, self.height, h, rowHeight)
                 end
             end
             if words then
                 local fontLabel = d.font == "default" and "Game font (default)" or d.font
                 self.font:SetValue(d.font, fontLabel)
-                h = Line(self, self.fontLabel, self.font, h)
+                h = Line(self, self.fontLabel, self.font, h, rowHeight)
                 self.outline:SetValue(d.outline, LabelOf(RM().CHOICES.outline, d.outline))
-                h = Line(self, self.outlineLabel, self.outline, h)
-                self.color:SetValue(d.textColor)
-                h = Line(self, self.colorLabel, self.color, h)
+                h = Line(self, self.outlineLabel, self.outline, h, rowHeight)
             end
             self.panel:SetValue(d.panel, LabelOf(RM().CHOICES.panel, d.panel))
-            h = Line(self, self.panelLabel, self.panel, h)
+            h = Line(self, self.panelLabel, self.panel, h, rowHeight)
+            local presetLabel
+            for _, pr in ipairs(RM().PRESETS) do if pr[1] == p.preset then presetLabel = pr[2] end end
+            self.preset:SetValue(p.preset, presetLabel)
+            h = Line(self, self.presetLabel, self.preset, h, rowHeight)
             self.point:SetValue(p.point, LabelOf(RM().POINTS, p.point))
-            h = Line(self, self.pointLabel, self.point, h)
+            h = Line(self, self.pointLabel, self.point, h, rowHeight)
             Put(self.offsetLabel, self, LABEL_X, h + 4)
             if not self.x:HasFocus() then self.x:SetText(tostring(p.x)) end
             if not self.y:HasFocus() then self.y:SetText(tostring(p.y)) end
             Put(self.x, self, CTRL_X, h)
             Put(self.y, self, CTRL_X + 80, h)
-            h = h + ROW
+            h = h + rowHeight
             self.strata:SetValue(d.strata, LabelOf(RM().CHOICES.strata, d.strata))
-            h = Line(self, self.strataLabel, self.strata, h)
+            h = Line(self, self.strataLabel, self.strata, h, rowHeight)
             self.fade:SetChecked(d.fade)
             Put(self.fade, self, CTRL_X, h + 2); self.fade.label:Show()
-            h = h + ROW
+            h = h + rowHeight
             self.pulse:SetChecked(d.pulse)
             Put(self.pulse, self, CTRL_X, h + 2); self.pulse.label:Show()
-            h = h + ROW
+            h = h + rowHeight
             if R:Enabled("arrivalReducedMotion") then
                 h = h + Text(self.motion, "Reduced motion is on (Notifications), so it neither fades nor pulses.", "quiet", CTRL_X, h, self) + 6
             end
             self.delay:SetValue(d.delay)
-            h = Line(self, self.delayLabel, self.delay, h)
+            h = Line(self, self.delayLabel, self.delay, h, rowHeight)
             self.min:SetValue(d.minShow)
-            h = Line(self, self.minLabel, self.min, h)
+            h = Line(self, self.minLabel, self.min, h, rowHeight)
             h = h + Text(self.timing, ("In seconds. Waiting %d: its conditions must stay true that long before it shows; if they stop first, nothing shows. Keeping it up %d: once shown it stays at least that long, unless you turn it off, delete it, or it stops applying to this character."):format(d.delay, d.minShow), "quiet", LABEL_X, h, self) + 6
         end
-        h = h + 8
-        self:SetHeight(h)
-        Put(self, parent, 0, y)
-        return h
-    end
-    return s
-end
-
----------------------------------------------------------------------------
--- Preview: drawn here by the reminder's own layout code, or shown where it sits
----------------------------------------------------------------------------
-local BOX_H = 150
-
-local function PreviewSection(parent, env)
-    local s = Section(parent, "reminderPreview", "Preview appearance", "How it looks, drawn here, or on your screen where it sits. A preview shows it whatever its conditions say, and changes nothing.")
-    local D = R.ReminderDisplay
-    s.box = CreateFrame("Frame", nil, s, "BackdropTemplate")
-    s.box:SetSize(W - PAD * 2, BOX_H)
-    Wg().Well(s.box)
-    s.surface = D.NewSurface(s.box)
-    s.surface:SetPoint("CENTER", s.box, "CENTER", 0, 0)
-    s.tag = Wg().Tag(s.box, "PREVIEW")
-    s.tag:SetPoint("TOPLEFT", 6, -6)
-    s.caption = Note(s)
-    s.show = Wg().Button(s, "Show on screen", 150, "secondary", function()
-        local v = env.view()
-        if not v then return end
-        if D.PreviewId() == v.id then D.PreviewStop() env.Changed() return end
-        local ok = D.PreviewStart(v, false)
-        if not ok then env.Say("The preview waits until you are out of combat.", "warn") end
-        env.Changed()
-    end)
-    R.Interact.Tip(s.show, "Show on screen", "Shows it where it sits, marked Preview, whatever its conditions say. Nothing about your equipment or its rules changes. It ends when you close these settings, enter combat, turn Reminders off or delete it.")
-    s.state = Note(s, W - CTRL_X - 170)
-
-    function s:Layout(v, y)
-        local h = Top(self)
-        Put(self.box, self, PAD, h)
-        local _, _, scale = D.DrawSurface(self.surface, v, W - PAD * 2 - 24, BOX_H - 24)
-        self.surface:Show()
-        h = h + BOX_H + 8
-        local words = scale < 1 and ("Shown here at %d%% of its size, to fit the box."):format(math.floor(scale * 100)) or "Shown here at its own size."
-        if not v.valid then words = words .. " It can't show in the world until what is listed above is fixed." end
-        h = h + Text(self.caption, words, "quiet", PAD, h, self) + 8
-        local on = D.PreviewId() == v.id
-        self.show.text:SetText(on and "Hide preview" or "Show on screen")
-        Put(self.show, self, PAD, h)
-        local stateText = on and (D.Positioning() and "On screen now, with a handle to drag." or "On screen now, marked Preview.") or ""
-        Text(self.state, stateText, "ok", PAD + 162, h + 4, self)
-        h = h + ROW + 6
+        h = h + 12
         self:SetHeight(h)
         Put(self, parent, 0, y)
         return h
@@ -527,9 +614,8 @@ local SOUND_WHY = {
 }
 
 local function SoundSection(parent, env)
-    local s = Section(parent, "hazardAlerts", "Sound", "An optional sound when it appears. It plays once each time it comes up, never while it stays up, and a preview makes none.")
-    s.label = Label(s, "Sound")
-    s.pick = Dropdown(s, 260, function()
+    local s = Section(parent, nil, "Sound")
+    s.pick = Dropdown(s, 200, function()
         local v = env.view()
         local list = { { value = "", label = "None" } }
         for _, c in ipairs(R:SoundChoices(v and v.sound or nil)) do list[#list + 1] = { value = c[1], label = c[2] } end
@@ -546,28 +632,29 @@ local function SoundSection(parent, env)
     end)
     R.Interact.Tip(s.play, "Play", "Plays the chosen sound once. It follows the game's sound-effects volume: if that is muted or at zero, you will hear nothing.")
     s.note = Note(s)
-    s.parts = { s.label, s.pick, s.play, s.note }
+    s.parts = { s.pick, s.play, s.note }
 
     function s:Layout(v, y)
         HideAll(self.parts)
-        local h = Top(self)
+        local h = 10
         local label = "None"
         if v.sound then
             label = v.sound
             if not R:ResolveSound(v.sound) then label = v.sound .. " (not available)" end
         end
         self.pick:SetValue(v.sound or "", label)
-        h = Line(self, self.label, self.pick, h)
-        Put(self.play, self, CTRL_X + 272, h - ROW)
+        local pickWidth = math.min(200, self:GetWidth() - CTRL_X - PAD - 82)
+        self.pick:SetWidth(pickWidth)
+        Put(self.pick, self, CTRL_X, h)
+        Put(self.play, self, CTRL_X + pickWidth + 12, h)
+        h = h + 31
         local words
         if v.sound and not R:ResolveSound(v.sound) then
-            words = "That sound isn't available right now, so nothing plays until it is back."
-        elseif v.sound then
-            words = "It follows the game's sound-effects volume. Nothing is written in chat."
-        else
-            words = "No sound. Choose one to hear it when this reminder appears."
+            words = "That sound isn't available right now."
+            h = h + Text(self.note, words, "warn", LABEL_X, h, self) + 4
         end
-        h = h + Text(self.note, words, (v.sound and not R:ResolveSound(v.sound)) and "warn" or "quiet", LABEL_X, h, self) + 10
+        self.play:SetEnabled(v.sound ~= nil)
+        h = h + 8
         self:SetHeight(h)
         Put(self, parent, 0, y)
         return h
@@ -604,21 +691,69 @@ local function ConditionLine(c, observedWord)
 end
 
 -- A line for each condition and group of a decision, a group before what is in it and what is in it a step in.
+local function ResultRow(parent)
+    local G, M = Wg(), R.SettingsMaterial
+    local row = CreateFrame("Frame", nil, parent)
+    row.icon = row:CreateTexture(nil, "ARTWORK")
+    row.icon:SetSize(25, 25); row.icon:SetPoint("TOPLEFT", 0, -2)
+    row.title = M.ReminderFont(G.Text(row, "body"), 14, true)
+    row.state = M.ReminderFont(G.Text(row, "body"), 13, true)
+    row.observation = M.ReminderFont(G.Text(row, "small"), 12)
+    row.state:SetPoint("TOPRIGHT", 0, -3); row.state:SetWidth(92); row.state:SetJustifyH("RIGHT")
+    row.line = G.Solid(row, "BORDER", G.pal.bronzeLo, .32)
+    row.line:SetHeight(1); row.line:SetPoint("BOTTOMLEFT"); row.line:SetPoint("BOTTOMRIGHT")
+    return row
+end
+
 local function NodeLines(self, pool, out, observedWord, h)
+    local Pl = R.RemindersPlain
     for i, c in ipairs(out and out.nodes or {}) do
-        local fs = pool[i]
-        if not fs then break end
-        local x = PAD + 10 + 16 * ((c.depth or 1) - 1)
-        h = h + Text(fs, ConditionLine(c, observedWord), ResultTone(c.result), x, h, self) + 4
+        local row = pool[i]
+        if not row then break end
+        local x = PAD + 12 * math.min(4, (c.depth or 1) - 1)
+        local w = (self.editorWidth or self:GetWidth()) - x - PAD
+        row:SetWidth(w)
+        local title = c.group and (c.match == "any" and "Any of these" or "All of these") or Pl.Sentence(c.entry)
+        row.title:SetText(title)
+        row.title:ClearAllPoints(); row.title:SetPoint("TOPLEFT", c.group and 0 or 34, -2)
+        row.title:SetWidth(math.max(60, w - (c.group and 0 or 34) - 98))
+        row.state:SetText(({ match = "Met", nomatch = "Not met", unknown = "Unknown", invalid = "Needs attention" })[c.result] or "Unknown")
+        Wg().Color(row.state, c.result == "match" and Wg().pal.sage
+            or c.result == "nomatch" and Wg().pal.danger.text
+            or c.result == "invalid" and Wg().pal.bronzeText or Wg().pal.textDim)
+        Wg().Color(row.title, c.group and Wg().pal.textDim or Wg().pal.text)
+        row.icon:SetShown(not c.group)
+        row.observation:SetShown(not c.group)
+        local titleH = row.title:GetStringHeight() or 14
+        if not c.group then
+            Pl.ApplyArt(row.icon, c.entry and c.entry.cond, 25)
+            row.observation:ClearAllPoints(); row.observation:SetPoint("TOPLEFT", 34, -titleH - 6)
+            row.observation:SetWidth(w - 34)
+            row.observation:SetText(observedWord .. ": " .. ((c.observed and c.observed ~= "") and c.observed or "Not available"))
+            Wg().Color(row.observation, Wg().pal.textDim)
+        end
+        local rh = titleH + (c.group and 10 or (row.observation:GetStringHeight() or 12) + 17)
+        row:SetHeight(rh); Put(row, self, x, h)
+        h = h + rh + 6
     end
     return h
 end
 
+Ed.ResultRow, Ed.DrawResults = ResultRow, NodeLines
+
 local function TestSection(parent, env)
-    local s = Section(parent, "reminderTest", "Test", "What it decides right now and why, and the same decision for situations you choose, without changing your equipment.")
+    local s = Section(parent, "reminderTest", "Diagnostics")
+    s.toggle = Wg().Button(s, "Diagnostics", 126, "secondary", function()
+        Ed.testOpen = not Ed.testOpen; env.Changed()
+    end)
     local NODES = RM().MAX_CONDITIONS + RM().MAX_GROUPS
     s.liveHead = Wg().Text(s, "body")
-    s.liveHead:SetText("Right now")
+    s.liveHead:SetText("Current visibility")
+    R.SettingsMaterial.ReminderFont(s.liveHead, 17, true)
+    s.eye = s:CreateTexture(nil, "ARTWORK")
+    s.eye:SetSize(22, 22)
+    s.conditionHead = R.SettingsMaterial.ReminderFont(Wg().Text(s, "body"), 14, true)
+    s.conditionHead:SetText("Condition results · live observations")
     s.liveResult = Note(s)
     s.live = {}
     s.simHead = Wg().Text(s, "body")
@@ -627,8 +762,8 @@ local function TestSection(parent, env)
     s.simIntro = Note(s)
     s.picks, s.pickLabels, s.sim = {}, {}, {}
     for i = 1, NODES do
-        s.live[i] = Note(s, W - PAD * 2 - 10)
-        s.sim[i] = Note(s, W - PAD * 2 - 10)
+        s.live[i] = ResultRow(s)
+        s.sim[i] = ResultRow(s)
     end
     for i = 1, RM().MAX_CONDITIONS do
         s.pickLabels[i] = Note(s, 300)
@@ -648,10 +783,18 @@ local function TestSection(parent, env)
         end)
     end
     s.simResult = Note(s)
-    s.manualHead = Wg().Text(s, "body")
-    s.manualHead:SetText("Check it in the game")
-    s.manual = Note(s)
-    local parts = { s.liveHead, s.liveResult, s.simHead, s.simTag, s.simIntro, s.simResult, s.manualHead, s.manual }
+    s.technical = Note(s)
+    s.details = Wg().Button(s, "› Technical details", 160, "secondary", function()
+        Ed.technicalOpen = not Ed.technicalOpen; env.Changed()
+    end)
+    R.SettingsMaterial.Disclosure(s.details)
+    R.SettingsMaterial.ReminderControl(s.details, "secondary")
+    s.try = Wg().Button(s, "› Try a situation", 160, "secondary", function()
+        Ed.situationOpen = not Ed.situationOpen; env.Changed()
+    end)
+    R.SettingsMaterial.Disclosure(s.try)
+    R.SettingsMaterial.ReminderControl(s.try, "secondary")
+    local parts = { s.liveHead, s.liveResult, s.simHead, s.simTag, s.simIntro, s.simResult, s.conditionHead, s.eye, s.details, s.technical, s.try }
     for i = 1, NODES do parts[#parts + 1] = s.live[i]; parts[#parts + 1] = s.sim[i] end
     for i = 1, RM().MAX_CONDITIONS do parts[#parts + 1] = s.picks[i]; parts[#parts + 1] = s.pickLabels[i] end
 
@@ -659,24 +802,46 @@ local function TestSection(parent, env)
         HideAll(parts)
         local E, CT = R.ReminderEval, R.ReminderController
         local h = Top(self)
-        Put(self.liveHead, self, PAD, h)
-        h = h + 18
+        self.toggle.text:SetText(Ed.testOpen and "Hide diagnostics" or "Diagnostics")
+        if not Ed.testOpen then
+            self:Hide()
+            return 0
+        end
         local out, status = CT.Inspect(v.id)
+        local label, state, reason, visible = R.RemindersPlain.LiveFeedback(v)
+        self.liveHead:SetText(label)
+        Put(self.eye, self, PAD, h - 2)
+        self.eye:SetTexture(R.PATH .. [[media\guildloc\]] .. (visible and "eye-open-small.tga" or "eye-hidden-small.tga"))
+        local tint = visible and Wg().pal.sage or state == "unmet" and Wg().pal.danger.text
+            or state == "invalid" and Wg().pal.bronzeText or Wg().pal.textDim
+        Wg().Color(self.liveHead, tint)
+        self.eye:SetVertexColor(tint[1], tint[2], tint[3], 1)
+        Put(self.liveHead, self, PAD + 30, h)
+        h = h + 24
+        h = h + Text(self.liveResult, reason or "No observation available.", nil, PAD + 30, h, self) + 16
+        Put(self.conditionHead, self, PAD, h); h = h + 25
         h = NodeLines(self, self.live, out, "Observed", h)
-        local words = E.STATUS_WORDS[status] or tostring(status)
-        local why = out and (out.reason or out.explain) or ""
-        if status == "disabled" then why = "Turn it on to use it. " .. (out and out.explain or "")
-        elseif status == "off" then why = "Turn Reminders on (above) to use it."
-        elseif status == "world" then why = "It decides once you are in the world." end
-        h = h + 2 + Text(self.liveResult, ("Result: %s. %s"):format(words, why), StatusTone(status), PAD, h + 2, self) + 12
-
+        self.details.text:SetText("Technical details")
+        self.details:SetExpanded(Ed.technicalOpen)
+        Put(self.details, self, PAD, h); h = h + 34
+        if Ed.technicalOpen then
+            local details = { "Live evaluation · " .. tostring(status) }
+            for _, c in ipairs(out and out.nodes or {}) do details[#details + 1] = ConditionLine(c, "Observed") end
+            if out then details[#details + 1] = out.reason or out.explain or "" end
+            h = h + Text(self.technical, table.concat(details, "\n"), "quiet", PAD, h, self) + 12
+        end
+        self.try.text:SetText("Try a situation")
+        self.try:SetExpanded(Ed.situationOpen)
+        Put(self.try, self, PAD, h); h = h + 34
+        if Ed.situationOpen then
+        self.simHead:SetText("Sample inputs")
         Put(self.simHead, self, PAD, h)
-        Put(self.simTag, self, PAD + (self.simHead:GetStringWidth() or 100) + 10, h)
-        h = h + 20
+        Put(self.simTag, self, PAD + 110, h)
+        h = h + 23
         if #v.conditions == 0 then
             h = h + Text(self.simIntro, "Add a condition first; then you can try situations here.", "quiet", PAD, h, self) + 8
         else
-            h = h + Text(self.simIntro, "Choose what each condition would see. The decision below is made by the same rules as the live one, from these made-up facts only: your equipment, the live result and your settings are not touched. Conditions that ask about the same thing (several classes) share one choice.", "quiet", PAD, h, self) + 8
+            h = h + Text(self.simIntro, "Choose sample values to see how the rule would respond.", "quiet", PAD, h, self) + 8
             local picks = Ed.picks and Ed.picks[v.id] or {}
             for i, input in ipairs(E.SimInputs(v)) do
                 if not self.picks[i] then break end
@@ -687,9 +852,9 @@ local function TestSection(parent, env)
                 Text(self.pickLabels[i], ("%d. %s"):format(i, label), nil, PAD + 10, h + 4, self)
                 if chosen then
                     self.picks[i]:SetValue(chosen.key, chosen.label)
-                    Put(self.picks[i], self, W - PAD - 240, h)
+                    Put(self.picks[i], self, PAD + 10, h + 22)
                 end
-                h = h + ROW
+                h = h + ROW + 26
             end
             local sim = E.Simulate(v, picks)
             h = NodeLines(self, self.sim, sim, "Simulated", h)
@@ -697,9 +862,7 @@ local function TestSection(parent, env)
             h = h + 2 + Text(self.simResult, ("Simulated result: %s. %s"):format(simWords, sim.reason or sim.explain), StatusTone(sim.status), PAD, h + 2, self) + 12
         end
 
-        Put(self.manualHead, self, PAD, h)
-        h = h + 18
-        h = h + Text(self.manual, "Turn it on, then change what it is about (take off or put on equipment, move your ammunition): within a moment it appears or goes, and Right now says why. Every condition is checked each time, even when an earlier one has already settled the answer, so each line shows its own result. Your gear and bags are never changed by TwichUI.", "quiet", PAD, h, self) + 10
+        end -- simulated inputs disclosure
         self:SetHeight(h)
         Put(self, parent, 0, y)
         return h
@@ -708,12 +871,76 @@ local function TestSection(parent, env)
 end
 
 function Ed.Build(parent, env)
-    return {
+    Ed.sections = {
         ShowSection(parent, env),
         WhenSection(parent, env),
         PlacementSection(parent, env),
         SoundSection(parent, env),
-        PreviewSection(parent, env),
         TestSection(parent, env),
     }
+    local placement, test = Ed.sections[3], Ed.sections[5]
+    placement.diagnostics = test.toggle
+    test.toggle:SetParent(placement)
+    for _, section in ipairs(Ed.sections) do
+        for _, key in ipairs({ "itemBox", "textBox", "x", "y" }) do
+            if section[key] and R.SettingsMaterial then R.SettingsMaterial.ReminderControl(section[key], "field") end
+        end
+        for _, key in ipairs({ "move", "play", "toggle" }) do
+            if section[key] and R.SettingsMaterial then R.SettingsMaterial.ReminderControl(section[key]) end
+        end
+    end
+    return Ed.sections
+end
+
+function Ed.FitWidth(width)
+    W = width
+    for i, section in ipairs(Ed.sections or {}) do
+        if i ~= 2 then
+            section:SetWidth(W)
+            section.editorWidth = W
+        end
+
+    end
+end
+
+-- Navigation only: use a single reusable gold outline, with a stale-timer guard. Never focus an edit box
+-- (focus loss could otherwise save an unrelated edit), evaluate a condition or call a Config setter.
+function Ed.Reveal(part)
+    local sections = Ed.sections
+    if not sections then return end
+    local show = sections[1]
+    local target = part == "text" and show.textBox or show.choose
+    if part == "test" then
+        Ed.testOpen = true
+        if R.RemindersPage then R.RemindersPage.Refresh() end
+        target = sections[5]
+    elseif part == "size" then
+        target = show.size
+    end
+    if not target or not target:IsShown() then target = show end
+    Ed.revealToken = (Ed.revealToken or 0) + 1
+    local token = Ed.revealToken
+    if Ed.highlight then Ed.highlight:Hide() end
+    if not Ed.highlight then
+        Ed.highlight = CreateFrame("Frame", nil, show, "BackdropTemplate")
+        local fill = R.SettingsCraft.Sheet(Ed.highlight, "selection-hot", { layer = "BACKGROUND", corner = 8 })
+        fill:SetAlpha(0.30)
+        R.SettingsCraft.Sheet(Ed.highlight, "hover-rim", { layer = "OVERLAY", corner = 8 })
+        Ed.highlight:EnableMouse(false)
+    end
+    Ed.highlight:SetParent(target)
+    Ed.highlight:SetFrameLevel((target:GetFrameLevel() or 0) + 1)
+    Ed.highlight:ClearAllPoints()
+    Ed.highlight:SetPoint("TOPLEFT", target, "TOPLEFT", -3, 3)
+    Ed.highlight:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 3, -3)
+    Ed.highlight:Show()
+    Ed.revealed = target
+    if R.SettingsUI and R.SettingsUI.RevealFrame then R.SettingsUI.RevealFrame(target) end
+    C_Timer.After(1.8, function() if token == Ed.revealToken then Ed.highlight:Hide() end end)
+end
+
+function Ed.ClearReveal()
+    Ed.revealToken = (Ed.revealToken or 0) + 1
+    Ed.revealed = nil
+    if Ed.highlight then Ed.highlight:Hide() end
 end

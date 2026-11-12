@@ -135,3 +135,9 @@ following, clicks, lifecycle), `map/Art.lua` (the painting), `map/Detail.lua`, `
    and the map tools place where you click, even past the edge of the map underneath; pings; the navigation trail.
 10. Turn it off while zoomed deep into a cave: everything goes, the map is whole and the game's own.
 11. `/tui diagnostics`: the World map exploration section reads sensibly, with no names.
+
+## Settings completion
+
+The Places tab now separates layer selection, readability and map-action help, with safe navigation to Zoom setup.
+All six preferences, map data, coordinate handling, pins and navigation remain unchanged. See
+[the final settings report](settings-modernization-completion.md) for simulator evidence and client acceptance.

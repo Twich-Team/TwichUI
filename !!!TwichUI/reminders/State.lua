@@ -14,6 +14,11 @@
 --   def.events = { EVENT = function(...) -> true (every key of this kind) | an arg (that key) | nil (none) }
 --   def.Read(arg, obs) -> true when the value in obs changed (writes it into obs: the live table, or a peek's own)
 --   def.units = { EVENT = "player" } (optional) listens for that event for that unit only (RegisterUnitEvent)
+--   def.Forget(arg, obs) (optional) drops what one key keeps, for a kind whose keys share one table in obs
+--     (obs.aura.HELPFUL / obs.aura.HARMFUL); without it a kind's whole obs[kind] goes when its last key is unwanted.
+--   def.Reset() (optional) forgets what the source keeps of its own (what an event last said) when Reminders stop.
+-- A source can live in a file of its own loaded after this one (reminders/Auras.lua and the others): ST.Plain,
+-- ST.Number and ST.Set are the helpers below, ST.Counted() counts a read for /tui diagnostics.
 -- Events only mark keys as due; one short timer later (COALESCE) each due key is read once, and the controller is
 -- told which ones actually changed (so a burst of equipment events, or swapping gear, is one decision, after it has
 -- settled). No OnUpdate, no polling.
@@ -83,6 +88,12 @@ C.ItemName = function(id)
     local name = Plain(C_Item.GetItemNameByID(id))
     return type(name) == "string" and name or nil
 end
+C.SpellName = function(id)
+    if not (C_Spell and C_Spell.GetSpellName) then return nil end
+    local ok, name = pcall(C_Spell.GetSpellName, id)
+    name = ok and Plain(name) or nil
+    return type(name) == "string" and name ~= "" and name or nil
+end
 
 ---------------------------------------------------------------------------
 -- Sources
@@ -134,6 +145,9 @@ local function Set(into, key, value)
     return true
 end
 
+ST.Plain, ST.Number, ST.Set = Plain, Number, Set
+function ST.Counted() stats.reads = stats.reads + 1 end
+
 ST.Source("slot", {
     events = {
         PLAYER_EQUIPMENT_CHANGED = function(slot) return Number(slot) end,
@@ -183,6 +197,33 @@ ST.Source("resting", {
         local v
         if IsResting then v = Plain(IsResting()) == true end
         return Set(into, "resting", v)
+    end,
+})
+
+-- Moving (obs.moving): the start / stop events say it outright; the game is asked when there has been none in this world.
+local moving
+ST.Source("moving", {
+    events = {
+        PLAYER_STARTED_MOVING = function() moving = true return true end,
+        PLAYER_STOPPED_MOVING = function() moving = false return true end,
+    },
+    Read = function(_, into)
+        local v = moving
+        if v == nil and IsPlayerMoving then v = Plain(IsPlayerMoving()) == true end
+        return Set(into, "moving", v)
+    end,
+    Reset = function() moving = nil end,
+})
+
+-- On a flight path (obs.taxi): UnitOnTaxi, read again when the game takes control of the character or hands it back
+-- (boarding and landing; qol/GuideAutoHide.lua listens the same way).
+ST.Source("taxi", {
+    events = { PLAYER_CONTROL_LOST = true, PLAYER_CONTROL_GAINED = true },
+    Read = function(_, into)
+        local v
+        if UnitOnTaxi then v = Plain(UnitOnTaxi("player")) end
+        if type(v) ~= "boolean" then v = nil end
+        return Set(into, "taxi", v)
     end,
 })
 
@@ -411,6 +452,10 @@ ST.Source("ammo", {
 -- (Blizzard_BuffFrame/BuffFrame.lua), and C_PaperDollInfo.GetTemporaryEnchantmentInfo(inventorySlot) is the older form of
 -- the same question. A hand whose item can't be told (no details yet) or whose enchants can't be read is nil (unknown),
 -- never "bare": only a weapon the game has described, with nothing on it, counts as having no enchant.
+-- When it ends: obs.enchant.ends[hand] = the GetTime at which an enchant on that hand runs out, from the list's
+-- timeLeft (milliseconds: the buff frame divides it by 1000), nil when it isn't given plainly (the older form never
+-- gives it). A later read that differs by under ENDS_SLACK seconds is the same end, so reading again is not a change.
+-- charges is in the same list but not read: 0 there can't be told apart from "doesn't use charges".
 local WEAPON_CLASS, FISHING_POLE = 2, 20
 do
     local E = rawget(_G, "Enum")
@@ -423,13 +468,19 @@ local ENCHANT_HANDS = {
     { "offHand", rawget(_G, "INVSLOT_OFFHAND") or 17, "OffHand", 1 },
 }
 
+local ENDS_SLACK = 1.5
+
+-- Whether a hand has one (true / false / nil), and the seconds it has left when the game says plainly.
 local function HasTempEnchant(invSlot, enumName, enumValue)
     if C_Item and C_Item.GetWeaponEnchantInfo then
         local ws = rawget(_G, "Enum") and Enum.WeaponSlot
         local ok, list = pcall(C_Item.GetWeaponEnchantInfo, ws and ws[enumName] or enumValue)
         if ok and type(list) == "table" and not (issecretvalue and issecretvalue(list)) then
             for _, e in pairs(list) do
-                if type(e) == "table" and Plain(e.hasEnchant) == true then return true end
+                if type(e) == "table" and Plain(e.hasEnchant) == true then
+                    local ms = Number(e.timeLeft)
+                    return true, ms and ms > 0 and ms / 1000 or nil
+                end
             end
             return false
         end
@@ -451,9 +502,9 @@ local function EnchantState(invSlot, enumName, enumValue)
     class, sub = Number(class), Number(sub)
     if class == nil then return nil end
     if class ~= WEAPON_CLASS or sub == FISHING_POLE then return "noWeapon" end
-    local has = HasTempEnchant(invSlot, enumName, enumValue)
+    local has, left = HasTempEnchant(invSlot, enumName, enumValue)
     if has == nil then return nil end
-    return has and "enchanted" or "bare"
+    return has and "enchanted" or "bare", left
 end
 
 ST.Source("enchant", {
@@ -469,10 +520,18 @@ ST.Source("enchant", {
     Read = function(_, into)
         stats.reads = stats.reads + 1
         local e, differs = into.enchant, false
-        if not e then e = {}; into.enchant = e; differs = true end
+        if not e then e = { ends = {} }; into.enchant = e; differs = true end
+        e.ends = e.ends or {}
+        local now = GetTime and GetTime() or nil
         for _, h in ipairs(ENCHANT_HANDS) do
-            local v = EnchantState(h[2], h[3], h[4])
+            local v, left = EnchantState(h[2], h[3], h[4])
             if e[h[1]] ~= v then e[h[1]] = v; differs = true end
+            local ends = (v == "enchanted" and left and now) and now + left or nil
+            local old = e.ends[h[1]]
+            if (ends == nil) ~= (old == nil) or (ends and math.abs(ends - old) > ENDS_SLACK) then
+                e.ends[h[1]] = ends
+                differs = true
+            end
         end
         return differs
     end,
@@ -542,7 +601,7 @@ ST.Source("wellFed", {
 local function Settle(mine)
     if mine ~= settleToken then return end
     if R.Life and not R.Life.InWorld() then return end   -- another loading screen: its own world entry looks again
-    combat = nil
+    combat, moving = nil, nil
     for key in pairs(want) do Mark(key) end
 end
 
@@ -550,7 +609,7 @@ local function OnEvent(_, event, ...)
     stats.events = stats.events + 1
     if event == "PLAYER_ENTERING_WORLD" then
         worldSeen = true
-        combat = nil   -- a loading screen: ask the game again
+        combat, moving = nil, nil   -- a loading screen: ask the game again
         ammoRetries = 0
         -- The game does not finish settling inside this event (gear, mount, life and combat can still be changing just
         -- after a login, a reload or a dungeon door), and not every change comes with an event of its own: look again
@@ -646,11 +705,12 @@ function ST.Stop()
     started = false
     for k in pairs(want) do want[k] = nil end
     for k in pairs(dirty) do dirty[k] = nil end
+    for k in pairs(obs) do obs[k] = nil end   -- every source's facts, whichever file it lives in
     obs.slots = {}
-    obs.combat, obs.life, obs.mounted, obs.ammo, obs.class, obs.talent, obs.enchant = nil, nil, nil, nil, nil, nil, nil
-    obs.wellFed = nil
-    obs.resting, obs.place = nil, nil
     combat, ammoWatch, ammoRetries = nil, true, 0
+    for _, src in pairs(SOURCES) do
+        if src.Reset then pcall(src.Reset) end
+    end
     SyncEvents()
 end
 
@@ -662,9 +722,13 @@ function ST.Want(keys)
             want[key] = nil
             dirty[key] = nil
             local kind, arg = Split(key)
-            if kind == "slot" then obs.slots[tonumber(arg)] = nil else obs[kind] = nil end
+            local src = SOURCES[kind]
+            if kind == "slot" then obs.slots[tonumber(arg)] = nil
+            elseif src and src.Forget then src.Forget(arg, obs)
+            else obs[kind] = nil end
             -- the combat events are no longer heard, so what they last said can't be trusted when it is wanted again
             if kind == "combat" then combat = nil end
+            if kind == "moving" then moving = nil end
         end
     end
     for key in pairs(keys) do want[key] = true end
@@ -682,11 +746,28 @@ end
 
 function ST.Observations() return obs end
 
+-- Reads these keys again now (those still wanted), for a reminder whose answer can change with time alone (a buff
+-- running down): an expiry the game sends no event for is still seen. What changed is told on as usual; returns
+-- whether anything did.
+function ST.Recheck(keys)
+    for k in pairs(changed) do changed[k] = nil end
+    local any = false
+    for _, key in ipairs(keys) do
+        if want[key] and Read(key, obs) then changed[key] = true; any = true end
+    end
+    if any and listener then
+        stats.tellings = stats.tellings + 1
+        local ok, err = pcall(listener, changed)
+        if not ok then R.Fault("reminders", err) end
+    end
+    return any
+end
+
 -- The observations one reminder's conditions need, read now into a table of their own: for the settings window's
 -- look at a reminder that isn't running (a draft, or one for another character). The live table is not touched,
 -- nothing is listened for and no item is asked for.
 function ST.Peek(view)
-    local into = { slots = {} }
+    local into = { slots = {}, now = GetTime and GetTime() or nil }
     if not ST.InWorld() then return into end
     for _, entry in ipairs(view.leaves) do
         if entry.provider and entry.cond then

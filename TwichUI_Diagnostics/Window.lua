@@ -729,6 +729,7 @@ local MEMS = {
     { key = "navdata", label = "TwichUI_NavData" },
     { key = "layouts", label = "TwichUI_Layouts" },
     { key = "layoutwizard", label = "TwichUI_LayoutWizard" },
+    { key = "workshop", label = "TwichUI_Workshop" },
     { key = "diag", label = "TwichUI Diagnostics" },
     { key = "heap", label = "Whole UI heap" },
 }

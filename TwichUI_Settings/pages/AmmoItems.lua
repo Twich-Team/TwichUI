@@ -13,7 +13,7 @@ local P = {}
 R.AmmoItemsPage = P
 
 local W = 644                  -- the settings window's content width
-local ROW_H, VISIBLE = 32, 6
+local ROW_H, VISIBLE = 56, 5
 local HELP_H = 62
 local ADD_TOP = -(HELP_H + 4)
 local LIST_TOP = ADD_TOP - 60 - 40
@@ -78,18 +78,18 @@ end
 local function StatusText(entry, state)
     local AI = R.AmmoItems
     if state == "missing" then
-        return "The game has no item with this ID yet. It stays registered in case it appears; remove it if it was a typo.", "warn"
+        return "Item unavailable · registration kept", "warn"
     end
     if state == "loading" then return "Loading the item's details...", nil end
     local client = AI.Classify(entry.id)
     local mine = AI.KindLabel(entry.kind):lower()
     if client == "arrow" or client == "bullet" then
-        if client == entry.kind then return ("The game lists it as %s too."):format(mine), "ok" end
-        return ("The game lists it as %s. Your registration as %s decides."):format(AI.KindLabel(client):lower(), mine), nil
+        if client == entry.kind then return "Matches game classification", "ok" end
+        return ("Game: %s · your choice: %s"):format(AI.KindLabel(client):lower(), mine), nil
     end
-    if client == "other" then return ("The game lists it as another kind of projectile. Your registration as %s decides."):format(mine), nil end
-    if client == false then return ("The game does not list it as ammunition. Your registration as %s decides."):format(mine), nil end
-    return ("The game has not classified it. Your registration as %s decides."):format(mine), nil
+    if client == "other" then return "Game: other projectile · your choice applies", nil end
+    if client == false then return "Game: not ammunition · your choice applies", nil end
+    return "Game classification unavailable · your choice applies", nil
 end
 
 ---------------------------------------------------------------------------
@@ -111,7 +111,7 @@ local function Added(id, how, kind)
     if how == "exists" then
         P.Say(("%s is already registered, so nothing was changed. Here it is."):format(name), "ok")
     else
-        P.Say(("Registered %s as %s. Nothing in your bags or equipment was touched."):format(name, R.AmmoItems.KindLabel(kind):lower()), "ok")
+        P.Say(("Registered as %s. Nothing in your bags or equipment was touched."):format(R.AmmoItems.KindLabel(kind):lower()), "ok")
     end
     P.Refresh()
     P.Focus(id)
@@ -178,8 +178,7 @@ local function Row(i)
     local row = CreateFrame("Button", nil, f.content)
     row:SetSize(LIST_W, ROW_H)
     row:SetPoint("TOPLEFT", 0, -(i - 1) * ROW_H)
-    row.bg = G.Solid(row, "BACKGROUND", pal.text, (i % 2 == 0) and 0.035 or 0)
-    row.bg:SetAllPoints()
+
     row.flash = G.Solid(row, "BACKGROUND", pal.teal, 0.22)
     row.flash:SetAllPoints()
     row.flashFade = G.Motion.Fader(function(a) row.flash:SetAlpha(a) end, 0)
@@ -188,16 +187,17 @@ local function Row(i)
     row.icon:SetPoint("LEFT", 6, 0)
     row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     row.name = G.Text(row, "body")
-    row.name:SetPoint("TOPLEFT", 38, -3)
+    row.name:SetPoint("TOPLEFT", 38, -7)
     row.name:SetWidth(NAME_W)
-    row.name:SetWordWrap(false)
+    row.name:SetWordWrap(true)
+    row.name:SetHeight(30)
     row.status = G.Text(row, "meta")
-    row.status:SetPoint("TOPLEFT", 38, -18)
+    row.status:SetPoint("TOPLEFT", 38, -39)
     row.status:SetWidth(NAME_W)
     row.status:SetWordWrap(false)
     row:SetScript("OnEnter", function(self)
         if not self.id then return end
-        ItemTip(self, self.id, { self.status:GetText() })
+        ItemTip(self, self.id, { self.name:GetText(), self.status:GetText() })
     end)
     row:SetScript("OnLeave", function(self) I.HideTip(self) end)
     row:SetScript("OnHide", function(self) I.HideTip(self) end)
@@ -295,7 +295,8 @@ local function Build()
     f.help = G.Text(f, "small")
     f.help:SetPoint("TOPLEFT", 4, -2)
     f.help:SetWidth(W - 8)
-    f.help:SetText("TwichUI already recognizes the game's own arrows and bullets. Register an item here only when the game doesn't classify it the way you need, such as one a server added. This says what an item is; it doesn't equip it, count it or make it fit your weapon. An ammunition reminder still reads your equipment and bags each time.")
+    f.help:SetText("Register items the game doesn't recognize as arrows or bullets. This never equips or moves an item.")
+    I.Tip(f, "Known ammunition", "The game's own arrows and bullets are already recognized. Registration only classifies an item: it doesn't count it or make it fit your weapon. Ammunition reminders still read your equipment and bags each time.")
 
     -- the add area: a box to drop an item on, or its item ID or link
     G.Card(f, 0, ADD_TOP, W, ADD_TOP - 60)
@@ -364,9 +365,9 @@ local function Build()
         return t
     end
     Column("Item", 38)
-    Column("It is", KIND_X + 4)
+    Column("Count as", KIND_X + 4)
     f.count = G.Text(f, "meta")
-    f.count:SetPoint("TOPRIGHT", -8, LIST_TOP + 16)
+    f.count:SetPoint("TOPRIGHT", f, "TOPLEFT", W - 8, LIST_TOP + 16)
     f.count:SetJustifyH("RIGHT")
     f.well = CreateFrame("Frame", nil, f, "BackdropTemplate")
     f.well:SetPoint("TOPLEFT", 0, LIST_TOP)
@@ -407,6 +408,7 @@ end
 
 K.Page({
     key = "ammoCustom", name = "Known ammunition", nav = "Known ammunition", parent = "reminders", order = 23,
+    materialHeader = true, compact = true, designReference = false,
     description = "Ammunition you register yourself, such as an item a server added, as arrows or bullets, for reminders about ammunition.",
     keywords = "ammo ammunition custom known register arrows bullets item id link server hunter quiver list reminder reminders",
     when = function() return R.AmmoItems ~= nil end,

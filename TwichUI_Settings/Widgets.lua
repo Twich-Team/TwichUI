@@ -31,7 +31,7 @@ end
 -- Slider: a thin track with a bronze fill, a gold thumb, and the value in a box beside it that can be typed in.
 -- onChange(value) runs for the player's own changes only. SetRange(min, max, step), SetValue(v), SetActive(on).
 ---------------------------------------------------------------------------
-function Wg.Slider(parent, w, onChange)
+function Wg.Slider(parent, w, onChange, material)
     local holder = CreateFrame("Frame", nil, parent)
     holder:SetSize(w, 22)
     local box = Wg.EditBox(holder, 44, 20)
@@ -67,6 +67,16 @@ function Wg.Slider(parent, w, onChange)
         fill:SetWidth(math.max(1, width))
     end
     local function Paint()
+        if material then
+            local light = active and 1 or 0.45
+            R.SettingsCraft.Thumb(thumb)
+            thumb:SetVertexColor(light, light, light, 1)
+            fill:SetTexture(R.SettingsMaterial.FILE["grain-primary"])
+            fill:SetVertexColor(1, 1, 1, light)
+            local ink = active and pal.text or pal.stone
+            box:SetTextColor(ink[1], ink[2], ink[3])
+            return
+        end
         local c = active and pal.teal or pal.stone
         thumb:SetColorTexture(c[1], c[2], c[3], active and 1 or 0.6)
         local f = active and pal.tealLo or pal.bronzeLo
@@ -121,6 +131,20 @@ function Wg.Slider(parent, w, onChange)
         Paint()
     end
     holder.slider, holder.box = s, box
+    if material then
+        local M = R.SettingsMaterial
+        M.ReminderControl(box, "field")
+        box:SetJustifyH("RIGHT")
+        R.SettingsCraft.Sheet(s, "field", { layer = "BACKGROUND", corner = 5 })
+        track:SetColorTexture(0.055, 0.039, 0.027, 1)
+        trackEdge:SetColorTexture(0.45, 0.35, 0.23, 0.9)
+        R.SettingsCraft.Thumb(thumb)
+        thumb:SetSize(16, 20)
+        s:HookScript("OnEnter", function() if active then thumb:SetVertexColor(1.15, 1.15, 1.10) end end)
+        s:HookScript("OnLeave", Paint)
+        s:HookScript("OnMouseDown", function() if active then thumb:SetVertexColor(0.80, 0.80, 0.80) end end)
+        s:HookScript("OnMouseUp", Paint)
+    end
     Paint()
     return holder
 end
@@ -180,7 +204,19 @@ local function BuildMenu()
         end)
         menu.rows[i] = row
     end
-    menu.thumb = Wg.Solid(menu, "OVERLAY", pal.thumb, 0.8)
+    menu.bar = CreateFrame("Slider", nil, menu)
+    menu.bar:SetOrientation("VERTICAL")
+    menu.bar:SetWidth(12)
+    menu.bar:SetPoint("TOPRIGHT", -1, -4)
+    menu.bar:SetPoint("BOTTOMRIGHT", -1, 4)
+    menu.bar:SetValueStep(1)
+    menu.thumb = Wg.Solid(menu.bar, "OVERLAY", pal.thumb, .8)
+    menu.bar:SetThumbTexture(menu.thumb)
+    menu.bar:SetScript("OnValueChanged", function(_, value)
+        if menu.painting then return end
+        menu.offset = math.floor(value + .5)
+        Wg.PaintMenu()
+    end)
     menu.thumb:SetWidth(3)
     menu:SetScript("OnMouseWheel", function(self, delta)
         local most = math.max(0, #self.choices - MENU_ROWS)
@@ -205,9 +241,16 @@ function Wg.PaintMenu()
         row.choice = choice
         if choice then
             row.text:SetText(choice.label)
+            if row.baseFont then row.text:SetFont(unpack(row.baseFont)) end
+            if choice.font then
+                row.baseFont = row.baseFont or { row.text:GetFont() }
+                local ok, accepted = pcall(row.text.SetFont, row.text, choice.font, 13, "")
+                if not ok or accepted == false then row.text:SetFont(unpack(row.baseFont)) end
+            end
             local chosen = choice.value == current
             row.mark:SetShown(chosen)
-            Wg.Color(row.text, chosen and pal.tealHi or pal.text)
+            Wg.Color(row.text, chosen and (menu.materialMode and pal.bronzeText or pal.tealHi) or pal.text)
+            if row.materialSelected then row.materialSelected:SetShown(menu.materialMode and chosen) end
             row:Show()
         else
             row:Hide()
@@ -218,11 +261,15 @@ function Wg.PaintMenu()
         local h = MENU_ROWS * MENU_ROW_H
         local size = math.max(16, h * MENU_ROWS / #choices)
         menu.thumb:SetHeight(size)
-        menu.thumb:ClearAllPoints()
-        menu.thumb:SetPoint("TOPRIGHT", -4, -4 - (h - size) * (menu.offset / most))
+        menu.painting = true
+        menu.bar:SetMinMaxValues(0, most)
+        menu.bar:SetValue(menu.offset)
+        menu.painting = nil
+        menu.bar:Show()
         menu.thumb:Show()
     else
         menu.thumb:Hide()
+        menu.bar:Hide()
     end
 end
 
@@ -232,11 +279,32 @@ function Wg.CloseMenu()
     if menu and menu:IsShown() then menu:Hide() end
 end
 
+-- WoW region geometry is in layout coordinates. A UIParent popup additionally
+-- needs every ancestor scroll transform; those are applied while rendering the child.
+function Wg.VisibleRect(owner)
+    local l, r, b, t = owner:GetLeft(), owner:GetRight(), owner:GetBottom(), owner:GetTop()
+    if not (type(l) == "number" and type(r) == "number" and type(b) == "number" and type(t) == "number") then return end
+    local parent, scale = owner:GetParent(), owner:GetEffectiveScale()
+    while parent do
+        if parent.IsObjectType and parent:IsObjectType("ScrollFrame") then
+            local ratio = parent:GetEffectiveScale() / scale
+            local dy = (parent:GetVerticalScroll() or 0) * ratio
+            local dx = (parent:GetHorizontalScroll() or 0) * ratio
+            l, r, b, t = l - dx, r - dx, b + dy, t + dy
+        end
+        parent = parent:GetParent()
+    end
+    return l, r, b, t
+end
+
 local function OpenMenu(owner)
     if not menu then BuildMenu() end
     if menu:IsShown() and menu.owner == owner then Wg.CloseMenu() return end
     local choices = owner.choices and owner.choices() or {}
     menu.owner, menu.choices, menu.current, menu.offset = owner, choices, owner.value, 0
+    local M = R.SettingsMaterial
+    if M then M.MenuStyle(menu, owner.twichReminderMaterial == true) end
+    for _, row in ipairs(menu.rows) do row.baseFont = { row.text:GetFont() } end
     for i, choice in ipairs(choices) do
         if choice.value == owner.value then
             menu.offset = math.max(0, math.min(#choices - MENU_ROWS, i - math.floor(MENU_ROWS / 2)))
@@ -244,28 +312,55 @@ local function OpenMenu(owner)
         end
     end
     local shown = math.max(1, math.min(MENU_ROWS, #choices))
-    menu:SetSize(math.max(owner.menuWidth or owner:GetWidth(), 160), shown * MENU_ROW_H + 8)
-    menu:ClearAllPoints()
-    -- a small button near the right edge (owner.menuWidth wider than itself) opens its list leftwards, so it isn't clipped
-    if owner.menuAlignRight then
-        menu:SetPoint("TOPRIGHT", owner, "BOTTOMRIGHT", 0, -2)
-    else
-        menu:SetPoint("TOPLEFT", owner, "BOTTOMLEFT", 0, -2)
+    local width = math.max(owner.menuWidth or owner:GetWidth(), 160)
+    if owner.compactMenu then
+        local measured = 0
+        for _, choice in ipairs(choices) do
+            menu.rows[1].text:SetText(choice.label)
+            measured = math.max(measured, menu.rows[1].text:GetStringWidth() or 0)
+        end
+        width = math.max(112, math.min(280, measured + 38))
     end
+    menu:SetSize(width, shown * MENU_ROW_H + 8)
     menu:SetScale(owner:GetEffectiveScale() / UIParent:GetEffectiveScale())
+    menu:ClearAllPoints()
+    -- A UIParent popup must anchor to the *visible* owner rectangle, including
+    -- its scroll offset. Relative anchors to a scroll child can use its unclipped
+    -- layout coordinates on this client. Convert pixels once, after setting scale.
+    local left, right, bottom, top = Wg.VisibleRect(owner)
+    if type(left) == "number" and type(right) == "number" and type(bottom) == "number" and type(top) == "number" then
+        local ratio = owner:GetEffectiveScale() / menu:GetEffectiveScale()
+        local uiHeight = UIParent:GetHeight() * UIParent:GetEffectiveScale() / menu:GetEffectiveScale()
+        local above = bottom * ratio < menu:GetHeight() + 6 and uiHeight - top * ratio >= menu:GetHeight() + 6
+        local edge = owner.menuAlignRight and "RIGHT" or "LEFT"
+        menu:SetPoint((above and "BOTTOM" or "TOP") .. edge, UIParent, "BOTTOMLEFT",
+            (owner.menuAlignRight and right or left) * ratio, (above and top or bottom) * ratio + (above and 2 or -2))
+    elseif owner.menuAlignRight then
+        menu:SetPoint("TOPRIGHT", owner, "BOTTOMRIGHT", 0, -2)
+    else menu:SetPoint("TOPLEFT", owner, "BOTTOMLEFT", 0, -2) end
     Wg.PaintMenu()
     menu:Show()
     menu:Raise()
 end
 
-function Wg.Dropdown(parent, w, onPick)
-    local b = S.DropButton(parent, w, function(self)
-        if self.active ~= false then OpenMenu(self) end
-    end, fieldPal)
+-- An action popup uses the same owner-scale, clamp and lifecycle as value menus.
+function Wg.ContextMenu(owner, choices, onPick)
+    owner.choices = function() return choices end
+    owner.onPick, owner.compactMenu, owner.twichReminderMaterial = onPick, true, true
+    OpenMenu(owner)
+end
+
+function Wg.Dropdown(parent, w, onPick, compact)
+    local function Open(self) self:OpenMenu() end
+    local b = compact and S.Button(parent, "···", w, "secondary", Open, fieldPal)
+        or S.DropButton(parent, w, Open, fieldPal)
     b.onPick = onPick
+    b.compactMenu = compact and true or false
     b.active = true
+    function b:OpenMenu() if self.active ~= false then OpenMenu(self) end end
     Wg.Recess(b, 0.9)   -- it shows a value, like a field; only its arrowhead says it opens a list
-    Wg.Hover(b, pal.text, 0.05)
+    local hover = Wg.Hover(b, pal.text, 0.05)
+    b:HookScript("OnEnter", function() if b.twichReminderMaterial then hover:Set(0) end end)
     function b:SetChoices(fn) self.choices = fn end
     function b:SetValue(v, label)
         self.value = v
@@ -546,4 +641,46 @@ function Wg.Scroll(parent, contentWidth)
     scroll:SetScrollChild(content)
     Look.ScrollBar(scroll)
     return scroll, content
+end
+
+
+-- Opt-in wheel easing. Work exists only between a wheel event and its bounded destination.
+-- Native thumb dragging and explicit reveals supersede pending wheel movement immediately.
+function Wg.ScrollMotion(scroll, active)
+    if scroll.twichScrollMotion then return end
+    scroll.twichScrollMotion = true
+    local original = scroll:GetScript("OnMouseWheel")
+    local driver = CreateFrame("Frame", nil, scroll)
+    scroll.motionDriver = driver
+    local target, start, elapsed, advancing
+    function scroll:StopMotion() target = nil; driver:SetScript("OnUpdate", nil) end
+    local function Limit(value)
+        local child = scroll:GetScrollChild()
+        local most = math.max(0, (child and child:GetHeight() or 0) - scroll:GetHeight())
+        return math.max(0, math.min(most, value))
+    end
+    scroll:SetScript("OnMouseWheel", function(self, delta)
+        if active and not active() then
+            self:StopMotion()
+            if original then original(self, delta) end
+            return
+        end
+        Wg.CloseMenu()
+        target = Limit((target or self:GetVerticalScroll()) - delta * 24)
+        if not Wg.Motion.Enabled() then self:SetVerticalScroll(target); self:StopMotion(); return end
+        start, elapsed = self:GetVerticalScroll(), 0
+        driver:SetScript("OnUpdate", function(_, dt)
+            elapsed = Wg.Motion.Enabled() and math.min(.12, elapsed + dt) or .12
+            local t = elapsed / .12
+            local value = Limit(start + (target - start) * (1 - (1 - t) * (1 - t)))
+            advancing = true
+            self:SetVerticalScroll(value)
+            advancing = nil
+            if t >= 1 then self:StopMotion() end
+        end)
+    end)
+    scroll:HookScript("OnHide", function() scroll:StopMotion() end)
+    scroll:HookScript("OnVerticalScroll", function() if not advancing then scroll:StopMotion() end end)
+    local bar = scroll.ScrollBar
+    if type(bar) == "table" then bar:HookScript("OnMouseDown", function() scroll:StopMotion(); Wg.CloseMenu() end) end
 end

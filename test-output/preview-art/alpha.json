@@ -1,0 +1,30 @@
+{
+  "landscape": {
+    "source": "assets/reminder-preview-landscape-source.png",
+    "source_size": [
+      1536,
+      1024
+    ],
+    "runtime_size": [
+      512,
+      512
+    ],
+    "source_alpha": false,
+    "clear_pixels": 0,
+    "translucent_pixels": 0
+  },
+  "parchment": {
+    "source": "assets/reminder-preview-parchment-source.png",
+    "source_size": [
+      1983,
+      793
+    ],
+    "runtime_size": [
+      512,
+      256
+    ],
+    "source_alpha": true,
+    "clear_pixels": 236424,
+    "translucent_pixels": 1335089
+  }
+}

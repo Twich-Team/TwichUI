@@ -37,6 +37,9 @@ ART = {
     "shield": "reminder-art-shield-source.png",
     "ammo": "reminder-art-ammo-source.png",
     "wellfed": "reminder-art-wellfed-source.png",
+    "enchant": "reminder-art-enchant-source.png",
+    "item": "reminder-art-item-source.png",
+    "custom": "reminder-art-custom-source.png",
 }
 
 
@@ -58,10 +61,13 @@ def main():
     ap.add_argument("--src", default=os.path.join(root, "assets"))
     ap.add_argument("--out", default=os.path.join(root, "!!!TwichUI", "media", "reminders"))
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--only", nargs="+", choices=sorted(ART), help="Build only these paintings; leave other runtime art alone")
     args = ap.parse_args()
     if not args.check:
         os.makedirs(args.out, exist_ok=True)
     for name, src in ART.items():
+        if args.only and name not in args.only:
+            continue
         w, h, pixels, has_alpha = read_png(os.path.join(args.src, src))
         if not has_alpha:
             raise SystemExit("%s: no alpha channel" % src)

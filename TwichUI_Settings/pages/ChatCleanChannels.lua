@@ -12,14 +12,11 @@ local P = {}
 R.ChatCleanChannelsPage = P
 
 local W = 644                  -- the settings window's content width
-local ROW_H, VISIBLE = 36, 9
+local ROW_H, VISIBLE = 120, 3
 local LIST_TOP = -66
 local LIST_H = ROW_H * VISIBLE + 8
 local LIST_W = W - 12 - 26
-local NAME_W = 190
-local CLEAN_X = 208
-local CAT_X = { spam = 244, recruit = 296, politics = 348, lgbt = 400, olympus = 452, repeats = 504 }
-local RULES_X = 556
+local NAME_W = 380
 
 local f, built
 local rows = {}
@@ -58,35 +55,44 @@ local function Row(i)
     local row = CreateFrame("Frame", nil, f.content)
     row:SetSize(LIST_W, ROW_H)
     row:SetPoint("TOPLEFT", 0, -(i - 1) * ROW_H)
-    row.bg = G.Solid(row, "BACKGROUND", pal.text, (i % 2 == 0) and 0.035 or 0)
-    row.bg:SetAllPoints()
     row.name = G.Text(row, "body")
     row.name:SetPoint("TOPLEFT", 8, -4)
     row.name:SetWidth(NAME_W)
-    row.name:SetWordWrap(false)
+    row.name:SetWordWrap(true)
+    row.name:SetHeight(30)
     row.status = G.Text(row, "meta")
-    row.status:SetPoint("TOPLEFT", 8, -20)
+    row.status:SetPoint("TOPLEFT", 8, -36)
     row.status:SetWidth(NAME_W)
     row.status:SetWordWrap(false)
 
     row.clean = G.Checkbox(row, function(on) Set(row, "on", on) end)
-    row.clean:SetPoint("LEFT", CLEAN_X, 0)
+    row.clean:SetPoint("TOPLEFT", 480, -8)
+    local cleanLabel = G.Text(row, "small")
+    cleanLabel:SetPoint("RIGHT", row.clean, "LEFT", -8, 0)
+    cleanLabel:SetText("Clean")
     I.Tip(row.clean, "Clean this channel", function()
         return "On: TwichUI checks messages in this channel against the filters ticked beside it and the custom rules that apply here. Off: the channel is left alone; its choices are kept."
     end)
     row.cats = {}
-    for _, c in ipairs(CC().CATEGORIES) do
+    for i, c in ipairs(CC().CATEGORIES) do
         local box = G.Checkbox(row, function(on) Set(row, c.key, on) end)
-        box:SetPoint("LEFT", CAT_X[c.key], 0)
+        box:SetPoint("TOPLEFT", 8 + ((i - 1) % 3) * 195, -58 - math.floor((i - 1) / 3) * 27)
+        local label = G.Text(row, "small")
+        label:SetPoint("LEFT", box, "RIGHT", 5, 0)
+        label:SetText(c.label)
         I.Tip(box, c.label, function()
             if row.ch and not (row.ch.choice and row.ch.choice.on) then return c.text, "Needs \"Clean this channel\" ticked." end
             return c.text
         end)
         row.cats[c.key] = box
     end
+    local divider = G.Solid(row, "BACKGROUND", pal.bronzeLo, 0.5)
+    divider:SetPoint("BOTTOMLEFT", 8, 1)
+    divider:SetPoint("BOTTOMRIGHT", -8, 1)
+    divider:SetHeight(1)
     row.rules = G.Text(row, "meta")
-    row.rules:SetPoint("LEFT", RULES_X, 0)
-    row.rules:SetWidth(LIST_W - RULES_X - 4)
+    row.rules:SetPoint("TOPLEFT", 480, -28)
+    row.rules:SetWidth(LIST_W - 484)
     row.rules:SetJustifyH("LEFT")
     rows[i] = row
     return row
@@ -95,11 +101,10 @@ end
 local function Status(ch)
     if ch.joined then
         local where = ch.number and ("/%d"):format(ch.number) or "joined"
-        if ch.kind == "custom" then return where .. " · custom channel, recognised by name" end
-        return where .. " · recognised in every zone and language"
+        if ch.kind == "custom" then return where .. " · custom channel" end
+        return where .. " · joined"
     end
-    if ch.kind == "custom" then return "Not joined now · custom channel, recognised by name" end
-    return "Not joined now · kept for when you are"
+    return "Not joined · choice saved for later"
 end
 
 function P.Refresh()
@@ -107,9 +112,9 @@ function P.Refresh()
     local G = Wg()
     local pal = G.pal
     local list, rules = {}, CC().Rules()
-    -- channels you aren't in are listed only while they are cleaned (their choice is kept either way)
+    -- Keep saved channels discoverable even when cleaning is paused or the channel is not joined.
     for _, ch in ipairs(CC().KnownChannels()) do
-        if ch.joined or (ch.choice and ch.choice.on) then list[#list + 1] = ch end
+        list[#list + 1] = ch
     end
     for i, ch in ipairs(list) do
         local row = Row(i)
@@ -124,7 +129,7 @@ function P.Refresh()
             box:SetActive(e.on == true)
         end
         local n = RulesFor(ch.key, rules)
-        row.rules:SetText(n == 0 and "none" or (n == 1 and "1 rule" or ("%d rules"):format(n)))
+        row.rules:SetText(n == 1 and "1 rule" or ("%d rules"):format(n))
         G.Color(row.rules, (e.on and n > 0) and pal.textDim or pal.stone)
         row:Show()
     end
@@ -157,22 +162,8 @@ local function Build()
     f.help = G.Text(f, "small")
     f.help:SetPoint("TOPLEFT", 4, -2)
     f.help:SetWidth(W - 8)
-    f.help:SetText("Tick the channels to clean, then the filters each one uses. Custom rules choose their own channels on the Custom rules tab. Channels you didn't tick, and whispers, group, guild and system messages, are never looked at.")
-
-    local function Column(text, x, title, body)
-        local b = CreateFrame("Button", nil, f)
-        b:SetSize(72, 16)
-        b:SetPoint("TOPLEFT", 6 + x - 4, -46)
-        local t = G.Text(b, "meta")
-        t:SetPoint("LEFT", 0, 0)
-        t:SetText(text)
-        if title then I.Tip(b, title, body) end
-        return b
-    end
-    Column("Channel", 4)
-    Column("Clean", CLEAN_X - 6, "Clean this channel", "Whether TwichUI looks at this channel at all.")
-    for _, c in ipairs(CC().CATEGORIES) do Column(c.short, CAT_X[c.key] - 10, c.label, c.text) end
-    Column("Rules", RULES_X, "Custom rules", "How many of your custom rules that are on apply in this channel.")
+    f.help:SetText("Choose channels to clean, then their filters. Whispers, group, guild and system messages stay untouched.")
+    I.Tip(f, "Channel filters", "Custom rules choose their own channels on the Custom rules tab. Channels you don't enable are never filtered. Channel choices are kept when you leave and rejoin.")
 
     f.well = CreateFrame("Frame", nil, f, "BackdropTemplate")
     f.well:SetPoint("TOPLEFT", 0, LIST_TOP)
@@ -194,7 +185,7 @@ local function Build()
     f.about = G.Text(f, "small")
     f.about:SetPoint("TOPLEFT", 4, below - 20)
     f.about:SetWidth(W - 190)
-    f.about:SetText("System channels such as General and Trade are recognised by the game's own channel ID, so your choice holds whatever their number in your list, in every zone and city, and in any language. Custom channels have only their name, so they are recognised by it.")
+    f.about:SetText("Your choices are saved when you leave a channel. Custom rules are managed on their own tab.")
     G.Color(f.about, pal.stone)
     f.reset = G.Button(f, "Recommended channels", 170, "danger", function()
         R.Interact.Confirm("TWICHUI_CHATCLEAN_CHANNELS", "Put the recommended channel choice back?\n\nGeneral and Trade are cleaned with the spam and repeat filters, and every other channel's choice is forgotten. Your custom rules are kept, with the channels they name.", function()
@@ -202,7 +193,7 @@ local function Build()
             P.Say("The recommended channels are back.", "ok")
         end, { accept = "Put back" })
     end)
-    f.reset:SetPoint("TOPRIGHT", -2, below - 22)
+    f.reset:SetPoint("TOPLEFT", W - 172, below - 22)
     I.Tip(f.reset, "Recommended channels", "Puts back General and Trade with the spam and repeat filters, and forgets the choices for other channels. Custom rules are kept. Asks first.")
 end
 

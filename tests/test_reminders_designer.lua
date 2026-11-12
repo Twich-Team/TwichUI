@@ -441,4 +441,28 @@ Check(out.status == "invalid", "the runtime's own handling is unchanged: the rul
 local entriesNow = Pl.Entries()
 for _, e in ipairs(entriesNow) do if e.key == "ammunition" then Check(e.note and e.note:find("can't be turned on here"), "the picker notes it before it is added") end end
 
+-- Location chips present a bounded Any group without converting the stored tree.
+local lid = Make(function(id)
+  Put(id, nil, Cond("player", { state = "mounted" }))
+  assert(RM.AddGroup(id, nil, "any"))
+  Put(id, { 2 }, Cond("player", { state = "dungeon" }))
+  Put(id, { 2 }, Cond("player", { state = "raid" }))
+end)
+local locations = RM.Get(lid)
+local stored, revision = Deep(Raw(lid)), RM.Rev()
+Check(Pl.Basic(locations) and table.concat(Pl.LocationValues(locations.conditions[2]), ",") == "dungeon,raid",
+  "the existing positive location Any group has a simple chip presentation")
+Check(Pl.RuleSummary(locations):find("dungeon or a raid"), "the human summary retains location OR")
+for _, state in ipairs({ "dungeon", "raid", "none" }) do
+  local result = E.Run(locations, Obs({ mounted = true, place = state }), { simulated = true }).result
+  Check(result == (state == "none" and "nomatch" or "match"), "location OR evaluates normally for " .. state)
+end
+Check(E.Run(locations, Obs({ mounted = true }), { simulated = true }).result == "unknown",
+  "location chips preserve missing-observation unknown")
+Check(RM.Rev() == revision and Deep(Raw(lid)) == stored, "reading chips and summaries changes no saved data")
+RM.SetCondition(lid, { 2, 2 }, Cond("player", { state = "raid", negate = true }))
+Check(not Pl.Basic(RM.Get(lid)), "a negated alternative keeps the original advanced structure")
+RM.SetCondition(lid, { 2, 2 }, Cond("player", { state = "combat" }))
+Check(not Pl.Basic(RM.Get(lid)), "a mixed predicate group remains Advanced logic")
+
 if failures == 0 then print("PASSED") else print(failures .. " FAILED") end

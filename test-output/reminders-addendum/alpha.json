@@ -1,0 +1,56 @@
+{
+  "enchant": {
+    "source": "assets/reminder-condition-enchant-v2-source.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "source_clear": 1141994,
+    "balance": 0.9704105834898716,
+    "runtime": {
+      "64": {
+        "content": [
+          54,
+          53
+        ],
+        "clear": 2770,
+        "partial": 1326
+      },
+      "32": {
+        "content": [
+          27,
+          26
+        ],
+        "clear": 679,
+        "partial": 345
+      }
+    }
+  },
+  "combat": {
+    "source": "assets/reminder-condition-combat-source.png",
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "source_clear": 1145877,
+    "balance": 0.9658267207137162,
+    "runtime": {
+      "64": {
+        "content": [
+          53,
+          54
+        ],
+        "clear": 2664,
+        "partial": 1432
+      },
+      "32": {
+        "content": [
+          26,
+          27
+        ],
+        "clear": 634,
+        "partial": 390
+      }
+    }
+  }
+}

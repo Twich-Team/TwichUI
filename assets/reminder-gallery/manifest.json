@@ -1,0 +1,2668 @@
+{
+ "version": 1,
+ "categories": [
+  "Equipment",
+  "Buffs & Effects",
+  "Supplies",
+  "Character",
+  "Adventure",
+  "General"
+ ],
+ "canvas": {
+  "source": 192,
+  "large": 128,
+  "small": 64,
+  "fit": 0.86
+ },
+ "sheets": {
+  "1": "docs/reminders-revision/icon-grid-1.png",
+  "2": "docs/reminders-revision/icon-grid-2.png"
+ },
+ "artwork": [
+  {
+   "id": "reminder-lion-shield",
+   "name": "Lion shield",
+   "category": "Equipment",
+   "description": "A bronze shield with a lion's head: protection and tank preparation.",
+   "keywords": [
+    "shield",
+    "lion",
+    "protection",
+    "defense",
+    "tank",
+    "block",
+    "armor",
+    "bronze"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 1,
+    "column": 1
+   },
+   "crop": {
+    "x": 24,
+    "y": 13,
+    "width": 151,
+    "height": 174
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-lion-shield.png",
+   "texture": "media/reminders/gallery/reminder-lion-shield",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-broken-shield",
+    "reminder-tank-preparation"
+   ],
+   "balance": 0.991
+  },
+  {
+   "id": "reminder-enchanted-sword",
+   "name": "Enchanted sword",
+   "category": "Equipment",
+   "description": "A sword wrapped in blue magic: a weapon enchantment.",
+   "keywords": [
+    "sword",
+    "enchant",
+    "enchantment",
+    "weapon",
+    "magic",
+    "blue",
+    "buff",
+    "oil"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 1,
+    "column": 2
+   },
+   "crop": {
+    "x": 202,
+    "y": 19,
+    "width": 167,
+    "height": 163
+   },
+   "parts": 2,
+   "source": "assets/reminder-gallery/reminder-enchanted-sword.png",
+   "texture": "media/reminders/gallery/reminder-enchanted-sword",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-sharpening-stone"
+   ],
+   "balance": 0.992
+  },
+  {
+   "id": "reminder-sharpening-stone",
+   "name": "Sharpening stone",
+   "category": "Equipment",
+   "description": "A whetstone on a wooden block: sharpening a weapon.",
+   "keywords": [
+    "sharpening",
+    "stone",
+    "whetstone",
+    "weapon",
+    "sharpen",
+    "blade",
+    "enhancement"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 1,
+    "column": 3
+   },
+   "crop": {
+    "x": 384,
+    "y": 35,
+    "width": 181,
+    "height": 151
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-sharpening-stone.png",
+   "texture": "media/reminders/gallery/reminder-sharpening-stone",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-poisoned-dagger",
+   "name": "Poisoned dagger",
+   "category": "Equipment",
+   "description": "A dagger dripping green poison.",
+   "keywords": [
+    "poison",
+    "dagger",
+    "rogue",
+    "weapon",
+    "coat",
+    "lethal",
+    "deadly"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 1,
+    "column": 4
+   },
+   "crop": {
+    "x": 584,
+    "y": 13,
+    "width": 147,
+    "height": 177
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-poisoned-dagger.png",
+   "texture": "media/reminders/gallery/reminder-poisoned-dagger",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-rogue-preparation"
+   ],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-helmet",
+   "name": "Helmet",
+   "category": "Equipment",
+   "description": "A riveted bronze helmet.",
+   "keywords": [
+    "helmet",
+    "helm",
+    "head",
+    "armor",
+    "equipment",
+    "gear"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 1,
+    "column": 5
+   },
+   "crop": {
+    "x": 760,
+    "y": 12,
+    "width": 163,
+    "height": 175
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-helmet.png",
+   "texture": "media/reminders/gallery/reminder-helmet",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [],
+   "balance": 0.975
+  },
+  {
+   "id": "reminder-breastplate",
+   "name": "Plate armor",
+   "category": "Equipment",
+   "description": "A plate breastplate with pauldrons.",
+   "keywords": [
+    "breastplate",
+    "chest",
+    "armor",
+    "plate",
+    "equipment",
+    "gear"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 1,
+    "column": 6
+   },
+   "crop": {
+    "x": 935,
+    "y": 18,
+    "width": 189,
+    "height": 162
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-breastplate.png",
+   "texture": "media/reminders/gallery/reminder-breastplate",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-broken-shield",
+   "name": "Broken shield",
+   "category": "Equipment",
+   "description": "A shield split by a crack: damaged or broken equipment.",
+   "keywords": [
+    "broken",
+    "cracked",
+    "shield",
+    "damaged",
+    "durability",
+    "repair",
+    "equipment"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 1,
+    "column": 7
+   },
+   "crop": {
+    "x": 1136,
+    "y": 12,
+    "width": 156,
+    "height": 175
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-broken-shield.png",
+   "texture": "media/reminders/gallery/reminder-broken-shield",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-lion-shield"
+   ],
+   "balance": 0.977
+  },
+  {
+   "id": "reminder-combat-loadout",
+   "name": "Combat loadout",
+   "category": "Equipment",
+   "description": "Crossed swords and a travel pack: ready for a fight.",
+   "keywords": [
+    "swords",
+    "crossed",
+    "loadout",
+    "pack",
+    "gear",
+    "combat",
+    "ready",
+    "travel",
+    "equipment"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 1,
+    "column": 8
+   },
+   "crop": {
+    "x": 1311,
+    "y": 15,
+    "width": 210,
+    "height": 171
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-combat-loadout.png",
+   "texture": "media/reminders/gallery/reminder-combat-loadout",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-arcane-sigil",
+   "name": "Arcane sigil",
+   "category": "Buffs & Effects",
+   "description": "Two hands around a glowing sigil: a general magical effect.",
+   "keywords": [
+    "arcane",
+    "sigil",
+    "magic",
+    "hands",
+    "buff",
+    "effect",
+    "spell",
+    "class"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 2,
+    "column": 1
+   },
+   "crop": {
+    "x": 16,
+    "y": 199,
+    "width": 167,
+    "height": 145
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-arcane-sigil.png",
+   "texture": "media/reminders/gallery/reminder-arcane-sigil",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-hourglass",
+   "name": "Golden hourglass",
+   "category": "Buffs & Effects",
+   "description": "A golden hourglass ringed with light: a timed effect.",
+   "keywords": [
+    "hourglass",
+    "timer",
+    "time",
+    "expiring",
+    "duration",
+    "buff",
+    "effect",
+    "sand"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 2,
+    "column": 2
+   },
+   "crop": {
+    "x": 200,
+    "y": 198,
+    "width": 145,
+    "height": 153
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-hourglass.png",
+   "texture": "media/reminders/gallery/reminder-hourglass",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-expiring-buff"
+   ],
+   "balance": 0.962
+  },
+  {
+   "id": "reminder-curse-skull",
+   "name": "Cursed skull",
+   "category": "Buffs & Effects",
+   "description": "A purple skull: a curse or a harmful effect.",
+   "keywords": [
+    "skull",
+    "curse",
+    "debuff",
+    "harmful",
+    "death",
+    "purple",
+    "poison"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 2,
+    "column": 3
+   },
+   "crop": {
+    "x": 362,
+    "y": 206,
+    "width": 129,
+    "height": 134
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-curse-skull.png",
+   "texture": "media/reminders/gallery/reminder-curse-skull",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-harmful-debuff"
+   ],
+   "balance": 0.957
+  },
+  {
+   "id": "reminder-arcane-ward",
+   "name": "Arcane ward",
+   "category": "Buffs & Effects",
+   "description": "A shield with a violet rune: a magical ward.",
+   "keywords": [
+    "ward",
+    "shield",
+    "protection",
+    "barrier",
+    "absorb",
+    "magic",
+    "violet",
+    "buff"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 2,
+    "column": 5
+   },
+   "crop": {
+    "x": 689,
+    "y": 202,
+    "width": 119,
+    "height": 141
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-arcane-ward.png",
+   "texture": "media/reminders/gallery/reminder-arcane-ward",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-missing-buff"
+   ],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-blessing-hand",
+   "name": "Blessing",
+   "category": "Buffs & Effects",
+   "description": "An open hand with a soft glow: a blessing.",
+   "keywords": [
+    "blessing",
+    "hand",
+    "bless",
+    "glow",
+    "holy",
+    "buff",
+    "beneficial",
+    "paladin"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 2,
+    "column": 6
+   },
+   "crop": {
+    "x": 833,
+    "y": 201,
+    "width": 112,
+    "height": 144
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-blessing-hand.png",
+   "texture": "media/reminders/gallery/reminder-blessing-hand",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-war-horn",
+   "name": "War horn",
+   "category": "Buffs & Effects",
+   "description": "A bronze war horn: a shout, a call or a group buff.",
+   "keywords": [
+    "horn",
+    "war",
+    "shout",
+    "call",
+    "battle",
+    "buff",
+    "group",
+    "raid"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 2,
+    "column": 7
+   },
+   "crop": {
+    "x": 959,
+    "y": 198,
+    "width": 170,
+    "height": 166
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-war-horn.png",
+   "texture": "media/reminders/gallery/reminder-war-horn",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-open-spellbook",
+   "name": "Open spellbook",
+   "category": "Buffs & Effects",
+   "description": "An open book with a glowing rune: magical knowledge.",
+   "keywords": [
+    "spellbook",
+    "book",
+    "open",
+    "arcane",
+    "intellect",
+    "magic",
+    "knowledge",
+    "buff",
+    "spell"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 2,
+    "column": 8
+   },
+   "crop": {
+    "x": 1113,
+    "y": 203,
+    "width": 178,
+    "height": 136
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-open-spellbook.png",
+   "texture": "media/reminders/gallery/reminder-open-spellbook",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-golden-rings",
+   "name": "Golden rings",
+   "category": "Buffs & Effects",
+   "description": "Stacked golden rings of light: layered effects.",
+   "keywords": [
+    "rings",
+    "stacks",
+    "stacking",
+    "layered",
+    "aura",
+    "gold",
+    "buff"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 2,
+    "column": 9
+   },
+   "crop": {
+    "x": 1296,
+    "y": 202,
+    "width": 103,
+    "height": 135
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-golden-rings.png",
+   "texture": "media/reminders/gallery/reminder-golden-rings",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-aura-stacks"
+   ],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-stained-cloth",
+   "name": "Stained cloth",
+   "category": "Buffs & Effects",
+   "description": "A cloth marked with a dark stain: a harmful effect to cleanse.",
+   "keywords": [
+    "cloth",
+    "stain",
+    "dirty",
+    "cleanse",
+    "dispel",
+    "harmful",
+    "debuff",
+    "disease"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 2,
+    "column": 10
+   },
+   "crop": {
+    "x": 1412,
+    "y": 206,
+    "width": 116,
+    "height": 134
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-stained-cloth.png",
+   "texture": "media/reminders/gallery/reminder-stained-cloth",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [],
+   "balance": 0.966
+  },
+  {
+   "id": "reminder-arrow-quiver",
+   "name": "Arrow quiver",
+   "category": "Supplies",
+   "description": "A leather quiver of arrows.",
+   "keywords": [
+    "quiver",
+    "arrows",
+    "ammunition",
+    "ammo",
+    "ranged",
+    "hunter",
+    "low",
+    "supplies"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 3,
+    "column": 1
+   },
+   "crop": {
+    "x": 16,
+    "y": 358,
+    "width": 148,
+    "height": 157
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-arrow-quiver.png",
+   "texture": "media/reminders/gallery/reminder-arrow-quiver",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "ammo"
+   ],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-crystal-pouch",
+   "name": "Crystal pouch",
+   "category": "Supplies",
+   "description": "An open pouch of blue crystals: reagents.",
+   "keywords": [
+    "pouch",
+    "reagents",
+    "crystals",
+    "bag",
+    "components",
+    "spell",
+    "materials"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 3,
+    "column": 2
+   },
+   "crop": {
+    "x": 175,
+    "y": 368,
+    "width": 169,
+    "height": 147
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-crystal-pouch.png",
+   "texture": "media/reminders/gallery/reminder-crystal-pouch",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-low-reagents"
+   ],
+   "balance": 0.992
+  },
+  {
+   "id": "reminder-supply-pack",
+   "name": "Supply pack",
+   "category": "Supplies",
+   "description": "A bundle of stores for the road: consumables.",
+   "keywords": [
+    "supplies",
+    "pack",
+    "consumables",
+    "bundle",
+    "provisions",
+    "stores"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 3,
+    "column": 3
+   },
+   "crop": {
+    "x": 353,
+    "y": 361,
+    "width": 185,
+    "height": 155
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-supply-pack.png",
+   "texture": "media/reminders/gallery/reminder-supply-pack",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-full-inventory"
+   ],
+   "balance": 0.979
+  },
+  {
+   "id": "reminder-health-potion",
+   "name": "Health potion",
+   "category": "Supplies",
+   "description": "A red potion flask.",
+   "keywords": [
+    "potion",
+    "health",
+    "healing",
+    "red",
+    "flask",
+    "bottle",
+    "drink",
+    "consumable"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 3,
+    "column": 4
+   },
+   "crop": {
+    "x": 561,
+    "y": 362,
+    "width": 128,
+    "height": 151
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-health-potion.png",
+   "texture": "media/reminders/gallery/reminder-health-potion",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-mana-potion",
+   "name": "Mana potion",
+   "category": "Supplies",
+   "description": "A blue potion flask.",
+   "keywords": [
+    "potion",
+    "mana",
+    "blue",
+    "flask",
+    "bottle",
+    "drink",
+    "consumable"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 3,
+    "column": 5
+   },
+   "crop": {
+    "x": 725,
+    "y": 360,
+    "width": 130,
+    "height": 151
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-mana-potion.png",
+   "texture": "media/reminders/gallery/reminder-mana-potion",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-low-mana"
+   ],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-bread-and-cheese",
+   "name": "Bread and cheese",
+   "category": "Supplies",
+   "description": "A loaf and a wedge of cheese: food.",
+   "keywords": [
+    "bread",
+    "cheese",
+    "food",
+    "eat",
+    "hunger",
+    "supplies",
+    "provisions"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 3,
+    "column": 6
+   },
+   "crop": {
+    "x": 860,
+    "y": 379,
+    "width": 179,
+    "height": 134
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-bread-and-cheese.png",
+   "texture": "media/reminders/gallery/reminder-bread-and-cheese",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-low-food",
+    "wellfed"
+   ],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-waterskin",
+   "name": "Waterskin",
+   "category": "Supplies",
+   "description": "A leather waterskin, full: drink.",
+   "keywords": [
+    "waterskin",
+    "water",
+    "drink",
+    "thirst",
+    "supplies",
+    "flask"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 3,
+    "column": 7
+   },
+   "crop": {
+    "x": 1049,
+    "y": 362,
+    "width": 138,
+    "height": 152
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-waterskin.png",
+   "texture": "media/reminders/gallery/reminder-waterskin",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-low-drink"
+   ],
+   "balance": 0.999
+  },
+  {
+   "id": "reminder-purple-elixir",
+   "name": "Purple elixir",
+   "category": "Supplies",
+   "description": "A bottle of purple elixir: an elixir or a flask.",
+   "keywords": [
+    "elixir",
+    "flask",
+    "potion",
+    "bottle",
+    "purple",
+    "buff",
+    "consumable"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 3,
+    "column": 8
+   },
+   "crop": {
+    "x": 1211,
+    "y": 360,
+    "width": 116,
+    "height": 155
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-purple-elixir.png",
+   "texture": "media/reminders/gallery/reminder-purple-elixir",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-hammer-and-anvil",
+   "name": "Hammer and anvil",
+   "category": "Equipment",
+   "description": "A hammer on an anvil: repairs and crafting.",
+   "keywords": [
+    "hammer",
+    "anvil",
+    "repair",
+    "blacksmith",
+    "crafting",
+    "smith",
+    "equipment",
+    "durability"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 3,
+    "column": 9
+   },
+   "crop": {
+    "x": 1345,
+    "y": 363,
+    "width": 175,
+    "height": 151
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-hammer-and-anvil.png",
+   "texture": "media/reminders/gallery/reminder-hammer-and-anvil",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-red-crystal",
+   "name": "Red crystal",
+   "category": "Character",
+   "description": "A red crystal in a bronze setting: health.",
+   "keywords": [
+    "crystal",
+    "red",
+    "health",
+    "life",
+    "gem",
+    "resource",
+    "hp"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 4,
+    "column": 1
+   },
+   "crop": {
+    "x": 24,
+    "y": 517,
+    "width": 135,
+    "height": 157
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-red-crystal.png",
+   "texture": "media/reminders/gallery/reminder-red-crystal",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-low-health"
+   ],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-blue-crystal",
+   "name": "Blue crystal",
+   "category": "Character",
+   "description": "A blue crystal in a bronze setting: mana or another magical resource.",
+   "keywords": [
+    "crystal",
+    "blue",
+    "mana",
+    "gem",
+    "resource",
+    "magic"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 4,
+    "column": 2
+   },
+   "crop": {
+    "x": 198,
+    "y": 516,
+    "width": 152,
+    "height": 158
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-blue-crystal.png",
+   "texture": "media/reminders/gallery/reminder-blue-crystal",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-low-mana"
+   ],
+   "balance": 0.991
+  },
+  {
+   "id": "reminder-lightning-rune",
+   "name": "Lightning rune",
+   "category": "Character",
+   "description": "An amber lightning bolt on stone: energy.",
+   "keywords": [
+    "lightning",
+    "rune",
+    "energy",
+    "amber",
+    "bolt",
+    "resource",
+    "stone"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 4,
+    "column": 3
+   },
+   "crop": {
+    "x": 386,
+    "y": 520,
+    "width": 156,
+    "height": 149
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-lightning-rune.png",
+   "texture": "media/reminders/gallery/reminder-lightning-rune",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-low-energy"
+   ],
+   "balance": 0.952
+  },
+  {
+   "id": "reminder-battle-emblem",
+   "name": "Battle emblem",
+   "category": "Character",
+   "description": "A red horned battle emblem: rage and fury.",
+   "keywords": [
+    "emblem",
+    "rage",
+    "fury",
+    "red",
+    "battle",
+    "warrior",
+    "horned",
+    "resource"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 4,
+    "column": 4
+   },
+   "crop": {
+    "x": 575,
+    "y": 526,
+    "width": 173,
+    "height": 140
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-battle-emblem.png",
+   "texture": "media/reminders/gallery/reminder-battle-emblem",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-low-rage"
+   ],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-arcane-spellbook",
+   "name": "Arcane spellbook",
+   "category": "Character",
+   "description": "A violet spellbook: a known ability or talent.",
+   "keywords": [
+    "spellbook",
+    "book",
+    "arcane",
+    "violet",
+    "spell",
+    "ability",
+    "talent",
+    "known",
+    "learned"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 4,
+    "column": 5
+   },
+   "crop": {
+    "x": 763,
+    "y": 524,
+    "width": 183,
+    "height": 143
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-arcane-spellbook.png",
+   "texture": "media/reminders/gallery/reminder-arcane-spellbook",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-bandages",
+   "name": "Bandages",
+   "category": "Supplies",
+   "description": "Rolled bandages and a small potion: recovery and rest.",
+   "keywords": [
+    "bandages",
+    "first",
+    "aid",
+    "recovery",
+    "rest",
+    "heal",
+    "potion",
+    "supplies"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 4,
+    "column": 8
+   },
+   "crop": {
+    "x": 1330,
+    "y": 532,
+    "width": 180,
+    "height": 129
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-bandages.png",
+   "texture": "media/reminders/gallery/reminder-bandages",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-warrior-banner",
+   "name": "Crossed swords banner",
+   "category": "Character",
+   "description": "Crossed swords on a blue banner: a warrior, or ready for combat.",
+   "keywords": [
+    "banner",
+    "swords",
+    "crossed",
+    "warrior",
+    "combat",
+    "fight",
+    "blue",
+    "battle",
+    "ready"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 5,
+    "column": 4
+   },
+   "crop": {
+    "x": 542,
+    "y": 672,
+    "width": 168,
+    "height": 157
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-warrior-banner.png",
+   "texture": "media/reminders/gallery/reminder-warrior-banner",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [],
+   "balance": 0.957
+  },
+  {
+   "id": "reminder-healing-light",
+   "name": "Healing light",
+   "category": "Character",
+   "description": "An open hand holding a spark of light: a healer.",
+   "keywords": [
+    "hand",
+    "light",
+    "healer",
+    "healing",
+    "holy",
+    "heal",
+    "spark",
+    "priest"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 5,
+    "column": 5
+   },
+   "crop": {
+    "x": 738,
+    "y": 678,
+    "width": 171,
+    "height": 150
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-healing-light.png",
+   "texture": "media/reminders/gallery/reminder-healing-light",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-dungeon-entrance",
+   "name": "Dungeon entrance",
+   "category": "Adventure",
+   "description": "A torchlit stone doorway: a dungeon.",
+   "keywords": [
+    "dungeon",
+    "entrance",
+    "door",
+    "gate",
+    "torch",
+    "instance",
+    "cave",
+    "stone"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 5,
+    "column": 7
+   },
+   "crop": {
+    "x": 1098,
+    "y": 674,
+    "width": 201,
+    "height": 147
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-dungeon-entrance.png",
+   "texture": "media/reminders/gallery/reminder-dungeon-entrance",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-raid-gate",
+   "name": "Raid gate",
+   "category": "Adventure",
+   "description": "A fortress gate hung with banners: a raid.",
+   "keywords": [
+    "raid",
+    "gate",
+    "fortress",
+    "castle",
+    "banners",
+    "instance",
+    "door"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 5,
+    "column": 8
+   },
+   "crop": {
+    "x": 1313,
+    "y": 679,
+    "width": 204,
+    "height": 139
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-raid-gate.png",
+   "texture": "media/reminders/gallery/reminder-raid-gate",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [],
+   "balance": 0.999
+  },
+  {
+   "id": "reminder-marked-map",
+   "name": "Marked map",
+   "category": "Adventure",
+   "description": "A parchment map with a red marker: a place.",
+   "keywords": [
+    "map",
+    "location",
+    "marker",
+    "pin",
+    "place",
+    "parchment",
+    "zone",
+    "navigate",
+    "where"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 6,
+    "column": 1
+   },
+   "crop": {
+    "x": 10,
+    "y": 840,
+    "width": 184,
+    "height": 159
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-marked-map.png",
+   "texture": "media/reminders/gallery/reminder-marked-map",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-horse",
+   "name": "Horse",
+   "category": "Adventure",
+   "description": "A horse's head in its bridle: mounted.",
+   "keywords": [
+    "horse",
+    "mount",
+    "mounted",
+    "riding",
+    "steed",
+    "travel"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 6,
+    "column": 2
+   },
+   "crop": {
+    "x": 204,
+    "y": 841,
+    "width": 168,
+    "height": 157
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-horse.png",
+   "texture": "media/reminders/gallery/reminder-horse",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [],
+   "balance": 0.964
+  },
+  {
+   "id": "reminder-bedroll",
+   "name": "Bedroll",
+   "category": "Adventure",
+   "description": "A rolled bedroll: rest and camping.",
+   "keywords": [
+    "bedroll",
+    "rest",
+    "camping",
+    "sleep",
+    "camp",
+    "bed",
+    "resting"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 6,
+    "column": 3
+   },
+   "crop": {
+    "x": 386,
+    "y": 846,
+    "width": 191,
+    "height": 152
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-bedroll.png",
+   "texture": "media/reminders/gallery/reminder-bedroll",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-camp-tent"
+   ],
+   "balance": 0.993
+  },
+  {
+   "id": "reminder-companion-crests",
+   "name": "Companion crests",
+   "category": "Adventure",
+   "description": "Three shields side by side: a group.",
+   "keywords": [
+    "crests",
+    "shields",
+    "group",
+    "party",
+    "companions",
+    "team"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 6,
+    "column": 5
+   },
+   "crop": {
+    "x": 769,
+    "y": 832,
+    "width": 175,
+    "height": 167
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-companion-crests.png",
+   "texture": "media/reminders/gallery/reminder-companion-crests",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-group-preparation"
+   ],
+   "balance": 0.953
+  },
+  {
+   "id": "reminder-leather-backpack",
+   "name": "Leather backpack",
+   "category": "Supplies",
+   "description": "A buckled leather backpack: bags and inventory.",
+   "keywords": [
+    "backpack",
+    "bag",
+    "inventory",
+    "space",
+    "leather",
+    "pack",
+    "bags"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 6,
+    "column": 6
+   },
+   "crop": {
+    "x": 964,
+    "y": 839,
+    "width": 169,
+    "height": 162
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-leather-backpack.png",
+   "texture": "media/reminders/gallery/reminder-leather-backpack",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-full-inventory"
+   ],
+   "balance": 0.942
+  },
+  {
+   "id": "reminder-bronze-bell",
+   "name": "Bronze bell",
+   "category": "General",
+   "description": "A bronze bell with a ribbon: a general reminder.",
+   "keywords": [
+    "bell",
+    "reminder",
+    "alert",
+    "ring",
+    "notice",
+    "general",
+    "bronze"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 6,
+    "column": 7
+   },
+   "crop": {
+    "x": 1151,
+    "y": 832,
+    "width": 163,
+    "height": 169
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-bronze-bell.png",
+   "texture": "media/reminders/gallery/reminder-bronze-bell",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [],
+   "balance": 0.984
+  },
+  {
+   "id": "reminder-camp-tent",
+   "name": "Camp tent",
+   "category": "Adventure",
+   "description": "A lit tent: camping and travel.",
+   "keywords": [
+    "tent",
+    "camp",
+    "camping",
+    "fire",
+    "rest",
+    "travel",
+    "light"
+   ],
+   "sheet": 1,
+   "position": {
+    "row": 6,
+    "column": 8
+   },
+   "crop": {
+    "x": 1319,
+    "y": 827,
+    "width": 208,
+    "height": 168
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-camp-tent.png",
+   "texture": "media/reminders/gallery/reminder-camp-tent",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-bedroll"
+   ],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-missing-buff",
+   "name": "Missing buff",
+   "category": "Buffs & Effects",
+   "description": "A fading ivory sigil in a bronze medallion: a buff that is missing.",
+   "keywords": [
+    "missing",
+    "buff",
+    "fading",
+    "sigil",
+    "absent",
+    "expired",
+    "medallion",
+    "aura"
+   ],
+   "sheet": 2,
+   "position": {
+    "row": 1,
+    "column": 1
+   },
+   "crop": {
+    "x": 38,
+    "y": 41,
+    "width": 186,
+    "height": 186
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-missing-buff.png",
+   "texture": "media/reminders/gallery/reminder-missing-buff",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-expiring-buff",
+    "reminder-arcane-ward"
+   ],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-expiring-buff",
+   "name": "Expiring buff",
+   "category": "Buffs & Effects",
+   "description": "A crumbling hourglass medallion: a buff about to end.",
+   "keywords": [
+    "expiring",
+    "buff",
+    "hourglass",
+    "ending",
+    "crumbling",
+    "timer",
+    "aura",
+    "medallion"
+   ],
+   "sheet": 2,
+   "position": {
+    "row": 1,
+    "column": 2
+   },
+   "crop": {
+    "x": 287,
+    "y": 41,
+    "width": 195,
+    "height": 191
+   },
+   "parts": 11,
+   "source": "assets/reminder-gallery/reminder-expiring-buff.png",
+   "texture": "media/reminders/gallery/reminder-expiring-buff",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-hourglass",
+    "reminder-missing-buff"
+   ],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-harmful-debuff",
+   "name": "Harmful debuff",
+   "category": "Buffs & Effects",
+   "description": "A green corrupted rune wrapped in dark energy: a harmful effect.",
+   "keywords": [
+    "debuff",
+    "harmful",
+    "corrupted",
+    "rune",
+    "curse",
+    "poison",
+    "disease",
+    "green",
+    "aura"
+   ],
+   "sheet": 2,
+   "position": {
+    "row": 1,
+    "column": 3
+   },
+   "crop": {
+    "x": 539,
+    "y": 42,
+    "width": 200,
+    "height": 196
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-harmful-debuff.png",
+   "texture": "media/reminders/gallery/reminder-harmful-debuff",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-curse-skull"
+   ],
+   "balance": 0.983
+  },
+  {
+   "id": "reminder-aura-stacks",
+   "name": "Aura stacks",
+   "category": "Buffs & Effects",
+   "description": "Overlapping bronze seals around a glowing star: stacks of an effect.",
+   "keywords": [
+    "aura",
+    "stacks",
+    "stacking",
+    "seals",
+    "layers",
+    "medallion",
+    "star",
+    "buff"
+   ],
+   "sheet": 2,
+   "position": {
+    "row": 1,
+    "column": 4
+   },
+   "crop": {
+    "x": 777,
+    "y": 41,
+    "width": 216,
+    "height": 191
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-aura-stacks.png",
+   "texture": "media/reminders/gallery/reminder-aura-stacks",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-golden-rings"
+   ],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-low-health",
+   "name": "Low health",
+   "category": "Character",
+   "description": "A cracked red heart crystal in bronze.",
+   "keywords": [
+    "health",
+    "low",
+    "heart",
+    "cracked",
+    "hp",
+    "life",
+    "red",
+    "crystal"
+   ],
+   "sheet": 2,
+   "position": {
+    "row": 2,
+    "column": 1
+   },
+   "crop": {
+    "x": 38,
+    "y": 287,
+    "width": 193,
+    "height": 189
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-low-health.png",
+   "texture": "media/reminders/gallery/reminder-low-health",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-red-crystal"
+   ],
+   "balance": 0.973
+  },
+  {
+   "id": "reminder-low-mana",
+   "name": "Low mana",
+   "category": "Character",
+   "description": "A nearly empty blue mana vessel.",
+   "keywords": [
+    "mana",
+    "low",
+    "empty",
+    "vessel",
+    "flask",
+    "blue",
+    "resource"
+   ],
+   "sheet": 2,
+   "position": {
+    "row": 2,
+    "column": 2
+   },
+   "crop": {
+    "x": 301,
+    "y": 279,
+    "width": 163,
+    "height": 198
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-low-mana.png",
+   "texture": "media/reminders/gallery/reminder-low-mana",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-mana-potion",
+    "reminder-blue-crystal"
+   ],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-low-energy",
+   "name": "Low energy",
+   "category": "Character",
+   "description": "A fading amber lightning emblem.",
+   "keywords": [
+    "energy",
+    "low",
+    "lightning",
+    "amber",
+    "fading",
+    "resource",
+    "rogue"
+   ],
+   "sheet": 2,
+   "position": {
+    "row": 2,
+    "column": 3
+   },
+   "crop": {
+    "x": 533,
+    "y": 274,
+    "width": 206,
+    "height": 203
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-low-energy.png",
+   "texture": "media/reminders/gallery/reminder-low-energy",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-lightning-rune"
+   ],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-low-rage",
+   "name": "Low rage",
+   "category": "Character",
+   "description": "A worn red battle banner with crossed swords.",
+   "keywords": [
+    "rage",
+    "low",
+    "banner",
+    "red",
+    "swords",
+    "warrior",
+    "resource"
+   ],
+   "sheet": 2,
+   "position": {
+    "row": 2,
+    "column": 4
+   },
+   "crop": {
+    "x": 794,
+    "y": 270,
+    "width": 189,
+    "height": 214
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-low-rage.png",
+   "texture": "media/reminders/gallery/reminder-low-rage",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-battle-emblem"
+   ],
+   "balance": 0.993
+  },
+  {
+   "id": "reminder-talent-specialization",
+   "name": "Talent specialization",
+   "category": "Character",
+   "description": "A branching character-build diagram on parchment.",
+   "keywords": [
+    "talent",
+    "specialization",
+    "spec",
+    "build",
+    "tree",
+    "parchment",
+    "scroll",
+    "roles"
+   ],
+   "sheet": 2,
+   "position": {
+    "row": 3,
+    "column": 1
+   },
+   "crop": {
+    "x": 25,
+    "y": 522,
+    "width": 221,
+    "height": 210
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-talent-specialization.png",
+   "texture": "media/reminders/gallery/reminder-talent-specialization",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [],
+   "balance": 0.938
+  },
+  {
+   "id": "reminder-talent-learned",
+   "name": "Talent learned",
+   "category": "Character",
+   "description": "A glowing amber rune carved into a stone tablet.",
+   "keywords": [
+    "talent",
+    "learned",
+    "known",
+    "rune",
+    "stone",
+    "tablet",
+    "glowing",
+    "amber",
+    "chosen"
+   ],
+   "sheet": 2,
+   "position": {
+    "row": 3,
+    "column": 2
+   },
+   "crop": {
+    "x": 296,
+    "y": 521,
+    "width": 175,
+    "height": 209
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-talent-learned.png",
+   "texture": "media/reminders/gallery/reminder-talent-learned",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-talent-missing"
+   ],
+   "balance": 0.967
+  },
+  {
+   "id": "reminder-talent-missing",
+   "name": "Talent missing",
+   "category": "Character",
+   "description": "A dark, unlit rune carved into a stone tablet.",
+   "keywords": [
+    "talent",
+    "missing",
+    "unlearned",
+    "rune",
+    "stone",
+    "tablet",
+    "dark",
+    "unlit"
+   ],
+   "sheet": 2,
+   "position": {
+    "row": 3,
+    "column": 3
+   },
+   "crop": {
+    "x": 545,
+    "y": 521,
+    "width": 174,
+    "height": 209
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-talent-missing.png",
+   "texture": "media/reminders/gallery/reminder-talent-missing",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-talent-learned"
+   ],
+   "balance": 0.966
+  },
+  {
+   "id": "reminder-cooldown-ready",
+   "name": "Cooldown ready",
+   "category": "Character",
+   "description": "A blue magical clock medallion: an ability, ready.",
+   "keywords": [
+    "cooldown",
+    "ready",
+    "ability",
+    "clock",
+    "blue",
+    "medallion",
+    "timer",
+    "spell"
+   ],
+   "sheet": 2,
+   "position": {
+    "row": 3,
+    "column": 4
+   },
+   "crop": {
+    "x": 774,
+    "y": 512,
+    "width": 230,
+    "height": 224
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-cooldown-ready.png",
+   "texture": "media/reminders/gallery/reminder-cooldown-ready",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-low-reagents",
+   "name": "Low reagents",
+   "category": "Supplies",
+   "description": "A nearly empty leather pouch with a few crystals left.",
+   "keywords": [
+    "reagents",
+    "low",
+    "empty",
+    "pouch",
+    "crystals",
+    "components",
+    "materials",
+    "bag"
+   ],
+   "sheet": 2,
+   "position": {
+    "row": 4,
+    "column": 1
+   },
+   "crop": {
+    "x": 31,
+    "y": 777,
+    "width": 192,
+    "height": 190
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-low-reagents.png",
+   "texture": "media/reminders/gallery/reminder-low-reagents",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-crystal-pouch",
+    "reminder-missing-class-reagents"
+   ],
+   "balance": 0.93
+  },
+  {
+   "id": "reminder-low-food",
+   "name": "Low food",
+   "category": "Supplies",
+   "description": "A small food pouch with bread and crumbs.",
+   "keywords": [
+    "food",
+    "low",
+    "bread",
+    "crumbs",
+    "pouch",
+    "eat",
+    "hunger",
+    "supplies"
+   ],
+   "sheet": 2,
+   "position": {
+    "row": 4,
+    "column": 2
+   },
+   "crop": {
+    "x": 274,
+    "y": 782,
+    "width": 214,
+    "height": 182
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-low-food.png",
+   "texture": "media/reminders/gallery/reminder-low-food",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-bread-and-cheese",
+    "wellfed"
+   ],
+   "balance": 0.97
+  },
+  {
+   "id": "reminder-low-drink",
+   "name": "Low drink",
+   "category": "Supplies",
+   "description": "An almost empty worn waterskin.",
+   "keywords": [
+    "drink",
+    "low",
+    "water",
+    "waterskin",
+    "empty",
+    "thirst",
+    "supplies"
+   ],
+   "sheet": 2,
+   "position": {
+    "row": 4,
+    "column": 3
+   },
+   "crop": {
+    "x": 522,
+    "y": 771,
+    "width": 185,
+    "height": 201
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-low-drink.png",
+   "texture": "media/reminders/gallery/reminder-low-drink",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-waterskin"
+   ],
+   "balance": 0.988
+  },
+  {
+   "id": "reminder-missing-class-reagents",
+   "name": "Class reagents",
+   "category": "Supplies",
+   "description": "A nearly empty pouch marked with a rune: class reagents.",
+   "keywords": [
+    "reagents",
+    "class",
+    "rune",
+    "pouch",
+    "missing",
+    "empty",
+    "components",
+    "mage",
+    "rogue"
+   ],
+   "sheet": 2,
+   "position": {
+    "row": 4,
+    "column": 4
+   },
+   "crop": {
+    "x": 781,
+    "y": 777,
+    "width": 215,
+    "height": 189
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-missing-class-reagents.png",
+   "texture": "media/reminders/gallery/reminder-missing-class-reagents",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-low-reagents"
+   ],
+   "balance": 0.978
+  },
+  {
+   "id": "reminder-full-inventory",
+   "name": "Full inventory",
+   "category": "Supplies",
+   "description": "An overfilled leather adventuring backpack.",
+   "keywords": [
+    "inventory",
+    "full",
+    "bags",
+    "backpack",
+    "overfilled",
+    "space",
+    "stuffed",
+    "pack"
+   ],
+   "sheet": 2,
+   "position": {
+    "row": 5,
+    "column": 1
+   },
+   "crop": {
+    "x": 21,
+    "y": 1001,
+    "width": 224,
+    "height": 220
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-full-inventory.png",
+   "texture": "media/reminders/gallery/reminder-full-inventory",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-leather-backpack",
+    "reminder-supply-pack"
+   ],
+   "balance": 0.917
+  },
+  {
+   "id": "reminder-fishing-rod",
+   "name": "Fishing rod",
+   "category": "Equipment",
+   "description": "A broken fishing rod with its line and bobber.",
+   "keywords": [
+    "fishing",
+    "rod",
+    "line",
+    "bobber",
+    "hook",
+    "broken",
+    "equipment",
+    "fish"
+   ],
+   "sheet": 2,
+   "position": {
+    "row": 5,
+    "column": 2
+   },
+   "crop": {
+    "x": 261,
+    "y": 1023,
+    "width": 233,
+    "height": 193
+   },
+   "parts": 4,
+   "source": "assets/reminder-gallery/reminder-fishing-rod.png",
+   "texture": "media/reminders/gallery/reminder-fishing-rod",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-group-preparation",
+   "name": "Group preparation",
+   "category": "Adventure",
+   "description": "Three banners: healer, leader and fighter.",
+   "keywords": [
+    "group",
+    "party",
+    "preparation",
+    "banners",
+    "roles",
+    "team",
+    "healer",
+    "tank",
+    "damage"
+   ],
+   "sheet": 2,
+   "position": {
+    "row": 5,
+    "column": 3
+   },
+   "crop": {
+    "x": 516,
+    "y": 1007,
+    "width": 233,
+    "height": 210
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-group-preparation.png",
+   "texture": "media/reminders/gallery/reminder-group-preparation",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-companion-crests"
+   ],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-spell-not-learned",
+   "name": "Spell not learned",
+   "category": "Character",
+   "description": "A dark closed spellbook with an unfinished rune.",
+   "keywords": [
+    "spell",
+    "not",
+    "learned",
+    "unknown",
+    "book",
+    "closed",
+    "unfinished",
+    "rune",
+    "missing",
+    "ability",
+    "talent"
+   ],
+   "sheet": 2,
+   "position": {
+    "row": 5,
+    "column": 4
+   },
+   "crop": {
+    "x": 780,
+    "y": 1016,
+    "width": 215,
+    "height": 210
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-spell-not-learned.png",
+   "texture": "media/reminders/gallery/reminder-spell-not-learned",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [],
+   "balance": 0.945
+  },
+  {
+   "id": "reminder-healer-preparation",
+   "name": "Healer preparation",
+   "category": "Character",
+   "description": "A healing hand with an ivory cross and laurel.",
+   "keywords": [
+    "healer",
+    "preparation",
+    "hand",
+    "cross",
+    "laurel",
+    "heal",
+    "holy",
+    "support",
+    "medallion"
+   ],
+   "sheet": 2,
+   "position": {
+    "row": 6,
+    "column": 1
+   },
+   "crop": {
+    "x": 19,
+    "y": 1255,
+    "width": 222,
+    "height": 221
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-healer-preparation.png",
+   "texture": "media/reminders/gallery/reminder-healer-preparation",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-healing-light"
+   ],
+   "balance": 0.979
+  },
+  {
+   "id": "reminder-tank-preparation",
+   "name": "Tank preparation",
+   "category": "Character",
+   "description": "A reinforced shield with a lion crest.",
+   "keywords": [
+    "tank",
+    "preparation",
+    "shield",
+    "lion",
+    "crest",
+    "defense",
+    "protect",
+    "role"
+   ],
+   "sheet": 2,
+   "position": {
+    "row": 6,
+    "column": 2
+   },
+   "crop": {
+    "x": 269,
+    "y": 1253,
+    "width": 223,
+    "height": 224
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-tank-preparation.png",
+   "texture": "media/reminders/gallery/reminder-tank-preparation",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-lion-shield"
+   ],
+   "balance": 0.95
+  },
+  {
+   "id": "reminder-caster-preparation",
+   "name": "Caster preparation",
+   "category": "Character",
+   "description": "A blue crystalline arcane focus.",
+   "keywords": [
+    "caster",
+    "preparation",
+    "arcane",
+    "focus",
+    "crystal",
+    "staff",
+    "magic",
+    "mage",
+    "blue",
+    "wizard"
+   ],
+   "sheet": 2,
+   "position": {
+    "row": 6,
+    "column": 3
+   },
+   "crop": {
+    "x": 528,
+    "y": 1250,
+    "width": 194,
+    "height": 230
+   },
+   "parts": 3,
+   "source": "assets/reminder-gallery/reminder-caster-preparation.png",
+   "texture": "media/reminders/gallery/reminder-caster-preparation",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [],
+   "balance": 1.0
+  },
+  {
+   "id": "reminder-rogue-preparation",
+   "name": "Rogue preparation",
+   "category": "Character",
+   "description": "A poison vial beside a dagger.",
+   "keywords": [
+    "rogue",
+    "preparation",
+    "poison",
+    "vial",
+    "dagger",
+    "stealth"
+   ],
+   "sheet": 2,
+   "position": {
+    "row": 6,
+    "column": 4
+   },
+   "crop": {
+    "x": 764,
+    "y": 1256,
+    "width": 227,
+    "height": 223
+   },
+   "parts": 1,
+   "source": "assets/reminder-gallery/reminder-rogue-preparation.png",
+   "texture": "media/reminders/gallery/reminder-rogue-preparation",
+   "textureSizes": {
+    "large": 128,
+    "small": 64
+   },
+   "related": [
+    "reminder-poisoned-dagger"
+   ],
+   "balance": 1.0
+  }
+ ],
+ "legacy": [
+  {
+   "kind": "art",
+   "id": "shield",
+   "name": "Steel shield",
+   "category": "Equipment",
+   "description": "A plain steel shield with a bronze rim.",
+   "keywords": "shield steel protection defense equipment off hand"
+  },
+  {
+   "kind": "art",
+   "id": "ammo",
+   "name": "Arrows",
+   "category": "Supplies",
+   "description": "A bundle of arrows.",
+   "keywords": "arrows ammunition ammo ranged hunter bow supplies"
+  },
+  {
+   "kind": "art",
+   "id": "wellfed",
+   "name": "Plate and cutlery",
+   "category": "Supplies",
+   "description": "An empty plate with a fork and knife.",
+   "keywords": "plate cutlery food well fed eat meal hunger supplies"
+  },
+  {
+   "kind": "art",
+   "id": "enchant",
+   "name": "Weapon oil",
+   "category": "Equipment",
+   "description": "A bottle of amber weapon oil.",
+   "keywords": "oil weapon enchant enchantment poison bottle equipment"
+  },
+  {
+   "kind": "icon",
+   "id": "reminderShow",
+   "name": "Framed shield",
+   "category": "General",
+   "description": "A framed shield: the reminders icon.",
+   "keywords": "shield framed reminders icon general"
+  },
+  {
+   "kind": "icon",
+   "id": "reminders",
+   "name": "Bell",
+   "category": "General",
+   "description": "A bell: a general reminder.",
+   "keywords": "bell reminder alert ring general icon"
+  },
+  {
+   "kind": "icon",
+   "id": "reminderTest",
+   "name": "Checklist",
+   "category": "General",
+   "description": "A checklist.",
+   "keywords": "checklist list tasks check test general icon"
+  },
+  {
+   "kind": "icon",
+   "id": "hazardAlerts",
+   "name": "Warning shield",
+   "category": "General",
+   "description": "A shield with a warning mark.",
+   "keywords": "warning hazard danger alert shield general icon"
+  },
+  {
+   "kind": "icon",
+   "id": "ammunition",
+   "name": "Quiver",
+   "category": "Supplies",
+   "description": "A quiver.",
+   "keywords": "quiver ammunition ammo arrows supplies icon"
+  },
+  {
+   "kind": "icon",
+   "id": "foodAndDrink",
+   "name": "Bread and cup",
+   "category": "Supplies",
+   "description": "Bread and a cup: food and drink.",
+   "keywords": "bread cup food drink eat supplies icon"
+  },
+  {
+   "kind": "icon",
+   "id": "gearComparison",
+   "name": "Breastplate",
+   "category": "Equipment",
+   "description": "A breastplate.",
+   "keywords": "breastplate armor gear equipment chest icon"
+  },
+  {
+   "kind": "icon",
+   "id": "mage",
+   "name": "Arcane staff",
+   "category": "Character",
+   "description": "A staff with an arcane crystal.",
+   "keywords": "staff arcane mage magic crystal focus icon"
+  }
+ ],
+ "rejected": [
+  {
+   "sheet": 1,
+   "row": 2,
+   "col": 4,
+   "name": "Empty plate",
+   "reason": "Same subject as the existing Plate and cutlery (wellfed), which saved reminders already use.",
+   "duplicate_of": "wellfed"
+  },
+  {
+   "sheet": 1,
+   "row": 4,
+   "col": 6,
+   "name": "Hourglass medallion",
+   "reason": "Near-identical to Expiring buff (sheet 2) and to Golden hourglass.",
+   "duplicate_of": "reminder-expiring-buff"
+  },
+  {
+   "sheet": 1,
+   "row": 4,
+   "col": 7,
+   "name": "Crossed-out spellbook",
+   "reason": "Same idea as Spell not learned (sheet 2), which is the stronger version.",
+   "duplicate_of": "reminder-spell-not-learned"
+  },
+  {
+   "sheet": 1,
+   "row": 5,
+   "col": 1,
+   "name": "Talent tree parchment",
+   "reason": "Same subject as Talent specialization (sheet 2), which is more detailed.",
+   "duplicate_of": "reminder-talent-specialization"
+  },
+  {
+   "sheet": 1,
+   "row": 5,
+   "col": 2,
+   "name": "Lit rune stone",
+   "reason": "Same subject as Talent learned (sheet 2).",
+   "duplicate_of": "reminder-talent-learned"
+  },
+  {
+   "sheet": 1,
+   "row": 5,
+   "col": 3,
+   "name": "Unlit rune stone",
+   "reason": "Same subject as Talent missing (sheet 2).",
+   "duplicate_of": "reminder-talent-missing"
+  },
+  {
+   "sheet": 1,
+   "row": 5,
+   "col": 6,
+   "name": "Plain steel shield",
+   "reason": "Same subject as the existing Shield (shield), which saved reminders already use.",
+   "duplicate_of": "shield"
+  },
+  {
+   "sheet": 1,
+   "row": 6,
+   "col": 4,
+   "name": "Crossed weapons banner",
+   "reason": "Near-identical to Crossed swords banner, one row above.",
+   "duplicate_of": "reminder-warrior-banner"
+  }
+ ]
+}

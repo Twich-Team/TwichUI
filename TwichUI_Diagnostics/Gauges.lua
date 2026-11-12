@@ -45,6 +45,12 @@ DX.OPS = {
     ["pins.minimap.tick"] = { module = "pins", label = "Pins on the minimap, one update", kind = "update", file = "pins/Minimap.lua", where = "Update > Step", every = "10 times a second (25 when rotating) while a pin is eligible" },
     ["pins.ping.tick"] = { module = "pins", label = "A map ping animating, one frame", kind = "update", file = "pins/PingMap.lua", where = "Tick > Step", every = "every frame while a ping shows" },
     ["nav.load"] = { module = "nav", label = "Navigation data addon loaded (first route)", kind = "init", file = "nav/Data.lua", where = "ND.Load > C_AddOns.LoadAddOn", every = "once per session, when the first route is asked for" },
+    ["workshop.load"] = { module = "workshop", label = "Workshop addon loaded", kind = "init", file = "WorkshopLauncher.lua", where = "L.Load > C_AddOns.LoadAddOn", every = "once per session, the first time the Workshop is opened" },
+    ["workshop.read"] = { module = "workshop", label = "Workshop: the open profession's recipes read (list, learned flags; queued recipes refreshed)", kind = "rebuild", file = "TwichUI_Workshop/Session.lua", where = "S.Observe > Observe.Read; S.ReadMerchant", every = "when the Workshop opens and per burst of profession or merchant window changes while it is shown" },
+    ["workshop.bank"] = { module = "workshop", label = "Workshop: the open bank (or the shown guild bank tab) read and remembered", kind = "bulk", file = "TwichUI_Workshop/Bank.lua", where = "RunBank, GuildAnswer", every = "per burst of changes (0.4 s settle) while a bank is open and the Workshop addon is loaded; none otherwise" },
+    ["workshop.worth"] = { module = "workshop", label = "Workshop: \"What's it worth?\" lines added to an item tooltip (saved prices read, nothing asked of the auction house)", kind = "rebuild", file = "TwichUI_Workshop/WorthTip.lua", where = "T.OnItem > Add", every = "per rebuild of the tooltip of an item in the bags or bank, only after the Workshop was loaded in the session" },
+    ["workshop.scan"] = { module = "workshop", label = "Workshop: auction listings read for a price scan (a batch of up to 400) and merged into the saved prices (a step of up to 120 items)", kind = "bulk", file = "TwichUI_Workshop/Scan.lua", where = "BeginRead > Step, SaveStep", every = "per batch or step, only during a scan the player started at the auction house" },
+    ["workshop.render"] = { module = "workshop", label = "Workshop: the window drawn (recipe rows, queue, materials against the bags, the shopping list and its plan)", kind = "rebuild", file = "TwichUI_Workshop/Window.lua", where = "Win.Render", every = "per burst of profession, bag or item-name changes and per click, only while the Workshop is shown" },
     ["layouts.load"] = { module = "layouts", label = "Layout tools addon loaded", kind = "init", file = "LayoutsLauncher.lua", where = "L.Load > C_AddOns.LoadAddOn", every = "once per session, for /tui layout or after a reload while an install is being finished" },
     ["layouts.plan"] = { module = "layouts", label = "Layout install planned (package checked, layers composed, each addon read, an update compared with the baseline)", kind = "rebuild", file = "TwichUI_Layouts/Engine.lua", where = "LY.Plan", every = "on request (/tui layout plan, and again inside apply)" },
     ["layouts.apply"] = { module = "layouts", label = "Layout install applied (EllesmereUI import, TwichUI profile and values)", kind = "bulk", file = "TwichUI_Layouts/Engine.lua", where = "LY.Apply", every = "on request" },
@@ -108,6 +114,7 @@ DX.OPS = {
     ["settings.window.build"] = { module = "settings", label = "Settings window built (first open)", kind = "init", file = "TwichUI_Settings/Window.lua", where = "BuildWindow", every = "once, first open" },
     ["settings.page.build"] = { module = "settings", label = "A settings page drawn for the first time", kind = "build", file = "TwichUI_Settings/Window.lua", where = "BuildView", every = "once per page, first visit" },
     ["settings.page.layout"] = { module = "settings", label = "A settings page laid out", kind = "layout", visible = "settings.shown", file = "TwichUI_Settings/Window.lua", where = "Layout(view)", every = "per page shown or resized" },
+    ["settings.companion"] = { module = "settings", label = "A settings sample refreshed", kind = "layout", visible = "settings.shown", file = "TwichUI_Settings/Companion.lua", where = "Update(view)", every = "on a visible sample or preference change" },
     ["settings.search"] = { module = "settings", label = "Settings search results drawn", kind = "search", visible = "settings.shown", file = "TwichUI_Settings/Window.lua", where = "DrawResults", every = "per search typed" },
     ["settings.search.index"] = { module = "settings", label = "Settings search index built", kind = "rebuild", file = "TwichUI_Settings/Search.lua", where = "Search.Build", every = "once, first search" },
 }
@@ -174,6 +181,12 @@ local G = {
     { "core.settingsClosers", "Settings-closed callbacks", "listeners", "core", function() local L = R.SettingsLauncher return L and type(L.closers) == "table" and #L.closers or nil end },
     { "core.easing", "Window effects easing now", "state", "core", function() local M = R.Look and R.Look.Motion return M and M.Count and DX.Num(M.Count()) or nil end },
     { "settings.shown", "Settings window shown", "state", "settings", function() local UI = R.SettingsUI return Flag(UI ~= nil and UI.IsShown() or false) end },
+    { "settings.sampleScenes", "Settings sample renderers kept (maximum four)", "pool", "settings", function()
+        return R.SettingsCompanion and R.SettingsCompanion.SceneCount() or 0
+    end },
+    { "settings.sampleShown", "Settings sample shown", "state", "settings", function()
+        return Flag(R.SettingsCompanion ~= nil and R.SettingsCompanion.Active() ~= nil)
+    end },
     { "settings.pagesDrawn", "Settings pages drawn (kept until a reload)", "cache", "settings", function()
         local UI = R.SettingsUI
         if not (UI and UI.Stats) then return nil end
@@ -206,6 +219,7 @@ local G = {
     { "nav.decodedTiles", "Navigation tiles decoded (cache)", "cache", "map", Field("NavData", "decodedTiles") },
     { "reminders.active", "Reminders running", "state", "group", Field("ReminderController", "active") },
     { "reminders.keys", "Reminders: observations listened for", "listeners", "group", Field("ReminderController", "keys") },
+    { "reminders.timed", "Reminders: waiting on a time boundary (one timer each)", "listeners", "group", Field("ReminderController", "timed") },
     { "reminders.decisions", "Reminders: decisions so far (module count)", "work", "group", Field("ReminderController", "decisions") },
     { "reminders.designer.cards", "Reminders designer: condition cards made (pool)", "pool", "settings", Field("RemindersDesigner", "cards") },
     { "reminders.designer.pickerRows", "Reminders designer: picker rows made (pool)", "pool", "settings", Field("RemindersDesigner", "pickerRows") },
@@ -213,6 +227,17 @@ local G = {
     { "partyDeath.events", "Party member fallen: events registered", "listeners", "group", Field("PartyDeath", "events") },
     { "partyDeath.tracked", "Party member fallen: members tracked", "state", "group", Field("PartyDeath", "tracked") },
     { "healer.events", "Healer Watch: events registered", "listeners", "group", Field("HealerWatcher", "events") },
+    { "workshop.queue", "Workshop: recipes queued (this character)", "state", "core", Field("Workshop", "queue") },
+    { "workshop.recipes", "Workshop: recipes held while the window is open", "cache", "core", Field("Workshop", "recipes") },
+    { "workshop.cache", "Workshop: recipe details remembered while the window is open", "cache", "core", Field("Workshop", "cache") },
+    { "workshop.events", "Workshop: events registered (zero while the window is hidden)", "listeners", "core", Field("Workshop", "events") },
+    { "workshop.rows", "Workshop: list rows made (pool)", "pool", "core", Field("Workshop", "rows") },
+    { "workshop.prices", "Workshop: items with a saved price (newest scan of this realm)", "state", "core", Field("Workshop", "prices") },
+    { "workshop.history", "Workshop: items with saved price history (newest scan of this realm; bounded per market)", "state", "core", Field("Workshop", "history") },
+    { "workshop.vendor", "Workshop: items with a saved vendor price (at most 400)", "state", "core", Field("Workshop", "vendor") },
+    { "workshop.stored", "Workshop: item counts remembered from the bank and guild banks (bounded)", "state", "core", Field("Workshop", "storedItems") },
+    { "workshop.bankEvents", "Workshop: bank events registered (a few always; more only while a bank is open)", "listeners", "core", Field("Workshop", "bankEvents") },
+    { "workshop.picks", "Workshop: source choices held on the shopping list (this session)", "state", "core", Field("Workshop", "picks") },
     { "camping.events", "Camping bar: events registered", "listeners", "core", Field("Camping", "events") },
     { "camping.buttons", "Camping bar: buttons made (pool)", "pool", "core", Field("Camping", "buttons") },
     { "camping.rest.events", "Camping bar: sleeping bag bar events registered", "listeners", "core", Field("CampingRest", "events") },

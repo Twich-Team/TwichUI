@@ -157,7 +157,8 @@ local function Build()
     f.previewNote = G.Text(f.preview, "small")
     f.previewNote:SetWidth(W - PAD * 2)
     f.previewNote:SetWordWrap(true)
-    f.previewNote:SetText("A sample drawn with your settings and made-up readings. It reads nothing from your group, sends nothing and changes nothing; the live panel carries on underneath.")
+    f.previewNote:SetText("Choose a scenario, then try it at its real position or move the panel.")
+    I.Tip(f.preview, "Isolated sample", "Made-up readings, drawn with your settings. It reads nothing from your group, sends nothing and changes no setting. The live panel carries on independently.")
     f.scenarioLabel = G.Text(f.preview, "body")
     f.scenarioLabel:SetText("Scenario")
     f.scenario = G.Dropdown(f.preview, 220, function(value)
@@ -205,7 +206,8 @@ local function Build()
     f.phrasesNote = G.Text(f.phrases, "small")
     f.phrasesNote:SetWidth(W - PAD * 2)
     f.phrasesNote:SetWordWrap(true)
-    f.phrasesNote:SetText("Words that count as a mana message from the watched healer. They are literal text, not patterns, and nothing reads their meaning: \"not oom\" still matches \"oom\". A message only counts when the game says it came from the healer you watch; names are never matched. A phrase like \"drinking\" is shown as something they said, never as confirmed drinking.")
+    f.phrasesNote:SetText("Literal matching: \"not oom\" still matches \"oom\". Only the watched healer's messages count; nothing is sent.")
+    I.Tip(f.phrases, "Mana phrases", "Words count only when the game says they came from the watched healer; names are never matched. A phrase such as drinking is only something they said, never confirmed drinking. Whole-message and word matching keep their original meanings.")
     f.addBox = G.EditBox(f.phrases, 260, 22)
     f.addBox:SetMaxLetters(HW().PHRASE_MAX * 4)
     local addMode = "word"
@@ -280,9 +282,13 @@ local function LayoutPreview(y)
     h = h + 32
     Put(f.flashTry, p, PAD, h)
     h = h + 32
-    Put(f.stage, p, PAD, h)
-    R.HealerDisplay.DrawSurface(f.surface, Wt.ScenarioView(key), Wt.Config(), W - PAD * 2 - 20, PREVIEW_H - 20)
-    h = h + PREVIEW_H + 12
+    local companion = R.SettingsCompanion and R.SettingsCompanion.Active() == "healerWatch"
+    f.stage:SetShown(not companion)
+    if not companion then
+        Put(f.stage, p, PAD, h)
+        R.HealerDisplay.DrawSurface(f.surface, Wt.ScenarioView(key), Wt.Config(), W - PAD * 2 - 20, PREVIEW_H - 20)
+        h = h + PREVIEW_H + 12
+    end
     p:SetHeight(h)
     Put(p, f, 0, y)
     return h
@@ -415,7 +421,10 @@ function P.PlayParticles()
     if not (f and built and f.surface) then return false, "page" end
     local D = R.HealerDisplay
     local cfg = { particleColor = HW().Get("particleColor"), particleIntensity = HW().Get("particleIntensity") }
-    local ok, why = D.PreviewParticles(f.surface, cfg)
+    local companion = R.SettingsCompanion
+    local ok, why
+    if companion and companion.Active() == "healerWatch" then ok, why = companion.PlayHealerParticles(cfg)
+    else ok, why = D.PreviewParticles(f.surface, cfg) end
     if ok and Watch().PreviewActive() and D.Frame() and D.Frame():IsShown() then D.PreviewParticles(D.Frame(), cfg) end
     return ok, why
 end
@@ -496,13 +505,15 @@ K.Page({
         -- 1. Who to watch
         K.Card({
             title = "Who to watch", icon = "healerWatch",
-            what = "A small panel with one healer's mana, whether they are drinking, and what they just said about mana, so you can judge for yourself when to wait.",
+            compact = true,
+            help = "Information only: never sends a message, says whether to pull or acts for you. Your healer choice lasts for this session and group. More about this explains automatic selection, leaving the group and unavailable readings.",
+            what = "Choose the healer whose mana you want to follow.",
             summary = function()
                 if not On() then return "Off." end
                 local text = WatchingText()
                 return text .. DOT .. ScopeLabel()
             end,
-            consequence = "It only informs. It never sends a message, never says whether to pull and never acts for you. Your choice of healer lasts for this session and group; nothing about who heals is saved.",
+            consequence = "Information only: no messages or actions. Your choice lasts for this session and group.",
             inline = true,
             details = {
                 { "How is the healer found?", "If you chose someone, it watches them. Otherwise it watches the one member of your group whose role is set to Healer (in the group finder, a role check or the unit menu). If no one, or more than one, has that role, it asks you to choose. It never guesses from class, spells or gear." },
@@ -552,7 +563,8 @@ K.Page({
         -- 2. What to show
         K.Card({
             title = "What to show", icon = "healerWatchDrink", switch = false,
-            what = "The healer's measured mana, confirmed drinking, and recent mana messages, each shown as what it is.",
+            inline = true,
+            what = "Choose which readings and signals to show.",
             summary = function()
                 local parts = { Label("manaFormat") }
                 if hw.Get("showBar") then parts[#parts + 1] = "bar" end
@@ -560,7 +572,7 @@ K.Page({
                 parts[#parts + 1] = hw.Get("chatDisplay") == "off" and "chat off" or ("chat for %ds"):format(hw.Get("chatExpiry"))
                 return table.concat(parts, DOT)
             end,
-            consequence = "A cup means the game shows a drinking aura on them; a faded cup means drinking can't be seen right now. A speech bubble means they said one of your phrases: it is never taken as a mana reading or as drinking. The flask is decoration; the bar and the number are the measured mana.",
+            consequence = "The bar measures mana; the flask is decoration. Cups mean confirmed drinking; speech bubbles mean messages, never inferred drinking.",
             details = {
                 { "How do the thresholds work?", "Low begins when mana drops below the low threshold and ends only when it is back at or above the low clear point; the same for critical. The gap stops the panel flickering when mana hovers at a threshold. Critical can't be set above low, and each clear point is kept at or above its threshold: the summary shows the values in use." },
                 { "Which chat is listened to?", "Only the channels ticked below, and only messages the game says came from the watched healer. Other public channels are never looked at, nothing is kept after a message expires, and nothing is ever sent." },
@@ -570,6 +582,7 @@ K.Page({
         Pick("manaFormat", "Mana number", "How the measured mana is written. When it can't be read, \"--\" is shown, never 0%.")
         Check("showBar", "Show a mana bar", "A bar filled to the measured mana, in the mana color, turning to the low and critical colors.")
         Check("showManaState", "Say \"Low mana\" and \"Critical mana\"", "Writes the state in the status line too, so it is never told by color alone.")
+        K.Header("Mana thresholds", "Choose when low and critical begin and end. Different clear points prevent flickering.")
         local function Effective() return hw.Thresholds() end
         K.Note(Range("lowAt", "Low mana below (%)", "Low mana begins when the measured mana drops below this percentage."), function()
             local t = Effective()
@@ -587,10 +600,12 @@ K.Page({
             local t = Effective()
             if t.criticalClear ~= hw.Get("criticalClear") then return ("In use: %d%%."):format(t.criticalClear) end
         end)
+        K.Header("Drinking and messages", "Choose the signals you want beside the mana reading.")
         Check("showDrinking", "Mark confirmed drinking", "A cup when the game shows a drinking aura on the healer, and a faded cup while auras can't be seen. Sitting, rising mana or a message never count as drinking.")
         Pick("chatDisplay", "Mana messages in chat", "Mark and words shows the speech bubble and a short, cleaned excerpt of what they said; Mark only shows the bubble and \"Mana message\"; Nothing stops listening to chat.")
         local function ChatOn() return On() and hw.Get("chatDisplay") ~= "off" end
         local chatWhy = "Greyed out: chat is set to Nothing."
+        K.Header("Chat channels and sound", "Only the watched healer's messages are read. Choose channels, duration and optional sound.")
         Check("chatParty", "Listen to party and raid chat", "Messages from the watched healer in party or raid chat (and from the party or raid leader).", ChatOn, chatWhy)
         Check("chatInstance", "Listen to instance chat", "Messages from the watched healer in instance chat, which groups made by the group finder use.", ChatOn, chatWhy)
         Check("chatSay", "Listen to /say", "Messages the watched healer says nearby. Off by default.", ChatOn, chatWhy)
@@ -605,14 +620,14 @@ K.Page({
         -- 3. When to show
         K.Card({
             title = "When to show", icon = "reminderWhen", switch = false,
-            what = "Where Healer Watch applies, and whether the panel is up all the time or only when something needs your attention.",
+            what = "Choose where the panel appears and what makes it visible.",
             summary = function()
                 local parts = { ScopeLabel(), Label("visibility") }
                 if not hw.Get("showInCombat") then parts[#parts + 1] = "hidden in combat" end
                 if not hw.Get("showOutOfCombat") then parts[#parts + 1] = "hidden out of combat" end
                 return table.concat(parts, DOT)
             end,
-            consequence = "Where it applies is a gate, not an alert: outside it nothing is read. With \"Only when something needs attention\", any one ticked condition is enough to show the panel. Mana that can't be read never counts as low.",
+            consequence = "Outside your chosen places, nothing is read. Unknown mana never counts as low.",
         })
         Pick("visibility", "Show the panel", "Always shows it wherever it applies. Only when something needs attention keeps it hidden until any of the conditions ticked below is true.")
         local function Attention() return On() and hw.Get("visibility") == "attention" end
@@ -629,7 +644,8 @@ K.Page({
         -- 4. Appearance and testing
         K.Card({
             title = "Appearance and testing", icon = "appearance", switch = false,
-            what = "The panel's layout, size, text and colors. A preview, scenarios, the chat phrases and live diagnostics follow this card.",
+            inline = true,
+            what = "Choose a layout, then tune its size and text. Watch the sample beside this page.",
             summary = function()
                 return table.concat({ Label("preset"), ("%d%%"):format(hw.Get("scale")), ("opacity %d%%"):format(hw.Get("opacity")) }, DOT)
             end,
@@ -651,11 +667,13 @@ K.Page({
         Range("textSize", "Text size", "The size of the name and the number; the status line is drawn a little smaller.")
         Pick("outline", "Text outline", "Outline keeps the words readable over any scenery; Shadow is a soft dark edge; None leaves them bare.")
         Pick("statusPlace", "Status line", "Whether the status line sits below the bar or above it (Compact).")
+        K.Header("Colors", "Mana, low and critical remain distinct; words also explain their state.")
         Swatch("colorMana", "Mana color", "The bar's color while mana is fine.")
         Swatch("colorLow", "Low mana color", "The bar's and the number's color while mana is low; also used for \"Choose a healer\".")
         Swatch("colorCritical", "Critical mana color", "The bar's and the number's color while mana is critical.")
         Swatch("colorText", "Text color", "The name and the number.")
         Swatch("colorDim", "Secondary text color", "The status line and readings that can't be trusted.")
+        K.Header("Mana bar", "Texture, borders and panel background.")
         Under(K.Dropdown(Setting("barTexture", STRING, "Mana bar texture"),
             function() return MS.StatusBars.Choices(hw.Get("barTexture")) end,
             "The picture the bar is filled with, tinted by the mana, low and critical colors. Flat color is a plain fill; the rest are EllesmereUI's bar textures while it is installed and every LibSharedMedia status bar texture. A texture that has gone is drawn flat and stays chosen."), main, On)
@@ -670,6 +688,7 @@ K.Page({
         end
         Range("panelBg", "Background (%)", "A dark wash behind the whole panel, for reading over bright scenery. 0 for none (the default).")
         Check("panelBorder", "Border round the panel", "A thin bronze line round the whole panel.")
+        K.Header("Attention effects", "Optional motion. Notifications' Reduced motion always takes precedence.")
         Check("fade", "Fade in and out", "A short fade when the panel appears and goes. Off with Notifications' Reduced motion.")
         local NOTE = " None by default. Neither effect plays with Notifications' Reduced motion. The panel's words and numbers say the same thing with or without it."
         Pick("effectChat", "Attention effect: they say something", "What draws the eye when a mana message from the healer begins. Flash: a short bright flash of the panel, twice (at least two seconds apart). Magical particles: a few soft motes drift off the panel's edges and fade, without flashing it." .. NOTE)
@@ -691,6 +710,7 @@ K.Page({
             end
         end, "Plays one burst on the sample below, in the chosen color and strength, whatever the effects above are set to. It reads nothing from your group and changes nothing. It never plays with Notifications' Reduced motion."), main, On)
         Check("pulse", "Pulse once when mana becomes critical", "Three slow breaths, then still; never a pulse that keeps going. Off with Notifications' Reduced motion.")
+        K.Header("Position", "Use Move it on Try it for direct placement, or enter precise offsets here.")
         Pick("point", "Anchor", "The point of the screen the panel is placed from. Moving the panel keeps this anchor.")
         Range("x", "Horizontal offset", "Screen units from the anchor, to the right (negative: to the left).")
         Range("y", "Vertical offset", "Screen units from the anchor, upwards (negative: downwards).")

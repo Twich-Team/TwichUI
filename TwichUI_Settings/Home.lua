@@ -16,10 +16,15 @@ local I = R.Interact
 local pal = Wg.pal
 local Home = {}
 R.SettingsHome = Home
+local M = R.SettingsMaterial
 
-local TILE_H, TILE_GAP = 66, 10
-local GRID_H, GRID_GAP = 48, 8
-local GRID_MIN_COLS, GRID_MAX_COLS, GRID_CELL = 3, 5, 210   -- a cell is about GRID_CELL wide or more; the columns follow the width
+local TILE_H, TILE_GAP = 88, 12
+local GRID_H, GRID_GAP = 76, 12
+local GRID_MIN_COLS, GRID_MAX_COLS, GRID_CELL = 2, 3, 240
+local FEATURED = { "notifications", "reminders", "healerWatch", "qol", "magicInventory", "auction",
+    "chronicle", "navigation", "cozyBag", "food", "hazard", "workshop" }
+local featured = {}
+for i, key in ipairs(FEATURED) do featured[key] = i end
 
 -- How many feature cells fit side by side in a row this wide.
 local function Columns(width)
@@ -50,11 +55,9 @@ end
 local function Panel(parent, w, h, onClick)
     local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
     b:SetSize(w, h)
-    Wg.Panel(b)
-    Wg.Hover(b, pal.hoverFill, 0.9)
-    b.fill = Wg.Solid(b, "BACKGROUND", pal.selectedFill, 1)
-    b.fill:SetPoint("TOPLEFT", 1, -1)
-    b.fill:SetPoint("BOTTOMRIGHT", -1, 1)
+    M.PanelFace(b, "card")
+    M.MaterialHover(b)
+    b.fill = R.SettingsCraft.Sheet(b, "selection", { layer = "BACKGROUND", sub = 2, corner = 10 })
     b.fill:Hide()
     b.bar = Wg.Solid(b, "ARTWORK", pal.bronzeText, 1)
     b.bar:SetDrawLayer("ARTWORK", 2)
@@ -69,7 +72,7 @@ local function Panel(parent, w, h, onClick)
 end
 
 function Home.Build(parent, width, env)
-    local hero = { views = {}, shown = "explore", grid = {}, looks = {}, changedRows = {}, env = env }
+    local hero = { views = {}, shown = "home", grid = {}, looks = {}, changedRows = {}, env = env, query = "" }
     local frame = CreateFrame("Frame", nil, parent)
     frame:SetWidth(width)
     hero.frame = frame
@@ -82,15 +85,15 @@ function Home.Build(parent, width, env)
             env.Relayout()
         end)
         tile:SetPoint("TOPLEFT", (i - 1) * (tileW + TILE_GAP), 0)
-        tile.icon = Icon(tile, view.icon, 40)
-        tile.icon:SetPoint("LEFT", 10, 0)
-        tile.title = Wg.Text(tile, "body")
-        tile.title:SetPoint("TOPLEFT", 58, -13)
-        tile.title:SetWidth(tileW - 66)
+        tile.icon = Icon(tile, view.icon, 48)
+        tile.icon:SetPoint("LEFT", 8, 0)
+        tile.title = M.ReminderFont(Wg.Text(tile, "body"), 16, true, "serif")
+        tile.title:SetPoint("TOPLEFT", 62, -12)
+        tile.title:SetWidth(tileW - 72)
         tile.title:SetText(view.title)
         tile.line = Wg.Text(tile, "small")
         tile.line:SetPoint("TOPLEFT", tile.title, "BOTTOMLEFT", 0, -4)
-        tile.line:SetWidth(tileW - 66)
+        tile.line:SetWidth(tileW - 72)
         tile.line:SetWordWrap(true)
         tile.view = view
         tile.index = i
@@ -101,6 +104,25 @@ function Home.Build(parent, width, env)
     hero.help = Wg.Text(frame, "small")
     hero.help:SetWidth(width - 4)
     hero.help:SetWordWrap(true)
+    hero.find = Wg.EditBox(frame, 220, 28)
+    M.SearchDecoration(hero.find, "Find a feature...")
+    hero.find:SetScript("OnTextChanged", function(self)
+        hero.query = self:GetText():lower():gsub("^%s+", ""):gsub("%s+$", "")
+        env.Relayout()
+    end)
+    hero.find:SetScript("OnEscapePressed", function(self) self:SetText(""); self:ClearFocus() end)
+    hero.all = Panel(frame, width, 64, function()
+        hero.shown = hero.shown == "home" and "explore" or "home"
+        env.Relayout()
+    end)
+    hero.all.icon = Icon(hero.all, "journeyChronicle", 42)
+    hero.all.icon:SetPoint("LEFT", 12, 0)
+    hero.all.title = M.ReminderFont(Wg.Text(hero.all, "body"), 17, true, "serif")
+    hero.all.title:SetPoint("TOPLEFT", 68, -10)
+    hero.all.line = Wg.Text(hero.all, "small")
+    hero.all.line:SetPoint("TOPLEFT", 68, -34)
+    hero.all.arrow = Wg.Text(hero.all, "heading")
+    hero.all.arrow:SetPoint("RIGHT", -16, 0); hero.all.arrow:SetText("›")
 
     -- Explore: every feature in the list, with its status
     local cols = Columns(width)
@@ -109,24 +131,29 @@ function Home.Build(parent, width, env)
         if page.key ~= "overview" then
             local cell = Panel(frame, cellW, GRID_H, function() env.Navigate(page.key) end)
             cell.page = page
-            cell.icon = Icon(cell, page.def.icon, 28)
-            cell.icon:SetPoint("LEFT", 9, 0)
-            local textX = page.def.icon and 46 or 12
+            cell.icon = Icon(cell, page.def.icon, 48)
+            cell.icon:SetPoint("LEFT", 10, 0)
+            local textX = page.def.icon and 68 or 12
             cell.textX = textX
-            cell.name = Wg.Text(cell, "body")
-            cell.name:SetPoint("TOPLEFT", textX, -9)
-            cell.name:SetWidth(cellW - textX - 8)
-            cell.name:SetWordWrap(false)
+            cell.name = M.ReminderFont(Wg.Text(cell, "body"), 16, true, "serif")
+            cell.name:SetPoint("TOPLEFT", textX, -12)
+            cell.name:SetWidth(cellW - textX - 24)
+            cell.name:SetWordWrap(true)
             cell.name:SetText(page.nav)
             cell.status = Wg.Text(cell, "small")
             cell.status:SetPoint("TOPLEFT", cell.name, "BOTTOMLEFT", 0, -3)
             cell.status:SetWidth(cellW - textX - 8)
             cell.status:SetWordWrap(false)
+            cell.arrow = Wg.Text(cell, "heading")
+            cell.arrow:SetPoint("RIGHT", -10, 0); cell.arrow:SetText("›")
             local tip = page.def.overview and page.def.overview.tip or page.def.description
             I.Tip(cell, page.name, tip)
             hero.grid[#hero.grid + 1] = cell
         end
     end
+    table.sort(hero.grid, function(a, b)
+        return (featured[a.page.key] or 1000 + a.page.def.order) < (featured[b.page.key] or 1000 + b.page.def.order)
+    end)
 
     -- Appearance: the pages that change how something looks (appearance tabs, skins, artwork)
     local function Look(page)
@@ -201,11 +228,13 @@ function Home:Resize(width)
         tile:SetWidth(tileW)
         tile:ClearAllPoints()
         tile:SetPoint("TOPLEFT", (tile.index - 1) * (tileW + TILE_GAP), 0)
-        tile.title:SetWidth(tileW - 66)
-        tile.line:SetWidth(tileW - 66)
+        tile.title:SetWidth(tileW - 72)
+        tile.line:SetWidth(tileW - 72)
     end
     self.help:SetWidth(width - 4)
     self.empty:SetWidth(width - 4)
+    self.all:SetWidth(width)
+    self.find:SetWidth(math.min(220, math.floor(width * .42)))
     for _, row in ipairs(self.looks) do
         row:SetWidth(width)
         row.label:SetWidth(width - 120)
@@ -227,48 +256,58 @@ function Home:Layout(y)
     frame:SetPoint("TOPLEFT", frame:GetParent(), "TOPLEFT", 0, -y)
     local changed = K.Changed()
 
+    local tileHeight = TILE_H
     for key, tile in pairs(self.views) do
         local chosen = key == self.shown
         tile.fill:SetShown(chosen)
         tile.bar:SetShown(chosen)
-        Wg.Color(tile.title, chosen and pal.text or pal.textDim)
+        Wg.Color(tile.title, pal.text)
         local line = tile.view.line
         tile.line:SetText(type(line) == "function" and line(#changed) or line)
+        tileHeight = math.max(tileHeight, 28 + tile.title:GetStringHeight() + tile.line:GetStringHeight())
     end
-    local h = TILE_H + 16
+    for _, tile in pairs(self.views) do tile:SetHeight(tileHeight) end
+    local h = tileHeight + 24
 
     local heading, help
-    if self.shown == "explore" then
-        heading, help = "Features", "Each opens its page, where every option is explained. Nothing changes until you change it there."
+    if self.shown == "explore" or self.shown == "home" then
+        heading, help = self.shown == "home" and "Your features" or "All features", ""
     elseif self.shown == "appearance" then
-        heading, help = "Appearance", "Fonts, colors, borders and artwork. Reduce window motion, under General below, turns off this window's fades and shows the end of each sample at once."
+        heading, help = "Appearance", "Choose a feature to adjust its look."
     else
         local P = R.Profiles
         local profile = P and P.Current and P.Current()
         heading = "Changed settings"
-        help = "Compared with TwichUI's defaults" .. (profile and (" in the profile \"" .. profile .. "\"") or "")
-            .. ". Opening a page or playing a sample never counts as a change. Choose one to go to its control; nothing here resets anything."
+        help = "Compared with defaults" .. (profile and (" in \"" .. profile .. "\"") or "") .. ". Select a setting to edit it."
     end
     self.heading:SetText(heading)
     self.heading:ClearAllPoints()
     self.heading:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -h)
-    h = h + (self.heading:GetStringHeight() or 14) + 4
+    self.find:ClearAllPoints()
+    self.find:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, -h + 2)
+    self.find:SetShown(self.shown == "home" or self.shown == "explore")
+    h = h + math.max(28, self.heading:GetStringHeight() or 14) + 12
     self.help:SetText(help)
     self.help:ClearAllPoints()
     self.help:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -h)
-    h = h + (self.help:GetStringHeight() or 12) + 10
+    self.help:SetShown(help ~= "")
+    if help ~= "" then h = h + (self.help:GetStringHeight() or 12) + 10 end
 
     -- explore grid
     local cols = Columns(width)
     local cellW = math.floor((width - GRID_GAP * (cols - 1)) / cols)
-    for i, cell in ipairs(self.grid) do
-        local show = self.shown == "explore"
+    local count = 0
+    for _, cell in ipairs(self.grid) do
+        local browsing = self.shown == "explore" or self.shown == "home"
+        local match = self.query == "" or (cell.page.name .. " " .. (cell.page.def.keywords or "")):lower():find(self.query, 1, true)
+        local show = browsing and match and (self.shown == "explore" or self.query ~= "" or featured[cell.page.key])
         cell:SetShown(show)
         if show then
-            local col, row = (i - 1) % cols, math.floor((i - 1) / cols)
+            local col, row = count % cols, math.floor(count / cols)
+            count = count + 1
             cell:SetWidth(cellW)
-            cell.name:SetWidth(cellW - cell.textX - 8)
-            cell.status:SetWidth(cellW - cell.textX - 8)
+            cell.name:SetWidth(cellW - cell.textX - 24)
+            cell.status:SetWidth(cellW - cell.textX - 24)
             cell:ClearAllPoints()
             cell:SetPoint("TOPLEFT", frame, "TOPLEFT", col * (cellW + GRID_GAP), -(h + row * (GRID_H + GRID_GAP)))
             local status = cell.page.def.overview and cell.page.def.overview.status
@@ -278,9 +317,17 @@ function Home:Layout(y)
             cell.status:SetText(text)
         end
     end
-    if self.shown == "explore" then
-        local rows = math.ceil(#self.grid / cols)
-        h = h + rows * (GRID_H + GRID_GAP) - GRID_GAP
+    if self.shown == "explore" or self.shown == "home" then
+        local rows = math.ceil(count / cols)
+        if rows > 0 then h = h + rows * (GRID_H + GRID_GAP) - GRID_GAP end
+    end
+    local browsing = self.shown == "home" or self.shown == "explore"
+    self.all:SetShown(browsing)
+    if browsing then
+        self.all:ClearAllPoints(); self.all:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -(h + 14))
+        self.all.title:SetText(self.shown == "home" and "All features" or "Back to your features")
+        self.all.line:SetText(self.shown == "home" and "Browse every TwichUI feature" or "Return to Home's featured collection")
+        h = h + 78
     end
 
     -- appearance list
@@ -317,7 +364,12 @@ function Home:Layout(y)
         h = h + LIST_H + 6
     end
     for i = n + 1, #self.changedRows do self.changedRows[i]:Hide(); self.changedRows[i].item = nil end
-    self.empty:SetShown(showChanged and #changed == 0)
+    self.empty:SetShown((showChanged and #changed == 0) or (browsing and count == 0))
+    if browsing and count == 0 then
+        self.empty:SetText("No features found. Try another name.")
+        self.empty:ClearAllPoints(); self.empty:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -h)
+        h = h + 24
+    end
     if showChanged and #changed == 0 then
         self.empty:SetText("Every setting is at its default.")
         self.empty:ClearAllPoints()

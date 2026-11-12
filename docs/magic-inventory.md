@@ -13,6 +13,14 @@ chooser), `tests/test_magic_inventory_settings.lua` (the page), `tests/test_magi
 
 **Nothing here has been tried in the game.** No mail has been sent and no item moved by it. See "In-game checklist".
 
+The current rule builder's **Item filters** action opens a focused panel inside Settings, rather than extending the
+page with a legacy form. Filters, Categories and Also include have separate tabs. Quality supports several selections
+and an explicit Any quality (the existing empty quality set); equipment/binding each select one stored value. Done or
+Escape keeps edits in the private rule draft. Save rule and Cancel rule invoke the builder's existing transaction.
+Inclusions bypass all ordinary filters; exclusions and global protections retain precedence. No rule-schema migration
+is involved. Layout, evidence, reusable scenario commands and client limits are in the
+[workspace implementation record](magic-inventory-revision/implementation.md#focused-item-selection-editor--2026-11-11).
+
 ## What it does
 
 The player makes rules: which items (categories as the game files them, quality, equipment or not, binding, and lists
@@ -82,15 +90,19 @@ not exported in this version. If an export is added: send destination names, nev
 off and require each destination to be chosen on the receiving character (the per-character layout already makes an
 imported rule need its recipient).
 
-## The rules table (settings page)
+## Rule management (settings page)
 
-"Your rules" is a table, one row a rule in priority order: grip, number, on/off, Name, Items, Action, Where, Keep, then Up, Dn,
-Edit, Copy and Delete. Rows are banded; a cell is one line cut off with "..." (the row's tooltip has the full Items,
-Destination, Keep, target stack size and any problem); "Where" turns amber when a destination is missing. A row is dragged
-by pressing on it away from its controls: a virtual drag (`MagicInventoryDrag.lua`, a label follows the pointer, nothing
+The page has four focused tasks: Your rules, Destinations, Guild arrangement and Protected items. Your rules uses one
+compact illustrated row per rule, in priority order: name, enabled switch, matching items, destination, keep/target amount and
+configuration state. Edit opens the goal-based private builder; the context menu exposes Move up/down,
+Duplicate and Delete; the full tooltip still includes target stack size and validation details. Destinations separates
+recipient input, character scope and naming controls into readable rows. No recipient or rule schema changes.
+
+A row is dragged
+by pressing on it away from its controls: a virtual drag (`MagicInventoryDrag.lua`, a row-sized ghost retains the grab offset, nothing
 real is picked up) with a line showing where the rule will land, and the page scrolls near the view's top and bottom
 edges. Letting go on a row calls `MI.MoveRuleTo(id, place)`; letting go anywhere else changes nothing, and hiding the
-page ends the drag. Up and Dn stay for one-step moves. Tests: `tests/test_magic_inventory_settings.lua`,
+page ends the drag. Move up/down stay for one-step moves. Tests: `tests/test_magic_inventory_settings.lua`,
 `MoveRuleTo` in `tests/test_magic_inventory.lua`. Not tried in the game: how the rows look at the real font sizes, and
 the edge scrolling.
 
@@ -214,16 +226,25 @@ confirmed, and why it stopped.
 
 ## Settings (`TwichUI_Settings/pages/MagicInventory.lua`, Everyday > Magic Inventory)
 
-Feature card and switch, then: **Your rules** (on/off, name, Items, Destination, Keep, Up/Down, Edit, Duplicate, Delete
-with a question), **New rule from a template** (Cloth to bank alt, Herbs to bank, Metal & Stone to bank (the game files
-ore, bars and stone together), Uncommon BoE equipment to a friend, Custom items; each starts off; templates name no
-recipient), **Preview** (the review from your bags, no actions), **Destinations on this character** (recipient for this
-character, **All my characters** only when ticked, **Use the tab shown now** with the guild bank open, Rename, Clear here,
-Remove), **Never transfer** (Choose from bags, Add by ID or link). The editor: Name, then 1 Items, 2 Destination, 3
-Exceptions and keep, 4 Review (the rule in one sentence, why it can't be turned on yet, Turn this rule on), Save, Cancel. Step 2
-asks **Which way** for a bank or guild bank rule (Deposit extras, Withdraw to top up, Balance both ways; choosing a withdrawing way
-with no keep amount sets 20), and step 3 then calls the keep amount **Target in bags** (a withdraw-only guild rule has no target
-stack size). The table's Action column says Deposit, Withdraw or Balance for those rules, and Where says Bank or the tab.
+Feature switch, then four focused tasks: **Your rules**, **Destinations**, **Guild arrangement** and **Protected items**.
+Each rule is a compact row with its name, matching items, behavior/destination/keep badges and enabled state.
+**Edit** opens the builder; the context menu provides Move up/down, Duplicate and confirmed Delete. Search and state
+filters keep absolute priorities; reordering requires an unfiltered list.
+Drag ordering and the first-match/keep semantics are unchanged. **New rule from a template** retains Cloth to bank alt,
+Herbs to bank, Metal & Stone to bank, Uncommon BoE equipment to a friend and Custom items. Templates start off and
+name no recipient. **Preview** opens the existing review from your bags without moving anything.
+
+**Destinations** separates the current recipient/tab, entry and character scope from Rename, Clear here and Remove.
+**All my characters** is still opt-in; **Use the tab shown now** still requires an open guild bank. **Protected items**
+retains Never transfer, Choose from bags and Add by ID/link. Guild arrangement retains the Current/Design/Preview workflow.
+
+The private editor has Name and **1 Items**, **2 Destination**, **3 Limits**, **4 Review**, plus Back/Next/Save/Cancel.
+Items starts with the selected categories; **Choose categories** discloses the full game catalog. Long names wrap in
+measured rows. Quality, equipment, binding and explicit item choices remain accessible. Limits retains every exception,
+keep and stack control. Review retains the natural-language rule, missing-configuration reason and Turn this rule on.
+Destination still asks **Which way** for bank/guild rules (Deposit extras, Withdraw to top up or Balance both ways).
+Choosing a withdrawing way with no keep amount sets 20 as before; Limits calls it **Target in bags**. Withdraw-only
+guild rules still have no target stack size. Rule cards explicitly describe Deposit, Withdraw or Balance and their destination.
 
 ## Guild bank previews (`inventory/GuildBank.lua`, `inventory/GuildPlan.lua`, `pages/MagicInventoryGuild.lua`)
 
@@ -642,3 +663,8 @@ in `DX.OPS` and `docs/diagnostics.md`. Gauges `inventory.frames` (review rows an
     allowance of 1: one stack is offered and the other is "left out". Pick up more of the item yourself during the run: it stops
     ("over") rather than pass the target. **Open questions:** does a withdrawal count one per stack against the allowance, and does
     the panel fit its buttons at your UI scale (Read again, Withdraw, Deposit, Organize bank, Arrangement)?
+
+## Redesigned rule workspace
+
+The compact manager and goal-based private rule builder replace oversized cards and the four-step wizard. See
+[implementation, schema mapping, artwork and simulator commands](magic-inventory-revision/implementation.md).

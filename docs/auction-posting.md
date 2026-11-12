@@ -64,3 +64,75 @@ item is chosen where it always was: when the posting goes through.
 
 No profiling scope or gauge: the work is a table lookup and a few string formats on edits the player makes, with no frame updates,
 timers or retained state beyond one number (`vendorSeen`) and a small per-visit request set.
+
+## Settings modernization (11 November 2026)
+
+The previous settings page was two plain headers and switches, with the important rules buried in long tooltips.
+It now presents two independent illustrated task cards: **Sell from your bags** and **Track money collected from mail**.
+Each shows its actual module enablement, a short workflow explanation and an always-visible safeguard. Selling still
+requires Post; mailbox money is explicitly not profit. Both existing switches retain their canonical settings APIs,
+keys, defaults, profile behavior and reset scope. A secondary **Pricing and totals explained** disclosure separates
+less frequent explanations from setup. No numeric threshold, item list, pricing formula or provider setting exists
+to expose here; quantity, price, duration, searches and vendor warnings stay in the actual selling tab.
+
+No companion was added: these settings do not customize an alert's appearance, and a fake auction/price preview
+would be misleading. Missing price data is explained, never represented as zero or as a safe price. No current
+auction state or fabricated total is displayed. Existing scales and ledger icon sheets, canonical walnut cards,
+bronze disclosure controls and switches are reused; no new artwork or shared-component changes were required.
+Runtime auction, mailbox, warning, confirmation and search code is untouched. Settings retain existing lazy page
+construction in the load-on-demand settings addon; this introduces no startup events, timers or polling, and needs
+no new diagnostic scope. No performance improvement is claimed.
+
+### Permanent coverage
+
+- `test_auction_settings.lua`: both canonical switch bindings, live On/Off summaries and visible safeguard text.
+- Existing `test_auction_price.lua`: comparable/partial/absent results, vendor unknown versus zero and validation.
+- Existing `test_auction_window.lua`: explicit posting, below-vendor confirmation, changed-posting cancellation,
+  and skin available/absent stand-ins. These remain unit fixtures, not installed-addon acceptance.
+- Existing `test_mail_gold.lua`: actual-received accounting, empty visits, toggle behavior and no retained visit data.
+- `tools/simlab/scenarios/settings.lua`: actual page/card construction, each switch toggle/restore, collapsed and
+  expanded disclosure, disabled pose, constrained scrolling, search, reopen and navigation cleanup. Handler input
+  does not establish real mouse/keyboard hit regions. No auctions, bids, purchases or cancellations are performed.
+
+Rerun focused scenarios:
+
+```sh
+bash tools/simlab/settings.sh auction
+SIMLAB_SETTINGS_DATA='"off"' SIMLAB_SETTINGS_POSE=narrow bash tools/simlab/settings.sh auction
+SIMLAB_SETTINGS_DATA='"advanced"' bash tools/simlab/settings.sh auction
+SIMLAB_SETTINGS_DATA='"advanced"' SIMLAB_SETTINGS_POSE=narrow bash tools/simlab/settings.sh auction
+```
+
+**Screenshot-reviewed:** captures are local evidence under `../wow-ui-sim-lab/artifacts/`, excluded from commits.
+The first render (`settings-20261111-124422/auction.png`) caught a fallback icon; it was replaced with the existing
+ledger illustration. The expanded render (`124542`) exposed excessive wrapping in a narrow status-value column;
+explanations were moved below short labels before rerendering. Default final view `124521` and disabled constrained
+view `124601` were opened and inspected. Final expanded views are recorded below after review.
+
+Real-client acceptance is pending: native fonts/localization, real pointer/keyboard, disclosure and reset prompts,
+reload/profile persistence, Auctionator present/absent behavior, actual auction search/vendor data and mailbox totals.
+No real-client acceptance or full transaction verification is claimed by these screenshots. No live SavedVariables
+or deployed addon files were edited.
+
+Final screenshot-reviewed evidence (all `auction.png`, folder prefix `settings-20261111-`):
+
+| Folder | View | Handler/state checks |
+|---|---|---|
+| `124521` | Default enabled cards; corrected ledger art | 17 |
+| `124601` | Both disabled, constrained viewport | 17 |
+| `124648` | Expanded explanation, corrected label/detail layout | 17 |
+| `124848` | Expanded constrained explanation, scrolled to its actual card | 19 |
+
+The lab's raw native scroll range allowed an empty tail when used as a capture target (`124759`); targeting the
+actual explanation card instead produces the reviewed constrained view. This does not establish native scrollbar
+end-stop correctness; verify it in the client. Simulator fonts are substituted and API sources are older than the
+installed Forever client. No simulator engine changes were made.
+
+**Unit-tested:** the focused settings, price, posting-window and mail-gold commands passed. The settings test installs
+erroring scan/transaction stand-ins and verifies that describing/editing configuration does not invoke them.
+The initial full suite reported 188 passed / 1 failed because the intentional labels/rows changed the settings
+contract snapshot. Its documented regeneration command was used; the reviewed fixture diff contains only Auction
+House labels/tooltips/rows. Defaults, variables, write destinations, reset results and all other pages are unchanged.
+Edited Lua files pass `luac5.1 -p`; final `git diff --check` passes.
+
+Final full rerun: `./tests/run.sh` — **190 passed, 0 failed**, including the new settings test and reviewed contract.

@@ -26,6 +26,9 @@ A_Admin.SetManualClock(GetTime())
 -- settings test). Lab.Solo() leaves a party if there is one and is a no-op otherwise. The group case is not
 -- avoided: diagnose.sh runs it on purpose. WatchSends only records; it calls the simulator's own function.
 local group = Lab.Solo()
+-- Guild Locations now shares by default, independently of party membership. Isolate this appearance test
+-- through its real setter in the disposable synthetic profile, before installing the send observer.
+if R.GuildLoc then R.GuildLoc.SetState("off") end
 Lab.WatchSends()
 
 local scope, own, scale, outline, view, rowCount
@@ -156,6 +159,9 @@ Step("time passes", function()
     local saved = Lab.Digest(Saved("notifyLookArrival") or {})
     local steps = Lab.RunUntil((P and P.window) or 12, 0.5)
     Lab.Say("clock", "simSeconds=" .. Lab.simSeconds, "advanceSteps=" .. steps)
+    for _, send in ipairs(Lab.sends) do
+        Lab.Say("observed-send", "prefix=" .. tostring(send.prefix), "channel=" .. tostring(send.chatType))
+    end
     Check("state", "time passes: no addon message was attempted while solo", 0, #Lab.sends)
     Check("state", "time passes: the saved look is unchanged", saved, Lab.Digest(Saved("notifyLookArrival") or {}))
     Check("state", "time passes: the window is still shown", true, UI().IsShown())

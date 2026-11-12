@@ -18,7 +18,13 @@ pages\Gear.lua
 pages\Notifications.lua
 pages\RemindersPlain.lua
 pages\RemindersEditor.lua
+pages\RemindersBuilderRail.lua
 pages\RemindersDesigner.lua
+pages\RemindersRuleDrag.lua
+pages\RemindersPreview.lua
+pages\RemindersPlacement.lua
+pages\RemindersCatalog.lua
+pages\RemindersImagePicker.lua
 pages\Reminders.lua
 pages\HealerWatch.lua
 pages\ReturnTheFavor.lua
@@ -54,6 +60,8 @@ pages\Npcs.lua
 pages\NpcKnowledge.lua
 pages\CozyBag.lua
 pages\Auction.lua
+pages\WorkshopWorth.lua
+pages\Workshop.lua
 pages\Skins.lua
 pages\RestedXP.lua
 pages\SpeakStone.lua
@@ -66,6 +74,10 @@ pages\Troubleshooting.lua
 # Home's ways in, and the window (last: it tells TwichUI the settings are ready)
 Search.lua
 Widgets.lua
+Material.lua
+Craft.lua
+Design.lua
+Companion.lua
 Previews.lua
 previews\QoL.lua
 Cards.lua

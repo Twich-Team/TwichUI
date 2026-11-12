@@ -155,6 +155,7 @@ function Lab.Step(name, fn)
     if Lab.aborted or Lab.stopped then return end
     Lab.steps = Lab.steps + 1
     Say("step", name)
+    local began = Lab.simSeconds
     local ok, err = xpcall(fn, function(e) return tostring(e) .. "\n" .. (debug and debug.traceback and debug.traceback() or "") end)
     if not ok then
         Lab.failed = Lab.failed + 1
@@ -163,6 +164,7 @@ function Lab.Step(name, fn)
         Out("Lua error: " .. tostring(err))
         return
     end
+    Say("step-time", ("%.1f"):format(Lab.simSeconds - began), name)   -- simulated seconds this step used (where the budget goes)
     Lab.Settle(0.1)
     if P.stopAfter == name then
         Lab.stopped = true

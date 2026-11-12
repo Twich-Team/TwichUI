@@ -3,6 +3,7 @@
 -- launchers' and the RestedXP guide's (modules/SpellMenu.lua, modules/RestedXPBrokerMenu.lua): the same palette,
 -- fonts and placement, and the player's own menu background and border (modules/MenuStyle.lua).
 --   Open settings...        opens the settings window (R:OpenSettings) and closes the menu.
+--   Workshop...             opens or closes the Workshop (R.WorkshopLauncher.Toggle; it loads the addon the first time).
 --   Quiet the screen        a temporary switch (QuietScreen.lua, not saved: off again at the next login or reload).
 --                           While it is On, the cards, Reminders, action bar glows, Healer Watch panel and Return
 --                           the Favor list stay away. The row says On or Off.
@@ -65,6 +66,11 @@ local SPEC = {
     {
         key = "settings", label = "Open settings...", plain = true,
         act = function() M.Close(); R:OpenSettings() end,
+    },
+    {
+        key = "workshop", label = "Workshop...", plain = true,
+        shown = function() return R.WorkshopLauncher ~= nil end,
+        act = function() M.Close(); R.WorkshopLauncher.Toggle() end,
     },
     { kind = "divider" },
     {

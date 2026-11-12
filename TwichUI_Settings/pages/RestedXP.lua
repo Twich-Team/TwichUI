@@ -74,6 +74,45 @@ K.Page({
         local Header, Toggle, Button, Proxy, ProxyToggle, Under = K.Header, K.Toggle, K.Button, K.Proxy, K.ProxyToggle, K.Under
         local BOOL, STRING, NUMBER = K.BOOL, K.STRING, K.NUMBER
 
+        local intro = Header("RestedXP guide window", "Gives the RestedXP Guides window a TwichUI look: a background and border, text colors, fonts and sizes, a quieter header and footer, and a slim scroll bar; and its waypoint arrow a shape, color and size of your choosing. It never changes guide content, progress, step completion or the window's position and size. Works with or without EllesmereUI. There is no sample here: open RestedXP's guide window to see each change as you make it.")
+        local function RestedXPStatus()
+            local state = RS.Status()
+            local text = STATUS[state.code] or { state.code }
+            local color = (state.code == "active" and R.GREEN) or (state.code == "off" and R.GREY) or R.GOLD
+            return color .. text[1] .. "|r", text[2]
+        end
+        local rxpBase = "Gives the RestedXP guide window the TwichUI look. Turning it on makes TwichUI the theme RestedXP uses (it remembers the one you had); turning it off puts that one back. Everything below is TwichUI's look; RestedXP's own settings are unchanged."
+        local rxpToggle = Toggle("restedxpSkin", "Skin the RestedXP guide window", rxpBase)
+        if rxpToggle and rxpToggle.GetTooltip ~= nil then
+            -- the status is read when the tooltip is shown, so it is never stale
+            rxpToggle.GetTooltip = function(self)
+                local status, detail = RestedXPStatus()
+                return rxpBase .. "\n\nStatus: " .. status .. (detail and ("\n" .. detail) or "")
+            end
+        end
+        K.Status("RestedXP availability", function()
+            local state = RS.Status()
+            if state.loaded then return "Loaded" end
+            return ({ missing = "Not installed", disabled = "Disabled in AddOns" })[state.addon] or "Not loaded"
+        end, function() return "Your guide and appearance preferences are kept while RestedXP is unavailable." end)
+        K.Status("Guide window look", function() return (RestedXPStatus()) end,
+            function() local _, detail = RestedXPStatus(); return detail end)
+        local function RxpOn() return R:Enabled("restedxpSkin") end
+        local use = Button("TwichUI look in RestedXP", "Use it", function()
+            local ok, why = RS.UseTheme()
+            if not ok then
+                local reason = why == "conflict" and "another RestedXP skin is drawing."
+                    or why == "combat" and "it will be applied when combat ends."
+                    or "RestedXP isn't ready."
+                R.Print("RestedXP skin: %s", reason)
+            end
+        end, "Makes TwichUI's theme the one RestedXP uses, if you chose another in RestedXP's own options. The theme you had is remembered and put back if you turn the skin off.")
+        Under(use, rxpToggle, function()
+            local state = RS.Status()
+            return RxpOn() and state.integrated and not state.conflict
+        end, "Enable the look and load a supported RestedXP guide. Conflicting skins must be turned off first.")
+
+
         -- The game's own waypoint on the place RestedXP's arrow leads to. Off until turned on (qol/GuideWaypoint.lua).
         local GW = R.QoLGuideWaypoint
         if GW then
@@ -136,34 +175,6 @@ K.Page({
                 end
             end
         end
-
-        local intro = Header("RestedXP guide window", "Gives the RestedXP Guides window a TwichUI look: a background and border, text colors, fonts and sizes, a quieter header and footer, and a slim scroll bar; and its waypoint arrow a shape, color and size of your choosing. It never changes guide content, progress, step completion or the window's position and size. Works with or without EllesmereUI. There is no sample here: open RestedXP's guide window to see each change as you make it.")
-        local function RestedXPStatus()
-            local state = RS.Status()
-            local text = STATUS[state.code] or { state.code }
-            local color = (state.code == "active" and R.GREEN) or (state.code == "off" and R.GREY) or R.GOLD
-            return color .. text[1] .. "|r", text[2]
-        end
-        local rxpBase = "Gives the RestedXP guide window the TwichUI look. Turning it on makes TwichUI the theme RestedXP uses (it remembers the one you had); turning it off puts that one back. Everything below is TwichUI's look; RestedXP's own settings are unchanged."
-        local rxpToggle = Toggle("restedxpSkin", "Skin the RestedXP guide window", rxpBase)
-        if rxpToggle and rxpToggle.GetTooltip ~= nil then
-            -- the status is read when the tooltip is shown, so it is never stale
-            rxpToggle.GetTooltip = function(self)
-                local status, detail = RestedXPStatus()
-                return rxpBase .. "\n\nStatus: " .. status .. (detail and ("\n" .. detail) or "")
-            end
-        end
-        local function RxpOn() return R:Enabled("restedxpSkin") end
-        local use = Button("TwichUI look in RestedXP", "Use it", function()
-            local ok, why = RS.UseTheme()
-            if not ok then
-                local reason = why == "conflict" and "another RestedXP skin is drawing."
-                    or why == "combat" and "it will be applied when combat ends."
-                    or "RestedXP isn't ready."
-                R.Print("RestedXP skin: %s", reason)
-            end
-        end, "Makes TwichUI's theme the one RestedXP uses, if you chose another in RestedXP's own options. The theme you had is remembered and put back if you turn the skin off.")
-        Under(use, rxpToggle, RxpOn)
 
         Header("Window background and border", "The guide window's fill and edge: textures, color, opacity and thickness. Textures come from the game, from EllesmereUI (while it is installed) and from any LibSharedMedia pack.")
         local resettable = K.Appearance(RS.Look, "restedxpLook", "window", nil, nil, nil, nil, rxpToggle, RxpOn, {

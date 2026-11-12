@@ -6,13 +6,13 @@ local K = R.SettingsKit
 
 -- Addons TwichUI can skin. addon = folder name.
 local SKINS = {
-    { key = "attuneSkin", addon = "Attune", label = "Attune",
+    { key = "attuneSkin", addon = "Attune", label = "Attune", icon = "guide",
       what = "Gives the Attune window (/attune) and its quest panels the EllesmereUI look." },
-    { key = "auctionatorSkin", addon = "Auctionator", label = "Auctionator",
+    { key = "auctionatorSkin", addon = "Auctionator", label = "Auctionator", icon = "auctionHouse",
       what = "Gives Auctionator's tabs, buttons, lists and boxes the EllesmereUI look. Also needs EllesmereUI's Auction House window skin." },
-    { key = "foreverDungeonJournalSkin", addon = "ForeverDungeonJournal", label = "Dungeon Journal",
+    { key = "foreverDungeonJournalSkin", addon = "ForeverDungeonJournal", label = "Dungeon Journal", icon = "mapsNavigation",
       what = "Gives the Forever Dungeon Journal window (/fj) the EllesmereUI look." },
-    { key = "whatsTrainingSkin", addon = "WhatsTraining", label = "WhatsTraining",
+    { key = "whatsTrainingSkin", addon = "WhatsTraining", label = "WhatsTraining", icon = "vendors",
       what = "Gives WhatsTraining's floating window (/wt) the EllesmereUI look." },
 }
 
@@ -37,7 +37,7 @@ local function SkinStatus(skin)
     if not K.Loaded(skin.addon) then
         return R.GREEN .. "Ready|r", "Applies when " .. skin.label .. " loads."
     end
-    return R.GREEN .. "Active|r", nil
+    return R.GOLD .. "Enabled (addon loaded)|r", "Open " .. skin.label .. " to check the look."
 end
 
 K.Page({
@@ -61,11 +61,21 @@ K.Page({
     build = function()
         local Header, Toggle, Button = K.Header, K.Toggle, K.Button
 
-        Header("EllesmereUI look", "Gives these addons the EllesmereUI look. Needs EllesmereUI with its third-party addon skins on. TwichUI only skins the addons listed here.")
+        Header("Skin setup", "EllesmereUI skins require its third-party addon skin support. Turning a skin off restores through the existing reload path.")
+        K.Status("EllesmereUI", function()
+            local state = K.AddonState("EllesmereUI")
+            return state == "missing" and "Not installed" or state == "disabled" and "Disabled in AddOns" or not R.S and "Waiting for skin support" or "Skin support available"
+        end)
+        K.Status("Apply or restore", function() return "Reload required" end,
+            function() return "Change a skin switch, then reload. Turning it off uses the addon's normal look after reload; saved preferences are retained." end)
         -- Each skin's tooltip ends with its status, read when it is shown.
         for _, skin in ipairs(SKINS) do
             local installed = K.AddonState(skin.addon) ~= "missing"
             local label = installed and skin.label or (skin.label .. "  " .. R.GREY .. "(not installed)|r")
+            K.Card({ title = skin.label .. " look", icon = skin.icon, compact = true, switchLabels = { "Use", "Skip" },
+                what = skin.what,
+                summary = function() local status, detail = SkinStatus(skin); return status .. (detail and (" · " .. detail) or "") end,
+            })
             local row = Toggle(skin.key, label, skin.what)
             if row then
                 row.data.tooltip = function()
@@ -74,11 +84,11 @@ K.Page({
                 end
                 -- on, installed, but EllesmereUI isn't giving it a look: said under the label, with what to do
                 K.Note(row, function()
-                    local _, detail, needs = SkinStatus(skin)
-                    if needs then return detail, "warn" end
+                    local status, detail, needs = SkinStatus(skin)
+                    return status .. (detail and (" · " .. detail) or ""), needs and "warn" or "quiet"
                 end)
                 if not installed then
-                    row:AddModifyPredicate(function() return false end)
+                    row:AddModifyPredicate(function() return K.AddonState(skin.addon) ~= "missing" end)
                     row.why = "Install " .. skin.label .. " to use this skin."
                 end
             end

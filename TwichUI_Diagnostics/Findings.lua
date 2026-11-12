@@ -168,6 +168,7 @@ function F.MemoryStats(rec)
     end
     out.heap, out.diag, out.settings, out.navdata = Series("heap"), Series("diag"), Series("settings"), Series("navdata")
     out.layouts, out.layoutwizard = Series("layouts"), Series("layoutwizard")
+    out.workshop = Series("workshop")
     return out
 end
 

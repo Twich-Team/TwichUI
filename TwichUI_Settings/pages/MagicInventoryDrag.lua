@@ -17,6 +17,17 @@ local function Wg() return R.SettingsWidgets end
 local Drag = {}
 P.Drag = Drag
 local ghost, current
+local function Follow(self)
+    local x, y = GetCursorPosition()
+    local scale = self:GetEffectiveScale()
+    self:ClearAllPoints()
+    if current and current.ghost == self and current.ghostOffset then
+        self:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x / scale + current.ghostOffset[1], y / scale + current.ghostOffset[2])
+    else
+        self:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x / scale, y / scale)
+    end
+    if current and current.hover then current.hover(current.find and current.find() or nil) end
+end
 
 local function Ghost()
     if ghost then return ghost end
@@ -37,13 +48,7 @@ local function Ghost()
     ghost.label:SetPoint("LEFT", 8, 0)
     ghost:Hide()
     -- only while a drag is on: follow the pointer and tell the editor what is under it (to light up the target)
-    ghost:SetScript("OnUpdate", function(self)
-        local x, y = GetCursorPosition()
-        local scale = UIParent:GetEffectiveScale()
-        self:ClearAllPoints()
-        self:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x / scale, y / scale)
-        if current and current.hover then current.hover(current.find and current.find() or nil) end
-    end)
+    ghost:SetScript("OnUpdate", Follow)
     return ghost
 end
 
@@ -55,6 +60,12 @@ function Drag.Source() return current and current.src or nil end
 function Drag.Start(def)
     if current then Drag.Cancel() end
     current = def
+    if def.ghost then
+        def.ghost:SetScript("OnUpdate", Follow)
+        Follow(def.ghost)
+        def.ghost:Show()
+        return
+    end
     local g = Ghost()
     if def.label then
         g.tex:Hide()
@@ -78,6 +89,7 @@ local function End()
     local d = current
     current = nil
     if ghost then ghost:Hide() end
+    if d and d.ghost then d.ghost:Hide(); d.ghost:SetScript("OnUpdate", nil) end
     if d and d.hover then d.hover(nil) end
     return d
 end

@@ -1,0 +1,12 @@
+reference header: median RGB (38.0, 28.0, 22.0); mean Y 29.67; Y deviation 2.76; crop 980,56,190,30
+reference editor: median RGB (23.0, 17.0, 14.0); mean Y 18.26; Y deviation 1.01; crop 1280,590,180,50
+reference card: median RGB (47.0, 34.0, 27.0); mean Y 36.63; Y deviation 2.40; crop 1190,377,220,35
+baseline header: median RGB (34.0, 24.0, 19.0); mean Y 25.60; Y deviation 2.58; crop 1090,215,180,25
+baseline editor: median RGB (34.0, 24.0, 19.0); mean Y 25.86; Y deviation 2.61; crop 1160,700,180,50
+baseline card: median RGB (47.0, 32.0, 23.0); mean Y 34.64; Y deviation 1.86; crop 1110,510,220,35
+pass2 header: median RGB (24.0, 20.0, 17.0); mean Y 20.62; Y deviation 0.65; crop 1090,215,180,25
+pass2 editor: median RGB (29.0, 24.0, 20.0); mean Y 24.76; Y deviation 0.71; crop 1160,700,180,50
+pass2 card: median RGB (50.0, 40.0, 31.0); mean Y 41.49; Y deviation 1.08; crop 1110,510,220,35
+final header: median RGB (24, 20, 17), encoded luma deviation 0.87; crop 1090,215,180,25
+final editor: median RGB (35, 29, 24), encoded luma deviation 1.17; crop 1160,700,180,50
+final card: median RGB (48, 37, 29), encoded luma deviation 1.55; crop 1110,510,220,35

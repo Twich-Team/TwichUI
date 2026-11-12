@@ -1,0 +1,19 @@
+{
+  "home.png": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/settings-20261111-092357/overview.png",
+  "magic-rules.png": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/settings-20261111-092357/magicInventory.png",
+  "magic-items.png": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/settings-20261111-093114/magicInventory.png",
+  "magic-categories-narrow.png": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/settings-20261111-093152/magicInventory.png",
+  "magic-destinations.png": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/settings-20261111-092146/magicInventory.png",
+  "notifications.png": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/settings-20261111-091932/notifications.png",
+  "healer-watch.png": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/settings-20261111-093207/healerWatch.png",
+  "chronicle.png": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/settings-20261111-092357/chronicleLook.png",
+  "navigation.png": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/settings-20261111-091932/navigation.png",
+  "navigation-trail.png": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/settings-20261111-092146/navigationLook.png",
+  "chat-editor.png": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/settings-20261111-093738/chatCleanRules.png",
+  "hazard-editor.png": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/settings-20261111-093114/hazardRules.png",
+  "glow-editor.png": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/settings-20261111-093114/barGlowsSpells.png",
+  "camping.png": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/settings-20261111-092357/camping.png",
+  "pings.png": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/settings-20261111-092748/pings.png",
+  "reminders.png": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/reminders-20261111-092504/editor.png",
+  "guild-arrangement.png": "/home/rich/dev/personal/wow-ui-sim-lab/artifacts/guildbank-20261111-092630/second-pass.png"
+}

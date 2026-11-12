@@ -12,18 +12,22 @@ local GW = {}
 R.GearWindow = GW
 
 local WIDTH = 640
-local ROW_H = 22
+local ROW_H = 28
 local TOP = -2                 -- the settings window draws the page's title above
 local f                        -- the page's frame
 local built = false
 local editTree                 -- skill line of the tree whose values are shown
 local weights, priority = {}, {}
+local selectedGroup = "all"
 
 local ACCENT = { 0.79, 0.64, 0.29 }
 local INK = { 0.93, 0.88, 0.76 }   -- the settings window's text
 
 local function Text(parent, template)
-    local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight")
+    local widgets = R.SettingsWidgets
+    local kind = template and template:find("Small", 1, true) and "small" or template == "GameFontNormal" and "heading" or "body"
+    local fs = widgets and widgets.Text and widgets.Text(parent, kind)
+        or parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight")
     fs:SetJustifyH("LEFT")
     if template == nil or template == "GameFontHighlight" then fs:SetTextColor(INK[1], INK[2], INK[3]) end
     return fs
@@ -157,7 +161,7 @@ local function GroupRow(content, i, title)
     return row
 end
 
-local WEIGHTS_HELP = "What one point of each stat is worth, next to the tree's main stat at 1. Ratings count per 1% at your level. Your changes show in gold; clear a box to put its default back."
+local WEIGHTS_HELP = "Relative value per point (ratings: per 1%). Gold labels mark edits; clear a field to restore its default."
 local PRIORITY_HELP = "Rank the stats your guide lists, most important first. Each counts %d%% as much as the one above it, and stats you leave out count nothing. Weapon damage and armor keep this tree's weights."
 local PRIORITY_SIDE = 166      -- room for the buttons beside the ranked list
 
@@ -170,7 +174,7 @@ local function Panel(p, y)
     local box = CreateFrame("Frame", nil, p, "BackdropTemplate")
     box:SetPoint("TOPLEFT", 0, y)
     box:SetPoint("BOTTOMRIGHT", 0, 6)
-    Wg.Surface(box, Wg.pal.well, 0.9, Wg.pal.bronzeLo, 0.8)
+    Wg.Well(box)
     return box
 end
 
@@ -288,7 +292,7 @@ end
 
 local function Build(p)
     built = true
-    Help(p, "Each tree starts from TwichUI's rough weights, so nothing here has to be filled in; change them only to follow a guide. Which tree is used is chosen on the Gear comparison page.", TOP)
+    Help(p, "Source: TwichUI defaults with your manual changes. Editing affects upgrade estimates, not your equipment.", TOP)
 
     local treeLabel = Text(p, "GameFontNormal")
     treeLabel:SetPoint("TOPLEFT", 4, TOP - 40)
@@ -346,27 +350,38 @@ local function Build(p)
         local custom = editTree and P.CustomWeights(select(2, UnitClass("player")), editTree)
         return "Puts every stat weight of this tree back to TwichUI's defaults.", not (custom and next(custom)) and "No weight has been changed for this tree." or nil
     end)
-    weights.reset:SetPoint("TOPRIGHT", 0, TOP - 76)
-    weights.help = Help(p, "", TOP - 76)
+    weights.reset:SetPoint("TOPRIGHT", p, "TOPLEFT", WIDTH, TOP - 110)
+    weights.help = Help(p, "", TOP - 110)
     weights.help:SetWidth(WIDTH - 8 - 140)
 
     -- Stat weights: every stat with an editable number.
-    weights.box = Panel(p, TOP - 120)
+    weights.group = Dropdown(p, 240, function()
+        local choices = { { value = "all", label = "All stat groups" } }
+        for _, group in ipairs(W.EDITOR) do choices[#choices + 1] = { value = group[1], label = group[1] } end
+        return choices
+    end, function(value) FinishEditing(); selectedGroup = value; GW:Refresh() end)
+    weights.group:SetPoint("TOPLEFT", 4, TOP - 74)
+    Tip(weights.group, "Show a stat group", "Focus on one group without changing any weights. All groups remain available here.")
+    weights.box = Panel(p, TOP - 158)
     local content = ScrollContent(weights.box, 0)
     weights.rows = {}
+    weights.groups = {}
+    weights.content = content
     local i = 0
     for _, group in ipairs(W.EDITOR) do
         i = i + 1
-        GroupRow(content, i, group[1])
+        weights.groups[#weights.groups + 1] = { frame = GroupRow(content, i, group[1]), name = group[1] }
         for _, stat in ipairs(group[2]) do
             i = i + 1
-            weights.rows[#weights.rows + 1] = WeightRow(content, i, stat)
+            local row = WeightRow(content, i, stat)
+            row.group = group[1]
+            weights.rows[#weights.rows + 1] = row
         end
     end
     content:SetHeight(i * ROW_H)
 
     -- Stat priority: the ranked list, and buttons to change it.
-    priority.box = Panel(p, TOP - 120)
+    priority.box = Panel(p, TOP - 158)
     priority.content = ScrollContent(priority.box, PRIORITY_SIDE)
     priority.rows = {}
     for _ in pairs(W.ITEM_POINT) do
@@ -418,6 +433,22 @@ local function RefreshWeightRows(classFile, tree)
             row.default:SetText("")
         end
     end
+    local index = 0
+    for _, group in ipairs(weights.groups) do
+        local shown = selectedGroup == "all" or selectedGroup == group.name
+        group.frame:SetShown(shown)
+        if shown then
+            group.frame:ClearAllPoints(); group.frame:SetPoint("TOPLEFT", 0, -index * ROW_H); index = index + 1
+        end
+        for _, row in ipairs(weights.rows) do
+            if row.group == group.name then
+                row:SetShown(shown)
+                if shown then row:ClearAllPoints(); row:SetPoint("TOPLEFT", 0, -index * ROW_H); index = index + 1 end
+            end
+        end
+    end
+    weights.content:SetHeight(math.max(1, index * ROW_H))
+    ShowChoice(weights.group, selectedGroup)
     weights.reset:SetEnabled(next(custom) ~= nil)
 end
 
@@ -452,6 +483,7 @@ function GW:Refresh()
     f.noClass:SetShown(not known)
     weights.tree:SetShown(known)
     weights.mode:SetShown(known)
+    weights.group:SetShown(known)
     if not known then
         weights.box:Hide(); priority.box:Hide(); weights.reset:Hide(); weights.help:SetText("")
         return
@@ -463,6 +495,7 @@ function GW:Refresh()
     local usesPriority = P.UsesPriority(classFile, editTree)
     ShowChoice(weights.tree, editTree)
     ShowChoice(weights.mode, usesPriority and "priority" or "weights")
+    weights.group:SetShown(not usesPriority)
     weights.box:SetShown(not usesPriority)
     weights.reset:SetShown(not usesPriority)
     priority.box:SetShown(usesPriority)

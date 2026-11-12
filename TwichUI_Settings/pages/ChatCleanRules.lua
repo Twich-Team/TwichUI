@@ -16,7 +16,7 @@ local ROW_H, VISIBLE = 34, 5
 local LIST_TOP = -58
 local LIST_H = ROW_H * VISIBLE + 8
 local LIST_W = W - 12 - 26
-local EDIT_TOP = LIST_TOP - LIST_H - 12
+local EDIT_TOP = -42
 local CHANNEL_COLS, CHANNEL_ROWS = 4, 3
 
 local f, built
@@ -40,6 +40,11 @@ local MODE_HELP = {
     contains = "Hides messages that contain this text anywhere. Every character is literal: \"wts boost\", \"50%\" or \"[gold]\" mean exactly that. Example: cheap gold",
     wildcard = "* is any run of characters (or none) and ? is one character; everything else is literal. Matches anywhere in the message. Example: wts*boost hides \"WTS mythic boost\". To find a real * or ?, use Contains text.",
     pattern = "A Lua pattern (not a regular expression), matched as written, case included, against the text you see. %d is a digit, %a a letter, . any character, [abc] a set; * + - repeat, ? is optional. At most 2 repeats, 80 characters, no %1. Example: %d+%s*g%f[%A] finds a price such as \"500 g\".",
+}
+local MODE_SUMMARY = {
+    contains = "Find these words anywhere in the message. Punctuation is literal. Example: cheap gold.",
+    wildcard = "Use * for any number of characters and ? for one. Example: wts*boost.",
+    pattern = "Lua pattern: case matters; two repeats and 80 characters maximum. Syntax in the menu tooltip.",
 }
 
 function P.Say(text, tone)
@@ -77,14 +82,21 @@ local function PaintEditor()
     local pal = G.pal
     local open = edit ~= nil
     for _, part in ipairs(f.editorParts) do part:SetShown(open) end
-    f.examples:SetShown(not open)
+    f.examples:Hide()
+    f.listHost:SetShown(not open); f.editorHost:SetShown(open); f.back:SetShown(open)
+    if f.modeOpen ~= open then
+        f.modeOpen = open
+        C_Timer.After(0, function()
+            if f:IsShown() and R.SettingsUI and R.SettingsUI.Refresh then R.SettingsUI.Refresh() end
+        end)
+    end
     if not open then
         for _, box in ipairs(channelBoxes) do box:Hide(); box.label:Hide() end
         return
     end
     f.editTitle:SetText(edit.id and "Edit rule" or "New rule")
     f.mode:SetValue(edit.mode, MODE_LABEL[edit.mode])
-    f.modeHelp:SetText(MODE_HELP[edit.mode])
+    f.modeHelp:SetText(MODE_SUMMARY[edit.mode])
     local pattern = edit.mode == "pattern"
     f.case:SetShown(not pattern)
     f.caseLabel:SetShown(not pattern)
@@ -270,11 +282,22 @@ local function Build()
     local G, I = Wg(), R.Interact
     local pal = G.pal
 
-    f.help = G.Text(f, "small")
+    f.listHost = CreateFrame("Frame", nil, f)
+    f.listHost:SetPoint("TOPLEFT")
+    f.listHost:SetPoint("BOTTOMLEFT")
+    f.listHost:SetWidth(W)
+    f.editorHost = CreateFrame("Frame", nil, f)
+    f.editorHost:SetPoint("TOPLEFT")
+    f.editorHost:SetPoint("BOTTOMLEFT")
+    f.editorHost:SetWidth(W)
+    f.back = G.Button(f, "Back to rules", 140, "secondary", function() P.Close() end)
+    f.back:SetPoint("TOPLEFT", 0, -2)
+    f.help = G.Text(f.listHost, "small")
     f.help:SetPoint("TOPLEFT", 4, -2)
-    f.help:SetWidth(W - 140)
-    f.help:SetText("Words or patterns to hide, each in the channels you choose (only channels being cleaned). Checked from the top, before the built-in filters. Messages from you, friends, your guild and group are never hidden.")
-    f.add = G.Button(f, "Add a rule", 120, "secondary", function() P.Open(nil) end)
+    f.help:SetWidth(W - 184)
+    f.help:SetText("Add words or patterns, then choose their channels. Try a message in Live view.")
+    I.Tip(f, "Custom filters", "Rules run from the top before built-in filters, only in channels being cleaned. Messages from you, friends, guildmates and group members are never hidden.")
+    f.add = G.Button(f.listHost, "Add a rule", 120, "secondary", function() P.Open(nil) end)
     f.add:SetPoint("TOPRIGHT", -2, -4)
     I.Tip(f.add, "Add a rule", function()
         if #CC().Rules() >= CC().MAX_RULES then return "Opens the editor below.", ("You have %d rules, the most there can be. Remove one first."):format(CC().MAX_RULES) end
@@ -282,7 +305,7 @@ local function Build()
     end)
 
     local function Column(text, x)
-        local t = G.Text(f, "meta")
+        local t = G.Text(f.listHost, "meta")
         t:SetPoint("TOPLEFT", 6 + x, -42)
         t:SetText(text)
         return t
@@ -290,10 +313,10 @@ local function Build()
     Column("On", 4)
     Column("Rule", 36)
     Column("Order", 380)
-    f.count = G.Text(f, "meta")
+    f.count = G.Text(f.listHost, "meta")
     f.count:SetPoint("TOPRIGHT", -8, -42)
     f.count:SetJustifyH("RIGHT")
-    f.well = CreateFrame("Frame", nil, f, "BackdropTemplate")
+    f.well = CreateFrame("Frame", nil, f.listHost, "BackdropTemplate")
     f.well:SetPoint("TOPLEFT", 0, LIST_TOP)
     f.well:SetSize(W, LIST_H)
     G.Well(f.well)
@@ -307,84 +330,87 @@ local function Build()
 
     -- the editor
     local y = EDIT_TOP
-    G.Card(f, 0, y, W, -540)
+    G.Card(f.editorHost, 0, y, W, y - 282)
     f.note = G.Text(f, "small")
-    f.note:SetPoint("TOPLEFT", 4, y + 12)
+    f.note:SetPoint("TOPLEFT", 4, -30)
     f.note:SetWidth(W - 8)
     f.note:SetWordWrap(false)
     P.Say(P.lastSaid, P.lastTone)
     f.editorParts = {}
     local function Part(x) f.editorParts[#f.editorParts + 1] = x; return x end
 
-    f.examples = G.Text(f, "small")
+    f.examples = G.Text(f.editorHost, "small")
     f.examples:SetPoint("TOPLEFT", 12, y - 12)
     f.examples:SetWidth(W - 24)
     f.examples:SetText("Add a rule to hide messages with words you choose. Examples:\n  Contains text: cheap gold  (hides any message containing those words; punctuation is literal)\n  Wildcard: wts*boost  (* is anything, ? is one character)\nRules don't bring back messages already hidden, and changes apply to messages from then on.")
 
-    f.editTitle = Part(G.Text(f, "heading"))
+    f.editTitle = Part(G.Text(f.editorHost, "heading"))
     f.editTitle:SetPoint("TOPLEFT", 12, y - 10)
-    local findLabel = Part(G.Text(f, "meta"))
+    local findLabel = Part(G.Text(f.editorHost, "meta"))
     findLabel:SetPoint("TOPLEFT", 12, y - 32)
     findLabel:SetText("Find")
-    f.text = Part(G.EditBox(f, W - 24 - 180 - 44, 22))
+    f.text = Part(G.EditBox(f.editorHost, W - 24 - 180 - 44, 22))
     f.text:SetPoint("TOPLEFT", 52, y - 28)
     f.text:SetMaxLetters(Match().TEXT_MAX)
     f.text:SetScript("OnEnterPressed", function() P.Save() end)
     f.text:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
     I.Tip(f.text, "Find", "The text or pattern to look for in the text people see (link details are not searched).")
-    f.mode = Part(G.Dropdown(f, 180, function(value)
+    f.mode = Part(G.Dropdown(f.editorHost, 180, function(value)
         if not edit then return end
         edit.mode = value
         PaintEditor()
     end))
     f.mode:SetChoices(function() return MODES end)
     f.mode:SetPoint("TOPRIGHT", -12, y - 28)
-    I.Tip(f.mode, "How it is matched", "Contains text: the text anywhere, every character literal. Wildcard: * and ? stand for any characters. Lua pattern: for people who know Lua patterns.")
-    f.modeHelp = Part(G.Text(f, "small"))
+    I.Tip(f.mode, "How it is matched", function() return MODE_HELP[edit and edit.mode or "contains"] end)
+    f.modeHelp = Part(G.Text(f.editorHost, "small"))
     f.modeHelp:SetPoint("TOPLEFT", 12, y - 56)
     f.modeHelp:SetWidth(W - 24)
 
-    local nameLabel = Part(G.Text(f, "meta"))
+    local nameLabel = Part(G.Text(f.editorHost, "meta"))
     nameLabel:SetPoint("TOPLEFT", 12, y - 108)
     nameLabel:SetText("Name")
-    f.name = Part(G.EditBox(f, 220, 22))
+    f.name = Part(G.EditBox(f.editorHost, 220, 22))
     f.name:SetPoint("TOPLEFT", 52, y - 104)
     f.name:SetMaxLetters(Match().NAME_MAX)
     f.name:SetScript("OnEnterPressed", function() P.Save() end)
     I.Tip(f.name, "Name (optional)", "Shown in the list and the live view. Left empty, the rule is described by what it matches.")
-    f.case = Part(G.Checkbox(f, function(on) f.case:SetChecked(on) end))
+    f.case = Part(G.Checkbox(f.editorHost, function(on) f.case:SetChecked(on) end))
     f.case:SetPoint("TOPLEFT", 300, y - 106)
-    f.caseLabel = Part(G.Text(f, "small"))
+    f.caseLabel = Part(G.Text(f.editorHost, "small"))
     f.caseLabel:SetPoint("LEFT", f.case, "RIGHT", 6, 0)
     f.caseLabel:SetText("Match case")
     I.Tip(f.case, "Match case", "Off (usual): \"WTS\" also finds \"wts\". Only the letters A to Z have a case here; accented and other letters are compared as typed.")
 
-    local appliesLabel = Part(G.Text(f, "meta"))
+    local appliesLabel = Part(G.Text(f.editorHost, "meta"))
     appliesLabel:SetPoint("TOPLEFT", 12, y - 138)
     appliesLabel:SetText("Applies to")
-    f.all = Part(G.Checkbox(f, function(on)
+    f.all = Part(G.Checkbox(f.editorHost, function(on)
         if not edit then return end
         edit.all = on
         PaintEditor()
     end))
     f.all:SetPoint("TOPLEFT", 90, y - 136)
-    f.allLabel = Part(G.Text(f, "small"))
+    f.allLabel = Part(G.Text(f.editorHost, "small"))
     f.allLabel:SetPoint("LEFT", f.all, "RIGHT", 6, 0)
     f.allLabel:SetText("All channels being cleaned")
     I.Tip(f.all, "All channels being cleaned", "On: the rule applies in every channel you clean, now and later. Off: only in the channels ticked below (and only while they are cleaned).")
     f.channelTop = y - 160
-    f.noChannels = Part(G.Text(f, "small"))
+    f.noChannels = Part(G.Text(f.editorHost, "small"))
     f.noChannels:SetPoint("TOPLEFT", 16, f.channelTop)
     f.noChannels:SetText("No channels to choose from yet: join one, or use All channels being cleaned.")
 
-    f.problem = Part(G.Text(f, "small"))
+    f.problem = Part(G.Text(f.editorHost, "small"))
     f.problem:SetPoint("TOPLEFT", 12, y - 232)
     f.problem:SetWidth(W - 24 - 220)
     G.Color(f.problem, pal.danger.text)
-    f.save = Part(G.Button(f, "Save", 96, "secondary", function() P.Save() end))
+    f.save = Part(G.Button(f.editorHost, "Save", 96, "secondary", function() P.Save() end))
     f.save:SetPoint("TOPRIGHT", -112, y - 232)
-    f.cancel = Part(G.Button(f, "Cancel", 90, "secondary", function() P.Close() end))
+    f.cancel = Part(G.Button(f.editorHost, "Cancel", 90, "secondary", function() P.Close() end))
     f.cancel:SetPoint("TOPRIGHT", -12, y - 232)
+    f.moreHelp = G.Button(f.listHost, "?", 24, "secondary")
+    f.moreHelp:SetPoint("TOPRIGHT", -132, -4)
+    I.Tip(f.moreHelp, "Rule examples", function() return f.examples:GetText() end)
     if edit then P.Open(edit.id) else PaintEditor() end
 end
 
@@ -411,5 +437,5 @@ K.Page({
     description = "Your own words or patterns to hide, each with the channels it applies to.",
     keywords = "chat rule rules custom word words keyword phrase text wildcard pattern lua regex filter hide block",
     when = function() return R.ChatClean ~= nil end,
-    host = function() return P.Frame() end,
+    host = function() return P.Frame() end, hostHeight = function() return edit and 342 or (LIST_H + 82) end,
 })

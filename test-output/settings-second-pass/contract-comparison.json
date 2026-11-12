@@ -1,0 +1,10 @@
+{
+  "pages": true,
+  "keys": true,
+  "settings": true,
+  "rows": false,
+  "changed": true,
+  "changedDB": true,
+  "defaulted": true,
+  "defaultedDB": true
+}

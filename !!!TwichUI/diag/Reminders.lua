@@ -18,6 +18,7 @@ local function Snapshot()
         D.Flag(c.running), c.reminders, c.turnedOn, c.valid, c.active)
     Line("conditions in the running reminders: %d, in %d groups", c.conditions, c.groups)
     Line("showing: %d; waiting out a delay: %d; kept up for a minimum: %d", c.visible, c.pending, c.holding)
+    Line("waiting on a time boundary: %d (looked again %d times of %d set)", c.timed or 0, c.timeChecks or 0, c.timeWaits or 0)
     Line("observations read: %d; events registered: %d; item details asked for: %d; an equipped item without details: %s",
         s.keys, s.events, s.asked, D.Flag(s.unresolved))
     Line("frames: %d (made %d, kept for reuse %d, on screen %d); preview: %s; moving: %s; icons waiting: %d",

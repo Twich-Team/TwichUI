@@ -12,11 +12,33 @@ K.Page({
         status = function() return K.OnOff(R:Enabled("auctionPosting")) end,
     },
     build = function()
-        K.Header("Sell from Bags", "A tab in the Auction House for listing items from your bags, one at a time.")
-        K.Toggle("auctionPosting", "Add a Sell from Bags tab to the Auction House",
-            "Lists the items in your bags that the auction house will take. Picking one searches its current listings (that item only, never the whole auction house) and suggests a price that matches the lowest comparable listing, with what it's based on. You set the quantity, price and duration; nothing is posted until you press Post. Results aren't saved.")
-        K.Header("Mailbox", "A short line in your chat when you close the mailbox.")
-        K.Toggle("mailGoldSummary", "Show mailbox gold summary",
-            "When you close the mailbox, says in your chat how much money you took from mail during that visit: auction proceeds and money other players sent. Each time you open the mailbox starts again from zero, and nothing is said if you took no money. Only money that actually reached you counts, not money merely waiting in the inbox, cash-on-delivery payments, postage or other gold you gained or spent meanwhile. It is not a profit figure: deposits and fees are not subtracted. Nothing is saved.")
+        K.Card({
+            title = "Sell from your bags", icon = "auctionHouse",
+            what = "Choose an item at the Auction House, check its price, then post it yourself.",
+            summary = function()
+                return R:Enabled("auctionPosting") and "On · Sell from Bags appears at the Auction House"
+                    or "Off · the extra selling tab is hidden"
+            end,
+            consequence = "Nothing is listed until you press Post. A price below known vendor value asks for confirmation.",
+        })
+        K.Toggle("auctionPosting", "Show Sell from Bags",
+            "Adds the selling tab. Selecting an item searches that item only; opening settings never searches or posts.")
+        K.Card({
+            title = "Track money collected from mail", icon = "reviewChanges",
+            what = "See a private chat total when you close the mailbox after collecting money.",
+            summary = function()
+                return R:Enabled("mailGoldSummary") and "On · one total per mailbox visit"
+                    or "Off · no collection summary"
+            end,
+            consequence = "Money received, not profit. Fees and deposits are not subtracted; nothing is saved.",
+        })
+        K.Toggle("mailGoldSummary", "Show collected mail gold",
+            "Counts auction proceeds and money sent by players that actually reaches you during this visit. No money collected means no message.")
+        local details = K.Header("Pricing and totals explained", "Read before relying on a suggested price or a mail total.")
+        details.settingsSecondary = true
+        K.Status("Suggested price", function() return "Item-specific" end, function() return "Based on current comparable listings for the selected item; results are not saved." end)
+        K.Status("Missing price data", function() return "Never assumed zero" end, function() return "Unknown is not zero or a safe price. Check the live tab's search and vendor-value messages." end)
+        K.Status("Vendor warning", function() return "Review before posting" end, function() return "Compares the listed price with vendor value, before auction fees; it does not predict profit." end)
+        K.Status("Mail total", function() return "Received this visit" end, function() return "Starts fresh each visit. Excludes waiting mail, COD payments, postage and unrelated gold changes." end)
     end,
 })

@@ -543,7 +543,7 @@ local function SlotButton(s)
     return Get(key, function()
         local b = CreateFrame("Button", nil, Kit.Frame(), "BackdropTemplate")
         b:SetSize(CELL, CELL)
-        Wg().Surface(b, Wg().pal.well, 1, Wg().pal.bronzeLo, 0.9)
+        Wg().Well(b)
         b.tex = b:CreateTexture(nil, "ARTWORK")
         b.tex:SetPoint("TOPLEFT", 2, -2)
         b.tex:SetPoint("BOTTOMRIGHT", -2, 2)
@@ -635,7 +635,7 @@ local function ItemButton(key)
     return Get(key, function()
         local b = CreateFrame("Button", nil, Kit.Frame(), "BackdropTemplate")
         b:SetSize(CELL, CELL)
-        Wg().Surface(b, Wg().pal.well, 1, Wg().pal.bronzeLo, 0.9)
+        Wg().Well(b)
         b.tex = b:CreateTexture(nil, "ARTWORK")
         b.tex:SetPoint("TOPLEFT", 2, -2)
         b.tex:SetPoint("BOTTOMRIGHT", -2, 2)
@@ -801,7 +801,11 @@ local function TabButton(i)
     return Get("gTab" .. i, function()
         local btn = CreateFrame("Button", nil, Kit.Frame(), "BackdropTemplate")
         btn:SetHeight(34)
-        Wg().Surface(btn, Wg().pal.well, 1, Wg().pal.bronzeLo, 0.9)
+        Wg().Well(btn)
+        if R.SettingsMaterial then
+            R.SettingsMaterial.ReminderRow(btn)
+            R.SettingsMaterial.MaterialHover(btn, function() return not btn.selected end)
+        end
         btn.icon = btn:CreateTexture(nil, "ARTWORK")
         btn.icon:SetSize(24, 24)
         btn.icon:SetPoint("LEFT", 4, 0)
@@ -1161,6 +1165,8 @@ function P.DrawGuildPreview(y)
         local hot = hoverTarget and hoverTarget.tab == i and hoverTarget.slot == nil
         local edge = (hot or (armed and false)) and pal.tealHi or (i == selTab and pal.tealHi or pal.bronzeLo)
         b:SetBackdropBorderColor(edge[1], edge[2], edge[3], (i == selTab or hot) and 1 or 0.9)
+        b.selected = i == selTab
+        if b.sel then b.sel:SetShown(b.selected or hot) end
     end
     y = y + 40
 
@@ -1231,6 +1237,7 @@ function P.DrawGuildPreview(y)
         Wide(ah, px, py + 4, pw)
         ah:SetText("Placed automatically in this tab")
         Tone(ah, "head")
+        py = py + H(ah) + 10
         local ld = Get("gLayout", function()
             return Wg().Dropdown(Kit.Frame(), 230, function(value)
                 local ok, text = mi.Design.SetLayout(draft, selTab, value)
@@ -1245,7 +1252,8 @@ function P.DrawGuildPreview(y)
         end)
         local layout = (dt and dt.layout) or "packed"
         ld:SetValue(layout, mi.LAYOUTS[layout])
-        At(ld, px + pw - 230, py)
+        ld:SetWidth(math.min(230, pw))
+        At(ld, px, py)
         py = py + 26
         local n = 0
         if dt then

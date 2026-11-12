@@ -117,7 +117,7 @@ end
 local function Settle() for _ = 1, 6 do FlushTimers() end end
 
 for _, f in ipairs({ "modules/Borders.lua", "modules/MenuStyle.lua", "modules/Media.lua", "Icons.lua",
-  "reminders/AmmoItems.lua", "reminders/Config.lua", "reminders/Conditions.lua", "reminders/Ammunition.lua", "reminders/Evaluate.lua", "reminders/State.lua",
+  "reminders/AmmoItems.lua", "reminders/ArtData.lua", "reminders/Config.lua", "reminders/Gallery.lua", "reminders/Conditions.lua", "reminders/Ammunition.lua", "reminders/Evaluate.lua", "reminders/State.lua",
   "reminders/Display.lua", "reminders/Controller.lua", "setup/TwichConfig.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
@@ -688,6 +688,37 @@ Check(#frames == frames0 and ST.Snapshot().events == events0, "editing again and
 RM.Delete(gid)
 Settle()
 Check(ST.Snapshot().keys == 0 and not Shown(gid), "deleted: nothing read")
+
+---------------------------------------------------------------------------
+-- The builder's transaction preserves imported predicates and only applies validated edits.
+---------------------------------------------------------------------------
+local _, ruleId = RM.Create("shield")
+local rule = RM.Get(ruleId).raw
+rule.conditions[2] = { type = "otherVersion", extra = { key = 42 } }
+RM.Invalidate()
+local handle = RM.BeginRuleEdit(ruleId)
+local rev = RM.Rev()
+Check(RM.ChangeRuleEdit(handle, RM.MoveNode, 2, {}, 1), "an imported condition can be moved in the draft")
+Check(RM.Rev() == rev and rule.conditions[2].extra.key == 42, "the saved order is isolated")
+Check(RM.SaveRuleEdit(handle) and RM.Get(ruleId).raw == rule and rule.conditions[1].extra.key == 42,
+  "Save preserves the imported condition and its data")
+Check(not RM.SetEnabled(ruleId, true), "the preserved unknown predicate still prevents enabling")
+handle = RM.BeginRuleEdit(ruleId)
+local conditions = rule.conditions
+Check(RM.ChangeRuleEdit(handle, RM.SetScope, "who", "all") and RM.SaveRuleEdit(handle)
+    and rule.conditions == conditions, "a scope-only save leaves the existing rule tables alone")
+RM.Delete(ruleId)
+
+local _, itemId = RM.Create("item")
+handle = RM.BeginRuleEdit(itemId)
+Check(RM.ChangeRuleEdit(handle, function(draft)
+  local ok, why = RM.SetCondition(draft, 1, { type = "equipment", slot = "any", what = "item", item = 6948, negate = true })
+  if ok then RM.StageRuleItem(draft, 6948) end
+  return ok, why
+end), "a draft can set an inferred item icon")
+Check(RM.ChangeRuleEdit(handle, RM.RemoveNode, 1) and RM.SaveRuleEdit(handle)
+    and not RM.Get(itemId).display.item, "a removed draft condition cannot leave behind a stale inferred icon")
+RM.Delete(itemId)
 
 ---------------------------------------------------------------------------
 -- P. Nothing acts in the game

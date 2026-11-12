@@ -103,6 +103,12 @@ function Cards.Build(view, sec, width, env)
     sec.note = Wg.Text(sec.head, "small")
     sec.note:SetWidth(textW)
     sec.textX = textX
+    if def.help then
+        sec.help = Wg.Button(sec.head, "?", 24, "secondary")
+        sec.help:SetPoint("TOPRIGHT", -119, 0)
+        I.Tip(sec.help, def.title, def.help)
+        R.SettingsMaterial.ReminderControl(sec.help)
+    end
 
     -- after the head: the rules in one line, and what to know first
     sec.summary = Wg.Text(card, "small")
@@ -179,7 +185,7 @@ function Cards.Primary(sec, row, env)
         Saved()
     end
     hit:SetScript("OnClick", function() Flip(not setting:GetValue()) end)
-    v.control = Wg.Checkbox(sec.head, Flip)
+    v.control = sec.header.card.compact and R.SettingsMaterial.Pill(sec.head, Flip) or Wg.Checkbox(sec.head, Flip)
     v.control:SetPoint("TOPRIGHT", sec.head, "TOPRIGHT", -4, -4)
     v.control:HookScript("OnEnter", function() local show = hit:GetScript("OnEnter"); if show then show(hit) end end)
     v.control:HookScript("OnLeave", function() I.HideTip(hit) end)
@@ -199,7 +205,8 @@ function Cards.Primary(sec, row, env)
         local on = setting:GetValue() and true or false
         v.control:SetChecked(on)
         v.control:SetActive(enabled)
-        sec.state:SetText(on and "On" or "Off")
+        local labels = sec.header.card.switchLabels
+        sec.state:SetText(labels and labels[on and 1 or 2] or (on and "On" or "Off"))
         Wg.Color(sec.state, (on and enabled) and pal.sage or pal.stone)
         return enabled
     end
@@ -235,6 +242,7 @@ function Cards.Layout(view, sec, inner, env)
     local def, card, pad = sec.header.card, sec.card, env.PAD
     local primary = sec.primaryView
     local head = sec.head
+    if def.compact then inner = 6 end
 
     -- head
     head:ClearAllPoints()
@@ -246,8 +254,8 @@ function Cards.Layout(view, sec, inner, env)
     sec.desc:SetText(sec.header:GetTooltip() or "")
     sec.desc:ClearAllPoints()
     sec.desc:SetPoint("TOPLEFT", head, "TOPLEFT", sec.textX, -h)
-    sec.desc:Show()
-    h = h + (sec.desc:GetStringHeight() or 12)
+    sec.desc:SetShown(not def.compact)
+    if not def.compact then h = h + (sec.desc:GetStringHeight() or 12) end
     -- under the sentence: why the switch can't be used, or what it is waiting on (a reload, an overlap)
     local note, tone
     if primary then
@@ -263,9 +271,9 @@ function Cards.Layout(view, sec, inner, env)
         sec.note:SetPoint("TOPLEFT", head, "TOPLEFT", sec.textX, -(h + 3))
         h = h + 3 + (sec.note:GetStringHeight() or 12)
     end
-    h = math.max(h, (sec.iconDrawn and ICON or 0) + 4) + 4
+    h = def.compact and math.max(25, h) or (math.max(h, (sec.iconDrawn and ICON or 0) + 4) + 4)
     head:SetHeight(h)
-    inner = inner + h + 8
+    inner = inner + h + (def.compact and 0 or 8)
 
     -- preview
     if sec.preview then
@@ -278,7 +286,7 @@ function Cards.Layout(view, sec, inner, env)
 
     -- the rules as set, and what to know first
     for _, fs in ipairs({ { sec.summary, SummaryText(def) }, { sec.consequence, ConsequenceText(def) } }) do
-        local text = fs[2]
+        local text = not def.compact and fs[2] or nil
         fs[1]:SetShown(text ~= nil)
         if text then
             fs[1]:SetText(text)
@@ -303,8 +311,16 @@ function Cards.Layout(view, sec, inner, env)
     if sec.detailsButton then
         sec.detailsButton:SetOpen(detailsOpen and true or false, "More about this", "Less about this")
         sec.detailsButton:ClearAllPoints()
-        sec.detailsButton:SetPoint("TOPLEFT", card, "TOPLEFT", x, -(inner + 2))
-        any = true
+        if def.compact then
+            if sec.help then
+                sec.detailsButton:SetPoint("TOPRIGHT", sec.help, "TOPLEFT", -8, -2)
+            else
+                sec.detailsButton:SetPoint("TOPRIGHT", head, "TOPRIGHT", -112, -2)
+            end
+        else
+            sec.detailsButton:SetPoint("TOPLEFT", card, "TOPLEFT", x, -(inner + 2))
+            any = true
+        end
     end
     if sec.play then
         sec.play:ClearAllPoints()
@@ -340,6 +356,20 @@ function Cards.Layout(view, sec, inner, env)
         sec.revealFade:To(1, Motion.TIME.disclose)
     end
     return inner
+end
+
+function Cards.PlaceInHeader(view, sec, env)
+    Cards.Layout(view, sec, 6, env)
+    local head = sec.head
+    head:SetParent(view.chrome or view.frame)
+    head:ClearAllPoints()
+    head:SetPoint("TOPRIGHT", -4, -33)
+    head:SetSize(225, 29)
+    sec.icon:Hide()
+    sec.title:Hide()
+    head:Show()
+    sec.top = 0
+    sec.primaryView.y = 33
 end
 
 -- Opens the part of a card that holds `row` (its rules), so a search result or a link can show it. Changes no

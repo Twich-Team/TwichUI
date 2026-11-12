@@ -71,6 +71,13 @@ simlab_stage() {
   fi
   # Only what a page needs: the core and its load-on-demand settings window.
   local copy=("$REPO/!!!TwichUI" "$REPO/TwichUI_Settings")
+  # SIMLAB_EXTRA: more load-on-demand addon folders of the repository to stage (names, space separated; workshop.sh sets
+  # TwichUI_Workshop). Empty by default, so smoke/interact/diagnose stage exactly what they did before.
+  local extra
+  for extra in ${SIMLAB_EXTRA:-}; do
+    case "$extra" in TwichUI_*) [ -d "$REPO/$extra" ] || { echo "simlab: no addon folder $extra in the repository" >&2; return 2; }; copy+=("$REPO/$extra") ;;
+      *) echo "simlab: SIMLAB_EXTRA accepts only TwichUI_* folders, not $extra" >&2; return 2 ;; esac
+  done
   [ "${SIMLAB_SHIM:-1}" = "1" ] && copy+=("$SIMLAB_DIR/shim/!!!!SimLabShims")
   rm -rf -- "${ROOT:?}"   # rsync --delete would leave a folder from an earlier run, such as the shim, in place
   mkdir -p "$ROOT"

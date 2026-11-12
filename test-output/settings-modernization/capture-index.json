@@ -1,0 +1,466 @@
+[
+  {
+    "page": "overview",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/overview.png",
+    "sha256": "706bd3922afe69b552455703f43737f09ef6dda0c8e15ef3533e1e8de49c2a0d",
+    "result": "steps=2 simSeconds=3.9 passed=21 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "notifications",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/notifications.png",
+    "sha256": "ba76d4e80fac0fb40133576138ea6122d4aa801c402e7675df39dd6757154dff",
+    "result": "steps=2 simSeconds=3.6 passed=15 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "notificationsLook",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/notificationsLook.png",
+    "sha256": "5f315b6b894673bb8409e9973f491f34fa4f59c03c796bb915afcfab1342e144",
+    "result": "steps=2 simSeconds=3.6 passed=21 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "reminders",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/reminders.png",
+    "sha256": "c1f5b0c3a1be491d9999293c6336ee307a9f49ce19318f5b7467edf34cac3e28",
+    "result": "steps=2 simSeconds=3.6 passed=10 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "ammoCustom",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/ammoCustom.png",
+    "sha256": "54fa07bf5bca6b9fd44d2f57fff5cdc0130d74f6e4cc491cb5c4df28460683f3",
+    "result": "steps=2 simSeconds=3.6 passed=10 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "healerWatch",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/healerWatch.png",
+    "sha256": "728bb6bdbbeabc90c94f956300c20e4a492539cfa037dcb1e34f918b0002025e",
+    "result": "steps=2 simSeconds=3.6 passed=8 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "buffBack",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/buffBack.png",
+    "sha256": "04ffe81f2a694c809a31bed4d96e0210760c6caa87e700fbf902df5ddae46709",
+    "result": "steps=2 simSeconds=3.6 passed=8 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "qol",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/qol.png",
+    "sha256": "a2cf55a59cb5e4898e5b554a6796c2ddd41fc15bd919761b2cea0188e5dfa0d2",
+    "result": "steps=2 simSeconds=3.6 passed=8 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "markers",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/markers.png",
+    "sha256": "2228ff2b93af4f01c40c30edc4603163ab269274a07ff0577e509ebf48f7401f",
+    "result": "steps=2 simSeconds=3.6 passed=12 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "markersTarget",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/markersTarget.png",
+    "sha256": "19a9a50fc9c9aaee26991c24a36f275c25bc135c579805121d30a6f5e2998212",
+    "result": "steps=2 simSeconds=3.6 passed=15 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "markersWorld",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/markersWorld.png",
+    "sha256": "5b5397ddecf878abfe5151aa83f7321289d404120c0c3cbe30e40a25a2a3ca23",
+    "result": "steps=2 simSeconds=3.6 passed=15 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "markersBar",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/markersBar.png",
+    "sha256": "610331e617e74daf7febd6921cb25bd57a20cb1600a97e4a36948f0514919c6f",
+    "result": "steps=2 simSeconds=3.6 passed=15 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "chatClean",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/chatClean.png",
+    "sha256": "4369b08058359b31b4e69747adeaba03a5c018106a5a5c47958c90bbb3c432f7",
+    "result": "steps=2 simSeconds=3.6 passed=15 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "chatCleanChannels",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/chatCleanChannels.png",
+    "sha256": "be4fcb0f307529f449356db548a6abcdb2f59001696c6b84e9dce51a130d2574",
+    "result": "steps=2 simSeconds=3.6 passed=12 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "chatCleanRules",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/chatCleanRules.png",
+    "sha256": "a2e969d747f576cc8edffa351c2c07c0c8930e88a3c7609a7a6f8f97b7efacf8",
+    "result": "steps=2 simSeconds=3.6 passed=12 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "chatCleanLive",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/chatCleanLive.png",
+    "sha256": "20580a902507ac504dd94e93299432080e230e45dd8a8cb19e1fcfb29d49b51e",
+    "result": "steps=2 simSeconds=3.6 passed=12 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "food",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/food.png",
+    "sha256": "8d544daff0dc0c3ca2790982c8819601fb1533589ace79e336c9f287c53edb00",
+    "result": "steps=2 simSeconds=3.6 passed=11 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "camping",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/camping.png",
+    "sha256": "0ffb005d426a1b3aee4ecc5fb49cf2fee3327f5d54898c72716b847ae0639062",
+    "result": "steps=2 simSeconds=3.6 passed=13 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "campingRest",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/campingRest.png",
+    "sha256": "968d2e07921176f43d060f34b31a5a86bbb7e0ad74d0f692726994ccd97ca786",
+    "result": "steps=2 simSeconds=3.6 passed=22 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "hazard",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/hazard.png",
+    "sha256": "a50b0445e87d235aa45aec8fe62b5c528066193b9dfc0f236b3cd0903e32cd8b",
+    "result": "steps=2 simSeconds=3.6 passed=19 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "hazardRules",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/hazardRules.png",
+    "sha256": "89c92425f2bf152993b68db460881b5ec885a4ea0b53bd8319e04b3df6f00a05",
+    "result": "steps=2 simSeconds=3.6 passed=10 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "restock",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/restock.png",
+    "sha256": "2eb3e883de2189a9d061138217511ddfda955c2ae0ac6c43f08c1fb04b1e935d",
+    "result": "steps=2 simSeconds=3.6 passed=15 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "restockItems",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/restockItems.png",
+    "sha256": "2a5005153e84b5f0e0a903c8cbda405410650e053c4bd60d3d714881ac2770e7",
+    "result": "steps=2 simSeconds=3.6 passed=10 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "workshop",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/workshop.png",
+    "sha256": "22144dce1b7ae83b0ed23f0490417fabcf90b88a4fb4146f9cbbd9cdee1545ed",
+    "result": "steps=2 simSeconds=3.6 passed=14 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "magicInventory",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/magicInventory.png",
+    "sha256": "8366d86744c46477aacde7b43f1aeee56db9591f7e01d2af61e0cc8fdb8eaf50",
+    "result": "steps=2 simSeconds=3.6 passed=8 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "auction",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/auction.png",
+    "sha256": "a21080ea7ede90b3733326b18c31d325af38ab072b3e71f5166351701e2db805",
+    "result": "steps=2 simSeconds=3.6 passed=8 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "chronicle",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/chronicle.png",
+    "sha256": "d11fe3fe8e96b453ea1877c4d787a98ac34da097b16fa1ba056b392db9ff4c39",
+    "result": "steps=2 simSeconds=3.6 passed=12 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "chronicleLook",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/chronicleLook.png",
+    "sha256": "aef384258c6ef78f0e4274df14003944b60c710fb5e81365972b2e8aa4b84af4",
+    "result": "steps=2 simSeconds=3.6 passed=18 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "cozyBag",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/cozyBag.png",
+    "sha256": "afac9d4e01a056d3a0217e233899304d719a16ee9d1bcde424141b09e6cf05e2",
+    "result": "steps=2 simSeconds=3.6 passed=13 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "pins",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/pins.png",
+    "sha256": "df9144b5b2d947f3c88111a7b072f0394ff49af40020ee3fc856e1bc0e5105ff",
+    "result": "steps=2 simSeconds=3.6 passed=22 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "pings",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/pings.png",
+    "sha256": "72d74a294efbc23d10369b97044bd2f0cadbdea18882ca4c11b184596ad82b1d",
+    "result": "steps=2 simSeconds=3.6 passed=13 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "pinsLook",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/pinsLook.png",
+    "sha256": "2777ac5883736b6c70b7fd71e45b0227e95532513347679d0ab1b19044dab317",
+    "result": "steps=2 simSeconds=3.6 passed=19 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "mapToolbar",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/mapToolbar.png",
+    "sha256": "ea1bacbfca5bdf13393464646eb4c2d8e3e9ddb3e24e7a295be657de408a1b45",
+    "result": "steps=2 simSeconds=3.6 passed=8 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "worldMap",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/worldMap.png",
+    "sha256": "b04169ce9288ab2fda3ff562a97f9d8829927cf140e0baf4c95446cdeab1989b",
+    "result": "steps=2 simSeconds=3.6 passed=13 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "worldMapPlaces",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/worldMapPlaces.png",
+    "sha256": "1d706465d782e6a758f591e079b5c7ead7fd56b8f9b037498749505aaf0a4aef",
+    "result": "steps=2 simSeconds=3.6 passed=10 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "navigation",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/navigation.png",
+    "sha256": "b7d0b05a525bc8086fce53361d46879b2459cb3f17d25b343572c725e46fa47b",
+    "result": "steps=2 simSeconds=3.6 passed=16 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "navigationLook",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/navigationLook.png",
+    "sha256": "e1e4ad014a5c1847a6d871f307c521fec83759757c502df41992c5c2786d4966",
+    "result": "steps=2 simSeconds=3.6 passed=18 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "npcs",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/npcs.png",
+    "sha256": "7e9d0c9b352cb0ede32880c55a05685755f6c4005bf658feda726a694016431e",
+    "result": "steps=2 simSeconds=3.6 passed=16 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "npcsList",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/npcsList.png",
+    "sha256": "87848e7dca5c6a2328c7318e248fc9a222c4711f9980f5028c3d445b1d5cf6a1",
+    "result": "steps=2 simSeconds=3.6 passed=19 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "npcsKnowledge",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/npcsKnowledge.png",
+    "sha256": "883d139e557233d5a7dc87d43525482106f070fa54ea77a25b1bc53a1cbb4ad1",
+    "result": "steps=2 simSeconds=3.6 passed=11 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "guildLocations",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/guildLocations.png",
+    "sha256": "e1ec3edbefff297ff766e4ce69ddc6da7133e18463d09e94eff10e6ee5f206ee",
+    "result": "steps=2 simSeconds=3.6 passed=10 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "gear",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/gear.png",
+    "sha256": "7b544a6c6b1b98dab260dcd97d2e7a29ad352e0360d76f500e090d8ef591c2fb",
+    "result": "steps=2 simSeconds=3.6 passed=12 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "statWeights",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/statWeights.png",
+    "sha256": "bdae7de1c819efa9e513faa37254229237cb37b50ea63243eaf0cc6be25edc14",
+    "result": "steps=2 simSeconds=3.6 passed=10 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "mage",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/mage.png",
+    "sha256": "5a42e8bc865c22f7d3220eeed2af752739116bbc5cb4aa94ef1dc9214d74b50f",
+    "result": "steps=2 simSeconds=3.6 passed=18 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "refreshmentShares",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/refreshmentShares.png",
+    "sha256": "a71da8e9b3c145f4dc00e3e3412ae527da97a485a5f7e61beb9e05701ee10954",
+    "result": "steps=2 simSeconds=3.6 passed=10 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "classBars",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/classBars.png",
+    "sha256": "09b6eb548e45ef44a70a104a28e01b1129a611ce86ab7f72b5841a8ca5df152f",
+    "result": "steps=2 simSeconds=3.6 passed=15 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "classBarsLayout",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/classBarsLayout.png",
+    "sha256": "b5ff134f3ed7a86b3cad9c183f323ed8733d07d9493fd72369a3db8659a388aa",
+    "result": "steps=2 simSeconds=3.6 passed=15 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "classBarsLook",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/classBarsLook.png",
+    "sha256": "9858d1aeeef70ae751942a6553cbfed04c0e6c20ad7d923cf0a617370aa6883f",
+    "result": "steps=2 simSeconds=3.6 passed=18 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "classBarsEffects",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/classBarsEffects.png",
+    "sha256": "c8bde5c79fe22e05ec62eeb075d9c0645ce30f498a784f1eb44f315dade49d6f",
+    "result": "steps=2 simSeconds=3.6 passed=15 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "barGlows",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/barGlows.png",
+    "sha256": "fc87a1978ba4278a060eb6adda0573768487970649a444664678c5c55a42979c",
+    "result": "steps=2 simSeconds=3.6 passed=12 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "barGlowsSpells",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/barGlowsSpells.png",
+    "sha256": "6cf0f8c62552e5d00da998daf42a8de24b88b37b2c205cefba72e565104ec000",
+    "result": "steps=2 simSeconds=3.6 passed=10 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "skins",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/skins.png",
+    "sha256": "410c62124051a67f6fa8cd978d5b335f5dc9499f7069a2c5bf494f4e5044b0e3",
+    "result": "steps=2 simSeconds=3.6 passed=10 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "speakstone",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/speakstone.png",
+    "sha256": "66235ede5069a7e16c32dc9b71510c4dd57f1bda7ef0b8e74e07ae63d232105a",
+    "result": "steps=2 simSeconds=3.6 passed=19 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "restedxp",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/restedxp.png",
+    "sha256": "4e64ef782d74a944a9047e2a61a6fd90eb6b0b4a122846e4828a87d766b2a355",
+    "result": "steps=2 simSeconds=3.6 passed=35 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "targetArt",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/targetArt.png",
+    "sha256": "3ec7d985777c0fcf77f0b58715762c187ba61ea05de34ba0518be9c973ca27ac",
+    "result": "steps=2 simSeconds=3.6 passed=14 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "sharing",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/sharing.png",
+    "sha256": "9609dd6438c11e7374b1f4f62a5d83115f47776b874e983d4a97beaa1f63224a",
+    "result": "steps=2 simSeconds=3.6 passed=10 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "profiles",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/profiles.png",
+    "sha256": "00e79171dea8aa64c7baf663d5cf2cfe18cf0c39f64ac83b3bc4efa4ce6f7fa4",
+    "result": "steps=2 simSeconds=3.6 passed=13 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  },
+  {
+    "page": "troubleshooting",
+    "wide_capture": "../wow-ui-sim-lab/artifacts/settings-20261111-080603/troubleshooting.png",
+    "sha256": "72b47f02e8514ab199a91bf3f50237d8944e61c9e7492dd70a2b23f5efec9f0e",
+    "result": "steps=2 simSeconds=3.6 passed=11 failed=0 aborted=false stopped=false",
+    "review": "Screenshot-reviewed in indexed contact sheets; later focused refinements are recorded in docs/settings-modernization.md",
+    "client_acceptance": "pending"
+  }
+]

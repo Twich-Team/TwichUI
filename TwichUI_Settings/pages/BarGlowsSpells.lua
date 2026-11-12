@@ -11,17 +11,18 @@ R.BarGlowsSpellsPage = P
 
 local W = 644
 local ROW_H, VISIBLE = 30, 8
-local LIST_TOP = -64
+local LIST_TOP = -104
 local LIST_H = ROW_H * VISIBLE + 8
 local LIST_W = W - 12 - 26
-local EDIT_TOP = LIST_TOP - LIST_H - 14
+local EDIT_TOP = -44
 local EDIT_H = 262
-local ADD_TOP = EDIT_TOP - EDIT_H - 18
+local ADD_TOP = -44
 local HOST_H = -ADD_TOP + 150
 
 local f, built
 local rows = {}
 local kind = "missingBuff"
+local task = "list"
 local target                     -- the row being edited: { kind, key } (key nil: the kind's defaults)
 local addKind, addAs, addSlot = "readyCooldown", "spell", "both"
 local refreshQueued = false
@@ -145,7 +146,16 @@ local function PaintEditor()
     local bg, C = BG(), Cat()
     local open = target ~= nil
     for _, part in ipairs(f.editorParts) do part:SetShown(open) end
-    f.editHint:SetShown(not open)
+    f.editHint:Hide()
+    f.listHost:SetShown(not open and task == "list")
+    f.editorHost:SetShown(open)
+    f.addHost:SetShown(not open and task == "add")
+    f.browse:SetSelected(not open and task == "list"); f.addTask:SetSelected(not open and task == "add")
+    local mode = open and "edit" or task
+    if f.mode ~= mode then
+        f.mode = mode
+        C_Timer.After(0, function() if f:IsShown() and R.SettingsUI and R.SettingsUI.Refresh then R.SettingsUI.Refresh() end end)
+    end
     if not open then
         if f.sample then R.BarGlowDraw.Clear(f.sample) end
         return
@@ -411,6 +421,7 @@ function P.Add()
     f.addAura:SetText("")
     f.addId:ClearFocus()
     kind = addKind
+    task = "list"
     P.Say(("Added %s under %s."):format(label, Cat().TYPE_INFO[addKind].label:lower()), "ok")
     P.Refresh()
     return true
@@ -434,24 +445,33 @@ local function Build()
     local G, I, bg = Wg(), R.Interact, BG()
     local pal = G.pal
 
-    f.help = G.Text(f, "small")
-    f.help:SetPoint("TOPLEFT", 4, -2)
+    f.listHost = CreateFrame("Frame", nil, f); f.listHost:SetAllPoints()
+    f.editorHost = CreateFrame("Frame", nil, f); f.editorHost:SetAllPoints()
+    f.addHost = CreateFrame("Frame", nil, f); f.addHost:SetAllPoints()
+    local function Choose(value) target = nil; task = value; P.Refresh() end
+    f.browse = G.Tab(f, "Your spells and items", 310, function() Choose("list") end)
+    f.browse:SetPoint("TOPLEFT", 0, -2)
+    f.addTask = G.Tab(f, "Add a spell or item", 322, function() Choose("add") end)
+    f.addTask:SetPoint("TOPLEFT", 316, -2)
+    f.help = G.Text(f.listHost, "small")
+    f.help:SetPoint("TOPLEFT", 4, -42)
     f.help:SetWidth(W - 230)
-    f.help:SetText("Pick a kind. Its first row is its defaults: the kind on or off, and the look of all its rows. Each spell or item below can be turned off or given a look of its own. Faded names are spells you haven't learned or items you don't carry.")
-    f.kind = G.Dropdown(f, 200, function(value)
+    f.help:SetText("Pick a kind, then choose a row's Look. The first row sets its defaults.")
+    I.Tip(f, "Spells and looks", "Each spell or item can be turned off or given its own look. Faded names are spells you haven't learned or items you don't carry. The first row controls the shared defaults for this kind.")
+    f.kind = G.Dropdown(f.listHost, 200, function(value)
         kind = value
         if target and target.kind ~= kind then target = nil end
         P.Refresh()
     end)
     f.kind:SetChoices(KindChoices)
-    f.kind:SetPoint("TOPRIGHT", -2, -4)
+    f.kind:SetPoint("TOPRIGHT", -2, -44)
     I.Tip(f.kind, "Kind", "Which kind of glow to list.")
-    f.kindTip = G.Text(f, "meta")
-    f.kindTip:SetPoint("TOPLEFT", 4, -44)
+    f.kindTip = G.Text(f.listHost, "meta")
+    f.kindTip:SetPoint("TOPLEFT", 4, -84)
     f.kindTip:SetWidth(W - 8)
     f.kindTip:SetWordWrap(false)
 
-    f.well = CreateFrame("Frame", nil, f, "BackdropTemplate")
+    f.well = CreateFrame("Frame", nil, f.listHost, "BackdropTemplate")
     f.well:SetPoint("TOPLEFT", 0, LIST_TOP)
     f.well:SetSize(W, LIST_H)
     G.Well(f.well)
@@ -465,22 +485,22 @@ local function Build()
 
     -- the editor
     local y = EDIT_TOP
-    G.Card(f, 0, y, W, y - EDIT_H)
+    G.Card(f.editorHost, 0, y, W, y - EDIT_H)
     f.editorParts = {}
     local function Part(x) f.editorParts[#f.editorParts + 1] = x; return x end
-    f.editHint = G.Text(f, "small")
+    f.editHint = G.Text(f.editorHost, "small")
     f.editHint:SetPoint("TOPLEFT", 12, y - 14)
     f.editHint:SetWidth(W - 24)
     f.editHint:SetText("Click Look on a row to change how it glows. The sample button here glows as you change it.")
-    f.editTitle = Part(G.Text(f, "heading"))
+    f.editTitle = Part(G.Text(f.editorHost, "heading"))
     f.editTitle:SetPoint("TOPLEFT", 12, y - 10)
     f.editTitle:SetWidth(W - 120)
-    f.editSub = Part(G.Text(f, "meta"))
+    f.editSub = Part(G.Text(f.editorHost, "meta"))
     f.editSub:SetPoint("TOPLEFT", 12, y - 26)
     f.editSub:SetWidth(W - 120)
 
     -- the sample: an icon in the shape of an action button, glowing as the look is set
-    f.sample = Part(CreateFrame("Frame", nil, f))
+    f.sample = Part(CreateFrame("Frame", nil, f.editorHost))
     f.sample:SetSize(40, 40)
     f.sample:SetPoint("TOPRIGHT", f, "TOPLEFT", W - 30, y - 16)
     f.sampleIcon = f.sample:CreateTexture(nil, "ARTWORK")
@@ -488,20 +508,20 @@ local function Build()
     I.Tip(f.sample, "Sample", "This glows the way the look is set now. Your bars follow the same look.")
 
     local function Label(text, x, dy)
-        local t = Part(G.Text(f, "meta"))
+        local t = Part(G.Text(f.editorHost, "meta"))
         t:SetPoint("TOPLEFT", x, y - dy)
         t:SetText(text)
         return t
     end
     local function Drop(x, dy, w, choices, field, tip)
-        local d = Part(G.Dropdown(f, w, function(v) SetField(field, v) end))
+        local d = Part(G.Dropdown(f.editorHost, w, function(v) SetField(field, v) end))
         d:SetChoices(choices)
         d:SetPoint("TOPLEFT", x, y - dy)
         I.Tip(d, field, tip)
         return d
     end
     local function Slide(x, dy, lo, hi, step, field, tip)
-        local s = Part(G.Slider(f, 220, function(v) SetField(field, math.floor(v + 0.5)) end))
+        local s = Part(G.Slider(f.editorHost, 220, function(v) SetField(field, math.floor(v + 0.5)) end))
         s:SetRange(lo, hi, step)
         s:SetPoint("TOPLEFT", x, y - dy)
         I.Tip(s, field, tip)
@@ -515,7 +535,7 @@ local function Build()
     Label("Motion", 236, 54)
     f.motion = Drop(290, 50, 130, function() return f.motionChoices end, "motion", "Moving: it runs around the button. Breathing: it stands still and fades out and in. Still: no movement at all.")
     Label("Color", 436, 54)
-    f.color = Part(G.Swatch(f, function(hex) SetField("color", hex) end))
+    f.color = Part(G.Swatch(f.editorHost, function(hex) SetField("color", hex) end))
     f.color:SetPoint("TOPLEFT", 480, y - 52)
     I.Tip(f.color, "Color", "The glow's color, and its message's. Click to choose another.")
 
@@ -543,13 +563,13 @@ local function Build()
     f["repeat"] = Drop(476, 152, 100, function() return SecondsChoices(bg.REPEATS, "Off") end, "repeat",
         "Every so many seconds while it is still due, the glow, message and sound come again. Off: once, as it starts.")
 
-    f.message = Part(G.Checkbox(f, function(on) SetField("message", on) end))
+    f.message = Part(G.Checkbox(f.editorHost, function(on) SetField("message", on) end))
     f.message:SetPoint("TOPLEFT", 12, y - 188)
     I.Tip(f.message, "Message", "A small card in the zone arrival card's look as it starts (and with each repeat), with the spell's name and what is wanted. How long it stays and whether it shows the icon are on the General tab. Never in chat.")
-    local msgLabel = Label("Show a message", 36, 190)
+    local msgLabel = Label("Show a message", 54, 190)
     msgLabel:SetWidth(140)
     Label("Sound", 236, 190)
-    f.sound = Part(G.Dropdown(f, 220, function(v) SetField("sound", v) end))
+    f.sound = Part(G.Dropdown(f.editorHost, 220, function(v) SetField("sound", v) end))
     f.sound:SetChoices(function()
         local out = { { value = bg.NO_SOUND, label = "None" } }
         local s = target and TargetStyle(target)
@@ -558,7 +578,7 @@ local function Build()
     end)
     f.sound:SetPoint("TOPLEFT", 290, y - 186)
     I.Tip(f.sound, "Sound", "A sound as it starts (and with each repeat). TwichUI's sounds and any LibSharedMedia sound.")
-    f.testSound = Part(G.Button(f, "Play", 60, "secondary", function()
+    f.testSound = Part(G.Button(f.editorHost, "Play", 60, "secondary", function()
         local s = target and TargetStyle(target)
         if not s or s.sound == bg.NO_SOUND then P.Say("No sound is chosen.", "warn") return end
         local path = R:ResolveSound(s.sound)
@@ -567,43 +587,43 @@ local function Build()
     f.testSound:SetPoint("TOPLEFT", 520, y - 186)
 
     f.belowLabel = Part(Label("Low below", 12, 224))
-    f.below = Part(G.Slider(f, 220, function(v)
+    f.below = Part(G.Slider(f.editorHost, 220, function(v)
         if target and target.key then BG().SetBelow(target.kind, target.key, math.floor(v + 0.5)) end
     end))
     f.below:SetRange(0, 200, 1)
     f.below:SetPoint("TOPLEFT", 90, y - 220)
     I.Tip(f.below, "Low below", "It counts as low when you carry fewer than this. Reset puts back the shipped limit.")
-    f.reset = Part(G.Button(f, "Use the defaults", 150, "secondary", function()
+    f.reset = Part(G.Button(f.editorHost, "Use the defaults", 150, "secondary", function()
         if not target then return end
         if target.key then BG().ResetSpell(target.kind, target.key) else BG().ResetType(target.kind) end
         P.Say("Back to the defaults.", "ok")
     end))
     f.reset:SetPoint("TOPRIGHT", f, "TOPLEFT", W - 112, y - 222)
-    f.close = Part(G.Button(f, "Close", 90, "secondary", function() P.CloseEditor() end))
+    f.close = Part(G.Button(f.editorHost, "Close", 90, "secondary", function() P.CloseEditor() end))
     f.close:SetPoint("TOPRIGHT", f, "TOPLEFT", W - 12, y - 222)
 
     -- adding
     local ay = ADD_TOP
-    G.Card(f, 0, ay, W, ay - 120)
-    local addTitle = G.Text(f, "heading")
+    G.Card(f.addHost, 0, ay, W, ay - 120)
+    local addTitle = G.Text(f.addHost, "heading")
     addTitle:SetPoint("TOPLEFT", 12, ay - 10)
     addTitle:SetText("Add a spell or item")
     local function ALabel(text, x, dy)
-        local t = G.Text(f, "meta")
+        local t = G.Text(f.addHost, "meta")
         t:SetPoint("TOPLEFT", x, ay - dy)
         t:SetText(text)
         return t
     end
     ALabel("As", 12, 40)
-    f.addKind = G.Dropdown(f, 160, function(v) addKind = v; P.PaintAdd() end)
+    f.addKind = G.Dropdown(f.addHost, 160, function(v) addKind = v; P.PaintAdd() end)
     f.addKind:SetChoices(AddKinds)
     f.addKind:SetPoint("TOPLEFT", 40, ay - 36)
     I.Tip(f.addKind, "As", "What kind of glow it is. A low stock is an item; a seal, tracking, cooldown or proc a spell; a missing buff or weapon buff either.")
-    f.addAs = G.Dropdown(f, 80, function(v) addAs = v; P.PaintAdd() end)
+    f.addAs = G.Dropdown(f.addHost, 80, function(v) addAs = v; P.PaintAdd() end)
     f.addAs:SetChoices(function() return { { value = "spell", label = "Spell" }, { value = "item", label = "Item" } } end)
     f.addAs:SetPoint("TOPLEFT", 210, ay - 36)
     ALabel("ID", 302, 40)
-    f.addId = G.EditBox(f, 140, 22)
+    f.addId = G.EditBox(f.addHost, 140, 22)
     f.addId:SetPoint("TOPLEFT", 324, ay - 36)
     f.addId:SetMaxLetters(200)
     f.addId:SetScript("OnEnterPressed", function() P.Add() end)
@@ -611,19 +631,19 @@ local function Build()
     f.addId:SetScript("OnReceiveDrag", function(self) TakeCursor(self) end)
     f.addId:SetScript("OnMouseDown", function(self) if GetCursorInfo and GetCursorInfo() then TakeCursor(self) end end)
     I.Tip(f.addId, "ID", "A spell or item ID, a link (shift-click one into this field), or drag a spell from your spellbook or an item from your bags here.")
-    f.add = G.Button(f, "Add", 80, "secondary", function() P.Add() end)
+    f.add = G.Button(f.addHost, "Add", 80, "secondary", function() P.Add() end)
     f.add:SetPoint("TOPRIGHT", f, "TOPLEFT", W - 12, ay - 35)
     f.addSlotLabel = ALabel("Hand", 12, 74)
-    f.addSlot = G.Dropdown(f, 130, function(v) addSlot = v; P.PaintAdd() end)
+    f.addSlot = G.Dropdown(f.addHost, 130, function(v) addSlot = v; P.PaintAdd() end)
     f.addSlot:SetChoices(function() return { { value = "both", label = "Either hand" }, { value = "mainHand", label = "Main hand" }, { value = "offHand", label = "Off hand" } } end)
     f.addSlot:SetPoint("TOPLEFT", 50, ay - 70)
     f.addAuraLabel = ALabel("Buff ID (optional)", 200, 74)
-    f.addAura = G.EditBox(f, 110, 22)
+    f.addAura = G.EditBox(f.addHost, 110, 22)
     f.addAura:SetPoint("TOPLEFT", 310, ay - 70)
     f.addAura:SetMaxLetters(200)
     I.Tip(f.addAura, "Buff ID", "The buff the item gives, when it is not the item's own spell: for a food, the Well Fed buff's spell ID. Empty: the item's own spell.")
     f.note = G.Text(f, "small")
-    f.note:SetPoint("TOPLEFT", 12, ay - 100)
+    f.note:SetPoint("BOTTOMLEFT", 12, 6)
     f.note:SetWidth(W - 24)
     f.note:SetWordWrap(false)
     P.Say(P.lastSaid, P.lastTone)
@@ -654,5 +674,5 @@ K.Page({
     description = "Every kind of glow and each of its spells or items: on or off, and how each one looks, when it shows, its message and sound.",
     keywords = "glow look color colour strength opacity size speed motion breathing ants pixel border spell alert sound message repeat glow time when combat add spell item id",
     when = function() return R.BarGlows ~= nil and R.BarGlowDraw ~= nil end,
-    host = function() return P.Frame() end, hostHeight = HOST_H,
+    host = function() return P.Frame() end, hostHeight = function() return target and 340 or task == "add" and 204 or 382 end,
 })

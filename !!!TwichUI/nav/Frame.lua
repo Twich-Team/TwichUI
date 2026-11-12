@@ -135,9 +135,9 @@ local function NewButton(parent, label, onClick, tip)
     return b
 end
 
-function NF.New(preview)
+function NF.New(preview, previewName)
     local self = setmetatable({ preview = preview, last = {} }, Frame)
-    local f = CreateFrame("Frame", preview and "TwichUINavigationPreview" or "TwichUINavigation", UIParent, "BackdropTemplate")
+    local f = CreateFrame("Frame", preview and (previewName or "TwichUINavigationPreview") or "TwichUINavigation", UIParent, "BackdropTemplate")
     self.f = f
     f:SetFrameStrata("MEDIUM")
     f:SetClampedToScreen(true)

@@ -1,0 +1,83 @@
+## Interface: 16001
+## Title: |cffC9A24ATwich|rUI Settings
+## Notes: The settings window for TwichUI. Loaded only when you open TwichUI's settings; keep it turned on alongside TwichUI.
+## Author: twichie
+## Version: 1.0.0
+## RequiredDeps: !!!TwichUI
+## LoadOnDemand: 1
+## IconTexture: Interface\AddOns\!!!TwichUI\media\icon
+## X-License: MIT (code); see !!!TwichUI\LICENSE
+## Category: Interface Enhancements
+
+# The page list and the controls pages describe themselves with (no frames)
+Kit.lua
+
+# One file per page, in any order (each page says its place)
+pages\Overview.lua
+pages\Gear.lua
+pages\Notifications.lua
+pages\RemindersPlain.lua
+pages\RemindersEditor.lua
+pages\RemindersBuilderRail.lua
+pages\RemindersDesigner.lua
+pages\RemindersRuleDrag.lua
+pages\RemindersPreview.lua
+pages\RemindersPlacement.lua
+pages\RemindersCatalog.lua
+pages\Reminders.lua
+pages\HealerWatch.lua
+pages\ReturnTheFavor.lua
+pages\QoL.lua
+pages\Markers.lua
+pages\MarkerBar.lua
+pages\ChatClean.lua
+pages\ChatCleanChannels.lua
+pages\ChatCleanRules.lua
+pages\ChatCleanLive.lua
+pages\Hazard.lua
+pages\HazardRules.lua
+pages\FoodDrink.lua
+pages\Camping.lua
+pages\CampingRest.lua
+pages\Restock.lua
+pages\RestockItems.lua
+pages\MagicInventory.lua
+pages\MagicInventoryDrag.lua
+pages\MagicInventoryGuild.lua
+pages\Mage.lua
+pages\ClassBars.lua
+pages\BarGlows.lua
+pages\BarGlowsSpells.lua
+pages\AmmoItems.lua
+pages\Chronicle.lua
+pages\Pins.lua
+pages\MapToolbar.lua
+pages\Navigation.lua
+pages\WorldMap.lua
+pages\GuildLocations.lua
+pages\Npcs.lua
+pages\NpcKnowledge.lua
+pages\CozyBag.lua
+pages\Auction.lua
+pages\WorkshopWorth.lua
+pages\Workshop.lua
+pages\Skins.lua
+pages\RestedXP.lua
+pages\SpeakStone.lua
+pages\TargetArt.lua
+pages\Sharing.lua
+pages\Profiles.lua
+pages\Troubleshooting.lua
+
+# Search over the pages' descriptions, the controls the window draws with, sample previews and feature cards,
+# Home's ways in, and the window (last: it tells TwichUI the settings are ready)
+Search.lua
+Widgets.lua
+Material.lua
+Craft.lua
+Design.lua
+Previews.lua
+previews\QoL.lua
+Cards.lua
+Home.lua
+Window.lua

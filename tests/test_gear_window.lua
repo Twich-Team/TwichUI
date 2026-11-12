@@ -6,6 +6,11 @@ local c = MakeClient("Rich", {"!!!TwichUI"})
 local function Obj()
   local o = {text = "", checked = false, shown = true}
   return setmetatable(o, {__index = function(t, k)
+    if k == "GetWidth" then return function(s) return s.width or 180 end end
+    if k == "SetWidth" then return function(s, value) s.width = value end end
+    if k == "GetHeight" then return function() return 22 end end
+    if k == "GetFont" then return function() return "Fonts\\FRIZQT__.TTF", 12, "" end end
+    if k == "IsEnabled" then return function() return true end end
     if k == "GetText" then return function(s) return s.text end end
     if k == "SetText" then return function(s, v) s.text = v or "" end end
     if k == "GetChecked" then return function(s) return s.checked end end
@@ -17,7 +22,7 @@ local function Obj()
     if k == "HasFocus" then return function() return false end end
     if k == "CreateFontString" or k == "CreateTexture" then return function() return Obj() end end
     if k == "ScrollBar" or k == "ThumbTexture" then local sb = Obj(); rawset(t, k, sb); return sb end
-    return function() end
+    if type(k) == "string" and k:find("^%u") then return function() end end
   end})
 end
 local realCreate = c.CreateFrame
@@ -37,7 +42,7 @@ c.UnitClass = function() return "Mage", "MAGE" end
 c.UnitLevel = function() return 30 end
 c.C_SpecializationInfo = { GetActiveSpecGroup = function() return 1 end, GetCombatConfigIDForSpecGroup = function() return nil end }
 local opened
-for _, f in ipairs({ "chronicle/Style.lua", "Look.lua", "FrameLook.lua", "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", "gear/Data.lua",
+for _, f in ipairs({ "chronicle/Style.lua", "Look.lua", "FrameLook.lua", "CraftLook.lua", "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", "gear/Data.lua",
   "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
@@ -87,7 +92,18 @@ end
 Radios()
 local labels = {}
 for _, r in ipairs(radios) do labels[#labels + 1] = r.label end
-assert(#radios == 5, "three trees and two modes: " .. table.concat(labels, ", "))
+assert(#radios == 6 + #R.GearWeights.EDITOR, "trees, modes and stat groups: " .. table.concat(labels, ", "))
+-- Browsing one group hides unrelated fields and preserves their saved values.
+local savedWeights = P.CustomWeights("MAGE", R.GearData.Trees()[1].skillLine)
+for _, r in ipairs(radios) do if r.label == "Attributes" then r.setSelected() end end
+local total, visible = 0, 0
+for _, object in ipairs(made) do
+  if rawget(object, "stat") then total = total + 1; if object:IsShown() then visible = visible + 1 end end
+end
+assert(visible > 0 and visible < total, "group filter shows a focused subset")
+assert(P.CustomWeights("MAGE", R.GearData.Trees()[1].skillLine) == savedWeights, "browsing does not write weights")
+for _, r in ipairs(radios) do if r.label == "All stat groups" then r.setSelected() end end
+for _, object in ipairs(made) do if rawget(object, "stat") then assert(object:IsShown(), "all stat fields restored") end end
 for _, r in ipairs(radios) do if r.label == "Stat priority" then r.setSelected() end end
 local trees = R.GearData.Trees()
 local edited

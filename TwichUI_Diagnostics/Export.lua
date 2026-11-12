@@ -282,6 +282,7 @@ function EX.Summary(rec, opts)
         if mem.navdata then A("- TwichUI_NavData (the baked walking maps, loaded on the first route): %s -> %s (the client's figure for that addon; which addon the loaded data strings count toward is the client's choice)", KB(mem.navdata.first), KB(mem.navdata.last)) end
         if mem.layouts then A("- TwichUI_Layouts (layout packages, loaded for /tui layout or to check an install after a reload): %s -> %s", KB(mem.layouts.first), KB(mem.layouts.last)) end
         if mem.layoutwizard then A("- TwichUI_LayoutWizard (the layout setup window, loaded when /tui layout opens it): %s -> %s", KB(mem.layoutwizard.first), KB(mem.layoutwizard.last)) end
+        if mem.workshop then A("- TwichUI_Workshop (recipes, the craft queue and the materials still needed, loaded when /tui workshop first opens it): %s -> %s", KB(mem.workshop.first), KB(mem.workshop.last)) end
         if mem.diag then A("- TwichUI Diagnostics itself: %s -> %s (its own captures are in this figure, not TwichUI's)", KB(mem.diag.first), KB(mem.diag.last)) end
     end
     if (mem.scopeAllocKB or 0) > 0 then

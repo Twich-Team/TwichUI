@@ -36,6 +36,7 @@ end
 local list = {
     -- the first sheet, row by row
     home = Sheet("home"),                         -- a cottage
+    magicInventory = { file = ICONS .. "magicInventory", small = ICONS .. "magicInventory-small", size = 64, pad = 3, source = "settingsHome" }, -- assets/settings-satchel-source.png
     notifications = Sheet("notifications"),       -- a bell
     qualityOfLife = Sheet("qualityOfLife"),       -- a feather and a cog
     markers = Sheet("markers"),                   -- a pennant

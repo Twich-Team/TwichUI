@@ -118,7 +118,7 @@ local function Settle() for _ = 1, 6 do FlushTimers() end end
 
 for _, f in ipairs({ "modules/Borders.lua", "modules/MenuStyle.lua", "modules/Media.lua", "Icons.lua",
   "gear/Weights.lua", "gear/Prefs.lua", "gear/Data.lua",
-  "reminders/AmmoItems.lua", "reminders/Config.lua", "reminders/Conditions.lua", "reminders/Ammunition.lua", "reminders/Evaluate.lua", "reminders/State.lua",
+  "reminders/AmmoItems.lua", "reminders/ArtData.lua", "reminders/Config.lua", "reminders/Gallery.lua", "reminders/Conditions.lua", "reminders/Ammunition.lua", "reminders/Evaluate.lua", "reminders/State.lua",
   "reminders/Display.lua", "reminders/Controller.lua", "setup/TwichConfig.lua", "../TwichUI_Settings/pages/RemindersPlain.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
@@ -188,7 +188,7 @@ do
   Check(clean and clean.hand == "offHand" and clean.what == "applied" and clean.negate == nil and clean.extra == nil, "only its own fields are kept")
   Check(C.Check(clean).hand == "offHand", "round trip")
   Check(select(1, C.Check({ type = "weaponEnchant", hand = "ranged", what = "missing" })) == nil, "a hand it doesn't know is refused")
-  Check(select(1, C.Check({ type = "weaponEnchant", hand = "mainHand", what = "expiring" })) == nil, "a question it doesn't know is refused")
+  Check(select(1, C.Check({ type = "weaponEnchant", hand = "mainHand", what = "sideways" })) == nil, "a question it doesn't know is refused")
   Check(select(1, C.Check({ type = "weaponEnchant", hand = "mainHand" })) == nil, "no question is refused")
   Check(select(1, C.Check({ type = "weaponEnchant" })) == nil, "nothing chosen is refused")
   local new = P.New()
@@ -209,7 +209,7 @@ do
   local equip = Pl.WithSubject(new, "slot:head")
   Check(equip and equip.type == "equipment" and equip.slot == "head", "and the subject can change to an equipment slot")
   local choices = Pl.ValueChoices(new)
-  Check(#choices == 2 and choices[1].value == "missing" and choices[2].value == "applied", "two questions to choose from")
+  Check(#choices == 3 and choices[1].value == "missing" and choices[2].value == "applied" and choices[3].value == "expiring", "three questions to choose from (running out is the third)")
   Check(Pl.ValueLabel(new) == "Has no temporary enchant", "value label: " .. Pl.ValueLabel(new))
   local found
   for _, e in ipairs(Pl.Entries()) do if e.kind == "weaponEnchant" then found = e end end

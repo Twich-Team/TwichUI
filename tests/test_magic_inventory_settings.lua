@@ -1,10 +1,21 @@
 -- Magic Inventory's settings page (TwichUI_Settings/pages/MagicInventory.lua) with stand-in frames:
 --   * the rule list in plain words (items, destination, keep), the template list, an empty state;
---   * a template opens the four-step editor; it saves turned off while its recipient isn't chosen, and says why;
+--   * a template opens the goal-based private builder; it saves turned off while its recipient isn't chosen, and says why;
 --   * the recipient is set for this character only, exactly as typed (in the game's capitalization), then the rule
 --     can be turned on; the Never transfer list and a rule's lists come from the bag chooser without moving anything;
 --   * deleting asks first; redrawing again and again makes no new controls.
 dofile(TESTS .. "mi_mock.lua")
+-- Record native ownership changes for the chip draw-order regression. Layering itself is simulator/client evidence.
+local OriginalFake = MIFake
+MIFake = function(kind, parent)
+  local object = OriginalFake(kind, parent)
+  object.SetParent = function(self, owner) self.parent = owner end
+  object.GetParent = function(self) return self.parent end
+  object.CreateMaskTexture = function(self) return MIFake("MaskTexture", self) end
+  object.AddMaskTexture = function(self, mask) self.appliedMask = mask end
+  object.RemoveMaskTexture = function(self) self.appliedMask = nil end
+  return object
+end
 
 local failures = 0
 local function Check(cond, msg) if not cond then failures = failures + 1; print("FAIL: " .. msg) end end
@@ -50,31 +61,69 @@ local f = P.Frame()
 f:Hide(); f:Show()
 Flush()
 Check(Has(f, "^Your rules$") and Has(f, "No rules yet"), "an empty list says how to start")
-Check(Has(f, "^Never transfer$") and Has(f, "Destinations on this character"), "destinations and the Never transfer list")
+Check(P.Task() == "rules" and not Has(f, "^Never transfer$"), "rules are the initial focused task")
+Check(P.SetTask("destinations"), "destination task is available"); Flush()
+Check(Has(f, "Destinations on this character"), "destinations have their own view")
+P.SetTask("protected"); Flush()
+Check(Has(f, "^Never transfer$"), "protected items have their own view")
+P.SetTask("rules"); Flush()
 
 -- a template opens the editor
-P.NewFromTemplate("cloth")
+Click("newRule")
+Check(#P.Control("newRule").choices() == #MI.TEMPLATES, "primary New rule retains every supported template")
+P.Control("newRule").onPick("cloth")
+R.SettingsWidgets.CloseMenu()
 Flush()
 Check(P.Editing() ~= nil and Has(f, "^New rule$"), "the editor opens")
-Check(Has(f, "^1  Items$") and Has(f, "^4  Review$"), "four steps")
-Check(P.Control("e1cat1") and P.Control("e1cat1"):GetChecked(), "the template's category is ticked")
+Check(Has(f, "^What items%?$") and Has(f, "^Rule review$"), "cohesive builder sections")
+local builderHeight = P.Height()
+Click("moreItemFilters")
+Check(P.Control("filterEditor"):IsShown() and P.Height() == builderHeight, "focused filters do not expand or displace the builder")
+local qualityArt = {}
+for i = 1, 6 do qualityArt[P.Control("e1q" .. i .. "art").tex.texture] = true end
+local qualityArtCount = 0; for _ in pairs(qualityArt) do qualityArtCount = qualityArtCount + 1 end
+Check(qualityArtCount == 6, "all six quality choices have distinct artwork")
+Check(not P.Control("e1cat1") or not P.Control("e1cat1").shown, "category catalog is a separate focused tab")
+Click("filterTabcategories")
+Check(P.Control("e1cat1mark").shown, "the template category has an explicit selected indicator")
 Check(Has(f, "^Cloth"), "named as the game names it")
-Click("eNext"); Click("eNext"); Click("eNext")
-Check(Has(f, "Send by mail .* Bank alt %(choose the recipient on this character%)"), "the review names the destination and what is missing")
-Check(Has(f, "Can't be turned on yet"), "and says it can't be turned on yet")
-Check(Has(f, "Whether a player can receive these, or who plays that character, isn't something TwichUI can check"), "honest about recipients")
+local categorySearch = P.Control("filterCategorySearch")
+categorySearch:SetText("zzzznoexistingcategory"); categorySearch.scripts.OnTextChanged(categorySearch); Flush()
+Check(P.Control("filterNoCategories").shown and P.Editing().cats[1] ~= nil, "empty category search preserves the selection")
+categorySearch:SetText(""); categorySearch.scripts.OnTextChanged(categorySearch); Flush()
+Click("filterDone")
+Check(not P.Control("filterEditor").shown and P.Editing() ~= nil, "Done retains only the private draft")
+local equipmentBefore = P.Editing().equip
+Click("quickCategory3")
+Check(P.Control("filterEditor").shown and P.Editing().equip == equipmentBefore, "equipment artwork opens the existing editor without changing the draft")
+Click("filterDone")
+Click("advancedDestination")
+Check(P.Control("reviewValue2").text == "Bank alt" and Has(f, "Needs attention"), "the review names the destination and what is missing")
+Check(Has(f, "Needs attention"), "and says it can't be turned on yet")
+TIP = {}; P.Control("reviewPanel").scripts.OnEnter(P.Control("reviewPanel"))
+Check(table.concat(TIP, " "):find("Whether a player can receive these", 1, true), "review help is honest about recipients")
 Click("eSave")
 Check(P.Editing() == nil, "saved")
 local rule = MI.Rules()[1]
 Check(rule and rule.name == "Cloth to bank alt" and rule.enabled == false and rule.keep == 20, "saved turned off, keeping 20 of each")
-Check(Has(f, "^Name$") and Has(f, "^Items$") and Has(f, "^Action$") and Has(f, "^Where$") and Has(f, "^Keep$"), "the list is a table with column headings")
-Check(Has(f, "^Cloth") and Has(f, "^Mail$") and Has(f, "^20$"), "a row says what it matches, what it does and what it keeps")
-Check(Has(f, "^Bank alt$"), "and where it goes, until a recipient is chosen")
+Check(Has(f, "Cloth to bank alt") and Has(f, "^Cloth") and Has(f, "Keep 20"), "a rule card says what it matches and what it keeps")
+Check(Has(f, "Mail") and Has(f, "Bank alt"), "the destination and missing configuration are visible without hover")
 local row1 = P.Control("tr1")
+Check(P.Control("rule1action"):GetParent() == P.Control("rule1actionbadge"), "chip text is owned by its surface, above the surface artwork")
+Check(P.Control("rule1action").text == "Mail", "disabled rule behavior remains readable")
 row1.scripts.OnEnter(row1)
 local tipText = table.concat(TIP, "\n")
 Check(tipText:find("Items: Cloth") and tipText:find("Keep: 20 of each matching item") and tipText:find("choose the recipient on this character"), "the row's tooltip says it plainly, and what it needs")
 row1.scripts.OnLeave(row1)
+
+-- Filtering retains absolute priorities and cannot reorder hidden rules.
+local savedBeforeFilter = MI.Rules()[1].id
+local search = P.Control("findRule")
+search:SetText("Cloth"); search.scripts.OnTextChanged(search); Flush()
+Check(P.Control("tr1").index == 1, "filtered priority stays absolute")
+P.StartRuleDrag(P.Control("tr1")); Check(not P.Drag.Active(), "filtered drag is rejected")
+search:SetText(""); search.scripts.OnTextChanged(search); Flush()
+Check(MI.Rules()[1].id == savedBeforeFilter, "search never changes order")
 
 -- turning it on is refused, with the reason
 local box = P.Control("rule1on")
@@ -82,20 +131,24 @@ box.scripts.OnClick(box, "LeftButton"); Flush()
 Check(not MI.Rules()[1].enabled and Has(f, "Choose the recipient for \"Bank alt\" on this character"), "refused with the reason")
 
 -- the recipient, for this character only
+P.SetTask("destinations"); Flush()
 local rb = P.Control("dest1box")
 rb:SetText("bankalt")
 Click("dest1set")
 local where = MI.Resolve(rule.dest)
 Check(where and where.recipient == "Bankalt" and not where.shared, "the recipient is set here, in the game's capitalization")
 Check(Has(f, "now mails to Bankalt on this character"), "and the page says exactly who")
+P.SetTask("rules"); Flush()
 box = P.Control("rule1on")
 box.scripts.OnClick(box, "LeftButton"); Flush()
 Check(MI.Rules()[1].enabled, "now it can be turned on")
+P.SetTask("destinations"); Flush()
 rb = P.Control("dest1box"); rb:SetText("Bad Name")
 Click("dest1set")
 Check(MI.Resolve(rule.dest).recipient == "Bankalt" and Has(f, "only letters"), "a name that isn't one is refused and the old one kept")
 
 -- the Never transfer list through the bag chooser: kinds only, nothing moves
+P.SetTask("protected"); Flush()
 c.Bags({ [0] = { size = 16, slots = { [1] = { 2589, 20 }, [2] = { 2447, 5 } } } })
 Click("neverPick")
 Check(MI.Picker.IsShown(), "the bag chooser opens")
@@ -112,15 +165,18 @@ Check(P.ControlCount() == n, "no new controls after redrawing: " .. n .. " -> " 
 
 -- editing then cancelling changes nothing
 local before = MI.Rules()[1].name
+P.SetTask("rules"); Flush()
 Click("rule1edit")
+Check(not P.SetTask("destinations"), "a private editor requires Save or Cancel before changing tasks")
 P.Control("eName"):SetText("Something else")
 P.Control("eName").scripts.OnTextChanged(P.Control("eName"))
 Click("eCancel")
 Check(MI.Rules()[1].name == before, "Cancel keeps the rule as it was")
 
 -- delete asks first
-Click("rule1del")
-Check(c.POPUP and c.POPUP.text:find("Delete the rule \"Cloth to bank alt\"") and c.POPUP.text:find("nothing in your bags, bank or mail changes"), "deleting asks, saying what it changes")
+Click("rule1more")
+P.Control("rule1more").onPick("delete"); Flush()
+Check(c.POPUP and c.POPUP.text:find("Cloth to bank alt") and c.POPUP.text:find("no items move"), "deleting asks, saying what it changes")
 Check(#MI.Rules() == 1, "nothing deleted before the answer")
 c.StaticPopupDialogs.TWICHUI_MI_RULE_DELETE.OnAccept()
 Flush()
@@ -139,6 +195,7 @@ c.OpenGuildBank()
 c.GUILD.current = 2
 c.FireEvent("GUILDBANKBAGSLOTS_CHANGED")
 local gdest = MI.AddDest("guild", "Cloth tab")
+P.SetTask("destinations")
 Flush()
 local di
 for i, d in ipairs(MI.Dests()) do if d.id == gdest then di = i end end
@@ -159,8 +216,8 @@ Flush()
 -- the target stack size in the editor
 P.NewFromTemplate("custom")
 Flush()
-Click("eTab2"); Click("e2kguild")
-Click("eTab3")
+Click("advancedDestination"); Click("e2kguild")
+Click("advancedLimits")
 Check(P.Control("e3stackN") ~= nil and Has(f, "^Target stack size$"), "a guild bank rule has a Target stack size")
 local sb = P.Control("e3stackN")
 sb:SetText("25"); sb.scripts.OnEnterPressed(sb); Flush()
@@ -178,19 +235,20 @@ Click("eCancel")
 -- a rule that withdraws: the editor asks which way, the keep amount becomes the target, and the words say it never goes over
 P.NewFromTemplate("custom")
 Flush()
-Click("eTab2"); Click("e2kbank")
+Click("advancedDestination"); Click("e2kbank")
 Check(Has(f, "^Which way$") and P.Control("e2fwithdraw") ~= nil and P.Control("e2fbalance") ~= nil, "a bank rule asks which way")
 Click("e2fwithdraw")
 Check(P.Editing().flow == "withdraw" and P.Editing().keep == 20, "withdrawing starts with a target of 20")
-Click("eTab3")
+Click("advancedLimits")
 Check(Has(f, "^Target in bags$") and Has(f, "never goes over"), "the keep amount is the target, and it says it never goes over")
-Click("eTab4")
-Check(Has(f, "^Withdraw from bank") and Has(f, "never more"), "the review sentence says what it does")
+Flush()
+TIP = {}; P.Control("reviewPanel").scripts.OnEnter(P.Control("reviewPanel"))
+Check(P.Control("reviewValue3").text == "Withdraw" and table.concat(TIP, " "):find("never more", 1, true), "structured review and help describe withdrawal limits")
 Click("eCancel")
 do
   local wid = MI.SaveRule({ kind = "bank", name = "Keep 40 milk", enabled = false, cats = { "0:5" }, flow = "balance", keep = 40 })
   Flush()
-  Check(Has(f, "^Balance$") and Has(f, "^Bank$") and Has(f, "^40$"), "the table shows Balance, Bank and the target")
+  Check(Has(f, "Balance") and Has(f, "Bank") and Has(f, "Keep 40"), "the rule card shows balance and its target in words")
   MI.DeleteRule(wid)
   Flush()
 end
@@ -236,7 +294,85 @@ do
   MI.DeleteRule(extra); MI.DeleteRule(third); Flush()
 end
 
+-- Goal-based controls edit only the private draft and save through the same schema.
+local savedCount = #MI.Rules()
+P.NewFromTemplate("custom"); Flush()
+Click("quickCategory1"); Click("e1cat1")
+Check(#P.Editing().cats == 1, "category chooser edits the draft category list")
+Click("filterTabfilters"); Click("e1q5"); Click("e1q6")
+Check(P.Editing().qualities[3] and P.Editing().qualities[4], "qualities support multiple selected tiles")
+Click("e1eq2"); Click("e1b2")
+Check(P.Editing().equip == "equipment" and P.Editing().bind == "boe", "equipment and binding are independent exclusive choices")
+Click("e1q1")
+Check(next(P.Editing().qualities) == nil and P.Editing().bind == "boe" and #P.Editing().cats == 1, "Any quality clears only quality restrictions")
+Click("e1q5"); Click("e1q6"); Click("e1eq3"); Click("e1b3")
+Check(P.Editing().equip == "other" and P.Editing().bind == "nobind", "changing exclusive choices replaces their stored enum")
+Check(#P.FilterSummary(P.Editing()) == 3 and P.Control("activeItemFilters").text:find("Rare"), "main card reflects active draft filters")
+Click("filterDone"); Click("moreItemFilters")
+Check(P.Control("e1q5mark").shown and P.Control("e1q6mark").shown and P.Control("e1eq3mark").shown, "reopening retains selected qualities and classification")
+Click("filterDone")
+Click("destinationChoicebank"); Click("flowChoicebalance")
+Check(P.Editing().kind == "bank" and P.Editing().flow == "balance", "destination and movement selectors edit the draft")
+local originalKeep = P.Editing().keep
+Click("keepPlus"); Check(P.Editing().keep == originalKeep + 1, "quantity stepper edits the draft")
+P.Editing().include[2589] = true; P.QueueRefresh(); Flush()
+Check(P.Control("summaryArt").appliedMask ~= nil, "native item artwork uses the existing portrait silhouette")
+Check(P.Control("selectedIncludename").text:find("Linen"), "selected item row includes the resolved name")
+Click("excludePick"); MI.Picker.Toggle(2589); MI.Picker.Done(); Flush()
+Check(P.Editing().include[2589] and P.Editing().exclude[2589], "rule exclusion overrides without dropping the separate inclusion")
+Click("selectedIncluderemove")
+Check(not P.Editing().include[2589] and P.Control("summaryArt").appliedMask == nil, "removal restores transparent category art without a stale mask")
+Check(#MI.Rules() == savedCount, "draft changes do not allocate a rule")
+Click("eCancel"); Check(#MI.Rules() == savedCount, "cancel discards the private changes")
+
+-- Legacy-shaped rules round-trip unchanged; all filter actions belong to the same parent transaction.
+local function Signature(value)
+  if type(value) ~= "table" then return type(value) .. ":" .. tostring(value) end
+  local keys, out = {}, {}
+  for key in pairs(value) do keys[#keys + 1] = key end
+  table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+  for _, key in ipairs(keys) do out[#out + 1] = Signature(key) .. "=" .. Signature(value[key]) end
+  return "{" .. table.concat(out, ";") .. "}"
+end
+local legacyId = MI.SaveRule({ name = "Existing filtered rule", kind = "bank", flow = "balance", keep = 12,
+  cats = { "7:5" }, qualities = { [3] = true, [4] = true }, equip = "other", bind = "nobind",
+  include = { [2589] = true, [9999999] = true }, exclude = { [2447] = true }, enabled = false })
+Flush()
+local legacy = Signature(MI.Rule(legacyId))
+Click("rule" .. #MI.Rules() .. "edit"); Click("moreItemFilters")
+Check(P.Control("e1q5mark").shown and P.Control("e1q6mark").shown, "old multi-quality values load into the focused editor")
+Click("filterTabinclude")
+Check(P.Editing().include[2589] and P.Editing().exclude[2447], "visiting inclusions never changes exclusions")
+Check(P.Control("filterIncludeName2").text:find("9999999"), "unresolved inclusions remain visible by their stable item ID")
+Click("filterDone"); Click("eSave")
+Check(Signature(MI.Rule(legacyId)) == legacy, "untouched legacy rule round-trips every stored field")
+Click("rule" .. #MI.Rules() .. "edit"); Click("moreItemFilters"); Click("e1q1"); Click("e1eq2"); Click("e1b2")
+P.Control("filterEditor"):Hide(); Flush()
+Check(P.Editing() and P.Editing().equip == "equipment" and Signature(MI.Rule(legacyId)) == legacy, "Escape/close retains unsaved filter edits only in the parent draft")
+Click("moreItemFilters"); Click("filterCancelRule")
+Check(P.Editing() == nil and Signature(MI.Rule(legacyId)) == legacy, "Cancel rule discards all focused-editor edits")
+Click("rule" .. #MI.Rules() .. "edit"); Click("moreItemFilters"); Click("e1q1"); Click("e1q4"); Click("e1eq2"); Click("e1b2")
+Click("filterSaveRule")
+local changed = MI.Rule(legacyId)
+Check(changed.id == legacyId and changed.qualities[2] and not changed.qualities[3] and changed.equip == "equipment" and changed.bind == "boe", "Save rule persists selected filter values through the canonical API")
+Check(changed.keep == 12 and changed.flow == "balance" and changed.include[2589] and changed.include[9999999] and changed.exclude[2447] and changed.cats[1] == "7:5", "filter saving preserves identity, movement, keep and separate item sets, including unresolved IDs")
+Check(MI.Match(changed, MI.ItemFacts(2589), { bound = false }) == "included" and MI.Match(changed, MI.ItemFacts(2447), { bound = false }) == "excluded", "inclusions bypass filters and exclusions still win")
+Click("rule" .. #MI.Rules() .. "edit"); Click("moreItemFilters")
+f:Hide(); f:Show(); Flush()
+Check(not P.Control("filterEditor").shown and not P.Control("filterShade").shown and P.Editing() ~= nil, "leaving the page cleans up the popup without losing the rule draft")
+Click("eCancel"); MI.DeleteRule(legacyId); Flush()
+
+P.NewFromTemplate("custom"); Flush()
+Click("builderBack")
+Check(P.Editing() ~= nil and c.POPUP.name == "TWICHUI_MI_DISCARD_DRAFT", "Back asks before discarding a draft")
+c.StaticPopupDialogs.TWICHUI_MI_DISCARD_DRAFT.OnAccept(); Flush()
+Check(P.Editing() == nil and #MI.Rules() == savedCount, "discard changes no saved rule")
+Click("rule1edit"); Click("builderDuplicate")
+Check(P.Editing() and not P.Editing().id and #MI.Rules() == savedCount, "builder duplicate is an independent unsaved draft")
+Click("eCancel")
+
 -- the guild bank arrangement editor has its own test (test_magic_inventory_editor.lua)
+P.SetTask("guild"); Flush()
 Check(Has(f, "Guild bank arrangement") and Has(f, "Editing is design only"), "the page leads with the arrangement and says editing is design only")
 Check(P.Control("gPreview") ~= nil, "and has one primary action, Preview changes")
 n = P.ControlCount()

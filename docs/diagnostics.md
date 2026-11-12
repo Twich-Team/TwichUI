@@ -141,10 +141,16 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `settings.describe`, `settings.window.build` (`Perf.Call`) | `TwichUI_Settings/Window.lua` `UI.Open` | init |
 | `settings.page.build` (`Perf.Call`), `settings.page.layout`, `settings.search` | `TwichUI_Settings/Window.lua` | build, layout, search |
 | `settings.search.index` | `TwichUI_Settings/Search.lua` `Search.Build` | rebuild |
+| `settings.companion` | `TwichUI_Settings/Companion.lua` `Update`, only for an active settings page; gauges `settings.sampleScenes` (maximum four) and `settings.sampleShown` read state without building/loading | layout |
 | `npcs.minimap.tick`, `pins.minimap.tick` (`Perf.Call`, after the throttle) | `npcs/Minimap.lua`, `pins/Minimap.lua` `Update` > `Step` | update |
 | `nav.search`, `nav.position`, `nav.progress`, `nav.ticker` (`Perf.Call`) | `nav/Nav.lua` `OnUpdate` (`nav.ticker`: each trail or arrow updater) | update |
 | `nav.load` (`Perf.Call`) | `nav/Data.lua` `ND.Load`, around `C_AddOns.LoadAddOn` of `TwichUI_NavData` | init |
 | `layouts.load` (`Perf.Call`) | `LayoutsLauncher.lua` `L.Load`, around `C_AddOns.LoadAddOn` of `TwichUI_Layouts` | init |
+| `workshop.load` (`Perf.Call`) | `WorkshopLauncher.lua` `L.Load`, around `C_AddOns.LoadAddOn` of `TwichUI_Workshop` | init |
+| `workshop.read` (`Perf.Call`), `workshop.render` (`Perf.Start`/`Stop`) | `TwichUI_Workshop/Session.lua` `S.Observe` (the open profession's recipe list read; opening, and a burst of profession window changes while shown) and `S.ReadMerchant` (the open merchant's money-only listings; same bursts), `TwichUI_Workshop/Window.lua` `Win.Render` (a burst of changes or a click, only while shown). Gauges `workshop.queue`, `.recipes`, `.cache`, `.events` (zero while hidden), `.rows`, `.prices` (items with a saved price), `.history` (items with saved price history), `.vendor` (items with a saved vendor price), `.picks` (shopping source choices) | rebuild |
+| `workshop.bank` (`Perf.Call`) | `TwichUI_Workshop/Bank.lua` `RunBank` (the open character bank read: tab list, then every slot of each tab) and `GuildAnswer` (the shown guild bank tab's 98 slots); a burst of changes is one read after 0.4 s, only while a bank is open and the Workshop addon is loaded. Gauges `workshop.stored` (item counts remembered, bounded) and `workshop.bankEvents` (a few always, more only while a bank is open) | bulk |
+| `workshop.worth` (`Perf.Wrap`) | `TwichUI_Workshop/WorthTip.lua` `OnItem` (the "What's it worth?" lines on the tooltip of an item in the bags or bank: a few table reads and one price lookup per rebuild, no auction query); only after the Workshop was loaded in the session. No gauge: it keeps no cache (an event frame, plus one item-information event only while a tooltip waits for an item) | rebuild |
+| `workshop.scan` (`Perf.Start`/`Stop`) | `TwichUI_Workshop/Scan.lua` `BeginRead > Step` (one batch of at most 400 auction listings read) and `SaveStep` (one step of at most 120 items merged into the saved prices and their history, then one write at the end); only during a price scan the player started | bulk |
 | `layoutwizard.preview.follow` (`Perf.Start`/`Stop`) | `TwichUI_LayoutWizard/Preview.lua` `view:Track`'s throttled OnUpdate (about 30 a second, only while the pointer is over the miniature in the tooltip scenario with Follow mouse picked; removed on leaving, hiding, another scenario or closing) | layout |
 | `layoutwizard.load` (`Perf.Call`) | `LayoutsLauncher.lua` `L.LoadWizard`, around `C_AddOns.LoadAddOn` of `TwichUI_LayoutWizard` | init |
 | `layoutwizard.overlay.build` (`Perf.Call`), `layoutwizard.overlay` (`Perf.Call`) | `TwichUI_LayoutWizard/Overlay.lua` `Build` (the first time the full-size preview opens), `Draw` (each time it opens, or a layout, scenario or the screen changes in it; never while it is closed) | init, layout |
@@ -171,7 +177,7 @@ windows), which the reports name when most TwichUI CPU is outside every scope.
 Gauges (`Gauges.lua`) read what modules already report (`Snapshot()` functions and a few read-only counts): event-bus
 listeners and events (`R.ListenerCounts`, added to `Core.lua`), switch listeners, settings-closed callbacks, effects
 easing, settings shown, pages drawn and search index, world map shown, NPC and pin marker pools and those in use, map
-detail tiles, navigation tiles decoded, reminders running and observation keys, the Reminders condition designer's card and picker-row pools (`reminders.designer.cards`, `reminders.designer.pickerRows`; they grow once, to the sizes a reminder is limited to, and then stay) and whether one of its editors is open, Healer Watch's and class bars' events, and the
+detail tiles, navigation tiles decoded, reminders running, observation keys and reminders waiting on a time boundary (`reminders.timed`: one timer each, at most one per running reminder), the Reminders condition designer's card and picker-row pools (`reminders.designer.cards`, `reminders.designer.pickerRows`; they grow once, to the sizes a reminder is limited to, and then stay) and whether one of its editors is open, Healer Watch's and class bars' events, and the
 Cozy Sleeping Bag offer's events (`bag.offer.events`: 0 to 3) and looks so far, with whether its button frame is made and shown
 (`bag.button.built`, `bag.button.shown`).
 The layout setup registers four of its own (`TwichUI_LayoutWizard/Window.lua` and `Overlay.lua`, only once it is loaded):
@@ -209,7 +215,7 @@ ticks over 5/50 ms for TwichUI, diagnostics overhead (with its hitches: long fra
 gauge read lifted over the limit), TwichUI CPU outside every scope (`unattributed-cpu`; `prefs.thresholds.unattributedPerSec`,
 default 1 ms a second, medium at five times that), errors, and what limits the capture. The memory finding reports the
 series (lowest, highest, intervals up and down, at least how many KB/s were allocated between readings, the largest
-fall as evidence that the collector ran, the scopes' allocation) and says a pool's size is not measured. The report's memory section also shows `TwichUI_NavData`, `TwichUI_Layouts` and `TwichUI_LayoutWizard` (read with the others, separate
+fall as evidence that the collector ran, the scopes' allocation) and says a pool's size is not measured. The report's memory section also shows `TwichUI_NavData`, `TwichUI_Layouts`, `TwichUI_LayoutWizard` and `TwichUI_Workshop` (read with the others, separate
 addons) and its CPU section shows the instrumented total as a true ratio of the client's count: above about 110% it says the
 instrumented times are upper bounds (the first real capture had 877 ms instrumented against 509 ms counted; the cause is
 not established). A long frame next to an addon load names the addon, and the Markers list includes addon loads and
