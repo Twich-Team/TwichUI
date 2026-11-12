@@ -7,7 +7,8 @@
 --   * a price is the CHEAPEST BUYOUT among the listings the newest scan of that auction house saw, per single item (a stack's buyout
 --     divided by its count, rounded UP to whole copper, never below 1 copper);
 --   * it is a LISTING price, not a sale: nothing here knows what actually sold, how fast, or at what price;
---   * an auction without a buyout (bid only) is ignored; so is anything that is not a whole number in range;
+--   * an auction without a buyout (bid only, a finite 0) is ignored; so is anything that is not a whole number in range, and a NaN or an
+--     infinity is INVALID, never bid-only (W.Finite is checked before the zero test);
 --   * a missing, invalid or unreadable price is "unknown" (nil). It is never turned into 0, and any unknown input makes the whole
 --     cost or profit unknown;
 --   * one market per auction house: realm AND the auction house's side, never mixed (see Key);
@@ -117,8 +118,9 @@ function Batch:Add(item, count, buyout, hasAllInfo)
     if Plain(hasAllInfo) == false then self.partialInfo = self.partialInfo + 1 end
     count = Int(count, 1, PR.MAX_COUNT)
     if not count then self.invalid = self.invalid + 1 return false end
+    -- finite first: in the client a NaN equals 0, so the bid-only test below must never see one (see W.Finite)
     local raw = Plain(buyout)
-    if raw == nil then self.invalid = self.invalid + 1 return false end
+    if not W.Finite(raw) then self.invalid = self.invalid + 1 return false end
     if raw == 0 then self.noBuyout = self.noBuyout + 1 return false end   -- bid only: no buyout to price from
     buyout = Int(raw, 1, PR.MAX_COPPER)
     if not buyout then self.invalid = self.invalid + 1 return false end

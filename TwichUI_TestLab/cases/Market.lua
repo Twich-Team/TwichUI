@@ -149,6 +149,45 @@ Pure("market.reference.invalid-values", function(t)
 end)
 
 ---------------------------------------------------------------------------
+-- Non-finite numbers and the bid-only test, in this client (found 2026-11-12: a NaN buyout was read as bid-only, because in Forever a NaN
+-- equals 0). Production decides finiteness with W.Finite, from the printed form, before any comparison. This case asks the client directly:
+-- the finiteness answers for every NaN/infinity form, each field of a record, the accounting of a mixed batch, and that a finite zero is
+-- still bid-only. (Which comparisons this client's NaN passes is reported by client.lua.nan-comparisons.)
+---------------------------------------------------------------------------
+Pure("market.finite.records", function(t)
+    local W, PR = t.W, t.W.Prices
+    local nan = 0 / 0
+    local inf = math.huge
+    local forms = { { "runtime NaN", nan }, { "negated NaN", -nan }, { "NaN times -1", nan * -1 }, { "+inf", inf }, { "-inf", -inf },
+        { "inf - inf", inf - inf }, { "inf * 0", inf * 0 } }
+    for _, f in ipairs(forms) do t:Check(W.Finite(f[2]) == false, f[1] .. " is not finite (prints " .. tostring(f[2]) .. ")") end
+    for _, v in ipairs({ 0, -0, 1, 99999999999, 2 ^ 53, 1e300 }) do t:Check(W.Finite(v) == true, "finite: " .. tostring(v)) end
+    local function Class(item, count, buyout)
+        local b = PR.NewBatch()
+        b:Add(item, count, buyout, true)
+        return b.used == 1 and "priced" or (b.noBuyout == 1 and "bid-only" or (b.invalid == 1 and "invalid" or "unclassified"))
+    end
+    t:Same(Class(7, 5, 0), "bid-only", "finite zero buyout")
+    t:Same(Class(7, 5, -0), "bid-only", "negative zero buyout")
+    for _, f in ipairs(forms) do
+        t:Same(Class(7, 5, f[2]), "invalid", "buyout " .. f[1])
+        t:Same(Class(7, f[2], 0), "invalid", "count " .. f[1] .. " with no buyout")
+        t:Same(Class(f[2], 5, 0), "invalid", "item " .. f[1] .. " with no buyout")
+    end
+    t:Same(Class(7, 5, -1), "invalid", "negative buyout"); t:Same(Class(7, 5, "100"), "invalid", "string buyout")
+    t:Same(Class(7, 5, 100), "priced", "ordinary buyout")
+    local b = PR.NewBatch()
+    local recs = { { 7, 2, 10 }, { 7, 4, 12 }, { 7, 3, 0 }, { 8, 1, 0 }, { 7, 1, nan }, { 7, 1, -nan }, { 7, 1, inf }, { 7, 1, -inf },
+        { 7, nan, 1 }, { nan, 1, 1 }, { 7, 1, -5 }, { 8, 2, 50 } }
+    for _, r in ipairs(recs) do b:Add(r[1], r[2], r[3], true) end
+    t:Same(b.read, 12, "read"); t:Same(b.used, 3, "priced"); t:Same(b.noBuyout, 2, "bid-only"); t:Same(b.invalid, 7, "invalid")
+    t:Same(b.read, b.used + b.noBuyout + b.invalid, "every record is accounted for once")
+    local items = b:Items()
+    t:Same(items[7], "3,4,2,6,5", "item 7"); t:Same(items[8], "25,2,1,2,0", "item 8")
+    t:Yield()
+end)
+
+---------------------------------------------------------------------------
 -- The history and the statistics against the full-history model
 ---------------------------------------------------------------------------
 -- What production keeps for the model's item, in History's own flat arrays

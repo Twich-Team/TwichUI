@@ -67,6 +67,18 @@ m("market.batch.item-limit-priority", PRICES, "if px ~= py then return px > py e
 m("market.batch.item-limit-listings", PRICES, "if lx ~= ly then return lx > ly end", "if lx ~= ly then return lx < ly end",
   "over the item limit, the items with the fewest listings are kept", [MKT])
 
+# --- non-finite auction data (2026-11-12 client finding: in Forever a NaN equals 0, so a bid-only test on it counts a NaN buyout as bid-only) ---
+m("market.batch.finite-check-dropped", PRICES, "if not W.Finite(raw) then self.invalid = self.invalid + 1 return false end",
+  "if raw == nil then self.invalid = self.invalid + 1 return false end",
+  "the buyout is compared with 0 before it is known to be a finite number: a NaN buyout becomes bid-only in the client", [MKT], smoke=True)
+m("market.data.int-finite-dropped", DATA, "if not Finite(v) or v < lo or v > hi or math.floor(v) ~= v then return nil end",
+  "if type(v) ~= \"number\" or v ~= v or v < lo or v > hi or math.floor(v) ~= v then return nil end",
+  "the whole-number check goes back to deciding NaN by comparison, which the client's NaN passes (a NaN item or count is accepted)", [MKT])
+m("market.data.finite-always-true", DATA, "return tostring(v):find(\"^[%d%.eE%+%-]+$\") ~= nil", "return true",
+  "the finiteness test accepts everything, so only comparisons stand between a NaN or an infinity and a price", [MKT])
+m("market.history.price-finite-dropped", HISTORY, "if not W.Finite(price) or price ~= floor(price)", "if type(price) ~= \"number\" or price ~= floor(price)",
+  "the history accepts a price decided by comparison alone, which a client NaN passes", [MKT])
+
 # --- history: folding, retention, windows ------------------------------------------------------------------------------
 m("market.history.fold-bucket-index", HISTORY, "local b = floor(d / H.BUCKET_DAYS)", "local b = floor((d + 1) / H.BUCKET_DAYS)",
   "the 28-day bucket of a day is off by one at its edge", [MKT])

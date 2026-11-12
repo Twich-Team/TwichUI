@@ -21,10 +21,21 @@ local function Plain(v)
 end
 W.Plain = Plain
 
--- A whole number from lo to hi, or nil (a secret, a fraction, NaN, a string, out of range)
+-- Is v a finite number (not NaN, not an infinity)? Decided WITHOUT comparing v with anything. OBSERVED in WoW: Forever 1.60.1 build 70888
+-- (Test Lab run, 2026-11-12): a NaN equals itself, equals 0, and is both less and greater than ordinary numbers, so no comparison tells a
+-- NaN from a number there (desktop Lua says NaN ~= NaN and rejects it). A finite number prints as digits, a point, an exponent and signs
+-- only; a NaN or an infinity prints with letters (nan, inf, -nan(ind), ...). Run this BEFORE any comparison of a value that came from
+-- outside (an auction record, a game call); compare only what it accepted. A secret value is not a number here (Plain first).
+function W.Finite(v)
+    if type(v) ~= "number" then return false end
+    return tostring(v):find("^[%d%.eE%+%-]+$") ~= nil
+end
+local Finite = W.Finite
+
+-- A whole number from lo to hi, or nil (a secret, a fraction, NaN, an infinity, a string, out of range)
 function W.Int(v, lo, hi)
     v = Plain(v)
-    if type(v) ~= "number" or v ~= v or v < lo or v > hi or math.floor(v) ~= v then return nil end
+    if not Finite(v) or v < lo or v > hi or math.floor(v) ~= v then return nil end
     return v
 end
 

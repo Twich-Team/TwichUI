@@ -4,7 +4,8 @@
 --   * each frame it resumes cases until about SLICE seconds have passed (measured), then waits for the next frame;
 --   * a case that wants to share a frame calls t:Yield() at a safe point (t:Wait(seconds) is a pause across frames that costs nothing
 --     while it waits); a case that never yields runs to its end in one step, so cases that cannot yield are kept small;
---   * every step is timed; a step longer than a slice is counted as an OVERRUN and reported with its case (it was never cut short);
+--   * every step is timed, and so is a case's setup (loading the Workshop on demand); one longer than a slice is counted as an OVERRUN and
+--     reported with its case (it was never cut short);
 --   * a case that has not finished when its budget is spent is ABANDONED at a yield point (never resumed again), status "timeout";
 --     a step that overran its budget and then finished keeps its result and is reported as late;
 --   * Stop, the run cap and combat all work the same way: no further step is scheduled. The case that was waiting at a yield point is
@@ -237,7 +238,13 @@ local function OnUpdate(_, elapsed)
         local cur = s.cur
         if not cur then
             if s.i >= #s.list then return Finish("complete") end
+            -- the case's setup (loading the Workshop on demand, the saved-data fingerprint) runs inside this slice but before any step is
+            -- timed: attribute it, or a long slice would have no overrun to explain it
+            local a = s.clock()
+            local began = s.list[s.i + 1]
             cur = Begin(s)
+            local dur = s.clock() - a
+            if dur > s.slice and began then Overrun(s, { case = began }, dur) end
         end
         paused = false
         if cur then

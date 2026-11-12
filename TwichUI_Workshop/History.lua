@@ -38,7 +38,7 @@ local function N(v) return ("%.0f"):format(v) end
 
 -- The day number (days since 1970-01-01, UTC) of a time, or nil
 function H.Day(at)
-    if type(at) ~= "number" or at ~= at or at < 0 then return nil end
+    if not W.Finite(at) or at < 0 then return nil end
     local d = floor(at / H.DAY)
     if d < 1 or d > MAX_DAY then return nil end
     return d
@@ -113,8 +113,8 @@ end
 -- The history string after observing `price` (whole copper) on `day`; `old` is the item's current string or nil. Returns the new
 -- string, or nil and why: "bad" (day or price not a whole number in range), "stale" (older than the newest day kept).
 function H.Add(old, day, price)
-    if type(day) ~= "number" or day ~= floor(day) or day < 1 or day > MAX_DAY then return nil, "bad" end
-    if type(price) ~= "number" or price ~= floor(price) or price < 1 or price > MAX_COPPER then return nil, "bad" end
+    if not W.Finite(day) or day ~= floor(day) or day < 1 or day > MAX_DAY then return nil, "bad" end
+    if not W.Finite(price) or price ~= floor(price) or price < 1 or price > MAX_COPPER then return nil, "bad" end
     local pts, bks = H.Decode(old)
     if not pts then pts, bks = {}, {} end
     local n = #pts

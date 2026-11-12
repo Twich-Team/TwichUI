@@ -283,6 +283,34 @@ do
 end
 
 ---------------------------------------------------------------------------
+-- 3b. Time spent BEFORE a case's first step (loading the Workshop on demand) is inside the slice, so it must be attributed. Found while
+--     reading the first full real-client report (worst slice 35.1 ms, worst frame 50 ms, overruns 0): Step timed only the case's own steps,
+--     so a slow setup made a long slice that no overrun named.
+---------------------------------------------------------------------------
+do
+  local loaded, t = false, nil
+  local launcher = { Loaded = function() return loaded end, Explain = function(code) return code end,
+    Load = function() t.Advance(0.030) loaded = true return true end }   -- loading the addon takes 30 ms and cannot yield
+  t = Setup({ launcher = launcher })
+  local wire = WireFrames(t)
+  t.Load({ "Lab.lua", "Runner.lua", "Report.lua" })
+  local TL = t.TL
+  local RN = TL.Runner
+  wire(RN)
+  TL.Category{ id = "s", label = "S" }
+  TL.Case{ id = "needs.workshop", cat = "s", class = "pure", needs = { "workshop" }, run = function(tt) tt:Check(true) end }
+  TL.Case{ id = "quick", cat = "s", class = "pure", run = function(tt) tt:Check(true) end }
+  local done
+  Check(RN.Start(TL.Select(), { cats = { "s" }, clock = t.Now, onDone = function(s) done = s end }))
+  Drive(RN)
+  Check(done and done.ended == "complete" and done.counts.pass == 2, "finished, both pass")
+  Check(done.worstSlice >= 0.030, "the slice holds the 30 ms load")
+  Same(done.overrunCount, 1, "and the load is an overrun, not unaccounted time")
+  Same(done.overruns[1].id, "needs.workshop", "named after the case that needed it")
+  Check(done.overruns[1].ms >= 29, "with its measured length")
+end
+
+---------------------------------------------------------------------------
 -- 4. Stop: the rest is "stopped", nothing is resumed, nothing is left running; Stop inside a step waits for the step
 ---------------------------------------------------------------------------
 do

@@ -767,6 +767,103 @@ do
 end
 
 ---------------------------------------------------------------------------
+-- 6c. NON-FINITE AUCTION DATA IN PRODUCTION (Test Lab run 2026-11-12, WoW: Forever 1.60.1 build 70888; seeds 7100001, 7100013, 7100014).
+--     FOUND: `market.reference.batch` and `market.reference.invalid-values` failed because Batch:Add tested `raw == 0` (bid-only) BEFORE any
+--     finiteness check, and in that client a NaN equals 0, equals itself, and is both less and greater than ordinary numbers; so a NaN buyout
+--     was counted as bid-only instead of invalid. FIX: W.Finite (Data.lua) decides finiteness from the printed form, without a comparison,
+--     and runs first in W.Int, Batch:Add and History.
+--     Desktop Lua 5.1 cannot reproduce those comparisons (its NaN is never == 0), so a plain NaN test proves only the CONTRACT. The EMULATION
+--     below proves the DECISION ORDER: while `tostring` is made to print "nan" for every number, a value whose comparisons look ordinary (0,
+--     a good count, a good item) must still be read as invalid, because production may consult only the printed form of a number it has not
+--     yet shown to be finite. That is what a NaN that compares equal to 0 looks like to the code. The client run (Test Lab) is the final proof.
+---------------------------------------------------------------------------
+do
+  local nan, inf = 0 / 0, math.huge
+  local realToString = c.tostring or tostring
+  local function AsNaN(which, fn)   -- run fn while the numbers in `which` (a set) print as a NaN; every comparison stays ordinary
+    c.tostring = function(v) if type(v) == "number" and which[v] then return "nan" end return realToString(v) end
+    local ok, err = pcall(fn)
+    c.tostring = nil
+    if not ok then error(err, 0) end
+  end
+  local function Run(recs)
+    local b = PR.NewBatch()
+    for _, r in ipairs(recs) do b:Add(r.item, r.count, r.buyout, r.info) end
+    return b
+  end
+  local function One(item, count, buyout)
+    local b = Run({ { item = item, count = count, buyout = buyout } })
+    return (b.used == 1 and "priced") or (b.noBuyout == 1 and "bid-only") or (b.invalid == 1 and "invalid") or "unaccounted"
+  end
+
+  -- W.Finite: the contract
+  for _, v in ipairs({ 0, -0, 1, -1, 0.5, 99999999999, 2 ^ 53, 1e300, -1e300, 4102444800 }) do Check(W.Finite(v), "finite: " .. tostring(v)) end
+  for _, v in ipairs({ nan, -nan, nan * -1, 0 / 0 * -1, inf, -inf, inf - inf, inf * 0 }) do Check(not W.Finite(v), "not finite: " .. tostring(v)) end
+  for _, v in ipairs({ "5", "nan", "inf", false, true, {}, print }) do Check(not W.Finite(v), "not a number: " .. type(v)) end
+  Check(not W.Finite(nil), "nil is not finite")
+  Check(W.Int(nan, 1, 10) == nil and W.Int(inf, 1, 10) == nil and W.Int(-inf, -10, 10) == nil and W.Int(0 / 0 * -1, 0, 10) == nil, "Int refuses NaN and infinities")
+  Check(W.Int(0, 0, 10) == 0 and W.Int(10, 0, 10) == 10 and W.Int(2.5, 0, 10) == nil and W.Int("3", 0, 10) == nil, "Int still reads ordinary numbers as before")
+
+  -- the batch, one field at a time (real values)
+  Same(One(7, 5, 0), "bid-only", "a finite zero buyout is bid-only"); Same(One(7, 5, -0), "bid-only", "negative zero is a finite zero")
+  Same(One(7, 5, nan), "invalid", "a NaN buyout is invalid"); Same(One(7, 5, -nan), "invalid", "a negated NaN buyout is invalid")
+  Same(One(7, 5, 0 / 0 * -1), "invalid", "a NaN made negative is invalid")
+  Same(One(7, 5, inf), "invalid", "a positive infinite buyout is invalid"); Same(One(7, 5, -inf), "invalid", "a negative infinite buyout is invalid")
+  Same(One(7, 5, -1), "invalid", "a negative buyout is invalid"); Same(One(7, 5, "100"), "invalid", "a string buyout is invalid")
+  Same(One(7, 5, 100.5), "invalid", "a fractional buyout is invalid"); Same(One(7, 5, nil), "invalid", "a missing buyout is invalid")
+  Same(One(7, 5, 100000000000), "invalid", "a buyout past the limit is invalid"); Same(One(7, 5, 99999999999), "priced", "the limit itself is priced")
+  Same(One(7, nan, 100), "invalid", "a NaN count is invalid"); Same(One(7, nan, 0), "invalid", "a NaN count with no buyout is invalid, not bid-only")
+  Same(One(7, inf, 100), "invalid", "an infinite count is invalid"); Same(One(7, 0, 0), "invalid", "a zero count is invalid, not bid-only")
+  Same(One(nan, 5, 100), "invalid", "a NaN item is invalid"); Same(One(nan, 5, 0), "invalid", "a NaN item with no buyout is invalid, not bid-only")
+  Same(One(-inf, 5, 100), "invalid", "an infinite item is invalid"); Same(One(0, 5, 100), "invalid", "item 0 is invalid")
+
+  -- the emulation: ONE field is a "NaN" (prints as one, compares as an ordinary number, e.g. equal to 0); the other fields are good
+  AsNaN({ [0] = true }, function()
+    Same(One(7, 5, 0), "invalid", "a buyout that prints as NaN is invalid, NOT bid-only, whatever it compares equal to")
+  end)
+  AsNaN({ [4242] = true }, function()
+    Same(One(7, 5, 4242), "invalid", "a buyout that prints as NaN is not priced even if it compares as a good number")
+    Same(One(7, 5, 4243), "priced", "(its neighbour is)")
+  end)
+  AsNaN({ [99999999999] = true }, function() Same(One(7, 5, 99999999999), "invalid", "...at the limit too") end)
+  AsNaN({ [5] = true }, function()
+    Same(One(7, 5, 100), "invalid", "a good count that prints as NaN is invalid")
+    Same(One(7, 5, 0), "invalid", "...with no buyout it is invalid, not bid-only")
+  end)
+  AsNaN({ [7] = true }, function()
+    Same(One(7, 5, 100), "invalid", "a good item that prints as NaN is invalid")
+    Same(One(7, 5, 0), "invalid", "...with no buyout it is invalid, not bid-only")
+    local b = Run({ { item = 7, count = 5, buyout = 100 }, { item = 7, count = 5, buyout = 0 } })
+    Same(b.read, 2); Same(b.invalid, 2); Same(b.used, 0); Same(b.noBuyout, 0)
+    Check(next((b:Items())) == nil, "nothing is priced")
+  end)
+  AsNaN({ [150] = true }, function() Check(H.Add(nil, 150, 1000) == nil, "History refuses a day that prints as NaN") end)
+  AsNaN({ [1000] = true }, function() Check(H.Add(nil, 150, 1000) == nil, "History refuses a price that prints as NaN") end)
+  AsNaN({ [1000000] = true }, function() Check(H.Day(1000000) == nil, "History.Day refuses a time that prints as NaN") end)
+  Same(One(7, 5, 0), "bid-only", "with real printing restored, a zero buyout is bid-only again")
+
+  -- accounting: valid, bid-only and invalid records add up, and only the valid ones are priced
+  local recs = {
+    { item = 7, count = 2, buyout = 10 }, { item = 7, count = 4, buyout = 12 },     -- priced: 5 and 3 each, so 3 is the cheapest
+    { item = 7, count = 3, buyout = 0 }, { item = 8, count = 1, buyout = 0 },       -- bid-only
+    { item = 7, count = 1, buyout = nan }, { item = 7, count = 1, buyout = -nan }, { item = 7, count = 1, buyout = inf },
+    { item = 7, count = 1, buyout = -inf }, { item = 7, count = nan, buyout = 1 }, { item = nan, count = 1, buyout = 1 },
+    { item = 7, count = 1, buyout = -5 }, { item = 7, count = 1, buyout = "9" },   -- invalid
+    { item = 8, count = 2, buyout = 50 },                                           -- priced
+  }
+  local b = Run(recs)
+  Same(b.read, 13); Same(b.used, 3); Same(b.noBuyout, 2); Same(b.invalid, 8)
+  Same(b.read, b.used + b.noBuyout + b.invalid, "every record is accounted for exactly once")
+  local items, n = b:Items()
+  Same(n, 2); Same(items[7], "3,4,2,6,5", "item 7: 12 for 4 is 3 each (4 items), one other listing at 5; the invalid records changed nothing")
+  Same(items[8], "25,2,1,2,0", "item 8: 50 for 2 is 25 each; its bid-only record is not a price")
+  -- the same valid listings alone give identical results
+  local only = Run({ recs[1], recs[2], recs[13] })
+  local i2 = only:Items()
+  Same(i2[7], items[7]); Same(i2[8], items[8])
+end
+
+---------------------------------------------------------------------------
 -- 7. KNOWN GAPS: what production does today in three corners the contract does not settle (docs/workshop/testing-roadmap.md, "M2 findings").
 --    These are CHARACTERIZATION tests: they pin the current behaviour so a change is a conscious one, not a statement that it is right.
 ---------------------------------------------------------------------------
