@@ -296,3 +296,77 @@ function MK.Compare(item, period, opt)
     return { item = p.item, current = p.price, reference = ref, period = name, relation = p.price > ref and "above" or (p.price < ref and "below" or "same"),
         difference = p.price - ref, ratio = p.price / ref, n = w.n, exact = w.exact, limited = w.skipped > 0, price = p, basis = MK.BASIS.compare }
 end
+
+---------------------------------------------------------------------------
+-- The status of the prices, for the window's footer chip
+---------------------------------------------------------------------------
+-- A presentation policy, read-only and deterministic: what the newest scan's age and coverage are, in a few words. FRESHNESS and
+-- COMPLETENESS are two properties and are never merged: a partial scan can be a minute old, and a day-old scan can be whole.
+--   freshness  "fresh"  scanned up to MK.FRESH_AFTER ago (2 hours)
+--              "aging"  older than that, up to PR.OLD_AFTER (a day): usable
+--              "old"    older than a day
+--   complete   true only when the scan was a whole read (Summary.complete); false is "Partial scan" whatever its age
+--   The scan in progress outranks both: "scanning" (with its progress) and "saving" (the scan's last phase, the prices being committed).
+-- Nothing here runs on a timer: the age is worked out when the footer is drawn (on opening, navigation and a scan's changes).
+-- Returns { state = "scanning" | "saving" | "none" | "ready", text, icon ("done" | "current"), tone ("good" | "warn" | "bad" | "quiet"),
+--   freshness, complete, age (seconds), tip = { lines } (the whole market, when, how much was seen, and the limits) }.
+MK.FRESH_AFTER = 2 * 3600
+
+-- "32m ago", "5h ago", "3d ago"
+function MK.AgeShort(seconds)
+    if type(seconds) ~= "number" then return "at an unknown time" end
+    if seconds < 60 then return "just now" end
+    if seconds < 3600 then return ("%dm ago"):format(math.floor(seconds / 60)) end
+    if seconds < 86400 then return ("%dh ago"):format(math.floor(seconds / 3600)) end
+    return ("%dd ago"):format(math.floor(seconds / 86400))
+end
+
+function MK.Freshness(age)
+    if type(age) ~= "number" then return nil end
+    if age <= MK.FRESH_AFTER then return "fresh" end
+    if age <= PR.OLD_AFTER then return "aging" end
+    return "old"
+end
+
+function MK.Status(opt)
+    local src = MK.Source()
+    local m = (opt and opt.market) or src.market
+    local now = Now(opt)
+    local tip = {}
+    if SC.state == "scanning" then
+        local saving = SC.phase == "saving"
+        local pct = math.floor((SC.Progress() or 0) * 100 + 0.5)
+        tip[1] = saving and "The prices of this scan are being saved." or "A scan of the open auction house is running."
+        tip[2] = "It only reads: nothing is bought, bid or posted."
+        return { state = saving and "saving" or "scanning", text = saving and "Saving prices" or ("Scanning prices \194\183 %d%%"):format(pct),
+            icon = "current", tone = "warn", tip = tip }
+    end
+    if not m then
+        tip[1] = src.open and "No prices are saved for this auction house yet." or "No auction house prices are saved for this realm yet."
+        tip[2] = "Open the auction house and choose Scan prices."
+        return { state = "none", text = "No prices yet", icon = "current", tone = "quiet", tip = tip }
+    end
+    local info = Summary(m, now)
+    local age = info.age
+    local fresh = MK.Freshness(age)
+    local complete = info.complete == true
+    local when = MK.AgeShort(age)
+    local text, icon, tone
+    if complete then
+        if fresh == "fresh" then text, icon, tone = "Prices updated " .. when, "done", "good"
+        elseif fresh == "aging" then text, icon, tone = "Prices updated " .. when, "current", "warn"
+        else text, icon, tone = "Old prices \194\183 " .. when, "current", "bad" end
+    else
+        text = (fresh == "old" and "Old partial scan \194\183 " or "Partial scan \194\183 ") .. when
+        icon, tone = "current", fresh == "old" and "bad" or "warn"
+    end
+    -- the whole market is here (and nowhere in the normal text): which realm and side, since two markets are never merged
+    tip[#tip + 1] = (PR.Label(m) or "the auction house"):gsub("^%l", string.upper)
+    tip[#tip + 1] = ("Scanned %s (%s)"):format(PR.AgeText(age), fresh == "fresh" and "fresh" or (fresh == "aging" and "getting old" or "old"))
+    tip[#tip + 1] = complete and "Coverage: a complete scan." or "Coverage: partial. Some listings may be missing from this scan."
+    if info.items then tip[#tip + 1] = ("%d items priced"):format(info.items) end
+    if info.scans and info.scans > 1 then tip[#tip + 1] = ("%d scan days of history"):format(info.scans) end
+    if info.scope ~= "full" then tip[#tip + 1] = "From an older scan that kept only the items of known recipes." end
+    tip[#tip + 1] = "Cheapest buyout listings per item. A listing is not a sale."
+    return { state = "ready", text = text, icon = icon, tone = tone, freshness = fresh, complete = complete, age = age, tip = tip }
+end

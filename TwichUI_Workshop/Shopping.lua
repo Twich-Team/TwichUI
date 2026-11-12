@@ -438,6 +438,25 @@ function Sh.Explain(row)
     return text
 end
 
+-- Why a source can't be chosen for this row: one plain sentence, or nil when it can (the same reasons Explain gives, for the disabled choice's tooltip)
+function Sh.WhyNot(row, kind)
+    if Usable(row.options[kind]) and not (kind == "make" and row.kind == "buy" and row.reagentOnly) then return nil end
+    local o = row.options[kind]
+    if kind == "vendor" then
+        if not o then return "No vendor that sells this has been seen." end
+        if o.state == "noprice" then return "A vendor sells it, but its price hasn't been seen yet." end
+        if o.state == "limited" then return "A vendor had too few when you last saw it." end
+        return "The vendor's price isn't known."
+    elseif kind == "auction" then
+        if not o then return "No auction price is saved for this. Scan prices at the auction house." end
+        if o.state == "few" then return "Not enough are listed at the auction house." end
+        return "The auction price isn't known."
+    end
+    if row.kind == "buy" and row.reagentOnly then return "It is bought: it is a reagent of something you are making." end
+    if not o then return "No recipe you know makes this." end
+    return MAKE_WHY[o.state] or "It can't be made from what is known."
+end
+
 -- The player may pick among these for a row, in the order they are cycled: vendor, auction, make (each only when it exists and can be done).
 -- A made material's reagents (reagentOnly rows) are bought, so they offer no making.
 function Sh.Choices(row)

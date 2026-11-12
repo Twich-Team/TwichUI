@@ -14,7 +14,11 @@
 --   UI.ItemIcon(parent, size)               an item picture in a thin bronze frame (.tex)
 --   UI.Art(texture, id, size)               feature artwork (an Icons id, or "npc:<name>" for the vendor/trainer paintings)
 --   UI.Rule(parent)                         a quiet divider line
---   UI.Hover(row)                           a row's painted hover and selection (row:SetSelected(bool))
+--   UI.Hover(row)                           a row's painted hover and selection (row:SetSelected(bool), row:SetHot(bool), row:Follow(child),
+--                                           row:SyncHover()); the row owns OnEnter / OnLeave, tooltips go in row.TipEnter / row.TipLeave
+--   UI.WrapHover(frame, on, off)            a hover for a non-row (a card) that wraps its scripts: call after its tooltip is set
+--   UI.PassClicks(btn, row)                 a picture's unmodified click chooses the row it sits on
+--   UI.Chip(parent, w, h)                   a status chip (chip:Set(text, status, tone)): a bronze-framed leather pill, a status picture and a line
 --   UI.Chevron(parent)                      a "›" in the heading font
 --   UI.Triangle(parent, w)                  a small solid triangle (:SetDirection("up"|"down"), :SetColor(c, a)); no texture file
 --   UI.SortHead(parent, text, w, onClick)   a sortable column heading: :SetSort(active, desc) draws the direction, gold when it is the sort
@@ -90,8 +94,13 @@ function UI.Rule(parent, alpha)
     return t
 end
 
--- The look of a row: a faint stripe on every other row (row:SetStripe(bool), set by the list), the painted hover with a lit rim, and the chosen
--- state (the selection sheet and a gold bar at the left edge): row:SetSelected(bool). Textures are made once, with the row.
+-- The look of a row: a faint stripe on every other row (row:SetStripe(bool), set by the list), the painted hover (a warmer face, a lit
+-- bronze rim and a lit top edge, eased in and out through Look.Motion, so it is bounded and honours the reduced-motion choice), and the
+-- chosen state (the selection sheet and a gold bar at the left edge): row:SetSelected(bool). Textures are made once, with the row.
+-- The row OWNS its OnEnter / OnLeave (SetScript, once, here): a page that wants a tooltip sets row.TipEnter(row) / row.TipLeave(row) and
+-- never replaces the scripts, so the hover cannot be lost to the order two pieces of code touched the row in. A picture or button that sits
+-- on the row takes the pointer from it, so row:Follow(child) (after the child's own scripts are final) keeps the row lit while the pointer is
+-- on the child. row.hovered says whether the row is lit; row:SyncHover() re-reads the pointer (a recycled row that scrolled under it).
 function UI.Hover(row, corner)
     local c = corner or 8
     local stripe = L.Solid(row, "BACKGROUND", K.text, 0.028)
@@ -104,15 +113,84 @@ function UI.Hover(row, corner)
     hot:SetAlpha(0)
     local rim = CL.Sheet(row, "hover-rim", { layer = "OVERLAY", sub = 2, corner = c })
     rim:SetAlpha(0)
+    local lift = L.Solid(row, "OVERLAY", K.bronzeHi, 1)   -- the lit top edge (shown by its alpha)
+    lift:SetHeight(1)
+    lift:SetPoint("TOPLEFT", 7, -1); lift:SetPoint("TOPRIGHT", -7, -1)
     local bar = L.Solid(row, "ARTWORK", K.bronzeText, 0.95)
     bar:SetWidth(3)
     bar:SetPoint("TOPLEFT", 3, -6); bar:SetPoint("BOTTOMLEFT", 3, 6)
     bar:Hide()
-    row.twichSel, row.twichHot, row.twichStripe = sel, hot, stripe
-    row:HookScript("OnEnter", function(self) hot:SetAlpha(0.8); rim:SetAlpha(self.selected and 0.3 or 0.7) end)
-    row:HookScript("OnLeave", function() hot:SetAlpha(0); rim:SetAlpha(0) end)
-    row:HookScript("OnHide", function() hot:SetAlpha(0); rim:SetAlpha(0) end)
-    function row:SetSelected(on) self.selected = on and true or false; sel:SetShown(self.selected); bar:SetShown(self.selected) end
+    row.twichSel, row.twichHot, row.twichRim, row.twichStripe = sel, hot, rim, stripe
+    local M = L.Motion
+    local function Apply(v)   -- v: how lit the row is, 0 to 1
+        hot:SetAlpha(v * (row.selected and 0.4 or 1))
+        rim:SetAlpha(v * (row.selected and 0.6 or 1))
+        lift:SetAlpha(v * 0.55)
+    end
+    local fade = M and M.Fader(Apply, 0) or nil
+    row.twichFade = fade
+    row.hovered = false
+    function row:SetHot(on)
+        on = on and true or false
+        if self.hovered == on then return end
+        self.hovered = on
+        if fade then fade:To(on and 1 or 0, M.TIME.hover) else Apply(on and 1 or 0) end
+    end
+    local function Light(v) if fade then fade:Set(v) else Apply(v) end end
+    local follow
+    local function Pointer(self)   -- is the pointer on the row, or on a picture or button that sits on it?
+        if follow then
+            for i = 1, #follow do
+                local ch = follow[i]
+                if ch:IsShown() and ch.IsMouseOver and ch:IsMouseOver() then return true end
+            end
+        end
+        return false
+    end
+    row:SetScript("OnEnter", function(self)
+        self:SetHot(true)
+        if self.TipEnter then self:TipEnter() end
+    end)
+    row:SetScript("OnLeave", function(self)
+        if self.TipLeave then self:TipLeave() end
+        if not Pointer(self) then self:SetHot(false) end
+    end)
+    local function TipIsMine(self)
+        if not (GameTooltip and GameTooltip.GetOwner) then return false end
+        local owner = GameTooltip:GetOwner()
+        if owner == self then return true end
+        for i = 1, follow and #follow or 0 do if owner == follow[i] then return true end end
+        return false
+    end
+    row:HookScript("OnHide", function(self)
+        self.hovered = false
+        Light(0)
+        if TipIsMine(self) then GameTooltip:Hide() end   -- a hidden or recycled row never leaves its tooltip behind
+    end)
+    function row:Follow(child)
+        follow = follow or {}
+        follow[#follow + 1] = child
+        local enter, leave = child:GetScript("OnEnter"), child:GetScript("OnLeave")
+        child:SetScript("OnEnter", function(...) row:SetHot(true); if enter then enter(...) end end)
+        child:SetScript("OnLeave", function(...)
+            if leave then leave(...) end
+            if not (row.IsMouseOver and row:IsMouseOver()) then row:SetHot(false) end
+        end)
+    end
+    function row:SyncHover()
+        local over = self.IsMouseOver and self:IsMouseOver() and true or false
+        if over ~= self.hovered then self:SetHot(over) end
+    end
+    -- after the list filled this row with other data: the lit state follows the pointer, and a tooltip it shows is drawn again from the new data
+    function row:RefreshHover()
+        self:SyncHover()
+        if self.hovered and self.TipEnter and TipIsMine(self) then self:TipEnter() end
+    end
+    function row:SetSelected(on)
+        self.selected = on and true or false
+        sel:SetShown(self.selected); bar:SetShown(self.selected)
+        Apply(fade and fade.value or (self.hovered and 1 or 0))   -- hover and the chosen state share the row: re-weigh them
+    end
     function row:SetStripe(on) stripe:SetShown(on and not self.selected and true or false); self.striped = on and true or false end
 end
 
@@ -320,6 +398,7 @@ function UI.List(parent, rowH, make, minH, surface)
                 row:Show()
                 row.fill(row, data[idx], idx)
                 if row.SetStripe then row:SetStripe(idx % 2 == 0) end
+                if row.RefreshHover then row:RefreshHover() end
             elseif row then
                 row:Hide()
             end
@@ -351,22 +430,50 @@ function UI.Head(parent, text, w, justify)
     return h
 end
 
--- An item's tooltip on a button-like frame (Shift-click puts its link in the open chat box, like other item pictures)
+-- An item's tooltip on a button-like frame (Shift-click puts its link in the open chat box, like other item pictures). On a row that owns its
+-- hover (UI.Hover) it is the row's tooltip (TipEnter / TipLeave), so the row's lit state is never replaced.
 function UI.ItemTip(btn, getItem)
-    btn:SetScript("OnEnter", function(self)
+    local function Enter(self)
         local item = getItem()
         if GameTooltip and item then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             if not pcall(GameTooltip.SetItemByID, GameTooltip, item) then GameTooltip:Hide() end
         end
-    end)
-    btn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
-    btn:SetScript("OnClick", function()
+    end
+    local function Leave() if GameTooltip then GameTooltip:Hide() end end
+    if btn.SetHot then
+        btn.TipEnter, btn.TipLeave = Enter, Leave
+    else
+        btn:SetScript("OnEnter", Enter)
+        btn:SetScript("OnLeave", Leave)
+    end
+    btn:SetScript("OnClick", function(self, ...)
         local item = getItem()
-        if not (item and IsModifiedClick and IsModifiedClick("CHATLINK") and ChatEdit_InsertLink) then return end
+        if not (item and IsModifiedClick and IsModifiedClick("CHATLINK") and ChatEdit_InsertLink) then
+            if self.twichRowClick then self.twichRowClick(self, ...) end   -- an unmodified click chooses the row it sits on
+            return
+        end
         local ok, _, link = pcall(C_Item.GetItemInfo, item)
         if ok and type(link) == "string" then pcall(ChatEdit_InsertLink, link) end
     end)
+end
+
+-- Lets a click that a picture would otherwise swallow choose its row: the picture runs the row's own OnClick (the modified-click item link
+-- still goes to chat).
+function UI.PassClicks(btn, row)
+    btn.twichRowClick = function(_, ...)
+        local click = row:GetScript("OnClick")
+        if click then click(row, ...) end
+    end
+end
+
+-- Hover for a frame that is not a row (a card): wraps the frame's CURRENT scripts, so call it after the frame's tooltip is set. on(frame) /
+-- off(frame) are the painting.
+function UI.WrapHover(frame, on, off)
+    local enter, leave = frame:GetScript("OnEnter"), frame:GetScript("OnLeave")
+    frame:SetScript("OnEnter", function(...) on(frame); if enter then enter(...) end end)
+    frame:SetScript("OnLeave", function(...) if leave then leave(...) end; off(frame) end)
+    frame:HookScript("OnHide", function() off(frame) end)
 end
 
 function UI.Tip(frame, title, body) R.Interact.Tip(frame, title, body) end
@@ -448,32 +555,93 @@ function UI.SortHead(parent, text, w, onClick)
     return h
 end
 
--- A recessed progress bar. frac 0..1; the fill is a flat tone with a lit top line (a gradient is not relied on)
+-- A recessed progress bar. frac 0..1. The track is a dark well with a bronze rim and a dark inner top edge, its floor a shade lighter than
+-- its walls so the unfilled part reads as empty; the fill is a flat tone with a darker lower half, a lit top line and a lit end, so it reads
+-- as a raised bar without relying on a gradient. Every texture is made once; :SetFraction only moves the fill's width.
 function UI.Meter(parent, w, h)
     local m = CreateFrame("Frame", nil, parent)
-    m:SetSize(w, h or 8)
-    local track = L.Solid(m, "BACKGROUND", K.ink, 0.9)
+    h = h or 10
+    m:SetSize(w, h)
+    local track = L.Solid(m, "BACKGROUND", K.ink, 1)
     track:SetAllPoints()
-    local lo = L.Solid(m, "BORDER", K.bronzeLo, 0.8); lo:SetPoint("BOTTOMLEFT"); lo:SetPoint("BOTTOMRIGHT"); lo:SetHeight(1)
-    local top = L.Solid(m, "BORDER", K.ink, 1); top:SetPoint("TOPLEFT"); top:SetPoint("TOPRIGHT"); top:SetHeight(1)
+    local floor = L.Solid(m, "BACKGROUND", K.bronzeLo, 0.22)   -- the empty part, a shade lighter than the walls
+    floor:SetDrawLayer("BACKGROUND", 1)
+    floor:SetPoint("TOPLEFT", 2, -3); floor:SetPoint("BOTTOMRIGHT", -2, 2)
+    local function Edge(p1, p2, wd, ht, c, a)
+        local e = L.Solid(m, "BORDER", c, a)
+        e:SetPoint(p1); e:SetPoint(p2)
+        if wd then e:SetWidth(wd) else e:SetHeight(ht) end
+    end
+    Edge("TOPLEFT", "TOPRIGHT", nil, 1, K.bronze, 0.6)          -- the rim
+    Edge("BOTTOMLEFT", "BOTTOMRIGHT", nil, 1, K.bronzeHi, 0.5)   -- the lit lower lip of the recess
+    Edge("TOPLEFT", "BOTTOMLEFT", 1, nil, K.bronze, 0.6)
+    Edge("TOPRIGHT", "BOTTOMRIGHT", 1, nil, K.bronze, 0.6)
+    local inner = L.Solid(m, "BORDER", K.ink, 0.9)   -- the shadow just under the top rim
+    inner:SetPoint("TOPLEFT", 1, -1); inner:SetPoint("TOPRIGHT", -1, -1); inner:SetHeight(1)
     m.fill = L.Solid(m, "ARTWORK", K.sage, 1)
-    m.fill:SetPoint("TOPLEFT", 1, -1); m.fill:SetPoint("BOTTOMLEFT", 1, 1)
-    m.shine = L.Solid(m, "OVERLAY", { 1, 1, 1 }, 0.22)
+    m.fill:SetPoint("TOPLEFT", 2, -2); m.fill:SetPoint("BOTTOMLEFT", 2, 2)
+    m.shade = L.Solid(m, "OVERLAY", { 0, 0, 0 }, 0.26)
+    m.shade:SetDrawLayer("OVERLAY", 1)
+    m.shade:SetPoint("BOTTOMLEFT", m.fill, "BOTTOMLEFT", 0, 0); m.shade:SetPoint("BOTTOMRIGHT", m.fill, "BOTTOMRIGHT", 0, 0)
+    m.shade:SetHeight(math.max(1, math.floor((h - 4) * 0.45)))
+    m.shine = L.Solid(m, "OVERLAY", { 1, 1, 1 }, 0.30)
+    m.shine:SetDrawLayer("OVERLAY", 2)
     m.shine:SetPoint("TOPLEFT", m.fill, "TOPLEFT", 0, 0); m.shine:SetPoint("TOPRIGHT", m.fill, "TOPRIGHT", 0, 0); m.shine:SetHeight(1)
+    m.cap = L.Solid(m, "OVERLAY", { 1, 1, 1 }, 0.38)
+    m.cap:SetDrawLayer("OVERLAY", 2)
+    m.cap:SetPoint("TOPRIGHT", m.fill, "TOPRIGHT", 0, 0); m.cap:SetPoint("BOTTOMRIGHT", m.fill, "BOTTOMRIGHT", 0, 0); m.cap:SetWidth(1)
+    m.parts = { m.fill, m.shade, m.shine, m.cap }
     m.frac = 0
     function m:SetFraction(f)
         f = math.max(0, math.min(1, tonumber(f) or 0))
         self.frac = f
-        local inner = math.max(1, (self:GetWidth() or w) - 2)
-        local px = math.floor(inner * f + 0.5)
-        self.fill:SetShown(px > 0)
-        self.shine:SetShown(px > 0)
+        local room = math.max(1, (self:GetWidth() or w) - 4)
+        local px = math.floor(room * f + 0.5)
+        if f > 0 and px < 3 then px = 3 end   -- a start is always visible
+        self.px = px
+        for _, t in ipairs(self.parts) do t:SetShown(px > 0) end
         if px > 0 then self.fill:SetWidth(px) end
     end
     function m:SetTone(c) self.fill:SetColorTexture(c[1], c[2], c[3], 1) end
     m:HookScript("OnSizeChanged", function(self) self:SetFraction(self.frac) end)
     m:SetFraction(0)
     return m
+end
+
+-- A status chip: a shallow bronze-framed leather pill with a small status picture and a short line (chip:Set(text, status, tone)). status is
+-- "done" | "current" | "failed" | nil (no picture); tone a palette colour for the text. Decorative: the caller adds a tooltip (UI.TipFn).
+function UI.Chip(parent, w, h)
+    local chip = CreateFrame("Frame", nil, parent)
+    h = h or 24
+    chip:SetSize(w, h)
+    chip:EnableMouse(true)
+    chip.sheet = CL.Sheet(chip, "chip", { layer = "ARTWORK", sub = 4, corner = 12 })
+    chip.icon = chip:CreateTexture(nil, "OVERLAY")
+    chip.icon:SetSize(14, 14)
+    chip.icon:SetPoint("LEFT", 10, 0)
+    chip.text = UI.Text(chip, 13, K.text)
+    chip.text:SetPoint("LEFT", chip.icon, "RIGHT", 6, 0)
+    chip.text:SetPoint("RIGHT", -12, 0)
+    function chip:Set(text, status, tone)
+        self.text:SetText(text or "")
+        UI.Paint(self.text, tone or K.text)
+        if status then
+            UI.Status(self.icon, status, 14)
+            self.icon:Show()
+            self.text:ClearAllPoints()
+            self.text:SetPoint("LEFT", self.icon, "RIGHT", 6, 0)
+            self.text:SetPoint("RIGHT", -12, 0)
+        else
+            self.icon:Hide()
+            self.text:ClearAllPoints()
+            self.text:SetPoint("LEFT", 12, 0)
+            self.text:SetPoint("RIGHT", -12, 0)
+        end
+        self.status = status
+        local want = math.ceil((self.text:GetStringWidth() or 0)) + (status and 30 or 12) + 12
+        self:SetWidth(math.max(90, math.min(self.maxW or want, want)))
+    end
+    return chip
 end
 
 function UI.Ago(at)
@@ -498,7 +666,17 @@ end
 -- The price chart: the observed days of one item as dots (a stem to the floor of the plot), placed by their real day number, so a day with
 -- no scan is a gap and nothing joins two days. Draws only what Market.Series holds (the last observed days; older groups are named in the
 -- caption, not drawn). chart:Set(series, money) where series is Market.Series' answer or nil. Textures are made once (MAX dots).
+-- A trend needs two observed days. With none or one the chart says so in words ("More scans needed to show a price trend."), with the one
+-- observed price and when it was seen, and draws no dots: a lone dot in an empty plot looks unfinished and says nothing a number does not.
+-- chart.state is "empty" (no recent day), "single" (one day) or "series" (a trend): a later chart engine takes over from here.
 local MAX_DOTS = 8
+local function DayWords(day)
+    local today = math.floor((time and time() or 0) / 86400)
+    local ago = today - day
+    if ago <= 0 then return "seen today" end
+    if ago == 1 then return "seen yesterday" end
+    return ("seen %d days ago"):format(ago)
+end
 function UI.PriceChart(parent, w, h)
     local c = CreateFrame("Frame", nil, parent)
     c:SetSize(w, h)
@@ -524,37 +702,47 @@ function UI.PriceChart(parent, w, h)
     c.hi:SetPoint("TOPRIGHT", -8, -8); c.hi:SetWidth(62); c.hi:SetJustifyH("RIGHT")
     c.lo = UI.Text(c, 11, K.textDim)
     c.lo:SetPoint("BOTTOMRIGHT", -8, 8); c.lo:SetWidth(62); c.lo:SetJustifyH("RIGHT")
+    -- the words shown instead of a trend: a headline and, under it, the one observed price when there is one
     c.msg = UI.Text(c, 12, K.textDim)
-    c.msg:SetPoint("TOPLEFT", 12, -10); c.msg:SetPoint("BOTTOMRIGHT", -12, 10)
-    c.msg:SetWordWrap(true); c.msg:SetJustifyH("CENTER"); c.msg:SetJustifyV("MIDDLE")
+    c.msg:SetPoint("LEFT", 14, 0); c.msg:SetPoint("RIGHT", -14, 0)
+    c.msg:SetPoint("BOTTOM", c, "CENTER", 0, 1)
+    c.msg:SetWordWrap(true); c.msg:SetJustifyH("CENTER"); c.msg:SetJustifyV("BOTTOM")
+    c.note = UI.Text(c, 11, K.stone)
+    c.note:SetPoint("LEFT", 14, 0); c.note:SetPoint("RIGHT", -14, 0)
+    c.note:SetPoint("TOP", c, "CENTER", 0, -3)
+    c.note:SetJustifyH("CENTER")
+    c.state = "empty"
+    local function Words(self, headline, note)
+        for i = 1, MAX_DOTS do self.dots[i]:Hide(); self.stems[i]:Hide() end
+        for _, g in ipairs(self.guides) do g:Hide() end
+        self.hi:SetText(""); self.lo:SetText("")
+        self.msg:SetText(headline)
+        self.note:SetText(note or "")
+        self.msg:Show(); self.note:Show()
+    end
     function c:Set(series, money)
         local pts = series and series.points or {}
         local n = math.min(#pts, MAX_DOTS)
         local first = #pts - n + 1
-        for i = 1, MAX_DOTS do self.dots[i]:Hide(); self.stems[i]:Hide() end
-        for _, g in ipairs(self.guides) do g:Hide() end
         self.shown = n
         if n == 0 then
-            self.hi:SetText(""); self.lo:SetText("")
-            self.msg:SetText(series and "Older prices are kept only as ranges, so there is no recent day to draw." or "No price history for this item yet.")
-            self.msg:Show()
+            self.state = "empty"
+            Words(self, series and "Only older ranges are kept, so there is no recent day to show." or "No price history for this item yet.",
+                "More scans needed to show a price trend.")
+            self.shown = 0
             return
         end
         if n == 1 then
-            local d = self.dots[1]
-            d:ClearAllPoints(); d:SetPoint("CENTER", self.plot, "CENTER", 0, 8); d:Show()
-            self.hi:SetText(money(pts[first].price)); self.lo:SetText("")
-            self.msg:SetText("One day observed")
-            self.msg:ClearAllPoints()
-            self.msg:SetPoint("BOTTOMLEFT", 10, 5); self.msg:SetPoint("BOTTOMRIGHT", -74, 5); self.msg:SetHeight(14)
-            self.msg:SetWordWrap(false)
-            self.msg:Show()
+            self.state = "single"
+            local p = pts[first]
+            Words(self, "More scans needed to show a price trend.", ("Cheapest seen: %s \194\183 %s"):format(money(p.price), DayWords(p.day)))
+            self.shown = 0   -- nothing is drawn: the one observation is in words
+            self.observed = 1
             return
         end
-        self.msg:Hide()
-        self.msg:ClearAllPoints()
-        self.msg:SetPoint("TOPLEFT", 12, -10); self.msg:SetPoint("BOTTOMRIGHT", -12, 10)
-        self.msg:SetWordWrap(true)
+        self.state = "series"
+        self.msg:Hide(); self.note:Hide()
+        for i = 1, MAX_DOTS do self.dots[i]:Hide(); self.stems[i]:Hide() end
         local lo, hi, day0, day1
         for i = first, #pts do
             local p = pts[i]

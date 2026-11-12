@@ -8,7 +8,7 @@
 
 local R = TwichUI
 local W = R.Workshop
-local S, O, PR, Op, SC, MK = W.Session, W.Observe, W.Prices, W.Opps, W.Scan, W.Market
+local S, O, PR, Op, SC, MK, Q = W.Session, W.Observe, W.Prices, W.Opps, W.Scan, W.Market, W.Queue
 local UI = W.UI
 
 local OPP_H, COL_W, DETAIL_W = 52, 90, 284
@@ -103,6 +103,7 @@ local function MakeOppRow(parent)
     row.iconFrame:SetAllPoints()
     row.icon = row.iconFrame.tex
     UI.ItemTip(row.iconBtn, function() return row.item end)
+    UI.PassClicks(row.iconBtn, row)
     row.profit = MakeCell(row, -RIGHT, true)
     row.sell = MakeCell(row, -(RIGHT + COL_W + 4))
     row.cost = MakeCell(row, -(RIGHT + 2 * (COL_W + 4)))
@@ -112,15 +113,17 @@ local function MakeOppRow(parent)
     row.sub = UI.Text(row, 12, K.stone)
     row.sub:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -4)
     row.sub:SetPoint("RIGHT", row.name, "RIGHT", 0, 0)
+    -- the row's own tooltip goes through the row's hover (UI.Hover owns OnEnter / OnLeave), never over it
     row.ShowTip = ShowBasis
-    row:SetScript("OnEnter", ShowBasis)
-    row:SetScript("OnLeave", function(self)
+    row.TipEnter = ShowBasis
+    row.TipLeave = function(self)
         if UI.hoverRow == self then UI.hoverRow = nil end
         if GameTooltip then GameTooltip:Hide() end
-    end)
+    end
     row:SetScript("OnClick", function(self)
         if self.rec then selected = self.rec.id; UI.Redraw() end
     end)
+    row:Follow(row.iconBtn)   -- the picture takes the pointer from the row: the row stays lit while it is over the picture
     row.fill = function(self, r)
         local e, rec = r.est, r.rec
         self.data, self.rec, self.item = r, rec, rec.outItem
@@ -192,6 +195,19 @@ local function ChartNote(series)
     return note
 end
 
+-- The details' Add: the chosen recipe goes into the one queue (Session.Add; a refusal is explained in the footer and the button), and the
+-- page is drawn again so the row, the details and the button all say it is queued. Returns whether it was added.
+local Opps = {}
+W.OppsView = Opps
+function Opps.AddSelected()
+    local d = page and page.detail
+    local rec = d and d.rec
+    if not rec then return false end
+    local ok = S.Add(rec)
+    UI.Redraw()
+    return ok
+end
+
 local function RenderDetail(rows)
     local d = page.detail
     local r
@@ -244,6 +260,14 @@ local function RenderDetail(rows)
         end
     end
     d.more:SetText(n > MAT_ROWS and ("+%d more (hold Shift over the row)"):format(n - MAT_ROWS) or (n == 0 and "Not known yet." or ""))
+    -- the Market block sits under the last material row shown (and the note about more materials goes right under those rows)
+    local used = math.min(n, MAT_ROWS)
+    d.more:ClearAllPoints()
+    d.more:SetPoint("TOPLEFT", d.body, "TOPLEFT", 14, -(194 + used * MAT_H) + 1)
+    d.more:SetPoint("RIGHT", d.body, "RIGHT", -14, 0)
+    d.market:ClearAllPoints()
+    d.market:SetPoint("TOPLEFT", d.body, "TOPLEFT", 0, -(194 + used * MAT_H + 22))
+    d.market:SetPoint("BOTTOMRIGHT", d.body, "BOTTOMRIGHT", 0, 58)
     -- what the market data says about what it makes
     local market = oppView and oppView.source.market
     local ev = Evidence(rec.outItem, market)
@@ -255,15 +279,29 @@ local function RenderDetail(rows)
     local series = market and rec.outItem and MK.Series(rec.outItem, { market = market }) or nil
     d.chart:Set(series, UI.Money)
     d.chartNote:SetText(ChartNote(series))
-    if S.IsQueued(rec.id) then
+    -- the button: what it does now (add), what already happened (queued, with a check) or why it can't (the queue is full)
+    local queued = S.IsQueued(rec.id)
+    local full = not queued and Q.Count() >= W.MAX_QUEUE
+    d.addWhy = nil
+    if queued then
         d.add.text:SetText("In your queue")
         d.add:SetEnabled(false)
-        d.add.artHolder:SetAlpha(0)
+        for _, part in ipairs(d.add.artParts) do part:Hide() end
+        d.add.check:Show()
+        d.addWhy = "This recipe is in your crafting plan. Change how many in the Crafting page."
+    elseif full then
+        d.add.text:SetText("Queue full")
+        d.add:SetEnabled(false)
+        for _, part in ipairs(d.add.artParts) do part:Show() end
+        d.add.check:Hide()
+        d.addWhy = ("The queue holds %d recipes and is full. Remove one in the Crafting page to add another."):format(W.MAX_QUEUE)
     else
         d.add.text:SetText("Add to crafting plan")
         d.add:SetEnabled(true)
-        d.add.artHolder:SetAlpha(1)
+        for _, part in ipairs(d.add.artParts) do part:Show() end
+        d.add.check:Hide()
     end
+    d.add.artHolder:SetAlpha(d.add:IsEnabled() and 1 or 0.7)
     d.rec = rec
 end
 
@@ -424,34 +462,50 @@ local function BuildDetail()
     d.more = UI.Text(body, 11, K.stone)
     d.more:SetPoint("TOPLEFT", 14, -194 - MAT_ROWS * MAT_H + 1)
     d.more:SetPoint("RIGHT", -14, 0)
-    -- the market, stacked up from the button: the history chart, then two facts, then the heading
-    d.add = UI.ArtButton(d, "Add to crafting plan", "plus", DETAIL_W - 28, "primary", function()
-        if d.rec then S.Add(d.rec); UI.Redraw() end
-    end, 36)
+    -- the button, and above it the Market block: a heading, two facts and the history chart, which takes the rest of the room (the block is
+    -- placed under the last material row shown, so a recipe with few materials leaves no gap)
+    d.add = UI.ArtButton(d, "Add to crafting plan", "plus", DETAIL_W - 28, "primary", function() Opps.AddSelected() end, 36)
     d.add:SetPoint("BOTTOMLEFT", 14, 12)
     d.add:SetPoint("BOTTOMRIGHT", -14, 12)
-    UI.Tip(d.add, "Add to crafting plan", "Puts this recipe in the queue to make once, in the Crafting page. Nothing is bought or crafted.")
-    d.chart = UI.PriceChart(body, DETAIL_W - 28, 72)
-    d.chart:SetPoint("BOTTOMLEFT", 14, 58)
+    d.add.check = d.add.artHolder:CreateTexture(nil, "OVERLAY")   -- the queued state's picture, in the place of the plus
+    d.add.check:SetAllPoints()
+    UI.Status(d.add.check, "done", 24)
+    d.add.check:Hide()
+    UI.TipFn(d.add, "Add to crafting plan", function()
+        if d.addWhy then return d.addWhy end
+        return "Puts this recipe in the queue to make once, in the Crafting page. Nothing is bought or crafted."
+    end)
+    local mk = CreateFrame("Frame", nil, body)
+    d.market = mk
+    mk:SetPoint("TOPLEFT", body, "TOPLEFT", 0, -312)
+    mk:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", 0, 58)
+    local mh = UI.Text(mk, 13, K.bronzeText, "strong")
+    mh:SetPoint("TOPLEFT", 14, 0)
+    mh:SetText("Market")
+    d.chartNote = UI.Text(mk, 11, K.stone)
+    d.chartNote:SetPoint("TOPRIGHT", -14, -1)
+    d.chartNote:SetJustifyH("RIGHT")
+    local mr = UI.Rule(mk, 0.45)
+    mr:SetPoint("TOPLEFT", 14, -18); mr:SetPoint("TOPRIGHT", -14, -18)
     d.evidence = {}
-    for i = 2, 1, -1 do
-        local v = UI.Text(body, 12, K.textDim)
-        v:SetPoint("BOTTOMRIGHT", -14, 136 + (2 - i) * 17)
+    for i = 1, 2 do
+        local v = UI.Text(mk, 12, K.textDim)
+        v:SetPoint("TOPRIGHT", -14, -24 - (i - 1) * 17)
         v:SetJustifyH("RIGHT")
-        local l = UI.Text(body, 12, K.stone)
-        l:SetPoint("BOTTOMLEFT", 14, 136 + (2 - i) * 17)
+        local l = UI.Text(mk, 12, K.stone)
+        l:SetPoint("TOPLEFT", 14, -24 - (i - 1) * 17)
         l:SetPoint("RIGHT", v, "LEFT", -6, 0)
         d.evidence[i] = { l = l, v = v }
     end
-    local mh = UI.Text(body, 13, K.bronzeText, "strong")
-    mh:SetPoint("BOTTOMLEFT", 14, 172)
-    mh:SetText("Market")
-    d.chartNote = UI.Text(body, 11, K.stone)
-    d.chartNote:SetPoint("BOTTOMRIGHT", -14, 173)
-    d.chartNote:SetJustifyH("RIGHT")
-    local mr = UI.Rule(body, 0.45)
-    mr:SetPoint("BOTTOMLEFT", 14, 170); mr:SetPoint("BOTTOMRIGHT", -14, 170)
-    UI.Tip(body, "What these figures are", "Prices are the cheapest buyout listings your scans saw, per item. The dots are the lowest listing on each day a scan was made; a day without a scan has no dot. None of it is a sale price or a promise that it will sell.")
+    d.chart = UI.PriceChart(mk, DETAIL_W - 28, 72)
+    d.chart:ClearAllPoints()
+    d.chart:SetPoint("TOPLEFT", 14, -62)
+    d.chart:SetPoint("BOTTOMRIGHT", -14, 0)
+    -- what these figures are, on the Market heading only: a frame over the whole block would sit on the button
+    local why = CreateFrame("Frame", nil, mk)
+    why:SetPoint("TOPLEFT", 14, 0); why:SetPoint("TOPRIGHT", -14, 0); why:SetHeight(20)
+    why:EnableMouse(true)
+    UI.Tip(why, "What these figures are", "Prices are the cheapest buyout listings your scans saw, per item. The dots are the lowest listing on each day a scan was made; a day without a scan has no dot. None of it is a sale price or a promise that it will sell.")
     d.empty = UI.Text(d, 13, K.textDim)
     d.empty:SetPoint("TOPLEFT", 14, -16)
     d.empty:SetPoint("RIGHT", -14, 0)

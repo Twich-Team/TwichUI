@@ -129,7 +129,7 @@ Check(rows[2].diff:GetText() == "Orange")
 -- queue it with the row's own button, then change and remove
 rows[1].add:GetScript("OnClick")(rows[1].add)
 Same(#Q.Entries(), 1); Same(Q.Entries()[1].name, "Healing Potion")
-Check(rows[1].add.text:GetText() == "Queued" and rows[1].add.enabled == false, "a queued recipe says Queued and can't be added twice")
+Check(rows[1].mark:IsShown() and rows[1].mark.text:GetText() == "Queued" and not rows[1].add:IsShown(), "a queued recipe says Queued (in the compact mark, not on a stretched button) and can't be added twice")
 local qrow = Win.Lists().queue.rows[1]
 Check(qrow:IsShown() and qrow.name:GetText() == "Healing Potion")
 local detail = Win.Craft().detail
@@ -467,6 +467,23 @@ do
   Check(sd.explain:GetText():find("Make 2 x Peacebloom Bundle", 1, true), sd.explain:GetText())
   Check(sd.explain:GetText():find("Making this looks cheaper than buying at the auction house", 1, true), sd.explain:GetText())
   Same(sd.act.text:GetText(), "Add to crafting plan"); Check(sd.act:IsShown())
+  -- the suggestion and the player's own choice are told apart, in words: Make is suggested (the lowest cost), nothing is overridden yet
+  Same(sd.tags.make:GetText(), "Suggested"); Same(sd.tags.auction:GetText(), ""); Same(sd.tags.vendor:GetText(), "")
+  Check(not sd.useSuggestion:IsShown(), "no override: no Use suggestion")
+  Check(sd.choose.vendor.enabled == false and sd.choose.vendor.twichuiTip.body(sd.choose.vendor):find("Not available: No vendor that sells this has been seen.", 1, true), "an impossible source says why")
+  sd.choose.auction:GetScript("OnClick")(sd.choose.auction)   -- the player chooses the auction house instead
+  Same(S.picks[10], "auction"); Check(sd.choose.auction.on and not sd.choose.make.on, "the choice is lit")
+  Same(sd.tags.make:GetText(), "Suggested", "the suggestion stays marked while it is overridden")
+  Same(sd.tags.auction:GetText(), "Your choice")
+  Check(sd.useSuggestion:IsShown(), "an override offers Use suggestion")
+  Check(sd.choose.make.twichuiTip.body(sd.choose.make):find("suggestion", 1, true), "the suggested source's tooltip says so")
+  sd.useSuggestion:GetScript("OnClick")(sd.useSuggestion)
+  Same(S.picks[10], nil, "Use suggestion drops the choice"); Check(sd.choose.make.on and not sd.useSuggestion:IsShown())
+  Same(sd.tags.make:GetText(), "Suggested"); Same(sd.tags.auction:GetText(), "")
+  sd.choose.make:GetScript("OnClick")(sd.choose.make)   -- choosing what is suggested is not an override
+  Same(S.picks[10], "make"); Same(sd.tags.make:GetText(), "Suggested"); Check(not sd.useSuggestion:IsShown(), "your choice equal to the suggestion is not an override")
+  sd.choose.make:GetScript("OnClick")(sd.choose.make)   -- the lit one again returns to the suggestion
+  Same(S.picks[10], nil)
   sd = Select(seed)
   Same(seed.name:GetText(), "Seed"); Same(seed.need:GetText(), "2"); Same(seed.spend.a:GetText(), "20c", "2 seeds at 10 each")
   Same(seed.kind:GetText(), "Buy")
@@ -559,7 +576,7 @@ do
   c.TwichUIWorkshopDB.markets["Realm|Alliance"].items[10] = nil
   Win.Render()
   Same(SL.rows[1].spend.a:GetText(), "Unknown", "unknown cost is not zero")
-  Check(shop.total:GetText():find("Some prices missing", 1, true), shop.total:GetText())
+  Check(shop.total:GetText():find("price missing", 1, true), shop.total:GetText())
 
   f:Hide()
   Same(Events(f), 0, "hidden: no events")
@@ -632,7 +649,7 @@ do
   Same(SL.rows[2].kind:GetText(), "Buy", "the second row is now a buy row")
   Check(Select(SL.rows[2]).choose.auction:IsShown(), "with its source choices")
   Same(SL.rows[2].need:GetText(), "3"); Same(SL.rows[2].spend.a:GetText(), "Unknown", "unpriced: unknown, not zero")
-  Check(shop.total:GetText():find("Some prices missing", 1, true), shop.total:GetText())
+  Check(shop.total:GetText():find("price missing", 1, true), shop.total:GetText())
   Win.SetMode("craft")
   f:Hide()
   Same(Events(f), 0, "hidden: no events")
@@ -682,11 +699,12 @@ do
   local cards = ov.cards
   Same(cards.market.stat:GetText(), "23,439", "items priced, readable"); Same(cards.market.statLabel:GetText(), "items priced")
   Check(cards.market.facts[1].text:GetText():find("^Scan complete"), cards.market.facts[1].text:GetText())
-  Same(cards.market.facts[2].text:GetText(), "Market: Realm (Alliance)")
+  Same(cards.market.facts[2].text:GetText(), "Covers every listed item", "what the scan covered; the market's name is not repeated on the card")
   Check(cards.market.facts[1].text:GetText():find("5 hours ago", 1, true), "its age")
   c.TwichUIWorkshopDB.markets["Realm|Alliance"] = Market({ complete = false })
   Win.Render()
   Check(cards.market.facts[1].text:GetText():find("^Partial scan"), "a scan that was not whole is never called complete: " .. cards.market.facts[1].text:GetText())
+  Same(cards.market.facts[2].text:GetText(), "Some listings may be missing")
   c.TwichUIWorkshopDB.markets["Realm|Alliance"] = Market({ at = now - 3 * 86400, realm = "Realm" })
   Win.Render()
   Check(cards.market.facts[1].text:GetText():find("(old)", 1, true), "an old scan says so")
@@ -694,7 +712,7 @@ do
   c.GetRealmName = function() return LONG end
   c.TwichUIWorkshopDB.markets = { [LONG .. "|Alliance"] = Market({ realm = LONG }) }
   Win.Render()
-  Check(#cards.market.facts[2].text:GetText() < 45 and cards.market.facts[2].text:GetText():find("\226\128\166", 1, true), "a long market name is cut with an ellipsis: " .. cards.market.facts[2].text:GetText())
+  Check(not (cards.market.facts[1].text:GetText() .. cards.market.facts[2].text:GetText()):find("realm", 1, true), "no realm or side name on the card, however long it is")
   c.GetRealmName = function() return "Realm" end
   c.TwichUIWorkshopDB.markets = { ["Realm|Alliance"] = Market() }
   Win.Render()
@@ -731,7 +749,8 @@ do
   c.GetProfessions = function() return 1, 2, 3, 4, 5, 6 end
   c.GetProfessionInfo = function(i) return "Skill " .. i, 1000 + i, 10 * i, 100 end
   Win.Render()
-  Same(cards.profs.more:GetText(), "and 2 more", "more professions than rows: said, not squeezed"); Same(pr[4].text:GetText(), "Skill 4")
+  Same(cards.profs.more:GetText(), "and 3 more", "more professions than the card has room for: the rows that fit, and the rest said, not squeezed")
+  Same(pr[3].text:GetText(), "Skill 3"); Check(not pr[4]:IsShown(), "no row is drawn outside the card")
   c.GetProfessions = function() return 1 end
   c.GetProfessionInfo = function(i) return "Alchemy", 1001, 80, 100 end
 
@@ -780,16 +799,20 @@ do
   r2:GetScript("OnClick")(r2)
   Check(r2.selected == true and not L_.rows[1].selected, "choosing a row marks it and only it")
   Same(opps.detail.name:GetText(), "Mana Potion")
-  -- Mana Potion has one observed day: a point and a plain note, no line
+  -- Mana Potion has one observed day: no mostly empty plot with one floating dot, but the words and the one price (no dot, no stem, no line)
   local chart = opps.detail.chart
-  Same(chart.shown, 1); Check(chart.dots[1]:IsShown() and not chart.dots[2]:IsShown(), "one observation is one dot")
-  Same(chart.msg:GetText(), "One day observed"); Check(chart.msg:IsShown())
+  Same(chart.state, "single"); Same(chart.shown, 0)
+  Check(not chart.dots[1]:IsShown() and not chart.stems[1]:IsShown(), "one observation draws nothing: a lone dot says no more than the number")
+  Same(chart.msg:GetText(), "More scans needed to show a price trend."); Check(chart.msg:IsShown() and chart.note:IsShown())
+  Check(chart.note:GetText():find("Cheapest seen: ", 1, true) and chart.note:GetText():find("seen today", 1, true), "the one observed price and when: " .. chart.note:GetText())
+  Same(chart.hi:GetText(), ""); Same(chart.lo:GetText(), "")
   Same(opps.detail.chartNote:GetText(), "1 observed day")
   r1:GetScript("OnClick")(r1)
   Same(opps.detail.name:GetText(), "Healing Potion")
   -- Healing Potion: three observed days (today-3, today-2, today): the dots sit at their real days, the gap before today is a gap
+  Same(chart.state, "series")
   Same(chart.shown, 3); Check(chart.dots[1]:IsShown() and chart.dots[3]:IsShown() and not chart.dots[4]:IsShown(), "three observations, three dots")
-  Check(not chart.msg:IsShown(), "no message over a real chart")
+  Check(not chart.msg:IsShown() and not chart.note:IsShown(), "no message over a real chart")
   local function X(i) local pt = chart.dots[i].points[#chart.dots[i].points] return pt[4] end
   Check(X(1) < X(2) and X(2) < X(3), "oldest to newest, left to right")
   Check(math.abs((X(3) - X(2)) - 2 * (X(2) - X(1))) < 0.01, "spacing follows the days (a missing day is a gap): " .. X(1) .. " " .. X(2) .. " " .. X(3))
@@ -802,7 +825,8 @@ do
   -- only older ranges: nothing to draw, and it says so
   c.TwichUIWorkshopDB.markets["Realm|Alliance"].hist[501] = "|" .. math.floor((today - 40) / 28) .. ",800,950,1750,2"
   Win.Render()
-  Same(chart.shown, 0); Check(chart.msg:IsShown() and chart.msg:GetText():find("only as ranges", 1, true), chart.msg:GetText())
+  Same(chart.state, "empty"); Same(chart.shown, 0)
+  Check(chart.msg:IsShown() and chart.msg:GetText():find("older ranges", 1, true), chart.msg:GetText())
   -- no history at all
   c.TwichUIWorkshopDB.markets["Realm|Alliance"].hist[501] = nil
   Win.Render()
@@ -899,6 +923,421 @@ do
   g.bags = { [10] = 4, [11] = 1 }
   W.Storage.Reset = nil
   c.TwichUIDB.workshop.storage = nil
+  for _, e in ipairs({ unpack(Q.Entries()) }) do Q.Remove(e.id) end
+  Win.SetMode("overview")
+  f:Hide()
+end
+
+---------------------------------------------------------------------------
+-- The third pass (real-client findings): the Opportunities Add button through its real handler, queued states that fit their place, the
+-- tooltips of queued crafts, the hover of every kind of row (it is owned by the row, and survives a tooltip, a child and a selection),
+-- the profession bars inside their card, the market status (freshness and completeness apart) and the chart's sparse-history states.
+---------------------------------------------------------------------------
+do
+  local f = Win.Frame()
+  local M = R.Look.Motion
+  local pend = {}
+  c.C_Timer = { After = function(_, fn) pend[#pend + 1] = fn end }
+  local function Flush() local list = pend; pend = {}; for _, fn in ipairs(list) do fn() end end
+  c.GetMoneyString = function(n) return n .. "c" end
+  c.UnitFactionGroup = function() return "Alliance" end
+  c.GetRealmName = function() return "Realm" end
+  for _, e in ipairs({ unpack(Q.Entries()) }) do Q.Remove(e.id) end
+  g.recipes = { [1] = { name = "Healing Potion", diff = 1 }, [2] = { name = "Mana Potion", diff = 0 } }
+  g.schem = {
+    [1] = { quantityMin = 1, quantityMax = 1, outputItemID = 501, reagentSlotSchematics = { { reagentType = 1, reagents = { { itemID = 10 } }, quantityRequired = 2, required = true } } },
+    [2] = { quantityMin = 1, quantityMax = 1, outputItemID = 502, reagentSlotSchematics = { { reagentType = 1, reagents = { { itemID = 10 } }, quantityRequired = 1, required = true },
+      { reagentType = 1, reagents = { { itemID = 11 } }, quantityRequired = 1, required = true } } },
+  }
+  g.names[501], g.names[502] = "Healing Potion", "Mana Potion"
+  g.filtered = { 1, 2 }
+  g.bags = { [10] = 4, [11] = 1 }
+  g.prof = { professionID = 171, professionName = "Alchemy" }
+  local now = os.time()
+  local today = math.floor(now / 86400)
+  local function Market(over)
+    local m = { f = 2, scope = "full", realm = "Realm", side = "Alliance", at = now - 1920, complete = true, read = 1, used = 1, n = 23439,
+      items = { [10] = "100,9,9,9,0", [11] = "50,9,9,9,0", [501] = "1000,1,1,1,0", [502] = "300,1,1,1,0" },
+      hist = { [501] = (today - 3) .. ",900;" .. (today - 2) .. ",1000;" .. today .. ",1100|", [502] = today .. ",300|" }, sd = { today - 3, today - 2, today } }
+    for k, v in pairs(over or {}) do m[k] = v end
+    return m
+  end
+  c.TwichUIWorkshopDB = { v = 1, markets = { ["Realm|Alliance"] = Market() } }
+  c.TwichUIDB.workshop.vendor = nil
+  c.TwichUIDB.workshop.storage = nil
+  local ch = c.TwichUIDB.workshop.chars and c.TwichUIDB.workshop.chars[Q.CharKey()]
+  if ch then ch.known = nil end
+  f:Hide(); f:Show()
+
+  -- a recording tooltip
+  local tip = { items = {}, lines = {}, shown = false }
+  local GT = c.GameTooltip
+  GT.SetOwner = function(s, o) s.owner = o; tip.lines = {}; tip.items = {}; tip.shown = true end
+  GT.SetItemByID = function(_, id) tip.items[#tip.items + 1] = id end
+  GT.AddLine = function(_, t) tip.lines[#tip.lines + 1] = t end
+  GT.AddDoubleLine = function(_, a, b) tip.lines[#tip.lines + 1] = a .. "=" .. tostring(b) end
+  GT.SetText = function(_, t) tip.lines[#tip.lines + 1] = t end
+  GT.ClearLines = function() tip.lines = {} end
+  GT.Show = function() tip.shown = true end
+  GT.Hide = function(s) tip.shown = false; s.owner = nil end
+  local inserted = {}
+  c.IsModifiedClick = function() return false end
+  c.ChatEdit_InsertLink = function(l) inserted[#inserted + 1] = l end
+  c.C_Item.GetItemInfo = function(id) return g.names[id], "|Hitem:" .. id .. "|h[" .. tostring(g.names[id]) .. "]|h" end
+
+  ---------------------------------------------------------------------------
+  -- 1. The Opportunities Add button: the real control, the chosen recipe, the queue, the redraw
+  ---------------------------------------------------------------------------
+  Win.SetMode("opps"); Win.Render()
+  local opps, OL = Win.Opps(), Win.Lists().opps
+  local add = opps.detail.add
+  local first = OL.rows[1]
+  first:GetScript("OnClick")(first)   -- choose the first row
+  local chosenId = opps.detail.rec.id
+  Check(chosenId and not Q.Find(chosenId), "a recipe is chosen and is not queued")
+  Same(add.text:GetText(), "Add to crafting plan"); Check(add:IsEnabled() and add:IsShown() and add.check:IsShown() == false)
+  Check(#add.artParts == 2 and add.artParts[1]:IsShown() and add.artParts[2]:IsShown(), "the plus is drawn")
+  local scripts = add:GetScript("OnClick")
+  Check(type(scripts) == "function", "the button has a click handler")
+  scripts(add, "LeftButton")   -- the control's own handler, not Session.Add
+  Check(Q.Find(chosenId), "the chosen recipe is in the queue")
+  Same(Q.Find(chosenId).crafts, 1, "queued once")
+  Same(add.text:GetText(), "In your queue"); Check(add:IsEnabled() == false and add.check:IsShown() and not add.artParts[1]:IsShown(), "the button says it, with a check in place of the plus")
+  Check(f.note:GetText():find("Added ", 1, true), "the footer says what happened: " .. f.note:GetText())
+  Check(first.sub:GetText():find("In your queue", 1, true), "the list row says so too")
+  Check(add.twichuiTip.body(add):find("in your crafting plan", 1, true), "and the button's tooltip explains")
+  f.tabCraft:GetScript("OnClick")(f.tabCraft)
+  Check(#Win.Lists().queue.data == 1 and Win.Lists().queue.data[1].entry.id == chosenId, "the Crafting page shows the queue")
+  f.tabOpps:GetScript("OnClick")(f.tabOpps)
+  Same(W.OppsView.AddSelected(), false, "adding a recipe that is already queued is refused (the handler, not only the disabled button)")
+  Check(f.note:GetText():find("already in the queue", 1, true), "and explained: " .. f.note:GetText())
+  Same(#Q.Entries(), 1, "and changes nothing")
+
+  -- a full queue: the button says so and the refusal is explained
+  for i = 1, W.MAX_QUEUE do Q.Add({ id = 9000 + i, name = "Filler " .. i }, 1) end
+  Same(#Q.Entries(), W.MAX_QUEUE)
+  local other
+  for _, r in ipairs(OL.rows) do if r:IsShown() and r.rec and not Q.Find(r.rec.id) then other = r end end
+  Check(other, "an unqueued recipe is listed")
+  other:GetScript("OnClick")(other)
+  Same(add.text:GetText(), "Queue full"); Check(add:IsEnabled() == false and add.twichuiTip.body(add):find("full", 1, true))
+  Same(W.OppsView.AddSelected(), false, "a full queue refuses")
+  Check(f.note:GetText():find("The queue is full", 1, true), f.note:GetText())
+  -- and the recipe browser's rows say Full inside their own place
+  f.tabCraft:GetScript("OnClick")(f.tabCraft)
+  local cr = Win.Craft()
+  cr.segRecipes:GetScript("OnClick")(cr.segRecipes)
+  local RL = Win.Lists().recipes
+  local ACT_W = 70
+  local function Fits(row)   -- the text and its picture are inside the place the button has: a mock font gives 6 units a character
+    local text = row.mark:IsShown() and row.mark.text or row.add.text
+    local start = row.mark:IsShown() and (row.mark.icon:IsShown() and 4 + 12 + 3 or 8) or (12 + 20 + 8)
+    local w = start + #text:GetText() * 6
+    return w <= ACT_W - 2, text:GetText() .. " " .. w
+  end
+  local seen = {}
+  for _, r in ipairs(RL.rows) do
+    if r:IsShown() and r.rec then
+      local ok, what = Fits(r)
+      Check(ok, "the action text fits its place: " .. what)
+      seen[r.mark:IsShown() and r.mark.text:GetText() or r.add.text:GetText()] = true
+      Check(r.mark:IsShown() ~= r.add:IsShown(), "a button or a mark, never both")
+    end
+  end
+  Check(seen.Queued and seen.Full, "a queued and a full state were drawn: " .. (seen.Queued and "Queued " or "") .. (seen.Full and "Full" or ""))
+  Check(RL.rows[1].mark.twichuiTip.body(RL.rows[1].mark):len() > 0, "a mark explains itself")
+  for i = #Q.Entries(), 1, -1 do if Q.Entries()[i].id >= 9000 then Q.Remove(Q.Entries()[i].id) end end
+  Win.Render()
+  seen = {}
+  for _, r in ipairs(RL.rows) do
+    if r:IsShown() and r.rec then
+      local ok, what = Fits(r)
+      Check(ok, "fits: " .. what)
+      seen[r.mark:IsShown() and "Queued" or "Add"] = true
+    end
+  end
+  Check(seen.Add and seen.Queued, "an unqueued recipe is a button, a queued one a mark")
+  -- a long name never changes the action's place or size
+  RL.rows[1].fill(RL.rows[1], { id = 3001, name = ("Very long recipe name "):rep(6), diff = 1, icon = 1, prof = 171, profName = "Alchemy" })
+  Check(Fits(RL.rows[1]) and RL.rows[1].add.w == ACT_W or RL.rows[1].mark.w == ACT_W, "a long name leaves the action as it was")
+
+  ---------------------------------------------------------------------------
+  -- 2. Queue tooltips: the item's own tooltip on its picture, a short recipe tooltip on the row, stale ones cleared
+  ---------------------------------------------------------------------------
+  for _, e in ipairs({ unpack(Q.Entries()) }) do Q.Remove(e.id) end
+  local recs = S.AllRecipes()
+  S.Add(recs[1]); S.Add(recs[2]); S.SetCrafts(recs[1].id, 3)
+  Win.Render()
+  cr.segQueue:GetScript("OnClick")(cr.segQueue)
+  local QL = Win.Lists().queue
+  local qr1, qr2 = QL.rows[1], QL.rows[2]
+  Check(qr1:IsShown() and qr2:IsShown())
+  local function ItemOf(row) return row.entry.outItem end
+  Check(ItemOf(qr1) == 501 and ItemOf(qr2) == 502, "the queue entries know what they make")
+  qr1.iconBtn:GetScript("OnEnter")(qr1.iconBtn)
+  Same(tip.items[1], 501, "hovering the first queued craft's picture shows ITS output item's tooltip")
+  Same(GT:GetOwner(), qr1.iconBtn)
+  qr2.iconBtn:GetScript("OnEnter")(qr2.iconBtn)
+  Same(tip.items[1], 502, "and the second row's picture shows the second item, not the first")
+  c.IsModifiedClick = function() return true end
+  qr2.iconBtn:GetScript("OnClick")(qr2.iconBtn)
+  Same(inserted[#inserted], "|Hitem:502|h[Mana Potion]|h", "Shift-click puts the item link in the chat box")
+  local selectedBefore = qr1.selected
+  qr1.iconBtn:GetScript("OnClick")(qr1.iconBtn)
+  Same(inserted[#inserted], "|Hitem:501|h[Healing Potion]|h")
+  c.IsModifiedClick = function() return false end
+  qr2.iconBtn:GetScript("OnClick")(qr2.iconBtn)
+  Check(qr2.selected == true, "an unmodified click on the picture chooses the row")
+  -- the row's own tooltip: the recipe, the crafts queued, what it makes
+  qr1.scripts.OnEnter(qr1)
+  Same(GT:GetOwner(), qr1)
+  local text = table.concat(tip.lines, " | ")
+  Check(text:find("Healing Potion", 1, true) and text:find("Crafts queued=3", 1, true) and text:find("Makes=", 1, true), "the row's tooltip: " .. text)
+  -- a recycled row: filled with another entry, its tooltip is drawn again from the new data; a hidden row leaves none behind
+  qr1.entry = nil
+  qr1:Hide()
+  Check(tip.shown == false and GT:GetOwner() == nil, "a hidden row clears its tooltip")
+  qr1:Show()
+  -- the plus and minus controls keep their own tooltips and the row stays lit
+  qr1.more.IsMouseOver = function() return true end
+  qr1.scripts.OnEnter(qr1)
+  qr1.scripts.OnLeave(qr1)
+  Check(qr1.hovered == true, "the pointer went to the plus: the row stays lit")
+  qr1.more.IsMouseOver = nil
+  qr1.more.scripts.OnLeave(qr1.more)
+  Check(qr1.hovered == false, "and goes out when the pointer leaves the plus and the row")
+  Check(qr1.more.twichuiTip ~= nil, "the control still has its own tooltip")
+
+  ---------------------------------------------------------------------------
+  -- 3. Hover: owned by the row, visible, coexisting with the chosen state, bounded
+  ---------------------------------------------------------------------------
+  local function RowKinds()
+    Win.SetMode("opps"); Win.Render()
+    local o = Win.Lists().opps.rows[1]
+    Win.SetMode("craft"); Win.Render()
+    cr.segRecipes:GetScript("OnClick")(cr.segRecipes)
+    local rr = Win.Lists().recipes.rows[1]
+    cr.segQueue:GetScript("OnClick")(cr.segQueue)
+    local qq = Win.Lists().queue.rows[1]
+    local mm = Win.Lists().mats.rows[1]
+    Win.SetMode("shop"); Win.Render()
+    local ss = Win.Lists().shop.rows[1]
+    return { opportunities = o, recipes = rr, queue = qq, materials = mm, shopping = ss, detailmat = Win.Opps().detail.mats[1] }
+  end
+  local kinds = RowKinds()
+  local function Lit(row) return row.twichHot.parts[1].alpha or 0, row.twichRim.parts[1].alpha or 0 end
+  for name, row in pairs(kinds) do
+    Check(row, name .. " row exists")
+    local onEnter, onLeave = row.scripts.OnEnter, row.scripts.OnLeave
+    Check(onEnter and onLeave, name .. ": the row has its own OnEnter and OnLeave")
+    -- whatever a page sets afterwards (tips, fills, selection), the row's scripts are the same ones, and they light it
+    if row.fill then pcall(row.fill, row, row.data or row.qrow or row.rec or row.row) end
+    Same(row.scripts.OnEnter, onEnter, name .. ": the scripts were not replaced")
+    row:SetSelected(false); row:SetHot(false); M.Settle()
+    onEnter(row)
+    Check(row.hovered == true, name .. ": OnEnter lights the row")
+    Check(M.Count() >= 1 or select(1, Lit(row)) > 0, name .. ": it eases in")
+    M.Advance(0.3)
+    local hot, rim = Lit(row)
+    Check(hot >= 0.9 and rim >= 0.9, ("%s: lit art is visible once eased in (face %.2f, rim %.2f)"):format(name, hot, rim))
+    -- chosen and hovered together
+    row:SetSelected(true); M.Advance(0.3)
+    Check(row.selected and row.hovered, name .. ": chosen and hovered at once")
+    local hot2, rim2 = Lit(row)
+    Check(rim2 > 0 and rim2 < rim and row.twichSel.parts[1]:IsShown(), ("%s: the chosen sheet shows and the rim is quieter (%.2f)"):format(name, rim2))
+    row:SetSelected(false)
+    onLeave(row)
+    M.Advance(0.3)
+    Check(row.hovered == false and select(1, Lit(row)) == 0 and select(2, Lit(row)) == 0, name .. ": leaving takes it out")
+    -- hidden while lit
+    onEnter(row); M.Advance(0.3); row:Hide()
+    Check(row.hovered == false and select(1, Lit(row)) == 0, name .. ": a hidden row is not left lit")
+    row:Show()
+    -- recycled: the list re-reads the pointer
+    row.IsMouseOver = function() return true end
+    row:SyncHover(); M.Advance(0.3)
+    Check(row.hovered, name .. ": a row that scrolls under the pointer lights")
+    row.IsMouseOver = function() return false end
+    row:SyncHover(); M.Advance(0.3)
+    Check(not row.hovered, name .. ": and goes out when the pointer is elsewhere")
+  end
+  -- the row's tooltip and the lit state come from one OnEnter
+  GT.owner = nil
+  kinds.opportunities.scripts.OnEnter(kinds.opportunities)
+  Check(kinds.opportunities.hovered, "the Opportunities row is lit")
+  -- reduced motion: shown at once, nothing eases
+  c.TwichUIDB.ui = c.TwichUIDB.ui or {}
+  c.TwichUIDB.ui.reduceSettingsMotion = true
+  local row = kinds.shopping
+  row:SetHot(false); M.Settle()
+  row:SetHot(true)
+  Check(M.Count() == 0 and select(1, Lit(row)) >= 0.9, "reduced motion: lit at once, no easing")
+  c.TwichUIDB.ui.reduceSettingsMotion = nil
+  row:SetHot(false); M.Settle()
+  -- a picture on a row keeps it lit (the Opportunities and Shopping rows)
+  for _, name in ipairs({ "opportunities", "shopping" }) do
+    local r = kinds[name]
+    r.scripts.OnEnter(r)
+    r.iconBtn.IsMouseOver = function() return true end
+    r.scripts.OnLeave(r)
+    Check(r.hovered, name .. ": the pointer on the picture keeps the row lit")
+    r.iconBtn.scripts.OnEnter(r.iconBtn)
+    Check(r.hovered, name .. ": and entering the picture lights it too")
+    r.iconBtn.IsMouseOver = function() return false end
+    r.iconBtn.scripts.OnLeave(r.iconBtn)
+    Check(not r.hovered, name .. ": leaving everything takes it out")
+  end
+
+  ---------------------------------------------------------------------------
+  -- 4. The profession bars stay inside the Overview card
+  ---------------------------------------------------------------------------
+  Win.SetMode("overview"); Win.Render()
+  local ov = Win.Overview()
+  local pc = ov.cards.profs
+  local skills
+  local function SetSkills(list)
+    skills = list
+    c.GetProfessions = function() local t = {} for i = 1, #list do t[i] = i end return unpack(t) end
+    c.GetProfessionInfo = function(i) local k = skills[i] if k then return k[1], k[2], k[3], k[4] end end
+  end
+  local PROF_TOP, PROF_BOTTOM = 90, 10
+  local function Inside(label)
+    local lowest = 0
+    local n = 0
+    for _, row in ipairs(pc.facts) do
+      if row:IsShown() then
+        n = n + 1
+        local y = row.points[#row.points][5]
+        local bottom = -y + row.h
+        if bottom > lowest then lowest = bottom end
+        Check(row.h >= 18, label .. ": rows are tall enough to read (" .. row.h .. ")")
+      end
+    end
+    if pc.more:GetText() ~= "" then lowest = lowest + 14 end
+    Check(lowest <= pc.cardH - PROF_BOTTOM, ("%s: the list ends at %d inside a %d card"):format(label, lowest, pc.cardH))
+    return n
+  end
+  local long = "A profession name that is far too long to fit in the room it has beside the numbers"
+  local cases = {
+    { "none", {}, 1 }, { "one", { { "Alchemy", 1, 125, 150 } }, 1 },
+    { "two", { { "Alchemy", 1, 125, 150 }, { "Fishing", 2, 75, 150 } }, 2 },
+    { "four", { { "Alchemy", 1, 125, 150 }, { "Tailoring", 2, 80, 100 }, { "Cooking", 3, 10, 150 }, { long, 4, 300, 300 } }, 4 },
+    { "unavailable", { { "Alchemy", 1 }, { "Fishing", 2, 75, 0 } }, 2 },
+  }
+  for _, case in ipairs(cases) do
+    SetSkills(case[2]); Win.Render()
+    local shown = Inside(case[1])
+    Check(shown == (#case[2] == 0 and 1 or case[3]), ("%s: %d rows shown"):format(case[1], shown))
+  end
+  SetSkills(cases[4][2]); Win.Render()
+  Check(#pc.facts[4].text:GetText() > 20 and long:sub(1, #pc.facts[4].text:GetText()) == pc.facts[4].text:GetText(), "a long name is read bounded (Observe.Skills), and the row clips it inside its place: " .. pc.facts[4].text:GetText())
+  Check(pc.facts[4].text.points[1][1] == "LEFT" and pc.facts[4].text.points[2][1] == "RIGHT", "between the picture and the numbers, so it cannot run into them")
+  Same(pc.facts[4].value:GetText(), "300 / 300"); Check(pc.facts[4].bar.frac == 1)
+  SetSkills(cases[5][2]); Win.Render()
+  Same(pc.facts[1].value:GetText(), "n/a"); Same(pc.facts[1].bar.frac, 0)
+  Same(pc.facts[2].value:GetText(), "n/a", "a maximum of zero is not a level")
+  -- a smaller page: fewer rows, the rest said, still inside
+  SetSkills(cases[4][2]); Win.Render()
+  ov:Fire("OnSizeChanged", 820, 400)
+  Win.Render()
+  local shownSmall = Inside("small page")
+  Check(shownSmall < 4 and pc.more:GetText():find("more", 1, true), "a small page shows what fits and says how many more: " .. shownSmall .. " / " .. pc.more:GetText())
+  ov:Fire("OnSizeChanged", 820, 555)
+  Win.Render()
+  Same(Inside("normal page"), 4)
+  -- a skill changes while the page is open
+  skills[1][3] = 126
+  Fire("SKILL_LINES_CHANGED"); FlushTimers(); Flush()
+  Same(pc.facts[1].value:GetText(), "126 / 150")
+  -- the bar itself: filled and empty parts, a start is always visible, nothing is made again
+  local bar = pc.facts[1].bar
+  local made = MI_MADE
+  bar:SetFraction(0); Check(not bar.fill:IsShown() and not bar.shine:IsShown() and not bar.cap:IsShown(), "an empty bar draws no fill")
+  bar:SetFraction(0.001); Check(bar.fill:IsShown() and bar.fill.w >= 3, "a start is visible")
+  bar:SetFraction(1); Check(bar.fill.w == bar.w - 4, "a full bar fills its track (inside the rim)")
+  bar:SetFraction(0.5); Check(bar.fill.w == math.floor((bar.w - 4) * 0.5 + 0.5))
+  Same(MI_MADE, made, "drawing a bar makes no new object")
+  SetSkills({ { "Alchemy", 1, 125, 150 } })
+
+  ---------------------------------------------------------------------------
+  -- 5. The market status: freshness and completeness are separate, the name is in the tooltip only
+  ---------------------------------------------------------------------------
+  local MK = W.Market
+  local function Status(over, at)
+    c.TwichUIWorkshopDB.markets = { ["Realm|Alliance"] = over and Market(over) or nil }
+    return MK.Status({ now = now })
+  end
+  local function With(age, complete) return Status({ at = now - age, complete = complete }) end
+  local st = With(1920, true)
+  Same(st.text, "Prices updated 32m ago"); Same(st.icon, "done"); Same(st.tone, "good"); Same(st.freshness, "fresh"); Same(st.complete, true)
+  st = With(1920, false)
+  Same(st.text, "Partial scan \194\183 32m ago", "a partial scan can be recent"); Same(st.freshness, "fresh"); Same(st.complete, false); Same(st.icon, "current")
+  st = With(5 * 3600, true)
+  Same(st.text, "Prices updated 5h ago"); Same(st.freshness, "aging"); Same(st.complete, true); Same(st.tone, "warn")
+  st = With(3 * 86400, true)
+  Same(st.text, "Old prices \194\183 3d ago", "an old scan can be complete"); Same(st.freshness, "old"); Same(st.complete, true); Same(st.tone, "bad")
+  st = With(3 * 86400, false)
+  Same(st.text, "Old partial scan \194\183 3d ago"); Same(st.freshness, "old"); Same(st.complete, false)
+  Same(With(MK.FRESH_AFTER, true).freshness, "fresh", "two hours is still fresh"); Same(With(MK.FRESH_AFTER + 1, true).freshness, "aging")
+  Same(With(W.Prices.OLD_AFTER, true).freshness, "aging", "a day is still usable"); Same(With(W.Prices.OLD_AFTER + 1, true).freshness, "old")
+  Same(With(5, true).text, "Prices updated just now")
+  st = With(1920, true)
+  local tiptext = table.concat(st.tip, "\n")
+  Check(tiptext:find("Alliance auction house on Realm", 1, true) and tiptext:find("Coverage: a complete scan", 1, true) and tiptext:find("23439 items priced", 1, true)
+    and tiptext:find("not a sale", 1, true), "the tooltip holds the whole market, the coverage, the count and the limit: " .. tiptext)
+  Check(not st.text:find("Realm", 1, true) and not st.text:find("Alliance", 1, true), "the visible text names no realm or side")
+  Check(table.concat(With(1920, false).tip, "\n"):find("Coverage: partial", 1, true))
+  st = Status(nil)
+  Same(st.state, "none"); Same(st.text, "No prices yet")
+  -- a scan in progress outranks both
+  c.TwichUIWorkshopDB.markets = { ["Realm|Alliance"] = Market() }
+  W.Scan.state, W.Scan.phase = "scanning", "reading"
+  Check(MK.Status({ now = now }).text:find("^Scanning prices"), "scanning")
+  W.Scan.phase = "saving"
+  Same(MK.Status({ now = now }).text, "Saving prices")
+  Same(MK.Status({ now = now }).state, "saving")
+  W.Scan.state, W.Scan.phase = "idle", nil
+  -- the footer: a chip with that text, no realm, a tooltip with the market, and no timer
+  Win.SetMode("overview")
+  c.TwichUIWorkshopDB.markets = { ["Realm|Alliance"] = Market({ at = os.time() - 1920 }) }
+  local timers = #pend
+  Win.Render()
+  Same(f.chip.text:GetText(), "Prices updated 32m ago"); Same(f.chip.status, "done")
+  Check(not f.chip.text:GetText():find("Realm", 1, true) and not f.note:GetText():find("Realm", 1, true), "the footer names no market")
+  Check(f.chip.twichuiTip.body(f.chip):find("Alliance auction house on Realm", 1, true), "the chip's tooltip names it")
+  Check(f.chip.w >= 90 and f.chip.w <= 330, "the chip fits its text: " .. f.chip.w)
+  Same(#pend, timers, "drawing the status made no timer: the age is read when drawn, never kept current in the background")
+  c.TwichUIWorkshopDB.markets = { ["Realm|Alliance"] = Market({ at = os.time() - 3 * 86400, complete = false }) }
+  Win.Render()
+  Same(f.chip.text:GetText(), "Old partial scan \194\183 3d ago")
+  c.TwichUIWorkshopDB.markets = {}
+  Win.Render()
+  Same(f.chip.text:GetText(), "No prices yet")
+  Check(next(c.TwichUIWorkshopDB.markets) == nil, "the status read the markets and changed none")
+  c.TwichUIWorkshopDB.markets = { ["Realm|Alliance"] = Market() }
+
+  ---------------------------------------------------------------------------
+  -- 6. Redraws and navigation create no more frames; layout updates keep the queue and the market data
+  ---------------------------------------------------------------------------
+  for _, e in ipairs({ unpack(Q.Entries()) }) do Q.Remove(e.id) end
+  S.Add(S.AllRecipes()[1])
+  local function Cycle()
+    for _, key in ipairs({ "overview", "opps", "craft", "shop" }) do
+      Win.SetMode(key); Win.Render(); Win.Render()
+      local o = Win.Lists().opps.rows[1]
+      if o and o.scripts.OnEnter then o.scripts.OnEnter(o); o.scripts.OnLeave(o) end
+    end
+    ov:Fire("OnSizeChanged", 820, 400); ov:Fire("OnSizeChanged", 820, 555)
+    FlushTimers()
+  end
+  for _ = 1, 3 do Cycle() end
+  local made2 = MI_MADE
+  local queueBefore, marketBefore = #Q.Entries(), c.TwichUIWorkshopDB.markets["Realm|Alliance"].n
+  for _ = 1, 5 do Cycle() end
+  Same(MI_MADE, made2, "navigation, redraws, hover and layout updates make no new frame or texture")
+  Same(#Q.Entries(), queueBefore, "the queue is as it was"); Same(c.TwichUIWorkshopDB.markets["Realm|Alliance"].n, marketBefore, "and the market data")
+  M.Advance(0.3)
+  Same(M.Count(), 0, "the easing is bounded: it ends by itself, and none is left running")
   for _, e in ipairs({ unpack(Q.Entries()) }) do Q.Remove(e.id) end
   Win.SetMode("overview")
   f:Hide()

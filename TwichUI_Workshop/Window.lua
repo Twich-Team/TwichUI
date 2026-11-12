@@ -1,7 +1,7 @@
 -- TwichUI Workshop: the window
 -- The shell in the settings window's crafted look (docs/settings-design-system.md, drawn through the core's CraftLook.lua, so the settings
 -- addon is never loaded for it): a leather header with the TwichUI Workshop brand and the close box, a page list on the left, the page in a
--- recessed well, and a footer with where the prices come from and the last action's message. The pages are the views (ViewOverview,
+-- recessed well, and a footer with the price status chip and the last action's message. The pages are the views (ViewOverview,
 -- ViewOpportunities, ViewCrafting, ViewShopping.lua): each builds once into its own frame and draws what Session.lua says. Opened with
 -- /tui workshop, the TwichUI menu or the settings page; it never opens by itself. It opens on Overview the first time; the page shown is
 -- kept only while the game runs. No position, size or page is saved.
@@ -54,20 +54,15 @@ local EVENTS = {
 ---------------------------------------------------------------------------
 -- Drawing
 ---------------------------------------------------------------------------
--- The footer's first line: the prices the views use, in a few words
-local function MarketLine()
-    local src = S.PriceSource()
-    local m = src.market
-    if not m then
-        return src.open and "No prices for this auction house yet" or "No auction house prices yet: scan them at the auction house"
-    end
-    local info = MK.Info({ market = m })
-    local parts = { "Prices: " .. (src.label or "auction house") }
-    local age = PR.Age(m.at)
-    if age then parts[#parts + 1] = "scanned " .. PR.AgeText(age) .. (age > PR.OLD_AFTER and " (old)" or "") end
-    if info and info.items then parts[#parts + 1] = ("%d %s"):format(info.items, UI.Plural(info.items, "item", "items")) end
-    if info and info.scans and info.scans > 1 then parts[#parts + 1] = ("%d scan days of history"):format(info.scans) end
-    return table.concat(parts, " \194\183 ")
+-- The footer's price status chip (Market.Status decides the words: freshness and completeness are separate properties). The market's
+-- whole name, the scan time, the coverage and the limits are in its tooltip, not in the footer; the age is worked out here, when the
+-- window draws (no timer keeps it current).
+local TONES = { good = "sage", warn = "bronzeText", bad = "ember", quiet = "textDim" }
+local function PaintStatus()
+    local st = MK.Status()
+    f.chip.tipLines = st.tip
+    f.chip:Set(st.text, st.icon, K[TONES[st.tone] or "text"])
+    f.chip.state = st.state
 end
 
 function Win.Render()
@@ -77,7 +72,7 @@ function Win.Render()
     renders = renders + 1
     local def = UI.pages[mode]
     if def and def.Render then def.Render(pages[mode]) end
-    f.market:SetText(MarketLine())
+    PaintStatus()
     f.note:SetText(S.Note() or (Q.Held() and "This queue was saved by a newer TwichUI and is read-only." or ""))
     if pt then Perf.Stop(pt) end
 end
@@ -235,7 +230,7 @@ local function BuildShell()
     CL.QuietTile(well, "editor", "BACKGROUND", 3):SetAllPoints(well)
     f.well = well
 
-    -- footer: where the prices come from, and the last action's message
+    -- footer: the price status chip, and the last action's message
     local footer = CreateFrame("Frame", nil, f)
     footer:SetPoint("BOTTOMLEFT", PAD, 13)
     footer:SetPoint("BOTTOMRIGHT", -PAD, 13)
@@ -244,12 +239,13 @@ local function BuildShell()
     local rule = UI.Rule(f, 0.6)
     rule:SetPoint("BOTTOMLEFT", footer, "TOPLEFT", 0, 4)
     rule:SetPoint("BOTTOMRIGHT", footer, "TOPRIGHT", 0, 4)
-    f.market = UI.Text(footer, 13, K.textDim)
-    f.market:SetPoint("LEFT", 10, 0)
-    f.market:SetWidth(470)
+    f.chip = UI.Chip(footer, 220, 22)
+    f.chip.maxW = 330
+    f.chip:SetPoint("LEFT", 8, 0)
+    UI.TipFn(f.chip, "Market prices", function(self) return self.tipLines and table.concat(self.tipLines, "\n") or nil end)
     f.note = UI.Text(footer, 13, K.bronzeText)
     f.note:SetPoint("RIGHT", -10, 0)
-    f.note:SetPoint("LEFT", f.market, "RIGHT", 16, 0)
+    f.note:SetPoint("LEFT", f.chip, "RIGHT", 16, 0)
     f.note:SetJustifyH("RIGHT")
     f.footer = footer
 end

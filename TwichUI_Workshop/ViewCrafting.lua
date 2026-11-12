@@ -35,6 +35,8 @@ UI.AgeOf = AgeOf
 ---------------------------------------------------------------------------
 -- Rows
 ---------------------------------------------------------------------------
+local ACT_W = 70   -- the width of a recipe row's action: every state of it (Add, Queued, Full) is drawn inside it
+
 local function MakeRecipeRow(parent)
     local row = CreateFrame("Frame", nil, parent)
     row:EnableMouse(true)
@@ -44,12 +46,28 @@ local function MakeRecipeRow(parent)
     row.iconFrame = UI.ItemIcon(row, 32)
     row.iconFrame:SetPoint("LEFT", 8, 0)
     row.icon = row.iconFrame.tex
-    row.add = UI.ArtButton(row, "Add", "plus", 70, "secondary", function()
+    row.add = UI.ArtButton(row, "Add", "plus", ACT_W, "secondary", function()
         local rec = row.rec
         if rec then S.Add(rec); UI.Redraw() end
     end, 26)
     row.add:SetPoint("RIGHT", -6, 0)
     UI.Tip(row.add, "Add to queue", "Puts this recipe in the queue to make once. Change how many in the queue.")
+    -- the other states of the action are a compact mark of the same width (a check and "Queued", or "Full"), never a stretched button: the
+    -- text is drawn inside this box, and the box is the button's own place
+    local mark = CreateFrame("Frame", nil, row)
+    mark:SetSize(ACT_W, 26)
+    mark:SetPoint("RIGHT", -6, 0)
+    mark:EnableMouse(true)
+    mark.icon = mark:CreateTexture(nil, "ARTWORK")
+    mark.icon:SetSize(12, 12)
+    mark.icon:SetPoint("LEFT", 4, 0)
+    UI.Status(mark.icon, "done", 12)
+    mark.text = UI.Text(mark, 12, K.sage, "strong")
+    mark.text:SetPoint("LEFT", mark.icon, "RIGHT", 3, 0)
+    mark.text:SetPoint("RIGHT", -2, 0)
+    mark:Hide()
+    row.mark = mark
+    UI.TipFn(mark, "Recipe in the queue", function(self) return self.why end)
     row.name = UI.Text(row, 14, K.text, "strong")
     row.name:SetPoint("TOPLEFT", row.iconFrame, "TOPRIGHT", 9, 1)
     row.name:SetPoint("RIGHT", row.add, "LEFT", -6, 0)
@@ -59,7 +77,7 @@ local function MakeRecipeRow(parent)
     row.sub:SetPoint("LEFT", row.diff, "RIGHT", 6, 0)
     row.sub:SetPoint("RIGHT", row.add, "LEFT", -6, 0)
     -- the whole name (and what the craft makes) on hover: the column is narrow
-    row:SetScript("OnEnter", function(self)
+    row.TipEnter = function(self)
         local rec = self.rec
         if not (GameTooltip and rec) then return end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -70,8 +88,8 @@ local function MakeRecipeRow(parent)
             GameTooltip:AddLine(per and ("Makes " .. per) or "What it makes isn't known yet.", 0.8, 0.8, 0.8, true)
         end
         GameTooltip:Show()
-    end)
-    row:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    end
+    row.TipLeave = function() if GameTooltip then GameTooltip:Hide() end end
     row.fill = function(self, rec)
         self.rec = rec
         O.Fill(rec)
@@ -86,14 +104,31 @@ local function MakeRecipeRow(parent)
         end
         local per = W.PerCraft(rec.outMin, rec.outMax)
         self.sub:SetText(per and ("Makes " .. per) or "Makes: unknown")
-        if S.IsQueued(rec.id) then
-            self.add.text:SetText("Queued")
-            self.add:SetEnabled(false)
-        else
-            self.add.text:SetText("Add")
-            self.add:SetEnabled(true)
+        local queued = S.IsQueued(rec.id)
+        local full = not queued and W.Queue.Count() >= W.MAX_QUEUE
+        self.add:SetEnabled(not (queued or full))   -- a hidden button is not a live one either
+        self.add:SetShown(not (queued or full))
+        self.mark:SetShown(queued or full)
+        if queued then
+            self.mark.icon:Show()
+            self.mark.text:ClearAllPoints()
+            self.mark.text:SetPoint("LEFT", self.mark.icon, "RIGHT", 3, 0)
+            self.mark.text:SetPoint("RIGHT", -2, 0)
+            self.mark.text:SetText("Queued")
+            UI.Paint(self.mark.text, K.sage)
+            self.mark.why = "This recipe is in your queue. Change how many in the queue."
+        elseif full then
+            self.mark.icon:Hide()
+            self.mark.text:ClearAllPoints()
+            self.mark.text:SetPoint("LEFT", 8, 0)
+            self.mark.text:SetPoint("RIGHT", -2, 0)
+            self.mark.text:SetText("Full")
+            UI.Paint(self.mark.text, K.bronzeText)
+            self.mark.why = ("The queue holds %d recipes and is full. Remove one to add another."):format(W.MAX_QUEUE)
         end
     end
+    row:Follow(row.add)
+    row:Follow(mark)
     return row
 end
 
@@ -106,14 +141,59 @@ local function QueueLine(r)
 end
 UI.QueueLine = QueueLine
 
+-- The tooltip of a queued craft: the recipe, how many crafts, what they make, and what is not known (the item's own tooltip, when its icon is
+-- hovered and the output item is known, is the game's: nothing is made up around it)
+local function QueueTip(row)
+    local e = row.entry
+    if not (GameTooltip and e) then return end
+    GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+    GameTooltip:AddLine(e.name, 1, 0.82, 0)
+    GameTooltip:AddDoubleLine("Crafts queued", tostring(e.crafts), 0.8, 0.8, 0.8, 1, 1, 1)
+    local r = row.qrow
+    if r and r.perCraft then
+        GameTooltip:AddDoubleLine("Makes", e.crafts == 1 and r.perCraft or (r.perCraft .. " each, " .. r.expected .. " in all"), 0.8, 0.8, 0.8, 1, 1, 1)
+    else
+        GameTooltip:AddLine("What it makes isn't known yet.", 0.8, 0.8, 0.8, true)
+    end
+    if r and r.unresolved then
+        GameTooltip:AddLine("Its materials aren't known: open " .. (e.profName or "its profession") .. " to update.", 1, 0.82, 0.3, true)
+    end
+    GameTooltip:AddLine("Click to choose it.", 0.55, 0.55, 0.55)
+    GameTooltip:Show()
+end
+
 local function MakeQueueRow(parent)
     local row = CreateFrame("Button", nil, parent)
     UI.Hover(row)
     local rule = UI.Rule(row, 0.2)
     rule:SetPoint("BOTTOMLEFT", 6, 0); rule:SetPoint("BOTTOMRIGHT", -6, 0)
-    row.iconFrame = UI.ItemIcon(row, 42)
-    row.iconFrame:SetPoint("LEFT", 10, 0)
+    -- the picture is a button: the item's own tooltip (when the output item is known) and Shift-click for its chat link
+    row.iconBtn = CreateFrame("Button", nil, row)
+    row.iconBtn:SetSize(42, 42)
+    row.iconBtn:SetPoint("LEFT", 10, 0)
+    row.iconFrame = UI.ItemIcon(row.iconBtn, 42)
+    row.iconFrame:SetAllPoints()
     row.icon = row.iconFrame.tex
+    row.iconBtn:SetScript("OnEnter", function(self)
+        local item = row.entry and row.entry.outItem
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        if not (item and pcall(GameTooltip.SetItemByID, GameTooltip, item)) then
+            GameTooltip:Hide()
+            QueueTip(row)   -- no output item known: the queue's own tooltip, so the picture never shows nothing
+        end
+    end)
+    row.iconBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    row.iconBtn:SetScript("OnClick", function()
+        local item = row.entry and row.entry.outItem
+        if item and IsModifiedClick and IsModifiedClick("CHATLINK") and ChatEdit_InsertLink then
+            local ok, _, link = pcall(C_Item.GetItemInfo, item)
+            if ok and type(link) == "string" then pcall(ChatEdit_InsertLink, link) end
+            return
+        end
+        local click = row:GetScript("OnClick")
+        if click then click(row) end
+    end)
     row.more = UI.Glyph(row, "+", function()
         if row.id then S.Change(row.id, IsShiftKeyDown and IsShiftKeyDown() and 5 or 1); UI.Redraw() end
     end, 24)
@@ -142,9 +222,11 @@ local function MakeQueueRow(parent)
     row:SetScript("OnClick", function(self)
         if self.id then selected = self.id; UI.Redraw() end
     end)
+    row.TipEnter = QueueTip
+    row.TipLeave = function() if GameTooltip then GameTooltip:Hide() end end
     row.fill = function(self, r)
         local e = r.entry
-        self.id = e.id
+        self.id, self.entry, self.qrow = e.id, e, r
         self.icon:SetTexture(e.icon or UI.ICON_BLANK)
         self.name:SetText(e.name)
         self.line:SetText(QueueLine(r))
@@ -154,6 +236,9 @@ local function MakeQueueRow(parent)
         self.more:SetEnabled(e.crafts < W.MAX_CRAFTS)
         self:SetSelected(e.id == selected)
     end
+    row:Follow(row.iconBtn)   -- last: after the pieces' own tooltips are set
+    row:Follow(row.more)
+    row:Follow(row.less)
     return row
 end
 
@@ -184,7 +269,7 @@ local function MakeMaterialRow(parent)
     row.note:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -1)
     row.note:SetPoint("RIGHT", row.need, "LEFT", -6, 0)
     row.note:Hide()
-    row:SetScript("OnEnter", function(self)
+    row.TipEnter = function(self)
         if GameTooltip and self.item then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             if not pcall(GameTooltip.SetItemByID, GameTooltip, self.item) then
@@ -207,8 +292,8 @@ local function MakeMaterialRow(parent)
                 GameTooltip:Show()
             end
         end
-    end)
-    row:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    end
+    row.TipLeave = function() if GameTooltip then GameTooltip:Hide() end end
     row.fill = function(self, m)
         self.item, self.made, self.madeRange, self.row = m.item, m.made, m.madeRange, m
         local name, icon = O.ItemFacts(m.item)
@@ -447,6 +532,9 @@ local function BuildLeft()
     UI.lists.queue = queue
 end
 
+-- The chosen craft, in three bands: who it is (a picture, the name, the profession and how many crafts), what it may cost and earn (three
+-- recessed boxes across the panel), and the actions (with the warning about unknown materials beside them). Nothing is added to fill it:
+-- a craft with little to say simply has a short first band.
 local function BuildDetail()
     local x = LEFT_W + 12
     local d = Card(x, TOP, nil, PANEL_H)
@@ -454,47 +542,52 @@ local function BuildDetail()
     page.detail = d
     d.head = CreateFrame("Frame", nil, d)
     d.head:SetAllPoints()
-    d.iconFrame = UI.ItemIcon(d.head, 60)
-    d.iconFrame:SetPoint("TOPLEFT", 14, -14)
+    d.iconFrame = UI.ItemIcon(d.head, 48)
+    d.iconFrame:SetPoint("TOPLEFT", 14, -12)
     d.icon = d.iconFrame.tex
-    d.name = UI.Text(d.head, 21, K.text, "serif")
-    d.name:SetPoint("TOPLEFT", 86, -12)
-    d.name:SetWidth(206)
-    d.name:SetWordWrap(true)
-    d.name:SetMaxLines(2)
-    d.name:SetJustifyV("TOP")
+    d.name = UI.Text(d.head, 19, K.text, "serif")
+    d.name:SetPoint("TOPLEFT", 74, -10)
+    d.name:SetPoint("RIGHT", d.head, "RIGHT", -14, 0)
+    d.name:SetHeight(24)
     d.prof = UI.Text(d.head, 13, K.textDim)
-    d.prof:SetPoint("TOPLEFT", d.name, "BOTTOMLEFT", 1, -4)
+    d.prof:SetPoint("TOPLEFT", d.name, "BOTTOMLEFT", 1, -3)
     d.crafts = UI.Text(d.head, 14, K.bronzeText, "strong")
     d.crafts:SetPoint("LEFT", d.prof, "RIGHT", 10, 0)
     d.makes = UI.Text(d.head, 13, K.textDim)
-    d.makes:SetPoint("TOPLEFT", d.prof, "BOTTOMLEFT", 0, -4)
-    d.makes:SetWidth(206)
-    d.state = UI.Text(d.head, 12, K.textDim)
-    d.state:SetWidth(206)
-    d.state:SetWordWrap(true)
-    d.state:SetPoint("TOPLEFT", d.makes, "BOTTOMLEFT", 0, -3)
-    -- what the crafts may cost and earn, as three labelled figures on the right
-    local right = CreateFrame("Frame", nil, d.head)
-    right:SetPoint("TOPRIGHT", -14, -12)
-    right:SetSize(130, 100)
-    right:EnableMouse(true)
-    local function Fig(label, y, big)
-        local l = UI.Text(right, 12, K.stone)
-        l:SetPoint("TOPRIGHT", 0, y)
+    d.makes:SetPoint("TOPLEFT", d.prof, "BOTTOMLEFT", 0, -3)
+    d.makes:SetPoint("RIGHT", d.head, "RIGHT", -14, 0)
+    -- what the crafts may cost and earn: three boxes across the panel
+    local gap = 8
+    local function Box(label, i)
+        local b = CreateFrame("Frame", nil, d.head)
+        b:SetHeight(42)
+        b:SetPoint("TOPLEFT", d.head, "TOPLEFT", 14 + (i - 1) * 1, -74)   -- the x is set by the width below
+        UI.Panel(b, "canvas")
+        b:EnableMouse(true)
+        local l = UI.Text(b, 11, K.stone)
+        l:SetPoint("TOPLEFT", 10, -6)
         l:SetText(label)
-        l:SetJustifyH("RIGHT")
-        l:SetWidth(130)
-        local v = UI.Text(right, big and 18 or 14, K.text, "strong")
-        v:SetPoint("TOPRIGHT", 0, y - 14)
-        v:SetWidth(130)
-        v:SetJustifyH("RIGHT")
-        return v, l
+        local v = UI.Text(b, 16, K.text, "strong")
+        v:SetPoint("BOTTOMLEFT", 10, 6)
+        v:SetPoint("RIGHT", -8, 0)
+        UI.Tip(b, "Estimates", "From the cheapest auction listings your last scan saw: one craft's estimate times the crafts. A listing is not a sale, and the auction house's cut is not taken off until it is confirmed.")
+        return b, v, l
     end
-    d.cost = Fig("Total cost", 0)
-    d.sell = Fig("Est. value", -32)
-    d.profit, d.profitLabel = Fig("Profit before fees", -64, true)
-    UI.Tip(right, "Estimates", "From the cheapest auction listings your last scan saw: one craft's estimate times the crafts. A listing is not a sale, and the auction house's cut is not taken off until it is confirmed.")
+    local b1, v1 = Box("Total cost", 1)
+    local b2, v2 = Box("Est. value", 2)
+    local b3, v3, l3 = Box("Profit before fees", 3)
+    d.boxes = { b1, b2, b3 }
+    d.cost, d.sell, d.profit, d.profitLabel = v1, v2, v3, l3
+    local function Place(w)
+        local bw = math.floor((w - 28 - 2 * gap) / 3)
+        for i, b in ipairs(d.boxes) do
+            b:ClearAllPoints()
+            b:SetPoint("TOPLEFT", d.head, "TOPLEFT", 14 + (i - 1) * (bw + gap), -74)
+            b:SetWidth(bw)
+        end
+    end
+    Place(LEFT_W + 100)
+    d:HookScript("OnSizeChanged", function(_, w) if w and w >= 200 then Place(w) end end)
     d.empty = UI.Text(d, 13, K.textDim)
     d.empty:SetPoint("TOPLEFT", 16, -16)
     d.empty:SetPoint("RIGHT", -16, 0)
@@ -510,6 +603,13 @@ local function BuildDetail()
     end, 30)
     d.open:SetPoint("RIGHT", d.remove, "LEFT", -8, 0)
     UI.Tip(d.open, "Open recipe", "Shows this recipe in the game's profession window. It makes nothing.")
+    -- the warning about unknown materials sits at the left of the actions, in the room they leave
+    d.state = UI.Text(d.head, 12, K.textDim)
+    d.state:SetPoint("BOTTOMLEFT", d.head, "BOTTOMLEFT", 14, 12)
+    d.state:SetPoint("RIGHT", d.open, "LEFT", -10, 0)
+    d.state:SetHeight(30)
+    d.state:SetWordWrap(true)
+    d.state:SetJustifyV("MIDDLE")
     page.open, page.remove = d.open, d.remove
 end
 

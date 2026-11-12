@@ -111,6 +111,7 @@ local function MakeShopRow(parent)
     row.iconFrame:SetAllPoints()
     row.icon = row.iconFrame.tex
     UI.ItemTip(row.iconBtn, function() return row.item end)
+    UI.PassClicks(row.iconBtn, row)
     -- right to left: the cost, the kind (a picture and a word), how many
     row.spend = {}
     row.spend.a = UI.Text(row, 14, K.text, "strong")
@@ -137,11 +138,12 @@ local function MakeShopRow(parent)
     row.detail = UI.Text(row, 12, K.textDim)
     row.detail:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -4)
     row.detail:SetPoint("RIGHT", row.need, "LEFT", -8, 0)
-    row:SetScript("OnEnter", function(self) ShowShopBasis(self, self.data) end)
-    row:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    row.TipEnter = function(self) ShowShopBasis(self, self.data) end   -- through the row's hover (UI.Hover owns OnEnter / OnLeave)
+    row.TipLeave = function() if GameTooltip then GameTooltip:Hide() end end
     row:SetScript("OnClick", function(self)
         if self.data then chosen = Key(self.data); UI.Redraw() end
     end)
+    row:Follow(row.iconBtn)
     row.fill = function(self, r)
         self.data, self.item = r, r.item
         local name, icon = O.ItemFacts(r.item)
@@ -243,11 +245,19 @@ local function RenderDetail(plan, ctx)
         b:SetShown(isBuyMake)
         b:SetEnabled(isBuyMake and set[k] == true)
         b:SetOn(isBuyMake and r.source == k)
+        -- the words under a choice: the one Workshop suggests, and (when it differs) the one the player chose
+        local tag = d.tags[k]
+        local suggested = isBuyMake and r.suggested == k
+        local mine = isBuyMake and r.picked and r.source == k and r.suggested ~= k
+        tag:SetText(suggested and "Suggested" or (mine and "Your choice" or ""))
+        UI.Paint(tag, suggested and K.sage or K.bronzeText)
+        tag:SetShown(isBuyMake)
     end
+    d.useSuggestion:SetShown(isBuyMake and r.picked == true and r.suggested ~= nil and r.source ~= r.suggested)
     d.sourceHead:SetText(isBuyMake and "Source" or "Where")
     d.explainBox:ClearAllPoints()
-    d.explainBox:SetPoint("TOPLEFT", 14, isBuyMake and -250 or -216)
-    d.explainBox:SetPoint("TOPRIGHT", -14, isBuyMake and -250 or -216)
+    d.explainBox:SetPoint("TOPLEFT", 14, isBuyMake and -252 or -208)
+    d.explainBox:SetPoint("TOPRIGHT", -14, isBuyMake and -252 or -208)
     d.explain:SetText(ShopDetail(r))
     -- the price evidence
     if r.kind == "collect" then
@@ -320,8 +330,8 @@ local function Render()
         shop.total:SetText("Nothing to buy: collect what is stored.")   -- only collect rows: stored materials cost nothing to get
         UI.Paint(shop.total, K.sage)
     elseif tot.missing > 0 then
-        shop.total:SetText(("Estimated spending: %s so far. Some prices missing: %d %s."):format(UI.Money(tot.cash), tot.missing,
-            Plural(tot.missing, "material has no price", "materials have no price")))
+        shop.total:SetText(("Estimated spending: %s so far \194\183 %d %s"):format(UI.Money(tot.cash), tot.missing,
+            Plural(tot.missing, "price missing", "prices missing")))
         UI.Paint(shop.total, K.bronzeText)
     else
         shop.total:SetText("Estimated spending: " .. UI.Money(tot.cash) .. (tot.estimate and " (includes estimates)" or ""))
@@ -370,15 +380,15 @@ local function BuildDetail()
     d.head = CreateFrame("Frame", nil, d)
     d.head:SetAllPoints()
     local ib = CreateFrame("Button", nil, d.head)
-    ib:SetSize(54, 54)
-    ib:SetPoint("TOPLEFT", 14, -14)
-    d.iconFrame = UI.ItemIcon(ib, 54)
+    ib:SetSize(48, 48)
+    ib:SetPoint("TOPLEFT", 14, -12)
+    d.iconFrame = UI.ItemIcon(ib, 48)
     d.iconFrame:SetAllPoints()
     d.icon = d.iconFrame.tex
     UI.ItemTip(ib, function() return d.item end)
     d.name = UI.Text(d.head, 19, K.text, "serif")
-    d.name:SetPoint("TOPLEFT", 80, -14)
-    d.name:SetWidth(DETAIL_W - 80 - 14)
+    d.name:SetPoint("TOPLEFT", 74, -12)
+    d.name:SetWidth(DETAIL_W - 74 - 14)
     d.name:SetWordWrap(true)
     d.name:SetMaxLines(2)
     d.name:SetJustifyV("TOP")
@@ -388,10 +398,10 @@ local function BuildDetail()
     d.kindWord = UI.Text(d.head, 14, K.text, "strong")
     d.kindWord:SetPoint("LEFT", d.kindArt, "RIGHT", 6, 0)
     -- quantities
-    Section(d.head, "Quantities", -80)
+    Section(d.head, "Quantities", -72)
     d.qty = {}
     for i = 1, 4 do
-        local y = -104 - (i - 1) * 20
+        local y = -96 - (i - 1) * 19
         local v = UI.Text(d.head, 14, K.text, "strong")
         v:SetPoint("TOPRIGHT", -14, y)
         v:SetJustifyH("RIGHT")
@@ -399,9 +409,10 @@ local function BuildDetail()
         l:SetPoint("TOPLEFT", 14, y)
         d.qty[i] = { l = l, v = v }
     end
-    -- the source: the choices, and why
-    d.sourceHead = Section(d.head, "Source", -192)
-    d.choose = {}
+    -- the source: the choices, which one Workshop suggests, and which one is the player's own. A small caption under a choice says so
+    -- ("Suggested", "Your choice") in words, and "Use suggestion" returns to the suggestion when another source was chosen.
+    d.sourceHead = Section(d.head, "Source", -180)
+    d.choose, d.tags = {}, {}
     local bw = math.floor((DETAIL_W - 28 - 8) / 3)
     for i, k in ipairs(Sh.ORDER) do
         local b = UI.Segment(d.head, k == "auction" and "Auction" or Sh.NAMES[k], bw, function()
@@ -411,38 +422,58 @@ local function BuildDetail()
                 UI.Redraw()
             end
         end)
-        b:SetPoint("TOPLEFT", 14 + (i - 1) * (bw + 4), -216)
-        UI.Tip(b, Sh.NAMES[k], "Where this material comes from. Only the ways that are possible can be chosen; choose the lit one again to go back to the suggestion. Nothing is bought or made for you.")
+        b:SetPoint("TOPLEFT", 14 + (i - 1) * (bw + 4), -204)
+        UI.TipFn(b, Sh.NAMES[k], function()
+            local r = d.data
+            if not r then return nil end
+            local why = Sh.WhyNot(r, k)
+            if why then return "Not available: " .. why end
+            local text = "Choose this to get the material this way. Nothing is bought or made for you."
+            if r.suggested == k then text = "Workshop's suggestion: the lowest known cost. " .. text
+            elseif r.source == k then text = "Your choice. Choose it again, or use the suggestion, to go back. " .. text end
+            return text
+        end)
         d.choose[k] = b
+        local tag = UI.Text(d.head, 11, K.sage)
+        tag:SetPoint("TOP", b, "BOTTOM", 0, -2)
+        tag:SetWidth(bw)
+        tag:SetJustifyH("CENTER")
+        d.tags[k] = tag
     end
+    d.useSuggestion = UI.Button(d.head, "Use suggestion", 112, "secondary", function()
+        if d.data then S.PickSource(d.data.item, nil); UI.Redraw() end
+    end, 20)
+    d.useSuggestion:SetPoint("TOPRIGHT", -14, -175)
+    UI.Tip(d.useSuggestion, "Use suggestion", "Goes back to the source Workshop suggests for this material: the one with the lowest known cost.")
+    d.useSuggestion:Hide()
     d.explainBox = CreateFrame("Frame", nil, d.head)
-    d.explainBox:SetPoint("TOPLEFT", 14, -250)
-    d.explainBox:SetPoint("TOPRIGHT", -14, -250)
-    d.explainBox:SetHeight(50)
+    d.explainBox:SetPoint("TOPLEFT", 14, -252)
+    d.explainBox:SetPoint("TOPRIGHT", -14, -252)
+    d.explainBox:SetHeight(40)
     d.explainBox:EnableMouse(true)
     d.explainBox:SetScript("OnEnter", function(self) ShowShopBasis(self, d.data) end)
     d.explainBox:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
     d.explain = UI.Text(d.explainBox, 12, K.textDim)
     d.explain:SetPoint("TOPLEFT", 0, 0)
     d.explain:SetWidth(DETAIL_W - 28)
-    d.explain:SetHeight(50)
+    d.explain:SetHeight(40)
     d.explain:SetWordWrap(true)
     -- the price
     d.costLabel = UI.Text(d.head, 12, K.stone)
-    d.costLabel:SetPoint("TOPLEFT", 14, -308)
+    d.costLabel:SetPoint("TOPLEFT", 14, -300)
     d.cost = UI.Text(d.head, 17, K.text, "strong")
-    d.cost:SetPoint("TOPRIGHT", -14, -304)
+    d.cost:SetPoint("TOPRIGHT", -14, -296)
     d.cost:SetJustifyH("RIGHT")
     d.costNote = UI.Text(d.head, 11, K.stone)
-    d.costNote:SetPoint("TOPRIGHT", -14, -326)
+    d.costNote:SetPoint("TOPRIGHT", -14, -317)
     d.costNote:SetJustifyH("RIGHT")
     d.costNote:SetWidth(DETAIL_W - 28)
     d.usedFor = UI.Text(d.head, 12, K.textDim)
-    d.usedFor:SetPoint("TOPLEFT", 14, -346)
+    d.usedFor:SetPoint("TOPLEFT", 14, -334)
     d.usedFor:SetPoint("RIGHT", -14, 0)
     d.usedFor:SetWordWrap(true)
     d.usedFor:SetJustifyV("TOP")
-    d.usedFor:SetHeight(30)
+    d.usedFor:SetHeight(28)
     d.act = UI.ArtButton(d, "Show vendor", "npc:coins", DETAIL_W - 28, "primary", function()
         local x = d.data
         if not x then return end
@@ -488,14 +519,26 @@ local function BuildBar()
     rule:ClearAllPoints()
     rule:SetPoint("TOP", bar, "TOPLEFT", 312, -12)
     rule:SetPoint("BOTTOM", bar, "BOTTOMLEFT", 312, 12)
+    -- the spending line has the bar's whole remaining width and one line (its sentences are kept short enough to fit); the notes beneath
+    -- wrap to two lines, and every note is in the bar's tooltip
     shop.total = UI.Text(bar, 14, K.text, "strong")
-    shop.total:SetPoint("TOPLEFT", 328, -10)
-    shop.total:SetWidth(470)
-    shop.total:SetHeight(34)
-    shop.total:SetWordWrap(true)
+    shop.total:SetPoint("TOPLEFT", 328, -9)
+    shop.total:SetPoint("RIGHT", bar, "RIGHT", -14, 0)
+    shop.total:SetHeight(18)
     shop.notes = UI.Text(bar, 11, K.textDim)
-    shop.notes:SetPoint("TOPLEFT", 328, -48)
-    shop.notes:SetWidth(470)
+    shop.notes:SetPoint("TOPLEFT", 328, -30)
+    shop.notes:SetPoint("RIGHT", bar, "RIGHT", -14, 0)
+    shop.notes:SetHeight(34)
+    shop.notes:SetWordWrap(true)
+    shop.notes:SetJustifyV("TOP")
+    -- a wrapped text wants an explicit width: the bar's width less its left part and margin, set now and whenever the bar is sized
+    local function Widths(w)
+        local room = math.max(200, (w or 820) - 328 - 14)
+        shop.total:SetWidth(room)
+        shop.notes:SetWidth(room)
+    end
+    Widths(820)
+    bar:HookScript("OnSizeChanged", function(_, w) if w and w >= 300 then Widths(w) end end)
     UI.TipFn(bar, "Shopping plan", function() return shop.notesAll ~= "" and shop.notesAll or nil end)
 end
 

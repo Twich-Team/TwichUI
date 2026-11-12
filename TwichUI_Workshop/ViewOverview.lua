@@ -11,7 +11,7 @@ local UI = W.UI
 
 local GAP, BOTTOM_H, TOP = 12, 118, -68
 local ART, TEXT_X = 92, 120
-local PROF_ROWS, PROF_H = 4, 21
+local PROF_ROWS, PROF_TOP, PROF_MIN, PROF_MAX, PROF_BOTTOM = 4, 90, 18, 24, 10   -- the professions list: its top in the card, the row pitch limits, the foot
 
 local K
 local page
@@ -25,19 +25,19 @@ local actions = {}
 local function CardHover(frame)
     local CL = UI.CL
     local hot = CL.Sheet(frame, "selection-hot", { layer = "BACKGROUND", sub = 2, corner = 10 })
-    hot:SetAlpha(0.28)
+    hot:SetAlpha(0.45)
     hot:Hide()
     local rim = CL.Sheet(frame, "hover-rim", { layer = "OVERLAY", sub = 3 })
     rim:Hide()
-    frame:HookScript("OnEnter", function() hot:Show(); rim:Show() end)
-    frame:HookScript("OnLeave", function() hot:Hide(); rim:Hide() end)
-    frame:HookScript("OnHide", function() hot:Hide(); rim:Hide() end)
+    frame.twichHot, frame.twichRim = hot, rim
+    -- the scripts are wrapped later, after the card's tooltip is set (UI.WrapHover), so neither replaces the other
+    return function() hot:Show(); rim:Show() end, function() hot:Hide(); rim:Hide() end
 end
 
 local function MakeCard(key, art, title, desc, target)
     local c = CreateFrame("Button", nil, page)
     UI.Panel(c, "card")
-    CardHover(c)
+    c.hoverOn, c.hoverOff = CardHover(c)
     c.art = c:CreateTexture(nil, "ARTWORK")
     c.art:SetSize(ART, ART)
     c.art:SetPoint("TOPLEFT", 14, -16)
@@ -122,16 +122,13 @@ end
 local function BuildProfRows(c)
     c.facts = {}
     for i = 1, PROF_ROWS do
-        local y = -90 - (i - 1) * PROF_H
         local row = CreateFrame("Frame", nil, c)
-        row:SetHeight(PROF_H)
-        row:SetPoint("TOPLEFT", TEXT_X, y)
-        row:SetPoint("TOPRIGHT", -16, y)
+        row:SetHeight(PROF_MIN)
         row.icon = row:CreateTexture(nil, "ARTWORK")
         row.icon:SetSize(16, 16)
         row.icon:SetPoint("LEFT", 0, 0)
         row.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-        row.bar = UI.Meter(row, 72, 9)
+        row.bar = UI.Meter(row, 104, 10)
         row.bar:SetPoint("RIGHT", 0, 0)
         row.value = UI.Text(row, 13, K.text)
         row.value:SetWidth(62)
@@ -143,7 +140,31 @@ local function BuildProfRows(c)
         c.facts[i] = row
     end
     c.more = UI.Text(c, 12, K.stone)
-    c.more:SetPoint("TOPLEFT", TEXT_X, -90 - PROF_ROWS * PROF_H + 1)
+    c.availH = 70
+end
+
+-- Places the professions list inside what the card has left under its heading, measured (never clipped): the row pitch is what the room allows
+-- between PROF_MIN and PROF_MAX, and when the rooms holds fewer rows than there are professions the list shows what fits and says how many
+-- more there are. Returns how many rows are shown.
+local function PlaceProfs(c, total)
+    local room = c.availH or 70
+    local fit = math.max(1, math.floor(room / PROF_MIN))
+    local shown = math.min(total, PROF_ROWS, fit)
+    if shown < total then   -- one line of the room goes to "and N more"
+        shown = math.max(1, math.min(shown, math.floor((room - 14) / PROF_MIN)))
+    end
+    local pitch = math.max(PROF_MIN, math.min(PROF_MAX, math.floor((room - (shown < total and 14 or 0)) / math.max(1, shown))))
+    for i, row in ipairs(c.facts) do
+        row:ClearAllPoints()
+        local y = -PROF_TOP - (i - 1) * pitch
+        row:SetPoint("TOPLEFT", c, "TOPLEFT", TEXT_X, y)
+        row:SetPoint("TOPRIGHT", c, "TOPRIGHT", -16, y)
+        row:SetHeight(pitch)
+    end
+    c.more:ClearAllPoints()
+    c.more:SetPoint("TOPLEFT", c, "TOPLEFT", TEXT_X, -PROF_TOP - shown * pitch + 2)
+    c.pitch, c.shown = pitch, shown
+    return shown
 end
 
 local function Build(p)
@@ -179,6 +200,8 @@ local function Build(p)
         return table.concat(lines, "\n")
     end)
 
+    for _, c in pairs(cards) do UI.WrapHover(c, c.hoverOn, c.hoverOff) end   -- after the tooltips above: wraps them, never replaces them
+
     -- the cards are laid out for the page's real size once the game has measured it: two columns, and the height the bottom panel leaves
     local function Layout(width, height)
         local cw = math.floor((width - GAP) / 2)
@@ -188,8 +211,12 @@ local function Build(p)
         cards.opps:ClearAllPoints(); cards.opps:SetPoint("TOPLEFT", cw + GAP, TOP); cards.opps:SetSize(cw, ch)
         cards.plan:ClearAllPoints(); cards.plan:SetPoint("TOPLEFT", 0, TOP - ch - GAP); cards.plan:SetSize(cw, ch)
         cards.profs:ClearAllPoints(); cards.profs:SetPoint("TOPLEFT", cw + GAP, TOP - ch - GAP); cards.profs:SetSize(cw, ch)
+        cards.profs.availH = ch - PROF_TOP - PROF_BOTTOM   -- the room the professions list has: the card's height under its heading and rule
+        cards.profs.cardH = ch
+        if cards.profs.count then PlaceProfs(cards.profs, cards.profs.count) end
     end
     Layout(820, 555)
+    page.PlaceProfs = PlaceProfs
     page:HookScript("OnSizeChanged", function(_, width, height)
         if width and height and width >= 100 and height >= 300 then Layout(width, height) end
     end)
@@ -284,14 +311,6 @@ end
 ---------------------------------------------------------------------------
 -- Drawing
 ---------------------------------------------------------------------------
-local SIDE_WORDS = { Alliance = "Alliance", Horde = "Horde", Neutral = "Neutral" }
--- "SimulatedRealm (Horde)": the market in a few characters (the whole name is in the card's tooltip)
-local function MarketName(m)
-    local realm = UI.Shorten(m.realm or "this realm", 22)
-    local side = SIDE_WORDS[m.side]
-    return side and ("%s (%s)"):format(realm, side) or realm
-end
-
 local function PlanFacts(sum, queue)
     local toGet = sum.shortItems or 0
     local first, second
@@ -325,14 +344,17 @@ local function RenderProfessions()
     else
         rows = list
     end
+    c.count = #rows
+    local shown = PlaceProfs(c, math.max(1, #rows))
     for i, row in ipairs(c.facts) do
         local d = rows[i]
-        if d then
+        if d and i <= shown then
             row:Show()
             row.text:SetText(d.name)
             local icon = d.icon
             row.icon:SetTexture(icon or UI.ICON_BLANK)
-            if d.rank then
+            row.icon:Show()
+            if d.rank and d.max and d.max > 0 then
                 row.value:SetText(("%d / %d"):format(d.rank, d.max))
                 row.bar:SetFraction(d.rank / d.max)
                 row.bar:SetTone(d.rank >= d.max and K.tealHi or K.sage)
@@ -342,6 +364,7 @@ local function RenderProfessions()
                 UI.Paint(row.value, K.stone)
                 row.bar:SetFraction(0)
             end
+            row.bar:Show()
         else
             row:Hide()
         end
@@ -349,13 +372,13 @@ local function RenderProfessions()
     if #rows == 0 then
         c.facts[1]:Show()
         c.facts[1].text:SetText(list == nil and "Open a profession window to add it here." or "No professions learned yet.")
-        c.facts[1].icon:SetTexture(nil)
-        c.facts[1].value:SetText(""); c.facts[1].bar:SetFraction(0)
+        c.facts[1].icon:Hide()
+        c.facts[1].value:SetText(""); c.facts[1].bar:SetFraction(0); c.facts[1].bar:Hide()
         UI.Paint(c.facts[1].text, K.textDim)
     else
         UI.Paint(c.facts[1].text, K.text)
     end
-    c.more:SetText(#rows > PROF_ROWS and ("and %d more"):format(#rows - PROF_ROWS) or "")
+    c.more:SetText(#rows > shown and ("and %d more"):format(#rows - shown) or "")
 end
 
 local function RenderActivity(market, info)
@@ -418,8 +441,11 @@ local function Render()
     else
         mf[1] = { "No scan yet", "current", "bronzeText" }
     end
-    if market then mf[2] = { "Market: " .. MarketName(market), nil, "textDim" }
-    else mf[2] = { "Scan at the auction house", nil, "textDim" } end
+    -- the market's name is not repeated here (the footer chip's tooltip and this card's tooltip hold it); what the scan covered is the fact
+    if not market then mf[2] = { "Scan at the auction house", nil, "textDim" }
+    elseif market.scope ~= "full" then mf[2] = { "Recipe items only (an older scan)", nil, "textDim" }
+    elseif info and info.complete then mf[2] = { "Covers every listed item", nil, "textDim" }
+    else mf[2] = { "Some listings may be missing", nil, "bronzeText" } end
     SetFacts(cards.market, mf)
 
     -- best opportunities (the best by estimated profit, over every known recipe, whatever the Opportunities page's filters)

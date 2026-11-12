@@ -201,7 +201,8 @@ local function Queue()   -- the saved queue, read back: "name x crafts, ..."
     for _, e in ipairs(R.Workshop.Queue.Entries()) do out[#out + 1] = e.name .. " x" .. e.crafts end
     return table.concat(out, ", ")
 end
-local function Event(name) A_Admin.FireEvent(name) Lab.Settle(0.4) end
+-- the window redraws 0.2 s after an event (Window.lua SETTLE); 0.3 s is past that, and the check that follows still reads the redrawn page
+local function Event(name) A_Admin.FireEvent(name) Lab.Settle(0.3) end
 local function Opps() return Win().Opps() end
 local function ProfitHead() local h = Win().Heads().profit return Txt(h.text) .. " " .. Txt(h.sub) end   -- the profit heading: its label, and its qualification beneath
 local function Shop() return Win().Shop() end
@@ -302,8 +303,9 @@ Lab.Step("crafting: add, change quantity, remove", function()
     Click(Row(list, "Minor Healing Potion").add, "Add Minor Healing Potion")
     Click(Row(list, "Weak Troll's Blood Potion").add, "Add Weak Troll's Blood Potion")
     Check("state", "two recipes queued, one craft each", "Minor Healing Potion x1, Weak Troll's Blood Potion x1", Queue())
-    Check("display", "added recipe's button now says Queued and is disabled", "Queued/false",
-        Txt(Row(list, "Minor Healing Potion").add.text) .. "/" .. tostring(Row(list, "Minor Healing Potion").add:IsEnabled()))
+    Check("display", "added recipe's row now says Queued in its mark, and its Add is gone and disabled", "Queued/true/false/false",
+        Txt(Row(list, "Minor Healing Potion").mark.text) .. "/" .. tostring(Row(list, "Minor Healing Potion").mark:IsShown()) .. "/"
+        .. tostring(Row(list, "Minor Healing Potion").add:IsShown()) .. "/" .. tostring(Row(list, "Minor Healing Potion").add:IsEnabled()))
     local q = Lists().queue
     local a, b = Rows(q)[1], Rows(q)[2]
     Check("display", "queue order and labels", "Minor Healing Potion | Weak Troll's Blood Potion", Names(q))
@@ -907,7 +909,7 @@ Lab.Step("shopping: combined list, sources, total, warning", function()
     Check("display", "Bronze Bar detail: crafts, made, leftover, comparison",
         "Make 3 x Smelt Bronze: makes 6, 1 left over. Suggested source. Making this looks cheaper than buying at the auction house.", Explain("Bronze Bar"))
     Check("display", "total with the incomplete-total warning",
-        "Estimated spending: 1s 90c so far. Some prices missing: 1 material has no price.", Txt(Shop().total))
+        "Estimated spending: 1s 90c so far \194\183 1 price missing", Txt(Shop().total))
     Check("display", "vendor status line", "Vendor prices as last seen (2 noted) \194\183 bags only", Txt(Shop().status))
     Check("display", "notes keep one short caveat about the suggestions", true, Txt(Shop().notes):find("Suggestions compare one material at a time", 1, true) ~= nil)
 end)
@@ -925,14 +927,14 @@ Lab.Step("shopping: source choices", function()
     Check("state", "choice is kept in memory", "auction", tostring(R.Workshop.Session.picks[2841]))
     Check("display", "its reagent rows go (no subcraft now)", "Silverleaf | Coarse Thread | Peacebloom | Bronze Bar", Names(Lists().shop))
     Check("display", "total now includes the estimate: 15 + 25 + 2000 = 2040c",
-        "Estimated spending: 20s 40c so far. Some prices missing: 1 material has no price.", Txt(Shop().total))
+        "Estimated spending: 20s 40c so far \194\183 1 price missing", Txt(Shop().total))
     Choose("Bronze Bar", "make")
     Check("state", "make, chosen by the player", "make", tostring(R.Workshop.Session.picks[2841]))
     Check("display", "make row again, with the reagent rows back, and still chosen", "Silverleaf | Coarse Thread | Peacebloom | Copper Ore | Tin Ore | Bronze Bar/Bronze Bar",
         Names(Lists().shop) .. "/" .. Txt(Shop().detail.name))
     Choose("Bronze Bar", "make")
     Check("state", "choosing it again: back to the suggestion", "nil", tostring(R.Workshop.Session.picks[2841]))
-    Check("display", "back to the original total", "Estimated spending: 1s 90c so far. Some prices missing: 1 material has no price.", Txt(Shop().total))
+    Check("display", "back to the original total", "Estimated spending: 1s 90c so far \194\183 1 price missing", Txt(Shop().total))
     -- Peacebloom has one option (auction): choosing it picks it, choosing it again returns to the suggestion.
     Choose("Peacebloom", "auction")
     Check("state", "single option: chosen", "auction", tostring(R.Workshop.Session.picks[2447]))
@@ -984,7 +986,7 @@ Lab.Step("shopping: add the suggested subcraft", function()
         "Silverleaf | Coarse Thread | Peacebloom | Copper Ore | Tin Ore", Names(Lists().shop))
     Check("display", "Copper Ore: queue's own need, once", "2 | Auction house | 70c | just now | -", Line("Copper Ore"))
     Check("display", "Tin Ore: queue's own need, once", "3 | Vendor | 80c | just now | Show vendor", Line("Tin Ore"))
-    Check("display", "total unchanged: the ingredients are counted once", "Estimated spending: 1s 90c so far. Some prices missing: 1 material has no price.", Txt(Shop().total))
+    Check("display", "total unchanged: the ingredients are counted once", "Estimated spending: 1s 90c so far \194\183 1 price missing", Txt(Shop().total))
     local anyMake = false
     for _, r in ipairs(Rows(Lists().shop)) do if r.data.kind == "make" then anyMake = true end end
     Check("display", "no Make row is left, so no Add to crafting plan action", false, anyMake)
@@ -1007,7 +1009,7 @@ Lab.Step("shopping: bags change", function()
     BAGS[2770] = 6
     Event("BAG_UPDATE_DELAYED")
     Check("event", "enough Copper Ore: its row goes", "Silverleaf | Coarse Thread | Peacebloom | Tin Ore", Names(Lists().shop))
-    Check("event", "total drops by the Copper Ore row (190 - 70 = 120c)", "Estimated spending: 1s 20c so far. Some prices missing: 1 material has no price.", Txt(Shop().total))
+    Check("event", "total drops by the Copper Ore row (190 - 70 = 120c)", "Estimated spending: 1s 20c so far \194\183 1 price missing", Txt(Shop().total))
     BAGS[2447] = 7
     BAGS[765] = 3
     Event("BAG_UPDATE_DELAYED")
@@ -1342,6 +1344,265 @@ Lab.Step("bank and guild bank: a withdrawal and a deposit never count twice", fu
 end)
 
 ---------------------------------------------------------------------------------------------------------------------------
+-- Third pass: what the owner found in the real client, as far as the simulator can show it
+--   hit test   EMULATED from frame rectangles, strata, levels and the mouse flag (the simulator has no pointer): it says whether any other
+--              mouse-enabled frame is stacked over a control's centre. It cannot say how the real client orders equal levels.
+--   hover      the row's own OnEnter, run by the scenario: the painted art's state (shown, alpha, parent visible). Not a pointer, not how it looks.
+--   fit        measured string widths against the control's rectangle (the simulator draws addon fonts in Friz Quadrata: a structural check)
+---------------------------------------------------------------------------------------------------------------------------
+Lab.Step("third pass: hit test, hover, fit, tooltips, status", function()
+    local W = R.Workshop
+    local STRATA = { BACKGROUND = 1, LOW = 2, MEDIUM = 3, HIGH = 4, DIALOG = 5, FULLSCREEN = 6, FULLSCREEN_DIALOG = 7, TOOLTIP = 8 }
+    local function InWorkshop(fr)
+        local p = fr
+        while p do
+            if p == TwichUIWorkshop then return true end
+            p = p.GetParent and p:GetParent() or nil
+        end
+        return false
+    end
+    local function Rect(fr)   -- left, bottom, right, top in screen units
+        local l, b, w, h = fr:GetRect()
+        if not l then return nil end
+        local s = fr:GetEffectiveScale()
+        return l * s, b * s, (l + w) * s, (b + h) * s
+    end
+    -- every mouse-enabled shown frame of the window, in creation order
+    local function Targets()
+        local out, order = {}, 0
+        local fr = EnumerateFrames()
+        while fr do
+            order = order + 1
+            if fr.IsMouseEnabled and fr:IsMouseEnabled() and fr:IsVisible() and InWorkshop(fr) then
+                local l, b, r, t = Rect(fr)
+                if l then out[#out + 1] = { f = fr, l = l, b = b, r = r, t = t, key = (STRATA[fr:GetFrameStrata()] or 3) * 1e9 + fr:GetFrameLevel() * 1e4 + order } end
+            end
+            fr = EnumerateFrames(fr)
+        end
+        return out
+    end
+    local function TopAt(targets, x, y)
+        local best
+        for _, tg in ipairs(targets) do
+            if x >= tg.l and x <= tg.r and y >= tg.b and y <= tg.t and (not best or tg.key > best.key) then best = tg end
+        end
+        return best and best.f or nil
+    end
+    local function Under(fr, ancestor)
+        while fr do if fr == ancestor then return true end fr = fr:GetParent() end
+        return false
+    end
+    local function Label(fr) return (fr:GetName() or (fr.text and fr.text.GetText and fr.text:GetText()) or fr:GetObjectType()) end
+    -- every shown button is the top mouse target at its own centre (a row only when its centre is inside its scroll area)
+    local function CoveredButtons()
+        local targets, bad = Targets(), {}
+        for _, tg in ipairs(targets) do
+            local fr = tg.f
+            if fr:GetObjectType() == "Button" then
+                local cx, cy = (tg.l + tg.r) / 2, (tg.b + tg.t) / 2
+                local clipped = false
+                local p = fr:GetParent()
+                while p and p ~= TwichUIWorkshop do
+                    if p:GetObjectType() == "ScrollFrame" then
+                        local l, b, r, t = Rect(p)
+                        if l and not (cx >= l and cx <= r and cy >= b and cy <= t) then clipped = true end
+                    end
+                    p = p:GetParent()
+                end
+                if not clipped then
+                    local top = TopAt(targets, cx, cy)
+                    if top and not Under(top, fr) then bad[#bad + 1] = Label(fr) .. " under " .. Label(top) end
+                end
+            end
+        end
+        return #bad == 0 and "none covered" or table.concat(bad, "; ")
+    end
+    local function Hover(row) row:GetScript("OnEnter")(row) Lab.Settle(0.15) end
+    local function Unhover(row) row:GetScript("OnLeave")(row) Lab.Settle(0.15) end
+    local function Art(row) return row.twichHot.parts[1], row.twichRim.parts[1] end
+
+    -- 1. Opportunities: the Add button, through its real control, with the real queue
+    Tab("Opportunities")
+    Check("state", "the hit test sees the window's mouse targets (it is not passing on an empty list)", true, #Targets() > 20)
+    local add = Opps().detail.add
+    local rows = Rows(Lists().opps)
+    local pick
+    for _, r in ipairs(rows) do if r.rec and not W.Queue.Find(r.rec.id) then pick = r break end end
+    Check("display", "an unqueued recipe is listed", true, pick ~= nil)
+    Click(pick, "choose an unqueued recipe")
+    local rec = Opps().detail.rec
+    Check("display", "its details are shown, and Add is offered", "Add to crafting plan/true", Txt(add.text) .. "/" .. tostring(add:IsEnabled()))
+    do
+        local cx, cy = add:GetCenter()
+        local s = add:GetEffectiveScale()
+        local top = TopAt(Targets(), cx * s, cy * s)
+        Check("display", "HIT TEST (emulated): the Add button is the top mouse target at its centre", "Add to crafting plan", top and Label(top) or "nothing")
+    end
+    Check("display", "HIT TEST (emulated): no button on Opportunities has another mouse frame stacked over its centre", "none covered", CoveredButtons())
+    local before = #W.Queue.Entries()
+    Click(add, "Add to crafting plan")
+    Check("state", "the click put the chosen recipe in the queue", true, W.Queue.Find(rec.id) ~= nil and #W.Queue.Entries() == before + 1)
+    Check("display", "the button says it is queued, and the row and footer agree", "In your queue/false/true/true",
+        Txt(add.text) .. "/" .. tostring(add:IsEnabled()) .. "/" .. tostring(Row(Lists().opps, rec.name).sub:GetText():find("In your queue", 1, true) ~= nil)
+        .. "/" .. tostring(Txt(Frame().note):find("^Added ") ~= nil))
+    Tab("Crafting")
+    Check("display", "Crafting shows it in the queue", true, (function()
+        for _, q in ipairs(Lists().queue.data) do if q.entry.id == rec.id then return true end end
+        return false
+    end)())
+    W.Session.Remove(rec.id)   -- put the queue back as the poses expect it
+    Win().Render()
+
+    -- 2. Crafting: the action of every recipe row fits its place (measured), in each state: Queued (the real rows), Add and Full (a row filled with
+    --    a recipe that is not queued, with a very long name, as the list does when it scrolls)
+    local function Fits(r)
+        local box = r.mark:IsShown() and r.mark or r.add
+        local label = r.mark:IsShown() and r.mark.text or r.add.text
+        local left = label:GetLeft()
+        local right = left and (left + label:GetStringWidth())
+        local ok = right and right <= box:GetRight() - 1 and box:GetWidth() == 70
+        return ok and "inside" or (Txt(label) .. " ends " .. tostring(right) .. " > " .. tostring(box:GetRight() - 1) .. " width " .. box:GetWidth())
+    end
+    Click(Win().Craft().segRecipes, "Recipes")
+    local rr = Rows(Lists().recipes)
+    local states = {}
+    for _, r in ipairs(rr) do if r.mark:IsShown() then states[#states + 1] = Txt(r.mark.text) .. " " .. Fits(r) end end
+    Check("display", "every queued recipe's mark is inside its 70-wide place", "Queued inside", states[1] or "none queued")
+    local spare = rr[1]
+    local fakeRec = { id = 3001, name = "A recipe with a very long name that never fits the row beside its action", diff = 1, icon = 1, prof = 171, profName = "Alchemy" }
+    spare.fill(spare, fakeRec)
+    Check("display", "an unqueued recipe is an Add button, inside its place, with a long name beside it", "Add inside", Txt(spare.add.text) .. " " .. Fits(spare))
+    local fill = {}
+    for i = 1, 30 - #W.Queue.Entries() do fill[#fill + 1] = 9000 + i; W.Queue.Add({ id = 9000 + i, name = "Filler " .. i }, 1) end
+    spare.fill(spare, fakeRec)
+    Check("display", "with a full queue an unqueued recipe says Full, inside its place", "Full inside", Txt(spare.mark.text) .. " " .. Fits(spare))
+    for _, id in ipairs(fill) do W.Queue.Remove(id) end
+    Win().Render()
+    Click(Win().Craft().segQueue, "Craft queue")
+
+    -- 3. The queue's tooltips: each picture binds its own output item; the glyph controls keep the row lit
+    local seenItem
+    local origSet = GameTooltip.SetItemByID
+    GameTooltip.SetItemByID = function(self, id) seenItem = id return true end
+    local bad = {}
+    for _, q in ipairs(Rows(Lists().queue)) do
+        seenItem = nil
+        q.iconBtn:GetScript("OnEnter")(q.iconBtn)
+        if seenItem ~= q.entry.outItem then bad[#bad + 1] = Txt(q.name) .. " shows " .. tostring(seenItem) .. " not " .. tostring(q.entry.outItem) end
+        q.iconBtn:GetScript("OnLeave")(q.iconBtn)
+    end
+    GameTooltip.SetItemByID = origSet
+    Check("display", "every queued craft's picture shows the tooltip of the item it makes", "all bound", #bad == 0 and "all bound" or table.concat(bad, "; "))
+    Check("display", "HIT TEST (emulated): no button on Crafting has another mouse frame stacked over its centre", "none covered", CoveredButtons())
+
+    -- 4. Hover: the row's own scripts, the art's state, hover with the chosen state, a child control
+    local q1, q2 = Rows(Lists().queue)[1], Rows(Lists().queue)[2]
+    Click(q1, "choose the first queued craft")
+    Unhover(q2)
+    local hot, rim = Art(q2)
+    Check("display", "a row at rest: no hover art", "0.00/0.00", ("%.2f/%.2f"):format(hot:GetAlpha(), rim:GetAlpha()))
+    Hover(q2)
+    Check("display", "hovering a row lights its face and its rim (shown, in a visible row)", "true/true/true/true",
+        tostring(hot:GetAlpha() >= 0.9) .. "/" .. tostring(rim:GetAlpha() >= 0.9) .. "/" .. tostring(hot:IsVisible()) .. "/" .. tostring(rim:IsVisible()))
+    Hover(q1)
+    local hot1, rim1 = Art(q1)
+    Check("display", "a chosen row hovered: the chosen sheet and a quieter rim", "true/true/true",
+        tostring(q1.selected) .. "/" .. tostring(q1.twichSel.parts[1]:IsVisible()) .. "/" .. tostring(rim1:GetAlpha() > 0 and rim1:GetAlpha() < 0.9))
+    Unhover(q1); Unhover(q2)
+    Check("display", "leaving the rows takes the art out", "0.00/0.00", ("%.2f/%.2f"):format(select(1, Art(q2)):GetAlpha(), select(2, Art(q2)):GetAlpha()))
+    Check("display", "no row keeps an easing running", 0, R.Look.Motion.Count())
+
+    -- 5. Overview: the professions fit the card, at three, four (one with a very long name) and none
+    Tab("Overview")
+    local ov = Win().Overview()
+    local card = ov.cards.profs
+    local function Inside()
+        local worst, n = 0, 0
+        for _, row in ipairs(card.facts) do
+            if row:IsShown() then
+                n = n + 1
+                local over = card:GetBottom() - row:GetBottom()   -- positive: the row's bottom is above the card's
+                if row:GetBottom() < card:GetBottom() + 6 then worst = worst + 1 end
+            end
+        end
+        local more = card.more:GetText() ~= "" and (card.more:GetBottom() < card:GetBottom() + 4) and 1 or 0
+        return ("%d rows, %d outside"):format(n, worst + more)
+    end
+    Check("display", "three professions: all inside the card", "3 rows, 0 outside", Inside())
+    SKILLS[4] = { "A profession with a very long localized name that cannot fit", 136241, 300, 300 }
+    GetProfessions = function() return 1, 2, 3, 4 end
+    Win().Render()
+    Check("display", "four professions, one with a very long name: all inside the card", "4 rows, 0 outside", Inside())
+    Check("display", "and the long name stays between the picture and the numbers", true,
+        card.facts[4].text:GetRight() <= card.facts[4].value:GetLeft() and card.facts[4].text:GetLeft() >= card.facts[4].icon:GetRight())
+    SKILLS[4] = nil
+    GetProfessions = function() return 1, 2, nil, 3 end
+    Win().Render()
+    local bar = card.facts[1].bar
+    Check("display", "a bar's fill is inside its track with the rim around it", true, bar.fill:GetLeft() > bar:GetLeft() and bar.fill:GetRight() < bar:GetRight())
+
+    -- 6. The footer's status chip, and no market name on the pages
+    local chip = Frame().chip
+    Check("display", "the footer chip says how old the prices are", "Prices updated just now", Txt(chip.text))
+    Check("display", "the chip's text is inside the chip, and the chip inside the footer", true,
+        chip.text:GetLeft() + chip.text:GetStringWidth() <= chip:GetRight() and chip:GetRight() <= Frame().footer:GetRight())
+    Check("display", "no page or footer text names the realm or the side", true, (function()
+        local texts = { Txt(chip.text), Txt(Frame().note), Txt(ov.cards.market.facts[1].text), Txt(ov.cards.market.facts[2].text) }
+        for _, t in ipairs(texts) do if t:find("SimulatedRealm", 1, true) or t:find("Horde", 1, true) or t:find("Alliance", 1, true) then return false end end
+        return true
+    end)())
+    Check("display", "the chip's tooltip names the whole market", true, tostring(chip.twichuiTip.body(chip)):find("SimulatedRealm", 1, true) ~= nil)
+
+    -- 7. Shopping: the suggestion and the player's own choice are told apart
+    Tab("Shopping")
+    local d = Shop().detail
+    local target
+    for _, r in ipairs(Rows(Lists().shop)) do
+        if r.data and r.data.kind ~= "collect" and r.data.suggested and #W.Shopping.Choices(r.data) >= 2 then target = r break end
+    end
+    Check("display", "a row with two possible sources is listed", true, target ~= nil)
+    if target then
+        Click(target, "choose a row with two sources")
+        local s = target.data.suggested
+        local function Tags()
+            local out = {}
+            for _, k in ipairs(W.Shopping.ORDER) do out[#out + 1] = k .. "=" .. Txt(d.tags[k]) end
+            return table.concat(out, " ")
+        end
+        local expect = {}
+        for _, k in ipairs(W.Shopping.ORDER) do expect[#expect + 1] = k .. "=" .. (k == s and "Suggested" or "") end
+        Check("display", "the suggested source is named in words, nothing is overridden", table.concat(expect, " ") .. "/false", Tags() .. "/" .. tostring(d.useSuggestion:IsShown()))
+        local other
+        for _, k in ipairs(W.Shopping.Choices(target.data)) do if k ~= s then other = k end end
+        Click(d.choose[other], "choose another source")
+        local expect2 = {}
+        for _, k in ipairs(W.Shopping.ORDER) do expect2[#expect2 + 1] = k .. "=" .. (k == s and "Suggested" or (k == other and "Your choice" or "")) end
+        Check("display", "an override: the suggestion stays marked, the choice is named, and Use suggestion is offered", table.concat(expect2, " ") .. "/true",
+            Tags() .. "/" .. tostring(d.useSuggestion:IsShown()))
+        Click(d.useSuggestion, "Use suggestion")
+        Check("state", "Use suggestion drops the choice", "nil/false", tostring(W.Session.picks[target.data.item]) .. "/" .. tostring(d.useSuggestion:IsShown()))
+    end
+    Check("display", "the spending line is one line and inside the bar", true,
+        Shop().total:GetLeft() + Shop().total:GetStringWidth() <= Shop().bar:GetRight() and Shop().total:GetHeight() <= 20)
+    Check("display", "HIT TEST (emulated): no button on Shopping has another mouse frame stacked over its centre", "none covered", CoveredButtons())
+
+    -- 8. Navigation and redraws make no new frame, once the pools have settled
+    local function CountFrames()
+        local n, fr = 0, EnumerateFrames()
+        while fr do n = n + 1; fr = EnumerateFrames(fr) end
+        return n
+    end
+    local function Cycle() for _, key in ipairs({ "overview", "opps", "craft", "shop" }) do Win().SetMode(key); Win().Render(); Win().Render() end end
+    for _ = 1, 3 do Cycle() end
+    local settled = CountFrames()
+    for _ = 1, 4 do Cycle() end
+    Check("state", "four more rounds of navigation and redraws made no frame (the change in the count)", 0, CountFrames() - settled)
+    Win().SetMode("overview")
+    W.Session.ClearNote()   -- the step's own removal message is not the pose's
+    Win().Render()
+end)
+
+---------------------------------------------------------------------------------------------------------------------------
 -- The pose a screenshot is taken in (params.view). The checks above are the same in every launch.
 ---------------------------------------------------------------------------------------------------------------------------
 Lab.Step("pose for the screenshot", function()
@@ -1352,6 +1613,7 @@ Lab.Step("pose for the screenshot", function()
         Click(Win().Craft().segQueue, "Craft queue (the left card)")
         Click(Rows(Lists().queue)[2], "choose the second queued craft")
         Check("display", "pose: the chosen craft's details", Txt(Rows(Lists().queue)[2].name), Txt(Win().Craft().detail.name))
+        Rows(Lists().queue)[3]:SetHot(true)   -- a row under the pointer, for the screenshot (the art only: no tooltip is opened)
     elseif view == "empty" then
         -- the empty states: every queued craft removed through the details' Remove, and the saved prices taken away (synthetic data:
         -- the scenario's own fake market, nothing of a real install)
@@ -1365,9 +1627,18 @@ Lab.Step("pose for the screenshot", function()
         Check("display", "pose: no skill from the game is unavailable, not zero", "n/a | 0", Txt(Win().Overview().cards.profs.facts[1].value) .. " | " .. Win().Overview().cards.profs.facts[1].bar.frac)
         Check("display", "pose: an empty plan", "0 | of 30 queued", Txt(Win().Overview().cards.plan.stat) .. " | " .. Txt(Win().Overview().cards.plan.statLabel))
         Check("display", "pose: the quick action to scan prices", "Scan prices", Txt(Win().Overview().actions.scan.text))
-    elseif view == "overview" then
+    elseif view == "overview" or view == "smallov" then
+        -- four professions, the last with a long name: the card has to hold them (the pose of the Overview screenshots, normal and small screen)
+        SKILLS[4] = { "Enchanting and other long localized names", 136241, 300, 300 }
+        GetProfessions = function() return 1, 2, 3, 4 end
         Tab("Overview")
         Check("display", "pose: the Overview with prices, a plan and skills", true, Win().Overview():IsShown())
+        Check("display", "pose: four professions, the maximum one full", "4 | 300 / 300 | 1.0000", (function()
+            local rows = Win().Overview().cards.profs.facts
+            local n = 0
+            for _, r in ipairs(rows) do if r:IsShown() then n = n + 1 end end
+            return n .. " | " .. Txt(rows[4].value) .. " | " .. ("%.4f"):format(rows[4].bar.frac)
+        end)())
         local ov = Win().Overview()
         Check("display", "pose: the market card says how many items were priced and that the scan was whole", "13 | Scan complete \194\183 just now",
             Txt(ov.cards.market.stat) .. " | " .. Txt(ov.cards.market.facts[1].text))
@@ -1394,6 +1665,7 @@ Lab.Step("pose for the screenshot", function()
         Click(Win().Craft().segQueue, "Craft queue")
         Check("display", "pose: a long queue", true, #R.Workshop.Queue.Entries() >= 7)
         Click(Rows(Lists().queue)[3], "choose the third queued craft")
+        Rows(Lists().queue)[5]:SetHot(true)
     elseif view == "shopmix" or view == "shopcollect" then
         -- stored materials make Collect rows beside Buy and Make rows; with everything stored only Collect rows remain (synthetic bank counts)
         Tab("Crafting")
@@ -1418,6 +1690,7 @@ Lab.Step("pose for the screenshot", function()
         local row = Row(Lists().opps, "Minor Healing Potion")
         Click(row, "choose Minor Healing Potion")
         Check("display", "pose: its details are shown", "Minor Healing Potion", Txt(Opps().detail.name))
+        Row(Lists().opps, "Weak Troll's Blood Potion"):SetHot(true)   -- a row under the pointer, for the screenshot
         Check("display", "pose: the details price one craft's materials, each with its quantity", true, Txt(Opps().detail.mats[1].qty):find("^\195\151%d+") ~= nil and Opps().detail.mats[1].item ~= nil)
     elseif view == "design" then
         -- the settings window on the Workshop page, scrolled to the tooltip designer, the Hold Shift preview with a line selected
@@ -1439,6 +1712,7 @@ Lab.Step("pose for the screenshot", function()
         QueueAct(Rows(q)[4], "remove", "Remove Smelt Bronze")
         Tab("Shopping")
         Check("display", "pose: shopping shows the Make row again", "Silverleaf | Coarse Thread | Peacebloom | Copper Ore | Tin Ore | Bronze Bar", Names(Lists().shop))
+        Rows(Lists().shop)[2]:SetHot(true)   -- a row under the pointer, for the screenshot
     end
     Lab.Settle(0.5)
 end)

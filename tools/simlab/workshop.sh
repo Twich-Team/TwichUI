@@ -3,13 +3,14 @@
 # Workshop with /tui workshop and drives its Crafting, Opportunities and Shopping views over synthetic game data
 # (scenarios/workshop.lua says exactly what is real and what is fake). Writes to $WOWSIM_LAB/artifacts/workshop-<time>/.
 #
-# Twelve launches, each from a freshly emptied root and a new empty install (no saved variables):
+# Thirteen launches, each from a freshly emptied root and a new empty install (no saved variables):
 #   overview  the whole scenario, ending on the Overview (prices, opportunities, plan, professions, next steps), then a screenshot
 #   craft     the same, ending on Crafting with a populated queue and a chosen craft's details, then a screenshot
 #   opps      the same, ending on Opportunities with a recipe's details, then a screenshot
 #   shop      the same, ending on Shopping (mixed sources, a Make row, the missing-price warning), then a screenshot
 #   design    the same, ending on the settings window's Workshop page at the "What's it worth?" tooltip designer, then a screenshot
 #   small     the same as opps on a 1000x700 screen (the window fits itself to the screen), then a screenshot
+#   smallov   the same, ending on the Overview with four professions on a 1000x700 screen, then a screenshot
 #   empty     the same, then the queue emptied and the saved prices taken away: the Overview's empty states, then a screenshot
 #   history   the same as opps, with several observed days of price history for the chosen craft, then a screenshot
 #   craftlong the same, ending on Crafting with every known recipe queued (a long queue), then a screenshot
@@ -17,6 +18,7 @@
 #   shopcollect  the same, with everything stored: only Collect rows, then a screenshot
 #   wrong   the whole scenario with one expectation made deliberately wrong: it must FAIL on that check and on no other
 #
+#   SIMLAB_ONLY="opps craft"  run only the named launches (a quick look while working; the full run, with none named, is the evidence)
 #   SIMLAB_ASSETS=0  hide the game install (logic only; the screenshots are worthless then)
 #   SIMLAB_SHIM=0    leave the shim out
 #
@@ -43,6 +45,7 @@ fixture opps '{ view = "opps" }'
 fixture shop '{ view = "shop" }'
 fixture design '{ view = "design" }'
 fixture small '{ view = "opps" }'
+fixture smallov '{ view = "smallov" }'
 fixture empty '{ view = "empty" }'
 fixture history '{ view = "history" }'
 fixture craftlong '{ view = "craftlong" }'
@@ -54,6 +57,7 @@ repo_before="$(git -C "$REPO" status --porcelain --ignored)"
 status=0
 launch() {  # name command...
   local name="$1"; shift
+  case " ${SIMLAB_ONLY:-$name} " in *" $name "*) ;; *) return 0 ;; esac
   simlab_stage
   [ -d "$ROOT/TwichUI_Workshop" ] || { echo "simlab: TwichUI_Workshop is not in the root" >&2; exit 2; }
   set +e
@@ -71,6 +75,7 @@ launch opps screenshot --png -o "$RUN/opps.png" --width 1600 --height 1200
 launch shop screenshot --png -o "$RUN/shop.png" --width 1600 --height 1200
 launch design screenshot --png -o "$RUN/design.png" --width 1600 --height 1200
 launch small screenshot --png -o "$RUN/small.png" --width 1000 --height 700
+launch smallov screenshot --png -o "$RUN/smallov.png" --width 1000 --height 700
 launch empty screenshot --png -o "$RUN/empty.png" --width 1600 --height 1200
 launch history screenshot --png -o "$RUN/history.png" --width 1600 --height 1200
 launch craftlong screenshot --png -o "$RUN/craftlong.png" --width 1600 --height 1200
