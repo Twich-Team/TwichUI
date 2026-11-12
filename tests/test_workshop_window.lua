@@ -261,7 +261,8 @@ do
   local L_ = Win.Lists().opps
   -- no scan yet
   Check(L_.empty:GetText():find("No prices saved yet", 1, true), L_.empty:GetText())
-  Check(opps.source:GetText():find("No saved prices for this realm", 1, true))
+  local function StatusTip() return opps.statusBox.twichuiTip.body(opps.statusBox) end   -- where the prices come from: in the status tooltip (and the footer)
+  Check(StatusTip():find("No saved prices for this realm", 1, true), StatusTip())
   Same(#L_.data, 2, "the list still has the rows: unknown ones are shown as unknown")
   Check(L_.rows[1].profit.a:GetText() == "Unknown" and L_.rows[1].cost.a:GetText() == "Unknown", "no scan: Unknown, never 0")
 
@@ -302,23 +303,22 @@ do
   Same(ahBtn.text:GetText(), "Scan prices"); Check(ahBtn.enabled)
   Same(opps.scan.text:GetText(), "Scan prices"); Check(opps.scan.enabled)
   Check(opps.status:GetText():find("Prices found for 5 items", 1, true), opps.status:GetText())
-  Check(opps.source:GetText():find("Alliance auction house on Realm \194\183 just now", 1, true), opps.source:GetText())
+  Check(StatusTip():find("Alliance auction house on Realm \194\183 just now", 1, true), StatusTip())
   Same(#L_.data, 2)
   local r1, r2 = L_.rows[1], L_.rows[2]
   Same(r1.name:GetText(), "Healing Potion", "highest estimated profit first")
   Same(r1.cost.a:GetText(), "200c", "2 x 100: the materials in full")
   Same(r1.sell.a:GetText(), "1000c"); Same(r1.sell.b:GetText(), "to 2000c", "makes 1-2: a range, not the maximum")
   Same(r1.profit.a:GetText(), "800c"); Same(r1.profit.b:GetText(), "to 1800c")
-  Check(r1.sub:GetText():find("Makes 1-2", 1, true) and r1.sub:GetText():find("Alchemy", 1, true), r1.sub:GetText())
+  Check(r1.sub:GetText():find("makes 1-2", 1, true) and r1.sub:GetText():find("Alchemy", 1, true), r1.sub:GetText())
   Same(r2.name:GetText(), "Mana Potion")
   Same(r2.cost.a:GetText(), "150c"); Same(r2.sell.a:GetText(), "300c"); Same(r2.profit.a:GetText(), "150c"); Check(not r2.profit.b:IsShown() and not r2.sell.b:IsShown(), "a single amount has no second line")
-  Check(opps.summary:GetText():find("2 of 2 priced", 1, true) and opps.summary:GetText():find("2 profitable", 1, true), opps.summary:GetText())
-  -- the footer is one short line; the cut is not confirmed, so nothing is called profit after fees
-  Check(opps.notes:GetText():find("before fees", 1, true), "the unconfirmed cut is stated: " .. opps.notes:GetText())
-  Check(#opps.notes:GetText() < 100 and not opps.notes:GetText():find("\n", 1, true), "one short line, not paragraphs")
-  Check(not opps.notes:GetText():find("Deposits", 1, true) and not opps.notes:GetText():find("listing", 1, true), "the long explanation is not in the footer")
-  Check(opps.about:IsShown(), "and it is behind About prices")
-  Same(Win.Heads().profit.text:GetText(), "Profit before fees", "the column is not called estimated profit while the cut isn't taken off")
+  Same(S.Opportunities().summary.priced, 2); Same(S.Opportunities().summary.profitable, 2)
+  -- no summary line, footer paragraphs or About button on the page any more; the cut is not confirmed, so the qualification is in the heading
+  -- (beside the figure) and in the status tooltip, and nothing is called profit after fees
+  Check(opps.summary == nil and opps.notes == nil and opps.about == nil and opps.profitOnly == nil and opps.source == nil, "the page carries none of them")
+  Check(StatusTip():find("Profit is before fees", 1, true), "the unconfirmed cut is stated: " .. StatusTip())
+  Same(Win.Heads().profit.text:GetText() .. " " .. Win.Heads().profit.sub:GetText(), "Profit before fees", "the column is not called estimated profit while the cut isn't taken off")
   -- the short tooltip on demand
   tip = {}
   r1:GetScript("OnEnter")(r1)
@@ -381,7 +381,7 @@ do
   Same(L_.rows[2].profit.a:GetText(), "Unknown", "unknown, not zero"); Same(L_.rows[2].cost.a:GetText(), "Unknown")
   Same(L_.rows[2].sell.a:GetText(), "300c", "what is known is still shown")
   Same(L_.rows[2].sub:GetText(), "1 material has no price")
-  Check(opps.summary:GetText():find("1 of 2 priced", 1, true), opps.summary:GetText())
+  Same(S.Opportunities().summary.priced, 1)
 
   -- a scan that fails keeps the usable one
   local before = W.Prices.Market("Realm|Alliance").at
@@ -392,15 +392,15 @@ do
   Check(opps.status:GetText():find("earlier prices were kept", 1, true), opps.status:GetText())
   Same(W.Prices.Market("Realm|Alliance").at, before, "the earlier scan is untouched")
   Same(L_.rows[1].name:GetText(), "Healing Potion"); Same(L_.rows[1].cost.a:GetText(), "200c", "and the list still uses it")
-  Check(opps.source:GetText():find("Alliance auction house", 1, true), "still names the market")
+  Check(StatusTip():find("Alliance auction house", 1, true), "still names the market")
 
   -- Profitable only
-  opps.profitOnly:GetScript("OnClick")(opps.profitOnly)
+  S.ToggleProfitOnly(); Win.Render()   -- the filter's logic stays though the toolbar no longer carries its switch
   Same(#L_.data, 1, "only Healing Potion is both priced and profitable"); Same(L_.rows[1].name:GetText(), "Healing Potion")
   ah.records = { { item = 10, count = 2, buyout = 200 }, { item = 11, count = 1, buyout = 50 }, { item = 501, count = 1, buyout = 10 }, { item = 502, count = 1, buyout = 10 } }
   opps.scan:GetScript("OnClick")(opps.scan); FireScan("REPLICATE_ITEM_LIST_UPDATE"); Advance(5)
   Same(#L_.data, 0); Check(L_.empty:GetText():find("No profitable crafts", 1, true), L_.empty:GetText())
-  opps.profitOnly:GetScript("OnClick")(opps.profitOnly)
+  S.ToggleProfitOnly(); Win.Render()
   Same(#L_.data, 2, "off: they are all shown, losses included")
   Check(L_.rows[1].profit.a:GetText():sub(1, 1) == "-", "a loss shows its minus sign")
 
@@ -410,7 +410,7 @@ do
   Same(W.Scan.state, "done")
   Check(Win.Lists().opps.empty:IsShown() == false, "the rows are still listed (as unknown)")
   Check(L_.rows[1].profit.a:GetText() == "Unknown")
-  Check(opps.summary:GetText():find("0 of 2 priced", 1, true))
+  Same(S.Opportunities().summary.priced, 0)
   Check(S.Opportunities().state == "noprices")
 
   -- closing the auction house mid-scan, then the window: nothing is left running
@@ -458,16 +458,23 @@ do
   local function RowOf(item) for _, r in ipairs(SL.rows) do if r:IsShown() and r.item == item then return r end end end
   local make, seed = RowOf(10), RowOf(12)
   Check(make and seed, "both rows are drawn")
+  local function Select(r) r:GetScript("OnClick")(r) return shop.detail end   -- a row chosen: its details are shown
+  local sd = Select(make)
   Same(make.name:GetText(), "Peacebloom"); Same(make.need:GetText(), "2")
-  Same(make.source.text:GetText(), "Make"); Check(make.detail:GetText():find("Make 2 x Peacebloom Bundle", 1, true), make.detail:GetText())
-  Check(make.detail:GetText():find("Making this looks cheaper than buying at the auction house", 1, true), make.detail:GetText())
-  Same(make.act.text:GetText(), "Add to queue"); Check(make.act:IsShown())
+  Same(make.kind:GetText(), "Make", "the row says Make in words as well as in its picture")
+  Check(sd.choose.make.on and not sd.choose.auction.on, "the details light Make")
+  Same(sd.name:GetText(), "Peacebloom")
+  Check(sd.explain:GetText():find("Make 2 x Peacebloom Bundle", 1, true), sd.explain:GetText())
+  Check(sd.explain:GetText():find("Making this looks cheaper than buying at the auction house", 1, true), sd.explain:GetText())
+  Same(sd.act.text:GetText(), "Add to crafting plan"); Check(sd.act:IsShown())
+  sd = Select(seed)
   Same(seed.name:GetText(), "Seed"); Same(seed.need:GetText(), "2"); Same(seed.spend.a:GetText(), "20c", "2 seeds at 10 each")
-  Check(seed.detail:GetText():find("Needed to make Peacebloom Bundle", 1, true), seed.detail:GetText())
+  Same(seed.kind:GetText(), "Buy")
+  Check(sd.explain:GetText():find("Needed to make Peacebloom Bundle", 1, true), sd.explain:GetText())
   Check(seed.spend.b:GetText():find("1 day ago", 1, true), "the price age is shown: " .. seed.spend.b:GetText())
-  Check(not seed.act:IsShown(), "no action where none fits")
+  Check(sd.costNote:GetText():find("1 day ago", 1, true), "and in the details: " .. sd.costNote:GetText())
+  Check(not sd.act:IsShown(), "no action where none fits")
   Check(shop.total:GetText():find("Estimated spending: 20c", 1, true), shop.total:GetText())
-  Check(shop.source:GetText():find("1 day ago", 1, true), shop.source:GetText())
   -- the basis tooltip says what is owned and what is not
   tip = nil
   local lines = {}
@@ -477,7 +484,8 @@ do
   local all = table.concat(lines, "\n")
   Check(all:find("Make | worth 20c", 1, true) and all:find("Cooldowns, tools and stations aren't checked", 1, true), all)
   -- adding the made material to the queue: explicit, once; nothing is counted twice
-  make.act:GetScript("OnClick")(make.act)
+  local makeAct = Select(make).act
+  makeAct:GetScript("OnClick")(makeAct)
   Same(#Q.Entries(), 2, "the bundle is queued"); Same(Q.Find(3).crafts, 2)
   Same(#SL.data, 1, "Peacebloom is now made by the queue: one row left"); Same(SL.rows[1].item, 12)
   Same(SL.rows[1].need:GetText(), "2", "the seeds are counted once")
@@ -496,10 +504,13 @@ do
   -- the source button changes the choice
   Win.Render()
   local sr = SL.rows[1]
-  sr.source:GetScript("OnClick")(sr.source)
-  Check(S.picks[12] == "auction" and SL.rows[1].source.text:GetText() == "Auction house", "the player's choice")
-  sr.source:GetScript("OnClick")(sr.source)
-  Check(S.picks[12] == nil, "and back to the suggestion")
+  local pd = Select(sr)
+  local auction = pd.choose.auction
+  auction:GetScript("OnClick")(auction)
+  Check(S.picks[12] == "auction" and pd.choose.auction.on, "the player's choice, lit in the details")
+  Same(SL.rows[1].detail:GetText(), "Auction house", "and named under the row")
+  auction:GetScript("OnClick")(auction)
+  Check(S.picks[12] == nil, "chosen again: back to the suggestion")
 
   -- a vendor: the price is noted from the merchant window, and Show vendor needs a place the NPC list knows
   local pending = {}
@@ -519,8 +530,9 @@ do
   Check(W.Vendor.Entry(12) ~= nil, "the merchant window was read when the event settled")
   Same(W.Vendor.Entry(12).p, 4); Same(W.Vendor.Entry(12).npc, 4567)
   sr = SL.rows[1]
-  Same(sr.source.text:GetText(), "Vendor", "4 each at the vendor against 10 at the auction house"); Same(sr.spend.a:GetText(), "8c")
-  Check(not sr.act:IsShown(), "no place is known for the vendor, so no Show vendor")
+  pd = Select(sr)
+  Check(pd.choose.vendor.on and sr.detail:GetText() == "Vendor", "4 each at the vendor against 10 at the auction house"); Same(sr.spend.a:GetText(), "8c")
+  Check(not pd.act:IsShown(), "no place is known for the vendor, so no Show vendor")
   local located
   R.NpcStore = { Entries = function() return { { id = 4567, n = "Mira", m = 1, x = 5000, y = 5000, s = { 12 }, own = true } } end,
     ValidMap = function() return true end, Usable = function() return true end, MyFaction = function() return nil end, COORD = 10000 }
@@ -529,8 +541,9 @@ do
   R.Enabled = function(_, key) if key == "npcMap" then return true end return enabled(R, key) end
   Win.Render()
   sr = SL.rows[1]
-  Check(sr.act:IsShown() and sr.act.text:GetText() == "Show vendor", "a seen place: Show vendor")
-  sr.act:GetScript("OnClick")(sr.act)
+  pd = Select(sr)
+  Check(pd.act:IsShown() and pd.act.text:GetText() == "Show vendor", "a seen place: Show vendor")
+  pd.act:GetScript("OnClick")(pd.act)
   Check(located and located.n == "Mira", "the map is asked to show that vendor, nothing else")
   Check(f.note:GetText():find("Showing Mira on the map", 1, true), f.note:GetText())
   R.Enabled = enabled; R.NpcStore, R.NpcMap = nil, nil
@@ -598,26 +611,297 @@ do
   local shop, SL = Win.Shop(), Win.Lists().shop
   Same(#SL.data, 2, "a bank row and a guild bank row; nothing to buy")
   local r1, r2 = SL.rows[1], SL.rows[2]
-  Same(r1.need:GetText(), "5"); Same(r1.where:GetText(), "Collect from bank"); Check(r1.where:IsShown() and not r1.source:IsShown(), "no source to pick for something you own")
-  Same(r2.need:GetText(), "3"); Same(r2.where:GetText(), "Collect from guild bank")
-  Same(r1.spend.a:GetText(), "Already owned"); Check(not r1.act:IsShown(), "no action: nothing is bought, made or sent")
+  local function Select(r) r:GetScript("OnClick")(r) return shop.detail end   -- a row chosen: its details are shown
+  local d1 = Select(r1)
+  Same(r1.need:GetText(), "5"); Same(r1.kind:GetText(), "Collect"); Same(r1.detail:GetText(), "From your bank")
+  Check(not d1.choose.vendor:IsShown() and not d1.choose.auction:IsShown() and not d1.choose.make:IsShown(), "no source to pick for something you own")
+  Same(r2.need:GetText(), "3"); Same(r2.kind:GetText(), "Collect"); Same(r2.detail:GetText(), "From the guild bank")
+  Same(r1.spend.a:GetText(), "Already owned"); Check(not d1.act:IsShown(), "no action: nothing is bought, made or sent")
   Check(r1.spend.b:GetText():find("seen 2 hours ago", 1, true), r1.spend.b:GetText())
-  Check(r2.detail:GetText():find("Shared stock", 1, true) and not r2.detail:GetText():find("limit", 1, true), "unlimited today: " .. r2.detail:GetText())
+  local d2 = Select(r2)
+  Check(d2.explain:GetText():find("Shared stock", 1, true) and not d2.explain:GetText():find("limit", 1, true), "unlimited today: " .. d2.explain:GetText())
   W.Storage.StoreGuildTab({ key = "Raiders-" .. realm, name = "Raiders" }, 1, { n = { [10] = 9 }, by = Q.CharKey(), w = 1, lim = 5, rem = 3 }, Q.Now() - 60, 1)
   Win.Render()
-  Check(Win.Lists().shop.rows[2].detail:GetText():find("withdrawal limit may apply", 1, true), "a finite allowance is flagged, not promised")
+  Check(Select(Win.Lists().shop.rows[2]).explain:GetText():find("withdrawal limit may apply", 1, true), "a finite allowance is flagged, not promised")
   Same(shop.total:GetText(), "Nothing to buy: collect what is stored.")
   Check(shop.status:GetText():find("bags, bank and guild bank", 1, true), shop.status:GetText())
   -- the choice off again: the guild bank's part is something to buy
   shop.useGuild:GetScript("OnClick")(shop.useGuild)
   Check(not S.UseGuild(), "the same choice from the Shopping view")
-  Same(#SL.data, 2); Same(SL.rows[1].where:GetText(), "Collect from bank")
-  Check(SL.rows[2].source:IsShown() and not SL.rows[2].where:IsShown(), "the second row is now a buy row with its source")
+  Same(#SL.data, 2); Same(SL.rows[1].kind:GetText(), "Collect")
+  Same(SL.rows[2].kind:GetText(), "Buy", "the second row is now a buy row")
+  Check(Select(SL.rows[2]).choose.auction:IsShown(), "with its source choices")
   Same(SL.rows[2].need:GetText(), "3"); Same(SL.rows[2].spend.a:GetText(), "Unknown", "unpriced: unknown, not zero")
   Check(shop.total:GetText():find("Some prices missing", 1, true), shop.total:GetText())
   Win.SetMode("craft")
   f:Hide()
   Same(Events(f), 0, "hidden: no events")
+end
+
+---------------------------------------------------------------------------
+-- The refined pages: Overview (skills, states, activity), Opportunities (honest history chart, selection, sort indicators), Crafting
+-- (left card modes, plan estimates and totals) and Shopping (details). Synthetic data only.
+---------------------------------------------------------------------------
+do
+  local f = Win.Frame()
+  local pend = {}
+  c.C_Timer = { After = function(_, fn) pend[#pend + 1] = fn end }
+  local function Flush() local list = pend; pend = {}; for _, fn in ipairs(list) do fn() end end
+  c.GetMoneyString = function(n) return n .. "c" end
+  c.UnitFactionGroup = function() return "Alliance" end
+  c.GetRealmName = function() return "Realm" end
+  for _, e in ipairs({ unpack(Q.Entries()) }) do Q.Remove(e.id) end
+  g.recipes = { [1] = { name = "Healing Potion", diff = 1 }, [2] = { name = "Mana Potion", diff = 0 } }
+  g.schem = {
+    [1] = { quantityMin = 1, quantityMax = 1, outputItemID = 501, reagentSlotSchematics = { { reagentType = 1, reagents = { { itemID = 10 } }, quantityRequired = 2, required = true } } },
+    [2] = { quantityMin = 1, quantityMax = 1, outputItemID = 502, reagentSlotSchematics = { { reagentType = 1, reagents = { { itemID = 10 } }, quantityRequired = 1, required = true },
+      { reagentType = 1, reagents = { { itemID = 11 } }, quantityRequired = 1, required = true } } },
+  }
+  g.filtered = { 1, 2 }
+  g.bags = { [10] = 4, [11] = 1 }
+  g.prof = { professionID = 171, professionName = "Alchemy" }
+  local now = os.time()
+  local today = math.floor(now / 86400)
+  local function Market(over)
+    local m = { f = 2, scope = "full", realm = "Realm", side = "Alliance", at = now - 18000, complete = true, read = 1, used = 1, n = 23439,
+      items = { [10] = "100,9,9,9,0", [11] = "50,9,9,9,0", [501] = "1000,1,1,1,0", [502] = "300,1,1,1,0" },
+      hist = { [501] = (today - 3) .. ",900;" .. (today - 2) .. ",1000;" .. today .. ",1100|", [502] = today .. ",300|" }, sd = { today - 3, today - 2, today } }
+    for k, v in pairs(over or {}) do m[k] = v end
+    return m
+  end
+  c.TwichUIWorkshopDB = { v = 1, markets = { ["Realm|Alliance"] = Market() } }
+  c.TwichUIDB.workshop.vendor = nil
+  c.TwichUIDB.workshop.storage = nil   -- no remembered bank from the sections above
+  local ch = c.TwichUIDB.workshop.chars and c.TwichUIDB.workshop.chars[Q.CharKey()]
+  if ch then ch.known = nil end   -- the recipes remembered by earlier sections: this one starts with the two it sets up
+  f:Hide(); f:Show()
+  local ov = Win.Overview()
+  Win.SetMode("overview")
+
+  -- Overview: the numbers, thousands separators, and "complete" only when the scan was
+  local cards = ov.cards
+  Same(cards.market.stat:GetText(), "23,439", "items priced, readable"); Same(cards.market.statLabel:GetText(), "items priced")
+  Check(cards.market.facts[1].text:GetText():find("^Scan complete"), cards.market.facts[1].text:GetText())
+  Same(cards.market.facts[2].text:GetText(), "Market: Realm (Alliance)")
+  Check(cards.market.facts[1].text:GetText():find("5 hours ago", 1, true), "its age")
+  c.TwichUIWorkshopDB.markets["Realm|Alliance"] = Market({ complete = false })
+  Win.Render()
+  Check(cards.market.facts[1].text:GetText():find("^Partial scan"), "a scan that was not whole is never called complete: " .. cards.market.facts[1].text:GetText())
+  c.TwichUIWorkshopDB.markets["Realm|Alliance"] = Market({ at = now - 3 * 86400, realm = "Realm" })
+  Win.Render()
+  Check(cards.market.facts[1].text:GetText():find("(old)", 1, true), "an old scan says so")
+  local LONG = "A very long realm name that cannot fit"
+  c.GetRealmName = function() return LONG end
+  c.TwichUIWorkshopDB.markets = { [LONG .. "|Alliance"] = Market({ realm = LONG }) }
+  Win.Render()
+  Check(#cards.market.facts[2].text:GetText() < 45 and cards.market.facts[2].text:GetText():find("\226\128\166", 1, true), "a long market name is cut with an ellipsis: " .. cards.market.facts[2].text:GetText())
+  c.GetRealmName = function() return "Realm" end
+  c.TwichUIWorkshopDB.markets = { ["Realm|Alliance"] = Market() }
+  Win.Render()
+
+  -- Overview: professions with their skill; unusable numbers are unavailable, never zero
+  local skills = { { "Tailoring", 1001, 125, 150 }, { "Enchanting", 1002, 98, 150 }, { "Fishing", 1003, 75, 150 } }
+  c.GetProfessions = function() return 1, 2, nil, 3 end
+  c.GetProfessionInfo = function(i) local k = skills[i] if k then return k[1], k[2], k[3], k[4] end end
+  Win.Render()
+  local pr = cards.profs.facts
+  local function PRow(i) return pr[i].text:GetText() .. "|" .. pr[i].value:GetText() .. "|" .. ("%.4f"):format(pr[i].bar.frac) end
+  Same(PRow(1), "Tailoring|125 / 150|0.8333"); Same(PRow(2), "Enchanting|98 / 150|0.6533"); Same(PRow(3), "Fishing|75 / 150|0.5000")
+  Check(not pr[4]:IsShown(), "only as many rows as professions")
+  skills[2][3] = 151   -- more than the maximum: not a pair the game can mean
+  Win.Render()
+  Same(PRow(2), "Enchanting|n/a|0.0000", "an unusable pair is unavailable, not a made-up level")
+  skills[2][3], skills[2][4] = nil, nil
+  Win.Render()
+  Same(PRow(2), "Enchanting|n/a|0.0000", "no numbers: unavailable")
+  skills[2][3], skills[2][4] = 98, 150
+  -- a refresh event, only while shown
+  Check(f.events["SKILL_LINES_CHANGED"], "the skill change is listened for while shown")
+  skills[1][3] = 126
+  Fire("SKILL_LINES_CHANGED"); Flush()
+  Same(PRow(1), "Tailoring|126 / 150|0.8400", "a skill change redraws the card")
+  -- no API: the Workshop's own professions, drawn as unavailable
+  c.GetProfessions, c.GetProfessionInfo = nil, nil
+  Win.Render()
+  Check(cards.profs.facts[1]:IsShown() and cards.profs.facts[1].value:GetText() == "n/a" and cards.profs.facts[1].bar.frac == 0, "no skill from the game: unavailable")
+  c.GetProfessions = function() return nil end
+  c.GetProfessionInfo = function() end
+  Win.Render()
+  Check(cards.profs.facts[1].text:GetText():find("No professions", 1, true), "none learned: said so")
+  c.GetProfessions = function() return 1, 2, 3, 4, 5, 6 end
+  c.GetProfessionInfo = function(i) return "Skill " .. i, 1000 + i, 10 * i, 100 end
+  Win.Render()
+  Same(cards.profs.more:GetText(), "and 2 more", "more professions than rows: said, not squeezed"); Same(pr[4].text:GetText(), "Skill 4")
+  c.GetProfessions = function() return 1 end
+  c.GetProfessionInfo = function(i) return "Alchemy", 1001, 80, 100 end
+
+  -- Overview: recent activity is real, bounded and newest first
+  S.ClearActivity(); Win.Render()
+  Check(ov.bottom.empty:IsShown() == false, "the saved scan is real, so the list is not empty")
+  Check(ov.activity[1].text:GetText():find("Auction house scan completed (23,439 items)", 1, true), ov.activity[1].text:GetText())
+  Same(ov.activity[1].age:GetText(), "5h ago")
+  Check(S.Add(S.AllRecipes()[1]), "queued the potion")
+  Win.Render()
+  Same(ov.activity[1].text:GetText(), "Added Healing Potion to plan", "a plan change is recorded the moment it happens")
+  Same(ov.activity[2].text:GetText():find("Auction house scan completed", 1, true) ~= nil, true)
+  Check(ov.activity[1].age:GetText() == "just now")
+  for i = 1, 12 do S.Change(1, 1); S.Change(1, -1) end   -- changing a count is not an event
+  Same(#S.Activity(), 1 + 0, "changing the number of crafts is not an activity")
+  for _, e in ipairs({ unpack(Q.Entries()) }) do Q.Remove(e.id) end
+  local n = 0
+  for i = 1, 14 do S.Add(S.AllRecipes()[(i % 2) + 1]); S.Remove(S.AllRecipes()[(i % 2) + 1].id) end
+  Check(#S.Activity() <= 8, "the activity list is bounded: " .. #S.Activity())
+  Check(S.Activity()[1].text:find("^Removed"), "newest first")
+  -- activity does not touch the saved data
+  Check(c.TwichUIDB.workshop.activity == nil, "nothing about activity is saved")
+  c.TwichUIWorkshopDB.markets["Realm|Alliance"] = nil
+  Win.Render()
+  Same(cards.market.stat:GetText(), "\226\128\148", "no market: no invented count"); Same(cards.market.facts[1].text:GetText(), "No scan yet")
+  Check(ov.bottom.empty:IsShown() == (#S.Activity() == 0), "the empty state shows only with nothing to say")
+  c.TwichUIWorkshopDB.markets["Realm|Alliance"] = Market()
+  for _, e in ipairs({ unpack(Q.Entries()) }) do Q.Remove(e.id) end
+
+  -- Opportunities: selection, sort indicators, the honest chart
+  Win.SetMode("opps"); Win.Render()
+  local opps, L_ = Win.Opps(), Win.Lists().opps
+  Check(#L_.data == 2, "two recipes, got " .. #L_.data .. ": " .. (L_.data[1] and L_.data[1].rec.name or "") .. " / " .. (L_.data[3] and L_.data[3].rec.name or ""))
+  local H = Win.Heads()
+  Check(H.profit.active and H.profit.tri:IsShown() and H.profit.tri.dir == "down" and not H.cost.active and H.cost.hintUp:IsShown() and not H.cost.tri:IsShown(),
+    "profit is the sort, pointing down (highest first); the others only hint that they sort")
+  H.cost:GetScript("OnClick")(H.cost)
+  Check(H.cost.active and H.cost.tri.dir == "up" and not H.profit.active and H.profit.hintUp:IsShown(), "the indicator moves to the new column, pointing up for cheapest first")
+  H.cost:GetScript("OnClick")(H.cost)
+  Check(H.cost.tri.dir == "down", "the same column again reverses the arrow")
+  H.profit:GetScript("OnClick")(H.profit)
+  Check(H.profit.active and H.profit.tri.dir == "down", "back on profit")
+  Same(L_.rows[1].name:GetText(), "Healing Potion")
+  local r1, r2 = L_.rows[1], L_.rows[2]
+  Check(r1.selected == true and not r2.selected, "the first row is chosen by default")
+  r2:GetScript("OnClick")(r2)
+  Check(r2.selected == true and not L_.rows[1].selected, "choosing a row marks it and only it")
+  Same(opps.detail.name:GetText(), "Mana Potion")
+  -- Mana Potion has one observed day: a point and a plain note, no line
+  local chart = opps.detail.chart
+  Same(chart.shown, 1); Check(chart.dots[1]:IsShown() and not chart.dots[2]:IsShown(), "one observation is one dot")
+  Same(chart.msg:GetText(), "One day observed"); Check(chart.msg:IsShown())
+  Same(opps.detail.chartNote:GetText(), "1 observed day")
+  r1:GetScript("OnClick")(r1)
+  Same(opps.detail.name:GetText(), "Healing Potion")
+  -- Healing Potion: three observed days (today-3, today-2, today): the dots sit at their real days, the gap before today is a gap
+  Same(chart.shown, 3); Check(chart.dots[1]:IsShown() and chart.dots[3]:IsShown() and not chart.dots[4]:IsShown(), "three observations, three dots")
+  Check(not chart.msg:IsShown(), "no message over a real chart")
+  local function X(i) local pt = chart.dots[i].points[#chart.dots[i].points] return pt[4] end
+  Check(X(1) < X(2) and X(2) < X(3), "oldest to newest, left to right")
+  Check(math.abs((X(3) - X(2)) - 2 * (X(2) - X(1))) < 0.01, "spacing follows the days (a missing day is a gap): " .. X(1) .. " " .. X(2) .. " " .. X(3))
+  Same(opps.detail.chartNote:GetText(), "3 observed days")
+  Check(chart.hi:GetText() == "1100c" and chart.lo:GetText() == "900c", "its range is the lowest and highest observed: " .. chart.hi:GetText() .. " / " .. chart.lo:GetText())
+  -- older groups are named, not drawn
+  c.TwichUIWorkshopDB.markets["Realm|Alliance"].hist[501] = (today - 1) .. ",1000;" .. today .. ",1100|" .. math.floor((today - 40) / 28) .. ",800,950,1750,2"
+  Win.Render()
+  Same(chart.shown, 2); Check(opps.detail.chartNote:GetText():find("plus older ranges", 1, true), "older days are named, never drawn: " .. opps.detail.chartNote:GetText())
+  -- only older ranges: nothing to draw, and it says so
+  c.TwichUIWorkshopDB.markets["Realm|Alliance"].hist[501] = "|" .. math.floor((today - 40) / 28) .. ",800,950,1750,2"
+  Win.Render()
+  Same(chart.shown, 0); Check(chart.msg:IsShown() and chart.msg:GetText():find("only as ranges", 1, true), chart.msg:GetText())
+  -- no history at all
+  c.TwichUIWorkshopDB.markets["Realm|Alliance"].hist[501] = nil
+  Win.Render()
+  Same(chart.shown, 0); Check(chart.msg:GetText():find("No price history", 1, true) and chart.hi:GetText() == "", chart.msg:GetText())
+  -- a malformed history is no history (never repaired by guessing)
+  c.TwichUIWorkshopDB.markets["Realm|Alliance"].hist[501] = "garbage"
+  Win.Render()
+  Same(chart.shown, 0)
+  c.TwichUIWorkshopDB.markets["Realm|Alliance"].hist[501] = (today - 3) .. ",900;" .. (today - 2) .. ",1000;" .. today .. ",1100|"
+  Win.Render()
+  -- the materials of one craft: each with its item tooltip and its quantity
+  local mat = opps.detail.mats[1]
+  Check(mat:IsShown() and mat.item == 10 and mat.qty:GetText() == "\195\151" .. 2, "a material: item and quantity")
+  tip = {}
+  Check(mat.scripts.OnEnter ~= nil and mat.scripts.OnClick ~= nil, "it has an item tooltip and a chat link on Shift-click")
+
+  -- Crafting: the left card's two lists, the plan's estimates and totals
+  Win.SetMode("craft"); Win.Render()
+  local cr = Win.Craft()
+  Check(Win.Lists().recipes.box:IsShown() == (Win.Lists().queue.box:IsShown() == false), "one list at a time in the left card")
+  cr.segQueue:GetScript("OnClick")(cr.segQueue)
+  Check(Win.Lists().queue.box:IsShown() and not Win.Lists().recipes.box:IsShown() and cr.segQueue.on and not cr.segRecipes.on, "Craft queue shows the queue")
+  cr.addRecipe:GetScript("OnClick")(cr.addRecipe)
+  Check(Win.Lists().recipes.box:IsShown() and not Win.Lists().queue.box:IsShown() and f.search:IsShown(), "Add recipe shows the recipes")
+  local rec = S.AllRecipes()
+  S.Add(rec[1]); S.Add(rec[2])
+  S.SetCrafts(1, 2)
+  Win.Render()
+  -- Healing Potion x2: cost 2 x 200, sells 2 x 1000, profit 2 x 800. Mana Potion x1: cost 100 + 50, sells 300, profit 150.
+  local byId, tot = S.PlanEstimates()
+  Same(byId[1].cost, 400); Same(byId[1].sellLow, 2000); Same(byId[1].profitLow, 1600)
+  Same(byId[2].cost, 150); Same(byId[2].profitLow, 150)
+  Same(tot.cost, 550); Same(tot.sellLow, 2300); Same(tot.profitLow, 1750); Same(tot.priced, 2); Same(tot.unpriced, 0); Same(tot.crafts, 3)
+  local bar = cr.bar
+  Same(bar.title:GetText(), "Total (2 recipes)"); Same(bar.sub:GetText(), "3 crafts to make")
+  Same(bar.cost:GetText(), "550c"); Same(bar.value:GetText(), "2300c"); Same(bar.profit:GetText(), "1750c")
+  Same(bar.profitLabel:GetText(), "Profit before fees", "the totals say before fees too")
+  Same(bar.partial:GetText(), "")
+  Same(cr.detail.name:GetText(), "Healing Potion"); Same(cr.detail.cost:GetText(), "400c"); Same(cr.detail.sell:GetText(), "2000c"); Same(cr.detail.profit:GetText(), "1600c")
+  Check(bar.shop.enabled, "the shopping list is reachable")
+  -- an unpriced craft is left out of the totals and counted, never taken as free
+  c.TwichUIWorkshopDB.markets["Realm|Alliance"].items[11] = nil
+  Win.Render()
+  local _, tot2 = S.PlanEstimates()
+  Same(tot2.priced, 1); Same(tot2.unpriced, 1); Same(tot2.cost, 400, "Mana Potion is not in the cost")
+  Same(bar.partial:GetText(), "1 of 2 priced"); Same(bar.cost:GetText(), "400c")
+  cr.open:GetScript("OnClick")(cr.open)   -- Open recipe stays, and acts on the chosen craft
+  Same(g.opened[#g.opened], 1)
+  c.TwichUIWorkshopDB.markets["Realm|Alliance"] = nil
+  Win.Render()
+  Same(cr.detail.cost:GetText(), "Unknown"); Same(bar.cost:GetText(), "Unknown", "no prices: unknown, never 0")
+  c.TwichUIWorkshopDB.markets["Realm|Alliance"] = Market()
+  -- the queue rows: a chosen craft, and the plus and minus controls
+  local qrow = Win.Lists().queue.rows[2]
+  qrow:GetScript("OnClick")(qrow)
+  Same(cr.detail.name:GetText(), "Mana Potion"); Check(qrow.selected == true and not Win.Lists().queue.rows[1].selected, "the chosen craft is marked")
+  Check(qrow.less.enabled == false, "minus is off at one craft"); Check(Win.Lists().queue.rows[1].less.enabled == true)
+  Check(#qrow.less.bars == 1 and #qrow.more.bars == 2, "the controls are drawn (a bar, and two bars): no font glyph")
+  -- the materials list: an optional note per material (for a planner that knows how it is made) is shown only when given
+  Check(Win.Lists().mats.rows[1].note:IsShown() == false, "no note, no second line")
+
+  -- Shopping: the details of the chosen material
+  Win.SetMode("shop"); Win.Render()
+  local shop, SL = Win.Shop(), Win.Lists().shop
+  g.bags = { [10] = 0, [11] = 0 }
+  Win.Render()
+  local row10
+  for _, r in ipairs(SL.rows) do if r:IsShown() and r.item == 10 then row10 = r end end
+  Check(row10, "Peacebloom is to be bought")
+  row10:GetScript("OnClick")(row10)
+  local d = shop.detail
+  Same(d.name:GetText(), "Peacebloom")
+  Check(row10.selected, "the chosen row is marked")
+  -- needs: Healing x2 uses 4, Mana x1 uses 1: 5 in all, none in the bags
+  Same(d.qty[1].l:GetText(), "Needed in total"); Same(d.qty[1].v:GetText(), "5")
+  Same(d.qty[2].l:GetText(), "In your bags"); Same(d.qty[2].v:GetText(), "0")
+  Same(d.qty[3].l:GetText(), "To get"); Same(d.qty[3].v:GetText(), "5")
+  Check(d.usedFor:GetText():find("Needed for: Healing Potion, Mana Potion", 1, true), d.usedFor:GetText())
+  Same(d.cost:GetText(), "500c", "5 at 100 each"); Check(d.costNote:GetText():find("Auction house", 1, true), d.costNote:GetText())
+  Same(row10.kind:GetText(), "Buy"); Check(not d.act:IsShown(), "Buy has no action here: nothing is bought for you")
+  Check(d.choose.auction.on and d.choose.auction.enabled and not d.choose.vendor.enabled, "only the possible sources can be chosen")
+  Check(shop.counts.buy.n:GetText() == "2" and shop.counts.make.n:GetText() == "0" and shop.counts.collect.n:GetText() == "0", "the plan counts")
+  Check(shop.total:GetText():find("Estimated spending: 550c", 1, true), shop.total:GetText())
+  -- only collect rows
+  g.bags = { [10] = 0, [11] = 0 }
+  W.Storage.StoreBank({ ids = { 6 }, tabs = { [6] = { [10] = 5, [11] = 1 } }, incomplete = 0 }, Q.Now() - 600)
+  Win.Render()
+  Same(#SL.data, 2); Check(SL.rows[1].kind:GetText() == "Collect" and SL.rows[2].kind:GetText() == "Collect", "everything is stored: two collect rows")
+  Check(shop.counts.collect.n:GetText() == "2" and shop.counts.buy.n:GetText() == "0")
+  Same(shop.total:GetText(), "Nothing to buy: collect what is stored.")
+  local cd = shop.detail
+  Check(not cd.choose.vendor:IsShown() and not cd.act:IsShown(), "collect: no source choice, no action")
+  Same(cd.cost:GetText(), "Already owned")
+  g.bags = { [10] = 4, [11] = 1 }
+  W.Storage.Reset = nil
+  c.TwichUIDB.workshop.storage = nil
+  for _, e in ipairs({ unpack(Q.Entries()) }) do Q.Remove(e.id) end
+  Win.SetMode("overview")
+  f:Hide()
 end
 
 ---------------------------------------------------------------------------

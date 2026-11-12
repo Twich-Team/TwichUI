@@ -1,29 +1,31 @@
 -- TwichUI Workshop: the Overview page
--- Four cards that answer, from what is already known (nothing is scanned, read or saved to draw them): are my auction prices there and
--- how old are they, can I make anything that may earn, what is in my queue and what does it still need, and which professions the Workshop
--- knows. Each card opens its page. Under them, at most three next steps worked out from the same facts. No figure is made up: a card with
--- nothing to show says what to do to fill it.
+-- Four cards that answer, from what is already known (nothing is scanned or saved to draw them): are my auction prices there and how old are
+-- they, can I make anything that may earn, what is in my queue and what does it still need, and how far along my professions are. Each card
+-- opens its page. Under them, what happened this session and the three things most often wanted next. No figure is made up: a card with
+-- nothing to show says what to do to fill it, and a profession whose skill the game won't give is drawn as unavailable, never as zero.
 
 local R = TwichUI
 local W = R.Workshop
 local S, PR, Op, SC, MK = W.Session, W.Prices, W.Opps, W.Scan, W.Market
 local UI = W.UI
 
-local CARD_H, GAP, FACTS, NEXT_H, TOP = 172, 12, 3, 112, -62   -- CARD_H: until the page is measured (then the cards share what Next steps leaves)
+local GAP, BOTTOM_H, TOP = 12, 118, -68
+local ART, TEXT_X = 92, 120
+local PROF_ROWS, PROF_H = 4, 21
 
 local K
 local page
 local cards = {}
-local steps = {}
+local actions = {}
 
 ---------------------------------------------------------------------------
 -- Building
 ---------------------------------------------------------------------------
--- The painted hover of a card or a step (the settings window's material hover: a faint warm selection face and the hover rim)
+-- The painted hover of a card (the settings window's material hover: a faint warm selection face and the hover rim)
 local function CardHover(frame)
     local CL = UI.CL
     local hot = CL.Sheet(frame, "selection-hot", { layer = "BACKGROUND", sub = 2, corner = 10 })
-    hot:SetAlpha(0.22)
+    hot:SetAlpha(0.28)
     hot:Hide()
     local rim = CL.Sheet(frame, "hover-rim", { layer = "OVERLAY", sub = 3 })
     rim:Hide()
@@ -32,46 +34,60 @@ local function CardHover(frame)
     frame:HookScript("OnHide", function() hot:Hide(); rim:Hide() end)
 end
 
-local function MakeCard(key, art, title, desc, target, x, y, w)
+local function MakeCard(key, art, title, desc, target)
     local c = CreateFrame("Button", nil, page)
-    c:SetPoint("TOPLEFT", x, y)
-    c:SetSize(w, CARD_H)
     UI.Panel(c, "card")
     CardHover(c)
     c.art = c:CreateTexture(nil, "ARTWORK")
-    c.art:SetSize(64, 64)
-    c.art:SetPoint("TOPLEFT", 16, -18)
-    UI.Art(c.art, art, 64)
-    c.title = UI.Text(c, 20, K.text, "serif")
-    c.title:SetPoint("TOPLEFT", 94, -15)
+    c.art:SetSize(ART, ART)
+    c.art:SetPoint("TOPLEFT", 14, -16)
+    UI.Art(c.art, art, ART)
+    c.title = UI.Text(c, 22, K.text, "serif")
+    c.title:SetPoint("TOPLEFT", TEXT_X, -13)
     c.title:SetText(title)
     -- the way in: a small painted button with a chevron (the whole card is the button; this one does the same)
-    c.go = UI.Button(c, "", 26, "secondary", function() UI.Go(c.target) end, 26)
+    c.go = UI.Button(c, "", 28, "secondary", function() UI.Go(c.target) end, 28)
     c.go:SetPoint("TOPRIGHT", -14, -14)
-    c.chevron = UI.Chevron(c.go, 20)
+    c.chevron = UI.Chevron(c.go, 22)
     c.chevron:SetPoint("CENTER", 1, 1)
     c.desc = UI.Text(c, 13, K.textDim)
-    c.desc:SetPoint("TOPLEFT", 94, -44)
-    c.desc:SetPoint("RIGHT", -48, 0)
+    c.desc:SetPoint("TOPLEFT", TEXT_X, -44)
+    c.desc:SetWidth(232)
+    c.desc:SetHeight(36)
     c.desc:SetWordWrap(true)
     c.desc:SetText(desc)
-    local rule = UI.Rule(c, 0.5)
-    rule:SetPoint("TOPLEFT", 94, -86); rule:SetPoint("TOPRIGHT", -16, -86)
-    c.facts = {}
-    for i = 1, FACTS do
-        local fy = -96 - (i - 1) * 22
-        local icon = c:CreateTexture(nil, "ARTWORK")
-        icon:SetSize(15, 15)
-        icon:SetPoint("TOPLEFT", 94, fy - 1)
-        local text = UI.Text(c, 13, K.text)
-        text:SetPoint("TOPLEFT", 115, fy)
-        text:SetPoint("RIGHT", -16, 0)
-        c.facts[i] = { icon = icon, text = text }
-    end
+    c.rule = UI.Rule(c, 0.5)
+    c.rule:SetPoint("TOPLEFT", TEXT_X, -84); c.rule:SetPoint("TOPRIGHT", -16, -84)
     c.target = target
     c:SetScript("OnClick", function(self) UI.Go(self.target) end)
     cards[key] = c
     return c
+end
+
+-- the big number of a card and what it counts; `side` is a quiet note at the right of the same line
+local function AddStat(c)
+    c.stat = UI.Text(c, 28, K.bronzeText, "serif")
+    c.stat:SetPoint("TOPLEFT", TEXT_X, -90)
+    c.statLabel = UI.Text(c, 14, K.textDim)
+    c.statLabel:SetPoint("BOTTOMLEFT", c.stat, "BOTTOMRIGHT", 8, 4)
+    c.side = UI.Text(c, 12, K.stone)
+    c.side:SetPoint("TOPRIGHT", c, "TOPRIGHT", -16, -104)
+    c.side:SetJustifyH("RIGHT")
+end
+
+-- two fact lines under the stat: a small picture (a guide status icon, or a plain dot) and a line of text
+local function AddFacts(c, count, top)
+    c.facts = {}
+    for i = 1, count do
+        local fy = top - (i - 1) * 22
+        local icon = c:CreateTexture(nil, "ARTWORK")
+        icon:SetSize(15, 15)
+        icon:SetPoint("TOPLEFT", TEXT_X, fy - 1)
+        local text = UI.Text(c, 13, K.text)
+        text:SetPoint("TOPLEFT", TEXT_X + 21, fy)
+        text:SetPoint("RIGHT", -16, 0)
+        c.facts[i] = { icon = icon, text = text }
+    end
 end
 
 -- A fact line: { text, status ("done" | "current" | nil for a plain dot), tone (a palette key) }
@@ -84,11 +100,11 @@ local function SetFacts(c, list)
             if fact[2] then
                 UI.Status(f.icon, fact[2], 15)
                 f.icon:SetVertexColor(1, 1, 1, 1)
+                f.icon:SetSize(15, 15)
             else
                 f.icon:SetColorTexture(K.bronzeText[1], K.bronzeText[2], K.bronzeText[3], 0.85)
                 f.icon:SetSize(5, 5)
             end
-            if fact[2] then f.icon:SetSize(15, 15) end
             f.icon:Show()
         else
             f.text:SetText("")
@@ -97,71 +113,278 @@ local function SetFacts(c, list)
     end
 end
 
+local function SetStat(c, value, label, side)
+    c.stat:SetText(value or "")
+    c.statLabel:SetText(label or "")
+    c.side:SetText(side or "")
+end
+
+local function BuildProfRows(c)
+    c.facts = {}
+    for i = 1, PROF_ROWS do
+        local y = -90 - (i - 1) * PROF_H
+        local row = CreateFrame("Frame", nil, c)
+        row:SetHeight(PROF_H)
+        row:SetPoint("TOPLEFT", TEXT_X, y)
+        row:SetPoint("TOPRIGHT", -16, y)
+        row.icon = row:CreateTexture(nil, "ARTWORK")
+        row.icon:SetSize(16, 16)
+        row.icon:SetPoint("LEFT", 0, 0)
+        row.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+        row.bar = UI.Meter(row, 72, 9)
+        row.bar:SetPoint("RIGHT", 0, 0)
+        row.value = UI.Text(row, 13, K.text)
+        row.value:SetWidth(62)
+        row.value:SetPoint("RIGHT", row.bar, "LEFT", -8, 0)
+        row.value:SetJustifyH("RIGHT")
+        row.text = UI.Text(row, 13, K.text)
+        row.text:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
+        row.text:SetPoint("RIGHT", row.value, "LEFT", -6, 0)
+        c.facts[i] = row
+    end
+    c.more = UI.Text(c, 12, K.stone)
+    c.more:SetPoint("TOPLEFT", TEXT_X, -90 - PROF_ROWS * PROF_H + 1)
+end
+
 local function Build(p)
     page, K = p, UI.K
-    local width = page:GetWidth() or 0
-    local w = math.floor(((width > 100 and width or 820) - GAP) / 2)
-    local top = TOP
-    MakeCard("market", "auctionHouse", "Market prices", "The cheapest auction house listings, read when you choose Scan prices.",
-        "opps", 0, top, w)
-    MakeCard("opps", "npc:coins", "Best opportunities", "What one craft of your known recipes could earn at those prices.",
-        "opps", w + GAP, top, w)
-    MakeCard("plan", "reviewChanges", "Your crafting plan", "Your queued crafts, and the materials they still need.",
-        "craft", 0, top - CARD_H - GAP, w)
-    MakeCard("profs", "npc:hammer-and-chisel", "Your professions", "The professions the Workshop has read for this character.",
-        "craft", w + GAP, top - CARD_H - GAP, w)
+    MakeCard("market", "auctionHouse", "Market prices", "Auction House data and price history for buying, crafting and selling.", "opps")
+    MakeCard("opps", "diagOperations", "Best opportunities", "Profitable crafts based on current prices, costs and your professions.", "opps")
+    MakeCard("plan", "reviewChanges", "Your crafting plan", "Queued crafts, material needs and what to make next.", "craft")
+    MakeCard("profs", "journeyChronicle", "Profession progress", "Your current skills, so you know what to level next.", "craft")
+    AddStat(cards.market); AddFacts(cards.market, 2, -128)
+    AddStat(cards.opps); AddFacts(cards.opps, 2, -128)
+    AddStat(cards.plan); AddFacts(cards.plan, 2, -128)
+    BuildProfRows(cards.profs)
     page.cards = cards
-    -- the cards are laid out for the page's real size once the game has measured it: two columns, and the height Next steps leaves
-    page:HookScript("OnSizeChanged", function(_, width, height)
-        if not (width and height) or width < 100 or height < 300 then return end
-        local cw = math.floor((width - GAP) / 2)
-        local ch = math.max(150, math.floor((height + top - NEXT_H - 2 * GAP) / 2))
-        for _, c in pairs(cards) do c:SetSize(cw, ch) end
-        cards.opps:SetPoint("TOPLEFT", cw + GAP, top)
-        cards.plan:SetPoint("TOPLEFT", 0, top - ch - GAP)
-        cards.profs:SetPoint("TOPLEFT", cw + GAP, top - ch - GAP)
+    UI.TipFn(cards.market, "Market prices", function()
+        local src = S.PriceSource()
+        local m = src.market
+        if not m then return "No auction prices are saved for this realm yet. Open the auction house and choose Scan prices." end
+        local info = MK.Info({ market = m })
+        local lines = { (src.label or "the auction house"):gsub("^%l", string.upper) }
+        local age = PR.Age(m.at)
+        lines[#lines + 1] = "Scanned " .. PR.AgeText(age) .. (age and age > PR.OLD_AFTER and " (old)" or "")
+        lines[#lines + 1] = info and info.complete and "A complete scan." or "Some listings may be missing from this scan."
+        return table.concat(lines, "\n")
+    end)
+    UI.TipFn(cards.profs, "Profession progress", function()
+        local list = S.Skills()
+        if not list then return "This game version doesn't give TwichUI your profession skill, so no levels are shown." end
+        if #list == 0 then return "This character has no professions." end
+        local lines = {}
+        for _, s in ipairs(list) do
+            lines[#lines + 1] = s.rank and ("%s: %d / %d"):format(s.name, s.rank, s.max) or (s.name .. ": skill not available")
+        end
+        return table.concat(lines, "\n")
     end)
 
-    -- next steps
+    -- the cards are laid out for the page's real size once the game has measured it: two columns, and the height the bottom panel leaves
+    local function Layout(width, height)
+        local cw = math.floor((width - GAP) / 2)
+        local ch = math.max(150, math.floor((height + TOP - BOTTOM_H - 2 * GAP) / 2))
+        for _, c in pairs(cards) do c.desc:SetWidth(cw - TEXT_X - 52) end
+        cards.market:ClearAllPoints(); cards.market:SetPoint("TOPLEFT", 0, TOP); cards.market:SetSize(cw, ch)
+        cards.opps:ClearAllPoints(); cards.opps:SetPoint("TOPLEFT", cw + GAP, TOP); cards.opps:SetSize(cw, ch)
+        cards.plan:ClearAllPoints(); cards.plan:SetPoint("TOPLEFT", 0, TOP - ch - GAP); cards.plan:SetSize(cw, ch)
+        cards.profs:ClearAllPoints(); cards.profs:SetPoint("TOPLEFT", cw + GAP, TOP - ch - GAP); cards.profs:SetSize(cw, ch)
+    end
+    Layout(820, 555)
+    page:HookScript("OnSizeChanged", function(_, width, height)
+        if width and height and width >= 100 and height >= 300 then Layout(width, height) end
+    end)
+
+    -- recent activity and the quick actions
     local n = CreateFrame("Frame", nil, page)
     n:SetPoint("BOTTOMLEFT", 0, 0)
     n:SetPoint("BOTTOMRIGHT", 0, 0)
-    n:SetHeight(NEXT_H)
+    n:SetHeight(BOTTOM_H)
     UI.Panel(n, "editor")
-    page.next = n
+    page.bottom = n
+    local split = 0.42
+    local art = n:CreateTexture(nil, "ARTWORK")
+    art:SetSize(26, 26)
+    art:SetPoint("TOPLEFT", 14, -9)
+    UI.Art(art, "reminders", 26)
     local title = UI.Text(n, 18, K.text, "serif")
-    title:SetPoint("TOPLEFT", 16, -10)
-    title:SetText("Next steps")
+    title:SetPoint("LEFT", art, "RIGHT", 8, 0)
+    title:SetText("Recent activity")
+    page.activity = {}
     for i = 1, 3 do
-        local s = CreateFrame("Button", nil, n)
-        s:SetHeight(24)
-        s:SetPoint("TOPLEFT", 10, -36 - (i - 1) * 24)
-        s:SetPoint("TOPRIGHT", -10, -36 - (i - 1) * 24)
-        UI.Hover(s)
-        s.icon = s:CreateTexture(nil, "ARTWORK")
-        s.icon:SetSize(16, 16)
-        s.icon:SetPoint("LEFT", 8, 0)
-        UI.Status(s.icon, "current", 16)
-        s.go = UI.Text(s, 13, K.bronzeText, "strong")
-        s.go:SetPoint("RIGHT", -10, 0)
-        s.go:SetJustifyH("RIGHT")
-        s.text = UI.Text(s, 14, K.text)
-        s.text:SetPoint("LEFT", 32, 0)
-        s.text:SetPoint("RIGHT", s.go, "LEFT", -12, 0)
-        s:SetScript("OnClick", function(self) if self.target then UI.Go(self.target) end end)
-        steps[i] = s
+        local y = -42 - (i - 1) * 23
+        local line = CreateFrame("Frame", nil, n)
+        line:SetHeight(22)
+        line:SetPoint("TOPLEFT", 14, y)
+        line.icon = line:CreateTexture(nil, "ARTWORK")
+        line.icon:SetSize(14, 14)
+        line.icon:SetPoint("LEFT", 0, 0)
+        line.age = UI.Text(line, 12, K.stone)
+        line.age:SetWidth(56)
+        line.age:SetPoint("RIGHT", 0, 0)
+        line.age:SetJustifyH("RIGHT")
+        line.text = UI.Text(line, 12, K.text)
+        line.text:SetPoint("LEFT", line.icon, "RIGHT", 8, 0)
+        line.text:SetPoint("RIGHT", line.age, "LEFT", -8, 0)
+        page.activity[i] = line
     end
-    page.steps = steps
-    n.done = UI.Text(n, 14, K.textDim)
-    n.done:SetPoint("TOPLEFT", 18, -44)
-    n.done:SetPoint("RIGHT", -18, 0)
-    n.done:SetWordWrap(true)
+    n.empty = UI.Text(n, 13, K.stone)
+    n.empty:SetPoint("TOPLEFT", 16, -44)
+    n.empty:SetWidth(330)
+    n.empty:SetWordWrap(true)
+    n.empty:SetJustifyV("TOP")
+    n.empty:SetText("Nothing yet this session. Scans and changes to your plan appear here.")
+    local rule = UI.Rule(n, 0.6)
+    rule:SetWidth(1)
+    rule:ClearAllPoints()
+    rule:SetPoint("TOP", n, "TOPLEFT", 0, -12)
+    rule:SetPoint("BOTTOM", n, "BOTTOMLEFT", 0, 12)
+    n.actionsBox = CreateFrame("Frame", nil, n)
+    n.actionsBox:SetPoint("TOPLEFT", 14, -42)
+    n.actionsBox:SetPoint("BOTTOMRIGHT", -14, 12)
+    local atitle = UI.Text(n, 18, K.text, "serif")
+    atitle:SetText("Quick actions")
+    n.atitle = atitle
+    local function Action(key, label, art, target, tip, fn)
+        local b = UI.ArtButton(n.actionsBox, label, art, 120, "secondary", fn or function() UI.Go(target) end, 44)
+        UI.Tip(b, label, tip)
+        actions[key] = b
+        return b
+    end
+    Action("scan", "Scan prices", "diagOverview", nil,
+        "Reads every listing at the open auction house once, so your crafts can be priced. It only reads, starts only when you press this, and needs the auction house open.",
+        function() S.StartScan(); UI.Redraw() end)
+    Action("plan", "Crafting plan", "npc:hammer", "craft", "Your craft queue and the materials it needs.")
+    Action("shop", "Shopping list", "npc:reagent-pouch", "shop", "What your queue still needs, and where to get it.")
+    local function Place(w)
+        local left = math.floor(w * split)
+        local aw = w - left - 28
+        local bw = math.floor((aw - 2 * 8) / 3)
+        local x = 0
+        for _, key in ipairs({ "scan", "plan", "shop" }) do
+            local b = actions[key]
+            b:ClearAllPoints(); b:SetPoint("TOPLEFT", n.actionsBox, "TOPLEFT", x, 0); b:SetSize(bw, 44)
+            x = x + bw + 8
+        end
+        n.atitle:ClearAllPoints(); n.atitle:SetPoint("TOPLEFT", left + 16, -12)
+        n.actionsBox:ClearAllPoints()
+        n.actionsBox:SetPoint("TOPLEFT", left + 14, -42)
+        n.actionsBox:SetPoint("BOTTOMRIGHT", -14, 12)
+        rule:ClearAllPoints()
+        rule:SetPoint("TOP", n, "TOPLEFT", left, -12)
+        rule:SetPoint("BOTTOM", n, "BOTTOMLEFT", left, 12)
+        for _, line in ipairs(page.activity) do line:SetWidth(left - 28) end
+        n.empty:SetWidth(left - 32)
+    end
+    Place(820)
+    n:HookScript("OnSizeChanged", function(_, w) if w and w >= 200 then Place(w) end end)
+    page.actions = actions
+    page.next = n
 end
 
 ---------------------------------------------------------------------------
 -- Drawing
 ---------------------------------------------------------------------------
-local PAGE_WORDS = { opps = "Opportunities", craft = "Crafting", shop = "Shopping" }
+local SIDE_WORDS = { Alliance = "Alliance", Horde = "Horde", Neutral = "Neutral" }
+-- "SimulatedRealm (Horde)": the market in a few characters (the whole name is in the card's tooltip)
+local function MarketName(m)
+    local realm = UI.Shorten(m.realm or "this realm", 22)
+    local side = SIDE_WORDS[m.side]
+    return side and ("%s (%s)"):format(realm, side) or realm
+end
+
+local function PlanFacts(sum, queue)
+    local toGet = sum.shortItems or 0
+    local first, second
+    if sum.state == "empty" then
+        first = { "No materials needed", nil, "textDim" }
+    elseif sum.state == "ready" then
+        first = { "Ready to craft: materials in your bags", "done", "sage" }
+    elseif sum.state == "collect" then
+        first = { ("Collect %d from storage"):format((sum.bankItems or 0) + (sum.guildItems or 0)), "current", "bronzeText" }
+    elseif sum.state == "short" then
+        first = { ("%d %s still needed"):format(toGet, UI.Plural(toGet, "material", "materials")), "current", "bronzeText" }
+    else
+        first = { "Some counts can't be read yet", "current", "bronzeText" }
+    end
+    if sum.state ~= "empty" then
+        second = { toGet > 0 and ("%d %s on your shopping list"):format(toGet, UI.Plural(toGet, "material", "materials")) or "Nothing to buy",
+            nil, toGet > 0 and "text" or "textDim" }
+    else
+        second = { #queue == 0 and "Add recipes to get started" or "", nil, "stone" }
+    end
+    return { first, second }
+end
+
+local function RenderProfessions()
+    local c = cards.profs
+    local list, why = S.Skills()
+    local rows = {}
+    if list == nil then
+        -- no skill from the game: the professions the Workshop has read, drawn as unavailable (never as zero)
+        for _, pr in ipairs(S.Professions()) do rows[#rows + 1] = { name = pr.name, unavailable = true } end
+    else
+        rows = list
+    end
+    for i, row in ipairs(c.facts) do
+        local d = rows[i]
+        if d then
+            row:Show()
+            row.text:SetText(d.name)
+            local icon = d.icon
+            row.icon:SetTexture(icon or UI.ICON_BLANK)
+            if d.rank then
+                row.value:SetText(("%d / %d"):format(d.rank, d.max))
+                row.bar:SetFraction(d.rank / d.max)
+                row.bar:SetTone(d.rank >= d.max and K.tealHi or K.sage)
+                UI.Paint(row.value, K.text)
+            else
+                row.value:SetText("n/a")
+                UI.Paint(row.value, K.stone)
+                row.bar:SetFraction(0)
+            end
+        else
+            row:Hide()
+        end
+    end
+    if #rows == 0 then
+        c.facts[1]:Show()
+        c.facts[1].text:SetText(list == nil and "Open a profession window to add it here." or "No professions learned yet.")
+        c.facts[1].icon:SetTexture(nil)
+        c.facts[1].value:SetText(""); c.facts[1].bar:SetFraction(0)
+        UI.Paint(c.facts[1].text, K.textDim)
+    else
+        UI.Paint(c.facts[1].text, K.text)
+    end
+    c.more:SetText(#rows > PROF_ROWS and ("and %d more"):format(#rows - PROF_ROWS) or "")
+end
+
+local function RenderActivity(market, info)
+    local list = S.Activity(3)
+    local sawScan = false
+    for _, a in ipairs(list) do if a.scan then sawScan = true end end
+    -- the saved scan is real too: when this session recorded none, say what the saved market holds
+    if not sawScan and market and market.at then
+        local items = info and info.items or market.n
+        local text = (info and info.complete) and ("Auction house scan completed (%s items)"):format(UI.Num(items or 0))
+            or ("Auction house scan saved, not complete (%s items)"):format(UI.Num(items or 0))
+        list[#list + 1] = { at = market.at, text = text, tone = (info and info.complete) and "done" or "current" }
+        table.sort(list, function(a, b) return (a.at or 0) > (b.at or 0) end)
+        while #list > 3 do list[#list] = nil end
+    end
+    for i, line in ipairs(page.activity) do
+        local a = list[i]
+        if a then
+            line:Show()
+            line.text:SetText(a.text)
+            line.age:SetText(UI.Ago(a.at))
+            UI.Status(line.icon, a.tone == "failed" and "failed" or (a.tone == "current" and "current" or "done"), 14)
+            UI.Paint(line.text, K.text)
+        else
+            line:Hide()
+        end
+    end
+    page.next.empty:SetShown(#list == 0)
+end
 
 local function Render()
     local Plural = UI.Plural
@@ -171,120 +394,69 @@ local function Render()
     local v = S.Opportunities()
     local queue = S.QueueRows()
     local _, sum = S.Materials()
-    local profs = S.Professions()
-    local nextSteps = {}
 
-    -- market prices
-    local mf = {}
+    -- market prices: the scan, how many items it priced, how old it is, which market
     local age = market and PR.Age(market.at) or nil
+    local mf = {}
+    if market then
+        SetStat(cards.market, UI.Num(info and info.items or 0), Plural(info and info.items or 0, "item priced", "items priced"),
+            (info and (info.scans or 0) > 0) and ("%d %s of history"):format(info.scans, Plural(info.scans, "day", "days")) or nil)
+    else
+        SetStat(cards.market, "\226\128\148", "no prices yet", nil)
+    end
     if SC.Busy() then
-        mf[#mf + 1] = { ("Scanning: %d%%"):format(math.floor((SC.Progress() or 0) * 100 + 0.5)), "current", "bronzeText" }
+        mf[1] = { ("Scanning: %d%%"):format(math.floor((SC.Progress() or 0) * 100 + 0.5)), "current", "bronzeText" }
     elseif market then
+        local when = age and PR.AgeText(age) or "at an unknown time"
         local old = age and age > PR.OLD_AFTER
-        mf[#mf + 1] = { "Last scan: " .. (age and PR.AgeText(age) or "at an unknown time") .. (old and " (old)" or ""), old and "current" or "done",
-            old and "bronzeText" or "text" }
+        -- a scan that was collected is not necessarily the whole house: "complete" is said only when the scan was
+        if info and info.complete then
+            mf[1] = { "Scan complete \194\183 " .. when .. (old and " (old)" or ""), old and "current" or "done", old and "bronzeText" or "text" }
+        else
+            mf[1] = { "Partial scan \194\183 " .. when .. (old and " (old)" or ""), "current", "bronzeText" }
+        end
     else
-        mf[#mf + 1] = { "No scan yet", "current", "bronzeText" }
+        mf[1] = { "No scan yet", "current", "bronzeText" }
     end
-    if info then
-        local parts = { ("%d %s priced"):format(info.items or 0, Plural(info.items or 0, "item", "items")) }
-        if (info.scans or 0) > 0 then parts[#parts + 1] = ("%d %s of history"):format(info.scans, Plural(info.scans, "scan day", "scan days")) end
-        mf[#mf + 1] = { table.concat(parts, " \194\183 ") }
-        local label = (src.label or "auction house"):gsub("^%l", string.upper)
-        mf[#mf + 1] = { label .. (info.complete and "" or " \194\183 partial scan"), nil, "textDim" }
-    else
-        mf[#mf + 1] = { "Scan prices at the auction house.", nil, "textDim" }
-        mf[#mf + 1] = { "Prices are read only when you ask.", nil, "stone" }
-    end
+    if market then mf[2] = { "Market: " .. MarketName(market), nil, "textDim" }
+    else mf[2] = { "Scan at the auction house", nil, "textDim" } end
     SetFacts(cards.market, mf)
-    if not market then
-        nextSteps[#nextSteps + 1] = { "Scan auction prices: open the auction house and choose Scan prices.", "opps" }
-    elseif age and age > PR.OLD_AFTER then
-        nextSteps[#nextSteps + 1] = { "Your prices are " .. PR.AgeText(age) .. ": scan again at the auction house.", "opps" }
-    end
 
     -- best opportunities (the best by estimated profit, over every known recipe, whatever the Opportunities page's filters)
     local of, s = {}, v.summary
     local best = market and Op.Select(v.all, Op.DEFAULTS)[1] or nil
     if s.total == 0 then
-        of[#of + 1] = { "No recipes read yet", "current", "bronzeText" }
-        of[#of + 1] = { "Open one of your professions to add its recipes.", nil, "textDim" }
-        nextSteps[#nextSteps + 1] = { "Open one of your professions so the Workshop can read its recipes.", "craft" }
+        SetStat(cards.opps, "\226\128\148", "no recipes read yet", nil)
+        of[1] = { "Open one of your professions to add its recipes", "current", "bronzeText" }
     elseif not market then
-        of[#of + 1] = { ("%d known %s, not priced yet"):format(s.total, Plural(s.total, "recipe", "recipes")), "current", "bronzeText" }
-        of[#of + 1] = { "Profits appear after a price scan.", nil, "textDim" }
+        SetStat(cards.opps, UI.Num(s.total), Plural(s.total, "known recipe", "known recipes"), nil)
+        of[1] = { "Not priced yet", "current", "bronzeText" }
+        of[2] = { "Profits appear after a price scan", nil, "textDim" }
     else
-        of[#of + 1] = { ("%d profitable of %d priced"):format(s.profitable, s.priced), s.profitable > 0 and "done" or nil,
-            s.profitable > 0 and "sage" or "text" }
+        SetStat(cards.opps, UI.Num(s.profitable), Plural(s.profitable, "profitable craft", "profitable crafts"),
+            ("of %s priced"):format(UI.Num(s.priced)))
         if best and best.est.state == "ok" and best.est.profitLow > 0 then
-            of[#of + 1] = { ("Best: %s (%s %s)"):format(best.rec.name, UI.Money(best.est.profitLow), best.est.cutRate and "profit" or "before fees") }
-            if #queue == 0 then
-                nextSteps[#nextSteps + 1] = { ("Plan a craft that may earn: %s."):format(best.rec.name), "opps" }
-            end
+            of[1] = { "Top profit: " .. UI.Shorten(best.rec.name, 30), "done", "text" }
+            of[2] = { ("%s each, %s"):format(UI.Money(best.est.profitLow), best.est.cutRate and "after the cut" or "before fees"), nil, "sage" }
         else
-            of[#of + 1] = { "Nothing profitable at these prices.", nil, "textDim" }
+            of[1] = { "Nothing profitable at these prices", nil, "textDim" }
         end
-        of[#of + 1] = { ("From %d known %s"):format(s.total, Plural(s.total, "recipe", "recipes")) .. (v.incomplete and "; some may be missing" or ""),
-            nil, "stone" }
     end
     SetFacts(cards.opps, of)
 
     -- the crafting plan
-    local pf = {}
-    pf[#pf + 1] = { ("%d of %d queued"):format(#queue, W.MAX_QUEUE), #queue > 0 and "done" or nil, "text" }
-    local text, tone = S.Headline(sum)
-    pf[#pf + 1] = { text, tone == "good" and "done" or (tone == "warn" and "current" or nil), tone == "good" and "sage" or (tone == "warn" and "bronzeText" or "textDim") }
-    if sum.state ~= "empty" then
-        local toGet = sum.shortItems or 0
-        pf[#pf + 1] = { toGet > 0 and ("%d %s on your shopping list"):format(toGet, Plural(toGet, "material", "materials")) or "Nothing to buy",
-            nil, toGet > 0 and "text" or "textDim" }
-    end
-    SetFacts(cards.plan, pf)
-    if sum.state == "ready" then
-        nextSteps[#nextSteps + 1] = { "Ready to craft: open a queued recipe from Crafting.", "craft" }
-    elseif sum.state == "collect" then
-        nextSteps[#nextSteps + 1] = { (S.Headline(sum)), "shop" }
-    elseif sum.state == "short" then
-        nextSteps[#nextSteps + 1] = { ("Get %d %s: see where on your shopping list."):format(sum.shortItems, Plural(sum.shortItems, "material", "materials")), "shop" }
-    elseif sum.state == "empty" and s.total > 0 and not (best and #queue == 0 and market) then
-        nextSteps[#nextSteps + 1] = { "Add recipes to your crafting plan.", "craft" }
-    end
+    SetStat(cards.plan, tostring(#queue), ("of %d queued"):format(W.MAX_QUEUE), nil)
+    SetFacts(cards.plan, PlanFacts(sum, queue))
 
-    -- professions
-    local prf = {}
-    for i = 1, math.min(#profs, FACTS) do
-        local pr = profs[i]
-        local when = pr.live and "open now" or (pr.at and ("seen " .. PR.AgeText(PR.Age(pr.at))) or "remembered")
-        prf[#prf + 1] = { ("%s \194\183 %d %s \194\183 %s"):format(pr.name, pr.known, Plural(pr.known, "recipe", "recipes"), when),
-            pr.live and "done" or nil, pr.live and "text" or "textDim" }
-    end
-    if #profs == 0 then
-        prf[1] = { "None yet", "current", "bronzeText" }
-        prf[2] = { "Open a profession window to add it here.", nil, "textDim" }
-    elseif #profs > FACTS then
-        prf[FACTS] = { ("and %d more"):format(#profs - FACTS + 1), nil, "stone" }
-    end
-    SetFacts(cards.profs, prf)
-
-    -- next steps
-    for i, st in ipairs(steps) do
-        local step = nextSteps[i]
-        if step then
-            st.text:SetText(step[1])
-            st.go:SetText(PAGE_WORDS[step[2]] .. "  \226\128\186")
-            st.target = step[2]
-            st:Show()
-        else
-            st:Hide()
-        end
-    end
-    page.next.done:SetShown(#nextSteps == 0)
-    page.next.done:SetText("Nothing waiting. Choose a page on the left to plan your next crafts.")
+    RenderProfessions()
+    RenderActivity(market, info)
+    actions.scan.text:SetText(SC.Busy() and "Scanning..." or "Scan prices")
+    actions.scan:SetEnabled(not SC.Busy())
 end
 
 UI.Register({
     key = "overview", nav = "Overview", icon = "home",
-    title = "Overview", sub = "Your prices, opportunities and crafting plan at a glance.",
+    title = "Overview", sub = "Your command center for crafting, markets and making gold.",
     tip = "Where your prices, opportunities, queue and professions stand, and what to do next.",
     Build = Build, Render = Render,
 })

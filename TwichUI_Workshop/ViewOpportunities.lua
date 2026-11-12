@@ -1,18 +1,20 @@
 -- TwichUI Workshop: the Opportunities page (a list and the chosen recipe's details)
 -- For every recipe read this session (all professions seen), ONE craft: Cost to make, Sell price and Estimated profit from the prices of the
 -- last auction house scan (Session.Opportunities, which prices through Market.Price; nothing is calculated here). Profession segments filter,
--- the money headings sort, Profitable only hides losses and unknowns. Choosing a row shows its details beside the list: the materials of one
--- craft and what the saved scan and its history say about what it makes, each figure labelled for what it is (cheapest listings, not sales).
--- The Scan prices button starts the player's own scan (Session.StartScan); its progress is shown while it runs.
+-- the money headings sort (each shows its direction), and the list opens on the most profitable craft first. Choosing a row shows its details
+-- beside the list: the profit, what a craft costs and sells for, the materials of one craft (each with its item tooltip), and what the saved
+-- scan and its history say about what it makes, drawn from the days actually observed. The Scan prices button starts the player's own scan
+-- (Session.StartScan); its progress is shown while it runs. The market source and age are in the window's footer and the status tooltip.
 
 local R = TwichUI
 local W = R.Workshop
 local S, O, PR, Op, SC, MK = W.Session, W.Observe, W.Prices, W.Opps, W.Scan, W.Market
 local UI = W.UI
 
-local OPP_H, COL_W, DETAIL_W = 46, 92, 236
-local MAT_ROWS = 3
-local RIGHT = 10   -- a row's right margin before the profit column
+local OPP_H, COL_W, DETAIL_W = 52, 90, 284
+local MAT_ROWS, MAT_H = 4, 26
+local RIGHT = 8   -- a row's right margin before the profit column
+local TOP = -100  -- the list's top edge on the page (the chips sit above it)
 
 local K
 local page, opps
@@ -23,9 +25,9 @@ local selected     -- the recipe whose details are shown (memory only)
 local function IsShift() return IsShiftKeyDown and IsShiftKeyDown() == true end
 
 -- One money column of a row: a value, and under it "to <highest>" when the amount is a range (an uncertain output)
-local function MakeCell(row, right)
+local function MakeCell(row, right, strong)
     local c = {}
-    c.a = UI.Text(row, 14, K.text)
+    c.a = UI.Text(row, strong and 15 or 14, K.text, strong and "strong" or nil)
     c.a:SetWidth(COL_W)
     c.a:SetJustifyH("RIGHT")
     c.b = UI.Text(row, 12, K.stone)
@@ -35,8 +37,8 @@ local function MakeCell(row, right)
         c.a:ClearAllPoints()
         c.b:ClearAllPoints()
         if high then
-            c.a:SetPoint("TOPRIGHT", row, "TOPRIGHT", right, -7)
-            c.b:SetPoint("TOPRIGHT", row, "TOPRIGHT", right, -25)
+            c.a:SetPoint("TOPRIGHT", row, "TOPRIGHT", right, -9)
+            c.b:SetPoint("TOPRIGHT", row, "TOPRIGHT", right, -28)
             c.b:SetText("to " .. high)
             c.b:Show()
         else
@@ -92,21 +94,21 @@ end
 local function MakeOppRow(parent)
     local row = CreateFrame("Button", nil, parent)
     UI.Hover(row)
-    local rule = UI.Rule(row, 0.25)
+    local rule = UI.Rule(row, 0.2)
     rule:SetPoint("BOTTOMLEFT", 6, 0); rule:SetPoint("BOTTOMRIGHT", -6, 0)
     row.iconBtn = CreateFrame("Button", nil, row)
-    row.iconBtn:SetSize(34, 34)
-    row.iconBtn:SetPoint("LEFT", 6, 0)
-    row.iconFrame = UI.ItemIcon(row.iconBtn, 34)
+    row.iconBtn:SetSize(38, 38)
+    row.iconBtn:SetPoint("LEFT", 10, 0)
+    row.iconFrame = UI.ItemIcon(row.iconBtn, 38)
     row.iconFrame:SetAllPoints()
     row.icon = row.iconFrame.tex
     UI.ItemTip(row.iconBtn, function() return row.item end)
-    row.profit = MakeCell(row, -RIGHT)
-    row.sell = MakeCell(row, -(RIGHT + COL_W + 6))
-    row.cost = MakeCell(row, -(RIGHT + 2 * (COL_W + 6)))
-    row.name = UI.Text(row, 14, K.text)
-    row.name:SetPoint("TOPLEFT", row.iconBtn, "TOPRIGHT", 8, -1)
-    row.name:SetPoint("RIGHT", row, "RIGHT", -(RIGHT + 3 * (COL_W + 6)), 0)
+    row.profit = MakeCell(row, -RIGHT, true)
+    row.sell = MakeCell(row, -(RIGHT + COL_W + 4))
+    row.cost = MakeCell(row, -(RIGHT + 2 * (COL_W + 4)))
+    row.name = UI.Text(row, 14, K.text, "strong")
+    row.name:SetPoint("TOPLEFT", row.iconBtn, "TOPRIGHT", 9, -2)
+    row.name:SetPoint("RIGHT", row, "RIGHT", -(RIGHT + 3 * (COL_W + 4)), 0)
     row.sub = UI.Text(row, 12, K.stone)
     row.sub:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -4)
     row.sub:SetPoint("RIGHT", row.name, "RIGHT", 0, 0)
@@ -126,16 +128,20 @@ local function MakeOppRow(parent)
         if rec.outItem then _, icon = O.ItemFacts(rec.outItem) end
         self.icon:SetTexture(icon or rec.icon or UI.ICON_BLANK)
         self.name:SetText(rec.name)
+        -- the second line, shortest first: the profession, then what matters about this craft right now
+        local detail = rec.profName or ""
         local makes = W.PerCraft(e.outMin, e.outMax)
-        local detail = makes and ("Makes " .. makes) or "Makes: unknown"
-        if rec.profName then detail = detail .. "  -  " .. rec.profName end
-        if e.state ~= "ok" then detail = (Op.WhyText(e) or "Not priced") end
+        if e.state ~= "ok" then
+            detail = Op.WhyText(e) or "Not priced"
+        elseif makes and (e.outMax ~= e.outMin or (e.outMin or 1) > 1) then
+            detail = detail .. " \194\183 makes " .. makes
+        end
         -- whether one craft's materials are in the bags or in storage (asked only for the rows drawn; never part of the estimate)
         r.avail = r.avail or (oppView and oppView.avail and oppView.avail(rec)) or nil
         local word = e.state == "ok" and Op.AvailWord(r.avail) or nil
-        if word then detail = detail .. "  -  " .. word end
+        if word then detail = detail .. " \194\183 " .. word end
         local queued = S.IsQueued(rec.id)
-        if queued then detail = detail .. "  -  In your queue" end
+        if queued then detail = detail .. " \194\183 In your queue" end
         self.sub:SetText(detail)
         UI.Paint(self.sub, e.state ~= "ok" and K.bronzeText or (word and (r.avail.state == "ready" and K.sage or K.bronzeText))
             or (queued and K.sage) or K.stone)
@@ -169,11 +175,21 @@ local function Evidence(item, market)
     end
     local st = MK.Stats(item, "week", { market = market })
     if st and not st.single then
-        out[#out + 1] = { ("7-day lows (%d %s)"):format(st.n, UI.Plural(st.n, "day", "days")), UI.Money(st.low) .. " - " .. UI.Money(st.high) }
+        out[#out + 1] = { ("Daily lows (%d %s)"):format(st.n, UI.Plural(st.n, "day", "days")), UI.Money(st.low) .. " - " .. UI.Money(st.high) }
     else
         out[#out + 1] = { "Price history", st and "one day so far" or "not yet" }
     end
     return out
+end
+
+-- How the history is described under the chart: the days it really covers, never more
+local function ChartNote(series)
+    if not series then return "" end
+    local n = #series.points
+    if n == 0 then return "older ranges only" end
+    local note = ("%d observed %s"):format(n, UI.Plural(n, "day", "days"))
+    if #series.groups > 0 then note = note .. ", plus older ranges" end
+    return note
 end
 
 local function RenderDetail(rows)
@@ -209,35 +225,44 @@ local function RenderDetail(rows)
     end
     d.cost:SetText(e.cost and UI.Money(e.cost) or "Unknown")
     d.sell:SetText(e.sellLow and Range(e.sellLow, e.sellHigh, UI.Money) or "Unknown")
-    -- materials of one craft
+    -- materials of one craft, each with its item tooltip
     local n = #(e.mats or {})
     for i, line in ipairs(d.mats) do
         local m = e.mats and e.mats[i]
         if m and i <= MAT_ROWS then
             local _, mi = O.ItemFacts(m.item)
+            line.item = m.item
             line.icon:SetTexture(mi or UI.ICON_BLANK)
-            line.name:SetText(("%d x %s"):format(m.qty, UI.ItemName(m.item)))
+            line.name:SetText(UI.ItemName(m.item))
+            line.qty:SetText("\195\151" .. m.qty)
             line.value:SetText(m.total and UI.Money(m.total) or (m.unavailable == "few" and "too few" or "no price"))
             UI.Paint(line.value, m.total and K.textDim or K.bronzeText)
             line:Show()
         else
+            line.item = nil
             line:Hide()
         end
     end
     d.more:SetText(n > MAT_ROWS and ("+%d more (hold Shift over the row)"):format(n - MAT_ROWS) or (n == 0 and "Not known yet." or ""))
     -- what the market data says about what it makes
-    local ev = Evidence(rec.outItem, oppView and oppView.source.market)
+    local market = oppView and oppView.source.market
+    local ev = Evidence(rec.outItem, market)
     for i, pair in ipairs(d.evidence) do
         local x = ev[i]
         pair.l:SetText(x and x[1] or "")
         pair.v:SetText(x and x[2] or "")
     end
+    local series = market and rec.outItem and MK.Series(rec.outItem, { market = market }) or nil
+    d.chart:Set(series, UI.Money)
+    d.chartNote:SetText(ChartNote(series))
     if S.IsQueued(rec.id) then
         d.add.text:SetText("In your queue")
         d.add:SetEnabled(false)
+        d.add.artHolder:SetAlpha(0)
     else
         d.add.text:SetText("Add to crafting plan")
         d.add:SetEnabled(true)
+        d.add.artHolder:SetAlpha(1)
     end
     d.rec = rec
 end
@@ -245,8 +270,6 @@ end
 ---------------------------------------------------------------------------
 -- Drawing
 ---------------------------------------------------------------------------
-local SORT_WORDS = { profit = "profit", cost = "Cost to make", sell = "Sell price" }
-
 local function LayoutChips(list)
     local n = #list + 1
     for i = 1, math.max(n, #chips) do
@@ -261,7 +284,7 @@ local function LayoutChips(list)
                 end)
                 chips[i] = b
             end
-            local w = math.max(56, math.min(112, math.floor((560 - 4 * (n - 1)) / n)))
+            local w = math.max(56, math.min(112, math.floor((500 - 4 * (n - 1)) / n)))
             b:SetWidth(w)
             b:ClearAllPoints()
             b:SetPoint("TOPLEFT", opps, "TOPLEFT", (i - 1) * (w + 4), -66)
@@ -278,26 +301,15 @@ end
 local function Render()
     local v = S.Opportunities()
     oppView = v
-    local src = v.source
 
-    -- where the prices come from: the auction house and how old, in a few words
-    local sourceText
-    if src.market then
-        sourceText = ("Prices: %s \194\183 %s"):format(src.label, Op.ScanWords({ at = src.market.at, complete = src.market.complete }) or "")
-    elseif src.open then
-        sourceText = "No saved prices for this auction house yet."
-    else
-        sourceText = "No saved prices for this realm yet."
-    end
-    opps.source:SetText(sourceText)
-
-    -- the latest scan attempt
+    -- the latest scan attempt, in one short line beside the button (the full source and age are in its tooltip and the footer)
     local msg, tone = SC.Message()
     opps.status:SetText(msg or "")
     UI.Paint(opps.status, tone == "good" and K.sage or (tone == "warn" and K.bronzeText or K.textDim))
     local busy = SC.Busy()
     opps.scan.text:SetText(busy and "Scanning..." or "Scan prices")
     opps.scan:SetEnabled(not busy)
+    opps.statusBox:SetShown(not busy)
     if busy then
         local frac = SC.Progress() or 0
         opps.bar:Set(frac, W.AuctionButton.BarText(msg, frac))
@@ -308,10 +320,9 @@ local function Render()
 
     -- filters and the sort
     LayoutChips(S.Professions())
-    opps.profitOnly:SetOn(S.opp.profitOnly)
     for key, h in pairs(UI.heads) do
-        if key == "profit" then h.text:SetText(v.rate and "Estimated profit" or "Profit before fees") end
-        UI.Paint(h.text, S.opp.sort == key and K.bronzeText or K.stone)
+        if key == "profit" then h:SetLabel("Profit", v.rate and "after the cut" or "before fees") end
+        h:SetSort(S.opp.sort == key, S.opp.desc)
         h.tipBody = (S.opp.sort == key and (S.opp.desc and "Highest first. Click to show the lowest first."
             or "Lowest first. Click to show the highest first.") or "Click to sort by this.")
     end
@@ -319,124 +330,128 @@ local function Render()
     -- the list and the chosen row
     RenderDetail(v.rows)
     UI.lists.opps:SetData(v.rows, v.empty)
-    local sum = v.summary
-    if sum.total > 0 then
-        opps.summary:SetText(("%d of %d priced \194\183 %d profitable \194\183 %s, %s first")
-            :format(sum.priced, sum.total, sum.profitable, SORT_WORDS[S.opp.sort]:lower(), S.opp.desc and "highest" or "lowest"))
-    else
-        opps.summary:SetText("")
-    end
-    -- one short line; the longer explanation is behind "About prices"
-    local note = ""
-    if sum.total > 0 then
-        note = v.rate and "Profit is after the auction house's cut." or "Profit is before fees: the auction house's cut isn't confirmed."
-        if v.incomplete then note = note .. " Some recipes may be missing." end
-    end
-    opps.notes:SetText(note)
-    opps.about:SetShown(sum.total > 0)
 end
 
 ---------------------------------------------------------------------------
 -- Building
 ---------------------------------------------------------------------------
+local function Section(parent, text, y)
+    local h = UI.Text(parent, 13, K.bronzeText, "strong")
+    h:SetPoint("TOPLEFT", 14, y)
+    h:SetText(text)
+    local rule = UI.Rule(parent, 0.45)
+    rule:SetPoint("TOPLEFT", 14, y - 18); rule:SetPoint("TOPRIGHT", -14, y - 18)
+    return h, rule
+end
+
+local function BuildMaterialRow(parent, y)
+    local line = CreateFrame("Button", nil, parent)
+    line:SetHeight(MAT_H)
+    line:SetPoint("TOPLEFT", 8, y)
+    line:SetPoint("TOPRIGHT", -8, y)
+    UI.Hover(line, 6)
+    line.iconFrame = UI.ItemIcon(line, 22)
+    line.iconFrame:SetPoint("LEFT", 4, 0)
+    line.icon = line.iconFrame.tex
+    line.value = UI.Text(line, 12, K.textDim)
+    line.value:SetWidth(74)
+    line.value:SetPoint("RIGHT", -6, 0)
+    line.value:SetJustifyH("RIGHT")
+    line.qty = UI.Text(line, 13, K.bronzeText, "strong")
+    line.qty:SetWidth(26)
+    line.qty:SetPoint("RIGHT", line.value, "LEFT", -4, 0)
+    line.qty:SetJustifyH("RIGHT")
+    line.name = UI.Text(line, 13, K.text)
+    line.name:SetPoint("LEFT", line.iconFrame, "RIGHT", 7, 0)
+    line.name:SetPoint("RIGHT", line.qty, "LEFT", -6, 0)
+    UI.ItemTip(line, function() return line.item end)
+    return line
+end
+
 local function BuildDetail()
     local d = CreateFrame("Frame", nil, opps)
-    d:SetPoint("TOPRIGHT", 0, -140)
-    d:SetPoint("BOTTOMRIGHT", 0, 46)
+    d:SetPoint("TOPRIGHT", 0, -44)
+    d:SetPoint("BOTTOMRIGHT", 0, 0)
     d:SetWidth(DETAIL_W)
     UI.Panel(d, "card")
     page.detail = d
-    -- the head: the picture, the name (one or two lines) and the profession
+    -- the head: a large picture, the name (one or two lines) and the profession
     d.head = CreateFrame("Frame", nil, d)
     d.head:SetAllPoints()
-    d.iconFrame = UI.ItemIcon(d.head, 40)
-    d.iconFrame:SetPoint("TOPLEFT", 12, -12)
+    d.iconFrame = UI.ItemIcon(d.head, 54)
+    d.iconFrame:SetPoint("TOPLEFT", 14, -14)
     d.icon = d.iconFrame.tex
-    d.name = UI.Text(d.head, 16, K.text, "serif")
-    d.name:SetPoint("TOPLEFT", 60, -12)
-    d.name:SetWidth(DETAIL_W - 60 - 12)
+    d.name = UI.Text(d.head, 19, K.text, "serif")
+    d.name:SetPoint("TOPLEFT", 78, -14)
+    d.name:SetWidth(DETAIL_W - 78 - 14)
     d.name:SetWordWrap(true)
     d.name:SetMaxLines(2)
     d.name:SetJustifyV("TOP")
-    d.prof = UI.Text(d.head, 12, K.stone)
-    d.prof:SetPoint("TOPLEFT", d.name, "BOTTOMLEFT", 0, -3)
-    -- the body hangs under the profession line, so a name of one line or two pushes it down (never under the picture)
+    d.prof = UI.Text(d.head, 13, K.textDim)
+    d.prof:SetPoint("BOTTOMLEFT", d.iconFrame, "BOTTOMRIGHT", 10, 1)
     local body = CreateFrame("Frame", nil, d)
-    body:SetPoint("TOPLEFT", d.prof, "BOTTOMLEFT", -60, -10)
-    body:SetPoint("BOTTOMRIGHT", 0, 52)
+    body:SetAllPoints()
     d.body = body
-    local y = 0
-    local function Pair(label, big)
-        local l = UI.Text(body, 12, K.stone)
-        l:SetPoint("TOPLEFT", 12, y - (big and 4 or 0))
-        l:SetText(label)
-        local v = UI.Text(body, big and 17 or 13, K.text, big and "strong" or nil)
-        v:SetPoint("TOPRIGHT", -12, y + (big and 0 or 1))
-        v:SetJustifyH("RIGHT")
-        y = y - (big and 24 or 19)
-        return l, v
-    end
-    d.profitLabel, d.profit = Pair("Profit before fees", true)
+    -- the profit, large
+    d.profitLabel = UI.Text(body, 12, K.stone)
+    d.profitLabel:SetPoint("TOPLEFT", 14, -86)
+    d.profit = UI.Text(body, 24, K.text, "strong")
+    d.profit:SetPoint("TOPRIGHT", -14, -80)
+    d.profit:SetJustifyH("RIGHT")
     d.why = UI.Text(body, 12, K.bronzeText)
-    d.why:SetPoint("TOPLEFT", 12, y + 4)
-    d.why:SetPoint("RIGHT", -12, 0)
-    local _; _, d.cost = Pair("Cost to make")
-    _, d.sell = Pair("Sell price (listing)")
-    local r1 = UI.Rule(body, 0.45)
-    r1:SetPoint("TOPLEFT", 12, y - 2); r1:SetPoint("TOPRIGHT", -12, y - 2)
-    y = y - 10
-    local mh = UI.Text(body, 13, K.bronzeText, "strong")
-    mh:SetPoint("TOPLEFT", 12, y)
-    mh:SetText("Materials (one craft)")
-    y = y - 19
-    d.mats = {}
-    for i = 1, MAT_ROWS do
-        local line = CreateFrame("Frame", nil, body)
-        line:SetHeight(18)
-        line:SetPoint("TOPLEFT", 12, y)
-        line:SetPoint("TOPRIGHT", -12, y)
-        line.icon = line:CreateTexture(nil, "ARTWORK")
-        line.icon:SetSize(16, 16)
-        line.icon:SetPoint("LEFT", 0, 0)
-        line.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-        line.value = UI.Text(line, 12, K.textDim)
-        line.value:SetPoint("RIGHT", 0, 0)
-        line.value:SetJustifyH("RIGHT")
-        line.name = UI.Text(line, 12, K.text)
-        line.name:SetPoint("LEFT", line.icon, "RIGHT", 6, 0)
-        line.name:SetPoint("RIGHT", line.value, "LEFT", -6, 0)
-        d.mats[i] = line
-        y = y - 18
+    d.why:SetPoint("TOPLEFT", 14, -108)
+    d.why:SetPoint("RIGHT", -14, 0)
+    -- cost to make against sell price, two recessed boxes side by side
+    local bw = math.floor((DETAIL_W - 28 - 8) / 2)
+    local function Box(label, x)
+        local b = CreateFrame("Frame", nil, body)
+        b:SetSize(bw, 46)
+        b:SetPoint("TOPLEFT", x, -116)
+        UI.Panel(b, "canvas")
+        local l = UI.Text(b, 11, K.stone)
+        l:SetPoint("TOPLEFT", 10, -7)
+        l:SetText(label)
+        local v = UI.Text(b, 15, K.text, "strong")
+        v:SetPoint("BOTTOMLEFT", 10, 8)
+        v:SetPoint("RIGHT", -8, 0)
+        return v
     end
+    d.cost = Box("Cost to make", 14)
+    d.sell = Box("Sell price (listing)", 14 + bw + 8)
+    Section(body, "Materials (one craft)", -172)
+    d.mats = {}
+    for i = 1, MAT_ROWS do d.mats[i] = BuildMaterialRow(body, -194 - (i - 1) * MAT_H) end
     d.more = UI.Text(body, 11, K.stone)
-    d.more:SetPoint("TOPLEFT", 12, y - 1)
-    d.more:SetPoint("RIGHT", -12, 0)
-    y = y - 16
-    local r2 = UI.Rule(body, 0.45)
-    r2:SetPoint("TOPLEFT", 12, y); r2:SetPoint("TOPRIGHT", -12, y)
-    y = y - 8
-    local eh = UI.Text(body, 13, K.bronzeText, "strong")
-    eh:SetPoint("TOPLEFT", 12, y)
-    eh:SetText("At the auction house")
-    y = y - 19
+    d.more:SetPoint("TOPLEFT", 14, -194 - MAT_ROWS * MAT_H + 1)
+    d.more:SetPoint("RIGHT", -14, 0)
+    -- the market, stacked up from the button: the history chart, then two facts, then the heading
+    d.add = UI.ArtButton(d, "Add to crafting plan", "plus", DETAIL_W - 28, "primary", function()
+        if d.rec then S.Add(d.rec); UI.Redraw() end
+    end, 36)
+    d.add:SetPoint("BOTTOMLEFT", 14, 12)
+    d.add:SetPoint("BOTTOMRIGHT", -14, 12)
+    UI.Tip(d.add, "Add to crafting plan", "Puts this recipe in the queue to make once, in the Crafting page. Nothing is bought or crafted.")
+    d.chart = UI.PriceChart(body, DETAIL_W - 28, 72)
+    d.chart:SetPoint("BOTTOMLEFT", 14, 58)
     d.evidence = {}
-    for i = 1, 2 do
-        local l = UI.Text(body, 12, K.stone)
-        l:SetPoint("TOPLEFT", 12, y)
+    for i = 2, 1, -1 do
         local v = UI.Text(body, 12, K.textDim)
-        v:SetPoint("TOPRIGHT", -12, y)
+        v:SetPoint("BOTTOMRIGHT", -14, 136 + (2 - i) * 17)
         v:SetJustifyH("RIGHT")
+        local l = UI.Text(body, 12, K.stone)
+        l:SetPoint("BOTTOMLEFT", 14, 136 + (2 - i) * 17)
         l:SetPoint("RIGHT", v, "LEFT", -6, 0)
         d.evidence[i] = { l = l, v = v }
-        y = y - 18
     end
-    UI.Tip(body, "What these figures are", "Prices are the cheapest buyout listings your scans saw, per item. The 7-day lows are the lowest and highest of each scanned day's cheapest listing. None of them is a sale price or a promise that it will sell.")
-    d.add = UI.Button(d, "Add to crafting plan", DETAIL_W - 24, "primary", function()
-        if d.rec then S.Add(d.rec); UI.Redraw() end
-    end, 30)
-    d.add:SetPoint("BOTTOMLEFT", 12, 12)
-    d.add:SetPoint("BOTTOMRIGHT", -12, 12)
-    UI.Tip(d.add, "Add to crafting plan", "Puts this recipe in the queue to make once, in the Crafting page. Nothing is bought or crafted.")
+    local mh = UI.Text(body, 13, K.bronzeText, "strong")
+    mh:SetPoint("BOTTOMLEFT", 14, 172)
+    mh:SetText("Market")
+    d.chartNote = UI.Text(body, 11, K.stone)
+    d.chartNote:SetPoint("BOTTOMRIGHT", -14, 173)
+    d.chartNote:SetJustifyH("RIGHT")
+    local mr = UI.Rule(body, 0.45)
+    mr:SetPoint("BOTTOMLEFT", 14, 170); mr:SetPoint("BOTTOMRIGHT", -14, 170)
+    UI.Tip(body, "What these figures are", "Prices are the cheapest buyout listings your scans saw, per item. The dots are the lowest listing on each day a scan was made; a day without a scan has no dot. None of it is a sale price or a promise that it will sell.")
     d.empty = UI.Text(d, 13, K.textDim)
     d.empty:SetPoint("TOPLEFT", 14, -16)
     d.empty:SetPoint("RIGHT", -14, 0)
@@ -446,87 +461,78 @@ end
 
 local function Build(p)
     page, opps, K = p, p, UI.K
-    opps.scan = UI.Button(opps, "Scan prices", 140, "primary", function()
+    opps.scan = UI.ArtButton(opps, "Scan prices", "diagOverview", 158, "primary", function()
         S.StartScan()
         UI.Redraw()
-    end, 30)
+    end, 34)
     opps.scan:SetPoint("TOPRIGHT", -2, -2)
     UI.Tip(opps.scan, "Scan prices", "Reads every listing at the open auction house once, so your crafts can be priced. It only reads: it never buys, bids or posts, and it starts only when you press this. It can take a little while.")
-    opps.bar = W.NewBar(opps, 300, 20)           -- the overall progress of a scan, shown only while one runs
-    opps.bar:SetPoint("TOPRIGHT", opps.scan, "BOTTOMRIGHT", 0, -6)
+    opps.bar = W.NewBar(opps, 250, 20)           -- the overall progress of a scan, shown only while one runs
+    opps.bar:SetPoint("RIGHT", opps.scan, "LEFT", -12, 0)
     opps.bar:Hide()
-    opps.profitOnly = UI.Switch(opps, "Profitable only", function()
-        S.ToggleProfitOnly()
-        UI.lists.opps:ScrollTop()
-        UI.Redraw()
+    -- one short line about the latest scan; where the prices come from is in its tooltip (and the window's footer)
+    local sb = CreateFrame("Frame", nil, opps)
+    sb:SetSize(340, 34)
+    sb:SetPoint("RIGHT", opps.scan, "LEFT", -12, 0)
+    sb:EnableMouse(true)
+    opps.statusBox = sb
+    opps.status = UI.Text(sb, 13, K.textDim)
+    opps.status:SetAllPoints()
+    opps.status:SetJustifyH("RIGHT")
+    opps.status:SetJustifyV("MIDDLE")
+    opps.status:SetWordWrap(true)
+    UI.TipFn(sb, "Prices", function()
+        local src = oppView and oppView.source
+        if not (src and src.market) then
+            return (src and src.open) and "No saved prices for this auction house yet." or "No saved prices for this realm yet."
+        end
+        local text = ("Prices: %s \194\183 %s"):format(src.label, Op.ScanWords({ at = src.market.at, complete = src.market.complete }) or "")
+        text = text .. "\nCheapest buyout listings per item: a listing is not a sale."
+        if oppView.rate then text = text .. "\nProfit is after the auction house's cut." else text = text .. "\nProfit is before fees: the auction house's cut isn't confirmed." end
+        if oppView.incomplete then text = text .. "\nSome recipes may be missing: a profession's window lists only what its filters allow." end
+        return text
     end)
-    opps.profitOnly:SetPoint("TOPRIGHT", -2, -69)
-    UI.Tip(opps.profitOnly, "Profitable only", "Hides crafts that lose money at these prices and crafts that couldn't be priced.")
-    opps.source = UI.Text(opps, 13, K.textDim)
-    opps.source:SetPoint("TOPLEFT", 1, -102)
-    opps.source:SetPoint("RIGHT", -2, 0)
-    opps.status = UI.Text(opps, 13, K.textDim)
-    opps.status:SetPoint("TOPLEFT", 1, -120)
-    opps.status:SetPoint("RIGHT", -2, 0)
 
     -- the list
     local card = CreateFrame("Frame", nil, opps)
-    card:SetPoint("TOPLEFT", 0, -140)
-    card:SetPoint("BOTTOMRIGHT", -(DETAIL_W + 12), 46)
+    card:SetPoint("TOPLEFT", 0, TOP)
+    card:SetPoint("BOTTOMRIGHT", -(DETAIL_W + 12), 0)
     UI.Panel(card, "card")
     opps.card = card
     local x = -(4 + 16)   -- a row's right edge in the card: the list's inset and its scroll gutter
     local function Head(key, text, right, w)
-        local h = CreateFrame("Button", nil, card)
-        h:SetSize(w, 18)
-        h:SetPoint("TOPRIGHT", card, "TOPRIGHT", right, -12)
-        h.text = UI.Head(h, text, w)
-        h.text:SetAllPoints()
-        h:SetScript("OnClick", function() S.SortBy(key); UI.lists.opps:ScrollTop(); UI.Redraw() end)
-        h:SetScript("OnEnter", function(self)
+        local h = UI.SortHead(card, text, w, function() S.SortBy(key); UI.lists.opps:ScrollTop(); UI.Redraw() end)
+        h:SetPoint("TOPRIGHT", card, "TOPRIGHT", right, -6)
+        h:HookScript("OnEnter", function(self)
             if GameTooltip then
                 GameTooltip:SetOwner(self, "ANCHOR_TOP")
-                GameTooltip:AddLine(text, 1, 0.82, 0)
+                GameTooltip:AddLine(self.label, 1, 0.82, 0)
                 GameTooltip:AddLine(self.tipBody or "Click to sort by this.", 0.8, 0.8, 0.8, true)
                 GameTooltip:Show()
             end
         end)
-        h:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+        h:HookScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
         UI.heads[key] = h
     end
     local item = UI.Head(card, "Recipe (one craft)", 160, "LEFT")
-    item:SetPoint("TOPLEFT", 14, -14)
-    -- the profit heading is the longest ("Profit before fees"): it may reach into the sell column's empty left side
-    Head("profit", "Estimated profit", x - RIGHT, COL_W + 20)
-    Head("sell", "Sell price", x - (RIGHT + COL_W + 6), COL_W - 24)
-    Head("cost", "Cost to make", x - (RIGHT + 2 * (COL_W + 6)), COL_W)
-    local rule = UI.Rule(card, 0.45)
-    rule:SetPoint("TOPLEFT", 12, -32); rule:SetPoint("TOPRIGHT", -12, -32)
-    local list = UI.List(card, OPP_H, MakeOppRow, 304, false)
-    list.box:SetPoint("TOPLEFT", 4, -34)
+    item:SetPoint("TOPLEFT", 16, -13)
+    -- the profit heading carries its qualification on a second line ("before fees"), so it is no wider than its column
+    Head("profit", "Profit", x - RIGHT, COL_W)
+    Head("sell", "Sell price", x - (RIGHT + COL_W + 4), COL_W)
+    Head("cost", "Cost to make", x - (RIGHT + 2 * (COL_W + 4)), COL_W)
+    local rule = UI.Rule(card, 0.5)
+    rule:SetPoint("TOPLEFT", 12, -34); rule:SetPoint("TOPRIGHT", -12, -34)
+    local list = UI.List(card, OPP_H, MakeOppRow, 360, false)
+    list.box:SetPoint("TOPLEFT", 4, -36)
     list.box:SetPoint("BOTTOMRIGHT", -4, 4)
     UI.lists.opps = list
 
     BuildDetail()
-
-    opps.summary = UI.Text(opps, 13, K.textDim)
-    opps.summary:SetPoint("BOTTOMLEFT", 1, 24)
-    opps.summary:SetPoint("RIGHT", -150, 0)
-    opps.notes = UI.Text(opps, 12, K.stone)
-    opps.notes:SetPoint("BOTTOMLEFT", 1, 6)
-    opps.notes:SetPoint("RIGHT", -150, 0)
-    opps.about = UI.Button(opps, "About prices", 130, "secondary", function() end, 28)
-    opps.about:SetPoint("BOTTOMRIGHT", -2, 4)
-    UI.Tip(opps.about, "About these prices",
-        "Cheapest buyout listings from your last scan, per item. A listing isn't a sale: it may not sell at that price, or at all. "
-        .. "Deposits, unsold listings and selling time aren't counted. The auction house's cut is taken off only once it is confirmed. "
-        .. "Some professions list only what their window's filters allow, so a few recipes may be missing. "
-        .. "Hover a row for its numbers; hold Shift for the details.")
 end
 
 UI.Register({
     key = "opps", nav = "Opportunities", icon = "npc:coins",
-    title = "Opportunities", sub = "Crafts from your known recipes, ranked by what one craft may earn.",
+    title = "Opportunities", sub = "Crafts from your known recipes, ranked by potential profit.",
     tip = "Which crafts could be worth making, from the prices of your last auction house scan.",
     Build = Build, Render = Render,
     Reset = function() oppView = nil; selected = nil end,

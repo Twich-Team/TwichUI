@@ -30,15 +30,16 @@ STEPS = [
     "opportunities: rows, ordering, filtering, unknowns", "opportunities: short tooltip, details with Shift",
     "what's it worth: item tooltip lines", "what's it worth: tooltip designer",
     "opportunities: test-input cut, then removed", "opportunities: Add to queue",
-    "shopping: combined list, sources, total, warning", "shopping: source button", "shopping: Show vendor",
+    "shopping: combined list, sources, total, warning", "shopping: source choices", "shopping: Show vendor",
     "shopping: add the suggested subcraft", "shopping: bags change", "close and reopen", "remembered recipes: closed window, background read, nothing open",
     "bank and guild bank: remembered while the window is closed", "bank and guild bank: planned with, collected not bought, labelled, profit unchanged",
     "bank and guild bank: the guild choice, permissions and limits", "bank and guild bank: a withdrawal and a deposit never count twice", "pose for the screenshot",
 ]
 LAYERS = ("init", "display", "click", "direct", "event", "state")
 VIEWS = {"overview": "TwichUIWorkshop", "craft": "TwichUIWorkshop", "opps": "TwichUIWorkshop", "shop": "TwichUIWorkshop", "design": "TwichUISettings",
-         "small": "TwichUIWorkshop", "empty": "TwichUIWorkshop"}
-SHOTS = ("overview", "craft", "opps", "shop", "design", "small", "empty")
+         "small": "TwichUIWorkshop", "empty": "TwichUIWorkshop", "history": "TwichUIWorkshop", "craftlong": "TwichUIWorkshop",
+         "shopmix": "TwichUIWorkshop", "shopcollect": "TwichUIWorkshop"}
+SHOTS = ("overview", "craft", "opps", "shop", "design", "small", "empty", "history", "craftlong", "shopmix", "shopcollect")
 VOICE, UTF8 = "voice-settings-unsupplied", "addon-message-invalid-utf8"
 CHECK = re.compile(r"^SIMLAB check (PASS|FAIL) \[([^\]]+)\] (.*?) \| expected=(.*?) \| actual=(.*)$", re.M)
 
@@ -139,7 +140,7 @@ def main():
     print("  Game data ........................ FAKE and deterministic (professions, items, bags, auction listings, merchant); "
           "the world map and NpcMap.Locate are stand-ins in the Show vendor step")
     print("  Persistence tested ............... NO: nothing is reloaded or written to disk. Closing and reopening the window is not persistence.")
-    print(f"  Screenshots ...................... {'captured' if assets else 'captured WITHOUT game assets'}: overview.png, craft.png, opps.png, shop.png, design.png, small.png (1000x700), empty.png "
+    print(f"  Screenshots ...................... {'captured' if assets else 'captured WITHOUT game assets'}: overview.png, craft.png, opps.png, shop.png, design.png, small.png (1000x700), empty.png, history.png, craftlong.png, shopmix.png, shopcollect.png "
           "(a script cannot judge them; look at them, and remember custom fonts are not drawn)")
     print("  Real-client tested ............... NO")
     print(f"{len(r['checks'])} checks per launch; {r['done'].group(2) if r['done'] else '?'} s of simulated time.")

@@ -103,6 +103,11 @@ T.GetRecipeSchematic = function(id)
 end
 T.OpenRecipe = function(id) opened[#opened + 1] = id return true end
 
+-- the character's professions and their skill (Observe.Skills: GetProfessions / GetProfessionInfo, which the Forever profession book also calls)
+local SKILLS = { { "Alchemy", 136240, 125, 150 }, { "Blacksmithing", 136241, 80, 100 }, { "Fishing", 136245, 75, 150 } }
+GetProfessions = function() return 1, 2, nil, 3 end
+GetProfessionInfo = function(i) local k = SKILLS[i] if k then return k[1], k[2], k[3], k[4] end end
+
 -- the auction house -----------------------------------------------------------------------------------------------------------
 -- { item, stack count, buyout of the whole stack in copper (0 = bid only) }, read by index 0 .. n-1 as the product reads them
 local LISTINGS = {
@@ -198,6 +203,7 @@ local function Queue()   -- the saved queue, read back: "name x crafts, ..."
 end
 local function Event(name) A_Admin.FireEvent(name) Lab.Settle(0.4) end
 local function Opps() return Win().Opps() end
+local function ProfitHead() local h = Win().Heads().profit return Txt(h.text) .. " " .. Txt(h.sub) end   -- the profit heading: its label, and its qualification beneath
 local function Shop() return Win().Shop() end
 local function Lists() return Win().Lists() end
 
@@ -205,7 +211,7 @@ local function Tab(name)   -- the page list on the left
     local f = Frame()
     local b = ({ Overview = f.tabOverview, Crafting = f.tabCraft, Shopping = f.tabShop, Opportunities = f.tabOpps })[name]
     Click(b, "tab " .. name)
-    Lab.Settle(0.2)
+    Lab.Settle(0.1)   -- the page switch is synchronous; the next frame runs the page's batched reading
 end
 
 -- open the Workshop the way a player does (/tui workshop) and switch which profession the fake profession window shows
@@ -233,10 +239,20 @@ Lab.Step("open and navigate", function()
         tostring(Win().Overview():IsVisible()) .. "/" .. tostring(Lists().recipes.box:IsVisible()) .. "/" .. tostring(Shop():IsShown()) .. "/" .. tostring(Opps():IsShown()))
     Check("display", "the page list marks Overview", "true/false", tostring(Frame().tabOverview.on) .. "/" .. tostring(Frame().tabCraft.on))
     Check("display", "Overview: no scan yet is said, not a made-up price", "No scan yet", Txt(Win().Overview().cards.market.facts[1].text))
-    Check("display", "Overview: the professions card lists what was read", true, Txt(Win().Overview().cards.profs.facts[1].text):find("^Alchemy") ~= nil)
-    Check("display", "Overview: an empty plan", "0 of 30 queued", Txt(Win().Overview().cards.plan.facts[1].text))
-    Check("display", "Overview: the first next step is the price scan", "Scan auction prices: open the auction house and choose Scan prices.",
-        Txt(Win().Overview().steps[1].text))
+    Check("display", "Overview: no price count is invented before a scan", "\226\128\148 | no prices yet",
+        Txt(Win().Overview().cards.market.stat) .. " | " .. Txt(Win().Overview().cards.market.statLabel))
+    do
+        local rows = Win().Overview().cards.profs.facts
+        local function PRow(i) return Txt(rows[i].text) .. " | " .. Txt(rows[i].value) .. " | " .. ("%.4f"):format(rows[i].bar.frac) end
+        -- the game's own answer (GetProfessions: Alchemy 125 of 150, Blacksmithing 80 of 100, Fishing 75 of 150): 125/150, 80/100, 75/150
+        Check("display", "Overview: Alchemy skill and its bar", "Alchemy | 125 / 150 | 0.8333", PRow(1))
+        Check("display", "Overview: Blacksmithing skill and its bar", "Blacksmithing | 80 / 100 | 0.8000", PRow(2))
+        Check("display", "Overview: Fishing skill and its bar (a profession the Workshop never read)", "Fishing | 75 / 150 | 0.5000", PRow(3))
+        Check("display", "Overview: no fourth profession row", false, rows[4]:IsShown())
+    end
+    Check("display", "Overview: an empty plan", "0 | of 30 queued", Txt(Win().Overview().cards.plan.stat) .. " | " .. Txt(Win().Overview().cards.plan.statLabel))
+    Check("display", "Overview: the quick action to scan prices exists", "Scan prices/true", Txt(Win().Overview().actions.scan.text) .. "/" .. tostring(Win().Overview().actions.scan:IsEnabled()))
+    Check("display", "Overview: nothing has happened yet this session", true, Win().Overview().bottom.empty:IsShown())
     Tab("Crafting")
     Check("click", "Crafting tab: mode", "craft", Win().Mode())
     Check("display", "Alchemy recipes listed, sorted by name",
@@ -263,7 +279,7 @@ end)
 -- Queue after this block: Minor Healing Potion x3 (Alchemy), Weak Troll's Blood Potion x2 (Alchemy), Copper Belt Buckle x2 (Blacksmithing).
 -- Bags: Peacebloom 4, Silverleaf 0, Empty Vial 5, Bronze Bar 3, Coarse Thread 1, Copper Ore 4, Tin Ore 0.
 Lab.Step("crafting: unsupported recipe is not ready", function()
-    Check("display", "empty queue says so", "Nothing queued yet. Use Add on a recipe.", Txt(Lists().queue.empty))
+    Check("display", "empty queue says so", "Nothing queued yet. Choose Add recipe, then Add on a recipe.", Txt(Lists().queue.empty))
     Check("display", "empty materials list says so", "Materials for the queue appear here.", Txt(Lists().mats.empty))
     local row = Row(Lists().recipes, "Enchant Bracer - Lesser Choice")
     Check("display", "unsupported recipe row: difficulty word", "Yellow", Txt(row.diff))
@@ -407,7 +423,8 @@ end
 
 Lab.Step("opportunities: before any scan", function()
     Tab("Opportunities")
-    Check("display", "no prices yet: source line", "No saved prices for this auction house yet.", Txt(Opps().source))
+    local function StatusTip() local b = Opps().statusBox return b.twichuiTip.body(b) end
+    Check("display", "no prices yet: the status tooltip says so (the source is no longer a line on the page)", "No saved prices for this auction house yet.", StatusTip())
     Check("display", "no prices yet: empty state", "No prices for this auction house yet. Choose Scan prices.", Txt(Lists().opps.empty))
     Check("display", "Scan prices button is available", "Scan prices/true", Txt(Opps().scan.text) .. "/" .. tostring(Opps().scan:IsEnabled()))
 end)
@@ -431,7 +448,11 @@ Lab.Step("opportunities: scan against the fake auction house", function()
     Check("display", "status line after the scan", "Scan finished. Prices found for 13 items.", Txt(Opps().status))
     Check("display", "button back to Scan prices", "Scan prices/true", Txt(Opps().scan.text) .. "/" .. tostring(Opps().scan:IsEnabled()))
     Check("display", "progress bar hidden after the scan", false, Opps().bar:IsShown())
-    Check("display", "price source line", "Prices: the auction house on SimulatedRealm \194\183 just now", Txt(Opps().source))
+    do
+        local b = Opps().statusBox
+        local tip = Norm(b.twichuiTip.body(b))
+        Check("display", "the status tooltip names the market and how old it is", "Prices: the auction house on SimulatedRealm \194\183 just now", (tip:match("^[^\n]*")))
+    end
     -- the saved cheapest unit prices (hand arithmetic: stack buyout / stack count, rounded up)
     local items = TwichUIWorkshopDB.markets["SimulatedRealm|unknown"].items
     local function P(id) local e = items[id] local a, b, c, d = (e or ""):match("^(%d+),(%d+),(%d+),(%d+),%d+$") return a and ("%d/%d/%d/%d"):format(a, b, c, d) or "none" end
@@ -460,20 +481,32 @@ Lab.Step("opportunities: rows, ordering, filtering, unknowns", function()
     Check("display", "Weak Troll's Blood Potion: cost | sell | profit", "30c | 60c | 30c", OppLine("Weak Troll's Blood Potion"))
     Check("display", "loss is shown as negative", "30c | 25c | -5c", OppLine("Greater Elixir of Extremely Long Fortitude Name"))
     Check("display", "missing price: everything unknown, reason under the name",
-        "Unknown for profit; 1 material has no price  -  In your queue", (OppLine("Copper Belt Buckle"):find("Unknown | .*Unknown$") and "Unknown for profit" or OppLine("Copper Belt Buckle")) .. "; " .. Txt(Row(o, "Copper Belt Buckle").sub))
+        "Unknown for profit; 1 material has no price \194\183 In your queue", (OppLine("Copper Belt Buckle"):find("Unknown | .*Unknown$") and "Unknown for profit" or OppLine("Copper Belt Buckle")) .. "; " .. Txt(Row(o, "Copper Belt Buckle").sub))
     Check("display", "unsupported recipe: Unknown with its reason", "Its materials aren't known or can't be counted", Txt(Row(o, "Enchant Bracer - Lesser Choice").sub))
-    Check("display", "output basis under a priced name (quantity and profession)", "Makes 1-3  -  Alchemy", Txt(Row(o, "Elixir of Many Wonders").sub))
-    Check("display", "output basis for a fixed output", "Makes 2  -  Blacksmithing", Txt(Row(o, "Smelt Bronze").sub))
-    Check("display", "summary line (5 of 7 priced, 4 profitable)", "5 of 7 priced \194\183 4 profitable \194\183 profit, highest first", Txt(Opps().summary))
-    Check("display", "footer is one short line saying the profit is before fees", "Profit is before fees: the auction house's cut isn't confirmed. Some recipes may be missing.", Txt(Opps().notes))
-    Check("display", "profit column is not called estimated while no cut is taken off", "Profit before fees", Txt(Win().Heads().profit.text))
-    Check("display", "About prices holds the long explanation", true, Opps().about:IsShown())
+    Check("display", "output basis under a priced name (quantity and profession)", "Alchemy \194\183 makes 1-3", Txt(Row(o, "Elixir of Many Wonders").sub))
+    Check("display", "output basis for a fixed output", "Blacksmithing \194\183 makes 2", Txt(Row(o, "Smelt Bronze").sub))
+    do
+        local b = Opps().statusBox
+        local tip = Norm(b.twichuiTip.body(b))
+        Check("display", "the before-fees qualification is in the status tooltip, and the page carries no summary or footer paragraphs",
+            "true/true/nil/nil/nil", tostring(tip:find("Profit is before fees: the auction house's cut isn't confirmed.", 1, true) ~= nil) .. "/"
+            .. tostring(tip:find("Some recipes may be missing", 1, true) ~= nil) .. "/" .. tostring(Opps().summary) .. "/" .. tostring(Opps().notes) .. "/" .. tostring(Opps().about))
+    end
+    Check("display", "profit column is not called estimated while no cut is taken off", "Profit before fees", ProfitHead())
+    Check("display", "no Profitable only switch in the toolbar", "nil", tostring(Opps().profitOnly))
+    local H = Win().Heads()
+    Check("display", "sort indicator: profit is the sort (gold triangle pointing down, highest first); the others only hint", "true/true/false/false/true/true",
+        tostring(H.profit.active) .. "/" .. tostring(H.profit.tri:IsShown()) .. "/" .. tostring(H.cost.active) .. "/" .. tostring(H.cost.tri:IsShown()) .. "/" .. tostring(H.cost.hintUp:IsShown()) .. "/" .. tostring(H.sell.hintDown:IsShown()))
+    Check("display", "sort indicator direction: down for highest first", "down", H.profit.tri.dir)
 
     -- sort: Cost to make. First click = cheapest first; ties by name. Costs: 30 (Elixir, Greater Elixir, Weak Troll's), 70 (Minor), 100 (Smelt).
     Click(Win().Heads().cost, "Cost to make heading")
+    Check("display", "sort indicator moves to Cost to make, pointing up for cheapest first", "true/up/false",
+        tostring(Win().Heads().cost.active) .. "/" .. tostring(Win().Heads().cost.tri.dir) .. "/" .. tostring(Win().Heads().profit.active))
     Check("click", "sort by cost, cheapest first",
         "Elixir of Many Wonders | Greater Elixir of Extremely Long Fortitude Name | Weak Troll's Blood Potion | Minor Healing Potion | Smelt Bronze | Copper Belt Buckle | Enchant Bracer - Lesser Choice", Names(o))
     Click(Win().Heads().cost, "Cost to make heading (second click)")
+    Check("display", "the second click turns the indicator down", "down", Win().Heads().cost.tri.dir)
     Check("click", "second click reverses",
         "Smelt Bronze | Minor Healing Potion | Elixir of Many Wonders | Greater Elixir of Extremely Long Fortitude Name | Weak Troll's Blood Potion | Copper Belt Buckle | Enchant Bracer - Lesser Choice", Names(o))
     Click(Win().Heads().profit, "Estimated profit heading")
@@ -488,11 +521,11 @@ Lab.Step("opportunities: rows, ordering, filtering, unknowns", function()
     Click(FindButton(Opps(), "All"), "All filter")
     Check("click", "All again shows every recipe", 7, #Rows(o))
 
-    -- Profitable only drops the loss and the unknowns
-    Click(Opps().profitOnly, "Profitable only")
-    Check("click", "Profitable only: losses and unknowns hidden", "Smelt Bronze | Minor Healing Potion | Elixir of Many Wonders | Weak Troll's Blood Potion", Names(o))
-    Click(Opps().profitOnly, "Profitable only (off)")
-    Check("click", "Profitable only off shows all again", 7, #Rows(o))
+    -- the filter's logic is kept (Session), though the toolbar no longer carries its switch: it drops the loss and the unknowns
+    R.Workshop.Session.ToggleProfitOnly(); R.Workshop.UI.Redraw()
+    Check("direct", "profitable only: losses and unknowns hidden", "Smelt Bronze | Minor Healing Potion | Elixir of Many Wonders | Weak Troll's Blood Potion", Names(o))
+    R.Workshop.Session.ToggleProfitOnly(); R.Workshop.UI.Redraw()
+    Check("direct", "profitable only off shows all again", 7, #Rows(o))
 end)
 
 Lab.Step("opportunities: short tooltip, details with Shift", function()
@@ -800,7 +833,8 @@ Lab.Step("opportunities: test-input cut, then removed", function()
     Check("display", "[test input] Minor Healing Potion profit", "72c", Profit("Minor Healing Potion"))
     Check("display", "[test input] range profit", "65c to 2s 55c", Profit("Elixir of Many Wonders"))
     Check("display", "[test input] loss gets bigger", "-6c", Profit("Greater Elixir of Extremely Long Fortitude Name"))
-    Check("display", "[test input] note now speaks of the cut", true, Txt(Opps().notes):find("^Profit is after the auction house's cut%.") ~= nil and Txt(Win().Heads().profit.text) == "Estimated profit")
+    Check("display", "[test input] the status tooltip now speaks of the cut", true,
+        Norm(Opps().statusBox.twichuiTip.body(Opps().statusBox)):find("Profit is after the auction house's cut.", 1, true) ~= nil and ProfitHead() == "Profit after the cut")
     R.Workshop.Prices.CUT.unknown = nil
     Win().Render()
     Check("display", "test cut removed: profit back to the uncut value", "7s", Profit("Smelt Bronze"))
@@ -829,9 +863,21 @@ end)
 -- 4. Shopping
 ---------------------------------------------------------------------------------------------------------------------------
 local function ShopRow(name) return Row(Lists().shop, name) end
-local function Line(name)   -- need | source | spend | spend note | action
+local function Pick(name) Click(ShopRow(name), "choose the row " .. name) return Shop().detail end   -- choosing a row shows its details
+local function Source(r) return r.data.source and R.Workshop.Shopping.NAMES[r.data.source] or "No source" end
+local function Line(name)   -- to get | source | spend | spend note | the details' action
     local r = ShopRow(name)
-    return table.concat({ Txt(r.need), Txt(r.source.text), Txt(r.spend.a), Txt(r.spend.b), r.act:IsShown() and Txt(r.act.text) or "-" }, " | ")
+    local d = Pick(name)
+    return table.concat({ Txt(r.need), Source(r), Txt(r.spend.a), Txt(r.spend.b), d.act:IsShown() and Txt(d.act.text) or "-" }, " | ")
+end
+local function Explain(name) return Txt(Pick(name).explain) end   -- the words that explain the row, in the details
+local function Lit(d)   -- which source choice is lit in the details
+    for _, k in ipairs({ "vendor", "auction", "make" }) do if d.choose[k].on then return k end end
+    return "none"
+end
+local function Choose(name, kind)   -- the details' source choice (a click on its segment)
+    local d = Pick(name)
+    Click(d.choose[kind], "source " .. kind .. " for " .. name)
 end
 
 -- State: queue = Minor Healing Potion x3, Weak Troll's Blood Potion x2, Copper Belt Buckle x2. Bags: Peacebloom 4, Silverleaf 0, Vial 5,
@@ -850,50 +896,56 @@ Lab.Step("shopping: combined list, sources, total, warning", function()
     Check("display", "rows: buys by item number, then the made item",
         "Silverleaf | Coarse Thread | Peacebloom | Copper Ore | Tin Ore | Bronze Bar", Names(s))
     Check("display", "Peacebloom (auction, exact)", "3 | Auction house | 15c | just now | -", Line("Peacebloom"))
-    Check("display", "Silverleaf (unpriced: not enough listed)", "3 | No source | Unknown |  | -", Line("Silverleaf"))
+    Check("display", "Silverleaf (unpriced: not enough listed)", "3 | No source | Unknown | no price | -", Line("Silverleaf"))
     Check("display", "Coarse Thread (vendor)", "1 | Vendor | 25c | just now | Show vendor", Line("Coarse Thread"))
     Check("display", "Copper Ore (2 to buy for the subcraft)", "2 | Auction house | 70c | just now | -", Line("Copper Ore"))
     Check("display", "Tin Ore (vendor stack of 5 for 3 needed)", "3 | Vendor | 80c | just now | Show vendor", Line("Tin Ore"))
-    Check("display", "Bronze Bar (make suggested)", "5 | Make | 1s 50c | materials, counted in their rows | Add to queue", Line("Bronze Bar"))
-    Check("display", "Peacebloom detail", "Suggested source. Only the auction house has a price.", Txt(ShopRow("Peacebloom").detail))
-    Check("display", "Silverleaf detail says why", "Not enough are listed at the auction house.", Txt(ShopRow("Silverleaf").detail))
-    Check("display", "Tin Ore detail: leftover from the whole stack", "2 left over. Needed to make Smelt Bronze.", Txt(ShopRow("Tin Ore").detail))
+    Check("display", "Bronze Bar (make suggested)", "5 | Make | 1s 50c | materials, counted in their rows | Add to crafting plan", Line("Bronze Bar"))
+    Check("display", "Peacebloom detail", "Suggested source. Only the auction house has a price.", Explain("Peacebloom"))
+    Check("display", "Silverleaf detail says why", "Not enough are listed at the auction house.", Explain("Silverleaf"))
+    Check("display", "Tin Ore detail: leftover from the whole stack", "2 left over. Needed to make Smelt Bronze.", Explain("Tin Ore"))
     Check("display", "Bronze Bar detail: crafts, made, leftover, comparison",
-        "Make 3 x Smelt Bronze: makes 6, 1 left over. Suggested source. Making this looks cheaper than buying at the auction house.", Txt(ShopRow("Bronze Bar").detail))
+        "Make 3 x Smelt Bronze: makes 6, 1 left over. Suggested source. Making this looks cheaper than buying at the auction house.", Explain("Bronze Bar"))
     Check("display", "total with the incomplete-total warning",
         "Estimated spending: 1s 90c so far. Some prices missing: 1 material has no price.", Txt(Shop().total))
-    Check("display", "price source line", "Auction prices: the auction house on SimulatedRealm \194\183 just now", Txt(Shop().source))
     Check("display", "vendor status line", "Vendor prices as last seen (2 noted) \194\183 bags only", Txt(Shop().status))
     Check("display", "notes keep one short caveat about the suggestions", true, Txt(Shop().notes):find("Suggestions compare one material at a time", 1, true) ~= nil)
 end)
 
-Lab.Step("shopping: source button", function()
-    -- Bronze Bar options: auction (estimate) and make. Cycle: suggestion (Make) -> Auction house -> Make (chosen) -> suggestion.
-    Click(ShopRow("Bronze Bar").source, "Source (1st click)")
-    Check("click", "1st click: auction house, an estimate", "5 | Auction house | about 20s | estimate, just now | -", Line("Bronze Bar"))
-    Check("display", "estimate is explained on the row", true, Txt(ShopRow("Bronze Bar").detail):find("Unit-price estimate: more may cost more.", 1, true) ~= nil)
+Lab.Step("shopping: source choices", function()
+    -- Bronze Bar options: auction (estimate) and make. The details lit the suggestion (Make); the player chooses the auction house, then Make
+    -- explicitly, and choosing the chosen one again returns to the suggestion.
+    local d = Pick("Bronze Bar")
+    Check("display", "Bronze Bar details: Make is lit, the auction house can be chosen, the vendor cannot", "make/false/true/true",
+        Lit(d) .. "/" .. tostring(d.choose.vendor:IsEnabled()) .. "/" .. tostring(d.choose.auction:IsEnabled()) .. "/" .. tostring(d.choose.make:IsEnabled()))
+    Choose("Bronze Bar", "auction")
+    Check("click", "the auction house: an estimate", "5 | Auction house | about 20s | estimate, just now | -", Line("Bronze Bar"))
+    Check("display", "estimate is explained in the details", true, Explain("Bronze Bar"):find("Unit-price estimate: more may cost more.", 1, true) ~= nil)
+    Check("display", "the details lit the chosen source and the row stays chosen", "auction/Bronze Bar", Lit(Shop().detail) .. "/" .. Txt(Shop().detail.name))
     Check("state", "choice is kept in memory", "auction", tostring(R.Workshop.Session.picks[2841]))
     Check("display", "its reagent rows go (no subcraft now)", "Silverleaf | Coarse Thread | Peacebloom | Bronze Bar", Names(Lists().shop))
     Check("display", "total now includes the estimate: 15 + 25 + 2000 = 2040c",
         "Estimated spending: 20s 40c so far. Some prices missing: 1 material has no price.", Txt(Shop().total))
-    Click(ShopRow("Bronze Bar").source, "Source (2nd click)")
-    Check("state", "2nd click: make, chosen by the player", "make", tostring(R.Workshop.Session.picks[2841]))
-    Check("display", "make row again, with the reagent rows back", "Silverleaf | Coarse Thread | Peacebloom | Copper Ore | Tin Ore | Bronze Bar", Names(Lists().shop))
-    Click(ShopRow("Bronze Bar").source, "Source (3rd click)")
-    Check("state", "3rd click: back to the suggestion", "nil", tostring(R.Workshop.Session.picks[2841]))
+    Choose("Bronze Bar", "make")
+    Check("state", "make, chosen by the player", "make", tostring(R.Workshop.Session.picks[2841]))
+    Check("display", "make row again, with the reagent rows back, and still chosen", "Silverleaf | Coarse Thread | Peacebloom | Copper Ore | Tin Ore | Bronze Bar/Bronze Bar",
+        Names(Lists().shop) .. "/" .. Txt(Shop().detail.name))
+    Choose("Bronze Bar", "make")
+    Check("state", "choosing it again: back to the suggestion", "nil", tostring(R.Workshop.Session.picks[2841]))
     Check("display", "back to the original total", "Estimated spending: 1s 90c so far. Some prices missing: 1 material has no price.", Txt(Shop().total))
-    -- Peacebloom has one option (auction): the first click chooses it, the second returns to the suggestion.
-    Click(ShopRow("Peacebloom").source, "Source (Peacebloom, 1st click)")
-    Check("state", "single option: chosen by the first click", "auction", tostring(R.Workshop.Session.picks[2447]))
-    Click(ShopRow("Peacebloom").source, "Source (Peacebloom, 2nd click)")
-    Check("state", "single option: second click returns to the suggestion", "nil", tostring(R.Workshop.Session.picks[2447]))
+    -- Peacebloom has one option (auction): choosing it picks it, choosing it again returns to the suggestion.
+    Choose("Peacebloom", "auction")
+    Check("state", "single option: chosen", "auction", tostring(R.Workshop.Session.picks[2447]))
+    Choose("Peacebloom", "auction")
+    Check("state", "single option: chosen again returns to the suggestion", "nil", tostring(R.Workshop.Session.picks[2447]))
     -- Silverleaf has no priced option. Choosing the auction house must not invent a price or a complete total.
     local total = Txt(Shop().total)
-    Click(ShopRow("Silverleaf").source, "Source (Silverleaf, 1st click)")
-    Say("info", "Silverleaf source button, 1st click: picks", tostring(R.Workshop.Session.picks[765]), "button now", Txt(ShopRow("Silverleaf").source.text))
-    Check("display", "an unpriced material stays Unknown after a source click", "Unknown", Txt(ShopRow("Silverleaf").spend.a))
-    Check("display", "the total is not made complete by a source click", total, Txt(Shop().total))
-    Click(ShopRow("Silverleaf").source, "Source (Silverleaf, 2nd click)")
+    local sl = Pick("Silverleaf")
+    Say("info", "Silverleaf source choices: enabled", tostring(sl.choose.auction:IsEnabled()), "lit", Lit(sl))
+    if sl.choose.auction:IsEnabled() then Choose("Silverleaf", "auction") end
+    Check("display", "an unpriced material stays Unknown after a source choice", "Unknown", Txt(ShopRow("Silverleaf").spend.a))
+    Check("display", "the total is not made complete by a source choice", total, Txt(Shop().total))
+    if R.Workshop.Session.picks[765] then Choose("Silverleaf", "auction") end
     Check("state", "Silverleaf back to its suggestion", "nil", tostring(R.Workshop.Session.picks[765]))
 end)
 
@@ -909,7 +961,7 @@ Lab.Step("shopping: Show vendor", function()
     local pinsBefore = R.Pins.LocalCount() .. "/" .. #R.Pins.AllSharedPins()
     local navBefore = tostring(R.Nav.Active())
     local waypointBefore = C_Map.HasUserWaypoint and tostring(C_Map.HasUserWaypoint()) or "n/a"
-    Click(ShopRow("Coarse Thread").act, "Show vendor (Coarse Thread)")
+    Click(Pick("Coarse Thread").act, "Show vendor (Coarse Thread)")
     NM.Locate, _G.ToggleWorldMap = originalLocate, originalToggle
     Check("click", "the world map is asked to open once", 1, toggles)
     Check("click", "Locate was called once", 1, #calls)
@@ -925,7 +977,7 @@ end)
 
 Lab.Step("shopping: add the suggested subcraft", function()
     local q0 = Queue()
-    Click(ShopRow("Bronze Bar").act, "Add to queue (Bronze Bar)")
+    Click(Pick("Bronze Bar").act, "Add to crafting plan (Bronze Bar)")
     -- 3 crafts of Smelt Bronze added: needs Copper Ore 6 (bags 4 -> 2 short), Tin Ore 3 (3 short); Bronze Bar need 8, 6 will be made, 3 in bags -> 0 short
     Check("state", "Smelt Bronze x3 queued", q0 .. ", Smelt Bronze x3", Queue())
     Check("display", "the made item is no longer on the list; its ingredients are, once each",
@@ -933,9 +985,9 @@ Lab.Step("shopping: add the suggested subcraft", function()
     Check("display", "Copper Ore: queue's own need, once", "2 | Auction house | 70c | just now | -", Line("Copper Ore"))
     Check("display", "Tin Ore: queue's own need, once", "3 | Vendor | 80c | just now | Show vendor", Line("Tin Ore"))
     Check("display", "total unchanged: the ingredients are counted once", "Estimated spending: 1s 90c so far. Some prices missing: 1 material has no price.", Txt(Shop().total))
-    local anyAdd = false
-    for _, r in ipairs(Rows(Lists().shop)) do if r.act:IsShown() and Txt(r.act.text) == "Add to queue" then anyAdd = true end end
-    Check("display", "no Add to queue button is left", false, anyAdd)
+    local anyMake = false
+    for _, r in ipairs(Rows(Lists().shop)) do if r.data.kind == "make" then anyMake = true end end
+    Check("display", "no Make row is left, so no Add to crafting plan action", false, anyMake)
     Check("display", "the window says what it queued", "Queued 3 crafts of Smelt Bronze.", Txt(Frame().note))
     -- repeated activation (DIRECT call: the control is gone, so the session handler is what a second activation would reach)
     local ok = R.Workshop.Session.AddSubcraft(2841)
@@ -1000,7 +1052,7 @@ Lab.Step("close and reopen", function()
     for _, p in ipairs(R.Workshop.Session.Professions()) do names[#names + 1] = p.name end
     Check("state", "both professions are known after reopening", "Alchemy | Blacksmithing", table.concat(names, " | "))
     Check("display", "remembered profession is labelled as remembered", true,
-        (function() Click(FindButton(Frame(), "Alchemy"), "Alchemy chip") return Txt(Frame().notice):find("Remembered from", 1, true) ~= nil end)())
+        (function() Click(Win().Craft().segRecipes, "Recipes (the left card)") Click(FindButton(Frame(), "Alchemy"), "Alchemy chip") return Txt(Frame().notice):find("Remembered from", 1, true) ~= nil end)())
     Click(FindButton(Frame(), "Blacksmithing"), "Blacksmithing chip")
 end)
 
@@ -1027,7 +1079,8 @@ Lab.Step("remembered recipes: closed window, background read, nothing open", fun
     Tab("Opportunities")
     Check("display", "no profession open: both professions come from what was saved", "Alchemy | Blacksmithing", (function()
         local n = {} for _, p in ipairs(W.Session.Professions()) do n[#n + 1] = p.name end return table.concat(n, " | ") end)())
-    Check("display", "Opportunities lists all seven recipes from saved knowledge, priced from the saved scan", "5 of 7 priced", Txt(Opps().summary):match("^(%d+ of %d+ priced)"))
+    Check("display", "Opportunities lists all seven recipes from saved knowledge, priced from the saved scan (the Overview counts 5 priced)", "7 | of 5 priced",
+        #Rows(Lists().opps) .. " | " .. (function() Tab("Overview") local t = Txt(Win().Overview().cards.opps.side) Tab("Opportunities") return t end)())
     Tab("Crafting")
     Check("display", "Crafting says the list is remembered", true, Txt(Frame().notice):find("Remembered from", 1, true) ~= nil)
     -- restore the open profession for the screenshot poses
@@ -1096,8 +1149,11 @@ local function Mat(name)   -- need/in bags/stored/still needed, from the Craftin
 end
 local function SLine(i)    -- name | to get | where or source | spending | its note, for the i-th shown Shopping row
     local r = Rows(Lists().shop)[i]
-    return table.concat({ Txt(r.name), Txt(r.need), r.where:IsShown() and Txt(r.where) or Txt(r.source.text), Txt(r.spend.a), Txt(r.spend.b) }, " | ")
+    local where
+    if r.data.kind == "collect" then where = r.data.where == "guild" and "Collect from guild bank" or "Collect from bank" else where = Source(r) end
+    return table.concat({ Txt(r.name), Txt(r.need), where, Txt(r.spend.a), Txt(r.spend.b) }, " | ")
 end
+local function ExplainAt(i) local r = Rows(Lists().shop)[i] Click(r, "choose shopping row " .. i) return Txt(Shop().detail.explain) end   -- the i-th row's explanation
 local oppBefore, bankFrame, guildFrame
 
 -- State on entry: the window is shown on Crafting; queue = Minor Healing Potion x3, Weak Troll's Blood Potion x2, Copper Belt Buckle x2, Smelt
@@ -1159,8 +1215,10 @@ Lab.Step("bank and guild bank: planned with, collected not bought, labelled, pro
     Check("display", "buy 2 Copper Ore", "Copper Ore | 2 | Auction house | 70c | just now", SLine(6))
     Check("display", "buy the 1 Tin Ore still missing: 30c at the auction house beats a stack of 5 at 80c", "Tin Ore | 1 | Auction house | 30c | just now", SLine(7))
     local c1 = Rows(Lists().shop)[1]
-    Check("display", "a collect row has no source button and no action", "false/false", tostring(c1.source:IsShown()) .. "/" .. tostring(c1.act:IsShown()))
-    Check("display", "a collect row says it is already owned", "Collect from your bank. It is already yours: nothing to buy.", Txt(c1.detail))
+    Click(c1, "choose the first collect row")
+    local cd = Shop().detail
+    Check("display", "a collect row has no source choices and no action", "false/false/false", tostring(cd.choose.vendor:IsShown()) .. "/" .. tostring(cd.choose.make:IsShown()) .. "/" .. tostring(cd.act:IsShown()))
+    Check("display", "a collect row says it is already owned", "Collect from your bank. It is already yours: nothing to buy.", Txt(cd.explain))
     Check("display", "total counts only what is bought: 90 + 25 + 70 + 30", "Estimated spending: 2s 15c", Txt(Shop().total))
     Check("display", "status line names what is counted", "Vendor prices as last seen (2 noted) \194\183 bags and bank", Txt(Shop().status))
 
@@ -1169,9 +1227,9 @@ Lab.Step("bank and guild bank: planned with, collected not bought, labelled, pro
     local after = OppLine("Minor Healing Potion") .. " / " .. OppLine("Weak Troll's Blood Potion") .. " / " .. OppLine("Smelt Bronze")
     Check("display", "cost, sell price and profit are exactly what they were without the bank", oppBefore, after)
     local o = Lists().opps
-    Check("display", "Minor Healing Potion: 1 Silverleaf is in the bank", "Makes 1  -  Alchemy  -  Collect materials  -  In your queue", Txt(Row(o, "Minor Healing Potion").sub))
-    Check("display", "Weak Troll's Blood Potion: all in the bags", "Makes 1  -  Alchemy  -  Ready to craft  -  In your queue", Txt(Row(o, "Weak Troll's Blood Potion").sub))
-    Check("display", "Elixir of Many Wonders: nothing held, nothing said", "Makes 1-3  -  Alchemy", Txt(Row(o, "Elixir of Many Wonders").sub))
+    Check("display", "Minor Healing Potion: 1 Silverleaf is in the bank", "Alchemy \194\183 Collect materials \194\183 In your queue", Txt(Row(o, "Minor Healing Potion").sub))
+    Check("display", "Weak Troll's Blood Potion: all in the bags", "Alchemy \194\183 Ready to craft \194\183 In your queue", Txt(Row(o, "Weak Troll's Blood Potion").sub))
+    Check("display", "Elixir of Many Wonders: nothing held, nothing said", "Alchemy \194\183 makes 1-3", Txt(Row(o, "Elixir of Many Wonders").sub))
     Tab("Crafting")
 end)
 
@@ -1201,7 +1259,7 @@ Lab.Step("bank and guild bank: the guild choice, permissions and limits", functi
     Check("display", "collect Silverleaf from the guild bank (3 needed - 1)", "Silverleaf | 2 | Collect from guild bank | Already owned | seen just now", SLine(2))
     Check("display", "collect Copper Ore from the guild bank (6 needed - 4 in bags)", "Copper Ore | 2 | Collect from guild bank | Already owned | seen just now", SLine(4))
     Check("display", "Tin Ore: tab 2 only allows viewing, so only the bank's 2 are collected and 1 is bought", "Tin Ore | 1 | Auction house | 30c | just now", SLine(7))
-    Check("display", "shared stock is said so", "Collect from the guild bank. Shared stock: other members can take it too.", Txt(Rows(Lists().shop)[2].detail))
+    Check("display", "shared stock is said so", "Collect from the guild bank. Shared stock: other members can take it too.", ExplainAt(2))
     Check("display", "total counts only what is bought: 25 + 30", "Estimated spending: 55c", Txt(Shop().total))
     Check("display", "status line names the guild bank", "Vendor prices as last seen (2 noted) \194\183 bags, bank and guild bank", Txt(Shop().status))
     local view = W.Session.Stock()
@@ -1221,7 +1279,7 @@ Lab.Step("bank and guild bank: the guild choice, permissions and limits", functi
     Lab.Settle(0.3)
     Tab("Shopping")
     Check("display", "a daily limit is flagged on the collect row", "Collect from the guild bank. Shared stock: other members can take it too, and a withdrawal limit may apply.",
-        Txt(Rows(Lists().shop)[2].detail))
+        ExplainAt(2))
     -- a bag change nobody answers (the guild bank is open, and the last answer is over a second old): that tab is uncertain and is no longer planned with
     Lab.Settle(0.6)
     Fire("BAG_UPDATE_DELAYED")
@@ -1291,7 +1349,7 @@ Lab.Step("pose for the screenshot", function()
     Say("pose", view)
     if view == "craft" then
         Tab("Crafting")
-        Click(FindButton(Frame(), "Alchemy"), "Alchemy chip")
+        Click(Win().Craft().segQueue, "Craft queue (the left card)")
         Click(Rows(Lists().queue)[2], "choose the second queued craft")
         Check("display", "pose: the chosen craft's details", Txt(Rows(Lists().queue)[2].name), Txt(Win().Craft().detail.name))
     elseif view == "empty" then
@@ -1300,20 +1358,67 @@ Lab.Step("pose for the screenshot", function()
         Tab("Crafting")
         while #Rows(Lists().queue) > 0 do QueueAct(Rows(Lists().queue)[1], "remove", "Remove (emptying the queue)") end
         TwichUIWorkshopDB.markets = {}
+        -- the game gives no profession skill either (the call is missing): the Workshop's own professions are drawn as unavailable
+        GetProfessions, GetProfessionInfo = nil, nil
         Tab("Overview")
         Check("display", "pose: no prices is said, not a made-up figure", "No scan yet", Txt(Win().Overview().cards.market.facts[1].text))
-        Check("display", "pose: an empty plan", "0 of 30 queued", Txt(Win().Overview().cards.plan.facts[1].text))
-        Check("display", "pose: the first next step is the price scan", "Scan auction prices: open the auction house and choose Scan prices.",
-            Txt(Win().Overview().steps[1].text))
+        Check("display", "pose: no skill from the game is unavailable, not zero", "n/a | 0", Txt(Win().Overview().cards.profs.facts[1].value) .. " | " .. Win().Overview().cards.profs.facts[1].bar.frac)
+        Check("display", "pose: an empty plan", "0 | of 30 queued", Txt(Win().Overview().cards.plan.stat) .. " | " .. Txt(Win().Overview().cards.plan.statLabel))
+        Check("display", "pose: the quick action to scan prices", "Scan prices", Txt(Win().Overview().actions.scan.text))
     elseif view == "overview" then
         Tab("Overview")
-        Check("display", "pose: the Overview with prices, a plan and next steps", true, Win().Overview():IsShown())
+        Check("display", "pose: the Overview with prices, a plan and skills", true, Win().Overview():IsShown())
+        local ov = Win().Overview()
+        Check("display", "pose: the market card says how many items were priced and that the scan was whole", "13 | Scan complete \194\183 just now",
+            Txt(ov.cards.market.stat) .. " | " .. Txt(ov.cards.market.facts[1].text))
+        Check("display", "pose: the opportunities card counts what is profitable and names the best", "4 | of 5 priced | Top profit: Smelt Bronze",
+            Txt(ov.cards.opps.stat) .. " | " .. Txt(ov.cards.opps.side) .. " | " .. Txt(ov.cards.opps.facts[1].text))
+        Check("display", "pose: the activity names the scan and the plan changes of this run", true, Txt(ov.activity[1].text) ~= "" and ov.activity[3]:IsShown())
+    elseif view == "history" then
+        -- the history chart with several observed days and a gap (synthetic days: the market's own scan day, and earlier ones)
+        Tab("Opportunities")
+        local mk = TwichUIWorkshopDB.markets["SimulatedRealm|unknown"]
+        local today = math.floor(time() / 86400)
+        mk.hist[118] = (today - 6) .. ",190;" .. (today - 5) .. ",175;" .. (today - 3) .. ",160;" .. (today - 2) .. ",180;" .. today .. ",150|"
+        Click(Row(Lists().opps, "Minor Healing Potion"), "choose Minor Healing Potion")
+        local chart = Opps().detail.chart
+        Check("display", "pose: five observed days are five dots, a gap where no scan was made", "5 | 5 observed days", chart.shown .. " | " .. Txt(Opps().detail.chartNote))
+    elseif view == "craftlong" then
+        -- a longer queue: every known recipe of both professions
+        Tab("Crafting")
+        Click(Win().Craft().segRecipes, "Recipes")
+        for _, p in ipairs({ "Alchemy", "Blacksmithing" }) do
+            Click(FindButton(Frame(), p), p .. " chip")
+            for _, r in ipairs(Rows(Lists().recipes)) do if r.add:IsEnabled() then Click(r.add, "Add " .. Txt(r.name)) end end
+        end
+        Click(Win().Craft().segQueue, "Craft queue")
+        Check("display", "pose: a long queue", true, #R.Workshop.Queue.Entries() >= 7)
+        Click(Rows(Lists().queue)[3], "choose the third queued craft")
+    elseif view == "shopmix" or view == "shopcollect" then
+        -- stored materials make Collect rows beside Buy and Make rows; with everything stored only Collect rows remain (synthetic bank counts)
+        Tab("Crafting")
+        QueueAct(Rows(Lists().queue)[4], "remove", "Remove Smelt Bronze")
+        if view == "shopmix" then
+            R.Workshop.Storage.StoreBank({ ids = { 6 }, tabs = { [6] = { [2447] = 2, [765] = 1 } }, incomplete = 0 }, R.Workshop.Queue.Now() - 7200)
+        else
+            SetBags({})
+            R.Workshop.Storage.StoreBank({ ids = { 6 }, tabs = { [6] = { [2447] = 7, [765] = 3, [3371] = 5, [2841] = 8, [2320] = 2 } }, incomplete = 0 }, R.Workshop.Queue.Now() - 7200)
+        end
+        Event("BAG_UPDATE_DELAYED")
+        Tab("Shopping")
+        local kinds = {}
+        for _, r in ipairs(Rows(Lists().shop)) do kinds[r.data.kind] = (kinds[r.data.kind] or 0) + 1 end
+        if view == "shopmix" then
+            Check("display", "pose: Collect rows beside Buy rows", true, (kinds.collect or 0) > 0 and (kinds.buy or 0) > 0)
+        else
+            Check("display", "pose: only Collect rows", "nil/nil/5", tostring(kinds.buy) .. "/" .. tostring(kinds.make) .. "/" .. tostring(kinds.collect))
+        end
     elseif view == "opps" then
         Tab("Opportunities")
         local row = Row(Lists().opps, "Minor Healing Potion")
         Click(row, "choose Minor Healing Potion")
         Check("display", "pose: its details are shown", "Minor Healing Potion", Txt(Opps().detail.name))
-        Check("display", "pose: the details price one craft's materials", true, Txt(Opps().detail.mats[1].name):find("^%d+ x ") ~= nil)
+        Check("display", "pose: the details price one craft's materials, each with its quantity", true, Txt(Opps().detail.mats[1].qty):find("^\195\151%d+") ~= nil and Opps().detail.mats[1].item ~= nil)
     elseif view == "design" then
         -- the settings window on the Workshop page, scrolled to the tooltip designer, the Hold Shift preview with a line selected
         Lab.Open("workshop")

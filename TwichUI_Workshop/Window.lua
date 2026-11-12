@@ -47,6 +47,7 @@ local EVENTS = {
     MERCHANT_SHOW = "merchant", MERCHANT_UPDATE = "merchant",
     BAG_UPDATE_DELAYED = "draw", GET_ITEM_INFO_RECEIVED = "draw",
     MODIFIER_STATE_CHANGED = "modifier",
+    SKILL_LINES_CHANGED = "draw",
     AUCTION_HOUSE_SHOW = "draw", AUCTION_HOUSE_CLOSED = "draw", AUCTION_HOUSE_DISABLED = "draw",
 }
 
@@ -310,11 +311,11 @@ local function BuildPages()
         local page = CreateFrame("Frame", nil, f.well)
         page:SetPoint("TOPLEFT", 18, -14)
         page:SetPoint("BOTTOMRIGHT", -18, 14)
-        page.heading = UI.Text(page, 25, K.text, "serif")
+        page.heading = UI.Text(page, 32, K.text, "serif")
         page.heading:SetPoint("TOPLEFT", 0, 0)
         page.heading:SetText(def.title)
         page.sub = UI.Text(page, 14, K.textDim)
-        page.sub:SetPoint("TOPLEFT", 1, -34)
+        page.sub:SetPoint("TOPLEFT", 1, -38)
         page.sub:SetText(def.sub or "")
         page:Hide()
         pages[def.key] = page
