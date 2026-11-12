@@ -346,6 +346,34 @@ do
   local yields = 0
   RC2.Collect({ frames = many.frames, chunk = 10, yield = function() yields = yields + 1 end })
   Same(yields, 5, "it yields every chunk of frames (51 / 10)")
+  -- a time budget: every frame costs a virtual millisecond (its first question advances the clock), so the yields follow the clock, not a count
+  do
+    local now, wrapped = 0, many.frames
+    for _, fr in ipairs(wrapped) do
+      local ask = fr.IsMouseEnabled
+      fr.IsMouseEnabled = function(...) now = now + 0.001; return ask(...) end
+    end
+    local clock = function() return now end
+    local spans, last, count = {}, nil, 0
+    sc = RC2.Collect({ frames = wrapped, clock = clock, budget = 0.004, check = 1, yield = function() count = count + 1; spans[#spans + 1] = now - (last or 0); last = now; now = now + 5 end })
+    -- (the 5 s the yield adds stands for the frames the runner lets pass; Collect must not count it as scan time)
+    Check(not sc.truncated and sc.scanned == 51, "the walk still covers every frame")
+    Same(sc.yields, count, "it counts its yields")
+    Check(count >= 10 and count <= 14, "about one yield per 4 ms of scanning (51 frames at 1 ms): " .. count)
+    Check(sc.longest <= 0.0051, "no stretch between yields is longer than the budget plus one frame: " .. sc.longest)
+    Check(math.abs(sc.work - 0.051) < 0.0011, "the scan time excludes the waiting at yields: " .. sc.work)
+    -- a clock that never moves cannot hold a yield back for ever: the frame count still bounds a stretch
+    count = 0
+    RC2.Collect({ frames = wrapped, clock = function() return 1 end, budget = 0.004, check = 4, chunk = 10, yield = function() count = count + 1 end })
+    Same(count, 5, "a stopped clock still yields every chunk of frames")
+    -- no yield function and a clock: nothing to call, nothing raised
+    sc = RC2.Collect({ frames = wrapped, clock = clock })
+    Same(sc.yields, 0); Check(sc.scanned == 51)
+    -- the clock is read every `check` frames, not on every one (it must cost next to nothing)
+    local reads = 0
+    RC2.Collect({ frames = wrapped, clock = function() reads = reads + 1; return now end, budget = 1000, check = 32, yield = function() end })
+    Check(reads <= 5, "a clock read every 32 frames: " .. reads)
+  end
   local viaEnum = Load(many)
   sc = viaEnum.Collect({})
   Same(sc.scanned, 51, "EnumerateFrames is used when no list is given"); Check(not sc.truncated)

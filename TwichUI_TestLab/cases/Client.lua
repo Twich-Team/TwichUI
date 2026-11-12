@@ -30,6 +30,33 @@ Read("client.lua.division-by-zero", function(t)
     t:Fact("client.lua.mod_zero_value", mod)
 end)
 
+-- How this client's Lua compares a NaN. The reference model once decided NaN by comparing (`v == v and v >= lo ...`) and, in the client, accepted
+-- a NaN count that desktop Lua 5.1 rejects (market.reference.batch, seeds 7100008 and 7100012). These are the primitives, REPORTED so the
+-- reason is on record; what is ASSERTED is only that the model's comparison-free test (REF.Finite) is right in this client.
+Read("client.lua.nan-comparisons", function(t)
+    local REF = TL.Reference
+    local zero = 0
+    local runtime = zero / zero            -- computed when it runs
+    local literal = 0 / 0                  -- the form the fixtures write; the compiler may treat it differently
+    local function B(x) return x and "T" or "F" end
+    for _, pair in ipairs({ { "runtime", runtime }, { "literal", literal }, { "negated", -runtime }, { "inf", math.huge } }) do
+        local name, v = pair[1], pair[2]
+        t:Fact("client.nan." .. name .. ".tostring", tostring(v))
+        t:Fact("client.nan." .. name .. ".cmp", ("v==v %s  v~=v %s  v<1 %s  v>1 %s  v<=1 %s  v>=1 %s  v==0 %s"):format(
+            B(v == v), B(v ~= v), B(v < 1), B(v > 1), B(v <= 1), B(v >= 1), B(v == 0)))
+        local okM, mod = pcall(function() return v % 1 end)
+        local okF, fl = pcall(math.floor, v)
+        t:Fact("client.nan." .. name .. ".arith", ("v%%1=%s  floor(v)=%s  floor(v)==v %s  v-v==0 %s"):format(
+            okM and tostring(mod) or "raised", okF and tostring(fl) or "raised", B(okF and fl == v), B(v - v == 0)))
+        if REF and REF.Finite then t:Fact("client.nan." .. name .. ".finite", B(REF.Finite(v))) end
+    end
+    if REF and REF.Finite then
+        t:Check(REF.Finite(5) and REF.Finite(99999999999) and REF.Finite(-1.5) and REF.Finite(1e15), "ordinary numbers are finite")
+        t:Check(not REF.Finite(runtime) and not REF.Finite(literal) and not REF.Finite(-runtime), "a NaN is not finite, however it was made")
+        t:Check(not REF.Finite(math.huge) and not REF.Finite(-math.huge), "nor is an infinity")
+    end
+end)
+
 Read("client.lua.yield-across-pcall", function(t)
     -- The runner never yields inside a pcall, because stock Lua 5.1 refuses. This only reports what this client does.
     local co = coroutine.create(function() local ok = pcall(coroutine.yield) return ok end)
@@ -50,11 +77,14 @@ end)
 
 -- The Lab's own runner, observed in the client: a pause across frames, so that Stop can be tried by hand while it waits (the other cases
 -- finish within a few frames). It reads the clock and nothing else.
-Read("client.runner.pause-probe", function(t)
+-- The pause is a COOPERATIVE wait: the runner schedules no step for the case until the time has passed, so nothing is running meanwhile (this is
+-- not a non-interruptible operation). Its budget is the pause plus headroom: a wait that ends a few milliseconds after the pause's own end
+-- (the next frame) must not be reported as late.
+TL.Case{ id = "client.runner.pause-probe", cat = "client", class = "readonly", budget = 4, run = function(t)
     local RN = TL.Runner
     local started = RN.Now()
     t:Wait(2)
     local elapsed = RN.Now() - started
     t:Check(elapsed >= 2, "the pause lasted at least the 2 s asked for")
     t:Fact("client.runner.pause_2s_measured_ms", ("%.0f"):format(elapsed * 1000))
-end)
+end }

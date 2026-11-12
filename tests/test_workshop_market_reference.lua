@@ -713,6 +713,60 @@ do
 end
 
 ---------------------------------------------------------------------------
+-- 6b. NaN and infinity in a record (testing roadmap M5.1). The first real-client Test Lab run (2026-11-12) found the REFERENCE MODEL counting a
+--     NaN count as valid for seeds 7100008 and 7100012, because it decided NaN by comparing (`v == v ...`) and the client's comparisons do not
+--     reject a NaN the way desktop Lua 5.1 does. The model now decides finiteness without a comparison (REF.Finite). Desktop Lua cannot
+--     reproduce the client's NaN comparisons, so these tests pin the CONTRACT (what each value must be read as) and that the two failing seeds
+--     still draw NaN fields, so the regression keeps its teeth.
+---------------------------------------------------------------------------
+do
+  local nan, inf = 0 / 0, math.huge
+  -- finiteness: numbers that print as digits only
+  for _, v in ipairs({ 0, 1, -1, 1.5, 99999999999, 2 ^ 53, 1e300, -1e300, 4102444800 }) do Check(REF.Finite(v), "finite: " .. tostring(v)) end
+  for _, v in ipairs({ nan, -nan, nan * -1, inf, -inf }) do Check(not REF.Finite(v), "not finite: " .. tostring(v)) end
+  for _, v in ipairs({ "5", false, true, {} }) do Check(not REF.Finite(v), "not a number: " .. type(v)) end
+  Check(not REF.Finite(nil), "nil is not finite")
+  -- whole numbers in range: the limits are in, one past is out, fractions and the non-finite are out
+  Check(REF.Whole(1, 1, 10000) and REF.Whole(10000, 1, 10000) and not REF.Whole(0, 1, 10000) and not REF.Whole(10001, 1, 10000), "count limits")
+  Check(not REF.Whole(2.5, 1, 10000) and not REF.Whole(nan, 1, 10000) and not REF.Whole(inf, 1, 10000) and not REF.Whole(-inf, 0, 99999999999), "fraction, NaN, infinity")
+  Check(REF.Whole(99999999999, 0, 99999999999) and not REF.Whole(100000000000, 0, 99999999999), "buyout limit")
+  -- the probe prints primitives and the decision, for a NaN too, and never raises
+  local probe = REF.NumberProbe(nan, 1, 10000)
+  Check(probe:find("finite=F", 1, true) and probe:find("whole=F", 1, true) and probe:find("eq_self=", 1, true), "the probe reports a NaN: " .. probe)
+  Same(REF.NumberProbe("x", 1, 2), "type string", "and says what a non-number is")
+
+  -- by hand: records of ONE item. 5 at 10 (2 each), a NaN count at 5 (invalid, NOT priced: it would be the cheapest), 3 with no buyout.
+  local recs = { { item = 7, count = 2, buyout = 10 }, { item = 7, count = nan, buyout = 5 }, { item = 7, count = 3, buyout = 0 },
+    { item = 7, count = 4, buyout = nan }, { item = nan, count = 4, buyout = 0 }, { item = 7, count = inf, buyout = 0 } }
+  local e = REF.ExpectBatch(recs)
+  Same(e.used, 1, "one record is priced"); Same(e.noBuyout, 1, "one is bid-only"); Same(e.invalid, 4, "the NaN count, the NaN buyout, the NaN item and the infinite count are invalid")
+  Same(REF.EntryText(e.items[7]), "5,2,1,2,0", "the NaN record is not the cheapest: 10 for 2 is 5 each, one listing of two items")
+  local b = PR.NewBatch()
+  for _, r in ipairs(recs) do b:Add(r.item, r.count, r.buyout, r.info) end
+  Same(b.used, 1); Same(b.noBuyout, 1); Same(b.invalid, 4)
+  Same(select(1, b:Items())[7], "5,2,1,2,0", "production reads the same record the same way")
+
+  -- the two seeds that failed in the client still draw a NaN where it matters (a count, with a buyout of 0 in one and above 0 in the other)
+  for _, k in ipairs({ { 8, 0 }, { 12, 1 } }) do
+    local seed = 7100000 + k[1]
+    local gen = FX.Listings(seed, { items = 3, records = 30 + k[1], tiers = 1 + k[1] % 3 })
+    local hit = 0
+    for _, r in ipairs(gen.records) do
+      if type(r.count) == "number" and r.count ~= r.count and (r.buyout == 0) == (k[2] == 0) then hit = hit + 1 end
+    end
+    Check(hit >= 1, "seed " .. seed .. " draws a NaN count " .. (k[2] == 0 and "with no buyout" or "with a buyout"))
+    local m, got = REF.ExpectBatch(gen.records), PR.NewBatch()
+    for _, r in ipairs(gen.records) do got:Add(r.item, r.count, r.buyout, r.info) end
+    Same(got.used, m.used, "seed " .. seed .. " used"); Same(got.noBuyout, m.noBuyout, "seed " .. seed .. " bid-only"); Same(got.invalid, m.invalid, "seed " .. seed .. " invalid")
+  end
+  -- and the client's own numbers for them, from the report: seed 7100008 has 4 bid-only and 6 invalid records, seed 7100012 has 33 used and 2 invalid
+  local g8 = REF.ExpectBatch(FX.Listings(7100008, { items = 3, records = 38, tiers = 3 }).records)
+  Same(g8.noBuyout, 4); Same(g8.invalid, 6)
+  local g12 = REF.ExpectBatch(FX.Listings(7100012, { items = 3, records = 42, tiers = 1 }).records)
+  Same(g12.used, 33); Same(g12.invalid, 2)
+end
+
+---------------------------------------------------------------------------
 -- 7. KNOWN GAPS: what production does today in three corners the contract does not settle (docs/workshop/testing-roadmap.md, "M2 findings").
 --    These are CHARACTERIZATION tests: they pin the current behaviour so a change is a conscious one, not a statement that it is right.
 ---------------------------------------------------------------------------

@@ -73,19 +73,32 @@ end }
 TL.Case{ id = "ui.workshop.reach-scan", cat = "ui", class = "readonly", budget = 30, run = function(t)
     local win, f = WorkshopWindow()
     if not win then t:Skip(f) end
-    local collected = RC.Collect({ yield = function() t:Yield() end })
+    -- Cooperative pacing: yield when about RC.BUDGET seconds of scanning have passed (not after a fixed number of frames, which took 11 to 15 ms
+    -- a step in the first real-client run). The scan still walks every frame, Workshop's or not, so a blocker from anywhere is seen. A step
+    -- cannot be cut short; it can only be kept small by yielding often.
+    local clock = TL.Runner.Now
+    local began = clock()
+    local collected = RC.Collect({ clock = clock, yield = function() t:Yield() end })
     t:Fact("ui.scan.frames", collected.scanned)
+    t:Fact("ui.scan.yields", collected.yields)
+    t:Fact("ui.scan.work_ms", ("%.1f"):format(collected.work * 1000))
+    t:Fact("ui.scan.longest_slice_ms", ("%.1f"):format(collected.longest * 1000))
+    t:Fact("ui.scan.elapsed_ms", ("%.1f"):format((clock() - began) * 1000))
     t:Fact("ui.scan.takingPointer", #collected.list)
     t:Fact("ui.scan.truncated", collected.truncated)
     t:Check(not collected.truncated, ("the scan looked at all %d frames (it stops at %d)"):format(collected.scanned, RC.MAX_FRAMES))
     local tally = { reachable = 0, ambiguous = 0, blocked = 0, clipped = 0, other = 0, noScript = 0, disabled = 0, controls = 0 }
-    local n = 0
+    local n, paced, seen = 0, clock(), 0
+    local function Pace()   -- yield when the budget is spent; the clock is read every few frames, and always after a control's analysis
+        if clock() - paced >= RC.BUDGET then t:Yield(); paced = clock() end
+    end
     for _, c in ipairs(collected.list) do
         local fr = c.frame
+        seen = seen + 1
+        if seen % 16 == 0 then Pace() end
         local okT, kind = RC.Call(fr, "GetObjectType")
         if okT and (kind == "Button" or kind == "CheckButton") and RC.Within(fr, f) then
             n = n + 1
-            if n % 20 == 0 then t:Yield() end
             local okS, script = RC.Call(fr, "GetScript", "OnClick")
             if not (okS and type(script) == "function") then
                 tally.noScript = tally.noScript + 1
@@ -104,6 +117,7 @@ TL.Case{ id = "ui.workshop.reach-scan", cat = "ui", class = "readonly", budget =
                     t:Check(false, ("%s on %s"):format(v, res.intended))
                     t:Note((res.text:gsub("\n%s*", " | ")))
                 end
+                Pace()
             end
         end
     end

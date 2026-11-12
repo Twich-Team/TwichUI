@@ -34,7 +34,35 @@ REF.DAY, REF.POINTS, REF.BUCKET, REF.MAX_BUCKETS, REF.RETAIN, REF.MAX_SCAN_DAYS 
 local MAX_COPPER, MAX_COUNT, MAX_ID, MAX_DAY = 99999999999, 10000, 2147483647, 200000
 local floor = math.floor
 
-local function Whole(v, lo, hi) return type(v) == "number" and v == v and v >= lo and v <= hi and v % 1 == 0 end
+-- Is v a finite number? Decided WITHOUT comparing v with anything: a finite number prints as digits, a point, an exponent and signs only; a
+-- NaN or an infinity prints with letters (nan, inf, and the client's own spellings). OBSERVED (Test Lab run, client 1.60.1 build 70888,
+-- 2026-11-12, seeds 7100008 and 7100012): the plain test `v == v and v >= lo and v <= hi and v % 1 == 0` ACCEPTED a NaN count in the
+-- client (desktop Lua 5.1 rejects it at `v == v`), so a model that decides NaN by comparison disagrees with itself between interpreters.
+-- Comparisons below run only on numbers this has shown to be finite.
+local function Finite(v)
+    if type(v) ~= "number" then return false end
+    local s = tostring(v)
+    return s ~= "" and s:find("^[%d%.eE%+%-]+$") ~= nil
+end
+REF.Finite = Finite
+
+local function Whole(v, lo, hi) return Finite(v) and v >= lo and v <= hi and v % 1 == 0 end
+REF.Whole = Whole
+
+-- v is exactly zero (a bid-only buyout). Never true for a NaN, whatever the interpreter says NaN == 0 is.
+local function Zero(v) return Finite(v) and v == 0 end
+
+-- What this interpreter answers for a number, as one short line: the primitives the model could depend on, then what Whole decides.
+-- For the Test Lab's divergence report; a pure function of v, lo and hi.
+function REF.NumberProbe(v, lo, hi)
+    if type(v) ~= "number" then return "type " .. type(v) end
+    local function B(x) return x and "T" or "F" end
+    local ok, mod = pcall(function() return v % 1 end)
+    local okF, fl = pcall(math.floor, v)
+    return ("tostring=%s eq_self=%s ne_self=%s lt_lo=%s gt_hi=%s le_hi=%s ge_lo=%s eq_0=%s mod1=%s floor=%s floor_eq=%s | finite=%s whole=%s"):format(
+        tostring(v), B(v == v), B(v ~= v), B(v < lo), B(v > hi), B(v <= hi), B(v >= lo), B(v == 0), ok and tostring(mod) or "raised",
+        okF and tostring(fl) or "raised", B(okF and fl == v), B(Finite(v)), B(Whole(v, lo, hi)))
+end
 
 -- whole-number division with a remainder (a >= 0, b >= 1)
 local function DivMod(a, b)
@@ -83,6 +111,7 @@ end
 -- buyout (bid only) is ignored; so is anything that is not a whole number in range"):
 --   invalid   the item is not a whole number 1..2147483647, or the count is not 1..10000, or the buyout is missing or not a whole number
 --             0..99999999999. A record malformed in item or count is invalid even when its buyout is 0 (malformed first).
+--             A NaN or an infinity is never a whole number (decided by REF.Finite, not by comparing it).
 --   nobuyout  a valid item and count with a buyout of 0 (bid only)
 --   priced    everything else
 --   partial   a record with a valid item whose `info` is exactly false (the game had not loaded all of its information)
@@ -104,7 +133,7 @@ function REF.ExpectBatch(records)
             if r.info == false then out.partial = out.partial + 1 end
             if not Whole(r.count, 1, MAX_COUNT) then
                 out.invalid = out.invalid + 1
-            elseif r.buyout == 0 then
+            elseif Zero(r.buyout) then
                 out.noBuyout = out.noBuyout + 1
             elseif not Whole(r.buyout, 1, MAX_COPPER) then
                 out.invalid = out.invalid + 1

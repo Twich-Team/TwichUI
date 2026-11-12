@@ -207,6 +207,42 @@ do
 end
 
 ---------------------------------------------------------------------------
+-- 2b. A model/production disagreement is NAMED, not only counted (M5.1): production sabotaged to accept a NaN count must fail the batch case
+--     and the per-value case, and the report must name the first differing record and print the number primitives of the field.
+---------------------------------------------------------------------------
+do
+  local t = Setup({ TwichUIDB = { modules = {} }, TwichUIWorkshopDB = { v = 1, markets = {} } })
+  local wire = WireFrames(t)
+  t.Load(LabFiles())
+  local TL = t.TL
+  wire(TL.Runner)
+  local PR = t.c.TwichUI.Workshop.Prices
+  local real = PR.NewBatch
+  PR.NewBatch = function(...)
+    local b = real(...)
+    local add = b.Add
+    b.Add = function(self, item, count, buyout, info) if count ~= count then count = 5 end return add(self, item, count, buyout, info) end   -- a NaN count read as 5
+    return b
+  end
+  local list = { TL.cases["market.reference.batch"], TL.cases["market.reference.invalid-values"] }
+  Check(list[1] and list[2], "both market cases are registered")
+  local done
+  local step = 0
+  Check(TL.Runner.Start(list, { cats = { "core" }, clock = function() step = step + 0.0002 return step end, onDone = function(s) done = s end }))
+  Drive(TL.Runner)
+  Check(done, "the run finished")
+  for i, r in ipairs(done.results) do
+    Same(r.status, "fail", list[i].id .. " fails when production reads a NaN count as valid")
+    Check(r.detail:find("first differing record", 1, true) or r.detail:find("count number", 1, true), list[i].id .. " names what differed: " .. tostring(r.detail))
+    local notes = table.concat(r.notes or {}, "\n")
+    Check(notes:find("finite=F", 1, true) and notes:find("eq_self=", 1, true), list[i].id .. " prints the number primitives: " .. notes:sub(1, 300))
+    Check(#notes < 4000, "and stays short (" .. #notes .. " characters)")
+  end
+  local dnotes = table.concat(done.results[1].notes, "\n")
+  Check(dnotes:find("record %d+ %(invalid%)") and dnotes:find("model invalid, production priced", 1, true), "the batch note gives the record, its intent and both answers: " .. dnotes:sub(1, 300))
+end
+
+---------------------------------------------------------------------------
 -- 3. Slices: cases that yield share frames; a step that never yields is measured as an overrun, never "interrupted"
 ---------------------------------------------------------------------------
 do

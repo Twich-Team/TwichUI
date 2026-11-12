@@ -6,6 +6,10 @@
 -- run the test with MARKET_SEED=<the seed in the message>.
 --
 -- Seeds: batch 7100001..7100016, history 7200001..7200006, mirror 7400001..7400040.
+--
+-- WHEN THE MODEL AND PRODUCTION DISAGREE the case names the FIRST record they classify differently (its fields, both answers, and the
+-- number primitives of the field that differs), instead of only counting: the first real-client run (2026-11-12) found the model counting a
+-- NaN count as valid, and counts alone could not say which record or why. A report holds at most a handful of records, never the batch.
 
 local R = TwichUI
 local TL = R.TestLab
@@ -16,6 +20,46 @@ local DAY = 86400
 local function Pure(id, run) TL.Case{ id = id, cat = "core", class = "pure", needs = { "workshop" }, budget = 5, run = run } end
 
 local function EntryOf(p) return ("%.0f,1,1,1,0"):format(p) end   -- %.0f for money: the client's %d refuses numbers beyond 32 bits
+
+-- How one record is read, by the model and by production, each on a batch of its own: "priced", "bid-only" or "invalid"
+local function ModelClass(r)
+    local e = REF.ExpectBatch({ r })
+    return e.used == 1 and "priced" or (e.noBuyout == 1 and "bid-only" or (e.invalid == 1 and "invalid" or "unclassified"))
+end
+local function ProductionClass(PR, r)
+    local b = PR.NewBatch()
+    b:Add(r.item, r.count, r.buyout, r.info)
+    return b.used == 1 and "priced" or (b.noBuyout == 1 and "bid-only" or (b.invalid == 1 and "invalid" or "unclassified"))
+end
+
+-- a field for a report: its type and value, whole numbers in full, anything else by %.14g or tostring (a NaN prints as the client writes it)
+local function Show(v)
+    if type(v) == "number" then return ("number %s"):format(tostring(v)) end
+    if type(v) == "string" then return ("string %q"):format(v):sub(1, 30) end
+    return type(v) .. " " .. tostring(v)
+end
+
+local FIELDS = { { "item", 1, 2147483647 }, { "count", 1, 10000 }, { "buyout", 0, 99999999999 } }
+
+-- The first record the model and production read differently: its index and fields, both answers, and the primitives of its numeric
+-- fields. nil when every record is read the same way. Bounded: it looks at the records handed in, reports one.
+local function FirstDivergence(PR, records)
+    for i, r in ipairs(records) do
+        local m, p = ModelClass(r), ProductionClass(PR, r)
+        if m ~= p then
+            local parts = { ("record %d (%s): item %s, count %s, buyout %s, model %s, production %s"):format(
+                i, tostring(r.intent), Show(r.item), Show(r.count), Show(r.buyout), m, p) }
+            for _, f in ipairs(FIELDS) do
+                local v = r[f[1]]
+                if type(v) == "number" and not REF.Whole(v, f[2], f[3]) then
+                    parts[#parts + 1] = ("%s: %s"):format(f[1], REF.NumberProbe(v, f[2], f[3]))
+                end
+            end
+            return table.concat(parts, " | "), i
+        end
+    end
+    return nil
+end
 
 ---------------------------------------------------------------------------
 -- The auction batch against the model
@@ -31,6 +75,11 @@ Pure("market.reference.batch", function(t)
         for _, r in ipairs(gen.records) do b:Add(r.item, r.count, r.buyout, r.info) end
         local items, n = b:Items()
         local tag = "seed " .. seed
+        local first, at = FirstDivergence(PR, gen.records)
+        if first then
+            t:Check(false, tag .. ": first differing record: " .. first:sub(1, 200))
+            t:Note(tag .. " " .. first)
+        end
         t:Same(n, exp.n, tag .. ": items priced")
         t:Same(b.used, exp.used, tag .. ": records used")
         t:Same(b.noBuyout, exp.noBuyout, tag .. ": bid-only records")
@@ -41,6 +90,62 @@ Pure("market.reference.batch", function(t)
         end
         t:Yield()
     end
+end)
+
+---------------------------------------------------------------------------
+-- Every malformed value the generator draws, one at a time, in each field of an otherwise valid record
+---------------------------------------------------------------------------
+-- The contract (Prices.lua): an item, a count and a buyout that are not whole numbers in range are INVALID records; a valid item and count
+-- with a buyout of exactly 0 is bid-only. This case puts each malformed value (a NaN, an infinity, a fraction, a string, a boolean, a number
+-- past a limit, no value at all) in one field of a good record and asks the model and production, each on its own: both must say invalid, and
+-- the limits themselves must be priced. A disagreement names the field and the value and prints the number primitives (REF.NumberProbe).
+Pure("market.reference.invalid-values", function(t)
+    local PR = t.W.Prices
+    if not (FX and REF and FX.BAD) then t:Skip("the fixtures or the reference model are not loaded") end
+    local good = { item = 4000, count = 5, buyout = 1000, info = true }
+    local function With(field, value)
+        local r = { item = good.item, count = good.count, buyout = good.buyout, info = true }
+        r[field] = value
+        return r
+    end
+    local function Both(r, want, what)
+        local m, p = ModelClass(r), ProductionClass(PR, r)
+        if m ~= want or p ~= want then
+            t:Check(false, ("%s: model %s, production %s, expected %s"):format(what, m, p, want))
+            local f = what:match("^(%a+) ")
+            for _, spec in ipairs(FIELDS) do
+                if spec[1] == f and type(r[f]) == "number" then t:Note(what .. " " .. REF.NumberProbe(r[f], spec[2], spec[3])) end
+            end
+        else
+            t:Check(true)
+        end
+    end
+    for _, spec in ipairs(FIELDS) do
+        local field, lo, hi = spec[1], spec[2], spec[3]
+        for i = 1, #FX.BAD[field] do
+            Both(With(field, FX.BAD[field][i]), "invalid", ("%s %s"):format(field, Show(FX.BAD[field][i])))
+        end
+        Both(With(field, nil), "invalid", field .. " missing")
+        Both(With(field, math.huge * -1), "invalid", field .. " -inf")
+        Both(With(field, 0 / 0 * -1), "invalid", field .. " negated NaN")
+        if field ~= "buyout" then
+            Both(With(field, lo), "priced", field .. " at its lowest, " .. lo)
+            Both(With(field, hi), "priced", field .. " at its highest, " .. hi)
+            Both(With(field, hi + 1), "invalid", field .. " one past its highest")
+            Both(With(field, lo - 1), "invalid", field .. " one below its lowest")
+        else
+            Both(With(field, 1), "priced", "buyout at its lowest, 1")
+            Both(With(field, hi), "priced", "buyout at its highest, " .. hi)
+            Both(With(field, hi + 1), "invalid", "buyout one past its highest")
+            Both(With(field, 0), "bid-only", "buyout exactly 0")
+        end
+    end
+    -- a bad count or item beats a buyout of 0: malformed comes first
+    Both({ item = 4000, count = 0 / 0, buyout = 0 }, "invalid", "count NaN with buyout 0")
+    Both({ item = 4000, count = 0, buyout = 0 }, "invalid", "count 0 with buyout 0")
+    Both({ item = 0 / 0, count = 5, buyout = 0 }, "invalid", "item NaN with buyout 0")
+    Both({ item = 4000, count = 5, buyout = 0 / 0 }, "invalid", "buyout NaN is not bid-only")
+    t:Yield()
 end)
 
 ---------------------------------------------------------------------------

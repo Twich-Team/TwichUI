@@ -190,7 +190,7 @@ local function Step(s, cur)
         ReleaseGuided()
         Verdict(cur)
         if total > cur.case.budget then
-            r.detail = (r.detail and (r.detail .. "; ") or "") .. ("late: it took %.1f s of its %.0f s budget, and could not be interrupted"):format(total, cur.case.budget)
+            r.detail = (r.detail and (r.detail .. "; ") or "") .. ("late: it took %.1f s of its %.0f s budget (the budget is checked between steps; a running step could not be interrupted)"):format(total, cur.case.budget)
         end
     elseif total > cur.case.budget then
         Abandon(s, cur, total)

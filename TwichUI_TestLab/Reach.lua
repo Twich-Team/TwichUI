@@ -242,10 +242,20 @@ end
 
 ---------------------------------------------------------------------------
 -- The frames that could take the pointer: visible and mouse enabled. opts.frames = a list (tests); otherwise EnumerateFrames, at most
--- opts.limit frames (the simulator has about 68,000; a game UI far fewer); opts.yield() is called every opts.chunk frames (a case yields there).
--- Returns { list, scanned, hidden, truncated }: `hidden` counts mouse-enabled frames that are not visible. List entries carry what the
--- analysis needs, so a frame is asked once.
+-- opts.limit frames (the simulator has about 68,000; a game UI far fewer).
+-- COOPERATIVE: opts.yield() is called when a slice of work is used up, and only there (Lua cannot interrupt a loop that does not yield, so
+-- how long one slice runs is decided by how often this asks). It is used up
+--   * when opts.clock (a function giving seconds) is given: as soon as opts.budget seconds (default RC.BUDGET) have passed since the last yield,
+--     the clock being read only every opts.check frames (default RC.CHECK, so reading it costs next to nothing); a slice is then about the
+--     budget plus the cost of up to `check` frames, whatever the machine's speed;
+--   * always: after opts.chunk frames (default 2000), whether or not a clock is given (the tests, and the bound if a clock stops moving).
+-- Returns { list, scanned, hidden, truncated, yields, work, longest }: `hidden` counts mouse-enabled frames that are not visible; with a clock,
+-- `work` is the seconds spent scanning (waiting at a yield is not counted) and `longest` the longest stretch between two yields. List entries
+-- carry what the analysis needs, so a frame is asked once; the whole UI is walked ONCE.
 ---------------------------------------------------------------------------
+RC.BUDGET = 0.0015   -- seconds of scanning between yields when a clock is given (the Lab's slice is 5 ms; two or three such steps fit in a frame's slice)
+RC.CHECK = 32        -- frames between two clock reads
+
 local function Entry(fr, order)
     if Bool(fr, "IsMouseEnabled") ~= true then return nil, "passive" end   -- the cheap question first: most frames take no pointer
     if Bool(fr, "IsVisible") ~= true then return nil, "hidden" end
@@ -261,13 +271,32 @@ end
 
 function RC.Collect(opts)
     opts = opts or {}
-    local out = { list = {}, scanned = 0, hidden = 0, truncated = false }
+    local out = { list = {}, scanned = 0, hidden = 0, truncated = false, yields = 0, work = 0, longest = 0 }
     local limit, chunk = opts.limit or RC.MAX_FRAMES, opts.chunk or 2000
+    local clock, budget, check = opts.clock, opts.budget or RC.BUDGET, opts.check or RC.CHECK
+    local since, mark = 0, clock and clock()
+    local function Spent()   -- the stretch of scanning since the last yield
+        if not clock then return end
+        local d = clock() - mark
+        out.work = out.work + d
+        if d > out.longest then out.longest = d end
+    end
+    local function Yield()
+        Spent()
+        since = 0
+        out.yields = out.yields + 1
+        opts.yield()
+        if clock then mark = clock() end   -- the time spent waiting for the next step is not scan time
+    end
     local function Take(fr)
         out.scanned = out.scanned + 1
         local e, skip = Entry(fr, out.scanned)
         if e then out.list[#out.list + 1] = e elseif skip == "hidden" then out.hidden = out.hidden + 1 end
-        if opts.yield and out.scanned % chunk == 0 then opts.yield() end
+        if opts.yield then
+            since = since + 1
+            if since >= chunk then Yield()
+            elseif clock and since % check == 0 and clock() - mark >= budget then Yield() end
+        end
     end
     if opts.frames then
         for _, fr in ipairs(opts.frames) do
@@ -282,6 +311,7 @@ function RC.Collect(opts)
             fr = EnumerateFrames(fr)
         end
     end
+    Spent()
     return out
 end
 

@@ -96,6 +96,8 @@ local STACKS = { 1, 1, 1, 1, 2, 3, 4, 5, 5, 7, 10, 10, 15, 20, 20, 40, 200, 1000
 local BAD_ITEM = { 0, -5, 1.5, "12", false, 2147483648, 0 / 0, math.huge }
 local BAD_COUNT = { 0, -1, 2.5, "3", false, 10001, 0 / 0 }
 local BAD_BUYOUT = { -1, 1.5, "900", 100000000000, math.huge, 0 / 0, false }
+-- the malformed values the generator draws from, for a test or the Lab to try one by one (a NaN and an infinity among them)
+FX.BAD = { item = BAD_ITEM, count = BAD_COUNT, buyout = BAD_BUYOUT }
 
 -- opt: items (distinct item ids, default 5), records (default 40), tiers (distinct unit prices per item, default 3), invalid, noBuyout, partial
 -- (the chance of each kind of record, defaults 0.08, 0.10, 0.10). Prices come in tiers so that several stacks tie EXACTLY, and some stacks sit
