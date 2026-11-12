@@ -94,13 +94,13 @@ btn:Show(); btn:Enable(); btn:EnableMouse(true)
 ---------------------------------------------------------------------------
 -- The stand-in's silence is not success
 ---------------------------------------------------------------------------
-local lazy = MIFake("Button")   -- not instrumented: IsMouseEnabled and the rest answer nothing
+local lazy = MIFake("Button")   -- not instrumented: IsMouseClickEnabled and the rest answer nothing
 lazy:SetScript("OnClick", function() calls = calls + 1 end)
 local before = calls
 res = Press(lazy)
 Check(not res.invoked and Reasons(res):find("unknown", 1, true), "an un-instrumented MIFake is refused as unknown: " .. res.text)
 Same(calls, before, "its handler did not run")
-Check(res.text:find("unknown", 1, true) and res.text:find("IsMouseEnabled", 1, true), "and the text says which question had no answer: " .. res.text)
+Check(res.text:find("unknown", 1, true) and res.text:find("IsMouseClickEnabled", 1, true), "and the text says which question had no answer (the click flag, the question under test): " .. res.text)
 Check(not pcall(Press.Must, lazy), "Must raises for it")
 local ok, err = pcall(Press.Must, lazy)
 Check(not ok and tostring(err):find("REFUSED", 1, true), "with the explanation: " .. tostring(err))
@@ -123,6 +123,29 @@ Same(Reasons(Press.Hover(row)), "no-enter-handler")
 -- clicks off does not stop hover
 row:SetScript("OnEnter", function() entered = entered + 1 end); row:SetMouseClickEnabled(false)
 Check(Press.Hover(row).invoked, "click-disabled still hovers")
+
+-- M6.1: click and motion are separate (OBSERVED, Forever 1.60.1 build 70888: a frame can read mouse false with clicks on, or with motion on).
+-- The stand-in below answers IsMouseEnabled false for both; Press asks the question it is testing.
+local only = Make("Button", win, "ClickOnly")
+local pressed, entered2 = 0, 0
+only:SetScript("OnClick", function() pressed = pressed + 1 end); only:SetScript("OnEnter", function() entered2 = entered2 + 1 end)
+only:SetMouseClickEnabled(true); only:SetMouseMotionEnabled(false); only.IsMouseEnabled = function() return false end
+Check(Press(only).invoked and pressed == 1, "a click-only button is pressed although IsMouseEnabled reads false")
+local h = Press.Hover(only)
+Check(not h.invoked and Reasons(h) == "motion-disabled", "and it cannot be hovered: " .. h.text)
+Same(entered2, 0, "OnEnter did not run")
+only:SetMouseClickEnabled(false); only:SetMouseMotionEnabled(true)
+local c = Press(only)
+Check(not c.invoked and Reasons(c) == "click-disabled", "a motion-only button is not pressed: " .. c.text)
+Same(pressed, 1, "OnClick did not run")
+Check(Press.Hover(only).invoked and entered2 == 1, "but it hovers")
+-- Press is STRICTER than the client's Button:Click(): that was observed to run OnClick on a hidden or mouse-disabled button (not a disabled one).
+-- Press models a click a person could make, so it still refuses both; the client's programmatic behaviour is a separate, recorded fact.
+only:SetMouseClickEnabled(true); only:SetMouseMotionEnabled(true); only.IsMouseEnabled = nil
+only:Hide()
+Check(not Press(only).invoked, "Press still refuses a hidden button"); only:Show()
+only:EnableMouse(false)
+Check(not Press(only).invoked, "and a mouse-off button"); only:EnableMouse(true)
 
 -- the helper is opt-in: loading it changed nothing in MIFake itself
 local fresh = MIFake("Button")

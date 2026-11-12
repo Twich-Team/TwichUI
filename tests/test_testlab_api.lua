@@ -160,7 +160,7 @@ local function ProbeWorld(t, opts)
   end
   t.c.CreateFrame = function(kind, name, parent)
     if not (type(name) == "string" and name:find("^TwichUITestLabProbe")) then return orig(kind, name, parent) end
-    local f = w:Frame{ type = kind, name = name, parent = parent, w = 0, h = 0 }
+    local f = w:Frame{ type = kind, name = name, parent = parent, w = 0, h = 0, propagateApi = opts.propagateApi }
     t.c[name] = f
     function f:ClearAllPoints() self._anchor = nil end
     function f:SetPoint(_, rel, _, dx, dy) self._anchor = { rel = rel or UIP, dx = dx or 0, dy = dy or 0 } end
@@ -820,6 +820,28 @@ do   -- a client that routes by the stack (the first click-enabled frame, passin
   Same(f["api.overlap.clicks-off.model_agrees_with_onclick"], "yes"); Same(f["api.overlap.propagate.model_agrees_with_onclick"], "yes")
   Same(f["api.overlap.mouse-off.visual"], "U")
   Same(t.Result().status, "pass", tostring(t.Result().detail)); Released(t, "a stack-routing client")
+end
+
+-- M6.1: the model reads propagation through the method THIS client has (Forever documents CanPropagateMouseClicks, not GetPropagateMouseClicks);
+-- a client that answers neither leaves the model UNKNOWN, and the report says what the reader saw next to what the click did
+for _, variant in ipairs({ { "can", "true via CanPropagateMouseClicks", "reachable (through propagation)", "yes" },
+    { "get", "true via GetPropagateMouseClicks", "reachable (through propagation)", "yes" },
+    { "none", "unreadable", "unknown", "n/a (unknown)" } }) do
+  local t = Setup()
+  local w = ProbeWorld(t, { propagateApi = variant[1] })
+  t.Run({ "api.click.overlap" }, { "apiguided" }); t.Frames(5)
+  local prompt = Prompt(t)
+  for i = 1, 4 do
+    local cx, cy = w:Mark(); w:Press(cx, cy); t.Frames(30)
+    if i == 1 then Press(prompt.choiceBtns[1]); t.Frames(5) end
+  end
+  local f = t.Facts()
+  Same(f["api.overlap.propagate.propagate_readback"], variant[2], variant[1] .. ": the reader's answer is recorded")
+  Same(f["api.overlap.propagate.model"], variant[3], variant[1] .. ": the model's classification")
+  Same(f["api.overlap.propagate.model_agrees_with_onclick"], variant[4], variant[1] .. ": and whether it agrees with OnClick")
+  Same(f["api.overlap.propagate.onclick"], "L", variant[1] .. ": the click reached L")
+  Same(f["api.overlap.mouse-on.model"], variant[1] == "none" and "unknown" or "blocked by U", variant[1] .. ": a non-propagating overlay blocks, or is unknown when propagation cannot be read")
+  Released(t, "propagation reader " .. variant[1])
 end
 
 do   -- skipping a step, an API the client lacks, and Cancel

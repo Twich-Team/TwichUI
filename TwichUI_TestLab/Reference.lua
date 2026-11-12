@@ -494,7 +494,14 @@ end
 local MAX_GRAPH, MAX_CRAFTS, MAX_CANDIDATES = 60, 999, 4
 REF.MAX_GRAPH, REF.MAX_CRAFTS, REF.MAX_CANDIDATES = MAX_GRAPH, MAX_CRAFTS, MAX_CANDIDATES
 
-local function Qty(v) return (type(v) == "number" and v == v and v > 0) and v or 0 end   -- nil, negative and NaN count as none
+-- nil, negative, NaN and infinity count as none (Finite first, no comparison of a malformed number: in the client a NaN compares as both less and
+-- greater, and an infinite `want` would never end the loop in REF.Take)
+local function Qty(v) return (Finite(v) and v > 0) and v or 0 end
+
+-- A held bag count as production reads it (W.Count): a whole number from 0, or nil (unknown). Written again here, not imported.
+local MAX_HELD = 2147483647
+local function Held(v) if Whole(v, 0, MAX_HELD) then return v end return nil end
+REF.Held = Held
 
 -- Takes `want` items one at a time from the bags, then the bank, then the guild bank (whole numbers). Returns
 -- { bags, bank, guild (taken from each), missing (what none holds), left = { bags, bank, guild left } }.
@@ -574,8 +581,7 @@ function REF.Rows(entries, have, stock)
     local rows = {}
     local s = { entries = #entries, unknown = unknown, items = #order, shortItems = 0, unknownItems = 0, cycle = cycle, collectItems = 0, bankItems = 0, guildItems = 0 }
     for _, item in ipairs(order) do
-        local h = have(item)
-        if type(h) ~= "number" or h ~= h or h < 0 then h = nil end
+        local h = Held(have(item))
         local row = { item = item, need = need[item], made = made[item], madeRange = made[item] and range[item] or nil, have = h }
         if h ~= nil then
             local bank, guild = 0, 0
@@ -655,8 +661,8 @@ function REF.CraftState(mats, have, bank, guild)
     if type(mats) ~= "table" or #mats == 0 then out.state = "unknown" return out end
     local collect = false
     for _, m in ipairs(mats) do
-        local h = have(m.item)
-        if type(h) ~= "number" or h ~= h or h < 0 then out.state = "unknown" return out end
+        local h = Held(have(m.item))
+        if h == nil then out.state = "unknown" return out end
         local t = REF.Take(m.qty, h, bank(m.item), guild(m.item))
         out.bags, out.bank, out.guild = out.bags + t.bags, out.bank + t.bank, out.guild + t.guild
         if t.missing > 0 then out.missing = out.missing + 1 end

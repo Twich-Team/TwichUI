@@ -82,9 +82,12 @@ do
   Check(not RC.Eligibility(boom).ok)
   local RC2 = Load(w, { issecretvalue = function(v) return v == "SECRET" end })
   local sec = Btn{ name = "Sec" }
-  sec.IsMouseEnabled = function() return "SECRET" end
+  sec.IsMouseClickEnabled = function() return "SECRET" end
   e = RC2.Eligibility(sec)
-  Check(not e.ok and e.text:find("IsMouseEnabled", 1, true), "a secret answer is unknown: " .. e.text)
+  Check(not e.ok and e.text:find("IsMouseClickEnabled", 1, true), "a secret answer to the question under test is unknown: " .. e.text)
+  local sec2 = Btn{ name = "Sec2" }
+  sec2.IsMouseEnabled = function() return "SECRET" end
+  Check(RC2.Eligibility(sec2).ok, "the aggregate is not the question for a click: a secret IsMouseEnabled does not decide it when the click flag answers")
   -- the caller's own script test
   local hooked = w:Frame{ type = "Button", name = "Hooked", parent = win, x = 0, y = 0, w = 10, h = 10 }
   Check(RC.Eligibility(hooked, "click", { hasScript = function() return true end }).ok, "hasScript answers for a stand-in")
@@ -350,8 +353,8 @@ do
   do
     local now, wrapped = 0, many.frames
     for _, fr in ipairs(wrapped) do
-      local ask = fr.IsMouseEnabled
-      fr.IsMouseEnabled = function(...) now = now + 0.001; return ask(...) end
+      local ask = fr.IsMouseClickEnabled   -- the scan's first question (Entry asks click and motion, not the aggregate)
+      fr.IsMouseClickEnabled = function(...) now = now + 0.001; return ask(...) end
     end
     local clock = function() return now end
     local spans, last, count = {}, nil, 0
@@ -393,6 +396,221 @@ do
   Check(none.Sample().ok == false and none.Sample().why:find("not available", 1, true), "without GetMouseFoci it says so")
   local broken = Load(nil, { GetMouseFoci = function() error("x") end })
   Check(broken.Sample().ok == false, "a failing GetMouseFoci is reported, not raised")
+end
+
+
+---------------------------------------------------------------------------
+-- 8. M6.1: what the real client showed (Forever 1.60.1 build 70888; docs/testlab.md "Verified Forever behaviour"). OFFLINE MODEL: these prove the
+--    analysis classifies typed-in arrangements; the client's own behaviour is only what the Lab's reports recorded.
+--    8a. click and motion are separate questions (IsMouseEnabled reads false for a click-only and for a motion-only frame)
+--    8b. a propagating overlay is reachable through propagation; a blocking one blocks; an unreadable one is unknown
+--    8c. geometry numbers are finite (a NaN that compares like a number is still not geometry)
+---------------------------------------------------------------------------
+do
+  local function Setup(def)
+    local w = World.New()
+    local RC = Load(w)
+    local win = w:Frame{ name = "Window", x = 100, y = 100, w = 800, h = 600, strata = "HIGH", level = 5 }
+    def = def or {}
+    def.type, def.name, def.parent, def.x, def.y, def.w, def.h, def.level = def.type or "Button", def.name or "Target", win, 400, 300, 120, 30, 6
+    def.onClick = def.onClick or function() end
+    def.onEnter = def.onEnter or function() end
+    local target = w:Frame(def)
+    local function Look(kind, opts)
+      opts = opts or {}
+      opts.kind = kind
+      opts.collected = RC.Collect({ frames = w.frames })
+      return RC.Analyze(target, opts)
+    end
+    local function Over(d)   -- a frame planted over the target's centre (460, 315)
+      d.name, d.x, d.y, d.w, d.h = d.name or "Over", 380, 280, 200, 80
+      d.strata = d.strata or "DIALOG"; d.level = d.level or 1
+      return w:Frame(d)
+    end
+    return w, RC, target, Look, Over
+  end
+
+  -- 8a. click only: IsMouseEnabled reads false, clicks are on, motion is off
+  do
+    local _, RC, target, Look = Setup{ click = true, motion = false, agg = false }
+    Same(target:IsMouseEnabled(), false, "(the stand-in reads mouse false)")
+    local e = RC.Eligibility(target, "click")
+    Check(e.ok, "a click-only control is eligible for a click although IsMouseEnabled is false: " .. e.text)
+    Same(Look("click").verdict, "reachable", "and reachable by the pointer: " .. Look("click").text)
+    e = RC.Eligibility(target, "hover")
+    Same(Reasons(e), "motion-disabled", "for hover the reason is motion, not 'mouse off'")
+    Same(Look("hover").verdict, "ineligible")
+  end
+  -- 8a. motion only: IsMouseEnabled false, clicks off, motion on
+  do
+    local _, RC, target, Look = Setup{ click = false, motion = true, agg = false }
+    local e = RC.Eligibility(target, "hover")
+    Check(e.ok, "a motion-only control is eligible for hover although IsMouseEnabled is false: " .. e.text)
+    Same(Look("hover").verdict, "reachable", Look("hover").text)
+    Same(Reasons(RC.Eligibility(target, "click")), "click-disabled", "for a click the reason is clicks off")
+    Same(Look("click").verdict, "ineligible")
+  end
+  -- both off is "mouse off" as before; a frame with neither method uses the aggregate, conservatively
+  do
+    local _, RC, target = Setup{ click = false, motion = false }
+    Same(Reasons(RC.Eligibility(target, "click")), "mouse-disabled"); Same(Reasons(RC.Eligibility(target, "hover")), "mouse-disabled")
+    local w = World.New()
+    local RCo = Load(w)
+    local old = w:Frame{ type = "Button", name = "Old", x = 0, y = 0, w = 10, h = 10, noClickEnabled = true, onClick = function() end, onEnter = function() end }
+    old.IsMouseMotionEnabled = nil
+    Check(RCo.Eligibility(old, "click").ok and RCo.Eligibility(old, "click").state.fallback == "IsMouseEnabled", "no separate methods: the aggregate answers, and the report says so")
+    old.EnableMouse(old, false)
+    Same(Reasons(RCo.Eligibility(old, "click")), "mouse-disabled", "and off is off")
+    old.IsMouseEnabled = function() return nil end
+    Check(not RCo.Eligibility(old, "click").ok and RCo.Eligibility(old, "click").unknown[1]:find("IsMouseClickEnabled is missing", 1, true), "no methods and no aggregate answer: unknown, not eligible")
+  end
+  -- the overlays: mouse off, click off (motion on), click only
+  do
+    local w, _, target, Look, Over = Setup()
+    local o = Over{ click = false, motion = false, agg = false }
+    Same(Look("click").verdict, "reachable", "a mouse-disabled overlay does not block a click")
+    Same(Look("hover").verdict, "reachable", "nor hover")
+    o:SetMouseMotionEnabled(true)   -- click off, motion on, aggregate off: what the client reported
+    o.IsMouseEnabled = function() return false end
+    Same(Look("click").verdict, "reachable", "a click-disabled overlay lets the click through")
+    Same(Look("hover").verdict, "blocked", "but still takes the pointer's motion (its IsMouseEnabled reads false)")
+    Same(Look("hover").blocker.label, "Over")
+    o:SetMouseMotionEnabled(false); o:SetMouseClickEnabled(true)   -- click only, aggregate still false
+    Same(Look("click").verdict, "blocked", "a CLICK-ONLY overlay blocks a click though IsMouseEnabled reads false: " .. Look("click").text)
+    Same(Look("hover").verdict, "reachable", "and not hover")
+  end
+  -- parent hidden, disabled button
+  do
+    local w, RC, target = Setup{ click = true, motion = false, agg = false }
+    target:GetParent():Hide()
+    Same(Reasons(RC.Eligibility(target, "click")), "ancestor-hidden", "a hidden parent makes even a click-only control ineligible")
+    target:GetParent():Show(); target:Disable()
+    Same(Reasons(RC.Eligibility(target, "click")), "disabled")
+  end
+
+  -- 8b. propagation: Reachable -> through propagation -> Reachable, for each way the client may expose the flag
+  for _, api in ipairs({ "can", "get", "both" }) do
+    local w, RC, target, Look, Over = Setup()
+    local before = Look("click")
+    Same(before.verdict, "reachable"); Check(before.via == nil, "no propagation involved at first")
+    local o = Over{ propagateApi = api, mouse = true }
+    local blocked = Look("click")
+    Same(blocked.verdict, "blocked", api .. ": a mouse-enabled overlay that does not propagate blocks: " .. blocked.text)
+    o._propagate = true
+    local r = Look("click")
+    Same(r.verdict, "reachable", api .. ": propagating overlay: " .. r.text)
+    Same(r.via, "propagation", "and says it is through propagation"); Same(r.propagator.label, "Over")
+    Check(r.text:find("REACHABLE (through propagation) click on Target", 1, true) and r.text:find("propagating frame: Over", 1, true), r.text)
+    Same(r.eligibility.ok, true)
+    -- GetMouseFoci would name the overlay first (the model of the pointer here does): the verdict is not taken from it
+    w:Cursor(460, 315)
+    Same(w:Foci()[1], o, "(the pointer's own stack lists the overlay first)")
+    o:Hide()
+    local after = Look("click")
+    Same(after.verdict, "reachable"); Check(after.via == nil, "removed: reachable again, with no propagation involved")
+  end
+  -- a propagating overlay does not rescue a click that a NON-propagating frame takes
+  do
+    local _, _, target, Look, Over = Setup()
+    Over{ name = "Passer", propagateApi = "can", mouse = true, propagate = true, level = 5 }
+    Over{ name = "Blocker", propagateApi = "can", mouse = true, level = 3 }
+    local r = Look("click")
+    Same(r.verdict, "blocked", r.text); Same(r.blocker.label, "Blocker")
+  end
+  -- a propagating frame BELOW the target is just an ordinary lower frame
+  do
+    local _, _, target, Look, Over = Setup()
+    Over{ name = "Under", propagateApi = "can", mouse = true, propagate = true, strata = "LOW" }
+    local r = Look("click")
+    Same(r.verdict, "reachable"); Check(r.via == nil, "a propagating frame under the control is not 'through propagation'")
+  end
+  -- hover is not affected by click propagation
+  do
+    local _, _, target, Look, Over = Setup()
+    Over{ propagateApi = "can", mouse = true, propagate = true }
+    Same(Look("hover").verdict, "blocked", "an overlay that propagates CLICKS still takes the pointer's motion")
+  end
+  -- more than one propagating frame is not assumed to pass the click
+  do
+    local _, _, target, Look, Over = Setup()
+    Over{ name = "P1", propagateApi = "can", mouse = true, propagate = true }
+    Over{ name = "P2", propagateApi = "can", mouse = true, propagate = true, level = 2 }
+    local r = Look("click")
+    Same(r.verdict, "unknown", r.text); Check(r.why:find("2 frames", 1, true) and r.via == nil, r.why)
+  end
+  -- propagation that cannot be read is UNKNOWN, never "does not propagate" (the old reader asked a method this client does not have)
+  for _, api in ipairs({ "none", "odd" }) do
+    local _, _, target, Look, Over = Setup()
+    Over{ propagateApi = api, mouse = true }
+    local r = Look("click")
+    Same(r.verdict, "unknown", api .. ": " .. r.text)
+    Check(r.why:find("cannot be read", 1, true) and r.blocker and r.blocker.label == "Over", r.why)
+    Check(r.text:find("UNKNOWN click on Target", 1, true), r.text)
+  end
+  -- ... but an unreadable frame BELOW the control, or one that cannot take clicks, decides nothing
+  do
+    local _, _, target, Look, Over = Setup()
+    Over{ propagateApi = "none", mouse = true, strata = "LOW" }
+    Same(Look("click").verdict, "reachable", "an unreadable frame under the control: the control is on top")
+    local _, _, target2, Look2, Over2 = Setup()
+    Over2{ propagateApi = "none", click = false, motion = true }
+    Same(Look2("click").verdict, "reachable", "an unreadable frame with clicks off cannot take the click")
+  end
+  -- equal strata and level stays ambiguous, for clicks and for a click-only pair
+  do
+    local w, RC, target, Look, Over = Setup()
+    Over{ name = "Twin", type = "Button", strata = "HIGH", level = 6, parent = nil, mouse = true, propagateApi = "can", onClick = function() end }
+    local r = Look("click")
+    Same(r.verdict, "ambiguous", "an unrelated frame with the same strata and level: " .. r.text)
+    local w2, RC2, t2, Look2, Over2 = Setup{ click = true, motion = false, agg = false }
+    Over2{ name = "Twin", strata = "HIGH", level = 6, click = true, motion = false, agg = false, propagateApi = "can" }
+    Same(Look2("click").verdict, "ambiguous", "also for click-only frames")
+  end
+  -- a propagating overlay AND a tied twin: reachable through propagation, and the tie is still said
+  do
+    local _, _, target, Look, Over = Setup()
+    Over{ name = "Passer", propagateApi = "can", mouse = true, propagate = true }
+    Over{ name = "Twin", type = "Button", strata = "HIGH", level = 6, parent = nil, mouse = true, propagateApi = "can", onClick = function() end }
+    local r = Look("click")
+    Same(r.verdict, "ambiguous", r.text); Same(r.via, "propagation")
+    Check(r.why:find("also Twin ties", 1, true) or r.why:find("ties with it", 1, true), "the tie is in the reason: " .. r.why)
+  end
+  -- a client without the separate click / motion methods: the scan falls back to IsMouseEnabled (on takes both, off takes neither)
+  do
+    local w = World.New()
+    local RC = Load(w)
+    local on = w:Frame{ type = "Button", name = "On", x = 0, y = 0, w = 10, h = 10, onClick = function() end }
+    local off = w:Frame{ type = "Button", name = "Off", x = 50, y = 0, w = 10, h = 10, mouse = false, onClick = function() end }
+    for _, f in ipairs({ on, off }) do f.IsMouseClickEnabled, f.IsMouseMotionEnabled = nil, nil end
+    local sc = RC.Collect({ frames = w.frames })
+    Check(#sc.list == 1 and sc.list[1].frame == on and sc.list[1].click and sc.list[1].motion, "the aggregate decides when the separate methods are missing: " .. #sc.list)
+  end
+  -- hit-rectangle insets, positive and negative, on the overlay and on the control
+  do
+    local _, RC, target, Look, Over = Setup()
+    local o = Over{ propagateApi = "can", mouse = true }
+    o:SetHitRectInsets(150, 0, 0, 0)
+    Same(Look("click").verdict, "reachable", "a positive inset on the overlay frees the centre")
+    o:SetHitRectInsets(-50, -50, -50, -50)
+    Same(Look("click").verdict, "blocked", "a negative inset extends the overlay")
+    o:SetHitRectInsets(0, 0, 0, 0); o:Hide()
+    target:SetHitRectInsets(-30, 0, 0, 0)
+    Same(Look("click", { point = { 380, 315 } }).verdict, "reachable", "a negative inset on the control reaches past its frame")
+    target:SetHitRectInsets(30, 0, 0, 0)
+    Same(Look("click", { point = { 410, 315 } }).verdict, "outside", "a positive inset removes the strip")
+  end
+
+  -- 8c. geometry that is not finite
+  do
+    local RC = Load(nil)
+    for _, v in ipairs({ 0, 1, -1, 1.5, 99999999999, 1e11, -1e11 }) do Check(RC.Num(v), "finite geometry: " .. tostring(v)) end
+    for _, v in ipairs({ 0 / 0, -(0 / 0), math.huge, -math.huge, 1e12, -1e12, "5", true }) do Check(not RC.Num(v), "not geometry: " .. tostring(v)) end
+    Check(not RC.Num(nil))
+    -- a NaN that compares like an ordinary number (it prints "nan"; every comparison stays ordinary): still not geometry
+    local RC2 = Load(nil, { tostring = function(v) if v == 7 then return "nan" end return tostring(v) end })
+    Check(not RC2.Num(7), "a value that prints as nan is rejected before it is compared")
+    Check(RC2.Num(8), "and an ordinary neighbour is accepted")
+  end
 end
 
 print("PASSED test_reach")

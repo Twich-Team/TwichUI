@@ -16,7 +16,10 @@
 -- WHAT IT DOES NOT TELL YOU (the result says so in `evidence`):
 --   * not where the pointer is: another frame over the control, a hit rectangle that excludes the centre, scroll clipping, strata and
 --     frame levels are not looked at here (tools/simlab/ and the Lab's pointer probe do that, each with its own evidence label);
---   * not what the real client does with a disabled or hidden control (its Click() may run OnClick or not; that is a client probe);
+--   * not what the real client does with a disabled or hidden control. OBSERVED (Forever 1.60.1 build 70888, Test Lab api.click.programmatic): a
+--     native Button's Click() ran its handlers when the button was HIDDEN or its mouse was OFF, and did not when it was DISABLED. Press is
+--     deliberately stricter: it models a click a person could make, so a hidden or mouse-off control is still refused. Click() evidence and
+--     pointer evidence are different things; neither is a substitute for the other;
 --   * the evidence of a pass is "handler invoked (offline)", of a refusal "refused by the stand-in's recorded state".
 -- Nothing is replaced globally: an uninstrumented test is exactly as before.
 local Reach = (function()

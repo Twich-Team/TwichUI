@@ -1611,7 +1611,12 @@ Lab.Step("reachability: planted overlay, hover rows, insets, clipping, tooltip",
         ov:EnableMouse(mouse ~= false)
         ov:Show()
     end
-    local function Unplant() if ov then ov:EnableMouse(false); ov:Hide() end end
+    local function Unplant()
+        if ov then
+            if ov.SetPropagateMouseClicks then pcall(ov.SetPropagateMouseClicks, ov, false) end
+            ov:EnableMouse(true); ov:EnableMouse(false); ov:Hide()
+        end
+    end
 
     -- 0. the simulator's own pointer API, so its limits are written down by a check: GetMouseFoci answers what was forced, not a position
     Tab("Opportunities")
@@ -1654,6 +1659,35 @@ Lab.Step("reachability: planted overlay, hover rows, insets, clipping, tooltip",
     Win().Render()
     Unplant()
     Check("display", "NEGATIVE CONTROL: with the overlay removed, the Add button is reachable again", "reachable", Verdict(Look(add)))
+    -- M6.1 NEGATIVE CONTROL for propagation: the planted overlay passes clicks on (SetPropagateMouseClicks), so the button is reachable THROUGH it;
+    -- Reachable -> Propagated -> Reachable. SIMULATED classification only: the simulator has no pointer, and the client's own behaviour (one
+    -- propagating frame over a Button handed it the click, observed in Forever 1.60.1 build 70888) is a Test Lab fact, not something proved here.
+    -- The overlay's flag is read through the Lab's own reader (CanPropagateMouseClicks, then GetPropagateMouseClicks): if the simulator has
+    -- neither, the analysis must say UNKNOWN, which the first check records.
+    Plant(add)
+    local canSet = type(ov.SetPropagateMouseClicks) == "function"
+    local flag = canSet and RC.Propagates(ov)
+    Check("display", "REACH: the simulator's overlay answers its propagation flag (false by default) through the Lab's reader", "true/false", tostring(canSet) .. "/" .. tostring(flag))
+    if canSet then
+        ov:SetPropagateMouseClicks(true)
+        local passed = Look(add)
+        Check("display", "NEGATIVE CONTROL: with the overlay propagating clicks the Add button is REACHABLE THROUGH PROPAGATION (simulated), naming the propagating frame",
+            "reachable/propagation/SimlabPlantedOverlay", passed.verdict .. "/" .. tostring(passed.via) .. "/" .. tostring(passed.propagator and passed.propagator.label))
+        Check("display", "NEGATIVE CONTROL: the report says it is through propagation", true, passed.text:find("REACHABLE (through propagation) click on Add to crafting plan", 1, true) ~= nil)
+        ov:SetPropagateMouseClicks(false)
+        Check("display", "NEGATIVE CONTROL: propagation switched off, the overlay BLOCKS again", "blocked/SimlabPlantedOverlay", Verdict(Look(add)))
+        Check("display", "NEGATIVE CONTROL: and a propagating overlay does not change what the hover sees (it still takes the pointer)", "blocked/SimlabPlantedOverlay", (function()
+            ov:SetPropagateMouseClicks(true)
+            local hv = Look(add, "hover", { hasScript = function() return true end })
+            ov:SetPropagateMouseClicks(false)
+            return Verdict(hv)
+        end)())
+    end
+    Unplant()
+    Check("display", "NEGATIVE CONTROL: with the overlay removed again, the Add button is reachable with no propagation involved", "reachable/nil", (function()
+        local r = Look(add)
+        return r.verdict .. "/" .. tostring(r.via)
+    end)())
     -- a decorative frame (mouse off) over the button is no obstruction
     Plant(add, false)
     Check("display", "REACH: a decorative frame with the mouse off over the button does not block it", "reachable", Verdict(Look(add)))

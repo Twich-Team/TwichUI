@@ -1065,6 +1065,84 @@ do
   Same(select(4, REF.Combine(entries))[A], nil, "the model says the same")
 end
 
+---------------------------------------------------------------------------
+-- 6d. HELD COUNTS THAT ARE NOT COUNTS (M6.1; Test Lab core report, Forever 1.60.1 build 70888: `numeric.held.inf=have inf short 0 craft ready`).
+--     FOUND: Materials.Rows, Stock.Craft and Observe.BagCount judged the bag count with `n ~= n or n < 0`, which accepts a positive infinity (not a
+--     NaN, not negative), so an infinite count covered every need and the craft read "ready". In that client a NaN also passes comparisons, so the
+--     idiom depended on the interpreter. FIX: W.Count (Data.lua) = W.Int(v, 0, MAX_ID): finite decided from the printed form first, then whole,
+--     then in range. Unknown stays nil (never 0); the model (REF.Held) is written again, not imported.
+---------------------------------------------------------------------------
+do
+  local nan, inf = 0 / 0, math.huge
+  local MAXH = 2147483647
+  local bad = { { "nan", nan }, { "-nan", -nan }, { "inf", inf }, { "-inf", -inf }, { "inf-inf", inf - inf }, { "negative", -1 }, { "fraction", 2.5 },
+    { "half", 0.5 }, { "over-limit", MAXH + 1 }, { "huge", 1e300 }, { "string", "5" }, { "true", true }, { "table", {} } }
+  local good = { { "zero", 0 }, { "negative-zero", -0 }, { "one", 1 }, { "stack", 200 }, { "large", 1000000 }, { "limit", MAXH } }
+  local mats = { { item = 1001, qty = 3 } }
+  local entries = { { crafts = 1, mats = mats } }
+  local function Judge(v)
+    local rows, sum = MT.Rows(entries, function() return v end)
+    local craft = K.Craft(mats, function() return v end, nil)
+    return rows[1], sum, craft
+  end
+  for _, f in ipairs(bad) do
+    local row, sum, craft = Judge(f[2])
+    Check(W.Count(f[2]) == nil, f[1] .. ": W.Count must say unknown")
+    Check(REF.Held(f[2]) == nil, f[1] .. ": the model must say unknown")
+    Check(row.have == nil and row.short == nil, f[1] .. ": Materials.Rows must call it unknown (have and short nil), got have=" .. tostring(row.have) .. " short=" .. tostring(row.short))
+    Check(sum.state == "partial" and sum.unknownItems == 1, f[1] .. ": and the summary partial, not short or ready (" .. tostring(sum.state) .. ")")
+    Same(craft.state, "unknown", f[1] .. ": Stock.Craft must never call it ready or short")
+    Same(craft.bags, 0, f[1] .. ": and take nothing from the bags")
+    local mrow = REF.Rows(entries, function() return f[2] end)[1]
+    Check(mrow.have == nil and mrow.short == nil, f[1] .. ": the model agrees")
+    Same(REF.CraftState(mats, function() return f[2] end, function() return 0 end, function() return 0 end).state, "unknown", f[1] .. ": and its craft state")
+  end
+  for _, f in ipairs(good) do
+    local row, _, craft = Judge(f[2])
+    Check(W.Count(f[2]) == f[2], f[1] .. ": W.Count keeps a good count")
+    Same(row.have, f[2], f[1] .. ": kept")
+    Same(row.short, math.max(0, 3 - f[2]), f[1] .. ": short")
+    Same(craft.state, f[2] >= 3 and "ready" or "short", f[1] .. ": craft state")
+    Same(REF.Held(f[2]), f[2], f[1] .. ": the model keeps it")
+  end
+  -- unknown is not zero: an unreadable bag count must not read as "nothing held" (which would be short) even with a bank that holds enough
+  local row = MT.Rows(entries, function() return inf end, function() return 5, 0 end)[1]
+  Check(row.short == nil and row.fromBank == nil, "an unknown bag count does not let the bank cover it, and is not a shortage")
+  -- the three sources stay separate with a valid bag count: bags 1, bank 2 -> ready after collecting
+  local r2 = MT.Rows(entries, function() return 1 end, function() return 2, 0 end)[1]
+  Check(r2.short == 0 and r2.fromBank == 2, "bags then bank, unchanged")
+  -- Observe.BagCount: the same boundary on what the game says (a stand-in C_Item)
+  local real = c.C_Item
+  for _, f in ipairs(bad) do
+    c.C_Item = { GetItemCount = function() return f[2] end }
+    Check(W.Observe.BagCount(1001) == nil, "BagCount: " .. f[1] .. " is nil (unknown), not a count")
+  end
+  for _, f in ipairs(good) do
+    c.C_Item = { GetItemCount = function() return f[2] end }
+    Same(W.Observe.BagCount(1001), f[2], "BagCount: " .. f[1])
+  end
+  c.C_Item = { GetItemCount = function() error("boom") end }
+  Check(W.Observe.BagCount(1001) == nil, "BagCount: a raising call is unknown")
+  c.C_Item = nil
+  Check(W.Observe.BagCount(1001) == nil, "BagCount: no API is unknown")
+  c.C_Item = real
+  -- the model's allocation must end on an infinite want (it looped forever on one before Qty used Finite)
+  local t = REF.Take(inf, 3, 0, 0)
+  Same(t.bags, 0, "REF.Take: an infinite want is none"); Same(t.missing, 0, "and nothing is missing")
+  -- EMULATION: a NaN that compares like an ordinary number (here 5 and 0 print as "nan" but compare normally, as a client NaN equal to them would).
+  -- Production may consult only the printed form of a number it has not shown to be finite, so these must still be unknown.
+  local realToString = c.tostring or tostring
+  c.tostring = function(v) if v == 5 or v == 0 then return "nan" end return realToString(v) end
+  local ok, err = pcall(function()
+    for _, v in ipairs({ 5, 0 }) do
+      local row2, _, craft2 = Judge(v)
+      Check(row2.have == nil and row2.short == nil and craft2.state == "unknown", "a count that prints as nan (" .. v .. ") is unknown")
+    end
+  end)
+  c.tostring = nil
+  if not ok then error(err, 0) end
+end
+
 if #found > 0 then
   for _, m in ipairs(found) do print(m) end
   error(#found .. " differences found (CRAFT_ALL)", 0)

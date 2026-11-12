@@ -60,9 +60,10 @@ end)
 -- The NaN guard idioms the code base uses, asked of every kind of malformed number, in THIS client. What is ASSERTED is only that every idiom
 -- accepts an ordinary number and that the comparison-free test (REF.Finite) rejects every NaN and infinity; what the others do with a NaN is
 -- REPORTED (A accepted the value, R rejected it), because it depends on how this client compares a NaN (client.lua.nan-comparisons).
--- Production sites: the count guard is Observe.BagCount, Stock.Craft and Materials.Rows (their inputs are the game's item counts or a nil);
--- Reach.Num guards frame geometry in the Lab itself; the fixtures' idiom is Fixtures.lua Clamp/Rate/Whole. docs/workshop/testing-roadmap.md M6
--- has the audit table (where each input comes from and whether it can be malformed).
+-- `count_guard` is the OLD idiom of Observe.BagCount, Stock.Craft and Materials.Rows, kept here only to record what it does in this client (a
+-- positive infinity passes it everywhere; M6.1 replaced it with W.Count, asserted by numeric.guards.held-counts). `reach_num` is the OLD
+-- Reach.Num (now decided from the printed form first) and `nan_only` the shape the fixtures used (Fixtures.lua now uses a printed-form test).
+-- Nothing is asserted about the OLD idioms except that ordinary numbers pass. docs/workshop/testing-roadmap.md (M6.1) has the audit table.
 Read("client.lua.nan-guards", function(t)
     local REF = TL.Reference
     local zero = 0

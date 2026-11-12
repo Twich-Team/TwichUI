@@ -14,7 +14,7 @@
 -- Frame fields: type (default "Frame"), name, parent, x y w h (screen units, bottom-left origin), scale (own scale, default 1; the parent's
 -- multiplies in), strata (default "MEDIUM"), level (default parent's + 1), mouse (default true for Button/CheckButton/EditBox/Slider, false
 -- otherwise), shown (default true), enabled (Buttons: true), click/motion (default follow `mouse`), insets {l, r, t, b}, clips, propagate,
--- onClick/onEnter (set as scripts), noEnabled (a frame type without IsEnabled), noClickEnabled (an older client without IsMouseClickEnabled).
+-- onClick/onEnter (set as scripts), agg / aggregateAnd (what IsMouseEnabled answers), propagateApi (see the getter), noEnabled (a frame type without IsEnabled), noClickEnabled (an older client without IsMouseClickEnabled).
 local World = {}
 World.__index = World
 
@@ -57,7 +57,13 @@ function World:Frame(def)
   function f:SetFrameStrata(v) self._strata = v end
   function f:GetFrameLevel() return self._level end
   function f:SetFrameLevel(v) self._level = v end
-  function f:IsMouseEnabled() return self._click or self._motion end
+  -- IsMouseEnabled: by default "either" (the older stand-in); def.agg forces the aggregate to a value, def.aggregateAnd makes it "both". OBSERVED in
+  -- Forever 1.60.1 build 70888: a frame can read mouse false with click true (motion false), and mouse false with motion true (click false).
+  function f:IsMouseEnabled()
+    if def.agg ~= nil then return def.agg end
+    if def.aggregateAnd then return self._click and self._motion end
+    return self._click or self._motion
+  end
   function f:EnableMouse(v) self._click, self._motion = v and true or false, v and true or false end
   function f:IsMouseMotionEnabled() return self._motion end
   function f:SetMouseMotionEnabled(v) self._motion = v and true or false end
@@ -68,7 +74,12 @@ function World:Frame(def)
   function f:SetHitRectInsets(l, r, t, b) self._insets = { l, r, t, b } end
   function f:GetHitRectInsets() return self._insets[1], self._insets[2], self._insets[3], self._insets[4] end   -- documented order: left, right, top, bottom
   function f:DoesClipChildren() return self._clips end
-  function f:GetPropagateMouseClicks() return self._propagate == true end
+  -- the propagation getter: Forever's API documentation lists CanPropagateMouseClicks (and no Get...); def.propagateApi = "both" (default), "can",
+  -- "get", "none" (neither exists) or "odd" (Can... exists and answers nothing)
+  local api = def.propagateApi or "both"
+  if api == "both" or api == "can" then function f:CanPropagateMouseClicks() return self._propagate == true end end
+  if api == "both" or api == "get" then function f:GetPropagateMouseClicks() return self._propagate == true end end
+  if api == "odd" then function f:CanPropagateMouseClicks() return nil end end
   function f:SetScript(n, fn) self.scripts[n] = fn end
   function f:GetScript(n) return self.scripts[n] end
   if HAS_ENABLED[kind] and not def.noEnabled then
@@ -87,7 +98,7 @@ local RANK = { BACKGROUND = 1, LOW = 2, MEDIUM = 3, HIGH = 4, DIALOG = 5, FULLSC
 function World:Foci()
   local x, y, out = self.cx, self.cy, {}
   for _, f in ipairs(self.frames) do
-    if f:IsVisible() and f:IsMouseEnabled() and f._motion then
+    if f:IsVisible() and f._motion then
       local s = f:GetEffectiveScale()
       local il, ir, it, ib = f._insets[1], f._insets[2], f._insets[3], f._insets[4]
       local l, b, w, h = f:GetRect()

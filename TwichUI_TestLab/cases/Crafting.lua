@@ -35,17 +35,21 @@ local function RowsText(rows)
 end
 
 ---------------------------------------------------------------------------
--- Held counts that are not counts. Materials.Rows and Stock.Craft each guard the bag count they are handed with `h ~= h or h < 0` (a NaN or
--- a negative is "unknown", never a count). Their input is the game's item count (Observe.BagCount, which has the same guard) or nil, so a NaN
--- is not expected; this feeds one anyway, with explicit inputs, to record how the guard behaves in THIS client (where a NaN compares oddly:
--- client.lua.nan-comparisons). A positive infinity passes the guard on desktop Lua as well; it is reported, not asserted.
+-- Held counts that are not counts. Materials.Rows and Stock.Craft judge the bag count they are handed with W.Count (a whole number from 0, finite
+-- decided without a comparison): anything else is "unknown", never a count, and never makes a craft ready. Their input is the game's item
+-- count (Observe.BagCount, the same boundary) or nil. This feeds malformed values anyway, with explicit inputs, and ASSERTS every one is unknown.
+-- History: the first client run (Forever 1.60.1 build 70888) showed `numeric.held.inf=have inf short 0 craft ready`: the old guard
+-- `h ~= h or h < 0` let a positive infinity through on desktop Lua as well. M6.1 replaced it.
 ---------------------------------------------------------------------------
 Pure("numeric.guards.held-counts", function(t)
     local W = t.W
     local zero = 0
     local nan = zero / zero
     local forms = { { "nan", nan, true }, { "nan-literal", 0 / 0, true }, { "nan-negated", -nan, true }, { "string", "5", true }, { "negative", -1, true },
-        { "-inf", -math.huge, true }, { "inf", math.huge }, { "negative-zero", -0 }, { "zero", 0 }, { "five", 5 } }
+        { "-inf", -math.huge, true }, { "inf", math.huge, true }, { "inf-minus-inf", math.huge - math.huge, true },
+        { "fraction", 2.5, true }, { "fraction-small", 0.5, true }, { "over-limit", 2 ^ 31, true }, { "huge", 1e300, true },
+        { "boolean", true, true }, { "table", {}, true },
+        { "negative-zero", -0 }, { "zero", 0 }, { "five", 5 }, { "limit", 2147483647 } }
     local mats = { { item = 1001, qty = 3 } }
     local entries = { { crafts = 1, mats = mats } }
     for _, f in ipairs(forms) do
@@ -60,11 +64,20 @@ Pure("numeric.guards.held-counts", function(t)
         end
         if f[1] == "five" then
             t:Same(row.have, 5, "an ordinary count is kept"); t:Same(row.short, 0, "and covers a need of 3"); t:Same(craft.state, "ready", "so the craft is ready")
+        elseif f[1] == "limit" then
+            t:Same(row.have, 2147483647, "the largest accepted count is kept"); t:Same(craft.state, "ready", "and a craft is ready")
         elseif f[1] == "zero" or f[1] == "negative-zero" then
             t:Same(row.short, 3, f[1] .. ": nothing held leaves the whole need short"); t:Same(craft.state, "short", f[1] .. ": and the craft is short")
         end
     end
-    t:Note("inputs are made-up; production sees only the game's item counts. The same guard in Observe.BagCount is not called here because it reads the game's C_Item.")
+    -- unknown must not become zero: a nil count leaves short nil (not the whole need), and the summary is "partial"
+    local _, sum = W.Materials.Rows(entries, function() return math.huge end)
+    t:Same(sum.state, "partial", "an infinite count leaves the summary partial (unknown), not short and not ready")
+    t:Same(sum.unknownItems, 1, "and counts the item as unknown")
+    -- the bank and guild bank stay separate: an invalid bag count does not hide what the bank holds
+    local rows = W.Materials.Rows(entries, function() return math.huge end, function() return 2, 1 end)
+    t:Check(rows[1].have == nil and rows[1].short == nil and rows[1].fromBank == nil, "stock counts are not applied to an unknown bag count")
+    t:Note("inputs are made-up; production sees only the game's item counts. The same boundary in Observe.BagCount (W.Count) is not called here because it reads the game's C_Item; tests/test_workshop_stock_counts.lua calls it with a stand-in.")
 end)
 
 ---------------------------------------------------------------------------

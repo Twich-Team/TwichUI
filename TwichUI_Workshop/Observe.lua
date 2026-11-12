@@ -207,9 +207,8 @@ function O.BagCount(item)
     local f = C_Item and C_Item.GetItemCount
     if not f then return nil end
     local ok, n = pcall(f, item)
-    n = ok and Plain(n) or nil
-    if type(n) ~= "number" or n ~= n or n < 0 then return nil end
-    return n
+    if not ok then return nil end
+    return W.Count(n)   -- a whole number from 0, or nil: a NaN, an infinity, a fraction or a negative is "unknown", never a count
 end
 
 -- name, icon (either may be nil while the game loads the item; it is asked once per call and GET_ITEM_INFO_RECEIVED follows)

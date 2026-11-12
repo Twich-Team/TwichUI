@@ -33,6 +33,13 @@ FX.LIMITS = { records = 5000, items = 200, tiers = 8, scans = 400, markets = 6,
 
 local floor = math.floor
 
+-- Is v a finite number? Decided from the printed form, WITHOUT comparing it (a NaN compares as equal to itself and to 0 in the client, so
+-- `v ~= v` accepts one there; same rule as W.Finite and REF.Finite, written here because this file loads first).
+local function Finite(v)
+    if type(v) ~= "number" then return false end
+    return tostring(v):find("^[%d%.eE%+%-]+$") ~= nil
+end
+
 ---------------------------------------------------------------------------
 -- The generator
 ---------------------------------------------------------------------------
@@ -41,7 +48,7 @@ Rng.__index = Rng
 
 -- a seed as a whole number below 2^52 (a NaN, infinity or non-number is 0); the same rule for the generator and for anything printed from a seed
 local function Whole(seed)
-    if type(seed) ~= "number" or seed ~= seed or seed == math.huge or seed == -math.huge then seed = 0 end
+    if not Finite(seed) then seed = 0 end
     return math.abs(floor(seed)) % 4503599627370496   -- 2^52
 end
 
@@ -80,12 +87,12 @@ function Rng:Shuffle(list)
 end
 
 local function Clamp(v, lo, hi, default)
-    if type(v) ~= "number" or v ~= v then return default end
+    if not Finite(v) then return default end
     return math.max(lo, math.min(hi, floor(v)))
 end
 
 local function Rate(v, default)
-    if type(v) ~= "number" or v ~= v then return default end
+    if not Finite(v) then return default end
     return math.max(0, math.min(1, v))
 end
 

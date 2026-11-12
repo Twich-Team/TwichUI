@@ -9,8 +9,14 @@
 -- geometry (strata, level, hit rectangle, insets, clipping, other frames over it) says whether the pointer REACHES it.
 --
 -- What the geometry assumes (a model, not a fact about the client; docs/testlab.md "Reachability"):
---   * a frame takes the pointer when it is visible, mouse enabled, and the point is inside its hit rectangle (its rectangle less
---     SetHitRectInsets); for a click it must also be click enabled and not propagate clicks, for hover motion enabled;
+--   * a frame takes the pointer when it is visible, the point is inside its hit rectangle (its rectangle less SetHitRectInsets) and the
+--     operation is enabled ON ITS OWN: a click needs IsMouseClickEnabled, hover IsMouseMotionEnabled. IsMouseEnabled is NOT consulted when those
+--     answer (OBSERVED, Forever 1.60.1 build 70888: a frame can read mouse false, click true, motion false, and the reverse; the aggregate looks
+--     like "both", not "either"). Only a client without the separate methods falls back to it, and then conservatively (off means not eligible);
+--   * a frame that propagates clicks hands the click to what is under it: it does not block a click. OBSERVED once: ONE mouse-enabled upper
+--     frame with SetPropagateMouseClicks(true) over a Button, GetMouseFoci naming the upper frame first, the Button's OnClick ran. That is all
+--     that is known: one propagating frame is reported "reachable, through propagation"; two or more are reported unknown, not assumed to pass;
+--     a frame whose propagation cannot be read is unknown too, never assumed not to propagate (see RC.Propagates);
 --   * the topmost is the highest strata, then frame level; a descendant is above its ancestor on a tie; any other tie is reported as
 --     ambiguous, never decided (the client's order for equal strata and level is not known);
 --   * a ScrollFrame, or a frame that clips children, hides the part of its descendants outside its rectangle from the pointer.
@@ -54,7 +60,42 @@ local function Bool(obj, method)
     return v
 end
 
-local function Num(v) return type(v) == "number" and v == v and v > -1e12 and v < 1e12 end
+-- A geometry number: finite and of a sane size. Finiteness is decided from the printed form FIRST, without a comparison (as W.Finite does in the
+-- Workshop): in the client a NaN compares equal to itself and is both less and greater than ordinary numbers, so `v == v and v > -1e12` accepts
+-- one there. The bound then rejects an infinity. Geometry is compared with a tolerance elsewhere (read-backs carry floating point noise).
+local function Num(v)
+    if type(v) ~= "number" then return false end
+    if tostring(v):find("^[%d%.eE%+%-]+$") == nil then return false end
+    return v > -1e12 and v < 1e12
+end
+RC.Num = Num
+
+-- Does this frame hand mouse clicks on to what is under it? true / false, or nil when the client cannot be asked. Forever's API documentation
+-- (SimpleScriptRegionAPIDocumentation.lua) lists SetPropagateMouseClicks and CanPropagateMouseClicks and NO GetPropagateMouseClicks; the Lab used
+-- the latter, which this client does not have, read "no answer" as "does not propagate", and so called a propagating overlay a blocker. Both names
+-- are tried, the documented one first; that Can... reports the current setting is read from its name and checked by api.click.overlap, which
+-- records this reader's answer next to what the click did (`propagate_readback`). Neither answering is UNKNOWN, never false.
+RC.PROPAGATE_METHODS = { "CanPropagateMouseClicks", "GetPropagateMouseClicks" }
+function RC.Propagates(fr)
+    for _, method in ipairs(RC.PROPAGATE_METHODS) do
+        local v = Bool(fr, method)
+        if v ~= nil then return v, method end
+    end
+    return nil
+end
+
+-- click, motion: whether the frame takes that input, from the two separate methods; a method the frame does not have falls back to
+-- IsMouseEnabled (an older client), where off means off. nil when nothing answered. Not the same question as "is the mouse enabled".
+local function MouseFlags(fr)
+    local c, cs = Bool(fr, "IsMouseClickEnabled")
+    local m, ms = Bool(fr, "IsMouseMotionEnabled")
+    if (c == nil and cs == "missing") or (m == nil and ms == "missing") then
+        local agg = Bool(fr, "IsMouseEnabled")
+        if c == nil and cs == "missing" then c = agg end
+        if m == nil and ms == "missing" then m = agg end
+    end
+    return c, m
+end
 
 local function Parent(frame)
     local ok, p = Call(frame, "GetParent")
@@ -210,17 +251,24 @@ function RC.Eligibility(frame, kind, opts)
     if enabled == false then No("disabled", "the control is disabled")
     elseif enabled == nil and enStatus ~= "missing" then Unknown("IsEnabled: " .. tostring(enWhy)) end   -- a plain Frame has no IsEnabled: not applicable
 
-    local mouse, _, mouseWhy = Bool(frame, "IsMouseEnabled")
+    -- The operation under test decides, not the aggregate: a click needs click input, hover needs motion input. IsMouseEnabled is recorded for
+    -- the report and used only when the frame has no separate method (an older client), where "off" is conservatively "not eligible".
+    local mouse = Bool(frame, "IsMouseEnabled")
     e.state.mouse = mouse
-    if mouse == nil then Unknown("IsMouseEnabled: " .. tostring(mouseWhy))
-    elseif mouse == false then No("mouse-disabled", "mouse input is off (EnableMouse)")
-    else
-        local method, code, flag = "IsMouseClickEnabled", "click-disabled", "click"
-        if kind == "hover" then method, code, flag = "IsMouseMotionEnabled", "motion-disabled", "motion" end
-        local on, st, w3 = Bool(frame, method)
-        e.state[flag] = on
-        if on == false then No(code, flag == "click" and "mouse clicks are off (SetMouseClickEnabled)" or "mouse motion is off (SetMouseMotionEnabled)")
-        elseif on == nil and st ~= "missing" then Unknown(method .. ": " .. tostring(w3)) end   -- an older client may not have it: not applicable
+    local method, code, flag = "IsMouseClickEnabled", "click-disabled", "click"
+    if kind == "hover" then method, code, flag = "IsMouseMotionEnabled", "motion-disabled", "motion" end
+    local on, st, w3 = Bool(frame, method)
+    e.state[flag] = on
+    local otherOn = Bool(frame, flag == "click" and "IsMouseMotionEnabled" or "IsMouseClickEnabled")
+    e.state[flag == "click" and "motion" or "click"] = otherOn
+    if on == nil and st == "missing" then   -- no separate method: the aggregate is all there is
+        if mouse == nil then Unknown(method .. " is missing and IsMouseEnabled gave no answer")
+        elseif mouse == false then No("mouse-disabled", "mouse input is off (EnableMouse), and this frame cannot say click and motion apart")
+        else e.state.fallback = "IsMouseEnabled" end
+    elseif on == nil then Unknown(method .. ": " .. tostring(w3))
+    elseif on == false then
+        if otherOn == false then No("mouse-disabled", "mouse input is off (EnableMouse)")
+        else No(code, flag == "click" and "mouse clicks are off (SetMouseClickEnabled)" or "mouse motion is off (SetMouseMotionEnabled)") end
     end
 
     local script = opts.script or SCRIPTS[kind]   -- opts.script: a frame that is not a Button is clicked through OnMouseUp, say
@@ -257,16 +305,17 @@ RC.BUDGET = 0.0015   -- seconds of scanning between yields when a clock is given
 RC.CHECK = 32        -- frames between two clock reads
 
 local function Entry(fr, order)
-    if Bool(fr, "IsMouseEnabled") ~= true then return nil, "passive" end   -- the cheap question first: most frames take no pointer
+    local click, motion = MouseFlags(fr)   -- a frame may take clicks and not motion, or the reverse: IsMouseEnabled alone cannot say
+    if click ~= true and motion ~= true then return nil, "passive" end   -- the cheap question first: most frames take no pointer
     if Bool(fr, "IsVisible") ~= true then return nil, "hidden" end
     local hr = RC.HitRect(fr)
     if not hr then return nil, "passive" end
     local okS, strata = Call(fr, "GetFrameStrata")
     local okL, level = Call(fr, "GetFrameLevel")
-    local propagate = Bool(fr, "GetPropagateMouseClicks")
+    local propagate = RC.Propagates(fr)   -- true, false, or nil (cannot be read)
     return { frame = fr, order = order, hit = hr.hit, rect = hr.rect, insets = hr.insets, empty = hr.empty,
         strata = okS and RC.STRATA[strata] or 3, strataName = okS and tostring(strata) or "MEDIUM", level = okL and Num(level) and level or 0,
-        click = Bool(fr, "IsMouseClickEnabled") ~= false, motion = Bool(fr, "IsMouseMotionEnabled") ~= false, propagate = propagate == true }
+        click = click == true, motion = motion == true, propagate = propagate }
 end
 
 function RC.Collect(opts)
@@ -332,6 +381,7 @@ function RC.Describe(entryOrFrame, opts)
         level = okL and Num(level) and level or "?", chain = RC.Chain(fr, opts),
         shown = Bool(fr, "IsShown"), enabled = Bool(fr, "IsEnabled"), mouse = Bool(fr, "IsMouseEnabled"),
         click = Bool(fr, "IsMouseClickEnabled"), motion = Bool(fr, "IsMouseMotionEnabled") }
+    d.propagate = RC.Propagates(fr)
     if hr then d.rect, d.hit, d.insets = Rounded(hr.rect), Rounded(hr.hit), hr.insets end
     return d
 end
@@ -340,6 +390,7 @@ local function Flag(v) if v == nil then return "?" end return v and "on" or "off
 
 function RC.DescribeText(d)
     local s = ("%s [%s, %s level %s, mouse %s click %s motion %s"):format(d.label, d.type, d.strata, tostring(d.level), Flag(d.mouse), Flag(d.click), Flag(d.motion))
+    if d.propagate ~= false then s = s .. ", propagates clicks " .. Flag(d.propagate) end
     if d.hit then
         s = s .. (", hit rect x %d..%d y %d..%d"):format(d.hit[1], d.hit[3], d.hit[2], d.hit[4])
         local i = d.insets
@@ -368,8 +419,10 @@ end
 
 ---------------------------------------------------------------------------
 -- Analysis. Returns a result table:
---   verdict   reachable | ambiguous | blocked | clipped | outside | ineligible | unhittable
---   intended, chain, kind, evidence, eligibility, rect, hit, insets, point, pointSource, top, blocker, relation, stack, tie, text, notes
+--   verdict   reachable | ambiguous | blocked | clipped | outside | ineligible | unhittable | unknown
+--   via       "propagation" when the verdict is reachable only because ONE frame over the control passes the click on (propagator describes it);
+--             "unknown" is also given when a frame over the control cannot say whether it propagates, or several propagate (see the header)
+--   intended, chain, kind, evidence, eligibility, rect, hit, insets, point, pointSource, top, blocker, relation, stack, tie, via, propagator, text, notes
 -- opts: kind, point = { x, y } (screen units; default the centre of the hit rectangle), collected (a RC.Collect result), label,
 --       hasScript, evidence (a word the caller sets: "simulator-geometry", "offline-model", "client-geometry"), plus RC.Collect's options
 ---------------------------------------------------------------------------
@@ -396,6 +449,14 @@ local function Above(a, b)
     Prep(a); Prep(b)
     if a.depth ~= b.depth then return a.depth > b.depth end
     return a.order > b.order
+end
+
+-- Is `a` drawn above `b` by a rule the Lab claims (strata, then level, then a descendant above its ancestor)? Creation order is NOT such a rule,
+-- so two unrelated frames of equal strata and level outrank neither way.
+local function Outranks(a, b)
+    if a.strata ~= b.strata then return a.strata > b.strata end
+    if a.level ~= b.level then return a.level > b.level end
+    return Prep(a).anc[b.frame] == true
 end
 
 -- the first entry after `top` that is neither inside it nor above it, with the same strata and level: the order between them is unknown
@@ -443,10 +504,16 @@ function RC.Analyze(target, opts)
     local collected = opts.collected or RC.Collect(opts)
     res.scan = { scanned = collected.scanned, capturing = #collected.list, truncated = collected.truncated }
     local targetAnc = Ancestors(target)
-    local stack = {}
+    -- stack: frames that take THIS input and keep it. passers: click-capable frames that hand the click on (propagate true). maybe: click-capable
+    -- frames whose propagation cannot be read (they may take the click or pass it: unknown, never assumed either way). Hover ignores both.
+    local stack, passers, maybe = {}, {}, {}
     for _, c in ipairs(collected.list) do
-        local takes = c.frame == target or (kind == "click" and c.click and not c.propagate) or (kind == "hover" and c.motion)
-        if takes and not c.empty and Inside(c.hit, x, y) and not ClippedBy(c.frame, x, y) then stack[#stack + 1] = c end
+        local takes = c.frame == target or (kind == "click" and c.click) or (kind == "hover" and c.motion)
+        if takes and not c.empty and Inside(c.hit, x, y) and not ClippedBy(c.frame, x, y) then
+            if kind == "click" and c.frame ~= target and c.propagate == true then passers[#passers + 1] = c
+            elseif kind == "click" and c.frame ~= target and c.propagate == nil then maybe[#maybe + 1] = c
+            else stack[#stack + 1] = c end
+        end
     end
     table.sort(stack, Above)
     local top = stack[1]
@@ -475,6 +542,25 @@ function RC.Analyze(target, opts)
     elseif res.relation == "self" then
         res.verdict = res.tie and "ambiguous" or "reachable"
         if res.tie then res.why = "another frame ties with it on strata and level; the client's order for that is not known: " .. res.tie.label end
+        if kind == "click" then
+            -- frames over the control that are not decided by the stack: ones whose propagation cannot be read, and ones that pass the click on
+            local unsure, passing = nil, {}
+            for _, m in ipairs(maybe) do if not Outranks(top, m) then unsure = unsure or m end end
+            for _, p in ipairs(passers) do if Outranks(p, top) then passing[#passing + 1] = p end end
+            if unsure then
+                res.verdict, res.blocker = "unknown", RC.Describe(unsure, opts)
+                res.why = "a click-capable frame is over the control and whether it propagates clicks cannot be read (" .. table.concat(RC.PROPAGATE_METHODS, ", ")
+                    .. " gave no answer): it may take the click or pass it on"
+            elseif #passing >= 2 then
+                res.verdict = "unknown"
+                res.why = ("%d frames over the control propagate clicks; only one propagating frame has been observed to hand a click on, so passing through more is not assumed"):format(#passing)
+                res.propagator = RC.Describe(passing[1], opts)
+            elseif #passing == 1 then
+                res.via, res.propagator = "propagation", RC.Describe(passing[1], opts)
+                res.why = "the click reaches it through a frame over it that propagates clicks: " .. res.propagator.label
+                if res.tie then res.why = res.why .. "; also " .. res.tie.label .. " ties with it on strata and level (order unknown)" end
+            end
+        end
     elseif res.relation == "child" then
         res.verdict, res.blocker = "blocked", res.top
         res.why = "a child frame takes the pointer from the control"
@@ -490,11 +576,12 @@ end
 -- A result in words: what was intended, where the point was, what happened, who blocked it, the control's own state, the evidence class.
 function RC.Explain(res)
     local lines = {}
-    lines[#lines + 1] = ("%s %s on %s"):format(res.verdict and res.verdict:upper() or "?", res.kind, res.intended)
+    lines[#lines + 1] = ("%s%s %s on %s"):format(res.verdict and res.verdict:upper() or "?", res.via == "propagation" and " (through propagation)" or "", res.kind, res.intended)
     lines[#lines + 1] = "  hierarchy: " .. tostring(res.chain)
     if res.point then lines[#lines + 1] = ("  expected hit point: x %d y %d (%s)"):format(res.point[1], res.point[2], tostring(res.pointSource)) end
     if res.why then lines[#lines + 1] = "  why: " .. res.why end
     if res.blocker then lines[#lines + 1] = "  blocking frame: " .. RC.DescribeText(res.blocker) end
+    if res.propagator then lines[#lines + 1] = "  propagating frame: " .. RC.DescribeText(res.propagator) end
     if res.tie then lines[#lines + 1] = "  tied with: " .. RC.DescribeText(res.tie) end
     if res.top and res.relation == "self" then lines[#lines + 1] = "  topmost there: the control itself" end
     if res.hit then

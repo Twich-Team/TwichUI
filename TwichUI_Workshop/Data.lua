@@ -39,6 +39,13 @@ function W.Int(v, lo, hi)
     return v
 end
 
+-- A held item count (bags, bank, guild bank): a whole number from 0 up, or nil. Unknown stays nil and is never zero. This is THE boundary every
+-- count read from the game passes (Observe.BagCount) or is judged by (Materials.Rows, Stock.Craft): W.Int decides finiteness without a
+-- comparison, so a NaN, an infinity (either sign), a fraction, a negative, a secret value and a non-number are all "not a count" in every
+-- client. The old guard `n ~= n or n < 0` let a positive infinity through (it is not NaN and not negative) and, where a NaN compares oddly,
+-- depended on the interpreter. OBSERVED: Forever 1.60.1 build 70888 (Test Lab core report): numeric.held.inf made a craft "ready".
+function W.Count(v) return W.Int(v, 0, W.MAX_ID) end
+
 -- Cuts a string to at most `max` bytes without leaving half of a multi-byte character at the end
 local function Cut(s, max)
     if #s <= max then return s end

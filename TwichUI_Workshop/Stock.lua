@@ -126,8 +126,8 @@ function K.Craft(mats, have, view)
     if type(mats) ~= "table" or #mats == 0 then out.state = "unknown" return out end
     local collect = false
     for _, m in ipairs(mats) do
-        local h = have(m.item)
-        if type(h) ~= "number" or h ~= h or h < 0 then out.state = "unknown" return out end
+        local h = W.Count(have(m.item))   -- see Materials.Rows: anything but a whole number from 0 is unknown, never a count
+        if h == nil then out.state = "unknown" return out end
         local bank, guild = K.Counted(view, m.item)
         local b, k, g, rest = W.Split(m.qty, h, bank, guild)
         out.bags, out.bank, out.guild = out.bags + b, out.bank + k, out.guild + g

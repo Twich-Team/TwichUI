@@ -91,7 +91,7 @@ end)
 -- api.mouse.states
 ---------------------------------------------------------------------------
 local MOUSE_METHODS = { "EnableMouse", "EnableMouseMotion", "EnableMouseClicks", "SetMouseClickEnabled", "SetMouseMotionEnabled", "IsMouseEnabled",
-    "IsMouseClickEnabled", "IsMouseMotionEnabled", "SetPropagateMouseClicks", "GetPropagateMouseClicks", "SetHitRectInsets", "GetHitRectInsets", "Click", "Disable", "Enable" }
+    "IsMouseClickEnabled", "IsMouseMotionEnabled", "SetPropagateMouseClicks", "CanPropagateMouseClicks", "GetPropagateMouseClicks", "SetHitRectInsets", "GetHitRectInsets", "Click", "Disable", "Enable" }
 
 Own("api.mouse.states", function(t)
     NotInCombat(t)
@@ -401,7 +401,7 @@ local function ModelFor(target, targetPiece)
     elseif res.verdict == "blocked" then who = res.blocker and P.PieceByLabel(res.blocker.label) or "?"
     elseif res.verdict == "ambiguous" then who = "tie"
     else who = res.verdict end
-    return who, res.verdict
+    return who, res.verdict, res.via
 end
 
 local function Report(t, key, r, idx)
@@ -435,8 +435,11 @@ Guide("api.click.overlap", function(t)
         defs[i] = { id = m.id, name = m.name, note = m.note, mode = m.mode, unsupported = m.unsupported,
             setup = function() return P.Overlap(m.mode) end,
             after = function(res, sum)
-                local who, verdict = ModelFor(res.info.pieces.L, "L")
-                return { who = who, verdict = verdict }
+                local who, verdict, via = ModelFor(res.info.pieces.L, "L")
+                -- what the Lab's own reader says U's propagation is NOW (the arrangement is live): beside the click it is the check that
+                -- Can/GetPropagateMouseClicks reports the setting; "unreadable" is what the model treats as UNKNOWN, never as "no"
+                local value, method = RC.Propagates(res.info.pieces.U)
+                return { who = who, verdict = verdict, via = via, readback = value == nil and "unreadable" or (tostring(value) .. " via " .. tostring(method)) }
             end,
             lines = function(info)
                 local l = { "A lower BLUE Button (L) and an upper ORANGE frame (U) overlap in the middle of the screen. Click ONCE inside the white square, where they overlap.",
@@ -453,14 +456,16 @@ Guide("api.click.overlap", function(t)
         if r.sum and not r.notUsable then
             local s = r.sum
             local who, verdict = r.extra and r.extra.who, r.extra and r.extra.verdict
+            local via = r.extra and r.extra.via
             local reachable = verdict == "reachable"
             local ranL = Has(s.clicks, "L")
-            local agrees = verdict == "ambiguous" and "n/a (tie)" or ((reachable == ranL) and "yes" or "NO")
-            t:Fact(("api.overlap.%s.model"):format(d.id), ("%s%s"):format(tostring(verdict), who and verdict == "blocked" and (" by " .. who) or ""))
+            local agrees = (verdict == "ambiguous" and "n/a (tie)") or (verdict == "unknown" and "n/a (unknown)") or ((reachable == ranL) and "yes" or "NO")
+            t:Fact(("api.overlap.%s.model"):format(d.id), ("%s%s%s"):format(tostring(verdict), via and (" (through " .. via .. ")") or "", who and verdict == "blocked" and (" by " .. who) or ""))
+            t:Fact(("api.overlap.%s.propagate_readback"):format(d.id), r.extra and r.extra.readback or "unavailable")
             t:Fact(("api.overlap.%s.model_agrees_with_onclick"):format(d.id), agrees)
             t:Fact(("api.overlap.%s.foci_top_ran_onclick_or_up"):format(d.id), (s.foci[1] and (Has(s.clicks, s.foci[1]) or Has(s.ups, s.foci[1]))) and "yes" or "NO")
-            t:Note(("%s | %s | setters: %s | U now %s | model: %s%s | model vs OnClick on L: %s%s"):format(d.name, s.text, d.mode == "off" and "none" or tostring(r.info.text),
-                tostring(r.info.readback), tostring(verdict), who and verdict == "blocked" and (" by " .. who) or "", agrees,
+            t:Note(("%s | %s | setters: %s | U now %s | model: %s%s%s | model vs OnClick on L: %s%s"):format(d.name, s.text, d.mode == "off" and "none" or tostring(r.info.text),
+                tostring(r.info.readback), tostring(verdict), via and (" through " .. via) or "", who and verdict == "blocked" and (" by " .. who) or "", agrees,
                 r.choice and (" | you saw: " .. (r.choice == "U" and "orange on top" or (r.choice == "L" and "blue on top" or "could not tell"))) or ""))
             t:Check(#s.downs > 0 or #s.ups > 0 or #s.clicks > 0, d.name .. ": a Lab-owned frame received the press (if none did, the arrangement itself failed)")
             t:Check(s.hasFoci, d.name .. ": GetMouseFoci answered")

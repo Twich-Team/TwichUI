@@ -22,6 +22,7 @@ MKT = "test_workshop_market_reference.lua"
 CRF = "test_workshop_crafting_reference.lua"
 PRICES, HISTORY, MARKET = "TwichUI_Workshop/Prices.lua", "TwichUI_Workshop/History.lua", "TwichUI_Workshop/Market.lua"
 MATERIALS, STOCK, DATA = "TwichUI_Workshop/Materials.lua", "TwichUI_Workshop/Stock.lua", "TwichUI_Workshop/Data.lua"
+OBSERVE = "TwichUI_Workshop/Observe.lua"
 SHOPPING, VENDOR, OPPS = "TwichUI_Workshop/Shopping.lua", "TwichUI_Workshop/Vendor.lua", "TwichUI_Workshop/Opportunities.lua"
 
 # `--broad` re-runs a SURVIVOR against these older, broader Workshop tests to say whether anything else notices it (the mutation still counts as
@@ -179,8 +180,11 @@ m("crafting.materials.cycle-credited", MATERIALS, "if cyc[i] then", "if false th
   "recipes that depend on each other are credited as if they could start from nothing", [CRF])
 m("crafting.materials.credit-ignored", MATERIALS, "local _, k, g, rest = W.Split(math.max(0, n - (mk or 0)), h, bank, guild)", "local _, k, g, rest = W.Split(math.max(0, n), h, bank, guild)",
   "what queued crafts will make is not subtracted from what must be got", [CRF])
-m("crafting.materials.unreadable-bags-as-zero", MATERIALS, "if type(h) ~= \"number\" or h ~= h or h < 0 then h = nil end", "if type(h) ~= \"number\" or h ~= h or h < 0 then h = 0 end",
+m("crafting.materials.unreadable-bags-as-zero", MATERIALS, "local h = W.Count(have(item))", "local h = W.Count(have(item)) or 0",
   "bag counts that cannot be read are treated as an empty bag instead of unknown", [CRF], smoke=True)
+m("crafting.materials.count-old-guard", MATERIALS, "local h = W.Count(have(item))",
+  "local h = have(item); if type(h) ~= \"number\" or h ~= h or h < 0 then h = nil end",
+  "the bag count is judged by the old `h ~= h or h < 0` idiom again: a positive infinity (or a fraction) is accepted as a count and covers every need (client run 2026-11-12: numeric.held.inf)", [CRF], smoke=True)
 m("crafting.materials.unknown-recipe-uncounted", MATERIALS, "unknown = unknown + 1", "unknown = unknown",
   "a queued recipe with unknown materials is not counted as unknown", [CRF])
 m("crafting.materials.unknown-sorted-first", MATERIALS, "if row.short == nil then return 2 end", "if row.short == nil then return 0 end",
@@ -205,8 +209,20 @@ m("crafting.stock.guild-tabs-not-summed", STOCK, "g.counted[item] = (g.counted[i
   "an item held in several guild tabs is counted only for the last one", [CRF])
 m("crafting.stock.guild-policy-ignored", STOCK, "local g = view.guild.enabled and view.guild.counted[item] or 0", "local g = view.guild.counted[item] or 0",
   "guild bank materials are planned with although the player turned that off", [CRF], smoke=True)
-m("crafting.stock.craft-unreadable-bags-as-zero", STOCK, "if type(h) ~= \"number\" or h ~= h or h < 0 then out.state = \"unknown\" return out end", "if type(h) ~= \"number\" or h ~= h or h < 0 then h = 0 end",
+m("crafting.stock.craft-unreadable-bags-as-zero", STOCK, "if h == nil then out.state = \"unknown\" return out end", "if h == nil then h = 0 end",
   "a craft whose bag counts cannot be read is reported as short instead of unknown", [CRF])
+m("crafting.stock.craft-count-old-guard", STOCK, "local h = W.Count(have(m.item))",
+  "local h = have(m.item); if type(h) ~= \"number\" or h ~= h or h < 0 then h = nil end",
+  "a craft is judged with the old count guard again: an infinite bag count makes it ready", [CRF])
+m("crafting.observe.bagcount-old-guard", OBSERVE, "return W.Count(n)   -- a whole number from 0, or nil",
+  "if type(n) ~= \"number\" or n ~= n or n < 0 then return nil end return n   -- a whole number from 0, or nil",
+  "the game's item count is passed on with the old guard: an infinity or a fraction becomes a count", [CRF])
+m("crafting.data.count-zero-rejected", DATA, "function W.Count(v) return W.Int(v, 0, W.MAX_ID) end", "function W.Count(v) return W.Int(v, 1, W.MAX_ID) end",
+  "an empty bag (a count of 0) is called unknown instead of 0, so the whole need is not reported short", [CRF])
+m("crafting.data.count-negative-accepted", DATA, "function W.Count(v) return W.Int(v, 0, W.MAX_ID) end", "function W.Count(v) return W.Int(v, -1, W.MAX_ID) end",
+  "a negative count is accepted as a count", [CRF])
+m("crafting.data.count-unbounded", DATA, "function W.Count(v) return W.Int(v, 0, W.MAX_ID) end", "function W.Count(v) return W.Int(v, 0, 1e300) end",
+  "the upper bound on a count is lifted, so 1e300 reads as a number of items held", [CRF])
 m("crafting.stock.craft-guild-collect", STOCK, "if k + g > 0 then collect = true end", "if k > 0 then collect = true end",
   "a craft whose materials come from the guild bank is reported as ready", [CRF])
 
