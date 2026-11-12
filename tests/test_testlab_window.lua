@@ -337,7 +337,8 @@ do
   for _, id in ipairs(TL.categoryOrder) do
     n = n + 1
     Check(win.boxes[id] and win.entries[id], id .. " has a check and an entry")
-    Same(win.boxes[id]:GetChecked(), not TL.categories[id].guided, id .. " starts " .. (TL.categories[id].guided and "unticked" or "ticked"))
+    local optIn = TL.categories[id].guided or TL.categories[id].optin
+    Same(win.boxes[id]:GetChecked(), not optIn, id .. " starts " .. (optIn and "unticked" or "ticked"))
     Check(win.entries[id].catName.text == TL.categories[id].label, id .. " shows its own name")
   end
   local nBoxes = 0

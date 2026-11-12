@@ -75,7 +75,7 @@ function V.Categories()
     local out = {}
     for _, id in ipairs(TL.categoryOrder) do
         local cat = TL.categories[id]
-        out[#out + 1] = { id = id, label = cat.label, blurb = cat.blurb, guided = cat.guided, count = TL.Count(id) }
+        out[#out + 1] = { id = id, label = cat.label, blurb = cat.blurb, guided = cat.guided, optin = cat.optin, count = TL.Count(id) }
     end
     return out
 end

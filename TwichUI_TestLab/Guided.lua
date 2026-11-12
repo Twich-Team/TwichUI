@@ -10,6 +10,13 @@
 -- A request never clicks the target, writes nothing and listens to nothing: the sample is taken in the key's (or the button's) handler,
 -- once, and the case reads the finished snapshot. G.End releases everything and is called when the case ends, on Stop, on combat, on a
 -- closed window, on an error and on a timeout (Runner calls it), so no binding can outlive the run. G.Snapshot() says what is still live.
+--
+-- Two additions for the client API probes (milestone 6, cases/Api.lua):
+--   mode "click"   a request with NO key: the player clicks a Lab-owned test frame (Probe.lua) and the case reads what that frame recorded. The prompt
+--                  then shows only Skip and Cancel, and nothing is bound. The Lab never clicks anything itself; the player does, on Lab frames only.
+--   choices        up to three answer buttons on the prompt (G.Choice() reads the pick): what the player SEES (which colour is on top) cannot be read by code.
+--   G.BindingProbe a one-step, no-yield set / clear / set / clear of the same temporary binding, reading GetBindingAction between the calls. No key
+--                  press is involved and nothing can run between the calls; the binding is cleared on every path.
 
 local R = TwichUI
 local TL = R.TestLab
@@ -97,6 +104,13 @@ local function BuildPrompt()
     p.skip:SetPoint("LEFT", p.count, "RIGHT", 8, 0)
     p.cancel = Button("Cancel", 90, function() if TL.Runner then TL.Runner.Stop("user") end end)
     p.cancel:SetPoint("LEFT", p.skip, "RIGHT", 8, 0)
+    p.choiceBtns = {}
+    for i = 1, 3 do   -- the answer buttons (shown only when a request asks for them)
+        local b = Button("", 170, function() G.Pick(i) end)
+        b:SetPoint("BOTTOMLEFT", 14 + (i - 1) * 178, 78)
+        b:Hide()
+        p.choiceBtns[i] = b
+    end
     p:Hide()
     prompt = p
     return p
@@ -107,6 +121,7 @@ local function Say(text)
 end
 
 local function KeyText()
+    if state and state.mode == "click" then return nil end
     if boundKey then return ("Press %s (the pointer does not move)."):format(boundKey) end
     return ("No key is available (%s). Use \"Sample in %d s\", then move the pointer onto the target and leave it there."):format(state and state.keyWhy or "unknown", G.COUNTDOWN)
 end
@@ -117,8 +132,25 @@ local function Paint()
     prompt.title:SetText((state.title or "Pointer probe") .. (run and (" (case %d of %d)"):format(run.at, run.n) or ""))
     local lines = {}
     for i, line in ipairs(state.lines or {}) do lines[i] = i .. ". " .. line end
-    lines[#lines + 1] = (#lines + 1) .. ". " .. KeyText()
+    local keyLine = KeyText()
+    if keyLine then lines[#lines + 1] = (#lines + 1) .. ". " .. keyLine end
     prompt.body:SetText(table.concat(lines, "\n"))
+end
+
+-- Lays the prompt out for the request: a click request has no Sample buttons; answer buttons appear when the request has choices
+local function Layout()
+    local p = prompt
+    if not (p and state) then return end
+    local click = state.mode == "click"
+    if click then p.sample:Hide(); p.count:Hide() else p.sample:Show(); p.count:Show() end
+    p.skip:ClearAllPoints()
+    if click then p.skip:SetPoint("BOTTOMLEFT", 14, 10) else p.skip:SetPoint("LEFT", p.count, "RIGHT", 8, 0) end
+    local choices = state.choices
+    p:SetHeight(choices and 262 or 190)
+    for i, b in ipairs(p.choiceBtns) do
+        local c = choices and choices[i]
+        if c then b.text:SetText(c.label); b:Show() else b:Hide() end
+    end
 end
 
 ---------------------------------------------------------------------------
@@ -128,12 +160,16 @@ end
 -- Returns true, or false and why (the caller skips the case with that sentence).
 function G.Begin(req)
     if state then G.End("replaced") end
-    if type(req) ~= "table" or type(req.capture) ~= "function" then return false, "no capture function" end
+    if type(req) ~= "table" or (type(req.capture) ~= "function" and req.mode ~= "click") then return false, "no capture function" end
     if InCombat() then return false, "not during combat" end
-    state = { title = req.title, lines = req.lines, capture = req.capture, status = "waiting", attempts = 0, startedAt = Now() }
-    local ok, why = Bind(G.KEY)
-    if not ok then state.keyWhy = why end
+    state = { title = req.title, lines = req.lines, capture = req.capture, status = "waiting", attempts = 0, startedAt = Now(),
+        mode = req.mode == "click" and "click" or "key", choices = type(req.choices) == "table" and req.choices or nil }
+    if state.mode == "key" then
+        local ok, why = Bind(G.KEY)
+        if not ok then state.keyWhy = why end
+    end
     BuildPrompt():Show()
+    Layout()
     Paint()
     Say("Waiting for you.")
     return true
@@ -148,6 +184,7 @@ function G.Trigger(source)
     if not s or s.status ~= "waiting" then return false end
     s.countdownAt = nil
     s.attempts = s.attempts + 1
+    if type(s.capture) ~= "function" then return false end
     local ok, snap = pcall(s.capture, source, s.attempts)
     if not ok then
         s.status, s.err = "failed", tostring(snap)
@@ -168,6 +205,35 @@ function G.Retry(message)
     Say(("Not counted (%d of %d): %s"):format(s.attempts, G.MAX_ATTEMPTS, tostring(message)))
     return true
 end
+
+-- The prompt's status line, for a case that runs its own loop (a click request)
+function G.Say(text) Say(text) end
+
+-- An answer button was pressed (or a test pressed it): remembered until the case reads it. Ignored when the request has no such answer.
+function G.Pick(i)
+    local s = state
+    local c = s and s.choices and s.choices[i]
+    if not c then return false end
+    s.choice = c.id
+    Say("You answered: " .. tostring(c.label))
+    return true
+end
+function G.Choice() return state and state.choice or nil end
+
+-- The next step of a click request, in the same prompt: new title, lines, answer buttons and status; the request is waiting again (a step that
+-- was skipped is not carried over). False when no request is open.
+function G.Update(req)
+    local s = state
+    if not (s and type(req) == "table") then return false end
+    s.title, s.lines = req.title or s.title, req.lines or s.lines
+    s.choices = type(req.choices) == "table" and req.choices or nil
+    s.choice, s.status, s.sample, s.countdownAt = nil, "waiting", nil, nil
+    Layout()
+    Paint()
+    Say(req.status or "Waiting for you.")
+    return true
+end
+function G.ClearChoice() if state then state.choice = nil end end
 
 function G.StartCountdown()
     local s = state
@@ -200,6 +266,48 @@ function G.End()
     Unbind()
     if proxy then proxy:Hide() end
     if prompt then prompt:Hide() end
+end
+
+---------------------------------------------------------------------------
+-- The binding probe: can an override binding be made, cleared and made again out of combat, and what does the client say about the key in
+-- between? One step with no yield: no key can be pressed meanwhile, so nothing is ever routed to the proxy. Returns plain data:
+--   { key, refused, combat, before, bound, cleared, bound2, after, bindOk, rebindOk, ..., protectedOk }   (strings; "n/a" when the API is absent)
+-- `refused` is set (and nothing is attempted) in combat or while a guided request holds the key. The binding is cleared on every path.
+---------------------------------------------------------------------------
+function G.BindingProbe(key)
+    key = key or G.KEY
+    local obs = { key = key, combat = InCombat() }
+    if obs.combat then obs.refused = "in combat: nothing was attempted" return obs end
+    if state then obs.refused = "a guided request holds the key" return obs end
+    local function Action(k)
+        if type(GetBindingAction) ~= "function" then return "n/a" end
+        local ok, v = pcall(GetBindingAction, k, true)
+        if not ok then return "raised" end
+        return (tostring(v):gsub("[%c|]", " "))
+    end
+    local p = Proxy()
+    if C_RestrictedActions and type(C_RestrictedActions.CheckAllowProtectedFunctions) == "function" then
+        local ok, allowed = pcall(C_RestrictedActions.CheckAllowProtectedFunctions, p, true)
+        obs.protectedOk = ok and tostring(allowed) or "raised"
+    else
+        obs.protectedOk = "n/a"
+    end
+    obs.before = Action(key)
+    local ran, err = pcall(function()
+        local ok1, why1 = Bind(key)
+        obs.bindOk, obs.bindWhy = ok1, why1
+        obs.bound = Action(key)
+        Unbind(); p:Hide()
+        obs.cleared = Action(key)
+        local ok2, why2 = Bind(key)
+        obs.rebindOk, obs.rebindWhy = ok2, why2
+        obs.bound2 = Action(key)
+    end)
+    Unbind(); p:Hide()
+    obs.after = Action(key)
+    if not ran then obs.raised = tostring(err) end
+    obs.live = G.Snapshot()
+    return obs
 end
 
 -- What is still live (for the tests and the diagnostics): nothing, once a run is over.

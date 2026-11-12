@@ -35,6 +35,39 @@ local function RowsText(rows)
 end
 
 ---------------------------------------------------------------------------
+-- Held counts that are not counts. Materials.Rows and Stock.Craft each guard the bag count they are handed with `h ~= h or h < 0` (a NaN or
+-- a negative is "unknown", never a count). Their input is the game's item count (Observe.BagCount, which has the same guard) or nil, so a NaN
+-- is not expected; this feeds one anyway, with explicit inputs, to record how the guard behaves in THIS client (where a NaN compares oddly:
+-- client.lua.nan-comparisons). A positive infinity passes the guard on desktop Lua as well; it is reported, not asserted.
+---------------------------------------------------------------------------
+Pure("numeric.guards.held-counts", function(t)
+    local W = t.W
+    local zero = 0
+    local nan = zero / zero
+    local forms = { { "nan", nan, true }, { "nan-literal", 0 / 0, true }, { "nan-negated", -nan, true }, { "string", "5", true }, { "negative", -1, true },
+        { "-inf", -math.huge, true }, { "inf", math.huge }, { "negative-zero", -0 }, { "zero", 0 }, { "five", 5 } }
+    local mats = { { item = 1001, qty = 3 } }
+    local entries = { { crafts = 1, mats = mats } }
+    for _, f in ipairs(forms) do
+        local v = f[2]
+        local rows = W.Materials.Rows(entries, function() return v end)
+        local craft = W.Stock.Craft(mats, function() return v end, nil)
+        local row = rows[1]
+        t:Fact("numeric.held." .. f[1], ("have %s short %s craft %s"):format(tostring(row.have), tostring(row.short), tostring(craft.state)))
+        if f[3] then
+            t:Check(row.have == nil and row.short == nil, f[1] .. " as a bag count: Materials.Rows must call it unknown (have and short nil)")
+            t:Check(craft.state == "unknown", f[1] .. " as a bag count: Stock.Craft must call it unknown, never ready")
+        end
+        if f[1] == "five" then
+            t:Same(row.have, 5, "an ordinary count is kept"); t:Same(row.short, 0, "and covers a need of 3"); t:Same(craft.state, "ready", "so the craft is ready")
+        elseif f[1] == "zero" or f[1] == "negative-zero" then
+            t:Same(row.short, 3, f[1] .. ": nothing held leaves the whole need short"); t:Same(craft.state, "short", f[1] .. ": and the craft is short")
+        end
+    end
+    t:Note("inputs are made-up; production sees only the game's item counts. The same guard in Observe.BagCount is not called here because it reads the game's C_Item.")
+end)
+
+---------------------------------------------------------------------------
 -- Allocation and combined materials
 ---------------------------------------------------------------------------
 Pure("crafting.reference.allocation", function(t)

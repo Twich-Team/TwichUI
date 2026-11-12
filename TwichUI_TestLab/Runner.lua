@@ -5,7 +5,8 @@
 --   * a case that wants to share a frame calls t:Yield() at a safe point (t:Wait(seconds) is a pause across frames that costs nothing
 --     while it waits); a case that never yields runs to its end in one step, so cases that cannot yield are kept small;
 --   * every step is timed, and so is a case's setup (loading the Workshop on demand); one longer than a slice is counted as an OVERRUN and
---     reported with its case (it was never cut short);
+--     reported with its case (it was never cut short). The one-time Workshop load is also listed apart as SETUP, and a case's own time
+--     starts after it, so a calculation is never charged for the load that happened to come first;
 --   * a case that has not finished when its budget is spent is ABANDONED at a yield point (never resumed again), status "timeout";
 --     a step that overran its budget and then finished keeps its result and is reported as late;
 --   * Stop, the run cap and combat all work the same way: no further step is scheduled. The case that was waiting at a yield point is
@@ -43,11 +44,12 @@ end
 
 local function InCombat() return InCombatLockdown and InCombatLockdown() and true or false end
 
--- A guided case may hold a temporary key binding and a prompt (Guided.lua). Whatever ends a case or the run, they are released. Cleanup only:
--- it schedules nothing and never changes a case's result.
+-- A guided case may hold a temporary key binding and a prompt (Guided.lua); an owned or guided probe may hold test frames (Probe.lua). Whatever
+-- ends a case or the run, they are released. Cleanup only: it schedules nothing and never changes a case's result.
 local function ReleaseGuided()
-    local G = TL.Guided
+    local G, P = TL.Guided, TL.Probe
     if G and G.End then pcall(G.End) end
+    if P and P.Release then pcall(P.Release) end
 end
 
 ---------------------------------------------------------------------------
@@ -65,7 +67,7 @@ RN.Count = Count
 local function Summary(s, ended)
     local now = s.clock()
     return { results = s.results, counts = Count(s.results), cats = s.cats, seconds = now - s.startedAt, frames = s.frames, slices = s.slices,
-        worstSlice = s.worstSlice, worstFrame = s.worstFrame, overruns = s.overruns, overrunCount = s.overrunCount, ended = ended,
+        worstSlice = s.worstSlice, worstFrame = s.worstFrame, overruns = s.overruns, overrunCount = s.overrunCount, setups = s.setups, ended = ended,
         clock = RN.ClockName(), slice = s.slice, active = false }
 end
 
@@ -129,10 +131,17 @@ local function Begin(s)
     local case = s.list[s.i]
     r.status = "running"
     local W
+    s.lastSetup = nil
     if case.needs then
         for _, need in ipairs(case.needs) do
             if need == "workshop" then
-                local ws, why = TL.Workshop()
+                local loadStart = s.clock()
+                local ws, why, loadedNow = TL.Workshop()
+                if loadedNow then
+                    -- the one-time load is setup, not the case's work: it is listed apart (the case's own time starts after it)
+                    s.lastSetup = { id = case.id, ms = (s.clock() - loadStart) * 1000, what = "Workshop load" }
+                    if #s.setups < RN.MAX_OVERRUNS then s.setups[#s.setups + 1] = s.lastSetup end
+                end
                 if not ws then
                     r.status, r.detail = "skipped", why
                     return nil
@@ -146,10 +155,10 @@ local function Begin(s)
     return s.cur
 end
 
-local function Overrun(s, cur, dur)
+local function Overrun(s, cur, dur, setup)
     s.overrunCount = s.overrunCount + 1
     if #s.overruns < RN.MAX_OVERRUNS then
-        s.overruns[#s.overruns + 1] = { id = cur.case.id, ms = dur * 1000 }
+        s.overruns[#s.overruns + 1] = { id = cur.case.id, ms = dur * 1000, setup = setup and setup.what or nil }
     end
 end
 
@@ -244,7 +253,7 @@ local function OnUpdate(_, elapsed)
             local began = s.list[s.i + 1]
             cur = Begin(s)
             local dur = s.clock() - a
-            if dur > s.slice and began then Overrun(s, { case = began }, dur) end
+            if dur > s.slice and began then Overrun(s, { case = began }, dur, s.lastSetup) end
         end
         paused = false
         if cur then
@@ -282,7 +291,7 @@ function RN.Start(list, opts)
     end
     state = { list = list, results = results, i = 0, clock = clock, slice = opts.slice or RN.SLICE, cap = opts.cap or RN.RUN_CAP,
         onProgress = opts.onProgress, onDone = opts.onDone, cats = opts.cats or {}, startedAt = clock(), frames = 0, slices = 0,
-        worstSlice = 0, worstFrame = 0, overruns = {}, overrunCount = 0 }
+        worstSlice = 0, worstFrame = 0, overruns = {}, overrunCount = 0, setups = {} }
     frame:RegisterEvent("PLAYER_REGEN_DISABLED")
     frame:SetScript("OnUpdate", OnUpdate)
     return true

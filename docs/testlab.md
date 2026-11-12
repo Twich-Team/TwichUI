@@ -1,6 +1,6 @@
 # TwichUI Test Lab
 
-A **development-only** addon, `TwichUI_TestLab/`, that runs selected TwichUI code inside the real WoW: Forever client and produces a report you can copy. It is milestone 1 of `docs/workshop/testing-roadmap.md` (sections C, F, G); later milestones only add case files (milestone 2 added `Fixtures.lua`, `Reference.lua` and `cases/Market.lua`, below; milestone 5 added `Reach.lua`, `Guided.lua` and `cases/UI.lua`, see "Reachability and the pointer probe").
+A **development-only** addon, `TwichUI_TestLab/`, that runs selected TwichUI code inside the real WoW: Forever client and produces a report you can copy. It is milestone 1 of `docs/workshop/testing-roadmap.md` (sections C, F, G); later milestones only add case files (milestone 2 added `Fixtures.lua`, `Reference.lua` and `cases/Market.lua`, below; milestone 5 added `Reach.lua`, `Guided.lua` and `cases/UI.lua`, see "Reachability and the pointer probe"; milestone 6 added `Probe.lua` and `cases/Api.lua`, see "Client UI API probes").
 
 It is not a player feature. It is never packaged and never offered to players (see "Not in releases").
 
@@ -33,6 +33,8 @@ Nothing runs by itself: not at login, not at load, not on a timer.
 
 **Reachability and the pointer probe (milestone 5).** A working click handler does not prove a working button, so this category reads what the client does with the pointer. Section "Reachability and the pointer probe" below has the whole picture; `Reach.lua` is the analysis, `Guided.lua` the guided-case mechanism, `cases/UI.lua` the cases (`ui.pointer.api`, `ui.workshop.reach-scan`, and the three guided cases `ui.pointer.add-button`, `ui.pointer.opportunity-row`, `ui.pointer.row-picture`).
 
+**Client UI API probes (milestone 6).** Two opt-in groups that measure how a few UI calls and input routes behave in the client, on frames the Lab makes itself: **Client UI API (own frames)** (`api`, four automatic `owned` cases) and **Client UI API (guided)** (`apiguided`, four guided cases). Neither is ticked for you and neither runs in an unqualified run. The section "Client UI API probes (milestone 6)" below has the cases, the steps, the safety guarantees and the findings table (to be filled in from real runs). `numeric.guards.held-counts` (core) and `client.lua.nan-guards` (client) are the read-only numeric audit cases of the same milestone (roadmap section H, M6).
+
 Evidence labels in the report: **client** = observed in this game client; **synthetic** = production code in the client's Lua on made-up data; **guided** = observed with the player's help (the pointer probe); **not run** = never started.
 
 The core cases' expected values were worked out by hand and are written beside each case in `cases/Core.lua`. If one fails, decide first whether the hand arithmetic or the code is wrong.
@@ -49,8 +51,10 @@ Every case declares a class, and the registry refuses a case without one.
 |---|---|
 | `pure` | Call production functions with explicit inputs only, on made-up data. |
 | `readonly` | Read live game state or real saved data. |
-| `guided` | Asks the player to put the pointer somewhere, then **reads** what the client reports (`GetMouseFoci`, rectangles, flags). Never clicks, writes or sends. The only input mechanism is the one temporary key binding described below. Its category is never ticked for the player, and an unqualified `TL.Select()` leaves it out. |
-| `owned` | Accepted by the registry, not used yet. |
+| `guided` | Asks the player to put the pointer somewhere, then **reads** what the client reports (`GetMouseFoci`, rectangles, flags). Never clicks, writes or sends. Its input is the one temporary key binding described below, or (milestone 6) a **click the player makes on a Lab-made test frame**, which the frame only counts. Its category is never ticked for the player, and an unqualified `TL.Select()` leaves it out. |
+
+**Opt-in groups.** `TL.Category{ optin = true }` (a guided group is always opt-in) means the group is unticked in the window and left out of `TL.Select()` with no argument; it runs only when chosen by name. The sidebar says "Builds its own test frames, so it is never ticked for you".
+| `owned` | Creates and changes **Lab-made probe frames only** (`Probe.lua`, named `TwichUITestLabProbe...`), out of combat, and reads what they report. Never a control of the Workshop or of any other addon, never a click on one. Its group is **opt-in** (below), and the Runner releases every probe frame when a case or the run ends. |
 
 Enforced:
 
@@ -78,7 +82,7 @@ Redesigned (2026-11-12) after the approved mockup, `docs/test-lab/lab-mockup.png
 
 **Empty states** each have a sentence: nothing chosen, nothing run yet, a filter or search that matches nothing (it names the search and the filter), no failures, no passes yet, a stopped run, every case skipped.
 
-**Guided runs.** The window is big, so it **steps aside** while a run that includes a guided group is going: its content is hidden and it takes no pointer, so the Workshop and the prompt at the top of the screen are not covered and the pointer cannot land on the Lab. It is still open (the run goes on), and it comes back when the run ends or is stopped, or by closing it, which ends the run as before. The prompt's title now says where the step stands (case *n* of *m*). Cancel on the prompt or **Stop** ends the run and removes the key as before.
+**Guided runs.** The window is big, so it **steps aside** while a run that includes a guided group (a pointer probe or a click probe) is going: its content is hidden and it takes no pointer, so the Workshop and the prompt at the top of the screen are not covered and the pointer cannot land on the Lab. It is still open (the run goes on), and it comes back when the run ends or is stopped, or by closing it, which ends the run as before. The prompt's title now says where the step stands (case *n* of *m*). Cancel on the prompt or **Stop** ends the run and removes the key as before.
 
 **A small screen.** The window is sized from the screen (at most 1280 by 780, at least 940 by 600) and scaled to fit by the core's `FitToScreen`. Below 1100 wide it narrows: a narrower sidebar without descriptions (they are tooltips), smaller buttons, and a table that drops the Message and then the Type column (the details panel has them). Cards use short labels and no mark when they are narrow. A window shorter than 680 gets a shorter report box.
 
@@ -121,10 +125,15 @@ labels: client = ... | synthetic = ... | guided = ... | not run = never started
 PASS    price.unit.round-up  synthetic 0.2 ms
 FAIL    market.trend.percent  synthetic 0.3 ms  negative percent: expected -33.4, got -33.3
 ...
+setup (one-time, before the case named; not part of that case's time, but part of the run's):
+  Workshop load  23.6 ms, before price.unit.round-up
 overruns (a step ran longer than the slice; it could not be interrupted):
   <case id>  <ms> ms in one step
+  <case id>  <ms> ms in one step (setup: Workshop load, not the case's own work)
 facts: client.api.GetTimePreciseSec=function client.lua.div_zero_value=inf ...
 ```
+
+**Setup is reported apart (milestone 6).** The one-time load of the Workshop for the first case that needs it is timed on its own and listed under `setup`; a case's own duration starts after it, so `price.unit.round-up` (or whichever case comes first) is no longer charged for the load. The load still counts in the run's total, in `worstSlice`, and as an overrun when it exceeds a slice (marked `(setup: ...)`): nothing is hidden, only labelled. The 23.6 ms step in the real-client report that prompted this is *probably* that load; the next report's `setup` line will say.
 
 `ended` is `complete`, `user`, `combat`, `cap` or `closed`. The report holds counts, case ids, the Lab's own messages and facts. Text that came from a case has control characters, item links and colour codes removed and is cut at 240 characters. It contains no character, realm, guild or account name, no chat, no item link and no saved value (the offline test uses a mock character and realm and checks they never appear).
 
@@ -141,6 +150,7 @@ facts: client.api.GetTimePreciseSec=function client.lua.div_zero_value=inf ...
 - The fingerprint cannot tell a case's change from the game's own in the same moment.
 - Facts are observations of one client at one moment.
 - **Numbers that are not numbers.** The client's Lua does not reject a NaN everywhere desktop Lua 5.1 does (the reference model accepted a NaN count by comparison, 2026-11-12). Pure code that must refuse a NaN should not rely on `v == v`; the model decides finiteness without a comparison (`REF.Finite`), and `client.lua.nan-comparisons` reports what this client does.
+- Milestone 6's probes (below) have run **offline against stand-in frames only**; nothing about the Forever client is claimed until you run them in the game and the findings table is filled in.
 - The Lab is not a benchmark tool and has no `/tui lab` command (an owner decision). The reachability cases (milestone 5) ran **offline, in the simulator and, once (2026-11-12), in the game**: the three guided cases passed (`GetMouseFoci` named the intended Workshop frame topmost in each); how the hover *looks* is still not tested.
 
 ## Real-client checks for initial acceptance
@@ -256,3 +266,85 @@ FAIL    ui.pointer.add-button  guided 4021.7 ms  the topmost frame under the poi
 - The simulator's `GetMouseFoci` returns only a frame a scenario forced with `A_Admin.SetMouseOverFrame`; it never works out a frame from a position. The simulator also stores a scroll frame's offset without moving its rows' rectangles. Both are recorded as checks in the scenario.
 - The geometry cannot say how the client orders frames of equal strata and level (it reports them ambiguous), and it does not model secure frames or mouse capture.
 - A hit-test miss in a scan is a pointer-level finding, not a diagnosis: the frame named as blocker is where to look.
+
+## Client UI API probes (milestone 6)
+
+**Why they exist.** The simulator and the offline tests assume how some UI calls behave (what `EnableMouse(false)` does to the click and motion flags, whether `Click()` runs a disabled button's script, which of two overlapping frames takes a real click, whether `SetHitRectInsets` changes the pointer's region). Those are guesses until the game answers. The probes ask it, on frames the Lab makes, and **record what it says**: a result is a fact about one client at one moment, a refused call is a recorded restriction (never retried another way), and no expected answer is built into the report.
+
+**What they are not.** Not a UI redesign, not an auction house tool, not a way to click anything of the Workshop or any other addon. Both groups are opt-in; nothing runs by itself.
+
+### The cases
+
+| Case | Group, class | Needs you | What it records |
+|---|---|---|---|
+| `api.binding.override` | own frames, `owned` | no | An override binding made for the Lab's own hidden button, cleared, made again and cleared, **out of combat, in one step with no yield** (so no key press can be routed meanwhile). `GetBindingAction(F9, true)` before, while bound, after clearing, bound again and after the final clear; whether each call was accepted; `C_RestrictedActions.CheckAllowProtectedFunctions` on the button. The combat answer is *read* (`protected_allowed`), never tried: the Lab does not start or continue in combat. |
+| `api.mouse.states` | own frames, `owned` | no | For a plain Frame and a Button: `IsMouseEnabled / IsMouseClickEnabled / IsMouseMotionEnabled` (+ shown, visible, enabled) after each way of switching input: a fresh frame (as it was when first made this session), `EnableMouse(true/false)`, motion only (by `EnableMouseMotion`, by `SetMouseMotionEnabled`, by turning clicks off), clicks only, both flags off, a `SetScript("OnEnter")` alone, hidden, and (Button) disabled and enabled again. Which of the method names exist (`EnableMouseClicks`, absent from the Forever API documentation, is *reported*, never assumed). Whether `IsMouseEnabled` agrees with "click or motion" in each step, which is what the reachability model relies on. |
+| `api.click.programmatic` | own frames, `owned` | no | What `Button:Click()` does to counters on `OnClick`, `PreClick` and `PostClick` for a visible and enabled button (the **control**: if it does not run, the other rows mean nothing and the case fails), disabled, hidden, mouse-disabled, click-disabled and shown-under-a-hidden-parent; the state at the moment of the call; whether `Click()` raised. **A programmatic Click is not a physical click** (the guided cases measure those). |
+| `api.hitrect.insets` | own frames, `owned` | no | `SetHitRectInsets` callable out of combat; `(0,0,0,0)`, asymmetric positive `(10,20,30,40)`, negative, mixed and degenerate values; what `GetHitRectInsets` reports back (asymmetric values show the order); the Lab's own hit-rectangle arithmetic against what the client reported. A refused or missing call is recorded as a restriction. The pointer's region is the guided case below. |
+| `api.binding.keypress` | guided, `guided` | **press F9 twice** | A real key press reaches a Lab-owned button while the binding is registered; the binding is cleared (`GetBindingAction`) and **registered again**, and a second press reaches it again. A press of the prompt's own buttons is not a key press and is asked again. |
+| `api.click.overlap` | guided, `guided` | **click 4 times, answer once** | A lower blue Button and an upper orange frame overlap; you click the white square where they meet. Four configurations of the upper frame: mouse off, mouse on, clicks off (motion on), `SetPropagateMouseClicks(true)` (skipped, with the reason, if the method is missing or refused). |
+| `api.order.equal-level` | guided, `guided` | **click 4 times, answer 4 times** | Two Buttons with the **same** strata and frame level overlap. You click where they meet in four arrangements: A created first and shown first; the same shown in the other order; B created first (the second pair of frames); each inside its own container. |
+| `api.hitrect.pointer` | guided, `guided` | **click 3 times** | A teal Button with insets `L70 R-50`: you click inside its paint but inside the removed strip, in the middle, and outside the paint inside the added strip. |
+
+### Three kinds of evidence for a click, never merged
+
+Each click scenario reports, separately and in the facts line: **`foci`** (the client's own `GetMouseFoci` stack at the first press, by piece name, top first, e.g. `U>L>back`), **`onclick`** and **`mouseup`** (the pieces whose `OnClick` / `OnMouseUp` actually ran; a plain Frame cannot have an `OnClick`), and **`visual`** (what **you** saw on top, answered with the buttons on the prompt, because code cannot read what is drawn). It also records whether the topmost focus is a frame that ran `OnClick` or `OnMouseUp` (`foci_top_ran_onclick_or_up`) and what the Lab's geometry model (`Reach.Analyze`, over just the arrangement's frames) predicted (`model`, `model_agrees_with_onclick`). **They are not assumed to be equal**; a difference is the finding.
+
+### How to run them in the game (steps)
+
+1. Copy `TwichUI_TestLab/` into the development client's `Interface/AddOns/` (as always) and `/reload`. Open the Lab (data bar menu, **Test Lab (development)...**, or `/tuilab`).
+2. **Automatic group.** Tick **Client UI API (own frames)** only and press **Run**. It finishes in a moment; nothing is asked of you. Copy the report (**Copy report**, Ctrl+C).
+3. **Guided group.** Tick **Client UI API (guided)** only and press **Run**. The Lab window steps aside; a prompt appears at the top of the screen and a dark **Test Lab probe area** in the middle of it. Do what the prompt says, one case at a time:
+   - **Key press (`api.binding.keypress`):** press **F9** when asked (do not click the prompt's buttons), then **F9** again for step 2.
+   - **Clicks:** click **once**, inside the white square, with the **left** button. A click outside the square is not counted and the prompt says how far off it was. When the prompt shows answer buttons, say which colour you see drawn on top inside the square (or "I can't tell").
+   - **Skip this step** skips one scenario and moves on; **Cancel** (or **Stop**, or closing the Lab) ends the run and removes everything.
+4. When the run ends the Lab window returns with the report. **Copy report**, paste it into the findings table below (or hand it over).
+5. Afterwards: F9 does whatever it did before (nothing is left bound), and no Lab frame is on screen.
+
+### Safety and cleanup guarantees
+
+- **Explicit action.** The groups are opt-in and run only when ticked by name. A guided case does nothing until you act; nothing runs at load, at login or on a timer.
+- **Ownership.** Every frame is made by `Probe.lua` and named `TwichUITestLabProbe<role>` (one per role for the whole session: the game cannot delete a frame, so a rerun reuses them, reset to a clean state). No frame of the Workshop, the auction house or any other addon is read for its state, changed, hooked or clicked by these cases.
+- **What a probe frame does.** Its handlers append a short record to a bounded list (at most 24 records per click) and nothing else: no send, save, hook, move, or protected action. The backdrop takes a click that no probe frame takes, so a probe click never reaches the 3D world. `Click()` only increments a counter.
+- **Key binding.** The only one is the existing temporary override binding in `Guided.lua` (one key, `F9`, for the Lab's own hidden 1 x 1 button, never `UIParent`, never saved: `SaveBindings` and `SetBinding*` are forbidden by the static scan). The automatic binding probe makes, clears, makes and clears it in a single step with no yield, so no press can be routed; the guided key probe holds it only while its prompt is open. Click requests bind no key.
+- **Released on every path.** `Runner` calls `Guided.End()` and `Probe.Release()` when a case ends, on Stop, on a closed window, on an error, on a timeout, on combat and at the end of the run. `Probe.Release()` hides every probe frame, takes their scripts and mouse off, puts hit-rectangle insets and propagation back and forgets the click trial; `Probe.Snapshot()` and `Guided.Snapshot()` say what is still live (nothing, afterwards). Tests check each route.
+- **Combat.** A run is refused in combat and stopped by `PLAYER_REGEN_DISABLED`; the probes never try a protected call in combat. A restriction the client *does* show out of combat (a call that raises, `HasRestrictions`, `IsProtected`) is recorded as an observed restriction and the probe goes on; it never tries a different route to get the same effect.
+- **Saved data.** Nothing is written. The runner's fingerprint of the saved roots brackets every case; a test checks `TwichUIDB` is deep-equal afterwards.
+- **Not in releases.** Unchanged: the Lab is excluded from packages (`.pkgmeta`, `tools/release.py`).
+
+### Source evidence from the Forever API documentation (documentation, not observation)
+
+Read from `wow-ui-source` (`forever`) `Blizzard_APIDocumentationGenerated`; these say what the documentation declares, **not** what the client does:
+
+- `EnableMouse`, `EnableMouseMotion`, `SetMouseClickEnabled`, `SetMouseMotionEnabled`, `SetHitRectInsets`, `SetFrameLevel` and `SetToplevel` are `IsProtectedFunction`; `SetPropagateMouseClicks` / `SetPropagateMouseMotion` / `SetPassThroughButtons` are also `HasRestrictions`. `GetHitRectInsets` is not protected. Whether "protected" bites an addon's own unprotected frame out of combat is exactly what `api.mouse.states` and `api.hitrect.insets` record.
+- There is no `EnableMouseClicks` in the documentation; the click flag's setter is `SetMouseClickEnabled`. The probes report the method's presence and never claim support.
+- `Button:Click` declares `ChecksForbiddenAspects = ScriptedInput` on `self`; Blizzard's own slash-command code checks `HasAccessConstraints()` and `HasAnyForbiddenAspects(ScriptedInput)` before clicking a button. The Lab's button has none (`api.click.has_access_constraints` reports it).
+- `C_RestrictedActions.CheckAllowProtectedFunctions(object, silent)` returns whether the calling context may call protected functions on the object; the probes use it (silent) as the safe observation of "would a protected call be allowed here".
+- `SetOverrideBindingClick`, `ClearOverrideBindings` and `GetBindingAction` are not in the generated documentation files; `GetBindingAction(key, checkOverride)` is used by Blizzard's own UI (`Blizzard_Keybindings`, `CoinPickupFrame`).
+
+### Client-API findings (fill in from real runs)
+
+Nothing below has been observed yet. Each row is updated from a copied report, with the client version, the date and the case. "Model" rows compare the Lab's assumption in `Reach.lua` with what was observed; **if they differ, the model is not changed by running the probe**: record the discrepancy and open a narrow follow-up.
+
+| Question | Case, fact keys | Observed (client, date) | Reach model assumes | Agrees? |
+|---|---|---|---|---|
+| Can an override binding be made and cleared out of combat from addon code? | `api.binding.override` `bind_ok`, `action_*` | not yet observed | yes (M5 used it once) | - |
+| Does a real key press reach the Lab's button, again after clear and re-register? | `api.binding.keypress` `first`, `second` | not yet observed | yes | - |
+| Is the binding API restricted in combat? | `api.binding.override` `protected_allowed` (read, not tried) | not yet observed | refused in combat | - |
+| `EnableMouse(false)` and the click/motion flags | `api.mouse.states` `enable-false`, `flags_consistent` | not yet observed | all three read false | - |
+| Motion only / clicks only: which calls produce them | `api.mouse.states` `motion-only-*`, `clicks-only-*` | not yet observed | flags are independent | - |
+| A script alone (`SetScript("OnEnter")`) and the mouse | `api.mouse.states` `script-only` | not yet observed | does not enable the mouse | - |
+| Hidden and disabled frames' flags | `api.mouse.states` `hidden`, `disabled` | not yet observed | flags unchanged, ineligible for other reasons | - |
+| Does `EnableMouseClicks` exist? | `api.mouse.method.EnableMouseClicks` | not yet observed | not used | - |
+| `Click()` on a disabled / hidden / mouse-off / click-off / parent-hidden button | `api.click.*` | not yet observed | (not modelled; `Press` refuses) | - |
+| A mouse-enabled upper frame: who gets a real click | `api.click.overlap` `mouse-on` | not yet observed | the upper frame blocks | - |
+| Upper frame with clicks off | `api.click.overlap` `clicks-off` | not yet observed | does not block a click | - |
+| Upper frame propagating clicks | `api.click.overlap` `propagate` | not yet observed | does not block a click | - |
+| Equal strata and level: what decides the top frame | `api.order.*`, `observation` | not yet observed | unknown (reported **ambiguous**; unchanged whatever is found) | - |
+| `SetHitRectInsets`: callable out of combat, values accepted, read-back | `api.hitrect.insets` | not yet observed | accepted | - |
+| Does the pointer's region follow the insets? | `api.hitrect.pointer` | not yet observed | yes (hit rectangle = rectangle less insets) | - |
+| Do `GetMouseFoci`, `OnClick` and what you saw agree? | every click scenario (`foci_top_ran_onclick_or_up`, `visual_equals_foci`) | not yet observed | not assumed | - |
+
+### Offline tests
+
+`tests/test_testlab_api.lua` (stand-in frames that answer the way each test says, several different ways on purpose): registration, safety classes and opt-in; the mouse-state matrix (and a client without the newer methods, and one whose `IsMouseEnabled` disagrees); the click counters (a lenient, a strict, a broken and a raising `Click`); the hit-rectangle round trip (rounding, refusal, missing method); the binding probe (combat, a held key, no API, a raising call, `GetBindingAction` missing or raising, and `TwichUIDB` unchanged); release on error, normal end without cleanup, Stop, timeout, combat and a closed window; the click trial (bounded, outside the square, finished after a quiet moment); the guided flows (a button press is not a key press, Skip, Cancel, combat, timeout, unsupported methods, answers kept apart from `GetMouseFoci` and `OnClick`, the equal-level observation under three different stand-in clients, the hit-rectangle model disagreeing with the pointer); and that no fact is cut at 60 characters. **They assert no Forever behaviour**: they prove the probes measure and report whatever the frames did and clean up. Hand-made defects were checked against them (release dropped, trial kept, clear dropped, `ups` counted as clicks, key requirement dropped, outside-square clicks counted, opt-in dropped, inset reset dropped, mouse not turned off, control dropped): all killed.

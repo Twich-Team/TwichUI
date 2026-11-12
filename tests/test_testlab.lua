@@ -308,6 +308,20 @@ do
   Same(done.overrunCount, 1, "and the load is an overrun, not unaccounted time")
   Same(done.overruns[1].id, "needs.workshop", "named after the case that needed it")
   Check(done.overruns[1].ms >= 29, "with its measured length")
+  -- the one-time load is listed apart as setup, and is not charged to the case's own time (milestone 6)
+  Same(#done.setups, 1, "the load is listed as setup")
+  Same(done.setups[1].id, "needs.workshop"); Same(done.setups[1].what, "Workshop load"); Check(done.setups[1].ms >= 29)
+  Same(done.overruns[1].setup, "Workshop load", "the overrun says it is setup, not the case's own work")
+  Check(done.results[1].ms < 5, "the case's own time does not include the load (" .. tostring(done.results[1].ms) .. " ms)")
+  Check(done.results[1].status == "pass")
+  local text = TL.Report.Build(done)
+  Check(text:find("setup (one-time, before the case named;", 1, true) and text:find("Workshop load  3%d%.%d ms, before needs.workshop"), "the report lists it: " .. text)
+  Check(text:find("(setup: Workshop load, not the case's own work)", 1, true), "and marks the overrun as setup")
+  -- a second case needing the Workshop, already loaded, adds no setup
+  local again
+  Check(RN.Start(TL.Select(), { cats = { "s" }, clock = t.Now, onDone = function(s) again = s end }))
+  Drive(RN)
+  Same(#again.setups, 0, "once loaded, no setup is listed")
 end
 
 ---------------------------------------------------------------------------
@@ -561,13 +575,17 @@ do
   Check(lines[4]:find("^clock: GetTimePreciseSec | slice 5 ms | cooperative"), lines[4])
   Check(lines[5]:find("^labels: client = observed in this game client | synthetic ="), lines[5])
   local n = #done.results
-  Same(#lines, 5 + n + 1, "five header lines, one line per case, one facts line")
+  local noteLines = 0
+  for _, r in ipairs(done.results) do noteLines = noteLines + #(r.notes or {}) end
+  Same(#lines, 5 + n + noteLines + 1, "five header lines, one line per case and per evidence note, one facts line")
   Check(lines[6]:find("^PASS    price%.unit%.round%-up  synthetic %d+%.%d ms$"), lines[6])
   local client = 0
-  for i = 6, 5 + n do
+  for i = 6, 5 + n + noteLines do
     local l = lines[i]
-    Check(l:find("^PASS    [%w%.%-]+  %a+ +[%d%.]+ ms"), "line format: " .. l)
-    if l:find("^PASS    client%.") then client = client + 1; Check(l:find(" client "), "client cases are labelled client: " .. l) end
+    if not l:find("^        ") then   -- an evidence note is indented under its case
+      Check(l:find("^PASS    [%w%.%-]+  %a+ +[%d%.]+ ms"), "line format: " .. l)
+      if l:find("^PASS    client%.") then client = client + 1; Check(l:find(" client "), "client cases are labelled client: " .. l) end
+    end
   end
   Check(client >= 4, "the client cases are in the report (" .. client .. ")")
   Check(lines[#lines]:find("^facts: client%.api%.C_AddOnProfiler=nil client%.api%.EnumerateFrames=nil"), lines[#lines])
@@ -668,7 +686,7 @@ do
   local p = io.popen('find "' .. LAB .. '" -name "*.lua" | sort')
   for path in p:lines() do files[#files + 1] = path end
   p:close()
-  Check(#files == 15, "the scan found the Lab's files (" .. #files .. ")")
+  Check(#files == 17, "the scan found the Lab's files (" .. #files .. ")")
   -- every file the .toc loads is scanned, and nothing is loaded that is not
   local scanned = {}
   for _, path in ipairs(files) do scanned[path:sub(#LAB + 1)] = true end

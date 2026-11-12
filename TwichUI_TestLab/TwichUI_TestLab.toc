@@ -20,6 +20,8 @@ View.lua
 Reach.lua
 # The guided-case mechanism: one temporary key binding, a small prompt, released when a case or the run ends
 Guided.lua
+# Lab-owned probe frames and the click arrangement of the client API probes (released when a case or the run ends)
+Probe.lua
 # Deterministic synthetic market data and the independent reference models (also loaded by tests/test_workshop_market_reference.lua)
 Fixtures.lua
 Reference.lua
@@ -29,6 +31,7 @@ cases\Market.lua
 cases\Crafting.lua
 cases\Client.lua
 cases\UI.lua
+cases\Api.lua
 # The window's controls, then the window (last: it opens once when the addon loads and registers /tuilab)
 Kit.lua
 Window.lua

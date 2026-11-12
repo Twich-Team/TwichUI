@@ -57,6 +57,35 @@ Read("client.lua.nan-comparisons", function(t)
     end
 end)
 
+-- The NaN guard idioms the code base uses, asked of every kind of malformed number, in THIS client. What is ASSERTED is only that every idiom
+-- accepts an ordinary number and that the comparison-free test (REF.Finite) rejects every NaN and infinity; what the others do with a NaN is
+-- REPORTED (A accepted the value, R rejected it), because it depends on how this client compares a NaN (client.lua.nan-comparisons).
+-- Production sites: the count guard is Observe.BagCount, Stock.Craft and Materials.Rows (their inputs are the game's item counts or a nil);
+-- Reach.Num guards frame geometry in the Lab itself; the fixtures' idiom is Fixtures.lua Clamp/Rate/Whole. docs/workshop/testing-roadmap.md M6
+-- has the audit table (where each input comes from and whether it can be malformed).
+Read("client.lua.nan-guards", function(t)
+    local REF = TL.Reference
+    local zero = 0
+    local runtime = zero / zero
+    local forms = { { "nan", runtime }, { "lit", 0 / 0 }, { "neg", -runtime }, { "inf", math.huge }, { "-inf", -math.huge } }
+    local idioms = {
+        { "count_guard", "v ~= v or v < 0 rejects", function(v) return not (v ~= v or v < 0) end },
+        { "reach_num", "v == v and v > -1e12 and v < 1e12 accepts", function(v) return v == v and v > -1e12 and v < 1e12 end },
+        { "nan_only", "v ~= v rejects", function(v) return not (v ~= v) end },
+        { "ref_finite", "REF.Finite (no comparison)", REF and REF.Finite or function() return true end },
+    }
+    for _, idiom in ipairs(idioms) do
+        local parts = {}
+        for _, f in ipairs(forms) do parts[#parts + 1] = f[1] .. "=" .. (idiom[3](f[2]) and "A" or "R") end
+        t:Fact("client.nanguard." .. idiom[1], table.concat(parts, " "))
+        t:Check(idiom[3](5) and idiom[3](0) and idiom[3](99999999999), idiom[1] .. " accepts ordinary numbers")
+    end
+    if REF and REF.Finite then
+        for _, f in ipairs(forms) do t:Check(not REF.Finite(f[2]), "REF.Finite rejects " .. f[1]) end
+    end
+    t:Note("A = the idiom accepted the value, R = it rejected it. A NaN that an idiom accepts is a path to look at only if its input can be a NaN: see the audit table in docs/workshop/testing-roadmap.md (M6).")
+end)
+
 Read("client.lua.yield-across-pcall", function(t)
     -- The runner never yields inside a pcall, because stock Lua 5.1 refuses. This only reports what this client does.
     local co = coroutine.create(function() local ok = pcall(coroutine.yield) return ok end)

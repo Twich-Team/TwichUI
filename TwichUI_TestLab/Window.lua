@@ -596,7 +596,7 @@ local function BuildSide(top, bottom)
     local y = 0
     for _, cat in ipairs(V.Categories()) do
         local id = cat.id
-        chosen[id] = not cat.guided   -- a guided category asks things of the player: it is never ticked for them
+        chosen[id] = not (cat.guided or cat.optin)   -- a guided or opt-in category asks things of the player or builds test frames: it is never ticked for them
         local entry = CreateFrame("Button", nil, content)
         K.Hover(entry)
         entry:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
@@ -622,7 +622,8 @@ local function BuildSide(top, bottom)
         blurb:SetWordWrap(true)
         blurb:SetJustifyV("TOP")
         local text = cat.blurb:sub(1, 1):upper() .. cat.blurb:sub(2)
-        if cat.guided then text = (text ~= "" and (text .. " ") or "") .. "Asks for you, so it is never ticked for you." end
+        if cat.guided then text = (text ~= "" and (text .. " ") or "") .. "Asks for you, so it is never ticked for you."
+        elseif cat.optin then text = (text ~= "" and (text .. " ") or "") .. "Builds its own test frames, so it is never ticked for you." end
         blurb:SetText(text)
         local bh = blurb:GetStringHeight() or 0
         if bh < 1 then bh = math.ceil((#blurb:GetText() * 6.4) / (innerW - 44)) * 15 end

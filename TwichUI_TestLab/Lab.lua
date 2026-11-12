@@ -8,7 +8,8 @@
 --   class   what the case may do (the registry refuses a case without one):
 --             pure      calls production functions with EXPLICIT inputs only, on made-up data (never saved data, never the game)
 --             readonly  reads live game state or real saved data and must leave it unchanged (bracketed by TL.Fingerprint)
---             owned     creates and reuses Lab-owned frames only (not used yet)
+--             owned     creates and reuses Lab-owned frames only (Probe.lua): never a control of the player's UI, never a click on one. Its
+--                       category is opt-in (see TL.Category), and Runner releases every probe frame when a case or the run ends.
 --             guided    asks the player to put the pointer somewhere and observes what the client reports, read only (Guided.lua). Its category
 --                       is never part of an unqualified run: TL.Select(nil) leaves it out, and the window leaves its box unticked.
 --   needs   { "workshop" } to get t.W = R.Workshop (loaded through the core's launcher, which refuses in combat)
@@ -44,11 +45,12 @@ TL.cases, TL.caseOrder, TL.rejected = TL.cases or {}, TL.caseOrder or {}, TL.rej
 ---------------------------------------------------------------------------
 -- Registry
 ---------------------------------------------------------------------------
--- { id, label, blurb, guided }: a group of cases the window offers as one checkbox. A guided category asks things of the player, so it
--- starts unticked and only runs when it is chosen by name.
+-- { id, label, blurb, guided, optin }: a group of cases the window offers as one checkbox. A guided category asks things of the player, so it
+-- starts unticked and only runs when it is chosen by name. An OPT-IN category (the client API probes that build their own test frames) is the
+-- same for the checkbox and for TL.Select(nil): it runs only when it is chosen by name, because it creates frames and changes their state.
 function TL.Category(def)
     if type(def) ~= "table" or type(def.id) ~= "string" or TL.categories[def.id] then return false end
-    TL.categories[def.id] = { id = def.id, label = def.label or def.id, blurb = def.blurb or "", guided = def.guided == true }
+    TL.categories[def.id] = { id = def.id, label = def.label or def.id, blurb = def.blurb or "", guided = def.guided == true, optin = def.optin == true or def.guided == true }
     TL.categoryOrder[#TL.categoryOrder + 1] = def.id
     return true
 end
@@ -76,15 +78,15 @@ function TL.Case(def)
     return case
 end
 
--- The registered cases of the chosen categories ({ core = true }), in registration order; nil chooses every category EXCEPT guided ones,
--- which run only when named: nothing asks the player for anything unless the player (or a test) chose it.
+-- The registered cases of the chosen categories ({ core = true }), in registration order; nil chooses every category EXCEPT guided and opt-in
+-- ones, which run only when named: nothing asks the player for anything, and no probe frame is made, unless the player (or a test) chose it.
 function TL.Select(chosen)
     local out = {}
     for _, id in ipairs(TL.caseOrder) do
         local c = TL.cases[id]
         if chosen then
             if chosen[c.cat] then out[#out + 1] = c end
-        elseif c.class ~= "guided" then
+        elseif c.class ~= "guided" and not (TL.categories[c.cat] and TL.categories[c.cat].optin) then
             out[#out + 1] = c
         end
     end
@@ -108,14 +110,15 @@ function TL.Label(case)
 end
 
 ---------------------------------------------------------------------------
--- The Workshop, loaded through the core's launcher (it refuses in combat); nil and a sentence when it cannot be had
+-- The Workshop, loaded through the core's launcher (it refuses in combat); nil and a sentence when it cannot be had. The third answer is
+-- true when THIS call loaded it (the Runner times that load apart from the case that needed it).
 ---------------------------------------------------------------------------
 function TL.Workshop()
     local launcher = R.WorkshopLauncher
     if not launcher then return nil, "the core's Workshop launcher is not available" end
-    if launcher.Loaded() then return R.Workshop end
+    if launcher.Loaded() then return R.Workshop, nil, false end
     local ok, why = launcher.Load()
-    if ok then return R.Workshop end
+    if ok then return R.Workshop, nil, true end
     return nil, launcher.Explain and launcher.Explain(why) or ("the Workshop could not be loaded (" .. tostring(why) .. ")")
 end
 

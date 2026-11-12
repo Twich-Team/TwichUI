@@ -71,10 +71,16 @@ end
 function RP.Build(sum)
     local lines = Header(sum)
     for _, r in ipairs(sum.results) do CaseLines(r, lines) end
+    if sum.setups and #sum.setups > 0 then
+        lines[#lines + 1] = "setup (one-time, before the case named; not part of that case's time, but part of the run's):"
+        for _, s in ipairs(sum.setups) do
+            lines[#lines + 1] = ("  %s  %.1f ms, before %s"):format(Clean(s.what, 40), s.ms, Clean(s.id, 80))
+        end
+    end
     if #sum.overruns > 0 then
         lines[#lines + 1] = "overruns (a step ran longer than the slice; it could not be interrupted):"
         for _, o in ipairs(sum.overruns) do
-            lines[#lines + 1] = ("  %s  %.1f ms in one step"):format(Clean(o.id, 80), o.ms)
+            lines[#lines + 1] = ("  %s  %.1f ms in one step%s"):format(Clean(o.id, 80), o.ms, o.setup and (" (setup: " .. Clean(o.setup, 40) .. ", not the case's own work)") or "")
         end
     end
     local facts = {}
