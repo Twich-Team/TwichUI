@@ -52,5 +52,12 @@ Bank.lua
 WorthTip.lua
 # The progress bar and the Scan prices button on the auction house window (the click goes through Session)
 AuctionButton.lua
-# The window (last: it tells TwichUI the addon is ready)
+# The window's presentation helpers: the settings window's crafted look through the core's CraftLook.lua (TwichUI_Settings is never loaded)
+Style.lua
+# The pages, in the order the page list shows them (each builds once and draws what Session.lua says)
+ViewOverview.lua
+ViewOpportunities.lua
+ViewCrafting.lua
+ViewShopping.lua
+# The window: the shell, the page list and the events (last: it tells TwichUI the addon is ready)
 Window.lua

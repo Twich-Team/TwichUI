@@ -145,7 +145,9 @@ function S.Professions()
     local out = {}
     for _, id in ipairs(order) do
         local p = profs[id]
-        out[#out + 1] = { id = id, name = p.profName, count = #p.recipes, selected = id == current }
+        -- live: read in the profession window this session; at: when it was read (a remembered one: when it was last read)
+        out[#out + 1] = { id = id, name = p.profName, count = #p.recipes, known = #p.recipes + (p.extra and #p.extra or 0),
+            selected = id == current, live = p.live == true, at = p.at }
     end
     return out
 end
@@ -466,7 +468,8 @@ function S.Opportunities()
         if n == nil then n = O.BagCount(item) or false counts[item] = n end
         return n or nil
     end
-    local out = { rows = rows, summary = Op.Summary(all), source = src, rate = rate, lookup = lookup, incomplete = false, stock = view,
+    -- all: every row before the page's filter and sort (the Overview reads its best one; nothing is priced twice)
+    local out = { rows = rows, all = all, summary = Op.Summary(all), source = src, rate = rate, lookup = lookup, incomplete = false, stock = view,
         avail = function(rec) return K.Craft(rec.mats, Have, view) end }
     for _, id in ipairs(order) do
         if not profs[id].complete then out.incomplete = true end

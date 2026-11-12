@@ -45,7 +45,7 @@ local c = MIClient("Rich", {
     cl.UIParent = MIFake("Frame"); cl.UIParent.w, cl.UIParent.h = 1920, 1080
     cl.GameTooltip = MIFake("GameTooltip")
     cl.UISpecialFrames = {}
-    for _, file in ipairs({ "chronicle/Style.lua", "Look.lua", "FrameLook.lua" }) do
+    for _, file in ipairs({ "chronicle/Style.lua", "Look.lua", "FrameLook.lua", "CraftLook.lua" }) do
       local chunk = assert(loadfile(ROOT .. file)); setfenv(chunk, cl); chunk("!!!TwichUI", {})
     end
   end,
@@ -76,7 +76,7 @@ c.C_Item = {
 c.InCombatLockdown = function() return false end
 c.IsShiftKeyDown = function() return false end
 
-for _, f in ipairs({ "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua", "AuctionButton.lua", "Window.lua" }) do
+for _, f in ipairs({ "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua", "AuctionButton.lua", "Style.lua", "ViewOverview.lua", "ViewOpportunities.lua", "ViewCrafting.lua", "ViewShopping.lua", "Window.lua" }) do
   local chunk = assert(loadfile(ROOT .. "../TwichUI_Workshop/" .. f)); setfenv(chunk, c); chunk("TwichUI_Workshop", {})
 end
 local W = R.Workshop
@@ -96,6 +96,10 @@ Check(f and f:IsShown(), "shown")
 Check(#f.points >= 1, "the window is anchored: an unanchored frame is shown but never drawn (the in-game failure)")
 Check(f.points[1][1] == "CENTER", "centered on the screen")
 Check(Events(f) > 0, "listens while shown"); Same(W.Snapshot().events, Events(f))
+Same(Win.Mode(), "overview", "it opens on the Overview the first time")
+Check(f.tabOverview.on == true and f.tabCraft.on == false, "the page list marks the page shown")
+f.tabCraft:GetScript("OnClick")(f.tabCraft)
+Same(Win.Mode(), "craft", "the page list switches pages"); Check(Win.Craft():IsShown() and not Win.Overview():IsShown())
 Check(S.Notices()[1]:find("Open one of your professions", 1, true), "an instruction, not an unexplained empty list")
 Same(#Win.Lists().recipes.data, 0)
 Check(Win.Lists().recipes.empty:GetText() == "No recipes yet.", "and the list says why it is empty")
@@ -127,7 +131,10 @@ rows[1].add:GetScript("OnClick")(rows[1].add)
 Same(#Q.Entries(), 1); Same(Q.Entries()[1].name, "Healing Potion")
 Check(rows[1].add.text:GetText() == "Queued" and rows[1].add.enabled == false, "a queued recipe says Queued and can't be added twice")
 local qrow = Win.Lists().queue.rows[1]
-Check(qrow:IsShown() and qrow.name:GetText():find("Healing Potion", 1, true) and qrow.name:GetText():find("Alchemy", 1, true))
+Check(qrow:IsShown() and qrow.name:GetText() == "Healing Potion")
+local detail = Win.Craft().detail
+Same(detail.name:GetText(), "Healing Potion", "the first queued craft's details are shown")
+Same(detail.prof:GetText(), "Alchemy", "with its profession")
 Check(qrow.line:GetText() == "1 craft - makes 1-2", qrow.line:GetText())
 Check(not qrow.stale:IsShown(), "known materials: no update line")
 qrow.more:GetScript("OnClick")(qrow.more); qrow.more:GetScript("OnClick")(qrow.more)
@@ -154,10 +161,11 @@ Win.Render()
 Same(f.headline:GetText(), "Ready to craft: all the materials are in your bags.")
 
 -- open recipe, remove
-qrow.open:GetScript("OnClick")(qrow.open)
+local open, remove = Win.Craft().open, Win.Craft().remove   -- in the chosen craft's details, so the rows stay readable
+open:GetScript("OnClick")(open)
 Same(g.opened[#g.opened], 1)
-Check(qrow.open.text:GetText() == "Open recipe")
-qrow.remove:GetScript("OnClick")(qrow.remove)
+Check(open.text:GetText() == "Open recipe")
+remove:GetScript("OnClick")(remove)
 Same(#Q.Entries(), 0); Check(f.note:GetText():find("Removed", 1, true))
 
 -- events: a burst of changes is one redraw, a stale one is dropped, hidden stops everything
@@ -347,11 +355,15 @@ do
 
   -- add to the existing queue (the same queue the Crafting view uses)
   local queued = #Q.Entries()
-  local add1 = L_.rows[1].add
-  Check(add1.text:GetText() == "Add" and add1.enabled)
+  -- choose the row, then the details' Add (the list itself only chooses)
+  L_.rows[1]:GetScript("OnClick")(L_.rows[1])
+  local add1 = opps.detail.add
+  Same(opps.detail.name:GetText(), "Healing Potion", "the chosen row's details")
+  Check(add1.text:GetText() == "Add to crafting plan" and add1.enabled)
   add1:GetScript("OnClick")(add1)
   Same(#Q.Entries(), queued + 1); Check(Q.Find(1), "Healing Potion is in the one queue")
-  Same(L_.rows[1].add.text:GetText(), "Queued"); Check(L_.rows[1].add.enabled == false)
+  Same(opps.detail.add.text:GetText(), "In your queue"); Check(opps.detail.add.enabled == false)
+  Check(L_.rows[1].sub:GetText():find("In your queue", 1, true), "and the row says so")
   Check(f.note:GetText():find("Added Healing Potion", 1, true))
   f.tabCraft:GetScript("OnClick")(f.tabCraft)
   Same(Win.Mode(), "craft"); Check(not opps:IsShown())
@@ -606,6 +618,60 @@ do
   Win.SetMode("craft")
   f:Hide()
   Same(Events(f), 0, "hidden: no events")
+end
+
+---------------------------------------------------------------------------
+-- Lifecycle: the pages are built once; opening, closing, switching pages and redrawing make no new frames and write nothing
+---------------------------------------------------------------------------
+do
+  local f = Win.Frame()
+  local function Dump(v, out)   -- a stable text of a saved table, to compare before and after
+    out = out or {}
+    if type(v) ~= "table" then out[#out + 1] = tostring(v) return out end
+    local keys = {}
+    for k in pairs(v) do keys[#keys + 1] = k end
+    table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+    out[#out + 1] = "{"
+    for _, k in ipairs(keys) do out[#out + 1] = tostring(k) .. "="; Dump(v[k], out) end
+    out[#out + 1] = "}"
+    return out
+  end
+  local function Cycle()
+    f:Show()
+    for _, key in ipairs({ "overview", "opps", "craft", "shop", "overview" }) do
+      local item = ({ overview = f.tabOverview, opps = f.tabOpps, craft = f.tabCraft, shop = f.tabShop })[key]
+      item:GetScript("OnClick")(item)
+      Same(Win.Mode(), key)
+      Check(Win.Page(key):IsShown(), "the page asked for is shown")
+      for _, other in ipairs({ "overview", "opps", "craft", "shop" }) do
+        if other ~= key then Check(not Win.Page(other):IsShown(), "only one page at a time: " .. other) end
+      end
+      Win.Render(); Win.Render()
+    end
+    FlushTimers()
+    f:Hide()
+  end
+  -- the first cycles may make the pooled rows each page needs (a list's rows are made the first time that many are shown, and this
+  -- fixture's shopping list gains a row as its remembered guild bank state ages); after two quiet cycles in a row nothing more is made
+  local warm, quiet = 0, 0
+  repeat
+    local before = MI_MADE
+    Cycle()
+    warm = warm + 1
+    quiet = MI_MADE == before and quiet + 1 or 0
+  until quiet == 2 or warm == 8
+  Check(quiet == 2, "the pools settle")
+  local made, saved = MI_MADE, table.concat(Dump(c.TwichUIDB.workshop), " ")
+  for _ = 1, 5 do Cycle() end
+  Same(MI_MADE, made, "five more open / navigate / redraw / close cycles made no frame or texture")
+  for name, l in pairs(Win.Lists()) do
+    Check(#l.rows <= math.ceil(l.minH / l.rowH) + 1, ("the %s pool is bounded by what it can show (%d rows)"):format(name, #l.rows))
+  end
+  Same(table.concat(Dump(c.TwichUIDB.workshop), " "), saved, "and navigating wrote nothing to the saved data")
+  Same(Events(f), 0, "closed: no events")
+  f:Show()
+  Same(Win.Mode(), "overview", "the page shown is kept while the game runs")
+  f:Hide()
 end
 
 print("PASSED")

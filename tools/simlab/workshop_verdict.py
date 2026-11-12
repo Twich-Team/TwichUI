@@ -36,7 +36,9 @@ STEPS = [
     "bank and guild bank: the guild choice, permissions and limits", "bank and guild bank: a withdrawal and a deposit never count twice", "pose for the screenshot",
 ]
 LAYERS = ("init", "display", "click", "direct", "event", "state")
-VIEWS = {"craft": "TwichUIWorkshop", "opps": "TwichUIWorkshop", "shop": "TwichUIWorkshop", "design": "TwichUISettings"}
+VIEWS = {"overview": "TwichUIWorkshop", "craft": "TwichUIWorkshop", "opps": "TwichUIWorkshop", "shop": "TwichUIWorkshop", "design": "TwichUISettings",
+         "small": "TwichUIWorkshop", "empty": "TwichUIWorkshop"}
+SHOTS = ("overview", "craft", "opps", "shop", "design", "small", "empty")
 VOICE, UTF8 = "voice-settings-unsupplied", "addon-message-invalid-utf8"
 CHECK = re.compile(r"^SIMLAB check (PASS|FAIL) \[([^\]]+)\] (.*?) \| expected=(.*?) \| actual=(.*)$", re.M)
 
@@ -67,9 +69,9 @@ def main():
         results.append(bool(passed))
         print(f"  {'pass' if passed else 'FAIL'}  {name}" + (f"  ({detail})" if detail else ""))
 
-    runs = {n: load(run, n) for n in ("craft", "opps", "shop", "design", "wrong")}
+    runs = {n: load(run, n) for n in SHOTS + ("wrong",)}
 
-    for n in ("craft", "opps", "shop", "design"):
+    for n in SHOTS:
         r = runs[n]
         print(f"The scenario, ending on {n}:")
         d = r["done"]
@@ -92,8 +94,9 @@ def main():
                 break
             out.append(c)
         return out
-    a, b, c, d = (common(runs[n]) for n in ("craft", "opps", "shop", "design"))
-    check("the checks before the screenshot pose are identical in the four launches", a == b == c == d and len(a) > 0, f"{len(a)} / {len(b)} / {len(c)} / {len(d)}")
+    first = [common(runs[n]) for n in SHOTS]
+    check(f"the checks before the screenshot pose are identical in the {len(SHOTS)} launches", all(x == first[0] for x in first) and len(first[0]) > 0,
+          " / ".join(str(len(x)) for x in first))
 
     print("Negative control (one expectation made wrong on purpose):")
     w = runs["wrong"]
@@ -106,14 +109,17 @@ def main():
           f"{len(w['checks'])} checks, {len(wrong_failed)} failed")
 
     print("Screenshots (files only; whether they look right is for a person to judge):")
-    for n in ("craft", "opps", "shop", "design"):
+    for n in SHOTS:
         path = run / f"{n}.png"
+        size = (1000, 700) if n == "small" else (1600, 1200)
+        # the Workshop window is 1080x700, centred (the settings window of the design shot is smaller, centred too); on the small screen
+        # it is scaled to fit, so the middle of the screen is inside it
+        box = (150, 120, 700, 460) if n == "small" else (260, 250, 1080, 700)
         try:
             width, height, pixels = read_rgba(path)
-            check(f"{n}.png is 1600x1200", (width, height) == (1600, 1200), f"{width}x{height}")
-            # the window is 800x620, centred on the 1600x1200 screen
-            check(f"{n}.png: the window area is not blank", distinct_colours(pixels, 400, 290, 800, 620) > 500,
-                  f"{distinct_colours(pixels, 400, 290, 800, 620)} distinct colours")
+            check(f"{n}.png is {size[0]}x{size[1]}", (width, height) == size, f"{width}x{height}")
+            check(f"{n}.png: the window area is not blank", distinct_colours(pixels, *box) > 500,
+                  f"{distinct_colours(pixels, *box)} distinct colours")
         except (OSError, ValueError) as err:
             check(f"{n}.png is readable", False, str(err))
 
@@ -133,7 +139,7 @@ def main():
     print("  Game data ........................ FAKE and deterministic (professions, items, bags, auction listings, merchant); "
           "the world map and NpcMap.Locate are stand-ins in the Show vendor step")
     print("  Persistence tested ............... NO: nothing is reloaded or written to disk. Closing and reopening the window is not persistence.")
-    print(f"  Screenshots ...................... {'captured' if assets else 'captured WITHOUT game assets'}: craft.png, opps.png, shop.png, design.png "
+    print(f"  Screenshots ...................... {'captured' if assets else 'captured WITHOUT game assets'}: overview.png, craft.png, opps.png, shop.png, design.png, small.png (1000x700), empty.png "
           "(a script cannot judge them; look at them, and remember custom fonts are not drawn)")
     print("  Real-client tested ............... NO")
     print(f"{len(r['checks'])} checks per launch; {r['done'].group(2) if r['done'] else '?'} s of simulated time.")

@@ -3,11 +3,14 @@
 # Workshop with /tui workshop and drives its Crafting, Opportunities and Shopping views over synthetic game data
 # (scenarios/workshop.lua says exactly what is real and what is fake). Writes to $WOWSIM_LAB/artifacts/workshop-<time>/.
 #
-# Five launches, each from a freshly emptied root and a new empty install (no saved variables):
-#   craft   the whole scenario, ending on Crafting with a populated queue, then a screenshot
-#   opps    the same, ending on Opportunities, then a screenshot
-#   shop    the same, ending on Shopping (mixed sources, a Make row, the missing-price warning), then a screenshot
-#   design  the same, ending on the settings window's Workshop page at the "What's it worth?" tooltip designer, then a screenshot
+# Eight launches, each from a freshly emptied root and a new empty install (no saved variables):
+#   overview  the whole scenario, ending on the Overview (prices, opportunities, plan, professions, next steps), then a screenshot
+#   craft     the same, ending on Crafting with a populated queue and a chosen craft's details, then a screenshot
+#   opps      the same, ending on Opportunities with a recipe's details, then a screenshot
+#   shop      the same, ending on Shopping (mixed sources, a Make row, the missing-price warning), then a screenshot
+#   design    the same, ending on the settings window's Workshop page at the "What's it worth?" tooltip designer, then a screenshot
+#   small     the same as opps on a 1000x700 screen (the window fits itself to the screen), then a screenshot
+#   empty     the same, then the queue emptied and the saved prices taken away: the Overview's empty states, then a screenshot
 #   wrong   the whole scenario with one expectation made deliberately wrong: it must FAIL on that check and on no other
 #
 #   SIMLAB_ASSETS=0  hide the game install (logic only; the screenshots are worthless then)
@@ -30,10 +33,13 @@ export SIMLAB_FORWARD="WOW_SIM_SOFTWARE_RENDER=1 WOW_SIM_NO_PARTY=1"
 fixture() {  # name params
   { printf 'SIMLAB_PARAMS = %s\n' "$2"; cat "$SIMLAB_DIR/scenarios/lib.lua" "$SIMLAB_DIR/scenarios/workshop.lua"; } > "$LAB/fixtures/workshop-$1.lua"
 }
+fixture overview '{ view = "overview" }'
 fixture craft '{ view = "craft" }'
 fixture opps '{ view = "opps" }'
 fixture shop '{ view = "shop" }'
 fixture design '{ view = "design" }'
+fixture small '{ view = "opps" }'
+fixture empty '{ view = "empty" }'
 fixture wrong "{ view = \"craft\", wrongAt = \"$WRONG_AT\" }"
 
 repo_before="$(git -C "$REPO" status --porcelain --ignored)"
@@ -51,10 +57,13 @@ launch() {  # name command...
   [ "$code" -eq 0 ] || status="$code"
 }
 
+launch overview screenshot --png -o "$RUN/overview.png" --width 1600 --height 1200
 launch craft screenshot --png -o "$RUN/craft.png" --width 1600 --height 1200
 launch opps screenshot --png -o "$RUN/opps.png" --width 1600 --height 1200
 launch shop screenshot --png -o "$RUN/shop.png" --width 1600 --height 1200
 launch design screenshot --png -o "$RUN/design.png" --width 1600 --height 1200
+launch small screenshot --png -o "$RUN/small.png" --width 1000 --height 700
+launch empty screenshot --png -o "$RUN/empty.png" --width 1600 --height 1200
 launch wrong dump-tree --visible-only
 
 echo "artifacts: $RUN"

@@ -63,6 +63,8 @@ One short entry per feature that has a continuing handoff. Details live in the f
 
 Reference: [docs/workshop.md](docs/workshop.md) (files, saved data, the exact pricing and shopping rules, scan facts and unknowns, client facts, licensing limits, evidence, checks).
 
+- **UI modernization (2026-11-11, `feature/workshop-foundation`):** the window rebuilt in the settings look (shell, page list, Overview / Opportunities / Crafting / Shopping pages with detail panels) from the `docs/workshop/` mockups; the settings look's shared primitives moved to the core (`!!!TwichUI/CraftLook.lua`) so the Workshop never loads TwichUI_Settings. Unit-tested and simulator-tested (screenshots reviewed structurally); **not real-client-tested**. See docs/workshop.md "The window: UI architecture".
+
 - **Built (1, 2):** load-on-demand addon with `/tui workshop`, a data bar menu row and a settings page; recipes of the player's own professions (remembered between sessions), a per-character queue, combined materials against bags; a player-started **Scan prices**
   (one `ReplicateItems` scan, bounded batches, also a button on the auction house window), saved cheapest-buyout prices per auction house, the price service (`Prices.lua`) and the **Opportunities** view (cost, sell price, estimated profit for one craft; no auction house cut applied
   because none is confirmed, and it says so).

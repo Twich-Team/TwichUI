@@ -175,9 +175,9 @@ local function Row(list, name)
 end
 local function FindButton(root, text, depth)
     depth = depth or 0
-    if depth > 3 then return nil end
+    if depth > 6 then return nil end
     for _, c in ipairs({ root:GetChildren() }) do
-        if c.text and c.text.GetText and c.text:GetText() == text and c:IsShown() then return c end
+        if c.text and c.text.GetText and c.text:GetText() == text and c:IsVisible() then return c end   -- only what a player could click
         local hit = FindButton(c, text, depth + 1)
         if hit then return hit end
     end
@@ -186,6 +186,10 @@ local function Click(btn, what)
     if not btn then error("missing control: " .. tostring(what)) end
     if btn.IsEnabled and not btn:IsEnabled() then error("control is disabled: " .. tostring(what)) end
     btn:Click()
+end
+local function QueueAct(row, which, what)   -- Open recipe and Remove sit in the chosen craft's details: choose the row, then the action
+    Click(row, "choose the queued craft for: " .. tostring(what))
+    Click(Win().Craft()[which], what)
 end
 local function Queue()   -- the saved queue, read back: "name x crafts, ..."
     local out = {}
@@ -197,9 +201,9 @@ local function Opps() return Win().Opps() end
 local function Shop() return Win().Shop() end
 local function Lists() return Win().Lists() end
 
-local function Tab(name)   -- the three buttons beside the title
+local function Tab(name)   -- the page list on the left
     local f = Frame()
-    local b = ({ Crafting = f.tabCraft, Shopping = f.tabShop, Opportunities = f.tabOpps })[name]
+    local b = ({ Overview = f.tabOverview, Crafting = f.tabCraft, Shopping = f.tabShop, Opportunities = f.tabOpps })[name]
     Click(b, "tab " .. name)
     Lab.Settle(0.2)
 end
@@ -224,9 +228,17 @@ Lab.Step("open and navigate", function()
     Check("init", "workshop addon loaded by /tui workshop", true, R.WorkshopLauncher.Loaded())
     Check("display", "window is shown after /tui workshop", true, Frame() ~= nil and Frame():IsShown())
     Check("display", "window is visible (anchored, alpha up)", true, Frame():IsVisible() and Frame():GetAlpha() > 0.99)
-    Check("display", "window opens on Crafting", "craft", Win().Mode())
-    Check("display", "Crafting view shown, Shopping and Opportunities hidden", "true/false/false",
-        tostring(Lists().recipes.box:IsVisible()) .. "/" .. tostring(Shop():IsShown()) .. "/" .. tostring(Opps():IsShown()))
+    Check("display", "window opens on the Overview", "overview", Win().Mode())
+    Check("display", "Overview shown, Crafting, Shopping and Opportunities hidden", "true/false/false/false",
+        tostring(Win().Overview():IsVisible()) .. "/" .. tostring(Lists().recipes.box:IsVisible()) .. "/" .. tostring(Shop():IsShown()) .. "/" .. tostring(Opps():IsShown()))
+    Check("display", "the page list marks Overview", "true/false", tostring(Frame().tabOverview.on) .. "/" .. tostring(Frame().tabCraft.on))
+    Check("display", "Overview: no scan yet is said, not a made-up price", "No scan yet", Txt(Win().Overview().cards.market.facts[1].text))
+    Check("display", "Overview: the professions card lists what was read", true, Txt(Win().Overview().cards.profs.facts[1].text):find("^Alchemy") ~= nil)
+    Check("display", "Overview: an empty plan", "0 of 30 queued", Txt(Win().Overview().cards.plan.facts[1].text))
+    Check("display", "Overview: the first next step is the price scan", "Scan auction prices: open the auction house and choose Scan prices.",
+        Txt(Win().Overview().steps[1].text))
+    Tab("Crafting")
+    Check("click", "Crafting tab: mode", "craft", Win().Mode())
     Check("display", "Alchemy recipes listed, sorted by name",
         "Elixir of Many Wonders | Enchant Bracer - Lesser Choice | Greater Elixir of Extremely Long Fortitude Name | Minor Healing Potion | Weak Troll's Blood Potion",
         Names(Lists().recipes))
@@ -263,7 +275,7 @@ Lab.Step("crafting: unsupported recipe is not ready", function()
     Check("display", "queued unsupported recipe: 'Open profession to update.' shown", true, q.stale:IsShown())
     Check("display", "headline is NOT 'all materials in your bags'", "1 recipe can't be counted yet. Open its profession to update.", Txt(Frame().headline))
     Check("display", "no material row for an uncountable recipe", 0, #Rows(Lists().mats))
-    Click(q.remove, "Remove (unsupported recipe)")
+    QueueAct(q, "remove", "Remove (unsupported recipe)")
     Check("state", "unsupported recipe removed", "", Queue())
     Check("display", "queue count after remove", "0 of 30", Txt(Frame().queueCount))
     Check("display", "empty materials headline", "Add recipes to see the materials you need.", Txt(Frame().headline))
@@ -278,7 +290,9 @@ Lab.Step("crafting: add, change quantity, remove", function()
         Txt(Row(list, "Minor Healing Potion").add.text) .. "/" .. tostring(Row(list, "Minor Healing Potion").add:IsEnabled()))
     local q = Lists().queue
     local a, b = Rows(q)[1], Rows(q)[2]
-    Check("display", "queue order and labels", "Minor Healing Potion  (Alchemy) | Weak Troll's Blood Potion  (Alchemy)", Names(q))
+    Check("display", "queue order and labels", "Minor Healing Potion | Weak Troll's Blood Potion", Names(q))
+    Check("display", "the first queued craft's details, with its profession", "Minor Healing Potion | Alchemy",
+        Txt(Win().Craft().detail.name) .. " | " .. Txt(Win().Craft().detail.prof))
     Check("display", "1 craft line (makes 1)", "1 craft - makes 1", Txt(a.line))
     Check("display", "'-' is disabled at one craft", false, a.less:IsEnabled())
     Click(a.more, "+ on Minor Healing Potion")
@@ -291,7 +305,7 @@ Lab.Step("crafting: add, change quantity, remove", function()
     Check("display", "queue count", "2 of 30", Txt(Frame().queueCount))
 
     -- remove one through its control and add it back
-    Click(Rows(q)[2].remove, "Remove Weak Troll's Blood Potion")
+    QueueAct(Rows(q)[2], "remove", "Remove Weak Troll's Blood Potion")
     Check("state", "Remove takes the entry out", "Minor Healing Potion x3", Queue())
     Click(Row(list, "Weak Troll's Blood Potion").add, "Add Weak Troll's Blood Potion again")
     Click(Rows(q)[2].more, "+ on re-added entry")
@@ -355,7 +369,7 @@ Lab.Step("crafting: a second profession and Open recipe", function()
     Click(chip, "Alchemy chip")
     Check("click", "Alchemy chip switches the recipe list", "Elixir of Many Wonders | Enchant Bracer - Lesser Choice | Greater Elixir of Extremely Long Fortitude Name | Minor Healing Potion | Weak Troll's Blood Potion", Names(Lists().recipes))
     -- Open recipe records the id and asks nothing else of the game
-    Click(Rows(Lists().queue)[1].open, "Open recipe")
+    QueueAct(Rows(Lists().queue)[1], "open", "Open recipe")
     Check("click", "Open recipe asks the game to open recipe 2330", "2330", tostring(opened[#opened]))
 end)
 
@@ -446,7 +460,7 @@ Lab.Step("opportunities: rows, ordering, filtering, unknowns", function()
     Check("display", "Weak Troll's Blood Potion: cost | sell | profit", "30c | 60c | 30c", OppLine("Weak Troll's Blood Potion"))
     Check("display", "loss is shown as negative", "30c | 25c | -5c", OppLine("Greater Elixir of Extremely Long Fortitude Name"))
     Check("display", "missing price: everything unknown, reason under the name",
-        "Unknown for profit; 1 material has no price", (OppLine("Copper Belt Buckle"):find("Unknown | .*Unknown$") and "Unknown for profit" or OppLine("Copper Belt Buckle")) .. "; " .. Txt(Row(o, "Copper Belt Buckle").sub))
+        "Unknown for profit; 1 material has no price  -  In your queue", (OppLine("Copper Belt Buckle"):find("Unknown | .*Unknown$") and "Unknown for profit" or OppLine("Copper Belt Buckle")) .. "; " .. Txt(Row(o, "Copper Belt Buckle").sub))
     Check("display", "unsupported recipe: Unknown with its reason", "Its materials aren't known or can't be counted", Txt(Row(o, "Enchant Bracer - Lesser Choice").sub))
     Check("display", "output basis under a priced name (quantity and profession)", "Makes 1-3  -  Alchemy", Txt(Row(o, "Elixir of Many Wonders").sub))
     Check("display", "output basis for a fixed output", "Makes 2  -  Blacksmithing", Txt(Row(o, "Smelt Bronze").sub))
@@ -795,16 +809,19 @@ end)
 Lab.Step("opportunities: Add to queue", function()
     local o = Lists().opps
     local row = Row(o, "Elixir of Many Wonders")
-    Check("display", "Add button before", "Add/true", Txt(row.add.text) .. "/" .. tostring(row.add:IsEnabled()))
-    Click(row.add, "Add (Elixir of Many Wonders)")
+    Click(row, "choose Elixir of Many Wonders")
+    local add = Opps().detail.add
+    Check("display", "its details are shown", "Elixir of Many Wonders", Txt(Opps().detail.name))
+    Check("display", "Add button before", "Add to crafting plan/true", Txt(add.text) .. "/" .. tostring(add:IsEnabled()))
+    Click(add, "Add to crafting plan (Elixir of Many Wonders)")
     Check("state", "the real queue gained the recipe",
         "Minor Healing Potion x3, Weak Troll's Blood Potion x2, Copper Belt Buckle x2, Elixir of Many Wonders x1", Queue())
-    row = Row(o, "Elixir of Many Wonders")
-    Check("display", "button now Queued and disabled", "Queued/false", Txt(row.add.text) .. "/" .. tostring(row.add:IsEnabled()))
+    Check("display", "button now In your queue and disabled", "In your queue/false", Txt(add.text) .. "/" .. tostring(add:IsEnabled()))
+    Check("display", "the row says it is queued", true, Txt(Row(o, "Elixir of Many Wonders").sub):find("In your queue", 1, true) ~= nil)
     Tab("Crafting")
     local q = Lists().queue
     Check("display", "Crafting shows the added entry with its range", "1 craft - makes 1-3", Txt(Rows(q)[4].line))
-    Click(Rows(q)[4].remove, "Remove Elixir of Many Wonders")
+    QueueAct(Rows(q)[4], "remove", "Remove Elixir of Many Wonders")
     Check("state", "queue back to three entries", "Minor Healing Potion x3, Weak Troll's Blood Potion x2, Copper Belt Buckle x2", Queue())
 end)
 
@@ -1152,8 +1169,8 @@ Lab.Step("bank and guild bank: planned with, collected not bought, labelled, pro
     local after = OppLine("Minor Healing Potion") .. " / " .. OppLine("Weak Troll's Blood Potion") .. " / " .. OppLine("Smelt Bronze")
     Check("display", "cost, sell price and profit are exactly what they were without the bank", oppBefore, after)
     local o = Lists().opps
-    Check("display", "Minor Healing Potion: 1 Silverleaf is in the bank", "Makes 1  -  Alchemy  -  Collect materials", Txt(Row(o, "Minor Healing Potion").sub))
-    Check("display", "Weak Troll's Blood Potion: all in the bags", "Makes 1  -  Alchemy  -  Ready to craft", Txt(Row(o, "Weak Troll's Blood Potion").sub))
+    Check("display", "Minor Healing Potion: 1 Silverleaf is in the bank", "Makes 1  -  Alchemy  -  Collect materials  -  In your queue", Txt(Row(o, "Minor Healing Potion").sub))
+    Check("display", "Weak Troll's Blood Potion: all in the bags", "Makes 1  -  Alchemy  -  Ready to craft  -  In your queue", Txt(Row(o, "Weak Troll's Blood Potion").sub))
     Check("display", "Elixir of Many Wonders: nothing held, nothing said", "Makes 1-3  -  Alchemy", Txt(Row(o, "Elixir of Many Wonders").sub))
     Tab("Crafting")
 end)
@@ -1275,17 +1292,28 @@ Lab.Step("pose for the screenshot", function()
     if view == "craft" then
         Tab("Crafting")
         Click(FindButton(Frame(), "Alchemy"), "Alchemy chip")
+        Click(Rows(Lists().queue)[2], "choose the second queued craft")
+        Check("display", "pose: the chosen craft's details", Txt(Rows(Lists().queue)[2].name), Txt(Win().Craft().detail.name))
+    elseif view == "empty" then
+        -- the empty states: every queued craft removed through the details' Remove, and the saved prices taken away (synthetic data:
+        -- the scenario's own fake market, nothing of a real install)
+        Tab("Crafting")
+        while #Rows(Lists().queue) > 0 do QueueAct(Rows(Lists().queue)[1], "remove", "Remove (emptying the queue)") end
+        TwichUIWorkshopDB.markets = {}
+        Tab("Overview")
+        Check("display", "pose: no prices is said, not a made-up figure", "No scan yet", Txt(Win().Overview().cards.market.facts[1].text))
+        Check("display", "pose: an empty plan", "0 of 30 queued", Txt(Win().Overview().cards.plan.facts[1].text))
+        Check("display", "pose: the first next step is the price scan", "Scan auction prices: open the auction house and choose Scan prices.",
+            Txt(Win().Overview().steps[1].text))
+    elseif view == "overview" then
+        Tab("Overview")
+        Check("display", "pose: the Overview with prices, a plan and next steps", true, Win().Overview():IsShown())
     elseif view == "opps" then
         Tab("Opportunities")
-        -- scrolling: seven rows of 46 px do not fit the 304 px list. One row down (46 px): the first row is gone, the last is whole.
-        Lists().opps.scroll:SetVerticalScroll(46)
-        Lab.Settle(0.1)
-        Check("display", "pose: scrolled one row, the list starts at the second row and ends with the last",
-            "Minor Healing Potion|Enchant Bracer - Lesser Choice", (function()
-                local n = Names(Lists().opps) local first = n:match("^[^|]-%s*|") or n
-                return (n:match("^(.-) | ") or n) .. "|" .. (n:match(" | ([^|]-)$") or n)
-            end)())
-        Lists().opps.scroll:SetVerticalScroll(0)
+        local row = Row(Lists().opps, "Minor Healing Potion")
+        Click(row, "choose Minor Healing Potion")
+        Check("display", "pose: its details are shown", "Minor Healing Potion", Txt(Opps().detail.name))
+        Check("display", "pose: the details price one craft's materials", true, Txt(Opps().detail.mats[1].name):find("^%d+ x ") ~= nil)
     elseif view == "design" then
         -- the settings window on the Workshop page, scrolled to the tooltip designer, the Hold Shift preview with a line selected
         Lab.Open("workshop")
@@ -1303,14 +1331,9 @@ Lab.Step("pose for the screenshot", function()
         -- the mixed-source list with a Make row: take the Smelt Bronze entry back out through its Remove button
         Tab("Crafting")
         local q = Lists().queue
-        Click(Rows(q)[4].remove, "Remove Smelt Bronze")
+        QueueAct(Rows(q)[4], "remove", "Remove Smelt Bronze")
         Tab("Shopping")
         Check("display", "pose: shopping shows the Make row again", "Silverleaf | Coarse Thread | Peacebloom | Copper Ore | Tin Ore | Bronze Bar", Names(Lists().shop))
-        -- scrolling: six rows of 54 px do not fit the 296 px list. One row down puts the Make row in view.
-        Lists().shop.scroll:SetVerticalScroll(54)
-        Lab.Settle(0.1)
-        Check("display", "pose: scrolled one row, the Make row is at the bottom of the list", "Coarse Thread|Bronze Bar",
-            (function() local n = Names(Lists().shop) return (n:match("^(.-) | ") or n) .. "|" .. (n:match(" | ([^|]-)$") or n) end)())
     end
     Lab.Settle(0.5)
 end)
