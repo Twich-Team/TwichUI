@@ -78,9 +78,22 @@ function RP.Build(sum)
         end
     end
     if #sum.overruns > 0 then
-        lines[#lines + 1] = "overruns (a step ran longer than the slice; it could not be interrupted):"
+        lines[#lines + 1] = ("overruns (a resume ran longer than the slice and could not be interrupted): %d in all, the %d longest, longest first; a frame interval is not CPU time:"):format(sum.overrunCount, #sum.overruns)
         for _, o in ipairs(sum.overruns) do
-            lines[#lines + 1] = ("  %s  %.1f ms in one step%s"):format(Clean(o.id, 80), o.ms, o.setup and (" (setup: " .. Clean(o.setup, 40) .. ", not the case's own work)") or "")
+            local how = o.what == "begin" and "before its first step" or (o.what == "verdict" and "after it ended (the saved-data check)" or "one resume")
+            local why = ""
+            if o.phase then
+                why = (" | %s %.1f ms, other %.1f ms | %s"):format(Clean(o.phase, 20), o.phaseMs or 0, o.otherMs or 0, o.timed and "included timed steps (the workload)" or "no timed step (the Lab's own setup, check or collection)")
+            end
+            lines[#lines + 1] = ("  %s  %.1f ms, %s%s%s"):format(Clean(o.id, 80), o.ms, how, o.setup and (" (setup: " .. Clean(o.setup, 40) .. ", not the case's own work)") or "", why)
+        end
+        if sum.overrunBy and sum.overrunOrder and #sum.overrunOrder > 0 then
+            local per = {}
+            for _, id in ipairs(sum.overrunOrder) do
+                local by = sum.overrunBy[id]
+                per[#per + 1] = ("%s %d (worst %.0f ms)"):format(Clean(id, 60), by.n, by.worst)
+            end
+            lines[#lines + 1] = "  by case: " .. table.concat(per, "; ")
         end
     end
     local facts = {}

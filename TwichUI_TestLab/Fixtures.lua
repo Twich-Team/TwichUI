@@ -244,6 +244,7 @@ function FX.Calendar(seed, opt)
     end
     local scans = {}
     for i = 1, nScans do
+        if opt.tick then opt.tick(i) end   -- the caller may yield between scans (M7.1); nothing is drawn from the generator here
         if i > 1 then
             if rng:Chance(same) then
                 -- the same day again

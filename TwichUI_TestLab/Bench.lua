@@ -37,6 +37,10 @@ BN.NOISE_FLOOR = 0.05    -- ... and this fraction of the baseline median, whiche
 BN.UNSTABLE = 0.25       -- a MAD above this fraction of the median makes a comparison inconclusive
 BN.MIN_MS = 0.05         -- a median below this is at the edge of the clock's resolution: inconclusive
 BN.MAX_STEP_MS = 100     -- in the game a single step longer than this stops the benchmark (it would be a visible stutter)
+BN.INSTR = 2             -- the instrumentation level, written on a result line (inst=). 2 added the phase/segment attribution of M7.1. A sample is
+                         -- still the sum of a repetition's timed steps, so lines of level 1 and 2 are comparable; it is information, not a comparison key
+BN.REPORT_SEG_MS = 16    -- a segment shorter than this (a frame at 60 fps) is not worth a report line
+BN.SLOW_SEGMENTS = 4     -- the longest uninterrupted segments kept on a result
 
 local floor, abs, max, min = math.floor, math.abs, math.max, math.min
 
@@ -131,16 +135,73 @@ function BN.Measure(w, opt)
         return nil
     end
 
+    -- ATTRIBUTION (M7.1). A SEGMENT is the work between two yields: it is what the game would have had to absorb in one frame, and it holds
+    -- more than the timed steps (the workload's setup, its fingerprint, verification, the signature, forced collections). Each piece is timed
+    -- under a phase name; Y() closes the segment at every yield and keeps the longest few, with how the time divided. None of this is part of a
+    -- sample: a sample stays the sum of the timed steps.
+    --   setup | fingerprint | begin | warmup (a warm-up repetition's steps) | step (a timed repetition's steps) | finish | signature | verify | collect | other
+    local phases, slow = {}, {}
+    local segStart, segParts, segTimed = clock(), {}, false
+    local function Part(name, d)
+        segParts[name] = (segParts[name] or 0) + d
+        local p = phases[name]
+        if not p then p = { n = 0, total = 0, max = 0 } phases[name] = p end
+        p.n, p.total = p.n + 1, p.total + d
+        if d > p.max then p.max = d end
+    end
+    -- a phase that yields inside (the workload's setup, its verification) is split at the yield: each segment gets its own share, and the
+    -- time spent waiting for the next frame belongs to no phase
+    local inflight
+    local function Timed(name, f, ...)
+        local outer = inflight
+        local rec = { name = name, from = clock() }
+        inflight = rec
+        local r1, r2 = f(...)
+        Part(name, clock() - rec.from)
+        inflight = outer
+        if outer then outer.from = clock() end
+        return r1, r2
+    end
+    local function Close(label)
+        local now = clock()
+        if inflight then Part(inflight.name, now - inflight.from) end
+        local ms = (now - segStart) * 1000
+        if ms > 0 then
+            local top, topMs, sum = "other", 0, 0
+            for k, v in pairs(segParts) do
+                sum = sum + v
+                if v > topMs then top, topMs = k, v end
+            end
+            local seg = { ms = ms, phase = top, phaseMs = topMs * 1000, otherMs = max(0, ms - sum * 1000), timed = segTimed, label = label, parts = {} }
+            for k, v in pairs(segParts) do seg.parts[k] = v * 1000 end
+            if opt.segment then opt.segment(seg) end
+            -- the longest few, by length
+            if #slow < BN.SLOW_SEGMENTS or ms > slow[#slow].ms then
+                slow[#slow + 1] = seg
+                table.sort(slow, function(a, b) return a.ms > b.ms end)
+                while #slow > BN.SLOW_SEGMENTS do slow[#slow] = nil end
+            end
+        end
+        segParts, segTimed = {}, false
+    end
+    local function Y(label)
+        Close(label)
+        if yield then yield() end
+        segStart = clock()
+        if inflight then inflight.from = segStart end
+    end
+
     local base
-    if opt.retained then collectgarbage() collectgarbage() base = mem() end
+    if opt.retained then Timed("collect", function() collectgarbage() collectgarbage() end) base = mem() end
     local ctx = opt.ctx or {}
-    ctx.yield = yield or function() end
+    ctx.yield = function() Y("setup") end
     ctx.stop = stop
-    local state = w.setup(ctx)
+    ctx.clock = clock
+    local state = Timed("setup", w.setup, ctx)
     if state == nil then return Abort("skipped", "the workload could not build its input") end
     local work = state.work or w.work   -- a workload whose size is only known once its input is built says so in state.work
     res.work = work
-    local before = w.fingerprint and w.fingerprint(state) or nil
+    local before = w.fingerprint and Timed("fingerprint", w.fingerprint, state, ctx) or nil
 
     local stepWorst, heapDeltas, heapPeaks, walls, afterRep = 0, {}, {}, {}, {}
     local firstSig
@@ -149,7 +210,7 @@ function BN.Measure(w, opt)
     for rep = 1 - warm, reps do
         local timed = rep >= 1
         if opt.progress then opt.progress(timed and ("repetition %d of %d"):format(rep, reps) or "warm-up") end
-        local step, finish = w.begin(state)
+        local step, finish = Timed("begin", w.begin, state)
         local wallStart, memStart = clock(), mem()
         local cpu, worst, peak, steps = 0, 0, 0, 0
         local done
@@ -157,29 +218,33 @@ function BN.Measure(w, opt)
             local a = clock()
             done = step()
             local d = clock() - a
+            Part(timed and "step" or "warmup", d)
+            segTimed = segTimed or timed
             steps = steps + 1
             cpu = cpu + d
             if d > worst then worst = d end
             local grown = mem() - memStart
             if grown > peak then peak = grown end
             if maxStep and d > maxStep then
+                Close("oversize")
                 return Abort("oversize", ("one step took %.1f ms, past the %.0f ms limit; the benchmark was stopped rather than repeated"):format(d * 1000, maxStep * 1000))
             end
             if not done then
                 local status, why = Interrupted()
                 if status then return Abort(status, why) end
-                if yield then yield() end
+                Y("step")
             end
         until done
         local wall = clock() - wallStart
-        local out = finish()
-        local sig = w.signature(out)
+        Y("end of steps")   -- the last step must not share a frame with the verification below or the next repetition's first step
+        local out = Timed("finish", finish)
+        local sig = Timed("signature", w.signature, out)
         if firstSig == nil then firstSig = sig
         elseif sig ~= firstSig then
             return Abort("mismatch", ("repetition %d gave a different result from the first (%s vs %s)"):format(rep, tostring(sig):sub(1, 60), tostring(firstSig):sub(1, 60)))
         end
         if (rep == 1 - warm or rep == reps) and w.verify then
-            local ok, why = w.verify(state, out, ctx)
+            local ok, why = Timed("verify", w.verify, state, out, ctx)
             if not ok then return Abort("mismatch", "the output is wrong: " .. tostring(why)) end
         end
         res.steps = steps
@@ -194,15 +259,16 @@ function BN.Measure(w, opt)
         end
         out = nil
         if opt.retained then   -- the warm-up is collected too, but only timed repetitions count toward growth
-            collectgarbage() collectgarbage()
+            Timed("collect", function() collectgarbage() collectgarbage() end)
             if timed then afterRep[#afterRep + 1] = mem() end
         end
         local status, why = Interrupted()
         if status and rep < reps then return Abort(status, why) end
+        if rep < reps then Y("repetition") end
     end
 
     if before ~= nil then
-        local after = w.fingerprint(state)
+        local after = Timed("fingerprint", w.fingerprint, state, ctx)
         if after ~= before then return Abort("mismatch", "the benchmark changed its own input (the fingerprint before and after differ)") end
         before, after = nil, nil   -- a fingerprint can be large; it must not count as retained memory
     end
@@ -220,12 +286,16 @@ function BN.Measure(w, opt)
     for _, p in ipairs(heapPeaks) do if p > res.heapPeakKB then res.heapPeakKB = p end end
     if opt.retained then
         state = nil
-        collectgarbage() collectgarbage()
+        Timed("collect", function() collectgarbage() collectgarbage() end)
         res.retainedKB = mem() - base
         res.heapAfterRep = afterRep
         res.heapGrowthKB = #afterRep > 1 and (afterRep[#afterRep] - afterRep[1]) or 0
     end
     res.verified = w.verify ~= nil
+    Close("end")
+    res.inst, res.phases, res.slowest = BN.INSTR, phases, slow
+    local longest = slow[1]
+    if longest then res.longestMs, res.longestPhase, res.longestTimed = longest.ms, longest.phase, longest.timed end
     res.limits[#res.limits + 1] = "heap figures are the Lua heap (collectgarbage count), approximate: a collection can hide growth, peak is sampled between steps"
     return res
 end
@@ -310,6 +380,16 @@ function BN.Encode(r)
         Add("heapdelta", ("%.1f"):format(r.heapDeltaKB)) Add("heappeak", ("%.1f"):format(r.heapPeakKB))
         if r.retainedKB then Add("retained", ("%.1f"):format(r.retainedKB)) Add("growth", ("%.1f"):format(r.heapGrowthKB or 0)) end
         Add("verified", r.verified and 1 or 0)
+        Add("inst", r.inst)
+        if r.longestMs then Add("longest", F3(r.longestMs)) Add("lphase", r.longestPhase) Add("ltimed", r.longestTimed and 1 or 0) end
+        if r.phases then
+            local names = {}
+            for k in pairs(r.phases) do names[#names + 1] = k end
+            table.sort(names)
+            local ph = {}
+            for i, k in ipairs(names) do ph[i] = ("%s:%.1f:%.1f"):format(k, r.phases[k].total * 1000, r.phases[k].max * 1000) end
+            Add("phases", table.concat(ph, ","))   -- name:total ms:longest ms, over the whole measurement
+        end
     else
         Add("why", (tostring(r.why or ""):gsub("[^%w%.,%-%(%)/]", "_")):sub(1, 100))
     end
@@ -317,7 +397,7 @@ function BN.Encode(r)
 end
 
 local NUM = { v = true, seed = true, size = true, work = true, reps = true, warmup = true, median = true, mad = true, min = true, max = true,
-    persec = true, stepmax = true, wall = true, wait = true, heapdelta = true, heappeak = true, retained = true, growth = true, verified = true }
+    persec = true, inst = true, longest = true, ltimed = true, stepmax = true, wall = true, wait = true, heapdelta = true, heappeak = true, retained = true, growth = true, verified = true }
 
 -- A line from Encode back into a result (only what a comparison needs, plus the figures), or nil and why.
 function BN.Decode(line)
@@ -397,6 +477,15 @@ function BN.ReportLines(items, header)
         end
         if it.frame and it.frame.n and it.frame.n > 0 then
             extra[#extra + 1] = ("frames %d, worst %.0f ms, over 33 ms: %d, over 50 ms: %d"):format(it.frame.n, it.frame.worst * 1000, it.frame.over33, it.frame.over50)
+        end
+        if r.slowest and r.slowest[1] and r.slowest[1].ms >= BN.REPORT_SEG_MS then
+            local segs = {}
+            for i, g in ipairs(r.slowest) do
+                if g.ms >= BN.REPORT_SEG_MS then
+                    segs[#segs + 1] = ("%.1f ms (%s %.1f, other %.1f; %s)"):format(g.ms, g.phase, g.phaseMs, g.otherMs, g.timed and "includes timed steps" or "not timed")
+                end
+            end
+            extra[#extra + 1] = "longest segments between yields: " .. table.concat(segs, "; ")
         end
         if it.compare then extra[#extra + 1] = "vs baseline: " .. it.compare.verdict .. " (" .. it.compare.reason .. ")" end
         if #extra > 0 then lines[#lines + 1] = "      " .. table.concat(extra, " | ") end

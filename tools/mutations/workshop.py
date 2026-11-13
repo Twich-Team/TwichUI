@@ -57,6 +57,20 @@ m("market.batch.next-price-not-demoted", PRICES, "a.b2, a.c2 = a.b, a.c", "a.b2,
   "the old cheapest price is not remembered as the next higher price when a cheaper listing arrives", [MKT])
 m("market.batch.next-price-highest", PRICES, "elseif not a.b2 or buyout * a.c2 < a.b2 * count then", "elseif not a.b2 or buyout * a.c2 > a.b2 * count then",
   "the next higher price becomes the dearest listing instead of the nearest above the cheapest", [MKT])
+# M7.1: the batch's entries are built a few hundred at a time (ItemsJob), by the scan as well as by Items(); the stepped path has its own defects
+PRICES_TESTS = "test_workshop_prices.lua"
+m("market.batch.stepped-boundary-item-lost", PRICES,
+  "            out[id] = Entry(acc[id])\n            self.cursor = id\n            left = left - 1",
+  "            if left > 1 then out[id] = Entry(acc[id]) end\n            self.cursor = id\n            left = left - 1",
+  "the last item of every build step is skipped: a market of more than one step silently loses items at the step boundaries", [PRICES_TESTS])
+m("market.batch.stepped-ranking-shifted", PRICES,
+  "            local id = ids[self.at]\n            out[id] = Entry(acc[id])",
+  "            local id = ids[self.at + 1]\n            out[id] = Entry(acc[id])",
+  "over the item limit the kept items are read one rank late: the best-ranked item is dropped and the first one that did not fit is kept", [PRICES_TESTS, MKT])
+m("market.scan.build-ignores-closed-window", "TwichUI_Workshop/Scan.lua",
+  "                if not SC.AuctionOpen() then return End(\"interrupted\", \"closed\") end\n                local Perf = R.Perf",
+  "                local Perf = R.Perf",
+  "the scan keeps building and saves a market after the auction window was closed during the build steps", [PRICES_TESTS])
 m("market.batch.next-price-same-copper", PRICES, "if x <= p then x = 0 end", "if x < p then x = 0 end",
   "a next price that rounds to the cheapest copper is reported as a different price", [MKT])
 m("market.batch.items-total", PRICES, "a.l, a.t = a.l + 1, a.t + count", "a.l, a.t = a.l + 1, a.t + 1",

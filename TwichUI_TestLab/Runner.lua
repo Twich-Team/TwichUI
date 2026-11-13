@@ -22,7 +22,7 @@ TL.Runner = RN
 
 RN.SLICE = 0.005        -- seconds of work per frame
 RN.RUN_CAP = 300        -- seconds for a whole run
-RN.MAX_OVERRUNS = 20    -- overruns kept for the report
+RN.MAX_OVERRUNS = 20    -- the LONGEST overruns kept for the report (M7.1: it was the first 20, which hid the worst); every one is counted, by case too
 
 local state    -- the active run, or nil
 local frame
@@ -67,7 +67,7 @@ RN.Count = Count
 local function Summary(s, ended)
     local now = s.clock()
     return { results = s.results, counts = Count(s.results), cats = s.cats, seconds = now - s.startedAt, frames = s.frames, slices = s.slices,
-        worstSlice = s.worstSlice, worstFrame = s.worstFrame, overruns = s.overruns, overrunCount = s.overrunCount, setups = s.setups, ended = ended,
+        worstSlice = s.worstSlice, worstFrame = s.worstFrame, overruns = s.overruns, overrunCount = s.overrunCount, overrunBy = s.overrunBy, overrunOrder = s.overrunOrder, setups = s.setups, ended = ended,
         clock = RN.ClockName(), slice = s.slice, active = false }
 end
 
@@ -157,11 +157,23 @@ local function Begin(s)
     return s.cur
 end
 
-local function Overrun(s, cur, dur, setup)
+-- One long step. what: "begin" (the case's setup before its first step), "step" (a resume of the case, which for a benchmark has seg, the
+-- Bench's account of that segment: its longest phase, whether timed steps were in it) or "verdict" (the check after the case ended).
+-- The list keeps the longest RN.MAX_OVERRUNS; the count and the per-case figures cover all of them.
+local function Overrun(s, id, dur, what, setup, seg)
     s.overrunCount = s.overrunCount + 1
-    if #s.overruns < RN.MAX_OVERRUNS then
-        s.overruns[#s.overruns + 1] = { id = cur.case.id, ms = dur * 1000, setup = setup and setup.what or nil }
-    end
+    local by = s.overrunBy[id]
+    if not by then by = { n = 0, worst = 0 } s.overrunBy[id] = by s.overrunOrder[#s.overrunOrder + 1] = id end
+    by.n = by.n + 1
+    local ms = dur * 1000
+    if ms > by.worst then by.worst = ms end
+    local list = s.overruns
+    if #list >= RN.MAX_OVERRUNS and ms <= list[#list].ms then return end
+    local o = { id = id, ms = ms, what = what, setup = setup and setup.what or nil }
+    if seg then o.phase, o.phaseMs, o.otherMs, o.timed = seg.phase, seg.phaseMs, seg.otherMs, seg.timed end
+    list[#list + 1] = o
+    table.sort(list, function(a, b) return a.ms > b.ms end)
+    while #list > RN.MAX_OVERRUNS do list[#list] = nil end
 end
 
 -- A case that has not finished when its budget is spent is dropped at its yield point and never resumed
@@ -179,12 +191,13 @@ end
 local function Step(s, cur)
     local a = s.clock()
     s.stepping = true
+    cur.t.seg = nil
     local ok, err = coroutine.resume(cur.co, cur.t)
     s.stepping = false
     local b = s.clock()
     local dur = b - a
     local r = cur.r
-    if dur > s.slice then Overrun(s, cur, dur) end
+    if dur > s.slice then Overrun(s, cur.case.id, dur, "step", nil, cur.t.seg) end
     local dead = coroutine.status(cur.co) == "dead"
     local total = b - cur.started
     r.ms = total * 1000
@@ -201,7 +214,10 @@ local function Step(s, cur)
     elseif dead then
         s.cur = nil
         ReleaseGuided()
+        local va = s.clock()
         Verdict(cur)
+        local vd = s.clock() - va
+        if vd > s.slice then Overrun(s, cur.case.id, vd, "verdict") end
         if total > cur.case.budget then
             r.detail = (r.detail and (r.detail .. "; ") or "") .. ("late: it took %.1f s of its %.0f s budget (the budget is checked between steps; a running step could not be interrupted)"):format(total, cur.case.budget)
         end
@@ -266,7 +282,7 @@ local function OnUpdate(_, elapsed)
             local began = s.list[s.i + 1]
             cur = Begin(s)
             local dur = s.clock() - a
-            if dur > s.slice and began then Overrun(s, { case = began }, dur, s.lastSetup) end
+            if dur > s.slice and began then Overrun(s, began.id, dur, "begin", s.lastSetup) end
         end
         paused = false
         if cur then
@@ -304,7 +320,7 @@ function RN.Start(list, opts)
     end
     state = { list = list, results = results, i = 0, clock = clock, slice = opts.slice or RN.SLICE, cap = opts.cap or RN.RUN_CAP,
         onProgress = opts.onProgress, onDone = opts.onDone, cats = opts.cats or {}, startedAt = clock(), frames = 0, slices = 0,
-        worstSlice = 0, worstFrame = 0, overruns = {}, overrunCount = 0, setups = {} }
+        worstSlice = 0, worstFrame = 0, overruns = {}, overrunCount = 0, overrunBy = {}, overrunOrder = {}, setups = {} }
     frame:RegisterEvent("PLAYER_REGEN_DISABLED")
     frame:SetScript("OnUpdate", OnUpdate)
     return true

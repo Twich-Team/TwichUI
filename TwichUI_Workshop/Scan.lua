@@ -207,8 +207,7 @@ local function EnterSettle(wait)
     Changed()
 end
 
-local function ReadDone(batch, truncated)
-    local items, n, over, dropped = batch:Items()
+local function ReadDone(batch, truncated, items, n, over, dropped)
     local cut = truncated or over
     local result = { items = items, n = n, read = batch.read, used = batch.used, partialInfo = batch.partialInfo, dropped = dropped,
         cut = cut, complete = batch.partialInfo == 0 and not cut, updates = run.updates, restarts = run.restarts }
@@ -260,7 +259,19 @@ local function BeginRead()
             Changed()
             C_Timer.After(0, Step)
         else
-            ReadDone(batch, truncated)
+            -- the entries are built a step at a time too (Prices.ITEMS_STEP): at 40,000 items the one call was a visible hitch
+            local job = batch:ItemsJob()
+            local function Build()
+                if mine ~= token or g ~= gen or SC.phase ~= "reading" then return end
+                if not SC.AuctionOpen() then return End("interrupted", "closed") end
+                local Perf = R.Perf
+                local bt = Perf and Perf.on and Perf.Start("workshop.scan")
+                local done = job:Step()
+                if bt then Perf.Stop(bt) end
+                if not done then return C_Timer.After(0, Build) end
+                ReadDone(batch, truncated, job:Result())
+            end
+            C_Timer.After(0, Build)
         end
     end
     Changed()

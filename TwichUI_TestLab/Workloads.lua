@@ -32,9 +32,34 @@ local function Ctx(ctx)
     return ctx.W, TL.Fixtures, TL.Reference
 end
 
+-- A function to call between pieces of Lab-owned work: it yields once about 4 ms have passed since the last yield (M7.1: a long unyielded
+-- fingerprint or check is a frame hitch the Lab itself caused, and the report would blame the workload for it)
+local function Budget(ctx)
+    local clock = ctx and ctx.clock
+    local t0 = clock and clock()
+    return function()
+        if clock and ctx.yield and clock() - t0 >= 0.004 then
+            ctx.yield()
+            t0 = clock()
+        end
+    end
+end
+
 -- yields every `every` items of a loop that has no other yield: a verification must not hold a frame
 local function Pace(ctx, i, every)
-    if i % every == 0 and ctx and ctx.yield then ctx.yield() end
+    if not (ctx and ctx.yield) then return end
+    if ctx.clock then
+        -- by time when the harness gives a clock (M7.1): about 4 ms of Lab-owned work per frame whatever one item costs
+        if i % 4 ~= 0 then return end
+        local now = ctx.clock()
+        if not ctx.paceAt then ctx.paceAt = now return end
+        if now - ctx.paceAt >= 0.004 then
+            ctx.yield()
+            ctx.paceAt = ctx.clock()
+        end
+    elseif i % every == 0 then
+        ctx.yield()
+    end
 end
 
 ---------------------------------------------------------------------------
@@ -46,7 +71,7 @@ local BATCH_STEP = 400   -- the step is the size the scan itself reads at a time
 local function Aggregate(size, items, offline)
     local name = size >= 1000 and (floor(size / 1000) .. "k") or tostring(size)
     return Add({
-        id = "market.aggregate." .. name, fixture = "bulk.listings", seed = 7600001, size = size, unit = "records", work = size, offline = offline,
+        id = "market.aggregate." .. name, fixture = "bulk.listings", seed = 7600001, size = size, unit = "records", work = size, offline = offline, v = 2,
         setup = function(ctx)
             local W, FX = Ctx(ctx)
             local b = FX.Bulk(7600001, size, items)
@@ -61,8 +86,11 @@ local function Aggregate(size, items, offline)
         begin = function(st)
             local b = st.bulk
             local batch = st.W.Prices.NewBatch()
-            local at, entries, n = 0, nil, nil
+            local at, entries, n, job = 0, nil, nil, nil
             local item, count, buyout = b.item, b.count, b.buyout
+            local PR = st.W.Prices
+            -- the scan's own sequence (Scan.lua): records BATCH_STEP at a time, then the entries PR.ITEMS_STEP at a time. v1 called Items() in
+            -- one step, which is what the scan did before M7.1; its figures are not this workload's
             return function()
                 if at < b.n then
                     local last = min(b.n, at + BATCH_STEP)
@@ -70,7 +98,9 @@ local function Aggregate(size, items, offline)
                     at = last
                     return false
                 end
-                entries, n = batch:Items()
+                job = job or batch:ItemsJob()
+                if not job:Step(PR.ITEMS_STEP) then return false end
+                entries, n = job:Result()
                 return true
             end, function() return { batch = batch, entries = entries, n = n } end
         end,
@@ -96,7 +126,7 @@ local function Aggregate(size, items, offline)
                 local m = tr.m[id]
                 if not (p and m) then return false, "item " .. tostring(id) .. " is not one the fixture listed" end
                 if l ~= tr.l[id] or t ~= tr.t[id] then return false, ("item %d: %s listings and %s items, the fixture made %d and %d"):format(id, tostring(l), tostring(t), tr.l[id], tr.t[id]) end
-                if p < m - 1e-6 or p >= m + 1 then return false, ("item %d: cheapest unit %d, the fixture's cheapest is %.3f"):format(id, p, m) end
+                if p < m - 1e-6 or p >= m + 1 then return false, ("item %d: cheapest unit %.0f, the fixture's cheapest is %.3f"):format(id, p, m) end
             end
             -- the small tier is also compared with the independent reference model, record by record
             local W, FX, REF = Ctx(ctx)
@@ -115,7 +145,7 @@ local function Aggregate(size, items, offline)
 end
 Aggregate(1000, 300)
 Aggregate(10000, 3000)
-Aggregate(50000, 12000).maxStepMs = 300   -- its last step turns ~12,000 items into entries in one go (Prices.lua, a production step): ~90 ms offline, a finding in itself
+Aggregate(50000, 12000)
 Aggregate(250000, 30000, true)
 
 ---------------------------------------------------------------------------
@@ -124,12 +154,14 @@ Aggregate(250000, 30000, true)
 -- 200 items, scans over N days (seed 7610001 mixed, 7611001 dense). The observations are flattened into parallel arrays outside the timed section.
 local HIST_STEP = 500
 
-local function CalendarOps(seed, scans, dense)
+local function CalendarOps(seed, scans, dense, ctx)
     local FX = TL.Fixtures
     local cal = FX.Calendar(seed, { scans = scans, items = 200, style = dense and "dense" or "mixed", start = 20000,
-        listed = dense and 1 or nil, same = dense and 0 or nil, back = dense and 0 or nil, cut = dense and 0 or nil })
+        listed = dense and 1 or nil, same = dense and 0 or nil, back = dense and 0 or nil, cut = dense and 0 or nil,
+        tick = function(i) Pace(ctx, i, 1) end })
     local ops = { item = {}, day = {}, price = {}, n = 0, ids = cal.items, top = 0 }
-    for _, sc in ipairs(cal.scans) do
+    for si, sc in ipairs(cal.scans) do
+        Pace(ctx, si, 1)
         if sc.complete and not sc.cut and not sc.changed then   -- a cut scan adds no history (Prices.lua)
             for _, id in ipairs(cal.items) do
                 local p = sc.items[id]
@@ -147,9 +179,10 @@ end
 
 -- what the observations say, kept by a replay that knows nothing of strings or buckets: per item the observed days, oldest first, the same
 -- day replaced, a day before the newest ignored
-local function Replay(ops, upto)
+local function Replay(ops, upto, ctx)
     local days = {}
     for k = 1, upto do
+        Pace(ctx, k, 500)
         local id, day, p = ops.item[k], ops.day[k], ops.price[k]
         local list = days[id]
         if not list then list = {} days[id] = list end
@@ -183,7 +216,7 @@ local function CheckRecent(W, strings, days, ids, ctx)
             if not pts then return false, "item " .. id .. " has no history" end
             if #pts ~= #want * 2 then return false, ("item %d holds %d exact days, expected %d"):format(id, #pts / 2, #want) end
             for i, d in ipairs(want) do
-                if pts[2 * i - 1] ~= d[1] or pts[2 * i] ~= d[2] then return false, ("item %d day %d: %s,%s expected %d,%d"):format(id, i, tostring(pts[2 * i - 1]), tostring(pts[2 * i]), d[1], d[2]) end
+                if pts[2 * i - 1] ~= d[1] or pts[2 * i] ~= d[2] then return false, ("item %d day %d: %s,%s expected %.0f,%.0f"):format(id, i, tostring(pts[2 * i - 1]), tostring(pts[2 * i]), d[1], d[2]) end
             end
             if #bks > H.MAX_BUCKETS * 5 then return false, "item " .. id .. " keeps more buckets than the limit" end
         end
@@ -202,7 +235,7 @@ local function Insert(scans, name)
         id = "history.insert." .. name, fixture = "calendar.mixed", seed = 7610001, size = scans, unit = "updates",
         setup = function(ctx)
             local W = Ctx(ctx)
-            local ops = CalendarOps(7610001, scans, false)
+            local ops = CalendarOps(7610001, scans, false, ctx)
             return { W = W, ops = ops, work = ops.n }
         end,
         fingerprint = function(st) local o = st.ops return ("%d:%d:%d"):format(o.n, o.top, #o.ids) end,
@@ -222,7 +255,7 @@ local function Insert(scans, name)
         end,
         signature = HistorySignature,
         verify = function(st, out, ctx)
-            return CheckRecent(st.W, out.strings, Replay(st.ops, st.ops.n), st.ops.ids, ctx)
+            return CheckRecent(st.W, out.strings, Replay(st.ops, st.ops.n, ctx), st.ops.ids, ctx)
         end,
     })
 end
@@ -235,7 +268,7 @@ Add({
     id = "history.fold.dense", fixture = "calendar.dense", seed = 7611001, size = 90, unit = "updates",
     setup = function(ctx)
         local W = Ctx(ctx)
-        local ops = CalendarOps(7611001, 90, true)
+        local ops = CalendarOps(7611001, 90, true, ctx)
         local prefix = 0
         for k = 1, ops.n do if ops.day[k] <= ops.day[1] + 29 then prefix = k end end   -- the first 30 scan days are laid down before timing
         local base = {}
@@ -265,7 +298,7 @@ Add({
     end,
     signature = HistorySignature,
     verify = function(st, out, ctx)
-        local ok, why = CheckRecent(st.W, out.strings, Replay(st.ops, st.ops.n), st.ops.ids, ctx)
+        local ok, why = CheckRecent(st.W, out.strings, Replay(st.ops, st.ops.n, ctx), st.ops.ids, ctx)
         if not ok then return ok, why end
         local buckets = 0
         for _, s in pairs(out.strings) do
@@ -282,7 +315,7 @@ Add({
     id = "history.trim.400d", fixture = "calendar.mixed", seed = 7610001, size = 400, unit = "trims",
     setup = function(ctx)
         local W = Ctx(ctx)
-        local ops = CalendarOps(7610001, 400, false)
+        local ops = CalendarOps(7610001, 400, false, ctx)
         local strings, ids = {}, {}
         for k = 1, ops.n do
             local id = ops.item[k]
@@ -320,7 +353,7 @@ Add({
             if out.kept[i] > out.kept[i - 1] then return false, "a later date kept more histories than an earlier one" end
         end
         if out.kept[#out.kept] ~= 0 then return false, "histories survive 500 days past the newest scan" end
-        local days = Replay(st.ops, st.ops.n)
+        local days = Replay(st.ops, st.ops.n, ctx)
         local recent = 0
         for _, id in ipairs(st.ids) do
             local list = days[id]
@@ -336,10 +369,10 @@ Add({
 ---------------------------------------------------------------------------
 local QUERY_STEP = 250
 
-local function HistoryMarket(W, ops, strings)
+local function HistoryMarket(W, ops, strings, ctx)
     local items, n = {}, 0
-    local days = Replay(ops, ops.n)
-    for id, list in pairs(days) do items[id] = ("%d,1,1,1,0"):format(list[#list][2]) n = n + 1 end
+    local days = Replay(ops, ops.n, ctx)
+    for id, list in pairs(days) do items[id] = ("%.0f,1,1,1,0"):format(list[#list][2]) n = n + 1 end
     -- items with a single observed day: a sparse history
     local sparse = {}
     for k = 1, 40 do
@@ -364,7 +397,7 @@ Add({
     id = "market.stats.6k", fixture = "calendar.mixed+sparse", seed = 7610001, size = 400, unit = "queries", work = 6000,
     setup = function(ctx)
         local W = Ctx(ctx)
-        local ops = CalendarOps(7610001, 400, false)
+        local ops = CalendarOps(7610001, 400, false, ctx)
         local strings = {}
         for k = 1, ops.n do
             local id = ops.item[k]
@@ -372,7 +405,7 @@ Add({
             if s then strings[id] = s end
             Pace(ctx, k, 500)
         end
-        local m, days, sparse = HistoryMarket(W, ops, strings)
+        local m, days, sparse = HistoryMarket(W, ops, strings, ctx)
         local ids = {}
         for _, id in ipairs(ops.ids) do if strings[id] then ids[#ids + 1] = id end end
         for _, id in ipairs(sparse) do ids[#ids + 1] = id end
@@ -430,7 +463,7 @@ Add({
                 if not s then return false, "item " .. id .. " has no statistics, " .. cnt .. " days were observed this week" end
                 local avg = floor(sum / cnt + 0.5)
                 if s.n ~= cnt or s.low ~= lo or s.high ~= hi or s.average ~= avg then
-                    return false, ("item %d week: n %s low %s high %s avg %s, expected %d %d %d %d"):format(id, tostring(s.n), tostring(s.low), tostring(s.high), tostring(s.average), cnt, lo, hi, avg)
+                    return false, ("item %d week: n %s low %s high %s avg %s, expected %.0f %.0f %.0f %.0f"):format(id, tostring(s.n), tostring(s.low), tostring(s.high), tostring(s.average), cnt, lo, hi, avg)
                 end
             end
         end
@@ -548,9 +581,9 @@ local function Crafting(name, count, entries, pool, guild)
             end
             return { W = W, FX = FX, scns = scns, work = count }
         end,
-        fingerprint = function(st)
-            local parts = {}
-            for i, scn in ipairs(st.scns) do parts[i] = TL.Bench.Ser(scn) end   -- the planner must not change the scenarios it is given
+        fingerprint = function(st, ctx)
+            local parts, between = {}, Budget(ctx)
+            for i, scn in ipairs(st.scns) do parts[i] = TL.Bench.Ser(scn) between() end   -- the planner must not change the scenarios it is given
             return table.concat(parts, "|")
         end,
         begin = function(st)

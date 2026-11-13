@@ -147,7 +147,7 @@ facts: client.api.GetTimePreciseSec=function client.lua.div_zero_value=inf ...
 
 | Id | Fixture and seed | Size | Step (one timed unit) |
 |---|---|---|---|
-| `market.aggregate.1k / 10k / 50k` (`250k` offline only) | `FX.Bulk`, seed 7600001 | 1,000 / 10,000 / 50,000 (250,000) records over 300 / 3,000 / 12,000 (30,000) items; 2% invalid, 5% bid-only | 400 records through `Prices.NewBatch():Add`, then `Items()` as the last step |
+| `market.aggregate.1k / 10k / 50k` (`250k` offline only) | `FX.Bulk`, seed 7600001 | 1,000 / 10,000 / 50,000 (250,000) records over 300 / 3,000 / 12,000 (30,000) items; 2% invalid, 5% bid-only | 400 records through `Prices.NewBatch():Add`, then the entries built `Prices.ITEMS_STEP` (400) at a time by `batch:ItemsJob()`, the scan's own sequence. **Version 2** (v1 called `Items()` as one last step) |
 | `history.insert.30d / 120d / 400d` | `FX.Calendar` mixed (gaps, repeats, cut scans skipped), seed 7610001, 200 items | 30 / 120 / 400 scan days | 500 `History.Add` calls from empty strings (folds and expiry included) |
 | `history.fold.dense` | dense calendar, seed 7611001 | 30 days laid down untimed, then 60 daily updates of 200 items | 500 `History.Add` calls, each folding one day |
 | `history.trim.400d` | seed 7610001 | 200 histories x 6 later dates | 300 `History.Trim` calls |
@@ -163,7 +163,7 @@ Other cases: `perf.retained.*` (three workloads with forced full collections bet
 - One warm-up repetition (not a sample), then five timed repetitions (`--reps`, at most 25). Reported: every sample, **median**, **MAD** (median of the absolute deviations from the median), minimum, maximum, throughput (work / median), **longest single step**, wall time (first step to last, waits included) and wait (wall minus steps). A complete game-frame interval is a different quantity: the Runner keeps the game's frame intervals per case (count, worst, over 33 ms, over 50 ms) and the report prints them; they include every other addon.
 - **Memory** is the Lua heap (`collectgarbage("count")`, KB), not an addon's total and not an allocation count. "Heap change" is the median change over a repetition and "peak" the highest value sampled between steps; a collection can hide growth and a spike inside a step is invisible, so both are approximate. "Retained" and "growth over repetitions" use forced full collections after each repetition and are measured only offline or by the `perf.retained.*` cases.
 - **Correctness.** Every repetition's output signature must equal the first; the workload's verification runs on the warm-up and the last repetition against what the fixture knows or an independent derivation (generator truth, a replay of the observations, the reference model of `Reference.lua`, the construction of the lookup mix); a fingerprint of the input before and after must match. A failure is status `mismatch`, not a time.
-- **Stutter guard.** If one step takes longer than 100 ms (300 ms for the 50k batch, whose last step is a production `Items()` conversion) the benchmark stops (`oversize`) instead of repeating it. A budget (50 s) and combat also end it; Stop is handled by the Runner. Statuses other than `ok` carry a reason and no statistics.
+- **Stutter guard.** If one step takes longer than 100 ms the benchmark stops (`oversize`) instead of repeating it. A budget (50 s) and combat also end it; Stop is handled by the Runner. Statuses other than `ok` carry a reason and no statistics.
 
 ### Comparing (`Bench.Compare`, `--compare`)
 
@@ -188,7 +188,17 @@ Take a baseline and a candidate on the same machine, same session, nothing else 
 
 ### Known limits
 
-The game's Lua is a different build with the interface's memory shared; a figure measured offline says nothing about it. The clock is `GetTimePreciseSec` in the game, `os.clock` (process CPU seconds) offline. The 50k and 250k batches end with one production `Items()` step of tens of milliseconds offline: that is a finding about production (a scan's save step), not something the benchmark yields around, and no production algorithm was changed for the benchmarks. UI redraws are deferred (above). The crafting workloads use the current one-level planner only. Verification of `Compare`, `Trend` and `Series` outputs is by signature stability plus the week statistics against the replay; the other fields are not independently derived.
+The game's Lua is a different build with the interface's memory shared; a figure measured offline says nothing about it. The clock is `GetTimePreciseSec` in the game, `os.clock` (process CPU seconds) offline. `market.aggregate.*` v1 ended with one production `Items()` call (about 40 ms at 12,000 items and over 100 ms at the 40,000 limit offline): M7.1 found the live scan did the same and made it stepped, so v2 measures the stepped sequence; v1 figures are not v2's. UI redraws are deferred (above). The crafting workloads use the current one-level planner only. Verification of `Compare`, `Trend` and `Series` outputs is by signature stability plus the week statistics against the replay; the other fields are not independently derived.
+
+### Attribution of long steps (M7.1)
+
+A **segment** is the work between two yields, which is what one game frame must absorb. `Measure` times each piece of it under a phase name (`setup`, `fingerprint`, `begin`, `warmup`/`step` for the repetitions' steps, `finish`, `signature`, `verify`, `collect` for forced collections) and, at every yield, closes the segment and keeps the longest four. A sample is still the sum of the **timed steps only**, so lines with `inst=1` (the first two real-client runs) and `inst=2` compare normally; `inst=` is information, not a comparison key. Each result line now also carries `longest=` (ms), `lphase=` (the phase that dominated it), `ltimed=` (1 if a timed step was inside it) and `phases=name:total ms:longest ms,...`. The report prints, for a segment of 16 ms or more, `longest segments between yields: 61.0 ms (verify 40.0, other 1.0; no timed step)`. Lab-owned setup, fingerprints and verification yield about every 4 ms (a time budget, not a count); a yield also follows the last step of a repetition and separates repetitions, so a segment holds one step at most.
+
+The Runner's overrun list keeps the **longest** 20 (it kept the first 20, which hid the worst), says whether each was a resume, the case's setup before its first step, or the check after it ended, names the dominant phase for a benchmark, and ends with `by case: id count (worst ms)`; the count covers every overrun. A frame interval is the game's time, not CPU time. A step that never yields still cannot be interrupted, only measured.
+
+### Rerunning only what M7.1 changed (in the game)
+
+Tick **Performance (benchmarks)** and choose by name: `perf.market.stats.6k` (the overflow), `perf.market.aggregate.50k` and `perf.market.aggregate.10k` (stepped finalization, v2), `perf.crafting.plan.large` (the fingerprint that was one 130 ms offline step, now yielded), `perf.history.insert.400d` and `perf.history.fold.dense` (Lab-owned setup now yielded). Then read the `longest segments` line and the `overruns` section: the worst entry should now be a named `step` or `collect`, not an anonymous 600 ms.
 
 ### Safety
 

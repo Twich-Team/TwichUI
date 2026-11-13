@@ -138,6 +138,32 @@ do
   Same(count, PR.MAX_ITEMS); Check(cut, "cut off"); Same(lost, 3)
   Check(kept[PR.MAX_ITEMS + 3], "a recipe item is kept first"); Check(kept[PR.MAX_ITEMS + 2], "then the item with most listings")
   Check(kept[1] and kept[PR.MAX_ITEMS - 2], "then the lowest item numbers"); Check(not kept[PR.MAX_ITEMS - 1] and not kept[PR.MAX_ITEMS] and not kept[PR.MAX_ITEMS + 1], "and these three did not fit")
+  -- M7.1: the stepped job gives exactly the answer Items() gives, whatever the step size, under the limit and over it (with a small limit
+  -- so the over-limit case is cheap); a job that is not finished has no result; and no step does more than its share
+  local was = PR.MAX_ITEMS
+  for _, lim in ipairs({ 1000, 7 }) do
+    PR.MAX_ITEMS = lim
+    for _, size in ipairs({ 0, 1, 6, 7, 8, 25, 400 }) do
+      local pri = { [size] = true, [3] = true }
+      local function Fill() local x = PR.NewBatch(pri) for i = 1, size do x:Add(i * 3 + 1, 1 + i % 4, 10 + i % 17) if i % 5 == 0 then x:Add(i * 3 + 1, 2, 500) end end return x end
+      local whole = { Fill():Items() }
+      for _, step in ipairs({ 1, 3, 400 }) do
+        local job, steps = Fill():ItemsJob(), 0
+        Check(job:Result() == nil, "no result before the job is finished")
+        while not job:Step(step) do
+          steps = steps + 1
+          Check(steps < 100000, "the job finishes")
+          Check(job:Result() == nil, "and has no result while unfinished")
+        end
+        local part = { job:Result() }
+        Same(part[2], whole[2], ("count, size %d limit %d step %d"):format(size, lim, step)); Same(part[3], whole[3], "over the limit"); Same(part[4], whole[4], "dropped")
+        for id, e in pairs(whole[1]) do Same(part[1][id], e, ("entry %d, size %d limit %d step %d"):format(id, size, lim, step)) end
+        for id in pairs(part[1]) do Check(whole[1][id] ~= nil, "no extra entry") end
+        if lim == 1000 and size >= 25 and step == 1 then Check(steps >= size, "a one-item step does not do the whole batch at once (" .. steps .. " steps)") end
+      end
+    end
+  end
+  PR.MAX_ITEMS = was
 end
 
 ---------------------------------------------------------------------------
@@ -440,6 +466,9 @@ do
   Check(pr > 0.08 and pr < 0.5, "a third of the way through the reading: " .. tostring(pr))
   Check(t.Tick()); Same(t.ah.infoCalls, 800)
   Check(t.Tick()); Same(t.ah.infoCalls, 1003, "the last, smaller batch (records past the end aren't asked for)")
+  -- M7.1: the saved entries are built on the next timer tick(s), not in the last read step
+  Same(SC.state, "scanning"); Same(SC.phase, "reading", "the entries are still to be built")
+  Check(t.Tick()); Same(t.ah.infoCalls, 1003, "building the entries reads no more records")
   Same(SC.state, "done"); Check(SC.result.complete); Same(SC.result.items, 3, "every item, wanted or not"); Same(SC.result.used, 1002)
   Same(t.ah.outOfRange, nil, "records 0 .. n-1 are read, nothing outside them")
   Same(PR.Lookup(PR.Market("Realm|Alliance"), 10).qty, 1, "the record at index 0 (101 copper) counts")
@@ -522,6 +551,25 @@ do
   t.Advance(10); Same(t.ah.infoCalls, calls, "no further reading")
   t.c.AuctionHouseFrame:Show()
   Same(PR.Market("Realm|Alliance").n, before.n, "nothing was written")
+  -- M7.1: closed after the last record was read, while the entries are still being built: interrupted, nothing written, no result
+  do
+    local mk = PR.Market("Realm|Alliance")
+    t.ah.records = Records(1000, 10)
+    local base = t.ah.infoCalls
+    Check(SC.Start(want)); t.Fire("REPLICATE_ITEM_LIST_UPDATE")
+    local guard = 0
+    while SC.state == "scanning" and guard < 20 do
+      -- the first reading tick reads 400 of the 1000 records; go on until the last record was asked for
+      if t.ah.infoCalls - base >= 1000 then break end
+      t.Tick() guard = guard + 1
+    end
+    Same(SC.state, "scanning"); Same(SC.phase, "reading", "all records read, the entries not built yet")
+    t.c.AuctionHouseFrame:Hide()
+    Check(t.Tick()); Same(SC.state, "interrupted", "the build step notices the window is gone"); Same(SC.why, "closed")
+    t.Advance(10); Same(SC.state, "interrupted")
+    t.c.AuctionHouseFrame:Show()
+    Same(PR.Market("Realm|Alliance").at, mk.at, "the saved market was not rewritten"); Same(PR.Market("Realm|Alliance").n, mk.n)
+  end
   -- the same, ended by the event
   Check(SC.Start(want)); t.Fire("REPLICATE_ITEM_LIST_UPDATE"); Check(t.Tick()); t.Fire("AUCTION_HOUSE_DISABLED")
   Same(SC.state, "interrupted"); t.Advance(10); Same(SC.state, "interrupted")

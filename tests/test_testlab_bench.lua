@@ -189,7 +189,7 @@ do
   Same(calls.setup, 1, "the input is built once, outside the timing")
   Same(calls.begin, 6, "one warm-up and five repetitions")
   Same(calls.step, 18, "three steps each")
-  Same(yields, 12, "a yield after every step but the last")
+  Same(yields, 12 + 6 + 5, "a yield after every step but the last, one after the last step (M7.1) and one between repetitions")
   Same(#res.samples, 5, "five samples: the warm-up is not one")
   for i, want in ipairs({ 6, 9, 12, 15, 18 }) do Close(res.samples[i], want, "sample " .. i) end
   Close(res.median, 12); Close(res.mad, 3, "MAD of 6 9 12 15 18"); Close(res.min, 6); Close(res.max, 18)
@@ -447,6 +447,70 @@ do
   local badLook = Measure("market.lookup.24k")
   MK.Price = price
   Same(badLook.status, "mismatch", tostring(badLook.why))
+
+  -- M7.1: market.stats.6k raised "integer overflow attempting to store 39286995442" in the client. Cause: the workload's FIXTURE wrote a
+  -- copper price with %d. This file loads client_format.lua, which refuses what the client refuses, so the committed workload runs here
+  -- exactly as it does there; the fixture's prices do pass 2^31 (the figure in the client's message is one of them)
+  local stats = Measure("market.stats.6k")
+  Same(stats.status, "ok", "market.stats.6k: " .. tostring(stats.why))
+  Check(stats.verified and stats.work == 6000, "and it verified its output")
+  local st = WL.byId["market.stats.6k"]
+  local big = false
+  for _, p in ipairs(st.setup({ W = t.R.Workshop, yield = function() end }).ops.price) do if p >= 2147483648 then big = true break end end
+  Check(big, "the fixture holds a price beyond 32 bits, so the %d guard is exercised")
+  -- the output is still checked: a wrong week average from production is caught, and the checksum sees a wrong result
+  local stat = MK.Stats
+  MK.Stats = function(id, span, o) local r = stat(id, span, o) if r and span == "week" and r.average then r = setmetatable({ average = r.average + 1 }, { __index = r }) end return r end
+  local badStats = Measure("market.stats.6k")
+  MK.Stats = stat
+  Same(badStats.status, "mismatch", tostring(badStats.why)); Check(badStats.why:find("avg", 1, true), tostring(badStats.why))
+  local sigA = st.signature({ got = { 1 }, chk = 5 })
+  Check(sigA ~= st.signature({ got = { 1 }, chk = 6 }) and sigA ~= st.signature({ got = { 2 }, chk = 5 }), "the signature separates a different count and a different checksum")
+end
+
+---------------------------------------------------------------------------
+-- 6b. Attribution (M7.1): what a segment between two yields was made of
+---------------------------------------------------------------------------
+do
+  local t = Setup({ noWorkshop = true })
+  t.Load({ "Lab.lua", "Bench.lua" })
+  local BN = t.TL.Bench
+  local now = 0
+  local seen = {}
+  local w = { id = "attr", v = 1, fixture = "f", seed = 1, size = 1, unit = "u", work = 10,
+    setup = function(ctx) now = now + 0.030 ctx.yield() now = now + 0.010 return { n = 2 } end,
+    fingerprint = function() now = now + 0.020 return "fp" end,
+    begin = function(st)
+      local at = 0
+      return function() now = now + 0.002 at = at + 1 return at >= st.n end, function() now = now + 0.001 return { sig = "s" } end
+    end,
+    signature = function(o) return o.sig end,
+    verify = function() now = now + 0.040 return true end }
+  local res = BN.Measure(w, { clock = function() return now end, yield = function() now = now + 0.007 end, reps = 2, warmup = 0, env = "t", host = "h",
+    segment = function(seg) seen[#seen + 1] = seg end })
+  Same(res.status, "ok", tostring(res.why))
+  Same(res.inst, BN.INSTR, "the instrumentation level is recorded")
+  Close(res.median, 4, "a sample is still the sum of the timed steps only")
+  Close(res.phases.setup.total * 1000, 40, "setup is split at its yield and the wait belongs to no phase"); Same(res.phases.setup.n, 2)
+  Close(res.phases.setup.max * 1000, 30); Close(res.phases.fingerprint.max * 1000, 20)
+  Close(res.phases.verify.max * 1000, 40, "verification is its own phase"); Same(res.phases.verify.n, 2, "on the first and the last repetition")
+  Close(res.phases.step.total * 1000, 8, "four timed steps")
+  Same(res.longestPhase, "verify"); Close(res.longestMs, 61, "the longest segment: the last repetition's finish 1 + verify 40 + the closing fingerprint 20"); Check(not res.longestTimed, "it held no timed step")
+  Check(#res.slowest <= BN.SLOW_SEGMENTS and res.slowest[1].ms >= res.slowest[#res.slowest].ms, "the longest few, longest first")
+  Check(#seen >= 6, "the Runner is told of every segment (" .. #seen .. ")")
+  -- a segment that holds a timed step says so
+  local timedSeen = false
+  for _, g in ipairs(seen) do if g.timed then timedSeen = true end end
+  Check(timedSeen, "and which held timed steps")
+  -- the line carries the attribution, and decoding it keeps the instrumentation level without making runs incomparable
+  local line = BN.Encode(res)
+  Check(line:find(" inst=2", 1, true) and line:find(" lphase=verify", 1, true) and line:find(" ltimed=0", 1, true) and line:find(" phases=", 1, true), line)
+  local back = BN.Decode(line)
+  Same(back.inst, BN.INSTR); Close(back.longest, 61, "decoded longest segment")
+  local older = BN.Decode(line:gsub(" inst=2", " inst=1"))
+  Check(BN.Compare(older, back).verdict ~= "incomparable", "a level-1 line and a level-2 line are comparable: a sample did not change")
+  local text = table.concat(BN.ReportLines({ { result = res } }, "h"), "\n")
+  Check(text:find("longest segments between yields", 1, true) and text:find("verify 40.0", 1, true), text)
 end
 
 ---------------------------------------------------------------------------

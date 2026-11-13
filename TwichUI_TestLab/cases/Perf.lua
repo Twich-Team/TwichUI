@@ -29,6 +29,7 @@ local function Register(id, w, retained)
             clock = RN.Now, clockName = RN.ClockName(), env = Environment(), host = "client", lua = _VERSION,
             yield = function() t:Yield() end, stop = Combat, budget = 50, maxStep = (w.maxStepMs or BN.MAX_STEP_MS) / 1000, retained = retained,
             progress = function(text) t:Progress(text) end, ctx = { W = t.W },
+            segment = function(seg) t.seg = seg end,   -- the Runner reads it when this resume ends, to say what a long slice was made of
         })
         if res.status == "skipped" then t:Skip(res.why) end
         if retained then res.id = w.id .. ".retained" end   -- its timings are not the plain run's: a different line, a different baseline

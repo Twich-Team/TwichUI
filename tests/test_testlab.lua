@@ -278,8 +278,41 @@ do
   Check(done.slices >= frames - 1)
   -- a yielding case's slice stays near the budget: no frame but the heavy one exceeds it by more than one step
   local report = TL.Report.Build(done)
-  Check(report:find("overruns (a step ran longer than the slice; it could not be interrupted):", 1, true), "the report says so")
-  Check(report:find("heavy  %d+%.%d ms in one step"), "and lists it")
+  Check(report:find("overruns (a resume ran longer than the slice and could not be interrupted): 1 in all, the 1 longest", 1, true), "the report says so")
+  Check(report:find("heavy  %d+%.%d ms, one resume"), "and lists it")
+  Check(report:find("by case: heavy 1 (worst 50 ms)", 1, true), "and counts it by case")
+end
+
+-- M7.1: the report keeps the LONGEST overruns, not the first ones, counts all of them, and counts them by case
+do
+  local t = Setup({ noWorkshop = true })
+  local wire = WireFrames(t)
+  t.Load({ "Lab.lua", "Runner.lua", "Report.lua" })
+  local TL = t.TL
+  local RN = TL.Runner
+  wire(RN)
+  TL.Category{ id = "o", label = "O" }
+  local N = 26
+  for k = 1, N do
+    -- case k holds one step of 10 + k ms, except the LAST case, which holds the longest of all (400 ms)
+    local ms = k == N and 400 or (10 + k)
+    TL.Case{ id = ("c%02d"):format(k), cat = "o", class = "pure", run = function(tt) t.Advance(ms / 1000) tt:Check(true) end }
+  end
+  local done
+  Check(RN.Start(TL.Select(), { cats = { "o" }, clock = t.Now, onDone = function(s) done = s end }))
+  Drive(RN)
+  Check(done, "finished")
+  Same(done.overrunCount, N, "every overrun is counted")
+  Same(#done.overruns, RN.MAX_OVERRUNS, "the list is bounded")
+  Same(done.overruns[1].id, ("c%02d"):format(N), "and the longest comes first although it came last")
+  Check(done.overruns[1].ms >= 399, "with its length")
+  for i = 2, #done.overruns do Check(done.overruns[i - 1].ms >= done.overruns[i].ms, "longest first") end
+  Check(done.overruns[#done.overruns].ms > 10 + (N - RN.MAX_OVERRUNS) + 0.5, "the shortest kept is longer than the ones left out")
+  Same(#done.overrunOrder, N, "the per-case figures cover every case"); Same(done.overrunBy["c01"].n, 1)
+  local report = TL.Report.Build(done)
+  Check(report:find("%d+ in all, the 20 longest"), "the report says how many were left out")
+  Check(report:find("c26  400.0 ms"), "the longest is listed")
+  Check(not report:find("c01  11.0 ms, one resume", 1, true), "an early short one is not")
 end
 
 ---------------------------------------------------------------------------

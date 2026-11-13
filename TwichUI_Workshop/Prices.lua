@@ -154,25 +154,99 @@ end
 -- { [itemID] = "p,q,l,t,x" }, how many items, whether more than MAX_ITEMS were found, and how many were dropped. Over the limit the
 -- kept items are the priority items first, then those with the most listings, then the lowest item numbers (a fixed, explainable
 -- order, never a cut by item number alone); `dropped` says how many valid items did not fit.
-function Batch:Items()
-    local acc, out, n = self.acc, {}, 0
-    for _ in pairs(acc) do n = n + 1 end
-    if n <= PR.MAX_ITEMS then
-        for id, a in pairs(acc) do out[id] = Entry(a) end
-        return out, n, false, 0
+--
+-- It is built by an ItemsJob so the scan can do it a few hundred items at a time (M7.1: at 40,000 items the single call was a visible
+-- hitch, 40 ms at 12,000 items and over 100 ms at the limit, offline). Items() runs the same job to the end, so both give one answer.
+local ItemsJob = {}
+ItemsJob.__index = ItemsJob
+
+PR.ITEMS_STEP = 400          -- items turned into saved entries per step of an ItemsJob (the size of a scan's read step)
+
+function Batch:ItemsJob()
+    return setmetatable({ acc = self.acc, priority = self.priority, out = {}, n = 0, phase = "count", cursor = nil }, ItemsJob)
+end
+
+-- Does up to `limit` items of work (counting and listing an item cost a tenth of building its entry). Returns true when finished.
+-- The batch's table must not change meanwhile (a scan's batch is complete when this starts). The one piece that cannot be split is
+-- the sort of a market over MAX_ITEMS, which is rare; it happens in one step.
+function ItemsJob:Step(limit)
+    limit = limit or PR.ITEMS_STEP
+    local acc, out = self.acc, self.out
+    local light = limit * 10
+    if self.phase == "count" then
+        local id = self.cursor
+        while light > 0 do
+            id = next(acc, id)
+            if id == nil then
+                self.cursor = nil
+                if self.n <= PR.MAX_ITEMS then self.phase = "build" else self.phase, self.ids = "collect", {} end
+                break
+            end
+            self.n = self.n + 1
+            self.cursor = id
+            light = light - 1
+        end
+        if self.phase == "count" then return false end
     end
-    local ids = {}
-    for id in pairs(acc) do ids[#ids + 1] = id end
-    local pri = self.priority or {}
-    table.sort(ids, function(x, y)
-        local px, py = pri[x] and 1 or 0, pri[y] and 1 or 0
-        if px ~= py then return px > py end
-        local lx, ly = acc[x].l, acc[y].l
-        if lx ~= ly then return lx > ly end
-        return x < y
-    end)
-    for i = 1, PR.MAX_ITEMS do out[ids[i]] = Entry(acc[ids[i]]) end
-    return out, PR.MAX_ITEMS, true, n - PR.MAX_ITEMS
+    if self.phase == "build" then
+        local id, left = self.cursor, limit
+        while left > 0 do
+            id = next(acc, id)
+            if id == nil then self.phase = "done" self.cursor = nil return true end
+            out[id] = Entry(acc[id])
+            self.cursor = id
+            left = left - 1
+        end
+        return false
+    end
+    if self.phase == "collect" then
+        local ids, id = self.ids, self.cursor
+        while light > 0 do
+            id = next(acc, id)
+            if id == nil then
+                self.cursor = nil
+                local pri = self.priority or {}
+                table.sort(ids, function(x, y)
+                    local px, py = pri[x] and 1 or 0, pri[y] and 1 or 0
+                    if px ~= py then return px > py end
+                    local lx, ly = acc[x].l, acc[y].l
+                    if lx ~= ly then return lx > ly end
+                    return x < y
+                end)
+                self.phase, self.at = "sorted", 0
+                return false
+            end
+            ids[#ids + 1] = id
+            self.cursor = id
+            light = light - 1
+        end
+        return false
+    end
+    if self.phase == "sorted" then
+        local ids, left = self.ids, limit
+        while left > 0 and self.at < PR.MAX_ITEMS do
+            self.at = self.at + 1
+            local id = ids[self.at]
+            out[id] = Entry(acc[id])
+            left = left - 1
+        end
+        if self.at >= PR.MAX_ITEMS then self.phase = "done" return true end
+        return false
+    end
+    return self.phase == "done"
+end
+
+-- items, how many, whether over the limit, how many dropped; only once Step has returned true
+function ItemsJob:Result()
+    if self.phase ~= "done" then return nil end
+    if self.n <= PR.MAX_ITEMS then return self.out, self.n, false, 0 end
+    return self.out, PR.MAX_ITEMS, true, self.n - PR.MAX_ITEMS
+end
+
+function Batch:Items()
+    local job = self:ItemsJob()
+    while not job:Step(math.huge) do end
+    return job:Result()
 end
 
 ---------------------------------------------------------------------------
