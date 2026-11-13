@@ -473,10 +473,13 @@ end
 
 -- The player's click on Scan prices. Returns true, or false and why (Scan.lua says it in words). Needs no profession: the scan prices
 -- every item the auction house lists.
-function S.StartScan()
-    S.FillSome(math.huge)
+-- opts.auto (A6, Auto.lua only): started on opening the auction house, not by a click. It reads no profession window first (the scan needs no recipe;
+-- the recipes only decide which items to keep first when the auction house lists more than the Workshop keeps).
+function S.StartScan(opts)
+    local auto = type(opts) == "table" and opts.auto == true
+    if not auto then S.FillSome(math.huge) end
     local set = S.Wanted()
-    return SC.Start(set)
+    return SC.Start(set, { auto = auto })
 end
 
 -- Which saved prices the view uses (Market.Source): with an auction house open, only that one; otherwise the one of this realm scanned last

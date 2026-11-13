@@ -1079,9 +1079,132 @@ The cache is bounded (2,000 entries; retained memory returns to the baseline whe
 - Still unknown for Cost: whether Forever lets a buyer take part of a stack (section 15); until then every multi-listing walk that ends inside a
   tier of mixed stack sizes is a range.
 
+## A6 implementation report: automatic price updates on opening the auction house (2026-11-13)
+
+**Status:** built and offline/simulator tested; **not real-client accepted**. Whether Forever lets an addon start `C_AuctionHouse.ReplicateItems()`
+from an event handler is **unknown**: the UI source's API documentation (`AuctionHouseDocumentation.lua`) marks it only as the replacement for an
+"allItem" query and says nothing of hardware events, restrictions or a cooldown, and nothing in the repository has observed it. So the shipped
+behaviour is the **one-click path**; the event-driven request is behind a capability gate that only the owner switches on after the Lab probes.
+
+### What was built
+- **Core detector, `!!!TwichUI/WorkshopAuto.lua`** (listed in the core `.toc` after `WorkshopLauncher.lua`). Events: `PLAYER_INTERACTION_MANAGER_FRAME_SHOW`
+  (Auctioneer; `Enum.PlayerInteractionType.Auctioneer`, 21 when the enum is absent) and `AUCTION_HOUSE_SHOW` open a visit; `..._FRAME_HIDE` (Auctioneer)
+  and `AUCTION_HOUSE_CLOSED` end it. The first opening event starts a visit and its siblings, while it is open, change nothing. The detector makes no
+  timer when the setting is off or the player is in combat. Otherwise one bounded chain: a look on the next frame and every 0.25 s for at most 5 s
+  until `AuctionHouseFrame` is shown; every look first checks the visit is still current and open (so an event after the window closed loads nothing),
+  the setting is still on and the player is not in combat. When the window is shown it calls `WorkshopLauncher.Load()` once (never retried in the
+  visit; the launcher itself refuses in combat) and then `Workshop.Auto.Visit(id)`. No per-frame work, no `OnUpdate`, nothing at login.
+- **Setting `workshopAutoScan`** (core switch, `TwichUIDB.modules.workshopAutoScan`, default **on**; `Core.lua` `DEFAULT_MODULES`, `Switches.lua`), read at
+  each opening, so turning it off applies at once; available before the Workshop loads; no second saved variable. On the Workshop settings page:
+  "Update prices automatically when I open the Auction House", "Reads the Auction House at most once an hour. Nothing is bought or posted.", and a
+  status row that says **"One click"** (not "Automatic") while the capability is not `supported`, so the page never claims a background update that
+  needs a click.
+- **Policy and entry, `TwichUI_Workshop/Auto.lua`** (pure `Fresh` and `Decide`, then `Visit`). Gates, in order: setting, combat, window open and the visit
+  current, visit not already handled, market known, saved data not held, no scan running, posting search not busy, market fresh, refusal backoff.
+  Result: `scan` (capability `supported`), `prompt` (`click` or `unknown`), or `skip` with a reason.
+- **Shared scanner, `Scan.lua`**: `Scan.Start(priority, { auto = true })` (through `Session.StartScan({ auto = true })`, which skips the profession read an
+  automatic start has no need of). One scanner, one state machine: request, events, settling, reading, completeness, retry limits, distribution,
+  history, stepped commit, atomic Apply, generation tokens, all unchanged. New: `Scan.Stop()`, `SC.auto`/`SC.key`, an automatic scan giving way to the
+  player (below) and the messages.
+- **Button, `AuctionButton.lua`**: no new frames. The existing button reads **Update prices** while a prompt waits, **Stop** while a scan runs
+  (disabled and reading "Saving..." in the short saving step), otherwise **Scan prices**; the existing bar and status line carry "Updating market prices...",
+  "Market prices updated." and, on a refusal, "Automatic update unavailable. You can update prices manually."
+- **Test Lab probes, `TwichUI_TestLab/cases/AutoScan.lua`** (opt-in, manual group "Automatic price update probes").
+
+### The capability gate
+`R.WorkshopAuto.CAPABILITY` (core, `WorkshopAuto.lua`): `"unknown"` (shipped), `"click"`, `"supported"`; anything else reads as unknown.
+| Value | Meaning | A due update |
+|---|---|---|
+| `unknown` | the probe has not been run | prompt "Update prices"; **no request is made** |
+| `click` | the probe showed a click is required | the same prompt |
+| `supported` | the probe showed an event-driven request is accepted | started by `Auto.Visit` on opening, once per visit |
+To enable after a good probe: change the one constant (a code change, reviewed), not a saved setting. A prompt never uses up the visit's one automatic
+attempt, and the player's click is an ordinary manual scan (`snap.auto = false`).
+
+### The state machine of a visit
+`closed` --open event--> `visit n` (dedupe) --setting/combat--> skip, **or** --window shown within 5 s--> load Workshop --> `Auto.Visit(n)` -->
+`skip(reason)` | `prompt` | `scan` --> scanner phases: `waiting` (throttle) -> `awaiting` (request sent) -> `settling` -> `reading` -> `saving` -> `done`.
+Ends: `done`, `failed` (why), `interrupted` (`closed`, `stopped`, `busy`).
+
+### Cooldown, refusal and time
+- **Freshness** is the market's newest accepted **full** scan (`info.at`; a legacy recipes-only market is not one) **under 60 minutes**. The market is the
+  exact key `realm|side` from the auctioneer's `UnitFactionGroup("npc")` (`unknown` is its own market): another faction's or realm's scan never counts.
+- A scan accepted earlier **this session** also counts by the monotonic clock (`GetTime`), so a wall clock that moved backwards cannot make a scan repeat.
+  A saved time more than 5 minutes in the future is not believed as fresh. A missing or non-numeric time is "due". (Equal to 60 minutes is due.)
+- **Refusal backoff**: after an automatic scan fails with `dropped`, `throttled`, `noResponse` or `api` (or `Scan.Start` refuses with `api`), that market
+  is left alone for **15 minutes**, in session memory only. Manual scans ignore the cooldown and the backoff.
+- **One automatic attempt per visit**: a visit id is handled once (`Auto.Visit` uses it up whatever the outcome); a repeated or stale call does nothing.
+  Closing and reopening is a new visit and follows the cooldown.
+
+### Stop, closing, and the commit
+- `Scan.Stop()` ends a scan in `waiting`, `awaiting`, `settling` or `reading` as `interrupted`/`stopped`: the scan token and generation advance, so every
+  pending timer and event is harmless, and **nothing is written** (the saved market, history and logs are only read until the last saving step).
+- **Not stoppable in `saving`.** The saving phase builds new tables in small steps and then applies them in one step. Stopping between steps would
+  be safe in principle, but a Stop racing the apply could not promise "nothing was written", so the button is disabled ("Saving...") and
+  `Scan.Stop()` answers `false, "saving"`. The phase is short (time-budgeted steps), and this keeps the existing rule.
+- **Closing the auction house:** before `saving` the scan ends `interrupted`/`closed` with nothing written; **during `saving` the commit finishes** (the
+  listings were already read), exactly as before A6.
+- **Giving way:** an automatic scan that is still `waiting` for the throttle ends `interrupted`/`busy` (nothing sent, nothing written) if
+  `AUCTION_HOUSE_THROTTLED_MESSAGE_SENT` shows another request went out, and it refuses to start, or to send, while the posting search is busy. A manual
+  scan keeps waiting. The Workshop never blocks the player's search, purchase or posting and takes no protected action.
+
+### Provenance and compatibility
+`snap.auto` and the scan-log `AUTO` flag already existed in the A2 format; A6 only sets them from the run. **No database version, market format or
+history change**, and no migration. Manual scans, the existing Scan prices click and the Opportunities view's scan are unchanged. A refused, stopped
+or interrupted scan changes nothing saved (tested by comparing the whole saved table before and after).
+
+### Test Lab probes (opt-in; run each on its own, at an auction house, out of combat)
+Category "Automatic price update probes (opt-in)" (a manual group, like the load test). The static scan in `tests/test_testlab.lua` still forbids
+`ReplicateItems` everywhere except this one file, and there it requires exactly one call, inside `RequestOnce`, with no loop or timer around it.
+| Case | Class | What it does |
+|---|---|---|
+| `autoscan.state` | read only | setting, capability, API presence, throttle readiness, last visit's decision |
+| `autoscan.market.identity` | read only | the market key and side the Workshop would use; the saved market's age |
+| `autoscan.event.open` | guided | arm; you close and reopen the auction house; **one** request is made from the opening event handler, no click; reports accepted / blocked / dropped / no answer, time to the first update, throttle readiness, `ADDON_ACTION_FORBIDDEN`/`BLOCKED` events, counts of owner fields filled in, stacks over one, records lacking info, and the commodity status of up to five stackables |
+| `autoscan.click.request` | guided | one request from a click on a Lab-owned button; optionally search straight after: reports the search's delay (sent and answered) |
+Safety: the request only when `IsThrottledMessageSystemReady()` is true, once per case, never retried, never simulated; a refusal is recorded, not
+worked around; only counts and times are kept (no player name is read into a fact, no listing is stored); nothing is bought, bid, posted or
+cancelled; the Lab's saved-data fingerprint still covers the Workshop's saved variables.
+
+### Verification (this session)
+- Offline: `tests/test_workshop_auto.lua` (new): pure `Fresh` and `Decide`; setting on by default and off; no load or timer when off or in combat; a
+  window that never shows (stale event) and one that shows late; close before the look; close-and-reopen; duplicate events as one visit; one request,
+  correct `snap.auto` and scan-log flag, version-2 database and history; second visit inside the hour; 59 and 61 minutes; a different market; refusal
+  and 15-minute backoff; one attempt per visit; manual scans after automatic ones and during a backoff; capability `unknown` and `click` (no request,
+  prompt, the click is manual); posting busy; giving way to another request; Stop while waiting, awaiting and reading; Stop refused in saving; closing
+  while reading and while saving; a stale id; clock moved backwards. Syntax checks, the settings contract (two new default lines), and `test_testlab.lua`.
+- Mutations: 12 new `market.auto.*` entries (setting ignored, duplicate visit, stale timer loads, cooldown bypassed, backoff bypassed, wrong-market
+  freshness, unknown treated as supported, manual gives way, Stop during saving, provenance lost, manual marked automatic, refusal not remembered):
+  all killed by `test_workshop_auto.lua`. (The catalog's `SUITE.targets` now also admits `!!!TwichUI/WorkshopAuto.lua`.)
+- Simulator: a new step in `tools/simlab/scenarios/workshop.lua` ("automatic price updates on opening the auction house") drives the real core, policy and
+  scanner against the fake auction house (unknown capability prompt and click, fresh market, due after an hour, Stop, close during a scan, setting off,
+  combat, repeated events, provenance). Handler-level over fake game data; not proof of the real client.
+
+### Not proven (needs the real client)
+Whether `ReplicateItems` is accepted from an event or only from a click; the time to the first update; the throttle's behaviour after a full scan;
+whether the player's search right after is delayed; whether `owner` is filled in; whole-stack versus partial purchasing; that the new button states are
+visible and usable; reload persistence. The A4 history and A5 valuation Lab checks are **still deferred** (see above): A4, A5 and A6 are not release-ready.
+
+### Client acceptance checklist (in this order)
+1. `/tuilab`: run `autoscan.state` (read only). Expect capability `unknown`, setting on.
+2. At an auction house: `autoscan.market.identity`. Expect `Realm|Alliance` (or the side you stand in); on a neutral house `unknown` is a market of its own.
+3. Run **`autoscan.event.open`** alone, then follow its prompt (close, reopen within 45 s). Record its verdict and `first_update_ms`.
+4. Wait for the throttle (the case reports readiness), then run **`autoscan.click.request`** alone; optionally search for something right after clicking.
+   Record the verdict, the search delay and the owner / stack facts.
+5. If event-driven was ACCEPTED: report it; the owner then sets `R.WorkshopAuto.CAPABILITY = "supported"` (one reviewed change). If it was blocked or not
+   answered but the click worked: set `"click"`. Otherwise leave `"unknown"`.
+6. With the shipped `unknown`: open an auction house whose prices are over an hour old (or never scanned): **Update prices** appears, no request is made
+   until you click; the click scans and the status line follows; **Stop** appears while it runs and a Stop writes nothing; closing mid-scan leaves the
+   saved prices as they were; the market's second visit within the hour offers nothing; the other faction's house is scanned on its own; turning the
+   setting off removes the prompt and stops automatic starts (manual Scan prices still works); the normal auction house stays usable meanwhile.
+7. With `supported` (only after step 5): opening an auction house with old prices shows "Updating market prices...", then "Market prices updated."; a second
+   visit inside the hour does nothing; a search started while it waits makes it give way.
+Do not edit or corrupt saved data to test any of this.
+
 ### Not built
 Selling services (`Sell.Suggest`, `Sell.Proceeds`) and the Item Advisor (A8), consumer integration (A7: Shopping and crafting on `Cost`,
-Opportunities, the tooltip), automatic scanning (A6), charts (C1), variant-aware data (A10), sales data (A11).
+Opportunities, the tooltip), charts (C1), variant-aware data (A10), sales data (A11). (A6, automatic scanning, is built behind the capability gate
+above; its real-client acceptance is pending.)
 
 ---
 

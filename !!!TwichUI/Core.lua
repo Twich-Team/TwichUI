@@ -66,6 +66,7 @@ local DEFAULT_MODULES = {
     mageSellDrink = true,    -- ... ordinary drink (needs the first one)
     mageSellDryRun = true,   -- ... only say what would be sold, sell nothing (on until turned off)
     auctionPosting = true,   -- "Sell from Bags" tab in the Auction House (searches only when you pick an item)
+    workshopAutoScan = true, -- Workshop: update prices when you open the Auction House, at most once an hour per market (reads only; WorkshopAuto.lua; the game may still ask for one click)
     mailGoldSummary = true,  -- one chat line when you close the mailbox: the money you took from mail during that visit (nothing is saved)
     restock = false,         -- Vendor restocking: keep chosen items at a target in your bags, bought from merchants (opt-in, explicit true only; asks first unless you confirm otherwise)
     magicInventory = false,  -- Magic Inventory: rules that prepare items to mail or deposit; moves them only when you review and click at a mailbox, bank or guild bank (opt-in, explicit true only; inventory/)

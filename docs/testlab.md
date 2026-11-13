@@ -270,6 +270,21 @@ every addon's load and the client's own work, so only differences between runs m
 (load on demand) only if Forever treats both alike, which this measures for the companion, not for the Workshop. Nothing here measures frame
 time during play after the load. **No real-client figure exists yet.**
 
+## Automatic price update probes (A6; opt-in, guided)
+Category "Automatic price update probes (opt-in)", a manual group: its cases never run as a group; start each on its own (Run case). They ask the
+real client what the UI source does not say: may an addon make the whole-house request (`C_AuctionHouse.ReplicateItems`) from an event handler
+without a click. **Results are unknown until the owner runs them**; the Workshop asks for one click until `R.WorkshopAuto.CAPABILITY` is set from them.
+- `autoscan.state` (read only): the setting, the capability gate, API presence, throttle readiness, the last visit's decision.
+- `autoscan.market.identity` (read only, auction house open): the market key and side the Workshop uses and the saved market's age.
+- `autoscan.event.open` (guided): arm, close and reopen the auction house within 45 s; ONE request is made from the opening event handler.
+- `autoscan.click.request` (guided): ONE request from a click on a Lab button; optionally search right after to see whether it is delayed.
+Each guided case reports a verdict (ACCEPTED, BLOCKED, DROPPED, NO ANSWER or NOT TESTED), the time to the first update, throttle readiness, blocked-action
+events, and counts only of: owner fields filled in, stacks over one, records lacking info, commodity status of up to five stackables. Safety: the
+request is made only when the game says it is ready, once per case, never retried, never simulated, out of combat; a refusal is recorded, not
+worked around; no player name or listing is kept; nothing is bought, bid, posted or cancelled. `tests/test_testlab.lua` allows `ReplicateItems` in
+this one file only, and requires exactly one call, inside `RequestOnce`, with no loop or timer around it. The full procedure and acceptance steps:
+`docs/workshop/market-data-foundation-v2.md`, "A6 implementation report".
+
 ## Not in releases
 
 - `.pkgmeta` lists `TwichUI_TestLab`, `TwichUI_LoadTest` and `TwichUI_LoadTestClock` under `ignore`, and none is one of the `move-folders`;

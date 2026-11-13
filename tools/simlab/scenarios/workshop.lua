@@ -29,6 +29,7 @@
 local R = TwichUI
 local Check = Lab.Check
 local params = rawget(_G, "SIMLAB_PARAMS") or {}
+Lab.BUDGET = 36   -- (A6) the automatic-update step needs one scan's quiet period of simulated time (was 30); the delayed failures that grow with time are classified by the verdict
 local Say = Lab.Say
 
 A_Admin.SetManualClock(GetTime())
@@ -1850,6 +1851,90 @@ end)
 ---------------------------------------------------------------------------------------------------------------------------
 -- The pose a screenshot is taken in (params.view). The checks above are the same in every launch.
 ---------------------------------------------------------------------------------------------------------------------------
+-- A6: updating prices on opening the auction house. The Workshop is loaded already here (the earlier steps opened it), so the core detector, the policy
+-- and the shared scanner run for real against the fake auction house; what is NOT proven is that the REAL client accepts an automatic request (the Test
+-- Lab probes autoscan.* do that). The detector's entry points (WA.Opened/WA.Closed, what its events call) are called directly: the events themselves would make Blizzard load its real auction UI, which the simulator cannot (the events are covered in tests/test_workshop_auto.lua). A market of its own (the other side) keeps the scenario's main prices untouched; it is removed afterwards.
+Lab.Step("automatic price updates on opening the auction house", function()
+    local WA, A, SC = R.WorkshopAuto, R.Workshop.Auto, R.Workshop.Scan
+    local AB = R.Workshop.AuctionButton
+    local realFaction, realCombat = UnitFactionGroup, InCombatLockdown
+    local offset = 0
+    local wall0, mono0 = A.wall, A.mono
+    A.wall = function() return time() + offset end
+    A.mono = function() return GetTime() + offset end
+    UnitFactionGroup = function() return "Horde" end
+    local KEY = "SimulatedRealm|Horde"
+    local function Open() SetAuctionHouse(true) WA.Opened() Lab.Settle(0.1) end
+    local function Close() SetAuctionHouse(false) WA.Closed() Lab.Settle(0.05) end
+    local function Finish() A_Admin.FireEvent("REPLICATE_ITEM_LIST_UPDATE") Lab.Settle(2.6) end   -- (the scan's quiet period is 2 s)
+    local function Saved() local m = TwichUIWorkshopDB.markets[KEY] return m and (m.snap and m.snap.seq or 0) or "none" end
+    local base = ah.requested
+    A.Reset()
+    Check("init", "the setting is on by default", true, R:Enabled("workshopAutoScan"))
+    Check("init", "the capability is not yet verified in the real client", "unknown", WA.Capability())
+    -- unknown capability: a prompt, never a request
+    Open()
+    Check("event", "unverified capability: opening makes no request", 0, ah.requested - base)
+    Check("state", "unverified capability: a one-click prompt is offered", "prompt/true", tostring(A.state.action) .. "/" .. tostring(A.Prompting()))
+    if AB and AB.Button() then
+        Check("display", "the button offers Update prices", "Update prices", Txt(AB.Button().text))
+        Click(AB.Button(), "Update prices")
+        Check("click", "the click is the player's own scan: one request", "scanning/1", SC.state .. "/" .. (ah.requested - base))
+        Check("display", "while it runs the button is Stop", "Stop", Txt(AB.Button().text))
+        Check("click", "a click while it runs stops it, nothing saved", "true/stopped/none", tostring(SC.Stop()) .. "/" .. tostring(SC.why) .. "/" .. tostring(Saved()))
+    else
+        Check("init", "(the Auction House button exists)", true, false)
+    end
+    -- supported (set here for the test only): fresh market, then due
+    -- (an earlier accepted scan of this market, made directly: the full scan takes more simulated time than this scenario has left)
+    Check("state", "an earlier scan is saved for the market", true, R.Workshop.Prices.Commit(KEY, { realm = "SimulatedRealm", side = "Horde", at = time() + offset, complete = true,
+        read = 1, used = 1, n = 1, items = { [2447] = "5,1,1,1,0" } }) ~= false)
+    local seq = Saved()
+    Close() WA.CAPABILITY = "supported" Open()
+    Check("event", "fresh market: no further request", 1, ah.requested - base)
+    Check("state", "fresh market: the visit says so", "skip/fresh", tostring(A.state.action) .. "/" .. tostring(A.state.why))
+    Close() offset = 3700 Open()
+    Check("event", "an hour later the update starts by itself, once", "scanning/2", SC.state .. "/" .. (ah.requested - base))
+    Check("display", "its line says prices are updating", "Updating market prices...", (SC.Message()))
+    if AB and AB.Button() then Check("display", "the button is its Stop", "Stop", Txt(AB.Button().text)) end
+    -- Stop: ends it, writes nothing, a late answer changes nothing
+    Check("click", "Stop ends the scan", "true/stopped", tostring(SC.Stop()) .. "/" .. tostring(SC.why))
+    A_Admin.FireEvent("REPLICATE_ITEM_LIST_UPDATE") Lab.Settle(0.3)
+    Check("state", "stopped: nothing was saved", seq, Saved())
+    -- the window closing mid-scan
+    Close() offset = 7400 Open()
+    Check("event", "due again: a request", "scanning/3", SC.state .. "/" .. (ah.requested - base))
+    A_Admin.FireEvent("REPLICATE_ITEM_LIST_UPDATE") Lab.Settle(0.1)
+    Close()
+    Lab.Settle(2.3)   -- (the scan notices the closed window when its quiet period ends and the reading begins)
+    Check("state", "closed during the scan: interrupted, nothing saved", "interrupted/closed/" .. tostring(seq), SC.state .. "/" .. tostring(SC.why) .. "/" .. tostring(Saved()))
+    -- the setting off, and combat
+    local n = ah.requested
+    R:SetEnabled("workshopAutoScan", false) offset = 11100 Close() Open()
+    Check("event", "setting off: no request", 0, ah.requested - n)
+    R:SetEnabled("workshopAutoScan", true)
+    Close() InCombatLockdown = function() return true end Open()
+    Check("event", "in combat: no request, and the visit says why", "0/combat", (ah.requested - n) .. "/" .. tostring(WA.Snapshot().skipped))
+    InCombatLockdown = realCombat
+    -- the same events again are one visit: one request
+    Close() Open() WA.Opened() WA.Opened() Lab.Settle(0.1)
+    Check("event", "repeated equivalent events: one request for the visit", 1, ah.requested - n)
+    Finish()
+    local mk = TwichUIWorkshopDB.markets[KEY]
+    Check("state", "the automatic scan is saved as automatic, in the version-2 database", "true/" .. tostring(R.Workshop.Prices.SAVED_VERSION),
+        tostring(mk and mk.snap and mk.snap.auto) .. "/" .. tostring(TwichUIWorkshopDB.v))
+    Check("state", "the other market was not touched", "SimulatedRealm|unknown", (function() local m = R.Workshop.Prices.Market("SimulatedRealm|unknown") return m and m.key or "none" end)())
+    -- put everything back
+    Close()
+    WA.CAPABILITY = "unknown"
+    UnitFactionGroup = realFaction
+    A.wall, A.mono = wall0, mono0
+    A.Reset()
+    TwichUIWorkshopDB.markets[KEY] = nil
+    SetAuctionHouse(true)
+    Lab.Settle(0.3)
+end)
+
 Lab.Step("pose for the screenshot", function()
     local view = params.view or "craft"
     Say("pose", view)

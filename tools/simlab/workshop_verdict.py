@@ -34,7 +34,7 @@ STEPS = [
     "shopping: add the suggested subcraft", "shopping: bags change", "close and reopen", "remembered recipes: closed window, background read, nothing open",
     "bank and guild bank: remembered while the window is closed", "bank and guild bank: planned with, collected not bought, labelled, profit unchanged",
     "bank and guild bank: the guild choice, permissions and limits", "bank and guild bank: a withdrawal and a deposit never count twice", "third pass: hit test, hover, fit, tooltips, status",
-    "reachability: planted overlay, hover rows, insets, clipping, tooltip", "pose for the screenshot",
+    "reachability: planted overlay, hover rows, insets, clipping, tooltip", "automatic price updates on opening the auction house", "pose for the screenshot",
 ]
 LAYERS = ("init", "display", "click", "direct", "event", "state")
 VIEWS = {"overview": "TwichUIWorkshop", "craft": "TwichUIWorkshop", "opps": "TwichUIWorkshop", "shop": "TwichUIWorkshop", "design": "TwichUISettings",

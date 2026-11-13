@@ -27,7 +27,7 @@ SHOPPING, VENDOR, OPPS = "TwichUI_Workshop/Shopping.lua", "TwichUI_Workshop/Vend
 
 # `--broad` re-runs a SURVIVOR against these older, broader Workshop tests to say whether anything else notices it (the mutation still counts as
 # a survivor of its focused tests; the note only tells you where the gap is). The default run never uses them.
-SUITE = {"broad_tests": ("test_workshop_market.lua", "test_workshop_prices.lua", "test_workshop_shopping.lua", "test_workshop_storage.lua", "test_workshop.lua")}
+SUITE = {"targets": ("TwichUI_Workshop/", "!!!TwichUI/WorkshopAuto.lua"), "broad_tests": ("test_workshop_market.lua", "test_workshop_prices.lua", "test_workshop_shopping.lua", "test_workshop_storage.lua", "test_workshop.lua")}
 
 MUTATIONS = []
 
@@ -559,6 +559,38 @@ m("market.value.cache-facts-ignore-entries", VALUATION, "    local f = e and e.f
   "    local f = e and e.f or nil", "cached snapshot facts (Recent Price, spread, flags) are used for an item whose saved entries changed", [VAL])
 m("market.value.range-legacy-double-count", VALUATION, "            local limit = (r.recordedFrom or (today + 1)) - 1",
   "            local limit = today", "legacy minimum days after version-2 recording began are counted beside the version-2 days", [VAL])
+
+
+# ======================================================================================================================
+# AUTOMATIC PRICE UPDATES (A6): the setting, the visit, the cooldown and backoff, the market, Stop and provenance
+# ======================================================================================================================
+AUTOT = "test_workshop_auto.lua"
+AUTO, SCAN, WAUTO, SESSION = "TwichUI_Workshop/Auto.lua", "TwichUI_Workshop/Scan.lua", "!!!TwichUI/WorkshopAuto.lua", "TwichUI_Workshop/Session.lua"
+m("market.auto.setting-ignored", WAUTO, 'function WA.Enabled() return R:Enabled("workshopAutoScan") end', "function WA.Enabled() return true end",
+  "the Auction House opening loads the Workshop and scans although the player turned automatic updates off", [AUTOT], smoke=True)
+m("market.auto.duplicate-visit", WAUTO, "    if open then return end                                          -- the same visit, said again\n", "",
+  "the several events of one opening each count as a visit, so a visit is handled again and again", [AUTOT])
+m("market.auto.stale-timer-loads", WAUTO, "    if id ~= visit or not open then return end                      -- a later visit, or the window closed: nothing\n",
+  "    if false then return end\n", "a timer from a visit that has closed (or been replaced) still loads the Workshop and acts", [AUTOT])
+m("market.auto.cooldown-bypassed", AUTO, "A.COOLDOWN = 3600 ", "A.COOLDOWN = 0 ",
+  "a market scanned a minute ago is scanned again on the next opening (the 60-minute cooldown is gone)", [AUTOT], smoke=True)
+m("market.auto.backoff-bypassed", AUTO, 'if c.backoffLeft and c.backoffLeft > 0 then return "skip", "backoff" end', "if false then end",
+  "after the game refused an automatic request the next opening asks again at once", [AUTOT])
+m("market.auto.wrong-market-freshness", AUTO, "local info = key and PR.Market(key) or nil", "local info = key and PR.Market(PR.Keys()[1] or key) or nil",
+  "the other faction's (or another realm's) scan makes this auction house look fresh", [AUTOT])
+m("market.auto.unknown-treated-supported", AUTO, 'if c.capability == "supported" then return "scan", "due" end', 'if c.capability ~= "click" then return "scan", "due" end',
+  "an unverified capability starts the request by itself instead of asking for the click", [AUTOT], smoke=True)
+m("market.auto.manual-gives-way", SCAN, "        if run.auto and SC.phase == \"waiting\" then End(\"interrupted\", \"busy\") end",
+  "        if SC.phase == \"waiting\" then End(\"interrupted\", \"busy\") end",
+  "a scan the player asked for is cancelled by another request, as only an automatic one should be", [AUTOT])
+m("market.auto.stop-during-saving", SCAN, '    if SC.phase == "saving" then return false, "saving" end\n    End("interrupted", "stopped")',
+  '    End("interrupted", "stopped")', "Stop is accepted while the accepted result is being saved, racing the apply", [AUTOT])
+m("market.auto.provenance-lost", SCAN, "at = time(), auto = run.auto == true, complete", "at = time(), auto = false, complete",
+  "an automatic scan is saved as a manual one", [AUTOT])
+m("market.auto.manual-marked-automatic", SESSION, 'local auto = type(opts) == "table" and opts.auto == true', "local auto = true",
+  "the player's own click is saved as an automatic scan", [AUTOT])
+m("market.auto.refusal-not-remembered", AUTO, "    elseif SC.state == \"failed\" and SC.auto and key and REFUSED[SC.why] then\n        backoff[key] = A.mono() + A.BACKOFF",
+  "    elseif SC.state == \"failed\" and SC.auto and key and REFUSED[SC.why] then\n        backoff[key] = nil", "a refused automatic request is forgotten, so the backoff never applies", [AUTOT])
 
 
 # ======================================================================================================================

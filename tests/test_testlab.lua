@@ -719,7 +719,7 @@ do
   local p = io.popen('find "' .. LAB .. '" -name "*.lua" | sort')
   for path in p:lines() do files[#files + 1] = path end
   p:close()
-  Check(#files == 22, "the scan found the Lab's files (" .. #files .. ")")
+  Check(#files == 23, "the scan found the Lab's files (" .. #files .. ")")
   -- every file the .toc loads is scanned, and nothing is loaded that is not
   local scanned = {}
   for _, path in ipairs(files) do scanned[path:sub(#LAB + 1)] = true end
@@ -743,13 +743,31 @@ do
     local code = src:gsub("%-%-[^\n]*", "")   -- comments are not code (the Lab has no long comments)
     Check(not code:find("%-%-%[=*%["), path .. " has a long comment the scan would misread")
     for _, name in ipairs(FORBIDDEN) do
-      Check(not code:find(name, 1, true), path:sub(#LAB + 1) .. " uses forbidden name " .. name)
+      -- the ONE exception (A6): the automatic-update probe makes the whole-house request itself, because that is what it asks the client about;
+      -- it is checked tightly below. Every other file, and every other name, stays forbidden.
+      local allowed = name == "ReplicateItems" and path:sub(#LAB + 1) == "cases/AutoScan.lua"
+      Check(allowed or not code:find(name, 1, true), path:sub(#LAB + 1) .. " uses forbidden name " .. name)
     end
     for _, root in ipairs({ "TwichUIDB", "TwichUIWorkshopDB", "TwichUIDiagnosticsDB" }) do
       Check(not code:find(root .. "%s*[=%.%[]"), path:sub(#LAB + 1) .. " touches the saved root " .. root)
     end
     Check(not code:find("_G%s*%[[^%]]*%]%s*=[^=]"), path:sub(#LAB + 1) .. " assigns through _G[...]")
     Check(not code:find("[^%w_]_G%.[%w_]+%s*=[^=]"), path:sub(#LAB + 1) .. " assigns a global through _G")
+  end
+  -- the probe's one request (A6): called in exactly one place, inside RequestOnce, once per case, after the throttle is read as ready and with
+  -- no loop around it; no other file calls it
+  do
+    local f = assert(io.open(LAB .. "cases/AutoScan.lua")); local code = f:read("*a"):gsub("%-%-[^\n]*", ""); f:close()
+    local _, calls = code:gsub("pcall%(AH%.ReplicateItems%)", "")
+    Same(calls, 1, "the probe calls the whole-house request in exactly one place")
+    local fn = code:match("local function RequestOnce%(rec, via%).-\nend\n")
+    Check(fn and fn:find("pcall(AH.ReplicateItems)", 1, true), "that place is RequestOnce")
+    Check(fn:find("if rec.requested then return false end", 1, true), "RequestOnce makes at most one request per recorder")
+    Check(fn:find("ready ~= true", 1, true) and fn:find("Combat()", 1, true) and fn:find("AHOpen()", 1, true), "it asks for readiness, combat and an open window first")
+    Check(not fn:find("while", 1, true) and not fn:find("for ", 1, true) and not fn:find("C_Timer", 1, true), "no loop or timer around the request")
+    for _, forbidden in ipairs({ "ownerName ..", "SendChatMessage", "print(" }) do
+      Check(not code:find(forbidden, 1, true), "the probe does not " .. forbidden)
+    end
   end
   -- the temporary key binding: only Guided.lua has it, owned by its own button, and it is only ever cleared for that owner
   for _, path in ipairs(files) do

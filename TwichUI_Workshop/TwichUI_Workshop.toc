@@ -47,6 +47,8 @@ Scan.lua
 # The market data API: current prices, history, quotes, markets (one source for every feature; reads saved data only)
 Market.lua
 Valuation.lua
+# Opening the auction house: when a price update is due, and what to do about it (A6; pure policy plus one entry point)
+Auto.lua
 # What the window shows and does, without any frame
 Session.lua
 # Remembers the player's own professions' recipes while the window is closed (after load only; reads, never opens anything)

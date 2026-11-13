@@ -240,6 +240,8 @@ Define("npcMap", {
 -- Auction House
 Define("auctionPosting", { apply = Refresh("AuctionWindow") })
 Define("mailGoldSummary", { apply = Refresh("MailGold") })
+-- Workshop price updates on opening the Auction House: read at each opening (WorkshopAuto.lua), so nothing needs refreshing when it changes
+Define("workshopAutoScan")
 Define("restock", { apply = Refresh("Restock") })
 Define("magicInventory", { apply = Refresh("MagicInventory") })
 

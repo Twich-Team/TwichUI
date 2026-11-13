@@ -1,5 +1,5 @@
 -- TwichUI Workshop: the progress bar, and the Scan prices button on the auction house window
--- The scan is started only by the player's click, here or in the Workshop's Opportunities view (the same Session.StartScan, the same
+-- The scan is started by the player's click, here or in the Workshop's Opportunities view (or, when automatic updates are on and Auto.lua may, on opening) (the same Session.StartScan, the same
 -- Scan.lua state). While a scan runs both show an overall progress bar (Scan.Progress: asking, waiting, then the reading) and the same
 -- one-line message; afterwards the auction house window keeps the last message until it closes.
 --
@@ -74,9 +74,19 @@ end
 function AB.Refresh()
     if not btn then return end
     local busy = SC.Busy()
-    btn.text:SetText(busy and "Scanning..." or "Scan prices")
-    btn:SetEnabled(not busy)
+    local A = W.Auto
+    local prompting = not busy and A ~= nil and A.Prompting()
+    -- while a scan runs the button is its Stop (Scan.Stop); during the short saving step it can only wait, so it says so and is off
+    if busy then
+        local saving = SC.phase == "saving"
+        btn.text:SetText(saving and "Saving..." or "Stop")
+        btn:SetEnabled(not saving)
+    else
+        btn.text:SetText(prompting and "Update prices" or "Scan prices")
+        btn:SetEnabled(true)
+    end
     local msg, tone = SC.Message()
+    if prompting and not SC.Busy() then msg, tone = "Prices are due for an update.", "warn" end
     if busy then
         local frac = SC.Progress() or 0
         bar:Set(frac, AB.BarText(msg, frac))
@@ -86,7 +96,7 @@ function AB.Refresh()
         bar:Hide()
         status:SetText(msg or "")
         Paint(status, tone == "good" and K.sage or (tone == "warn" and K.gold or K.textDim))
-        status:SetShown(msg ~= nil and not stale)
+        status:SetShown(msg ~= nil and (prompting or not stale))
     end
 end
 
@@ -97,12 +107,16 @@ local function Attach()
     local F = R.FrameLook
     local AH = AuctionHouseFrame
     btn = F.Button(AH, "Scan prices", BTN_W, "primary", function()
-        S.StartScan()
+        -- a click while a scan runs is its Stop; otherwise it is the player's own scan (never marked automatic), which also answers a prompt
+        if SC.Busy() then SC.Stop() else
+            if W.Auto then W.Auto.Answered() end
+            S.StartScan()
+        end
         AB.Refresh()
     end)
     btn:SetHeight(H)
     btn:SetPoint("TOPRIGHT", AH, "BOTTOMRIGHT", -6, -4)
-    R.Interact.Tip(btn, "Scan prices", "Reads every listing at this auction house once, so the Workshop can price your crafts. It only reads: it never buys, bids or posts, and it starts only when you press this. It prices the recipes the Workshop has read this session, so keep the Workshop open while you open your professions. It can take a little while.")
+    R.Interact.Tip(btn, "Scan prices", "Reads every listing at this auction house once, so the Workshop can price your crafts. It only reads: it never buys, bids or posts. It starts when you press this, or, if you turned on automatic updates and the game allows it, once an hour when you open the auction house; \"Update prices\" means one is due. While it runs, this button stops it and nothing is saved. It can take a little while.")
     bar = W.NewBar(AH, BAR_W, H)
     bar:SetPoint("TOPRIGHT", btn, "TOPLEFT", -8, 0)
     bar:Hide()

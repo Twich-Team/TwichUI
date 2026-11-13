@@ -298,8 +298,8 @@ do
   FlushTimers()
   Check(opps.bar:IsShown() and ahBar:IsShown(), "a bar in both places while scanning")
   Check(opps.bar.text:GetText():find("Asking the auction house for its listings 3%", 1, true), opps.bar.text:GetText())
-  Same(ahBtn.text:GetText(), "Scanning..."); Check(ahBtn.enabled == false, "the auction house button can't start a second scan")
-  ahBtn:GetScript("OnClick")(ahBtn); Same(ah.sent, 1, "and a click on it does nothing meanwhile")
+  -- (A6) while a scan runs the auction house button is its Stop: it is on and cannot start a second scan; pressing it is tested in test_workshop_auto.lua
+  Same(ahBtn.text:GetText(), "Stop"); Check(ahBtn.enabled == true, "the auction house button offers Stop while a scan runs"); Same(ah.sent, 1, "and no second request was made")
   FireScan("REPLICATE_ITEM_LIST_UPDATE")
   Same(W.Scan.phase, "settling"); Same(W.Scan.Progress(), 0.08, "listings are arriving: past the asking")
   Advance(7)
