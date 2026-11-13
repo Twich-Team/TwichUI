@@ -1,39 +1,54 @@
 # Workshop Market Data Foundation 2.0 (A1: architecture and data contract)
 
-Status: **planning only** (2026-11-12, branch `feature/workshop`, base commit `2fd4b775`, M7.1). Nothing here is built. This document is the source of truth for the A2 to A7 implementation campaign; `docs/workshop.md` still describes what exists.
+Status: **planning only, revised after owner review** (first version `4c74e94f`, revision 2026-11-12, branch `feature/workshop`). Nothing here is built. This document is the source of truth for the A2 to A12 implementation campaign; `docs/workshop.md` still describes what exists.
 
 Evidence labels used throughout:
-- **[verified]**: read in this repository's code or in the Forever UI source (`../wow-ui-source`, branch `forever`).
-- **[measured]**: a throwaway prototype run offline (Lua 5.1, WSL dev machine, synthetic data). The scripts are in [a1-prototypes/](a1-prototypes/). An offline figure never stands in for the client.
-- **[real-client]**: observed in Forever 1.60.1 build 70888, as recorded in `docs/testlab.md` or the roadmap.
-- **[proposed]**: a design choice in this document.
+- **[verified]**: read in this repository's code, in `git show v1.3.0:...`, or in the Forever UI source (`../wow-ui-source`, branch `forever`).
+- **[measured]**: a throwaway prototype run offline (Lua 5.1, WSL dev machine, synthetic data). Scripts: [a1-prototypes/](a1-prototypes/). An offline figure never stands in for the client.
+- **[real-client]**: observed in Forever 1.60.1 build 70888 (as recorded in `docs/testlab.md` or the testing roadmap).
+- **[proposed]**: a design choice in this document. **[approved]**: an owner decision (section 14).
 - **[unknown]**: needs a probe or an in-game check before anything relies on it.
+
+### What changed in the revision
+| Area | First A1 | Revised |
+|---|---|---|
+| Daily history | 14 days | **30 days for every item** (D2), measured +24% over 14 days in the worst schedule |
+| Intraday | none per item | **8-point, 48-hour ring per item**, with an exact "unchanged" rule (D3) |
+| Daily point | last scan's values only | last scan's values **plus the day's low/high** of minimum, Recent Price and supply, and the scan count (no extreme is erased by a later scan) |
+| Buckets | 9 fields, means of Recent Price only | 13 fields: low/mean/high of minimum, Recent Price and supply, mean listings |
+| Day and scan logs | 64-scan log | scan log covering at least 48 h, plus a **120-day day log** so every gap has a reason |
+| Update method | decode and re-encode per scan | **append-only update** of the newest daily segment (measured about 15x cheaper, identical output) |
+| Selling | Market Value → Recent → Minimum as a sell price | **Separate services**: valuation, competition, listing suggestion, proceeds, Advisor decision (D9); no valuation is ever a sell price |
+| Large markets | not addressed | **budget guard** with an ordered, reported compaction ladder (D4) |
+| Recent Price | 13 cases | **+10 adversarial cases**, the manipulation bound stated, thin-market reasons added; algorithm unchanged (D1) |
+| Milestones | A2 to A7 | A2 to A7 adjusted; **A8 selling services and Item Advisor** split out; charts, variants, Ledger, import after |
 
 ---
 
 ## 1. Executive summary
 
-**The model [proposed]:** keep today's compact, 1.3-readable current-price entry exactly as it is, and add three new things beside it:
-1. a **distribution summary** of each item in the newest scan: the cheapest 6 price tiers (exact), a tail total, quantity-weighted quartiles and a robust **Recent Price**, all computed at scan time from the complete listing list;
-2. a **two-tier listing history** per item: one point per observed day for 14 days (minimum, Recent Price, supply, listings), then weekly buckets to day 60 and two-week buckets to day 120 (low, mean and high of the Recent Price, low and mean of the minimum, mean supply);
-3. a **market-level scan log** (the last 64 accepted scans with time and quality), which tells a chart "scanned, not listed" apart from "not scanned".
+**The model [approved in principle]:** keep today's compact, 1.3-readable current-price entry unchanged and add beside it:
+1. a **distribution summary** per item for the newest scan: the cheapest 6 price tiers (exact), a tail total, quantity-weighted quartiles and the **Recent Price** (band mean), computed at scan time from the full listing list;
+2. a **per-item history** in three resolutions: an **8-observation intraday ring** (48 h, real timestamps), **30 days of daily points** (closing values and the day's ranges), then **weekly buckets to day 60 and two-week buckets to day 120** (low/mean/high of minimum, Recent Price and supply);
+3. **market-level logs**: every scan of the last 48 h (at least 64), and every scan day of the last 120 days, with quality flags.
 
-The existing minimum-only history is **frozen, not converted**: it keeps its exact meaning, is still read for the minimum series, and expires on its own schedule. The database version goes from 1 to 2 so that TwichUI 1.3 becomes read-only instead of overwriting the new fields (1.3 rebuilds the whole market table on every commit [verified]).
+The existing minimum-only history is **frozen, never converted**; the database version goes from 1 to 2 so TwichUI 1.3 becomes read-only (1.3 rebuilds the whole market table on every commit and would otherwise drop the new fields) [verified].
 
-**Price sources [proposed]:** Minimum Buyout, Recent Price (band mean), Market Value (recency-weighted median of daily Recent Prices over 14 days), Historical Value (median over 60 days), Long-term range (120 days), Dispersion, Supply, Trend (same metric only), Posture (cheap/normal/expensive), Data Quality (a level plus reasons, not a number), and a **purchase cost that walks the stored price tiers** for the quantity actually needed. Every answer says what it is, how old it is, how many observations it rests on and why it might be missing.
+**Cost [measured, synthetic]:** a full 40,000-item market after 120 days of three scans a day: **38.5 MB of history text, a 40 MB saved file, 47 MB resident after loading**, plus about 5 MB of snapshot data. A 20,000-item market at the same rate: about 19 MB. One scan a day: about 22 MB at 40,000 items. Today's format: about 8 MB worst. Offline, the 40 MB file loads in 0.19 s with plain `dofile`; the client's loader is [unknown] and is measured before history writes ship (A4 gate).
 
-**Why this one:** it is the smallest design that answers every product question in the brief from listing evidence alone, keeps the measured worst step bounded, needs **no startup migration** (old data is read in place), and keeps the raw evidence that matters (exact low tiers, quartiles, daily points) so later algorithms can be revised without throwing data away. Measured cost: about **20 MB of saved text for a full 40,000-item market after 120 days** of daily scanning (mixed listing frequency), about 14 MB for a sparser market, against about 8 MB worst for today's format. That is the main owner decision (section 14).
+**Semantics:** a **valuation** (Market Value, Historical Value) says what something has been listed for; **competition** says what is listed now; a **listing suggestion** (later, A8) proposes a posting price from competition; **proceeds** subtract known fees and say what is unknown; the **Item Advisor** decides Vendor / Auction / Disenchant / Unknown from those, conservatively. They are separate result types and cannot be swapped by accident.
 
-**Automatic scanning [proposed]:** on by default, started from the core when the auction house opens (it loads the Workshop if needed), at most once per market per 60 minutes, never in combat, never retried automatically after a refusal within 15 minutes, read-only, with a Stop control on the progress bar. Whether the client accepts `ReplicateItems` without a click is **unknown** and is the first check of A6.
+**Automatic scanning [approved]:** on by default, at most once per market per 60 minutes, 15-minute back-off after a refusal, once per visit, Stop on the bar, never in combat, after a client probe confirms the request is accepted without a click.
 
 ---
 
 ## 2. Verified current implementation and API constraints
 
 ### 2.1 Repository state
-- Branch `feature/workshop`, HEAD `2fd4b775` (M7.1), working tree clean at start [verified].
-- Released baseline `v1.3.0` saves the same shape described here (`f = 2`, `v = 1`, 7 exact days + 3 x 28-day buckets, 120-day retention) [verified with `git show v1.3.0:...`].
-- Focused tests on HEAD: `test_workshop_market.lua` PASSED, `test_workshop_market_reference.lua` PASSED (200 houses, 9,480 scans, 239,167 queries compared, 7.5 s), `test_workshop_prices.lua` PASSED [verified, run for A1].
+- Branch `feature/workshop`; A1 commit `4c74e94f` on top of M7.1 `2fd4b775`; tree clean at the start of the revision [verified].
+- Released baseline `v1.3.0` saves `f = 2` markets in `v = 1`, 7 exact days + 3 x 28-day buckets, 120-day retention, and treats `v > 1` as held [verified with `git show v1.3.0:`].
+- In `v1.3.0`, **only `Prices.lua` writes `TwichUIWorkshopDB`**: `Store(true)` (creates the table when absent) and `Job:Apply` (evicts the oldest market over 3, replaces `db.markets[key]` with a new table of known fields, deletes the legacy copy). `BeginCommit` and `Apply` both return `held` first when `p.v > 1`. No other file in the release names the global outside tests and docs [verified by grep over `git ls-tree v1.3.0`].
+- Focused tests on the A1 base: `test_workshop_market.lua`, `test_workshop_market_reference.lua` (200 houses, 9,480 scans, 239,167 queries), `test_workshop_prices.lua`: all PASSED [verified]. No production file changed since.
 
 ### 2.2 Saved data today [verified, `Prices.lua`, `History.lua`]
 ```
@@ -43,211 +58,210 @@ market = { f = 2, scope = "full", realm, side, at, complete, cut, read, used, pa
            hist  = { [itemID] = "d,p;d,p;...|b,lo,hi,sum,n;..." },
            sd    = { day, ... } }                                         -- at most 32 scan days
 ```
-- `p` cheapest unit buyout (stack buyout / count, rounded **up**, at least 1 copper; the cheapest is chosen by exact fraction comparison); `q` items at exactly that fraction; `l` buyout listings; `t` items in them; `x` next higher whole-copper unit price, 0 when none or when it rounds to `p` (M2 finding 1: 261 such items in the reference run).
-- History: one value per UTC day (the day's last whole-read scan), 7 exact observed days, older days folded into 28-day buckets (`day // 28`: lo, hi, sum, n), at most 3 buckets, nothing older than 120 days before the newest scan. A cut scan, or one whose count kept changing, adds nothing to history; a whole read with `hasAllInfo == false` records does.
-- Limits: `MAX_ITEMS = 40000` per market, `MAX_MARKETS = 3`, `MAX_RECORDS = 250000`, `COMMIT_STEP = 120`, `ITEMS_STEP = 400`. Over the item cap the kept items are recipe items first, then most listings, then lowest id; the scan is `cut` and not complete.
-- A complete saved scan is never replaced by an incomplete one (`kept`). `Apply` writes everything at once; a dropped job writes nothing. 1.3's `Apply` writes a **new** market table containing only the fields it knows.
-- Legacy recipe-only `TwichUIDB.workshop.prices` is read, never rewritten, classified `scope = "recipes"`, replaced by the first full scan.
+- `p` cheapest unit buyout (stack buyout / count, rounded up, at least 1 copper; the cheapest by exact fraction); `q` items at exactly that fraction; `l` buyout listings; `t` items; `x` next higher whole-copper price, 0 when none or when it rounds to `p`.
+- History: one value per UTC day (the day's last whole-read scan), 7 exact observed days, 28-day buckets (`day // 28`), at most 3, 120-day retention. Cut or count-changed scans add nothing; whole reads with `hasAllInfo == false` records do.
+- Limits: 40,000 items per market, 3 markets, 250,000 records, commit steps of 120 items, finalize steps of 400. A complete saved scan is never replaced by an incomplete one (`kept`); `Apply` writes everything at once.
 
-### 2.3 The Market API today [verified, `Market.lua`]
-`Source, Info, Markets, Price, Quote, Stats, Trend, Compare, Observed, Series, Status, Freshness, AgeShort`, all read-only, each answer with a `basis` sentence and a reason word for every "no" (`baditem badqty nomarket variant unlisted outofscope nodata insufficient badperiod`). Consumers: `Session.Opportunities`/`Shopping` (through `Market.Price` lookups fed into `Prices.Estimate` and `Prices.Quote`), `WorthTip` (`Market.Price` with `variant`), `ViewOpportunities` (`Price`, `Stats week`, `Series`), `ViewOverview` and `Window` (`Info`, `Status`). Nothing outside `Market.lua`/`Prices.lua` decodes saved strings.
+### 2.3 Market API today [verified, `Market.lua`]
+`Source, Info, Markets, Price, Quote, Stats, Trend, Compare, Observed, Series, Status, Freshness, AgeShort`, read-only, each with a `basis` sentence and a reason word for every "no". Consumers: `Session.Opportunities`/`Shopping` (through `Market.Price`, `Prices.Estimate`, `Prices.Quote`), `WorthTip`, `ViewOpportunities` (`Price`, `Stats week`, `Series`), `ViewOverview`, `Window` (`Info`, `Status`).
 
 ### 2.4 Scan lifecycle today [verified, `Scan.lua`]
-Player click only. `IsThrottledMessageSystemReady` → `ReplicateItems` → wait for `REPLICATE_ITEM_LIST_UPDATE` (90 s) → quiet for 2 s (at most 10 s) → read records `0 .. n-1`, 400 per timer tick → stepped `ItemsJob` (400 items per tick, M7.1) → restart if the count changed (at most 3) → re-read after 4 s if records lacked info (at most 2) → stepped commit (120 items per tick) → atomic `Apply`. Closing the house before saving interrupts and writes nothing; closing during saving finishes the save. Tokens end every timer and event of an ended scan.
+Player click only. Throttle ready → `ReplicateItems` → first update (90 s) → 2 s quiet (at most 10) → read `0 .. n-1`, 400 per tick → stepped `ItemsJob` → restart on a count change (3) → re-read after 4 s for missing info (2) → stepped commit → atomic `Apply`. Closing before saving interrupts and writes nothing; during saving it finishes.
 
-### 2.5 Forever auction API facts [verified, `Blizzard_APIDocumentationGenerated/AuctionHouseDocumentation.lua`, forever branch]
+### 2.5 Forever auction API facts [verified, `AuctionHouseDocumentation.lua`, forever]
 | Fact | Consequence |
 |---|---|
-| `ReplicateItems()`: "should be used in place of an 'allItem' QueryAuctionItems call to query the entire auction house". No restriction flag in the documentation entry. | Whether it needs a hardware event (a click) is **not stated** [unknown]. |
-| `GetReplicateItemInfo(index)` returns 18 values: name, texture, count, qualityID, usable, level, levelType, minBid, minIncrement, buyoutPrice, bidAmount, highBidder, bidderFullName, owner, ownerFullName, saleStatus, itemID, hasAllInfo. `SecretArguments = "AllowedWhenUntainted"`. | Per record: **item id only**, no link, no suffix. Owner names are other players' data: never stored (section 3.4). |
-| `GetReplicateItemLink(index)` → itemLink (nilable); `GetReplicateItemTimeLeft(index)` → timeLeft. | Variants are knowable only by a second call per record; its cost is [unknown]. Time left could support "about to expire" evidence later. |
-| `ItemKey = { itemID, itemLevel, itemSuffix, battlePetSpeciesID }` | The client itself treats suffix and item level as identity. |
-| Events `AUCTION_HOUSE_SHOW` (synchronous), `AUCTION_HOUSE_CLOSED`, `REPLICATE_ITEM_LIST_UPDATE`, throttle events. The core already listens to `PLAYER_INTERACTION_MANAGER_FRAME_SHOW` with `Enum.PlayerInteractionType.Auctioneer` (`modules/AuctionatorSkin.lua:412`). | The open signal exists in the always-loaded core; the Workshop is LoD (`WorkshopLauncher.Load`, refuses in combat). |
-| `Blizzard_AuctionHouseUI` is LoD, with a camelot-specific `Blizzard_AuctionData.lua`. | Whether stackable goods are bought as **commodities** (any quantity) or as **whole auctions** in Forever is [unknown]. The purchase-cost design handles both (section 4.10). |
-| No auction house cut in the source (`Prices.CUT = {}`). | Unchanged: profit stays "before the cut" until a side is confirmed. |
+| `ReplicateItems()` documented for whole-house queries; no restriction flag listed | Whether it needs a click is not stated [unknown]. |
+| `GetReplicateItemInfo(index)`: 18 values incl. count, buyoutPrice, owner, itemID, hasAllInfo; `AllowedWhenUntainted` | Item id only per record; owner names are never stored. |
+| `GetReplicateItemLink(index)`, `GetReplicateItemTimeLeft(index)` | Variants need a second call per record [cost unknown]. |
+| `ItemKey = { itemID, itemLevel, itemSuffix, battlePetSpeciesID }` | The client treats suffix and level as identity. |
+| `AUCTION_HOUSE_SHOW`, `AUCTION_HOUSE_CLOSED`, throttle events; the core already handles `PLAYER_INTERACTION_MANAGER_FRAME_SHOW` with `Auctioneer` (`modules/AuctionatorSkin.lua:412`) | The open signal is available to the always-loaded core. |
+| `Blizzard_AuctionHouseUI` LoD with a camelot-specific data file | Commodity (any quantity) versus whole-auction buying is [unknown]. |
+| No auction house cut or deposit formula in the source | Fees stay unknown until confirmed in the game. |
 
-### 2.6 Measured performance facts carried forward
-- **[real-client]** M7.1: the single `Items()` call was a live hitch (82 ms focused step at 12,000 items; 135 to 145 ms offline at 40,000); now stepped. Commit steps measured at most 4 ms offline. Client CPU was about 2.4 times offline in the crafting fingerprint comparison (one data point; use it as an order of magnitude only).
-- **[real-client]** `string.format("%d")` refuses values above 2^31 (the `perf.market.stats.6k` overflow). All encoders must keep using `("%.0f")`.
-- **[real-client]** NaN compares equal to everything; `W.Finite` must run before any comparison of a value read from the game.
-- **[measured, earlier]** current market at 23,439 items: 8.3 MB Lua memory, 3.2 MB saved text; history string 72 B average, 175 B worst by construction.
+### 2.6 Performance facts carried forward
+- [real-client] M7.1: one synchronous `Items()` was an 82 ms step at 12,000 items; now stepped. Client CPU was about 2.4 times offline in one comparison (order of magnitude only).
+- [real-client] `string.format("%d")` refuses values above 2^31: encoders use `("%.0f")`. NaN compares equal to everything: `W.Finite` first.
 
 ---
 
-## 3. Proposed data schema [proposed]
+## 3. Data schema [proposed; final for A2]
 
 ### 3.1 Database
 ```
 TwichUIWorkshopDB = { v = 2, markets = { [key] = market } }
 ```
-- `v = 2` is written by the first commit of the new code (inside the same `Apply`). Effect on 1.3: `PR.Held()` is true, so 1.3 reads prices and the frozen history and refuses to scan ("held"); it can no longer rebuild a market and drop the new fields. Effect on future code: `v > 2` is held, as today.
-- Imports are **not** in this database (section 9).
+`v = 2` is written by the first commit of the new code inside `Apply`. 1.3 then holds (reads, never writes). `v > 2` is held by the new code. Imports are not stored here (section 9).
 
 ### 3.2 Market (`f = 3`)
 ```
 market = {
-  -- unchanged fields and meanings (1.3 reads these)
+  -- unchanged (1.3 reads these)
   f = 3, scope = "full", realm, side, at, complete, cut, read, used, partial, n, hn, sd,
-  items = { [id] = "p,q,l,t,x" },          -- unchanged entry, same rules (exact-fraction minimum, q, x)
-  hist  = { [id] = "<v1 string>" },        -- FROZEN legacy minimum history: never extended, trimmed by expiry only
+  items = { [id] = "p,q,l,t,x" },     -- unchanged entry and rules
+  hist  = { [id] = "<v1 string>" },   -- FROZEN legacy minimum history: trimmed by expiry, never extended
   -- new
-  snap  = { seq, kind = "full", alg = 1, at, records, used, invalid, noBuyout, partial, items, client },
-  dist  = { [id] = "<distribution entry>" },   -- only items with 2 or more distinct unit prices
-  h2    = { [id] = "<daily tier>" },           -- v2 history, days 0..13
-  c2    = { [id] = "<bucket tier>" },          -- v2 history, weekly to day 60, two-week to day 120
-  scans = { "seq,at,flags,items,records", ... },   -- last 64 accepted scans, oldest first
-  v2from = day,                                -- first day of v2 history in this market (the legacy/v2 boundary)
+  snap   = { seq, kind = "full", alg = 1, at, records, used, invalid, noBuyout, partial, items, auto, client },
+  dist   = { [id] = "<distribution entry>" },   -- items with 2 or more distinct unit prices
+  h2     = { [id] = "<ring>|<newest day>:<daily points>" },
+  c2     = { [id] = "<buckets>" },
+  scans  = { "seq,at,flags,items,records", ... },  -- oldest first: every scan of the last 48 h, at least 64, at most 256
+  days   = { "day,scans,flags", ... },              -- oldest first: every scan day of the last 120 days (at most 120 entries)
+  v2from = day,                                     -- first day of v2 history (legacy/v2 boundary)
+  compact = { level, at, items },                   -- budget guard record (section 7.4), absent when never used
 }
 ```
-- `seq` increases by one per accepted scan of the market. `flags` is a small bit set written as digits: complete, cut, changed, partial, fed history, automatic, imported (reserved).
-- `client` is the build string when readable (`GetBuildInfo`), otherwise absent. It is provenance, not a key.
-- `hn` keeps counting items with **legacy** history (its 1.3 meaning). New counts live in `snap`.
+- `seq` increases by one per accepted scan. `flags` (digits of a bit set): whole read, complete, cut, count changed, partial info, fed history, automatic, imported (reserved).
+- The **scan log** includes scans that could not feed history (cut, changed): a chart marks them as "incomplete scan" rather than treating the absence of points as "not listed".
+- The **day log** keeps, per scan day, how many accepted scans happened and whether any was a whole read; a day with no entry had no scan. This is what separates "not scanned" from "scanned, not listed" for 120 days.
+- `hn` keeps its 1.3 meaning (items with legacy history). `client` is the build string when readable.
 
 ### 3.3 Per-item entries
 
-**Current entry `items[id]`: unchanged.** Keeping it costs about 19 B per item [measured] and buys full 1.3 readability, the cheapest lookup path and unchanged `Market.Price`.
+**`items[id]`: unchanged** (about 19 B per item [measured]).
 
-**Distribution entry `dist[id]`** (decimal, `%.0f`, no escaping needed):
+**`dist[id]`** (decimal `%.0f`; about 99 to 107 B per multi-tier item [measured]):
 ```
-"alg,r,a,q25,q50,q75,hi,near|p1:q1:l1:m1;p2:q2:l2:m2;...;p6:q6:l6:m6|tq:tl"
+"alg,r,a,q25,q50,q75,hi,near|p1:q1:l1:m1;...;p6:q6:l6:m6|tq:tl"
 ```
-| Field | Meaning | Stored or derived |
-|---|---|---|
-| `alg` | Recent Price algorithm version (1) | stored |
-| `r` | Recent Price (section 5) | stored: needs the full list |
-| `a` | its anchor (weighted 25% point) | stored: needed to explain `r` |
-| `q25 q50 q75` | quantity-weighted quartiles of unit price (whole copper) | stored: need the full list |
-| `hi` | highest unit price listed | stored (outlier evidence) |
-| `near` | items priced at or below 1.10 x `r` | stored ("supply near the price") |
-| `pk:qk:lk:mk` | cheapest 6 distinct whole-copper unit prices: price, items, listings, largest single listing | stored, exact |
-| `tq:tl` | items and listings beyond tier 6 | stored (conservation) |
-| min, q at min, total items, total listings, next price | | **derived** from `items` and tier 1 |
-| spread, cheap-outlier flag, depth covered | | **derived** |
+`r` Recent Price, `a` its anchor, `q25..q75` quantity-weighted quartiles, `hi` highest unit price, `near` items at or below 1.10 x `r`; tiers: the cheapest 6 distinct whole-copper unit prices (rounded up, as a buyer sees them) with items, listings and the largest single listing (`m`, omitted when `l = 1`); `tq:tl` items and listings beyond tier 6. One-price items have no entry (everything equals `p`). Minimum, total items and listings, next price, spread and flags are derived on read.
 
-- An item with one distinct unit price has **no** `dist` entry: every quartile, `r` and tier are its `p`. In the prototype's wide-spread synthetic market 99% of items had 2 or more tiers [measured]; a real house is likely sparser [unknown].
-- Tiers use the **rounded-up whole-copper** unit price, as a buyer sees it. Tier 1's quantity may exceed `items.q` (which counts the exact fraction); that is documented, not reconciled.
-- `m` (largest listing in the tier) bounds over-buying when auctions are bought whole (section 4.10). Omitted when `l = 1` (then `m = q`).
-- Size: 100 to 107 B per multi-tier item [measured], about 4 MB of text for 40,000 items.
-
-**Daily tier `h2[id]`**: one point per observed day, newest last, day as a delta from the previous point:
+**`h2[id]`: intraday ring and daily points**
 ```
-"d,p,dr,t,l;d,p,dr,t,l;..."        dr = r - p (0 when r = p), t = items listed, l = listings
+"<ring point>;<ring point>...|<newest day>:<daily point>;<daily point>;..."
+ring point   "m,dm,p,dr,t,l[!]"
+daily point  "dd,p,dr,t,l[,n,dpl,drl,drh,dtl,dth][!]"
 ```
-All five values come from the **same** scan (the last accepted whole-read scan that listed the item that day), as v1 does for its one value. Optional trailing `!` on a point: the feeding scan had `partial > 0`.
+| Field | Meaning |
+|---|---|
+| `m` | minute number (`floor(time / 60)`) of the first sighting; absolute for the first ring point, a delta from the previous point after that |
+| `dm` | minutes the identical observation was seen again after `m` (0 = seen once) |
+| `p`, `dr`, `t`, `l` | minimum, Recent Price minus minimum (`r = p + dr`), items listed, listings |
+| `!` | a scan behind this point had records without all their information (`partial > 0`) |
+| `newest day` | absolute UTC day of the newest daily point (so a new day is appended without decoding the string) |
+| `dd` | first point: absolute day; later points: days after the previous point |
+| daily `p, dr, t, l` | **closing values**: the last whole-read scan of that day that listed the item |
+| `n, dpl, drl, drh, dtl, dth` | present only when 2 or more whole-read scans listed the item that day and some value moved: scan count; closing minimum minus the day's lowest minimum; closing Recent minus the day's lowest Recent; the day's highest Recent minus closing Recent; closing items minus the day's fewest; the day's most minus closing |
 
-**Bucket tier `c2[id]`**:
+**`c2[id]`: buckets**
 ```
-"k,s,n,plo,pmean,rmean,rlo,rhi,tmean;..."    s = 7 or 14 (bucket length), k = day // s
+"k,s,n,plo,dpm,dph,rm,drl,drh,tm,dtl,dth,lm;..."
 ```
-Points leave the daily tier only when it spans more than 14 + 6 days, a whole week at a time (so `c2` is rewritten about once a week per item, not every scan). Weekly buckets older than 60 days are merged pairwise into two-week buckets (`k = week // 2`). Nothing older than 120 days before the newest scan is kept. Because 28 = 4 x 7 and 14 = 2 x 7, v1's 28-day buckets, v2's weekly and two-week buckets all fall on the same week boundaries.
+`s` is 7 (weekly) or 14 (two-week), `k = day // s`; `n` observed days; minimum: lowest of the days' lows (`plo`), mean of closing minimums (`plo + dpm`), highest closing minimum (`mean + dph`); Recent Price: mean of closing values (`rm`), lowest day low (`rm - drl`), highest day high (`rm + drh`); supply: mean closing items (`tm`), fewest (`tm - dtl`), most (`tm + dth`); `lm` mean listings. Means round half up; merging two buckets uses `round((m1 x n1 + m2 x n2) / (n1 + n2))`, so a two-week mean can differ from the exact mean of its days by at most 1 copper (stated in the API).
 
-### 3.4 What is deliberately not stored
-- **Seller names** (`owner`, `ownerFullName`): other players' data; never saved. A distinct-seller **count** could be computed transiently later if the field proves populated [unknown]; deferred.
-- Bids, bid amounts, high bidders. Bid-only auctions remain counted (`noBuyout`) and excluded from prices.
-- Every listing of every scan (section 7, option C).
-- Anything derived cheaply on read: spreads, quality levels, posture, Market and Historical Value.
+**Retention rules (exact):**
+- Ring: at most 8 points, none whose last sighting (`m + dm`) is more than 48 hours before the market's newest whole-read scan. The read API also filters by the caller's window.
+- Daily: points move to buckets only when the daily tier spans more than 36 days, a whole calendar week (`day // 7`) at a time, and only weeks entirely older than 30 days. **Guarantee: every observed day of the last 30 days is a daily point** (up to 36 can be).
+- Weekly buckets are merged pairwise into two-week buckets (`k = week // 2`) once they end more than 60 days before the newest scan; nothing ending more than 120 days back is kept. Because 7, 14 and v1's 28 all divide 28, every tier falls on the same week boundaries.
+- An item whose strings hold nothing after expiry is removed; a market whose newest scan is more than 120 days old is removed at the next commit of any market (its history has fully expired by definition).
 
-### 3.5 Item identity and variants
-- **Key: item id** (unchanged). A full scan gives the id per record and nothing else [verified]; the cheapest variant of an id sets `p`, and `dist` mixes variants.
-- **Fallback policy:** `Market.*(item, { variant = true })` keeps answering `nil, "variant"` (as now). A non-variant caller whose item is of a class that *can* have random suffixes (weapon or armor by `GetItemInfoInstant`, uncommon or better) gets the note `mixedvariants` on every answer and Data Quality at most `fair`.
-- **Later (A8, after a probe):** for weapon and armor records only, call `GetReplicateItemLink`, parse the suffix, and keep `vitems`/`vdist` under keys `"id:s<suffix>"` with no history at first. Not before a Lab probe measures the call's cost and how often suffixes appear. Item level is not split (Forever items have fixed levels as far as the source shows [unknown]). Battle pets are not split (out of scope; noted).
-- Stack size is never part of identity: prices are per unit; stacks only matter for purchase cost (`m`).
+### 3.4 How scans feed each tier (D3, section 4 of the brief)
+| Scan kind | `items`/`dist` | ring | daily | day log / scan log |
+|---|---|---|---|---|
+| complete whole read | replaces (as today) | appended or extended | close values replaced, ranges and `n` updated | recorded |
+| whole read with partial info | replaces unless a complete one is kept (as today) | appended with `!` | updated, `!` | recorded, partial flag |
+| cut or count changed | may replace an incomplete one only (as today) | **nothing** | **nothing** | recorded as incomplete |
+| interrupted, failed, stopped | nothing | nothing | nothing | nothing (nothing is accepted) |
+
+**"Unchanged" (ring compression), exactly:** a new observation is merged into the newest ring point only when `p`, `r`, `t` and `l` are all identical **and** the partial flag is the same; then that point's `dm` grows to the new time. Anything else appends a point. A merged point means "seen at `m` and again at `m + dm` with identical values"; the chart draws it as a flat segment between those two real times and claims nothing between other points.
+
+**Daily point from several scans:** the closing values come from the last whole-read scan that listed the item; the day's lows and highs keep every earlier extreme. A later scan therefore cannot erase evidence of a dip or a spike that day. After the ring expires the day keeps its closing values, its ranges and its scan count; **what is lost is when during the day each extreme happened and the order of changes.**
+
+**Absent versus not scanned:** an item missing from a whole-read scan gets no point (never a zero). The day log and scan log tell the chart which of "not scanned", "scanned, not listed" or "only incomplete scans" applies.
+
+### 3.5 Not stored
+Seller names, bids, bidders, every listing of every scan (section 7, option R), and anything derivable on read (spreads, quality, posture, valuations).
+
+### 3.6 Item identity and variants (D6 approved)
+- Key: item id. The cheapest variant sets `p`; `dist` and history mix variants [verified: records carry the id only].
+- `Market.*(item, { variant = true })` keeps answering `nil, "variant"`. For an item whose class can carry random suffixes (weapon or armor by `GetItemInfoInstant`, uncommon or better), every answer carries `mixedvariants`; Data Quality is at most `limited` for valuation of such items and the Advisor never recommends Auction from mixed data (section 4C).
+- Later (A10, after a probe of `GetReplicateItemLink` cost and suffix frequency): suffix keys `"id:s<suffix>"` for weapons and armor only, snapshot first, history later. Stack size is never identity.
 
 ---
 
-## 4. Price-source definitions [proposed]
+## 4. Price sources and services [proposed; D7 to D9 approved]
 
-One table per source. "Latest snapshot" = the newest accepted scan of the market. "Daily value" = the h2 point of that day.
+Every result carries `role`, one of `valuation`, `competition`, `suggestion`, `proceeds`, `advice`, plus `basis`, `at`, `age`, `freshness`, `quality`, `provenance` and reasons. A function of one role never returns a value of another role, and no service takes a `valuation` result as its price input (section 4C).
 
-### 4.1 Minimum Buyout
-- **Meaning:** the cheapest valid buyout unit price in the latest snapshot (`items.p`). **Inputs:** `items`. **Window:** one snapshot.
-- **Missing:** `unlisted` (full scope), `outofscope` (legacy recipes), `nomarket`, `variant`.
-- **Qualifications:** age, completeness, `thin` (1 listing), `cheapoutlier` when `p < r / 2`.
-- **Consumers:** "lowest price now", posting undercut reference (future AH Sell), minimum history chart.
-- **Never claims:** a typical price, a sale price, that more than tier 1's quantity is available at it.
+### 4A. Valuations (`role = "valuation"`): references, never a sell price
+| Source | Meaning | Inputs, window | Missing | Never claims |
+|---|---|---|---|---|
+| **Minimum Buyout** | cheapest valid buyout per item, newest snapshot (`items.p`) | snapshot | `unlisted`, `outofscope`, `nomarket`, `variant` | a typical or sale price; more than tier 1 available at it |
+| **Recent Price** | representative **listing** price: band mean (section 5) | snapshot, `dist.r` | as above; one price → `p` | a sale price or expected sale price |
+| **Market Value** | recency-weighted median of daily closing Recent Prices over 14 days; weights 4 (age 0 to 2), 2 (3 to 6), 1 (7 to 13); weighted median = first value (ascending) whose cumulative weight reaches half the total | `h2`, 14 days | none in 14 days → `stale`; one day → value, quality `limited` | a sale average; legacy minimum days are never used |
+| **Historical Value** | median of closing Recent Prices over observed days in 60 days; days 0 to 30 individually, weekly buckets by their mean weighted by `n` | `h2` + `c2`, 60 days | fewer than 3 days → `insufficient`; `aggregate = true` when buckets contributed | anything about days not scanned |
+| **Long-term range** | lowest and highest Recent Price (day ranges included) and lowest minimum over 120 days; legacy days feed the minimum only, labelled | all tiers | `nodata` | a value (it is a range) |
+| **Dispersion** | snapshot `spread = (q75 - q25) / q50`: `tight` < 0.10, `moderate` < 0.30, `wide`; `cheapoutlier` when `p < r / 2`; `farbelow` when fewer than 5 listings and `p` is under half the second tier | `dist` | — | sales volatility |
+| **Supply** | items, listings, items near the Recent Price, at the minimum; history: closing items and day ranges | snapshot, history | — | demand or sales ("listed", never "sold") |
+| **Trend** | one metric only (Recent, Minimum or Supply): median of the newer half of the window's observed days against the older half; 14-day default; 2 days per half; `flat` under 5% | history | `insufficient` | a forecast |
+| **Posture** | Recent Price against Historical Value: `cheap` < 0.85, `expensive` > 1.15 **[approved D8]** | needs Historical from 5+ observed days, Quality at least `fair`, at least 3 listings | `unknown` with the reason | that a low minimum is a bargain (the minimum is never the compared value) |
 
-### 4.2 Recent Price
-- **Meaning:** a robust estimate of the current listing price: the mean price of the cheapest 30% of the listed items, after ignoring listings priced below half of the weighted 25% point (section 5). **Inputs:** the full listing list at scan time; stored as `dist.r` (or `p` for one-tier items).
-- **Window:** one snapshot. **Missing:** as Minimum. **Qualifications:** `thin` (fewer than 3 listings), `wide` spread, completeness, age.
-- **Storage:** `dist`. **Consumers:** current worth, Market Value input, posture, history chart.
-- **Never claims:** a sale price, that the item sells at this price, that it is "fair".
+Existing `Market.Price/Stats/Trend/Compare/Series/Observed` keep their minimum-based meanings and basis sentences.
 
-### 4.3 Market Value
-- **Meaning:** a recency-weighted median of daily Recent Prices over the last 14 days. Weights by age in days: 4 (0 to 2), 2 (3 to 6), 1 (7 to 13). Weighted median = the smallest daily value whose cumulative weight (values sorted ascending) reaches half the total weight. Integer weights keep the reference model exact.
-- **Inputs:** `h2` (`p + dr`). **Window:** 14 days ending today.
-- **Missing:** no daily point in 14 days → `nil, "stale"`; one point → that value, quality `limited`; legacy minimum days are **never** used.
-- **Consumers:** Item Advisor sell value, Opportunities sell side (A7), posture's current side.
-- **Never claims:** a sale average or expected sale price; it is a smoothed listing estimate.
-
-### 4.4 Historical Value
-- **Meaning:** the median, over observed days in the last 60 days, of daily Recent Prices. Days 0 to 13 count individually; each weekly bucket contributes its `rmean` with weight `n` (its observed days).
-- **Window:** 60 days. **Missing:** fewer than 3 observed days → `insufficient`; buckets present → the answer carries `aggregate = true` (a median taken from bucket means is approximate).
-- **Consumers:** posture reference, Item Advisor "usual price", charts' reference line.
-- **Never claims:** anything about days not scanned (missing days are not imputed and do not count).
-
-### 4.5 Long-term range (120 days)
-- **Meaning:** low and high of Recent Price (`rlo`, `rhi`, daily values) and low of Minimum over the retained 120 days, plus observed-day count. Legacy v1 minimum points and buckets contribute **to the minimum low only**, labelled `legacy`.
-- **Missing:** `nodata`. **Never claims:** a value; it is a range.
-
-### 4.6 Dispersion
-- **Meaning (snapshot):** `spread = (q75 - q25) / q50`; classes `tight` < 0.10, `moderate` < 0.30, `wide` otherwise; plus `cheapoutlier` and `hi / r`. **Meaning (history):** the daily range `rlo..rhi` per bucket.
-- **Consumers:** Data Quality, Item Advisor ("prices vary a lot"). **Never claims:** volatility of sales.
-
-### 4.7 Available Supply
-- **Meaning:** items and listings in the latest snapshot (`t`, `l`), items near the Recent Price (`near`), items at the minimum; history: daily `t`, `l` and bucket `tmean`.
-- **Never claims:** demand, sales, sell-through. A falling supply may mean sales, cancellations or expiries; the text says "listed", never "sold".
-
-### 4.8 Trend
-- **Meaning:** for one metric (Recent Price, Minimum or Supply, never mixed), the median of the newer half of the window's observed days against the median of the older half. Default window 14 days; each half needs 2 observed days; `flat` when the change is under 5%.
-- **Missing:** `insufficient`. Existing `Market.Trend` (first vs last minimum, 7 days) is unchanged and stays labelled as such.
-- **Never claims:** a forecast.
-
-### 4.9 Price Posture
-- **Meaning:** Recent Price against Historical Value: `cheap` below 0.85, `expensive` above 1.15, `normal` between (thresholds: decision D8).
-- **Requires:** Historical Value from at least 5 observed days and Data Quality at least `fair`; otherwise `unknown` with the reason.
-- **Never claims:** that buying now is a good deal; it compares listing prices only.
-
-### 4.10 Purchase cost (quantity-aware)
-- **Meaning:** what buying `n` items is expected to cost, walking tiers 1 to 6 cheapest first.
-  - `exact`: `n` fits inside the stored tiers and auctions are bought per item, or every tier used has uniform listings that sum exactly.
-  - `range`: auctions are bought whole (or that is not known): low = per-item walk; high = low plus at most `m - 1` items of over-buy at the last tier used. Until the commodity question is answered (A6 probe) every multi-listing walk is a `range`.
-  - `estimate`: `n` exceeds the six tiers but not `t`: the tiers' cost plus the rest at tier 6's price, marked "at least".
-  - `few`: `n > t`. `none`: no data.
-- **Replaces** today's `Prices.Quote` "estimate" state for consumers that opt in (A7); `Quote` itself is unchanged.
-- **Never claims:** that listings still exist; another buyer may take them.
-
-### 4.11 Data Quality
-A level (`good`, `fair`, `limited`, `none`) and the list of reasons that set it, computed on read. No numeric score [proposed rule table, decision D7]:
+**Data Quality [approved D7, policy version 1]:** a level and readable reasons, computed on read, **versioned** (`Market.QUALITY_POLICY = 1`); a later policy can change thresholds without touching saved data.
 
 | Level | All of |
 |---|---|
-| `good` | snapshot complete, age at most 24 h, at least 5 listings, spread not `wide`, at least 7 observed days in the last 30, no `mixedvariants` |
-| `fair` | age at most 3 days, at least 3 listings, not `cut` |
-| `limited` | anything else with a price |
+| `good` | snapshot complete, age ≤ 24 h, ≥ 5 listings, spread not `wide`, ≥ 7 observed days in 30, no `mixedvariants`, no `farbelow` |
+| `fair` | age ≤ 3 days, ≥ 3 listings, not `cut`, no `mixedvariants` |
+| `limited` | anything else **with a price** (a 1-listing, fresh, complete item is `limited` with "Only 1 listing", and its values are still returned) |
 | `none` | no price (`unlisted`, `nomarket`, `variant`, `outofscope`) |
 
-Reasons are words the UI can print ("Only 2 listings", "Scanned 4 days ago", "Prices vary a lot", "Seen on 2 days this month", "Several versions of this item are mixed").
+Thin markets are therefore never "worthless": they are shown, with their reason, and only the services that act on them (Posture, Advisor) become conservative.
 
-### 4.12 Future sources (extension points, not designed in detail)
-| Source | Needs | Hook |
-|---|---|---|
-| Actual sale price | the player's own mail invoices (`Mail.lua` already reads money gains) | `kind = "sale"` series in a separate Ledger store, never in `h2` |
-| Observed sale rate / sell-through | the player's own posted vs sold auctions | Ledger; never inferred from listing disappearance |
-| Deposits and fees | the cut per side (`Prices.CUT`), deposit formula from the client | `MK.Fees`, reserved |
-| Character/account transactions | Gold Ledger | its own saved data |
-| External data | section 9 | `opt.sources` |
+### 4B. Competition (`role = "competition"`): what a seller would compete with now
+`Market.Competition(item, qty, opt)`: the current tiers (6 exact, tail total), the lowest **competing** price (the cheapest tier at or above half the Recent Price anchor, so a bait listing under the band filter is shown but marked), items listed at or below a given price, how deep the cheapest tiers are relative to `qty`, the snapshot's age and quality. Evidence only; no suggested price.
+
+### 4C. Listing suggestion (`role = "suggestion"`, A8): a candidate posting price, never a promise
+`Sell.Suggest(item, qty, opt)` with `opt.strategy` (v1: only `"match"`, posting at the lowest competing price; undercut amounts and patient strategies are later choices).
+- **Base price comes from competition only.** Valuations are used as **checks that add flags**, never as the price:
+  - Market Value more than 1.5 x the competing price → keep the competing price, flag `belowusual` ("listed below its usual price").
+  - Competing price more than 1.5 x Historical Value → flag `aboveusual` ("may not sell at this price").
+  - Recent Price moved more than 15% since the previous day → flag `moving`.
+- No competing listing → state `nocompetition`; the answer shows Market Value as a **reference**, not a suggestion.
+- Quality below `fair`, snapshot older than 3 days, or `mixedvariants` → state `uncertain` (no price) with reasons.
+- `qty` above the competing tier depth is fine (a seller does not need depth), but the answer says how many items already sit at or below the price.
+
+### 4D. Proceeds (`role = "proceeds"`, A8)
+`Sell.Proceeds(price, qty, opt)`: gross = price x qty; cut from `Prices.CUT` when confirmed for the side, else `cut = nil` and the label "before the auction house cut"; deposit `nil` and "deposit not known" until a formula is confirmed in the client; `sold = "notguaranteed"` always. **Never** multiplied by an invented sale probability. Sell-through arrives only with the Ledger (A11).
+
+### 4E. Item Advisor (`role = "advice"`, A8): Vendor, Auction, Disenchant or Unknown
+Inputs: vendor sell price (`Worth.lua` already reads it), binding, the suggestion, proceeds, quality, variant status. Policy version 1, conservative:
+| Condition | Decision |
+|---|---|
+| bound or not auctionable | Vendor if it has a vendor price, else Unknown |
+| `mixedvariants`, or suggestion state `uncertain`/`nocompetition` | Vendor if it has a vendor price ("auction value uncertain"), else Unknown |
+| suggestion gross ≥ 1.5 x vendor price **and** gross - vendor ≥ policy minimum (proposed 1 gold), quality ≥ `fair` | Auction, with flags (`beforecut`, `deposit unknown`, `aboveusual`, `notguaranteed`) |
+| otherwise with a vendor price | Vendor |
+| Disenchant | always Unknown (no outcome data; never fabricated) |
+| nothing known | Unknown |
+
+The 1.5x margin stands in for unknown fees, deposits and the risk of an unsold listing; it is policy, versioned, and replaced by real figures when the cut, deposit and Ledger data exist.
+
+**Fallbacks required by the brief, in one place:** old data → `uncertain` beyond 3 days; few listings → `limited`/`farbelow` reasons, Posture `unknown`; history disagrees with current → flags `belowusual`/`aboveusual`, the current competition still sets the price; Market Value much higher than competition → competition wins (`belowusual`); fees unknown → `beforecut`/deposit unknown, margin rule; sale probability unknown → `notguaranteed`, never a probability; variants mixed → no Auction advice; disenchant unknown → Unknown.
+
+### 4F. Purchase cost (`Market.Cost`, A5)
+Walks tiers 1 to 6 for the quantity needed: `exact`, `range` (whole-auction buying: up to `m - 1` items over-bought at the last tier; every multi-listing walk is a range until the commodity question is answered), `estimate` (beyond 6 tiers: "at least"), `few`, `none`. Never claims the listings still exist.
+
+### 4G. Future sources
+Actual sale prices, sell-through and fees from the Ledger (A11); external data (A12, section 9). Each arrives as its own `role`/`kind`, never written into `h2`.
 
 ---
 
-## 5. Representative-price algorithms
+## 5. Recent Price: the band mean [D1 approved provisionally]
 
-### 5.1 Candidates (all on the full listing list of one item: whole-copper unit price `u`, items `q`, sorted ascending; `T` = total items)
-- **A. Weighted percentile:** the price of the first listing whose cumulative items exceed 25% of `T`.
-- **B. Price-tier mode:** group consecutive prices into clusters (a new cluster starts above 1.05 x the cluster's first price); among clusters that start inside the cheapest 50% of supply, take the one holding the most items; its item-weighted mean.
-- **C. Band mean (recommended):** anchor `a` = A; ignore listings with `u < a / 2`; of the rest, the item-weighted mean of the cheapest 30% of their items (a fraction of a listing counts at the boundary).
+### 5.1 Definition (unchanged)
+Listings of one item in one snapshot: whole-copper unit price `u`, items `q`, ascending; `T` total items.
+1. **Anchor** `a` = the price of the first listing whose cumulative items are **more than** 25% of `T`.
+2. Ignore listings with `u < a / 2`.
+3. **Recent Price** = item-weighted mean of the cheapest 30% of the remaining items (a fraction of a listing counts at the boundary), rounded half up, at least 1.
 
-### 5.2 Hand examples (copper; recomputed by [a1-prototypes/algos.lua](a1-prototypes/algos.lua) [measured])
-| Case | Listings (price x items) | Min | A | B | C |
+Labelled everywhere as a **representative listing price**, never an expected sale price.
+
+### 5.2 Candidates and cases (copper; recomputed by [a1-prototypes/algos.lua](a1-prototypes/algos.lua) for the revision [measured])
+A = weighted 25% point; B = cluster mode (clusters within 5%, the fullest that starts in the cheapest half); **C = band mean (approved)**.
+
+| Case | Listings (price x items) | Min | A | B | **C** |
 |---|---|---|---|---|---|
 | 1 healthy spread | 9500x5, 9800x5, 10000x10, 10200x10, 10500x10, 11000x5 | 9500 | 10000 | 10233 | **9741** |
 | 2 one 1c listing, deep market | 1x1, 5000x40, 5200x10 | 1 | 5000 | 5040 | **5000** |
@@ -257,295 +271,325 @@ Reasons are words the UI can print ("Only 2 listings", "Scanned 4 days ago", "Pr
 | 5b few cheap under a wall | 4500x5, 6000x200 | 4500 | 6000 | 6000 | **5878** |
 | 6 two clusters | 100000x10, 200000x90 | 100000 | 200000 | 200000 | **166667** |
 | 7 one listing | 300000x1 | 300000 | 300000 | 300000 | **300000** |
-| 8 100 listings, 1c apart | 5000..5099 x1 | 5000 | 5025 | 5050 | **5015** |
+| 8 100 listings 1c apart | 5000..5099 x1 | 5000 | 5025 | 5050 | **5015** |
 | 9 one 200-stack vs singles | 4000x200, 6000x5 | 4000 | 4000 | 4000 | **4000** |
 | 10 rare, far apart | 800000, 1500000, 4000000 (x1) | 800000 | 800000 | 800000 | **800000** |
 | 11 bait volume, 29% of supply | 2000x8, 5000x20 | 2000 | 2000 | 5000 | **2143** |
 | 12 bait volume, 20% of supply | 2000x5, 5000x20 | 2000 | 5000 | 5000 | **5000** |
+| **Adversarial (revision)** | | | | | |
+| 13 thin, two far apart | 10000x1, 40000x1 | 10000 | 10000 | 10000 | **10000** |
+| 14 thin, one 1c among three | 1x1, 9000x1, 9500x1 | 1 | 1 | 1 | **1** |
+| 15 widely separated equal clusters | 10000x50, 1000000x50 | 10000 | 10000 | 10000 | **10000** |
+| 16 large cheap wall | 4000x1000, 5000x20 | 4000 | 4000 | 4000 | **4000** |
+| 17 large expensive wall | 5000x20, 9000x1000 | 5000 | 9000 | 9000 | **8739** |
+| 18 manipulator: 24% of supply just over half | 2510x12, 5000x38 | 2510 | 5000 | 5000 | **3008** |
+| 19 manipulator: 26% just over half | 2510x13, 5000x37 | 2510 | 2510 | 5000 | **2842** |
+| 20 manipulator: 24% just under half | 2490x12, 5000x38 | 2490 | 5000 | 5000 | **5000** |
+| 21 one 1000-stack cheap, two singles | 3000x1000, 5000x1, 5100x1 | 3000 | 3000 | 3000 | **3000** |
+| 22 three singles under a 1000-stack | 5000x3, 9000x1000 | 5000 | 9000 | 9000 | **8960** |
 
-Worked check of case 1 for C: T = 45; 25% = 11.25; cumulative 5, 10, 20 → anchor 10000; nothing below 5000; 30% of 45 = 13.5 items: 5 x 9500 + 5 x 9800 + 3.5 x 10000 = 131,500 / 13.5 = 9740.7 → **9741**.
-Case 6 for C: anchor 200000 (cumulative 10 is not above 25); 100000 is not below 100000, so kept; 30 items: 10 x 100000 + 20 x 200000 = 5,000,000 / 30 = **166667**.
+Worked checks: case 1: T = 45, 25% = 11.25, cumulative 5, 10, 20 → anchor 10000; 13.5 items: 5 x 9500 + 5 x 9800 + 3.5 x 10000 = 131,500 / 13.5 = **9741**. Case 18: T = 50, cumulative 12 is not above 12.5 → anchor 5000; 2510 ≥ 2500, kept; 15 items: 12 x 2510 + 3 x 5000 = 45,120 / 15 = **3008**. Case 17: anchor 9000; 306 items: 20 x 5000 + 286 x 9000 = 2,674,000 / 306 = **8739**.
 
-### 5.3 Where they disagree and why C
-- **A** is a single listing's price: it jumps between tiers (case 8 moves with one listing) and ignores everything below its point (case 5b says 6000 although 5 items are buyable at 4500). Simple, but it hides real cheap supply.
-- **B** finds "where most of it sits", which suits valuing a big stack but **ignores 29% of supply in case 11** and the whole cheaper cluster in case 6. Its clustering threshold (5%) is a tuning knob players cannot see, and it is discontinuous at cluster boundaries.
-- **C** moves smoothly (case 8: 5015), keeps real cheap supply in proportion (5b: 5878, 6: 166667, 11: 2143), and drops a cheap listing only if it is both **under 25% of supply and under half the anchor** (cases 2, 3, 12). It never removes more than 25% of supply, which bounds how much a filter can hide. High outliers never enter (case 4). One sentence explains it: *"the average price of the cheapest 30% of what is listed, leaving out a few listings far below the rest."*
-- **Thin markets:** with 1 to 2 listings every method returns roughly the minimum; C does too, and Data Quality says `limited` ("Only 2 listings").
-- **Edge fixed during A1:** with "at least 25%" instead of "more than 25%" in the anchor, case 3 gave 1667 (a single cheap unit out of four pulled the value down by two thirds). The rule is strictly "more than".
+### 5.3 What the adversarial cases show
+- **Manipulation bound (cases 18 to 20).** A seller with **less than 25% of supply** priced just over half the honest price can pull the band mean to about **0.58 x** the honest price at most ((0.25 x 0.5 + 0.05 x 1) / 0.3); priced under half it is ignored entirely (case 20). With **25% or more** of supply, the anchor moves to their price (case 19): that supply is real and buyable, so a listing estimate follows it. Market Value (14-day weighted median) and Historical Value (60-day median) dampen a one-day manipulation; Posture then reads `cheap`, which the Advisor treats as information, not advice.
+- **Thin markets (13, 14).** With 1 to 3 listings every method returns about the minimum; case 14 shows a 1-copper listing **defeats all three** when it is a third of supply. The algorithm is not changed; instead the snapshot reason `farbelow` ("the lowest of few listings is far below the others") is raised, Quality becomes `limited`, Posture is `unknown` and the Advisor will not suggest an auction from it.
+- **Separated clusters (6, 15).** C follows the cheaper cluster in proportion to its supply; `spread` is `wide`, so Quality cannot be `good`, and Competition shows both clusters.
+- **Walls.** A cheap wall sets the value (16, correct: it is buyable). An expensive wall dominates the value (17, 22) while a few cheaper items exist: Recent Price says 87 to 90 silver and **Competition says 50 silver**. That difference is exactly why a listing suggestion is built from competition, not from Recent Price (section 4C).
+- **Large single stacks (9, 21).** Prices are per item. Whether a buyer can take part of a 1000-stack is [unknown] (commodity question); `Cost` returns a range covering whole-stack buying.
 
-### 5.4 Manipulation and the limits of listing data
-- A seller posting a large cheap volume (case 11) **does** move every robust estimate, because that supply is real and buyable. That is correct for a listing estimate.
-- A seller buying out the cheap supply and relisting high is **invisible** to snapshot data except as a jump in Recent Price with a drop in supply; Market Value (14-day weighted median) and Historical Value (60-day median) dampen a one-day jump; Posture would say `expensive`.
-- Nothing here knows what sold. A price with no buyers looks identical to a price with many.
-
-### 5.5 Arithmetic and cost
-- Exact integer arithmetic is used while `u x q x 10 < 2^53` (weights in tenths of an item: 30% of `T` items = `3T/10`); above that, double arithmetic with the result documented as within 1 copper. The reference model uses the same rule.
-- Rounding: half up to whole copper; at least 1.
-- Cost per item: one sort of its **distinct** prices (k log k), one pass. Prototype: 236,500 distinct tiers from 250,000 records over 29,937 items, finalize 0.46 s total, worst 400-item step 12.9 ms offline [measured, wide synthetic spread]. That step is too long for a frame: A3 steps by **work units** (distinct tiers, about 1,000 per step) instead of items.
+### 5.4 Arithmetic and cost
+Exact integer arithmetic while `u x q x 10 < 2^53` (weights in tenths of an item), otherwise double arithmetic, documented within 1 copper; round half up. Per item: one sort of distinct prices. Finalize at 10k / 20k / 30k / 40k items: 0.15 / 0.29 / 0.45 / 0.62 s total, worst 400-item step 7.5 to 12.9 ms offline [measured, wide synthetic spread, 7.6 to 9.4 tiers per item]: A3 steps by **distinct tiers** (about 1,000 per step), not by items.
 
 ---
 
-## 6. Historical storage and chart support
+## 6. History and chart support
 
-### 6.1 Tiers and what each period holds [proposed]
-| Age | Resolution | Fields |
-|---|---|---|
-| latest snapshot | per scan | everything in `items` + `dist` |
-| 0 to 13 days | one point per observed day | min, Recent Price, items, listings, partial flag |
-| 14 to 60 days | weekly buckets | observed days, min low, min mean, Recent mean/low/high, items mean |
-| 61 to 120 days | two-week buckets | same |
-| legacy (frozen v1) | 7 exact days + 28-day buckets, until expired | minimum only (lo, hi, mean) |
-| market level | last 64 scans | time, quality flags, item and record counts |
+### 6.1 Chart support matrix [proposed]
+| Range | Resolution available | Metrics | Guarantee | Exact or aggregate | Min and Recent both? | Supply shown as | Missing shown as | Lost irreversibly |
+|---|---|---|---|---|---|---|---|---|
+| 24 h | ring points (real timestamps) + "now" snapshot | p, r, t, l | the last 8 distinct observations within 48 h | exact observations; merged points are flat segments between two real times | yes | items and listings per observation | gap between observations (no line beyond 3 h), incomplete-scan markers from the scan log | nothing within the ring's reach; anything older than 8 changes |
+| 48 h | same | same | same | same | yes | same | same | same |
+| 7 days | daily points + ring for the last 2 days | p, r, t, l closing + day lows/highs | every observed day | exact days; day ranges are exact extremes of that day's scans | yes | closing items with the day's fewest/most as a band | no point; gap reason `noscan`/`unlisted`/`incomplete` from the day log | time of day of each extreme after 48 h |
+| 14 days | daily points | same | every observed day | exact days | yes | same | same | same |
+| 30 days | daily points | same | every observed day of the last 30 | exact days | yes | same | same | same |
+| 60 days | 30 daily + weekly buckets | buckets: min low/mean/high, Recent low/mean/high, supply fewest/mean/most, mean listings, observed days | weekly beyond day 30 | **aggregate** beyond day 30 (bands, never daily points) | yes | band per bucket | bucket with `n` < 7 says how many days it holds; missing weeks are gaps | individual days and their order inside a week |
+| 120 days | + two-week buckets beyond day 60, + frozen legacy minimum | as above; legacy: minimum lo/hi/mean per 28 days | two-week beyond day 60, to day 120 | aggregate | Recent from `v2from` only; legacy feeds **minimum only** | as above | before `v2from`, Recent simply has no data (labelled "Recent Price recorded since ...") | weekly detail beyond 60 days; two-week means can differ by 1 copper from exact |
 
-**Intraday:** no per-item intraday points [decision D3]. A chart can show the latest snapshot as "now" beside today's daily point, and the scan log shows how often the house was scanned. A per-item ring (4 points in 48 h) would add about 50 to 80 B per item; deferred unless the owner wants intraday item charts.
-
-### 6.2 Chart-ready read API (A4) [proposed]
-`Market.History(item, metric, opt)` with metric `min`, `recent`, `supply`, `listings`, `range`:
+### 6.2 Chart-ready API [proposed; A4]
+`Market.History(item, metric, opt)`; `metric` = `min`, `recent`, `supply`, `listings`; `opt = { market, now, from, to, sources }`.
 ```
-{ item, metric, basis, unit = "copper" | "items" | "listings",
-  points = { { from, to, kind = "day" | "week" | "fortnight" | "legacy-day" | "legacy-bucket",
-               v, lo, hi, n, partial, provenance = "local" | "legacy" } ... },     -- oldest first
-  gaps   = { { from, to, reason = "noscan" | "unlisted" | "notretained" | "cut" } ... },
-  today, v2from, resolutionChanges = { day, ... } }
+{ item, metric, basis, unit = "copper" | "items" | "listings", market, label,
+  points = { { kind = "obs" | "day" | "week" | "fortnight" | "legacy-day" | "legacy-bucket",
+               at | from, to,          -- obs: real time (seconds); others: UTC day range
+               v,                      -- obs/day: the observed (closing) value; buckets: the mean
+               lo, hi,                 -- day: the day's extremes (when n > 1); buckets: lowest/highest
+               n,                      -- obs: 1 or "seen again until" (until = at + dm*60); day: scans; buckets: observed days
+               exact = true | false, partial, complete, provenance = "local" | "legacy" | "import:<id>" } ... },
+  gaps  = { { from, to, reason = "noscan" | "unlisted" | "incomplete" | "notretained" | "beforev2" } ... },
+  resolution = { { from, to, kind } ... },   -- where the chart switches between obs, day, week, fortnight, legacy
+  today, v2from }
 ```
-Rules: a point exists only for an observed day or a bucket of observed days; **nothing is interpolated**. A gap is any run of days between points; its reason comes from the scan log (`noscan` when no accepted scan that day, `unlisted` when scans happened without the item, `notretained` before the retention, `cut` for scans that could not feed history). A chart draws a line only between points closer than a gap threshold (suggested 3 days for daily points, one bucket for buckets) and a dashed or no line otherwise; bucket points are drawn as bands (`lo..hi`) with their mean, never as daily points. Legacy points appear in `min` and `range` only.
+- Nothing is interpolated; a point exists only where something was observed. `exact = false` for every bucket, so a chart cannot draw a bucket as a day.
+- Metric identity is strict: `recent` never contains legacy points; `min` joins legacy days before `v2from` with v2 days, each labelled.
+- The UI never decodes saved strings. One chart engine (later, C1) serves Opportunities, Market Intelligence, the Item Advisor and the Ledger from this shape.
 
-### 6.3 Coverage after N days of daily scanning [measured, synthetic, 3,000-item sample scaled to 40,000]
-Recommended layout ("lean, two-week tail"), mixed market (30% of items listed on 90% of days, 40% on 35%, 30% on 6%):
+### 6.3 Storage by age, recommended layout [measured, 1,000-item sample scaled; mixed listing frequency: 30% of items on 90% of days, 40% on 35%, 30% on 6%]
+Three scans a day (4 h apart), 30-day daily + 8-point ring + weekly to 60 + two-week to 120:
 
-| After | Average per item | Worst item | 40,000 items |
-|---|---|---|---|
-| 7 days | 52 B | 164 B | 2.0 MB |
-| 30 days | 184 B | 504 B | 7.0 MB |
-| 60 days | 328 B | 775 B | 12.5 MB |
-| 120 days | 509 B | 1,053 B | 19.4 MB |
-
-Sparser market (10% / 30% / 60% of items): 365 B average, 13.9 MB at 120 days. Adding listings to the daily points (not in the measured variant) is estimated at under 1 MB more.
-
----
-
-## 7. Storage strategies compared
-
-| | **A. Compact summary** (recommended, section 3) | **B. Richer daily, same tail** | **C. Raw recent snapshots** |
-|---|---|---|---|
-| Snapshot | v1 entry + dist (6 tiers, quartiles, r) | same | every listing of the last 3 scans |
-| Daily tier | 14 days: d, p, r, t, l | 30 days: d, p, r, q75, t, l | 14 days as A |
-| Older | weekly to 60, two-week to 120 | weekly to 120 | as A |
-| History text, 40k items, 120 d (mixed) | **19.4 MB** [measured] | 30.1 MB [measured] | A + raw |
-| Snapshot text, 40k multi-tier items | 4.1 MB dist + 0.7 MB entries [measured] | same | about 250,000 records x 3 x ~15 B = **11 MB** [estimate] |
-| Lua memory | about the text size (798 B resident per item for 788 B of text in two id-keyed string tables) [measured] | same ratio | raw tables 3 to 5x text [estimate] |
-| Scan finalize | 0.46 s CPU at 30k items; stepped by tiers [measured] | same | + serialization of every record |
-| Commit (history), per 120 items | about 7 ms offline (decode + encode) [measured] → time-budgeted steps | about 10 ms [measured] | as A |
-| History query | one decode of a < 1.1 KB string | < 2 KB | as A |
-| Migration | none (legacy frozen) | none | none |
-| Chart accuracy | daily for 2 weeks, weekly bands to 60 d, 2-week bands to 120 d | daily for a month | as A + re-derivable snapshots |
-| Item Advisor / AH | Recent, Market, Historical, tiers for cost | same | could re-run new algorithms on 3 scans |
-| Evidence discarded | listings beyond tier 6 (kept as totals); intraday changes; individual days after 2 weeks | days after 30 | the same after 3 scans |
-
-Today's format for comparison: about 72 B of history per item (175 B worst), about 8 MB per full market worst [verified measurement from 2026-11-11].
-
-**Choice: A.** B costs 55% more for daily resolution between 14 and 30 days, which a two-week chart does not need and a month chart shows acceptably as weekly bands. C is the only way to re-run a future algorithm on raw data, but three scans of raw evidence is not a history and costs more than the whole snapshot summary; the quartiles and six exact tiers keep enough to compute any lower-band estimator approximately. **Totals for A** (one full 40,000-item market after 120 days, mixed): about 24 MB of saved text including keys, about 20 to 25 MB resident while the Workshop is loaded; a 20,000-item sparse market about 8 MB [estimate from the measured rates]. Three markets at the cap would be about 70 MB worst, hence decision D4.
-
-Transient memory during a scan: the per-item tier map, packed as `qty * 65536 + listings` per distinct price, measured **14.5 MB** for 250,000 records / 30k items and 22.9 MB for 400,000 records / 40k items, in addition to today's batch table (11 MB) [measured]. Unpacked `{qty, listings}` tables measured 37.8 MB, so A3 must use the packed form. Released after the commit.
+| After | Average per item | Worst item | 10k items | 20k | 40k |
+|---|---|---|---|---|---|
+| 1 day | 47 B | 162 B | 0.4 MB | 0.9 MB | 1.8 MB |
+| 2 days | 91 B | 289 B | 0.9 MB | 1.7 MB | 3.5 MB |
+| 7 days | 167 B | 509 B | 1.6 MB | 3.2 MB | 6.4 MB |
+| 14 days | 277 B | 819 B | 2.6 MB | 5.3 MB | 10.6 MB |
+| 30 days | 523 B | 1,540 B | 5.0 MB | 10.0 MB | 20.0 MB |
+| 60 days | 726 B | 1,927 B | 6.9 MB | 13.8 MB | 27.7 MB |
+| 120 days | 1,009 B | 2,543 B | 9.6 MB | 19.2 MB | 38.5 MB |
 
 ---
 
-## 8. Automatic scan policy [proposed; A6]
+## 7. Storage strategies and performance [measured unless marked]
 
-**Trigger:** the core (always loaded) sees `PLAYER_INTERACTION_MANAGER_FRAME_SHOW` with type `Auctioneer` (or `AUCTION_HOUSE_SHOW`). If the setting is on and the player is not in combat, it loads the Workshop through `WorkshopLauncher.Load` (which already refuses in combat), then calls `Session.StartScan({ auto = true })` once `AuctionHouseFrame` is shown (checked over at most 5 s of timer ticks, then gives up silently).
+### 7.1 Daily retention options (D2), three scans a day, at 120 days, 40,000 items
+| Option | Average / worst per item | 40k text | Saved file | Resident after load | Update per item, append path | Complexity |
+|---|---|---|---|---|---|---|
+| 14-day daily, no ring | 764 / 1,644 B | 29.1 MB | 30.7 MB | 37.4 MB | 6.2 µs | low |
+| **A: uniform 30-day daily, no ring** | 954 / 2,362 B | 36.4 MB | 38.0 MB | 44.7 MB | 7.2 µs | low |
+| B: adaptive (30 days for 10% tracked items) | 776 / 2,170 B | 29.6 MB | 31.2 MB | 37.9 MB | 6.3 µs | **per-item policy**: who is tracked, what happens when tracking stops, charts that differ by item |
+| C: 30 days, day ranges only on the newest 14 | 801 / 1,893 B | 30.6 MB | 32.1 MB | 38.8 MB | **no append path**: a middle segment is rewritten daily, 123 µs | medium |
+| 14-day + 4-point ring | 811 / 1,768 B | 30.9 MB | 32.5 MB | 39.2 MB | 11.1 µs | low |
+| 30-day + 4-point ring | 1,001 / 2,484 B | 38.2 MB | 39.8 MB | 46.5 MB | 12.1 µs | low |
+| **30-day + 8-point ring (recommended)** | 1,009 / 2,543 B | 38.5 MB | 40.0 MB | 46.7 MB | 13.0 µs | low |
 
-**Gates (all must pass, else nothing is sent and the bar shows nothing or one quiet line):**
-1. No scan running; the posting page's search is not busy (`R.AuctionScan.Busy`, as today).
-2. The market's newest accepted scan is older than **60 minutes** (decision D5). A complete scan within the last 60 minutes means no request.
-3. No automatic attempt for this market ended `dropped`, `throttled`, `noResponse` or `api` in the last **15 minutes** (session memory only, nothing saved).
-4. `PR.Held()` is false.
-5. Once per auction house visit: closing and reopening within 60 minutes does not retry.
+Other schedules for the recommended layout: **one scan on 80% of days**: 30-day + ring about 586 B per item, 22.3 MB at 40,000 items (measured with the 4-point ring; with one scan a day the ring holds at most two points, so 8 points cost the same [estimate]); against 14-day + ring: 557 B (+5% for 30 days). **Eight scans a day** (90 min apart): 1,136 B, 43.3 MB text, 44.9 MB file, 51.6 MB resident (4-point ring: 1,092 B, so 8 points cost +4% there and +1% at three scans a day).
 
-**Behaviour:**
-- Same state machine, same completeness rules, same atomic commit, same `kept` rule. The only differences: `snap.flags` marks it automatic, and its messages are quieter (no failure line unless the player opens the Workshop; the bar shows "Updating prices... 40%").
-- **Stop** control on the progress bar (new): ends the scan as `interrupted` with nothing written (the existing token path). Also available for manual scans.
-- Closing the house before saving interrupts it (as today); during saving it finishes (as today).
-- Browsing and buying: the scan sends one request and then only reads local results; it never calls a search, buy, bid, post or cancel function. Whether `ReplicateItems` delays the player's own searches through the throttle is [unknown] and is an A6 real-client check. If the player's search starts while the scan is still `waiting` for the throttle, the automatic scan gives up (it never competes with a player action).
-- If the client refuses `ReplicateItems` outside a hardware event [unknown], A6 falls back to a one-click "Update prices" prompt on the bar (no popup, no chat), and the setting's text says so.
+**Recommendation: Option A (uniform 30-day daily) with the 8-point ring.** It costs 24% more than 14 days at three scans a day and 5% more at one a day, keeps the real shape of every 30-day chart, and has the simplest code. Adaptive saves about 19% but makes history depend on a per-item tracking state that changes over time (a chart's resolution would depend on when an item was tracked), and its saving disappears if many items are tracked. Option C saves 16% but loses the append-only update (the main runtime win, below). The 8-point ring costs 1 to 4% more than 4 points and covers twice as many changes (with hourly automatic scans, 4 points span about 4 hours of changes; 8 span a working day).
 
-**Setting (A6, not now):** one row in the Workshop settings page: **"Update prices automatically when I open the auction house"**, default on, with a one-line note "Reads the auction house once an hour at most. Nothing is bought or posted." Stored through the core's settings layer so the core can read it before the Workshop loads (the exact switch name is an A6 detail).
-
-**Cost of the default:** every auction house visit loads the Workshop and its saved variables (up to about 24 MB per full market). This is the price of auto-scanning and is measured in A6 (`workshop.load` scope already times the load).
-
----
-
-## 9. External data and a desktop companion [proposed boundary; not built]
-
-- **Transport:** addons cannot read files at runtime. A companion would write a separate load-on-demand data addon (for example `TwichUI_WorkshopData`) while the game is closed, containing **one global table of strings**. That file is executed by the client as addon code (like any addon); this is the owner's call (D10) because the project rule forbids executing untrusted data. Our own parser then validates every string; nothing inside is executed by TwichUI.
-- **Record:** `{ schema, source = { id, name, version }, generated = time, market = { realm, side, region? }, kind = "daily" | "snapshot" | "sale", items = { [id] = "<same encodings as h2/dist>" } }`.
-- **Validation:** schema known, sizes bounded (items, string length, days), market key matches a known `Realm|Side` exactly, timestamps not in the future and inside 120 days, values pass `W.Int`; anything else rejected whole per item.
-- **Never merged:** imported observations live in their own tables and are never written into `h2`/`c2`. The API takes `opt.sources = { "local" }` by default; `{ "local", "import" }` fills days without a local observation, each point carrying `provenance = "import:<source>"`. Same day in both: local wins for values; both are visible in a chart.
-- **Duplicates:** same source, market, item and day → the newer `generated` wins. **Freshness:** an imported day never makes the "Prices updated" chip fresh; the chip describes local scans only.
-
----
-
-## 10. Public Market API extensions [proposed; A4 and A5]
-
-`Market.API = 2`. Every existing function keeps its signature and meaning (they describe the minimum and the v1 statistics). New functions, all read-only, all `(item, ..., opt)` with `opt = { market, now, variant, sources }`:
-
-| Call | Returns |
+### 7.2 Runtime [measured offline]
+| Work | Figure |
 |---|---|
-| `Value(item, kind, opt)` | `kind` = `"min" \| "recent" \| "market" \| "historical"`: `{ kind, value, basis, at, age, freshness, window = { from, to, days }, n, aggregate, complete, quality = { level, reasons }, provenance, notes }` or `nil, reason` (adds `stale`, `mixedvariants` note) |
-| `Distribution(item, opt)` | `{ min, q25, q50, q75, hi, recent, anchor, tiers = { { price, items, listings, largest } }, tail = { items, listings }, spread, spreadClass, cheapOutlier, total, listings, near }` |
-| `Supply(item, opt)` | `{ items, listings, near, atMin, typical = median daily items over 14 days, trend }` |
-| `Cost(item, qty, opt)` | section 4.10: `{ state, low, high, unitLow, unitHigh, tiersUsed, covered, granularity = "item" \| "auction" \| "unknown" }` |
-| `Quality(item, opt)` | `{ level, reasons, facts = { age, complete, listings, days30, days60, spreadClass, variant } }` |
-| `Posture(item, opt)` | `{ posture, ratio, current, reference, n, quality }` |
-| `History(item, metric, opt)` | section 6.2 |
-| `TrendOf(item, metric, days, opt)` | section 4.8: `{ direction, from, to, change, percent, nOlder, nNewer, metric }` |
-| `Sales(item, opt)` | reserved: `nil, "nosales"` until the Ledger exists |
+| History update, decode + re-encode per item | 89 to 183 µs (11 to 22 ms per 120 items): too slow for a frame |
+| **History update, append-only** (cut the ring, read the `newest day` header, replace or append the last daily segment) | **6 to 18 µs per item (0.8 to 2.2 ms per 120 items)**; output identical to the full encoder in **all 134,458 to 375,357 comparisons** |
+| Fold (bucket rewrite) | 3 to 10% of updates (about weekly per item); uses the full path |
+| Chart query, largest item (decode + build points) | 144 to 178 µs |
+| Saved file 40k items, `dofile` | 0.15 to 0.22 s for 23 to 45 MB files |
+| Snapshot finalize | 0.15 / 0.29 / 0.45 / 0.62 s at 10k / 20k / 30k / 40k items |
+| Transient tier map during a scan (packed `items * 65536 + listings`) | 14.5 MB at 250,000 records / 30k items, 22.9 MB at 400,000 / 40k; about 4.6 / 9.3 MB at 80,000 / 160,000 records [estimate by records]; unpacked form 37.8 MB (rejected) |
 
-Caching: `Value("market")`, `Value("historical")` and `Quality` are cached per `(market key, snap.seq, item)` in one bounded table (at most 2,000 entries, cleared on commit). Nothing else is cached. Basis sentences: one per kind in `Market.BASIS`, all containing the word "listing" or "listed".
+Client figures are [unknown]: the client's saved-variables loader is a different implementation, and writing the file at logout or `/reload` costs time too. The figures say the format is not pathological; they are not a load-time claim.
+
+### 7.3 Totals per market and the three-market worst case
+| Market | History text | + snapshot (`items` + `dist`) | Saved file | Resident |
+|---|---|---|---|---|
+| 10k items, 3 scans/day, 120 d | 9.6 MB | +1.1 MB [measured] | about 11.5 MB [estimate] | about 14 MB [estimate] |
+| 20k items, 3 scans/day | 19.2 MB | +2.2 MB [measured] | about 23 MB [estimate] | about 28 MB [estimate] |
+| 40k items, 1 scan/day | 22.3 MB | +4.8 MB | about 29 MB [estimate] | about 35 MB [estimate] |
+| 40k items, 3 scans/day | 38.5 MB | +4.8 MB | about 46 MB [estimate] | about 57 MB [estimate: 46.7 measured history + 10.7 measured snapshot] |
+| 40k items, 8 scans/day | 43.3 MB | +4.8 MB | about 51 MB [estimate] | about 62 MB [estimate] |
+| **three markets at the cap, 3 scans/day each** | | | **about 140 MB** [estimate] | **about 170 MB** [estimate] |
+
+The three-market worst case needs a player scanning three 40,000-item houses three times a day for four months; the real size of a Forever house is [unknown] (the 40,000 cap is a design bound, not an observation). Peak memory during a commit adds the transient tier map, the batch (about 11 MB at 30k items [measured, M7]) and the replaced strings awaiting collection.
+
+### 7.4 Large markets: the budget guard (D4) [proposed]
+Three markets keep their own identities and histories [approved]. To bound the unusual case **without silently discarding the most valuable evidence**, each commit adds up the bytes of the market's strings (it already touches them) and applies an **ordered compaction ladder** to the market being committed when its history text exceeds the **per-market budget (proposed 48 MB)** or all markets together exceed **the account budget (proposed 96 MB)**, starting with the market scanned longest ago:
+1. Drop the day-range extensions of daily points older than 14 days (closing values stay; measured −16%).
+2. Fold days 15 to 30 into weekly buckets early **only for items observed on fewer than 4 of the last 30 days** (they have no daily shape to lose).
+3. Drop supply fewest/most from buckets older than 60 days.
+
+Never compacted: the ring, the last 14 daily points, closing minimum/Recent/supply, bucket means and ranges of prices, legacy history, the snapshot. Each step is recorded in `market.compact` and shown in `Market.Info` and the footer tooltip ("Older detail was condensed for 3,200 rarely listed items to keep the saved file small"). A market not scanned for 120 days is removed (its history has expired). Budgets are constants in one place, adjustable after real `workshop.load` figures.
+
+### 7.5 Strategies considered
+| | **Summary + rich history (recommended)** | Raw recent snapshots (R) |
+|---|---|---|
+| Keeps | 6 exact tiers, quartiles, band mean per scan; ring, 30 daily, buckets | every listing of the last 3 scans, plus the same history |
+| Extra size | — | about 11 MB per 40k-item market [estimate] |
+| Benefit | everything the product questions need | re-running a new algorithm on 3 scans |
+| Verdict | chosen | rejected: three scans are not a history, and the quartiles and exact low tiers already allow approximate re-derivation of lower-band estimators |
 
 ---
 
-## 11. Migration and backward compatibility [proposed]
+## 8. Automatic scanning [D5 approved; A6]
 
-**Principle: read old data in place, write new data beside it; convert nothing.**
+**Trigger:** the core sees `PLAYER_INTERACTION_MANAGER_FRAME_SHOW` with `Auctioneer` (or `AUCTION_HOUSE_SHOW`); if the setting is on and the player is not in combat it loads the Workshop (`WorkshopLauncher.Load`, which refuses in combat) and starts `Session.StartScan({ auto = true })` once `AuctionHouseFrame` is shown (checked for at most 5 s, then gives up silently).
+
+**Gates:** no scan running and the posting search not busy; the market's newest accepted scan older than **60 minutes**; no automatic attempt for this market refused (`dropped`, `throttled`, `noResponse`, `api`) in the last **15 minutes** (session memory only); not held; **once per visit**.
+
+**Behaviour:** the same state machine, completeness rules, atomic commit and `kept` rule; `snap.auto` and the scan log mark it automatic; quiet progress text ("Updating prices... 40%"); a **Stop** control on the bar (also for manual scans) ends it `interrupted` with nothing written; if the player starts a search while the automatic scan still waits for the throttle, it gives up. Never buys, bids, posts or cancels.
+
+**Client verification first (A6 step 1, Lab guided probe):** whether `ReplicateItems` is accepted from an event handler without a click; time to the first update; whether the player's own search right after is delayed; commodity versus whole-auction buying of stackables; whether `owner` is populated (count only). If the request needs a click, A6 falls back to a one-click "Update prices" prompt on the bar and the setting's text says so.
+
+**Setting:** "Update prices automatically when I open the auction house", default on, note "Reads the auction house at most once an hour. Nothing is bought or posted." Stored through the core settings layer so the core can read it before the Workshop loads. Cost: each auction house visit loads the Workshop and its saved data (section 7.3).
+
+---
+
+## 9. External data [D10 deferred]
+
+Workshop works fully without external data. The **transport is not chosen**: a generated load-on-demand data addon, a size-limited import string, or another method are all open; none is committed to (a generated Lua file is executed by the client as addon code, which needs its own decision against the project rule on executing data).
+
+The **boundary** is fixed now so the schema does not need to change later:
+- Record: `{ schema, source = { id, name, version }, generated, market = { realm, side }, kind = "daily" | "snapshot" | "sale", items = { [id] = "<h2/dist encodings>" } }`.
+- Validation: known schema, bounded sizes, exact market match, timestamps not in the future and within 120 days, every value through `W.Int`; failures rejected per item.
+- Storage: separate tables (never `h2`/`c2`); `opt.sources` defaults to `{ "local" }`; imported points carry `provenance = "import:<id>"`; same day in both: local wins for values, both visible on a chart; duplicates: newer `generated` wins; imported days never make the "Prices updated" chip fresh.
+
+---
+
+## 10. Public Market API [proposed]
+
+`Market.API = 2`. Every existing function keeps its signature and meaning. New, all read-only, `(item, ..., opt)` with `opt = { market, now, variant, sources }`:
+
+| Call | Role | Returns |
+|---|---|---|
+| `Value(item, kind, opt)` | valuation | `kind` = `min`, `recent`, `market`, `historical`: `{ role, kind, value, basis, at, age, freshness, window, n, aggregate, complete, quality, provenance, notes }` or `nil, reason` (`stale`, `insufficient`, ...) |
+| `Range(item, days, opt)` | valuation | long-term low/high of Recent and minimum, observed days |
+| `Distribution(item, opt)` | valuation | quartiles, `hi`, Recent, anchor, tiers, tail, spread class, flags, totals, `near` |
+| `Supply(item, opt)` | valuation | items, listings, near, at minimum, 14-day median items, trend |
+| `TrendOf(item, metric, days, opt)` | valuation | direction, change, percent, halves' sizes |
+| `Posture(item, opt)` | valuation | `cheap/normal/expensive/unknown`, ratio, reference, quality |
+| `Quality(item, opt)` | valuation | level, reasons, facts, `policy` version |
+| `Competition(item, qty, opt)` | competition | section 4B |
+| `Cost(item, qty, opt)` | (purchase) | section 4F |
+| `History(item, metric, opt)` | valuation series | section 6.2 |
+| `Sales(item, opt)` | reserved | `nil, "nosales"` until the Ledger |
+| `W.Sell.Suggest`, `W.Sell.Proceeds` (A8) | suggestion, proceeds | sections 4C, 4D |
+| `W.Advisor.Decide(item, ctx)` (A8) | advice | section 4E |
+
+Cache: `Value(market)`, `Value(historical)`, `Quality` per `(market key, snap.seq, item)`, at most 2,000 entries, cleared on commit. Basis sentences always say "listing" or "listed".
+
+---
+
+## 11. Migration and compatibility [proposed]
+
+**Read old data in place, write new data beside it, convert nothing, no load-time pass.**
 
 | Case | Behaviour |
 |---|---|
-| `v = 1`, `f = 2` market (1.3) | Read as today. The first new commit writes `f = 3` with the same `items` rules, keeps `hist` (now frozen: trimmed by expiry, never extended), starts `h2`/`c2`/`dist`/`scans`, sets `v2from` to the scan's day and `db.v = 2`, all inside `Apply`. |
-| legacy recipes-only (`TwichUIDB.workshop.prices`) | Unchanged (replaced by the first full scan). |
-| `v = 2` read by 1.3 | 1.3 is held: prices and frozen history read correctly (same `items` and `hist` encodings); scans refused. Verified against 1.3's code path in A2 tests. |
-| `v > 2` | Held (unchanged rule). |
-| interrupted first commit | Nothing written (the existing job contract); the next scan tries again. |
-| repeated commits | Idempotent with respect to migration: `f = 3` markets are never "migrated" again; the legacy `hist` is only trimmed. |
-| malformed `dist`/`h2`/`c2` string | Treated as absent for that item (as v1 does), never repaired by guessing; the next scan's observation replaces it. A malformed `scans` entry is skipped. |
-| clock moved back | As v1: an observation older than the newest kept day is ignored. |
-| startup work | None: no load-time migration pass. Legacy `hist` trimming stays inside the commit's existing "old" phase. |
+| `v = 1`, `f = 2` (1.3) | read as today; the first new commit writes `f = 3` with unchanged `items`, frozen `hist`, new tables, `v2from`, `db.v = 2`, all in `Apply` |
+| legacy recipes-only (`TwichUIDB.workshop.prices`) | unchanged |
+| `v = 2` under 1.3 | **held**: 1.3 reads `items` and `hist` (same encodings), refuses `BeginCommit`, `Apply` and `Scan.Start` with `held`; its only writers are behind that check [verified, 2.1] |
+| `v > 2` | held |
+| interrupted first commit | nothing written |
+| repeated commits | nothing re-migrated; legacy `hist` only trimmed by expiry |
+| malformed `dist`/`h2`/`c2`/log entry | treated as absent for that item or entry, never repaired; the next observation replaces it |
+| clock moved back | an observation older than the newest kept one is ignored (ring, daily and buckets alike) |
 
-**Meaning preserved:** a legacy point is "the cheapest buyout listing of that day's last whole-read scan"; a v2 daily `p` has exactly that meaning, so the `min` series joins them (legacy before `v2from`, v2 from `v2from`), each point labelled. Legacy points never appear in Recent, Market or Historical Value, nor in a Recent Price chart. No v2 field is ever filled from v1 data.
+**Meaning preserved:** a legacy point is "the cheapest buyout listing of that day's last whole-read scan"; a v2 daily closing `p` has the same meaning, so only the `min` series joins them. No v2 field is ever filled from v1 data; Recent Price history starts at `v2from`.
 
-**Rollout check:** A2's tests load a fixture saved by 1.3's encoder, commit with the new code, then read the result with a copy of 1.3's reader (`Prices.lua`/`History.lua`/`Market.lua` at `v1.3.0`, stored as a test fixture) and require identical `Price`/`Stats`/`Series` answers for the legacy days. The Test Lab gets a read-only integrity case (counts of `f = 2`/`f = 3` markets, malformed strings per table).
+**How the old-client test proves protection, not just readability (A2):**
+1. Build a v1 database with 1.3's own encoders (fixture copies of `Prices.lua`, `History.lua`, `Market.lua` from `git show v1.3.0:` in `tests/fixtures/workshop_v13/`), commit with the new code (now `v = 2`, `f = 3`, non-empty new tables in later milestones; A2 seeds them with synthetic strings for this test).
+2. Load the **1.3** code against that database and call every write path it has: `PR.Commit`, `PR.BeginCommit` + `Step` + `Apply`, `Scan.Start` (with the fake house), and the 1.3 window's refresh path. Each must refuse (`held` or `unavailable`).
+3. Deep-compare the whole database before and after (including `dist`, `h2`, `c2`, `scans`, `days`): identical.
+4. Serialize it with the test round-trip writer (M9 or the minimal one A2 adds), reload, and repeat step 3: what a client would write back at logout is the same data.
+5. Check 1.3's answers (`Price`, `Stats`, `Series`) on the legacy days are unchanged.
 
 ---
 
 ## 12. Test and performance requirements
 
-### 12.1 Invariants per algorithm (each needs a test that would fail on a plausible wrong answer)
+### 12.1 Invariants (each with a test that fails on a plausible wrong answer)
 | Area | Invariants |
 |---|---|
-| Tier map / dist | conservation: `sum tier items + tail items = t`, `sum listings + tail listings = l`; tiers strictly ascending; tier 1 price = `p` rounded rule; no record counted twice (every record added twice doubles every count); shuffled input gives the same entry; bid-only and invalid records excluded and counted |
-| Quantiles | weighted quantile equals the brute-force answer on the expanded item list; `p <= q25 <= q50 <= q75 <= hi`; one-tier items have no dist entry |
-| Recent Price | equals the independent reference on random lists; `p <= r <= q50` (the band ends by 25% + 30% x 75% = 47.5% of supply); never removes more than 25% of supply; cases 1 to 12 of section 5.2 exactly; scaling all prices by k scales r by k (within rounding); adding a listing above the band never changes r |
-| Daily tier | at most one point per day; points from one scan only; cut scans add nothing; partial flag carried; delta encoding round-trips |
-| Buckets | fold only whole weeks; `rlo <= rmean <= rhi`; `n` equals the observed days folded; nothing older than 120 days; weekly-to-two-week merge preserves n and sums; boundaries at days 13/14, 60/61, 119/120/121 |
-| Market/Historical Value | weighted median equals the brute force over the day list; missing days never count; `stale` exactly after 14 days without a point |
-| History API | no point on a day without an observation; every gap has a reason consistent with the scan log; legacy points only in `min`/`range` |
-| Isolation | another market's scans change nothing; imports never change local answers with default `sources` |
-| Unknown vs zero | no API returns 0 for missing data; every nil has a reason |
-| Migration | 1.3 fixture → commit → 1.3 reader gives identical legacy answers; second commit changes nothing in `hist` except expiry; `v > 2` held |
-| Cancellation | Stop, close and a failed step at every phase leave the saved database byte-identical (deep compare) |
+| Tier map / dist | conservation (`sum tiers + tail = t`, listings likewise); tiers ascending; tier 1 = rounded `p`; records added twice double counts; shuffle-invariant; bid-only and invalid excluded and counted |
+| Quantiles / Recent | equal to a brute force on expanded item lists; `p <= q25 <= q50 <= q75 <= hi`; `p <= r <= q50`; never removes more than 25% of supply; cases 1 to 22 exactly; scale invariance within rounding; a listing above the band never changes `r` |
+| Ring | at most 8; 48 h bound against the newest whole-read scan; the unchanged rule merges only when p, r, t, l and the flag all match (mutants: compare `p` only; ignore the flag); `m + dm` never decreases; cut scans add nothing |
+| Daily | one point per day; closing = last whole-read scan listing the item; lows/highs equal the extremes of that day's scans; extension present iff n ≥ 2 and a value moved; append path equals the full encoder; partial flag carried |
+| Buckets | whole weeks only, only weeks entirely older than 30 days; daily guarantee of 30 observed days; weekly → two-week after 60; expiry at 120; `lo <= mean <= hi` per metric; `n` conserved by merges; merge rounding as specified; boundaries 29/30/31/36/37, 59/60/61, 119/120/121 |
+| Logs | every accepted scan in the scan log; 48 h coverage with bounds 64/256; day log 120 days; gap reasons consistent with the logs |
+| Values | weighted medians equal a brute force over the day list; missing days never count; `stale` exactly after 14 days; legacy never in Recent, Market, Historical |
+| Services | no function of one role returns another; `Sell.Suggest` price never equals a valuation unless the competing price does (property over random fixtures); Advisor never says Auction for `mixedvariants`, `uncertain`, Disenchant data absent |
+| History API | no point without an observation; buckets `exact = false`; metric identity; resolution list covers the range |
+| Isolation, unknown vs zero, migration, cancellation | as section 11; no API returns 0 for missing data; Stop/close/failing step at every phase leave the database deep-equal |
+| Budget guard | ladder order; never touches the protected data; recorded and reported |
 
-### 12.2 Tools to extend
-- **Reference models:** extend `test_workshop_market_reference.lua` (and the Lab `Reference.lua`) with an independent listing-level model (expanded item lists, sorted exact fractions) for tiers, quantiles and Recent Price, and a full day-list model for h2/c2 and the values.
-- **Fixtures:** a new seeded listing-distribution generator with wide and narrow spreads, walls, cheap baits and thin items (`FX.Listings`), and calendars that exercise every tier boundary.
-- **Mutation catalog** (`tools/mutations/workshop.py`, group `market`): at least anchor `>=` vs `>`, half-anchor gap off, 30% → 25%, tier order, tail dropped, fold of a partial week, two-week merge losing `n`, weights 4/2/1 swapped, legacy points leaking into Recent series, `v` not bumped.
-- **Simulator** (`tools/simlab/workshop.sh`): the fake house serves listing distributions; scenario for automatic start on open, Stop, close mid-read; settings page row (A6).
-- **Test Lab:** benchmarks `market.aggregate.*` **v3** (tier map + dist finalize), `history.commit.v2.120d`, `market.value.6k`; probes for A6 and A8 (below).
-- **Persistence:** M9's saved-variables round trip is a prerequisite for A2's fixture tests (or A2 builds the minimal writer/reader it needs).
+### 12.2 Tools
+- Reference models: a listing-level model (tiers, quantiles, band mean) and a scan-level history model (every whole-read scan kept in full, then the ring, days and buckets derived naively) in `test_workshop_market_reference.lua` and the Lab `Reference.lua`.
+- Fixtures: `FX.Listings` (wide, narrow, walls, baits, thin, clusters) and scan calendars with several scans a day, partial and cut scans, and every retention boundary.
+- Mutation catalog (`--group market`): anchor `>=`; gap filter off; 30% → 25%; unchanged rule on `p` only; ring bound by wall clock; daily close = first scan; day low not updated; fold of a partial week; two-week merge losing `n`; weights swapped; legacy in Recent; `v` not bumped; ladder touching the last 14 days; Suggest priced from Market Value.
+- Simulator (`workshop.sh`): distributions in the fake house; several scans a session; auto start on open, Stop, close mid-read (A6).
+- Test Lab: `market.aggregate.*` v3, `history.update.append`, `history.fold`, `market.history.query`, `market.value.6k`; probes for A6 and A10; **a saved-data load case** (A4 gate, below).
 
-### 12.3 Performance acceptance (relative, no absolute targets until client figures exist)
-- Longest production step of a scan with the new finalize is **no longer than today's longest step** on the same fixture in both interpreters (M7.1 v2 figures are the baseline), using work-unit or time-budgeted steps.
-- Commit steps are time-budgeted (about 4 ms of work per tick, the Lab's `Pace` pattern) rather than fixed at 120 items, because the measured per-120-item cost rises from about 4 to about 7 ms offline with v2 strings.
-- Retained memory after a scan returns to the pre-scan level plus the new saved data (forced-collection case, offline and `perf.retained.*`).
-- In the client: `workshop.load` time for a synthetic 40,000-item, 120-day database, recorded before A4 ships (the SavedVariables parse cost at 20+ MB is [unknown]).
+### 12.3 Performance acceptance (relative; no absolute targets until client figures exist)
+- The scan's longest step is not longer than today's on the same fixture (M7.1 v2 baseline), using tier-budgeted finalize steps.
+- History updates use the append path; the commit is time-budgeted (about 4 ms of work per tick, the Lab `Pace` pattern) because folds still use the full path.
+- Retained memory after a scan returns to the pre-scan level plus the new data.
+- **A4 gate:** in the client, the load time of a synthetic 40,000-item, 120-day database (about 46 MB) is recorded before history writes ship. Proposed method: a development-only Lab companion addon whose only content is a saved variable the Lab fills with synthetic data; after `/reload`, the Lab times `LoadAddOn` of it with `debugprofilestop` and the player times the `/reload` itself. Real saved data is never touched. If the load is unacceptable, the budgets in 7.4 are lowered before release.
 
 ---
 
 ## 13. Implementation milestones
 
-Each is one request, follows the roadmap's verification policy (section F) and ends with `./tests/run.sh`. Reasoning: **Opus or High** helps A3 (finalize stepping and exact arithmetic), A4 (fold/expiry boundaries and the legacy join) and A5 (statistic definitions and the reference model); **Sonnet Medium** suits A2, A6 (with care on events) and A7.
+Each is one request, follows roadmap section F, and ends with `./tests/run.sh`. Model guidance: **Opus/High** helps A3 (tier-budgeted finalize, exact arithmetic), A4 (ring/daily/bucket boundaries, append path, legacy join, budget guard) and A5 (statistics and their reference models); **Sonnet/Medium** suits A2, A6 (care with events), A7, A8 (rules are tabled here), C1.
 
-**A2. Schema v2 and compatibility (no new data yet)**
-- Objective: the `v = 2` / `f = 3` contract, readers that accept both, the frozen-legacy rule, held behaviour, the 1.3-compatibility fixture.
-- Files: `Prices.lua` (Store, Checked, Held, Apply writing `f = 3` with empty new tables, `snap`, `scans`, `v2from`), `Market.lua` (`Info` reports `f`, `v2from`), tests: `test_workshop_prices.lua`, new `test_workshop_schema.lua`, fixture `tests/fixtures/workshop_v13/` (1.3's three files from `git show v1.3.0:`).
-- Accept: section 11 table holds case by case; commits keep all existing answers; 1.3 reader on a v2 database gives identical answers; a dropped job writes nothing.
-- Simulator: `workshop.sh` unchanged pass. Real client: `/reload` after one scan; 1.3 downgrade check optional.
-- Out of scope: dist, h2, auto-scan, UI.
+| | Objective | Main files | Acceptance highlights | Out of scope |
+|---|---|---|---|---|
+| **A2** schema v2 and compatibility | the final schema of section 3 defined, validated and written (new tables empty except `snap`, `scans`, `days`, `v2from`); readers for `f = 2` and `f = 3` | `Prices.lua`, `Market.lua` (`Info`), new `test_workshop_schema.lua`, fixture `tests/fixtures/workshop_v13/` | every row of section 11; the five-step old-client protection test; dropped job writes nothing | dist, history, API, UI, auto-scan |
+| **A3** observation collection | packed tier map; `dist` with Recent Price; the per-item observation each scan hands to history (`p, r, t, l`, partial) and the scan/day log entries for every scan kind | `Prices.lua` (Batch, ItemsJob), `Scan.lua`, new pure `Dist.lua` (+ `.toc` after `History.lua`) | 12.1 tier/quantile/Recent invariants; cases 1 to 22; longest step not above v2 | history tiers, API |
+| **A4** history and chart API | ring, 30-day daily with ranges, buckets, append path, logs, `Market.History`, legacy join, budget guard, the load gate | new pure `History2.lua`, `Prices.lua` (Job phases, time budget), `Market.lua` | 12.1 ring/daily/bucket/log invariants; append equals full encode; load gate recorded | valuations, charts UI |
+| **A5** valuation | `Value`, `Range`, `Distribution`, `Supply`, `TrendOf`, `Posture`, `Quality`, `Competition`, `Cost`, cache | `Market.lua` or new pure `Valuation.lua` | every row of 4A/4B/4F tested incl. "never claims"; quality policy versioned; thin items `limited`, not `none` | consumers, selling |
+| **A6** automatic scanning | the Lab probe, then section 8 | core launcher hook (+ `.toc`), `Scan.lua` (`auto`, Stop), `AuctionButton.lua`, `Session.lua`, settings page, simulator | every gate tested; nothing in combat; Stop writes nothing; one request per visit | — |
+| **A7** consumer integration (no selling advice) | Shopping and Opportunities materials use `Cost`; Opportunities keeps its labelled minimum-based profit and **adds** the output's Market Value and Competition columns; tooltip shows valuation lines with Quality | `Session.lua`, `Opportunities.lua`, `Shopping.lua`, `WorthTip.lua`, `WorthLayout.lua`, views | no consumer decodes saved strings; every figure names its role and source; unchanged results with v1-only data | suggestions, Advisor |
+| **A8** selling services and Item Advisor v1 | `Sell.Suggest`, `Sell.Proceeds`, `Advisor.Decide` with policy version 1; Opportunities profit moves to the suggestion's proceeds; `Worth.Recommend` uses the Advisor | new pure `Sell.lua`, `Advisor.lua`, `Worth.lua`, `Opportunities.lua` | every rule of 4C to 4E tested; the role property tests; crafting reference model updated; `--group crafting` | sell-through, undercut strategies |
+| **C1** chart engine | one renderer over `Market.History` | UI files | screenshots reviewed; no interpolation; bands for buckets | — |
+| **A10** variants | probe, then suffix keys | | | |
+| **A11** Ledger and sale sources | invoices, sell-through, fees | | | |
+| **A12** import boundary | section 9 once the transport is chosen | | | |
 
-**A3. Rich snapshot collection**
-- Objective: packed tier map in `Batch:Add`, dist entries and Recent Price built in the stepped finalize by work units, `snap` counts.
-- Files: `Prices.lua` (Batch, ItemsJob), `Scan.lua` (steps unchanged in shape), new pure `Dist.lua` (encode/decode/Recent/quantiles; the only code that knows the string), `.toc` (after `History.lua`), tests + reference model + mutants.
-- Accept: section 12.1 tier/quantile/Recent invariants; cases 1 to 12; benchmark v3 longest step not above v2's; transient memory reported.
-- Real client: a scan's `workshop.scan` worst step; dist entry count vs items.
-- Out of scope: history, API beyond an internal `Prices.Dist(market, item)`.
-
-**A4. History v2 and chart API**
-- Objective: h2/c2 recording in the commit, folds, expiry, scans log use, `Market.History`, legacy join for `min`.
-- Files: new pure `History2.lua`, `Prices.lua` (Job phases, time budget), `Market.lua` (`History`), tests + day-list reference + mutants, Lab benchmark `history.commit.v2.120d`.
-- Accept: bucket and boundary invariants; gaps with reasons; no point invented; legacy only in `min`; commit step bound per 12.3; `workshop.load` measured on a synthetic full database in the client before release.
-- Out of scope: values, charts UI.
-
-**A5. Valuation**
-- Objective: `Value`, `Distribution`, `Supply`, `Cost`, `Quality`, `Posture`, `TrendOf`, bounded cache.
-- Files: `Market.lua` (or a new pure `Valuation.lua` it calls), tests, reference model for weighted medians and the tier walk, mutants.
-- Accept: every source's "missing" and "never claims" rules in section 4 have a test; basis sentences say "listing".
-- Out of scope: consumers.
-
-**A6. Automatic scanning**
-- Objective: section 8. First step: a Lab probe (guided, read-only besides one request the player approves) recording whether `ReplicateItems` is accepted from an event handler without a click, the time to first update, whether a player search right after is delayed, whether stackables buy per item (commodity) or per auction, and whether `owner` is populated (count only).
-- Files: core `WorkshopLauncher.lua` or a small core hook file (+ `.toc`), `Scan.lua` (`auto` flag, Stop), `AuctionButton.lua` (Stop, quiet text), `Session.lua`, `TwichUI_Settings/pages/Workshop.lua`, settings contract tests, simulator scenario.
-- Accept: gates of section 8 each tested; no request in combat or when held; Stop writes nothing; one request per visit.
-- Real client: the probe results, then normal play with the setting on.
-
-**A7. Consumer integration**
-- Objective: Opportunities and Shopping use `Cost` for materials and `Value("market")` (fallback `recent`, then `min`, labelled) for outputs; `WorthTip` shows the chosen source and Quality; Overview shows Posture where quality allows.
-- Files: `Session.lua`, `Opportunities.lua`, `Shopping.lua`, `Worth.lua`, `WorthLayout.lua`, views; crafting reference model update; `--group crafting` mutants.
-- Accept: no consumer decodes saved strings; every displayed figure names its source; unchanged results when only v1 data exists.
-
-**Later:** A8 variants (probe first), A9 Ledger and sale sources, A10 import boundary, charts UI.
+Order: A2 → A3 → A4 → A5 → (A6 can start after A3) → A7 → A8 → C1. A3 must ship before A6 if automatic scans should already feed the ring and daily ranges.
 
 ---
 
-## 14. Product decisions requiring owner approval
+## 14. Owner decisions
 
-| # | Decision | Recommendation | Trade-off / example |
+| # | Decision | Status | Final direction |
 |---|---|---|---|
-| D1 | Recent Price algorithm | **C, band mean** (anchor > 25%, ignore below half the anchor, cheapest 30%) | Case 6 (10 at 10g, 90 at 20g): C says 16.67g, A and B say 20g. C keeps real cheap supply in proportion; A/B are simpler but hide it. |
-| D2 | History resolution and retention | **Daily 14 days, weekly to 60, two-week to 120** | Daily for 30 days costs about 55% more (30 vs 19 MB per full market) for daily points in days 15 to 30. |
-| D3 | Intraday item history | **None per item**; scan log + latest snapshot | A 4-point/48 h ring adds about 2 to 3 MB per full market. |
-| D4 | Storage budget and market count | **Keep 3 markets**, accept about 20 to 25 MB worst per full market (typical much less); revisit after real `workshop.load` figures | Alternative: 2 markets, or rich history only for the 2 most recently scanned markets (the third keeps snapshot + legacy-style minimum). |
-| D5 | Automatic scan frequency | **On by default; at most once per market per 60 min; 15 min back-off after a refusal; once per visit** | 30 min gives fresher intraday data but more throttle risk (other addons claim one full scan per 15 min [unknown]). |
-| D6 | Variant handling | **Item-id aggregate with a `mixedvariants` note until a probe**; then suffix keys for weapons/armor only | Splitting all records needs 250,000 link calls per scan [cost unknown]. |
-| D7 | Data Quality thresholds | **The table in 4.11** (good: complete, ≤ 24 h, ≥ 5 listings, not wide, ≥ 7 days in 30) | Stricter thresholds make most items "limited" in a small house. |
-| D8 | Posture thresholds | **±15% against the 60-day Historical Value, at least 5 observed days** | ±10% flags more items as cheap/expensive; more noise. |
-| D9 | Source priority in consumers | **Buying: `Cost` of the real quantity. Selling/worth: Market Value → Recent → Minimum, always labelled** | Using Minimum for selling (today) overstates profit when the cheapest listing is a bait; using Market Value lags a crash by days. |
-| D10 | External data transport | **Defer; if built, a generated LoD data addon validated by our parser, local data always first** | A generated Lua file is executed by the client as addon code; the alternative (pasted strings) cannot carry MBs (`docs/workshop.md`, large paste capture). |
+| D1 | Recent Price | **approved provisionally** | Band mean: anchor at more than 25% of supply, ignore below half the anchor, mean of the cheapest 30%. Adversarial cases 13 to 22 added; manipulation bound 0.58x with under 25% of supply; thin-market reason `farbelow`. Labelled a representative listing price. Revisit after real distributions are seen (A3 Lab report of tier counts). |
+| D2 | Historical resolution | **revised and recommended** | Uniform 30-day daily for every item, weekly to 60, two-week to 120 (section 7.1). Adaptive and the 14-day hybrid rejected on complexity and the loss of the append path. |
+| D3 | Intraday | **revised and recommended** | 8-point ring, 48 h, real timestamps, exact unchanged rule; daily points keep the day's lows and highs and scan count. |
+| D4 | Market count | **approved** | Three markets with separate histories; budget guard 48 MB per market / 96 MB in all with the ladder of 7.4; A4 load gate before release. |
+| D5 | Automatic scanning | **approved** | On by default, 60 min per market, 15 min back-off, once per visit, Stop, after the client probe. |
+| D6 | Variants | **approved** | Item-id aggregate; `mixedvariants`; no confident equipment valuation or Auction advice from mixed data; variant keys after a probe (A10). |
+| D7 | Data Quality | **approved** | Table in 4A as policy version 1; thin markets `limited` with reasons, never `none` while a price exists. |
+| D8 | Posture | **approved** | ±15% against Historical Value; needs 5+ observed days, Quality fair, 3+ listings; never on the minimum. |
+| D9 | Price-source priority | **revised** | No valuation is a sell price. Separate valuation, competition, suggestion, proceeds and advice services (section 4); conservative Advisor policy v1 with a 1.5x vendor margin. |
+| D10 | External data | **deferred** | Versioned import boundary and provenance kept (section 9); transport undecided. |
 
-Related open roadmap decisions this design touches: "the profit bound" (roadmap decision 3) is **superseded** by tier-walk `Cost` (D9); "market side when the house is closed" (decision 2) is unchanged and independent.
-
----
-
-## 15. Known limitations and deferred capabilities
-
-- Listing data only: no sales, demand, sell-through or real price paid; disappearing listings are not sales.
-- One snapshot per scan: anything listed and bought between scans is invisible.
-- Forever specifics [unknown]: full-scan throttle, `ReplicateItems` without a click, `hasAllInfo` frequency, commodity vs whole-auction buying, `GetReplicateItemLink` cost, `owner` population, SavedVariables parse time at 20+ MB, neutral auctioneer side.
-- Variants are mixed per item id until A8.
-- Buckets keep low/mean/high, not daily shapes; medians that use buckets are approximate (flagged).
-- The prototype used **synthetic** price distributions (log-uniform base prices, up to ±50% spread, 1% outliers, Zipf-like popularity); real Forever houses may have fewer tiers per item and fewer items, which would make every size figure smaller.
-- Deferred: per-item intraday history, seller counts, time-left evidence, variant keys, sale/Ledger sources, imports and the companion, charts UI, Auction House Browse/Sell replacement.
+**Remaining genuine choices (with recommendations):**
+1. **Budget numbers** (7.4): 48 MB per market / 96 MB in all. Recommendation: keep them provisional until the A4 load gate; lower them if a 46 MB load is noticeable.
+2. **Advisor minimum gain** (4E): Auction only if it beats vendor by 1.5x **and** at least 1 gold. Recommendation: 1 gold; it keeps trivial items on Vendor.
+3. **The Lab load-test companion addon** (12.3): a development-only addon with one saved variable, never packaged. Recommendation: approve, it is the only way to measure load time without touching real saved data.
 
 ---
 
-## Appendix A. Prototype commands (offline, throwaway; not part of the addon or the test suite)
+## 15. Known limitations, assumptions and deferred capabilities
+
+**Requires real-client verification:**
+- `ReplicateItems` without a click; the full-scan throttle; the player's search during an automatic scan.
+- Commodity versus whole-auction buying of stackables (affects `Cost` ranges).
+- How often records arrive with `hasAllInfo == false` (affects the partial flags and completeness).
+- `GetReplicateItemLink` cost and suffix frequency (variants).
+- `owner` population (seller counts, deferred).
+- Saved-variables **load and write time** at 20 to 50 MB per market.
+- Real Forever house size, tiers per item and listing frequency (every size figure here is synthetic and probably pessimistic in tiers per item).
+- The auction house cut and deposit (proceeds).
+
+**Inherent limits:** listing data only (no sales, demand or sell-through; disappearing listings are not sales); a snapshot sees nothing between scans; scan time is not sale time; buckets keep extremes and means, not the days; the ring keeps 8 changes, not every scan.
+
+**Deferred:** charts UI (C1), variants (A10), Ledger and sale sources (A11), imports and the companion (A12), undercut and patient selling strategies, seller counts, time-left evidence.
+
+---
+
+## Appendix A. Prototype commands (offline, throwaway; not part of the addon or the suite)
 ```
-lua5.1 docs/workshop/a1-prototypes/algos.lua                  # section 5.2 table
-lua5.1 docs/workshop/a1-prototypes/snapshot.lua 30000 250000  # dist sizes, finalize time, first history estimate
-lua5.1 docs/workshop/a1-prototypes/storage.lua acc 30000 250000          # packed tier map memory
-lua5.1 docs/workshop/a1-prototypes/storage.lua hist                      # history variants (several minutes)
+lua5.1 docs/workshop/a1-prototypes/algos.lua                          # section 5.2 (cases 1 to 22)
+lua5.1 docs/workshop/a1-prototypes/snapshot.lua 40000 400000          # dist sizes, finalize time (also 10000 80000, 20000 160000)
+lua5.1 docs/workshop/a1-prototypes/storage.lua acc 30000 250000       # packed tier map memory
+lua5.1 docs/workshop/a1-prototypes/history.lua all active 1000        # section 7.1 (about 4 min); designs and schedules: see its header
+lua5.1 docs/workshop/a1-prototypes/history.lua d30ring8 heavy 1000
 ```
+`storage.lua hist` is the first A1 history estimate (superseded by `history.lua`). Run them with bash or pass arguments literally (zsh does not split a quoted variable).
 
 ## Appendix B. Copy-ready prompt for A2 (do not run until approved)
 
 > **TwichUI Workshop — Market Data Foundation 2.0, milestone A2: schema v2 and compatibility.**
 > Branch `feature/workshop`. Read `CLAUDE.md`, `docs/workshop/market-data-foundation-v2.md` (sections 2, 3, 11, 12, 13 A2) and `docs/workshop/testing-roadmap.md` section F before editing.
-> Implement only A2: `TwichUIWorkshopDB.v = 2` and markets `f = 3` as specified in section 3.1 to 3.2, written atomically in `Prices` `Job:Apply` on the first commit; `items` and `sd` unchanged; `hist` frozen (trimmed by expiry in the existing "old" phase, never extended by new scans); new empty `dist`, `h2`, `c2`; `snap` (seq, kind, alg = 1, at, records, used, invalid, noBuyout, partial, items, client when readable); `scans` (last 64 accepted scans, the encoding in 3.2); `v2from`. Readers accept `f = 2` and `f = 3`; `v > 2` is held; malformed new fields are treated as absent. `Market.Info` reports `f` and `v2from`. No distribution, no new history, no API beyond that, no UI, no auto-scan.
-> Tests: new `tests/test_workshop_schema.lua` covering every row of section 11's table, including a fixture database written by 1.3's encoders and read back through 1.3's reader (copy `Prices.lua`, `History.lua` and `Market.lua` from `git show v1.3.0:TwichUI_Workshop/...` into `tests/fixtures/workshop_v13/`), deep-compare of the saved database after a dropped job, Stop and a failing step. Update `test_workshop_prices.lua` only where the stored shape changed. Run `luac5.1 -p` on edited files, the focused tests, `test_workshop_market_reference.lua`, `bash tools/mutate.sh --group market` (add catalog entries for "v not bumped", "legacy hist extended by a new scan", "1.3 field dropped from f = 3"), `bash tools/simlab/workshop.sh`, then `./tests/run.sh`. Report with evidence labels; list `/reload` after a scan as the real-client check. Do not commit unless asked.
+> Implement only A2. In `Prices.lua`: `TwichUIWorkshopDB.v = 2` and markets `f = 3` exactly as section 3.1 to 3.2, written in `Job:Apply` on the first commit; `items`, `sd` and `hn` unchanged; `hist` frozen (trimmed by expiry in the existing "old" phase, never extended); new tables `dist`, `h2`, `c2` created empty; `snap` (seq, kind, alg = 1, at, records, used, invalid, noBuyout, partial, items, auto = false, client when readable); `scans` (encoding and bounds of 3.2: every scan of the last 48 h, at least 64, at most 256, including cut and changed scans with their flags); `days` (120-day day log, 3.2); `v2from`. Add validated readers for every new field (a malformed entry is absent, never repaired) and accept `f = 2` and `f = 3`; `v > 2` is held. `Market.Info` reports `f`, `v2from`, `scans` count and `compact`. No distribution, no ring, no daily or bucket writing, no new Market functions, no UI, no automatic scanning.
+> Tests: new `tests/test_workshop_schema.lua` covering every row of section 11 and the **five-step old-client protection test** (fixture copies of `Prices.lua`, `History.lua`, `Market.lua` from `git show v1.3.0:TwichUI_Workshop/...` in `tests/fixtures/workshop_v13/`; seed `dist`/`h2`/`c2` with synthetic strings; every 1.3 write path refuses; deep-compare before and after, and after a text round trip), plus deep-compare after a dropped job, Stop and a failing step. Update `test_workshop_prices.lua` only where the stored shape changed. Run `luac5.1 -p` on edited files, the focused tests, `test_workshop_market_reference.lua`, `bash tools/mutate.sh --group market` (add catalog entries: "v not bumped", "legacy hist extended by a new scan", "1.3 field dropped from f = 3", "scan log drops cut scans"), `bash tools/simlab/workshop.sh`, then `./tests/run.sh`. Report with evidence labels; list `/reload` after a scan as the real-client check. Do not commit unless asked.

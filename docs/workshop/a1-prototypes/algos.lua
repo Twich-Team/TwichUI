@@ -49,6 +49,17 @@ local S = {
   { "10 rare, 3 far-apart listings", { { 800000, 1 }, { 1500000, 1 }, { 4000000, 1 } } },
   { "11 bait volume 8@20s vs 20@50s", { { 2000, 8 }, { 5000, 20 } } },
   { "12 bait volume 5@20s vs 20@50s", { { 2000, 5 }, { 5000, 20 } } },
+  -- adversarial cases (A1 revision)
+  { "13 thin, two far apart", { { 10000, 1 }, { 40000, 1 } } },
+  { "14 thin, 1c among three", { { 1, 1 }, { 9000, 1 }, { 9500, 1 } } },
+  { "15 separated clusters 1g/100g", { { 10000, 50 }, { 1000000, 50 } } },
+  { "16 cheap wall 1000@40s, 20@50s", { { 4000, 1000 }, { 5000, 20 } } },
+  { "17 expensive wall 20@50s, 1000@90s", { { 5000, 20 }, { 9000, 1000 } } },
+  { "18 manipulator 24% just over half", { { 2510, 12 }, { 5000, 38 } } },
+  { "19 manipulator 26% just over half", { { 2510, 13 }, { 5000, 37 } } },
+  { "20 manipulator 24% just under half", { { 2490, 12 }, { 5000, 38 } } },
+  { "21 one 1000-stack cheap, singles", { { 3000, 1000 }, { 5000, 1 }, { 5100, 1 } } },
+  { "22 one huge stack dear, singles", { { 5000, 3 }, { 9000, 1000 } } },
 }
 print(("%-36s %8s %8s %8s %8s %8s"):format("case", "min", "A:P25", "B:mode", "C:band", "anchor"))
 for _, sc in ipairs(S) do
