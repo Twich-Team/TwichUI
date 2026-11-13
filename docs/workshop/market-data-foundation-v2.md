@@ -1,6 +1,6 @@
 # Workshop Market Data Foundation 2.0 (A1: architecture and data contract)
 
-Status: **planning only, revised after owner review** (first version `4c74e94f`, revision 2026-11-12, branch `feature/workshop`). Nothing here is built. This document is the source of truth for the A2 to A12 implementation campaign; `docs/workshop.md` still describes what exists.
+Status: **planning, revised after owner review** (first version `4c74e94f`, revision 2026-11-12, branch `feature/workshop`). **Only milestone A2 is built** (see "A2 as built" after section 15); everything else here is still a plan. This document is the source of truth for the A2 to A12 implementation campaign; `docs/workshop.md` describes what exists.
 
 Evidence labels used throughout:
 - **[verified]**: read in this repository's code, in `git show v1.3.0:...`, or in the Forever UI source (`../wow-ui-source`, branch `forever`).
@@ -574,6 +574,42 @@ Order: A2 → A3 → A4 → A5 → (A6 can start after A3) → A7 → A8 → C1.
 **Inherent limits:** listing data only (no sales, demand or sell-through; disappearing listings are not sales); a snapshot sees nothing between scans; scan time is not sale time; buckets keep extremes and means, not the days; the ring keeps 8 changes, not every scan.
 
 **Deferred:** charts UI (C1), variants (A10), Ledger and sale sources (A11), imports and the companion (A12), undercut and patient selling strategies, seller counts, time-left evidence.
+
+---
+
+## A2 as built (schema v2 and compatibility, 2026-11-12)
+
+**Implemented** (`Prices.lua`, `Scan.lua`, `Market.lua`; unit-tested in `tests/test_workshop_schema.lua`, not real-client-tested):
+
+| Area | What A2 does |
+|---|---|
+| Database | `TwichUIWorkshopDB.v = 2` (`PR.SAVED_VERSION`). Written only inside `Job:Apply` of an accepted commit, after everything fallible was built on copies; loading and reading never write. `v` above 2 is held (reads, refuses `BeginCommit`, `Apply`, `Scan.Start`). No startup migration, no eager rewrite of other markets. |
+| Market | `f = 3` (`PR.MARKET_FORMAT`). Unchanged fields: `scope, realm, side, at, complete, cut, read, used, partial, n, hn, sd, items, hist`. New: `snap`, `scans`, `days`, `v2from`. A mixed database of `f = 2` and `f = 3` markets is normal; a market becomes `f = 3` when it is next committed. |
+| `snap` | `seq` (+1 per accepted scan, after the highest valid logged number), `kind = "full"`, `at`, `records`, `used`, `invalid`, `noBuyout`, `partial`, `items`, `auto = false` (scans are manual), `client` (`GetBuildInfo` version.build, when readable). **`alg` is absent**: it names the distribution algorithm and there is no distribution until A3. `Scan.lua` now also hands over `invalid` and `noBuyout` (the batch already counted them). |
+| `scans` | `"seq,at,flags,items,records"`, oldest first, every accepted scan: all of the last 48 h, never fewer than the newest 64, never more than 256. Flags (decimal bit set): 1 whole read, 2 complete, 4 cut, 8 count changed, 16 partial information, 32 automatic; 64 (fed history) and 128 (imported) are reserved and not written. A refused or interrupted scan is not logged. |
+| `days` | `"day,scans,flags"`, oldest first, one entry per scan day of the last 120 days; flags 1 any whole read, 2 any cut/changed scan, 4 any scan with records lacking their information. A scan dated before the newest logged day adds no earlier entry. |
+| `v2from` | The day of the first accepted format 3 scan of the market; never moved afterwards. |
+| Later containers | `dist`, `h2`, `c2`, `compact` are **not created** (omitted, not empty). If a market already holds them as tables (a later build wrote them into the same database version, which will not bump `v` again), a commit carries them forward untouched; a value that is not a table is dropped. **There is no separate `ring` container**: the ring is part of each `h2` entry (section 3.3); the A2 brief's separate `ring` was not adopted. |
+| Legacy history | `hist` and `sd` are **frozen**: an accepted scan only expires what `History.Trim` says is too old (and drops an item with nothing left; `hn` follows). Nothing is converted into price metrics. Consequence until A4: `Market.Stats/Series/Trend/Compare/Observed`, the chart and anything built on the history stop growing; they keep answering from the days already saved, and they age out after 120 days. The old feeding code stays behind `PR.FEED_LEGACY_HISTORY = false` so `History.lua`, the readers and the reference model are still exercised end to end (the tests turn it on; production never does). |
+| Readers | `PR.Market` accepts `f = 2` and `f = 3`. `snap`, `v2from`, `compact` are validated on read; the logs are validated entry by entry on demand (`PR.ScanLog`, `PR.DayLog`). A malformed field is absent, never repaired, and never makes the price entries unreadable; the next commit writes only valid entries. |
+| `Market.Info` | Adds `format` (2 or 3), `dbVersion`, `v2from`, `scanLog` and `dayLog` (counts of valid entries) and `compact`. The existing `scans` keeps its meaning (the legacy history's scan days). No other function was added to `W.Market` (tested). |
+
+**Compatibility evidence** [unit-tested]: `tests/fixtures/workshop_v13/` holds byte-for-byte copies of `Data, Materials, Queue, History, Prices, Scan, Market` from the `v1.3.0` tag (`README.md` there gives the commands that prove it). The test builds the version-1 database with that released code, upgrades it with the new code, seeds the full shape (`dist`, `h2`, `c2`, `compact`, logs) and loads the released code against it: `Commit`, `BeginCommit`, `Scan.Start` and an `Apply` of a job begun before the upgrade are each refused with `held`; the whole database is deep-equal before and after, and after a serialize-and-reload round trip; 1.3's `Stats` and `Series` on the legacy days equal what it answered before the upgrade. 1.3's only writer of the database is in `Prices.lua` (`git grep TwichUIWorkshopDB v1.3.0`; the Workshop window only reads); a test also asserts that only `Prices.lua` names the database in the current Workshop.
+
+**Persistence** [unit-tested]: a rejected (`kept`, `bad`), dropped, ready-but-never-applied, failing-step, failing-metadata and cancelled (auction house closed) commit leaves the database deep-equal, with no version bump and no orphaned field; a failing Apply on a version-2 database is the same. Repeated commits, eviction of the oldest market (unchanged rule) and market isolation are covered. Mutations `market.schema.*` (9) are killed by it.
+
+**Performance** [measured, offline, synthetic 40,000-item market, six commits]: with the history frozen a commit has no per-item work (0.00 ms worst step; Apply about 0.1 ms, which includes building the metadata and the 256-entry log parse); the old feeding path on the same data is 6.8 ms worst step, 12 ms Apply, 0.56 s whole commit. A2 adds no allocation proportional to the number of items; the saved schema overhead is a few hundred bytes plus about 20 bytes per logged scan. Real-client load time is not claimed (A4 gate).
+
+**Not built** (A3 and later): distributions, Recent Price, ring/daily/bucket history, valuations, new API, UI changes, automatic scanning, the compaction ladder and budget guard.
+
+**Real-client acceptance (none done; all non-destructive):**
+1. Back up nothing and corrupt nothing. Open the Workshop with your existing saved prices: the Overview shows prices and the history chart as before.
+2. Run a normal price scan and let it finish. In `WTF/.../SavedVariables/TwichUIWorkshopDB.lua` the first lines read `["v"] = 2` and the market has `["f"] = 3` with `snap`, `scans`, `days`, `v2from` (after `/reload` or logout; the file is written then).
+3. Opportunities and Shopping still show prices; the history chart still shows the days it had (it does not grow, by design).
+4. `/reload`, open the Workshop again, check the file's modification time does not change by merely opening it.
+5. Start a scan and close the auction house before it finishes, or let a scan be refused (open the Workshop away from an auction house and click Scan): the file keeps its previous version (still `v = 1` if no scan ever completed).
+
+**A3 handoff:** write `dist` (tiers, quartiles, Recent Price) from a packed tier map in `ItemsJob`'s stepped finalize, set `snap.alg = 1`, add the per-item observation for A4 (`p, r, t, l`, partial) to the scan result, and keep committing through the same `Apply` (build first, assign last). `dist` is a per-scan snapshot: replace it wholesale each accepted scan and do not rely on A2's carry-forward, which only protects data from a downgrade. `BuildMarket` in `Prices.lua` is where new containers join. Do not bump `db.v` again for additive containers. Open decision for the owner: the legacy history is frozen from now on, so the existing trend/chart features go stale until A4; if that is unacceptable in the interim, `PR.FEED_LEGACY_HISTORY` is the single switch (it feeds the old history again; it is separate from version-2 history).
 
 ---
 

@@ -20,6 +20,7 @@ for _, f in ipairs(FILES) do
 end
 local W = c.TwichUI.Workshop
 local PR, MK, H = W.Prices, W.Market, W.History
+PR.FEED_LEGACY_HISTORY = true   -- this test measures the 1.3 history feed (production keeps it frozen, see test_workshop_schema.lua)
 
 local function Mem() collectgarbage() collectgarbage() return collectgarbage("count") end
 local function Clock() return os.clock() end

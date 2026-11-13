@@ -314,6 +314,37 @@ m("crafting.opps.tie-id-reversed", OPPS, "return a.rec.id < b.rec.id", "return a
   "equal values and names are ordered by recipe id backwards", [CRF])
 
 
+# --- the saved schema (market data foundation 2.0, A2): the version bump, the frozen legacy history, the 1.3 fields, the held database ----
+SCHEMA = "test_workshop_schema.lua"
+m("market.schema.version-not-bumped", PRICES,
+  "if type(db.v) ~= \"number\" or db.v < PR.SAVED_VERSION then db.v = PR.SAVED_VERSION end",
+  "if type(db.v) ~= \"number\" or db.v < PR.SAVED_VERSION then end",
+  "a commit writes a format 3 market into a version-1 database: TwichUI 1.3 would not hold it and its next scan would drop the new fields", [SCHEMA])
+m("market.schema.legacy-history-extended", PRICES, "PR.FEED_LEGACY_HISTORY = false", "PR.FEED_LEGACY_HISTORY = true",
+  "a scan of format 3 keeps appending to the frozen minimum-price history, so legacy and version-2 history overlap", [SCHEMA])
+m("market.schema.legacy-field-dropped", PRICES,
+  "hn = self.oldCount + self.added - (self.dropped or 0), items = scan.items, hist = hist, sd = sd,",
+  "hn = self.oldCount + self.added - (self.dropped or 0), items = scan.items, hist = hist,",
+  "the new-format market forgets a field 1.3 reads (the scan days of the history)", [SCHEMA])
+m("market.schema.newer-database-writable", PRICES, "return p ~= nil and type(p.v) == \"number\" and p.v > PR.SAVED_VERSION",
+  "return p ~= nil and type(p.v) == \"number\" and p.v > PR.SAVED_VERSION + 1",
+  "a database one version newer than this code is treated as its own and rewritten", [SCHEMA, "test_workshop_prices.lua"])
+m("market.schema.apply-skips-held-check", PRICES, "    if self.phase ~= \"ready\" then return false, \"bad\" end\n    if PR.Held() then return false, \"held\" end",
+  "    if self.phase ~= \"ready\" then return false, \"bad\" end",
+  "a job begun before a newer version wrote the database is applied over it", [SCHEMA])
+m("market.schema.future-containers-dropped", PRICES,
+  "for _, k in ipairs({ \"dist\", \"h2\", \"c2\", \"compact\" }) do if type(raw[k]) == \"table\" then m[k] = raw[k] end end",
+  "for _, k in ipairs({}) do if type(raw[k]) == \"table\" then m[k] = raw[k] end end",
+  "a commit by this version silently discards distribution, history and budget records a later version wrote into the same database version", [SCHEMA])
+m("market.schema.scan-log-unbounded", PRICES, "while #scans > PR.SCAN_LOG_MAX do table.remove(scans, 1) end", "",
+  "the scan log grows without a bound", [SCHEMA])
+m("market.schema.coverage-boundary-moves", PRICES, "local v2from = oldFull and old.v2from or day", "local v2from = day",
+  "the first day of version-2 coverage is reset by every scan", [SCHEMA])
+m("market.schema.version-bumped-before-build", PRICES, "    local market = BuildMarket(self, hist, sd)\n",
+  "    if Store(false) then Store(false).v = PR.SAVED_VERSION end\n    local market = BuildMarket(self, hist, sd)\n",
+  "the version is bumped before the market is built, so a failure while building leaves a version-2 database holding only old-format markets", [SCHEMA])
+
+
 # ======================================================================================================================
 # EXAMINED AND LEFT OUT (equivalent mutants: no test can tell them from the original, so they would only ever "survive")
 # ======================================================================================================================

@@ -17,11 +17,17 @@
 --
 -- WHAT IS SAVED (account-wide, NOT in TwichUIDB: a market holds up to MAX_ITEMS items and a history, so it lives in the Workshop's
 -- own saved variables, which the game loads only when the Workshop is loaded; never in a profile, a share or a backup):
---   TwichUIWorkshopDB = { v = 1, markets = { ["Realm|Side"] = market } }
---   market = { f = 2, scope = "full", realm, side, at (time of the scan), complete, cut, read, used, partial, n (items kept),
+--   TwichUIWorkshopDB = { v = 2, markets = { ["Realm|Side"] = market } }   (v 1 is read; the first accepted commit writes v 2)
+--   market = { f = 3 (or 2, written by TwichUI 1.3), scope = "full", realm, side, at (time of the scan), complete, cut, read, used,
+--              partial, n (items kept),
 --              items = { [itemID] = "p,q,l,t,x" }   the newest accepted scan: what it saw of each item
---              hist  = { [itemID] = "..." }          the item's history (History.lua), kept across scans
---              sd    = { day, ... } }                the days of the scans that fed the history (newest last, MAX_SCAN_DAYS)
+--              hist  = { [itemID] = "..." }          the item's FROZEN legacy minimum-buyout history (History.lua): trimmed by expiry,
+--                                                    never extended by a scan of format 3 (docs/workshop/market-data-foundation-v2.md)
+--              sd    = { day, ... } }                the days of the scans that fed that legacy history (frozen with it)
+--   Format 3 adds, beside those (section 3.2 of the foundation document): snap (the newest accepted scan's facts), scans (a bounded log
+--   of accepted scans), days (a 120-day log of scan days), v2from (the first day of version-2 coverage) and the later milestones'
+--   containers dist, h2, c2, which this version never fills and only carries forward untouched. Format 3 data is what makes TwichUI 1.3
+--   hold the database (v 2 > its v 1): it reads, and refuses every write.
 --       p  cheapest unit price (copper)           q  items listed at that exact price
 --       l  buyout listings seen for the item      t  items in those listings
 --       x  the next higher unit price listed (0 = every listing was at p, or it could not be told)
@@ -41,7 +47,14 @@ local H = W.History
 local PR = {}
 W.Prices = PR
 
-PR.SAVED_VERSION = 1
+PR.SAVED_VERSION = 2          -- TwichUIWorkshopDB.v: written by the first accepted commit (1 = TwichUI 1.3, which holds a database above 1)
+PR.MARKET_FORMAT = 3          -- market.f written by this version (2 = TwichUI 1.3's markets, still read)
+PR.SCAN_LOG_MIN, PR.SCAN_LOG_MAX, PR.SCAN_LOG_HOURS = 64, 256, 48   -- scans kept in market.scans: all of the last 48 h, at least 64, at most 256
+PR.DAY_LOG_DAYS = 120         -- scan days kept in market.days
+-- The legacy minimum-buyout history is FROZEN (market data foundation 2.0): a scan expires what is too old and adds nothing to it. The
+-- 1.3 feeding code below stays only so History.lua, the readers and the reference model are still exercised end to end; production never
+-- turns this on (tests do, and tests/test_workshop_schema.lua proves the default). Version-2 history arrives with milestone A4.
+PR.FEED_LEGACY_HISTORY = false
 PR.MAX_COPPER = 99999999999   -- MAXIMUM_BID_PRICE in Blizzard_AuctionHouseUI
 PR.MAX_COUNT = 10000          -- items in one auction (real stacks are far smaller)
 PR.MAX_ITEMS = 40000          -- items kept per market (see "Item limit" in docs/workshop.md)
@@ -265,7 +278,7 @@ local function Store(create)
     local db = TwichUIWorkshopDB
     if type(db) ~= "table" then
         if not create then return nil end
-        db = { v = PR.SAVED_VERSION, markets = {} }
+        db = { v = PR.SAVED_VERSION, markets = {} }   -- only ever created inside an Apply
         TwichUIWorkshopDB = db
     end
     if type(db.markets) ~= "table" then
@@ -292,6 +305,73 @@ function PR.Held()
     return p ~= nil and type(p.v) == "number" and p.v > PR.SAVED_VERSION
 end
 
+---------------------------------------------------------------------------
+-- Format 3 metadata: validated readers (a malformed field is absent, never repaired, and never makes the price entries unreadable)
+---------------------------------------------------------------------------
+-- Scan flags (market.scans, a decimal bit set). FED_HISTORY is reserved: version-2 history is written from A4 on.
+local F_WHOLE, F_COMPLETE, F_CUT, F_CHANGED, F_PARTIAL, F_AUTO = 1, 2, 4, 8, 16, 32
+local F_ALL = 1 + 2 + 4 + 8 + 16 + 32 + 64 + 128   -- including FED_HISTORY (64) and IMPORTED (128), reserved
+-- Day flags (market.days): any whole read / any scan that was cut or changed / any scan with records lacking their information
+local D_WHOLE, D_INCOMPLETE, D_PARTIAL = 1, 2, 4
+PR.SCAN_FLAGS = { WHOLE = F_WHOLE, COMPLETE = F_COMPLETE, CUT = F_CUT, CHANGED = F_CHANGED, PARTIAL = F_PARTIAL, AUTO = F_AUTO }
+PR.DAY_FLAGS = { WHOLE = D_WHOLE, INCOMPLETE = D_INCOMPLETE, PARTIAL = D_PARTIAL }
+
+-- "seq,at,flags,items,records" -> { seq, at, flags, items, records }, or nil
+local function ScanEntry(e)
+    if type(e) ~= "string" or #e > 80 then return nil end
+    local a, b, c, d, f = e:match("^(%d+),(%d+),(%d+),(%d+),(%d+)$")
+    if not a then return nil end
+    local seq, at, flags = Int(tonumber(a), 1, W.MAX_ID), Int(tonumber(b), 1, MAX_TIME), Int(tonumber(c), 0, F_ALL)
+    local items, records = Int(tonumber(d), 0, W.MAX_ID), Int(tonumber(f), 0, W.MAX_ID)
+    if not (seq and at and flags and items and records) then return nil end
+    return { seq = seq, at = at, flags = flags, items = items, records = records }
+end
+
+-- "day,scans,flags" -> { day, scans, flags }, or nil
+local function DayEntry(e)
+    if type(e) ~= "string" or #e > 40 then return nil end
+    local a, b, c = e:match("^(%d+),(%d+),(%d+)$")
+    if not a then return nil end
+    local day, n, flags = H.Day(tonumber(a) * H.DAY), Int(tonumber(b), 1, W.MAX_ID), Int(tonumber(c), 0, 7)
+    if not (day and n and flags) then return nil end
+    return { day = day, scans = n, flags = flags }
+end
+
+-- The valid entries of a scan log or day log, in saved order (nil when the field is not a list). Parsed on demand only.
+local function Entries(list, parse)
+    if type(list) ~= "table" then return nil end
+    local out = {}
+    for i = 1, #list do local e = parse(list[i]) if e then out[#out + 1] = e end end
+    return out
+end
+
+function PR.ScanLog(market) return market and Entries(market.scanLog, ScanEntry) or nil end
+function PR.DayLog(market) return market and Entries(market.dayLog, DayEntry) or nil end
+
+local function Snap(t)
+    if type(t) ~= "table" then return nil end
+    local seq, at = Int(t.seq, 1, W.MAX_ID), Int(t.at, 1, MAX_TIME)
+    if not seq or not at or t.kind ~= "full" then return nil end
+    local snap = { seq = seq, kind = "full", at = at, auto = t.auto == true }
+    for _, k in ipairs({ "records", "used", "invalid", "noBuyout", "partial", "items" }) do snap[k] = Int(t[k], 0, W.MAX_ID) end
+    snap.alg = Int(t.alg, 1, 99)
+    snap.client = Text(t.client, 40)
+    return snap
+end
+
+local function Compact(t)
+    if type(t) ~= "table" then return nil end
+    local level, at, items = Int(t.level, 1, 9), Int(t.at, 1, MAX_TIME), Int(t.items, 0, W.MAX_ID)
+    if not (level and at and items) then return nil end
+    return { level = level, at = at, items = items }
+end
+
+-- The saved database's version, or nil when there is none (1 = TwichUI 1.3, 2 = market data foundation 2.0)
+function PR.DbVersion()
+    local db = Store(false)
+    return db and Int(db.v, 0, 1000) or nil
+end
+
 local function Checked(key, m, legacy)
     if type(m) ~= "table" or type(m.items) ~= "table" then return nil end
     local at = Int(m.at, 1, MAX_TIME)
@@ -309,6 +389,16 @@ local function Checked(key, m, legacy)
         info.hist = type(m.hist) == "table" and m.hist or nil
         info.histItems = Int(m.hn, 0, W.MAX_ID) or 0
         info.scanDays = type(m.sd) == "table" and m.sd or nil
+        -- format 3 (a format 2 market simply has none of it); only what is cheap to check is checked here, the logs are checked on demand
+        info.format = m.f == 3 and 3 or 2
+        if info.format == 3 then
+            info.snap = Snap(m.snap)
+            local from = Int(m.v2from, 1, 200000)
+            info.v2from = from and H.Day(from * H.DAY) or nil
+            info.compact = Compact(m.compact)
+            info.scanLog = type(m.scans) == "table" and m.scans or nil
+            info.dayLog = type(m.days) == "table" and m.days or nil
+        end
     end
     return info
 end
@@ -368,7 +458,7 @@ end
 local Job = {}
 Job.__index = Job
 
-local function HistoryUsable(scan) return scan.cut ~= true and scan.changed ~= true end
+local function WholeRead(scan) return scan.cut ~= true and scan.changed ~= true end
 
 function PR.BeginCommit(key, scan)
     if PR.Held() then return false, "held" end
@@ -377,15 +467,17 @@ function PR.BeginCommit(key, scan)
     if not at then return false, "bad" end
     local old = PR.Market(key)
     if old and old.complete and scan.complete ~= true and not old.legacy then return false, "kept" end
+    -- the legacy minimum history is FROZEN (format 3): a scan never adds to it, it only expires what is too old (the "old" phase)
     local day = H.Day(at)
-    local job = setmetatable({ key = key, scan = scan, at = at, old = old, upd = {}, drop = {}, phase = "scan", cursor = nil, done = 0,
-        total = 0, added = 0, day = day, feed = day ~= nil and HistoryUsable(scan) }, Job)
+    local feed = PR.FEED_LEGACY_HISTORY == true and day ~= nil and WholeRead(scan)
+    local job = setmetatable({ key = key, scan = scan, at = at, old = old, upd = {}, drop = {}, phase = feed and "scan" or "old", cursor = nil,
+        done = 0, total = 0, added = 0, day = day, feed = feed }, Job)
     local oldHist = old and old.scope == "full" and old.hist or nil
     job.oldHist = oldHist
     job.oldCount = 0
     if oldHist then for _ in pairs(oldHist) do job.oldCount = job.oldCount + 1 end end
     local n = 0
-    for _ in pairs(scan.items) do n = n + 1 end
+    if feed then for _ in pairs(scan.items) do n = n + 1 end end
     job.total = n + job.oldCount
     return job
 end
@@ -402,7 +494,7 @@ function Job:Step(limit)
             if id == nil then self.phase = "old" self.cursor = nil break end
             left = left - 1
             self.done = self.done + 1
-            if self.feed and Int(id, 1, W.MAX_ID) then
+            if Int(id, 1, W.MAX_ID) then
                 local p = type(entry) == "string" and tonumber(entry:match("^(%d+),")) or nil
                 if p and p >= 1 and p <= PR.MAX_COPPER then
                     local s = H.Add(oldHist and oldHist[id] or nil, day, p)
@@ -416,7 +508,7 @@ function Job:Step(limit)
         end
     end
     if self.phase == "old" then
-        -- items this scan did not list keep their history, minus what expired; the history of an item is dropped when nothing is left
+        -- legacy history only expires (and, with FEED_LEGACY_HISTORY, an item the scan did not list keeps its history minus that): an item's history is dropped when nothing is left of it
         local id, s = self.cursor, nil
         local source = oldHist or {}
         while left > 0 do
@@ -436,25 +528,115 @@ end
 
 function Job:Progress() return self.total > 0 and math.min(1, self.done / self.total) or 1 end
 
+-- The build string, when the game says it (nil in tests and when unreadable; never a guess)
+local function ClientBuild()
+    if type(GetBuildInfo) ~= "function" then return nil end
+    local ok, version, build = pcall(GetBuildInfo)
+    if not ok or type(version) ~= "string" then return nil end
+    return Text(type(build) == "string" and (version .. "." .. build) or version, 40)
+end
+
+-- a bit set kept as a decimal number: the union of two sets of the small bits in `bits` (Lua 5.1 has no bitwise operators)
+local function Union(a, b, bits)
+    local out = 0
+    for _, bit in ipairs(bits) do
+        if floor(a / bit) % 2 == 1 or floor(b / bit) % 2 == 1 then out = out + bit end
+    end
+    return out
+end
+
+-- The scan log and day log after one more accepted scan, as saved strings. Pure: no saved table is touched. Only valid earlier entries
+-- are carried forward; a malformed one is dropped, never repaired.
+local function Logs(old, scan, at, day, seq)
+    local whole, partial = WholeRead(scan), (Int(scan.partial, 0, W.MAX_ID) or 0) > 0
+    local flags = (whole and F_WHOLE or 0) + (scan.complete == true and F_COMPLETE or 0) + (scan.cut == true and F_CUT or 0)
+        + (scan.changed == true and F_CHANGED or 0) + (partial and F_PARTIAL or 0) + (scan.auto == true and F_AUTO or 0)
+    local scans = {}
+    for _, e in ipairs(Entries(old and old.scanLog, ScanEntry) or {}) do
+        scans[#scans + 1] = ("%s,%s,%s,%s,%s"):format(N(e.seq), N(e.at), N(e.flags), N(e.items), N(e.records))
+    end
+    scans[#scans + 1] = ("%s,%s,%s,%s,%s"):format(N(seq), N(at), N(flags), N(Int(scan.n, 0, PR.MAX_ITEMS) or 0), N(Int(scan.read, 0, W.MAX_ID) or 0))
+    -- every scan of the last 48 hours, never fewer than the newest 64, never more than the newest 256
+    while #scans > PR.SCAN_LOG_MAX do table.remove(scans, 1) end
+    local cutoff = at - PR.SCAN_LOG_HOURS * 3600
+    while #scans > PR.SCAN_LOG_MIN do
+        local e = ScanEntry(scans[1])
+        if e and e.at >= cutoff then break end
+        table.remove(scans, 1)
+    end
+
+    -- one entry per scan day; a scan dated before the newest logged day (the clock went back) is not added as a new entry
+    local list = Entries(old and old.dayLog, DayEntry) or {}
+    local newest = list[#list] and list[#list].day or nil
+    if day then
+        local dflags = (whole and D_WHOLE or D_INCOMPLETE) + (partial and D_PARTIAL or 0)
+        local merged = false
+        for _, e in ipairs(list) do
+            if e.day == day then e.scans, e.flags, merged = e.scans + 1, Union(e.flags, dflags, { D_WHOLE, D_INCOMPLETE, D_PARTIAL }), true end
+        end
+        if not merged and (not newest or day > newest) then list[#list + 1] = { day = day, scans = 1, flags = dflags } end
+        newest = newest and math.max(newest, day) or day
+    end
+    local days = {}
+    local from = newest and newest - PR.DAY_LOG_DAYS + 1 or 0
+    for _, e in ipairs(list) do
+        if e.day >= from then days[#days + 1] = ("%s,%s,%s"):format(N(e.day), N(e.scans), N(e.flags)) end
+    end
+    return scans, days
+end
+
+-- The format 3 market for a commit, built from the old market and the scan WITHOUT changing any saved table (so a failure while
+-- building leaves everything as it was). `hist` is the legacy history table, expired already.
+local function BuildMarket(self, hist, sd)
+    local scan, old, at, day = self.scan, self.old, self.at, self.day
+    local oldFull = old and old.scope == "full" and old.format == 3
+    -- sequence number: after the newest the old market proves (its snapshot, else its log)
+    local seq = oldFull and old.snap and old.snap.seq or 0
+    for _, e in ipairs(oldFull and Entries(old.scanLog, ScanEntry) or {}) do if e.seq > seq then seq = e.seq end end
+    seq = seq + 1
+    local scans, days = Logs(oldFull and old or nil, scan, at, day, seq)
+    local read, used = Int(scan.read, 0, W.MAX_ID), Int(scan.used, 0, W.MAX_ID)
+    local snap = { seq = seq, kind = "full", at = at, records = read, used = used, invalid = Int(scan.invalid, 0, W.MAX_ID),
+        noBuyout = Int(scan.noBuyout, 0, W.MAX_ID), partial = Int(scan.partial, 0, W.MAX_ID) or 0,
+        items = Int(scan.n, 0, PR.MAX_ITEMS) or 0, auto = scan.auto == true, client = ClientBuild() }
+    local v2from = oldFull and old.v2from or day
+    local m = { f = PR.MARKET_FORMAT, scope = "full", realm = Text(scan.realm, 60), side = Text(scan.side, 20) or "unknown", at = at,
+        complete = scan.complete == true, cut = scan.cut == true or scan.changed == true or nil, read = read, used = used,
+        partial = Int(scan.partial, 0, W.MAX_ID) or 0, n = Int(scan.n, 0, PR.MAX_ITEMS) or 0,
+        hn = self.oldCount + self.added - (self.dropped or 0), items = scan.items, hist = hist, sd = sd,
+        snap = snap, scans = scans, days = days, v2from = v2from }
+    -- the later milestones' containers are never written here, only carried forward from a market that has them (a build that fills
+    -- them must not lose them to this one); a market without them gets none
+    local raw = oldFull and self.oldRaw or nil
+    if raw then
+        for _, k in ipairs({ "dist", "h2", "c2", "compact" }) do if type(raw[k]) == "table" then m[k] = raw[k] end end
+    end
+    return m
+end
+
 function Job:Apply()
     if self.phase ~= "ready" then return false, "bad" end
     if PR.Held() then return false, "held" end
-    local db = Store(true)
-    if not db then return false, "unsaved" end
     local key, scan, old = self.key, self.scan, self.old
-    -- the history table is the old one changed in place (its items are the same strings), or a new one for a first scan
-    local hist = self.oldHist
-    if not hist then hist = {} end
-    for id, s in pairs(self.upd) do hist[id] = s end
-    for id in pairs(self.drop) do hist[id] = nil end
+    -- EVERYTHING that can fail is done first, on copies: the saved tables are touched only by the plain assignments below
     local sd = {}
     if old and old.scanDays then for _, d in ipairs(old.scanDays) do if type(d) == "number" then sd[#sd + 1] = d end end end
     if self.feed and self.day then
-        if sd[#sd] ~= self.day then
-            if sd[#sd] == nil or sd[#sd] < self.day then sd[#sd + 1] = self.day end
-        end
+        if sd[#sd] == nil or sd[#sd] < self.day then sd[#sd + 1] = self.day end
         while #sd > H.MAX_SCAN_DAYS do table.remove(sd, 1) end
     end
+    local raw = Store(false)
+    self.oldRaw = raw and raw.markets[key]
+    if type(self.oldRaw) ~= "table" then self.oldRaw = nil end
+    local hist = self.oldHist or {}
+    local market = BuildMarket(self, hist, sd)
+    local lp = LegacyStore()
+    local db = Store(true)
+    if not db then return false, "unsaved" end
+    -- from here on only assignments
+    -- the history table is the old one changed in place (its items are the same strings), or a new one
+    for id, s in pairs(self.upd) do hist[id] = s end
+    for id in pairs(self.drop) do hist[id] = nil end
     if db.markets[key] == nil then
         local count, oldestKey, oldestAt = 0, nil, nil
         for k, m in pairs(db.markets) do
@@ -464,12 +646,9 @@ function Job:Apply()
         end
         if count >= PR.MAX_MARKETS and oldestKey then db.markets[oldestKey] = nil end
     end
-    db.markets[key] = { f = 2, scope = "full", realm = Text(scan.realm, 60), side = Text(scan.side, 20) or "unknown", at = self.at,
-        complete = scan.complete == true, cut = scan.cut == true or scan.changed == true or nil, read = Int(scan.read, 0, W.MAX_ID),
-        used = Int(scan.used, 0, W.MAX_ID), partial = Int(scan.partial, 0, W.MAX_ID) or 0, n = Int(scan.n, 0, PR.MAX_ITEMS) or 0,
-        hn = self.oldCount + self.added - (self.dropped or 0), items = scan.items, hist = hist, sd = sd }
+    db.markets[key] = market
+    if type(db.v) ~= "number" or db.v < PR.SAVED_VERSION then db.v = PR.SAVED_VERSION end
     -- the earlier recipe-only scan of this market is replaced by this one: it is not kept twice
-    local lp = LegacyStore()
     if lp and lp.markets[key] ~= nil then lp.markets[key] = nil end
     return true
 end

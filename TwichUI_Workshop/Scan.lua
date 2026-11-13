@@ -173,7 +173,8 @@ end
 
 local function Finish(result)
     local scan = { realm = run.realm, side = run.side, at = time(), complete = result.complete, cut = result.cut, changed = result.changed,
-        read = result.read, used = result.used, partial = result.partialInfo, n = result.n, items = result.items }
+        read = result.read, used = result.used, invalid = result.invalid, noBuyout = result.noBuyout, partial = result.partialInfo, n = result.n,
+        items = result.items }
     local job, why = PR.BeginCommit(run.key, scan)
     if not job then
         if why == "kept" then return End("failed", "kept") end
@@ -209,7 +210,8 @@ end
 
 local function ReadDone(batch, truncated, items, n, over, dropped)
     local cut = truncated or over
-    local result = { items = items, n = n, read = batch.read, used = batch.used, partialInfo = batch.partialInfo, dropped = dropped,
+    local result = { items = items, n = n, read = batch.read, used = batch.used, invalid = batch.invalid, noBuyout = batch.noBuyout,
+        partialInfo = batch.partialInfo, dropped = dropped,
         cut = cut, complete = batch.partialInfo == 0 and not cut, updates = run.updates, restarts = run.restarts }
     -- more updates during the read are item data arriving, not a different market. A different number of listings is: start
     -- over a few times, and if it never holds still keep what was read as a scan that is NOT complete (never a failure).

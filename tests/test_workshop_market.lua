@@ -51,6 +51,7 @@ local function Setup()
   for _, f in ipairs(FILES) do
     local chunk = assert(loadfile(ROOT .. "../TwichUI_Workshop/" .. f)); setfenv(chunk, c); chunk("TwichUI_Workshop", {})
   end
+  c.TwichUI.Workshop.Prices.FEED_LEGACY_HISTORY = true   -- these tests exercise the 1.3 history feed; production keeps it frozen (test_workshop_schema.lua)
   local t = { c = c, ah = ah, W = c.TwichUI.Workshop }
   function t.Fire(event)
     for _, fr in ipairs(made) do if fr.events[event] and fr.scripts.OnEvent then fr.scripts.OnEvent(fr, event) end end

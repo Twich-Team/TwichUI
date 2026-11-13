@@ -35,6 +35,7 @@ end
 for _, f in ipairs({ "Fixtures.lua", "Reference.lua" }) do
   local chunk = assert(loadfile(LAB .. f)); setfenv(chunk, c); chunk("TwichUI_TestLab", {})
 end
+c.TwichUI.Workshop.Prices.FEED_LEGACY_HISTORY = true   -- these tests exercise the 1.3 history feed; production keeps it frozen (test_workshop_schema.lua)
 local W = c.TwichUI.Workshop
 local PR, MK, H = W.Prices, W.Market, W.History
 local FX, REF = c.TwichUI.TestLab.Fixtures, c.TwichUI.TestLab.Reference

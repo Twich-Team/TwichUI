@@ -43,6 +43,7 @@ local function Setup()
   for _, f in ipairs(FILES) do
     local chunk = assert(loadfile(ROOT .. "../TwichUI_Workshop/" .. f)); setfenv(chunk, c); chunk("TwichUI_Workshop", {})
   end
+  c.TwichUI.Workshop.Prices.FEED_LEGACY_HISTORY = true   -- these tests exercise the 1.3 history feed; production keeps it frozen (test_workshop_schema.lua)
   local t = { c = c, ah = ah, W = c.TwichUI.Workshop }
   function t.Fire(event)
     for _, fr in ipairs(made) do
@@ -222,7 +223,7 @@ do
   t.c.TwichUIWorkshopDB.markets["Realm|Alliance"] = { at = "yesterday", items = {} }
   Same(PR.Market("Realm|Alliance"), nil, "no usable scan time: not used")
   -- a newer TwichUI wrote this: read, never changed
-  t.c.TwichUIWorkshopDB.v = 2
+  t.c.TwichUIWorkshopDB.v = 3   -- (v 2 is this version's own database)
   local ok2, why2 = PR.Commit("Realm|Horde", Scan(123456, true, 1))
   Check(not ok2 and why2 == "held", "held"); Same(PR.Lookup(PR.Market("Realm|Horde"), 10).price, 900)
   t.c.TwichUIWorkshopDB.v = 1

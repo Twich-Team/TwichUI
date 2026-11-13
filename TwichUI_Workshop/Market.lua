@@ -84,7 +84,11 @@ local function Now(opt) return opt and Int(opt.now, 1, 4102444800) or time() end
 local function Summary(m, now)
     return { key = m.key, label = PR.Label(m), realm = m.realm, side = m.side, at = m.at, age = PR.Age(m.at, now), old = PR.Age(m.at, now) > PR.OLD_AFTER,
         scope = m.scope, complete = m.scope == "full" and m.complete, cut = m.cut == true, partial = m.partial or 0, legacy = m.legacy == true, items = m.n,
-        read = m.read, used = m.used, scans = m.scanDays and #m.scanDays or 0 }
+        read = m.read, used = m.used, scans = m.scanDays and #m.scanDays or 0,
+        -- the saved format (A2): the market's format (2 = TwichUI 1.3's, 3 = market data foundation 2.0), the database version, where
+        -- version-2 coverage begins, how many valid entries the scan log and the day log hold, and the budget guard's record (nil = none)
+        format = m.format, dbVersion = PR.DbVersion(), v2from = m.v2from, scanLog = m.scanLog and #(PR.ScanLog(m)) or nil,
+        dayLog = m.dayLog and #(PR.DayLog(m)) or nil, compact = m.compact }
 end
 
 -- What is known of one market: when it was scanned, how much of it was seen, how many scan days its history has. nil, "nomarket".
