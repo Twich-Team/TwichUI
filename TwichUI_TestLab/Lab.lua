@@ -51,12 +51,12 @@ TL.cases, TL.caseOrder, TL.rejected = TL.cases or {}, TL.caseOrder or {}, TL.rej
 ---------------------------------------------------------------------------
 -- Registry
 ---------------------------------------------------------------------------
--- { id, label, blurb, guided, optin }: a group of cases the window offers as one checkbox. A guided category asks things of the player, so it
+-- { id, label, blurb, guided, optin, manual }: a group of cases the window offers as one checkbox. A guided category asks things of the player, so it
 -- starts unticked and only runs when it is chosen by name. An OPT-IN category (the client API probes that build their own test frames) is the
 -- same for the checkbox and for TL.Select(nil): it runs only when it is chosen by name, because it creates frames and changes their state.
 function TL.Category(def)
     if type(def) ~= "table" or type(def.id) ~= "string" or TL.categories[def.id] then return false end
-    TL.categories[def.id] = { id = def.id, label = def.label or def.id, blurb = def.blurb or "", guided = def.guided == true, optin = def.optin == true or def.guided == true }
+    TL.categories[def.id] = { id = def.id, label = def.label or def.id, blurb = def.blurb or "", guided = def.guided == true, optin = def.optin == true or def.guided == true or def.manual == true, manual = def.manual == true }
     TL.categoryOrder[#TL.categoryOrder + 1] = def.id
     return true
 end
@@ -68,6 +68,9 @@ local function Reject(def, why)
 end
 
 -- Returns the case, or nil and why. A refused case is listed in TL.rejected and never runs.
+-- A MANUAL category is a guided workflow whose cases need a person between them (the saved-data load test: generate, /reload, measure). It is
+-- opt-in, and its cases never run as a group: TL.Select leaves them out even when the group is named, and only TL.SelectCase (one case at a
+-- time) can start one.
 function TL.Case(def)
     if type(def) ~= "table" then return Reject(def, "not a table") end
     if type(def.id) ~= "string" or def.id == "" then return Reject(def, "no id") end
@@ -79,6 +82,7 @@ function TL.Case(def)
     local budget = tonumber(def.budget) or TL.DEFAULT_BUDGET
     local top = def.class == "guided" and TL.MAX_GUIDED_BUDGET or (def.class == "devdata" and TL.MAX_DEVDATA_BUDGET or TL.MAX_BUDGET)
     local case = { id = def.id, cat = def.cat, class = def.class, needs = def.needs or {}, run = def.run,
+        step = tonumber(def.step), about = type(def.about) == "string" and def.about or nil, after = type(def.after) == "string" and def.after or nil,
         budget = math.max(0.1, math.min(top, budget)) }
     TL.cases[case.id] = case
     TL.caseOrder[#TL.caseOrder + 1] = case.id
@@ -91,13 +95,26 @@ function TL.Select(chosen)
     local out = {}
     for _, id in ipairs(TL.caseOrder) do
         local c = TL.cases[id]
-        if chosen then
+        local cat = TL.categories[c.cat]
+        if cat and cat.manual then
+            -- never part of a group run, named or not
+        elseif chosen then
             if chosen[c.cat] then out[#out + 1] = c end
         elseif c.class ~= "guided" and not (TL.categories[c.cat] and TL.categories[c.cat].optin) then
             out[#out + 1] = c
         end
     end
     return out
+end
+
+-- ONE case, as a one-item list for Runner.Start. chosen ({ cat = true }) is the opt-in: a case of an opt-in group (owned, guided, devdata, manual)
+-- is refused unless its group is chosen, exactly as for a group run. Returns the list, or nil and why ("unknown", "optin").
+function TL.SelectCase(id, chosen)
+    local c = type(id) == "string" and TL.cases[id] or nil
+    if not c then return nil, "unknown" end
+    local cat = TL.categories[c.cat]
+    if cat and cat.optin and not (type(chosen) == "table" and chosen[c.cat]) then return nil, "optin" end
+    return { c }
 end
 
 function TL.Count(cat)

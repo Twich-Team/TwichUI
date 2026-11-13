@@ -68,7 +68,7 @@ local function Summary(s, ended)
     local now = s.clock()
     return { results = s.results, counts = Count(s.results), cats = s.cats, seconds = now - s.startedAt, frames = s.frames, slices = s.slices,
         worstSlice = s.worstSlice, worstFrame = s.worstFrame, overruns = s.overruns, overrunCount = s.overrunCount, overrunBy = s.overrunBy, overrunOrder = s.overrunOrder, setups = s.setups, ended = ended,
-        clock = RN.ClockName(), slice = s.slice, active = false }
+        clock = RN.ClockName(), slice = s.slice, active = false, only = s.only }
 end
 
 local function Finish(reason)
@@ -304,7 +304,7 @@ end
 ---------------------------------------------------------------------------
 -- The API
 ---------------------------------------------------------------------------
--- list: cases from TL.Select. opts: onProgress(progress) once per frame, onDone(summary), cats (names, for the report), and for tests
+-- list: cases from TL.Select or TL.SelectCase (opts.only = that case's id, named in the report). opts: onProgress(progress) once per frame, onDone(summary), cats (names, for the report), and for tests
 -- clock, slice, cap. Returns true, or false and why: "running", "empty", "combat".
 function RN.Start(list, opts)
     opts = opts or {}
@@ -319,7 +319,7 @@ function RN.Start(list, opts)
         results[i] = { id = c.id, cat = c.cat, class = c.class, label = TL.Label(c), status = "pending", facts = {} }
     end
     state = { list = list, results = results, i = 0, clock = clock, slice = opts.slice or RN.SLICE, cap = opts.cap or RN.RUN_CAP,
-        onProgress = opts.onProgress, onDone = opts.onDone, cats = opts.cats or {}, startedAt = clock(), frames = 0, slices = 0,
+        onProgress = opts.onProgress, onDone = opts.onDone, cats = opts.cats or {}, only = type(opts.only) == "string" and opts.only or nil, startedAt = clock(), frames = 0, slices = 0,
         worstSlice = 0, worstFrame = 0, overruns = {}, overrunCount = 0, overrunBy = {}, overrunOrder = {}, setups = {} }
     frame:RegisterEvent("PLAYER_REGEN_DISABLED")
     frame:SetScript("OnUpdate", OnUpdate)

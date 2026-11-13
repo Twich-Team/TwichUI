@@ -48,7 +48,7 @@ local function Header(sum)
     local c = sum.counts
     local total = #sum.results
     lines[3] = ("run: %s | %d cases: %d pass, %d fail, %d skipped, %d error, %d timeout, %d stopped | %.2f s | slices %d, worst %.1f ms, worst frame %.0f ms, overruns %d | ended: %s")
-        :format(#sum.cats > 0 and table.concat(sum.cats, ",") or "none", total, c.pass, c.fail, c.skipped, c.error, c.timeout, c.stopped,
+        :format(sum.only and ("individual case " .. Clean(sum.only, 80)) or (#sum.cats > 0 and table.concat(sum.cats, ",") or "none"), total, c.pass, c.fail, c.skipped, c.error, c.timeout, c.stopped,
             sum.seconds, sum.slices, sum.worstSlice * 1000, sum.worstFrame * 1000, sum.overrunCount, Clean(sum.ended, 20))
     lines[4] = ("clock: %s | slice %.0f ms | cooperative: a step that never yields cannot be interrupted, only measured"):format(sum.clock, (sum.slice or 0) * 1000)
     lines[5] = "labels: client = observed in this game client | synthetic = production code in the client's Lua on made-up data | guided = observed with the player's help | not run = never started"

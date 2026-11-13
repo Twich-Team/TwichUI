@@ -4,6 +4,7 @@
 -- Real saved data is never touched: generation goes through R.LoadTest (its own saved variable), and the three real roots stay under the
 -- fingerprint like every other case. The procedure, what each number means and what none of them can tell are in docs/testlab.md.
 --
+-- A MANUAL group: its cases never run as a group (TL.Select leaves them out); each is started on its own, in order 1 to 5, with a /reload between.
 --   loadtest.generate.<preset>   (devdata) build a synthetic version-2 market into the companion's saved variable, in 4 ms slices
 --   loadtest.measure             (readonly) in a FRESH session (after /reload, before anything loaded the companion): time LoadAddOn
 --   loadtest.reload              (readonly) the clock companion's record of the last /reload (total time; whether the big file was loaded)
@@ -15,13 +16,17 @@ local TL = R.TestLab
 local WL, FX = TL.Workloads, TL.Fixtures
 
 TL.Category{ id = "loadtest", label = "Saved-data load test (development)",
-    blurb = "builds a large synthetic saved file in a development-only companion addon and times how the client loads it; never touches your data", optin = true }
+    blurb = "a guided workflow, one case at a time with a /reload between: it builds a large synthetic saved file in a development-only companion addon and times how the client loads it; never touches your data", manual = true }
 
 local NAME = "TwichUI_LoadTest"
 local function Api(fn) return C_AddOns and C_AddOns[fn] end
 local function Exists() local f = Api("DoesAddOnExist") return f and f(NAME) == true end
 local function IsLoaded() local f = Api("IsAddOnLoaded") return f and f(NAME) == true end
 local clock = type(debugprofilestop) == "function" and debugprofilestop or nil
+
+-- Set when this session generated data. A /reload starts a new Lua state, so the flag is gone exactly when the file has been written: it makes
+-- loadtest.clear refuse to throw generated data away before the reload that writes it (the one mistake that silently spoils the test).
+local generatedThisSession
 
 -- dense: share of items listed every day three times (the rest are listed on about one day in eight)
 local PRESETS = {
@@ -31,13 +36,16 @@ local PRESETS = {
 }
 
 for _, ps in ipairs(PRESETS) do
-    TL.Case{ id = "loadtest.generate." .. ps.id, cat = "loadtest", class = "devdata", needs = { "workshop" }, budget = 600, run = function(t)
+    TL.Case{ id = "loadtest.generate." .. ps.id, cat = "loadtest", class = "devdata", needs = { "workshop" }, budget = 600, step = 1,
+      about = "Step 1. Builds the synthetic market (" .. ps.about .. "). Run ONE preset, then /reload.",
+      after = "Next: type /reload now (it writes the file), then run loadtest.reload, then loadtest.measure before anything else loads the companion.", run = function(t)
         if not Exists() then return t:Skip("the development-only addon TwichUI_LoadTest is not installed (copy the folder beside the Workshop)") end
         if not IsLoaded() then
             local ok, why = Api("LoadAddOn")(NAME)
             if not ok then return t:Skip("TwichUI_LoadTest could not be loaded: " .. tostring(why)) end
         end
         local LT = R.LoadTest
+        generatedThisSession = ps.id
         local W = t.W
         local H2, D = W.History2, W.Dist
         local rng = FX.Rng(7640001)
@@ -72,7 +80,9 @@ for _, ps in ipairs(PRESETS) do
     end }
 end
 
-TL.Case{ id = "loadtest.measure", cat = "loadtest", class = "readonly", budget = 60, run = function(t)
+TL.Case{ id = "loadtest.measure", cat = "loadtest", class = "readonly", budget = 60, step = 3,
+  about = "Step 3. Right after the /reload, before anything else loads the companion: times loading the big file. Refused if it is already loaded.",
+  after = "Next: optionally run loadtest.gc, then loadtest.clear when you are done measuring.", run = function(t)
     if not Exists() then return t:Skip("the development-only addon TwichUI_LoadTest is not installed") end
     if IsLoaded() then return t:Skip("TwichUI_LoadTest is already loaded in this session, so its load cannot be timed: /reload, then run this case before anything else") end
     if not clock then return t:Skip("debugprofilestop is not available in this client: nothing can be timed") end
@@ -104,7 +114,9 @@ TL.Case{ id = "loadtest.measure", cat = "loadtest", class = "readonly", budget =
     t:Check(meta ~= nil and (meta.items or 0) > 0, "the companion's saved file held generated data")
 end }
 
-TL.Case{ id = "loadtest.reload", cat = "loadtest", class = "readonly", budget = 5, run = function(t)
+TL.Case{ id = "loadtest.reload", cat = "loadtest", class = "readonly", budget = 5, step = 2,
+  about = "Step 2. Shows the clock companion's record of the last /reload (how long it took, and whether the big file was written then).",
+  after = "Next: run loadtest.measure now, before anything else loads the companion.", run = function(t)
     local C = R.LoadClock
     if not C then return t:Skip("the development-only addon TwichUI_LoadTestClock is not installed or not turned on") end
     local list = C.List()
@@ -125,7 +137,9 @@ TL.Case{ id = "loadtest.reload", cat = "loadtest", class = "readonly", budget = 
     t:Check(true, "")
 end }
 
-TL.Case{ id = "loadtest.gc", cat = "loadtest", class = "readonly", budget = 30, run = function(t)
+TL.Case{ id = "loadtest.gc", cat = "loadtest", class = "readonly", budget = 30, step = 4,
+  about = "Step 4 (optional). One forced full garbage collection after the load: how long it took and what stayed.",
+  after = "Next: loadtest.clear when you are done measuring.", run = function(t)
     if not clock then return t:Skip("debugprofilestop is not available") end
     local h0, t0 = collectgarbage("count"), clock()
     collectgarbage("collect")
@@ -135,7 +149,12 @@ TL.Case{ id = "loadtest.gc", cat = "loadtest", class = "readonly", budget = 30, 
     t:Check(true, "")
 end }
 
-TL.Case{ id = "loadtest.clear", cat = "loadtest", class = "devdata", budget = 10, run = function(t)
+TL.Case{ id = "loadtest.clear", cat = "loadtest", class = "devdata", budget = 10, step = 5,
+  about = "Step 5. Only when every measurement is done: empties the synthetic saved variable. Refused in the session that generated it.",
+  after = "Next: /reload so a small file is written; then delete the two companion folders if you are finished.", run = function(t)
+    if generatedThisSession then
+        return t:Skip(("refused: this session generated the %s data and no /reload has written it yet; clearing now would throw it away before it was measured. /reload, run loadtest.reload and loadtest.measure, then clear"):format(generatedThisSession))
+    end
     if not Exists() then return t:Skip("the development-only addon TwichUI_LoadTest is not installed") end
     if not IsLoaded() then
         local ok, why = Api("LoadAddOn")(NAME)

@@ -53,6 +53,10 @@ Every case declares a class, and the registry refuses a case without one.
 | `readonly` | Read live game state or real saved data. |
 | `guided` | Asks the player to put the pointer somewhere, then **reads** what the client reports (`GetMouseFoci`, rectangles, flags). Never clicks, writes or sends. Its input is the one temporary key binding described below, or (milestone 6) a **click the player makes on a Lab-made test frame**, which the frame only counts. Its category is never ticked for the player, and an unqualified `TL.Select()` leaves it out. |
 
+**Running one case.** `TL.SelectCase(id, chosen)` returns a one-item list for `Runner.Start` (`opts.only = id`); the report's run line then reads `run: individual case <id>`. A case of an opt-in group is refused (`"optin"`) unless its group is ticked, so `devdata`, `owned` and `guided` cases keep their opt-in. In the window: select a row of the table and press **Run case** (that case runs again, alone), or use the **Run** button beside a case in a one-case-at-a-time group (below). The runner refuses a second run while one is active, and Stop works as for a group.
+
+**One-case-at-a-time groups.** `TL.Category{ manual = true }` (implies opt-in) is a guided workflow: `TL.Select` leaves its cases out even when the group is named, so no group run can chain them. The sidebar lists its cases in step order (`step`, `about`) each with a Run button, enabled once the group is ticked; after a case ends, its `after` text is shown as the next step.
+
 **Opt-in groups.** `TL.Category{ optin = true }` (a guided group is always opt-in) means the group is unticked in the window and left out of `TL.Select()` with no argument; it runs only when chosen by name. The sidebar says "Builds its own test frames, so it is never ticked for you".
 | `owned` | Creates and changes **Lab-made probe frames only** (`Probe.lua`, named `TwichUITestLabProbe...`), out of combat, and reads what they report. Never a control of the Workshop or of any other addon, never a click on one. Its group is **opt-in** (below), and the Runner releases every probe frame when a case or the run ends. |
 
@@ -234,21 +238,19 @@ data only through `R.LoadTest` (safety class `devdata`, allowed only in an opt-i
 `loadtest.measure`; `loadtest.reload`; `loadtest.gc`; `loadtest.clear`. Generation builds the data with the Workshop's own `History2` and `Dist`
 writers in 4 ms slices (minutes for 40,000 items) into a new table and replaces the saved variable only at the end.
 
-**Procedure (in the development client):**
-1. Copy `TwichUI_LoadTest/` and `TwichUI_LoadTestClock/` beside the other addons (the machine-local deploy script may need updating for them);
-   enable both. Nothing else changes.
-2. Baseline: `/reload` once, then `/reload` again (the clock records each). Open the Lab, tick only **Saved-data load test**, run
-   `loadtest.reload`: that is the reload time with no large file.
-3. Run `loadtest.generate.heavy` (or `mixed`). Then `/reload`: the client **writes** the large file at this logout; `loadtest.reload` afterwards
-   reports this reload with "the large file was LOADED (so written)". Compare with step 2: the difference is the write (plus noise).
-4. Immediately after that reload, before anything else loads the companion, run `loadtest.measure`. It times `C_AddOns.LoadAddOn` of the
+**Procedure (in the development client).** The group is a one-case-at-a-time workflow: tick **Saved-data load test (development)** to allow its cases, then use the **Run** button beside each case, in this order; the Lab shows the next step after each. Cases never run together as a group.
+1. Copy `TwichUI_LoadTest/` and `TwichUI_LoadTestClock/` beside the other addons (the machine-local `tools/deploy.sh` copies both, with the
+   extra interface number like the Lab); enable both. Nothing else changes. Disable the clock when not measuring.
+2. Optional baseline: `/reload` twice (the clock records each), then run `loadtest.reload`: the reload time with no large file.
+3. **Step 1:** run ONE of `loadtest.generate.mixed` (the realistic market), `.heavy` (the upper bound) or `.small` (a dry run). Then type `/reload`: the client **writes** the large file at this logout.
+4. **Step 2:** run `loadtest.reload`: this reload with "the large file was LOADED (so written)". Compare with the baseline: the difference is the write (plus noise).
+5. **Step 3:** immediately, before anything else loads the companion, run `loadtest.measure`. It times `C_AddOns.LoadAddOn` of the
    companion and splits it: time before the companion's file ran, file to `ADDON_LOADED`, after. If the saved variable was absent when the file
    ran and present at `ADDON_LOADED`, the middle figure is the client deserializing the saved file; the report says which order this client used.
-   The heap before and after is also reported (the loaded data plus uncollected garbage).
-5. Optionally run `loadtest.gc` (one forced full collection: an upper bound for a later collection of that heap, not what play feels like).
-6. `/reload` once more **without** loading the companion: `loadtest.reload` then shows a reload where the file was neither read nor written.
+   The heap before and after is also reported. If something already loaded the companion, it is skipped: `/reload` and run it first.
+6. **Step 4 (optional):** `loadtest.gc` (one forced full collection: an upper bound for a later collection of that heap, not what play feels like).
 7. Copy the report. Record the saved file's size on disk (`WTF/Account/<account>/SavedVariables/TwichUI_LoadTest.lua`).
-8. Clean up: `loadtest.clear`, `/reload` (a small file is written), then disable or delete both folders and their saved files.
+8. **Step 5, only when every measurement is done:** `loadtest.clear`, then `/reload` (a small file is written); disable or delete both folders and their saved files. `loadtest.clear` **refuses** in the session that generated the data (a `/reload` has not yet written it), so it cannot spoil the test by following generation.
 
 **What these numbers are and are not.** `loadtest.measure` times one `LoadAddOn` call with `debugprofilestop` (its resolution is reported by
 `perf.clock`); it measures the read of THIS synthetic file in THIS session, not the Workshop's own initialization (the Lab's `setup` timing of

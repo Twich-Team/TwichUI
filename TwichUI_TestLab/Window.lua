@@ -100,6 +100,7 @@ local function Select(id, byPlayer)
     pick.user = byPlayer and true or pick.user
     win.list:Layout()
     W.Details()
+    if W.UpdateButtons then W.UpdateButtons() end
 end
 
 local CHIP = { synthetic = { 0.86, 0.84, 0.80 }, client = { 0.78, 0.88, 1.0 }, guided = { 1.0, 0.84, 0.52 } }
@@ -296,11 +297,16 @@ local function Buttons()
     local running = RN.Active()
     local failures = RN.last and (RN.last.counts.fail + RN.last.counts.error + RN.last.counts.timeout) or 0
     win.run:SetEnabled(not running and chosenCases > 0)
+    local one = pick.id and TL.SelectCase(pick.id, chosen)
+    win.runOne:SetEnabled(not running and one ~= nil and one ~= false)
+    for id, b in pairs(win.caseButtons or {}) do b:SetEnabled(not running and TL.SelectCase(id, chosen) ~= nil) end
     win.stop:SetEnabled(running)
     win.copy:SetEnabled(not running and RN.last ~= nil)
     win.copyFail:SetEnabled(not running and RN.last ~= nil and failures > 0)
     for _, box in pairs(win.boxes) do box:SetActive(not running) end
 end
+
+W.UpdateButtons = Buttons
 
 -- cards, run state, chips and progress: only what changed is written
 local function Header(m)
@@ -400,7 +406,10 @@ local function Done(sum)
         if problem then pick.id = problem.id end
     end
     local c = sum.counts
-    if sum.ended == "complete" then
+    local single = sum.only and TL.cases[sum.only]
+    if sum.ended == "complete" and single and single.after and #sum.results == 1 and sum.results[1].status ~= "skipped" and c.fail + c.error + c.timeout == 0 then
+        Say(single.after)
+    elseif sum.ended == "complete" then
         Say(c.fail + c.error + c.timeout == 0 and "Every case that ran passed." or "Some cases did not pass. The first one is chosen; Copy failures selects their evidence.")
     else
         Say("Stopped. No further step was started. A step already running could not have been interrupted; the report says what ran.")
@@ -417,14 +426,11 @@ W.OnProgress, W.OnDone = Progress, Done   -- for the simulator scenario, which h
 ---------------------------------------------------------------------------
 -- Actions
 ---------------------------------------------------------------------------
-function W.Run()
-    local list = TL.Select(chosen)
-    if #list == 0 then Say("Choose at least one group.") return false end
-    local cats = {}
-    for _, id in ipairs(TL.categoryOrder) do if chosen[id] then cats[#cats + 1] = id end end
+-- Starts the runner on a list (a group run, or one case) and puts the window in its running state
+local function Begin(list, cats, only)
     local asks = false
     for _, c in ipairs(list) do if c.class == "guided" then asks = true end end
-    local ok, why = RN.Start(list, { cats = cats, onProgress = Progress, onDone = Done })
+    local ok, why = RN.Start(list, { cats = cats, only = only, onProgress = Progress, onDone = Done })
     if not ok then
         Say(why == "combat" and "Not during combat. Try again when combat ends." or "It cannot start now (" .. tostring(why) .. ").")
         return false
@@ -439,6 +445,37 @@ function W.Run()
     Buttons()
     if asks then Peek(true) end
     return true
+end
+
+function W.Run()
+    local list = TL.Select(chosen)
+    if #list == 0 then
+        local manual
+        for id in pairs(chosen) do if chosen[id] and TL.categories[id] and TL.categories[id].manual then manual = true end end
+        Say(manual and "That group runs one case at a time: use the Run button beside a case in the list on the left." or "Choose at least one group.")
+        return false
+    end
+    local cats = {}
+    for _, id in ipairs(TL.categoryOrder) do if chosen[id] then cats[#cats + 1] = id end end
+    return Begin(list, cats, nil)
+end
+
+-- ONE case: only it runs. A case of an opt-in group needs that group ticked (TL.SelectCase), like a group run; the runner refuses a second run.
+function W.RunCase(id)
+    local list, why = TL.SelectCase(id, chosen)
+    if not list then
+        Say(why == "optin" and "Tick its group first: this case belongs to an opt-in group and runs only when you choose that group." or "That case is not registered.")
+        return false
+    end
+    if RN.Active() then Say("A run is already in progress.") return false end
+    local ok = Begin(list, { list[1].cat }, id)
+    return ok
+end
+
+-- the Run case button: the case of the chosen row of the table (run it again, alone)
+function W.RunSelected()
+    if not pick.id then Say("Choose a row in the table first.") return false end
+    return W.RunCase(pick.id)
 end
 
 function W.Stop() return RN.Stop("user") end
@@ -623,6 +660,7 @@ local function BuildSide(top, bottom)
         blurb:SetJustifyV("TOP")
         local text = cat.blurb:sub(1, 1):upper() .. cat.blurb:sub(2)
         if cat.guided then text = (text ~= "" and (text .. " ") or "") .. "Asks for you, so it is never ticked for you."
+        elseif cat.manual then text = (text ~= "" and (text .. " ") or "") .. "Tick it to allow its cases, then run them one at a time, in order. Never run as a group."
         elseif cat.optin then text = (text ~= "" and (text .. " ") or "") .. "Builds its own test frames, so it is never ticked for you." end
         blurb:SetText(text)
         local bh = blurb:GetStringHeight() or 0
@@ -631,6 +669,35 @@ local function BuildSide(top, bottom)
         if nh < 1 then nh = math.ceil(#cat.label * 8.4 / (narrow and innerW - 44 or innerW - 84)) * 19 end
         if narrow then bh = 0 end
         local eh = 8 + math.max(20, nh) + (narrow and 0 or 4) + bh + 12
+        if cat.manual then
+            -- a one-case-at-a-time group: each case in its order, with what it is for and its own Run button (never run as a group)
+            local rows = {}
+            for _, cid in ipairs(TL.caseOrder) do if TL.cases[cid].cat == id then rows[#rows + 1] = TL.cases[cid] end end
+            table.sort(rows, function(a, b) return (a.step or 99) < (b.step or 99) or ((a.step or 99) == (b.step or 99) and a.id < b.id) end)
+            local ry = eh
+            win.caseButtons = win.caseButtons or {}
+            for _, c in ipairs(rows) do
+                local label = K.Text(entry, 13, K.P.text, "strong")
+                label:SetPoint("TOPLEFT", entry, "TOPLEFT", 12, -ry)
+                label:SetWidth(innerW - 90)
+                label:SetText(c.id)
+                local btn = K.Button(entry, "Run", 56, "secondary", function() W.RunCase(c.id) end, 24, "play")
+                btn:SetPoint("TOPRIGHT", entry, "TOPRIGHT", -8, -ry + 2)
+                K.Tip(btn, c.id, (c.about or "") .. (c.class == "devdata" and " Needs this group ticked." or ""))
+                win.caseButtons[c.id] = btn
+                local about = K.Text(entry, 12, K.P.textDim)
+                about:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -2)
+                about:SetWidth(innerW - 30)
+                about:SetWordWrap(true)
+                about:SetJustifyV("TOP")
+                local txt = c.about or ""
+                about:SetText(txt)
+                local ah = about:GetStringHeight() or 0
+                if ah < 1 then ah = math.ceil(#txt * 6 / (innerW - 30)) * 14 end
+                ry = ry + 22 + ah + 8
+            end
+            eh = ry + 4
+        end
         if narrow then K.Tip(entry, cat.label, text) end
         entry:SetHeight(eh)
         entry:SetScript("OnClick", function() box:GetScript("OnClick")(box) end)   -- the whole entry is the hit area; the check ignores it during a run
@@ -686,8 +753,10 @@ local function BuildTop(main)
     local bw = narrow and { 96, 84, 134, 146 } or { 124, 112, 160, 168 }
     win.run = Bar("Run", bw[1], "primary", function() W.Run() end, "play", "Run", "Runs the chosen groups, one case after another, spread over frames. A guided group is only run when you tick it.")
     win.run:SetPoint("TOPLEFT", main, "TOPLEFT", 0, -y)
+    win.runOne = Bar("Run case", narrow and 112 or 132, "secondary", function() W.RunSelected() end, "play", "Run case", "Runs only the case of the row chosen in the table, again and alone. A case of an opt-in group needs its group ticked on the left. To start a case before any run, use the Run button beside it in a one-case-at-a-time group.")
+    win.runOne:SetPoint("LEFT", win.run, "RIGHT", 10, 0)
     win.stop = Bar("Stop", bw[2], "secondary", function() W.Stop() end, "stop", "Stop", "No further step is started. A step that is already running cannot be interrupted; the report says what ran.")
-    win.stop:SetPoint("LEFT", win.run, "RIGHT", 10, 0)
+    win.stop:SetPoint("LEFT", win.runOne, "RIGHT", 10, 0)
     win.copy = Bar("Copy report", bw[3], "secondary", function() W.Copy() end, "doc", "Copy report", "Selects the whole report in the box below; press Ctrl+C, then paste it. The game gives addons no clipboard.")
     win.copy:SetPoint("LEFT", win.stop, "RIGHT", 10, 0)
     win.copyFail = Bar("Copy failures", bw[4], "secondary", function() W.CopyFailures() end, "doc", "Copy failures", "Selects only the cases that failed, raised an error or timed out, with their evidence; press Ctrl+C. Available when the last run had some.")

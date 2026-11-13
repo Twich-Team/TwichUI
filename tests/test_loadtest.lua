@@ -152,7 +152,15 @@ do
   local TL = t.c.TwichUI.TestLab
   Same(#TL.rejected, 0, "every load-test case is accepted")
   Same(TL.categories.loadtest.optin, true, "the group is opt-in")
+  Same(TL.categories.loadtest.manual, true, "and manual: its cases are run one at a time")
   for _, c in ipairs(TL.Select(nil)) do Check(c.cat ~= "loadtest", "an unqualified run never includes the load test") end
+  Same(#TL.Select({ loadtest = true }), 0, "naming the group never runs generation, measurement and cleanup together")
+  Same(select(2, TL.SelectCase("loadtest.generate.small", {})), "optin", "a developer-data case needs the group chosen")
+  Same(#TL.SelectCase("loadtest.generate.small", { loadtest = true }), 1)
+  for _, id in ipairs({ "loadtest.generate.heavy", "loadtest.generate.mixed", "loadtest.generate.small", "loadtest.reload", "loadtest.measure", "loadtest.gc", "loadtest.clear" }) do
+    Check(TL.cases[id].step and TL.cases[id].about, id .. " says which step it is")
+  end
+  Check(TL.cases["loadtest.generate.small"].after:find("/reload", 1, true), "generation tells the player to /reload next")
   -- a devdata case outside an opt-in group is refused
   TL.Category{ id = "plain", label = "plain" }
   Same(select(2, TL.Case{ id = "x.devdata", cat = "plain", class = "devdata", run = function() end }), "a devdata case belongs to an opt-in category")
@@ -192,9 +200,18 @@ do
   Same(m.skip, nil); Same(#m.fails, 0); Same(m.facts["loadtest.items"], 4000); Same(m.facts["loadtest.saved_at_file"], "false")
   Check(tonumber(m.facts["loadtest.file_to_loaded_ms"]) >= 40, "the deserialization window is reported")
   Check(m.notes[1]:find("ran the addon's file first", 1, true), "and explained")
-  -- clear
-  local cl = Run("loadtest.clear")
-  Same(#cl.fails, 0); Same(t.c.TwichUILoadTestDB.meta.items, 0)
+  -- clear straight after generating, in the same session, is refused: the data has not been written and measured yet
+  local early = Run("loadtest.clear")
+  Check(early.skip and early.skip:find("no /reload has written it yet", 1, true), "clear is refused in the session that generated: " .. tostring(early.skip))
+  Same(t.c.TwichUILoadTestDB.meta.items, 4000, "and nothing was cleared")
+  -- after the reload (a fresh Lua state: t2) it clears
+  local cl = (function()
+    local res = { facts = {}, notes = {}, fails = {} }
+    t2.c.TwichUI.TestLab.cases["loadtest.clear"].run({ Check = function(_, ok, w) if not ok then res.fails[#res.fails + 1] = w end end, Skip = function(_, w) res.skip = w end,
+      Fact = function() end, Note = function() end })
+    return res
+  end)()
+  Same(cl.skip, nil); Same(#cl.fails, 0); Same(t2.c.TwichUILoadTestDB.meta.items, 0)
   Same(t.c.TwichUIWorkshopDB, nil, "no Workshop database was created")
 end
 

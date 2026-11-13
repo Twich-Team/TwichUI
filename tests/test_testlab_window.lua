@@ -162,6 +162,7 @@ local function Lab(opts)
   for i = 1, 3 do TL.Case{ id = "fxp.ok" .. i, cat = "fxp", class = "pure", run = function(tt) tt:Check(true, "ok") end } end
   TL.Category{ id = "fxy", label = "Waiting group", blurb = "one case that waits across frames" }
   TL.Case{ id = "fxy.wait", cat = "fxy", class = "pure", budget = 5, run = function(tt) tt:Wait(0.3); tt:Check(true) end }
+  if opts.setup then opts.setup(TL, t) end
   t.Load({ "Kit.lua", "Window.lua" })
   t.win = TL.Window.Frame()
   return t, TL
@@ -646,6 +647,72 @@ do
 
   local t3 = Lab({ screen = { 1920, 640 } })
   Check(t3.win.report:GetHeight() <= 130, "a short window gets a shorter report box: " .. t3.win.report:GetHeight())
+end
+
+---------------------------------------------------------------------------
+-- Individual case runs and manual (one-case-at-a-time) groups
+---------------------------------------------------------------------------
+do
+  local ran = {}
+  local function Mark(id) return function(tt) ran[#ran + 1] = id; tt:Check(true) end end
+  local t, TL = Lab({ setup = function(TL)
+  TL.Category{ id = "man", label = "Manual group", blurb = "one at a time", manual = true }
+  TL.Case{ id = "man.gen", cat = "man", class = "devdata", step = 1, about = "makes data", after = "Next: /reload.", run = Mark("man.gen") }
+  TL.Case{ id = "man.measure", cat = "man", class = "readonly", step = 3, about = "measures", run = Mark("man.measure") }
+  TL.Case{ id = "man.clear", cat = "man", class = "devdata", step = 5, about = "clears", run = Mark("man.clear") }
+  TL.Case{ id = "man.wait", cat = "man", class = "readonly", budget = 5, step = 4, about = "waits", run = function(tt) tt:Wait(10); tt:Check(true) end }
+  end })
+  local win, W, RN = t.win, TL.Window, TL.Runner
+  Check(TL.categories.man.optin and TL.categories.man.manual, "a manual group is opt-in")
+  -- the window is already built: rebuilding it is the game's job; here the API and the registry are what is under test
+  -- 1. group runs never include a manual group's cases, named or not
+  for _, c in ipairs(TL.Select({ man = true })) do Check(false, "a named manual group ran as a group: " .. c.id) end
+  for _, c in ipairs(TL.Select(nil)) do Check(c.cat ~= "man", "an unqualified run leaves it out") end
+  Same(#TL.Select({ fxp = true }), 3, "an ordinary group still selects all its cases")
+  -- 2. one case: alone; the opt-in is enforced for an opt-in group
+  Same(select(2, TL.SelectCase("nope", {})), "unknown")
+  Same(select(2, TL.SelectCase("man.gen", {})), "optin", "a devdata case needs its group chosen")
+  Same(select(2, TL.SelectCase("man.measure", nil)), "optin", "and so does a readonly case of an opt-in group")
+  local list = TL.SelectCase("man.gen", { man = true })
+  Same(#list, 1); Same(list[1].id, "man.gen")
+  Same(#TL.SelectCase("fxp.ok2", {}), 1, "an ordinary group's case needs no opt-in")
+  -- 3. the window: running one case runs only it, the report names it, the next step is shown
+  local before = DeepCopy({ t.c.TwichUIDB, t.c.TwichUIWorkshopDB, t.c.TwichUIDiagnosticsDB })
+  Check(not W.RunCase("man.gen"), "refused until the group is ticked"); Check(win.note.text:find("Tick its group first", 1, true), win.note.text)
+  Same(#ran, 0)
+  Choose(win, { "man" })
+  Check(win.boxes.man:GetChecked(), "ticked")
+  Check(not win.run:IsEnabled(), "Run (the group run) stays off: the manual group has nothing to run as a group")
+  Check(not W.Run() and win.note.text:find("one case at a time", 1, true), win.note.text)
+  Check(win.caseButtons["man.gen"] and win.caseButtons["man.clear"], "each case has its own Run button")
+  Check(win.caseButtons["man.gen"]:IsEnabled(), "enabled once the group is ticked")
+  Check(W.RunCase("man.gen"), "the case starts")
+  Check(RN.Active() and not win.caseButtons["man.gen"]:IsEnabled() and not win.runOne:IsEnabled(), "no other case can start while one runs")
+  Check(not W.RunCase("man.measure"), "an overlapping run is refused"); Check(not RN.Start(TL.SelectCase("man.measure", { man = true })), "also at the runner")
+  Drive(RN, 100, 0.016, t)
+  Same(#ran, 1); Same(ran[1], "man.gen", "only the chosen case ran, not its group")
+  Same(#RN.last.results, 1); Same(RN.last.only, "man.gen")
+  local rep = win.edit:GetText()
+  Check(rep:find("run: individual case man.gen |", 1, true), "the report names the case: " .. rep:sub(1, 400))
+  Check(rep:find("1 cases: 1 pass", 1, true))
+  Same(win.note.text, "Next: /reload.", "the next step is shown")
+  Check(win.caseButtons["man.gen"]:IsEnabled(), "buttons are back")
+  -- a run of an ordinary group is reported as before (no 'individual')
+  Choose(win, { "fxp" }); Check(W.Run()); Drive(RN, 100, 0.016, t)
+  Check(win.edit:GetText():find("run: fxp |", 1, true) and not win.edit:GetText():find("individual", 1, true), "a group run is reported as a group")
+  Same(RN.last.counts.pass, 3)
+  -- Run case: the selected row, alone
+  W.Select("fxp.ok2"); Check(win.runOne:IsEnabled(), "a chosen row can be run again")
+  Check(W.RunSelected()); Drive(RN, 100, 0.016, t)
+  Same(#RN.last.results, 1); Same(RN.last.results[1].id, "fxp.ok2"); Same(RN.last.only, "fxp.ok2")
+  -- 4. Stop works for an individual run
+  Choose(win, { "man" })
+  Check(W.RunCase("man.wait")); t.Advance(0.016); local fr = RN.frameForTests(); fr.scripts.OnUpdate(fr, 0.016)
+  Check(RN.Stop("user"), "Stop is available"); Check(not RN.Active())
+  Same(RN.last.ended, "user"); Same(RN.last.results[1].status, "stopped")
+  Check(win.edit:GetText():find("individual case man.wait", 1, true), "a stopped individual run is still named")
+  -- 5. no saved root changed
+  Check(DeepSame(before, { t.c.TwichUIDB, t.c.TwichUIWorkshopDB, t.c.TwichUIDiagnosticsDB }), "no saved root changed")
 end
 
 print("PASSED test_testlab_window")
