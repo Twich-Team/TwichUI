@@ -24,9 +24,10 @@
 --              hist  = { [itemID] = "..." }          the item's FROZEN legacy minimum-buyout history (History.lua): trimmed by expiry,
 --                                                    never extended by a scan of format 3 (docs/workshop/market-data-foundation-v2.md)
 --              sd    = { day, ... } }                the days of the scans that fed that legacy history (frozen with it)
---   Format 3 adds, beside those (section 3.2 of the foundation document): snap (the newest accepted scan's facts), scans (a bounded log
---   of accepted scans), days (a 120-day log of scan days), v2from (the first day of version-2 coverage) and the later milestones'
---   containers dist, h2, c2, which this version never fills and only carries forward untouched. Format 3 data is what makes TwichUI 1.3
+--   Format 3 adds, beside those (section 3.2 of the foundation document): snap (the newest accepted scan's facts; alg = 1 when dist is
+--   present), dist (A3: one text per item with two or more whole-copper unit prices, made by Dist.lua from the same scan and replaced whole
+--   by every accepted scan), scans (a bounded log of accepted scans), days (a 120-day log of scan days), v2from (the first day of
+--   version-2 coverage) and the later milestones' containers h2, c2, which this version never fills and only carries forward untouched. Format 3 data is what makes TwichUI 1.3
 --   hold the database (v 2 > its v 1): it reads, and refuses every write.
 --       p  cheapest unit price (copper)           q  items listed at that exact price
 --       l  buyout listings seen for the item      t  items in those listings
@@ -44,6 +45,7 @@ local W = R.Workshop
 local Q = W.Queue
 local Int, Text, Plain = W.Int, W.Text, W.Plain
 local H = W.History
+local D = W.Dist
 local PR = {}
 W.Prices = PR
 
@@ -75,15 +77,20 @@ local function N(v) return ("%.0f"):format(v) end
 ---------------------------------------------------------------------------
 -- Numbers
 ---------------------------------------------------------------------------
+-- the rounding, for a buyout and a count already known to be whole numbers in range
+local function RoundUp(buyout, count)
+    local q = floor(buyout / count)
+    while q * count < buyout do q = q + 1 end
+    while q > 1 and (q - 1) * count >= buyout do q = q - 1 end
+    return q < 1 and 1 or q
+end
+
 -- Copper per single item for an auction: the buyout of the whole stack divided by its count, rounded up (whole copper, at least 1).
 -- nil when either number is not a whole number in range.
 function PR.Unit(buyout, count)
     buyout, count = Int(buyout, 1, PR.MAX_COPPER), Int(count, 1, PR.MAX_COUNT)
     if not buyout or not count then return nil end
-    local q = math.floor(buyout / count)
-    while q * count < buyout do q = q + 1 end
-    while q > 1 and (q - 1) * count >= buyout do q = q - 1 end
-    return math.max(q, 1)
+    return RoundUp(buyout, count)
 end
 
 -- The auction house's cut of one sale, whole copper
@@ -122,6 +129,39 @@ function PR.NewBatch(priority)
     return setmetatable({ priority = priority, acc = {}, read = 0, used = 0, noBuyout = 0, invalid = 0, partialInfo = 0 }, Batch)
 end
 
+-- (A3) Adds a listing of `count` items at the whole-copper unit price `unit` to the tiers of an item that already holds a listing. Called
+-- BEFORE the item's minimum fields (b, c, l, t) count this listing, because it reads them as they were:
+--   * while every listing so far shares ONE unit price there is no tier state of its own: that price is the cheapest fraction rounded up
+--     (RoundUp(b, c)), its items and listings are t and l, and w (present from the second listing) is its largest single listing;
+--   * the first listing at another price moves the tiers into the map m: m[unit] = items * SHIFT + listings (packed: one number per tier),
+--     and m[-unit] = the largest single listing of a tier, kept only for tiers with two or more listings (a negative key cannot meet a price).
+-- Nothing is allocated for an item with one price or one listing, and one table holds all of an item's tiers.
+local function Tier(a, unit, count)
+    local m = a.m
+    if not m then
+        local u0 = RoundUp(a.b, a.c)
+        local w = a.w
+        if u0 == unit then
+            if not w then w = a.t end              -- one listing so far: all its items
+            a.w = count > w and count or w
+            return
+        end
+        m = { [u0] = a.t * D.SHIFT + a.l, [unit] = count * D.SHIFT + 1 }
+        if w then m[-u0] = w end
+        a.m, a.w = m, nil
+        return
+    end
+    local v = m[unit]
+    if v then
+        local w = m[-unit]
+        if not w then w = (v - v % D.SHIFT) / D.SHIFT end
+        m[-unit] = count > w and count or w
+        m[unit] = v + count * D.SHIFT + 1
+    else
+        m[unit] = count * D.SHIFT + 1
+    end
+end
+
 -- One auction record: the item, the items in the stack, the buyout of the whole stack (0 = bid only) and whether the game had all of the
 -- record's information yet (an explicit false only). Returns true when it counted toward a price.
 function Batch:Add(item, count, buyout, hasAllInfo)
@@ -138,12 +178,17 @@ function Batch:Add(item, count, buyout, hasAllInfo)
     buyout = Int(raw, 1, PR.MAX_COPPER)
     if not buyout then self.invalid = self.invalid + 1 return false end
     self.used = self.used + 1
+    -- the price tiers (A3): beyond what a packed tier can hold the distribution is given up (distBad), never corrupted; the minimum entry is not
+    local tier = not self.distBad
+    if tier and self.used > D.MAX_RECORDS then self.distBad, tier = "records", false end
     local a = self.acc[item]
     if not a then
-        -- b/c: the cheapest unit price as a fraction (buyout / count); q: items at it; l, t: listings and items; b2/c2: the next higher
+        -- b/c: the cheapest unit price as a fraction (buyout / count); q: items at it; l, t: listings and items; b2/c2: the next higher; and,
+        -- from the second listing on, the price tiers (see Tier): w, then m
         self.acc[item] = { b = buyout, c = count, q = count, l = 1, t = count }
         return true
     end
+    if tier then Tier(a, RoundUp(buyout, count), count) end
     a.l, a.t = a.l + 1, a.t + count
     local lhs, rhs = buyout * a.c, a.b * count   -- compares the unit prices exactly, with no division
     if lhs < rhs then
@@ -174,9 +219,56 @@ local ItemsJob = {}
 ItemsJob.__index = ItemsJob
 
 PR.ITEMS_STEP = 400          -- items turned into saved entries per step of an ItemsJob (the size of a scan's read step)
+PR.TIERS_STEP = 600         -- work units (below) per step of an ItemsJob with ITEMS_STEP items; the step stops at whichever limit comes first
+PR.TIER_ITEM_COST = 8        -- work units besides its tiers that summarising and writing one item's distribution costs (measured: a string of ~30 numbers)
+
+-- (A3) The saved distribution text of an item with two or more tiers, from the batch's tiers. The sorted lists are the job's scratch lists,
+-- reused item after item (the entries beyond n are cleared so the sort sees exactly n). Returns the text and the number of tiers.
+local function DistEntry(job, a)
+    local m = a.m
+    local ps, qs, ls, ms = job.sp, job.sq, job.sl, job.sm
+    local n = 0
+    for u in pairs(m) do if u > 0 then n = n + 1 ps[n] = u end end
+    for k = n + 1, job.sn do ps[k] = nil end
+    job.sn = n
+    table.sort(ps)
+    local shift = D.SHIFT
+    for k = 1, n do
+        local u = ps[k]
+        local v = m[u]
+        local l = v % shift                      -- (D.Unpack, inlined: this runs once per tier)
+        qs[k], ls[k] = (v - l) / shift, l
+        if l > 1 then ms[k] = m[-u] end
+    end
+    return D.Encode(ps, qs, ls, ms, n), n
+end
 
 function Batch:ItemsJob()
-    return setmetatable({ acc = self.acc, priority = self.priority, out = {}, n = 0, phase = "count", cursor = nil }, ItemsJob)
+    -- the distribution is built beside the entries, unless the batch already gave it up; one item that cannot be summarised ends it for the
+    -- whole scan (the minimum entries are unaffected), so a scan never writes a distribution it did not finish
+    local job = { acc = self.acc, priority = self.priority, out = {}, n = 0, phase = "count", cursor = nil, tiers = 0, stepTiers = 0, widest = 0 }
+    if self.distBad then
+        job.distWhy = self.distBad
+    else
+        job.dist, job.sp, job.sq, job.sl, job.sm, job.sn = {}, {}, {}, {}, {}, 0
+    end
+    return setmetatable(job, ItemsJob)
+end
+
+-- The entry of one item, and its distribution when it has two or more tiers. Returns the tiers it summarised (the step's work).
+function ItemsJob:Make(id)
+    local a = self.acc[id]
+    self.out[id] = Entry(a)
+    if self.dist and a.m then
+        local ok, text, n = pcall(DistEntry, self, a)
+        if ok and text then
+            self.dist[id] = text
+            if n > self.widest then self.widest = n end
+            return n
+        end
+        self.dist, self.distWhy = nil, "failed"
+    end
+    return 0
 end
 
 -- Does up to `limit` items of work (counting and listing an item cost a tenth of building its entry). Returns true when finished.
@@ -203,10 +295,13 @@ function ItemsJob:Step(limit)
     end
     if self.phase == "build" then
         local id, left = self.cursor, limit
-        while left > 0 do
+        local work = limit * (PR.TIERS_STEP / PR.ITEMS_STEP)   -- the tiers one step may summarise, in proportion to the items it may build
+        self.stepTiers = 0
+        while left > 0 and work > 0 do
             id = next(acc, id)
-            if id == nil then self.phase = "done" self.cursor = nil return true end
-            out[id] = Entry(acc[id])
+            if id == nil then self.phase = "done" self.cursor = nil self:Release() return true end
+            local cost = self:Make(id)
+            work, self.stepTiers = work - (cost > 0 and cost + PR.TIER_ITEM_COST or 0), self.stepTiers + cost
             self.cursor = id
             left = left - 1
         end
@@ -237,23 +332,29 @@ function ItemsJob:Step(limit)
     end
     if self.phase == "sorted" then
         local ids, left = self.ids, limit
-        while left > 0 and self.at < PR.MAX_ITEMS do
+        local work = limit * (PR.TIERS_STEP / PR.ITEMS_STEP)
+        self.stepTiers = 0
+        while left > 0 and work > 0 and self.at < PR.MAX_ITEMS do
             self.at = self.at + 1
-            local id = ids[self.at]
-            out[id] = Entry(acc[id])
+            local cost = self:Make(ids[self.at])
+            work, self.stepTiers = work - (cost > 0 and cost + PR.TIER_ITEM_COST or 0), self.stepTiers + cost
             left = left - 1
         end
-        if self.at >= PR.MAX_ITEMS then self.phase = "done" return true end
+        if self.at >= PR.MAX_ITEMS then self.phase = "done" self:Release() return true end
         return false
     end
     return self.phase == "done"
 end
 
--- items, how many, whether over the limit, how many dropped; only once Step has returned true
+-- the scratch lists are not needed once the last item is built
+function ItemsJob:Release() self.sp, self.sq, self.sl, self.sm = nil, nil, nil, nil end
+
+-- items, how many, whether over the limit, how many dropped, and the distribution { [itemID] = text } of the items with two or more price tiers
+-- (nil when it could not be built whole: see distWhy); only once Step has returned true
 function ItemsJob:Result()
     if self.phase ~= "done" then return nil end
-    if self.n <= PR.MAX_ITEMS then return self.out, self.n, false, 0 end
-    return self.out, PR.MAX_ITEMS, true, self.n - PR.MAX_ITEMS
+    if self.n <= PR.MAX_ITEMS then return self.out, self.n, false, 0, self.dist end
+    return self.out, PR.MAX_ITEMS, true, self.n - PR.MAX_ITEMS, self.dist
 end
 
 function Batch:Items()
@@ -396,6 +497,7 @@ local function Checked(key, m, legacy)
             local from = Int(m.v2from, 1, 200000)
             info.v2from = from and H.Day(from * H.DAY) or nil
             info.compact = Compact(m.compact)
+            info.dist = type(m.dist) == "table" and m.dist or nil
             info.scanLog = type(m.scans) == "table" and m.scans or nil
             info.dayLog = type(m.days) == "table" and m.days or nil
         end
@@ -470,23 +572,50 @@ function PR.BeginCommit(key, scan)
     -- the legacy minimum history is FROZEN (format 3): a scan never adds to it, it only expires what is too old (the "old" phase)
     local day = H.Day(at)
     local feed = PR.FEED_LEGACY_HISTORY == true and day ~= nil and WholeRead(scan)
-    local job = setmetatable({ key = key, scan = scan, at = at, old = old, upd = {}, drop = {}, phase = feed and "scan" or "old", cursor = nil,
-        done = 0, total = 0, added = 0, day = day, feed = feed }, Job)
+    -- (A3) a distribution comes with the scan only as a table made by algorithm D.ALG; it is checked entry by entry (phase "dist") against the
+    -- scan's own minimum entries before it is trusted, and a scan without one (or with a bad one) is saved without any: never a part of one
+    local dist = type(scan.dist) == "table" and scan.alg == D.ALG and scan.dist or nil
+    local job = setmetatable({ key = key, scan = scan, at = at, old = old, upd = {}, drop = {}, phase = dist and "dist" or (feed and "scan" or "old"),
+        cursor = nil, done = 0, total = 0, added = 0, day = day, feed = feed, dist = dist }, Job)
+    if dist then for _ in pairs(dist) do job.total = job.total + 1 end end
     local oldHist = old and old.scope == "full" and old.hist or nil
     job.oldHist = oldHist
     job.oldCount = 0
     if oldHist then for _ in pairs(oldHist) do job.oldCount = job.oldCount + 1 end end
     local n = 0
     if feed then for _ in pairs(scan.items) do n = n + 1 end end
-    job.total = n + job.oldCount
+    job.total = job.total + n + job.oldCount
     return job
 end
+
+-- Does a distribution entry agree with the minimum entry of the same item in the same scan? (it decodes, starts at the same price, and holds
+-- the same items and listings in all; the minimum entry's items at its exact cheapest fraction fit inside the first tier)
+local function DistAgrees(entry, text)
+    if type(entry) ~= "string" then return false end
+    local p, q, l, t = entry:match("^(%d+),(%d+),(%d+),(%d+)")
+    local d = p and D.Decode(text)
+    return d ~= nil and d.min == tonumber(p) and d.tiers[1].q >= tonumber(q) and d.l == tonumber(l) and d.t == tonumber(t)
+end
+local DIST_COST = 3   -- a distribution entry is checked at about three times the work of merging one item
 
 -- Merges up to `limit` more items. Returns true when every item has been merged.
 function Job:Step(limit)
     limit = limit or PR.COMMIT_STEP
     local oldHist, upd, drop, day = self.oldHist, self.upd, self.drop, self.day
     local left = limit
+    if self.phase == "dist" then
+        local id, text = self.cursor, nil
+        local items = self.scan.items
+        while left > 0 do
+            id, text = next(self.dist, id)
+            if id == nil then self.distOk = true break end
+            left = left - DIST_COST
+            self.done = self.done + 1
+            if not DistAgrees(items[id], text) then self.distOk = false break end
+            self.cursor = id
+        end
+        if self.distOk ~= nil then self.phase, self.cursor = (self.feed and "scan" or "old"), nil end
+    end
     if self.phase == "scan" then
         local id, entry = self.cursor, nil
         while left > 0 do
@@ -599,17 +728,22 @@ local function BuildMarket(self, hist, sd)
     local snap = { seq = seq, kind = "full", at = at, records = read, used = used, invalid = Int(scan.invalid, 0, W.MAX_ID),
         noBuyout = Int(scan.noBuyout, 0, W.MAX_ID), partial = Int(scan.partial, 0, W.MAX_ID) or 0,
         items = Int(scan.n, 0, PR.MAX_ITEMS) or 0, auto = scan.auto == true, client = ClientBuild() }
+    -- alg says the dist table below came from algorithm alg for THIS scan's items and passed the commit's checks; it is absent otherwise
+    if self.distOk == true then snap.alg = D.ALG end
     local v2from = oldFull and old.v2from or day
     local m = { f = PR.MARKET_FORMAT, scope = "full", realm = Text(scan.realm, 60), side = Text(scan.side, 20) or "unknown", at = at,
         complete = scan.complete == true, cut = scan.cut == true or scan.changed == true or nil, read = read, used = used,
         partial = Int(scan.partial, 0, W.MAX_ID) or 0, n = Int(scan.n, 0, PR.MAX_ITEMS) or 0,
         hn = self.oldCount + self.added - (self.dropped or 0), items = scan.items, hist = hist, sd = sd,
         snap = snap, scans = scans, days = days, v2from = v2from }
+    -- dist belongs to ONE scan: this scan's replaces the old one whole, and a scan without a checked distribution leaves none (an old one
+    -- would describe listings that are gone)
+    if snap.alg then m.dist = self.dist end
     -- the later milestones' containers are never written here, only carried forward from a market that has them (a build that fills
     -- them must not lose them to this one); a market without them gets none
     local raw = oldFull and self.oldRaw or nil
     if raw then
-        for _, k in ipairs({ "dist", "h2", "c2", "compact" }) do if type(raw[k]) == "table" then m[k] = raw[k] end end
+        for _, k in ipairs({ "h2", "c2", "compact" }) do if type(raw[k]) == "table" then m[k] = raw[k] end end
     end
     return m
 end
@@ -690,6 +824,54 @@ function PR.Lookup(market, item)
     x = Int(x, 1, PR.MAX_COPPER)
     return { price = price, qty = Int(q, 1, W.MAX_ID), listings = Int(l, 1, W.MAX_ID), total = Int(t, 1, W.MAX_ID),
         next = x and x > price and x or nil, at = market.at, complete = market.complete, scope = market.scope }
+end
+
+-- (A3) The price distribution of one item in the market's newest scan: Dist.Decode's table, or nil and why:
+--   "unlisted"    the market has no usable minimum entry for the item
+--   "noevidence"  the newest scan carries no algorithm-1 distribution (a scan from before A3, one whose distribution could not be built whole)
+--   "missing"     the scan has the evidence and the item's minimum entry says it has a second price, but there is no entry
+--   "malformed"   an entry exists and cannot be trusted (it does not decode, or contradicts the minimum entry)
+-- An item with ONE price has no entry by design (what the scan wrote is "no entry" with alg 1): the answer is then a one-tier distribution made
+-- from its minimum entry, with single = true. Its largest single listing is known only when it has one listing. (An item whose second price
+-- rounds to the same copper as its first can say x = 0 without being single-priced; the scan writes an entry for any item with two tiers, so
+-- the only way that item lacks one is damage, which this cannot see.)
+function PR.Distribution(info, item)
+    if type(info) ~= "table" or info.scope ~= "full" then return nil, "noevidence" end
+    local lk = PR.Lookup(info, item)
+    if not lk then return nil, "unlisted" end
+    if not (info.snap and info.snap.alg == D.ALG and info.dist) then return nil, "noevidence" end
+    local e = info.dist[item]
+    if e == nil then
+        if lk.next then return nil, "missing" end
+        local p = lk.price
+        return { alg = D.ALG, r = p, a = p, q25 = p, q50 = p, q75 = p, hi = p, near = lk.total, t = lk.total, l = lk.listings, min = p, single = true,
+            tiers = { { p = p, q = lk.total, l = lk.listings, m = lk.listings == 1 and lk.total or nil } }, tq = 0, tl = 0 }
+    end
+    local d = D.Decode(e)
+    if not d or d.min ~= lk.price or d.t ~= lk.total or d.l ~= lk.listings then return nil, "malformed" end
+    return d
+end
+
+-- (A3, the contract A4 records from) THE OBSERVATION of one item in a market's newest accepted scan: everything history needs, read from ONE
+-- scan (the snapshot, the minimum entry and the distribution entry were saved by one Apply and are checked to belong together), or nil and why
+-- ("noformat": not a format 3 market, "nosnapshot", "inconsistent": the snapshot is not the market's newest scan, "unlisted"):
+--   { item, market (key), seq, at (the scan's time), p (minimum), r (Recent Price; nil with noRecent = the reason when there is no usable
+--     distribution), t (items listed), l (buyout listings), partial (records of that scan lacked their information), complete, cut (listings
+--     may be missing: not a whole read), whole (= not cut), auto, alg }
+-- Nothing is calculated that the scan did not provide and nothing is saved: there is no second copy of this in the database.
+function PR.Observation(info, item)
+    if type(info) ~= "table" or info.scope ~= "full" or info.format ~= 3 then return nil, "noformat" end
+    local snap = info.snap
+    if not snap then return nil, "nosnapshot" end
+    if snap.at ~= info.at then return nil, "inconsistent" end
+    local lk = PR.Lookup(info, item)
+    if not lk then return nil, "unlisted" end
+    local obs = { item = item, market = info.key, seq = snap.seq, at = snap.at, p = lk.price, t = lk.total, l = lk.listings,
+        partial = (snap.partial or 0) > 0, complete = info.complete == true, cut = info.cut == true, whole = info.cut ~= true,
+        auto = snap.auto == true, alg = snap.alg }
+    local d, why = PR.Distribution(info, item)
+    if d then obs.r = d.r else obs.noRecent = why end
+    return obs
 end
 
 -- What buying `qty` of an item at that auction house is expected to cost, from what the scan saw of it (Lookup's answer, or nil).

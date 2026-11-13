@@ -292,3 +292,170 @@ Pure("market.trend.window-and-percent", function(t)
         t:Same(down.percent, -up.percent, ("mirror: %d from %d (seed 7400000, draw %d)"):format(d, a, i))
     end
 end)
+
+---------------------------------------------------------------------------
+-- The price distribution (A3): Recent Price, quartiles, the saved text, the stepped build
+---------------------------------------------------------------------------
+-- Pure data in, production functions with explicit inputs (Prices.NewBatch / ItemsJob, Dist.*), nothing saved, nothing read from the player's
+-- market. Seeds: 7700001..7700012. The expected Recent Prices below are the document's (docs/workshop/market-data-foundation-v2.md, 5.2); the
+-- reference model (REF.ExpectDist) lines every item up and reads ranks, a second derivation that shares no code with Dist.lua.
+
+local function Listing(u, q) return { item = 1, count = q, buyout = u * q, info = true } end
+local function DistOf(PR, records)
+    local b = PR.NewBatch()
+    for _, r in ipairs(records) do b:Add(r.item, r.count, r.buyout, r.info) end
+    local items, _, _, _, dist = b:Items()
+    return items, dist
+end
+local function RefOf(records)
+    local ref = {}
+    for _, r in ipairs(records) do ref[#ref + 1] = { b = r.buyout, c = r.count } end
+    return REF.ExpectDist(ref)
+end
+
+-- a representative Recent Price: the cases whose answer depends on a boundary
+Pure("market.dist.recent", function(t)
+    local PR, D = t.W.Prices, t.W.Dist
+    if not (D and REF and REF.ExpectDist) then t:Skip("the distribution or its reference model is not loaded") end
+    local cases = {
+        { "1 healthy spread", { { 9500, 5 }, { 9800, 5 }, { 10000, 10 }, { 10200, 10 }, { 10500, 10 }, { 11000, 5 } }, 9741 },
+        { "3 thin, one cheap unit (the strict 25% boundary)", { { 1000, 1 }, { 5000, 3 } }, 5000 },
+        { "5b few cheap under a wall", { { 4500, 5 }, { 6000, 200 } }, 5878 },
+        { "11 bait volume 29%", { { 2000, 8 }, { 5000, 20 } }, 2143 },
+        { "12 bait volume 20%", { { 2000, 5 }, { 5000, 20 } }, 5000 },
+        { "17 large expensive wall", { { 5000, 20 }, { 9000, 1000 } }, 8739 },
+        { "18 manipulator just over half", { { 2510, 12 }, { 5000, 38 } }, 3008 },
+        { "20 manipulator just under half", { { 2490, 12 }, { 5000, 38 } }, 5000 },
+    }
+    for _, c in ipairs(cases) do
+        local records = {}
+        for _, x in ipairs(c[2]) do records[#records + 1] = Listing(x[1], x[2]) end
+        local _, dist = DistOf(PR, records)
+        local d = dist and dist[1] and D.Decode(dist[1])
+        t:Check(d ~= nil, c[1] .. ": the entry reads")
+        if d then
+            t:Same(d.r, c[3], c[1] .. ": Recent Price")
+            t:Same(dist[1], RefOf(records).text, c[1] .. ": the saved text equals the reference model's")
+        end
+    end
+    local _, one = DistOf(PR, { Listing(300000, 1) })
+    t:Same(one[1], nil, "one price: no distribution entry")
+end)
+
+-- quartiles, anchor, supply near the price, tiers and tail: seeded houses against the reference model
+Pure("market.dist.quartiles", function(t)
+    local PR, D = t.W.Prices, t.W.Dist
+    if not (D and FX and REF and REF.ExpectDist) then t:Skip("the distribution or its reference model is not loaded") end
+    for i = 1, 12 do
+        local seed = 7700000 + i
+        local gen = FX.Listings(seed, { items = 2, records = 24 + i, tiers = 2 + i % 7, invalid = 0.1, noBuyout = 0.1 })
+        local b = PR.NewBatch()
+        for _, r in ipairs(gen.records) do b:Add(r.item, r.count, r.buyout, r.info) end
+        local items, _, _, _, dist = b:Items()
+        local priced = {}
+        for _, r in ipairs(gen.records) do
+            if r.intent == "priced" then priced[r.item] = priced[r.item] or {}; table.insert(priced[r.item], { b = r.buyout, c = r.count }) end
+        end
+        for item, list in pairs(priced) do
+            local e = REF.ExpectDist(list)
+            local tag = ("seed %d item %d"):format(seed, item)
+            if e.distinct < 2 then
+                t:Same(dist[item], nil, tag .. ": one price tier, no entry")
+            else
+                t:Same(dist[item], e.text, tag .. ": the saved text")
+                local d = dist[item] and D.Decode(dist[item])
+                if d then
+                    t:Check(d.min <= d.q25 and d.q25 <= d.a and d.a <= d.q50 and d.q50 <= d.q75 and d.q75 <= d.hi and d.min <= d.r and d.r <= d.q50, tag .. ": ordering of the statistics")
+                    local q, l = d.tq, d.tl
+                    for _, tr in ipairs(d.tiers) do q, l = q + tr.q, l + tr.l end
+                    t:Check(q == e.t and l == e.l, tag .. ": tiers and tail hold every item and listing")
+                end
+            end
+        end
+        t:Yield()
+    end
+end)
+
+-- numbers: malformed records do not reach the tiers, the numeric limits, and a text that is not exactly what the writer makes
+Pure("market.dist.numbers", function(t)
+    local PR, D = t.W.Prices, t.W.Dist
+    if not (D and FX and FX.BAD) then t:Skip("the distribution or the fixtures are not loaded") end
+    local clean = { Listing(100, 5), Listing(150, 2), Listing(200, 1), Listing(400, 3) }
+    local _, want = DistOf(PR, clean)
+    local noisy = {}
+    for _, r in ipairs(clean) do noisy[#noisy + 1] = r end
+    for _, field in ipairs({ "item", "count", "buyout" }) do
+        for _, bad in ipairs(FX.BAD[field]) do
+            local r = { item = 1, count = 5, buyout = 600, info = true }
+            r[field] = bad
+            noisy[#noisy + 1] = r
+        end
+    end
+    local items2, dist2 = DistOf(PR, noisy)
+    t:Same(dist2[1], want[1], "malformed records (a NaN, an infinity, fractions, strings, limits) leave the distribution as it was")
+    for id in pairs(items2) do t:Check(id == 1, "no item invented by a malformed record") end
+
+    -- limits: the dearest allowed price and the largest quantities, exact (expected values worked out in exact fractions, not by this code)
+    local function Stats(tiers)
+        local ps, qs, ls = {}, {}, {}
+        for i, x in ipairs(tiers) do ps[i], qs[i], ls[i] = x[1], x[2], 1 end
+        return D.Stats(ps, qs, ls, #tiers)
+    end
+    t:Same((Stats({ { 99999999990, 3 }, { 99999999995, 5 }, { 99999999999, 2 } })), 99999999990, "Recent Price near the copper limit")
+    t:Same((Stats({ { 99999999000, 600000000 }, { 99999999999, 1900000000 } })), 99999999200, "a mean of 99999999199.8")
+    t:Same((Stats({ { 1, 2500000000 }, { 2, 100 }, { 99999999999, 1 } })), 1, "2.5 billion items at one copper")
+    local r, _, _, _, _, _, _, _, _, exact = Stats({ { 50000000000, 600000000 }, { 99999999999, 1900000000 } })
+    t:Check(not exact and math.abs(r - 60000000000) <= 1 and t.W.Finite(r), "beyond 2^53 the result is flagged inexact and within a copper")
+
+    -- the reader refuses what the writer never makes
+    local good = want[1]
+    t:Check(D.Decode(good) ~= nil, "the good entry reads")
+    for name, text in pairs({
+        ["a NaN"] = (good:gsub("^1,%d+", "1,nan")), ["an infinity"] = (good:gsub("^1,%d+", "1,inf")), ["an exponent"] = (good:gsub("^1,%d+", "1,1e3")),
+        ["a negative"] = (good:gsub("^1,%d+", "1,-5")), ["a leading zero"] = (good:gsub("^1,", "1,0")), ["a fraction"] = (good:gsub("^1,%d+", "1,10.5")),
+        ["another algorithm"] = (good:gsub("^1,", "2,")), ["copper over the limit"] = (good:gsub("^1,%d+", "1,100000000000")),
+    }) do
+        t:Check(D.Decode(text) == nil, name .. " is refused")
+    end
+    t:Check(D.Decode(nil) == nil and D.Decode(12) == nil and D.Decode("") == nil, "a missing, numeric or empty value is refused")
+end)
+
+-- the stepped build and the saved text: bounded work per step, the same entries at any step size, every entry reads back
+Pure("market.dist.finalize", function(t)
+    local PR, D = t.W.Prices, t.W.Dist
+    if not (D and FX and FX.Bulk) then t:Skip("the distribution or the fixtures are not loaded") end
+    local bulk = FX.Bulk(7700101, 1500, 150, 400)
+    while not bulk:Done() do bulk:Fill(500) t:Yield() end
+    local batch = PR.NewBatch()
+    for i = 1, bulk.n do batch:Add(bulk.item[i], bulk.count[i], bulk.buyout[i], true) end
+    local whole = { batch:Items() }
+    t:Check(whole[5] ~= nil, "a distribution was built")
+    local sizes = { PR.ITEMS_STEP, 25, 3 }
+    for _, limit in ipairs(sizes) do
+        local job = batch:ItemsJob()
+        local steps, worst = 0, 0
+        repeat
+            local done = job:Step(limit)
+            steps = steps + 1
+            if job.stepTiers > worst then worst = job.stepTiers end
+            t:Yield()
+        until done or steps > 100000
+        t:Check(worst <= limit * (PR.TIERS_STEP / PR.ITEMS_STEP) + job.widest, ("step %d: no step summarised more tiers than its budget plus one item (%d)"):format(limit, worst))
+        local items, _, _, _, dist = job:Result()
+        local same = true
+        for id, e in pairs(whole[1]) do if items[id] ~= e then same = false end end
+        for id, e in pairs(whole[5]) do if dist[id] ~= e then same = false end end
+        t:Check(same, ("step %d: the same entries and distributions as one pass (%d steps)"):format(limit, steps))
+    end
+    -- every entry reads, holds the items and listings the fixture counted, and starts at the item's price
+    local bad, n = 0, 0
+    for id, text in pairs(whole[5]) do
+        n = n + 1
+        local d = D.Decode(text)
+        local tr = bulk.truth
+        if not d or d.t ~= tr.t[id] or d.l ~= tr.l[id] or d.min ~= tonumber(whole[1][id]:match("^(%d+),")) then bad = bad + 1 end
+        if n % 20 == 0 then t:Yield() end
+    end
+    t:Same(bad, 0, ("%d distribution entries read back and conserve items, listings and the minimum"):format(n))
+    t:Note(("%d items, %d with a distribution"):format(whole[2], n))
+end)

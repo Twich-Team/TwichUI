@@ -60,12 +60,12 @@ m("market.batch.next-price-highest", PRICES, "elseif not a.b2 or buyout * a.c2 <
 # M7.1: the batch's entries are built a few hundred at a time (ItemsJob), by the scan as well as by Items(); the stepped path has its own defects
 PRICES_TESTS = "test_workshop_prices.lua"
 m("market.batch.stepped-boundary-item-lost", PRICES,
-  "            out[id] = Entry(acc[id])\n            self.cursor = id\n            left = left - 1",
-  "            if left > 1 then out[id] = Entry(acc[id]) end\n            self.cursor = id\n            left = left - 1",
+  "            local cost = self:Make(id)\n            work, self.stepTiers",
+  "            if left > 1 then local cost = self:Make(id) end\n            local cost = 0\n            work, self.stepTiers",
   "the last item of every build step is skipped: a market of more than one step silently loses items at the step boundaries", [PRICES_TESTS])
 m("market.batch.stepped-ranking-shifted", PRICES,
-  "            local id = ids[self.at]\n            out[id] = Entry(acc[id])",
-  "            local id = ids[self.at + 1]\n            out[id] = Entry(acc[id])",
+  "            local cost = self:Make(ids[self.at])",
+  "            local cost = self:Make(ids[self.at + 1])",
   "over the item limit the kept items are read one rank late: the best-ranked item is dropped and the first one that did not fit is kept", [PRICES_TESTS, MKT])
 m("market.scan.build-ignores-closed-window", "TwichUI_Workshop/Scan.lua",
   "                if not SC.AuctionOpen() then return End(\"interrupted\", \"closed\") end\n                local Perf = R.Perf",
@@ -93,6 +93,75 @@ m("market.data.finite-always-true", DATA, "return tostring(v):find(\"^[%d%.eE%+%
   "the finiteness test accepts everything, so only comparisons stand between a NaN or an infinity and a price", [MKT])
 m("market.history.price-finite-dropped", HISTORY, "if not W.Finite(price) or price ~= floor(price)", "if type(price) ~= \"number\" or price ~= floor(price)",
   "the history accepts a price decided by comparison alone, which a client NaN passes", [MKT])
+
+# --- A3: the price distribution (Dist.lua) and its collection (Prices.lua, Scan.lua) -----------------------------------------------
+DIST = "TwichUI_Workshop/Dist.lua"
+DIST_TESTS = "test_workshop_dist.lua"
+SCAN = "TwichUI_Workshop/Scan.lua"
+m("market.dist.anchor-at-or-above", DIST, "if not a and c4 > t then a = p end", "if not a and c4 >= t then a = p end",
+  "the anchor is the first price AT a quarter of the items instead of strictly more than a quarter: thin markets anchor on the cheapest price", [DIST_TESTS], smoke=True)
+m("market.dist.band-size", DIST, "local base, want = ps[first], eligible * 3", "local base, want = ps[first], eligible * 4",
+  "the band is the cheapest 40% instead of 30% of the eligible items", [DIST_TESTS], smoke=True)
+m("market.dist.low-filter-off", DIST, "while ps[first] * 2 < a do first = first + 1 end", "while ps[first] * 2 < 0 do first = first + 1 end",
+  "the half-the-anchor filter is gone: a handful of cheap bait listings pull the Recent Price down", [DIST_TESTS], smoke=True)
+m("market.dist.low-filter-boundary", DIST, "while ps[first] * 2 < a do first = first + 1 end", "while ps[first] * 2 <= a do first = first + 1 end",
+  "a price of exactly half the anchor is ignored instead of kept", [DIST_TESTS])
+m("market.dist.tier-order-reversed", PRICES, "    table.sort(ps)\n    local shift = D.SHIFT",
+  "    table.sort(ps, function(x, y) return x > y end)\n    local shift = D.SHIFT",
+  "the tiers are written dearest first: tier 1 is no longer the minimum", [DIST_TESTS])
+m("market.dist.tier-quantity-lost", PRICES, "        m[unit] = v + count * D.SHIFT + 1", "        m[unit] = v + 1",
+  "a second listing at a known price adds a listing but none of its items", [DIST_TESTS])
+m("market.dist.new-tier-quantity-lost", PRICES, "        m[unit] = count * D.SHIFT + 1\n    end\nend", "        m[unit] = 1\n    end\nend",
+  "a listing at a new price enters its tier as one item instead of its stack", [DIST_TESTS])
+m("market.dist.second-price-quantity-lost", PRICES, "m = { [u0] = a.t * D.SHIFT + a.l, [unit] = count * D.SHIFT + 1 }", "m = { [u0] = a.t * D.SHIFT + a.l, [unit] = 1 }",
+  "the listing that starts the second tier arrives with one item instead of its stack", [DIST_TESTS])
+m("market.dist.first-tier-lost", PRICES, "m = { [u0] = a.t * D.SHIFT + a.l, [unit] = count * D.SHIFT + 1 }", "m = { [u0] = a.l, [unit] = count * D.SHIFT + 1 }",
+  "the items of the first tier are forgotten when the second price arrives", [DIST_TESTS])
+m("market.dist.tail-listings-wrong", DIST, "tq, tl = tq + qs[k], tl + ls[k]", "tq, tl = tq + qs[k], tl + 1",
+  "the tail counts one listing per price instead of the listings in it", [DIST_TESTS])
+m("market.dist.largest-listing-smallest", PRICES, "        m[-unit] = count > w and count or w", "        m[-unit] = count < w and count or w",
+  "the largest single listing of a tier is the smallest", [DIST_TESTS])
+m("market.dist.largest-listing-first-lost", PRICES, "        if not w then w = (v - v % D.SHIFT) / D.SHIFT end", "        if not w then w = 1 end",
+  "the first listing of a tier is forgotten when the second arrives: its stack never counts as the largest", [DIST_TESTS])
+m("market.dist.largest-listing-first-price", PRICES, "            if not w then w = a.t end              -- one listing so far: all its items", "            if not w then w = 1 end",
+  "the same before the item has a second price", [DIST_TESTS])
+m("market.dist.largest-listing-not-carried", PRICES, "        if w then m[-u0] = w end", "",
+  "when the second price arrives, the first tier's largest listing is dropped", [DIST_TESTS])
+m("market.dist.round-down", DIST, "local r = base + floor((2 * sum + got) / (2 * got))", "local r = base + floor((2 * sum) / (2 * got))",
+  "the Recent Price is rounded down instead of half up", [DIST_TESTS])
+m("market.dist.quartile-weight", DIST, "if not q75 and c4 >= t * 3 then q75 = p break end", "if not q75 and c4 >= t * 2 then q75 = p break end",
+  "the upper quartile is read at two thirds of the items", [DIST_TESTS])
+m("market.dist.median-rank", DIST, "if not q50 and cum * 2 >= t then q50 = p end", "if not q50 and cum * 2 > t then q50 = p end",
+  "the median is read strictly past half the items (a different percentile definition)", [DIST_TESTS])
+m("market.dist.near-limit", DIST, "if ps[k] * 10 > limit then break end", "if ps[k] * 10 >= limit then break end",
+  "supply at exactly 110% of the Recent Price is not counted as near it", [DIST_TESTS])
+m("market.dist.step-budget-ignored", PRICES, "        while left > 0 and work > 0 do\n            id = next(acc, id)", "        while left > 0 do\n            id = next(acc, id)",
+  "a finalization step is limited by items only: a market of many price tiers does all its sorting in one frame", [DIST_TESTS])
+m("market.dist.packing-limit-ignored", PRICES, "if tier and self.used > D.MAX_RECORDS then self.distBad, tier = \"records\", false end", "",
+  "more records than a packed tier can count are accumulated anyway: the listings carry into the items", [DIST_TESTS])
+m("market.dist.stale-kept-when-new-fails", PRICES, "    if snap.alg then m.dist = self.dist end", "    m.dist = self.dist or (self.oldRaw and self.oldRaw.dist)",
+  "a scan whose distribution failed keeps the previous scan's: it describes listings that are gone", [DIST_TESTS])
+m("market.dist.stale-carried-over", PRICES, "for _, k in ipairs({ \"h2\", \"c2\", \"compact\" }) do", "for _, k in ipairs({ \"dist\", \"h2\", \"c2\", \"compact\" }) do",
+  "the old scan's distribution overwrites the new one (the A2 carry-forward left in place for dist)", [DIST_TESTS])
+m("market.dist.alg-never-set", PRICES, "if self.distOk == true then snap.alg = D.ALG end", "if self.distOk == true then snap.alg = nil end",
+  "the snapshot never says which algorithm made its distribution", [DIST_TESTS])
+m("market.dist.alg-wrong", PRICES, "if self.distOk == true then snap.alg = D.ALG end", "if self.distOk == true then snap.alg = 2 end",
+  "the snapshot names the wrong algorithm", [DIST_TESTS])
+m("market.dist.alg-claimed-without-evidence", PRICES, "if self.distOk == true then snap.alg = D.ALG end", "if scan.items then snap.alg = D.ALG end",
+  "the snapshot claims algorithm 1 evidence for every scan, including one whose distribution failed", [DIST_TESTS])
+m("market.dist.commit-check-skipped", PRICES, "if not DistAgrees(items[id], text) then self.distOk = false break end", "",
+  "a distribution is saved without being checked against the scan's minimum entries", [DIST_TESTS])
+m("market.dist.agrees-ignores-price", PRICES, "return d ~= nil and d.min == tonumber(p) and", "return d ~= nil and",
+  "an entry that starts at another price than the item's minimum is accepted", [DIST_TESTS])
+m("market.dist.agrees-ignores-totals", PRICES, "and d.l == tonumber(l) and d.t == tonumber(t)", "",
+  "an entry whose items and listings are not the item's is accepted (another item's entry)", [DIST_TESTS])
+m("market.dist.finalize-after-cancel", SCAN, "            local function Build()\n                if mine ~= token or g ~= gen or SC.phase ~= \"reading\" then return end",
+  "            local function Build()\n                if false then return end",
+  "the finalization timer of a scan that ended (or was replaced by a new one) goes on building and saves for it", [DIST_TESTS, PRICES_TESTS])
+m("market.dist.observation-snapshot-unchecked", PRICES, "    if snap.at ~= info.at then return nil, \"inconsistent\" end\n", "",
+  "the observation mixes a snapshot with a market it does not belong to", [DIST_TESTS])
+m("market.dist.single-price-reported-missing", PRICES, "        if lk.next then return nil, \"missing\" end", "",
+  "an item that should have a distribution entry but has none is reported as single-priced", [DIST_TESTS])
 
 # --- history: folding, retention, windows ------------------------------------------------------------------------------
 m("market.history.fold-bucket-index", HISTORY, "local b = floor(d / H.BUCKET_DAYS)", "local b = floor((d + 1) / H.BUCKET_DAYS)",
@@ -333,9 +402,9 @@ m("market.schema.apply-skips-held-check", PRICES, "    if self.phase ~= \"ready\
   "    if self.phase ~= \"ready\" then return false, \"bad\" end",
   "a job begun before a newer version wrote the database is applied over it", [SCHEMA])
 m("market.schema.future-containers-dropped", PRICES,
-  "for _, k in ipairs({ \"dist\", \"h2\", \"c2\", \"compact\" }) do if type(raw[k]) == \"table\" then m[k] = raw[k] end end",
+  "for _, k in ipairs({ \"h2\", \"c2\", \"compact\" }) do if type(raw[k]) == \"table\" then m[k] = raw[k] end end",
   "for _, k in ipairs({}) do if type(raw[k]) == \"table\" then m[k] = raw[k] end end",
-  "a commit by this version silently discards distribution, history and budget records a later version wrote into the same database version", [SCHEMA])
+  "a commit by this version silently discards history and budget records a later version wrote into the same database version", [SCHEMA])
 m("market.schema.scan-log-unbounded", PRICES, "while #scans > PR.SCAN_LOG_MAX do table.remove(scans, 1) end", "",
   "the scan log grows without a bound", [SCHEMA])
 m("market.schema.coverage-boundary-moves", PRICES, "local v2from = oldFull and old.v2from or day", "local v2from = day",

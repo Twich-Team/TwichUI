@@ -172,9 +172,12 @@ end
 -- depend on the chunk size. About 2% of records are invalid (a count of 0) and 5% are bid-only (buyout 0). b.truth is what the generator
 -- KNOWS: read / used / noBuyout / invalid, and per item the listings (l), the items listed (t) and the cheapest unit price as a float (m),
 -- worked out here from the made-up numbers, not by the Workshop. Item ids are distinct and fixed: 1000 + 7 * k.
-function FX.Bulk(seed, n, items)
+-- spread (A3, default 40): how many copper above its base an item's unit price may be, so how many distinct price tiers an item can have. It
+-- changes only the value drawn, never the number of draws, so a given seed makes the same records at the default spread as before.
+function FX.Bulk(seed, n, items, spread)
     n = Clamp(n, 0, FX.BULK.records, 1000)
     items = Clamp(items, 1, FX.BULK.items, 300)
+    spread = Clamp(spread, 0, 30000, 40)
     local rng = FX.Rng(seed)
     local b = { seed = seed, n = n, nItems = items, filled = 0, item = {}, count = {}, buyout = {},
         truth = { read = 0, used = 0, noBuyout = 0, invalid = 0, l = {}, t = {}, m = {} } }
@@ -188,7 +191,7 @@ function FX.Bulk(seed, n, items)
             local id = 1000 + 7 * idx
             local count = STACK[rng:Int(1, #STACK)]
             local base = 20 + (idx * 37) % 9000
-            local buyout = count * (base + rng:Int(0, 40))
+            local buyout = count * (base + rng:Int(0, spread))
             local roll = rng:Next()
             self.item[i], self.count[i], self.buyout[i] = id, count, buyout
             tr.read = tr.read + 1

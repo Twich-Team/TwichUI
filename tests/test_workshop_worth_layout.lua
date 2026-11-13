@@ -11,7 +11,7 @@ dofile(TESTS .. "mi_mock.lua")
 local function Check(cond, msg) if not cond then error(msg or "check failed", 2) end end
 local function Same(a, b, msg) if a ~= b then error((msg or "") .. " expected " .. tostring(b) .. ", got " .. tostring(a), 2) end end
 
-local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Prices.lua", "Opportunities.lua",
+local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "Prices.lua", "Opportunities.lua",
   "Vendor.lua", "Shopping.lua", "Worth.lua", "WorthLayout.lua" }
 local function Load(c, file)
   local chunk = assert(loadfile(ROOT .. "../TwichUI_Workshop/" .. file))

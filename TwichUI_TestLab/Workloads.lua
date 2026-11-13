@@ -66,15 +66,20 @@ end
 -- 1. The auction batch (Prices.NewBatch / Add / Items)
 ---------------------------------------------------------------------------
 -- seed 7600001; records 1,000 / 10,000 / 50,000 (and 250,000, the scan's own boundary, offline only); distinct items 300 / 3,000 / 12,000 / 30,000
+-- VERSION 3 (A3): the entries are built together with the price distribution (Prices.lua, Dist.lua), so the work per item, the memory and the
+-- longest step include the per-item tier sort and summary. v2 figures are the minimum-only aggregation and are not comparable by Compare.
+-- Variants (same seed, other price spreads, ids with a tag): "wide" (up to 4,001 prices per item: many tiers), "narrow" (2 prices: concentrated),
+-- "deep" (60 items with thousands of tiers each: the longest per-item sort).
 local BATCH_STEP = 400   -- the step is the size the scan itself reads at a time
 
-local function Aggregate(size, items, offline)
+local function Aggregate(size, items, offline, spread, tag)
     local name = size >= 1000 and (floor(size / 1000) .. "k") or tostring(size)
     return Add({
-        id = "market.aggregate." .. name, fixture = "bulk.listings", seed = 7600001, size = size, unit = "records", work = size, offline = offline, v = 2,
+        id = "market.aggregate." .. (tag and (tag .. ".") or "") .. name, fixture = "bulk.listings", seed = 7600001, size = size, unit = "records",
+        work = size, offline = offline, v = 3,
         setup = function(ctx)
             local W, FX = Ctx(ctx)
-            local b = FX.Bulk(7600001, size, items)
+            local b = FX.Bulk(7600001, size, items, spread)
             while not b:Done() do b:Fill(1000) ctx.yield() end
             return { W = W, bulk = b, work = b.n }
         end,
@@ -86,11 +91,11 @@ local function Aggregate(size, items, offline)
         begin = function(st)
             local b = st.bulk
             local batch = st.W.Prices.NewBatch()
-            local at, entries, n, job = 0, nil, nil, nil
+            local at, entries, n, dist, job = 0, nil, nil, nil, nil
             local item, count, buyout = b.item, b.count, b.buyout
             local PR = st.W.Prices
-            -- the scan's own sequence (Scan.lua): records BATCH_STEP at a time, then the entries PR.ITEMS_STEP at a time. v1 called Items() in
-            -- one step, which is what the scan did before M7.1; its figures are not this workload's
+            -- the scan's own sequence (Scan.lua): records BATCH_STEP at a time, then the entries and distributions PR.ITEMS_STEP items (at most
+            -- PR.TIERS_STEP tiers) at a time. v1 called Items() in one step; v2 built the minimum entries only
             return function()
                 if at < b.n then
                     local last = min(b.n, at + BATCH_STEP)
@@ -100,13 +105,17 @@ local function Aggregate(size, items, offline)
                 end
                 job = job or batch:ItemsJob()
                 if not job:Step(PR.ITEMS_STEP) then return false end
-                entries, n = job:Result()
+                local _, _, _, _, d
+                entries, n, _, _, d = job:Result()
+                dist = d
                 return true
-            end, function() return { batch = batch, entries = entries, n = n } end
+            end, function() return { batch = batch, entries = entries, n = n, dist = dist } end
         end,
         signature = function(out)
             local b = out.batch
-            return ("%d/%d/%d/%d/%d"):format(b.read, b.used, b.noBuyout, b.invalid, out.n)
+            local nd = 0
+            if out.dist then for _ in pairs(out.dist) do nd = nd + 1 end end
+            return ("%d/%d/%d/%d/%d/%d"):format(b.read, b.used, b.noBuyout, b.invalid, out.n, nd)
         end,
         verify = function(st, out, ctx)
             local b, tr = out.batch, st.bulk.truth
@@ -117,6 +126,7 @@ local function Aggregate(size, items, offline)
             local distinct = 0
             for _ in pairs(tr.l) do distinct = distinct + 1 end
             if out.n ~= distinct then return false, ("%d items priced, the fixture listed %d"):format(out.n, distinct) end
+            if not out.dist then return false, "no distribution was built" end
             local i = 0
             for id, e in pairs(out.entries) do
                 i = i + 1
@@ -128,15 +138,39 @@ local function Aggregate(size, items, offline)
                 if l ~= tr.l[id] or t ~= tr.t[id] then return false, ("item %d: %s listings and %s items, the fixture made %d and %d"):format(id, tostring(l), tostring(t), tr.l[id], tr.t[id]) end
                 if p < m - 1e-6 or p >= m + 1 then return false, ("item %d: cheapest unit %.0f, the fixture's cheapest is %.3f"):format(id, p, m) end
             end
-            -- the small tier is also compared with the independent reference model, record by record
+            -- the distribution: an entry only for an item with 2 or more listings; each one reads, starts at the item's price, holds exactly the
+            -- items and listings the fixture counted, and is ordered (minimum <= quartiles <= highest, minimum <= Recent Price <= median)
+            local Dist = st.W.Dist
+            i = 0
+            for id, text in pairs(out.dist) do
+                i = i + 1
+                Pace(ctx, i, 500)
+                local d = Dist.Decode(text)
+                if not d then return false, "item " .. tostring(id) .. ": the distribution does not read" end
+                if tr.l[id] == nil or tr.l[id] < 2 then return false, ("item %d has %s listings and a distribution"):format(id, tostring(tr.l[id])) end
+                if d.t ~= tr.t[id] or d.l ~= tr.l[id] then return false, ("item %d: distribution holds %d items in %d listings, the fixture made %d in %d"):format(id, d.t, d.l, tr.t[id], tr.l[id]) end
+                local p = tonumber(out.entries[id]:match("^(%d+),"))
+                if d.min ~= p then return false, ("item %d: distribution starts at %d, the minimum entry says %d"):format(id, d.min, p) end
+            end
+            -- the small tier is also compared with the independent reference models, record by record
             local W, FX, REF = Ctx(ctx)
             if REF and st.bulk.n <= 2000 then
-                local records = {}
-                for k = 1, st.bulk.n do records[k] = { item = st.bulk.item[k], count = st.bulk.count[k], buyout = st.bulk.buyout[k], info = true } end
+                local records, listings = {}, {}
+                for k = 1, st.bulk.n do
+                    records[k] = { item = st.bulk.item[k], count = st.bulk.count[k], buyout = st.bulk.buyout[k], info = true }
+                    local c, bo = st.bulk.count[k], st.bulk.buyout[k]
+                    if c >= 1 and bo >= 1 then
+                        local list = listings[st.bulk.item[k]]
+                        if not list then list = {} listings[st.bulk.item[k]] = list end
+                        list[#list + 1] = { b = bo, c = c }
+                    end
+                end
                 local exp = REF.ExpectBatch(records)
                 if exp.used ~= b.used or exp.n ~= out.n then return false, "the reference model counts differently" end
                 for id, e in pairs(exp.items) do
                     if out.entries[id] ~= REF.EntryText(e) then return false, "item " .. id .. " differs from the reference model" end
+                    local x = REF.ExpectDist(listings[id])
+                    if out.dist[id] ~= x.text then return false, ("item %d: distribution %s, the reference model says %s"):format(id, tostring(out.dist[id]), tostring(x.text)) end
                 end
             end
             return true
@@ -146,7 +180,12 @@ end
 Aggregate(1000, 300)
 Aggregate(10000, 3000)
 Aggregate(50000, 12000)
+Aggregate(10000, 300, false, 4000, "wide")
+Aggregate(10000, 3000, false, 1, "narrow")
 Aggregate(250000, 30000, true)
+Aggregate(50000, 1500, true, 4000, "wide")
+Aggregate(250000, 30000, true, 4000, "wide")
+Aggregate(250000, 60, true, 20000, "deep")
 
 ---------------------------------------------------------------------------
 -- 2. History: replaying observations (insert, fold, retention) and the queries

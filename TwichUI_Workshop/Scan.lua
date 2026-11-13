@@ -31,6 +31,7 @@
 local R = TwichUI
 local W = R.Workshop
 local PR = W.Prices
+local D = W.Dist
 local Int, Text = W.Int, W.Text
 local SC = {}
 W.Scan = SC
@@ -41,6 +42,7 @@ local MAX_REREADS = 2        -- reads repeated for that reason, at most
 local MAX_RESTARTS = 3       -- times a read may be started over because the NUMBER of listings changed while it was read
 local MAX_SETTLE = 10        -- seconds a wait for quiet may last: more updates than that no longer push the read back
 local BATCH = 400            -- records read per step; the next step runs on the next timer tick so the interface stays responsive
+local BUILD_MS = 3           -- milliseconds the entries and distributions may be built per timer tick (a step is at most Prices.TIERS_STEP tiers)
 local MAX_RECORDS = 250000   -- records read, at most (more makes the scan not complete)
 local THROTTLE_WAIT = 30     -- seconds to wait for the auction house to be ready to take a request
 local RESPONSE_WAIT = 90     -- seconds to wait for the listings after the request
@@ -167,14 +169,15 @@ local function SaveStep(mine)
     if not (good and applied) then return End("failed", (good and why == "held") and "held" or "unsaved") end
     -- the result is set before the end is announced: a watcher told of the end reads the message at once
     SC.result = { complete = result.complete, used = result.used, read = result.read, items = result.n, partialInfo = result.partialInfo,
-        changed = result.changed, cut = result.cut, dropped = result.dropped, updates = result.updates, restarts = result.restarts }
+        changed = result.changed, cut = result.cut, dropped = result.dropped, updates = result.updates, restarts = result.restarts,
+        alg = job.distOk == true and D.ALG or nil }
     End("done")
 end
 
 local function Finish(result)
     local scan = { realm = run.realm, side = run.side, at = time(), complete = result.complete, cut = result.cut, changed = result.changed,
         read = result.read, used = result.used, invalid = result.invalid, noBuyout = result.noBuyout, partial = result.partialInfo, n = result.n,
-        items = result.items }
+        items = result.items, dist = result.dist, alg = result.dist and D.ALG or nil }
     local job, why = PR.BeginCommit(run.key, scan)
     if not job then
         if why == "kept" then return End("failed", "kept") end
@@ -208,10 +211,10 @@ local function EnterSettle(wait)
     Changed()
 end
 
-local function ReadDone(batch, truncated, items, n, over, dropped)
+local function ReadDone(batch, truncated, items, n, over, dropped, dist)
     local cut = truncated or over
     local result = { items = items, n = n, read = batch.read, used = batch.used, invalid = batch.invalid, noBuyout = batch.noBuyout,
-        partialInfo = batch.partialInfo, dropped = dropped,
+        partialInfo = batch.partialInfo, dropped = dropped, dist = dist,
         cut = cut, complete = batch.partialInfo == 0 and not cut, updates = run.updates, restarts = run.restarts }
     -- more updates during the read are item data arriving, not a different market. A different number of listings is: start
     -- over a few times, and if it never holds still keep what was read as a scan that is NOT complete (never a failure).
@@ -268,7 +271,11 @@ local function BeginRead()
                 if not SC.AuctionOpen() then return End("interrupted", "closed") end
                 local Perf = R.Perf
                 local bt = Perf and Perf.on and Perf.Start("workshop.scan")
-                local done = job:Step()
+                -- steps of at most Prices.TIERS_STEP tiers, as many as fit in BUILD_MS (a step is never begun after that), then the frame goes on
+                local clock = type(debugprofilestop) == "function" and debugprofilestop or nil
+                local t0 = clock and clock()
+                local done
+                repeat done = job:Step() until done or not t0 or clock() - t0 >= BUILD_MS
                 if bt then Perf.Stop(bt) end
                 if not done then return C_Timer.After(0, Build) end
                 ReadDone(batch, truncated, job:Result())

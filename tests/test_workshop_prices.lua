@@ -11,7 +11,7 @@ local function Same(a, b, msg) if a ~= b then error((msg or "") .. " expected " 
 -- an item entry "p,q,l,t,x" as numbers
 local function Parse(e) local p, q, l, t, x = e:match("^(%d+),(%d+),(%d+),(%d+),(%d+)$"); return { tonumber(p), tonumber(q), tonumber(l), tonumber(t), tonumber(x) } end
 
-local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua" }
+local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua" }
 
 -- a virtual clock and timers, a fake auction house
 local function Setup()
@@ -470,6 +470,9 @@ do
   -- M7.1: the saved entries are built on the next timer tick(s), not in the last read step
   Same(SC.state, "scanning"); Same(SC.phase, "reading", "the entries are still to be built")
   Check(t.Tick()); Same(t.ah.infoCalls, 1003, "building the entries reads no more records")
+  -- A3: the distribution is summarised in steps of at most Prices.TIERS_STEP price tiers, and this item has about that many: a tick or two more
+  for _ = 1, 3 do if SC.state == "scanning" then Check(t.Tick()) end end
+  Same(t.ah.infoCalls, 1003, "and still no more records")
   Same(SC.state, "done"); Check(SC.result.complete); Same(SC.result.items, 3, "every item, wanted or not"); Same(SC.result.used, 1002)
   Same(t.ah.outOfRange, nil, "records 0 .. n-1 are read, nothing outside them")
   Same(PR.Lookup(PR.Market("Realm|Alliance"), 10).qty, 1, "the record at index 0 (101 copper) counts")

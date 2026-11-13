@@ -26,6 +26,8 @@ Storage.lua
 Stock.lua
 # The price history of one item: a compact, bounded string per item (pure)
 History.lua
+# The price distribution of one item: quartiles, the Recent Price, the saved text and its checked reading (pure)
+Dist.lua
 # Auction prices: collecting a scan, the saved markets (TwichUIWorkshopDB), what one craft costs and earns (no game calls, no frames)
 Prices.lua
 # The Opportunities list: rows, filter, sort, the basis text (pure)

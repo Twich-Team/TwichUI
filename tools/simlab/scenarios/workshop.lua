@@ -462,6 +462,18 @@ Lab.Step("opportunities: scan against the fake auction house", function()
     Check("state", "Bronze Bar cheapest 400c (800/2), 2 at that price, 2 listings, 5 items", "400/2/2/5", P(2841))
     Check("state", "Coarse Thread has no price", "none", P(2320))
     Check("state", "an item no recipe uses is priced too: 3 for 999 is 333c each", "333/3/1/3", P(55555))
+    -- A3: the price distribution kept beside the minimum entries. Hand arithmetic: Peacebloom is 20 at 5c and 10 at 7c (30 items, the 25% mark
+    -- is passed inside the first price, so Recent Price 5c); Bronze Bar 2 at 400c and 3 at 500c (the cheapest 30% of 5 items is 1.5 items, all at
+    -- 400c); the two Frostweave-like single listings of item 118 are 150c and 180c. Every other item has one price: no entry.
+    local mk = TwichUIWorkshopDB.markets["SimulatedRealm|unknown"]
+    local ids = {}
+    for id in pairs(mk.dist or {}) do ids[#ids + 1] = id end
+    table.sort(ids)
+    Check("state", "the scan kept a checked distribution (algorithm 1) for the three items with two prices, and for no other", "1/118,2447,2841", tostring(mk.snap.alg) .. "/" .. table.concat(ids, ","))
+    Check("state", "Peacebloom distribution", "1,5,5,5,5,7,7,20|5:20:1;7:10:1", tostring(mk.dist[2447]))
+    Check("state", "Bronze Bar distribution", "1,400,400,400,500,500,500,2|400:2:1;500:3:1", tostring(mk.dist[2841]))
+    Check("state", "item 118 distribution", "1,150,150,150,150,180,180,1|150:1:1;180:1:1", tostring(mk.dist[118]))
+    Check("state", "the scan reports the algorithm of the distribution it kept", "1", tostring(R.Workshop.Scan.result.alg))
 end)
 
 Lab.Step("opportunities: rows, ordering, filtering, unknowns", function()

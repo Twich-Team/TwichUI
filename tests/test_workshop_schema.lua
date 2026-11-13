@@ -38,7 +38,7 @@ local function Clone(v) return Reload(Ser(v)) end
 ---------------------------------------------------------------------------
 -- A client with the Workshop loaded: the current files, or the released 1.3 files; a fake auction house; a virtual clock
 ---------------------------------------------------------------------------
-local NOW = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua" }
+local NOW = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua" }
 local V13 = { "Data.lua", "Materials.lua", "Queue.lua", "History.lua", "Prices.lua", "Scan.lua", "Market.lua" }
 
 local function Setup(which, db)
@@ -536,7 +536,9 @@ do
   -- the current code carries later milestones' containers forward through a commit instead of dropping them
   Check(Commit(now, KEY, 106, { [10] = 440, [14] = 77 }, nil, 3))
   local m = now.DB().markets[KEY]
-  Same(Ser(m.dist), Ser(Seeded.markets[KEY].dist), "dist carried"); Same(Ser(m.h2), Ser(Seeded.markets[KEY].h2), "h2 carried")
+  -- A3: dist describes ONE scan, so it is not carried (an old scan's would describe listings that are gone); the later containers still are
+  Same(m.dist, nil, "dist is replaced by the scan's own (this scan had none): not carried"); Same(m.snap.alg, nil)
+  Same(Ser(m.h2), Ser(Seeded.markets[KEY].h2), "h2 carried")
   Same(Ser(m.c2), Ser(Seeded.markets[KEY].c2), "c2 carried"); Same(Ser(m.compact), Ser(Seeded.markets[KEY].compact), "compact carried")
   Same(m.snap.seq, 3, "numbered after the logged scans"); Same(#m.scans, 3); Same(m.v2from, 102)
   Same(Ser(now.DB().markets["Realm|Horde"]), Ser(Seeded.markets["Realm|Horde"]), "another market untouched")

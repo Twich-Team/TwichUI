@@ -10,6 +10,8 @@
 --     uses division or floating point, so the model does not depend on 53-bit products or on rounding. A unit price is then rounded UP to
 --     whole copper (at least 1) by the same integer division. The model states what production's "next price" x means (xModel) and what a
 --     literal reading of "the next higher price listed" would be (xStrict); they differ in one documented corner (see REF.ExpectBatch).
+--  1b. PRICE DISTRIBUTION (REF.ExpectDist, A3). Production walks a running total over sorted price tiers; the model lines up every item
+--     one by one and reads quartiles, the anchor, the Recent Price band and the near-price supply off ranks (see the section's comment).
 --  2. HISTORY (REF.NewMarket / Item). Production keeps, per item, a compact string: seven exact days and up to three 28-day buckets that
 --     hold only low, high, sum and count. The model keeps EVERY observed day in a plain map (`truth`, never compacted) and the same
 --     two tiers as SETS of days (`exact`, `coarse`); a bucket's low, high, sum and count are computed from its days when asked. So what
@@ -196,6 +198,65 @@ function REF.Keep(items, limit, priority)
         count = count + 1
     end
     return kept, n - count
+end
+
+---------------------------------------------------------------------------
+-- 1b. The price distribution of one item (A3)
+---------------------------------------------------------------------------
+-- Production keeps TIERS (a distinct unit price with its items and listings), adds up a running total and walks it. The model never forms a
+-- tier to compute with: it lines up EVERY ITEM of every priced listing by unit price (a stack of 5 is five entries, so the list is as long as
+-- the items listed: keep the scenarios small) and reads each answer off a RANK in that list:
+--   q25 q50 q75  the entry at rank ceil(T/4), ceil(T/2), ceil(3T/4)                       (nearest rank)
+--   a            the entry at rank floor(T/4) + 1: the first rank STRICTLY above a quarter of the items
+--   r            keep the entries priced at least half of a; E of them are left; the band is the cheapest 3E/10 entries: the first floor(3E/10)
+--                whole ones and (3E mod 10)/10 of the next, so the sum in tenths of an entry is 10 x (their prices) + (3E mod 10) x (the next price)
+--                and the mean is that over 3E, rounded half up (whole numbers only, no fractions, no floating point)
+--   near         the entries priced at most 1.10 x r, counted one by one (price x 10 <= r x 11)
+-- The tiers of the saved text, its tail and the text itself are then written from the model's own grouping. `records` are { b, c } valid
+-- priced listings (the buyout of the whole stack and its count) of ONE item.
+function REF.ExpectDist(records)
+    local entries, byUnit, order = {}, {}, {}
+    local listings = 0
+    for _, rec in ipairs(records) do
+        local u = CeilCopper(rec.b, rec.c)
+        listings = listings + 1
+        for _ = 1, rec.c do entries[#entries + 1] = u end
+        local g = byUnit[u]
+        if not g then g = { p = u, q = 0, l = 0, m = 0 } byUnit[u] = g order[#order + 1] = g end
+        g.q, g.l = g.q + rec.c, g.l + 1
+        if rec.c > g.m then g.m = rec.c end
+    end
+    table.sort(entries)
+    table.sort(order, function(x, y) return x.p < y.p end)
+    local T = #entries
+    local e = { t = T, l = listings, min = entries[1], hi = entries[T], tiers = {}, tq = 0, tl = 0 }
+    local function Rank(num, den) return entries[(DivMod(T * num + den - 1, den))] end
+    e.q25, e.q50, e.q75 = Rank(1, 4), Rank(1, 2), Rank(3, 4)
+    e.a = entries[(DivMod(T, 4)) + 1]
+    local eligible = {}
+    for _, x in ipairs(entries) do if 2 * x >= e.a then eligible[#eligible + 1] = x end end
+    local E = #eligible
+    local whole, tenths = DivMod(3 * E, 10)
+    local sum = 0
+    for i = 1, whole do sum = sum + 10 * eligible[i] end
+    if tenths > 0 then sum = sum + tenths * eligible[whole + 1] end
+    e.r = RoundHalfUp(sum, 3 * E)
+    e.near = 0
+    for _, x in ipairs(entries) do if x * 10 <= e.r * 11 then e.near = e.near + 1 end end
+    for i, g in ipairs(order) do
+        if i <= 6 then e.tiers[i] = g else e.tq, e.tl = e.tq + g.q, e.tl + g.l end
+    end
+    e.distinct = #order
+    if #order >= 2 then
+        local function N(v) return ("%.0f"):format(v) end
+        local segs = {}
+        for i, g in ipairs(e.tiers) do
+            segs[i] = N(g.p) .. ":" .. N(g.q) .. ":" .. N(g.l) .. (g.l > 1 and (":" .. N(g.m)) or "")
+        end
+        e.text = ("1,%s,%s,%s,%s,%s,%s,%s|%s"):format(N(e.r), N(e.a), N(e.q25), N(e.q50), N(e.q75), N(e.hi), N(e.near), table.concat(segs, ";"))
+        if e.tq > 0 then e.text = e.text .. "|" .. N(e.tq) .. ":" .. N(e.tl) end
+    end
+    return e
 end
 
 ---------------------------------------------------------------------------
