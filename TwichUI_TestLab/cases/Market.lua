@@ -459,3 +459,88 @@ Pure("market.dist.finalize", function(t)
     t:Same(bad, 0, ("%d distribution entries read back and conserve items, listings and the minimum"):format(n))
     t:Note(("%d items, %d with a distribution"):format(whole[2], n))
 end)
+
+---------------------------------------------------------------------------
+-- (A4) Version-2 history: History2's ring, daily points and buckets against the independent model (Reference.lua section 5), byte for
+-- byte, on a few seeded calendars; and the brief's three-scan day by hand. Pure: History2.Update/Retain on strings held by the case only.
+-- Seeds 7650001..7650004. The offline suite runs hundreds (tests/test_workshop_history2.lua).
+---------------------------------------------------------------------------
+local function H2Calendar(rng, nItems)
+    local scans, day, state = {}, 20000 + rng:Int(0, 6), {}
+    for id = 1, nItems do state[id] = { p = rng:Int(10, 5000), t = rng:Int(1, 40), l = rng:Int(1, 6), live = rng:Chance(0.7) } end
+    for _ = 1, rng:Int(20, 60) do
+        day = day + rng:Pick({ 0, 1, 1, 2, 6, 25, 70 })
+        local minute = rng:Int(0, 200)
+        for _ = 1, rng:Pick({ 1, 2, 3 }) do
+            minute = minute + rng:Pick({ 1, 60, 240 })
+            if minute >= 1440 then break end
+            local sc = { at = day * DAY + minute * 60, whole = not rng:Chance(0.1), partial = rng:Chance(0.15) and 1 or 0, items = {} }
+            for id, s in pairs(state) do
+                if rng:Chance(0.12) then s.live = not s.live end
+                if s.live then
+                    if rng:Chance(0.4) then s.p = math.max(1, s.p + rng:Int(-50, 50)) end
+                    if rng:Chance(0.4) then s.t = math.max(1, s.t + rng:Int(-5, 5)) end
+                    local r = s.p + rng:Pick({ 0, 3, 200 })
+                    if rng:Chance(0.15) then r = nil end
+                    sc.items[id] = { p = s.p, r = r, t = s.t, l = s.l }
+                end
+            end
+            scans[#scans + 1] = sc
+        end
+    end
+    return scans
+end
+
+Pure("market.history2.model", function(t)
+    local H2 = t.W.History2
+    local compared = 0
+    for seed = 7650001, 7650004 do
+        local rng = FX.Rng(seed)
+        local nItems = rng:Int(2, 5)
+        local model = REF.H2New()
+        local h2, c2, lastAt = {}, {}, nil
+        for _, sc in ipairs(H2Calendar(rng, nItems)) do
+            if REF.H2Scan(model, sc) then
+                local ctx = { T = math.floor(sc.at / DAY), M = math.floor(sc.at / 60), prevM = lastAt and math.floor(lastAt / 60) or nil }
+                for id = 1, nItems do
+                    local o = sc.items[id]
+                    if o then
+                        local obs = H2.Obs(sc.at, o.p, o.r, o.t, o.l, sc.partial > 0)
+                        h2[id], c2[id] = H2.Update(h2[id], c2[id], obs, ctx)
+                    elseif h2[id] or c2[id] then
+                        h2[id], c2[id] = H2.Retain(h2[id], c2[id], ctx)
+                    end
+                end
+                lastAt = sc.at
+                for id = 1, nItems do
+                    local eh, ec = REF.H2Text(REF.H2Expect(model, id))
+                    if eh ~= h2[id] or ec ~= c2[id] then
+                        t:Check(false, ("seed %d item %d at %d: h2 %s, the model says %s"):format(seed, id, sc.at, tostring(h2[id]), tostring(eh)))
+                        return
+                    end
+                    compared = compared + 1
+                end
+                t:Yield()
+            end
+        end
+    end
+    t:Check(compared > 50, "item states compared: " .. compared)
+    t:Note(("%d item states equal to the model, byte for byte (4 seeds)"):format(compared))
+end)
+
+Pure("market.history2.day", function(t)
+    local H2 = t.W.History2
+    local D0 = 20000
+    local function Ctx(at, prev) return { T = math.floor(at / DAY), M = math.floor(at / 60), prevM = prev and math.floor(prev / 60) or nil } end
+    local a1, a2, a3 = D0 * DAY + 8 * 3600, D0 * DAY + 14 * 3600, D0 * DAY + 20 * 3600
+    local h = H2.Update(nil, nil, H2.Obs(a1, 900, 1000, 100, 10), Ctx(a1))
+    h = H2.Update(h, nil, H2.Obs(a2, 500, 600, 70, 8), Ctx(a2, a1))
+    h = H2.Update(h, nil, H2.Obs(a3, 1000, 1100, 120, 12), Ctx(a3, a2))
+    local m0 = math.floor(a1 / 60)
+    -- worked by hand: closing 1000 / 1100 / 120 / 12, three scans; lows 500 (min), 600 (Recent), 70 (items); nothing above the close
+    t:Same(h, ("%.0f,0,900,100,100,10;360,0,500,100,70,8;360,0,1000,100,120,12|%.0f:%.0f,1000,100,120,12,3,500,0,500,0,50,0"):format(m0, D0, D0), "the brief's day")
+    -- missing Recent Price: an empty field, never 0
+    local x = H2.Update(nil, nil, H2.Obs(a1, 700, nil, 4, 2), Ctx(a1))
+    t:Same(x, ("%.0f,0,700,,4,2|%.0f:%.0f,700,,4,2"):format(m0, D0, D0), "unknown Recent Price")
+    t:Same(H2.DecodeH2("|20000:20000,5,0,1,1,2,0,0,0,0,0,0"), nil, "a non-canonical spelling is refused")
+end)

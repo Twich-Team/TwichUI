@@ -632,6 +632,14 @@ Outside the requested scope and **not audited here**: about 35 other `v ~= v` si
 
 **Market data foundation 2.0, A3 (2026-11-12): the price distribution.** Verification policy applied (section F): independent reference (`REF.ExpectDist`, `Reference.lua`) and the document's 22 worked cases, 375 seeded scenarios, byte-for-byte comparison of the minimum entries with the released 1.3 code, `--group market.dist` mutation catalog (`tools/mutations/workshop.py`), `market.aggregate.*` benchmark **v3** with wide, narrow and deep variants, four Test Lab cases (`market.dist.*`), and the simulator's fake-house scan asserting the saved distribution. Details and results: `docs/workshop/market-data-foundation-v2.md`, "A3 as built". Real-client acceptance is pending.
 
+**Market data foundation A4 (2026-11-13): version-2 history.** New evidence for history work: `tests/test_workshop_history2.lua` (the
+independent history model in `Reference.lua` section 5, byte-for-byte comparisons through `History2` directly and through the real commit
+pipeline, gap reasons, atomicity, the budget guard), `tests/test_loadtest.lua` (the development-only load-test companions), the
+`market.history2.*` mutation entries (catalog, `--group market.history2`), `history2.*` workloads and the Lab group "Saved-data load test"
+(`docs/testlab.md`). Policy for later history changes: run `test_workshop_history2.lua` and `--group market.history2`; a change to the saved text
+needs the model's writer (`REF.H2Text`) changed independently, never copied from `History2.lua`. **Open:** the real-client load gate (not run),
+and the Lab's `market.history2.*` cases in the client. Details: `docs/workshop/market-data-foundation-v2.md`, "A4 as built".
+
 ## Unresolved decisions (product input needed)
 
 1. **How the Lab is opened.** `/run C_AddOns.LoadAddOn("TwichUI_TestLab")` (M1, no change to the release), or a hidden core `/tui lab` that only says "development builds only" when the addon is absent (about 15 lines shipped to players).

@@ -10,7 +10,7 @@ dofile(TESTS .. "mi_mock.lua")
 local function Check(cond, msg) if not cond then error(msg, 2) end end
 local function Same(a, b, msg) if a ~= b then error((msg or "") .. " expected " .. tostring(b) .. ", got " .. tostring(a), 2) end end
 
-local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "Prices.lua", "Opportunities.lua",
+local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua",
     "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua" }
 local D = 86400
 
@@ -52,6 +52,9 @@ local function Setup()
     local chunk = assert(loadfile(ROOT .. "../TwichUI_Workshop/" .. f)); setfenv(chunk, c); chunk("TwichUI_Workshop", {})
   end
   c.TwichUI.Workshop.Prices.FEED_LEGACY_HISTORY = true   -- these tests exercise the 1.3 history feed; production keeps it frozen (test_workshop_schema.lua)
+  -- the version-2 history (A4) is recorded beside it in production; its pipeline, steps and limits have their own tests
+  -- (test_workshop_history2.lua), so the step counts below stay those of the legacy feed alone
+  c.TwichUI.Workshop.Prices.RECORD_HISTORY = false
   local t = { c = c, ah = ah, W = c.TwichUI.Workshop }
   function t.Fire(event)
     for _, fr in ipairs(made) do if fr.events[event] and fr.scripts.OnEvent then fr.scripts.OnEvent(fr, event) end end

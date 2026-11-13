@@ -11,7 +11,7 @@ local function Same(a, b, msg) if a ~= b then error((msg or "") .. " expected " 
 -- an item entry "p,q,l,t,x" as numbers
 local function Parse(e) local p, q, l, t, x = e:match("^(%d+),(%d+),(%d+),(%d+),(%d+)$"); return { tonumber(p), tonumber(q), tonumber(l), tonumber(t), tonumber(x) } end
 
-local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua" }
+local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua" }
 
 -- a virtual clock and timers, a fake auction house
 local function Setup()

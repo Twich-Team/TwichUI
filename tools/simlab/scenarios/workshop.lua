@@ -474,6 +474,21 @@ Lab.Step("opportunities: scan against the fake auction house", function()
     Check("state", "Bronze Bar distribution", "1,400,400,400,500,500,500,2|400:2:1;500:3:1", tostring(mk.dist[2841]))
     Check("state", "item 118 distribution", "1,150,150,150,150,180,180,1|150:1:1;180:1:1", tostring(mk.dist[118]))
     Check("state", "the scan reports the algorithm of the distribution it kept", "1", tostring(R.Workshop.Scan.result.alg))
+    -- A4: the version-2 history recorded from the same scan (the A3 observation of each listed item): one ring point and one daily point.
+    -- Peacebloom: minimum 5c, Recent Price 5c (dr 0), 30 items in 2 listings; the 3-for-999 item has one price, so Recent Price = minimum.
+    local h2 = mk.h2 or {}
+    local function Shape(id) return ((h2[id] or ""):gsub("^%d+,", "M,"):gsub("|%d+:%d+,", "|D:D,")) end
+    Check("state", "A4: Peacebloom's history: one observation and one day, Recent Price = minimum here", "M,0,5,0,30,2|D:D,5,0,30,2", Shape(2447))
+    Check("state", "A4: a one-price item records r = p (dr 0), never an empty Recent Price", "M,0,333,0,3,1|D:D,333,0,3,1", Shape(55555))
+    Check("state", "A4: no history for an item with no buyout listing", "nil", tostring(h2[2320]))
+    local n2 = 0
+    for _ in pairs(h2) do n2 = n2 + 1 end
+    Check("state", "A4: one history entry per priced item, and the history's own record", "13/13/1", ("%d/%s/%s"):format(n2, tostring(mk.h2info and mk.h2info.items), tostring(mk.h2info and mk.h2info.v)))
+    Check("state", "A4: the scan log says this scan was recorded (flags 1 + 2 + 64)", "67", (mk.scans[#mk.scans] or ""):match("^%d+,%d+,(%d+),") or "none")
+    local hs = R.Workshop.Market.History(2447, "recent", { market = "SimulatedRealm|unknown" })
+    local kinds = {}
+    for _, pnt in ipairs(hs and hs.points or {}) do kinds[#kinds + 1] = pnt.kind .. ":" .. tostring(pnt.v) end
+    Check("state", "A4: Market.History gives a day point and an observation, nothing invented", "day:5,obs:5", table.concat(kinds, ","))
 end)
 
 Lab.Step("opportunities: rows, ordering, filtering, unknowns", function()

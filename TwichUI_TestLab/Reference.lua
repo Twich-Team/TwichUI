@@ -1181,3 +1181,219 @@ function REF.Order(rows, opts)
     end
     return kept
 end
+
+---------------------------------------------------------------------------
+-- 5. VERSION-2 HISTORY (market data foundation 2.0, A4): a deliberately naive model of History2.lua
+---------------------------------------------------------------------------
+-- The model keeps EVERY accepted scan in full (its time, whether it was a whole read, which items it listed and their p, r, t, l) and derives
+-- the expected ring, daily points and buckets of an item from that full record at the end, in one pass per tier, the way the foundation
+-- document states the rules (section 3.3 and "A4 as built"): it never folds incrementally, never decodes a string and shares no code with
+-- History2.lua. Its own writer (REF.H2Text) builds the saved text from field lists, so a byte comparison with production is a real check of
+-- the append path. What it does NOT model: the budget guard (compaction is tested on its own), malformed saved strings, and the per-item
+-- "stale" rule (the commit refuses a whole scan dated before the newest recorded one, so a stale item cannot occur in a real market).
+local H2REF = { RING = 8, RING_MIN = 2880, DAY = 86400 }
+REF.H2 = H2REF
+
+function REF.H2New() return { all = {}, rec = {} } end
+
+-- One ACCEPTED scan: { at, whole (not cut, not changed), partial (records lacking information), items = { [id] = { p, r, t, l } } }.
+-- Returns whether it is recorded into the history: a whole read dated no earlier than the newest recorded scan.
+function REF.H2Scan(model, scan)
+    model.all[#model.all + 1] = scan
+    local last = model.rec[#model.rec]
+    local fed = scan.whole == true and (not last or scan.at >= last.at)
+    scan.fed = fed
+    if fed then model.rec[#model.rec + 1] = scan end
+    return fed
+end
+
+local function Half(sum, n) return math.floor((2 * sum + n) / (2 * n)) end   -- half up (sums here are whole numbers below 2^53)
+REF.H2Half = Half
+
+-- The expected decoded state of item `id`: ring (list of { first, last, p, r, t, l, pf } in minutes), days (list of { d, p, r, t, l, n, plo, phi,
+-- rlo, rhi, tlo, thi, pf }), buckets (list of { k, s, n, nr, plo, pm, phi, rm, rlo, rhi, tm, tlo, thi, lm, pf, exact = { pm, rm, tm, lm } }),
+-- as of the newest recorded scan. nil when nothing is recorded.
+function REF.H2Expect(model, id)
+    local newest = model.rec[#model.rec]
+    if not newest then return nil end
+    local M, T = math.floor(newest.at / 60), math.floor(newest.at / H2REF.DAY)
+    -- the ring: an observation extends the newest point only when the values (and the partial flag) are the same, that point was seen by
+    -- the previous recorded scan (same minute), and it is still within 48 hours of this one; else it is a new point
+    local pts, prevMin = {}, nil
+    for _, sc in ipairs(model.rec) do
+        local sm = math.floor(sc.at / 60)
+        local o = sc.items[id]
+        if o then
+            local pf = (sc.partial or 0) > 0
+            local lp = pts[#pts]
+            if lp and prevMin and lp.last == prevMin and lp.last >= sm - H2REF.RING_MIN and lp.p == o.p and lp.r == o.r and lp.t == o.t and lp.l == o.l and lp.pf == pf then
+                lp.last = sm
+            else
+                pts[#pts + 1] = { first = sm, last = sm, p = o.p, r = o.r, t = o.t, l = o.l, pf = pf }
+            end
+        end
+        prevMin = sm
+    end
+    local ring = {}
+    for _, x in ipairs(pts) do if x.last >= M - H2REF.RING_MIN then ring[#ring + 1] = x end end
+    while #ring > H2REF.RING do table.remove(ring, 1) end
+    -- every listed day: the closing values are the day's last recorded scan; the ranges every scan of it
+    local byDay, order = {}, {}
+    for _, sc in ipairs(model.rec) do
+        local o = sc.items[id]
+        if o then
+            local d = math.floor(sc.at / H2REF.DAY)
+            local x = byDay[d]
+            if not x then x = { d = d, n = 0, obs = {} } byDay[d] = x order[#order + 1] = d end
+            x.n = x.n + 1
+            x.obs[#x.obs + 1] = o
+            x.p, x.r, x.t, x.l = o.p, o.r, o.t, o.l
+            if (sc.partial or 0) > 0 then x.pf = true end
+        end
+    end
+    table.sort(order)
+    local allDays = {}
+    for _, d in ipairs(order) do
+        local x = byDay[d]
+        for _, o in ipairs(x.obs) do
+            x.plo, x.phi = math.min(x.plo or o.p, o.p), math.max(x.phi or o.p, o.p)
+            x.tlo, x.thi = math.min(x.tlo or o.t, o.t), math.max(x.thi or o.t, o.t)
+            if o.r then x.rlo, x.rhi = math.min(x.rlo or o.r, o.r), math.max(x.rhi or o.r, o.r) end
+        end
+        allDays[#allDays + 1] = x
+    end
+    -- tiers by the newest day T: daily from the start of the calendar week holding T - 29; weekly to a pair of weeks ending 60 days back;
+    -- two-week to 120 days back
+    local dailyFrom = 7 * math.floor((T - 29) / 7)
+    local days, weeks, wlist = {}, {}, {}
+    for _, x in ipairs(allDays) do
+        if x.d >= dailyFrom then days[#days + 1] = x
+        else
+            local w = math.floor(x.d / 7)
+            if not weeks[w] then weeks[w] = {} wlist[#wlist + 1] = w end
+            table.insert(weeks[w], x)
+        end
+    end
+    local function Bucket(k, s, list)
+        local b = { k = k, s = s, n = #list, nr = 0, exact = {} }
+        local sp, sr, st, sl = 0, 0, 0, 0
+        for _, x in ipairs(list) do
+            b.plo, b.phi = math.min(b.plo or x.plo, x.plo), math.max(b.phi or x.phi, x.phi)
+            b.tlo, b.thi = math.min(b.tlo or x.tlo, x.tlo), math.max(b.thi or x.thi, x.thi)
+            if x.rlo then b.rlo, b.rhi = math.min(b.rlo or x.rlo, x.rlo), math.max(b.rhi or x.rhi, x.rhi) end
+            sp, st, sl = sp + x.p, st + x.t, sl + x.l
+            if x.r then sr, b.nr = sr + x.r, b.nr + 1 end
+            if x.pf then b.pf = true end
+        end
+        b.pm, b.tm, b.lm = Half(sp, b.n), Half(st, b.n), Half(sl, b.n)
+        b.exact = { pm = sp / b.n, tm = st / b.n, lm = sl / b.n, rm = b.nr > 0 and sr / b.nr or nil }
+        if b.nr > 0 then b.rm = Half(sr, b.nr) end
+        return b
+    end
+    local bks, pairsOf, plist = {}, {}, {}
+    for _, w in ipairs(wlist) do
+        local wb = Bucket(w, 7, weeks[w])
+        if 14 * math.floor(w / 2) + 13 < T - 60 then
+            local k = math.floor(w / 2)
+            if not pairsOf[k] then pairsOf[k] = {} plist[#plist + 1] = k end
+            table.insert(pairsOf[k], wb)
+        else
+            bks[#bks + 1] = wb
+        end
+    end
+    -- a two-week bucket: the documented merge of its (rounded) weekly buckets, each metric weighted by its own count; and the exact means
+    local merged = {}
+    for _, k in ipairs(plist) do
+        local ws = pairsOf[k]
+        local f = { k = k, s = 14, n = 0, nr = 0, exact = {} }
+        local ep, et, el, er, tlok = 0, 0, 0, 0, true
+        for _, wb in ipairs(ws) do
+            f.plo, f.phi = math.min(f.plo or wb.plo, wb.plo), math.max(f.phi or wb.phi, wb.phi)
+            f.tlo, f.thi = math.min(f.tlo or wb.tlo, wb.tlo), math.max(f.thi or wb.thi, wb.thi)
+            if wb.rlo then f.rlo, f.rhi = math.min(f.rlo or wb.rlo, wb.rlo), math.max(f.rhi or wb.rhi, wb.rhi) end
+            if wb.pf then f.pf = true end
+            ep, et, el = ep + wb.exact.pm * wb.n, et + wb.exact.tm * wb.n, el + wb.exact.lm * wb.n
+            if wb.nr > 0 then er = er + wb.exact.rm * wb.nr end
+        end
+        local a, b = ws[1], ws[2]
+        if not b then
+            f.n, f.nr, f.pm, f.rm, f.tm, f.lm = a.n, a.nr, a.pm, a.rm, a.tm, a.lm
+        else
+            f.n, f.nr = a.n + b.n, a.nr + b.nr
+            f.pm, f.tm, f.lm = Half(a.pm * a.n + b.pm * b.n, f.n), Half(a.tm * a.n + b.tm * b.n, f.n), Half(a.lm * a.n + b.lm * b.n, f.n)
+            if a.nr > 0 and b.nr > 0 then f.rm = Half(a.rm * a.nr + b.rm * b.nr, f.nr) else f.rm = a.rm or b.rm end
+        end
+        f.exact = { pm = ep / f.n, tm = et / f.n, lm = el / f.n, rm = f.nr > 0 and er / f.nr or nil }
+        merged[#merged + 1] = f
+    end
+    local all = {}
+    for _, f in ipairs(merged) do all[#all + 1] = f end
+    for _, b in ipairs(bks) do all[#all + 1] = b end
+    local kept = {}
+    for _, b in ipairs(all) do if b.k * b.s + b.s - 1 >= T - 120 then kept[#kept + 1] = b end end
+    return { ring = ring, days = days, buckets = kept, T = T, M = M }
+end
+
+-- The saved text of an expected state, written from the document's field lists (not from History2.lua): h2 text or nil, c2 text or nil
+local function F(v) return ("%.0f"):format(v) end
+function REF.H2Text(e)
+    if not e then return nil, nil end
+    local h2, c2
+    if #e.days > 0 then
+        local rs, prev = {}, nil
+        for _, x in ipairs(e.ring) do
+            local f = { F(prev and x.first - prev.first or x.first), F(x.last - x.first), F(x.p), x.r and F(x.r - x.p) or "", F(x.t), F(x.l) }
+            rs[#rs + 1] = table.concat(f, ",") .. (x.pf and "!" or "")
+            prev = x
+        end
+        local ds, pd = {}, nil
+        for _, x in ipairs(e.days) do
+            local f = { F(pd and x.d - pd or x.d), F(x.p), x.r and F(x.r - x.p) or "", F(x.t), F(x.l) }
+            if x.n > 1 then
+                f[#f + 1] = F(x.n)
+                local flat = x.plo == x.p and x.phi == x.p and x.tlo == x.t and x.thi == x.t and x.rlo == x.r and x.rhi == x.r
+                if not flat then
+                    f[#f + 1] = F(x.p - x.plo) f[#f + 1] = F(x.phi - x.p)
+                    if x.r then f[#f + 1] = F(x.r - x.rlo) f[#f + 1] = F(x.rhi - x.r)
+                    elseif x.rlo then f[#f + 1] = F(x.rlo) f[#f + 1] = F(x.rhi)
+                    else f[#f + 1] = "" f[#f + 1] = "" end
+                    f[#f + 1] = F(x.t - x.tlo) f[#f + 1] = F(x.thi - x.t)
+                end
+            end
+            ds[#ds + 1] = table.concat(f, ",") .. (x.pf and "!" or "")
+            pd = x.d
+        end
+        h2 = table.concat(rs, ";") .. "|" .. F(e.days[#e.days].d) .. ":" .. table.concat(ds, ";")
+    end
+    if #e.buckets > 0 then
+        local bs = {}
+        for _, b in ipairs(e.buckets) do
+            local f = { F(b.k), F(b.s), F(b.n), F(b.nr), F(b.plo), F(b.pm - b.plo), F(b.phi - b.pm) }
+            if b.rm then f[#f + 1] = F(b.rm) f[#f + 1] = F(b.rm - b.rlo) f[#f + 1] = F(b.rhi - b.rm)
+            elseif b.rlo then f[#f + 1] = "" f[#f + 1] = F(b.rlo) f[#f + 1] = F(b.rhi)
+            else f[#f + 1] = "" f[#f + 1] = "" f[#f + 1] = "" end
+            f[#f + 1] = F(b.tm) f[#f + 1] = F(b.tm - b.tlo) f[#f + 1] = F(b.thi - b.tm) f[#f + 1] = F(b.lm)
+            bs[#bs + 1] = table.concat(f, ",") .. (b.pf and "!" or "")
+        end
+        c2 = table.concat(bs, ";")
+    end
+    return h2, c2
+end
+
+-- Why a day has no point for an item, from the full scan record: "noscan", "incomplete" (only cut or changed scans), "unlisted" (a recorded
+-- scan that day did not list it), "unknown" (a whole read that day was not recorded and no recorded scan was); nil when the item was listed
+function REF.H2DayReason(model, id, d)
+    local any, whole, fed, listed = false, false, false, false
+    for _, sc in ipairs(model.all) do
+        if math.floor(sc.at / H2REF.DAY) == d then
+            any = true
+            if sc.whole then whole = true end
+            if sc.fed then fed = true if sc.items[id] then listed = true end end
+        end
+    end
+    if listed then return nil end
+    if fed then return "unlisted" end
+    if whole then return "unknown" end
+    if any then return "incomplete" end
+    return "noscan"
+end

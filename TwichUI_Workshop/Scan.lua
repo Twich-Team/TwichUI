@@ -43,6 +43,7 @@ local MAX_RESTARTS = 3       -- times a read may be started over because the NUM
 local MAX_SETTLE = 10        -- seconds a wait for quiet may last: more updates than that no longer push the read back
 local BATCH = 400            -- records read per step; the next step runs on the next timer tick so the interface stays responsive
 local BUILD_MS = 3           -- milliseconds the entries and distributions may be built per timer tick (a step is at most Prices.TIERS_STEP tiers)
+local SAVE_MS = 4            -- (A4) milliseconds of commit steps per timer tick (a step is at most Prices.COMMIT_STEP work units; history folds cost more)
 local MAX_RECORDS = 250000   -- records read, at most (more makes the scan not complete)
 local THROTTLE_WAIT = 30     -- seconds to wait for the auction house to be ready to take a request
 local RESPONSE_WAIT = 90     -- seconds to wait for the listings after the request
@@ -158,7 +159,11 @@ end
 local function SaveStep(mine)
     if mine ~= token or SC.phase ~= "saving" or not run then return end
     local job, result = run.job, run.result
-    local ok, done = pcall(Perf, "workshop.scan", job.Step, job)
+    -- steps of at most Prices.COMMIT_STEP work units, as many as fit in SAVE_MS (none is begun after that), then the frame goes on
+    local clock = type(debugprofilestop) == "function" and debugprofilestop or nil
+    local t0 = clock and clock()
+    local ok, done
+    repeat ok, done = pcall(Perf, "workshop.scan", job.Step, job) until not ok or done or not t0 or clock() - t0 >= SAVE_MS
     if not ok then return End("failed", "unsaved") end
     if not done then
         run.saveFrac = job:Progress()

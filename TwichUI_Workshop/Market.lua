@@ -31,7 +31,7 @@
 
 local R = TwichUI
 local W = R.Workshop
-local PR, H, SC = W.Prices, W.History, W.Scan
+local PR, H, SC, H2 = W.Prices, W.History, W.Scan, W.History2
 local Int = W.Int
 local MK = {}
 W.Market = MK
@@ -88,7 +88,12 @@ local function Summary(m, now)
         -- the saved format (A2): the market's format (2 = TwichUI 1.3's, 3 = market data foundation 2.0), the database version, where
         -- version-2 coverage begins, how many valid entries the scan log and the day log hold, and the budget guard's record (nil = none)
         format = m.format, dbVersion = PR.DbVersion(), v2from = m.v2from, scanLog = m.scanLog and #(PR.ScanLog(m)) or nil,
-        dayLog = m.dayLog and #(PR.DayLog(m)) or nil, compact = m.compact }
+        dayLog = m.dayLog and #(PR.DayLog(m)) or nil, compact = m.compact,
+        -- (A4) the version-2 history's own record: its format, the first day and newest scan recorded, its text size and entry counts;
+        -- state "future" = a later build's format, never read here. compact (above) says when older detail was condensed and whether the
+        -- budget could not be met (compact.over).
+        history = m.h2info and m.h2info.state ~= "none" and { state = m.h2info.state, format = m.h2info.v, from = m.h2info.from, at = m.h2info.at,
+            bytes = m.h2info.bytes, items = m.h2info.items, citems = m.h2info.citems } or nil }
 end
 
 -- What is known of one market: when it was scanned, how much of it was seen, how many scan days its history has. nil, "nomarket".
@@ -247,6 +252,202 @@ function MK.Series(item, opt)
             average = math.floor(bks[i + 3] / bks[i + 4] + 0.5), n = bks[i + 4] }
     end
     return { item = item, points = points, groups = groups, today = H.Day(Now(opt)), market = m.key, label = PR.Label(m), basis = MK.BASIS.stats }
+end
+
+---------------------------------------------------------------------------
+-- (A4) The version-2 history as a chart can draw it
+---------------------------------------------------------------------------
+MK.HISTORY_UNITS = { min = "copper", recent = "copper", supply = "items", listings = "listings" }
+MK.HISTORY_BASIS = {
+    min = "The cheapest buyout listing per item: at each observation, the closing value of each listed day with that day's low and high, and the low, mean and high of older weeks. Listings, not sales.",
+    recent = "The Recent Price, a representative listing price (the mean of the cheapest 30% of the listed items, very low outliers ignored), at each observation, each listed day and older weeks. Recorded since version-2 history began; never taken from the older minimum history. Not a sale price.",
+    supply = "How many items were listed, at each observation, each listed day (with that day's fewest and most) and older weeks. Listed, never sold.",
+    listings = "How many buyout listings there were, at each observation, each listed day and older weeks (their mean). Listed, never sold.",
+}
+MK.GAP_REASONS = {
+    noscan = "No scan of this auction house on these days.", unlisted = "Scanned, and it was not listed.",
+    incomplete = "Only incomplete scans these days.", notretained = "Older than the history keeps.",
+    beforev2 = "Before this history began recording.", norecent = "Listed, but no Recent Price could be worked out.",
+    unknown = "Scanned, but that scan was not recorded into the history.",
+}
+
+local function Pick(x, metric)
+    if metric == "min" then return x.p, x.plo, x.phi end
+    if metric == "recent" then return x.r, x.rlo, x.rhi end
+    if metric == "supply" then return x.t, x.tlo, x.thi end
+    return x.l, nil, nil
+end
+local function PickBucket(b, metric)
+    if metric == "min" then return b.pm, b.plo, b.phi, b.n end
+    if metric == "recent" then return b.rm, b.rlo, b.rhi, b.nr end
+    if metric == "supply" then return b.tm, b.tlo, b.thi, b.n end
+    return b.lm, nil, nil, b.n
+end
+
+-- History(item, metric, opt) -> chart-ready series, or nil and a reason (baditem, badmetric, variant, nomarket, outofscope, format).
+--   metric   "min", "recent", "supply" or "listings"
+--   opt      market, now, from / to (times; default: everything kept, up to now), sources (a list of "local" and "legacy"; default both;
+--            legacy points exist for "min" only, before the version-2 history began)
+-- Returns { item, metric, unit, basis, market, label, today, from, to (days), v2from, recordedFrom, compact, damaged, ringFull,
+--   points = { oldest first: legacy, buckets, days, then observations } where a point is
+--     obs            { kind, at (first sighting, seconds), last (last sighting, when seen again), v, partial, exact = true, provenance = "local" }
+--     day            { kind, from = to = day, v (the closing value; nil for "recent" when only the day's range is known, then missing = "norecent"),
+--                      lo, hi (the day's extremes; nil when condensed or for listings), n (scans), partial, condensed, exact = true }
+--     week/fortnight { kind, from, to, v (mean), lo, hi, n (observed days with a value), partial, condensed, rangeDropped, exact = false }
+--     legacy-day / legacy-bucket   the frozen minimum history (provenance = "legacy"), only for "min" and only before recordedFrom
+--   gaps  = { { from, to, reason } } days with no point and why (MK.GAP_REASONS); nothing is ever interpolated or filled with zero
+--   marks = { { at, reason } } scans of the scan log (48 h) the item's observations do not account for: unlisted / incomplete / unknown /
+--           notretained (the ring keeps 8 observations: when it is full, older scans are "notretained", not "unlisted")
+--   resolution = { { from, to, kind } } where each kind of point lies (days; obs also has fromAt / toAt) }
+function MK.History(item, metric, opt)
+    item = Int(item, 1, W.MAX_ID)
+    if not item then return nil, "baditem" end
+    if not MK.HISTORY_UNITS[metric] then return nil, "badmetric" end
+    if opt and opt.variant then return nil, "variant" end
+    local m = Resolve(opt)
+    if not m then return nil, "nomarket" end
+    if m.scope ~= "full" then return nil, "outofscope" end
+    local info = m.h2info
+    if info and info.state == "future" then return nil, "format" end
+    local now = Now(opt)
+    local today = H.Day(now)
+    local toAt = opt and Int(opt.to, 1, 4102444800) or now
+    if toAt > now then toAt = now end
+    local fromAt = opt and Int(opt.from, 1, 4102444800) or (now - (H2.RETAIN_DAYS + 14) * H2.DAY)
+    local fromDay, toDay = H.Day(fromAt) or 1, H.Day(toAt) or today
+    local src = { ["local"] = true, legacy = true }
+    if opt and type(opt.sources) == "table" then
+        src = {}
+        for _, k in ipairs(opt.sources) do src[k] = true end
+    end
+    local recordedFrom = info and info.from or nil
+    local ring, days, bks, bad
+    if src["local"] then ring, days, bks, bad = H2.Read(m.h2 and m.h2[item], m.c2 and m.c2[item]) end
+    ring, days, bks = ring or {}, days or {}, bks or {}
+
+    local out = { item = item, metric = metric, unit = MK.HISTORY_UNITS[metric], basis = MK.HISTORY_BASIS[metric], market = m.key, label = PR.Label(m),
+        today = today, from = fromDay, to = toDay, v2from = m.v2from, recordedFrom = recordedFrom, compact = m.compact, damaged = bad,
+        ringFull = #ring >= H2.RING, points = {}, gaps = {}, marks = {}, resolution = {} }
+    local pts, covered, norecent = out.points, {}, {}
+    local spans = {}
+    local function Span(kind, a, b)
+        local sp = spans[kind]
+        if not sp then sp = { from = a, to = b, kind = kind } spans[kind] = sp spans[#spans + 1] = sp
+        else if a < sp.from then sp.from = a end if b > sp.to then sp.to = b end end
+    end
+    local function Cover(a, b) for d = math.max(a, fromDay), math.min(b, toDay) do covered[d] = true end end
+
+    -- the frozen legacy minimum history: only "min", only days before version-2 recording began (never counted twice)
+    if metric == "min" and src.legacy then
+        local lp, lb = H.Decode(m.hist and m.hist[item])
+        if lp then
+            local limit = (recordedFrom or (today + 1)) - 1
+            local firstExact = lp[1] or (limit + 1)
+            for i = 1, #lb, 5 do
+                local a, b = lb[i] * H.BUCKET_DAYS, math.min(lb[i] * H.BUCKET_DAYS + H.BUCKET_DAYS - 1, firstExact - 1, limit)
+                if b >= a and b >= fromDay and a <= toDay then
+                    pts[#pts + 1] = { kind = "legacy-bucket", from = a, to = b, v = math.floor(lb[i + 3] / lb[i + 4] + 0.5), lo = lb[i + 1], hi = lb[i + 2],
+                        n = lb[i + 4], exact = false, provenance = "legacy" }
+                    Cover(a, b) Span("legacy", a, b)
+                end
+            end
+            for i = 1, #lp, 2 do
+                local d = lp[i]
+                if d <= limit and d >= fromDay and d <= toDay then
+                    pts[#pts + 1] = { kind = "legacy-day", from = d, to = d, v = lp[i + 1], n = 1, exact = true, provenance = "legacy" }
+                    Cover(d, d) Span("legacy", d, d)
+                end
+            end
+        end
+    end
+    -- buckets: always aggregates
+    for _, b in ipairs(bks) do
+        local a, e = b.k * b.s, H2.BucketEnd(b)
+        if e >= fromDay and a <= toDay then
+            local v, lo, hi, n = PickBucket(b, metric)
+            local kind = b.s == 7 and "week" or "fortnight"
+            if v or lo then
+                pts[#pts + 1] = { kind = kind, from = a, to = e, v = v, lo = lo, hi = hi, n = n, partial = b.pf, condensed = b.cf,
+                    rangeDropped = metric == "supply" and b.tlo == nil or nil, missing = (not v) and "norecent" or nil, exact = false, provenance = "local" }
+                Cover(a, e) Span(kind, a, e)
+            else
+                for d = a, e do norecent[d] = true end
+            end
+        end
+    end
+    -- daily points: exact days
+    for _, x in ipairs(days) do
+        if x.d >= fromDay and x.d <= toDay then
+            local v, lo, hi = Pick(x, metric)
+            if v or lo then
+                pts[#pts + 1] = { kind = "day", from = x.d, to = x.d, v = v, lo = (not x.cf) and lo or nil, hi = (not x.cf) and hi or nil, n = x.n,
+                    partial = x.pf, condensed = x.cf, missing = (not v) and "norecent" or nil, exact = true, provenance = "local" }
+                Cover(x.d, x.d) Span("day", x.d, x.d)
+            else
+                norecent[x.d] = true
+            end
+        end
+    end
+    -- observations: real times
+    local obsFrom, obsTo
+    for _, x in ipairs(ring) do
+        local at, last = x.m * 60, (x.m + x.dm) * 60
+        local v = Pick(x, metric)
+        if v and last >= fromAt and at <= toAt then
+            pts[#pts + 1] = { kind = "obs", at = at, last = x.dm > 0 and last or nil, v = v, partial = x.pf, exact = true, provenance = "local" }
+            obsFrom, obsTo = obsFrom or at, last
+        end
+    end
+
+    -- why the other days have no point (the day log says what happened; it never says the item was there)
+    local dayLog = {}
+    local newestLog
+    for _, e in ipairs(PR.DayLog(m) or {}) do dayLog[e.day] = e.flags newestLog = e.day end
+    local DF = PR.DAY_FLAGS
+    local function Bit(flags, bit) return math.floor(flags / bit) % 2 == 1 end
+    local function Reason(d)
+        if norecent[d] then return "norecent" end
+        if not recordedFrom or d < recordedFrom then return "beforev2" end
+        local f = dayLog[d]
+        if f then
+            if Bit(f, DF.FED) then return "unlisted" end
+            if Bit(f, DF.WHOLE) then return "unknown" end
+            return "incomplete"
+        end
+        if newestLog and d < newestLog - PR.DAY_LOG_DAYS + 1 then return "notretained" end
+        if not newestLog then return "unknown" end
+        return "noscan"
+    end
+    local gap
+    for d = fromDay, math.min(toDay, today) do
+        if not covered[d] then
+            local why = Reason(d)
+            if gap and gap.reason == why and gap.to == d - 1 then gap.to = d
+            else gap = { from = d, to = d, reason = why } out.gaps[#out.gaps + 1] = gap end
+        end
+    end
+    -- scans of the last 48 hours the observations do not account for
+    if src["local"] then
+        local SF = PR.SCAN_FLAGS
+        local oldest = ring[1] and ring[1].m or nil
+        for _, e in ipairs(PR.ScanLog(m) or {}) do
+            if e.at >= fromAt and e.at <= toAt and e.at >= (m.at or 0) - H2.RING_MINUTES * 60 and (not recordedFrom or H.Day(e.at) >= recordedFrom) then
+                local em, seen = math.floor(e.at / 60), false
+                for _, x in ipairs(ring) do if em >= x.m and em <= x.m + x.dm then seen = true break end end
+                if not seen then
+                    local why
+                    if not Bit(e.flags, SF.WHOLE) then why = "incomplete"
+                    elseif not Bit(e.flags, SF.FED) then why = "unknown"
+                    elseif out.ringFull and oldest and em < oldest then why = "notretained"
+                    else why = "unlisted" end
+                    out.marks[#out.marks + 1] = { at = e.at, reason = why }
+                end
+            end
+        end
+    end
+    for _, sp in ipairs(spans) do out.resolution[#out.resolution + 1] = { from = sp.from, to = sp.to, kind = sp.kind } end
+    if obsFrom then out.resolution[#out.resolution + 1] = { from = H.Day(obsFrom), to = H.Day(obsTo), fromAt = obsFrom, toAt = obsTo, kind = "obs" } end
+    return out
 end
 
 -- The change from a to b as a percentage of a, in whole TENTHS of a percent, rounded to the nearest with a tie going AWAY from zero, the

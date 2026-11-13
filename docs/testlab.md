@@ -205,9 +205,63 @@ Tick **Performance (benchmarks)** and choose by name: `perf.market.stats.6k` (th
 
 All workloads are `pure`: made-up input, explicit arguments, no saved market, no scan, no queue, no purchase, no frame, timer or event of their own, no write to any saved variable (the Runner's fingerprint also brackets each case). Cleanup after normal end, error, timeout, Stop, close or combat is "nothing to clean": the state is plain garbage once the case is not resumed. The Lab remains excluded from packages.
 
+### History workloads (A4, `history2.*`)
+
+`history2.update.{1k,10k,40k}` (another scan the same day: the append path), `history2.update.sparse.10k`, `history2.rollover.10k` (the next day),
+`history2.fold.{10k,40k}` (the day a whole week folds: the full path), `history2.sweep.{10k,40k}` (a scan that lists none of the items: the
+retention check), `history2.compact.10k` (budget step 1 over every item) and `history2.query.long` (`Market.History` over 50 long histories, four
+metrics, 200 queries). Each runs `History2.Update/Retain/Compact` on a synthetic in-memory market built by `History2`'s own writer, in the commit's
+own work units (`Prices.HIST_FAST_COST`, `HIST_FULL_COST`, `SWEEP_COST`) and `Prices.COMMIT_STEP` units per step; never a saved market. The 40k
+ones are offline only. Figures: `docs/workshop/market-data-foundation-v2.md`, "A4 as built".
+
+## Saved-data load test (A4 load gate; development only)
+
+The market data foundation's version-2 history can make the Workshop's saved file tens of megabytes. How long **this client** takes to read and
+write such a file is unknown, and offline Lua parsing does not answer it. This procedure measures it **without touching anyone's real data**,
+with two development-only companion addons and the opt-in Lab group **Saved-data load test (development)** (`cases/Load.lua`). It is a
+**release gate**: the version-2 history (`Prices.RECORD_HISTORY`) is not approved for a release until these figures exist and were reviewed.
+
+| Folder | Kind | Saved variable | What it does |
+|---|---|---|---|
+| `TwichUI_LoadTest/` | load on demand | `TwichUILoadTestDB` (synthetic only) | holds the generated market; records when its own file ran, when its `ADDON_LOADED` came, the Lua heap at each, and whether its saved variable existed at each; stamps `GetTime()` at logout |
+| `TwichUI_LoadTestClock/` | always loaded while enabled | `TwichUILoadClockDB` (a few numbers) | remembers `GetTime()` at logout and at the next `PLAYER_ENTERING_WORLD`, and whether `TwichUI_LoadTest` (and the Workshop) were loaded at that logout |
+
+Neither ever names `TwichUIDB`, `TwichUIWorkshopDB` or `TwichUIDiagnosticsDB` (`tests/test_loadtest.lua` scans them). The Lab writes the synthetic
+data only through `R.LoadTest` (safety class `devdata`, allowed only in an opt-in group); the real roots stay under the fingerprint.
+
+**Cases.** `loadtest.generate.heavy` (40,000 items, every one listed three times a day for 120 days: the upper bound, about 64 MB of text),
+`loadtest.generate.mixed` (40,000 items, 30% listed daily: about 24 MB), `loadtest.generate.small` (4,000 items: a dry run of the procedure);
+`loadtest.measure`; `loadtest.reload`; `loadtest.gc`; `loadtest.clear`. Generation builds the data with the Workshop's own `History2` and `Dist`
+writers in 4 ms slices (minutes for 40,000 items) into a new table and replaces the saved variable only at the end.
+
+**Procedure (in the development client):**
+1. Copy `TwichUI_LoadTest/` and `TwichUI_LoadTestClock/` beside the other addons (the machine-local deploy script may need updating for them);
+   enable both. Nothing else changes.
+2. Baseline: `/reload` once, then `/reload` again (the clock records each). Open the Lab, tick only **Saved-data load test**, run
+   `loadtest.reload`: that is the reload time with no large file.
+3. Run `loadtest.generate.heavy` (or `mixed`). Then `/reload`: the client **writes** the large file at this logout; `loadtest.reload` afterwards
+   reports this reload with "the large file was LOADED (so written)". Compare with step 2: the difference is the write (plus noise).
+4. Immediately after that reload, before anything else loads the companion, run `loadtest.measure`. It times `C_AddOns.LoadAddOn` of the
+   companion and splits it: time before the companion's file ran, file to `ADDON_LOADED`, after. If the saved variable was absent when the file
+   ran and present at `ADDON_LOADED`, the middle figure is the client deserializing the saved file; the report says which order this client used.
+   The heap before and after is also reported (the loaded data plus uncollected garbage).
+5. Optionally run `loadtest.gc` (one forced full collection: an upper bound for a later collection of that heap, not what play feels like).
+6. `/reload` once more **without** loading the companion: `loadtest.reload` then shows a reload where the file was neither read nor written.
+7. Copy the report. Record the saved file's size on disk (`WTF/Account/<account>/SavedVariables/TwichUI_LoadTest.lua`).
+8. Clean up: `loadtest.clear`, `/reload` (a small file is written), then disable or delete both folders and their saved files.
+
+**What these numbers are and are not.** `loadtest.measure` times one `LoadAddOn` call with `debugprofilestop` (its resolution is reported by
+`perf.clock`); it measures the read of THIS synthetic file in THIS session, not the Workshop's own initialization (the Lab's `setup` timing of
+the Workshop's load is that) and not what other addons do at the same time. `loadtest.reload` measures logout-to-world with `GetTime()`, which is
+assumed to keep counting across `/reload` (unverified in Forever: a negative or implausible span is reported as "not measurable"); it includes
+every addon's load and the client's own work, so only differences between runs mean anything. The Workshop's real file is read the same way
+(load on demand) only if Forever treats both alike, which this measures for the companion, not for the Workshop. Nothing here measures frame
+time during play after the load. **No real-client figure exists yet.**
+
 ## Not in releases
 
-- `.pkgmeta` lists `TwichUI_TestLab` under `ignore`, and it is not one of the `move-folders`.
+- `.pkgmeta` lists `TwichUI_TestLab`, `TwichUI_LoadTest` and `TwichUI_LoadTestClock` under `ignore`, and none is one of the `move-folders`;
+  `tools/release.py` refuses any path containing them; `tests/test_release_tools.py` checks both for each.
 - `tools/release.py`'s package check refuses a zip whose top-level folders are not exactly the seven addons, and now also refuses any path containing `TwichUI_TestLab` anywhere (its `FORBIDDEN` set).
 - `tests/test_release_tools.py` covers both: a Lab folder beside the addons, a Lab folder inside the core, and the `.pkgmeta` entries.
 

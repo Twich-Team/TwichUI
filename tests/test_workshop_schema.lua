@@ -38,7 +38,7 @@ local function Clone(v) return Reload(Ser(v)) end
 ---------------------------------------------------------------------------
 -- A client with the Workshop loaded: the current files, or the released 1.3 files; a fake auction house; a virtual clock
 ---------------------------------------------------------------------------
-local NOW = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua" }
+local NOW = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua" }
 local V13 = { "Data.lua", "Materials.lua", "Queue.lua", "History.lua", "Prices.lua", "Scan.lua", "Market.lua" }
 
 local function Setup(which, db)
@@ -169,10 +169,16 @@ do
   local s = m.snap
   Same(s.seq, 1); Same(s.kind, "full"); Same(s.at, 102 * D + 700); Same(s.records, 5); Same(s.used, 2); Same(s.invalid, 1); Same(s.noBuyout, 2)
   Same(s.partial, 0); Same(s.items, 2); Same(s.auto, false); Same(s.alg, nil, "no distribution algorithm yet: nothing to name"); Same(s.client, "1.60.1.70009", "the build string the client reports (the mock's)")
-  Same(#m.scans, 1); Same(m.scans[1], ("1,%d,%d,2,5"):format(102 * D + 700, 1 + 2), "seq,at,flags(whole+complete),items,records")
-  Same(#m.days, 1); Same(m.days[1], "102,1,1", "day,scans,flags(whole read)")
+  Same(#m.scans, 1); Same(m.scans[1], ("1,%d,%d,2,5"):format(102 * D + 700, 1 + 2 + 64), "seq,at,flags(whole+complete+recorded into history, A4),items,records")
+  Same(#m.days, 1); Same(m.days[1], "102,1,9", "day,scans,flags(whole read + recorded into history, A4)")
   Same(m.v2from, 102, "version-2 coverage begins on the first accepted scan's day")
-  Same(m.dist, nil); Same(m.h2, nil); Same(m.c2, nil); Same(m.compact, nil); Same(m.ring, nil, "later milestones' containers are not created")
+  Same(m.dist, nil); Same(m.compact, nil); Same(m.ring, nil, "containers no milestone writes are not created")
+  -- (A4) the version-2 history of the two listed items: one ring point and one daily point each, r unknown (no distribution in this scan)
+  local minute = math.floor((102 * D + 700) / 60)
+  Same(m.h2[10], ("%d,0,470,,1,1|102:102,470,,1,1"):format(minute)); Same(m.h2[12], ("%d,0,300,,1,1|102:102,300,,1,1"):format(minute))
+  Same(m.h2[11], nil, "no history for an item this scan did not list"); Same(next(m.c2), nil, "no buckets yet")
+  Same(m.h2info.v, 1); Same(m.h2info.from, 102); Same(m.h2info.at, 102 * D + 700); Same(m.h2info.items, 2); Same(m.h2info.citems, 0)
+  Same(m.h2info.bytes, #m.h2[10] + #m.h2[12])
   -- the other 1.3 market fields still carry the meaning they had
   for _, k in ipairs({ "f", "scope", "realm", "side", "at", "complete", "read", "used", "partial", "n", "hn", "sd", "items", "hist" }) do
     Check(m[k] ~= nil, "legacy field " .. k .. " is kept in a format 3 market")
@@ -198,7 +204,7 @@ do
   Check(Commit(t, KEY, 103, { [10] = 450 }, nil, 300))
   local m = t.DB().markets[KEY]
   Same(m.snap.seq, 3); Same(#m.scans, 3); Same(m.v2from, 102, "the coverage boundary never moves")
-  Same(m.days[1], "102,2,1", "two scans on one day are one entry with a count"); Same(m.days[2], "103,1,1")
+  Same(m.days[1], "102,2,9", "two scans on one day are one entry with a count (9: whole read, recorded into history)"); Same(m.days[2], "103,1,9")
   Same(Ser(m.hist), Ser(V1.markets[KEY].hist), "history is untouched by repeated commits")
   Same(PR.Lookup(PR.Market(KEY), 10).price, 450)
 
@@ -211,9 +217,9 @@ do
   local b = t.DB().markets[B]
   Same(b.scans[1], ("1,%d,4,1,1"):format(110 * D + 10), "cut: not whole, not complete")
   Same(b.scans[2], ("2,%d,12,1,1"):format(110 * D + 20), "cut and count changed")
-  Same(b.scans[3], ("3,%d,17,1,1"):format(110 * D + 30), "whole read (1) with partial information (16) but not complete")
-  Same(b.scans[4], ("4,%d,35,1,1"):format(111 * D + 40), "whole, complete, automatic")
-  Same(b.days[1], "110,3,7", "any whole read, any incomplete scan, any partial information"); Same(b.days[2], "111,1,1")
+  Same(b.scans[3], ("3,%d,81,1,1"):format(110 * D + 30), "whole read (1) with partial information (16) but not complete, recorded into history (64)")
+  Same(b.scans[4], ("4,%d,99,1,1"):format(111 * D + 40), "whole, complete, automatic, recorded")
+  Same(b.days[1], "110,3,15", "any whole read, any incomplete scan, any partial information, any scan recorded"); Same(b.days[2], "111,1,9")
   Same(b.snap.auto, true); Same(b.cut, nil, "the newest scan was whole")
   local ok, why = Commit(t, B, 112, { [1] = 5 }, { complete = false, cut = true })
   Same(ok, false); Same(why, "kept", "a complete scan is never replaced by an incomplete one")
@@ -224,7 +230,7 @@ do
   for i = 1, 300 do Check(Commit(t, C, 120, { [1] = 5 }, nil, i)) end
   local c = t.DB().markets[C]
   Same(#c.scans, 256, "at most 256 scans"); Same(c.scans[1]:match("^(%d+),"), "45"); Same(c.scans[256]:match("^(%d+),"), "300"); Same(c.snap.seq, 300)
-  Same(c.days[1], "120,300,1", "the day log keeps counting")
+  Same(c.days[1], "120,300,9", "the day log keeps counting")
   -- every scan of the last 48 hours: 70 scans ten minutes apart (under 12 hours) are all kept
   local E = "Realm|E"
   for i = 1, 70 do Check(Commit(t, E, 130, { [1] = 5 }, nil, i * 600)) end
@@ -238,11 +244,12 @@ do
   local G = "Realm|G"
   for i = 1, 130 do Check(Commit(t, G, 300 + i, { [1] = 5 }, nil, 5)) end
   local g = t.DB().markets[G]
-  Same(#g.days, 120, "120 scan days at most"); Same(g.days[1], "311,1,1"); Same(g.days[120], "430,1,1")
+  Same(#g.days, 120, "120 scan days at most"); Same(g.days[1], "311,1,9"); Same(g.days[120], "430,1,9")
   -- a scan dated before the newest logged day (the clock went back) is logged as a scan but opens no earlier day
   Check(Commit(t, G, 350, { [1] = 5 }, nil, 6))
   g = t.DB().markets[G]
-  Same(#g.days, 120); Same(g.days[120], "430,1,1"); Same(g.snap.seq, 131)
+  Same(#g.days, 120); Same(g.days[120], "430,1,9"); Same(g.snap.seq, 131)
+  Same(g.scans[#g.scans]:match(",(%d+),%d+,%d+$"), "3", "(A4) a scan dated before the newest recorded one is not recorded into the history")
   Same(g.v2from, 301, "coverage began with the first scan")
 end
 
@@ -310,7 +317,7 @@ do
   Same(PR2.Lookup(PR2.Market(KEY), 10).price, 470, "price entries read although the optional fields are junk")
   local info = MK2.Info({ market = KEY, now = 103 * D })
   Same(info.format, 3); Same(info.v2from, nil); Same(info.compact, nil); Same(PR2.Market(KEY).snap, nil)
-  Same(info.scanLog, 2, "only the two well-formed scan entries count"); Same(info.dayLog, 2, "103,2,3 and 106,1,7")
+  Same(info.scanLog, 2, "only the two well-formed scan entries count"); Same(info.dayLog, 3, "103,2,3, 104,2,9 (A4: flag 8, recorded into history) and 106,1,7")
   Check(t2.W.Prices.ScanLog(PR2.Market(KEY))[1].seq == 3, "a valid entry decodes")
   local junkBefore = Ser(t2.DB())
   MK2.Info(); MK2.Markets()
@@ -319,10 +326,12 @@ do
   local n = t2.DB().markets[KEY]
   Same(n.snap.seq, 9, "numbered after the highest valid entry"); Same(#n.scans, 3, "the two valid entries (seq 3 and 8) plus the new one; flags 256 and a zero time are out of range")
   for _, e in ipairs(n.scans) do Check(e:match("^%d+,%d+,%d+,%d+,%d+$"), "only well-formed entries are written") end
-  Same(n.days[1], "103,2,3"); Same(n.days[#n.days], "107,1,1")
+  Same(n.days[1], "103,2,3"); Same(n.days[#n.days], "107,1,9")
   Same(n.v2from, 107, "no valid boundary: it starts at this scan's day")
-  Same(n.dist, nil, "a container that is not a table is not carried"); Same(n.h2, nil)
-  Same(n.c2["10"], "kept as it is", "a table container is carried forward untouched")
+  Same(n.dist, nil, "a container that is not a table is not carried")
+  -- (A4) this commit recorded history: the scan's item has its first point, and an entry whose key is not an item id cannot be this
+  -- format's and is not carried (a commit that records nothing carries a table container forward untouched: section 5b)
+  Check(type(n.h2[10]) == "string" and n.h2[10]:find("|107:", 1, true), "the listed item's history starts"); Same(n.c2["10"], nil)
 end
 
 ---------------------------------------------------------------------------
@@ -406,7 +415,7 @@ do
   local trim = H.Trim
   H.Trim = function() error("step failed") end
   job = t.W.Prices.BeginCommit(KEY, ScanOf(105 * D, { [10] = 1 }))
-  Check(not pcall(job.Step, job, 1), "the step fails")
+  Check(not pcall(function() while not job:Step(1) do end end), "the step fails (A4: the legacy expiry runs after the history phases)")
   H.Trim = trim
   Unchanged(t, before, "failing step"); NoOrphans(t.DB(), "failing step")
 
@@ -466,6 +475,8 @@ do
   m.h2 = { [10] = "2880000,5,470,0,3,1;120,0,480,10,2,1!|102:100,470,10,3,1,2,0,5,10,0,1;1,465,12,2,1" }
   m.c2 = { [10] = "14,14,5,400,10,20,450,5,5,3,1,1,2;15,7,4,380,20,30,440,6,6,2,1,1,3" }
   m.compact = { level = 2, at = 102 * D, items = 40 }
+  -- (A4) these strings are a LATER build's history format (h2info.v = 2): this build reads none of them and carries them forward untouched
+  m.h2info = { v = 2, from = 102, at = 102 * D + 800, bytes = 300, items = 1, citems = 1 }
   m.scans[#m.scans + 1] = ("2,%d,35,2,2"):format(102 * D + 800)
   m.days[#m.days + 1] = "103,4,3"
   m.snap.alg = 1
@@ -540,6 +551,8 @@ do
   Same(m.dist, nil, "dist is replaced by the scan's own (this scan had none): not carried"); Same(m.snap.alg, nil)
   Same(Ser(m.h2), Ser(Seeded.markets[KEY].h2), "h2 carried")
   Same(Ser(m.c2), Ser(Seeded.markets[KEY].c2), "c2 carried"); Same(Ser(m.compact), Ser(Seeded.markets[KEY].compact), "compact carried")
+  Same(Ser(m.h2info), Ser(Seeded.markets[KEY].h2info), "(A4) the later format's record carried: nothing was recorded into a history this build cannot read")
+  Same(m.scans[#m.scans]:match("^%d+,%d+,(%d+),"), "3", "and the scan log says this scan was not recorded (no flag 64)")
   Same(m.snap.seq, 3, "numbered after the logged scans"); Same(#m.scans, 3); Same(m.v2from, 102)
   Same(Ser(now.DB().markets["Realm|Horde"]), Ser(Seeded.markets["Realm|Horde"]), "another market untouched")
   Same(Ser(now.DB().markets["Realm|Neutral"]), Ser(Seeded.markets["Realm|Neutral"]))
@@ -548,14 +561,14 @@ do
 end
 
 ---------------------------------------------------------------------------
--- 10. Scope guards: the public Market API did not grow; only Prices.lua writes the market database
+-- 10. Scope guards: the public Market API grew only by A4's History (read-only); only Prices.lua writes the market database
 ---------------------------------------------------------------------------
 do
   local t = Setup("now", Clone(V1))
   local names = {}
   for k, v in pairs(t.W.Market) do if type(v) == "function" then names[#names + 1] = k end end
   table.sort(names)
-  Same(table.concat(names, ","), "AgeShort,Compare,Freshness,Info,Markets,Observed,Price,Quote,Series,Source,Stats,Status,Trend", "")
+  Same(table.concat(names, ","), "AgeShort,Compare,Freshness,History,Info,Markets,Observed,Price,Quote,Series,Source,Stats,Status,Trend", "")
 end
 
 do

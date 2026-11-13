@@ -12,6 +12,9 @@
 --                       category is opt-in (see TL.Category), and Runner releases every probe frame when a case or the run ends.
 --             guided    asks the player to put the pointer somewhere and observes what the client reports, read only (Guided.lua). Its category
 --                       is never part of an unqualified run: TL.Select(nil) leaves it out, and the window leaves its box unticked.
+--             devdata   (A4) fills or empties the development-only load-test companion's OWN saved variable (TwichUILoadTestDB, through
+--                       R.LoadTest's functions; this file and cases/Load.lua never name it) with synthetic data. Allowed only in an opt-in
+--                       category; the three real saved roots stay under the fingerprint like every other case.
 --   needs   { "workshop" } to get t.W = R.Workshop (loaded through the core's launcher, which refuses in combat)
 --   budget  seconds the case may take across frames before it is abandoned (default 10, at most 60)
 --   run     function(t): the case API below
@@ -35,10 +38,11 @@ local TL = R.TestLab or {}
 R.TestLab = TL
 
 TL.VERSION = "0.1.0-dev"
-TL.CLASSES = { pure = true, readonly = true, owned = true, guided = true }
+TL.CLASSES = { pure = true, readonly = true, owned = true, guided = true, devdata = true }
 TL.SAVED_ROOTS = { "TwichUIDB", "TwichUIWorkshopDB", "TwichUIDiagnosticsDB" }
 TL.MAX_BUDGET = 60
 TL.MAX_GUIDED_BUDGET = 150   -- a person takes longer than a function
+TL.MAX_DEVDATA_BUDGET = 600  -- building a 40,000-item synthetic saved file in 4 ms slices takes minutes
 TL.DEFAULT_BUDGET = 10
 
 TL.categories, TL.categoryOrder = TL.categories or {}, TL.categoryOrder or {}
@@ -68,11 +72,12 @@ function TL.Case(def)
     if type(def) ~= "table" then return Reject(def, "not a table") end
     if type(def.id) ~= "string" or def.id == "" then return Reject(def, "no id") end
     if TL.cases[def.id] then return Reject(def, "duplicate id") end
-    if not TL.CLASSES[def.class] then return Reject(def, "no safety class (pure, readonly, owned or guided)") end
+    if not TL.CLASSES[def.class] then return Reject(def, "no safety class (pure, readonly, owned, guided or devdata)") end
     if not TL.categories[def.cat] then return Reject(def, "unknown category") end
+    if def.class == "devdata" and not TL.categories[def.cat].optin then return Reject(def, "a devdata case belongs to an opt-in category") end
     if type(def.run) ~= "function" then return Reject(def, "no run function") end
     local budget = tonumber(def.budget) or TL.DEFAULT_BUDGET
-    local top = def.class == "guided" and TL.MAX_GUIDED_BUDGET or TL.MAX_BUDGET
+    local top = def.class == "guided" and TL.MAX_GUIDED_BUDGET or (def.class == "devdata" and TL.MAX_DEVDATA_BUDGET or TL.MAX_BUDGET)
     local case = { id = def.id, cat = def.cat, class = def.class, needs = def.needs or {}, run = def.run,
         budget = math.max(0.1, math.min(top, budget)) }
     TL.cases[case.id] = case

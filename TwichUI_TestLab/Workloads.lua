@@ -679,6 +679,185 @@ Crafting("large-noguild", 30, 30, 64, false)
 -- Workshop page redraws (overview, opportunities, crafting, shopping lists) and open/close cycles: they read the player's real queue and saved
 -- markets and build real frames, so a benchmark of them would either touch player data or time a stand-in. They are deferred (docs/testlab.md,
 -- "Benchmarks"); real play is measured by R.Perf scopes and TwichUI_Diagnostics captures.
+---------------------------------------------------------------------------
+-- 6. (A4) Version-2 history: the commit's history phases and the chart query, on synthetic in-memory markets (never the saved ones)
+---------------------------------------------------------------------------
+-- A market of N items, each with the history a dense item has after months of three scans a day (8-point ring, 30+ daily points with day
+-- ranges, weekly and two-week buckets), or a sparse item (a few days a month). Built once per setup by History2's own writer from
+-- seeded values; the work is then what the commit does per item, in its own work units (PR.HIST_FAST_COST, PR.HIST_FULL_COST,
+-- PR.SWEEP_COST), PR.COMMIT_STEP units per step. T0 is chosen so (T0 - 29) % 7 == 3: day T0 and T0 + 1 fold nothing, T0 + 4
+-- folds a whole week for every dense item.
+local H2_T0 = 20004 + 3 + 29   -- (20036 - 29) % 7 == 3
+local function H2Item(H2, rng, T, dense)
+    local ring, days, bks = {}, {}, {}
+    local p, t = rng:Int(50, 50000), rng:Int(1, 300)
+    local from = H2.FoldBefore(T)
+    for d = from, T do
+        if dense or rng:Chance(0.12) then
+            local n = dense and 3 or 1
+            local x = { d = d, p = p, r = p + rng:Int(0, 900), t = t, l = rng:Int(1, 30), n = n }
+            x.plo, x.phi, x.tlo, x.thi = math.max(1, x.p - (n > 1 and rng:Int(0, 40) or 0)), x.p + (n > 1 and rng:Int(0, 40) or 0), math.max(1, x.t - (n > 1 and rng:Int(0, 20) or 0)), x.t + (n > 1 and rng:Int(0, 20) or 0)
+            x.rlo, x.rhi = math.max(x.p, x.r - (n > 1 and rng:Int(0, 60) or 0)), x.r + (n > 1 and rng:Int(0, 60) or 0)
+            days[#days + 1] = x
+            p, t = math.max(1, p + rng:Int(-30, 30)), math.max(1, t + rng:Int(-5, 5))
+        end
+    end
+    if #days == 0 then days[1] = { d = T, p = p, r = p, t = t, l = 1, n = 1, plo = p, phi = p, rlo = p, rhi = p, tlo = t, thi = t } end
+    local last = days[#days]
+    if dense then
+        -- eight changes two hours apart, the newest two hours before the benchmark's scan (23:00 of day T)
+        for k = 1, 8 do ring[k] = { m = T * 1440 + 23 * 60 - (9 - k) * 120, dm = 0, p = last.p + k, r = last.r + k, t = last.t, l = last.l } end
+    end
+    -- buckets: weeks from 60 days back to the daily tier, two-week buckets to 120 days back (dense: every week; sparse: some)
+    local wk0 = math.floor((from - 1) / 7)
+    local fortStart = math.floor((T - 120) / 14) + 1
+    for k = fortStart, math.floor((T - 60) / 14) - 1 do
+        if dense or rng:Chance(0.3) then
+            local pm = p + rng:Int(-100, 100)
+            if pm < 2 then pm = 2 end
+            bks[#bks + 1] = { k = k, s = 14, n = dense and 14 or rng:Int(1, 3), nr = 0, plo = pm - 1, pm = pm, phi = pm + 5, tm = t, tlo = math.max(1, t - 3), thi = t + 3, lm = 3 }
+        end
+    end
+    for w = 2 * math.floor((T - 60) / 14), wk0 do
+        if (dense or rng:Chance(0.3)) and w * 7 + 6 < from then
+            local pm = p + rng:Int(-100, 100)
+            if pm < 2 then pm = 2 end
+            local b = { k = w, s = 7, n = dense and 7 or 1, plo = pm - 1, pm = pm, phi = pm + 5, tm = t, tlo = math.max(1, t - 3), thi = t + 3, lm = 3 }
+            b.nr, b.rm, b.rlo, b.rhi = b.n, pm + 50, pm + 40, pm + 60
+            bks[#bks + 1] = b
+        end
+    end
+    return H2.Encode(ring, days, bks)
+end
+
+WL.H2Item, WL.H2_T0 = H2Item, H2_T0   -- also the synthetic data of the saved-data load test (cases/Load.lua)
+
+local function H2Name(n) return n >= 1000 and (floor(n / 1000) .. "k") or tostring(n) end
+
+-- kind: "update" (another scan the same day: the append path), "rollover" (the next day: append), "fold" (a week folds: the full path),
+-- "sweep" (the scan lists none of them: the retention check of every item), "compact" (budget step 1 over every item)
+local function History2Work(kind, n, dense, offline)
+    local id = "history2." .. kind .. "." .. (dense and "" or "sparse.") .. H2Name(n)
+    return Add({
+        id = id, fixture = dense and "h2.dense" or "h2.sparse", seed = 7630001, size = n, unit = "items", work = n, offline = offline, v = 1,
+        setup = function(ctx)
+            local W, FX = Ctx(ctx)
+            local H2 = W.History2
+            local rng = FX.Rng(7630001)
+            local h2, c2 = {}, {}
+            for i = 1, n do
+                h2[i], c2[i] = H2Item(H2, rng, H2_T0, dense)
+                if i % 500 == 0 and ctx.yield then ctx.yield() end
+            end
+            local dayOf = { update = H2_T0, rollover = H2_T0 + 1, fold = H2_T0 + 4, sweep = H2_T0 + 1, compact = H2_T0 }
+            local T = dayOf[kind]
+            local at = T * DAY + 23 * 3600
+            return { W = W, h2 = h2, c2 = c2, at = at, ctx = { T = T, M = floor(at / 60), prevM = floor(at / 60) - 240 } }
+        end,
+        fingerprint = function(st)
+            local sum = 0
+            for i = 1, n, 37 do sum = (sum * 31 + #st.h2[i] + (st.c2[i] and #st.c2[i] or 0)) % 2147483629 end
+            return ("%d:%d"):format(n, sum)
+        end,
+        begin = function(st)
+            local W = st.W
+            local H2, PR = W.History2, W.Prices
+            local outH, outC, paths = {}, {}, {}
+            local i, ctx, at = 0, st.ctx, st.at
+            return function()
+                local left = PR.COMMIT_STEP
+                while left > 0 and i < n do
+                    i = i + 1
+                    local a, b, path
+                    if kind == "sweep" then
+                        a, b, path = H2.Retain(st.h2[i], st.c2[i], ctx)
+                        left = left - (path == "full" and PR.HIST_FULL_COST or PR.SWEEP_COST)
+                    elseif kind == "compact" then
+                        local changed
+                        a, b, changed = H2.Compact(1, st.h2[i], st.c2[i], ctx)
+                        path = changed and "changed" or "same"
+                        left = left - PR.HIST_FULL_COST
+                    else
+                        local o = H2.Obs(at, 1000 + i % 500, 1100 + i % 500, 20 + i % 40, 1 + i % 9, false)
+                        a, b, path = H2.Update(st.h2[i], st.c2[i], o, ctx)
+                        left = left - (path == "fast" and PR.HIST_FAST_COST or PR.HIST_FULL_COST)
+                    end
+                    outH[i], outC[i] = a, b
+                    paths[path] = (paths[path] or 0) + 1
+                end
+                return i >= n
+            end, function() return { h2 = outH, c2 = outC, paths = paths } end
+        end,
+        signature = function(out)
+            local bytes, parts = 0, {}
+            for i = 1, n do bytes = bytes + (out.h2[i] and #out.h2[i] or 0) + (out.c2[i] and #out.c2[i] or 0) end
+            for k, v in pairs(out.paths) do parts[#parts + 1] = k .. "=" .. v end
+            table.sort(parts)
+            return ("%d/%s"):format(bytes, table.concat(parts, ","))
+        end,
+        -- every result reads back; an observed item's newest day closes with the observation; the expected path was taken
+        verify = function(st, out, ctx)
+            local W = Ctx(ctx)
+            local H2 = W.History2
+            local want = ({ update = "fast", rollover = "fast", fold = "full", sweep = nil, compact = nil })[kind]
+            for i = 1, n do
+                Pace(ctx, i, 400)
+                local ring, days, bks, bad = H2.Read(out.h2[i], out.c2[i])
+                if bad then return false, ("item %d: the result does not read back (%s)"):format(i, bad) end
+                if kind ~= "sweep" and kind ~= "compact" then
+                    local x = days[#days]
+                    if x.d ~= st.ctx.T or x.p ~= 1000 + i % 500 or x.t ~= 20 + i % 40 then return false, ("item %d: the newest day is not the observation"):format(i) end
+                    if #ring > 8 then return false, "ring over 8" end
+                end
+            end
+            if want and dense and (out.paths[want] or 0) ~= n then return false, ("%s path for %s of %d items"):format(want, tostring(out.paths[want]), n) end
+            return true
+        end,
+    })
+end
+History2Work("update", 1000, true)
+History2Work("update", 10000, true)
+History2Work("update", 40000, true, true)
+History2Work("update", 10000, false)
+History2Work("rollover", 10000, true)
+History2Work("fold", 10000, true)
+History2Work("fold", 40000, true, true)
+History2Work("sweep", 10000, true)
+History2Work("sweep", 40000, true, true)
+History2Work("compact", 10000, true)
+
+-- the chart query of a long, dense history (every tier present), through an opt.market table: four metrics, repeated
+Add({
+    id = "history2.query.long", fixture = "h2.dense", seed = 7630002, size = 50, unit = "items", work = 200, v = 1,
+    setup = function(ctx)
+        local W, FX = Ctx(ctx)
+        local H2 = W.History2
+        local rng = FX.Rng(7630002)
+        local m = { key = "Lab|Bench", realm = "Lab", side = "Bench", scope = "full", format = 3, at = H2_T0 * DAY + 23 * 3600, items = {}, h2 = {}, c2 = {},
+            h2info = { state = "ok", v = 1, from = H2_T0 - 130, at = H2_T0 * DAY + 23 * 3600 } }
+        for i = 1, 50 do m.h2[i], m.c2[i] = H2Item(H2, rng, H2_T0, true) end
+        return { W = W, m = m }
+    end,
+    begin = function(st)
+        local MK, i, got = st.W.Market, 0, {}
+        local metrics = { "min", "recent", "supply", "listings" }
+        return function()
+            for _ = 1, 10 do
+                i = i + 1
+                local r = MK.History((i - 1) % 50 + 1, metrics[(i - 1) % 4 + 1], { market = st.m, now = st.m.at + 60 })
+                got[#got + 1] = r and #r.points or -1
+                if i >= 200 then return true end
+            end
+            return false
+        end, function() return got end
+    end,
+    signature = function(out) local s = 0 for _, v in ipairs(out) do s = s + v end return tostring(s) end,
+    verify = function(st, out)
+        for k, v in ipairs(out) do if v < 30 then return false, ("query %d returned %d points; every item has more than 30 observed days"):format(k, v) end end
+        return true
+    end,
+})
+
 WL.DEFERRED = { "Workshop page redraw (overview, opportunities, crafting queue, shopping list)", "open/close and navigation cycles of the Workshop window" }
 
 -- the workloads that run in the game (the others are offline only)

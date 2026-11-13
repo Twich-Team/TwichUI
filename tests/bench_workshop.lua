@@ -17,7 +17,7 @@
 --   --paired             the baseline and this run were interleaved (A B A B ...): require the same direction in every pair
 dofile(TESTS .. "mi_mock.lua")
 
-local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "Prices.lua", "Opportunities.lua",
+local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua",
     "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua" }
 local LAB = ROOT .. "../TwichUI_TestLab/"
 

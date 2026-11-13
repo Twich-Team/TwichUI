@@ -1,0 +1,11 @@
+## Interface: 16001
+## Title: |cffC9A24ATwich|rUI Load Test clock (development)
+## Notes: Development tool, never part of a release: remembers when the game was last logged out or reloaded and when it came back, to time /reload for the saved-data load test. Turn it off when not measuring.
+## Author: twichie
+## Version: 0.1.0-dev
+## RequiredDeps: !!!TwichUI
+## SavedVariables: TwichUILoadClockDB
+## X-License: MIT (code); see !!!TwichUI\LICENSE
+## Category: Development
+
+Clock.lua

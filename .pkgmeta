@@ -41,6 +41,9 @@ ignore:
   - KNOWN_BUGS.md
   # the in-game Test Lab is a development tool and must never be in a release (docs/testlab.md)
   - TwichUI_TestLab
+  # the saved-data load-test companions (a large synthetic saved file and its clock) are development tools too (docs/testlab.md)
+  - TwichUI_LoadTest
+  - TwichUI_LoadTestClock
   # a development session note (it quotes local machine paths); not part of the addon
   - TwichUI-Workbench-Session-Handoff-2026-11-03.md
   # an editor workspace file kept at pins/ (not the addon's pins/ folder): it must not collide with !!!TwichUI/pins

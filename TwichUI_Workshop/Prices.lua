@@ -46,6 +46,7 @@ local Q = W.Queue
 local Int, Text, Plain = W.Int, W.Text, W.Plain
 local H = W.History
 local D = W.Dist
+local H2 = W.History2
 local PR = {}
 W.Prices = PR
 
@@ -57,6 +58,13 @@ PR.DAY_LOG_DAYS = 120         -- scan days kept in market.days
 -- 1.3 feeding code below stays only so History.lua, the readers and the reference model are still exercised end to end; production never
 -- turns this on (tests do, and tests/test_workshop_schema.lua proves the default). Version-2 history arrives with milestone A4.
 PR.FEED_LEGACY_HISTORY = false
+-- (A4) Version-2 history (History2.lua: the ring, daily points and buckets in market.h2 / market.c2) is recorded by every accepted whole read.
+-- A DEVELOPER switch, not a setting: the real-client saved-variables load gate (foundation document, "A4 as built") must pass before a release
+-- ships with it on; turning it off makes accepted scans carry h2/c2/h2info/compact forward untouched, exactly as A2/A3 did.
+PR.RECORD_HISTORY = true
+-- (A4) The budget guard (section 7.4, owner decision D4, provisional): bytes of version-2 history text (h2 + c2) per market and in all markets
+PR.HISTORY_BUDGET = 48 * 1024 * 1024
+PR.ACCOUNT_BUDGET = 96 * 1024 * 1024
 PR.MAX_COPPER = 99999999999   -- MAXIMUM_BID_PRICE in Blizzard_AuctionHouseUI
 PR.MAX_COUNT = 10000          -- items in one auction (real stacks are far smaller)
 PR.MAX_ITEMS = 40000          -- items kept per market (see "Item limit" in docs/workshop.md)
@@ -409,13 +417,14 @@ end
 ---------------------------------------------------------------------------
 -- Format 3 metadata: validated readers (a malformed field is absent, never repaired, and never makes the price entries unreadable)
 ---------------------------------------------------------------------------
--- Scan flags (market.scans, a decimal bit set). FED_HISTORY is reserved: version-2 history is written from A4 on.
-local F_WHOLE, F_COMPLETE, F_CUT, F_CHANGED, F_PARTIAL, F_AUTO = 1, 2, 4, 8, 16, 32
-local F_ALL = 1 + 2 + 4 + 8 + 16 + 32 + 64 + 128   -- including FED_HISTORY (64) and IMPORTED (128), reserved
--- Day flags (market.days): any whole read / any scan that was cut or changed / any scan with records lacking their information
-local D_WHOLE, D_INCOMPLETE, D_PARTIAL = 1, 2, 4
-PR.SCAN_FLAGS = { WHOLE = F_WHOLE, COMPLETE = F_COMPLETE, CUT = F_CUT, CHANGED = F_CHANGED, PARTIAL = F_PARTIAL, AUTO = F_AUTO }
-PR.DAY_FLAGS = { WHOLE = D_WHOLE, INCOMPLETE = D_INCOMPLETE, PARTIAL = D_PARTIAL }
+-- Scan flags (market.scans, a decimal bit set). FED_HISTORY (64): the scan was recorded into the version-2 history (A4). IMPORTED is reserved.
+local F_WHOLE, F_COMPLETE, F_CUT, F_CHANGED, F_PARTIAL, F_AUTO, F_FED = 1, 2, 4, 8, 16, 32, 64
+local F_ALL = 1 + 2 + 4 + 8 + 16 + 32 + 64 + 128   -- including IMPORTED (128), reserved
+-- Day flags (market.days): any whole read / any scan that was cut or changed / any scan with records lacking their information / (A4) any scan
+-- recorded into the version-2 history (so "scanned, not listed" is only ever said of a day whose scan could have recorded the item)
+local D_WHOLE, D_INCOMPLETE, D_PARTIAL, D_FED = 1, 2, 4, 8
+PR.SCAN_FLAGS = { WHOLE = F_WHOLE, COMPLETE = F_COMPLETE, CUT = F_CUT, CHANGED = F_CHANGED, PARTIAL = F_PARTIAL, AUTO = F_AUTO, FED = F_FED }
+PR.DAY_FLAGS = { WHOLE = D_WHOLE, INCOMPLETE = D_INCOMPLETE, PARTIAL = D_PARTIAL, FED = D_FED }
 
 -- "seq,at,flags,items,records" -> { seq, at, flags, items, records }, or nil
 local function ScanEntry(e)
@@ -433,7 +442,7 @@ local function DayEntry(e)
     if type(e) ~= "string" or #e > 40 then return nil end
     local a, b, c = e:match("^(%d+),(%d+),(%d+)$")
     if not a then return nil end
-    local day, n, flags = H.Day(tonumber(a) * H.DAY), Int(tonumber(b), 1, W.MAX_ID), Int(tonumber(c), 0, 7)
+    local day, n, flags = H.Day(tonumber(a) * H.DAY), Int(tonumber(b), 1, W.MAX_ID), Int(tonumber(c), 0, 15)
     if not (day and n and flags) then return nil end
     return { day = day, scans = n, flags = flags }
 end
@@ -460,11 +469,25 @@ local function Snap(t)
     return snap
 end
 
+-- the budget guard's record: the highest step applied, when, how many items it changed; (A4) also the history bytes before and after and
+-- `over` when the ladder could not bring the market under its budget (nothing more is ever removed: it is reported instead)
 local function Compact(t)
     if type(t) ~= "table" then return nil end
     local level, at, items = Int(t.level, 1, 9), Int(t.at, 1, MAX_TIME), Int(t.items, 0, W.MAX_ID)
     if not (level and at and items) then return nil end
-    return { level = level, at = at, items = items }
+    return { level = level, at = at, items = items, before = Int(t.before, 0, 2 ^ 40), bytes = Int(t.bytes, 0, 2 ^ 40), over = t.over == true or nil }
+end
+
+-- (A4) market.h2info: the version-2 history's own facts. v = the text format (History2.FORMAT), from = the first day recorded, at = the time of
+-- the newest scan recorded, bytes = the h2 + c2 text after it, items / citems = entries in h2 / c2. state: "ok" (absent or this build's
+-- format: the strings are checked one by one when read) or "future" (a later build's format, or a record that cannot be read: never read or
+-- written by this build, carried forward untouched).
+local function H2Info(t, hasHistory)
+    if t == nil then return { state = hasHistory and "ok" or "none" } end
+    if type(t) ~= "table" or Int(t.v, 1, 99) ~= H2.FORMAT then return { state = "future" } end
+    local from = Int(t.from, 1, 200000)
+    return { state = "ok", v = t.v, from = from and H.Day(from * H.DAY) or nil, at = Int(t.at, 1, MAX_TIME), bytes = Int(t.bytes, 0, 2 ^ 40),
+        items = Int(t.items, 0, W.MAX_ID), citems = Int(t.citems, 0, W.MAX_ID) }
 end
 
 -- The saved database's version, or nil when there is none (1 = TwichUI 1.3, 2 = market data foundation 2.0)
@@ -500,6 +523,10 @@ local function Checked(key, m, legacy)
             info.dist = type(m.dist) == "table" and m.dist or nil
             info.scanLog = type(m.scans) == "table" and m.scans or nil
             info.dayLog = type(m.days) == "table" and m.days or nil
+            -- (A4) the version-2 history: the tables as saved (each string is checked when it is read) and the history's own record
+            info.h2 = type(m.h2) == "table" and m.h2 or nil
+            info.c2 = type(m.c2) == "table" and m.c2 or nil
+            info.h2info = H2Info(m.h2info, info.h2 ~= nil or info.c2 ~= nil)
         end
     end
     return info
@@ -562,6 +589,26 @@ Job.__index = Job
 
 local function WholeRead(scan) return scan.cut ~= true and scan.changed ~= true end
 
+-- (A4) Will this commit record version-2 history? Returns its context { T (the scan's day), M (its minute), prevM (the minute of the newest scan
+-- already recorded, nil when none), from (the first recorded day), others (history bytes of the other markets, from their own records: never by
+-- walking their strings) }, or nil and why: "off" (PR.RECORD_HISTORY), "incomplete" (cut or changed while read: section 3.4), "format" (a later
+-- build's history format: carried forward untouched), "clock" (the scan is dated before the newest scan already recorded; nothing is reordered)
+local function HistoryPlan(key, old, scan, at, day)
+    if PR.RECORD_HISTORY ~= true then return nil, "off" end
+    if not WholeRead(scan) or not day then return nil, "incomplete" end
+    local hi = old and old.format == 3 and old.h2info or nil
+    if hi and hi.state == "future" then return nil, "format" end
+    if hi and hi.at and at < hi.at then return nil, "clock" end
+    local others = 0
+    local db = Store(false)
+    if db then
+        for k, m in pairs(db.markets) do
+            if k ~= key and type(m) == "table" and type(m.h2info) == "table" then others = others + (Int(m.h2info.bytes, 0, 2 ^ 40) or 0) end
+        end
+    end
+    return { T = day, M = floor(at / 60), prevM = hi and hi.at and floor(hi.at / 60) or nil, from = hi and hi.from or day, others = others }
+end
+
 function PR.BeginCommit(key, scan)
     if PR.Held() then return false, "held" end
     if type(key) ~= "string" or type(scan) ~= "table" or type(scan.items) ~= "table" then return false, "bad" end
@@ -575,9 +622,23 @@ function PR.BeginCommit(key, scan)
     -- (A3) a distribution comes with the scan only as a table made by algorithm D.ALG; it is checked entry by entry (phase "dist") against the
     -- scan's own minimum entries before it is trusted, and a scan without one (or with a bad one) is saved without any: never a part of one
     local dist = type(scan.dist) == "table" and scan.alg == D.ALG and scan.dist or nil
-    local job = setmetatable({ key = key, scan = scan, at = at, old = old, upd = {}, drop = {}, phase = dist and "dist" or (feed and "scan" or "old"),
-        cursor = nil, done = 0, total = 0, added = 0, day = day, feed = feed, dist = dist }, Job)
+    local rec, recWhy = HistoryPlan(key, old, scan, at, day)
+    local job = setmetatable({ key = key, scan = scan, at = at, old = old, upd = {}, drop = {},
+        phase = dist and "dist" or (rec and "hist" or (feed and "scan" or "old")),
+        cursor = nil, done = 0, total = 0, added = 0, day = day, feed = feed, dist = dist, rec = rec, recWhy = recWhy }, Job)
     if dist then for _ in pairs(dist) do job.total = job.total + 1 end end
+    -- (A4) the version-2 history is built into NEW tables (unchanged strings are shared, never copied); the saved ones are only read
+    local raw = Store(false)
+    job.beginRaw = raw and raw.markets[key]
+    if rec then
+        local full = old and old.format == 3
+        job.oldH2, job.oldC2 = full and old.h2 or nil, full and old.c2 or nil
+        job.h2new, job.c2new, job.touched, job.recent = {}, {}, {}, {}
+        job.hbytes, job.hitems, job.citems = 0, 0, 0
+        job.hist2 = { fast = 0, full = 0, new = 0, replaced = 0, stale = 0, bad = 0, same = 0, malformed = 0, dropped = 0 }
+        local hi = full and old.h2info or nil
+        job.total = job.total + (Int(scan.n, 0, PR.MAX_ITEMS) or 0) + (hi and (hi.items or 0) + (hi.citems or 0) or 0)
+    end
     local oldHist = old and old.scope == "full" and old.hist or nil
     job.oldHist = oldHist
     job.oldCount = 0
@@ -591,10 +652,10 @@ end
 -- Does a distribution entry agree with the minimum entry of the same item in the same scan? (it decodes, starts at the same price, and holds
 -- the same items and listings in all; the minimum entry's items at its exact cheapest fraction fit inside the first tier)
 local function DistAgrees(entry, text)
-    if type(entry) ~= "string" then return false end
+    if type(entry) ~= "string" then return nil end
     local p, q, l, t = entry:match("^(%d+),(%d+),(%d+),(%d+)")
     local d = p and D.Decode(text)
-    return d ~= nil and d.min == tonumber(p) and d.tiers[1].q >= tonumber(q) and d.l == tonumber(l) and d.t == tonumber(t)
+    return (d ~= nil and d.min == tonumber(p) and d.tiers[1].q >= tonumber(q) and d.l == tonumber(l) and d.t == tonumber(t)) and d or nil
 end
 local DIST_COST = 3   -- a distribution entry is checked at about three times the work of merging one item
 
@@ -611,11 +672,20 @@ function Job:Step(limit)
             if id == nil then self.distOk = true break end
             left = left - DIST_COST
             self.done = self.done + 1
-            if not DistAgrees(items[id], text) then self.distOk = false break end
+            local d = DistAgrees(items[id], text)
+            if not d then self.distOk = false break end
+            if self.recent then self.recent[id] = d.r end   -- (A4) the checked Recent Price, for the history below
             self.cursor = id
         end
-        if self.distOk ~= nil then self.phase, self.cursor = (self.feed and "scan" or "old"), nil end
+        if self.distOk ~= nil then
+            if self.distOk == false then self.recent = self.rec and {} or nil end   -- a distribution that failed its check says nothing
+            self.phase, self.cursor = self.rec and "hist" or (self.feed and "scan" or "old"), nil
+        end
     end
+    if self.phase == "hist" then left = self:HistStep(left) end
+    if self.phase == "sweep" or self.phase == "sweepc" then left = self:SweepStep(left) end
+    if self.phase == "budget" then self:Budget() end
+    if self.phase == "compact" then left = self:CompactStep(left) end
     if self.phase == "scan" then
         local id, entry = self.cursor, nil
         while left > 0 do
@@ -676,10 +746,10 @@ end
 
 -- The scan log and day log after one more accepted scan, as saved strings. Pure: no saved table is touched. Only valid earlier entries
 -- are carried forward; a malformed one is dropped, never repaired.
-local function Logs(old, scan, at, day, seq)
+local function Logs(old, scan, at, day, seq, fed)
     local whole, partial = WholeRead(scan), (Int(scan.partial, 0, W.MAX_ID) or 0) > 0
     local flags = (whole and F_WHOLE or 0) + (scan.complete == true and F_COMPLETE or 0) + (scan.cut == true and F_CUT or 0)
-        + (scan.changed == true and F_CHANGED or 0) + (partial and F_PARTIAL or 0) + (scan.auto == true and F_AUTO or 0)
+        + (scan.changed == true and F_CHANGED or 0) + (partial and F_PARTIAL or 0) + (scan.auto == true and F_AUTO or 0) + (fed and F_FED or 0)
     local scans = {}
     for _, e in ipairs(Entries(old and old.scanLog, ScanEntry) or {}) do
         scans[#scans + 1] = ("%s,%s,%s,%s,%s"):format(N(e.seq), N(e.at), N(e.flags), N(e.items), N(e.records))
@@ -698,10 +768,10 @@ local function Logs(old, scan, at, day, seq)
     local list = Entries(old and old.dayLog, DayEntry) or {}
     local newest = list[#list] and list[#list].day or nil
     if day then
-        local dflags = (whole and D_WHOLE or D_INCOMPLETE) + (partial and D_PARTIAL or 0)
+        local dflags = (whole and D_WHOLE or D_INCOMPLETE) + (partial and D_PARTIAL or 0) + (fed and D_FED or 0)
         local merged = false
         for _, e in ipairs(list) do
-            if e.day == day then e.scans, e.flags, merged = e.scans + 1, Union(e.flags, dflags, { D_WHOLE, D_INCOMPLETE, D_PARTIAL }), true end
+            if e.day == day then e.scans, e.flags, merged = e.scans + 1, Union(e.flags, dflags, { D_WHOLE, D_INCOMPLETE, D_PARTIAL, D_FED }), true end
         end
         if not merged and (not newest or day > newest) then list[#list + 1] = { day = day, scans = 1, flags = dflags } end
         newest = newest and math.max(newest, day) or day
@@ -723,7 +793,7 @@ local function BuildMarket(self, hist, sd)
     local seq = oldFull and old.snap and old.snap.seq or 0
     for _, e in ipairs(oldFull and Entries(old.scanLog, ScanEntry) or {}) do if e.seq > seq then seq = e.seq end end
     seq = seq + 1
-    local scans, days = Logs(oldFull and old or nil, scan, at, day, seq)
+    local scans, days = Logs(oldFull and old or nil, scan, at, day, seq, self.rec ~= nil)
     local read, used = Int(scan.read, 0, W.MAX_ID), Int(scan.used, 0, W.MAX_ID)
     local snap = { seq = seq, kind = "full", at = at, records = read, used = used, invalid = Int(scan.invalid, 0, W.MAX_ID),
         noBuyout = Int(scan.noBuyout, 0, W.MAX_ID), partial = Int(scan.partial, 0, W.MAX_ID) or 0,
@@ -744,6 +814,13 @@ local function BuildMarket(self, hist, sd)
     local raw = oldFull and self.oldRaw or nil
     if raw then
         for _, k in ipairs({ "h2", "c2", "compact" }) do if type(raw[k]) == "table" then m[k] = raw[k] end end
+        if type(raw.h2info) == "table" then m.h2info = raw.h2info end
+    end
+    -- (A4) a recorded scan replaces them with the tables its job built (a scan that recorded nothing carries them forward untouched, above)
+    if self.rec then
+        m.h2, m.c2 = self.h2new, self.c2new
+        m.h2info = { v = H2.FORMAT, from = self.rec.from, at = at, bytes = self.hbytes, items = self.hitems, citems = self.citems }
+        if self.compactRec then m.compact = self.compactRec end
     end
     return m
 end
@@ -761,6 +838,8 @@ function Job:Apply()
     end
     local raw = Store(false)
     self.oldRaw = raw and raw.markets[key]
+    -- (A4) the market must be the one this job began from: a job built on a market that another commit replaced meanwhile would undo it
+    if self.oldRaw ~= self.beginRaw then return false, "changed" end
     if type(self.oldRaw) ~= "table" then self.oldRaw = nil end
     local hist = self.oldHist or {}
     local market = BuildMarket(self, hist, sd)
@@ -870,8 +949,161 @@ function PR.Observation(info, item)
         partial = (snap.partial or 0) > 0, complete = info.complete == true, cut = info.cut == true, whole = info.cut ~= true,
         auto = snap.auto == true, alg = snap.alg }
     local d, why = PR.Distribution(info, item)
-    if d then obs.r = d.r else obs.noRecent = why end
+    -- rsrc (A4): where r came from, "dist" (the item's distribution entry) or "single" (one price, so r = p by definition); with no r,
+    -- noRecent says why ("noevidence": the scan has no checked algorithm-1 distribution, "missing", "malformed"). r is NEVER filled from p
+    -- for an item that had a second price.
+    if d then obs.r, obs.rsrc = d.r, d.single and "single" or "dist" else obs.noRecent = why end
     return obs
+end
+
+---------------------------------------------------------------------------
+-- (A4) The commit's version-2 history phases (Job:Step calls them; Apply writes their tables). All work goes into the job's own new tables.
+---------------------------------------------------------------------------
+-- Work units, calibrated offline (bench_workshop.lua history2.*) so a step of PR.COMMIT_STEP units is about 1.5 to 2 ms on the dev machine
+-- whatever the mix: the legacy expiry about 14 us per item (1 unit), the append path about 40 us, the full path (a fold) about 200 us, an
+-- unlisted item with nothing due about 2 us.
+PR.HIST_FAST_COST = 3      -- the append path
+PR.HIST_FULL_COST = 15     -- an item whose history is decoded and re-encoded (a fold, a merge, an expiry, a first observation, the budget guard)
+PR.SWEEP_COST = 0.125      -- an item the scan did not list, nothing due (its strings are kept as they are)
+
+-- The observation of one item of the scan being saved: the same table Prices.Observation reads back from the saved market (r from the checked
+-- distribution entry; an item with no entry and no second price has r = p; one with a second price and no entry, or a scan whose distribution
+-- did not pass, has NO r). nil when the entry is unusable.
+local function ScanObs(self, id, entry, partial)
+    local p, _, l, t, x = Entry5(entry)
+    p = Int(p, 1, PR.MAX_COPPER)
+    if not p then return nil end
+    local r
+    if self.distOk == true then
+        r = self.recent[id]
+        local nx = Int(x, 1, PR.MAX_COPPER)
+        if r == nil and not (nx and nx > p) then r = p end
+    end
+    return H2.Obs(self.at, p, r, Int(t, 1, W.MAX_ID), Int(l, 1, W.MAX_ID), partial)
+end
+
+-- keeps the new strings of one item and counts them
+local function Keep(self, id, a, b)
+    local h2n, c2n = self.h2new, self.c2new
+    local was, wasc = h2n[id], c2n[id]
+    if type(was) == "string" then self.hbytes, self.hitems = self.hbytes - #was, self.hitems - 1 end
+    if type(wasc) == "string" then self.hbytes, self.citems = self.hbytes - #wasc, self.citems - 1 end
+    h2n[id], c2n[id] = a, b
+    if type(a) == "string" then self.hbytes, self.hitems = self.hbytes + #a, self.hitems + 1 end
+    if type(b) == "string" then self.hbytes, self.citems = self.hbytes + #b, self.citems + 1 end
+end
+
+-- the items the scan listed: one observation each
+function Job:HistStep(left)
+    local ctx, items, oldH2, oldC2, st = self.rec, self.scan.items, self.oldH2, self.oldC2, self.hist2
+    local partial = (Int(self.scan.partial, 0, W.MAX_ID) or 0) > 0
+    local id, entry = self.cursor, nil
+    while left > 0 do
+        id, entry = next(items, id)
+        if id == nil then self.phase, self.cursor = "sweep", nil return left end
+        self.done = self.done + 1
+        local o = Int(id, 1, W.MAX_ID) and ScanObs(self, id, entry, partial)
+        if o then
+            local h, c = oldH2 and oldH2[id], oldC2 and oldC2[id]
+            local a, b, path = H2.Update(h, type(c) == "string" and c or nil, o, ctx)
+            self.touched[id] = true
+            Keep(self, id, a, b)
+            st[path] = st[path] + 1
+            left = left - (path == "fast" and PR.HIST_FAST_COST or PR.HIST_FULL_COST)
+        else
+            st.bad = st.bad + 1
+            left = left - 1
+        end
+        self.cursor = id
+    end
+    return left
+end
+
+-- every other item with history: what has expired, folded or merged as of this scan (sweep: h2, then sweepc: items with buckets only).
+-- A key that is not an item id or a value that is not a string cannot be this format's and is not carried; a string the reader refuses is.
+function Job:SweepStep(left)
+    local ctx, st, touched = self.rec, self.hist2, self.touched
+    local c2 = self.oldC2
+    local source = (self.phase == "sweep" and self.oldH2 or c2) or {}
+    local id, v = self.cursor, nil
+    while left > 0 do
+        id, v = next(source, id)
+        if id == nil then
+            self.cursor = nil
+            if self.phase == "sweep" then self.phase = "sweepc" return left end
+            self.phase = "budget"
+            return left
+        end
+        if not touched[id] then
+            self.done = self.done + 1
+            touched[id] = true
+            if Int(id, 1, W.MAX_ID) and type(v) == "string" then
+                local h, c
+                if self.phase == "sweep" then h, c = v, c2 and c2[id] else h, c = nil, v end
+                if type(c) ~= "string" then c = nil end
+                local a, b, path = H2.Retain(h, c, ctx)
+                Keep(self, id, a, b)
+                st[path] = st[path] + 1
+                left = left - (path == "full" and PR.HIST_FULL_COST or PR.SWEEP_COST)
+            else
+                st.dropped = st.dropped + 1
+                left = left - PR.SWEEP_COST
+            end
+        end
+        self.cursor = id
+    end
+    return left
+end
+
+-- (section 7.4) over budget? then the ladder, one step at a time over the whole market, until it is under or the ladder is done
+local function Over(self)
+    return self.hbytes > PR.HISTORY_BUDGET or self.hbytes + self.rec.others > PR.ACCOUNT_BUDGET
+end
+function Job:Budget()
+    self.phase = self.feed and "scan" or "old"
+    if not Over(self) then return end
+    self.cstep, self.csub, self.cursor, self.cbefore, self.cchanged, self.cn = 1, "h", nil, self.hbytes, {}, 0
+    self.phase = "compact"
+end
+
+function Job:CompactStep(left)
+    local ctx, step = self.rec, self.cstep
+    local h2n, c2n = self.h2new, self.c2new
+    local source = self.csub == "h" and h2n or c2n
+    local id, v = self.cursor, nil
+    while left > 0 do
+        id, v = next(source, id)
+        if id == nil then
+            self.cursor = nil
+            if self.csub == "h" then self.csub = "c" return left end
+            -- this step is done: under budget, or the last step, ends the ladder
+            if Over(self) and step < 3 then
+                self.cstep, self.csub = step + 1, "h"
+                return left
+            end
+            self.compactRec = { level = step, at = self.at, items = self.cn, before = self.cbefore, bytes = self.hbytes, over = Over(self) or nil }
+            self.phase = self.feed and "scan" or "old"
+            return left
+        end
+        -- (an item with h2 was done in the "h" pass, h2 and c2 together)
+        if self.csub == "h" or h2n[id] == nil then
+            local h, c = h2n[id], c2n[id]
+            if type(h) ~= "string" then h = nil end
+            if type(c) ~= "string" then c = nil end
+            local a, b, changed = H2.Compact(step, h, c, ctx)
+            if changed then
+                Keep(self, id, a, b)
+                if not self.cchanged[id] then self.cchanged[id], self.cn = true, self.cn + 1 end
+                left = left - PR.HIST_FULL_COST
+            else
+                left = left - PR.HIST_FAST_COST   -- (nothing due: only its text was looked at)
+            end
+        else
+            left = left - PR.SWEEP_COST
+        end
+        self.cursor = id
+    end
+    return left
 end
 
 -- What buying `qty` of an item at that auction house is expected to cost, from what the scan saw of it (Lookup's answer, or nil).

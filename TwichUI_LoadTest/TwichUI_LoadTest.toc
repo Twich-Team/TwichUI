@@ -1,0 +1,12 @@
+## Interface: 16001
+## Title: |cffC9A24ATwich|rUI Load Test (development)
+## Notes: Development tool, never part of a release: one synthetic saved variable for measuring how the client loads a large saved file (Workshop market data foundation, the A4 load gate). Loaded only on request. Holds no real data.
+## Author: twichie
+## Version: 0.1.0-dev
+## RequiredDeps: !!!TwichUI
+## LoadOnDemand: 1
+## SavedVariables: TwichUILoadTestDB
+## X-License: MIT (code); see !!!TwichUI\LICENSE
+## Category: Development
+
+LoadTest.lua

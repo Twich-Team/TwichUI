@@ -1,6 +1,6 @@
 # Workshop Market Data Foundation 2.0 (A1: architecture and data contract)
 
-Status: **planning, revised after owner review** (first version `4c74e94f`, revision 2026-11-12, branch `feature/workshop`). **Milestones A2 and A3 are built** (see "A2 as built" and "A3 as built" after section 15); everything else here is still a plan. This document is the source of truth for the A2 to A12 implementation campaign; `docs/workshop.md` describes what exists.
+Status: **planning, revised after owner review** (first version `4c74e94f`, revision 2026-11-12, branch `feature/workshop`). **Milestones A2, A3 and A4 are built** (see "A2 as built", "A3 as built" and "A4 as built" after section 15; **A4's real-client load gate is pending**); everything else here is still a plan. This document is the source of truth for the A2 to A12 implementation campaign; `docs/workshop.md` describes what exists.
 
 Evidence labels used throughout:
 - **[verified]**: read in this repository's code, in `git show v1.3.0:...`, or in the Forever UI source (`../wow-ui-source`, branch `forever`).
@@ -677,6 +677,194 @@ The new work costs about **1.4 times** the time and **1.7 to 2.6 times** the tra
 8. Do not edit or damage the saved file to test errors; malformed data is covered offline.
 
 **Next: A4** (history and the chart API): the eight-point intraday ring, the 30-day daily points with their lows and highs, weekly and two-week buckets, the logs, `Market.History`, the append-only update, the budget guard and the load-time gate (section 12.3), all fed from `Prices.Observation` and switched on by setting `h2`; `PR.FEED_LEGACY_HISTORY` stays `false`.
+
+---
+
+## A4 as built (version-2 history, chart API, budget guard, load-test facility; 2026-11-13)
+
+**Implemented** (unit-tested in `tests/test_workshop_history2.lua`, `tests/test_workshop_schema.lua`, `tests/test_loadtest.lua`; simulator-tested
+over the fake auction house; **not real-client-tested**): `History2.lua` (new, pure: encoding, strict reading, the ring, daily points, folding,
+merging, expiry, the append path, the guard's steps), `Prices.lua` (the commit's new phases, eligibility, `h2info`, the fed flags, the guard),
+`Scan.lua` (commit steps time-budgeted: 4 ms per tick), `Market.lua` (`Market.History`, `Market.Info.history`), the Workshop `.toc`
+(`History2.lua` after `Dist.lua`, before `Prices.lua`). Development only: `TwichUI_LoadTest/`, `TwichUI_LoadTestClock/`, the Lab group
+"Saved-data load test", `history2.*` workloads and two `market.history2.*` Lab cases.
+
+**Live recording on the development branch: ON** (`Prices.RECORD_HISTORY = true`, a developer constant, not a setting). **Not release-ready:**
+the real-client saved-data load gate (section 12.3; procedure in `docs/testlab.md`, "Saved-data load test") has not run. Turning the constant
+off makes every commit carry `h2`, `c2`, `h2info` and `compact` forward untouched (tested), as A2/A3 did.
+
+### What is recorded, and when (section 3.4 as implemented)
+| Scan | `items`/`dist` | ring and daily | scan log / day log |
+|---|---|---|---|
+| accepted whole read (complete, or with records lacking information: marked `!`) | as A3 | recorded | flags + 64 / day flag 8 |
+| accepted cut or count-changed scan | as A3 | nothing | logged, no 64 / no 8 |
+| whole read dated before the newest recorded scan (clock moved back) | as A3 | nothing (`recWhy = "clock"`) | logged, no 64 |
+| market whose `h2info.v` is a later format | as A3 | nothing: `h2`, `c2`, `h2info`, `compact` carried untouched | logged, no 64 |
+| `RECORD_HISTORY = false` | as A3 | nothing, carried untouched | logged, no 64 |
+| refused (`kept`, `held`, `bad`), interrupted, failed | nothing | nothing | nothing |
+
+The observation recorded for an item is A3's contract: the job builds it from its own checked entries exactly as `Prices.Observation` reads it
+back from the saved scan (the test compares the two for every listed item of every pipeline scan). `Prices.Observation` gained `rsrc`
+(`"dist"` or `"single"`) beside `r`; `noRecent` keeps its meaning. **Recent Price is recorded only when it is known**: from the checked
+distribution entry, or `r = p` for a genuinely one-price item (no entry and no second price). A scan whose distribution did not pass its
+check, or an item with a second price and no entry, records **no** Recent Price (an empty field), never the minimum and never 0 (tests;
+mutation `market.history2.unknown-recent-is-min`).
+
+### The saved text (format 1, `market.h2info.v = 1`; header of `History2.lua`)
+```
+h2[id] = "<ring>|<newest day>:<daily>"
+  ring point   "m,dm,p,dr,t,l[!]"                          m absolute (first) or minutes after the previous point's m; dr EMPTY = r unknown
+  daily point  "dd,p,dr,t,l[!]"                            one scan
+               "dd,p,dr,t,l,n[!]"                          n >= 2 scans, nothing moved
+               "dd,p,dr,t,l,n[!]~"                         n >= 2, ranges condensed by the budget guard
+               "dd,p,dr,t,l,n,dpl,dph,drl,drh,dtl,dth[!]"  n >= 2, something moved
+c2[id] = "k,s,n,nr,plo,dpm,dph,rm,drl,drh,tm,dtl,dth,lm[!][~];..."
+market.h2info = { v = 1, from = first recorded day, at = newest recorded scan, bytes = h2 + c2 text, items, citems }
+```
+**Differences from section 3.3, each deliberate:**
+1. *Unknown Recent Price* is an empty `dr` (A1 had no way to say it). When a day's closing scan had none but earlier scans did, the day's
+   Recent low/high are written as absolute values (`drl`, `drh`); buckets the same when `nr = 0`.
+2. *The day's highest minimum* (`dph`) is kept: the brief asks for the day's low and high minimum; A1's daily point had only the low.
+3. *The scan count is kept whenever it is 2 or more* (A1 dropped `n` when nothing moved): short form `dd,p,dr,t,l,n`.
+4. *Buckets count Recent Price days separately* (`nr`): a Recent mean is over the days that had one, never a mean that counts the others as
+   zero (mutation `recent-mean-by-days`); the minimum, supply and listings means are over all `n` observed days. A bucket's minimum high is the
+   highest day high (A1: highest closing minimum, because days had no high).
+5. *The ring's unchanged rule* also requires that the point was seen by the previous recorded scan (`h2info.at`, minute resolution) and is
+   still within 48 hours: an observed absence is never hidden inside a flat segment, and an old point is never stretched over two days.
+6. Flags `~` (condensed) on days and buckets; empty `dtl,dth` = supply range dropped by the guard.
+7. `market.h2info` is new (A1 had none); `v2from` keeps its A2 meaning; charts use `h2info.from` (`recordedFrom`) as the Recent Price boundary,
+   because markets saved by A2/A3 builds have `v2from` days with no version-2 history.
+
+**Retention (exact):** ring: last sighting within 2,880 minutes of the scan being saved, at most 8 points, the oldest dropped first. Daily:
+every day from the first day of the calendar week (`day // 7`, Thursdays) holding `T - 29` (so every listed day of ages 0 to 29, up to 36 days).
+Weekly: whole weeks folded once entirely 30 or more days old; merged pairwise (`week // 2`) once the pair ends more than 60 days back. Expiry: a
+bucket whose last day is more than 120 days back. Retention runs for every item at every recorded scan (items the scan did not list are swept
+too), never because time passed without a scan. Boundary tests: ages 29/30/31/36/37 through a 140-day run, 59/60/61 and 119/120/121 with
+exact bucket ends, leap day 2028-02-29 and the 2027/2028 year change. Rounding: half up; a two-week mean is within 1 copper (1 item) of the
+exact mean of its days (checked against exact means for every bucket in the model comparison).
+
+### The append path (section 7.2)
+`History2.Update` appends to (or replaces) the newest daily point and rewrites the ring without decoding the daily points in between, when no
+fold, merge or expiry is due (`H2Due`, `C2Due`: a few `match` calls on the first fields). Before appending it checks: one `|` and one `:`, the
+whole ring field by field, the first and the newest daily point field by field, and the day sequence (every point starts with a step of at least
+1 and the steps add up to the header). The points in between are decoded field by field by the full path, which runs at every fold (weekly for
+an item with history) and on every read; a string the reader refuses is absent to readers and replaced by the item's next observation. A
+character scan of the whole string was measured and dropped: it cost more than the rest of the append.
+
+**Equivalence:** the append path and the full path both produce exactly the independent model's text (below), byte for byte.
+
+### Commit integration
+New job phases after A3's `dist`: `hist` (the scan's items: `History2.Update`), `sweep` and `sweepc` (every other item with history:
+`History2.Retain`), `budget`, `compact` (only when over budget), then A2's legacy `scan`/`old`. Everything is built into **new** `h2`/`c2` tables
+(unchanged strings are shared, not copied); `Apply` assigns them with the rest, so a dropped, failing or cancelled commit leaves the database
+deep-equal (tested with an error injected into `Update` and `Retain` after 0, 1, 7 and 15 calls, a job dropped in every phase, and a job ready
+but never applied). `Apply` now also refuses (`"changed"`) a job begun on a market another commit replaced meanwhile. Work units
+(`Prices.HIST_FAST_COST` 3, `HIST_FULL_COST` 15, `SWEEP_COST` 0.125, legacy 1; `COMMIT_STEP` 120) are calibrated so one step is about 1.5 to 2 ms
+offline, and `Scan.lua` runs steps for at most 4 ms per tick (`SAVE_MS`), then yields the frame; the token, generation and "auction house still
+open" checks are unchanged.
+
+### Gaps and `Market.History(item, metric, opt)`
+`metric` = `min`, `recent`, `supply`, `listings`; `opt` = `market`, `now`, `from`, `to` (times), `sources` (`"local"`, `"legacy"`). Returns
+`{ item, metric, unit, basis, market, label, today, from, to, v2from, recordedFrom, compact, damaged, ringFull, points, gaps, marks, resolution }`
+(field-by-field in `Market.lua`), or `nil` and `baditem`, `badmetric`, `variant`, `nomarket`, `outofscope`, `format`.
+- Points: `obs` (real first and last sighting times), `day` (closing value, the day's low/high, scan count), `week`/`fortnight` (mean,
+  low/high, observed days with a value; `exact = false`), `legacy-day`/`legacy-bucket` (`min` only, only days before `recordedFrom`, so nothing is
+  counted twice; `provenance = "legacy"`). Nothing is interpolated; no zero is ever made up; a `recent` day whose closing Recent Price is
+  unknown but whose range is known is a point with `v = nil`, `missing = "norecent"`.
+- Gap reasons per day without a point, from the day log (120 days) and `recordedFrom`: `noscan` (no scan that day), `unlisted` (a scan **recorded
+  into the history** that day did not list it: day flag 8), `incomplete` (only cut or changed scans), `unknown` (a whole read that was not
+  recorded: switch off, clock, later format), `beforev2` (before recording began), `norecent`, `notretained` (beyond the day log). The market
+  log proves a scan happened, never that an item was there.
+- Marks (the last 48 hours, from the scan log): a scan the item's observations do not cover is `unlisted`, `incomplete`, `unknown`, or
+  `notretained` when the ring is full (8 points) and the scan is older than its oldest point.
+- `Market.Price/Stats/Trend/Compare/Series/Observed` are unchanged and still read only the frozen legacy history.
+
+### Budget guard (section 7.4 as implemented)
+The job adds up the bytes of the new `h2`/`c2` strings as it builds them (no extra pass); the other markets count from their own
+`h2info.bytes` (no walk of their strings). Over `Prices.HISTORY_BUDGET` (48 MB) or with all markets over `ACCOUNT_BUDGET` (96 MB), the
+**committing** market runs the ladder, one step at a time over every item, until it is under: (1) condense day ranges of daily points 14 or more
+days old (closing values and scan counts stay); (2) for items listed on fewer than 4 of the last 30 days, fold whole weeks entirely 14 or more
+days old into weekly buckets early; (3) drop the supply range of buckets ending more than 60 days back. A cheap per-item check skips items
+with nothing due. Never touched (tested against the same commit without a budget): the ring, the daily points of the last 14 days, every
+closing value and scan count, every bucket's counts, means and price ranges, the legacy history, the snapshot. `market.compact = { level, at,
+items, before, bytes, over }`, shown by `Market.Info` (and `Market.History.compact`); `over = true` when step 3 still left it over budget:
+nothing more is removed, it is reported. **Interpretations:** "the last 14 daily points" is read as the daily points of the last 14 days
+(ages 0 to 13; as points, a sparse item's every point would be protected and step 2 could never apply); the ladder runs on the committing
+market only (another market is never rewritten by a commit that is not its own; "longest ago first" from section 7.4 is therefore not done).
+
+### Verification [unit-tested unless marked]
+- `test_workshop_history2.lua` (about 25 s): hand-worked cases (the brief's three-scan day by hand: closing 1100 / low 600 / high 1100 /
+  supply 120, 70 to 120, 3 scans; the unchanged rule and each value that breaks it; 8 and 9 changes; 2,880 vs 2,881 minutes; missing Recent
+  Price; midnight; clock back; leap and year days); 30+ refused spellings of `h2` and 19 of `c2`; the damaged strings the append path must not
+  append to; **120 seeded calendars through `History2` directly (53,969 item states) and 25 through the real pipeline with two interleaved markets
+  (35,951), compared byte for byte with the model**; a failed and a partial distribution; `Market.History` against the model's gap reasons
+  (15,744 `noscan` and 204 `unlisted` days compared) plus fixed cases for `incomplete`, `unknown`, `norecent`, the marks and the legacy join;
+  atomicity; the budget guard; a later format, malformed strings, the switch, cut scans, the frozen legacy history.
+- The model (`TwichUI_TestLab/Reference.lua` section 5) keeps every scan in full, derives each tier in one naive pass from the final state, and
+  writes the text with its own writer; it shares no code with `History2.lua`. It does not model the guard or malformed strings (tested on their own).
+- `test_workshop_schema.lua` updated where the stored shape changed (flags 64 and 8, `h2` now written, the Market API now has `History`, the
+  seeded "later containers" marked as a later format so they are still carried untouched); the 1.3 protection test is unchanged and passes.
+- Mutation: `bash tools/mutate.sh --group market`: **126 of 126 killed** (33 new `market.history2.*`: ring over 8, 49-hour reach, the 48-hour
+  boundary, the unchanged rule on the minimum only / ignoring supply / the partial flag / an absence, the first scan as the close, the day low,
+  high and supply low lost, a fold before the 30-day window, a fold across weeks, an unweighted two-week merge, a Recent mean over all days, an
+  early merge, the 120-day boundary, the append path ignoring the day sequence, the guard touching the last 14 days or folding them, cut scans
+  recorded, unknown Recent Price as the minimum, a later format written, a clock-back scan recorded, the day "recorded" flag on any whole read,
+  a ladder step skipped, the guard never run, the history phase writing the saved table, a stale job applied, legacy in Recent, legacy counted
+  twice, "unlisted" without evidence, a point without evidence). The first run left two survivors, both real test gaps, now closed: a
+  checked distribution missing one item's entry, and legacy days after recording began. Two A3 entries (`commit-check-skipped`,
+  `agrees-ignores-price`) were re-pointed at the lines A4 changed and still die.
+- Simulator [simulator-tested]: `bash tools/simlab/workshop.sh` PASS WITH KNOWN SIMULATOR LIMITATIONS (the same two classified errors), 444
+  checks per launch (6 new: the recorded history of two items by hand, none for an unpriced item, `h2info`, the scan log flag, `Market.History`).
+- Test Lab: `market.history2.model` (4 seeds) and `market.history2.day` run and pass offline through the real Runner (`test_testlab.lua`); not
+  yet in the client.
+
+### Performance [measured offline, Lua 5.1, WSL; synthetic; GC included]
+`bench_workshop.lua --only history2 --xl --reps 3` (history work only, in commit steps; median, longest step, transient heap peak):
+| Workload | Total | Per item | Longest step | Heap peak |
+|---|---|---|---|---|
+| `update.1k` / `10k` / `40k` (dense, same day: append) | 37 ms / 400 ms / 1.80 s | 37 to 45 us | 3.4 / 10.0 / 19.8 ms | 7 / 35 / 129 MB |
+| `update.sparse.10k` | 111 ms | 11 us | 2.3 ms | 9 MB |
+| `rollover.10k` (next day: append) | 379 ms | 38 us | 7.8 ms | 36 MB |
+| `fold.10k` / `fold.40k` (a week folds: full path) | 2.11 s / 9.27 s | 211 / 232 us | 10.2 / 34.0 ms | 37 / 139 MB |
+| `sweep.10k` / `sweep.40k` (unlisted items, nothing due) | 18 / 74 ms | 1.8 us | 1.9 / 3.0 ms | 0.5 / 2 MB |
+| `compact.10k` (guard step 1, every item due) | 2.00 s | 200 us | 9.4 ms | 33 MB |
+| `query.long` (`Market.History`, 200 queries of long histories) | 29 ms | 0.14 ms a query | 2.2 ms | 4 MB |
+Retained memory after the runs: +5 to +264 KB (nothing accumulates). The workloads are v1 (new); nothing earlier is comparable.
+
+Whole commits through the real pipeline (`BeginCommit`, `Step` with the default units, `Apply`), a market whose items all have long histories:
+| Items (history) | Scan | Total | Steps | Longest step | Heap peak |
+|---|---|---|---|---|---|
+| 1,000 (all dense) | same day | 0.04 s | 27 | 2.3 ms | +5 MB |
+| 10,000 (all dense) | same day / fold day | 0.40 s / 2.13 s | 252 / 1,252 | 8.0 / 9.1 ms | +35 / +50 MB |
+| 40,000 (60% dense, ~43 MB) | same day / fold day | 1.27 s / 5.99 s | 1,002 / 4,063 | 20.5 / 13.5 ms | +99 / +127 MB |
+| 40,000 (all dense, 64 MB: over budget) | first commit / the next | ~19.5 s / ~3.4 s | | 30 ms | |
+
+A typical step is 1.5 to 2 ms; the longest steps are garbage-collector pauses in a heap of hundreds of megabytes (every listed item's string
+is rebuilt, about 3 KB of garbage and 1.2 KB of new text per dense item), not the step budget. The append path costs about 26 to 43 us per item
+offline (A1's prototype: 6 to 18 us, without the checks described above); the full path about 130 to 210 us. The client ran offline code about
+2.4 times slower in M7.1: a 40,000-item same-day commit would take about 3 s, a fold day about 15 s, spread over frames.
+
+**Synthetic saved sizes** (`WL.H2Item`, the load test's own generator; plain `dofile` offline): `heavy` 40,000 items all dense: 63.7 MB of
+history text (1,671 B per item), a 64.8 MB file, 0.13 s to parse, +81 MB resident; `mixed` (30% dense): 24.1 MB, 25.1 MB, 0.06 s, +41 MB. The
+heavy market is **over the 48 MB budget**: the full ladder brings it to about 56 MB and records `over = true` (owner review below).
+
+### Load gate (pending)
+Procedure, what it measures and what it cannot: `docs/testlab.md`, "Saved-data load test". No real-client figure exists. Until it is run and
+reviewed: keep `RECORD_HISTORY` as it is on this branch and do not release with it on; lower the budgets in `Prices.lua` if the load is too slow.
+
+### Open owner decisions
+1. **Budgets against the heavy synthetic market:** a 40,000-item market where every item is listed three times a day for 120 days exceeds
+   48 MB even after the approved ladder (about 56 MB, `over = true`). Keep 48 MB, raise it, or approve a further step (for example condensing
+   from 7 days): measure first (load gate).
+2. **A market not scanned for 120 days** is not removed (A1 section 3.3 proposed it; it deletes data, so it waits for approval). Its history
+   simply stops being swept.
+3. **Expiry by bucket end** keeps two-week buckets whose last day is within 120 days, so data up to about 133 days old remains.
+
+### A5 handoff
+`Market.History` and `History2.Read` give every tier decoded; A5's `Value(market)` (14-day weighted median of daily **closing** Recent Prices) and
+`Value(historical)` (60 days, weekly buckets by their mean weighted by `nr`) read the `day` points and buckets with `exact = false`; `Range` reads
+day ranges and bucket low/high; legacy points feed the minimum only. Note for A5: buckets carry `nr` for Recent Price; a day without a known
+closing Recent Price must not vote. The cache key (section 10) can use `snap.seq`. Do not decode `h2`/`c2` outside `History2.lua`.
 
 ---
 

@@ -28,6 +28,8 @@ Stock.lua
 History.lua
 # The price distribution of one item: quartiles, the Recent Price, the saved text and its checked reading (pure)
 Dist.lua
+# The version-2 history of one item: the 48-hour ring, 30 daily points, weekly and two-week buckets, the append path (pure)
+History2.lua
 # Auction prices: collecting a scan, the saved markets (TwichUIWorkshopDB), what one craft costs and earns (no game calls, no frames)
 Prices.lua
 # The Opportunities list: rows, filter, sort, the basis text (pure)

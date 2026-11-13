@@ -149,9 +149,9 @@ m("market.dist.alg-wrong", PRICES, "if self.distOk == true then snap.alg = D.ALG
   "the snapshot names the wrong algorithm", [DIST_TESTS])
 m("market.dist.alg-claimed-without-evidence", PRICES, "if self.distOk == true then snap.alg = D.ALG end", "if scan.items then snap.alg = D.ALG end",
   "the snapshot claims algorithm 1 evidence for every scan, including one whose distribution failed", [DIST_TESTS])
-m("market.dist.commit-check-skipped", PRICES, "if not DistAgrees(items[id], text) then self.distOk = false break end", "",
+m("market.dist.commit-check-skipped", PRICES, "            if not d then self.distOk = false break end\n", "            if not d then d = { r = nil } end\n",
   "a distribution is saved without being checked against the scan's minimum entries", [DIST_TESTS])
-m("market.dist.agrees-ignores-price", PRICES, "return d ~= nil and d.min == tonumber(p) and", "return d ~= nil and",
+m("market.dist.agrees-ignores-price", PRICES, "return (d ~= nil and d.min == tonumber(p) and", "return (d ~= nil and",
   "an entry that starts at another price than the item's minimum is accepted", [DIST_TESTS])
 m("market.dist.agrees-ignores-totals", PRICES, "and d.l == tonumber(l) and d.t == tonumber(t)", "",
   "an entry whose items and listings are not the item's is accepted (another item's entry)", [DIST_TESTS])
@@ -412,6 +412,82 @@ m("market.schema.coverage-boundary-moves", PRICES, "local v2from = oldFull and o
 m("market.schema.version-bumped-before-build", PRICES, "    local market = BuildMarket(self, hist, sd)\n",
   "    if Store(false) then Store(false).v = PR.SAVED_VERSION end\n    local market = BuildMarket(self, hist, sd)\n",
   "the version is bumped before the market is built, so a failure while building leaves a version-2 database holding only old-format markets", [SCHEMA])
+
+
+# --- version-2 history (market data foundation 2.0, A4): the ring, the daily points, the buckets, the commit, the chart API, the guard ------
+HISTORY2 = "TwichUI_Workshop/History2.lua"
+H2T = "test_workshop_history2.lua"
+m("market.history2.ring-over-eight", HISTORY2, "    while #ring > H2.RING do table.remove(ring, 1) end",
+  "    while #ring > H2.RING + 1 do table.remove(ring, 1) end", "the ring keeps nine observations instead of eight", [H2T], smoke=True)
+m("market.history2.ring-reach-49h", HISTORY2, "    local cutoff = M - H2.RING_MINUTES", "    local cutoff = M - H2.RING_MINUTES - 60",
+  "the ring's reach is 49 hours, not 48", [H2T])
+m("market.history2.ring-reach-boundary", HISTORY2, "while ring[1] and ring[1].m + ring[1].dm < cutoff do", "while ring[1] and ring[1].m + ring[1].dm <= cutoff do",
+  "an observation last seen exactly 48 hours back is dropped", [H2T])
+m("market.history2.unchanged-min-only", HISTORY2,
+  "if last and prevM and last.m + last.dm == prevM and last.p == o.p and last.r == o.r and last.t == o.t and last.l == o.l and last.pf == o.pf then",
+  "if last and prevM and last.m + last.dm == prevM and last.p == o.p then",
+  "the ring's unchanged rule compares the minimum only: a Recent Price or supply change is merged away", [H2T], smoke=True)
+m("market.history2.unchanged-ignores-supply", HISTORY2, "and last.r == o.r and last.t == o.t and last.l == o.l", "and last.r == o.r and last.l == o.l",
+  "a supply-only change is merged into the previous observation", [H2T])
+m("market.history2.unchanged-ignores-partial", HISTORY2, "and last.l == o.l and last.pf == o.pf then", "and last.l == o.l then",
+  "an observation from a scan lacking information is merged with a complete one", [H2T])
+m("market.history2.unchanged-ignores-absence", HISTORY2, "if last and prevM and last.m + last.dm == prevM and last.p", "if last and last.p",
+  "a scan that did not list the item is hidden inside a flat segment (identical values before and after)", [H2T])
+m("market.history2.close-is-first-scan", HISTORY2, "    x.p, x.r, x.t, x.l = o.p, o.r, o.t, o.l\n", "\n",
+  "a day's closing values are its first scan's, not its last", [H2T], smoke=True)
+m("market.history2.day-low-overwritten", HISTORY2, "    if o.p < x.plo then x.plo = o.p end", "    x.plo = o.p",
+  "a later scan replaces the day's lowest minimum, so a dip that day is lost", [H2T])
+m("market.history2.day-high-overwritten", HISTORY2, "        if not x.rhi or o.r > x.rhi then x.rhi = o.r end", "        x.rhi = o.r",
+  "a later scan replaces the day's highest Recent Price, so a spike that day is lost", [H2T])
+m("market.history2.day-supply-low-lost", HISTORY2, "    if o.t < x.tlo then x.tlo = o.t end", "",
+  "the day's fewest items are not updated by later scans", [H2T])
+m("market.history2.fold-too-early", HISTORY2, "function H2.FoldBefore(today) return 7 * floor((today - 29) / 7) end",
+  "function H2.FoldBefore(today) return 7 * floor((today - 22) / 7) end", "weeks fold before every day of the last 30 is safe", [H2T])
+m("market.history2.fold-crosses-weeks", HISTORY2, "while days[i] and days[i].d < before and floor(days[i].d / 7) == w do",
+  "while days[i] and days[i].d < before do", "one weekly bucket swallows the days of every week being folded", [H2T])
+m("market.history2.merge-unweighted", HISTORY2, "    into.pm = Mean(into.pm * into.n + w.pm * w.n, n)", "    into.pm = Mean(into.pm + w.pm, 2)",
+  "a two-week mean is the plain mean of two weekly means, ignoring how many days each holds", [H2T])
+m("market.history2.recent-mean-by-days", HISTORY2, "    if b.nr > 0 then b.rm = Mean(sr, b.nr) end", "    if b.nr > 0 then b.rm = Mean(sr, b.n) end",
+  "a week's Recent Price mean divides by every observed day, counting days without a Recent Price as zero", [H2T])
+m("market.history2.merge-early", HISTORY2, "if b.s == 7 and 14 * floor(b.k / 2) + 13 < T - H2.WEEKLY_DAYS then", "if b.s == 7 and b.k * 7 + 6 < T - H2.WEEKLY_DAYS then",
+  "a week merges into a two-week bucket while its partner week is still weekly", [H2T])
+m("market.history2.expiry-boundary", HISTORY2, "while bks[1] and BucketEnd(bks[1]) < T - H2.RETAIN_DAYS do", "while bks[1] and BucketEnd(bks[1]) <= T - H2.RETAIN_DAYS do",
+  "a bucket ending exactly 120 days back is dropped", [H2T])
+m("market.history2.fast-path-unchecked-days", HISTORY2, "    if sum ~= newest then return nil end", "",
+  "the append path appends to a string whose day sequence does not add up (a damaged string)", [H2T])
+m("market.history2.guard-touches-recent-days", HISTORY2, "if T - x.d >= H2.PROTECT_DAYS and x.n >= 2 and not x.cf and Moved(x) then",
+  "if x.n >= 2 and not x.cf and Moved(x) then", "the budget guard condenses the ranges of the last 14 days too", [H2T])
+m("market.history2.guard-folds-recent-weeks", HISTORY2, "changed = FoldDays(days, bks, 7 * floor((T - H2.PROTECT_DAYS + 1) / 7))",
+  "changed = FoldDays(days, bks, 7 * floor((T + 1) / 7))", "the budget guard folds a sparse item's protected last 14 days", [H2T])
+m("market.history2.cut-scans-recorded", PRICES, "    if not WholeRead(scan) or not day then return nil, \"incomplete\" end",
+  "    if not day then return nil, \"incomplete\" end", "a cut or count-changed scan is recorded into the history", [H2T, SCHEMA], smoke=True)
+m("market.history2.unknown-recent-is-min", PRICES, "if r == nil and not (nx and nx > p) then r = p end", "if r == nil then r = p end",
+  "an item with a second price but no checked distribution is recorded with Recent Price = minimum", [H2T], smoke=True)
+m("market.history2.future-format-written", PRICES, "    if hi and hi.state == \"future\" then return nil, \"format\" end\n", "\n",
+  "a later build's history format is rewritten by this one", [H2T, SCHEMA])
+m("market.history2.clock-back-recorded", PRICES, "    if hi and hi.at and at < hi.at then return nil, \"clock\" end\n", "\n",
+  "a scan dated before the newest recorded one is recorded (history reordered)", [SCHEMA, H2T])
+m("market.history2.day-fed-flag-on-any-whole", PRICES, "+ (partial and D_PARTIAL or 0) + (fed and D_FED or 0)", "+ (partial and D_PARTIAL or 0) + (whole and D_FED or 0)",
+  "the day log says a day was recorded whenever a whole read happened, so a chart says 'not listed' without evidence", [H2T])
+m("market.history2.guard-skips-step", PRICES, "                self.cstep, self.csub = step + 1, \"h\"", "                self.cstep, self.csub = step + 2, \"h\"",
+  "the budget guard jumps from step 1 to step 3 (out of the approved order)", [H2T])
+m("market.history2.guard-never-runs", PRICES, "    return self.hbytes > PR.HISTORY_BUDGET or self.hbytes + self.rec.others > PR.ACCOUNT_BUDGET",
+  "    return false", "the budget is never checked", [H2T])
+m("market.history2.commit-writes-saved-table", PRICES,
+  "            Keep(self, id, a, b)\n            st[path] = st[path] + 1\n            left = left - (path == \"fast\"",
+  "            Keep(self, id, a, b)\n            if oldH2 then oldH2[id] = a end\n            st[path] = st[path] + 1\n            left = left - (path == \"fast\"",
+  "the history phase writes each new string into the saved table at once: a failing or dropped commit leaves part of the scan saved", [H2T], smoke=True)
+m("market.history2.stale-job-applied", PRICES, "    if self.oldRaw ~= self.beginRaw then return false, \"changed\" end\n", "\n",
+  "a job begun before another commit of the same market is applied over it, undoing that commit", [H2T])
+m("market.history2.legacy-in-recent", MARKET, "    if metric == \"min\" and src.legacy then", "    if (metric == \"min\" or metric == \"recent\") and src.legacy then",
+  "the Recent Price series is filled from the legacy minimum history", [H2T], smoke=True)
+m("market.history2.legacy-double-counted", MARKET, "            local limit = (recordedFrom or (today + 1)) - 1", "            local limit = today",
+  "legacy minimum days after version-2 recording began are shown beside the version-2 days (counted twice)", [H2T])
+m("market.history2.unlisted-without-evidence", MARKET, "            if Bit(f, DF.FED) then return \"unlisted\" end", "            if Bit(f, DF.WHOLE) then return \"unlisted\" end",
+  "a day whose whole read was not recorded is called 'scanned, not listed'", [H2T])
+m("market.history2.point-without-evidence", MARKET,
+  "            local v, lo, hi = Pick(x, metric)\n            if v or lo then", "            local v, lo, hi = Pick(x, metric)\n            if true then",
+  "a day with no Recent Price evidence still gets a (valueless) chart point", [H2T])
 
 
 # ======================================================================================================================

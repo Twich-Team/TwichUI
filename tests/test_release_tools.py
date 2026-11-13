@@ -437,6 +437,18 @@ class ArchiveTests(unittest.TestCase):
         self.assertNotIn("TwichUI_TestLab", moved, "the Lab is never one of the folders the packager moves into the zip")
         self.assertNotIn("TwichUI_TestLab", rel.ADDONS)
 
+    def test_load_test_companions_are_excluded_from_every_package(self):
+        # the development-only saved-data load test (TwichUI_LoadTest/, TwichUI_LoadTestClock/) is refused and left out like the Lab
+        pkgmeta = (Path(__file__).resolve().parent.parent / ".pkgmeta").read_text(encoding="utf-8")
+        ignore = pkgmeta.split("\nignore:", 1)[1]
+        moved = pkgmeta.split("move-folders:", 1)[1].split("enable-nolib-creation", 1)[0]
+        for folder in ("TwichUI_LoadTest", "TwichUI_LoadTestClock"):
+            with self.subTest(folder):
+                self.assertTrue(any(folder in p for p in self.make({folder + "/x.lua": "-- dev\n"})), folder)
+                self.assertIn("\n  - " + folder + "\n", ignore + "\n")
+                self.assertNotIn(folder, moved)
+                self.assertNotIn(folder, rel.ADDONS)
+
     def test_problems_are_found(self):
         cases = {
             "top-level": {"TwichUI/Core.lua": ""},
