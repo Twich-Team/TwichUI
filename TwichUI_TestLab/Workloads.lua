@@ -858,6 +858,100 @@ Add({
     end,
 })
 
+---------------------------------------------------------------------------
+-- 7. (A5) The valuation services on a synthetic market (never the saved ones)
+---------------------------------------------------------------------------
+-- N items, each with a real snapshot (listings through Prices.NewBatch: 1 to 9 listings, so single-price and multi-tier items) and the version-2
+-- history of section 6 (half dense, half sparse). A query cycles through the items, and every pass over them uses the next service:
+-- Value min / recent / market / historical, Quality, TrendOf recent, Competition, Cost. 50 queries per step. Modes:
+--   uncached    the market table has no key: every history question decodes the item's strings (the worst case, a cache that never hits)
+--   cold        the cache is emptied when each repetition begins (the first pass misses, later passes hit)
+--   warm        the cache already holds every item's digest
+--   invalidate  warm, then a new scan generation (snap.seq + 1) before each repetition: the first query wipes the cache
+local VALUE_STEP = 50
+local VALUE_SERVICES = { "min", "recent", "market", "historical", "quality", "trend", "competition", "cost" }
+local function ValueMarket(W, rng, n)
+    local PR, H2 = W.Prices, W.History2
+    local b = PR.NewBatch()
+    for i = 1, n do
+        local base = rng:Int(50, 50000)
+        for k = 1, rng:Int(1, 9) do local c = rng:Int(1, 20) b:Add(i, c, (base + rng:Int(0, k * 40)) * c, true) end
+    end
+    local items, _, _, _, dist = b:Items()
+    local at = H2_T0 * DAY + 23 * 3600
+    local m = { key = "Lab|Value", realm = "Lab", side = "Value", scope = "full", format = 3, at = at, complete = true, partial = 0, items = items, dist = dist,
+        snap = { seq = 1, kind = "full", at = at, alg = 1 }, h2 = {}, c2 = {}, h2info = { state = "ok", v = 1, from = H2_T0 - 130, at = at } }
+    for i = 1, n do m.h2[i], m.c2[i] = H2Item(H2, rng, H2_T0, rng:Chance(0.5)) end
+    return m
+end
+local function ValueQuery(MK, service, id, opt)
+    if service == "quality" then local q = MK.Quality(id, opt) return q and #q.level or 0 end
+    if service == "trend" then local r = MK.TrendOf(id, "recent", nil, opt) return r and #r.direction or 0 end
+    if service == "competition" then local r = MK.Competition(id, 5, opt) return r and r.cheapest or 0 end
+    if service == "cost" then local r = MK.Cost(id, 5, opt) return r.low or 0 end
+    local v = MK.Value(id, service, opt)
+    return v and v.value or 0
+end
+local function ValueWork(name, nItems, nQueries, mode, offline)
+    return Add({
+        id = "value." .. name, fixture = "value.market", seed = 7640001, size = nItems, unit = "queries", work = nQueries, offline = offline, v = 1,
+        setup = function(ctx)
+            local W, FX = Ctx(ctx)
+            local m = ValueMarket(W, FX.Rng(7640001), nItems)
+            if mode == "uncached" then m.key = nil end
+            local st = { W = W, m = m, opt = { market = m, now = m.at + 3600 } }
+            if mode == "warm" or mode == "invalidate" then
+                W.Valuation.CacheClear()
+                for i = 1, nItems do W.Market.Value(i, "market", st.opt) if i % 500 == 0 and ctx.yield then ctx.yield() end end
+            end
+            return st
+        end,
+        begin = function(st)
+            local MK, VA = st.W.Market, st.W.Valuation
+            if mode == "cold" then VA.CacheClear() end
+            if mode == "invalidate" then st.m.snap.seq = st.m.snap.seq + 1 end
+            local i, sum, mv = 0, 0, {}
+            local opt = st.opt
+            return function()
+                for _ = 1, VALUE_STEP do
+                    i = i + 1
+                    local id = (i - 1) % nItems + 1
+                    local service = VALUE_SERVICES[floor((i - 1) / nItems) % #VALUE_SERVICES + 1]
+                    local v = ValueQuery(MK, service, id, opt)
+                    sum = (sum + v) % 2147483629
+                    if service == "market" then mv[id] = v end
+                    if i >= nQueries then return true end
+                end
+                return false
+            end, function() return { sum = sum, mv = mv, cache = VA.CacheStats() } end
+        end,
+        signature = function(out) return tostring(out.sum) end,
+        -- Market Value against the reference model (an expanded-list weighted median over the decoded days), and the cache bound
+        verify = function(st, out, ctx)
+            local W, _, REF = Ctx(ctx)
+            local H2 = W.History2
+            local today = floor(st.opt.now / DAY)
+            local checked = 0
+            for id, v in pairs(out.mv) do
+                Pace(ctx, id, 200)
+                local _, days, bks = H2.Read(st.m.h2[id], st.m.c2[id])
+                local want = REF.VMarketValue({ days = days or {}, buckets = bks or {} }, today)
+                if (want and want.v or 0) ~= v then return false, ("item %d: Market Value %s, the model says %s"):format(id, tostring(v), tostring(want and want.v)) end
+                checked = checked + 1
+            end
+            if nQueries >= 3 * nItems and checked == 0 then return false, "no Market Value was asked" end
+            if out.cache.entries > W.Valuation.CACHE_MAX then return false, ("the cache holds %d entries, over its bound"):format(out.cache.entries) end
+            return true
+        end,
+    })
+end
+ValueWork("uncached.1k", 1000, 6000, "uncached")
+ValueWork("cold.1k", 1000, 6000, "cold")
+ValueWork("warm.1k", 1000, 6000, "warm")
+ValueWork("invalidate.1k", 1000, 6000, "invalidate")
+ValueWork("warm.20k", 1000, 20000, "warm")
+ValueWork("cold.6k", 6000, 20000, "cold", true)
+
 WL.DEFERRED = { "Workshop page redraw (overview, opportunities, crafting queue, shopping list)", "open/close and navigation cycles of the Workshop window" }
 
 -- the workloads that run in the game (the others are offline only)

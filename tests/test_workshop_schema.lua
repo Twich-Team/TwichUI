@@ -38,7 +38,7 @@ local function Clone(v) return Reload(Ser(v)) end
 ---------------------------------------------------------------------------
 -- A client with the Workshop loaded: the current files, or the released 1.3 files; a fake auction house; a virtual clock
 ---------------------------------------------------------------------------
-local NOW = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua" }
+local NOW = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Valuation.lua", "Session.lua" }
 local V13 = { "Data.lua", "Materials.lua", "Queue.lua", "History.lua", "Prices.lua", "Scan.lua", "Market.lua" }
 
 local function Setup(which, db)
@@ -561,14 +561,14 @@ do
 end
 
 ---------------------------------------------------------------------------
--- 10. Scope guards: the public Market API grew only by A4's History (read-only); only Prices.lua writes the market database
+-- 10. Scope guards: the public Market API grew only by A4's History and A5's read-only valuation services; only Prices.lua writes the market database
 ---------------------------------------------------------------------------
 do
   local t = Setup("now", Clone(V1))
   local names = {}
   for k, v in pairs(t.W.Market) do if type(v) == "function" then names[#names + 1] = k end end
   table.sort(names)
-  Same(table.concat(names, ","), "AgeShort,Compare,Freshness,History,Info,Markets,Observed,Price,Quote,Series,Source,Stats,Status,Trend", "")
+  Same(table.concat(names, ","), "AgeShort,Compare,Competition,Cost,Distribution,Freshness,History,Info,Markets,Observed,Posture,Price,Quality,Quote,Range,Series,Source,Stats,Status,Supply,Trend,TrendOf,Value", "")
 end
 
 do

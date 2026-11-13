@@ -1397,3 +1397,203 @@ function REF.H2DayReason(model, id, d)
     if any then return "incomplete" end
     return "noscan"
 end
+
+---------------------------------------------------------------------------
+-- 7. VALUATION (market data foundation 2.0, A5): deliberately naive models of Valuation.lua
+---------------------------------------------------------------------------
+-- These never call Valuation.lua, Market.lua, History2.lua or Dist.lua. A weighted median is read off an EXPANDED, sorted list (a value of weight
+-- w written w times; the median is the entry at rank ceil(W / 2)), a window is tested day by day, a bucket's share of a window is counted day by
+-- day, a cost is the sum of the cheapest entries of the expanded item list, and the history comes from the history model (section 5: REF.H2Expect,
+-- every scan kept in full). Policy constants are restated here from the foundation document (section 4A, D7, D8), not read from production.
+local VREF = { MV = 14, HV = 60, HV_MIN = 3, Q_DAYS = 30 }
+REF.V = VREF
+
+local function Expanded(list)
+    table.sort(list)
+    return list[math.ceil(#list / 2)], #list
+end
+REF.VLowerMedian = function(list) local copy = {} for i, v in ipairs(list) do copy[i] = v end return (Expanded(copy)) end
+
+-- a bucket's days inside from .. to, counted one by one; it is used when all of it, or at least half of its days, lie inside
+local function BucketShare(a, e, from, to)
+    local inside = 0
+    for d = a, e do if d >= from and d <= to then inside = inside + 1 end end
+    return inside, inside > 0 and 2 * inside >= (e - a + 1)
+end
+REF.VBucketShare = BucketShare
+
+-- Market Value from an expected history state (REF.H2Expect) as of `today`: { v, n, weight } or nil and "nohistory" / "stale" / "norecent"
+function REF.VMarketValue(e, today)
+    if not e or (#e.days == 0 and #e.buckets == 0) then return nil, "nohistory" end
+    local list, n, listed = {}, 0, 0
+    for _, x in ipairs(e.days) do
+        local age = today - x.d
+        if age >= 0 and age <= VREF.MV - 1 then
+            listed = listed + 1
+            if x.r then
+                n = n + 1
+                local w = 1
+                if age < 3 then w = 4 elseif age < 7 then w = 2 end
+                for _ = 1, w do list[#list + 1] = x.r end
+            end
+        end
+    end
+    if n == 0 then return nil, listed > 0 and "norecent" or "stale" end
+    local v, weight = Expanded(list)
+    return { v = v, n = n, weight = weight }
+end
+
+-- Historical Value: { v, n (observed days), aggregate } or nil and "nohistory" / "insufficient"
+function REF.VHistorical(e, today)
+    if not e or (#e.days == 0 and #e.buckets == 0) then return nil, "nohistory" end
+    local from, list, agg = today - VREF.HV + 1, {}, false
+    for _, x in ipairs(e.days) do if x.r and x.d >= from and x.d <= today then list[#list + 1] = x.r end end
+    for _, b in ipairs(e.buckets) do
+        local _, used = BucketShare(b.k * b.s, b.k * b.s + b.s - 1, from, today)
+        if used and b.nr > 0 then
+            for _ = 1, b.nr do list[#list + 1] = b.rm end
+            agg = true
+        end
+    end
+    if #list < VREF.HV_MIN then return nil, "insufficient", #list end
+    local v, n = Expanded(list)
+    return { v = v, n = n, aggregate = agg }
+end
+
+-- TrendOf: field "r", "p" or "t"; { direction, older, newer (medians), no, nn } (direction "insufficient" when a half has fewer than 2 days)
+function REF.VTrend(e, today, field, days)
+    local half = math.floor(days / 2)
+    local older, newer = {}, {}
+    for _, x in ipairs(e and e.days or {}) do
+        local age = today - x.d
+        if x[field] and age >= 0 and age < days then
+            if age < half then newer[#newer + 1] = x[field] else older[#older + 1] = x[field] end
+        end
+    end
+    local out = { no = #older, nn = #newer }
+    if #older > 0 then out.older = Expanded(older) end
+    if #newer > 0 then out.newer = Expanded(newer) end
+    if #older < 2 or #newer < 2 then out.direction = "insufficient" return out end
+    local a, b = out.older, out.newer
+    -- flat: the change is under 5% of the older median (as a fraction: |b - a| / a < 1 / 20)
+    if math.abs(b - a) * 20 < a then out.direction = "flat" elseif b > a then out.direction = "rising" else out.direction = "falling" end
+    return out
+end
+
+-- Range from the expected state: { min = { lo, hi, n }, recent = { lo, hi, n }, supply = { lo, hi, n }, aggregate } or nil and "nohistory" / "nodata"
+function REF.VRange(e, today, days)
+    if not e or (#e.days == 0 and #e.buckets == 0) then return nil, "nohistory" end
+    local from = today - days + 1
+    local mn, rc, sp, any, agg = { n = 0 }, { n = 0 }, { n = 0 }, false, false
+    local function Put(t, lo, hi) if lo then t.lo = math.min(t.lo or lo, lo) t.hi = math.max(t.hi or hi, hi) end end
+    for _, x in ipairs(e.days) do
+        if x.d >= from and x.d <= today then
+            any = true
+            mn.n, sp.n = mn.n + 1, sp.n + 1
+            if x.r then rc.n = rc.n + 1 end
+            Put(mn, x.plo, x.phi) Put(sp, x.tlo, x.thi) Put(rc, x.rlo, x.rhi)
+        end
+    end
+    for _, b in ipairs(e.buckets) do
+        local _, used = BucketShare(b.k * b.s, b.k * b.s + b.s - 1, from, today)
+        if used then
+            any, agg = true, true
+            mn.n, sp.n, rc.n = mn.n + b.n, sp.n + b.n, rc.n + b.nr
+            Put(mn, b.plo, b.phi) Put(sp, b.tlo, b.thi) Put(rc, b.rlo, b.rhi)
+        end
+    end
+    if not any then return nil, "nodata" end
+    return { min = mn, recent = rc, supply = sp, aggregate = agg }
+end
+
+-- Data Quality, policy 1, from plain facts: { priced, complete, cut, age, listings, spreadClass (nil = no distribution), observed, mixed,
+-- farbelow }. Returns the level and the set of reason codes (every requirement of "good" that is not met).
+function REF.VQuality(f)
+    if not f.priced then return "none", {} end
+    local codes, good, fair = {}, true, true
+    local function Fail(code, alsoFair) codes[code] = true good = false if alsoFair then fair = false end end
+    if f.cut then Fail("cut", true) elseif not f.complete then Fail("incomplete") end
+    if f.age > 3 * 86400 then Fail("age", true) elseif f.age > 86400 then Fail("age") end
+    if f.listings < 5 then Fail("listings", f.listings < 3) end
+    if f.spreadClass == nil then Fail("nodistribution") elseif f.spreadClass == "wide" then Fail("spread") end
+    if f.observed < 7 then Fail("days") end
+    if f.mixed then Fail("mixedvariants", true) end
+    if f.farbelow then Fail("farbelow") end
+    return good and "good" or (fair and "fair" or "limited"), codes
+end
+
+-- spread class of three quartiles: (q75 - q25) / q50 below 1/10 tight, below 3/10 moderate, else wide (as exact fractions)
+function REF.VSpreadClass(q25, q50, q75)
+    local num, den = q75 - q25, q50
+    if num * 10 < den then return "tight" end
+    if num * 10 < den * 3 then return "moderate" end
+    return "wide"
+end
+
+-- the plain facts of one item's listings: records = { { b, c } } (whole-copper unit prices: b = unit x c). Returns { p, t, l, groups (by unit,
+-- cheapest first: { p, q, l, sizes = { counts } }), entries (every item's unit price, sorted), farbelow, cheapoutlier (needs r) }
+function REF.VListings(records)
+    local by, groups, entries = {}, {}, {}
+    for _, rec in ipairs(records) do
+        local u = CeilCopper(rec.b, rec.c)
+        local g = by[u]
+        if not g then g = { p = u, q = 0, l = 0, sizes = {} } by[u] = g groups[#groups + 1] = g end
+        g.q, g.l = g.q + rec.c, g.l + 1
+        g.sizes[#g.sizes + 1] = rec.c
+        for _ = 1, rec.c do entries[#entries + 1] = u end
+    end
+    table.sort(groups, function(a, b) return a.p < b.p end)
+    table.sort(entries)
+    local out = { groups = groups, entries = entries, t = #entries, l = #records, p = entries[1] }
+    out.farbelow = #records < 5 and groups[2] ~= nil and 2 * groups[1].p < groups[2].p
+    return out
+end
+
+-- Competition: the first of the six cheapest prices at or above half the anchor `a`, and the items priced at or below it
+function REF.VCompetition(lst, a)
+    local competing
+    for i = 1, math.min(6, #lst.groups) do
+        if 2 * lst.groups[i].p >= a then competing = lst.groups[i].p break end
+    end
+    local ahead
+    if competing then ahead = 0 for _, u in ipairs(lst.entries) do if u <= competing then ahead = ahead + 1 end end end
+    return { cheapest = lst.groups[1].p, competing = competing, ahead = ahead }
+end
+
+-- Cost of qty: { state, low, high } from the plain listings. Within the six cheapest prices: low = the cheapest qty entries added up; high = whole
+-- listings at the last price used (at most its largest listing minus one item over, never more than it holds). Beyond: low = the six prices
+-- whole and every further item at one copper above the sixth price, high = every further item at the highest price, whole listings of the rest.
+function REF.VCost(lst, qty)
+    if lst.t < qty then return { state = "few" } end
+    local six, sixItems, sixCost = math.min(6, #lst.groups), 0, 0
+    for i = 1, six do sixItems, sixCost = sixItems + lst.groups[i].q, sixCost + lst.groups[i].q * lst.groups[i].p end
+    if qty <= sixItems then
+        local low = 0
+        for i = 1, qty do low = low + lst.entries[i] end
+        local before, beforeCost = 0, 0
+        for i = 1, six do
+            local g = lst.groups[i]
+            if before + g.q >= qty then
+                local rem, largest = qty - before, 0
+                for _, c in ipairs(g.sizes) do if c > largest then largest = c end end
+                -- a one-price item is saved without a distribution entry: its largest listing is not kept, only that it is at most what the
+                -- other listings leave (each holds at least one item)
+                if #lst.groups == 1 and g.l > 1 then largest = g.q - g.l + 1 end
+                local whole = math.min(rem + largest - 1, g.q)
+                -- listings all of one size (the tier's items are its listings times the largest): the number of listings needed, exactly
+                if largest * g.l == g.q then whole = largest * math.ceil(rem / largest) end
+                local high = beforeCost + whole * g.p
+                return { state = high == low and "exact" or "range", low = low, high = high, group = g, rem = rem, beforeCost = beforeCost }
+            end
+            before, beforeCost = before + g.q, beforeCost + g.q * g.p
+        end
+    end
+    local tq, tl = 0, 0
+    for i = 7, #lst.groups do tq, tl = tq + lst.groups[i].q, tl + lst.groups[i].l end
+    local rem = qty - sixItems
+    local low = sixCost + rem * (lst.groups[six].p + 1)
+    local high = sixCost + math.min(rem + tq - tl, tq) * lst.entries[#lst.entries]
+    local actual = 0
+    for i = 1, qty do actual = actual + lst.entries[i] end
+    return { state = "estimate", low = low, high = high, actual = actual }
+end

@@ -544,3 +544,150 @@ Pure("market.history2.day", function(t)
     t:Same(x, ("%.0f,0,700,,4,2|%.0f:%.0f,700,,4,2"):format(m0, D0, D0), "unknown Recent Price")
     t:Same(H2.DecodeH2("|20000:20000,5,0,1,1,2,0,0,0,0,0,0"), nil, "a non-canonical spelling is refused")
 end)
+
+---------------------------------------------------------------------------
+-- (A5) The valuation services, on synthetic in-memory markets (opt.market tables; never the saved ones, nothing is saved)
+---------------------------------------------------------------------------
+-- Seeds 7660001..7660004. The offline suite runs many more (tests/test_workshop_valuation.lua). The Posture and Cost cases use copper amounts near
+-- the auction house's maximum, so the client's own number arithmetic is checked at the 85% / 115% boundaries and on large totals.
+local VT = 20083   -- a day whose weekly bucket 2860 (days 20020..20026) has 3 of its days inside the 60-day window, and 4 a day earlier
+local function VDay(d, r, p) return { d = d, p = p or math.min(r or 50, 50), r = r, t = 10, l = 3, n = 1, plo = p or math.min(r or 50, 50), phi = p or math.min(r or 50, 50), rlo = r, rhi = r, tlo = 10, thi = 10 } end
+local function VBucket(k, n, nr, rm) return { k = k, s = 7, n = n, nr = nr, plo = 50, pm = 50, phi = 50, rm = rm, rlo = rm, rhi = rm, tm = 10, tlo = 10, thi = 10, lm = 3 } end
+-- a market table: listings { [id] = { { unit, count } } } through the real batch, history { [id] = { days, buckets } } through History2's writer
+local function VMarket(W, key, at, listings, history)
+    local b = W.Prices.NewBatch()
+    for id, list in pairs(listings or {}) do for _, x in ipairs(list) do b:Add(id, x[2], x[1] * x[2], true) end end
+    local items, _, _, _, dist = b:Items()
+    local m = { key = key, realm = "Lab", side = "Value", scope = "full", format = 3, at = at, complete = true, partial = 0, items = items, dist = dist or {},
+        snap = { seq = 1, kind = "full", at = at, alg = 1 }, h2 = {}, c2 = {}, h2info = { state = "ok", v = 1, from = VT - 130, at = at } }
+    for id, h in pairs(history or {}) do m.h2[id], m.c2[id] = W.History2.Encode({}, h[1], h[2]) end
+    return m
+end
+
+Pure("market.value.weighted", function(t)
+    local MK = t.W.Market
+    local function Ages(list) local out = {} for _, a in ipairs(list) do out[#out + 1] = VDay(VT - a[1], a[2]) end return out end
+    local fourteen = {}
+    for a = 13, 0, -1 do fourteen[#fourteen + 1] = { a, 1000 + 10 * a } end
+    local m = VMarket(t.W, "Lab|ValueW", VT * DAY + 36000, nil, {
+        [1] = { Ages({ { 6, 100 }, { 5, 200 }, { 4, 300 }, { 3, 400 }, { 2, 500 }, { 1, 600 }, { 0, 700 } }) },
+        [2] = { Ages({ { 5, 300 }, { 3, 200 }, { 0, 100 } }) },
+        [3] = { Ages(fourteen) },
+        [4] = { Ages({ { 1, 99999999999 }, { 0, 99999999998 } }) } })
+    local opt = { market = m, now = VT * DAY + 43200 }
+    -- worked by hand: weights 4 (ages 0-2), 2 (3-6), 1 (7-13); the smallest value whose cumulative weight reaches half the total
+    t:Same(MK.Value(1, "market", opt).value, 500, "seven days: 12 of 20 at 500 (a plain median would say 400)")
+    t:Same(MK.Value(2, "market", opt).value, 100, "exactly half the weight (4 of 8) reaches the median")
+    t:Same(MK.Value(3, "market", opt).value, 1030, "fourteen days: weight 14 of 27 at 1030")
+    t:Same(MK.Value(4, "market", opt).value, 99999999998, "large copper")
+    t:Same(MK.Value(3, "market", opt).weight, 27)
+end)
+
+Pure("market.value.historical", function(t)
+    local MK = t.W.Market
+    local m = VMarket(t.W, "Lab|ValueH", VT * DAY + 36000, nil, {
+        -- a bucket of 7 observed days with ONE Recent Price (9000) and one of 2 days (2000) beside three daily 1000s: by nr the median is 1000
+        [1] = { { VDay(VT - 25, 1000), VDay(VT - 20, 1000), VDay(VT - 10, 1000) }, { VBucket(2861, 7, 1, 9000), VBucket(2862, 2, 2, 2000) } },
+        [2] = { { VDay(VT - 23, 1000), VDay(VT - 17, 1000), VDay(VT - 13, 1000) }, { VBucket(2860, 7, 7, 9000) } } })
+    local function HV(id, day) return MK.Value(id, "historical", { market = m, now = day * DAY + 46800 }) end
+    local v = HV(1, VT)
+    t:Same(v and v.value, 1000, "a bucket weighs only its days with a Recent Price") t:Same(v and v.aggregate, true, "bucket means: an aggregate")
+    t:Same(HV(2, VT).value, 1000, "3 of the bucket's 7 days inside the window: left out")
+    t:Same(HV(2, VT - 1).value, 9000, "4 of 7 inside: counted whole, and disclosed")
+    t:Same(#HV(2, VT - 1).edges, 1)
+end)
+
+Pure("market.value.model", function(t)
+    local MK, H2 = t.W.Market, t.W.History2
+    local compared = 0
+    for seed = 7660001, 7660004 do
+        local rng = FX.Rng(seed)
+        local T = 20090 + rng:Int(0, 30)
+        local bks, w = {}, math.floor((T - 70) / 7)
+        for _ = 1, rng:Int(0, 5) do
+            w = w + rng:Int(1, 2)
+            if w * 7 + 6 >= T - 36 then break end
+            local n = rng:Int(1, 7)
+            local nr = rng:Int(0, n)
+            bks[#bks + 1] = VBucket(w, n, nr, nr > 0 and rng:Int(500, 3000) or nil)
+        end
+        local first = #bks > 0 and (bks[#bks].k * 7 + 7) or (T - 36)
+        local days = {}
+        for d = math.max(first, T - 36), T do
+            if rng:Chance(0.5) then local r = rng:Chance(0.15) and nil or rng:Int(60, 3000) days[#days + 1] = VDay(d, r, r and math.min(r, rng:Int(1, 50)) or 20) end
+        end
+        if #days == 0 then days[1] = VDay(T, 1000) end
+        local m = VMarket(t.W, "Lab|ValueM" .. seed, T * DAY + 43200, nil, { [1] = { days, bks } })
+        local _, rd, rb = H2.Read(m.h2[1], m.c2[1])
+        local e = { days = rd, buckets = rb or {} }
+        for _, off in ipairs({ -20, -1, 0, 3, 13 }) do
+            local today = T + off
+            local opt = { market = m, now = today * DAY + 3600 }
+            local mv, rmv = MK.Value(1, "market", opt), REF.VMarketValue(e, today)
+            if (mv and mv.value) ~= (rmv and rmv.v) then t:Check(false, ("seed %d day %d: Market Value %s, the model says %s"):format(seed, today, tostring(mv and mv.value), tostring(rmv and rmv.v))) return end
+            local hv, rhv = MK.Value(1, "historical", opt), REF.VHistorical(e, today)
+            if (hv and hv.value) ~= (rhv and rhv.v) then t:Check(false, ("seed %d day %d: Historical Value %s, the model says %s"):format(seed, today, tostring(hv and hv.value), tostring(rhv and rhv.v))) return end
+            local tr, rt = MK.TrendOf(1, "recent", 14, opt), REF.VTrend(e, today, "r", 14)
+            if tr.direction ~= rt.direction then t:Check(false, ("seed %d day %d: trend %s, the model says %s"):format(seed, today, tr.direction, rt.direction)) return end
+            compared = compared + 1
+        end
+        t:Yield()
+    end
+    t:Check(compared == 20, "queries compared: " .. compared)
+    t:Note(("%d queries equal to the model (4 seeds, 5 days each)"):format(compared))
+end)
+
+Pure("market.value.posture", function(t)
+    local MK = t.W.Market
+    local H = 80000000000            -- 85% = 68000000000 and 115% = 92000000000 exactly
+    local hist = {}
+    for a = 5, 1, -1 do hist[#hist + 1] = VDay(VT - a, H, 1) end
+    local function Three(u) return { { u, 1 }, { u, 1 }, { u, 1 } } end
+    local m = VMarket(t.W, "Lab|ValueP", VT * DAY + 36000,
+        { [1] = Three(68000000000), [2] = Three(67999999999), [3] = Three(92000000000), [4] = Three(92000000001) },
+        { [1] = { hist }, [2] = { hist }, [3] = { hist }, [4] = { hist } })
+    local opt = { market = m, now = VT * DAY + 39600 }
+    t:Same(MK.Posture(1, opt).posture, "normal", "exactly 85%") t:Same(MK.Posture(2, opt).posture, "cheap", "one copper under 85%")
+    t:Same(MK.Posture(3, opt).posture, "normal", "exactly 115%") t:Same(MK.Posture(4, opt).posture, "expensive", "one copper over 115%")
+end)
+
+Pure("market.value.cost", function(t)
+    local MK = t.W.Market
+    local eight, big = {}, {}
+    for i = 0, 7 do eight[#eight + 1] = { 10 + i, 1 } end
+    for i = 1, 10 do big[i] = { 99999999999, 1 } end
+    local m = VMarket(t.W, "Lab|ValueC", VT * DAY + 36000, {
+        [1] = { { 50, 4 }, { 50, 4 }, { 50, 4 }, { 60, 1 } }, [2] = { { 10, 2 }, { 20, 1 }, { 20, 1 }, { 20, 1 }, { 30, 5 } }, [3] = { { 4000, 200 } }, [4] = eight, [5] = big })
+    local opt = { market = m, now = VT * DAY + 39600 }
+    local function C(id, q) return MK.Cost(id, q, opt) end
+    local x = C(1, 5) t:Same(x.state, "range") t:Same(x.low, 250) t:Same(x.high, 400, "listings of 4: two whole listings")
+    x = C(2, 5) t:Same(x.state, "exact", "a tier boundary") t:Same(x.cost, 80)
+    x = C(2, 6) t:Same(x.low, 110) t:Same(x.high, 230)
+    x = C(3, 5) t:Same(x.high, 800000, "one 200-stack") t:Same(C(3, 201).state, "few")
+    x = C(4, 7) t:Same(x.state, "estimate") t:Same(x.low, 91, "at least: one copper over the sixth price") t:Same(x.cost, nil)
+    x = C(5, 10) t:Same(x.state, "exact") t:Same(x.cost, 999999999990, "a large total stays exact in the client")
+    t:Same(("%.0f"):format(x.cost), "999999999990", "and prints as whole copper")
+end)
+
+Pure("market.value.cache", function(t)
+    local MK, VA = t.W.Market, t.W.Valuation
+    local week = {}
+    for a = 9, 0, -1 do week[#week + 1] = VDay(VT - a, 1000 + a) end
+    local listings = { [1] = { { 1000, 2 }, { 1000, 2 }, { 1000, 2 }, { 1000, 2 }, { 1010, 1 } } }
+    local m = VMarket(t.W, "Lab|ValueK", VT * DAY + 36000, listings, { [1] = { week } })
+    VA.CacheClear()
+    local s0 = VA.CacheStats()
+    local opt = { market = m, now = VT * DAY + 39600 }
+    local a = MK.Value(1, "market", opt)
+    local q = MK.Quality(1, opt)
+    t:Same(VA.CacheStats().hits - s0.hits, 1, "Quality reused the digest Market Value made")
+    t:Same(q.level, "good")
+    t:Same(MK.Quality(1, { market = m, now = VT * DAY + 36000 + 86401 }).level, "fair", "a day later the same data is no longer good")
+    -- a new scan generation: the answer is the new data's, never the cached one
+    local m2 = VMarket(t.W, "Lab|ValueK", VT * DAY + 37000, listings, { [1] = { (function() local w = {} for i, x in ipairs(week) do w[i] = x end w[#w] = VDay(VT, 5000) return w end)() } })
+    m2.snap.seq = 2
+    local b = MK.Value(1, "market", { market = m2, now = VT * DAY + 39600 })
+    t:Same(a.value, 1002, "by hand: 1000 (4), 1001 (4), 1002 (4) reach 12 of 23") t:Same(b.value, 1004, "after a new scan: the new data, never the cached answer")
+    t:Check(VA.CacheStats().entries <= VA.CACHE_MAX)
+    VA.CacheClear()
+end)

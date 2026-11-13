@@ -218,6 +218,16 @@ metrics, 200 queries). Each runs `History2.Update/Retain/Compact` on a synthetic
 own work units (`Prices.HIST_FAST_COST`, `HIST_FULL_COST`, `SWEEP_COST`) and `Prices.COMMIT_STEP` units per step; never a saved market. The 40k
 ones are offline only. Figures: `docs/workshop/market-data-foundation-v2.md`, "A4 as built".
 
+### Valuation workloads and cases (A5, `value.*`, `market.value.*`)
+
+`value.uncached.1k` (a market table without a key: every history question decodes), `value.cold.1k` (the cache emptied when each repetition
+begins), `value.warm.1k` and `value.warm.20k` (every digest cached), `value.invalidate.1k` (warm, then a new scan generation: the first query
+empties the cache) and `value.cold.6k` (6,000 items, more than the cache holds; offline only). 1,000 synthetic items with real snapshots (through
+`Prices.NewBatch`) and the A4 synthetic histories; each pass over the items uses the next service (`Value` min, recent, market, historical,
+`Quality`, `TrendOf`, `Competition`, `Cost`), 50 queries per step. Verified against the reference model's Market Value and the cache bound. Core
+cases: `market.value.weighted`, `.historical`, `.model`, `.posture`, `.cost`, `.cache` (synthetic market tables; nothing is saved). Figures:
+`docs/workshop/market-data-foundation-v2.md`, "A5 as built".
+
 ## Saved-data load test (A4 load gate; development only)
 
 The market data foundation's version-2 history can make the Workshop's saved file tens of megabytes. How long **this client** takes to read and

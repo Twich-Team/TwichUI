@@ -489,6 +489,33 @@ Lab.Step("opportunities: scan against the fake auction house", function()
     local kinds = {}
     for _, pnt in ipairs(hs and hs.points or {}) do kinds[#kinds + 1] = pnt.kind .. ":" .. tostring(pnt.v) end
     Check("state", "A4: Market.History gives a day point and an observation, nothing invented", "day:5,obs:5", table.concat(kinds, ","))
+    -- A5: the valuation services over the same saved scan, read-only. Hand arithmetic: Bronze Bar is one stack of 2 at 400c and one of 3 at 500c,
+    -- so buying 3 is 2 x 400 + 1 x 500 = 1300c, or 2300c if the whole 3-stack must be bought (a range); its Recent Price is 400c and the cheapest
+    -- price at or above half the anchor (400c) is 400c itself, with 2 items at or below it. Peacebloom has 2 listings (thin: limited quality)
+    -- and one recorded day (Market Value 5c from one day; Historical Value needs 3 days).
+    local function Sig()
+        local parts = {}
+        for _, tb in ipairs({ mk.items, mk.dist or {}, mk.h2 or {}, mk.c2 or {} }) do
+            local keys = {}
+            for k in pairs(tb) do keys[#keys + 1] = k end
+            table.sort(keys)
+            for _, k in ipairs(keys) do parts[#parts + 1] = k .. "=" .. tostring(tb[k]) end
+        end
+        return table.concat(parts, ";") .. "|" .. tostring(mk.snap.seq) .. "|" .. tostring(TwichUIWorkshopDB.v)
+    end
+    local before = Sig()
+    local MKt, opt = R.Workshop.Market, { market = "SimulatedRealm|unknown" }
+    local function V(id, kind) local v, why = MKt.Value(id, kind, opt) return v and tostring(v.value) or ("nil:" .. tostring(why)) end
+    Check("state", "A5: Minimum Buyout, Recent Price, Market Value, Historical Value of Peacebloom", "5/5/5/nil:insufficient", V(2447, "min") .. "/" .. V(2447, "recent") .. "/" .. V(2447, "market") .. "/" .. V(2447, "historical"))
+    Check("state", "A5: Bronze Bar's Recent Price", "400", V(2841, "recent"))
+    local cost = MKt.Cost(2841, 3, opt)
+    Check("state", "A5: buying 3 Bronze Bars: a range, whole stacks", "range/1300/2300", ("%s/%s/%s"):format(cost.state, tostring(cost.low), tostring(cost.high)))
+    local comp = MKt.Competition(2841, 1, opt)
+    Check("state", "A5: Bronze Bar competition: the competing price and the items at or below it", "400/2/competition", ("%s/%s/%s"):format(tostring(comp and comp.competing), tostring(comp and comp.ahead), tostring(comp and comp.role)))
+    local q = MKt.Quality(2447, opt)
+    Check("state", "A5: Peacebloom's Data Quality (2 listings, one observed day): limited, policy 1", "limited/1/Only 2 listings.", ("%s/%s/%s"):format(q.level, tostring(q.policy), tostring(q.reasons[1] and q.reasons[1].text)))
+    Check("state", "A5: posture needs more evidence", "unknown", MKt.Posture(2447, opt).posture)
+    Check("state", "A5: nothing above changed the saved prices", "same", Sig() == before and "same" or "changed")
 end)
 
 Lab.Step("opportunities: rows, ordering, filtering, unknowns", function()

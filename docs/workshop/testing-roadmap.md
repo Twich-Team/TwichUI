@@ -640,6 +640,15 @@ pipeline, gap reasons, atomicity, the budget guard), `tests/test_loadtest.lua` (
 needs the model's writer (`REF.H2Text`) changed independently, never copied from `History2.lua`. **Open:** the real-client load gate (not run),
 and the Lab's `market.history2.*` cases in the client. Details: `docs/workshop/market-data-foundation-v2.md`, "A4 as built".
 
+**Market data foundation A5 (2026-11-13): valuation services.** New evidence for valuation work: `tests/test_workshop_valuation.lua` (hand-worked
+cases for every brief example; 120 layouts of days and buckets queried at nine different days against the models; 30 seeded two-market
+calendars through the real commit pipeline, `VALUE_SEEDS` for more; the cache; read-only and old-API equality), the independent models in
+`Reference.lua` section 7 (expanded-list medians, day-by-day window shares, costs from the expanded item list, brute-force whole-listing
+purchases), the `market.value.*` mutation entries (`--group market.value`), the `value.*` workloads and the Lab's `market.value.*` cases. Policy
+for later valuation changes: run `test_workshop_valuation.lua` and `--group market.value`; a rule change needs the model in section 7 changed
+independently. **Open:** every A5 Lab case in the client (and A4's, deferred by the owner). Details: `docs/workshop/market-data-foundation-v2.md`,
+"A5 as built".
+
 ## Unresolved decisions (product input needed)
 
 1. **How the Lab is opened.** `/run C_AddOns.LoadAddOn("TwichUI_TestLab")` (M1, no change to the release), or a hidden core `/tui lab` that only says "development builds only" when the addon is absent (about 15 lines shipped to players).

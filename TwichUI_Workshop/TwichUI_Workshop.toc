@@ -46,6 +46,7 @@ WorthLayout.lua
 Scan.lua
 # The market data API: current prices, history, quotes, markets (one source for every feature; reads saved data only)
 Market.lua
+Valuation.lua
 # What the window shows and does, without any frame
 Session.lua
 # Remembers the player's own professions' recipes while the window is closed (after load only; reads, never opens anything)

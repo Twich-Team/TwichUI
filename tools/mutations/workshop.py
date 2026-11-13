@@ -489,6 +489,77 @@ m("market.history2.point-without-evidence", MARKET,
   "            local v, lo, hi = Pick(x, metric)\n            if v or lo then", "            local v, lo, hi = Pick(x, metric)\n            if true then",
   "a day with no Recent Price evidence still gets a (valueless) chart point", [H2T])
 
+# --- (A5) the valuation services: Market Value, Historical Value, Range, Quality, Posture, TrendOf, Competition, Cost, the cache ----------------
+VALUATION = "TwichUI_Workshop/Valuation.lua"
+VAL = "test_workshop_valuation.lua"
+m("market.value.age-weights-shifted", VALUATION,
+  "function V.MarketWeight(age) if age <= 2 then return 4 end if age <= 6 then return 2 end return 1 end",
+  "function V.MarketWeight(age) if age <= 3 then return 4 end if age <= 6 then return 2 end return 1 end",
+  "a 3-day-old observation weighs as much as today's (the weight bands are off by a day)", [VAL], smoke=True)
+m("market.value.weights-ignored", VALUATION,
+  "function V.MarketWeight(age) if age <= 2 then return 4 end if age <= 6 then return 2 end return 1 end",
+  "function V.MarketWeight(age) return 1 end", "Market Value becomes a plain median: recent days no longer weigh more", [VAL])
+m("market.value.median-strict-half", VALUATION, "        if 2 * cum >= total then return vs[i], total end",
+  "        if 2 * cum > total then return vs[i], total end",
+  "the weighted median needs MORE than half the weight, so an exact half boundary picks the next value", [VAL], smoke=True)
+m("market.value.window-15-days", VALUATION, "        if age >= 0 and age < V.MV_DAYS then\n            listed = listed + 1",
+  "        if age >= 0 and age <= V.MV_DAYS then\n            listed = listed + 1", "Market Value counts a 14-day-old observation (15 days)", [VAL])
+m("market.value.unknown-recent-is-min", VALUATION,
+  "            if x.r then\n                n = n + 1\n                VS[n], WS[n] = x.r, V.MarketWeight(age)",
+  "            if x.r or x.p then\n                n = n + 1\n                VS[n], WS[n] = x.r or x.p, V.MarketWeight(age)",
+  "a day without a known Recent Price votes with its minimum instead (missing evidence replaced by another metric)", [VAL], smoke=True)
+m("market.value.bucket-weight-by-days", VALUATION, "            VS[n], WS[n] = b.rm, b.nr", "            VS[n], WS[n] = b.rm, b.n",
+  "a bucket's Recent Price mean weighs every observed day, also the days without a Recent Price (n instead of nr)", [VAL], smoke=True)
+m("market.value.bucket-edge-ignored", VALUATION, "    return ov, ov == span or 2 * ov >= span", "    return ov, ov > 0",
+  "a bucket counts whole as soon as one of its days is inside the window (the window boundary ignored)", [VAL])
+m("market.value.aggregate-as-exact", VALUATION, "        r.aggregate, r.approximate, r.complete = v.aggregate, v.aggregate, not v.partial",
+  "        r.aggregate, r.approximate, r.complete = false, false, not v.partial", "a Historical Value built from weekly means is presented as exact days", [VAL])
+m("market.value.historical-two-days", VALUATION, "V.HV_MIN_DAYS = 3 ", "V.HV_MIN_DAYS = 2 ",
+  "Historical Value is given from two observed days", [VAL])
+m("market.value.quality-days-window-ignored", VALUATION, "    for _, x in ipairs(days) do if x.d >= qfrom and x.d <= today then obs = obs + 1 end end",
+  "    for _, x in ipairs(days) do if x.d <= today then obs = obs + 1 end end", "Data Quality counts observed days older than 30 as 'this month'", [VAL])
+m("market.value.quality-fair-two-listings", VALUATION, "V.GOOD_LISTINGS, V.FAIR_LISTINGS = 5, 3", "V.GOOD_LISTINGS, V.FAIR_LISTINGS = 5, 2",
+  "the fair threshold is weakened to two listings", [VAL])
+m("market.value.quality-mixed-fair", VALUATION, "\"Several economically distinct item variants may be mixed.\", true)",
+  "\"Several economically distinct item variants may be mixed.\", false)", "mixed variants keep an item from good but allow fair", [VAL])
+m("market.value.variants-unknown-quality-safe", VALUATION, "    if q ~= nil and q < 2 then return false end", "    if q == nil or q < 2 then return false end",
+  "a weapon or armor whose quality is not loaded is treated as having no variants", [VAL])
+m("market.value.posture-on-minimum", VALUATION, "    local cur, cwhy = SnapshotValue(cx, \"recent\")", "    local cur, cwhy = SnapshotValue(cx, \"min\")",
+  "posture compares the cheapest listing (possibly a bait) with the Historical Value", [VAL], smoke=True)
+m("market.value.posture-cheap-boundary", VALUATION, "    if 100 * c < V.POSTURE_LOW * h then", "    if 100 * c <= V.POSTURE_LOW * h then",
+  "exactly 85% of Historical Value is called cheap", [VAL])
+m("market.value.posture-expensive-boundary", VALUATION, "    elseif 100 * c > V.POSTURE_HIGH * h then", "    elseif 100 * c >= V.POSTURE_HIGH * h then",
+  "exactly 115% of Historical Value is called expensive", [VAL])
+m("market.value.posture-ignores-farbelow", VALUATION, "    if s and s.farbelow then Miss(\"farbelow\") end\n", "\n",
+  "a thin market whose cheapest listing is far below the others can be called a bargain", [VAL])
+m("market.value.trend-mixes-metrics", VALUATION, "        local v, age = x[field], today - x.d",
+  "        local v, age = (today - x.d < half) and x[field] or x.p, today - x.d",
+  "the older half of a Recent Price trend is read from the minimum (two metrics compared)", [VAL])
+m("market.value.trend-flat-boundary", VALUATION, "    if 100 * math.abs(b - a) < V.FLAT_PERCENT * a then", "    if 100 * math.abs(b - a) <= V.FLAT_PERCENT * a then",
+  "exactly 5% is called flat", [VAL])
+m("market.value.competing-at-anchor", VALUATION, "        local under = 2 * t.p < d.a", "        local under = t.p < d.a",
+  "the competing price is the anchor itself instead of the cheapest price at or above half of it", [VAL])
+m("market.value.cost-unlimited-at-minimum", VALUATION, "        if rem <= t.q then\n            low = base + rem * t.p",
+  "        if true then\n            low = base + rem * t.p", "the whole quantity is costed at the cheapest price, as if it held unlimited items", [VAL], smoke=True)
+m("market.value.cost-tier-off-by-one", VALUATION, "        if rem <= t.q then\n            low = base + rem * t.p",
+  "        if rem < t.q then\n            low = base + rem * t.p", "a quantity that exactly empties a tier walks into the next one", [VAL])
+m("market.value.cost-whole-listing-omitted", VALUATION, "                whole = rem + largest - 1\n", "                whole = rem\n",
+  "the cost ignores that whole listings may have to be bought (no range, a false exact)", [VAL], smoke=True)
+m("market.value.cost-equal-listings-rounding-lost", VALUATION, "whole = largest * floor((rem + largest - 1) / largest)", "whole = rem",
+  "a tier of equal stacks is costed as if part of a stack could be bought", [VAL])
+m("market.value.cost-equal-listings-assumed", VALUATION, "            if largest * t.l == t.q then", "            if true then",
+  "every tier is assumed to hold equal stacks, so the over-buy of mixed stack sizes is understated", [VAL])
+m("market.value.cost-beyond-at-sixth-price", VALUATION, "        low = base + rem * (p6 + 1)", "        low = base + rem * p6",
+  "items beyond the six kept prices are costed at the sixth price, which they are known to exceed", [VAL])
+m("market.value.cache-ignores-strings", VALUATION, "    if e and e.g and e.h2s == h2s and e.c2s == c2s and e.today == today then",
+  "    if e and e.g and e.today == today then", "a cached digest is returned for strings that changed (a replaced history)", [VAL], smoke=True)
+m("market.value.cache-ignores-day", VALUATION, "    if e and e.g and e.h2s == h2s and e.c2s == c2s and e.today == today then",
+  "    if e and e.g and e.h2s == h2s and e.c2s == c2s then", "a cached digest is kept across a day rollover (weights and windows not moved)", [VAL])
+m("market.value.cache-facts-ignore-entries", VALUATION, "    local f = e and e.f and e.ie == ie and e.de == de and e.f or nil",
+  "    local f = e and e.f or nil", "cached snapshot facts (Recent Price, spread, flags) are used for an item whose saved entries changed", [VAL])
+m("market.value.range-legacy-double-count", VALUATION, "            local limit = (r.recordedFrom or (today + 1)) - 1",
+  "            local limit = today", "legacy minimum days after version-2 recording began are counted beside the version-2 days", [VAL])
+
 
 # ======================================================================================================================
 # EXAMINED AND LEFT OUT (equivalent mutants: no test can tell them from the original, so they would only ever "survive")
