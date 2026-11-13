@@ -108,6 +108,8 @@ local function Verdict(cur)
     r.facts = t.facts
     r.notes = t.notes
     r.checks = t.checks
+    r.bench, r.progress = t.bench, nil
+    r.detail = nil   -- a running case's progress text is not a result
     r.fails, r.failed = t.fails, t.failed   -- the failure lines (at most 8) and how many checks failed; read by the window's details panel
     if t.skipped then
         r.status, r.detail = "skipped", t.skipped
@@ -170,7 +172,7 @@ local function Abandon(s, cur, total)
     r.status = "timeout"
     r.detail = ("abandoned at a yield point after %.1f s (budget %.0f s); it was not resumed"):format(total, cur.case.budget)
     r.ms = total * 1000
-    r.facts, r.checks, r.notes = cur.t.facts, cur.t.checks, cur.t.notes
+    r.facts, r.checks, r.notes, r.bench = cur.t.facts, cur.t.checks, cur.t.notes, cur.t.bench
 end
 
 -- Resumes the active case once and settles it if it ended, was abandoned or overran
@@ -194,7 +196,7 @@ local function Step(s, cur)
             r.facts, r.checks, r.notes = cur.t.facts, cur.t.checks, cur.t.notes
         else
             r.status, r.detail = "error", tostring(err)
-            r.facts, r.checks, r.notes = cur.t.facts, cur.t.checks, cur.t.notes
+            r.facts, r.checks, r.notes, r.bench = cur.t.facts, cur.t.checks, cur.t.notes, cur.t.bench
         end
     elseif dead then
         s.cur = nil
@@ -205,6 +207,8 @@ local function Step(s, cur)
         end
     elseif total > cur.case.budget then
         Abandon(s, cur, total)
+    elseif cur.t.progress then
+        r.detail = cur.t.progress   -- shown while it runs; the verdict clears it
     end
 end
 
@@ -238,6 +242,15 @@ local function OnUpdate(_, elapsed)
     if not s then return end
     s.frames = s.frames + 1
     if s.frames > 1 and type(elapsed) == "number" and elapsed > s.worstFrame then s.worstFrame = elapsed end
+    -- the game's own frame intervals while a case is active, kept on its record: a benchmark's report line says how the frames fared
+    if s.cur and s.frames > 1 and type(elapsed) == "number" then
+        local f = s.cur.r.frame
+        if not f then f = { n = 0, worst = 0, over33 = 0, over50 = 0 } s.cur.r.frame = f end
+        f.n = f.n + 1
+        if elapsed > f.worst then f.worst = elapsed end
+        if elapsed > 0.033 then f.over33 = f.over33 + 1 end
+        if elapsed > 0.050 then f.over50 = f.over50 + 1 end
+    end
     if InCombat() then return Finish("combat") end
     local t0 = s.clock()
     if t0 - s.startedAt > s.cap then return Finish("cap") end

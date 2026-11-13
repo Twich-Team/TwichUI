@@ -25,6 +25,10 @@ Probe.lua
 # Deterministic synthetic market data and the independent reference models (also loaded by tests/test_workshop_market_reference.lua)
 Fixtures.lua
 Reference.lua
+# Benchmarks (M7): the measurement and comparison framework, the shared workloads, and recorded real-client baselines (data only)
+Bench.lua
+Workloads.lua
+Baselines.lua
 # The cases: the same pure definitions tests/test_testlab.lua runs offline
 cases\Core.lua
 cases\Market.lua
@@ -32,6 +36,7 @@ cases\Crafting.lua
 cases\Client.lua
 cases\UI.lua
 cases\Api.lua
+cases\Perf.lua
 # The window's controls, then the window (last: it opens once when the addon loads and registers /tuilab)
 Kit.lua
 Window.lua

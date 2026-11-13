@@ -30,6 +30,9 @@ FX.MAX_COPPER, FX.MAX_COUNT, FX.MAX_ID = 99999999999, 10000, 2147483647
 FX.LIMITS = { records = 5000, items = 200, tiers = 8, scans = 400, markets = 6,
     -- crafting (M3): far below the planner's own bounds (30 recipes, 16 materials, 4 candidates), so every scenario stays easy to inspect
     pool = 8, entries = 8, candidates = 4, tabs = 8 }
+-- Benchmarks only (M7): sizes the correctness fixtures above never use. A caller must ask for them (FX.Bulk, or opt.bulk in FX.Crafting).
+-- 250,000 records and 30,000 items are the scan's own boundaries; the crafting numbers are the planner's (30 recipes) and a pool of items.
+FX.BULK = { records = 250000, items = 30000, pool = 64, entries = 30 }
 
 local floor = math.floor
 
@@ -162,6 +165,53 @@ function FX.Listings(seed, opt)
 end
 
 ---------------------------------------------------------------------------
+-- Bulk auction records for benchmarks (M7): flat parallel arrays, generated in chunks
+---------------------------------------------------------------------------
+-- FX.Bulk(seed, n, items) -> b. b.item[i], b.count[i], b.buyout[i] hold record i (no table per record: 50,000 records stay small). Fill(k)
+-- makes the next k records, so a caller in the game can spread the work over frames; one generator is consumed in order, so the records do not
+-- depend on the chunk size. About 2% of records are invalid (a count of 0) and 5% are bid-only (buyout 0). b.truth is what the generator
+-- KNOWS: read / used / noBuyout / invalid, and per item the listings (l), the items listed (t) and the cheapest unit price as a float (m),
+-- worked out here from the made-up numbers, not by the Workshop. Item ids are distinct and fixed: 1000 + 7 * k.
+function FX.Bulk(seed, n, items)
+    n = Clamp(n, 0, FX.BULK.records, 1000)
+    items = Clamp(items, 1, FX.BULK.items, 300)
+    local rng = FX.Rng(seed)
+    local b = { seed = seed, n = n, nItems = items, filled = 0, item = {}, count = {}, buyout = {},
+        truth = { read = 0, used = 0, noBuyout = 0, invalid = 0, l = {}, t = {}, m = {} } }
+    local STACK = { 1, 1, 1, 1, 5, 5, 20, 200 }
+    function b:Done() return self.filled >= self.n end
+    function b:Fill(k)
+        local last = math.min(self.n, self.filled + (tonumber(k) or 0))
+        local tr = self.truth
+        for i = self.filled + 1, last do
+            local idx = 1 + floor(items * rng:Next() ^ 2)
+            local id = 1000 + 7 * idx
+            local count = STACK[rng:Int(1, #STACK)]
+            local base = 20 + (idx * 37) % 9000
+            local buyout = count * (base + rng:Int(0, 40))
+            local roll = rng:Next()
+            self.item[i], self.count[i], self.buyout[i] = id, count, buyout
+            tr.read = tr.read + 1
+            if roll < 0.02 then
+                self.count[i] = 0
+                tr.invalid = tr.invalid + 1
+            elseif roll < 0.07 then
+                self.buyout[i] = 0
+                tr.noBuyout = tr.noBuyout + 1
+            else
+                tr.used = tr.used + 1
+                tr.l[id] = (tr.l[id] or 0) + 1
+                tr.t[id] = (tr.t[id] or 0) + count
+                local unit = buyout / count
+                if not tr.m[id] or unit < tr.m[id] then tr.m[id] = unit end
+            end
+        end
+        self.filled = last
+    end
+    return b
+end
+
+---------------------------------------------------------------------------
 -- A market's scans over days (for the history and the statistics)
 ---------------------------------------------------------------------------
 local GAPS = {
@@ -288,8 +338,8 @@ end
 function FX.Crafting(seed, opt)
     opt = opt or {}
     local rng = FX.Rng(seed)
-    local nPool = Clamp(opt.items, 2, FX.LIMITS.pool, rng:Int(3, 6))
-    local nEntries = Clamp(opt.entries, 0, FX.LIMITS.entries, rng:Int(1, 3))
+    local nPool = Clamp(opt.items, 2, opt.bulk and FX.BULK.pool or FX.LIMITS.pool, rng:Int(3, 6))
+    local nEntries = Clamp(opt.entries, 0, opt.bulk and FX.BULK.entries or FX.LIMITS.entries, rng:Int(1, 3))
     local used, pool, products = {}, {}, {}
     local function NewId()
         local id

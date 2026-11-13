@@ -296,7 +296,7 @@ Each milestone is one request. **Tests** lists the evidence the milestone must p
 
 **M7. Benchmarks**
 - **Objective:** section E.
-- **Files:** `Fixtures.lua` sizes, `cases/Bench.lua`, `tests/bench_workshop.lua`, result lines, a comparison note in this document.
+- **Files (as built, see H):** `Fixtures.lua` sizes, `Bench.lua`, `Workloads.lua`, `cases/Perf.lua`, `tests/bench_workshop.lua`, result lines, a comparison note in this document.
 - **Accept:** the same fixtures give results in both interpreters; 5-run median and MAD; frame figures in game; the scale test reuses the fixtures.
 - **Depends on:** M2.
 - **Out of scope:** thresholds, optimizations.
@@ -616,7 +616,11 @@ Outside the requested scope and **not audited here**: about 35 other `v ~= v` si
 
 *Real-client checks (not done).* (1) Core: `numeric.guards.held-counts` passes with `inf`, `inf-minus-inf`, fractions and `huge` all unknown. (2) Guided `api.click.overlap`: read `propagate_readback` (expect `true via CanPropagateMouseClicks`) and `model` for `propagate` (expect `reachable (through propagation)`, agreeing with `onclick`); if the readback is `unreadable`, the model says `unknown` and the cause above is wrong or incomplete. (3) Interface reachability with the Workshop open: `scan.capturing` should be close to the previous run's figure; a large jump would mean a default plain frame reports its click flag true, and `Collect` needs a narrower rule. (4) F9 and the Lab window unchanged afterwards.
 
-**M6.1 stops here; M7 (benchmarks) is not started.**
+**M6.1 stops here.**
+
+**M7, benchmarks (2026-11-12): test tooling only; no production file changed. Real-client performance acceptance is pending until the suite runs in Forever.** Reference: `docs/testlab.md` "Benchmarks (milestone 7)" (workloads, fixtures and seeds, methodology, comparison policy, commands, in-game steps, limits). Built: `Bench.lua`, `Workloads.lua`, `Baselines.lua`, `cases/Perf.lua` (opt-in category), `FX.Bulk` and `FX.Crafting{bulk=true}`, per-case frame intervals and progress text in the Runner, a separate "benchmarks (schema 1)" report section (report schema 1 unchanged), `tests/bench_workshop.lua`, `tests/test_testlab_bench.lua`. Deviations from section E: workloads are 1k/10k/50k records (+250k offline) rather than 2k/50k/250k; the file is `Workloads.lua` plus `cases/Perf.lua` instead of `cases/Bench.lua`; retained memory is offline or in separate `perf.retained.*` cases. Findings: the last step of a large batch (`Items()` over ~12,000 items) is one production step of about 40 to 90 ms offline, the longest uninterrupted step of any workload, and worth a look when Market Intelligence adds more per-item work. UI redraw benchmarks are deferred (they need the player's real state). Offline figures (WSL, Lua 5.1, quiet machine, labelled host `dev-wsl`, five repetitions) are in `tests/test-output/` only, not committed.
+
+**M7 stops here; the next work is product features (Market Intelligence).**
 
 ## Unresolved decisions (product input needed)
 

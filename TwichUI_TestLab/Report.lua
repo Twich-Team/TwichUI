@@ -89,6 +89,13 @@ function RP.Build(sum)
     end
     table.sort(facts)
     lines[#lines + 1] = "facts: " .. (#facts > 0 and table.concat(facts, " ") or "none")
+    -- benchmarks (M7): their own section with its own schema line; the lines above are unchanged, so a report without benchmarks is as before
+    local items = {}
+    for _, r in ipairs(sum.results) do
+        for _, b in ipairs(r.bench or {}) do items[#items + 1] = { result = b, frame = r.frame, compare = b.compare } end
+    end
+    local bench = TL.Bench and TL.Bench.ReportLines(items, ("clock %s | slice %.0f ms | read these as measurements of this run, not budgets"):format(sum.clock, (sum.slice or 0) * 1000))
+    if bench then for _, l in ipairs(bench) do lines[#lines + 1] = l end end
     local text = table.concat(lines, "\n")
     if #text > RP.MAX_BYTES then text = text:sub(1, RP.MAX_BYTES) .. "\n... (cut at " .. RP.MAX_BYTES .. " bytes)" end
     return text

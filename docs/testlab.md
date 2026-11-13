@@ -137,6 +137,63 @@ facts: client.api.GetTimePreciseSec=function client.lua.div_zero_value=inf ...
 
 `ended` is `complete`, `user`, `combat`, `cap` or `closed`. The report holds counts, case ids, the Lab's own messages and facts. Text that came from a case has control characters, item links and colour codes removed and is cut at 240 characters. It contains no character, realm, guild or account name, no chat, no item link and no saved value (the offline test uses a mock character and realm and checks they never appear).
 
+## Benchmarks (milestone 7)
+
+**Purpose.** Measure, with repeatable synthetic workloads, how much CPU time and memory the Workshop's calculations take and how the cost grows with the data, so an optimisation is judged on evidence. They do not set budgets: no threshold exists until real-client figures are recorded. Offline figures describe one machine and its Lua 5.1; they never stand in for the game.
+
+**Where it lives.** `Bench.lua` (measurement, statistics, comparison, result lines; pure, the clock, memory reading and yield are injected), `Workloads.lua` (the workloads: one definition for every interpreter), `Baselines.lua` (recorded real-client result lines, data only, empty until recorded), `cases/Perf.lua` (the opt-in **Performance (benchmarks)** category), `tests/bench_workshop.lua` (offline runner, not matched by `run.sh`), `tests/test_testlab_bench.lua` (unit tests on a scripted clock).
+
+### Workloads (all call production code with explicit inputs on made-up data)
+
+| Id | Fixture and seed | Size | Step (one timed unit) |
+|---|---|---|---|
+| `market.aggregate.1k / 10k / 50k` (`250k` offline only) | `FX.Bulk`, seed 7600001 | 1,000 / 10,000 / 50,000 (250,000) records over 300 / 3,000 / 12,000 (30,000) items; 2% invalid, 5% bid-only | 400 records through `Prices.NewBatch():Add`, then `Items()` as the last step |
+| `history.insert.30d / 120d / 400d` | `FX.Calendar` mixed (gaps, repeats, cut scans skipped), seed 7610001, 200 items | 30 / 120 / 400 scan days | 500 `History.Add` calls from empty strings (folds and expiry included) |
+| `history.fold.dense` | dense calendar, seed 7611001 | 30 days laid down untimed, then 60 daily updates of 200 items | 500 `History.Add` calls, each folding one day |
+| `history.trim.400d` | seed 7610001 | 200 histories x 6 later dates | 300 `History.Trim` calls |
+| `market.stats.6k` | seed 7610001 + 40 sparse (one-day) histories | 6,000 queries | 250 queries of `Market.Stats` (week, 30 days, retained), `Trend`, `Compare`, `Series`, `Observed` |
+| `market.lookup.24k` | four hand-built markets (fresh, 3 days old, recipes-only, none), 3,000 items | 24,000 `Market.Price` calls: known, unknown, old, out of scope, no market, bad item, variant | 1,000 lookups |
+| `crafting.plan.small / medium / large / large-noguild` | `FX.Crafting` with `bulk`, seeds 7620001+ | 200 scenarios of 3 recipes, 80 of 10, 30 of 30 (the planner's bound); `large-noguild` leaves the guild bank out | one scenario: `Materials.Rows` then `Shopping.Plan` (current one-level planner) |
+
+Other cases: `perf.retained.*` (three workloads with forced full collections between repetitions; a visible hitch, so separate), `perf.clock` (the smallest step the clock makes) and `perf.ui.redraw`, which **skips on purpose**: Workshop page redraws and open/close cycles read the player's real queue and prices and build real frames, so no safe synthetic benchmark exists yet (use `R.Perf` scopes and Diagnostics captures in real play). Nothing is timed on stand-in frames.
+
+### Methodology
+
+- A **sample** is the sum of the timed steps of one repetition, in ms. Fixture generation, the memory readings, the yield and the progress callback are outside the timing.
+- One warm-up repetition (not a sample), then five timed repetitions (`--reps`, at most 25). Reported: every sample, **median**, **MAD** (median of the absolute deviations from the median), minimum, maximum, throughput (work / median), **longest single step**, wall time (first step to last, waits included) and wait (wall minus steps). A complete game-frame interval is a different quantity: the Runner keeps the game's frame intervals per case (count, worst, over 33 ms, over 50 ms) and the report prints them; they include every other addon.
+- **Memory** is the Lua heap (`collectgarbage("count")`, KB), not an addon's total and not an allocation count. "Heap change" is the median change over a repetition and "peak" the highest value sampled between steps; a collection can hide growth and a spike inside a step is invisible, so both are approximate. "Retained" and "growth over repetitions" use forced full collections after each repetition and are measured only offline or by the `perf.retained.*` cases.
+- **Correctness.** Every repetition's output signature must equal the first; the workload's verification runs on the warm-up and the last repetition against what the fixture knows or an independent derivation (generator truth, a replay of the observations, the reference model of `Reference.lua`, the construction of the lookup mix); a fingerprint of the input before and after must match. A failure is status `mismatch`, not a time.
+- **Stutter guard.** If one step takes longer than 100 ms (300 ms for the 50k batch, whose last step is a production `Items()` conversion) the benchmark stops (`oversize`) instead of repeating it. A budget (50 s) and combat also end it; Stop is handled by the Runner. Statuses other than `ok` carry a reason and no statistics.
+
+### Comparing (`Bench.Compare`, `--compare`)
+
+Verdicts: **faster**, **slower**, **same** (indistinguishable within noise), **inconclusive**, **incomparable**. The noise threshold is `max(3 x the larger MAD, 5% of the baseline median)`. Inconclusive: fewer than five samples, a MAD above 25% of its median, a median under 0.05 ms (clock resolution), or with `--paired` (A B A B ... runs) a pair that points the other way. Incomparable: a different workload id or version, fixture, seed, size, work, environment (client build or "lua5.1-offline"), host label, clock or Lua version, or a run that did not finish. This is a rule of thumb for deciding whether to believe a number, not a statistical test, and a single lower number is never an improvement.
+
+### Commands (offline, from the repository root)
+
+```
+(cd tests && lua5.1 -e 'require("bit"); ROOT="../!!!TwichUI/"; REPO="../"; TESTS="./"' bench_workshop.lua --list)
+(cd tests && lua5.1 -e '...same...' bench_workshop.lua --smoke)                        # quick check that everything runs and verifies
+(cd tests && lua5.1 -e '...same...' bench_workshop.lua --host mypc --save --xl)        # full set + the 250k house; writes tests/test-output/bench-mypc.txt
+(cd tests && lua5.1 -e '...same...' bench_workshop.lua --host mypc --compare test-output/bench-mypc.txt --only lookup)
+```
+Take a baseline and a candidate on the same machine, same session, nothing else running (a simulator run on the same CPU visibly widened the MADs). `test-output/` is ignored by git and packaging.
+
+### In the game
+
+1. `/run C_AddOns.LoadAddOn("TwichUI_TestLab")`, out of combat.
+2. Tick **Performance (benchmarks)** (never ticked for you), press Run. It takes roughly 10 to 30 seconds; each case shows "warm-up" / "repetition n of 5" while it runs. Stop or combat ends it at the next step.
+3. Press Copy and paste the whole report. Its **benchmarks (schema 1)** section has one `B1 ...` line per workload (the parseable result), a second line with wall/wait, the frame record and the baseline verdict.
+4. To record a baseline, paste those `B1` lines into `TL.BaselineText` in `Baselines.lua` (nothing else; text is parsed field by field, never executed); later runs then print "vs baseline". Repeat in a second session before trusting the numbers.
+
+### Known limits
+
+The game's Lua is a different build with the interface's memory shared; a figure measured offline says nothing about it. The clock is `GetTimePreciseSec` in the game, `os.clock` (process CPU seconds) offline. The 50k and 250k batches end with one production `Items()` step of tens of milliseconds offline: that is a finding about production (a scan's save step), not something the benchmark yields around, and no production algorithm was changed for the benchmarks. UI redraws are deferred (above). The crafting workloads use the current one-level planner only. Verification of `Compare`, `Trend` and `Series` outputs is by signature stability plus the week statistics against the replay; the other fields are not independently derived.
+
+### Safety
+
+All workloads are `pure`: made-up input, explicit arguments, no saved market, no scan, no queue, no purchase, no frame, timer or event of their own, no write to any saved variable (the Runner's fingerprint also brackets each case). Cleanup after normal end, error, timeout, Stop, close or combat is "nothing to clean": the state is plain garbage once the case is not resumed. The Lab remains excluded from packages.
+
 ## Not in releases
 
 - `.pkgmeta` lists `TwichUI_TestLab` under `ignore`, and it is not one of the `move-folders`.

@@ -24,6 +24,8 @@
 --   t:Note(text)                     one line of evidence for the report, printed under the case (at most 16, each cut at 400 characters)
 --   t:Yield()                        a cooperative slice boundary (never inside a pcall: Lua 5.1 cannot yield across one)
 --   t:Wait(seconds)                  a pause across frames; nothing of this case is scheduled meanwhile
+--   t:Bench(result)                  attach a benchmark result (Bench.lua) to the report's benchmark section (at most 4 per case)
+--   t:Progress(text)                 what the running case is doing ("repetition 3 of 5"), shown while it runs
 --
 -- Which calls a case may never make (writes, scans, purchases, mail, trades, destruction) is enforced by tests/test_testlab.lua, which
 -- scans these files; the list is in docs/testlab.md. This file never assigns to a saved-variable global.
@@ -205,6 +207,16 @@ end
 
 function T:Yield()
     if coroutine.running() then coroutine.yield() end
+end
+
+-- A benchmark result for the report's benchmark section (the Runner copies it to the case's record). Bounded.
+function T:Bench(result)
+    self.bench = self.bench or {}
+    if type(result) == "table" and #self.bench < 4 then self.bench[#self.bench + 1] = result end
+end
+
+function T:Progress(text)
+    self.progress = tostring(text or ""):sub(1, 80)
 end
 
 -- A pause of about `seconds` across frames: the runner schedules no step for this case until the time has passed (the other work of the
