@@ -2,7 +2,7 @@
 
 Checks the manifest (stable unique ids, categories, names, keywords, crop rectangles inside their sheet, every picture on a sheet either catalogued or
 rejected with a reason), every individual source image (square RGBA, real transparency, a clear edge, the picture centred with its margin) and every
-runtime texture, that ArtData.lua is what the manifest says, and that the tool rebuilds the manifest, ArtData.lua and a sample of the pictures byte for byte.
+runtime texture, that ArtData.lua is what the manifest says, and that the tool rebuilds the manifest, ArtData.lua and a sample of the pictures (exact PNG pixels and byte-identical runtime textures).
 
 Run (from tests/): python3 -B -m unittest -q test_reminder_gallery
 """
@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -31,6 +32,64 @@ def png_header(path):
     assert d[:8] == b"\x89PNG\r\n\x1a\n", path
     w, h, depth, ctype = struct.unpack(">IIBB", d[16:26])
     return w, h, depth, ctype
+
+
+def exact_png(path):
+    """Decode 8-bit non-interlaced RGB/RGBA without clearing transparent pixels."""
+    data = Path(path).read_bytes()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError("not a PNG: %s" % path)
+    pos, parts, header = 8, [], None
+    while pos < len(data):
+        length, kind = struct.unpack(">I4s", data[pos:pos + 8])
+        body = data[pos + 8:pos + 8 + length]
+        pos += length + 12
+        if kind == b"IHDR":
+            header = struct.unpack(">IIBBBBB", body)
+        elif kind == b"tRNS":
+            raise ValueError("unsupported PNG transparency: %s" % path)
+        elif kind == b"IDAT":
+            parts.append(body)
+        elif kind == b"IEND":
+            break
+    w, h, depth, color, compression, filtering, interlace = header
+    if (depth, compression, filtering, interlace) != (8, 0, 0, 0) or color not in (2, 6):
+        raise ValueError("unsupported PNG format: %s" % path)
+    bpp = 4 if color == 6 else 3
+    stride = w * bpp
+    raw = zlib.decompress(b"".join(parts))
+    if len(raw) != h * (stride + 1):
+        raise ValueError("invalid PNG data length: %s" % path)
+    previous = bytearray(stride)
+    rows = []
+    for y in range(h):
+        start = y * (stride + 1)
+        filter_type = raw[start]
+        line = bytearray(raw[start + 1:start + 1 + stride])
+        if filter_type > 4:
+            raise ValueError("invalid PNG filter: %s" % path)
+        for i in range(stride):
+            left = line[i - bpp] if i >= bpp else 0
+            up = previous[i]
+            upper_left = previous[i - bpp] if i >= bpp else 0
+            if filter_type == 1:
+                predictor = left
+            elif filter_type == 2:
+                predictor = up
+            elif filter_type == 3:
+                predictor = (left + up) // 2
+            elif filter_type == 4:
+                p = left + up - upper_left
+                distances = (abs(p - left), abs(p - up), abs(p - upper_left))
+                predictor = (left, up, upper_left)[distances.index(min(distances))]
+            else:
+                predictor = 0
+            line[i] = (line[i] + predictor) & 255
+        previous = line
+        if bpp == 3:
+            line = bytearray(channel for x in range(w) for channel in (*line[x * 3:x * 3 + 3], 255))
+        rows.append(bytes(line))
+    return w, h, tuple(rows)
 
 
 def tga(path):
@@ -171,10 +230,41 @@ class Rebuild(unittest.TestCase):
     def test_sample_pictures_are_what_the_tool_builds(self):
         out = Path(self.tmp.name)
         for i in SAMPLE:
-            self.assertEqual((out / "assets" / "reminder-gallery" / (i + ".png")).read_bytes(), (ASSETS / (i + ".png")).read_bytes(), i + ".png")
+            self.assertEqual(exact_png(out / "assets" / "reminder-gallery" / (i + ".png")), exact_png(ASSETS / (i + ".png")), i + ".png")
             for suffix in ("", "-small"):
                 name = i + suffix + ".tga"
                 self.assertEqual((out / "!!!TwichUI" / "media" / "reminders" / "gallery" / name).read_bytes(), (MEDIA / name).read_bytes(), name)
+
+
+class ExactPngRegression(unittest.TestCase):
+    @staticmethod
+    def png(path, w, h, pixels, level):
+        def chunk(kind, data):
+            return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xffffffff)
+        rows = b"".join(b"\x00" + pixels[y * w * 4:(y + 1) * w * 4] for y in range(h))
+        Path(path).write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0))
+                               + chunk(b"IDAT", zlib.compress(rows, level)) + chunk(b"IEND", b""))
+
+    def test_compression_and_every_channel(self):
+        # Include transparent RGB, every faint alpha, and ordinary visible pixels.
+        alphas = (*range(10), 255)
+        pixels = bytes(channel for alpha in alphas for channel in (41, 82, 123, alpha))
+        with tempfile.TemporaryDirectory() as tmp:
+            first, second = Path(tmp) / "first.png", Path(tmp) / "second.png"
+            self.png(first, 11, 1, pixels, 0)
+            self.png(second, 11, 1, pixels, 9)
+            self.assertNotEqual(first.read_bytes(), second.read_bytes())
+            self.assertEqual(exact_png(first), (11, 1, (pixels,)))
+            self.assertEqual(exact_png(first), exact_png(second))
+            for alpha in range(len(alphas)):
+                for channel in range(4):
+                    with self.subTest(alpha=alpha, channel=channel):
+                        changed = bytearray(pixels)
+                        changed[alpha * 4 + channel] ^= 1
+                        self.png(second, 11, 1, changed, 9)
+                        self.assertNotEqual(exact_png(first), exact_png(second))
+            self.png(second, 1, 11, pixels, 9)
+            self.assertNotEqual(exact_png(first), exact_png(second))
 
 
 if __name__ == "__main__":
