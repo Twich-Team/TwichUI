@@ -305,6 +305,39 @@ message and an unavailable action can be looked at. Nothing is executed. Use a 1
 strip (shorter screens put it beside the window). The lab's screenshots draw dark colors much lighter than the game does, so judge shape,
 order and spacing from them, not color.
 
+## Diagnostics: party membership and guild membership are independent
+
+`bash tools/simlab/run.sh diagnose` runs six independent processes. The original
+`solo` diagnostic expected no messages after leaving the sample party, but the
+simulator also supplies a guild. With Guild Locations sharing enabled by default,
+the real addon legitimately sends a `TwichUIGuild` position packet on `GUILD`
+(observed at simulated 7.5 s). This was an outdated fixture assumption, not a
+production regression or a party hello leaking after departure.
+
+- `solo` now models **no party and no guild**. Only the synthetic membership
+  reads (`IsInGuild`, `GetGuildInfo`) change; the lab fires
+  `PLAYER_GUILD_UPDATE("player")` through the real addon handler. It asserts
+  sharing stays enabled, its existing position session ends, and **zero messages
+  of any prefix/channel** are attempted. The observer starts before departure.
+- `guildsolo` preserves the default guild and sharing choice while leaving the
+  party. It runs at least 21 simulated seconds to cover the complete 5..20 s
+  first-send jitter. It requires exactly one message in this stationary fixture,
+  validates the real position parser, first sequence number, the player's own
+  map/coordinates, `TwichUIGuild`/`GUILD`, no target, valid UTF-8 and transport
+  acceptance. Every observed send is checked; other/extra traffic fails.
+- Contract, no-addon baseline, grouped and synthetic-login cases retain their
+  assertions and error-classifier rules. Every message is logged even in a
+  failed solo run. No feature is turned off and no transport call is filtered.
+
+Use `./tests/run.sh fast core` and `./tests/run.sh feature core` for these
+fixtures and their shared dependencies. `test_simlab_diagnostics.lua` executes
+the actual fixture/observer in an isolated synthetic world, including controls
+that must fail for disabled sharing, a stale session, unexpected unguilded
+traffic, a missing/extra guild packet, another prefix/channel/target, malformed
+or foreign-position data, and transport refusal. It complements the real-addon
+simulator launches and `test_guild_locations.lua`; it does not prove real
+network delivery, real guild membership changes or client timing.
+
 ## Delayed failures
 
 Two errors appear once the simulated clock passes a few seconds. Neither is hidden: the log keeps both, and
@@ -315,7 +348,7 @@ error the run does not permit fails it, and a classified error a run requires bu
 settings scenario's permit set to the real grouped log to show that going solo there hides nothing (the hello is rejected).
 
 ```sh
-tools/simlab/diagnose.sh                  # five launches, about 20 s: contract, baseline, solo, grouped, login (SIMLAB_WINDOW=12)
+tools/simlab/diagnose.sh                  # six launches: contract, baseline, solo, guildsolo, grouped, login (SIMLAB_WINDOW=12)
 tools/simlab/interact.sh                  # the settings scenario, solo, over the same window
 tools/simlab/sim.sh --no-saved-vars --no-addons --exec-lua '@<fixture>' dump-tree --visible-only   # a single launch, by hand
 ```

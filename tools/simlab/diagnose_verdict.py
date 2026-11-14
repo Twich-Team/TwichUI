@@ -6,6 +6,7 @@ A clean exit proves nothing, so each launch is judged on its whole log:
   baseline  the clock covered the window with no addon, no addon message was attempted, and the voice error shows up
             anyway (so it is not TwichUI's)
   solo      the group state was verified solo, the clock covered the window, nothing was sent, no unclassified error
+  guildsolo solo but guilded with sharing enabled: only one valid own-position GUILD message, no party traffic
   grouped   the party was verified, the clock covered the window, the hello was attempted and the simulator refused its
             bytes, and that refusal is the one classified error (known_failures.py) besides the voice one; and exactly one
             hello came (the 6 s login hello was never scheduled: see the docs, "Event paths, not elapsed time")
@@ -52,7 +53,7 @@ def main():
             stale.append(name)
         print(f"  {'pass' if passed else 'FAIL'}  {name}" + (f"  ({detail})" if detail else ""))
 
-    def scenario(label, d, expect_window):
+    def scenario(label, d, expect_window, required_window=window):
         failed = [c for c in d["checks"] if c[0] == "FAIL"]
         check(f"{label}: the scenario reached its end", d["done"] and d["done"].group(5) == "false", d["done"].group(0) if d["done"] else "no done line")
         check(f"{label}: no check failed", d["checks"] and not failed,
@@ -61,8 +62,8 @@ def main():
               and int(d["done"].group(4)) == len(failed))
         if expect_window:
             sim = float(d["done"].group(2)) if d["done"] else 0
-            check(f"{label}: the clock ran the whole declared window", sim >= window and d["ticks"] and d["ticks"][-1] >= window - 1e-6,
-                  f"{sim} s simulated, last tick {d['ticks'][-1] if d['ticks'] else None}, window {window}")
+            check(f"{label}: the clock ran the whole declared window", sim >= required_window and d["ticks"] and d["ticks"][-1] >= required_window - 1e-6,
+                  f"{sim} s simulated, last tick {d['ticks'][-1] if d['ticks'] else None}, window {required_window}")
 
     def classified(label, d, allow, require):
         r = kf.classify(d["text"], allow=allow, require=require)
@@ -70,7 +71,7 @@ def main():
             check(f"{label}: {name}", passed, detail)
         return r
 
-    contract, baseline, solo, grouped, login = (load(run, n) for n in ("contract", "baseline", "solo", "grouped", "login"))
+    contract, baseline, solo, guildsolo, grouped, login = (load(run, n) for n in ("contract", "baseline", "solo", "guildsolo", "grouped", "login"))
     voice_due = window >= 6   # the ticker's first call comes about 4.5 s after the script starts, its second about 9.5 s
 
     print("Minimal reproduction, no addon loaded (what the simulator's SendAddonMessage accepts):")
@@ -84,10 +85,14 @@ def main():
     rb = classified("baseline", baseline, (VOICE,), (VOICE,) if voice_due else ())
     check("baseline: no addon message was attempted and the hello rule did not fire", HELLO not in rb["known"] and not rb["unexpected"])
 
-    print("TwichUI, solo (left the sample party, state verified), the clock over the window:")
+    print("TwichUI, solo and unguilded (synthetic guild departure, sharing still enabled):")
     scenario("solo", solo, True)
     rs = classified("solo", solo, (VOICE,), ())
     check("solo: the hello rule did not fire (no send was attempted)", HELLO not in rs["known"] and HELLO not in rs["unexpected"])
+
+    print("TwichUI, solo but guilded (default sharing; all sends observed, none filtered):")
+    scenario("guildsolo", guildsolo, True, max(window, 21))
+    classified("guildsolo", guildsolo, (VOICE,), ())
 
     print("TwichUI, grouped on purpose (the sample party kept), the clock over the window:")
     scenario("grouped", grouped, True)
@@ -126,7 +131,7 @@ def main():
 
     print("What this run found, by kind (not one pass/fail):")
     passed_checks = {n: sum(1 for c in d["checks"] if c[0] == "PASS") for n, d in
-                     (("contract", contract), ("baseline", baseline), ("solo", solo), ("grouped", grouped))}
+                     (("contract", contract), ("baseline", baseline), ("solo", solo), ("guildsolo", guildsolo), ("grouped", grouped))}
     print("  Passed behavior ........... " + ", ".join(f"{k}: {v} checks" for k, v in passed_checks.items()))
     print(f"  Simulated time ............ {window:g} s declared in baseline, solo and grouped, "
           f"{baseline['done'].group(2) if baseline['done'] else '?'} / {solo['done'].group(2) if solo['done'] else '?'} / "

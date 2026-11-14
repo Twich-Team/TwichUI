@@ -1,6 +1,12 @@
 # Test and simulator performance
 
-## Results
+**Current diagnostics status (2026-11-14): resolved.** The follow-up at the end of
+this report corrects the party/guild fixture assumption. Full verification now
+passes: **222 files/modules, 140 simulator launches and 17,487 structured checks**
+in **1,674.207 s (27 min 54.21 s)**, exit **0**. Historical failed results below
+are retained as baseline evidence, not the current verification status.
+
+## Optimization milestone results (historical, `152f2e91`)
 
 | Workflow | Baseline | Optimized | Change |
 |---|---:|---:|---|
@@ -19,8 +25,10 @@ This supports the conservative two-worker default, not unmeasured higher
 concurrency. All layout files remain serial. The original first/warm samples
 below show ordinary run-to-run variation; these are not performance thresholds.
 
-**Evidence:** unit-tested and simulator-tested. Full verification exits 1 on the
-same pre-existing solo-message assertion as the unchanged baseline. No assertion
+**Historical milestone evidence (`152f2e91`):** unit-tested and simulator-tested.
+That full verification exited 1 on the pre-existing solo-message assertion.
+The diagnostics follow-up below resolves its fixture assumption without changing
+production behavior; its verification results are recorded separately. No assertion
 was disabled, normalized, or made expected-to-fail to produce a green result.
 No real-client or appearance validation is claimed.
 
@@ -294,8 +302,8 @@ checks against the actual checkout.
 
 ## Remaining opportunities
 
-- Repair the pre-existing diagnostics solo-message mismatch as separate work;
-  do not suppress it in the runner or broaden error-classifier exceptions.
+- The diagnostics solo-message mismatch is resolved by the follow-up below;
+  its original failed milestone result is retained as historical evidence.
 - Profile the large layout mock-client heaps before changing their fixtures.
   Caching mutable mock clients or sharing a Lua process would risk state leaks.
 - Simulator workers need separate roots, fixtures, home, cache, WTF, artifacts,
@@ -325,3 +333,70 @@ Final scope review: changes are limited to developer documentation, test
 selection/runner/control tests, and `tools/simlab/` wrappers/verdicts. Original
 Lua tests, production addons, third-party libraries, `.toc` metadata, release CI,
 mutation runner/catalog and the separate simulator installation are unchanged.
+
+## Diagnostics follow-up — 2026-11-14
+
+Root cause: `Lab.Solo()` leaves the sample party, not the synthetic guild. The
+unexpected call was `TwichUIGuild`, channel `GUILD`, at simulated 7.5 s, accepted
+by the simulator. Its synthetic payload was a version-1 position packet,
+`1:p:<epoch>:1:2248:5000:5000`. This is the documented, authorized Guild Locations
+default (own position, GUILD only), independent of party membership.
+
+Smallest existing reproduction: `bash tools/simlab/run.sh diagnose`, exit 1 on
+`solo: no addon message was attempted across the window` (expected 0, actual 1).
+A single solo launch with the unchanged fixture plus a trailing observer dump
+identified the packet; both commands used repository-local writable state and
+the unchanged read-only simulator installation. Raw logs and controlled failure
+copies are in `test-output/diagnostics-regression/`.
+
+The fixture now distinguishes unguilded solo from guilded solo. The original
+zero-message assertion is retained in the unguilded world, and the real guild
+update handler must end the session while sharing remains enabled. A sixth
+`guildsolo` launch retains the original guilded world and checks every observed
+message: exactly one valid own-position GUILD packet, no party/other traffic.
+It covers the entire first-send jitter window. No production file, feature
+state setter, transport observer, classifier exception or existing assertion
+was disabled or relaxed. Message logging now also identifies failures in solo.
+
+Focused evidence: six native diagnostic launches / 101 checks pass with
+the same classified simulator limitations; `fast core` passes 12 files;
+`test_guild_locations.lua` passes 645 checks; the new fixture regression test
+passes 30 isolation/failure-control checks. A copied native guildsolo log with
+channel changed to PARTY and consistent failure counts makes the unchanged
+verdict logic return 1. The new regression test also rejects a disposable copy
+of the original fixture (exit 1 on the zero-message assertion) and passes the
+corrected fixture. All 64 assertions in the original contract, no-addon baseline,
+grouped and login cases have identical expected/actual outcomes.
+
+Verification (native WSL; installation read-only):
+
+| Command | Result |
+|---|---|
+| `./tests/run.sh fast core` | 12 files pass; 1.502 s |
+| Direct `test_simlab_diagnostics.lua` | 30 isolation/transport/failure checks pass; original fixture fails this test |
+| Direct `test_guild_locations.lua` | 645 real-addon unit checks pass |
+| `bash tools/simlab/run.sh diagnose` | Six launches / 101 checks pass with the unchanged classified simulator limitations |
+| Copied native log: guildsolo channel deliberately changed to PARTY | Verdict exits 1 on that check; count agreement remains valid |
+| `./tests/run.sh feature core` | 21 files, smoke and all diagnostics pass; 47.338 s |
+| `./tests/run.sh full` | **PASS**, exit **0**; 222 files/modules (214 Lua, 8 Python / 117 cases), 140 launches / 17,487 structured checks; 1,674.207 s |
+
+The complete run also passes the 668-file Lua syntax check and 36 lab-guard
+cases. Other simulator catalogs keep their original scopes: smoke 2 launches,
+interaction 4, Workshop 25, Test Lab 9, settings 58 and Reminders 36. Diagnostics
+grows from five launches / 74 checks to six / 101. It retains every original
+case; the unguilded zero-message case now passes, and the original guilded solo
+world is explicitly covered instead of suppressing its legitimate packet.
+
+The full `report.json` is in the unique folder printed by
+`test-output/diagnostics-regression/full.log`; `full-summary.json` records its
+path/counts, and `unchanged-cases.json` records the original assertion comparison.
+The working tree was reviewed for unrelated or generated files. Changes are
+limited to three diagnostics files, one focused Lua regression test, its core
+selection and developer documentation. Production addons, message transport,
+feature defaults, simulator engine/installation, `.toc` metadata and release
+configuration are unchanged. No other feature milestone was started.
+
+Evidence is **unit-tested** and **simulator-tested**. The same known voice and
+UTF-8 simulator limitations are still reported and classified, with no new
+exceptions. No real-client test, network delivery or appearance validation is
+claimed.

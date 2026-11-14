@@ -32,7 +32,7 @@ Replace `workshop-settings` with one of these nonempty groups:
 | `navigation` | Navigation, maps, pins, NPCs and guild locations |
 | `settings` | Settings contracts, framework, pages and feature settings |
 | `shared-ui` | Frame styling, notifications, themes, reachability and shared window components |
-| `core` | Initialization, defaults, profiles, persistence, routing and storage |
+| `core` | Initialization, defaults, profiles, persistence, routing, storage and group/guild diagnostic isolation |
 | `layouts` | Layouts, wizard, import tools and reproducible artwork |
 | `test-tools` | All Python test infrastructure tests |
 
@@ -128,6 +128,10 @@ in-repository paths; the sole exception is this dedicated marked workspace.
 Do not edit the checkout or create unrelated artifact files during a scenario:
 the existing repository-status guard intentionally treats such changes as a
 failed run.
+
+The diagnostics script includes both unguilded-solo (strictly zero messages) and
+guilded-solo (exactly one validated own-position GUILD packet) cases. Party
+departure does not imply guild departure. See [the diagnostic fixtures](simulator-lab.md#diagnostics-party-membership-and-guild-membership-are-independent).
 
 Full verification clears inherited `SIMLAB_*` filters and synthetic settings
 options (preserving the game path), and ignores `WOWSIM_LAB`, so it cannot be

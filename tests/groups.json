@@ -1,6 +1,6 @@
 {
   "core": {
-    "tests": ["test_commands.lua", "test_defaults.lua", "test_lifecycle.lua", "test_persist.lua", "test_profiles.lua", "test_lod_apply.lua", "test_routing.lua", "test_storage.lua", "test_stored_data.lua", "test_status.lua", "test_cleanup.lua"],
+    "tests": ["test_simlab_diagnostics.lua", "test_commands.lua", "test_defaults.lua", "test_lifecycle.lua", "test_persist.lua", "test_profiles.lua", "test_lod_apply.lua", "test_routing.lua", "test_storage.lua", "test_stored_data.lua", "test_status.lua", "test_cleanup.lua"],
     "syntax": ["!!!TwichUI/*.lua", "!!!TwichUI/setup/*.lua"],
     "dependencies": ["shared-ui"],
     "simulators": [{"script": "smoke"}, {"script": "diagnose"}]
