@@ -17,7 +17,9 @@ local function Money(v) return tostring(v) .. "c" end
 
 -- a saved format 3 market (as test_workshop_valuation's RawMarket): listings[id] = { { unit, count } }, days[id] = daily points
 local function Dp(d, r, p) return { d = d, p = p or 50, r = r, t = 10, l = 3, n = 1, plo = p or 50, phi = p or 50, rlo = r, rhi = r, tlo = 10, thi = 10 } end
+local marketSeq=0
 local function Market(key, o)
+  marketSeq=marketSeq+1
   local PR, H2 = W.Prices, W.History2
   local b = PR.NewBatch()
   local ids = {}
@@ -27,7 +29,7 @@ local function Market(key, o)
   local items, n, _, _, dist = b:Items()
   local m = { f = 3, scope = "full", realm = "Realm", side = key:match("|(.*)$"), at = o.at, complete = o.complete ~= false, read = 1, used = 1, partial = 0, n = n,
     items = items, hist = o.hist or {}, hn = 0, sd = {}, key = key,
-    snap = { seq = o.seq or 1, kind = "full", at = o.at, alg = (not o.noDist) and 1 or nil, records = 1, used = 1, partial = 0, items = n },
+    snap = { seq = o.seq or marketSeq, kind = "full", at = o.at, alg = (not o.noDist) and 1 or nil, records = 1, used = 1, partial = 0, items = n },
     dist = (not o.noDist) and dist or nil, h2 = {}, c2 = {}, scans = {}, days = {}, v2from = (not o.legacy) and 1 or nil, h2info = (not o.legacy) and { v = 1, from = 1, at = o.at } or nil }
   for id, list in pairs(o.days or {}) do m.h2[id], m.c2[id] = H2.Encode({}, list, nil) end
   c.TwichUIWorkshopDB.markets[key] = m
@@ -60,7 +62,7 @@ local r = Decide()
 A.SetGain(10000)
 Same(Decide().action,r.action,"pure snapshot does not read a changing saved preference")
 A.SetGain(0)
-Same(r.action, "auction"); Same(r.suggestion.price, 100); Same(r.evidence, "strong")
+Same(r.action, "auction"); Same(r.level,"supported"); Same(r.suggestion.price, 100); Same(r.evidence, "strong")
 Same(r.proceeds.gross, 100); Check(r.proceeds.net == nil and r.proceeds.deposit == nil, "unknown costs stay unknown")
 Check(r.reasons[1]:find("gross"), "gross comparison is explicit")
 Same(Decide({ sell = 110 }).action, "vendor")
@@ -89,7 +91,42 @@ Same(Decide({ crafting = { uses = {}, reserved = 0 } }).action, "auction", "unle
 Healthy({ at = NOW - 4 * DAY })
 Same(Decide().action, "unknown", "stale listings")
 Healthy({ complete = false })
-Same(Decide().action, "unknown", "partial scan")
+r=Decide(); Same(r.action,"auction","partial current listings may support a tentative comparison")
+Same(r.level,"tentative"); Same(r.evidence,"limited")
+Same(r.suggestion.price,nil,"tentative observation is never a posting suggestion")
+Same(r.proceeds,nil,"tentative comparison never creates sale proceeds")
+Same(r.observed.role,"observedListing"); Same(r.observed.value,100)
+Same(A.Tooltip(r),"Workshop: Possible Auction"); Same(A.Short(r),"Possible Auction")
+Same(W.Worth.Recommend({advisor=r}).kind,"possible","alternate tooltip path cannot promote tentative advice")
+Same(W.Worth.Recommend({advisor=r}).pick,nil)
+Same(Decide({sell=80}).action,"unknown","partial auction data never defaults to vendor")
+Same(Decide({minGain=91}).action,"unknown","tentative retains configured gain")
+Same(Decide({minGain=90}).level,"tentative","tentative exact gain boundary")
+Same(Decide({qty=0}).action,"unknown"); Same(Decide({qty="nil"}).action,"unknown")
+Same(Decide({bindType="nil"}).action,"unknown"); Same(Decide({variant="suffix"}).action,"unknown")
+Same(Decide({bound=true}).action,"vendor","known ineligible items retain vendor baseline")
+Same(Decide({crafting=craft}).action,"craft"); Same(Decide({pendingPlan=true}).action,"unknown")
+Same(Decide({disenchant=true}).level,"tentative","missing DE never blocks the supported tentative comparison")
+Healthy({complete=false,at=NOW-86400}); Same(Decide().level,"tentative","24-hour observation boundary")
+Healthy({complete=false,at=NOW-86401}); Same(Decide().action,"unknown","tentative has stricter freshness")
+local limitedMarket=Healthy({complete=false}); limitedMarket.cut=true
+Same(Decide().action,"unknown","truncated scan cannot support even tentative advice")
+limitedMarket=Healthy({complete=false}); limitedMarket.scope="recipes"
+Same(Decide().action,"unknown","old recipe-only coverage is not current market evidence")
+Healthy({complete=false,noDist=true}); Same(Decide().action,"unknown","missing distribution cannot be invented")
+Healthy({days={[100]=Days(D0-1,D0,100)}})
+r=Decide(); Same(r.level,"supported"); Same(r.evidence,"limited","sparse history retains original fair support")
+Same(r.suggestion.price,100)
+Healthy({complete=false,days={[100]=Days(D0-10,D0,1000)}})
+r=Decide(); Same(r.observed.value,100,"tentative never substitutes historical valuation")
+Same(Decide({sell="nil"}).action,"unknown","unknown vendor baseline cannot be compared")
+Healthy({complete=false,listings={[100]={{100,20}}},days={}})
+r=Decide(); Same(r.level,"tentative"); Same(r.observed.value,100,"stack buyout normalized to unit observation")
+Same(r.suggestion.price,nil)
+Healthy({complete=false,listings={[100]={{1,1},{100,1},{100,1}}}})
+Same(Decide().action,"unknown","tentative cannot bypass suspicious low tiers")
+Market(KEY,{at=NOW,listings={},days={[100]=Days(D0-10,D0,100)}})
+Same(Decide().action,"unknown","history alone never creates current advice")
 Healthy({ listings = { [100] = { { 1, 1 }, { 100, 1 }, { 100, 1 } } } })
 Same(Decide().action, "unknown", "sparse suspicious tier")
 Healthy({ listings = { [100] = { { 100, 1 } } } })
@@ -183,6 +220,10 @@ for _,action in ipairs({"vendor","auction","disenchant","craft","unknown"}) do
   local lines=WL.Lines(eval,ctx,{enabled=true,lines={{id="recommend",when="always"}}},false)
   Check(lines[2][1]:find(A.Tooltip(eval.advisor),1,true),"simple primary wording " .. action)
 end
+Healthy({complete=false})
+eval.advisor=Decide()
+local tentativeLines=WL.Lines(eval,ctx,{enabled=true,lines={{id="recommend",when="always"}}},false)
+Check(tentativeLines[2][1]:find("Workshop: Possible Auction",1,true),"Normal configurable field preserves qualification")
 local shifted={enabled=true,lines={{id="recommend",when="shift"}}}
 local normal=WL.Lines(eval,ctx,shifted,false) or {}
 for _,line in ipairs(normal) do Check(not line[1]:find("Workshop:",1,true),"Shift-only recommendation hidden normally") end
@@ -203,11 +244,18 @@ c.C_Item.GetStackCount=function() return 20 end
 c.IsShiftKeyDown=function() return false end
 local tipChunk=assert(loadfile(ROOT .. "../TwichUI_Workshop/WorthTip.lua")); setfenv(tipChunk,c); tipChunk()
 session.QueueStrategy=function() error("hover must never start or request a planner job") end
+Healthy()
 Check(WL.Set({enabled=false,lines={{id="recommend",when="always"}}}))
 W.WorthTip.OnItem(c.GameTooltip,{guid="Item-100"}); Same(#drawn,0,"disabled tooltip adds nothing")
 Check(WL.Set({enabled=true,lines={{id="recommend",when="always"}}}))
 W.WorthTip.OnItem(c.GameTooltip,{guid="Item-100"})
 Check(table.concat(drawn," "):find("Workshop: Auction",1,true),"actual Normal tooltip calls Advisor")
+Healthy({complete=false})
+drawn={}; W.WorthTip.OnItem(c.GameTooltip,{guid="Item-100"})
+Check(table.concat(drawn," "):find("Workshop: Possible Auction",1,true),"actual Normal renderer keeps limited evidence visible")
+Check(WL.Set({enabled=true,lines={{id="recommend",when="shift"}}}))
+drawn={}; W.WorthTip.OnItem(c.GameTooltip,{guid="Item-100"})
+Check(not table.concat(drawn," "):find("Workshop:",1,true),"tentative respects Shift-only customization")
 Check(WL.Set({enabled=true,lines={{id="vendor",when="always"}}}))
 drawn={}; W.WorthTip.OnItem(c.GameTooltip,{guid="Item-100"})
 Check(not table.concat(drawn," "):find("Workshop:",1,true),"removing primary is respected by the live renderer")

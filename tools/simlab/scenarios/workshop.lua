@@ -711,13 +711,13 @@ Lab.Step("what's it worth: item tooltip lines", function()
     Say("TooltipDataProcessor in the simulator: " .. tostring(rawget(_G, "TooltipDataProcessor") ~= nil) .. "; registered by the product: " .. tostring(WT.registered))
     local requestsBefore = ah.requested
     Check("direct", "no cut confirmed, the auction is dearer: the fee is named and no winner is claimed",
-        "What's it worth? / Workshop: Insufficient data / Vendor | 60c / Auction (before fees) | 1s 50c / Hold Shift for details", Hover(118))
+        "What's it worth? / Workshop: Not enough data / Vendor | 60c / Auction (before fees) | 1s 50c / Hold Shift for details", Hover(118))
     Check("direct", "active plan demand overrides a tempting vendor comparison",
         "What's it worth? / Workshop: Keep for crafting / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details", Hover(2841))
     Check("direct", "repeating the update gives the same lines, not more",
-        "What's it worth? / Workshop: Insufficient data / Vendor | 60c / Auction (before fees) | 1s 50c / Hold Shift for details", Hover(118))
+        "What's it worth? / Workshop: Not enough data / Vendor | 60c / Auction (before fees) | 1s 50c / Hold Shift for details", Hover(118))
     Check("direct", "green armour: disenchant has no data, so it is said and no winner is claimed",
-        "What's it worth? / Workshop: Insufficient data / Vendor | 10c / Auction (before fees) | 25c / Disenchant (average) | no data / Hold Shift for details", Hover(9999))
+        "What's it worth? / Workshop: Not enough data / Vendor | 10c / Auction (before fees) | 25c / Disenchant (average) | no data / Hold Shift for details", Hover(9999))
     Check("direct", "a bound item cannot be listed (unavailable, not unknown)",
         "What's it worth? / Workshop: Keep for crafting / Vendor | 4c / Auction | can't be listed (bound)", Hover(2447))
     Check("direct", "an item with no listing: no price (never 0), more prices needed",
@@ -725,24 +725,24 @@ Lab.Step("what's it worth: item tooltip lines", function()
     Check("direct", "a random-properties variant is not priced from the base item's listings",
         "What's it worth? / Workshop: Keep for crafting / Vendor | 3c / Auction | this variant isn't priced", Hover(765))
     Check("direct", "a stack says the values are for one item",
-        "What's it worth? (each) / Workshop: Insufficient data / Vendor | 30c / Auction (before fees) | 60c / Hold Shift for details", Hover(3382))
+        "What's it worth? (each) / Workshop: Not enough data / Vendor | 30c / Auction (before fees) | 60c / Hold Shift for details", Hover(3382))
     -- 3382: Weak Troll's Blood Potion 300/5 = 60c each
     Check("direct", "an item the player does not hold (no guid) gets nothing", "", Hover(118, { id = 118 }))
 
     w.SetShift(true)
     local long = Hover(118)
     Check("direct", "Shift: the Always lines plus the age and the source, once each, and the unconfirmed cut stays on the value",
-        "What's it worth? / Workshop: Insufficient data / Vendor | 60c / Auction (before fees) | 1s 50c / Scanned | just now / Prices from | the auction house on SimulatedRealm / Estimates, not sales. Deposits and failed listings aren't counted.", long)
+        "What's it worth? / Workshop: Not enough data / Vendor | 60c / Auction (before fees) | 1s 50c / Scanned | just now / Prices from | the auction house on SimulatedRealm / Estimates, not sales. Deposits and failed listings aren't counted.", long)
     local _, n = long:gsub("Deposits and failed listings", "")
     Check("direct", "Shift: the deposit / failed-listing exclusion is stated once", 1, n)
     Check("direct", "Shift: the details stay short enough for a tooltip", true, select(2, long:gsub(" / ", "")) + 1 <= 10)
     w.SetShift(false)
-    Check("direct", "released: the short form again, nothing left over", "What's it worth? / Workshop: Insufficient data / Vendor | 60c / Auction (before fees) | 1s 50c / Hold Shift for details", Hover(118))
+    Check("direct", "released: the short form again, nothing left over", "What's it worth? / Workshop: Not enough data / Vendor | 60c / Auction (before fees) | 1s 50c / Hold Shift for details", Hover(118))
 
     -- TEST INPUT: a made-up 5% cut for the 'unknown' side (the product's PR.CUT is empty). 150 x 0.05 = 7.5 -> 8, net 142.
     R.Workshop.Prices.CUT.unknown = 0.05
     Check("direct", "[test input] a verified fee alone cannot repair insufficient competition",
-        "What's it worth? / Workshop: Insufficient data / Vendor | 60c / Auction (after fees) | 1s 42c / Hold Shift for details", Hover(118))
+        "What's it worth? / Workshop: Not enough data / Vendor | 60c / Auction (after fees) | 1s 42c / Hold Shift for details", Hover(118))
     R.Workshop.Prices.CUT.unknown = nil
     Check("direct", "test cut removed: back to before fees", true, Hover(118):find("Auction (before fees) | 1s 50c", 1, true) ~= nil)
 
@@ -925,7 +925,7 @@ Lab.Step("what's it worth: tooltip designer", function()
         for _, entry in ipairs(menu and menu.rows or {}) do if entry:IsShown() and entry.choice and entry.choice.value == v then entry:Click() return true end end return false end
     Check("click", "the example list offers 'Missing prices'", true, Pick("missing"))
     Check("display", "missing prices: said once, the unknown stays unknown (never zero)",
-        "What's it worth? / Workshop: Insufficient data / Vendor | 3s / Auction | no price / Disenchant (average) | no data / Hold Shift for details", Mock())
+        "What's it worth? / Workshop: Not enough data / Vendor | 3s / Auction | no price / Disenchant (average) | no data / Hold Shift for details", Mock())
     Check("click", "the example list offers 'Can't be auctioned'", true, Pick("unavailable"))
     Check("display", "an action that can't be done and an unknown value, side by side",
         "What's it worth? / Workshop: Vendor / Vendor | 3s / Auction | can't be listed (bound) / Disenchant (average) | no data", Mock())
@@ -2098,12 +2098,13 @@ Lab.Step("pose for the screenshot", function()
         Check("display","pose: no invented identities in an empty catalog",0,#p.list.data)
         Check("display","pose: empty catalog hides unperformable actions",false,p.detail.track:IsShown())
         Check("display","pose: empty catalog explains item selection",true,p.detail.empty:IsShown())
-    elseif view == "advisorscroll" or view == "advisorsource" or view == "advisorcategory" or view == "advisoralt" or view == "advisorlong" or view == "advisor" or view == "advisorsmall" or view == "advisorempty" or view == "advisorscaled" then
+    elseif view == "advisortentative" or view == "advisorbags" or view == "advisorfiltered" or view == "advisorscroll" or view == "advisorsource" or view == "advisorcategory" or view == "advisoralt" or view == "advisorlong" or view == "advisor" or view == "advisorsmall" or view == "advisorempty" or view == "advisorscaled" then
         local W=R.Workshop
         local ids={}; for _,e in ipairs(W.Queue.Entries()) do ids[#ids+1]=e.id end
         for _,id in ipairs(ids) do W.Session.Remove(id) end
         SetBags({[2447]=20,[765]=4,[3371]=10})
-        local m=W.Session.PriceSource().market
+        local checked=W.Session.PriceSource().market
+        local m=checked and TwichUIWorkshopDB.markets[checked.key]
         if view=="advisorempty" then
             for key in pairs(TwichUIWorkshopDB.markets) do TwichUIWorkshopDB.markets[key]=nil end
         elseif m then
@@ -2134,12 +2135,17 @@ Lab.Step("pose for the screenshot", function()
                 return n,l,id==2447 and 3 or q,lev,req,kind,sub,stack,equip,icon,sell,class,subclass,bind
             end
         end
-        if view=="advisorcategory" then
+        if view=="advisorcategory" or view=="advisorfiltered" then
             local info=C_Item.GetItemInfo
             C_Item.GetItemInfo=function(id)
                 local n,l,q,lev,req,kind,sub,stack,equip,icon,sell,class,subclass,bind=info(id)
                 return n,l,q,lev,req,id==3371 and "Reagent" or "Trade Goods",sub,stack,equip,icon,sell,class,subclass,bind
             end
+        end
+        if view=="advisortentative" and m then
+            m.complete=false; m.snap.seq=m.snap.seq+1
+            local day=math.floor(time()/86400)
+            m.h2[2447],m.c2[2447]=W.History2.Encode({},{{d=day-1,p=100,r=100,t=100,l=5,n=1},{d=day,p=100,r=100,t=100,l=5,n=1}},nil)
         end
         W.UI.Advisor.Open(2447); Lab.Settle(0.8)
         local p=Win().Page("advisor")
@@ -2147,6 +2153,23 @@ Lab.Step("pose for the screenshot", function()
         Check("state","pose: real source catalog selected Peacebloom",2447,p.result and p.result.item)
         Check("display","pose: advisor never claims net proceeds",true,p.result and (not p.result.proceeds or p.result.proceeds.net==nil))
         Check("state","pose: expected advice",view=="advisorempty" and "unknown" or "auction",p.result and p.result.action)
+        if view=="advisortentative" then
+            Check("state","pose: limited evidence remains tentative","tentative",p.result.level)
+            Check("display","pose: tentative advice prominent","Possible: Auction/Limited evidence",Txt(p.detail.action) .. "/" .. Txt(p.detail.evidence))
+            Check("state","pose: tentative has no posting price",nil,p.result.suggestion.price)
+            Check("state","pose: tentative has no proceeds",nil,p.result.proceeds)
+            Check("display","pose: row retains tentative qualification","Possible Auction",Txt(p.list.rows[1].badge))
+        end
+        if view=="advisorbags" or view=="advisorfiltered" then
+            AdvisorChoice(p.source,"In bags")
+            Check("state","pose: carried source has three actual identities",3,#p.list.data)
+            if view=="advisorfiltered" then
+                AdvisorChoice(p.category,"Reagent")
+                p.search:SetText("vial"); Click(p.auctionable,"Advisor Auctionable"); Lab.Settle(0.3)
+                Check("state","pose: all four filters combine",1,#p.list.data)
+                Check("state","pose: real reagent filter selects Empty Vial",3371,p.result.item)
+            end
+        end
         if view=="advisorscroll" then
             local list=p.list
             list.scroll:SetVerticalScroll(1283); list:Layout()

@@ -775,3 +775,25 @@ m("market.advisor.invented-gross-quantity", "TwichUI_Workshop/Advisor.lua",
   's.price and qty and qty > 0 and W.Sell.Proceeds(s.price, qty)',
   's.price and W.Sell.Proceeds(s.price, math.max(1, qty or 1))',
   "an absent or unknown stack is displayed with an invented one-item gross total", ["test_workshop_advisor.lua"])
+
+# A8.1: tentative advice is a separate evidence role, never a posting/proceeds path.
+m("market.advisor.tentative-age", "TwichUI_Workshop/Sell.lua",
+  'c.age>W.Valuation.GOOD_AGE', 'c.age>W.Valuation.GOOD_AGE/3600',
+  "seconds are compared to an hours threshold and valid recent observations are discarded", ["test_workshop_advisor.lua"])
+m("market.advisor.tentative-history", "TwichUI_Workshop/Sell.lua",
+  'value=c.competing,at=c.at,age=c.age,reasons=reasons',
+  'value=f.mval and f.mval.value or c.competing,at=c.at,age=c.age,reasons=reasons',
+  "historical valuation replaces the observed current listing", ["test_workshop_advisor.lua"])
+m("market.advisor.tentative-gain", "TwichUI_Workshop/Advisor.lua",
+  'observed.value-sell>=gain', 'observed.value-sell>=0',
+  "tentative advice ignores the configured worthwhile gain", ["test_workshop_advisor.lua"])
+m("market.advisor.tentative-margin", "TwichUI_Workshop/Advisor.lua",
+  'observed.value>=sell*1.5', 'observed.value>=sell',
+  "thin evidence bypasses the conservative vendor margin", ["test_workshop_advisor.lua"])
+m("market.advisor.tentative-upgrade", "TwichUI_Workshop/Advisor.lua",
+  '"auction","tentative","limited",observed', '"auction","supported","limited",observed',
+  "an uncertain observation is promoted to supported Auction advice", ["test_workshop_advisor.lua"])
+m("market.advisor.tentative-tooltip-upgrade", "TwichUI_Workshop/Advisor.lua",
+  'function A.Tooltip(r) return "Workshop: " .. (r.level=="tentative"',
+  'function A.Tooltip(r) return "Workshop: " .. (false',
+  "the Normal tooltip loses the Possible qualification", ["test_workshop_advisor.lua"])

@@ -44,3 +44,23 @@ function S.Proceeds(price, qty)
     r.state, r.gross, r.qty, r.unit = "ok", price * qty, qty, price
     return r
 end
+
+-- A separate, weaker observation role; never a suggestion or proceeds. The
+-- normalized competing tier still comes from A5's outlier-aware service. Only
+-- known thin coverage/history may qualify, with stricter 24-hour freshness.
+function S.Observation(f)
+    local c,q=f and f.comp,f and f.quality
+    if not c or not q or f.variant or not W.Int(c.competing,1,W.Prices.MAX_COPPER)
+        or not W.Finite(c.age) or c.age<0 or c.age>W.Valuation.GOOD_AGE or c.cut
+        or (c.complete~=true and c.complete~=false) or not q.facts or q.facts.distribution~=true or Has(c.notes,"mixedvariants")
+        or (q.level~="good" and q.level~="fair" and q.level~="limited") then return nil end
+    local allowed={incomplete=true,listings=true,days=true}
+    local reasons,incomplete={},false
+    for _,reason in ipairs(q.reasons or {}) do
+        if not allowed[reason.code] then return nil end
+        if reason.code=="incomplete" then incomplete=true end
+        reasons[#reasons+1]=reason.text
+    end
+    if not c.complete and not incomplete then return nil end
+    return {role="observedListing",value=c.competing,at=c.at,age=c.age,reasons=reasons,beforeFees=true}
+end

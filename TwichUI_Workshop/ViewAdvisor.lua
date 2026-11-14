@@ -59,9 +59,9 @@ local function MakeRow(parent)
     UI.Hover(row)
     row.pic = UI.ItemIcon(row,36); row.pic:SetPoint("LEFT",10,0)
     row.name = UI.Text(row,15,K.text,"serif")
-    row.name:SetPoint("TOPLEFT",54,-9); row.name:SetPoint("RIGHT",-64,0); row.name:SetMaxLines(2); row.name:SetWordWrap(true)
+    row.name:SetPoint("TOPLEFT",54,-9); row.name:SetPoint("RIGHT",-98,0); row.name:SetMaxLines(2); row.name:SetWordWrap(true)
     row.sub = UI.Text(row,11,K.textDim); row.sub:SetPoint("BOTTOMLEFT",54,8); row.sub:SetPoint("RIGHT",-10,0)
-    row.badge = UI.Text(row,11,K.bronzeText,"strong"); row.badge:SetPoint("TOPRIGHT",-10,-14); row.badge:SetWidth(56); row.badge:SetJustifyH("RIGHT")
+    row.badge = UI.Text(row,11,K.bronzeText,"strong"); row.badge:SetPoint("TOPRIGHT",-10,-14); row.badge:SetWidth(86); row.badge:SetMaxLines(2); row.badge:SetWordWrap(true); row.badge:SetJustifyH("RIGHT")
     row:SetScript("OnClick",function() if row.data then Select(row.data.item) end end)
     UI.ItemTip(row,function() return row.data and row.data.item end)
     row.twichRowClick = function() if row.data then Select(row.data.item) end end
@@ -72,7 +72,7 @@ local function MakeRow(parent)
         self.sub:SetText(Category(data.info))
         -- Bounded visible rows only; MarketFacts supplies cached evidence.
         local rec = D.Decide(data.item,false,data)
-        self.badge:SetText(A.SHORT[rec.action]); self:SetSelected(selected == data.item)
+        self.badge:SetText(A.Short(rec)); self:SetSelected(selected == data.item)
     end
     return row
 end
@@ -206,11 +206,12 @@ local function PaintDetail()
         line.name:SetText(alt.action=="craft" and "Craft" or (alt.action=="auction" and "Auction" or (alt.action=="vendor" and "Vendor" or (alt.action=="disenchant" and "Disenchant" or "Watch"))))
         local value = alt.state=="unavailable" and "Unavailable" or (alt.value and UI.Money(alt.value) or (alt.state=="choice" and "Refresh manually" or "Unknown"))
         if alt.action=="craft" then value=r.crafting.reserved>0 and ("Needed for plan (" .. r.crafting.reserved .. ")") or (#row.uses>0 and (#row.uses .. " known uses; compare strategy") or "No known recipe uses") end
-        if alt.action=="auction" and alt.value then value=value .. " gross / item" end
+        if alt.action=="auction" and alt.value then value=value .. (alt.state=="observed" and " observed / item (limited)" or " gross / item") end
         if alt.action=="disenchant" and alt.value then value=value .. " expected materials" end
         line.value:SetText(value); UI.Tip(line,line.name:GetText(),alt.note)
     end
     d.limit:SetText(r.proceeds and r.proceeds.state=="ok" and ("Gross for " .. (r.qty or 1) .. ": " .. UI.Money(r.proceeds.gross) .. ". Fees, deposits and sale likelihood unknown.") or (r.missing[1] or "Manually refreshed observations; future prices are unknown."))
+    if r.observed then d.limit:SetText("Observed: " .. UI.Money(r.observed.value) .. " / item; not a suggested posting price. Fees and sale outcome unknown.") end
     d.track.text:SetText(D.Tracked()[selected] and "Untrack item" or "Track item")
     d.recipes:SetEnabled(#row.uses>0)
     d.sources:SetEnabled((r.crafting.reserved or 0)>0)
@@ -305,6 +306,7 @@ local function Build(p)
     p.search=UI.Search(p,280,30,"Search known items..."); p.search:SetPoint("TOPLEFT",0,-62)
     p.search:SetScript("OnTextChanged",function(self)
         query=self:GetText() or ""; searchToken=searchToken+1
+        p.search.hint:SetShown(query=="" and not self:HasFocus())
         local mine=searchToken; C_Timer.After(0.15,function() if mine==searchToken then Search(true) end end)
     end)
     local sources={{"bags","In bags"},{"tracked","Tracked items"},{"all","All known items"}}

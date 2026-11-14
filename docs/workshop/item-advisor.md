@@ -285,3 +285,53 @@ native menu name and the 40-second simulated-time budget); neither is counted
 as passing evidence. The final scenario retains every assertion and has a
 45-second resource allowance for the additional interactions. Real pointer
 wheel/drag input still needs client acceptance.
+
+A8.1 policy 2 adds `level = supported / tentative / insufficient` without
+changing `Sell.Suggest` policy 1. Supported advice retains all its pricing,
+freshness, completeness, 1.5x margin and configurable gain requirements.
+Tentative advice has a separate observed-listing role and only qualifies with
+known owned quantity, auction eligibility, vendor baseline and cleared plan
+protection. It uses the same normalized/outlier-filtered competing tier, requires
+age at most 24 hours and a known distribution, and allows only incomplete
+coverage, thin listings or sparse observed days as quality limitations. Cut scans,
+recipe-only old scans, mixed variants, suspicious tiers, unknown distributions,
+stale/absent listings and unresolved plan dependencies cannot qualify.
+The same margin and minimum gain apply. Incomplete evidence never defaults to
+Vendor. Sparse history alone still permits the original fair supported advice.
+
+Tentative results say `Possible: Auction` / `Limited evidence`; list badges and
+the existing configurable Normal recommendation field say `Possible Auction`.
+They have no suggested posting price or proceeds. The separately labelled
+observed unit value appears in alternatives/footer; historical references,
+confirmed vendor values and unknown sale outcomes retain their meanings.
+The older Worth adapter also retains tentative status and a quiet tone.
+Tooltip ids, saved order, profile layouts, Shift visibility and removal behavior
+are unchanged. Hover still reads bounded cached facts and never requests a plan.
+Verified disenchant estimation/eligibility and unknown-outcome behavior remain
+unchanged; no Forever output probabilities have been invented.
+
+A8.1 checkpoint 3 verified: fast Advisor 2/2 and Workshop Settings 11/11;
+feature Advisor 44/44 plus 12 simulator launches / 6,338 structured checks
+(268.201 s total); feature Workshop Settings 76/76 plus three simulator launches
+(105.249 s total). Market mutations: **189/189 detected**, no survivors, invalid
+mutations, timeouts or infrastructure errors (`test-output/a81-market-final.log`).
+The focused Advisor subset also detected 11/11. Tests cover partial/sparse/fresh/
+stale/absent listings, gain/margin boundaries, history-versus-current pricing,
+normalized stack values, plan/quantity/binding guards, missing disenchant data,
+and actual Normal/Shift/removal/disabled tooltip rendering without planner jobs.
+
+The first expanded simulator attempt retained old tooltip wording and changed a
+checked market copy instead of stored fixture headers; both fixture issues were
+corrected. A subsequent run held all 6,338 assertions but failed the workspace
+guard because a parallel mutation log introduced new ignored output paths. All
+output paths were prepared before the successful rerun; the guard was unchanged.
+An initial mutation exposed a missing history-divergence case (now covered);
+a redundant age mutation was replaced with a realistic seconds/hours mistake.
+The final entire market campaign passed, rather than counting those attempts.
+
+Personally reviewed corrected captures in
+`test-output/simlab/artifacts/workshop-2gfNSVt5/`: supported, tentative, insufficient,
+filtered search (hint no longer overlaps typed text) and narrow states. Earlier
+corrected captures in `workshop-FXaqbAHE/` also establish the tentative banner,
+missing posting price/proceeds and the observed-price qualification. These are
+structural simulator evidence, not client font/input/appearance acceptance.

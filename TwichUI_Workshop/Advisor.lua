@@ -1,13 +1,13 @@
--- A8 policy v1: deterministic advice over one immutable evidence snapshot.
+-- A8.1 policy v2: supported and tentative advice over one evidence snapshot.
 -- Decide has no planning, history decoding, inventory reads, saved writes or frames.
 -- Gain/SetGain are the small existing-account preference adapter; callers snapshot it.
 local W = TwichUI.Workshop
-local A = { POLICY = 1, API = 1 }
+local A = { POLICY = 2, API = 1 }
 W.Advisor = A
-A.LABEL = { auction = "Consider selling on Auction House", vendor = "Sell to Vendor", craft = "Keep for crafting plan",
-    disenchant = "Consider disenchanting", watch = "Watch this item", unknown = "Insufficient data" }
-A.SHORT = { auction = "Auction", vendor = "Vendor", craft = "Plan", disenchant = "Disenchant", watch = "Watch", unknown = "Unknown" }
-A.EVIDENCE = { strong = "Strong evidence", limited = "Limited evidence", insufficient = "Insufficient data" }
+A.LABEL = { auction = "Recommended: Auction", vendor = "Recommended: Vendor", craft = "Keep for crafting plan",
+    disenchant = "Consider disenchanting", watch = "Watch this item", unknown = "Not enough data to compare" }
+A.SHORT = { auction = "Auction", vendor = "Vendor", craft = "Craft", disenchant = "Disenchant", watch = "Watch", unknown = "Limited data" }
+A.EVIDENCE = { strong = "Strong evidence", limited = "Limited evidence", insufficient = "Known values and alternatives below" }
 -- Zero adds no universal copper threshold; the 1.5x vendor margin still applies.
 function A.Gain()
     local ws = type(TwichUIDB) == "table" and TwichUIDB.workshop
@@ -75,7 +75,16 @@ function A.Decide(item, ctx)
         end
         r.evidence = r.action == "unknown" and "insufficient" or (s.quality == "good" and "strong" or "limited")
     else
-        Reason("No reliable Auction House posting price is available.")
+        local observed=W.Sell.Observation(r.facts)
+        local gain=W.Int(ctx.minGain,0,W.Prices.MAX_COPPER) or 0
+        if observed and sell~=nil and observed.value>=sell*1.5 and observed.value-sell>=gain and observed.value>sell then
+            r.action,r.level,r.evidence,r.observed="auction","tentative","limited",observed
+            Reason("Current listings suggest auctioning may be worthwhile; evidence is limited.")
+            for _,why in ipairs(observed.reasons) do Reason(why) end
+            Reason("The observed listing is not a suggested posting price; a sale is not guaranteed.")
+            local alt=r.alternatives[2]
+            alt.state,alt.value,alt.note="observed",observed.value,"Observed current listing per item, not a suggested posting price. Limited evidence; fees and sale outcome unknown."
+        else Reason("Vendor and current auction evidence do not support a reliable comparison.") end
         for _, why in ipairs(s.reasons or {}) do r.missing[#r.missing + 1] = why end
     end
     local de = r.disenchant
@@ -100,9 +109,11 @@ function A.Decide(item, ctx)
             if flag == "aboveusual" then Reason("Competition is above the historical reference; it may not sell at this price.") end
         end
     end
-    r.text, r.evidenceText = A.LABEL[r.action], A.EVIDENCE[r.evidence]
+    r.level=r.level or (r.action=="unknown" and "insufficient" or "supported")
+    r.text, r.evidenceText = r.level=="tentative" and "Possible: Auction" or A.LABEL[r.action], A.EVIDENCE[r.evidence]
     return r
 end
 
-A.TOOLTIP = {vendor="Vendor",auction="Auction",disenchant="Disenchant",craft="Keep for crafting",watch="Watch",unknown="Insufficient data"}
-function A.Tooltip(r) return "Workshop: " .. (A.TOOLTIP[r.action] or A.TOOLTIP.unknown) end
+A.TOOLTIP = {vendor="Vendor",auction="Auction",disenchant="Disenchant",craft="Keep for crafting",watch="Watch",unknown="Not enough data"}
+function A.Short(r) return r.level=="tentative" and "Possible Auction" or A.SHORT[r.action] end
+function A.Tooltip(r) return "Workshop: " .. (r.level=="tentative" and "Possible Auction" or A.TOOLTIP[r.action] or A.TOOLTIP.unknown) end
