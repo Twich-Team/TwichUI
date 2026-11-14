@@ -133,7 +133,8 @@ do
   local blank = RowOf(OL, function(r) return r.rec and r.rec.name == "Bar" end)
   blank:GetScript("OnClick")(blank)
   Same(d.strat.pairs[1].v:GetText(), Money(200), "the bar on its own: 2 ore, 100 each (3 in the bags: owned, counted at its value)")
-  Same(d.strat.save:GetText(), W.Strategy.NO_SAVING, "nothing to craft on the way: buying directly is the best supported option")
+  Same(d.strat.save:GetText(), "Buying directly is best", "nothing to craft on the way: buying directly is the best supported option (in a few words)")
+  Check(d.strat.saveTip == W.Strategy.NO_SAVING, "and the full sentence in the tooltip")
   sword:GetScript("OnClick")(sword)
 end
 

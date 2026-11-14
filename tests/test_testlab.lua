@@ -719,7 +719,7 @@ do
   local p = io.popen('find "' .. LAB .. '" -name "*.lua" | sort')
   for path in p:lines() do files[#files + 1] = path end
   p:close()
-  Check(#files == 23, "the scan found the Lab's files (" .. #files .. ")")
+  Check(#files == 24, "the scan found the Lab's files (" .. #files .. ")")
   -- every file the .toc loads is scanned, and nothing is loaded that is not
   local scanned = {}
   for _, path in ipairs(files) do scanned[path:sub(#LAB + 1)] = true end
@@ -794,6 +794,29 @@ do
   local core = assert(io.open(LAB .. "cases/Core.lua")):read("*a")
   Check(not core:find("Market%.Source") and not core:find("Market%.Markets") and not core:find("PR%.Market%(") and not core:find("MK%.Info"),
     "the core cases never ask for a saved market")
+end
+
+-- the crafting progress probe's summary (cases/Progress.lua, P2.1): what Workshop's Progress.auto would rely on, read from a recording
+do
+  local t = Setup()
+  t.Load(LabFiles())
+  local TL = t.TL
+  Check(type(TL.ProgressSummary) == "function", "the probe's summary exists")
+  t.c.C_TradeSkillUI = { GetRecipeInfo = function(id) if id == 500 then return { name = "Bar" } end end }
+  local function E(event, ...) return { event = event, args = { ... } } end
+  local log = { E("UNIT_SPELLCAST_START", "player", "G1", 500), E("UNIT_SPELLCAST_SUCCEEDED", "player", "G1", 500),
+    E("UNIT_SPELLCAST_SUCCEEDED", "player", "G2", 500), E("UNIT_SPELLCAST_SUCCEEDED", "player", "G2", 500),
+    E("UNIT_SPELLCAST_START", "player", "G3", 500), E("UNIT_SPELLCAST_INTERRUPTED", "player", "G3", 500),
+    E("UNIT_SPELLCAST_SUCCEEDED", "party1", "P1", 500), E("UNIT_SPELLCAST_SUCCEEDED", "player", "G4", 6603),
+    E("TRADE_SKILL_ITEM_CRAFTED_RESULT", { itemID = 20, quantity = 2, operationID = 7 }), E("BAG_UPDATE_DELAYED") }
+  local s = TL.ProgressSummary(log)
+  Same(s.succeeded, 3, "the player's casts that succeeded (another unit's is not counted)")
+  Same(s.recipeSpells, 2, "two of them a recipe id"); Same(s.otherSpells, 1, "one another spell")
+  Same(s.twice, 1, "a GUID that succeeded twice is reported"); Same(s.failed, 1, "the interrupted cast")
+  Same(s.results, 1); Same(s.bags, 1)
+  Check(s.items[1]:find("20 x2", 1, true), s.items[1])
+  local c = TL.cases["crafting.progress.events"]
+  Check(c and c.class == "guided" and c.cat == "progress", "the probe is a guided, opt-in case")
 end
 
 print("PASSED test_testlab")

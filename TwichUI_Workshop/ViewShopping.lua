@@ -18,7 +18,7 @@ local UI = W.UI
 local SHOP_H, DETAIL_W, BAR_H, GAP = 56, 300, 70, 10
 local NEED_W, KIND_W, SPEND_W = 46, 104, 112
 local TOP = -66
-local BAR_TEXT = 412   -- where the spending line starts in the bar (after the four counts)
+local BAR_TEXT = 432   -- where the spending line starts in the bar (after the four counts)
 
 local K
 local page, shop

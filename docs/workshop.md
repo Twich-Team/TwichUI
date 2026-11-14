@@ -137,6 +137,9 @@ Materials the player keeps in the personal bank or the guild bank are planned wi
 | `Style.lua` | `W.UI`: the window's presentation helpers over the core's `CraftLook.lua` (text, faces, buttons, segments, switch, search, pooled lists, item pictures); the views register here |
 | `ViewOverview.lua`, `ViewOpportunities.lua`, `ViewCrafting.lua`, `ViewShopping.lua` | the four pages: each builds once into its own frame and draws what Session says (see "The window: UI architecture") |
 | `Window.lua` | the shell (header, page list, well, footer), page switching, events registered only while shown, the deferred redraw and batched recipe reading; marks `W.ready` last |
+| `Compact.lua` | P2.1: the compact companion (Travel and Craft), in the window's place; listens to the bags only while shown (`docs/workshop/multilevel-crafting-planner.md` 15.6) |
+| `Progress.lua` | P2.1: progress on the plan: the player's Done and Undo; the game's cast evidence is written but OFF until the Test Lab probe confirms it (15.7) |
+| `Notice.lua` | P2.1: progress notices through TwichUI's notification coordinator (kind `workshop`), verified progress only (15.7) |
 | `!!!TwichUI/CraftLook.lua` | core: the settings look's shared sheets, materials, fonts and controls (`R.CraftLook`), so the Workshop never loads TwichUI_Settings |
 | `TwichUI_Settings/pages/Workshop.lua` | settings page: works before the addon loads, through the launcher; hosts the tooltip designer |
 | `TwichUI_Settings/pages/WorkshopWorth.lua` | **the "What's it worth?" tooltip designer** (`R.WorkshopWorthDesigner`): list of lines, tooltip mockup, drag/click editing; reuses Magic Inventory's virtual drag (`MagicInventoryDrag.lua`) |

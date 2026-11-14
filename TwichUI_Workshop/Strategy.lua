@@ -140,6 +140,11 @@ function St.Summary(plan, money, detailed)
     if sv and sv.confident then out.saveLine = "Saves at least " .. money(sv.low)
     elseif sv and sv.lowerBounds and sv.lowerBounds > 0 then out.saveLine = "Could save about " .. money(sv.lowerBounds)
     else out.saveLine = out.savingsWhy end
+    -- the same in a few words, for a narrow place (Opportunities' block); the full sentence is its tooltip
+    if sv and sv.confident then out.saveShort = out.saveLine
+    elseif sv and sv.lowerBounds and sv.lowerBounds > 0 then out.saveShort = out.saveLine
+    elseif sv then out.saveShort = "Buying directly is best"
+    else out.saveShort = "Not enough prices to compare" end
     out.owned = s.owned or 0
     return out
 end

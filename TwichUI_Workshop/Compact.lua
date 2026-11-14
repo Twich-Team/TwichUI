@@ -29,6 +29,7 @@ local K
 local f
 local mode = "travel"
 local scheduled, token = false, 0
+local bags = false   -- a settled bag change since the last redraw (Notice.lua looks at what became ready)
 local stats = { renders = 0, flushes = 0, events = 0, longest = 0 }
 
 local function Clock()
@@ -84,12 +85,19 @@ local function MakeRow(parent)
     row.iconFrame = UI.ItemIcon(row, 22)
     row.iconFrame:SetPoint("LEFT", 6, 0)
     row.icon = row.iconFrame.tex
-    row.map = UI.Button(row, "Map", 44, "secondary", function(self)
+    -- the row's one action: Map (Travel: a known seller on the world map) or Done (Craft: one craft counted, Session.MarkCrafted)
+    row.map = UI.Button(row, "Map", 48, "secondary", function(self)
         local d = row.data
-        if d and d.item then S.ShowVendor(d.item); C.Note(S.Note()) end
+        if not d then return end
+        if d.done then S.MarkCrafted(d.done); C.Note(S.Note()); C.Render()
+        elseif d.item then S.ShowVendor(d.item); C.Note(S.Note()) end
     end, 20)
     row.map:SetPoint("RIGHT", -4, 0)
-    UI.Tip(row.map, "Show vendor", "Show a known seller on the world map.")
+    UI.TipFn(row.map, nil, function()
+        local d = row.data
+        if d and d.done then return "Crafted one\nCount one craft of this recipe as done." end
+        return "Show vendor\nShow a known seller on the world map."
+    end)
     row.word = UI.Text(row, 11, K.textDim)
     row.word:SetPoint("RIGHT", row.map, "LEFT", -6, 0)
     row.word:SetJustifyH("RIGHT")
@@ -112,9 +120,11 @@ local function MakeRow(parent)
         self.word:SetText(d.word or "")
         self.word:SetWidth(math.min(90, math.ceil((self.word:GetStringWidth() or 0) + 4)))   -- the name gets every unit the word does not need
         UI.Paint(self.word, K[TONES[d.tone] or "textDim"])
-        self.map:SetShown(d.vendor == true)
+        local act = d.vendor == true or d.done ~= nil
+        self.map:SetShown(act)
+        if act then self.map.text:SetText(d.done and "Done" or "Map") end
         self.word:ClearAllPoints()
-        if d.vendor then self.word:SetPoint("RIGHT", self.map, "LEFT", -6, 0) else self.word:SetPoint("RIGHT", -8, 0) end
+        if act then self.word:SetPoint("RIGHT", self.map, "LEFT", -6, 0) else self.word:SetPoint("RIGHT", -8, 0) end
     end
     return row
 end
@@ -149,6 +159,7 @@ local function RenderTravel()
     if engine == "planning" and not ctx.first then text = "Updating... " .. text end
     f.summary:SetText(text)
     f.bar:Hide(); f.barText:Hide()
+    f.undo:Hide()
     f.list:SetData(data, nil)
     f.list.box:SetAlpha(engine == "planning" and 0.6 or 1)
 end
@@ -161,7 +172,7 @@ local function RenderCraft()
     for _, r in ipairs(rows) do
         local e = r.entry
         local word = r.state == "short" and ("Missing " .. r.missing) or WORD[r.state]
-        data[#data + 1] = { item = e.outItem, icon = e.icon, title = e.crafts .. " \195\151 " .. e.name, word = word,
+        data[#data + 1] = { item = e.outItem, icon = e.icon, title = e.crafts .. " \195\151 " .. e.name, word = word, done = e.id,
             tone = r.state == "collect" and "collect2" or r.state, lines = { { ("%d %s left"):format(e.crafts, e.crafts == 1 and "craft" or "crafts") } } }
     end
     local text
@@ -181,6 +192,7 @@ local function RenderCraft()
     end
     f.list:SetData(data, nil)
     f.list.box:SetAlpha(1)
+    f.undo:SetShown(W.Progress ~= nil and W.Progress.CanUndo())
 end
 
 function C.Render()
@@ -209,6 +221,10 @@ function C.Schedule()
         if mine ~= token then return end
         scheduled = false
         stats.flushes = stats.flushes + 1
+        if bags then
+            bags = false
+            if W.Notice then W.Notice.BagsChanged() end
+        end
         C.Render()
     end)
 end
@@ -270,12 +286,16 @@ local function Build()
     list.box:SetPoint("BOTTOMRIGHT", -6, 20)
     f.list = list
     UI.lists.compact = list
+    f.undo = UI.Button(f, "Undo", 54, "secondary", function() S.UndoCrafted(); C.Note(S.Note()); C.Render() end, 18)
+    f.undo:SetPoint("BOTTOMRIGHT", -8, 2)
+    UI.Tip(f.undo, "Undo", "Take back your last Crafted one.")
+    f.undo:Hide()
     f.note = UI.Text(f, 11, K.bronzeText)
     f.note:SetPoint("BOTTOMLEFT", 10, 5)
-    f.note:SetPoint("RIGHT", -10, 0)
+    f.note:SetPoint("RIGHT", f.undo, "LEFT", -6, 0)
     f:SetScript("OnEvent", function(_, event)
         stats.events = stats.events + 1
-        if event == "BAG_UPDATE_DELAYED" then W.Strategy.Bump() end   -- what is owned changed: plans are worked out again
+        if event == "BAG_UPDATE_DELAYED" then W.Strategy.Bump(); bags = true end   -- what is owned changed: plans are worked out again
         C.Schedule()
     end)
     f:HookScript("OnShow", function(self)
@@ -283,6 +303,7 @@ local function Build()
         scheduled = false
         R.FitToScreen(self)
         for _, e in ipairs(EVENTS) do self:RegisterEvent(e) end
+        if W.Notice and not W.Notice.Stats().armed then W.Notice.Arm() end   -- what is ready now is remembered, never announced
         C.Render()
     end)
     f:HookScript("OnHide", function(self)
@@ -290,7 +311,10 @@ local function Build()
         scheduled = false
         self:UnregisterAllEvents()
         f.noteText = nil
-        if not (W.Window and W.Window.IsShown()) then S.Reset(); Q.Unload() end   -- nothing is held while neither view is shown
+        if not (W.Window and W.Window.IsShown()) then   -- nothing is held while neither view is shown
+            if W.Notice then W.Notice.Disarm() end
+            S.Reset(); Q.Unload()
+        end
     end)
     if UISpecialFrames then tinsert(UISpecialFrames, NAME) end   -- Esc closes it, like the window
     return f

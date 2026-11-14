@@ -40,6 +40,7 @@ local token = 0       -- changes whenever a pending redraw should be forgotten
 local scheduled = false
 local dirtyRead = false
 local dirtyMerchant = false
+local dirtyBags = false     -- a settled bag change since the last redraw (Notice.lua looks at what became ready)
 local renders, flushes = 0, 0
 
 local EVENTS = {
@@ -131,6 +132,10 @@ local function Flush()
     if dirtyMerchant then
         dirtyMerchant = false
         R.Perf.Call("workshop.read", S.ReadMerchant)
+    end
+    if dirtyBags then
+        dirtyBags = false
+        if W.Notice then W.Notice.BagsChanged() end
     end
     Win.Render()
 end
@@ -349,7 +354,7 @@ local function Build()
             local row = UI.hoverRow
             if row and row:IsShown() then row:ShowTip() end   -- Shift pressed or released while over a row: the other tooltip
         elseif kind then
-            if event == "BAG_UPDATE_DELAYED" then W.Strategy.Bump() end   -- what is owned changed: plans are worked out again
+            if event == "BAG_UPDATE_DELAYED" then W.Strategy.Bump(); dirtyBags = true end   -- what is owned changed: plans are worked out again
             Schedule(kind)
         end
     end)
@@ -362,6 +367,7 @@ local function Build()
         R.Perf.Call("workshop.read", S.ReadMerchant)   -- a merchant window already open is read too (nothing happens when none is)
         Win.Render()
         Prepare()
+        if W.Notice and not W.Notice.Stats().armed then W.Notice.Arm() end   -- what is ready now is remembered, never announced
     end)
     f:HookScript("OnHide", function(self)
         token = token + 1
@@ -371,6 +377,7 @@ local function Build()
         UI.hoverRow = nil
         for _, def in ipairs(UI.order) do if def.Reset then def.Reset() end end
         if not (W.Compact and W.Compact.IsShown()) then   -- the compact view, if it took the window's place, keeps the session
+            if W.Notice then W.Notice.Disarm() end
             S.Reset()
             Q.Unload()
         end
@@ -435,6 +442,13 @@ function W.Snapshot()
     s.mode = mode
     s.renders = renders
     s.flushes = flushes
+    -- P2.1: the compact view, progress and notices (counts only)
+    local cs = W.Compact and W.Compact.Stats() or nil
+    s.compactShown, s.compactRenders, s.compactEvents = cs and cs.shown or false, cs and cs.renders or 0, cs and cs.events or 0
+    local ps = W.Progress and W.Progress.Stats() or nil
+    s.progressCredited, s.progressAuto = ps and ps.credited or 0, ps and ps.auto or false
+    local ns = W.Notice and W.Notice.Stats() or nil
+    s.noticesShown, s.noticesRefused = ns and ns.submitted or 0, ns and ns.refused or 0
     return s
 end
 

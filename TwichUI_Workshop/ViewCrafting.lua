@@ -387,7 +387,7 @@ local function RenderDetail(queue, byId, totals)
     if not r then
         selected = nil
         d.head:Hide()
-        d.open:Hide(); d.remove:Hide()
+        d.open:Hide(); d.remove:Hide(); d.done:Hide(); d.undo:Hide()
         d.empty:SetText("Queued crafts appear here: what each makes, what its materials may cost, and what it may sell for. Choose Add recipe to plan one.")
         d.empty:Show()
         return
@@ -423,7 +423,11 @@ local function RenderDetail(queue, byId, totals)
         UI.Paint(d.cost, K.stone); UI.Paint(d.sell, K.stone); UI.Paint(d.profit, K.stone)
     end
     d.profitLabel:SetText(totals.rate and "Estimated profit" or "Profit before fees")
-    d.open:Show(); d.remove:Show()
+    d.open:Show(); d.remove:Show(); d.done:Show()
+    d.undo:SetShown(W.Progress ~= nil and W.Progress.CanUndo())
+    d.makes:ClearAllPoints()
+    d.makes:SetPoint("TOPLEFT", d.prof, "BOTTOMLEFT", 0, -3)
+    d.makes:SetPoint("RIGHT", d.undo:IsShown() and d.undo or d.done, "LEFT", -8, 0)
 end
 
 local function RenderBar(queue, totals, sum)
@@ -525,6 +529,7 @@ local function Render()
     f.storeNote:SetText(S.StockNote(sum, view) or "")
     f.scope:SetText(("Counts %s."):format(K2.Scope(view)))
     f.useGuild:SetOn(view.guild.enabled)
+    if page.notices then page.notices:SetOn(W.Notice ~= nil and W.Notice.On()) end
     RenderBar(queue, totals, sum)
 end
 
@@ -608,19 +613,29 @@ local function BuildDetail()
     d.crafts = UI.Text(d.head, 14, K.bronzeText, "strong")
     d.crafts:SetPoint("LEFT", d.prof, "RIGHT", 10, 0)
     -- the actions sit at the right of the name block (the room under the name is free there), so the panel needs no row of its own for them
-    d.remove = UI.Button(d, "Remove", 84, "secondary", function()
+    d.remove = UI.Button(d, "Remove", 76, "secondary", function()
         if selected then S.Remove(selected); UI.Redraw() end
     end, 26)
     d.remove:SetPoint("TOPRIGHT", -14, -40)
     UI.Tip(d.remove, "Remove", "Takes this recipe out of the queue. Nothing else changes.")
-    d.open = UI.ArtButton(d, "Open recipe", "npc:hammer", 136, "secondary", function()
+    d.open = UI.ArtButton(d, "Open recipe", "npc:hammer", 124, "secondary", function()
         if selected then S.OpenRecipe(selected); UI.Redraw() end
     end, 26)
-    d.open:SetPoint("RIGHT", d.remove, "LEFT", -6, 0)
+    d.open:SetPoint("RIGHT", d.remove, "LEFT", -4, 0)
     UI.Tip(d.open, "Open recipe", "Shows this recipe in the game's profession window. It makes nothing.")
+    -- the player's own progress: one craft done (Session.MarkCrafted); the queue counts down and the entry goes after its last craft
+    d.done = UI.Button(d, "Done", 60, "secondary", function()
+        if selected then S.MarkCrafted(selected); UI.Redraw() end
+    end, 26)
+    UI.Tip(d.done, "Crafted one", "Count one craft as done. The last one takes the recipe off the plan.")
+    d.done:SetPoint("RIGHT", d.open, "LEFT", -4, 0)
     d.makes = UI.Text(d.head, 13, K.textDim)
     d.makes:SetPoint("TOPLEFT", d.prof, "BOTTOMLEFT", 0, -3)
-    d.makes:SetPoint("RIGHT", d.open, "LEFT", -8, 0)
+    d.undo = UI.Button(d, "Undo", 56, "secondary", function() S.UndoCrafted(); UI.Redraw() end, 26)
+    d.undo:SetPoint("RIGHT", d.done, "LEFT", -4, 0)
+    UI.Tip(d.undo, "Undo", "Take back your last Crafted one.")
+    d.undo:Hide()
+    d.makes:SetPoint("RIGHT", d.undo, "LEFT", -8, 0)
     d.makes:SetHeight(16)
     -- what the crafts may cost and earn: three boxes across the panel
     local gap = 8
@@ -774,6 +789,13 @@ local function Build(p, frame)
     page.addRecipe = UI.ArtButton(page, "Add recipe", "plus", 140, "secondary", function() ShowLeft("recipes"); UI.Redraw() end, 32)
     page.addRecipe:SetPoint("TOPRIGHT", -2, -4)
     UI.Tip(page.addRecipe, "Add recipe", "Shows your recipes so you can choose what to add to the plan.")
+    -- progress notices (Notice.lua): a short card when a craft is counted or a recipe's materials are all in your bags; on unless turned off
+    page.notices = UI.Switch(page, "Progress notices", function()
+        if W.Notice then W.Notice.SetOn(not W.Notice.On()) end
+        UI.Redraw()
+    end)
+    page.notices:SetPoint("RIGHT", page.addRecipe, "LEFT", -18, 0)
+    UI.Tip(page.notices, "Progress notices", "A short notice when a craft is counted or a recipe's materials are ready.")
 end
 
 UI.Register({

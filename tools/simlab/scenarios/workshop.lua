@@ -2158,6 +2158,29 @@ Lab.Step("pose for the screenshot", function()
         Lab.Settle(0.3)
         d = Pick("Bronze Bar")
         Check("display", "pose: the choice is lit and named, the suggestion is still said", "Your choice | Suggested", Txt(d.tags.auction) .. " | " .. Txt(d.tags.make))
+    elseif view == "shopafter" then
+        -- (P2.1) Shopping after a material arrived in the bags: its row goes after one settled redraw; how it arrived is not claimed
+        Tab("Crafting")
+        QueueAct(Rows(Lists().queue)[4], "remove", "Remove Smelt Bronze")
+        Tab("Shopping")
+        BAGS[2770] = 6
+        Event("BAG_UPDATE_DELAYED")
+        Lab.Settle(0.5)
+        Check("event", "pose: the Copper Ore row is gone once the bags hold enough", false, (Names(Lists().shop)):find("Copper Ore", 1, true) ~= nil)
+    elseif view == "notice" then
+        -- (P2.1) a progress notice through TwichUI's notification coordinator, after the player's own Crafted one
+        Tab("Crafting")
+        local q = Rows(Lists().queue)
+        Click(q[1], "choose the first queued craft")
+        local d = Win().Craft().detail
+        local before = #R.Workshop.Queue.Entries() > 0 and R.Workshop.Queue.Entries()[1].crafts or 0
+        Click(d.done, "Crafted one")
+        Check("state", "pose: one craft was counted", before - 1, R.Workshop.Queue.Entries()[1].crafts)
+        -- the notice gathers for 1.5 s before one card is asked for; the scenario's simulated time is capped, so the gathered words are handed on now
+        -- (a direct call of the same function the timer runs)
+        R.Workshop.Notice.Flush()
+        Lab.Settle(0.2)
+        Check("direct", "pose: the progress notice was handed to the coordinator", true, R.Workshop.Notice.Stats().submitted >= 1)
     elseif view == "compact" or view == "compactcraft" then
         -- (P2.1) the compact companion in the window's place: Travel (what is still to get, by source) or Craft (the queue, what is ready next)
         Tab("Crafting")

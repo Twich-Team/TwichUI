@@ -711,6 +711,16 @@ m("crafting.vendor.same-map-not-local", VENDOR, "((spot and spot.map ~= nil and 
   "with no position, a seller on the player's own map is not preferred", [VPT])
 m("crafting.vendor.nearest-claimed-without-distance", VENDOR, "return out, (first.tier == 1 and \"nearest\") or", "return out, (first.tier <= 2 and \"nearest\") or",
   "a seller is called the nearest although no distance was compared", [VPT])
+# P2.1: progress on the plan (Progress.lua) and its notices (Notice.lua)
+PROGRESS, NOTICE, CMP = "TwichUI_Workshop/Progress.lua", "TwichUI_Workshop/Notice.lua", "test_workshop_compact.lua"
+m("crafting.progress.duplicate-cast-counted", PROGRESS, "        if seen[key] then stats.duplicate = stats.duplicate + 1 return false, \"duplicate\" end\n", "",
+  "a second event for the same cast takes a second craft off the queue", [CMP])
+m("crafting.progress.auto-gate-ignored", PROGRESS, "    if not P.auto then return false, \"off\" end\n", "",
+  "the game's unverified cast events change the queue although automatic counting is off", [CMP])
+m("crafting.progress.other-unit-counted", PROGRESS, "if unit ~= \"player\" or type(castGUID)", "if type(castGUID)",
+  "another unit's cast counts as the player's craft", [CMP])
+m("crafting.notice.first-look-announced", NOTICE, "    if before == nil then Nt.Arm() return nil end", "    if before == nil then before = {} end",
+  "opening the window (or a login) announces every recipe that is already ready", [CMP])
 # P2.1: the simple price presentation and the buy-or-craft words
 m("crafting.strategy.lower-bound-as-total", STRAT, "    return \"from \" .. money(r.low), tip", "    return money(r.low), tip",
   "the simple figure drops its 'from', so a range's lower bound reads as the total cost", [STU])

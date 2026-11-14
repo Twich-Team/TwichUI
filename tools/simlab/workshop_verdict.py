@@ -41,9 +41,10 @@ VIEWS = {"overview": "TwichUIWorkshop", "craft": "TwichUIWorkshop", "opps": "Twi
          "small": "TwichUIWorkshop", "smallov": "TwichUIWorkshop", "empty": "TwichUIWorkshop", "history": "TwichUIWorkshop", "craftlong": "TwichUIWorkshop",
          "shopmix": "TwichUIWorkshop", "shopcollect": "TwichUIWorkshop", "strategy": "TwichUIWorkshop", "confirm": "TwichUIWorkshop",
          "stratlong": "TwichUIWorkshop", "planning": "TwichUIWorkshop", "nodata": "TwichUIWorkshop", "override": "TwichUIWorkshop",
-         "compact": "TwichUIWorkshopCompact", "compactcraft": "TwichUIWorkshopCompact", "tooltip": "TwichUIWorkshop", "smallstrat": "TwichUIWorkshop"}
+         "compact": "TwichUIWorkshopCompact", "compactcraft": "TwichUIWorkshopCompact", "tooltip": "TwichUIWorkshop", "smallstrat": "TwichUIWorkshop",
+         "shopafter": "TwichUIWorkshop", "notice": "TwichUIWorkshop"}
 SHOTS = ("overview", "craft", "opps", "shop", "design", "small", "smallov", "empty", "history", "craftlong", "shopmix", "shopcollect",
-         "strategy", "confirm", "stratlong", "planning", "nodata", "override", "compact", "compactcraft", "tooltip", "smallstrat")
+         "strategy", "confirm", "stratlong", "planning", "nodata", "override", "compact", "compactcraft", "tooltip", "smallstrat", "shopafter", "notice")
 VOICE, UTF8 = "voice-settings-unsupplied", "addon-message-invalid-utf8"
 CHECK = re.compile(r"^SIMLAB check (PASS|FAIL) \[([^\]]+)\] (.*?) \| expected=(.*?) \| actual=(.*)$", re.M)
 
@@ -154,7 +155,7 @@ def main():
     print("  Game data ........................ FAKE and deterministic (professions, items, bags, auction listings, merchant); "
           "the world map and NpcMap.Locate are stand-ins in the Show vendor step")
     print("  Persistence tested ............... NO: nothing is reloaded or written to disk. Closing and reopening the window is not persistence.")
-    print(f"  Screenshots ...................... {'captured' if assets else 'captured WITHOUT game assets'}: overview.png, craft.png, opps.png, shop.png, design.png, small.png (1000x700), smallov.png (1000x700), empty.png, history.png, craftlong.png, shopmix.png, shopcollect.png, strategy.png, confirm.png, stratlong.png, planning.png, nodata.png, override.png, compact.png, compactcraft.png, tooltip.png, smallstrat.png (1000x700) "
+    print(f"  Screenshots ...................... {'captured' if assets else 'captured WITHOUT game assets'}: overview.png, craft.png, opps.png, shop.png, design.png, small.png (1000x700), smallov.png (1000x700), empty.png, history.png, craftlong.png, shopmix.png, shopcollect.png, strategy.png, confirm.png, stratlong.png, planning.png, nodata.png, override.png, compact.png, compactcraft.png, tooltip.png, smallstrat.png (1000x700), shopafter.png, notice.png "
           "(a script cannot judge them; look at them, and remember custom fonts are not drawn)")
     print("  Real-client tested ............... NO")
     print(f"{len(r['checks'])} checks per launch; {r['done'].group(2) if r['done'] else '?'} s of simulated time.")

@@ -57,6 +57,8 @@ MarketFacts.lua
 Auto.lua
 # What the window shows and does, without any frame
 Session.lua
+# Progress on the plan: the player's "Crafted one"; the game's evidence is off until verified (P2.1)
+Progress.lua
 # Remembers the player's own professions' recipes while the window is closed (after load only; reads, never opens anything)
 Watch.lua
 # Remembers the bank and the guild bank while they are open, window hidden or not (after load only; reads, never moves anything)
@@ -76,5 +78,7 @@ ViewShopping.lua
 ViewStrategy.lua
 # The compact companion: Travel and Craft, a small panel in the window's place (P2.1)
 Compact.lua
+# Progress notices through TwichUI's notification coordinator (P2.1)
+Notice.lua
 # The window: the shell, the page list and the events (last: it tells TwichUI the addon is ready)
 Window.lua

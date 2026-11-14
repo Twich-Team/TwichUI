@@ -5,7 +5,7 @@
 dofile(TESTS .. "mi_mock.lua")
 local Press = dofile(TESTS .. "press.lua")   -- opt-in (M5): frames record the mouse state, and Press refuses a control that could not take a click
 
-local function Check(cond, msg) if not cond then error(msg, 2) end end
+local function Check(cond, msg) if not cond then error(msg or "check failed", 2) end end
 local function Same(a, b, msg) if a ~= b then error((msg or "") .. " expected " .. tostring(b) .. ", got " .. tostring(a), 2) end end
 
 local c = MIClient("Rich", {
@@ -77,7 +77,7 @@ c.C_Item = {
 c.InCombatLockdown = function() return false end
 c.IsShiftKeyDown = function() return false end
 
-for _, f in ipairs({ "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "CraftPlanner.lua", "Strategy.lua", "Scan.lua", "Market.lua", "Valuation.lua", "MarketFacts.lua", "Session.lua", "AuctionButton.lua", "Style.lua", "ViewOverview.lua", "ViewOpportunities.lua", "ViewCrafting.lua", "ViewShopping.lua", "ViewStrategy.lua", "Compact.lua", "Window.lua" }) do
+for _, f in ipairs({ "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "CraftPlanner.lua", "Strategy.lua", "Scan.lua", "Market.lua", "Valuation.lua", "MarketFacts.lua", "Session.lua", "AuctionButton.lua", "Style.lua", "ViewOverview.lua", "ViewOpportunities.lua", "ViewCrafting.lua", "ViewShopping.lua", "ViewStrategy.lua", "Progress.lua", "Compact.lua", "Notice.lua", "Window.lua" }) do
   local chunk = assert(loadfile(ROOT .. "../TwichUI_Workshop/" .. f)); setfenv(chunk, c); chunk("TwichUI_Workshop", {})
 end
 local W = R.Workshop
@@ -203,6 +203,140 @@ do
   St.Pump(); Cm.Render()
   Check(Has(30), "and back when the bags hold less (used or moved: no claim either way)")
   Cm.ShowFull()
+end
+
+-- progress (Progress.lua): the player's "Crafted one" always; the game's evidence only when switched on, once per cast --------------------------------
+do
+  local P, Nt = W.Progress, W.Notice
+  Check(P.auto == false and not P.Listening(), "automatic counting is OFF and nothing is registered until the client run confirms the evidence")
+  Same(select(2, P.OnSpellcast("player", "Cast-1", 500)), "off", "while off, the game's events change nothing")
+  Same(Q.Find(500).crafts, 4)
+  -- the player's own click, through the Crafting page
+  Win.SetMode("craft"); Win.Render()
+  local craft = Win.Craft()
+  S.Select(500); Win.Render()
+  local d = craft.detail
+  Check(d.done and d.done:IsShown(), "the chosen craft offers Crafted one")
+  d.done:GetScript("OnClick")(d.done)
+  Same(Q.Find(500).crafts, 3, "one craft fewer")
+  Check(f.note:GetText():find("Bar crafted: 3 crafts left.", 1, true), f.note:GetText())
+  -- a mistaken click is taken back: Undo appears, counts the craft again and goes
+  Check(d.undo:IsShown(), "Undo is offered after Crafted one")
+  d.undo:GetScript("OnClick")(d.undo)
+  Same(Q.Find(500).crafts, 4, "the craft is counted again"); Check(not d.undo:IsShown(), "and Undo goes")
+  Check(f.note:GetText():find("Undone: Bar, 4 crafts left.", 1, true), f.note:GetText())
+  Same(select(2, W.Progress.Undo()), "nothing", "only once")
+  d.done:GetScript("OnClick")(d.done)
+  Same(Q.Find(500).crafts, 3)
+  -- the game's evidence, switched on here only to prove the rules (it is not on for players)
+  P.auto = true
+  Check(P.OnSpellcast("player", "Cast-2", 500), "a successful cast of a queued recipe is one craft")
+  Same(Q.Find(500).crafts, 2)
+  Same(select(2, P.OnSpellcast("player", "Cast-2", 500)), "duplicate", "the same cast twice is counted once"); Same(Q.Find(500).crafts, 2)
+  Same(select(2, P.OnSpellcast("party1", "Cast-3", 500)), "other", "another unit's cast is not yours"); Same(Q.Find(500).crafts, 2)
+  Same(select(2, P.OnSpellcast("player", "Cast-4", 777)), "notqueued", "a spell that is not a queued recipe changes nothing")
+  Same(select(2, P.OnSpellcast("player", nil, 500)), "other", "no cast identity: not counted")
+  Same(Q.Find(500).crafts, 2)
+  P.auto = false
+  -- the last craft removes the entry; the saved queue has the change (the queue's own save)
+  S.SetCrafts(500, 1)
+  local ok, info = P.Credit(500)
+  Check(ok and info.done and not Q.Find(500), "the last craft removes the entry")
+  Same(Nt.CreditText(info), "Bar completed.")
+  local saved = false
+  for _, slot in pairs(c.TwichUIDB.workshop.chars or {}) do
+    for _, e in ipairs(slot.queue or {}) do if e.id == 500 then saved = true end end
+  end
+  Check(not saved, "and the saved queue no longer has it")
+  Same(select(2, P.Credit(500)), "notqueued", "nothing to count twice")
+  -- Undo after the last craft brings the entry back (at the end of the queue); not if it was queued again meanwhile
+  Check(S.UndoCrafted() and Q.Find(500) and Q.Find(500).crafts == 1, "the removed entry is back, one craft")
+  Check(P.Credit(500) and not Q.Find(500))
+  Check(S.Add((function() for _, r in ipairs(S.AllRecipes()) do if r.name == "Bar" then return r end end end)()), "queued again by the player")
+  Check(not S.UndoCrafted() and Q.Find(500).crafts == 1, "Undo refuses: the recipe was queued again, nothing doubles")
+  S.Remove(500)
+  Same(Nt.CreditText({ name = "Sword", left = 0, done = true, planDone = true }), "Crafting plan complete.")
+  Same(Nt.CreditText({ name = "Sword", left = 1, done = false }), "Sword crafted: 1 craft left.")
+  Check(S.Add((function() for _, r in ipairs(S.AllRecipes()) do if r.name == "Bar" then return r end end end)()), "Bar queued again")
+end
+
+-- the compact Craft view's Done: one craft counted from the row, Undo beside the note ---------------------------------------------------------------
+do
+  local Cm = W.Compact
+  Cm.Show("craft"); Cm.Render()
+  local cf = Cm.Frame()
+  local row
+  for _, r in ipairs(Win.Lists().compact.rows) do if r:IsShown() and r.data and r.data.done == 500 then row = r end end
+  Check(row and row.map:IsShown() and row.map.text:GetText() == "Done", "each queued recipe has Done")
+  local was = Q.Find(500).crafts
+  row.map:GetScript("OnClick")(row.map)
+  Same(Q.Find(500) and Q.Find(500).crafts or 0, was - 1, "one craft counted")
+  Check(cf.undo:IsShown(), "Undo is offered")
+  cf.undo:GetScript("OnClick")(cf.undo)
+  Same(Q.Find(500).crafts, was, "and taken back")
+  Cm.ShowFull()
+end
+
+-- notices (Notice.lua): what became ready since the last look; nothing at the first look; gathered; not repeated -------------------------------------
+do
+  local Nt = W.Notice
+  Same(Nt.ReadyText({ "Bar" }, false), "All materials for Bar are ready.")
+  Same(Nt.ReadyText({ "Bar", "Sword" }, false), "Materials ready for 2 recipes.")
+  Same(Nt.ReadyText({ "Bar" }, true), "Everything for your crafting plan is in your bags.")
+  Same(Nt.ReadyText({}, true), nil, "nothing became ready: nothing to say")
+  Same(Nt.Gather({ "a", "b", "c" }), "c (and 2 more)"); Same(Nt.Gather({ "x", "Crafting plan complete." }), "Crafting plan complete.")
+  g.bags[30] = 20   -- already ready when the window opens (a login): remembered, never announced
+  Nt.Disarm()
+  Same(Nt.BagsChanged(), nil, "a recipe that is ready at the first look is not announced")
+  Same(Nt.BagsChanged(), nil, "nor later, while nothing changes")
+  g.bags[30] = 0
+  Nt.Disarm()
+  Same(Nt.BagsChanged(), nil, "the first look is only remembered (a login or a first scan says nothing)")
+  Same(Nt.BagsChanged(), nil, "nothing changed")
+  g.bags[30] = 20   -- now the Bars' ore is in the bags
+  Same(Nt.BagsChanged(), "All materials for Bar are ready.", "a recipe that became ready is said")
+  Same(Nt.BagsChanged(), nil, "and only once")
+  g.bags[30] = 0
+  Same(Nt.BagsChanged(), nil, "losing materials says nothing")
+  -- off: nothing is gathered
+  Nt.SetOn(false); Check(not Nt.On() and c.TwichUIDB.workshop.view.notices == false, "off is saved")
+  Check(not Nt.Say("x"), "notices off: nothing is said")
+  Nt.SetOn(true); Check(Nt.On() and c.TwichUIDB.workshop.view.notices == nil, "on is the default and is not stored")
+  -- the Crafting page's switch is the same choice
+  Win.SetMode("craft"); Win.Render()
+  local sw = Win.Craft().notices
+  Check(sw and sw.on, "the switch shows on")
+  sw:GetScript("OnClick")(sw); Win.Render()
+  Check(not Nt.On() and not sw.on, "and turns notices off")
+  sw:GetScript("OnClick")(sw); Win.Render()
+  Check(Nt.On() and sw.on, "and on again")
+end
+
+-- notices reach TwichUI's own coordinator: one card for a burst, the same words not repeated, the coordinator's refusal respected ----------------------
+do
+  local Nt = W.Notice
+  Nt.Flush()   -- what the earlier checks gathered (their timer was a no-op here; in the game it fires)
+  local real = R.Notify
+  local subs, kinds = {}, {}
+  local refuse = nil
+  R.Notify = { Register = function(kind, spec) kinds[kind] = spec end, Finished = function() end,
+    Submit = function(req) if refuse then return false, refuse end subs[#subs + 1] = req return true end }
+  local pending = {}
+  local saved = c.C_Timer
+  c.C_Timer = { After = function(_, fn) pending[#pending + 1] = fn end }
+  local function Run() local list = pending pending = {} for _, fn in ipairs(list) do fn() end end
+  Nt.Say("Bar crafted: 2 crafts left."); Nt.Say("Bar crafted: 1 craft left."); Nt.Say("Bar completed.")
+  Same(#pending, 1, "three messages wait for one card")
+  Run()
+  Same(#subs, 1, "one card for the burst"); Same(subs[1].kind, "workshop"); Same(subs[1].payload.text, "Bar completed. (and 2 more)")
+  Check(kinds.workshop and kinds.workshop.label == "Workshop progress", "the card kind is registered with the coordinator")
+  Nt.Say("Bar completed. (and 2 more)"); Run()
+  Same(#subs, 1, "the same words are not shown again straight away")
+  refuse = "quiet"   -- the Quiet screen switch is the coordinator's rule
+  Nt.Say("All materials for Sword are ready."); Run()
+  Same(#subs, 1, "a refused notice is simply not shown"); Same(Nt.Stats().refused, 1)
+  c.C_Timer = saved
+  R.Notify = real
 end
 
 print("PASSED test_workshop_compact")

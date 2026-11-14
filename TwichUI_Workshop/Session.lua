@@ -316,6 +316,37 @@ function S.Change(id, delta)
     return S.SetCrafts(id, n)
 end
 
+-- "Crafted one": the player says one craft of a queued recipe is done (Progress.Credit: the queue's own save; the entry goes after its last craft).
+-- Never from a click on the game's Craft button and never from a bag count. Returns true, or false (the note says why).
+function S.MarkCrafted(id)
+    local P = W.Progress
+    if not P then return false end
+    local ok, info = P.Credit(id)
+    if not ok then
+        note = ACTION_WHY[info] or (info == "notqueued" and "That recipe isn't in the queue.") or ACTION_WHY.bad
+        return false
+    end
+    Sg.Bump()
+    note = W.Notice and W.Notice.CreditText(info) or (info.name .. " crafted.")
+    Log(note, info.planDone and "done" or "current")
+    return true
+end
+
+-- Takes back the player's last "Crafted one" (Progress.Undo). Returns true, or false (the note says why).
+function S.UndoCrafted()
+    local P = W.Progress
+    if not P then return false end
+    local ok, info = P.Undo()
+    if not ok then
+        note = info == "exists" and "That recipe was queued again, so there is nothing to undo." or (info == "nothing" and "Nothing to undo." or (ACTION_WHY[info] or ACTION_WHY.bad))
+        return false
+    end
+    Sg.Bump()
+    note = ("Undone: %s, %d %s left."):format(info.name, info.left, info.left == 1 and "craft" or "crafts")
+    Log(note, "current")
+    return true
+end
+
 function S.Remove(id)
     local e = Q.Find(id)
     local ok, why = Q.Remove(id)

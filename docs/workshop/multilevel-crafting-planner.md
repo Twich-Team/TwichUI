@@ -403,3 +403,40 @@ The list's source column says **Vendor** (balance-scales art), **Auction** (gave
 - **Compact view** (`Compact.lua`, "Compact view" in the window's header) swaps the 1200-unit window for a 300-unit movable panel (clamped, Esc closes it, no position saved); **Full view** swaps back, and the queue, the page and the source choices are kept (the session is not reset while either view is shown). Two modes: **Travel** (each material still to get: "3 × Peacebloom", its source in a word, a **Map** button for a seller the NPC collection knows; one summary line "6 materials still needed: 5 to buy, 1 to craft"; no market valuations) and **Craft** (the queue in order: "Ready", "Missing 2", "Collect first"; "Next: craft 2 × …", the crafts left, and a bar of how many recipes are ready). It has no secure or protected control and never crafts, buys or moves anything.
 - **Live updates.** While the window or the compact view is shown, a settled bag change (`BAG_UPDATE_DELAYED`) invalidates the plans (`Strategy.Bump`) and schedules **one** redraw `SETTLE` seconds later (0.2 s in the window, 0.3 s in the compact view); a burst of events is one redraw, nothing runs per frame, and a finished plan job redraws the compact view too (`Strategy.onChange`, `Storage.OnChange`). A material that is now covered leaves the list; one that is used or moved comes back. **How** it arrived (bought, collected, looted) is never claimed: the counts are what the bags hold. Source choices are kept while the material is part of the queue's needs (P2's rule). Hidden, neither view listens to anything.
 - Unit-tested in `tests/test_workshop_compact.lua` (both modes, the pure row builders, six bag events = one redraw, a material that arrives and leaves, Full view keeps the queue, nothing runs when both are closed). Simulator poses `compact`, `compactcraft`, `tooltip` (an intermediate's item tooltip in the strategy view) and `smallstrat` (the strategy view at 1000×700).
+
+### 15.7 Progress and notices (checkpoint 4)
+
+- **Manual progress, always available.** **Done** on the Crafting page's chosen craft (tooltip "Crafted one") and on each row of the compact Craft view: `Session.MarkCrafted` → `Progress.Credit`, which lowers the entry's crafts by one through `Queue.SetCrafts` and removes the entry after its last craft (`Queue.Remove`): the queue's own save and rollback, no new saved record. **Undo** (shown only right after) takes back the player's last count (`Progress.Undo`): the craft is counted again, or the removed entry comes back (at the end of the queue); it refuses if the recipe was queued again meanwhile, so nothing doubles.
+- **Automatic completion is OFF** (`Progress.auto = false`; no event is registered). The rule that would be used is written and unit-tested: `UNIT_SPELLCAST_SUCCEEDED` for `"player"` whose spell id is a queued recipe's id, once per cast GUID (bounded memory of 64; never a click, a started/failed/interrupted cast, a bag increase, another unit, or a second event of the same cast). Forever's UI source (1.60.1) also has `TRADE_SKILL_CRAFT_BEGIN(recipeSpellID)` and `TRADE_SKILL_ITEM_CRAFTED_RESULT(itemID, quantity, operationID, …)` but no recipe id in the result; **none of this has been seen in the client**. The Test Lab case **`crafting.progress.events`** (category "Crafting progress probe", opt-in, guided: you craft three of one item and cancel one; the Lab only listens) reports the successful casts with a recipe id, any GUID seen twice, cancelled casts and the crafted results, with a verdict. Only after an "EVIDENCE OK" run, checked against what was really crafted, may `Progress.auto` be set to true.
+- **Notices** (`Notice.lua`) go through TwichUI's notification coordinator as a new card kind `workshop` ("Workshop progress"; Quiet screen, duplicates, loading screens and other cards' places are the coordinator's rules). Said only for verified progress: a counted craft ("Bar crafted: 2 crafts left.", "Bar completed.", "Crafting plan complete.") and a queued recipe whose materials became all present in the bags since the last look ("All materials for Basic Campfire are ready.", "Materials ready for 3 recipes.", "Everything for your crafting plan is in your bags."). The first look after the window or the compact view opens is only remembered (a login or a first scan says nothing). Never claimed: that an item was bought, collected or looted. A burst within 1.5 s is one card; the same words are not repeated within 20 s. **Progress notices** switch on the Crafting page (`TwichUIDB.workshop.view.notices = false` when off; on by default). The card uses the Workshop's card surface and, when the core's notification look is present, its type (`Arrival.Typeset`); it never takes the mouse and is hidden after 4 s.
+- Unit-tested in `tests/test_workshop_compact.lua` (Done, Undo, the last craft, the gate off, duplicate and foreign casts, notices' words, first look, gathering, no repeat, the coordinator's refusal, the switch) and `tests/test_testlab.lua` (the probe's summary). Mutations `crafting.progress.*`, `crafting.notice.first-look-announced`.
+
+### 15.8 Performance (offline, plain Lua 5.1 on the development machine; not the game's figures)
+
+A scratch script over the real files with a generated 30-recipe queue (3 materials each from 60 items, 12 intermediate recipes), median of 5:
+
+| what | time |
+|---|---|
+| a bag change: the Shopping plan's first call (St.FIRST slices at once) | 1.5 ms; then 13 slices, 3.5 ms in all, **longest slice 0.54 ms** |
+| Shopping page draw (plan ready) | 1.1 ms |
+| open the strategy view of the whole queue (54 rows) | 0.4 ms |
+| switch to the compact view / back to the full window | 3.0 ms / 5.4 ms (the window's own open: it reads the profession again) |
+| compact Craft draw (30 recipes) / Travel draw (39 rows) | 0.15 ms / 0.9 ms |
+| 50 bag events while compact is shown | 1 scheduled redraw (4.2 ms, including the replanning's first slices), then one more when the plan finished |
+| Notice.BagsChanged (30 recipes) | 0.09 ms |
+| Done (save + invalidate) | 0.04 ms |
+
+### 15.9 Verification (2026-11-14)
+
+- `./tests/run.sh` and `bash tools/mutate.sh --group crafting` (results in the commit messages); `tools/simlab/workshop.sh`: 25 launches. New screenshot poses: `compact`, `compactcraft`, `tooltip`, `smallstrat` (1000×700), `shopafter`, `notice`; the earlier ones show the simplified Opportunities (`opps`), strategy (`strategy`, `stratlong`), confirmation (`confirm`), Crafting (`craft`) and Shopping (`shop`, `shopmix`). Structural only: the simulator draws addon fonts in a fallback font.
+
+### 15.10 Real-client checks still needed (none done)
+
+1. Prices: "from" / "at least" figures and their tooltips read well at the real scale; the Price ranges switch changes every page; nothing clips (Opportunities' block, the strategy figures, Shopping's cost column).
+2. The strategy view: item tooltips on every row (craft, vendor, auction, collect, bags), not off-screen, not duplicated; Notes; Other options open and fold; scrolling a long chain.
+3. Add to crafting plan from Opportunities: the confirmation's list is right; Cancel changes nothing; Add recipe only appears only when no optimized plan can be made.
+4. Show vendor in Undercity with sellers known in Undercity and Orgrimmar: the Undercity one is shown, and the words are right.
+5. The compact view: moving it, Esc, Full view, UI scale; the Map button; Done and Undo; it stays out of the way while travelling; no hitch on bag changes (bank, vendor and auction purchases, mail).
+6. Notices: the card's place and look beside the other cards; Quiet screen; nothing at login or when the window opens; a burst is one card.
+7. **Run the Test Lab case `crafting.progress.events`** (craft three of one item, cancel one) and keep `Progress.auto` off unless its verdict is EVIDENCE OK and the counts match what was crafted.
+8. `/reload` after Done: the queue keeps the count.

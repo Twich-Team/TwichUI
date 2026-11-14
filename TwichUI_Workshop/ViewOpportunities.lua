@@ -446,7 +446,7 @@ function Opps.PaintStrategy(rec)
     if words.direct then costTip = (costTip and (costTip .. "\n") or "") .. "Buying every material directly: " .. words.direct end
     Pair(1, words.cost, costTip)
     Pair(2, words.cash, words.cashTip)
-    st.save:SetText(words.saveLine or "")
+    st.save:SetText(words.saveShort or "")
     st.saveTip = words.savingsWhy
     UI.Paint(st.save, words.savingsTone == "good" and K.sage or (words.savingsTone == "warn" and K.bronzeText or K.textDim))
 end

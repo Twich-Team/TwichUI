@@ -39,6 +39,7 @@ cases\Api.lua
 cases\Perf.lua
 cases\Load.lua
 cases\AutoScan.lua
+cases\Progress.lua
 # The window's controls, then the window (last: it opens once when the addon loads and registers /tuilab)
 Kit.lua
 Window.lua
