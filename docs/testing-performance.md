@@ -1,5 +1,33 @@
 # Test and simulator performance
 
+## Results
+
+| Workflow | Baseline | Optimized | Change |
+|---|---:|---:|---|
+| Full offline, isolated sequential comparison | 310.69 s / 218 files | 266.87 s / 221 files | **14.10% less wall time** |
+| Workshop Settings fast checks | Former full offline check: 310.69 s | Median 1.355 s / 7 files | **99.56% less feedback time, narrower coverage** |
+| Workshop Settings feature verification | No previous single feature command | 124.170 s / 71 files + 3 launches | Focused checkpoint evidence |
+| Complete milestone command | No previous aggregate command | 1,702.555 s / 221 files + 139 launches | Existing diagnostics failure remains visible |
+
+The isolated offline comparison ran the original serial runner and the new
+2-worker runner back-to-back after all simulator processes ended. Both passed;
+the new run retains every original test and adds 19 Python infrastructure cases.
+Original CPU: 291.57 s user + 16.30 s system; new: 317.81 s + 18.75 s. Parallelism
+reduces feedback wall time, not total CPU work; these samples also include the
+new tests. Maximum child RSS: 4,085,304 → 4,076,848 KiB (about 3.9 GiB in both).
+This supports the conservative two-worker default, not unmeasured higher
+concurrency. All layout files remain serial. The original first/warm samples
+below show ordinary run-to-run variation; these are not performance thresholds.
+
+**Evidence:** unit-tested and simulator-tested. Full verification exits 1 on the
+same pre-existing solo-message assertion as the unchanged baseline. No assertion
+was disabled, normalized, or made expected-to-fail to produce a green result.
+No real-client or appearance validation is claimed.
+
+Implementation checkpoints were committed and pushed on `feature/workshop`:
+`e58e59fc` (audit) and `11f37460` (runner, isolation, controls and instructions).
+This document's final benchmark update follows those verified checkpoints.
+
 ## Audit before implementation — 2026-11-14
 
 Baseline revision: `420e7319` on `feature/workshop`. Native WSL2, Lua 5.1,
@@ -28,7 +56,7 @@ Only TwichUI may be changed; the sibling simulator installation is read-only.
 - Workshop has 25 launches: 24 screenshot poses and an intentional failure.
   Every pose repeats the complete scenario and is compared for reproducibility.
   Test Lab has nine launches; interaction four; diagnostics five; smoke two.
-  Settings discovers its catalog at runtime; Reminders has 37 default poses.
+  Settings discovers its catalog at runtime; Reminders has 36 default poses.
   Exact executed counts will be recorded from the benchmark artifacts.
 - Simulator roots, fixtures, home, cache, WTF, and artifact names are shared.
   Existing runners can overwrite one another. Serial execution is required
@@ -71,3 +99,229 @@ Raw logs, original scripts, timing files and profiles are ignored under
 `test-output/workflow-baseline/`. The baseline simulator wrapper overlays its
 writable directories with `test-output/simlab-baseline/`; the installation stays
 read-only. No simulator source/build changes or production addon edits.
+
+## Warm profile and verification setup
+
+The original per-file warm run passed all 218 files/modules in **318.808 s**.
+Layout tests (13 files) accounted for 177.041 s, Workshop (24) 67.722 s,
+Python modules (5) 21.095 s, and the remaining 176 files 52.904 s.
+Slowest files: layout publish 33.612 s, layout wizard 30.904 s, Workshop
+history2 23.268 s, layout hardening 21.519 s, layout presets 18.411 s,
+layout update 15.860 s, Workshop market scale 15.111 s.
+
+An initial new serial run passed 220 files/modules in 364.672 s while simulator
+probes were active; this is a contention diagnostic, not an isolated speedup
+comparison. Early simulator timing attempts correctly failed repository-status
+guards as benchmark setup created files. Scenario assertions passed; these
+attempts are not reported as successful guarded regression runs. Baseline
+simulator scripts now run from a frozen source snapshot with its own Git
+boundary, and benchmark outputs share pre-created ignored directories.
+
+## Implemented workflow and measured focused checks
+
+The interface and exact boundaries are in [testing.md](testing.md).
+`tests/groups.json` is the feature map; full discovery uses every Lua/Python
+`test_*` file, never a union of feature groups. No production addon file, Lua
+test assertion, randomized scenario count or mutation entry was changed.
+
+| Check | Measured result | Selection |
+|---|---:|---|
+| Fast Workshop Settings (three repeats) | 1.558 / 1.104 / 1.355 s wall; median **1.355 s** | 7 Lua test files + 13 syntax files |
+| Workshop Settings feature verification | **124.170 s** | 71 Lua test files + 3 simulator launches / 1,452 checks |
+| Paired PNG decode, old → new medians | **1.410662 → 0.860348 s (39.01% less)** | Identical 1600×1200 image, exact decoded bytes |
+| Paired colour count, old → new medians | **0.104454 → 0.020756 s (80.13% less)** | Identical crop, 5,216 RGB colours |
+| Mutation example (`market.dist`, one worker) | **12.5 s** campaign, 31/31 killed | Full selected campaign, no survivors/invalid/timeouts/infra errors |
+
+The focused samples ran while other benchmark workflows were active. They show
+practical feedback time, not an isolated CPU comparison. A fast selection is
+approximately 99.6% shorter than the former 318.8-second full offline check,
+with **intentionally narrower coverage**. It cannot establish full regression
+coverage. Feature verification includes shared dependencies and preserves the
+Workshop replay comparison and wrong-expectation control.
+
+PNG timings use three interleaved old/new runs, reversing order on alternating
+repetitions. Every decoded byte was compared; randomized tests also cover all
+five PNG filters, edge pixels, Paeth ties and modulo-256 overflow. Screenshot
+size/colour assertions remain intact, and duplicate colour counting within a
+Workshop image verdict was removed. No image validation was dropped.
+
+### Original simulator measurements
+
+All use seeded disposable caches and independent processes, not an OS-cache
+flush. The first Workshop attempt (581.41 s) correctly failed its repository
+status guard during benchmark setup. It is not successful regression evidence.
+The frozen-source repeat below passed its guard and verdict. Its **997 files
+match Git blobs at `420e7319`**, with no missing or mismatched file.
+
+| Original script | Seconds | Launches | Structured scenario checks | Images | Result |
+|---|---:|---:|---:|---:|---|
+| Workshop (all default poses) | 622.09 | 25 | 12,118 | 24 | Pass with classified simulator limitations |
+| Smoke | 29.37 | 2 | — (56 pages constructed) | 1 | Pass |
+| Interaction | 27.73 | 4 | 244 | 2 | Pass with classified limitations |
+| Diagnostics | 22.77 | 5 | 74 | 0 | **Fail: solo expects zero sends, observes one** |
+| Test Lab | 73.60 | 9 | 229 | 9 | Pass with classified limitations |
+| Settings, `workshop` selection | 16.94 | 2 | 37 | 2 | Pass |
+| Reminders, `editor narrow` selection | 24.17 | 2 | 187 | 2 | Pass |
+
+The diagnostics failure is present in the unchanged baseline. Its assertion and
+failure exit remain visible. No assertion, source behavior, message observer or
+scenario was changed to accommodate it. Fixing that older scenario/behavior
+mismatch is separate work. Existing classified runtime limitations also remain
+in the logs; a scenario pass is not a claim of zero simulator runtime errors.
+
+### Resource and parallelization decisions
+
+Offline execution uses two workers by default, at most four on request. All 13
+layout test files run individually after the worker pool: the original process
+peak was about 3.9 GiB. Every test has its own process and temporary folder;
+fixture-generation opt-ins and reduced-seed overrides are cleared. Existing
+Python generators use disposable directories; the release-tool HTTP server
+uses an ephemeral port. New tests must retain those isolation properties;
+place unaudited shared writers or large heaps in the exclusive selection until
+measured. No persistent Lua process or shared mutable fixture cache was added.
+
+Simulator execution remains one worker, protected by a lock. An observed
+simulator process used about 1.3 GiB RSS; GNU time around bubblewrap does **not**
+account for every process in the nested PID namespace, so its small wrapper RSS
+is not a simulator memory estimate. The installation/dependencies and staged
+addons were explicitly checked read-only inside the process boundary; only
+repository-local mutable state is writable. Interrupted cache seeding cannot
+publish a partially copied cache. No simulator installation/source was changed.
+
+Staging reuse lasts only one script invocation. Full Workshop and Test Lab
+replays remain independent processes, with their reproducibility comparisons,
+negative controls and screenshots. Serial mode remains available everywhere;
+no simulation parallelism is claimed.
+
+## Comprehensive regression result
+
+`SIMLAB_ONLY=bogus SIMLAB_ASSETS=0 ./tests/run.sh full` deliberately supplied
+invalid/narrowing inherited options to verify that the milestone command clears
+them. It executed the complete defaults with game assets, not the supplied
+filter. Total: **1,702.555 s (28 min 22.56 s)**, exit **1** solely for the
+unchanged baseline diagnostics failure. Syntax (667 Lua files), every offline
+file/module, and the other seven suite/guard results passed. This is not a green
+full-regression claim.
+
+| Full-run component | Seconds | Launches | Structured checks | Result |
+|---|---:|---:|---:|---|
+| Lab guard | 0.689 | — | 36 guard cases | Pass |
+| Smoke | 23.406 | 2 | 56 pages constructed | Pass |
+| Interaction | 26.718 | 4 | 244 | Pass |
+| Diagnostics | 19.171 | 5 | 74 | Baseline failure retained |
+| Workshop | 483.597 | 25 | 12,118 | Pass |
+| Test Lab | 62.488 | 9 | 229 | Pass |
+| Settings | 420.483 | 58 | 1,027 | Pass |
+| Reminders | 381.436 | 36 | 3,768 | Pass |
+
+That is **139 launches / 17,460 structured scenario checks**, plus the guard and
+smoke construction checks. Workshop still has 24 images and the wrong-on-purpose
+launch. Every default settings page and Reminders pose ran. There was no previous
+single aggregate command for all these scripts, so there is no invented
+before/after percentage for this newly consolidated 28-minute command.
+
+Coverage comparison: **213 original Lua files retained; all five original Python
+modules and their 98 cases retained; three new infrastructure modules add 19
+cases**. Final full discovery ran **221 files/modules and 117 Python cases**.
+Across all 49 launches shared with the representative baseline runs, assertion
+names, layers, expected/actual values, pass/fail outcomes and object-identity
+relationships agree. Forty-five transcripts match literally; the remaining
+four differ only in process-local Lua table addresses. Raw logs were retained;
+address canonicalization was used only for this offline comparison, never for a
+verdict or assertion.
+
+Workshop's observed 622.09 → 483.597 s is 22.3% less wall time; Test Lab's
+73.60 → 62.488 s is 15.1% less. Original simulator measurements overlapped other
+benchmark activity, so these whole-script deltas include host/cache/load effects
+and are not isolated causal speedup claims. The paired PNG measurements above
+are the controlled comparison. All scenario processes/reproducibility checks
+were retained; startup remains a substantial cost.
+
+## Exact commands and artifacts
+
+Primary commands (from the repository root):
+
+```sh
+/usr/bin/time -v ./tests/run.sh fast workshop-settings
+/usr/bin/time -v ./tests/run.sh feature workshop-settings
+/usr/bin/time -v ./tests/run.sh --jobs 1
+/usr/bin/time -v ./tests/run.sh --jobs 2
+/usr/bin/time -v ./tests/run.sh full
+bash tools/mutate.sh --all --check
+/usr/bin/time -v bash tools/mutate.sh --group market.dist --jobs 1 \
+  --json test-output/workflow-optimized/mutation-dist.json
+TMPDIR="$PWD/test-output/workflow-optimized" bash tools/simlab/tests/lab_guard.sh
+```
+
+The original runner can be reproduced against this unchanged addon/test source
+without checking out over current work. The actual isolated comparison used:
+
+```sh
+mkdir -p test-output/workflow-optimized
+python3 -B - <<'PY'
+from pathlib import Path
+import subprocess
+script = subprocess.check_output(['git', 'show', '420e7319:tests/run.sh'], text=True)
+script = script.replace('cd "$(dirname "$0")"', 'cd "$1/tests"')
+Path('test-output/workflow-optimized/original-offline.sh').write_text(script)
+PY
+/usr/bin/time -v bash test-output/workflow-optimized/original-offline.sh "$PWD"
+/usr/bin/time -v ./tests/run.sh --jobs 2
+```
+
+These two comparison commands run sequentially after simulator activity ends.
+They compare the original suite's 218 files/modules with the new runner's 221;
+the latter also executes all 19 new infrastructure cases. For a future feature
+revision, compare equivalent source/fixtures rather than interpreting changes
+in addon workload as runner performance.
+
+Raw first/warm profiles, per-file logs, original simulator scripts and source
+integrity checks: `test-output/workflow-baseline/`. Full/feature reports and
+per-test logs: `test-output/verification/` (each command prints its exact unique
+folder). Comparison timings, process-control results, paired PNG samples,
+coverage comparison and mutation report: `test-output/workflow-optimized/`.
+All are ignored, intentional development artifacts, not release contents.
+
+Failure controls passed: nonzero Lua/Python exits, caught `ERROR:` markers,
+missing success markers, full traceback retention, failed Python modules run
+once, process-group timeout/descendant termination, invalid feature/pose names,
+wrong-expectation simulator control, workspace lock refusal, symlink refusal,
+read-only mounts, isolated cache writes and child exit-code propagation. The
+comprehensive run's real baseline diagnostics failure also propagated to exit 1.
+The lab guard passes all 36 cases with the runner's in-repository TMPDIR; its
+repository stand-in fixes that fixture assumption while retaining explicit
+checks against the actual checkout.
+
+## Remaining opportunities
+
+- Repair the pre-existing diagnostics solo-message mismatch as separate work;
+  do not suppress it in the runner or broaden error-classifier exceptions.
+- Profile the large layout mock-client heaps before changing their fixtures.
+  Caching mutable mock clients or sharing a Lua process would risk state leaks.
+- Simulator workers need separate roots, fixtures, home, cache, WTF, artifacts,
+  locks and a measured WSL resource budget. They are not parallelized here.
+- Reducing full Workshop replays or batching poses could save startup time, but
+  changes existing reproducibility evidence. That requires a separately reviewed
+  coverage design; no simulator engine patch or source build was attempted.
+- `guild_bank_preview.sh` is still a manual parameterized preview without a
+  default regression catalog/verdict. Turning it into regression coverage would
+  be separate work, not an excuse to count its screenshots as tested behavior.
+
+No production changes, releases, simulator installation edits or Workshop
+Settings 2.0 feature work were performed.
+
+## Isolated comparison artifacts
+
+`test-output/workflow-optimized/baseline-isolated.log` ends with
+`218 passed, 0 failed`; its `.time` records 310.69 s. The following
+`unit-isolated.log` ends with `221 passed, 0 failed` (266.610 s inside the runner,
+266.87 s including launcher startup). Its `report.json` contains all 213 Lua
+files, all eight Python modules / 117 cases, and zero failures.
+`benchmark-sequence.json` records both exit codes as zero and the comprehensive
+run's retained failure as exit 1. `full-summary.json` and
+`coverage-comparison.json` record the simulator totals and baseline comparison.
+
+Final scope review: changes are limited to developer documentation, test
+selection/runner/control tests, and `tools/simlab/` wrappers/verdicts. Original
+Lua tests, production addons, third-party libraries, `.toc` metadata, release CI,
+mutation runner/catalog and the separate simulator installation are unchanged.
