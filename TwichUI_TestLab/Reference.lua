@@ -1597,3 +1597,247 @@ function REF.VCost(lst, qty)
     for i = 1, qty do actual = actual + lst.entries[i] end
     return { state = "estimate", low = low, high = high, actual = actual }
 end
+
+---------------------------------------------------------------------------
+-- 8. The multilevel crafting planner (P1, docs/workshop/multilevel-crafting-planner.md): an EXHAUSTIVE model
+---------------------------------------------------------------------------
+-- Written from the contract, not from CraftPlanner.lua. Where production branches on the items that can be made, collapses the two ways of
+-- buying into one choice, solves independent parts apart, walks demand in passes and prunes by a bound, this model lists EVERY combination of
+-- choices of every reachable item (vendor, auction house, no source, each usable recipe), finds the demand of each combination by repeating
+-- the whole calculation until it stops changing (Jacobi iteration), allocates owned items one at a time (REF.Take) and prices from the plain
+-- listings (REF.VCost). Small scenarios only: a scenario with more than `limit` combinations is skipped (and counted by the caller).
+REF.CHAIN = { candidates = 4, maxCrafts = 999, maxQty = 9999, maxId = 2147483647, maxMats = 16 }
+REF.CHAIN_RANK = { vendor = 1, auction = 2, none = 3 }
+
+-- One recipe as the contract allows it: { id, per, mats = { [item] = qty }, ids (sorted) } or nil and why
+-- (invalid, unavailable, unsupported, noamount, range, circular: checked in that order)
+function REF.ChainRecipe(rec, item, unavailable)
+    local L = REF.CHAIN
+    if type(rec) ~= "table" or not Whole(rec.id, 1, L.maxId) or rec.outItem ~= item then return nil, "invalid" end
+    if unavailable and unavailable[rec.id] then return nil, "unavailable" end
+    if type(rec.mats) ~= "table" or #rec.mats == 0 then return nil, "unsupported" end
+    local mats, ids = {}, {}
+    for _, m in ipairs(rec.mats) do
+        if type(m) ~= "table" or not Whole(m.item, 1, L.maxId) or not Whole(m.qty, 1, L.maxQty) then return nil, "unsupported" end
+        if mats[m.item] == nil then ids[#ids + 1] = m.item mats[m.item] = 0 end
+        mats[m.item] = mats[m.item] + m.qty
+    end
+    if #ids > L.maxMats then return nil, "unsupported" end
+    if not Whole(rec.outMin, 1, L.maxQty) then return nil, "noamount" end
+    if rec.outMax ~= nil then
+        if not Whole(rec.outMax, 1, L.maxQty) then return nil, "noamount" end
+        if rec.outMax ~= rec.outMin then return nil, "range" end
+    end
+    if mats[item] then return nil, "circular" end
+    table.sort(ids)
+    return { id = rec.id, per = rec.outMin, mats = mats, ids = ids }
+end
+
+-- owned items valued at num/den each, rounded half up, by quotient and remainder
+local function HalfUp(o, num, den)
+    local q = o * num
+    local whole = math.floor(q / den)
+    if 2 * (q - whole * den) >= den then whole = whole + 1 end
+    return whole
+end
+
+-- The model of one scenario (FX.Chain's). opt: objective ("economic" | "cash"), limit (combinations, default 4000), picks (default scn.picks).
+-- Returns { skipped = "toolarge", size } or { size, feasible = n, best = plan or nil, bestCash = plan (the cash objective's best), items }.
+-- A plan: { vec, key = { missing, cashMissing, valueMissing, econ, cash, cashHigh (nil: open), owned, crafts }, per = { [item] = { d, credit, bags,
+-- bank, guild, rest, source, crafts, low, high, value } }, assign }.
+function REF.ChainPlan(scn, opt)
+    opt = opt or {}
+    local L = REF.CHAIN
+    local picks = opt.picks or scn.picks or {}
+    local valid = {}
+    for _, e in ipairs(scn.entries) do
+        if Whole(e.crafts, 1, L.maxCrafts) then valid[#valid + 1] = e end
+    end
+    local need, _, _, made = REF.Combine(valid)
+    -- what can be reached from the queue's needs through recipes that may be used
+    local reach, list, choices = {}, {}, {}
+    local frontier = {}
+    for item, n in pairs(need) do if n > 0 then frontier[#frontier + 1] = item end end
+    while #frontier > 0 do
+        local item = table.remove(frontier)
+        if not reach[item] then
+            reach[item] = true
+            list[#list + 1] = item
+            local recs = {}
+            for _, rec in ipairs(scn.recipes[item] or {}) do recs[#recs + 1] = rec end
+            table.sort(recs, function(a, b) return a.id < b.id end)
+            local ok = {}
+            for _, rec in ipairs(recs) do
+                local r = REF.ChainRecipe(rec, item, scn.unavailable)
+                if r and #ok < L.candidates then ok[#ok + 1] = r end
+            end
+            local ch = {}
+            if scn.vendor[item] or scn.sells[item] then ch[#ch + 1] = { kind = "vendor", rank = 1 } end
+            if scn.listings[item] then ch[#ch + 1] = { kind = "auction", rank = 2, lst = REF.VListings(scn.listings[item]) } end
+            if #ch == 0 then ch[#ch + 1] = { kind = "none", rank = 3 } end
+            for p, r in ipairs(ok) do ch[#ch + 1] = { kind = "make", rank = 3 + p, r = r } for _, x in ipairs(r.ids) do frontier[#frontier + 1] = x end end
+            -- the player's choice: honoured only when it exists
+            local pick, keep = picks[item], {}
+            for _, c in ipairs(ch) do
+                if (pick == "vendor" and c.kind == "vendor") or (pick == "auction" and c.kind == "auction") or (pick == "make" and c.kind == "make") then keep[#keep + 1] = c end
+            end
+            if #keep > 0 then ch = keep end
+            choices[item] = ch
+        end
+    end
+    table.sort(list)
+    local size = 1
+    for _, item in ipairs(list) do size = size * #choices[item] end
+    if size > (opt.limit or 4000) then return { skipped = "toolarge", size = size } end
+
+    local function Unit(item)
+        local num, den
+        local v = scn.vendor[item]
+        if v then num, den = v.p, v.s end
+        local lst = scn.listings[item] and REF.VListings(scn.listings[item])
+        if lst and (not num or lst.p * den < num) then num, den = lst.p, 1 end
+        return num, den
+    end
+    local function RestOf(item, d)
+        local net = d - math.min(d, made[item] or 0)
+        if scn.unknown[item] then return net, 0, 0, 0 end
+        local t = REF.Take(net, scn.bags[item] or 0, scn.bank[item] or 0, scn.guild[item] or 0)
+        return t.missing, t.bags, t.bank, t.guild
+    end
+    local function Eval(assign)
+        local D = {}
+        for _, item in ipairs(list) do D[item] = need[item] or 0 end
+        local crafts, stable = {}, false
+        for _ = 1, #list + 2 do
+            local nextD = {}
+            for _, item in ipairs(list) do nextD[item] = need[item] or 0 end
+            crafts = {}
+            for _, item in ipairs(list) do
+                local ch = assign[item]
+                if ch.kind == "make" then
+                    local rest = RestOf(item, D[item])
+                    local c = math.floor((rest + ch.r.per - 1) / ch.r.per)
+                    if c > L.maxCrafts then return nil, "toomany" end
+                    crafts[item] = c
+                    for x, q in pairs(ch.r.mats) do nextD[x] = nextD[x] + q * c end
+                end
+            end
+            stable = true
+            for _, item in ipairs(list) do
+                if nextD[item] > L.maxId then return nil, "toomany" end
+                if nextD[item] ~= D[item] then stable = false end
+            end
+            D = nextD
+            if stable then break end
+        end
+        if not stable then return nil, "circular" end
+        -- crafts that are done must not depend on each other in a circle
+        local state = {}
+        local function Loop(item)
+            state[item] = 1
+            for x in pairs(assign[item].r.mats) do
+                if (crafts[x] or 0) > 0 then
+                    if state[x] == 1 then return true end
+                    if not state[x] and Loop(x) then return true end
+                end
+            end
+            state[item] = 2
+            return false
+        end
+        for _, item in ipairs(list) do
+            if (crafts[item] or 0) > 0 and not state[item] and Loop(item) then return nil, "circular" end
+        end
+        local key = { missing = 0, cashMissing = 0, valueMissing = 0, cash = 0, cashHigh = 0, owned = 0, crafts = 0 }
+        local per, vec = {}, {}
+        for i, item in ipairs(list) do
+            local d = D[item]
+            vec[i] = 0
+            if d > 0 then
+                local credit = math.min(d, made[item] or 0)
+                local rest, b, k, g = RestOf(item, d)
+                local p = { d = d, credit = credit, bags = b, bank = k, guild = g, rest = rest }
+                local owned = b + k + g
+                if owned > 0 then
+                    local num, den = Unit(item)
+                    if num then p.value = HalfUp(owned, num, den) key.owned = key.owned + p.value else key.valueMissing = key.valueMissing + 1 end
+                end
+                if rest > 0 then
+                    local ch = assign[item]
+                    vec[i] = ch.rank
+                    p.source = ch.kind
+                    if ch.kind == "make" then
+                        p.crafts = crafts[item]
+                        key.crafts = key.crafts + crafts[item]
+                    else
+                        local low, high
+                        if ch.kind == "vendor" and scn.vendor[item] then
+                            local v = scn.vendor[item]
+                            local buys = Ceil(rest, v.s)
+                            if not (v.a >= 0 and buys * v.s > v.a) then low, high = buys * v.p, buys * v.p end
+                        elseif ch.kind == "auction" then
+                            local c = REF.VCost(ch.lst, rest)
+                            if c.state ~= "few" then low = c.low high = c.state ~= "estimate" and c.high or nil end
+                        end
+                        p.low, p.high = low, high
+                        if low then
+                            key.cash = key.cash + low
+                            if high and key.cashHigh then key.cashHigh = key.cashHigh + high else key.cashHigh = nil end
+                        else
+                            key.cashMissing = key.cashMissing + 1
+                        end
+                    end
+                end
+                per[item] = p
+            end
+        end
+        key.missing = key.cashMissing + key.valueMissing
+        key.econ = key.cash + key.owned
+        return { key = key, per = per, vec = vec, assign = assign }
+    end
+    local function Before(x, y, objective)
+        local a, b = x.key, y.key
+        local order = objective == "cash" and { "cashMissing", "cash", "valueMissing", "econ" } or { "missing", "econ", "cash" }
+        for _, f in ipairs(order) do
+            if a[f] ~= b[f] then return a[f] < b[f] end
+        end
+        for i = 1, #x.vec do
+            if x.vec[i] ~= y.vec[i] then return x.vec[i] < y.vec[i] end
+        end
+        return false
+    end
+    local out = { size = size, feasible = 0, infeasible = 0, items = list }
+    local assign = {}
+    local function Walk(i)
+        if i > #list then
+            local copy = {}
+            for k, v in pairs(assign) do copy[k] = v end
+            local plan, why = Eval(copy)
+            if not plan then out.infeasible = out.infeasible + 1 out.why = out.why or why return end
+            out.feasible = out.feasible + 1
+            if not out.best or Before(plan, out.best, "economic") then out.best = plan end
+            if not out.bestCash or Before(plan, out.bestCash, "cash") then out.bestCash = plan end
+            return
+        end
+        for _, c in ipairs(choices[list[i]]) do
+            assign[list[i]] = c
+            Walk(i + 1)
+        end
+    end
+    Walk(1)
+    if opt.objective == "cash" then out.best, out.bestEconomic = out.bestCash, out.best end
+    return out
+end
+
+-- A Market.Cost-shaped stand-in over a chain scenario's plain listings (REF.VCost), for the Lab cases and the benchmarks, where no saved market
+-- may be built. The offline test gives the planner the REAL Market.Cost instead; this exists so the Lab never touches TwichUIWorkshopDB.
+function REF.ChainCostFn(scn)
+    local lists = {}
+    for item, recs in pairs(scn.listings) do lists[item] = REF.VListings(recs) end
+    return function(item, qty)
+        local l = lists[item]
+        if not l then return { state = "none" } end
+        local x = REF.VCost(l, qty)
+        if x.state == "few" then return { state = "few", available = l.t } end
+        return { state = x.state, cost = x.state == "exact" and x.low or nil, low = x.low, high = x.high, available = l.t, complete = true }
+    end
+end

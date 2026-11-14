@@ -383,6 +383,61 @@ m("crafting.opps.tie-id-reversed", OPPS, "return a.rec.id < b.rec.id", "return a
   "equal values and names are ordered by recipe id backwards", [CRF])
 
 
+# --- the multilevel crafting planner (P1, CraftPlanner.lua): combined demand, owned stock, batches, circles, choices, ranges, the search ------
+PLANNER = "TwichUI_Workshop/CraftPlanner.lua"
+CPT = "test_workshop_craftplanner.lua"
+m("crafting.planner.late-demand-lost", PLANNER, "if pos[j] <= pos[k] then again = true end", "",
+  "demand that reaches an item after it was already decided is dropped: the combined demand is split, the first consumer's share alone is acquired", [CPT], smoke=True)
+m("crafting.planner.delta-not-incremental", PLANNER, "local delta = c - crafted[k]", "local delta = c",
+  "when an item's demand grows, its reagents are added again for every craft instead of the new crafts only (reagents double counted)", [CPT])
+m("crafting.planner.bags-counted-twice", PLANNER, "local owned = nd.bags + nd.bank + nd.guild\n", "local owned = nd.bags + nd.bank + nd.guild + nd.bags\n",
+  "the bag count is applied once for the queue and again for the subcrafts: owned stock is spent twice", [CPT])
+m("crafting.planner.queued-credit-ignored", PLANNER, "local net = d - min(d, nd.credit)\n    if nd.unknown then return net end", "local net = d\n    if nd.unknown then return net end",
+  "what queued crafts make is not subtracted before crafting more of the item", [CPT])
+m("crafting.planner.owned-free", PLANNER, "if nd.num then val = Value(o, nd.num, nd.den) e.owned = e.owned + val", "if nd.num then val = 0 e.owned = e.owned + val",
+  "owned materials are valued at nothing, so a plan looks cheaper because the player already owns things", [CPT], smoke=True)
+m("crafting.planner.owned-value-truncated", PLANNER, "local function Value(o, num, den) return floor((2 * o * num + den) / (2 * den)) end",
+  "local function Value(o, num, den) return floor(o * num / den) end",
+  "the value of owned items is truncated instead of rounded half up (a stack price over its size)", [CPT])
+m("crafting.planner.crafts-rounded-down", PLANNER, "local c = ceil(r / ch.r.per)", "local c = floor(r / ch.r.per)",
+  "crafts are rounded down: the plan makes fewer than it needs", [CPT])
+m("crafting.planner.leftover-dropped", PLANNER, "used = d.rest, leftover = d.crafts * r.per - d.rest,", "used = d.rest, leftover = 0,",
+  "the rest of the last craft is not reported as a leftover", [CPT])
+m("crafting.planner.alternate-recipe-ignored", PLANNER, "if r and #nd.recipes >= L.candidates then", "if r and #nd.recipes >= 1 then",
+  "only the first usable recipe of an item is ever compared", [CPT])
+m("crafting.planner.circle-accepted", PLANNER, "if circle then return { ok = false, why = \"circular\", cycle = circle } end", "",
+  "crafts that need each other are accepted once their demand stops growing (a 3-per-craft circle looks free)", [CPT])
+m("crafting.planner.self-recipe-accepted", PLANNER, "if sum[item] then return nil, \"circular\" end", "",
+  "a recipe that uses its own output is offered as a way to make it", [CPT])
+m("crafting.planner.order-ignores-prerequisites", PLANNER, "for _, it in ipairs(st.after) do if not done[stepOf[it]] then ready = false break end end", "",
+  "the crafts are listed by item number, so a craft can come before the craft that makes its reagent", [CPT])
+m("crafting.planner.invalid-pick-honoured", PLANNER, "if (pick == \"vendor\" and nd.hasVendor) or (pick == \"auction\" and nd.hasAuction) then", "if true then",
+  "a choice to buy from a source that does not exist is followed and becomes a step with no price", [CPT])
+m("crafting.planner.unavailable-recipe-used", PLANNER, "if not ok then return nil, \"unavailable\" end", "",
+  "a recipe the character cannot do is planned as a craft", [CPT])
+m("crafting.planner.estimate-as-exact", PLANNER, "q.low, q.atMost = Num(c.low), Num(c.high)   -- \"at least low\"", "q.low, q.high = Num(c.low), Num(c.low)   -- \"at least low\"",
+  "an auction 'at least' figure is reported as the exact total, so the plan's upper bound is not open", [CPT])
+m("crafting.planner.high-from-low", PLANNER, "if q.high and not e.open then e.cashHigh = e.cashHigh + q.high else e.open = true end",
+  "if q.high and not e.open then e.cashHigh = e.cashHigh + q.low else e.open = true end",
+  "the plan's upper bound adds the lower bounds: a whole-stack range collapses to its cheapest end", [CPT])
+m("crafting.planner.unknown-as-zero", PLANNER, "e.cashMissing = e.cashMissing + 1", "e.cash = e.cash + 0",
+  "a material with no price counts as costing nothing, so an unpriced route wins", [CPT], smoke=True)
+m("crafting.planner.cash-as-economic", PLANNER, "e.econ = e.cash + e.owned", "e.econ = e.cash",
+  "the economic cost leaves out owned materials: economic and cash cost are the same figure", [CPT])
+m("crafting.planner.vendor-tie-to-auction", PLANNER, "if v and v.low and (not (a and a.low) or v.low <= a.low) then return v end",
+  "if v and v.low and (not (a and a.low) or v.low < a.low) then return v end",
+  "an equal vendor and auction price goes to the auction house", [CPT])
+m("crafting.planner.tie-order-reversed", PLANNER, "if v[i] ~= w[i] then return v[i] < w[i] and -1 or 1 end", "if v[i] ~= w[i] then return v[i] > w[i] and -1 or 1 end",
+  "of two plans that cost the same, the one making things (or using the later recipe) is preferred over buying", [CPT])
+m("crafting.planner.prune-equal-bound", PLANNER, "if C.best and KeyCmp(P, e, C.best.e) > 0 then P.pruned", "if C.best and KeyCmp(P, e, C.best.e) >= 0 then P.pruned",
+  "the search drops a branch whose bound only equals the best, losing an equal-cost plan that ranks first", [CPT])
+m("crafting.planner.limited-called-proven", PLANNER, "if C.limited then s.exhaustive = false end", "",
+  "a search that stopped at its limit is reported as exhaustive and its plan as the proven best", [CPT], smoke=True)
+m("crafting.planner.budget-reserved-for-trivial-parts", PLANNER, "for _, C in ipairs(comps) do if C.decide > 0 then deciding = deciding + 1 end end", "for _, C in ipairs(comps) do deciding = deciding + 1 end",
+  "every independent part keeps a share of the search states, even one with nothing to decide, so a large queue starves the part that has choices", [CPT])
+m("crafting.planner.depth-one-too-deep", PLANNER, "if nd.depth < L.depth then", "if nd.depth <= L.depth then",
+  "the depth limit lets one more level of crafting through", [CPT])
+
 # --- the saved schema (market data foundation 2.0, A2): the version bump, the frozen legacy history, the 1.3 fields, the held database ----
 SCHEMA = "test_workshop_schema.lua"
 m("market.schema.version-not-bumped", PRICES,
@@ -620,5 +675,7 @@ m("market.auto.refusal-not-remembered", AUTO, "    elseif SC.state == \"failed\"
 # EXAMINED AND LEFT OUT (equivalent mutants: no test can tell them from the original, so they would only ever "survive")
 # ======================================================================================================================
 #   Prices.Unit  `return math.max(q, 1)` -> `return q`: the round-up loop above it already lifts a zero to 1.
+#   CraftPlanner.Consider  `VecCmp(v, b.v) >= 0` -> `> 0`: it differs only when the two plans' costs AND choice vectors are equal, i.e. the
+#       same plan, so replacing it changes nothing observable.
 #   Shopping.Suggest  dropping `(k ~= "make" or o.state == "ok")`: a make option that is not "ok" returns before it is given a cost, and
 #       Suggest needs `o.cost`, so the guard never decides anything today (it is defence in depth if EvalMake ever sets a cost earlier).

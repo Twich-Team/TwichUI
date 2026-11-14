@@ -60,7 +60,7 @@ Priority: **P1** means wrong money figures or lost data are plausible, **P2** me
 | Launcher / LoD | launcher tests at login/combat/failure | — | — | P3 | yes: first open from a packaged install |
 | *Future:* buy/post/cancel flows | none | state machines with explicit player confirmation, failure injection, never acting without a click | fake API + state-machine tests + simulator | P1 | **yes, always** |
 | *Future:* Ledger & attribution | none | replay of event fixtures; deduplication of mail/AH events; economic vs cash profit; an unknown cost basis stays unknown | reference replay model + fixtures | P1 | yes: real event payloads |
-| *Future:* multilevel craft-vs-buy, levelling routes, recommendations | none (one-level planner only) | an exhaustive reference on small graphs; cycles; a minimum worthwhile gain; conservative output when evidence is thin | reference model + property | P1 | no for algorithms |
+| *Future:* multilevel craft-vs-buy (engine built in P1, `test_workshop_craftplanner.lua`), levelling routes, recommendations | the P1 engine has the exhaustive model; levelling and recommendations none | an exhaustive reference on small graphs; cycles; a minimum worthwhile gain; conservative output when evidence is thin | reference model + property | P1 | no for algorithms |
 
 **Where independent reference models pay off most**, in order:
 1. `Shopping.Plan`, and later the multilevel planner. Allocation and comparison logic is where plausible-looking wrong answers hide, and a brute force over small instances is easy to write and obviously correct.
@@ -648,6 +648,14 @@ purchases), the `market.value.*` mutation entries (`--group market.value`), the 
 for later valuation changes: run `test_workshop_valuation.lua` and `--group market.value`; a rule change needs the model in section 7 changed
 independently. **Open:** every A5 Lab case in the client (and A4's, deferred by the owner). Details: `docs/workshop/market-data-foundation-v2.md`,
 "A5 as built".
+
+**P1, the multilevel crafting planner (2026-11-13).** `CraftPlanner.lua`, a pure engine with **no consumer yet** (Shopping still uses
+`Shopping.Plan`). New evidence for planner work: `tests/test_workshop_craftplanner.lua` (hand-worked chains; 400 seeded `FX.Chain` scenarios x 2
+objectives over the real `Market.Cost`, compared item by item with the exhaustive `REF.ChainPlan`, `Reference.lua` section 8; independent
+feasibility invariants on every plan, larger graphs and limited searches; malformed input; determinism and the stepped job; Shopping unchanged),
+the `crafting.planner.*` mutation entries (24, `--group crafting.planner`), the `crafting.planner.*` workloads and seven Lab cases. Policy for
+later planner changes: run `test_workshop_craftplanner.lua` and `--group crafting.planner`; a rule change needs `REF.ChainPlan` changed
+independently. **Open:** the Lab cases and benchmarks in the client; P2 integration. Details: `docs/workshop/multilevel-crafting-planner.md`.
 
 ## Unresolved decisions (product input needed)
 

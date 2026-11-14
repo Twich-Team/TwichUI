@@ -169,3 +169,143 @@ Pure("crafting.reference.estimate", function(t)
         t:Yield()
     end
 end)
+
+---------------------------------------------------------------------------
+-- The multilevel crafting planner (P1, CraftPlanner.lua; docs/workshop/multilevel-crafting-planner.md). Made-up graphs with explicit inputs:
+-- nothing reads the player's queue, stock, saved source choices or auction data, and the cost service is a stand-in (REF.ChainCostFn) so no
+-- saved market is built. The hand-worked numbers are the ones tests/test_workshop_craftplanner.lua section A checks offline.
+-- Seeds: chains 7540001..7540016.
+---------------------------------------------------------------------------
+local function Planner(t)
+    local CP = t.W.CraftPlanner
+    if not CP then t:Skip("the multilevel planner (CraftPlanner.lua) is not loaded") end
+    return CP
+end
+local function E(item, qty, crafts, id) return { id = id or (900 + item), name = "Final", crafts = crafts or 1, mats = { { item = item, qty = qty } }, outItem = 9999, outMin = 1, outMax = 1 } end
+local function Rec(id, out, per, mats)
+    local m = {}
+    for i = 1, #mats, 2 do m[#m + 1] = { item = mats[i], qty = mats[i + 1] } end
+    return { id = id, name = "R" .. id, outItem = out, outMin = per, outMax = per, mats = m }
+end
+local function Look(price) return { price = price, qty = 1000, listings = 1, total = 1000, at = 1, complete = true } end
+local function Vend(p, s) return { p = p, s = s or 1, a = -1, at = 1, npc = 1 } end
+local function Inp(t)
+    local bags, bank = t.bags or {}, t.bank or {}
+    return { entries = t.entries, picks = t.picks, have = function(i) return bags[i] or 0 end, stock = function(i) return bank[i] or 0, 0 end,
+        auction = function(i) return (t.lookup or {})[i] end, cost = t.cost, vendor = function(i) return (t.vendor or {})[i] end, sells = function() return false end,
+        recipes = function(i) return (t.recipes or {})[i] or {} end }
+end
+local function Line(r, item) for _, l in ipairs(r.items) do if l.item == item then return l end end end
+local TWO = { lookup = { [110] = Look(50), [120] = Look(30) }, vendor = { [200] = Vend(4) },
+    recipes = { [110] = { Rec(510, 110, 1, { 120, 1, 200, 1 }) }, [120] = { Rec(520, 120, 2, { 200, 2 }) } } }
+local function Two(extra) local t = { entries = { E(110, 2) } } for k, v in pairs(TWO) do t[k] = v end for k, v in pairs(extra or {}) do t[k] = v end return t end
+
+Pure("crafting.planner.two-level", function(t)
+    local CP = Planner(t)
+    -- 2 A: buy 100; make A, buy B 68; make both: R 4 x 4 = 16, B crafted before A
+    local r = CP.Plan(Inp(Two()))
+    t:Same(r.summary.economic.low, 16, "two levels: make both for 16")
+    t:Same(r.crafts[1].item .. ">" .. r.crafts[2].item, "120>110", "B is crafted before A")
+    t:Same(Line(r, 200).need, 4, "R's demand is combined over both crafts")
+    t:Check(r.summary.proven, "the plan is the proven best of the options considered")
+    t:Fact("crafting.planner.two-level", ("econ %d cash %d crafts %d %s"):format(r.summary.economic.low, r.summary.cash.low, r.summary.crafts, r.summary.optimization))
+end)
+
+Pure("crafting.planner.shared-stock", function(t)
+    local CP = Planner(t)
+    -- R: 3 in bags, 2 in the bank; demand 4 takes bags 3, bank 1; nothing bought; the owned R are still worth 16
+    local r = CP.Plan(Inp(Two{ bags = { [200] = 3 }, bank = { [200] = 2 } }))
+    local o = Line(r, 200).owned
+    t:Same(o.bags .. "/" .. o.bank, "3/1", "bags first, then the bank, once for both crafts")
+    t:Same(r.summary.cash.low, 0, "no cash"); t:Same(r.summary.economic.low, 16, "owned materials are not free")
+    t:Same(#r.collect, 1, "one collect row")
+end)
+
+Pure("crafting.planner.cycle", function(t)
+    local CP = Planner(t)
+    -- X makes 3 from 1 Y, Y makes 3 from 1 X: making both would settle at no cost and is refused; make X, buy Y (20)
+    local r = CP.Plan(Inp{ entries = { E(410, 1) }, lookup = { [410] = Look(50), [411] = Look(20) },
+        recipes = { [410] = { Rec(710, 410, 3, { 411, 1 }) }, [411] = { Rec(711, 411, 3, { 410, 1 }) } } })
+    t:Same(r.summary.economic.low, 20, "a circle is never a plan, even when it looks free")
+    t:Same(Line(r, 411).alternatives[1].why, "circular", "and the circle is named")
+    -- the same circle with another route for Y (from R at 1): make X and Y from R
+    r = CP.Plan(Inp{ entries = { E(176, 1) }, lookup = { [176] = Look(50), [177] = Look(20) }, vendor = { [178] = Vend(1) },
+        recipes = { [176] = { Rec(576, 176, 1, { 177, 1 }) }, [177] = { Rec(577, 177, 1, { 176, 1 }), Rec(578, 177, 1, { 178, 1 }) } } })
+    t:Same(r.summary.economic.low, 1, "the route that is not circular is used")
+end)
+
+Pure("crafting.planner.alternatives", function(t)
+    local CP = Planner(t)
+    -- two recipes: 2 R (5) = 10 or 1 S (6) = 6: the second, the first 4 dearer
+    local r = CP.Plan(Inp{ entries = { E(185, 1) }, lookup = { [185] = Look(100) }, vendor = { [186] = Vend(5), [187] = Vend(6) },
+        recipes = { [185] = { Rec(585, 185, 1, { 186, 2 }), Rec(586, 185, 1, { 187, 1 }) } } })
+    t:Same(r.crafts[1].recipe, 586, "the cheaper recipe"); t:Same(Line(r, 185).alternatives[2].difference, 4, "the other is 4 dearer")
+    -- three queued crafts each need 1 I (4 at auction, or 3 from 1 R at 9): together one craft for 9 < 12
+    local entries = { E(140, 1, 1, 701), E(140, 1, 1, 702), E(140, 1, 1, 703) }
+    r = CP.Plan(Inp{ entries = entries, lookup = { [140] = Look(4) }, vendor = { [141] = Vend(9) }, recipes = { [140] = { Rec(540, 140, 3, { 141, 1 }) } } })
+    t:Same(r.summary.economic.low, 9, "combined demand: one craft for all three")
+end)
+
+Pure("crafting.planner.ranges", function(t)
+    local CP = Planner(t)
+    local function Cost(a) return function(item, qty)
+        if item == 312 then return { state = "exact", cost = 2 * qty, low = 2 * qty, high = 2 * qty } end
+        if item ~= 311 then return { state = "none" } end
+        if a == "range" then return { state = "range", low = 8 * qty, high = 11 * qty } end
+        return { state = "estimate", low = 8 * qty, high = 99 * qty }
+    end end
+    local chain = { entries = { E(310, 1) }, lookup = { [311] = Look(8), [312] = Look(2) }, recipes = { [310] = { Rec(610, 310, 1, { 311, 1, 312, 1 }) } } }
+    chain.cost = Cost("range")
+    local r = CP.Plan(Inp(chain))
+    t:Same(r.summary.economic.low .. ".." .. tostring(r.summary.economic.high), "10..13", "8-11 plus exactly 2 is 10 to 13")
+    chain.cost = Cost("estimate")
+    r = CP.Plan(Inp(chain))
+    t:Same(r.summary.economic.low .. ".." .. tostring(r.summary.economic.high), "10..nil", "at least 8 plus 2: at least 10, no upper bound")
+end)
+
+Pure("crafting.planner.bounded", function(t)
+    local CP = Planner(t)
+    local w = { entries = {}, lookup = {}, vendor = { [349] = Vend(2), [350] = Vend(3) }, recipes = {} }
+    for i = 1, 8 do
+        local item = 340 + i
+        w.entries[i] = E(item, i, 1, 800 + i)
+        w.lookup[item] = Look(5 + i)
+        w.recipes[item] = { Rec(640 + 2 * i, item, 1 + i % 2, { 349, 1 + i % 3 }), Rec(641 + 2 * i, item, 1, { 350, 1 }) }
+    end
+    local full = CP.Plan(Inp(w), { limits = { states = 1000000 } })
+    t:Yield()
+    local r = CP.Plan(Inp(w), { limits = { states = 10 } })
+    t:Same(full.summary.optimization, "exhaustive", "the full search finishes")
+    t:Same(r.summary.optimization, "bounded", "a search stopped at its limit says so"); t:Check(not r.summary.proven, "and is never called proven")
+    t:Check(r.summary.economic.low >= full.summary.economic.low, "a limited search never beats the full one")
+    t:Fact("crafting.planner.bounded", ("full %d (%d states) limited %d (%d states)"):format(full.summary.economic.low, full.summary.work.states, r.summary.economic.low, r.summary.work.states))
+end)
+
+Pure("crafting.planner.reference", function(t)
+    local CP = Planner(t)
+    if not (FX and FX.Chain and REF and REF.ChainPlan) then t:Skip("the chain fixtures or the reference model are not loaded") end
+    local compared = 0
+    for i = 1, 16 do
+        local seed = 7540000 + i
+        local scn = FX.Chain(seed)
+        local inp = FX.ChainInput(scn, { cost = REF.ChainCostFn(scn) })
+        for _, objective in ipairs({ "economic", "cash" }) do
+            local ref = REF.ChainPlan(scn, { objective = objective })
+            if ref.best then
+                local r = CP.Plan(inp, { objective = objective })
+                local k = ref.best.key
+                t:Same(("%d/%.0f/%.0f/%s/%d"):format(r.summary.missing, r.summary.economic.low, r.summary.cash.low, tostring(r.summary.cash.high), r.summary.crafts),
+                    ("%d/%.0f/%.0f/%s/%d"):format(k.missing, k.econ, k.cash, tostring(k.cashHigh), k.crafts), ("seed %d %s: totals"):format(seed, objective))
+                for item, p in pairs(ref.best.per) do
+                    local l = Line(r, item)
+                    local src = p.rest == 0 and "owned" or p.source
+                    t:Same(l and l.source, src, ("seed %d %s item %d: source"):format(seed, objective, item))
+                end
+                compared = compared + 1
+            end
+        end
+        t:Yield()
+    end
+    t:Fact("crafting.planner.compared", compared)
+    t:Check(compared >= 24, "most seeds compared: " .. compared)
+end)

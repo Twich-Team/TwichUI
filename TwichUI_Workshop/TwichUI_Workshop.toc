@@ -38,6 +38,8 @@ Opportunities.lua
 Vendor.lua
 # The shopping list: where to get each missing material, or whether to make it (pure)
 Shopping.lua
+# The multilevel crafting planner: buy or make every material of the whole chain, combined demand, owned stock once (pure; P1, no window uses it yet)
+CraftPlanner.lua
 # "What's it worth?": vendor, auction and disenchant for one item (pure; disenchant has no outcome data, so it is only ever "no data")
 Worth.lua
 # The "What's it worth?" lines the player chose and their order: the saved layout and the one builder the tooltip and the designer share (pure)

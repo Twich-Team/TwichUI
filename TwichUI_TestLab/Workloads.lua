@@ -673,6 +673,86 @@ Crafting("medium", 80, 10, 24, true)
 Crafting("large", 30, 30, 64, true)
 Crafting("large-noguild", 30, 30, 64, false)
 
+-- 5b. (P1) The multilevel planner, run as P2 must run it: a CraftPlanner.Job advanced PLANNER_STEP work units per step (so the "longest step"
+-- figure is one such slice), one made-up chain after another (FX.Chain; cost from the listings through REF.ChainCostFn, never a saved market).
+-- "small": the reference-sized graphs; "large": 20 to 40 items with several recipes each, most searched to the state limit; "worst": the same
+-- large graphs with dear intermediates (more making, so more branches). verify: every plan's totals against the exhaustive model where the
+-- model can enumerate it (small), else the plan's own feasibility (every demand covered, no item planned twice).
+local PLANNER_STEP = 300   -- CraftPlanner.STEP
+local function Planner(name, count, opt, base)
+    return Add({
+        id = "crafting.planner." .. name, fixture = "crafting.chain", seed = base + 1, size = count, unit = "plans", work = count, v = 1,
+        setup = function(ctx)
+            local W, FX, REF = Ctx(ctx)
+            if not (W and W.CraftPlanner and FX.Chain and REF and REF.ChainCostFn) then return nil end
+            local scns = {}
+            for i = 1, count do scns[i] = FX.Chain(base + i, opt) ctx.yield() end
+            return { W = W, FX = FX, REF = REF, scns = scns, work = count }
+        end,
+        fingerprint = function(st, ctx)
+            local parts, between = {}, Budget(ctx)
+            for i, scn in ipairs(st.scns) do parts[i] = TL.Bench.Ser(scn) between() end
+            return table.concat(parts, "|")
+        end,
+        begin = function(st)
+            local CP, FX, REF, scns = st.W.CraftPlanner, st.FX, st.REF, st.scns
+            local at, job, results, chk = 0, nil, {}, 0
+            return function()
+                if not job then
+                    at = at + 1
+                    local scn = scns[at]
+                    job = CP.Job(FX.ChainInput(scn, { cost = REF.ChainCostFn(scn) }))
+                end
+                if job:Step(PLANNER_STEP) then
+                    local r = job:Result()
+                    results[at] = r
+                    chk = (chk * 31 + #r.items + #r.crafts + (r.summary.economic.low or 0) % 1000003) % 2147483629
+                    job = nil
+                end
+                return job == nil and at >= #scns
+            end, function() return { results = results, chk = chk } end
+        end,
+        signature = function(out)
+            local parts = {}
+            for i, r in ipairs(out.results) do
+                local s = r.summary
+                parts[i] = ("%.0f/%s/%d/%s"):format(s.economic.low, tostring(s.economic.high), s.missing, s.optimization)
+            end
+            return out.chk .. "/" .. table.concat(parts, ";")
+        end,
+        verify = function(st, out, ctx)
+            local REF = st.REF
+            local compared = 0
+            for i, scn in ipairs(st.scns) do
+                local r = out.results[i]
+                if not r then return false, "plan " .. i .. " is missing" end
+                local seen = {}
+                for _, l in ipairs(r.items) do
+                    if seen[l.item] then return false, ("plan %d: item %d is planned twice"):format(i, l.item) end
+                    seen[l.item] = true
+                    if l.rest > 0 and l.source ~= "make" and not (l.buy and l.buy.qty == l.rest) then return false, ("plan %d: item %d is not covered"):format(i, l.item) end
+                end
+                if opt.size ~= "large" then
+                    local ref = REF.ChainPlan(scn)
+                    if ref.best then
+                        if ref.best.key.econ ~= r.summary.economic.low or ref.best.key.missing ~= r.summary.missing then
+                            return false, ("plan %d (seed %d): economic %s with %d unknown, the exhaustive model %s with %d"):format(i, base + i,
+                                tostring(r.summary.economic.low), r.summary.missing, tostring(ref.best.key.econ), ref.best.key.missing)
+                        end
+                        compared = compared + 1
+                    end
+                end
+                ctx.yield()
+            end
+            if opt.size ~= "large" and compared == 0 then return false, "no plan could be compared with the exhaustive model" end
+            return true
+        end,
+    })
+end
+Planner("small", 40, {}, 7640000)
+Planner("large", 12, { size = "large" }, 7641000)
+Planner("worst", 8, { size = "large", markup = 6 }, 7642000)
+
 ---------------------------------------------------------------------------
 -- 6. What is deliberately NOT here
 ---------------------------------------------------------------------------

@@ -428,6 +428,175 @@ function FX.PlanInput(scn, rows, opt)
     }
 end
 
+---------------------------------------------------------------------------
+-- Multilevel crafting chains (P1, the multilevel planner: docs/workshop/multilevel-crafting-planner.md)
+---------------------------------------------------------------------------
+-- SEEDS used by the tests and the Lab: chains 7540000+i; larger graphs 7550000+i; benchmarks 7640000+i.
+-- A layered graph: raw materials (level 0), intermediates (levels 1 to 3) made from lower levels, sometimes by two recipes, sometimes with a
+-- recipe that reaches UP a level or uses its own output (a circle), a varying or unknown output, uncountable materials or a recipe the
+-- character does not know (scn.unavailable). The queue's crafts use intermediates and raw materials; one may make an intermediate (a queued
+-- credit). Everything is small unless opt.size asks otherwise, so the reference can enumerate every choice. Nothing is a real item or price.
+-- opt: raw (2..), levels ({ n1, n2, n3 } intermediates per level), entries, cycles (chance of a circular recipe, default 0.12), size
+-- ("small" default, "large": more of everything, for invariant and bounded-search tests and benchmarks), markup (a whole-number factor on the
+-- prices of intermediates, default 1: a larger one makes making them, and so deeper chains, the cheaper choice more often), top (the queue uses
+-- only the highest level's items).
+-- Returns { seed, now, items (all ids, ascending), level = { [item] = 0..3 }, entries, bags, bank, guild, unknown, vendor, sells, listings =
+--   { [item] = { { b, c } } } (b = buyout of a stack of c, whole-copper units), auction = { [item] = Prices.Lookup-shaped }, recipes =
+--   { [item] = { recipe } }, unavailable = { [recipeId] = true }, picks = { [item] = kind } }
+local CHAIN_UNITS = { 1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 30, 45, 60, 90, 150 }
+function FX.Chain(seed, opt)
+    opt = opt or {}
+    local rng = FX.Rng(seed)
+    local large = opt.size == "large"
+    local nRaw = Clamp(opt.raw, 1, 40, large and rng:Int(6, 14) or rng:Int(2, 4))
+    local levels = opt.levels or (large and { rng:Int(4, 8), rng:Int(3, 6), rng:Int(2, 4) } or { rng:Int(1, 3), rng:Int(0, 2), rng:Chance(0.3) and 1 or 0 })
+    local cycleChance = opt.cycles or 0.12
+    local used, items, level, byLevel = {}, {}, {}, { [0] = {} }
+    local function NewId()
+        local id
+        repeat id = rng:Int(100, 9000) until not used[id]
+        used[id] = true
+        items[#items + 1] = id
+        return id
+    end
+    for _ = 1, nRaw do local id = NewId() level[id] = 0 byLevel[0][#byLevel[0] + 1] = id end
+    for L = 1, 3 do
+        byLevel[L] = {}
+        for _ = 1, Clamp(levels[L], 0, 20, 0) do local id = NewId() level[id] = L byLevel[L][#byLevel[L] + 1] = id end
+    end
+    local below = {}   -- the items of levels lower than L
+    local recipes, unavailable, nextRecipe = {}, {}, 30000
+    local function Recipe(out, from, must)
+        nextRecipe = nextRecipe + rng:Int(1, 9)
+        local r = { id = nextRecipe, name = "Make " .. out .. "/" .. nextRecipe, outItem = out }
+        local k = rng:Int(1, math.min(3, #from))
+        local copy = {}
+        for i, id in ipairs(from) do copy[i] = id end
+        rng:Shuffle(copy)
+        r.mats = {}
+        for i = 1, k do r.mats[i] = { item = copy[i], qty = rng:Int(1, 4) } end
+        if must and not (function() for _, m in ipairs(r.mats) do if m.item == must then return true end end end)() then
+            r.mats[#r.mats + 1] = { item = must, qty = rng:Int(1, 3) }
+        end
+        if rng:Chance(0.08) then r.mats[#r.mats + 1] = { item = r.mats[1].item, qty = rng:Int(1, 2) } end   -- the same reagent listed twice
+        local roll = rng:Next()
+        if roll < 0.80 then r.outMin = rng:Pick({ 1, 1, 2, 3, 5 }) r.outMax = r.outMin
+        elseif roll < 0.86 then r.outMin = rng:Int(1, 2) r.outMax = r.outMin + 1   -- a range
+        elseif roll < 0.90 then r.outMin = nil                                        -- the output is not known
+        elseif roll < 0.93 then r.mats = nil                                          -- materials not countable
+        else r.outMin = rng:Int(1, 3) end                                             -- outMax not given: a fixed output
+        if rng:Chance(0.06) then unavailable[r.id] = true end
+        return r
+    end
+    for L = 1, 3 do
+        for _, id in ipairs(byLevel[L - 1]) do below[#below + 1] = id end
+        for _, id in ipairs(byLevel[L]) do
+            local list = {}
+            local lower = byLevel[L - 1]
+            for _ = 1, rng:Chance(0.35) and 2 or 1 do list[#list + 1] = Recipe(id, below, #lower > 0 and rng:Pick(lower) or nil) end
+            recipes[id] = list
+        end
+    end
+    -- circles: a lower item made from a higher one, or an item that uses itself
+    for _, id in ipairs(items) do
+        if level[id] < 3 and rng:Chance(cycleChance) then
+            local higher = {}
+            for _, x in ipairs(items) do if level[x] > level[id] then higher[#higher + 1] = x end end
+            if #higher > 0 then
+                local r = Recipe(id, higher)
+                recipes[id] = recipes[id] or {}
+                table.insert(recipes[id], r)
+            end
+        end
+        if recipes[id] and rng:Chance(cycleChance / 3) then
+            local r = Recipe(id, { id })
+            table.insert(recipes[id], r)
+        end
+    end
+    -- the queue
+    local entries = {}
+    local nEntries = Clamp(opt.entries, 1, large and 30 or 4, large and rng:Int(4, 12) or rng:Int(1, 3))
+    local top = {}
+    for L = 3, 1, -1 do for _, id in ipairs(byLevel[L]) do top[#top + 1] = id end end
+    for i = 1, nEntries do
+        local e = { id = 5000 + i, name = "Final " .. i, crafts = rng:Int(1, large and 6 or 3) }
+        local from = {}
+        for _, id in ipairs(top) do from[#from + 1] = id end
+        if opt.top then   -- only the highest level the graph has: every chain starts at its top
+            from = {}
+            for L = 3, 1, -1 do if #byLevel[L] > 0 and #from == 0 then for _, id in ipairs(byLevel[L]) do from[#from + 1] = id end end end
+        end
+        for _, id in ipairs(byLevel[0]) do if not opt.top and rng:Chance(0.4) then from[#from + 1] = id end end
+        if #from == 0 then from = byLevel[0] end
+        rng:Shuffle(from)
+        e.mats = {}
+        for k = 1, math.min(#from, rng:Int(1, 3)) do e.mats[k] = { item = from[k], qty = rng:Int(1, 4) } end
+        if rng:Chance(0.02) then e.mats = nil end
+        if rng:Chance(0.12) and #byLevel[1] > 0 then
+            e.outItem = rng:Pick(byLevel[1]) e.outMin = rng:Int(1, 2) e.outMax = e.outMin   -- a queued craft makes an intermediate
+            e.mats = { { item = rng:Pick(byLevel[0]), qty = rng:Int(1, 3) } }
+        else
+            e.outItem = 9500 + i e.outMin = 1 e.outMax = 1
+        end
+        entries[i] = e
+    end
+    -- stock, merchants, auctions
+    local bags, bank, guild, unknown, vendor, sells, listings, auction = {}, {}, {}, {}, {}, {}, {}, {}
+    for _, id in ipairs(items) do
+        if rng:Chance(0.04) then unknown[id] = true else bags[id] = rng:Chance(0.55) and 0 or rng:Int(1, 8) end
+        bank[id] = rng:Chance(0.7) and 0 or rng:Int(1, 6)
+        guild[id] = rng:Chance(0.8) and 0 or rng:Int(1, 6)
+        local base = rng:Pick(CHAIN_UNITS) * (level[id] + 1) * (level[id] > 0 and Clamp(opt.markup, 1, 20, 1) or 1)
+        if rng:Chance(level[id] == 0 and 0.5 or 0.15) then
+            vendor[id] = { p = base * rng:Pick({ 1, 1, 2, 5 }), s = rng:Pick({ 1, 1, 5, 10 }), a = rng:Pick({ -1, -1, -1, 4, 40 }), at = FX.NOW - rng:Pick(AGES), npc = 900 + id % 50 }
+            sells[id] = true
+        elseif rng:Chance(0.05) then
+            sells[id] = true
+        end
+        if rng:Chance(0.8) then
+            local recs, unit = {}, base + rng:Int(0, 3)
+            for _ = 1, rng:Int(1, 4) do
+                local c = rng:Pick({ 1, 1, 2, 3, 5, 10 })
+                recs[#recs + 1] = { b = unit * c, c = c }
+                if rng:Chance(0.5) then unit = unit + rng:Int(1, 6) end
+            end
+            listings[id] = recs
+            local cheapest, qty, total, n = nil, 0, 0, #recs
+            for _, r in ipairs(recs) do
+                local u = r.b / r.c
+                total = total + r.c
+                if not cheapest or u < cheapest then cheapest, qty = u, r.c elseif u == cheapest then qty = qty + r.c end
+            end
+            auction[id] = { price = cheapest, qty = qty, listings = n, total = total, at = FX.NOW - 600, complete = true, scope = "full" }
+        end
+    end
+    -- the player's choices, now and then (some of them impossible on purpose)
+    local picks = {}
+    if opt.picks ~= false and rng:Chance(0.3) then
+        local id = rng:Pick(items)
+        picks[id] = rng:Pick({ "vendor", "auction", "make" })
+    end
+    table.sort(items)
+    return { seed = seed, now = FX.NOW, items = items, level = level, entries = entries, bags = bags, bank = bank, guild = guild, unknown = unknown,
+        vendor = vendor, sells = sells, listings = listings, auction = auction, recipes = recipes, unavailable = unavailable, picks = picks }
+end
+
+-- The multilevel planner's input for a chain scenario. opt.cost(item, qty) is the purchase-cost service (Market.Cost-shaped; the offline test gives
+-- the real Market.Cost over a market built from scn.listings, the Lab a stand-in); opt.auction overrides the price lookup; opt.picks overrides
+-- scn.picks; opt.limits is passed by the caller to the planner, not here.
+function FX.ChainInput(scn, opt)
+    opt = opt or {}
+    return {
+        entries = scn.entries, picks = opt.picks or scn.picks, have = FX.CraftHave(scn), stock = FX.CraftStock(scn),
+        auction = opt.auction or function(item) return scn.auction[item] end,
+        cost = opt.cost,
+        vendor = function(item) return scn.vendor[item] end,
+        sells = function(item) return scn.sells[item] == true end,
+        recipes = function(item) return scn.recipes[item] or {} end,
+        available = function(rec) return not scn.unavailable[rec.id] end,
+    }
+end
+
 -- Recipes as the window may read them, with a price lookup and an optional cut: for the craft estimate and the Opportunities list.
 -- Some recipes are deliberately incomplete (no materials, no output item, an output the game gave only as a maximum, a maximum below the
 -- minimum), because those are the shapes Prices.Estimate has to refuse or repair. recipes[i] = { id, name, prof, outItem, outMin, outMax, mats }.

@@ -18,7 +18,7 @@
 dofile(TESTS .. "mi_mock.lua")
 
 local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua",
-    "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Valuation.lua", "Session.lua" }
+    "Vendor.lua", "Shopping.lua", "CraftPlanner.lua", "Scan.lua", "Market.lua", "Valuation.lua", "Session.lua" }
 local LAB = ROOT .. "../TwichUI_TestLab/"
 
 local opt = { only = {}, reps = 5 }
