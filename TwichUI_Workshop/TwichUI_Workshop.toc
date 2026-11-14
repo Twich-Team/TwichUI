@@ -80,6 +80,7 @@ ViewOverview.lua
 ViewOpportunities.lua
 ViewCrafting.lua
 ViewShopping.lua
+ViewAdvisor.lua
 # The full strategy view and the confirmation before an optimized plan is added to the queue (P2)
 ViewStrategy.lua
 # The compact companion: Travel and Craft, a small panel in the window's place (P2.1)

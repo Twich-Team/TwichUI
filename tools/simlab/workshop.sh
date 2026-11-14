@@ -40,7 +40,7 @@ set -euo pipefail
 selection=()
 read -r -a selection <<< "${SIMLAB_ONLY:-}"
 for pose in "${selection[@]}"; do
-  case " overview craft opps shop design small smallov empty history craftlong shopmix shopcollect strategy confirm stratlong planning nodata override compact compactcraft tooltip smallstrat shopafter notice wrong " in
+  case " overview craft opps shop design small smallov empty history craftlong shopmix shopcollect strategy confirm stratlong planning nodata override compact compactcraft tooltip smallstrat shopafter notice advisor advisorsmall advisorempty advisorscaled wrong " in
     *" $pose "*) ;; *) echo "simlab: unknown Workshop pose: $pose" >&2; exit 2 ;;
   esac
 done
@@ -87,6 +87,10 @@ fixture tooltip '{ view = "tooltip" }'
 fixture smallstrat '{ view = "smallstrat" }'
 fixture shopafter '{ view = "shopafter" }'
 fixture notice '{ view = "notice" }'
+fixture advisor '{ view = "advisor" }'
+fixture advisorsmall '{ view = "advisorsmall" }'
+fixture advisorempty '{ view = "advisorempty" }'
+fixture advisorscaled '{ view = "advisorscaled" }'
 fixture wrong "{ view = \"craft\", wrongAt = \"$WRONG_AT\" }"
 
 repo_before="$(git -C "$REPO" status --porcelain --ignored)"
@@ -129,6 +133,10 @@ launch tooltip screenshot --png -o "$RUN/tooltip.png" --width 1600 --height 1200
 launch smallstrat screenshot --png -o "$RUN/smallstrat.png" --width 1000 --height 700
 launch shopafter screenshot --png -o "$RUN/shopafter.png" --width 1600 --height 1200
 launch notice screenshot --png -o "$RUN/notice.png" --width 1600 --height 1200
+launch advisor screenshot --png -o "$RUN/advisor.png" --width 1600 --height 1200
+launch advisorsmall screenshot --png -o "$RUN/advisorsmall.png" --width 1000 --height 700
+launch advisorempty screenshot --png -o "$RUN/advisorempty.png" --width 1600 --height 1200
+launch advisorscaled screenshot --png -o "$RUN/advisorscaled.png" --width 1600 --height 1200
 launch wrong dump-tree --visible-only
 
 echo "artifacts: $RUN"

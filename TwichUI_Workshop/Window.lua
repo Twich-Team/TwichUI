@@ -28,7 +28,7 @@ local PAGE_TOP, PAGE_BOTTOM = HEADER_H + 12, FOOTER_H + 13
 local SETTLE = 0.2
 -- The page list: the views registered themselves (UI.Register) in this order. Later destinations (Item Advisor, Market, Ledger) join as a
 -- second group under the divider without changing the shell.
-local NAV_GROUPS = { { "overview", "opps", "craft", "shop" } }
+local NAV_GROUPS = { { "overview", "opps", "craft", "shop", "advisor" } }
 
 local L, K
 local f               -- the window
@@ -304,6 +304,7 @@ local function BuildNav()
         end
     end
     -- the names the tests and the simulator scenario use
+    f.tabAdvisor = navItems.advisor
     f.tabOverview, f.tabOpps, f.tabCraft, f.tabShop = navItems.overview, navItems.opps, navItems.craft, navItems.shop
 end
 

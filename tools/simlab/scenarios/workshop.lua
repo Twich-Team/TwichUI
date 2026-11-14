@@ -2032,7 +2032,35 @@ end)
 Lab.Step("pose for the screenshot", function()
     local view = params.view or "craft"
     Say("pose", view)
-    if view == "craft" then
+    if view == "advisor" or view == "advisorsmall" or view == "advisorempty" or view == "advisorscaled" then
+        local W=R.Workshop
+        local ids={}; for _,e in ipairs(W.Queue.Entries()) do ids[#ids+1]=e.id end
+        for _,id in ipairs(ids) do W.Session.Remove(id) end
+        SetBags({[2447]=20,[765]=4,[3371]=10})
+        local m=W.Session.PriceSource().market
+        if view=="advisorempty" then
+            for key in pairs(TwichUIWorkshopDB.markets) do TwichUIWorkshopDB.markets[key]=nil end
+        elseif m then
+            local b=W.Prices.NewBatch()
+            for i=1,5 do b:Add(2447,20,2000,true) end
+            local items,_,_,_,dist=b:Items()
+            m.items[2447]=items[2447]; m.dist=m.dist or {}; m.dist[2447]=dist[2447]
+            m.at=time()-60; m.complete=true; m.scope="full"
+            m.snap=m.snap or {}; m.snap.seq=(m.snap.seq or 0)+1; m.snap.at=m.at; m.snap.alg=1
+            m.h2=m.h2 or {}; m.c2=m.c2 or {}
+            local day=math.floor(time()/86400); local days={}
+            for d=day-10,day do days[#days+1]={d=d,p=100,r=100,t=100,l=5,n=1,plo=100,phi=100,rlo=100,rhi=100,tlo=100,thi=100} end
+            m.h2[2447],m.c2[2447]=W.History2.Encode({},days,nil)
+            m.h2info=m.h2info or {v=1,from=day-10}; m.h2info.at=m.at
+        end
+        W.UI.Advisor.Open(2447); Lab.Settle(0.8)
+        local p=Win().Page("advisor")
+        Check("display","pose: Advisor is a first-class sidebar page","advisor/true",Win().Mode() .. "/" .. tostring(Win().Frame().tabAdvisor:IsShown()))
+        Check("state","pose: real source catalog selected Peacebloom",2447,p.result and p.result.item)
+        Check("display","pose: advisor never claims net proceeds",true,p.result and (not p.result.proceeds or p.result.proceeds.net==nil))
+        Check("state","pose: expected advice",view=="advisorempty" and "unknown" or "auction",p.result and p.result.action)
+        if view=="advisorscaled" then Win().Frame():SetScale(0.8) end
+    elseif view == "craft" then
         Tab("Crafting")
         Click(Win().Craft().segQueue, "Craft queue (the left card)")
         Click(Rows(Lists().queue)[2], "choose the second queued craft")

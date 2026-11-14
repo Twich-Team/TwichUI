@@ -69,6 +69,6 @@
     "tests": ["test_workshop_advisor*.lua"],
     "syntax": ["TwichUI_Workshop/**/*.lua"],
     "dependencies": ["market", "crafting"],
-    "simulators": [{"script": "workshop", "only": ["opps", "history", "craft", "wrong"]}]
+    "simulators": [{"script": "workshop", "only": ["advisor", "advisorsmall", "advisorempty", "advisorscaled", "craft", "wrong"]}]
   }
 }
