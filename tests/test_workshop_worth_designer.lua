@@ -42,7 +42,7 @@ for _, file in ipairs({ "../TwichUI_Settings/Kit.lua", "../TwichUI_Settings/Widg
 end
 local D = R.WorkshopWorthDesigner
 local WORKSHOP_FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua",
-  "Vendor.lua", "Shopping.lua", "Worth.lua", "WorthLayout.lua" }
+  "Vendor.lua", "Shopping.lua", "MarketFacts.lua", "Worth.lua", "WorthLayout.lua" }
 -- the launcher: loading the Workshop is what makes R.Workshop exist (the real one calls LoadAddOn)
 local loads, refuse = 0, nil
 R.WorkshopLauncher = {
@@ -81,7 +81,7 @@ local function Ids()
   for _, e in ipairs(R.Workshop.WorthLayout.Get().lines) do out[#out + 1] = e.id .. (e.when == "shift" and "*" or "") end
   return table.concat(out, ",")
 end
-local DEFAULT = "recommend,vendor,auction,disenchant,status*,source*,note*"
+local DEFAULT = "recommend,vendor,auction,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*"
 
 ---------------------------------------------------------------------------
 -- Before the Workshop is loaded
@@ -142,12 +142,12 @@ for _, e in ipairs(L.EXAMPLES) do
   end
 end
 D.SetExample("ordinary"); D.SetMode(false)
-Same(table.concat(Mock(), "\n"), "Suggested: Vendor\nVendor | 500c\nAuction (before fees) | 400c\n(Disenchant value (average): nothing to show for this example)",
+Same(table.concat(Mock(), "\n"), "Suggested: Vendor\nVendor | 500c\nAuction (before fees) | 400c\n(Disenchant value (average): nothing to show for this example)\nMarket value (14 days) | 420c",
   "ordinary item, Normal") -- coin text is the fallback in this harness
 Check(f.mock.hint.shown ~= false and f.mock.hint.text == "Hold Shift for details", "the hint in Normal")
 D.SetMode(true)
 Check(f.mock.hint.shown == false, "no hint while previewing Hold Shift")
-Check(#Mock() == 7, "Hold Shift adds the Shift lines to the Always lines")
+Check(#Mock() == 12, "Hold Shift adds the Shift lines to the Always lines")
 D.SetMode(false)
 D.SetExample("missing")
 Check(table.concat(Mock(), "\n"):find("More prices needed", 1, true) and table.concat(Mock(), "\n"):find("Auction | no price", 1, true), "missing prices")
@@ -172,13 +172,13 @@ Check(f.selTitle.text == "Vendor value" and f.up.shown ~= false and f.up.enabled
 Click(D.Row(2)); Same(D.Selected(), nil, "again deselects")
 Check(f.up.shown == false and Has(f, "Click a line in the preview"), "and they go")
 Click(D.Row(2))
-Click(f.down); Same(Ids(), "recommend,auction,vendor,disenchant,status*,source*,note*", "Move down")
-Click(f.up); Click(f.up); Same(Ids(), "vendor,recommend,auction,disenchant,status*,source*,note*", "Move up (twice)")
+Click(f.down); Same(Ids(), "recommend,auction,vendor,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*", "Move down")
+Click(f.up); Click(f.up); Same(Ids(), "vendor,recommend,auction,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*", "Move up (twice)")
 Check(f.up.enabled == false, "no further up from the top")
 Click(f.down); Click(f.down)
 -- steps are among the lines SHOWN: Normal skips the hidden Shift lines
 D.Select("vendor"); D.Select("vendor")   -- clear
-D.Select("disenchant")
+D.Select("marketvalue")
 Check(f.down.enabled == false, "Normal: nothing shown below it (the rest is Hold Shift only)")
 D.SetMode(true)
 Check(f.down.enabled == true, "Hold Shift preview: the Shift lines are shown, so it can step down")
@@ -238,7 +238,7 @@ Check(c.TwichUIDB.workshop == nil, "never in the account-wide Workshop record")
 -- the mockup sits at the top left of a 1000 high screen; a pointer at rel pixels below its top
 local mock = f.mock
 mock.GetLeft = function() return 100 end; mock.GetRight = function() return 404 end
-mock.GetTop = function() return 1000 end; mock.GetBottom = function() return 800 end
+mock.GetTop = function() return 1000 end; mock.GetBottom = function() return 700 end
 local cursor = { x = 0, y = 0 }
 c.GetCursorPosition = function() return cursor.x, cursor.y end
 local function Point(rel) cursor.x, cursor.y = 150, 1000 - rel end
@@ -247,7 +247,7 @@ local function RowMid(i) local m = D.Model() return (m.tops[i] + m.bottoms[i]) /
 
 D.SetMode(false)
 D.RemoveLine("auction")
-Same(Ids(), "recommend,vendor,disenchant,status*,source*,note*")
+Same(Ids(), "recommend,vendor,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*")
 -- drag "Auction value" from the list and let go above the second row
 local b = D.ListButton(3)
 b.scripts.OnDragStart(b)
@@ -256,7 +256,7 @@ Point(RowMid(2) - 1)   -- over the first half of row 2 (vendor): before it
 Same(D.Find(), 1, "the gap before row 2")
 Check(Drag.Source().kind == "list", "carrying a line from the list")
 Drag.Stop()   -- OnDragStop does this
-Same(Ids(), "recommend,auction,vendor,disenchant,status*,source*,note*", "dropped between the first two rows")
+Same(Ids(), "recommend,auction,vendor,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*", "dropped between the first two rows")
 Check(not Drag.Active() and f.marker.shown == false, "the marker is gone")
 -- the marker follows the pointer while it is held (the carried label's per-frame update asks where the pointer is)
 do
@@ -278,21 +278,21 @@ do
   ghost.scripts.OnUpdate(ghost)
   Check(f.marker.shown == false, "no marker outside the mockup")
   lb.scripts.OnDragStop(lb)
-  Same(Ids(), "recommend,auction,vendor,disenchant,status*,source*,note*", "released outside: unchanged")
+  Same(Ids(), "recommend,auction,vendor,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*", "released outside: unchanged")
 end
 b = D.ListButton(7)   -- outcomes
 b.scripts.OnDragStart(b)
 Point(RowMid(1) - 2)
 Same(D.Find(), 0, "the gap at the top")
 Drag.Cancel()
-Same(Ids(), "recommend,auction,vendor,disenchant,status*,source*,note*", "cancelled: nothing changed")
+Same(Ids(), "recommend,auction,vendor,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*", "cancelled: nothing changed")
 -- dropped outside the mockup: nothing changes, and it is said
 b = D.ListButton(7)
 b.scripts.OnDragStart(b)
 cursor.x, cursor.y = 5000, 5000
 Same(D.Find(), nil, "outside the mockup there is no target")
 b.scripts.OnDragStop(b)
-Same(Ids(), "recommend,auction,vendor,disenchant,status*,source*,note*", "dropped outside: unchanged")
+Same(Ids(), "recommend,auction,vendor,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*", "dropped outside: unchanged")
 Check(Has(f, "Nothing changed."), "and it says so")
 Check(not Drag.Active(), "and the drag is over")
 -- a line already in the preview cannot be dragged from the list again
@@ -308,24 +308,24 @@ Check(Drag.Active() and Drag.Source().kind == "row" and Drag.Source().id == "not
 Check(row.alpha == 0.4, "the carried row is dimmed")
 Point(2)
 row.scripts.OnDragStop(row)
-Same(Ids(), "note*,recommend,auction,vendor,disenchant,status*,source*", "the row moved to the top")
+Same(Ids(), "note*,recommend,auction,vendor,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*", "the row moved to the top")
 Check(row.alpha == 1 or D.Row(last).alpha == 1, "dimming ends")
 -- a row dropped where it already is does not change anything
 row = D.Row(2)
 row.scripts.OnDragStart(row)
 Point(RowMid(2) + 1)
 row.scripts.OnDragStop(row)
-Same(Ids(), "note*,recommend,auction,vendor,disenchant,status*,source*", "dropped on itself: unchanged")
+Same(Ids(), "note*,recommend,auction,vendor,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*", "dropped on itself: unchanged")
 -- below the last row: the end
 row = D.Row(1)
 row.scripts.OnDragStart(row)
 Point(D.Model().bottoms[#D.Model().sec.rows] + 3)
 row.scripts.OnDragStop(row)
-Same(Ids(), "recommend,auction,vendor,disenchant,status*,source*,note*", "dropped below the last row: moved to the end")
+Same(Ids(), "recommend,auction,vendor,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*", "dropped below the last row: moved to the end")
 -- the gap to a place in the layout, in the Normal preview (hidden lines in between)
 D.SetMode(false)
 Same(D.PositionOf(0), 1); Same(D.PositionOf(1), 2)
-Same(D.PositionOf(#D.Model().sec.rows), 5, "after the last SHOWN line: before the hidden Shift lines")
+Same(D.PositionOf(#D.Model().sec.rows), 6, "after the last SHOWN line (the market value is the fifth): before the hidden Shift lines")
 D.SetMode(false)
 -- a hidden Shift line before the shown ones: a gap means a place in the whole layout, not a count of the rows shown
 L.SetLines({ { id = "status", when = "shift" }, { id = "vendor", when = "always" }, { id = "note", when = "shift" }, { id = "auction", when = "always" } })

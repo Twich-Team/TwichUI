@@ -648,19 +648,23 @@ local function WorthWorld()
         if not w then return oldInfo(x) end
         return ITEMS[id], "link", w[2], 10, 1, "", "", 20, "", ICON, w[1], w[3], 0, w[4]
     end
-    local lines, shift = {}, false
-    tt.AddLine = function(_, text) if text ~= " " then lines[#lines + 1] = text end end
-    tt.AddDoubleLine = function(_, a, b) lines[#lines + 1] = a .. " | " .. b end
+    local lines, mlines, shift = {}, {}, false
+    -- the A7 market lines (Market value, Recent price, Historical value, Supply, Market data) are collected apart: the checks of the older lines
+    -- compare the Vendor / Auction / recommendation lines exactly as before, and the market lines have checks of their own (HoverMarket)
+    local function IsMarket(text) return text:find("^Market value") or text:find("^Recent price") or text:find("^Historical value") or text:find("^Supply") or text:find("^Market data") end
+    tt.AddLine = function(_, text) if text ~= " " then if IsMarket(text) then mlines[#mlines + 1] = text else lines[#lines + 1] = text end end end
+    tt.AddDoubleLine = function(_, a, b) if IsMarket(a) then mlines[#mlines + 1] = a .. " | " .. b else lines[#lines + 1] = a .. " | " .. b end end
     IsShiftKeyDown = function() return shift end
     local function Hover(id, data)
-        lines = {}
+        lines, mlines = {}, {}
         WT.OnItem(tt, data or { guid = "Item-" .. id .. "-0", id = id })
         return Norm(table.concat(lines, " / "))
     end
+    local function HoverMarket(id) Hover(id) return Norm(table.concat(mlines, " / ")) end
 
     return {
         WT = WT, tt = tt, ah = ah,
-        Hover = Hover,
+        Hover = Hover, HoverMarket = HoverMarket,
         SetShift = function(on) shift = on end,
         Restore = function()
             tt.AddLine, tt.AddDoubleLine, IsShiftKeyDown, C_Item.GetItemInfo = oldLine, oldDouble, oldShift, oldInfo
@@ -741,17 +745,23 @@ Lab.Step("what's it worth: tooltip designer", function()
         local out = { Txt(f.mock.title) }
         for i = 1, #D.Model().sec.rows do
             local r = D.Row(i)
-            out[#out + 1] = r.wide:IsShown() and Txt(r.wide) or (Txt(r.left) .. " | " .. Txt(r.right))
+            local text = r.wide:IsShown() and Txt(r.wide) or (Txt(r.left) .. " | " .. Txt(r.right))
+            if not text:find("^%(?Market value") and not text:find("^%(?Recent price") and not text:find("^%(?Historical value") and not text:find("^%(?Supply")
+                and not text:find("^%(?Market data") then out[#out + 1] = text end   -- (the A7 market lines have their own check)
         end
         if f.mock.hint:IsShown() then out[#out + 1] = Txt(f.mock.hint) end
         return table.concat(out, " / ")
     end
     local function NoPlaceholders(text) return (text:gsub(" / %(%u[^%)]-%)%)", ""):gsub(" / %([^/]-nothing to show for this example%)", "")) end
-    local function Layout() local t = {} for _, e in ipairs(WL.Get().lines) do t[#t + 1] = e.id .. (e.when == "shift" and "*" or "") end return table.concat(t, ",") end
+    local A7 = { marketvalue = true, recent = true, historical = true, supply = true, quality = true }   -- (the A7 lines: checked on their own)
+    local function Layout() local t = {} for _, e in ipairs(WL.Get().lines) do if not A7[e.id] then t[#t + 1] = e.id .. (e.when == "shift" and "*" or "") end end return table.concat(t, ",") end
     local DEFAULT = "recommend,vendor,auction,disenchant,status*,source*,note*"
     local function Live(shiftHeld) w.SetShift(shiftHeld) return w.Hover(2841) end   -- Bronze Bar: vendor 5s, cheapest listing 4s, before fees
 
     Check("state", "the layout starts as the short default", DEFAULT, Layout())
+    Check("state", "the A7 market lines are in the default: market value Always, the rest Hold Shift", "marketvalue,recent*,historical*,supply*,quality*",
+        (function() local t = {} for _, e in ipairs(WL.Get().lines) do if A7[e.id] then t[#t + 1] = e.id .. (e.when == "shift" and "*" or "") end end return table.concat(t, ",") end)())
+    Check("direct", "the live tooltip carries the market value line, labelled as a 14-day reference", true, w.HoverMarket(2841):find("Market value (14 days)", 1, true) ~= nil)
     Check("display", "Normal preview of the ordinary example",
         "What's it worth? / Suggested: Vendor / Vendor | 5s / Auction (before fees) | 4s / (Disenchant value (average): nothing to show for this example) / Hold Shift for details", Mock())
     Check("display", "labelled as preview data", true, Txt(f.caption):find("Preview data", 1, true) ~= nil)
@@ -952,13 +962,13 @@ Lab.Step("shopping: combined list, sources, total, warning", function()
     local s = Lists().shop
     Check("display", "rows: buys by item number, then the made item",
         "Silverleaf | Coarse Thread | Peacebloom | Copper Ore | Tin Ore | Bronze Bar", Names(s))
-    Check("display", "Peacebloom (auction, exact)", "3 | Auction house | 15c | just now | -", Line("Peacebloom"))
+    Check("display", "Peacebloom (auction, exact)", "3 | Auction house | 15c | to 1s | -", Line("Peacebloom"))
     Check("display", "Silverleaf (unpriced: not enough listed)", "3 | No source | Unknown | no price | -", Line("Silverleaf"))
     Check("display", "Coarse Thread (vendor)", "1 | Vendor | 25c | just now | Show vendor", Line("Coarse Thread"))
-    Check("display", "Copper Ore (2 to buy for the subcraft)", "2 | Auction house | 70c | just now | -", Line("Copper Ore"))
+    Check("display", "Copper Ore (2 to buy for the subcraft)", "2 | Auction house | 70c | to 7s | -", Line("Copper Ore"))
     Check("display", "Tin Ore (vendor stack of 5 for 3 needed)", "3 | Vendor | 80c | just now | Show vendor", Line("Tin Ore"))
     Check("display", "Bronze Bar (make suggested)", "5 | Make | 1s 50c | materials, counted in their rows | Add to crafting plan", Line("Bronze Bar"))
-    Check("display", "Peacebloom detail", "Suggested source. Only the auction house has a price.", Explain("Peacebloom"))
+    Check("display", "Peacebloom detail", "Suggested source. Only the auction house has a price. Auctions may require buying larger stacks.", Explain("Peacebloom"))
     Check("display", "Silverleaf detail says why", "Not enough are listed at the auction house.", Explain("Silverleaf"))
     Check("display", "Tin Ore detail: leftover from the whole stack", "2 left over. Needed to make Smelt Bronze.", Explain("Tin Ore"))
     Check("display", "Bronze Bar detail: crafts, made, leftover, comparison",
@@ -976,13 +986,13 @@ Lab.Step("shopping: source choices", function()
     Check("display", "Bronze Bar details: Make is lit, the auction house can be chosen, the vendor cannot", "make/false/true/true",
         Lit(d) .. "/" .. tostring(d.choose.vendor:IsEnabled()) .. "/" .. tostring(d.choose.auction:IsEnabled()) .. "/" .. tostring(d.choose.make:IsEnabled()))
     Choose("Bronze Bar", "auction")
-    Check("click", "the auction house: an estimate", "5 | Auction house | about 20s | estimate, just now | -", Line("Bronze Bar"))
-    Check("display", "estimate is explained in the details", true, Explain("Bronze Bar"):find("Unit-price estimate: more may cost more.", 1, true) ~= nil)
+    Check("click", "the auction house: an estimate", "5 | Auction house | 23s | just now | -", Line("Bronze Bar"))
+    Check("display", "the whole-quantity walk of the price tiers gives an exact figure, so no estimate is claimed", false, Explain("Bronze Bar"):find("estimate", 1, true) ~= nil)
     Check("display", "the details lit the chosen source and the row stays chosen", "auction/Bronze Bar", Lit(Shop().detail) .. "/" .. Txt(Shop().detail.name))
     Check("state", "choice is kept in memory", "auction", tostring(R.Workshop.Session.picks[2841]))
     Check("display", "its reagent rows go (no subcraft now)", "Silverleaf | Coarse Thread | Peacebloom | Bronze Bar", Names(Lists().shop))
     Check("display", "total now includes the estimate: 15 + 25 + 2000 = 2040c",
-        "Estimated spending: 20s 40c so far \194\183 1 price missing", Txt(Shop().total))
+        "Estimated spending: 23s 40c so far \194\183 1 price missing", Txt(Shop().total))
     Choose("Bronze Bar", "make")
     Check("state", "make, chosen by the player", "make", tostring(R.Workshop.Session.picks[2841]))
     Check("display", "make row again, with the reagent rows back, and still chosen", "Silverleaf | Coarse Thread | Peacebloom | Copper Ore | Tin Ore | Bronze Bar/Bronze Bar",
@@ -1039,7 +1049,7 @@ Lab.Step("shopping: add the suggested subcraft", function()
     Check("state", "Smelt Bronze x3 queued", q0 .. ", Smelt Bronze x3", Queue())
     Check("display", "the made item is no longer on the list; its ingredients are, once each",
         "Silverleaf | Coarse Thread | Peacebloom | Copper Ore | Tin Ore", Names(Lists().shop))
-    Check("display", "Copper Ore: queue's own need, once", "2 | Auction house | 70c | just now | -", Line("Copper Ore"))
+    Check("display", "Copper Ore: queue's own need, once", "2 | Auction house | 70c | to 7s | -", Line("Copper Ore"))
     Check("display", "Tin Ore: queue's own need, once", "3 | Vendor | 80c | just now | Show vendor", Line("Tin Ore"))
     Check("display", "total unchanged: the ingredients are counted once", "Estimated spending: 1s 90c so far \194\183 1 price missing", Txt(Shop().total))
     local anyMake = false
@@ -1269,14 +1279,14 @@ Lab.Step("bank and guild bank: planned with, collected not bought, labelled, pro
     Check("display", "collect Tin Ore from the bank", "Tin Ore | 2 | Collect from bank | Already owned | seen just now", SLine(3))
     Check("display", "buy the Silverleaf still missing: 2 listed at 45c, now exact", "Silverleaf | 2 | Auction house | 90c | just now", SLine(4))
     Check("display", "buy Coarse Thread at the vendor", "Coarse Thread | 1 | Vendor | 25c | just now", SLine(5))
-    Check("display", "buy 2 Copper Ore", "Copper Ore | 2 | Auction house | 70c | just now", SLine(6))
-    Check("display", "buy the 1 Tin Ore still missing: 30c at the auction house beats a stack of 5 at 80c", "Tin Ore | 1 | Auction house | 30c | just now", SLine(7))
+    Check("display", "buy 2 Copper Ore", "Copper Ore | 2 | Auction house | 70c | to 7s", SLine(6))
+    Check("display", "buy the 1 Tin Ore still missing: 30c at the auction house beats a stack of 5 at 80c", "Tin Ore | 1 | Auction house | 30c | to 3s", SLine(7))
     local c1 = Rows(Lists().shop)[1]
     Click(c1, "choose the first collect row")
     local cd = Shop().detail
     Check("display", "a collect row has no source choices and no action", "false/false/false", tostring(cd.choose.vendor:IsShown()) .. "/" .. tostring(cd.choose.make:IsShown()) .. "/" .. tostring(cd.act:IsShown()))
     Check("display", "a collect row says it is already owned", "Collect from your bank. It is already yours: nothing to buy.", Txt(cd.explain))
-    Check("display", "total counts only what is bought: 90 + 25 + 70 + 30", "Estimated spending: 2s 15c", Txt(Shop().total))
+    Check("display", "total counts only what is bought: 90 + 25 + 70 + 30", "Estimated spending: 2s 15c to 11s 15c", Txt(Shop().total))
     Check("display", "status line names what is counted", "Vendor prices as last seen (2 noted) \194\183 bags and bank", Txt(Shop().status))
 
     -- Opportunities: stored materials say whether a craft can start; the cost, the sell price and the profit do not move
@@ -1315,9 +1325,9 @@ Lab.Step("bank and guild bank: the guild choice, permissions and limits", functi
     Check("display", "collect Silverleaf from the bank", "Silverleaf | 1 | Collect from bank | Already owned | seen just now", SLine(1))
     Check("display", "collect Silverleaf from the guild bank (3 needed - 1)", "Silverleaf | 2 | Collect from guild bank | Already owned | seen just now", SLine(2))
     Check("display", "collect Copper Ore from the guild bank (6 needed - 4 in bags)", "Copper Ore | 2 | Collect from guild bank | Already owned | seen just now", SLine(4))
-    Check("display", "Tin Ore: tab 2 only allows viewing, so only the bank's 2 are collected and 1 is bought", "Tin Ore | 1 | Auction house | 30c | just now", SLine(7))
+    Check("display", "Tin Ore: tab 2 only allows viewing, so only the bank's 2 are collected and 1 is bought", "Tin Ore | 1 | Auction house | 30c | to 3s", SLine(7))
     Check("display", "shared stock is said so", "Collect from the guild bank. Shared stock: other members can take it too.", ExplainAt(2))
-    Check("display", "total counts only what is bought: 25 + 30", "Estimated spending: 55c", Txt(Shop().total))
+    Check("display", "total counts only what is bought: 25 + 30", "Estimated spending: 55c to 3s 25c", Txt(Shop().total))
     Check("display", "status line names the guild bank", "Vendor prices as last seen (2 noted) \194\183 bags, bank and guild bank", Txt(Shop().status))
     local view = W.Session.Stock()
     Check("state", "tab 2's 9 Tin Ore are information, not counted: a viewable tab does not establish a right to take", "9/nowithdraw/0",
@@ -1870,7 +1880,11 @@ Lab.Step("automatic price updates on opening the auction house", function()
     local function Saved() local m = TwichUIWorkshopDB.markets[KEY] return m and (m.snap and m.snap.seq or 0) or "none" end
     local base = ah.requested
     A.Reset()
-    Check("init", "the setting is on by default", true, R:Enabled("workshopAutoScan"))
+    Check("init", "shipped policy is manual and the setting off by default", "manual/false", WA.POLICY .. "/" .. tostring(R:Enabled("workshopAutoScan")))
+    Open()
+    Check("event", "manual policy: opening makes no request and offers no prompt", "0/false", (ah.requested - base) .. "/" .. tostring(A.Prompting()))
+    Close()
+    WA.POLICY = "auto" R:SetEnabled("workshopAutoScan", true)   -- (the A6 behaviour, kept for a later decision, is what the rest of this step exercises)
     Check("init", "the capability is not yet verified in the real client", "unknown", WA.Capability())
     -- unknown capability: a prompt, never a request
     Open()

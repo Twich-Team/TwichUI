@@ -10,9 +10,15 @@ local R = TwichUI
 local W = R.Workshop
 local S, O, PR, Op, SC, MK, Q = W.Session, W.Observe, W.Prices, W.Opps, W.Scan, W.Market, W.Queue
 local UI = W.UI
+local F = W.Facts
 
 local OPP_H, COL_W, DETAIL_W = 52, 90, 284
-local MAT_ROWS, MAT_H = 4, 26
+local MAT_ROWS, MAT_H = 3, 22
+local MAT_TOP = 188        -- the first material row's top edge in the details
+local MK_ROW = 14          -- one market fact's row
+local MK_ROWS = 7          -- most facts shown (Market.Value x4 and Competition, Supply, Data quality)
+local STRATEGY_H = 0       -- room kept for the future Crafting Strategy section (the multilevel planner, not built: see docs/workshop/market-data-foundation-v2.md, A7)
+local BOTTOM = 58          -- the button's room under the market block
 local RIGHT = 8   -- a row's right margin before the profit column
 local TOP = -100  -- the list's top edge on the page (the chips sit above it)
 
@@ -165,26 +171,6 @@ end
 ---------------------------------------------------------------------------
 local function Range(a, b, f) if a == b or b == nil then return f(a) end return f(a) .. " to " .. f(b) end
 
--- What the saved scan and its history say about the item one craft makes, as label / value pairs: plain facts, each labelled for what it is
--- (the cheapest listings a scan saw, never a sale price or a market value)
-local function Evidence(item, market)
-    if not (item and market) then return { { "Auction prices", "none saved yet" } } end
-    local out = {}
-    local p, why = MK.Price(item, { market = market })
-    if p then
-        out[#out + 1] = { ("Cheapest listing (%d %s)"):format(p.listings or 0, UI.Plural(p.listings or 0, "listing", "listings")), UI.Money(p.price) }
-    else
-        out[#out + 1] = { "Cheapest listing", why == "unlisted" and "none in the last scan" or "unknown" }
-    end
-    local st = MK.Stats(item, "week", { market = market })
-    if st and not st.single then
-        out[#out + 1] = { ("Daily lows (%d %s)"):format(st.n, UI.Plural(st.n, "day", "days")), UI.Money(st.low) .. " - " .. UI.Money(st.high) }
-    else
-        out[#out + 1] = { "Price history", st and "one day so far" or "not yet" }
-    end
-    return out
-end
-
 -- How the history is described under the chart: the days it really covers, never more
 local function ChartNote(series)
     if not series then return "" end
@@ -260,25 +246,39 @@ local function RenderDetail(rows)
         end
     end
     d.more:SetText(n > MAT_ROWS and ("+%d more (hold Shift over the row)"):format(n - MAT_ROWS) or (n == 0 and "Not known yet." or ""))
-    -- the Market block sits under the last material row shown (and the note about more materials goes right under those rows)
     local used = math.min(n, MAT_ROWS)
     d.more:ClearAllPoints()
-    d.more:SetPoint("TOPLEFT", d.body, "TOPLEFT", 14, -(194 + used * MAT_H) + 1)
+    d.more:SetPoint("TOPLEFT", d.body, "TOPLEFT", 14, -(MAT_TOP + used * MAT_H) + 1)
     d.more:SetPoint("RIGHT", d.body, "RIGHT", -14, 0)
-    d.market:ClearAllPoints()
-    d.market:SetPoint("TOPLEFT", d.body, "TOPLEFT", 0, -(194 + used * MAT_H + 22))
-    d.market:SetPoint("BOTTOMRIGHT", d.body, "BOTTOMRIGHT", 0, 58)
-    -- what the market data says about what it makes
+    -- what the market data says about what it makes (Facts: one cached read of the Market services; nothing is calculated here)
     local market = oppView and oppView.source.market
-    local ev = Evidence(rec.outItem, market)
-    for i, pair in ipairs(d.evidence) do
-        local x = ev[i]
-        pair.l:SetText(x and x[1] or "")
-        pair.v:SetText(x and x[2] or "")
+    local f = F and rec.outItem and F.Of(rec.outItem, { market = market }) or nil
+    local rows = f and F.Rows(f, UI.Money) or {}   -- (the rows exist whatever the data: a missing figure says why)
+    for i, pair in ipairs(d.facts) do
+        local x = rows[i]
+        pair.data = x
+        if x then
+            pair.l:SetText(x.label)
+            pair.v:SetText(x.value)
+            UI.Paint(pair.v, x.tone == "quiet" and K.stone or (x.tone == "dim" and K.textDim or K.text))
+            pair:Show()
+        else
+            pair:Hide()
+        end
     end
-    local series = market and rec.outItem and MK.Series(rec.outItem, { market = market }) or nil
+    -- the Market block sits under the last material row shown (and the "more" note, and room kept for the Crafting Strategy section); the chart
+    -- takes what is left under the facts
+    local top = MAT_TOP + used * MAT_H + (n > MAT_ROWS and 16 or 6) + STRATEGY_H
+    d.market:ClearAllPoints()
+    d.market:SetPoint("TOPLEFT", d.body, "TOPLEFT", 0, -top)
+    d.market:SetPoint("BOTTOMRIGHT", d.body, "BOTTOMRIGHT", 0, BOTTOM)
+    d.chart:ClearAllPoints()
+    d.chart:SetPoint("TOPLEFT", d.market, "TOPLEFT", 14, -(24 + #rows * MK_ROW + 4))
+    d.chart:SetPoint("BOTTOMRIGHT", d.market, "BOTTOMRIGHT", -14, 0)
+    local series = f and F.Chart(f) or nil
     d.chart:Set(series, UI.Money)
-    d.chartNote:SetText(ChartNote(series))
+    d.chartNote:SetText(ChartNote(series))   -- the days the history really covers; when the listings were scanned is on the Data quality row
+    d.chartTip = series and ChartNote(series) or nil
     -- the button: what it does now (add), what already happened (queued, with a check) or why it can't (the queue is full)
     local queued = S.IsQueued(rec.id)
     local full = not queued and Q.Count() >= W.MAX_QUEUE
@@ -437,30 +437,34 @@ local function BuildDetail()
     d.profit:SetPoint("TOPRIGHT", -14, -80)
     d.profit:SetJustifyH("RIGHT")
     d.why = UI.Text(body, 12, K.bronzeText)
-    d.why:SetPoint("TOPLEFT", 14, -108)
+    d.why:SetPoint("TOPLEFT", 14, -104)
     d.why:SetPoint("RIGHT", -14, 0)
     -- cost to make against sell price, two recessed boxes side by side
     local bw = math.floor((DETAIL_W - 28 - 8) / 2)
     local function Box(label, x)
         local b = CreateFrame("Frame", nil, body)
-        b:SetSize(bw, 46)
-        b:SetPoint("TOPLEFT", x, -116)
+        b:SetSize(bw, 42)
+        b:SetPoint("TOPLEFT", x, -114)
         UI.Panel(b, "canvas")
         local l = UI.Text(b, 11, K.stone)
         l:SetPoint("TOPLEFT", 10, -7)
         l:SetText(label)
         local v = UI.Text(b, 15, K.text, "strong")
-        v:SetPoint("BOTTOMLEFT", 10, 8)
+        v:SetPoint("BOTTOMLEFT", 10, 6)
         v:SetPoint("RIGHT", -8, 0)
-        return v
+        return b, v
     end
-    d.cost = Box("Cost to make", 14)
-    d.sell = Box("Sell price (listing)", 14 + bw + 8)
-    Section(body, "Materials (one craft)", -172)
+    local costBox, sellBox
+    costBox, d.cost = Box("Cost to make", 14)
+    sellBox, d.sell = Box("Sell price (listing)", 14 + bw + 8)
+    -- what the profit assumes, in words: it is the existing minimum-based estimate (A7 keeps it; the selling strategy is A8), not Market Value
+    UI.Tip(costBox, "Cost to make", "What one craft's materials cost at the cheapest listings your last scan saw, owned or not (owning them does not make them free).")
+    UI.Tip(sellBox, "Sell price (listing)", "The lowest current listing of what it makes, from your last scan, before fees. The profit uses this. It is not the Market Value or Historical Value below, which are references from past listings, and not a promise it will sell.")
+    Section(body, "Materials (one craft)", -164)
     d.mats = {}
-    for i = 1, MAT_ROWS do d.mats[i] = BuildMaterialRow(body, -194 - (i - 1) * MAT_H) end
+    for i = 1, MAT_ROWS do d.mats[i] = BuildMaterialRow(body, -MAT_TOP - (i - 1) * MAT_H) end
     d.more = UI.Text(body, 11, K.stone)
-    d.more:SetPoint("TOPLEFT", 14, -194 - MAT_ROWS * MAT_H + 1)
+    d.more:SetPoint("TOPLEFT", 14, -MAT_TOP - MAT_ROWS * MAT_H + 1)
     d.more:SetPoint("RIGHT", -14, 0)
     -- the button, and above it the Market block: a heading, two facts and the history chart, which takes the rest of the room (the block is
     -- placed under the last material row shown, so a recipe with few materials leaves no gap)
@@ -477,8 +481,8 @@ local function BuildDetail()
     end)
     local mk = CreateFrame("Frame", nil, body)
     d.market = mk
-    mk:SetPoint("TOPLEFT", body, "TOPLEFT", 0, -312)
-    mk:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", 0, 58)
+    mk:SetPoint("TOPLEFT", body, "TOPLEFT", 0, -(MAT_TOP + MAT_ROWS * MAT_H + 6))
+    mk:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", 0, BOTTOM)
     local mh = UI.Text(mk, 13, K.bronzeText, "strong")
     mh:SetPoint("TOPLEFT", 14, 0)
     mh:SetText("Market")
@@ -487,25 +491,38 @@ local function BuildDetail()
     d.chartNote:SetJustifyH("RIGHT")
     local mr = UI.Rule(mk, 0.45)
     mr:SetPoint("TOPLEFT", 14, -18); mr:SetPoint("TOPRIGHT", -14, -18)
-    d.evidence = {}
-    for i = 1, 2 do
-        local v = UI.Text(mk, 12, K.textDim)
-        v:SetPoint("TOPRIGHT", -14, -24 - (i - 1) * 17)
-        v:SetJustifyH("RIGHT")
-        local l = UI.Text(mk, 12, K.stone)
-        l:SetPoint("TOPLEFT", 14, -24 - (i - 1) * 17)
-        l:SetPoint("RIGHT", v, "LEFT", -6, 0)
-        d.evidence[i] = { l = l, v = v }
+    -- the facts: a label and a value each, one hover tooltip per fact (what the figure is, and what it is not)
+    d.facts = {}
+    for i = 1, MK_ROWS do
+        local row = CreateFrame("Frame", nil, mk)
+        row:SetHeight(MK_ROW)
+        row:SetPoint("TOPLEFT", 14, -22 - (i - 1) * MK_ROW)
+        row:SetPoint("TOPRIGHT", -14, -22 - (i - 1) * MK_ROW)
+        row:EnableMouse(true)
+        row.v = UI.Text(row, 11, K.text)
+        row.v:SetPoint("RIGHT", 0, 0)
+        row.v:SetJustifyH("RIGHT")
+        row.l = UI.Text(row, 11, K.stone)
+        row.l:SetPoint("LEFT", 0, 0)
+        row.l:SetPoint("RIGHT", row.v, "LEFT", -6, 0)
+        UI.TipFn(row, nil, function() local x = row.data return x and x.tip or nil end)
+        d.facts[i] = row
     end
-    d.chart = UI.PriceChart(mk, DETAIL_W - 28, 72)
+    d.chart = UI.PriceChart(mk, DETAIL_W - 28, 56)
     d.chart:ClearAllPoints()
-    d.chart:SetPoint("TOPLEFT", 14, -62)
+    d.chart:SetPoint("TOPLEFT", 14, -(24 + 5 * MK_ROW))
     d.chart:SetPoint("BOTTOMRIGHT", -14, 0)
+    d.chart:EnableMouse(true)
+    UI.TipFn(d.chart, "Price history", function()
+        local note = d.chartTip
+        return "The lowest listing on each day a scan saw the item" .. (note and (": " .. note .. ".") or ".") ..
+            " A day without a scan has no dot. Not a sale price, and nothing before your first scan is known."
+    end)
     -- what these figures are, on the Market heading only: a frame over the whole block would sit on the button
     local why = CreateFrame("Frame", nil, mk)
     why:SetPoint("TOPLEFT", 14, 0); why:SetPoint("TOPRIGHT", -14, 0); why:SetHeight(20)
     why:EnableMouse(true)
-    UI.Tip(why, "What these figures are", "Prices are the cheapest buyout listings your scans saw, per item. The dots are the lowest listing on each day a scan was made; a day without a scan has no dot. None of it is a sale price or a promise that it will sell.")
+    UI.Tip(why, "What these figures are", "Listings your scans saw, never sales. Lowest listing and Competing price are what is for sale now. Recent price, Market value (14 days) and Historical value (60 days) are references from past listings, not a selling price and not a promise it will sell. The profit above uses the lowest listing.")
     d.empty = UI.Text(d, 13, K.textDim)
     d.empty:SetPoint("TOPLEFT", 14, -16)
     d.empty:SetPoint("RIGHT", -14, 0)

@@ -30,16 +30,6 @@ K.Page({
         K.Status("Loaded", function() return Loaded() and "Yes" or "Not yet" end,
             function() return Loaded() and "The Workshop is ready." or "It loads the first time you open it." end,
             "The Workshop is a separate part of TwichUI that waits until you ask for it, so it costs nothing until then.", function() return Loaded() and "ok" or "quiet" end)
-        K.Toggle("workshopAutoScan", "Update prices automatically when I open the Auction House",
-            "Reads the Auction House at most once an hour. Nothing is bought or posted.")
-        K.Status("Update method", function() return R.WorkshopAuto and R.WorkshopAuto.Capability() == "supported" and "Automatic" or "One click" end,
-            function()
-                if R.WorkshopAuto and R.WorkshopAuto.Capability() == "supported" then
-                    return "When an update is due, it starts as you open the Auction House. Stop ends it and saves nothing."
-                end
-                return "When an update is due, an Update prices button appears on the Auction House window. Starting it by itself has not been confirmed in this game version yet, so it never starts without your click."
-            end,
-            "The game decides whether an addon may start a whole Auction House read by itself. Until that is confirmed, TwichUI asks for one click and never tries on its own.", function() return "quiet" end)
         K.Header("What it does", "Recipes come from a profession window of your own: open a profession with the Workshop open and they appear, and they are remembered for that character, so you don't have to open them all again after a reload; opening one again updates it. Your queue is saved for each character and stays when you switch professions. Materials count what is in your bags, plus what the Workshop saw in your bank the last time you opened it with the Workshop loaded (and your guild bank, if you turn that on in the window); mail and other characters are not counted. Nothing is made, bought or sent for you.")
         K.Header("Shopping", "The Shopping view lists each material the queue still needs once, with a suggested source: a vendor, the auction house, or making it from its own materials. It compares only prices TwichUI has seen (your last scan, and what vendors charged when you had their window open with the Workshop open), says plainly when a price is missing or an estimate, and never buys, crafts or posts anything for you.")
         K.Header("Opportunities", "At the auction house, press Scan prices in the Opportunities view to see what your known crafts cost to make and might sell for. The scan only reads the listings, and only when you press the button; it never buys, bids or posts. Prices are the cheapest listings seen, not sales, and are saved for the next visit.")

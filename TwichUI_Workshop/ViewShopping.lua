@@ -78,7 +78,14 @@ local function ShopDetail(r)
     local why = Sh.Explain(r)
     if r.source and not r.picked and not r.reagentOnly then why = "Suggested source. " .. why end
     parts[#parts + 1] = why
-    if r.estimate then parts[#parts + 1] = "Unit-price estimate: more may cost more." end
+    if r.kind == "buy" and r.source == "auction" then
+        local _, note = Sh.CostWords(r, UI.Money)
+        if note then parts[#parts + 1] = note end
+        local o = r.options.auction
+        if o and o.state == "few" then
+            parts[#parts + 1] = ("Not enough listings to price your full quantity (%d listed)."):format(o.quote and o.quote.total or 0)
+        end
+    end
     if r.made and r.made > 0 then parts[#parts + 1] = ("%s%d will come from queued crafts."):format(r.madeRange and "At least " or "", r.made) end
     return table.concat(parts, " ")
 end
@@ -95,7 +102,7 @@ local function ShortLine(r)
     if r.kind == "collect" then return r.where == "guild" and "From the guild bank" or "From your bank" end
     if r.kind == "make" then return "Make " .. r.make.crafts .. " \195\151 " .. UI.Shorten(r.make.rec.name, 13) end
     local text = r.source and Sh.NAMES[r.source] or "No source"
-    if r.estimate then text = text .. " \194\183 est." end
+    if r.estimate then text = text .. (r.costState == "range" and " \194\183 range" or " \194\183 est.") end
     return text
 end
 
@@ -174,12 +181,21 @@ local function MakeShopRow(parent)
             UI.Paint(a, mk.cash and K.textDim or K.stone)
             b:SetText("materials, counted in their rows")
         elseif r.cash then
-            a:SetText((r.estimate and "about " or "") .. UI.Money(r.cash))
-            UI.Paint(a, K.text)
-            if r.estimate then tag[#tag + 1] = "estimate" end
             local age = AgeWords(r.at, r.source == "vendor" and W.Vendor.OLD_AFTER or nil)
-            if age then tag[#tag + 1] = age end
-            b:SetText(table.concat(tag, ", "))
+            if r.costState == "range" and r.high then
+                -- one exact figure is not known: the cheapest it can be, and under it the most (whole listings may have to be bought)
+                a:SetText(UI.Money(r.low))
+                b:SetText("to " .. UI.Money(r.high))
+            elseif r.costState == "estimate" and r.costInfo then
+                a:SetText(UI.Money(r.low))
+                b:SetText("at least" .. (age and (", " .. age) or ""))
+            else
+                a:SetText((r.estimate and "about " or "") .. UI.Money(r.cash))
+                if r.estimate then tag[#tag + 1] = "estimate" end
+                if age then tag[#tag + 1] = age end
+                b:SetText(table.concat(tag, ", "))
+            end
+            UI.Paint(a, K.text)
         else
             a:SetText("Unknown")
             UI.Paint(a, K.stone)
@@ -273,13 +289,17 @@ local function RenderDetail(plan, ctx)
         d.costNote:SetText("the reagents are counted in their own rows")
     else
         d.costLabel:SetText(r.estimate and "Estimated cost" or "Cost")
-        d.cost:SetText(r.cash and ((r.estimate and "about " or "") .. UI.Money(r.cash)) or "Unknown")
+        local short = r.cash and Sh.CostWords(r, UI.Money)
+        d.cost:SetText(short or "Unknown")
         UI.Paint(d.cost, r.cash and K.text or K.stone)
         local tag = {}
         if r.source then tag[#tag + 1] = Sh.NAMES[r.source] end
+        local info = r.source == "auction" and r.costInfo or nil
+        if info and info.used and info.used[1] then tag[#tag + 1] = "lowest " .. UI.Money(info.used[1].p) end
         local age = AgeWords(r.at, r.source == "vendor" and W.Vendor.OLD_AFTER or nil)
         if age then tag[#tag + 1] = age end
-        d.costNote:SetText(r.cash and table.concat(tag, ", ") or "no price known")
+        local why = r.source == "auction" and r.options.auction and r.options.auction.state == "few" and "not enough listed" or "no price known"
+        d.costNote:SetText(r.cash and table.concat(tag, ", ") or why)
     end
     -- what the queue needs it for
     local used = S.NeededFor(r.item)
@@ -330,9 +350,15 @@ local function Render()
         shop.total:SetText("Nothing to buy: collect what is stored.")   -- only collect rows: stored materials cost nothing to get
         UI.Paint(shop.total, K.sage)
     elseif tot.missing > 0 then
-        shop.total:SetText(("Estimated spending: %s so far \194\183 %d %s"):format(UI.Money(tot.cash), tot.missing,
+        shop.total:SetText(("Estimated spending: %s%s so far \194\183 %d %s"):format(tot.open and "at least " or "", UI.Money(tot.cash), tot.missing,
             Plural(tot.missing, "price missing", "prices missing")))
         UI.Paint(shop.total, K.bronzeText)
+    elseif tot.estimate and tot.open then
+        shop.total:SetText("Estimated spending: at least " .. UI.Money(tot.low))   -- some price is only a lower bound: no upper end is claimed
+        UI.Paint(shop.total, K.text)
+    elseif tot.estimate and tot.high and tot.high > tot.low then
+        shop.total:SetText("Estimated spending: " .. UI.Money(tot.low) .. " to " .. UI.Money(tot.high))
+        UI.Paint(shop.total, K.text)
     else
         shop.total:SetText("Estimated spending: " .. UI.Money(tot.cash) .. (tot.estimate and " (includes estimates)" or ""))
         UI.Paint(shop.total, K.text)

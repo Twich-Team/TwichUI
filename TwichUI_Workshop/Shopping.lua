@@ -44,25 +44,59 @@ local function Round(x) return math.floor(x + 0.5) end
 -- The options for buying `qty` of an item: { vendor = opt, auction = opt } (either may be missing). An option: { kind, state, cost, quote, at }.
 -- cost is nil when it cannot be said (vendor: "noprice" = a merchant is known to sell it but no price was seen, "limited" = it had fewer
 -- when seen; auction: "few" = fewer listed than asked for).
-local function BuyOptions(inp, item, qty)
+--
+-- The auction option (A7). With inp.cost (Market.Cost, which knows the six cheapest price tiers and how many items each holds) the state is
+-- "exact" (one supported total), "range" (whole listings may have to be bought, so the total lies between low and high), "estimate" (more than
+-- the six kept tiers are needed: only a lower bound is known) or "few" (fewer are listed than asked for). `cost` is the figure the PLAN counts
+-- and compares (suggestions, the spending line's first number): the LOWER supported bound, i.e. what exactly the items needed cost at the listed
+-- prices, which is also what the plan counted before A7 for the cheapest listings. It is flagged `estimate` whenever it is not the one exact total,
+-- and the windows show the whole range ("8s to 11s", "at least 8s") through CostWords, never the lower bound alone. `low` and `high` keep both ends
+-- (`high` is nil for an estimate, where only "at least" is known). Without inp.cost, or for an item whose saved scan has no price tiers (a market
+-- from before the distributions), the old unit-price quote is used unchanged (state "exact" up to what the saved scan shows at the cheapest price,
+-- otherwise "estimate" with cost = unit price x quantity).
+local function AuctionOption(inp, item, qty, memo)
+    local p = inp.auction(item)
+    if inp.cost then
+        local key = item .. ":" .. qty
+        local c = memo[key]
+        if c == nil then c = inp.cost(item, qty) or false memo[key] = c end
+        if c and (c.state == "exact" or c.state == "range" or c.state == "estimate") then
+            local cost = c.state == "exact" and c.cost or c.low
+            local q = { state = c.state, qty = qty, cost = cost, unit = c.used and c.used[1] and c.used[1].p or c.unit, total = c.available,
+                at = c.at, complete = c.complete }
+            return { kind = "auction", state = c.state, cost = cost, low = c.low, high = c.state ~= "estimate" and c.high or nil, quote = q, info = c,
+                at = c.at, estimate = c.state ~= "exact" }
+        elseif c and c.state == "few" then
+            return { kind = "auction", state = "few", quote = { state = "few", qty = qty, total = c.available, at = c.at, complete = c.complete },
+                info = c, at = c.at }
+        end
+        -- state "none": fall through to the unit-price quote when the market has a price but no tiers (an older saved scan)
+    end
+    local aq = PR.Quote(p, qty)
+    if aq.state == "none" then return nil end
+    local o = { kind = "auction", state = aq.state, cost = aq.cost, quote = aq, at = aq.at, estimate = aq.state == "estimate" }
+    if aq.cost then o.low = aq.cost end
+    if aq.state == "exact" then o.high = aq.cost end
+    return o
+end
+
+local function BuyOptions(inp, item, qty, memo)
     local o = {}
     local vr = inp.vendor(item)
     if vr then
         local q = V.Quote(vr, qty)
         o.vendor = { kind = "vendor", state = q.state, cost = q.cost, quote = q, at = vr.at, npc = vr.npc }
+        if q.cost then o.vendor.low, o.vendor.high = q.cost, q.cost end
     elseif inp.sells(item) then
         o.vendor = { kind = "vendor", state = "noprice" }
     end
-    local aq = PR.Quote(inp.auction(item), qty)
-    if aq.state ~= "none" then
-        o.auction = { kind = "auction", state = aq.state, cost = aq.cost, quote = aq, at = aq.at, estimate = aq.state == "estimate" }
-    end
+    o.auction = AuctionOption(inp, item, qty, memo)
     return o
 end
 
 -- The cheaper priced way to buy `qty`: { source, cost, estimate, at } or nil. A tie goes to the vendor.
-local function Best(inp, item, qty)
-    local o = BuyOptions(inp, item, qty)
+local function Best(inp, item, qty, memo)
+    local o = BuyOptions(inp, item, qty, memo)
     local best
     if o.vendor and o.vendor.cost then best = { source = "vendor", cost = o.vendor.cost, at = o.vendor.at } end
     if o.auction and o.auction.cost and (not best or o.auction.cost < best.cost) then
@@ -117,6 +151,7 @@ end
 --   uncertain (words), make (make rows: the option that is done)
 function Sh.Plan(inp)
     local rowsIn = inp.rows
+    local memo = {}   -- Market.Cost answers of this plan, by item and quantity: one decode each, however often the options are compared
     local picks = inp.picks or {}
     local have = inp.have
     local pool, used = {}, {}   -- pool[item]: { bags, bank, guild } owned left after the queue's own craft needs (false: unknown); used[item]: taken by made materials
@@ -182,7 +217,7 @@ function Sh.Plan(inp)
             local owned = b + k + g
             local line = { item = m.item, qty = total, owned = owned, buy = total - owned, bags = b, bank = k, guild = g }
             if line.buy > 0 then
-                local b = Best(inp, m.item, line.buy)
+                local b = Best(inp, m.item, line.buy, memo)
                 if b then
                     line.source, line.cost, line.estimate = b.source, b.cost, b.estimate
                     cash = cash + b.cost
@@ -259,7 +294,7 @@ function Sh.Plan(inp)
     for _, r in ipairs(todo) do
         local res = { item = r.item, need = r.need, made = r.made, madeRange = r.madeRange, have = r.have, short = r.short,
             fromBank = r.fromBank, fromGuild = r.fromGuild }
-        res.options = BuyOptions(inp, r.item, r.short)
+        res.options = BuyOptions(inp, r.item, r.short, memo)
         local mk = BestMake(r.item, r.short)
         if mk then res.options.make = mk end
         res.suggested = Suggest(res.options)
@@ -295,11 +330,12 @@ function Sh.Plan(inp)
     table.sort(acqItems)
 
     local out = {}
-    local totals = { cash = 0, priced = 0, missing = 0, estimate = false, makes = 0, incomplete = false, collect = 0 }
+    -- cash: what the plan counts (see AuctionOption); low / high: the supported ends of the spending (high is nil once any price is only a lower bound: open)
+    local totals = { cash = 0, low = 0, high = 0, open = false, priced = 0, missing = 0, estimate = false, makes = 0, incomplete = false, collect = 0 }
     for _, item in ipairs(acqItems) do
         local a = acq[item]
         local main = a.main
-        local opts = BuyOptions(inp, item, a.qty)
+        local opts = BuyOptions(inp, item, a.qty, memo)
         local src, picked
         local pick = picks[item]
         if (pick == "vendor" or pick == "auction") and opts[pick] then
@@ -308,7 +344,7 @@ function Sh.Plan(inp)
             src = main.source   -- the suggested way, as long as it still covers everything that is bought of it
         end
         if not src then
-            local b = Best(inp, item, a.qty)
+            local b = Best(inp, item, a.qty, memo)
             src = b and b.source or (main and (main.source == "vendor" or main.source == "auction") and main.source) or nil
         end
         local base = byItem[item]
@@ -322,6 +358,9 @@ function Sh.Plan(inp)
         local o = src and opts[src] or nil
         if o and o.cost then
             row.cash, row.at, row.estimate = o.cost, o.at, o.estimate
+            row.costState, row.low, row.high, row.costInfo = (o.kind == "vendor" and "exact" or o.state), o.low or o.cost, o.high, o.info
+            totals.low = totals.low + (o.low or o.cost)
+            if o.high then totals.high = totals.high + o.high else totals.open = true end
             if o.quote and o.quote.surplus and o.quote.surplus > 0 then row.surplus = o.quote.surplus end
             totals.cash, totals.priced = totals.cash + o.cost, totals.priced + 1
             if o.estimate then totals.estimate = true end
@@ -329,7 +368,7 @@ function Sh.Plan(inp)
         else
             totals.missing = totals.missing + 1
         end
-        if row.suggested == "auction" and opts.auction and opts.auction.estimate then row.uncertain = "The auction price is an estimate: more may cost more." end
+        if row.suggested == "auction" and opts.auction and (opts.auction.estimate or opts.auction.state == "range") then row.uncertain = opts.auction.state == "range" and "Auctions may require buying larger stacks." or "The auction price is an estimate: more may cost more." end
         out[#out + 1] = row
     end
     for _, res in ipairs(resolved) do
@@ -388,6 +427,24 @@ end
 ---------------------------------------------------------------------------
 -- Words
 ---------------------------------------------------------------------------
+-- What an auction purchase may cost, in plain words (A7): the figure for a row's cost column and, when the figure is not one exact total,
+-- one sentence on why. r: a buy row (costState, low, high, cash, estimate, costInfo) or an auction option. Returns short, note (note may be nil).
+-- An exact total and a vendor price are shown as they are; a range as "low to high"; an estimate as "at least low" (a lower bound is never
+-- shown as if it were the total); the old unit-price quote (no price tiers saved) keeps its "about" wording.
+function Sh.CostWords(r, money)
+    local st = r.costState or r.state
+    local cash = r.cash or r.cost
+    if cash == nil then return nil end
+    if st == "range" then
+        return money(r.low) .. " to " .. money(r.high), "Auctions may require buying larger stacks."
+    elseif st == "estimate" and (r.costInfo or r.info) then
+        return "at least " .. money(r.low or cash), "You need more than the cheapest listings hold, so the rest may cost more."
+    elseif st == "estimate" then
+        return "about " .. money(cash), "Unit-price estimate: more may cost more."
+    end
+    return money(cash)
+end
+
 local SUBJECT = { vendor = "Buying from the vendor", auction = "Buying at the auction house", make = "Making this" }
 local AGAINST = { vendor = "buying from the vendor", auction = "buying at the auction house", make = "making it" }
 
@@ -516,10 +573,15 @@ function Sh.Basis(row, name, money, ageText, now)
         local a = o.auction
         if a.state == "few" then
             L("Auction house", ("only %d listed"):format(a.quote.total or 0))
+            L("  Not enough listings to price your full quantity.")
         else
             local q = a.quote
-            L("Auction house", (a.estimate and "about " or "") .. money(a.cost))
-            if a.estimate then
+            local short, note = Sh.CostWords(a, money)
+            L("Auction house", short)
+            if a.info then
+                if q.unit then L("  " .. money(q.unit) .. " each is the cheapest listing") end
+                if note then L("  " .. note) end
+            elseif a.estimate then
                 L("  " .. money(q.unit) .. " each is the cheapest listing" .. (q.listed and (" (" .. q.listed .. " at that price)") or "") ..
                     "; the rest may cost more")
             end

@@ -186,6 +186,7 @@ local function Generation(m)
     return ("%s:%s:%s:%s:%s:%s:%s"):format(tostring(s and s.seq), tostring(m.at), tostring(s and s.at), tostring(s and s.alg), tostring(m.scope),
         tostring(hi and hi.at), tostring(hi and hi.bytes))
 end
+V.Generation = Generation   -- (A7) consumers that keep answers (MarketFacts.lua) validate them against the same stamp
 
 -- the call's cache entry (created empty when there is none), or nil for a market without a key
 local function Slot(cx)

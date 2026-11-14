@@ -20,6 +20,8 @@ local R = TwichUI
 local WA = {}
 R.WorkshopAuto = WA
 
+WA.POLICY = "manual"        -- "manual" (shipped, owner decision after A6: a price scan starts only from the player's click, and opening the Auction House
+                            -- does nothing, not even an offer) | "auto" (the A6 behaviour below, kept for a later decision; never reached while "manual")
 WA.CAPABILITY = "unknown"   -- "unknown" | "click" | "supported": the developer gate described above
 WA.WAIT = 5                 -- seconds the window is waited for, at most
 WA.STEP = 0.25
@@ -29,7 +31,7 @@ local AUCTIONEER = (Enum and Enum.PlayerInteractionType and Enum.PlayerInteracti
 local visit, open = 0, false
 local stats = { visits = 0, started = 0, skipped = nil, loads = 0, last = nil }
 
-function WA.Enabled() return R:Enabled("workshopAutoScan") end
+function WA.Enabled() return WA.POLICY == "auto" and R:Enabled("workshopAutoScan") end
 function WA.Capability()
     local c = WA.CAPABILITY
     return (c == "supported" or c == "click") and c or "unknown"

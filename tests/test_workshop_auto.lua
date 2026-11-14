@@ -70,6 +70,7 @@ local function Setup(opts)
     c.FireEvent("PLAYER_LOGIN")
     local R = c.TwichUI
     local t = { c = c, R = R, ah = ah, WA = R.WorkshopAuto }
+    if opts.manual ~= true then t.WA.POLICY = "auto"; R:SetEnabled("workshopAutoScan", true) end   -- the A6 behaviour under test; the shipped policy is manual (below)
     if opts.capability ~= false then t.WA.CAPABILITY = opts.capability or "supported" end
     function t.W() return R.Workshop end
     function t.Loads() return loads end
@@ -158,11 +159,22 @@ end
 ---------------------------------------------------------------------------
 do
     local t = Setup()
-    Check(t.R.DEFAULT_MODULES.workshopAutoScan == true and t.R:Enabled("workshopAutoScan"), "on by default")
+    Check(t.R.DEFAULT_MODULES.workshopAutoScan == false, "the setting is off by default (prices are updated by the player's click)")
     Check(t.R.Switches.defs.workshopAutoScan ~= nil, "the switch is defined")
     Same(t.WA.Capability(), "supported"); t.WA.CAPABILITY = "bogus"; Same(t.WA.Capability(), "unknown"); t.WA.CAPABILITY = "supported"
     Same(t.Loads(), 0, "nothing is loaded at login")
     Same(t.OwnTimers(), 0, "no timers at login")
+end
+
+-- the shipped policy: manual. Opening the Auction House does nothing, whatever the setting and capability say
+do
+    local t = Setup({ manual = true })
+    Same(t.WA.POLICY, "manual", "shipped as manual")
+    t.R:SetEnabled("workshopAutoScan", true); t.WA.CAPABILITY = "supported"
+    Check(not t.WA.Enabled(), "manual policy: never enabled, even with the switch on and the capability supported")
+    t.Open()
+    Same(t.Loads(), 0, "manual: opening the auction house loads nothing"); Same(t.OwnTimers(), 0, "manual: no timer"); Same(t.ah.sent, 0, "manual: no request")
+    Check(not (t.W() and t.W().Auto and t.W().Auto.Prompting and t.W().Auto.Prompting()), "manual: no prompt either")
 end
 
 -- disabled: no load, no timers, no request

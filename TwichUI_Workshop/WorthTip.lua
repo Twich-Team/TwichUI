@@ -71,6 +71,7 @@ function T.Read(data)
     local market = src.market
     if market then
         f.market = { label = src.label, side = market.side, at = market.at, complete = market.complete }
+        f.marketTable = market
         f.price = MK.Price(id, { market = market, variant = f.variant ~= nil })   -- the one price service; a variant is never given the base item's price
         f.rate = PR.CutRate(market.side)
     end
@@ -115,6 +116,11 @@ local function Add(tooltip, data)
     if not layout.enabled then return end
     local r = WO.Evaluate(f)
     local ctx = { money = WL.Money, ageText = PR.AgeText, market = f.market, now = f.now, count = f.count }
+    -- the market figures (A7), only when the layout has a line that uses them and there is a saved market; one cached read per item (MarketFacts),
+    -- so a Shift rebuild of the same tooltip decodes nothing again. A variant is never priced from the base item's listings (facts say so).
+    if W.Facts and f.market and WL.UsesMarket(layout) then
+        ctx.facts = W.Facts.Of(f.item, { market = f.marketTable, variant = f.variant ~= nil, now = f.now })
+    end
     local lines = WL.Lines(r, ctx, layout, Shift())
     carrying = tooltip   -- even with no lines now: a Shift change may bring some
     if not lines then return end

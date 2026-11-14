@@ -12,7 +12,7 @@ local function Check(cond, msg) if not cond then error(msg or "check failed", 2)
 local function Same(a, b, msg) if a ~= b then error((msg or "") .. " expected " .. tostring(b) .. ", got " .. tostring(a), 2) end end
 
 local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua",
-  "Vendor.lua", "Shopping.lua", "Worth.lua", "WorthLayout.lua" }
+  "Vendor.lua", "Shopping.lua", "MarketFacts.lua", "Worth.lua", "WorthLayout.lua" }
 local function Load(c, file)
   local chunk = assert(loadfile(ROOT .. "../TwichUI_Workshop/" .. file))
   setfenv(chunk, c)
@@ -112,12 +112,12 @@ end
 ---------------------------------------------------------------------------
 do
   local base = WL.DefaultLines()
-  Same(Ids(base), "recommend,vendor,auction,disenchant,status*,source*,note*", "the short default")
-  Same(Keys(WL.BY_ID), "auction,disenchant,note,outcomes,recommend,source,status,vendor", "eight line types")
+  Same(Ids(base), "recommend,vendor,auction,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*", "the short default")
+  Same(Keys(WL.BY_ID), "auction,disenchant,historical,marketvalue,note,outcomes,quality,recent,recommend,source,status,supply,vendor", "thirteen line types")
   -- add: at a place, at the end, refused twice, unknown refused
   local l, why = WL.Add(base, "outcomes", 2)
-  Same(Ids(l), "recommend,outcomes*,vendor,auction,disenchant,status*,source*,note*", "added at 2, starting where the type starts (Hold Shift)")
-  Same(Ids(base), "recommend,vendor,auction,disenchant,status*,source*,note*", "the argument is never changed")
+  Same(Ids(l), "recommend,outcomes*,vendor,auction,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*", "added at 2, starting where the type starts (Hold Shift)")
+  Same(Ids(base), "recommend,vendor,auction,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*", "the argument is never changed")
   l, why = WL.Add(base, "vendor", 1); Same(l, nil); Same(why, "duplicate", "no duplicate line types")
   l, why = WL.Add(base, "colors", 1); Same(l, nil); Same(why, "unknown")
   Same(Ids(WL.Add({}, "vendor")), "vendor", "into an empty layout")
@@ -125,32 +125,32 @@ do
   Same(Ids(WL.Add({ { id = "vendor", when = "always" } }, "auction", -4)), "auction,vendor", "a place before the first is the first")
   Same(Ids(WL.Add({ { id = "vendor", when = "always" } }, "auction", 99)), "vendor,auction", "a place past the end is the end")
   -- remove
-  l = WL.Remove(base, "auction"); Same(Ids(l), "recommend,vendor,disenchant,status*,source*,note*")
+  l = WL.Remove(base, "auction"); Same(Ids(l), "recommend,vendor,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*")
   l, why = WL.Remove(l, "auction"); Same(l, nil); Same(why, "missing")
   -- move: before the line now at that position
-  Same(Ids(WL.Move(base, "note", 1)), "note*,recommend,vendor,auction,disenchant,status*,source*", "to the top")
-  Same(Ids(WL.Move(base, "recommend", 4)), "vendor,auction,recommend,disenchant,status*,source*,note*", "down, before the 4th line")
-  Same(Ids(WL.Move(base, "recommend", 8)), "vendor,auction,disenchant,status*,source*,note*,recommend", "to the end")
+  Same(Ids(WL.Move(base, "note", 1)), "note*,recommend,vendor,auction,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*", "to the top")
+  Same(Ids(WL.Move(base, "recommend", 4)), "vendor,auction,recommend,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*", "down, before the 4th line")
+  Same(Ids(WL.Move(base, "recommend", 13)), "vendor,auction,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*,recommend", "to the end")
   Same(Ids(WL.Move(base, "vendor", 2)), Ids(base), "dropped where it already is: unchanged")
   Same(Ids(WL.Move(base, "vendor", 3)), Ids(base), "dropped just after itself: unchanged")
-  Same(Ids(WL.Move(base, "auction", 2)), "recommend,auction,vendor,disenchant,status*,source*,note*")
+  Same(Ids(WL.Move(base, "auction", 2)), "recommend,auction,vendor,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*")
   l, why = WL.Move(base, "colors", 1); Same(l, nil); Same(why, "missing")
   -- step: one step among the lines SHOWN in that mode
-  Same(Ids(WL.Step(base, "auction", -1, false)), "recommend,auction,vendor,disenchant,status*,source*,note*")
+  Same(Ids(WL.Step(base, "auction", -1, false)), "recommend,auction,vendor,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*")
   l, why = WL.Step(base, "recommend", -1, false); Same(l, nil); Same(why, "edge")
   -- the Normal preview: stepping "note*" is not possible (it is not shown), but in the Hold Shift preview it is
-  l, why = WL.Step(base, "disenchant", 1, false); Same(l, nil); Same(why, "edge", "Normal: nothing visible below it (the rest is Shift-only), so no step")
+  l, why = WL.Step(base, "marketvalue", 1, false); Same(l, nil); Same(why, "edge", "Normal: nothing visible below it (the rest is Shift-only), so no step")
   local hid = { { id = "vendor", when = "always" }, { id = "status", when = "shift" }, { id = "auction", when = "always" } }
   Same(Ids(WL.Step(hid, "vendor", 1, false)), "status*,auction,vendor", "Normal: a step passes the next SHOWN line, the hidden one stays behind")
   Same(Ids(WL.Step(hid, "vendor", 1, true)), "status*,vendor,auction", "Hold Shift: the next line is shown, so one step")
-  Same(Ids(WL.Step(base, "disenchant", 1, true)), "recommend,vendor,auction,status*,disenchant,source*,note*", "Hold Shift: one visible step")
+  Same(Ids(WL.Step(base, "disenchant", 1, true)), "recommend,vendor,auction,marketvalue,disenchant,recent*,historical*,supply*,quality*,status*,source*,note*", "Hold Shift: one visible step (the next shown line is the always-shown market value)")
   -- visibility
-  l = WL.SetWhen(base, "vendor", "shift"); Same(Ids(l), "recommend,vendor*,auction,disenchant,status*,source*,note*")
+  l = WL.SetWhen(base, "vendor", "shift"); Same(Ids(l), "recommend,vendor*,auction,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*")
   l, why = WL.SetWhen(base, "vendor", "sometimes"); Same(l, nil); Same(why, "bad")
   -- every operation keeps a valid layout
   local ops = { WL.Add(base, "outcomes", 3), WL.Remove(base, "note"), WL.Move(base, "auction", 1), WL.Step(base, "vendor", 1, true), WL.SetWhen(base, "note", "always") }
   for _, o in ipairs(ops) do Same(Ids(WL.Clean(o)), Ids(o), "an operation's result is already clean") end
-  Check(#WL.Add(WL.Remove(base, "note"), "note") == 7, "removed and added back")
+  Check(#WL.Add(WL.Remove(base, "note"), "note") == 12, "removed and added back")
 end
 
 ---------------------------------------------------------------------------
@@ -161,8 +161,8 @@ do
   local def = { enabled = true, lines = WL.DefaultLines() }
   local ids = function(s) local t = {} for _, row in ipairs(s.rows) do t[#t + 1] = row.id end return table.concat(t, ",") end
   local normal, shift = WL.Rows(r, Ctx(), def, false), WL.Rows(r, Ctx(), def, true)
-  Same(ids(normal), "recommend,vendor,auction,disenchant", "Normal: the Always lines")
-  Same(ids(shift), "recommend,vendor,auction,disenchant,status,source,note", "Hold Shift: the Always lines and the Shift lines, in the configured order, none twice")
+  Same(ids(normal), "recommend,vendor,auction,disenchant,marketvalue", "Normal: the Always lines")
+  Same(ids(shift), "recommend,vendor,auction,disenchant,marketvalue,recent,historical,supply,quality,status,source,note", "Hold Shift: the Always lines and the Shift lines, in the configured order, none twice")
   Same(normal.hint, "Hold Shift for details", "details exist: the hint")
   Same(shift.hint, nil, "no hint while Shift is held")
   -- Shift lines in the middle keep their place
@@ -264,8 +264,8 @@ do
   local g = WL.Get()
   Same(g.enabled, true); Same(Ids(g.lines), Ids(WL.DEFAULT_LINES))
   g.lines[1].id = "note"; g.lines[2] = nil
-  Same(Ids(WL.Get().lines), "recommend,vendor,auction,disenchant,status*,source*,note*", "changing a copy never changes the defaults")
-  Same(Ids(WL.DEFAULT_LINES), "recommend,vendor,auction,disenchant,status*,source*,note*")
+  Same(Ids(WL.Get().lines), "recommend,vendor,auction,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*", "changing a copy never changes the defaults")
+  Same(Ids(WL.DEFAULT_LINES), "recommend,vendor,auction,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*")
   Check(WL.IsDefault())
   Same(c.TwichUIDB.ui.workshopWorth, nil, "reading writes nothing")
   c.TwichUIDB = nil

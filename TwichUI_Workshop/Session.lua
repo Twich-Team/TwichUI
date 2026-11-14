@@ -635,6 +635,8 @@ function S.Shopping()
         rows = mrows, picks = S.picks, have = O.BagCount, stock = stock,
         stockMeta = function(item, where) return K.Meta(view, item, where) end,
         auction = function(item) return market and MK.Price(item, { market = market }) or nil end,
+        -- the quantity-aware price (A7): Market.Cost over the very market the prices come from; none without a market (the plan then uses the unit quote)
+        cost = (market and MK.Cost) and function(item, qty) return MK.Cost(item, qty, { market = market }) end or nil,
         vendor = V.Entry,
         sells = function(item) return sellers[item] ~= nil end,
         recipes = function(item) return byOut[item] or {} end,
@@ -750,5 +752,5 @@ function S.Snapshot()
     local picks = 0
     for _ in pairs(S.picks) do picks = picks + 1 end
     return { professions = #order, recipes = n, queue = Q.Count(), cache = O.CacheSize(), observations = S.observations,
-        prices = market and market.n or 0, history = market and market.histItems or 0, vendor = V.Count(), picks = picks, scan = SC.state, stored = St.Counts() }
+        prices = market and market.n or 0, history = market and market.histItems or 0, vendor = V.Count(), picks = picks, marketFacts = W.Facts and W.Facts.CacheSize() or 0, scan = SC.state, stored = St.Counts() }
 end

@@ -562,12 +562,35 @@ m("market.value.range-legacy-double-count", VALUATION, "            local limit 
 
 
 # ======================================================================================================================
+# CONSUMERS OF THE MARKET SERVICES (A7): Shopping over Market.Cost, MarketFacts
+# ======================================================================================================================
+A7T = "test_workshop_a7.lua"
+SHOP, FACTS = "TwichUI_Workshop/Shopping.lua", "TwichUI_Workshop/MarketFacts.lua"
+m("market.a7.range-shown-as-low", SHOP, 'return money(r.low) .. " to " .. money(r.high), "Auctions may require buying larger stacks."', 'return money(r.low), nil',
+  "a purchase that may need whole stacks is shown as its cheapest possible total, as if it were certain", [A7T])
+m("market.a7.estimate-shown-as-exact", SHOP, 'return "at least " .. money(r.low or cash), ', 'return money(r.low or cash), ',
+  "a lower bound for a quantity beyond the six kept price tiers is shown as the total", [A7T])
+m("market.a7.cost-not-memoised", SHOP, 'if c == nil then c = inp.cost(item, qty) or false memo[key] = c end', 'c = inp.cost(item, qty) or false',
+  "every comparison of the sources decodes the item's price tiers again", [A7T])
+m("market.a7.none-drops-legacy-price", SHOP, '        -- state "none": fall through to the unit-price quote', '        do return nil end\n        -- state "none": fall through to the unit-price quote',
+  "an item of an older scan (no price tiers saved) loses its auction price when the quantity-aware cost has nothing to say", [A7T])
+m("market.a7.cache-ignores-generation", FACTS, 'local stamp = W.Valuation.Generation(m) .. "|" .. floor(now / F.BUCKET)', 'local stamp = "x"',
+  "a successful scan does not change the figures the Opportunities details and the tooltip show", [A7T])
+m("market.a7.cache-ignores-time", FACTS, 'local stamp = W.Valuation.Generation(m) .. "|" .. floor(now / F.BUCKET)', 'local stamp = W.Valuation.Generation(m)',
+  "a cached answer shows the age and freshness it had hours ago", [A7T])
+m("market.a7.other-market-substituted", FACTS, '    if m == nil then return MK.Source().market end\n    if type(m) == "string" then return PR.Market(m) end',
+  '    if m == nil then return MK.Source().market end\n    if type(m) == "string" then return PR.Market(m) or MK.Source().market end',
+  "a market with no scan shows another auction house's figures", [A7T])
+
+# ======================================================================================================================
 # AUTOMATIC PRICE UPDATES (A6): the setting, the visit, the cooldown and backoff, the market, Stop and provenance
 # ======================================================================================================================
 AUTOT = "test_workshop_auto.lua"
 AUTO, SCAN, WAUTO, SESSION = "TwichUI_Workshop/Auto.lua", "TwichUI_Workshop/Scan.lua", "!!!TwichUI/WorkshopAuto.lua", "TwichUI_Workshop/Session.lua"
-m("market.auto.setting-ignored", WAUTO, 'function WA.Enabled() return R:Enabled("workshopAutoScan") end', "function WA.Enabled() return true end",
+m("market.auto.setting-ignored", WAUTO, 'function WA.Enabled() return WA.POLICY == "auto" and R:Enabled("workshopAutoScan") end', 'function WA.Enabled() return WA.POLICY == "auto" end',
   "the Auction House opening loads the Workshop and scans although the player turned automatic updates off", [AUTOT], smoke=True)
+m("market.auto.manual-policy-ignored", WAUTO, 'function WA.Enabled() return WA.POLICY == "auto" and R:Enabled("workshopAutoScan") end', 'function WA.Enabled() return R:Enabled("workshopAutoScan") end',
+  "the owner's manual-only decision is not honoured: a saved switch (or a later default) makes opening the Auction House load the Workshop and offer or start an update", [AUTOT], smoke=True)
 m("market.auto.duplicate-visit", WAUTO, "    if open then return end                                          -- the same visit, said again\n", "",
   "the several events of one opening each count as a visit, so a visit is handled again and again", [AUTOT])
 m("market.auto.stale-timer-loads", WAUTO, "    if id ~= visit or not open then return end                      -- a later visit, or the window closed: nothing\n",
