@@ -367,10 +367,19 @@ do
   Same(opps.detail.name:GetText(), "Healing Potion", "the chosen row's details")
   Check(add1.text:GetText() == "Add to crafting plan" and add1.enabled)
   Press.Must(add1)   -- pressed as a player would: the control must be eligible first
+  do   -- P2.1: Add is the optimized plan, behind the confirmation; nothing is queued until it is accepted
+    local _, cdw = W.StrategyView.Frames()
+    Check(cdw:IsShown(), "Add opens the confirmation")
+    Same(#Q.Entries(), queued, "nothing is added by asking")
+    -- this recipe's output isn't known, so no optimized plan can be made: the confirmation says so and offers the recipe on its own, named as such
+    Check(not cdw.ok:IsEnabled() and cdw.plain:IsShown(), "the deliberate fallback, never an optimized plan that isn't one: " .. cdw.text:GetText())
+    Press.Must(cdw.plain)
+    Check(not cdw:IsShown(), "accepted")
+  end
   Same(#Q.Entries(), queued + 1); Check(Q.Find(1), "Healing Potion is in the one queue")
   Same(opps.detail.add.text:GetText(), "In your queue"); Check(opps.detail.add.enabled == false)
   Check(L_.rows[1].sub:GetText():find("In your queue", 1, true), "and the row says so")
-  Check(f.note:GetText():find("Added Healing Potion", 1, true))
+  Check(f.note:GetText():find("Healing Potion", 1, true), f.note:GetText())
   f.tabCraft:GetScript("OnClick")(f.tabCraft)
   Same(Win.Mode(), "craft"); Check(not opps:IsShown())
   Same(#Win.Lists().queue.data, #Q.Entries(), "and the Crafting view shows it")
@@ -467,10 +476,10 @@ do
   local function Select(r) r:GetScript("OnClick")(r) return shop.detail end   -- a row chosen: its details are shown
   local sd = Select(make)
   Same(make.name:GetText(), "Peacebloom"); Same(make.need:GetText(), "2")
-  Same(make.kind:GetText(), "Make", "the row says Make in words as well as in its picture")
+  Same(make.kind:GetText(), "Craft", "the row says Craft in words as well as in its picture")
   Check(sd.choose.make.on and not sd.choose.auction.on, "the details light Make")
   Same(sd.name:GetText(), "Peacebloom")
-  Check(sd.explain:GetText():find("Make 2 x Peacebloom Bundle", 1, true), sd.explain:GetText())
+  Check(sd.explain:GetText():find("Craft 2 x Peacebloom Bundle", 1, true), sd.explain:GetText())
   Check(sd.explain:GetText():find("Making this looks cheaper than buying at the auction house", 1, true), sd.explain:GetText())
   Same(sd.act.text:GetText(), "Add optimized plan")   -- P2: the multilevel plan adds its crafts through a confirmation; Check(sd.act:IsShown())
   -- the suggestion and the player's own choice are told apart, in words: Make is suggested (the lowest cost), nothing is overridden yet
@@ -482,7 +491,7 @@ do
   Same(sd.tags.make:GetText(), "Suggested", "the suggestion stays marked while it is overridden")
   Same(sd.tags.auction:GetText(), "Your choice")
   Check(sd.useSuggestion:IsShown(), "an override offers Use suggestion")
-  Check(sd.choose.make.twichuiTip.body(sd.choose.make):find("suggestion", 1, true), "the suggested source's tooltip says so")
+  Check(sd.choose.make.twichuiTip.body(sd.choose.make):find("Suggested", 1, true), "the suggested source's tooltip says so")
   sd.useSuggestion:GetScript("OnClick")(sd.useSuggestion)
   Same(S.picks[10], nil, "Use suggestion drops the choice"); Check(sd.choose.make.on and not sd.useSuggestion:IsShown())
   Same(sd.tags.make:GetText(), "Suggested"); Same(sd.tags.auction:GetText(), "")
@@ -492,7 +501,7 @@ do
   Same(S.picks[10], nil)
   sd = Select(seed)
   Same(seed.name:GetText(), "Seed"); Same(seed.need:GetText(), "2"); Same(seed.spend.a:GetText(), "20c", "2 seeds at 10 each")
-  Same(seed.kind:GetText(), "Buy")
+  Same(seed.kind:GetText(), "Auction", "an auction purchase says Auction, not just Buy")
   Check(sd.explain:GetText():find("Needed to make Peacebloom Bundle", 1, true), sd.explain:GetText())
   Check(seed.spend.b:GetText():find("1 day ago", 1, true), "the price age is shown: " .. seed.spend.b:GetText())
   Check(sd.costNote:GetText():find("1 day ago", 1, true), "and in the details: " .. sd.costNote:GetText())
@@ -539,7 +548,7 @@ do
   local auction = pd.choose.auction
   auction:GetScript("OnClick")(auction)
   Check(S.picks[12] == "auction" and pd.choose.auction.on, "the player's choice, lit in the details")
-  Same(SL.rows[1].detail:GetText(), "Auction house", "and named under the row")
+  Same(SL.rows[1].detail:GetText(), "Buy at Auction House", "and named under the row in full")
   auction:GetScript("OnClick")(auction)
   Check(S.picks[12] == nil, "chosen again: back to the suggestion")
 
@@ -562,7 +571,7 @@ do
   Same(W.Vendor.Entry(12).p, 4); Same(W.Vendor.Entry(12).npc, 4567)
   sr = SL.rows[1]
   pd = Select(sr)
-  Check(pd.choose.vendor.on and sr.detail:GetText() == "Vendor", "4 each at the vendor against 10 at the auction house"); Same(sr.spend.a:GetText(), "8c")
+  Check(pd.choose.vendor.on and sr.detail:GetText() == "Buy from vendor" and sr.kind:GetText() == "Vendor", "4 each at the vendor against 10 at the auction house"); Same(sr.spend.a:GetText(), "8c")
   Check(not pd.act:IsShown(), "no place is known for the vendor, so no Show vendor")
   local located
   R.NpcStore = { Entries = function() return { { id = 4567, n = "Mira", m = 1, x = 5000, y = 5000, s = { 12 }, own = true } } end,
@@ -660,7 +669,7 @@ do
   shop.useGuild:GetScript("OnClick")(shop.useGuild)
   Check(not S.UseGuild(), "the same choice from the Shopping view")
   Same(#SL.data, 2); Same(SL.rows[1].kind:GetText(), "Collect")
-  Same(SL.rows[2].kind:GetText(), "Buy", "the second row is now a buy row")
+  Same(SL.rows[2].kind:GetText(), "No source", "the second row is now a row to buy, with no source priced")
   Check(Select(SL.rows[2]).choose.auction:IsShown(), "with its source choices")
   Same(SL.rows[2].need:GetText(), "3"); Same(SL.rows[2].spend.a:GetText(), "Unknown", "unpriced: unknown, not zero")
   Check(shop.total:GetText():find("price missing", 1, true), shop.total:GetText())
@@ -923,16 +932,17 @@ do
   Same(d.qty[3].l:GetText(), "To get"); Same(d.qty[3].v:GetText(), "5")
   Check(d.usedFor:GetText():find("Needed for: Healing Potion, Mana Potion", 1, true), d.usedFor:GetText())
   Same(d.cost:GetText(), "500c", "5 at 100 each"); Check(d.costNote:GetText():find("Auction house", 1, true), d.costNote:GetText())
-  Same(row10.kind:GetText(), "Buy"); Check(not d.act:IsShown(), "Buy has no action here: nothing is bought for you")
+  Same(row10.kind:GetText(), "Auction"); Check(not d.act:IsShown(), "Auction has no action here: nothing is bought for you")
+  Same(d.kindWord:GetText(), "Buy at Auction House", "the details say the acquisition in full")
   Check(d.choose.auction.on and d.choose.auction.enabled and not d.choose.vendor.enabled, "only the possible sources can be chosen")
-  Check(shop.counts.buy.n:GetText() == "2" and shop.counts.make.n:GetText() == "0" and shop.counts.collect.n:GetText() == "0", "the plan counts")
+  Check(shop.counts.auction.n:GetText() == "2" and shop.counts.vendor.n:GetText() == "0" and shop.counts.make.n:GetText() == "0" and shop.counts.collect.n:GetText() == "0", "the plan counts")
   Check(shop.total:GetText():find("Estimated spending: 550c", 1, true), shop.total:GetText())
   -- only collect rows
   g.bags = { [10] = 0, [11] = 0 }
   W.Storage.StoreBank({ ids = { 6 }, tabs = { [6] = { [10] = 5, [11] = 1 } }, incomplete = 0 }, Q.Now() - 600)
   Win.Render()
   Same(#SL.data, 2); Check(SL.rows[1].kind:GetText() == "Collect" and SL.rows[2].kind:GetText() == "Collect", "everything is stored: two collect rows")
-  Check(shop.counts.collect.n:GetText() == "2" and shop.counts.buy.n:GetText() == "0")
+  Check(shop.counts.collect.n:GetText() == "2" and shop.counts.auction.n:GetText() == "0" and shop.counts.vendor.n:GetText() == "0")
   Same(shop.total:GetText(), "Nothing to buy: collect what is stored.")
   local cd = shop.detail
   Check(not cd.choose.vendor:IsShown() and not cd.act:IsShown(), "collect: no source choice, no action")
@@ -1018,6 +1028,12 @@ do
   local pressed = Press(add)   -- the control's own handler, run only if the button could take a click (shown, enabled, mouse on, in a shown window)
   Check(pressed.invoked, pressed.text)
   Same(pressed.calls[1], "OnClick"); Same(pressed.button, "LeftButton")
+  do
+    local _, cdw = W.StrategyView.Frames()
+    Check(cdw:IsShown() and not Q.Find(chosenId), "the optimized confirmation first: nothing queued yet")
+    local okp = Press(cdw.ok:IsEnabled() and cdw.ok or cdw.plain)
+    Check(okp.invoked, okp.text)
+  end
   Check(Q.Find(chosenId), "the chosen recipe is in the queue")
   Same(Q.Find(chosenId).crafts, 1, "queued once")
   Same(add.text:GetText(), "In your queue"); Check(add:IsEnabled() == false and add.check:IsShown() and not add.artParts[1]:IsShown(), "the button says it, with a check in place of the plus")
@@ -1026,7 +1042,7 @@ do
     Check(not again.invoked and again.reasons[1] == "disabled", "a queued recipe's Add button is disabled, and Press refuses it: " .. again.text)
     Same(Q.Find(chosenId).crafts, 1, "so pressing it again did not queue a second craft")
   end
-  Check(f.note:GetText():find("Added ", 1, true), "the footer says what happened: " .. f.note:GetText())
+  Check(f.note:GetText():find("Queued ", 1, true), "the footer says what happened: " .. f.note:GetText())
   Check(first.sub:GetText():find("In your queue", 1, true), "the list row says so too")
   Check(add.twichuiTip.body(add):find("in your crafting plan", 1, true), "and the button's tooltip explains")
   f.tabCraft:GetScript("OnClick")(f.tabCraft)

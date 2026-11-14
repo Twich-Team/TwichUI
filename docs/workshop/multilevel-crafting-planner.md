@@ -368,3 +368,32 @@ The heavy plan therefore takes about 570 frames (about 9 s at 60 fps) in the wor
 
 - `./tests/run.sh`: 216 passed, 0 failed. `--group crafting` mutation campaign: 100 of 100 valid mutations killed (14 new entries).
 - `tools/simlab/workshop.sh`: 19 launches, 479 checks each, passed with only the classified simulator limitations; the clean run's screenshots are in `wow-ui-sim-lab/artifacts/workshop-20261114-053748/` (`opps`, `strategy`, `confirm`, `planning`, `nodata`, `craft`, `craftlong`, `stratlong`, `shop`, `shopmix`, `override`, `small`). The simulator draws addon fonts in a fallback font and is not visual validation; control clicks are handler-level.
+
+## 15. P2.1: simpler words, the default Add, vendors, the compact view and progress (built 2026-11-14, `feature/workshop`)
+
+The owner's real-client review of P2 (four screenshots of Opportunities, the expanded strategy and the Crafting Plan; the screenshots themselves were not available to this session, so the work follows the written review and the code). **`CraftPlanner.lua` was not changed.** Planning stays in `CP.Job` slices; observation and progress are separate files (`Progress.lua`, `Notice.lua`); nothing new is written by the planner.
+
+### 15.1 Prices: one planning figure
+
+- `Strategy.CostText(range, money, lowerOnly, detailed)` is the one format every Workshop page uses (Opportunities, the strategy view, the Crafting strip, Shopping's rows, details and spending line). **Simple** (the default): an exact figure as it is; a range as **"from X"** (X is the planner's lower bound, the figure plans are compared on); an open upper end or a missing price as **"at least X"**. The range ("Between X and Y. Auctions may require buying whole stacks.") is in the tooltip. A lower bound is never shown without "from" / "at least", and no upper bound is invented. **Detailed** ("Price ranges" switch in the strategy view) shows "X to Y" inline. Saved as `TwichUIDB.workshop.view.prices = "detailed"` (absent = Simple); `Session.PriceDetail` / `SetPriceDetail`; read by `Strategy.detailed`.
+- The underlying P1 figures (`summary.economic`, `cash`, `baseline`, `savings`) are unchanged; only their words are.
+- Savings words: "Saves at least X" (the ranges do not overlap), "Could save about X" (lower bounds only, overlapping), **"Buying the materials directly is the best supported option."** (the plan is not cheaper) and **"Not enough price information to compare every route."** (a price is missing). "None found" is gone.
+
+### 15.2 Opportunities and the strategy view
+
+- **Opportunities' Crafting strategy** reads top to bottom: the status, what to do (`Strategy.Headline`: "Buy 3 materials", "Craft 2 intermediates · Buy 2 · Collect 1"), **Estimated cost** (large) beside **Gold needed now**, the saving line, View strategy. Buying directly is in the cost's tooltip.
+- **The strategy view** (`ViewStrategy.lua`) is a checklist: the item and how sure the plan is, three figures (Estimated cost, Gold needed now, Savings), the headline, then **Craft**, **Buy from vendor**, **Buy from Auction House**, **No price yet**, **Collect**, **Already in your bags**, and **Other options considered (n)**, folded away until clicked. Row titles are the action ("Craft 3 × Bolt of Woolen Cloth", "Buy 1 × Fine Thread"); the subtitle is a few words. **"Good to know" is gone from the list**: what the plan assumes (`Strategy.Notes`) is behind a small **Notes** control.
+- **Tooltips.** Every item row shows the game's own item tooltip (`UI.ItemTipLines`, one tooltip per hover, nothing added later) with Workshop's lines under it: makes, uses, left over, the price range and its age, and the buy-or-craft comparison.
+- **Buy or craft** (`Strategy.Compare`): from P1's own alternatives, which are whole-plan totals with one item changed (P1 has no per-item share, so none is invented): "Buying it costs 42c more.", "Crafting it (Bolt) costs 18c more.", "… costs about 42c more, but the costs are too close to call." (overlapping ranges: never a certain saving), "… would cost 18c less; you chose …", the real reason for a way that is not possible, "a price is missing, so it can't be compared". The row's right side says it in two or three words ("saves 4s", "cheaper by 18c", "too close to call").
+
+### 15.3 Add to crafting plan: the optimized plan by default
+
+Opportunities' **Add to crafting plan** opens the strategy confirmation for the recipe (`StrategyView.Confirm(rec)`): the queue as it is plus this recipe, planned together, listing exactly the recipes and crafts ("2 recipes, 5 crafts in all") that **Add to plan** adds through `Session.ApplyOptimized` → `Queue.AddBatch` (all or nothing, checked again against the queue, nothing counted twice; P2's rules, unchanged). When no optimized plan can be made (the recipe's output or materials aren't known, or it makes a varying amount), the confirmation says so and offers **Add recipe only**, named as such (never presented as optimized). A queued recipe or a full queue is refused with the plain add's own explanation. Source choices are not changed by adding.
+
+### 15.4 Shopping: Vendor, Auction, Craft, Collect
+
+The list's source column says **Vendor** (balance-scales art), **Auction** (gavel), **Craft** (hammer), **Collect** (backpack) or **No source**; the row's second line and the details say it in full ("Buy from vendor", "Buy at Auction House", "Craft from reagents", "Collect from bank" / "guild bank"). The bar counts the four kinds. Split rows (some collected, some bought) stay separate rows, as in P2.
+
+### 15.5 Show vendor: the nearest known seller
+
+`Vendor.Places` used to put the merchant where the price was noted ahead of every distance, so in Undercity it chose Orgrimmar. Now (the NPC search's tiers): sellers with a comparable straight-line distance, nearest first (whole yards); then sellers on the player's map; then the rest. Ties: a seller the player dealt with, then the price's merchant, then the newest observation, then name and place. It returns how the first was chosen, and Show vendor's words say only that: "the nearest known seller", "a seller in this area", or how many others are known. Faction (`NpcStore.Usable`), the item in the merchant's seen stock, valid maps and coordinates are required as before (`Vendor.Sellers`). Unit-tested in `tests/test_workshop_vendor_places.lua` (the Undercity case, no local seller, several nearby, no position, an instance, faction, stale and reported entries, missing evidence, one NPC at two places).

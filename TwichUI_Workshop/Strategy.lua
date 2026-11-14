@@ -35,6 +35,25 @@ function St.RangeText(r, money, lowerOnly)
     return money(r.low) .. " to " .. money(r.high)
 end
 
+-- How a cost is shown: "simple" (the default: one planning figure, its uncertainty in one visible word, the range in the tooltip) or
+-- "detailed" (the range inline). Session keeps the player's choice (Session.PriceDetail) and sets St.detailed; every page reads it here, so
+-- Workshop has one format.
+St.detailed = false
+
+-- One cost for the page: text, tip. The figure is the planner's own lower bound (plans are compared on it), so a figure that is not exact always
+-- says so: "from X" when the upper end is known, "at least X" when it is open or a price is missing. Never a guaranteed total from a lower bound,
+-- and never an invented upper end. tip: the range and why it is one (nil for an exact figure).
+function St.CostText(r, money, lowerOnly, detailed)
+    if not r or r.low == nil then return nil end
+    if detailed == nil then detailed = St.detailed end
+    if lowerOnly then return "at least " .. money(r.low), "Some prices are missing, so this is only the part that is known." end
+    if r.high == nil then return "at least " .. money(r.low), "Part of it is an auction estimate with no known upper end: buying that many may cost more." end
+    if r.high == r.low then return money(r.low), nil end
+    local tip = ("Between %s and %s. Auctions may require buying whole stacks."):format(money(r.low), money(r.high))
+    if detailed then return money(r.low) .. " to " .. money(r.high), tip end
+    return "from " .. money(r.low), tip
+end
+
 -- How sure the plan is, in the words the windows use. tone: "good" | "warn" | "quiet".
 function St.Status(s)
     if not s or s.status == "empty" then return "Nothing to plan", "quiet" end
@@ -66,31 +85,61 @@ function St.Actions(plan)
     return table.concat(parts, " \194\183 ")
 end
 
+-- What to do, at a glance: "Buy 3 materials", "Collect 2 materials", or "Craft 2 intermediates \194\183 Buy 2 \194\183 Collect 1" when there is
+-- more than one kind of step (the first part says what the counts are; the others follow it)
+function St.Headline(plan)
+    local n = St.Counts(plan)
+    local function Things(k, one, many) return k == 1 and one or many end
+    local parts = {}
+    if n.craft > 0 then parts[#parts + 1] = ("Craft %d %s"):format(n.craft, Things(n.craft, "intermediate", "intermediates")) end
+    if n.buy > 0 then parts[#parts + 1] = #parts == 0 and ("Buy %d %s"):format(n.buy, Things(n.buy, "material", "materials")) or ("Buy " .. n.buy) end
+    if n.collect > 0 then parts[#parts + 1] = #parts == 0 and ("Collect %d %s"):format(n.collect, Things(n.collect, "material", "materials")) or ("Collect " .. n.collect) end
+    if #parts == 0 then return "Nothing to craft, buy or collect" end
+    return table.concat(parts, " \194\183 ")
+end
+
 -- The saving against buying every missing material directly, in words. Returns label, text, tone, and a sentence for the tooltip.
 --   "Savings" only when the plan is certainly cheaper (the ends of the two ranges do not overlap); otherwise "Potential savings" with a
---   figure that is only a comparison of the lower bounds; nothing when a price is missing (no figure is invented).
+--   figure that is only a comparison of the lower bounds; nothing when a price is missing (no figure is invented). "No saving" (buying directly is
+--   as good) and "Unknown" (it can't be compared) are told apart.
+St.NO_SAVING = "Buying the materials directly is the best supported option."
+St.NO_COMPARE = "Not enough price information to compare every route."
 function St.Savings(s, money)
     local sv = s and s.savings
-    if not sv then return "Potential savings", "Unknown", "quiet", "A price is missing, so no saving is claimed." end
+    if not sv then return "Potential savings", "Unknown", "quiet", St.NO_COMPARE end
     if sv.confident then
         return "Savings", "at least " .. money(sv.low), "good", "Certainly cheaper than buying directly: the price ranges do not overlap."
     end
     if sv.lowerBounds and sv.lowerBounds > 0 then
         return "Potential savings", "about " .. money(sv.lowerBounds), "warn", "Cheaper at the lowest prices, but the price ranges overlap, so it is not certain."
     end
-    return "Potential savings", "None found", "quiet", "Buying directly costs about the same or less."
+    return "Potential savings", "No saving", "quiet", St.NO_SAVING
 end
 
 -- Everything the compact Crafting Strategy block shows, as text. money(copper) -> text.
-function St.Summary(plan, money)
+--   status, tone        how sure the plan is (St.Status)
+--   headline, actions   what to do (St.Headline; the old counts line St.Actions)
+--   cost, costTip       the planning figure: the optimized economic cost (St.CostText; "from" / "at least" when it is not exact)
+--   cash, cashTip       the gold needed now (only what is bought)
+--   direct, directTip   buying every missing material directly (only when no price is missing)
+--   savingsLabel, savings, savingsTone, savingsWhy   St.Savings; saveLine: one short sentence ("Save about 12s", or St.NO_SAVING / St.NO_COMPARE)
+--   economic            the old inline range text (St.RangeText), kept for the Detailed presentation and the tests
+function St.Summary(plan, money, detailed)
     local s = plan.summary
     local text, tone = St.Status(s)
-    local out = { status = text, tone = tone, actions = St.Actions(plan), complete = s.complete, ok = s.status == "complete" or s.status == "incomplete" }
+    local out = { status = text, tone = tone, actions = St.Actions(plan), headline = St.Headline(plan), complete = s.complete,
+        ok = s.status == "complete" or s.status == "incomplete" }
     local lowerOnly = s.missing and s.missing > 0
+    local cashOnly = s.cashMissing and s.cashMissing > 0
     out.economic = St.RangeText(s.economic, money, lowerOnly)
-    out.cash = St.RangeText(s.cash, money, s.cashMissing and s.cashMissing > 0)
-    if s.baseline and s.baseline.missing == 0 then out.direct = St.RangeText(s.baseline.economic, money) end
+    out.cost, out.costTip = St.CostText(s.economic, money, lowerOnly, detailed)
+    out.cash, out.cashTip = St.CostText(s.cash, money, cashOnly, detailed)
+    if s.baseline and s.baseline.missing == 0 then out.direct, out.directTip = St.CostText(s.baseline.economic, money, false, detailed) end
     out.savingsLabel, out.savings, out.savingsTone, out.savingsWhy = St.Savings(s, money)
+    local sv = s.savings
+    if sv and sv.confident then out.saveLine = "Saves at least " .. money(sv.low)
+    elseif sv and sv.lowerBounds and sv.lowerBounds > 0 then out.saveLine = "Could save about " .. money(sv.lowerBounds)
+    else out.saveLine = out.savingsWhy end
     out.owned = s.owned or 0
     return out
 end
@@ -522,69 +571,153 @@ function St.Ops(plan, final)
 end
 
 ---------------------------------------------------------------------------
--- The full strategy: a flat list of rows
+-- The full strategy: a checklist
 ---------------------------------------------------------------------------
--- Rows for the strategy view's scrolling list: { kind = "head" | "step" | "buy" | "collect" | "own" | "alt" | "note", title, detail, right, item, tone }.
--- name(item) -> text; money(copper) -> text; ageText(seconds) -> text; now: the time the ages are counted to.
-function St.Detail(plan, name, money, ageText, now)
-    local out = {}
+-- The comparison of one item's chosen way with its other ways, in ordinary words, from the planner's own alternatives (P1: each alternative
+-- is the WHOLE plan with only this item's choice changed, so the figures are plan totals, never an invented per-item share). Returns
+-- short, lines, each: short is a few words for the row ("saves 4s", "too close to call"), lines the tooltip's { left, right } pairs, each the
+-- one sentence of each alternative (in the planner's order).
+--   compare is the chosen plan against the alternative: "lower" (the plan is certainly cheaper), "higher" (the alternative certainly is: the
+--   player's own choice), "equal", "overlap" (the order isn't certain) or "unknown" (a price is missing).
+local CHOSEN = { make = "crafting it", vendor = "buying it", auction = "buying it", none = "this way" }
+function St.Compare(line, money)
+    local alts = line and line.alternatives
+    if not (alts and #alts > 0) then return nil, nil end
+    local lines, each, short = {}, {}, nil
+    local mine = line.source == "make" and "Craft" or "Buy"
+    for _, a in ipairs(alts) do
+        local other = a.kind == "make" and "Craft" or "Buy"
+        local what = a.kind == "make" and ("Crafting it" .. (a.name and (" (" .. a.name .. ")") or "")) or "Buying it"
+        local text
+        if a.ok == false then
+            text = what .. ": " .. (CP.WHY[a.why] or "not possible")
+        elseif a.difference == nil or a.compare == "unknown" then
+            text = what .. ": a price is missing, so it can't be compared."
+        elseif a.compare == "equal" or a.difference == 0 then
+            text = what .. " costs the same."
+            short = short or "same either way"
+        elseif a.difference > 0 then
+            if a.compare == "lower" then
+                text = ("%s costs %s more."):format(what, money(a.difference))
+                short = short or ((mine == "Craft" and "saves " or "cheaper by ") .. money(a.difference))
+            else
+                text = ("%s costs about %s more, but the costs are too close to call."):format(what, money(a.difference))
+                short = short or "too close to call"
+            end
+        else
+            text = ("%s would cost %s less; you chose %s."):format(what, money(-a.difference), CHOSEN[line.source] or "this way")
+            short = short or "your choice"
+        end
+        lines[#lines + 1] = { text }
+        each[#each + 1] = text
+        if a.ok ~= false and a.economic and a.economic.low then
+            lines[#lines + 1] = { ("Plan if %s"):format(other == "Craft" and "crafted" or "bought"), (St.CostText(a.economic, money)) }
+        end
+    end
+    return short, lines, each
+end
+
+-- Notes on what the plan assumes (the planner's reason sentences, rejected recipes and the two standing caveats): one list, shown behind the
+-- strategy view's small "Notes" control, never as paragraphs in the checklist
+function St.Notes(plan, name)
     local s = plan.summary
-    local function Row(kind, title, detail, right, item, tone) out[#out + 1] = { kind = kind, title = title, detail = detail, right = right, item = item, tone = tone } end
+    local out, seen = {}, {}
+    local function Add(t) if t and not seen[t] then seen[t] = true out[#out + 1] = t end end
+    for _, code in ipairs(s.reasons or {}) do Add(CP.WHY[code]) end
+    for _, code in ipairs(s.limits or {}) do Add(CP.WHY[code]) end
+    for _, rj in ipairs(plan.rejected or {}) do Add(name(rj.item) .. ": " .. (CP.WHY[rj.why] or "A recipe isn't used.")) end
+    Add("Owned materials lower the gold you spend, not the estimated cost: they count at what they would cost.")
+    Add("Cooldowns, crafting stations and recipe requirements aren't checked. Nothing is bought or crafted for you.")
+    return out
+end
+
+-- Rows for the strategy view's scrolling list, in the order the player works through them:
+--   { kind = "head" | "step" | "vendor" | "auction" | "buy" | "collect" | "own" | "toggle" | "alt", title, detail, right, item, tone, tip }
+-- title is the action ("Craft 3 \195\151 Bolt of Woolen Cloth", "Buy 1 \195\151 Fine Thread", "Collect 2 \195\151 Rugged Leather"); detail is a few
+-- words; tip holds the precise numbers ({ left, right } lines) for the row's tooltip, under the item's own tooltip. The other ways the planner
+-- considered are one "toggle" row, collapsed unless `showAlts`. name(item) -> text; money(copper) -> text; ageText(seconds) -> text; now: the
+-- time ages are counted to.
+function St.Detail(plan, name, money, ageText, now, showAlts)
+    local out = {}
+    local function Row(kind, title, detail, right, item, tone, tip)
+        out[#out + 1] = { kind = kind, title = title, detail = detail, right = right, item = item, tone = tone, tip = tip }
+    end
     local function Head(title) Row("head", title) end
     local function Seen(at) if at and now then return "seen " .. ageText(math.max(0, now - at)) end return nil end
     local lines = {}
     for _, l in ipairs(plan.items or {}) do lines[l.item] = l end
 
     if #plan.crafts > 0 then
-        Head("Crafting steps, in order")
+        Head("Craft")
         for _, c in ipairs(plan.crafts) do
-            local uses = {}
-            for _, rg in ipairs(c.reagents) do uses[#uses + 1] = ("%d \195\151 %s"):format(rg.qty, name(rg.item)) end
-            local detail = "Uses " .. table.concat(uses, ", ")
-            if c.leftover > 0 then detail = detail .. (" \194\183 %d left over"):format(c.leftover) end
-            Row("step", ("%d. Craft %s \195\151 %d"):format(c.order, c.name, c.crafts), detail, "makes " .. c.produced, c.item, "make")
+            local tip = { { "Makes", tostring(c.produced) } }
+            for _, rg in ipairs(c.reagents) do tip[#tip + 1] = { "Uses " .. rg.qty .. " \195\151 " .. name(rg.item) } end
+            if c.leftover > 0 then tip[#tip + 1] = { "Left over", tostring(c.leftover) } end
+            local short, cmp = St.Compare(lines[c.item], money)
+            for _, x in ipairs(cmp or {}) do tip[#tip + 1] = x end
+            local detail = ("makes %d"):format(c.produced) .. (c.leftover > 0 and (", %d spare"):format(c.leftover) or "")
+            Row("step", ("Craft %d \195\151 %s"):format(c.crafts, c.name), detail, short or "", c.item, "make", tip)
         end
     end
 
-    local buys, missing = {}, {}
+    local vendor, auction, missing = {}, {}, {}
     for _, l in ipairs(plan.items or {}) do
-        if l.buy then
-            if l.buy.low then buys[#buys + 1] = l else missing[#missing + 1] = l end
+        local b = l.buy
+        if b then
+            if not b.low then missing[#missing + 1] = l
+            elseif b.source == "vendor" then vendor[#vendor + 1] = l
+            else auction[#auction + 1] = l end
         end
     end
-    if #buys + #missing > 0 then
-        Head("Buy")
-        for _, l in ipairs(buys) do
-            local b = l.buy
-            local words = St.RangeText({ low = b.low, high = b.high }, money)
-            local where = b.source == "vendor" and "from a vendor" or "at the auction house"
-            local detail = ("%d %s"):format(b.qty, where)
-            if b.surplus and b.surplus > 0 then detail = detail .. (", %d left over"):format(b.surplus) end
-            local age = Seen(b.at)
-            if age then detail = detail .. " \194\183 " .. age end
-            if b.freshness == "old" then detail = detail .. " (old)" end
-            if b.complete == false then detail = detail .. " (not a complete scan)" end
-            Row("buy", name(l.item), detail, words, l.item, "buy")
-        end
+    local function BuyRow(kind, l)
+        local b = l.buy
+        local text, rangeTip = St.CostText({ low = b.low, high = b.high }, money)
+        local tip = {}
+        if rangeTip then tip[#tip + 1] = { rangeTip } end
+        if b.surplus and b.surplus > 0 then tip[#tip + 1] = { "Left over", tostring(b.surplus) } end
+        local age = Seen(b.at)
+        if age then tip[#tip + 1] = { "Price", age .. (b.freshness == "old" and " (old)" or "") } end
+        if b.complete == false then tip[#tip + 1] = { "From a scan that didn't finish." } end
+        local _, cmp = St.Compare(l, money)
+        for _, x in ipairs(cmp or {}) do tip[#tip + 1] = x end
+        local detail = kind == "vendor" and "from a vendor" or "at the Auction House"
+        if b.freshness == "old" then detail = detail .. " \194\183 old price" end
+        Row(kind, ("Buy %d \195\151 %s"):format(b.qty, name(l.item)), detail, text, l.item, "buy", tip)
+    end
+    if #vendor > 0 then
+        Head("Buy from vendor")
+        for _, l in ipairs(vendor) do BuyRow("vendor", l) end
+    end
+    if #auction > 0 then
+        Head("Buy from Auction House")
+        for _, l in ipairs(auction) do BuyRow("auction", l) end
+    end
+    if #missing > 0 then
+        Head("No price yet")
         for _, l in ipairs(missing) do
-            Row("buy", name(l.item), CP.WHY[l.missing] or CP.WHY.nosource, "no price", l.item, "warn")
+            Row("buy", ("Get %d \195\151 %s"):format(l.buy.qty or l.rest or 0, name(l.item)), "no known source price", "no price", l.item, "warn",
+                { { CP.WHY[l.missing] or CP.WHY.nosource } })
         end
     end
 
-    local owned, coll = {}, {}
+    if #plan.collect > 0 then
+        Head("Collect")
+        for _, c in ipairs(plan.collect) do
+            local guild = c.where == "guild"
+            Row("collect", ("Collect %d \195\151 %s"):format(c.qty, name(c.item)), guild and "from the guild bank" or "from your bank", "", c.item, "collect",
+                { { guild and "Shared stock: others can take it too, and a withdrawal limit may apply." or "Counted from when your bank was last open." } })
+        end
+    end
+
+    local owned = {}
     for _, l in ipairs(plan.items or {}) do
         if l.owned.bags > 0 then owned[#owned + 1] = l end
     end
     if #owned > 0 then
-        Head("From your bags")
-        for _, l in ipairs(owned) do Row("own", name(l.item), "worth " .. (l.value and money(l.value) or "an unknown amount") .. " counted in the cost", tostring(l.owned.bags), l.item, "own") end
-    end
-    if #plan.collect > 0 then
-        Head("Collect from storage")
-        for _, c in ipairs(plan.collect) do
-            local guild = c.where == "guild"
-            Row("collect", name(c.item), guild and "Shared stock: other members can take it too; a withdrawal limit may apply." or "Remembered from when your bank was last open.",
-                (guild and "guild bank " or "bank ") .. c.qty, c.item, "collect")
+        Head("Already in your bags")
+        for _, l in ipairs(owned) do
+            Row("own", name(l.item), "in your bags", tostring(l.owned.bags), l.item, "own",
+                { { "Counted at", l.value and money(l.value) or "an unknown value" }, { "Owned materials still count at what they would cost." } })
         end
     end
 
@@ -593,43 +726,25 @@ function St.Detail(plan, name, money, ageText, now)
         if l.alternatives and #l.alternatives > 0 then alts[#alts + 1] = l end
     end
     if #alts > 0 then
-        Head("Other ways considered")
-        for _, l in ipairs(alts) do
-            local chosen = l.source == "make" and ("Make " .. (l.make and l.make.name or "it")) or (l.source == "vendor" and "Buy from a vendor" or (l.source == "auction" and "Buy at the auction house" or "No source"))
-            for _, a in ipairs(l.alternatives) do
-                local what = a.kind == "make" and ("Make " .. (a.name or "it")) or "Buy it"
-                local detail, right
-                if a.ok == false then
-                    detail, right = CP.WHY[a.why] or "Not possible", "not possible"
-                elseif a.difference then
-                    if a.difference > 0 then
-                        right = money(a.difference) .. " more"
-                        detail = a.compare == "lower" and "Certainly dearer than the plan." or "Dearer than the plan, but the price ranges overlap."
-                    elseif a.difference < 0 then
-                        right = money(-a.difference) .. " less"
-                        detail = "Would cost less; this plan uses your own choice."
-                    else
-                        right, detail = "same cost", "Costs the same as the plan."
-                    end
-                else
-                    right, detail = "unknown", "A price is missing, so it can't be compared."
+        local n = 0
+        for _, l in ipairs(alts) do n = n + #l.alternatives end
+        Row("toggle", ("Other options considered (%d)"):format(n), nil, showAlts and "Hide" or "Show")
+        if showAlts then
+            for _, l in ipairs(alts) do
+                local _, cmp, each = St.Compare(l, money)
+                for i, a in ipairs(l.alternatives) do
+                    local what = a.kind == "make" and ("Craft " .. name(l.item)) or ("Buy " .. name(l.item))
+                    local line = each and each[i] or ""
+                    local right
+                    if a.ok == false then right = "not possible"
+                    elseif a.difference == nil or a.compare == "unknown" then right = "can't compare"
+                    elseif a.compare == "equal" or a.difference == 0 then right = "same cost"
+                    elseif a.difference > 0 then right = a.compare == "lower" and (money(a.difference) .. " more") or "too close to call"
+                    else right = money(-a.difference) .. " less" end
+                    Row("alt", what, line, right, l.item, "alt", cmp)
                 end
-                Row("alt", name(l.item) .. ": " .. what, "The plan: " .. chosen .. ". " .. detail, right, l.item, "alt")
             end
         end
     end
-
-    Head("Good to know")
-    for _, code in ipairs(s.reasons or {}) do
-        if CP.WHY[code] then Row("note", CP.WHY[code]) end
-    end
-    for _, code in ipairs(s.limits or {}) do
-        if CP.WHY[code] then Row("note", CP.WHY[code]) end
-    end
-    for _, rj in ipairs(plan.rejected or {}) do
-        Row("note", name(rj.item) .. ": " .. (CP.WHY[rj.why] or "A recipe isn't used."))
-    end
-    Row("note", "Owned materials lower the cash you spend, not the economic cost: they are counted at what they would cost.")
-    Row("note", "Cooldowns, crafting stations and recipe requirements aren't checked. Nothing is bought or crafted for you.")
     return out
 end

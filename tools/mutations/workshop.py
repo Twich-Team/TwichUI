@@ -703,6 +703,22 @@ m("crafting.strategy.suggestion-follows-choice", STRAT, "    if not line.picked 
 m("crafting.strategy.final-recipe-first", STRAT, "if final then ops[#ops + 1] = { recipe = final.id, name = final.name, crafts = final.crafts or 1, produces = final.outItem, final = true } end",
   "if final then table.insert(ops, 1, { recipe = final.id, name = final.name, crafts = final.crafts or 1, produces = final.outItem, final = true }) end",
   "the recipe the player adds is queued before the crafts that make its materials", [STU])
+# P2.1: where Show vendor points (Vendor.Places)
+VPT = "test_workshop_vendor_places.lua"
+m("crafting.vendor.priced-before-distance", VENDOR, "        if a.tier ~= b.tier then return a.tier < b.tier end\n        if a.yards", "        if a.priced ~= b.priced then return a.priced end\n        if a.tier ~= b.tier then return a.tier < b.tier end\n        if a.yards",
+  "the merchant the price was seen at outranks a nearer seller (Undercity sent to Orgrimmar)", [VPT])
+m("crafting.vendor.same-map-not-local", VENDOR, "((spot and spot.map ~= nil and e.m == spot.map) and 2 or 3)", "3",
+  "with no position, a seller on the player's own map is not preferred", [VPT])
+m("crafting.vendor.nearest-claimed-without-distance", VENDOR, "return out, (first.tier == 1 and \"nearest\") or", "return out, (first.tier <= 2 and \"nearest\") or",
+  "a seller is called the nearest although no distance was compared", [VPT])
+# P2.1: the simple price presentation and the buy-or-craft words
+m("crafting.strategy.lower-bound-as-total", STRAT, "    return \"from \" .. money(r.low), tip", "    return money(r.low), tip",
+  "the simple figure drops its 'from', so a range's lower bound reads as the total cost", [STU])
+m("crafting.strategy.open-end-as-exact", STRAT, "    if r.high == nil then return \"at least \" .. money(r.low),", "    if r.high == nil then return money(r.low),",
+  "an estimate with no known upper end is shown as an exact figure", [STU])
+m("crafting.strategy.overlap-called-saving", STRAT, "            if a.compare == \"lower\" then\n                text = (\"%s costs %s more.\")",
+  "            if a.compare ~= \"unknown\" then\n                text = (\"%s costs %s more.\")",
+  "overlapping cost ranges are said to save a certain amount", [STU])
 m("crafting.strategy.bags-not-in-key", SESSION, "bags[#bags + 1] = tostring(O.BagCount(m.item))", "bags[#bags + 1] = \"\"",
   "a plan is reused after the bags changed, because the key ignores what the bags hold", [STU])
 m("crafting.strategy.apply-double-crafts", SESSION, "ops[#ops + 1] = { rec = r, crafts = c.crafts }", "ops[#ops + 1] = { rec = r, crafts = c.crafts * 2 }",

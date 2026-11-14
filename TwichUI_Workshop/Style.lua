@@ -458,6 +458,37 @@ function UI.ItemTip(btn, getItem)
     end)
 end
 
+-- Shift-click on an item: its link in the open chat box (nothing else; an unmodified click is the caller's)
+function UI.LinkItem(item)
+    if not (item and IsModifiedClick and IsModifiedClick("CHATLINK") and ChatEdit_InsertLink) then return false end
+    local ok, _, link = pcall(C_Item.GetItemInfo, item)
+    if ok and type(link) == "string" then pcall(ChatEdit_InsertLink, link) return true end
+    return false
+end
+
+-- An item's own tooltip with Workshop's lines under it: extra = { { left, right }, { sentence }, ... }. Without an item (or one the game can't
+-- show yet) the title and the lines alone. One tooltip, drawn once per hover: nothing is added to it later.
+function UI.ItemTipLines(owner, item, extra, title)
+    if not GameTooltip then return end
+    GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+    local shown = item ~= nil and pcall(GameTooltip.SetItemByID, GameTooltip, item)
+    if not shown then
+        if GameTooltip.ClearLines then GameTooltip:ClearLines() end
+        if title then GameTooltip:AddLine(title, 1, 0.82, 0) end
+    end
+    if extra and #extra > 0 then
+        if shown then
+            GameTooltip:AddLine(" ")
+            if title then GameTooltip:AddLine(title, 1, 0.82, 0) end
+        end
+        for _, x in ipairs(extra) do
+            if x[2] then GameTooltip:AddDoubleLine(x[1], x[2], 0.8, 0.8, 0.8, 1, 1, 1)
+            else GameTooltip:AddLine(x[1], 0.8, 0.8, 0.8, true) end
+        end
+    end
+    GameTooltip:Show()
+end
+
 -- Lets a click that a picture would otherwise swallow choose its row: the picture runs the row's own OnClick (the modified-click item link
 -- still goes to chat).
 function UI.PassClicks(btn, row)

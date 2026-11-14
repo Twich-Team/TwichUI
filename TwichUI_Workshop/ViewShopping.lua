@@ -18,6 +18,7 @@ local UI = W.UI
 local SHOP_H, DETAIL_W, BAR_H, GAP = 56, 300, 70, 10
 local NEED_W, KIND_W, SPEND_W = 46, 104, 112
 local TOP = -66
+local BAR_TEXT = 412   -- where the spending line starts in the bar (after the four counts)
 
 local K
 local page, shop
@@ -37,6 +38,16 @@ local function AgeWords(at, oldAfter)
     local text = PR.AgeText(age)
     if age > (oldAfter or PR.OLD_AFTER) then text = text .. " (old)" end
     return text
+end
+
+-- A cost as the row and the details show it (Strategy.CostText's rule: "from" / "at least" when it is not exact; the range inline only with
+-- "Price ranges" on). Returns text, note.
+local function CostWords(r)
+    if r.costState == "range" and r.high then
+        local text = Sg.CostText({ low = r.low, high = r.high }, UI.Money)
+        return text, "Auctions may require buying larger stacks."
+    end
+    return Sh.CostWords(r, UI.Money)
 end
 
 -- a row's identity: its item, and whether it is the row to collect from storage or the one to buy or make (an item has at most one of each,
@@ -75,7 +86,7 @@ local function ShopDetail(r)
     end
     if r.kind == "make" then
         local m = r.make
-        parts[#parts + 1] = ("Make %d x %s: makes %d%s."):format(m.crafts, m.rec.name, m.made,
+        parts[#parts + 1] = ("Craft %d x %s: makes %d%s."):format(m.crafts, m.rec.name, m.made,
             m.surplus > 0 and (", " .. m.surplus .. " left over") or "")
     elseif r.surplus then
         parts[#parts + 1] = ("%d left over."):format(r.surplus)
@@ -84,7 +95,7 @@ local function ShopDetail(r)
     if r.source and not r.picked and not r.reagentOnly then why = "Suggested source. " .. why end
     parts[#parts + 1] = why
     if r.kind == "buy" and r.source == "auction" then
-        local _, note = Sh.CostWords(r, UI.Money)
+        local _, note = CostWords(r)
         if note then parts[#parts + 1] = note end
         local o = r.options.auction
         if o and o.state == "few" then
@@ -95,18 +106,32 @@ local function ShopDetail(r)
     return table.concat(parts, " ")
 end
 
--- Buy, Make and Collect: a painting, a word and a muted tone each
+-- Vendor, Auction, Craft and Collect: a painting (the vendor and auctioneer art of the NPC collection), a short word for the list, the full
+-- action for the details, and a muted tone each. Colour is never the only sign. A row to buy with no usable source is "No source".
 local KIND = {
-    buy = { word = "Buy", art = "npc:coins", tone = "bronzeText" },
-    make = { word = "Make", art = "npc:hammer", tone = "tealHi" },
-    collect = { word = "Collect", art = "npc:leather-backpack", tone = "sage" },
+    vendor = { word = "Vendor", full = "Buy from vendor", art = "npc:balance-scales", tone = "bronzeText" },
+    auction = { word = "Auction", full = "Buy at Auction House", art = "npc:gavel", tone = "bronzeText" },
+    none = { word = "No source", full = "No source known", art = "npc:coins", tone = "stone" },
+    make = { word = "Craft", full = "Craft from reagents", art = "npc:hammer", tone = "tealHi" },
+    collect = { word = "Collect", full = "Collect from bank", art = "npc:leather-backpack", tone = "sage" },
 }
+local function KindOf(r)
+    if r.kind == "collect" then return KIND.collect, "collect" end
+    if r.kind == "make" then return KIND.make, "make" end
+    local k = (r.source == "vendor" or r.source == "auction") and r.source or "none"
+    return KIND[k], k
+end
+local function FullWord(r)
+    if r.kind == "collect" then return r.where == "guild" and "Collect from guild bank" or "Collect from bank" end
+    return (KindOf(r)).full
+end
+UI.ShopKind = function(r) local kind, k = KindOf(r) return kind.word, k, FullWord(r) end   -- (the compact view and the tests)
 
--- The short second line of a list row: where it comes from, in a few words
+-- The short second line of a list row: what it is for, or the action in words
 local function ShortLine(r)
     if r.kind == "collect" then return r.where == "guild" and "From the guild bank" or "From your bank" end
-    if r.kind == "make" then return "Make " .. r.make.crafts .. " \195\151 " .. UI.Shorten(r.make.rec.name, 13) end
-    local text = r.source and Sh.NAMES[r.source] or "No source"
+    if r.kind == "make" then return "Craft " .. r.make.crafts .. " \195\151 " .. UI.Shorten(r.make.rec.name, 13) end
+    local text = r.reagentOnly and r.forNames and ("For " .. UI.Shorten(r.forNames[1], 18)) or FullWord(r)
     if r.estimate then text = text .. (r.costState == "range" and " \194\183 range" or " \194\183 est.") end
     return text
 end
@@ -163,7 +188,7 @@ local function MakeShopRow(parent)
         self.name:SetText(name or ("Item " .. r.item))
         self.detail:SetText(ShortLine(r))
         self.need:SetText(tostring(r.qty))
-        local kind = KIND[r.kind] or KIND.buy
+        local kind = KindOf(r)
         local tone = K[kind.tone]
         UI.Paint(self.need, tone)
         UI.Art(self.kindArt, kind.art, 22)
@@ -193,10 +218,13 @@ local function MakeShopRow(parent)
             end
         elseif r.cash then
             local age = AgeWords(r.at, r.source == "vendor" and W.Vendor.OLD_AFTER or nil)
-            if r.costState == "range" and r.high then
+            if r.costState == "range" and r.high and Sg.detailed then
                 -- one exact figure is not known: the cheapest it can be, and under it the most (whole listings may have to be bought)
                 a:SetText(UI.Money(r.low))
                 b:SetText("to " .. UI.Money(r.high))
+            elseif r.costState == "range" and r.high then
+                a:SetText((CostWords(r)))   -- "from X": the range is in the row's tooltip
+                b:SetText(age or "whole stacks")
             elseif r.costState == "estimate" and r.costInfo then
                 a:SetText(UI.Money(r.low))
                 b:SetText("at least" .. (age and (", " .. age) or ""))
@@ -233,13 +261,13 @@ local function RenderDetail(plan, ctx)
         return
     end
     d.data = r
-    local kind = KIND[r.kind] or KIND.buy
+    local kind = KindOf(r)
     local name, icon = O.ItemFacts(r.item)
     d.item = r.item
     d.icon:SetTexture(icon or UI.ICON_BLANK)
     d.name:SetText(name or ("Item " .. r.item))
     UI.Art(d.kindArt, kind.art, 22)
-    d.kindWord:SetText(kind.word)
+    d.kindWord:SetText(FullWord(r))
     UI.Paint(d.kindWord, K[kind.tone])
     -- quantities: the plan's own numbers, nothing recalculated
     local lines = {}
@@ -300,7 +328,7 @@ local function RenderDetail(plan, ctx)
         d.costNote:SetText(mk.planned and "counted in the materials and crafts of the plan" or "the reagents are counted in their own rows")
     else
         d.costLabel:SetText(r.estimate and "Estimated cost" or "Cost")
-        local short = r.cash and Sh.CostWords(r, UI.Money)
+        local short = r.cash and CostWords(r)
         d.cost:SetText(short or "Unknown")
         UI.Paint(d.cost, r.cash and K.text or K.stone)
         local tag = {}
@@ -343,9 +371,12 @@ local function Render()
 
     shop.status:SetText(("Vendor prices as last seen (%d noted) \194\183 %s"):format(W.Vendor.Count(), K2.Scope(ctx.stock)))
 
-    -- what kinds of rows there are
-    local n = { collect = 0, buy = 0, make = 0 }
-    for _, r in ipairs(plan.rows) do n[r.kind] = (n[r.kind] or 0) + 1 end
+    -- what kinds of rows there are (a row to buy counts under its source; one with none under neither)
+    local n = { collect = 0, vendor = 0, auction = 0, make = 0 }
+    for _, r in ipairs(plan.rows) do
+        local _, k = KindOf(r)
+        n[k] = (n[k] or 0) + 1
+    end
     for kind, badge in pairs(shop.counts) do badge.n:SetText(tostring(n[kind] or 0)) end
 
     local empty
@@ -359,6 +390,7 @@ local function Render()
     UI.lists.shop:SetData(plan.rows, empty)
 
     -- the total: only what is priced, and never as if it were complete when it is not
+    shop.rangeTip = nil
     if ctx.first then
         shop.total:SetText("Planning...")
         UI.Paint(shop.total, K.textDim)
@@ -375,7 +407,9 @@ local function Render()
         shop.total:SetText("Estimated spending: at least " .. UI.Money(tot.low))   -- some price is only a lower bound: no upper end is claimed
         UI.Paint(shop.total, K.text)
     elseif tot.estimate and tot.high and tot.high > tot.low then
-        shop.total:SetText("Estimated spending: " .. UI.Money(tot.low) .. " to " .. UI.Money(tot.high))
+        local text, tip = Sg.CostText({ low = tot.low, high = tot.high }, UI.Money)
+        shop.total:SetText("Estimated spending: " .. text)
+        shop.rangeTip = tip
         UI.Paint(shop.total, K.text)
     else
         shop.total:SetText("Estimated spending: " .. UI.Money(tot.cash) .. (tot.estimate and " (includes estimates)" or ""))
@@ -402,12 +436,12 @@ local function Render()
     elseif plan.plan then
         local w = Sg.Summary(plan.plan, UI.Money)
         local line = w.status
-        if w.economic then line = line .. " \194\183 economic cost " .. w.economic end
-        notes[#notes + 1] = line .. ". Owned materials lower cash, not economic cost."
+        if w.cost then line = line .. " \194\183 estimated cost " .. w.cost end
+        notes[#notes + 1] = line .. "."
     end
     local stockNote = S.StockNote(sum, ctx.stock)
     if stockNote then notes[#notes + 1] = stockNote end
-    shop.notesAll = table.concat(notes, "\n")
+    shop.notesAll = table.concat(notes, "\n") .. (shop.rangeTip and ("\n" .. shop.rangeTip) or "")
     shop.notes:SetText(table.concat(notes, " "))
 end
 
@@ -468,7 +502,7 @@ local function BuildDetail()
     d.choose, d.tags = {}, {}
     local bw = math.floor((DETAIL_W - 28 - 8) / 3)
     for i, k in ipairs(Sh.ORDER) do
-        local b = UI.Segment(d.head, k == "auction" and "Auction" or Sh.NAMES[k], bw, function()
+        local b = UI.Segment(d.head, k == "auction" and "Auction" or (k == "make" and "Craft" or Sh.NAMES[k]), bw, function()
             if d.data then
                 -- the chosen source again returns to the suggestion
                 if S.picks[d.data.item] == k then S.PickSource(d.data.item, nil) else S.PickSource(d.data.item, k) end
@@ -476,15 +510,14 @@ local function BuildDetail()
             end
         end)
         b:SetPoint("TOPLEFT", 14 + (i - 1) * (bw + 4), -204)
-        UI.TipFn(b, Sh.NAMES[k], function()
+        UI.TipFn(b, ({ vendor = "Buy from vendor", auction = "Buy at Auction House", make = "Craft from reagents" })[k], function()
             local r = d.data
             if not r then return nil end
             local why = Sh.WhyNot(r, k)
             if why then return "Not available: " .. why end
-            local text = "Choose this to get the material this way. Nothing is bought or made for you."
-            if r.suggested == k then text = "Workshop's suggestion: the lowest known cost. " .. text
-            elseif r.source == k then text = "Your choice. Choose it again, or use the suggestion, to go back. " .. text end
-            return text
+            if r.suggested == k then return "Suggested: the lowest known cost." end
+            if r.source == k then return "Your choice. Click again to use the suggestion." end
+            return "Get this material this way instead."
         end)
         d.choose[k] = b
         local tag = UI.Text(d.head, 11, K.sage)
@@ -497,7 +530,7 @@ local function BuildDetail()
         if d.data then S.PickSource(d.data.item, nil); UI.Redraw() end
     end, 20)
     d.useSuggestion:SetPoint("TOPRIGHT", -14, -175)
-    UI.Tip(d.useSuggestion, "Use suggestion", "Goes back to the source Workshop suggests for this material: the one with the lowest known cost.")
+    UI.Tip(d.useSuggestion, "Use suggestion", "Go back to the lowest known cost.")
     d.useSuggestion:Hide()
     d.explainBox = CreateFrame("Frame", nil, d.head)
     d.explainBox:SetPoint("TOPLEFT", 14, -252)
@@ -539,7 +572,11 @@ local function BuildDetail()
     end, 34)
     d.act:SetPoint("BOTTOMLEFT", 14, 12)
     d.act:SetPoint("BOTTOMRIGHT", -14, 12)
-    UI.Tip(d.act, "Show vendor / Add to crafting plan", "Show vendor: shows a vendor seen to sell this on the world map. It sets no waypoint and starts no route. Add optimized plan: shows the crafts the plan makes and asks you to confirm before adding them to your crafting plan. Nothing is bought or crafted.")
+    UI.TipFn(d.act, nil, function()
+        local x = d.data
+        if x and x.kind == "make" then return "Add optimized plan\nReview the crafts before adding them." end
+        return "Show vendor\nShow the nearest known seller on the world map. No route is started."
+    end)
     d.empty = UI.Text(d, 13, K.textDim)
     d.empty:SetPoint("TOPLEFT", 14, -16)
     d.empty:SetPoint("RIGHT", -14, 0)
@@ -557,9 +594,9 @@ local function BuildBar()
     bar:EnableMouse(true)
     shop.bar = bar
     shop.counts = {}
-    for i, k in ipairs({ "buy", "make", "collect" }) do
+    for i, k in ipairs({ "vendor", "auction", "make", "collect" }) do
         local kind = KIND[k]
-        local x = 14 + (i - 1) * 98
+        local x = 14 + (i - 1) * 96
         local art = bar:CreateTexture(nil, "ARTWORK")
         art:SetSize(26, 26)
         art:SetPoint("LEFT", bar, "LEFT", x, 0)
@@ -574,23 +611,23 @@ local function BuildBar()
     local rule = UI.Rule(bar, 0.6)
     rule:SetWidth(1)
     rule:ClearAllPoints()
-    rule:SetPoint("TOP", bar, "TOPLEFT", 312, -12)
-    rule:SetPoint("BOTTOM", bar, "BOTTOMLEFT", 312, 12)
+    rule:SetPoint("TOP", bar, "TOPLEFT", BAR_TEXT - 16, -12)
+    rule:SetPoint("BOTTOM", bar, "BOTTOMLEFT", BAR_TEXT - 16, 12)
     -- the spending line has the bar's whole remaining width and one line (its sentences are kept short enough to fit); the notes beneath
     -- wrap to two lines, and every note is in the bar's tooltip
     shop.total = UI.Text(bar, 14, K.text, "strong")
-    shop.total:SetPoint("TOPLEFT", 328, -9)
+    shop.total:SetPoint("TOPLEFT", BAR_TEXT, -9)
     shop.total:SetPoint("RIGHT", bar, "RIGHT", -14, 0)
     shop.total:SetHeight(18)
     shop.notes = UI.Text(bar, 11, K.textDim)
-    shop.notes:SetPoint("TOPLEFT", 328, -30)
+    shop.notes:SetPoint("TOPLEFT", BAR_TEXT, -30)
     shop.notes:SetPoint("RIGHT", bar, "RIGHT", -14, 0)
     shop.notes:SetHeight(34)
     shop.notes:SetWordWrap(true)
     shop.notes:SetJustifyV("TOP")
     -- a wrapped text wants an explicit width: the bar's width less its left part and margin, set now and whenever the bar is sized
     local function Widths(w)
-        local room = math.max(200, (w or 820) - 328 - 14)
+        local room = math.max(200, (w or 820) - BAR_TEXT - 14)
         shop.total:SetWidth(room)
         shop.notes:SetWidth(room)
     end
@@ -610,7 +647,7 @@ local function Build(p)
         if UI.StrategyView then UI.StrategyView.Open("queue") end
     end, 28)
     shop.view:SetPoint("TOPRIGHT", -190, -6)
-    UI.Tip(shop.view, "View strategy", "Shows the whole plan: the crafting steps in order, what to buy and where, what comes from your bags and storage, and the other ways considered. Nothing is bought or crafted.")
+    UI.Tip(shop.view, "View strategy", "See every step of the plan, with prices and comparisons.")
     shop.status = UI.Text(shop, 12, K.stone)
     shop.status:SetPoint("TOPRIGHT", -2, -38)
     shop.status:SetJustifyH("RIGHT")
@@ -646,7 +683,7 @@ end
 UI.Register({
     key = "shop", nav = "Shopping", icon = "npc:reagent-pouch",
     title = "Shopping", sub = "What your queue still needs, and where to get it.",
-    tip = "What your queue still needs, where to get each material (a vendor, the auction house or making it) and what that may cost.",
+    tip = "What your queue still needs and where to get it.",
     Build = Build, Render = Render,
     Reset = function() shopView = nil; chosen = nil end,
 })

@@ -115,11 +115,12 @@ local d = opps.detail
 
 -- Opportunities ------------------------------------------------------------------------------------------------------------------------------
 Same(d.strat.status:GetText(), "Best verified plan", "a small plan is ready when the page is drawn")
-Same(d.strat.pairs[1].v:GetText(), Money(1200), "buying the bars directly (1000 cash + the 2 ore owned)")
-Same(d.strat.pairs[2].v:GetText(), Money(1000), "the optimized economic cost")
-Same(d.strat.pairs[3].v:GetText(), Money(700), "the cash needed now")
-Same(d.strat.pairs[4].l:GetText(), "Savings"); Check(d.strat.pairs[4].v:GetText():find("at least", 1, true), d.strat.pairs[4].v:GetText())
-Same(d.strat.actions:GetText(), "Craft 1 \194\183 Buy 1")
+Same(d.strat.headline:GetText(), "Craft 1 intermediate \194\183 Buy 1", "what to do, at a glance")
+Same(d.strat.pairs[1].l:GetText(), "Estimated cost"); Same(d.strat.pairs[1].v:GetText(), Money(1000), "one planning figure: the optimized cost (exact here)")
+Same(d.strat.pairs[2].l:GetText(), "Gold needed now"); Same(d.strat.pairs[2].v:GetText(), Money(700), "the cash needed now")
+Check(d.strat.pairs[1].tip:find(Money(1200), 1, true), "buying the bars directly is in the cost's tooltip, not a box of its own")
+Same(d.strat.save:GetText(), "Saves at least " .. Money(200), "a certain saving is said as such")
+for _, p in ipairs(d.strat.pairs) do Check(not p.v:GetText():find(" to ", 1, true), "no inline range in the simple view") end
 Same(d.cost:GetText(), Money(1200), "the existing one-level cost to make is unchanged and is not the optimized cost")
 Check(d.view:IsEnabled(), "View strategy is available")
 Check(d.chart and d.chart:IsShown() ~= nil and d.chartBox ~= nil, "the price history is still there, in a place of its own")
@@ -131,7 +132,8 @@ Same(#Q.Entries(), 0, "looking changes nothing")
 do
   local blank = RowOf(OL, function(r) return r.rec and r.rec.name == "Bar" end)
   blank:GetScript("OnClick")(blank)
-  Same(d.strat.pairs[2].v:GetText(), Money(200), "the bar on its own: 2 ore, 100 each (3 in the bags: owned, counted at its value)")
+  Same(d.strat.pairs[1].v:GetText(), Money(200), "the bar on its own: 2 ore, 100 each (3 in the bags: owned, counted at its value)")
+  Same(d.strat.save:GetText(), W.Strategy.NO_SAVING, "nothing to craft on the way: buying directly is the best supported option")
   sword:GetScript("OnClick")(sword)
 end
 
@@ -148,16 +150,16 @@ do
   Win.Render()
   Same(d.strat.status:GetText(), "Planning...", "planning is said, quietly")
   Check(not d.view:IsEnabled(), "and the strategy can't be opened yet")
-  Check(d.strat.pairs[2].v:GetText() == "...", "no figures of another recipe")
+  Check(d.strat.pairs[1].v:GetText() == "...", "no figures of another recipe")
   local bar = RowOf(OL, function(r) return r.rec and r.rec.name == "Bar" end)
   bar:GetScript("OnClick")(bar)
   Same(d.strat.status:GetText(), "Planning...", "the new selection plans its own")
   St.Pump()
   Win.Render()
-  Same(d.strat.status:GetText(), "Best verified plan"); Same(d.strat.pairs[2].v:GetText(), Money(200), "the figures of the recipe shown, not of the one planned first")
+  Same(d.strat.status:GetText(), "Best verified plan"); Same(d.strat.pairs[1].v:GetText(), Money(200), "the figures of the recipe shown, not of the one planned first")
   sword:GetScript("OnClick")(sword)
   St.Pump(); Win.Render()
-  Same(d.strat.pairs[2].v:GetText(), Money(1000))
+  Same(d.strat.pairs[1].v:GetText(), Money(1000))
   W.CraftPlanner.Job = real
 end
 
@@ -169,15 +171,41 @@ local SLst = Win.Lists().strategy
 local titles = {}
 for _, r in ipairs(SLst.data) do titles[#titles + 1] = (r.title or "") end
 local all = table.concat(titles, "|")
-Check(all:find("Crafting steps, in order", 1, true) and all:find("1. Craft Bar \195\151 4", 1, true), all)
-Check(all:find("Buy", 1, true) and all:find("Ore", 1, true) or all:find("Item30", 1, true) or all:find("Item 30", 1, true) or all:find("From your bags", 1, true), all)
-Check(all:find("Good to know", 1, true), "the limits are listed")
-Same(sv.boxes[2].v:GetText(), Money(1000)); Same(sv.boxes[3].v:GetText(), Money(700))
+Check(all:find("Craft|Craft 4 \195\151 Bar", 1, true), "the crafts first, the action as the title: " .. all)
+Check(all:find("Buy from Auction House", 1, true) or all:find("Buy from vendor", 1, true), "buying says where: " .. all)
+Check(not all:find("Good to know", 1, true), "the caveats are not paragraphs in the list")
+Check(#sv.notes > 0 and table.concat(sv.notes, " "):find("aren't checked", 1, true), "they are behind the Notes control")
+Same(sv.boxes[1].l:GetText(), "Estimated cost"); Same(sv.boxes[1].v:GetText(), Money(1000)); Same(sv.boxes[2].v:GetText(), Money(700))
+Check(sv.boxes[1].tip:find(Money(1200), 1, true), "buying directly is in the tooltip")
+Check(sv.boxes[3].v:GetText():find(Money(200), 1, true), "the saving")
+do   -- every item row carries the item for its tooltip and the precise lines under it
+  local step
+  for _, r in ipairs(SLst.data) do if r.kind == "step" then step = r end end
+  Check(step and step.item and step.tip and #step.tip > 0, "the craft row has an item tooltip and its numbers")
+  local toggle
+  for _, r in ipairs(SLst.data) do if r.kind == "toggle" then toggle = r end end
+  if toggle then
+    local n = #SLst.data
+    Same(toggle.right, "Show"); W.StrategyView.ToggleAlternatives()
+    Check(#SLst.data > n, "the other options open on demand")
+    W.StrategyView.ToggleAlternatives()
+    Same(#SLst.data, n, "and fold away again")
+  end
+  -- the presentation choice: ranges inline, everywhere, and saved
+  Check(not W.Session.PriceDetail(), "Simple is the default")
+  sv.detailed:GetScript("OnClick")(sv.detailed)
+  Check(W.Session.PriceDetail() and W.Strategy.detailed, "Detailed is chosen")
+  Same(c.TwichUIDB.workshop.view.prices, "detailed", "and saved")
+  sv.detailed:GetScript("OnClick")(sv.detailed)
+  Check(not W.Session.PriceDetail() and not W.Strategy.detailed and c.TwichUIDB.workshop.view.prices == nil, "and back")
+end
 sv.add:GetScript("OnClick")(sv.add)
 Check(cd:IsShown(), "the confirmation is shown")
 Same(#Q.Entries(), 0, "nothing is added by asking")
 local ops = Win.Lists().confirm.data
 Same(#ops, 2); Same(ops[1].name, "Bar"); Same(ops[1].crafts, 4); Same(ops[2].name, "Sword"); Check(ops[2].final)
+Check(cd.text:GetText():find("2 recipes, 5 crafts", 1, true), "the confirmation says exactly what is added: " .. cd.text:GetText())
+Check(not cd.plain:IsShown(), "no fallback while the optimized plan can be added")
 Check(cd.ok:IsEnabled(), "it can be accepted")
 cd.cancel:GetScript("OnClick")(cd.cancel)
 Check(not cd:IsShown()); Same(#Q.Entries(), 0, "cancelled: nothing added")
@@ -202,7 +230,7 @@ Win.SetMode("craft"); Win.Render()
 local craft = Win.Craft()
 Check(craft.strat.line1:GetText():find("Best verified plan", 1, true), craft.strat.line1:GetText())
 Check(craft.strat.line1:GetText():find("Buy 1", 1, true) and not craft.strat.line1:GetText():find("Craft", 1, true), "the queue makes the bars itself: nothing more to craft: " .. craft.strat.line1:GetText())
-Check(craft.strat.line2:GetText():find("Economic", 1, true) and craft.strat.line2:GetText():find("Cash now", 1, true), craft.strat.line2:GetText())
+Check(craft.strat.line2:GetText():find("Estimated cost", 1, true) and craft.strat.line2:GetText():find("Gold needed now", 1, true), craft.strat.line2:GetText())
 craft.strat.view:GetScript("OnClick")(craft.strat.view)
 Check(sv:IsShown(), "the strip opens the strategy of the whole queue"); sv:Hide()
 -- every material row shows a note exactly when the plan gave one
@@ -218,7 +246,7 @@ Check(noted >= 1, "the plan says how a material is got")
 -- Shopping ---------------------------------------------------------------------------------------------------------------------------------------
 Win.SetMode("shop"); Win.Render()
 local shop = Win.Shop()
-Check(shop.notes:GetText():find("Best verified plan", 1, true) and shop.notes:GetText():find("economic cost", 1, true), shop.notes:GetText())
+Check(shop.notes:GetText():find("Best verified plan", 1, true) and shop.notes:GetText():find("estimated cost", 1, true), shop.notes:GetText())
 Check(shop.view:IsEnabled(), "View strategy on the Shopping page")
 local SL = Win.Lists().shop
 Same(#SL.data, 1, "only the ore is left to buy"); Same(SL.data[1].item, 30); Same(SL.data[1].multilevel, true)

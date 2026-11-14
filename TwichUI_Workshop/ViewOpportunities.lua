@@ -192,10 +192,16 @@ end
 -- page is drawn again so the row, the details and the button all say it is queued. Returns whether it was added.
 local Opps = {}
 W.OppsView = Opps
+-- "Add to crafting plan": the optimized plan by default. It opens the strategy confirmation for this recipe (the queue as it is plus this
+-- recipe, planned together; the list says exactly which recipes and crafts are added, and nothing changes until it is accepted). Only when the
+-- confirmation can't be shown at all is the recipe queued on its own, as before.
 function Opps.AddSelected()
     local d = page and page.detail
     local rec = d and d.rec
     if not rec then return false end
+    -- a queued recipe or a full queue: the plain add's own refusal says why (nothing is planned for a recipe that can't be added)
+    local refused = S.IsQueued(rec.id) or Q.Count() >= W.MAX_QUEUE
+    if not refused and UI.StrategyView and UI.StrategyView.Confirm(rec) then return true end
     local ok = S.Add(rec)
     UI.Redraw()
     return ok
@@ -413,32 +419,36 @@ function Opps.PaintStrategy(rec)
     if not d then return end
     local st = d.strat
     local state, plan, why = S.OppStrategy(rec)
-    local function Pair(i, label, text, tone)
+    local function Pair(i, text, tip)
         local p = st.pairs[i]
-        p.l:SetText(label)
         p.v:SetText(text or "Unknown")
-        UI.Paint(p.v, text and (tone == "good" and K.sage or (tone == "quiet" and K.stone or K.text)) or K.stone)
+        p.tip = tip
+        UI.Paint(p.v, text and K.text or K.stone)
     end
     d.stratState = state
     d.view:SetEnabled(state == "ready")
+    st.saveTip = nil
     if state ~= "ready" then
         st.status:SetText(state == "planning" and "Planning..." or (state == "failed" and "Couldn't be worked out" or "Not enough data"))
         UI.Paint(st.status, K.textDim)
-        for i = 1, 4 do Pair(i, st.pairs[i].label, nil) end
-        if state == "planning" then
-            for i = 1, 4 do st.pairs[i].v:SetText("...") end
-        end
-        st.actions:SetText(state == "unknown" and (why or "") or "")
+        Pair(1, state == "planning" and "..." or nil); Pair(2, state == "planning" and "..." or nil)
+        st.headline:SetText(state == "unknown" and (why or "") or "")
+        UI.Paint(st.headline, K.textDim)
+        st.save:SetText("")
         return
     end
     local words = Sg.Summary(plan, UI.Money)
     st.status:SetText(words.status)
     UI.Paint(st.status, words.tone == "good" and K.sage or (words.tone == "warn" and K.bronzeText or K.textDim))
-    Pair(1, "Buy ingredients directly", words.direct)
-    Pair(2, "Optimized economic cost", words.economic)
-    Pair(3, "Cash needed now", words.cash)
-    Pair(4, words.savingsLabel, words.savings, words.savingsTone)
-    st.actions:SetText(words.actions)
+    st.headline:SetText(words.headline)
+    UI.Paint(st.headline, K.text)
+    local costTip = words.costTip
+    if words.direct then costTip = (costTip and (costTip .. "\n") or "") .. "Buying every material directly: " .. words.direct end
+    Pair(1, words.cost, costTip)
+    Pair(2, words.cash, words.cashTip)
+    st.save:SetText(words.saveLine or "")
+    st.saveTip = words.savingsWhy
+    UI.Paint(st.save, words.savingsTone == "good" and K.sage or (words.savingsTone == "warn" and K.bronzeText or K.textDim))
 end
 
 local function BuildDetail()
@@ -489,9 +499,9 @@ local function BuildDetail()
     d.why:SetPoint("TOPLEFT", 14, WHY_Y)
     d.why:SetPoint("RIGHT", -14, 0)
     -- what the figures assume, in words: the existing minimum-based estimate (A7 keeps it; the selling strategy is A8), not Market Value
-    UI.Tip(costBox, "Cost to make", "What one craft's materials cost at the cheapest listings your last scan saw, owned or not (owning them does not make them free). The list is ranked by this estimate, not by the strategy below.")
-    UI.Tip(sellBox, "Sell price (listing)", "The lowest current listing of what it makes, from your last scan, before fees. The profit uses this. It is not the Market Value or Historical Value below, which are references from past listings, and not a promise it will sell.")
-    UI.Tip(profitBox, "Profit", "Sell price minus Cost to make, as the list shows it: a one-level estimate from the cheapest listings. The Crafting Strategy below is a separate reference and does not change it.")
+    UI.Tip(costBox, "Cost to make", "One craft's materials at the cheapest listings of your last scan. The list is ranked by this.")
+    UI.Tip(sellBox, "Sell price (listing)", "The lowest listing of what it makes, before fees. Not a promise it will sell.")
+    UI.Tip(profitBox, "Profit", "Sell price minus Cost to make: a one-level estimate.")
 
     -- the Crafting Strategy block
     local st = CreateFrame("Frame", nil, body)
@@ -506,34 +516,46 @@ local function BuildDetail()
     st.status = UI.Text(st, 11, K.sage)
     st.status:SetPoint("TOPRIGHT", -10, -10)
     st.status:SetJustifyH("RIGHT")
+    -- what to do, in one line; then the planning figure, large, with the gold needed now beside it; then the saving and View strategy
+    st.headline = UI.Text(st, 13, K.text, "strong")
+    st.headline:SetPoint("TOPLEFT", 10, -27)
+    st.headline:SetWidth(DETAIL_W - 28 - 20)
     st.pairs = {}
     local colw = math.floor((DETAIL_W - 28 - 20) / 2)
-    local LABELS = { "Buy ingredients directly", "Optimized economic cost", "Cash needed now", "Potential savings" }
-    for i = 1, 4 do
-        local col, row = (i - 1) % 2, math.floor((i - 1) / 2)
-        local x, y = 10 + col * (colw + 0), -26 - row * 28
-        local l = UI.Text(st, 11, K.stone)
-        l:SetPoint("TOPLEFT", x, y)
+    local LABELS = { "Estimated cost", "Gold needed now" }
+    for i = 1, 2 do
+        local x = 10 + (i - 1) * colw
+        local cell = CreateFrame("Frame", nil, st)
+        cell:SetPoint("TOPLEFT", x, -45)
+        cell:SetSize(colw - 6, 34)
+        cell:EnableMouse(true)
+        local l = UI.Text(cell, 11, K.stone)
+        l:SetPoint("TOPLEFT", 0, 0)
         l:SetWidth(colw - 6)
-        l:SetJustifyH("LEFT")
-        local v = UI.Text(st, 13, K.text, "strong")
-        v:SetPoint("TOPLEFT", x, y - 12)
-        v:SetWidth(colw - 6)
-        v:SetJustifyH("LEFT")
         l:SetText(LABELS[i])
-        st.pairs[i] = { l = l, v = v, label = LABELS[i] }
+        local v = UI.Text(cell, i == 1 and 16 or 14, K.text, "strong")
+        v:SetPoint("TOPLEFT", 0, -13)
+        v:SetWidth(colw - 6)
+        local pair = { l = l, v = v, label = LABELS[i], cell = cell }
+        UI.TipFn(cell, LABELS[i], function()
+            local base = i == 1 and "Owned materials count at what they would cost." or "Only what you buy now."
+            return (pair.tip and (pair.tip .. "\n") or "") .. base
+        end)
+        st.pairs[i] = pair
     end
-    st.actions = UI.Text(st, 12, K.textDim)
-    st.actions:SetPoint("BOTTOMLEFT", 10, 10)
-    st.actions:SetWidth(DETAIL_W - 28 - 20 - 110)
-    st.actions:SetJustifyH("LEFT")
+    st.save = UI.Text(st, 12, K.textDim)
+    st.save:SetPoint("BOTTOMLEFT", 10, 10)
+    st.save:SetWidth(DETAIL_W - 28 - 20 - 112)
+    st.save:SetJustifyH("LEFT")
     d.view = UI.Button(st, "View strategy", 104, "secondary", function()
         if d.rec and UI.StrategyView then UI.StrategyView.Open("opp", d.rec) end
     end, 22)
     d.view:SetPoint("BOTTOMRIGHT", -8, 6)
-    UI.Tip(d.view, "View strategy", "Shows the whole strategy for making this once: the crafting steps in order, what to buy and from where, what comes from your bags and storage, and the other ways considered.")
+    UI.Tip(d.view, "View strategy", "See every step, with prices and comparisons.")
     st:EnableMouse(true)
-    UI.Tip(st, "Crafting strategy", "The multilevel planner's answer for making this once, on its own: it may craft some of the materials itself when that costs less than buying them. These figures are a separate reference. They do not change the cost, profit or order in the list. Economic cost counts the materials you own at what they would cost; cash needed is only what you would buy.")
+    UI.TipFn(st, "Crafting strategy", function()
+        return (st.saveTip and (st.saveTip .. "\n") or "") .. "Making this once, on its own. Separate from the list's cost and profit."
+    end)
 
     -- the materials of one craft (left) beside the market facts (right)
     local mc = CreateFrame("Frame", nil, body)
@@ -560,7 +582,7 @@ local function BuildDetail()
     d.add.check:Hide()
     UI.TipFn(d.add, "Add to crafting plan", function()
         if d.addWhy then return d.addWhy end
-        return "Puts this recipe in the queue to make once, in the Crafting page. Nothing is bought or crafted."
+        return "Review the optimized crafts before adding them."
     end)
     local mk = CreateFrame("Frame", nil, body)
     d.market = mk
@@ -613,7 +635,7 @@ local function BuildDetail()
     local why = CreateFrame("Frame", nil, mk)
     why:SetPoint("TOPLEFT", 6, 0); why:SetPoint("TOPRIGHT", -14, 0); why:SetHeight(20)
     why:EnableMouse(true)
-    UI.Tip(why, "What these figures are", "Listings your scans saw, never sales. Lowest listing and Competing price are what is for sale now. Recent price, Market value (14 days) and Historical value (60 days) are references from past listings, not a selling price and not a promise it will sell. The profit above uses the lowest listing.")
+    UI.Tip(why, "What these figures are", "Listings your scans saw, never sales.\nMarket value (14 days) and Historical value (60 days) are references, not a selling price.")
     d.empty = UI.Text(d, 13, K.textDim)
     d.empty:SetPoint("TOPLEFT", 14, -16)
     d.empty:SetPoint("RIGHT", -14, 0)
@@ -628,7 +650,7 @@ local function Build(p)
         UI.Redraw()
     end, 34)
     opps.scan:SetPoint("TOPRIGHT", -2, -2)
-    UI.Tip(opps.scan, "Scan prices", "Reads every listing at the open auction house once, so your crafts can be priced. It only reads: it never buys, bids or posts, and it starts only when you press this. It can take a little while.")
+    UI.Tip(opps.scan, "Scan prices", "Read every listing at the open auction house.\nIt only reads: it never buys, bids or posts.")
     opps.bar = W.NewBar(opps, 250, 20)           -- the overall progress of a scan, shown only while one runs
     opps.bar:SetPoint("RIGHT", opps.scan, "LEFT", -12, 0)
     opps.bar:Hide()

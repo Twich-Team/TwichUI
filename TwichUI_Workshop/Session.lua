@@ -29,6 +29,35 @@ local note             -- the last thing an action said, until the next action
 local lastShop         -- the last finished multilevel shopping package (shown, marked as updating, while a newer plan is computed)
 
 ---------------------------------------------------------------------------
+-- How costs are shown: the one Workshop choice of presentation (Strategy.CostText reads Strategy.detailed)
+--   TwichUIDB.workshop.view = { prices = "detailed" }   absent (or anything else) means Simple, the default. Account-wide, like the rest of
+--   the "workshop" key; a held (newer) workshop record is never changed.
+---------------------------------------------------------------------------
+function S.PriceDetail()
+    local ws = type(TwichUIDB) == "table" and TwichUIDB.workshop
+    local v = type(ws) == "table" and ws.view
+    return type(v) == "table" and v.prices == "detailed"
+end
+
+function S.SetPriceDetail(on)
+    if Q.Held() then return false, "held" end
+    on = on == true
+    if type(TwichUIDB) ~= "table" then return false, "unsaved" end
+    local ws = TwichUIDB.workshop
+    if type(ws) ~= "table" then
+        if not on then Sg.detailed = false return true end
+        ws = { v = W.SAVED_VERSION }
+        TwichUIDB.workshop = ws
+    end
+    if type(ws.view) ~= "table" then ws.view = {} end
+    ws.view.prices = on and "detailed" or nil
+    Sg.detailed = on
+    return true
+end
+
+Sg.detailed = S.PriceDetail()
+
+---------------------------------------------------------------------------
 -- What happened this session (memory only, never saved: the Overview's "Recent activity" shows real events, not a history)
 ---------------------------------------------------------------------------
 local activity = {}    -- newest last: { at, text, tone ("done" | "current" | "failed") }
@@ -970,7 +999,8 @@ end
 function S.ShowVendor(item)
     local sellers = V.Sellers({ [item] = true })[item]
     local rec = V.Entry(item)
-    local e = V.Places(sellers, rec and rec.npc, 1)[1]
+    local places, how = V.Places(sellers, rec and rec.npc, 3)
+    local e = places[1]
     if not e then
         note = "No vendor location is known for that item."
         return false
@@ -986,7 +1016,13 @@ function S.ShowVendor(item)
     end
     if WorldMapFrame and WorldMapFrame.IsShown and not WorldMapFrame:IsShown() and ToggleWorldMap then pcall(ToggleWorldMap) end
     local ok = NMAP.Locate(e)
-    note = ok and ("Showing %s on the map."):format(e.n) or "The map couldn't show that vendor."
+    -- the words say only what is known: "nearest" for a compared distance, "in this area" for the same map, otherwise how many others are known
+    local more = #sellers - 1
+    if not ok then note = "The map couldn't show that vendor."
+    elseif how == "nearest" then note = ("Showing %s, the nearest known seller."):format(e.n)
+    elseif how == "local" then note = ("Showing %s, a seller in this area."):format(e.n)
+    elseif more > 0 then note = ("Showing %s. %d other %s known."):format(e.n, more, more == 1 and "seller is" or "sellers are")
+    else note = ("Showing %s on the map."):format(e.n) end
     return ok
 end
 

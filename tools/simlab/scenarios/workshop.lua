@@ -210,6 +210,15 @@ local function Click(btn, what)
     if btn.IsEnabled and not btn:IsEnabled() then error("control is disabled: " .. tostring(what)) end
     btn:Click()
 end
+-- (P2.1) Opportunities' Add opens the optimized confirmation; accept it (Add to plan), or the deliberate "Add recipe only" when no optimized plan
+-- can be made for the recipe. Returns which one was pressed.
+local function AcceptAdd(label)
+    local _, cdw = R.Workshop.StrategyView.Frames()
+    Check("display", "Add opened the confirmation, and nothing is queued by asking (" .. label .. ")", true, cdw ~= nil and cdw:IsShown())
+    if cdw.ok:IsEnabled() then Click(cdw.ok, "Add to plan (" .. label .. ")") return "ok" end
+    Click(cdw.plain, "Add recipe only (" .. label .. ")")
+    return "plain"
+end
 local function QueueAct(row, which, what)   -- Open recipe and Remove sit in the chosen craft's details: choose the row, then the action
     Click(row, "choose the queued craft for: " .. tostring(what))
     Click(Win().Craft()[which], what)
@@ -932,6 +941,7 @@ Lab.Step("opportunities: Add to queue", function()
     Check("display", "its details are shown", "Elixir of Many Wonders", Txt(Opps().detail.name))
     Check("display", "Add button before", "Add to crafting plan/true", Txt(add.text) .. "/" .. tostring(add:IsEnabled()))
     Click(add, "Add to crafting plan (Elixir of Many Wonders)")
+    Check("state", "it makes a varying amount, so no optimized plan: the confirmation offers the recipe on its own", "plain", AcceptAdd("Elixir of Many Wonders"))
     Check("state", "the real queue gained the recipe",
         "Minor Healing Potion x3, Weak Troll's Blood Potion x2, Copper Belt Buckle x2, Elixir of Many Wonders x1", Queue())
     Check("display", "button now In your queue and disabled", "In your queue/false", Txt(add.text) .. "/" .. tostring(add:IsEnabled()))
@@ -979,23 +989,24 @@ Lab.Step("shopping: combined list, sources, total, warning", function()
     local s = Lists().shop
     Check("display", "rows: buys by item number, then the made item",
         "Silverleaf | Coarse Thread | Peacebloom | Copper Ore | Tin Ore | Bronze Bar", Names(s))
-    Check("display", "Peacebloom (auction, exact)", "3 | Auction house | 15c | to 1s | -", Line("Peacebloom"))
+    Check("display", "Peacebloom (auction, exact)", "3 | Auction house | from 15c | just now | -", Line("Peacebloom"))
     Check("display", "Silverleaf (unpriced: not enough listed)", "3 | No source | Unknown | no price | -", Line("Silverleaf"))
     Check("display", "Coarse Thread (vendor)", "1 | Vendor | 25c | just now | Show vendor", Line("Coarse Thread"))
-    Check("display", "Copper Ore (2 to buy for the subcraft)", "2 | Auction house | 70c | to 7s | -", Line("Copper Ore"))
+    Check("display", "Copper Ore (2 to buy for the subcraft)", "2 | Auction house | from 70c | just now | -", Line("Copper Ore"))
     Check("display", "Tin Ore (vendor stack of 5 for 3 needed)", "3 | Vendor | 80c | just now | Show vendor", Line("Tin Ore"))
     Check("display", "Bronze Bar (make suggested)", "5 | Make | In the plan | cost is in its materials | Add optimized plan", Line("Bronze Bar"))   -- (P2) a made material's cost is part of the multilevel plan, in its own materials' rows
     Check("display", "Peacebloom detail", "Suggested source. Only the auction house has a price. Auctions may require buying larger stacks.", Explain("Peacebloom"))
     Check("display", "Silverleaf detail says why", "Not enough are listed at the auction house.", Explain("Silverleaf"))
     Check("display", "Tin Ore detail: leftover from the whole stack", "2 left over. Needed to make Smelt Bronze.", Explain("Tin Ore"))
     Check("display", "Bronze Bar detail: crafts, made, leftover, comparison",
-        "Make 3 x Smelt Bronze: makes 6, 1 left over. Suggested source. Making this looks cheaper than buying at the auction house. It is certainly cheaper.", Explain("Bronze Bar"))
+        "Craft 3 x Smelt Bronze: makes 6, 1 left over. Suggested source. Making this looks cheaper than buying at the auction house. It is certainly cheaper.", Explain("Bronze Bar"))
     Check("display", "total with the incomplete-total warning",
         "Estimated spending: 1s 90c so far \194\183 1 price missing", Txt(Shop().total))
     Check("display", "vendor status line", "Vendor prices as last seen (2 noted) \194\183 bags only", Txt(Shop().status))
     -- (P2) the notes say how sure the plan is (a missing price makes it partial, never "verified") and keep the caveat about owned materials
-    Check("display", "notes say the plan is partial (a price is missing) and keep the caveat about owned materials", "true/true/false",
-        tostring(Txt(Shop().notes):find("Partial plan", 1, true) ~= nil) .. "/" .. tostring(Txt(Shop().notes):find("Owned materials lower cash, not economic cost", 1, true) ~= nil)
+    -- (P2.1) the caveat about owned materials is in the strategy's Notes, not repeated in the bar
+    Check("display", "notes say the plan is partial (a price is missing) and name its estimated cost", "true/true/false",
+        tostring(Txt(Shop().notes):find("Partial plan", 1, true) ~= nil) .. "/" .. tostring(Txt(Shop().notes):find("estimated cost", 1, true) ~= nil)
         .. "/" .. tostring(Txt(Shop().notes):find("Best verified plan", 1, true) ~= nil))
 end)
 
@@ -1054,7 +1065,7 @@ Lab.Step("shopping: Show vendor", function()
     Check("click", "Locate was called once", 1, #calls)
     Check("state", "Locate got the merchant entry (id, name, the player's map when it was noted)", "3333 | Haldric the Peddler | " .. tostring(here),
         calls[1] and (calls[1].id .. " | " .. calls[1].n .. " | " .. calls[1].m) or "no call")
-    Check("display", "the note names the merchant", "Showing Haldric the Peddler on the map.", Txt(Frame().note))
+    Check("display", "the note names the merchant and says it is the nearest known seller (a distance was compared)", "Showing Haldric the Peddler, the nearest known seller.", Txt(Frame().note))
     Check("state", "no waypoint was set", waypointBefore, C_Map.HasUserWaypoint and tostring(C_Map.HasUserWaypoint()) or "n/a")
     Check("state", "no pin was created (local/shared)", pinsBefore, R.Pins.LocalCount() .. "/" .. #R.Pins.AllSharedPins())
     Check("state", "no navigation was started", navBefore, tostring(R.Nav.Active()))
@@ -1076,7 +1087,7 @@ Lab.Step("shopping: add the suggested subcraft", function()
     Check("state", "Smelt Bronze x3 queued", q0 .. ", Smelt Bronze x3", Queue())
     Check("display", "the made item is no longer on the list; its ingredients are, once each",
         "Silverleaf | Coarse Thread | Peacebloom | Copper Ore | Tin Ore", Names(Lists().shop))
-    Check("display", "Copper Ore: queue's own need, once", "2 | Auction house | 70c | to 7s | -", Line("Copper Ore"))
+    Check("display", "Copper Ore: queue's own need, once", "2 | Auction house | from 70c | just now | -", Line("Copper Ore"))
     Check("display", "Tin Ore: queue's own need, once", "3 | Vendor | 80c | just now | Show vendor", Line("Tin Ore"))
     Check("display", "total unchanged: the ingredients are counted once", "Estimated spending: 1s 90c so far \194\183 1 price missing", Txt(Shop().total))
     local anyMake = false
@@ -1308,14 +1319,14 @@ Lab.Step("bank and guild bank: planned with, collected not bought, labelled, pro
     Check("display", "collect Tin Ore from the bank", "Tin Ore | 2 | Collect from bank | Already owned | seen just now", SLine(3))
     Check("display", "buy the Silverleaf still missing: 2 listed at 45c, now exact", "Silverleaf | 2 | Auction house | 90c | just now", SLine(4))
     Check("display", "buy Coarse Thread at the vendor", "Coarse Thread | 1 | Vendor | 25c | just now", SLine(5))
-    Check("display", "buy 2 Copper Ore", "Copper Ore | 2 | Auction house | 70c | to 7s", SLine(6))
-    Check("display", "buy the 1 Tin Ore still missing: 30c at the auction house beats a stack of 5 at 80c", "Tin Ore | 1 | Auction house | 30c | to 3s", SLine(7))
+    Check("display", "buy 2 Copper Ore", "Copper Ore | 2 | Auction house | from 70c | just now", SLine(6))
+    Check("display", "buy the 1 Tin Ore still missing: 30c at the auction house beats a stack of 5 at 80c", "Tin Ore | 1 | Auction house | from 30c | just now", SLine(7))
     local c1 = Rows(Lists().shop)[1]
     Click(c1, "choose the first collect row")
     local cd = Shop().detail
     Check("display", "a collect row has no source choices and no action", "false/false/false", tostring(cd.choose.vendor:IsShown()) .. "/" .. tostring(cd.choose.make:IsShown()) .. "/" .. tostring(cd.act:IsShown()))
     Check("display", "a collect row says it is already owned", "Collect from your bank. It is already yours: nothing to buy.", Txt(cd.explain))
-    Check("display", "total counts only what is bought: 90 + 25 + 70 + 30", "Estimated spending: 2s 15c to 11s 15c", Txt(Shop().total))
+    Check("display", "total counts only what is bought: 90 + 25 + 70 + 30", "Estimated spending: from 2s 15c", Txt(Shop().total))
     Check("display", "status line names what is counted", "Vendor prices as last seen (2 noted) \194\183 bags and bank", Txt(Shop().status))
 
     -- Opportunities: stored materials say whether a craft can start; the cost, the sell price and the profit do not move
@@ -1354,9 +1365,9 @@ Lab.Step("bank and guild bank: the guild choice, permissions and limits", functi
     Check("display", "collect Silverleaf from the bank", "Silverleaf | 1 | Collect from bank | Already owned | seen just now", SLine(1))
     Check("display", "collect Silverleaf from the guild bank (3 needed - 1)", "Silverleaf | 2 | Collect from guild bank | Already owned | seen just now", SLine(2))
     Check("display", "collect Copper Ore from the guild bank (6 needed - 4 in bags)", "Copper Ore | 2 | Collect from guild bank | Already owned | seen just now", SLine(4))
-    Check("display", "Tin Ore: tab 2 only allows viewing, so only the bank's 2 are collected and 1 is bought", "Tin Ore | 1 | Auction house | 30c | to 3s", SLine(7))
+    Check("display", "Tin Ore: tab 2 only allows viewing, so only the bank's 2 are collected and 1 is bought", "Tin Ore | 1 | Auction house | from 30c | just now", SLine(7))
     Check("display", "shared stock is said so", "Collect from the guild bank. Shared stock: other members can take it too.", ExplainAt(2))
-    Check("display", "total counts only what is bought: 25 + 30", "Estimated spending: 55c to 3s 25c", Txt(Shop().total))
+    Check("display", "total counts only what is bought: 25 + 30", "Estimated spending: from 55c", Txt(Shop().total))
     Check("display", "status line names the guild bank", "Vendor prices as last seen (2 noted) \194\183 bags, bank and guild bank", Txt(Shop().status))
     local view = W.Session.Stock()
     Check("state", "tab 2's 9 Tin Ore are information, not counted: a viewable tab does not establish a right to take", "9/nowithdraw/0",
@@ -1501,10 +1512,11 @@ Lab.Step("third pass: hit test, hover, fit, tooltips, status", function()
     Check("display", "HIT TEST (emulated): no button on Opportunities has another mouse frame stacked over its centre", "none covered", CoveredButtons())
     local before = #W.Queue.Entries()
     Click(add, "Add to crafting plan")
+    AcceptAdd(rec.name)
     Check("state", "the click put the chosen recipe in the queue", true, W.Queue.Find(rec.id) ~= nil and #W.Queue.Entries() == before + 1)
     Check("display", "the button says it is queued, and the row and footer agree", "In your queue/false/true/true",
         Txt(add.text) .. "/" .. tostring(add:IsEnabled()) .. "/" .. tostring(Row(Lists().opps, rec.name).sub:GetText():find("In your queue", 1, true) ~= nil)
-        .. "/" .. tostring(Txt(Frame().note):find("^Added ") ~= nil))
+        .. "/" .. tostring(Txt(Frame().note):find("^Added ") ~= nil or Txt(Frame().note):find("^Queued ") ~= nil))
     Tab("Crafting")
     Check("display", "Crafting shows it in the queue", true, (function()
         for _, q in ipairs(Lists().queue.data) do if q.entry.id == rec.id then return true end end
@@ -1748,8 +1760,12 @@ Lab.Step("reachability: planted overlay, hover rows, insets, clipping, tooltip",
         tostring(blocked.eligibility.ok) .. "/" .. tostring(type(add:GetScript("OnClick")) == "function"))
     local queued = #W.Queue.Entries()
     add:Click()   -- handler level: it still runs, which is exactly why a handler test cannot see the obstruction
-    Check("click", "NEGATIVE CONTROL: Button:Click() still runs the blocked button's handler (a passing handler test proves nothing about the pointer)", queued + 1, #W.Queue.Entries())
-    W.Session.Remove(pick.rec.id)   -- put the queue back
+    -- (P2.1) the handler opens the optimized confirmation (nothing is queued until it is accepted), so "it ran" is the confirmation being shown
+    local _, cdw = R.Workshop.StrategyView.Frames()
+    Check("click", "NEGATIVE CONTROL: Button:Click() still runs the blocked button's handler (a passing handler test proves nothing about the pointer)", "true/" .. queued,
+        tostring(cdw ~= nil and cdw:IsShown()) .. "/" .. #W.Queue.Entries())
+    if cdw then cdw:Hide() end   -- closed again, so its scrim covers nothing in the checks that follow
+    if W.Queue.Find(pick.rec.id) then W.Session.Remove(pick.rec.id) end   -- put the queue back
     Win().Render()
     Unplant()
     Check("display", "NEGATIVE CONTROL: with the overlay removed, the Add button is reachable again", "reachable", Verdict(Look(add)))
@@ -1808,6 +1824,7 @@ Lab.Step("reachability: planted overlay, hover rows, insets, clipping, tooltip",
     Check("display", "REACH: a chosen row is still reachable for hover (selection is painting, not input)", "true/reachable", tostring(row.selected) .. "/" .. Verdict(Look(row, "hover")))
     -- a disabled button: reachable geometry, ineligible state; the handler (Click) refuses it
     Click(add, "Add to crafting plan")   -- queued: the button turns into "In your queue", disabled
+    AcceptAdd("the chosen row")          -- (P2.1) through the confirmation
     local disabled = Look(add)
     Check("display", "REACH: a queued recipe's Add button is disabled: ineligible, and still the topmost frame there", "ineligible/self", disabled.verdict .. "/" .. tostring(disabled.relation))
     W.Session.Remove(pick.rec.id)
@@ -2123,7 +2140,7 @@ Lab.Step("pose for the screenshot", function()
         local realAfter = C_Timer.After
         C_Timer.After = function() end
         Click(Row(Lists().opps, "Copper Belt Buckle"), "choose Copper Belt Buckle")
-        Check("display", "pose: Opportunities says it is planning, with no figures", "Planning... | ...", Txt(Opps().detail.strat.status) .. " | " .. Txt(Opps().detail.strat.pairs[2].v))
+        Check("display", "pose: Opportunities says it is planning, with no figures", "Planning... | ...", Txt(Opps().detail.strat.status) .. " | " .. Txt(Opps().detail.strat.pairs[1].v))
         C_Timer.After = realAfter
     elseif view == "nodata" then
         -- (P2) a recipe whose materials aren't known: no strategy and no invented figure

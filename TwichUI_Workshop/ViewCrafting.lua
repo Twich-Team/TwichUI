@@ -20,8 +20,7 @@ local REC_H, QUE_H, MAT_H = 48, 66, 32   -- (a material row holds its name and, 
 local STRIP_H = 40      -- the Crafting Strategy strip above the materials
 local STRIP_SHIFT = STRIP_H + 6
 local MC_SHORT, MC_STORED, MC_HAVE, MC_NEED, MC_GAP = 84, 58, 56, 46, 4
-local USE_GUILD_TIP = "Plans with materials remembered from your guild bank that your guild rank may be able to take. It never withdraws anything. "
-    .. "Guild stock is shared with other members, so what was seen may be gone, and a daily limit may apply. Off unless you turn it on."
+local USE_GUILD_TIP = "Plan with what your guild bank was last seen to hold. Nothing is withdrawn.\nShared stock: it may be gone, and a daily limit may apply."
 UI.USE_GUILD_TIP = USE_GUILD_TIP
 
 local K
@@ -477,11 +476,11 @@ local function PaintStrategy(state, plan, why, n)
         return
     end
     local w = Sg.Summary(plan, UI.Money)
-    st.line1:SetText(w.status .. " \194\183 " .. w.actions)
+    st.line1:SetText(w.status .. " \194\183 " .. w.headline)
     UI.Paint(st.line1, w.tone == "good" and K.sage or (w.tone == "warn" and K.bronzeText or K.textDim))
     local parts = {}
-    if w.economic then parts[#parts + 1] = "Economic " .. w.economic end
-    if w.cash then parts[#parts + 1] = "Cash now " .. w.cash end
+    if w.cost then parts[#parts + 1] = "Estimated cost " .. w.cost end
+    if w.cash then parts[#parts + 1] = "Gold needed now " .. w.cash end
     st.line2:SetText(table.concat(parts, " \194\183 "))
     st.words = w
 end
@@ -637,7 +636,7 @@ local function BuildDetail()
         local v = UI.Text(b, 16, K.text, "strong")
         v:SetPoint("BOTTOMLEFT", 10, 6)
         v:SetPoint("RIGHT", -8, 0)
-        UI.Tip(b, "Estimates", "From the cheapest auction listings your last scan saw: one craft's estimate times the crafts. A listing is not a sale, and the auction house's cut is not taken off until it is confirmed.")
+        UI.Tip(b, "Estimates", "From the cheapest listings of your last scan, before the auction house's cut.")
         return b, v, l
     end
     local b1, v1 = Box("Total cost", 1)
@@ -699,13 +698,17 @@ local function BuildMaterials()
         if UI.StrategyView then UI.StrategyView.Open("queue") end
     end, 24)
     st.view:SetPoint("RIGHT", -8, 0)
-    UI.Tip(st.view, "View strategy", "Shows the whole plan for your queue: the crafting steps in order, what to buy and where, what comes from your bags and storage, and what else was considered. You can add the crafts it suggests to this plan from there, after confirming.")
+    UI.Tip(st.view, "View strategy", "See every step of the plan, with prices and comparisons.")
     st:EnableMouse(true)
     UI.TipFn(st, "Crafting strategy", function()
         local w = st.words
-        local lines = "One plan for the whole queue: shared materials and what you own are counted once, and some materials may be crafted when that costs less than buying them. Economic cost counts what you own at what it would cost; cash now is only what you would buy. The estimates above and in the bar are unchanged."
+        local lines = "One plan for the whole queue: shared materials are counted once."
         if w then
-            lines = (w.direct and ("Buying directly: " .. w.direct .. ". ") or "") .. (w.savings and (w.savingsLabel .. ": " .. w.savings .. ". ") or "") .. lines
+            local top = {}
+            if w.costTip then top[#top + 1] = w.costTip end
+            if w.direct then top[#top + 1] = "Buying every material directly: " .. w.direct end
+            if w.saveLine then top[#top + 1] = w.saveLine end
+            if #top > 0 then lines = table.concat(top, "\n") .. "\n" .. lines end
         end
         return lines
     end)
@@ -755,10 +758,10 @@ local function BuildBar()
     bar.partial = UI.Text(bar, 11, K.bronzeText)
     bar.partial:SetPoint("TOPLEFT", 190, -42)
     bar.partial:SetPoint("TOPRIGHT", bar, "TOPLEFT", 600, -42)
-    UI.Tip(bar, "Plan totals", "The estimates of the queued crafts added up: the cheapest auction listings of your last scan, a craft at a time. A listing is not a sale; the auction house's cut is not taken off until it is confirmed. A recipe that couldn't be priced is left out and counted in 'priced'.")
+    UI.Tip(bar, "Plan totals", "The queued crafts' estimates added up, before the auction house's cut.\nA recipe without a price is left out.")
     bar.shop = UI.ArtButton(bar, "Shopping list", "npc:reagent-pouch", 150, "primary", function() UI.Go("shop") end, 38)
     bar.shop:SetPoint("RIGHT", -10, 0)
-    UI.Tip(bar.shop, "Shopping list", "What your queue still needs, where to get it and what that may cost. Nothing is bought.")
+    UI.Tip(bar.shop, "Shopping list", "What your queue still needs and where to get it.")
 end
 
 local function Build(p, frame)
