@@ -764,8 +764,33 @@ Lab.Step("what's it worth: tooltip designer", function()
     local D = R.WorkshopWorthDesigner
     Check("init", "the designer is loaded with the settings window", "table", type(D))
     local f = D.Frame()
+    local rawClick = Click
+    local function Apply() if D.Dirty() then Check("state", "explicit Save applies the draft", true, D.Save()) end end
+    local function Click(button, label)
+        rawClick(button, label)
+        if button == f.reset then
+            Check("state", "Reset requests confirmation", true, D.ResetPending())
+            rawClick(f.confirmYes, "Confirm default layout")
+        end
+        Apply()
+    end
+    local prior = WL.Get().lines[2].id
+    D.RemoveLine("vendor")
+    Check("state", "draft removal does not change the live layout", prior, WL.Get().lines[2].id)
+    Check("state", "Undo restores field presence", true, D.Undo() and not D.Dirty())
+    Check("state", "Redo restores the draft removal", true, D.Redo() and D.Dirty())
+    D.Cancel()
+    Check("state", "Cancel preserves saved layout", prior, WL.Get().lines[2].id)
+    D.Search("historical")
+    Check("display", "catalog search hides other fields", false, D.ListButton(2):IsShown())
+    Check("state", "catalog search does not save", false, D.Dirty())
+    D.Search("")
+    Check("display", "unsupported outcome data is absent from the catalog", false, D.ListButton(7):IsShown())
+    Lab.Settle(.2)
+    local hit = R.TestLab.Reach.Analyze(D.ListButton(3), { evidence = "simulator-geometry", limit = 1000000 })
+    Check("direct", "[geometry] supported catalog row can receive clicks", "reachable", hit.verdict)
     Check("init", "with the Workshop loaded, the designer (not the invitation) is shown", true, f:IsShown() and f.mock:IsShown() and not f.inviteButton:IsShown())
-    Check("display", "the list has the eight line types", 8, (function() local n = 0 for i = 1, 8 do if D.ListButton(i) and D.ListButton(i):IsShown() then n = n + 1 end end return n end)())
+    Check("display", "the catalog has seven supported types among the original eight", 7, (function() local n = 0 for i = 1, 8 do if D.ListButton(i) and D.ListButton(i):IsShown() then n = n + 1 end end return n end)())
     Check("display", "one instruction", "Drag lines into the preview.", Txt(f.instruction))
 
     local function Mock()   -- what the mockup shows, top to bottom (rows without anything to say are the designer's own placeholders)
@@ -834,7 +859,8 @@ Lab.Step("what's it worth: tooltip designer", function()
     Check("state", "clicking it again adds nothing: no duplicate line types", "recommend,auction*,vendor,disenchant,status*,source*,note*", Layout())
 
     -- the outcomes line: addable, but there is no outcome data, so nothing is ever shown for it
-    Click(D.ListButton(7), "Disenchant outcomes in the list")
+    -- Legacy saved outcome entries remain editable, though never offered as a capability.
+    D.AddLine("outcomes"); Apply()
     Check("state", "outcomes added", true, Layout():find("outcomes", 1, true) ~= nil)
     Check("display", "the mockup holds its place and says there is nothing to show", true, Mock():find("(Disenchant outcomes: nothing to show for this example)", 1, true) ~= nil)
     Check("direct", "the live tooltip shows no outcomes line", false, Live(true):find("Disenchant gives", 1, true) ~= nil)
@@ -857,29 +883,29 @@ Lab.Step("what's it worth: tooltip designer", function()
     local model = D.Model()
     -- drag "Disenchant outcomes" from the list and let go between Recommendation and Auction (gap 1)
     local b = D.ListButton(7)
-    ;(b:GetScript("OnDragStart"))(b)
+    D.StartDrag({ kind = "list", id = "outcomes" })
     Check("direct", "[handler] OnDragStart on a list line starts a carry", true, Drag.Active())
     PointerAt(model.tops[2] - 1)
     Check("direct", "[handler] over the top of the second row the gap is 1", 1, D.Find())
     Check("direct", "[handler] and a gap means a place in the layout", 2, D.PositionOf(1))
-    ;(b:GetScript("OnDragStop"))(b)
+    ;(b:GetScript("OnDragStop"))(b); Apply()
     Check("state", "[handler] OnDragStop over the mockup adds the line there", "recommend,outcomes,auction,vendor,disenchant,status*,source*,note*", Layout())
     Check("direct", "[handler] and the carry is over", false, Drag.Active())
     -- drag a row to the end, then outside the mockup
-    D.RemoveLine("outcomes")
+    D.RemoveLine("outcomes"); Apply()
     local r1 = D.Row(1)
     ;(r1:GetScript("OnDragStart"))(r1)
     Check("direct", "[handler] OnDragStart on a row carries it", "recommend", Drag.Source() and Drag.Source().id)
     model = D.Model()
     PointerAt(model.bottoms[#model.sec.rows] + 2)
-    ;(r1:GetScript("OnDragStop"))(r1)
+    ;(r1:GetScript("OnDragStop"))(r1); Apply()
     Check("state", "[handler] dropped below the last row: Recommendation moved to the end of the shown rows",
         "auction,vendor,disenchant,recommend,status*,source*,note*", Layout())
     r1 = D.Row(4)
     ;(r1:GetScript("OnDragStart"))(r1)
     GetCursorPosition = function() return 1, 1 end   -- far from the mockup
     Check("direct", "[handler] away from the mockup there is no target", true, D.Find() == nil)
-    ;(r1:GetScript("OnDragStop"))(r1)
+    ;(r1:GetScript("OnDragStop"))(r1); Apply()
     Check("state", "[handler] released outside: nothing changed", "auction,vendor,disenchant,recommend,status*,source*,note*", Layout())
     Check("display", "[handler] and it says so", "Nothing changed.", select(1, D.Said()))
     GetCursorPosition = realCursor
@@ -2090,18 +2116,27 @@ Lab.Step("pose for the screenshot", function()
         Check("display", "pose: the details price one craft's materials, each with its quantity", true, Txt(Opps().detail.mats[1].qty):find("^\195\151%d+") ~= nil and Opps().detail.mats[1].item ~= nil)
     elseif view == "design" then
         -- the settings window on the Workshop page, scrolled to the tooltip designer, the Hold Shift preview with a line selected
+        R.SettingsUI.Close()
+        Win().Hide()
+        TwichUIDB.ui.settingsWindow = { w = 1380, h = 1120 }
         Lab.Open("workshop")
         R.SettingsUI.View("workshop").taskButtons[2]:Click()
         local D = R.WorkshopWorthDesigner
-        D.SetMode(true)
-        D.Select("auction")
+        D.Cancel()
+        local pose = params.designer or "shift"
+        D.SetMode(pose == "shift")
+        D.Select(nil)
+        if pose == "search" then D.Frame().search:SetText("market")
+        elseif pose == "selected" then D.Select("auction")
+        elseif pose == "reorder" then D.MoveLine("vendor", 1); D.Select("vendor")
+        elseif pose == "reset" then D.RemoveLine("vendor"); D.ResetLayout() end
         local content = R.SettingsUI.View("workshop").frame:GetParent()
         local scroll = content and content:GetParent()
         Lab.Settle(0.2)   -- let the page lay out before measuring where the designer is
         local ct, dt = content and content:GetTop(), D.Frame():GetTop()
         if scroll and scroll.SetVerticalScroll and ct and dt then scroll:SetVerticalScroll(math.max(0, ct - dt - 8)) end
         Lab.Settle(0.2)
-        Check("display", "pose: the designer is on screen with the Hold Shift preview", true, D.Frame():IsShown() and D.Mode())
+        Check("display", "pose: the designer is on screen with the Hold Shift preview", true, D.Frame():IsShown() and D.Mode() == (pose == "shift"))
     elseif view == "strategy" or view == "confirm" then
         -- (P2) the full strategy of one craft, and the confirmation before its crafts are added: Copper Belt Buckle needs Bronze Bars, which Smelt Bronze makes
         -- (the queue already makes the bars through Smelt Bronze; take that entry out so the plan has crafts to add)

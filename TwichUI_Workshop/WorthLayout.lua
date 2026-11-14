@@ -148,6 +148,31 @@ function WL.CanWrite()
     return true
 end
 
+-- Validate the entire editor draft before replacing anything. Old setter APIs remain
+-- available to callers; the editor uses this atomic commit for enabled + lines.
+function WL.Set(layout)
+    local ok, why = WL.CanWrite()
+    if not ok then return false, why end
+    if type(layout) ~= "table" or type(layout.enabled) ~= "boolean" or type(layout.lines) ~= "table" then return false, "bad" end
+    local n, seen, lines = 0, {}, {}
+    for k in pairs(layout.lines) do
+        if type(k) ~= "number" or k % 1 ~= 0 or k < 1 or k > WL.MAX_LINES then return false, "bad" end
+        n = n + 1
+    end
+    for i = 1, n do
+        local e = layout.lines[i]
+        if type(e) ~= "table" or not WL.BY_ID[e.id] or seen[e.id] or (e.when ~= "always" and e.when ~= "shift") then return false, "bad" end
+        seen[e.id] = true; lines[i] = { id = e.id, when = e.when }
+    end
+    local old = Saved(false)
+    local out = {}
+    for k, v in pairs(old or {}) do out[k] = v end
+    out.v, out.enabled, out.lines = WL.VERSION, layout.enabled, lines
+    if type(TwichUIDB.ui) ~= "table" then TwichUIDB.ui = {} end
+    TwichUIDB.ui[WL.KEY] = out
+    return true
+end
+
 function WL.SetEnabled(on)
     if on ~= true and on ~= false then return false, "bad" end
     local ok, why = WL.CanWrite()
@@ -429,13 +454,13 @@ WL.EXAMPLES = {
       facts = { sell = 500, quality = 1, classID = 7, bindType = 0, bound = false, market = EXAMPLE_MARKET,
           price = { price = 400, at = EXAMPLE_NOW - 3 * 3600, complete = true } },
       market = function() return ExampleFacts(420, 400, 450, 24, 9, 400, "good") end },
-    { key = "higher", label = "Auction looks higher",
+    { key = "higher", label = "Crafting material",
       facts = { sell = 500, quality = 1, classID = 7, bindType = 0, bound = false, market = EXAMPLE_MARKET,
           price = { price = 900, at = EXAMPLE_NOW - 3 * 3600, complete = true } },
       market = function() return ExampleFacts(700, 900, 650, 5, 2, 900, "good") end },
-    { key = "missing", label = "Missing prices",
+    { key = "missing", label = "No market data",
       facts = { sell = 300, quality = 2, classID = 4, equipLoc = "INVTYPE_CHEST", bindType = 2, bound = false, market = EXAMPLE_MARKET } },
-    { key = "unavailable", label = "Can't be auctioned",
+    { key = "unavailable", label = "Equipment (bound)",
       facts = { sell = 300, quality = 2, classID = 4, equipLoc = "INVTYPE_CHEST", bindType = 1, bound = true, market = EXAMPLE_MARKET } },
 }
 WL.EXAMPLE_BY_KEY = {}

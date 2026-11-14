@@ -65,7 +65,8 @@ fixture overview '{ view = "overview" }'
 fixture craft '{ view = "craft" }'
 fixture opps '{ view = "opps" }'
 fixture shop '{ view = "shop" }'
-fixture design '{ view = "design" }'
+case "${SIMLAB_DESIGN_POSE:-shift}" in normal|shift|search|selected|reorder|reset) ;; *) exit 2 ;; esac
+fixture design "{ view = \"design\", designer = \"${SIMLAB_DESIGN_POSE:-shift}\" }"
 fixture small '{ view = "opps" }'
 fixture smallov '{ view = "smallov" }'
 fixture empty '{ view = "empty" }'

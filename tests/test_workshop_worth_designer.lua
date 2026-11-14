@@ -5,7 +5,7 @@
 --   * click-to-add, select, Move up / Move down, Remove, Always / Hold Shift, no duplicates, Enable tooltip, Reset layout;
 --   * the drag handlers (OnDragStart / OnDragStop with a faked pointer position): add by drop, reorder by drop, a drop outside changes
 --     nothing, the marker, the frame hiding mid-drag; these prove the handlers, NOT real pointer-driven dragging (docs/workshop.md);
---   * everything saves at once, a newer schema is left alone, redrawing makes no new controls.
+--   * edits remain drafts until explicit Save; a newer schema is left alone, redrawing makes no new controls.
 dofile(TESTS .. "mi_mock.lua")
 
 local failures = 0
@@ -36,6 +36,10 @@ local function LoadAs(addon, file)
   local chunk = assert(loadfile(ROOT .. file)); setfenv(chunk, c); chunk(addon, {})
 end
 -- the settings side: the Kit, the widgets, the virtual drag (Magic Inventory's, which the designer shares), the designer
+local applyViews
+R.Profiles = { OnApply = function(phase, name, fn)
+  if phase == "views" and name == "workshop-worth-designer" then applyViews = fn end
+end }
 R.MagicInventoryPage = {}
 for _, file in ipairs({ "../TwichUI_Settings/Kit.lua", "../TwichUI_Settings/Widgets.lua", "../TwichUI_Settings/pages/MagicInventoryDrag.lua", "../TwichUI_Settings/pages/WorkshopWorth.lua" }) do
   LoadAs("TwichUI_Settings", file)
@@ -78,7 +82,7 @@ local function Mock()   -- the rows shown, top to bottom
 end
 local function Ids()
   local out = {}
-  for _, e in ipairs(R.Workshop.WorthLayout.Get().lines) do out[#out + 1] = e.id .. (e.when == "shift" and "*" or "") end
+  for _, e in ipairs(D.Draft().lines) do out[#out + 1] = e.id .. (e.when == "shift" and "*" or "") end
   return table.concat(out, ",")
 end
 local DEFAULT = "recommend,vendor,auction,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*"
@@ -107,7 +111,10 @@ local L = R.Workshop.WorthLayout
 -- The list and the mockup
 ---------------------------------------------------------------------------
 Same(Ids(), DEFAULT, "the short default")
-for i, t in ipairs(L.TYPES) do Same(D.ListButton(i).label.text, t.label, "list: " .. t.label) end
+for i, t in ipairs(L.TYPES) do
+  if t.id ~= "outcomes" then Same(D.ListButton(i).label.text, t.label, "list: " .. t.label)
+  else Check(D.ListButton(i).shown == false, "unsupported outcomes are not offered") end
+end
 Check(Has(f, "Drag lines into the preview."), "the one instruction")
 Check(Has(f, "Preview data"), "the example values are labelled as preview data")
 Check(Has(f, "Example item"), "the mockup is a tooltip")
@@ -116,7 +123,7 @@ Check(f.enable:GetChecked() == true, "Enable tooltip is on by default")
 Check(f.reset.enabled == false, "nothing to reset yet")
 for i, t in ipairs(L.TYPES) do
   local added = L.IndexOf(L.Get().lines, t.id) ~= nil
-  Check((D.ListButton(i).check.shown ~= false) == added, "check mark on " .. t.id .. " iff it is in the preview")
+  Check(t.id == "outcomes" or (D.ListButton(i).check.shown ~= false) == added, "check mark on " .. t.id .. " iff it is in the preview")
 end
 
 -- the mockup IS the tooltip builder's output: every example, both previews
@@ -170,7 +177,7 @@ D.SetExample("ordinary")
 Click(D.Row(2)); Same(D.Selected(), "vendor", "clicking a row selects it")
 Check(f.selTitle.text == "Vendor value" and f.up.shown ~= false and f.up.enabled == true, "its controls appear")
 Click(D.Row(2)); Same(D.Selected(), nil, "again deselects")
-Check(f.up.shown == false and Has(f, "Click a line in the preview"), "and they go")
+Check(f.up.shown == false and Has(f, "Click a preview line"), "and they go")
 Click(D.Row(2))
 Click(f.down); Same(Ids(), "recommend,auction,vendor,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*", "Move down")
 Click(f.up); Click(f.up); Same(Ids(), "vendor,recommend,auction,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*", "Move up (twice)")
@@ -203,7 +210,7 @@ Check(D.AddLine("vendor") == false and Ids() == before and Has(f, "already in th
 Click(D.ListButton(2)); Same(D.Selected(), nil, "an added line's button selects it (toggle)")
 D.AddLine("vendor")   -- selected again; no change
 -- adding a detail line in the Hold Shift preview keeps its usual Hold Shift choice; in Normal it starts Always so it is seen
-Click(D.ListButton(7)); Check(Ids():find("outcomes,", 1, true) or Ids():find("outcomes$"), "outcomes added")
+D.AddLine("outcomes"); Check(Ids():find("outcomes,", 1, true) or Ids():find("outcomes$"), "outcomes added")
 Check(not Ids():find("outcomes*", 1, true), "added in Normal: Always, so it shows where you are looking")
 D.RemoveLine("outcomes"); D.SetMode(true); D.AddLine("outcomes")
 Check(Ids():find("outcomes*", 1, true), "added in the Hold Shift preview: its usual choice (Hold Shift)")
@@ -221,15 +228,18 @@ D.Select("disenchant")
 ---------------------------------------------------------------------------
 -- Enable tooltip and Reset layout
 ---------------------------------------------------------------------------
-Check(not L.IsDefault() and f.reset.enabled == true, "Reset layout is available after a change")
-Click(f.reset); Same(Ids(), DEFAULT, "Reset layout")
-Check(f.reset.enabled == false and Has(f, "short default layout"), "and says so")
+Check(D.Dirty() and f.reset.enabled == true, "Reset layout is available after a change")
+Click(f.reset); Click(f.confirmYes); Same(Ids(), DEFAULT, "Reset layout")
+Check(f.reset.enabled == false and Has(f, "Default layout restored"), "and says so")
 f.enable.scripts.OnClick(f.enable, "LeftButton")   -- the checkbox toggles itself, then tells the designer
-Check(L.Enabled() == false and f.enable:GetChecked() == false, "Enable tooltip off")
-D.AddLine("outcomes"); Click(f.reset)
-Check(L.Enabled() == false, "Reset layout leaves Enable tooltip as it was")
-f.enable.scripts.OnClick(f.enable, "LeftButton"); Check(L.Enabled() == true, "and back on")
-Check(c.TwichUIDB.ui.workshopWorth ~= nil and c.TwichUIDB.ui.workshopWorth.v == 1, "saved in the profile's ui group at once")
+Check(D.Draft().enabled == false and f.enable:GetChecked() == false, "Enable tooltip off")
+D.AddLine("outcomes"); Click(f.reset); Click(f.confirmYes)
+Check(D.Draft().enabled == false, "Reset layout leaves Enable tooltip as it was")
+f.enable.scripts.OnClick(f.enable, "LeftButton"); Check(D.Draft().enabled == true, "and back on")
+Check(c.TwichUIDB.ui.workshopWorth == nil, "draft changes have not written the saved layout")
+D.SetEnabled(false); Check(D.Save(), "explicit Save")
+Check(c.TwichUIDB.ui.workshopWorth and c.TwichUIDB.ui.workshopWorth.v == 1 and not L.Enabled(), "saved atomically in the profile ui group")
+D.SetEnabled(true); D.Save()
 Check(c.TwichUIDB.workshop == nil, "never in the account-wide Workshop record")
 
 ---------------------------------------------------------------------------
@@ -238,7 +248,7 @@ Check(c.TwichUIDB.workshop == nil, "never in the account-wide Workshop record")
 -- the mockup sits at the top left of a 1000 high screen; a pointer at rel pixels below its top
 local mock = f.mock
 mock.GetLeft = function() return 100 end; mock.GetRight = function() return 404 end
-mock.GetTop = function() return 1000 end; mock.GetBottom = function() return 700 end
+mock.GetTop = function() return 1000 end; mock.GetBottom = function() return 1000 - mock:GetHeight() end
 local cursor = { x = 0, y = 0 }
 c.GetCursorPosition = function() return cursor.x, cursor.y end
 local function Point(rel) cursor.x, cursor.y = 150, 1000 - rel end
@@ -329,12 +339,12 @@ Same(D.PositionOf(#D.Model().sec.rows), 6, "after the last SHOWN line (the marke
 D.SetMode(false)
 -- a hidden Shift line before the shown ones: a gap means a place in the whole layout, not a count of the rows shown
 L.SetLines({ { id = "status", when = "shift" }, { id = "vendor", when = "always" }, { id = "note", when = "shift" }, { id = "auction", when = "always" } })
-D.Refresh()
+D.Cancel()
 Same(D.PositionOf(0), 2, "before the first SHOWN row is after the hidden line")
 Same(D.PositionOf(1), 4, "between two shown rows: before the second, after the hidden line between them")
 Same(D.PositionOf(2), 5, "after the last shown row")
 Check(D.Drop({ kind = "list", id = "outcomes" }, 1) and Ids() == "status*,vendor,note*,outcomes,auction", "dropped between them: " .. Ids())
-L.SetLines(L.DefaultLines()); D.Refresh()
+L.SetLines(L.DefaultLines()); D.Cancel()
 Check(D.StartDrag({ kind = "list", id = "vendor" }) == false and not Drag.Active(), "a line already in the preview is not carried again")
 -- drop handlers by themselves
 Check(D.Drop({ kind = "bogus" }, 0) == false and D.Drop(nil, 0) == false and D.Drop({ kind = "list", id = "outcomes" }, nil) == false, "a bad drop does nothing")
@@ -361,14 +371,61 @@ Same(#f.mock.children, n, "switching previews makes no new rows")
 Check(#f.mock.children <= 40, "a bounded mockup")
 c.TwichUIDB.ui.workshopWorth = { v = 2, lines = { { id = "note" } }, future = true }
 D.Refresh()
+D.Cancel()
 Same(Ids(), DEFAULT, "a newer layout reads as the default")
-Click(D.ListButton(7)); Check(Has(f, "newer TwichUI"), "and a change is refused, said")
+D.AddLine("outcomes"); Check(Has(f, "newer TwichUI"), "and a change is refused, said")
 Same(c.TwichUIDB.ui.workshopWorth.v, 2, "the newer data is untouched")
 Check(c.TwichUIDB.ui.workshopWorth.future == true and #c.TwichUIDB.ui.workshopWorth.lines == 1, "the newer data is untouched")
 D.ResetLayout(); Check(Has(f, "newer TwichUI"), "reset refused too")
 c.TwichUIDB.ui.workshopWorth = nil
+D.Cancel()
 -- the page host: the Workshop page asks the designer for its frame and height
 Check(D.Height() > 300, "a tall designer: " .. tostring(D.Height()))
+
+-- Draft history, atomic save, cancellation, filtering and compatible saved layouts.
+D.Cancel(); D.SetMode(false)
+local saved = L.Get()
+D.RemoveLine("vendor"); D.SetWhen("auction", "shift"); D.SetEnabled(false)
+Check(D.Dirty() and L.Enabled(), "draft enabled change cannot affect the live tooltip")
+Check(L.IndexOf(L.Get().lines, "vendor"), "removing in draft leaves the saved line intact")
+Check(D.Undo() and D.Draft().enabled, "undo restores enabled state")
+Check(D.Undo() and D.Draft().lines[3].when == "always", "undo restores visibility")
+Check(D.Undo() and not D.Dirty(), "undo restores order and presence")
+Check(D.Redo() and not L.IndexOf(D.Draft().lines, "vendor"), "redo restores removal")
+D.Cancel(); Check(not D.Dirty() and L.IndexOf(D.Draft().lines, "vendor"), "Cancel discards all draft edits")
+D.SetMode(true); D.SetExample("higher"); D.Search("historical")
+Check(D.ListButton(11).shown ~= false and D.ListButton(2).shown == false, "search filters supported catalog fields")
+Check(not D.Dirty(), "mode, sample and search do not dirty the layout")
+D.Search("nothing matches this"); Check(f.noResults.shown ~= false, "empty search is explicit")
+D.Search(""); D.SetMode(false)
+D.MoveLine("vendor", 1); D.SetWhen("auction", "shift"); D.SetEnabled(false)
+Check(D.Save(), "Save commits the complete intended layout")
+Check(not L.Enabled() and L.Get().lines[1].id == "vendor" and L.Get().lines[2].id == "recommend", "saved order and enabled state")
+Check(L.Get().lines[3].id == "auction" and L.Get().lines[3].when == "shift", "saved visibility")
+local old = c.TwichUIDB.ui.workshopWorth
+Check(not L.Set({ enabled = true, lines = { { id = "vendor", when = "sometimes" } } }), "invalid visibility refused")
+Check(not L.Set({ enabled = true, lines = { { id = "vendor", when = "always" }, { id = "vendor", when = "shift" } } }), "duplicate refused")
+Check(c.TwichUIDB.ui.workshopWorth == old and not L.Enabled(), "invalid complete layout writes nothing")
+D.ResetLayout(); Check(D.ResetPending() and L.Get().lines[1].id == "vendor", "reset first requests confirmation")
+D.KeepEditing(); Check(not D.ResetPending(), "reset can be declined")
+D.ResetLayout(); D.ResetLayout(true)
+Check(D.Dirty() and L.Get().lines[1].id == "vendor" and not D.Draft().enabled, "confirmed reset is a draft and retains enabled")
+D.Cancel()
+-- The real profile service keeps the ui table and applies new contents in place.
+D.RemoveLine("vendor")
+c.TwichUIDB.ui.workshopWorth = { v = 1, lines = { { id = "auction", when = "shift" } } }
+Check(type(applyViews) == "function", "profile views callback registered once")
+applyViews()
+Check(not D.Dirty() and #D.Draft().lines == 1 and D.Draft().lines[1].id == "auction", "profile apply discards the previous profile draft")
+Check(not D.Undo() and not D.Redo(), "history cannot cross profiles")
+c.TwichUIDB.ui.workshopWorth = { v = 1, enabled = false, lines = {} }; D.Cancel()
+Check(#D.Draft().lines == 0 and not D.Draft().enabled, "saved empty/off v1 layout preserved")
+Check(not D.Dirty(), "opening an old layout does not save")
+D.AddLine("vendor"); D.Cancel(); Check(#L.Get().lines == 0, "cancel preserves intentional empty layout")
+c.TwichUIDB.ui.workshopWorth = { v = 3, future = true }; D.Cancel()
+Check(not D.SetEnabled(false) and not D.Save(), "future schema refuses draft edits and Save")
+Check(c.TwichUIDB.ui.workshopWorth.v == 3 and c.TwichUIDB.ui.workshopWorth.future, "future schema left intact")
+c.TwichUIDB.ui.workshopWorth = nil; D.Cancel()
 
 if failures > 0 then error(failures .. " check(s) failed", 0) end
 print("PASSED")

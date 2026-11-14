@@ -71,3 +71,25 @@ that interaction model while retaining the stored layout and renderer.
   in checkpoint 3. No inert objective or compact control is shown in this step.
 - Shared settings contract unchanged; Workshop is conditional in that fixture,
   so a separate real-launcher description/persistence test covers its controls.
+
+### Checkpoint 2 — visual draft editor
+
+- Two columns reuse the existing materials, renderer, pure layout operations and
+  Magic Inventory drag helper. The searchable catalog offers 12 implemented
+  fields. Legacy `outcomes` entries are retained/editable but never offered.
+- Undo/Redo retain up to 50 complete drafts. Save validates the whole layout before
+  atomically replacing its v1 record; invalid/duplicate/sparse/future layouts are
+  refused. Cancel, reset confirmation, empty/off layouts, profile apply and
+  Always/Shift behavior are unit-tested. Preview modes/search/samples never save.
+- Unit-tested: fast **8 passed**, 1.134 s; feature **73 passed**, 119.973 s,
+  including selected Workshop simulator scenarios (66.668 s). The legacy scenario
+  now explicitly saves its edits before checking the live item tooltip; separate
+  assertions check that draft edits, Undo/Redo and Cancel leave it unchanged.
+- Simulator-tested: six requested poses passed (506 structured checks per launch),
+  including catalog geometry reachability. Handler tests include add/reorder,
+  pointer-outside cancellation and page hiding; they are not real pointer input.
+- Screenshot-reviewed at 1380×1120 in a 1600×1200 viewport:
+  `test-output/simlab/artifacts/workshop-{DeCOApNd,Kp6ovqvL,c5sOd7On,Yb9ZvZqe,EoePVQlg,QWDlJb8I}/design.png`
+  (Normal, Shift, search, selection, reorder, reset). The wider capture contains
+  the full editor. Small windows use the existing page scroll. Simulator game
+  overlays and substituted fonts remain visible; these are structural captures.
