@@ -575,7 +575,7 @@ local function BuildDetail()
     UI.TipFn(d.act, nil, function()
         local x = d.data
         if x and x.kind == "make" then return "Add optimized plan\nReview the crafts before adding them." end
-        return "Show vendor\nShow the nearest known seller on the world map. No route is started."
+        return "Show vendor\nShow the nearest known seller on the map and set a waypoint on it."
     end)
     d.empty = UI.Text(d, 13, K.textDim)
     d.empty:SetPoint("TOPLEFT", 14, -16)

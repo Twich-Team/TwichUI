@@ -576,7 +576,10 @@ do
   local located
   R.NpcStore = { Entries = function() return { { id = 4567, n = "Mira", m = 1, x = 5000, y = 5000, s = { 12 }, own = true } } end,
     ValidMap = function() return true end, Usable = function() return true end, MyFaction = function() return nil end, COORD = 10000 }
-  R.NpcMap = { Locate = function(e) located = e; return true end }
+  local marked, tracked = nil, nil
+  R.NpcMap = { Locate = function(e) located = e; return true end, SetWaypoint = function(e) marked = e; return true end }
+  local savedST = c.C_SuperTrack
+  c.C_SuperTrack = { SetSuperTrackedUserWaypoint = function(on) tracked = on end }
   local enabled = R.Enabled
   R.Enabled = function(_, key) if key == "npcMap" then return true end return enabled(R, key) end
   Win.Render()
@@ -584,8 +587,39 @@ do
   pd = Select(sr)
   Check(pd.act:IsShown() and pd.act.text:GetText() == "Show vendor", "a seen place: Show vendor")
   pd.act:GetScript("OnClick")(pd.act)
-  Check(located and located.n == "Mira", "the map is asked to show that vendor, nothing else")
-  Check(f.note:GetText():find("Showing Mira on the map", 1, true), f.note:GetText())
+  Check(located and located.n == "Mira", "the map is asked to show that vendor")
+  Check(marked == located, "the game's waypoint is put on the same vendor")
+  Same(tracked, true, "and tracked, so its marker shows in the world")
+  Check(f.note:GetText():find("Showing Mira on the map. Waypoint set.", 1, true), f.note:GetText())
+  -- a map the game won't put a waypoint on: the vendor is still shown, nothing is tracked, and the words don't claim a waypoint
+  marked, tracked = nil, nil
+  R.NpcMap.SetWaypoint = function(e) marked = e; return false end
+  pd.act:GetScript("OnClick")(pd.act)
+  Same(tracked, nil, "no waypoint: nothing tracked"); Check(not f.note:GetText():find("Waypoint", 1, true), f.note:GetText())
+  -- the map couldn't be opened, but the waypoint could: still a way to find it
+  R.NpcMap.Locate = function() return false end
+  R.NpcMap.SetWaypoint = function(e) marked = e; return true end
+  pd.act:GetScript("OnClick")(pd.act)
+  Check(f.note:GetText():find("Waypoint set on Mira", 1, true), f.note:GetText())
+  -- WaypointUI loaded: its public API makes the waypoint, named after the NPC (map, x and y in percent); the game's unnamed one is not set as well
+  R.NpcMap.Locate = function(e) located = e; return true end
+  local asked
+  c.WaypointUIAPI = { Navigation = { NewUserNavigation = function(o) asked = o; return { name = o.name } end } }
+  marked, tracked = nil, nil
+  pd.act:GetScript("OnClick")(pd.act)
+  Check(asked and asked.name == "Mira" and asked.mapID == 1 and asked.x == 50 and asked.y == 50, "WaypointUI's waypoint carries the NPC's name and place")
+  Same(marked, nil, "the game's unnamed waypoint is not set as well"); Same(tracked, nil, "WaypointUI tracks its own")
+  Check(f.note:GetText():find("Waypoint set.", 1, true), f.note:GetText())
+  -- WaypointUI fails (an error, or no waypoint made): the game's own waypoint instead, so Show vendor still marks the NPC
+  c.WaypointUIAPI = { Navigation = { NewUserNavigation = function() error("boom") end } }
+  pd.act:GetScript("OnClick")(pd.act)
+  Check(marked and marked.n == "Mira" and tracked == true, "an error in WaypointUI falls back to the game's waypoint")
+  marked, tracked = nil, nil
+  c.WaypointUIAPI = { Navigation = { NewUserNavigation = function() return nil end } }
+  pd.act:GetScript("OnClick")(pd.act)
+  Check(marked and tracked == true, "and so does a refusal")
+  c.WaypointUIAPI = nil
+  c.C_SuperTrack = savedST
   R.Enabled = enabled; R.NpcStore, R.NpcMap = nil, nil
 
   -- a material with no price: a known subtotal and a clear message, never a complete-looking total

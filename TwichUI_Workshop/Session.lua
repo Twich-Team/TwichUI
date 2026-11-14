@@ -1025,8 +1025,27 @@ function S.AddSubcraft(item)
     return true
 end
 
--- The click on Show vendor: shows the vendor seen to sell the item on the world map (the NPC collection's own "find"); it sets no waypoint,
--- starts no route and buys nothing. Returns true, or false (and says why in the note).
+-- A waypoint on a merchant, named after it where that can be done. With WaypointUI loaded, its public API (WaypointUIAPI.Navigation.
+-- NewUserNavigation: name, map, x and y in percent; it sets and tracks the game's waypoint itself) makes a waypoint that carries the NPC's name.
+-- Without it, or if it refuses or fails, the game's own waypoint (the NPC collection's NpcMap.SetWaypoint, which has no name: the game's waypoint
+-- has none) is set and tracked. Returns true and "named" | "game", or false.
+local function Waypoint(NMAP, e)
+    local api = type(WaypointUIAPI) == "table" and type(WaypointUIAPI.Navigation) == "table" and WaypointUIAPI.Navigation or nil
+    local NS = R.NpcStore
+    if api and type(api.NewUserNavigation) == "function" and NS and NS.COORD then
+        local ok, nav = pcall(api.NewUserNavigation, { name = e.n, mapID = e.m, x = e.x / NS.COORD * 100, y = e.y / NS.COORD * 100 })
+        if ok and nav then return true, "named" end
+    end
+    if NMAP.SetWaypoint and NMAP.SetWaypoint(e) then
+        if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then pcall(C_SuperTrack.SetSuperTrackedUserWaypoint, true) end
+        return true, "game"
+    end
+    return false
+end
+
+-- The click on Show vendor: shows the vendor seen to sell the item on the world map (the NPC collection's own "find") and puts the game's own
+-- waypoint on it, tracked, so its marker shows in the world (Waypoint above: named after the NPC through WaypointUI when it is loaded; it replaces
+-- the waypoint you had, as setting one in the game does, and only on this click). It starts no route and buys nothing. Returns true, or false (and says why in the note).
 function S.ShowVendor(item)
     local sellers = V.Sellers({ [item] = true })[item]
     local rec = V.Entry(item)
@@ -1047,14 +1066,17 @@ function S.ShowVendor(item)
     end
     if WorldMapFrame and WorldMapFrame.IsShown and not WorldMapFrame:IsShown() and ToggleWorldMap then pcall(ToggleWorldMap) end
     local ok = NMAP.Locate(e)
+    -- the game's waypoint on the seller, tracked: placed even if the map couldn't be shown (the marker is the way to find it)
+    local marked = Waypoint(NMAP, e)
     -- the words say only what is known: "nearest" for a compared distance, "in this area" for the same map, otherwise how many others are known
     local more = #sellers - 1
-    if not ok then note = "The map couldn't show that vendor."
+    if not ok then note = marked and ("Waypoint set on %s; the map couldn't show it."):format(e.n) or "The map couldn't show that vendor."
     elseif how == "nearest" then note = ("Showing %s, the nearest known seller."):format(e.n)
     elseif how == "local" then note = ("Showing %s, a seller in this area."):format(e.n)
     elseif more > 0 then note = ("Showing %s. %d other %s known."):format(e.n, more, more == 1 and "seller is" or "sellers are")
     else note = ("Showing %s on the map."):format(e.n) end
-    return ok
+    if ok and marked then note = note .. " Waypoint set." end
+    return ok or marked
 end
 
 function S.Snapshot()

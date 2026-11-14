@@ -1048,25 +1048,30 @@ Lab.Step("shopping: source choices", function()
 end)
 
 Lab.Step("shopping: Show vendor", function()
-    -- The intended calls are: open the world map (ToggleWorldMap) and NpcMap.Locate(entry) for a merchant seen to sell the item, and nothing
-    -- that navigates. The simulator cannot run Blizzard's world map (opening it raises many Blizzard Lua errors: unsupported map APIs), so
+    -- The intended calls are: open the world map (ToggleWorldMap), NpcMap.Locate(entry) for a merchant seen to sell the item and (P2.1)
+    -- NpcMap.SetWaypoint(entry), the game's waypoint on the same merchant; nothing that navigates or makes a pin. SetWaypoint is the real one,
+    -- recorded: the simulator's synthetic map refuses waypoints, so the refusal path (no claim in the note) is what runs here. The simulator cannot run Blizzard's world map (opening it raises many Blizzard Lua errors: unsupported map APIs), so
     -- BOTH are replaced here by recording stand-ins: this checks what the Workshop asks for, not what the map then shows.
     local NM, calls, toggles = R.NpcMap, {}, 0
     local originalLocate, originalToggle = NM.Locate, ToggleWorldMap
     NM.Locate = function(e) calls[#calls + 1] = e return true end
+    local originalWaypoint, marks = NM.SetWaypoint, {}
+    NM.SetWaypoint = function(e) marks[#marks + 1] = e return originalWaypoint(e) end
     _G.ToggleWorldMap = function() toggles = toggles + 1 end
     local here = C_Map.GetBestMapForUnit("player")
     local pinsBefore = R.Pins.LocalCount() .. "/" .. #R.Pins.AllSharedPins()
     local navBefore = tostring(R.Nav.Active())
     local waypointBefore = C_Map.HasUserWaypoint and tostring(C_Map.HasUserWaypoint()) or "n/a"
     Click(Pick("Coarse Thread").act, "Show vendor (Coarse Thread)")
-    NM.Locate, _G.ToggleWorldMap = originalLocate, originalToggle
+    NM.Locate, _G.ToggleWorldMap, NM.SetWaypoint = originalLocate, originalToggle, originalWaypoint
     Check("click", "the world map is asked to open once", 1, toggles)
     Check("click", "Locate was called once", 1, #calls)
     Check("state", "Locate got the merchant entry (id, name, the player's map when it was noted)", "3333 | Haldric the Peddler | " .. tostring(here),
         calls[1] and (calls[1].id .. " | " .. calls[1].n .. " | " .. calls[1].m) or "no call")
     Check("display", "the note names the merchant and says it is the nearest known seller (a distance was compared)", "Showing Haldric the Peddler, the nearest known seller.", Txt(Frame().note))
-    Check("state", "no waypoint was set", waypointBefore, C_Map.HasUserWaypoint and tostring(C_Map.HasUserWaypoint()) or "n/a")
+    Check("click", "the game's waypoint was asked for once, on the same merchant", "1/true", #marks .. "/" .. tostring(marks[1] == calls[1]))
+    Check("state", "this map refuses waypoints: none was set, and the note claims none", waypointBefore .. "/false",
+        (C_Map.HasUserWaypoint and tostring(C_Map.HasUserWaypoint()) or "n/a") .. "/" .. tostring(Txt(Frame().note):find("Waypoint", 1, true) ~= nil))
     Check("state", "no pin was created (local/shared)", pinsBefore, R.Pins.LocalCount() .. "/" .. #R.Pins.AllSharedPins())
     Check("state", "no navigation was started", navBefore, tostring(R.Nav.Active()))
     -- an item no known merchant sells has no Show vendor button

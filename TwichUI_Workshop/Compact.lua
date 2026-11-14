@@ -3,7 +3,7 @@
 -- "Full view" button swaps back. Two modes in one panel (memory only, like the window's page):
 --   Travel  what is still to get, from the Shopping plan of the whole queue (Session.ShoppingPlan, the multilevel plan and its fallback): the
 --           quantity, the source in words (Vendor, Auction, Craft, Collect) and, for a vendor seen to sell it, a map button (Session.ShowVendor:
---           the NPC collection's own "show on map"; no waypoint, no route). No market valuations.
+--           the NPC collection's own "show on map" and the game's waypoint on it; no route). No market valuations.
 --   Craft   the queue in its order: the next craft whose materials are all in the bags, how many crafts are left, which recipes are ready and
 --           which still lack something, and a bar of how many of the queue's recipes are ready.
 -- It reads; it never crafts, buys or moves anything, and it has no secure or protected control. While shown it listens to bag changes and item
@@ -96,7 +96,7 @@ local function MakeRow(parent)
     UI.TipFn(row.map, nil, function()
         local d = row.data
         if d and d.done then return "Crafted one\nCount one craft of this recipe as done." end
-        return "Show vendor\nShow a known seller on the world map."
+        return "Show vendor\nShow a known seller on the map and set a waypoint on it."
     end)
     row.word = UI.Text(row, 11, K.textDim)
     row.word:SetPoint("RIGHT", row.map, "LEFT", -6, 0)
