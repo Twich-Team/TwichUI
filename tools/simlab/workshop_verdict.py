@@ -40,9 +40,10 @@ LAYERS = ("init", "display", "click", "direct", "event", "state")
 VIEWS = {"overview": "TwichUIWorkshop", "craft": "TwichUIWorkshop", "opps": "TwichUIWorkshop", "shop": "TwichUIWorkshop", "design": "TwichUISettings",
          "small": "TwichUIWorkshop", "smallov": "TwichUIWorkshop", "empty": "TwichUIWorkshop", "history": "TwichUIWorkshop", "craftlong": "TwichUIWorkshop",
          "shopmix": "TwichUIWorkshop", "shopcollect": "TwichUIWorkshop", "strategy": "TwichUIWorkshop", "confirm": "TwichUIWorkshop",
-         "stratlong": "TwichUIWorkshop", "planning": "TwichUIWorkshop", "nodata": "TwichUIWorkshop", "override": "TwichUIWorkshop"}
+         "stratlong": "TwichUIWorkshop", "planning": "TwichUIWorkshop", "nodata": "TwichUIWorkshop", "override": "TwichUIWorkshop",
+         "compact": "TwichUIWorkshopCompact", "compactcraft": "TwichUIWorkshopCompact", "tooltip": "TwichUIWorkshop", "smallstrat": "TwichUIWorkshop"}
 SHOTS = ("overview", "craft", "opps", "shop", "design", "small", "smallov", "empty", "history", "craftlong", "shopmix", "shopcollect",
-         "strategy", "confirm", "stratlong", "planning", "nodata", "override")
+         "strategy", "confirm", "stratlong", "planning", "nodata", "override", "compact", "compactcraft", "tooltip", "smallstrat")
 VOICE, UTF8 = "voice-settings-unsupplied", "addon-message-invalid-utf8"
 CHECK = re.compile(r"^SIMLAB check (PASS|FAIL) \[([^\]]+)\] (.*?) \| expected=(.*?) \| actual=(.*)$", re.M)
 
@@ -125,10 +126,10 @@ def main():
     print("Screenshots (files only; whether they look right is for a person to judge):")
     for n in SHOTS:
         path = run / f"{n}.png"
-        size = (1000, 700) if n in ("small", "smallov") else (1600, 1200)
+        size = (1000, 700) if n in ("small", "smallov", "smallstrat") else (1600, 1200)
         # the Workshop window is 1080x700, centred (the settings window of the design shot is smaller, centred too); on the small screen
         # it is scaled to fit, so the middle of the screen is inside it
-        box = (150, 120, 700, 460) if n in ("small", "smallov") else (260, 250, 1080, 700)
+        box = (150, 120, 700, 460) if n in ("small", "smallov", "smallstrat") else ((650, 450, 950, 750) if n in ("compact", "compactcraft") else (260, 250, 1080, 700))
         try:
             width, height, pixels = read_rgba(path)
             check(f"{n}.png is {size[0]}x{size[1]}", (width, height) == size, f"{width}x{height}")
@@ -153,7 +154,7 @@ def main():
     print("  Game data ........................ FAKE and deterministic (professions, items, bags, auction listings, merchant); "
           "the world map and NpcMap.Locate are stand-ins in the Show vendor step")
     print("  Persistence tested ............... NO: nothing is reloaded or written to disk. Closing and reopening the window is not persistence.")
-    print(f"  Screenshots ...................... {'captured' if assets else 'captured WITHOUT game assets'}: overview.png, craft.png, opps.png, shop.png, design.png, small.png (1000x700), smallov.png (1000x700), empty.png, history.png, craftlong.png, shopmix.png, shopcollect.png, strategy.png, confirm.png, stratlong.png, planning.png, nodata.png, override.png "
+    print(f"  Screenshots ...................... {'captured' if assets else 'captured WITHOUT game assets'}: overview.png, craft.png, opps.png, shop.png, design.png, small.png (1000x700), smallov.png (1000x700), empty.png, history.png, craftlong.png, shopmix.png, shopcollect.png, strategy.png, confirm.png, stratlong.png, planning.png, nodata.png, override.png, compact.png, compactcraft.png, tooltip.png, smallstrat.png (1000x700) "
           "(a script cannot judge them; look at them, and remember custom fonts are not drawn)")
     print("  Real-client tested ............... NO")
     print(f"{len(r['checks'])} checks per launch; {r['done'].group(2) if r['done'] else '?'} s of simulated time.")

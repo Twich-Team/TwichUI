@@ -74,5 +74,7 @@ ViewCrafting.lua
 ViewShopping.lua
 # The full strategy view and the confirmation before an optimized plan is added to the queue (P2)
 ViewStrategy.lua
+# The compact companion: Travel and Craft, a small panel in the window's place (P2.1)
+Compact.lua
 # The window: the shell, the page list and the events (last: it tells TwichUI the addon is ready)
 Window.lua

@@ -107,7 +107,7 @@ do
   Same(St.Headline({ crafts = {}, items = {}, collect = { { item = 4 } } }), "Collect 1 material")
   -- buy-or-craft comparisons in ordinary words, from the planner's own alternatives (plan totals, never a per-item share)
   local short, lines, each = St.Compare({ source = "make", alternatives = { { kind = "buy", ok = true, compare = "lower", difference = 42, economic = { low = 142, high = 142 } } } }, Money)
-  Same(short, "saves 42c"); Same(each[1], "Buying it costs 42c more."); Same(lines[2][1], "Plan if bought"); Same(lines[2][2], "142c")
+  Same(short, "saves 42c"); Same(each[1], "Buying it costs 42c more."); Same(lines[2][1], "If bought instead, the whole plan costs 142c."); Same(lines[2][2], nil, "one sentence, not a two-column line")
   short, _, each = St.Compare({ source = "make", alternatives = { { kind = "buy", ok = true, compare = "overlap", difference = 42, economic = { low = 142, high = 300 } } } }, Money)
   Same(short, "too close to call", "overlapping ranges never claim a saving"); Check(each[1]:find("too close to call", 1, true))
   short, _, each = St.Compare({ source = "auction", alternatives = { { kind = "make", name = "Bolt", ok = true, compare = "lower", difference = 18 } } }, Money)

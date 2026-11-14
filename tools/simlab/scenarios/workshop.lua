@@ -2158,6 +2158,38 @@ Lab.Step("pose for the screenshot", function()
         Lab.Settle(0.3)
         d = Pick("Bronze Bar")
         Check("display", "pose: the choice is lit and named, the suggestion is still said", "Your choice | Suggested", Txt(d.tags.auction) .. " | " .. Txt(d.tags.make))
+    elseif view == "compact" or view == "compactcraft" then
+        -- (P2.1) the compact companion in the window's place: Travel (what is still to get, by source) or Craft (the queue, what is ready next)
+        Tab("Crafting")
+        QueueAct(Rows(Lists().queue)[4], "remove", "Remove Smelt Bronze")
+        Tab("Shopping")
+        Click(Frame().compact, "Compact view")
+        local C = R.Workshop.Compact
+        local cf = C.Frame()
+        if view == "compactcraft" then Click(cf.craft, "Craft") end
+        Lab.Settle(0.3)
+        cf:ClearAllPoints(); cf:SetPoint("CENTER", UIParent, "CENTER", 0, 0)   -- in the middle, for the screenshot
+        Check("display", "pose: the compact view replaced the window and shows its mode", "true/false/" .. (view == "compact" and "travel" or "craft"),
+            tostring(cf:IsShown()) .. "/" .. tostring(Frame():IsShown()) .. "/" .. C.Mode())
+        local words = {}
+        for _, d in ipairs(Lists().compact.data) do words[#words + 1] = d.word end
+        Check("display", "pose: every row says its source or state in words", true, #words > 0)
+    elseif view == "tooltip" or view == "smallstrat" then
+        -- (P2.1) the strategy view: an intermediate's row with the game's item tooltip and the buy-or-craft lines under it; on a small screen too
+        Tab("Crafting")
+        QueueAct(Rows(Lists().queue)[4], "remove", "Remove Smelt Bronze")
+        Tab("Opportunities")
+        Click(Row(Lists().opps, "Copper Belt Buckle"), "choose Copper Belt Buckle")
+        Click(Opps().detail.view, "View strategy")
+        Lab.Settle(0.3)
+        local row
+        for _, r in ipairs(Rows(Lists().strategy)) do if r.data and r.data.kind == "step" then row = r break end end
+        Check("display", "pose: a craft step of an intermediate is listed", true, row ~= nil)
+        if row and view == "tooltip" then
+            row:SetHot(true)
+            row:TipEnter()
+            Check("display", "pose: the row's tooltip is the item's own, owned by the row", "true", tostring(GameTooltip:IsShown() and GameTooltip:GetOwner() == row))
+        end
     elseif view == "shop" then
         -- the mixed-source list with a Make row: take the Smelt Bronze entry back out through its Remove button
         Tab("Crafting")

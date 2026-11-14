@@ -3,7 +3,7 @@
 # Workshop with /tui workshop and drives its Crafting, Opportunities and Shopping views over synthetic game data
 # (scenarios/workshop.lua says exactly what is real and what is fake). Writes to $WOWSIM_LAB/artifacts/workshop-<time>/.
 #
-# Nineteen launches, each from a freshly emptied root and a new empty install (no saved variables):
+# Twenty-three launches, each from a freshly emptied root and a new empty install (no saved variables):
 #   overview  the whole scenario, ending on the Overview (prices, opportunities, plan, professions, next steps), then a screenshot
 #   craft     the same, ending on Crafting with a populated queue and a chosen craft's details, then a screenshot
 #   opps      the same, ending on Opportunities with a recipe's details, then a screenshot
@@ -18,6 +18,8 @@
 #   shopcollect  the same, with everything stored: only Collect rows, then a screenshot
 #   strategy  (P2) the same, ending on the full strategy of Copper Belt Buckle (Opportunities, View strategy), then a screenshot
 #   confirm   (P2) the same, with the confirmation before the optimized plan is added open over it, then a screenshot
+#   compact, compactcraft (P2.1) the compact view (Travel, Craft) in the window's place; tooltip (P2.1) an intermediate's item tooltip in the
+#             strategy view; smallstrat (P2.1) the strategy view on a 1000x700 screen
 #   stratlong (P2) the same, every known recipe queued, the strategy of the whole queue open (a long scrolling list), then a screenshot
 #   planning  (P2) the same, the plan of the chosen recipe still being worked out (the job never finishes), then a screenshot
 #   nodata    (P2) the same, a recipe whose materials aren't known chosen: no strategy and no invented figure, then a screenshot
@@ -66,6 +68,10 @@ fixture stratlong '{ view = "stratlong" }'
 fixture planning '{ view = "planning" }'
 fixture nodata '{ view = "nodata" }'
 fixture override '{ view = "override" }'
+fixture compact '{ view = "compact" }'
+fixture compactcraft '{ view = "compactcraft" }'
+fixture tooltip '{ view = "tooltip" }'
+fixture smallstrat '{ view = "smallstrat" }'
 fixture wrong "{ view = \"craft\", wrongAt = \"$WRONG_AT\" }"
 
 repo_before="$(git -C "$REPO" status --porcelain --ignored)"
@@ -102,6 +108,10 @@ launch stratlong screenshot --png -o "$RUN/stratlong.png" --width 1600 --height 
 launch planning screenshot --png -o "$RUN/planning.png" --width 1600 --height 1200
 launch nodata screenshot --png -o "$RUN/nodata.png" --width 1600 --height 1200
 launch override screenshot --png -o "$RUN/override.png" --width 1600 --height 1200
+launch compact screenshot --png -o "$RUN/compact.png" --width 1600 --height 1200
+launch compactcraft screenshot --png -o "$RUN/compactcraft.png" --width 1600 --height 1200
+launch tooltip screenshot --png -o "$RUN/tooltip.png" --width 1600 --height 1200
+launch smallstrat screenshot --png -o "$RUN/smallstrat.png" --width 1000 --height 700
 launch wrong dump-tree --visible-only
 
 echo "artifacts: $RUN"

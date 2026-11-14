@@ -610,8 +610,8 @@ function St.Compare(line, money)
         end
         lines[#lines + 1] = { text }
         each[#each + 1] = text
-        if a.ok ~= false and a.economic and a.economic.low then
-            lines[#lines + 1] = { ("Plan if %s"):format(other == "Craft" and "crafted" or "bought"), (St.CostText(a.economic, money)) }
+        if a.ok ~= false and a.economic and a.economic.low then   -- one wrapped sentence (a two-column line can outgrow the tooltip)
+            lines[#lines + 1] = { ("If %s instead, the whole plan costs %s."):format(other == "Craft" and "crafted" or "bought", (St.CostText(a.economic, money))) }
         end
     end
     return short, lines, each

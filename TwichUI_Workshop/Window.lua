@@ -2,7 +2,8 @@
 -- The shell in the settings window's crafted look (docs/settings-design-system.md, drawn through the core's CraftLook.lua, so the settings
 -- addon is never loaded for it): a leather header with the TwichUI Workshop brand and the close box, a page list on the left, the page in a
 -- recessed well, and a footer with the price status chip and the last action's message. The pages are the views (ViewOverview,
--- ViewOpportunities, ViewCrafting, ViewShopping.lua): each builds once into its own frame and draws what Session.lua says. Opened with
+-- ViewOpportunities, ViewCrafting, ViewShopping.lua): each builds once into its own frame and draws what Session.lua says. "Compact view" in the
+-- header swaps the window for the small companion (Compact.lua), which listens to the bags itself while it is shown. Opened with
 -- /tui workshop, the TwichUI menu or the settings page; it never opens by itself. It opens on Overview the first time; the page shown is
 -- kept only while the game runs. No position, size or page is saved.
 --
@@ -198,6 +199,12 @@ local function BuildShell()
     CL.Font(f.close.text, 16, true)
     f.close:SetPoint("RIGHT", header, "RIGHT", -10, 0)
     UI.Tip(f.close, "Close", "Closes the Workshop. Your queue is saved; nothing else changes.")
+    -- the compact companion (Compact.lua): a small panel to keep up while travelling or crafting; it takes the window's place
+    f.compact = UI.ArtButton(header, "Compact view", "npc:leather-backpack", 140, "secondary", function()
+        if W.Compact then W.Compact.Show(mode == "craft" and "craft" or "travel") end
+    end, 28)
+    f.compact:SetPoint("RIGHT", f.close, "LEFT", -10, 0)
+    UI.Tip(f.compact, "Compact view", "A small panel to keep open while you travel and craft.")
 
     -- the page list
     local nav = CreateFrame("Frame", nil, f, "BackdropTemplate")
@@ -363,19 +370,26 @@ local function Build()
         self:UnregisterAllEvents()
         UI.hoverRow = nil
         for _, def in ipairs(UI.order) do if def.Reset then def.Reset() end end
-        S.Reset()
-        Q.Unload()
+        if not (W.Compact and W.Compact.IsShown()) then   -- the compact view, if it took the window's place, keeps the session
+            S.Reset()
+            Q.Unload()
+        end
     end)
     BuildShell()
     BuildPages()
     BuildNav()
     for key, page in pairs(pages) do page:SetShown(key == mode) end
     PaintNav()
-    W.Strategy.onChange = function() if f and f:IsShown() then Schedule("draw") end end   -- a plan was finished (or dropped by a change)
+    local function Compact() if W.Compact and W.Compact.IsShown() then W.Compact.Schedule() end end   -- the compact view draws the same plans
+    W.Strategy.onChange = function()   -- a plan was finished (or dropped by a change)
+        if f and f:IsShown() then Schedule("draw") end
+        Compact()
+    end
     SC.OnChange = function() if f and f:IsShown() then Schedule("draw") end end
     St.OnChange = function()   -- the bank or guild bank was seen, or the choice changed: what can be planned with changed, so plans are worked out again
         W.Strategy.Bump()
         if f and f:IsShown() then Schedule("draw") end
+        Compact()
     end
     if UISpecialFrames then tinsert(UISpecialFrames, NAME) end   -- Esc closes it (never the game menu's handler list)
     return f
