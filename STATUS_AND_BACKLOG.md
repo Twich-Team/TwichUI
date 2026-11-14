@@ -91,6 +91,21 @@ This supersedes the pre-A8 tooltip recommendation policy described below.
 **Stop at A8:** no Auction House replacement, automated posting or another
 mockup-dependent milestone was begun.
 
+## Workshop A8.1 Item Advisor refinement — complete on feature/workshop (2026-11-14)
+
+Native source/category dropdowns, saved bags-first discovery, stable viewport/
+selection across background metadata refresh and page return, and a separate
+qualified `Possible Auction` policy are implemented. Supported posting rules,
+Tooltip Designer customization, ownership/plan protection and verified-only
+Disenchant estimates remain intact. Fast checks, Advisor/Settings feature checks
+and 189 market mutations have passed. Comprehensive verification passed 226
+files/modules, 677 Lua syntax checks and all default simulator suites (153
+launches / 25,368 structured checks). A final missing-metadata guard was added
+after that run and verified with fast Advisor plus the complete Advisor feature
+selection (44 files/modules, 12 launches / 6,338 checks). Structural screenshots
+were reviewed; real-client acceptance remains outstanding. Evidence is tracked in [item-advisor.md](docs/workshop/item-advisor.md).
+Stop after A8.1; another feature milestone requires a separate request.
+
 ## Workshop (TwichUI_Workshop) — feature/workshop; foundation and market milestones built, real-client verification incomplete
 
 Reference: [docs/workshop.md](docs/workshop.md) (files, saved data, the exact pricing and shopping rules, scan facts and unknowns, client facts, licensing limits, evidence, checks).

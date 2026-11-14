@@ -31,11 +31,10 @@ competition is far above/below the reference; they never supply a posting price.
 `Sell.Proceeds` reports gross unit price times quantity with bounded arithmetic.
 Fees, deposit and sale probability remain unknown. It never reports net proceeds.
 
-`Advisor.Decide` API/policy 1 keeps active-plan materials first, using the existing
+`Advisor.Decide` API 1 / policy 2 keeps active-plan materials first, using the existing
 planner's allocation. Known recipe uses alone never prove crafting profit. A
 bound item may be vendored when its sell value is known. Missing disenchant
-data never blocks a supported Vendor or Auction recommendation. Other uncertain auction comparisons
-remain Unknown. A supported auction suggestion must exceed vendor by 1.5x and
+data never blocks a supported Vendor or Auction recommendation. Comparisons too weak for the separate tentative policy remain Unknown. A supported auction suggestion must exceed vendor by 1.5x and
 the player's minimum worthwhile gain; that gain defaults to zero copper (no
 universal gold floor). Auction advice says *consider*, uses gross value and
 never promises a sale or profit. Watch is a choice with manual refresh, not a
@@ -72,7 +71,8 @@ and comprehensive verification results. No real-client acceptance is claimed.
 
 The fifth left-sidebar page preserves the Workshop shell and its movement and
 screen-fitting behavior. Its two columns contain a pooled searchable list and
-selected-item evidence. Source/category controls cycle supported choices; the
+selected-item evidence. Source/category dropdowns directly select supported choices; In bags is the
+first-use default and explicit source choices are saved. The
 auctionable filter requires known eligibility. Market cards keep observed,
 historical and suggested values separate. The existing chart displays up to
 eight actual daily low observations, with real gaps, rather than the mockup's
@@ -225,12 +225,12 @@ this character's known recipes, tracking and saved selection, not a global item
 database. History-only identities must also be reachable through one of those
 sources. Existing Opportunities profit estimates keep their previous semantics;
 this campaign does not claim to migrate them to a selling strategy. The shorter
-shell, scrollable evidence, cycle filters and existing eight-observation chart
+shell, scrollable evidence, native dropdowns and existing eight-observation chart
 are the documented adaptations of the mockup. No Auction House replacement,
 automated posting, advanced selling strategy, shared chart engine, Ledger,
 profession guide redesign or market-server integration was started.
 
-## A8.1 refinement checkpoints (active)
+## A8.1 refinement checkpoints (complete)
 
 The real-client screenshot and refinement request retain the approved page layout.
 The original A8 engine, Tooltip Designer integration and verified disenchant
@@ -335,3 +335,85 @@ filtered search (hint no longer overlaps typed text) and narrow states. Earlier
 corrected captures in `workshop-FXaqbAHE/` also establish the tentative banner,
 missing posting price/proceeds and the observed-price qualification. These are
 structural simulator evidence, not client font/input/appearance acceptance.
+
+A8.1 checkpoint 4 source polish: selecting an already displayed temporary
+All-known source now explicitly saves that choice, while retaining the result
+collection and viewport. Focused regressions cover both persistence and no-reset
+behavior. Removed custom tinting of native pooled highlight textures after
+screenshot review showed it replacing radio artwork with squares. Native hover
+and radio rendering remain owned by the menu manager; selected text retains the
+Workshop palette. Fast Advisor 2/2 passed. Four focused simulator launches and
+all 2,104 structured checks (including the deliberately wrong control) passed;
+source/category menus personally reviewed in
+`test-output/simlab/artifacts/workshop-Dih6rfPY/` with correct native markers.
+
+An early full preflight was stopped during unit tests when that menu-artwork
+issue was noticed, before its simulator phase. It is not counted as complete
+verification (`test-output/a81-full-preflight.log`). The final comprehensive run
+starts after the corrected menu review with all output paths pre-created and
+source edits paused until completion. Its result is recorded below when complete.
+
+
+## A8.1 final verification — passed
+
+The comprehensive run `./tests/run.sh full` completed with **226 passed, 0 failed**,
+**677 Lua syntax checks**, the workspace guard, and all seven default simulator
+suites: **153 launches / 25,368 structured checks**, **1,714.535 s** (28 min 34.54 s),
+exit **0**. No scenario, assertion, negative control or classification requirement
+was removed. Existing simulator voice-settings and NPC UTF-8 limitations remain
+classified; no A8.1 classification exception was added.
+
+| Suite | Launches | Structured checks | Result |
+|---|---:|---:|---|
+| smoke | 2 | 0 | pass |
+| interact | 4 | 244 | pass |
+| diagnose | 6 | 101 | pass |
+| workshop | 38 | 19,997 | pass |
+| testlab | 9 | 229 | pass |
+| settings | 58 | 1,029 | pass |
+| reminders | 36 | 3,768 | pass |
+
+Final review then reproduced one additional timing edge: metadata arriving in
+an identity-only discovery slice with a category filter attempted to inspect a
+missing previous `row.info`. The small missing-table guard was added after the
+comprehensive run. Regressions now exercise metadata before information is filled
+with both category and Auctionable filters, retaining nonzero viewport offsets.
+The failing reproduction is preserved in
+`test-output/a81-late-metadata-reproduction.log`.
+
+Verification scope is explicit: the comprehensive run preceded that final
+one-line guard; the **final source** subsequently passed fast Advisor **2/2** and
+feature Advisor **44/44**, **12 launches / 6,338 checks**, **266.177 s**, exit **0**.
+The broad suite was not repeated for this localized UI guard. Monetary/tooltip
+logic is unchanged from the comprehensive run and the **189/189** final market
+mutation campaign. Earlier Workshop Settings feature verification passed **76/76**,
+three launches / **1,580 checks**; its fast selection passed **11/11**.
+
+Final source feature report: `test-output/verification/feature-item-advisor-e2672b5y/report.json`.
+Comprehensive report: `test-output/verification/full-all-_9zud6ej/report.json`.
+Supervisor log/exit: `test-output/a81-full.log`, `test-output/a81-full.exit`.
+Final feature log/exit: `test-output/a81-cp4-feature.log`,
+`test-output/a81-cp4-feature.exit`. Source edits were paused during every simulator
+run; new output paths were prepared before the successful runs.
+
+### Screenshot review and client acceptance
+
+Personally reviewed wide, narrow, scaled, bags-only, filtered, scrolled, supported,
+tentative and insufficient-evidence states. The completed comprehensive source
+captures are in `test-output/simlab/artifacts/workshop-w0g8eIFX/`:
+`advisorbags.png`, `advisorsource.png`, `advisorcategory.png`,
+`advisorfiltered.png`, `advisorscroll.png`, `advisor.png`,
+`advisortentative.png`, `advisorempty.png`, `advisorsmall.png`,
+`advisorscaled.png`, `advisorlong.png` and `advisoralt.png`.
+Corrected native menu markers were also reviewed in `workshop-Dih6rfPY/`;
+the final feature captures are in `workshop-gmBEm1GH/`. The late metadata guard
+changes no geometry, artwork or recommendation policy.
+
+These establish structural simulator evidence only. Still check real pointer,
+wheel/scrollbar drag, outside/Escape dismissal and menu positioning at the user's
+UI scales; actual fonts/quality colors; source preference across reload;
+Normal/Shift, removed fields and profile changes in native item tooltips; live
+bag binding/late item events and representative market observations. Disenchant
+outcome data remains unverified in production; no probability table is invented.
+No protected gameplay, automated scans/posting, release or additional milestone
+was introduced. Stop at A8.1.

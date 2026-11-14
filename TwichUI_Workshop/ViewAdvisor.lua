@@ -261,7 +261,7 @@ function V.ItemReady(item, success)
     if not page or not page:IsShown() or success==false or not catalog then return end
     local row=catalog.byID[item]
     if not row then return end
-    local info,old=D.Info(item),row.info
+    local info,old=D.Info(item),row.info or {}
     if not row.info or row.info.quality~=info.quality or row.info.classID~=info.classID then W.Facts.CacheClear() end
     local oldSearch=row.search
     row.info=info; row.search=(info.name .. " " .. item):lower()
@@ -326,11 +326,12 @@ local function Build(p)
                 for _,entry in ipairs(choices()) do
                     local value,text=entry[1],entry[2]
                     local radio=root:CreateRadio(text,function() return current()==value end,function()
-                        if current()~=value then choose(value); Search(true) end
+                        local changed=current()~=value
+                        choose(value)
+                        if changed then Search(true) end
                     end)
                     radio:AddInitializer(function(button)
                         if button.fontString then UI.Paint(button.fontString,current()==value and K.bronzeText or K.text) end
-                        if button.highlight then button.highlight:SetColorTexture(0.43,0.30,0.14,0.55) end
                     end)
                 end
                 root:AddMenuReleasedCallback(function() menu=nil end)
