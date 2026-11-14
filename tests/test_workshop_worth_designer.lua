@@ -350,6 +350,13 @@ Check(D.StartDrag({ kind = "list", id = "vendor" }) == false and not Drag.Active
 Check(D.Drop({ kind = "bogus" }, 0) == false and D.Drop(nil, 0) == false and D.Drop({ kind = "list", id = "outcomes" }, nil) == false, "a bad drop does nothing")
 Check(D.Drop({ kind = "list", id = "outcomes" }, 0) and Ids():sub(1, 9) == "outcomes,", "a drop adds at the gap: " .. Ids())
 D.RemoveLine("outcomes")
+-- Cursor coordinates are in physical pixels; scale is applied exactly once.
+D.SetMode(false)
+local scaleBefore = mock.GetEffectiveScale
+mock.GetEffectiveScale = function() return .8 end
+cursor.x, cursor.y = 150 * .8, (1000 - 4) * .8
+Same(D.Find(), 0, "scaled pointer maps to the first insertion gap")
+mock.GetEffectiveScale = scaleBefore
 -- the frame closing mid-drag puts the drag away
 b = D.ListButton(7)
 b.scripts.OnDragStart(b)
@@ -373,6 +380,7 @@ c.TwichUIDB.ui.workshopWorth = { v = 2, lines = { { id = "note" } }, future = tr
 D.Refresh()
 D.Cancel()
 Same(Ids(), DEFAULT, "a newer layout reads as the default")
+Check(not f.enable.enabled and not f.save.enabled and not D.ListButton(3).enabled, "future layout controls are read-only")
 D.AddLine("outcomes"); Check(Has(f, "newer TwichUI"), "and a change is refused, said")
 Same(c.TwichUIDB.ui.workshopWorth.v, 2, "the newer data is untouched")
 Check(c.TwichUIDB.ui.workshopWorth.future == true and #c.TwichUIDB.ui.workshopWorth.lines == 1, "the newer data is untouched")
@@ -410,6 +418,7 @@ D.ResetLayout(); Check(D.ResetPending() and L.Get().lines[1].id == "vendor", "re
 D.KeepEditing(); Check(not D.ResetPending(), "reset can be declined")
 D.ResetLayout(); D.ResetLayout(true)
 Check(D.Dirty() and L.Get().lines[1].id == "vendor" and not D.Draft().enabled, "confirmed reset is a draft and retains enabled")
+D.ResetLayout(); Check(D.ResetPending() and D.Save() and not D.ResetPending(), "Save closes a pending reset confirmation")
 D.Cancel()
 -- The real profile service keeps the ui table and applies new contents in place.
 D.RemoveLine("vendor")
@@ -426,6 +435,16 @@ c.TwichUIDB.ui.workshopWorth = { v = 3, future = true }; D.Cancel()
 Check(not D.SetEnabled(false) and not D.Save(), "future schema refuses draft edits and Save")
 Check(c.TwichUIDB.ui.workshopWorth.v == 3 and c.TwichUIDB.ui.workshopWorth.future, "future schema left intact")
 c.TwichUIDB.ui.workshopWorth = nil; D.Cancel()
+
+-- Catalog headers can wrap at the narrow supported width without covering search.
+for _, width in ipairs({ 500, 644, 1088 }) do
+  f:SetWidth(width); D.Refresh()
+  local titlePoint = f.listTitle.points[#f.listTitle.points]
+  local searchPoint = f.searchLabel.points[#f.searchLabel.points]
+  Check(-searchPoint[5] >= -titlePoint[5] + math.max(24, f.listTitle:GetStringHeight()) + 10, "wrapped catalog title leaves search below it")
+  Check(f.mock:GetWidth() > 200, "preview retains a usable width")
+end
+f:SetWidth(644); D.Refresh()
 
 if failures > 0 then error(failures .. " check(s) failed", 0) end
 print("PASSED")

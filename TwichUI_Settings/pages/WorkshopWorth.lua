@@ -7,7 +7,7 @@
 -- over made-up items (WL.Example) that are labelled as preview data. Nothing is scanned or read from the game, and nothing here changes
 -- a figure: the layout only chooses which lines appear, in what order, and when.
 --
--- LOAD ON DEMAND: the Workshop is not loaded at login. Until it is, this shows one sentence and one button; the button loads the Workshop
+-- LOAD ON DEMAND: unless login loading was explicitly enabled, the Workshop loads only when asked. The invitation button loads it
 -- through its normal safe launcher (never in combat, opens no window). Hovering an item never loads anything.
 --
 -- THE DRAG is the same virtual drag Magic Inventory's editor uses (MagicInventoryDrag.lua): a label follows the pointer while the button
@@ -148,6 +148,7 @@ function D.Save()
     local ok, why = WL().Set(v)
     if not ok then Say(why == "newer" and NEWER or "That couldn't be saved.", "warn"); D.Refresh(); return false end
     draft, base, undo, redo = WL().Get(), WL().Get(), {}, {}
+    resetPending = false
     Say("Layout saved."); D.Refresh(); return true
 end
 function D.Cancel()
@@ -321,7 +322,7 @@ end
 function D.StartDrag(src)
     local Dr = DragKit()
     local L = WL()
-    if not (Dr and L and model) then return false end
+    if not (Dr and L and model) or not L.CanWrite() then return false end
     if src.kind == "list" and L.IndexOf(model.layout.lines, src.id) then return false end   -- already in the preview
     if src.kind == "row" then
         for _, fr in ipairs(rows) do if fr.rowId == src.id then fr:SetAlpha(0.4) end end   -- the row being carried
@@ -483,7 +484,12 @@ local function BuildList(L)
         if R.SettingsMaterial then R.SettingsMaterial.MaterialHover(b) end
         At(b, 4, TOP + 22 + (i - 1) * 32)
         b.label = G.Text(b, "body")
-        b.label:SetPoint("LEFT", 28, 0)
+        b.icon = b:CreateTexture(nil, "ARTWORK"); b.icon:SetSize(20, 20); b.icon:SetPoint("LEFT", 24, 0)
+        local icons = { recommend = "guide", vendor = "vendors", auction = "auctionHouse", disenchant = "mage",
+            recent = "auctionHouse", marketvalue = "auctionHouse", historical = "reviewChanges", supply = "magicInventory",
+            quality = "troubleshooting", status = "reminders", source = "navigation", note = "reviewChanges" }
+        if R.Icons then R.Icons.Apply(b.icon, icons[t.id] or "guide", 20) else b.icon:Hide() end
+        b.label:SetPoint("LEFT", 50, 0)
         b.label:SetWidth(LIST_W - 40)
         b.label:SetWordWrap(false)
         b.grip = G.Text(b, "meta"); b.grip:SetPoint("LEFT", 8, 0); b.grip:SetText("::")
@@ -529,7 +535,8 @@ function D.Refresh()
     COL_X = LIST_W + 44; MOCK_W = W - COL_X - 20
     INNER = MOCK_W - 24; SIDE_W = math.floor((MOCK_W - 12) / 3)
     At(f.listTitle, 16, 62); f.listTitle:SetWidth(LIST_W)
-    At(f.searchLabel, 16, 94); At(f.search, 16, 112); f.search:SetWidth(LIST_W)
+    local searchY = 62 + math.max(24, f.listTitle:GetStringHeight() or 24) + 12
+    At(f.searchLabel, 16, searchY); At(f.search, 16, searchY + 18); f.search:SetWidth(LIST_W)
     At(f.previewTitle, COL_X, 62); f.previewTitle:SetWidth(MOCK_W)
     At(f.modeNormal, COL_X, 104); At(f.modeShift, COL_X + 90, 104)
     At(f.example, COL_X, 142); f.example:SetWidth(MOCK_W)
@@ -557,10 +564,12 @@ function D.Refresh()
     if selected and not L.IndexOf(layout.lines, selected) then selected = nil end
 
     -- header
+    local writable, writeWhy = L.CanWrite()
+    f.enable:SetEnabled(writable)
     f.enable:SetChecked(layout.enabled)
-    f.reset:SetEnabled(not Equal({ enabled = layout.enabled, lines = L.DefaultLines() }, layout))
+    f.reset:SetEnabled(writable and not Equal({ enabled = layout.enabled, lines = L.DefaultLines() }, layout))
     f.undo:SetEnabled(#undo > 0); f.redo:SetEnabled(#redo > 0)
-    f.save:SetEnabled(D.Dirty()); f.cancel:SetEnabled(D.Dirty())
+    f.save:SetEnabled(writable and D.Dirty()); f.cancel:SetEnabled(D.Dirty())
     f.modeNormal:SetOn(not shiftMode)
     f.modeShift:SetOn(shiftMode)
     local ex = L.EXAMPLE_BY_KEY[exampleKey] or L.EXAMPLES[1]
@@ -572,7 +581,8 @@ function D.Refresh()
         { "Market information", "recent", "marketvalue", "historical", "supply", "quality" },
         { "Details & provenance", "status", "source", "note" },
     }
-    local listY = 150
+    local listStart = searchY + 56
+    local listY = listStart
     for gi, group in ipairs(groups) do
         local heading, any = f.catalogHeaders[gi], false
         for n = 2, #group do
@@ -589,7 +599,8 @@ function D.Refresh()
             if visible then
                 local added = L.IndexOf(layout.lines, t.id) ~= nil
                 b.id, b.added = t.id, added
-                At(b, 16, listY); b:SetWidth(LIST_W); b.label:SetWidth(LIST_W - 58)
+                b:SetEnabled(writable)
+                At(b, 16, listY); b:SetWidth(LIST_W); b.label:SetWidth(LIST_W - 80)
                 b.label:SetText(t.label); G.Color(b.label, added and pal.stone or pal.text)
                 b.check:SetShown(added); b.plus:SetShown(not added)
                 b.hint = added and "In the preview. Click to select it." or "Click to add it, or drag it into the preview."
@@ -598,7 +609,7 @@ function D.Refresh()
         end
     end
     listButtons[L.BY_ID.outcomes.order]:Hide()
-    f.noResults:SetShown(listY == 150); At(f.noResults, 16, 150)
+    f.noResults:SetShown(listY == listStart); At(f.noResults, 16, listStart)
 
     -- the mockup
     local sec = PaintMock(L, layout)
@@ -618,9 +629,9 @@ function D.Refresh()
     f.selTitle:SetWidth(MOCK_W)
     if entry then
         f.selTitle:SetText(Label(entry.id)); G.Color(f.selTitle, pal.bronzeText)
-        f.up:SetEnabled(L.Step(layout.lines, entry.id, -1, shiftMode) ~= nil)
-        f.down:SetEnabled(L.Step(layout.lines, entry.id, 1, shiftMode) ~= nil)
-        f.remove:SetEnabled(true)
+        f.up:SetEnabled(writable and L.Step(layout.lines, entry.id, -1, shiftMode) ~= nil)
+        f.down:SetEnabled(writable and L.Step(layout.lines, entry.id, 1, shiftMode) ~= nil)
+        f.remove:SetEnabled(writable)
         f.visLabel:SetText("Shows")
         f.always:SetOn(entry.when == "always"); f.holdShift:SetOn(entry.when == "shift")
     else
@@ -631,6 +642,7 @@ function D.Refresh()
     At(f.selTitle, COL_X, sy)
     for i, c in ipairs({ f.up, f.down, f.remove }) do c:SetWidth(SIDE_W); At(c, COL_X + (i - 1) * (SIDE_W + 6), sy + 28) end
     At(f.visLabel, COL_X, sy + 66)
+    f.always:SetEnabled(writable); f.holdShift:SetEnabled(writable)
     f.always:SetWidth(96); f.holdShift:SetWidth(100)
     At(f.always, COL_X + 44, sy + 60); At(f.holdShift, COL_X + 146, sy + 60)
 
@@ -641,7 +653,8 @@ function D.Refresh()
     f.confirm:SetShown(resetPending)
     At(f.confirm, COL_X, bottom - 88); f.confirm:SetSize(MOCK_W, 80)
     f.confirmText:SetWidth(MOCK_W - 24)
-    f.said:SetText(said or (D.Dirty() and "Unsaved changes" or "Saved layout"))
+    local stateText = D.Dirty() and "Unsaved changes" or "Saved layout"
+    f.said:SetText(writeWhy == "newer" and NEWER or (stateText .. (said and (" - " .. said) or "")))
     G.Color(f.said, saidTone == "warn" and AMBER or pal.textDim)
     f.said:SetWidth(W - 32); At(f.said, 16, bottom + 42)
     height = bottom + 76

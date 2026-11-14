@@ -54,7 +54,7 @@ K.Page({
     build = function()
         K.Header("General", "Workshop opens when you ask for it.")
         K.ProxyToggle("workshopLoadOnLogin", "Load Workshop when I log in",
-            "Load Workshop after your next login or reload. Opens no window and starts no scan. Off by default.", false,
+            "Load Workshop after your next login or reload. Opens no window and starts no scan. Large saved market databases can pause the game while loading. Off by default.", false,
             function() local l = Launcher(); return l and l.LoadOnLogin and l.LoadOnLogin() or false end,
             function(on) local l = Launcher(); if l and l.SetLoadOnLogin then l.SetLoadOnLogin(on) end end)
         local load = K.Button("Workshop options", "Load options", LoadOptions,

@@ -59,7 +59,19 @@ One short entry per feature that has a continuing handoff. Details live in the f
 - The revision reuses existing artwork and game icons. Its panel faces and optional header switch are reusable through opt-in settings components. Reminders is the first adopter.
 - The component pass covered all eighteen existing simulator poses plus item/artwork-only alternatives, with 65–68 handler/state checks per pose and follow-up clean/dirty footer captures. Full unit suite: 187/0. Latest smoke passed 56/56 page construction without captured errors. The [revision record](docs/reminders-revision/implementation.md) retains screenshot anomalies, exact commands, component comparisons, remaining visual differences and client checks; visual acceptance is still pending.
 
-## Workshop (TwichUI_Workshop) - milestones 1 to 3 built, uncommitted on feature/workbench; the window opens and works in game (player-confirmed); milestone 2 reported complete by the player (not itemized); milestone 3 not tried in game
+## Workshop Settings 2.0 — feature/workshop (2026-11-14)
+
+Four local settings tabs, a two-column tooltip draft editor, real economic/cash and
+compact preferences, and optional safe login loading are implemented. Existing v1
+layouts and account preferences are retained. Manual AH scanning and disabled
+automatic craft completion remain unchanged. Checkpoints: `f0971531`, `9659435c`,
+`04a7fe12`; final polish and all four checkpoints are complete. Full regression:
+224 files/modules, 140 simulator launches, 18,047 structured checks passed. The record is in
+[docs/workshop/settings-v2.md](docs/workshop/settings-v2.md). Real-client mouse,
+font, combat/reload and large-database startup acceptance remain pending. Stop
+before A8; perform those acceptance checks before requesting the next mockup.
+
+## Workshop (TwichUI_Workshop) — feature/workshop; foundation and market milestones built, real-client verification incomplete
 
 Reference: [docs/workshop.md](docs/workshop.md) (files, saved data, the exact pricing and shopping rules, scan facts and unknowns, client facts, licensing limits, evidence, checks).
 

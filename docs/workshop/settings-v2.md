@@ -52,8 +52,7 @@ be listed separately; screenshots do not prove real-client appearance or input.
 
 ## Checkpoint record
 
-Implementation and verification results will be recorded here as checkpoints
-complete. The original tooltip designer saves immediately; checkpoint 2 replaces
+All four checkpoints are implemented and verified. Results follow. The original tooltip designer saves immediately; checkpoint 2 replaces
 that interaction model while retaining the stored layout and renderer.
 
 ### Checkpoint 1 — four-tab foundation
@@ -126,3 +125,101 @@ that interaction model while retaining the stored layout and renderer.
   large database. SavedVariables deserialization remains synchronous; opting in
   moves that cost to the delayed load rather than eliminating it. Login timing
   is exposed through the existing launcher's diagnostic snapshot.
+
+
+### Checkpoint 4 — integrated polish and final verification
+
+- Reused the existing icon registry for catalog rows, made saved/draft status
+  explicit and disabled edits visibly for newer layout schemas. Updated player
+  documentation and the continuing handoff.
+- Unit-tested: fast **11 passed**, 1.352 s, including read-only future layouts and
+  physical cursor coordinates at scale 0.8.
+- Native narrow probe: **517 checks passed**, including actual Undo/Redo,
+  Save/Cancel button handlers, unscrolled source stacking and scrolled bounds.
+  `test-output/simlab/artifacts/workshop-bhjYVmMM/design.png` (936×660 window).
+- Evidence correction: the raw simulator GetRect result stays in logical,
+  unscrolled coordinates while its screenshot draws the child with the scroll
+  offset. The initial raw reachability probe therefore reported visible scrolled
+  actions as clipped. Scrolled probes now assert both drawn bounds using the
+  explicit offset and report their narrower evidence. They do not establish
+  stacking or pointer delivery after scrolling. Full stacking checks remain for
+  unscrolled controls. No production geometry or simulator engine was patched.
+- Corrected wrapped catalog-title/search spacing using the measured title height.
+  Final narrow and scale-0.8 captures passed and were screenshot-reviewed:
+  `test-output/simlab/artifacts/workshop-{bhjYVmMM,9Nk43Viy}/design.png`.
+  The scale-0.8 case had 514 checks; narrow had 517. This is synthetic UI scaling,
+  not a real-client scale/focus/input acceptance test. The login helper now warns
+  that a large saved market database can pause the game while loading.
+- Final feature check: **74 passed**, no failures, selected native suite passed;
+  121.694 s total (native 66.878 s). Save also closes a pending reset confirmation.
+- Comprehensive result: **PASS**, recorded below.
+
+## Real-client acceptance and deliberate limits
+
+- Test real dragging at normal and changed UI scale, including a scrolled preview,
+  drops outside the window, Esc and closing/switching pages mid-drag. The simulator
+  has no genuine pointer stream; its scrolled rectangle/stacking model is limited.
+- Check final Cinzel/game typography, long labels, selected-row actions and reset
+  confirmation at minimum and larger window sizes. The simulator substitutes fonts.
+- Verify an actual login and reload with the preference OFF and ON, combat ending,
+  profile switching and a representative large saved market database. The measured
+  empty/synthetic loads cannot predict that database's synchronous startup pause.
+- Confirm saved v1/empty/off layouts and account preferences survive real reloads,
+  and manual Crafted one/Undo and explicitly clicked AH scans retain their behavior.
+
+The approved mockup is followed through the existing shell, two material panels,
+searchable grouped catalog, prominent tooltip and Normal/Shift controls. Save and
+Cancel are explicit additions required by the mission; all twelve implemented
+fields remain available. Existing icon/material components replace the mockup's
+bespoke row art and parchment headings. Narrow windows scroll the page body.
+There is no market-selection override because the existing source service offers
+none; the page reports its actual automatic source selection. Unsupported outcome
+data is not invented, and no new data-quality metric is calculated for a whole market.
+
+Next recommended milestone: real-client acceptance of Settings 2.0. A8 Item Advisor
+and all other mockup-dependent features remain unstarted and require separate scope.
+
+The first comprehensive attempt was interrupted after the newly added catalog
+geometry probe failed on the 1000×700 screen: it assumed the third catalog row
+was already visible. The probe now asserts the first visible catalog row; the
+wide Designer case separately checks an unused field's drag source. Both small
+screen cases passed unchanged reachability assertions after this correction.
+The interrupted log is retained as
+`test-output/workshop-settings-v2/full-interrupted-small-probe.log`; it is not a
+complete regression result. The full command was rerun from the beginning and passed.
+
+
+## Final comprehensive result — PASS
+
+`./tests/run.sh full` completed successfully with exit 0:
+
+- **224 files/modules passed**, 0 failed (216 Lua and 8 Python modules;
+  117 Python cases).
+- **670 Lua files syntax-checked**, plus runner/simulator Python and shell checks.
+- **8 suites passed**: seven native simulator suites plus the lab safety guard.
+- **140 launches, 18,047 structured checks**, including the expected negative
+  controls, **1,999.917 seconds (33m 20s)**.
+- Report: `test-output/verification/full-all-tqkut2h7/report.json`.
+  Console: `test-output/workshop-settings-v2/full-final.log`.
+
+| Suite | Launches | Structured checks | Result |
+|---|---:|---:|---|
+| lab-guard | 0 | 0 | PASS |
+| smoke | 2 | 0 | PASS |
+| interact | 4 | 244 | PASS |
+| diagnose | 6 | 101 | PASS |
+| workshop | 25 | 12676 | PASS |
+| testlab | 9 | 229 | PASS |
+| settings | 58 | 1029 | PASS |
+| reminders | 36 | 3768 | PASS |
+
+Final wide Designer capture, simulator-tested and screenshot-reviewed:
+`test-output/simlab/artifacts/workshop-snOk9To9/design.png`.
+All full-run settings captures: `test-output/simlab/artifacts/settings-YXkiPsS3/`.
+The checkpoint sections above locate the four tabs, six editing poses, actual
+preference integration, narrow window and scale-0.8 captures.
+
+The native verdicts retain their classified simulator API failures; this pass
+means the assertions and scenario verdicts held, not that the real client was
+exercised. Known font, pointer, scrolled geometry and large-database limits remain
+as listed above. No release, deployment, metadata/library changes or A8 work.

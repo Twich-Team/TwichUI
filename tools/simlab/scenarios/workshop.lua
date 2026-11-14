@@ -29,7 +29,7 @@
 local R = TwichUI
 local Check = Lab.Check
 local params = rawget(_G, "SIMLAB_PARAMS") or {}
-Lab.BUDGET = 36   -- (A6) the automatic-update step needs one scan's quiet period of simulated time (was 30); the delayed failures that grow with time are classified by the verdict
+Lab.BUDGET = 40   -- Scan quiet periods and settings scroll/geometry probes; delayed simulator failures remain classified.
 local Say = Lab.Say
 
 A_Admin.SetManualClock(GetTime())
@@ -758,6 +758,8 @@ end)
 Lab.Step("what's it worth: tooltip designer", function()
     local w = WorthWorld()
     local WL = R.Workshop.WorthLayout
+    if R.SettingsUI then R.SettingsUI.Close() end
+    TwichUIDB.ui.settingsWindow = { w = 1240, h = 1060 }
     local ok = Lab.Open("workshop")
     R.SettingsUI.View("workshop").taskButtons[2]:Click()
     Check("init", "the settings window opened on the Workshop page", true, ok == true)
@@ -787,7 +789,7 @@ Lab.Step("what's it worth: tooltip designer", function()
     D.Search("")
     Check("display", "unsupported outcome data is absent from the catalog", false, D.ListButton(7):IsShown())
     Lab.Settle(.2)
-    local hit = R.TestLab.Reach.Analyze(D.ListButton(3), { evidence = "simulator-geometry", limit = 1000000 })
+    local hit = R.TestLab.Reach.Analyze(D.ListButton(1), { evidence = "simulator-geometry", limit = 1000000 })
     Check("direct", "[geometry] supported catalog row can receive clicks", "reachable", hit.verdict)
     Check("init", "with the Workshop loaded, the designer (not the invitation) is shown", true, f:IsShown() and f.mock:IsShown() and not f.inviteButton:IsShown())
     Check("display", "the catalog has seven supported types among the original eight", 7, (function() local n = 0 for i = 1, 8 do if D.ListButton(i) and D.ListButton(i):IsShown() then n = n + 1 end end return n end)())
@@ -2118,11 +2120,50 @@ Lab.Step("pose for the screenshot", function()
         -- the settings window on the Workshop page, scrolled to the tooltip designer, the Hold Shift preview with a line selected
         R.SettingsUI.Close()
         Win().Hide()
-        TwichUIDB.ui.settingsWindow = { w = 1380, h = 1120 }
+        if params.size == "scaled" then UIParent:SetScale(.8) end
+        TwichUIDB.ui.settingsWindow = params.size == "narrow" and { w = 936, h = 660 } or { w = 1380, h = 1120 }
         Lab.Open("workshop")
         R.SettingsUI.View("workshop").taskButtons[2]:Click()
         local D = R.WorkshopWorthDesigner
         D.Cancel()
+        local frame = D.Frame()
+        local saved = R.Workshop.WorthLayout.Get()
+        local function Reach(control, label)
+            R.SettingsUI.RevealFrame(control); Lab.Settle(.25)
+            local result = R.TestLab.Reach.Analyze(control, { evidence = "simulator-geometry", limit = 1000000 })
+            local child = R.SettingsUI.View("workshop").frame:GetParent()
+            local sc = child:GetParent()
+            local offset = sc:GetVerticalScroll()
+            if offset == 0 then
+                Check("direct", "pose: [geometry] designer " .. label .. " is reachable", "reachable", result.verdict)
+            else
+                -- This simulator reports logical, unscrolled GetRect coordinates
+                -- while rendering the child with the scroll offset. RC's raw
+                -- rectangle model cannot prove stacking after scrolling. Check
+                -- drawn bounds explicitly; do not call this pointer evidence.
+                local r, viewport = R.TestLab.Reach.HitRect(control), R.TestLab.Reach.HitRect(sc)
+                local dy = offset * sc:GetEffectiveScale()
+                Check("direct", "pose: [scroll bounds] designer " .. label .. " fits vertically", true,
+                    r.rect[2] + dy >= viewport.rect[2] and r.rect[4] + dy <= viewport.rect[4])
+                Check("direct", "pose: [scroll bounds] designer " .. label .. " fits horizontally", true,
+                    r.rect[1] >= viewport.rect[1] and r.rect[3] <= viewport.rect[3])
+                Lab.Say("reach-limit", label, "raw rectangles", result.verdict, "rendering scroll offset", offset,
+                    "scroll-adjusted bounds only; not pointer or stacking evidence")
+            end
+        end
+        D.RemoveLine("auction")
+        Reach(D.ListButton(3), "available field drag source")
+        D.Undo()
+        Reach(D.Row(2), "preview drag source")
+        D.Select("vendor"); Reach(frame.remove, "selected-row action")
+        D.RemoveLine("vendor"); frame.undo:Click()
+        Check("click", "pose: Undo button restores the saved draft", false, D.Dirty())
+        frame.redo:Click(); Reach(frame.save, "Save")
+        frame.save:Click()
+        Check("click", "pose: Save button commits removal", nil, R.Workshop.WorthLayout.IndexOf(R.Workshop.WorthLayout.Get().lines, "vendor"))
+        D.RemoveLine("auction"); Reach(frame.cancel, "Cancel"); frame.cancel:Click()
+        Check("click", "pose: Cancel button preserves saved auction field", true, R.Workshop.WorthLayout.IndexOf(R.Workshop.WorthLayout.Get().lines, "auction") ~= nil)
+        R.Workshop.WorthLayout.Set(saved); D.Cancel()
         local pose = params.designer or "shift"
         D.SetMode(pose == "shift")
         D.Select(nil)
