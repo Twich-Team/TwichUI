@@ -1,7 +1,7 @@
 -- TwichUI: opening the Workshop
 -- The Workshop (browse your professions' recipes, queue crafts, see the combined materials still needed) is an addon of its
 -- own, TwichUI_Workshop, loaded the first time it is asked for (load on demand), like TwichUI Diagnostics. Nothing of it is loaded,
--- built or run at login or in ordinary play, and nothing here runs unless asked: no events, no timers. docs/workshop.md has the whole.
+-- built at login unless the active profile opts in. Only that opt-in schedules a delayed load; it opens no window. docs/workshop.md has the whole.
 --
 --   L.Loaded()      read only: has the addon started this session
 --   L.Load()        loads it if needed: true, or false and a reason code (never in combat)
@@ -89,8 +89,9 @@ function L.Command(arg)
     print(R.GREY .. "/tui workshop: open or close the Workshop (loads it the first time)." .. "|r")
 end
 
+local loginState, loginMS = "waiting", nil
 function L.Snapshot()
-    return { loaded = L.Loaded(), attempts = L.attempts, failed = L.failed }
+    return { loaded = L.Loaded(), attempts = L.attempts, failed = L.failed, login = loginState, loginMS = loginMS }
 end
 
 -- Lightweight settings access. Reading this never loads the Workshop or its
@@ -110,7 +111,11 @@ function L.SettingsState()
     local ws = type(TwichUIDB) == "table" and TwichUIDB.workshop
     local view = type(ws) == "table" and type(ws.view) == "table" and ws.view or {}
     local stock = type(ws) == "table" and type(ws.storage) == "table" and ws.storage or {}
-    return { prices = view.prices == "detailed", guild = stock.useGuild == true, notices = view.notices ~= false }
+    local w = L.Loaded() and R.Workshop
+    if w then return { prices = w.Session.PriceDetail(), guild = w.Storage.UseGuild(), notices = w.Notice.On(),
+        objective = w.Session.Objective(), compact = w.Session.CompactMode() } end
+    return { prices = view.prices == "detailed", guild = stock.useGuild == true, notices = view.notices ~= false,
+        objective = view.objective == "cash" and "cash" or "economic", compact = view.compactMode == "craft" and "craft" or "travel" }
 end
 function L.SetOption(key, on)
     if type(on) ~= "boolean" or not L.Loaded() then return false end
@@ -124,3 +129,54 @@ function L.SetOption(key, on)
     if ok and w.Compact and w.Compact.IsShown() then w.Compact.Schedule() end
     return ok
 end
+
+function L.SetChoice(key, value)
+    if not L.Loaded() then return false end
+    local w, ok = R.Workshop
+    if key == "objective" then ok = w.Session.SetObjective(value)
+    elseif key == "compact" then ok = w.Compact.SetMode(value)
+    else return false end
+    if ok and w.Window and w.Window.IsShown() then w.Window.Render() end
+    if ok and w.Compact and w.Compact.IsShown() then w.Compact.Schedule() end
+    return ok
+end
+
+-- A session's first world entry latches the login choice, after profile loading.
+-- Off means no timer and no Workshop initialization. Opting in later takes effect
+-- next login/reload. Deserialization is synchronous even though the load is delayed.
+local entered, pending, waiting, attempted = false, false, false, false
+local generation
+local function CurrentProfile()
+    return R.Profiles and R.Profiles.Generation and R.Profiles.Generation() or 0
+end
+local function ScheduleLogin()
+    if pending or attempted then return end
+    pending, waiting, loginState = true, false, "scheduled"
+    C_Timer.After(2, function()
+        pending = false
+        if generation ~= CurrentProfile() or not L.LoadOnLogin() then loginState = "cancelled"; return end
+        if not R.Life.InWorld() then loginState = "world"; return end
+        if L.Loaded() then attempted, loginState = true, "already-loaded"; return end
+        if InCombatLockdown and InCombatLockdown() then waiting, loginState = true, "combat"; return end
+        attempted = true
+        local start = debugprofilestop and debugprofilestop()
+        local ok, why = L.Load()
+        if start then loginMS = math.max(0, debugprofilestop() - start) end
+        loginState = ok and "loaded" or (why or "failed")
+        if not ok and R.Life then R.Life.Note("workshop-login-failed") end
+    end)
+end
+R:On("PLAYER_ENTERING_WORLD", function()
+    if not (R.Life and R.Life.configReady) then return end
+    if entered then
+        if loginState == "world" then ScheduleLogin() end
+        return
+    end
+    entered = true
+    if not L.LoadOnLogin() then loginState = "off"; return end
+    generation = CurrentProfile()
+    ScheduleLogin()
+end)
+R:On("PLAYER_REGEN_ENABLED", function()
+    if waiting and not attempted then ScheduleLogin() end
+end)

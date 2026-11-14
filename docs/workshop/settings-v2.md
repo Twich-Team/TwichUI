@@ -93,3 +93,36 @@ that interaction model while retaining the stored layout and renderer.
   (Normal, Shift, search, selection, reorder, reset). The wider capture contains
   the full editor. Small windows use the existing page scroll. Simulator game
   overlays and substituted fonts remain visible; these are structural captures.
+
+### Checkpoint 3 — real preferences and opt-in login loading
+
+- Login preference and tooltip layouts are profile-specific. Existing price,
+  guild-stock and notice settings remain account-wide; objective and compact mode
+  join that existing Workshop `view` record. Defaults are economic / Travel.
+- Login OFF schedules no bootstrap timer. ON schedules one load two seconds after
+  first world entry, after profile initialization. Combat and leaving the world
+  defer it; stale profile work is cancelled. Repeated world/combat events cannot
+  duplicate initialization; missing/disabled/error outcomes are recorded, with
+  exceptions reported once through existing diagnostics. No unsolicited chat.
+- Unit-tested: login/reload event paths, OFF/ON, later opt-in, cancellation, combat,
+  zoning, manual pre-load, profile generation and errors. Actual module loading
+  constructs no Workshop window, starts no plans/scans and decodes no history.
+  `WorkshopAuto.POLICY = "manual"` and `Progress.auto = false` remain unchanged.
+- Objective is forwarded to all four existing planner request paths and included
+  in cache keys. A real integration case chooses buying under economic cost and
+  crafting with owned inputs under cash cost; manual source choices survive.
+  Compact mode persists and can change while hidden without opening either view.
+- Unit-tested: final fast **11 passed**, 1.119 s. Feature **74 passed**, 121.703 s,
+  including native Workshop scenarios (67.891 s). Crafting mutation group:
+  **111/111 killed**, no survivors, invalid cases or timeouts, 40.9 s; includes the
+  new objective-not-forwarded defect.
+- Simulator-tested and screenshot-reviewed: actual settings controls load the
+  module, change all five supported preferences, restore defaults and keep both
+  windows closed, scans idle and unverified progress off. **37 Workshop checks**
+  plus 22 Home checks; `test-output/simlab/artifacts/settings-9kRBQThv/workshop.png`.
+- Performance observations: source initialization **10.509 ms** in the offline
+  frame harness; native simulator's explicit Load options click **9.235 ms** with
+  empty synthetic saved data. Neither establishes real-client startup cost with a
+  large database. SavedVariables deserialization remains synchronous; opting in
+  moves that cost to the delayed load rather than eliminating it. Login timing
+  is exposed through the existing launcher's diagnostic snapshot.

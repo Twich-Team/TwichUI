@@ -16,6 +16,14 @@ local function Option(key, variable, label, tip, default)
     row:AddModifyPredicate(Loaded)
     row.why = "Load Workshop options first. No Workshop window or scan will open."
 end
+local function Choice(key, variable, label, default, choices, tip)
+    local setting = K.Proxy(variable, "string", label, default,
+        function() return State(key) or default end,
+        function(value) local l = Launcher(); if l and l.SetChoice then l.SetChoice(key, value) end end)
+    local row = K.Dropdown(setting, function() return choices end, tip)
+    row:AddModifyPredicate(Loaded)
+    row.why = "Load Workshop options first. No Workshop window or scan will open."
+end
 local function LoadOptions()
     local l = Launcher()
     if l then
@@ -67,9 +75,9 @@ K.Page({
         K.Status("Faction", function() return Value("side", "Not available") end)
         K.Status("Last scan", function()
             local i = Info(); local w = R.Workshop
-            return i and w.Market.AgeShort(i.age) .. " ago" or "No scan recorded"
+            return i and w.Market.AgeShort(i.age) or "No scan recorded"
         end)
-        K.Status("Freshness", function() local i = Info(); return i and R.Workshop.Market.Freshness(i.age) or "Unknown" end)
+        K.Status("Freshness", function() local i = Info(); local words = { fresh = "Fresh", aging = "Aging", old = "Old" }; return i and words[R.Workshop.Market.Freshness(i.age)] or "Unknown" end)
         K.Status("Coverage", function()
             local i = Info(); if not i then return "No observations" end
             return i.complete and "Whole scan" or "Partial observations"
@@ -77,13 +85,21 @@ K.Page({
         K.Status("History", function()
             local i = Info(); local h = i and i.history
             if h and h.state == "future" then return "Newer format" end
-            return h and h.from and ("Since " .. date("%d %b %Y", h.from * 86400)) or "No retained history"
+            return h and h.from and ("Since " .. date("!%d %b %Y", h.from * 86400)) or "No retained history"
         end, function() return "Item-level quality and history depend on what your scans actually observed." end)
+        K.Status("Data quality", function() return "Shown per item" end,
+            function() return "Good, Fair or Limited describes each item's observed data in its tooltip, not the entire market." end)
         K.Status("Collection", function() return "Manual Auction House scans" end)
 
         K.Header("Crafting & Shopping", "Use saved observations and choose what is included in your plans.")
         local craft = K.Button("Crafting options", "Load options", LoadOptions, "Load Workshop options without opening its window or starting a plan.")
         craft:AddShownPredicate(function() return not Loaded() end)
+        Choice("objective", "workshopObjective", "Planning objective", "economic", {
+            { "economic", "Economic cost" }, { "cash", "Gold required now" },
+        }, "Economic cost includes the value of materials you own. Gold required now prioritizes additional spending. Manual source choices are retained.")
+        Choice("compact", "workshopCompactMode", "Compact view", "travel", {
+            { "travel", "Travel: materials to gather" }, { "craft", "Craft: recipe progress" },
+        }, "The compact panel's saved view. This changes its display without opening it.")
         Option("guild", "workshopUseGuild", "Include guild-bank materials",
             "Use remembered, permitted guild-bank stock when planning. Unknown or unreadable stock is never treated as available.", false)
         Option("notices", "workshopProgressNotices", "Crafting progress notifications",

@@ -444,4 +444,33 @@ do
   for _, r in ipairs(plan.rows) do Check(r.kind == "buy" or r.kind == "make" or r.kind == "collect") end
 end
 
+-- The settings objective reaches the real planner and changes the chosen plan.
+do
+  local c, g, W = World()
+  local S, St = W.Session, W.Strategy
+  g.bags[30] = 10
+  c.TwichUIDB.workshop.prices.markets["Realm|unknown"].items[30] = { 200, 99, 99, 99 }
+  Check(S.Add(Rec(W, 1)))
+  Same(S.Objective(), "economic")
+  local economic = S.ShoppingPlan()
+  Check(Row(economic, 20, "buy"), "economic cost buys bars rather than consuming more valuable owned ore")
+  Same(economic.plan.objective, "economic")
+  Check(S.SetObjective("cash"))
+  local cash = S.ShoppingPlan()
+  Same(cash.plan.objective, "cash", "cash preference reaches queue planner")
+  Check(Row(cash, 20, "make"), "cash objective makes bars with owned ore")
+  Same(cash.totals.cash, 0); Same(economic.totals.cash, 1000)
+  Check(S.PickSource(20, "auction"))
+  Check(S.SetObjective("economic") and S.SetObjective("cash"))
+  local manual = S.ShoppingPlan()
+  Check(Row(manual, 20, "buy").picked, "manual source choice survives objective changes")
+  local _, opp = S.OppStrategy(Rec(W, 1))
+  Same(opp.objective, "cash", "cash objective reaches recipe strategy")
+  Check(not S.SetObjective("invalid")); Same(S.Objective(), "cash")
+  local saved = c.TwichUIDB.workshop
+  saved.v = W.SAVED_VERSION + 1
+  Check(not S.SetObjective("economic") and not S.SetCompactMode("craft"), "future saved records are held")
+  Same(saved.view.objective, "cash")
+end
+
 print("PASSED test_workshop_strategy")

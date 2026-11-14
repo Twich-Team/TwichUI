@@ -77,13 +77,31 @@ c.C_Item = {
 c.InCombatLockdown = function() return false end
 c.IsShiftKeyDown = function() return false end
 
+local loadStart, historyReads = os.clock(), 0
+local actualHistoryRead
 for _, f in ipairs({ "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "CraftPlanner.lua", "Strategy.lua", "Scan.lua", "Market.lua", "Valuation.lua", "MarketFacts.lua", "Session.lua", "AuctionButton.lua", "Style.lua", "ViewOverview.lua", "ViewOpportunities.lua", "ViewCrafting.lua", "ViewShopping.lua", "ViewStrategy.lua", "Progress.lua", "Compact.lua", "Notice.lua", "Window.lua" }) do
   local chunk = assert(loadfile(ROOT .. "../TwichUI_Workshop/" .. f)); setfenv(chunk, c); chunk("TwichUI_Workshop", {})
+  if f == "History2.lua" then
+    actualHistoryRead = R.Workshop.History2.Read
+    R.Workshop.History2.Read = function(...) historyReads = historyReads + 1; return actualHistoryRead(...) end
+  end
 end
+local loadMS = (os.clock() - loadStart) * 1000
 local W = R.Workshop
 Check(W.ready and W.Open and W.Toggle, "the window file marks the addon ready")
 local Win, S, Q = W.Window, W.Session, W.Queue
 local St, UI = W.Strategy, W.UI
+Check(not Win.Frame() and not W.Compact.IsShown(), "loading Workshop builds no window")
+Same(St.Stats().started, 0, "loading starts no planning")
+Check(not W.Scan.Busy() and W.Progress.auto == false, "loading neither scans nor enables unverified progress")
+Same(historyReads, 0, "loading decodes no history")
+R.Workshop.History2.Read = actualHistoryRead
+print(("Workshop source initialization: %.3f ms; no windows, planning or history decoding (synthetic; excludes SavedVariables deserialization)"):format(loadMS))
+Check(W.Compact.SetMode("craft"), "compact preference changes while hidden")
+Same(S.CompactMode(), "craft"); Same(c.TwichUIDB.workshop.view.compactMode, "craft")
+Check(not Win.Frame() and not W.Compact.IsShown(), "preference opens neither view")
+Check(not W.Compact.SetMode("invalid")); Same(S.CompactMode(), "craft")
+Check(W.Compact.SetMode("travel")); Same(S.CompactMode(), "travel")
 local function Money(n) return UI.Money(n) end
 
 -- the world of test_workshop_strategy.lua: a Sword (recipe 1, item 90) needs 4 Bars (20) and 2 Ore (30); a Bar (recipe 500) is made from 2 Ore

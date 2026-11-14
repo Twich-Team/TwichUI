@@ -739,3 +739,9 @@ m("crafting.queue.batch-full-one-early", QUEUE, "    if #entries + fresh > W.MAX
   "a batch that exactly fills the queue is refused as full", [STU])
 m("crafting.queue.batch-raise-limit", QUEUE, "            if have.crafts + n > W.MAX_CRAFTS then return false, \"toomany\" end", "            if have.crafts + n >= W.MAX_CRAFTS then return false, \"toomany\" end",
   "an entry may not be raised to exactly the most crafts it holds", [STU])
+
+# Settings 2.0: a preference that saves but is dropped at the queue/planner boundary.
+m("crafting.settings.objective-not-forwarded", "TwichUI_Workshop/Session.lua",
+  'Sg.Request("queue", key, function() return PlanInput(entries, byOut, view, src), { objective = S.Objective() } end)',
+  'Sg.Request("queue", key, function() return PlanInput(entries, byOut, view, src), { objective = "economic" } end)',
+  "the cash preference appears saved but Shopping still optimizes economic cost", ["test_workshop_strategy.lua"])

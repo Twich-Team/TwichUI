@@ -55,6 +55,42 @@ function S.SetPriceDetail(on)
     return true
 end
 
+-- These account preferences use the existing view record. A future Workshop
+-- schema is read-only, as it is for prices, notices and source choices.
+function S.Objective()
+    local ws = type(TwichUIDB) == "table" and TwichUIDB.workshop
+    local v = type(ws) == "table" and ws.view
+    return type(v) == "table" and v.objective == "cash" and "cash" or "economic"
+end
+function S.CompactMode()
+    local ws = type(TwichUIDB) == "table" and TwichUIDB.workshop
+    local v = type(ws) == "table" and ws.view
+    return type(v) == "table" and v.compactMode == "craft" and "craft" or "travel"
+end
+local function SetViewChoice(key, value, default)
+    if Q.Held() then return false, "held" end
+    if type(TwichUIDB) ~= "table" then return false, "unsaved" end
+    local ws = TwichUIDB.workshop
+    if type(ws) ~= "table" then
+        if value == default then return true end
+        ws = { v = W.SAVED_VERSION }; TwichUIDB.workshop = ws
+    end
+    if type(ws.view) ~= "table" then ws.view = {} end
+    ws.view[key] = value ~= default and value or nil
+    return true
+end
+function S.SetObjective(value)
+    if value ~= "economic" and value ~= "cash" then return false, "bad" end
+    local before = S.Objective()
+    local ok, why = SetViewChoice("objective", value, "economic")
+    if ok and before ~= value then Sg.Bump() end
+    return ok, why
+end
+function S.SetCompactMode(value)
+    if value ~= "travel" and value ~= "craft" then return false, "bad" end
+    return SetViewChoice("compactMode", value, "travel")
+end
+
 Sg.detailed = S.PriceDetail()
 
 ---------------------------------------------------------------------------
@@ -756,7 +792,7 @@ function S.PlanKey(scope, entries, view, src, extra, nopicks)
     local g, b, mk = view.guild, view.bank, src.market
     -- what the remembered bank and guild bank can supply right now (a tab turning uncertain, or read again, changes it without a new time)
     local stock = table.concat({ tostring(g.tabs), tostring(g.unread), tostring(g.uncertain), tostring(g.limitedTabs), b.counted and "B" or "b", tostring(b.tabs) }, ".")
-    return table.concat({ Sg.epoch, scope, extra or "", table.concat(q, ","), table.concat(bags, ","), nopicks and "" or PicksSig(), g.enabled and "G" or "g", tostring(g.at or 0),
+    return table.concat({ Sg.epoch, scope, S.Objective(), extra or "", table.concat(q, ","), table.concat(bags, ","), nopicks and "" or PicksSig(), g.enabled and "G" or "g", tostring(g.at or 0),
         tostring(b.at or 0), stock, mk and (tostring(src.label) .. "@" .. tostring(mk.at)) or "none", tostring(SC.ended or 0), V.Count(), S.observations }, "|")
 end
 
@@ -801,7 +837,7 @@ local function QueuePlan()
     if #entries == 0 then return "empty", nil, nil, env end
     local key = S.PlanKey("queue", entries, view, src)
     env.key = key
-    local state, plan, why = Sg.Request("queue", key, function() return PlanInput(entries, byOut, view, src), nil end)
+    local state, plan, why = Sg.Request("queue", key, function() return PlanInput(entries, byOut, view, src), { objective = S.Objective() } end)
     return state, plan, why, env
 end
 
@@ -840,7 +876,7 @@ function S.ShoppingPlan()
             local suggest
             if next(S.picks) then
                 local skey = S.PlanKey("suggest", env.entries, env.view, env.src, nil, true)
-                local st, sp = Sg.Request("suggest", skey, function() return PlanInput(env.entries, env.byOut, env.view, env.src, true), nil end)
+                local st, sp = Sg.Request("suggest", skey, function() return PlanInput(env.entries, env.byOut, env.view, env.src, true), { objective = S.Objective() } end)
                 if st == "ready" and sp then
                     suggest = {}
                     for _, l in ipairs(sp.items) do
@@ -885,7 +921,7 @@ function S.OppStrategy(rec)
     local view, src = S.Stock(), S.PriceSource()
     local entries = { RecipeEntry(rec, 1) }
     local key = S.PlanKey("opp", entries, view, src)
-    local state, plan, why = Sg.Request("opp", key, function() return PlanInput(entries, byOut, view, src), nil end)
+    local state, plan, why = Sg.Request("opp", key, function() return PlanInput(entries, byOut, view, src), { objective = S.Objective() } end)
     return state, plan, why
 end
 
@@ -904,7 +940,7 @@ function S.PreviewOptimized(rec)
     end
     if #entries == 0 then return "empty" end
     local key = S.PlanKey("confirm", entries, view, src, rec and rec.id or nil)
-    local state, plan, why = Sg.Request("confirm", key, function() return PlanInput(entries, byOut, view, src), nil end)
+    local state, plan, why = Sg.Request("confirm", key, function() return PlanInput(entries, byOut, view, src), { objective = S.Objective() } end)
     if state ~= "ready" then return state, nil, nil, key, why end
     return state, plan, Sg.Ops(plan, final), key
 end

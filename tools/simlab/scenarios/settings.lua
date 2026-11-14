@@ -99,6 +99,53 @@ Lab.Step("open", function()
         Lab.Say("inventory", page.key, page.name, "rows=" .. #page.rows, "host=" .. tostring(page.def.host ~= nil))
     end
 end)
+if key == "workshop" and params.filled then
+    Lab.Step("Workshop preference integration", function()
+        local K, UI, L = R.SettingsKit, R.SettingsUI, R.WorkshopLauncher
+        local v = UI.View("workshop")
+        v.taskButtons[1]:Click()
+        local load
+        for _, row in ipairs(K.pages.workshop.rows) do
+            if row:GetName() == "Workshop options" then load = v.rows[row.id].control end
+        end
+        Lab.Check("construct", "explicit load action exists", true, load ~= nil)
+        local start = debugprofilestop and debugprofilestop()
+        load:Click()
+        if start then Lab.Say("timing", "Workshop options load click ms", debugprofilestop() - start) end
+        Lab.Settle(.3)
+        local w = R.Workshop
+        Lab.Check("state", "options action loads Workshop", true, L.Loaded())
+        Lab.Check("state", "loading options builds no Workshop window", nil, w.Window.Frame())
+        Lab.Check("state", "loading options starts no plan", 0, w.Strategy.Stats().started)
+        Lab.Check("state", "loading options starts no scan", false, w.Scan.Busy())
+        v.rows.workshopDetailedPrices.control:Click()
+        Lab.Check("interact", "price control calls existing preference", true, w.Session.PriceDetail())
+        v.taskButtons[4]:Click(); Lab.Settle(.2)
+        local function Pick(id, value)
+            v.rows[id].control:Click()
+            local menu = rawget(_G, "TwichUISettingsMenu")
+            for _, row in ipairs(menu and menu.rows or {}) do
+                if row:IsShown() and row.choice and row.choice.value == value then row:Click(); return true end
+            end
+            return false
+        end
+        Lab.Check("interact", "cash objective is selectable", true, Pick("workshopObjective", "cash"))
+        Lab.Check("state", "objective changes the real planner preference", "cash", w.Session.Objective())
+        Lab.Check("interact", "compact Craft is selectable", true, Pick("workshopCompactMode", "craft"))
+        Lab.Check("state", "compact mode is saved and applied", "craft", w.Compact.Mode())
+        v.rows.workshopUseGuild.control:Click()
+        Lab.Check("interact", "guild control uses existing stock preference", true, w.Storage.UseGuild())
+        v.rows.workshopProgressNotices.control:Click()
+        Lab.Check("interact", "notice control uses existing preference", false, w.Notice.On())
+        Lab.Check("state", "preferences keep full window hidden", nil, w.Window.Frame())
+        Lab.Check("state", "preferences keep compact window hidden", false, w.Compact.IsShown())
+        Lab.Check("state", "unverified progress remains disabled", false, w.Progress.auto)
+        K.ResetPage("workshop"); Lab.Settle(.2)
+        Lab.Check("state", "page defaults restore economic objective", "economic", w.Session.Objective())
+        Lab.Check("state", "page defaults restore compact Travel", "travel", w.Session.CompactMode())
+        Lab.Check("state", "page defaults leave login loading off", false, L.LoadOnLogin())
+    end)
+end
 Lab.Step("disclosures and navigation", function()
     local K, UI, W = R.SettingsKit, R.SettingsUI, R.SettingsWidgets
     local view = assert(UI.View(key))

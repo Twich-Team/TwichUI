@@ -1,6 +1,6 @@
 -- TwichUI Workshop: the compact companion (P2.1)
 -- A small, movable panel for playing while the plan is followed: "Compact view" in the Workshop's header swaps the full window for it, and its
--- "Full view" button swaps back. Two modes in one panel (memory only, like the window's page):
+-- "Full view" button swaps back. Two modes in one panel (the choice is saved in Workshop preferences):
 --   Travel  what is still to get, from the Shopping plan of the whole queue (Session.ShoppingPlan, the multilevel plan and its fallback): the
 --           quantity, the source in words (Vendor, Auction, Craft, Collect) and, for a vendor seen to sell it, a map button (Session.ShowVendor:
 --           the NPC collection's own "show on map" and the game's waypoint on it; no route). No market valuations.
@@ -8,7 +8,7 @@
 --           which still lack something, and a bar of how many of the queue's recipes are ready.
 -- It reads; it never crafts, buys or moves anything, and it has no secure or protected control. While shown it listens to bag changes and item
 -- names (a burst of events is one redraw, SETTLE seconds later; no OnUpdate) and redraws when a plan finishes; hidden, it listens to nothing.
--- Nothing is saved: not its place, not its mode.
+-- Its mode is saved; its position remains session-only.
 
 local R = TwichUI
 local W = R.Workshop
@@ -27,7 +27,7 @@ local EVENTS = { "BAG_UPDATE_DELAYED", "GET_ITEM_INFO_RECEIVED" }   -- (the bank
 
 local K
 local f
-local mode = "travel"
+local mode = S.CompactMode()
 local scheduled, token = false, 0
 local bags = false   -- a settled bag change since the last redraw (Notice.lua looks at what became ready)
 local stats = { renders = 0, flushes = 0, events = 0, longest = 0 }
@@ -324,10 +324,14 @@ end
 -- Opening
 ---------------------------------------------------------------------------
 function C.SetMode(m)
-    if m ~= "travel" and m ~= "craft" then return end
+    if m ~= "travel" and m ~= "craft" then return false end
+    local ok = S.SetCompactMode(m)
+    if not ok then return false end
     mode = m
     C.Render()
+    return true
 end
+
 function C.Mode() return mode end
 
 -- The full window's "Compact view": the compact panel in its place (the window's page and the queue are kept)

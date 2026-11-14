@@ -36,4 +36,30 @@ for _, row in ipairs(K.pages.workshop.rows) do
 end
 assert(table.concat(headers, "|") == "General|Tooltip Designer|Market Data|Crafting & Shopping")
 assert(K.pages.workshop.def.hostAfter == "Tooltip Designer")
+-- Market descriptions use real source summaries, with honest empty/future states.
+local status = {}
+for _, row in ipairs(K.pages.workshop.rows) do if row.kind == "status" then status[row:GetName()] = row end end
+local market, calls, now = nil, 0, 10
+c.GetTime = function() return now end
+c.date = os.date
+R.Workshop.Market = {
+    Info = function() calls = calls + 1; return market end,
+    AgeShort = function(age) return age < 60 and "just now" or "3h ago" end,
+    Freshness = function() return "fresh" end,
+}
+assert(status["Selected market"].value() == "No observations yet")
+market = { label = "Realm Alliance", side = "Alliance", age = 1, items = 123, complete = false,
+    history = { state = "ok", from = 20000 } }
+now = now + 1
+assert(status["Selected market"].value() == "Realm Alliance")
+assert(status["Last scan"].value() == "just now", "age text does not append another ago")
+assert(status["Freshness"].value() == "Fresh")
+assert(status.Coverage.value() == "Partial observations")
+assert(status.History.value() == "Since " .. os.date("!%d %b %Y", 20000 * 86400))
+assert(calls == 2, "one validated summary per refresh, not one per status row")
+market.age = 10800; now = now + 1
+assert(status["Last scan"].value() == "3h ago")
+market.history = { state = "future" }; now = now + 1
+assert(status.History.value() == "Newer format")
+assert(status["Data quality"].value() == "Shown per item", "no fabricated aggregate quality")
 print("PASSED")
