@@ -40,7 +40,7 @@ set -euo pipefail
 selection=()
 read -r -a selection <<< "${SIMLAB_ONLY:-}"
 for pose in "${selection[@]}"; do
-  case " overview craft opps shop design small smallov empty history craftlong shopmix shopcollect strategy confirm stratlong planning nodata override compact compactcraft tooltip smallstrat shopafter notice advisor advisorsmall advisorempty advisorscaled advisorlong advisorvacant advisoralt advisorsource advisorcategory wrong " in
+  case " overview craft opps shop design small smallov empty history craftlong shopmix shopcollect strategy confirm stratlong planning nodata override compact compactcraft tooltip smallstrat shopafter notice advisor advisorsmall advisorempty advisorscaled advisorlong advisorvacant advisoralt advisorsource advisorcategory advisorscroll wrong " in
     *" $pose "*) ;; *) echo "simlab: unknown Workshop pose: $pose" >&2; exit 2 ;;
   esac
 done
@@ -96,6 +96,7 @@ fixture advisorvacant '{ view = "advisorvacant" }'
 fixture advisoralt '{ view = "advisoralt" }'
 fixture advisorsource '{ view = "advisorsource" }'
 fixture advisorcategory '{ view = "advisorcategory" }'
+fixture advisorscroll '{ view = "advisorscroll" }'
 fixture wrong "{ view = \"craft\", wrongAt = \"$WRONG_AT\" }"
 
 repo_before="$(git -C "$REPO" status --porcelain --ignored)"
@@ -147,6 +148,7 @@ launch advisorvacant screenshot --png -o "$RUN/advisorvacant.png" --width 1600 -
 launch advisoralt screenshot --png -o "$RUN/advisoralt.png" --width 1600 --height 1200
 launch advisorsource screenshot --png -o "$RUN/advisorsource.png" --width 1600 --height 1200
 launch advisorcategory screenshot --png -o "$RUN/advisorcategory.png" --width 1600 --height 1200
+launch advisorscroll screenshot --png -o "$RUN/advisorscroll.png" --width 1600 --height 1200
 launch wrong dump-tree --visible-only
 
 echo "artifacts: $RUN"

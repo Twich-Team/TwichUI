@@ -29,7 +29,7 @@
 local R = TwichUI
 local Check = Lab.Check
 local params = rawget(_G, "SIMLAB_PARAMS") or {}
-Lab.BUDGET = 40   -- Scan quiet periods and settings scroll/geometry probes; delayed simulator failures remain classified.
+Lab.BUDGET = 45 -- includes the native menu picks and large-list/page-return regression   -- Scan quiet periods and settings scroll/geometry probes; delayed simulator failures remain classified.
 local Say = Lab.Say
 
 A_Admin.SetManualClock(GetTime())
@@ -2033,6 +2033,20 @@ Lab.Step("automatic price updates on opening the auction house", function()
     Lab.Settle(0.3)
 end)
 
+-- Drive the native menu's public picking contract, as its radio buttons do.
+local function AdvisorChoice(button,label)
+    Click(button,"Advisor filter menu")
+    local menu=_G.Menu.GetManager():GetOpenMenu()
+    local choice
+    menu:EnumerateElementDescriptions(function(_,description)
+        if MenuUtil.GetElementText(description)==label then choice=description end
+    end)
+    if not choice then error("missing Advisor filter: " .. label) end
+    choice:Pick(MenuInputContext.MouseButton,"LeftButton")
+    Lab.Settle(0.3)
+    Check("state","Advisor: menu closes after direct selection",nil,_G.Menu.GetManager():GetOpenMenu())
+end
+
 -- A8 workflow verification is replayed in every pose, like the existing pages.
 Lab.Step("item advisor: navigation, discovery, tracking and actions", function()
     local W=R.Workshop; local D=W.AdvisorData
@@ -2040,6 +2054,10 @@ Lab.Step("item advisor: navigation, discovery, tracking and actions", function()
     W.UI.Advisor.Open(2447); Lab.Settle(0.5)
     local p=Win().Page("advisor")
     Check("display","Advisor: first-class left navigation and item selection","advisor/2447",Win().Mode() .. "/" .. tostring(p.result and p.result.item))
+    AdvisorChoice(p.source,"In bags")
+    Check("state","Advisor: direct source choice persists","bags",D.Source())
+    for _,row in ipairs(p.list.data) do Check("state","Advisor: carried source excludes absent items",true,(row.count or 0)>0) end
+    AdvisorChoice(p.source,"All known items")
     p.search:SetText("silverleaf"); Lab.Settle(0.3)
     Check("state","Advisor: search selects the real matching identity",765,p.result and p.result.item)
     W.UI.Advisor.Open(2447); Lab.Settle(0.4)
@@ -2080,7 +2098,7 @@ Lab.Step("pose for the screenshot", function()
         Check("display","pose: no invented identities in an empty catalog",0,#p.list.data)
         Check("display","pose: empty catalog hides unperformable actions",false,p.detail.track:IsShown())
         Check("display","pose: empty catalog explains item selection",true,p.detail.empty:IsShown())
-    elseif view == "advisorsource" or view == "advisorcategory" or view == "advisoralt" or view == "advisorlong" or view == "advisor" or view == "advisorsmall" or view == "advisorempty" or view == "advisorscaled" then
+    elseif view == "advisorscroll" or view == "advisorsource" or view == "advisorcategory" or view == "advisoralt" or view == "advisorlong" or view == "advisor" or view == "advisorsmall" or view == "advisorempty" or view == "advisorscaled" then
         local W=R.Workshop
         local ids={}; for _,e in ipairs(W.Queue.Entries()) do ids[#ids+1]=e.id end
         for _,id in ipairs(ids) do W.Session.Remove(id) end
@@ -2100,6 +2118,13 @@ Lab.Step("pose for the screenshot", function()
             for d=day-10,day do days[#days+1]={d=d,p=100,r=100,t=100,l=5,n=1,plo=100,phi=100,rlo=100,rhi=100,tlo=100,thi=100} end
             m.h2[2447],m.c2[2447]=W.History2.Encode({},days,nil)
             m.h2info=m.h2info or {v=1,from=day-10}; m.h2info.at=m.at
+        end
+        if view=="advisorscroll" and m then
+            for id=10000,10799 do
+                ITEMS[id]="Stored Herb " .. id; BAGS[id]=1
+                m.items[id]=m.items[2447]
+            end
+            m.snap.seq=m.snap.seq+1
         end
         if view=="advisorlong" then
             ITEMS[2447]="Peacebloom of the Ancient Watcher's Extremely Long and Elaborate Herbal Collection"
@@ -2122,6 +2147,27 @@ Lab.Step("pose for the screenshot", function()
         Check("state","pose: real source catalog selected Peacebloom",2447,p.result and p.result.item)
         Check("display","pose: advisor never claims net proceeds",true,p.result and (not p.result.proceeds or p.result.proceeds.net==nil))
         Check("state","pose: expected advice",view=="advisorempty" and "unknown" or "auction",p.result and p.result.action)
+        if view=="advisorscroll" then
+            local list=p.list
+            list.scroll:SetVerticalScroll(1283); list:Layout()
+            local wheel=list.scroll:GetScript("OnMouseWheel")
+            Check("state","pose: native list wheel handler exists",true,type(wheel)=="function")
+            if wheel then wheel(list.scroll,-2) end
+            Lab.Settle(0.1)
+            local offset=list.scroll:GetVerticalScroll()
+            Check("state","pose: wheel moves to nonzero viewport",true,offset>0)
+            local bar=list.scroll.ScrollBar
+            bar:SetValue(offset+80); Lab.Settle(0.1)
+            offset=list.scroll:GetVerticalScroll()
+            Click(list.rows[2],"Advisor select scrolled row")
+            local item=p.result.item
+            W.UI.Advisor.ItemReady(item,true); Win().Render(); Lab.Settle(0.5)
+            Check("state","pose: metadata and detail preserve scroll",offset,list.scroll:GetVerticalScroll())
+            Win().SetMode("craft"); Win().SetMode("advisor"); Lab.Settle(0.5)
+            Check("state","pose: page return restores scrolled viewport",offset,list.scroll:GetVerticalScroll())
+            Check("state","pose: page return retains selection",item,p.result.item)
+            Check("state","pose: hundreds of results retain pooled rows",true,#list.data>800 and #list.rows<15)
+        end
         if view=="advisorsource" or view=="advisorcategory" then
             local before=p.list.data
             Click(view=="advisorsource" and p.source or p.category,"Advisor open filter dropdown")

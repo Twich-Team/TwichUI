@@ -263,3 +263,25 @@ source/category menus personally screenshot-reviewed in
 controls, above the evidence panel, with direct radio choices. No live-client
 pointer or reload test is claimed. The first capture exposed cursor anchoring;
 the corrected final run uses the native anchored-menu API.
+
+A8.1 checkpoint 2: the new 3,000-identity regression first failed on the old
+code (`metadata refresh ... expected 641, got 0`). `ItemReady` unconditionally
+marked search dirty and every completed search called `ScrollTop`; page hide
+also forced a new selected-row reveal. The fix separates intentional filter
+resets from background refreshes, preserves the live top identity/within-row
+offset at search completion, and keeps only that scalar viewport on hide.
+Metadata reruns filtering only when it can affect active-filter membership.
+Catalog/pooled-row references are still released on hide.
+
+Fast Advisor 2/2 and feature Advisor 44/44 passed; nine simulator launches,
+211.268 s total. The personally reviewed capture
+`test-output/simlab/artifacts/workshop-rMR6K6su/advisorscroll.png` shows 818
+results and selected Stored Herb 10005 after native wheel/scrollbar handlers,
+metadata updates and page return, all retaining offset 1379. Unit coverage also
+checks bags/all-known, active search/category, repeated advice paints, selection,
+menu dismissal, cooperative refresh during scrolling and bounded row pooling.
+Two preliminary simulator runs failed in test instrumentation (a shadowed
+native menu name and the 40-second simulated-time budget); neither is counted
+as passing evidence. The final scenario retains every assertion and has a
+45-second resource allowance for the additional interactions. Real pointer
+wheel/drag input still needs client acceptance.

@@ -167,5 +167,48 @@ W.Window.SetMode("overview"); Pump(); Same(#p.list.data,0,"hidden discovery rele
 for _,row in ipairs(p.list.rows) do Same(row.data,nil,"pooled rows release catalog references") end
 Same(W.Snapshot().advisorItems,0,"diagnostics show discovery released")
 W.Window.SetMode("advisor"); Pump(); Same(p.result.item,10,"selection survives page switch")
+-- Thousands of real discovered identities, still a bounded visible row pool.
+for id=1000,3999 do g.names[id]="Sample " .. id; g.bags[id]=1 end
+c.C_Container={GetContainerNumSlots=function(bag) return bag==0 and 3000 or 0 end,
+  GetContainerItemInfo=function(_,slot) return {itemID=999+slot,stackCount=1,isBound=false} end}
+W.UI.Advisor.Invalidate(); W.Window.Render(); Pump()
+Choose(p.source,"All known items"); Pump()
+Check(#p.list.data>=3000,"large real catalog")
+p.list.scroll:SetVerticalScroll(641); p.list:Layout()
+local chosen=p.result.item
+W.UI.Advisor.ItemReady(1010,true); W.Window.Render(); Pump()
+Same(p.list.scroll:GetVerticalScroll(),641,"metadata refresh preserves scrolled viewport")
+Same(p.result.item,chosen,"metadata refresh preserves selection")
+for _,sourceName in ipairs({"In bags","All known items"}) do
+  Choose(p.source,sourceName); Pump()
+  p.list.scroll:SetVerticalScroll(1323); p.list:Layout()
+  local row=p.list.rows[2]; row:GetScript("OnClick")(row); Pump()
+  local selectedItem=p.result.item
+  Same(p.list.scroll:GetVerticalScroll(),1323,"selection retains viewport: " .. sourceName)
+  for i=1,4 do W.Window.Render(); Pump() end
+  Same(p.list.scroll:GetVerticalScroll(),1323,"recommendation paint retains viewport")
+  W.UI.Advisor.Invalidate(); W.Window.Render()
+  p.list.scroll:SetVerticalScroll(1607); p.list:Layout(); Pump()
+  Same(p.list.scroll:GetVerticalScroll(),1607,"asynchronous discovery preserves latest scroll")
+  Same(p.result.item,selectedItem,"discovery retains selected identity")
+  p.source:GetScript("OnClick")(p.source); opened:Close(); Pump()
+  Same(p.list.scroll:GetVerticalScroll(),1607,"menu dismissal retains viewport")
+  W.Window.SetMode("overview"); Pump(); W.Window.SetMode("advisor"); Pump()
+  Same(p.list.scroll:GetVerticalScroll(),1607,"page return restores anchor and offset")
+  p.search:SetText("Sample"); p.search:GetScript("OnTextChanged")(p.search); Pump()
+  Same(p.list.scroll:GetVerticalScroll(),0,"intentional search resets viewport")
+  p.list.scroll:SetVerticalScroll(647); p.list:Layout()
+  g.names[1010]="Sample renamed"
+  W.UI.Advisor.ItemReady(1010,true); W.Window.Render(); Pump()
+  Same(p.list.scroll:GetVerticalScroll(),647,"active search preserves viewport after metadata update")
+  Choose(p.category,"Trade Goods"); Pump()
+  Same(p.list.scroll:GetVerticalScroll(),0,"intentional category resets viewport")
+  p.list.scroll:SetVerticalScroll(707); p.list:Layout()
+  W.UI.Advisor.Invalidate(); W.Window.Render(); Pump()
+  Same(p.list.scroll:GetVerticalScroll(),707,"category-filtered refresh preserves viewport")
+  Choose(p.category,"All categories"); Pump()
+  p.search:SetText(""); p.search:GetScript("OnTextChanged")(p.search); Pump()
+end
+Check(#p.list.rows<20,"large discovery keeps a bounded visible row pool")
 W.Window.Hide(); Pump()
 print("advisor UI: OK")

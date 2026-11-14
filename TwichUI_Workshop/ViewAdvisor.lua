@@ -9,8 +9,25 @@ local page, K, catalog, stamp, selected, result
 local query, source, category, auctionable = "", D.Source(), nil, false
 local token, searchToken = 0, 0
 local filtered, categories = {}, {}
-local reveal, searchDirty = true, false
+local reveal, searchDirty, resetView = false, false, false
+local viewport
 local Paint, Search, Render
+local function CaptureViewport()
+    if not page or #page.list.data==0 then return viewport end
+    local pixel=page.list.scroll:GetVerticalScroll() or 0
+    local row=page.list.data[math.floor(pixel/64)+1]
+    return {item=row and row.item, offset=pixel%64, pixel=pixel}
+end
+local function RestoreViewport(view)
+    local pixel=view and view.pixel or 0
+    for i,row in ipairs(filtered) do
+        if view and view.item and row.item>=view.item then pixel=(i-1)*64+view.offset; break end
+    end
+    local h=page.list.scroll:GetHeight() or 0
+    if h<=64 then h=page.list.minH end
+    page.list.scroll:SetVerticalScroll(math.min(math.max(0,#filtered*64-h),pixel))
+    page.list:Layout()
+end
 local function Name(row) return row.info.name end
 local function Category(info) return (info.category or "Item") .. (info.sub and info.sub ~= "" and (" \194\183 " .. info.sub) or "") end
 local function Color(fs, quality)
@@ -207,7 +224,8 @@ Paint=function()
     page.detail.empty:SetText((catalog and #catalog.rows==0) and "No items remembered yet. Open a profession, carry an item, or scan prices manually." or "Choose an item to compare your options.")
     PaintDetail()
 end
-Search=function()
+Search=function(reset)
+    resetView=resetView or reset==true
     searchDirty=false
     searchToken=searchToken+1
     local mine=searchToken
@@ -222,17 +240,17 @@ Search=function()
         if pt then R.Perf.Stop(pt) end
         at=last+1
         if at<=#catalog.rows then C_Timer.After(0,Step) else
+            local view=CaptureViewport()
             filtered=output
             local present=false; for _,r in ipairs(filtered) do if r.item==selected then present=true break end end
             if not present then selected=filtered[1] and filtered[1].item; if selected then D.Select(selected) end end
             if selected then D.Request(selected) end
-            page.list:ScrollTop(); Paint()
+            Paint()
             if reveal and selected then
-                local h=page.list.scroll:GetHeight() or 320
-                local most=math.max(0,#filtered*64-h)
-                for i,row in ipairs(filtered) do if row.item==selected then page.list.scroll:SetVerticalScroll(math.min(most,(i-1)*64)); break end end
-                page.list:Layout(); reveal=false
-            end
+                RestoreViewport({item=selected,offset=0,pixel=0})
+            elseif resetView then RestoreViewport(nil)
+            else RestoreViewport(view) end
+            reveal,resetView,viewport=false,false,nil
         end
     end
     Step()
@@ -242,14 +260,18 @@ function V.ItemReady(item, success)
     if not page or not page:IsShown() or success==false or not catalog then return end
     local row=catalog.byID[item]
     if not row then return end
-    local info=D.Info(item)
+    local info,old=D.Info(item),row.info
     if not row.info or row.info.quality~=info.quality or row.info.classID~=info.classID then W.Facts.CacheClear() end
+    local oldSearch=row.search
     row.info=info; row.search=(info.name .. " " .. item):lower()
     if info.category and info.category~="" then
         local found=false; for _,name in ipairs(categories) do if name==info.category then found=true break end end
         if not found then categories[#categories+1]=info.category; table.sort(categories) end
     end
-    searchDirty=true
+    -- Most item events change only painted values. Search again only when
+    -- metadata can change membership of an active filter, never just on hover.
+    if (query~="" and oldSearch~=row.search) or (category and old.category~=info.category)
+        or (auctionable and old.bindType~=info.bindType) then searchDirty=true end
 end
 function V.Stats() return { items=catalog and #catalog.rows or 0, results=#filtered, running=catalog and not catalog.done or false } end
 local function Key()
@@ -283,7 +305,7 @@ local function Build(p)
     p.search=UI.Search(p,280,30,"Search known items..."); p.search:SetPoint("TOPLEFT",0,-62)
     p.search:SetScript("OnTextChanged",function(self)
         query=self:GetText() or ""; searchToken=searchToken+1
-        local mine=searchToken; C_Timer.After(0.15,function() if mine==searchToken then Search() end end)
+        local mine=searchToken; C_Timer.After(0.15,function() if mine==searchToken then Search(true) end end)
     end)
     local sources={{"bags","In bags"},{"tracked","Tracked items"},{"all","All known items"}}
     local function SourceLabel()
@@ -302,7 +324,7 @@ local function Build(p)
                 for _,entry in ipairs(choices()) do
                     local value,text=entry[1],entry[2]
                     local radio=root:CreateRadio(text,function() return current()==value end,function()
-                        if current()~=value then choose(value); Search() end
+                        if current()~=value then choose(value); Search(true) end
                     end)
                     radio:AddInitializer(function(button)
                         if button.fontString then UI.Paint(button.fontString,current()==value and K.bronzeText or K.text) end
@@ -327,7 +349,7 @@ local function Build(p)
     end,function() return category or false end,function(value)
         category=value or nil; p.category.text:SetText(category or "All categories")
     end); p.category:SetPoint("LEFT",p.source,"RIGHT",8,0)
-    p.auctionable=UI.Switch(p,"Auctionable",function(b) auctionable=not auctionable; b:SetOn(auctionable); Search() end)
+    p.auctionable=UI.Switch(p,"Auctionable",function(b) auctionable=not auctionable; b:SetOn(auctionable); Search(true) end)
     p.auctionable:SetPoint("TOPRIGHT",-2,-67)
     UI.Tip(p.auctionable,"Known auction eligibility","Only item types confirmed unbound. Bound-on-equip and bound-on-use copies require individual inspection.")
     p.card=CreateFrame("Frame",nil,p); p.card:SetPoint("TOPLEFT",0,-104); p.card:SetPoint("BOTTOMLEFT",0,0); p.card:SetWidth(300); UI.Panel(p.card,"card")
@@ -348,7 +370,8 @@ local function Build(p)
     p:SetScript("OnSizeChanged",Layout)
     p:HookScript("OnHide",function()
         if menu then menu:Close(); menu=nil end
-        token=token+1; searchToken=searchToken+1; catalog=nil; filtered={}; stamp=nil; result=nil; reveal=true; searchDirty=false
+        viewport=CaptureViewport()
+        token=token+1; searchToken=searchToken+1; catalog=nil; filtered={}; stamp=nil; result=nil; searchDirty=false
         p.list:SetData({}); p.result=nil
         for _,row in ipairs(p.list.rows) do row.data=nil end
         if p.uses then
