@@ -113,9 +113,9 @@ function L.SettingsState()
     local stock = type(ws) == "table" and type(ws.storage) == "table" and ws.storage or {}
     local w = L.Loaded() and R.Workshop
     if w then return { prices = w.Session.PriceDetail(), guild = w.Storage.UseGuild(), notices = w.Notice.On(),
-        objective = w.Session.Objective(), compact = w.Session.CompactMode() } end
+        advisorGain = tostring(w.Advisor and w.Advisor.Gain() or 0), objective = w.Session.Objective(), compact = w.Session.CompactMode() } end
     return { prices = view.prices == "detailed", guild = stock.useGuild == true, notices = view.notices ~= false,
-        objective = view.objective == "cash" and "cash" or "economic", compact = view.compactMode == "craft" and "craft" or "travel" }
+        advisorGain = tostring(type(view.advisorGain)=="number" and view.advisorGain or 0), objective = view.objective == "cash" and "cash" or "economic", compact = view.compactMode == "craft" and "craft" or "travel" }
 end
 function L.SetOption(key, on)
     if type(on) ~= "boolean" or not L.Loaded() then return false end
@@ -135,6 +135,7 @@ function L.SetChoice(key, value)
     local w, ok = R.Workshop
     if key == "objective" then ok = w.Session.SetObjective(value)
     elseif key == "compact" then ok = w.Compact.SetMode(value)
+    elseif key == "advisorGain" and w.Advisor then ok = w.Advisor.SetGain(tonumber(value))
     else return false end
     if ok and w.Window and w.Window.IsShown() then w.Window.Render() end
     if ok and w.Compact and w.Compact.IsShown() then w.Compact.Schedule() end

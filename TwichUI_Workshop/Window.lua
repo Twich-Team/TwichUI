@@ -355,6 +355,7 @@ local function Build()
             local row = UI.hoverRow
             if row and row:IsShown() then row:ShowTip() end   -- Shift pressed or released while over a row: the other tooltip
         elseif kind then
+            if event=="GET_ITEM_INFO_RECEIVED" and mode=="advisor" and UI.Advisor then UI.Advisor.Invalidate() end
             if event == "BAG_UPDATE_DELAYED" then W.Strategy.Bump(); dirtyBags = true end   -- what is owned changed: plans are worked out again
             Schedule(kind)
         end

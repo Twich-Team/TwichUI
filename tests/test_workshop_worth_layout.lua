@@ -113,7 +113,7 @@ end
 do
   local base = WL.DefaultLines()
   Same(Ids(base), "recommend,vendor,auction,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*", "the short default")
-  Same(Keys(WL.BY_ID), "auction,disenchant,historical,marketvalue,note,outcomes,quality,recent,recommend,source,status,supply,vendor", "thirteen line types")
+  Same(Keys(WL.BY_ID), "advisorevidence,advisorwhy,auction,disenchant,historical,marketvalue,note,outcomes,quality,recent,recommend,source,status,supply,vendor", "registered line types include Advisor details")
   -- add: at a place, at the end, refused twice, unknown refused
   local l, why = WL.Add(base, "outcomes", 2)
   Same(Ids(l), "recommend,outcomes*,vendor,auction,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*", "added at 2, starting where the type starts (Hold Shift)")

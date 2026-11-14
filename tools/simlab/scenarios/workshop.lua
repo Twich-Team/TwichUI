@@ -711,38 +711,38 @@ Lab.Step("what's it worth: item tooltip lines", function()
     Say("TooltipDataProcessor in the simulator: " .. tostring(rawget(_G, "TooltipDataProcessor") ~= nil) .. "; registered by the product: " .. tostring(WT.registered))
     local requestsBefore = ah.requested
     Check("direct", "no cut confirmed, the auction is dearer: the fee is named and no winner is claimed",
-        "What's it worth? / No suggestion: auction fee unknown / Vendor | 60c / Auction (before fees) | 1s 50c / Hold Shift for details", Hover(118))
-    Check("direct", "the vendor wins even before fees (the cut can only lower the auction)",
-        "What's it worth? / Suggested: Vendor / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details", Hover(2841))
+        "What's it worth? / Workshop: Insufficient data / Vendor | 60c / Auction (before fees) | 1s 50c / Hold Shift for details", Hover(118))
+    Check("direct", "active plan demand overrides a tempting vendor comparison",
+        "What's it worth? / Workshop: Keep for crafting / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details", Hover(2841))
     Check("direct", "repeating the update gives the same lines, not more",
-        "What's it worth? / No suggestion: auction fee unknown / Vendor | 60c / Auction (before fees) | 1s 50c / Hold Shift for details", Hover(118))
+        "What's it worth? / Workshop: Insufficient data / Vendor | 60c / Auction (before fees) | 1s 50c / Hold Shift for details", Hover(118))
     Check("direct", "green armour: disenchant has no data, so it is said and no winner is claimed",
-        "What's it worth? / Disenchant value unknown / Vendor | 10c / Auction (before fees) | 25c / Disenchant (average) | no data / Hold Shift for details", Hover(9999))
+        "What's it worth? / Workshop: Insufficient data / Vendor | 10c / Auction (before fees) | 25c / Disenchant (average) | no data / Hold Shift for details", Hover(9999))
     Check("direct", "a bound item cannot be listed (unavailable, not unknown)",
-        "What's it worth? / Vendor | 4c / Auction | can't be listed (bound)", Hover(2447))
+        "What's it worth? / Workshop: Keep for crafting / Vendor | 4c / Auction | can't be listed (bound)", Hover(2447))
     Check("direct", "an item with no listing: no price (never 0), more prices needed",
-        "What's it worth? / More prices needed / Vendor | 20c / Auction | no price / Hold Shift for details", Hover(2320))
+        "What's it worth? / Workshop: Keep for crafting / Vendor | 20c / Auction | no price / Hold Shift for details", Hover(2320))
     Check("direct", "a random-properties variant is not priced from the base item's listings",
-        "What's it worth? / No suggestion: this variant isn't priced / Vendor | 3c / Auction | this variant isn't priced", Hover(765))
+        "What's it worth? / Workshop: Keep for crafting / Vendor | 3c / Auction | this variant isn't priced", Hover(765))
     Check("direct", "a stack says the values are for one item",
-        "What's it worth? (each) / No suggestion: auction fee unknown / Vendor | 30c / Auction (before fees) | 60c / Hold Shift for details", Hover(3382))
+        "What's it worth? (each) / Workshop: Insufficient data / Vendor | 30c / Auction (before fees) | 60c / Hold Shift for details", Hover(3382))
     -- 3382: Weak Troll's Blood Potion 300/5 = 60c each
     Check("direct", "an item the player does not hold (no guid) gets nothing", "", Hover(118, { id = 118 }))
 
     w.SetShift(true)
     local long = Hover(118)
     Check("direct", "Shift: the Always lines plus the age and the source, once each, and the unconfirmed cut stays on the value",
-        "What's it worth? / No suggestion: auction fee unknown / Vendor | 60c / Auction (before fees) | 1s 50c / Scanned | just now / Prices from | the auction house on SimulatedRealm / Estimates, not sales. Deposits and failed listings aren't counted.", long)
+        "What's it worth? / Workshop: Insufficient data / Vendor | 60c / Auction (before fees) | 1s 50c / Scanned | just now / Prices from | the auction house on SimulatedRealm / Estimates, not sales. Deposits and failed listings aren't counted.", long)
     local _, n = long:gsub("Deposits and failed listings", "")
     Check("direct", "Shift: the deposit / failed-listing exclusion is stated once", 1, n)
     Check("direct", "Shift: the details stay short enough for a tooltip", true, select(2, long:gsub(" / ", "")) + 1 <= 10)
     w.SetShift(false)
-    Check("direct", "released: the short form again, nothing left over", "What's it worth? / No suggestion: auction fee unknown / Vendor | 60c / Auction (before fees) | 1s 50c / Hold Shift for details", Hover(118))
+    Check("direct", "released: the short form again, nothing left over", "What's it worth? / Workshop: Insufficient data / Vendor | 60c / Auction (before fees) | 1s 50c / Hold Shift for details", Hover(118))
 
     -- TEST INPUT: a made-up 5% cut for the 'unknown' side (the product's PR.CUT is empty). 150 x 0.05 = 7.5 -> 8, net 142.
     R.Workshop.Prices.CUT.unknown = 0.05
-    Check("direct", "[test input] with a cut the auction wins, after the cut",
-        "What's it worth? / Suggested: Auction house / Vendor | 60c / Auction (after fees) | 1s 42c / Hold Shift for details", Hover(118))
+    Check("direct", "[test input] a verified fee alone cannot repair insufficient competition",
+        "What's it worth? / Workshop: Insufficient data / Vendor | 60c / Auction (after fees) | 1s 42c / Hold Shift for details", Hover(118))
     R.Workshop.Prices.CUT.unknown = nil
     Check("direct", "test cut removed: back to before fees", true, Hover(118):find("Auction (before fees) | 1s 50c", 1, true) ~= nil)
 
@@ -817,17 +817,21 @@ Lab.Step("what's it worth: tooltip designer", function()
         (function() local t = {} for _, e in ipairs(WL.Get().lines) do if A7[e.id] then t[#t + 1] = e.id .. (e.when == "shift" and "*" or "") end end return table.concat(t, ",") end)())
     Check("direct", "the live tooltip carries the market value line, labelled as a 14-day reference", true, w.HoverMarket(2841):find("Market value (14 days)", 1, true) ~= nil)
     Check("display", "Normal preview of the ordinary example",
-        "What's it worth? / Suggested: Vendor / Vendor | 5s / Auction (before fees) | 4s / (Disenchant value (average): nothing to show for this example) / Hold Shift for details", Mock())
+        "What's it worth? / Workshop: Vendor / Vendor | 5s / Auction (before fees) | 4s / (Disenchant value (average): nothing to show for this example) / Hold Shift for details", Mock())
     Check("display", "labelled as preview data", true, Txt(f.caption):find("Preview data", 1, true) ~= nil)
-    Check("direct", "the live tooltip for the same numbers has the same lines (minus the designer's placeholder)",
-        "What's it worth? / Suggested: Vendor / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details", Live(false))
-    Check("display", "the preview without its placeholder equals the live tooltip", Live(false), NoPlaceholders(Mock()))
+    Check("direct", "live values stay the same while the item is kept for the active plan",
+        "What's it worth? / Workshop: Keep for crafting / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details", Live(false))
+    -- Same values, different supported contexts: the live Bronze Bar is reserved
+    -- for this character's active plan; the synthetic preview has no plan.
+    Check("display", "preview and live values agree while active-plan advice stays distinct",
+        "What's it worth? / Workshop: Vendor / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details || What's it worth? / Workshop: Keep for crafting / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details",
+        NoPlaceholders(Mock()) .. " || " .. Live(false))
 
     Click(f.modeShift, "Hold Shift preview")
     Check("display", "Hold Shift preview adds the Shift lines to the Always lines, once each",
-        "What's it worth? / Suggested: Vendor / Vendor | 5s / Auction (before fees) | 4s / (Disenchant value (average): nothing to show for this example) / Scanned | 3 hours ago / Prices from | the example auction house / Estimates, not sales. Deposits and failed listings aren't counted.", Mock())
+        "What's it worth? / Workshop: Vendor / Vendor | 5s / Auction (before fees) | 4s / (Disenchant value (average): nothing to show for this example) / Scanned | 3 hours ago / Prices from | the example auction house / Estimates, not sales. Deposits and failed listings aren't counted.", Mock())
     Check("direct", "the live tooltip with Shift held has the same kinds of lines (this scan's own age and market)",
-        "What's it worth? / Suggested: Vendor / Vendor | 5s / Auction (before fees) | 4s / Scanned | just now / Prices from | the auction house on SimulatedRealm / Estimates, not sales. Deposits and failed listings aren't counted.", Live(true))
+        "What's it worth? / Workshop: Keep for crafting / Vendor | 5s / Auction (before fees) | 4s / Scanned | just now / Prices from | the auction house on SimulatedRealm / Estimates, not sales. Deposits and failed listings aren't counted.", Live(true))
     Click(f.modeNormal, "Normal preview")
 
     -- select and move (buttons): Vendor down one, past Auction
@@ -835,17 +839,17 @@ Lab.Step("what's it worth: tooltip designer", function()
     Check("state", "clicking a row selects it", "vendor", D.Selected())
     Click(f.down, "Move down")
     Check("state", "Move down puts Vendor after Auction", "recommend,auction,vendor,disenchant,status*,source*,note*", Layout())
-    Check("display", "and the preview shows it", "What's it worth? / Suggested: Vendor / Auction (before fees) | 4s / Vendor | 5s / (Disenchant value (average): nothing to show for this example) / Hold Shift for details", Mock())
-    Check("direct", "and the live tooltip follows at once", "What's it worth? / Suggested: Vendor / Auction (before fees) | 4s / Vendor | 5s / Hold Shift for details", Live(false))
+    Check("display", "and the preview shows it", "What's it worth? / Workshop: Vendor / Auction (before fees) | 4s / Vendor | 5s / (Disenchant value (average): nothing to show for this example) / Hold Shift for details", Mock())
+    Check("direct", "and the live tooltip follows at once", "What's it worth? / Workshop: Keep for crafting / Auction (before fees) | 4s / Vendor | 5s / Hold Shift for details", Live(false))
 
     -- Always -> Hold Shift for Auction: the recommendation is untouched and the value keeps its own "before fees"
     Click(D.Row(2), "the Auction row")
     Click(f.holdShift, "Hold Shift (visibility)")
     Check("state", "Auction is a Hold Shift line", "recommend,auction*,vendor,disenchant,status*,source*,note*", Layout())
     Check("state", "the Hold Shift preview came up so the line stays in view", true, D.Mode())
-    Check("direct", "live, Shift not held: no auction line, the suggestion unchanged", "What's it worth? / Suggested: Vendor / Vendor | 5s / Hold Shift for details", Live(false))
+    Check("direct", "live, Shift not held: no auction line, the suggestion unchanged", "What's it worth? / Workshop: Keep for crafting / Vendor | 5s / Hold Shift for details", Live(false))
     Check("direct", "live, Shift held: the auction line is back in its place, with 'before fees', once",
-        "What's it worth? / Suggested: Vendor / Auction (before fees) | 4s / Vendor | 5s / Scanned | just now / Prices from | the auction house on SimulatedRealm / Estimates, not sales. Deposits and failed listings aren't counted.", Live(true))
+        "What's it worth? / Workshop: Keep for crafting / Auction (before fees) | 4s / Vendor | 5s / Scanned | just now / Prices from | the auction house on SimulatedRealm / Estimates, not sales. Deposits and failed listings aren't counted.", Live(true))
     w.SetShift(false)
 
     -- remove, and click to add again; no duplicate
@@ -914,20 +918,20 @@ Lab.Step("what's it worth: tooltip designer", function()
     -- put the layout back by Reset
     Click(f.reset, "Reset layout")
     Check("state", "Reset layout puts the short default back", DEFAULT, Layout())
-    Check("direct", "and the live tooltip is the default again", "What's it worth? / Suggested: Vendor / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details", Live(false))
+    Check("direct", "and the live tooltip is the default again", "What's it worth? / Workshop: Keep for crafting / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details", Live(false))
 
     -- the examples: missing prices and an action that cannot be done
     local function Pick(v) f.example:Click() local menu = rawget(_G, "TwichUISettingsMenu")   -- the list is made by the first click
         for _, entry in ipairs(menu and menu.rows or {}) do if entry:IsShown() and entry.choice and entry.choice.value == v then entry:Click() return true end end return false end
     Check("click", "the example list offers 'Missing prices'", true, Pick("missing"))
     Check("display", "missing prices: said once, the unknown stays unknown (never zero)",
-        "What's it worth? / More prices needed / Vendor | 3s / Auction | no price / Disenchant (average) | no data / Hold Shift for details", Mock())
+        "What's it worth? / Workshop: Insufficient data / Vendor | 3s / Auction | no price / Disenchant (average) | no data / Hold Shift for details", Mock())
     Check("click", "the example list offers 'Can't be auctioned'", true, Pick("unavailable"))
     Check("display", "an action that can't be done and an unknown value, side by side",
-        "What's it worth? / Disenchant value unknown / Vendor | 3s / Auction | can't be listed (bound) / Disenchant (average) | no data", Mock())
+        "What's it worth? / Workshop: Vendor / Vendor | 3s / Auction | can't be listed (bound) / Disenchant (average) | no data", Mock())
     Pick("higher")
-    Check("display", "an auction that looks higher before fees: no winner is claimed",
-        "What's it worth? / No suggestion: auction fee unknown / Vendor | 5s / Auction (before fees) | 9s / (Disenchant value (average): nothing to show for this example) / Hold Shift for details", Mock())
+    Check("display", "supported gross auction advice retains the before-fees qualification",
+        "What's it worth? / Workshop: Auction / Vendor | 5s / Auction (before fees) | 9s / (Disenchant value (average): nothing to show for this example) / Hold Shift for details", Mock())
     Pick("ordinary")
 
     -- Enable tooltip
@@ -935,7 +939,7 @@ Lab.Step("what's it worth: tooltip designer", function()
     Check("state", "Enable tooltip off is saved", false, WL.Enabled())
     Check("direct", "live: no section at all, Shift or not", "", Live(true) .. Live(false))
     Click(f.enable, "Enable tooltip (on)")
-    Check("direct", "back on: the section is back", "What's it worth? / Suggested: Vendor / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details", Live(false))
+    Check("direct", "back on: the section is back", "What's it worth? / Workshop: Keep for crafting / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details", Live(false))
     Check("state", "nothing was asked of the auction house", 0, w.ah.requested - ah.requested)
 
     w.SetShift(false)
@@ -2027,6 +2031,39 @@ Lab.Step("automatic price updates on opening the auction house", function()
     TwichUIWorkshopDB.markets[KEY] = nil
     SetAuctionHouse(true)
     Lab.Settle(0.3)
+end)
+
+-- A8 workflow verification is replayed in every pose, like the existing pages.
+Lab.Step("item advisor: navigation, discovery, tracking and actions", function()
+    local W=R.Workshop; local D=W.AdvisorData
+    local requests=ah.requested
+    W.UI.Advisor.Open(2447); Lab.Settle(0.5)
+    local p=Win().Page("advisor")
+    Check("display","Advisor: first-class left navigation and item selection","advisor/2447",Win().Mode() .. "/" .. tostring(p.result and p.result.item))
+    p.search:SetText("silverleaf"); Lab.Settle(0.3)
+    Check("state","Advisor: search selects the real matching identity",765,p.result and p.result.item)
+    W.UI.Advisor.Open(2447); Lab.Settle(0.4)
+    Check("state","Advisor: external entry clears an old search",2447,p.result and p.result.item)
+    local tracked=D.Tracked()[2447]==true
+    Click(p.detail.track,"Advisor Track item"); Lab.Settle(0.3)
+    Check("click","Advisor: tracking toggles a saved explicit watch",not tracked,D.Tracked()[2447]==true)
+    Click(p.detail.track,"Advisor restore tracking"); Lab.Settle(0.3)
+    Check("state","Advisor: tracking can be restored",tracked,D.Tracked()[2447]==true)
+    Click(p.detail.recipes,"Advisor Recipe uses")
+    Check("display","Advisor: recipe uses open actual known recipes",true,p.uses and p.uses:IsShown())
+    if p.uses then Click(p.uses.close,"Advisor close recipe uses") end
+    p.detail.scroll:SetVerticalScroll(180)
+    Check("state","Advisor: evidence pane scrolls to alternatives",true,p.detail.scroll:GetVerticalScroll()>0)
+    p.detail.scroll:SetVerticalScroll(0)
+    Win().SetMode("opps"); Lab.Settle(0.3)
+    local pick
+    for _,r in ipairs(Rows(Lists().opps)) do if r.item and r.iconBtn then pick=r; break end end
+    local item=pick and pick.item
+    if pick then pick.iconBtn:Click("RightButton"); Lab.Settle(0.4) end
+    Check("click","Advisor: right-clicking an Opportunities item opens that item",tostring(item),tostring(p.result and p.result.item))
+    Check("state","Advisor: selected identity is saved",item,D.Selected())
+    Check("state","Advisor: discovery and interactions never request an auction scan",requests,ah.requested)
+    Win().SetMode("craft"); Lab.Settle(0.1)
 end)
 
 Lab.Step("pose for the screenshot", function()

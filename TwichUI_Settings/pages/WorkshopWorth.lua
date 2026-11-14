@@ -487,7 +487,7 @@ local function BuildList(L)
         b.icon = b:CreateTexture(nil, "ARTWORK"); b.icon:SetSize(20, 20); b.icon:SetPoint("LEFT", 24, 0)
         local icons = { recommend = "guide", vendor = "vendors", auction = "auctionHouse", disenchant = "mage",
             recent = "auctionHouse", marketvalue = "auctionHouse", historical = "reviewChanges", supply = "magicInventory",
-            quality = "troubleshooting", status = "reminders", source = "navigation", note = "reviewChanges" }
+            advisorwhy = "guide", advisorevidence = "troubleshooting", quality = "troubleshooting", status = "reminders", source = "navigation", note = "reviewChanges" }
         if R.Icons then R.Icons.Apply(b.icon, icons[t.id] or "guide", 20) else b.icon:Hide() end
         b.label:SetPoint("LEFT", 50, 0)
         b.label:SetWidth(LIST_W - 40)
@@ -579,7 +579,7 @@ function D.Refresh()
     local groups = {
         { "Recommendations & values", "recommend", "vendor", "auction", "disenchant" },
         { "Market information", "recent", "marketvalue", "historical", "supply", "quality" },
-        { "Details & provenance", "status", "source", "note" },
+        { "Details & provenance", "advisorwhy", "advisorevidence", "status", "source", "note" },
     }
     local listStart = searchY + 56
     local listY = listStart

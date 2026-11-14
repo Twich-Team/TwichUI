@@ -34,8 +34,8 @@ WL.HINT = "Hold Shift for details"
 ---------------------------------------------------------------------------
 -- label: the designer's name for it; what: one sentence for its tooltip; when: where a new one starts.
 WL.TYPES = {
-    { id = "recommend", label = "Recommendation", when = "always",
-      what = "Suggested: Vendor, Auction house or Disenchant, only when the estimates prove it. Otherwise why not." },
+    { id = "recommend", label = "Workshop recommendation", when = "always",
+      what = "Item Advisor: Vendor, Auction, Disenchant, Keep for crafting, or Insufficient data. Gross estimates never guarantee a sale." },
     { id = "vendor", label = "Vendor value", when = "always", what = "What a vendor pays for one." },
     { id = "auction", label = "Auction value", when = "always",
       what = "The cheapest listing your last scan saw, marked \"before fees\" until the auction house's cut is confirmed." },
@@ -54,6 +54,8 @@ WL.TYPES = {
     { id = "supply", label = "Supply and competition", when = "shift",
       what = "How many were listed in your last scan, and how many sit at or below the price you would compete with. Listings, never demand." },
     { id = "quality", label = "Market data quality", when = "shift", what = "How far the market figures can be trusted (Good, Fair, Limited) and why, in a few words." },
+    { id = "advisorwhy", label = "Advisor explanation", when = "shift", what = "The Item Advisor's factual reason and missing evidence. No extra planning on hover." },
+    { id = "advisorevidence", label = "Advisor evidence", when = "shift", what = "Strong, limited or insufficient evidence, without a statistical confidence claim." },
 }
 WL.BY_ID = {}
 for i, t in ipairs(WL.TYPES) do WL.BY_ID[t.id] = t; t.order = i end
@@ -137,6 +139,14 @@ function WL.Enabled() return WL.Get().enabled end
 WL.MARKET_IDS = { marketvalue = true, recent = true, historical = true, supply = true, quality = true }
 function WL.UsesMarket(layout)
     for _, e in ipairs(layout.lines) do if WL.MARKET_IDS[e.id] then return true end end
+    return false
+end
+
+-- The primary line keeps its established id/default and every saved layout.
+function WL.UsesAdvisor(layout, shift)
+    for _,e in ipairs(layout.lines) do
+        if (e.id=="recommend" or e.id=="advisorwhy" or e.id=="advisorevidence") and (e.when~="shift" or shift) then return true end
+    end
     return false
 end
 
@@ -301,6 +311,15 @@ function RENDER.recommend(r)
     local rec = WO.Recommend(r)
     if not rec then return nil end
     return { (rec.tone == "good" and "*" or "~") .. rec.text }
+end
+
+function RENDER.advisorwhy(r)
+    local a=r.advisor
+    if not a then return nil end
+    return { "~" .. (a.reasons[1] or a.text) .. (a.missing[1] and (" " .. a.missing[1]) or "") }
+end
+function RENDER.advisorevidence(r)
+    return r.advisor and { "Workshop evidence", r.advisor.evidenceText } or nil
 end
 
 function RENDER.vendor(r, ctx)
@@ -473,5 +492,12 @@ function WL.Example(key)
     local f = { now = EXAMPLE_NOW }
     for k, v in pairs(e.facts) do f[k] = v end
     local r = WO.Evaluate(f)
+    if W.Advisor then
+        local facts = e.market and e.market() or { nomarket=true }
+        facts.comp = facts.comp or {}
+        facts.comp.complete, facts.comp.age = true, 3*3600
+        facts.comp.quality = "good"
+        r.advisor = W.Advisor.Decide(1, { qty=1, sell=f.sell, bindType=f.bindType, bound=f.bound, facts=facts })
+    end
     return r, { money = WL.Money, ageText = PR.AgeText, market = EXAMPLE_MARKET, now = EXAMPLE_NOW, count = 1, facts = e.market and e.market() or nil }, e
 end

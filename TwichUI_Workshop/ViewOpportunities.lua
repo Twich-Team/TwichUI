@@ -226,6 +226,7 @@ local function RenderDetail(rows)
     local _, icon
     if rec.outItem then _, icon = O.ItemFacts(rec.outItem) end
     d.icon:SetTexture(icon or rec.icon or UI.ICON_BLANK)
+    d.item=rec.outItem
     d.name:SetText(rec.name)
     d.prof:SetText(rec.profName or "")
     d.profitLabel:SetText(Op.ProfitLabel(r))
@@ -464,6 +465,8 @@ local function BuildDetail()
     d.iconFrame = UI.ItemIcon(d.head, 46)
     d.iconFrame:SetPoint("TOPLEFT", 14, -12)
     d.icon = d.iconFrame.tex
+    d.advisorItem=CreateFrame("Button",nil,d.head); d.advisorItem:SetAllPoints(d.iconFrame)
+    UI.ItemTip(d.advisorItem,function() return d.item end)
     d.name = UI.Text(d.head, 19, K.text, "serif")
     d.name:SetPoint("TOPLEFT", 70, -12)
     d.name:SetWidth(DETAIL_W - 70 - 14)

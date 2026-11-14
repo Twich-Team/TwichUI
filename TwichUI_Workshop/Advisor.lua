@@ -50,11 +50,13 @@ function A.Decide(item, ctx)
         { action = "watch", state = "choice", note = "Refresh manually; future price direction is unknown." },
     }
     if not W.Int(item, 1, W.MAX_ID) then Reason("The item identity is unavailable.")
+    elseif qty == nil then Reason("The available bag quantity is unknown.")
     elseif qty == 0 then Reason("No copies are currently available in your bags.")
     elseif ctx.crafting and (ctx.crafting.reserved or 0) > 0 then
         r.action, r.evidence = "craft", "strong"
         Reason("This material is needed by your active crafting plan.")
         Reason("Keep the required quantity before considering a sale.")
+    elseif ctx.pendingPlan then Reason("Crafting plan dependencies are not fully checked yet.")
     elseif eligible == false then
         if sell and sell > 0 then r.action, r.evidence = "vendor", "strong" end
         Reason("This item cannot be listed on the Auction House.")
@@ -76,7 +78,7 @@ function A.Decide(item, ctx)
         for _, why in ipairs(s.reasons or {}) do r.missing[#r.missing + 1] = why end
     end
     local de = r.disenchant
-    if r.action ~= "craft" and qty ~= 0 and sell ~= nil and de.state == "ok" and de.expectedGross
+    if r.action ~= "craft" and not ctx.pendingPlan and W.Int(item,1,W.MAX_ID) and qty and qty > 0 and sell ~= nil and de.state == "ok" and de.expectedGross
         and (eligible == false or (eligible == true and s.state == "ok")) then
         local ceiling = math.max(sell, s.price or 0)
         local gain = W.Int(ctx.minGain, 0, W.Prices.MAX_COPPER) or A.Gain()
@@ -100,3 +102,6 @@ function A.Decide(item, ctx)
     r.text, r.evidenceText = A.LABEL[r.action], A.EVIDENCE[r.evidence]
     return r
 end
+
+A.TOOLTIP = {vendor="Vendor",auction="Auction",disenchant="Disenchant",craft="Keep for crafting",watch="Watch",unknown="Insufficient data"}
+function A.Tooltip(r) return "Workshop: " .. (A.TOOLTIP[r.action] or A.TOOLTIP.unknown) end

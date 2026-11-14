@@ -34,6 +34,7 @@ local function Market(key, o)
   return m
 end
 local NOW = D0 * DAY + 12 * 3600
+c.time=function() return NOW end
 local function Days(from, to, r) local t = {} for d = from, to do t[#t + 1] = Dp(d, r) end return t end
 local function Row(rows, id) for _, r in ipairs(rows) do if r.id == id then return r end end end
 
@@ -71,6 +72,7 @@ Same(Decide({ bound = true, sell = 0 }).action, "unknown")
 Same(Decide({ bindType = "nil" }).action, "unknown")
 Same(Decide({ variant = "suffix" }).action, "unknown")
 Same(Decide({ disenchant = true }).action, "auction", "unknown disenchant never blocks auction")
+Same(Decide({ qty = "nil" }).action,"unknown","unknown quantity")
 Same(Decide({ qty = 0 }).action, "unknown", "no copies cannot sell")
 Same(Decide({ qty = 100000 }).proceeds.gross, 10000000, "unit times quantity")
 Same(Sell.Proceeds(W.Prices.MAX_COPPER, 2).state, "unknown", "bounded arithmetic")
@@ -141,10 +143,60 @@ Check(D.Matches(job.byID[100], "material", "bags", true), "bag and auctionable f
 Check(not D.Matches(job.byID[101], "", "bags", false), "bags only")
 Same(D.Decide(100,true,job.byID[100]).action, "craft", "actual planner demand is authoritative")
 Same(D.Context(100,true,job.byID[100]).crafting.reserved,5)
+-- Exact bag-copy binding overrides a generic BoE type; all-bound copies cannot auction.
+local bagrow={info={sell=10,bindType=2,quality=1,classID=7},uses={},slots=true,unbound=3}
+Same(D.Context(100,false,bagrow).qty,3)
+local bagAdvice=D.Decide(100,false,bagrow); Same(bagAdvice.action,"auction", table.concat(bagAdvice.reasons," ") .. table.concat(bagAdvice.missing," "))
+bagrow.unbound=nil; bagrow.bound=9
+Same(D.Decide(100,false,bagrow).action,"vendor")
+bagrow.variant=true; bagrow.unbound=3
+Same(D.Decide(100,false,bagrow).action,"unknown")
 local m = Healthy(); for id = 1000, 20999 do m.items[id] = m.items[100] end
 local big = D.Catalog(); local count, maxms, t = 0,0,os.clock()
 repeat local t0=os.clock(); local _,err=big:Step(); Check(not err,err); maxms=math.max(maxms,(os.clock()-t0)*1000); count=count+1 until big.done
 Same(#big.rows,20002); Check(count >= 250, "discovery cooperatively sliced")
 print(("advisor catalog 20002: %.4fs, %d slices, max %.3fms"):format(os.clock()-t,count,maxms))
 Check(D.Track(100)); Same(D.Tracked()[100],nil,"toggle tracking")
+-- The actual tooltip renderer uses the default configurable recommendation id.
+local chunk=assert(loadfile(ROOT .. "../TwichUI_Workshop/WorthLayout.lua")); setfenv(chunk,c); chunk()
+local WL=W.WorthLayout
+local eval=W.Worth.Evaluate({sell=10,bindType=1})
+eval.advisor=A.Decide(100,{qty=1,sell=10,bindType=1})
+local ctx={money=tostring,ageText=tostring}
+local default=WL.Lines(eval,ctx,WL.Get(),false)
+Check(table.concat(default[2]," "):find("Workshop: Vendor",1,true),"default Normal recommendation")
+for _,action in ipairs({"vendor","auction","disenchant","craft","unknown"}) do
+  eval.advisor.action=action
+  local lines=WL.Lines(eval,ctx,{enabled=true,lines={{id="recommend",when="always"}}},false)
+  Check(lines[2][1]:find(A.Tooltip(eval.advisor),1,true),"simple primary wording " .. action)
+end
+local shifted={enabled=true,lines={{id="recommend",when="shift"}}}
+local normal=WL.Lines(eval,ctx,shifted,false) or {}
+for _,line in ipairs(normal) do Check(not line[1]:find("Workshop:",1,true),"Shift-only recommendation hidden normally") end
+Check(WL.Lines(eval,ctx,shifted,true)~=nil,"Shift shows configured recommendation")
+Check(WL.Lines(eval,ctx,{enabled=true,lines={}},true)==nil,"removed recommendation stays removed")
+Check(WL.UsesAdvisor({lines={{id="advisorwhy",when="shift"}}},false)==false,"hidden detail does no advisor work")
+Check(WL.UsesAdvisor({lines={{id="advisorwhy",when="shift"}}},true),"Shift detail requests advisor")
+-- Enable/disable belongs to WorthTip, before the shared presentation builder.
+c.time=function() return NOW end
+local drawn={}
+c.GameTooltip={ AddLine=function(_,s) drawn[#drawn+1]=s end, AddDoubleLine=function(_,a,b) drawn[#drawn+1]=a .. " " .. b end }
+c.C_Item.GetItemLocation=function() return {IsBagAndSlot=function() return true end} end
+c.C_Item.DoesItemExist=function() return true end
+c.C_Item.GetItemID=function() return 100 end
+c.C_Item.GetItemLink=function() return "item:100" end
+c.C_Item.IsBound=function() return false end
+c.C_Item.GetStackCount=function() return 20 end
+c.IsShiftKeyDown=function() return false end
+local tipChunk=assert(loadfile(ROOT .. "../TwichUI_Workshop/WorthTip.lua")); setfenv(tipChunk,c); tipChunk()
+session.QueueStrategy=function() error("hover must never start or request a planner job") end
+Check(WL.Set({enabled=false,lines={{id="recommend",when="always"}}}))
+W.WorthTip.OnItem(c.GameTooltip,{guid="Item-100"}); Same(#drawn,0,"disabled tooltip adds nothing")
+Check(WL.Set({enabled=true,lines={{id="recommend",when="always"}}}))
+W.WorthTip.OnItem(c.GameTooltip,{guid="Item-100"})
+Check(table.concat(drawn," "):find("Workshop: Auction",1,true),"actual Normal tooltip calls Advisor")
+Check(WL.Set({enabled=true,lines={{id="vendor",when="always"}}}))
+drawn={}; W.WorthTip.OnItem(c.GameTooltip,{guid="Item-100"})
+Check(not table.concat(drawn," "):find("Workshop:",1,true),"removing primary is respected by the live renderer")
+Same(W.WorthTip.faults,0,"live renderer has no faults")
 print("advisor: OK")

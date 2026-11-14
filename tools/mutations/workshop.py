@@ -757,3 +757,16 @@ m("market.advisor.partial-price", "TwichUI_Workshop/Sell.lua",
 m("market.advisor.unit-total", "TwichUI_Workshop/Sell.lua",
   'price * qty, qty, price', 'price, qty, price',
   "gross return for a stack is reported as one item", ["test_workshop_advisor.lua"])
+
+m("market.advisor.unknown-quantity", "TwichUI_Workshop/Advisor.lua",
+  'elseif qty == nil then Reason', 'elseif false then Reason',
+  "unknown bag quantities can receive a sale recommendation", ["test_workshop_advisor.lua"])
+m("market.disenchant.unverified-table", "TwichUI_Workshop/Disenchant.lua",
+  'snapshot and snapshot.verified == true and snapshot.client', 'snapshot and snapshot.client',
+  "an unverified outcome table can be treated as verified Forever evidence", ["test_workshop_advisor.lua"])
+m("market.disenchant.ignore-probability", "TwichUI_Workshop/Disenchant.lua",
+  'o.p * m.qty * p.value', 'm.qty * p.value',
+  "expected value counts every possible outcome as certain", ["test_workshop_advisor.lua"])
+m("crafting.advisor.ignore-reservation", "TwichUI_Workshop/Advisor.lua",
+  'elseif ctx.crafting and (ctx.crafting.reserved or 0) > 0 then', 'elseif false then',
+  "materials needed by the active plan can be recommended for sale", ["test_workshop_advisor.lua"])

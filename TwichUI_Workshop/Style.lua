@@ -437,7 +437,8 @@ function UI.ItemTip(btn, getItem)
         local item = getItem()
         if GameTooltip and item then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            if not pcall(GameTooltip.SetItemByID, GameTooltip, item) then GameTooltip:Hide() end
+            if not pcall(GameTooltip.SetItemByID, GameTooltip, item) then GameTooltip:Hide()
+            elseif UI.Advisor then GameTooltip:AddLine("Right-click: Item Advisor",0.65,0.58,0.45) end
         end
     end
     local function Leave() if GameTooltip then GameTooltip:Hide() end end
@@ -447,8 +448,10 @@ function UI.ItemTip(btn, getItem)
         btn:SetScript("OnEnter", Enter)
         btn:SetScript("OnLeave", Leave)
     end
-    btn:SetScript("OnClick", function(self, ...)
+    btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    btn:SetScript("OnClick", function(self, button, ...)
         local item = getItem()
+        if item and button=="RightButton" and UI.Advisor then UI.Advisor.Open(item); return end
         if not (item and IsModifiedClick and IsModifiedClick("CHATLINK") and ChatEdit_InsertLink) then
             if self.twichRowClick then self.twichRowClick(self, ...) end   -- an unmodified click chooses the row it sits on
             return

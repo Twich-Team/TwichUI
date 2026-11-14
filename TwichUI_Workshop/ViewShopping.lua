@@ -245,6 +245,14 @@ local function MakeShopRow(parent)
 end
 
 ---------------------------------------------------------------------------
+-- Cross-page selection uses the same row key as a click in this list.
+UI.OpenShopping = function(item)
+    chosen = tostring(item) .. ":own"
+    UI.Go("shop")
+    for _,r in ipairs(shopView and shopView.plan.rows or {}) do if r.item==item then chosen=Key(r); break end end
+    UI.Redraw()
+end
+
 -- The chosen material's details
 ---------------------------------------------------------------------------
 local function RenderDetail(plan, ctx)

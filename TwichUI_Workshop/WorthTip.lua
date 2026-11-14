@@ -121,6 +121,10 @@ local function Add(tooltip, data)
     if W.Facts and f.market and WL.UsesMarket(layout) then
         ctx.facts = W.Facts.Of(f.item, { market = f.marketTable, variant = f.variant ~= nil, now = f.now })
     end
+    if W.AdvisorData and WL.UsesAdvisor(layout, Shift()) then
+        ctx.facts = ctx.facts or W.Facts.Of(f.item, { market=f.marketTable, variant=f.variant~=nil, now=f.now })
+        r.advisor = W.AdvisorData.Tooltip(f, ctx.facts)
+    end
     local lines = WL.Lines(r, ctx, layout, Shift())
     carrying = tooltip   -- even with no lines now: a Shift change may bring some
     if not lines then return end

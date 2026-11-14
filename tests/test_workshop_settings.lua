@@ -30,6 +30,9 @@ for _, key in ipairs({ "prices", "guild", "notices" }) do
     assert(L.SetOption(key, false) and called[key] == false, "uses existing setter: " .. key)
 end
 assert(not L.SetOption("unknown", true))
+R.Workshop.Advisor={SetGain=function(v) called.gain=v; return v~=nil end}
+assert(L.SetChoice("advisorGain","1000") and called.gain==1000,"minimum gain uses the Advisor setter")
+assert(not L.SetChoice("advisorGain","invalid"),"invalid minimum gain is refused")
 local headers = {}
 for _, row in ipairs(K.pages.workshop.rows) do
     if row.kind == "header" then headers[#headers + 1] = row:GetName() end

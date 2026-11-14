@@ -62,6 +62,9 @@ K.Page({
         load:AddShownPredicate(function() return not Loaded() end)
         Option("prices", "workshopDetailedPrices", "Detailed price display",
             "Off: uncertain costs say from or at least. On: show supported price ranges. Pricing and calculations are unchanged.", false)
+        Choice("advisorGain", "workshopAdvisorGain", "Advisor minimum gain", "0", {
+            { "0", "No copper minimum" }, { "100", "1 silver" }, { "1000", "10 silver" }, { "10000", "1 gold" },
+        }, "Minimum gross listing gain per item above vendor sell value before considering Auction. The Advisor also requires a 1.5x vendor margin. Fees, deposits and a sale are not guaranteed.")
         K.Button("Workshop window", "Open Workshop", function() Launcher().Open(); K.RefreshOverview() end,
             "Open Workshop. You can also use /tui workshop.")
 

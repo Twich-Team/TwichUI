@@ -19,11 +19,13 @@ end
 local function Select(item)
     selected = item
     D.Select(item)
-    if page then Paint() end
+    if page then page.detail.scroll:SetVerticalScroll(0); Paint() end
 end
 function V.Open(item)
     if not W.Int(item,1,W.MAX_ID) then return false end
     selected = item; D.Select(item)
+    query,source,category,auctionable="","all",nil,false
+    if page then page.resetFilters(); page.detail.scroll:SetVerticalScroll(0) end
     stamp = nil
     if W.Window then W.Window.Show(); W.Window.SetMode("advisor") end
     return true
@@ -207,6 +209,7 @@ Search=function()
     end
     Step()
 end
+function V.Invalidate() stamp=nil end
 local function Key()
     local m=S.PriceSource().market
     return table.concat({m and W.Valuation.Generation(m) or "none",tostring(W.Strategy.epoch),tostring(S.observations)},"|")
@@ -262,6 +265,9 @@ local function Build(p)
         local w=p:GetWidth(); if w<=0 then w=940 end
         p.card:SetWidth(math.max(260,math.floor(w*0.34)))
         p.search:SetWidth(math.max(220,w-534))
+    end
+    p.resetFilters=function()
+        sourceIndex=1; p.search:SetText(""); p.source.text:SetText("All known items"); p.category.text:SetText("All categories"); p.auctionable:SetOn(false)
     end
     p:SetScript("OnSizeChanged",Layout)
     p:HookScript("OnHide",function()

@@ -395,6 +395,7 @@ local function RenderDetail(queue, byId, totals)
     local e = r.entry
     d.empty:Hide()
     d.head:Show()
+    d.item=e.outItem
     d.name:SetText(e.name)
     d.icon:SetTexture(e.icon or UI.ICON_BLANK)
     d.prof:SetText(e.profName or "")
@@ -604,6 +605,8 @@ local function BuildDetail()
     d.iconFrame = UI.ItemIcon(d.head, 48)
     d.iconFrame:SetPoint("TOPLEFT", 14, -12)
     d.icon = d.iconFrame.tex
+    d.advisorItem=CreateFrame("Button",nil,d.head); d.advisorItem:SetAllPoints(d.iconFrame)
+    UI.ItemTip(d.advisorItem,function() return d.item end)
     d.name = UI.Text(d.head, 19, K.text, "serif")
     d.name:SetPoint("TOPLEFT", 74, -10)
     d.name:SetPoint("RIGHT", d.head, "RIGHT", -14, 0)
