@@ -2080,7 +2080,7 @@ Lab.Step("pose for the screenshot", function()
         Check("display","pose: no invented identities in an empty catalog",0,#p.list.data)
         Check("display","pose: empty catalog hides unperformable actions",false,p.detail.track:IsShown())
         Check("display","pose: empty catalog explains item selection",true,p.detail.empty:IsShown())
-    elseif view == "advisoralt" or view == "advisorlong" or view == "advisor" or view == "advisorsmall" or view == "advisorempty" or view == "advisorscaled" then
+    elseif view == "advisorsource" or view == "advisorcategory" or view == "advisoralt" or view == "advisorlong" or view == "advisor" or view == "advisorsmall" or view == "advisorempty" or view == "advisorscaled" then
         local W=R.Workshop
         local ids={}; for _,e in ipairs(W.Queue.Entries()) do ids[#ids+1]=e.id end
         for _,id in ipairs(ids) do W.Session.Remove(id) end
@@ -2109,12 +2109,25 @@ Lab.Step("pose for the screenshot", function()
                 return n,l,id==2447 and 3 or q,lev,req,kind,sub,stack,equip,icon,sell,class,subclass,bind
             end
         end
+        if view=="advisorcategory" then
+            local info=C_Item.GetItemInfo
+            C_Item.GetItemInfo=function(id)
+                local n,l,q,lev,req,kind,sub,stack,equip,icon,sell,class,subclass,bind=info(id)
+                return n,l,q,lev,req,id==3371 and "Reagent" or "Trade Goods",sub,stack,equip,icon,sell,class,subclass,bind
+            end
+        end
         W.UI.Advisor.Open(2447); Lab.Settle(0.8)
         local p=Win().Page("advisor")
         Check("display","pose: Advisor is a first-class sidebar page","advisor/true",Win().Mode() .. "/" .. tostring(Win().Frame().tabAdvisor:IsShown()))
         Check("state","pose: real source catalog selected Peacebloom",2447,p.result and p.result.item)
         Check("display","pose: advisor never claims net proceeds",true,p.result and (not p.result.proceeds or p.result.proceeds.net==nil))
         Check("state","pose: expected advice",view=="advisorempty" and "unknown" or "auction",p.result and p.result.action)
+        if view=="advisorsource" or view=="advisorcategory" then
+            local before=p.list.data
+            Click(view=="advisorsource" and p.source or p.category,"Advisor open filter dropdown")
+            Lab.Settle(0.2)
+            Check("state","pose: opening menu preserves the result collection",true,before==p.list.data)
+        end
         if view=="advisoralt" then
             p.detail.scroll:SetVerticalScroll(190)
             Check("display","pose: five explicit action alternatives",5,#p.detail.alts)

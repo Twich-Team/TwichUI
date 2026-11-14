@@ -229,3 +229,37 @@ shell, scrollable evidence, cycle filters and existing eight-observation chart
 are the documented adaptations of the mockup. No Auction House replacement,
 automated posting, advanced selling strategy, shared chart engine, Ledger,
 profession guide redesign or market-server integration was started.
+
+## A8.1 refinement checkpoints (active)
+
+The real-client screenshot and refinement request retain the approved page layout.
+The original A8 engine, Tooltip Designer integration and verified disenchant
+limitations remain in force. Stop after these four checkpoints:
+
+1. Native source/category dropdowns; In bags first-use default; saved source
+   preference; direct selection/dismissal/combined filters and open-menu captures.
+2. Reproduce metadata-driven scroll resets, then preserve viewport and selection
+   across asynchronous/same-set refreshes and page return. Exercise large lists,
+   wheel/scrollbar handlers, search/category and nonzero-scroll captures.
+3. Separate supported/tentative/insufficient advice in page, rows and the existing
+   configurable Normal tooltip field. Preserve supported pricing safeguards,
+   ownership, plan protection, disenchant eligibility/expected-value checks and
+   missing-data behavior. Add evidence/tooltip regressions and market mutations.
+4. Review every relevant visual state and run the complete full verification
+   tier once at the final source state. Record evidence, commit/push and stop.
+
+Checkpoint 1 sources deliberately use the three existing supported discovery
+sources: In bags, Tracked items, All known items. No bank freshness is implied.
+The source preference uses the existing account view record, defaults narrowly
+when absent/invalid, and respects the newer-schema write guard. External item
+navigation temporarily reveals All known items without overwriting that preference.
+Native Forever radio menus own scale, positioning, selection and dismissal; the
+Workshop uses the existing core dropdown trigger and material styling.
+
+A8.1 checkpoint 1 verified: fast Advisor 2/2; feature Advisor 44/44 test
+files/modules and eight simulator launches passed (188.903 s total). Native
+source/category menus personally screenshot-reviewed in
+`test-output/simlab/artifacts/workshop-e1xTxWMj/`: both open beneath their
+controls, above the evidence panel, with direct radio choices. No live-client
+pointer or reload test is claimed. The first capture exposed cursor anchoring;
+the corrected final run uses the native anchored-menu API.

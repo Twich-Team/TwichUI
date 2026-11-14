@@ -16,6 +16,17 @@ local function View(create)
     return db.view
 end
 function D.Selected() local v = View(); return v and W.Int(v.advisorItem, 1, W.MAX_ID) end
+local sources = { bags=true, tracked=true, all=true }
+function D.Source()
+    local v=View()
+    return v and sources[v.advisorSource] and v.advisorSource or "bags"
+end
+function D.SetSource(value)
+    local v=sources[value] and View(true)
+    if not v then return false end
+    v.advisorSource=value
+    return true
+end
 function D.Select(item)
     item = W.Int(item, 1, W.MAX_ID)
     local v = item and View(true)

@@ -6,7 +6,7 @@ local UI, D, A, S = W.UI, W.AdvisorData, W.Advisor, W.Session
 local V = {}
 UI.Advisor = V
 local page, K, catalog, stamp, selected, result
-local query, source, category, auctionable = "", "all", nil, false
+local query, source, category, auctionable = "", D.Source(), nil, false
 local token, searchToken = 0, 0
 local filtered, categories = {}, {}
 local reveal, searchDirty = true, false
@@ -29,6 +29,8 @@ end
 function V.Open(item)
     if not W.Int(item,1,W.MAX_ID) then return false end
     selected = item; D.Select(item); D.Request(item,true); reveal=true
+    -- Explicit cross-page entry may reveal an item outside the saved source.
+    -- This temporary source does not replace the player's discovery preference.
     query,source,category,auctionable="","all",nil,false
     if page then page.resetFilters(); page.detail.scroll:SetVerticalScroll(0) end
     stamp = nil
@@ -283,16 +285,48 @@ local function Build(p)
         query=self:GetText() or ""; searchToken=searchToken+1
         local mine=searchToken; C_Timer.After(0.15,function() if mine==searchToken then Search() end end)
     end)
-    local sourceIndex=1; local sources={{"all","All known items"},{"bags","In bags"},{"tracked","Tracked items"}}
-    p.source=UI.Button(p,"All known items",145,"secondary",function()
-        sourceIndex=sourceIndex%#sources+1; source=sources[sourceIndex][1]; p.source.text:SetText(sources[sourceIndex][2]); Search()
-    end,30); p.source:SetPoint("LEFT",p.search,"RIGHT",10,0)
-    UI.Tip(p.source,"Item source","Click to cycle: all known items, items in bags, tracked items. Includes your saved market and known recipes, not a global database.")
-    p.category=UI.Button(p,"All categories",145,"secondary",function()
-        local nextIndex=1
-        for i,name in ipairs(categories) do if name==category then nextIndex=i+1 end end
-        category=categories[nextIndex]; p.category.text:SetText(category or "All categories"); Search()
-    end,30); p.category:SetPoint("LEFT",p.source,"RIGHT",8,0)
+    local sources={{"bags","In bags"},{"tracked","Tracked items"},{"all","All known items"}}
+    local function SourceLabel()
+        for _,entry in ipairs(sources) do if entry[1]==source then return entry[2] end end
+    end
+    -- Use the core's dropdown trigger and Forever's native radio menus: the
+    -- menu manager owns positioning, scale, Escape/outside dismissal and pooling.
+    local menu
+    local function Dropdown(label, choices, current, choose)
+        local b
+        b=R.ChronicleStyle.DropButton(p,145,function()
+            if menu then menu:Close(); menu=nil end
+            local root=MenuUtil.CreateRootMenuDescription(MenuVariants.GetDefaultMenuMixin())
+            do
+                root:SetMinimumWidth(145); root:SetScrollMode(320)
+                for _,entry in ipairs(choices()) do
+                    local value,text=entry[1],entry[2]
+                    local radio=root:CreateRadio(text,function() return current()==value end,function()
+                        if current()~=value then choose(value); Search() end
+                    end)
+                    radio:AddInitializer(function(button)
+                        if button.fontString then UI.Paint(button.fontString,current()==value and K.bronzeText or K.text) end
+                        if button.highlight then button.highlight:SetColorTexture(0.43,0.30,0.14,0.55) end
+                    end)
+                end
+                root:AddMenuReleasedCallback(function() menu=nil end)
+            end
+            menu=Menu.GetManager():OpenMenu(b,root,AnchorUtil.CreateAnchor("TOPLEFT",b,"BOTTOMLEFT",0,-2))
+        end,UI.K)
+        b:SetHeight(30); UI.CL.Dress(b,"dropdown"); b.text:SetText(label)
+        return b
+    end
+    p.source=Dropdown(SourceLabel(),function() return sources end,function() return source end,function(value)
+        source=value; D.SetSource(value); p.source.text:SetText(SourceLabel())
+    end); p.source:SetPoint("LEFT",p.search,"RIGHT",10,0)
+    UI.Tip(p.source,"Item source","Choose carried items, tracked items or known identities from your saved market and recipes. No bank contents or global item database are implied.")
+    p.category=Dropdown("All categories",function()
+        local choices={{false,"All categories"}}
+        for _,name in ipairs(categories) do choices[#choices+1]={name,name} end
+        return choices
+    end,function() return category or false end,function(value)
+        category=value or nil; p.category.text:SetText(category or "All categories")
+    end); p.category:SetPoint("LEFT",p.source,"RIGHT",8,0)
     p.auctionable=UI.Switch(p,"Auctionable",function(b) auctionable=not auctionable; b:SetOn(auctionable); Search() end)
     p.auctionable:SetPoint("TOPRIGHT",-2,-67)
     UI.Tip(p.auctionable,"Known auction eligibility","Only item types confirmed unbound. Bound-on-equip and bound-on-use copies require individual inspection.")
@@ -309,10 +343,11 @@ local function Build(p)
         p.search:SetWidth(math.max(220,w-534))
     end
     p.resetFilters=function()
-        sourceIndex=1; p.search:SetText(""); p.source.text:SetText("All known items"); p.category.text:SetText("All categories"); p.auctionable:SetOn(false)
+        p.search:SetText(""); p.source.text:SetText(SourceLabel()); p.category.text:SetText("All categories"); p.auctionable:SetOn(false)
     end
     p:SetScript("OnSizeChanged",Layout)
     p:HookScript("OnHide",function()
+        if menu then menu:Close(); menu=nil end
         token=token+1; searchToken=searchToken+1; catalog=nil; filtered={}; stamp=nil; result=nil; reveal=true; searchDirty=false
         p.list:SetData({}); p.result=nil
         for _,row in ipairs(p.list.rows) do row.data=nil end

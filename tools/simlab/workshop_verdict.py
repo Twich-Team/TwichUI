@@ -42,9 +42,9 @@ VIEWS = {"overview": "TwichUIWorkshop", "craft": "TwichUIWorkshop", "opps": "Twi
          "shopmix": "TwichUIWorkshop", "shopcollect": "TwichUIWorkshop", "strategy": "TwichUIWorkshop", "confirm": "TwichUIWorkshop",
          "stratlong": "TwichUIWorkshop", "planning": "TwichUIWorkshop", "nodata": "TwichUIWorkshop", "override": "TwichUIWorkshop",
          "compact": "TwichUIWorkshopCompact", "compactcraft": "TwichUIWorkshopCompact", "tooltip": "TwichUIWorkshop", "smallstrat": "TwichUIWorkshop",
-         "shopafter": "TwichUIWorkshop", "notice": "TwichUIWorkshop", "advisor": "TwichUIWorkshop", "advisorsmall": "TwichUIWorkshop", "advisorempty": "TwichUIWorkshop", "advisorscaled": "TwichUIWorkshop", "advisorlong": "TwichUIWorkshop", "advisorvacant": "TwichUIWorkshop", "advisoralt": "TwichUIWorkshop"}
+         "shopafter": "TwichUIWorkshop", "notice": "TwichUIWorkshop", "advisor": "TwichUIWorkshop", "advisorsmall": "TwichUIWorkshop", "advisorempty": "TwichUIWorkshop", "advisorscaled": "TwichUIWorkshop", "advisorlong": "TwichUIWorkshop", "advisorvacant": "TwichUIWorkshop", "advisoralt": "TwichUIWorkshop", "advisorsource": "TwichUIWorkshop", "advisorcategory": "TwichUIWorkshop"}
 SHOTS = ("overview", "craft", "opps", "shop", "design", "small", "smallov", "empty", "history", "craftlong", "shopmix", "shopcollect",
-         "strategy", "confirm", "stratlong", "planning", "nodata", "override", "compact", "compactcraft", "tooltip", "smallstrat", "shopafter", "notice", "advisor", "advisorsmall", "advisorempty", "advisorscaled", "advisorlong", "advisorvacant", "advisoralt")
+         "strategy", "confirm", "stratlong", "planning", "nodata", "override", "compact", "compactcraft", "tooltip", "smallstrat", "shopafter", "notice", "advisor", "advisorsmall", "advisorempty", "advisorscaled", "advisorlong", "advisorvacant", "advisoralt", "advisorsource", "advisorcategory")
 VOICE, UTF8 = "voice-settings-unsupplied", "addon-message-invalid-utf8"
 CHECK = re.compile(r"^SIMLAB check (PASS|FAIL) \[([^\]]+)\] (.*?) \| expected=(.*?) \| actual=(.*)$", re.M)
 

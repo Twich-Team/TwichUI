@@ -81,6 +81,31 @@ for _, f in ipairs({ "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Obs
   local chunk = assert(loadfile(ROOT .. "../TwichUI_Workshop/" .. f)); setfenv(chunk, c); chunk("TwichUI_Workshop", {})
 end
 local W = R.Workshop
+-- Record the same native menu contract used by Forever. Opening alone never picks.
+local opened
+local rootMenu
+c.MenuVariants={GetDefaultMenuMixin=function() return {} end}
+c.AnchorUtil={CreateAnchor=function(...) return {...} end}
+c.MenuUtil={CreateRootMenuDescription=function()
+  local root={entries={},SetMinimumWidth=function() end,SetScrollMode=function() end}
+  function root:AddMenuReleasedCallback(fn) self.release=fn end
+  function root:CreateRadio(text,selected,choose)
+    local entry={text=text,selected=selected,choose=function() choose(); opened:Close() end}
+    self.entries[#self.entries+1]=entry
+    return {AddInitializer=function() end}
+  end
+  rootMenu=root; return root
+end}
+c.Menu={GetManager=function() return {OpenMenu=function(_,owner,root,anchor)
+  local menu={entries=root.entries,closed=false,anchor=anchor}
+  function menu:Close() self.closed=true; root.release() end
+  opened=menu; return menu
+end} end}
+local function Choose(button,label)
+  button:GetScript("OnClick")(button)
+  for _,entry in ipairs(opened.entries) do if entry.text==label then entry.choose(); return end end
+  error("missing menu choice: " .. label)
+end
 local pending = {}
 c.C_Timer.After = function(_,fn) pending[#pending+1]=fn end
 local function Pump()
@@ -92,19 +117,41 @@ g.bags[10],g.bags[11]=5,0
 W.Session.AllRecipes=function() return { {id=1,name="Potion",outItem=11,mats={{item=10,qty=1}}} } end
 W.Window.Show()
 Check(W.Window.Frame().tabAdvisor,"first-class sidebar control")
-W.UI.Advisor.Open(10); Pump()
+W.Window.SetMode("advisor"); Pump()
 local p=W.Window.Page("advisor")
 Same(W.Window.Mode(),"advisor"); Same(p.result.item,10); Same(p.result.action,"unknown")
 Check(p.detail.empty:IsShown()==false,"detail shown")
+Same(#p.list.data,1,"first use shows carried items"); Same(p.source.text:GetText(),"In bags")
+Same(W.AdvisorData.Source(),"bags")
+p.source:GetScript("OnClick")(p.source)
+Same(#p.list.data,1,"opening source menu does not refresh results")
+Check(opened.entries[1].selected(),"current source marked")
+opened:Close(); Same(W.AdvisorData.Source(),"bags","dismissal preserves preference")
+Choose(p.source,"All known items"); Pump()
+Same(W.AdvisorData.Source(),"all","explicit source persisted")
+Same(opened.anchor[1],"TOPLEFT","menu is anchored below its trigger")
+Same(opened.anchor[3],"BOTTOMLEFT")
+c.TwichUIDB.workshop.view.advisorSource="invalid"
+Same(W.AdvisorData.Source(),"bags","invalid saved source defaults narrowly")
+W.AdvisorData.SetSource("all")
+
 Same(#p.list.data,2); Check(p.detail.recipes:IsEnabled(),"known uses action")
 p.search:SetText("silver"); p.search:GetScript("OnTextChanged")(p.search); Pump()
 Same(#p.list.data,1); Same(p.result.item,11)
 p.search:SetText(""); p.search:GetScript("OnTextChanged")(p.search); Pump()
-p.source:GetScript("OnClick")(p.source); Pump(); Same(#p.list.data,1); Same(p.list.data[1].item,10)
+Choose(p.source,"In bags"); Pump(); Same(#p.list.data,1); Same(p.list.data[1].item,10)
 W.AdvisorData.Track(11)
-p.source:GetScript("OnClick")(p.source); Pump(); Same(#p.list.data,1); Same(p.result.item,11)
+Choose(p.source,"Tracked items"); Pump(); Same(#p.list.data,1); Same(p.result.item,11)
+Choose(p.category,"Trade Goods"); Pump(); Same(#p.list.data,1)
+Choose(p.category,"All categories"); Pump(); Same(#p.list.data,1)
 W.UI.Advisor.Open(10); Pump(); Same(p.result.item,10,"cross-page entry resets stale filters")
 Same(#p.list.data,2,"cross-page entry restores all known items")
+Same(W.AdvisorData.Source(),"tracked","external reveal does not overwrite source preference")
+p.auctionable:GetScript("OnClick")(p.auctionable); Pump(); Same(#p.list.data,2,"auctionable combines with all known")
+Choose(p.source,"In bags"); Pump(); Same(#p.list.data,1,"auctionable combines with bag filter")
+p.search:SetText("silver"); p.search:GetScript("OnTextChanged")(p.search); Pump(); Same(#p.list.data,0,"search combines with source")
+W.UI.Advisor.Open(10); Pump()
+
 Check(W.Snapshot().advisorItems>0,"discovery retained count is visible to diagnostics")
 local infoReader=c.C_Item.GetItemInfo
 c.C_Item.GetItemQualityColor=function(q) if q==3 then return 0,0.44,0.87 end return 1,1,1 end
