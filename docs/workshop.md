@@ -84,6 +84,17 @@ The **Scan prices** button (top right of the view) starts a scan only when press
 
 **Updating prices is manual (owner decision after A6, kept in A7).** A scan starts only when the player presses **Scan prices** (in the Workshop or on the Auction House window); opening the Auction House loads nothing, makes no request and offers no prompt (`R.WorkshopAuto.POLICY = "manual"`). The A6 detector, capability gate (`CAPABILITY`, Test Lab `autoscan.*`) and the `workshopAutoScan` switch (default off, no longer on the settings page) are kept for a later decision. While any scan runs the button reads **Stop** (a Stop writes nothing; not offered in the short saving step). Details: `docs/workshop/market-data-foundation-v2.md`, "A6 implementation report" and "A7 as built".
 
+**Item Advisor (A8).** A first-class left-sidebar page combines observed competition,
+known vendor sell values, current-plan dependencies and uncertain alternatives.
+Normal bag/bank tooltips use the existing customizable recommendation field for
+`Workshop: Vendor / Auction / Disenchant / Keep for crafting / Insufficient data`.
+Missing disenchant outcomes do not block a supported sale recommendation. No
+verified Forever outcome table ships, so Disenchant remains an uncertain or
+unavailable alternative in production; expected-value arithmetic is covered by
+synthetic verified snapshots. Right-click a Workshop item icon to research it.
+See [A8 implementation and verification](workshop/item-advisor.md). The older
+"What's it worth?" discussion below describes the pre-A8 comparison policy.
+
 **Market figures (A7).** The Opportunities details show Lowest listing, Competing price, Recent price, Market value (14d), Historical value (60d), Supply and Data quality (`MarketFacts.lua`, over the Market services), with the existing chart below; the tooltip has a Market value line (Always) and four Hold Shift lines; Shopping prices the auction option for the quantity still missing with `Market.Cost` (exact, a range, "at least", or not enough listed). Profit still uses the lowest listing. See "A7 as built".
 
 **On the auction house window** (`AuctionButton.lua`): the same **Scan prices** button sits under the window's lower right corner, with the same progress bar and message beside it while a scan runs and the last message

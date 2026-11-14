@@ -770,3 +770,8 @@ m("market.disenchant.ignore-probability", "TwichUI_Workshop/Disenchant.lua",
 m("crafting.advisor.ignore-reservation", "TwichUI_Workshop/Advisor.lua",
   'elseif ctx.crafting and (ctx.crafting.reserved or 0) > 0 then', 'elseif false then',
   "materials needed by the active plan can be recommended for sale", ["test_workshop_advisor.lua"])
+
+m("market.advisor.invented-gross-quantity", "TwichUI_Workshop/Advisor.lua",
+  's.price and qty and qty > 0 and W.Sell.Proceeds(s.price, qty)',
+  's.price and W.Sell.Proceeds(s.price, math.max(1, qty or 1))',
+  "an absent or unknown stack is displayed with an invented one-item gross total", ["test_workshop_advisor.lua"])

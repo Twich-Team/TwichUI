@@ -25,6 +25,7 @@ Replace `workshop-settings` with one of these nonempty groups:
 | Group | Direct scope |
 |---|---|
 | `workshop-settings` | Workshop settings, Tooltip Designer, worth layout/tips and Workshop window |
+| `item-advisor` | Advisor recommendations, selling and disenchant evidence, discovery, page, market/crafting dependencies and selected Advisor simulator poses |
 | `workshop` | All Workshop tests and Test Lab tests |
 | `crafting` | Crafting, shopping, stock, planner, strategy and compact views |
 | `market` | Prices, distribution, history, valuation, schema and automatic scans |

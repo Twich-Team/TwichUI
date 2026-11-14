@@ -57,6 +57,9 @@ Same(A.Gain(), 100); Check(not A.SetGain(-1), "invalid gain refused")
 Check(A.SetGain(0), "zero preference preserved")
 Healthy()
 local r = Decide()
+A.SetGain(10000)
+Same(Decide().action,r.action,"pure snapshot does not read a changing saved preference")
+A.SetGain(0)
 Same(r.action, "auction"); Same(r.suggestion.price, 100); Same(r.evidence, "strong")
 Same(r.proceeds.gross, 100); Check(r.proceeds.net == nil and r.proceeds.deposit == nil, "unknown costs stay unknown")
 Check(r.reasons[1]:find("gross"), "gross comparison is explicit")
@@ -74,6 +77,8 @@ Same(Decide({ variant = "suffix" }).action, "unknown")
 Same(Decide({ disenchant = true }).action, "auction", "unknown disenchant never blocks auction")
 Same(Decide({ qty = "nil" }).action,"unknown","unknown quantity")
 Same(Decide({ qty = 0 }).action, "unknown", "no copies cannot sell")
+Same(Decide({qty=0}).proceeds,nil,"zero copies cannot show an invented one-item gross")
+Same(Decide({qty="nil"}).proceeds,nil,"unknown quantity cannot show a stack total")
 Same(Decide({ qty = 100000 }).proceeds.gross, 10000000, "unit times quantity")
 Same(Sell.Proceeds(W.Prices.MAX_COPPER, 2).state, "unknown", "bounded arithmetic")
 Same(Sell.Suggest(100, 0).state, "uncertain", "invalid quantity")
@@ -157,6 +162,14 @@ repeat local t0=os.clock(); local _,err=big:Step(); Check(not err,err); maxms=ma
 Same(#big.rows,20002); Check(count >= 250, "discovery cooperatively sliced")
 print(("advisor catalog 20002: %.4fs, %d slices, max %.3fms"):format(os.clock()-t,count,maxms))
 Check(D.Track(100)); Same(D.Tracked()[100],nil,"toggle tracking")
+-- Failed item-data requests are bounded until an explicit retry.
+local infoReader=c.C_Item.GetItemInfo
+local metadataRequests=0
+c.C_Item.GetItemInfo=function(id) if id~=999 then return infoReader(id) end end
+c.C_Item.RequestLoadItemDataByID=function() metadataRequests=metadataRequests+1 end
+D.Request(999); D.Request(999); Same(metadataRequests,1,"failed metadata loads cannot cause a request loop")
+D.Request(999,true); Same(metadataRequests,2,"explicit selection can retry")
+c.C_Item.GetItemInfo=infoReader
 -- The actual tooltip renderer uses the default configurable recommendation id.
 local chunk=assert(loadfile(ROOT .. "../TwichUI_Workshop/WorthLayout.lua")); setfenv(chunk,c); chunk()
 local WL=W.WorthLayout

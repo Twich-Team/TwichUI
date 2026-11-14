@@ -349,13 +349,13 @@ local function Build()
     if f.SetDontSavePosition then f:SetDontSavePosition(true) end
     f:SetScript("OnDragStart", function(self) self:StartMoving() end)
     f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
-    f:SetScript("OnEvent", function(_, event)
+    f:SetScript("OnEvent", function(_, event, a, b)
         local kind = EVENTS[event]
         if kind == "modifier" then
             local row = UI.hoverRow
             if row and row:IsShown() then row:ShowTip() end   -- Shift pressed or released while over a row: the other tooltip
         elseif kind then
-            if event=="GET_ITEM_INFO_RECEIVED" and mode=="advisor" and UI.Advisor then UI.Advisor.Invalidate() end
+            if event=="GET_ITEM_INFO_RECEIVED" and mode=="advisor" and UI.Advisor then UI.Advisor.ItemReady(a,b) end
             if event == "BAG_UPDATE_DELAYED" then W.Strategy.Bump(); dirtyBags = true end   -- what is owned changed: plans are worked out again
             Schedule(kind)
         end
@@ -440,6 +440,8 @@ function W.Snapshot()
     s.bankEvents = W.Bank and W.Bank.Events() or 0
     s.bankReads = W.Bank and (W.Bank.reads + W.Bank.guildReads) or 0
     s.storedItems = s.stored and (s.stored.bankItems + s.stored.guildItems) or 0
+    local adv=UI.Advisor and UI.Advisor.Stats()
+    s.advisorItems,s.advisorResults=adv and adv.items or 0,adv and adv.results or 0
     s.rows = rows
     s.mode = mode
     s.renders = renders

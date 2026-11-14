@@ -1,5 +1,6 @@
 -- A8 policy v1: deterministic advice over one immutable evidence snapshot.
--- No planning, history decoding, inventory reads, saved writes or frames here.
+-- Decide has no planning, history decoding, inventory reads, saved writes or frames.
+-- Gain/SetGain are the small existing-account preference adapter; callers snapshot it.
 local W = TwichUI.Workshop
 local A = { POLICY = 1, API = 1 }
 W.Advisor = A
@@ -26,7 +27,7 @@ function A.Decide(item, ctx)
     ctx = ctx or {}
     local qty = W.Int(ctx.qty, 0, W.MAX_ID)
     local r = { role = "advice", api = A.API, policy = A.POLICY, item = item, qty = qty, action = "unknown", evidence = "insufficient",
-        reasons = {}, missing = {}, alternatives = {}, facts = ctx.facts, crafting = ctx.crafting,
+        reasons = {}, missing = {}, alternatives = {}, facts = ctx.facts or {nomarket=true}, crafting = ctx.crafting,
         provenance = { source = "local", at = ctx.facts and ctx.facts.at, market = ctx.facts and ctx.facts.key } }
     local function Reason(s) r.reasons[#r.reasons + 1] = s end
     local sell = W.Int(ctx.sell, 0, W.Prices.MAX_COPPER)
@@ -36,16 +37,16 @@ function A.Decide(item, ctx)
     elseif ctx.bindType == 0 or ctx.bindType == 2 or ctx.bindType == 3 then eligible = true end
     r.eligible = eligible
     r.disenchant = ctx.disenchantValue or { state = "unknown", why = "Disenchant outcome data is unverified." }
-    local s = W.Sell.Suggest(item, qty and math.max(1, qty) or 1, { facts = ctx.facts, market = ctx.market, now = ctx.now, variant = ctx.variant })
+    local s = W.Sell.Suggest(item, qty and math.max(1, qty) or 1, { facts = r.facts, market = ctx.market, now = ctx.now, variant = ctx.variant })
     r.suggestion = s
     if eligible == false then s = { state = "unavailable" }; r.suggestion = s end
     if ctx.variant then s = { state = "uncertain" }; r.suggestion = s end
-    r.proceeds = s.price and W.Sell.Proceeds(s.price, math.max(1, qty or 1)) or nil
+    r.proceeds = s.price and qty and qty > 0 and W.Sell.Proceeds(s.price, qty) or nil
     r.alternatives = {
         { action = "vendor", state = r.vendor.state, value = sell, note = "Known sell value per item." },
         { action = "auction", state = eligible == true and s.state or (eligible == false and "unavailable" or "unknown"), value = s.price,
           note = eligible == false and "This item cannot be auctioned." or "Gross listing per item; fees and sale outcome unknown." },
-        { action = "craft", state = ctx.crafting and #ctx.crafting.uses > 0 and "available" or "unknown", note = "Only this character's known recipes are considered." },
+        { action = "craft", state = ctx.crafting and #(ctx.crafting.uses or {}) > 0 and "available" or "unknown", note = "Only this character's known recipes are considered." },
         { action = "disenchant", state = r.disenchant.state, value = r.disenchant.expectedGross, note = r.disenchant.why },
         { action = "watch", state = "choice", note = "Refresh manually; future price direction is unknown." },
     }
@@ -63,7 +64,7 @@ function A.Decide(item, ctx)
     elseif eligible == nil then Reason("Auction eligibility is not known.")
     elseif ctx.variant then Reason("This variant is not priced separately.")
     elseif s.state == "ok" and sell ~= nil then
-        local gain = W.Int(ctx.minGain, 0, W.Prices.MAX_COPPER) or A.Gain()
+        local gain = W.Int(ctx.minGain, 0, W.Prices.MAX_COPPER) or 0
         if s.price >= sell * 1.5 and s.price - sell >= gain and s.price > sell then
             r.action = "auction"
             Reason("Current listings support a higher gross value than vendoring.")
@@ -81,7 +82,7 @@ function A.Decide(item, ctx)
     if r.action ~= "craft" and not ctx.pendingPlan and W.Int(item,1,W.MAX_ID) and qty and qty > 0 and sell ~= nil and de.state == "ok" and de.expectedGross
         and (eligible == false or (eligible == true and s.state == "ok")) then
         local ceiling = math.max(sell, s.price or 0)
-        local gain = W.Int(ctx.minGain, 0, W.Prices.MAX_COPPER) or A.Gain()
+        local gain = W.Int(ctx.minGain, 0, W.Prices.MAX_COPPER) or 0
         if de.expectedGross > ceiling and de.expectedGross >= ceiling * 1.5 and de.expectedGross - ceiling >= gain then
             r.action, r.evidence = "disenchant", "limited"
             r.reasons = { "Verified outcomes support a higher expected material value.", "Disenchant outcomes and material sales are uncertain; this is not guaranteed proceeds." }
@@ -89,7 +90,7 @@ function A.Decide(item, ctx)
     end
     if ctx.disenchant and de.state == "unknown" then r.missing[#r.missing + 1] = de.why end
     if sell == nil then r.missing[#r.missing + 1] = "Vendor sell value is unknown." end
-    if ctx.crafting and #ctx.crafting.uses > 0 and r.action ~= "craft" then
+    if ctx.crafting and #(ctx.crafting.uses or {}) > 0 and r.action ~= "craft" then
         Reason("Known recipes use this item; compare their crafting strategy before selling.")
     end
     if s.price then

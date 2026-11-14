@@ -9,21 +9,26 @@ local page, K, catalog, stamp, selected, result
 local query, source, category, auctionable = "", "all", nil, false
 local token, searchToken = 0, 0
 local filtered, categories = {}, {}
+local reveal, searchDirty = true, false
 local Paint, Search, Render
 local function Name(row) return row.info.name end
 local function Category(info) return (info.category or "Item") .. (info.sub and info.sub ~= "" and (" \194\183 " .. info.sub) or "") end
 local function Color(fs, quality)
+    if quality and C_Item and C_Item.GetItemQualityColor then
+        local r,g,b=C_Item.GetItemQualityColor(quality)
+        if W.Finite(r) and W.Finite(g) and W.Finite(b) then fs:SetTextColor(r,g,b); return end
+    end
     local c = ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality or 1]
     if c then fs:SetTextColor(c.r,c.g,c.b) else UI.Paint(fs,K.text) end
 end
 local function Select(item)
     selected = item
-    D.Select(item)
+    D.Select(item); D.Request(item,true)
     if page then page.detail.scroll:SetVerticalScroll(0); Paint() end
 end
 function V.Open(item)
     if not W.Int(item,1,W.MAX_ID) then return false end
-    selected = item; D.Select(item)
+    selected = item; D.Select(item); D.Request(item,true); reveal=true
     query,source,category,auctionable="","all",nil,false
     if page then page.resetFilters(); page.detail.scroll:SetVerticalScroll(0) end
     stamp = nil
@@ -137,6 +142,16 @@ local function BuildDetails(parent)
         for i,f in ipairs(d.cards) do
             f:ClearAllPoints(); f:SetWidth(cw); f:SetPoint("TOPLEFT",8+((i-1)%3)*(cw+6),-(144+math.floor((i-1)/3)*51))
         end
+        local extra=math.max(0,(d.name:GetStringHeight() or 24)-24)
+        d.type:ClearAllPoints(); d.type:SetPoint("TOPLEFT",64,-42-extra); d.type:SetPoint("RIGHT",-10,0)
+        d.rec:ClearAllPoints(); d.rec:SetPoint("TOPLEFT",8,-66-extra); d.rec:SetPoint("TOPRIGHT",-8,-66-extra)
+        for i,f in ipairs(d.cards) do f:ClearAllPoints(); f:SetPoint("TOPLEFT",8+((i-1)%3)*(cw+6),-(144+extra+math.floor((i-1)/3)*51)) end
+        d.history:ClearAllPoints(); d.history:SetPoint("TOPLEFT",10,-246-extra)
+        d.chart:ClearAllPoints(); d.chart:SetPoint("TOPLEFT",8,-268-extra)
+        d.chartLabel:ClearAllPoints(); d.chartLabel:SetPoint("TOPLEFT",12,-378-extra)
+        d.alt:ClearAllPoints(); d.alt:SetPoint("TOPLEFT",8,-398-extra); d.alt:SetPoint("TOPRIGHT",-8,-398-extra)
+        d.limit:ClearAllPoints(); d.limit:SetPoint("TOPLEFT",12,-542-extra); d.limit:SetPoint("RIGHT",-12,0)
+        b:SetHeight(578+extra)
         d.chart:SetWidth(math.floor(w*0.51))
         d.why:SetWidth(w*0.49-34)
         d.reasons:ClearAllPoints(); d.reasons:SetPoint("TOPLEFT",d.chart,"TOPRIGHT",12,0); d.reasons:SetWidth(w*0.49-34)
@@ -170,13 +185,13 @@ local function PaintDetail()
     for i,alt in ipairs(r.alternatives) do
         local line=d.alts[i]
         line.name:SetText(alt.action=="craft" and "Craft" or (alt.action=="auction" and "Auction" or (alt.action=="vendor" and "Vendor" or (alt.action=="disenchant" and "Disenchant" or "Watch"))))
-        local value = alt.value and UI.Money(alt.value) or (alt.state=="unavailable" and "Unavailable" or (alt.state=="choice" and "Refresh manually" or "Unknown"))
+        local value = alt.state=="unavailable" and "Unavailable" or (alt.value and UI.Money(alt.value) or (alt.state=="choice" and "Refresh manually" or "Unknown"))
         if alt.action=="craft" then value=r.crafting.reserved>0 and ("Needed for plan (" .. r.crafting.reserved .. ")") or (#row.uses>0 and (#row.uses .. " known uses; compare strategy") or "No known recipe uses") end
         if alt.action=="auction" and alt.value then value=value .. " gross / item" end
         if alt.action=="disenchant" and alt.value then value=value .. " expected materials" end
         line.value:SetText(value); UI.Tip(line,line.name:GetText(),alt.note)
     end
-    d.limit:SetText(r.proceeds and ("Gross for " .. (r.qty or 1) .. ": " .. UI.Money(r.proceeds.gross) .. ". Fees, deposits and sale likelihood unknown.") or (r.missing[1] or "Manually refreshed observations; future prices are unknown."))
+    d.limit:SetText(r.proceeds and r.proceeds.state=="ok" and ("Gross for " .. (r.qty or 1) .. ": " .. UI.Money(r.proceeds.gross) .. ". Fees, deposits and sale likelihood unknown.") or (r.missing[1] or "Manually refreshed observations; future prices are unknown."))
     d.track.text:SetText(D.Tracked()[selected] and "Untrack item" or "Track item")
     d.recipes:SetEnabled(#row.uses>0)
     d.sources:SetEnabled((r.crafting.reserved or 0)>0)
@@ -186,10 +201,12 @@ end
 Paint=function()
     if not page or not page:IsShown() then return end
     page.results:SetText(("Results (%d) \194\183 Item ID order"):format(#filtered))
-    page.list:SetData(filtered,"No matching known items. Try another search or filter.")
+    page.list:SetData(filtered,(catalog and #catalog.rows==0) and "No known items yet.\nOpen a profession or scan prices manually." or "No matching known items.\nTry another search or filter.")
+    page.detail.empty:SetText((catalog and #catalog.rows==0) and "No items remembered yet. Open a profession, carry an item, or scan prices manually." or "Choose an item to compare your options.")
     PaintDetail()
 end
 Search=function()
+    searchDirty=false
     searchToken=searchToken+1
     local mine=searchToken
     if not catalog or not catalog.done then return end
@@ -197,19 +214,42 @@ Search=function()
     page.results:SetText("Searching known items...")
     local function Step()
         if mine~=searchToken or not page:IsShown() then return end
+        local pt=R.Perf and R.Perf.on and R.Perf.Start("workshop.advisorSearch")
         local last=math.min(#catalog.rows,at+D.BATCH-1)
         for i=at,last do local row=catalog.rows[i]; if D.Matches(row,query,source,auctionable,category) then output[#output+1]=row end end
+        if pt then R.Perf.Stop(pt) end
         at=last+1
         if at<=#catalog.rows then C_Timer.After(0,Step) else
             filtered=output
             local present=false; for _,r in ipairs(filtered) do if r.item==selected then present=true break end end
             if not present then selected=filtered[1] and filtered[1].item; if selected then D.Select(selected) end end
+            if selected then D.Request(selected) end
             page.list:ScrollTop(); Paint()
+            if reveal and selected then
+                local h=page.list.scroll:GetHeight() or 320
+                local most=math.max(0,#filtered*64-h)
+                for i,row in ipairs(filtered) do if row.item==selected then page.list.scroll:SetVerticalScroll(math.min(most,(i-1)*64)); break end end
+                page.list:Layout(); reveal=false
+            end
         end
     end
     Step()
 end
 function V.Invalidate() stamp=nil end
+function V.ItemReady(item, success)
+    if not page or not page:IsShown() or success==false or not catalog then return end
+    local row=catalog.byID[item]
+    if not row then return end
+    local info=D.Info(item)
+    if not row.info or row.info.quality~=info.quality or row.info.classID~=info.classID then W.Facts.CacheClear() end
+    row.info=info; row.search=(info.name .. " " .. item):lower()
+    if info.category and info.category~="" then
+        local found=false; for _,name in ipairs(categories) do if name==info.category then found=true break end end
+        if not found then categories[#categories+1]=info.category; table.sort(categories) end
+    end
+    searchDirty=true
+end
+function V.Stats() return { items=catalog and #catalog.rows or 0, results=#filtered, running=catalog and not catalog.done or false } end
 local function Key()
     local m=S.PriceSource().market
     return table.concat({m and W.Valuation.Generation(m) or "none",tostring(W.Strategy.epoch),tostring(S.observations)},"|")
@@ -217,7 +257,7 @@ end
 Render=function()
     if not page or not page:IsShown() then return end
     local key=Key()
-    if stamp==key and catalog then if catalog.done then Paint() end return end
+    if stamp==key and catalog then if catalog.done then if searchDirty then Search() else Paint() end end return end
     stamp=key; token=token+1; searchToken=searchToken+1
     local mine=token
     catalog=D.Catalog(); page.results:SetText("Gathering known items...")
@@ -264,6 +304,8 @@ local function Build(p)
     local function Layout()
         local w=p:GetWidth(); if w<=0 then w=940 end
         p.card:SetWidth(math.max(260,math.floor(w*0.34)))
+        p.list.empty:ClearAllPoints(); p.list.empty:SetPoint("TOPLEFT",14,-14); p.list.empty:SetWidth(math.max(180,p.card:GetWidth()-46)); p.list.empty:SetHeight(92)
+        p.detail.empty:ClearAllPoints(); p.detail.empty:SetPoint("TOPLEFT",18,-20); p.detail.empty:SetWidth(math.max(300,w-p.card:GetWidth()-52)); p.detail.empty:SetHeight(92)
         p.search:SetWidth(math.max(220,w-534))
     end
     p.resetFilters=function()
@@ -271,9 +313,13 @@ local function Build(p)
     end
     p:SetScript("OnSizeChanged",Layout)
     p:HookScript("OnHide",function()
-        token=token+1; searchToken=searchToken+1; catalog=nil; filtered={}; stamp=nil; result=nil
+        token=token+1; searchToken=searchToken+1; catalog=nil; filtered={}; stamp=nil; result=nil; reveal=true; searchDirty=false
         p.list:SetData({}); p.result=nil
-        if p.uses then p.uses:Hide() end
+        for _,row in ipairs(p.list.rows) do row.data=nil end
+        if p.uses then
+            p.uses:Hide(); p.uses.list:SetData({})
+            for _,row in ipairs(p.uses.list.rows) do row.rec=nil end
+        end
     end)
     p:HookScript("OnShow",Render)
     Layout()

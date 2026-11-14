@@ -497,7 +497,7 @@ function WL.Example(key)
         facts.comp = facts.comp or {}
         facts.comp.complete, facts.comp.age = true, 3*3600
         facts.comp.quality = "good"
-        r.advisor = W.Advisor.Decide(1, { qty=1, sell=f.sell, bindType=f.bindType, bound=f.bound, facts=facts })
+        r.advisor = W.Advisor.Decide(1, { qty=1, minGain=W.Advisor.Gain(), sell=f.sell, bindType=f.bindType, bound=f.bound, facts=facts })
     end
     return r, { money = WL.Money, ageText = PR.AgeText, market = EXAMPLE_MARKET, now = EXAMPLE_NOW, count = 1, facts = e.market and e.market() or nil }, e
 end

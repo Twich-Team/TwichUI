@@ -105,7 +105,20 @@ W.AdvisorData.Track(11)
 p.source:GetScript("OnClick")(p.source); Pump(); Same(#p.list.data,1); Same(p.result.item,11)
 W.UI.Advisor.Open(10); Pump(); Same(p.result.item,10,"cross-page entry resets stale filters")
 Same(#p.list.data,2,"cross-page entry restores all known items")
+Check(W.Snapshot().advisorItems>0,"discovery retained count is visible to diagnostics")
+local infoReader=c.C_Item.GetItemInfo
+c.C_Item.GetItemQualityColor=function(q) if q==3 then return 0,0.44,0.87 end return 1,1,1 end
+c.C_Item.GetItemInfo=function(id)
+  local n,l,q,lev,req,kind,sub,stack,equip,icon,sell,class,subclass,bind=infoReader(id)
+  return id==10 and "Arriving item name" or n,l,id==10 and 3 or q,lev,req,kind,sub,stack,equip,icon,sell,class,subclass,bind
+end
+p.detail.name.SetTextColor=function(self,r,g,b) self.rgb={r,g,b} end
+W.UI.Advisor.ItemReady(10,true); W.Window.Render(); Pump()
+Same(p.detail.name:GetText(),"Arriving item name","late item data updates the selected identity")
+Same(p.detail.name.rgb[2],0.44,"native quality color is used")
 W.Window.SetMode("overview"); Pump(); Same(#p.list.data,0,"hidden discovery released")
+for _,row in ipairs(p.list.rows) do Same(row.data,nil,"pooled rows release catalog references") end
+Same(W.Snapshot().advisorItems,0,"diagnostics show discovery released")
 W.Window.SetMode("advisor"); Pump(); Same(p.result.item,10,"selection survives page switch")
 W.Window.Hide(); Pump()
 print("advisor UI: OK")

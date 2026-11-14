@@ -44,9 +44,18 @@ function D.Info(item)
     if C_Item and C_Item.GetItemInfo then
         name, link, quality, _, _, kind, sub, _, equip, icon, sell, class, _, bind = C_Item.GetItemInfo(item)
     end
-    return { item = item, name = W.Text(name, 200) or ("Item " .. item), link = W.Text(link, 1000), quality = W.Int(quality, 0, 20),
+    return { item = item, known = W.Text(name,200)~=nil, name = W.Text(name, 200) or ("Item " .. item), link = W.Text(link, 1000), quality = W.Int(quality, 0, 20),
         category = W.Text(kind, 60), sub = W.Text(sub, 60), icon = W.Int(icon, 0, W.MAX_ID) or W.Text(icon, 300), sell = W.Int(sell, 0, W.Prices.MAX_COPPER),
         classID = W.Int(class, 0, 100), bindType = W.Int(bind, 0, 20), equipLoc = W.Text(equip, 80) }
+end
+-- Request only an explicitly selected item, never the whole saved catalog.
+local requestedItem
+function D.Request(item, force)
+    if requestedItem==item and not force then return end
+    if C_Item and C_Item.RequestLoadItemDataByID and not D.Info(item).known then
+        requestedItem=item
+        C_Item.RequestLoadItemDataByID(item)
+    end
 end
 -- A coroutine is stepped by the page's existing timer convention. Each resume
 -- does at most BATCH identity reads; no price evaluation and no data requests.
@@ -129,7 +138,8 @@ function D.Reserved(item)
     local plan, key = W.Strategy.Last("queue")
     if plan and type(key) == "string" and key:find(tostring(W.Strategy.epoch) .. "|queue|", 1, true) == 1 then
         for _, line in ipairs(plan.items or {}) do if line.item == item then reserved = math.max(reserved, line.need or 0) end end
-        return reserved, false
+        local summary=plan.summary or {}
+        return reserved, (summary.unknownEntries or 0)>0 or (summary.invalidEntries or 0)>0 or summary.unavailable==true
     end
     return reserved, W.Queue.Count() > 0
 end
@@ -137,7 +147,7 @@ function D.Tooltip(f, facts)
     local reserved, pending = D.Reserved(f.item)
     local can = C_SpellBook and C_SpellBook.ContainsAnyDisenchantSpell and W.Plain(C_SpellBook.ContainsAnyDisenchantSpell())
     return A.Decide(f.item, { qty = f.count or 1, sell = f.sell, bindType = f.bindType, bound = f.bound, variant = f.variant,
-        now = f.now, facts = facts, pendingPlan = pending, crafting = { uses = {}, reserved = reserved },
+        now = f.now, minGain = A.Gain(), facts = facts, pendingPlan = pending, crafting = { uses = {}, reserved = reserved },
         disenchantValue = W.Disenchant.Evaluate({item=f.item,quality=f.quality,classID=f.classID,equipLoc=f.equipLoc,canDisenchant=can}) })
 end
 -- Select-only heavy context. QueueStrategy reuses P2's cooperative job and its
@@ -145,7 +155,7 @@ end
 function D.Context(item, full, row)
     local f = row and row.info or D.Info(item)
     local ctx = { qty = O.BagCount(item), sell = f.sell, bindType = f.bindType, now = time(),
-        facts = W.Facts.Of(item), disenchant = W.Worth.DisenchantRelevant(f) }
+        minGain = A.Gain(), facts = W.Facts.Of(item, {variant=row and row.variant==true}), disenchant = W.Worth.DisenchantRelevant(f) }
     local reserved, pending = D.Reserved(item)
     ctx.pendingPlan = pending
     -- A generic item id cannot prove that a held BoE/BoU copy is unbound.
@@ -160,7 +170,7 @@ function D.Context(item, full, row)
     if full then
         local state, plan = S.QueueStrategy()
         craft.state = state
-        ctx.pendingPlan = state == "planning" or state == "failed"
+        ctx.pendingPlan = state == "planning" or state == "failed" or (plan and plan.summary and ((plan.summary.unknownEntries or 0)>0 or (plan.summary.invalidEntries or 0)>0 or plan.summary.unavailable==true))
         if state == "ready" and plan then
             for _, line in ipairs(plan.items or {}) do
                 if line.item == item then craft.reserved = math.max(reserved, line.need or 0); craft.owned = line.owned end

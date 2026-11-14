@@ -71,6 +71,26 @@ automatic craft completion remain unchanged. Checkpoints: `f0971531`, `9659435c`
 font, combat/reload and large-database startup acceptance remain pending. Stop
 before A8; perform those acceptance checks before requesting the next mockup.
 
+## Workshop A8 Item Advisor — complete on feature/workshop (2026-11-14)
+
+The separately approved A8 campaign adds the fifth left-sidebar page, conservative
+competition-based advice, Normal tooltip recommendations through the existing
+Designer field, known-recipe/plan integration, tracking, source navigation and
+bounded discovery/search. Missing disenchant data no longer blocks supported
+Vendor/Auction advice. The expected disenchant evaluator is tested on synthetic
+verified snapshots; production outcomes remain unknown until a verified,
+distributable Forever dataset exists. No probabilities or fees were invented.
+
+Engine/page/integration checkpoints: `aac4b4bc`, `3c08abdd`, `ca4df5ca` (pushed).
+Final comprehensive verification passed: **226 files/modules, 677 Lua syntax
+checks, 147 simulator launches and 21,930 structured checks**, exit 0. Market
+mutations 183/183; crafting mutations 112/112. Screenshots personally reviewed;
+real-client input, fonts, reload/profile persistence and timing remain pending.
+[Implementation, evidence and limitations](docs/workshop/item-advisor.md).
+This supersedes the pre-A8 tooltip recommendation policy described below.
+**Stop at A8:** no Auction House replacement, automated posting or another
+mockup-dependent milestone was begun.
+
 ## Workshop (TwichUI_Workshop) — feature/workshop; foundation and market milestones built, real-client verification incomplete
 
 Reference: [docs/workshop.md](docs/workshop.md) (files, saved data, the exact pricing and shopping rules, scan facts and unknowns, client facts, licensing limits, evidence, checks).
