@@ -64,5 +64,11 @@
     "syntax": ["tools/simlab/**/*.lua"],
     "dependencies": [],
     "simulators": []
+  },
+  "item-advisor": {
+    "tests": ["test_workshop_advisor*.lua"],
+    "syntax": ["TwichUI_Workshop/**/*.lua"],
+    "dependencies": ["market", "crafting"],
+    "simulators": [{"script": "workshop", "only": ["opps", "history", "craft", "wrong"]}]
   }
 }

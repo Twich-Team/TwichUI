@@ -745,3 +745,15 @@ m("crafting.settings.objective-not-forwarded", "TwichUI_Workshop/Session.lua",
   'Sg.Request("queue", key, function() return PlanInput(entries, byOut, view, src), { objective = S.Objective() } end)',
   'Sg.Request("queue", key, function() return PlanInput(entries, byOut, view, src), { objective = "economic" } end)',
   "the cash preference appears saved but Shopping still optimizes economic cost", ["test_workshop_strategy.lua"])
+
+# A8: a listing suggestion may never substitute a historical valuation or stack total.
+m("market.advisor.history-as-posting-price", "TwichUI_Workshop/Sell.lua",
+  'r.state, r.price, r.ahead = "ok", c.competing, c.ahead',
+  'r.state, r.price, r.ahead = "ok", f.mval and f.mval.value or c.competing, c.ahead',
+  "historical market value silently replaces actual competing listings", ["test_workshop_advisor.lua"])
+m("market.advisor.partial-price", "TwichUI_Workshop/Sell.lua",
+  'or not c.complete or c.cut', 'or false or c.cut',
+  "an incomplete scan is treated as sufficient for a competitive suggestion", ["test_workshop_advisor.lua"])
+m("market.advisor.unit-total", "TwichUI_Workshop/Sell.lua",
+  'price * qty, qty, price', 'price, qty, price',
+  "gross return for a stack is reported as one item", ["test_workshop_advisor.lua"])
