@@ -95,6 +95,9 @@ local function BuyOptions(inp, item, qty, memo)
 end
 
 -- The cheaper priced way to buy `qty`: { source, cost, estimate, at } or nil. A tie goes to the vendor.
+-- the options for buying `qty` of an item, for a caller that plans elsewhere (Strategy.lua's adapter shows the same words and tooltips)
+function Sh.BuyOptions(inp, item, qty, memo) return BuyOptions(inp, item, qty, memo or {}) end
+
 local function Best(inp, item, qty, memo)
     local o = BuyOptions(inp, item, qty, memo)
     local best
@@ -591,16 +594,16 @@ function Sh.Basis(row, name, money, ageText, now)
     local m = o.make
     if m then
         if m.state == "ok" then
-            L("Make", m.cost and ("worth " .. money(m.cost)) or "cost not known")
+            L("Make", m.planned and "part of the multilevel plan" or (m.cost and ("worth " .. money(m.cost)) or "cost not known"))
             L(("  %s: %d craft%s, %d made, %d left over"):format(m.rec.name, m.crafts, m.crafts == 1 and "" or "s", m.made, m.surplus))
             for _, r in ipairs(m.reagents) do
                 local parts = {}
-                if r.owned > 0 then
+                if r.owned and r.owned > 0 then
                     local stored = (r.bank or 0) + (r.guild or 0)
                     parts[#parts + 1] = r.owned .. " owned" .. (stored > 0 and (" (" .. stored .. " to collect)") or "")
                         .. (r.value and (" (worth " .. money(r.value) .. ")") or "")
                 end
-                if r.buy > 0 then parts[#parts + 1] = r.buy .. " to buy" .. (r.cost and (" for " .. money(r.cost)) or ", no price") end
+                if r.buy and r.buy > 0 then parts[#parts + 1] = r.buy .. " to buy" .. (r.cost and (" for " .. money(r.cost)) or ", no price") end
                 L(("  %d x %s"):format(r.qty, name(r.item)), table.concat(parts, ", "))
             end
             if m.cash then L("  Cash needed for the materials", money(m.cash)) end

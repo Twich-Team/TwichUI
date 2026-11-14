@@ -172,11 +172,28 @@ local function Rows(list)
 end
 local function Names(list, field)   -- the shown rows' name texts, in order
     local out = {}
+    -- (P2) a pooled list draws only the rows that fit, and the Crafting page's materials list now fits fewer: for a list of items the names of every
+    -- row the list was given are read (the first of them are the drawn ones), so a check on the order of the list does not depend on the window's height
+    local d = list.data
+    if not field and d and d[1] and d[1].item and ITEMS[d[1].item] then
+        for _, x in ipairs(d) do out[#out + 1] = ITEMS[x.item] or ("Item " .. tostring(x.item)) end
+        return table.concat(out, " | ")
+    end
     for _, row in ipairs(Rows(list)) do out[#out + 1] = Txt(row[field or "name"]) end
     return table.concat(out, " | ")
 end
 local function Row(list, name)
     for _, row in ipairs(Rows(list)) do if Txt(row.name) == name then return row end end
+    -- (P2) a list shows only the rows that fit (the Crafting Strategy strip leaves the materials list room for fewer): scroll to the one asked for,
+    -- as a player would, and look again
+    for i, d in ipairs(list.data or {}) do
+        local item = d.item
+        if item and ITEMS[item] == name then
+            list.scroll:SetVerticalScroll(math.max(0, (i - 1) * list.rowH))
+            list:Layout()
+            for _, row in ipairs(Rows(list)) do if Txt(row.name) == name then return row end end
+        end
+    end
     error(("no shown row named %q (shown: %s)"):format(name, Names(list)))
 end
 local function FindButton(root, text, depth)
@@ -967,16 +984,19 @@ Lab.Step("shopping: combined list, sources, total, warning", function()
     Check("display", "Coarse Thread (vendor)", "1 | Vendor | 25c | just now | Show vendor", Line("Coarse Thread"))
     Check("display", "Copper Ore (2 to buy for the subcraft)", "2 | Auction house | 70c | to 7s | -", Line("Copper Ore"))
     Check("display", "Tin Ore (vendor stack of 5 for 3 needed)", "3 | Vendor | 80c | just now | Show vendor", Line("Tin Ore"))
-    Check("display", "Bronze Bar (make suggested)", "5 | Make | 1s 50c | materials, counted in their rows | Add to crafting plan", Line("Bronze Bar"))
+    Check("display", "Bronze Bar (make suggested)", "5 | Make | In the plan | cost is in its materials | Add optimized plan", Line("Bronze Bar"))   -- (P2) a made material's cost is part of the multilevel plan, in its own materials' rows
     Check("display", "Peacebloom detail", "Suggested source. Only the auction house has a price. Auctions may require buying larger stacks.", Explain("Peacebloom"))
     Check("display", "Silverleaf detail says why", "Not enough are listed at the auction house.", Explain("Silverleaf"))
     Check("display", "Tin Ore detail: leftover from the whole stack", "2 left over. Needed to make Smelt Bronze.", Explain("Tin Ore"))
     Check("display", "Bronze Bar detail: crafts, made, leftover, comparison",
-        "Make 3 x Smelt Bronze: makes 6, 1 left over. Suggested source. Making this looks cheaper than buying at the auction house.", Explain("Bronze Bar"))
+        "Make 3 x Smelt Bronze: makes 6, 1 left over. Suggested source. Making this looks cheaper than buying at the auction house. It is certainly cheaper.", Explain("Bronze Bar"))
     Check("display", "total with the incomplete-total warning",
         "Estimated spending: 1s 90c so far \194\183 1 price missing", Txt(Shop().total))
     Check("display", "vendor status line", "Vendor prices as last seen (2 noted) \194\183 bags only", Txt(Shop().status))
-    Check("display", "notes keep one short caveat about the suggestions", true, Txt(Shop().notes):find("Suggestions compare one material at a time", 1, true) ~= nil)
+    -- (P2) the notes say how sure the plan is (a missing price makes it partial, never "verified") and keep the caveat about owned materials
+    Check("display", "notes say the plan is partial (a price is missing) and keep the caveat about owned materials", "true/true/false",
+        tostring(Txt(Shop().notes):find("Partial plan", 1, true) ~= nil) .. "/" .. tostring(Txt(Shop().notes):find("Owned materials lower cash, not economic cost", 1, true) ~= nil)
+        .. "/" .. tostring(Txt(Shop().notes):find("Best verified plan", 1, true) ~= nil))
 end)
 
 Lab.Step("shopping: source choices", function()
@@ -1044,7 +1064,14 @@ end)
 
 Lab.Step("shopping: add the suggested subcraft", function()
     local q0 = Queue()
-    Click(Pick("Bronze Bar").act, "Add to crafting plan (Bronze Bar)")
+    -- P2: the multilevel plan adds its crafts through a confirmation; the click alone changes nothing
+    Click(Pick("Bronze Bar").act, "Add optimized plan (Bronze Bar)")
+    Lab.Settle(0.3)
+    local svw, cdw = R.Workshop.StrategyView.Frames()
+    Check("state", "the click alone adds nothing: the confirmation is shown first", q0, Queue())
+    Check("display", "the confirmation is open and can be accepted", "true/true", tostring(cdw:IsShown()) .. "/" .. tostring(cdw.ok:IsEnabled()))
+    Click(cdw.ok, "Add to plan")
+    Lab.Settle(0.3)
     -- 3 crafts of Smelt Bronze added: needs Copper Ore 6 (bags 4 -> 2 short), Tin Ore 3 (3 short); Bronze Bar need 8, 6 will be made, 3 in bags -> 0 short
     Check("state", "Smelt Bronze x3 queued", q0 .. ", Smelt Bronze x3", Queue())
     Check("display", "the made item is no longer on the list; its ingredients are, once each",
@@ -1066,7 +1093,9 @@ Lab.Step("shopping: add the suggested subcraft", function()
     local function L(name) local r = Row(m, name) return Txt(r.need) .. "/" .. Txt(r.have) .. "/" .. Txt(r.short) end
     Check("display", "Crafting view agrees: Copper Ore need/in bags/still needed", "6/4/2", L("Copper Ore"))
     Check("display", "Crafting view: Tin Ore", "3/0/3", L("Tin Ore"))
+    m.scroll:SetVerticalScroll(math.max(0, #m.data * m.rowH - m.scroll:GetHeight())); m:Layout()   -- (P2: the Crafting Strategy strip leaves room for fewer rows; the last ones are scrolled to)
     Check("display", "Crafting view: Bronze Bar covered by the queued crafts", "8/3/0", L("Bronze Bar"))
+    m.scroll:SetVerticalScroll(0); m:Layout()
     Tab("Shopping")
 end)
 
@@ -2049,6 +2078,69 @@ Lab.Step("pose for the screenshot", function()
         if scroll and scroll.SetVerticalScroll and ct and dt then scroll:SetVerticalScroll(math.max(0, ct - dt - 8)) end
         Lab.Settle(0.2)
         Check("display", "pose: the designer is on screen with the Hold Shift preview", true, D.Frame():IsShown() and D.Mode())
+    elseif view == "strategy" or view == "confirm" then
+        -- (P2) the full strategy of one craft, and the confirmation before its crafts are added: Copper Belt Buckle needs Bronze Bars, which Smelt Bronze makes
+        -- (the queue already makes the bars through Smelt Bronze; take that entry out so the plan has crafts to add)
+        Tab("Crafting")
+        QueueAct(Rows(Lists().queue)[4], "remove", "Remove Smelt Bronze")
+        Tab("Opportunities")
+        Click(Row(Lists().opps, "Copper Belt Buckle"), "choose Copper Belt Buckle")
+        Click(Opps().detail.view, "View strategy")
+        Lab.Settle(0.3)
+        local sv, cd = R.Workshop.StrategyView.Frames()
+        local steps = false
+        for _, r in ipairs(Lists().strategy.data) do if r.kind == "step" then steps = true end end
+        Check("display", "pose: the strategy view is open with crafting steps in order", "true/true", tostring(sv:IsShown()) .. "/" .. tostring(steps))
+        if view == "confirm" then
+            Click(sv.add, "Add optimized plan")
+            Lab.Settle(0.3)
+            Check("display", "pose: the confirmation lists what would be added, and nothing is queued yet", "true/true", tostring(cd:IsShown()) .. "/" .. tostring(#Lists().confirm.data >= 1))
+        end
+    elseif view == "stratlong" then
+        -- (P2) a long queue (every known recipe of both professions): the strategy of the whole queue, a long scrolling list
+        Tab("Crafting")
+        Click(Win().Craft().segRecipes, "Recipes")
+        for _, p in ipairs({ "Alchemy", "Blacksmithing" }) do
+            Click(FindButton(Frame(), p), p .. " chip")
+            for _, r in ipairs(Rows(Lists().recipes)) do if r.add:IsEnabled() then Click(r.add, "Add " .. Txt(r.name)) end end
+        end
+        Click(Win().Craft().segQueue, "Craft queue")
+        Click(Win().Craft().strat.view, "View strategy (the whole queue)")
+        Lab.Settle(0.5)
+        Check("display", "pose: a long queue's strategy is open", true, R.Workshop.StrategyView.IsOpen() and #Lists().strategy.data > 6)
+    elseif view == "planning" then
+        -- (P2) a plan that is still being worked out: the job never finishes, so the page keeps saying so
+        local CPm = R.Workshop.CraftPlanner
+        local real = CPm.Job
+        CPm.Job = function(inp, opt)
+            local job = real(inp, opt)
+            job.Step = function() return false end
+            return job
+        end
+        R.Workshop.Strategy.Bump()
+        Tab("Opportunities")
+        -- the simulator runs a zero-delay timer again inside the same instant, so a job that never finishes would spin: no frame timer for this pose
+        local realAfter = C_Timer.After
+        C_Timer.After = function() end
+        Click(Row(Lists().opps, "Copper Belt Buckle"), "choose Copper Belt Buckle")
+        Check("display", "pose: Opportunities says it is planning, with no figures", "Planning... | ...", Txt(Opps().detail.strat.status) .. " | " .. Txt(Opps().detail.strat.pairs[2].v))
+        C_Timer.After = realAfter
+    elseif view == "nodata" then
+        -- (P2) a recipe whose materials aren't known: no strategy and no invented figure
+        Tab("Opportunities")
+        Click(Row(Lists().opps, "Enchant Bracer - Lesser Choice"), "choose Enchant Bracer - Lesser Choice")
+        Lab.Settle(0.3)
+        Check("display", "pose: no data is said, and View strategy is not offered", "Not enough data | false", Txt(Opps().detail.strat.status) .. " | " .. tostring(Opps().detail.view:IsEnabled()))
+    elseif view == "override" then
+        -- (P2) a source the player chose stays authoritative and is told apart from the suggestion
+        Tab("Crafting")
+        QueueAct(Rows(Lists().queue)[4], "remove", "Remove Smelt Bronze")
+        Tab("Shopping")
+        local d = Pick("Bronze Bar")
+        Click(d.choose.auction, "Auction house")
+        Lab.Settle(0.3)
+        d = Pick("Bronze Bar")
+        Check("display", "pose: the choice is lit and named, the suggestion is still said", "Your choice | Suggested", Txt(d.tags.auction) .. " | " .. Txt(d.tags.make))
     elseif view == "shop" then
         -- the mixed-source list with a Make row: take the Smelt Bronze entry back out through its Remove button
         Tab("Crafting")

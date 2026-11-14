@@ -3,7 +3,7 @@
 # Workshop with /tui workshop and drives its Crafting, Opportunities and Shopping views over synthetic game data
 # (scenarios/workshop.lua says exactly what is real and what is fake). Writes to $WOWSIM_LAB/artifacts/workshop-<time>/.
 #
-# Thirteen launches, each from a freshly emptied root and a new empty install (no saved variables):
+# Nineteen launches, each from a freshly emptied root and a new empty install (no saved variables):
 #   overview  the whole scenario, ending on the Overview (prices, opportunities, plan, professions, next steps), then a screenshot
 #   craft     the same, ending on Crafting with a populated queue and a chosen craft's details, then a screenshot
 #   opps      the same, ending on Opportunities with a recipe's details, then a screenshot
@@ -16,6 +16,12 @@
 #   craftlong the same, ending on Crafting with every known recipe queued (a long queue), then a screenshot
 #   shopmix   the same, ending on Shopping with Collect rows (a synthetic bank) beside Buy and Make rows, then a screenshot
 #   shopcollect  the same, with everything stored: only Collect rows, then a screenshot
+#   strategy  (P2) the same, ending on the full strategy of Copper Belt Buckle (Opportunities, View strategy), then a screenshot
+#   confirm   (P2) the same, with the confirmation before the optimized plan is added open over it, then a screenshot
+#   stratlong (P2) the same, every known recipe queued, the strategy of the whole queue open (a long scrolling list), then a screenshot
+#   planning  (P2) the same, the plan of the chosen recipe still being worked out (the job never finishes), then a screenshot
+#   nodata    (P2) the same, a recipe whose materials aren't known chosen: no strategy and no invented figure, then a screenshot
+#   override  (P2) the same, Shopping with the player's own source chosen for the made material, then a screenshot
 #   wrong   the whole scenario with one expectation made deliberately wrong: it must FAIL on that check and on no other
 #
 #   SIMLAB_ONLY="opps craft"  run only the named launches (a quick look while working; the full run, with none named, is the evidence)
@@ -54,6 +60,12 @@ fixture history '{ view = "history" }'
 fixture craftlong '{ view = "craftlong" }'
 fixture shopmix '{ view = "shopmix" }'
 fixture shopcollect '{ view = "shopcollect" }'
+fixture strategy '{ view = "strategy" }'
+fixture confirm '{ view = "confirm" }'
+fixture stratlong '{ view = "stratlong" }'
+fixture planning '{ view = "planning" }'
+fixture nodata '{ view = "nodata" }'
+fixture override '{ view = "override" }'
 fixture wrong "{ view = \"craft\", wrongAt = \"$WRONG_AT\" }"
 
 repo_before="$(git -C "$REPO" status --porcelain --ignored)"
@@ -84,6 +96,12 @@ launch history screenshot --png -o "$RUN/history.png" --width 1600 --height 1200
 launch craftlong screenshot --png -o "$RUN/craftlong.png" --width 1600 --height 1200
 launch shopmix screenshot --png -o "$RUN/shopmix.png" --width 1600 --height 1200
 launch shopcollect screenshot --png -o "$RUN/shopcollect.png" --width 1600 --height 1200
+launch strategy screenshot --png -o "$RUN/strategy.png" --width 1600 --height 1200
+launch confirm screenshot --png -o "$RUN/confirm.png" --width 1600 --height 1200
+launch stratlong screenshot --png -o "$RUN/stratlong.png" --width 1600 --height 1200
+launch planning screenshot --png -o "$RUN/planning.png" --width 1600 --height 1200
+launch nodata screenshot --png -o "$RUN/nodata.png" --width 1600 --height 1200
+launch override screenshot --png -o "$RUN/override.png" --width 1600 --height 1200
 launch wrong dump-tree --visible-only
 
 echo "artifacts: $RUN"

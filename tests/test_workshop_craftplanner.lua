@@ -723,12 +723,12 @@ do
     local b = W2.Shopping.Plan(FX.PlanInput(scn, W2.Materials.Rows(scn.entries, FX.CraftHave(scn), FX.CraftStock(scn))))
     Same(Ser(a), Ser(b), "F Shopping.Plan unchanged (seed " .. (7510000 + i) .. ")")
   end
-  -- no window, session or tooltip file calls the planner (P2 adopts it)
+  -- P2: Strategy.lua is the one consumer; no window, session or tooltip file calls the planner itself (they use Strategy)
   local toc = assert(io.open(ROOT .. "../TwichUI_Workshop/TwichUI_Workshop.toc")):read("*a")
   for file in toc:gmatch("\n([%w_]+%.lua)") do
-    if file ~= "CraftPlanner.lua" then
+    if file ~= "CraftPlanner.lua" and file ~= "Strategy.lua" then
       local src = assert(io.open(ROOT .. "../TwichUI_Workshop/" .. file)):read("*a")
-      Check(not src:find("CraftPlanner", 1, true), "F " .. file .. " does not use the planner yet")
+      Check(not src:find("CraftPlanner", 1, true), "F " .. file .. " goes through Strategy.lua, not the planner")
     end
   end
   Check(toc:find("\nShopping.lua\n[^\n]*\nCraftPlanner.lua\n"), "F the planner loads right after Shopping.lua")

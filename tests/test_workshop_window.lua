@@ -77,7 +77,7 @@ c.C_Item = {
 c.InCombatLockdown = function() return false end
 c.IsShiftKeyDown = function() return false end
 
-for _, f in ipairs({ "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Valuation.lua", "MarketFacts.lua", "Session.lua", "AuctionButton.lua", "Style.lua", "ViewOverview.lua", "ViewOpportunities.lua", "ViewCrafting.lua", "ViewShopping.lua", "Window.lua" }) do
+for _, f in ipairs({ "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "CraftPlanner.lua", "Strategy.lua", "Scan.lua", "Market.lua", "Valuation.lua", "MarketFacts.lua", "Session.lua", "AuctionButton.lua", "Style.lua", "ViewOverview.lua", "ViewOpportunities.lua", "ViewCrafting.lua", "ViewShopping.lua", "ViewStrategy.lua", "Window.lua" }) do
   local chunk = assert(loadfile(ROOT .. "../TwichUI_Workshop/" .. f)); setfenv(chunk, c); chunk("TwichUI_Workshop", {})
 end
 local W = R.Workshop
@@ -472,7 +472,7 @@ do
   Same(sd.name:GetText(), "Peacebloom")
   Check(sd.explain:GetText():find("Make 2 x Peacebloom Bundle", 1, true), sd.explain:GetText())
   Check(sd.explain:GetText():find("Making this looks cheaper than buying at the auction house", 1, true), sd.explain:GetText())
-  Same(sd.act.text:GetText(), "Add to crafting plan"); Check(sd.act:IsShown())
+  Same(sd.act.text:GetText(), "Add optimized plan")   -- P2: the multilevel plan adds its crafts through a confirmation; Check(sd.act:IsShown())
   -- the suggestion and the player's own choice are told apart, in words: Make is suggested (the lowest cost), nothing is overridden yet
   Same(sd.tags.make:GetText(), "Suggested"); Same(sd.tags.auction:GetText(), ""); Same(sd.tags.vendor:GetText(), "")
   Check(not sd.useSuggestion:IsShown(), "no override: no Use suggestion")
@@ -505,14 +505,22 @@ do
   c.GameTooltip.AddDoubleLine = function(_, a, b) lines[#lines + 1] = a .. " | " .. b end
   make:GetScript("OnEnter")(make)
   local all = table.concat(lines, "\n")
-  Check(all:find("Make | worth 20c", 1, true) and all:find("Cooldowns, tools and stations aren't checked", 1, true), all)
-  -- adding the made material to the queue: explicit, once; nothing is counted twice
+  Check(all:find("Make | part of the multilevel plan", 1, true) and all:find("Cooldowns, tools and stations aren't checked", 1, true), all)
+  -- adding the made material to the queue (P2): the button asks for a confirmation first; nothing changes until it is confirmed, once; nothing is counted twice
   local makeAct = Select(make).act
   makeAct:GetScript("OnClick")(makeAct)
+  Same(#Q.Entries(), 1, "the click alone changed nothing: a confirmation is shown")
+  local svw, cdw = W.StrategyView.Frames()
+  Check(svw:IsShown() and cdw:IsShown(), "the strategy view and its confirmation are open")
+  local cok = cdw.ok
+  Check(cok:IsEnabled(), "the plan was ready, so the confirmation can be accepted")
+  cok:GetScript("OnClick")(cok)
   Same(#Q.Entries(), 2, "the bundle is queued"); Same(Q.Find(3).crafts, 2)
+  Check(not cdw:IsShown(), "the confirmation closes once it is accepted")
   Same(#SL.data, 1, "Peacebloom is now made by the queue: one row left"); Same(SL.rows[1].item, 12)
   Same(SL.rows[1].need:GetText(), "2", "the seeds are counted once")
   Check(f.note:GetText():find("Queued 2 crafts of Peacebloom Bundle", 1, true), f.note:GetText())
+  svw:Hide()
   -- the Crafting view's Materials agree: the bundle's output is not "still needed"
   f.tabCraft:GetScript("OnClick")(f.tabCraft)
   local mrow
@@ -892,7 +900,10 @@ do
   Check(qrow.less.enabled == false, "minus is off at one craft"); Check(Win.Lists().queue.rows[1].less.enabled == true)
   Check(#qrow.less.bars == 1 and #qrow.more.bars == 2, "the controls are drawn (a bar, and two bars): no font glyph")
   -- the materials list: an optional note per material (for a planner that knows how it is made) is shown only when given
-  Check(Win.Lists().mats.rows[1].note:IsShown() == false, "no note, no second line")
+  -- P2: the multilevel plan gives a material that is bought, made or collected its one line; a material the plan has nothing to do for has none
+  for _, mr in ipairs(Win.Lists().mats.rows) do
+    if mr:IsShown() then Check(mr.note:IsShown() == (mr.row.note ~= nil), "a material shows its note exactly when the plan gave it one") end
+  end
 
   -- Shopping: the details of the chosen material
   Win.SetMode("shop"); Win.Render()

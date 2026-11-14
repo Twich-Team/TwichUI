@@ -309,3 +309,136 @@ Pure("crafting.planner.reference", function(t)
     t:Fact("crafting.planner.compared", compared)
     t:Check(compared >= 24, "most seeds compared: " .. compared)
 end)
+
+---------------------------------------------------------------------------
+-- The multilevel strategy in the windows (P2, Strategy.lua; docs/workshop/multilevel-crafting-planner.md section 14). The same made-up graphs as above,
+-- explicit inputs only: nothing reads the player's queue, stock, saved choices or auction data, and nothing here changes them. The jobs use a slot of their
+-- own ("lab", dropped at the end), never the windows' slots, and never Strategy.Bump or Strategy.Reset (those would cancel the player's open plans).
+---------------------------------------------------------------------------
+local function Strat(t)
+    local St = t.W.Strategy
+    if not (St and t.W.CraftPlanner) then t:Skip("the strategy (Strategy.lua) is not loaded") end
+    return St
+end
+-- Shopping-shaped rows from a plan: the adapter's input is the combined materials of the queue (Materials.Rows) and the planner's own input
+local function Adapted(t, entries, extra)
+    local W = t.W
+    local inp = Inp(Two(extra))
+    inp.entries = entries
+    local have = function(i) return (inp.have or function() return 0 end)(i) end
+    local mrows = W.Materials.Rows(entries, have)
+    local plan = W.CraftPlanner.Plan(inp)
+    return W.Strategy.Adapt(plan, { mrows = mrows, inp = inp, recById = function(id) for _, l in pairs(TWO.recipes) do for _, r in ipairs(l) do if r.id == id then return r end end end end }), plan
+end
+local function RowOf(list, item, kind) for _, r in ipairs(list.rows) do if r.item == item and (kind == nil or r.kind == kind) then return r end end end
+
+Pure("crafting.strategy.adapter", function(t)
+    Strat(t)
+    -- 2 A (110) as in two-level: make A and B (120) from R (200): crafts 120 then 110, R bought 4 x 4 = 16; the rows are Shopping's shape
+    local a, plan = Adapted(t, { E(110, 2) })
+    t:Same(a.engine, "multilevel")
+    local ma, mb = RowOf(a, 110, "make"), RowOf(a, 120, "make")
+    t:Check(ma and mb, "both made materials are make rows")
+    t:Same(mb.make.crafts .. "/" .. ma.make.crafts, "1/2", "B once (makes 2), A twice")
+    local r = RowOf(a, 200, "buy")
+    t:Same(r.qty .. "/" .. tostring(r.cash) .. "/" .. tostring(r.source), "4/16/vendor", "the reagent bought once, for the whole plan")
+    t:Check(r.reagentOnly, "and it says it is only for making")
+    t:Same(a.totals.cash, plan.summary.cash.low, "the spending is the planner's cash")
+    t:Fact("crafting.strategy.adapter", ("rows %d makes %d cash %d"):format(#a.rows, a.totals.makes, a.totals.cash))
+end)
+
+Pure("crafting.strategy.shared-allocation", function(t)
+    Strat(t)
+    -- R: 3 in the bags, 2 in the bank; demand 4: bags 3, bank 1 collected, nothing bought; the economic cost still counts the owned R
+    local W = t.W
+    local entries = { E(110, 2) }
+    local inp = Inp(Two{ bags = { [200] = 3 }, bank = { [200] = 2 } })
+    inp.entries = entries
+    local plan = W.CraftPlanner.Plan(inp)
+    local a = W.Strategy.Adapt(plan, { mrows = W.Materials.Rows(entries, inp.have, inp.stock), inp = inp })
+    local c = RowOf(a, 200, "collect")
+    t:Check(c, "the bank's R is a collect row"); t:Same(c.where .. "/" .. c.qty, "bank/1")
+    t:Check(RowOf(a, 200, "buy") == nil, "nothing is bought")
+    t:Same(a.totals.cash, 0); t:Same(W.Strategy.Summary(plan, tostring).economic, "16", "owned materials are not free")
+end)
+
+Pure("crafting.strategy.queue-wide", function(t)
+    Strat(t)
+    -- two queued finals that both need A (110): planned together R is needed 8 over both, bought once; alone each needs 4 (and the 3 in the bags help only one)
+    local W = t.W
+    local both = { E(110, 2, 1, 901), E(110, 2, 1, 902) }
+    local inp = Inp(Two{ bags = { [200] = 3 } })
+    inp.entries = both
+    local together = W.CraftPlanner.Plan(inp)
+    inp.entries = { both[1] }
+    local one = W.CraftPlanner.Plan(inp)
+    t:Same(Line(together, 200).need, 8, "the demand is combined over the whole queue")
+    t:Same(together.summary.cash.low, 20, "8 R - 3 owned = 5 bought at 4")
+    -- one queued craft alone buys 4 R - 3 owned = 1 (4 cash); two such plans added up would count the same 3 owned R twice (8): together it is 20
+    t:Same(one.summary.cash.low, 4, "one final alone: 1 R bought")
+    t:Check(together.summary.cash.low > 2 * one.summary.cash.low, "the plans of the recipes are not added up: the owned stock is allocated once, over the whole queue")
+    t:Fact("crafting.strategy.queue-wide", ("together cash %d, one cash %d"):format(together.summary.cash.low, one.summary.cash.low))
+end)
+
+Pure("crafting.strategy.stale-job", function(t)
+    local St = Strat(t)
+    local inp = Inp(Two())
+    local make = function() return inp end
+    inp.entries = { E(110, 2) }
+    local state = St.Request("lab", "k1", make, true)
+    t:Check(state == "ready" or state == "planning", "a request starts or finishes a job")
+    St.Pump(nil, "lab")
+    t:Check(St.Peek("lab", "k1") ~= nil, "the finished plan is kept for its own key")
+    t:Check(St.Peek("lab", "k2") == nil, "and for no other key")
+    -- a newer request of the slot replaces an unfinished older one: only the newer answer exists
+    local big = { entries = {} }
+    for k, v in pairs(inp) do big[k] = v end
+    for i = 1, 30 do
+        local mats = {}
+        for j = 1, 16 do mats[j] = { item = 20000 + i * 100 + j, qty = 3 } end
+        big.entries[i] = { id = 700 + i, name = "R" .. i, crafts = 5, mats = mats }
+    end
+    big.auction = function() return Look(10) end
+    St.Request("lab", "big", function() return big end, true)
+    St.Request("lab", "small", make, true)
+    St.Pump(nil, "lab")
+    t:Check(St.Peek("lab", "big") == nil, "the superseded job produced nothing")
+    t:Check(St.Peek("lab", "small") ~= nil, "the newer one did")
+    St.Drop("lab")
+    t:Check(St.Peek("lab", "small") == nil, "the slot is dropped")
+end)
+
+Pure("crafting.strategy.bounded-frame-time", function(t)
+    Strat(t)
+    local CP = t.W.CraftPlanner
+    -- a 480-material queue, each from two recipes over three shared materials: the job's slices are short and its result equals the plan at once
+    local entries, recipes, lookup = {}, {}, {}
+    for i = 1, 30 do
+        local mats = {}
+        for j = 1, 16 do
+            local item = 30000 + i * 100 + j
+            mats[j] = { item = item, qty = 3 }
+            lookup[item] = Look(10)
+            recipes[item] = {}
+            for k = 1, 2 do recipes[item][k] = Rec(item * 10 + k, item, 1, { 39001, k, 39002, 2, 39003, 1 }) end
+        end
+        entries[i] = { id = 600 + i, name = "R" .. i, crafts = 5, mats = mats }
+    end
+    lookup[39001], lookup[39002], lookup[39003] = Look(3), Look(4), Look(5)
+    local inp = Inp{ entries = entries, lookup = lookup, recipes = recipes }
+    local job = CP.Job(inp)
+    local steps, longest, clock = 0, 0, debugprofilestop or function() return 0 end
+    repeat
+        local t0 = clock()
+        local done = job:Step(CP.STEP)
+        local dt = clock() - t0
+        if dt > longest then longest = dt end
+        steps = steps + 1
+        if steps % 40 == 0 then t:Yield() end
+    until done or steps > 5000
+    t:Check(steps > 50, "the plan takes many slices: " .. steps)
+    local at = CP.Plan(inp)
+    t:Same(job:Result().summary.economic.low, at.summary.economic.low, "the stepped job equals the plan at once")
+    t:Same(job:Result().summary.crafts, at.summary.crafts)
+    t:Fact("crafting.strategy.bounded-frame-time", ("steps %d longest slice %.2f ms"):format(steps, longest))
+end)

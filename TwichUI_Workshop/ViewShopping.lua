@@ -4,10 +4,15 @@
 -- material comes from, what is needed and owned, the source choices and the price evidence beside the list; a bar at the foot adds the plan
 -- up. Buy, Make and Collect each have their own picture and word (colour is never the only sign). Nothing is bought, crafted, posted or
 -- sent; the only actions are choosing a source, showing a vendor on the map and adding a subcraft to the queue, all through Session.lua.
+-- P2: the rows come from the multilevel plan of the WHOLE queue (Session.ShoppingPlan through Strategy.Adapt: the same row shape as before, so
+-- the page keeps its interface). A made material's own materials are rows of their own; Collect rows come from storage; a source the player chose
+-- stays authoritative. While a plan is computed the last finished list stays, marked as updating; if the planner fails the old one-level list is
+-- shown and says so, never as the multilevel plan.
 
 local R = TwichUI
 local W = R.Workshop
 local S, O, PR, Op, Sh, K2 = W.Session, W.Observe, W.Prices, W.Opps, W.Shopping, W.Stock
+local Sg = W.Strategy
 local UI = W.UI
 
 local SHOP_H, DETAIL_W, BAR_H, GAP = 56, 300, 70, 10
@@ -75,7 +80,7 @@ local function ShopDetail(r)
     elseif r.surplus then
         parts[#parts + 1] = ("%d left over."):format(r.surplus)
     end
-    local why = Sh.Explain(r)
+    local why = r.multilevel and Sg.RowWhy(r) or Sh.Explain(r)
     if r.source and not r.picked and not r.reagentOnly then why = "Suggested source. " .. why end
     parts[#parts + 1] = why
     if r.kind == "buy" and r.source == "auction" then
@@ -177,9 +182,15 @@ local function MakeShopRow(parent)
         local tag = {}
         if r.kind == "make" then
             local mk = r.make
-            a:SetText(mk.cash and UI.Money(mk.cash) or "Unknown")
-            UI.Paint(a, mk.cash and K.textDim or K.stone)
-            b:SetText("materials, counted in their rows")
+            if mk.planned then
+                a:SetText("In the plan")
+                UI.Paint(a, K.textDim)
+                b:SetText("cost is in its materials")
+            else
+                a:SetText(mk.cash and UI.Money(mk.cash) or "Unknown")
+                UI.Paint(a, mk.cash and K.textDim or K.stone)
+                b:SetText("materials, counted in their rows")
+            end
         elseif r.cash then
             local age = AgeWords(r.at, r.source == "vendor" and W.Vendor.OLD_AFTER or nil)
             if r.costState == "range" and r.high then
@@ -283,10 +294,10 @@ local function RenderDetail(plan, ctx)
         d.costNote:SetText(r.at and ("seen " .. UI.AgeOf(r.at)) or "")
     elseif r.kind == "make" then
         local mk = r.make
-        d.costLabel:SetText("Materials cash")
-        d.cost:SetText(mk.cash and UI.Money(mk.cash) or "Unknown")
-        UI.Paint(d.cost, mk.cash and K.text or K.stone)
-        d.costNote:SetText("the reagents are counted in their own rows")
+        d.costLabel:SetText(mk.planned and "Cost" or "Materials cash")
+        d.cost:SetText(mk.planned and "In the plan" or (mk.cash and UI.Money(mk.cash) or "Unknown"))
+        UI.Paint(d.cost, (mk.planned or mk.cash) and K.text or K.stone)
+        d.costNote:SetText(mk.planned and "counted in the materials and crafts of the plan" or "the reagents are counted in their own rows")
     else
         d.costLabel:SetText(r.estimate and "Estimated cost" or "Cost")
         local short = r.cash and Sh.CostWords(r, UI.Money)
@@ -306,7 +317,7 @@ local function RenderDetail(plan, ctx)
     d.usedFor:SetText(#used > 0 and ("Needed for: " .. table.concat(used, ", ")) or (r.forNames and ("Needed to make: " .. table.concat(r.forNames, ", ")) or ""))
     -- the one action that fits the row
     if r.kind == "make" then
-        d.act.text:SetText("Add to crafting plan")
+        d.act.text:SetText(r.multilevel and "Add optimized plan" or "Add to crafting plan")
         d.act:Show()
     elseif r.kind ~= "collect" and r.source == "vendor" and ctx and ctx.sellers[r.item] then
         d.act.text:SetText("Show vendor")
@@ -322,8 +333,11 @@ end
 local Plural = UI.Plural
 
 local function Render()
-    local plan, ctx = S.Shopping()
+    local plan, ctx, engine = S.ShoppingPlan()
     shopView = { plan = plan, ctx = ctx }
+    local updating = engine == "planning"
+    shop.list.box:SetAlpha(updating and 0.6 or 1)
+    shop.view:SetEnabled(engine == "ready")
     local sum, tot = ctx.summary, plan.totals
     shop.useGuild:SetOn(ctx.stock.guild.enabled)
 
@@ -335,7 +349,8 @@ local function Render()
     for kind, badge in pairs(shop.counts) do badge.n:SetText(tostring(n[kind] or 0)) end
 
     local empty
-    if sum.state == "empty" then empty = "Add recipes to the queue to build a shopping list."
+    if ctx.first then empty = "Planning your shopping list..."
+    elseif sum.state == "empty" then empty = "Add recipes to the queue to build a shopping list."
     elseif #plan.rows == 0 then
         if sum.state == "ready" then empty = "Nothing to buy: the materials are in your bags, or made by your queue."
         else empty = (S.Headline(sum)) end
@@ -344,7 +359,10 @@ local function Render()
     UI.lists.shop:SetData(plan.rows, empty)
 
     -- the total: only what is priced, and never as if it were complete when it is not
-    if #plan.rows == 0 then
+    if ctx.first then
+        shop.total:SetText("Planning...")
+        UI.Paint(shop.total, K.textDim)
+    elseif #plan.rows == 0 then
         shop.total:SetText("")
     elseif tot.priced + tot.missing + tot.makes == 0 then
         shop.total:SetText("Nothing to buy: collect what is stored.")   -- only collect rows: stored materials cost nothing to get
@@ -363,6 +381,10 @@ local function Render()
         shop.total:SetText("Estimated spending: " .. UI.Money(tot.cash) .. (tot.estimate and " (includes estimates)" or ""))
         UI.Paint(shop.total, K.text)
     end
+    if updating and not ctx.first then
+        shop.total:SetText("Updating the plan...")   -- the list shown is the last finished one, not the plan of what was just changed
+        UI.Paint(shop.total, K.textDim)
+    end
     local notes = {}
     if plan.unknownBags > 0 then
         notes[#notes + 1] = ("%d %s a bag count that couldn't be read, so %s left out."):format(plan.unknownBags,
@@ -375,8 +397,13 @@ local function Render()
     if sum.cycle and sum.cycle > 0 then
         notes[#notes + 1] = ("%d queued %s depend on each other, so what they make isn't counted."):format(sum.cycle, Plural(sum.cycle, "recipe", "recipes"))
     end
-    if (n.buy or 0) + (n.make or 0) > 0 then
-        notes[#notes + 1] = "Suggestions compare one material at a time; owned materials lower what you spend but aren't free."
+    if ctx.engine == "basic" then
+        notes[#notes + 1] = "Basic list (one level only): the multilevel plan couldn't be worked out, so made materials' own materials are not planned."
+    elseif plan.plan then
+        local w = Sg.Summary(plan.plan, UI.Money)
+        local line = w.status
+        if w.economic then line = line .. " \194\183 economic cost " .. w.economic end
+        notes[#notes + 1] = line .. ". Owned materials lower cash, not economic cost."
     end
     local stockNote = S.StockNote(sum, ctx.stock)
     if stockNote then notes[#notes + 1] = stockNote end
@@ -503,12 +530,16 @@ local function BuildDetail()
     d.act = UI.ArtButton(d, "Show vendor", "npc:coins", DETAIL_W - 28, "primary", function()
         local x = d.data
         if not x then return end
-        if x.kind == "make" then S.AddSubcraft(x.item) else S.ShowVendor(x.item) end
+        if x.kind == "make" then
+            -- the multilevel plan adds its crafts through a confirmation (the whole plan's crafts, checked again before anything is added)
+            if x.multilevel and UI.StrategyView and UI.StrategyView.Open("queue") then UI.StrategyView.Confirm() return end
+            S.AddSubcraft(x.item)
+        else S.ShowVendor(x.item) end
         UI.Redraw()
     end, 34)
     d.act:SetPoint("BOTTOMLEFT", 14, 12)
     d.act:SetPoint("BOTTOMRIGHT", -14, 12)
-    UI.Tip(d.act, "Show vendor / Add to crafting plan", "Show vendor: shows a vendor seen to sell this on the world map. It sets no waypoint and starts no route. Add to crafting plan: queues the crafts that make this, so the queue makes it. Nothing is bought or crafted.")
+    UI.Tip(d.act, "Show vendor / Add to crafting plan", "Show vendor: shows a vendor seen to sell this on the world map. It sets no waypoint and starts no route. Add optimized plan: shows the crafts the plan makes and asks you to confirm before adding them to your crafting plan. Nothing is bought or crafted.")
     d.empty = UI.Text(d, 13, K.textDim)
     d.empty:SetPoint("TOPLEFT", 14, -16)
     d.empty:SetPoint("RIGHT", -14, 0)
@@ -575,6 +606,11 @@ local function Build(p)
         UI.Redraw()
     end)
     shop.useGuild:SetPoint("TOPRIGHT", -2, -10)
+    shop.view = UI.ArtButton(shop, "View strategy", "npc:hammer", 150, "secondary", function()
+        if UI.StrategyView then UI.StrategyView.Open("queue") end
+    end, 28)
+    shop.view:SetPoint("TOPRIGHT", -190, -6)
+    UI.Tip(shop.view, "View strategy", "Shows the whole plan: the crafting steps in order, what to buy and where, what comes from your bags and storage, and the other ways considered. Nothing is bought or crafted.")
     shop.status = UI.Text(shop, 12, K.stone)
     shop.status:SetPoint("TOPRIGHT", -2, -38)
     shop.status:SetJustifyH("RIGHT")
@@ -601,6 +637,7 @@ local function Build(p)
     list.box:SetPoint("TOPLEFT", 4, -36)
     list.box:SetPoint("BOTTOMRIGHT", -4, 4)
     UI.lists.shop = list
+    shop.list = list
 
     BuildDetail()
     BuildBar()

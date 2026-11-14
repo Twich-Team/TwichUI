@@ -1,6 +1,6 @@
 # Workshop P1: the multilevel crafting planner
 
-`TwichUI_Workshop/CraftPlanner.lua` (`W.CraftPlanner`). Built 2026-11-13 on `feature/workshop`. It is a **pure engine with no consumer yet**: no window, session or tooltip code calls it, and Shopping keeps using `Shopping.Plan` (a test checks both). P2 will connect it to Opportunities, the Crafting Plan and Shopping.
+`TwichUI_Workshop/CraftPlanner.lua` (`W.CraftPlanner`). Built 2026-11-13 on `feature/workshop`. P1 (sections 1 to 13) is the **pure engine**: it knows no window, session or saved data. **P2 (section 14, 2026-11-13) connects it** to Opportunities, the Crafting Plan and Shopping through `Strategy.lua`; the engine itself was not changed. `Shopping.Plan` stays as the one-level fallback.
 
 Evidence labels used below: **unit-tested** (`tests/`), **simulator-tested** (`tools/simlab`), **not tested**. Nothing here is **real-client-tested**.
 
@@ -250,3 +250,121 @@ These are inputs the client data does not give the Workshop today:
 - the selling side.
 
 A recipe is assumed doable if the character knows it. Leftovers have no value in the plan. The queued credit is Materials' rule: it applies only to items the queue itself needs, with no credit for a cyclic queue entry. Auction quotes come from the last scan: remembered, not live. In the client, all of this is **not tested**.
+
+## 14. P2: the planner in the windows (built 2026-11-13, `feature/workshop`)
+
+P2 connects the engine to Opportunities, the Crafting Plan and Shopping. **`CraftPlanner.lua` was not changed**: every consumer adapts to its API. Evidence labels: **unit-tested** (`tests/`), **simulator-tested** (`tools/simlab/workshop.sh`), **not tested** (the real client; nothing here has run in Forever).
+
+### 14.1 What the player sees
+
+- **Opportunities.** The details hold a compact **Crafting strategy** block for the chosen recipe made once, on its own: *Buy ingredients directly*, *Optimized economic cost*, *Cash needed now*, *Savings* (or *Potential savings*), a status ("Best verified plan", "Best plan found", "Partial plan: some prices or recipes are missing"), what to do ("Craft 1 · Buy 3 · Collect 1") and **View strategy**. It is a separate, labelled reference. **The row's cost, profit and the list's sort are still the one-level A7 estimate** (the Cost to make box says so in its tooltip; A8 will replace the selling side). The Price history chart is untouched and has more room than before (section 14.8).
+- **View strategy** (`ViewStrategy.lua`). A window over the Workshop in the same surfaces: four figures, then one scrolling list: crafting steps in order (what each uses, leftovers), what to buy (source, quantity, price or range, how old the scan is), what comes from the bags, what to collect from the bank or guild bank, the other ways considered ("Make Bar: 90c more, certainly dearer than the plan"), and what to know (the planner's reason sentences, rejected recipes, "owned materials lower cash, not economic cost", "cooldowns and stations aren't checked"). **Add optimized plan** opens the confirmation.
+- **Crafting Plan.** A strip above the materials gives the status and counts of the plan for the **whole queue** (one plan over combined demand: never a sum of per-recipe plans), the economic cost and the cash now, and View strategy. Each material row carries one line on how the plan gets it ("Craft Bar × 4", "Buy 3 at auction", "Collect 2"). The chosen craft's panel is more compact (Open recipe and Remove sit beside the name block) to pay for the strip. The estimates in the boxes and the bar are unchanged.
+- **Shopping.** The default suggestions come from the multilevel plan of the whole queue (the approved product decision). The page, its rows, details, source buttons and bar are the ones it had. A material made by the plan shows as a **Make** row whose cost is "In the plan"; its own materials are rows of their own (bought, or collected). **Add optimized plan** (on a Make row) opens the same confirmation. The bar names the plan's status and economic cost; **View strategy** is at the top.
+
+### 14.2 Modules
+
+| file | what it is |
+|---|---|
+| `Strategy.lua` (`W.Strategy`) | words (`Status`, `Summary`, `Savings`, `Actions`, `RangeText`), the planning jobs (`Request`, `Bump`, `Reset`, `Peek`, `Last`, `Pump` for tests, `Stats`), the adapter (`Adapt`, `RowWhy`), the queue operations (`Ops`) and the strategy rows (`Detail`). No frames, no saved data. |
+| `Session.lua` | `PlanKey`, `QueueStrategy`, `ShoppingPlan`, `OppStrategy`, `PreviewOptimized`, `ApplyOptimized`. `S.Shopping` (the one-level plan) is unchanged. |
+| `Queue.lua` | `Q.AddBatch(ops)`: several recipes, all or nothing. |
+| `ViewStrategy.lua` | the strategy window and the confirmation. |
+| `ViewOpportunities.lua`, `ViewCrafting.lua`, `ViewShopping.lua`, `Window.lua` | the three pages and the shell's wiring (a finished job redraws the page; a bag event invalidates plans; closing drops them). |
+
+### 14.3 The planning job lifecycle
+
+1. **A page asks** (`Session.QueueStrategy`, `ShoppingPlan`, `OppStrategy`, `PreviewOptimized`) with a **key**: `Session.PlanKey` = the strategy epoch, the scope, the queue (recipe and crafts), what the bags hold of the entries' own materials, the player's source choices, the guild bank choice, what was seen of the bank and guild bank (times, tab and uncertainty counts), the price source and its scan time, `Scan.ended`, the vendor price count and the known-recipe count.
+2. **`Strategy.Request(slot, key, make)`.** A result kept for exactly that key is returned. A job already running for it is left alone. Otherwise the slot's old job is cancelled, a new `CP.Job` is made, and **`St.FIRST` = 3 slices (`CP.STEP` work units each) run at once**: a small plan is ready before the page is drawn, so a click on a source never shows the old list for a frame. A longer plan goes on **one slice per frame** (`C_Timer.After(0)`, rescheduled only while a job is unfinished; no `OnUpdate`, no permanent timer).
+3. **Slots** are `queue` (Crafting strip and Shopping share it), `opp` (the chosen recipe), `suggest` (the queue without the player's choices, only while choices exist), `confirm` (the queue plus the recipe being added). Each slot has its own generation, so a request of another slot never makes a job stale (a test and a mutation cover this).
+4. **Invalidation.** `Strategy.Bump()` (epoch + 1) cancels every running job and forgets every kept result. It is called by queue edits (add, crafts, remove), a source choice that changed, the guild bank choice, a profession read, recipe details filled, a merchant read, a scan end, a bag event (`BAG_UPDATE_DELAYED`) and a bank or guild bank observation. The key also carries the epoch, the bag counts of the entries' materials and the stock view, so a missed event cannot show an old plan. **A result is only ever used for the key it was made for.**
+5. **While it runs.** Opportunities says "Planning..." with "..." in the figures and disables View strategy (never another recipe's figures). Shopping keeps the **last finished list**, dimmed, with "Updating the plan..." in the spending line (`ctx.stale`); with no earlier list it says "Planning your shopping list...". The Crafting strip says "Planning...".
+6. **Failure.** A job that raises is caught (`state = "failed"`). Shopping then shows `Session.Shopping`'s one-level plan with the note "Basic list (one level only): the multilevel plan couldn't be worked out", never the strategy words; Opportunities and the Crafting strip say it could not be worked out. The fallback is not used for any other reason.
+7. **Close.** `Session.Reset` (the window hid) calls `Strategy.Reset`: every job is cancelled and nothing is kept.
+
+### 14.4 Cost words (what each label promises)
+
+| text | meaning |
+|---|---|
+| Best verified plan | `proven`: the search finished within its states and no graph limit was hit. The best of **the options considered**, not of everything possible. |
+| Best plan found | the search hit a state or graph limit (or finished but did not prove). Never called optimal. |
+| Partial plan | a price, recipe or bag count is missing; the figures are what is known. |
+| Economic cost | cash plus the value of the owned materials the plan uses. Owned materials are not free. A range, or "at least" when the upper end is open. |
+| Cash needed now | only what is bought. Owned and collected materials are not in it. |
+| Buy ingredients directly | the baseline: every lacking material bought, nothing made beyond the queue. Shown only when no price is missing. |
+| Savings / Potential savings | `Savings`, "at least X", only when the planner says the plan is certainly cheaper (the ranges do not overlap). Otherwise **Potential savings**, "about X" (the lower bounds' difference, not a promise); "None found"; or "Unknown" when a price is missing (no figure is invented). Not a profit: selling prices are not part of it. |
+
+### 14.5 The Shopping adapter (`Strategy.Adapt`)
+
+It turns the planner's result into `Shopping.Plan`'s row shape without changing the planner's output. Per plan item: **make** rows (`make = { planned = true, rec, crafts, made, surplus, reagents }`), **buy** rows (the options come from `Shopping.BuyOptions`, so the tooltips, cost words and source buttons are the old ones), **collect** rows (from `plan.collect`, with the stock's age and limit). `need` is the plan's combined demand for the item, `short` the part of the queue's own shortage, `extra` what is bought for made materials (`reagentOnly` when it is all of it), `forNames` the crafts that use it. A source with no usable price is shown as "No source" (as before) unless the player chose it. A material that is both owned and short appears as a collect/in-bags part plus one buy part: the split is the rows, not one flattened badge.
+
+**Manual choices stay authoritative.** `Session.PickSource` is unchanged; the choice goes to the planner as a pick. A valid choice restricts the item; an impossible one is reported (`pickLost`, "Your earlier choice is no longer possible") and changes nothing else. **What Workshop would suggest** for an item the player chose a source for comes from the `suggest` plan (the same queue with no choices), because a valid pick removes the item's alternatives from the planner's own result. While that plan runs the Suggested tag is blank.
+
+### 14.6 Adding the plan to the queue
+
+**Nothing changes the queue without the confirmation.** The flow:
+
+1. **Add optimized plan** (strategy view, or a Make row in Shopping) opens the confirmation and requests the `confirm` plan: the queue as it is now plus, for Opportunities, the chosen recipe once if it is not queued.
+2. It lists the recipes and crafts (`Strategy.Ops`: the planner's crafts in an order that can be done, then the player's own recipe last). While the plan runs the button is disabled.
+3. **Add to plan** calls `Session.ApplyOptimized(key, rec)`, which rebuilds the key and **refuses ("Your plan changed while you were looking") unless it equals the key the list was made for**, then `Queue.AddBatch`.
+4. **`Queue.AddBatch(ops)` is all or nothing.** It validates everything first (held by a newer version; each recipe known, with materials and a fixed output; no recipe twice; no entry above 999 crafts; room for the new entries; at most 40 operations), changes the list in memory and saves **once**; if the save fails only this call's own changes are undone. A recipe already queued gets more crafts on the same entry.
+5. **Nothing is counted twice.** The plan already credits queued crafts, so what is added is only what is missing; after adding, the next plan has no crafts to add (a test checks this, and that raising an entry adds only the difference).
+
+Adding crafts to the queue crafts, buys and visits nothing.
+
+### 14.7 The old planner
+
+`Shopping.Plan` and `Session.Shopping` are untouched and are the fallback (14.3). `Session.AddSubcraft` is still used for a basic list. A test checks that the multilevel and one-level plans give the same spending for the one-level chain, and the simulator scenario's hand-calculated Shopping rows (Peacebloom, Copper Ore, Tin Ore, the spending line) pass unchanged on the multilevel plan.
+
+### 14.8 Layout and the approved mockups
+
+The left navigation, window shell, header and footer are unchanged. The mockups are 1586 x 992 and the Workshop window is 1200 x 700 units, so the layout follows their hierarchy, not their pixels.
+
+- **Opportunities:** the details are wider (400 units), the three money boxes are one row (Cost to make, Sell price, Profit before fees), the Crafting strategy block follows, the materials of one craft sit **beside** the market facts, and the price history has the full width under both. The history keeps the full width under both columns and a height of its own; its exact height was not measured (the simulator screenshots show it, with its caption and the "More scans needed" note, at roughly the size it had).
+- **Crafting Plan:** the chosen-craft panel is 126 units (was 164); the strip is 40 units; the materials list shows about four rows and scrolls.
+- **Shopping:** as before, plus View strategy and the plan's status in the bar.
+
+Differences from the mockups, on purpose: the mockups' "Beats buying sub-parts (56 30)" and the planned-cost badge are not drawn (the comparison is in the strategy figures); the Crafting Plan page has a strip and per-row notes, not a second panel with the ordered steps (those are in View strategy); the numbers in the mockups are illustrative and some are inconsistent.
+
+### 14.9 Performance (offline, plain Lua 5.1 on the development machine; not the game's figures)
+
+`measure_p2` (a scratch script over `Strategy.Request` and `Pump`; median of 5):
+
+| plan | slices | total | the request's first call (3 slices) | longest slice |
+|---|---|---|---|---|
+| one recipe, one subcraft (Opportunities) | 1 | 0.1 ms | 0.08 ms | 0.06 ms |
+| A7's 480 materials, buy only | 151 | 13 ms | 4.7 ms | 3.9 ms (first run; GC) |
+| 480 materials, each from 2 recipes over 3 shared | 569 | 100 ms | 2.6 ms | 1.4 ms |
+
+The heavy plan therefore takes about 570 frames (about 9 s at 60 fps) in the worst case, and no frame does more than the first call's 3 slices (about 3 to 5 ms) or one slice (about 1 ms). A page never calls `CP.Plan`. Memory: results are kept per slot (at most 8 keys) and dropped on a change or when the window closes; the heap grows by the planner's short-lived tables (P1 section 11).
+
+### 14.10 Evidence
+
+- **Unit-tested:** `tests/test_workshop_strategy.lua` (words, the adapter against the one-level plan on the same chain, choices and the suggestion, jobs: slices, cancelling, stale results, two slots, failure, the last list shown as not current; fallback; one recipe; preview without a change; apply, refused after a change, nothing counted twice, raising an entry; invalidation by bags, prices, scan end, crafts, guild bank and choices; mixed bags, bank and bought; `Queue.AddBatch`: capacity, limits, duplicates, an unsaved queue, a held queue), `tests/test_workshop_strategy_ui.lua` (the three pages and the views on recording frames: Opportunities beside the unchanged estimate, planning, the strategy view, the confirmation, Crafting, Shopping, the fallback and updating states, closing during a plan) and the changed expectations in `test_workshop_window.lua` (the Make row's text and the confirmation) and `test_workshop_craftplanner.lua` (Strategy.lua is the one consumer).
+- **Mutations:** 14 entries in `tools/mutations/workshop.py` (`crafting.strategy.*`, `crafting.queue.batch-*`): a saving called certain from the lower bounds, "verified" for a bounded plan, an open range shown as a total, a job reused for another key, another slot making a job stale, a collect quantity lost, reagent purchases shown as the queue's shortage, the suggestion equal to the choice, the player's recipe queued first, a key that ignores the bags, a doubled craft count, a failed batch that keeps its entries, a batch refused at exactly full, an entry refused at exactly 999.
+- **Simulator-tested:** `tools/simlab/workshop.sh` (the real files over synthetic game data, handler-level clicks): the hand-calculated Shopping figures on the multilevel plan, the confirmation (the click alone adds nothing; accepting queues Smelt Bronze × 3), and 6 new poses (strategy, confirm, stratlong, planning, nodata, override).
+- **Test Lab (developer only, not run in the client):** `crafting.strategy.adapter`, `.shared-allocation`, `.queue-wide`, `.stale-job`, `.bounded-frame-time`; they use a slot of their own and never touch the player's queue, choices or prices.
+
+### 14.11 Real-client checks still needed (none done)
+
+1. Open Opportunities with a scan and a multilevel recipe: the strategy block fills in without a visible stall; switching quickly between recipes shows "Planning..." and never another recipe's figures.
+2. The price history is visible and readable under the facts and materials at the real window size and UI scale; the recipe names in the list are readable.
+3. View strategy: the list scrolls; the numbers agree with the block; tooltips read well.
+4. Add optimized plan: the confirmation lists the right recipes; Cancel changes nothing; Add to plan queues them once; the Crafting page and Shopping then show no further crafts to add; `/reload` keeps the queue.
+5. Shopping: a manual source choice stays; "Updating the plan..." is not distracting; a bag change, a scan and an auction house visit refresh the list.
+6. Click-reachability of every new control with the real pointer (the simulator only proves handlers).
+7. A large queue (30 recipes): no hitch while the plan is worked out; closing the window during it is clean; combat and `/reload` during planning are harmless.
+8. A real guild bank: the collect rows and their "shared stock" wording.
+
+### 14.12 Limits and decisions
+
+- The strategy of Opportunities is for **one craft on its own** (the queue is not part of it); the confirmation plans the whole queue plus that recipe.
+- The make option of a bought material in Shopping is chosen from the known recipes (the planner's own alternative list is empty when a choice restricts the item), so its reagent lines carry quantities only.
+- A made material's own cost is not shown on its row ("In the plan"): P1 gives the plan's total, not a per-item share. The Make row's tooltip no longer says "worth Xc".
+- The suggestion for a chosen item needs the second (`suggest`) plan; with a very large queue and choices both plans run (one slice per frame each).
+- The window is wider (1200 units) so the details and the list both stay readable; `R.FitToScreen` scales it on a smaller screen as before.
+
+### 14.13 Verification results (2026-11-14)
+
+- `./tests/run.sh`: 216 passed, 0 failed. `--group crafting` mutation campaign: 100 of 100 valid mutations killed (14 new entries).
+- `tools/simlab/workshop.sh`: 19 launches, 479 checks each, passed with only the classified simulator limitations; the clean run's screenshots are in `wow-ui-sim-lab/artifacts/workshop-20261114-053748/` (`opps`, `strategy`, `confirm`, `planning`, `nodata`, `craft`, `craftlong`, `stratlong`, `shop`, `shopmix`, `override`, `small`). The simulator draws addon fonts in a fallback font and is not visual validation; control clicks are handler-level.

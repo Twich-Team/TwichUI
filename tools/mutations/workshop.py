@@ -679,3 +679,37 @@ m("market.auto.refusal-not-remembered", AUTO, "    elseif SC.state == \"failed\"
 #       same plan, so replacing it changes nothing observable.
 #   Shopping.Suggest  dropping `(k ~= "make" or o.state == "ok")`: a make option that is not "ok" returns before it is given a cost, and
 #       Suggest needs `o.cost`, so the guard never decides anything today (it is defence in depth if EvalMake ever sets a cost earlier).
+
+
+# --- the strategy in the windows (P2, Strategy.lua, Session.lua's strategy part, Queue.AddBatch): words, jobs, the adapter and the confirmed batch ---------------
+STRAT, SESSION, QUEUE = "TwichUI_Workshop/Strategy.lua", "TwichUI_Workshop/Session.lua", "TwichUI_Workshop/Queue.lua"
+STU = "test_workshop_strategy.lua"
+m("crafting.strategy.savings-certain-from-bounds", STRAT, "    if sv.confident then\n        return \"Savings\"", "    if sv.confident or (sv.lowerBounds and sv.lowerBounds > 0) then\n        return \"Savings\"",
+  "a saving is called certain because the lower bounds differ, though the price ranges overlap", [STU])
+m("crafting.strategy.verified-when-only-bounded", STRAT, "    if s.proven then return \"Best verified plan\", \"good\" end", "    if s.proven or s.exhaustive then return \"Best verified plan\", \"good\" end",
+  "a plan whose search hit a graph limit is called verified", [STU])
+m("crafting.strategy.open-range-as-total", STRAT, "    if lowerOnly or r.high == nil then return \"at least \" .. money(r.low) end", "    if lowerOnly then return \"at least \" .. money(r.low) end",
+  "an upper bound that is open is shown as a range or a total instead of 'at least'", [STU])
+m("crafting.strategy.old-job-for-new-key", STRAT, "    if s.key == key then\n        if s.state == \"planning\" and s.job then return \"planning\" end", "    if s.key ~= nil then\n        if s.state == \"planning\" and s.job then return \"planning\" end",
+  "a running job is reused for a different input snapshot, so the page shows a plan made for something else", [STU])
+m("crafting.strategy.other-slot-makes-stale", STRAT, "    if s.gen ~= mine then   -- a newer request of this slot", "    if mine ~= gen then   -- a newer request of this slot",
+  "the stale check uses one global generation, so a request of another page drops this page's finished plan", [STU])
+m("crafting.strategy.collect-quantity-lost", STRAT, "rows[#rows + 1] = { kind = \"collect\", item = c.item, where = c.where, qty = c.qty,", "rows[#rows + 1] = { kind = \"collect\", item = c.item, where = c.where, qty = 1,",
+  "a Collect row names one item instead of the planned quantity", [STU])
+m("crafting.strategy.reagent-buy-not-separated", STRAT, "row.short, row.qty, row.extra = short, qty, qty - short", "row.short, row.qty, row.extra = qty, qty, 0",
+  "what is bought for made materials is shown as the queue's own shortage", [STU])
+m("crafting.strategy.suggestion-follows-choice", STRAT, "    if not line.picked then return chosen end\n    return ctx.suggest and ctx.suggest[line.item] or nil", "    do return chosen end",
+  "the suggestion is always the player's own choice, so a differing choice is never told apart", [STU])
+m("crafting.strategy.final-recipe-first", STRAT, "if final then ops[#ops + 1] = { recipe = final.id, name = final.name, crafts = final.crafts or 1, produces = final.outItem, final = true } end",
+  "if final then table.insert(ops, 1, { recipe = final.id, name = final.name, crafts = final.crafts or 1, produces = final.outItem, final = true }) end",
+  "the recipe the player adds is queued before the crafts that make its materials", [STU])
+m("crafting.strategy.bags-not-in-key", SESSION, "bags[#bags + 1] = tostring(O.BagCount(m.item))", "bags[#bags + 1] = \"\"",
+  "a plan is reused after the bags changed, because the key ignores what the bags hold", [STU])
+m("crafting.strategy.apply-double-crafts", SESSION, "ops[#ops + 1] = { rec = r, crafts = c.crafts }", "ops[#ops + 1] = { rec = r, crafts = c.crafts * 2 }",
+  "the confirmed plan queues more crafts than the preview listed", [STU])
+m("crafting.queue.batch-keeps-new-entries", QUEUE, "        for i = #entries, size + 1, -1 do entries[i] = nil end\n", "",
+  "a batch whose save fails leaves the new entries in the queue", [STU])
+m("crafting.queue.batch-full-one-early", QUEUE, "    if #entries + fresh > W.MAX_QUEUE then return false, \"full\" end", "    if #entries + fresh >= W.MAX_QUEUE then return false, \"full\" end",
+  "a batch that exactly fills the queue is refused as full", [STU])
+m("crafting.queue.batch-raise-limit", QUEUE, "            if have.crafts + n > W.MAX_CRAFTS then return false, \"toomany\" end", "            if have.crafts + n >= W.MAX_CRAFTS then return false, \"toomany\" end",
+  "an entry may not be raised to exactly the most crafts it holds", [STU])

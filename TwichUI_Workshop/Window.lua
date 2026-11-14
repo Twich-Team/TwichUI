@@ -20,7 +20,7 @@ local Win = {}
 W.Window = Win
 
 local NAME = "TwichUIWorkshop"
-local WIDTH, HEIGHT = 1080, 700
+local WIDTH, HEIGHT = 1200, 700   -- (P2: 1080 wide until the strategy block; the Opportunities details and its list both need the room)
 local HEADER_H, FOOTER_H, NAV_W, PAD = 54, 38, 184, 14
 local NAV_ROW, NAV_ICON = 42, 28
 local PAGE_TOP, PAGE_BOTTOM = HEADER_H + 12, FOOTER_H + 13
@@ -73,6 +73,7 @@ function Win.Render()
     local def = UI.pages[mode]
     if def and def.Render then def.Render(pages[mode]) end
     PaintStatus()
+    if UI.StrategyView then UI.StrategyView.Refresh() end   -- the strategy view and its confirmation draw what the plans now say
     f.note:SetText(S.Note() or (Q.Held() and "This queue was saved by a newer TwichUI and is read-only." or ""))
     if pt then Perf.Stop(pt) end
 end
@@ -341,6 +342,7 @@ local function Build()
             local row = UI.hoverRow
             if row and row:IsShown() then row:ShowTip() end   -- Shift pressed or released while over a row: the other tooltip
         elseif kind then
+            if event == "BAG_UPDATE_DELAYED" then W.Strategy.Bump() end   -- what is owned changed: plans are worked out again
             Schedule(kind)
         end
     end)
@@ -369,8 +371,12 @@ local function Build()
     BuildNav()
     for key, page in pairs(pages) do page:SetShown(key == mode) end
     PaintNav()
+    W.Strategy.onChange = function() if f and f:IsShown() then Schedule("draw") end end   -- a plan was finished (or dropped by a change)
     SC.OnChange = function() if f and f:IsShown() then Schedule("draw") end end
-    St.OnChange = function() if f and f:IsShown() then Schedule("draw") end end   -- the bank or guild bank was seen, or the choice changed
+    St.OnChange = function()   -- the bank or guild bank was seen, or the choice changed: what can be planned with changed, so plans are worked out again
+        W.Strategy.Bump()
+        if f and f:IsShown() then Schedule("draw") end
+    end
     if UISpecialFrames then tinsert(UISpecialFrames, NAME) end   -- Esc closes it (never the game menu's handler list)
     return f
 end
