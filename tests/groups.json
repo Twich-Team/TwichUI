@@ -18,8 +18,8 @@
     "simulators": [{"script": "smoke"}, {"script": "settings"}]
   },
   "workshop-settings": {
-    "tests": ["test_workshop_worth.lua", "test_workshop_worth_designer.lua", "test_workshop_worth_layout.lua", "test_workshop_window.lua", "test_settings_contract.lua", "test_settings_design.lua", "test_settings_window_size.lua"],
-    "syntax": ["TwichUI_Settings/pages/Workshop*.lua", "TwichUI_Workshop/Worth*.lua", "TwichUI_Workshop/Window.lua"],
+    "tests": ["test_workshop_settings.lua", "test_workshop_worth.lua", "test_workshop_worth_designer.lua", "test_workshop_worth_layout.lua", "test_workshop_window.lua", "test_settings_contract.lua", "test_settings_design.lua", "test_settings_window_size.lua"],
+    "syntax": ["!!!TwichUI/WorkshopLauncher.lua", "TwichUI_Settings/pages/Workshop*.lua", "TwichUI_Workshop/Worth*.lua", "TwichUI_Workshop/Window.lua"],
     "dependencies": ["settings", "workshop"],
     "simulators": [{"script": "workshop", "only": ["design", "craft", "wrong"]}]
   },

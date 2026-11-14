@@ -92,3 +92,35 @@ end
 function L.Snapshot()
     return { loaded = L.Loaded(), attempts = L.attempts, failed = L.failed }
 end
+
+-- Lightweight settings access. Reading this never loads the Workshop or its
+-- separate market database. Presentation keys keep their established scope.
+function L.LoadOnLogin()
+    local ui = type(TwichUIDB) == "table" and TwichUIDB.ui
+    return type(ui) == "table" and ui.workshopLoadOnLogin == true or false
+end
+function L.SetLoadOnLogin(on)
+    if type(on) ~= "boolean" or type(TwichUIDB) ~= "table" then return false end
+    if on == L.LoadOnLogin() then return true end
+    if type(TwichUIDB.ui) ~= "table" then TwichUIDB.ui = {} end
+    TwichUIDB.ui.workshopLoadOnLogin = on or nil
+    return true
+end
+function L.SettingsState()
+    local ws = type(TwichUIDB) == "table" and TwichUIDB.workshop
+    local view = type(ws) == "table" and type(ws.view) == "table" and ws.view or {}
+    local stock = type(ws) == "table" and type(ws.storage) == "table" and ws.storage or {}
+    return { prices = view.prices == "detailed", guild = stock.useGuild == true, notices = view.notices ~= false }
+end
+function L.SetOption(key, on)
+    if type(on) ~= "boolean" or not L.Loaded() then return false end
+    local w = R.Workshop
+    local ok
+    if key == "prices" then ok = w.Session.SetPriceDetail(on)
+    elseif key == "guild" then ok = w.Session.SetUseGuild(on)
+    elseif key == "notices" then ok = w.Notice.SetOn(on)
+    else return false end
+    if ok and w.Window and w.Window.IsShown() then w.Window.Render() end
+    if ok and w.Compact and w.Compact.IsShown() then w.Compact.Schedule() end
+    return ok
+end

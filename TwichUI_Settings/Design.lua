@@ -33,7 +33,7 @@ Page("restock", "Choose what to keep stocked at merchants.", { "Question window 
 Page("restockItems", "Set a target quantity for each item you keep stocked.")
 Page("magicInventory", "Choose where your items belong, then review the moves.")
 Page("auction", "Keep selling and collecting mail close at hand.")
-Page("workshop", "Plan your crafts and see the materials you still need.", { "What it does", "Shopping", "Opportunities" })
+Page("workshop", "Choose how Workshop plans your crafts and shows item information.")
 Page("chronicle", "Keep a journal of your adventures.")
 Page("chronicleLook", "Make your journal comfortable to read.", { "Border", "Controls and accents" })
 Page("cozyBag", "Follow your progress toward the Cozy Sleeping Bag.", { "Previews" })
@@ -86,6 +86,8 @@ end
 -- Long forms expose one player task at a time. The original rows, dependencies and setters stay authoritative.
 -- Small forms and already focused card/list editors intentionally have no task strip.
 local TASKS = {
+    workshop = { { "General", "General" }, { "Tooltip Designer", "Tooltip Designer" },
+        { "Market Data", "Market Data" }, { "Crafting & Shopping", "Crafting & Shopping" } },
     notifications = { { "Arrivals", "Zone arrival" }, { "Training", "New training" }, { "Friends", "Friend login" }, { "Party", "Party deaths" },
         { "Comfort", "Accessibility" }, { "Try it", "Notification previews", "Appearance" } },
     notificationsLook = { { "Customize", "Notification appearance", "Text" },

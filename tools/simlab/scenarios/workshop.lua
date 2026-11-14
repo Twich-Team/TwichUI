@@ -759,6 +759,7 @@ Lab.Step("what's it worth: tooltip designer", function()
     local w = WorthWorld()
     local WL = R.Workshop.WorthLayout
     local ok = Lab.Open("workshop")
+    R.SettingsUI.View("workshop").taskButtons[2]:Click()
     Check("init", "the settings window opened on the Workshop page", true, ok == true)
     local D = R.WorkshopWorthDesigner
     Check("init", "the designer is loaded with the settings window", "table", type(D))
@@ -2090,6 +2091,7 @@ Lab.Step("pose for the screenshot", function()
     elseif view == "design" then
         -- the settings window on the Workshop page, scrolled to the tooltip designer, the Hold Shift preview with a line selected
         Lab.Open("workshop")
+        R.SettingsUI.View("workshop").taskButtons[2]:Click()
         local D = R.WorkshopWorthDesigner
         D.SetMode(true)
         D.Select("auction")
