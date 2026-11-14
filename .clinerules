@@ -24,7 +24,8 @@ Spelling: TwichUI (T-w-i-c-h, never "Twitch"). The core addon folder is `!!!Twic
 ## Commands (from the repo root; verified)
 - After every Lua edit: `luac5.1 -p '<file>'` (no output means OK). Never run plain `luac`.
 - One test (any `tests/test_*.lua`): `(cd tests && lua5.1 -e 'require("bit"); ROOT="../!!!TwichUI/"; REPO="../"; TESTS="./"' test_qol.lua)`
-- All tests (about 5 min): `./tests/run.sh`
+- Verification ([docs/testing.md](docs/testing.md)): `./tests/run.sh fast <group>` frequently; `./tests/run.sh feature <group>` before checkpoint commits; `./tests/run.sh full` before major milestone completion, or earlier for shared/high-risk changes. Use `workshop-settings` for Workshop Settings and Tooltip Designer. Never claim complete regression coverage from focused tests.
+- All offline/CI tests: `./tests/run.sh`; serial debugging: `./tests/run.sh --jobs 1`. Simulator state stays in the repository through `bash tools/simlab/run.sh <scenario>`.
 - No lint exists. Unless the user asks, never run `tools/` scripts, deploys, `git commit` or `git push`.
 
 ## Hard rules
@@ -43,7 +44,7 @@ Spelling: TwichUI (T-w-i-c-h, never "Twitch"). The core addon folder is `!!!Twic
 1. Read `TASK_NOTES.md`, then the matching recipe, then only the files it names.
 2. Before editing, state in 2 or 3 lines which files and functions you will change, and why. Research or planning request: change no file except `TASK_NOTES.md`.
 3. Edit one file at a time, run `luac5.1 -p` on it, then update `TASK_NOTES.md`. More than 3 files: list the steps under `Next` first.
-4. Finish with the recipe's tests, then `./tests/run.sh`.
+4. Run fast checks during edits, feature verification before checkpoints, and full verification for major milestones (earlier for shared/high-risk changes); otherwise finish code changes with `./tests/run.sh`.
 5. Unsure, stuck, or about to repeat a search or an edit: stop and ask one specific question.
 
 ## TASK_NOTES.md (survives context compaction)

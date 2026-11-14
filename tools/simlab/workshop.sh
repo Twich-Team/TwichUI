@@ -37,6 +37,16 @@ set -euo pipefail
 
 # shellcheck source=lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+selection=()
+read -r -a selection <<< "${SIMLAB_ONLY:-}"
+for pose in "${selection[@]}"; do
+  case " overview craft opps shop design small smallov empty history craftlong shopmix shopcollect strategy confirm stratlong planning nodata override compact compactcraft tooltip smallstrat shopafter notice wrong " in
+    *" $pose "*) ;; *) echo "simlab: unknown Workshop pose: $pose" >&2; exit 2 ;;
+  esac
+done
+if [[ " ${SIMLAB_ONLY:-} " == *" wrong "* ]] && [[ " ${SIMLAB_ONLY:-} " != *" craft "* ]]; then
+  echo 'simlab: the wrong control requires the craft pose for comparison' >&2; exit 2
+fi
 RUN="${SIMLAB_RUN:-$LAB/artifacts/workshop-$(date +%Y%m%d-%H%M%S)}"
 mkdir -p "$RUN"
 WRONG_AT="Peacebloom shared by two recipes: need/in bags/still needed"
@@ -126,5 +136,5 @@ leak=0
 find "$ROOT" -name '*.png' -o -name '*.stderr' -o -name '*.stdout' | grep -q . && { echo "simlab: artifacts found inside the addon root" >&2; leak=1; }
 simlab_disclose
 [ "$status" -eq 0 ] || exit "$status"
-python3 -I "$SIMLAB_DIR/workshop_verdict.py" "$RUN" "$WRONG_AT" "$SIMLAB_ASSETS" || exit 1
+python3 -I "$SIMLAB_DIR/workshop_verdict.py" "$RUN" "$WRONG_AT" "$SIMLAB_ASSETS" "${selection[@]}" || exit 1
 [ "$leak" -eq 0 ] || exit 1

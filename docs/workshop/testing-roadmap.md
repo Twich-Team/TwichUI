@@ -332,7 +332,7 @@ Each milestone is one request. **Tests** lists the evidence the milestone must p
 | Transactions | the state machine incl. refusal, confirmation and interruption paths; a static check that no action fires without a click; real-client checks listed and never automated | — |
 | Trivial (text, comments, constants with tests) | focused test + `luac5.1 -p` | simulator, full bench |
 
-Run the focused test files first, then `./tests/run.sh` once at the end. Do not rerun an unchanged failing command.
+Use [the verification tiers](../testing.md): fast feature checks during implementation, feature verification before checkpoint commits, and `./tests/run.sh full` before major milestone completion (earlier for shared/high-risk changes). The offline/CI suite remains `./tests/run.sh`. Keep the mutation requirements above; focused evidence never proves full regression coverage. Do not rerun an unchanged failing command.
 
 ---
 

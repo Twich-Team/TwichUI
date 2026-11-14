@@ -21,6 +21,17 @@ Needs `bwrap`, `rsync`, `git`, `curl`, `dpkg-deb`, Mesa's Vulkan drivers (`mesa-
 Gethe's `wow-ui-source` beside the repository (`SIMLAB_UI_SOURCE` moves it). Nothing is installed system-wide. The binary
 wants Ubuntu 24.04's ICU 74 and ALSA, so `setup.sh` unpacks those two packages into the lab, checked by hash.
 
+## Tiered verification and a read-only installation
+
+See [development verification](testing.md) for fast feature checks, feature
+checkpoints and `./tests/run.sh full` milestone regression. Prefer
+`bash tools/simlab/run.sh <scenario>` for the scripts below: it consumes this
+installation read-only, keeps mutable state in the repository's ignored
+`test-output/simlab/`, serializes runs, and stages addons once per invocation.
+Historical direct scripts still write to `WOWSIM_LAB`. Selected Workshop/Test
+Lab runs now get a focused verdict for exactly their selected poses; the default
+full runs keep every replay, screenshot assertion and negative control.
+
 ## Use it
 
 ```sh

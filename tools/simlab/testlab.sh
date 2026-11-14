@@ -22,6 +22,13 @@ set -euo pipefail
 
 # shellcheck source=lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+selection=()
+read -r -a selection <<< "${SIMLAB_ONLY:-}"
+for pose in "${selection[@]}"; do
+  case " idle running allpass mixed failfilter problems long guided small " in
+    *" $pose "*) ;; *) echo "simlab: unknown Test Lab pose: $pose" >&2; exit 2 ;;
+  esac
+done
 RUN="${SIMLAB_RUN:-$LAB/artifacts/testlab-$(date +%Y%m%d-%H%M%S)}"
 mkdir -p "$RUN"
 
@@ -71,5 +78,5 @@ leak=0
 find "$ROOT" -name '*.png' -o -name '*.stderr' -o -name '*.stdout' | grep -q . && { echo "simlab: artifacts found inside the addon root" >&2; leak=1; }
 simlab_disclose
 [ "$status" -eq 0 ] || exit "$status"
-python3 -I "$SIMLAB_DIR/testlab_verdict.py" "$RUN" "$SIMLAB_ASSETS" || exit 1
+python3 -I "$SIMLAB_DIR/testlab_verdict.py" "$RUN" "$SIMLAB_ASSETS" "${selection[@]}" || exit 1
 [ "$leak" -eq 0 ] || exit 1

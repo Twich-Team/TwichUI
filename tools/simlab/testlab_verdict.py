@@ -40,14 +40,20 @@ def load(run, name):
 
 def main():
     run, assets = Path(sys.argv[1]), sys.argv[2] == "1"
+    selected = tuple(sys.argv[3:]) or VIEWS
+    if len(selected) != len(set(selected)) or set(selected) - set(VIEWS):
+        print("FAIL: invalid Test Lab pose selection")
+        return 2
+    views = tuple(v for v in VIEWS if v in selected)
+    print("Selection: " + ("FULL REGRESSION" if set(views) == set(VIEWS) else "FOCUSED ONLY; not complete regression coverage"))
     results = []
 
     def check(name, passed, detail=""):
         results.append(bool(passed))
         print(f"  {'pass' if passed else 'FAIL'}  {name}" + (f"  ({detail})" if detail else ""))
 
-    runs = {v: load(run, v) for v in VIEWS}
-    for v in VIEWS:
+    runs = {v: load(run, v) for v in views}
+    for v in views:
         r = runs[v]
         print(f"The scenario, view {v}:")
         d = r["done"]
@@ -65,11 +71,11 @@ def main():
             check(f"{v}: the text-fit check ran", any(n.startswith("no card label") for n in names))
 
     print("Reproducibility, from a new empty install each time:")
-    first = [[c for c in runs[v]["checks"] if c[1] == "init" or c[2].startswith("one sidebar") or c[2].startswith("before a run")] for v in VIEWS]
-    check(f"the opening checks are identical in the {len(VIEWS)} launches", all(x == first[0] for x in first) and len(first[0]) > 3, " / ".join(str(len(x)) for x in first))
+    first = [[c for c in runs[v]["checks"] if c[1] == "init" or c[2].startswith("one sidebar") or c[2].startswith("before a run")] for v in views]
+    check(f"the opening checks are identical in the {len(views)} selected launches", all(x == first[0] for x in first) and len(first[0]) > 3, " / ".join(str(len(x)) for x in first))
 
     print("Screenshots (files only; whether they look right is for a person to judge):")
-    for v in VIEWS:
+    for v in views:
         path = run / f"{v}.png"
         size = (1000, 700) if v == "small" else (1600, 1200)
         # the window is centred and fills most of the screen; look at its middle
@@ -83,7 +89,7 @@ def main():
             check(f"{v}.png is readable", False, str(err))
 
     ok = all(results)
-    r = runs["mixed"]
+    r = runs["mixed"] if "mixed" in runs else runs[views[0]]
     layers = {}
     for c in r["checks"]:
         layers[c[1]] = layers.get(c[1], 0) + 1

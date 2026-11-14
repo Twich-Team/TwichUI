@@ -22,7 +22,7 @@ set -euo pipefail
 # shellcheck source=lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 WINDOW="${SIMLAB_WINDOW:-12}"
-RUN="$LAB/artifacts/diagnose-$(date +%Y%m%d-%H%M%S)"
+RUN="${SIMLAB_RUN:-$LAB/artifacts/diagnose-$(date +%Y%m%d-%H%M%S)}"
 mkdir -p "$RUN"
 
 export SIMLAB_ASSETS=0

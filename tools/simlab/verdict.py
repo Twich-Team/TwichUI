@@ -36,21 +36,30 @@ def read_rgba(path):
         kind = raw[offset]
         line = bytearray(raw[offset + 1:offset + 1 + stride])
         offset += stride + 1
-        for i in range(stride):
-            left = line[i - 4] if i >= 4 else 0
-            up = previous[i]
-            corner = previous[i - 4] if i >= 4 else 0
-            if kind == 1:
+        if kind == 1:
+            for i in range(4, stride):
+                left = line[i - 4]
                 line[i] = (line[i] + left) & 255
-            elif kind == 2:
+        elif kind == 2:
+            for i, up in enumerate(previous):
                 line[i] = (line[i] + up) & 255
-            elif kind == 3:
+        elif kind == 3:
+            for i in range(stride):
+                left = line[i - 4] if i >= 4 else 0
+                up = previous[i]
                 line[i] = (line[i] + (left + up) // 2) & 255
-            elif kind == 4:
+        elif kind == 4:
+            for i in range(stride):
+                left = line[i - 4] if i >= 4 else 0
+                up = previous[i]
+                corner = previous[i - 4] if i >= 4 else 0
                 estimate = left + up - corner
-                near = min((abs(estimate - left), 0, left), (abs(estimate - up), 1, up),
-                           (abs(estimate - corner), 2, corner))
-                line[i] = (line[i] + near[2]) & 255
+                a, b, c = abs(estimate - left), abs(estimate - up), abs(estimate - corner)
+                # PNG's Paeth tie order is left, then up, then upper-left.
+                near = left if a <= b and a <= c else up if b <= c else corner
+                line[i] = (line[i] + near) & 255
+        elif kind != 0:
+            raise ValueError(f"unexpected PNG filter: {kind}")
         rows.append(line)
         previous = line
     return width, height, rows
@@ -59,8 +68,8 @@ def read_rgba(path):
 def distinct_colours(rows, left, top, width, height):
     seen = set()
     for row in rows[top:top + height]:
-        for x in range(left, left + width):
-            seen.add(bytes(row[x * 4:x * 4 + 3]))
+        pixels = row[left * 4:(left + width) * 4]
+        seen.update(zip(pixels[0::4], pixels[1::4], pixels[2::4]))
     return len(seen)
 
 
