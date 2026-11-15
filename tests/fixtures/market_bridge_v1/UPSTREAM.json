@@ -1,7 +1,7 @@
 {
   "repository": "Twich-Team/TwichUI-Market",
   "ref": "feature/m1a-unified-pricing",
-  "commit": "7823197ca5537467762ed62115f8df0204e3038e",
+  "commit": "941f0f2d80019665f7caa2a3c4d76cfb6910c91c",
   "pull_request": "https://github.com/Twich-Team/TwichUI-Market/pull/7",
   "directory": "contracts/bridge/v1",
   "files": [
