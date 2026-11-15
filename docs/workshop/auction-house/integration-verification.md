@@ -1,5 +1,10 @@
 # Auction House revision integration — PR #19
 
+Current follow-up: the guild-bank boundary is reproduced and repaired with
+focused verification; see [the final repair](#focused-final-repair--guild-bank-boundary).
+**The full suite on the repaired source is pending rerun. Its previous result
+remains FAIL, exit 1.**
+
 Follow-up to [the refinement record](refinement.md), 2026-11-15. This record
 supersedes its final verification status. The comprehensive run below completed
 and failed on a separate Workshop blocker; the earlier voice-related full
@@ -14,8 +19,10 @@ remote. Target: `feature/workshop` at
 `572da3a04fe1a64581b3d1cd0208038c0104cfe3` (merged M1a, PR #21).
 Merge commit: `e2f5766d214679f6411d70ae522900fc314d0c28` (two parents; no
 rebase or history rewrite). Smoke correction and frozen full-test commit:
-`cbb48c8b90d3c6949a09537c5fedad67ebe2af23`. Later changes are evidence/proposal
-documents only; all 2,401 frozen tracked files still match their recorded hashes.
+`cbb48c8b90d3c6949a09537c5fedad67ebe2af23`. Commits `3e9ffa2` and `4d258a5`
+were evidence/proposal documents only. The final repair below changes only the
+Workshop fixture and storage boundary tests; production code remains unchanged.
+All 2,401 files of the historical frozen full checkout still match their hashes.
 
 The sole actual conflict was `tools/mutations/workshop.py`: adjacent additions
 of the AH `market.auction.*` / `market.sell.*` mutations and incoming M1a
@@ -156,7 +163,7 @@ Sell denomination conversion/Max/copying/deposit precision/unknown net, Advisor
 safeguards, owned-auction empty/unavailable states, disabled AH-1a and recovery.
 The default full catalog retains all replays and intentional wrong controls.
 
-## Comprehensive result and unresolved blocker
+## Historical comprehensive result and Workshop blocker
 
 The full command completed once, without cancellation, on frozen `cbb48c8`.
 There were no offline failures or timeouts. The exact overall exit is **1**;
@@ -233,3 +240,82 @@ localized/narrow/scaled input and hit testing, combat/taint/reload/coexistence,
 real native read ownership/timing and precision/deposit checks. No live buying,
 posting, cancellation/repost, automatic replacement, scan activation, Market
 synchronization or release activation is authorized by this verification.
+
+
+## Focused final repair — guild-bank boundary
+
+The follow-up authorized one narrow repair and explicitly deferred a full rerun.
+The cause is now demonstrated: a **fixture assumption**, exposed by ordinary
+floating-point clock subtraction, not a production pairing regression or a bad
+simulator time advance. Native no-addon probing with a single manual-clock
+initialization at `31.01` measured:
+
+| Advances of 0.05 s | Measured age | Production pairs (`age < 1`) |
+|---:|---|---|
+| 18 | `0.89999999999999858` | true |
+| 20 | `0.99999999999999645` | true |
+| 22 | `1.0999999999999979` | false |
+
+The original fixture's 0.3 + tab switch 0.1 + 0.6 seconds therefore did not
+establish its claim that the answer was older than one measured second. The
+production guard correctly ignored a still-paired move. A diagnostic copy of
+only the `overview` scenario pinned its initial clock to `11.21`, placing the
+last guild answer at `31.010000000000002`. It fired the bag event at
+`32.009999999999998`: age `0.99999999999999645`, pending=false. All three original
+uncertainty assertions failed, the scenario completed normally, and the verdict
+exited **1** (528 checks, three failures). Production code and all original
+assertions were unchanged in this reproduction; tracing and the diagnostic
+clock origin are not part of the published fixture.
+
+The same pinned diagnostic with the repaired fixture exited **0**, 533/533
+checks passing. It observed age `0.89999999999999858` with pending=false and
+age `1.0999999999999979` with pending=true. This is the same native clock phase
+that failed the old schedule, not a retry that happened to avoid the boundary.
+
+The published change is local to `tools/simlab/scenarios/workshop.lua`: exercise
+the paired side at 0.9 seconds, assert the tab stays certain, then advance to
+1.1 seconds and assert the event becomes pending. Both clock preconditions are
+asserted. The original uncertainty flag, bank-only planning list and explanatory
+note assertions remain verbatim, as do fresh-answer recovery, replay, error
+classification, screenshots and the deliberate wrong control. Five checks are
+added; 0.1 simulated second is added. No production epsilon/tolerance, clock
+reset/override, error allowance, removed assertion or relaxed verdict is used.
+
+`tests/test_workshop_storage.lua` adds five real-bank-recorder test cases: the
+exponent-crossing witness, a representable age just below one, exactly one, just
+above one, and the fixture's 1.1-second margin. They check pending state,
+uncertainty after the timer, exclusion of uncertain stock from planning, and
+session cleanup. A disposable mutation changing the guard from `<` to `<=`
+was killed specifically by the new exactly-one-second assertion. Baseline and
+mutation infrastructure checks passed; production `Bank.lua` is unchanged.
+
+| Focused check | Result |
+|---|---|
+| Lua 5.1 syntax, fixture and storage tests | PASS |
+| Storage boundary regression | PASS: five timing cases |
+| Simulator workflow unit tests | PASS: 8 |
+| Boundary mutation negative control | PASS: 1/1 killed; no survivor/invalid/timeout/infra/drift |
+| `./tests/run.sh fast auction-house` | PASS: 16 modules, 12.893 s |
+| `./tests/run.sh feature crafting --profile cloud` | PASS: 34 modules, 139 syntax checks; 5 launches / 2,645 structured checks; 333.481 s |
+| Workshop `overview empty notice` selection | PASS: 3 launches / 1595 structured checks |
+
+Feature replay matched all 528 common checks in four normal launches. Its wrong
+control failed exactly the doctored expectation, and every other check passed.
+The three originally failing poses also matched all 528 common checks across
+fresh launches. Every original uncertainty assertion passed in every selected
+normal launch. These are focused results, not full addon-wide coverage.
+
+**No comprehensive suite was rerun. The previous 6,790.094-second full run remains
+FAIL, exit 1; comprehensive verification on the repaired source is pending
+rerun.** Focused results establish this fixture correction through deterministic
+old/fixed reproduction, both-side unit coverage, feature replay/negative controls
+and all original failure poses. They do not retroactively change the old result.
+Production, Market formats/fixtures, M1b branches, AH transactions and AH-1a
+lifecycle/default/recovery gates are unchanged. Real-client acceptance remains.
+
+Raw evidence is preserved under `twichui-env/bankfix/`. Original/fixed pinned
+captures are in `TwichUI-bank-boundary-repro/test-output/simlab/artifacts/`
+(`workshop-v7McaHZO`, `workshop-0di0Jyzl`). Normal feature/failure-pose captures
+are in `TwichUI-bank-boundary-verification/test-output/simlab/artifacts/`
+(`workshop-5rXjBkfk`, `workshop-XYvCnPGe`). The compact JSON record includes
+source/log/report/image hashes, observed ages, checks, controls and scope.

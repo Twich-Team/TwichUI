@@ -166,9 +166,11 @@ CPU activity does not support indiscriminately shortening those windows.
 
 No option above is implemented here. The next smallest infrastructure proposal is
 phase profiling on a selected scenario, followed by the measured hot-path change
-with identical assertions and rejection controls. The guild-bank threshold issue
-also needs its own narrow diagnosis/correction; this policy proposal does not
-waive it, change its expectations or turn the current full result into a pass.
+with identical assertions and rejection controls. The subsequently authorized
+[focused guild-bank repair](workshop/auction-house/integration-verification.md#focused-final-repair--guild-bank-boundary)
+now establishes and corrects the fixture assumption. The historical full result
+remains FAIL and the repaired source remains pending full rerun; neither this
+proposal nor focused success turns that run into a pass.
 
 ## Evidence
 

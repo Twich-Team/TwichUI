@@ -1,6 +1,8 @@
 # Auction House refinement
 
 Current integration status: see [PR #19 integration verification](integration-verification.md).
+The focused guild-bank fixture repair is verified; full verification of the
+repaired source is **pending rerun**. The previous full exit-1 result is retained.
 The branch now includes `feature/workshop` `572da3a`; focused verification passes
 and the smoke failure is diagnosed/corrected. The new comprehensive run still
 exits 1, now on the existing Workshop guild-bank timing/replay checks. The

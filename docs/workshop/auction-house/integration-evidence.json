@@ -411,5 +411,164 @@
       "SIMLAB step-time and simulated seconds are virtual time, not wall time; no per-assertion wall timings exist.",
       "Outside-launch intervals include staging, fixture generation, verdict/image decoding and orchestration; they are not idle waiting."
     ]
+  },
+  "bank_boundary_repair": {
+    "source_before": "4d258a5f3a87a7f621dd1549181119d3e4596939",
+    "production_unchanged": true,
+    "files": {
+      "tools/simlab/scenarios/workshop.lua": "8cc3310cf66c43fde758718afc85136558740fb24b5e947464854e6f94603e39",
+      "tests/test_workshop_storage.lua": "7a43d16277e19850227fd9928bcde711e288975202239f0721eaf4934b2c4d23"
+    },
+    "runs": {
+      "original_pinned": {
+        "artifacts": "/workspace/TwichUI-bank-boundary-repro/test-output/simlab/artifacts/workshop-v7McaHZO",
+        "exit_code": 1,
+        "checks": 528,
+        "failures": [
+          [
+            "state",
+            "no answer followed the bag change: the tab may have changed",
+            "true",
+            "false"
+          ],
+          [
+            "display",
+            "its stock is not collected from any more: back to the bank-only list",
+            "Silverleaf | Peacebloom | Tin Ore | Silverleaf | Coarse Thread | Copper Ore | Tin Ore",
+            "Silverleaf | Silverleaf | Peacebloom | Copper Ore | Tin Ore | Coarse Thread | Tin Ore"
+          ],
+          [
+            "display",
+            "and the note says why",
+            "true",
+            "false"
+          ]
+        ],
+        "trace": [
+          "SIMLAB bank-clock answer=31.010000000000002 now=32.009999999999998 age=0.99999999999999645 sim=20.800000000000015",
+          "SIMLAB bank-pending false",
+          "SIMLAB bank-clock answer=33.509999999999998 now=34.810000000000002 age=1.3000000000000043 sim=23.600000000000019",
+          "SIMLAB bank-pending false",
+          "SIMLAB bank-clock answer=33.509999999999998 now=35.409999999999997 age=1.8999999999999986 sim=24.200000000000021",
+          "SIMLAB bank-pending false"
+        ],
+        "done": [
+          "SIMLAB done steps=30 simSeconds=38.1 passed=525 failed=3 aborted=false stopped=false"
+        ],
+        "stderr_sha256": "860a413c36580dc4ed2d62d6b0cedb7a715cc52a5b943320e61b7e8b7c989995"
+      },
+      "fixed_pinned": {
+        "artifacts": "/workspace/TwichUI-bank-boundary-repro/test-output/simlab/artifacts/workshop-0di0Jyzl",
+        "exit_code": 0,
+        "checks": 533,
+        "failures": [],
+        "trace": [
+          "SIMLAB bank-clock answer=31.010000000000002 now=31.91 age=0.89999999999999858 sim=20.700000000000014",
+          "SIMLAB bank-pending false",
+          "SIMLAB bank-clock answer=31.010000000000002 now=32.109999999999999 age=1.0999999999999979 sim=20.900000000000013",
+          "SIMLAB bank-pending true",
+          "SIMLAB bank-clock answer=33.609999999999999 now=34.909999999999997 age=1.2999999999999972 sim=23.700000000000017",
+          "SIMLAB bank-pending false",
+          "SIMLAB bank-clock answer=33.609999999999999 now=35.509999999999998 age=1.8999999999999986 sim=24.300000000000018",
+          "SIMLAB bank-pending false"
+        ],
+        "done": [
+          "SIMLAB done steps=30 simSeconds=38.2 passed=533 failed=0 aborted=false stopped=false"
+        ],
+        "stderr_sha256": "a7b089a5f50ad78acdf5f5e7c68d9ce80d37b685f4156e568fda3b9739775438"
+      }
+    },
+    "diagnosis": "Fixture assumption exposed by normal floating-point subtraction across a clock exponent boundary; native clock advance is correct and unchanged production <1.0 pairing guard correctly ignores a measured age below 1.",
+    "fix": "Explicit paired event at measured age about0.9 and unanswered event about1.1, with precondition/pending/uncertainty checks; original three assertions unchanged.",
+    "clock_probe": [
+      "BANK_CLOCK phase=31.010000000000002 steps=18 delta=0.89999999999999858 paired=true",
+      "BANK_CLOCK phase=31.010000000000002 steps=20 delta=0.99999999999999645 paired=true",
+      "BANK_CLOCK phase=31.010000000000002 steps=22 delta=1.0999999999999979 paired=false"
+    ],
+    "feature": {
+      "command": "./tests/run.sh feature crafting --profile cloud",
+      "passed": true,
+      "exit_code": 0,
+      "offline_modules": 34,
+      "lua_syntax_checks": 139,
+      "launches": 5,
+      "structured_checks": 2645,
+      "seconds": 333.4806485349982,
+      "artifacts": "/workspace/TwichUI-bank-boundary-verification/test-output/simlab/artifacts/workshop-5rXjBkfk",
+      "replay_common_checks": 528,
+      "negative_control": "exactly the doctored check failed; every other one passed"
+    },
+    "original_failure_poses": {
+      "command": "SIMLAB_ONLY='overview empty notice' SIMLAB_ASSETS=0 bash tools/simlab/run.sh workshop",
+      "exit_code": 0,
+      "launches": 3,
+      "checks": {
+        "overview": 533,
+        "empty": 532,
+        "notice": 530
+      },
+      "structured_checks": 1595,
+      "replay_common_checks": 528,
+      "artifacts": "/workspace/TwichUI-bank-boundary-verification/test-output/simlab/artifacts/workshop-XYvCnPGe"
+    },
+    "boundary_mutation": {
+      "transform": "Bank.lua pairing < changed to <=",
+      "exit_code": 0,
+      "counts": {
+        "killed": 1,
+        "survived": 0,
+        "invalid": 0,
+        "timeout": 0,
+        "infra": 0
+      },
+      "detection": "/workspace/twichui-env/runtime/usr/bin/lua5.1: test_workshop_storage.lua:794: exactly one measured second: pending state expected true, got false",
+      "production_copy_only": true
+    },
+    "unit_checks": {
+      "storage_boundary_cases": 5,
+      "storage_passed": true,
+      "simlab_workflow_tests_passed": 8,
+      "auction_house_fast_modules_passed": 16,
+      "auction_house_fast_seconds": 12.893
+    },
+    "comprehensive": {
+      "rerun": false,
+      "current_status": "PENDING RERUN",
+      "previous_status": "FAIL",
+      "previous_exit_code": 1,
+      "previous_tested_commit": "cbb48c8b90d3c6949a09537c5fedad67ebe2af23",
+      "reason_not_rerun": "Same-clock deterministic old/fixed reproduction, boundary unit tests, feature replay/negative controls and all original failing poses establish the local fixture correction; no production or other simulator infrastructure changed."
+    },
+    "log_sha256": {
+      "/workspace/twichui-env/bankfix/clock-boundary.stdout": "65affba5c773f8cf525918b5072de3febb4b8d6c93a0dd6af748a1d6117e9ec1",
+      "/workspace/twichui-env/bankfix/clock-boundary.stderr": "7cd19ba6604a21adc07414968da8f63860d032ee04b1bbd5c6c06a41cf5d3961",
+      "/workspace/twichui-env/bankfix/original-pinned.log": "62c5ad34aa75da93456b3d458bbaa609f1631fa7ab862c85c01d1edaf171bc53",
+      "/workspace/twichui-env/bankfix/fixed-pinned.log": "422b3638491efa9feec596c3bef711b79ca98f4c130ae92bf2cad279f168d611",
+      "/workspace/twichui-env/bankfix/storage.log": "945e979857a00aeaae461be449d6470c978d71fdd37495dd6df7d6c47f8b6662",
+      "/workspace/twichui-env/bankfix/workflows.log": "9ef618c1cd19822bc241bf4ca9eb58f7fe6b28dacd76be597ed5a232e7b7541f",
+      "/workspace/twichui-env/bankfix/boundary-mutation.log": "534537d7e1dd29bfbf60cff342097acea4f4a73e7a1ce4417a2535c6233aba74",
+      "/workspace/twichui-env/bankfix/boundary-mutation.json": "7367b612101a3ca58668c0234583ede2bef35db1ebc6ae6781653cf5828b236b",
+      "/workspace/twichui-env/bankfix/fast-ah.log": "6be6e820e2b2ca931f77e63ee5b5a2d69e8963f20ba428e8bd5abf7b1a552382",
+      "/workspace/twichui-env/bankfix/feature-crafting.log": "5f3e7d3592a561479d2ea775b25243e50abada19bf807345ba20ec698f4f8d85",
+      "/workspace/twichui-env/bankfix/repaired-poses.log": "1f8ff793e3e2a5bba7ff6cf7a3686851ef7d5450952d4862e19ba0cadede332a"
+    },
+    "feature_report_sha256": "48709eeebdb55f9506435fce2e12b163a5586f0d3da50669392d19aec85d2e45",
+    "screenshots": [
+      {
+        "path": "/workspace/TwichUI-bank-boundary-verification/test-output/simlab/artifacts/workshop-XYvCnPGe/overview.png",
+        "sha256": "bec911f95518f6f021a95a2665fc5e98212a30dcb988cb26f179ce7b315bb3ac",
+        "evidence": "captured structural evidence only; not real-client appearance validation"
+      },
+      {
+        "path": "/workspace/TwichUI-bank-boundary-verification/test-output/simlab/artifacts/workshop-XYvCnPGe/empty.png",
+        "sha256": "57d8a787c17cf0605aeff238fb878a417da36de5ae54005116ca66367231587e",
+        "evidence": "captured structural evidence only; not real-client appearance validation"
+      },
+      {
+        "path": "/workspace/TwichUI-bank-boundary-verification/test-output/simlab/artifacts/workshop-XYvCnPGe/notice.png",
+        "sha256": "6e2c98e87060949b91ed7a977ec8035e428333041cfe8ee340b3c122b777c604",
+        "evidence": "captured structural evidence only; not real-client appearance validation"
+      }
+    ]
   }
 }
