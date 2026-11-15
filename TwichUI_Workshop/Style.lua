@@ -711,8 +711,10 @@ local function DayWords(day)
     if ago == 1 then return "seen yesterday" end
     return ("seen %d days ago"):format(ago)
 end
-function UI.PriceChart(parent, w, h)
+function UI.PriceChart(parent, w, h, opt)
+    local maxDots = opt and W.Int(opt.maxDots, 2, 30) or MAX_DOTS
     local c = CreateFrame("Frame", nil, parent)
+    c.maxDots = maxDots
     c:SetSize(w, h)
     UI.Panel(c, "canvas")
     c.plot = CreateFrame("Frame", nil, c)
@@ -726,8 +728,8 @@ function UI.PriceChart(parent, w, h)
         c.guides[i] = g
     end
     c.dots, c.stems = {}, {}
-    for i = 1, MAX_DOTS do
-        c.stems[i] = L.Solid(c.plot, "ARTWORK", K.tealLo, 0.9)
+    for i = 1, maxDots do
+        c.stems[i] = L.Solid(c.plot, "ARTWORK", opt and opt.gold and K.bronzeLo or K.tealLo, 0.9)
         c.stems[i]:SetWidth(2)
         c.dots[i] = L.Solid(c.plot, "OVERLAY", K.bronzeText, 1)
         c.dots[i]:SetSize(7, 7)
@@ -747,7 +749,7 @@ function UI.PriceChart(parent, w, h)
     c.note:SetJustifyH("CENTER")
     c.state = "empty"
     local function Words(self, headline, note)
-        for i = 1, MAX_DOTS do self.dots[i]:Hide(); self.stems[i]:Hide() end
+        for i = 1, maxDots do self.dots[i]:Hide(); self.stems[i]:Hide() end
         for _, g in ipairs(self.guides) do g:Hide() end
         self.hi:SetText(""); self.lo:SetText("")
         self.msg:SetText(headline)
@@ -756,27 +758,27 @@ function UI.PriceChart(parent, w, h)
     end
     function c:Set(series, money)
         local pts = series and series.points or {}
-        local n = math.min(#pts, MAX_DOTS)
+        local n = math.min(#pts, maxDots)
         local first = #pts - n + 1
         self.shown = n
         if n == 0 then
             self.state = "empty"
-            Words(self, series and "Only older ranges are kept, so there is no recent day to show." or "No price history for this item yet.",
-                "More scans needed to show a price trend.")
+            Words(self, opt and opt.window and "No observations in this window." or (series and "Only older ranges are kept, so there is no recent day to show." or "No price history for this item yet."),
+                opt and opt.window and "Stored history only; missing days stay empty." or "More scans needed to show a price trend.")
             self.shown = 0
             return
         end
         if n == 1 then
             self.state = "single"
             local p = pts[first]
-            Words(self, "More scans needed to show a price trend.", ("Cheapest seen: %s \194\183 %s"):format(money(p.price), DayWords(p.day)))
+            Words(self, opt and opt.window and "One observation in this window." or "More scans needed to show a price trend.", ("Cheapest seen: %s \194\183 %s"):format(money(p.price), DayWords(p.day)))
             self.shown = 0   -- nothing is drawn: the one observation is in words
             self.observed = 1
             return
         end
         self.state = "series"
         self.msg:Hide(); self.note:Hide()
-        for i = 1, MAX_DOTS do self.dots[i]:Hide(); self.stems[i]:Hide() end
+        for i = 1, maxDots do self.dots[i]:Hide(); self.stems[i]:Hide() end
         local lo, hi, day0, day1
         for i = first, #pts do
             local p = pts[i]
@@ -784,6 +786,10 @@ function UI.PriceChart(parent, w, h)
             if not hi or p.price > hi then hi = p.price end
         end
         day0, day1 = pts[first].day, pts[#pts].day
+        if opt and opt.window and W.Finite(series.from) and W.Finite(series.to) and series.to > series.from then
+            day0, day1 = series.from, series.to
+        end
+        self.fromDay, self.toDay = day0, day1
         local span = math.max(1, day1 - day0)
         local pw, ph = (self.plot:GetWidth() or 0), (self.plot:GetHeight() or 0)
         if pw < 20 then pw = (w or 260) - 84 end
@@ -800,7 +806,7 @@ function UI.PriceChart(parent, w, h)
             st:ClearAllPoints(); st:SetPoint("BOTTOM", self.plot, "BOTTOMLEFT", x, 0); st:SetHeight(math.max(1, y - 3))
             local newest = i == n - 1
             d:SetSize(newest and 9 or 7, newest and 9 or 7)
-            d:SetColorTexture((newest and K.tealHi or K.bronzeText)[1], (newest and K.tealHi or K.bronzeText)[2], (newest and K.tealHi or K.bronzeText)[3], 1)
+            d:SetColorTexture((opt and opt.gold and K.bronzeText or newest and K.tealHi or K.bronzeText)[1], (opt and opt.gold and K.bronzeText or newest and K.tealHi or K.bronzeText)[2], (opt and opt.gold and K.bronzeText or newest and K.tealHi or K.bronzeText)[3], 1)
             d:Show(); st:Show()
         end
         for i, g in ipairs(self.guides) do

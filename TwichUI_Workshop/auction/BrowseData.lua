@@ -60,6 +60,8 @@ function D.Job(opt)
             end
         end
         local seen = {}
+        job.seen = seen
+        if opt.index then job.index = {} end
         local market = opt.market
         local function Add(id)
             id = W.Int(id, 1, W.MAX_ID)
@@ -67,13 +69,20 @@ function D.Job(opt)
             if job.scanned >= D.MAX then job.capped = true; return end
             seen[id] = true; job.scanned = job.scanned + 1
             local row = D.Row(id, market)
-            if D.Matches(row, opt) then job.rows[#job.rows + 1] = row end
+            if D.Matches(row, opt) then
+                job.rows[#job.rows + 1] = row
+                if job.index then job.index[id] = row end
+            end
         end
         if opt.item then Add(opt.item); Tick() end
-        for id in pairs(market and market.items or {}) do
-            Add(id); Tick()
+        for _, source in ipairs(opt.sources or {market and market.items or {}}) do
+            for id in pairs(source) do
+                Add(id); Tick()
+                if job.capped then break end
+            end
             if job.capped then break end
         end
+        if opt.enumerate and not job.capped then opt.enumerate(Add, Tick, job) end
         local rows, scratch, width = job.rows, {}, 1
         while width < #rows do
             for lo = 1, #rows, width * 2 do

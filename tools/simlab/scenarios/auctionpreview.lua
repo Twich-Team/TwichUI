@@ -194,6 +194,67 @@ Lab.Step("large Browse viewport and cleanup",function()
     A.Go("browse");p.forceItem=nil;A.Browse.Search("");Finish();A.Browse.Select(7067)
     Lab.Check("state","large Browse restored fixture",8,#p.rows)
 end)
+local function MarketSeed(W,sparse,ageOffset)
+    local now=time()-(ageOffset or 0)*86400;local today=math.floor(now/86400)
+    local key="Fixture Realm|Alliance"
+    TwichUIWorkshopDB={v=2,markets={}}
+    for age=110,0,-1 do
+        if (not sparse and (age%5~=0 or age==0)) or sparse and (age==0 or age==12) then
+            local batch=W.Prices.NewBatch()
+            for id in pairs(itemNames) do
+                local unit=20000+age*55+(id%11)*100
+                batch:Add(id,20,20*unit,true);batch:Add(id,30,30*(unit+3000),true)
+            end
+            local items,n,_,_,dist=batch:Items()
+            assert(W.Prices.Commit(key,{realm="Fixture Realm",side="Alliance",at=(today-age)*86400+60,
+                complete=true,items=items,n=n,read=n,used=n,alg=W.Dist.ALG,dist=dist}))
+        end
+    end
+    W.Facts.CacheClear();W.AuctionMarketData.Clear()
+    return key
+end
+Lab.Step("Market research and cross-page safety",function()
+    local W=R.Workshop
+    local saved=TwichUIWorkshopDB
+    local key=MarketSeed(W)
+    A.OpenMarket(7067,{market=key});Lab.Settle(0.5)
+    local p=A.Page("market")
+    Lab.Check("construct","Market functional page",nil,p.failed)
+    Lab.Check("state","Market identity retained",7067,p.selected)
+    Lab.Check("state","Market selected faction",key,p.projection.market)
+    Lab.Check("state","Market no actionable row",false,p.rows[1].actionable)
+    Lab.Check("state","Market observed supply",50,p.projection.facts.supply.items)
+    Lab.Check("state","Market price history",true,#p.projection.series.points>2)
+    local history=p.projection.history
+    A.Market.Range(120)
+    Lab.Check("interact","Market range reuses projection",true,history==p.projection.history)
+    Lab.Check("state","Market old aggregates separate",true,#p.projection.series.groups>0)
+    A.Market.Range(2)
+    Lab.Check("state","Market recent timestamp record","obs",p.projection.series.points[1].kind)
+    A.Market.Range(14)
+    p.browse:Click();Lab.Settle(0.5)
+    Lab.Check("interact","Market opens saved Browse","browse",A.Mode())
+    Lab.Check("state","Market Browse retains faction",key,A.Page("browse").market.key)
+    A.Page("browse").detail.market:Click();Lab.Settle(0.5)
+    Lab.Check("interact","Browse opens Market","market",A.Mode())
+    Lab.Check("state","Market shared track state",true,W.AdvisorData.Tracked()[7067])
+    p.track:Click();Lab.Check("interact","Market untracks shared list",nil,W.AdvisorData.Tracked()[7067])
+    p.track:Click();Lab.Check("interact","Market tracks shared list",true,W.AdvisorData.Tracked()[7067])
+    A.OpenMarket(7067,{market=key,itemKey={itemID=7067,itemSuffix=4}});Lab.Settle(0.4)
+    Lab.Check("state","Market variant unpriced",nil,p.projection.facts.min)
+    Lab.Check("state","Market variant not collapsed",false,p.browse:IsEnabled())
+    A.OpenMarket(7067,{market="missing|Horde"});Lab.Settle(0.4)
+    Lab.Check("state","Market absent faction honest",true,p.projection.facts.nomarket)
+    Lab.Check("state","Market zero native operations",0,calls)
+    A.Go("shopping")
+    Lab.Check("state","Market hidden cache released",0,W.AuctionMarketData.Stats().cache)
+    Lab.Check("state","Market hidden index released",nil,p.index)
+    Lab.Check("state","Market hidden events released",false,p.listening)
+    TwichUIWorkshopDB=saved;W.Facts.CacheClear()
+    A.Go("browse");A.Page("browse").researchMarketKey=nil
+    A.Browse.Search("");Lab.Settle(0.5);A.Browse.Select(7067)
+end)
+
 Lab.Step("native untouched and fit", function()
     Lab.Check("state", "native still shown", true, native:IsVisible())
     Lab.Check("state", "native scale retained", scale, native:GetScale())
@@ -265,5 +326,31 @@ if P.owned then
     A.Go("owned");Lab.Settle(0.3)
     local p=A.Page("owned")
     if p.list.rows[1] and p.list.rows[1].data then p.list.rows[1]:Click() end
+end
+if P.market then
+    local W=R.Workshop
+    MarketSeed(W,P.marketSparse,P.marketStale and 20 or 0)
+    if P.marketEmpty then TwichUIWorkshopDB={v=2,markets={}} end
+    if P.marketLarge then
+        local m=TwichUIWorkshopDB.markets["Fixture Realm|Alliance"]
+        for id=20000,22999 do m.items[id]=m.items[7067] end
+        m.n=3008
+    end
+    if P.marketMetadata then
+        itemNames[7067]="A Very Long Elemental Earth Name With Unavailable Late Metadata"
+        local original=C_Item.GetItemInfo
+        C_Item.GetItemInfo=function(id) if id==4306 then return nil end;return original(id) end
+    end
+    A.Go("market")
+    A.Market.Filter("marketKey","Fixture Realm|Alliance")
+    if P.marketError then
+        W.AuctionMarketData.Catalog=function() return {Step=function() error("synthetic unavailable catalog") end} end
+    end
+    A.Market.Search("");Lab.Settle(0.5)
+    local p=A.Page("market")
+    for _=1,100 do if not p.job then break end;Lab.Settle(0.05) end
+    A.Market.Select(7067)
+    if P.marketRecent then A.Market.Range(2) elseif P.marketLong then A.Market.Range(120) else A.Market.Range(14) end
+    if P.marketTracked then A.Market.Filter("scope","tracked");Lab.Settle(0.5) end
 end
 Lab.Finish()

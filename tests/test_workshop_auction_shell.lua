@@ -20,7 +20,7 @@ same(A.Snapshot().events,9,"visible shell and Browse events")
 for _,key in ipairs({"browse","shopping","sell","owned","market"}) do
     Press.Must(A.nav[key]); same(A.Mode(),key,"navigation")
     same(A.Page(key):IsShown(),true,"active page")
-    if key=="market" then same(A.Page(key).placeholder~=nil,true,"honest placeholder") end
+    if key=="market" then same(A.Page(key).chart~=nil,true,"functional read-only Market") end
 end
 same(A.Page("sell").post:IsEnabled(),false,"preparation cannot post")
 same(A.Page("owned").cancel:IsEnabled(),false,"read-only cannot cancel")

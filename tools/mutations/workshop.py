@@ -835,3 +835,22 @@ m("market.auction-read-invalid-complete", "TwichUI_Workshop/auction/ReadRequests
   "complete=api.HasFullItemSearchResults(p.arg) and count<=Q.MAX",
   "a missing native listing is silently omitted while the response is marked complete",
   ["test_workshop_auction_reads.lua"])
+
+# AH-6 must preserve market identity and typed-history resolution.
+m("market.ah6.wrong-market-fallback", "TwichUI_Workshop/auction/MarketData.lua",
+  "return PR.Market(key) -- an unavailable explicit market never falls back",
+  "return PR.Market(key) or MK.Source().market -- an unavailable explicit market never falls back",
+  "an unavailable chosen market silently shows another faction's prices", ["test_workshop_auction_market.lua"])
+m("market.ah6.aggregate-daily", "TwichUI_Workshop/auction/MarketData.lua",
+  '(p.kind=="day" or p.kind=="legacy-day") and p.v',
+  '(p.kind=="day" or p.kind=="legacy-day" or p.kind=="fortnight") and p.v',
+  "an old fortnight becomes a fabricated daily sample", ["test_workshop_auction_market.lua"])
+m("market.ah6.variant-row-advisor", "TwichUI_Workshop/auction/ViewMarket.lua",
+  'r.data and not Context(p,r.data.item).variant and r.data.item',
+  'r.data and r.data.item',
+  "right-click bypasses the disabled variant Advisor action and opens base-item advice",
+  ["test_workshop_auction_market_ui.lua"])
+m("market.ah6.unrelated-metadata", "TwichUI_Workshop/auction/ViewMarket.lua",
+  'if ok==false or not id or not (known and known[id]) then return end',
+  'if ok==false or not id then return end',
+  "unrelated item callbacks restart a large Market catalog", ["test_workshop_auction_market_ui.lua"])

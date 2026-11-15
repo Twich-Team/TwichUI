@@ -263,3 +263,10 @@ read-only Browse foundation, Sell preparation and experimental My Auctions
 view. Its scope and actual evidence supersede the earlier placeholder/deferred
 status above for those pages only. It does not accept AH-1a, enable replacement
 or enable new preview transactions.
+
+## AH-6 follow-up
+
+The separately authorized [Market campaign](market.md) integrates PRs #15–#17
+and implements Market research over existing Workshop services. Its evidence and
+client-only limits supersede the earlier Market-placeholder status. It does not
+activate replacement, native searches, transactions, synchronization or AH-7.

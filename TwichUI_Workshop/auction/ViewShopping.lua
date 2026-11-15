@@ -26,6 +26,7 @@ local function Detail(p)
     d.data=selected
     d.buy:SetEnabled(false)
     d.track:SetEnabled(selected~=nil)
+    d.market:SetEnabled(selected~=nil)
     d.browse:SetEnabled(selected~=nil and p.current)
     d.vendor:SetEnabled(selected~=nil and p.current and p.ctx.sellers and p.ctx.sellers[selected.row.item]~=nil)
     local recipe=selected and selected.row.make and selected.row.make.rec
@@ -137,7 +138,9 @@ local function BuildDetail(p)
     advice:SetPoint("TOPLEFT",4,-500);advice:SetPoint("TOPRIGHT",-4,-500)
     d.advice=A.Text(advice,"",11,12,-29);d.advice:SetWordWrap(true);d.advice:SetHeight(34)
     UI.TipFn(advice,"Advisor evidence",function() return d.advisorTip end)
-    d.body:SetHeight(574)
+    d.market=A.HistoryButton(d.body,function() return d.data and d.data.row.item end,300)
+    d.market:SetPoint("TOPLEFT",12,-582)
+    d.body:SetHeight(626)
     d.vendor=UI.Button(d,"Show vendor",91,"secondary",function()
         if d.data and p.current then S.ShowVendor(d.data.row.item) end
     end,28);d.vendor:SetPoint("BOTTOMLEFT",7,10)

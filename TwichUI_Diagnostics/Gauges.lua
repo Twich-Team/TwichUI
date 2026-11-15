@@ -20,6 +20,7 @@ local Perf = R.Perf
 -- every = how often it is expected to run, so a report can tell "runs often" from "runs on demand".
 DX.OPS = {
     ["auction.readSnapshot"] = { module = "auction", label = "AH experimental read normalization", kind = "rebuild", file = "TwichUI_Workshop/auction/ReadRequests.lua", where = "Event", every = "explicit response only; at most 500 rows" },
+    ["auction.marketDetails"] = { module="auction", label="AH Market selected-item services", kind="rebuild", file="TwichUI_Workshop/auction/MarketData.lua", where="Project", every="selected item/generation change only", visible="auction.previewShown" },
     ["auction.previewSearch"] = { module = "auction", label = "AH preview: stored catalog/filter/sort slice", kind = "rebuild", file = "TwichUI_Workshop/auction/BrowseData.lua", where = "Job.Step", every = "bounded slices only while Browse is visible", visible = "auction.previewShown" },
     ["auction.previewPageBuild"] = { module = "auction", label = "AH preview: lazy page construction", kind = "init", file = "TwichUI_Workshop/auction/Window.lua", where = "Page", every = "first visit to each preview page" },
     ["auction.previewResize"] = { module = "auction", label = "AH preview: resize", kind = "layout", file = "TwichUI_Workshop/auction/Window.lua", where = "A.Resize", every = "at most 20 Hz during an explicit resize drag", visible = "auction.previewShown" },
