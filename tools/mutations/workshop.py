@@ -80,6 +80,10 @@ m("market.sell.hidden-repaint", "TwichUI_Workshop/auction/ViewSell.lua",
 m("market.sell.deferred-provenance", "TwichUI_Workshop/auction/ViewSell.lua",
   " and p.money:GetCopper()~=p.filledPrice", "",
   "deferred programmatic money callbacks erase the matched price provenance and selection", SELL_TEST)
+m("market.sell.deposit-precision", SELL_PREP, "amount=math.ceil(amount/100)*100", "amount=amount",
+  "a whole-silver auctioneer displays the unrounded copper deposit instead of the native upfront cost", SELL_TEST)
+m("market.sell.deposit-unknown-precision", SELL_PREP, 'type(row.copper)=="boolean" and ', '',
+  "unknown money precision is treated as a verified deposit quote", SELL_TEST)
 
 
 # ======================================================================================================================

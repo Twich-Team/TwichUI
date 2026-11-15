@@ -92,7 +92,7 @@ function D.Draft(row,quantity,price,duration)
     result.gross,result.quantity,result.unit=proceeds.gross,quantity,price
     if row.locked or row.bound~=false or row.eligible~=true then result.reason="Auction eligibility is unavailable or this item cannot be auctioned.";return result end
     if row.copper==false and price%100~=0 then result.reason="This auctioneer requires whole-silver prices.";return result end
-    if Q.Available() and row.location and row.itemKey and W.Int(duration,1,3) and D.BagCurrent(row) then
+    if Q.Available() and row.location and row.itemKey and type(row.copper)=="boolean" and W.Int(duration,1,3) and D.BagCurrent(row) then
         local types=Enum and Enum.ItemCommodityStatus
         local ah=C_AuctionHouse
         local fn,args
@@ -100,7 +100,13 @@ function D.Draft(row,quantity,price,duration)
         elseif types and row.mode==types.Commodity then fn,args=ah.CalculateCommodityDeposit,{row.item,duration,quantity} end
         if type(fn)=="function" then
             local ok,deposit=pcall(fn,unpack(args))
-            if ok then result.deposit=W.Int(W.Plain(deposit),0,PR.MAX_COPPER) end
+            if ok then
+                local amount=W.Int(W.Plain(deposit),0,PR.MAX_COPPER)
+                -- Forever's native sell frame rounds the upfront quote when
+                -- this auctioneer supports only whole-silver money values.
+                if amount and row.copper==false then amount=math.ceil(amount/100)*100 end
+                result.deposit=W.Int(amount,0,PR.MAX_COPPER)
+            end
         end
     end
     result.valid=true;result.reason="Preparation only · posting awaits client acceptance."

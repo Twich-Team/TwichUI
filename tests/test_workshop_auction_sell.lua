@@ -50,6 +50,15 @@ deposit=0;same(D.Draft(row,3,101,2).deposit,0,"a verified zero deposit is not un
 deposit=nil;same(D.Draft(row,3,101,2).deposit,nil)
 same(D.Draft(row,3,W.Prices.MAX_COPPER,2).gross,nil,"overflow refused before multiplication")
 row.copper=false;same(D.Draft(row,3,101,2).valid,false,"native precision respected");row.copper=true
+deposit=123;row.copper=false
+same(D.Draft(row,3,100,2).deposit,200,"native whole-silver deposit rounds up")
+deposit=0;same(D.Draft(row,3,100,2).deposit,0,"whole-silver zero remains zero")
+deposit=W.Prices.MAX_COPPER
+same(D.Draft(row,3,100,2).deposit,nil,"rounded deposit cannot exceed the money bound")
+local precisionQuotes=quotes;row.copper=nil
+same(D.Draft(row,3,100,2).deposit,nil,"unknown money precision cannot supply an upfront quote")
+same(quotes,precisionQuotes,"unknown precision does not request a deposit quote")
+row.copper=true;deposit=nil
 for _,field in ipairs({"locked","pending"}) do row[field]=true;same(D.Max(row),0);same(D.Draft(row,3,100,2).valid,false);row[field]=false end
 row.reserved=1;same(D.Max(row),0);same(D.Draft(row,3,100,2).valid,false);row.reserved=0
 row.bound=nil;same(D.Max(row),0);row.bound=false
