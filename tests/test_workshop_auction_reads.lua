@@ -96,6 +96,7 @@ local query=Q.BrowseQuery({text="ore",quality=3,exact=true,minLevel=10,maxLevel=
 same(query.filters[1],9);same(query.filters[2],4)
 same(query.minLevel,10);same(query.maxLevel,20)
 same(query.sorts[1].sortOrder,1);same(query.sorts[1].reverseSort,true)
+same(Q.BrowseQuery({category={filters={}}}),nil,"unsupported category cannot become unfiltered query")
 Q.Event("AUCTION_HOUSE_CLOSED");Q.Event("AUCTION_HOUSE_SHOW")
 c.C_AuctionHouse.GetNumItemSearchResults=function() return 2 end
 c.C_AuctionHouse.GetItemSearchResultInfo=function(_,i)
@@ -122,6 +123,13 @@ local tree,by=W.AuctionCategories.Tree()
 same(#tree,1);same(tree[1].children[1].name,"Cloth")
 same(W.AuctionCategories.Matches({classID=4,subClassID=1},by["native:1.1"]),true)
 same(W.AuctionCategories.Matches({classID=4,subClassID=2},by["native:1.1"]),false)
+local inventoryReads=0
+c.C_Item.GetItemInventoryTypeByID=function() inventoryReads=inventoryReads+1;return 3 end
+W.AdvisorData.Info(10);same(inventoryReads,0,"shared metadata does not read unused inventory type")
+same(W.AuctionCategories.Matches({item=10,classID=4,subClassID=1},{filters={{classID=4,inventoryType=3}}}),true)
+same(inventoryReads,1,"inventory filter reads type once")
+same(W.AuctionCategories.Matches({item=10,classID=2},{filters={{classID=4,inventoryType=3}}}),false)
+same(inventoryReads,1,"unrelated class does not read inventory type")
 -- Regression: metadata storms cannot replace a running job.
 local A=W.AuctionUI
 local native=c.AuctionCategories
@@ -141,12 +149,24 @@ for i=1,20 do p:GetScript("OnEvent")(p,"GET_ITEM_INFO_RECEIVED",10,true);A.Rende
 W.AuctionBrowseData.Job=function() return {Step=function() error("callback failure") end} end
 A.Browse.Search("error");FlushTimers()
 same(p.job,nil);same(p.state,"failed")
+local source,fault=W.Market.Source,c.TwichUI.Fault
+local faults=0;c.TwichUI.Fault=function() faults=faults+1 end
+p.job={Step=function() return false end}
+W.Market.Source=function() error("market identity failure") end
+A.Browse.Search("source failure")
+same(p.job,nil,"failed setup releases superseded job")
+same(p.state,"data unavailable");same(faults,1,"setup error is reported")
+W.Market.Source=source;c.TwichUI.Fault=fault
+
 p.liveMode=true;Q.state="results"
 Q.snapshot={kind="item",epoch=Q.epoch,rows={{auctionID=71,item=10,itemKey={itemID=10},qty=3,total=299,unit=100}}}
 A.Render()
 same(p.totalHead:GetText(),"Total / bid","live columns do not claim historical estimates")
 same(p.scope:GetText():find("Explicit experimental",1,true)~=nil,true)
 same(p.rows[1].total,299,"live exact total remains distinct")
+same(p.unitHead:GetText(),"Unit price")
+Q.snapshot={kind="browse",epoch=Q.epoch,rows={{item=10,itemKey={itemID=10},qty=12,unit=100}}}
+A.Render();same(p.unitHead:GetText(),"Native min","group minimum not asserted to be unit price")
 
 A.Hide()
 local qty=5

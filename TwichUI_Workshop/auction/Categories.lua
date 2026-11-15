@@ -24,9 +24,19 @@ function C.Tree()
 end
 function C.Matches(info, node)
     if node.implicit then return false end -- unavailable from saved item metadata
+    local inventory,read=info.inventoryType,false
     for _,f in ipairs(node.filters) do
         if (not f.classID or f.classID==info.classID) and
-            (not f.subClassID or f.subClassID==info.subClassID) and (not f.inventoryType or f.inventoryType==info.inventoryType) then return true end
+            (not f.subClassID or f.subClassID==info.subClassID) then
+            if not f.inventoryType then return true end
+            if inventory==nil and not read then
+                read=true
+                if C_Item and C_Item.GetItemInventoryTypeByID then
+                    inventory=W.Int(C_Item.GetItemInventoryTypeByID(info.item),0,100)
+                end
+            end
+            if f.inventoryType==inventory then return true end
+        end
     end
     return false
 end

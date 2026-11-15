@@ -50,7 +50,7 @@ Detail = function(p)
     d.name:SetText(chosen.info.name); d.pic.tex:SetTexture(chosen.info.icon or UI.ICON_BLANK)
     d.kind:SetText((chosen.info.category or "Category unavailable") .. (chosen.info.sub and " · " .. chosen.info.sub or ""))
     d.track.text:SetText(AD.Tracked()[item] and "Untrack" or "Track")
-    local stamp = p.stamp .. ":" .. item .. ":" .. W.Strategy.epoch
+    local stamp = (p.stamp or "live") .. ":" .. item .. ":" .. W.Strategy.epoch
     if d.cached == stamp then return end
     d.cached = stamp
     local facts = W.Facts.Of(item, {market = p.market})
@@ -109,6 +109,18 @@ Start = function(p, reset)
         p.job, p.rows, p.error, p.state = nil, {}, "timed out", "timed out"
         Paint(p)
     end)
+end
+-- Setup can fail before a new timer/deadline is installed. Invalidate and
+-- clear any superseded job even when market identity/catalog construction fails.
+local Begin=Start
+Start=function(p,reset)
+    local ok,err=pcall(Begin,p,reset)
+    if ok then return end
+    p.token=p.token+1
+    p.job,p.rows,p.market,p.stamp,p.pendingView=nil,{},nil,nil,nil
+    p.error,p.state="data unavailable","data unavailable"
+    pcall(Paint,p)
+    R.Fault("auction preview search",err)
 end
 local function Filter(p, name, value)
     if p[name] == value then return end
@@ -307,7 +319,7 @@ local function Build(p)
         local h=UI.Head(tableCard,text,w,"RIGHT"); h:SetPoint("TOPRIGHT",x,-14);return h
     end
     local itemHead=A.Text(tableCard,"Item",13,14,-14,-280,UI.K.bronzeText)
-    p.qtyHead=Head("Qty*",42,-246); Head("Unit price",100,-138); p.totalHead=Head("Est. value*",110,-28)
+    p.qtyHead=Head("Qty*",42,-246); p.unitHead=Head("Unit price",100,-138); p.totalHead=Head("Est. value*",110,-28)
     p.list=UI.List(tableCard,56,MakeRow,360,false)
     p.list.box:SetPoint("TOPLEFT",4,-36); p.list.box:SetPoint("BOTTOMRIGHT",-4,72)
     p.status=A.Text(tableCard,"",12,12,-1,-12,UI.K.textDim)
@@ -319,7 +331,8 @@ local function Build(p)
     p.liveState:ClearAllPoints();p.liveState:SetPoint("BOTTOMLEFT",12,86)
     p.live=UI.Button(filters,"Live search (gated)",150,"secondary",function()
         local node=p.nativeByID and p.nativeByID[p.category]
-        local query=W.AuctionReads.BrowseQuery({text=p.search:GetText(),category=node,quality=p.quality,exact=p.exact,sort="Price"})
+        local query,reason=W.AuctionReads.BrowseQuery({text=p.search:GetText(),category=node,quality=p.quality,exact=p.exact,sort="Price"})
+        if not query then A.Note(reason);return end
         local ok,why=W.AuctionReads.Begin("browse",query)
         if ok then
             p.token=p.token+1;p.job=nil;p.rows={};p.liveMode=true;p.liveSnapshot=nil
@@ -343,6 +356,7 @@ local function Render(p)
     local reads=W.AuctionReads
     if p.liveMode then
         p.qtyHead:SetText("Qty");p.totalHead:SetText("Total / bid")
+        p.unitHead:SetText(reads.snapshot and reads.snapshot.kind=="item" and "Unit price" or "Native min")
         p.scope:SetText("Explicit experimental response · read-only.\nGrouped minima are not exact listing totals.")
         local snap=reads.snapshot
         p.liveState:SetText("Live Auction House · experimental · " .. reads.state)
@@ -366,7 +380,7 @@ local function Render(p)
         for _,e in ipairs({"AUCTION_HOUSE_BROWSE_RESULTS_UPDATED","ITEM_SEARCH_RESULTS_UPDATED","AUCTION_HOUSE_BROWSE_FAILURE","AUCTION_HOUSE_CLOSED","AUCTION_HOUSE_SHOW"}) do p:RegisterEvent(e) end
         p.eventCount=7;p.listening=true
     end
-    p.qtyHead:SetText("Qty*");p.totalHead:SetText("Est. value*")
+    p.qtyHead:SetText("Qty*");p.unitHead:SetText("Unit price");p.totalHead:SetText("Est. value*")
     p.scope:SetText("*Aggregated quantity at the cheapest tier.\nStored history; no current auctions or exact stacks.")
     p.liveState:SetText("Saved Market Data · historical observations")
     local market=W.Market.Source().market

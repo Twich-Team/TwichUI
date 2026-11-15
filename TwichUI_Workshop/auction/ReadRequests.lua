@@ -96,6 +96,9 @@ function Q.BrowseQuery(opt)
         if opt.exact and filters.ExactMatch then query.filters[#query.filters+1]=filters.ExactMatch end
     end
     if opt.category then
+        if #(opt.category.filters or {})==0 and not opt.category.implicit then
+            return nil,"This category has no generic native browse filter; use its native workflow."
+        end
         query.itemClassFilters=opt.category.filters
         if opt.category.implicit then
             query.filters=query.filters or {};query.filters[#query.filters+1]=opt.category.implicit
