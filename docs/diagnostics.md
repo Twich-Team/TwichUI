@@ -411,3 +411,7 @@ identical with a capture recording. `tests/test_release_tools.py`: four folders,
 `TwichUI_Workshop/auction/Window.lua`. Read-only gauges expose shown state,
 page pool (at most five), visible event registrations and row pool. They never
 load Workshop or construct a preview. No native-frame hooks are added.
+
+`auction.previewSearch` maps catalog/filter/cooperative merge-sort slices to
+`TwichUI_Workshop/auction/BrowseData.lua`. Additional gauges count results and
+pending jobs; hidden pages retain neither. Client timing remains unmeasured.

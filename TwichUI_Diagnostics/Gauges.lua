@@ -19,6 +19,7 @@ local Perf = R.Perf
 -- "!!!TwichUI/", the settings window "TwichUI_Settings/"), where: the function, so a report can name what to read.
 -- every = how often it is expected to run, so a report can tell "runs often" from "runs on demand".
 DX.OPS = {
+    ["auction.previewSearch"] = { module = "auction", label = "AH preview: stored catalog/filter/sort slice", kind = "rebuild", file = "TwichUI_Workshop/auction/BrowseData.lua", where = "Job.Step", every = "bounded slices only while Browse is visible", visible = "auction.previewShown" },
     ["auction.previewBuild"] = { module = "auction", label = "AH preview: shell construction", kind = "init", file = "TwichUI_Workshop/auction/Window.lua", where = "Build", every = "first explicit preview open" },
     ["auction.previewRender"] = { module = "auction", label = "AH preview: visible page render", kind = "rebuild", file = "TwichUI_Workshop/auction/Window.lua", where = "A.Render", every = "visible page changes and coalesced refreshes", visible = "auction.previewShown" },
     ["auction.proof"] = { module = "auction", label = "AH-1a presentation switch/recovery", kind = "layout", file = "auction/Host.lua", where = "Activate, Restore", every = "explicit diagnostic command, or recovery of its active lease" },
@@ -191,6 +192,8 @@ local G = {
     { "auction.previewShown", "AH preview shown", "state", "core", AuctionPreview("shown") },
     { "auction.previewPages", "AH preview pages built (at most five)", "pool", "core", AuctionPreview("pages") },
     { "auction.previewEvents", "AH preview visible listeners", "listeners", "core", AuctionPreview("events") },
+    { "auction.previewResults", "AH preview retained results", "cache", "core", AuctionPreview("results") },
+    { "auction.previewJobs", "AH preview pending catalog jobs", "state", "core", AuctionPreview("jobs") },
     { "auction.previewRows", "AH preview pooled rows", "pool", "core", AuctionPreview("rows") },
     { "core.listeners", "TwichUI event bus: listeners", "listeners", "core", Listeners },
     { "core.events", "TwichUI event bus: events listened for", "listeners", "core", Events },

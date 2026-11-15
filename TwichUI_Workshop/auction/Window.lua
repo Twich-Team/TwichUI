@@ -20,7 +20,7 @@ function A.Frame() return root end
 function A.Mode() return active end
 function A.IsShown() return root ~= nil and root:IsShown() end
 function A.Page(key) return A.views[key] end
-function A.Note(text) if root then root.note:SetText(text or "") end end
+function A.Note(text) if root then root.note:SetText("Preview · Replacement off · " .. (text or "Transactions unavailable")) end end
 function A.Schedule()
     if not A.IsShown() or scheduled then return end
     scheduled = true
@@ -179,9 +179,14 @@ function A.Show()
 end
 function A.Hide() if root then root:Hide() end end
 function A.Snapshot()
-    local pages, listeners, rows = 0, 0, 0
+    local pages, listeners, rows, results, jobs = 0, 0, 0, 0, 0
     for _ in pairs(A.views) do pages = pages + 1 end
     if A.IsShown() then listeners = #events end
-    for _, p in pairs(A.views) do if p.list then rows = rows + #p.list.rows end end
-    return { shown = A.IsShown() and 1 or 0, pages = pages, events = listeners, rows = rows, renders = renders }
+    for _, p in pairs(A.views) do
+        if p.list then rows = rows + #p.list.rows end
+        results = results + #(p.rows or {})
+        if p.job then jobs = jobs + 1 end
+        if A.IsShown() and p.listening then listeners = listeners + 2 end
+    end
+    return { shown = A.IsShown() and 1 or 0, pages = pages, events = listeners, rows = rows, results = results, jobs = jobs, renders = renders }
 end

@@ -797,3 +797,14 @@ m("market.advisor.tentative-tooltip-upgrade", "TwichUI_Workshop/Advisor.lua",
   'function A.Tooltip(r) return "Workshop: " .. (r.level=="tentative"',
   'function A.Tooltip(r) return "Workshop: " .. (false',
   "the Normal tooltip loses the Possible qualification", ["test_workshop_advisor.lua"])
+
+# AH-2 observation presentation: reuse normalization, preserve estimates and sort.
+m("market.ah.value-not-multiplied", "TwichUI_Workshop/auction/BrowseData.lua",
+  "W.Int(unit * qty, 1, W.Prices.MAX_COPPER)", "W.Int(unit, 1, W.Prices.MAX_COPPER)",
+  "aggregate tier value shown as the price of one item", ["test_workshop_auction_browse.lua"])
+m("market.ah.stored-actionable", "TwichUI_Workshop/auction/BrowseData.lua",
+  'source = "stored", actionable = false', 'source = "stored", actionable = true',
+  "saved history gains an actionable flag without a live listing", ["test_workshop_auction_browse.lua"])
+m("market.ah.price-order-reversed", "TwichUI_Workshop/auction/BrowseData.lua",
+  "(a.unit or math.huge) < (b.unit or math.huge)", "(a.unit or math.huge) > (b.unit or math.huge)",
+  "Browse sorts expensive observations first despite its unit-price ordering", ["test_workshop_auction_browse.lua"])
