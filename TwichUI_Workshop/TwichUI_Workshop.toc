@@ -90,9 +90,14 @@ Notice.lua
 # Standalone AH presentation preview; no native takeover or transaction actions
 auction/Window.lua
 auction/Components.lua
+auction/ReadRequests.lua
+auction/Categories.lua
 auction/BrowseData.lua
 auction/ViewBrowse.lua
 auction/ShoppingData.lua
 auction/ViewShopping.lua
+auction/SellData.lua
+auction/ViewSell.lua
+auction/ViewOwned.lua
 # The window: the shell, the page list and the events (last: it tells TwichUI the addon is ready)
 Window.lua

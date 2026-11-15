@@ -16,12 +16,15 @@ same(A.Show(),true,"explicit show")
 local f=A.Frame()
 same(A.Mode(),"browse","Browse default")
 same(W.Window.Frame(),nil,"preview never opens Workshop")
-same(A.Snapshot().events,4,"visible shell and Browse events")
+same(A.Snapshot().events,9,"visible shell and Browse events")
 for _,key in ipairs({"browse","shopping","sell","owned","market"}) do
     Press.Must(A.nav[key]); same(A.Mode(),key,"navigation")
     same(A.Page(key):IsShown(),true,"active page")
-    if key=="sell" or key=="owned" or key=="market" then same(A.Page(key).placeholder~=nil,true,"honest placeholder") end
+    if key=="market" then same(A.Page(key).placeholder~=nil,true,"honest placeholder") end
 end
+same(A.Page("sell").post:IsEnabled(),false,"preparation cannot post")
+same(A.Page("owned").cancel:IsEnabled(),false,"read-only cannot cancel")
+same(A.Page("owned").repost:IsEnabled(),false,"read-only cannot repost")
 local frames=#c.testFrames
 for i=1,50 do
     for _,key in ipairs({"browse","shopping","sell","owned","market"}) do Press.Must(A.nav[key]) end

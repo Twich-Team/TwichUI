@@ -51,13 +51,14 @@ function D.Track(item)
     return true
 end
 function D.Info(item)
-    local name, link, quality, _, _, kind, sub, _, equip, icon, sell, class, _, bind
+    local name, link, quality, _, _, kind, sub, _, equip, icon, sell, class, subclass, bind
     if C_Item and C_Item.GetItemInfo then
-        name, link, quality, _, _, kind, sub, _, equip, icon, sell, class, _, bind = C_Item.GetItemInfo(item)
+        name, link, quality, _, _, kind, sub, _, equip, icon, sell, class, subclass, bind = C_Item.GetItemInfo(item)
     end
     return { item = item, known = W.Text(name,200)~=nil, name = W.Text(name, 200) or ("Item " .. item), link = W.Text(link, 1000), quality = W.Int(quality, 0, 20),
         category = W.Text(kind, 60), sub = W.Text(sub, 60), icon = W.Int(icon, 0, W.MAX_ID) or W.Text(icon, 300), sell = W.Int(sell, 0, W.Prices.MAX_COPPER),
-        classID = W.Int(class, 0, 100), bindType = W.Int(bind, 0, 20), equipLoc = W.Text(equip, 80) }
+        inventoryType = C_Item and C_Item.GetItemInventoryTypeByID and W.Int(C_Item.GetItemInventoryTypeByID(item),0,100) or nil,
+        classID = W.Int(class, 0, 100), subClassID = W.Int(subclass, 0, 100), bindType = W.Int(bind, 0, 20), equipLoc = W.Text(equip, 80) }
 end
 -- Request only an explicitly selected item, never the whole saved catalog.
 local requestedItem

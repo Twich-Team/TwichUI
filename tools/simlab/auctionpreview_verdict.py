@@ -13,7 +13,7 @@ def judge(run):
     outcomes, transcripts = [], {}
     def check(label, passed):
         outcomes.append(bool(passed)); print(f"  {'pass' if passed else 'FAIL'} {label}")
-    for name in ('shell', 'replay', 'small', 'scaled', 'empty', 'filtered', 'resized', 'shopping', 'shoppingsmall', 'shoppingpurpose', 'wrong'):
+    for name in ('shell', 'replay', 'small', 'scaled', 'empty', 'filtered', 'resized', 'shopping', 'shoppingsmall', 'shoppingpurpose', 'categories', 'sell', 'sellsmall', 'sellscaled', 'sellempty', 'owned', 'ownedsmall', 'ownedempty', 'wrong'):
         text = '\n'.join((run / f'{name}.{suffix}').read_text(errors='replace') for suffix in ('stderr', 'stdout'))
         checks, done = CHECK.findall(text), DONE.search(text)
         failures = [c for c in checks if c[0] == 'FAIL']; transcripts[name] = checks
@@ -24,7 +24,7 @@ def judge(run):
         for label, passed, detail in kf.verdict_lines(kf.classify(text, allow=('voice-settings-unsupplied',), require=('voice-settings-unsupplied',))):
             check(f'{name}: {label} {detail}', passed)
         w,h,rgba = read_rgba(run / f'{name}.png')
-        check(f'{name}: image dimensions', (w,h) == ((1000,700) if name in ('small','shoppingsmall') else (1600,1200)))
+        check(f'{name}: image dimensions', (w,h) == ((1000,700) if name in ('small','shoppingsmall','sellsmall','ownedsmall') else (1600,1200)))
         check(f'{name}: window not blank', distinct_colours(rgba,w//5,h//4,w*3//5,h//2) > 150)
     check('independent replay identical', transcripts['shell']==transcripts['replay'])
     check('negative control retains other outcomes', len(transcripts['shell'])==len(transcripts['wrong']) and all(

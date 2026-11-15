@@ -19,6 +19,7 @@ local Perf = R.Perf
 -- "!!!TwichUI/", the settings window "TwichUI_Settings/"), where: the function, so a report can name what to read.
 -- every = how often it is expected to run, so a report can tell "runs often" from "runs on demand".
 DX.OPS = {
+    ["auction.readSnapshot"] = { module = "auction", label = "AH experimental read normalization", kind = "rebuild", file = "TwichUI_Workshop/auction/ReadRequests.lua", where = "Event", every = "explicit response only; at most 500 rows" },
     ["auction.previewSearch"] = { module = "auction", label = "AH preview: stored catalog/filter/sort slice", kind = "rebuild", file = "TwichUI_Workshop/auction/BrowseData.lua", where = "Job.Step", every = "bounded slices only while Browse is visible", visible = "auction.previewShown" },
     ["auction.previewPageBuild"] = { module = "auction", label = "AH preview: lazy page construction", kind = "init", file = "TwichUI_Workshop/auction/Window.lua", where = "Page", every = "first visit to each preview page" },
     ["auction.previewResize"] = { module = "auction", label = "AH preview: resize", kind = "layout", file = "TwichUI_Workshop/auction/Window.lua", where = "A.Resize", every = "at most 20 Hz during an explicit resize drag", visible = "auction.previewShown" },
@@ -191,6 +192,8 @@ local function AuctionPreview(field)
     end
 end
 local G = {
+    { "auction.previewReads", "AH experimental pending read", "state", "core", AuctionPreview("reads") },
+    { "auction.previewLiveResults", "AH experimental retained rows (max 500)", "cache", "core", AuctionPreview("liveResults") },
     { "auction.previewShown", "AH preview shown", "state", "core", AuctionPreview("shown") },
     { "auction.previewPages", "AH preview pages built (at most five)", "pool", "core", AuctionPreview("pages") },
     { "auction.previewEvents", "AH preview visible listeners", "listeners", "core", AuctionPreview("events") },
