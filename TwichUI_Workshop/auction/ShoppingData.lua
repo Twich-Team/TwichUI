@@ -5,6 +5,15 @@ local P = {}
 W.AuctionShoppingData = P
 P.SOURCES = { {"all","All Sources"}, {"auction","Auction House"}, {"vendor","Vendor"}, {"make","Craft"}, {"collect","Collect"}, {"none","No source"} }
 P.GROUPS = { {"item","Group by item"}, {"purpose","By crafting purpose"} }
+P.CUES={auction={"Auction House","npc:gavel"},vendor={"Vendor","npc:coins"},
+    make={"Craft","npc:hammer"},collect={"Collect","npc:reagent-pouch"},
+    owned={"Already owned","npc:leather-backpack"},none={"No source","npc:sealed-scroll"}}
+function P.Cue(row)
+    local key=P.Source(row)
+    if row.kind~="collect" and row.qty==0 and W.Int(row.have,0,W.MAX_ID) and
+        W.Int(row.need,1,W.MAX_ID) and row.have>=row.need then key="owned" end
+    return P.CUES[key],key
+end
 function P.Key(row) return row.item .. ":" .. (row.kind=="collect" and ("collect:"..tostring(row.where)) or "own") end
 function P.Source(row)
     if row.kind=="collect" then return "collect" end

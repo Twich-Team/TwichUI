@@ -4,6 +4,13 @@ local A,P,S=W.AuctionUI,W.AuctionShoppingData,W.Session
 local n=0
 local function same(a,b,msg) n=n+1;assert(a==b,(msg or "").." expected "..tostring(b)..", got "..tostring(a)) end
 local function settle() for i=1,45 do FlushTimers() end end
+for key,art in pairs({auction="npc:gavel",vendor="npc:coins",make="npc:hammer",collect="npc:reagent-pouch",owned="npc:leather-backpack"}) do
+    same(P.CUES[key][2],art,"existing source artwork")
+    same(type(P.CUES[key][1]),"string","text accompanies source symbols")
+end
+same(select(2,P.Cue({source="vendor",qty=0,have=3,need=3})),"owned")
+same(select(2,P.Cue({kind="collect",qty=2,have=0,need=2})),"collect","bank stock is not in bags")
+same(select(2,P.Cue({qty=0,have=0,need=0})),"none","no requirement is not invented ownership")
 local function rec(id) for _,r in ipairs(S.Current().recipes) do if r.id==id then return r end end end
 local function basic(item,qty) return {reagentType=1,reagents={{itemID=item}},quantityRequired=qty,required=true} end
 local function row(item,kind) for _,v in ipairs(A.Page("shopping").rows) do if v.row.item==item and (not kind or v.row.kind==kind) then return v end end end
