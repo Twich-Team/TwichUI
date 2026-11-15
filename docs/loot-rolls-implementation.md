@@ -116,8 +116,25 @@ appearance settings. Saved data: `TwichUIDB.ui.lootRolls` (a profile's; `docs/pr
 * **unit-tested** (`tests/test_loot_rolls.lua`): rules, conditions, priority and unknown handling; configuration and rule editing; roll lifecycle,
   eligibility, one send per roll, confirmation, results from the history, ambiguity, secret values, missing APIs, reload adoption; automation
   (opt-ins, stop, override, pause, edits, deadlines, stale timers, duplicate events); frame handover and fallback; cards and failure.
-* **simulator-tested / screenshot-reviewed**: see "Simulator evidence" below.
+* **simulator-tested** (`bash tools/simlab/loot.sh`, 13 views, all pass): manual, stack, auto, resolved, waiting, expired, unavailable cards;
+  rules, builder, cards, narrow, empty settings views; placement (cancel keeps the place, Finish saves it, refused while a roll is open).
+  Handler-level checks over synthetic rolls only (see `docs/simulator-lab.md`, "The Loot Rolls scenario").
+* **screenshot-reviewed** (structure only: the simulator draws solid colors lighter and falls back to the game font): compared against
+  `assets/LOOT_ROLLS_CARD_MOCKUP.png` and `assets/LOOT_ROLLS_RULE_BUILDER_MOCKUP.png`, three rounds for the cards and four for the editor.
+  Corrected after review: the item line and the upgrade pill overlapped; the countdown text was clipped; result columns overflowed the card;
+  list rows overlapped their status line; condition rows were too crowded (now two lines); the Need/Greed/Pass labels were clipped.
 * **real-client-tested**: nothing.
+
+## Remaining differences from the mockups
+
+Cards: the frame is the shared framed look (`FrameLook`), simpler than the mockup's ornate gold corner brackets; the interior is that look's
+espresso with rock grain, not painted leather; the countdown bar is flat green with a highlight line, not glossy; the winner banner has no
+laurel ends (a laurel cut from the mockup carried part of its background and was dropped); the name uses Cinzel (the simulator shows the game font).
+Rules page: the automatic rolling strip and switches are an addition (the mockup has none); conditions are two lines each instead of one so they
+survive a narrow window; no "?" help button (each control has a tooltip); the delay is a slider, not a spinner; there is no "Allow manual
+override" switch, because overriding is never optional here; "N of 24 rules" is at the top of the list; the live preview shows the whole card
+(scaled), with a picker for its states, rather than a small card with a "Rules active" tag. On a narrow screen the shared preview overlays the
+window, as it does for the other pages.
 
 ## In-game acceptance (not done)
 

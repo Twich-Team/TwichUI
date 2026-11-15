@@ -12,7 +12,7 @@ local P = {}
 R.LootRulesPage = P
 
 local PAD, GAP = 14, 8
-local LIST_W = 206
+local LIST_W = 224
 local ROW_H = 54
 local STRIP_H = 40
 local COND_H = 62
@@ -581,11 +581,14 @@ local function Build()
     f.thenTitle = Part(G.Text(e, "heading"))
     f.actions = {}
     for _, key in ipairs({ "need", "greed", "pass" }) do
-        local b = Part(R.FrameLook.Toggle(e, "     " .. ACTION_WORD[key], 120, function()
+        local b = Part(R.FrameLook.Toggle(e, ACTION_WORD[key], 120, function()
             if selected then LR().SetAction(selected, key); P.QueueRefresh() end
         end))
         b:SetHeight(32)
-        if b.text and b.text.SetFont then b.text:SetFont(STANDARD_TEXT_FONT or [[Fonts\FRIZQT__.TTF]], 14, "") end
+        if b.text then
+            if b.text.SetFont then b.text:SetFont(STANDARD_TEXT_FONT or [[Fonts\FRIZQT__.TTF]], 14, "") end
+            b.text:ClearAllPoints(); b.text:SetPoint("CENTER", b, "CENTER", 14, 0); b.text:SetWidth(80); b.text:SetJustifyH("CENTER"); b.text:SetWordWrap(false)   -- beside the icon, not under it
+        end
         b.icon = b:CreateTexture(nil, "OVERLAY"); b.icon:SetSize(22, 22); b.icon:SetPoint("LEFT", 14, 0)
         R.Icons.Apply(b.icon, ACTION_ICON[key], 22)
         f.actions[key] = b
