@@ -7,7 +7,7 @@ A.Market=V
 local page,Start,Detail,Paint
 local function Key(r) return r.item end
 local function Money(n) return n and UI.Money(n) or "Unavailable" end
-local function Date(day) return date("%b %d",math.floor(day*86400)) end
+local function Date(day) return date("!%b %d",math.floor(day*86400)) end
 local function Stamp(p,m)
     return (m and m.key..":"..W.Valuation.Generation(m) or "none")..":"..p.metadata..":"..p.bags..
         (p.scope=="tracked" and ":"..D.TrackStamp() or "")
@@ -66,21 +66,27 @@ Detail=function(p)
         local day=record.kind=="obs" and (record.last or record.at)/86400 or record.to
         if day and (not lastDay or day>lastDay) then lastDay=day end
     end
+    local freshness=r and (W.Facts.Freshness(f) or (lastDay and "Newest retained record ends "..Date(lastDay).." UTC" or "No listing observation")) or
+        (p.market and "Choose an item to inspect stored observations" or "No selected saved market")
     p.source:SetText((p.market and W.Prices.Label(p.market) or "No selected saved market").." · "..
-        (W.Facts.Freshness(f) or (lastDay and "Newest retained record ends "..Date(lastDay).." UTC" or "No latest listing observation")).."\nSaved Market Data · historical listings; current availability unknown.")
+        freshness.."\nSaved Market Data · historical listings; current availability unknown.")
     local values={}
     for _,row in ipairs(W.Facts.Rows(f,UI.Money)) do values[row.id]=row end
     for _,tile in ipairs(p.tiles) do
         local row=values[tile.id]
-        tile.value:SetText(tile.id=="quality" and Quality(f) or row and row.value or "Unavailable")
+        tile.value:SetText(tile.id=="quality" and (not r and p.market and "Choose an item" or Quality(f)) or row and row.value or "Unavailable")
         tile.tip=row and row.tip or "No supported value for the selected item and market."
     end
     p.chart:Set(x and x.series,UI.Money)
+    if not r then
+        p.chart.msg:SetText(p.error and "Stored history unavailable." or "Choose an item to inspect history.")
+        p.chart.note:SetText(p.error and "Refresh stored data to retry." or "Current auction availability is unknown.")
+    end
     p.chartCard.heading:SetText(p.days==2 and "Lowest seen · recent observations" or "Lowest seen · observed daily closings")
     local coverage,groups=ChartWords(p,x)
     p.coverage:SetText(coverage)
     local s=x and x.series
-    p.axis:SetText(s and (Date(s.from).." — "..Date(s.to).." UTC · gaps are not joined") or "No invented daily samples")
+    p.axis:SetText(s and (Date(s.from).." — "..Date(s.to).." UTC · gaps are not joined") or "Stored listing history")
     local tr=x and x.trend
     local trend=tr and tr.direction~="insufficient" and
         (({rising="Rising",falling="Falling",flat="Stable"})[tr.direction] or "Observed change")..
@@ -88,7 +94,7 @@ Detail=function(p)
         tr.older.n.." older and "..tr.newer.n.." newer observed days."
         or "Insufficient history for a 14-day trend. Each half needs at least two observed days."
     local q=f.quality
-    p.trends:SetText(trend.."\n\n"..Quality(f)..(q and q.n and (" · "..q.n.." / 30 observed days") or "")..
+    p.trends:SetText(not r and "Choose an item to inspect its observed trend and coverage." or trend.."\n\n"..Quality(f)..(q and q.n and (" · "..q.n.." / 30 observed days") or "")..
         "\n"..table.concat(W.Facts.QualityNotes(f,2),"\n"))
     local sup=f.supply
     local dist=x and x.distribution
@@ -106,17 +112,17 @@ Detail=function(p)
     if posture and posture.posture~="unknown" then
         lines[#lines+1]="Recent vs historical: "..posture.posture..(" (%+.1f%%)"):format(posture.percent or 0)
     else lines[#lines+1]="Price context unavailable: "..(W.Facts.WHY[posture and posture.why] or posture and posture.why or "insufficient evidence") end
-    p.contextText:SetText(table.concat(lines,"\n"))
+    p.contextText:SetText(not r and "Choose an item for saved pricing, supply and distribution context." or table.concat(lines,"\n"))
     p.aggregateText=groups
     p.chartTip=coverage.."\n"..(s and s.basis or "No supported history")..
         "\nGold markers show recorded minimums. No interpolation or sale activity is implied.\n"..
         (#groups>0 and ("Older aggregates (not daily markers):\n"..groups) or "No older aggregates in this window.")
 end
 Paint=function(p)
-    local text=p.error and ("Market data "..p.error..". Refresh stored data to retry.") or
-        p.job and "Loading known market items…" or p.scope=="tracked" and "No tracked items match. Track items in Browse or Item Advisor." or
-        p.scope=="bags" and "No matching bag items, or bag metadata is unavailable." or
-        p.market and "No known items match these filters." or "No saved market data. Locally collected observations work without a companion."
+    local text=p.error and (p.error=="timed out" and "Item search timed out.\nRefresh stored data." or "Stored data unavailable.\nRefresh stored data to retry.") or
+        p.job and "Loading known items…" or p.scope=="tracked" and "No tracked items match.\nTrack items in Browse\nor Item Advisor." or
+        p.scope=="bags" and "No matching bag items.\nBag data may be\nunavailable." or
+        p.market and "No matching known items.\nTry other filters." or "No saved market data.\nTry Tracked items\nor Items in bags."
     p.list:SetData(p.rows or {},text)
     p.status:SetText(p.job and "Discovering stored items…" or p.error and "Data unavailable" or
         (#(p.rows or {}).." known items"..(p.capped and " · limited to 20,000" or "")))
@@ -128,7 +134,7 @@ Start=function(p,reset)
     local view=not reset and (p.pendingView or p.viewport or A.Capture(p.list,Key)) or nil
     p.viewport=nil;p.pendingView=view
     if reset then p.list:ScrollTop() end
-    p.rows,p.index,p.error={},nil,nil
+    p.rows,p.index,p.known,p.error={},nil,nil,nil
     local ok,err=pcall(function()
         p.market=D.Resolve(p.marketKey)
         p.stamp=Stamp(p,p.market)
@@ -145,7 +151,7 @@ Start=function(p,reset)
         if not done then C_Timer.After(0,Step);return end
         local job=p.job
         p.job=nil;p.error=why or job.unavailable;p.capped=job.capped
-        p.rows=not p.error and job.rows or {};p.index=not p.error and job.index or {}
+        p.rows=not p.error and job.rows or {};p.index=not p.error and job.index or {};p.known=job.seen
         if not p.index[p.selected] then p.selected=p.rows[1] and p.rows[1].item end
         Paint(p);A.Restore(p.list,view,Key);p.pendingView=nil
         if p.stamp~=Stamp(p,p.market) then A.Schedule() end
@@ -153,7 +159,7 @@ Start=function(p,reset)
     C_Timer.After(0,Step)
     C_Timer.After(15,function()
         if mine~=p.token or not p.job then return end
-        p.token=p.token+1;p.job,p.rows,p.index,p.error=nil,{},nil,"timed out";Paint(p)
+        p.token=p.token+1;p.job,p.rows,p.index,p.known,p.error=nil,{},nil,nil,"timed out";Paint(p)
     end)
 end
 function V.Search(query)
@@ -231,15 +237,26 @@ local function Build(p)
             self:SetSelected(p.selected==x.item)
         end
         r.twichRowClick=function() if r.data then V.Select(r.data.item) end end
-        UI.ItemTip(r,function() return r.data and r.data.item end)
+        UI.ItemTip(r,function() return r.data and not Context(p,r.data.item).variant and r.data.item end)
         return r
     end,420,false)
+    p.list.empty:ClearAllPoints()
+    p.list.empty:SetPoint("TOPLEFT",14,-14);p.list.empty:SetPoint("TOPRIGHT",-14,-14)
+    Wrap(p.list.empty,132)
     p.list.box:SetPoint("TOPLEFT",4,-38);p.list.box:SetPoint("BOTTOMRIGHT",-4,50)
     p.status=A.Text(left,"",11,12,-1,-12,UI.K.textDim);p.status:ClearAllPoints();p.status:SetPoint("BOTTOMLEFT",12,12);p.status:SetPoint("RIGHT",-12,0);Wrap(p.status,30)
     local main=CreateFrame("Frame",nil,p);p.main=main
     main:SetPoint("TOPLEFT",left,"TOPRIGHT",12,0);main:SetPoint("BOTTOMRIGHT",0,0)
     UI.Panel(main,"card")
     p.pic=UI.ItemIcon(main,54);p.pic:SetPoint("TOPLEFT",12,-10)
+    p.pic:EnableMouse(true)
+    p.pic:SetScript("OnEnter",function()
+        if not p.chosen then return end
+        local variant=Context(p,p.chosen.item).variant
+        UI.ItemTipLines(p.pic,not variant and p.chosen.item or nil,
+            variant and {{"Variant identity preserved; base-item advice unavailable."}} or nil,p.chosen.info.name)
+    end)
+    p.pic:SetScript("OnLeave",function() if GameTooltip then GameTooltip:Hide() end end)
     p.name=A.Text(main,"",23,78,-10,-424);p.name:SetHeight(28)
     p.kind=A.Text(main,"",12,78,-44,-12,UI.K.textDim)
     p.track=UI.Button(main,"Track Item",110,"secondary",function()
@@ -297,9 +314,14 @@ local function Build(p)
         if p.projection then p.chart:Set(p.projection.series,UI.Money) end
     end
     main:HookScript("OnSizeChanged",Layout);Layout()
-    p:SetScript("OnEvent",function(_,event,_,ok)
-        if event=="GET_ITEM_INFO_RECEIVED" and ok~=false then p.metadata=p.metadata+1
-        elseif event=="BAG_UPDATE_DELAYED" and p.scope=="bags" then p.bags=p.bags+1 end
+    p:SetScript("OnEvent",function(_,event,item,ok)
+        if event=="GET_ITEM_INFO_RECEIVED" then
+            local id=W.Int(W.Plain(item),1,W.MAX_ID)
+            local known=p.job and p.job.seen or p.known
+            if ok==false or not id or not (known and known[id]) then return end
+            p.metadata=p.metadata+1
+        elseif event=="BAG_UPDATE_DELAYED" and p.scope=="bags" then p.bags=p.bags+1
+        else return end
         A.Schedule()
     end)
 end
@@ -314,7 +336,7 @@ local function Render(p)
 end
 local function Release(p)
     p.viewport=p.pendingView or (p.rows and A.Capture(p.list,Key)) or p.viewport
-    p.token=p.token+1;p.job,p.rows,p.index,p.market,p.projection,p.chosen,p.stamp,p.pendingView=nil,nil,nil,nil,nil,nil,nil,nil
+    p.token=p.token+1;p.job,p.rows,p.index,p.known,p.market,p.projection,p.chosen,p.stamp,p.pendingView=nil,nil,nil,nil,nil,nil,nil,nil,nil
     p.list:SetData({});p:UnregisterAllEvents();p.listening=false
     for _,r in ipairs(p.list.rows) do r.data=nil end
     D.Clear()

@@ -35,10 +35,12 @@ fixture marketlong '{ market = true, marketLong = true }'
 fixture markettracked '{ market = true, marketTracked = true }'
 fixture marketlarge '{ market = true, marketLarge = true }'
 fixture marketmetadata '{ market = true, marketMetadata = true }'
+fixture marketstale '{ market = true, marketStale = true }'
+fixture marketerror '{ market = true, marketError = true }'
 fixture wrong '{ wrongAt = "Browse default" }'
 repo_before="$(git -C "$REPO" status --porcelain --ignored)"
 status=0
-for name in shell replay small scaled empty filtered resized shopping shoppingsmall shoppingpurpose categories sell sellsmall sellscaled sellempty owned ownedsmall ownedempty market marketsmall marketscaled marketsparse marketempty marketrecent marketlong markettracked marketlarge marketmetadata wrong; do
+for name in shell replay small scaled empty filtered resized shopping shoppingsmall shoppingpurpose categories sell sellsmall sellscaled sellempty owned ownedsmall ownedempty market marketsmall marketscaled marketsparse marketempty marketrecent marketlong markettracked marketlarge marketmetadata marketstale marketerror wrong; do
   simlab_stage
   width=1600; height=1200
   if [[ "$name" = small || "$name" = shoppingsmall || "$name" = sellsmall || "$name" = ownedsmall || "$name" = marketsmall ]]; then width=1000; height=700; fi

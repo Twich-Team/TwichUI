@@ -401,6 +401,7 @@ local function Render(p)
     if not p.stamp or p.stamp~=Stamp(market,p) then Start(p,false) else Paint(p) end
 end
 local function Release(p)
+    if not A.IsShown() then p.researchMarketKey=nil end
     p.viewport=p.pendingView or A.Capture(p.list,Key)
     if p.liveMode then W.AuctionReads.Cancel("canceled");p.liveMode=false;p.liveSnapshot=nil end
     p.state="canceled"

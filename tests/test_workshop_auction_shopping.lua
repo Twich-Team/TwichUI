@@ -54,6 +54,12 @@ same(S.picks[20],"auction");same(row(20).source,"auction","shared source decisio
 -- A selected shopping requirement prepares a historical Browse inspection only.
 for _,r in ipairs(p.list.rows) do if r.data and r.data.row.item==20 then Press.Must(r);break end end
 local target=p.detail.data.row.item
+local queue,picks=digest(W.Queue.Entries()),digest(S.picks)
+Press.Must(p.detail.market);settle()
+same(A.Mode(),"market");same(A.Page("market").selected,target,"Shopping preserves material identity")
+same(digest(W.Queue.Entries()),queue,"Market inspection leaves crafting queue unchanged")
+same(digest(S.picks),picks,"Market inspection leaves acquisition decisions unchanged")
+A.Go("shopping");settle()
 Press.Must(p.detail.browse);settle()
 same(A.Mode(),"browse");same(A.Page("browse").forceItem,target)
 same(W.Strategy.ListenerCount(),0);same(W.Storage.ListenerCount(),0)

@@ -194,8 +194,8 @@ Lab.Step("large Browse viewport and cleanup",function()
     A.Go("browse");p.forceItem=nil;A.Browse.Search("");Finish();A.Browse.Select(7067)
     Lab.Check("state","large Browse restored fixture",8,#p.rows)
 end)
-local function MarketSeed(W,sparse)
-    local now=time();local today=math.floor(now/86400)
+local function MarketSeed(W,sparse,ageOffset)
+    local now=time()-(ageOffset or 0)*86400;local today=math.floor(now/86400)
     local key="Fixture Realm|Alliance"
     TwichUIWorkshopDB={v=2,markets={}}
     for age=110,0,-1 do
@@ -329,7 +329,7 @@ if P.owned then
 end
 if P.market then
     local W=R.Workshop
-    MarketSeed(W,P.marketSparse)
+    MarketSeed(W,P.marketSparse,P.marketStale and 20 or 0)
     if P.marketEmpty then TwichUIWorkshopDB={v=2,markets={}} end
     if P.marketLarge then
         local m=TwichUIWorkshopDB.markets["Fixture Realm|Alliance"]
@@ -343,6 +343,9 @@ if P.market then
     end
     A.Go("market")
     A.Market.Filter("marketKey","Fixture Realm|Alliance")
+    if P.marketError then
+        W.AuctionMarketData.Catalog=function() return {Step=function() error("synthetic unavailable catalog") end} end
+    end
     A.Market.Search("");Lab.Settle(0.5)
     local p=A.Page("market")
     for _=1,100 do if not p.job then break end;Lab.Settle(0.05) end

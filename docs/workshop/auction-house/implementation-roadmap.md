@@ -268,3 +268,11 @@ schema change or runtime diagnostic is necessary to establish the source facts.
 No remaining AH-0 blocker requires owner input. The next recommended authorized
 task is **AH-1a: lifecycle and fallback proof**, with real-client acceptance
 before consequential actions. Stop here for review.
+
+## AH-6 implementation status
+
+The read-only Market presentation, bounded chart adaptation and cross-page
+research links are implemented in the [AH-6 campaign](market.md), with full Cloud
+verification and draft-only publication. Existing valuation/history engines,
+transaction gates and AH-1a acceptance requirements remain unchanged. AH-7,
+client acceptance/activation and desktop synchronization remain separate work.

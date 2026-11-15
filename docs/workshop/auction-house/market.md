@@ -57,8 +57,8 @@ by ID. Metadata refreshes preserve selected identity, top identity and pixel off
 The selected projection uses `Facts.Of`, `Facts.Rows`, `Market.History`,
 `TrendOf`, `Posture` and `Distribution`, with the existing caches/quality decisions.
 One selected history projection is retained, keyed by the cached facts object;
-range changes reuse it. Hidden pages invalidate jobs/timers, unsubscribe frame
-events and release rows/index/market/projection. Shared Facts remains bounded by
+range changes reuse it. Catalog membership also includes filtered-out candidates, so relevant late metadata can enter a filter; unrelated callbacks and bag events outside bag scope do not rebuild the catalog. Hidden pages invalidate jobs/timers, unsubscribe frame
+events and release rows/index/membership/market/projection. Shared Facts remains bounded by
 its established 48-entry policy. Diagnostics exposes `auction.marketDetails`.
 
 ## Metric provenance
@@ -106,7 +106,7 @@ They never issue Auction House reads or change queue/source choices, apply a Sel
 price, infer a sale, cancel or repost. Open Browse remains saved-data research and
 preserves an explicit research market. Use in Advisor opens the existing item
 selection and shared track list; Advisor retains its own market settings, explained
-on the action. There is no second watch database.
+on the action. Tracking follows the existing base-item-ID convention. There is no second watch database.
 
 A future companion must validate/version/attribute imported observations through
 supported Workshop ingestion/history/valuation services. The page consumes typed
@@ -116,7 +116,7 @@ SavedVariables schema is introduced here. Existing local observations are suffic
 
 ## Acceptance and evidence
 
-Implementation and final measurements are recorded below after verification.
+AH-6 read-only implementation is complete. Final verification and measurements follow below.
 Cloud captures are structural only: no game assets or Cinzel font evidence, no
 actual pointer/keyboard, reload persistence, addon-message delivery, combat/taint,
 auctioneer attribution or transaction acceptance. Neither WSL nor the real Forever
@@ -146,7 +146,119 @@ byte-identical throughout. Page and cross-page feature verification in an isolat
 checkout: **57 files pass**, 161 Lua syntax files, **29 preview launches / 3,161
 structured checks** plus unchanged **4 proof launches / 431 checks**, **454.178 s**.
 All original assertions, replay and wrong-expectation controls remain active.
-Report: `/workspace/ah6-ui-verification/test-output/verification/feature-auction-house-m3t4gdao/`.
+Report in the isolated verification checkout: `test-output/verification/feature-auction-house-m3t4gdao/`.
 All 14 page/test/simulator files transferred byte-identically to the development
 branch. Reviewed all ten new Market poses; final polish will address the clipped
 empty-list message and explicit UTC date formatting before comprehensive checks.
+
+### Final AH-6 checkpoint
+
+Commits `019bf21` (adapter) and `edc0ca7` (page/navigation) are pushed. The final
+polish/verification commit is reported in the draft PR to avoid a self-reference.
+All requested checkpoints are complete; the AH-6 PR remains draft and unmerged.
+AH-7 and all replacement/transaction acceptance remain separate work.
+
+Final fast selection: **12/12 pass**, 5.317 s on the development branch. The
+isolated final candidate also passes 12/12. Final focused UI test has **72 checks**;
+the adapter test has **20,095 checks**, including the independent 20k ordering/cap
+fixture. Timeout, failed setup, late callbacks, missing markets, variants, late
+metadata entering a filter and irrelevant metadata not starting a rebuild are
+covered. Shopping history navigation preserves queue and acquisition decisions.
+
+Near-final `feature auction-house --profile cloud`: **57 files, 161 Lua syntax
+files, 31 preview launches / 3,379 checks and unchanged 4 proof launches / 431
+checks**, **496.168 s**, PASS. Its report is
+`test-output/verification/feature-auction-house-eu4b1opd/` in the development
+checkout. Final full verification below also covers the subsequent empty-state
+wording and metadata-membership refinement on the exact final source.
+
+Broad market mutations: **197/197 detected**, 854.6 s, no survivors, invalids,
+timeouts or infrastructure errors, before the final presentation/membership
+refinement. **All four AH-6 mutations on the final source** are detected, 5.7 s:
+wrong-market fallback, aggregate-as-daily, right-click variant advice bypass and
+unrelated metadata rebuilding a large catalog. This is not a claim that the
+entire now-198-entry group was rerun after that final refinement.
+
+An early full run was deliberately interrupted (exit 130) before acceptance to
+include the metadata-membership correction. It is not counted as passing evidence.
+The complete final rerun has no exclusions, weaker assertions or new simulator
+error exceptions:
+
+`./tests/run.sh full --profile cloud` — **PASS**, exit **0**, **3,284.569 s**:
+**237 files/modules, 700 Lua syntax files, all 10 simulator/guard suites,
+188 fresh launches and 29,178 structured checks**. Deterministic PNG byte-exact
+rebuild, explicit encoding vectors, inventory and corruption controls all pass.
+The existing narrow voice-settings/UTF-8 classifications and negative controls
+remain active. `local_milestone_passed` is **false** by design in Cloud.
+
+| Simulator catalog | Launches | Structured checks | Result |
+|---|---:|---:|---|
+| Lab guard | 0 | 0 | Pass |
+| Smoke | 2 | 56 constructed pages (separate count) | Pass |
+| Interaction | 4 | 244 | Pass |
+| Diagnostics | 6 | 101 | Pass |
+| AH-1a proof | 4 | 431 | Pass; client acceptance pending |
+| AH preview | 31 | 3,379 | Pass |
+| Workshop | 38 | 19,997 | Pass |
+| Test Lab | 9 | 229 | Pass |
+| Settings | 58 | 1,029 | Pass |
+| Reminders | 36 | 3,768 | Pass |
+
+Final report/logs in the isolated verification checkout:
+`test-output/verification/full-all-xayd335m/`. All 23 changed source/test/tool/doc
+files matched the frozen candidate in both checkouts before the final report-only
+documentation updates. No functional edits followed the passing comprehensive run.
+
+### Captures and visual review
+
+Final captures are in the isolated verification checkout at
+`test-output/simlab/artifacts/auctionpreview-OxLndZ5f/`. All twelve Market captures
+were opened and reviewed:
+
+- `market.png`, `marketsmall.png`, `marketscaled.png`: normal, narrow and scaled.
+- `marketsparse.png`, `marketempty.png`, `marketstale.png`, `marketerror.png`:
+  sparse, absent, outdated and explicit failed-catalog states.
+- `marketrecent.png`, `marketlong.png`: recent timestamps and 120-day range;
+  older aggregates remain separately labeled.
+- `markettracked.png`, `marketlarge.png`, `marketmetadata.png`: shared tracking,
+  3,009-item catalog, long names and missing metadata.
+
+The approved hierarchy is retained: item column, selected-item header/actions,
+gold marker chart, six fact cards and two context panels inside the unchanged
+shell. Empty/error guidance uses explicit short lines after screenshot review
+caught clipping in automatic wrapping. Long item names remain inspectable with
+item tooltips. No-assets captures show placeholder game icons/money art, fallback
+fonts and existing simulator background/issue-report artifacts. They establish
+structure only, not actual client materials, font wrapping, input or fidelity.
+
+### Synthetic CPU performance
+
+Reproduce the retained benchmark with the documented single-test Lua invocation
+using `tests/bench_auction_market.lua` (normal test globals and Lua 5.1/bitop).
+These are offline CPU measurements over real addon logic and recording frames;
+page totals include pumping all cooperative slices and are **not blocking client
+frame time** or a renderer benchmark.
+
+| Operation | Samples | Total CPU | Maximum sample/slice |
+|---|---:|---:|---:|
+| First Market open + sparse discovery | 1 | 16.545 ms | 16.545 ms |
+| Selected-item projection | 30 | 2.014 ms | 0.166 ms |
+| Chart window change | 60 | 8.882 ms | 0.347 ms |
+| 20k catalog | 418 slices | 567.944 ms | 9.718 ms/slice |
+| 20k page discovery | 1 | 616.783 ms | cumulative whole job |
+| 20k Market/Shopping switch pairs | 10 | 5,328.308 ms | 583.729 ms cumulative/pair |
+
+The final full-run catalog sample was 418 slices / 477 ms / 14.753 ms longest.
+Across 17 retained catalog samples in this campaign the largest observed slice
+was **15.311 ms**. Scheduling, GC and parallel offline checks affect these values;
+they do not establish the native client's per-frame cost. Production discovery
+retains the shared 160-entry/2 ms catalog and 2,048-operation/2 ms sort budgets,
+20,000-identity cap and visible-row pooling. Actual client budgets require the
+acceptance procedure above.
+
+After hiding: **0 jobs, 0 frame-event listeners, 0 selected projection cache**;
+rows, membership/index and market/history references are released. The benchmark
+retains **8 pooled Market row frames**, with no growth over repeated switches,
+and records **0 native Auction House calls**. Shared Workshop caches retain only
+their existing bounded state. Range changes do not rediscover the catalog; neither
+do unrelated metadata or bag updates outside bag scope.
