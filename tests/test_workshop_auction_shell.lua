@@ -16,7 +16,7 @@ same(A.Show(),true,"explicit show")
 local f=A.Frame()
 same(A.Mode(),"browse","Browse default")
 same(W.Window.Frame(),nil,"preview never opens Workshop")
-same(A.Snapshot().events,9,"visible shell and Browse events")
+same(A.Snapshot().events,10,"visible shell and Browse events, including native item-key metadata")
 for _,key in ipairs({"browse","shopping","sell","owned","market"}) do
     Press.Must(A.nav[key]); same(A.Mode(),key,"navigation")
     same(A.Page(key):IsShown(),true,"active page")

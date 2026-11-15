@@ -9,9 +9,12 @@ local function Key(r) return r.item end
 local function Money(n) return n and UI.Money(n) or "Unavailable" end
 local function Date(day) return date("!%b %d",math.floor(day*86400)) end
 local function Stamp(p,m)
-    if m and m.external then local b=W.Bridge.Status();return m.key..":"..b.state..":"..tostring(b.loading)..":"..p.metadata..":"..p.bags end
-    return (m and m.key..":"..W.Valuation.Generation(m) or "none")..":"..p.metadata..":"..p.bags..
+    if m and m.external then local b=W.Bridge.Status();return m.key..":"..b.state..":"..tostring(b.loading)..":"..p.scope..":"..p.bags..(p.scope=="tracked" and ":"..D.TrackStamp() or "") end
+    return (m and m.key..":"..W.Valuation.Generation(m) or "none")..":"..p.scope..":"..p.bags..
         (p.scope=="tracked" and ":"..D.TrackStamp() or "")
+end
+local function Options(p)
+    return {external=p.marketKey=="server",market=p.market,scope=p.scope,query=p.query,category=p.category,quality=p.quality,item=p.focusItem}
 end
 local function Context(p,item)
     return p.context and p.context.item==item and p.context or {}
@@ -47,6 +50,17 @@ local function ChartWords(p,x)
     if s.damaged then coverage=coverage.." · some history unreadable" end
     return coverage,table.concat(parts,"\n")
 end
+local function ServerChart(p,x)
+    local h=x.header
+    local formatter=p.serverMetric=="supply" and function(n)return ("%.0f"):format(n) end or UI.Money
+    p.chart:Set(x.series,formatter)
+    if x.series and #x.series.points==1 then
+        local point=x.series.points[1]
+        local label=p.serverMetric=="supply" and "Observed supply: " or p.serverMetric=="minimum" and "Observed minimum listing: " or
+            (h and h.pricing_algorithm=="asking-v1-provisional" and "Observed asking mean: " or "Observed Recent Price: ")
+        p.chart.note:SetText(label..formatter(point.price).." · "..Date(point.day).." UTC")
+    end
+end
 local function ServerDetail(p,r)
     p.track:SetEnabled(false);p.browse:SetEnabled(false);p.advisor:SetEnabled(false)
     p.variantDrop:Show();p.qualityDrop:Hide();p.metricDrop:Show();p.variantDrop:Refresh()
@@ -64,14 +78,7 @@ local function ServerDetail(p,r)
         if tile.localHeading==nil then tile.localHeading=tile.heading:GetText() end
         tile.heading:SetText(v and v.label or tile.localHeading)
     end
-    local formatter=p.serverMetric=="supply" and function(n)return ("%.0f"):format(n) end or UI.Money
-    p.chart:Set(x.series,formatter)
-    if x.series and #x.series.points==1 then
-        local point=x.series.points[1]
-        local label=p.serverMetric=="supply" and "Observed supply: " or p.serverMetric=="minimum" and "Observed minimum listing: " or
-            (h and h.pricing_algorithm=="asking-v1-provisional" and "Observed asking mean: " or "Observed Recent Price: ")
-        p.chart.note:SetText(label..formatter(point.price).." · "..Date(point.day).." UTC")
-    end
+    ServerChart(p,x)
     p.chartCard.heading:SetText(p.serverMetric=="supply" and "Server observed supply · daily" or p.serverMetric=="minimum" and "Server minimum listings · daily" or
         (h and h.pricing_algorithm=="asking-v1-provisional" and "Server asking mean · daily" or "Server Recent Price · daily"))
     if not x.series then p.chart.msg:SetText(status.loading and "Validating external data…" or not status.ready and "No validated bridge available." or "Choose an exact server variant.");p.chart.note:SetText("Local scan history remains available from the source selector.") end
@@ -111,7 +118,7 @@ Detail=function(p)
     local freshness=r and (W.Facts.Freshness(f) or (lastDay and "Newest retained record ends "..Date(lastDay).." UTC" or "No listing observation")) or
         (p.market and "Choose an item to inspect stored observations" or "No selected saved market")
     p.source:SetText((p.market and W.Prices.Label(p.market) or "No selected saved market").." · "..
-        freshness.."\nSaved Market Data · historical listings; current availability unknown.")
+        freshness.." · saved observations")
     local values={}
     for _,row in ipairs(W.Facts.Rows(f,UI.Money)) do values[row.id]=row end
     for _,tile in ipairs(p.tiles) do
@@ -134,7 +141,7 @@ Detail=function(p)
         (({rising="Rising",falling="Falling",flat="Stable"})[tr.direction] or "Observed change")..
         (tr.percent and (" · %+.1f%%"):format(tr.percent) or "").."\n14-day comparison of daily minimum medians: "..
         tr.older.n.." older and "..tr.newer.n.." newer observed days."
-        or "Insufficient history for a 14-day trend. Each half needs at least two observed days."
+        or "Insufficient history for a 14-day trend."
     local q=f.quality
     p.trends:SetText(not r and "Choose an item to inspect its observed trend and coverage." or trend.."\n\n"..Quality(f)..(q and q.n and (" · "..q.n.." / 30 observed days") or "")..
         "\n"..table.concat(W.Facts.QualityNotes(f,2),"\n"))
@@ -161,6 +168,7 @@ Detail=function(p)
         (#groups>0 and ("Older aggregates (not daily markers):\n"..groups) or "No older aggregates in this window.")
 end
 Paint=function(p)
+    W.AuctionBrowseData.Count("paints")
     local text=p.error and (p.error=="timed out" and "Item search timed out.\nRefresh stored data." or "Stored data unavailable.\nRefresh stored data to retry.") or
         p.job and "Loading known items…" or p.scope=="tracked" and "No tracked items match.\nTrack items in Browse\nor Item Advisor." or
         p.scope=="bags" and "No matching bag items.\nBag data may be\nunavailable." or
@@ -171,16 +179,29 @@ Paint=function(p)
     Detail(p)
 end
 Start=function(p,reset)
+    if p.job and p.job.discovering and W.AuctionBrowseData.SameMarket(p.market,D.Resolve(p.marketKey)) and p.stamp==Stamp(p,D.Resolve(p.marketKey)) then
+        p.refilter=true
+        if reset then p.list:ScrollTop();p.pendingView=nil end
+        return
+    end
+    if p.job and p.job.Cancel then p.job:Cancel() end
     p.token=p.token+1
     local mine=p.token
     local view=not reset and (p.pendingView or p.viewport or A.Capture(p.list,Key)) or nil
     p.viewport=nil;p.pendingView=view
     if reset then p.list:ScrollTop() end
-    p.rows,p.index,p.known,p.error={},nil,nil,nil
+    p.rows=p.rows or {};p.error=nil
     local ok,err=pcall(function()
-        p.market=D.Resolve(p.marketKey)
-        p.stamp=Stamp(p,p.market)
-        p.job=D.Catalog({market=p.market,external=p.marketKey=="server",scope=p.scope,query=p.query,category=p.category,quality=p.quality,item=p.focusItem})
+        local market=D.Resolve(p.marketKey)
+        local stamp=Stamp(p,market)
+        local sourceKey=market and market.key or "none"
+        if p.sourceKey and p.sourceKey~=sourceKey then p.rows,p.index={},{} end
+        p.sourceKey=sourceKey
+        local cached=W.AuctionBrowseData.SameMarket(p.market,market) and p.stamp==stamp and p.catalog or nil
+        if not cached then W.AuctionBrowseData.Count("invalidations");p.catalog,p.known,p.dirty=nil,nil,nil end
+        p.market,p.stamp=market,stamp
+        local opt=Options(p);opt.catalog=cached
+        p.job=D.Catalog(opt)
     end)
     if not ok then
         p.job,p.market=nil,nil;p.error="unavailable";Paint(p);R.Fault("auction market catalog",err);return
@@ -192,16 +213,32 @@ Start=function(p,reset)
         if not good then done,why=true,"failed" end
         if not done then C_Timer.After(0,Step);return end
         local job=p.job
+        if why and job.Cancel then job:Cancel() end
         p.job=nil;p.error=why or job.unavailable;p.capped=job.capped
-        p.rows=not p.error and job.rows or {};p.index=not p.error and job.index or {};p.known=job.seen
+        if not p.error then
+            p.rows,p.index,p.known,p.catalog=job.rows,job.index,job.seen,job.catalog
+            W.AuctionBrowseData.Patch(p,Options(p))
+            if p.refilter then p.refilter=nil;Start(p,true);return end
+        else p.index=p.index or {} end
         if not p.index[p.selected] then p.selected=p.rows[1] and p.rows[1].item end
         Paint(p);A.Restore(p.list,view,Key);p.pendingView=nil
         if p.stamp~=Stamp(p,p.market) then A.Schedule() end
     end
+    local Advance=Step
+    Step=function()
+        local ok,why=pcall(Advance)
+        if ok or mine~=p.token then return end
+        if p.job and p.job.Cancel then p.job:Cancel() end
+        p.token=p.token+1;p.job,p.dirty,p.refilter=nil,nil,nil
+        p.error="failed";W.AuctionBrowseData.Count("errors")
+        p.status:SetText("Data unavailable · refresh saved data")
+        pcall(Paint,p);R.Fault("auction market callback",why)
+    end
     C_Timer.After(0,Step)
     C_Timer.After(15,function()
         if mine~=p.token or not p.job then return end
-        p.token=p.token+1;p.job,p.rows,p.index,p.known,p.error=nil,{},nil,nil,"timed out";Paint(p)
+        if p.job.Cancel then p.job:Cancel() end
+        p.token=p.token+1;p.job,p.error=nil,"timed out";Paint(p)
     end)
 end
 function V.Search(query)
@@ -325,8 +362,8 @@ local function Build(p)
             variant and {{"Variant identity preserved; base-item advice unavailable."}} or nil,p.chosen.info.name)
     end)
     p.pic:SetScript("OnLeave",function() if GameTooltip then GameTooltip:Hide() end end)
-    p.name=A.Text(main,"",23,78,-10,-424);p.name:SetHeight(28)
-    p.kind=A.Text(main,"",12,78,-44,-12,UI.K.textDim)
+    p.name=A.Text(main,"",20,78,-10,-424);p.name:SetWordWrap(true);p.name:SetMaxLines(2);p.name:SetJustifyV("TOP");p.name:SetHeight(48)
+    p.kind=A.Text(main,"",12,78,-64,-12,UI.K.textDim)
     p.track=UI.Button(main,"Track Item",110,"secondary",function()
         if p.chosen then
             local ok=AD.Track(p.chosen.item)
@@ -343,16 +380,16 @@ local function Build(p)
         if item and UI.Advisor then A.Hide();UI.Advisor.Open(item) end
     end,30);p.advisor:SetPoint("LEFT",p.browse,"RIGHT",8,0)
     UI.Tip(p.advisor,"Item Advisor","Opens the existing Workshop Item Advisor with this base item. Advisor uses its own existing market selection; Market's temporary research selector does not change it.")
-    p.source=A.Text(main,"",11,12,-64,-12,UI.K.textDim);Wrap(p.source,32)
-    p.chartCard=A.Card(main,"Lowest seen · observed daily closings",190)
-    p.chartCard:SetPoint("TOPLEFT",8,-104);p.chartCard:SetPoint("TOPRIGHT",-8,-104)
-    p.chart=UI.PriceChart(p.chartCard,800,102,{maxDots=30,window=true,gold=true})
+    p.source=A.Text(main,"",11,12,-84,-12,UI.K.textDim);Wrap(p.source,32)
+    p.chartCard=A.Card(main,"Lowest seen · observed daily closings",224)
+    p.chartCard:SetPoint("TOPLEFT",8,-124);p.chartCard:SetPoint("TOPRIGHT",-8,-124)
+    p.chart=UI.PriceChart(p.chartCard,800,136,{maxDots=30,window=true,gold=true})
     p.metricDrop=A.Dropdown(p.chartCard,190,function()return W.ServerMarket and W.ServerMarket.METRICS or {} end,
         function()return p.serverMetric end,V.Metric)
     p.metricDrop:SetPoint("TOPRIGHT",-8,-2);p.metricDrop:Hide()
     p.chart:SetPoint("TOPLEFT",10,-36);p.chart:SetPoint("TOPRIGHT",-10,-36)
-    p.axis=A.Text(p.chartCard,"",11,12,-142,-12,UI.K.textDim)
-    p.coverage=A.Text(p.chartCard,"",11,12,-160,-12,UI.K.textDim);Wrap(p.coverage,26)
+    p.axis=A.Text(p.chartCard,"",11,12,-176,-12,UI.K.textDim)
+    p.coverage=A.Text(p.chartCard,"",11,12,-194,-12,UI.K.textDim);Wrap(p.coverage,26)
     UI.TipFn(p.chart,"Stored minimum listing history",function() return p.chartTip end)
     p.tiles={}
     local definitions={{"market","Market value · 14d"},{"recent","Recent listing"},{"hist","Historical · 60d"},
@@ -378,19 +415,18 @@ local function Build(p)
     local function Layout()
         local w=main:GetWidth();if not w or w<100 then w=888 end
         local tileW=(w-16-5*6)/6
-        for i,tile in ipairs(p.tiles) do tile:ClearAllPoints();tile:SetWidth(tileW);tile:SetPoint("TOPLEFT",8+(i-1)*(tileW+6),-304) end
+        for i,tile in ipairs(p.tiles) do tile:ClearAllPoints();tile:SetWidth(tileW);tile:SetPoint("TOPLEFT",8+(i-1)*(tileW+6),-358) end
         local half=(w-26)/2
-        p.trendCard:SetWidth(half);p.trendCard:SetPoint("TOPLEFT",8,-400);p.trendCard:SetPoint("BOTTOMLEFT",8,8)
+        p.trendCard:SetWidth(half);p.trendCard:SetPoint("TOPLEFT",8,-454);p.trendCard:SetPoint("BOTTOMLEFT",8,8)
         p.contextCard:SetPoint("TOPLEFT",p.trendCard,"TOPRIGHT",10,0);p.contextCard:SetPoint("BOTTOMRIGHT",-8,8)
-        if p.projection then p.chart:Set(p.projection.series,p.marketKey=="server" and p.serverMetric=="supply" and function(n)return ("%.0f"):format(n)end or UI.Money) end
+        if p.projection then
+            if p.marketKey=="server" then ServerChart(p,p.projection) else p.chart:Set(p.projection.series,UI.Money) end
+        end
     end
     main:HookScript("OnSizeChanged",Layout);Layout()
     p:SetScript("OnEvent",function(_,event,item,ok)
         if event=="GET_ITEM_INFO_RECEIVED" then
-            local id=W.Int(W.Plain(item),1,W.MAX_ID)
-            local known=p.job and p.job.seen or p.known
-            if ok==false or not id or not (known and known[id]) then return end
-            p.metadata=p.metadata+1
+            W.AuctionBrowseData.Metadata(p,item,ok)
         elseif event=="BAG_UPDATE_DELAYED" and p.scope=="bags" then p.bags=p.bags+1
         else return end
         A.Schedule()
@@ -398,17 +434,30 @@ local function Build(p)
 end
 local function Render(p)
     if not p.listening then
+        W.Strategy.Listen(A.Schedule,true)
         p:RegisterEvent("GET_ITEM_INFO_RECEIVED");p:RegisterEvent("BAG_UPDATE_DELAYED")
         p.listening=true;p.eventCount=2
     end
     if p.job then return end
     local market=D.Resolve(p.marketKey)
-    if not p.stamp or p.stamp~=Stamp(p,market) then Start(p,false) else Detail(p);p.list:Layout() end
+    if not p.stamp or not W.AuctionBrowseData.SameMarket(p.market,market) or p.stamp~=Stamp(p,market) then Start(p,false)
+    else
+        local view=A.Capture(p.list,Key)
+        local changed,structural,_,updates=W.AuctionBrowseData.Patch(p,Options(p))
+        if changed and structural then Paint(p);A.Restore(p.list,view,Key)
+        else
+            if changed then A.PatchRows(p.list,updates) end
+            Detail(p)
+        end
+    end
 end
 local function Release(p)
     p.viewport=p.pendingView or (p.rows and A.Capture(p.list,Key)) or p.viewport
+    if p.job and p.job.Cancel then p.job:Cancel() end
+    p.catalog,p.dirty,p.refilter=nil,nil,nil
     p.token=p.token+1;p.job,p.rows,p.index,p.known,p.market,p.projection,p.chosen,p.stamp,p.pendingView=nil,nil,nil,nil,nil,nil,nil,nil,nil
     p.list:SetData({});p:UnregisterAllEvents();p.listening=false
+    W.Strategy.Listen(A.Schedule,false)
     for _,r in ipairs(p.list.rows) do r.data=nil end
     D.Clear()
 end

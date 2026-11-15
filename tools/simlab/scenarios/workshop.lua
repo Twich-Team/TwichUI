@@ -1421,13 +1421,23 @@ Lab.Step("bank and guild bank: the guild choice, permissions and limits", functi
     GBANK.tabs[1].rem = 3
     GBANK.current = 1
     Fire("GUILDBANKBAGSLOTS_CHANGED")
+    local guildAnsweredAt = GetTime()
     Lab.Settle(0.3)
     Tab("Shopping")
     Check("display", "a daily limit is flagged on the collect row", "Collect from the guild bank. Shared stock: other members can take it too, and a withdrawal limit may apply.",
         ExplainAt(2))
-    -- a bag change nobody answers (the guild bank is open, and the last answer is over a second old): that tab is uncertain and is no longer planned with
-    Lab.Settle(0.6)
+    -- Exercise both sides with a frame margin. The old 0.3 + Tab's 0.1 + 0.6 landed exactly at PAIR;
+    -- across a clock exponent boundary, that subtraction can be just below 1.0 (a correctly paired move).
+    Lab.Settle(0.5) -- 0.9 s after the answer: safely inside the pairing window
+    Check("state", "guild bag change is inside the pairing window", true, GetTime() - guildAnsweredAt < W.Bank.PAIR)
     Fire("BAG_UPDATE_DELAYED")
+    Check("state", "paired guild bag change is not pending", false, W.Bank.Pending().guildPending)
+    Check("state", "paired guild bag change keeps the tab certain", false,
+        W.Storage.Guild({ key = "Simulated Guild-" .. GetRealmName() }).tabs[1].u == true)
+    Lab.Settle(0.2) -- 1.1 s after the same answer: safely outside, independent of startup clock phase
+    Check("state", "unanswered guild bag change is past the pairing window", true, GetTime() - guildAnsweredAt > W.Bank.PAIR)
+    Fire("BAG_UPDATE_DELAYED")
+    Check("state", "unanswered guild bag change is pending", true, W.Bank.Pending().guildPending)
     Lab.Settle(1.5)
     Check("state", "no answer followed the bag change: the tab may have changed", true, W.Storage.Guild({ key = "Simulated Guild-" .. GetRealmName() }).tabs[1].u == true)
     Check("display", "its stock is not collected from any more: back to the bank-only list", "Silverleaf | Peacebloom | Tin Ore | Silverleaf | Coarse Thread | Copper Ore | Tin Ore", Names(Lists().shop))

@@ -19,6 +19,9 @@ fixture small '{}'
 fixture scaled '{ scaled = true }'
 fixture categories '{ categories = true }'
 fixture sell '{ sell = true }'
+fixture sellobserved '{ sell = true, savedCompetition = true }'
+fixture loading '{ loading = true }'
+fixture liveprepare '{ categories = true, livePrepare = true }'
 fixture sellsmall '{ sell = true }'
 fixture sellscaled '{ sell = true, scaled = true }'
 fixture sellempty '{ sell = true, bagEmpty = true }'
@@ -53,7 +56,7 @@ mv "$LAB/fixtures/bridge-combined.lua" "$LAB/fixtures/auctionpreview-marketbridg
 fixture wrong '{ wrongAt = "Browse default" }'
 repo_before="$(git -C "$REPO" status --porcelain --ignored)"
 status=0
-for name in shell replay small scaled empty filtered resized shopping shoppingsmall shoppingpurpose categories sell sellsmall sellscaled sellempty owned ownedsmall ownedempty market marketsmall marketscaled marketsparse marketempty marketrecent marketlong markettracked marketlarge marketmetadata marketstale marketerror marketbridge wrong; do
+for name in shell replay small scaled empty filtered resized shopping shoppingsmall shoppingpurpose categories loading liveprepare sell sellobserved sellsmall sellscaled sellempty owned ownedsmall ownedempty market marketsmall marketscaled marketsparse marketempty marketrecent marketlong markettracked marketlarge marketmetadata marketstale marketerror marketbridge wrong; do
   simlab_stage
   width=1600; height=1200
   if [[ "$name" = small || "$name" = shoppingsmall || "$name" = sellsmall || "$name" = ownedsmall || "$name" = marketsmall ]]; then width=1000; height=700; fi

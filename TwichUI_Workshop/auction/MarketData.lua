@@ -64,7 +64,7 @@ function D.Catalog(opt)
         end
     end
     return W.AuctionBrowseData.Job({market=opt.market,sources=sources,enumerate=enumerate,index=true,
-        item=opt.item,query=opt.query,category=opt.category,quality=opt.quality})
+        item=opt.item,query=opt.query,category=opt.category,quality=opt.quality,catalog=opt.catalog})
 end
 -- Translate typed history records to bounded chart inputs; never decode, resample
 -- or turn weekly/fortnight/legacy aggregates into daily observations.

@@ -76,8 +76,37 @@ def distinct_colours(rows, left, top, width, height):
 
 
 def classify_smoke(text):
-    """Only the documented group hello send is permitted, not arbitrary UTF-8 errors."""
-    result = kf.classify(text, allow=('addon-message-invalid-utf8',))
+    """Disclose the group hello and evidenced native timer limitation; fail other origins."""
+    voice = 'voice-settings-unsupplied'
+    result = kf.classify(text, allow=('addon-message-invalid-utf8', voice))
+    begin, end = 'SIMLAB smoke-clock begin\n', 'SIMLAB smoke-clock end\n'
+    before, separator, rest = text.partition(begin)
+    window, closing, after = rest.partition(end)
+    probe = 'SIMLAB voice-capability native=true unavailable=true'
+    evidenced = (separator and closing and text.count(begin) == text.count(end) == 1
+                 and before.splitlines().count(probe) == 1)
+    # v0.1.37 drops the timer callback's Audio.lua frame. Only its observed native
+    # AdvanceTime traceback (plus Blizzard's duplicate error reporter) is accepted.
+    frame = re.compile(r"(?:stack traceback:|\(string\):\d+: in main chunk|"
+                       r"\[C\]: in function 'AdvanceTime'|\[C\]: \?|"
+                       r"=\(string\):\d+: in main chunk|=\[C\]:: in function 'AdvanceTime'|\?: \?|"
+                       r"\[Interface/AddOns/Blizzard_ScriptErrors/Blizzard_ScriptErrors\.lua\]:\d+: "
+                       r"in function (?:'GetErrorData'|<[^>]+>))")
+    native_seen = False
+    for section, in_window in ((before, False), (window, True), (after, False)):
+        for block in kf.blocks(section):
+            if not re.fullmatch(kf.RULES[voice]['message'], block['message']):
+                continue
+            stack = [line.strip() for line in block['stack']]
+            native_stack = (len(stack) >= 5 and stack[:3] == [
+                'stack traceback:', '(string):1: in main chunk', "[C]: in function 'AdvanceTime'"]
+                and re.fullmatch(r"\(string\):\d+: in main chunk", stack[3])
+                and stack[4] == '[C]: ?' and all(frame.fullmatch(line) for line in stack))
+            valid = evidenced and in_window and (native_seen if block['suppressed'] else native_stack)
+            if valid and not block['suppressed']:
+                native_seen = True
+            if not valid:
+                result['unknown'].append((block['tick'], 'voice error without native smoke-clock evidence'))
     for block in kf.blocks(text):
         if block['message'] == 'string at argument 2 is not valid UTF-8' and not block['suppressed']:
             stack = '\n'.join(block['stack'])

@@ -28,6 +28,17 @@ W.Market.Value=function()error('external detail read local valuation')end
 W.Market.History=function()error('external chart read local history')end
 A.Market.Filter('marketKey','server');local p=settle()
 assert(p.failed==nil and loads==1 and #p.rows==2)
+-- Combined AH catalogs must refilter the retained external identities, rather
+-- than rediscover them or call local prices when metadata arrives later.
+local catalog=p.catalog;local enumerate=B.EachItem;local enumerations=0
+B.EachItem=function(...) enumerations=enumerations+1;return enumerate(...) end
+A.Market.Search('2589');p=settle();assert(#p.rows==1 and p.catalog[2589]==catalog[2589])
+A.Market.Search('');p=settle();assert(#p.rows==2 and enumerations==0,'external filters rediscovered completed identities')
+local token=p.token
+for i=1,20 do p:GetScript('OnEvent')(p,'GET_ITEM_INFO_RECEIVED',2589,true);A.Render();FlushTimers() end
+assert(p.token==token and p.catalog[2589]==catalog[2589] and not p.job,'external metadata restarted discovery')
+for _,row in ipairs(p.rows) do assert(row.unit==nil and row.actionable==false,'external item aggregate inherited local price') end
+B.EachItem=enumerate
 assert(A.Market.Select(2589));assert(p.projection.record==nil,'item aggregate silently picked variant')
 local key=generation.records[2].variant_key
 assert(A.Market.Variant(key))
@@ -49,6 +60,8 @@ for i=1,3000 do local ok,why=B.Step(3);if why~='loading' then assert(ok);break e
 A.Market.Filter('marketKey','server');p=settle();assert(A.Market.Select(2589) and A.Market.Variant(key))
 assert(p.chart.state=='single' and p.chart.note:GetText():find('Observed Recent Price:',1,true) and not p.chart.note:GetText():find('Cheapest',1,true))
 assert(A.Market.Metric('supply') and p.chart.note:GetText():find('Observed supply:',1,true))
+for _,hook in ipairs(p.main.hooks.OnSizeChanged or {}) do hook(p.main) end
+assert(p.chart.note:GetText():find('Observed supply:',1,true),'resize lost external supply provenance')
 assert(A.Market.Metric('minimum') and p.chart.note:GetText():find('Observed minimum listing:',1,true))
 assert(c.TwichUIWorkshopDB==db and fingerprint(db)==before and native==0,'local data or AH actions changed')
 W.Market.Price,W.Market.Value,W.Market.History=oldPrice,oldValue,oldHistory
@@ -62,5 +75,5 @@ assert(c.TwichUIWorkshopDB==db and fingerprint(db)==before and native==0 and loa
 print(('BRIDGE_UI_BENCH iterations=50 elapsed_us=%d retained_growth_bytes=%d pages=%d cache_entries=%d'):format(elapsed,growth,pages,B.Status().cache_entries))
 A.Market.Filter('marketKey',m.key);p=settle();A.Market.Select(10)
 assert(p.projection.facts.min.value==20200 and loads==1,'local source default/values changed')
-A.Hide();assert(B.Status().cache_entries<=B.CACHE_MAX)
+A.Hide();assert(B.Status().cache_entries<=B.CACHE_MAX and p.catalog==nil and p.job==nil)
 print('PASSED: external Market UI, exact variant/history, unchanged local scans, no AH requests')

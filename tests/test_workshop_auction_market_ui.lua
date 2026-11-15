@@ -62,7 +62,9 @@ p.list.scroll:SetVerticalScroll(60*100+17);p.list:Layout()
 local top=p.rows[101].item
 A.Market.Select(p.rows[500].item);local selected=p.selected
 local token=p.token
+local metadata=W.AuctionBrowseData.Stats().metadata
 p:GetScript("OnEvent")(p,"GET_ITEM_INFO_RECEIVED",9000000,true);Settle()
+same(W.AuctionBrowseData.Stats().metadata,metadata,"unrelated metadata is not queued")
 same(p.token,token,"unrelated metadata does not rebuild thousands of rows")
 p:GetScript("OnEvent")(p,"BAG_UPDATE_DELAYED");Settle()
 same(p.token,token,"bag updates do not rebuild non-bag catalogs")
@@ -79,9 +81,9 @@ same(p.listening,false);same(p.job,nil);same(#p.list.data,0)
 -- Bags: no bank inventory; navigation does not apply history to a posting form.
 c.C_Container={GetContainerNumSlots=function(b) return b==0 and 1 or 0 end,
  GetContainerItemInfo=function() return {itemID=10,stackCount=3,isBound=false,isLocked=false} end}
-A.Go("sell");local sell=A.Page("sell");Press.Must(sell.list.rows[1]);sell.price:SetText("333")
+A.Go("sell");local sell=A.Page("sell");Press.Must(sell.list.rows[1]);sell.money:SetCopper(333)
 Press.Must(sell.detail.market);Settle();same(A.Mode(),"market");same(p.selected,10)
-A.Go("sell");same(sell.price:GetText(),"","changing pages does not price a posting form")
+A.Go("sell");same(sell.money:GetCopper(),nil,"changing pages does not price a posting form")
 same(sell.post:IsEnabled(),false)
 -- Attributed owned result is passed by identity; navigation cannot cancel/repost.
 local Q=W.AuctionReads;Q.Available=function() return true end

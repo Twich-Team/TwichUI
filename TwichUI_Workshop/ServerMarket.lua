@@ -11,7 +11,7 @@ end
 function M.Catalog(opt)
     if not B.Status().ready then return {rows={},index={},seen={},unavailable=B.Status().loading and 'loading_bridge' or 'bridge_unavailable',Step=function()return true end} end
     opt=opt or {}
-    return W.AuctionBrowseData.Job({sources={},market=nil,index=true,item=opt.item,query=opt.query,category=opt.category,quality=opt.quality,
+    return W.AuctionBrowseData.Job({sources={},market=nil,index=true,catalog=opt.catalog,item=opt.item,query=opt.query,category=opt.category,quality=opt.quality,
         enumerate=function(add,tick,job)
             if opt.scope=='tracked' then
                 for id,on in pairs(W.AdvisorData.Tracked()) do if on then local variants=B.Variants(id,1);if variants and #variants>0 then add(id) end;tick();if job.capped then break end end end
