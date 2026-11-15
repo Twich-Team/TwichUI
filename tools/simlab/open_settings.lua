@@ -39,7 +39,11 @@ Window("window-opening")
 -- The window fades in on OnUpdate, and the screenshot command runs only a few ticks after this script. Upstream's
 -- manual clock lets that same fade finish, in steps the size of frames (one long step is cut short by the fader).
 A_Admin.SetManualClock(GetTime())
-for _ = 1, 40 do A_Admin.AdvanceTime(0.05) end
+Say("tick", "t=" .. tostring(GetTime()))
+for _ = 1, 40 do
+    A_Admin.AdvanceTime(0.05)
+    Say("tick", "t=" .. tostring(GetTime()))
+end
 Window("window-settled")
 
 local stats = UI.Stats()
