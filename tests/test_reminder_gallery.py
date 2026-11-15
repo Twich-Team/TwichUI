@@ -152,7 +152,7 @@ class Rebuild(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
-        cls.run_result = subprocess.run([sys.executable, "-I", "-B", str(TOOL), "--out-root", cls.tmp.name, "--only", *SAMPLE],
+        cls.run_result = subprocess.run([sys.executable, "-I", "-B", str(TOOL), "--out-root", cls.tmp.name],
                                         capture_output=True, text=True, cwd=str(ROOT))
 
     @classmethod
@@ -175,6 +175,31 @@ class Rebuild(unittest.TestCase):
             for suffix in ("", "-small"):
                 name = i + suffix + ".tga"
                 self.assertEqual((out / "!!!TwichUI" / "media" / "reminders" / "gallery" / name).read_bytes(), (MEDIA / name).read_bytes(), name)
+
+    def test_entire_gallery_is_what_the_tool_builds(self):
+        out = Path(self.tmp.name)
+        for art in json.loads((ASSETS / "manifest.json").read_text())["artwork"]:
+            rel = Path(art["source"])
+            self.assertEqual((out / rel).read_bytes(), (ROOT / rel).read_bytes(), str(rel))
+            for suffix in ("", "-small"):
+                name = art["id"] + suffix + ".tga"
+                self.assertEqual((out / "!!!TwichUI/media/reminders/gallery" / name).read_bytes(),
+                                 (MEDIA / name).read_bytes(), name)
+
+    def test_changed_generated_png_and_tga_are_rejected(self):
+        out = Path(self.tmp.name)
+        for rel in ("assets/reminder-gallery/" + SAMPLE[0] + ".png",
+                    "!!!TwichUI/media/reminders/gallery/" + SAMPLE[0] + ".tga"):
+            path = out / rel
+            original = path.read_bytes()
+            changed = bytearray(original)
+            changed[-1] ^= 1
+            try:
+                path.write_bytes(changed)
+                with self.assertRaises(AssertionError):
+                    self.test_sample_pictures_are_what_the_tool_builds()
+            finally:
+                path.write_bytes(original)
 
 
 if __name__ == "__main__":
