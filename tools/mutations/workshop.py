@@ -36,6 +36,21 @@ def m(id, file, find, replace, why, tests, smoke=False, expect="killed", note=""
     MUTATIONS.append(dict(id=id, file=file, find=find, replace=replace, why=why, tests=tuple(tests), smoke=smoke, expect=expect, note=note))
 
 
+# Dormant M1a calculator: mutations exercise exact boundaries without enabling it.
+m("market.canonical.half-anchor", "TwichUI_Workshop/PricingV1.lua",
+  "if 2 * p >= anchor then eligible = eligible + tiers[p] base = base or p end",
+  "if 2 * p > anchor then eligible = eligible + tiers[p] base = base or p end",
+  "an exactly half-anchor tier disappears from eligible band quantity", ["test_workshop_pricing_v1.lua"])
+m("market.canonical.historical-minimum", "TwichUI_Workshop/PricingV1.lua",
+  "local m, h = Median(mv), #hv >= 3 and Median(hv) or nil",
+  "local m, h = Median(mv), #hv >= 2 and Median(hv) or nil",
+  "two dates incorrectly establish canonical Historical Value", ["test_workshop_pricing_v1.lua"])
+m("market.canonical.rounding-range", "TwichUI_Workshop/PricingV1.lua",
+  'if sum > floor((SAFE - got) / 2) then return nil, "numeric_range" end',
+  'if false then return nil, "numeric_range" end',
+  "doubling the band accumulator silently loses exact rounding", ["test_workshop_pricing_v1.lua"])
+
+
 # ======================================================================================================================
 # MARKET AND PRICING: the batch (cheapest price per item), history, statistics, quotes and the craft estimate
 # ======================================================================================================================

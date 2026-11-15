@@ -1,0 +1,14 @@
+{
+  "repository": "Twich-Team/TwichUI-Market",
+  "ref": "feature/m1a-unified-pricing",
+  "commit": "941f0f2d80019665f7caa2a3c4d76cfb6910c91c",
+  "pull_request": "https://github.com/Twich-Team/TwichUI-Market/pull/7",
+  "directory": "contracts/bridge/v1",
+  "files": [
+    "generation.schema.json",
+    "canonical-generation.json",
+    "provisional-generation.json",
+    "SHA256SUMS.json"
+  ],
+  "verification": "Mirror these four files byte for byte and validate their checksum manifest. Header capability tests do not validate or ingest generations."
+}
