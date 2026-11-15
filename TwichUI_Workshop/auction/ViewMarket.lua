@@ -72,7 +72,7 @@ Detail=function(p)
     local freshness=r and (W.Facts.Freshness(f) or (lastDay and "Newest retained record ends "..Date(lastDay).." UTC" or "No listing observation")) or
         (p.market and "Choose an item to inspect stored observations" or "No selected saved market")
     p.source:SetText((p.market and W.Prices.Label(p.market) or "No selected saved market").." · "..
-        freshness.."\nSaved Market Data · historical listings; current availability unknown.")
+        freshness.." · saved observations")
     local values={}
     for _,row in ipairs(W.Facts.Rows(f,UI.Money)) do values[row.id]=row end
     for _,tile in ipairs(p.tiles) do
@@ -95,7 +95,7 @@ Detail=function(p)
         (({rising="Rising",falling="Falling",flat="Stable"})[tr.direction] or "Observed change")..
         (tr.percent and (" · %+.1f%%"):format(tr.percent) or "").."\n14-day comparison of daily minimum medians: "..
         tr.older.n.." older and "..tr.newer.n.." newer observed days."
-        or "Insufficient history for a 14-day trend. Each half needs at least two observed days."
+        or "Insufficient history for a 14-day trend."
     local q=f.quality
     p.trends:SetText(not r and "Choose an item to inspect its observed trend and coverage." or trend.."\n\n"..Quality(f)..(q and q.n and (" · "..q.n.." / 30 observed days") or "")..
         "\n"..table.concat(W.Facts.QualityNotes(f,2),"\n"))
@@ -290,8 +290,8 @@ local function Build(p)
             variant and {{"Variant identity preserved; base-item advice unavailable."}} or nil,p.chosen.info.name)
     end)
     p.pic:SetScript("OnLeave",function() if GameTooltip then GameTooltip:Hide() end end)
-    p.name=A.Text(main,"",23,78,-10,-424);p.name:SetHeight(28)
-    p.kind=A.Text(main,"",12,78,-44,-12,UI.K.textDim)
+    p.name=A.Text(main,"",20,78,-10,-424);p.name:SetWordWrap(true);p.name:SetMaxLines(2);p.name:SetJustifyV("TOP");p.name:SetHeight(48)
+    p.kind=A.Text(main,"",12,78,-64,-12,UI.K.textDim)
     p.track=UI.Button(main,"Track Item",110,"secondary",function()
         if p.chosen then
             local ok=AD.Track(p.chosen.item)
@@ -308,13 +308,13 @@ local function Build(p)
         if item and UI.Advisor then A.Hide();UI.Advisor.Open(item) end
     end,30);p.advisor:SetPoint("LEFT",p.browse,"RIGHT",8,0)
     UI.Tip(p.advisor,"Item Advisor","Opens the existing Workshop Item Advisor with this base item. Advisor uses its own existing market selection; Market's temporary research selector does not change it.")
-    p.source=A.Text(main,"",11,12,-64,-12,UI.K.textDim);Wrap(p.source,32)
-    p.chartCard=A.Card(main,"Lowest seen · observed daily closings",190)
-    p.chartCard:SetPoint("TOPLEFT",8,-104);p.chartCard:SetPoint("TOPRIGHT",-8,-104)
-    p.chart=UI.PriceChart(p.chartCard,800,102,{maxDots=30,window=true,gold=true})
+    p.source=A.Text(main,"",11,12,-84,-12,UI.K.textDim);Wrap(p.source,32)
+    p.chartCard=A.Card(main,"Lowest seen · observed daily closings",224)
+    p.chartCard:SetPoint("TOPLEFT",8,-124);p.chartCard:SetPoint("TOPRIGHT",-8,-124)
+    p.chart=UI.PriceChart(p.chartCard,800,136,{maxDots=30,window=true,gold=true})
     p.chart:SetPoint("TOPLEFT",10,-36);p.chart:SetPoint("TOPRIGHT",-10,-36)
-    p.axis=A.Text(p.chartCard,"",11,12,-142,-12,UI.K.textDim)
-    p.coverage=A.Text(p.chartCard,"",11,12,-160,-12,UI.K.textDim);Wrap(p.coverage,26)
+    p.axis=A.Text(p.chartCard,"",11,12,-176,-12,UI.K.textDim)
+    p.coverage=A.Text(p.chartCard,"",11,12,-194,-12,UI.K.textDim);Wrap(p.coverage,26)
     UI.TipFn(p.chart,"Stored minimum listing history",function() return p.chartTip end)
     p.tiles={}
     local definitions={{"market","Market value · 14d"},{"recent","Recent listing"},{"hist","Historical · 60d"},
@@ -340,9 +340,9 @@ local function Build(p)
     local function Layout()
         local w=main:GetWidth();if not w or w<100 then w=888 end
         local tileW=(w-16-5*6)/6
-        for i,tile in ipairs(p.tiles) do tile:ClearAllPoints();tile:SetWidth(tileW);tile:SetPoint("TOPLEFT",8+(i-1)*(tileW+6),-304) end
+        for i,tile in ipairs(p.tiles) do tile:ClearAllPoints();tile:SetWidth(tileW);tile:SetPoint("TOPLEFT",8+(i-1)*(tileW+6),-358) end
         local half=(w-26)/2
-        p.trendCard:SetWidth(half);p.trendCard:SetPoint("TOPLEFT",8,-400);p.trendCard:SetPoint("BOTTOMLEFT",8,8)
+        p.trendCard:SetWidth(half);p.trendCard:SetPoint("TOPLEFT",8,-454);p.trendCard:SetPoint("BOTTOMLEFT",8,8)
         p.contextCard:SetPoint("TOPLEFT",p.trendCard,"TOPRIGHT",10,0);p.contextCard:SetPoint("BOTTOMRIGHT",-8,8)
         if p.projection then p.chart:Set(p.projection.series,UI.Money) end
     end
@@ -366,8 +366,12 @@ local function Render(p)
     if not p.stamp or not W.AuctionBrowseData.SameMarket(p.market,market) or p.stamp~=Stamp(p,market) then Start(p,false)
     else
         local view=A.Capture(p.list,Key)
-        if W.AuctionBrowseData.Patch(p,Options(p)) then Paint(p);A.Restore(p.list,view,Key)
-        else Detail(p) end
+        local changed,structural,_,updates=W.AuctionBrowseData.Patch(p,Options(p))
+        if changed and structural then Paint(p);A.Restore(p.list,view,Key)
+        else
+            if changed then A.PatchRows(p.list,updates) end
+            Detail(p)
+        end
     end
 end
 local function Release(p)

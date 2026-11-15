@@ -41,9 +41,45 @@ m("market.auction.metadata-restarts", "TwichUI_Workshop/auction/BrowseData.lua",
   "late item metadata invalidates the whole catalog again, causing endless completed-job restarts",
   ["test_workshop_auction_stability.lua"])
 m("market.auction.metadata-insert-order", "TwichUI_Workshop/auction/BrowseData.lua",
-  '(r.unit or math.huge)<(row.unit or math.huge)', '(r.unit or math.huge)>(row.unit or math.huge)',
+  'if D.Less(r,row,opt) then', 'if not D.Less(r,row,opt) then',
   "a late filtered item is inserted in reverse price order in the retained result list",
   ["test_workshop_auction_stability.lua"])
+m("market.auction.visible-row-ignored", "TwichUI_Workshop/auction/Components.lua",
+  "updates[row.data.item]", "updates[-1]", "changed metadata never reaches its pooled visible row",
+  ["test_workshop_auction_stability.lua"])
+
+SELL_PREP="TwichUI_Workshop/auction/SellData.lua"
+SELL_TEST=["test_workshop_auction_sell.lua"]
+m("market.sell.gold-scale", SELL_PREP, "local total=nums[1]*10000+nums[2]*100+nums[3]",
+  "local total=nums[1]*1000+nums[2]*100+nums[3]", "gold is converted at the wrong denomination", SELL_TEST)
+m("market.sell.silver-range", SELL_PREP, "not W.Int(nums[2],0,99)", "not W.Int(nums[2],0,100)",
+  "an out-of-range silver field is silently accepted", SELL_TEST)
+m("market.sell.native-max", SELL_PREP, "math.min(row.qty,row.available or row.qty)",
+  "math.max(row.qty,row.available or row.qty)", "Max exceeds the available native count or combines stacks", SELL_TEST)
+m("market.sell.old-epoch", SELL_PREP, "Q.epoch==ctx.epoch", "true",
+  "a competition price remains copyable after the auctioneer epoch changes", SELL_TEST)
+m("market.sell.unknown-owner", SELL_PREP, "and r.ownershipKnown==true", "",
+  "unknown ownership flags are treated as a verified external competitor", SELL_TEST)
+m("market.sell.partial-complete", SELL_PREP, '="live",snap.complete,snap.at', '="live",true,snap.at',
+  "a partial response is promoted to complete and supplies draft prices", SELL_TEST)
+m("market.sell.deposit-is-fee", SELL_PREP,
+  'result.valid=true;result.reason="Preparation only · posting awaits client acceptance."',
+  'result.net=result.gross-(result.deposit or 0);result.valid=true;result.reason="Preparation only · posting awaits client acceptance."',
+  "unknown commission and refundable-deposit treatment become a fabricated net estimate", SELL_TEST)
+m("market.sell.foreign-row", SELL_PREP, "if r==tier and r.copy then", "if r.copy then",
+  "a price from outside the selected competition result is accepted", SELL_TEST)
+m("market.sell.variant-boolean", SELL_PREP, "r.variant=r.variantKind~=nil", "r.variant=r.variantKind",
+  "a string variant flag bypasses the Facts boolean variant guard", SELL_TEST)
+m("market.sell.caution-ignored", SELL_PREP, 'if flag=="belowusual" then', 'if flag=="never" then',
+  "far-below-historical competition is automatically filled despite the existing caution flag", SELL_TEST)
+m("market.sell.hidden-repaint", "TwichUI_Workshop/auction/ViewSell.lua",
+  ' or not p:IsShown() or not A.IsShown() or A.Mode()~="sell"', '',
+  "a delayed native text event resurrects market references after Sell is hidden", SELL_TEST)
+
+
+m("market.sell.deferred-provenance", "TwichUI_Workshop/auction/ViewSell.lua",
+  " and p.money:GetCopper()~=p.filledPrice", "",
+  "deferred programmatic money callbacks erase the matched price provenance and selection", SELL_TEST)
 
 
 # ======================================================================================================================
@@ -816,7 +852,7 @@ m("market.ah.stored-actionable", "TwichUI_Workshop/auction/BrowseData.lua",
   'source = "stored", actionable = false', 'source = "stored", actionable = true',
   "saved history gains an actionable flag without a live listing", ["test_workshop_auction_browse.lua"])
 m("market.ah.price-order-reversed", "TwichUI_Workshop/auction/BrowseData.lua",
-  "(a.unit or math.huge) < (b.unit or math.huge)", "(a.unit or math.huge) > (b.unit or math.huge)",
+  "return a.unit<b.unit", "return a.unit>b.unit",
   "Browse sorts expensive observations first despite its unit-price ordering", ["test_workshop_auction_browse.lua"])
 
 # AH-3 presentation keeps the shared plan's quantities, uncertainty and state.
@@ -837,7 +873,7 @@ m("crafting.ah.unknown-requirements-as-ready", "TwichUI_Workshop/auction/Shoppin
   "unread recipe requirements or bag counts are presented as fulfilled or fully priced", ["test_workshop_auction_shopping.lua"])
 
 m("market.auction-draft-total", "TwichUI_Workshop/auction/SellData.lua",
-  "result.gross=proceeds.gross", "result.gross=price",
+  "result.gross,result.quantity,result.unit=proceeds.gross,quantity,price", "result.gross,result.quantity,result.unit=price,quantity,price",
   "preparation displays a single unit as gross proceeds for a multi-item draft",
   ["test_workshop_auction_reads.lua"])
 m("market.auction-read-invalid-complete", "TwichUI_Workshop/auction/ReadRequests.lua",
@@ -860,7 +896,7 @@ m("market.ah6.variant-row-advisor", "TwichUI_Workshop/auction/ViewMarket.lua",
   'r.data and r.data.item',
   "right-click bypasses the disabled variant Advisor action and opens base-item advice",
   ["test_workshop_auction_market_ui.lua"])
-m("market.ah6.unrelated-metadata", "TwichUI_Workshop/auction/ViewMarket.lua",
-  'if ok==false or not id or not (known and known[id]) then return end',
+m("market.ah6.unrelated-metadata", "TwichUI_Workshop/auction/BrowseData.lua",
+  'if ok==false or not id or not (p.job and p.job.seen and p.job.seen[id] or p.known and p.known[id]) then return end',
   'if ok==false or not id then return end',
-  "unrelated item callbacks restart a large Market catalog", ["test_workshop_auction_market_ui.lua"])
+  "unrelated item callbacks enter the known-item metadata queue", ["test_workshop_auction_market_ui.lua"])

@@ -8,15 +8,17 @@ local function Detail(p)
     p.chosen=chosen;p.detail.market:SetEnabled(chosen~=nil)
     p.detail.name:SetText(chosen and AD.Info(chosen.item).name or "Choose an owned listing")
     p.detail.pic.tex:SetTexture(chosen and AD.Info(chosen.item).icon or UI.ICON_BLANK)
-    p.detail.kind:SetText("Read-only · experimental response")
-    if not chosen then p.info:SetText("No attributable current listing selected.\nDisappearance does not confirm a sale.");p.advice:SetText("");return end
-    local facts=W.Facts.Of(chosen.item,{variant=chosen.itemKey.itemSuffix~=0 or chosen.itemKey.itemLevel~=0})
+    p.detail.kind:SetText("Owned listings")
+    if not chosen then p.info:SetText("Select a listing to inspect its price and time remaining.");p.advice:SetText("");return end
+    local k=chosen.itemKey
+    local variant=(k.itemSuffix or 0)~=0 or (k.itemLevel or 0)~=0 or (k.battlePetSpeciesID or 0)~=0
+    local facts=W.Facts.Of(chosen.item,{variant=variant})
     p.info:SetText("Auction ID: "..chosen.auctionID.."\nQuantity: "..chosen.qty..
         "\nAsking total: "..Money(chosen.total).."\nUnit (rounded up): "..Money(chosen.unit)..
         "\nBid: "..Money(chosen.bid).."\nTime: "..(chosen.seconds and (chosen.seconds.." seconds at read") or chosen.band and ("native band "..chosen.band) or "unavailable")..
         "\nStatus: "..(chosen.status==0 and "Active at read" or chosen.status==1 and "Native Sold status" or "Unknown")..
         "\nCompetition: unavailable\nCompleteness: "..(p.complete and "native complete response" or "unverified / partial"))
-    local rec=AD.Decide(chosen.item,false)
+    local rec=variant and {text="Variant-specific advice unavailable",reasons={}} or AD.Decide(chosen.item,false)
     p.advice:SetText("Saved market context · "..(W.Facts.Freshness(facts) or "No observation").."\n"..
         (rec.text or "Insufficient advice").."\n"..table.concat(rec.reasons or {},"\n"))
 end
@@ -39,27 +41,29 @@ local function Render(p)
             end
         end
     end
-    local empty="Owned auctions unavailable. Use explicit Refresh at an auctioneer after experimental client verification."
+    local empty=Q.Pending()>0 and "Loading your auctions…" or "Your auctions are unavailable. Live refresh awaits client verification."
     if snapshot and snapshot.kind=="owned" and snapshot.epoch==Q.epoch and Q.Available() then
         empty=#snapshot.rows>0 and "No returned owned listings match this filter." or
             p.complete and "No owned listings returned." or "No owned listings returned; this response may be partial."
     end
     p.list:SetData(p.rows,empty)
-    p.status:SetText("Current experimental session · "..Q.state..(p.complete and " · native complete response" or " · partial / completeness unverified"))
+    p.refresh:SetEnabled(Q.Available() and Q.Pending()==0)
+    p.status:SetText(#p.rows>0 and (#p.rows.." returned listings"..(p.complete and "" or " · partial response")) or "")
     A.Restore(p.list,view,function(r) return r.auctionID end)
     Detail(p)
 end
 local function Build(p)
     p.filter="all"
-    p.refresh=UI.Button(p,"Refresh owned (gated)",210,"primary",function()
+    p.refresh=UI.Button(p,"Refresh listings",210,"primary",function()
         local ok,why=Q.Begin("owned")
         if not ok then A.Note(why) end
         Render(p)
     end,32);p.refresh:SetPoint("TOPLEFT",0,0)
+    UI.Tip(p.refresh,"Live refresh","Requires the existing experimental read gate and a fresh verified auctioneer visit. No refresh runs automatically; cancel and repost remain unavailable.")
     p.filters=A.Dropdown(p,240,function() return {{"all","All returned listings"},{"active","Active at read"},{"soon","Expiring within 1 hour (known)"}} end,
         function() return p.filter end,function(v) p.filter=v;Render(p) end)
     p.filters:SetPoint("LEFT",p.refresh,"RIGHT",12,0)
-    local card=A.Card(p,"My Auctions · explicit read only",100)
+    local card=A.Card(p,"My Auctions",100)
     card:SetPoint("TOPLEFT",0,-48);card:SetPoint("BOTTOMRIGHT",-380,0)
     p.list=UI.List(card,60,function(parent)
         local r=CreateFrame("Button",nil,parent);UI.Hover(r)

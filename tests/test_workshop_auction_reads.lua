@@ -176,10 +176,10 @@ c.C_Container={GetContainerNumSlots=function(bag) return bag==0 and 1 or 0 end,
 c.ItemLocation={CreateFromBagAndSlot=function() return {} end}
 c.C_AuctionHouse.IsSellItemValid=function() return true end
 A.Show();A.Go("sell");local sell=A.Page("sell")
-same(#sell.rows,1,"bags only");Press.Must(sell.list.rows[1]);sell.price:SetText("100")
+same(#sell.rows,1,"bags only");Press.Must(sell.list.rows[1]);sell.money:SetCopper(100)
 same(sell.chosen.qty,5);qty=2;A.Render()
 same(sell.selected,nil,"bag quantity change invalidates draft selection")
-same(sell.price:GetText(),"","bag changes clear unit-price intent")
+same(sell.money:GetCopper(),nil,"bag changes clear unit-price intent")
 same(sell.post:IsEnabled(),false)
 A.Hide()
 A.Show();A.Go("owned")
