@@ -1,0 +1,429 @@
+{
+  "fixture_version": 1,
+  "algorithm_proposal": "twichui-pricing-v1",
+  "policy": [
+    {
+      "id": "thin-posting-block",
+      "input": {
+        "priced_listings": 3,
+        "farbelow": true,
+        "age_seconds": 0,
+        "complete": true,
+        "mixed_variants": false
+      },
+      "expected": {
+        "posting_allowed": false,
+        "reason": "farbelow"
+      }
+    },
+    {
+      "id": "stale-posting-block",
+      "input": {
+        "priced_listings": 5,
+        "farbelow": false,
+        "age_seconds": 259201,
+        "complete": true,
+        "mixed_variants": false
+      },
+      "expected": {
+        "posting_allowed": false,
+        "reason": "stale"
+      }
+    },
+    {
+      "id": "mixed-variant-block",
+      "input": {
+        "priced_listings": 5,
+        "farbelow": false,
+        "age_seconds": 0,
+        "complete": true,
+        "mixed_variants": true
+      },
+      "expected": {
+        "posting_allowed": false,
+        "reason": "mixedvariants"
+      }
+    },
+    {
+      "id": "partial-posting-block",
+      "input": {
+        "priced_listings": 5,
+        "farbelow": false,
+        "age_seconds": 0,
+        "complete": false,
+        "mixed_variants": false
+      },
+      "expected": {
+        "posting_allowed": false,
+        "reason": "incomplete"
+      }
+    },
+    {
+      "id": "synthetic-posting-block",
+      "input": {
+        "priced_listings": 5,
+        "farbelow": false,
+        "age_seconds": 0,
+        "complete": true,
+        "mixed_variants": false,
+        "synthetic": true
+      },
+      "expected": {
+        "posting_allowed": false,
+        "reason": "synthetic"
+      }
+    },
+    {
+      "id": "unknown-content-time",
+      "input": {
+        "priced_listings": 5,
+        "farbelow": false,
+        "age_seconds": null,
+        "complete": true,
+        "mixed_variants": false
+      },
+      "expected": {
+        "posting_allowed": false,
+        "reason": "unknown_age"
+      }
+    }
+  ],
+  "quality": [
+    {
+      "id": "good",
+      "input": {
+        "has_price": true,
+        "complete": true,
+        "cut": false,
+        "age_seconds": 0,
+        "priced_listings": 5,
+        "distribution": true,
+        "wide_spread": false,
+        "observed_days_30": 7,
+        "mixed_variants": false,
+        "farbelow": false,
+        "synthetic": false,
+        "mapping_verified": true
+      },
+      "expected": "good"
+    },
+    {
+      "id": "two-days",
+      "input": {
+        "has_price": true,
+        "complete": true,
+        "cut": false,
+        "age_seconds": 0,
+        "priced_listings": 5,
+        "distribution": true,
+        "wide_spread": false,
+        "observed_days_30": 2,
+        "mixed_variants": false,
+        "farbelow": false,
+        "synthetic": false,
+        "mapping_verified": true
+      },
+      "expected": "fair"
+    },
+    {
+      "id": "two-listings",
+      "input": {
+        "has_price": true,
+        "complete": true,
+        "cut": false,
+        "age_seconds": 0,
+        "priced_listings": 2,
+        "distribution": true,
+        "wide_spread": false,
+        "observed_days_30": 7,
+        "mixed_variants": false,
+        "farbelow": false,
+        "synthetic": false,
+        "mapping_verified": true
+      },
+      "expected": "limited"
+    },
+    {
+      "id": "wide",
+      "input": {
+        "has_price": true,
+        "complete": true,
+        "cut": false,
+        "age_seconds": 0,
+        "priced_listings": 5,
+        "distribution": true,
+        "wide_spread": true,
+        "observed_days_30": 7,
+        "mixed_variants": false,
+        "farbelow": false,
+        "synthetic": false,
+        "mapping_verified": true
+      },
+      "expected": "fair"
+    },
+    {
+      "id": "no-distribution",
+      "input": {
+        "has_price": true,
+        "complete": true,
+        "cut": false,
+        "age_seconds": 0,
+        "priced_listings": 5,
+        "distribution": false,
+        "wide_spread": false,
+        "observed_days_30": 7,
+        "mixed_variants": false,
+        "farbelow": false,
+        "synthetic": false,
+        "mapping_verified": true
+      },
+      "expected": "fair"
+    },
+    {
+      "id": "partial",
+      "input": {
+        "has_price": true,
+        "complete": false,
+        "cut": false,
+        "age_seconds": 0,
+        "priced_listings": 5,
+        "distribution": true,
+        "wide_spread": false,
+        "observed_days_30": 7,
+        "mixed_variants": false,
+        "farbelow": false,
+        "synthetic": false,
+        "mapping_verified": true
+      },
+      "expected": "fair"
+    },
+    {
+      "id": "cut",
+      "input": {
+        "has_price": true,
+        "complete": true,
+        "cut": true,
+        "age_seconds": 0,
+        "priced_listings": 5,
+        "distribution": true,
+        "wide_spread": false,
+        "observed_days_30": 7,
+        "mixed_variants": false,
+        "farbelow": false,
+        "synthetic": false,
+        "mapping_verified": true
+      },
+      "expected": "limited"
+    },
+    {
+      "id": "synthetic",
+      "input": {
+        "has_price": true,
+        "complete": true,
+        "cut": false,
+        "age_seconds": 0,
+        "priced_listings": 5,
+        "distribution": true,
+        "wide_spread": false,
+        "observed_days_30": 7,
+        "mixed_variants": false,
+        "farbelow": false,
+        "synthetic": true,
+        "mapping_verified": true
+      },
+      "expected": "limited"
+    },
+    {
+      "id": "unknown-age",
+      "input": {
+        "has_price": true,
+        "complete": true,
+        "cut": false,
+        "age_seconds": null,
+        "priced_listings": 5,
+        "distribution": true,
+        "wide_spread": false,
+        "observed_days_30": 7,
+        "mixed_variants": false,
+        "farbelow": false,
+        "synthetic": false,
+        "mapping_verified": true
+      },
+      "expected": "limited"
+    },
+    {
+      "id": "unverified-market",
+      "input": {
+        "has_price": true,
+        "complete": true,
+        "cut": false,
+        "age_seconds": 0,
+        "priced_listings": 5,
+        "distribution": true,
+        "wide_spread": false,
+        "observed_days_30": 7,
+        "mixed_variants": false,
+        "farbelow": false,
+        "synthetic": false,
+        "mapping_verified": false
+      },
+      "expected": "limited"
+    },
+    {
+      "id": "no-price",
+      "input": {
+        "has_price": false,
+        "complete": true,
+        "cut": false,
+        "age_seconds": 0,
+        "priced_listings": 5,
+        "distribution": true,
+        "wide_spread": false,
+        "observed_days_30": 7,
+        "mixed_variants": false,
+        "farbelow": false,
+        "synthetic": false,
+        "mapping_verified": true
+      },
+      "expected": "none"
+    }
+  ],
+  "purchases": [
+    {
+      "id": "commodity-depth",
+      "source_kind": "commodities",
+      "requested": 3,
+      "listings": [
+        {
+          "quantity": 2,
+          "unit_copper": "100",
+          "total_copper": null,
+          "bid_copper": null
+        },
+        {
+          "quantity": 3,
+          "unit_copper": "200",
+          "total_copper": null,
+          "bid_copper": null
+        }
+      ],
+      "expected": {
+        "state": "exact_observed",
+        "low_copper": "400",
+        "high_copper": "400",
+        "fulfilled": 3
+      }
+    },
+    {
+      "id": "whole-stack",
+      "source_kind": "auctions",
+      "requested": 3,
+      "listings": [
+        {
+          "quantity": 10,
+          "unit_copper": null,
+          "total_copper": "1000",
+          "bid_copper": null
+        }
+      ],
+      "expected": {
+        "state": "range",
+        "low_copper": "300",
+        "high_copper": "1000",
+        "whole_listing_plan_copper": "1000",
+        "whole_listing_plan_units": 10
+      }
+    },
+    {
+      "id": "insufficient-supply",
+      "source_kind": "commodities",
+      "requested": 6,
+      "listings": [
+        {
+          "quantity": 5,
+          "unit_copper": "100",
+          "total_copper": null,
+          "bid_copper": null
+        }
+      ],
+      "expected": {
+        "state": "few",
+        "low_copper": null,
+        "high_copper": null,
+        "available": 5
+      }
+    }
+  ],
+  "identity": [
+    {
+      "id": "variant-a",
+      "descriptor": {
+        "id": 6537,
+        "bonus_lists": [
+          12718
+        ]
+      },
+      "expected_variant_key": "b89bee06d6e64b0d8b39e2ea2cabb0fdbf1a229d33c0e3b609f1df30b522596f"
+    },
+    {
+      "id": "variant-b",
+      "descriptor": {
+        "id": 6537,
+        "bonus_lists": [
+          12725
+        ]
+      },
+      "expected_variant_key": "a652d1b04d3e8be9647212fc3e07dc41603859c9b8055506cbed718ea09c3a05"
+    }
+  ],
+  "validation": [
+    {
+      "id": "leading-zero",
+      "field": "copper",
+      "value": "01",
+      "expected": "reject"
+    },
+    {
+      "id": "exponent",
+      "field": "copper",
+      "value": "1e3",
+      "expected": "reject"
+    },
+    {
+      "id": "negative",
+      "field": "copper",
+      "value": "-1",
+      "expected": "reject"
+    },
+    {
+      "id": "beyond-i64",
+      "field": "copper",
+      "value": "9223372036854775808",
+      "expected": "reject"
+    },
+    {
+      "id": "numeric-money",
+      "field": "copper",
+      "value": 100,
+      "expected": "reject"
+    },
+    {
+      "id": "future-algorithm",
+      "field": "algorithm",
+      "value": "twichui-pricing-v999",
+      "expected": "reject"
+    },
+    {
+      "id": "future-observation",
+      "field": "observed_at",
+      "value": "2026-11-15T12:00:01Z",
+      "expected": "reject"
+    },
+    {
+      "id": "old-bucket",
+      "field": "historical_basis",
+      "value": "legacy-weekly-mean",
+      "expected": "legacy_only"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "repository": "Twich-Team/TwichUI-Market",
+  "ref": "research/m05-unified-pricing",
+  "commit": "02af203703196e9d7a503a78c9e8afbf8ac1cbfa",
+  "pull_request": "https://github.com/Twich-Team/TwichUI-Market/pull/6",
+  "directory": "contracts/pricing/v1",
+  "files": [
+    "snapshots.json",
+    "temporal.json",
+    "boundaries.json",
+    "fixture.schema.json",
+    "SHA256SUMS.json"
+  ],
+  "verification": "Mirror these five files byte for byte; verify SHA256SUMS.json and compare against this exact upstream commit."
+}
