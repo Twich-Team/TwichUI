@@ -52,6 +52,14 @@ assert(A.Market.Metric('supply') and p.chart.note:GetText():find('Observed suppl
 assert(A.Market.Metric('minimum') and p.chart.note:GetText():find('Observed minimum listing:',1,true))
 assert(c.TwichUIWorkshopDB==db and fingerprint(db)==before and native==0,'local data or AH actions changed')
 W.Market.Price,W.Market.Value,W.Market.History=oldPrice,oldValue,oldHistory
+-- Measure actual page handlers separately from the reader-only benchmark.
+A.Go('browse');A.Go('market');p=settle();assert(A.Market.Select(2589) and A.Market.Variant(key))
+collectgarbage('collect');local heap=collectgarbage('count')*1024;local started=os.clock();local pages=A.Snapshot().pages
+for i=1,50 do A.Go('browse');A.Go('market');p=settle();assert(A.Market.Select(2589) and A.Market.Variant(key)) end
+local elapsed=math.floor((os.clock()-started)*1000000+.5);collectgarbage('collect');local growth=math.floor(collectgarbage('count')*1024-heap)
+assert(A.Snapshot().pages==pages and B.Status().cache_entries<=B.CACHE_MAX and growth<524288,'repeated external navigation exceeded the offline fixture budget')
+assert(c.TwichUIWorkshopDB==db and fingerprint(db)==before and native==0 and loads==1,'navigation changed local data or performed unexpected operations')
+print(('BRIDGE_UI_BENCH iterations=50 elapsed_us=%d retained_growth_bytes=%d pages=%d cache_entries=%d'):format(elapsed,growth,pages,B.Status().cache_entries))
 A.Market.Filter('marketKey',m.key);p=settle();A.Market.Select(10)
 assert(p.projection.facts.min.value==20200 and loads==1,'local source default/values changed')
 A.Hide();assert(B.Status().cache_entries<=B.CACHE_MAX)
