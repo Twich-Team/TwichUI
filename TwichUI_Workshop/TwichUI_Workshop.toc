@@ -87,5 +87,7 @@ ViewStrategy.lua
 Compact.lua
 # Progress notices through TwichUI's notification coordinator (P2.1)
 Notice.lua
+# Standalone AH presentation preview; no native takeover or transaction actions
+auction/Window.lua
 # The window: the shell, the page list and the events (last: it tells TwichUI the addon is ready)
 Window.lua

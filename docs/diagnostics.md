@@ -403,3 +403,11 @@ identical with a capture recording. `tests/test_release_tools.py`: four folders,
 - No error stack traces for errors TwichUI's handlers catch (the pcall ended them); the game's display has them.
 - No per-module memory: the client's figure is per addon; only `MeasureCall` (opt-in) gives per-call allocation.
 - No live comparison or chart of two metrics on one axis, by design.
+
+## Standalone Auction House preview
+
+`auction.previewBuild` times first explicit shell construction;
+`auction.previewRender` times only the visible page. Both map to
+`TwichUI_Workshop/auction/Window.lua`. Read-only gauges expose shown state,
+page pool (at most five), visible event registrations and row pool. They never
+load Workshop or construct a preview. No native-frame hooks are added.

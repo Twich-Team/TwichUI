@@ -27,6 +27,7 @@ Replace `workshop-settings` with one of these nonempty groups:
 | `workshop-settings` | Workshop settings, Tooltip Designer, worth layout/tips and Workshop window |
 | `item-advisor` | Advisor recommendations, selling and disenchant evidence, discovery, page, market/crafting dependencies and selected Advisor simulator poses |
 | `workshop` | All Workshop tests and Test Lab tests |
+| `auction-house` | Standalone Auction House preview, existing auction safeguards and Workshop dependencies |
 | `crafting` | Crafting, shopping, stock, planner, strategy and compact views |
 | `market` | Prices, distribution, history, valuation, schema and automatic scans |
 | `reminders` | Reminders engines, designer, settings and artwork |
@@ -107,6 +108,7 @@ Use the read-only installation through the local launcher:
 ```sh
 bash tools/simlab/run.sh smoke
 bash tools/simlab/run.sh auctionproof
+bash tools/simlab/run.sh auctionpreview
 SIMLAB_ONLY='design craft wrong' bash tools/simlab/run.sh workshop
 SIMLAB_ONLY='idle mixed' bash tools/simlab/run.sh testlab
 bash tools/simlab/run.sh settings workshop

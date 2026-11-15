@@ -70,5 +70,34 @@
     "syntax": ["TwichUI_Workshop/**/*.lua"],
     "dependencies": ["market", "crafting"],
     "simulators": [{"script": "workshop", "only": ["advisor", "advisorsmall", "advisorempty", "advisorscaled", "advisorsource", "advisorcategory", "advisorscroll", "advisortentative", "advisorbags", "advisorfiltered", "craft", "wrong"]}]
+  },
+  "auction-house": {
+    "tests": [
+      "test_workshop_auction*.lua",
+      "test_auction_host.lua",
+      "test_auction_window.lua",
+      "test_workshop_window.lua",
+      "test_workshop_login.lua"
+    ],
+    "syntax": [
+      "TwichUI_Workshop/**/*.lua",
+      "!!!TwichUI/WorkshopLauncher.lua",
+      "!!!TwichUI/Core.lua"
+    ],
+    "dependencies": [
+      "shared-ui",
+      "core",
+      "crafting",
+      "market",
+      "item-advisor"
+    ],
+    "simulators": [
+      {
+        "script": "auctionpreview"
+      },
+      {
+        "script": "auctionproof"
+      }
+    ]
   }
 }

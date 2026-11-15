@@ -83,6 +83,22 @@ end
 function L.Open() return Run("Open") end
 function L.Toggle() return Run("Toggle") end
 
+-- Explicit standalone preview; never touches the native Auction House or Host.
+function L.AuctionPreview()
+    if InCombatLockdown and InCombatLockdown() then Say("%s", L.Explain("COMBAT")); return false end
+    local WS = Ready()
+    if not WS then return false end
+    if not (WS.AuctionUI and WS.AuctionUI.Show) then Say("%s", L.Explain("INCOMPLETE")); return false end
+    local ok, result = pcall(WS.AuctionUI.Show)
+    if not ok then
+        WS.AuctionUI.Hide()
+        R.Fault("auction preview", result)
+        Say("%s", L.Explain("ERROR"))
+        return false
+    end
+    return result
+end
+
 function L.Command(arg)
     local word = (arg or ""):match("^%s*(%S*)"):lower()
     if word == "" or word == "open" then L.Toggle() return end

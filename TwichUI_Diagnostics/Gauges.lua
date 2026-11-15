@@ -19,6 +19,8 @@ local Perf = R.Perf
 -- "!!!TwichUI/", the settings window "TwichUI_Settings/"), where: the function, so a report can name what to read.
 -- every = how often it is expected to run, so a report can tell "runs often" from "runs on demand".
 DX.OPS = {
+    ["auction.previewBuild"] = { module = "auction", label = "AH preview: shell construction", kind = "init", file = "TwichUI_Workshop/auction/Window.lua", where = "Build", every = "first explicit preview open" },
+    ["auction.previewRender"] = { module = "auction", label = "AH preview: visible page render", kind = "rebuild", file = "TwichUI_Workshop/auction/Window.lua", where = "A.Render", every = "visible page changes and coalesced refreshes", visible = "auction.previewShown" },
     ["auction.proof"] = { module = "auction", label = "AH-1a presentation switch/recovery", kind = "layout", file = "auction/Host.lua", where = "Activate, Restore", every = "explicit diagnostic command, or recovery of its active lease" },
     ["auction.proofWatch"] = { module = "auction", label = "AH-1a lease check", kind = "update", file = "auction/Host.lua", where = "Watch", every = "every 0.25 s only during the explicit, at most 30-second proof" },
     ["core.savedData"] = { module = "core", label = "Saved data check at load (Persist.LoadMain)", kind = "init", file = "Core.lua", where = "ADDON_LOADED handler > Persist.LoadMain", every = "once per load" },
@@ -179,7 +181,17 @@ local function Field(module, field)
 end
 local function Flag(v) if v == nil then return nil end return v and 1 or 0 end
 
+local function AuctionPreview(field)
+    return function()
+        local A = R.Workshop and R.Workshop.AuctionUI
+        return A and DX.Num(A.Snapshot()[field]) or 0
+    end
+end
 local G = {
+    { "auction.previewShown", "AH preview shown", "state", "core", AuctionPreview("shown") },
+    { "auction.previewPages", "AH preview pages built (at most five)", "pool", "core", AuctionPreview("pages") },
+    { "auction.previewEvents", "AH preview visible listeners", "listeners", "core", AuctionPreview("events") },
+    { "auction.previewRows", "AH preview pooled rows", "pool", "core", AuctionPreview("rows") },
     { "core.listeners", "TwichUI event bus: listeners", "listeners", "core", Listeners },
     { "core.events", "TwichUI event bus: events listened for", "listeners", "core", Events },
     { "core.switchListeners", "Switch change listeners", "listeners", "core", function() return R.Switches and type(R.Switches.listeners) == "table" and #R.Switches.listeners or nil end },
