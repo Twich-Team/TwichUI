@@ -193,3 +193,10 @@ empty/filtered Browse, Shopping and purpose grouping, 3,000-item scrolling,
 preview-only native-frame isolation, modeled control reachability, independent
 replay and an intentional wrong-expectation control. Its screenshots and hit
 rectangles do not establish real input, fonts, combat/taint or server behavior.
+
+## Explicit cloud profile
+
+`--profile cloud` runs the same tier selections with the existing no-game-assets
+mode; it never satisfies the full local milestone gate. Default local verification
+is unchanged. See [cloud environment compatibility](cloud-environment.md) for
+commands, exact limitations, smoke classification and the open PNG encoder gate.

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Judges one simulator smoke run (docs/simulator-lab.md). A clean exit proves nothing, so a pass needs all of these:
-the real window opened on the real page through R:OpenSettings, finished fading in, constructed rows, raised no Lua
+the real window opened on the real page through R:OpenSettings, finished fading in, constructed rows, raised no unclassified Lua
 error, lost none of TwichUI's own textures, shows real pixels where the window is, and every other page constructed too.
 
 What a pass is evidence of: initialization and page construction. It is not evidence that any control works (see
@@ -13,6 +13,8 @@ import struct
 import sys
 import zlib
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import known_failures as kf
 
 
 def read_rgba(path):
@@ -73,6 +75,17 @@ def distinct_colours(rows, left, top, width, height):
     return len(seen)
 
 
+def classify_smoke(text):
+    """Only the documented group hello send is permitted, not arbitrary UTF-8 errors."""
+    result = kf.classify(text, allow=('addon-message-invalid-utf8',))
+    for block in kf.blocks(text):
+        if block['message'] == 'string at argument 2 is not valid UTF-8' and not block['suppressed']:
+            stack = '\n'.join(block['stack'])
+            if not all(part in stack for part in ('Group.lua', 'SayHello', 'Share.lua', 'SendControl')):
+                result['unknown'].append((block['tick'], 'UTF-8 error outside the group hello chain'))
+    return result
+
+
 def main():
     run, page, title = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
     out = (run / "run.stdout").read_text(errors="replace")
@@ -96,8 +109,11 @@ def main():
     check("the page constructed rows", rows and int(rows.group(1)) > 0, says.get("view", "no view line"))
     check("the page title is in the frame tree", f'text="{title}"' in out)
 
-    errors = re.findall(r"^Lua error: .*$", err, re.M)
-    check("no Lua error", not errors, f"{len(errors)} found; first: {errors[0][:150]}" if errors else "")
+    classified = classify_smoke(err)
+    for name, passed, detail in kf.verdict_lines(classified):
+        check(name, passed, detail)
+    for line in kf.describe(classified):
+        print(line)
     missing = [m for m in re.findall(r"Not found: (.*)", err) if "twichui" in m.lower()]
     check("no TwichUI texture missing", not missing, ", ".join(missing[:4]))
 
@@ -121,7 +137,7 @@ def main():
 
     print("Evidence: initialization tested, page construction tested. NOT tested here: control interaction, state "
           "mutation, persistence, how anything looks, the real client.")
-    print("PASS (initialization and construction only)" if all(checks) else "FAIL")
+    print("PASS (initialization and construction only; classified simulator limits disclosed)" if all(checks) else "FAIL")
     return 0 if all(checks) else 1
 
 

@@ -196,10 +196,23 @@ def syntax_checks(repo, selection, processes, output_dir):
     return True
 
 
+def simulator_env(tmp, profile):
+    env = {k: v for k, v in child_env(tmp).items()
+           if (not k.startswith('SIMLAB_') or k == 'SIMLAB_WOW') and k != 'WOWSIM_LAB'}
+    if profile == 'cloud':
+        env['SIMLAB_ASSETS'] = '0'
+        # Explicit runtime launcher for verified user-space shared libraries.
+        if os.environ.get('SIMLAB_BIN'):
+            env['SIMLAB_BIN'] = os.environ['SIMLAB_BIN']
+    return env
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('tier', nargs='?', choices=('unit', 'fast', 'feature', 'full'), default='unit')
     parser.add_argument('group', nargs='?')
+    parser.add_argument('--profile', choices=('local', 'cloud'), default='local',
+                        help='cloud uses no game assets; all selections/assertions remain, visual/client gates stay local')
     parser.add_argument('--jobs', type=int, choices=range(1, 5), default=2, metavar='1..4')
     parser.add_argument('--list', action='store_true', help='show exact tests, syntax files and simulator selections; run nothing')
     parser.add_argument('--timeout', type=float, default=300, help='per offline test in seconds (default 300)')
@@ -210,6 +223,7 @@ def main(argv=None):
         selection = plan(REPO, args.tier, args.group)
     except ValueError as exc:
         parser.error(str(exc))
+    selection['profile'] = args.profile
     if args.list:
         print(json.dumps(selection, indent=2))
         return 0
@@ -218,6 +232,7 @@ def main(argv=None):
     base.mkdir(parents=True, exist_ok=True)
     output_dir = Path(tempfile.mkdtemp(prefix=f'{args.tier}-{args.group or "all"}-', dir=base))
     (output_dir / 'tmp').mkdir()
+    print(f'profile: {args.profile}; cloud results never satisfy the local milestone gate')
     print(f'{args.tier} {args.group or "all"}: {len(selection["tests"])} test files/modules, {args.jobs} workers; layout tests serial', flush=True)
     print(f'artifacts: {output_dir}', flush=True)
     processes = Processes()
@@ -236,8 +251,7 @@ def main(argv=None):
         rows = run_tests(REPO, selection['tests'], args.jobs, output_dir, processes, args.timeout)
         # No inheritance of pose filters, synthetic settings overrides or asset
         # switches may silently turn a milestone into a partial run.
-        env = {k: v for k, v in child_env(output_dir / 'tmp').items()
-               if (not k.startswith('SIMLAB_') or k == 'SIMLAB_WOW') and k != 'WOWSIM_LAB'}
+        env = simulator_env(output_dir / 'tmp', args.profile)
         for spec in selection['simulators']:
             cmd = (['bash', 'tools/simlab/tests/lab_guard.sh'] if spec['script'] == 'lab-guard' else
                    ['bash', 'tools/simlab/run.sh', spec['script'], *spec.get('args', [])])
@@ -266,6 +280,9 @@ def main(argv=None):
                 print(output, flush=True)
         passed = syntax_ok and all(row['passed'] for row in rows) and all(row['passed'] for row in sims)
         report = dict(selection=selection, jobs=args.jobs, layout_workers=1, seconds=time.perf_counter() - start,
+                      local_milestone_passed=passed and args.tier == 'full' and args.profile == 'local',
+                      unsupported_coverage=(['game asset rendering, client fonts and visual fidelity']
+                                            if args.profile == 'cloud' else []),
                       syntax_passed=syntax_ok, tests=rows, simulators=sims, passed=passed)
         (output_dir / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
         print(f'{sum(r["passed"] for r in rows)} passed, {sum(not r["passed"] for r in rows)} failed; '

@@ -123,5 +123,18 @@ class Fails(unittest.TestCase):
         self.assertEqual(env['PYTHONDONTWRITEBYTECODE'], '1')
 
 
+class CloudProfile(unittest.TestCase):
+    def test_profile_keeps_filters_cleared_and_selects_assets_explicitly(self):
+        with mock.patch.dict(os.environ, {'SIMLAB_ONLY': 'wrong', 'SIMLAB_ASSETS': '1',
+                                         'SIMLAB_BIN': '/verified/launcher', 'SIMLAB_FORWARD': 'injected=1'}):
+            cloud = runner.simulator_env(Path('/tmp'), 'cloud')
+            local = runner.simulator_env(Path('/tmp'), 'local')
+        self.assertEqual(cloud['SIMLAB_ASSETS'], '0')
+        self.assertEqual(cloud['SIMLAB_BIN'], '/verified/launcher')
+        for key in ('SIMLAB_ONLY', 'SIMLAB_FORWARD'):
+            self.assertNotIn(key, cloud)
+        for key in ('SIMLAB_ASSETS', 'SIMLAB_BIN'):
+            self.assertNotIn(key, local)
+
 if __name__ == '__main__':
     unittest.main()
