@@ -6,7 +6,7 @@ documentation only. Do not automatically begin AH-1, C1 or another feature.
 
 AH-1a follow-up: the disabled diagnostic lifecycle proof is implemented and
 offline/simulator verification is recorded in [lifecycle-proof.md](lifecycle-proof.md).
-Real Forever acceptance remains pending; AH-1b and all functional pages are blocked.
+Real Forever acceptance remains pending; native takeover and transaction activation remain blocked. The separately authorized [standalone presentation campaign](presentation.md) implements the shell, read-only Browse and shared Shopping without satisfying or bypassing those gates.
 
 Read [API capabilities](api-capabilities.md), [architecture](architecture.md),
 [integration and mockup fidelity](integration.md), `AGENTS.md`, `CLAUDE.md`,

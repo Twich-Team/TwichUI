@@ -2,7 +2,7 @@
 
 Status: the full replacement below remains proposed. AH-1a implements only the
 disabled diagnostic [lifecycle proof](lifecycle-proof.md), with no shell/pages or
-automatic takeover. **Real-client acceptance is pending; AH-1b is blocked.** Source facts and unresolved API
+automatic takeover. **Real-client acceptance is pending; native replacement is blocked.** The separately authorized [standalone presentation](presentation.md) implements the shell, Browse and Shopping without takeover. Source facts and unresolved API
 contracts are in [api-capabilities.md](api-capabilities.md). This document does
 not authorize AH-1. The approved result is one complete Auction House window
 with Browse, Shopping, Sell, My Auctions and Market in its left sidebar.

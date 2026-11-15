@@ -2,7 +2,7 @@
 
 Date: 2026-11-14. Scope: diagnostic lifecycle infrastructure only. No replacement
 window, pages, transactions or scan policy changes. **Real-client acceptance is
-pending; AH-1b is blocked.** The proof must stay disabled by default.
+pending; native replacement is blocked.** The proof must stay disabled by default. Later authorization permits the independent [presentation preview](presentation.md); it does not accept this lifecycle mechanism or activate replacement.
 
 ## Source review and decision
 

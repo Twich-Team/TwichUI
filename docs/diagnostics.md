@@ -415,3 +415,8 @@ load Workshop or construct a preview. No native-frame hooks are added.
 `auction.previewSearch` maps catalog/filter/cooperative merge-sort slices to
 `TwichUI_Workshop/auction/BrowseData.lua`. Additional gauges count results and
 pending jobs; hidden pages retain neither. Client timing remains unmeasured.
+
+`auction.previewPageBuild` records each lazy page's first construction.
+`auction.previewResize` records the explicit resize drag (at most 20 Hz).
+`auction.previewSubscriptions` counts the independent shared-plan/stock
+observers; it returns to zero when Shopping hides. No new addon memory owner.

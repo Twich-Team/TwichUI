@@ -13,13 +13,13 @@ def judge(run):
     outcomes, transcripts = [], {}
     def check(label, passed):
         outcomes.append(bool(passed)); print(f"  {'pass' if passed else 'FAIL'} {label}")
-    for name in ('shell', 'replay', 'small', 'scaled', 'empty', 'filtered', 'shopping', 'shoppingsmall', 'shoppingpurpose', 'wrong'):
+    for name in ('shell', 'replay', 'small', 'scaled', 'empty', 'filtered', 'resized', 'shopping', 'shoppingsmall', 'shoppingpurpose', 'wrong'):
         text = '\n'.join((run / f'{name}.{suffix}').read_text(errors='replace') for suffix in ('stderr', 'stdout'))
         checks, done = CHECK.findall(text), DONE.search(text)
         failures = [c for c in checks if c[0] == 'FAIL']; transcripts[name] = checks
-        check(f'{name}: all steps complete', done and done[1] == '5' and done[5] == done[6] == 'false')
+        check(f'{name}: all steps complete', done and done[1] == '7' and done[5] == done[6] == 'false')
         check(f'{name}: counts agree', done and int(done[3]) == len(checks)-len(failures) and int(done[4]) == len(failures))
-        check(f'{name}: full assertions', len(checks) == 67 and {c[1] for c in checks} == {'init','construct','interact','state'})
+        check(f'{name}: full assertions', len(checks) == 87 and {c[1] for c in checks} == {'init','construct','interact','state'})
         check(f'{name}: expected outcomes', (len(failures)==1 and failures[0][2]=='Browse default') if name=='wrong' else not failures)
         for label, passed, detail in kf.verdict_lines(kf.classify(text, allow=('voice-settings-unsupplied',), require=('voice-settings-unsupplied',))):
             check(f'{name}: {label} {detail}', passed)

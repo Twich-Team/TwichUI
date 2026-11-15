@@ -1,7 +1,7 @@
 # AH-0: Workshop integration and mockup fidelity
 
 Status: source-grounded reuse plan at `13aa14f1`; additions described here are
-**proposed**, not implemented. See [API evidence](api-capabilities.md) and
+**proposed** for native replacement. The separately authorized [standalone shell, Browse and Shopping](presentation.md) now use the existing services without native takeover or transaction actions. See [API evidence](api-capabilities.md) and
 [architecture](architecture.md). Existing tests are baseline engine evidence,
 not proof of the new Auction House pages.
 

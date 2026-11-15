@@ -33,11 +33,13 @@ local function Detail(p)
     d.recipeID=recipe and recipe.id
     for _,b in pairs(d.choices) do b:SetEnabled(false);b:SetOn(false) end
     if not selected then
-        d.pic.tex:SetTexture(UI.ICON_BLANK);d.name:SetText("No missing materials")
-        d.kind:SetText("The shared Workshop queue is unchanged.")
-        d.quantities:SetText("Choose a material to inspect its quantities.")
+        local incomplete=P.Incomplete(p.plan,p.ctx)
+        d.track.text:SetText("Track")
+        d.pic.tex:SetTexture(UI.ICON_BLANK);d.name:SetText(incomplete and "Requirements unavailable" or "No missing materials")
+        d.kind:SetText(incomplete and "Some recipe or bag data is missing." or "The shared Workshop queue is unchanged.")
+        d.quantities:SetText(incomplete and "Unknown quantities are not counted as owned." or "Choose a material to inspect its quantities.")
         d.sourceText:SetText("");d.cost:SetText("Unknown");d.costNote:SetText("")
-        d.needed:SetText("");d.advice:SetText("Add recipes in Workshop to build a shopping list.")
+        d.needed:SetText("");d.advice:SetText(incomplete and "Open the profession and refresh stock." or "Add recipes in Workshop to build a shopping list.")
         d.chart:Set(nil,UI.Money);d.basis=nil;return
     end
     local r=selected.row
@@ -63,8 +65,7 @@ local function Detail(p)
     d.chart:Set(W.Facts.Chart(facts),UI.Money)
     local rec=W.AdvisorData.Decide(r.item,false)
     d.advice:SetText((rec.text or "Limited evidence").."\n"..
-        (p.current and "Acquire only the quantity in the current shared plan. " or "Wait for the plan to finish. ")..
-        "Purchasing remains unavailable.")
+        (p.current and "Shared plan; purchasing unavailable." or "Wait for the plan to finish."))
     d.advisorTip=table.concat(rec.reasons or {},"\n")
     d.track.text:SetText(W.AdvisorData.Tracked()[r.item] and "Untrack" or "Track")
     Evidence(d,selected,p)
@@ -102,11 +103,12 @@ end
 local function BuildDetail(p)
     local d=A.Details(p,400);p.detail=d
     d:SetPoint("TOPRIGHT",0,-52);d:SetPoint("BOTTOMRIGHT",0,0)
-    local q=A.Card(d.body,"Quantities",62);q:SetPoint("TOPLEFT",4,-100);q:SetPoint("TOPRIGHT",-4,-100)
-    d.quantities=A.Text(q,"",12,12,-30);d.quantities:SetWordWrap(true);d.quantities:SetHeight(28)
-    local sources=A.Card(d.body,"Best Sources · shared decisions",110)
-    sources:SetPoint("TOPLEFT",4,-170);sources:SetPoint("TOPRIGHT",-4,-170)
-    d.sourceText=A.Text(sources,"",11,12,-32);d.sourceText:SetHeight(32);d.sourceText:SetWordWrap(true)
+    d.kind:ClearAllPoints();d.kind:SetPoint("TOPLEFT",12,-74);d.kind:SetPoint("RIGHT",-12,0)
+    local q=A.Card(d.body,"Quantities",56);q:SetPoint("TOPLEFT",4,-90);q:SetPoint("TOPRIGHT",-4,-90)
+    d.quantities=A.Text(q,"",11,12,-28);d.quantities:SetWordWrap(true);d.quantities:SetHeight(24)
+    local sources=A.Card(d.body,"Best Sources · shared decisions",98)
+    sources:SetPoint("TOPLEFT",4,-154);sources:SetPoint("TOPRIGHT",-4,-154)
+    d.sourceText=A.Text(sources,"",11,12,-32);d.sourceText:SetHeight(28);d.sourceText:SetWordWrap(true)
     d.choices={}
     for i,k in ipairs({"vendor","auction","make"}) do
         local b=UI.Segment(sources,SOURCE[k],106,function()
@@ -117,25 +119,25 @@ local function BuildDetail(p)
                 S.PickSource(v.row.item,choice);A.Schedule()
             end
         end)
-        b:SetPoint("TOPLEFT",12+(i-1)*112,-74);d.choices[k]=b
+        b:SetPoint("TOPLEFT",12+(i-1)*112,-64);d.choices[k]=b
     end
-    local costs=A.Card(d.body,"Cost Summary",84)
-    costs:SetPoint("TOPLEFT",4,-288);costs:SetPoint("TOPRIGHT",-4,-288)
-    d.cost=A.Text(costs,"",15,12,-31,-12,UI.K.bronzeText)
-    d.costNote=A.Text(costs,"",11,12,-52);d.costNote:SetWordWrap(true);d.costNote:SetHeight(28)
+    local costs=A.Card(d.body,"Cost Summary",74)
+    costs:SetPoint("TOPLEFT",4,-260);costs:SetPoint("TOPRIGHT",-4,-260)
+    d.cost=A.Text(costs,"",15,12,-28,-12,UI.K.bronzeText)
+    d.costNote=A.Text(costs,"",11,12,-47);d.costNote:SetWordWrap(true);d.costNote:SetHeight(22)
     UI.TipFn(costs,"Source and cost evidence",function() return d.basis end)
-    local chart=A.Card(d.body,"Cheapest seen · observed days",92)
-    chart:SetPoint("TOPLEFT",4,-380);chart:SetPoint("TOPRIGHT",-4,-380)
-    d.chart=UI.PriceChart(chart,342,56);d.chart:SetPoint("TOPLEFT",8,-28);d.chart:SetPoint("TOPRIGHT",-8,-28)
-    local used=A.Card(d.body,"Needed For",68)
-    used:SetPoint("TOPLEFT",4,-480);used:SetPoint("TOPRIGHT",-4,-480)
-    d.needed=A.Text(used,"",12,12,-31);d.needed:SetWordWrap(true);d.needed:SetHeight(30)
+    local chart=A.Card(d.body,"Cheapest seen · observed days",84)
+    chart:SetPoint("TOPLEFT",4,-342);chart:SetPoint("TOPRIGHT",-4,-342)
+    d.chart=UI.PriceChart(chart,342,48);d.chart:SetPoint("TOPLEFT",8,-28);d.chart:SetPoint("TOPRIGHT",-8,-28)
+    local used=A.Card(d.body,"Needed For",58)
+    used:SetPoint("TOPLEFT",4,-434);used:SetPoint("TOPRIGHT",-4,-434)
+    d.needed=A.Text(used,"",11,12,-29);d.needed:SetWordWrap(true);d.needed:SetHeight(24)
     UI.TipFn(used,"Crafting purpose",function() return d.data and d.data.purpose end)
-    local advice=A.Card(d.body,"Item Advisor",84)
-    advice:SetPoint("TOPLEFT",4,-556);advice:SetPoint("TOPRIGHT",-4,-556)
-    d.advice=A.Text(advice,"",11,12,-30);d.advice:SetWordWrap(true);d.advice:SetHeight(48)
+    local advice=A.Card(d.body,"Item Advisor",68)
+    advice:SetPoint("TOPLEFT",4,-500);advice:SetPoint("TOPRIGHT",-4,-500)
+    d.advice=A.Text(advice,"",11,12,-29);d.advice:SetWordWrap(true);d.advice:SetHeight(34)
     UI.TipFn(advice,"Advisor evidence",function() return d.advisorTip end)
-    d.body:SetHeight(652)
+    d.body:SetHeight(574)
     d.vendor=UI.Button(d,"Show vendor",91,"secondary",function()
         if d.data and p.current then S.ShowVendor(d.data.row.item) end
     end,28);d.vendor:SetPoint("BOTTOMLEFT",7,10)
@@ -211,8 +213,9 @@ local function Render(p)
     p.status:SetText((W.Queue.Held() and "Read-only saved queue · " or "")..status)
     p.list.box:SetAlpha(current and 1 or 0.55)
     p.list:SetData(p.rows,p.state=="planning" and "Planning shared requirements…" or
+        P.Incomplete(p.plan,p.ctx) and "Some requirements cannot be counted. Open their profession and refresh stock." or
         #p.plan.rows==0 and "No missing materials. Open Workshop to review or add recipes." or "No requirements match these filters.")
-    p.total:SetText(P.Total(p.plan,UI.Money))
+    p.total:SetText(P.Total(p.plan,UI.Money,p.ctx))
     local stockNote=S.StockNote(p.ctx.summary,p.ctx.stock)
     p.scope:SetText(W.Stock.Scope(p.ctx.stock)..(stockNote and ("\n"..stockNote) or "").."\nObserved costs are estimates; purchasing is unavailable.")
     p.guild:SetOn(S.UseGuild())

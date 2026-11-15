@@ -822,3 +822,6 @@ m("crafting.ah.stale-enabled", "TwichUI_Workshop/auction/ShoppingData.lua",
 m("crafting.ah.range-unqualified", "TwichUI_Workshop/auction/ShoppingData.lua",
   "return W.Strategy.CostText({low=row.low,high=row.high},money)", "return money(row.low)",
   "an uncertain cost lower bound is displayed as an exact amount", ["test_workshop_auction_shopping.lua"])
+m("crafting.ah.unknown-requirements-as-ready", "TwichUI_Workshop/auction/ShoppingData.lua",
+  "if P.Incomplete(plan,ctx) then", "if false then",
+  "unread recipe requirements or bag counts are presented as fulfilled or fully priced", ["test_workshop_auction_shopping.lua"])

@@ -46,8 +46,14 @@ function P.State(plan, ctx, state)
     if state=="basic" then return "Basic list · multilevel planning unavailable",true end
     return "Shared multilevel crafting plan",true
 end
-function P.Total(plan, money)
+function P.Incomplete(plan, ctx)
+    return (plan.unknownBags or 0)>0 or (ctx and ctx.summary and (ctx.summary.unknown or 0)>0) or false
+end
+function P.Total(plan, money, ctx)
     local t=plan.totals or {}
+    if P.Incomplete(plan,ctx) then
+        return "Known requirements only: at least "..money(t.low or t.cash or 0).." · recipe or bag data missing"
+    end
     if #(plan.rows or {})==0 then return "No missing materials in the shared plan." end
     if (t.priced or 0)+(t.missing or 0)+(t.makes or 0)==0 then return "Collect stored materials; nothing to buy." end
     if (t.missing or 0)>0 then

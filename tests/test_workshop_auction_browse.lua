@@ -73,6 +73,9 @@ A.Browse.Filter("quality",3); for i=1,30 do FlushTimers() end
 same(#p.list.data,1,"quality filter");same(p.list.data[1].item,12)
 Press.Must(p.reset);for i=1,30 do FlushTimers() end
 A.Browse.Search("absent");for i=1,30 do FlushTimers() end
+same(p.search.hint:IsShown(),false,"programmatic search hides placeholder")
+same(p.detail.compare:IsEnabled(),false,"empty comparison disabled")
+same(p.detail.track.text:GetText(),"Track","empty tracking label reset")
 same(#p.list.data,0);same(p.list.empty:GetText():find("No stored",1,true)~=nil,true,"honest empty")
 A.OpenBrowse(14,8);for i=1,30 do FlushTimers() end
 same(#p.list.data,1);same(p.list.data[1].unit,nil,"Shopping item without price")
@@ -102,9 +105,26 @@ same(p.list.scroll:GetVerticalScroll(),56*120+17,"page return keeps viewport")
 -- Cancelled metadata jobs never repaint a hidden page.
 A.Browse.Search("Earth");A.Hide();for i=1,20 do FlushTimers() end
 same(p.job,nil);same(#p.list.data,0)
+-- The documented catalog cap is observable; sorting still runs in slices.
+local capped={key="cap",at=now,scope="full",complete=true,items={}}
+for id=1,20005 do capped.items[id]=items[10] end
+local capJob=D.Job({market=capped})
+local steps,longest,begin=0,0,os.clock()
+repeat
+ local t=os.clock();local done=capJob:Step()
+ longest=math.max(longest,os.clock()-t);steps=steps+1
+ assert(steps<10000,"bounded catalog completes")
+ if done then break end
+until false
+same(#capJob.rows,20000,"explicit 20k catalog cap");same(capJob.capped,true,"cap is disclosed")
+same(capJob.scanned,20000);same(steps>1,true,"cap job is cooperative")
+print(("Auction Browse 20k synthetic: %d slices, %.3f s total, %.3f ms longest (offline CPU; not a client budget)"):format(steps,os.clock()-begin,longest*1000))
 -- Error is explicit and recoverable, not a zero-price listing.
 A.Show();W.AdvisorData.Info=function() error("synthetic unavailable metadata") end
 for i=1,20 do FlushTimers() end
-same(p.error~=nil,true);same(#p.list.data,0);same(p.list.empty:GetText():find("could not",1,true)~=nil,true)
+same(p.error~=nil,true);same(p.search.hint:IsShown(),false,"programmatic search hides placeholder")
+same(p.detail.compare:IsEnabled(),false,"empty comparison disabled")
+same(p.detail.track.text:GetText(),"Track","empty tracking label reset")
+same(#p.list.data,0);same(p.list.empty:GetText():find("could not",1,true)~=nil,true)
 A.Hide()
 print("PASSED: Auction Browse "..n.." checks")

@@ -70,6 +70,18 @@ W.Storage.OnChange=function() called=called+1 end
 W.Storage.StoreBank({ids={6},tabs={[6]={[50]=2}},incomplete=0},c.time());settle()
 same(called,1,"legacy callback preserved");same(row(50).missing,2,"new stock seen")
 W.Storage.OnChange=originalCallback
+-- Unknown bag counts and recipe materials never look like a fulfilled list.
+local held=g.bags[40];g.bags[40]=nil
+p:GetScript("OnEvent")(p,"BAG_UPDATE_DELAYED");settle()
+same((p.plan.unknownBags or 0)>0,true,"shared planner reports unknown stock")
+same(p.total:GetText():find("Known requirements only",1,true)~=nil,true,"partial stock total qualified")
+g.bags[40]=held;p:GetScript("OnEvent")(p,"BAG_UPDATE_DELAYED");settle()
+W.Queue.Add({id=999,name="Unresolved recipe",prof=171,profName="Alchemy"},1);W.Strategy.Bump();settle()
+same(p.ctx.summary.unknown>0,true,"unread recipe remains unknown")
+same(p.total:GetText():find("Known requirements only",1,true)~=nil,true,"unresolved recipe total qualified")
+W.Queue.Remove(999);W.Strategy.Bump();settle()
+same(P.Incomplete({rows={},unknownBags=1},{}),true,"unknown empty requirements are incomplete")
+same(P.Total({rows={},unknownBags=1,totals={cash=0}},tostring):find("data missing",1,true)~=nil,true)
 -- Planning and basic fallback are explicitly qualified by the presentation.
 local real=S.ShoppingPlan
 local plan,ctx=real();local stale={};for k,v in pairs(ctx) do stale[k]=v end;stale.stale=true
@@ -78,6 +90,9 @@ A.Render();same(p.current,false);same(p.detail.browse:IsEnabled(),false);same(p.
 same(p.status:GetText():find("Updating",1,true)~=nil,true)
 S.ShoppingPlan=function()return plan,ctx,"basic"end
 A.Render();same(p.status:GetText():find("Basic",1,true)~=nil,true);same(p.current,true)
+S.ShoppingPlan=function()return {rows={},unknownBags=1,totals={}},ctx,"ready"end
+A.Render();same(p.detail.name:GetText(),"Requirements unavailable","unknown empty list never says fulfilled")
+same(p.list.empty:GetText():find("cannot be counted",1,true)~=nil,true)
 S.ShoppingPlan=real
 -- Group/filter projection never edits quantities or totals.
 local input={rows={{item=20,need=9,have=2,qty=7,kind="buy",source="auction",cash=70},{item=50,need=4,have=nil,qty=4,kind="collect",where="bank"}},totals={cash=70,low=70,high=70,priced=1,missing=0,makes=0}}

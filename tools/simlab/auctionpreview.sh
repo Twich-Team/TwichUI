@@ -6,11 +6,12 @@ RUN="${SIMLAB_RUN:-$LAB/artifacts/auctionpreview-$(date +%Y%m%d-%H%M%S)}"
 mkdir -p "$RUN"
 export SIMLAB_ASSETS="${SIMLAB_ASSETS:-1}" SIMLAB_EXTRA="TwichUI_Workshop"
 export SIMLAB_FORWARD="WOW_SIM_SOFTWARE_RENDER=1 WOW_SIM_NO_PARTY=1"
-fixture() { { printf 'SIMLAB_PARAMS = %s\n' "$2"; cat "$SIMLAB_DIR/scenarios/lib.lua" "$SIMLAB_DIR/scenarios/auctionpreview.lua"; } > "$LAB/fixtures/auctionpreview-$1.lua"; }
+fixture() { { printf 'SIMLAB_PARAMS = %s\n' "$2"; cat "$SIMLAB_DIR/scenarios/lib.lua"; printf 'do\n'; cat "$REPO/TwichUI_TestLab/Reach.lua"; printf '\nend\n'; cat "$SIMLAB_DIR/scenarios/auctionpreview.lua"; } > "$LAB/fixtures/auctionpreview-$1.lua"; }
 fixture shell '{}'
 fixture replay '{}'
 fixture empty '{ empty = true }'
 fixture filtered '{ filtered = true }'
+fixture resized '{ resized = true }'
 fixture shopping '{ shopping = true }'
 fixture shoppingsmall '{ shopping = true }'
 fixture shoppingpurpose '{ shopping = true, purpose = true }'
@@ -19,7 +20,7 @@ fixture scaled '{ scaled = true }'
 fixture wrong '{ wrongAt = "Browse default" }'
 repo_before="$(git -C "$REPO" status --porcelain --ignored)"
 status=0
-for name in shell replay small scaled empty filtered shopping shoppingsmall shoppingpurpose wrong; do
+for name in shell replay small scaled empty filtered resized shopping shoppingsmall shoppingpurpose wrong; do
   simlab_stage
   width=1600; height=1200
   if [[ "$name" = small || "$name" = shoppingsmall ]]; then width=1000; height=700; fi

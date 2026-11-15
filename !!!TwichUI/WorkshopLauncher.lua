@@ -94,14 +94,15 @@ function L.AuctionPreview()
     if not loaded then R.Fault("auction preview load", WS); Say("%s", L.Explain("ERROR")); return false end
     if not WS then return false end
     if not (WS.AuctionUI and WS.AuctionUI.Show) then Say("%s", L.Explain("INCOMPLETE")); return false end
-    local ok, result = pcall(WS.AuctionUI.Show)
+    local ok, result, why = pcall(WS.AuctionUI.Show)
     if not ok then
         WS.AuctionUI.Hide()
         R.Fault("auction preview", result)
         Say("%s", L.Explain("ERROR"))
         return false
     end
-    return result
+    if result ~= true then Say("%s", L.Explain(why or "INCOMPLETE")); return false end
+    return true
 end
 
 function L.Command(arg)

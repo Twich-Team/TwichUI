@@ -29,13 +29,15 @@ Detail = function(p)
     for _, r in ipairs(p.rows or {}) do if r.item == p.selected then chosen = r; break end end
     d.data = chosen
     d.track:SetEnabled(chosen ~= nil)
+    d.compare:SetEnabled(chosen ~= nil)
     d.buy:SetEnabled(false)
     if not chosen then
+        d.track.text:SetText("Track")
         d.name:SetText("Choose an item"); d.kind:SetText("Stored observations only")
         d.pic.tex:SetTexture(UI.ICON_BLANK)
         for _, t in ipairs(d.factLines) do t:SetText("") end
         d.fresh:SetText("No current auction listings are shown.")
-        d.chart:Set(nil, UI.Money); d.advice:SetText("Select an item to inspect its history and available Advisor evidence.")
+        d.chart:Set(nil, UI.Money); d.advice:SetText("Select an item to inspect its history.")
         d.evidence:SetText(""); d.cached = nil
         return
     end
@@ -108,6 +110,7 @@ function V.Search(query)
     if not page then return end
     page.query = W.Text(query, 200) or ""
     page.search:SetText(page.query)
+    page.search.hint:SetShown(page.query == "" and not page.search:HasFocus())
     Start(page, true)
 end
 function V.Select(item)
@@ -195,6 +198,9 @@ local function Build(p)
     p.submit:SetPoint("TOPRIGHT",0,0)
     p.search:SetScript("OnEnterPressed",function(self) self:ClearFocus(); V.Search(self:GetText()) end)
     p.search:SetScript("OnEscapePressed",function(self) self:ClearFocus() end)
+    p.search:HookScript("OnTextChanged",function(self)
+        self.hint:SetShown(self:GetText()=="" and not self:HasFocus())
+    end)
     local filters = A.Card(p,"Category",540); p.filters=filters
     filters:SetWidth(174); filters:SetPoint("TOPLEFT",0,-52); filters:SetPoint("BOTTOMLEFT",0,0)
     p.categoryButtons={}

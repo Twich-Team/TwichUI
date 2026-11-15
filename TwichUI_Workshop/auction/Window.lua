@@ -31,14 +31,21 @@ function A.Schedule()
         A.Render()
     end)
 end
+local function Release(key, page)
+    local def = A.pages[key]
+    if not (page and page.built and def and def.Release) then return end
+    local ok, err = pcall(def.Release, page)
+    if not ok then R.Fault("auction preview cleanup", err) end
+end
 function A.Render()
     if not A.IsShown() then return end
     local def, page = A.pages[active], A.views[active]
-    if not (def and def.Render) then return end
+    if not (def and def.Render and page and page.built and not page.failed) then return end
     local function Draw() renders = renders + 1; def.Render(page) end
     local ok, err = pcall(function() R.Perf.Call("auction.previewRender", Draw) end)
     if not ok then
-        if def.Release then def.Release(page) end
+        Release(active, page)
+        page.failed = true
         page:Hide()
         root.failure:SetText("This page could not be displayed. Close the preview and try again. Blizzard's Auction House is unchanged.")
         root.failure:Show()
@@ -46,12 +53,15 @@ function A.Render()
     end
 end
 local function Page(key)
-    if A.views[key] then return A.views[key] end
+    if A.views[key] then return A.views[key].built and A.views[key] or nil end
     local page = CreateFrame("Frame", nil, root.content)
     page:SetAllPoints()
     page:Hide()
+    A.views[key] = page
     local def = A.pages[key]
-    if def then def.Build(page)
+    if def then
+        local ok, err = pcall(function() R.Perf.Call("auction.previewPageBuild", def.Build, page) end)
+        if not ok then R.Fault("auction preview build", err); return nil end
     else
         local text = UI.Text(page, 16, UI.K.textDim)
         text:SetPoint("TOPLEFT", 12, -12); text:SetPoint("RIGHT", -12, 0)
@@ -60,7 +70,7 @@ local function Page(key)
             "Preview only. This page belongs to a later milestone and has no auction actions.")
         page.placeholder = text
     end
-    A.views[key] = page
+    page.built = true
     return page
 end
 function A.Go(key)
@@ -70,8 +80,7 @@ function A.Go(key)
     if not root then active = key; return true end
     for other, page in pairs(A.views) do
         if other ~= key and page:IsShown() then
-            local def = A.pages[other]
-            if def and def.Release then def.Release(page) end
+            Release(other, page)
             page:Hide()
         end
     end
@@ -80,19 +89,77 @@ function A.Go(key)
     root.sub:SetText(key == "browse" and "Search stored observations and compare prices and market history." or
         key == "shopping" and "Gather what your existing Workshop queue and crafting plan still need." or "Preview only — implementation is deferred.")
     root.failure:Hide()
-    Page(key):Show()
+    local page = Page(key)
+    if page then page.failed = nil; page:Show()
+    else
+        root.failure:SetText("This page could not be built. Reload the UI before trying again. Blizzard's Auction House is unchanged.")
+        root.failure:Show()
+    end
     for k, button in pairs(A.nav) do
         button.on = k == key; button.sel:SetShown(button.on)
         UI.Paint(button.text, button.on and UI.K.text or UI.K.textDim)
     end
-    A.Render()
-    return true
+    if page then A.Render() end
+    return page ~= nil
 end
 local function Band(frame)
     local CL = R.CraftLook
     CL.Tile(frame, "BACKGROUND", -4, "dark", 1, { 0.90, 0.94, 0.98 })
     CL.Tile(frame, "BACKGROUND", -3, "warm", 0.04, { 0.70, 0.83, 0.96 })
     CL.QuietTile(frame, "header", "BACKGROUND", -2)
+end
+-- Resize only this independent preview. Its minimum logical dimensions keep
+-- the approved three-column layout usable; FitToScreen handles smaller screens.
+function A.Resize(width, height)
+    if not root or not W.Finite(width) or not W.Finite(height) then return false end
+    R.Perf.Call("auction.previewResize", function()
+        -- FitToScreen preserves at least 0.6 scale. Bound growth so that
+        -- floor cannot push an enlarged window outside a narrow viewport.
+        local maxW = math.max(1420, math.min(1920, math.floor((UIParent:GetWidth() - 48) / 0.6)))
+        local maxH = math.max(880, math.min(1200, math.floor((UIParent:GetHeight() - 48) / 0.6)))
+        root:SetSize(math.max(1420, math.min(maxW, math.floor(width + 0.5))),
+            math.max(880, math.min(maxH, math.floor(height + 0.5))))
+        R.FitToScreen(root)
+        A.Schedule()
+    end)
+    return true
+end
+local function StopSizing()
+    if root and root.resize then
+        root.sizing = nil
+        root.resize:SetScript("OnUpdate", nil)
+    end
+end
+local function ResizeGrip()
+    local grip = CreateFrame("Button", nil, root)
+    root.resize = grip
+    grip:SetSize(22,22); grip:SetPoint("BOTTOMRIGHT",-12,8)
+    for x=0,2 do for y=0,2-x do
+        local dot=UI.L.Solid(grip,"OVERLAY",UI.K.bronzeText,0.7)
+        dot:SetSize(2,2);dot:SetPoint("BOTTOMRIGHT",-3-x*5,3+y*5)
+    end end
+    UI.Tip(grip,"Resize preview","Drag to resize. The approved layout keeps a minimum size and fits smaller screens by scaling.")
+    grip:SetScript("OnMouseDown",function(_,button)
+        if button~="LeftButton" then return end
+        local scale=root:GetEffectiveScale()
+        local x,y=GetCursorPosition()
+        local left,top=root:GetLeft(),root:GetTop()
+        if left and top then
+            root:ClearAllPoints();root:SetPoint("TOPLEFT",UIParent,"BOTTOMLEFT",left,top)
+        end
+        root.sizing={x=x/scale,y=y/scale,w=root:GetWidth(),h=root:GetHeight(),since=0}
+        grip:SetScript("OnUpdate",function(_,elapsed)
+            if not root.sizing then return end
+            if not IsMouseButtonDown("LeftButton") then StopSizing();return end
+            local d=root.sizing
+            d.since=d.since+elapsed
+            if d.since<0.05 then return end
+            d.since=0
+            local px,py=GetCursorPosition()
+            A.Resize(d.w+px/scale-d.x,d.h+d.y-py/scale)
+        end)
+    end)
+    grip:SetScript("OnMouseUp",StopSizing)
 end
 local function Build()
     UI.Init()
@@ -154,7 +221,7 @@ local function Build()
     root.note = UI.Text(root, 12, K.textDim)
     root.note:SetPoint("BOTTOMLEFT", 24, 18); root.note:SetPoint("RIGHT", -24, 0)
     root.note:SetText("Standalone preview  •  Replacement off  •  Transactions unavailable")
-    root:SetScript("OnEvent", function() R.FitToScreen(root); A.Schedule() end)
+    root:SetScript("OnEvent", function() StopSizing(); R.FitToScreen(root); A.Schedule() end)
     root:HookScript("OnShow", function()
         epoch = epoch + 1; scheduled = false
         R.FitToScreen(root)
@@ -162,17 +229,19 @@ local function Build()
         A.Go(active)
     end)
     root:HookScript("OnHide", function()
-        epoch = epoch + 1; scheduled = false; root:UnregisterAllEvents()
+        epoch = epoch + 1; scheduled = false; StopSizing(); root:UnregisterAllEvents()
         for key, page in pairs(A.views) do
-            local def = A.pages[key]
-            if def and def.Release then def.Release(page) end
+            Release(key, page)
         end
     end)
+    ResizeGrip()
+    A.ready = true
     if UISpecialFrames then tinsert(UISpecialFrames, "TwichUIAuctionPreview") end
 end
 function A.Show()
     if InCombatLockdown and InCombatLockdown() then return false, "COMBAT" end
     if not root then R.Perf.Call("auction.previewBuild", Build) end
+    if not A.ready then return false, "INCOMPLETE" end
     active = "browse"
     if root:IsShown() then A.Go(active) else root:Show() end
     return true
@@ -188,5 +257,5 @@ function A.Snapshot()
         if p.job then jobs = jobs + 1 end
         if A.IsShown() and p.listening then listeners = listeners + (p.eventCount or 2) end
     end
-    return { shown = A.IsShown() and 1 or 0, pages = pages, events = listeners, rows = rows, results = results, jobs = jobs, subscriptions = (W.Strategy.ListenerCount and W.Strategy.ListenerCount() or 0) + (W.Storage.ListenerCount and W.Storage.ListenerCount() or 0), renders = renders }
+    return { shown = A.IsShown() and 1 or 0, pages = pages, events = listeners, rows = rows, results = results, jobs = jobs, subscriptions = (W.Strategy.ListenerCount and W.Strategy.ListenerCount() or 0) + (W.Storage.ListenerCount and W.Storage.ListenerCount() or 0), renders = renders, sizing = root and root.sizing and 1 or 0 }
 end

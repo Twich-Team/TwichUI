@@ -9,7 +9,7 @@ No new Python packages are required.
 |---|---|---|
 | Fast development | `./tests/run.sh fast workshop-settings` | Direct feature tests and Lua syntax; no simulator |
 | Feature checkpoint | `./tests/run.sh feature workshop-settings` | Feature tests, shared dependency tests/syntax and selected simulator regressions |
-| Full milestone | `./tests/run.sh full` | Every offline test, all addon Lua syntax (excluding third-party libraries), simulator guard and all eight default simulator regression scripts |
+| Full milestone | `./tests/run.sh full` | Every offline test, all addon Lua syntax (excluding third-party libraries), simulator guard and all default simulator regression scripts |
 | Offline/CI | `./tests/run.sh` | Every offline test, including artwork rebuilds and mutation-runner harness tests; no simulator |
 
 Use fast checks frequently during implementation, feature verification before a
@@ -141,7 +141,7 @@ Full verification clears inherited `SIMLAB_*` filters and synthetic settings
 options (preserving the game path), and ignores `WOWSIM_LAB`, so it cannot be
 silently narrowed. It runs every original default pose and original negative
 control for `smoke`, `interact`, `diagnose`, `workshop`, `testlab`, `settings` and
-`reminders`, plus the AH-1a `auctionproof` synthetic lifecycle catalog, including the settings catalog discovered by the scenario. It does
+`reminders`, plus the AH-1a `auctionproof` synthetic lifecycle catalog and the independent `auctionpreview` catalog, including the settings catalog discovered by the scenario. It does
 not replace replay checks with pose-only launches. `guild_bank_preview.sh`
 remains a manual, parameterized exploratory capture: it has no default catalog
 or regression verdict and was never part of the automated suites.
@@ -186,3 +186,10 @@ unchanged. No campaign assertions or randomized scenarios are reduced.
 
 Measured baselines, exact benchmark commands, counts and limitations are in
 [testing-performance.md](testing-performance.md).
+
+The standalone `auctionpreview` catalog uses stored synthetic observations and
+the real shared Shopping planner. It covers normal/narrow/scaled/resized views,
+empty/filtered Browse, Shopping and purpose grouping, 3,000-item scrolling,
+preview-only native-frame isolation, modeled control reachability, independent
+replay and an intentional wrong-expectation control. Its screenshots and hit
+rectangles do not establish real input, fonts, combat/taint or server behavior.

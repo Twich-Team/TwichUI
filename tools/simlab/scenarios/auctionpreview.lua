@@ -79,6 +79,7 @@ Lab.Step("Browse history and filters", function()
     Lab.Check("state","all data marked historical",true,p.list.data[1] and p.list.data[1].source=="stored" and p.list.data[1].actionable==false)
     A.Browse.Search("Elemental Earth");Lab.Settle(0.4)
     Lab.Check("interact","search history narrows",1,#p.list.data)
+    Lab.Check("construct","programmatic query hides placeholder",false,p.search.hint:IsShown())
     Lab.Check("state","observed quantity",3,p.list.data[1] and p.list.data[1].qty)
     Lab.Check("state","no live auction ID",nil,p.list.data[1] and p.list.data[1].auctionID)
     Lab.Check("state","unit normalization",100,p.list.data[1] and p.list.data[1].unit)
@@ -155,6 +156,39 @@ Lab.Step("Shopping shared plan",function()
     Lab.Check("state","Shopping releases references",nil,p.plan)
     A.Browse.Search("");Lab.Settle(0.4);A.Browse.Select(7067)
 end)
+Lab.Step("large Browse viewport and cleanup",function()
+    local W,p=R.Workshop,A.Page("browse")
+    local key="Fixture Realm|Alliance"
+    local original=TwichUIWorkshopDB.markets[key]
+    local entry=original.items[7067]
+    local large={f=2,key=key,realm="Fixture Realm",side="Alliance",at=time()-60,scope="full",complete=true,items={},n=3000,read=3000,used=3000}
+    for id=20000,22999 do large.items[id]=entry end
+    TwichUIWorkshopDB.markets[key]=large;p.forceItem=nil
+    A.Browse.Search("")
+    local function Finish()
+        for _=1,100 do if not p.job then return end;Lab.Settle(0.05) end
+        error("large Browse job did not complete within the fixture budget")
+    end
+    Finish()
+    Lab.Check("state","large Browse catalog",3000,#p.rows)
+    Lab.Check("construct","large Browse pool bounded",true,#p.list.rows<30)
+    p.list.scroll:SetVerticalScroll(56*200+17);p.list:Layout()
+    local top=p.list.data[201].item
+    A.Browse.Select(p.list.data[900].item)
+    local selected=p.selected
+    p:GetScript("OnEvent")(p,"GET_ITEM_INFO_RECEIVED",selected,true)
+    Lab.Settle(0.2);Finish()
+    Lab.Check("state","large Browse selected retained",selected,p.selected)
+    local pixel=p.list.scroll:GetVerticalScroll()
+    Lab.Check("state","large Browse top identity retained",top,p.list.data[math.floor(pixel/56)+1].item)
+    Lab.Check("state","large Browse within-row offset retained",17,pixel%56)
+    A.Go("shopping")
+    Lab.Check("state","large Browse hidden rows released",0,#p.list.data)
+    Lab.Check("state","large Browse job cancelled on hide",nil,p.job)
+    TwichUIWorkshopDB.markets[key]=original
+    A.Go("browse");p.forceItem=nil;A.Browse.Search("");Finish();A.Browse.Select(7067)
+    Lab.Check("state","large Browse restored fixture",8,#p.rows)
+end)
 Lab.Step("native untouched and fit", function()
     Lab.Check("state", "native still shown", true, native:IsVisible())
     Lab.Check("state", "native scale retained", scale, native:GetScale())
@@ -170,7 +204,28 @@ Lab.Step("native untouched and fit", function()
     Lab.Check("construct", "navigation at left", true, f.nav:GetRight() < f.content:GetLeft())
     Lab.Check("construct", "window within viewport", true, f:GetWidth()*f:GetEffectiveScale() <= UIParent:GetWidth()*UIParent:GetEffectiveScale())
 end)
+Lab.Step("control geometry and resize",function()
+    local RC=R.TestLab.Reach
+    local p=A.Page("browse")
+    local collected=RC.Collect({limit=1000000})
+    for label,control in pairs({close=f.close,blizzard=f.blizzard,browse=A.nav.browse,shopping=A.nav.shopping,search=p.submit,category=p.categoryDrop}) do
+        local hit=RC.Analyze(control,{kind="click",collected=collected,evidence="simulator-geometry",limit=1000000})
+        Lab.Check("construct","reachable preview "..label,"reachable",hit.verdict)
+    end
+    local over=CreateFrame("Frame",nil,f)
+    over:SetAllPoints(f.close);over:SetFrameLevel(f.close:GetFrameLevel()+20);over:EnableMouse(true);over:Show()
+    local blocked=RC.Analyze(f.close,{kind="click",evidence="simulator-geometry",limit=1000000})
+    Lab.Check("construct","geometry detects blocking overlay","blocked",blocked.verdict)
+    over:Hide()
+    Lab.Check("construct","geometry recovers after overlay","reachable",RC.Analyze(f.close,{kind="click",evidence="simulator-geometry",limit=1000000}).verdict)
+    A.Resize(1720,1000)
+    Lab.Check("state","resize width",UIParent:GetWidth()<1100 and 1586 or 1720,math.floor(f:GetWidth()+0.5))
+    Lab.Check("state","resize height",1000,math.floor(f:GetHeight()+0.5))
+    Lab.Check("construct","resize remains inside viewport",true,f:GetWidth()*f:GetEffectiveScale()<=UIParent:GetWidth()*UIParent:GetEffectiveScale())
+    A.Resize(1420,880);Lab.Settle(0.2)
+end)
 Lab.RunUntil(math.max(5.5,Lab.simSeconds))
+if P.resized then A.Resize(1720,1000);Lab.Settle(0.2) end
 if P.shopping then A.Go("shopping");Lab.Settle(0.5) end
 if P.purpose then Pick(A.Page("shopping").groupDrop,"By crafting purpose") end
 if P.empty then A.Browse.Search("no matching observations");Lab.Settle(0.4) end
