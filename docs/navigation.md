@@ -55,7 +55,7 @@ slopes, mounts, speed and creatures aren't modelled.
 
 | Supported | Not supported (refused or not offered, never drawn through) |
 |---|---|
-| Going round mountains, cliffs, walls, buildings and barrier doodads (fences, palisades) | Lifts and elevators (Thunder Bluff's mesas, Freewind Post's plateau), the Deeprun Tram, the Darnassus portal: they aren't in the client's tables (the server places them) |
+| Going round mountains, cliffs, walls, buildings and barrier doodads (fences, palisades) | Lifts and elevators other than those listed under Journeys (the Deeprun Tram, the Undercity lift), the Darnassus portal: the server places them, so they aren't in the walking maps |
 | Through gates, streets, bridges and tunnels the client's collision has | Instances (no position, no walking map) |
 | Swimming across water when going round costs more (3x) | A destination in one of those cut-off places: "No way there" with the reason |
 | Stepping or hopping up ledges up to 2 yards | Portals other than the Mage's own teleports, class-specific travel (Druid, Shaman), mounts' flight |
@@ -68,7 +68,7 @@ ground over water, then the lowest; once you are on a floor it is kept.
 
 ## Journeys
 
-`nav/Journey.lua` plans a journey as legs: **walk**, **boat or zeppelin**, **flight**, **teleport**, **Hearthstone**. A trip on
+`nav/Journey.lua` plans a journey as legs: **walk**, **boat or zeppelin**, **flight**, **lift**, **teleport**, **Hearthstone**. A trip on
 one continent shorter than 700 yards, or with nothing but walking on offer, is just walked; anything else is planned over
 the network below, and the plain walk is always one of the candidates.
 
@@ -92,6 +92,29 @@ mount at +100%: mounts aren't read). **Every figure that isn't a distance is an 
 client has no speeds, and where a boat is now isn't known. The plan is the cheapest under that model, not a proof of the
 fastest way.
 
+**Lifts** (`nav/Lifts.lua`). A lift is a hand-kept list entry: two stand points (x, y and the height of the floor) and an
+estimate of the wait and ride (35 s). Each end is joined to the walking map at plan time, on the floor at its height, like
+your position and the destination, so no re-bake is needed; the planner then rides between them both ways. The Great Lift,
+the Freewind Post lift and Thunder Bluff's four lifts are listed. Their positions are the client's own: each is a placement of the
+`thousandneedleselevator` WMO in Kalimdor's tiles (shaft axes (-4666, -1839) and (-5392, -2496)), and the stand points are
+floors of the baked walking map at the bottom (z about -46) and the top (z about 86 and 89). Thunder Bluff's four lifts are in no
+client file (the server spawns them; the AreaPOI, GameObjects and placement tables were searched), so theirs come from the
+player's own position readings at each shaft. Each end is the nearest walking-map ground 14 to 19 yards from the shaft (the
+mesa edge at the top, z 131 or 141; the lowland at the foot, z 59 to 61), so the walk ends at a spot beside the lift rather
+than in the cabin. A lift is added to `LF.LIFTS` once its two stand points are known. A walk that ends at a lift says "walk to the Great Lift
+(bottom)", the lift step says "Take the Great Lift up", and arriving within 10 yards of the other end plans again from
+there. A plain walk that finds no way (`unreachable`) is tried again through the planner, which knows the lifts. Standing
+on a pocket of ground the map doesn't join to the land (Freewind Post's plateau) normally counts as standing on the nearest
+land; with a lift to that pocket on the map it doesn't.
+
+**Stairs** are listed the same way (`stairs = true`, worded "Take the … stairs up"). Orgrimmar's flight master is the one entry:
+the baked walking map doesn't join the foot of its tower to the top, so the walk there was a 900-yard loop round the east side
+for a flight master 30 yards away. The top is the flight point's own stand point; the bottom is the street at the tower's west
+foot, about 15 yards from the first step (the entrance isn't in any table), so **the position is approximate and unverified in
+the game**. Other Orgrimmar stairs may be cut the same way; a scan found candidates but none were added without a position to
+check. A short walk with the start or the destination within 250 yards of a lift or stairs end is planned with them (a plain walk
+would take the loop); other short walks are just walked.
+
 **The Hearthstone's bind point.** The game tells an addon only the name of the place (`GetBindLocation`), so TwichUI keeps
 where the player stood when `HEARTHSTONE_BOUND` fired (at the innkeeper), per character, in `ui.navTravel` (account-wide,
 never in a profile or shared). Without one the Hearthstone is not offered, and Navigation's settings say so.
@@ -107,8 +130,8 @@ a boat or on a flight path (`UnitOnTaxi`) the state is "riding": nothing to foll
 are within 150 yd of its arrival dock), a landing, a teleport or the Hearthstone (a jump of 120 yd or a new continent), or
 walking well away from a dock you were to board, plans again from where you are.
 
-**Known gaps.** The walking maps have no lifts, the tram or the Darnassus portal, so Teldrassil is reached only by boat and
-Darnassus (a teleport lands there) is cut off from the rest of Kalimdor; Thunder Bluff's mesas likewise. A destination
+**Known gaps.** The walking maps have no tram or Darnassus portal and only the lifts above, so Teldrassil is reached only by boat and
+Darnassus (a teleport lands there) is cut off from the rest of Kalimdor; Thunder Bluff's other rises (Hunter, Spirit, Elder) are not joined to the main mesa in the map (their rope bridges aren't in it). A destination
 inside a cut-off place is refused, and a teleport into one is never chosen for somewhere else. A ship dock's stand point is
 the nearest connected land (the shore end of its pier, up to about 90 yards from the boat's stop): the walk ends there and
 the last steps onto the pier are yours.
@@ -244,7 +267,7 @@ Turn on Display Lua Errors. Test alone, then with EllesmereUI.
 6. **Arrival.** Walk to the destination: "Arrived", one sound (if on), then everything goes.
 7. **Teleport and death.** Hearth or die and release mid-route: one new plan from where you land; in an instance "Position
    unavailable", and back outside it continues.
-8. **No route.** Navigate to Thunder Bluff from Bloodhoof Village (lifts aren't walked) and to the other continent: "No
+8. **No route.** Navigate to Thunder Bluff's Hunter Rise (not joined to the main mesa) and to the other continent: "No
    walking route" with the reason; the first shows a grey direct-bearing arrow, the second no arrow and nothing on the maps.
 9. **Minimap.** Turn rotate minimap on and off, zoom in and out, indoors and out: the trail turns and scales with the minimap
    and never crosses its edge; with EllesmereUI's square minimap it stops at the inner circle.
@@ -273,7 +296,7 @@ Turn on Display Lua Errors. Test alone, then with EllesmereUI.
 17. **Journeys: leaving the plan.** Walk away from the dock you were to board; stand on the pier by it; swim; fly a different
     flight. A new plan after a few seconds each time, never one every update. Turn the options off one by one (boats, flights,
     teleports, Hearthstone): the plan changes, and with all four off another continent says there is no way.
-18. **Cut-off places.** Navigate to Thunder Bluff's mesa top from below, to Darnassus, and to a spot on a lift-only plateau:
+18. **Cut-off places.** Navigate to Darnassus and to Thunder Bluff's Hunter Rise (the main mesa and Freewind Post are reached by lift; see Lifts):
     "No way there" with the reason, never a line through the air.
 19. **Faction.** An Alliance character is never sent by a Horde zeppelin or flight, and the other way round.
 14. **Pins and pings unchanged.** Party pins, map pings and the other map tools work as before; Ctrl-click still sets the

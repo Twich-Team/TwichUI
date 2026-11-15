@@ -384,6 +384,8 @@ local function LegInstruction(L)
     if L.kind == "ferry" then
         if L.fromName == L.toName then return ("Take the %s to the other dock at %s"):format(L.transport, L.toName), "ferry" end
         return ("Take the %s to %s"):format(L.transport, L.toName), "ferry"
+    elseif L.kind == "lift" then
+        return ("Take the %s %s"):format(L.lift.name, L.up and "up" or "down"), "lift"
     elseif L.kind == "flight" then
         local via = #L.via > 0 and (" via " .. table.concat(L.via, ", ")) or ""
         return ("Fly from %s to %s%s"):format(L.fromName, L.toName, via), "flight"
@@ -410,6 +412,9 @@ NV.LegShort = LegShort
 function NV.LegDetail(L)
     if L.kind == "ferry" then
         return ("Wait for it here: %s, then %s aboard (estimates)"):format(J.Minutes(L.wait), J.Minutes(L.travel))
+    elseif L.kind == "lift" then
+        if L.lift.stairs then return ("About %d seconds to climb (estimate)"):format(math.floor(L.seconds / 5 + 0.5) * 5) end
+        return ("Step on and wait for it: about %d seconds in all (estimate)"):format(math.floor(L.seconds / 5 + 0.5) * 5)
     elseif L.kind == "flight" then
         return ("Talk to the flight master and choose %s. %s in the air (estimate)"):format(L.toName, J.Minutes(L.seconds))
     elseif L.kind == "teleport" then
@@ -459,9 +464,31 @@ local function Arrive()
     end
 end
 
+-- The planner (nav/Journey.lua) for the destination, from where you are.
+local liftTried = false          -- a walk with nothing else on offer found no way: the planner, with lifts, has been tried
+local function PlanJourney()
+    local TV = R.NavTravel
+    local req = TV and TV.Request() or { faction = 1, speed = 7, ships = false, teleports = {} }
+    req.start = { cont = pos.cont, x = pos.x, y = pos.y }
+    req.goal = { cont = dest.continent, x = dest.wx, y = dest.wy }
+    local L = CurLeg()
+    req.prefer = route and route.startTile and { tile = route.startTile, poly = route.startPoly }
+        or (L and L.kind == "lift" and L.tprefer) or nil          -- just off a lift: on its far end's floor
+    job, jobGen = J.Plan(req), gen
+    SetState(journey and "recalculating" or "calculating")
+end
+
 local function Fail(why)
     stats.failures = stats.failures + 1
+    local was = pending or journey
     job, pending, legJob = nil, nil, nil
+    -- a plain walk to somewhere it doesn't reach: a lift may (Thunder Bluff, Freewind Post); the planner knows them
+    if why == "unreachable" and not liftTried and was and was.walkOnly and dest and pos.ok and pos.cont == dest.continent
+        and R.NavLifts and #R.NavLifts.On(pos.cont) > 0 and ND.Transit() then
+        liftTried = true
+        PlanJourney()
+        return
+    end
     local L = CurLeg()
     if (why == "start-off" or why == "unreachable") and L and L.kind ~= "walk" then
         -- aboard a boat or in the air with the journey still good: hold it, and look again in a moment
@@ -481,12 +508,12 @@ local function NextRouteJob(j, from)
         local L = j.legs[i]
         if L.kind == "walk" and not L.route and not L.routeFailed then
             local fx, fy = L.fx, L.fy
-            local prefer
+            local prefer = L.fprefer                       -- a walk from a lift's end starts on that end's floor
             if L.from == "S" and pos.ok and pos.cont == L.cont then
                 fx, fy = pos.x, pos.y                      -- the first walk starts where you are now
                 prefer = route and route.startTile and { tile = route.startTile, poly = route.startPoly } or nil
             end
-            legJob = RT.Plan(L.cont, fx, fy, L.tx, L.ty, prefer)
+            legJob = RT.Plan(L.cont, fx, fy, L.tx, L.ty, prefer, L.tprefer)
             legJobJourney, legJobIdx, legJobGen = j, i, gen
             return
         end
@@ -550,6 +577,7 @@ function Plan(kind)
         return
     end
     if job or legJob then stats.superseded = stats.superseded + 1 end
+    liftTried = false
     gen = gen + 1                                     -- anything still being searched is now stale
     job, pending, legJob = nil, nil, nil
     stats.plans = stats.plans + 1
@@ -559,7 +587,10 @@ function Plan(kind)
     local direct = pos.cont == dest.continent
     local TV = R.NavTravel
     local straight = direct and Dist(dest.wx, dest.wy, pos.x, pos.y) or math.huge
-    if direct and (straight <= J.MULTI_YARDS or not (TV and TV.Any()) or not ND.Transit()) then
+    -- (a short walk near a lift or stairs is planned with them: the walk round may be far longer)
+    local LF = R.NavLifts
+    local viaLifts = direct and LF and ND.Transit() and LF.Near(pos.cont, pos.x, pos.y, dest.wx, dest.wy, 250)
+    if direct and not viaLifts and (straight <= J.MULTI_YARDS or not (TV and TV.Any()) or not ND.Transit()) then
         if not ND.HasMap(pos.cont) then
             Emit("route")
             SetState("noroute", "no-data")
@@ -573,12 +604,7 @@ function Plan(kind)
         SetState("noroute", "other-continent")
         return
     end
-    local req = TV and TV.Request() or { faction = 1, speed = 7, ships = false, teleports = {} }
-    req.start = { cont = pos.cont, x = pos.x, y = pos.y }
-    req.goal = { cont = dest.continent, x = dest.wx, y = dest.wy }
-    req.prefer = route and route.startTile and { tile = route.startTile, poly = route.startPoly } or nil
-    job, jobGen = J.Plan(req), gen
-    SetState(journey and "recalculating" or "calculating")
+    PlanJourney()
 end
 
 function NV.OnCombatEnd()
@@ -592,7 +618,16 @@ end
 local function LegProgress(L, now)
     local dArr = (pos.cont == L.tcont) and Dist(pos.x, pos.y, L.tx, L.ty) or math.huge
     local dDep = (pos.cont == L.fcont) and Dist(pos.x, pos.y, L.fx, L.fy) or math.huge
-    if L.kind == "ferry" or L.kind == "flight" then
+    if L.kind == "lift" then
+        -- the lift is over once you stand at its other end; well away from where it starts and not there, you have left the plan
+        if dArr <= 10 and dDep > 12 then Plan("leg") return end
+        if dDep > 60 and dArr > 30 then
+            offSince = offSince or now
+            if now - offSince >= OFF_HOLD and now - lastPlanAt >= REPLAN_GAP then Plan("off") end
+        else
+            offSince = nil
+        end
+    elseif L.kind == "ferry" or L.kind == "flight" then
         if dArr <= (L.kind == "ferry" and 150 or 200) then Plan("leg") return end
         local land = OnLand()
         if dDep > 100 and not land then

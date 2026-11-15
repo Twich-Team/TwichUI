@@ -243,6 +243,7 @@ pins\Broker.lua
 nav\Prefs.lua
 nav\Data.lua
 nav\Route.lua
+nav\Lifts.lua
 nav\Journey.lua
 nav\Nav.lua
 nav\Auto.lua
