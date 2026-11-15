@@ -129,7 +129,7 @@ K.Page({
             return Slider(setting, NP.LIMITS[key][1], NP.LIMITS[key][2], tooltip)
         end
 
-        Header("Navigation", "Plans a way to a place you choose, on foot or by boat, zeppelin, flight, teleport or Hearthstone, and guides you along it. Off until you turn it on. It never moves your character, turns the camera, casts or clicks anything, and nothing another player sends you starts it.")
+        Header("Navigation", "Plans a way to a place you choose, on foot or by boat, zeppelin, flight, teleport or Hearthstone, and guides you along it. Off until you turn it on. It never moves your character, turns the camera, casts or clicks anything, and nothing another player sends you starts it. The one thing it can do for you is take a flight, only if you turn that on below.")
         local toggle = Toggle("navigation", "Turn on navigation",
             "Adds Navigate here to your pins' menus (Party pins) and a Navigate tool to the world map's tool bar, and /tui nav. Choosing one plans the way there and shows it.\n\nWalks are planned on maps made from the game's own terrain, buildings and water: they go round mountains, walls and lakes, and through gates and over bridges the maps know. Longer trips, and trips to another continent, are planned in steps with what you have (see Getting there). Lifts, the tram and portals aren't known. The walking maps (about 10 MB) load the first time you plan something, never at login and never in combat.")
         Under(K.Status("Walking maps", DataStatus, nil, "The walking maps are a separate addon, TwichUI_NavData, loaded the first time you plan a route."), toggle, On)
@@ -144,7 +144,7 @@ K.Page({
         Under(Check("navigationWorldTrail", "worldTrail", "Draw the route on the world map", "The route from where you are to the destination, on whichever map of its continent you look at. Under the map's pins and labels."), toggle, On)
         Under(Check("navigationMinimapTrail", "minimapTrail", "Draw the route on the minimap", "The part of the route near you. It turns with the minimap when the minimap rotates."), toggle, On)
 
-        Header("Getting there", "What a journey may use. A trip to another continent, or a long one, is planned in steps: walk, boat, zeppelin, flight, a Mage teleport, your Hearthstone. TwichUI never casts, rides or interacts for you: it says what to do and where.")
+        Header("Getting there", "What a journey may use. A trip to another continent, or a long one, is planned in steps: walk, boat, zeppelin, flight, a Mage teleport, your Hearthstone. TwichUI never casts, rides or interacts for you (a flight, only if you turn that on under Flights): it says what to do and where.")
         Under(Check("navigationShips", "useShips", "Use boats and zeppelins", "Transports between docks, from the game's own data. How long you wait is an average: where a boat is right now isn't known."), toggle, On)
         local flights = Under(Check("navigationFlights", "useFlights", "Use flights you have learned", "Only flight points TwichUI has seen your character can fly to: it adds them each time you open a flight master's map, and never forgets one. A point you haven't opened a map for isn't used. Only your faction's."), toggle, On)
         K.Note(flights, function()
@@ -166,6 +166,34 @@ K.Page({
         if speedSetting then behavior[#behavior + 1] = { setting = speedSetting, default = NP.DEFAULTS.speed } end
         Under(K.Dropdown(speedSetting, function() return NP.SPEEDS end,
             "Times in a journey assume this ground speed, and so decide whether a flight or a boat saves you anything. Mounts and buffs aren't read: choose what you usually have."), toggle, On)
+        Header("Flights", "When a journey's next step is a flight and you open the flight master's map.")
+        Under(Check("navigationHighlightFlight", "highlightFlight", "Highlight the flight to take", "While the flight master's map is open, a glow marks the flight point the journey lands at, on the game's own window. Nothing is clicked for you. It only appears for a point the map offers from where you are."), toggle, On)
+        local FL = R.NavFlight
+        local autoRow
+        local autoSetting = Proxy("navigationAutoFlight", BOOL, "Take the flight for me", NP.DEFAULTS.autoFlight,
+            function() return NP.Get("autoFlight") end,
+            function(value)
+                value = value and true or false
+                if value and FL and not FL.Acknowledged() then
+                    R.Interact.Confirm("TWICHUI_NAV_FLIGHT_AUTO",
+                        "Take flights automatically?\n\nWhen a journey's next step is a flight and you open the flight master's map at the flight master it meant, TwichUI chooses that flight for you, once, without asking. That spends the flight's cost and starts the flight. It never opens a map or talks to a flight master for you, never flies in combat, and leaves alone anything the map doesn't offer from where you are.\n\nThis confirmation is kept for your account on this computer. A profile or a shared setup can turn this on, but nothing flies for you until you have confirmed it here.",
+                        function()
+                            FL.Acknowledge()
+                            NP.Set("autoFlight", true)
+                            if autoRow then autoRow:GetSetting():NotifyUpdate() end
+                        end, { accept = "Take flights for me" })
+                    return
+                end
+                NP.Set("autoFlight", value)
+            end)
+        if autoSetting then behavior[#behavior + 1] = { setting = autoSetting, default = NP.DEFAULTS.autoFlight } end
+        autoRow = Under(K.Checkbox(autoSetting, "Off by default. When on, and confirmed, opening the flight master's map at the flight the journey wants takes that one flight, once, for you. Only with navigation on and a journey whose current step is that flight; never in combat or while already flying.\n\nWhether the game lets an addon do this is not known: if it refuses, TwichUI stops trying and this says so."), toggle, On)
+        K.Note(autoRow, function()
+            if not FL then return end
+            if FL.Blocked() then return "The game refused to let TwichUI take the flight, so it is off until you reload. The highlight still marks it for you to click.", "warn" end
+            if FL.AutoWaiting() then return "Chosen in a profile or a shared setup but not confirmed on this account yet: nothing flies for you. Turn it off and on here to confirm.", "warn" end
+        end)
+
         Header("Arriving and leaving the route", "When you count as there, and how far off the route counts as off it. Planning again waits a moment, so a quick step aside doesn't replan.")
         Under(Number("navigationArrival", "arrivalYards", "Arrived within", "How near the destination (in yards, straight line) counts as arrived. Navigation then ends by itself after a moment."), toggle, On)
         Under(Number("navigationOffRoute", "offRouteYards", "Off the route beyond", "How far from the route (in yards) counts as off it. Off it for a few seconds plans a new route from where you are. A teleport or a long jump plans again at once."), toggle, On)

@@ -967,11 +967,25 @@ function NV.Command(arg)
 end
 
 -- Read only, for /tui diagnostics: states and counts, never a place or a name.
+-- The flight the journey has you take next, for nav/Flight.lua: the current leg when it is a flight, or the flight after a walk
+-- to its flight master. { node (the game's taxi node of where it lands), name, index, current (it is the leg you are on),
+-- cont, x, y (its flight master) }, or nil. A snapshot; nothing here starts or stops anything.
+function NV.FlightNow()
+    if not (dest and journey and state == "navigating") then return nil end
+    local L, idx = CurLeg(), leg
+    if L and L.kind == "walk" and journey.legs[leg + 1] then L, idx = journey.legs[leg + 1], leg + 1 end
+    if not (L and L.kind == "flight") then return nil end
+    local tr = ND.Transit()
+    local pl = tr and tr.place[L.to]
+    if not (pl and type(pl.node) == "number" and pl.node > 0) then return nil end
+    return { node = pl.node, name = L.toName, index = idx, current = idx == leg, cont = L.fcont, x = L.fx, y = L.fy }
+end
+
 function NV.Diagnostics()
     return { state = state, reason = reason, active = dest ~= nil, routePoints = route and route.n or 0,
         legs = journey and #journey.legs or 0, leg = leg,
         searching = job ~= nil, axis = axis, plans = stats.plans, offRoute = stats.replansOff, jumps = stats.replansJump,
         failures = stats.failures, arrivals = stats.arrivals, superseded = stats.superseded, tickers = #tickers,
         driver = driver ~= nil and driver:GetScript("OnUpdate") ~= nil, data = ND.Snapshot(),
-        auto = R.NavAuto and R.NavAuto.Diagnostics() or nil }
+        auto = R.NavAuto and R.NavAuto.Diagnostics() or nil, flight = R.NavFlight and R.NavFlight.Diagnostics() or nil }
 end

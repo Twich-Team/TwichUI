@@ -8,7 +8,7 @@ client's coordinates and how it feels to follow are for the game.
 
 A journey to a place you choose, on this continent or another: walking, boats and zeppelins, flights you have learned, Mage
 teleports and your Hearthstone, whichever is quickest by estimate. A compact frame with the next instruction, a direction
-arrow, and the walks on the world map and the minimap. It never moves your character, turns the camera, casts, clicks or presses anything, and
+arrow, and the walks on the world map and the minimap. It never moves your character, turns the camera, casts, clicks or presses anything (the one exception is Take the flight for me, off by default, below), and
 nothing another player sends you (a ping, a party pin) ever starts it or changes its destination.
 
 ## Starting and stopping
@@ -129,6 +129,20 @@ Hearthstone says to use it. Nothing is ever cast, ridden or clicked for you.
 a boat or on a flight path (`UnitOnTaxi`) the state is "riding": nothing to follow, the plan is held. A boat's arrival (you
 are within 150 yd of its arrival dock), a landing, a teleport or the Hearthstone (a jump of 120 yd or a new continent), or
 walking well away from a dock you were to board, plans again from where you are.
+
+**Flights** (`nav/Flight.lua`). When a journey's current step is a flight (or a walk to its flight master) and the flight master's
+map is open, the flight point the journey lands at gets a glow, on whichever of the game's two flight windows is showing
+(the flight map's pins or the older taxi frame's buttons), only if the map offers it as reachable from where you are.
+**Highlight the flight to take** (`highlightFlight`) is on by default. **Take the flight for me** (`autoFlight`) is **off by
+default** and does nothing until it has been confirmed on this account (`ui.flightAck`, like the restocking confirmation; a
+profile or a shared setup can choose it but it waits for the confirmation here). When on: opening the map within 200 yards of
+the flight's own flight master, with that flight as the journey's current step, asks the game for that one flight (the slot
+the flight map gave for it), once (the same one is not tried again for 30 s). Never in combat, while already flying, from
+another flight master, or for a point the map doesn't offer as reachable; it never opens a map or talks to a flight master.
+**It is not known whether the client lets an addon call `TakeTaxiNode`** (the game's own windows call it from a click and it
+isn't in the documented API). The call is guarded, and if the client reports it refused for TwichUI (`ADDON_ACTION_FORBIDDEN` or
+`ADDON_ACTION_BLOCKED`) automatic flying turns itself off until a reload and the settings say so; the highlight stays. The
+navigation diagnostics' `flight` entry has the counts (maps opened, glows shown, tries, flights taken, refusals), never a place.
 
 **Known gaps.** The walking maps have no tram or Darnassus portal and only the lifts above, so Teldrassil is reached only by boat and
 Darnassus (a teleport lands there) is cut off from the rest of Kalimdor; Thunder Bluff's other rises (Hunter, Spirit, Elder) are not joined to the main mesa in the map (their rope bridges aren't in it). A destination

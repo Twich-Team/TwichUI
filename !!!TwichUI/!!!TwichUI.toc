@@ -248,6 +248,7 @@ nav\Journey.lua
 nav\Nav.lua
 nav\Auto.lua
 nav\Travel.lua
+nav\Flight.lua
 nav\Paint.lua
 nav\Unlock.lua
 nav\Frame.lua
