@@ -5,9 +5,21 @@ local D = { BATCH = 160, MAX = 20000, MS = 2, SORT_BATCH = 2048 }
 W.AuctionBrowseData = D
 local AD, MK = W.AdvisorData, W.Market
 local stats = {starts=0, completions=0, cancellations=0, errors=0, active=0,
-    projections=0, metadata=0, patches=0, invalidations=0, paints=0, longest=0}
+    projections=0, metadata=0, patches=0, rowUpdates=0, invalidations=0, paints=0, longest=0}
 function D.Count(key) stats[key]=math.min(1000000000,(stats[key] or 0)+1) end
 function D.Stats() local out={};for k,v in pairs(stats) do out[k]=v end;return out end
+function D.Less(a,b,opt)
+    if opt and opt.sort=="Name" then
+        local an,bn=a.info.name:lower(),b.info.name:lower()
+        if an~=bn then return an<bn end
+    elseif a.unit~=b.unit then
+        if not a.unit then return false end
+        if not b.unit then return true end
+        if opt and opt.reverse then return a.unit>b.unit end
+        return a.unit<b.unit
+    end
+    return a.item<b.item
+end
 function D.SameMarket(a,b)
     if a==b then return true end
     if not a or not b or a.key~=b.key then return false end
@@ -26,6 +38,7 @@ end
 function D.Patch(p,opt)
     if p.job or not p.catalog or not p.dirty then return false end
     local changed,n,began=false,0,debugprofilestop and debugprofilestop() or 0
+    local structural,selected,updates=false,false,{}
     for id in pairs(p.dirty) do
         p.dirty[id]=nil
         local row=p.catalog[id]
@@ -35,17 +48,19 @@ function D.Patch(p,opt)
             for k,v in pairs(info) do if row.info[k]~=v then different=true;break end end
             for k,v in pairs(row.info) do if info[k]~=v then different=true;break end end
             if different then
-                row.info=info;D.Count("patches");changed=true
+                row.info=info;D.Count("patches");changed=true;updates[id]=true
+                selected=selected or p.selected==id
                 local at
                 for i,r in ipairs(p.rows) do if r.item==id then at=i;break end end
+                if at and opt and opt.sort=="Name" then table.remove(p.rows,at);at=nil;structural=true end
                 local matches=D.Matches(row,opt)
-                if at and not matches then table.remove(p.rows,at)
+                if at and not matches then table.remove(p.rows,at);structural=true
                 elseif not at and matches then
+                    structural=true
                     local lo,hi=1,#p.rows+1
                     while lo<hi do
                         local mid=math.floor((lo+hi)/2);local r=p.rows[mid]
-                        if (r.unit or math.huge)<(row.unit or math.huge) or
-                            r.unit==row.unit and r.item<row.item then lo=mid+1 else hi=mid end
+                        if D.Less(r,row,opt) then lo=mid+1 else hi=mid end
                     end
                     table.insert(p.rows,lo,row)
                 end
@@ -61,7 +76,7 @@ function D.Patch(p,opt)
         for _,r in ipairs(p.rows) do if r.item==p.selected then selected=true;break end end
         if not selected then p.selected=p.rows[1] and p.rows[1].item end
     end
-    return changed
+    return changed,structural,selected,updates
 end
 D.CATEGORIES = { {"all", "All Categories"}, {"trade", "Trade Goods"}, {"consumable", "Consumable"},
     {"equipment", "Equipment"}, {"recipe", "Recipe"}, {"misc", "Miscellaneous"} }
@@ -99,10 +114,6 @@ function D.Row(item, market)
     local estimate = unit and qty and W.Int(unit * qty, 1, W.Prices.MAX_COPPER) or nil
     return { item = item, info = info, unit = unit, qty = qty, estimate = estimate,
         at = p and p.at, observed = p ~= nil, source = "stored", actionable = false }
-end
-local function Less(a,b)
-    if a.unit ~= b.unit then return (a.unit or math.huge) < (b.unit or math.huge) end
-    return a.item < b.item
 end
 -- Sort is cooperative too; no unbounded table.sort at the end of a catalog tick.
 function D.Job(opt)
@@ -150,7 +161,7 @@ function D.Job(opt)
                 local mid, hi = math.min(lo + width - 1, #rows), math.min(lo + width * 2 - 1, #rows)
                 local left, right = lo, mid + 1
                 for dst = lo, hi do
-                    if left <= mid and (right > hi or Less(rows[left], rows[right])) then scratch[dst] = rows[left]; left = left + 1
+                    if left <= mid and (right > hi or D.Less(rows[left], rows[right],opt)) then scratch[dst] = rows[left]; left = left + 1
                     else scratch[dst] = rows[right]; right = right + 1 end
                     Tick(D.SORT_BATCH)
                 end

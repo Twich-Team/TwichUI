@@ -425,6 +425,8 @@ metadata/patches during a client capture: duplicate events should increase the
 event counter without increasing starts or list presentations. Source changes
 and filter projections have separate counters; existing row-pool gauges expose
 frame growth. All mutation work is inside existing preview render/search scopes.
+`auction.catalogRowUpdates` counts individual pooled rows refreshed in place;
+offscreen metadata changes do not repaint unrelated visible rows.
 
 `auction.previewPageBuild` records each lazy page's first construction.
 `auction.previewResize` records the explicit resize drag (at most 20 Hz).

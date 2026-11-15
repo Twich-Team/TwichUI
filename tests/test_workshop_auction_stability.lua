@@ -57,12 +57,18 @@ for _,mode in ipairs({"browse","market"}) do
     end
     same(p.token,token,"metadata does not create generations")
     same(D.Stats().paints,paints,"duplicate events do not reconstruct visible rows")
+    local presentations,rowUpdates=D.Stats().paints,D.Stats().rowUpdates
     late[10]="Late Herb"
     Events(p,10);A.Render();FlushTimers()
     same(p.catalog[10].info.name,"Late Herb","affected row refreshed")
     same(p.selected,selected,"late metadata keeps selection")
     same(p.rows[math.floor(p.list.scroll:GetVerticalScroll()/p.list.rowH)+1].item,top)
     same(p.list.scroll:GetVerticalScroll()%p.list.rowH,17)
+    same(D.Stats().paints,presentations,"offscreen metadata does not reconstruct visible rows")
+    same(D.Stats().rowUpdates,rowUpdates,"offscreen metadata does not repaint unrelated rows")
+    late[top]="Renamed visible item";Events(p,top);A.Render();FlushTimers()
+    same(p.list.rows[1].name:GetText(),"Renamed visible item","only the affected visible frame is refreshed")
+    same(D.Stats().paints,presentations,"visible row patches also avoid list reconstruction")
     local search=A[mode=="browse" and "Browse" or "Market"].Search
     search("Not Yet Known");Settle(p)
     same(#p.rows,0)

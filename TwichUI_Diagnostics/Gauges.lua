@@ -209,6 +209,7 @@ local G = {
     { "auction.catalogFilters", "AH cached filter projections", "counter", "core", AuctionPreview("catalog_projections") },
     { "auction.catalogMetadata", "AH relevant metadata events", "counter", "core", AuctionPreview("catalog_metadata") },
     { "auction.catalogPatches", "AH changed metadata rows", "counter", "core", AuctionPreview("catalog_patches") },
+    { "auction.catalogRowUpdates", "AH individual visible row updates", "counter", "core", AuctionPreview("catalog_rowUpdates") },
     { "auction.catalogInvalidations", "AH source invalidations", "counter", "core", AuctionPreview("catalog_invalidations") },
     { "auction.catalogPaints", "AH result list presentations", "counter", "core", AuctionPreview("catalog_paints") },
     { "auction.catalogLongest", "AH longest catalog slice (ms)", "state", "core", AuctionPreview("catalog_longest") },
