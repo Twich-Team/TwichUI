@@ -825,3 +825,13 @@ m("crafting.ah.range-unqualified", "TwichUI_Workshop/auction/ShoppingData.lua",
 m("crafting.ah.unknown-requirements-as-ready", "TwichUI_Workshop/auction/ShoppingData.lua",
   "if P.Incomplete(plan,ctx) then", "if false then",
   "unread recipe requirements or bag counts are presented as fulfilled or fully priced", ["test_workshop_auction_shopping.lua"])
+
+m("market.auction-draft-total", "TwichUI_Workshop/auction/SellData.lua",
+  "result.gross=proceeds.gross", "result.gross=price",
+  "preparation displays a single unit as gross proceeds for a multi-item draft",
+  ["test_workshop_auction_reads.lua"])
+m("market.auction-read-invalid-complete", "TwichUI_Workshop/auction/ReadRequests.lua",
+  "complete=api.HasFullItemSearchResults(p.arg) and count<=Q.MAX and #rows==count",
+  "complete=api.HasFullItemSearchResults(p.arg) and count<=Q.MAX",
+  "a missing native listing is silently omitted while the response is marked complete",
+  ["test_workshop_auction_reads.lua"])

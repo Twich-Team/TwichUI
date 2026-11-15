@@ -22,7 +22,9 @@ function D.Matches(row, opt)
             if row.info.name:lower() ~= query and tostring(row.item) ~= query then return false end
         elseif not (row.info.name .. " " .. row.item):lower():find(query, 1, true) then return false end
     end
-    if opt.category and opt.category ~= "all" and D.Category(row.info) ~= opt.category then return false end
+    if opt.nativeCategory then
+        if not W.AuctionCategories.Matches(row.info,opt.nativeCategory) then return false end
+    elseif opt.category and opt.category ~= "all" and D.Category(row.info) ~= opt.category then return false end
     if opt.quality and opt.quality >= 0 and row.info.quality ~= opt.quality then return false end
     local bind = row.info.bindType
     if opt.auctionable and bind ~= 0 and bind ~= 2 and bind ~= 3 then return false end

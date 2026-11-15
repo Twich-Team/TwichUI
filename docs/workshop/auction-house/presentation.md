@@ -255,3 +255,11 @@ assertions passing. Together with the earlier sample this is an observation,
 not a before/after speedup or a hard client timing guarantee. Final static
 checks pass for local AH document links, whitespace, TOC/load order and absence
 of native auction/takeover operations in the standalone page modules.
+
+## Subsequent bounded campaign
+
+The separately authorized [overnight campaign](overnight.md) advances the
+read-only Browse foundation, Sell preparation and experimental My Auctions
+view. Its scope and actual evidence supersede the earlier placeholder/deferred
+status above for those pages only. It does not accept AH-1a, enable replacement
+or enable new preview transactions.

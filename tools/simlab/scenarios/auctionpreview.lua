@@ -1,5 +1,10 @@
 -- Real addon shell and handler-level inputs over a synthetic native-frame sentinel.
 -- No real auctioneer, server, pointer, combat, font or taint evidence.
+if P.categories then
+    -- Synthetic hierarchy tests presentation; runtime data comes from Blizzard.
+    AuctionCategories={{name="Fixture trade group",filters={{classID=7}},
+        subCategories={{name="Fixture subclass",filters={{classID=7,subClassID=0}}}}}}
+end
 local R = TwichUI
 A_Admin.SetManualClock(GetTime())
 Lab.Solo()
@@ -230,4 +235,35 @@ if P.shopping then A.Go("shopping");Lab.Settle(0.5) end
 if P.purpose then Pick(A.Page("shopping").groupDrop,"By crafting purpose") end
 if P.empty then A.Browse.Search("no matching observations");Lab.Settle(0.4) end
 if P.filtered then A.Browse.Search("Cloth");Lab.Settle(0.4) end
+
+if P.categories then
+    local p=A.Page("browse")
+    p.categoryList.rows[2]:Click();Lab.Settle(0.3)
+    p.categoryList.rows[3]:Click();Lab.Settle(0.3)
+end
+if P.sell then
+    C_Container.GetContainerNumSlots=function(bag) return bag==0 and not P.bagEmpty and 2 or 0 end
+    C_Container.GetContainerItemInfo=function(_,slot)
+        return {itemID=slot==1 and 7067 or 4306,stackCount=slot==1 and 3 or 20,isBound=false,isLocked=false}
+    end
+    C_AuctionHouse.IsSellItemValid=function() return true end
+    A.Go("sell");Lab.Settle(0.3)
+    local p=A.Page("sell")
+    if p.list.rows[1] and p.list.rows[1].data then
+        p.list.rows[1]:Click();p.price:SetText("101")
+    end
+end
+if P.owned then
+    -- Inject normalized synthetic evidence for presentation only; never native I/O.
+    local Q=R.Workshop.AuctionReads
+    Q.Available=function() return true end
+    Q.state=P.ownedEmpty and "empty" or "results"
+    Q.snapshot={epoch=Q.epoch,kind="owned",rows=P.ownedEmpty and {} or {
+        {auctionID=21,item=7067,itemKey={itemID=7067,itemLevel=0,itemSuffix=0},qty=3,total=299,unit=100,status=0,seconds=1800},
+        {auctionID=22,item=4306,itemKey={itemID=4306,itemLevel=0,itemSuffix=0},qty=20,total=12000,unit=600,status=0,band=2}
+    }}
+    A.Go("owned");Lab.Settle(0.3)
+    local p=A.Page("owned")
+    if p.list.rows[1] and p.list.rows[1].data then p.list.rows[1]:Click() end
+end
 Lab.Finish()
