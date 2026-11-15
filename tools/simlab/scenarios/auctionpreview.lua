@@ -157,7 +157,7 @@ Lab.Step("Shopping shared plan",function()
     Lab.Check("state","Shopping restores requirement",8,Find(7067) and Find(7067).missing)
     Lab.Check("state","Shopping one planner subscription",1,W.Strategy.ListenerCount())
     A.Go("browse");Lab.Settle(0.4)
-    Lab.Check("state","Shopping unsubscribes hidden",0,W.Strategy.ListenerCount())
+    Lab.Check("state","Shopping unsubscribes; Browse owns one source observer",1,W.Strategy.ListenerCount())
     Lab.Check("state","Shopping releases references",nil,p.plan)
     A.Browse.Search("");Lab.Settle(0.4);A.Browse.Select(7067)
 end)
@@ -212,6 +212,38 @@ local function MarketSeed(W,sparse,ageOffset)
     end
     W.Facts.CacheClear();W.AuctionMarketData.Clear()
     return key
+end
+-- Explicit synthetic read evidence, never a native request or transaction.
+local function SellFixture(W,empty)
+    local function Item(slot) return slot==1 and 2771 or 4306 end
+    local function Count(slot) return slot==1 and 3 or 20 end
+    C_Container={GetContainerNumSlots=function(bag) return bag==0 and not empty and 2 or 0 end,
+        GetContainerItemInfo=function(_,slot) return {itemID=Item(slot),stackCount=Count(slot),isBound=false,isLocked=false,
+            hyperlink="item:"..Item(slot)..":0:0:0:0:0:0:0:0:0:0:0"} end}
+    ItemLocation={CreateFromBagAndSlot=function(_,bag,slot) return {bag=bag,slot=slot} end}
+    C_AuctionHouse=setmetatable({
+        IsSellItemValid=function() return true end,
+        GetItemKeyFromItem=function(location) return {itemID=Item(location.slot),itemLevel=0,itemSuffix=0,battlePetSpeciesID=0} end,
+        GetAvailablePostCount=function(location) return Count(location.slot) end,
+        GetItemCommodityStatus=function() return Enum.ItemCommodityStatus.Item end,
+        SupportsCopperValues=function() return true end,
+        CalculateItemDeposit=function() return 123 end,
+    },getmetatable(C_AuctionHouse))
+    W.AuctionReads.Available=function() return true end
+    local reserved=W.AdvisorData.Reserved
+    W.AdvisorData.Reserved=function(item) if item==2771 then return 0,false end;return reserved(item) end
+end
+local function SellLive(W,p)
+    local Q=W.AuctionReads
+    local market=W.Market.Source().market
+    local key=p.chosen.itemKey
+    Q.serial=505
+    p.request={intent=505,epoch=Q.epoch,itemKey=key,marketStamp=market and market.key..":"..W.Valuation.Generation(market) or "none"}
+    Q.snapshot={kind="item",intent=505,epoch=Q.epoch,at=GetTime(),complete=true,rows={
+        Q.Listing({auctionID=201,itemKey=key,quantity=3,buyoutAmount=299,containsOwnerItem=false,containsAccountItem=false}),
+        Q.Listing({auctionID=202,itemKey=key,quantity=20,buyoutAmount=405000,containsOwnerItem=false,containsAccountItem=false}),
+        Q.Listing({auctionID=203,itemKey=key,quantity=1,buyoutAmount=1,containsOwnerItem=true,containsAccountItem=false})}}
+    Q.state="results";A.Render()
 end
 Lab.Step("Market research and cross-page safety",function()
     local W=R.Workshop
@@ -290,6 +322,48 @@ Lab.Step("control geometry and resize",function()
     Lab.Check("construct","resize remains inside viewport",true,f:GetWidth()*f:GetEffectiveScale()<=UIParent:GetWidth()*UIParent:GetEffectiveScale())
     A.Resize(1420,880);Lab.Settle(0.2)
 end)
+Lab.Step("Sell price preparation without transactions",function()
+    local W=R.Workshop;local Q=W.AuctionReads
+    local old={container=C_Container,location=ItemLocation,api=C_AuctionHouse,available=Q.Available,
+        reserved=W.AdvisorData.Reserved,snapshot=Q.snapshot,serial=Q.serial,epoch=Q.epoch,state=Q.state}
+    local before=calls
+    SellFixture(W)
+    A.Go("sell");Lab.Settle(0.2)
+    local p=A.Page("sell")
+    Lab.Check("construct","Sell preparation built",nil,p.failed)
+    p.list.rows[1]:Click()
+    Lab.Check("state","Sell default selected-stack max","3",p.quantity:GetText())
+    p.money:SetCopper(12345)
+    Lab.Check("interact","Sell gold input","1",p.money.gold:GetText())
+    Lab.Check("interact","Sell silver input","23",p.money.silver:GetText())
+    Lab.Check("interact","Sell copper input","45",p.money.copper:GetText())
+    Lab.Check("state","Sell integer gross",37035,p.draft.gross)
+    Lab.Check("state","Sell quoted upfront deposit",123,p.draft.deposit)
+    Lab.Check("state","Sell commission remains unknown",nil,p.draft.fees)
+    Lab.Check("state","Sell net remains unknown",nil,p.draft.net)
+    SellLive(W,p)
+    Lab.Check("state","Sell excludes owned competition",2,#p.competition.rows)
+    Lab.Check("state","Sell exact competing total",299,p.competition.rows[1].total)
+    Lab.Check("state","Sell normalized competing unit",100,p.competition.rows[1].unit)
+    p.competitionList.rows[1]:Click()
+    Lab.Check("interact","Sell click copies only unit price",100,p.money:GetCopper())
+    Lab.Settle(0.2)
+    Lab.Check("state","Sell deferred match provenance",true,p.priceOrigin=="Matched current listing" and p.matched==201)
+    Lab.Check("state","Sell broker total unmodified",299,Q.snapshot.rows[1].total)
+    p.quantity:SetText("1");p.max:Click()
+    Lab.Check("interact","Sell Max shortcut","3",p.quantity:GetText())
+    Q.snapshot.complete=false;A.Render();p.money:SetCopper(777);p.competitionList.rows[1]:Click()
+    Lab.Check("state","Sell partial response cannot copy",777,p.money:GetCopper())
+    Lab.Check("state","Sell post stays disabled",false,p.post:IsEnabled())
+    Lab.Check("state","Sell has no post handler",nil,p.post:GetScript("OnClick"))
+    Lab.Check("state","Sell preparation sends no native operation",before,calls)
+    A.Go("browse");Lab.Settle(0.3)
+    Lab.Check("state","Sell hidden competition released",nil,p.competition)
+    C_Container,ItemLocation,C_AuctionHouse=old.container,old.location,old.api
+    Q.Available,W.AdvisorData.Reserved=old.available,old.reserved
+    Q.snapshot,Q.serial,Q.epoch,Q.state=old.snapshot,old.serial,old.epoch,old.state
+    A.Note("Transactions unavailable")
+end)
 Lab.RunUntil(math.max(5.5,Lab.simSeconds))
 if P.resized then A.Resize(1720,1000);Lab.Settle(0.2) end
 if P.shopping then A.Go("shopping");Lab.Settle(0.5) end
@@ -303,16 +377,34 @@ if P.categories then
     p.categoryList.rows[3]:Click();Lab.Settle(0.3)
 end
 if P.sell then
-    C_Container.GetContainerNumSlots=function(bag) return bag==0 and not P.bagEmpty and 2 or 0 end
-    C_Container.GetContainerItemInfo=function(_,slot)
-        return {itemID=slot==1 and 7067 or 4306,stackCount=slot==1 and 3 or 20,isBound=false,isLocked=false}
-    end
-    C_AuctionHouse.IsSellItemValid=function() return true end
+    MarketSeed(R.Workshop)
+    SellFixture(R.Workshop,P.bagEmpty)
     A.Go("sell");Lab.Settle(0.3)
     local p=A.Page("sell")
     if p.list.rows[1] and p.list.rows[1].data then
-        p.list.rows[1]:Click();p.price:SetText("101")
+        p.list.rows[1]:Click()
+        if not P.savedCompetition then SellLive(R.Workshop,p);p.competitionList.rows[1]:Click()
+        else p.money:SetCopper(20200) end
     end
+end
+if P.loading then
+    local W=R.Workshop
+    MarketSeed(W)
+    local m=TwichUIWorkshopDB.markets["Fixture Realm|Alliance"]
+    for id=20000,25999 do m.items[id]=m.items[7067] end
+    m.n=0;for _ in pairs(m.items) do m.n=m.n+1 end
+    -- The simulator drains zero-delay timers in one manual-clock tick. Keep
+    -- real discovery slices on separate ticks for this capture only.
+    local after=C_Timer.After
+    C_Timer.After=function(delay,fn) return after(delay==0 and 0.05 or delay,fn) end
+    A.Hide();W.AuctionBrowseData.BATCH=1;A.Show();A.Browse.Search("")
+    Lab.Settle(0.1)
+    local p=A.Page("browse")
+    Lab.Check("state","Loading capture has an active real discovery",true,p.job~=nil and #p.rows==0)
+end
+if P.livePrepare then
+    local p=A.Page("browse")
+    p.search:SetText("Silk Cloth");p.live:Click()
 end
 if P.owned then
     -- Inject normalized synthetic evidence for presentation only; never native I/O.
@@ -352,5 +444,8 @@ if P.market then
     A.Market.Select(7067)
     if P.marketRecent then A.Market.Range(2) elseif P.marketLong then A.Market.Range(120) else A.Market.Range(14) end
     if P.marketTracked then A.Market.Filter("scope","tracked");Lab.Settle(0.5) end
+    if P.marketMetadata then
+        Lab.Check("construct","Market long title fits its heading",true,p.name:GetText()==itemNames[7067] and not p.name:IsTruncated() and p.name:GetStringHeight()<=p.name:GetHeight())
+    end
 end
 Lab.Finish()

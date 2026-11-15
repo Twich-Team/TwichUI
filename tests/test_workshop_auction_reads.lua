@@ -145,6 +145,7 @@ Press.Must(p.categoryList.rows[3])
 same(p.category,"native:1.1","direct child selection")
 local job=p.job
 for i=1,20 do p:GetScript("OnEvent")(p,"GET_ITEM_INFO_RECEIVED",10,true);A.Render();same(p.job,job,"job not restarted") end
+while p.job do FlushTimers() end -- Finish discovery before injecting the next job's callback failure.
 -- A throwing timer slice terminates with a visible failed state.
 W.AuctionBrowseData.Job=function() return {Step=function() error("callback failure") end} end
 A.Browse.Search("error");FlushTimers()
@@ -175,10 +176,10 @@ c.C_Container={GetContainerNumSlots=function(bag) return bag==0 and 1 or 0 end,
 c.ItemLocation={CreateFromBagAndSlot=function() return {} end}
 c.C_AuctionHouse.IsSellItemValid=function() return true end
 A.Show();A.Go("sell");local sell=A.Page("sell")
-same(#sell.rows,1,"bags only");Press.Must(sell.list.rows[1]);sell.price:SetText("100")
+same(#sell.rows,1,"bags only");Press.Must(sell.list.rows[1]);sell.money:SetCopper(100)
 same(sell.chosen.qty,5);qty=2;A.Render()
 same(sell.selected,nil,"bag quantity change invalidates draft selection")
-same(sell.price:GetText(),"","bag changes clear unit-price intent")
+same(sell.money:GetCopper(),nil,"bag changes clear unit-price intent")
 same(sell.post:IsEnabled(),false)
 A.Hide()
 A.Show();A.Go("owned")

@@ -32,8 +32,8 @@ local c = MIClient("Rich", {
       fr.UnregisterAllEvents = function(s) s.events = {} end
       fr.SetFrameStrata = function() end
       fr.SetMotionScriptsWhileDisabled = function() end
-      fr.CreateTexture = function(s) local t = MIFake("Texture", s); t.SetColorTexture = function() end t.SetVertexColor = function() end t.SetTexCoord = function() end t.SetTexture = function(x, v) x.texture = v end return t end
-      fr.CreateFontString = function(s) local t = MIFake("FontString", s); t.SetFont = function() return true end t.SetJustifyV = function() end t.SetWordWrap = function() end t.SetTextColor = function() end return t end
+      fr.CreateTexture = function(s) local t = MIFake("Texture", s); t.SetColorTexture = function() end t.SetVertexColor = function() end t.SetTexCoord = function() end t.SetTexture = function(x, v) x.texture = v end t.SetAtlas = function(x,v) x.atlas=v end return t end
+      fr.CreateFontString = function(s) local t = MIFake("FontString", s); t.SetFont = function() return true end t.SetJustifyV = function() end t.SetWordWrap = function() end t.SetTextColor = function() end t.SetDirection = function() error("FontString has no SetDirection API") end return t end
       Press.Instrument(fr, name)   -- last, so it replaces the no-op EnableMouse above with one that records
       if cl.testFrames then cl.testFrames[#cl.testFrames+1] = fr end
       if name then cl[name] = fr end

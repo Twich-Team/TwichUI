@@ -1,6 +1,42 @@
 -- Shared presentation pieces for the approved AH cards and filters. No game actions.
 local R, W = TwichUI, TwichUI.Workshop
 local A, UI = W.AuctionUI, W.UI
+function A.PatchRows(list,updates)
+    for _,row in ipairs(list.rows) do
+        if row:IsShown() and row.data and updates[row.data.item] then
+            row.fill(row,row.data);W.AuctionBrowseData.Count("rowUpdates")
+        end
+    end
+end
+
+-- Familiar denomination fields using the same coin atlases as the native
+-- money input used by Sell from Bags. No search decoration or raw-copper field.
+function A.MoneyInputs(parent,changed)
+    local f=CreateFrame("Frame",nil,parent);f:SetSize(286,60)
+    f.fields={}
+    for i,def in ipairs({{"Gold",110,"coin-gold"},{"Silver",80,"coin-silver"},{"Copper",80,"coin-copper"}}) do
+        local x=i==1 and 0 or i==2 and 118 or 206
+        local label=UI.Text(f,12,UI.K.textDim);label:SetPoint("TOPLEFT",x,0);label:SetText(def[1])
+        local box=UI.L.EditBox(f,def[2],38);UI.CL.Dress(box,"field")
+        box:SetPoint("TOPLEFT",x,-20);box:SetTextInsets(8,24,0,0);box:SetMaxLetters(i==1 and 7 or 2)
+        box:SetJustifyH("RIGHT")
+        box.coin=box:CreateTexture(nil,"ARTWORK");box.coin:SetSize(14,16);box.coin:SetPoint("RIGHT",-7,0);box.coin:SetAtlas(def[3])
+        box:SetScript("OnTextChanged",function() if not f.setting and changed then changed() end end)
+        box:SetScript("OnEscapePressed",function(self) self:ClearFocus() end)
+        f.fields[i]=box
+    end
+    for i,box in ipairs(f.fields) do
+        box:SetScript("OnTabPressed",function() local nextBox=f.fields[i%3+1];nextBox:SetFocus();nextBox:HighlightText() end)
+    end
+    f.gold,f.silver,f.copper=f.fields[1],f.fields[2],f.fields[3]
+    function f:GetCopper() return W.AuctionSellData.Money(self.gold:GetText(),self.silver:GetText(),self.copper:GetText()) end
+    function f:SetCopper(n)
+        local g,s,c=W.AuctionSellData.Coins(n)
+        self.setting=true;self.gold:SetText(g);self.silver:SetText(s);self.copper:SetText(c);self.setting=false
+        if changed then changed() end
+    end
+    return f
+end
 
 function A.Text(parent, text, size, x, y, right, color)
     local t = UI.Text(parent, size or 14, color or UI.K.text)

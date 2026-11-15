@@ -4,6 +4,80 @@ local R, W = TwichUI, TwichUI.Workshop
 local D = { BATCH = 160, MAX = 20000, MS = 2, SORT_BATCH = 2048 }
 W.AuctionBrowseData = D
 local AD, MK = W.AdvisorData, W.Market
+local stats = {starts=0, completions=0, cancellations=0, errors=0, active=0,
+    projections=0, metadata=0, patches=0, rowUpdates=0, invalidations=0, paints=0, longest=0}
+function D.Count(key) stats[key]=math.min(1000000000,(stats[key] or 0)+1) end
+function D.Stats() local out={};for k,v in pairs(stats) do out[k]=v end;return out end
+function D.Less(a,b,opt)
+    if opt and opt.sort=="Name" then
+        local an,bn=a.info.name:lower(),b.info.name:lower()
+        if an~=bn then return an<bn end
+    elseif a.unit~=b.unit then
+        if not a.unit then return false end
+        if not b.unit then return true end
+        if opt and opt.reverse then return a.unit>b.unit end
+        return a.unit<b.unit
+    end
+    return a.item<b.item
+end
+function D.SameMarket(a,b)
+    if a==b then return true end
+    if not a or not b or a.key~=b.key then return false end
+    -- Prices.Market returns a fresh read facade; compare its backing stores.
+    for _,k in ipairs({"items","h2","c2","hist","dist"}) do if a[k]~=b[k] then return false end end
+    return true
+end
+-- Metadata is a row change, never a new catalog generation. Keep candidates
+-- excluded by a filter too, so late names/categories can enter the same view.
+function D.Metadata(p,item,ok)
+    local id=W.Int(W.Plain(item),1,W.MAX_ID)
+    if ok==false or not id or not (p.job and p.job.seen and p.job.seen[id] or p.known and p.known[id]) then return end
+    D.Count("metadata")
+    p.dirty=p.dirty or {};p.dirty[id]=true
+end
+function D.Patch(p,opt)
+    if p.job or not p.catalog or not p.dirty then return false end
+    local changed,n,began=false,0,debugprofilestop and debugprofilestop() or 0
+    local structural,selected,updates=false,false,{}
+    for id in pairs(p.dirty) do
+        p.dirty[id]=nil
+        local row=p.catalog[id]
+        if row then
+            local info=AD.Info(id)
+            local different=false
+            for k,v in pairs(info) do if row.info[k]~=v then different=true;break end end
+            for k,v in pairs(row.info) do if info[k]~=v then different=true;break end end
+            if different then
+                row.info=info;D.Count("patches");changed=true;updates[id]=true
+                selected=selected or p.selected==id
+                local at
+                for i,r in ipairs(p.rows) do if r.item==id then at=i;break end end
+                if at and opt and opt.sort=="Name" then table.remove(p.rows,at);at=nil;structural=true end
+                local matches=D.Matches(row,opt)
+                if at and not matches then table.remove(p.rows,at);structural=true
+                elseif not at and matches then
+                    structural=true
+                    local lo,hi=1,#p.rows+1
+                    while lo<hi do
+                        local mid=math.floor((lo+hi)/2);local r=p.rows[mid]
+                        if D.Less(r,row,opt) then lo=mid+1 else hi=mid end
+                    end
+                    table.insert(p.rows,lo,row)
+                end
+                if p.index then p.index[id]=matches and row or nil end
+            end
+        end
+        n=n+1
+        if n>=D.BATCH or debugprofilestop and debugprofilestop()-began>=D.MS then break end
+    end
+    if next(p.dirty) then W.AuctionUI.Schedule() else p.dirty=nil end
+    if changed then
+        local selected=false
+        for _,r in ipairs(p.rows) do if r.item==p.selected then selected=true;break end end
+        if not selected then p.selected=p.rows[1] and p.rows[1].item end
+    end
+    return changed,structural,selected,updates
+end
 D.CATEGORIES = { {"all", "All Categories"}, {"trade", "Trade Goods"}, {"consumable", "Consumable"},
     {"equipment", "Equipment"}, {"recipe", "Recipe"}, {"misc", "Miscellaneous"} }
 D.QUALITIES = { {-1, "All Qualities"}, {0, "Poor"}, {1, "Common"}, {2, "Uncommon"}, {3, "Rare"}, {4, "Epic"}, {5, "Legendary"} }
@@ -41,14 +115,11 @@ function D.Row(item, market)
     return { item = item, info = info, unit = unit, qty = qty, estimate = estimate,
         at = p and p.at, observed = p ~= nil, source = "stored", actionable = false }
 end
-local function Less(a,b)
-    if a.unit ~= b.unit then return (a.unit or math.huge) < (b.unit or math.huge) end
-    return a.item < b.item
-end
 -- Sort is cooperative too; no unbounded table.sort at the end of a catalog tick.
 function D.Job(opt)
     opt = opt or {}
-    local job = { rows = {}, scanned = 0, capped = false }
+    local job = { rows = {}, scanned = 0, capped = false, catalog={}, discovering=not opt.catalog }
+    D.Count(opt.catalog and "projections" or "starts");stats.active=stats.active+1
     local co = coroutine.create(function()
         local work = 0
         local began = debugprofilestop and debugprofilestop() or 0
@@ -68,28 +139,29 @@ function D.Job(opt)
             if not id or seen[id] then return end
             if job.scanned >= D.MAX then job.capped = true; return end
             seen[id] = true; job.scanned = job.scanned + 1
-            local row = D.Row(id, market)
+            local row = opt.catalog and opt.catalog[id] or D.Row(id, market)
+            job.catalog[id]=row
             if D.Matches(row, opt) then
                 job.rows[#job.rows + 1] = row
                 if job.index then job.index[id] = row end
             end
         end
         if opt.item then Add(opt.item); Tick() end
-        for _, source in ipairs(opt.sources or {market and market.items or {}}) do
+        for _, source in ipairs(opt.catalog and {opt.catalog} or opt.sources or {market and market.items or {}}) do
             for id in pairs(source) do
                 Add(id); Tick()
                 if job.capped then break end
             end
             if job.capped then break end
         end
-        if opt.enumerate and not job.capped then opt.enumerate(Add, Tick, job) end
+        if opt.enumerate and not opt.catalog and not job.capped then opt.enumerate(Add, Tick, job) end
         local rows, scratch, width = job.rows, {}, 1
         while width < #rows do
             for lo = 1, #rows, width * 2 do
                 local mid, hi = math.min(lo + width - 1, #rows), math.min(lo + width * 2 - 1, #rows)
                 local left, right = lo, mid + 1
                 for dst = lo, hi do
-                    if left <= mid and (right > hi or Less(rows[left], rows[right])) then scratch[dst] = rows[left]; left = left + 1
+                    if left <= mid and (right > hi or D.Less(rows[left], rows[right],opt)) then scratch[dst] = rows[left]; left = left + 1
                     else scratch[dst] = rows[right]; right = right + 1 end
                     Tick(D.SORT_BATCH)
                 end
@@ -100,12 +172,19 @@ function D.Job(opt)
     end)
     function job:Step()
         if self.done then return true, self.error end
+        local began=debugprofilestop and debugprofilestop() or 0
         local function Resume() return coroutine.resume(co) end
         local ok, err = R.Perf.Call("auction.previewSearch", Resume)
         self.done = coroutine.status(co) == "dead"
         self.error = not ok and tostring(err) or nil
         if self.error then self.done = true; self.rows = {} end
+        if debugprofilestop then stats.longest=math.max(stats.longest,debugprofilestop()-began) end
+        if self.done then stats.active=math.max(0,stats.active-1);D.Count(self.error and "errors" or "completions") end
         return self.done, self.error
+    end
+    function job:Cancel()
+        if self.done then return end
+        self.done=true;self.error="canceled";stats.active=math.max(0,stats.active-1);D.Count("cancellations")
     end
     return job
 end

@@ -45,7 +45,7 @@ local function Detail(p)
     end
     local r=selected.row
     d.name:SetText(selected.info.name);d.pic.tex:SetTexture(selected.info.icon or UI.ICON_BLANK)
-    d.kind:SetText((selected.info.category or "Metadata unavailable").." · "..SOURCE[selected.source])
+    d.kind:SetText(selected.info.category or "Metadata unavailable")
     d.quantities:SetText("Required: "..Num(r.need).."    In bags: "..Num(r.have).."\n"..
         (r.kind=="collect" and "To collect: " or "Still to get: ")..Num(r.qty)..
         ((r.made or 0)>0 and (" · From queued crafts: "..r.made) or ""))
@@ -53,9 +53,9 @@ local function Detail(p)
     d.cost:SetText(cost or "Price unknown")
     d.costNote:SetText((note or (r.at and ("Observed "..UI.Ago(r.at)) or "Source/price may be unavailable."))..
         (p.ctx.stale and " Previous plan; quantities may change." or ""))
-    d.sourceText:SetText((r.picked and "Your source choice: " or "Planned source: ")..SOURCE[selected.source]..
+    d.sourceText:SetText((r.picked and "Your choice: " or "")..SOURCE[selected.source]..
         (r.kind=="collect" and (r.where=="guild" and " · guild bank" or " · personal bank") or "")..
-        "\n"..(r.kind=="collect" and "Stored stock may have changed." or "Last observed costs; no live purchase quote."))
+        (r.kind=="collect" and "\nStored stock may have changed." or ""))
     if r.kind~="collect" and p.current then
         local choices={}
         for _,k in ipairs(W.Shopping.Choices(r)) do choices[k]=true end
@@ -65,8 +65,7 @@ local function Detail(p)
     local facts=W.Facts.Of(r.item)
     d.chart:Set(W.Facts.Chart(facts),UI.Money)
     local rec=W.AdvisorData.Decide(r.item,false)
-    d.advice:SetText((rec.text or "Limited evidence").."\n"..
-        (p.current and "Shared plan; purchasing unavailable." or "Wait for the plan to finish."))
+    d.advice:SetText((rec.text or "Limited evidence")..(p.current and "" or "\nWait for the plan to finish."))
     d.advisorTip=table.concat(rec.reasons or {},"\n")
     d.track.text:SetText(W.AdvisorData.Tracked()[r.item] and "Untrack" or "Track")
     Evidence(d,selected,p)
@@ -80,17 +79,23 @@ local function Row(parent)
         local t=UI.Text(r,12,UI.K.text);t:SetWidth(w);t:SetJustifyH("RIGHT");t:SetPoint("RIGHT",x,7);return t
     end
     r.need=Cell(46,-454);r.have=Cell(46,-402);r.missing=Cell(46,-350)
-    r.source=Cell(92,-250);r.cost=Cell(118,-126);r.purpose=Cell(112,-8)
+    r.source=Cell(82,-246);r.cost=Cell(110,-126);r.purpose=Cell(112,-8)
+    UI.CL.Font(r.source,11)
+    r.sourceIcon=r:CreateTexture(nil,"ARTWORK");r.sourceIcon:SetSize(18,18);r.sourceIcon:SetPoint("RIGHT",-332,7)
     r:SetScript("OnClick",function(self) if self.data then Select(self.data.key) end end)
     r.fill=function(self,v)
         self.data=v
         self.pic.tex:SetTexture(v.info.icon or UI.ICON_BLANK)
         self.name:SetText(v.info.name)
         self.need:SetText(Num(v.need));self.have:SetText(Num(v.have));self.missing:SetText(Num(v.missing))
-        self.source:SetText(SOURCE[v.source]);self.cost:SetText((P.Cost(v.row,UI.Money)) or "Unknown")
+        local cue=P.Cue(v.row)
+        self.source:SetText(cue[1]);UI.Art(self.sourceIcon,cue[2],18)
+        UI.Paint(self.source,v.source=="auction" and UI.K.bronzeText or UI.K.text)
+        self.cost:SetText((P.Cost(v.row,UI.Money)) or "Unknown")
         self.purpose:SetText(v.purpose)
-        self.sub:SetText((v.row.picked and "Your choice · " or "")..(v.row.kind=="collect" and "Collect stored stock; no purchase" or
-            v.row.kind=="make" and "Crafting costs are counted in material rows" or "Observed costs; availability unknown"))
+        self.sub:SetText(v.row.picked and "Your source choice" or v.row.kind=="collect" and
+            (v.row.where=="guild" and "Guild bank stock" or "Personal bank stock") or
+            v.row.kind=="make" and "Planned craft" or v.row.at and ("Observed "..UI.Ago(v.row.at)) or "")
         self:SetSelected(page.selected==v.key)
     end
     UI.TipFn(r,"Shared shopping requirement",function()
@@ -107,7 +112,7 @@ local function BuildDetail(p)
     d.kind:ClearAllPoints();d.kind:SetPoint("TOPLEFT",12,-74);d.kind:SetPoint("RIGHT",-12,0)
     local q=A.Card(d.body,"Quantities",56);q:SetPoint("TOPLEFT",4,-90);q:SetPoint("TOPRIGHT",-4,-90)
     d.quantities=A.Text(q,"",11,12,-28);d.quantities:SetWordWrap(true);d.quantities:SetHeight(24)
-    local sources=A.Card(d.body,"Best Sources · shared decisions",98)
+    local sources=A.Card(d.body,"Acquisition source",98)
     sources:SetPoint("TOPLEFT",4,-154);sources:SetPoint("TOPRIGHT",-4,-154)
     d.sourceText=A.Text(sources,"",11,12,-32);d.sourceText:SetHeight(28);d.sourceText:SetWordWrap(true)
     d.choices={}
@@ -144,7 +149,7 @@ local function BuildDetail(p)
     d.vendor=UI.Button(d,"Show vendor",91,"secondary",function()
         if d.data and p.current then S.ShowVendor(d.data.row.item) end
     end,28);d.vendor:SetPoint("BOTTOMLEFT",7,10)
-    d.browse=UI.Button(d,"Browse history",99,"secondary",function()
+    d.browse=UI.Button(d,"Browse",99,"secondary",function()
         local v=d.data
         if v and p.current then A.OpenBrowse(v.row.item,v.row.qty) end
     end,28);d.browse:SetPoint("LEFT",d.vendor,"RIGHT",4,0)

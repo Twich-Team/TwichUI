@@ -43,10 +43,15 @@ function Q.EnableExperimental(on)
     Q.experimental=on==true;Q.ambiguous=true;Q.End("reopen auctioneer after experimental opt-in")
 end
 function Q.Key(k)
-    if type(k)~="table" or not W.Int(k.itemID,1,W.MAX_ID) then return nil end
-    local out={itemID=k.itemID}
+    k=W.Plain(k)
+    if type(k)~="table" then return nil end
+    local id=W.Int(W.Plain(k.itemID),1,W.MAX_ID)
+    if not id then return nil end
+    local out={itemID=id}
     for _,f in ipairs({"itemLevel","itemSuffix","battlePetSpeciesID"}) do
-        out[f]=W.Int(k[f] or 0,0,W.MAX_ID)
+        local value=k[f]
+        if type(value)=="nil" then value=0 else value=W.Plain(value) end
+        out[f]=W.Int(value,0,W.MAX_ID)
         if not out[f] then return nil end
     end
     return out
@@ -58,6 +63,7 @@ local function Same(a,b)
 end
 local function Amount(v) return W.Int(W.Plain(v),1,W.Prices.MAX_COPPER) end
 function Q.Listing(x,commodity)
+    x=W.Plain(x)
     if type(x)~="table" then return nil end
     local qty=W.Int(W.Plain(x.quantity),1,W.MAX_ID)
     local id=W.Int(W.Plain(x.auctionID),1,9007199254740991)
@@ -68,10 +74,12 @@ function Q.Listing(x,commodity)
         unit=Amount(x.unitPrice)
         total=unit and W.Int(unit*qty,1,W.Prices.MAX_COPPER)
     else total=Amount(x.buyoutAmount);unit=total and math.ceil(total/qty) end
-    return {auctionID=id,itemKey=key,item=key.itemID,qty=qty,unit=unit,total=total,
-        bid=Amount(x.bidAmount) or Amount(x.minBid),status=W.Int(x.status,0,1),
-        seconds=W.Int(x.timeLeftSeconds,0,W.MAX_ID),band=W.Int(x.timeLeft,0,10),
-        own=x.containsOwnerItem==true,account=x.containsAccountItem==true,actionable=false}
+    local own,account=W.Plain(x.containsOwnerItem),W.Plain(x.containsAccountItem)
+    return {auctionID=id,itemKey=key,item=key.itemID,link=W.Text(W.Plain(x.itemLink),1000),qty=qty,unit=unit,total=total,
+        bid=Amount(x.bidAmount) or Amount(x.minBid),status=W.Int(W.Plain(x.status),0,1),
+        seconds=W.Int(W.Plain(x.timeLeftSeconds),0,W.MAX_ID),band=W.Int(W.Plain(x.timeLeft),0,10),
+        own=own==true,account=account==true,
+        ownershipKnown=type(own)=="boolean" and type(account)=="boolean",actionable=false}
 end
 local function Finish(state,rows,complete)
     if not pending then return end
@@ -86,6 +94,7 @@ local function Finish(state,rows,complete)
 end
 function Q.BrowseQuery(opt)
     opt=opt or {}
+    if opt.text~=nil and (type(opt.text)~="string" or #opt.text>200) then return nil,"Search text is invalid." end
     local query={searchString=W.Text(opt.text,200) or "",sorts={}}
     local filters=Enum and Enum.AuctionHouseFilter
     if filters then
@@ -106,6 +115,8 @@ function Q.BrowseQuery(opt)
     end
     query.minLevel=W.Int(opt.minLevel,0,W.MAX_ID)
     query.maxLevel=W.Int(opt.maxLevel,0,W.MAX_ID)
+    if opt.minLevel~=nil and query.minLevel==nil or opt.maxLevel~=nil and query.maxLevel==nil or
+        query.minLevel and query.maxLevel and query.minLevel>query.maxLevel then return nil,"Level restrictions are invalid." end
     local sorts=Enum and Enum.AuctionHouseSortOrder
     local allowed={Price=true,Name=true,Level=true,Bid=true,Buyout=true,TimeRemaining=true}
     if sorts and allowed[opt.sort] and sorts[opt.sort] then

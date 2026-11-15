@@ -71,6 +71,19 @@ sweep remains strict. `test_simlab_smoke.py` verifies these failure paths; the
 existing diagnostics contract also probes invalid UTF-8 without any addon loaded.
 This classification says nothing about the real client's transport contract.
 
+Smoke also covers six seconds of manual-clock advancement, crossing the native
+five-second audio-settings ticker instead of depending on startup phase. Its
+existing `voice-settings-unsupplied` rule is permitted only when a read-only
+`pcall` probe confirms that the actual C binding raises the exact missing-capability
+message. The full error must occur between this fixture's clock markers, with
+only the observed native `AdvanceTime`/fixture-main traceback and optional
+Blizzard error-report frames. An addon frame, absent probe, different message,
+out-of-window error or uncorroborated suppressed summary fails. No native API is
+replaced. The construction sweep remains strict. Reproduction, negative controls
+and complete regression evidence are in
+[AH integration verification](workshop/auction-house/integration-verification.md).
+
+
 ## PNG reproducibility remains a gate
 
 `tests/test_reminder_gallery.py`, `Rebuild.test_sample_pictures_are_what_the_tool_builds`
