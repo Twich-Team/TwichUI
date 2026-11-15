@@ -23,7 +23,7 @@ CLEAR_ENV = (
     'CRAFT_SEED', 'CRAFT_SCENARIOS', 'CRAFT_ALL', 'CHAIN_SEED', 'CHAIN_SCENARIOS',
     'H2_SEEDS', 'H2_PIPE_SEEDS', 'VALUE_SEEDS',
 )
-FULL_SIMULATORS = ('lab-guard', 'smoke', 'interact', 'diagnose', 'workshop', 'testlab', 'settings', 'reminders')
+FULL_SIMULATORS = ('lab-guard', 'smoke', 'interact', 'diagnose', 'auctionproof', 'workshop', 'testlab', 'settings', 'reminders')
 # Layout tests build many complete mock clients (baseline peak ~4 GiB). They
 # run after the worker pool, one at a time; never overlap two large heaps.
 EXCLUSIVE = ('test_layout',)

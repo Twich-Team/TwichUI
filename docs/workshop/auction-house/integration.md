@@ -5,6 +5,10 @@ Status: source-grounded reuse plan at `13aa14f1`; additions described here are
 [architecture](architecture.md). Existing tests are baseline engine evidence,
 not proof of the new Auction House pages.
 
+AH-1a implements only the [diagnostic lifecycle proof](lifecycle-proof.md) in
+core; it never loads Workshop or adds any page/data integration below. The
+existing posting window exposes only a read-only busy guard for takeover refusal.
+
 ## Ownership rules
 
 - `TwichUIWorkshopDB` remains the only market observation store. `Prices`, `Dist`,

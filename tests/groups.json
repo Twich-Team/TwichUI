@@ -1,9 +1,9 @@
 {
   "core": {
-    "tests": ["test_simlab_diagnostics.lua", "test_commands.lua", "test_defaults.lua", "test_lifecycle.lua", "test_persist.lua", "test_profiles.lua", "test_lod_apply.lua", "test_routing.lua", "test_storage.lua", "test_stored_data.lua", "test_status.lua", "test_cleanup.lua"],
-    "syntax": ["!!!TwichUI/*.lua", "!!!TwichUI/setup/*.lua"],
+    "tests": ["test_auction_host.lua", "test_auction_window.lua", "test_auction_price.lua", "test_simlab_diagnostics.lua", "test_commands.lua", "test_defaults.lua", "test_lifecycle.lua", "test_persist.lua", "test_profiles.lua", "test_lod_apply.lua", "test_routing.lua", "test_storage.lua", "test_stored_data.lua", "test_status.lua", "test_cleanup.lua"],
+    "syntax": ["!!!TwichUI/*.lua", "!!!TwichUI/setup/*.lua", "!!!TwichUI/auction/*.lua"],
     "dependencies": ["shared-ui"],
-    "simulators": [{"script": "smoke"}, {"script": "diagnose"}]
+    "simulators": [{"script": "smoke"}, {"script": "diagnose"}, {"script": "auctionproof"}]
   },
   "shared-ui": {
     "tests": ["test_frame_look.lua", "test_menu_style.lua", "test_media_border.lua", "test_notify.lua", "test_notify_look.lua", "test_theme_defaults.lua", "test_window_smoke.lua", "test_press.lua", "test_reach.lua"],

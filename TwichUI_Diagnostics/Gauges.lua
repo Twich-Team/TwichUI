@@ -19,6 +19,8 @@ local Perf = R.Perf
 -- "!!!TwichUI/", the settings window "TwichUI_Settings/"), where: the function, so a report can name what to read.
 -- every = how often it is expected to run, so a report can tell "runs often" from "runs on demand".
 DX.OPS = {
+    ["auction.proof"] = { module = "auction", label = "AH-1a presentation switch/recovery", kind = "layout", file = "auction/Host.lua", where = "Activate, Restore", every = "explicit diagnostic command, or recovery of its active lease" },
+    ["auction.proofWatch"] = { module = "auction", label = "AH-1a lease check", kind = "update", file = "auction/Host.lua", where = "Watch", every = "every 0.25 s only during the explicit, at most 30-second proof" },
     ["core.savedData"] = { module = "core", label = "Saved data check at load (Persist.LoadMain)", kind = "init", file = "Core.lua", where = "ADDON_LOADED handler > Persist.LoadMain", every = "once per load" },
     ["core.startupHook"] = { module = "core", label = "Start-up hooks (each module's OnInit)", kind = "init", file = "Core.lua", where = "R.initHooks loop", every = "once per load, per module" },
     ["inventory.plan"] = { module = "inventory", label = "Magic Inventory plan (bags read, rules matched)", kind = "rebuild", file = "inventory/Plan.lua", where = "MI.CurrentPlan", every = "when a mailbox, bank or guild bank opens or its bags change (coalesced), and per review drawn" },

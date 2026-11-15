@@ -5,6 +5,11 @@ UI, gameplay requests, market schema changes or live-client operations were made
 Continue with [architecture](architecture.md), [integration](integration.md) and
 the [implementation roadmap](implementation-roadmap.md).
 
+AH-1a follow-up: an explicit, default-off anchor-only diagnostic and its
+[lifecycle evidence/real-client checklist](lifecycle-proof.md) now exist.
+Simulator evidence cannot establish native search or replacement compatibility;
+real Forever acceptance is still pending.
+
 ## Evidence boundary
 
 TwichUI baseline: `feature/workshop`, `13aa14f168bf34d2ec03dccecdbca407c68a071a`;

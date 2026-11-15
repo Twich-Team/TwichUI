@@ -506,6 +506,9 @@ COMMANDS = {
     { name = "layout", usage = "layout", desc = "the interface layout setup: review, apply with a way back, check, restore (listed on the Home page and Troubleshooting; loads only when used; /tui layout help lists the developer commands)", hidden = true, fn = function(arg)
         if R.LayoutsLauncher then R.LayoutsLauncher.Command(arg) else Unavailable("Layout setup") end
     end },
+    { name = "ahproof", usage = "ahproof [on|off|status]", desc = "AH-1a lifecycle diagnostic (default off, 30 seconds, no replacement pages)", hidden = true, fn = function(arg)
+        if R.AuctionHost then R.AuctionHost.Command(arg) else Unavailable("AH-1a diagnostic") end
+    end },
     { name = "workshop", usage = "workshop", desc = "the Workshop: your professions' recipes, a craft queue and the materials still needed (listed on the Workshop page and the TwichUI menu; loads only when opened)", hidden = true, fn = function(arg)
         if R.WorkshopLauncher then R.WorkshopLauncher.Command(arg) else Unavailable("The Workshop") end
     end },

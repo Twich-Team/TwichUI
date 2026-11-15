@@ -4,6 +4,10 @@ Research completed 2026-11-14 on `feature/workshop`, starting at `13aa14f1`.
 This is the handoff for **separately authorized** implementation. AH-0 adds
 documentation only. Do not automatically begin AH-1, C1 or another feature.
 
+AH-1a follow-up: the disabled diagnostic lifecycle proof is implemented and
+offline/simulator verification is recorded in [lifecycle-proof.md](lifecycle-proof.md).
+Real Forever acceptance remains pending; AH-1b and all functional pages are blocked.
+
 Read [API capabilities](api-capabilities.md), [architecture](architecture.md),
 [integration and mockup fidelity](integration.md), `AGENTS.md`, `CLAUDE.md`,
 [testing](../../testing.md), [testing performance](../../testing-performance.md)
@@ -50,7 +54,7 @@ scope. Commit/push then requires that campaign's authorization, as AH-0 has here
 
 | Milestone | Concrete scope and dependency | Acceptance / usable stopping point |
 |---|---|---|
-| **AH-1a — Lifecycle and fallback proof** | Lightweight core Host and default-off switch, guarded lazy load, minimal independent root, reversible parking, independent return control. No searches or transactions. Depends on AH-0 and the five images | Disabled path untouched; no market load off-AH; open/switch/back/close/reopen works; load/render failures restore Blizzard; no overwritten OnHide/bootstrap/Tabs; pass real lifecycle gate before extending takeover |
+| **AH-1a — Lifecycle and fallback proof** | Core Host with explicit transient diagnostic command, reversible anchor-only parking and independent Restore button; no saved switch, Workshop load, replacement root, shell, searches or transactions. See [proof contract and evidence](lifecycle-proof.md) | Offline/simulator recovery proof only; disabled default retained. Real Forever lifecycle acceptance pending, including combat deferral limitation; AH-1b blocked |
 | **AH-1b — Approved shared shell** | Header, left five-page navigation, empty page bodies, responsive sizing and common style; depends AH-1a | Five destinations match approved shell; Browse default; repeat navigation/close doesn't grow frames/listeners; Blizzard switch reachable at constrained sizes; no fake financial data. This completes AH-1 |
 | **AH-2a — Browse reads** | Request broker, normalized group/detail snapshots, filters, sorts, metadata, explicit continuation, selection and read-only comparison; adapt old targeted search to same owner. Depends AH-1 | Current query/state shown accurately, partial scope visible, throttles and timeout handled, no overlapping own searches, no buy action armed from stale/foreign result; existing Sell from Bags still works |
 | **AH-2b — Explicit buying** | Separate item buyout and commodity quote flows; optional bidding can be a later small addition. Transaction harness, immutable preview, exact totals and completion. Depends AH-2a and each mode's client evidence | Test whole-record item buyout first; commodity mode remains disabled until signature/classification validated. Every operation needs consent; no retries/automatic next purchase; disappeared listings and quote change/expiry refuse safely |
@@ -102,7 +106,9 @@ Use synthetic fixtures only; a “buy” fixture changes fake state, never the g
 For future code changes, add new tests and core auction syntax paths explicitly
 to appropriate existing groups. `workshop` already selects `test_workshop*.lua`;
 `core` does not automatically select a newly named `test_auction_host.lua`, and
-its syntax globs do not cover every auction subdirectory. Check `--list` after
+its syntax globs originally did not cover every auction subdirectory. AH-1a now
+adds the Host/old auction tests and auction syntax explicitly to `core`, plus the
+`auctionproof` simulator to feature-core and full verification. Check `--list` after
 editing group definitions so new tests actually run in the intended tier.
 The old auction price/window tests are not assumed covered by a fast Workshop
 group: run them directly or add them to the appropriate feature dependencies.

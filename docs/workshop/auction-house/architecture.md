@@ -1,7 +1,8 @@
 # AH-0: Replacement-window architecture
 
-Status: proposed, implementation-ready boundaries with explicit client gates;
-**not implemented or real-client-tested**. Source facts and unresolved API
+Status: the full replacement below remains proposed. AH-1a implements only the
+disabled diagnostic [lifecycle proof](lifecycle-proof.md), with no shell/pages or
+automatic takeover. **Real-client acceptance is pending; AH-1b is blocked.** Source facts and unresolved API
 contracts are in [api-capabilities.md](api-capabilities.md). This document does
 not authorize AH-1. The approved result is one complete Auction House window
 with Browse, Shopping, Sell, My Auctions and Market in its left sidebar.
@@ -51,8 +52,8 @@ modules only; no new framework, dependency or separate addon is required.
 | Existing `Style.lua` / a narrow extracted chart helper | Common cards, tables, coins, dropdowns, tooltips, chart presentation. Workshop continues to work without loading `TwichUI_Settings` |
 
 Core transport extraction happens only when needed by the corresponding
-milestone. AH-1 needs Host and empty page shells, not a speculative transport
-framework. All native side effects go through the final backend, including old
+milestone. AH-1a needs only Host and a diagnostic recovery control; empty page
+shells belong to AH-1b after real-client acceptance. All native side effects go through the final backend, including old
 Sell from Bags; two windows must not each own an independently armed action.
 
 Keep `TwichUI_Workshop` load-on-demand and use `WorkshopLauncher.Load()`.

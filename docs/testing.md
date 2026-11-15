@@ -9,7 +9,7 @@ No new Python packages are required.
 |---|---|---|
 | Fast development | `./tests/run.sh fast workshop-settings` | Direct feature tests and Lua syntax; no simulator |
 | Feature checkpoint | `./tests/run.sh feature workshop-settings` | Feature tests, shared dependency tests/syntax and selected simulator regressions |
-| Full milestone | `./tests/run.sh full` | Every offline test, all addon Lua syntax (excluding third-party libraries), simulator guard and all seven default simulator regression scripts |
+| Full milestone | `./tests/run.sh full` | Every offline test, all addon Lua syntax (excluding third-party libraries), simulator guard and all eight default simulator regression scripts |
 | Offline/CI | `./tests/run.sh` | Every offline test, including artwork rebuilds and mutation-runner harness tests; no simulator |
 
 Use fast checks frequently during implementation, feature verification before a
@@ -106,6 +106,7 @@ Use the read-only installation through the local launcher:
 
 ```sh
 bash tools/simlab/run.sh smoke
+bash tools/simlab/run.sh auctionproof
 SIMLAB_ONLY='design craft wrong' bash tools/simlab/run.sh workshop
 SIMLAB_ONLY='idle mixed' bash tools/simlab/run.sh testlab
 bash tools/simlab/run.sh settings workshop
@@ -138,7 +139,7 @@ Full verification clears inherited `SIMLAB_*` filters and synthetic settings
 options (preserving the game path), and ignores `WOWSIM_LAB`, so it cannot be
 silently narrowed. It runs every original default pose and original negative
 control for `smoke`, `interact`, `diagnose`, `workshop`, `testlab`, `settings` and
-`reminders`, including the settings catalog discovered by the scenario. It does
+`reminders`, plus the AH-1a `auctionproof` synthetic lifecycle catalog, including the settings catalog discovered by the scenario. It does
 not replace replay checks with pose-only launches. `guild_bank_preview.sh`
 remains a manual, parameterized exploratory capture: it has no default catalog
 or regression verdict and was never part of the automated suites.
@@ -154,6 +155,12 @@ Simulator-tested means handler/state checks over synthetic data and structural
 screenshots. It does not prove real pointer input, appearance, fonts, combat,
 taint, protected actions, messaging delivery or reload persistence. Those remain
 real-client checks; screenshots here are not visual acceptance.
+
+AH-1a's `auctionproof` uses four fresh launches (Workshop unloaded, replay,
+loaded, deliberate wrong expectation). Its native root and auctioneer/combat
+boundaries are synthetic; it does not establish native AH search or fallback
+compatibility. `feature core` selects it alongside smoke/diagnostics. Exact
+coverage and the pending client gate: [lifecycle proof](workshop/auction-house/lifecycle-proof.md).
 
 ## Mutation policy
 

@@ -396,6 +396,7 @@ targetart\Display.lua
 auction\Price.lua
 auction\Scan.lua
 auction\Window.lua
+auction\Host.lua
 # Mailbox gold summary: one chat line per mailbox visit (auction\Mail.lua)
 auction\Mail.lua
 
