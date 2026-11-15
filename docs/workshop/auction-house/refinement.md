@@ -1,5 +1,11 @@
 # Auction House refinement
 
+Current integration status: see [PR #19 integration verification](integration-verification.md).
+The branch now includes `feature/workshop` `572da3a`; focused verification passes
+and the smoke failure is diagnosed/corrected. The new comprehensive run still
+exits 1, now on the existing Workshop guild-bank timing/replay checks. The
+original campaign and its earlier failed full result are preserved below.
+
 Task branch: `codex/auction-house-ux-revision`, based on verified
 `feature/workshop` `8c1ffad9fb08e91d95c6d921e9e3b4543fe05b0c`.
 The task branch also includes `feature/workshop` `5b6e4e9` via a normal merge
