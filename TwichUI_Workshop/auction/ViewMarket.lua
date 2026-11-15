@@ -66,6 +66,12 @@ local function ServerDetail(p,r)
     end
     local formatter=p.serverMetric=="supply" and function(n)return ("%.0f"):format(n) end or UI.Money
     p.chart:Set(x.series,formatter)
+    if x.series and #x.series.points==1 then
+        local point=x.series.points[1]
+        local label=p.serverMetric=="supply" and "Observed supply: " or p.serverMetric=="minimum" and "Observed minimum listing: " or
+            (h and h.pricing_algorithm=="asking-v1-provisional" and "Observed asking mean: " or "Observed Recent Price: ")
+        p.chart.note:SetText(label..formatter(point.price).." · "..Date(point.day).." UTC")
+    end
     p.chartCard.heading:SetText(p.serverMetric=="supply" and "Server observed supply · daily" or p.serverMetric=="minimum" and "Server minimum listings · daily" or
         (h and h.pricing_algorithm=="asking-v1-provisional" and "Server asking mean · daily" or "Server Recent Price · daily"))
     if not x.series then p.chart.msg:SetText(status.loading and "Validating external data…" or not status.ready and "No validated bridge available." or "Choose an exact server variant.");p.chart.note:SetText("Local scan history remains available from the source selector.") end

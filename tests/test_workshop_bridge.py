@@ -68,6 +68,7 @@ class BridgeReader(unittest.TestCase):
             lambda g:g['coverage'].update(generation_complete=False),lambda g:g['records'][1].update(variant_key='a'*64),
             lambda g:g['records'][0]['current'].update(supply=1),lambda g:g['records'][1]['daily'][0].update(observation_ref=60),lambda g:g['records'][1].update(daily=[]),
             lambda g:g['records'][1]['current']['metrics'].update(historical_value_copper='100'),
+            lambda g:g['records'][1]['current']['metrics'].update(recent_copper='9223372036854775807'),
             lambda g:g['records'].append(copy.deepcopy(g['records'][1]))]
         for mutate in mutations:
             g=copy.deepcopy(base);mutate(g);seal(g)
@@ -91,6 +92,13 @@ class BridgeReader(unittest.TestCase):
             lines+=['assert(J.SHA('+lua(raw)+')=='+lua(hashlib.sha256(raw.encode()).hexdigest())+')']
             value={'text':raw,'money':'9223372036854775807','count':rng.randrange(0,9007199254740992),'null':None,'flags':[True,False]}
             text=encoded(value);lines+=['assert(J.Encode(J.Parse('+lua(text)+'))=='+lua(text)+')']
+        # A descriptive copper value above Lua's supported price range stays an exact
+        # string through a complete generation; consumers receive unsupported, never zero.
+        huge=json.loads((FIXTURES/'source-canonical-generation.json').read_text())
+        huge['records'][1]['current']['metrics']['quantity_weighted_ask_copper']='9223372036854775807';seal(huge)
+        lines+=['drain('+lua(packed(huge))+',true)',
+                'assert(B.Record(2589,'+lua(huge['records'][1]['variant_key'])+').current.metrics.quantity_weighted_ask_copper=="9223372036854775807")',
+                'local price,why=B.Value(2589,'+lua(huge['records'][1]['variant_key'])+',"mean");assert(price==nil and why=="unsupported")','preserved()']
         lines+=['assert(not pcall(J.Parse,\'{"a":null,"a":1}\'))','assert(not pcall(J.Parse,"9007199254740993"))',
                 'assert(not pcall(J.Parse,string.rep("[",15).."0"..string.rep("]",15)))']
         self.run_lua(lines)

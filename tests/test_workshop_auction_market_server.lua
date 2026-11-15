@@ -38,6 +38,18 @@ assert(not p.browse:IsEnabled() and not p.advisor:IsEnabled() and not p.track:Is
 assert(A.Market.Metric('supply') and p.projection.series.points[1].price==10)
 assert(A.Market.Metric('recent'))
 assert(not A.Market.Variant(string.rep('f',64)))
+-- One available complete date in the pinned partial fixture must not inherit
+-- the local chart's minimum-listing caption for representative price or supply.
+local file=assert(io.open(TESTS..'fixtures/market_bridge_v1/partial-unknown-generation.json'));local partial=J.Parse(file:read('*a'));file:close()
+local header=J.Copy(partial);header.records=nil
+local packet={transport_version=1,manifest=J.Encode(header),records={},receipt=J.Encode(setmetatable({schema_version=1,generation_id=partial.generation_id,desktop_build='synthetic-ui-test',completed_at='2026-11-15T13:00:00Z'},J.OBJECT))}
+for i,r in ipairs(partial.records) do packet.records[i]=J.Encode(r) end
+c.TwichUIMarketData=packet;B.Begin(packet)
+for i=1,3000 do local ok,why=B.Step(3);if why~='loading' then assert(ok);break end end
+A.Market.Filter('marketKey','server');p=settle();assert(A.Market.Select(2589) and A.Market.Variant(key))
+assert(p.chart.state=='single' and p.chart.note:GetText():find('Observed Recent Price:',1,true) and not p.chart.note:GetText():find('Cheapest',1,true))
+assert(A.Market.Metric('supply') and p.chart.note:GetText():find('Observed supply:',1,true))
+assert(A.Market.Metric('minimum') and p.chart.note:GetText():find('Observed minimum listing:',1,true))
 assert(c.TwichUIWorkshopDB==db and fingerprint(db)==before and native==0,'local data or AH actions changed')
 W.Market.Price,W.Market.Value,W.Market.History=oldPrice,oldValue,oldHistory
 A.Market.Filter('marketKey',m.key);p=settle();A.Market.Select(10)
