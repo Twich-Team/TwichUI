@@ -36,6 +36,13 @@ def m(id, file, find, replace, why, tests, smoke=False, expect="killed", note=""
     MUTATIONS.append(dict(id=id, file=file, find=find, replace=replace, why=why, tests=tuple(tests), smoke=smoke, expect=expect, note=note))
 
 
+# M1b external data validation: only disposable synthetic state is mutated.
+m("market.bridge.generation-integrity","TwichUI_Workshop/Bridge.lua","bodyHash:Finish()==h.generation_id","true","a generation identity no longer binds every source record", ["test_workshop_bridge.lua"])
+m("market.bridge.identity-order","TwichUI_Workshop/Bridge.lua","requireData(r.item_id>lastItem or r.item_id==lastItem and r.variant_key>lastVariant)","requireData(true)","duplicate exact variants overwrite the imported index", ["test_workshop_bridge.lua"])
+m("market.bridge.history-window","TwichUI_Workshop/Bridge.lua","math.max(ctx.from,ctx.today-days+1)","ctx.from","a selected history window includes older dates", ["test_workshop_bridge.lua"])
+m("market.bridge.local-history","TwichUI_Workshop/Bridge.lua","active=value;cache,order={},{}","TwichUIWorkshopDB.markets={};active=value;cache,order={},{}","an import overwrites original local scans", ["test_workshop_bridge.lua"])
+m("market.bridge.duplicate-json","TwichUI_Workshop/BridgeCodec.lua","if out[k]~=nil then fail() end","if false then fail() end","duplicate keys silently replace validated fields", ["test_workshop_bridge.lua"])
+m("market.bridge.integer-range","TwichUI_Workshop/BridgeCodec.lua","if #abs>16 or (#abs==16 and abs>'9007199254740991') then fail() end","if false then fail() end","JSON integers round through the Lua exact-number boundary", ["test_workshop_bridge.lua"])
 m("market.auction.metadata-restarts", "TwichUI_Workshop/auction/BrowseData.lua",
   '    D.Count("metadata")', '    D.Count("metadata");p.stamp=nil',
   "late item metadata invalidates the whole catalog again, causing endless completed-job restarts",
@@ -84,6 +91,15 @@ m("market.sell.deposit-precision", SELL_PREP, "amount=math.ceil(amount/100)*100"
   "a whole-silver auctioneer displays the unrounded copper deposit instead of the native upfront cost", SELL_TEST)
 m("market.sell.deposit-unknown-precision", SELL_PREP, 'type(row.copper)=="boolean" and ', '',
   "unknown money precision is treated as a verified deposit quote", SELL_TEST)
+
+# Integration: completed external catalogs and source-specific labels survive AH refilters/resizes.
+m("market.bridge.catalog-reuse", "TwichUI_Workshop/ServerMarket.lua",
+  "index=true,catalog=opt.catalog,item=opt.item", "index=true,item=opt.item",
+  "external filtering rediscovers identities instead of retaining completed rows", ["test_workshop_auction_market_server.lua"])
+m("market.bridge.resize-label", "TwichUI_Workshop/auction/ViewMarket.lua",
+  'if p.marketKey=="server" then ServerChart(p,p.projection) else p.chart:Set(p.projection.series,UI.Money) end',
+  'p.chart:Set(p.projection.series,UI.Money)',
+  "resizing labels one external supply observation as cheapest money", ["test_workshop_auction_market_server.lua"])
 
 # Dormant M1a calculator: mutations exercise exact boundaries without enabling it.
 m("market.canonical.half-anchor", "TwichUI_Workshop/PricingV1.lua",

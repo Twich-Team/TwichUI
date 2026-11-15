@@ -1,0 +1,33 @@
+{
+  "fixture_version": 1,
+  "origin": "independent_hand_calculation",
+  "synthetic": true,
+  "item_id": 2589,
+  "variant_json": "{\"id\":2589}",
+  "variant_key": "684434823a7f7a1797ecda68d5bb5abef5ea13a18aefa5a26cccff8e1b813d51",
+  "algorithm": "twichui-pricing-v1",
+  "history_basis": "canonical_complete_scope_close",
+  "dates": [
+    "2026-11-13",
+    "2026-11-15"
+  ],
+  "missing_dates": [
+    "2026-11-14"
+  ],
+  "recent_copper": [
+    "100",
+    "120"
+  ],
+  "supply": [
+    10,
+    10
+  ],
+  "current_recent_copper": "120",
+  "current_market_value_copper": "100",
+  "current_historical_value_copper": null,
+  "record_count": 4,
+  "historical_only_item": 2,
+  "bid_only_item": 123,
+  "other_variant_copper": "999",
+  "derivation": "Two complete scopes have one base-item price tier of 100 then 120 copper, quantities 3+3+4. Both dates have weight 4, so the lower weighted median is 100. Two priced dates cannot establish Historical Value. November 14 has no observation. Item 2 is listed only on November 13; item 123 has bids only. The separate bonus-9 variant is 999 and never joins the base variant."
+}

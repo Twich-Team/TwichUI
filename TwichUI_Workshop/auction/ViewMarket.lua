@@ -9,11 +9,12 @@ local function Key(r) return r.item end
 local function Money(n) return n and UI.Money(n) or "Unavailable" end
 local function Date(day) return date("!%b %d",math.floor(day*86400)) end
 local function Stamp(p,m)
+    if m and m.external then local b=W.Bridge.Status();return m.key..":"..b.state..":"..tostring(b.loading)..":"..p.scope..":"..p.bags..(p.scope=="tracked" and ":"..D.TrackStamp() or "") end
     return (m and m.key..":"..W.Valuation.Generation(m) or "none")..":"..p.scope..":"..p.bags..
         (p.scope=="tracked" and ":"..D.TrackStamp() or "")
 end
 local function Options(p)
-    return {market=p.market,scope=p.scope,query=p.query,category=p.category,quality=p.quality,item=p.focusItem}
+    return {external=p.marketKey=="server",market=p.market,scope=p.scope,query=p.query,category=p.category,quality=p.quality,item=p.focusItem}
 end
 local function Context(p,item)
     return p.context and p.context.item==item and p.context or {}
@@ -49,9 +50,54 @@ local function ChartWords(p,x)
     if s.damaged then coverage=coverage.." · some history unreadable" end
     return coverage,table.concat(parts,"\n")
 end
+local function ServerChart(p,x)
+    local h=x.header
+    local formatter=p.serverMetric=="supply" and function(n)return ("%.0f"):format(n) end or UI.Money
+    p.chart:Set(x.series,formatter)
+    if x.series and #x.series.points==1 then
+        local point=x.series.points[1]
+        local label=p.serverMetric=="supply" and "Observed supply: " or p.serverMetric=="minimum" and "Observed minimum listing: " or
+            (h and h.pricing_algorithm=="asking-v1-provisional" and "Observed asking mean: " or "Observed Recent Price: ")
+        p.chart.note:SetText(label..formatter(point.price).." · "..Date(point.day).." UTC")
+    end
+end
+local function ServerDetail(p,r)
+    p.track:SetEnabled(false);p.browse:SetEnabled(false);p.advisor:SetEnabled(false)
+    p.variantDrop:Show();p.qualityDrop:Hide();p.metricDrop:Show();p.variantDrop:Refresh()
+    p.name:SetText(r and r.info.name or "Choose a server item")
+    p.pic.tex:SetTexture(r and r.info.icon or UI.ICON_BLANK)
+    p.kind:SetText("External observations · choose an exact upstream variant · local prices stay separate")
+    local x=W.ServerMarket.Project(r and r.item,p.serverVariant,p.serverMetric,p.days);p.projection=x
+    local h=x.header;local selected=x.record
+    local status=W.Bridge.Status()
+    p.source:SetText(x.label.."\n"..(h and (h.pricing_algorithm.." · "..h.history_basis..(h.synthetic and " · synthetic" or "")) or
+        (status.loading and "Validating external generation…" or "Bridge unavailable; local scan data is unchanged.")))
+    local rows={};for _,v in ipairs(W.ServerMarket.Rows(x,UI.Money)) do rows[v.id]=v end
+    for _,tile in ipairs(p.tiles) do
+        local v=rows[tile.id];tile.value:SetText(v and v.value or "Unavailable");tile.tip=v and v.tip or "Choose an exact server variant."
+        if tile.localHeading==nil then tile.localHeading=tile.heading:GetText() end
+        tile.heading:SetText(v and v.label or tile.localHeading)
+    end
+    ServerChart(p,x)
+    p.chartCard.heading:SetText(p.serverMetric=="supply" and "Server observed supply · daily" or p.serverMetric=="minimum" and "Server minimum listings · daily" or
+        (h and h.pricing_algorithm=="asking-v1-provisional" and "Server asking mean · daily" or "Server Recent Price · daily"))
+    if not x.series then p.chart.msg:SetText(status.loading and "Validating external data…" or not status.ready and "No validated bridge available." or "Choose an exact server variant.");p.chart.note:SetText("Local scan history remains available from the source selector.") end
+    local series=x.series
+    p.coverage:SetText(series and (#series.points.." priced/supply markers · "..series.observed_days.." observed dates · "..#series.gaps.." unavailable dates in this window") or "No supported external history selected")
+    p.axis:SetText(series and (Date(series.from).." — "..Date(series.to).." UTC · missing days are not filled") or "Exact server observations only")
+    local obs=selected and h.observations[selected.current.observation_ref+1]
+    p.trends:SetText(selected and ("Separate external source\n"..selected.current.coverage.priced_days_14.." priced dates in the 14-day reference\n"..
+        selected.current.coverage.priced_days_60.." priced dates in the 60-day reference\nNo local competition or selling authorization.") or "No variant selected; no item-ID aggregate is substituted.")
+    p.contextText:SetText(selected and ("Variant SHA256: "..selected.variant_key.."\nSource observed: "..obs.observed_at.."\nUpstream content: "..
+        (obs.upstream_updated_at~=W.BridgeCodec.NULL and obs.upstream_updated_at or "unknown").."\nGeneration: "..h.generation_id:sub(1,16).."\nListings and supply are not completed sales.") or "Choose a variant to inspect its source timestamps and provenance.")
+    p.aggregateText="";p.chartTip=(h and h.history_basis or "External history unavailable").."\nExact available daily observations; no interpolation, sale proceeds or mature-window claim."
+end
 Detail=function(p)
     local r=p.index and p.index[p.selected]
     p.chosen=r
+    if p.marketKey=="server" and W.ServerMarket then ServerDetail(p,r);return end
+    if p.variantDrop then p.variantDrop:Hide();p.qualityDrop:Show();p.metricDrop:Hide() end
+    for _,tile in ipairs(p.tiles or {}) do if tile.localHeading then tile.heading:SetText(tile.localHeading) end end
     local ctx=Context(p,p.selected)
     p.track:SetEnabled(r~=nil)
     p.browse:SetEnabled(r~=nil and not ctx.variant)
@@ -205,33 +251,56 @@ end
 function V.Filter(key,value)
     if not page or not ({scope=true,category=true,quality=true,marketKey=true})[key] then return end
     page[key]=value;page.focusItem=nil
+    if key=="marketKey" then page.serverVariant="";D.Clear();if value=="server" then page.days=math.min(page.days,60);page.rangeDrop:Refresh() end;if value=="server" and W.Bridge then W.Bridge.Load() end end
     page.scopeDrop:Refresh();page.categoryDrop:Refresh();page.qualityDrop:Refresh();page.marketDrop:Refresh()
     Start(page,true)
+    if key=="marketKey" and value=="server" then
+        local mine=page.token
+        local function Ready()
+            if not A.IsShown() or A.Mode()~="market" or page.token~=mine then return end
+            if W.Bridge.Status().loading then C_Timer.After(0.05,Ready) else Start(page,true) end
+        end
+        C_Timer.After(0.05,Ready)
+    end
+end
+function V.Variant(key)
+    if not page or page.marketKey~="server" then return false end
+    if key~="" and not W.Bridge.Record(page.selected,key) then return false end
+    page.serverVariant=key;page.variantDrop:Refresh();Detail(page);return true
+end
+function V.Metric(metric)
+    if not page or page.marketKey~="server" or not ({minimum=true,recent=true,supply=true})[metric] then return false end
+    page.serverMetric=metric;page.metricDrop:Refresh();Detail(page);return true
 end
 function V.Range(days)
-    if not page then return end
+    if not page or page.marketKey=="server" and days>60 then return end
     for _,v in ipairs(D.RANGES) do if v[1]==days then page.days=days;page.rangeDrop:Refresh();Detail(page);return end end
 end
 function V.Select(item)
     if not page or not page.index or not page.index[item] then return false end
-    page.selected=item;AD.Request(item);page.list:Layout();Detail(page);return true
+    page.selected=item;page.serverVariant="";AD.Request(item);page.list:Layout();Detail(page);return true
 end
 function A.OpenMarket(item,opt)
     local ctx=D.Context(item,opt)
     if not ctx or not A.IsShown() then return false end
     A.Go("market")
-    page.context=ctx;page.marketKey=ctx.market or "auto"
+    page.context=ctx;page.marketKey=ctx.market or "auto";page.serverVariant=ctx.serverVariant or ""
     page.scope,page.category,page.quality="all","all",-1
     page.selected,page.focusItem=ctx.item,ctx.item
     page.query=tostring(ctx.item);page.search:SetText(page.query);page.search.hint:Hide()
     page.scopeDrop:Refresh();page.categoryDrop:Refresh();page.qualityDrop:Refresh();page.marketDrop:Refresh()
-    Start(page,true)
+    if page.marketKey=="server" and W.Bridge then
+        W.Bridge.Load()
+        V.Filter("marketKey","server")
+        page.serverVariant=ctx.serverVariant or ""
+    else Start(page,true) end
     return true
 end
 local function Build(p)
     page=p
     p.query,p.scope,p.category,p.quality,p.days,p.marketKey="","all","all",-1,14,"auto"
     p.metadata,p.bags,p.token=0,0,0
+    p.serverVariant,p.serverMetric="","recent"
     p.search=UI.Search(p,292,32,"Search market items or ID…");p.search:SetPoint("TOPLEFT",0,0);p.search:SetMaxLetters(200)
     p.search:SetScript("OnEnterPressed",function(self) self:ClearFocus();V.Search(self:GetText()) end)
     p.search:SetScript("OnEscapePressed",function(self) self:ClearFocus() end)
@@ -243,7 +312,7 @@ local function Build(p)
     p.scopeDrop:SetPoint("LEFT",p.search,"RIGHT",10,0)
     p.categoryDrop=Drop(180,function() return W.AuctionBrowseData.CATEGORIES end,"category")
     p.categoryDrop:SetPoint("LEFT",p.scopeDrop,"RIGHT",10,0)
-    p.rangeDrop=A.Dropdown(p,170,function() return D.RANGES end,function() return p.days end,V.Range)
+    p.rangeDrop=A.Dropdown(p,170,function() if p.marketKey~="server" then return D.RANGES end local ranges={} for _,entry in ipairs(D.RANGES)do if entry[1]<=60 then ranges[#ranges+1]={entry[1],entry[1]==2 and "2-day window" or entry[2]} end end return ranges end,function() return p.days end,V.Range)
     p.rangeDrop:SetPoint("TOPRIGHT",0,0)
     p.marketDrop=Drop(494,function()
         local entries=D.Markets()
@@ -252,6 +321,9 @@ local function Build(p)
     end,"marketKey");p.marketDrop:SetPoint("TOPLEFT",0,-42)
     p.qualityDrop=Drop(180,function() return W.AuctionBrowseData.QUALITIES end,"quality")
     p.qualityDrop:SetPoint("LEFT",p.marketDrop,"RIGHT",10,0)
+    p.variantDrop=A.Dropdown(p,180,function() return W.ServerMarket and W.ServerMarket.Variants(p.selected) or {{"","Choose exact variant"}} end,
+        function()return p.serverVariant end,V.Variant)
+    p.variantDrop:SetPoint("LEFT",p.marketDrop,"RIGHT",10,0);p.variantDrop:Hide()
     p.refresh=UI.Button(p,"Refresh stored data",170,"secondary",function() D.Clear();Start(p,false) end,32)
     p.refresh:SetPoint("TOPRIGHT",0,-42)
     UI.Tip(p.refresh,"Refresh stored data","Rereads only saved Workshop observations and bag metadata. It never sends an Auction House query.")
@@ -312,6 +384,9 @@ local function Build(p)
     p.chartCard=A.Card(main,"Lowest seen · observed daily closings",224)
     p.chartCard:SetPoint("TOPLEFT",8,-124);p.chartCard:SetPoint("TOPRIGHT",-8,-124)
     p.chart=UI.PriceChart(p.chartCard,800,136,{maxDots=30,window=true,gold=true})
+    p.metricDrop=A.Dropdown(p.chartCard,190,function()return W.ServerMarket and W.ServerMarket.METRICS or {} end,
+        function()return p.serverMetric end,V.Metric)
+    p.metricDrop:SetPoint("TOPRIGHT",-8,-2);p.metricDrop:Hide()
     p.chart:SetPoint("TOPLEFT",10,-36);p.chart:SetPoint("TOPRIGHT",-10,-36)
     p.axis=A.Text(p.chartCard,"",11,12,-176,-12,UI.K.textDim)
     p.coverage=A.Text(p.chartCard,"",11,12,-194,-12,UI.K.textDim);Wrap(p.coverage,26)
@@ -344,7 +419,9 @@ local function Build(p)
         local half=(w-26)/2
         p.trendCard:SetWidth(half);p.trendCard:SetPoint("TOPLEFT",8,-454);p.trendCard:SetPoint("BOTTOMLEFT",8,8)
         p.contextCard:SetPoint("TOPLEFT",p.trendCard,"TOPRIGHT",10,0);p.contextCard:SetPoint("BOTTOMRIGHT",-8,8)
-        if p.projection then p.chart:Set(p.projection.series,UI.Money) end
+        if p.projection then
+            if p.marketKey=="server" then ServerChart(p,p.projection) else p.chart:Set(p.projection.series,UI.Money) end
+        end
     end
     main:HookScript("OnSizeChanged",Layout);Layout()
     p:SetScript("OnEvent",function(_,event,item,ok)

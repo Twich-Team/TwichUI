@@ -5,6 +5,7 @@ if P.categories then
     AuctionCategories={{name="Fixture trade group",filters={{classID=7}},
         subCategories={{name="Fixture subclass",filters={{classID=7,subClassID=0}}}}}}
 end
+if P.bridge then TwichUIMarketData=SIMLAB_BRIDGE end -- data is present while Workshop is still unloaded
 local R = TwichUI
 A_Admin.SetManualClock(GetTime())
 Lab.Solo()
@@ -447,5 +448,34 @@ if P.market then
     if P.marketMetadata then
         Lab.Check("construct","Market long title fits its heading",true,p.name:GetText()==itemNames[7067] and not p.name:IsTruncated() and p.name:GetStringHeight()<=p.name:GetHeight())
     end
+end
+if P.bridge then
+    local W=R.Workshop;local B=W.Bridge
+    local saved=TwichUIWorkshopDB
+    local function fingerprint(v)
+        if type(v)~='table' then return tostring(v) end
+        local keys={};for k in pairs(v) do keys[#keys+1]=k end
+        table.sort(keys,function(a,b)return tostring(a)<tostring(b)end)
+        local out={};for _,k in ipairs(keys) do out[#out+1]=tostring(k)..'='..fingerprint(v[k]) end
+        return '{'..table.concat(out,',')..'}'
+    end
+    local before=fingerprint(saved)
+    Lab.Check('init','bridge remains idle through ordinary page navigation',false,B.Status().ready)
+    B.Begin(SIMLAB_BRIDGE)
+    for i=1,3000 do local ok,why=B.Step(3);if why~='loading' then break end end
+    Lab.Check('state','complete external generation validated',true,B.Status().ready)
+    A.Go('market');A.Market.Filter('marketKey','server');A.Market.Filter('scope','all');A.Market.Filter('category','all');A.Market.Filter('quality',-1);A.Market.Search('');Lab.Settle(0.5)
+    local p=A.Page('market');for i=1,100 do if not p.job then break end;Lab.Settle(0.05) end
+    Lab.Check('interact','server item selectable',true,A.Market.Select(2589))
+    Lab.Check('state','exact variant required',nil,p.projection.record)
+    local key=SIMLAB_BRIDGE.records[2]:match('"variant_key":"([a-f0-9]+)"')
+    Lab.Check('interact','exact server variant selectable',true,A.Market.Variant(key));A.Market.Range(2)
+    local points=p.projection.series and p.projection.series.points or {}
+    Lab.Check('state','two actual server dates',2,#points)
+    Lab.Check('state','first daily price',100,points[1] and points[1].price)
+    Lab.Check('state','latest daily price',120,points[2] and points[2].price)
+    Lab.Check('state','source timestamp preserved','2026-11-14T12:00:00.123456Z',points[1] and points[1].at)
+    Lab.Check('state','external data cannot enable trading',false,p.browse:IsEnabled() or p.advisor:IsEnabled() or p.track:IsEnabled())
+    Lab.Check('state','local saved observations unchanged',before,fingerprint(TwichUIWorkshopDB))
 end
 Lab.Finish()

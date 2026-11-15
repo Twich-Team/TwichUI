@@ -12,6 +12,12 @@
 
 # Names, limits and small checks (no game calls, no frames); it creates R.Workshop
 Data.lua
+# Explicit external source; loading Workshop alone does not load or validate the data addon.
+BridgeCodec.lua
+BridgeSchema.lua
+BridgeValidate.lua
+Bridge.lua
+ServerMarket.lua
 # The combined materials and what is still needed (pure)
 Materials.lua
 # The saved queue of the current character (TwichUIDB.workshop; the market data has its own saved variables, TwichUIWorkshopDB)

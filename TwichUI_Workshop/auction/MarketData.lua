@@ -10,6 +10,7 @@ function D.Clear() cached,last=nil,nil end
 function D.Stats() return {cache=cached and 1 or 0,points=last and last.series and #last.series.points or 0,
     groups=last and last.series and #last.series.groups or 0} end
 function D.Resolve(key)
+    if key=="server" and W.ServerMarket then return W.ServerMarket.Context() end
     if not key or key=="auto" then return MK.Source().market end
     return PR.Market(key) -- an unavailable explicit market never falls back
 end
@@ -20,6 +21,7 @@ function D.Markets()
         local m=PR.Market(key)
         if m then out[#out+1]={key,PR.Label(m)} end
     end
+    if W.ServerMarket then out[#out+1]={"server","Market server (external)"} end
     return out
 end
 function D.Context(item,opt)
@@ -27,7 +29,7 @@ function D.Context(item,opt)
     opt=opt or {}
     local k=opt.itemKey and W.AuctionReads.Key(opt.itemKey)
     if opt.itemKey and (not k or k.itemID~=item) then return nil end
-    return {item=item,itemKey=k,market=W.Text(opt.market,200),
+    return {item=item,itemKey=k,market=W.Text(opt.market,200),serverVariant=W.Text(opt.serverVariant,64),
         variant=opt.variant==true or k and (k.itemLevel~=0 or k.itemSuffix~=0 or k.battlePetSpeciesID~=0) or false}
 end
 function D.TrackStamp()
@@ -38,6 +40,7 @@ function D.TrackStamp()
 end
 function D.Catalog(opt)
     opt=opt or {}
+    if opt.external and W.ServerMarket then return W.ServerMarket.Catalog(opt) end
     local sources,enumerate={},nil
     if opt.scope=="tracked" then sources[1]=AD.Tracked()
     elseif opt.scope=="bags" then
