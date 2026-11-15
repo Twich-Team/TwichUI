@@ -353,4 +353,33 @@ if P.market then
     if P.marketRecent then A.Market.Range(2) elseif P.marketLong then A.Market.Range(120) else A.Market.Range(14) end
     if P.marketTracked then A.Market.Filter("scope","tracked");Lab.Settle(0.5) end
 end
+if P.bridge then
+    local W=R.Workshop;local B=W.Bridge
+    local saved=TwichUIWorkshopDB
+    local function fingerprint(v)
+        if type(v)~='table' then return tostring(v) end
+        local keys={};for k in pairs(v) do keys[#keys+1]=k end
+        table.sort(keys,function(a,b)return tostring(a)<tostring(b)end)
+        local out={};for _,k in ipairs(keys) do out[#out+1]=tostring(k)..'='..fingerprint(v[k]) end
+        return '{'..table.concat(out,',')..'}'
+    end
+    local before=fingerprint(saved)
+    Lab.Check('init','bridge remains idle through ordinary page navigation',false,B.Status().ready)
+    B.Begin(SIMLAB_BRIDGE)
+    for i=1,3000 do local ok,why=B.Step(3);if why~='loading' then break end end
+    Lab.Check('state','complete external generation validated',true,B.Status().ready)
+    A.Go('market');A.Market.Filter('marketKey','server');Lab.Settle(0.5)
+    local p=A.Page('market');for i=1,100 do if not p.job then break end;Lab.Settle(0.05) end
+    A.Market.Select(2589)
+    Lab.Check('state','exact variant required',nil,p.projection.record)
+    local key=SIMLAB_BRIDGE.records[2]:match('"variant_key":"([a-f0-9]+)"')
+    A.Market.Variant(key);A.Market.Range(2)
+    local points=p.projection.series.points
+    Lab.Check('state','two actual server dates',2,#points)
+    Lab.Check('state','first daily price',100,points[1] and points[1].price)
+    Lab.Check('state','latest daily price',120,points[2] and points[2].price)
+    Lab.Check('state','source timestamp preserved','2026-11-14T12:00:00.123456Z',points[1] and points[1].at)
+    Lab.Check('state','external data cannot enable trading',false,p.browse:IsEnabled() or p.advisor:IsEnabled() or p.track:IsEnabled())
+    Lab.Check('state','local saved observations unchanged',before,fingerprint(TwichUIWorkshopDB))
+end
 Lab.Finish()

@@ -37,10 +37,23 @@ fixture marketlarge '{ market = true, marketLarge = true }'
 fixture marketmetadata '{ market = true, marketMetadata = true }'
 fixture marketstale '{ market = true, marketStale = true }'
 fixture marketerror '{ market = true, marketError = true }'
+# A data-only transport built from pinned, explicitly synthetic fixture bytes.
+python3 - "$REPO/tests/fixtures/market_bridge_v1/source-canonical-generation.json" "$LAB/fixtures/bridge-payload.lua" <<'PYBRIDGE'
+import json,sys
+from pathlib import Path
+g=json.loads(Path(sys.argv[1]).read_text());records=g.pop('records')
+def raw(v):return json.dumps(v,sort_keys=True,separators=(',',':'),ensure_ascii=True)
+def q(s):return '"'+''.join('\\%03d'%b for b in s.encode())+'"'
+receipt=dict(schema_version=1,generation_id=g['generation_id'],desktop_build='synthetic-simulator',completed_at='2026-11-15T13:00:00Z')
+Path(sys.argv[2]).write_text('SIMLAB_BRIDGE = {transport_version=1,manifest='+q(raw(g))+',records={'+','.join(q(raw(r)) for r in records)+'},receipt='+q(raw(receipt))+'}\n')
+PYBRIDGE
+fixture marketbridge '{ bridge = true }'
+cat "$LAB/fixtures/bridge-payload.lua" "$LAB/fixtures/auctionpreview-marketbridge.lua" > "$LAB/fixtures/bridge-combined.lua"
+mv "$LAB/fixtures/bridge-combined.lua" "$LAB/fixtures/auctionpreview-marketbridge.lua"
 fixture wrong '{ wrongAt = "Browse default" }'
 repo_before="$(git -C "$REPO" status --porcelain --ignored)"
 status=0
-for name in shell replay small scaled empty filtered resized shopping shoppingsmall shoppingpurpose categories sell sellsmall sellscaled sellempty owned ownedsmall ownedempty market marketsmall marketscaled marketsparse marketempty marketrecent marketlong markettracked marketlarge marketmetadata marketstale marketerror wrong; do
+for name in shell replay small scaled empty filtered resized shopping shoppingsmall shoppingpurpose categories sell sellsmall sellscaled sellempty owned ownedsmall ownedempty market marketsmall marketscaled marketsparse marketempty marketrecent marketlong markettracked marketlarge marketmetadata marketstale marketerror marketbridge wrong; do
   simlab_stage
   width=1600; height=1200
   if [[ "$name" = small || "$name" = shoppingsmall || "$name" = sellsmall || "$name" = ownedsmall || "$name" = marketsmall ]]; then width=1000; height=700; fi

@@ -238,11 +238,11 @@ local function Build()
     A.ready = true
     if UISpecialFrames then tinsert(UISpecialFrames, "TwichUIAuctionPreview") end
 end
-function A.Show()
+function A.Show(initialMode)
     if InCombatLockdown and InCombatLockdown() then return false, "COMBAT" end
     if not root then R.Perf.Call("auction.previewBuild", Build) end
     if not A.ready then return false, "INCOMPLETE" end
-    active = "browse"
+    active = initialMode == "market" and "market" or "browse"
     if root:IsShown() then A.Go(active) else root:Show() end
     return true
 end

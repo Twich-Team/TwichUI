@@ -427,3 +427,7 @@ experimental native-response normalization in `auction/ReadRequests.lua:Event`.
 `auction.previewLiveResults` counts retained normalized experimental records.
 Sell bag rebuilding and My Auctions filtering are covered by the existing
 visible-page render scope; no hidden-page updater is introduced.
+
+## Market bridge measurements (M1b)
+
+The external reader registers `workshop.bridgeLoad`, `workshop.bridgeValidate`, `workshop.bridgeRecord` and `workshop.bridgeHistory` for explicit loading, cooperative validation slices and selected record/history reads. Read-only `workshop.bridgeRecords`, `workshop.bridgeBytes` and `workshop.bridgeCache` gauges report bounded retained state without loading or building it. `TwichUI_MarketData` has separate sampled addon memory and ownership markers. No bridge timer runs before an explicit load request or after validation completes. Cloud timing is not client acceptance.
