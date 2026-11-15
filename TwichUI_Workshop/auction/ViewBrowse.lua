@@ -13,6 +13,10 @@ local function Key(r)
     return r.item
 end
 local function Money(n) return n and UI.Money(n) or "Unavailable" end
+local function SavedMarket(p)
+    if p.researchMarketKey and p.researchMarketKey~="auto" then return W.Prices.Market(p.researchMarketKey) end
+    return W.Market.Source().market
+end
 local function Stamp(m, p)
     return (m and (m.key .. ":" .. W.Valuation.Generation(m)) or "none") .. ":" .. p.metadata
 end
@@ -35,6 +39,7 @@ Detail = function(p)
     d.data = chosen
     d.track:SetEnabled(chosen ~= nil)
     d.compare:SetEnabled(chosen ~= nil)
+    d.market:SetEnabled(chosen ~= nil)
     d.buy:SetEnabled(false)
     if not chosen then
         d.track.text:SetText("Track")
@@ -81,7 +86,7 @@ Start = function(p, reset)
     local view = reset and nil or (p.pendingView or p.viewport or A.Capture(p.list, Key))
     p.viewport = nil; p.pendingView = view
     if reset then p.list:ScrollTop(); p.selected = nil end
-    p.market = W.Market.Source().market
+    p.market = SavedMarket(p)
     p.stamp = Stamp(p.market, p)
     p.error, p.rows = nil, {}
     p.detail.cached = nil
@@ -149,10 +154,11 @@ function V.Select(item, key)
     for _, r in ipairs(page.list.rows) do if r.data then r:SetSelected(Key(r.data) == page.selected) end end
     Detail(page)
 end
-function A.OpenBrowse(item, qty)
+function A.OpenBrowse(item, qty, opt)
     item = W.Int(item, 1, W.MAX_ID)
     if not item or not A.IsShown() then return false end
     A.Go("browse")
+    page.researchMarketKey=opt and opt.market or nil
     page.forceItem = item
     page.category, page.quality, page.exact, page.auctionable = "all", -1, false, false
     page.categoryDrop:Refresh(); page.qualityDrop:Refresh()
@@ -213,7 +219,12 @@ local function BuildDetail(p)
         if not ok then A.Note(why) else p.liveSnapshot=nil;A.Schedule() end
     end,28)
     d.inspect:SetPoint("TOPLEFT",12,-580)
-    d.body:SetHeight(620)
+    d.market=A.HistoryButton(d.body,function()
+        local row=d.data
+        return row and row.item,{market=p.market and p.market.key or p.researchMarketKey,itemKey=row and row.itemKey}
+    end,300)
+    d.market:SetPoint("TOPLEFT",12,-618)
+    d.body:SetHeight(662)
     d.buy = UI.Button(d, "Buy unavailable", 122, "primary", nil, 32)
     d.buy:SetPoint("BOTTOMLEFT", 10, 10); d.buy:SetEnabled(false)
     d.compare = UI.Button(d, "Compare", 100, "secondary", function() d.scroll:SetVerticalScroll(98) end, 32)
@@ -383,7 +394,7 @@ local function Render(p)
     p.qtyHead:SetText("Qty*");p.unitHead:SetText("Unit price");p.totalHead:SetText("Est. value*")
     p.scope:SetText("*Aggregated quantity at the cheapest tier.\nStored history; no current auctions or exact stacks.")
     p.liveState:SetText("Saved Market Data · historical observations")
-    local market=W.Market.Source().market
+    local market=SavedMarket(p)
     -- Metadata bursts must not repeatedly cancel an unfinished catalog.
     -- It will be refreshed on the next visible render after completion.
     if p.job then return end

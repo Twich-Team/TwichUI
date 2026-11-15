@@ -87,7 +87,7 @@ function A.Go(key)
     active = key
     root.heading:SetText(found[4])
     root.sub:SetText(key == "browse" and "Search stored observations and compare prices and market history." or
-        key == "shopping" and "Gather what your existing Workshop queue and crafting plan still need." or key == "sell" and "Prepare bag items and pricing. Posting remains disabled." or key == "owned" and "Inspect explicit experimental owned-auction reads. Cancel and repost remain disabled." or "Preview only — implementation is deferred.")
+        key == "shopping" and "Gather what your existing Workshop queue and crafting plan still need." or key == "sell" and "Prepare bag items and pricing. Posting remains disabled." or key == "owned" and "Inspect explicit experimental owned-auction reads. Cancel and repost remain disabled." or "Inspect stored market history, listing prices and observation coverage.")
     root.failure:Hide()
     local page = Page(key)
     if page then page.failed = nil; page:Show()

@@ -5,6 +5,7 @@ local function Money(n) return n and UI.Money(n) or "No buyout / unknown" end
 local function Detail(p)
     local chosen
     for _,r in ipairs(p.rows or {}) do if r.auctionID==p.selected then chosen=r end end
+    p.chosen=chosen;p.detail.market:SetEnabled(chosen~=nil)
     p.detail.name:SetText(chosen and AD.Info(chosen.item).name or "Choose an owned listing")
     p.detail.pic.tex:SetTexture(chosen and AD.Info(chosen.item).icon or UI.ICON_BLANK)
     p.detail.kind:SetText("Read-only · experimental response")
@@ -86,8 +87,12 @@ local function Build(p)
     p.repost=UI.Button(p.detail,"Repost unavailable",158,"secondary",nil,30);p.repost:SetPoint("BOTTOMRIGHT",-10,10);p.repost:SetEnabled(false)
     UI.Tip(p.cancel,"Cancellation disabled","Exact real-client ownership, transaction and confirmation acceptance pending.")
     UI.Tip(p.repost,"Reposting disabled","No automatic cancellation or posting. Real-client acceptance pending.")
+    p.detail.market=A.HistoryButton(p.detail.body,function()
+        return p.chosen and p.chosen.item,{itemKey=p.chosen and p.chosen.itemKey}
+    end,300)
+    p.detail.market:SetPoint("TOPLEFT",12,-602);p.detail.body:SetHeight(646)
     p:SetScript("OnEvent",function() A.Schedule() end)
 end
 A.Register("owned",{Build=Build,Render=Render,Release=function(p)
-    Q.Cancel("page hidden");p:UnregisterAllEvents();p.listening=false;p.rows=nil;p.selected=nil;p.list:SetData({})
+    Q.Cancel("page hidden");p:UnregisterAllEvents();p.listening=false;p.rows=nil;p.chosen=nil;p.selected=nil;p.list:SetData({})
 end})

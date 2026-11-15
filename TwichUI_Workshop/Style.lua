@@ -763,15 +763,15 @@ function UI.PriceChart(parent, w, h, opt)
         self.shown = n
         if n == 0 then
             self.state = "empty"
-            Words(self, series and "Only older ranges are kept, so there is no recent day to show." or "No price history for this item yet.",
-                "More scans needed to show a price trend.")
+            Words(self, opt and opt.window and "No observations in this window." or (series and "Only older ranges are kept, so there is no recent day to show." or "No price history for this item yet."),
+                opt and opt.window and "Stored history only; missing days stay empty." or "More scans needed to show a price trend.")
             self.shown = 0
             return
         end
         if n == 1 then
             self.state = "single"
             local p = pts[first]
-            Words(self, "More scans needed to show a price trend.", ("Cheapest seen: %s \194\183 %s"):format(money(p.price), DayWords(p.day)))
+            Words(self, opt and opt.window and "One observation in this window." or "More scans needed to show a price trend.", ("Cheapest seen: %s \194\183 %s"):format(money(p.price), DayWords(p.day)))
             self.shown = 0   -- nothing is drawn: the one observation is in words
             self.observed = 1
             return

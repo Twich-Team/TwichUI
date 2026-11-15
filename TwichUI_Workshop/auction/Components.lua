@@ -84,3 +84,11 @@ function A.TrackButton(parent, getItem)
     end, 32)
     return b
 end
+
+-- Explicit research navigation only. Resolve context before Go releases the source page.
+function A.HistoryButton(parent, getContext, width)
+    return UI.Button(parent, "Open Market history", width or 240, "secondary", function()
+        local item,opt=getContext()
+        if item then A.OpenMarket(item,opt) end
+    end, 30)
+end

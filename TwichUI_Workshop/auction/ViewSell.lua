@@ -7,6 +7,7 @@ local function Detail(p)
     for _,r in ipairs(p.rows or {}) do if r.key==p.selected then row=r end end
     p.suggestion=nil
     p.chosen=row
+    p.detail.market:SetEnabled(row~=nil)
     p.detail.name:SetText(row and row.info.name or "Choose a bag item")
     p.detail.pic.tex:SetTexture(row and row.info.icon or UI.ICON_BLANK)
     p.detail.kind:SetText(row and ("Bags only · "..row.qty.." available") or "Bank stock cannot be posted from here")
@@ -100,6 +101,10 @@ local function Build(p)
     p.history=A.Text(p.detail.body,"",13,12,-108);p.history:SetWordWrap(true);p.history:SetHeight(100)
     p.chart=UI.PriceChart(p.detail.body,320,90);p.chart:SetPoint("TOPLEFT",8,-230)
     p.advice=A.Text(p.detail.body,"",13,12,-350);p.advice:SetWordWrap(true);p.advice:SetHeight(220)
+    p.detail.market=A.HistoryButton(p.detail.body,function()
+        return p.chosen and p.chosen.item,{variant=p.chosen and p.chosen.variant}
+    end,300)
+    p.detail.market:SetPoint("TOPLEFT",12,-582);p.detail.body:SetHeight(626)
     p:SetScript("OnEvent",function() A.Schedule() end)
 end
 A.Register("sell",{Build=Build,Render=function(p)
