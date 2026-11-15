@@ -182,8 +182,23 @@ local function Remember(s, key, result)
     s.cache[key] = result
 end
 
+-- Independent visible consumers subscribe without replacing Workshop's callback.
+local listeners = {}
+function St.Listen(fn, on)
+    if type(fn) ~= "function" then return end
+    listeners[fn] = on and true or nil
+end
+function St.ListenerCount()
+    local n = 0
+    for _ in pairs(listeners) do n = n + 1 end
+    return n
+end
+local function Notify()
+    for fn in pairs(listeners) do fn() end
+end
 local function Changed()
     if St.onChange then St.onChange() end
+    Notify()
 end
 
 local pending = false
@@ -329,6 +344,7 @@ end
 -- could match again). The page is told once, so it asks for the plan again.
 function St.Bump()
     St.epoch = St.epoch + 1
+    Notify()
     local dropped = false
     for _, s in pairs(slots) do
         if s.job then
@@ -351,6 +367,7 @@ function St.Reset()
         if s.job then s.job:Cancel(); stats.cancelled = stats.cancelled + 1 end
     end
     slots, order, ticking = {}, {}, false
+    Notify()
 end
 
 function St.Stats()

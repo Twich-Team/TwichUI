@@ -186,7 +186,7 @@ function A.Snapshot()
         if p.list then rows = rows + #p.list.rows end
         results = results + #(p.rows or {})
         if p.job then jobs = jobs + 1 end
-        if A.IsShown() and p.listening then listeners = listeners + 2 end
+        if A.IsShown() and p.listening then listeners = listeners + (p.eventCount or 2) end
     end
-    return { shown = A.IsShown() and 1 or 0, pages = pages, events = listeners, rows = rows, results = results, jobs = jobs, renders = renders }
+    return { shown = A.IsShown() and 1 or 0, pages = pages, events = listeners, rows = rows, results = results, jobs = jobs, subscriptions = (W.Strategy.ListenerCount and W.Strategy.ListenerCount() or 0) + (W.Storage.ListenerCount and W.Storage.ListenerCount() or 0), renders = renders }
 end

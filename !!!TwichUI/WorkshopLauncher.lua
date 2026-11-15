@@ -86,7 +86,12 @@ function L.Toggle() return Run("Toggle") end
 -- Explicit standalone preview; never touches the native Auction House or Host.
 function L.AuctionPreview()
     if InCombatLockdown and InCombatLockdown() then Say("%s", L.Explain("COMBAT")); return false end
-    local WS = Ready()
+    -- Workshop's optional native scan-button integration is deferred for this
+    -- load path: previewing must not add children or hooks to Blizzard's frame.
+    L.previewLoading = true
+    local loaded, WS = pcall(Ready)
+    L.previewLoading = nil
+    if not loaded then R.Fault("auction preview load", WS); Say("%s", L.Explain("ERROR")); return false end
     if not WS then return false end
     if not (WS.AuctionUI and WS.AuctionUI.Show) then Say("%s", L.Explain("INCOMPLETE")); return false end
     local ok, result = pcall(WS.AuctionUI.Show)

@@ -143,6 +143,7 @@ function AB.Status() return status end
 -- Made now when Blizzard's auction house window exists, otherwise when it is loaded (its own load on demand)
 function AB.Start()
     if attached then return end
+    if R.WorkshopLauncher and R.WorkshopLauncher.previewLoading then return end
     if type(AuctionHouseFrame) == "table" then return Attach() end
     ev = ev or CreateFrame("Frame")
     ev:SetScript("OnEvent", function(_, event, name)

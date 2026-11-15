@@ -408,6 +408,9 @@ end
 -- Opening
 ---------------------------------------------------------------------------
 function Win.Show()
+    -- Normal Workshop use resumes its existing native scan-button integration
+    -- after an earlier preview-only service load.
+    if W.AuctionButton then W.AuctionButton.Start() end
     if not f then Build() end
     f:Show()
 end

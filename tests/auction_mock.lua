@@ -1,6 +1,8 @@
 -- Synthetic presentation client with real Workshop modules and recording frames.
 dofile(TESTS .. "mi_mock.lua")
 local Press = dofile(TESTS .. "press.lua")
+local options = rawget(_G, "AUCTION_MOCK_OPTIONS") or {}
+AUCTION_MOCK_OPTIONS = nil
 local c = MIClient("Rich", {
   db = { modules = {} },
   beforeFiles = function(cl)
@@ -72,6 +74,17 @@ c.C_Item = {
 c.InCombatLockdown = function() return false end
 c.IsShiftKeyDown = function() return false end
 
+if options.preview then R.WorkshopLauncher = { previewLoading = true } end
+if options.native then
+    c.AuctionHouseFrame = c.CreateFrame("Frame", "AuctionHouseFrame", c.UIParent)
+    c.AuctionHouseFrame:SetSize(800,500); c.AuctionHouseFrame:SetPoint("CENTER"); c.AuctionHouseFrame:Show()
+    c.nativeHooks = 0
+    local hook = c.AuctionHouseFrame.HookScript
+    c.AuctionHouseFrame.HookScript = function(self,...)
+        c.nativeHooks = c.nativeHooks + 1
+        return hook(self,...)
+    end
+end
 local toc = assert(io.open(REPO .. "TwichUI_Workshop/TwichUI_Workshop.toc"))
 for line in toc:lines() do
   if line:match("%.lua$") then

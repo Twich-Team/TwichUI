@@ -193,6 +193,7 @@ local G = {
     { "auction.previewPages", "AH preview pages built (at most five)", "pool", "core", AuctionPreview("pages") },
     { "auction.previewEvents", "AH preview visible listeners", "listeners", "core", AuctionPreview("events") },
     { "auction.previewResults", "AH preview retained results", "cache", "core", AuctionPreview("results") },
+    { "auction.previewSubscriptions", "AH preview shared-plan/stock observers", "listeners", "core", AuctionPreview("subscriptions") },
     { "auction.previewJobs", "AH preview pending catalog jobs", "state", "core", AuctionPreview("jobs") },
     { "auction.previewRows", "AH preview pooled rows", "pool", "core", AuctionPreview("rows") },
     { "core.listeners", "TwichUI event bus: listeners", "listeners", "core", Listeners },

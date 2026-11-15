@@ -11,15 +11,18 @@ fixture shell '{}'
 fixture replay '{}'
 fixture empty '{ empty = true }'
 fixture filtered '{ filtered = true }'
+fixture shopping '{ shopping = true }'
+fixture shoppingsmall '{ shopping = true }'
+fixture shoppingpurpose '{ shopping = true, purpose = true }'
 fixture small '{}'
 fixture scaled '{ scaled = true }'
 fixture wrong '{ wrongAt = "Browse default" }'
 repo_before="$(git -C "$REPO" status --porcelain --ignored)"
 status=0
-for name in shell replay small scaled empty filtered wrong; do
+for name in shell replay small scaled empty filtered shopping shoppingsmall shoppingpurpose wrong; do
   simlab_stage
   width=1600; height=1200
-  if [ "$name" = small ]; then width=1000; height=700; fi
+  if [[ "$name" = small || "$name" = shoppingsmall ]]; then width=1000; height=700; fi
   set +e
   timeout 280 "$SIMLAB_DIR/sim.sh" --no-saved-vars --addons-path "$ROOT" --exec-lua "@$LAB/fixtures/auctionpreview-$name.lua" screenshot --png -o "$RUN/$name.png" --width "$width" --height "$height" > "$RUN/$name.stdout" 2> "$RUN/$name.stderr"
   code=$?

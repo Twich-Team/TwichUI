@@ -7,6 +7,12 @@ local native = CreateFrame("Frame", nil, UIParent)
 native:SetSize(800, 500); native:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 26, -90); native:SetScale(0.83); native:Show()
 AuctionHouseFrame = native
 local scale, hidden, shown, calls = native:GetScale(), 0, 0, 0
+local nativeHooks=0
+local realHook=native.HookScript
+native.HookScript=function(self,...)
+    nativeHooks=nativeHooks+1
+    return realHook(self,...)
+end
 native:SetScript("OnHide", function() hidden = hidden + 1 end)
 native:SetScript("OnShow", function() shown = shown + 1 end)
 C_AuctionHouse = setmetatable({}, { __index = function(_, key)
@@ -42,6 +48,8 @@ Lab.Step("explicit preview", function()
     Lab.Check("init", "proof disabled", false, R.AuctionHost.Snapshot().leased)
     SlashCmdList.TWICHUI("ahpreview")
     A = R.Workshop.AuctionUI; f = A.Frame()
+    Lab.Check("state","preview does not attach native scan button",false,R.Workshop.AuctionButton.Attached())
+    Lab.Check("state","preview adds no native hooks",0,nativeHooks)
     Seed(R.Workshop); A.Render()
     Lab.Check("construct", "preview shown", true, f:IsShown())
     Lab.Check("construct", "Workshop window unbuilt", false, R.Workshop.Snapshot().built)
@@ -82,6 +90,71 @@ Lab.Step("Browse history and filters", function()
     Lab.Check("interact","reset restores catalog",8,#p.list.data)
     A.Browse.Select(7067)
 end)
+local bags={}
+local function Pick(button,label)
+    button:Click()
+    local menu=_G.Menu.GetManager():GetOpenMenu()
+    local found
+    if menu then menu:EnumerateElementDescriptions(function(_,d) if MenuUtil.GetElementText(d)==label then found=d end end) end
+    if not found then error("missing filter "..label) end
+    found:Pick(MenuInputContext.MouseButton,"LeftButton")
+    Lab.Settle(0.3)
+end
+local function ShoppingSeed(W)
+    itemNames[10050]="Bolt of Silk Cloth";itemIcons[10050]="INV_Fabric_Silk_03"
+    local robe={id=1001,name="Silk Robe",prof=197,profName="Tailoring",outItem=10090,outMin=1,outMax=1,filled=true,
+        mats={{item=10050,qty=12},{item=7067,qty=8},{item=2321,qty=20},{item=4338,qty=4},{item=2604,qty=6}}}
+    local bolt={id=1002,name="Bolt of Silk Cloth",prof=197,profName="Tailoring",outItem=10050,outMin=1,outMax=1,filled=true,mats={{item=4306,qty=4}}}
+    W.Known.Store({prof=197,profName="Tailoring",complete=true,recipes={robe,bolt}})
+    W.Queue.Add(robe,1)
+    W.Session.Reset()
+    local market=TwichUIWorkshopDB.markets["Fixture Realm|Alliance"]
+    local b=W.Prices.NewBatch();b:Add(10050,99,1000*99,true);b:Add(4306,99,136*99,true);b:Add(7067,99,100*99,true)
+    local x=b:Items()
+    for id,entry in pairs(x) do market.items[id]=entry end
+    market.items[2604]=nil
+    W.Vendor.Observe({{id=2321,price=10,stack=1,avail=-1}},{[2321]=true},1234)
+    W.Storage.StoreBank({ids={6},tabs={[6]={[4338]=4}},incomplete=0},time()-7200)
+    bags={[10050]=2,[4306]=3}
+    C_Item.GetItemCount=function(id) return bags[id] or 0 end
+end
+Lab.Step("Shopping shared plan",function()
+    ShoppingSeed(R.Workshop)
+    A.Go("shopping");Lab.Settle(0.8)
+    local W,p=R.Workshop,A.Page("shopping")
+    local function Find(item)
+        for _,v in ipairs(p.rows) do if v.row.item==item then return v end end
+    end
+    local kinds={};for _,v in ipairs(p.rows) do kinds[v.source]=true end
+    for _,kind in ipairs({"make","auction","vendor","collect","none"}) do Lab.Check("state","Shopping source "..kind,true,kinds[kind]) end
+    Lab.Check("state","Shopping uses planner", "ready",p.state)
+    Lab.Check("state","Shopping stock in bags",0,Find(4338) and Find(4338).have)
+    Lab.Check("state","Shopping collect quantity",4,Find(4338) and Find(4338).missing)
+    Lab.Check("state","Shopping unknown price",nil,Find(2604) and Find(2604).row.cash)
+    Lab.Check("state","Shopping purchasing unavailable",false,p.detail.buy:IsEnabled())
+    Pick(p.sourceDrop,"Vendor")
+    Lab.Check("interact","Shopping source filter",1,#p.rows)
+    Lab.Check("state","Shopping filtered source","vendor",p.rows[1] and p.rows[1].source)
+    Pick(p.sourceDrop,"All Sources");Pick(p.groupDrop,"By crafting purpose")
+    Lab.Check("interact","Shopping purpose grouping","purpose",p.group)
+    Pick(p.groupDrop,"Group by item")
+    for _,r in ipairs(p.list.rows) do if r.data and r.data.row.item==7067 then r:Click();break end end
+    p.detail.browse:Click();Lab.Settle(0.4)
+    Lab.Check("interact","Shopping opens Browse history","browse",A.Mode())
+    Lab.Check("state","Shopping does not delete crafts",1,W.Queue.Count())
+    A.Go("shopping");Lab.Settle(0.3)
+    W.Session.SetCrafts(1001,2);Lab.Settle(0.5)
+    Lab.Check("state","Shopping queue updates",16,Find(7067) and Find(7067).missing)
+    bags[7067]=16;p:GetScript("OnEvent")(p,"BAG_UPDATE_DELAYED");Lab.Settle(0.5)
+    Lab.Check("state","Shopping real stock fulfillment",nil,Find(7067))
+    bags[7067]=0;W.Session.SetCrafts(1001,1);p.refresh:Click();Lab.Settle(0.5)
+    Lab.Check("state","Shopping restores requirement",8,Find(7067) and Find(7067).missing)
+    Lab.Check("state","Shopping one planner subscription",1,W.Strategy.ListenerCount())
+    A.Go("browse");Lab.Settle(0.4)
+    Lab.Check("state","Shopping unsubscribes hidden",0,W.Strategy.ListenerCount())
+    Lab.Check("state","Shopping releases references",nil,p.plan)
+    A.Browse.Search("");Lab.Settle(0.4);A.Browse.Select(7067)
+end)
 Lab.Step("native untouched and fit", function()
     Lab.Check("state", "native still shown", true, native:IsVisible())
     Lab.Check("state", "native scale retained", scale, native:GetScale())
@@ -97,7 +170,9 @@ Lab.Step("native untouched and fit", function()
     Lab.Check("construct", "navigation at left", true, f.nav:GetRight() < f.content:GetLeft())
     Lab.Check("construct", "window within viewport", true, f:GetWidth()*f:GetEffectiveScale() <= UIParent:GetWidth()*UIParent:GetEffectiveScale())
 end)
-Lab.RunUntil(5.5)
+Lab.RunUntil(math.max(5.5,Lab.simSeconds))
+if P.shopping then A.Go("shopping");Lab.Settle(0.5) end
+if P.purpose then Pick(A.Page("shopping").groupDrop,"By crafting purpose") end
 if P.empty then A.Browse.Search("no matching observations");Lab.Settle(0.4) end
 if P.filtered then A.Browse.Search("Cloth");Lab.Settle(0.4) end
 Lab.Finish()

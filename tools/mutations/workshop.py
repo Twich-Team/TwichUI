@@ -808,3 +808,17 @@ m("market.ah.stored-actionable", "TwichUI_Workshop/auction/BrowseData.lua",
 m("market.ah.price-order-reversed", "TwichUI_Workshop/auction/BrowseData.lua",
   "(a.unit or math.huge) < (b.unit or math.huge)", "(a.unit or math.huge) > (b.unit or math.huge)",
   "Browse sorts expensive observations first despite its unit-price ordering", ["test_workshop_auction_browse.lua"])
+
+# AH-3 presentation keeps the shared plan's quantities, uncertainty and state.
+m("crafting.ah.quantities-swapped", "TwichUI_Workshop/auction/ShoppingData.lua",
+  "need=row.need,have=row.have,missing=row.qty", "need=row.have,have=row.need,missing=row.qty",
+  "required and bag quantities swapped in the integrated view", ["test_workshop_auction_shopping.lua"])
+m("crafting.ah.missing-is-total", "TwichUI_Workshop/auction/ShoppingData.lua",
+  "missing=row.qty", "missing=row.need",
+  "the shopping view asks for all demand again instead of only the missing allocation", ["test_workshop_auction_shopping.lua"])
+m("crafting.ah.stale-enabled", "TwichUI_Workshop/auction/ShoppingData.lua",
+  'return "Updating plan · previous quantities may be stale",false', 'return "Updating plan · previous quantities may be stale",true',
+  "stale quantities enable quantity-dependent preparation", ["test_workshop_auction_shopping.lua"])
+m("crafting.ah.range-unqualified", "TwichUI_Workshop/auction/ShoppingData.lua",
+  "return W.Strategy.CostText({low=row.low,high=row.high},money)", "return money(row.low)",
+  "an uncertain cost lower bound is displayed as an exact amount", ["test_workshop_auction_shopping.lua"])

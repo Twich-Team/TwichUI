@@ -82,3 +82,51 @@ zero survivors/invalid/timeouts/infrastructure errors, 602.8 s. The selected
 Browse test checks 80 independent arithmetic fixtures plus a 6,000-item catalog,
 viewport preservation, cancellation and a recoverable read error. These are
 unit/simulator evidence, not real-client search or visual acceptance.
+
+## Checkpoint 3: Shopping
+
+`AuctionShoppingData` formats and filters `Session.ShoppingPlan()` output; it
+never allocates stock, optimizes recipes, calculates acquisition costs, persists
+a plan or touches inventory. CraftPlanner and the existing basic fallback remain
+the only engines. Required/bag/missing quantities are copied from shared rows,
+including unknown values. Collect rows distinguish personal and guild bank stock
+from bags and carry no purchase cost. Vendor/Auction/Craft/Collect/No source are
+shown with existing cost ranges, missing prices and source age. Grouping by item
+or shared crafting purpose is a presentation sort, without duplicated demand.
+
+The view preserves ready/planning/basic and stale state. Quantity-dependent
+preparation and source controls stay unavailable while stale/planning. Its source
+buttons use `Session.PickSource`; Track uses AdvisorData's existing saved set.
+Refresh stock recomputes the shared plan without scanning or moving items.
+Browse history prepares a selected item/need for read-only inspection and states
+that an auctioneer purchase must be performed separately. Show vendor and Open
+recipe call existing Session actions. Workshop recipes opens the unchanged
+Workshop Crafting screen. There is no Buy All, Clear bought, fictitious delivery,
+automatic craft or queue-consumption action. Actual bag changes determine when a
+requirement is fulfilled.
+
+Strategy and Storage have small independent visible-consumer subscriptions so
+neither preview nor Workshop replaces the other's callback. They are removed
+on page hide. Queue invalidation, planning completion and bank writes coalesce
+visible-page refreshes. Hidden pages drop plan/context/row references; a pending
+shared queue/suggestion job is cancelled only when no Workshop/compact view is
+using it. Preview close does not reset shared source choices or saved recipes.
+Diagnostics adds the shared-observer count; the existing render scope includes
+Shopping and the existing planner scopes remain authoritative.
+
+Preview-only loading also defers the existing AuctionButton native-frame
+attachment, including its hooks/listeners. Opening normal Workshop resumes its
+existing integration. A Workshop already loaded normally retains its existing
+button; the preview never removes, relocates or rehooks it. This preserves the
+preview's strict no-native-frame-mutation boundary.
+
+Checkpoint-3 verification: fast tier eight files pass; feature tier **53 files**,
+ten standalone preview launches and four unchanged proof launches pass
+(145.855 s, exit 0). Preview assertions total 670, including native attachment
+and hook isolation. The crafting campaign kills **116/116**, zero survivors,
+invalids, timeouts or infrastructure errors (40.0 s). Shopping, narrow Shopping
+and purpose-grouped screenshots were reviewed in `auctionpreview-1gKh9WWj`.
+The detail scroller exposes all evidence; final polish will tighten the default
+height. Tests also cover shared callback coexistence, stock changes, quantity
+projection, unknown/range costs, stale/basic states, Browse preparation, source
+choice persistence, repeated-use pools and refused-load flag cleanup.

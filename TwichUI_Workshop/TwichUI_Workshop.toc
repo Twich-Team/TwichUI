@@ -92,5 +92,7 @@ auction/Window.lua
 auction/Components.lua
 auction/BrowseData.lua
 auction/ViewBrowse.lua
+auction/ShoppingData.lua
+auction/ViewShopping.lua
 # The window: the shell, the page list and the events (last: it tells TwichUI the addon is ready)
 Window.lua
