@@ -145,6 +145,7 @@ Press.Must(p.categoryList.rows[3])
 same(p.category,"native:1.1","direct child selection")
 local job=p.job
 for i=1,20 do p:GetScript("OnEvent")(p,"GET_ITEM_INFO_RECEIVED",10,true);A.Render();same(p.job,job,"job not restarted") end
+while p.job do FlushTimers() end -- Finish discovery before injecting the next job's callback failure.
 -- A throwing timer slice terminates with a visible failed state.
 W.AuctionBrowseData.Job=function() return {Step=function() error("callback failure") end} end
 A.Browse.Search("error");FlushTimers()

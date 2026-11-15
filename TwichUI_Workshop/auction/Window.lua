@@ -257,5 +257,7 @@ function A.Snapshot()
         if p.job then jobs = jobs + 1 end
         if A.IsShown() and p.listening then listeners = listeners + (p.eventCount or 2) end
     end
-    return { reads = W.AuctionReads and W.AuctionReads.Pending() or 0, liveResults = W.AuctionReads and W.AuctionReads.snapshot and #W.AuctionReads.snapshot.rows or 0, shown = A.IsShown() and 1 or 0, pages = pages, events = listeners, rows = rows, results = results, jobs = jobs, subscriptions = (W.Strategy.ListenerCount and W.Strategy.ListenerCount() or 0) + (W.Storage.ListenerCount and W.Storage.ListenerCount() or 0), renders = renders, sizing = root and root.sizing and 1 or 0 }
+    local out={ reads = W.AuctionReads and W.AuctionReads.Pending() or 0, liveResults = W.AuctionReads and W.AuctionReads.snapshot and #W.AuctionReads.snapshot.rows or 0, shown = A.IsShown() and 1 or 0, pages = pages, events = listeners, rows = rows, results = results, jobs = jobs, subscriptions = (W.Strategy.ListenerCount and W.Strategy.ListenerCount() or 0) + (W.Storage.ListenerCount and W.Storage.ListenerCount() or 0), renders = renders, sizing = root and root.sizing and 1 or 0 }
+    for k,v in pairs(W.AuctionBrowseData and W.AuctionBrowseData.Stats() or {}) do out["catalog_"..k]=v end
+    return out
 end

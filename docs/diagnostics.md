@@ -416,6 +416,16 @@ load Workshop or construct a preview. No native-frame hooks are added.
 `TwichUI_Workshop/auction/BrowseData.lua`. Additional gauges count results and
 pending jobs; hidden pages retain neither. Client timing remains unmeasured.
 
+Catalog gauges now distinguish discovery starts, completed/canceled/error jobs,
+active jobs, cached filter projections, relevant metadata events, changed-row
+patches, source invalidations, list presentations and longest slice in ms.
+Counters saturate at one billion, retain no item identities, and require no log.
+Metadata does not invalidate a catalog. Compare starts/invalidations against
+metadata/patches during a client capture: duplicate events should increase the
+event counter without increasing starts or list presentations. Source changes
+and filter projections have separate counters; existing row-pool gauges expose
+frame growth. All mutation work is inside existing preview render/search scopes.
+
 `auction.previewPageBuild` records each lazy page's first construction.
 `auction.previewResize` records the explicit resize drag (at most 20 Hz).
 `auction.previewSubscriptions` counts the independent shared-plan/stock

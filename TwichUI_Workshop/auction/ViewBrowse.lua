@@ -18,7 +18,12 @@ local function SavedMarket(p)
     return W.Market.Source().market
 end
 local function Stamp(m, p)
-    return (m and (m.key .. ":" .. W.Valuation.Generation(m)) or "none") .. ":" .. p.metadata
+    return m and (m.key .. ":" .. W.Valuation.Generation(m)) or "none"
+end
+local function Options(p)
+    return {market=p.market,query=p.query,category=p.category,quality=p.quality,exact=p.exact,
+        auctionable=p.auctionable,nativeCategory=p.nativeByID and p.nativeByID[p.category],
+        item=p.forceItem}
 end
 local function DetailRows(d, facts)
     local rows = W.Facts.Rows(facts, UI.Money)
@@ -69,16 +74,23 @@ Detail = function(p)
     d.evidence:SetText((W.Advisor.EVIDENCE[rec.evidence] or "Limited evidence") .. "\n" .. table.concat(rec.reasons or {}, "\n"))
 end
 Paint = function(p)
+    D.Count("paints")
     p.list:SetData(p.rows or {}, p.error and ("Saved observations could not be read. Search " .. p.error .. ". Try Search history again.") or
         p.job and "Loading saved observations…" or p.market and "No stored observations match these filters." or
         "No saved market observations yet. Prices are never scanned automatically.")
     p.status:SetText(p.error and "Could not read observations" or p.job and "Loading stored observations…" or
         (tostring(#(p.rows or {})) .. " stored item observations" .. (p.capped and " · catalog limited to 20,000 items" or "")))
-    p.list.box:SetAlpha(p.job and 0.55 or 1)
+    p.list.box:SetAlpha(1)
     p.detail.buy:SetEnabled(false)
     Detail(p)
 end
 Start = function(p, reset)
+    if p.job and p.job.discovering and D.SameMarket(p.market,SavedMarket(p)) and p.stamp==Stamp(SavedMarket(p),p) then
+        p.refilter=true
+        if reset then p.selected=nil;p.list:ScrollTop();p.pendingView=nil end
+        return
+    end
+    if p.job and p.job.Cancel then p.job:Cancel() end
     p.token = p.token + 1
     p.state = "loading"
     if p.categoryList then p.categoryList:Layout() end
@@ -86,12 +98,19 @@ Start = function(p, reset)
     local view = reset and nil or (p.pendingView or p.viewport or A.Capture(p.list, Key))
     p.viewport = nil; p.pendingView = view
     if reset then p.list:ScrollTop(); p.selected = nil end
-    p.market = SavedMarket(p)
-    p.stamp = Stamp(p.market, p)
-    p.error, p.rows = nil, {}
+    local market=SavedMarket(p)
+    local stamp=Stamp(market,p)
+    local sourceKey=market and market.key or "none"
+    if p.sourceKey and p.sourceKey~=sourceKey then p.rows={};p.selected=nil end
+    p.sourceKey=sourceKey
+    local cached=D.SameMarket(p.market,market) and p.stamp==stamp and p.catalog or nil
+    if not cached then D.Count("invalidations");p.catalog,p.known,p.dirty=nil,nil,nil end
+    p.market,p.stamp=market,stamp
+    p.error = nil
+    p.rows=p.rows or {}
     p.detail.cached = nil
-    p.job = D.Job({market = p.market, query = p.query, category = p.category, quality = p.quality,
-        exact = p.exact, auctionable = p.auctionable, nativeCategory=p.nativeByID and p.nativeByID[p.category], item = p.forceItem or p.selected})
+    local opt=Options(p);opt.catalog=cached
+    p.job = D.Job(opt)
     Paint(p)
     local function Step()
         if mine ~= p.token or not A.IsShown() or A.Mode() ~= "browse" then return end
@@ -99,19 +118,36 @@ Start = function(p, reset)
         if not ok then err, done = "failed", true end
         if not done then C_Timer.After(0, Step); return end
         local job = p.job
+        if err and job.Cancel then job:Cancel() end
         p.job, p.error, p.capped = nil, err, job.capped
-        p.rows = err and {} or job.rows
+        p.rows = err and p.rows or job.rows
+        if not err then
+            p.catalog,p.known=job.catalog,job.seen;D.Patch(p,Options(p))
+            if p.refilter then p.refilter=nil;Start(p,true);return end
+        end
         p.state = err or (#p.rows > 0 and "results" or p.market and "no matching items" or "no stored data")
         local exists = false
         for _, r in ipairs(p.rows) do if r.item == p.selected then exists = true; break end end
         if not exists then p.selected = p.rows[1] and p.rows[1].item end
         Paint(p); A.Restore(p.list, view, Key); p.pendingView = nil
+        if not D.SameMarket(p.market,SavedMarket(p)) or p.stamp~=Stamp(SavedMarket(p),p) then A.Schedule() end
+    end
+    local Advance=Step
+    Step=function()
+        local ok,why=pcall(Advance)
+        if ok or mine~=p.token then return end
+        if p.job and p.job.Cancel then p.job:Cancel() end
+        p.token=p.token+1;p.job,p.dirty,p.refilter=nil,nil,nil
+        p.error,p.state="failed","failed";D.Count("errors")
+        p.status:SetText("Could not read observations · search saved data to retry")
+        pcall(Paint,p);R.Fault("auction catalog callback",why)
     end
     C_Timer.After(0, Step)
     C_Timer.After(15, function()
         if mine ~= p.token or not p.job then return end
         p.token = p.token + 1
-        p.job, p.rows, p.error, p.state = nil, {}, "timed out", "timed out"
+        if p.job.Cancel then p.job:Cancel() end
+        p.job, p.error, p.state = nil, "timed out", "timed out"
         Paint(p)
     end)
 end
@@ -121,6 +157,7 @@ local Begin=Start
 Start=function(p,reset)
     local ok,err=pcall(Begin,p,reset)
     if ok then return end
+    if p.job and p.job.Cancel then p.job:Cancel() end
     p.token=p.token+1
     p.job,p.rows,p.market,p.stamp,p.pendingView=nil,{},nil,nil,nil
     p.error,p.state="data unavailable","data unavailable"
@@ -356,10 +393,8 @@ local function Build(p)
     BuildDetail(p)
     p:SetScript("OnEvent",function(_,event,item,ok)
         if p.liveMode then A.Schedule();return end
-        if event~="GET_ITEM_INFO_RECEIVED" or ok~=false then
-            p.metadata=p.metadata+1
-            A.Schedule()
-        end
+        if event=="GET_ITEM_INFO_RECEIVED" then D.Metadata(p,item,ok) end
+        A.Schedule()
     end)
 end
 local function Render(p)
@@ -387,6 +422,7 @@ local function Render(p)
         return
     end
     if not p.listening then
+        W.Strategy.Listen(A.Schedule,true)
         p:RegisterEvent("GET_ITEM_INFO_RECEIVED"); p:RegisterEvent("BAG_UPDATE_DELAYED")
         for _,e in ipairs({"AUCTION_HOUSE_BROWSE_RESULTS_UPDATED","ITEM_SEARCH_RESULTS_UPDATED","AUCTION_HOUSE_BROWSE_FAILURE","AUCTION_HOUSE_CLOSED","AUCTION_HOUSE_SHOW"}) do p:RegisterEvent(e) end
         p.eventCount=7;p.listening=true
@@ -395,18 +431,24 @@ local function Render(p)
     p.scope:SetText("*Aggregated quantity at the cheapest tier.\nStored history; no current auctions or exact stacks.")
     p.liveState:SetText("Saved Market Data · historical observations")
     local market=SavedMarket(p)
-    -- Metadata bursts must not repeatedly cancel an unfinished catalog.
-    -- It will be refreshed on the next visible render after completion.
     if p.job then return end
-    if not p.stamp or p.stamp~=Stamp(market,p) then Start(p,false) else Paint(p) end
+    if not p.stamp or not D.SameMarket(p.market,market) or p.stamp~=Stamp(market,p) then Start(p,false)
+    else
+        local view=A.Capture(p.list,Key)
+        if D.Patch(p,Options(p)) then p.detail.cached=nil;Paint(p);A.Restore(p.list,view,Key)
+        else Detail(p) end
+    end
 end
 local function Release(p)
     if not A.IsShown() then p.researchMarketKey=nil end
     p.viewport=p.pendingView or A.Capture(p.list,Key)
     if p.liveMode then W.AuctionReads.Cancel("canceled");p.liveMode=false;p.liveSnapshot=nil end
     p.state="canceled"
+    if p.job and p.job.Cancel then p.job:Cancel() end
+    p.catalog,p.known,p.dirty,p.refilter=nil,nil,nil,nil
     p.token=p.token+1; p.job,p.rows,p.market,p.stamp,p.pendingView=nil,nil,nil,nil,nil
     p.list:SetData({}); p:UnregisterAllEvents(); p.listening=false
+    W.Strategy.Listen(A.Schedule,false)
     for _,r in ipairs(p.list.rows) do r.data=nil end
     p.detail.data,p.detail.cached,p.detail.recommendation=nil,nil,nil
 end

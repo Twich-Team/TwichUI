@@ -36,6 +36,16 @@ def m(id, file, find, replace, why, tests, smoke=False, expect="killed", note=""
     MUTATIONS.append(dict(id=id, file=file, find=find, replace=replace, why=why, tests=tuple(tests), smoke=smoke, expect=expect, note=note))
 
 
+m("market.auction.metadata-restarts", "TwichUI_Workshop/auction/BrowseData.lua",
+  '    D.Count("metadata")', '    D.Count("metadata");p.stamp=nil',
+  "late item metadata invalidates the whole catalog again, causing endless completed-job restarts",
+  ["test_workshop_auction_stability.lua"])
+m("market.auction.metadata-insert-order", "TwichUI_Workshop/auction/BrowseData.lua",
+  '(r.unit or math.huge)<(row.unit or math.huge)', '(r.unit or math.huge)>(row.unit or math.huge)',
+  "a late filtered item is inserted in reverse price order in the retained result list",
+  ["test_workshop_auction_stability.lua"])
+
+
 # ======================================================================================================================
 # MARKET AND PRICING: the batch (cheapest price per item), history, statistics, quotes and the craft estimate
 # ======================================================================================================================

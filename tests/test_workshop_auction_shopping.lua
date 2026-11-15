@@ -62,7 +62,8 @@ same(digest(S.picks),picks,"Market inspection leaves acquisition decisions uncha
 A.Go("shopping");settle()
 Press.Must(p.detail.browse);settle()
 same(A.Mode(),"browse");same(A.Page("browse").forceItem,target)
-same(W.Strategy.ListenerCount(),0);same(W.Storage.ListenerCount(),0)
+same(W.Strategy.ListenerCount(),1,"Shopping observer released; Browse owns one visible source observer")
+same(W.Storage.ListenerCount(),0)
 same(W.Queue.Count(),1,"navigation does not consume requirements")
 A.Go("shopping");settle()
 -- Queue and bag updates refresh via the shared services.

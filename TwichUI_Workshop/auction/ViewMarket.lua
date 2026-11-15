@@ -9,8 +9,11 @@ local function Key(r) return r.item end
 local function Money(n) return n and UI.Money(n) or "Unavailable" end
 local function Date(day) return date("!%b %d",math.floor(day*86400)) end
 local function Stamp(p,m)
-    return (m and m.key..":"..W.Valuation.Generation(m) or "none")..":"..p.metadata..":"..p.bags..
+    return (m and m.key..":"..W.Valuation.Generation(m) or "none")..":"..p.scope..":"..p.bags..
         (p.scope=="tracked" and ":"..D.TrackStamp() or "")
+end
+local function Options(p)
+    return {market=p.market,scope=p.scope,query=p.query,category=p.category,quality=p.quality,item=p.focusItem}
 end
 local function Context(p,item)
     return p.context and p.context.item==item and p.context or {}
@@ -119,6 +122,7 @@ Detail=function(p)
         (#groups>0 and ("Older aggregates (not daily markers):\n"..groups) or "No older aggregates in this window.")
 end
 Paint=function(p)
+    W.AuctionBrowseData.Count("paints")
     local text=p.error and (p.error=="timed out" and "Item search timed out.\nRefresh stored data." or "Stored data unavailable.\nRefresh stored data to retry.") or
         p.job and "Loading known items…" or p.scope=="tracked" and "No tracked items match.\nTrack items in Browse\nor Item Advisor." or
         p.scope=="bags" and "No matching bag items.\nBag data may be\nunavailable." or
@@ -129,16 +133,29 @@ Paint=function(p)
     Detail(p)
 end
 Start=function(p,reset)
+    if p.job and p.job.discovering and W.AuctionBrowseData.SameMarket(p.market,D.Resolve(p.marketKey)) and p.stamp==Stamp(p,D.Resolve(p.marketKey)) then
+        p.refilter=true
+        if reset then p.list:ScrollTop();p.pendingView=nil end
+        return
+    end
+    if p.job and p.job.Cancel then p.job:Cancel() end
     p.token=p.token+1
     local mine=p.token
     local view=not reset and (p.pendingView or p.viewport or A.Capture(p.list,Key)) or nil
     p.viewport=nil;p.pendingView=view
     if reset then p.list:ScrollTop() end
-    p.rows,p.index,p.known,p.error={},nil,nil,nil
+    p.rows=p.rows or {};p.error=nil
     local ok,err=pcall(function()
-        p.market=D.Resolve(p.marketKey)
-        p.stamp=Stamp(p,p.market)
-        p.job=D.Catalog({market=p.market,scope=p.scope,query=p.query,category=p.category,quality=p.quality,item=p.focusItem})
+        local market=D.Resolve(p.marketKey)
+        local stamp=Stamp(p,market)
+        local sourceKey=market and market.key or "none"
+        if p.sourceKey and p.sourceKey~=sourceKey then p.rows,p.index={},{} end
+        p.sourceKey=sourceKey
+        local cached=W.AuctionBrowseData.SameMarket(p.market,market) and p.stamp==stamp and p.catalog or nil
+        if not cached then W.AuctionBrowseData.Count("invalidations");p.catalog,p.known,p.dirty=nil,nil,nil end
+        p.market,p.stamp=market,stamp
+        local opt=Options(p);opt.catalog=cached
+        p.job=D.Catalog(opt)
     end)
     if not ok then
         p.job,p.market=nil,nil;p.error="unavailable";Paint(p);R.Fault("auction market catalog",err);return
@@ -150,16 +167,32 @@ Start=function(p,reset)
         if not good then done,why=true,"failed" end
         if not done then C_Timer.After(0,Step);return end
         local job=p.job
+        if why and job.Cancel then job:Cancel() end
         p.job=nil;p.error=why or job.unavailable;p.capped=job.capped
-        p.rows=not p.error and job.rows or {};p.index=not p.error and job.index or {};p.known=job.seen
+        if not p.error then
+            p.rows,p.index,p.known,p.catalog=job.rows,job.index,job.seen,job.catalog
+            W.AuctionBrowseData.Patch(p,Options(p))
+            if p.refilter then p.refilter=nil;Start(p,true);return end
+        else p.index=p.index or {} end
         if not p.index[p.selected] then p.selected=p.rows[1] and p.rows[1].item end
         Paint(p);A.Restore(p.list,view,Key);p.pendingView=nil
         if p.stamp~=Stamp(p,p.market) then A.Schedule() end
     end
+    local Advance=Step
+    Step=function()
+        local ok,why=pcall(Advance)
+        if ok or mine~=p.token then return end
+        if p.job and p.job.Cancel then p.job:Cancel() end
+        p.token=p.token+1;p.job,p.dirty,p.refilter=nil,nil,nil
+        p.error="failed";W.AuctionBrowseData.Count("errors")
+        p.status:SetText("Data unavailable · refresh saved data")
+        pcall(Paint,p);R.Fault("auction market callback",why)
+    end
     C_Timer.After(0,Step)
     C_Timer.After(15,function()
         if mine~=p.token or not p.job then return end
-        p.token=p.token+1;p.job,p.rows,p.index,p.known,p.error=nil,{},nil,nil,"timed out";Paint(p)
+        if p.job.Cancel then p.job:Cancel() end
+        p.token=p.token+1;p.job,p.error=nil,"timed out";Paint(p)
     end)
 end
 function V.Search(query)
@@ -316,10 +349,7 @@ local function Build(p)
     main:HookScript("OnSizeChanged",Layout);Layout()
     p:SetScript("OnEvent",function(_,event,item,ok)
         if event=="GET_ITEM_INFO_RECEIVED" then
-            local id=W.Int(W.Plain(item),1,W.MAX_ID)
-            local known=p.job and p.job.seen or p.known
-            if ok==false or not id or not (known and known[id]) then return end
-            p.metadata=p.metadata+1
+            W.AuctionBrowseData.Metadata(p,item,ok)
         elseif event=="BAG_UPDATE_DELAYED" and p.scope=="bags" then p.bags=p.bags+1
         else return end
         A.Schedule()
@@ -327,17 +357,26 @@ local function Build(p)
 end
 local function Render(p)
     if not p.listening then
+        W.Strategy.Listen(A.Schedule,true)
         p:RegisterEvent("GET_ITEM_INFO_RECEIVED");p:RegisterEvent("BAG_UPDATE_DELAYED")
         p.listening=true;p.eventCount=2
     end
     if p.job then return end
     local market=D.Resolve(p.marketKey)
-    if not p.stamp or p.stamp~=Stamp(p,market) then Start(p,false) else Detail(p);p.list:Layout() end
+    if not p.stamp or not W.AuctionBrowseData.SameMarket(p.market,market) or p.stamp~=Stamp(p,market) then Start(p,false)
+    else
+        local view=A.Capture(p.list,Key)
+        if W.AuctionBrowseData.Patch(p,Options(p)) then Paint(p);A.Restore(p.list,view,Key)
+        else Detail(p) end
+    end
 end
 local function Release(p)
     p.viewport=p.pendingView or (p.rows and A.Capture(p.list,Key)) or p.viewport
+    if p.job and p.job.Cancel then p.job:Cancel() end
+    p.catalog,p.dirty,p.refilter=nil,nil,nil
     p.token=p.token+1;p.job,p.rows,p.index,p.known,p.market,p.projection,p.chosen,p.stamp,p.pendingView=nil,nil,nil,nil,nil,nil,nil,nil,nil
     p.list:SetData({});p:UnregisterAllEvents();p.listening=false
+    W.Strategy.Listen(A.Schedule,false)
     for _,r in ipairs(p.list.rows) do r.data=nil end
     D.Clear()
 end
