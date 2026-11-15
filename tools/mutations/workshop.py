@@ -835,3 +835,13 @@ m("market.auction-read-invalid-complete", "TwichUI_Workshop/auction/ReadRequests
   "complete=api.HasFullItemSearchResults(p.arg) and count<=Q.MAX",
   "a missing native listing is silently omitted while the response is marked complete",
   ["test_workshop_auction_reads.lua"])
+
+# AH-6 must preserve market identity and typed-history resolution.
+m("market.ah6.wrong-market-fallback", "TwichUI_Workshop/auction/MarketData.lua",
+  "return PR.Market(key) -- an unavailable explicit market never falls back",
+  "return PR.Market(key) or MK.Source().market -- an unavailable explicit market never falls back",
+  "an unavailable chosen market silently shows another faction's prices", ["test_workshop_auction_market.lua"])
+m("market.ah6.aggregate-daily", "TwichUI_Workshop/auction/MarketData.lua",
+  '(p.kind=="day" or p.kind=="legacy-day") and p.v',
+  '(p.kind=="day" or p.kind=="legacy-day" or p.kind=="fortnight") and p.v',
+  "an old fortnight becomes a fabricated daily sample", ["test_workshop_auction_market.lua"])
