@@ -420,3 +420,10 @@ pending jobs; hidden pages retain neither. Client timing remains unmeasured.
 `auction.previewResize` records the explicit resize drag (at most 20 Hz).
 `auction.previewSubscriptions` counts the independent shared-plan/stock
 observers; it returns to zero when Shopping hides. No new addon memory owner.
+
+The overnight AH preview adds `auction.readSnapshot` for bounded (500-row)
+experimental native-response normalization in `auction/ReadRequests.lua:Event`.
+`auction.previewReads` is a 0/1 pending-read gauge and
+`auction.previewLiveResults` counts retained normalized experimental records.
+Sell bag rebuilding and My Auctions filtering are covered by the existing
+visible-page render scope; no hidden-page updater is introduced.
