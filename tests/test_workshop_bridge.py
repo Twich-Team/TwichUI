@@ -84,7 +84,7 @@ class BridgeReader(unittest.TestCase):
           'local h=B.History(2589,'+lua(key)+',"recent",{days=2});assert(#h.points==1 and #h.gaps==1 and h.gaps[1].why=="only_incomplete_server_observations")'])
     def test_json_sha_properties_and_large_currency_strings(self):
         import random
-        rng=random.Random(14031);lines=[]
+        rng=random.Random(14031);lines=['bit.ror=nil;local originalXor=bit.bxor;bit.bxor=function(a,b)return originalXor(a,b)end']
         for _ in range(80):
             raw=bytes(rng.randrange(256) for _ in range(rng.randrange(0,1024))).decode('latin1')
             # UTF-8 bytes are the independently hashed source string.

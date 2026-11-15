@@ -5,6 +5,7 @@ if P.categories then
     AuctionCategories={{name="Fixture trade group",filters={{classID=7}},
         subCategories={{name="Fixture subclass",filters={{classID=7,subClassID=0}}}}}}
 end
+if P.bridge then TwichUIMarketData=SIMLAB_BRIDGE end -- data is present while Workshop is still unloaded
 local R = TwichUI
 A_Admin.SetManualClock(GetTime())
 Lab.Solo()
@@ -368,13 +369,13 @@ if P.bridge then
     B.Begin(SIMLAB_BRIDGE)
     for i=1,3000 do local ok,why=B.Step(3);if why~='loading' then break end end
     Lab.Check('state','complete external generation validated',true,B.Status().ready)
-    A.Go('market');A.Market.Filter('marketKey','server');Lab.Settle(0.5)
+    A.Go('market');A.Market.Filter('marketKey','server');A.Market.Filter('scope','all');A.Market.Filter('category','all');A.Market.Filter('quality',-1);A.Market.Search('');Lab.Settle(0.5)
     local p=A.Page('market');for i=1,100 do if not p.job then break end;Lab.Settle(0.05) end
-    A.Market.Select(2589)
+    Lab.Check('interact','server item selectable',true,A.Market.Select(2589))
     Lab.Check('state','exact variant required',nil,p.projection.record)
     local key=SIMLAB_BRIDGE.records[2]:match('"variant_key":"([a-f0-9]+)"')
-    A.Market.Variant(key);A.Market.Range(2)
-    local points=p.projection.series.points
+    Lab.Check('interact','exact server variant selectable',true,A.Market.Variant(key));A.Market.Range(2)
+    local points=p.projection.series and p.projection.series.points or {}
     Lab.Check('state','two actual server dates',2,#points)
     Lab.Check('state','first daily price',100,points[1] and points[1].price)
     Lab.Check('state','latest daily price',120,points[2] and points[2].price)

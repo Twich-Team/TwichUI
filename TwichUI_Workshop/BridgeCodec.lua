@@ -118,8 +118,11 @@ local K={0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923
 0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
 0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2}
 function J.Hash(tick)
-    if not(bit and bit.bxor and bit.ror and bit.rshift) then error('bridge SHA-256 unavailable',0) end
-    local xor,band,bor,notb,ror,shr=bit.bxor,bit.band,bit.bor,bit.bnot,bit.ror,bit.rshift
+    if not(bit and bit.bxor and bit.band and bit.bor and bit.bnot and bit.lshift and bit.rshift) then error('bridge SHA-256 unavailable',0) end
+    local bxor,band,bor,notb,shl,shr=bit.bxor,bit.band,bit.bor,bit.bnot,bit.lshift,bit.rshift
+    -- Forever exposes shifts and binary bit operations; rotate/variadic helpers are not required.
+    local function xor(a,b,c) local n=bxor(a,b);if c~=nil then return bxor(n,c) end;return n end
+    local function ror(v,n) return bor(shr(v,n),shl(v,32-n)) end
     local h={0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19}
     local buffer,n,finished='',0,false;local ctx={}
     local function block(s,start)

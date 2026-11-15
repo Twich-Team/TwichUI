@@ -19,7 +19,7 @@ def judge(run):
         failures = [c for c in checks if c[0] == 'FAIL']; transcripts[name] = checks
         check(f'{name}: all steps complete', done and done[1] == '8' and done[5] == done[6] == 'false')
         check(f'{name}: counts agree', done and int(done[3]) == len(checks)-len(failures) and int(done[4]) == len(failures))
-        check(f'{name}: full assertions', len(checks) == (118 if name=='marketbridge' else 109) and {c[1] for c in checks} == {'init','construct','interact','state'})
+        check(f'{name}: full assertions', len(checks) == (120 if name=='marketbridge' else 109) and {c[1] for c in checks} == {'init','construct','interact','state'})
         check(f'{name}: expected outcomes', (len(failures)==1 and failures[0][2]=='Browse default') if name=='wrong' else not failures)
         for label, passed, detail in kf.verdict_lines(kf.classify(text, allow=('voice-settings-unsupplied',), require=('voice-settings-unsupplied',))):
             check(f'{name}: {label} {detail}', passed)
