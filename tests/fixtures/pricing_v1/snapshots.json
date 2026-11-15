@@ -1,0 +1,859 @@
+{
+  "fixture_version": 1,
+  "algorithm_proposal": "twichui-pricing-v1",
+  "cases": [
+    {
+      "id": "real-6537",
+      "origin": "captured_excerpt",
+      "item": {
+        "id": 6537,
+        "bonus_lists": [
+          12718
+        ]
+      },
+      "variant_key": "b89bee06d6e64b0d8b39e2ea2cabb0fdbf1a229d33c0e3b609f1df30b522596f",
+      "scope_complete": false,
+      "listings": [
+        {
+          "quantity": 1,
+          "unit_copper": null,
+          "total_copper": "4099",
+          "bid_copper": null
+        }
+      ],
+      "expected": {
+        "market_minimum": "4099",
+        "market_recent": "4099",
+        "workshop_recent": "4099",
+        "weighted_median": "4099",
+        "canonical_minimum": "4099",
+        "anchor": "4099",
+        "q25": "4099",
+        "q50": "4099",
+        "q75": "4099"
+      },
+      "derivation": "One retained listing: each priced-unit statistic equals its unit price. Not full variant coverage.",
+      "provenance": {
+        "source_repository": "Twich-Team/TwichUI-Market",
+        "source_commit": "7202e07a62f1770642b50afe5a3ec671d9b488cf",
+        "source_path": "backend/tests/fixtures/live-us-2026-11-14.json",
+        "source_file_sha256": "2ba587407d7dbea55a0b7d971fc88fab78f67176a3ef81304e964842f5eba610",
+        "source_kind": "auctions",
+        "auction_id": "61436806",
+        "retrieved_at": "2026-11-14T02:41:15.710982+00:00",
+        "source_url": "https://us.api.blizzard.com/data/wow/ruleset/1/auctions/110?namespace=dynamic-forever-us&locale=en_US",
+        "upstream_payload_sha256": "dc907a27a3604cc710b567826735a6a72642d463af2826c1816d08714f0fb9e6",
+        "original_listing_count": 96924,
+        "region": "us",
+        "transport_ruleset_id": 1,
+        "house_id": 110,
+        "player_ruleset": null,
+        "namespace": "dynamic-forever-us",
+        "observed_history_days": 0
+      }
+    },
+    {
+      "id": "real-14917",
+      "origin": "captured_excerpt",
+      "item": {
+        "id": 14917,
+        "bonus_lists": [
+          12725
+        ]
+      },
+      "variant_key": "c3b80299a47b146824ef618c6868a3653b71572dc7a98d280eb87d5620dc5100",
+      "scope_complete": false,
+      "listings": [
+        {
+          "quantity": 1,
+          "unit_copper": null,
+          "total_copper": "32500",
+          "bid_copper": null
+        }
+      ],
+      "expected": {
+        "market_minimum": "32500",
+        "market_recent": "32500",
+        "workshop_recent": "32500",
+        "weighted_median": "32500",
+        "canonical_minimum": "32500",
+        "anchor": "32500",
+        "q25": "32500",
+        "q50": "32500",
+        "q75": "32500"
+      },
+      "derivation": "One retained listing: each priced-unit statistic equals its unit price. Not full variant coverage.",
+      "provenance": {
+        "source_repository": "Twich-Team/TwichUI-Market",
+        "source_commit": "7202e07a62f1770642b50afe5a3ec671d9b488cf",
+        "source_path": "backend/tests/fixtures/live-us-2026-11-14.json",
+        "source_file_sha256": "2ba587407d7dbea55a0b7d971fc88fab78f67176a3ef81304e964842f5eba610",
+        "source_kind": "auctions",
+        "auction_id": "64702326",
+        "retrieved_at": "2026-11-14T02:41:15.710982+00:00",
+        "source_url": "https://us.api.blizzard.com/data/wow/ruleset/1/auctions/110?namespace=dynamic-forever-us&locale=en_US",
+        "upstream_payload_sha256": "dc907a27a3604cc710b567826735a6a72642d463af2826c1816d08714f0fb9e6",
+        "original_listing_count": 96924,
+        "region": "us",
+        "transport_ruleset_id": 1,
+        "house_id": 110,
+        "player_ruleset": null,
+        "namespace": "dynamic-forever-us",
+        "observed_history_days": 0
+      }
+    },
+    {
+      "id": "real-252437",
+      "origin": "captured_excerpt",
+      "item": {
+        "id": 252437
+      },
+      "variant_key": "5349b706cfb324bd70fff32a742647895237c8dd2cfe66a271ffc1e36f88850d",
+      "scope_complete": false,
+      "listings": [
+        {
+          "quantity": 10,
+          "unit_copper": "948",
+          "total_copper": null,
+          "bid_copper": null
+        }
+      ],
+      "expected": {
+        "market_minimum": "948",
+        "market_recent": "948",
+        "workshop_recent": "948",
+        "weighted_median": "948",
+        "canonical_minimum": "948",
+        "anchor": "948",
+        "q25": "948",
+        "q50": "948",
+        "q75": "948"
+      },
+      "derivation": "One retained listing: each priced-unit statistic equals its unit price. Not full variant coverage.",
+      "provenance": {
+        "source_repository": "Twich-Team/TwichUI-Market",
+        "source_commit": "7202e07a62f1770642b50afe5a3ec671d9b488cf",
+        "source_path": "backend/tests/fixtures/live-us-2026-11-14.json",
+        "source_file_sha256": "2ba587407d7dbea55a0b7d971fc88fab78f67176a3ef81304e964842f5eba610",
+        "source_kind": "commodities",
+        "auction_id": "63507784",
+        "retrieved_at": "2026-11-14T02:41:17.605752+00:00",
+        "source_url": "https://us.api.blizzard.com/data/wow/ruleset/1/auctions/110/commodities?namespace=dynamic-forever-us&locale=en_US",
+        "upstream_payload_sha256": "3cf41266007de8a8eaf53afc9ac8bcaf5a9150862d3f08ca0a2ac6d1e75fdb95",
+        "original_listing_count": 81471,
+        "region": "us",
+        "transport_ruleset_id": 1,
+        "house_id": 110,
+        "player_ruleset": null,
+        "namespace": "dynamic-forever-us",
+        "observed_history_days": 0
+      }
+    },
+    {
+      "id": "real-1081",
+      "origin": "captured_excerpt",
+      "item": {
+        "id": 1081
+      },
+      "variant_key": "aacb9fc1b65198568824e7dd04c64c4ff4d79617809f49913a0fc3c37dfbff20",
+      "scope_complete": false,
+      "listings": [
+        {
+          "quantity": 18,
+          "unit_copper": "50",
+          "total_copper": null,
+          "bid_copper": null
+        }
+      ],
+      "expected": {
+        "market_minimum": "50",
+        "market_recent": "50",
+        "workshop_recent": "50",
+        "weighted_median": "50",
+        "canonical_minimum": "50",
+        "anchor": "50",
+        "q25": "50",
+        "q50": "50",
+        "q75": "50"
+      },
+      "derivation": "One retained listing: each priced-unit statistic equals its unit price. Not full variant coverage.",
+      "provenance": {
+        "source_repository": "Twich-Team/TwichUI-Market",
+        "source_commit": "7202e07a62f1770642b50afe5a3ec671d9b488cf",
+        "source_path": "backend/tests/fixtures/live-us-2026-11-14.json",
+        "source_file_sha256": "2ba587407d7dbea55a0b7d971fc88fab78f67176a3ef81304e964842f5eba610",
+        "source_kind": "commodities",
+        "auction_id": "64585172",
+        "retrieved_at": "2026-11-14T02:41:17.605752+00:00",
+        "source_url": "https://us.api.blizzard.com/data/wow/ruleset/1/auctions/110/commodities?namespace=dynamic-forever-us&locale=en_US",
+        "upstream_payload_sha256": "3cf41266007de8a8eaf53afc9ac8bcaf5a9150862d3f08ca0a2ac6d1e75fdb95",
+        "original_listing_count": 81471,
+        "region": "us",
+        "transport_ruleset_id": 1,
+        "house_id": 110,
+        "player_ruleset": null,
+        "namespace": "dynamic-forever-us",
+        "observed_history_days": 0
+      }
+    },
+    {
+      "id": "healthy-material",
+      "origin": "synthetic",
+      "item": {
+        "id": 2589
+      },
+      "variant_key": "684434823a7f7a1797ecda68d5bb5abef5ea13a18aefa5a26cccff8e1b813d51",
+      "scope_complete": true,
+      "listings": [
+        {
+          "quantity": 20,
+          "unit_copper": "100",
+          "total_copper": null,
+          "bid_copper": null
+        },
+        {
+          "quantity": 20,
+          "unit_copper": "110",
+          "total_copper": null,
+          "bid_copper": null
+        },
+        {
+          "quantity": 20,
+          "unit_copper": "120",
+          "total_copper": null,
+          "bid_copper": null
+        }
+      ],
+      "expected": {
+        "market_minimum": "100",
+        "market_recent": "110",
+        "workshop_recent": "100",
+        "weighted_median": "110",
+        "canonical_minimum": "100",
+        "anchor": "100",
+        "q25": "100",
+        "q50": "110",
+        "q75": "120"
+      },
+      "derivation": "6600/60=110 mean; band takes 18 units at 100; lower median=110.",
+      "provenance": null
+    },
+    {
+      "id": "cheap-outlier",
+      "origin": "synthetic",
+      "item": {
+        "id": 2589
+      },
+      "variant_key": "684434823a7f7a1797ecda68d5bb5abef5ea13a18aefa5a26cccff8e1b813d51",
+      "scope_complete": true,
+      "listings": [
+        {
+          "quantity": 1,
+          "unit_copper": "1",
+          "total_copper": null,
+          "bid_copper": null
+        },
+        {
+          "quantity": 40,
+          "unit_copper": "5000",
+          "total_copper": null,
+          "bid_copper": null
+        },
+        {
+          "quantity": 10,
+          "unit_copper": "5200",
+          "total_copper": null,
+          "bid_copper": null
+        }
+      ],
+      "expected": {
+        "market_minimum": "1",
+        "market_recent": "4941",
+        "workshop_recent": "5000",
+        "weighted_median": "5000",
+        "canonical_minimum": "1",
+        "anchor": "5000",
+        "q25": "5000",
+        "q50": "5000",
+        "q75": "5000"
+      },
+      "derivation": "252001/51 rounds to 4941; strict-quarter anchor=5000, excludes 1; band=5000.",
+      "provenance": null
+    },
+    {
+      "id": "high-outlier",
+      "origin": "synthetic",
+      "item": {
+        "id": 2589
+      },
+      "variant_key": "684434823a7f7a1797ecda68d5bb5abef5ea13a18aefa5a26cccff8e1b813d51",
+      "scope_complete": true,
+      "listings": [
+        {
+          "quantity": 10,
+          "unit_copper": "5000",
+          "total_copper": null,
+          "bid_copper": null
+        },
+        {
+          "quantity": 1,
+          "unit_copper": "9990000",
+          "total_copper": null,
+          "bid_copper": null
+        }
+      ],
+      "expected": {
+        "market_minimum": "5000",
+        "market_recent": "912727",
+        "workshop_recent": "5000",
+        "weighted_median": "5000",
+        "canonical_minimum": "5000",
+        "anchor": "5000",
+        "q25": "5000",
+        "q50": "5000",
+        "q75": "5000"
+      },
+      "derivation": "10040000/11 rounds to 912727; cheapest 3.3 eligible units are 5000.",
+      "provenance": null
+    },
+    {
+      "id": "large-quantity-wall",
+      "origin": "synthetic",
+      "item": {
+        "id": 2589
+      },
+      "variant_key": "684434823a7f7a1797ecda68d5bb5abef5ea13a18aefa5a26cccff8e1b813d51",
+      "scope_complete": true,
+      "listings": [
+        {
+          "quantity": 5,
+          "unit_copper": "4500",
+          "total_copper": null,
+          "bid_copper": null
+        },
+        {
+          "quantity": 200,
+          "unit_copper": "6000",
+          "total_copper": null,
+          "bid_copper": null
+        }
+      ],
+      "expected": {
+        "market_minimum": "4500",
+        "market_recent": "5963",
+        "workshop_recent": "5878",
+        "weighted_median": "6000",
+        "canonical_minimum": "4500",
+        "anchor": "6000",
+        "q25": "6000",
+        "q50": "6000",
+        "q75": "6000"
+      },
+      "derivation": "1222500/205 rounds to 5963; band (5*4500+56.5*6000)/61.5=5878.04878.",
+      "provenance": null
+    },
+    {
+      "id": "thin-cheap-third",
+      "origin": "synthetic",
+      "item": {
+        "id": 2589
+      },
+      "variant_key": "684434823a7f7a1797ecda68d5bb5abef5ea13a18aefa5a26cccff8e1b813d51",
+      "scope_complete": true,
+      "listings": [
+        {
+          "quantity": 1,
+          "unit_copper": "1",
+          "total_copper": null,
+          "bid_copper": null
+        },
+        {
+          "quantity": 1,
+          "unit_copper": "9000",
+          "total_copper": null,
+          "bid_copper": null
+        },
+        {
+          "quantity": 1,
+          "unit_copper": "9500",
+          "total_copper": null,
+          "bid_copper": null
+        }
+      ],
+      "expected": {
+        "market_minimum": "1",
+        "market_recent": "6167",
+        "workshop_recent": "1",
+        "weighted_median": "9000",
+        "canonical_minimum": "1",
+        "anchor": "1",
+        "q25": "1",
+        "q50": "9000",
+        "q75": "9500"
+      },
+      "derivation": "18501/3=6167; first unit exceeds 25%, so anchor=1 and band=1. farbelow must block posting.",
+      "provenance": null
+    },
+    {
+      "id": "quarter-boundary",
+      "origin": "synthetic",
+      "item": {
+        "id": 2589
+      },
+      "variant_key": "684434823a7f7a1797ecda68d5bb5abef5ea13a18aefa5a26cccff8e1b813d51",
+      "scope_complete": true,
+      "listings": [
+        {
+          "quantity": 7,
+          "unit_copper": "2000",
+          "total_copper": null,
+          "bid_copper": null
+        },
+        {
+          "quantity": 21,
+          "unit_copper": "5000",
+          "total_copper": null,
+          "bid_copper": null
+        }
+      ],
+      "expected": {
+        "market_minimum": "2000",
+        "market_recent": "4250",
+        "workshop_recent": "5000",
+        "weighted_median": "5000",
+        "canonical_minimum": "2000",
+        "anchor": "5000",
+        "q25": "2000",
+        "q50": "5000",
+        "q75": "5000"
+      },
+      "derivation": "119000/28=4250; exactly 25% does not reach strict-quarter anchor; 2000 excluded.",
+      "provenance": null
+    },
+    {
+      "id": "above-quarter",
+      "origin": "synthetic",
+      "item": {
+        "id": 2589
+      },
+      "variant_key": "684434823a7f7a1797ecda68d5bb5abef5ea13a18aefa5a26cccff8e1b813d51",
+      "scope_complete": true,
+      "listings": [
+        {
+          "quantity": 8,
+          "unit_copper": "2000",
+          "total_copper": null,
+          "bid_copper": null
+        },
+        {
+          "quantity": 20,
+          "unit_copper": "5000",
+          "total_copper": null,
+          "bid_copper": null
+        }
+      ],
+      "expected": {
+        "market_minimum": "2000",
+        "market_recent": "4143",
+        "workshop_recent": "2143",
+        "weighted_median": "5000",
+        "canonical_minimum": "2000",
+        "anchor": "2000",
+        "q25": "2000",
+        "q50": "5000",
+        "q75": "5000"
+      },
+      "derivation": "116000/28 rounds 4143; band (8*2000+0.4*5000)/8.4 rounds 2143.",
+      "provenance": null
+    },
+    {
+      "id": "just-over-half",
+      "origin": "synthetic",
+      "item": {
+        "id": 2589
+      },
+      "variant_key": "684434823a7f7a1797ecda68d5bb5abef5ea13a18aefa5a26cccff8e1b813d51",
+      "scope_complete": true,
+      "listings": [
+        {
+          "quantity": 12,
+          "unit_copper": "2510",
+          "total_copper": null,
+          "bid_copper": null
+        },
+        {
+          "quantity": 38,
+          "unit_copper": "5000",
+          "total_copper": null,
+          "bid_copper": null
+        }
+      ],
+      "expected": {
+        "market_minimum": "2510",
+        "market_recent": "4402",
+        "workshop_recent": "3008",
+        "weighted_median": "5000",
+        "canonical_minimum": "2510",
+        "anchor": "5000",
+        "q25": "5000",
+        "q50": "5000",
+        "q75": "5000"
+      },
+      "derivation": "220120/50=4402.4; band (12*2510+3*5000)/15=3008; cheap cluster survives filter.",
+      "provenance": null
+    },
+    {
+      "id": "just-under-half",
+      "origin": "synthetic",
+      "item": {
+        "id": 2589
+      },
+      "variant_key": "684434823a7f7a1797ecda68d5bb5abef5ea13a18aefa5a26cccff8e1b813d51",
+      "scope_complete": true,
+      "listings": [
+        {
+          "quantity": 12,
+          "unit_copper": "2490",
+          "total_copper": null,
+          "bid_copper": null
+        },
+        {
+          "quantity": 38,
+          "unit_copper": "5000",
+          "total_copper": null,
+          "bid_copper": null
+        }
+      ],
+      "expected": {
+        "market_minimum": "2490",
+        "market_recent": "4398",
+        "workshop_recent": "5000",
+        "weighted_median": "5000",
+        "canonical_minimum": "2490",
+        "anchor": "5000",
+        "q25": "5000",
+        "q50": "5000",
+        "q75": "5000"
+      },
+      "derivation": "219880/50=4397.6; 2490 < 5000/2 so band excludes cheap cluster.",
+      "provenance": null
+    },
+    {
+      "id": "expensive-wall",
+      "origin": "synthetic",
+      "item": {
+        "id": 2589
+      },
+      "variant_key": "684434823a7f7a1797ecda68d5bb5abef5ea13a18aefa5a26cccff8e1b813d51",
+      "scope_complete": true,
+      "listings": [
+        {
+          "quantity": 20,
+          "unit_copper": "5000",
+          "total_copper": null,
+          "bid_copper": null
+        },
+        {
+          "quantity": 1000,
+          "unit_copper": "9000",
+          "total_copper": null,
+          "bid_copper": null
+        }
+      ],
+      "expected": {
+        "market_minimum": "5000",
+        "market_recent": "8922",
+        "workshop_recent": "8739",
+        "weighted_median": "9000",
+        "canonical_minimum": "5000",
+        "anchor": "9000",
+        "q25": "9000",
+        "q50": "9000",
+        "q75": "9000"
+      },
+      "derivation": "9100000/1020 rounds 8922; band (20*5000+286*9000)/306 rounds 8739.",
+      "provenance": null
+    },
+    {
+      "id": "unequal-stacks",
+      "origin": "synthetic",
+      "item": {
+        "id": 2589
+      },
+      "variant_key": "684434823a7f7a1797ecda68d5bb5abef5ea13a18aefa5a26cccff8e1b813d51",
+      "scope_complete": true,
+      "listings": [
+        {
+          "quantity": 2,
+          "unit_copper": null,
+          "total_copper": "201",
+          "bid_copper": null
+        },
+        {
+          "quantity": 8,
+          "unit_copper": null,
+          "total_copper": "1600",
+          "bid_copper": null
+        }
+      ],
+      "expected": {
+        "market_minimum": "101",
+        "market_recent": "180",
+        "workshop_recent": "134",
+        "weighted_median": "200",
+        "canonical_minimum": "101",
+        "anchor": "200",
+        "q25": "200",
+        "q50": "200",
+        "q75": "200"
+      },
+      "derivation": "Raw mean=1801/10=180.1; ceil tiers 101x2,200x8; band (202+200)/3=134.",
+      "provenance": null
+    },
+    {
+      "id": "fractional-minimum",
+      "origin": "synthetic",
+      "item": {
+        "id": 2589
+      },
+      "variant_key": "684434823a7f7a1797ecda68d5bb5abef5ea13a18aefa5a26cccff8e1b813d51",
+      "scope_complete": true,
+      "listings": [
+        {
+          "quantity": 3,
+          "unit_copper": null,
+          "total_copper": "301",
+          "bid_copper": null
+        }
+      ],
+      "expected": {
+        "market_minimum": "100",
+        "market_recent": "100",
+        "workshop_recent": "101",
+        "weighted_median": "101",
+        "canonical_minimum": "101",
+        "anchor": "101",
+        "q25": "101",
+        "q50": "101",
+        "q75": "101"
+      },
+      "derivation": "301/3=100 1/3; Market rounds half up to 100; Workshop uses ceiling 101.",
+      "provenance": null
+    },
+    {
+      "id": "sub-copper",
+      "origin": "synthetic",
+      "item": {
+        "id": 2589
+      },
+      "variant_key": "684434823a7f7a1797ecda68d5bb5abef5ea13a18aefa5a26cccff8e1b813d51",
+      "scope_complete": true,
+      "listings": [
+        {
+          "quantity": 3,
+          "unit_copper": null,
+          "total_copper": "1",
+          "bid_copper": null
+        }
+      ],
+      "expected": {
+        "market_minimum": "0",
+        "market_recent": "0",
+        "workshop_recent": "1",
+        "weighted_median": "1",
+        "canonical_minimum": "1",
+        "anchor": "1",
+        "q25": "1",
+        "q50": "1",
+        "q75": "1"
+      },
+      "derivation": "1/3 rounds to 0 in Market; ceiling=1 in Workshop. Zero is not a supported canonical listing price.",
+      "provenance": null
+    },
+    {
+      "id": "expensive-supported",
+      "origin": "synthetic",
+      "item": {
+        "id": 2589
+      },
+      "variant_key": "684434823a7f7a1797ecda68d5bb5abef5ea13a18aefa5a26cccff8e1b813d51",
+      "scope_complete": true,
+      "listings": [
+        {
+          "quantity": 2,
+          "unit_copper": "99999999998",
+          "total_copper": null,
+          "bid_copper": null
+        },
+        {
+          "quantity": 1,
+          "unit_copper": "99999999999",
+          "total_copper": null,
+          "bid_copper": null
+        }
+      ],
+      "expected": {
+        "market_minimum": "99999999998",
+        "market_recent": "99999999998",
+        "workshop_recent": "99999999998",
+        "weighted_median": "99999999998",
+        "canonical_minimum": "99999999998",
+        "anchor": "99999999998",
+        "q25": "99999999998",
+        "q50": "99999999998",
+        "q75": "99999999999"
+      },
+      "derivation": "299999999995/3=99999999998 1/3; band and lower median use lower tier.",
+      "provenance": null
+    },
+    {
+      "id": "above-lua-exact",
+      "origin": "synthetic",
+      "item": {
+        "id": 2589
+      },
+      "variant_key": "684434823a7f7a1797ecda68d5bb5abef5ea13a18aefa5a26cccff8e1b813d51",
+      "scope_complete": true,
+      "listings": [
+        {
+          "quantity": 1,
+          "unit_copper": "9007199254740993",
+          "total_copper": null,
+          "bid_copper": null
+        }
+      ],
+      "expected": {
+        "market_minimum": "9007199254740993",
+        "market_recent": "9007199254740993",
+        "workshop_recent": null,
+        "weighted_median": null,
+        "canonical_minimum": null,
+        "anchor": null,
+        "q25": null,
+        "q50": null,
+        "q75": null
+      },
+      "derivation": "Preserve exact decimal string. Outside canonical common unit-price domain; do not convert to Lua number.",
+      "provenance": null
+    },
+    {
+      "id": "signed64-maximum",
+      "origin": "synthetic",
+      "item": {
+        "id": 2589
+      },
+      "variant_key": "684434823a7f7a1797ecda68d5bb5abef5ea13a18aefa5a26cccff8e1b813d51",
+      "scope_complete": true,
+      "listings": [
+        {
+          "quantity": 1,
+          "unit_copper": "9223372036854775807",
+          "total_copper": null,
+          "bid_copper": null
+        }
+      ],
+      "expected": {
+        "market_minimum": "9223372036854775807",
+        "market_recent": "9223372036854775807",
+        "workshop_recent": null,
+        "weighted_median": null,
+        "canonical_minimum": null,
+        "anchor": null,
+        "q25": null,
+        "q50": null,
+        "q75": null
+      },
+      "derivation": "Valid raw signed-64 copper; outside canonical common unit-price domain.",
+      "provenance": null
+    },
+    {
+      "id": "bid-only",
+      "origin": "synthetic",
+      "item": {
+        "id": 2589
+      },
+      "variant_key": "684434823a7f7a1797ecda68d5bb5abef5ea13a18aefa5a26cccff8e1b813d51",
+      "scope_complete": true,
+      "listings": [
+        {
+          "quantity": 5,
+          "unit_copper": null,
+          "total_copper": null,
+          "bid_copper": "100"
+        }
+      ],
+      "expected": {
+        "market_minimum": null,
+        "market_recent": null,
+        "workshop_recent": null,
+        "weighted_median": null,
+        "canonical_minimum": null,
+        "anchor": null,
+        "q25": null,
+        "q50": null,
+        "q75": null
+      },
+      "derivation": "Supply=5, priced supply=0; no price or buyout distribution.",
+      "provenance": null
+    },
+    {
+      "id": "mixed-bid",
+      "origin": "synthetic",
+      "item": {
+        "id": 2589
+      },
+      "variant_key": "684434823a7f7a1797ecda68d5bb5abef5ea13a18aefa5a26cccff8e1b813d51",
+      "scope_complete": true,
+      "listings": [
+        {
+          "quantity": 3,
+          "unit_copper": "100",
+          "total_copper": null,
+          "bid_copper": null
+        },
+        {
+          "quantity": 7,
+          "unit_copper": null,
+          "total_copper": null,
+          "bid_copper": "10"
+        }
+      ],
+      "expected": {
+        "market_minimum": "100",
+        "market_recent": "100",
+        "workshop_recent": "100",
+        "weighted_median": "100",
+        "canonical_minimum": "100",
+        "anchor": "100",
+        "q25": "100",
+        "q50": "100",
+        "q75": "100"
+      },
+      "derivation": "Supply=10 but price denominator=3; bid-only units do not enter quantiles or band.",
+      "provenance": null
+    },
+    {
+      "id": "no-current-listings",
+      "origin": "synthetic",
+      "item": {
+        "id": 2589
+      },
+      "variant_key": "684434823a7f7a1797ecda68d5bb5abef5ea13a18aefa5a26cccff8e1b813d51",
+      "scope_complete": true,
+      "listings": [],
+      "expected": {
+        "market_minimum": null,
+        "market_recent": null,
+        "workshop_recent": null,
+        "weighted_median": null,
+        "canonical_minimum": null,
+        "anchor": null,
+        "q25": null,
+        "q50": null,
+        "q75": null
+      },
+      "derivation": "Complete empty source scope means no current listing, never a zero price.",
+      "provenance": null
+    }
+  ]
+}
