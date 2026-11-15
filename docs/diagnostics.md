@@ -138,6 +138,8 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `glows.evaluate`, `glows.map` (`Perf.Start`, after the coalescing) | `glows/Controller.lua` `Evaluate` (one look per burst of events) and `glows/Buttons.lua` `BT.Map` (the buttons read again after a bar, page, form, macro or spell change), only while Action bar glows is on | rebuild |
 | `glows.event`, `glows.unit`, `glows.group` (`Perf.Wrap`) | `glows/Controller.lua`'s three private event frames (game events; your own aura, inventory and casts; group members' auras, only out of combat in a group) | event |
 | `buffback.aura`, `buffback.event` (`Perf.Wrap`) | `buffback/Watch.lua`'s two private event frames (your own UNIT_AURA and UNIT_SPELLCAST_SUCCEEDED; zone, resting, combat, target, group and spell changes), only while it is on | event |
+| `loot.event` (`Perf.Wrap`) | `loot/Roll.lua`'s private event frame (group-loot roll events, the roll history, item information), only while Loot Rolls is on | event |
+| `loot.layout`, `loot.tick` (`Perf.Wrap`) | `loot/Cards.lua` `Layout` (a roll started, changed or ended, or a setting changed) and the stack's `OnUpdate` (the countdown bars: about 20 a second, only while a card is counting down or entering) | layout, update |
 | `settings.describe`, `settings.window.build` (`Perf.Call`) | `TwichUI_Settings/Window.lua` `UI.Open` | init |
 | `settings.page.build` (`Perf.Call`), `settings.page.layout`, `settings.search` | `TwichUI_Settings/Window.lua` | build, layout, search |
 | `settings.search.index` | `TwichUI_Settings/Search.lua` `Search.Build` | rebuild |

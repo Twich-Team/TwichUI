@@ -366,6 +366,19 @@ buffback\Watch.lua
 buffback\List.lua
 buffback\Unlock.lua
 
+# Loot Rolls: a card for each group-loot roll (replacing the game's roll frames one roll at a time, with the game's own window as the
+# fallback) and optional rules that can pick Need, Greed or Pass after a countdown the player can stop (off until turned on).
+# Rules.lua is the rule engine (pure), Config.lua what is stored, Roll.lua watches the game's rolls and is the only place a choice is sent
+# from, Auto.lua turns a rule's decision into a visible countdown, Blizzard.lua lets the game's frames step aside, Cards.lua draws, Main.lua
+# is the switch. The settings are in TwichUI_Settings. Artwork: media\loot (tools/make_loot_roll_art.py).
+loot\Rules.lua
+loot\Config.lua
+loot\Roll.lua
+loot\Auto.lua
+loot\Blizzard.lua
+loot\Cards.lua
+loot\Main.lua
+
 # Action bar glows: your action bar buttons glow when a buff of yours is missing (on you, or on group members out of
 # combat), a weapon buff, seal or tracking is off, a reagent or an item you chose runs low, an important cooldown comes
 # back, a proc can be used, or a button holds an old rank. Each kind and each spell can be turned off, and each has its own

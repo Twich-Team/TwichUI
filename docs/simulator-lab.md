@@ -31,6 +31,7 @@ tools/simlab/diagnose.sh         # the clock over a 12 s window: baseline, solo,
 tools/simlab/workshop.sh         # the real Workshop window through Crafting, Opportunities and Shopping over fake game data (below)
 bash tools/simlab/settings.sh    # capture the actual current settings catalog; handler checks and human screenshot review (below)
 bash tools/simlab/tests/lab_guard.sh   # the lab-path safety check's rejection paths, in disposable folders (below)
+bash tools/simlab/loot.sh        # the Loot Rolls cards, rules, settings pages and placement over synthetic rolls (below)
 ```
 
 Run the scripts with bash (`tools/simlab/x.sh` or `bash tools/simlab/x.sh`). Under zsh they stop before creating anything.
@@ -228,6 +229,20 @@ cached reopen and unchanged settings-change count. Home adds local filtering and
 Screenshots require inspection. Neither a successful construction nor these generic handlers proves all feature controls
 or actual pointer delivery. See [the second-pass workflow review](settings-second-pass.md) and [rollout report](settings-modernization.md) for page-by-page review, populated
 scenarios, exact run IDs, discrepancies and native-client gaps. The older 49-page coverage summary above is historical.
+
+## The Loot Rolls scenario
+
+`bash tools/simlab/loot.sh [view ...]` (views: `manual stack auto resolved waiting expired unavailable rules builder cards narrow empty place`; all by
+default) runs `scenarios/loot.lua` once per view from a fresh root, with a screenshot each, written to `$WOWSIM_LAB/artifacts/loot-<time>/`.
+It exercises the real `loot/` code and the Loot Rolls settings pages over **synthetic** rolls: the game-API boundary (`GetLootRollItemInfo`,
+`GetLootRollItemLink`, `GetLootRollTimeLeft`, `GetActiveLootRollIDs`, `RollOnLoot`, `C_Item`, `C_LootHistory`, the skill lines) is faked in the
+scenario, `RollOnLoot` only records the call, and the events (`START_LOOT_ROLL`, `CANCEL_LOOT_ROLL`, `LOOT_HISTORY_UPDATE_DROP`, ...) are
+delivered by `A_Admin.FireEvent` to the frames that registered for them. Its checks are handler-level (`Button:Click()`, direct calls) and state
+reads; the screenshots are for comparing layout with `assets/LOOT_ROLLS_*_MOCKUP.png`, not appearance in the game.
+
+It does **not** show that the Forever client sends these events, accepts `RollOnLoot` from a timer, closes a placed roll with
+`CANCEL_LOOT_ROLL`, or exposes other players' rolls: that is the in-game acceptance list in `docs/loot-rolls-implementation.md`.
+Screenshots draw solid colors lighter than the game does (the simulator's color handling), so the cards look greyer than the real framed look.
 
 ## The Workshop scenario
 
