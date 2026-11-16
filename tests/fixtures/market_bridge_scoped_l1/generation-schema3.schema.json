@@ -1,0 +1,315 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "format": {
+      "$ref": "https://twichui.example/contracts/bridge/v1/generation-schema2.json#/properties/format"
+    },
+    "contract_version": {
+      "$ref": "https://twichui.example/contracts/bridge/v1/generation-schema2.json#/properties/contract_version"
+    },
+    "schema_version": {
+      "const": 3
+    },
+    "transport_version": {
+      "$ref": "https://twichui.example/contracts/bridge/v1/generation-schema2.json#/properties/transport_version"
+    },
+    "generation_id": {
+      "$ref": "https://twichui.example/contracts/bridge/v1/generation-schema2.json#/properties/generation_id"
+    },
+    "issuer_id": {
+      "$ref": "https://twichui.example/contracts/bridge/v1/generation-schema2.json#/properties/issuer_id"
+    },
+    "producer": {
+      "$ref": "https://twichui.example/contracts/bridge/v1/generation-schema2.json#/properties/producer"
+    },
+    "required_features": {
+      "const": [
+        "exact_copper",
+        "current_summaries",
+        "daily_history",
+        "scoped_selection"
+      ]
+    },
+    "market": {
+      "$ref": "https://twichui.example/contracts/bridge/v1/generation-schema2.json#/properties/market"
+    },
+    "pricing_algorithm": {
+      "$ref": "https://twichui.example/contracts/bridge/v1/generation-schema2.json#/properties/pricing_algorithm"
+    },
+    "history_basis": {
+      "$ref": "https://twichui.example/contracts/bridge/v1/generation-schema2.json#/properties/history_basis"
+    },
+    "quality_policy": {
+      "$ref": "https://twichui.example/contracts/bridge/v1/generation-schema2.json#/properties/quality_policy"
+    },
+    "watermark_observation_id": {
+      "$ref": "https://twichui.example/contracts/bridge/v1/generation-schema2.json#/properties/watermark_observation_id"
+    },
+    "current_observation_ref": {
+      "$ref": "https://twichui.example/contracts/bridge/v1/generation-schema2.json#/properties/current_observation_ref"
+    },
+    "as_of_utc_day": {
+      "$ref": "https://twichui.example/contracts/bridge/v1/generation-schema2.json#/properties/as_of_utc_day"
+    },
+    "generated_at": {
+      "$ref": "https://twichui.example/contracts/bridge/v1/generation-schema2.json#/properties/generated_at"
+    },
+    "desktop_sync_completed_at": {
+      "type": "null"
+    },
+    "server_checked_at": {
+      "$ref": "https://twichui.example/contracts/bridge/v1/generation-schema2.json#/properties/server_checked_at"
+    },
+    "observations": {
+      "$ref": "https://twichui.example/contracts/bridge/v1/generation-schema2.json#/properties/observations"
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scope": {
+          "enum": [
+            "house_auctions",
+            "house_commodities"
+          ]
+        },
+        "generation_complete": {
+          "const": false
+        },
+        "current_complete": {
+          "type": "boolean"
+        },
+        "history_from_day": {
+          "type": "string",
+          "format": "date",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "history_through_day": {
+          "type": "string",
+          "format": "date",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "available_observed_days": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 61
+        },
+        "delivered_observed_days": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 61
+        },
+        "history_complete": {
+          "const": true
+        },
+        "history_truncated": {
+          "const": false
+        },
+        "distribution_complete": {
+          "const": false
+        },
+        "omitted_sections": {
+          "const": [
+            "distributions"
+          ]
+        }
+      },
+      "required": [
+        "scope",
+        "generation_complete",
+        "current_complete",
+        "history_from_day",
+        "history_through_day",
+        "available_observed_days",
+        "delivered_observed_days",
+        "history_complete",
+        "history_truncated",
+        "distribution_complete",
+        "omitted_sections"
+      ]
+    },
+    "synthetic": {
+      "$ref": "https://twichui.example/contracts/bridge/v1/generation-schema2.json#/properties/synthetic"
+    },
+    "record_count": {
+      "$ref": "https://twichui.example/contracts/bridge/v1/generation-schema2.json#/properties/record_count"
+    },
+    "records": {
+      "$ref": "https://twichui.example/contracts/bridge/v1/generation-schema2.json#/properties/records"
+    },
+    "integrity": {
+      "$ref": "https://twichui.example/contracts/bridge/v1/generation-schema2.json#/properties/integrity"
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "explicit_variants"
+        },
+        "selection_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "request_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "request": {
+          "$ref": "https://twichui.example/contracts/bridge/scoped-l1/selection.json"
+        },
+        "requested_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "included": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1000,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "item_id": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              },
+              "variant_key": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "item_id",
+              "variant_key"
+            ]
+          }
+        },
+        "excluded": {
+          "const": []
+        },
+        "scope_complete": {
+          "const": true
+        },
+        "whole_market_complete": {
+          "const": false
+        },
+        "date_coverage": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 60,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "day": {
+                "type": "string",
+                "format": "date"
+              },
+              "state": {
+                "enum": [
+                  "complete_close",
+                  "incomplete_only",
+                  "no_observation"
+                ]
+              },
+              "observation_ref": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 60
+              }
+            },
+            "required": [
+              "day",
+              "state",
+              "observation_ref"
+            ]
+          }
+        },
+        "record_sha256": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1000,
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      },
+      "required": [
+        "type",
+        "selection_id",
+        "request_digest",
+        "request",
+        "requested_count",
+        "included",
+        "excluded",
+        "scope_complete",
+        "whole_market_complete",
+        "date_coverage",
+        "record_sha256"
+      ]
+    }
+  },
+  "required": [
+    "format",
+    "contract_version",
+    "schema_version",
+    "transport_version",
+    "generation_id",
+    "issuer_id",
+    "producer",
+    "required_features",
+    "market",
+    "pricing_algorithm",
+    "history_basis",
+    "quality_policy",
+    "watermark_observation_id",
+    "current_observation_ref",
+    "as_of_utc_day",
+    "generated_at",
+    "desktop_sync_completed_at",
+    "server_checked_at",
+    "observations",
+    "coverage",
+    "synthetic",
+    "record_count",
+    "records",
+    "integrity",
+    "scope"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://twichui.example/contracts/bridge/scoped-l1/generation-schema3.json",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "pricing_algorithm": {
+            "const": "twichui-pricing-v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "history_basis": {
+            "const": "canonical_complete_scope_close"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "history_basis": {
+            "const": "market_rolling_daily_means"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "origin": "independent synthetic expectations, not production history",
+  "selected_item_ids": [10000, 10001, 10002, 10003, 10004],
+  "excluded_item_id": 10005,
+  "first_day": "2026-11-13",
+  "missing_day": "2026-11-14",
+  "last_day": "2026-11-15",
+  "priced_items": [10001, 10002],
+  "priced_recent_copper": "100",
+  "historical_only_item": 10000,
+  "historical_current_state": "absent",
+  "historical_current_supply": 0,
+  "bid_only_item": 10003,
+  "bid_only_supply": 10,
+  "bid_only_priced_supply": 0,
+  "bid_only_price": null,
+  "priced_historical_value": null,
+  "explanation": "Constant 100-copper asks yield Recent and Market Value 100. Two priced dates do not meet the three-date Historical Value minimum. Bid-only supply is ten, with no buyout. A complete second observation proves historical item absence; no observation exists on November 14."
+}
