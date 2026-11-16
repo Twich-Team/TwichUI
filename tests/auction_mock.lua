@@ -75,6 +75,14 @@ c.InCombatLockdown = function() return false end
 c.IsShiftKeyDown = function() return false end
 
 if options.preview then R.WorkshopLauncher = { previewLoading = true } end
+if options.experimentalOff then
+    c.TwichUIDB.ui = c.TwichUIDB.ui or {}
+    c.TwichUIDB.ui.workshopEnabled = false
+    local chunk = assert(loadfile(ROOT .. "WorkshopLauncher.lua")); setfenv(chunk, c); chunk("!!!TwichUI", {})
+    c.Enum.TooltipDataType = { Item = 1 }
+    c.tooltipCallbacks = {}
+    c.TooltipDataProcessor = { AddTooltipPostCall = function(_, fn) c.tooltipCallbacks[#c.tooltipCallbacks + 1] = fn end }
+end
 if options.native then
     c.AuctionHouseFrame = c.CreateFrame("Frame", "AuctionHouseFrame", c.UIParent)
     c.AuctionHouseFrame:SetSize(800,500); c.AuctionHouseFrame:SetPoint("CENTER"); c.AuctionHouseFrame:Show()

@@ -47,6 +47,7 @@ local BANK_EVENTS = { "BANK_TABS_CHANGED", "PLAYERBANKSLOTS_CHANGED", "BAG_UPDAT
 local GUILD_EVENTS = { "BAG_UPDATE_DELAYED" }
 
 local frame
+local active = false
 local registered = {}                       -- [event] = true while a content event is registered
 local open = { bank = false, guild = false }
 local pending = { bank = false, guild = false }   -- a bag change was seen with that bank open and its read has not come yet
@@ -302,7 +303,7 @@ local HANDLERS = {
 
 function B.Pending() return { bankPending = pending.bank, guildPending = pending.guild } end
 function B.Events()
-    if not frame then return 0 end
+    if not frame or not active then return 0 end
     local n = #ALWAYS
     for _ in pairs(registered) do n = n + 1 end
     return n
@@ -310,12 +311,16 @@ end
 function B.IsOpen() return { bank = open.bank, guild = open.guild } end
 
 function B.Start()
-    if frame or not CreateFrame then return end
-    frame = CreateFrame("Frame")
-    frame:SetScript("OnEvent", function(_, event, ...)
-        local fn = HANDLERS[event]
-        if fn then fn(...) end
-    end)
+    if active or not CreateFrame or not W.Active() then return end
+    active = true
+    if not frame then
+        frame = CreateFrame("Frame")
+        frame:SetScript("OnEvent", function(_, event, ...)
+            if not active or not W.Active() then return end
+            local fn = HANDLERS[event]
+            if fn then fn(...) end
+        end)
+    end
     for _, e in ipairs(ALWAYS) do frame:RegisterEvent(e) end
     -- a bank already open when the addon loads is read now
     local bf = _G.BankFrame
@@ -324,6 +329,15 @@ function B.Start()
         GuildOpened()
         R.Perf.Call("workshop.bank", GuildAnswer)   -- (an empty answer is not believed this early: see GuildAnswer)
     end
+end
+
+function B.Stop()
+    active = false
+    if frame then frame:UnregisterAllEvents() end
+    token.bank, token.guild = token.bank + 1, token.guild + 1
+    open.bank, open.guild, pending.bank, pending.guild = false, false, false, false
+    registered = {}
+    guild.lastTab, guild.key, guild.items = nil, nil, -100
 end
 
 B.Start()

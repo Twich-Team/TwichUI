@@ -336,6 +336,7 @@ function C.Mode() return mode end
 
 -- The full window's "Compact view": the compact panel in its place (the window's page and the queue are kept)
 function C.Show(m)
+    if not W.Active() then return false end
     if m then mode = m end
     if not f then
         if not UI.K then return false end   -- the window builds the look first

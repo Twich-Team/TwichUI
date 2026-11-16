@@ -26,6 +26,7 @@ R.Workshop = { ready = true, Session = {
     SetPriceDetail = function(v) called.prices = v; return true end,
     SetUseGuild = function(v) called.guild = v; return true end,
 }, Notice = { SetOn = function(v) called.notices = v; return true end } }
+assert(L.SetEnabled(true), "an existing loaded Workshop can be explicitly enabled")
 for _, key in ipairs({ "prices", "guild", "notices" }) do
     assert(L.SetOption(key, false) and called[key] == false, "uses existing setter: " .. key)
 end

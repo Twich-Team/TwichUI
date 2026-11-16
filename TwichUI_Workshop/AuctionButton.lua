@@ -73,6 +73,8 @@ end
 ---------------------------------------------------------------------------
 function AB.Refresh()
     if not btn then return end
+    if not W.Active() then btn:Hide(); bar:Hide(); status:Hide(); return end
+    btn:Show()
     local busy = SC.Busy()
     local A = W.Auto
     local prompting = not busy and A ~= nil and A.Prompting()
@@ -101,6 +103,7 @@ function AB.Refresh()
 end
 
 local function Attach()
+    if not W.Active() then return end
     if attached or type(AuctionHouseFrame) ~= "table" then return end
     attached = true
     L, K = R.Look, R.Look.pal
@@ -142,7 +145,8 @@ function AB.Status() return status end
 
 -- Made now when Blizzard's auction house window exists, otherwise when it is loaded (its own load on demand)
 function AB.Start()
-    if attached then return end
+    if not W.Active() then return end
+    if attached then AB.Refresh(); return end
     if R.WorkshopLauncher and R.WorkshopLauncher.previewLoading then return end
     if type(AuctionHouseFrame) == "table" then return Attach() end
     ev = ev or CreateFrame("Frame")
@@ -152,6 +156,11 @@ function AB.Start()
     end)
     ev:RegisterEvent("ADDON_LOADED")
     ev:RegisterEvent("AUCTION_HOUSE_SHOW")   -- (the frame may be made by another addon's load)
+end
+
+function AB.Stop()
+    if ev then ev:UnregisterAllEvents() end
+    if btn then btn:Hide(); bar:Hide(); status:Hide() end
 end
 
 AB.Start()

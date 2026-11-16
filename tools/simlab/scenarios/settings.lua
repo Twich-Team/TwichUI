@@ -109,6 +109,9 @@ if key == "workshop" and params.filled then
             if row:GetName() == "Workshop options" then load = v.rows[row.id].control end
         end
         Lab.Check("construct", "explicit load action exists", true, load ~= nil)
+        Lab.Check("state", "fresh Workshop starts experimental and off", false, L.Enabled())
+        v.rows.workshopEnabled.control:Click()
+        Lab.Check("interact", "experimental control enables Workshop", true, L.Enabled())
         local start = debugprofilestop and debugprofilestop()
         load:Click()
         if start then Lab.Say("timing", "Workshop options load click ms", debugprofilestop() - start) end

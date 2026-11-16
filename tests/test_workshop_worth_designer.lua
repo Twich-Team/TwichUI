@@ -94,7 +94,7 @@ local f = D.Frame()
 Check(f ~= nil and D.Frame() == f, "one frame, made once")
 f:Hide(); f:Show(); Flush()
 Check(R.Workshop == nil, "showing the page loads nothing")
-Check(Has(f, "needs the Workshop") and f.inviteButton.shown ~= false, "one sentence and one button")
+Check(Has(f, "needs Workshop") and f.inviteButton.shown ~= false, "one sentence and one button")
 Check(f.mock and f.mock.shown == false and D.ListButton(1) == nil, "no designer yet")
 Same(loads, 0, "the Workshop is loaded only by the button")
 refuse = "COMBAT"

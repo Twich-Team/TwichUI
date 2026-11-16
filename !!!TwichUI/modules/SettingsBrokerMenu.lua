@@ -85,7 +85,7 @@ local SPEC = {
     },
     {
         key = "workshop", label = "Workshop...", plain = true,
-        shown = function() return R.WorkshopLauncher ~= nil end,
+        shown = function() local l = R.WorkshopLauncher; return l and l.Enabled and l.Enabled() end,
         act = function() M.Close(); R.WorkshopLauncher.Toggle() end,
     },
     {

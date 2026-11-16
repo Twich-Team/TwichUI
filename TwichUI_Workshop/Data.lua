@@ -6,6 +6,12 @@ local R = TwichUI
 local W = R.Workshop or {}
 R.Workshop = W
 
+-- Non-removable hooks consult this too; disabling never discards saved data.
+function W.Active()
+    local l = R.WorkshopLauncher
+    return not W.suspended and (not l or not l.Enabled or l.Enabled())
+end
+
 W.ADDON = "TwichUI_Workshop"
 W.SAVED_VERSION = 1      -- the shape of TwichUIDB.workshop; a higher number was written by a newer TwichUI and is left alone
 W.MAX_QUEUE = 30         -- recipes in one character's queue

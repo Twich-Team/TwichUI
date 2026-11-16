@@ -8,6 +8,7 @@ A_Admin.SetManualClock(GetTime())
 Lab.Solo()
 local beforeLoads = R.WorkshopLauncher.Snapshot().attempts
 if P.loaded then
+    TwichUIDB.ui.workshopEnabled = true -- explicit fixture consent; preserve this catalog's single launcher load assertion
     Lab.Check("init", "Workshop loads through launcher", true, R.WorkshopLauncher.Load())
     Lab.Check("init", "Workshop stays unbuilt", false, R.Workshop.Snapshot().built)
 end

@@ -3,7 +3,8 @@
 local R = TwichUI
 local K = R.SettingsKit
 local function Launcher() return R.WorkshopLauncher end
-local function Loaded() return Launcher() and Launcher().Loaded() end
+local function Enabled() local l = Launcher(); return l and l.Enabled and l.Enabled() end
+local function Loaded() return Enabled() and Launcher().Loaded() end
 local function Shown() return Loaded() and R.Workshop.Window and R.Workshop.Window.IsShown() end
 local function State(key)
     local l = Launcher()
@@ -14,7 +15,7 @@ local function Option(key, variable, label, tip, default)
     local row = K.ProxyToggle(variable, label, tip, default, function() return State(key) end,
         function(on) local l = Launcher(); if l and l.SetOption then l.SetOption(key, on) end end)
     row:AddModifyPredicate(Loaded)
-    row.why = "Load Workshop options first. No Workshop window or scan will open."
+    row.why = "Enable Workshop — Experimental, then load its options. No window or scan will open."
 end
 local function Choice(key, variable, label, default, choices, tip)
     local setting = K.Proxy(variable, "string", label, default,
@@ -22,7 +23,7 @@ local function Choice(key, variable, label, default, choices, tip)
         function(value) local l = Launcher(); if l and l.SetChoice then l.SetChoice(key, value) end end)
     local row = K.Dropdown(setting, function() return choices end, tip)
     row:AddModifyPredicate(Loaded)
-    row.why = "Load Workshop options first. No Workshop window or scan will open."
+    row.why = "Enable Workshop — Experimental, then load its options. No window or scan will open."
 end
 local function LoadOptions()
     local l = Launcher()
@@ -45,34 +46,53 @@ local function Value(key, empty)
 end
 K.Page({
     key = "workshop", icon = "guide", name = "Workshop", order = 46, group = "everyday",
-    description = "Choose how Workshop plans your crafts and shows item information.",
-    keywords = "workshop tooltip designer normal shift price market history scan crafting shopping guild bank progress login load",
+    description = "Experimental professions, crafting plans, shopping and market research. Enable it when you want to try it.",
+    keywords = "workshop experimental enable opt in tooltip designer normal shift price market history scan crafting shopping guild bank progress login load",
     overview = { label = "Workshop", tip = "Crafting plans, shopping and item information.",
         when = function() return Launcher() ~= nil end,
-        status = function() return Shown() and "Open" or (Loaded() and "Closed" or "Not opened yet") end },
+        status = function() return not Enabled() and "Experimental · Off" or (Shown() and "Open" or (Loaded() and "Enabled" or "Ready to load")) end },
     when = function() return Launcher() ~= nil end,
     build = function()
         K.Header("General", "Workshop opens when you ask for it.")
-        K.ProxyToggle("workshopLoadOnLogin", "Load Workshop when I log in",
+        K.ProxyToggle("workshopEnabled", "Workshop — Experimental",
+            "Enable professions, crafting plans, shopping tools and market research. Some features are still being tested. Off for new installations. Disabling stops Workshop work and keeps your saved data. Reload only if you want to unload its code and saved market database from memory; no automatic reload.", false,
+            Enabled, function(on)
+                local l = Launcher()
+                if l and l.SetEnabled then
+                    local ok, why = l.SetEnabled(on)
+                    if not ok then R.Print("workshop: " .. l.Explain(why)) end
+                end
+                info, infoAt = nil, nil
+                K.RefreshOverview()
+            end)
+        local login = K.ProxyToggle("workshopLoadOnLogin", "Load Workshop when I log in",
             "Load Workshop after your next login or reload. Opens no window and starts no scan. Large saved market databases can pause the game while loading. Off by default.", false,
             function() local l = Launcher(); return l and l.LoadOnLogin and l.LoadOnLogin() or false end,
             function(on) local l = Launcher(); if l and l.SetLoadOnLogin then l.SetLoadOnLogin(on) end end)
+        login:AddModifyPredicate(Enabled)
+        login.why = "Enable Workshop — Experimental first. Your login preference is kept while it is off."
         local load = K.Button("Workshop options", "Load options", LoadOptions,
             "Load Workshop and its saved market data to configure its preferences. Opens no Workshop window and starts no scan.")
         load:AddShownPredicate(function() return not Loaded() end)
+        load:AddModifyPredicate(Enabled)
+        load.why = "Enable Workshop — Experimental first."
         Option("prices", "workshopDetailedPrices", "Detailed price display",
             "Off: uncertain costs say from or at least. On: show supported price ranges. Pricing and calculations are unchanged.", false)
         Choice("advisorGain", "workshopAdvisorGain", "Advisor minimum gain", "0", {
             { "0", "No copper minimum" }, { "100", "1 silver" }, { "1000", "10 silver" }, { "10000", "1 gold" },
         }, "Minimum gross listing gain per item above vendor sell value before considering Auction. The Advisor also requires a 1.5x vendor margin. Fees, deposits and a sale are not guaranteed.")
-        K.Button("Workshop window", "Open Workshop", function() Launcher().Open(); K.RefreshOverview() end,
+        local open = K.Button("Workshop window", "Open Workshop", function() Launcher().Open(); K.RefreshOverview() end,
             "Open Workshop. You can also use /tui workshop.")
+        open:AddModifyPredicate(Enabled)
+        open.why = "Enable Workshop — Experimental first."
 
         K.Header("Tooltip Designer", "Arrange Normal and Hold Shift item information using safe preview data.")
 
         K.Header("Market Data", "Observed listings, not sales. Auction House scans start only when you click Scan prices.")
         local data = K.Button("Saved market data", "Load data", LoadOptions, "Read Workshop's saved observations without opening its window or scanning.")
         data:AddShownPredicate(function() return not Loaded() end)
+        data:AddModifyPredicate(Enabled)
+        data.why = "Enable Workshop — Experimental first."
         K.Status("Selected market", function() return Value("label", Loaded() and "No observations yet" or "Not loaded") end,
             function() return Info() and "Matches the open Auction House; otherwise the latest scan for this realm." or "Open the Auction House and choose Scan prices to collect observations." end)
         K.Status("Faction", function() return Value("side", "Not available") end)
@@ -97,6 +117,8 @@ K.Page({
         K.Header("Crafting & Shopping", "Use saved observations and choose what is included in your plans.")
         local craft = K.Button("Crafting options", "Load options", LoadOptions, "Load Workshop options without opening its window or starting a plan.")
         craft:AddShownPredicate(function() return not Loaded() end)
+        craft:AddModifyPredicate(Enabled)
+        craft.why = "Enable Workshop — Experimental first."
         Choice("objective", "workshopObjective", "Planning objective", "economic", {
             { "economic", "Economic cost" }, { "cash", "Gold required now" },
         }, "Economic cost includes the value of materials you own. Gold required now prioritizes additional spending. Manual source choices are retained.")

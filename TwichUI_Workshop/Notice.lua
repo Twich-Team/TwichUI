@@ -33,6 +33,7 @@ local stats = { submitted = 0, refused = 0, gathered = 0, repeated = 0 }
 local function Now() return GetTime and GetTime() or 0 end
 
 function Nt.On()
+    if not W.Active() then return false end
     local ws = type(TwichUIDB) == "table" and TwichUIDB.workshop
     local v = type(ws) == "table" and ws.view
     return not (type(v) == "table" and v.notices == false)
@@ -140,6 +141,7 @@ local function Flush()
     local list = {}
     for _, p in ipairs(pending) do list[#list + 1] = p end
     pending = {}
+    if not W.Active() then return end
     local text = Nt.Gather(list)
     if not text then return end
     local now = Now()
@@ -205,6 +207,12 @@ function Nt.BagsChanged()
 end
 
 function Nt.Disarm() before = nil end
+function Nt.Stop()
+    Nt.Disarm()
+    pending = {}
+    if R.Notify and R.Notify.Cancel then R.Notify.Cancel(Nt.KIND) end
+    Dismiss()
+end
 function Nt.Stats() return { submitted = stats.submitted, refused = stats.refused, gathered = stats.gathered, repeated = stats.repeated, armed = before ~= nil } end
 
 -- a counted craft: said at once (gathered with whatever else just happened)
