@@ -21,7 +21,7 @@ CLEAR_ENV = (
     'TWICHUI_GENERATE_CONTRACT', 'TWICHUI_SETTINGS_INVENTORY',
     'MARKET_SEED', 'MARKET_SCENARIOS', 'MARKET_ALL', 'DIST_SEED', 'DIST_SCENARIOS',
     'CRAFT_SEED', 'CRAFT_SCENARIOS', 'CRAFT_ALL', 'CHAIN_SEED', 'CHAIN_SCENARIOS',
-    'H2_SEEDS', 'H2_PIPE_SEEDS', 'VALUE_SEEDS',
+    'H2_SEEDS', 'H2_PIPE_SEEDS', 'VALUE_SEEDS', 'L3_MARKET_ARTIFACT',
 )
 FULL_SIMULATORS = ('lab-guard', 'smoke', 'interact', 'diagnose', 'auctionproof', 'auctionpreview', 'workshop', 'testlab', 'settings', 'reminders')
 # Layout tests build many complete mock clients (baseline peak ~4 GiB). They

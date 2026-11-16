@@ -449,7 +449,7 @@ if P.market then
         Lab.Check("construct","Market long title fits its heading",true,p.name:GetText()==itemNames[7067] and not p.name:IsTruncated() and p.name:GetStringHeight()<=p.name:GetHeight())
     end
 end
-if P.bridge then
+if P.bridge and not P.scopedState then
     local W=R.Workshop;local B=W.Bridge
     local saved=TwichUIWorkshopDB
     local function fingerprint(v)
@@ -477,5 +477,36 @@ if P.bridge then
     Lab.Check('state','source timestamp preserved','2026-11-14T12:00:00.123456Z',points[1] and points[1].at)
     Lab.Check('state','external data cannot enable trading',false,p.browse:IsEnabled() or p.advisor:IsEnabled() or p.track:IsEnabled())
     Lab.Check('state','local saved observations unchanged',before,fingerprint(TwichUIWorkshopDB))
+end
+if P.scopedState then
+    local W=R.Workshop;local B=W.Bridge
+    local saved=TwichUIWorkshopDB
+    local function fingerprint(v)
+        if type(v)~='table' then return tostring(v) end
+        local keys={};for k in pairs(v) do keys[#keys+1]=k end;table.sort(keys,function(a,b)return tostring(a)<tostring(b)end)
+        local out={};for _,k in ipairs(keys) do out[#out+1]=tostring(k)..'='..fingerprint(v[k]) end;return '{'..table.concat(out,',')..'}'
+    end
+    local before=fingerprint(saved)
+    local valid=P.scopedState~='corrupt' and P.scopedState~='future'
+    Lab.Check('init','scoped bridge initially idle',false,B.Status().ready)
+    B.Begin(SIMLAB_BRIDGE)
+    for i=1,3000 do local ok,why=B.Step(3);if why~='loading' then break end end
+    Lab.Check('state','scoped candidate acceptance',valid,B.Status().ready)
+    Lab.Check('state','scoped validation status',valid and 'ready' or 'invalid',B.Status().state)
+    local scope=B.Scope()
+    Lab.Check('state','scope never claims whole market',false,scope and scope.whole_market_complete or false)
+    local item=P.scopedState=='unknown' and 2 or P.scopedState=='absent' and 10000 or P.scopedState=='outside' and 10005 or 10001
+    local variant=SIMLAB_BRIDGE.records[P.scopedState=='unknown' and 1 or P.scopedState=='absent' and 1 or 2]:match('"variant_key":"([a-f0-9]+)"')
+    if P.scopedState=='outside' then variant=string.rep('f',64) end
+    Lab.Check('interact','explicit scoped item navigation',true,A.OpenMarket(item,{market='server',serverVariant=variant}))
+    Lab.Settle(0.8);local p=A.Page('market')
+    local expected=({priced='priced',absent='observed_absent',unknown='unknown_coverage',outside='outside_scope',corrupt='invalid_generation',future='invalid_generation'})[P.scopedState]
+    Lab.Check('state','exact scope availability',expected,p.projection.availability.state)
+    local price=p.projection.facts and p.projection.facts.recent
+    Lab.Check('state','supported price or explicit unavailable',P.scopedState=='priced' and 100 or nil,price and price.value)
+    Lab.Check('state','unavailable never becomes zero',false,price and price.value==0 or false)
+    Lab.Check('state','generation stays inactive after rejection',valid,B.Status().ready)
+    Lab.Check('state','scoped observations cannot trade',false,p.browse:IsEnabled() or p.advisor:IsEnabled() or p.track:IsEnabled())
+    Lab.Check('state','scoped local history unchanged',before,fingerprint(TwichUIWorkshopDB))
 end
 Lab.Finish()
