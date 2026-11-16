@@ -80,7 +80,7 @@ class PromotionTests(unittest.TestCase):
         self.evidence = dict(candidate=dict(self.request), verification='https://example.invalid/report',
                              client_acceptance='https://example.invalid/client', limitations='Tester alpha; not certified')
         self.env = dict(deployment_branch_policy=dict(protected_branches=True, custom_branch_policies=False),
-                        protection_rules=[dict(type='required_reviewers', reviewers=[{'id':1}], prevent_self_review=True)])
+                        protection_rules=[dict(type='required_reviewers', reviewers=[{'type':'User', 'reviewer':{'login':'maintainer', 'id':1}}], prevent_self_review=False)])
         self.policy = dict(publication_enabled=False, environment_admin_bypass_disabled=True,
                            environment_configuration_evidence='https://example.invalid/settings-review')
         self.now = dt.datetime.now(dt.timezone.utc)
@@ -142,9 +142,30 @@ class PromotionTests(unittest.TestCase):
     def test_unprotected_environment_rejected(self):
         rel.validate_environment(self.env, self.policy)
         for data in ({}, dict(self.env, deployment_branch_policy=None),
-                     dict(self.env, protection_rules=[]), dict(self.env, protection_rules=[dict(type='required_reviewers',reviewers=[1],prevent_self_review=False)])):
+                     dict(self.env, protection_rules=[]), dict(self.env, protection_rules=[dict(type='required_reviewers',reviewers=[],prevent_self_review=False)])):
             with self.assertRaises(rel.ReleaseError):
                 rel.validate_environment(data, self.policy)
+
+    def test_solo_review_allowed_but_explicit_admin_bypass_rejected(self):
+        # Authoritative API false needs no invented policy attestation or evidence.
+        rel.validate_environment(dict(self.env, can_admins_bypass=False), {})
+        # Team configurations remain supported as well.
+        team = dict(self.env, protection_rules=[dict(type='required_reviewers', reviewers=[1], prevent_self_review=True)])
+        rel.validate_environment(team, self.policy)
+        for enabled in (True, None, "false", 0):
+            with self.subTest(enabled=enabled), self.assertRaisesRegex(rel.ReleaseError, 'administrator bypass'):
+                rel.validate_environment(dict(self.env, can_admins_bypass=enabled), self.policy)
+
+    def test_unauthorized_requestor_and_unprotected_main_rejected_before_download(self):
+        for permission, protected, error in [('read', True, 'authorized maintainer'),
+                                             ('write', False, 'main must be protected')]:
+            gh = mock.Mock(repo='org/repo')
+            gh._gh.side_effect = [{'permission':permission}, {'protected':protected}]
+            with self.subTest(permission=permission, protected=protected), \
+                    mock.patch.object(promotion.subprocess, 'run') as download, \
+                    self.assertRaisesRegex(rel.ReleaseError, error):
+                promotion.prepare(gh, self.request, 'maintainer', self.root)
+            download.assert_not_called()
 
     def test_missing_owner_bypass_attestation_fails_closed(self):
         for policy in ({}, dict(self.policy, environment_admin_bypass_disabled=False),
