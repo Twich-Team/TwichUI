@@ -685,3 +685,22 @@ The first line does not touch the repository, the game or `wow-ui-source`. Nothi
 Specialized page state fixtures and focused commands: [Batch 2 coverage](settings-batch-2.md).
 Item/channel stress, unavailable data and empty states: [Batch 3 coverage](settings-batch-3.md).
 Magic Inventory count, filter/context and new builder fixtures: [rule-workspace coverage](magic-inventory-revision/implementation.md).
+
+## Isolated verification workers (2026-11-16)
+
+The local launcher now supports runner-owned worker IDs 1 and 2, each under the
+exact guarded path `test-output/simlab-workers/worker-N`. These are the only new
+in-repository lab exceptions. Setup/adoption and arbitrary nested paths remain
+refused; symlinked worker parents, state directories, markers and locks are
+refused. Each worker seeds its own cache from the read-only installation and
+owns its home, WTF, fixtures, roots and artifact directories. No process is run
+against another lane's mutable state. The existing default workspace and serial
+commands retain their behavior.
+
+Use `./tests/run.sh feature verification-tools --profile cloud --measure --sim-jobs 2`
+for the bounded infrastructure selection, after reviewing [worker requirements](testing.md).
+Catalog scenarios stay serial; worker counts above two are refused. Native
+processes are fresh, stages are immutable within a script, and replay/incorrect
+expectation verdicts remain mandatory for selected controls. These checks do not
+establish real-client input, persistence or visual appearance. Measurements and
+serial/parallel parity are recorded in [the audit](testing-verification-audit.md).
