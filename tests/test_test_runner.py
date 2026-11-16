@@ -138,8 +138,8 @@ class Fails(unittest.TestCase):
         stat = Path(f'/proc/{pid}/stat')
         try:
             state = stat.read_text().split()[2]
-        except FileNotFoundError:
-            state = None  # Reaped between timeout cleanup and the /proc read.
+        except (FileNotFoundError, ProcessLookupError):
+            state = None  # Reaped before open (ENOENT) or during read (ESRCH).
         self.assertIn(state, (None, 'Z'), 'descendant is still running')
 
     def test_generation_and_seed_overrides_are_not_inherited(self):
