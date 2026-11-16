@@ -245,7 +245,7 @@ class Evidence(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'metrics.json'
             result = subprocess.run([sys.executable, '-B', str(REPO / 'tools/measure_command.py'), str(path), '--',
-                                     sys.executable, '-c', 'sum(i*i for i in range(1000000)); raise SystemExit(7)'])
+                                     sys.executable, '-c', 'import time; end=time.process_time()+.4\nwhile time.process_time()<end: pass\nraise SystemExit(7)'])
             self.assertEqual(result.returncode, 7)
             report = json.loads(path.read_text())
             self.assertEqual(report['exit_code'], 7)
