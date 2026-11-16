@@ -117,7 +117,7 @@ m("market.sell.deposit-unknown-precision", SELL_PREP, 'type(row.copper)=="boolea
 
 # Integration: completed external catalogs and source-specific labels survive AH refilters/resizes.
 m("market.bridge.catalog-reuse", "TwichUI_Workshop/ServerMarket.lua",
-  "index=true,catalog=opt.catalog,item=opt.item", "index=true,item=opt.item",
+  "index=true,catalog=opt.catalog,item=focus", "index=true,item=focus",
   "external filtering rediscovers identities instead of retaining completed rows", ["test_workshop_auction_market_server.lua"])
 m("market.bridge.resize-label", "TwichUI_Workshop/auction/ViewMarket.lua",
   'if p.marketKey=="server" then ServerChart(p,p.projection) else p.chart:Set(p.projection.series,UI.Money) end',
@@ -957,3 +957,41 @@ m("market.ah6.unrelated-metadata", "TwichUI_Workshop/auction/BrowseData.lua",
   'if ok==false or not id or not (p.job and p.job.seen and p.job.seen[id] or p.known and p.known[id]) then return end',
   'if ok==false or not id then return end',
   "unrelated item callbacks enter the known-item metadata queue", ["test_workshop_auction_market_ui.lua"])
+
+# L3 production scoped reader: no Python reference reader or shared fixture edits.
+SCOPED_TEST = ["test_workshop_bridge_scoped.lua"]
+m("market.scoped.request-digest", "TwichUI_Workshop/BridgeValidate.lua",
+  "need(scope.request_digest==J.SHA(requestText,tick))", "need(true)",
+  "the sealed request is no longer bound to its digest", SCOPED_TEST)
+m("market.scoped.selection-id", "TwichUI_Workshop/BridgeValidate.lua",
+  "need(scope.selection_id==J.SHA(J.Encode(stable,tick),tick))", "need(true)",
+  "a different stable selection identity is accepted", SCOPED_TEST)
+m("market.scoped.record-hash", "TwichUI_Workshop/BridgeValidate.lua",
+  "need(h.scope.record_sha256[ctx.recordPosition]==J.SHA(text,tick))", "need(true)",
+  "per-record integrity is ignored even after the complete generation is resealed", SCOPED_TEST)
+m("market.scoped.exact-membership", "TwichUI_Workshop/BridgeValidate.lua",
+  "need(v and v.item_id==r.item_id and v.variant_key==r.variant_key)", "need(true)",
+  "a valid different upstream variant satisfies the requested identity", SCOPED_TEST)
+m("market.scoped.history-completeness", "TwichUI_Workshop/BridgeValidate.lua",
+  "if h.coverage.history_complete then", "if false then",
+  "a missing required close is accepted as complete selected history", SCOPED_TEST)
+m("market.scoped.absence", "TwichUI_Workshop/Bridge.lua",
+  "if x.state=='absent' then out.state='observed_absent'", "if x.state=='absent' then out.state='priced'",
+  "confirmed absence is presented as priced evidence", SCOPED_TEST)
+m("market.scoped.missing-coverage", "TwichUI_Workshop/Bridge.lua",
+  "if not x then out.state='unknown_coverage';", "if not x then out.state='observed_absent';",
+  "a missing observation is interpreted as absence", SCOPED_TEST)
+m("market.scoped.features", "TwichUI_Workshop/BridgeValidate.lua",
+  "need(type(plan.const)=='table' and J.Encode(v,tick)==J.Encode(plan.const,tick) or v==plan.const)",
+  "need(type(plan.const)=='table' or v==plan.const)",
+  "unknown required features bypass array-const negotiation", SCOPED_TEST)
+m("market.scoped.local-isolation", "TwichUI_Workshop/Bridge.lua",
+  "active=value;cache,order={},{}", "TwichUIWorkshopDB.markets={};active=value;cache,order={},{}",
+  "external activation overwrites local scan history", SCOPED_TEST)
+m("market.scoped.last-good", "TwichUI_Workshop/Bridge.lua",
+  "if failure then stats.refusal=", "if failure then active=nil;stats.refusal=",
+  "a failed replacement deletes the preceding valid source", SCOPED_TEST)
+
+m("market.scoped.actual-budget", "TwichUI_Workshop/Bridge.lua",
+  "inputBytes=inputBytes+#v+(n>0 and 1 or 0)", "inputBytes=inputBytes",
+  "a falsely small manifest size permits an over-budget candidate to be decoded", SCOPED_TEST)

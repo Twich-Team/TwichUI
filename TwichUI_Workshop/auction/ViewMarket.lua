@@ -70,27 +70,42 @@ local function ServerDetail(p,r)
     local x=W.ServerMarket.Project(r and r.item,p.serverVariant,p.serverMetric,p.days);p.projection=x
     local h=x.header;local selected=x.record
     local status=W.Bridge.Status()
+    local availability=W.ServerMarket.AvailabilityText(x.availability and x.availability.state or x.why)
+    if x.historyWhy=='outside_scope' then availability='Requested history dates are outside this update.' end
     p.source:SetText(x.label.."\n"..(h and (h.pricing_algorithm.." · "..h.history_basis..(h.synthetic and " · synthetic" or "")) or
         (status.loading and "Validating external generation…" or "Bridge unavailable; local scan data is unchanged.")))
     local rows={};for _,v in ipairs(W.ServerMarket.Rows(x,UI.Money)) do rows[v.id]=v end
     for _,tile in ipairs(p.tiles) do
-        local v=rows[tile.id];tile.value:SetText(v and v.value or "Unavailable");tile.tip=v and v.tip or "Choose an exact server variant."
+        local v=rows[tile.id];tile.value:SetText(v and v.value or "Unavailable");tile.tip=v and v.tip or availability
         if tile.localHeading==nil then tile.localHeading=tile.heading:GetText() end
         tile.heading:SetText(v and v.label or tile.localHeading)
     end
     ServerChart(p,x)
     p.chartCard.heading:SetText(p.serverMetric=="supply" and "Server observed supply · daily" or p.serverMetric=="minimum" and "Server minimum listings · daily" or
         (h and h.pricing_algorithm=="asking-v1-provisional" and "Server asking mean · daily" or "Server Recent Price · daily"))
-    if not x.series then p.chart.msg:SetText(status.loading and "Validating external data…" or not status.ready and "No validated bridge available." or "Choose an exact server variant.");p.chart.note:SetText("Local scan history remains available from the source selector.") end
+    if not x.series then p.chart.msg:SetText(status.loading and "Validating external data…" or not status.ready and "No validated bridge available." or availability);p.chart.note:SetText("Local scan history remains available from the source selector.") end
     local series=x.series
-    p.coverage:SetText(series and (#series.points.." priced/supply markers · "..series.observed_days.." observed dates · "..#series.gaps.." unavailable dates in this window") or "No supported external history selected")
+    if series and #series.points==0 then p.chart.msg:SetText(availability) end
+    p.coverage:SetText(series and (#series.points.." priced/supply markers · "..series.observed_days.." observed dates · "..#series.gaps.." unavailable dates in this window") or availability)
     p.axis:SetText(series and (Date(series.from).." — "..Date(series.to).." UTC · missing days are not filled") or "Exact server observations only")
     local obs=selected and h.observations[selected.current.observation_ref+1]
-    p.trends:SetText(selected and ("Separate external source\n"..selected.current.coverage.priced_days_14.." priced dates in the 14-day reference\n"..
-        selected.current.coverage.priced_days_60.." priced dates in the 60-day reference\nNo local competition or selling authorization.") or "No variant selected; no item-ID aggregate is substituted.")
-    p.contextText:SetText(selected and ("Variant SHA256: "..selected.variant_key.."\nSource observed: "..obs.observed_at.."\nUpstream content: "..
-        (obs.upstream_updated_at~=W.BridgeCodec.NULL and obs.upstream_updated_at or "unknown").."\nGeneration: "..h.generation_id:sub(1,16).."\nListings and supply are not completed sales.") or "Choose a variant to inspect its source timestamps and provenance.")
-    p.aggregateText="";p.chartTip=(h and h.history_basis or "External history unavailable").."\nExact available daily observations; no interpolation, sale proceeds or mature-window claim."
+    local scope=x.scope
+    local scopeText=scope and scope.type=='explicit_variants' and ('Scope complete · '..scope.requested_count..' exact variants · not whole-market complete') or 'Legacy full-market generation'
+    if not h then scopeText='No validated external generation' end
+    local _,observedSeconds=W.BridgeValidate.Time(obs and obs.observed_at)
+    local age=observedSeconds and time and time()-observedSeconds
+    local ageText=age and (age>=0 and (' · '..math.floor(age/3600)..'h old') or ' · source time ahead of client') or ''
+    if status.error then p.kind:SetText(status.ready and 'Replacement rejected; previous validated generation retained.' or 'External generation rejected; local history is unchanged.')
+    elseif status.loading then p.kind:SetText('Validating external generation; previous data remains usable.') end
+    p.trends:SetText(selected and (availability.."\n"..selected.current.coverage.priced_days_14.." priced dates in the 14-day reference\n"..
+        selected.current.coverage.priced_days_60.." priced dates in the 60-day reference\nNo local competition or selling authorization.") or (availability.."\nNo item-ID aggregate is substituted.\n"..(x.availability.state=="outside_scope" and "Can be selected for a future desktop update." or "")))
+    local window=h and (h.coverage.history_from_day..' — '..h.coverage.history_through_day..' UTC') or 'External history unavailable'
+    local requested=type(x.variant)=='string' and #x.variant==64 and not x.variant:find('[^0-9a-f]') and x.variant
+    p.contextText:SetText((selected and ('Variant: '..selected.variant_key:sub(1,16)..' · generation: '..h.generation_id:sub(1,12)..'\nObserved: '..obs.observed_at..ageText..
+        '\nUpstream: '..(obs.upstream_updated_at~=W.BridgeCodec.NULL and obs.upstream_updated_at or 'unknown')) or requested and ('Requested variant: '..requested:sub(1,16)..'\nNot delivered; provenance unavailable.') or 'Choose a variant to inspect its provenance.')..'\n'..scopeText..'\n'..window)
+    p.aggregateText=(selected and ('Variant SHA256: '..selected.variant_key..'\nGeneration: '..h.generation_id..'\n') or requested and ('Requested variant SHA256: '..requested..'\n') or '')..
+        (scope and scope.selection_id and ('Selection: '..scope.selection_id..'\nRequest: '..scope.request_digest..'\nWatermark: '..scope.watermark_observation_id..'\n') or '')..scopeText..'\n'..window
+    p.chartTip=(h and h.history_basis or 'External history unavailable')..'\nExact available daily observations; no interpolation, sale proceeds or mature-window claim. The current UTC day remains provisional.'
 end
 Detail=function(p)
     local r=p.index and p.index[p.selected]
@@ -293,6 +308,7 @@ function A.OpenMarket(item,opt)
         W.Bridge.Load()
         V.Filter("marketKey","server")
         page.serverVariant=ctx.serverVariant or ""
+        page.focusItem=ctx.item
     else Start(page,true) end
     return true
 end

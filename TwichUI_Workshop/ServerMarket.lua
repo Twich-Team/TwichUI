@@ -3,6 +3,12 @@ local R,W=TwichUI,TwichUI.Workshop
 local B,J=W.Bridge,W.BridgeCodec
 local M={KEY='server',METRICS={{'recent','Recent listing price'},{'minimum','Minimum listing price'},{'supply','Observed supply'}}}
 W.ServerMarket=M
+M.AVAILABILITY={priced='Priced observations available',supply_only='Supply observed; supported price unavailable',
+    observed_absent='Observed absent; price unavailable',unknown_coverage='Observation coverage unknown',
+    outside_scope='Market history not included in this update.',unsupported='External evidence unsupported',
+    invalid_generation='External generation rejected',unavailable='External history unavailable',variant_required='Choose an exact server variant',
+    not_observed='No delivered record; absence is not established'}
+function M.AvailabilityText(state) return M.AVAILABILITY[state] or 'External history unavailable' end
 function M.Context()
     local m=B.Market();local status=B.Status()
     local label=m and ('Market server · '..m.region:upper()..' · '..(m.player_ruleset~=J.NULL and m.player_ruleset or 'ruleset unverified')..' · house '..m.house_id) or 'Market server · '..status.state
@@ -11,16 +17,17 @@ end
 function M.Catalog(opt)
     if not B.Status().ready then return {rows={},index={},seen={},unavailable=B.Status().loading and 'loading_bridge' or 'bridge_unavailable',Step=function()return true end} end
     opt=opt or {}
-    return W.AuctionBrowseData.Job({sources={},market=nil,index=true,catalog=opt.catalog,item=opt.item,query=opt.query,category=opt.category,quality=opt.quality,
+    local focus=W.Int(opt.item or tonumber(opt.query),1,W.MAX_ID)
+    return W.AuctionBrowseData.Job({sources={},market=nil,index=true,catalog=opt.catalog,item=focus,query=opt.query,category=opt.category,quality=opt.quality,
         enumerate=function(add,tick,job)
             if opt.scope=='tracked' then
-                for id,on in pairs(W.AdvisorData.Tracked()) do if on then local variants=B.Variants(id,1);if variants and #variants>0 then add(id) end;tick();if job.capped then break end end end
+                for id,on in pairs(W.AdvisorData.Tracked()) do if on then add(id);tick();if job.capped then break end end end
             elseif opt.scope=='bags' then
                 local api=C_Container
                 if not(api and api.GetContainerNumSlots and api.GetContainerItemInfo) then job.unavailable='Bag information unavailable';return end
                 for bag=0,(NUM_BAG_SLOTS or 4) do for slot=1,math.min(api.GetContainerNumSlots(bag) or 0,200) do
                     local entry=api.GetContainerItemInfo(bag,slot);local id=type(entry)=='table' and W.Int(W.Plain(entry.itemID),1,W.MAX_ID)
-                    if id then local variants=B.Variants(id,1);if variants and #variants>0 then add(id) end end
+                    if id then add(id) end
                     tick();if job.capped then return end
                 end end
             else B.EachItem(add,tick,function()return job.capped end) end
@@ -35,6 +42,11 @@ end
 function M.Project(item,variant,metric,days)
     local context=M.Context();local header=B.Manifest();local r,why=B.Record(item,variant)
     local out={source='market_server',market=context,label=context.label,variant=variant,metric=metric or 'recent',record=r,why=why,header=header}
+    out.scope=B.Scope();out.availability=B.Availability(item,variant)
+    if not r and why=='variant_required' and out.scope and out.scope.type=='explicit_variants' then
+        local variants=B.Variants(item or 0,1)
+        if variants and #variants==0 then out.availability.state='outside_scope';out.why='outside_scope' end
+    end
     if not r then return out end
     local history,historyWhy=B.History(item,variant,out.metric,{days=math.min(days or 14,60)})
     out.history,out.historyWhy=history,historyWhy
@@ -56,6 +68,18 @@ function M.Project(item,variant,metric,days)
     if header.synthetic then f.quality.reasons[#f.quality.reasons+1]={text='Synthetic fixture.'} end
     if not header.market.mapping_verified then f.quality.reasons[#f.quality.reasons+1]={text='Player-facing market mapping is unverified.'} end
     out.facts=f;return out
+end
+-- Dormant Advisor boundary: references only, never a local Facts snapshot or posting suggestion.
+-- Summary coverage is independent and currently unavailable; this does not load anything.
+function M.Evidence(item,variant)
+    local a=B.Availability(item,variant)
+    local out={api=1,role='external_evidence',source='market_server',tier='detailed_history',
+        state=a.state,included=a.included,summary_coverage='unavailable',local_competition=false,
+        confidence=a.state=='priced' and 'limited' or 'insufficient',market_identity=B.Market(),generation=B.Status().generation,scope=B.Scope()}
+    if a.included then
+        out.recent=B.Value(item,variant,'recent');out.market=B.Value(item,variant,'market')
+    end
+    return out
 end
 function M.Rows(x,money)
     if not x.facts then return {} end

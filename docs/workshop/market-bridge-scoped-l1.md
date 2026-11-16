@@ -1,5 +1,7 @@
 # L1 scoped Market bridge consumer foundation
 
+Historical L1 checkpoint. The current schema-3 runtime implementation and acceptance boundaries are documented in [L3](market-bridge-scoped-l3.md); the as-built L1 evidence below remains unchanged.
+
 **Offline conformance prototype only.** No `TwichUI_Workshop` runtime file, TOC, SavedVariables schema, source default, UI or deployed addon changes. Market owns the proposed contract and fixtures; [UPSTREAM.json](../../tests/fixtures/market_bridge_scoped_l1/UPSTREAM.json) pins exact authoritative source and hashes. Full specification and L2 plan live at Market `contracts/bridge/scoped-l1/README.md` and `docs/workshop-scoped-bridge-l1.md` at that revision.
 
 ## Inputs and version decision
