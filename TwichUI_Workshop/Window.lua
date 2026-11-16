@@ -489,7 +489,7 @@ function W.Resume()
     if W.Watch then W.Watch.Start() end
     if W.Bank then W.Bank.Start() end
     if W.WorthTip then W.WorthTip.Start() end
-    if W.AuctionButton then W.AuctionButton.Start() end
+    if W.AuctionButton then W.AuctionButton.Resume() end
 end
 if not W.Active() then W.suspended = true end
 W.ready = true

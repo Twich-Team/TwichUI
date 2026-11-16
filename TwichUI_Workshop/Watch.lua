@@ -21,6 +21,7 @@ local frame
 local active = false
 local pending = false
 local token = 0
+local requestGeneration = 0
 Wt.reads = 0
 
 local function WindowShown() return W.Window ~= nil and W.Window.IsShown() end
@@ -47,9 +48,9 @@ end
 function Wt.Request()
     if pending or not active or not W.Active() then return end
     pending = true
-    local mine = token
+    local mine = requestGeneration
     C_Timer.After(SETTLE, function()
-        if mine ~= token or not active or not W.Active() then return end
+        if mine ~= requestGeneration or not active or not W.Active() then return end
         pending = false
         Wt.Run()
     end)
@@ -68,6 +69,7 @@ end
 
 function Wt.Stop()
     active, pending, token = false, false, token + 1
+    requestGeneration = requestGeneration + 1
     if frame then frame:UnregisterAllEvents() end
 end
 function Wt.Events() return active and frame and #EVENTS or 0 end

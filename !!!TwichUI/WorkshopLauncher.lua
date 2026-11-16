@@ -176,14 +176,14 @@ function L.SettingsState()
     local ws = type(TwichUIDB) == "table" and TwichUIDB.workshop
     local view = type(ws) == "table" and type(ws.view) == "table" and ws.view or {}
     local stock = type(ws) == "table" and type(ws.storage) == "table" and ws.storage or {}
-    local w = L.Loaded() and R.Workshop
+    local w = L.Enabled() and L.Loaded() and R.Workshop
     if w then return { prices = w.Session.PriceDetail(), guild = w.Storage.UseGuild(), notices = w.Notice.On(),
         advisorGain = tostring(w.Advisor and w.Advisor.Gain() or 0), objective = w.Session.Objective(), compact = w.Session.CompactMode() } end
     return { prices = view.prices == "detailed", guild = stock.useGuild == true, notices = view.notices ~= false,
         advisorGain = tostring(type(view.advisorGain)=="number" and view.advisorGain or 0), objective = view.objective == "cash" and "cash" or "economic", compact = view.compactMode == "craft" and "craft" or "travel" }
 end
 function L.SetOption(key, on)
-    if type(on) ~= "boolean" or not L.Enabled() or not L.Loaded() then return false end
+    if type(on) ~= "boolean" or not L.Loaded() then return false end
     local w = R.Workshop
     local ok
     if key == "prices" then ok = w.Session.SetPriceDetail(on)
@@ -196,7 +196,7 @@ function L.SetOption(key, on)
 end
 
 function L.SetChoice(key, value)
-    if not L.Enabled() or not L.Loaded() then return false end
+    if not L.Loaded() then return false end
     local w, ok = R.Workshop
     if key == "objective" then ok = w.Session.SetObjective(value)
     elseif key == "compact" then ok = w.Compact.SetMode(value)

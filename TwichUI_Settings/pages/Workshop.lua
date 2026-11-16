@@ -53,7 +53,7 @@ K.Page({
         status = function() return not Enabled() and "Experimental · Off" or (Shown() and "Open" or (Loaded() and "Enabled" or "Ready to load")) end },
     when = function() return Launcher() ~= nil end,
     build = function()
-        K.Header("General", "Workshop opens when you ask for it.")
+        K.Header("General", "Experimental and off for new installations. Enabling keeps loading on demand; disabling stops Workshop work and keeps your saved data. Reload only to unload its code and market database from memory.")
         K.ProxyToggle("workshopEnabled", "Workshop — Experimental",
             "Enable professions, crafting plans, shopping tools and market research. Some features are still being tested. Off for new installations. Disabling stops Workshop work and keeps your saved data. Reload only if you want to unload its code and saved market database from memory; no automatic reload.", false,
             Enabled, function(on)

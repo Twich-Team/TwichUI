@@ -33,7 +33,7 @@ Page("restock", "Choose what to keep stocked at merchants.", { "Question window 
 Page("restockItems", "Set a target quantity for each item you keep stocked.")
 Page("magicInventory", "Choose where your items belong, then review the moves.")
 Page("auction", "Keep selling and collecting mail close at hand.")
-Page("workshop", "Choose how Workshop plans your crafts and shows item information.")
+Page("workshop", "Experimental crafting, shopping and market research. Enable it when you want to try it.")
 Page("chronicle", "Keep a journal of your adventures.")
 Page("chronicleLook", "Make your journal comfortable to read.", { "Border", "Controls and accents" })
 Page("cozyBag", "Follow your progress toward the Cozy Sleeping Bag.", { "Previews" })

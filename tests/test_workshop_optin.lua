@@ -80,6 +80,17 @@ do
     assert(not L.SetEnabled("true")); Preserved()
 end
 
+do
+    local c,L = Setup({})
+    local future={v=99,ui={workshopEnabled=true},workshop={v=99,opaque="preserved"}}
+    local before=Fingerprint(future)
+    c.TwichUI.Persist.Hold("TwichUIDB",future,{modules={},ui={}})
+    L.Migrate()
+    assert(c.TwichUIDB.ui.workshopEnabled==nil and not L.SetEnabled(true), "held future saved data cannot be migrated or enabled")
+    c.FireEvent("PLAYER_LOGOUT")
+    assert(c.TwichUIDB==future and Fingerprint(future)==before, "future original is restored byte-for-byte in the fixture")
+end
+
 -- Load every real Workshop TOC file while opted out, then exercise real services.
 AUCTION_MOCK_OPTIONS={experimentalOff=true,native=true}
 local c = dofile(TESTS .. "auction_mock.lua")
@@ -92,12 +103,12 @@ assert(not W.Bridge.Load() and not W.AuctionUI.Show() and not W.Window.Show())
 assert(not W.Compact.Show() and not W.Notice.Say("must stay silent"))
 assert(L.SetEnabled(true) and W.Active())
 assert(W.Watch.Events()>0 and W.Bank.Events()>0 and W.WorthTip.Events()>0)
-assert(#c.tooltipCallbacks==1 and W.AuctionButton.Attached())
-local hooks=c.nativeHooks
+assert(#c.tooltipCallbacks==1 and not W.AuctionButton.Attached(), "enabling alone cannot attach native AH controls")
 W.Queue.Add({id=1,name="Preserved recipe",mats={{item=10,qty=2}}})
 W.Queue.SetCrafts(1,4)
 W.Window.Show(); W.Window.Hide()
-local frames=#c.testFrames
+local hooks,frames=c.nativeHooks,#c.testFrames
+assert(W.AuctionButton.Attached(), "normal Workshop opening retains the existing manual scan button")
 local saved=Fingerprint({c.TwichUIDB.workshop,c.TwichUIWorkshopDB})
 local reads,bankReads,added=W.Watch.reads,W.Bank.reads,W.WorthTip.added
 W.Watch.Request()
@@ -105,7 +116,7 @@ assert(L.SetEnabled(false) and not W.Active())
 assert(W.Watch.Events()==0 and W.Bank.Events()==0 and W.WorthTip.Events()==0)
 assert(not W.AuctionButton.Button():IsShown() and not W.Scan.Busy())
 assert(not W.Bridge.Load() and not W.AuctionUI.Show() and not W.Window.Show())
-assert(not W.Notice.Say("disabled") and not L.SetOption("prices",true))
+assert(not W.Notice.Say("disabled"))
 W.Watch.Run(); c.tooltipCallbacks[1](c.GameTooltip,{guid="ignored"})
 FlushTimers()
 assert(W.Watch.reads==reads and W.Bank.reads==bankReads and W.WorthTip.added==added)
@@ -115,4 +126,24 @@ assert(L.SetEnabled(true) and W.Active())
 assert(c.nativeHooks==hooks and #c.tooltipCallbacks==1, "restart never duplicates hooks")
 assert(#c.testFrames==frames, "service frames are reused")
 assert(#W.Queue.Entries()==1 and W.Queue.Entries()[1].crafts==4)
+local beforeRead=W.Watch.reads
+local observe=W.Session.Observe
+W.Session.Observe=function() return true end -- a successful synthetic profession read
+W.Watch.Request(); W.Watch.Run(); FlushTimers()
+W.Watch.Request(); FlushTimers()
+assert(W.Watch.reads>=beforeRead+2, "a direct read cannot strand the pending event observer")
+W.Session.Observe=observe
+local profileUI=c.TwichUIDB.ui
+c.TwichUIDB.ui={workshopEnabled=false}; R.Profiles.Refresh("opt-in test")
+assert(not W.Active() and W.Watch.Events()==0 and W.Bank.Events()==0, "real profile application suspends services")
+c.TwichUIDB.ui=profileUI; R.Profiles.Refresh("opt-in test")
+assert(W.Active() and c.nativeHooks==hooks and #c.tooltipCallbacks==1, "profile return resumes without duplicate hooks")
+AUCTION_MOCK_OPTIONS={preview=true,native=true}
+local preview=dofile(TESTS .. "auction_mock.lua")
+preview.TwichUIDB.ui=preview.TwichUIDB.ui or {}
+preview.TwichUIDB.ui.workshopEnabled=true
+Load(preview,ROOT .. "WorkshopLauncher.lua")
+local PL=preview.TwichUI.WorkshopLauncher
+assert(PL.SetEnabled(false) and PL.SetEnabled(true))
+assert(preview.nativeHooks==0 and not preview.TwichUI.Workshop.AuctionButton.Attached(), "preview-only resume never hooks Blizzard AH")
 print("PASSED: conservative opt-in migration, saved fingerprints, profiles, delayed login, lifecycle and hook reuse")
