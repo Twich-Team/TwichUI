@@ -40,6 +40,39 @@ def encode(rows, width, filters):
 
 
 class Decoder(unittest.TestCase):
+    def test_corrupt_inputs_are_rejected(self):
+        def chunk(kind, body):
+            return struct.pack('>I', len(body)) + kind + body + struct.pack('>I', zlib.crc32(kind + body))
+        valid = encode([bytes(8)], 2, [0])
+        header = chunk(b'IHDR', struct.pack('>IIBBBBB', 2, 1, 8, 6, 0, 0, 0))
+        def image(raw):
+            return valid[:8] + header + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
+        cases = [b'', b'badbytes' + valid[8:], valid[:-1], valid + b'x',
+                 valid[:40] + bytes([valid[40] ^ 1]) + valid[41:],
+                 valid[:8] + header + valid[8:], image(bytes(8)), image(bytes(10)),
+                 valid[:8] + header + chunk(b'IEND', b''),
+                 valid[:8] + header + chunk(b'IDAT', b'bad zlib') + chunk(b'IEND', b'')]
+        for width, height in ((0, 1), (1, 0), (16385, 1), (16384, 16384)):
+            cases.append(valid[:8] + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 6, 0, 0, 0)) + valid[33:])
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'bad.png'
+            for data in cases:
+                with self.subTest(size=len(data), prefix=data[:12]):
+                    path.write_bytes(data)
+                    with self.assertRaises(ValueError):
+                        png.read_rgba(path)
+
+    def test_paeth_threshold_ties_and_extremes(self):
+        # Force all predictor branches and exact threshold ties independently
+        # of a screenshot's usual low-entropy pixels.
+        rng = random.Random(921)
+        rows = [bytes(rng.choice((0, 1, 10, 20, 30, 40, 127, 128, 254, 255))
+                      for _ in range(1024)) for _ in range(64)]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'threshold.png'
+            path.write_bytes(encode(rows, 256, [4]))
+            self.assertEqual([bytes(r) for r in png.read_rgba(path)[2]], rows)
+
     def test_all_filters_reconstruct_exact_bytes(self):
         rng = random.Random(4901)
         with tempfile.TemporaryDirectory() as tmp:

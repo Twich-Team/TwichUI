@@ -31,8 +31,10 @@ simlab_check_lab() {
   # Only the dedicated ignored workspace is allowed inside this repository.
   # setup/adopt still refuses every in-repository path, including this one.
   if [ "${SIMLAB_LOCAL:-0}" = "1" ] && [ "$mode" = use ] \
-     && [ "$canon" = "$REPO/test-output/simlab" ] && [ "$LAB" = "$canon" ]; then
-    local_workspace=1
+     && [ "$LAB" = "$canon" ]; then
+    case "$canon" in
+      "$REPO/test-output/simlab"|"$REPO/test-output/simlab-workers/worker-1"|"$REPO/test-output/simlab-workers/worker-2") local_workspace=1 ;;
+    esac
   fi
   if [ "$canon" = "/" ] || [ "$canon" = "$home" ] || { [ "$local_workspace" = 0 ] && _simlab_within "$canon" "$REPO"; } || _simlab_within "$REPO" "$canon" \
      || { [ -z "$home" ] || _simlab_within "$home" "$canon"; } || _simlab_within "$canon" "$wow" || _simlab_within "$wow" "$canon"; then

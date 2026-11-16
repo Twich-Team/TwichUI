@@ -7,16 +7,41 @@ No new Python packages are required.
 
 | Tier | Command | Evidence |
 |---|---|---|
-| Fast development | `./tests/run.sh fast workshop-settings` | Direct feature tests and Lua syntax; no simulator |
+| Development | `./tests/run.sh development workshop-settings` (alias `fast`) | Direct feature tests and Lua syntax; no simulator |
 | Feature checkpoint | `./tests/run.sh feature workshop-settings` | Feature tests, shared dependency tests/syntax and selected simulator regressions |
-| Full milestone | `./tests/run.sh full` | Every offline test, all addon Lua syntax (excluding third-party libraries), simulator guard and all default simulator regression scripts |
+| Integration | `./tests/run.sh integration market --with-group crafting` | Union of affected groups/dependencies and selected simulator coverage; deduplicated |
+| Release certification | `./tests/run.sh release --release-meta <meta.json> --release-zip <candidate.zip>` | Unchanged full gate plus existing release archive checker; no publication |
+| Full regression | `./tests/run.sh full` | Every offline test, all addon Lua syntax (excluding third-party libraries), simulator guard and all default simulator regression scripts |
 | Offline/CI | `./tests/run.sh` | Every offline test, including artwork rebuilds and mutation-runner harness tests; no simulator |
 
-Use fast checks frequently during implementation, feature verification before a
-checkpoint commit, and **full verification before declaring a major milestone
-complete**. Run full verification earlier for changes to shared architecture,
-load order, saved-data boundaries or other high-risk code. Focused evidence is
-never complete regression coverage. Record the tier and actual outcome.
+Use development checks frequently and affected feature checks before completing
+ordinary feature PRs. Use integration for changes crossing subsystem boundaries;
+repeat `--with-group` for each affected subsystem. Dependency tests and syntax
+expand recursively; simulator selections come from the explicitly requested
+groups. Identical catalogs merge, an unfiltered catalog dominates a filter, and
+distinct positional subsets remain separate. Unrelated visual catalogs stay out.
+
+Require the unchanged **full gate** for release candidate certification, major
+shared infrastructure changes, high-risk migrations, changes affecting global
+initialization or saved-data contracts, and explicit owner requests. Record the
+trigger; do not make an addon-wide simulator regression a blanket requirement
+for ordinary PRs. Full discovery, every default simulator launch, screenshots,
+replays, deliberate incorrect expectations and compatibility checks remain intact.
+The `release` profile adds `tools/release.py check` against an existing candidate
+archive and its packaging metadata. Missing inputs fail before executing tests.
+It checks, never builds, stamps, publishes or deploys. The existing CI packaging
+pipeline and real-client acceptance remain required. A cloud run never sets
+`automated_release_gate_passed` or `local_milestone_passed` true.
+
+Do not repeat an unchanged full run merely to refresh evidence. Diagnose failures
+with the smallest reproducing module/scenario, preserve the original report and
+logs, state the hypothesis and rerun only affected checks after a relevant fix.
+Broaden when the fix crosses boundaries. Retry nondeterminism only for a stated
+investigation; a clean retry does not erase a failure. Keep commit, working-tree
+fingerprint, fixture bytes and relevant runtime/environment constant in timing
+comparisons. Avoid overlapping heavy mutation campaigns and simulator benchmarks.
+Documentation-only evidence updates do not require another addon-wide run when
+tested executable inputs are unchanged. Focused success is never a full PASS.
 
 ## Select a feature
 
@@ -27,6 +52,7 @@ Replace `workshop-settings` with one of these nonempty groups:
 | `workshop-settings` | Workshop settings, Tooltip Designer, worth layout/tips and Workshop window |
 | `item-advisor` | Advisor recommendations, selling and disenchant evidence, discovery, page, market/crafting dependencies and selected Advisor simulator poses |
 | `workshop` | All Workshop tests and Test Lab tests |
+| `auction-preview` | Focused AH shell/replay, Shopping, Market, Sell, Owned, bridge, all six scoped-reader states and incorrect-expectation captures plus lifecycle; omits additional visual/stress poses |
 | `auction-house` | Standalone Auction House preview, existing auction safeguards and Workshop dependencies |
 | `crafting` | Crafting, shopping, stock, planner, strategy and compact views |
 | `market` | Prices, distribution, history, valuation, schema and automatic scans |
@@ -37,6 +63,7 @@ Replace `workshop-settings` with one of these nonempty groups:
 | `core` | Initialization, defaults, profiles, persistence, routing, storage and group/guild diagnostic isolation |
 | `layouts` | Layouts, wizard, import tools and reproducible artwork |
 | `test-tools` | All Python test infrastructure tests |
+| `verification-tools` | Four runner/simulator infrastructure modules plus ten representative Workshop, Settings, Reminders and AH launches; scoped infrastructure validation |
 
 Preview exact selections without executing anything:
 
@@ -54,7 +81,7 @@ requested feature; dependency tests do not trigger unrelated simulator catalogs.
 A `workshop-settings` feature run includes all Workshop and shared settings/core
 unit tests, then `design`, `craft` and `wrong` simulator launches, preserving
 replay comparison and the deliberately wrong expectation. Fast checks use the
-seven direct test files. This is the starting workflow for Workshop Settings 2.0;
+11 direct test files. This is the starting workflow for Workshop Settings 2.0;
 no Settings 2.0 feature implementation is part of this infrastructure change.
 
 Add new feature tests to their group's patterns. Full/CI discovery automatically
@@ -87,9 +114,9 @@ interpreters or tooling are errors, not skipped coverage.
 Each invocation prints its unique directory under `test-output/verification/`.
 It contains `<test filename>.log`, simulator suite logs, `syntax.log` and
 `report.json` (selection, timings, worker counts, exit codes, Python case counts,
-actual simulator launches/checks and pass/fail). Names inside that directory are
+actual simulator launches/checks and pass/fail). The report also records the requested verification profile, selection reason, omitted catalogs, coverage classification, source commit and working-tree fingerprint before/after, exit status, and the twenty slowest offline modules. A changed source fingerprint fails the run. Interrupted/error runs retain an explicitly incomplete, failed report; they cannot become certification evidence. Names inside that directory are
 stable; separate runs cannot overwrite one another. Successful temporary test
-folders are removed. No generated results should be committed.
+folders are removed. Do not commit raw generated results; compact reviewed benchmark evidence may be archived under `docs/evidence/` for infrastructure audits.
 
 Verification clears Lua/Python injection paths, fixture-generation opt-ins and
 seed/count overrides so an inherited environment cannot overwrite contracts or
@@ -121,9 +148,17 @@ binary/dependencies are mounted read-only and the existing cache is copied once
 as a disposable seed. No setup/download or simulator source change is performed.
 The installed game assets remain read-only. `SIMLAB_WOW` may select their path.
 
-A lock refuses simultaneous runs in the local workspace. Root, fixtures, cache,
-home and WTF are shared there, so simulator execution stays **serial**. Offline
-worker settings never increase simulator concurrency. Every launch starts a new
+A lock refuses simultaneous runs against the same mutable workspace. Default
+simulator execution stays **serial**. Opt-in `--sim-jobs 2` uses separate lane
+workspaces under `test-output/simlab-workers/worker-1` and `worker-2`, each with
+its own roots, fixtures, cache, home, WTF, artifacts and lock. Whole catalogs are
+assigned to fixed lanes; scenarios sharing state within a catalog remain serial.
+Admission requires at least four quota CPUs and 8 GiB currently available under
+host/cgroup limits; this is a guard, not a kernel memory reservation. Serial mode
+remains supported on smaller hosts. Offline `--jobs` never raises simulator
+concurrency. Compare serial/parallel transcripts and replay/incorrect-expectation
+controls before adopting parallelism for a new workload. No higher simulator
+worker count is supported. Every launch starts a new
 simulator with `--no-saved-vars`; one immutable addon stage is reused only within
 a script invocation, and a fresh invocation always replaces it. Set
 `SIMLAB_STAGE_ONCE=0` on the local launcher to debug original per-launch staging.
@@ -200,3 +235,48 @@ rectangles do not establish real input, fonts, combat/taint or server behavior.
 mode; it never satisfies the full local milestone gate. Default local verification
 is unchanged. See [cloud environment compatibility](cloud-environment.md) for
 commands, exact limitations, smoke classification and the open PNG encoder gate.
+
+## Measured diagnostics and focused Auction House captures
+
+`--profile local|cloud` selects the environment; the positional profile selects
+coverage. Existing `fast`, `feature`, `full` and no-argument commands retain their
+coverage. `development` aliases `fast`. `release --list` previews the full plan
+without needing archive inputs.
+
+```sh
+./tests/run.sh integration market --with-group crafting --list
+./tests/run.sh feature auction-preview --profile cloud --measure
+SIMLAB_ONLY='shell replay wrong' bash tools/simlab/run.sh auctionpreview
+```
+
+The new AH filter validates names, refuses duplicates and requires `shell` when
+`replay` or `wrong` is selected. Selected verdicts read only selected artifacts and
+print FOCUSED ONLY. Default invocation still executes all 41 launches and every
+original expectation. Narrow AH captures preserve every check for each selected
+launch; they do not certify omitted resizing, scaling, metadata/error and long-list
+poses. Use `auction-house` or full/release for the complete existing catalog.
+
+Opt-in `--measure` adds per-offline-module and per-native-launch telemetry using
+`tools/measure_command.py`. It samples descendant RSS and CPU ticks every 100 ms
+and records reaped-child counters separately. PID namespace boundaries can omit
+native CPU/RSS from reaped-child counters: use the explicitly labeled sampled
+tree values for native workload estimates. Short-lived processes may escape
+sampling; shared pages may be counted more than once. These are operational
+measurements, not exact heap peaks or a per-assertion profiler. Measurement adds
+observer overhead; compare equally instrumented, serially scheduled runs.
+Native bootstrap and last native timestamps are reported separately; simulated
+`GetTime()` is never interpreted as CPU or wall time. Artifact PNG names and
+per-launch assertion totals are retained. No process reuse or simulator worker
+parallelism is enabled by `--jobs` or `--measure`.
+
+The reproducible infrastructure benchmark selection is:
+
+```sh
+./tests/run.sh feature verification-tools --profile cloud --measure --sim-jobs 1
+./tests/run.sh feature verification-tools --profile cloud --measure --sim-jobs 2
+```
+
+Run these sequentially on frozen source, with no competing verification activity.
+This is ten launches across four representative catalogs, including Workshop and
+AH replay/negative controls. It is not the complete full/release gate. Results
+and resource limits are in [the verification audit](testing-verification-audit.md).
