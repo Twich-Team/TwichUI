@@ -14,7 +14,7 @@ local function Context()
     return ok and a==true and b==true and not (InCombatLockdown and InCombatLockdown())
 end
 function Q.Pending() return pending and 1 or 0 end
-function Q.Available() return Q.experimental and Context() and not Q.ambiguous end
+function Q.Available() return W.Active() and Q.experimental and Context() and not Q.ambiguous end
 function Q.End(reason)
     Q.epoch=Q.epoch+1
     pending=nil;Q.snapshot=nil;Q.state=reason or "unavailable"
@@ -25,6 +25,7 @@ function Q.Cancel(reason)
     Q.End(reason or "canceled")
 end
 function Q.Foreign()
+    if not W.Active() then return end
     if not sending then Q.ambiguous=true;Q.End("unattributed native query") end
 end
 local names={"SendBrowseQuery","SendSearchQuery","SendSellSearchQuery","QueryOwnedAuctions",
@@ -158,6 +159,7 @@ function Q.Begin(kind,arg)
     return true
 end
 function Q.Event(event,key)
+    if not W.Active() then return end
     if event=="AUCTION_HOUSE_SHOW" then
         if not Q.open then Q.open=true;Q.used={};Q.End("ready");Q.ambiguous=not (Q.experimental and Context() and Hooks()) end
         return
@@ -199,4 +201,21 @@ function Q.Event(event,key)
 end
 local events={"AUCTION_HOUSE_SHOW","AUCTION_HOUSE_CLOSED","AUCTION_HOUSE_DISABLED","PLAYER_LEAVING_WORLD",
     "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED","AUCTION_HOUSE_BROWSE_FAILURE","ITEM_SEARCH_RESULTS_UPDATED","OWNED_AUCTIONS_UPDATED"}
-for _,event in ipairs(events) do R:On(event,function(...) Q.Event(event,...) end) end
+local handlers,listening={},false
+function Q.Start()
+    if listening or not W.Active() then return end
+    listening=true
+    for _,event in ipairs(events) do
+        local name=event
+        handlers[name]=handlers[name] or function(...) Q.Event(name,...) end
+        R:On(name,handlers[name])
+    end
+end
+function Q.Stop()
+    if listening then
+        for _,event in ipairs(events) do R:Off(event,handlers[event]) end
+    end
+    listening=false;Q.open=false;Q.ambiguous=true
+    Q.Cancel("Workshop disabled; reopen auctioneer after enabling")
+end
+Q.Start()

@@ -59,6 +59,9 @@ m("workshop.optin.profile-bypass", "!!!TwichUI/WorkshopLauncher.lua",
 m("workshop.optin.preview-hooks", "TwichUI_Workshop/AuctionButton.lua",
   "if wanted then AB.Start() end", "AB.Start()",
   "resuming a preview-only load attaches controls to Blizzard AH", ["test_workshop_optin.lua"])
+m("workshop.optin.read-listener-leak", "TwichUI_Workshop/Window.lua",
+  "if W.AuctionReads then W.AuctionReads.Stop() end", "-- transport listeners left active",
+  "disabling leaves native read-transport callbacks registered", ["test_workshop_optin.lua"])
 
 
 # M1b external data validation: only disposable synthetic state is mutated.

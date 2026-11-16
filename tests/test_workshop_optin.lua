@@ -96,12 +96,15 @@ AUCTION_MOCK_OPTIONS={experimentalOff=true,native=true}
 local c = dofile(TESTS .. "auction_mock.lua")
 local R,W = c.TwichUI,c.TwichUI.Workshop
 local L=R.WorkshopLauncher
+local function ReadListeners() return R.ListenerCounts({}).ITEM_SEARCH_RESULTS_UPDATED or 0 end
 assert(not W.Active() and W.ready and not W.Window.Frame())
+assert(ReadListeners()==0, "disabled addon registers no read-transport events")
 assert(W.Watch.Events()==0 and W.Bank.Events()==0 and W.WorthTip.Events()==0)
 assert(c.nativeHooks==0 and #c.tooltipCallbacks==0, "disabled addon installs no optional hooks")
 assert(not W.Bridge.Load() and not W.AuctionUI.Show() and not W.Window.Show())
 assert(not W.Compact.Show() and not W.Notice.Say("must stay silent"))
 assert(L.SetEnabled(true) and W.Active())
+assert(ReadListeners()==1, "enabled read transport registers once")
 assert(W.Watch.Events()>0 and W.Bank.Events()>0 and W.WorthTip.Events()>0)
 assert(#c.tooltipCallbacks==1 and not W.AuctionButton.Attached(), "enabling alone cannot attach native AH controls")
 W.Queue.Add({id=1,name="Preserved recipe",mats={{item=10,qty=2}}})
@@ -114,6 +117,7 @@ local reads,bankReads,added=W.Watch.reads,W.Bank.reads,W.WorthTip.added
 W.Watch.Request()
 assert(L.SetEnabled(false) and not W.Active())
 assert(W.Watch.Events()==0 and W.Bank.Events()==0 and W.WorthTip.Events()==0)
+assert(ReadListeners()==0 and not W.AuctionReads.Available(), "disabling removes transport listeners and refuses reads")
 assert(not W.AuctionButton.Button():IsShown() and not W.Scan.Busy())
 assert(not W.Bridge.Load() and not W.AuctionUI.Show() and not W.Window.Show())
 assert(not W.Notice.Say("disabled"))
@@ -123,6 +127,7 @@ assert(W.Watch.reads==reads and W.Bank.reads==bankReads and W.WorthTip.added==ad
 assert(saved==Fingerprint({c.TwichUIDB.workshop,c.TwichUIWorkshopDB}), "disable/timers/hooks preserve complete saved fingerprints")
 for _=1,3 do assert(L.SetEnabled(true)); assert(L.SetEnabled(false)) end
 assert(L.SetEnabled(true) and W.Active())
+assert(ReadListeners()==1, "repeated toggles never duplicate transport listeners")
 assert(c.nativeHooks==hooks and #c.tooltipCallbacks==1, "restart never duplicates hooks")
 assert(#c.testFrames==frames, "service frames are reused")
 assert(#W.Queue.Entries()==1 and W.Queue.Entries()[1].crafts==4)

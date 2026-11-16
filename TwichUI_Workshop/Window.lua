@@ -471,7 +471,7 @@ function W.Suspend()
     if W.StrategyView then W.StrategyView.Close() end
     if W.Notice then W.Notice.Stop() end
     if W.Scan then W.Scan.Stop() end -- an already-committing atomic save may finish
-    if W.AuctionReads then W.AuctionReads.Cancel("Workshop disabled") end
+    if W.AuctionReads then W.AuctionReads.Stop() end
     if W.Bridge then W.Bridge.Cancel() end
     if W.Watch then W.Watch.Stop() end
     if W.Bank then W.Bank.Stop() end
@@ -489,6 +489,7 @@ function W.Resume()
     if W.Watch then W.Watch.Start() end
     if W.Bank then W.Bank.Start() end
     if W.WorthTip then W.WorthTip.Start() end
+    if W.AuctionReads then W.AuctionReads.Start() end
     if W.AuctionButton then W.AuctionButton.Resume() end
 end
 if not W.Active() then W.suspended = true end

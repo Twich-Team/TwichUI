@@ -9,6 +9,27 @@ The workflow planner reports `publish=false`, and the publish CLI also refuses t
 Owner real-client acceptance and explicit authorization are required before a separate
 reviewed change enables publication. Local candidate packaging and archive checks remain available.
 
+For a local v1.3 candidate without publication, use a separate **clone** at the
+frozen commit (the pinned packager expects a `.git` directory). Keep the owner
+checkout untouched. Write local metadata with a candidate `version`, its exact
+`commit` and `publish: false`; stamp only that disposable clone with
+`python3 -I tools/release.py stamp --meta /absolute/path/meta.json`. Download
+`release.sh` from the same packager commit pinned in the workflow,
+`e50a250f8705041e40f2fa1ddcb280a686d65aa0`, inspect it and run:
+
+```sh
+bash /absolute/path/release.sh -d -t /absolute/path/build-clone \
+  -r /absolute/path/candidate-output -n '!!!TwichUI-v<CANDIDATE-VERSION>-forever'
+python3 -I tools/release.py check --meta /absolute/path/meta.json /absolute/path/candidate.zip
+```
+
+`-d` means build only. Do not run the publish command or create a tag. Include all
+seven production addon folders according to `.pkgmeta`; exclude development
+companions. A `1.3.1-rc.1.g<sha>` candidate follows the existing `v1.3.0` baseline
+without inventing a new public version tag. Keep the packaged version out of
+committed `.toc` files. The consolidation archive uses committed training data;
+it does not silently fetch a different runtime dataset during certification.
+
 | You push | Channel | GitHub | CurseForge |
 | --- | --- | --- | --- |
 | a commit to `main` | alpha | prerelease (never "Latest") | alpha file |
