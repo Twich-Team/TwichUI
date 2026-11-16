@@ -87,6 +87,19 @@ def nearest(tags, head, cwd):
     return best[1] if best else None
 
 
+def publication_enabled(root=None):
+    path = Path(root or REPO_ROOT) / ".github/release-policy.json"
+    if not path.exists():
+        return True  # Older release branches retain their established policy.
+    try:
+        policy = json.loads(path.read_text())
+    except (OSError, ValueError) as exc:
+        raise ReleaseError("invalid release publication policy") from exc
+    if not isinstance(policy, dict) or type(policy.get("publication_enabled")) is not bool:
+        raise ReleaseError("invalid release publication policy")
+    return policy["publication_enabled"]
+
+
 def plan(ref, sha=None, repo_url=None, cwd=None):
     cwd = cwd or REPO_ROOT
     if git("rev-parse", "--is-shallow-repository", cwd=cwd).strip() == "true":
@@ -121,6 +134,9 @@ def plan(ref, sha=None, repo_url=None, cwd=None):
     def skip(reason):
         meta.update(publish=False, skip_reason=reason)
         return meta, None
+
+    if not publication_enabled(cwd):
+        return skip("publication is held by .github/release-policy.json; owner acceptance is pending")
 
     previous = None
     if channel == "release":
@@ -687,6 +703,8 @@ def main(argv=None):
                 return 1
             print(f"{Path(args.zip).name}: {', '.join(ADDONS)}, all at Version {meta['version']}: OK")
         elif args.cmd == "publish":
+            if not publication_enabled():
+                raise ReleaseError("publication is held by .github/release-policy.json")
             token = os.environ.get("CF_API_KEY")
             if not token:
                 raise ReleaseError("CF_API_KEY is not set")

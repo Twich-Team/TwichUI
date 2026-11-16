@@ -3,6 +3,12 @@
 Releases are built and published by `.github/workflows/release.yml`, with `tools/release.py` deciding the
 version and the release notes. No version or changelog needs editing by hand.
 
+**v1.3 publication hold:** `.github/release-policy.json` currently disables publication.
+Branch merges can proceed without creating a tag, GitHub release or CurseForge upload.
+The workflow planner reports `publish=false`, and the publish CLI also refuses the hold.
+Owner real-client acceptance and explicit authorization are required before a separate
+reviewed change enables publication. Local candidate packaging and archive checks remain available.
+
 | You push | Channel | GitHub | CurseForge |
 | --- | --- | --- | --- |
 | a commit to `main` | alpha | prerelease (never "Latest") | alpha file |
