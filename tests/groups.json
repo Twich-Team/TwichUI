@@ -138,5 +138,46 @@
         "script": "auctionproof"
       }
     ]
+  },
+  "verification-tools": {
+    "tests": [
+      "test_test_runner.py",
+      "test_simlab_*.py"
+    ],
+    "syntax": [
+      "tools/simlab/scenarios/*.lua"
+    ],
+    "dependencies": [],
+    "simulators": [
+      {
+        "script": "workshop",
+        "only": [
+          "craft",
+          "design",
+          "wrong"
+        ]
+      },
+      {
+        "script": "settings",
+        "args": [
+          "workshop"
+        ]
+      },
+      {
+        "script": "reminders",
+        "args": [
+          "editor",
+          "narrow"
+        ]
+      },
+      {
+        "script": "auctionpreview",
+        "only": [
+          "shell",
+          "replay",
+          "wrong"
+        ]
+      }
+    ]
   }
 }

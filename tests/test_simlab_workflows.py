@@ -1,5 +1,7 @@
 """Partial simulator selections must judge every selected pose and label scope."""
 import contextlib
+import concurrent.futures
+import fcntl
 import importlib.util
 import io
 import os
@@ -128,6 +130,40 @@ exit 7
         outside = self.base / 'outside'
         outside.mkdir()
         (self.repo / 'test-output').symlink_to(outside, target_is_directory=True)
+        result = self.run_launcher()
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertEqual(list(outside.iterdir()), [])
+
+    def test_worker_state_caches_and_artifacts_are_disjoint(self):
+        (self.scripts / 'smoke.sh').write_text('''set -eu
+echo "$SIMLAB_WORKER" > "$WOWSIM_LAB/home/owner"
+echo "$SIMLAB_WORKER" > "$WOWSIM_LAB/xdg/cache/wow-ui-sim/blizzard-ui/immutable"
+echo "artifacts: $SIMLAB_RUN"
+''')
+        def launch(worker):
+            return subprocess.run(['bash', str(self.scripts / 'run.sh'), 'smoke'],
+                                  env=dict(self.env, SIMLAB_WORKER=str(worker)), capture_output=True, text=True)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(launch, (1, 2)))
+        for worker, result in enumerate(results, 1):
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            state = self.repo / f'test-output/simlab-workers/worker-{worker}'
+            self.assertEqual((state / 'home/owner').read_text(), f'{worker}\n')
+            self.assertEqual((state / 'xdg/cache/wow-ui-sim/blizzard-ui/immutable').read_text(), f'{worker}\n')
+            self.assertIn(str(state / 'artifacts'), result.stdout)
+        self.assertEqual((self.install / 'xdg/cache/wow-ui-sim/blizzard-ui/immutable').read_text(), 'cache seed')
+        with (self.repo / 'test-output/simlab-worker-1.lock').open('w') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            self.assertEqual(launch(1).returncode, 2)
+            self.assertEqual(launch(2).returncode, 0)
+        self.assertEqual(launch('../escape').returncode, 2)
+
+    def test_worker_parent_symlink_is_refused(self):
+        outside = self.base / 'outside'
+        outside.mkdir()
+        (self.repo / 'test-output').mkdir()
+        (self.repo / 'test-output/simlab-workers').symlink_to(outside, target_is_directory=True)
+        self.env['SIMLAB_WORKER'] = '1'
         result = self.run_launcher()
         self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
         self.assertEqual(list(outside.iterdir()), [])

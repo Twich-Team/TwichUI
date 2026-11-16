@@ -161,6 +161,22 @@ class CloudProfile(unittest.TestCase):
 
 
 class Evidence(unittest.TestCase):
+    def test_parallel_admission_refuses_small_cpu_and_memory_quotas(self):
+        files = {'/sys/fs/cgroup/cpu.max': '400000 100000',
+                 '/sys/fs/cgroup/memory.max': str(16 * 1024**3),
+                 '/sys/fs/cgroup/memory.current': str(2 * 1024**3),
+                 '/proc/meminfo': 'MemAvailable: 16777216 kB\n'}
+        with (mock.patch.object(runner.os, 'sched_getaffinity', return_value={0, 1, 2, 3}),
+              mock.patch.object(Path, 'read_text', lambda path: files[str(path)])):
+            self.assertEqual(runner.simulator_capacity()['workers'], 2)
+            files['/sys/fs/cgroup/cpu.max'] = '200000 100000'
+            with self.assertRaises(ValueError):
+                runner.simulator_capacity()
+            files['/sys/fs/cgroup/cpu.max'] = '400000 100000'
+            files['/sys/fs/cgroup/memory.current'] = str(10 * 1024**3)
+            with self.assertRaises(ValueError):
+                runner.simulator_capacity()
+
     def test_source_identity_detects_tracked_and_untracked_changes(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)

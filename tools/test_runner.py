@@ -263,11 +263,27 @@ def syntax_checks(repo, selection, processes, output_dir):
             (output_dir / 'syntax.log').write_text(''.join(out))
             print('FAIL syntax:', ' '.join(cmd), log, flush=True)
             return False
-    for path in [repo / 'tools/test_runner.py', *sorted((repo / 'tools/simlab').glob('*.py'))]:
+    for path in [repo / 'tools/test_runner.py', repo / 'tools/measure_command.py', *sorted((repo / 'tools/simlab').glob('*.py'))]:
         compile(path.read_bytes(), str(path), 'exec')
     (output_dir / 'syntax.log').write_text(''.join(out))
     print(f'ok   syntax ({len(lua)} Lua files; runner/simulator Python and shell scripts)', flush=True)
     return True
+
+
+def simulator_capacity():
+    """Conservative admission check; no claim of a kernel memory reservation."""
+    cores = float(len(os.sched_getaffinity(0)))
+    quota, period = Path('/sys/fs/cgroup/cpu.max').read_text().split()
+    if quota != 'max':
+        cores = min(cores, int(quota) / int(period))
+    memory = Path('/sys/fs/cgroup/memory.max').read_text().strip()
+    available = int(next(line.split()[1] for line in Path('/proc/meminfo').read_text().splitlines() if line.startswith('MemAvailable:'))) * 1024
+    if memory != 'max':
+        available = min(available, int(memory) - int(Path('/sys/fs/cgroup/memory.current').read_text()))
+    if cores < 4 or available < 8 * 1024 ** 3:
+        raise ValueError(f'two simulator workers require >=4 quota CPUs and >=8 GiB available; found {cores:g} CPUs, {available / 1024**3:.2f} GiB')
+    return dict(quota_cpus=cores, available_bytes=available, workers=2,
+                guard='admission only; no kernel memory reservation; serial within each catalog')
 
 
 def simulator_env(tmp, profile):
@@ -290,6 +306,7 @@ def main(argv=None):
                         help='cloud uses no game assets; all selections/assertions remain, visual/client gates stay local')
     parser.add_argument('--jobs', type=int, choices=range(1, 5), default=2, metavar='1..4')
     parser.add_argument('--list', action='store_true', help='show exact tests, syntax files and simulator selections; run nothing')
+    parser.add_argument('--sim-jobs', type=int, choices=(1, 2), default=1, help='opt-in isolated catalog workers; default serial')
     parser.add_argument('--measure', action='store_true', help='opt-in per-command CPU/RSS telemetry (Linux /proc)')
     parser.add_argument('--release-meta', type=Path, help='existing packaging metadata for release archive validation')
     parser.add_argument('--release-zip', type=Path, help='existing candidate archive; checked, never published')
@@ -340,7 +357,12 @@ def main(argv=None):
         env = simulator_env(output_dir / 'tmp', args.profile)
         if args.measure:
             env['SIMLAB_METRICS'] = '1'
-        for index, spec in enumerate(selection['simulators']):
+        def run_simulator(index, spec, worker=None):
+            env = simulator_env(output_dir / 'tmp', args.profile)
+            if args.measure:
+                env['SIMLAB_METRICS'] = '1'
+            if worker is not None:
+                env['SIMLAB_WORKER'] = str(worker)
             cmd = (['bash', 'tools/simlab/tests/lab_guard.sh'] if spec['script'] == 'lab-guard' else
                    ['bash', 'tools/simlab/run.sh', spec['script'], *spec.get('args', [])])
             if spec.get('only'):
@@ -367,14 +389,28 @@ def main(argv=None):
                                           bootstrap_seconds=float(startup[1]) if startup else None,
                                           last_native_timestamp_seconds=float(stamps[-1]) if stamps else None,
                                           metrics=json.loads(path.with_suffix('.metrics.json').read_text()) if path.with_suffix('.metrics.json').is_file() else None))
-            sims.append(dict(**spec, passed=passed, exit_code=code, timed_out=timed_out,
+            row = dict(**spec, worker=worker, passed=passed, exit_code=code, timed_out=timed_out,
                              artifacts=artifacts[-1] if artifacts else None,
                              screenshots=sorted(p.name for p in Path(artifacts[-1]).glob('*.png')) if artifacts else [],
                              telemetry=[dict(file=p.name, **json.loads(p.read_text())) for p in sorted(Path(artifacts[-1]).glob('*.metrics.json'))] if artifacts else [],
-                             launches=launches, scenario_checks=checks, scenarios=sorted(scenarios, key=lambda s: s['scenario']), seconds=time.perf_counter() - t))
-            print(f'{"ok  " if passed else "FAIL"} simulator {spec["script"]} ({sims[-1]["seconds"]:.3f}s)', flush=True)
+                             launches=launches, scenario_checks=checks, scenarios=sorted(scenarios, key=lambda s: s['scenario']), seconds=time.perf_counter() - t)
+            print(f'{"ok  " if passed else "FAIL"} simulator {spec["script"]} ({row["seconds"]:.3f}s)', flush=True)
             if not passed:
                 print(output, flush=True)
+            return row
+
+        resource_budget = None
+        if args.sim_jobs == 2 and selection['simulators']:
+            resource_budget = simulator_capacity()
+            def lane(worker):
+                return [(index, run_simulator(index, spec, worker))
+                        for index, spec in list(enumerate(selection['simulators']))[worker - 1::2]]
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                futures = [pool.submit(lane, worker) for worker in (1, 2)]
+                indexed = [row for future in futures for row in future.result()]
+            sims = [row for _, row in sorted(indexed)]
+        else:
+            sims = [run_simulator(index, spec) for index, spec in enumerate(selection['simulators'])]
         package = None
         if args.tier == 'release':
             cmd = [sys.executable, '-I', 'tools/release.py', 'check', '--meta', str(args.release_meta.resolve()), str(args.release_zip.resolve())]
@@ -389,7 +425,7 @@ def main(argv=None):
         passed = passed and source_unchanged
         if not source_unchanged:
             print('FAIL source changed during verification; preserve this result and rerun affected checks on frozen source', flush=True)
-        report = dict(complete=True, package=package, automated_release_gate_passed=passed and args.tier == 'release' and args.profile == 'local', source=identity, source_after=final_identity, source_unchanged=source_unchanged,
+        report = dict(simulator_workers=args.sim_jobs, simulator_resource_budget=resource_budget, complete=True, package=package, automated_release_gate_passed=passed and args.tier == 'release' and args.profile == 'local', source=identity, source_after=final_identity, source_unchanged=source_unchanged,
                       exit_code=0 if passed else 1,
                       slowest_tests=sorted(rows, key=lambda r: r['seconds'], reverse=True)[:20],
                       selection=selection, jobs=args.jobs, layout_workers=1, seconds=time.perf_counter() - start,
