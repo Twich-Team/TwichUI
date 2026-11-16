@@ -5,7 +5,8 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-RELEASE_FILES = {"tools/release.py", "tools/ci_verify.py", "tests/test_release_tools.py",
+RELEASE_FILES = {"tools/release.py", "tools/release_promotion.py", "tests/test_release_promotion.py",
+                 ".github/workflows/release-candidate.yml", ".github/workflows/release-promotion.yml", "tools/ci_verify.py", "tests/test_release_tools.py",
                  "tests/test_release_isolation.py", ".github/workflows/release.yml",
                  ".github/release-policy.json", ".pkgmeta", "RELEASING.md", "docs/testing.md"}
 

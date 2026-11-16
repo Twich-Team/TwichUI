@@ -260,7 +260,7 @@ def notes(meta, repo_url, highlights, cwd):
     short = head[:7]
     commit_ref = f"[`{short}`]({repo_url}/commit/{head})" if repo_url else f"`{short}`"
     kinds = {"alpha": "Alpha build: a development build from `main`, for testing; it may hold unfinished changes.",
-             "beta": "Beta build: a test build from `beta`, for checking before a release.",
+             "beta": "Beta build: an explicitly selected release candidate, for checking before a release.",
              "release": "Stable release."}
     out = [f"## {PROJECT} {meta['version']}", "", f"{kinds[meta['channel']]} Commit {commit_ref}.", ""]
     if prev:
@@ -549,6 +549,102 @@ def verify_candidate(meta, zip_path, notes_text):
     return identity
 
 
+# Explicit candidates and protected promotion. No network or publication in these validators.
+def candidate_plan(channel, version, source, cwd, hotfix_base=None, repo_url=None):
+    if not re.fullmatch(r"[0-9a-f]{40}", source) or git("rev-parse", "HEAD", cwd=cwd).strip() != source:
+        raise ReleaseError("candidate requires the exact checked-out source SHA")
+    if len(version) > MAX_VERSION_LEN or channel not in ("alpha", "beta", "stable", "hotfix"):
+        raise ReleaseError("invalid candidate channel/version")
+    stable = STABLE_TAG.fullmatch("v" + version)
+    pre = PRE_TAG.fullmatch("v" + version)
+    if channel in ("stable", "hotfix"):
+        if not stable:
+            raise ReleaseError("stable/hotfix requires MAJOR.MINOR.PATCH")
+    elif not pre or pre.group(4) != channel or pre.group(6) != source[:7]:
+        raise ReleaseError("prerelease version must match channel and source SHA")
+    reachable = lines(git("tag", "--merged", source, cwd=cwd))
+    previous = max((t for t in reachable if STABLE_TAG.fullmatch(t) and
+                    git("rev-parse", t + "^{commit}", cwd=cwd).strip() != source),
+                   key=lambda t: version_of(STABLE_TAG.fullmatch(t)), default=None)
+    if previous and version_of(stable or pre) <= version_of(STABLE_TAG.fullmatch(previous)):
+        raise ReleaseError("candidate version must advance existing stable history")
+    if hotfix_base:
+        base = STABLE_TAG.fullmatch(hotfix_base)
+        if channel != "hotfix" or not base or hotfix_base not in reachable:
+            raise ReleaseError("hotfix requires a reachable stable base tag")
+        major, minor, patch = version_of(base)
+        if version_of(stable) != (major, minor, patch + 1):
+            raise ReleaseError("hotfix must be the next patch of its released line")
+        previous = hotfix_base
+    elif channel == "hotfix":
+        raise ReleaseError("hotfix requires its released base tag")
+    else:
+        git("merge-base", "--is-ancestor", source, "refs/remotes/origin/main", cwd=cwd)
+    if channel in ("alpha", "beta"):
+        prior = [t for t in reachable if (m := PRE_TAG.fullmatch(t)) and m.group(4) == channel and
+                 git("rev-parse", t + "^{commit}", cwd=cwd).strip() != source]
+        previous = nearest(sorted(prior), source, cwd) or previous
+    meta = dict(schema=2, channel="release" if stable else channel, release_kind=channel,
+                version=version, tag="v" + version, commit=source, publish=False,
+                prerelease=not bool(stable), make_latest=bool(stable), hotfix_base=hotfix_base,
+                previous={"tag": previous, "commit": git("rev-parse", previous + "^{commit}", cwd=cwd).strip()}
+                if previous else None)
+    return meta, notes(meta, repo_url, None, cwd)
+
+
+def validate_promotion(meta, zip_path, notes_text, requested, evidence):
+    identity = verify_candidate(meta, zip_path, notes_text)
+    expected = dict(source=meta["commit"], version=meta["version"],
+                    channel=meta.get("release_kind"), sha256=identity["sha256"])
+    if any(requested.get(k) != v for k, v in expected.items()):
+        raise ReleaseError("promotion request does not match exact source/version/channel/SHA256")
+    if evidence.get("candidate") != {**expected, "artifact_id": requested["artifact_id"]}:
+        raise ReleaseError("reviewed evidence does not bind this artifact")
+    kind = expected["channel"]
+    if kind not in ("alpha", "beta", "stable", "hotfix"):
+        raise ReleaseError("internal artifacts cannot be promoted")
+    stable = STABLE_TAG.fullmatch("v" + meta["version"])
+    pre = PRE_TAG.fullmatch("v" + meta["version"])
+    if kind in ("stable", "hotfix"):
+        if not stable:
+            raise ReleaseError("stable/hotfix requires a stable version")
+    elif not pre or pre.group(4) != kind or pre.group(6) != meta["commit"][:7]:
+        raise ReleaseError("prerelease channel/version/source mismatch")
+    if meta.get("tag") != "v" + meta["version"] or meta.get("channel") != ("release" if kind in ("stable", "hotfix") else kind):
+        raise ReleaseError("candidate channel/tag is inconsistent")
+    if meta.get("prerelease") != (kind in ("alpha", "beta")) or meta.get("make_latest") != (kind in ("stable", "hotfix")):
+        raise ReleaseError("candidate publication flags are inconsistent")
+    for key in ("verification", "client_acceptance"):
+        if not isinstance(evidence.get(key), str) or not evidence[key].startswith("https://"):
+            raise ReleaseError(f"reviewed {key} evidence URL required")
+    if kind != "alpha" and (evidence.get("release_gate_passed") is not True or evidence.get("client_accepted") is not True):
+        raise ReleaseError("beta/stable/hotfix requires exact-candidate release certification and client acceptance")
+    if kind == "alpha" and not evidence.get("limitations"):
+        raise ReleaseError("alpha requires explicit tester scope/limitations")
+    problems = check_archive(zip_path, meta["version"])
+    if problems:
+        raise ReleaseError("; ".join(problems))
+    with zipfile.ZipFile(zip_path) as archive:
+        interface = toc_field(archive.read(TOCS[CORE]).decode("utf-8"), "Interface")
+    game_version(interface)  # Fail before credentials or remote changes for invalid Forever metadata.
+    return identity
+
+
+def validate_environment(environment, policy):
+    rules = environment.get("protection_rules", [])
+    review = next((r for r in rules if r.get("type") == "required_reviewers"), {})
+    if not review.get("reviewers") or review.get("prevent_self_review") is not True:
+        raise ReleaseError("release environment must require independent review")
+    # GitHub's REST/GraphQL environment schema does not expose the UI bypass toggle.
+    # Require a reviewed owner attestation on protected main; never infer it from absent data.
+    if (policy.get("environment_admin_bypass_disabled") is not True or
+            not isinstance(policy.get("environment_configuration_evidence"), str) or
+            not policy["environment_configuration_evidence"].startswith("https://")):
+        raise ReleaseError("reviewed owner evidence that administrator bypass is disabled is required")
+    if environment.get("deployment_branch_policy") != {"protected_branches": True, "custom_branch_policies": False}:
+        raise ReleaseError("release environment must restrict deployments to protected branches")
+
+
 def publish(meta, zip_path, notes_text, gh, cf, log=print, sleep=time.sleep):
     """Publish one build. Safe to re-run: every step looks at what is already there first."""
     identity = verify_candidate(meta, zip_path, notes_text)
@@ -691,6 +787,14 @@ def main(argv=None):
     a.add_argument("--repo-url")
     a.add_argument("--github-output")
     a.add_argument("--repo-dir", help="the repository to read (default: the one this script is in)")
+    a = sub.add_parser("candidate")
+    a.add_argument("--channel", required=True)
+    a.add_argument("--version", required=True)
+    a.add_argument("--source", required=True)
+    a.add_argument("--repo-dir", required=True)
+    a.add_argument("--hotfix-base", default="")
+    a.add_argument("--repo-url")
+    a.add_argument("--out", required=True)
     a = sub.add_parser("internal")
     a.add_argument("--out", required=True)
     a = sub.add_parser("seal")
@@ -725,6 +829,15 @@ def main(argv=None):
                     for k in ("publish", "channel", "version", "tag", "packager_name"):
                         v = meta.get(k)
                         f.write(f"{k}={str(v).lower() if isinstance(v, bool) else (v or '')}\n")
+            return 0
+        if args.cmd == "candidate":
+            meta, text = candidate_plan(args.channel, args.version, args.source, args.repo_dir,
+                                        args.hotfix_base or None, args.repo_url)
+            out = Path(args.out)
+            out.mkdir(parents=True, exist_ok=False)
+            (out / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
+            (out / "notes.md").write_text(text, encoding="utf-8")
+            stamp(meta["version"], root=args.repo_dir)
             return 0
         if args.cmd == "internal":
             commit = git("rev-parse", "HEAD").strip()

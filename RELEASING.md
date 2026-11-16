@@ -48,42 +48,115 @@ Internal artifacts include meta.json, notes.md and the checked seven-addon ZIP, 
 creates a new internal candidate, never permission to replace an accepted public candidate.
 Internal versions (`0.0.0-dev.g<SHA>`) are not public version plans or certified releases.
 
-## Required owner settings and pending public promotion
+## Explicit candidates and promotion
 
-This PR implements release isolation and publisher integrity, **not a completed public
-promotion workflow**. Keep `.github/release-policy.json` false. No alpha, beta, stable or
-hotfix can be published by Actions in this workflow, even if that flag changes accidentally.
-The retained publisher CLI is an operator tool, not an approval system; do not use it to
-bypass the pending promotion workflow or hold.
+There are three workflows: normal verification/internal builds (`release.yml`),
+manual candidate creation (`release-candidate.yml`), and protected manual promotion
+(`release-promotion.yml`). All manual workflows run from **main** only. Source inputs
+must be full commit SHAs, never floating branch names. Nothing publishes on pushes/tags.
 
-Before a separate reviewed promotion implementation:
+1. Choose a reviewed source commit and final version. Run **Build release candidate**
+   on main with source, channel (`alpha`, `beta`, `stable`, `hotfix`) and version.
+   Prereleases use `N.N.N-alpha.COUNT.gSHA7` / `N.N.N-beta.COUNT.gSHA7`; stable/hotfix
+   use `N.N.N`. Use reachable history as described below; do not renumber old releases.
+   Hotfix additionally requires a reachable stable `hotfix_base` tag and its next patch.
+   Normal candidates must be ancestors of main; hotfixes may be on their released line.
+   The requestor must have write/maintain/admin permission. The build has no publication
+   secrets, uses trusted main tooling with separate source checkout, stamps all seven TOCs,
+   packages committed inputs, checks the ZIP, seals it and uploads without overwrite.
+2. Record the **artifact ID**, source SHA, version, channel and **ZIP** SHA256 from the
+   summary/meta.json. GitHub's artifact-container digest is different from the ZIP digest.
+   Download that ID for testing. Certify the final stamped bytes; never build during promotion.
+3. Commit exact-candidate evidence through a reviewed PR on main at
+   `docs/releases/<ZIP-SHA256>.json`, using the format below. Alpha requires feature/package
+   verification, client/tester acceptance evidence and explicit scope/limitations. Beta,
+   stable and hotfix also require a passing full release profile for this ZIP and explicit
+   real-client acceptance. Link retained reports; the ledger is a reviewed maintainer
+   attestation, not an automatic claim that the linked client tests were performed.
+4. For stable/hotfix, after certification create an **annotated** `vN.N.N` tag on the exact
+   source using the authorized maintainer identity. Tagging alone uploads nothing.
+   Existing tags are never moved/replaced. The publisher verifies the annotated tag and
+   an active no-bypass `refs/tags/v*` update/deletion ruleset before publication.
+5. Run **Promote exact release candidate** on main with the five recorded identifiers.
+   Preflight verifies maintainer permission, protected main, protected environment,
+   successful main-dispatched candidate origin, artifact ID/age/expiry, package/hash/notes,
+   version history, reviewed evidence and stable tag protection. It displays the exact tuple
+   before environment approval. **While publication_enabled is false, publication is skipped.**
+6. After a separately reviewed future authorization lifts the hold, an independent reviewer
+   approves the `release` environment job. Its name includes version, channel, artifact ID
+   and full digest; its environment URL links to the exact source/tuple summary. The job
+   re-downloads the **same ID**, repeats validation and checks the latest main hold before
+   credentials/upload. It never rebuilds or re-stamps. Global concurrency serializes all
+   channels, including approval waits. GitHub may replace a pending queued request; it
+   never cancels a running publisher. A displaced request must be deliberately dispatched again.
 
-1. Protect main: require pull requests, owner review and the `verify` check from this
-   workflow (select its actual check context after its first run); prohibit force pushes
-   and deletion. Apply protections to administrators; keep bypass lists restricted.
-2. Protect `v*` release tags against creation, update and deletion except the deliberately
-   authorized release identity. Preserve all existing public tags and release history.
-3. Create a `release` environment with owner/maintainer required reviewers, prevent
-   self-review, disable administrator bypass, and restrict deployment branches to protected
-   main (add a specific temporary release branch only when explicitly needed). If the GitHub
-   plan cannot enforce reviewers, leave publication disabled. Do not weaken these settings.
-4. Move `CF_API_KEY` from repository secrets to that environment. Grant contents-write only
-   to the eventual protected publish job; builds and PRs must have no publication credentials.
+```json
+{
+  "candidate": {
+    "artifact_id": "123456789",
+    "source": "FULL_40_HEX_SOURCE_SHA",
+    "version": "1.3.1",
+    "channel": "stable",
+    "sha256": "FULL_64_HEX_ZIP_SHA256"
+  },
+  "verification": "https://github.com/Twich-Team/TwichUI/...exact-candidate-report...",
+  "client_acceptance": "https://github.com/Twich-Team/TwichUI/...owner-acceptance...",
+  "release_gate_passed": true,
+  "client_accepted": true,
+  "limitations": "Actual alpha scope/omissions, or certified release limitations"
+}
+```
 
-The next implementation must support a separate manual promotion selecting immutable
-artifact ID/run, full source SHA, channel, version and SHA256. Display that tuple **before**
-environment approval, download that exact artifact, compare it to the approval inputs,
-verify package/notes/provenance and policy from protected main, and upload without rebuilding.
-Serialize all promotions globally. The approval must not float to a branch's latest commit.
-Plain workflow_dispatch alone is insufficient; protected environment review is the simplest
-supported additional approval. No promotion job or end-to-end approval rehearsal is claimed here.
+Do not set acceptance flags for a cloud-only/focused run. The full release/client checks
+are pending before the first real beta/stable/hotfix publication; this campaign does not
+run them. A beta-to-stable version stamp changes bytes: create/certify a new stable
+candidate and ledger/digest. Internal `0.0.0-dev` artifacts cannot be promoted.
 
-Release decisions still required: owner real-client v1.3 acceptance; alpha tester scope and
-visible omissions; beta/stable certification for the exact final bytes; stable version from
-existing history; and hotfix scope. Before beta/stable publication run the full release gate
-in docs/testing.md and record client acceptance. That certification is pending, not part of
-this development campaign. If stamping beta as stable changes bytes, certify/bind the new
-final hash; never call those archives byte-identical.
+Actions artifacts expire after 30 days; missing, older, deleted or expired candidates are
+rejected. Preserve final ZIP/meta/notes and certification evidence securely for support.
+If a candidate expires before acceptance, create a new candidate and review/certify its
+new digest/ID. Never rewrite an accepted release marker to pretend a rebuild matches it.
+If expiry occurs after a partial public release, reconcile existing destinations and
+retained original bytes manually; automatic promotion does not rebuild or guess identity.
+
+## Required GitHub settings
+
+Administrative API attempts on 2026-11-16 returned **HTTP 403 Resource not accessible by
+integration** for main protection, tag ruleset creation and environment creation. Repository
+metadata reported admin access, but the integration token cannot apply these settings.
+No setting is claimed applied. The workflow fails closed until required protection exists.
+
+Owner setup (Settings in Twich-Team/TwichUI):
+
+1. **Branches → main protection**: require pull requests, at least one independent approval,
+   dismiss stale approvals, require last-push approval, require the successful `verify` check
+   with branches up to date. Enforce for administrators; disallow force pushes and deletion.
+   Keep bypass lists empty. No branch synchronization is required.
+2. **Rules → Rulesets → New tag ruleset**: active, target tags `v*` (API include exactly
+   `refs/tags/v*`, no exclusions), restrict updates and deletion, no bypass actors. Creation
+   remains possible for authorized maintainers/Actions; do not give the publisher permission
+   to rewrite historical tags. Preserve the existing v3 ruleset and public history.
+3. **Environments → release**: required reviewer `rldiamond` (or a maintainer team), prevent
+   self-review, disable administrator bypass, deployment branches **protected branches only**.
+   Have another maintainer dispatch when rldiamond is the reviewer; a sole maintainer cannot
+   independently approve their own request. If the GitHub plan cannot enforce these controls,
+   leave publication disabled. The workflow verifies reviewers, self-review prevention and branch
+   restrictions through the REST API. GitHub's published REST/GraphQL schemas do **not** expose
+   the administrator-bypass UI toggle: after disabling it, commit a reviewed owner attestation
+   in `.github/release-policy.json`: set `environment_admin_bypass_disabled: true` and
+   `environment_configuration_evidence` to an HTTPS settings-review issue/report link. Both
+   remain false/empty in this PR. This attestation is a manual trust boundary, not a claim
+   that automation can inspect the toggle. Keep it current if environment settings change.
+4. **Environment secrets → release → CF_API_KEY**: configure a CurseForge upload token there.
+   Existing secret values cannot be read/moved by this integration. After configuring the
+   environment secret, delete the repository-level CF_API_KEY under Actions secrets. Never
+   paste a secret into chat, an issue or a workflow input. Only the protected publish job
+   references this secret. Builds/PR jobs use a read-only GitHub token.
+
+No broad PAT is required: promotion requests job-scoped `contents: write` and `actions: read`;
+preflight has contents/actions read only. If organization policy denies environment or
+ruleset metadata reads to the Actions token, resolve those specific permissions; do not
+remove protection validation. Do not enable publication in this implementation PR.
 
 ## Branch policy
 
