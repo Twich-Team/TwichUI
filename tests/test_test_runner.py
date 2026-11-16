@@ -17,6 +17,29 @@ spec.loader.exec_module(runner)
 
 
 class Selection(unittest.TestCase):
+    def test_profiles_preserve_full_and_merge_integration_without_extra_catalogs(self):
+        self.assertEqual(runner.plan(REPO, 'release', None), runner.plan(REPO, 'full', None))
+        self.assertEqual(runner.plan(REPO, 'development', 'market'), runner.plan(REPO, 'fast', 'market'))
+        combined = runner.plan(REPO, 'integration', 'market', ['crafting'])
+        for group in ('market', 'crafting'):
+            self.assertLessEqual(set(runner.plan(REPO, 'feature', group)['tests']), set(combined['tests']))
+        self.assertEqual(len(combined['simulators']), 1)
+        self.assertEqual(set(combined['simulators'][0]['only']), {'craft', 'opps', 'history', 'wrong', 'shop', 'strategy', 'shopcollect'})
+        desc = runner.describe(combined, 'integration')
+        self.assertIn('settings', desc['omitted_catalogs'])
+        self.assertIn('reminders', desc['omitted_catalogs'])
+        self.assertIn('negative controls', desc['coverage_classification']['simulators']['workshop'])
+        with self.assertRaises(ValueError):
+            runner.plan(REPO, 'feature', 'market', ['crafting'])
+        with self.assertRaises(ValueError):
+            runner.plan(REPO, 'integration', 'market', ['typo'])
+
+    def test_unfiltered_catalog_dominates_and_distinct_args_survive(self):
+        self.assertEqual(runner.merge_simulators([
+            {'script': 'workshop', 'only': ['craft', 'wrong']}, {'script': 'workshop'}]), [{'script': 'workshop'}])
+        self.assertEqual(len(runner.merge_simulators([
+            {'script': 'settings', 'args': ['workshop']}, {'script': 'settings', 'args': ['profiles']} ])), 2)
+
     def test_full_discovery_keeps_every_original_test_and_new_python_tests(self):
         tests = runner.discover(REPO)
         self.assertGreaterEqual(sum(n.endswith('.lua') for n in tests), 213)
@@ -135,6 +158,48 @@ class CloudProfile(unittest.TestCase):
             self.assertNotIn(key, cloud)
         for key in ('SIMLAB_ASSETS', 'SIMLAB_BIN'):
             self.assertNotIn(key, local)
+
+
+class Evidence(unittest.TestCase):
+    def test_source_identity_detects_tracked_and_untracked_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            subprocess.run(['git', 'init', '-q', tmp], check=True)
+            (repo / 'file').write_text('original')
+            subprocess.run(['git', '-C', tmp, 'add', '.'], check=True)
+            subprocess.run(['git', '-C', tmp, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid',
+                            'commit', '-qm', 'baseline'], check=True)
+            original = runner.source_identity(repo)
+            self.assertFalse(original['dirty'])
+            (repo / 'file').write_text('changed')
+            changed = runner.source_identity(repo)
+            self.assertTrue(changed['dirty'])
+            self.assertNotEqual(original, changed)
+            (repo / 'new.py').write_text('untracked input')
+            self.assertNotEqual(changed, runner.source_identity(repo))
+
+    def test_measurement_records_cpu_memory_and_propagates_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'metrics.json'
+            result = subprocess.run([sys.executable, '-B', str(REPO / 'tools/measure_command.py'), str(path), '--',
+                                     sys.executable, '-c', 'sum(i*i for i in range(1000000)); raise SystemExit(7)'])
+            self.assertEqual(result.returncode, 7)
+            report = json.loads(path.read_text())
+            self.assertEqual(report['exit_code'], 7)
+            self.assertGreater(report['wall_seconds'], 0)
+            self.assertGreater(report['reaped_child_user_seconds'], 0)
+            self.assertGreater(report['sampled_peak_tree_rss_bytes'], 0)
+
+    def test_auction_preview_selection_preserves_default_and_control_dependencies(self):
+        spec = importlib.util.spec_from_file_location('auction_preview', REPO / 'tools/simlab/auctionpreview_verdict.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.assertEqual(module.select([]), list(module.POSES))
+        self.assertEqual(len(module.POSES), 35)
+        for names in (['typo'], ['wrong'], ['replay'], ['shell', 'shell']):
+            with self.assertRaises(ValueError):
+                module.select(names)
+        self.assertEqual(module.select(['shell', 'replay', 'wrong']), ['shell', 'replay', 'wrong'])
 
 if __name__ == '__main__':
     unittest.main()

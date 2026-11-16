@@ -20,18 +20,54 @@ import known_failures as kf
 def read_rgba(path):
     """Decodes an 8-bit RGBA, non-interlaced PNG: the one form the simulator writes."""
     data = path.read_bytes()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError("invalid PNG signature")
     pos, idat, width, height = 8, [], 0, 0
+    ended, idat_closed = False, False
     while pos < len(data):
-        length, kind = struct.unpack(">I4s", data[pos:pos + 8])
-        body = data[pos + 8:pos + 8 + length]
+        if pos + 12 > len(data):
+            raise ValueError("truncated PNG chunk")
+        length, kind = struct.unpack_from(">I4s", data, pos)
+        end = pos + 8 + length
+        if end + 4 > len(data):
+            raise ValueError("truncated PNG chunk body")
+        body = data[pos + 8:end]
+        if zlib.crc32(kind + body) != struct.unpack_from(">I", data, end)[0]:
+            raise ValueError("invalid PNG chunk CRC")
+        if pos == 8 and kind != b"IHDR":
+            raise ValueError("PNG must start with IHDR")
         if kind == b"IHDR":
-            width, height, depth, colour, _, _, interlace = struct.unpack(">IIBBBBB", body)
-            if (depth, colour, interlace) != (8, 6, 0):
-                raise ValueError(f"unexpected PNG form: {depth} {colour} {interlace}")
+            if width or length != 13:
+                raise ValueError("invalid or duplicate PNG header")
+            width, height, depth, colour, compression, filtering, interlace = struct.unpack(">IIBBBBB", body)
+            if (depth, colour, compression, filtering, interlace) != (8, 6, 0, 0, 0):
+                raise ValueError("unexpected PNG form")
+            if not width or not height or width > 16384 or height > 16384 or (width * 4 + 1) * height > 256 * 1024 * 1024:
+                raise ValueError("PNG dimensions exceed decoder budget")
         elif kind == b"IDAT":
+            if idat_closed:
+                raise ValueError("nonconsecutive PNG image data")
             idat.append(body)
-        pos += length + 12
-    raw = zlib.decompress(b"".join(idat))
+        elif kind == b"IEND":
+            if length or not idat or end + 4 != len(data):
+                raise ValueError("invalid PNG end")
+            ended = True
+            break
+        elif not kind[0] & 32:
+            raise ValueError("unsupported critical PNG chunk")
+        if idat and kind != b"IDAT":
+            idat_closed = True
+        pos = end + 4
+    if not ended:
+        raise ValueError("missing PNG end")
+    expected = (width * 4 + 1) * height
+    decoder = zlib.decompressobj()
+    try:
+        raw = decoder.decompress(b"".join(idat), expected + 1)
+    except zlib.error as exc:
+        raise ValueError("corrupt PNG compressed data") from exc
+    if len(raw) != expected or not decoder.eof or decoder.unused_data or decoder.unconsumed_tail:
+        raise ValueError("invalid PNG scanline length or compressed stream")
     stride = width * 4
     rows, previous, offset = [], bytearray(stride), 0
     for _ in range(height):
@@ -55,10 +91,11 @@ def read_rgba(path):
                 left = line[i - 4] if i >= 4 else 0
                 up = previous[i]
                 corner = previous[i - 4] if i >= 4 else 0
-                estimate = left + up - corner
-                a, b, c = abs(estimate - left), abs(estimate - up), abs(estimate - corner)
-                # PNG's Paeth tie order is left, then up, then upper-left.
-                near = left if a <= b and a <= c else up if b <= c else corner
+                # Equivalent Paeth threshold form; avoids three abs calls per
+                # byte. Ties still prefer left, then up, then upper-left.
+                low, high = (left, up) if left < up else (up, left)
+                threshold = 3 * corner - left - up
+                near = high if threshold <= low else low if threshold >= high else corner
                 line[i] = (line[i] + near) & 255
         elif kind != 0:
             raise ValueError(f"unexpected PNG filter: {kind}")

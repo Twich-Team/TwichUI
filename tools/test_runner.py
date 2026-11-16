@@ -2,6 +2,7 @@
 """Small, deterministic offline/feature/milestone runner; see docs/testing.md."""
 import argparse
 import concurrent.futures
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -27,6 +28,70 @@ FULL_SIMULATORS = ('lab-guard', 'smoke', 'interact', 'diagnose', 'auctionproof',
 # Layout tests build many complete mock clients (baseline peak ~4 GiB). They
 # run after the worker pool, one at a time; never overlap two large heaps.
 EXCLUSIVE = ('test_layout',)
+ALIASES = {'development': 'fast', 'release': 'full'}
+COVERAGE = {
+    'smoke': ['shared UI construction', 'simulator lifecycle'],
+    'interact': ['feature interaction', 'replay/determinism', 'negative controls', 'visual structural checks'],
+    'diagnose': ['contract validation', 'simulator lifecycle', 'negative controls'],
+    'auctionproof': ['simulator lifecycle', 'replay/determinism', 'negative controls'],
+    'auctionpreview': ['feature interaction', 'replay/determinism', 'negative controls', 'visual structural checks'],
+    'workshop': ['feature interaction', 'replay/determinism', 'negative controls', 'visual structural checks'],
+    'testlab': ['contract validation', 'replay/determinism', 'visual structural checks'],
+    'settings': ['shared UI construction', 'feature interaction', 'visual structural checks'],
+    'reminders': ['feature interaction', 'visual structural checks'],
+    'lab-guard': ['contract validation', 'negative controls'],
+}
+
+
+def describe(selection, requested):
+    selection['verification_profile'] = requested
+    selection['selection_reason'] = (
+        'complete discovery and unchanged default simulator catalogs' if selection['tier'] == 'full' else
+        'complete offline discovery; no simulator' if selection['tier'] == 'unit' else
+        'direct feature tests and syntax; no simulator' if selection['tier'] == 'fast' else
+        'affected groups and recursive shared dependencies; explicit scoped simulator selections')
+    selected = {s['script'] for s in selection['simulators']}
+    selection['omitted_catalogs'] = [s for s in FULL_SIMULATORS if s not in selected]
+    selection['coverage_classification'] = {
+        'offline': ['unit tests', 'contracts, migrations, performance, packaging and mutation harnesses as selected by module'],
+        'simulators': {s['script']: COVERAGE[s['script']] for s in selection['simulators']},
+        'not_established': ['real-client acceptance', 'pixel baseline regression (structural screenshots only)',
+                            'production mutation campaigns (separate policy)', 'release archive certification'],
+    }
+    return selection
+
+
+def source_identity(repo):
+    def git(*args):
+        return subprocess.check_output(['git', '-C', str(repo), *args])
+    try:
+        commit = git('rev-parse', 'HEAD').decode().strip()
+        diff = git('diff', '--binary', 'HEAD', '--')
+        digest = hashlib.sha256(diff)
+        for name in sorted(git('ls-files', '--others', '--exclude-standard', '-z').split(b'\0')):
+            if name:
+                digest.update(name + b'\0')
+                digest.update((repo / os.fsdecode(name)).read_bytes())
+        return dict(commit=commit, dirty=bool(diff or git('ls-files', '--others', '--exclude-standard')),
+                    working_tree_sha256=digest.hexdigest())
+    except subprocess.CalledProcessError:
+        return dict(commit=None, dirty=None, working_tree_sha256=None)
+
+
+def merge_simulators(specs):
+    # Different positional args remain distinct (e.g. Settings subsets). An
+    # unfiltered catalog dominates filters only for the same script/args.
+    out = []
+    for spec in specs:
+        prior = next((s for s in out if s['script'] == spec['script'] and s.get('args', []) == spec.get('args', [])), None)
+        if prior is None:
+            out.append(dict(spec))
+        elif not prior.get('only') or not spec.get('only'):
+            prior.pop('only', None)
+        else:
+            prior['only'] = sorted(set(prior['only']) | set(spec['only']))
+    return out
+
 
 
 def discover(repo):
@@ -45,7 +110,10 @@ def expand(repo, patterns, tests=False):
     return found
 
 
-def plan(repo, tier, group):
+def plan(repo, tier, group, additional=()):
+    tier = ALIASES.get(tier, tier)
+    if additional and tier != 'integration':
+        raise ValueError('--with-group requires integration')
     groups = json.loads((repo / 'tests/groups.json').read_text())
     # Validate every group so stale patterns cannot quietly narrow coverage.
     for name, spec in groups.items():
@@ -78,14 +146,17 @@ def plan(repo, tier, group):
         visiting.remove(name)
         selected.add(name)
 
-    visit(group)
+    for target in [group, *additional]:
+        if target not in groups:
+            raise ValueError(f'unknown integration group: {target}')
+        visit(target)
     tests, syntax = set(), set()
     for name in sorted(selected):
         tests.update(expand(repo, groups[name]['tests'], tests=True))
         syntax.update(expand(repo, groups[name]['syntax']))
     # Shared dependency tests and syntax are included; simulator choices belong
     # to the requested feature, avoiding unrelated full UI catalog replays.
-    sims = groups[group]['simulators'] if tier == 'feature' else []
+    sims = merge_simulators([s for target in [group, *additional] for s in groups[target]['simulators']]) if tier in ('feature', 'integration') else []
     return dict(tier=tier, group=group, groups=sorted(selected), tests=sorted(tests),
                 syntax=sorted(syntax), simulators=sims)
 
@@ -143,18 +214,21 @@ class Processes:
                 self.children.discard(proc)
 
 
-def run_test(repo, name, output_dir, processes, timeout):
+def run_test(repo, name, output_dir, processes, timeout, measure=False):
     start = time.perf_counter()
     command = ['lua5.1', '-e', LUA_INIT, name] if name.endswith('.lua') else [sys.executable, '-B', '-m', 'unittest', '-q', name[:-3]]
+    metrics_path = output_dir / (name + '.metrics.json')
+    if measure:
+        command = [sys.executable, '-B', str(repo / 'tools/measure_command.py'), str(metrics_path), '--', *command]
     with tempfile.TemporaryDirectory(prefix=name + '-', dir=output_dir / 'tmp') as tmp:
         code, output, timed_out = processes.run(command, repo / 'tests', child_env(Path(tmp)), timeout)
     (output_dir / (name + '.log')).write_text(output)
     counts = re.findall(r'^Ran (\d+) tests? in ', output, re.M) if name.endswith('.py') else []
-    return dict(test=name, passed=not timed_out and judge(name, code, output), exit_code=code,
+    return dict(metrics=json.loads(metrics_path.read_text()) if measure and metrics_path.is_file() else None, test=name, passed=not timed_out and judge(name, code, output), exit_code=code,
                 timed_out=timed_out, python_cases=int(counts[-1]) if counts else None, seconds=time.perf_counter() - start)
 
 
-def run_tests(repo, names, jobs, output_dir, processes, timeout):
+def run_tests(repo, names, jobs, output_dir, processes, timeout, measure=False):
     rows = []
 
     def report(row):
@@ -168,12 +242,12 @@ def run_tests(repo, names, jobs, output_dir, processes, timeout):
     normal = [n for n in names if not n.startswith(EXCLUSIVE)]
     exclusive = [n for n in names if n.startswith(EXCLUSIVE)]
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
-        futures = [pool.submit(run_test, repo, n, output_dir, processes, timeout) for n in normal]
+        futures = [pool.submit(run_test, repo, n, output_dir, processes, timeout, measure) for n in normal]
         # Report in discovery order, independent of completion order.
         for future in futures:
             report(future.result())
     for name in exclusive:
-        report(run_test(repo, name, output_dir, processes, timeout))
+        report(run_test(repo, name, output_dir, processes, timeout, measure))
     return sorted(rows, key=lambda row: row['test'])
 
 
@@ -209,24 +283,32 @@ def simulator_env(tmp, profile):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('tier', nargs='?', choices=('unit', 'fast', 'feature', 'full'), default='unit')
+    parser.add_argument('tier', nargs='?', choices=('unit', 'fast', 'development', 'feature', 'integration', 'full', 'release'), default='unit')
     parser.add_argument('group', nargs='?')
+    parser.add_argument('--with-group', action='append', default=[], help='additional affected group for integration; repeatable')
     parser.add_argument('--profile', choices=('local', 'cloud'), default='local',
                         help='cloud uses no game assets; all selections/assertions remain, visual/client gates stay local')
     parser.add_argument('--jobs', type=int, choices=range(1, 5), default=2, metavar='1..4')
     parser.add_argument('--list', action='store_true', help='show exact tests, syntax files and simulator selections; run nothing')
+    parser.add_argument('--measure', action='store_true', help='opt-in per-command CPU/RSS telemetry (Linux /proc)')
+    parser.add_argument('--release-meta', type=Path, help='existing packaging metadata for release archive validation')
+    parser.add_argument('--release-zip', type=Path, help='existing candidate archive; checked, never published')
     parser.add_argument('--timeout', type=float, default=300, help='per offline test in seconds (default 300)')
     args = parser.parse_args(argv)
-    if args.timeout <= 0 or (args.tier == 'full' and args.group):
+    if args.timeout <= 0 or (args.tier in ('full', 'release') and args.group):
         parser.error('timeout must be positive; full does not accept a feature group')
     try:
-        selection = plan(REPO, args.tier, args.group)
+        selection = describe(plan(REPO, args.tier, args.group, args.with_group), args.tier)
     except ValueError as exc:
         parser.error(str(exc))
     selection['profile'] = args.profile
     if args.list:
         print(json.dumps(selection, indent=2))
         return 0
+    if args.tier == 'release' and (not args.release_meta or not args.release_zip or not args.release_meta.is_file() or not args.release_zip.is_file()):
+        parser.error('release requires existing --release-meta and --release-zip (or use --list)')
+    if args.tier != 'release' and (args.release_meta or args.release_zip):
+        parser.error('release archive arguments require release')
     # Each invocation has deterministic filenames within its own directory.
     base = REPO / 'test-output/verification'
     base.mkdir(parents=True, exist_ok=True)
@@ -243,16 +325,22 @@ def main(argv=None):
 
     previous = {sig: signal.signal(sig, interrupted) for sig in (signal.SIGINT, signal.SIGTERM)}
     start = time.perf_counter()
+    identity = source_identity(REPO)
     rows, sims = [], []
     syntax_ok = True
+    incomplete = dict(selection=selection, source=identity, passed=False, complete=False,
+                      exit_code=None, tests=[], simulators=[])
+    (output_dir / 'report.json').write_text(json.dumps(incomplete, indent=2) + '\n')
     try:
-        if args.tier != 'unit':
+        if selection['tier'] != 'unit':
             syntax_ok = syntax_checks(REPO, selection, processes, output_dir)
-        rows = run_tests(REPO, selection['tests'], args.jobs, output_dir, processes, args.timeout)
+        rows = run_tests(REPO, selection['tests'], args.jobs, output_dir, processes, args.timeout, args.measure)
         # No inheritance of pose filters, synthetic settings overrides or asset
         # switches may silently turn a milestone into a partial run.
         env = simulator_env(output_dir / 'tmp', args.profile)
-        for spec in selection['simulators']:
+        if args.measure:
+            env['SIMLAB_METRICS'] = '1'
+        for index, spec in enumerate(selection['simulators']):
             cmd = (['bash', 'tools/simlab/tests/lab_guard.sh'] if spec['script'] == 'lab-guard' else
                    ['bash', 'tools/simlab/run.sh', spec['script'], *spec.get('args', [])])
             if spec.get('only'):
@@ -263,32 +351,64 @@ def main(argv=None):
             # Full catalogs can take many launches. Each launch retains its own
             # existing timeout; the whole suite gets a separate generous guard.
             code, output, timed_out = processes.run(cmd, REPO, env, 3600)
-            (output_dir / (spec['script'] + '.log')).write_text(output)
+            (output_dir / (str(index) + '-' + spec['script'] + '.log')).write_text(output)
             passed = code == 0 and not timed_out
             artifacts = re.findall(r'^artifacts: (.+)$', output, re.M)
-            launches, checks = 0, 0
+            launches, checks, scenarios = 0, 0, []
             if artifacts:
                 for path in Path(artifacts[-1]).glob('*.stderr'):
                     launches += 1
                     log = path.read_text(errors='replace')
-                    checks += len(re.findall(r'^SIMLAB check (?:PASS|FAIL) ', log, re.M))
+                    count = len(re.findall(r'^SIMLAB check (?:PASS|FAIL) ', log, re.M))
+                    checks += count
+                    startup = re.search(r'\[\s*([\d.]+)s\].*\[Startup\] end post-event workarounds', log)
+                    stamps = re.findall(r'\[\s*([\d.]+)s\]', log)
+                    scenarios.append(dict(scenario=path.stem, structured_assertions=count,
+                                          bootstrap_seconds=float(startup[1]) if startup else None,
+                                          last_native_timestamp_seconds=float(stamps[-1]) if stamps else None,
+                                          metrics=json.loads(path.with_suffix('.metrics.json').read_text()) if path.with_suffix('.metrics.json').is_file() else None))
             sims.append(dict(**spec, passed=passed, exit_code=code, timed_out=timed_out,
                              artifacts=artifacts[-1] if artifacts else None,
-                             launches=launches, scenario_checks=checks, seconds=time.perf_counter() - t))
+                             screenshots=sorted(p.name for p in Path(artifacts[-1]).glob('*.png')) if artifacts else [],
+                             telemetry=[dict(file=p.name, **json.loads(p.read_text())) for p in sorted(Path(artifacts[-1]).glob('*.metrics.json'))] if artifacts else [],
+                             launches=launches, scenario_checks=checks, scenarios=sorted(scenarios, key=lambda s: s['scenario']), seconds=time.perf_counter() - t))
             print(f'{"ok  " if passed else "FAIL"} simulator {spec["script"]} ({sims[-1]["seconds"]:.3f}s)', flush=True)
             if not passed:
                 print(output, flush=True)
-        passed = syntax_ok and all(row['passed'] for row in rows) and all(row['passed'] for row in sims)
-        report = dict(selection=selection, jobs=args.jobs, layout_workers=1, seconds=time.perf_counter() - start,
-                      local_milestone_passed=passed and args.tier == 'full' and args.profile == 'local',
+        package = None
+        if args.tier == 'release':
+            cmd = [sys.executable, '-I', 'tools/release.py', 'check', '--meta', str(args.release_meta.resolve()), str(args.release_zip.resolve())]
+            code, output, timed_out = processes.run(cmd, REPO, child_env(output_dir / 'tmp'), 120)
+            (output_dir / 'package.log').write_text(output)
+            package = dict(exit_code=code, passed=code == 0 and not timed_out,
+                           archive_sha256=hashlib.sha256(args.release_zip.read_bytes()).hexdigest(),
+                           metadata_sha256=hashlib.sha256(args.release_meta.read_bytes()).hexdigest())
+        passed = (package is None or package['passed']) and syntax_ok and all(row['passed'] for row in rows) and all(row['passed'] for row in sims)
+        final_identity = source_identity(REPO)
+        source_unchanged = identity == final_identity
+        passed = passed and source_unchanged
+        if not source_unchanged:
+            print('FAIL source changed during verification; preserve this result and rerun affected checks on frozen source', flush=True)
+        report = dict(complete=True, package=package, automated_release_gate_passed=passed and args.tier == 'release' and args.profile == 'local', source=identity, source_after=final_identity, source_unchanged=source_unchanged,
+                      exit_code=0 if passed else 1,
+                      slowest_tests=sorted(rows, key=lambda r: r['seconds'], reverse=True)[:20],
+                      selection=selection, jobs=args.jobs, layout_workers=1, seconds=time.perf_counter() - start,
+                      local_milestone_passed=passed and selection['tier'] == 'full' and args.profile == 'local',
                       unsupported_coverage=(['game asset rendering, client fonts and visual fidelity']
                                             if args.profile == 'cloud' else []),
                       syntax_passed=syntax_ok, tests=rows, simulators=sims, passed=passed)
         (output_dir / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
+        print(f'verification profile: {args.tier}; omitted catalogs: {", ".join(selection["omitted_catalogs"]) or "none"}', flush=True)
         print(f'{sum(r["passed"] for r in rows)} passed, {sum(not r["passed"] for r in rows)} failed; '
               f'{len(sims)} simulator suites; {report["seconds"]:.3f}s; {"PASS" if passed else "FAIL"}', flush=True)
         return 0 if passed else 1
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, OSError, ValueError, SyntaxError) as exc:
+        incomplete.update(exit_code=130 if isinstance(exc, KeyboardInterrupt) else 2,
+                          seconds=time.perf_counter() - start, tests=rows, simulators=sims,
+                          error=type(exc).__name__ + ': ' + str(exc))
+        (output_dir / 'report.json').write_text(json.dumps(incomplete, indent=2) + '\n')
+        if not isinstance(exc, KeyboardInterrupt):
+            raise
         print('Interrupted; child process groups stopped. No complete regression result.', flush=True)
         return 130
     finally:

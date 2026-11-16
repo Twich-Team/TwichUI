@@ -66,4 +66,18 @@ for pair in ${SIMLAB_FORWARD:-}; do
   args+=(--setenv "${pair%%=*}" "${pair#*=}")
 done
 
+if [ "${SIMLAB_METRICS:-0}" = 1 ]; then
+  # Unique run directory and exec fixture give each launch a distinct sidecar.
+  fixture=launch
+  for arg in "$@"; do
+    case "$arg" in @*.lua) fixture="$(basename -- "${arg#@}" .lua)" ;; esac
+  done
+  fixture="${fixture#workshop-}"; fixture="${fixture#auctionpreview-}"; fixture="${fixture#reminders-}"
+  previous=
+  for arg in "$@"; do
+    [ "$previous" != -o ] || fixture="$(basename -- "$arg" .png)"
+    previous="$arg"
+  done
+  exec python3 -B "$SIMLAB_DIR/../measure_command.py" "$SIMLAB_RUN/$fixture.metrics.json" -- bwrap "${args[@]}" -- "$BIN" "$@"
+fi
 exec bwrap "${args[@]}" -- "$BIN" "$@"

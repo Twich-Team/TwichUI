@@ -56,7 +56,17 @@ mv "$LAB/fixtures/bridge-combined.lua" "$LAB/fixtures/auctionpreview-marketbridg
 fixture wrong '{ wrongAt = "Browse default" }'
 repo_before="$(git -C "$REPO" status --porcelain --ignored)"
 status=0
-for name in shell replay small scaled empty filtered resized shopping shoppingsmall shoppingpurpose categories loading liveprepare sell sellobserved sellsmall sellscaled sellempty owned ownedsmall ownedempty market marketsmall marketscaled marketsparse marketempty marketrecent marketlong markettracked marketlarge marketmetadata marketstale marketerror marketbridge wrong; do
+selection=()
+read -r -a selection <<< "${SIMLAB_ONLY:-}"
+# Validate before native launches; the verdict uses exactly this same catalog.
+poses="$(python3 -B - "$SIMLAB_DIR" "${selection[@]}" <<'PYSELECT'
+import sys
+sys.path.insert(0, sys.argv[1])
+from auctionpreview_verdict import select
+print(' '.join(select(sys.argv[2:])))
+PYSELECT
+)"
+for name in $poses; do
   simlab_stage
   width=1600; height=1200
   if [[ "$name" = small || "$name" = shoppingsmall || "$name" = sellsmall || "$name" = ownedsmall || "$name" = marketsmall ]]; then width=1000; height=700; fi
@@ -71,4 +81,4 @@ echo "artifacts: $RUN"
 [ "$repo_before" = "$(git -C "$REPO" status --porcelain --ignored)" ] || { echo 'simlab: repository status changed during run' >&2; exit 1; }
 simlab_disclose
 [ "$status" -eq 0 ] || exit "$status"
-python3 -I "$SIMLAB_DIR/auctionpreview_verdict.py" "$RUN"
+python3 -I "$SIMLAB_DIR/auctionpreview_verdict.py" "$RUN" "${selection[@]}"
