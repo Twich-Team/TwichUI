@@ -13,3 +13,5 @@ TASK_NOTES.md
 tools/navbake/.deps/
 tools/navbake/build/
 __pycache__/
+
+test-output/

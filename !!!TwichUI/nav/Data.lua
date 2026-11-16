@@ -570,6 +570,27 @@ function ND.Locate(map, x, y, reach, prefer, landReach)
     return Nearest(map, x, y, reach, false)
 end
 
+-- The ground polygon under a world point whose height is nearest z (within maxDz yards), where floors stack: tile and polygon.
+-- nil when no ground polygon holds the point at about that height. (Locate has no height: it takes the larger area.)
+function ND.FloorAt(map, x, y, z, maxDz)
+    local tx, ty = ND.TileOf(x, y)
+    local t = ND.Tile(map, tx, ty)
+    if not t then return nil end
+    local b = BucketOf(t, x, y)
+    local list = b and t.buckets[b]
+    local best, bd
+    if list then
+        for i = 1, #list do
+            local p = list[i]
+            if t.area[p] == 1 and Inside(t, p, x, y) then
+                local dz = math.abs((t.zmin[p] + t.zmax[p]) / 2 - z)
+                if dz <= maxDz and (not bd or dz < bd) then best, bd = p, dz end
+            end
+        end
+    end
+    if best then return t, best end
+end
+
 -- The two ends of polygon p's edge j (0-based within the polygon), world x and y.
 function ND.Edge(t, p, j)
     local n = t.pn[p]
