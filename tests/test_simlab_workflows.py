@@ -199,6 +199,28 @@ class TestLabSelection(unittest.TestCase):
             load.assert_not_called()
 
 
+class AuctionAssertionCount(unittest.TestCase):
+    def test_optin_assertion_is_required_without_accepting_missing_or_extra_checks(self):
+        spec = importlib.util.spec_from_file_location('ah_count', SIMLAB / 'auctionpreview_verdict.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name, expected in (('shell', 131), ('loading', 132), ('marketbridge', 142), ('scopedpriced', 142)):
+                for count in (expected - 1, expected, expected + 1):
+                    with self.subTest(pose=name, count=count):
+                        layers = ('init', 'construct', 'interact', 'state')
+                        lines = [f'SIMLAB check PASS [{layers[i % 4]}] check {i} | expected=true | actual=true' for i in range(count)]
+                        lines += [f'SIMLAB done steps=9 simSeconds=1 passed={count} failed=0 aborted=false stopped=false',
+                                  'Lua error: C_VoiceChat.CanAccessSettings: settings access has not been supplied']
+                        (root / (name + '.stderr')).write_text('\n'.join(lines))
+                        (root / (name + '.stdout')).write_text('')
+                        with (mock.patch.object(module, 'read_rgba', return_value=(1600, 1200, [])),
+                              mock.patch.object(module, 'distinct_colours', return_value=600),
+                              contextlib.redirect_stdout(io.StringIO())):
+                            self.assertEqual(module.judge(root, [name]), count == expected)
+
+
 class VerifierSourceIsolation(unittest.TestCase):
     def test_real_judge_flags_prevent_shared_source_bytecode_writes(self):
         with tempfile.TemporaryDirectory() as tmp:
