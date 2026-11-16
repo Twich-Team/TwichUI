@@ -96,7 +96,7 @@ Test TwichUI alone first, then with EllesmereUI. After each step, check `/tui di
     chime. Disconnect Battle.net (or its network) and reconnect: no burst of cards for people already online.
 11. **Notification interruption.** Open Preview sequence in options and enter combat, or reload, or zone mid-way.
     *Expect:* previews clear, later real cards still appear.
-12. **Optional integrations.** With and without EllesmereUI, a data-bar addon (LibDataBroker), Auctionator,
+12. **Optional integrations.** With and without EllesmereUI, a data-bar addon (LibDataBroker),
     Leatrix_Plus. *Expect:* TwichUI loads either way; only the affected piece is missing; no Lua errors.
 13. **Quick Keybind** (if enabled). Open the Game Menu in and out of combat. *Expect:* one button, disabled in combat
     with a reason; it enters the game's mode only when clicked out of combat.

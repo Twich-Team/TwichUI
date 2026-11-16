@@ -33,13 +33,18 @@ STEPS = [
     "shopping: combined list, sources, total, warning", "shopping: source choices", "shopping: Show vendor",
     "shopping: add the suggested subcraft", "shopping: bags change", "close and reopen", "remembered recipes: closed window, background read, nothing open",
     "bank and guild bank: remembered while the window is closed", "bank and guild bank: planned with, collected not bought, labelled, profit unchanged",
-    "bank and guild bank: the guild choice, permissions and limits", "bank and guild bank: a withdrawal and a deposit never count twice", "third pass: hit test, hover, fit, tooltips, status", "pose for the screenshot",
+    "bank and guild bank: the guild choice, permissions and limits", "bank and guild bank: a withdrawal and a deposit never count twice", "third pass: hit test, hover, fit, tooltips, status",
+    "reachability: planted overlay, hover rows, insets, clipping, tooltip", "automatic price updates on opening the auction house", "item advisor: navigation, discovery, tracking and actions", "pose for the screenshot",
 ]
 LAYERS = ("init", "display", "click", "direct", "event", "state")
 VIEWS = {"overview": "TwichUIWorkshop", "craft": "TwichUIWorkshop", "opps": "TwichUIWorkshop", "shop": "TwichUIWorkshop", "design": "TwichUISettings",
          "small": "TwichUIWorkshop", "smallov": "TwichUIWorkshop", "empty": "TwichUIWorkshop", "history": "TwichUIWorkshop", "craftlong": "TwichUIWorkshop",
-         "shopmix": "TwichUIWorkshop", "shopcollect": "TwichUIWorkshop"}
-SHOTS = ("overview", "craft", "opps", "shop", "design", "small", "smallov", "empty", "history", "craftlong", "shopmix", "shopcollect")
+         "shopmix": "TwichUIWorkshop", "shopcollect": "TwichUIWorkshop", "strategy": "TwichUIWorkshop", "confirm": "TwichUIWorkshop",
+         "stratlong": "TwichUIWorkshop", "planning": "TwichUIWorkshop", "nodata": "TwichUIWorkshop", "override": "TwichUIWorkshop",
+         "compact": "TwichUIWorkshopCompact", "compactcraft": "TwichUIWorkshopCompact", "tooltip": "TwichUIWorkshop", "smallstrat": "TwichUIWorkshop",
+         "shopafter": "TwichUIWorkshop", "notice": "TwichUIWorkshop", "advisor": "TwichUIWorkshop", "advisorsmall": "TwichUIWorkshop", "advisorempty": "TwichUIWorkshop", "advisorscaled": "TwichUIWorkshop", "advisorlong": "TwichUIWorkshop", "advisorvacant": "TwichUIWorkshop", "advisoralt": "TwichUIWorkshop", "advisorsource": "TwichUIWorkshop", "advisorcategory": "TwichUIWorkshop", "advisorscroll": "TwichUIWorkshop", "advisortentative": "TwichUIWorkshop", "advisorbags": "TwichUIWorkshop", "advisorfiltered": "TwichUIWorkshop"}
+SHOTS = ("overview", "craft", "opps", "shop", "design", "small", "smallov", "empty", "history", "craftlong", "shopmix", "shopcollect",
+         "strategy", "confirm", "stratlong", "planning", "nodata", "override", "compact", "compactcraft", "tooltip", "smallstrat", "shopafter", "notice", "advisor", "advisorsmall", "advisorempty", "advisorscaled", "advisorlong", "advisorvacant", "advisoralt", "advisorsource", "advisorcategory", "advisorscroll", "advisortentative", "advisorbags", "advisorfiltered")
 VOICE, UTF8 = "voice-settings-unsupplied", "addon-message-invalid-utf8"
 CHECK = re.compile(r"^SIMLAB check (PASS|FAIL) \[([^\]]+)\] (.*?) \| expected=(.*?) \| actual=(.*)$", re.M)
 
@@ -64,15 +69,24 @@ def load(run, name):
 
 def main():
     run, wrong_name, assets = Path(sys.argv[1]), sys.argv[2], sys.argv[3] == "1"
+    selected = tuple(sys.argv[4:]) or SHOTS + ("wrong",)
+    if (len(selected) != len(set(selected)) or set(selected) - set(SHOTS + ("wrong",))
+            or not set(selected).intersection(SHOTS) or ("wrong" in selected and "craft" not in selected)):
+        print("FAIL: invalid selection (wrong requires craft; choose existing, unique poses)")
+        return 2
+    shots = tuple(n for n in SHOTS if n in selected)
+    full = set(selected) == set(SHOTS + ("wrong",))
+    print("Selection: " + ("FULL REGRESSION" if full else "FOCUSED ONLY; not complete regression coverage")
+          + " (" + ", ".join(selected) + ")")
     results = []
 
     def check(name, passed, detail=""):
         results.append(bool(passed))
         print(f"  {'pass' if passed else 'FAIL'}  {name}" + (f"  ({detail})" if detail else ""))
 
-    runs = {n: load(run, n) for n in SHOTS + ("wrong",)}
+    runs = {n: load(run, n) for n in selected}
 
-    for n in SHOTS:
+    for n in shots:
         r = runs[n]
         print(f"The scenario, ending on {n}:")
         d = r["done"]
@@ -85,6 +99,16 @@ def main():
               d and int(d.group(3)) == len(r["checks"]) - len(failed) and int(d.group(4)) == len(failed))
         layers = {c[1] for c in r["checks"]}
         check(f"{n}: every evidence layer was exercised", set(LAYERS) <= layers, ", ".join(sorted(layers)))
+        # the reachability negative control (testing roadmap M5): the same button reads reachable, then BLOCKED by the planted frame, then
+        # reachable again. A check that is missing or out of order is a failure, never a pass by omission.
+        names = [c[2] for c in r["checks"]]
+        order = ["REACH: the Add button is reachable at its hit point", "NEGATIVE CONTROL: with a mouse-enabled frame planted over it",
+                 "NEGATIVE CONTROL: with the overlay removed, the Add button is reachable again"]
+        at = [next((i for i, x in enumerate(names) if x.startswith(o)), -1) for o in order]
+        passed_neg = [c for c in r["checks"] if c[2].startswith("NEGATIVE CONTROL")]
+        check(f"{n}: the planted overlay was seen: reachable, blocked, reachable (in that order)", all(i >= 0 for i in at) and at == sorted(at),
+              f"positions {at}")
+        check(f"{n}: every negative-control check held ({len(passed_neg)} of them)", len(passed_neg) >= 7 and all(c[0] == "PASS" for c in passed_neg))
         check(f"{n}: no Lua error outside the classified rules", not r["errors"], r["errors"][0][:150] if r["errors"] else "")
 
     print("Reproducibility, from a new empty install each time:")
@@ -95,37 +119,39 @@ def main():
                 break
             out.append(c)
         return out
-    first = [common(runs[n]) for n in SHOTS]
-    check(f"the checks before the screenshot pose are identical in the {len(SHOTS)} launches", all(x == first[0] for x in first) and len(first[0]) > 0,
+    first = [common(runs[n]) for n in shots]
+    check(f"the checks before the screenshot pose are identical in the {len(shots)} selected launches", all(x == first[0] for x in first) and len(first[0]) > 0,
           " / ".join(str(len(x)) for x in first))
 
-    print("Negative control (one expectation made wrong on purpose):")
-    w = runs["wrong"]
-    wrong_failed = [x for x in w["checks"] if x[0] == "FAIL"]
-    check("wrong: it ran to its end (a failure, not a crash)",
-          w["done"] and w["done"].group(5) == "false" and not w["errors"], w["done"].group(0) if w["done"] else "no done line")
-    check("wrong: exactly the doctored check failed", [x[2] for x in wrong_failed] == [wrong_name],
-          ", ".join(x[2] for x in wrong_failed) or "nothing failed")
-    check("wrong: every other check passed", len(w["checks"]) == len(runs["craft"]["checks"]) and len(wrong_failed) == 1,
-          f"{len(w['checks'])} checks, {len(wrong_failed)} failed")
+    if "wrong" in selected:
+        print("Negative control (one expectation made wrong on purpose):")
+        w = runs["wrong"]
+        wrong_failed = [x for x in w["checks"] if x[0] == "FAIL"]
+        check("wrong: it ran to its end (a failure, not a crash)",
+              w["done"] and w["done"].group(5) == "false" and not w["errors"], w["done"].group(0) if w["done"] else "no done line")
+        check("wrong: exactly the doctored check failed", [x[2] for x in wrong_failed] == [wrong_name],
+              ", ".join(x[2] for x in wrong_failed) or "nothing failed")
+        check("wrong: every other check passed", len(w["checks"]) == len(runs["craft"]["checks"]) and len(wrong_failed) == 1,
+              f"{len(w['checks'])} checks, {len(wrong_failed)} failed")
 
     print("Screenshots (files only; whether they look right is for a person to judge):")
-    for n in SHOTS:
+    for n in shots:
         path = run / f"{n}.png"
-        size = (1000, 700) if n in ("small", "smallov") else (1600, 1200)
+        size = (1000, 700) if n in ("small", "smallov", "smallstrat", "advisorsmall") else (1600, 1200)
         # the Workshop window is 1080x700, centred (the settings window of the design shot is smaller, centred too); on the small screen
         # it is scaled to fit, so the middle of the screen is inside it
-        box = (150, 120, 700, 460) if n in ("small", "smallov") else (260, 250, 1080, 700)
+        box = (150, 120, 700, 460) if n in ("small", "smallov", "smallstrat", "advisorsmall") else ((650, 450, 950, 750) if n in ("compact", "compactcraft") else (260, 250, 1080, 700))
         try:
             width, height, pixels = read_rgba(path)
             check(f"{n}.png is {size[0]}x{size[1]}", (width, height) == size, f"{width}x{height}")
-            check(f"{n}.png: the window area is not blank", distinct_colours(pixels, *box) > 500,
-                  f"{distinct_colours(pixels, *box)} distinct colours")
+            colours = distinct_colours(pixels, *box)
+            check(f"{n}.png: the window area is not blank", colours > 500,
+                  f"{colours} distinct colours")
         except (OSError, ValueError) as err:
             check(f"{n}.png is readable", False, str(err))
 
     ok = all(results)
-    r = runs["craft"]
+    r = runs["craft"] if "craft" in runs else runs[shots[0]]
     by_layer = {layer: sum(1 for x in r["checks"] if x[1] == layer) for layer in LAYERS}
     print("Evidence from this run (one launch; the others repeat it, then end in another view):")
     print(f"  Window opened by /tui workshop ... {'yes' if by_layer['init'] else 'NO'} ({by_layer['init']} init checks)")
@@ -140,8 +166,9 @@ def main():
     print("  Game data ........................ FAKE and deterministic (professions, items, bags, auction listings, merchant); "
           "the world map and NpcMap.Locate are stand-ins in the Show vendor step")
     print("  Persistence tested ............... NO: nothing is reloaded or written to disk. Closing and reopening the window is not persistence.")
-    print(f"  Screenshots ...................... {'captured' if assets else 'captured WITHOUT game assets'}: overview.png, craft.png, opps.png, shop.png, design.png, small.png (1000x700), smallov.png (1000x700), empty.png, history.png, craftlong.png, shopmix.png, shopcollect.png "
-          "(a script cannot judge them; look at them, and remember custom fonts are not drawn)")
+    print(f"  Screenshots ...................... {'captured' if assets else 'captured WITHOUT game assets'}: "
+          + ", ".join(n + ".png" for n in shots)
+          + " (a script cannot judge them; look at them, and remember custom fonts are not drawn)")
     print("  Real-client tested ............... NO")
     print(f"{len(r['checks'])} checks per launch; {r['done'].group(2) if r['done'] else '?'} s of simulated time.")
     known = kf.describe(r["cls"])

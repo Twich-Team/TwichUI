@@ -1,0 +1,959 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:twichui:pricing:fixtures:v1",
+  "title": "TwichUI pricing v1 research fixtures",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fixture_version": {
+          "const": 1
+        },
+        "algorithm_proposal": {
+          "const": "twichui-pricing-v1"
+        },
+        "cases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "origin": {
+                "enum": [
+                  "synthetic",
+                  "captured_excerpt"
+                ]
+              },
+              "item": {
+                "type": "object",
+                "required": [
+                  "id"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  }
+                },
+                "additionalProperties": true,
+                "maxProperties": 32
+              },
+              "variant_key": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "scope_complete": {
+                "type": "boolean"
+              },
+              "listings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "quantity": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 2147483647
+                    },
+                    "unit_copper": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]{0,18})$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "total_copper": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]{0,18})$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "bid_copper": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]{0,18})$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "quantity",
+                    "unit_copper",
+                    "total_copper",
+                    "bid_copper"
+                  ]
+                },
+                "maxItems": 150000
+              },
+              "expected": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "market_minimum": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,18})$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "market_recent": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,18})$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "workshop_recent": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,18})$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "weighted_median": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,18})$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "canonical_minimum": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,18})$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "anchor": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,18})$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "q25": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,18})$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "q50": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,18})$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "q75": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,18})$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "market_minimum",
+                  "market_recent",
+                  "workshop_recent",
+                  "weighted_median",
+                  "canonical_minimum",
+                  "anchor",
+                  "q25",
+                  "q50",
+                  "q75"
+                ]
+              },
+              "derivation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "provenance": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "source_repository": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      },
+                      "source_commit": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{40}$"
+                      },
+                      "source_path": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      },
+                      "source_file_sha256": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                      },
+                      "source_kind": {
+                        "enum": [
+                          "auctions",
+                          "commodities"
+                        ]
+                      },
+                      "auction_id": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,18})$"
+                      },
+                      "retrieved_at": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      },
+                      "source_url": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      },
+                      "upstream_payload_sha256": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                      },
+                      "original_listing_count": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 2147483647
+                      },
+                      "region": {
+                        "const": "us"
+                      },
+                      "transport_ruleset_id": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 2147483647
+                      },
+                      "house_id": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 2147483647
+                      },
+                      "player_ruleset": {
+                        "type": "null"
+                      },
+                      "namespace": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      },
+                      "observed_history_days": {
+                        "const": 0
+                      }
+                    },
+                    "required": [
+                      "source_repository",
+                      "source_commit",
+                      "source_path",
+                      "source_file_sha256",
+                      "source_kind",
+                      "auction_id",
+                      "retrieved_at",
+                      "source_url",
+                      "upstream_payload_sha256",
+                      "original_listing_count",
+                      "region",
+                      "transport_ruleset_id",
+                      "house_id",
+                      "player_ruleset",
+                      "namespace",
+                      "observed_history_days"
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "origin",
+              "item",
+              "variant_key",
+              "scope_complete",
+              "listings",
+              "expected",
+              "derivation",
+              "provenance"
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 1000
+        }
+      },
+      "required": [
+        "fixture_version",
+        "algorithm_proposal",
+        "cases"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fixture_version": {
+          "const": 1
+        },
+        "algorithm_proposal": {
+          "const": "twichui-pricing-v1"
+        },
+        "cases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "origin": {
+                "const": "synthetic"
+              },
+              "as_of": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "points": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "observed_at": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096
+                    },
+                    "unit_copper": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]{0,18})$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "state": {
+                      "enum": [
+                        "listed",
+                        "absent",
+                        "unknown"
+                      ]
+                    },
+                    "complete": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "observed_at",
+                    "unit_copper",
+                    "state",
+                    "complete"
+                  ]
+                },
+                "minItems": 1,
+                "maxItems": 1000
+              },
+              "expected": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "market_market_value": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,18})$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "market_historical_value": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,18})$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "workshop_market_value": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,18})$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "workshop_historical_value": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,18})$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "canonical_market_value": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,18})$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "canonical_historical_value": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,18})$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "canonical_priced_days_60": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 60
+                  }
+                },
+                "required": [
+                  "market_market_value",
+                  "market_historical_value",
+                  "workshop_market_value",
+                  "workshop_historical_value",
+                  "canonical_market_value",
+                  "canonical_historical_value",
+                  "canonical_priced_days_60"
+                ]
+              },
+              "derivation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              }
+            },
+            "required": [
+              "id",
+              "origin",
+              "as_of",
+              "points",
+              "expected",
+              "derivation"
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 1000
+        }
+      },
+      "required": [
+        "fixture_version",
+        "algorithm_proposal",
+        "cases"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fixture_version": {
+          "const": 1
+        },
+        "algorithm_proposal": {
+          "const": "twichui-pricing-v1"
+        },
+        "policy": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "input": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "priced_listings": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  },
+                  "farbelow": {
+                    "type": "boolean"
+                  },
+                  "age_seconds": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0
+                  },
+                  "complete": {
+                    "type": "boolean"
+                  },
+                  "mixed_variants": {
+                    "type": "boolean"
+                  },
+                  "synthetic": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "priced_listings",
+                  "farbelow",
+                  "age_seconds",
+                  "complete",
+                  "mixed_variants"
+                ]
+              },
+              "expected": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "posting_allowed": {
+                    "const": false
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  }
+                },
+                "required": [
+                  "posting_allowed",
+                  "reason"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "input",
+              "expected"
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 1000
+        },
+        "quality": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "input": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "has_price": {
+                    "type": "boolean"
+                  },
+                  "complete": {
+                    "type": "boolean"
+                  },
+                  "cut": {
+                    "type": "boolean"
+                  },
+                  "distribution": {
+                    "type": "boolean"
+                  },
+                  "wide_spread": {
+                    "type": "boolean"
+                  },
+                  "mixed_variants": {
+                    "type": "boolean"
+                  },
+                  "farbelow": {
+                    "type": "boolean"
+                  },
+                  "synthetic": {
+                    "type": "boolean"
+                  },
+                  "mapping_verified": {
+                    "type": "boolean"
+                  },
+                  "age_seconds": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0
+                  },
+                  "priced_listings": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  },
+                  "observed_days_30": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 30
+                  }
+                },
+                "required": [
+                  "has_price",
+                  "complete",
+                  "cut",
+                  "distribution",
+                  "wide_spread",
+                  "mixed_variants",
+                  "farbelow",
+                  "synthetic",
+                  "mapping_verified",
+                  "age_seconds",
+                  "priced_listings",
+                  "observed_days_30"
+                ]
+              },
+              "expected": {
+                "enum": [
+                  "good",
+                  "fair",
+                  "limited",
+                  "none"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "input",
+              "expected"
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 1000
+        },
+        "purchases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "source_kind": {
+                "enum": [
+                  "auctions",
+                  "commodities"
+                ]
+              },
+              "requested": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              },
+              "listings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "quantity": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 2147483647
+                    },
+                    "unit_copper": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]{0,18})$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "total_copper": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]{0,18})$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "bid_copper": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]{0,18})$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "quantity",
+                    "unit_copper",
+                    "total_copper",
+                    "bid_copper"
+                  ]
+                },
+                "minItems": 1,
+                "maxItems": 150000
+              },
+              "expected": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "state": {
+                    "enum": [
+                      "exact_observed",
+                      "range",
+                      "few"
+                    ]
+                  },
+                  "low_copper": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,18})$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "high_copper": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,18})$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "fulfilled": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  },
+                  "available": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  },
+                  "whole_listing_plan_copper": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,18})$"
+                  },
+                  "whole_listing_plan_units": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  }
+                },
+                "required": [
+                  "state",
+                  "low_copper",
+                  "high_copper"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "source_kind",
+              "requested",
+              "listings",
+              "expected"
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 1000
+        },
+        "identity": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "descriptor": {
+                "type": "object",
+                "required": [
+                  "id"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  }
+                },
+                "additionalProperties": true,
+                "maxProperties": 32
+              },
+              "expected_variant_key": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "id",
+              "descriptor",
+              "expected_variant_key"
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 1000
+        },
+        "validation": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "field": {
+                "enum": [
+                  "copper",
+                  "algorithm",
+                  "observed_at",
+                  "historical_basis"
+                ]
+              },
+              "value": {
+                "type": [
+                  "string",
+                  "integer"
+                ]
+              },
+              "expected": {
+                "enum": [
+                  "reject",
+                  "legacy_only"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "field",
+              "value",
+              "expected"
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 1000
+        }
+      },
+      "required": [
+        "fixture_version",
+        "algorithm_proposal",
+        "policy",
+        "quality",
+        "purchases",
+        "identity",
+        "validation"
+      ]
+    }
+  ]
+}

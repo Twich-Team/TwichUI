@@ -228,7 +228,7 @@ c.LibStub:NewLibrary("LibDataBroker-1.1", 4)
 assert(Cap("databar-ldb").state == "available")
 
 -- an addon being skinned that is not here; EllesmereUI missing while it is; the toolkit missing while both are
-assert(Cap("auctionator-skin").state == "not-installed" and not Cap("auctionator-skin").actionable, "nothing to skin")
+assert(Cap("whatstraining-skin").state == "not-installed" and not Cap("whatstraining-skin").actionable, "nothing to skin")
 assert(Cap("attune-skin").state == "not-loaded", "Attune is in the addon list here but has not loaded")
 c.LOADED.Attune = true
 assert(Cap("attune-skin").state == "unavailable" and Cap("attune-skin").code == "needs-ellesmereui" and not Cap("attune-skin").actionable,
@@ -366,7 +366,7 @@ local page = K.pages.troubleshooting
 assert(page and page.def.onShow, "the page takes its snapshot when it opens")
 local statusRows, shown = {}, {}
 for _, row in ipairs(page.rows) do if row.kind == "status" then statusRows[#statusRows + 1] = row end end
-assert(#statusRows == 6 + 2 + (5 + 6 + 1 + 4 + 1) + 1, "six summary lines, a folded line for each of the two multi-capability addons, each capability, and TwichUI Diagnostics' state: " .. #statusRows)
+assert(#statusRows == 6 + 2 + (5 + 6 + 3 + 1) + 1, "six summary lines, a folded line for each of the two multi-capability addons, each capability, and TwichUI Diagnostics' state: " .. #statusRows)
 local function Value(row) return row.value() end
 St.Invalidate()
 page.def.onShow()

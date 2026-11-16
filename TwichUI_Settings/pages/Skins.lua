@@ -8,8 +8,6 @@ local K = R.SettingsKit
 local SKINS = {
     { key = "attuneSkin", addon = "Attune", label = "Attune", icon = "guide",
       what = "Gives the Attune window (/attune) and its quest panels the EllesmereUI look." },
-    { key = "auctionatorSkin", addon = "Auctionator", label = "Auctionator", icon = "auctionHouse",
-      what = "Gives Auctionator's tabs, buttons, lists and boxes the EllesmereUI look. Also needs EllesmereUI's Auction House window skin." },
     { key = "foreverDungeonJournalSkin", addon = "ForeverDungeonJournal", label = "Dungeon Journal", icon = "mapsNavigation",
       what = "Gives the Forever Dungeon Journal window (/fj) the EllesmereUI look." },
     { key = "whatsTrainingSkin", addon = "WhatsTraining", label = "WhatsTraining", icon = "vendors",
@@ -42,8 +40,8 @@ end
 
 K.Page({
     key = "skins", icon = "addonSkins", name = "Addon skins", order = 90, group = "addons",
-    description = "The EllesmereUI look for supported addons, and TwichUI's own look for SpeakStone and the RestedXP guide window (in its own section). The rest of TwichUI works without them.",
-    keywords = "skin theme ellesmere attune auctionator dungeon journal whatstraining",
+    description = "The EllesmereUI look for supported addons, and TwichUI's own look for the RestedXP guide window (in its own section). The rest of TwichUI works without them.",
+    keywords = "skin theme ellesmere attune dungeon journal whatstraining",
     overview = {
         label = "Addon skins", tip = "The EllesmereUI look for supported addons. Needs EllesmereUI; the rest of TwichUI works without it.",
         status = function()
@@ -99,13 +97,6 @@ K.Page({
             Header("RestedXP guide window", "Gives the RestedXP Guides window a TwichUI look, and its waypoint arrow a shape, color and size of your choosing. Its settings are on the RestedXP page, under Other addons on the left.")
             Button("RestedXP guide window", "Open its page", function() R:OpenSettings("restedxp") end,
                 "Opens the RestedXP page, under Other addons: the game's waypoint on RestedXP's destination, and the guide window's switch, look, text, spacing, scroll bar, header and footer, waypoint arrow and timer bars.")
-        end
-
-        -- SpeakStone: the same, its own page, not through EllesmereUI.
-        if R.SpeakStoneSkin then
-            Header("SpeakStone speech frame", "Gives SpeakStone's speech frame a TwichUI look: background and border, fonts and colors, the controls, the portrait and the progress line. Its settings are on a page of their own, under this one.")
-            Button("SpeakStone speech frame", "Open its page", function() R:OpenSettings("speakstone") end,
-                "Opens the SpeakStone speech frame page, under Addon skins: the switch, the look, text, controls, portrait, progress line and spacing.")
         end
     end,
 })

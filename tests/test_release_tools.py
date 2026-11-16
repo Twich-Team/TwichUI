@@ -7,6 +7,9 @@ and CurseForge, so it shows the order of steps and what a re-run does, not that 
 Run: python3 -m unittest discover -s tests -p "test_release_tools.py"
 """
 import os
+import json
+import contextlib
+import io
 import subprocess
 import sys
 import tempfile
@@ -99,6 +102,33 @@ class PlanTests(unittest.TestCase):
         self.assertIn("- add a thing", notes)
         self.assertNotIn("first", notes)
         self.assertIn("compare", notes)
+
+    def test_publication_hold_blocks_all_channels_and_malformed_policy_fails_closed(self):
+        r = self.repo
+        r.commit("candidate")
+        r.tag("v1.3.0")
+        r.write(".github/release-policy.json", json.dumps({"publication_enabled": False}))
+        for ref in ("refs/heads/main", "refs/heads/beta", "refs/tags/v1.3.0"):
+            meta, notes = r.plan(ref)
+            self.assertFalse(meta["publish"])
+            self.assertIsNone(notes)
+            self.assertIn("publication is held", meta["skip_reason"])
+        for value in ("broken", '[]', '{"publication_enabled":"true"}'):
+            r.write(".github/release-policy.json", value)
+            with self.assertRaisesRegex(rel.ReleaseError, "invalid release publication policy"):
+                r.plan("refs/heads/main")
+
+    def test_publish_cli_honors_hold_before_credentials_or_archive_access(self):
+        # Use the real CLI with missing archive/notes: the policy must stop it first.
+        r = self.repo
+        r.write("meta.json", "{}")
+        r.write(".github/release-policy.json", json.dumps({"publication_enabled": False}))
+        from unittest import mock
+        with mock.patch.object(rel, "REPO_ROOT", r.root), contextlib.redirect_stderr(io.StringIO()) as errors:
+            code = rel.main(["publish", "--meta", str(r.root / "meta.json"), "--zip", "missing.zip",
+                             "--notes", "missing.md", "--repo", "example/unused"])
+        self.assertEqual(code, 1)
+        self.assertIn("publication is held", errors.getvalue())
 
     def test_next_alpha_starts_after_the_last_published_alpha(self):
         r = self.repo
@@ -425,9 +455,35 @@ class ArchiveTests(unittest.TestCase):
                 rel.TOCS[rel.WORKSHOP]: WORKSHOP_TOC.replace("1.0.0", self.VERSION).replace("\n", "\r\n")}
         self.assertEqual(self.make(crlf), [])
 
+    def test_test_lab_is_excluded_from_every_package(self):
+        # the development-only Test Lab (TwichUI_TestLab/) is refused wherever it lands, and the packager is told to leave it out
+        for name in ("TwichUI_TestLab/Lab.lua", "!!!TwichUI/TwichUI_TestLab/TwichUI_TestLab.toc"):
+            with self.subTest(name):
+                self.assertTrue(any("TwichUI_TestLab" in p for p in self.make({name: "-- lab\n"})), name)
+        pkgmeta = (Path(__file__).resolve().parent.parent / ".pkgmeta").read_text(encoding="utf-8")
+        ignore = pkgmeta.split("\nignore:", 1)[1]
+        self.assertIn("\n  - TwichUI_TestLab\n", ignore + "\n")
+        moved = pkgmeta.split("move-folders:", 1)[1].split("enable-nolib-creation", 1)[0]
+        self.assertNotIn("TwichUI_TestLab", moved, "the Lab is never one of the folders the packager moves into the zip")
+        self.assertNotIn("TwichUI_TestLab", rel.ADDONS)
+
+    def test_load_test_companions_are_excluded_from_every_package(self):
+        # the development-only saved-data load test (TwichUI_LoadTest/, TwichUI_LoadTestClock/) is refused and left out like the Lab
+        pkgmeta = (Path(__file__).resolve().parent.parent / ".pkgmeta").read_text(encoding="utf-8")
+        ignore = pkgmeta.split("\nignore:", 1)[1]
+        moved = pkgmeta.split("move-folders:", 1)[1].split("enable-nolib-creation", 1)[0]
+        for folder in ("TwichUI_LoadTest", "TwichUI_LoadTestClock"):
+            with self.subTest(folder):
+                self.assertTrue(any(folder in p for p in self.make({folder + "/x.lua": "-- dev\n"})), folder)
+                self.assertIn("\n  - " + folder + "\n", ignore + "\n")
+                self.assertNotIn(folder, moved)
+                self.assertNotIn(folder, rel.ADDONS)
+
     def test_problems_are_found(self):
         cases = {
             "top-level": {"TwichUI/Core.lua": ""},
+            "test lab beside the addons": {"TwichUI_TestLab/Lab.lua": "-- lab\n"},
+            "test lab inside the core": {"!!!TwichUI/TwichUI_TestLab/Lab.lua": "-- lab\n"},
             "nested addon": {"!!!TwichUI/TwichUI_Settings/Kit.lua": ""},
             "misspelled": {"TwitchUI_Settings/x.lua": ""},
             "development file": {"!!!TwichUI/tests/test.lua": ""},
@@ -436,7 +492,8 @@ class ArchiveTests(unittest.TestCase):
         }
         for what, extra in cases.items():
             with self.subTest(what):
-                self.assertTrue(any(what in p for p in self.make(extra)), self.make(extra))
+                key = "top-level" if what == "test lab beside the addons" else ("development file" if what == "test lab inside the core" else what)
+                self.assertTrue(any(key in p for p in self.make(extra)), self.make(extra))
         self.assertTrue(any("Version" in p for p in self.make(version="1.0.0")))
         self.assertTrue(any("loads Core.lua" in p for p in self.make(drop=("!!!TwichUI/Core.lua",))))
         lod = SETTINGS_TOC.replace("## LoadOnDemand: 1\n", "").replace("1.0.0", self.VERSION)

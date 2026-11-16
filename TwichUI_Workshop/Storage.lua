@@ -39,9 +39,24 @@ local MAX_TIME = 4102444800
 St.rev = 0                  -- changes with every write (the readers may cache against it)
 St.OnChange = nil           -- function(): called after a write, so a shown window can redraw
 
+-- Independent visible consumers subscribe without replacing Workshop's callback.
+local listeners = {}
+function St.Listen(fn, on)
+    if type(fn) ~= "function" then return end
+    listeners[fn] = on and true or nil
+end
+function St.ListenerCount()
+    local n = 0
+    for _ in pairs(listeners) do n = n + 1 end
+    return n
+end
+local function Notify()
+    for fn in pairs(listeners) do fn() end
+end
 local function Changed()
     St.rev = St.rev + 1
     if St.OnChange then St.OnChange() end
+    Notify()
 end
 
 local function Root(create)

@@ -1,0 +1,45 @@
+## Interface: 16001
+## Title: |cffC9A24ATwich|rUI Test Lab (development)
+## Notes: Development tool, never part of a release: runs selected TwichUI checks inside the game and makes a report to copy. Loaded only on request.
+## Author: twichie
+## Version: 0.1.0-dev
+## RequiredDeps: !!!TwichUI
+## LoadOnDemand: 1
+## X-License: MIT (code); see !!!TwichUI\LICENSE
+## Category: Development
+
+# The case registry and the case API (creates R.TestLab)
+Lab.lua
+# The cooperative runner (a frame with an OnUpdate only while a run is active)
+Runner.lua
+# The plain-text report
+Report.lua
+# What the window shows: pure presentation logic over the runner's records (counts, filters, search, details)
+View.lua
+# Reachability analysis: can a control take the pointer? (also run by the simulator scenario and the offline tests)
+Reach.lua
+# The guided-case mechanism: one temporary key binding, a small prompt, released when a case or the run ends
+Guided.lua
+# Lab-owned probe frames and the click arrangement of the client API probes (released when a case or the run ends)
+Probe.lua
+# Deterministic synthetic market data and the independent reference models (also loaded by tests/test_workshop_market_reference.lua)
+Fixtures.lua
+Reference.lua
+# Benchmarks (M7): the measurement and comparison framework, the shared workloads, and recorded real-client baselines (data only)
+Bench.lua
+Workloads.lua
+Baselines.lua
+# The cases: the same pure definitions tests/test_testlab.lua runs offline
+cases\Core.lua
+cases\Market.lua
+cases\Crafting.lua
+cases\Client.lua
+cases\UI.lua
+cases\Api.lua
+cases\Perf.lua
+cases\Load.lua
+cases\AutoScan.lua
+cases\Progress.lua
+# The window's controls, then the window (last: it opens once when the addon loads and registers /tuilab)
+Kit.lua
+Window.lua

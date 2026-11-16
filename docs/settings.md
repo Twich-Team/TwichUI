@@ -119,12 +119,12 @@ Everyday                  Notifications, Reminders › Known ammunition, Quality
 Journey                   Journey Chronicle › Appearance, Cozy Sleeping Bag
 Map                       Pins and Pings (Pins, Pings, Appearance), Map Toolbar, World map › Places, Navigation › Appearance, Vendors and trainers › Your list and sharing
 Gear & class              Gear comparison › Stat weights, Mage (Mages only) › Refreshment shares, Class resource bars › Layout, Appearance, Effects
-Other addons              Addon skins › SpeakStone speech frame, RestedXP (map waypoint, guide window look, timer bars), Target dragon artwork
+Other addons              Addon skins, RestedXP (map waypoint, guide window look, timer bars), Target dragon artwork
 Your configuration        Configuration sharing, Profiles, Troubleshooting
 ```
 
 `R:OpenSettings(key)` keys: `overview`, `notifications`, `reminders`, `qol`, `chatClean`, `chatCleanChannels`, `chatCleanRules`, `chatCleanLive`, `food`, `restock`, `restockItems`, `magicInventory`, `auction`, `chronicle`, `chronicleLook`, `pins`,
-`pinsLook`, `mapToolbar`, `gear`, `statWeights`, `mage`, `refreshmentShares`, `ammoCustom`, `classBars`, `classBarsLayout`, `classBarsLook`, `classBarsEffects`, `skins`, `restedxp`, `speakstone`, `targetArt`, `sharing`,
+`pinsLook`, `mapToolbar`, `gear`, `statWeights`, `mage`, `refreshmentShares`, `ammoCustom`, `classBars`, `classBarsLayout`, `classBarsLook`, `classBarsEffects`, `skins`, `restedxp`, `targetArt`, `sharing`,
 `profiles`, `troubleshooting`. A second argument names a setting (`"arrivalHold"` or `"TWICHUI_arrivalHold"`) or a
 row id: the window goes to its page, scrolls to it and marks it for 2.5 seconds (no
 animation). An unknown page opens Home; an unknown setting opens the page at its top. No argument reopens the page
@@ -373,8 +373,7 @@ Turn on Display Lua Errors. Test TwichUI alone, then with EllesmereUI. After eac
    nothing is clipped; badges sit after their label.
 7. **No hidden settings.** Home has no "Show advanced options". Quality of life shows **Wait before accepting a
    summon** under **Accept summons from** in Summons and resurrection, and **Wait before releasing** under Release in
-   battlegrounds; Gear comparison, Notifications, Configuration sharing, Chronicle appearance, RestedXP and
-   SpeakStone speech frame show their former Advanced rows in their sections. With an old save that had the option on or
+   battlegrounds; Gear comparison, Notifications, Configuration sharing, Chronicle appearance, and RestedXP show their former Advanced rows in their sections. With an old save that had the option on or
    off, nothing is hidden and nothing errors.
 8. **Greyed out.** Turn Party pins off: its rows grey out with "Needs ..." under each, and don't respond.
 9. **Search.** "minimap", "chime", "tomtom", "font", "how long": results from several pages, never-opened pages
@@ -388,7 +387,7 @@ Turn on Display Lua Errors. Test TwichUI alone, then with EllesmereUI. After eac
     follow; a dropdown shows the new names; nothing stale. In combat: refused with a message.
 13. **Combat.** Open the window and change Food and Drink's border and size in combat: they apply after combat; opacity
     at once. Nothing errors.
-14. **Previews.** Mage menu, refreshments panel, pin menu, new pin window, RestedXP timer bars, SpeakStone sample, the
+14. **Previews.** Mage menu, refreshments panel, pin menu, new pin window, RestedXP timer bars, the
     Chronicle window: each appears beside the window; closing the window puts away the sample previews (not the real
     windows).
 15. **Size and scale.** UI scale 0.64 and 1.15, a 1280x720 window: the settings window fits and can be moved; the

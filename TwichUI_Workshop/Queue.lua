@@ -193,6 +193,55 @@ function Q.Add(rec, crafts)
     return e
 end
 
+-- Adds several recipes (and/or more crafts of queued ones) as ONE change, all or nothing (P2: the player confirmed an optimized plan).
+-- ops = { { rec = <recipe record>, crafts = n }, ... } in the order they are to stand in the queue; a recipe not queued yet is appended with
+-- n crafts (it must have known materials and a fixed output: an unknown recipe is never queued by a plan), a queued one gets n more crafts.
+-- Everything is checked before anything changes (held, a recipe that can't be queued, the same recipe twice, room for the new entries,
+-- no entry above W.MAX_CRAFTS); the list is then changed in memory and saved once, and if that save fails the list is put back exactly as it
+-- was (only this call's own changes are undone: nothing else can have changed in between).
+-- Returns true and { added = new entries, raised = queued entries given more crafts }, or false and why: "held", "bad", "toomany", "full", "unsaved".
+Q.MAX_BATCH = 40
+function Q.AddBatch(ops)
+    if Q.Held() then return false, "held" end
+    if type(ops) ~= "table" or #ops == 0 or #ops > Q.MAX_BATCH then return false, "bad" end
+    local entries = Q.Entries()
+    local seen, plan, fresh = {}, {}, 0
+    for _, op in ipairs(ops) do
+        local n = type(op) == "table" and Int(op.crafts, 1, W.MAX_CRAFTS) or nil
+        local rec = type(op) == "table" and op.rec or nil
+        local id = type(rec) == "table" and Int(rec.id, 1, W.MAX_ID) or nil
+        if not n or not id or seen[id] then return false, "bad" end
+        seen[id] = true
+        local have = Q.Find(id)
+        if have then
+            if have.crafts + n > W.MAX_CRAFTS then return false, "toomany" end
+            plan[#plan + 1] = { have = have, n = n }
+        else
+            local e = Q.FromRecipe(rec, n)
+            if not e or not e.mats or not e.outItem or not e.outMin or e.outMin ~= e.outMax then return false, "bad" end
+            fresh = fresh + 1
+            plan[#plan + 1] = { entry = e }
+        end
+    end
+    if #entries + fresh > W.MAX_QUEUE then return false, "full" end
+    local was, size = {}, #entries
+    for _, p in ipairs(plan) do
+        if p.have then
+            was[#was + 1] = { p.have, p.have.crafts }
+            p.have.crafts = p.have.crafts + p.n
+        else
+            entries[#entries + 1] = p.entry
+        end
+    end
+    local ok, why = Save()
+    if not ok then
+        for i = #entries, size + 1, -1 do entries[i] = nil end
+        for _, w in ipairs(was) do w[1].crafts = w[2] end
+        return false, why
+    end
+    return true, { added = fresh, raised = #was }
+end
+
 -- Returns true, or false and why
 function Q.SetCrafts(id, n)
     if Q.Held() then return false, "held" end

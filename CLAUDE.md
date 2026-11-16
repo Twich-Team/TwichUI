@@ -11,6 +11,7 @@ TwichUI is a World of Warcraft addon for **WoW: Forever** (Lua 5.1): a focused, 
 - `!!!TwichUI/!!!TwichUI.toc`: load order (a core file not listed never loads). `Core.lua`: namespace `R`, events, `DEFAULT_MODULES`, `/tui` `COMMANDS`. `Switches.lua`: what each switch does.
 - Feature folders in `!!!TwichUI/`: `modules/ qol/ pins/ setup/ chronicle/ gear/ auction/ diag/` and more; `Libs/` is third-party (never edit).
 - Sibling addons in the repo (load on demand): `TwichUI_Settings/` (the settings window: `Kit.lua`, `pages/`), `TwichUI_NavData/`, `TwichUI_Diagnostics/`, `TwichUI_Layouts/`, `TwichUI_LayoutWizard/`, `TwichUI_Workshop/` (recipes, craft queue, materials; `docs/workshop.md`, status in `STATUS_AND_BACKLOG.md`). Packaging: `.pkgmeta` (ignores `tests tools docs CLAUDE.md .clinerules`).
+- Workshop verification policy (what evidence a Workshop change needs; the market and the crafting/shopping reference models, `tests/test_workshop_market_reference.lua` and `tests/test_workshop_crafting_reference.lua`, and the in-game Test Lab `TwichUI_TestLab/`, `docs/testlab.md`): **[docs/workshop/testing-roadmap.md](docs/workshop/testing-roadmap.md)**, section F "Verification policy" and H (status and findings). Read it before changing Workshop prices, history, statistics, costs or saved data. For money, quantity, rounding, ordering or eligibility logic there, also run the matching mutation group (`bash tools/mutate.sh --group market` or `--group crafting`, about 10 to 30 s; it works on disposable copies only) and add a catalog entry (`tools/mutations/workshop.py`) for a realistic defect the change makes possible; the roadmap's section H (M4) says how.
 - `tests/`: offline tests. `tools/`: dev scripts, `tools/simlab/` the simulator lab. `docs/`: per-feature docs; `.clinerules` + `docs/recipes/` are the separate, shorter rule set for local models (keep it consistent with this file).
 - Shell: single-quote paths containing `!!!` (`'!!!TwichUI/Core.lua'`); unquoted, the shell rewrites `!!`.
 
@@ -18,8 +19,9 @@ TwichUI is a World of Warcraft addon for **WoW: Forever** (Lua 5.1): a focused, 
 
 - Syntax check after a Lua edit: `luac5.1 -p '<file>'`. No linter exists.
 - One test: `(cd tests && lua5.1 -e 'require("bit"); ROOT="../!!!TwichUI/"; REPO="../"; TESTS="./"' test_x.lua)`
-- Project suite (about 10 s): `./tests/run.sh`
-- Simulator (optional, `docs/simulator-lab.md`): `bash tools/simlab/smoke.sh` (load order, construction), `bash tools/simlab/interact.sh`, `bash tools/simlab/diagnose.sh`, guard check `bash tools/simlab/tests/lab_guard.sh`. Run with bash, never zsh.
+- Verification profiles ([docs/testing.md](docs/testing.md)): `./tests/run.sh development <group>` during implementation; `feature <group>` before feature PR completion; `integration <group> --with-group <other>` across subsystems. `fast` remains supported. Group `workshop-settings` covers Workshop Settings and Tooltip Designer. Focused checks never prove complete regression coverage.
+- Complete offline/CI suite: `./tests/run.sh` (two workers; memory-heavy layout tests serial); `--jobs 1` for debugging.
+- Simulator (part of full milestone verification, `docs/simulator-lab.md`): prefer `bash tools/simlab/run.sh smoke` / `workshop` / `testlab` / `settings` / `reminders` / `interact` / `diagnose` to keep the installation read-only. Historical direct runners: `bash tools/simlab/smoke.sh` (load order, construction), `bash tools/simlab/interact.sh`, `bash tools/simlab/diagnose.sh`, guard check `bash tools/simlab/tests/lab_guard.sh`. Run with bash, never zsh.
 - Do not invent other commands. Unless asked: no `tools/` generators, deploys, `git commit` or `git push`.
 
 ## Default workflow
@@ -28,9 +30,9 @@ TwichUI is a World of Warcraft addon for **WoW: Forever** (Lua 5.1): a focused, 
 2. Inspect the smallest relevant subsystem (`.toc`, the feature's file, its doc and test).
 3. Follow existing patterns for naming, initialization, events and UI.
 4. Implement the smallest complete requested behavior.
-5. Run focused tests (and `luac5.1 -p` on edited files).
+5. Run `./tests/run.sh fast <group>` frequently (and `luac5.1 -p` on edited Lua files).
 6. Use a relevant existing simulator scenario when it gives meaningful evidence (settings pages, Kit, TOC or load order); not for every cosmetic change.
-7. Run `./tests/run.sh` for code changes, unless the task says otherwise.
+7. Run affected `feature` checks before completing ordinary feature PRs; use `integration` for changes crossing subsystem boundaries. Reserve the unchanged `full` gate for release candidate certification, major shared infrastructure changes, high-risk migrations, global initialization or saved-data contracts, and explicit owner requests. Record the trigger. `release` adds validation of an existing candidate archive and metadata. Do not require unrelated simulator catalogs on every PR. See `docs/testing.md` for selections, packaging and mutation requirements. Preserve failed evidence and source/fixture identity; reruns require changed inputs or a stated diagnostic hypothesis. Documentation-only evidence updates do not require another addon-wide run.
 8. Report results, limitations and remaining real-client checks.
 9. Stop.
 
@@ -80,11 +82,11 @@ Schema version is separate from release version. Defaults fill only missing valu
 
 ## Evidence labels and the simulator
 
-Label every claim: **unit-tested** (`tests/`), **simulator-tested** (`tools/simlab`), **screenshot-reviewed**, **real-client-tested**, or **not tested**. The simulator loads real addon code and constructs/drives pages at handler level; it cannot prove combat, taint, secure actions, addon-message delivery, reload persistence, real pointer/keyboard input or appearance (addon fonts fall back to a game font), and its screenshots are not visual validation. It is an optional verification tool, never a prerequisite for feature work. Details and limits: **[docs/simulator-lab.md](docs/simulator-lab.md)**.
+Label every claim: **unit-tested** (`tests/`), **simulator-tested** (`tools/simlab`), **screenshot-reviewed**, **real-client-tested**, or **not tested**. The simulator loads real addon code and constructs/drives pages at handler level; it cannot prove combat, taint, secure actions, addon-message delivery, reload persistence, real pointer/keyboard input or appearance (addon fonts fall back to a game font), and its screenshots are not visual validation. Fast development checks do not require it; feature checkpoints use the relevant selected scenarios, and full verification at the documented release/high-risk triggers includes every default regression scenario. Details and limits: **[docs/simulator-lab.md](docs/simulator-lab.md)**.
 
 ## Definition of done and report
 
-Requested behavior and acceptance criteria met; edited files syntax-checked; focused tests and `./tests/run.sh` pass (or the exception is stated); final diff reviewed for unintended changes, `.toc` order, generated files and metadata; diagnostics coverage decided for new features (scope/gauge or why none, per docs/dev-rules.md). Settings changes also follow the verification list in that doc. Never claim an unrun check. Keep reports short; do not add a tracking document for routine work. Format:
+Requested behavior and acceptance criteria met; edited files syntax-checked; the applicable documented verification profile passes (or the exception and omitted coverage are stated); final diff reviewed for unintended changes, `.toc` order, generated files and metadata; diagnostics coverage decided for new features (scope/gauge or why none, per docs/dev-rules.md). Settings changes also follow the verification list in that doc. Never claim an unrun check. Keep reports short; do not add a tracking document for routine work. Format:
 
 - **Changed:** short summary (files).
 - **Verified:** commands and outcomes, with evidence labels.

@@ -19,7 +19,7 @@ set -euo pipefail
 
 # shellcheck source=lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
-RUN="$LAB/artifacts/interact-$(date +%Y%m%d-%H%M%S)"
+RUN="${SIMLAB_RUN:-$LAB/artifacts/interact-$(date +%Y%m%d-%H%M%S)}"
 mkdir -p "$RUN"
 WRONG_AT="slider-clamp-max: typed 500 saved as"
 
@@ -65,5 +65,5 @@ leak=0
 find "$ROOT" -name '*.png' -o -name '*.stderr' -o -name '*.stdout' | grep -q . && { echo "simlab: artifacts found inside the addon root" >&2; leak=1; }
 simlab_disclose
 [ "$status" -eq 0 ] || exit "$status"
-python3 -I "$SIMLAB_DIR/interact_verdict.py" "$RUN" "$WRONG_AT" "$SIMLAB_ASSETS" "$WINDOW" || exit 1
+python3 -B -I "$SIMLAB_DIR/interact_verdict.py" "$RUN" "$WRONG_AT" "$SIMLAB_ASSETS" "$WINDOW" || exit 1
 [ "$leak" -eq 0 ] || exit 1

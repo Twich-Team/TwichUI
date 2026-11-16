@@ -44,7 +44,7 @@ second defaults system, and AceDB's removal of values equal to their defaults.
 | Scope | Fields |
 |---|---|
 | **Profile** | every `modules.*` switch except `restedxpSkin` |
-| **Profile** | `ui`: `arrivalHold`, `brokerMenu`, `chronicleAppearance`, `chronicleClock`, `chronicleLook`, `foodDrink`, `foodDrinkPosition`, `friendLoginChannel`, `friendLoginChime`, `friendLoginPlace`, `mageConjureText`, `mageSellMode`, `mageTravelText`, `partyPins` (clicks, labels, minimap, `/way`, the pin window's place), `pinsAppearance`, `pinsBroker`, `pinsBrokerMenu`, `pinsEditorLook`, `pinsMapText`, `pinsPing` (map pings: gesture, sound, durations, list), `pinsSound`, `previewSounds`, `qol`, `refreshments` (amounts and the panel's place), `refreshmentsStyle`, `refreshmentsText`, `refreshmentsTradeGives`, `restedxpSkin`, `restedxpSkinText`, `restedxpTimerLook`, `restedxpTimerText` (the skin's look and its timer bars), `speakstoneSkin`, `speakstoneSkinStyle`, `trainingPosition`, `welcomeBackPlace`, and any `ui` key added later |
+| **Profile** | `ui`: `arrivalHold`, `brokerMenu`, `chronicleAppearance`, `chronicleClock`, `chronicleLook`, `foodDrink`, `foodDrinkPosition`, `friendLoginChannel`, `friendLoginChime`, `friendLoginPlace`, `mageConjureText`, `mageSellMode`, `mageTravelText`, `partyPins` (clicks, labels, minimap, `/way`, the pin window's place), `pinsAppearance`, `pinsBroker`, `pinsBrokerMenu`, `pinsEditorLook`, `pinsMapText`, `pinsPing` (map pings: gesture, sound, durations, list), `pinsSound`, `previewSounds`, `qol`, `refreshments` (amounts and the panel's place), `refreshmentsStyle`, `refreshmentsText`, `refreshmentsTradeGives`, `restedxpSkin`, `restedxpSkinText`, `restedxpTimerLook`, `restedxpTimerText` (the skin's look and its timer bars), `trainingPosition`, `welcomeBackPlace`, and any `ui` key added later |
 | **Profile** | `gear`: `glancePossible`, `futureLevels`, `reveal`, `strictness`, `bagStyle` |
 | **Account, every profile** | `modules.restedxpSkin`: turning it on or off sets RestedXP's own chosen theme (`RXP.settings.profile.activeTheme`), and a profile change must never write another addon's settings |
 | **Account, every profile** | `ui.reduceSettingsMotion` and `ui.settingsWindow`: how the settings window itself moves, and where it sits (`ui.showAdvanced`, the removed "Show advanced options", is deleted on load) |
@@ -137,8 +137,8 @@ After the values are in place (every copy is made first, then plain assignments)
    version check and the four EllesmereUI skins.
 2. **Phases**, each feature having registered once with `Profiles.OnApply(phase, name, fn)`:
    - `look`: every MenuStyle look (Mage menus, refreshments panel, Chronicle, pin window, pin menus, RestedXP window
-     and timers, SpeakStone frame), the Chronicle appearance, the RestedXP text and layout, the RestedXP timer bars,
-     the SpeakStone style, and the pins' map text, data bar entry and click and label choices.
+     and timers), the Chronicle appearance, the RestedXP text and layout, the RestedXP timer bars,
+     and the pins' map text, data bar entry and click and label choices.
    - `layout`: Food and Drink (size, layout, look, place), the three cards' places and their Edit Mode outlines, and
      an open refreshments panel's place.
    - `views`: an open Chronicle (clock), the Mage launchers' and refreshments' data bar texts, the refreshments plan
@@ -160,7 +160,7 @@ Not moved live (by design or by the game):
 - The pin window and the refreshments panel open at the new profile's place next time; an open refreshments panel
   moves at once.
 - A card already on screen keeps its place until it closes.
-- RestedXP's own settings, SpeakStone's and EllesmereUI's are never changed. The RestedXP skin's switch is
+- RestedXP's own settings and EllesmereUI's are never changed. The RestedXP skin's switch is
   account-wide for that reason.
 
 ## Settings page
@@ -223,7 +223,7 @@ These simulate the client. They don't prove what the game does.
 
 ## In-game checks (none done yet)
 
-Turn on Display Lua Errors. Test with TwichUI alone, then with EllesmereUI, RestedXP and SpeakStone. Back up `WTF`
+Turn on Display Lua Errors. Test with TwichUI alone, then with EllesmereUI and RestedXP. Back up `WTF`
 first (see `docs/persistence.md`).
 
 1. **Upgrade.** Install over a 3.0.12 save. Every option is as it was. The Profiles page says "Default", used only by
@@ -247,10 +247,8 @@ first (see `docs/persistence.md`).
     enter combat, then accept: refused and nothing changes. No "action blocked" and no taint message.
 11. **RestedXP.** With the skin on, switch between profiles with different window colors: the look changes, and
     RestedXP's own Look and Feel theme setting does not change. The skin's on/off switch is the same in every profile.
-12. **SpeakStone.** A profile with the skin off and one with it on: switching turns the look off and on.
-    SpeakStone's own settings are unchanged.
 13. **Pins.** With local, party and kept pins, do every operation: all pins stay, and kept pins stay kept.
-14. **Optional addons absent.** Without EllesmereUI, RestedXP, SpeakStone or a data bar: switching works with no
+14. **Optional addons absent.** Without EllesmereUI, RestedXP or a data bar: switching works with no
     error.
 15. **Different UI scales.** At the smallest and largest UI scale, Food and Drink and the cards go to each profile's
     place.

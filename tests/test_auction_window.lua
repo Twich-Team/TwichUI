@@ -680,12 +680,15 @@ end
 -- Going back to a Blizzard tab hides our page; closing the auction house clears everything.
 AHF:SetDisplayMode("Buy")
 assert(not page.shown and tabCalls.update >= 1)
+assert(not A.LifecycleBusy(), "idle Blizzard tab permits lifecycle proof")
 if WITH_SKIN then
   assert(tabSel[tab] == false and tabSel[blizzTabs[1]] == true and tabSel[blizzTabs[2]] == false, "back on Buy")
 end
 tab.scripts.OnClick(tab)
+assert(A.LifecycleBusy(), "custom posting page blocks lifecycle proof")
 Emit("AUCTION_HOUSE_CLOSED")
 assert(not page.shown and SC.state == "idle" and SC.listings == nil)
+assert(not A.LifecycleBusy(), "close clears lifecycle busy state")
 
 -- Turned off: the tab hides and won't open.
 env.DISABLED = { auctionPosting = true }

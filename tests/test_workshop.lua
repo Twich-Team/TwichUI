@@ -7,7 +7,7 @@ dofile(TESTS .. "mi_mock.lua")
 local function Check(cond, msg) if not cond then error(msg, 2) end end
 local function Same(a, b, msg) if a ~= b then error((msg or "") .. " expected " .. tostring(b) .. ", got " .. tostring(a), 2) end end
 
-local WORKSHOP_FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua" }
+local WORKSHOP_FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua" }
 
 local function Load(c, file)
   local chunk = assert(loadfile(ROOT .. "../TwichUI_Workshop/" .. file))
@@ -554,6 +554,7 @@ do
   Check(R.WorkshopLauncher and not R.Workshop, "only the launcher exists at login")
   Same(loads, 0, "nothing loads at login")
   Check(not R.WorkshopLauncher.Loaded())
+  c.TwichUIDB.ui.workshopEnabled = true -- explicit opt-in fixture for launcher error/combat behavior
   -- combat: refused before asking the game
   c.InCombatLockdown = function() return true end
   local ok, why = R.WorkshopLauncher.Load()

@@ -39,8 +39,7 @@ only when it is *wanted* (a switch or mode the player chose) and unavailable in 
 | EllesmereUI: Unlock Mode (Food and Drink) | `R.FoodDrink.Unlock.Status()` |
 | RestedXP: guide window skin, timer bars, guide waypoint | `R.RestedXPSkin.Status()`, `.Timers.Status()`, `R.QoLGuideWaypoint.Status()` |
 | RestedXP: data bar guide toggle | `R.RestedXPBroker.Available()` and LibDataBroker |
-| SpeakStone skin | `R.SpeakStoneSkin.Status()` |
-| Skins for Auctionator, What's Training?, Forever Dungeon Journal, Attune | switch, the addon's presence, `R.S` |
+| Skins for What's Training?, Forever Dungeon Journal, Attune | switch, the addon's presence, `R.S` |
 | Data bar library | `LibStub:GetLibrary("LibDataBroker-1.1", true)` |
 
 Not covered (no adapter status to read): LibAHTab (Auction House tab), EllesmereUI Bags' upgrade-mark painter, Leatrix Plus,

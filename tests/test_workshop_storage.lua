@@ -7,7 +7,7 @@ dofile(TESTS .. "mi_mock.lua")
 local function Check(cond, msg) if not cond then error(msg, 2) end end
 local function Same(a, b, msg) if a ~= b then error((msg or "") .. " expected " .. tostring(b) .. ", got " .. tostring(a), 2) end end
 
-local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Prices.lua", "Opportunities.lua",
+local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua",
   "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua", "Watch.lua", "Bank.lua" }
 
 local ORE, BAR, SWORD, HERB = 10, 20, 90, 11
@@ -767,6 +767,38 @@ do
   Same(v2.bank.items[ORE], nil, "a bad count is no count"); Check(not v2.guild.seen, "a tab with no usable time is no tab")
   -- nothing in all this scanned idly
   Same(a.Timers(), 0)
+end
+
+
+-- The pairing contract uses the measured clock age, not a nominal sum of fixture delays.
+-- Native 20 x 0.05 s from 31.01 reaches 32.01, but their double subtraction is below 1.
+-- Preserve that conservative pairing behavior; put unanswered fixture moves clearly beyond it.
+do
+  Check(32.01 - 31.01 < 1, "the native exponent-crossing clock witness is below one second")
+  local epsilon = 2^-40 -- representable on either side of 33, not a rounded-away decimal
+  for _, case in ipairs({
+    { 31.01, 32.01, false, "nominal second rounded below the boundary" },
+    { 32, 33 - epsilon, false, "immediately below one second" },
+    { 32, 33, true, "exactly one measured second" },
+    { 32, 33 + epsilon, true, "immediately above one second" },
+    { 31.01, 32.11, true, "fixture's margin beyond one second" },
+  }) do
+    local s = Session()
+    s.Flush()
+    s.OpenGuild()
+    s.GPut(1, 1, ORE, 12)
+    s.g.t = case[1]
+    s.Fire("GUILDBANKBAGSLOTS_CHANGED")
+    s.g.t = case[2]
+    s.Fire("BAG_UPDATE_DELAYED")
+    Same(s.W.Bank.Pending().guildPending, case[3], case[4] .. ": pending state")
+    s.Flush()
+    Same(s.St.Guild(s.Guild()).tabs[1].u == true, case[3], case[4] .. ": uncertainty after the timer")
+    local view = s.K.Sources({ char = s.Key(), guild = s.Guild() }, true, nil, s.g.time)
+    Same(select(2, s.K.Counted(view, ORE)), case[3] and 0 or 12, case[4] .. ": planning counts only certain stock")
+    s.CloseGuild(); s.Flush()
+    Same(s.Timers(), 0, "boundary session leaves no pending timer")
+  end
 end
 
 print("PASSED")

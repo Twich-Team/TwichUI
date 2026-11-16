@@ -1347,5 +1347,125 @@ function RM.RemoveCharacter(id, who)
     return true
 end
 
+---------------------------------------------------------------------------
+-- Sharing one reminder (reminders/Share.lua carries it; docs/reminders.md, "Sharing a reminder")
+-- Export reads one reminder into a plain table that names what it shows and when, and nothing about who it is for: the
+-- characters it is limited to are never in it (only a class limit). Admit is the other end and the only door a received
+-- reminder goes through: the table is another player's text, so it is rebuilt field by field from checked values (never
+-- stored as it came), refused whole on the first thing that can't be read, and added the way Duplicate adds one: with
+-- an id of its own, turned off, limited to this character.
+---------------------------------------------------------------------------
+RM.SHARE_VERSION = 1
+
+local function ExportList(entries)
+    local out = {}
+    for _, e in ipairs(entries) do
+        if e.group then
+            out[#out + 1] = { type = "group", match = e.match, conditions = ExportList(e.children) }
+        else
+            out[#out + 1] = DeepCopy(e.cond)
+        end
+    end
+    return out
+end
+
+-- The reminder as it is sent, or false and a sentence. A reminder with anything unfinished is not sent: the other
+-- player would receive something they could not use either.
+function RM.Export(id)
+    local v = RM.Get(id)
+    if not v then return false, REFUSE.missing end
+    if v.broken then return false, REFUSE.broken end
+    if not v.valid then return false, "Finish this reminder first: " .. tostring(v.problems[1] or REFUSE.value) end
+    local display = {}
+    for key in pairs(RM.DISPLAY_DEFAULTS) do display[key] = v.display[key] end
+    display.item = v.display.item
+    return {
+        v = RM.SHARE_VERSION, name = v.name, match = v.match,
+        conditions = ExportList(v.conditions),
+        display = display,
+        place = { preset = v.place.preset, point = v.place.point, x = v.place.x, y = v.place.y },
+        sound = v.sound, class = v.scope.class,
+    }
+end
+
+local function AdmitList(list, depth, counts)
+    if type(list) ~= "table" then return nil, "a list of conditions is missing" end
+    local C = R.ReminderConditions
+    local out = {}
+    for _, c in ipairs(list) do
+        if type(c) ~= "table" then return nil, "a condition is not readable" end
+        if c.type == "group" then
+            if depth + 1 > RM.MAX_DEPTH or counts.groups >= RM.MAX_GROUPS then return nil, "its groups are nested more deeply than a reminder allows" end
+            if c.match ~= "all" and c.match ~= "any" then return nil, "a group does not say whether all or any of it must match" end
+            counts.groups = counts.groups + 1
+            local kids, why = AdmitList(c.conditions, depth + 1, counts)
+            if not kids then return nil, why end
+            if #kids == 0 then return nil, "a group has nothing in it" end
+            out[#out + 1] = { type = "group", match = c.match, conditions = kids }
+        else
+            if counts.conditions >= RM.MAX_CONDITIONS then return nil, "it has more conditions than a reminder allows" end
+            counts.conditions = counts.conditions + 1
+            local clean, why = C.Check(c)
+            if not clean then return nil, "a condition can't be used here: " .. tostring(why) end
+            out[#out + 1] = clean
+        end
+    end
+    return out
+end
+
+-- Adds a received reminder. Returns true, id, or false and a sentence saying why not (nothing is added then).
+function RM.Admit(p)
+    if type(p) ~= "table" then return false, "It arrived damaged." end
+    if not R.ReminderConditions then return false, "Reminders aren't available right now." end
+    if p.v ~= RM.SHARE_VERSION then
+        return false, (Whole(p.v) and p.v > RM.SHARE_VERSION) and "It was made by a newer TwichUI than this one, which can't read it. Update TwichUI." or "It arrived damaged."
+    end
+    local t = Store(false)   -- nothing is created until something is added
+    if t and not Writable(t) then return false, REFUSE.newer end
+    if t and type(t.list) == "table" and #t.list >= RM.MAX then return false, REFUSE.full end
+
+    local name = RM.PlainText(p.name, RM.NAME_MAX)
+    if not name then return false, "Its name can't be used." end
+    if p.match ~= "all" and p.match ~= "any" then return false, "It doesn't say whether all or any of its conditions must match." end
+    local conditions, why = AdmitList(p.conditions, 1, { conditions = 0, groups = 0 })
+    if not conditions then return false, "It can't be used: " .. tostring(why) end
+    if #conditions == 0 then return false, "It has no conditions." end
+
+    local display = {}
+    if type(p.display) ~= "table" then return false, "Its look is missing." end
+    for key in pairs(RM.DISPLAY_DEFAULTS) do
+        local value = p.display[key]
+        if value ~= nil then
+            if not RM.ValidDisplay(key, value) then return false, "Part of how it looks can't be used here." end
+            display[key] = value
+        end
+    end
+    if p.display.item ~= nil then
+        if not RM.ValidItem(p.display.item) then return false, "The item it shows can't be used here." end
+        display.item = p.display.item
+    end
+
+    local me = RM.CharacterKey()
+    local raw = {
+        name = name, enabled = false, match = p.match, conditions = conditions, display = display,
+        scope = me and { who = "characters", characters = { me } } or { who = "all", characters = {} },
+        place = ReadPlace(p.place),
+        sound = RM.ValidSound(p.sound) and p.sound or nil,
+    }
+    if CLASS[p.class] then raw.scope.class = p.class end
+    -- what the editor would say about it: nothing that stops it showing, or it is not kept
+    local view = MakeView(raw, 1, t, false)
+    if not view.valid then return false, "It can't be used here: " .. tostring(view.problems[1]) end
+
+    t = Store(true)
+    if not t then return false, REFUSE.value end
+    if type(t.list) ~= "table" then t.list = {} end
+    raw.id = NextId(t)
+    t.version = t.version or RM.VERSION
+    t.list[#t.list + 1] = raw
+    Tell(raw.id, "list")
+    return true, raw.id
+end
+
 -- A profile change puts another profile's reminders in place: everything is read again.
 R.Profiles.OnApply("layout", "reminders", function() RM.Invalidate() end)

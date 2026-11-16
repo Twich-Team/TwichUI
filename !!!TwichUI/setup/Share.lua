@@ -686,6 +686,7 @@ function SH:Settle(reason, incomingOnly)
         end
     end
     if StaticPopup_Hide then StaticPopup_Hide("TWICHUI_LAYOUT_OFFER"); StaticPopup_Hide("TWICHUI_OFFER") end
+    if R.ReminderShare then R.ReminderShare.Settle(reason, incomingOnly) end   -- shared reminders are transfers too (reminders/Share.lua)
     Changed()
 end
 

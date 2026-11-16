@@ -1,0 +1,193 @@
+[
+  {
+    "name": "exact_variant_mismatch",
+    "target": "generation",
+    "op": "set",
+    "path": [
+      "records",
+      1,
+      "variant_key"
+    ],
+    "value": "0000000000000000000000000000000000000000000000000000000000000000",
+    "reseal": true
+  },
+  {
+    "name": "future_schema",
+    "target": "generation",
+    "op": "set",
+    "path": [
+      "schema_version"
+    ],
+    "value": 999,
+    "reseal": true
+  },
+  {
+    "name": "corrupt_hash",
+    "target": "generation",
+    "op": "set",
+    "path": [
+      "generation_id"
+    ],
+    "value": "0000000000000000000000000000000000000000000000000000000000000000",
+    "reseal": false
+  },
+  {
+    "name": "missing_daily_close",
+    "target": "generation",
+    "op": "pop",
+    "path": [
+      "records",
+      1,
+      "daily"
+    ],
+    "reseal": true
+  },
+  {
+    "name": "oversized_copper",
+    "target": "generation",
+    "op": "set",
+    "path": [
+      "records",
+      1,
+      "current",
+      "metrics",
+      "quantity_weighted_ask_copper"
+    ],
+    "value": "9223372036854775808",
+    "reseal": true
+  },
+  {
+    "name": "incomplete_records",
+    "target": "generation",
+    "op": "pop",
+    "path": [
+      "records"
+    ],
+    "reseal": true
+  },
+  {
+    "name": "false_complete_market",
+    "target": "generation",
+    "op": "set",
+    "path": [
+      "coverage",
+      "generation_complete"
+    ],
+    "value": true,
+    "reseal": true
+  },
+  {
+    "name": "scope_not_complete",
+    "target": "generation",
+    "op": "set",
+    "path": [
+      "scope",
+      "scope_complete"
+    ],
+    "value": false,
+    "reseal": true
+  },
+  {
+    "name": "wrong_date_coverage",
+    "target": "generation",
+    "op": "set",
+    "path": [
+      "scope",
+      "date_coverage",
+      1,
+      "state"
+    ],
+    "value": "complete_close",
+    "reseal": true
+  },
+  {
+    "name": "bad_record_hash",
+    "target": "generation",
+    "op": "set",
+    "path": [
+      "scope",
+      "record_sha256",
+      0
+    ],
+    "value": "0000000000000000000000000000000000000000000000000000000000000000",
+    "reseal": true,
+    "refresh_record_hashes": false
+  },
+  {
+    "name": "unknown_required_feature",
+    "target": "generation",
+    "op": "set",
+    "path": [
+      "required_features",
+      3
+    ],
+    "value": "future_feature",
+    "reseal": true
+  },
+  {
+    "name": "wrong_market",
+    "target": "request",
+    "op": "set",
+    "path": [
+      "market",
+      "house_id"
+    ],
+    "value": 110
+  },
+  {
+    "name": "invalid_market",
+    "target": "request",
+    "op": "set",
+    "path": [
+      "market",
+      "house_id"
+    ],
+    "value": 0
+  },
+  {
+    "name": "unsupported_algorithm",
+    "target": "request",
+    "op": "set",
+    "path": [
+      "pricing_algorithm"
+    ],
+    "value": "future-pricing"
+  },
+  {
+    "name": "unsupported_basis",
+    "target": "request",
+    "op": "set",
+    "path": [
+      "history_basis"
+    ],
+    "value": "weekly-average"
+  },
+  {
+    "name": "request_future_schema",
+    "target": "request",
+    "op": "set",
+    "path": [
+      "expected_schema_version"
+    ],
+    "value": 999
+  },
+  {
+    "name": "duplicate_selection",
+    "target": "request",
+    "op": "append_first",
+    "path": [
+      "variants"
+    ]
+  },
+  {
+    "name": "unavailable_identity",
+    "target": "request",
+    "op": "set",
+    "path": [
+      "variants",
+      0,
+      "variant_key"
+    ],
+    "value": "0000000000000000000000000000000000000000000000000000000000000000"
+  }
+]
