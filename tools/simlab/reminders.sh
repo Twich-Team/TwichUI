@@ -2,7 +2,7 @@
 # Narrow Reminders scenario: handler interaction + screenshots, using the existing isolated lab.
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
-RUN="$LAB/artifacts/reminders-$(date +%Y%m%d-%H%M%S)"
+RUN="${SIMLAB_RUN:-$LAB/artifacts/reminders-$(date +%Y%m%d-%H%M%S)}"
 mkdir -p "$RUN"
 export SIMLAB_ASSETS="${SIMLAB_ASSETS:-1}"
 export SIMLAB_FORWARD="WOW_SIM_SOFTWARE_RENDER=1 WOW_SIM_NO_PARTY=1"

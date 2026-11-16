@@ -4,6 +4,8 @@
 -- fonts and placement, and the player's own menu background and border (modules/MenuStyle.lua).
 --   Open settings...        opens the settings window (R:OpenSettings) and closes the menu.
 --   Workshop...             opens or closes the Workshop (R.WorkshopLauncher.Toggle; it loads the addon the first time).
+--   Test Lab (development)... opens or closes the development Test Lab (loads it the first time). The row is absent unless the
+--                           TwichUI_TestLab folder is installed, so it never shows in a standard release.
 --   Quiet the screen        a temporary switch (QuietScreen.lua, not saved: off again at the next login or reload).
 --                           While it is On, the cards, Reminders, action bar glows, Healer Watch panel and Return
 --                           the Favor list stay away. The row says On or Off.
@@ -62,6 +64,20 @@ local QUIET_TIP = "Keeps notification cards, reminders, action bar glows, the He
     .. "Favor's list off the screen, with their sounds, until you turn this off or log out. Nothing in the settings "
     .. "changes, and what happens meanwhile is not shown afterwards."
 
+-- The development Test Lab (TwichUI_TestLab, docs/testlab.md) is never in a release: its row exists only while its folder is installed.
+local LAB = "TwichUI_TestLab"
+local function LabInstalled()
+    local C = C_AddOns
+    return C ~= nil and C.DoesAddOnExist ~= nil and C.DoesAddOnExist(LAB) and true or false
+end
+-- Opens or closes its window; the first time it loads the addon, which opens the window itself.
+local function ToggleLab()
+    local lab = R.TestLab
+    if lab and lab.Window then lab.Window.Toggle() return end
+    local ok, loaded, reason = pcall(C_AddOns.LoadAddOn, LAB)
+    if not (ok and loaded) then R.Print("test lab: couldn't load it (%s).", tostring(ok and reason or loaded)) end
+end
+
 local SPEC = {
     {
         key = "settings", label = "Open settings...", plain = true,
@@ -71,6 +87,11 @@ local SPEC = {
         key = "workshop", label = "Workshop...", plain = true,
         shown = function() return R.WorkshopLauncher ~= nil end,
         act = function() M.Close(); R.WorkshopLauncher.Toggle() end,
+    },
+    {
+        key = "testlab", label = "Test Lab (development)...", plain = true,
+        shown = LabInstalled,
+        act = function() M.Close(); ToggleLab() end,
     },
     { kind = "divider" },
     {

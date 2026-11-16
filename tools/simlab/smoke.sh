@@ -18,7 +18,7 @@ set -euo pipefail
 HERE="$SIMLAB_DIR"
 PAGE="${SIMLAB_PAGE:-qol}"
 TITLE="${SIMLAB_TITLE:-Quality of life}"
-RUN="$LAB/artifacts/smoke-$(date +%Y%m%d-%H%M%S)"
+RUN="${SIMLAB_RUN:-$LAB/artifacts/smoke-$(date +%Y%m%d-%H%M%S)}"
 mkdir -p "$RUN"
 
 simlab_stage

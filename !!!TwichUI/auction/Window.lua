@@ -1277,6 +1277,11 @@ function A.Refresh()
     if not on then A.Close() end
 end
 
+-- AH-1a must never conceal this page or an in-flight posting/confirmation.
+function A.LifecycleBusy()
+    return (page and page:IsShown()) or post.state ~= "idle"
+end
+
 local function Attach()
     if holder or not AuctionHouseFrame then return end
     AH = AuctionHouseFrame

@@ -7,12 +7,12 @@ if key == "skins" and params.integration then
     C_AddOns.LoadAddOn("TwichUI_Settings")
     local kit, state = R.SettingsKit, params.integration
     local originalState, originalLoaded = kit.AddonState, kit.Loaded
-    local targets = { Attune = true, Auctionator = true, ForeverDungeonJournal = true, WhatsTraining = true, EllesmereUI = true }
+    local targets = { Attune = true, ForeverDungeonJournal = true, WhatsTraining = true, EllesmereUI = true }
     kit.AddonState = function(name) if targets[name] then return state == "absent" and "missing" or "loaded" end; return originalState(name) end
     kit.Loaded = function(name) if targets[name] then return state ~= "absent" end; return originalLoaded(name) end
     if state ~= "absent" then R.S = R.S or {} end
     if state == "disabled" then
-        for _, name in ipairs({ "attuneSkin", "auctionatorSkin", "foreverDungeonJournalSkin", "whatsTrainingSkin" }) do R:SetEnabled(name, false) end
+        for _, name in ipairs({ "attuneSkin", "foreverDungeonJournalSkin", "whatsTrainingSkin" }) do R:SetEnabled(name, false) end
     end
 end
 -- Nested rule fixtures need value comparison, including numeric keys; Lab.Digest is intentionally shallow.
@@ -30,10 +30,10 @@ UnitClass = function() return "Mage", "MAGE" end
 TwichUIDB.ui.settingsWindow = { w = params.narrow and 936 or 1240, h = params.narrow and 660 or 960 }
 -- UI contract fixtures only: real integration engines are covered by their dedicated unit tests.
 -- These fixtures never call the third-party addon or claim real-addon compatibility.
-if params.integration and (key == "speakstone" or key == "restedxp") then
-    local skin = key == "speakstone" and R.SpeakStoneSkin or R.RestedXPSkin
+if params.integration and key == "restedxp" then
+    local skin = R.RestedXPSkin
     local state = params.integration
-    R:SetEnabled(key == "speakstone" and "speakstoneSkin" or "restedxpSkin", state ~= "disabled")
+    R:SetEnabled("restedxpSkin", state ~= "disabled")
     skin.Status = function()
         local available = state ~= "absent"
         return { code = state == "disabled" and "off" or available and "active" or key .. "-missing",
@@ -99,6 +99,53 @@ Lab.Step("open", function()
         Lab.Say("inventory", page.key, page.name, "rows=" .. #page.rows, "host=" .. tostring(page.def.host ~= nil))
     end
 end)
+if key == "workshop" and params.filled then
+    Lab.Step("Workshop preference integration", function()
+        local K, UI, L = R.SettingsKit, R.SettingsUI, R.WorkshopLauncher
+        local v = UI.View("workshop")
+        v.taskButtons[1]:Click()
+        local load
+        for _, row in ipairs(K.pages.workshop.rows) do
+            if row:GetName() == "Workshop options" then load = v.rows[row.id].control end
+        end
+        Lab.Check("construct", "explicit load action exists", true, load ~= nil)
+        local start = debugprofilestop and debugprofilestop()
+        load:Click()
+        if start then Lab.Say("timing", "Workshop options load click ms", debugprofilestop() - start) end
+        Lab.Settle(.3)
+        local w = R.Workshop
+        Lab.Check("state", "options action loads Workshop", true, L.Loaded())
+        Lab.Check("state", "loading options builds no Workshop window", nil, w.Window.Frame())
+        Lab.Check("state", "loading options starts no plan", 0, w.Strategy.Stats().started)
+        Lab.Check("state", "loading options starts no scan", false, w.Scan.Busy())
+        v.rows.workshopDetailedPrices.control:Click()
+        Lab.Check("interact", "price control calls existing preference", true, w.Session.PriceDetail())
+        v.taskButtons[4]:Click(); Lab.Settle(.2)
+        local function Pick(id, value)
+            v.rows[id].control:Click()
+            local menu = rawget(_G, "TwichUISettingsMenu")
+            for _, row in ipairs(menu and menu.rows or {}) do
+                if row:IsShown() and row.choice and row.choice.value == value then row:Click(); return true end
+            end
+            return false
+        end
+        Lab.Check("interact", "cash objective is selectable", true, Pick("workshopObjective", "cash"))
+        Lab.Check("state", "objective changes the real planner preference", "cash", w.Session.Objective())
+        Lab.Check("interact", "compact Craft is selectable", true, Pick("workshopCompactMode", "craft"))
+        Lab.Check("state", "compact mode is saved and applied", "craft", w.Compact.Mode())
+        v.rows.workshopUseGuild.control:Click()
+        Lab.Check("interact", "guild control uses existing stock preference", true, w.Storage.UseGuild())
+        v.rows.workshopProgressNotices.control:Click()
+        Lab.Check("interact", "notice control uses existing preference", false, w.Notice.On())
+        Lab.Check("state", "preferences keep full window hidden", nil, w.Window.Frame())
+        Lab.Check("state", "preferences keep compact window hidden", false, w.Compact.IsShown())
+        Lab.Check("state", "unverified progress remains disabled", false, w.Progress.auto)
+        K.ResetPage("workshop"); Lab.Settle(.2)
+        Lab.Check("state", "page defaults restore economic objective", "economic", w.Session.Objective())
+        Lab.Check("state", "page defaults restore compact Travel", "travel", w.Session.CompactMode())
+        Lab.Check("state", "page defaults leave login loading off", false, L.LoadOnLogin())
+    end)
+end
 Lab.Step("disclosures and navigation", function()
     local K, UI, W = R.SettingsKit, R.SettingsUI, R.SettingsWidgets
     local view = assert(UI.View(key))
@@ -196,7 +243,7 @@ Lab.Step("disclosures and navigation", function()
         end
         UI.Layout(view)
     elseif key == "skins" then
-        for _, name in ipairs({ "attuneSkin", "auctionatorSkin", "foreverDungeonJournalSkin", "whatsTrainingSkin" }) do
+        for _, name in ipairs({ "attuneSkin", "foreverDungeonJournalSkin", "whatsTrainingSkin" }) do
             local row = K.switchRows[name]
             if params.integration == "absent" then
                 Lab.Check("state", name .. " unavailable", false, row:Enabled())
@@ -573,11 +620,11 @@ if key == "statWeights" then
         if params.editor then group.onPick(choices[2].value); group:Click() end
     end)
 end
-if key == "speakstone" or key == "restedxp" then
+if key == "restedxp" then
     Lab.Step("integration preferences", function()
-        local skin = key == "speakstone" and R.SpeakStoneSkin or R.RestedXPSkin
+        local skin = R.RestedXPSkin
         local style = skin.Style or skin.Text
-        local property = key == "speakstone" and "textSize" or "lineSpacing"
+        local property = "lineSpacing"
         local before = style.Get(property)
         style.Set(property, before + 1)
         Lab.Check("state", "appearance preference saved", before + 1, style.Get(property))

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Judges one simulator smoke run (docs/simulator-lab.md). A clean exit proves nothing, so a pass needs all of these:
-the real window opened on the real page through R:OpenSettings, finished fading in, constructed rows, raised no Lua
+the real window opened on the real page through R:OpenSettings, finished fading in, constructed rows, raised no unclassified Lua
 error, lost none of TwichUI's own textures, shows real pixels where the window is, and every other page constructed too.
 
 What a pass is evidence of: initialization and page construction. It is not evidence that any control works (see
@@ -13,6 +13,8 @@ import struct
 import sys
 import zlib
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import known_failures as kf
 
 
 def read_rgba(path):
@@ -36,21 +38,30 @@ def read_rgba(path):
         kind = raw[offset]
         line = bytearray(raw[offset + 1:offset + 1 + stride])
         offset += stride + 1
-        for i in range(stride):
-            left = line[i - 4] if i >= 4 else 0
-            up = previous[i]
-            corner = previous[i - 4] if i >= 4 else 0
-            if kind == 1:
+        if kind == 1:
+            for i in range(4, stride):
+                left = line[i - 4]
                 line[i] = (line[i] + left) & 255
-            elif kind == 2:
+        elif kind == 2:
+            for i, up in enumerate(previous):
                 line[i] = (line[i] + up) & 255
-            elif kind == 3:
+        elif kind == 3:
+            for i in range(stride):
+                left = line[i - 4] if i >= 4 else 0
+                up = previous[i]
                 line[i] = (line[i] + (left + up) // 2) & 255
-            elif kind == 4:
+        elif kind == 4:
+            for i in range(stride):
+                left = line[i - 4] if i >= 4 else 0
+                up = previous[i]
+                corner = previous[i - 4] if i >= 4 else 0
                 estimate = left + up - corner
-                near = min((abs(estimate - left), 0, left), (abs(estimate - up), 1, up),
-                           (abs(estimate - corner), 2, corner))
-                line[i] = (line[i] + near[2]) & 255
+                a, b, c = abs(estimate - left), abs(estimate - up), abs(estimate - corner)
+                # PNG's Paeth tie order is left, then up, then upper-left.
+                near = left if a <= b and a <= c else up if b <= c else corner
+                line[i] = (line[i] + near) & 255
+        elif kind != 0:
+            raise ValueError(f"unexpected PNG filter: {kind}")
         rows.append(line)
         previous = line
     return width, height, rows
@@ -59,9 +70,49 @@ def read_rgba(path):
 def distinct_colours(rows, left, top, width, height):
     seen = set()
     for row in rows[top:top + height]:
-        for x in range(left, left + width):
-            seen.add(bytes(row[x * 4:x * 4 + 3]))
+        pixels = row[left * 4:(left + width) * 4]
+        seen.update(zip(pixels[0::4], pixels[1::4], pixels[2::4]))
     return len(seen)
+
+
+def classify_smoke(text):
+    """Disclose the group hello and evidenced native timer limitation; fail other origins."""
+    voice = 'voice-settings-unsupplied'
+    result = kf.classify(text, allow=('addon-message-invalid-utf8', voice))
+    begin, end = 'SIMLAB smoke-clock begin\n', 'SIMLAB smoke-clock end\n'
+    before, separator, rest = text.partition(begin)
+    window, closing, after = rest.partition(end)
+    probe = 'SIMLAB voice-capability native=true unavailable=true'
+    evidenced = (separator and closing and text.count(begin) == text.count(end) == 1
+                 and before.splitlines().count(probe) == 1)
+    # v0.1.37 drops the timer callback's Audio.lua frame. Only its observed native
+    # AdvanceTime traceback (plus Blizzard's duplicate error reporter) is accepted.
+    frame = re.compile(r"(?:stack traceback:|\(string\):\d+: in main chunk|"
+                       r"\[C\]: in function 'AdvanceTime'|\[C\]: \?|"
+                       r"=\(string\):\d+: in main chunk|=\[C\]:: in function 'AdvanceTime'|\?: \?|"
+                       r"\[Interface/AddOns/Blizzard_ScriptErrors/Blizzard_ScriptErrors\.lua\]:\d+: "
+                       r"in function (?:'GetErrorData'|<[^>]+>))")
+    native_seen = False
+    for section, in_window in ((before, False), (window, True), (after, False)):
+        for block in kf.blocks(section):
+            if not re.fullmatch(kf.RULES[voice]['message'], block['message']):
+                continue
+            stack = [line.strip() for line in block['stack']]
+            native_stack = (len(stack) >= 5 and stack[:3] == [
+                'stack traceback:', '(string):1: in main chunk', "[C]: in function 'AdvanceTime'"]
+                and re.fullmatch(r"\(string\):\d+: in main chunk", stack[3])
+                and stack[4] == '[C]: ?' and all(frame.fullmatch(line) for line in stack))
+            valid = evidenced and in_window and (native_seen if block['suppressed'] else native_stack)
+            if valid and not block['suppressed']:
+                native_seen = True
+            if not valid:
+                result['unknown'].append((block['tick'], 'voice error without native smoke-clock evidence'))
+    for block in kf.blocks(text):
+        if block['message'] == 'string at argument 2 is not valid UTF-8' and not block['suppressed']:
+            stack = '\n'.join(block['stack'])
+            if not all(part in stack for part in ('Group.lua', 'SayHello', 'Share.lua', 'SendControl')):
+                result['unknown'].append((block['tick'], 'UTF-8 error outside the group hello chain'))
+    return result
 
 
 def main():
@@ -87,8 +138,11 @@ def main():
     check("the page constructed rows", rows and int(rows.group(1)) > 0, says.get("view", "no view line"))
     check("the page title is in the frame tree", f'text="{title}"' in out)
 
-    errors = re.findall(r"^Lua error: .*$", err, re.M)
-    check("no Lua error", not errors, f"{len(errors)} found; first: {errors[0][:150]}" if errors else "")
+    classified = classify_smoke(err)
+    for name, passed, detail in kf.verdict_lines(classified):
+        check(name, passed, detail)
+    for line in kf.describe(classified):
+        print(line)
     missing = [m for m in re.findall(r"Not found: (.*)", err) if "twichui" in m.lower()]
     check("no TwichUI texture missing", not missing, ", ".join(missing[:4]))
 
@@ -112,7 +166,7 @@ def main():
 
     print("Evidence: initialization tested, page construction tested. NOT tested here: control interaction, state "
           "mutation, persistence, how anything looks, the real client.")
-    print("PASS (initialization and construction only)" if all(checks) else "FAIL")
+    print("PASS (initialization and construction only; classified simulator limits disclosed)" if all(checks) else "FAIL")
     return 0 if all(checks) else 1
 
 

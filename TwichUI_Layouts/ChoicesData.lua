@@ -182,14 +182,8 @@ LY.ADVENTURE_CHOICES = {
             skins = {
               modules = {
                 attuneSkin = true,
-                auctionatorSkin = true,
                 foreverDungeonJournalSkin = true,
                 whatsTrainingSkin = true,
-              },
-            },
-            speakstone = {
-              modules = {
-                speakstoneSkin = true,
               },
             },
             targetArt = {

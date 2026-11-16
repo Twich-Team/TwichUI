@@ -1,0 +1,144 @@
+{
+  "fixture_version": 1,
+  "origin": "synthetic",
+  "as_of": "2026-11-15T13:00:00Z",
+  "market": {
+    "region": "us",
+    "house_id": 114,
+    "transport_ruleset_id": 1,
+    "source_kind": "auctions",
+    "player_ruleset": "Normal"
+  },
+  "observations": [
+    {
+      "observed_at": "2026-11-13T12:00:00.123456Z",
+      "upstream_modified": "Fri, 13 Nov 2026 11:00:00 GMT",
+      "synthetic": true,
+      "scope_complete": true,
+      "payload": {
+        "auctions": [
+          {
+            "id": 1,
+            "item": {
+              "id": 2589
+            },
+            "quantity": 3,
+            "buyout": 300
+          },
+          {
+            "id": 2,
+            "item": {
+              "id": 2589
+            },
+            "quantity": 3,
+            "buyout": 300
+          },
+          {
+            "id": 3,
+            "item": {
+              "id": 2589
+            },
+            "quantity": 4,
+            "buyout": 400
+          },
+          {
+            "id": 10,
+            "item": {
+              "id": 2
+            },
+            "quantity": 3,
+            "buyout": 150
+          },
+          {
+            "id": 11,
+            "item": {
+              "id": 2
+            },
+            "quantity": 3,
+            "buyout": 150
+          },
+          {
+            "id": 12,
+            "item": {
+              "id": 2
+            },
+            "quantity": 4,
+            "buyout": 200
+          },
+          {
+            "id": 20,
+            "item": {
+              "id": 2589,
+              "bonus_lists": [
+                9
+              ]
+            },
+            "quantity": 1,
+            "buyout": 999
+          },
+          {
+            "id": 21,
+            "item": {
+              "id": 123
+            },
+            "quantity": 2,
+            "bid": 50
+          }
+        ]
+      }
+    },
+    {
+      "observed_at": "2026-11-15T12:00:00.123456Z",
+      "upstream_modified": "Sun, 15 Nov 2026 11:00:00 GMT",
+      "synthetic": true,
+      "scope_complete": true,
+      "payload": {
+        "auctions": [
+          {
+            "id": 1,
+            "item": {
+              "id": 2589
+            },
+            "quantity": 3,
+            "buyout": 360
+          },
+          {
+            "id": 2,
+            "item": {
+              "id": 2589
+            },
+            "quantity": 3,
+            "buyout": 360
+          },
+          {
+            "id": 3,
+            "item": {
+              "id": 2589
+            },
+            "quantity": 4,
+            "buyout": 480
+          },
+          {
+            "id": 20,
+            "item": {
+              "id": 2589,
+              "bonus_lists": [
+                9
+              ]
+            },
+            "quantity": 1,
+            "buyout": 999
+          },
+          {
+            "id": 21,
+            "item": {
+              "id": 123
+            },
+            "quantity": 2,
+            "bid": 50
+          }
+        ]
+      }
+    }
+  ]
+}

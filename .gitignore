@@ -14,4 +14,5 @@ tools/navbake/.deps/
 tools/navbake/build/
 __pycache__/
 
+# offline benchmark results (tests/bench_workshop.lua); machine-specific, never committed
 test-output/

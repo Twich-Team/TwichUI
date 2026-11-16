@@ -240,6 +240,8 @@ Define("npcMap", {
 -- Auction House
 Define("auctionPosting", { apply = Refresh("AuctionWindow") })
 Define("mailGoldSummary", { apply = Refresh("MailGold") })
+-- Workshop price updates on opening the Auction House: read at each opening (WorkshopAuto.lua), so nothing needs refreshing when it changes
+Define("workshopAutoScan")
 Define("restock", { apply = Refresh("Restock") })
 Define("magicInventory", { apply = Refresh("MagicInventory") })
 
@@ -266,11 +268,10 @@ Define("targetArt", { apply = Refresh("TargetArtDisplay") })
 Define("hazardAlerts", { apply = Refresh("HazardAlerts") })
 
 -- Addon skins: through EllesmereUI, after a reload
-for _, key in ipairs({ "attuneSkin", "auctionatorSkin", "foreverDungeonJournalSkin", "whatsTrainingSkin" }) do
+for _, key in ipairs({ "attuneSkin", "foreverDungeonJournalSkin", "whatsTrainingSkin" }) do
     Define(key, { reload = true })
 end
 Define("restedxpSkin", { when = function() return R.RestedXPSkin ~= nil end, apply = Refresh("RestedXPSkin", "OnSwitch") })
-Define("speakstoneSkin", { when = function() return R.SpeakStoneSkin ~= nil end, apply = Refresh("SpeakStoneSkin", "OnSwitch") })
 
 -- Configuration sharing (the sharing window shows these switches' state)
 local function RefreshWindow() if R.Window then R.Window:Refresh() end end

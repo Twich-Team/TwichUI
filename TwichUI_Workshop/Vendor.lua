@@ -175,26 +175,41 @@ function V.Sellers(wanted)
     return out
 end
 
--- Where to look for an item: the sellers of it (Sellers' answer for that item), the merchant the price was seen at first, then the nearest where
--- that can be said (straight lines, not walking), then by name. At most `limit` entries (default 3).
+-- Where to look for an item: the sellers of it (Sellers' answer for that item: merchants whose stock was seen to hold it, for the player's side,
+-- on a map the game shows), best first. Returns the places (at most `limit`, default 3) and how the first one was chosen:
+--   "nearest"  a straight-line distance was compared (same continent): it is the nearest KNOWN seller, not a walking route or a time
+--   "local"    no position could be compared, but it is on the map the player is on
+--   "unknown"  neither: nothing is claimed about how near it is (the merchant the price was seen at leads)
+-- The order (the NPC search's tiers, npcs/Search.lua):
+--   1  sellers whose distance can be told, nearest first (in whole yards: a recorded place is only good to a few yards)
+--   2  sellers on the player's map whose distance can't be told
+--   3  every other seller
+-- Within a tier and an equal distance: one the player dealt with before a reported one, then the merchant the price was seen at, then the one seen
+-- most recently, then by name and place, so the order never shuffles. The merchant where the price was noted is context, never a reason to send the
+-- player to another continent past a nearer seller (P2.1: in Undercity, an Undercity seller is shown, not the Orgrimmar one the price came from).
 function V.Places(list, npc, limit)
-    if type(list) ~= "table" or #list == 0 then return {} end
+    if type(list) ~= "table" or #list == 0 then return {}, nil end
     local NS, SR = R.NpcStore, R.NpcSearch
     local spot = SR and SR.Where and SR.Where() or nil
     local found = {}
     for _, e in ipairs(list) do
         local dist = spot and SR.Distance and SR.Distance(spot, e.m, e.x / NS.COORD, e.y / NS.COORD) or nil
-        found[#found + 1] = { e = e, priced = npc ~= nil and e.id == npc, dist = dist,
+        local tier = dist and 1 or ((spot and spot.map ~= nil and e.m == spot.map) and 2 or 3)
+        found[#found + 1] = { e = e, tier = tier, yards = dist and math.floor(dist + 0.5) or nil, own = e.own == true,
+            priced = npc ~= nil and e.id == npc, at = tonumber(e.at) or 0,
             name = tostring(e.n or ""):lower(), key = ("%d:%d:%d:%d"):format(e.id or 0, e.m, e.x, e.y) }
     end
     table.sort(found, function(a, b)
+        if a.tier ~= b.tier then return a.tier < b.tier end
+        if a.yards and b.yards and a.yards ~= b.yards then return a.yards < b.yards end
+        if a.own ~= b.own then return a.own end
         if a.priced ~= b.priced then return a.priced end
-        if (a.dist ~= nil) ~= (b.dist ~= nil) then return a.dist ~= nil end
-        if a.dist and a.dist ~= b.dist then return a.dist < b.dist end
+        if a.at ~= b.at then return a.at > b.at end
         if a.name ~= b.name then return a.name < b.name end
         return a.key < b.key
     end)
     local out = {}
     for i = 1, math.min(#found, limit or 3) do out[i] = found[i].e end
-    return out
+    local first = found[1]
+    return out, (first.tier == 1 and "nearest") or (first.tier == 2 and "local") or "unknown"
 end

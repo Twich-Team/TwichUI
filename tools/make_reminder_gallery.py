@@ -160,15 +160,38 @@ LEGACY = [
 ]
 
 
-def png_rgba(path, w, h, rows):
-    raw = b"".join(b"\x00" + bytes(r) for r in rows)
+def stored_zlib(raw):
+    """gallery-rgba-stored-v1: RFC 1950/1951 bytes, independent of compressors.
+
+    Fixed 65535-byte stored blocks trade source-file size for reproducibility.
+    zlib is used only for the standardized Adler32 checksum, never compression.
+    """
+    blocks = [b"\x78\x01"]
+    for start in range(0, len(raw) or 1, 65535):
+        block = raw[start:start + 65535]
+        final = start + len(block) == len(raw)
+        blocks.append(struct.pack("<BHH", int(final), len(block), len(block) ^ 0xffff))
+        blocks.append(block)
+    blocks.append(struct.pack(">I", zlib.adler32(raw) & 0xffffffff))
+    return b"".join(blocks)
+
+
+def png_rgba_bytes(w, h, rows):
+    rows = [bytes(row) for row in rows]
+    if w <= 0 or h <= 0 or len(rows) != h or any(len(row) != w * 4 for row in rows):
+        raise ValueError("RGBA rows must match positive image dimensions")
+    raw = b"".join(b"\x00" + row for row in rows)
 
     def chunk(kind, data):
         return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xffffffff)
 
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0))
+            + chunk(b"IDAT", stored_zlib(raw)) + chunk(b"IEND", b""))
+
+
+def png_rgba(path, w, h, rows):
     with open(path, "wb") as f:
-        f.write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0))
-                + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
+        f.write(png_rgba_bytes(w, h, rows))
 
 
 def png_rgb(path, w, h, rows):

@@ -1,0 +1,24 @@
+{
+  "repository": "Twich-Team/TwichUI-Market",
+  "ref": "feature/workshop-bridge-m1",
+  "commit": "1f76f8468722f07430acb3a10d26d6ad2d20e9cd",
+  "pull_request": "https://github.com/Twich-Team/TwichUI-Market/pull/8",
+  "directory": "contracts/bridge/v1",
+  "files": [
+    "generation.schema.json",
+    "canonical-generation.json",
+    "provisional-generation.json",
+    "SHA256SUMS.json",
+    "generation-schema2.schema.json",
+    "source-canonical-generation.json",
+    "source-provisional-generation.json",
+    "SCHEMA2-SHA256SUMS.json",
+    "AMENDMENT-001.md",
+    "fractional-close-generation.json",
+    "partial-unknown-generation.json",
+    "e2e-observations.json",
+    "e2e-expected.json",
+    "E2E-SHA256SUMS.json"
+  ],
+  "verification": "All listed files are exact authoritative bytes. Original schema-1, amended schema-2 and independent end-to-end inputs/expectations have separate hash manifests. Python, Rust and actual Workshop Lua validate generations."
+}

@@ -2,7 +2,8 @@
 -- The shell in the settings window's crafted look (docs/settings-design-system.md, drawn through the core's CraftLook.lua, so the settings
 -- addon is never loaded for it): a leather header with the TwichUI Workshop brand and the close box, a page list on the left, the page in a
 -- recessed well, and a footer with the price status chip and the last action's message. The pages are the views (ViewOverview,
--- ViewOpportunities, ViewCrafting, ViewShopping.lua): each builds once into its own frame and draws what Session.lua says. Opened with
+-- ViewOpportunities, ViewCrafting, ViewShopping.lua): each builds once into its own frame and draws what Session.lua says. "Compact view" in the
+-- header swaps the window for the small companion (Compact.lua), which listens to the bags itself while it is shown. Opened with
 -- /tui workshop, the TwichUI menu or the settings page; it never opens by itself. It opens on Overview the first time; the page shown is
 -- kept only while the game runs. No position, size or page is saved.
 --
@@ -20,14 +21,14 @@ local Win = {}
 W.Window = Win
 
 local NAME = "TwichUIWorkshop"
-local WIDTH, HEIGHT = 1080, 700
+local WIDTH, HEIGHT = 1200, 700   -- (P2: 1080 wide until the strategy block; the Opportunities details and its list both need the room)
 local HEADER_H, FOOTER_H, NAV_W, PAD = 54, 38, 184, 14
 local NAV_ROW, NAV_ICON = 42, 28
 local PAGE_TOP, PAGE_BOTTOM = HEADER_H + 12, FOOTER_H + 13
 local SETTLE = 0.2
 -- The page list: the views registered themselves (UI.Register) in this order. Later destinations (Item Advisor, Market, Ledger) join as a
 -- second group under the divider without changing the shell.
-local NAV_GROUPS = { { "overview", "opps", "craft", "shop" } }
+local NAV_GROUPS = { { "overview", "opps", "craft", "shop", "advisor" } }
 
 local L, K
 local f               -- the window
@@ -39,6 +40,7 @@ local token = 0       -- changes whenever a pending redraw should be forgotten
 local scheduled = false
 local dirtyRead = false
 local dirtyMerchant = false
+local dirtyBags = false     -- a settled bag change since the last redraw (Notice.lua looks at what became ready)
 local renders, flushes = 0, 0
 
 local EVENTS = {
@@ -73,6 +75,7 @@ function Win.Render()
     local def = UI.pages[mode]
     if def and def.Render then def.Render(pages[mode]) end
     PaintStatus()
+    if UI.StrategyView then UI.StrategyView.Refresh() end   -- the strategy view and its confirmation draw what the plans now say
     f.note:SetText(S.Note() or (Q.Held() and "This queue was saved by a newer TwichUI and is read-only." or ""))
     if pt then Perf.Stop(pt) end
 end
@@ -129,6 +132,10 @@ local function Flush()
     if dirtyMerchant then
         dirtyMerchant = false
         R.Perf.Call("workshop.read", S.ReadMerchant)
+    end
+    if dirtyBags then
+        dirtyBags = false
+        if W.Notice then W.Notice.BagsChanged() end
     end
     Win.Render()
 end
@@ -197,6 +204,12 @@ local function BuildShell()
     CL.Font(f.close.text, 16, true)
     f.close:SetPoint("RIGHT", header, "RIGHT", -10, 0)
     UI.Tip(f.close, "Close", "Closes the Workshop. Your queue is saved; nothing else changes.")
+    -- the compact companion (Compact.lua): a small panel to keep up while travelling or crafting; it takes the window's place
+    f.compact = UI.ArtButton(header, "Compact view", "npc:leather-backpack", 140, "secondary", function()
+        if W.Compact then W.Compact.Show(mode == "craft" and "craft" or "travel") end
+    end, 28)
+    f.compact:SetPoint("RIGHT", f.close, "LEFT", -10, 0)
+    UI.Tip(f.compact, "Compact view", "A small panel to keep open while you travel and craft.")
 
     -- the page list
     local nav = CreateFrame("Frame", nil, f, "BackdropTemplate")
@@ -291,6 +304,7 @@ local function BuildNav()
         end
     end
     -- the names the tests and the simulator scenario use
+    f.tabAdvisor = navItems.advisor
     f.tabOverview, f.tabOpps, f.tabCraft, f.tabShop = navItems.overview, navItems.opps, navItems.craft, navItems.shop
 end
 
@@ -335,12 +349,14 @@ local function Build()
     if f.SetDontSavePosition then f:SetDontSavePosition(true) end
     f:SetScript("OnDragStart", function(self) self:StartMoving() end)
     f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
-    f:SetScript("OnEvent", function(_, event)
+    f:SetScript("OnEvent", function(_, event, a, b)
         local kind = EVENTS[event]
         if kind == "modifier" then
             local row = UI.hoverRow
             if row and row:IsShown() then row:ShowTip() end   -- Shift pressed or released while over a row: the other tooltip
         elseif kind then
+            if event=="GET_ITEM_INFO_RECEIVED" and mode=="advisor" and UI.Advisor then UI.Advisor.ItemReady(a,b) end
+            if event == "BAG_UPDATE_DELAYED" then W.Strategy.Bump(); dirtyBags = true end   -- what is owned changed: plans are worked out again
             Schedule(kind)
         end
     end)
@@ -353,6 +369,7 @@ local function Build()
         R.Perf.Call("workshop.read", S.ReadMerchant)   -- a merchant window already open is read too (nothing happens when none is)
         Win.Render()
         Prepare()
+        if W.Notice and not W.Notice.Stats().armed then W.Notice.Arm() end   -- what is ready now is remembered, never announced
     end)
     f:HookScript("OnHide", function(self)
         token = token + 1
@@ -361,16 +378,28 @@ local function Build()
         self:UnregisterAllEvents()
         UI.hoverRow = nil
         for _, def in ipairs(UI.order) do if def.Reset then def.Reset() end end
-        S.Reset()
-        Q.Unload()
+        if not (W.Compact and W.Compact.IsShown()) then   -- the compact view, if it took the window's place, keeps the session
+            if W.Notice then W.Notice.Disarm() end
+            S.Reset()
+            Q.Unload()
+        end
     end)
     BuildShell()
     BuildPages()
     BuildNav()
     for key, page in pairs(pages) do page:SetShown(key == mode) end
     PaintNav()
+    local function Compact() if W.Compact and W.Compact.IsShown() then W.Compact.Schedule() end end   -- the compact view draws the same plans
+    W.Strategy.onChange = function()   -- a plan was finished (or dropped by a change)
+        if f and f:IsShown() then Schedule("draw") end
+        Compact()
+    end
     SC.OnChange = function() if f and f:IsShown() then Schedule("draw") end end
-    St.OnChange = function() if f and f:IsShown() then Schedule("draw") end end   -- the bank or guild bank was seen, or the choice changed
+    St.OnChange = function()   -- the bank or guild bank was seen, or the choice changed: what can be planned with changed, so plans are worked out again
+        W.Strategy.Bump()
+        if f and f:IsShown() then Schedule("draw") end
+        Compact()
+    end
     if UISpecialFrames then tinsert(UISpecialFrames, NAME) end   -- Esc closes it (never the game menu's handler list)
     return f
 end
@@ -379,6 +408,9 @@ end
 -- Opening
 ---------------------------------------------------------------------------
 function Win.Show()
+    -- Normal Workshop use resumes its existing native scan-button integration
+    -- after an earlier preview-only service load.
+    if W.AuctionButton then W.AuctionButton.Start() end
     if not f then Build() end
     f:Show()
 end
@@ -411,10 +443,19 @@ function W.Snapshot()
     s.bankEvents = W.Bank and W.Bank.Events() or 0
     s.bankReads = W.Bank and (W.Bank.reads + W.Bank.guildReads) or 0
     s.storedItems = s.stored and (s.stored.bankItems + s.stored.guildItems) or 0
+    local adv=UI.Advisor and UI.Advisor.Stats()
+    s.advisorItems,s.advisorResults=adv and adv.items or 0,adv and adv.results or 0
     s.rows = rows
     s.mode = mode
     s.renders = renders
     s.flushes = flushes
+    -- P2.1: the compact view, progress and notices (counts only)
+    local cs = W.Compact and W.Compact.Stats() or nil
+    s.compactShown, s.compactRenders, s.compactEvents = cs and cs.shown or false, cs and cs.renders or 0, cs and cs.events or 0
+    local ps = W.Progress and W.Progress.Stats() or nil
+    s.progressCredited, s.progressAuto = ps and ps.credited or 0, ps and ps.auto or false
+    local ns = W.Notice and W.Notice.Stats() or nil
+    s.noticesShown, s.noticesRefused = ns and ns.submitted or 0, ns and ns.refused or 0
     return s
 end
 

@@ -21,6 +21,17 @@ Needs `bwrap`, `rsync`, `git`, `curl`, `dpkg-deb`, Mesa's Vulkan drivers (`mesa-
 Gethe's `wow-ui-source` beside the repository (`SIMLAB_UI_SOURCE` moves it). Nothing is installed system-wide. The binary
 wants Ubuntu 24.04's ICU 74 and ALSA, so `setup.sh` unpacks those two packages into the lab, checked by hash.
 
+## Tiered verification and a read-only installation
+
+See [development verification](testing.md) for fast feature checks, feature
+checkpoints and `./tests/run.sh full` milestone regression. Prefer
+`bash tools/simlab/run.sh <scenario>` for the scripts below: it consumes this
+installation read-only, keeps mutable state in the repository's ignored
+`test-output/simlab/`, serializes runs, and stages addons once per invocation.
+Historical direct scripts still write to `WOWSIM_LAB`. Selected Workshop/Test
+Lab runs now get a focused verdict for exactly their selected poses; the default
+full runs keep every replay, screenshot assertion and negative control.
+
 ## Use it
 
 ```sh
@@ -29,6 +40,7 @@ tools/simlab/smoke.sh            # copies the working tree in, opens a page, con
 tools/simlab/interact.sh         # drives one real settings page through its controls, from a clean profile (below)
 tools/simlab/diagnose.sh         # the clock over a 12 s window: baseline, solo, grouped, and the addon-message contract (below)
 tools/simlab/workshop.sh         # the real Workshop window through Crafting, Opportunities and Shopping over fake game data (below)
+tools/simlab/testlab.sh          # the Test Lab window (TwichUI_TestLab) in nine states over synthetic recorded results (docs/testlab.md "The window")
 bash tools/simlab/settings.sh    # capture the actual current settings catalog; handler checks and human screenshot review (below)
 bash tools/simlab/tests/lab_guard.sh   # the lab-path safety check's rejection paths, in disposable folders (below)
 ```
@@ -53,6 +65,7 @@ build and show their rows, nothing more.
 | `tools/simlab/interact.sh` | After touching `NotifyLook`, the settings Kit or the controls it uses: handler-level behaviour and in-memory state (about 23 s) |
 | `tools/simlab/diagnose.sh` | Only for group/share/timer work: the clock window and message contract (about 15 s) |
 | `tools/simlab/workshop.sh` | After touching the Workshop window, session, planner, prices or scan: values and controls of its three views and the tooltip designer (about 30 s) |
+| `tools/simlab/testlab.sh` | After touching the Test Lab window (`Window.lua`, `Kit.lua`, `View.lua`): nine launches with a screenshot each, the emulated hit test over its controls and a text-fit check (about 1 minute); it loads the Lab with `LoadAddOn` and gives it synthetic results, no case runs |
 | `tests/run.sh` | The project's offline suite; still the main check, and the only one for most logic |
 | `bash tools/simlab/tests/lab_guard.sh` | After touching `lib.sh`, `setup.sh` or `sim.sh` |
 
@@ -234,7 +247,15 @@ scenarios, exact run IDs, discrepancies and native-client gaps. The older 49-pag
 `tools/simlab/workshop.sh` (a few minutes): thirteen launches from fresh empty installs (the Overview with four professions, Crafting, Opportunities and Shopping pages, the settings window's "What's it worth?" tooltip designer, Opportunities and the Overview on a 1000x700 screen, the Overview's empty states, the price-history chart, a long crafting queue and two Shopping poses (Collect with Buy and Make rows, and only Collect rows), each ending in its own screenshot, and a negative control with one wrong expectation). The designer step drives the real designer controls with `Button:Click()` and calls the drag handlers with a faked pointer position: handler level, not pointer-driven drag-and-drop. It stages `TwichUI_Workshop` with `SIMLAB_EXTRA=TwichUI_Workshop`
 (an opt-in list of `TwichUI_*` folders for `simlab_stage`; unset for every other command), opens the window with `/tui workshop`, and drives it at handler level over deterministic fake game data. What is fake, what each check is evidence of, the checks, the
 screenshots and what is not covered are in **docs/workshop.md "Simulator coverage"**; the scenario file's header lists the fakes. Notes that belong to the lab:
-- **Third-pass checks** (one step, run in every launch): an EMULATED hit test (from `GetRect`, strata, levels and `IsMouseEnabled`, over the Workshop's frames only: it says whether another mouse-enabled frame is stacked over a button's centre, never how the real client orders frames of equal level), the hover art's state after the row's own OnEnter (alpha, shown, parent visible), measured text fit (`GetStringWidth` against the control's rectangle, in Friz Quadrata), the queue pictures' tooltip bindings (a recorder over `GameTooltip.SetItemByID`), the profession card, the footer chip and Shopping's suggestion tags. `SIMLAB step-time` lines in the log say how many simulated seconds each step used (the budget is 30 s; where it goes is in those lines: the scan, the remembered-recipe and guild-bank steps wait on the product's own timers). `SIMLAB_ONLY="opps craft" bash tools/simlab/workshop.sh` runs only those launches for a quick look; its verdict is incomplete by design.
+- **Third-pass checks** (one step, run in every launch): an EMULATED hit test (`TwichUI_TestLab/Reach.lua`, see the next item: over every frame the simulator has, it says whether another mouse-enabled frame is stacked over a button's hit point and names it, never how the real client orders frames of equal level), the hover art's state after the row's own OnEnter (alpha, shown, parent visible), measured text fit (`GetStringWidth` against the control's rectangle, in Friz Quadrata), the queue pictures' tooltip bindings (a recorder over `GameTooltip.SetItemByID`), the profession card, the footer chip and Shopping's suggestion tags. `SIMLAB step-time` lines in the log say how many simulated seconds each step used (the budget is 30 s; where it goes is in those lines: the scan, the remembered-recipe and guild-bank steps wait on the product's own timers). `SIMLAB_ONLY="opps craft" bash tools/simlab/workshop.sh` runs only those launches for a quick look; its verdict is incomplete by design.
+- **Reachability step** (milestone 5 of `docs/workshop/testing-roadmap.md`, one step, run in every launch; about 0.4 simulated seconds). `workshop.sh` concatenates `TwichUI_TestLab/Reach.lua` (inside `do ... end`) into each fixture; the Lab addon itself is never loaded. The analysis reads every frame (`EnumerateFrames`, about 68,000 in the simulator; the limit is raised for it) and works out, from rectangles times effective scale, `SetHitRectInsets`, strata, frame level, visibility, mouse flags (including `IsMouseClickEnabled`/`IsMouseMotionEnabled`), scroll clipping and parents, which frame would take the pointer at a point. **It is an emulation: the simulator has no pointer.** Its own `GetMouseFoci` returns only what the scenario forces with `A_Admin.SetMouseOverFrame` (a check records this: with the pointer at 5,5 it names nothing), and it stores a scroll frame's offset without moving the rows' rectangles (also a check; a scrolled list is modelled by anchoring the child). What the step checks:
+  - **negative control** (planted by the scenario with `CreateFrame`, never by Workshop code): the Add button reads **reachable**, then **blocked** by the mouse-enabled `SimlabPlantedOverlay` (with the report naming the control, hierarchy, expected hit point, blocking frame, effective hit rectangle and evidence), then **reachable** after it is hidden; a decorative frame with the mouse off does not block it; the blocked button stays *eligible* and `Button:Click()` still runs its handler, which is the point (a handler test cannot see the obstruction). The same three states for a hoverable Opportunities row;
+  - the row's picture is reachable, and at the picture's centre the row is *not* the frame under the pointer (its child is), so the row must follow it (`row.hovered` is true after the picture's `OnEnter`, false after `OnLeave`); a chosen row is as hoverable as any;
+  - a queued recipe's Add button is disabled: ineligible, yet still the topmost frame there;
+  - `UI.Switch`'s negative `SetHitRectInsets` reaches over its label (a point on the label is the switch's; one beyond is `outside`);
+  - a scenario-owned scroll frame: rows clipped (c) and reachable (r) as `rrcccccc`, then (child anchored 100 higher) `ccrrcccc`, and a hidden scroll frame makes every row ineligible; the Opportunities pool: the rows that take the pointer are exactly the shown ones, and each shown row is reachable or scrolled out;
+  - the game tooltip shown over the button does not take the pointer (its mouse flag is reported: `false` in the simulator).
+  `workshop_verdict.py` requires the step to run and the negative-control checks to be present, in the order reachable, blocked, reachable, and all to pass; a missing control is a failure.
 - The simulator cannot run Blizzard's world map (opening it raises many Blizzard Lua errors: `IsFilteredOut`, `GetBountiesForMapID`, `GetGameRuleAsFrameStrata`... are missing), so the Show vendor step replaces `ToggleWorldMap` and `NpcMap.Locate` with recorders.
 - A merchant window noted by the real NPC collection makes it share the find; the simulator refuses that addon message (the known string rule, `npcs/Share.lua`). `workshop_verdict.py` permits that one error only from that file.
 - `GetMoneyString` coins are inline textures the simulator does not draw; the scenario turns them into `1s 50c` text to compare, and screenshots show bare numbers.
@@ -284,6 +305,39 @@ message and an unavailable action can be looked at. Nothing is executed. Use a 1
 strip (shorter screens put it beside the window). The lab's screenshots draw dark colors much lighter than the game does, so judge shape,
 order and spacing from them, not color.
 
+## Diagnostics: party membership and guild membership are independent
+
+`bash tools/simlab/run.sh diagnose` runs six independent processes. The original
+`solo` diagnostic expected no messages after leaving the sample party, but the
+simulator also supplies a guild. With Guild Locations sharing enabled by default,
+the real addon legitimately sends a `TwichUIGuild` position packet on `GUILD`
+(observed at simulated 7.5 s). This was an outdated fixture assumption, not a
+production regression or a party hello leaking after departure.
+
+- `solo` now models **no party and no guild**. Only the synthetic membership
+  reads (`IsInGuild`, `GetGuildInfo`) change; the lab fires
+  `PLAYER_GUILD_UPDATE("player")` through the real addon handler. It asserts
+  sharing stays enabled, its existing position session ends, and **zero messages
+  of any prefix/channel** are attempted. The observer starts before departure.
+- `guildsolo` preserves the default guild and sharing choice while leaving the
+  party. It runs at least 21 simulated seconds to cover the complete 5..20 s
+  first-send jitter. It requires exactly one message in this stationary fixture,
+  validates the real position parser, first sequence number, the player's own
+  map/coordinates, `TwichUIGuild`/`GUILD`, no target, valid UTF-8 and transport
+  acceptance. Every observed send is checked; other/extra traffic fails.
+- Contract, no-addon baseline, grouped and synthetic-login cases retain their
+  assertions and error-classifier rules. Every message is logged even in a
+  failed solo run. No feature is turned off and no transport call is filtered.
+
+Use `./tests/run.sh fast core` and `./tests/run.sh feature core` for these
+fixtures and their shared dependencies. `test_simlab_diagnostics.lua` executes
+the actual fixture/observer in an isolated synthetic world, including controls
+that must fail for disabled sharing, a stale session, unexpected unguilded
+traffic, a missing/extra guild packet, another prefix/channel/target, malformed
+or foreign-position data, and transport refusal. It complements the real-addon
+simulator launches and `test_guild_locations.lua`; it does not prove real
+network delivery, real guild membership changes or client timing.
+
 ## Delayed failures
 
 Two errors appear once the simulated clock passes a few seconds. Neither is hidden: the log keeps both, and
@@ -294,7 +348,7 @@ error the run does not permit fails it, and a classified error a run requires bu
 settings scenario's permit set to the real grouped log to show that going solo there hides nothing (the hello is rejected).
 
 ```sh
-tools/simlab/diagnose.sh                  # five launches, about 20 s: contract, baseline, solo, grouped, login (SIMLAB_WINDOW=12)
+tools/simlab/diagnose.sh                  # six launches: contract, baseline, solo, guildsolo, grouped, login (SIMLAB_WINDOW=12)
 tools/simlab/interact.sh                  # the settings scenario, solo, over the same window
 tools/simlab/sim.sh --no-saved-vars --no-addons --exec-lua '@<fixture>' dump-tree --visible-only   # a single launch, by hand
 ```

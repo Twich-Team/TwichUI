@@ -29,6 +29,7 @@
 local R = TwichUI
 local Check = Lab.Check
 local params = rawget(_G, "SIMLAB_PARAMS") or {}
+Lab.BUDGET = 45 -- includes the native menu picks and large-list/page-return regression   -- Scan quiet periods and settings scroll/geometry probes; delayed simulator failures remain classified.
 local Say = Lab.Say
 
 A_Admin.SetManualClock(GetTime())
@@ -171,11 +172,28 @@ local function Rows(list)
 end
 local function Names(list, field)   -- the shown rows' name texts, in order
     local out = {}
+    -- (P2) a pooled list draws only the rows that fit, and the Crafting page's materials list now fits fewer: for a list of items the names of every
+    -- row the list was given are read (the first of them are the drawn ones), so a check on the order of the list does not depend on the window's height
+    local d = list.data
+    if not field and d and d[1] and d[1].item and ITEMS[d[1].item] then
+        for _, x in ipairs(d) do out[#out + 1] = ITEMS[x.item] or ("Item " .. tostring(x.item)) end
+        return table.concat(out, " | ")
+    end
     for _, row in ipairs(Rows(list)) do out[#out + 1] = Txt(row[field or "name"]) end
     return table.concat(out, " | ")
 end
 local function Row(list, name)
     for _, row in ipairs(Rows(list)) do if Txt(row.name) == name then return row end end
+    -- (P2) a list shows only the rows that fit (the Crafting Strategy strip leaves the materials list room for fewer): scroll to the one asked for,
+    -- as a player would, and look again
+    for i, d in ipairs(list.data or {}) do
+        local item = d.item
+        if item and ITEMS[item] == name then
+            list.scroll:SetVerticalScroll(math.max(0, (i - 1) * list.rowH))
+            list:Layout()
+            for _, row in ipairs(Rows(list)) do if Txt(row.name) == name then return row end end
+        end
+    end
     error(("no shown row named %q (shown: %s)"):format(name, Names(list)))
 end
 local function FindButton(root, text, depth)
@@ -191,6 +209,15 @@ local function Click(btn, what)
     if not btn then error("missing control: " .. tostring(what)) end
     if btn.IsEnabled and not btn:IsEnabled() then error("control is disabled: " .. tostring(what)) end
     btn:Click()
+end
+-- (P2.1) Opportunities' Add opens the optimized confirmation; accept it (Add to plan), or the deliberate "Add recipe only" when no optimized plan
+-- can be made for the recipe. Returns which one was pressed.
+local function AcceptAdd(label)
+    local _, cdw = R.Workshop.StrategyView.Frames()
+    Check("display", "Add opened the confirmation, and nothing is queued by asking (" .. label .. ")", true, cdw ~= nil and cdw:IsShown())
+    if cdw.ok:IsEnabled() then Click(cdw.ok, "Add to plan (" .. label .. ")") return "ok" end
+    Click(cdw.plain, "Add recipe only (" .. label .. ")")
+    return "plain"
 end
 local function QueueAct(row, which, what)   -- Open recipe and Remove sit in the chosen craft's details: choose the row, then the action
     Click(row, "choose the queued craft for: " .. tostring(what))
@@ -462,6 +489,60 @@ Lab.Step("opportunities: scan against the fake auction house", function()
     Check("state", "Bronze Bar cheapest 400c (800/2), 2 at that price, 2 listings, 5 items", "400/2/2/5", P(2841))
     Check("state", "Coarse Thread has no price", "none", P(2320))
     Check("state", "an item no recipe uses is priced too: 3 for 999 is 333c each", "333/3/1/3", P(55555))
+    -- A3: the price distribution kept beside the minimum entries. Hand arithmetic: Peacebloom is 20 at 5c and 10 at 7c (30 items, the 25% mark
+    -- is passed inside the first price, so Recent Price 5c); Bronze Bar 2 at 400c and 3 at 500c (the cheapest 30% of 5 items is 1.5 items, all at
+    -- 400c); the two Frostweave-like single listings of item 118 are 150c and 180c. Every other item has one price: no entry.
+    local mk = TwichUIWorkshopDB.markets["SimulatedRealm|unknown"]
+    local ids = {}
+    for id in pairs(mk.dist or {}) do ids[#ids + 1] = id end
+    table.sort(ids)
+    Check("state", "the scan kept a checked distribution (algorithm 1) for the three items with two prices, and for no other", "1/118,2447,2841", tostring(mk.snap.alg) .. "/" .. table.concat(ids, ","))
+    Check("state", "Peacebloom distribution", "1,5,5,5,5,7,7,20|5:20:1;7:10:1", tostring(mk.dist[2447]))
+    Check("state", "Bronze Bar distribution", "1,400,400,400,500,500,500,2|400:2:1;500:3:1", tostring(mk.dist[2841]))
+    Check("state", "item 118 distribution", "1,150,150,150,150,180,180,1|150:1:1;180:1:1", tostring(mk.dist[118]))
+    Check("state", "the scan reports the algorithm of the distribution it kept", "1", tostring(R.Workshop.Scan.result.alg))
+    -- A4: the version-2 history recorded from the same scan (the A3 observation of each listed item): one ring point and one daily point.
+    -- Peacebloom: minimum 5c, Recent Price 5c (dr 0), 30 items in 2 listings; the 3-for-999 item has one price, so Recent Price = minimum.
+    local h2 = mk.h2 or {}
+    local function Shape(id) return ((h2[id] or ""):gsub("^%d+,", "M,"):gsub("|%d+:%d+,", "|D:D,")) end
+    Check("state", "A4: Peacebloom's history: one observation and one day, Recent Price = minimum here", "M,0,5,0,30,2|D:D,5,0,30,2", Shape(2447))
+    Check("state", "A4: a one-price item records r = p (dr 0), never an empty Recent Price", "M,0,333,0,3,1|D:D,333,0,3,1", Shape(55555))
+    Check("state", "A4: no history for an item with no buyout listing", "nil", tostring(h2[2320]))
+    local n2 = 0
+    for _ in pairs(h2) do n2 = n2 + 1 end
+    Check("state", "A4: one history entry per priced item, and the history's own record", "13/13/1", ("%d/%s/%s"):format(n2, tostring(mk.h2info and mk.h2info.items), tostring(mk.h2info and mk.h2info.v)))
+    Check("state", "A4: the scan log says this scan was recorded (flags 1 + 2 + 64)", "67", (mk.scans[#mk.scans] or ""):match("^%d+,%d+,(%d+),") or "none")
+    local hs = R.Workshop.Market.History(2447, "recent", { market = "SimulatedRealm|unknown" })
+    local kinds = {}
+    for _, pnt in ipairs(hs and hs.points or {}) do kinds[#kinds + 1] = pnt.kind .. ":" .. tostring(pnt.v) end
+    Check("state", "A4: Market.History gives a day point and an observation, nothing invented", "day:5,obs:5", table.concat(kinds, ","))
+    -- A5: the valuation services over the same saved scan, read-only. Hand arithmetic: Bronze Bar is one stack of 2 at 400c and one of 3 at 500c,
+    -- so buying 3 is 2 x 400 + 1 x 500 = 1300c, or 2300c if the whole 3-stack must be bought (a range); its Recent Price is 400c and the cheapest
+    -- price at or above half the anchor (400c) is 400c itself, with 2 items at or below it. Peacebloom has 2 listings (thin: limited quality)
+    -- and one recorded day (Market Value 5c from one day; Historical Value needs 3 days).
+    local function Sig()
+        local parts = {}
+        for _, tb in ipairs({ mk.items, mk.dist or {}, mk.h2 or {}, mk.c2 or {} }) do
+            local keys = {}
+            for k in pairs(tb) do keys[#keys + 1] = k end
+            table.sort(keys)
+            for _, k in ipairs(keys) do parts[#parts + 1] = k .. "=" .. tostring(tb[k]) end
+        end
+        return table.concat(parts, ";") .. "|" .. tostring(mk.snap.seq) .. "|" .. tostring(TwichUIWorkshopDB.v)
+    end
+    local before = Sig()
+    local MKt, opt = R.Workshop.Market, { market = "SimulatedRealm|unknown" }
+    local function V(id, kind) local v, why = MKt.Value(id, kind, opt) return v and tostring(v.value) or ("nil:" .. tostring(why)) end
+    Check("state", "A5: Minimum Buyout, Recent Price, Market Value, Historical Value of Peacebloom", "5/5/5/nil:insufficient", V(2447, "min") .. "/" .. V(2447, "recent") .. "/" .. V(2447, "market") .. "/" .. V(2447, "historical"))
+    Check("state", "A5: Bronze Bar's Recent Price", "400", V(2841, "recent"))
+    local cost = MKt.Cost(2841, 3, opt)
+    Check("state", "A5: buying 3 Bronze Bars: a range, whole stacks", "range/1300/2300", ("%s/%s/%s"):format(cost.state, tostring(cost.low), tostring(cost.high)))
+    local comp = MKt.Competition(2841, 1, opt)
+    Check("state", "A5: Bronze Bar competition: the competing price and the items at or below it", "400/2/competition", ("%s/%s/%s"):format(tostring(comp and comp.competing), tostring(comp and comp.ahead), tostring(comp and comp.role)))
+    local q = MKt.Quality(2447, opt)
+    Check("state", "A5: Peacebloom's Data Quality (2 listings, one observed day): limited, policy 1", "limited/1/Only 2 listings.", ("%s/%s/%s"):format(q.level, tostring(q.policy), tostring(q.reasons[1] and q.reasons[1].text)))
+    Check("state", "A5: posture needs more evidence", "unknown", MKt.Posture(2447, opt).posture)
+    Check("state", "A5: nothing above changed the saved prices", "same", Sig() == before and "same" or "changed")
 end)
 
 Lab.Step("opportunities: rows, ordering, filtering, unknowns", function()
@@ -593,19 +674,23 @@ local function WorthWorld()
         if not w then return oldInfo(x) end
         return ITEMS[id], "link", w[2], 10, 1, "", "", 20, "", ICON, w[1], w[3], 0, w[4]
     end
-    local lines, shift = {}, false
-    tt.AddLine = function(_, text) if text ~= " " then lines[#lines + 1] = text end end
-    tt.AddDoubleLine = function(_, a, b) lines[#lines + 1] = a .. " | " .. b end
+    local lines, mlines, shift = {}, {}, false
+    -- the A7 market lines (Market value, Recent price, Historical value, Supply, Market data) are collected apart: the checks of the older lines
+    -- compare the Vendor / Auction / recommendation lines exactly as before, and the market lines have checks of their own (HoverMarket)
+    local function IsMarket(text) return text:find("^Market value") or text:find("^Recent price") or text:find("^Historical value") or text:find("^Supply") or text:find("^Market data") end
+    tt.AddLine = function(_, text) if text ~= " " then if IsMarket(text) then mlines[#mlines + 1] = text else lines[#lines + 1] = text end end end
+    tt.AddDoubleLine = function(_, a, b) if IsMarket(a) then mlines[#mlines + 1] = a .. " | " .. b else lines[#lines + 1] = a .. " | " .. b end end
     IsShiftKeyDown = function() return shift end
     local function Hover(id, data)
-        lines = {}
+        lines, mlines = {}, {}
         WT.OnItem(tt, data or { guid = "Item-" .. id .. "-0", id = id })
         return Norm(table.concat(lines, " / "))
     end
+    local function HoverMarket(id) Hover(id) return Norm(table.concat(mlines, " / ")) end
 
     return {
         WT = WT, tt = tt, ah = ah,
-        Hover = Hover,
+        Hover = Hover, HoverMarket = HoverMarket,
         SetShift = function(on) shift = on end,
         Restore = function()
             tt.AddLine, tt.AddDoubleLine, IsShiftKeyDown, C_Item.GetItemInfo = oldLine, oldDouble, oldShift, oldInfo
@@ -626,38 +711,38 @@ Lab.Step("what's it worth: item tooltip lines", function()
     Say("TooltipDataProcessor in the simulator: " .. tostring(rawget(_G, "TooltipDataProcessor") ~= nil) .. "; registered by the product: " .. tostring(WT.registered))
     local requestsBefore = ah.requested
     Check("direct", "no cut confirmed, the auction is dearer: the fee is named and no winner is claimed",
-        "What's it worth? / No suggestion: auction fee unknown / Vendor | 60c / Auction (before fees) | 1s 50c / Hold Shift for details", Hover(118))
-    Check("direct", "the vendor wins even before fees (the cut can only lower the auction)",
-        "What's it worth? / Suggested: Vendor / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details", Hover(2841))
+        "What's it worth? / Workshop: Not enough data / Vendor | 60c / Auction (before fees) | 1s 50c / Hold Shift for details", Hover(118))
+    Check("direct", "active plan demand overrides a tempting vendor comparison",
+        "What's it worth? / Workshop: Keep for crafting / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details", Hover(2841))
     Check("direct", "repeating the update gives the same lines, not more",
-        "What's it worth? / No suggestion: auction fee unknown / Vendor | 60c / Auction (before fees) | 1s 50c / Hold Shift for details", Hover(118))
+        "What's it worth? / Workshop: Not enough data / Vendor | 60c / Auction (before fees) | 1s 50c / Hold Shift for details", Hover(118))
     Check("direct", "green armour: disenchant has no data, so it is said and no winner is claimed",
-        "What's it worth? / Disenchant value unknown / Vendor | 10c / Auction (before fees) | 25c / Disenchant (average) | no data / Hold Shift for details", Hover(9999))
+        "What's it worth? / Workshop: Not enough data / Vendor | 10c / Auction (before fees) | 25c / Disenchant (average) | no data / Hold Shift for details", Hover(9999))
     Check("direct", "a bound item cannot be listed (unavailable, not unknown)",
-        "What's it worth? / Vendor | 4c / Auction | can't be listed (bound)", Hover(2447))
+        "What's it worth? / Workshop: Keep for crafting / Vendor | 4c / Auction | can't be listed (bound)", Hover(2447))
     Check("direct", "an item with no listing: no price (never 0), more prices needed",
-        "What's it worth? / More prices needed / Vendor | 20c / Auction | no price / Hold Shift for details", Hover(2320))
+        "What's it worth? / Workshop: Keep for crafting / Vendor | 20c / Auction | no price / Hold Shift for details", Hover(2320))
     Check("direct", "a random-properties variant is not priced from the base item's listings",
-        "What's it worth? / No suggestion: this variant isn't priced / Vendor | 3c / Auction | this variant isn't priced", Hover(765))
+        "What's it worth? / Workshop: Keep for crafting / Vendor | 3c / Auction | this variant isn't priced", Hover(765))
     Check("direct", "a stack says the values are for one item",
-        "What's it worth? (each) / No suggestion: auction fee unknown / Vendor | 30c / Auction (before fees) | 60c / Hold Shift for details", Hover(3382))
+        "What's it worth? (each) / Workshop: Not enough data / Vendor | 30c / Auction (before fees) | 60c / Hold Shift for details", Hover(3382))
     -- 3382: Weak Troll's Blood Potion 300/5 = 60c each
     Check("direct", "an item the player does not hold (no guid) gets nothing", "", Hover(118, { id = 118 }))
 
     w.SetShift(true)
     local long = Hover(118)
     Check("direct", "Shift: the Always lines plus the age and the source, once each, and the unconfirmed cut stays on the value",
-        "What's it worth? / No suggestion: auction fee unknown / Vendor | 60c / Auction (before fees) | 1s 50c / Scanned | just now / Prices from | the auction house on SimulatedRealm / Estimates, not sales. Deposits and failed listings aren't counted.", long)
+        "What's it worth? / Workshop: Not enough data / Vendor | 60c / Auction (before fees) | 1s 50c / Scanned | just now / Prices from | the auction house on SimulatedRealm / Estimates, not sales. Deposits and failed listings aren't counted.", long)
     local _, n = long:gsub("Deposits and failed listings", "")
     Check("direct", "Shift: the deposit / failed-listing exclusion is stated once", 1, n)
     Check("direct", "Shift: the details stay short enough for a tooltip", true, select(2, long:gsub(" / ", "")) + 1 <= 10)
     w.SetShift(false)
-    Check("direct", "released: the short form again, nothing left over", "What's it worth? / No suggestion: auction fee unknown / Vendor | 60c / Auction (before fees) | 1s 50c / Hold Shift for details", Hover(118))
+    Check("direct", "released: the short form again, nothing left over", "What's it worth? / Workshop: Not enough data / Vendor | 60c / Auction (before fees) | 1s 50c / Hold Shift for details", Hover(118))
 
     -- TEST INPUT: a made-up 5% cut for the 'unknown' side (the product's PR.CUT is empty). 150 x 0.05 = 7.5 -> 8, net 142.
     R.Workshop.Prices.CUT.unknown = 0.05
-    Check("direct", "[test input] with a cut the auction wins, after the cut",
-        "What's it worth? / Suggested: Auction house / Vendor | 60c / Auction (after fees) | 1s 42c / Hold Shift for details", Hover(118))
+    Check("direct", "[test input] a verified fee alone cannot repair insufficient competition",
+        "What's it worth? / Workshop: Not enough data / Vendor | 60c / Auction (after fees) | 1s 42c / Hold Shift for details", Hover(118))
     R.Workshop.Prices.CUT.unknown = nil
     Check("direct", "test cut removed: back to before fees", true, Hover(118):find("Auction (before fees) | 1s 50c", 1, true) ~= nil)
 
@@ -673,42 +758,80 @@ end)
 Lab.Step("what's it worth: tooltip designer", function()
     local w = WorthWorld()
     local WL = R.Workshop.WorthLayout
+    if R.SettingsUI then R.SettingsUI.Close() end
+    TwichUIDB.ui.settingsWindow = { w = 1240, h = 1060 }
     local ok = Lab.Open("workshop")
+    R.SettingsUI.View("workshop").taskButtons[2]:Click()
     Check("init", "the settings window opened on the Workshop page", true, ok == true)
     local D = R.WorkshopWorthDesigner
     Check("init", "the designer is loaded with the settings window", "table", type(D))
     local f = D.Frame()
+    local rawClick = Click
+    local function Apply() if D.Dirty() then Check("state", "explicit Save applies the draft", true, D.Save()) end end
+    local function Click(button, label)
+        rawClick(button, label)
+        if button == f.reset then
+            Check("state", "Reset requests confirmation", true, D.ResetPending())
+            rawClick(f.confirmYes, "Confirm default layout")
+        end
+        Apply()
+    end
+    local prior = WL.Get().lines[2].id
+    D.RemoveLine("vendor")
+    Check("state", "draft removal does not change the live layout", prior, WL.Get().lines[2].id)
+    Check("state", "Undo restores field presence", true, D.Undo() and not D.Dirty())
+    Check("state", "Redo restores the draft removal", true, D.Redo() and D.Dirty())
+    D.Cancel()
+    Check("state", "Cancel preserves saved layout", prior, WL.Get().lines[2].id)
+    D.Search("historical")
+    Check("display", "catalog search hides other fields", false, D.ListButton(2):IsShown())
+    Check("state", "catalog search does not save", false, D.Dirty())
+    D.Search("")
+    Check("display", "unsupported outcome data is absent from the catalog", false, D.ListButton(7):IsShown())
+    Lab.Settle(.2)
+    local hit = R.TestLab.Reach.Analyze(D.ListButton(1), { evidence = "simulator-geometry", limit = 1000000 })
+    Check("direct", "[geometry] supported catalog row can receive clicks", "reachable", hit.verdict)
     Check("init", "with the Workshop loaded, the designer (not the invitation) is shown", true, f:IsShown() and f.mock:IsShown() and not f.inviteButton:IsShown())
-    Check("display", "the list has the eight line types", 8, (function() local n = 0 for i = 1, 8 do if D.ListButton(i) and D.ListButton(i):IsShown() then n = n + 1 end end return n end)())
+    Check("display", "the catalog has seven supported types among the original eight", 7, (function() local n = 0 for i = 1, 8 do if D.ListButton(i) and D.ListButton(i):IsShown() then n = n + 1 end end return n end)())
     Check("display", "one instruction", "Drag lines into the preview.", Txt(f.instruction))
 
     local function Mock()   -- what the mockup shows, top to bottom (rows without anything to say are the designer's own placeholders)
         local out = { Txt(f.mock.title) }
         for i = 1, #D.Model().sec.rows do
             local r = D.Row(i)
-            out[#out + 1] = r.wide:IsShown() and Txt(r.wide) or (Txt(r.left) .. " | " .. Txt(r.right))
+            local text = r.wide:IsShown() and Txt(r.wide) or (Txt(r.left) .. " | " .. Txt(r.right))
+            if not text:find("^%(?Market value") and not text:find("^%(?Recent price") and not text:find("^%(?Historical value") and not text:find("^%(?Supply")
+                and not text:find("^%(?Market data") then out[#out + 1] = text end   -- (the A7 market lines have their own check)
         end
         if f.mock.hint:IsShown() then out[#out + 1] = Txt(f.mock.hint) end
         return table.concat(out, " / ")
     end
     local function NoPlaceholders(text) return (text:gsub(" / %(%u[^%)]-%)%)", ""):gsub(" / %([^/]-nothing to show for this example%)", "")) end
-    local function Layout() local t = {} for _, e in ipairs(WL.Get().lines) do t[#t + 1] = e.id .. (e.when == "shift" and "*" or "") end return table.concat(t, ",") end
+    local A7 = { marketvalue = true, recent = true, historical = true, supply = true, quality = true }   -- (the A7 lines: checked on their own)
+    local function Layout() local t = {} for _, e in ipairs(WL.Get().lines) do if not A7[e.id] then t[#t + 1] = e.id .. (e.when == "shift" and "*" or "") end end return table.concat(t, ",") end
     local DEFAULT = "recommend,vendor,auction,disenchant,status*,source*,note*"
     local function Live(shiftHeld) w.SetShift(shiftHeld) return w.Hover(2841) end   -- Bronze Bar: vendor 5s, cheapest listing 4s, before fees
 
     Check("state", "the layout starts as the short default", DEFAULT, Layout())
+    Check("state", "the A7 market lines are in the default: market value Always, the rest Hold Shift", "marketvalue,recent*,historical*,supply*,quality*",
+        (function() local t = {} for _, e in ipairs(WL.Get().lines) do if A7[e.id] then t[#t + 1] = e.id .. (e.when == "shift" and "*" or "") end end return table.concat(t, ",") end)())
+    Check("direct", "the live tooltip carries the market value line, labelled as a 14-day reference", true, w.HoverMarket(2841):find("Market value (14 days)", 1, true) ~= nil)
     Check("display", "Normal preview of the ordinary example",
-        "What's it worth? / Suggested: Vendor / Vendor | 5s / Auction (before fees) | 4s / (Disenchant value (average): nothing to show for this example) / Hold Shift for details", Mock())
+        "What's it worth? / Workshop: Vendor / Vendor | 5s / Auction (before fees) | 4s / (Disenchant value (average): nothing to show for this example) / Hold Shift for details", Mock())
     Check("display", "labelled as preview data", true, Txt(f.caption):find("Preview data", 1, true) ~= nil)
-    Check("direct", "the live tooltip for the same numbers has the same lines (minus the designer's placeholder)",
-        "What's it worth? / Suggested: Vendor / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details", Live(false))
-    Check("display", "the preview without its placeholder equals the live tooltip", Live(false), NoPlaceholders(Mock()))
+    Check("direct", "live values stay the same while the item is kept for the active plan",
+        "What's it worth? / Workshop: Keep for crafting / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details", Live(false))
+    -- Same values, different supported contexts: the live Bronze Bar is reserved
+    -- for this character's active plan; the synthetic preview has no plan.
+    Check("display", "preview and live values agree while active-plan advice stays distinct",
+        "What's it worth? / Workshop: Vendor / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details || What's it worth? / Workshop: Keep for crafting / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details",
+        NoPlaceholders(Mock()) .. " || " .. Live(false))
 
     Click(f.modeShift, "Hold Shift preview")
     Check("display", "Hold Shift preview adds the Shift lines to the Always lines, once each",
-        "What's it worth? / Suggested: Vendor / Vendor | 5s / Auction (before fees) | 4s / (Disenchant value (average): nothing to show for this example) / Scanned | 3 hours ago / Prices from | the example auction house / Estimates, not sales. Deposits and failed listings aren't counted.", Mock())
+        "What's it worth? / Workshop: Vendor / Vendor | 5s / Auction (before fees) | 4s / (Disenchant value (average): nothing to show for this example) / Scanned | 3 hours ago / Prices from | the example auction house / Estimates, not sales. Deposits and failed listings aren't counted.", Mock())
     Check("direct", "the live tooltip with Shift held has the same kinds of lines (this scan's own age and market)",
-        "What's it worth? / Suggested: Vendor / Vendor | 5s / Auction (before fees) | 4s / Scanned | just now / Prices from | the auction house on SimulatedRealm / Estimates, not sales. Deposits and failed listings aren't counted.", Live(true))
+        "What's it worth? / Workshop: Keep for crafting / Vendor | 5s / Auction (before fees) | 4s / Scanned | just now / Prices from | the auction house on SimulatedRealm / Estimates, not sales. Deposits and failed listings aren't counted.", Live(true))
     Click(f.modeNormal, "Normal preview")
 
     -- select and move (buttons): Vendor down one, past Auction
@@ -716,17 +839,17 @@ Lab.Step("what's it worth: tooltip designer", function()
     Check("state", "clicking a row selects it", "vendor", D.Selected())
     Click(f.down, "Move down")
     Check("state", "Move down puts Vendor after Auction", "recommend,auction,vendor,disenchant,status*,source*,note*", Layout())
-    Check("display", "and the preview shows it", "What's it worth? / Suggested: Vendor / Auction (before fees) | 4s / Vendor | 5s / (Disenchant value (average): nothing to show for this example) / Hold Shift for details", Mock())
-    Check("direct", "and the live tooltip follows at once", "What's it worth? / Suggested: Vendor / Auction (before fees) | 4s / Vendor | 5s / Hold Shift for details", Live(false))
+    Check("display", "and the preview shows it", "What's it worth? / Workshop: Vendor / Auction (before fees) | 4s / Vendor | 5s / (Disenchant value (average): nothing to show for this example) / Hold Shift for details", Mock())
+    Check("direct", "and the live tooltip follows at once", "What's it worth? / Workshop: Keep for crafting / Auction (before fees) | 4s / Vendor | 5s / Hold Shift for details", Live(false))
 
     -- Always -> Hold Shift for Auction: the recommendation is untouched and the value keeps its own "before fees"
     Click(D.Row(2), "the Auction row")
     Click(f.holdShift, "Hold Shift (visibility)")
     Check("state", "Auction is a Hold Shift line", "recommend,auction*,vendor,disenchant,status*,source*,note*", Layout())
     Check("state", "the Hold Shift preview came up so the line stays in view", true, D.Mode())
-    Check("direct", "live, Shift not held: no auction line, the suggestion unchanged", "What's it worth? / Suggested: Vendor / Vendor | 5s / Hold Shift for details", Live(false))
+    Check("direct", "live, Shift not held: no auction line, the suggestion unchanged", "What's it worth? / Workshop: Keep for crafting / Vendor | 5s / Hold Shift for details", Live(false))
     Check("direct", "live, Shift held: the auction line is back in its place, with 'before fees', once",
-        "What's it worth? / Suggested: Vendor / Auction (before fees) | 4s / Vendor | 5s / Scanned | just now / Prices from | the auction house on SimulatedRealm / Estimates, not sales. Deposits and failed listings aren't counted.", Live(true))
+        "What's it worth? / Workshop: Keep for crafting / Auction (before fees) | 4s / Vendor | 5s / Scanned | just now / Prices from | the auction house on SimulatedRealm / Estimates, not sales. Deposits and failed listings aren't counted.", Live(true))
     w.SetShift(false)
 
     -- remove, and click to add again; no duplicate
@@ -742,7 +865,8 @@ Lab.Step("what's it worth: tooltip designer", function()
     Check("state", "clicking it again adds nothing: no duplicate line types", "recommend,auction*,vendor,disenchant,status*,source*,note*", Layout())
 
     -- the outcomes line: addable, but there is no outcome data, so nothing is ever shown for it
-    Click(D.ListButton(7), "Disenchant outcomes in the list")
+    -- Legacy saved outcome entries remain editable, though never offered as a capability.
+    D.AddLine("outcomes"); Apply()
     Check("state", "outcomes added", true, Layout():find("outcomes", 1, true) ~= nil)
     Check("display", "the mockup holds its place and says there is nothing to show", true, Mock():find("(Disenchant outcomes: nothing to show for this example)", 1, true) ~= nil)
     Check("direct", "the live tooltip shows no outcomes line", false, Live(true):find("Disenchant gives", 1, true) ~= nil)
@@ -765,49 +889,49 @@ Lab.Step("what's it worth: tooltip designer", function()
     local model = D.Model()
     -- drag "Disenchant outcomes" from the list and let go between Recommendation and Auction (gap 1)
     local b = D.ListButton(7)
-    ;(b:GetScript("OnDragStart"))(b)
+    D.StartDrag({ kind = "list", id = "outcomes" })
     Check("direct", "[handler] OnDragStart on a list line starts a carry", true, Drag.Active())
     PointerAt(model.tops[2] - 1)
     Check("direct", "[handler] over the top of the second row the gap is 1", 1, D.Find())
     Check("direct", "[handler] and a gap means a place in the layout", 2, D.PositionOf(1))
-    ;(b:GetScript("OnDragStop"))(b)
+    ;(b:GetScript("OnDragStop"))(b); Apply()
     Check("state", "[handler] OnDragStop over the mockup adds the line there", "recommend,outcomes,auction,vendor,disenchant,status*,source*,note*", Layout())
     Check("direct", "[handler] and the carry is over", false, Drag.Active())
     -- drag a row to the end, then outside the mockup
-    D.RemoveLine("outcomes")
+    D.RemoveLine("outcomes"); Apply()
     local r1 = D.Row(1)
     ;(r1:GetScript("OnDragStart"))(r1)
     Check("direct", "[handler] OnDragStart on a row carries it", "recommend", Drag.Source() and Drag.Source().id)
     model = D.Model()
     PointerAt(model.bottoms[#model.sec.rows] + 2)
-    ;(r1:GetScript("OnDragStop"))(r1)
+    ;(r1:GetScript("OnDragStop"))(r1); Apply()
     Check("state", "[handler] dropped below the last row: Recommendation moved to the end of the shown rows",
         "auction,vendor,disenchant,recommend,status*,source*,note*", Layout())
     r1 = D.Row(4)
     ;(r1:GetScript("OnDragStart"))(r1)
     GetCursorPosition = function() return 1, 1 end   -- far from the mockup
     Check("direct", "[handler] away from the mockup there is no target", true, D.Find() == nil)
-    ;(r1:GetScript("OnDragStop"))(r1)
+    ;(r1:GetScript("OnDragStop"))(r1); Apply()
     Check("state", "[handler] released outside: nothing changed", "auction,vendor,disenchant,recommend,status*,source*,note*", Layout())
     Check("display", "[handler] and it says so", "Nothing changed.", select(1, D.Said()))
     GetCursorPosition = realCursor
     -- put the layout back by Reset
     Click(f.reset, "Reset layout")
     Check("state", "Reset layout puts the short default back", DEFAULT, Layout())
-    Check("direct", "and the live tooltip is the default again", "What's it worth? / Suggested: Vendor / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details", Live(false))
+    Check("direct", "and the live tooltip is the default again", "What's it worth? / Workshop: Keep for crafting / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details", Live(false))
 
     -- the examples: missing prices and an action that cannot be done
     local function Pick(v) f.example:Click() local menu = rawget(_G, "TwichUISettingsMenu")   -- the list is made by the first click
         for _, entry in ipairs(menu and menu.rows or {}) do if entry:IsShown() and entry.choice and entry.choice.value == v then entry:Click() return true end end return false end
     Check("click", "the example list offers 'Missing prices'", true, Pick("missing"))
     Check("display", "missing prices: said once, the unknown stays unknown (never zero)",
-        "What's it worth? / More prices needed / Vendor | 3s / Auction | no price / Disenchant (average) | no data / Hold Shift for details", Mock())
+        "What's it worth? / Workshop: Not enough data / Vendor | 3s / Auction | no price / Disenchant (average) | no data / Hold Shift for details", Mock())
     Check("click", "the example list offers 'Can't be auctioned'", true, Pick("unavailable"))
     Check("display", "an action that can't be done and an unknown value, side by side",
-        "What's it worth? / Disenchant value unknown / Vendor | 3s / Auction | can't be listed (bound) / Disenchant (average) | no data", Mock())
+        "What's it worth? / Workshop: Vendor / Vendor | 3s / Auction | can't be listed (bound) / Disenchant (average) | no data", Mock())
     Pick("higher")
-    Check("display", "an auction that looks higher before fees: no winner is claimed",
-        "What's it worth? / No suggestion: auction fee unknown / Vendor | 5s / Auction (before fees) | 9s / (Disenchant value (average): nothing to show for this example) / Hold Shift for details", Mock())
+    Check("display", "supported gross auction advice retains the before-fees qualification",
+        "What's it worth? / Workshop: Auction / Vendor | 5s / Auction (before fees) | 9s / (Disenchant value (average): nothing to show for this example) / Hold Shift for details", Mock())
     Pick("ordinary")
 
     -- Enable tooltip
@@ -815,7 +939,7 @@ Lab.Step("what's it worth: tooltip designer", function()
     Check("state", "Enable tooltip off is saved", false, WL.Enabled())
     Check("direct", "live: no section at all, Shift or not", "", Live(true) .. Live(false))
     Click(f.enable, "Enable tooltip (on)")
-    Check("direct", "back on: the section is back", "What's it worth? / Suggested: Vendor / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details", Live(false))
+    Check("direct", "back on: the section is back", "What's it worth? / Workshop: Keep for crafting / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details", Live(false))
     Check("state", "nothing was asked of the auction house", 0, w.ah.requested - ah.requested)
 
     w.SetShift(false)
@@ -850,6 +974,7 @@ Lab.Step("opportunities: Add to queue", function()
     Check("display", "its details are shown", "Elixir of Many Wonders", Txt(Opps().detail.name))
     Check("display", "Add button before", "Add to crafting plan/true", Txt(add.text) .. "/" .. tostring(add:IsEnabled()))
     Click(add, "Add to crafting plan (Elixir of Many Wonders)")
+    Check("state", "it makes a varying amount, so no optimized plan: the confirmation offers the recipe on its own", "plain", AcceptAdd("Elixir of Many Wonders"))
     Check("state", "the real queue gained the recipe",
         "Minor Healing Potion x3, Weak Troll's Blood Potion x2, Copper Belt Buckle x2, Elixir of Many Wonders x1", Queue())
     Check("display", "button now In your queue and disabled", "In your queue/false", Txt(add.text) .. "/" .. tostring(add:IsEnabled()))
@@ -897,21 +1022,25 @@ Lab.Step("shopping: combined list, sources, total, warning", function()
     local s = Lists().shop
     Check("display", "rows: buys by item number, then the made item",
         "Silverleaf | Coarse Thread | Peacebloom | Copper Ore | Tin Ore | Bronze Bar", Names(s))
-    Check("display", "Peacebloom (auction, exact)", "3 | Auction house | 15c | just now | -", Line("Peacebloom"))
+    Check("display", "Peacebloom (auction, exact)", "3 | Auction house | from 15c | just now | -", Line("Peacebloom"))
     Check("display", "Silverleaf (unpriced: not enough listed)", "3 | No source | Unknown | no price | -", Line("Silverleaf"))
     Check("display", "Coarse Thread (vendor)", "1 | Vendor | 25c | just now | Show vendor", Line("Coarse Thread"))
-    Check("display", "Copper Ore (2 to buy for the subcraft)", "2 | Auction house | 70c | just now | -", Line("Copper Ore"))
+    Check("display", "Copper Ore (2 to buy for the subcraft)", "2 | Auction house | from 70c | just now | -", Line("Copper Ore"))
     Check("display", "Tin Ore (vendor stack of 5 for 3 needed)", "3 | Vendor | 80c | just now | Show vendor", Line("Tin Ore"))
-    Check("display", "Bronze Bar (make suggested)", "5 | Make | 1s 50c | materials, counted in their rows | Add to crafting plan", Line("Bronze Bar"))
-    Check("display", "Peacebloom detail", "Suggested source. Only the auction house has a price.", Explain("Peacebloom"))
+    Check("display", "Bronze Bar (make suggested)", "5 | Make | In the plan | cost is in its materials | Add optimized plan", Line("Bronze Bar"))   -- (P2) a made material's cost is part of the multilevel plan, in its own materials' rows
+    Check("display", "Peacebloom detail", "Suggested source. Only the auction house has a price. Auctions may require buying larger stacks.", Explain("Peacebloom"))
     Check("display", "Silverleaf detail says why", "Not enough are listed at the auction house.", Explain("Silverleaf"))
     Check("display", "Tin Ore detail: leftover from the whole stack", "2 left over. Needed to make Smelt Bronze.", Explain("Tin Ore"))
     Check("display", "Bronze Bar detail: crafts, made, leftover, comparison",
-        "Make 3 x Smelt Bronze: makes 6, 1 left over. Suggested source. Making this looks cheaper than buying at the auction house.", Explain("Bronze Bar"))
+        "Craft 3 x Smelt Bronze: makes 6, 1 left over. Suggested source. Making this looks cheaper than buying at the auction house. It is certainly cheaper.", Explain("Bronze Bar"))
     Check("display", "total with the incomplete-total warning",
         "Estimated spending: 1s 90c so far \194\183 1 price missing", Txt(Shop().total))
     Check("display", "vendor status line", "Vendor prices as last seen (2 noted) \194\183 bags only", Txt(Shop().status))
-    Check("display", "notes keep one short caveat about the suggestions", true, Txt(Shop().notes):find("Suggestions compare one material at a time", 1, true) ~= nil)
+    -- (P2) the notes say how sure the plan is (a missing price makes it partial, never "verified") and keep the caveat about owned materials
+    -- (P2.1) the caveat about owned materials is in the strategy's Notes, not repeated in the bar
+    Check("display", "notes say the plan is partial (a price is missing) and name its estimated cost", "true/true/false",
+        tostring(Txt(Shop().notes):find("Partial plan", 1, true) ~= nil) .. "/" .. tostring(Txt(Shop().notes):find("estimated cost", 1, true) ~= nil)
+        .. "/" .. tostring(Txt(Shop().notes):find("Best verified plan", 1, true) ~= nil))
 end)
 
 Lab.Step("shopping: source choices", function()
@@ -921,13 +1050,13 @@ Lab.Step("shopping: source choices", function()
     Check("display", "Bronze Bar details: Make is lit, the auction house can be chosen, the vendor cannot", "make/false/true/true",
         Lit(d) .. "/" .. tostring(d.choose.vendor:IsEnabled()) .. "/" .. tostring(d.choose.auction:IsEnabled()) .. "/" .. tostring(d.choose.make:IsEnabled()))
     Choose("Bronze Bar", "auction")
-    Check("click", "the auction house: an estimate", "5 | Auction house | about 20s | estimate, just now | -", Line("Bronze Bar"))
-    Check("display", "estimate is explained in the details", true, Explain("Bronze Bar"):find("Unit-price estimate: more may cost more.", 1, true) ~= nil)
+    Check("click", "the auction house: an estimate", "5 | Auction house | 23s | just now | -", Line("Bronze Bar"))
+    Check("display", "the whole-quantity walk of the price tiers gives an exact figure, so no estimate is claimed", false, Explain("Bronze Bar"):find("estimate", 1, true) ~= nil)
     Check("display", "the details lit the chosen source and the row stays chosen", "auction/Bronze Bar", Lit(Shop().detail) .. "/" .. Txt(Shop().detail.name))
     Check("state", "choice is kept in memory", "auction", tostring(R.Workshop.Session.picks[2841]))
     Check("display", "its reagent rows go (no subcraft now)", "Silverleaf | Coarse Thread | Peacebloom | Bronze Bar", Names(Lists().shop))
     Check("display", "total now includes the estimate: 15 + 25 + 2000 = 2040c",
-        "Estimated spending: 20s 40c so far \194\183 1 price missing", Txt(Shop().total))
+        "Estimated spending: 23s 40c so far \194\183 1 price missing", Txt(Shop().total))
     Choose("Bronze Bar", "make")
     Check("state", "make, chosen by the player", "make", tostring(R.Workshop.Session.picks[2841]))
     Check("display", "make row again, with the reagent rows back, and still chosen", "Silverleaf | Coarse Thread | Peacebloom | Copper Ore | Tin Ore | Bronze Bar/Bronze Bar",
@@ -952,25 +1081,30 @@ Lab.Step("shopping: source choices", function()
 end)
 
 Lab.Step("shopping: Show vendor", function()
-    -- The intended calls are: open the world map (ToggleWorldMap) and NpcMap.Locate(entry) for a merchant seen to sell the item, and nothing
-    -- that navigates. The simulator cannot run Blizzard's world map (opening it raises many Blizzard Lua errors: unsupported map APIs), so
+    -- The intended calls are: open the world map (ToggleWorldMap), NpcMap.Locate(entry) for a merchant seen to sell the item and (P2.1)
+    -- NpcMap.SetWaypoint(entry), the game's waypoint on the same merchant; nothing that navigates or makes a pin. SetWaypoint is the real one,
+    -- recorded: the simulator's synthetic map refuses waypoints, so the refusal path (no claim in the note) is what runs here. The simulator cannot run Blizzard's world map (opening it raises many Blizzard Lua errors: unsupported map APIs), so
     -- BOTH are replaced here by recording stand-ins: this checks what the Workshop asks for, not what the map then shows.
     local NM, calls, toggles = R.NpcMap, {}, 0
     local originalLocate, originalToggle = NM.Locate, ToggleWorldMap
     NM.Locate = function(e) calls[#calls + 1] = e return true end
+    local originalWaypoint, marks = NM.SetWaypoint, {}
+    NM.SetWaypoint = function(e) marks[#marks + 1] = e return originalWaypoint(e) end
     _G.ToggleWorldMap = function() toggles = toggles + 1 end
     local here = C_Map.GetBestMapForUnit("player")
     local pinsBefore = R.Pins.LocalCount() .. "/" .. #R.Pins.AllSharedPins()
     local navBefore = tostring(R.Nav.Active())
     local waypointBefore = C_Map.HasUserWaypoint and tostring(C_Map.HasUserWaypoint()) or "n/a"
     Click(Pick("Coarse Thread").act, "Show vendor (Coarse Thread)")
-    NM.Locate, _G.ToggleWorldMap = originalLocate, originalToggle
+    NM.Locate, _G.ToggleWorldMap, NM.SetWaypoint = originalLocate, originalToggle, originalWaypoint
     Check("click", "the world map is asked to open once", 1, toggles)
     Check("click", "Locate was called once", 1, #calls)
     Check("state", "Locate got the merchant entry (id, name, the player's map when it was noted)", "3333 | Haldric the Peddler | " .. tostring(here),
         calls[1] and (calls[1].id .. " | " .. calls[1].n .. " | " .. calls[1].m) or "no call")
-    Check("display", "the note names the merchant", "Showing Haldric the Peddler on the map.", Txt(Frame().note))
-    Check("state", "no waypoint was set", waypointBefore, C_Map.HasUserWaypoint and tostring(C_Map.HasUserWaypoint()) or "n/a")
+    Check("display", "the note names the merchant and says it is the nearest known seller (a distance was compared)", "Showing Haldric the Peddler, the nearest known seller.", Txt(Frame().note))
+    Check("click", "the game's waypoint was asked for once, on the same merchant", "1/true", #marks .. "/" .. tostring(marks[1] == calls[1]))
+    Check("state", "this map refuses waypoints: none was set, and the note claims none", waypointBefore .. "/false",
+        (C_Map.HasUserWaypoint and tostring(C_Map.HasUserWaypoint()) or "n/a") .. "/" .. tostring(Txt(Frame().note):find("Waypoint", 1, true) ~= nil))
     Check("state", "no pin was created (local/shared)", pinsBefore, R.Pins.LocalCount() .. "/" .. #R.Pins.AllSharedPins())
     Check("state", "no navigation was started", navBefore, tostring(R.Nav.Active()))
     -- an item no known merchant sells has no Show vendor button
@@ -979,12 +1113,19 @@ end)
 
 Lab.Step("shopping: add the suggested subcraft", function()
     local q0 = Queue()
-    Click(Pick("Bronze Bar").act, "Add to crafting plan (Bronze Bar)")
+    -- P2: the multilevel plan adds its crafts through a confirmation; the click alone changes nothing
+    Click(Pick("Bronze Bar").act, "Add optimized plan (Bronze Bar)")
+    Lab.Settle(0.3)
+    local svw, cdw = R.Workshop.StrategyView.Frames()
+    Check("state", "the click alone adds nothing: the confirmation is shown first", q0, Queue())
+    Check("display", "the confirmation is open and can be accepted", "true/true", tostring(cdw:IsShown()) .. "/" .. tostring(cdw.ok:IsEnabled()))
+    Click(cdw.ok, "Add to plan")
+    Lab.Settle(0.3)
     -- 3 crafts of Smelt Bronze added: needs Copper Ore 6 (bags 4 -> 2 short), Tin Ore 3 (3 short); Bronze Bar need 8, 6 will be made, 3 in bags -> 0 short
     Check("state", "Smelt Bronze x3 queued", q0 .. ", Smelt Bronze x3", Queue())
     Check("display", "the made item is no longer on the list; its ingredients are, once each",
         "Silverleaf | Coarse Thread | Peacebloom | Copper Ore | Tin Ore", Names(Lists().shop))
-    Check("display", "Copper Ore: queue's own need, once", "2 | Auction house | 70c | just now | -", Line("Copper Ore"))
+    Check("display", "Copper Ore: queue's own need, once", "2 | Auction house | from 70c | just now | -", Line("Copper Ore"))
     Check("display", "Tin Ore: queue's own need, once", "3 | Vendor | 80c | just now | Show vendor", Line("Tin Ore"))
     Check("display", "total unchanged: the ingredients are counted once", "Estimated spending: 1s 90c so far \194\183 1 price missing", Txt(Shop().total))
     local anyMake = false
@@ -1001,7 +1142,9 @@ Lab.Step("shopping: add the suggested subcraft", function()
     local function L(name) local r = Row(m, name) return Txt(r.need) .. "/" .. Txt(r.have) .. "/" .. Txt(r.short) end
     Check("display", "Crafting view agrees: Copper Ore need/in bags/still needed", "6/4/2", L("Copper Ore"))
     Check("display", "Crafting view: Tin Ore", "3/0/3", L("Tin Ore"))
+    m.scroll:SetVerticalScroll(math.max(0, #m.data * m.rowH - m.scroll:GetHeight())); m:Layout()   -- (P2: the Crafting Strategy strip leaves room for fewer rows; the last ones are scrolled to)
     Check("display", "Crafting view: Bronze Bar covered by the queued crafts", "8/3/0", L("Bronze Bar"))
+    m.scroll:SetVerticalScroll(0); m:Layout()
     Tab("Shopping")
 end)
 
@@ -1214,14 +1357,14 @@ Lab.Step("bank and guild bank: planned with, collected not bought, labelled, pro
     Check("display", "collect Tin Ore from the bank", "Tin Ore | 2 | Collect from bank | Already owned | seen just now", SLine(3))
     Check("display", "buy the Silverleaf still missing: 2 listed at 45c, now exact", "Silverleaf | 2 | Auction house | 90c | just now", SLine(4))
     Check("display", "buy Coarse Thread at the vendor", "Coarse Thread | 1 | Vendor | 25c | just now", SLine(5))
-    Check("display", "buy 2 Copper Ore", "Copper Ore | 2 | Auction house | 70c | just now", SLine(6))
-    Check("display", "buy the 1 Tin Ore still missing: 30c at the auction house beats a stack of 5 at 80c", "Tin Ore | 1 | Auction house | 30c | just now", SLine(7))
+    Check("display", "buy 2 Copper Ore", "Copper Ore | 2 | Auction house | from 70c | just now", SLine(6))
+    Check("display", "buy the 1 Tin Ore still missing: 30c at the auction house beats a stack of 5 at 80c", "Tin Ore | 1 | Auction house | from 30c | just now", SLine(7))
     local c1 = Rows(Lists().shop)[1]
     Click(c1, "choose the first collect row")
     local cd = Shop().detail
     Check("display", "a collect row has no source choices and no action", "false/false/false", tostring(cd.choose.vendor:IsShown()) .. "/" .. tostring(cd.choose.make:IsShown()) .. "/" .. tostring(cd.act:IsShown()))
     Check("display", "a collect row says it is already owned", "Collect from your bank. It is already yours: nothing to buy.", Txt(cd.explain))
-    Check("display", "total counts only what is bought: 90 + 25 + 70 + 30", "Estimated spending: 2s 15c", Txt(Shop().total))
+    Check("display", "total counts only what is bought: 90 + 25 + 70 + 30", "Estimated spending: from 2s 15c", Txt(Shop().total))
     Check("display", "status line names what is counted", "Vendor prices as last seen (2 noted) \194\183 bags and bank", Txt(Shop().status))
 
     -- Opportunities: stored materials say whether a craft can start; the cost, the sell price and the profit do not move
@@ -1260,9 +1403,9 @@ Lab.Step("bank and guild bank: the guild choice, permissions and limits", functi
     Check("display", "collect Silverleaf from the bank", "Silverleaf | 1 | Collect from bank | Already owned | seen just now", SLine(1))
     Check("display", "collect Silverleaf from the guild bank (3 needed - 1)", "Silverleaf | 2 | Collect from guild bank | Already owned | seen just now", SLine(2))
     Check("display", "collect Copper Ore from the guild bank (6 needed - 4 in bags)", "Copper Ore | 2 | Collect from guild bank | Already owned | seen just now", SLine(4))
-    Check("display", "Tin Ore: tab 2 only allows viewing, so only the bank's 2 are collected and 1 is bought", "Tin Ore | 1 | Auction house | 30c | just now", SLine(7))
+    Check("display", "Tin Ore: tab 2 only allows viewing, so only the bank's 2 are collected and 1 is bought", "Tin Ore | 1 | Auction house | from 30c | just now", SLine(7))
     Check("display", "shared stock is said so", "Collect from the guild bank. Shared stock: other members can take it too.", ExplainAt(2))
-    Check("display", "total counts only what is bought: 25 + 30", "Estimated spending: 55c", Txt(Shop().total))
+    Check("display", "total counts only what is bought: 25 + 30", "Estimated spending: from 55c", Txt(Shop().total))
     Check("display", "status line names the guild bank", "Vendor prices as last seen (2 noted) \194\183 bags, bank and guild bank", Txt(Shop().status))
     local view = W.Session.Stock()
     Check("state", "tab 2's 9 Tin Ore are information, not counted: a viewable tab does not establish a right to take", "9/nowithdraw/0",
@@ -1278,13 +1421,23 @@ Lab.Step("bank and guild bank: the guild choice, permissions and limits", functi
     GBANK.tabs[1].rem = 3
     GBANK.current = 1
     Fire("GUILDBANKBAGSLOTS_CHANGED")
+    local guildAnsweredAt = GetTime()
     Lab.Settle(0.3)
     Tab("Shopping")
     Check("display", "a daily limit is flagged on the collect row", "Collect from the guild bank. Shared stock: other members can take it too, and a withdrawal limit may apply.",
         ExplainAt(2))
-    -- a bag change nobody answers (the guild bank is open, and the last answer is over a second old): that tab is uncertain and is no longer planned with
-    Lab.Settle(0.6)
+    -- Exercise both sides with a frame margin. The old 0.3 + Tab's 0.1 + 0.6 landed exactly at PAIR;
+    -- across a clock exponent boundary, that subtraction can be just below 1.0 (a correctly paired move).
+    Lab.Settle(0.5) -- 0.9 s after the answer: safely inside the pairing window
+    Check("state", "guild bag change is inside the pairing window", true, GetTime() - guildAnsweredAt < W.Bank.PAIR)
     Fire("BAG_UPDATE_DELAYED")
+    Check("state", "paired guild bag change is not pending", false, W.Bank.Pending().guildPending)
+    Check("state", "paired guild bag change keeps the tab certain", false,
+        W.Storage.Guild({ key = "Simulated Guild-" .. GetRealmName() }).tabs[1].u == true)
+    Lab.Settle(0.2) -- 1.1 s after the same answer: safely outside, independent of startup clock phase
+    Check("state", "unanswered guild bag change is past the pairing window", true, GetTime() - guildAnsweredAt > W.Bank.PAIR)
+    Fire("BAG_UPDATE_DELAYED")
+    Check("state", "unanswered guild bag change is pending", true, W.Bank.Pending().guildPending)
     Lab.Settle(1.5)
     Check("state", "no answer followed the bag change: the tab may have changed", true, W.Storage.Guild({ key = "Simulated Guild-" .. GetRealmName() }).tabs[1].u == true)
     Check("display", "its stock is not collected from any more: back to the bank-only list", "Silverleaf | Peacebloom | Tin Ore | Silverleaf | Coarse Thread | Copper Ore | Tin Ore", Names(Lists().shop))
@@ -1345,77 +1498,45 @@ end)
 
 ---------------------------------------------------------------------------------------------------------------------------
 -- Third pass: what the owner found in the real client, as far as the simulator can show it
---   hit test   EMULATED from frame rectangles, strata, levels and the mouse flag (the simulator has no pointer): it says whether any other
---              mouse-enabled frame is stacked over a control's centre. It cannot say how the real client orders equal levels.
+--   hit test   EMULATED by TwichUI_TestLab/Reach.lua (loaded into this chunk by workshop.sh) from every frame's rectangle, hit-rect insets,
+--              strata, level, mouse flags, visibility, scroll clipping and parent chain (the simulator has no pointer, and its GetMouseFoci only
+--              returns what a scenario forced). It says whether any other mouse-enabled frame is stacked over a control's hit point and, if so,
+--              which. It cannot say how the real client orders equal levels (it reports those as ambiguous). The next step plants an overlay.
 --   hover      the row's own OnEnter, run by the scenario: the painted art's state (shown, alpha, parent visible). Not a pointer, not how it looks.
 --   fit        measured string widths against the control's rectangle (the simulator draws addon fonts in Friz Quadrata: a structural check)
 ---------------------------------------------------------------------------------------------------------------------------
 Lab.Step("third pass: hit test, hover, fit, tooltips, status", function()
     local W = R.Workshop
-    local STRATA = { BACKGROUND = 1, LOW = 2, MEDIUM = 3, HIGH = 4, DIALOG = 5, FULLSCREEN = 6, FULLSCREEN_DIALOG = 7, TOOLTIP = 8 }
-    local function InWorkshop(fr)
-        local p = fr
-        while p do
-            if p == TwichUIWorkshop then return true end
-            p = p.GetParent and p:GetParent() or nil
+    local RC = R.TestLab.Reach
+    local function Label(fr)   -- a frame's name, else a button's own text (synthetic text here), else its type
+        local name = fr.GetName and fr:GetName()
+        if name then return name end
+        local tx = fr.text
+        if type(tx) == "table" and tx.GetText then
+            local t = tx:GetText()
+            if t and t ~= "" then return t end
         end
-        return false
+        return nil
     end
-    local function Rect(fr)   -- left, bottom, right, top in screen units
-        local l, b, w, h = fr:GetRect()
-        if not l then return nil end
-        local s = fr:GetEffectiveScale()
-        return l * s, b * s, (l + w) * s, (b + h) * s
+    local function Look(fr, kind, extra)   -- one analysis of a control, against every frame the simulator has
+        local o = { kind = kind or "click", label = Label, evidence = "simulator-geometry", limit = 1000000 }
+        for k, v in pairs(extra or {}) do o[k] = v end
+        return RC.Analyze(fr, o)
     end
-    -- every mouse-enabled shown frame of the window, in creation order
-    local function Targets()
-        local out, order = {}, 0
-        local fr = EnumerateFrames()
-        while fr do
-            order = order + 1
-            if fr.IsMouseEnabled and fr:IsMouseEnabled() and fr:IsVisible() and InWorkshop(fr) then
-                local l, b, r, t = Rect(fr)
-                if l then out[#out + 1] = { f = fr, l = l, b = b, r = r, t = t, key = (STRATA[fr:GetFrameStrata()] or 3) * 1e9 + fr:GetFrameLevel() * 1e4 + order } end
-            end
-            fr = EnumerateFrames(fr)
-        end
-        return out
-    end
-    local function TopAt(targets, x, y)
-        local best
-        for _, tg in ipairs(targets) do
-            if x >= tg.l and x <= tg.r and y >= tg.b and y <= tg.t and (not best or tg.key > best.key) then best = tg end
-        end
-        return best and best.f or nil
-    end
-    local function Under(fr, ancestor)
-        while fr do if fr == ancestor then return true end fr = fr:GetParent() end
-        return false
-    end
-    local function Label(fr) return (fr:GetName() or (fr.text and fr.text.GetText and fr.text:GetText()) or fr:GetObjectType()) end
-    -- every shown button is the top mouse target at its own centre (a row only when its centre is inside its scroll area)
+    -- every shown, enabled button of the window with a click script is the topmost mouse frame at its hit point (a row only where the scroll
+    -- frame shows it)
     local function CoveredButtons()
-        local targets, bad = Targets(), {}
-        for _, tg in ipairs(targets) do
-            local fr = tg.f
-            if fr:GetObjectType() == "Button" then
-                local cx, cy = (tg.l + tg.r) / 2, (tg.b + tg.t) / 2
-                local clipped = false
-                local p = fr:GetParent()
-                while p and p ~= TwichUIWorkshop do
-                    if p:GetObjectType() == "ScrollFrame" then
-                        local l, b, r, t = Rect(p)
-                        if l and not (cx >= l and cx <= r and cy >= b and cy <= t) then clipped = true end
-                    end
-                    p = p:GetParent()
-                end
-                if not clipped then
-                    local top = TopAt(targets, cx, cy)
-                    if top and not Under(top, fr) then bad[#bad + 1] = Label(fr) .. " under " .. Label(top) end
-                end
+        local col, bad, n = RC.Collect({ limit = 1000000 }), {}, 0
+        for _, c in ipairs(col.list) do
+            local fr = c.frame
+            local kind = fr:GetObjectType()
+            if (kind == "Button" or kind == "CheckButton") and RC.Within(fr, TwichUIWorkshop) and fr:IsEnabled() and type(fr:GetScript("OnClick")) == "function" then
+                n = n + 1
+                local res = RC.Analyze(fr, { kind = "click", collected = col, label = Label, evidence = "simulator-geometry", limit = 1000000 })
+                if res.verdict ~= "reachable" and res.verdict ~= "clipped" then bad[#bad + 1] = (res.text:gsub("\n%s*", " | ")) end
             end
         end
-        return #bad == 0 and "none covered" or table.concat(bad, "; ")
+        return #bad == 0 and "none covered" or table.concat(bad, "; "), n
     end
     local function Hover(row) row:GetScript("OnEnter")(row) Lab.Settle(0.15) end
     local function Unhover(row) row:GetScript("OnLeave")(row) Lab.Settle(0.15) end
@@ -1423,7 +1544,7 @@ Lab.Step("third pass: hit test, hover, fit, tooltips, status", function()
 
     -- 1. Opportunities: the Add button, through its real control, with the real queue
     Tab("Opportunities")
-    Check("state", "the hit test sees the window's mouse targets (it is not passing on an empty list)", true, #Targets() > 20)
+    Check("state", "the hit test sees the window's mouse targets (it is not passing on an empty list)", true, select(2, CoveredButtons()) > 8)
     local add = Opps().detail.add
     local rows = Rows(Lists().opps)
     local pick
@@ -1433,18 +1554,17 @@ Lab.Step("third pass: hit test, hover, fit, tooltips, status", function()
     local rec = Opps().detail.rec
     Check("display", "its details are shown, and Add is offered", "Add to crafting plan/true", Txt(add.text) .. "/" .. tostring(add:IsEnabled()))
     do
-        local cx, cy = add:GetCenter()
-        local s = add:GetEffectiveScale()
-        local top = TopAt(Targets(), cx * s, cy * s)
-        Check("display", "HIT TEST (emulated): the Add button is the top mouse target at its centre", "Add to crafting plan", top and Label(top) or "nothing")
+        local res = Look(add)
+        Check("display", "HIT TEST (emulated): the Add button is the top mouse target at its centre", "Add to crafting plan", res.verdict == "reachable" and res.top.label or res.text)
     end
     Check("display", "HIT TEST (emulated): no button on Opportunities has another mouse frame stacked over its centre", "none covered", CoveredButtons())
     local before = #W.Queue.Entries()
     Click(add, "Add to crafting plan")
+    AcceptAdd(rec.name)
     Check("state", "the click put the chosen recipe in the queue", true, W.Queue.Find(rec.id) ~= nil and #W.Queue.Entries() == before + 1)
     Check("display", "the button says it is queued, and the row and footer agree", "In your queue/false/true/true",
         Txt(add.text) .. "/" .. tostring(add:IsEnabled()) .. "/" .. tostring(Row(Lists().opps, rec.name).sub:GetText():find("In your queue", 1, true) ~= nil)
-        .. "/" .. tostring(Txt(Frame().note):find("^Added ") ~= nil))
+        .. "/" .. tostring(Txt(Frame().note):find("^Added ") ~= nil or Txt(Frame().note):find("^Queued ") ~= nil))
     Tab("Crafting")
     Check("display", "Crafting shows it in the queue", true, (function()
         for _, q in ipairs(Lists().queue.data) do if q.entry.id == rec.id then return true end end
@@ -1603,12 +1723,496 @@ Lab.Step("third pass: hit test, hover, fit, tooltips, status", function()
 end)
 
 ---------------------------------------------------------------------------------------------------------------------------
+-- Reachability (testing roadmap M5): can the pointer reach the controls, and does the check SEE it when it cannot?
+--   The geometry is TwichUI_TestLab/Reach.lua's EMULATION over the simulator's frames: rectangles, hit-rect insets, strata, levels, mouse flags,
+--   visibility, scroll clipping and parents. It is not input: the simulator has no pointer, and its GetMouseFoci only returns what a scenario
+--   forces (checked below, so nobody mistakes it for a hit test). What it can do is catch an obstruction we put there on purpose:
+--   NEGATIVE CONTROL: a mouse-enabled frame planted over a working button by THIS SCENARIO (never by the Workshop's code). The same button
+--   must read reachable, then blocked (naming the planted frame), then reachable again once the frame is gone. The same for a hoverable row.
+--   A working handler is not a reachable button: the planted overlay leaves the button enabled with its click script, and Click() still runs it.
+---------------------------------------------------------------------------------------------------------------------------
+Lab.Step("reachability: planted overlay, hover rows, insets, clipping, tooltip", function()
+    local W = R.Workshop
+    local RC = R.TestLab.Reach
+    local function Label(fr)
+        local name = fr.GetName and fr:GetName()
+        if name then return name end
+        local tx = fr.text
+        if type(tx) == "table" and tx.GetText then
+            local t = tx:GetText()
+            if t and t ~= "" then return t end
+        end
+        return nil
+    end
+    local function Look(fr, kind, extra)
+        local o = { kind = kind or "click", label = Label, evidence = "simulator-geometry", limit = 1000000 }
+        for k, v in pairs(extra or {}) do o[k] = v end
+        return RC.Analyze(fr, o)
+    end
+    local function Verdict(res) return res.verdict .. (res.blocker and ("/" .. res.blocker.label) or "") end
+    -- the planted obstruction: made here, over a given control's hit point, in a strata above the Workshop; the Workshop never sees it
+    local ov
+    local function Plant(over, mouse)   -- over: the control whose hit point is covered
+        local hit = RC.HitRect(over).hit
+        local cx, cy = (hit[1] + hit[3]) / 2, (hit[2] + hit[4]) / 2
+        if not ov then
+            ov = CreateFrame("Frame", "SimlabPlantedOverlay", UIParent)
+            ov:SetFrameStrata("TOOLTIP")
+        end
+        ov:ClearAllPoints()
+        ov:SetSize(60, 40)
+        ov:SetPoint("CENTER", UIParent, "BOTTOMLEFT", cx / UIParent:GetEffectiveScale(), cy / UIParent:GetEffectiveScale())
+        ov:EnableMouse(mouse ~= false)
+        ov:Show()
+    end
+    local function Unplant()
+        if ov then
+            if ov.SetPropagateMouseClicks then pcall(ov.SetPropagateMouseClicks, ov, false) end
+            ov:EnableMouse(true); ov:EnableMouse(false); ov:Hide()
+        end
+    end
+
+    -- 0. the simulator's own pointer API, so its limits are written down by a check: GetMouseFoci answers what was forced, not a position
+    Tab("Opportunities")
+    local add = Opps().detail.add
+    local pick
+    for _, r in ipairs(Rows(Lists().opps)) do if r.rec and not W.Queue.Find(r.rec.id) then pick = r break end end
+    Check("display", "REACH: an unqueued recipe is listed", true, pick ~= nil)
+    Click(pick, "choose an unqueued recipe")
+    A_Admin.SetMouseOverFrame(add)
+    local forced = RC.Sample()
+    Check("display", "REACH: the simulator's GetMouseFoci returns the frame the scenario FORCED (SetMouseOverFrame), as a list", "true/1/true",
+        tostring(forced.ok) .. "/" .. tostring(forced.count) .. "/" .. tostring(forced.foci[1] and forced.foci[1].frame == add))
+    pcall(A_Admin.SetMouseOverFrame, nil)
+    A_Admin.SetMousePosition(5, 5)
+    Check("display", "REACH: and it names no frame from a position (the pointer is at 5,5, nowhere near; the forced frame is not a hit test)", "0",
+        tostring(#GetMouseFoci() > 0 and #GetMouseFoci() or 0))
+
+    -- 1. the Add button, then the planted overlay, then removal
+    local before = Look(add)
+    Check("display", "REACH: the Add button is reachable at its hit point", "reachable", Verdict(before))
+    Check("display", "REACH: its own state is eligible: shown, enabled, mouse on, clicks on, a click script", "true/true/true/true/true/true",
+        tostring(before.eligibility.state.shown) .. "/" .. tostring(before.eligibility.state.enabled) .. "/" .. tostring(before.eligibility.state.mouse)
+        .. "/" .. tostring(before.eligibility.state.click) .. "/" .. tostring(before.eligibility.state.handler) .. "/" .. tostring(before.eligibility.ok))
+    Plant(add)
+    local blocked = Look(add)
+    Check("display", "NEGATIVE CONTROL: with a mouse-enabled frame planted over it, the Add button reads BLOCKED and names the planted frame",
+        "blocked/SimlabPlantedOverlay", Verdict(blocked))
+    Check("display", "NEGATIVE CONTROL: the report says what, where and why", "true/true/true/true/true/true", (function()
+        local t = blocked.text
+        return tostring(t:find("BLOCKED click on Add to crafting plan", 1, true) ~= nil) .. "/" .. tostring(t:find("hierarchy: ", 1, true) ~= nil)
+            .. "/" .. tostring(t:find("expected hit point: x ", 1, true) ~= nil) .. "/" .. tostring(t:find("blocking frame: SimlabPlantedOverlay [Frame, TOOLTIP level", 1, true) ~= nil)
+            .. "/" .. tostring(t:find("effective hit rect: x ", 1, true) ~= nil) .. "/" .. tostring(t:find("evidence: simulator-geometry", 1, true) ~= nil)
+    end)())
+    Check("display", "NEGATIVE CONTROL: the blocked button is still ELIGIBLE (enabled, a click script): its handler would work, the pointer would not reach it", "true/true",
+        tostring(blocked.eligibility.ok) .. "/" .. tostring(type(add:GetScript("OnClick")) == "function"))
+    local queued = #W.Queue.Entries()
+    add:Click()   -- handler level: it still runs, which is exactly why a handler test cannot see the obstruction
+    -- (P2.1) the handler opens the optimized confirmation (nothing is queued until it is accepted), so "it ran" is the confirmation being shown
+    local _, cdw = R.Workshop.StrategyView.Frames()
+    Check("click", "NEGATIVE CONTROL: Button:Click() still runs the blocked button's handler (a passing handler test proves nothing about the pointer)", "true/" .. queued,
+        tostring(cdw ~= nil and cdw:IsShown()) .. "/" .. #W.Queue.Entries())
+    if cdw then cdw:Hide() end   -- closed again, so its scrim covers nothing in the checks that follow
+    if W.Queue.Find(pick.rec.id) then W.Session.Remove(pick.rec.id) end   -- put the queue back
+    Win().Render()
+    Unplant()
+    Check("display", "NEGATIVE CONTROL: with the overlay removed, the Add button is reachable again", "reachable", Verdict(Look(add)))
+    -- M6.1 NEGATIVE CONTROL for propagation: the planted overlay passes clicks on (SetPropagateMouseClicks), so the button is reachable THROUGH it;
+    -- Reachable -> Propagated -> Reachable. SIMULATED classification only: the simulator has no pointer, and the client's own behaviour (one
+    -- propagating frame over a Button handed it the click, observed in Forever 1.60.1 build 70888) is a Test Lab fact, not something proved here.
+    -- The overlay's flag is read through the Lab's own reader (CanPropagateMouseClicks, then GetPropagateMouseClicks): if the simulator has
+    -- neither, the analysis must say UNKNOWN, which the first check records.
+    Plant(add)
+    local canSet = type(ov.SetPropagateMouseClicks) == "function"
+    local flag = canSet and RC.Propagates(ov)
+    Check("display", "REACH: the simulator's overlay answers its propagation flag (false by default) through the Lab's reader", "true/false", tostring(canSet) .. "/" .. tostring(flag))
+    if canSet then
+        ov:SetPropagateMouseClicks(true)
+        local passed = Look(add)
+        Check("display", "NEGATIVE CONTROL: with the overlay propagating clicks the Add button is REACHABLE THROUGH PROPAGATION (simulated), naming the propagating frame",
+            "reachable/propagation/SimlabPlantedOverlay", passed.verdict .. "/" .. tostring(passed.via) .. "/" .. tostring(passed.propagator and passed.propagator.label))
+        Check("display", "NEGATIVE CONTROL: the report says it is through propagation", true, passed.text:find("REACHABLE (through propagation) click on Add to crafting plan", 1, true) ~= nil)
+        ov:SetPropagateMouseClicks(false)
+        Check("display", "NEGATIVE CONTROL: propagation switched off, the overlay BLOCKS again", "blocked/SimlabPlantedOverlay", Verdict(Look(add)))
+        Check("display", "NEGATIVE CONTROL: and a propagating overlay does not change what the hover sees (it still takes the pointer)", "blocked/SimlabPlantedOverlay", (function()
+            ov:SetPropagateMouseClicks(true)
+            local hv = Look(add, "hover", { hasScript = function() return true end })
+            ov:SetPropagateMouseClicks(false)
+            return Verdict(hv)
+        end)())
+    end
+    Unplant()
+    Check("display", "NEGATIVE CONTROL: with the overlay removed again, the Add button is reachable with no propagation involved", "reachable/nil", (function()
+        local r = Look(add)
+        return r.verdict .. "/" .. tostring(r.via)
+    end)())
+    -- a decorative frame (mouse off) over the button is no obstruction
+    Plant(add, false)
+    Check("display", "REACH: a decorative frame with the mouse off over the button does not block it", "reachable", Verdict(Look(add)))
+    Unplant()
+
+    -- 2. a hoverable row: the row, a planted overlay, removal; its picture (a child that takes the pointer); a chosen row is as reachable
+    local row = pick   -- the unqueued recipe's row chosen above
+    Check("display", "REACH: the row is reachable for hover at its centre", "reachable", Verdict(Look(row, "hover")))
+    Plant(row)
+    Check("display", "NEGATIVE CONTROL: a planted frame over the row blocks its hover", "blocked/SimlabPlantedOverlay", Verdict(Look(row, "hover")))
+    Unplant()
+    Check("display", "NEGATIVE CONTROL: and hover reaches the row again once it is gone", "reachable", Verdict(Look(row, "hover")))
+    local pic = row.iconBtn
+    Check("display", "REACH: the row's picture is reachable for hover", "reachable", Verdict(Look(pic, "hover")))
+    local ph = RC.HitRect(pic).hit
+    local onPic = Look(row, "hover", { point = { (ph[1] + ph[3]) / 2, (ph[2] + ph[4]) / 2 } })
+    Check("display", "REACH: at the picture the row is NOT the frame under the pointer: its child is (so the row must follow the child to stay lit)", "blocked/" .. RC.Label(pic, { label = Label }) .. "/child",
+        Verdict(onPic) .. "/" .. onPic.relation)
+    pic:GetScript("OnEnter")(pic)
+    Check("display", "REACH: the picture's own enter keeps the row lit (Follow)", "true", tostring(row.hovered))
+    pic:GetScript("OnLeave")(pic)
+    Check("display", "REACH: leaving the picture puts it out", "false", tostring(row.hovered))
+    Click(row, "choose the row")
+    Check("display", "REACH: a chosen row is still reachable for hover (selection is painting, not input)", "true/reachable", tostring(row.selected) .. "/" .. Verdict(Look(row, "hover")))
+    -- a disabled button: reachable geometry, ineligible state; the handler (Click) refuses it
+    Click(add, "Add to crafting plan")   -- queued: the button turns into "In your queue", disabled
+    AcceptAdd("the chosen row")          -- (P2.1) through the confirmation
+    local disabled = Look(add)
+    Check("display", "REACH: a queued recipe's Add button is disabled: ineligible, and still the topmost frame there", "ineligible/self", disabled.verdict .. "/" .. tostring(disabled.relation))
+    W.Session.Remove(pick.rec.id)
+    Win().Render()
+
+    -- 3. hit-rect insets: the switch's label is part of its hit area
+    Tab("Crafting")
+    local sw = Frame().useGuild   -- "Use guild bank" in the Crafting materials card (the window frame keeps it)
+    local hr = RC.HitRect(sw)
+    Check("display", "REACH: the switch's hit rectangle reaches past its frame, over its label (SetHitRectInsets with a negative left)", true, hr.hit[1] < hr.rect[1] and hr.insets[1] < 0)
+    local cyS = (hr.rect[2] + hr.rect[4]) / 2
+    Check("display", "REACH: a point on the label is reachable for the switch", "reachable", Verdict(Look(sw, "click", { point = { hr.rect[1] - 5, cyS } })))
+    Check("display", "REACH: a point further left than the hit rectangle is not the switch's", "outside", Verdict(Look(sw, "click", { point = { hr.hit[1] - 4, cyS } })))
+    hr = nil
+
+    -- 4. scroll clipping: a scroll frame the scenario owns, scrolled; and the Opportunities pool
+    local sf = CreateFrame("ScrollFrame", "SimlabReachScroll", UIParent)
+    sf:SetSize(200, 100); sf:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 20, 20); sf:SetFrameStrata("TOOLTIP")
+    local child = CreateFrame("Frame", nil, sf)
+    child:SetSize(200, 400)
+    sf:SetScrollChild(child)
+    local btns = {}
+    for i = 1, 8 do
+        local b = CreateFrame("Button", "SimlabReachRow" .. i, child)
+        b:SetSize(200, 50); b:SetPoint("TOPLEFT", child, "TOPLEFT", 0, -(i - 1) * 50)
+        b:SetScript("OnClick", function() end)
+        btns[i] = b
+    end
+    local function Seen() local out = {} for i = 1, 8 do out[#out + 1] = Verdict(Look(btns[i])):sub(1, 1) end return table.concat(out) end
+    Check("display", "REACH: a scroll frame at the top shows rows 1-2: reachable (r), the rest clipped (c)", "rrcccccc", (Seen():gsub("[^rc]", "?")))
+    -- SIMULATOR LIMIT, written down as a check: SetVerticalScroll stores the offset (GetVerticalScroll answers it) but the simulator does not
+    -- move the scroll child's rows (GetRect is unchanged, GetVerticalScrollRange stays 0). The real engine does move them. A scrolled list is
+    -- therefore modelled here by anchoring the child where the engine would put it at that offset.
+    local y0 = select(2, btns[3]:GetRect())
+    sf:SetVerticalScroll(100)
+    Check("state", "SIMULATOR LIMIT: SetVerticalScroll does not move the rows' rectangles (so scrolling is modelled by anchoring)", "stored 100, rect unchanged",
+        "stored " .. sf:GetVerticalScroll() .. ", rect " .. (select(2, btns[3]:GetRect()) == y0 and "unchanged" or "MOVED: the simulator now scrolls; use it"))
+    sf:SetVerticalScroll(0)
+    child:ClearAllPoints()
+    child:SetPoint("TOPLEFT", sf, "TOPLEFT", 0, 100)   -- the child 100 higher: two rows scrolled out of the top
+    Check("display", "REACH: scrolled by two rows (the child 100 higher), rows 3-4 are reachable and 1-2 are clipped", "ccrrcccc", (Seen():gsub("[^rc]", "?")))
+    sf:Hide()
+    Check("display", "REACH: a hidden scroll frame hides every row (ineligible, none reachable)", "iiiiiiii", (Seen():gsub("[^i]", "?")))
+    -- the pooled Opportunities rows: only the SHOWN ones take the pointer; recycled (hidden) rows never do
+    Tab("Opportunities")
+    local list = Lists().opps
+    local shown, pooled, taking = 0, #list.rows, 0
+    local col = RC.Collect({ limit = 1000000 })
+    local takes = {}
+    for _, c in ipairs(col.list) do takes[c.frame] = true end
+    for _, r in ipairs(list.rows) do
+        if r:IsShown() then shown = shown + 1 end
+        if takes[r] then taking = taking + 1 end
+    end
+    Check("display", "REACH: the Opportunities pool: the rows that take the pointer are exactly the shown ones", shown .. "/" .. shown, taking .. "/" .. shown)
+    local worst = "all reachable or scrolled out"
+    for _, r in ipairs(Rows(list)) do
+        local res = Look(r, "hover", { collected = col })
+        if res.verdict ~= "reachable" and res.verdict ~= "clipped" then worst = r.rec and Verdict(res) or res.verdict end
+    end
+    Check("display", "REACH: each shown Opportunities row is reachable for hover or scrolled out of view", "all reachable or scrolled out", worst)
+    Check("state", "REACH: the pool is not smaller than what it shows", true, pooled >= shown)
+
+    -- 5. a tooltip does not take the pointer from what it covers
+    GameTooltip:SetOwner(add, "ANCHOR_TOP")
+    GameTooltip:AddLine("Simlab reachability tooltip")
+    GameTooltip:Show()
+    local tipMouse = GameTooltip:IsMouseEnabled()
+    Check("display", "REACH: with the game tooltip shown beside the button, the Add button is reachable; the tooltip's own mouse flag is reported", "reachable/" .. tostring(tipMouse),
+        Verdict(Look(add)) .. "/" .. tostring(tipMouse))
+    GameTooltip:Hide()
+
+    sf:Hide()
+    Unplant()
+    Win().SetMode("overview")
+    W.Session.ClearNote()
+    Win().Render()
+end)
+
+---------------------------------------------------------------------------------------------------------------------------
 -- The pose a screenshot is taken in (params.view). The checks above are the same in every launch.
 ---------------------------------------------------------------------------------------------------------------------------
+-- A6: updating prices on opening the auction house. The Workshop is loaded already here (the earlier steps opened it), so the core detector, the policy
+-- and the shared scanner run for real against the fake auction house; what is NOT proven is that the REAL client accepts an automatic request (the Test
+-- Lab probes autoscan.* do that). The detector's entry points (WA.Opened/WA.Closed, what its events call) are called directly: the events themselves would make Blizzard load its real auction UI, which the simulator cannot (the events are covered in tests/test_workshop_auto.lua). A market of its own (the other side) keeps the scenario's main prices untouched; it is removed afterwards.
+Lab.Step("automatic price updates on opening the auction house", function()
+    local WA, A, SC = R.WorkshopAuto, R.Workshop.Auto, R.Workshop.Scan
+    local AB = R.Workshop.AuctionButton
+    local realFaction, realCombat = UnitFactionGroup, InCombatLockdown
+    local offset = 0
+    local wall0, mono0 = A.wall, A.mono
+    A.wall = function() return time() + offset end
+    A.mono = function() return GetTime() + offset end
+    UnitFactionGroup = function() return "Horde" end
+    local KEY = "SimulatedRealm|Horde"
+    local function Open() SetAuctionHouse(true) WA.Opened() Lab.Settle(0.1) end
+    local function Close() SetAuctionHouse(false) WA.Closed() Lab.Settle(0.05) end
+    local function Finish() A_Admin.FireEvent("REPLICATE_ITEM_LIST_UPDATE") Lab.Settle(2.6) end   -- (the scan's quiet period is 2 s)
+    local function Saved() local m = TwichUIWorkshopDB.markets[KEY] return m and (m.snap and m.snap.seq or 0) or "none" end
+    local base = ah.requested
+    A.Reset()
+    Check("init", "shipped policy is manual and the setting off by default", "manual/false", WA.POLICY .. "/" .. tostring(R:Enabled("workshopAutoScan")))
+    Open()
+    Check("event", "manual policy: opening makes no request and offers no prompt", "0/false", (ah.requested - base) .. "/" .. tostring(A.Prompting()))
+    Close()
+    WA.POLICY = "auto" R:SetEnabled("workshopAutoScan", true)   -- (the A6 behaviour, kept for a later decision, is what the rest of this step exercises)
+    Check("init", "the capability is not yet verified in the real client", "unknown", WA.Capability())
+    -- unknown capability: a prompt, never a request
+    Open()
+    Check("event", "unverified capability: opening makes no request", 0, ah.requested - base)
+    Check("state", "unverified capability: a one-click prompt is offered", "prompt/true", tostring(A.state.action) .. "/" .. tostring(A.Prompting()))
+    if AB and AB.Button() then
+        Check("display", "the button offers Update prices", "Update prices", Txt(AB.Button().text))
+        Click(AB.Button(), "Update prices")
+        Check("click", "the click is the player's own scan: one request", "scanning/1", SC.state .. "/" .. (ah.requested - base))
+        Check("display", "while it runs the button is Stop", "Stop", Txt(AB.Button().text))
+        Check("click", "a click while it runs stops it, nothing saved", "true/stopped/none", tostring(SC.Stop()) .. "/" .. tostring(SC.why) .. "/" .. tostring(Saved()))
+    else
+        Check("init", "(the Auction House button exists)", true, false)
+    end
+    -- supported (set here for the test only): fresh market, then due
+    -- (an earlier accepted scan of this market, made directly: the full scan takes more simulated time than this scenario has left)
+    Check("state", "an earlier scan is saved for the market", true, R.Workshop.Prices.Commit(KEY, { realm = "SimulatedRealm", side = "Horde", at = time() + offset, complete = true,
+        read = 1, used = 1, n = 1, items = { [2447] = "5,1,1,1,0" } }) ~= false)
+    local seq = Saved()
+    Close() WA.CAPABILITY = "supported" Open()
+    Check("event", "fresh market: no further request", 1, ah.requested - base)
+    Check("state", "fresh market: the visit says so", "skip/fresh", tostring(A.state.action) .. "/" .. tostring(A.state.why))
+    Close() offset = 3700 Open()
+    Check("event", "an hour later the update starts by itself, once", "scanning/2", SC.state .. "/" .. (ah.requested - base))
+    Check("display", "its line says prices are updating", "Updating market prices...", (SC.Message()))
+    if AB and AB.Button() then Check("display", "the button is its Stop", "Stop", Txt(AB.Button().text)) end
+    -- Stop: ends it, writes nothing, a late answer changes nothing
+    Check("click", "Stop ends the scan", "true/stopped", tostring(SC.Stop()) .. "/" .. tostring(SC.why))
+    A_Admin.FireEvent("REPLICATE_ITEM_LIST_UPDATE") Lab.Settle(0.3)
+    Check("state", "stopped: nothing was saved", seq, Saved())
+    -- the window closing mid-scan
+    Close() offset = 7400 Open()
+    Check("event", "due again: a request", "scanning/3", SC.state .. "/" .. (ah.requested - base))
+    A_Admin.FireEvent("REPLICATE_ITEM_LIST_UPDATE") Lab.Settle(0.1)
+    Close()
+    Lab.Settle(2.3)   -- (the scan notices the closed window when its quiet period ends and the reading begins)
+    Check("state", "closed during the scan: interrupted, nothing saved", "interrupted/closed/" .. tostring(seq), SC.state .. "/" .. tostring(SC.why) .. "/" .. tostring(Saved()))
+    -- the setting off, and combat
+    local n = ah.requested
+    R:SetEnabled("workshopAutoScan", false) offset = 11100 Close() Open()
+    Check("event", "setting off: no request", 0, ah.requested - n)
+    R:SetEnabled("workshopAutoScan", true)
+    Close() InCombatLockdown = function() return true end Open()
+    Check("event", "in combat: no request, and the visit says why", "0/combat", (ah.requested - n) .. "/" .. tostring(WA.Snapshot().skipped))
+    InCombatLockdown = realCombat
+    -- the same events again are one visit: one request
+    Close() Open() WA.Opened() WA.Opened() Lab.Settle(0.1)
+    Check("event", "repeated equivalent events: one request for the visit", 1, ah.requested - n)
+    Finish()
+    local mk = TwichUIWorkshopDB.markets[KEY]
+    Check("state", "the automatic scan is saved as automatic, in the version-2 database", "true/" .. tostring(R.Workshop.Prices.SAVED_VERSION),
+        tostring(mk and mk.snap and mk.snap.auto) .. "/" .. tostring(TwichUIWorkshopDB.v))
+    Check("state", "the other market was not touched", "SimulatedRealm|unknown", (function() local m = R.Workshop.Prices.Market("SimulatedRealm|unknown") return m and m.key or "none" end)())
+    -- put everything back
+    Close()
+    WA.CAPABILITY = "unknown"
+    UnitFactionGroup = realFaction
+    A.wall, A.mono = wall0, mono0
+    A.Reset()
+    TwichUIWorkshopDB.markets[KEY] = nil
+    SetAuctionHouse(true)
+    Lab.Settle(0.3)
+end)
+
+-- Drive the native menu's public picking contract, as its radio buttons do.
+local function AdvisorChoice(button,label)
+    Click(button,"Advisor filter menu")
+    local menu=_G.Menu.GetManager():GetOpenMenu()
+    local choice
+    menu:EnumerateElementDescriptions(function(_,description)
+        if MenuUtil.GetElementText(description)==label then choice=description end
+    end)
+    if not choice then error("missing Advisor filter: " .. label) end
+    choice:Pick(MenuInputContext.MouseButton,"LeftButton")
+    Lab.Settle(0.3)
+    Check("state","Advisor: menu closes after direct selection",nil,_G.Menu.GetManager():GetOpenMenu())
+end
+
+-- A8 workflow verification is replayed in every pose, like the existing pages.
+Lab.Step("item advisor: navigation, discovery, tracking and actions", function()
+    local W=R.Workshop; local D=W.AdvisorData
+    local requests=ah.requested
+    W.UI.Advisor.Open(2447); Lab.Settle(0.5)
+    local p=Win().Page("advisor")
+    Check("display","Advisor: first-class left navigation and item selection","advisor/2447",Win().Mode() .. "/" .. tostring(p.result and p.result.item))
+    AdvisorChoice(p.source,"In bags")
+    Check("state","Advisor: direct source choice persists","bags",D.Source())
+    for _,row in ipairs(p.list.data) do Check("state","Advisor: carried source excludes absent items",true,(row.count or 0)>0) end
+    AdvisorChoice(p.source,"All known items")
+    p.search:SetText("silverleaf"); Lab.Settle(0.3)
+    Check("state","Advisor: search selects the real matching identity",765,p.result and p.result.item)
+    W.UI.Advisor.Open(2447); Lab.Settle(0.4)
+    Check("state","Advisor: external entry clears an old search",2447,p.result and p.result.item)
+    local tracked=D.Tracked()[2447]==true
+    Click(p.detail.track,"Advisor Track item"); Lab.Settle(0.3)
+    Check("click","Advisor: tracking toggles a saved explicit watch",not tracked,D.Tracked()[2447]==true)
+    Click(p.detail.track,"Advisor restore tracking"); Lab.Settle(0.3)
+    Check("state","Advisor: tracking can be restored",tracked,D.Tracked()[2447]==true)
+    Click(p.detail.recipes,"Advisor Recipe uses")
+    Check("display","Advisor: recipe uses open actual known recipes",true,p.uses and p.uses:IsShown())
+    if p.uses then Click(p.uses.close,"Advisor close recipe uses") end
+    p.detail.scroll:SetVerticalScroll(180)
+    Check("state","Advisor: evidence pane scrolls to alternatives",true,p.detail.scroll:GetVerticalScroll()>0)
+    p.detail.scroll:SetVerticalScroll(0)
+    Win().SetMode("opps"); Lab.Settle(0.3)
+    local pick
+    for _,r in ipairs(Rows(Lists().opps)) do if r.item and r.iconBtn then pick=r; break end end
+    local item=pick and pick.item
+    if pick then pick.iconBtn:Click("RightButton"); Lab.Settle(0.4) end
+    Check("click","Advisor: right-clicking an Opportunities item opens that item",tostring(item),tostring(p.result and p.result.item))
+    Check("state","Advisor: selected identity is saved",item,D.Selected())
+    Check("state","Advisor: discovery and interactions never request an auction scan",requests,ah.requested)
+    Win().SetMode("craft"); Lab.Settle(0.1)
+end)
+
 Lab.Step("pose for the screenshot", function()
     local view = params.view or "craft"
     Say("pose", view)
-    if view == "craft" then
+    if view=="advisorvacant" then
+        local W=R.Workshop
+        for key in pairs(TwichUIWorkshopDB.markets) do TwichUIWorkshopDB.markets[key]=nil end
+        W.Session.AllRecipes=function() return {} end
+        C_Container.GetContainerNumSlots=function() return 0 end
+        local v=TwichUIDB.workshop.view; v.advisorItem=nil; v.advisorTracked={}
+        Win().SetMode("advisor"); Lab.Settle(0.5)
+        local p=Win().Page("advisor")
+        Check("display","pose: no invented identities in an empty catalog",0,#p.list.data)
+        Check("display","pose: empty catalog hides unperformable actions",false,p.detail.track:IsShown())
+        Check("display","pose: empty catalog explains item selection",true,p.detail.empty:IsShown())
+    elseif view == "advisortentative" or view == "advisorbags" or view == "advisorfiltered" or view == "advisorscroll" or view == "advisorsource" or view == "advisorcategory" or view == "advisoralt" or view == "advisorlong" or view == "advisor" or view == "advisorsmall" or view == "advisorempty" or view == "advisorscaled" then
+        local W=R.Workshop
+        local ids={}; for _,e in ipairs(W.Queue.Entries()) do ids[#ids+1]=e.id end
+        for _,id in ipairs(ids) do W.Session.Remove(id) end
+        SetBags({[2447]=20,[765]=4,[3371]=10})
+        local checked=W.Session.PriceSource().market
+        local m=checked and TwichUIWorkshopDB.markets[checked.key]
+        if view=="advisorempty" then
+            for key in pairs(TwichUIWorkshopDB.markets) do TwichUIWorkshopDB.markets[key]=nil end
+        elseif m then
+            local b=W.Prices.NewBatch()
+            for i=1,5 do b:Add(2447,20,2000,true) end
+            local items,_,_,_,dist=b:Items()
+            m.items[2447]=items[2447]; m.dist=m.dist or {}; m.dist[2447]=dist[2447]
+            m.at=time()-60; m.complete=true; m.scope="full"
+            m.snap=m.snap or {}; m.snap.seq=(m.snap.seq or 0)+1; m.snap.at=m.at; m.snap.alg=1
+            m.h2=m.h2 or {}; m.c2=m.c2 or {}
+            local day=math.floor(time()/86400); local days={}
+            for d=day-10,day do days[#days+1]={d=d,p=100,r=100,t=100,l=5,n=1,plo=100,phi=100,rlo=100,rhi=100,tlo=100,thi=100} end
+            m.h2[2447],m.c2[2447]=W.History2.Encode({},days,nil)
+            m.h2info=m.h2info or {v=1,from=day-10}; m.h2info.at=m.at
+        end
+        if view=="advisorscroll" and m then
+            for id=10000,10799 do
+                ITEMS[id]="Stored Herb " .. id; BAGS[id]=1
+                m.items[id]=m.items[2447]
+            end
+            m.snap.seq=m.snap.seq+1
+        end
+        if view=="advisorlong" then
+            ITEMS[2447]="Peacebloom of the Ancient Watcher's Extremely Long and Elaborate Herbal Collection"
+            local info=C_Item.GetItemInfo
+            C_Item.GetItemInfo=function(id)
+                local n,l,q,lev,req,kind,sub,stack,equip,icon,sell,class,subclass,bind=info(id)
+                return n,l,id==2447 and 3 or q,lev,req,kind,sub,stack,equip,icon,sell,class,subclass,bind
+            end
+        end
+        if view=="advisorcategory" or view=="advisorfiltered" then
+            local info=C_Item.GetItemInfo
+            C_Item.GetItemInfo=function(id)
+                local n,l,q,lev,req,kind,sub,stack,equip,icon,sell,class,subclass,bind=info(id)
+                return n,l,q,lev,req,id==3371 and "Reagent" or "Trade Goods",sub,stack,equip,icon,sell,class,subclass,bind
+            end
+        end
+        if view=="advisortentative" and m then
+            m.complete=false; m.snap.seq=m.snap.seq+1
+            local day=math.floor(time()/86400)
+            m.h2[2447],m.c2[2447]=W.History2.Encode({},{{d=day-1,p=100,r=100,t=100,l=5,n=1},{d=day,p=100,r=100,t=100,l=5,n=1}},nil)
+        end
+        W.UI.Advisor.Open(2447); Lab.Settle(0.8)
+        local p=Win().Page("advisor")
+        Check("display","pose: Advisor is a first-class sidebar page","advisor/true",Win().Mode() .. "/" .. tostring(Win().Frame().tabAdvisor:IsShown()))
+        Check("state","pose: real source catalog selected Peacebloom",2447,p.result and p.result.item)
+        Check("display","pose: advisor never claims net proceeds",true,p.result and (not p.result.proceeds or p.result.proceeds.net==nil))
+        Check("state","pose: expected advice",view=="advisorempty" and "unknown" or "auction",p.result and p.result.action)
+        if view=="advisortentative" then
+            Check("state","pose: limited evidence remains tentative","tentative",p.result.level)
+            Check("display","pose: tentative advice prominent","Possible: Auction/Limited evidence",Txt(p.detail.action) .. "/" .. Txt(p.detail.evidence))
+            Check("state","pose: tentative has no posting price",nil,p.result.suggestion.price)
+            Check("state","pose: tentative has no proceeds",nil,p.result.proceeds)
+            Check("display","pose: row retains tentative qualification","Possible Auction",Txt(p.list.rows[1].badge))
+        end
+        if view=="advisorbags" or view=="advisorfiltered" then
+            AdvisorChoice(p.source,"In bags")
+            Check("state","pose: carried source has three actual identities",3,#p.list.data)
+            if view=="advisorfiltered" then
+                AdvisorChoice(p.category,"Reagent")
+                p.search:SetText("vial"); Click(p.auctionable,"Advisor Auctionable"); Lab.Settle(0.3)
+                Check("state","pose: all four filters combine",1,#p.list.data)
+                Check("state","pose: real reagent filter selects Empty Vial",3371,p.result.item)
+            end
+        end
+        if view=="advisorscroll" then
+            local list=p.list
+            list.scroll:SetVerticalScroll(1283); list:Layout()
+            local wheel=list.scroll:GetScript("OnMouseWheel")
+            Check("state","pose: native list wheel handler exists",true,type(wheel)=="function")
+            if wheel then wheel(list.scroll,-2) end
+            Lab.Settle(0.1)
+            local offset=list.scroll:GetVerticalScroll()
+            Check("state","pose: wheel moves to nonzero viewport",true,offset>0)
+            local bar=list.scroll.ScrollBar
+            bar:SetValue(offset+80); Lab.Settle(0.1)
+            offset=list.scroll:GetVerticalScroll()
+            Click(list.rows[2],"Advisor select scrolled row")
+            local item=p.result.item
+            W.UI.Advisor.ItemReady(item,true); Win().Render(); Lab.Settle(0.5)
+            Check("state","pose: metadata and detail preserve scroll",offset,list.scroll:GetVerticalScroll())
+            Win().SetMode("craft"); Win().SetMode("advisor"); Lab.Settle(0.5)
+            Check("state","pose: page return restores scrolled viewport",offset,list.scroll:GetVerticalScroll())
+            Check("state","pose: page return retains selection",item,p.result.item)
+            Check("state","pose: hundreds of results retain pooled rows",true,#list.data>800 and #list.rows<15)
+        end
+        if view=="advisorsource" or view=="advisorcategory" then
+            local before=p.list.data
+            Click(view=="advisorsource" and p.source or p.category,"Advisor open filter dropdown")
+            Lab.Settle(0.2)
+            Check("state","pose: opening menu preserves the result collection",true,before==p.list.data)
+        end
+        if view=="advisoralt" then
+            p.detail.scroll:SetVerticalScroll(190)
+            Check("display","pose: five explicit action alternatives",5,#p.detail.alts)
+        end
+        if view=="advisorscaled" then Win().Frame():SetScale(0.8) end
+    elseif view == "craft" then
         Tab("Crafting")
         Click(Win().Craft().segQueue, "Craft queue (the left card)")
         Click(Rows(Lists().queue)[2], "choose the second queued craft")
@@ -1694,17 +2298,184 @@ Lab.Step("pose for the screenshot", function()
         Check("display", "pose: the details price one craft's materials, each with its quantity", true, Txt(Opps().detail.mats[1].qty):find("^\195\151%d+") ~= nil and Opps().detail.mats[1].item ~= nil)
     elseif view == "design" then
         -- the settings window on the Workshop page, scrolled to the tooltip designer, the Hold Shift preview with a line selected
+        R.SettingsUI.Close()
+        Win().Hide()
+        if params.size == "scaled" then UIParent:SetScale(.8) end
+        TwichUIDB.ui.settingsWindow = params.size == "narrow" and { w = 936, h = 660 } or { w = 1380, h = 1120 }
         Lab.Open("workshop")
+        R.SettingsUI.View("workshop").taskButtons[2]:Click()
         local D = R.WorkshopWorthDesigner
-        D.SetMode(true)
-        D.Select("auction")
+        D.Cancel()
+        local frame = D.Frame()
+        local saved = R.Workshop.WorthLayout.Get()
+        local function Reach(control, label)
+            R.SettingsUI.RevealFrame(control); Lab.Settle(.25)
+            local result = R.TestLab.Reach.Analyze(control, { evidence = "simulator-geometry", limit = 1000000 })
+            local child = R.SettingsUI.View("workshop").frame:GetParent()
+            local sc = child:GetParent()
+            local offset = sc:GetVerticalScroll()
+            if offset == 0 then
+                Check("direct", "pose: [geometry] designer " .. label .. " is reachable", "reachable", result.verdict)
+            else
+                -- This simulator reports logical, unscrolled GetRect coordinates
+                -- while rendering the child with the scroll offset. RC's raw
+                -- rectangle model cannot prove stacking after scrolling. Check
+                -- drawn bounds explicitly; do not call this pointer evidence.
+                local r, viewport = R.TestLab.Reach.HitRect(control), R.TestLab.Reach.HitRect(sc)
+                local dy = offset * sc:GetEffectiveScale()
+                Check("direct", "pose: [scroll bounds] designer " .. label .. " fits vertically", true,
+                    r.rect[2] + dy >= viewport.rect[2] and r.rect[4] + dy <= viewport.rect[4])
+                Check("direct", "pose: [scroll bounds] designer " .. label .. " fits horizontally", true,
+                    r.rect[1] >= viewport.rect[1] and r.rect[3] <= viewport.rect[3])
+                Lab.Say("reach-limit", label, "raw rectangles", result.verdict, "rendering scroll offset", offset,
+                    "scroll-adjusted bounds only; not pointer or stacking evidence")
+            end
+        end
+        D.RemoveLine("auction")
+        Reach(D.ListButton(3), "available field drag source")
+        D.Undo()
+        Reach(D.Row(2), "preview drag source")
+        D.Select("vendor"); Reach(frame.remove, "selected-row action")
+        D.RemoveLine("vendor"); frame.undo:Click()
+        Check("click", "pose: Undo button restores the saved draft", false, D.Dirty())
+        frame.redo:Click(); Reach(frame.save, "Save")
+        frame.save:Click()
+        Check("click", "pose: Save button commits removal", nil, R.Workshop.WorthLayout.IndexOf(R.Workshop.WorthLayout.Get().lines, "vendor"))
+        D.RemoveLine("auction"); Reach(frame.cancel, "Cancel"); frame.cancel:Click()
+        Check("click", "pose: Cancel button preserves saved auction field", true, R.Workshop.WorthLayout.IndexOf(R.Workshop.WorthLayout.Get().lines, "auction") ~= nil)
+        R.Workshop.WorthLayout.Set(saved); D.Cancel()
+        local pose = params.designer or "shift"
+        D.SetMode(pose == "shift")
+        D.Select(nil)
+        if pose == "search" then D.Frame().search:SetText("market")
+        elseif pose == "selected" then D.Select("auction")
+        elseif pose == "reorder" then D.MoveLine("vendor", 1); D.Select("vendor")
+        elseif pose == "reset" then D.RemoveLine("vendor"); D.ResetLayout() end
         local content = R.SettingsUI.View("workshop").frame:GetParent()
         local scroll = content and content:GetParent()
         Lab.Settle(0.2)   -- let the page lay out before measuring where the designer is
         local ct, dt = content and content:GetTop(), D.Frame():GetTop()
         if scroll and scroll.SetVerticalScroll and ct and dt then scroll:SetVerticalScroll(math.max(0, ct - dt - 8)) end
         Lab.Settle(0.2)
-        Check("display", "pose: the designer is on screen with the Hold Shift preview", true, D.Frame():IsShown() and D.Mode())
+        Check("display", "pose: the designer is on screen with the Hold Shift preview", true, D.Frame():IsShown() and D.Mode() == (pose == "shift"))
+    elseif view == "strategy" or view == "confirm" then
+        -- (P2) the full strategy of one craft, and the confirmation before its crafts are added: Copper Belt Buckle needs Bronze Bars, which Smelt Bronze makes
+        -- (the queue already makes the bars through Smelt Bronze; take that entry out so the plan has crafts to add)
+        Tab("Crafting")
+        QueueAct(Rows(Lists().queue)[4], "remove", "Remove Smelt Bronze")
+        Tab("Opportunities")
+        Click(Row(Lists().opps, "Copper Belt Buckle"), "choose Copper Belt Buckle")
+        Click(Opps().detail.view, "View strategy")
+        Lab.Settle(0.3)
+        local sv, cd = R.Workshop.StrategyView.Frames()
+        local steps = false
+        for _, r in ipairs(Lists().strategy.data) do if r.kind == "step" then steps = true end end
+        Check("display", "pose: the strategy view is open with crafting steps in order", "true/true", tostring(sv:IsShown()) .. "/" .. tostring(steps))
+        if view == "confirm" then
+            Click(sv.add, "Add optimized plan")
+            Lab.Settle(0.3)
+            Check("display", "pose: the confirmation lists what would be added, and nothing is queued yet", "true/true", tostring(cd:IsShown()) .. "/" .. tostring(#Lists().confirm.data >= 1))
+        end
+    elseif view == "stratlong" then
+        -- (P2) a long queue (every known recipe of both professions): the strategy of the whole queue, a long scrolling list
+        Tab("Crafting")
+        Click(Win().Craft().segRecipes, "Recipes")
+        for _, p in ipairs({ "Alchemy", "Blacksmithing" }) do
+            Click(FindButton(Frame(), p), p .. " chip")
+            for _, r in ipairs(Rows(Lists().recipes)) do if r.add:IsEnabled() then Click(r.add, "Add " .. Txt(r.name)) end end
+        end
+        Click(Win().Craft().segQueue, "Craft queue")
+        Click(Win().Craft().strat.view, "View strategy (the whole queue)")
+        Lab.Settle(0.5)
+        Check("display", "pose: a long queue's strategy is open", true, R.Workshop.StrategyView.IsOpen() and #Lists().strategy.data > 6)
+    elseif view == "planning" then
+        -- (P2) a plan that is still being worked out: the job never finishes, so the page keeps saying so
+        local CPm = R.Workshop.CraftPlanner
+        local real = CPm.Job
+        CPm.Job = function(inp, opt)
+            local job = real(inp, opt)
+            job.Step = function() return false end
+            return job
+        end
+        R.Workshop.Strategy.Bump()
+        Tab("Opportunities")
+        -- the simulator runs a zero-delay timer again inside the same instant, so a job that never finishes would spin: no frame timer for this pose
+        local realAfter = C_Timer.After
+        C_Timer.After = function() end
+        Click(Row(Lists().opps, "Copper Belt Buckle"), "choose Copper Belt Buckle")
+        Check("display", "pose: Opportunities says it is planning, with no figures", "Planning... | ...", Txt(Opps().detail.strat.status) .. " | " .. Txt(Opps().detail.strat.pairs[1].v))
+        C_Timer.After = realAfter
+    elseif view == "nodata" then
+        -- (P2) a recipe whose materials aren't known: no strategy and no invented figure
+        Tab("Opportunities")
+        Click(Row(Lists().opps, "Enchant Bracer - Lesser Choice"), "choose Enchant Bracer - Lesser Choice")
+        Lab.Settle(0.3)
+        Check("display", "pose: no data is said, and View strategy is not offered", "Not enough data | false", Txt(Opps().detail.strat.status) .. " | " .. tostring(Opps().detail.view:IsEnabled()))
+    elseif view == "override" then
+        -- (P2) a source the player chose stays authoritative and is told apart from the suggestion
+        Tab("Crafting")
+        QueueAct(Rows(Lists().queue)[4], "remove", "Remove Smelt Bronze")
+        Tab("Shopping")
+        local d = Pick("Bronze Bar")
+        Click(d.choose.auction, "Auction house")
+        Lab.Settle(0.3)
+        d = Pick("Bronze Bar")
+        Check("display", "pose: the choice is lit and named, the suggestion is still said", "Your choice | Suggested", Txt(d.tags.auction) .. " | " .. Txt(d.tags.make))
+    elseif view == "shopafter" then
+        -- (P2.1) Shopping after a material arrived in the bags: its row goes after one settled redraw; how it arrived is not claimed
+        Tab("Crafting")
+        QueueAct(Rows(Lists().queue)[4], "remove", "Remove Smelt Bronze")
+        Tab("Shopping")
+        BAGS[2770] = 6
+        Event("BAG_UPDATE_DELAYED")
+        Lab.Settle(0.5)
+        Check("event", "pose: the Copper Ore row is gone once the bags hold enough", false, (Names(Lists().shop)):find("Copper Ore", 1, true) ~= nil)
+    elseif view == "notice" then
+        -- (P2.1) a progress notice through TwichUI's notification coordinator, after the player's own Crafted one
+        Tab("Crafting")
+        local q = Rows(Lists().queue)
+        Click(q[1], "choose the first queued craft")
+        local d = Win().Craft().detail
+        local before = #R.Workshop.Queue.Entries() > 0 and R.Workshop.Queue.Entries()[1].crafts or 0
+        Click(d.done, "Crafted one")
+        Check("state", "pose: one craft was counted", before - 1, R.Workshop.Queue.Entries()[1].crafts)
+        -- the notice gathers for 1.5 s before one card is asked for; the scenario's simulated time is capped, so the gathered words are handed on now
+        -- (a direct call of the same function the timer runs)
+        R.Workshop.Notice.Flush()
+        Lab.Settle(0.2)
+        Check("direct", "pose: the progress notice was handed to the coordinator", true, R.Workshop.Notice.Stats().submitted >= 1)
+    elseif view == "compact" or view == "compactcraft" then
+        -- (P2.1) the compact companion in the window's place: Travel (what is still to get, by source) or Craft (the queue, what is ready next)
+        Tab("Crafting")
+        QueueAct(Rows(Lists().queue)[4], "remove", "Remove Smelt Bronze")
+        Tab("Shopping")
+        Click(Frame().compact, "Compact view")
+        local C = R.Workshop.Compact
+        local cf = C.Frame()
+        if view == "compactcraft" then Click(cf.craft, "Craft") end
+        Lab.Settle(0.3)
+        cf:ClearAllPoints(); cf:SetPoint("CENTER", UIParent, "CENTER", 0, 0)   -- in the middle, for the screenshot
+        Check("display", "pose: the compact view replaced the window and shows its mode", "true/false/" .. (view == "compact" and "travel" or "craft"),
+            tostring(cf:IsShown()) .. "/" .. tostring(Frame():IsShown()) .. "/" .. C.Mode())
+        local words = {}
+        for _, d in ipairs(Lists().compact.data) do words[#words + 1] = d.word end
+        Check("display", "pose: every row says its source or state in words", true, #words > 0)
+    elseif view == "tooltip" or view == "smallstrat" then
+        -- (P2.1) the strategy view: an intermediate's row with the game's item tooltip and the buy-or-craft lines under it; on a small screen too
+        Tab("Crafting")
+        QueueAct(Rows(Lists().queue)[4], "remove", "Remove Smelt Bronze")
+        Tab("Opportunities")
+        Click(Row(Lists().opps, "Copper Belt Buckle"), "choose Copper Belt Buckle")
+        Click(Opps().detail.view, "View strategy")
+        Lab.Settle(0.3)
+        local row
+        for _, r in ipairs(Rows(Lists().strategy)) do if r.data and r.data.kind == "step" then row = r break end end
+        Check("display", "pose: a craft step of an intermediate is listed", true, row ~= nil)
+        if row and view == "tooltip" then
+            row:SetHot(true)
+            row:TipEnter()
+            Check("display", "pose: the row's tooltip is the item's own, owned by the row", "true", tostring(GameTooltip:IsShown() and GameTooltip:GetOwner() == row))
+        end
     elseif view == "shop" then
         -- the mixed-source list with a Make row: take the Smelt Bronze entry back out through its Remove button
         Tab("Crafting")

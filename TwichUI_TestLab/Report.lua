@@ -1,0 +1,132 @@
+-- TwichUI Test Lab: the plain-text report (R.TestLab.Report)
+-- What a player (or a developer) pastes back: a fixed header, one line per case with its evidence label, and a facts line. It holds counts,
+-- case ids and the Lab's own messages only: no character, realm, guild or account name, no chat, no item link, no saved value. Text that
+-- came from a case is cleaned (control characters, item links and colour codes) and cut short before it is written.
+--
+--   TWICHUI-TESTLAB REPORT schema 1
+--   client <version> build <n> interface <toc> | TwichUI <version> | Workshop <version or "not loaded"> | TestLab <version>
+--   run: core,client | N cases: a pass, b fail, ... | 0.41 s | slices 31, worst 6.1 ms, worst frame 38 ms, overruns 0 | ended: complete
+--   labels: ...
+--   one line per case, then the overruns, then "facts: key=value ..."
+
+local R = TwichUI
+local TL = R.TestLab
+local RP = {}
+TL.Report = RP
+
+RP.SCHEMA = 1
+RP.MAX_DETAIL = 240
+RP.MAX_BYTES = 30000
+
+local WORD = { pass = "PASS", fail = "FAIL", error = "ERROR", skipped = "SKIP", timeout = "TIMEOUT", stopped = "STOP", pending = "PENDING", running = "RUNNING" }
+
+-- Text from a case, made safe to paste
+local function Clean(text, limit)
+    text = tostring(text or "")
+    text = text:gsub("|H.-|h(.-)|h", "[link]")
+    text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    text = text:gsub("%c", " "):gsub("|", "/")
+    if #text > (limit or RP.MAX_DETAIL) then text = text:sub(1, limit or RP.MAX_DETAIL) .. "..." end
+    return text
+end
+RP.Clean = Clean
+
+local function Version(addon)
+    local get = C_AddOns and C_AddOns.GetAddOnMetadata
+    local v = get and get(addon, "Version")
+    return v and Clean(v, 20) or "unknown"
+end
+
+local function Header(sum)
+    local version, build, _, toc = "?", "?", nil, "?"
+    if GetBuildInfo then version, build, _, toc = GetBuildInfo() end
+    local workshop = R.Workshop and R.Workshop.ready and ("Workshop " .. Version("TwichUI_Workshop")) or "Workshop not loaded"
+    local lines = {}
+    lines[1] = ("TWICHUI-TESTLAB REPORT schema %d"):format(RP.SCHEMA)
+    lines[2] = ("client %s build %s interface %s | TwichUI %s | %s | TestLab %s"):format(Clean(version, 20), Clean(build, 20), Clean(toc, 20),
+        Version("!!!TwichUI"), workshop, TL.VERSION)
+    local c = sum.counts
+    local total = #sum.results
+    lines[3] = ("run: %s | %d cases: %d pass, %d fail, %d skipped, %d error, %d timeout, %d stopped | %.2f s | slices %d, worst %.1f ms, worst frame %.0f ms, overruns %d | ended: %s")
+        :format(sum.only and ("individual case " .. Clean(sum.only, 80)) or (#sum.cats > 0 and table.concat(sum.cats, ",") or "none"), total, c.pass, c.fail, c.skipped, c.error, c.timeout, c.stopped,
+            sum.seconds, sum.slices, sum.worstSlice * 1000, sum.worstFrame * 1000, sum.overrunCount, Clean(sum.ended, 20))
+    lines[4] = ("clock: %s | slice %.0f ms | cooperative: a step that never yields cannot be interrupted, only measured"):format(sum.clock, (sum.slice or 0) * 1000)
+    lines[5] = "labels: client = observed in this game client | synthetic = production code in the client's Lua on made-up data | guided = observed with the player's help | not run = never started"
+    return lines
+end
+
+-- One case as the report writes it: its line, then its evidence notes
+local function CaseLines(r, out)
+    local label = (r.status == "stopped" and r.ms == nil) and "not run" or r.label
+    local word = WORD[r.status] or r.status
+    if r.class == "guided" and r.status == "stopped" and r.ms ~= nil then word = "CANCEL" end   -- the player's observation was cancelled part way
+    local timing = r.ms and ("%.1f ms"):format(r.ms) or ""
+    local detail = r.detail and Clean(r.detail) or ""
+    out[#out + 1] = ("%-8s%s  %-9s %s%s"):format(word, Clean(r.id, 80), label, timing,
+        detail ~= "" and ("  " .. detail) or "")
+    for _, note in ipairs(r.notes or {}) do out[#out + 1] = "        " .. Clean(note, 400) end
+end
+
+-- sum: Runner's summary ({ results, counts, cats, seconds, slices, worstSlice, worstFrame, overruns, overrunCount, ended, clock })
+function RP.Build(sum)
+    local lines = Header(sum)
+    for _, r in ipairs(sum.results) do CaseLines(r, lines) end
+    if sum.setups and #sum.setups > 0 then
+        lines[#lines + 1] = "setup (one-time, before the case named; not part of that case's time, but part of the run's):"
+        for _, s in ipairs(sum.setups) do
+            lines[#lines + 1] = ("  %s  %.1f ms, before %s"):format(Clean(s.what, 40), s.ms, Clean(s.id, 80))
+        end
+    end
+    if #sum.overruns > 0 then
+        lines[#lines + 1] = ("overruns (a resume ran longer than the slice and could not be interrupted): %d in all, the %d longest, longest first; a frame interval is not CPU time:"):format(sum.overrunCount, #sum.overruns)
+        for _, o in ipairs(sum.overruns) do
+            local how = o.what == "begin" and "before its first step" or (o.what == "verdict" and "after it ended (the saved-data check)" or "one resume")
+            local why = ""
+            if o.phase then
+                why = (" | %s %.1f ms, other %.1f ms | %s"):format(Clean(o.phase, 20), o.phaseMs or 0, o.otherMs or 0, o.timed and "included timed steps (the workload)" or "no timed step (the Lab's own setup, check or collection)")
+            end
+            lines[#lines + 1] = ("  %s  %.1f ms, %s%s%s"):format(Clean(o.id, 80), o.ms, how, o.setup and (" (setup: " .. Clean(o.setup, 40) .. ", not the case's own work)") or "", why)
+        end
+        if sum.overrunBy and sum.overrunOrder and #sum.overrunOrder > 0 then
+            local per = {}
+            for _, id in ipairs(sum.overrunOrder) do
+                local by = sum.overrunBy[id]
+                per[#per + 1] = ("%s %d (worst %.0f ms)"):format(Clean(id, 60), by.n, by.worst)
+            end
+            lines[#lines + 1] = "  by case: " .. table.concat(per, "; ")
+        end
+    end
+    local facts = {}
+    for _, r in ipairs(sum.results) do
+        for _, f in ipairs(r.facts or {}) do facts[#facts + 1] = f[1] .. "=" .. f[2] end
+    end
+    table.sort(facts)
+    lines[#lines + 1] = "facts: " .. (#facts > 0 and table.concat(facts, " ") or "none")
+    -- benchmarks (M7): their own section with its own schema line; the lines above are unchanged, so a report without benchmarks is as before
+    local items = {}
+    for _, r in ipairs(sum.results) do
+        for _, b in ipairs(r.bench or {}) do items[#items + 1] = { result = b, frame = r.frame, compare = b.compare } end
+    end
+    local bench = TL.Bench and TL.Bench.ReportLines(items, ("clock %s | slice %.0f ms | read these as measurements of this run, not budgets"):format(sum.clock, (sum.slice or 0) * 1000))
+    if bench then for _, l in ipairs(bench) do lines[#lines + 1] = l end end
+    local text = table.concat(lines, "\n")
+    if #text > RP.MAX_BYTES then text = text:sub(1, RP.MAX_BYTES) .. "\n... (cut at " .. RP.MAX_BYTES .. " bytes)" end
+    return text
+end
+
+-- The cases that did not pass (fail, error, timeout), with their evidence, under a header that says it is an excerpt. It is NOT a schema 1
+-- report (its first line says so): the full report stays the one to paste when the whole run matters. Returns the text and how many cases.
+function RP.BuildFailures(sum)
+    local head = Header(sum)
+    local lines = { "TWICHUI-TESTLAB FAILURES (an excerpt of a schema " .. RP.SCHEMA .. " report: only the cases that did not pass)", head[2], head[3] }
+    local n = 0
+    for _, r in ipairs(sum.results) do
+        if r.status == "fail" or r.status == "error" or r.status == "timeout" then
+            n = n + 1
+            CaseLines(r, lines)
+            for _, f in ipairs(r.fails or {}) do lines[#lines + 1] = "        failed: " .. Clean(f, 400) end
+        end
+    end
+    if n == 0 then lines[#lines + 1] = "no case failed, raised an error or timed out" end
+    return table.concat(lines, "\n"), n
+end

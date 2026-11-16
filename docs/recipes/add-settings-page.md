@@ -23,7 +23,7 @@ it; its pages call the core (`R:Enabled`, a feature's `Get`/`Set`).
 | `Gear.lua` | `gear` (10), tab `statWeights` (11) | `class` |
 | `Mage.lua` | `mage` (50), tab `refreshmentShares` (51) | `class` |
 | `ClassBars.lua` | `classBars` (55), tabs `classBarsLayout` (56), `classBarsLook` (57), `classBarsEffects` (58) | `class` |
-| `Skins.lua`, `SpeakStone.lua` | `skins` (90), tab `speakstone` (96) | `addons` |
+| `Skins.lua` | `skins` (90) | `addons` |
 | `RestedXP.lua` | `restedxp` (95) | `restedxp` |
 | `TargetArt.lua` | `targetArt` (97) | `addons` |
 | `Sharing.lua`, `Profiles.lua`, `Troubleshooting.lua` | `sharing` (100), `profiles` (105), `troubleshooting` (110) | `config` |

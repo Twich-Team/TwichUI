@@ -9,6 +9,8 @@ local W = R.Workshop
 local Q, M, O, KN = W.Queue, W.Materials, W.Observe, W.Known
 local PR, Op, SC, MK = W.Prices, W.Opps, W.Scan, W.Market
 local V, Sh = W.Vendor, W.Shopping
+-- Strategy.lua loads before this file (the .toc); a test that loads the session alone has no planner and nothing to invalidate
+local Sg = W.Strategy or { Bump = function() end, Reset = function() end }
 local St, K = W.Storage, W.Stock
 local S = { filter = "", observations = 0 }
 W.Session = S
@@ -24,6 +26,72 @@ local dirty = {}       -- [professionID] = true: changed since it was last kept
 local current          -- the professionID being browsed
 local lastWhy          -- why the last read gave nothing, or nil
 local note             -- the last thing an action said, until the next action
+local lastShop         -- the last finished multilevel shopping package (shown, marked as updating, while a newer plan is computed)
+
+---------------------------------------------------------------------------
+-- How costs are shown: the one Workshop choice of presentation (Strategy.CostText reads Strategy.detailed)
+--   TwichUIDB.workshop.view = { prices = "detailed" }   absent (or anything else) means Simple, the default. Account-wide, like the rest of
+--   the "workshop" key; a held (newer) workshop record is never changed.
+---------------------------------------------------------------------------
+function S.PriceDetail()
+    local ws = type(TwichUIDB) == "table" and TwichUIDB.workshop
+    local v = type(ws) == "table" and ws.view
+    return type(v) == "table" and v.prices == "detailed"
+end
+
+function S.SetPriceDetail(on)
+    if Q.Held() then return false, "held" end
+    on = on == true
+    if type(TwichUIDB) ~= "table" then return false, "unsaved" end
+    local ws = TwichUIDB.workshop
+    if type(ws) ~= "table" then
+        if not on then Sg.detailed = false return true end
+        ws = { v = W.SAVED_VERSION }
+        TwichUIDB.workshop = ws
+    end
+    if type(ws.view) ~= "table" then ws.view = {} end
+    ws.view.prices = on and "detailed" or nil
+    Sg.detailed = on
+    return true
+end
+
+-- These account preferences use the existing view record. A future Workshop
+-- schema is read-only, as it is for prices, notices and source choices.
+function S.Objective()
+    local ws = type(TwichUIDB) == "table" and TwichUIDB.workshop
+    local v = type(ws) == "table" and ws.view
+    return type(v) == "table" and v.objective == "cash" and "cash" or "economic"
+end
+function S.CompactMode()
+    local ws = type(TwichUIDB) == "table" and TwichUIDB.workshop
+    local v = type(ws) == "table" and ws.view
+    return type(v) == "table" and v.compactMode == "craft" and "craft" or "travel"
+end
+local function SetViewChoice(key, value, default)
+    if Q.Held() then return false, "held" end
+    if type(TwichUIDB) ~= "table" then return false, "unsaved" end
+    local ws = TwichUIDB.workshop
+    if type(ws) ~= "table" then
+        if value == default then return true end
+        ws = { v = W.SAVED_VERSION }; TwichUIDB.workshop = ws
+    end
+    if type(ws.view) ~= "table" then ws.view = {} end
+    ws.view[key] = value ~= default and value or nil
+    return true
+end
+function S.SetObjective(value)
+    if value ~= "economic" and value ~= "cash" then return false, "bad" end
+    local before = S.Objective()
+    local ok, why = SetViewChoice("objective", value, "economic")
+    if ok and before ~= value then Sg.Bump() end
+    return ok, why
+end
+function S.SetCompactMode(value)
+    if value ~= "travel" and value ~= "craft" then return false, "bad" end
+    return SetViewChoice("compactMode", value, "travel")
+end
+
+Sg.detailed = S.PriceDetail()
 
 ---------------------------------------------------------------------------
 -- What happened this session (memory only, never saved: the Overview's "Recent activity" shows real events, not a history)
@@ -51,6 +119,7 @@ function S.ClearActivity() activity = {}; lastEnded = SC.ended end
 function S.NoteScan()
     if SC.ended == lastEnded then return end
     lastEnded = SC.ended
+    Sg.Bump()   -- new prices: every plan is worked out again
     local text, tone = SC.Message()
     if text then Log(text, tone == "good" and "done" or (tone == "warn" and "failed" or "current"), true) end
 end
@@ -150,6 +219,7 @@ function S.Observe()
     current = r.prof
     dirty[r.prof] = true
     S.Save()
+    Sg.Bump()   -- the known recipes changed
     if #Q.Entries() > 0 then
         local byId = {}
         for _, rec in ipairs(r.recipes) do byId[rec.id] = rec end
@@ -169,6 +239,8 @@ function S.Reset()
     S.filter = ""
     S.opp.prof = nil
     O.ClearCache()
+    Sg.Reset()
+    lastShop = nil
 end
 
 function S.Professions()
@@ -260,6 +332,7 @@ function S.Add(rec)
         note = ACTION_WHY[why] or ACTION_WHY.bad
         return false
     end
+    Sg.Bump()
     note = e.mats and ("Added " .. e.name .. ".") or ("Added " .. e.name .. ". Its materials aren't known yet: open its profession to update.")
     Log("Added " .. e.name .. " to plan")
     return true
@@ -268,6 +341,7 @@ end
 function S.SetCrafts(id, n)
     local ok, why = Q.SetCrafts(id, n)
     if not ok then note = ACTION_WHY[why] or ACTION_WHY.bad end
+    if ok then Sg.Bump() end
     return ok
 end
 
@@ -278,10 +352,42 @@ function S.Change(id, delta)
     return S.SetCrafts(id, n)
 end
 
+-- "Crafted one": the player says one craft of a queued recipe is done (Progress.Credit: the queue's own save; the entry goes after its last craft).
+-- Never from a click on the game's Craft button and never from a bag count. Returns true, or false (the note says why).
+function S.MarkCrafted(id)
+    local P = W.Progress
+    if not P then return false end
+    local ok, info = P.Credit(id)
+    if not ok then
+        note = ACTION_WHY[info] or (info == "notqueued" and "That recipe isn't in the queue.") or ACTION_WHY.bad
+        return false
+    end
+    Sg.Bump()
+    note = W.Notice and W.Notice.CreditText(info) or (info.name .. " crafted.")
+    Log(note, info.planDone and "done" or "current")
+    return true
+end
+
+-- Takes back the player's last "Crafted one" (Progress.Undo). Returns true, or false (the note says why).
+function S.UndoCrafted()
+    local P = W.Progress
+    if not P then return false end
+    local ok, info = P.Undo()
+    if not ok then
+        note = info == "exists" and "That recipe was queued again, so there is nothing to undo." or (info == "nothing" and "Nothing to undo." or (ACTION_WHY[info] or ACTION_WHY.bad))
+        return false
+    end
+    Sg.Bump()
+    note = ("Undone: %s, %d %s left."):format(info.name, info.left, info.left == 1 and "craft" or "crafts")
+    Log(note, "current")
+    return true
+end
+
 function S.Remove(id)
     local e = Q.Find(id)
     local ok, why = Q.Remove(id)
     if ok then
+        Sg.Bump()
         note = e and ("Removed " .. e.name .. ".") or nil
         if e then Log("Removed " .. e.name .. " from plan", "current") end
     else note = ACTION_WHY[why] or ACTION_WHY.bad end
@@ -362,6 +468,7 @@ end
 function S.UseGuild() return St.UseGuild() end
 function S.SetUseGuild(on)
     local ok, why = St.SetUseGuild(on)
+    if ok then Sg.Bump() end
     if not ok then note = why == "held" and ACTION_WHY.held or "Couldn't save that choice yet. Try again in a moment." end
     return ok
 end
@@ -445,6 +552,7 @@ function S.FillSome(n)
             end)
         end
     end
+    if did then Sg.Bump() end
     if did and left == 0 then S.Save() end
     return left
 end
@@ -473,10 +581,13 @@ end
 
 -- The player's click on Scan prices. Returns true, or false and why (Scan.lua says it in words). Needs no profession: the scan prices
 -- every item the auction house lists.
-function S.StartScan()
-    S.FillSome(math.huge)
+-- opts.auto (A6, Auto.lua only): started on opening the auction house, not by a click. It reads no profession window first (the scan needs no recipe;
+-- the recipes only decide which items to keep first when the auction house lists more than the Workshop keeps).
+function S.StartScan(opts)
+    local auto = type(opts) == "table" and opts.auto == true
+    if not auto then S.FillSome(math.huge) end
     local set = S.Wanted()
-    return SC.Start(set)
+    return SC.Start(set, { auto = auto })
 end
 
 -- Which saved prices the view uses (Market.Source): with an auction house open, only that one; otherwise the one of this realm scanned last
@@ -605,6 +716,7 @@ function S.ReadMerchant()
     if not list then return false, npc end
     local kept, why = V.Observe(list, S.WantedMaterials(), npc)
     if kept == false then return false, why end
+    Sg.Bump()
     return true
 end
 
@@ -632,6 +744,8 @@ function S.Shopping()
         rows = mrows, picks = S.picks, have = O.BagCount, stock = stock,
         stockMeta = function(item, where) return K.Meta(view, item, where) end,
         auction = function(item) return market and MK.Price(item, { market = market }) or nil end,
+        -- the quantity-aware price (A7): Market.Cost over the very market the prices come from; none without a market (the plan then uses the unit quote)
+        cost = (market and MK.Cost) and function(item, qty) return MK.Cost(item, qty, { market = market }) end or nil,
         vendor = V.Entry,
         sells = function(item) return sellers[item] ~= nil end,
         recipes = function(item) return byOut[item] or {} end,
@@ -648,6 +762,236 @@ function S.Shopping()
     return plan, { summary = msum, source = src, sellers = sellers, now = Q.Now(), stock = view }
 end
 
+---------------------------------------------------------------------------
+-- The multilevel strategy (Strategy.lua, over the P1 planner): Opportunities, the Crafting Plan and Shopping
+---------------------------------------------------------------------------
+local function PicksSig()
+    local items = {}
+    for item in pairs(S.picks) do items[#items + 1] = item end
+    table.sort(items)
+    local out = {}
+    for _, item in ipairs(items) do out[#out + 1] = item .. "=" .. tostring(S.picks[item]) end
+    return table.concat(out, ",")
+end
+
+-- The key of one planning snapshot: the epoch (anything that invalidates plans), what the plan is about, the queue, the player's source choices,
+-- the guild bank choice and what was seen of the bank and guild bank, the price source and its scan, the vendor prices and the known recipes. A
+-- result is only ever used for the key it was made for.
+function S.PlanKey(scope, entries, view, src, extra, nopicks)
+    local q, bags, seen = {}, {}, {}
+    for i, e in ipairs(entries) do
+        q[i] = tostring(e.id) .. ":" .. tostring(e.crafts)
+        -- what the bags hold of the entries' own materials (a bag event also invalidates every plan; this keeps a missed event from showing an old plan)
+        for _, m in ipairs(e.mats or {}) do
+            if not seen[m.item] then
+                seen[m.item] = true
+                bags[#bags + 1] = tostring(O.BagCount(m.item))
+            end
+        end
+    end
+    local g, b, mk = view.guild, view.bank, src.market
+    -- what the remembered bank and guild bank can supply right now (a tab turning uncertain, or read again, changes it without a new time)
+    local stock = table.concat({ tostring(g.tabs), tostring(g.unread), tostring(g.uncertain), tostring(g.limitedTabs), b.counted and "B" or "b", tostring(b.tabs) }, ".")
+    return table.concat({ Sg.epoch, scope, S.Objective(), extra or "", table.concat(q, ","), table.concat(bags, ","), nopicks and "" or PicksSig(), g.enabled and "G" or "g", tostring(g.at or 0),
+        tostring(b.at or 0), stock, mk and (tostring(src.label) .. "@" .. tostring(mk.at)) or "none", tostring(SC.ended or 0), V.Count(), S.observations }, "|")
+end
+
+-- the planner's input for a list of queue-shaped entries: Shopping's functions over the same price, vendor, stock and recipe services
+local function PlanInput(entries, byOut, view, src, nopicks)
+    local market = src.market
+    local sellers
+    return {
+        entries = entries, have = O.BagCount, stock = K.Fn(view), picks = nopicks and {} or S.picks,
+        stockMeta = function(item, where) return K.Meta(view, item, where) end,
+        auction = function(item) return market and MK.Price(item, { market = market }) or nil end,
+        cost = (market and MK.Cost) and function(item, qty) return MK.Cost(item, qty, { market = market }) end or nil,
+        vendor = V.Entry,
+        sells = function(item)
+            if not sellers then sellers = V.Sellers(S.WantedMaterials()) end
+            return sellers[item] ~= nil
+        end,
+        recipes = function(item) return byOut[item] or {} end,
+    }
+end
+
+-- the queue entry of a known recipe for one craft (a recipe the planner is asked about, not a queued one)
+local function RecipeEntry(rec, crafts)
+    return { id = rec.id, name = rec.name, crafts = crafts or 1, mats = rec.mats, outItem = rec.outItem, outMin = rec.outMin, outMax = rec.outMax }
+end
+
+-- Can this recipe be planned and queued: its materials and a fixed output are known
+local function Plannable(rec)
+    if not (rec and type(rec.mats) == "table" and #rec.mats > 0 and rec.outItem and rec.outMin) then return false end
+    return rec.outMin == (rec.outMax or rec.outMin)
+end
+
+-- The whole queue's plan. Returns state ("ready" | "planning" | "failed" | "empty"), the planner's plan (nil unless ready), why, and the pieces
+-- the pages need: { entries, mrows, msum, view, src, byId, byOut }.
+local function QueuePlan()
+    local byId, byOut = Index()
+    local view = S.Stock()
+    local entries = QueueView(byId)
+    local mrows, msum = M.Rows(entries, O.BagCount, K.Fn(view))
+    local src = S.PriceSource()
+    local env = { entries = entries, mrows = mrows, msum = msum, view = view, src = src, byId = byId, byOut = byOut }
+    if #entries == 0 then return "empty", nil, nil, env end
+    local key = S.PlanKey("queue", entries, view, src)
+    env.key = key
+    local state, plan, why = Sg.Request("queue", key, function() return PlanInput(entries, byOut, view, src), { objective = S.Objective() } end)
+    return state, plan, why, env
+end
+
+-- The queue's strategy for the Crafting Plan page: state, plan, why
+function S.QueueStrategy()
+    local state, plan, why = QueuePlan()
+    return state, plan, why
+end
+
+-- The shopping list from the multilevel plan. Returns plan (Shopping.Plan's shape: rows, totals, unknownBags, and engine), ctx (as S.Shopping's
+-- plus engine and stale) and the state: "ready", "planning" (plan is the last finished one, marked ctx.stale, or an empty list), or "basic" (the
+-- planner failed: Shopping's own one-level plan is shown, and says so). A basic plan is never presented as the multilevel one.
+function S.ShoppingPlan()
+    local state, cp, why, env = QueuePlan()
+    local function Ctx(extra)
+        local sellers = {}
+        local wanted = {}
+        for _, r in ipairs(env.mrows) do wanted[r.item] = true end
+        if extra then for _, r in ipairs(extra.rows) do wanted[r.item] = true end end
+        sellers = V.Sellers(wanted)
+        return { summary = env.msum, source = env.src, sellers = sellers, now = Q.Now(), stock = env.view }
+    end
+    if state == "failed" then
+        local plan, ctx = S.Shopping()
+        plan.engine, ctx.engine, ctx.why = "basic", "basic", why
+        return plan, ctx, "basic"
+    end
+    if state == "ready" or state == "empty" then
+        local plan
+        if state == "empty" then
+            plan = { rows = {}, totals = { cash = 0, low = 0, high = 0, open = false, priced = 0, missing = 0, estimate = false, makes = 0, incomplete = false, collect = 0 },
+                unknownBags = 0, engine = "multilevel" }
+        else
+            local inp = PlanInput(env.entries, env.byOut, env.view, env.src)
+            -- the player's own choices: what Workshop would suggest without them is worked out as a second plan (only while choices exist)
+            local suggest
+            if next(S.picks) then
+                local skey = S.PlanKey("suggest", env.entries, env.view, env.src, nil, true)
+                local st, sp = Sg.Request("suggest", skey, function() return PlanInput(env.entries, env.byOut, env.view, env.src, true), { objective = S.Objective() } end)
+                if st == "ready" and sp then
+                    suggest = {}
+                    for _, l in ipairs(sp.items) do
+                        if l.source == "make" or l.source == "vendor" or l.source == "auction" then suggest[l.item] = l.source end
+                    end
+                end
+            end
+            plan = Sg.Adapt(cp, { mrows = env.mrows, inp = inp, recById = function(id) return env.byId[id] end, stockMeta = inp.stockMeta, suggest = suggest })
+        end
+        local ctx = Ctx(plan)
+        ctx.engine = "multilevel"
+        -- a choice stays while its material is part of the queue's needs or of the plan; otherwise it is forgotten (bounded)
+        local keep = {}
+        for _, r in ipairs(env.mrows) do keep[r.item] = true end
+        for _, r in ipairs(plan.rows) do keep[r.item] = true end
+        if cp then for _, l in ipairs(cp.items or {}) do keep[l.item] = true end end
+        for item in pairs(S.picks) do
+            if not keep[item] then S.picks[item] = nil end
+        end
+        lastShop = { plan = plan, ctx = ctx, key = env.key }
+        return plan, ctx, "ready"
+    end
+    -- planning: the last finished list is shown but marked as not current; with none, an empty list says it is being worked out
+    if lastShop then
+        local ctx = {}
+        for k, v in pairs(lastShop.ctx) do ctx[k] = v end
+        ctx.stale = true
+        return lastShop.plan, ctx, "planning"
+    end
+    local plan = { rows = {}, totals = { cash = 0, low = 0, high = 0, open = false, priced = 0, missing = 0, estimate = false, makes = 0, incomplete = false, collect = 0 },
+        unknownBags = 0, engine = "multilevel" }
+    local ctx = Ctx(plan)
+    ctx.engine, ctx.stale, ctx.first = "multilevel", true, true
+    return plan, ctx, "planning"
+end
+
+-- One recipe's strategy for Opportunities: the recipe made once, on its own (the queue is not part of it). Returns state ("ready" | "planning" |
+-- "failed" | "unknown" when its materials or output aren't known), the plan, why.
+function S.OppStrategy(rec)
+    if not Plannable(rec) then return "unknown", nil, "Its materials or what it makes aren't known yet, or it makes a varying amount." end
+    local byId, byOut = Index()
+    local view, src = S.Stock(), S.PriceSource()
+    local entries = { RecipeEntry(rec, 1) }
+    local key = S.PlanKey("opp", entries, view, src)
+    local state, plan, why = Sg.Request("opp", key, function() return PlanInput(entries, byOut, view, src), { objective = S.Objective() } end)
+    return state, plan, why
+end
+
+-- The plan a confirmation would apply: the queue as it is now, plus `rec` made once when it is not queued yet. Returns state, plan, ops (Strategy.Ops)
+-- and the key the plan was made for (ApplyOptimized checks it again). The queue is not changed.
+function S.PreviewOptimized(rec)
+    local byId, byOut = Index()
+    local view, src = S.Stock(), S.PriceSource()
+    local entries = {}
+    for i, e in ipairs(QueueView(byId)) do entries[i] = e end
+    local final
+    if rec and not Q.Find(rec.id) then
+        if not Plannable(rec) then return "unknown", nil, nil, nil, "Its materials or what it makes aren't known yet." end
+        entries[#entries + 1] = RecipeEntry(rec, 1)
+        final = { id = rec.id, name = rec.name, crafts = 1, outItem = rec.outItem }
+    end
+    if #entries == 0 then return "empty" end
+    local key = S.PlanKey("confirm", entries, view, src, rec and rec.id or nil)
+    local state, plan, why = Sg.Request("confirm", key, function() return PlanInput(entries, byOut, view, src), { objective = S.Objective() } end)
+    if state ~= "ready" then return state, nil, nil, key, why end
+    return state, plan, Sg.Ops(plan, final), key
+end
+
+local OPT_WHY = {
+    changed = "Your plan changed while you were looking. Review the updated list.",
+    nothing = "Nothing to add: your queue already covers that.",
+    unknown = "A recipe in the plan isn't known any more, so nothing was added.",
+}
+
+-- The player confirmed: adds the plan's crafts to the queue as one change (Queue.AddBatch), after checking again that the plan was made for the queue
+-- as it is now. Returns true, or false and why ("changed", "nothing", "unknown", or the queue's reason).
+function S.ApplyOptimized(key, rec)
+    local byId = Index()
+    local view, src = S.Stock(), S.PriceSource()
+    local entries = {}
+    for i, e in ipairs(QueueView(byId)) do entries[i] = e end
+    local extra = rec and not Q.Find(rec.id) and rec or nil
+    if extra then entries[#entries + 1] = RecipeEntry(extra, 1) end
+    local cur = S.PlanKey("confirm", entries, view, src, rec and rec.id or nil)
+    local plan = key and cur == key and Sg.Peek("confirm", key) or nil
+    if not plan then
+        note = OPT_WHY.changed
+        return false, "changed"
+    end
+    local ops = {}
+    for _, c in ipairs(plan.crafts) do
+        local r = byId[c.recipe]
+        if not r then note = OPT_WHY.unknown return false, "unknown" end
+        O.Fill(r)
+        ops[#ops + 1] = { rec = r, crafts = c.crafts }
+    end
+    if extra then O.Fill(extra); ops[#ops + 1] = { rec = extra, crafts = 1 } end
+    if #ops == 0 then note = OPT_WHY.nothing return false, "nothing" end
+    local ok, res = Q.AddBatch(ops)
+    if not ok then
+        note = ACTION_WHY[res] or (res == "toomany" and "That would be more crafts than a queue entry can hold.") or ACTION_WHY.bad
+        return false, res
+    end
+    for _, c in ipairs(plan.crafts) do S.picks[c.item] = nil end
+    Sg.Bump()
+    local n = #ops
+    if n == 1 then
+        note = ("Queued %d %s of %s."):format(ops[1].crafts, ops[1].crafts == 1 and "craft" or "crafts", ops[1].rec.name)
+    else
+        note = ("Added %d recipes to your crafting plan."):format(n)
+    end
+    Log(note)
+    return true
+end
+
 -- The buy or make row of an item (a collect row is never the one a source is chosen for: the same item can have both)
 local function FindRow(plan, item, kind)
     for _, r in ipairs(plan.rows) do
@@ -658,6 +1002,7 @@ end
 -- Chooses where a material comes from: kind is "vendor", "auction", "make" or nil (the suggestion)
 function S.PickSource(item, kind)
     if kind ~= nil and kind ~= "vendor" and kind ~= "auction" and kind ~= "make" then return false end
+    if S.picks[item] ~= kind then Sg.Bump() end
     S.picks[item] = kind
     return true
 end
@@ -676,6 +1021,7 @@ function S.CycleSource(item)
             if k == row.source then nextKind = choices[i + 1] break end
         end
     end
+    if S.picks[item] ~= nextKind then Sg.Bump() end
     S.picks[item] = nextKind
     return true
 end
@@ -710,16 +1056,37 @@ function S.AddSubcraft(item)
         return false
     end
     S.picks[item] = nil
+    Sg.Bump()
     note = ("Queued %d %s of %s."):format(mk.crafts, mk.crafts == 1 and "craft" or "crafts", rec.name)
     return true
 end
 
--- The click on Show vendor: shows the vendor seen to sell the item on the world map (the NPC collection's own "find"); it sets no waypoint,
--- starts no route and buys nothing. Returns true, or false (and says why in the note).
+-- A waypoint on a merchant, named after it where that can be done. With WaypointUI loaded, its public API (WaypointUIAPI.Navigation.
+-- NewUserNavigation: name, map, x and y in percent; it sets and tracks the game's waypoint itself) makes a waypoint that carries the NPC's name.
+-- Without it, or if it refuses or fails, the game's own waypoint (the NPC collection's NpcMap.SetWaypoint, which has no name: the game's waypoint
+-- has none) is set and tracked. Returns true and "named" | "game", or false.
+local function Waypoint(NMAP, e)
+    local api = type(WaypointUIAPI) == "table" and type(WaypointUIAPI.Navigation) == "table" and WaypointUIAPI.Navigation or nil
+    local NS = R.NpcStore
+    if api and type(api.NewUserNavigation) == "function" and NS and NS.COORD then
+        local ok, nav = pcall(api.NewUserNavigation, { name = e.n, mapID = e.m, x = e.x / NS.COORD * 100, y = e.y / NS.COORD * 100 })
+        if ok and nav then return true, "named" end
+    end
+    if NMAP.SetWaypoint and NMAP.SetWaypoint(e) then
+        if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then pcall(C_SuperTrack.SetSuperTrackedUserWaypoint, true) end
+        return true, "game"
+    end
+    return false
+end
+
+-- The click on Show vendor: shows the vendor seen to sell the item on the world map (the NPC collection's own "find") and puts the game's own
+-- waypoint on it, tracked, so its marker shows in the world (Waypoint above: named after the NPC through WaypointUI when it is loaded; it replaces
+-- the waypoint you had, as setting one in the game does, and only on this click). It starts no route and buys nothing. Returns true, or false (and says why in the note).
 function S.ShowVendor(item)
     local sellers = V.Sellers({ [item] = true })[item]
     local rec = V.Entry(item)
-    local e = V.Places(sellers, rec and rec.npc, 1)[1]
+    local places, how = V.Places(sellers, rec and rec.npc, 3)
+    local e = places[1]
     if not e then
         note = "No vendor location is known for that item."
         return false
@@ -735,8 +1102,17 @@ function S.ShowVendor(item)
     end
     if WorldMapFrame and WorldMapFrame.IsShown and not WorldMapFrame:IsShown() and ToggleWorldMap then pcall(ToggleWorldMap) end
     local ok = NMAP.Locate(e)
-    note = ok and ("Showing %s on the map."):format(e.n) or "The map couldn't show that vendor."
-    return ok
+    -- the game's waypoint on the seller, tracked: placed even if the map couldn't be shown (the marker is the way to find it)
+    local marked = Waypoint(NMAP, e)
+    -- the words say only what is known: "nearest" for a compared distance, "in this area" for the same map, otherwise how many others are known
+    local more = #sellers - 1
+    if not ok then note = marked and ("Waypoint set on %s; the map couldn't show it."):format(e.n) or "The map couldn't show that vendor."
+    elseif how == "nearest" then note = ("Showing %s, the nearest known seller."):format(e.n)
+    elseif how == "local" then note = ("Showing %s, a seller in this area."):format(e.n)
+    elseif more > 0 then note = ("Showing %s. %d other %s known."):format(e.n, more, more == 1 and "seller is" or "sellers are")
+    else note = ("Showing %s on the map."):format(e.n) end
+    if ok and marked then note = note .. " Waypoint set." end
+    return ok or marked
 end
 
 function S.Snapshot()
@@ -747,5 +1123,5 @@ function S.Snapshot()
     local picks = 0
     for _ in pairs(S.picks) do picks = picks + 1 end
     return { professions = #order, recipes = n, queue = Q.Count(), cache = O.CacheSize(), observations = S.observations,
-        prices = market and market.n or 0, history = market and market.histItems or 0, vendor = V.Count(), picks = picks, scan = SC.state, stored = St.Counts() }
+        prices = market and market.n or 0, history = market and market.histItems or 0, vendor = V.Count(), picks = picks, marketFacts = W.Facts and W.Facts.CacheSize() or 0, scan = SC.state, stored = St.Counts() }
 end

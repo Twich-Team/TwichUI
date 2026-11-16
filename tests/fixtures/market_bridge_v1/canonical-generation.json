@@ -1,0 +1,227 @@
+{
+  "format": "twichui-market-bridge",
+  "contract_version": 1,
+  "schema_version": 1,
+  "transport_version": 1,
+  "issuer_id": "00000000-0000-4000-8000-000000000001",
+  "producer": {
+    "server_build": "synthetic-fixture",
+    "desktop_build": "not-delivered-fixture"
+  },
+  "required_features": [
+    "exact_copper",
+    "current_summaries",
+    "daily_history"
+  ],
+  "market": {
+    "game": "wow-forever",
+    "region": "us",
+    "player_ruleset": "Normal",
+    "house_id": 114,
+    "source_kind": "auctions",
+    "server_market_id": 2,
+    "transport_ruleset_id": 1,
+    "mapping_verified": false,
+    "mapping_evidence_sha256": null,
+    "realm_scope": "ruleset_house"
+  },
+  "pricing_algorithm": "twichui-pricing-v1",
+  "history_basis": "canonical_complete_scope_close",
+  "quality_policy": 1,
+  "watermark_observation_id": "902",
+  "current_observation_ref": 1,
+  "as_of_utc_day": "2026-11-15",
+  "generated_at": "2026-11-15T12:02:00Z",
+  "desktop_sync_completed_at": "2026-11-15T12:01:00Z",
+  "server_checked_at": "2026-11-15T12:00:00Z",
+  "observations": [
+    {
+      "observation_id": "901",
+      "snapshot_id": "501",
+      "utc_day": "2026-11-14",
+      "observed_at": "2026-11-14T12:00:00Z",
+      "upstream_updated_at": "2026-11-14T11:00:00Z",
+      "upstream_modified_raw": null,
+      "namespace": "dynamic-forever-us",
+      "payload_sha256": "b327a21fcf77b19e6c87f0144baccab959d87bf57d49ef63004213c79725328a",
+      "snapshot_content_sha256": "04133061c78814098ceddb694761f6119a7c267b416f34b7b2f7a0eedfcaa951",
+      "synthetic": true,
+      "scope_complete": true
+    },
+    {
+      "observation_id": "902",
+      "snapshot_id": "502",
+      "utc_day": "2026-11-15",
+      "observed_at": "2026-11-15T12:00:00Z",
+      "upstream_updated_at": "2026-11-15T11:00:00Z",
+      "upstream_modified_raw": null,
+      "namespace": "dynamic-forever-us",
+      "payload_sha256": "508eb164ed09f92a8bfc4a1eecd74a7303b72a79c01e56e0d4678106f4a542d1",
+      "snapshot_content_sha256": "ace585073237b76b847042c29bbdd8864c4667037bb0252c99acb91332b8a47c",
+      "synthetic": true,
+      "scope_complete": true
+    }
+  ],
+  "coverage": {
+    "scope": "house_auctions",
+    "generation_complete": true,
+    "current_complete": true,
+    "history_from_day": "2026-11-14",
+    "history_through_day": "2026-11-15",
+    "available_observed_days": 2,
+    "delivered_observed_days": 2,
+    "history_complete": true,
+    "history_truncated": false,
+    "distribution_complete": true,
+    "omitted_sections": []
+  },
+  "synthetic": true,
+  "record_count": 2,
+  "records": [
+    {
+      "item_id": 2,
+      "variant_key": "9e7e65453739bbc64ba155eed18a37bd5fb1196c7f29ded1da660b94414d7ad8",
+      "variant_json": "{\"id\":2}",
+      "identity_basis": "exact_upstream",
+      "current": {
+        "state": "absent",
+        "algorithm": "twichui-pricing-v1",
+        "metric_basis": "lower_band_mean",
+        "observation_ref": 1,
+        "metrics": {
+          "minimum_copper": null,
+          "quantity_weighted_ask_copper": null,
+          "recent_copper": null,
+          "market_value_copper": "50",
+          "historical_value_copper": null
+        },
+        "supply": 0,
+        "priced_supply": 0,
+        "listing_count": 0,
+        "complete": true,
+        "arithmetic_status": "exact",
+        "coverage": {
+          "priced_days_14": 1,
+          "priced_days_60": 1,
+          "observed_days_60": 2,
+          "references_complete": true
+        }
+      },
+      "daily": [
+        {
+          "observation_ref": 0,
+          "state": "listed",
+          "algorithm": "twichui-pricing-v1",
+          "minimum_copper": "50",
+          "recent_copper": "50",
+          "supply": 10,
+          "priced_supply": 10,
+          "listing_count": 3,
+          "arithmetic_status": "exact"
+        },
+        {
+          "observation_ref": 1,
+          "state": "absent",
+          "algorithm": "twichui-pricing-v1",
+          "minimum_copper": null,
+          "recent_copper": null,
+          "supply": 0,
+          "priced_supply": 0,
+          "listing_count": 0,
+          "arithmetic_status": "exact"
+        }
+      ],
+      "distribution": null,
+      "distribution_status": "unavailable"
+    },
+    {
+      "item_id": 2589,
+      "variant_key": "684434823a7f7a1797ecda68d5bb5abef5ea13a18aefa5a26cccff8e1b813d51",
+      "variant_json": "{\"id\":2589}",
+      "identity_basis": "exact_upstream",
+      "current": {
+        "state": "listed",
+        "algorithm": "twichui-pricing-v1",
+        "metric_basis": "lower_band_mean",
+        "observation_ref": 1,
+        "metrics": {
+          "minimum_copper": "120",
+          "quantity_weighted_ask_copper": "120",
+          "recent_copper": "120",
+          "market_value_copper": "100",
+          "historical_value_copper": null
+        },
+        "supply": 10,
+        "priced_supply": 10,
+        "listing_count": 3,
+        "complete": true,
+        "arithmetic_status": "exact",
+        "coverage": {
+          "priced_days_14": 2,
+          "priced_days_60": 2,
+          "observed_days_60": 2,
+          "references_complete": true
+        }
+      },
+      "daily": [
+        {
+          "observation_ref": 0,
+          "state": "listed",
+          "algorithm": "twichui-pricing-v1",
+          "minimum_copper": "100",
+          "recent_copper": "100",
+          "supply": 10,
+          "priced_supply": 10,
+          "listing_count": 3,
+          "arithmetic_status": "exact"
+        },
+        {
+          "observation_ref": 1,
+          "state": "listed",
+          "algorithm": "twichui-pricing-v1",
+          "minimum_copper": "120",
+          "recent_copper": "120",
+          "supply": 10,
+          "priced_supply": 10,
+          "listing_count": 3,
+          "arithmetic_status": "exact"
+        }
+      ],
+      "distribution": {
+        "algorithm": "canonical-tiers-v1",
+        "basis": "current_asking_listings",
+        "complete": true,
+        "truncated": false,
+        "priced_supply": 10,
+        "unpriced_supply": 0,
+        "priced_listing_count": 3,
+        "unpriced_listing_count": 0,
+        "quartiles": {
+          "anchor_copper": "120",
+          "q25_copper": "120",
+          "q50_copper": "120",
+          "q75_copper": "120",
+          "high_copper": "120"
+        },
+        "tiers": [
+          {
+            "unit_copper": "120",
+            "quantity": 10,
+            "listing_count": 3,
+            "largest_listing": 4
+          }
+        ],
+        "bands": [],
+        "tail_quantity": 0,
+        "tail_listing_count": 0
+      },
+      "distribution_status": "available"
+    }
+  ],
+  "generation_id": "df3be24084e95795c7ecae5e7fb2c63e92643de78889e46bea1bc5705f656bb9",
+  "integrity": {
+    "records_bytes": 2573,
+    "records_sha256": "84ba3bdab5bcdee89e384e7a8c7e6691e0667c6b271a8484c91122cdf4b7cadf",
+    "manifest_sha256": "2c6db57da614e49ec732fca795b3199b59b723dd182a45c21a3a5ba551a66d66"
+  }
+}

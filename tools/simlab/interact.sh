@@ -19,7 +19,7 @@ set -euo pipefail
 
 # shellcheck source=lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
-RUN="$LAB/artifacts/interact-$(date +%Y%m%d-%H%M%S)"
+RUN="${SIMLAB_RUN:-$LAB/artifacts/interact-$(date +%Y%m%d-%H%M%S)}"
 mkdir -p "$RUN"
 WRONG_AT="slider-clamp-max: typed 500 saved as"
 

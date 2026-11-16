@@ -99,8 +99,7 @@ function M.Rows(entries, have, stock)
         collectItems = 0, bankItems = 0, guildItems = 0 }
     for _, item in ipairs(order) do
         local n = need[item]
-        local h = have(item)
-        if type(h) ~= "number" or h ~= h or h < 0 then h = nil end
+        local h = W.Count(have(item))   -- a whole number from 0, or nil (unknown): a NaN, an infinity, a fraction or a negative is never a count
         local mk = made[item]
         local row = { item = item, need = n, made = mk, madeRange = mk and range[item] or nil, have = h }
         if h ~= nil then

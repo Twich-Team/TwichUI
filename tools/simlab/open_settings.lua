@@ -38,8 +38,21 @@ Window("window-opening")
 
 -- The window fades in on OnUpdate, and the screenshot command runs only a few ticks after this script. Upstream's
 -- manual clock lets that same fade finish, in steps the size of frames (one long step is cut short by the fader).
+-- Read-only evidence for the one native capability absent in Forever v0.1.37. Do not replace the API or its ticker.
+local voice = C_VoiceChat and C_VoiceChat.CanAccessSettings
+local native = type(voice) == "function" and debug.getinfo(voice, "S").what == "C"
+local voiceOK, voiceError = pcall(voice)
+Say("voice-capability", "native=" .. tostring(native), "unavailable=" .. tostring(not voiceOK and
+    voiceError == "C_VoiceChat.CanAccessSettings: settings access has not been supplied"))
 A_Admin.SetManualClock(GetTime())
-for _ = 1, 40 do A_Admin.AdvanceTime(0.05) end
+Say("smoke-clock", "begin")
+Say("tick", "t=" .. tostring(GetTime()))
+-- Six seconds covers a native 5 s ticker regardless of startup phase; do not shorten the window to avoid it.
+for _ = 1, 120 do
+    A_Admin.AdvanceTime(0.05)
+    Say("tick", "t=" .. tostring(GetTime()))
+end
+Say("smoke-clock", "end")
 Window("window-settled")
 
 local stats = UI.Stats()

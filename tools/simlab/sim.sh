@@ -19,7 +19,8 @@ set -euo pipefail
 # shellcheck source=lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"   # sets REPO and LAB, and refuses a folder that is not a lab
 RELEASE="wow-ui-sim-v0.1.37-forever-linux-x86_64"
-BIN="${SIMLAB_BIN:-$LAB/release/$RELEASE/wow-sim}"
+INSTALL="${SIMLAB_INSTALL:-$LAB}"
+BIN="${SIMLAB_BIN:-$INSTALL/release/$RELEASE/wow-sim}"
 WOW="${SIMLAB_WOW:-/mnt/c/Program Files (x86)/World of Warcraft}"
 
 [ -x "$BIN" ] || { echo "simlab: no simulator at $BIN (see docs/simulator-lab.md)" >&2; exit 2; }
@@ -31,8 +32,8 @@ args=(
   --tmpfs /tmp
   --tmpfs "$HOME"
   --tmpfs /mnt/c
-  --ro-bind "$LAB/release" "$LAB/release"
-  --ro-bind "$LAB/deps" "$LAB/deps"
+  --ro-bind "$INSTALL/release" "$INSTALL/release"
+  --ro-bind "$INSTALL/deps" "$INSTALL/deps"
   --bind "$LAB/home" "$LAB/home"
   --bind "$LAB/xdg" "$LAB/xdg"
   --bind "$LAB/artifacts" "$LAB/artifacts"
@@ -42,7 +43,7 @@ args=(
   --clearenv
   --setenv PATH /usr/bin:/bin
   --setenv HOME "$LAB/home"
-  --setenv LD_LIBRARY_PATH "$LAB/deps/lib"
+  --setenv LD_LIBRARY_PATH "$INSTALL/deps/lib"
   --setenv XDG_CACHE_HOME "$LAB/xdg/cache"
   --setenv XDG_DATA_HOME "$LAB/xdg/data"
   --setenv XDG_CONFIG_HOME "$LAB/xdg/config"
