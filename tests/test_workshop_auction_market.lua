@@ -74,5 +74,12 @@ local default=W.UI.PriceChart(c.UIParent,400,100)
 local chart=W.UI.PriceChart(c.UIParent,400,100,{maxDots=30,window=true,gold=true})
 same(#default.dots,8);same(#chart.dots,30,"bounded optional adapter leaves old chart unchanged")
 chart:Set(p.series,W.UI.Money);same(chart.fromDay,p.series.from);same(chart.toDay,p.series.to)
+local all=W.UI.PriceChart(c.UIParent,800,136,{maxDots=60,window=true,gold=true})
+local dense={points={},from=1,to=60};for day=1,60 do dense.points[day]={day=day,price=100+day} end
+all:Set(dense,W.UI.Money);same(all.shown,60,"complete external daily window is rendered")
+for i=1,60 do same(all.dots[i]:IsShown(),true,"external marker hidden") end
+all:Set(dense,W.UI.Money,30);same(all.shown,30,"local marker cap preserved")
+for i=31,60 do same(all.dots[i]:IsShown(),false,"local view leaked older external markers") end
+same(#default.dots,8,"default chart unchanged")
 D.Clear();same(D.Stats().cache,0);same(D.Stats().points,0);same(native,0)
 print("PASSED: Auction Market adapter "..n.." checks")

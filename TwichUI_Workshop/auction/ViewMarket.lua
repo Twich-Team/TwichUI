@@ -141,7 +141,7 @@ Detail=function(p)
         tile.value:SetText(tile.id=="quality" and (not r and p.market and "Choose an item" or Quality(f)) or row and row.value or "Unavailable")
         tile.tip=row and row.tip or "No supported value for the selected item and market."
     end
-    p.chart:Set(x and x.series,UI.Money)
+    p.chart:Set(x and x.series,UI.Money,30)
     if not r then
         p.chart.msg:SetText(p.error and "Stored history unavailable." or "Choose an item to inspect history.")
         p.chart.note:SetText(p.error and "Refresh stored data to retry." or "Current auction availability is unknown.")
@@ -399,7 +399,7 @@ local function Build(p)
     p.source=A.Text(main,"",11,12,-84,-12,UI.K.textDim);Wrap(p.source,32)
     p.chartCard=A.Card(main,"Lowest seen · observed daily closings",224)
     p.chartCard:SetPoint("TOPLEFT",8,-124);p.chartCard:SetPoint("TOPRIGHT",-8,-124)
-    p.chart=UI.PriceChart(p.chartCard,800,136,{maxDots=30,window=true,gold=true})
+    p.chart=UI.PriceChart(p.chartCard,800,136,{maxDots=60,window=true,gold=true})
     p.metricDrop=A.Dropdown(p.chartCard,190,function()return W.ServerMarket and W.ServerMarket.METRICS or {} end,
         function()return p.serverMetric end,V.Metric)
     p.metricDrop:SetPoint("TOPRIGHT",-8,-2);p.metricDrop:Hide()
@@ -436,7 +436,7 @@ local function Build(p)
         p.trendCard:SetWidth(half);p.trendCard:SetPoint("TOPLEFT",8,-454);p.trendCard:SetPoint("BOTTOMLEFT",8,8)
         p.contextCard:SetPoint("TOPLEFT",p.trendCard,"TOPRIGHT",10,0);p.contextCard:SetPoint("BOTTOMRIGHT",-8,8)
         if p.projection then
-            if p.marketKey=="server" then ServerChart(p,p.projection) else p.chart:Set(p.projection.series,UI.Money) end
+            if p.marketKey=="server" then ServerChart(p,p.projection) else p.chart:Set(p.projection.series,UI.Money,30) end
         end
     end
     main:HookScript("OnSizeChanged",Layout);Layout()

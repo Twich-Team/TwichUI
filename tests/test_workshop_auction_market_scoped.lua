@@ -51,6 +51,7 @@ if artifact then
 else
     local generation=file('scoped.json');local raw=packet(generation);c.TwichUIMarketData=raw;drain(raw,true)
     local p=open(10001,generation.records[2].variant_key)
+    assert(p.chart.maxDots==60,'Market cannot display the complete scoped daily window')
     assert(#p.projection.series.points==2 and p.projection.series.points[1].price==100)
     assert(p.contextText:GetText():find('Scope complete',1,true) and p.contextText:GetText():find('not whole-market complete',1,true))
     assert(#p.projection.series.gaps==1 and p.projection.history.scope.scope_complete)
@@ -91,5 +92,17 @@ print(('BRIDGE_SCOPED_UI_BENCH iterations=50 elapsed_us=%d worst_iteration_us=%d
 assert(growth<512 and B.Status().cache_entries<=B.CACHE_MAX)
 assert(before==fingerprint(c.TwichUIWorkshopDB)..fingerprint(c.TwichUIDB) and native==0 and loads==0)
 A.Market.Filter('marketKey',m.key);A.Market.Search('10');p=settle();assert(A.Market.Select(10));assert(p.projection.facts.min.value==20200)
+-- A typed presentation control exercises the local cap independently of History2's retention buckets.
+local history=W.Market.History
+W.Market.History=function()
+    local h={points={},gaps={},basis='synthetic typed local daily history'}
+    for day=19941,20000 do h.points[#h.points+1]={kind='day',from=day,to=day,v=100} end
+    return h
+end
+W.AuctionMarketData.Clear()
+A.Market.Range(60);assert(#p.projection.series.points==60 and p.chart.shown==30,'local 30-marker cap changed')
+for _,hook in ipairs(p.main.hooks.OnSizeChanged or {}) do hook(p.main) end
+assert(p.chart.shown==30,'resize changed local marker cap')
+W.Market.History=history
 A.Hide();assert(p.job==nil and p.catalog==nil)
 print('PASSED: scoped Market page; exact prices/history, absence/unknown/exclusion, retention, navigation, local isolation')

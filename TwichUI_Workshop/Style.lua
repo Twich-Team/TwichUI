@@ -712,7 +712,7 @@ local function DayWords(day)
     return ("seen %d days ago"):format(ago)
 end
 function UI.PriceChart(parent, w, h, opt)
-    local maxDots = opt and W.Int(opt.maxDots, 2, 30) or MAX_DOTS
+    local maxDots = opt and W.Int(opt.maxDots, 2, 60) or MAX_DOTS
     local c = CreateFrame("Frame", nil, parent)
     c.maxDots = maxDots
     c:SetSize(w, h)
@@ -756,9 +756,9 @@ function UI.PriceChart(parent, w, h, opt)
         self.note:SetText(note or "")
         self.msg:Show(); self.note:Show()
     end
-    function c:Set(series, money)
+    function c:Set(series, money, limit)
         local pts = series and series.points or {}
-        local n = math.min(#pts, maxDots)
+        local n = math.min(#pts, W.Int(limit, 2, maxDots) or maxDots)
         local first = #pts - n + 1
         self.shown = n
         if n == 0 then

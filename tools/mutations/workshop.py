@@ -120,8 +120,8 @@ m("market.bridge.catalog-reuse", "TwichUI_Workshop/ServerMarket.lua",
   "index=true,catalog=opt.catalog,item=focus", "index=true,item=focus",
   "external filtering rediscovers identities instead of retaining completed rows", ["test_workshop_auction_market_server.lua"])
 m("market.bridge.resize-label", "TwichUI_Workshop/auction/ViewMarket.lua",
-  'if p.marketKey=="server" then ServerChart(p,p.projection) else p.chart:Set(p.projection.series,UI.Money) end',
-  'p.chart:Set(p.projection.series,UI.Money)',
+  'if p.marketKey=="server" then ServerChart(p,p.projection) else p.chart:Set(p.projection.series,UI.Money,30) end',
+  'p.chart:Set(p.projection.series,UI.Money,30)',
   "resizing labels one external supply observation as cheapest money", ["test_workshop_auction_market_server.lua"])
 
 # Dormant M1a calculator: mutations exercise exact boundaries without enabling it.
@@ -995,3 +995,10 @@ m("market.scoped.last-good", "TwichUI_Workshop/Bridge.lua",
 m("market.scoped.actual-budget", "TwichUI_Workshop/Bridge.lua",
   "inputBytes=inputBytes+#v+(n>0 and 1 or 0)", "inputBytes=inputBytes",
   "a falsely small manifest size permits an over-budget candidate to be decoded", SCOPED_TEST)
+
+m("market.scoped.render-window", "TwichUI_Workshop/auction/ViewMarket.lua",
+  "{maxDots=60,window=true,gold=true}", "{maxDots=30,window=true,gold=true}",
+  "older selected daily closes are hidden by the legacy chart cap", ["test_workshop_auction_market_scoped.lua"])
+m("market.scoped.local-chart-cap", "TwichUI_Workshop/auction/ViewMarket.lua",
+  "p.chart:Set(x and x.series,UI.Money,30)", "p.chart:Set(x and x.series,UI.Money)",
+  "the external chart expansion changes the established local-history cap", ["test_workshop_auction_market_scoped.lua"])
