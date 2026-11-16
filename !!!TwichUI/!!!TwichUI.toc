@@ -340,6 +340,8 @@ reminders\Character.lua
 reminders\Context.lua
 reminders\Display.lua
 reminders\Controller.lua
+reminders\Share.lua
+reminders\ShareUI.lua
 
 # Healer Watch: one healer's mana, confirmed drinking and recent mana-related chat in a small panel, in five-player
 # dungeons by default (off until turned on). The healer is the one with the Healer role, or the one you choose for the
