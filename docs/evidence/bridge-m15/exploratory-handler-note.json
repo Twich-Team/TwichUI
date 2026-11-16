@@ -1,0 +1,18 @@
+{
+  "evidence_kind": "single exploratory handler observation; transcription of tool output, not a preserved raw stdout file",
+  "origin": "synthetic",
+  "iterations": 50,
+  "navigation_us": 32884,
+  "retained_growth_bytes": 154733,
+  "pages": 2,
+  "decoded_cache_entries": 1,
+  "local_data_unchanged": true,
+  "no_auction_actions": true,
+  "limitations": [
+    "No paired performance claim",
+    "Not rendered game frame-time evidence",
+    "Exact source/binary metadata not retained for this single diagnostic",
+    "Authoritative frozen performance trend comes from Market capacity.json"
+  ],
+  "additional_runs_requested": false
+}

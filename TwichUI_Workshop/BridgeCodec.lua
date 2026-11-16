@@ -4,6 +4,8 @@ local W=TwichUI.Workshop
 local J={NULL={},OBJECT={},ARRAY={}}
 W.BridgeCodec=J
 local floor,char,byte,sub=math.floor,string.char,string.byte,string.sub
+local simple={['"']='"',['\\']='\\',['/']='/',b='\b',f='\f',n='\n',r='\r',t='\t'}
+local escapes={[34]='\\"',[92]='\\\\',[8]='\\b',[12]='\\f',[10]='\\n',[13]='\\r',[9]='\\t'}
 local function fail() error("invalid bridge encoding",0) end
 local function utf(n)
     if n<128 then return char(n) elseif n<2048 then return char(192+floor(n/64),128+n%64)
@@ -19,11 +21,19 @@ function J.Parse(raw,tick)
         if sub(raw,i,i)~='"' then fail() end
         i=i+1;local out={}
         while i<=n do
+            local at=raw:find('["\\%z\001-\031\127-\255]',i)
+            if not at then fail() end
+            if at>i then
+                for p=i,at-1,128 do
+                    out[#out+1]=sub(raw,p,math.min(p+127,at-1))
+                    if tick and p+127<at then tick() end
+                end
+                i=at
+            end
             step();local c=byte(raw,i);i=i+1
             if c==34 then return table.concat(out) end
             if c==92 then
                 local e=sub(raw,i,i);i=i+1
-                local simple={['"']='"',['\\']='\\',['/']='/',b='\b',f='\f',n='\n',r='\r',t='\t'}
                 if simple[e] then out[#out+1]=simple[e]
                 elseif e=='u' then
                     local hex=sub(raw,i,i+3);if #hex~=4 or hex:find('[^0-9a-fA-F]') then fail() end
@@ -65,11 +75,20 @@ function J.Parse(raw,tick)
     end
     local out=value(0);ws();if i~=n+1 then fail() end;return out
 end
-local function quote(s)
-    local out={'"'};local i=1
+local function quote(s,tick)
+    if #s<=128 and not s:find('[%z\001-\031"\\\127-\255]') then return '"'..s..'"' end
+    local out={'"'};local i,units=1,0
     while i<=#s do
+        local at=s:find('[%z\001-\031"\\\127-\255]',i) or #s+1
+        if at>i then
+            for p=i,at-1,128 do
+                out[#out+1]=sub(s,p,math.min(p+127,at-1))
+                if tick and p+127<at then tick() end
+            end
+            i=at
+            if i>#s then break end
+        end
         local c=byte(s,i);i=i+1
-        local escapes={[34]='\\"',[92]='\\\\',[8]='\\b',[12]='\\f',[10]='\\n',[13]='\\r',[9]='\\t'}
         if escapes[c] then out[#out+1]=escapes[c]
         elseif c>=32 and c<127 then out[#out+1]=char(c)
         else
@@ -83,22 +102,39 @@ local function quote(s)
             if cp<=65535 then out[#out+1]=('\\u%04x'):format(cp)
             else cp=cp-65536;out[#out+1]=('\\u%04x\\u%04x'):format(55296+floor(cp/1024),56320+cp%1024) end
         end
+        units=units+1;if tick and units%32==0 then tick() end
     end
     out[#out+1]='"';return table.concat(out)
 end
 function J.Encode(v,tick,depth)
-    depth=depth or 0;if depth>12 then fail() end;if tick then tick() end
-    if v==J.NULL then return 'null' end
-    local kind=type(v)
-    if kind=='string' then return quote(v) elseif kind=='boolean' then return v and 'true' or 'false'
-    elseif kind=='number' then if not W.Int(v,-9007199254740991,9007199254740991) then fail() end;return ('%.0f'):format(v)
-    elseif kind~='table' then fail() end
-    local parts={};local mt=getmetatable(v)
-    if mt==J.ARRAY then for i=1,#v do parts[i]=J.Encode(v[i],tick,depth+1) end;return '['..table.concat(parts,',')..']'
-    elseif mt~=J.OBJECT then fail() end
-    local keys={};for k in pairs(v) do if type(k)~='string' then fail() end;keys[#keys+1]=k end;table.sort(keys)
-    for _,k in ipairs(keys) do parts[#parts+1]=quote(k)..':'..J.Encode(v[k],tick,depth+1) end
-    return '{'..table.concat(parts,',')..'}'
+    local parts={}
+    local function emit(value,level)
+        if level>12 then fail() end;if tick then tick() end
+        if value==J.NULL then parts[#parts+1]='null';return end
+        local kind=type(value)
+        if kind=='string' then parts[#parts+1]=quote(value,tick)
+        elseif kind=='boolean' then parts[#parts+1]=value and 'true' or 'false'
+        elseif kind=='number' then
+            if not W.Int(value,-9007199254740991,9007199254740991) then fail() end
+            parts[#parts+1]=('%.0f'):format(value)
+        elseif kind=='table' then
+            local mt=getmetatable(value)
+            if mt==J.ARRAY then
+                parts[#parts+1]='['
+                for i=1,#value do if i>1 then parts[#parts+1]=',' end;emit(value[i],level+1) end
+                parts[#parts+1]=']'
+            elseif mt==J.OBJECT then
+                local keys={};for k in pairs(value) do if type(k)~='string' then fail() end;keys[#keys+1]=k end;table.sort(keys)
+                parts[#parts+1]='{'
+                for i,k in ipairs(keys) do
+                    if i>1 then parts[#parts+1]=',' end
+                    parts[#parts+1]=quote(k,tick);parts[#parts+1]=':';emit(value[k],level+1)
+                end
+                parts[#parts+1]='}'
+            else fail() end
+        else fail() end
+    end
+    emit(v,depth or 0);return table.concat(parts)
 end
 function J.Copy(v)
     if type(v)~='table' or v==J.NULL then return v end
@@ -119,23 +155,28 @@ local K={0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923
 0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2}
 function J.Hash(tick)
     if not(bit and bit.bxor and bit.band and bit.bor and bit.bnot and bit.lshift and bit.rshift) then error('bridge SHA-256 unavailable',0) end
-    local bxor,band,bor,notb,shl,shr=bit.bxor,bit.band,bit.bor,bit.bnot,bit.lshift,bit.rshift
+    local bxor,band,bor,shl,shr=bit.bxor,bit.band,bit.bor,bit.lshift,bit.rshift
     -- Forever exposes shifts and binary bit operations; rotate/variadic helpers are not required.
-    local function xor(a,b,c) local n=bxor(a,b);if c~=nil then return bxor(n,c) end;return n end
     local function ror(v,n) return bor(shr(v,n),shl(v,32-n)) end
     local h={0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19}
-    local buffer,n,finished='',0,false;local ctx={}
+    local buffer,n,finished='',0,false;local ctx={};local w={}
     local function block(s,start)
-        local w={}
         for i=0,15 do local p=start+i*4;w[i+1]=byte(s,p)*16777216+byte(s,p+1)*65536+byte(s,p+2)*256+byte(s,p+3) end
-        for i=17,64 do local a,b=w[i-15],w[i-2];w[i]=(w[i-16]+xor(ror(a,7),ror(a,18),shr(a,3))+w[i-7]+xor(ror(b,17),ror(b,19),shr(b,10)))%4294967296 end
+        for i=17,64 do
+            local a,b=w[i-15],w[i-2];w[i]=(w[i-16]+bxor(bxor(ror(a,7),ror(a,18)),shr(a,3))+w[i-7]+bxor(bxor(ror(b,17),ror(b,19)),shr(b,10)))%4294967296
+            if tick and i%16==0 then tick() end
+        end
         local a,b,c,d,e,f,g,z=unpack(h)
         for i=1,64 do
-            local t1=(z+xor(ror(e,6),ror(e,11),ror(e,25))+xor(band(e,f),band(notb(e),g))+K[i]+w[i])%4294967296
-            local t2=(xor(ror(a,2),ror(a,13),ror(a,22))+xor(band(a,b),band(a,c),band(b,c)))%4294967296
+            -- Ch(e,f,g) = g xor (e and (f xor g)).
+            -- Maj(a,b,c) = (a and b) or (c and (a or b)).
+            local t1=(z+bxor(bxor(ror(e,6),ror(e,11)),ror(e,25))+bxor(g,band(e,bxor(f,g)))+K[i]+w[i])%4294967296
+            local t2=(bxor(bxor(ror(a,2),ror(a,13)),ror(a,22))+bor(band(a,b),band(c,bor(a,b))))%4294967296
             z,g,f,e,d,c,b,a=g,f,e,(d+t1)%4294967296,c,b,a,(t1+t2)%4294967296
+            if tick and i%16==0 and i<64 then tick() end
         end
-        local v={a,b,c,d,e,f,g,z};for i=1,8 do h[i]=(h[i]+v[i])%4294967296 end
+        h[1],h[2],h[3],h[4]=(h[1]+a)%4294967296,(h[2]+b)%4294967296,(h[3]+c)%4294967296,(h[4]+d)%4294967296
+        h[5],h[6],h[7],h[8]=(h[5]+e)%4294967296,(h[6]+f)%4294967296,(h[7]+g)%4294967296,(h[8]+z)%4294967296
         if tick then tick() end
     end
     function ctx:Update(s)

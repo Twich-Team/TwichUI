@@ -1,12 +1,12 @@
 -- Opt-in Market bridge. No local scan/history writes, scans, transactions or startup loading.
 local R,W=TwichUI,TwichUI.Workshop
 local J,S=W.BridgeCodec,W.BridgeValidate
-local B={ADDON='TwichUI_MarketData',CACHE_MAX=24,SLICE_MS=3,RESUMES=32}
+local B={ADDON='TwichUI_MarketData',CACHE_MAX=24,SLICE_MS=3,RESUMES=512}
 W.Bridge=B
 local active,job,token=nil,nil,0
 local cache,order={},{}
 local state,lastError='absent',nil
-local stats={validation_ms=0,largest_slice_ms=0,slices=0,record_ms=0,record_calls=0,history_ms=0,history_calls=0,failures=0}
+local stats={validation_ms=0,largest_slice_ms=0,slices=0,resumes=0,largest_resumes=0,record_ms=0,record_calls=0,history_ms=0,history_calls=0,failures=0}
 local function clock() if GetTimePreciseSec then return GetTimePreciseSec()*1000 elseif debugprofilestop then return debugprofilestop() end;return 0 end
 local function measured(id,fn,...) if R.Perf and R.Perf.Call then return R.Perf.Call(id,fn,...) end;return fn(...) end
 local function requireData(ok) if not ok then error('invalid bridge generation',0) end end
@@ -31,15 +31,16 @@ local function validate(raw)
     end
     after[#after+1]='}'
     local bodyHash=J.Hash(tick):Update(table.concat(before));local recordsHash=J.Hash(tick):Update('[')
-    local out={header=h,context=ctx,records={},index={},variantKeys={},variantCounts={},itemIds={},receipt=receipt,raw=raw,bytes=#raw.manifest+13}
+    local out={header=h,manifest=raw.manifest,context=ctx,records={},index={},variantKeys={},variantCounts={},itemIds={},receipt=receipt,raw=raw,bytes=#raw.manifest+13}
     local lastItem,lastVariant=0,'';local recordBytes=2
     for i=1,count do
         local text=raw.records[i];requireData(type(text)=='string')
         local r=J.Parse(text,tick);S.Record(ctx,r,tick);requireData(J.Encode(r,tick)==text)
         requireData(r.item_id>lastItem or r.item_id==lastItem and r.variant_key>lastVariant)
-        if not out.index[r.item_id] then out.index[r.item_id]={};out.variantKeys[r.item_id]={};out.variantCounts[r.item_id]=0;out.itemIds[#out.itemIds+1]=r.item_id end
-        out.index[r.item_id][r.variant_key]=i
-        local list=out.variantKeys[r.item_id];if #list<100 then list[#list+1]=r.variant_key end
+        -- The contract already requires item/variant order. Retain one range
+        -- per item and one flat key array instead of two tables per item.
+        if not out.index[r.item_id] then out.index[r.item_id]=i;out.variantCounts[r.item_id]=0;out.itemIds[#out.itemIds+1]=r.item_id end
+        out.variantKeys[i]=r.variant_key
         out.variantCounts[r.item_id]=out.variantCounts[r.item_id]+1
         lastItem,lastVariant=r.item_id,r.variant_key;out.records[i]=text
         local piece=(i>1 and ',' or '')..text;recordBytes=recordBytes+#piece;requireData(#raw.manifest+recordBytes+11<=32*1024*1024)
@@ -57,13 +58,18 @@ end
 local function step(ms)
     local current=job;if not current then return active~=nil,lastError or state end
     local start=clock();local resumes=0;local complete=false;local failure=false
+    -- Reserve headroom for a final bounded unit and incidental interpreter GC.
+    -- Without a clock, retain the original conservative deterministic work cap.
+    local budget=math.max(0.5,(W.Int(ms,1,20) or B.SLICE_MS)-1)
+    local limit=(GetTimePreciseSec or debugprofilestop) and B.RESUMES or 32
     repeat
         local ok,value=coroutine.resume(current.co);resumes=resumes+1
         if not ok then failure=true;break end
         if coroutine.status(current.co)=='dead' then
             active=value;cache,order={},{};job=nil;state,lastError='ready',nil;complete=true;break
         end
-    until resumes>=B.RESUMES or clock()-start>=(W.Int(ms,1,20) or B.SLICE_MS)
+    until resumes>=limit or clock()-start>=budget
+    stats.resumes=stats.resumes+resumes;stats.largest_resumes=math.max(stats.largest_resumes,resumes)
     local elapsed=math.max(0,clock()-start);stats.validation_ms=stats.validation_ms+elapsed;stats.largest_slice_ms=math.max(stats.largest_slice_ms,elapsed);stats.slices=stats.slices+1
     if failure then job=nil;state=active and 'ready' or 'invalid';lastError='invalid';stats.failures=stats.failures+1;return false,'invalid' end
     if complete then return true end;return false,'loading'
@@ -80,7 +86,7 @@ end
 function B.Load()
     if job then schedule();return false,'loading' end
     local raw=TwichUIMarketData
-    if active and active.raw==raw and type(raw)=='table' and raw.manifest==J.Encode(active.header) then return true end
+    if active and active.raw==raw and type(raw)=='table' and raw.manifest==active.manifest then return true end
     if InCombatLockdown and InCombatLockdown() then return false,'combat' end
     if raw==nil then
         if not(C_AddOns and C_AddOns.LoadAddOn) then state='absent';lastError='missing';return false,'missing' end
@@ -103,8 +109,9 @@ function B.Variants(item,limit)
     item=W.Int(item,1,W.MAX_ID);limit=W.Int(limit or 20,1,100)
     if not item or not limit then return nil,'identity' end
     if not active then return nil,lastError or state end
-    local source=active.variantKeys[item] or {};local out={};for i=1,math.min(limit,#source) do out[i]=source[i] end
-    return out,(active.variantCounts[item] or 0)>#out
+    local first,count=active.index[item],active.variantCounts[item] or 0
+    local out={};for i=1,math.min(limit,count) do out[i]=active.variantKeys[first+i-1] end
+    return out,count>#out
 end
 function B.EachItem(add,tick,capped)
     if not active then return false,'unavailable' end
@@ -114,7 +121,14 @@ end
 local function record(item,variant)
     if not active then return nil,lastError or state end
     if not W.Int(item,1,W.MAX_ID) or type(variant)~='string' or #variant~=64 or variant:find('[^0-9a-f]') then return nil,'variant_required' end
-    local position=active.index[item] and active.index[item][variant];if not position then return nil,'not_observed' end
+    local first=active.index[item];if not first then return nil,'not_observed' end
+    local lo,hi,position=first,first+active.variantCounts[item]-1
+    while lo<=hi do
+        local mid=math.floor((lo+hi)/2);local key=active.variantKeys[mid]
+        if key==variant then position=mid;break
+        elseif key<variant then lo=mid+1 else hi=mid-1 end
+    end
+    if not position then return nil,'not_observed' end
     if cache[position] then return cache[position] end
     local r=J.Parse(active.records[position]);cache[position]=r;order[#order+1]=position
     if #order>B.CACHE_MAX then cache[table.remove(order,1)]=nil end
