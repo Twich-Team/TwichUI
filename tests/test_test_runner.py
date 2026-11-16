@@ -258,7 +258,8 @@ class Evidence(unittest.TestCase):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         self.assertEqual(module.select([]), list(module.POSES))
-        self.assertEqual(len(module.POSES), 35)
+        self.assertEqual(len(module.POSES), 41)
+        self.assertTrue({'scopedpriced', 'scopedoutside', 'scopedabsent', 'scopedunknown', 'scopedcorrupt', 'scopedfuture'} <= set(module.POSES))
         for names in (['typo'], ['wrong'], ['replay'], ['shell', 'shell']):
             with self.assertRaises(ValueError):
                 module.select(names)

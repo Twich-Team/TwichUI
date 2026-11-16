@@ -16,12 +16,10 @@ R.GREEN = "|cff8FB35A"
 
 local DEFAULT_MODULES = {
     media = true,            -- fonts and sounds for LibSharedMedia
-    auctionatorSkin = true,  -- EllesmereUI look for Auctionator
     whatsTrainingSkin = true, -- EllesmereUI look for WhatsTraining's window
     foreverDungeonJournalSkin = true, -- EllesmereUI look for Forever Dungeon Journal
     attuneSkin = true,       -- EllesmereUI look for Attune
     restedxpSkin = false,    -- TwichUI's look for the RestedXP guide window (needs RestedXP; opt-in; not through EllesmereUI)
-    speakstoneSkin = false,  -- TwichUI's look for SpeakStone's speech frame (needs SpeakStone; opt-in; not through EllesmereUI)
     setupSharing = true,     -- capture / send / receive / apply setups
     acceptSetups = true,     -- let friends offer setups (always asks first)
     quietLogin = true,       -- hide addon welcome messages at login/reload
@@ -517,9 +515,6 @@ COMMANDS = {
     end },
     { name = "hidden", usage = "hidden", desc = "welcome messages hidden at login", fn = function()
         if R.Quiet then R.Quiet:ShowHidden() else Unavailable("Quiet login") end
-    end },
-    { name = "skin", usage = "skin [apply]", desc = "Auctionator skin status; apply re-runs it", fn = function(arg)
-        if R.SkinCommand then R.SkinCommand(arg) else Unavailable("Auctionator skin") end
     end },
     { name = "commtest", usage = "commtest party|guild|direct <name>", desc = "test addon messages with another TwichUI user", fn = function(arg)
         if R.CommTest then R.CommTest.Run(arg) else Unavailable("Comm test") end

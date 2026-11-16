@@ -12,8 +12,10 @@ local function utf(n)
     elseif n<65536 then return char(224+floor(n/4096),128+floor(n/64)%64,128+n%64)
     else return char(240+floor(n/262144),128+floor(n/4096)%64,128+floor(n/64)%64,128+n%64) end
 end
-function J.Parse(raw,tick)
-    if type(raw)~="string" or #raw>65536 then fail() end
+function J.Parse(raw,tick,maximum)
+    -- Only the schema-3 manifest caller opts into the approved larger header.
+    maximum=W.Int(maximum or 65536,1,256*1024)
+    if not maximum or type(raw)~="string" or #raw>maximum then fail() end
     local i,n,steps=1,#raw,0
     local function step() steps=steps+1 if tick and steps%128==0 then tick() end end
     local function ws() while i<=n and raw:find("^[ \t\r\n]",i) do i=i+1;step() end end

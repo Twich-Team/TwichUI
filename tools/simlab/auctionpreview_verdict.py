@@ -9,7 +9,7 @@ from verdict import read_rgba, distinct_colours
 import known_failures as kf
 CHECK = re.compile(r'^SIMLAB check (PASS|FAIL) \[(\w+)\] (.*?) \| expected=(.*?) \| actual=(.*)$', re.M)
 DONE = re.compile(r'^SIMLAB done steps=(\d+) simSeconds=([\d.]+) passed=(\d+) failed=(\d+) aborted=(\w+) stopped=(\w+)$', re.M)
-POSES = ('shell', 'replay', 'small', 'scaled', 'empty', 'filtered', 'resized', 'shopping', 'shoppingsmall', 'shoppingpurpose', 'categories', 'loading', 'liveprepare', 'sell', 'sellobserved', 'sellsmall', 'sellscaled', 'sellempty', 'owned', 'ownedsmall', 'ownedempty', 'market', 'marketsmall', 'marketscaled', 'marketsparse', 'marketempty', 'marketrecent', 'marketlong', 'markettracked', 'marketlarge', 'marketmetadata', 'marketstale', 'marketerror', 'marketbridge', 'wrong')
+POSES = ('shell', 'replay', 'small', 'scaled', 'empty', 'filtered', 'resized', 'shopping', 'shoppingsmall', 'shoppingpurpose', 'categories', 'loading', 'liveprepare', 'sell', 'sellobserved', 'sellsmall', 'sellscaled', 'sellempty', 'owned', 'ownedsmall', 'ownedempty', 'market', 'marketsmall', 'marketscaled', 'marketsparse', 'marketempty', 'marketrecent', 'marketlong', 'markettracked', 'marketlarge', 'marketmetadata', 'marketstale', 'marketerror', 'marketbridge', 'scopedpriced', 'scopedoutside', 'scopedabsent', 'scopedunknown', 'scopedcorrupt', 'scopedfuture', 'wrong')
 
 
 def select(names):
@@ -35,7 +35,7 @@ def judge(run, names=None):
         failures = [c for c in checks if c[0] == 'FAIL']; transcripts[name] = checks
         check(f'{name}: all steps complete', done and done[1] == '9' and done[5] == done[6] == 'false')
         check(f'{name}: counts agree', done and int(done[3]) == len(checks)-len(failures) and int(done[4]) == len(failures))
-        check(f'{name}: full assertions', len(checks) == (141 if name=='marketbridge' else 131 if name in ('loading','marketmetadata') else 130) and {c[1] for c in checks} == {'init','construct','interact','state'})
+        check(f'{name}: full assertions', len(checks) == (141 if name=='marketbridge' or name.startswith('scoped') else 131 if name in ('loading','marketmetadata') else 130) and {c[1] for c in checks} == {'init','construct','interact','state'})
         check(f'{name}: expected outcomes', (len(failures)==1 and failures[0][2]=='Browse default') if name=='wrong' else not failures)
         for label, passed, detail in kf.verdict_lines(kf.classify(text, allow=('voice-settings-unsupplied',), require=('voice-settings-unsupplied',))):
             check(f'{name}: {label} {detail}', passed)

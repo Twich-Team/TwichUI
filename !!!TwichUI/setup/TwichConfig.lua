@@ -1994,7 +1994,7 @@ local function Define()
 
     g = Group("skins", "Addon skins", { page = "skins",
         note = "Each needs its addon, and takes effect after a reload." })
-    Switches(g, { "attuneSkin", "auctionatorSkin", "foreverDungeonJournalSkin", "whatsTrainingSkin" })
+    Switches(g, { "attuneSkin", "foreverDungeonJournalSkin", "whatsTrainingSkin" })
 
     g = Group("restedxp", "RestedXP guide window", { page = "restedxp",
         note = "The look only. Whether the skin is on stays yours: turning it on chooses RestedXP's own theme. Needs RestedXP." })
@@ -2014,18 +2014,6 @@ local function Define()
             "fillOpacity", "labelFont", "labelOutline", "labelSize", "labelColor", "timeFont", "timeOutline", "timeSize",
             "timeColor", "barHeight", "textPadding", "showIcon" },
             { fillGradient = ENUM.gradient, labelOutline = ENUM.outline, timeOutline = ENUM.timeOutline })
-    end
-
-    g = Group("speakstone", "SpeakStone speech frame", { page = "speakstone", note = "Needs SpeakStone." })
-    Switches(g, { "speakstoneSkin" })
-    do
-        local Sk = R.SpeakStoneSkin
-        Table(g, { "ui", "speakstoneSkin" }, Sk and Sk.Look, LOOK, LOOK_ENUMS)
-        Table(g, { "ui", "speakstoneSkinStyle" }, Sk and Sk.Style, { "nameFont", "nameSize", "nameColor", "textFont", "textSize",
-            "textColor", "lineSpacing", "timeFont", "timeSize", "timeColor", "buttonFont", "buttonSize", "buttonText",
-            "buttonFill", "buttonBorder", "accentColor", "showPortrait", "portraitSize", "portraitShape", "portraitBorderColor",
-            "portraitBorderSize", "showProgress", "progressHeight", "progressColor", "trackColor", "rightClickClose", "padding" },
-            { portraitShape = ENUM.shape })
     end
 
     local complete = true

@@ -130,7 +130,7 @@ and 2, repeat, injected failure). Document the step here. Never reuse or reorder
 - **Groups** must be tables (`modules`, `ui`, `setup`, `gear`, `storedData`, `whisperProbe`, `profiles`, `profileKeys`,
   `profileState`, `layouts` (its record is checked by `TwichUI_Layouts` when it loads, and never repaired by itself), and `ui.qol`,
   `ui.foodDrink`, `ui.brokerMenu`, `ui.refreshments`, `ui.refreshmentsStyle`, `ui.restedxpSkin`, `ui.restedxpSkinText`,
-  `ui.restedxpSkinState`, `ui.restedxpTimerLook`, `ui.restedxpTimerText`, `ui.speakstoneSkin`, `ui.speakstoneSkinStyle`, `ui.chronicleLook`, `ui.chronicleAppearance`, `ui.guideWaypoint`, `ui.mageSell`, `ui.chatClean`, `ui.classBars`, `ui.classBarsLook`, `ui.classBarsOverrides`, `ui.classBarsPosition`, `ui.ammoCustom`, `ui.reminders`, `ui.partyPins`, `ui.pinsLook`, `ui.pinsAppearance`,
+  `ui.restedxpSkinState`, `ui.restedxpTimerLook`, `ui.restedxpTimerText`, `ui.chronicleLook`, `ui.chronicleAppearance`, `ui.guideWaypoint`, `ui.mageSell`, `ui.chatClean`, `ui.classBars`, `ui.classBarsLook`, `ui.classBarsOverrides`, `ui.classBarsPosition`, `ui.ammoCustom`, `ui.reminders`, `ui.partyPins`, `ui.pinsLook`, `ui.pinsAppearance`,
   `ui.pinsMapText`, `ui.pinsBroker`, `ui.pinsBrokerMenu`, `ui.pinsEditorLook`, `ui.restockPromptStyle`, `ui.magicInventory`, `ui.npcMap`, and the top-level `magicInventory`). One that is not is dropped and rebuilt by its owner (`container-not-table`); its
   neighbours are untouched.
 - **Values** (ranges, texts, textures, positions) are judged by the feature that reads them, every time it reads

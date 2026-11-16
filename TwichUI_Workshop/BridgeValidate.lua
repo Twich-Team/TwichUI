@@ -49,7 +49,7 @@ local function schema(plan,v,tick)
             or kind=='integer' and W.Int(v,-9007199254740991,9007199254740991)~=nil end
         need(valid)
     end
-    if plan.const~=nil then need(v==plan.const) end
+    if plan.const~=nil then need(type(plan.const)=='table' and J.Encode(v,tick)==J.Encode(plan.const,tick) or v==plan.const) end
     if plan.enum then local found=false;for _,x in ipairs(plan.enum) do found=found or v==x end;need(found) end
     if plan.anyOf then local found=false;for _,p in ipairs(plan.anyOf) do if pcall(schema,p,v,nil) then found=true;break end end;need(found) end
     if plan.allOf then for _,p in ipairs(plan.allOf) do schema(p,v,tick) end end
@@ -78,9 +78,10 @@ S.ManifestBody=without
 function S.Header(h,tick)
     need(object(h) and h.records==nil)
     local plan=W.BridgeSchemas[h.schema_version];need(plan~=nil)
-    local g=J.Copy(h);g.records=J.Array();schema(plan,g,tick)
-    need(h.coverage.generation_complete==true and #J.Encode(h)<=65536)
-    local manifest=J.Encode(without(h),tick);need(#manifest<=65536 and J.SHA(manifest,tick)==h.integrity.manifest_sha256)
+    local g=J.Object();for k,v in pairs(h) do g[k]=v end;g.records=J.Array();schema(plan,g,tick)
+    local scoped=h.schema_version==3;local headerLimit=scoped and 256*1024 or 65536
+    need(h.coverage.generation_complete==(not scoped) and #J.Encode(h,tick)<=headerLimit)
+    local manifest=J.Encode(without(h),tick);need(#manifest<=headerLimit and J.SHA(manifest,tick)==h.integrity.manifest_sha256)
     local at=S.Time(h.generated_at);need(at~=nil)
     if h.desktop_sync_completed_at~=N then need(S.Time(h.desktop_sync_completed_at)<=at) end
     if h.server_checked_at~=N then need(S.Time(h.server_checked_at)<=at) end
@@ -110,6 +111,43 @@ function S.Header(h,tick)
         local o=ctx.observations[h.current_observation_ref+1]
         need(o~=nil and o==latest and o.source.scope_complete==c.current_complete)
     else need(h.record_count==0) end
+    if scoped then
+        local scope,request=h.scope,h.scope.request
+        local function same(a,b) return J.Encode(a,tick)==J.Encode(b,tick) end
+        need(request.issuer_id==h.issuer_id and same(request.market,h.market))
+        need(request.pricing_algorithm==h.pricing_algorithm and request.history_basis==h.history_basis)
+        need(request.history_from_day==c.history_from_day and request.history_through_day==c.history_through_day)
+        local requestText=J.Encode(request,tick);need(#requestText<=128*1024)
+        need(scope.request_digest==J.SHA(requestText,tick))
+        local stable=J.Object();for k,v in pairs(request) do if k~='history_from_day' and k~='history_through_day' then stable[k]=v end end
+        need(scope.selection_id==J.SHA(J.Encode(stable,tick),tick))
+        need(h.record_count==scope.requested_count and h.record_count==#request.variants and #scope.record_sha256==h.record_count)
+        need(same(scope.included,request.variants))
+        need(h.desktop_sync_completed_at==N and h.producer.desktop_build=='not-applicable-server-export')
+        local lastItem,lastKey=0,''
+        for _,v in ipairs(request.variants) do
+            need(v.item_id>lastItem or v.item_id==lastItem and v.variant_key>lastKey)
+            lastItem,lastKey=v.item_id,v.variant_key
+        end
+        need(#scope.date_coverage==to-from+1)
+        ctx.calendar={};ctx.recordPosition=0
+        for i,d in ipairs(scope.date_coverage) do
+            need(S.Date(d.day)==from+i-1)
+            local winner,complete
+            for _,o in ipairs(ctx.observations) do
+                if o.day==from+i-1 then
+                    local function newer(old) return not old or o.key>old.key or o.key==old.key and cmp(o.id,old.id)>0 end
+                    if newer(winner) then winner=o end
+                    if o.source.scope_complete and newer(complete) then complete=o end
+                end
+                if tick then tick() end
+            end
+            local chosen=complete or winner
+            need(d.state==(complete and 'complete_close' or winner and 'incomplete_only' or 'no_observation'))
+            need(d.observation_ref==(chosen and chosen.index or N))
+            ctx.calendar[from+i-1]=d
+        end
+    end
     return ctx
 end
 local function supported(v) return v==N or money(v,true) and (#v<12 or #v==11 and v<='99999999999') end
@@ -127,7 +165,13 @@ local function counts(x,prices,source,model)
 end
 function S.Record(ctx,r,tick)
     local h=ctx.header;schema(ctx.plan.properties.records.items,r,tick)
-    need(#J.Encode(r,tick)<=65536)
+    local text=J.Encode(r,tick);need(#text<=65536)
+    if h.schema_version==3 then
+        ctx.recordPosition=ctx.recordPosition+1
+        local v=h.scope.request.variants[ctx.recordPosition]
+        need(v and v.item_id==r.item_id and v.variant_key==r.variant_key)
+        need(h.scope.record_sha256[ctx.recordPosition]==J.SHA(text,tick))
+    end
     if r.identity_basis=='exact_upstream' then
         need(r.variant_json~=N and J.SHA(r.variant_json,tick)==r.variant_key)
         local d=J.Parse(r.variant_json,tick);need(object(d) and d.id==r.item_id and J.Encode(d,tick)==r.variant_json)
@@ -178,5 +222,5 @@ function S.Record(ctx,r,tick)
             need(quantity==d.priced_supply and listings==d.priced_listing_count)
         end
     end
-    return r
+    return r,text
 end

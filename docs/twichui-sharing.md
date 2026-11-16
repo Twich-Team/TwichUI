@@ -56,9 +56,8 @@ and `LIMITS` supply defaults and ranges, so the schema cannot drift from the fea
 | Gear comparison | hints, bag marks, and how hints behave |
 | Gear stat weights | weights, rankings and "weigh by ranking", by class and talent tree (account-wide) |
 | Mage | launchers, refreshments panel and its look, shares and reserve, trade button, and how selling is handled (`ui.mageSellMode`: sell directly or mark with EllesmereUI). Not whether selling is on, Dry run, the never-sell list or the confirmation, and not auto-fill |
-| Addon skins | the four EllesmereUI-based skins' switches (they need a reload) |
+| Addon skins | the three EllesmereUI-based skins' switches (they need a reload) |
 | RestedXP guide window | the skin's look, text and timer bars (not the on/off switch) |
-| SpeakStone speech frame | the switch and the whole look |
 
 Exported values are the **effective** ones: what the feature is using now (the saved value when usable, the default
 otherwise). So a sender who never changed a setting sends its default, and importing it puts the receiver's custom

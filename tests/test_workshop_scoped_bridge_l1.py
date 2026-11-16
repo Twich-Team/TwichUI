@@ -65,7 +65,7 @@ class ScopedProof(unittest.TestCase):
         self.assertEqual((F / 'legacy-schema2.json').read_text().strip(),
                          legacy.encoded(load(ROOT / 'tests/fixtures/market_bridge_v1/source-canonical-generation.json')))
 
-    def test_scoped_semantics_and_actual_legacy_refusal(self):
+    def test_scoped_semantics_and_future_refusal(self):
         self.run_proof([
             'P.Validate(g,plan,expected)',
             'assert(not g.coverage.generation_complete and g.scope.scope_complete and not g.scope.whole_market_complete)',
@@ -76,7 +76,7 @@ class ScopedProof(unittest.TestCase):
             'assert(g.records[4].current.metrics.recent_copper==J.NULL)',
             'local excluded=' + j(load(F / 'source.json')['records'][-1]),
             'local r,why=P.Lookup(g,excluded.item_id,excluded.variant_key);assert(r==nil and why=="outside_scope")',
-            'local h=J.Copy(g);h.records=nil;assert(not pcall(S.Header,h),"production reader accepted unknown schema")',
+            'local h=J.Copy(g);h.records=nil;h.schema_version=999;assert(not pcall(S.Header,h),"production reader accepted unknown schema")',
             'local unknown=' + j(load(F / 'unknown-scoped.json')),
             'P.Validate(unknown,plan,unknown.scope.request);assert(unknown.records[1].current.state=="unknown" and unknown.records[1].current.supply==J.NULL)',
             'local large=' + j(load(F / 'large-money-scoped.json')),

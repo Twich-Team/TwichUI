@@ -139,7 +139,7 @@ DX.OPS = {
 -- to add one next (a scope is `local pt = Perf.on and Perf.Start(id) ... if pt then Perf.Stop(pt) end`, or Perf.Wrap(id, fn)
 -- for a hook or a frame's OnEvent, or Perf.Call(id, fn, ...)).
 DX.UNSCOPED = {
-    "hooksecurefunc / HookScript callbacks on other addons' or Blizzard's frames, except the RestedXP ones named rxp.* (Look.lua, AuctionatorSkin.lua, Arrival.lua, SpeakStoneSkin.lua, WhatsTrainingSkin.lua, gear/Tooltip.lua, gear/Rolls.lua, markers/Bar.lua)",
+    "hooksecurefunc / HookScript callbacks on other addons' or Blizzard's frames, except the RestedXP ones named rxp.* (Look.lua, Arrival.lua, WhatsTrainingSkin.lua, gear/Tooltip.lua, gear/Rolls.lua, markers/Bar.lua)",
     "private event frames not listed above: hazard/Alerts.lua, reminders/Display.lua, modules/Training.lua, modules/FriendLogin.lua, chronicle/Recorder.lua, auction/Window.lua, auction/Scan.lua",
     "C_Timer callbacks (modules/Restock.lua, setup/Share.lua, npcs/Share.lua, setup/Group.lua, pins/PingMap.lua, chronicle/Recorder.lua, qol/Guide*.lua)",
     "other OnUpdate scripts: Look.lua (settings-window easing), guides/CozyBagWindow.lua, setup/Window.lua (transfer line), setup/Share.lua, setup/StoredData.lua, setup/Explorer.lua (background jobs), classbars on-bar scripts",

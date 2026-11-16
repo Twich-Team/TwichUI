@@ -12091,29 +12091,6 @@ LY.CLASSIC_CAPTURE = {
           borderTexture = "eui:pixels-textured",
         },
       },
-      speakstone = {
-        speakstoneSkin = {
-          bgColor = "ff1c1712",
-          borderColor = "ffffffff",
-          borderSize = 16,
-          borderTexture = "eui:pixels-textured",
-        },
-        speakstoneSkinStyle = {
-          buttonBorder = "ff41341c",
-          buttonFill = "ff1c1712",
-          buttonFont = "Alegreya Sans Medium",
-          buttonSize = 12,
-          nameColor = "ffc9a24a",
-          portraitSize = 60,
-          textColor = "ffe8dcc0",
-          textFont = "Alegreya Sans Medium",
-          textSize = 16,
-          timeColor = "ffa69d89",
-          timeFont = "Cinzel",
-          timeSize = 12,
-          trackColor = "ff6b6760",
-        },
-      },
       targetArt = {
         targetArt = {
           bossWideScale = 90,
