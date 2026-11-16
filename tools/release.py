@@ -10,11 +10,12 @@ publishes it, so every destination gets the same version and the same notes.
   release.py publish --meta DIR/meta.json --zip ZIP --notes DIR/notes.md --repo OWNER/NAME
                      (needs GH_TOKEN and CF_API_KEY in the environment)
 
-Channels: a push to main is an alpha, a push to beta a beta, and a stable tag (vMAJOR.MINOR.PATCH) a release.
+Legacy version planning supports main/alpha, beta/beta and stable tags. Actions only verifies and builds internally.
 Commit text is only ever handled as data: read from git with NUL separators, escaped for Markdown, and handed
 to gh and curl in files. Nothing here runs a shell. Standard library only (Python 3.8+).
 """
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -456,6 +457,13 @@ class GitHub:
     def update(self, release_id, fields):
         return self._gh(["-X", "PATCH", f"repos/{self.repo}/releases/{release_id}"], fields)
 
+    def asset_sha256(self, asset_id):
+        result = subprocess.run(["gh", "api", "-H", "Accept: application/octet-stream",
+                                 f"repos/{self.repo}/releases/assets/{asset_id}"], capture_output=True)
+        if result.returncode:
+            raise ReleaseError("could not verify GitHub asset bytes")
+        return hashlib.sha256(result.stdout).hexdigest()
+
     def delete_asset(self, asset_id):
         self._gh(["-X", "DELETE", f"repos/{self.repo}/releases/assets/{asset_id}"])
 
@@ -491,14 +499,7 @@ class CurseForge:
         exact = [v for v in versions if v.get("name") == name]
         if exact:
             return exact[0]["id"], name, None
-        # As the packager does: the newest version below the wanted one, else the newest at all.
-        key = lambda v: tuple(int(x) for x in re.findall(r"\d+", v.get("name", "")))
-        want = tuple(int(x) for x in name.split("."))
-        lower = [v for v in versions if key(v) < want]
-        pick = max(lower or versions, key=lambda v: v["id"], default=None)
-        if not pick:
-            raise ReleaseError("CurseForge lists no WoW: Forever game versions")
-        return pick["id"], pick["name"], f"CurseForge has no game version {name}; using {pick['name']}"
+        raise ReleaseError(f"CurseForge has no exact WoW: Forever game version {name}; publication requires reconciliation")
 
     def upload(self, zip_path, metadata):
         """('uploaded', file id) | ('failed', why): certainly not received | ('unknown', why): may have been."""
@@ -527,8 +528,30 @@ def game_version(interface):
     return f"{int(i[:-4])}.{int(i[-4:-2])}.{int(i[-2:])}"
 
 
+def sha256(path):
+    with open(path, "rb") as stream:
+        digest = hashlib.sha256()
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def candidate_identity(meta, zip_path, notes_text):
+    return {"sha256": sha256(zip_path), "filename": Path(zip_path).name.lstrip("!"),
+            "commit": meta["commit"], "version": meta["version"], "channel": meta["channel"],
+            "notes_sha256": hashlib.sha256(notes_text.encode("utf-8")).hexdigest()}
+
+
+def verify_candidate(meta, zip_path, notes_text):
+    identity = candidate_identity(meta, zip_path, notes_text)
+    if meta.get("candidate") != identity:
+        raise ReleaseError("candidate identity mismatch or missing metadata; reconcile, never rebuild a retry")
+    return identity
+
+
 def publish(meta, zip_path, notes_text, gh, cf, log=print, sleep=time.sleep):
     """Publish one build. Safe to re-run: every step looks at what is already there first."""
+    identity = verify_candidate(meta, zip_path, notes_text)
     tag, sha, channel = meta["tag"], meta["commit"], meta["channel"]
 
     def save(fields):
@@ -570,6 +593,8 @@ def publish(meta, zip_path, notes_text, gh, cf, log=print, sleep=time.sleep):
             raise ReleaseError(f"release {tag} exists but was not made by this workflow; reconcile it by hand")
         if state.get("commit") != sha:
             raise ReleaseError(f"release {tag} records commit {state.get('commit')}, not {sha}")
+        if state.get("candidate") != identity:
+            raise ReleaseError("candidate identity mismatch or historical metadata missing; reconcile the release by hand")
         if not rel.get("draft"):
             if rel.get("tag_name") == tag and tag_on_github() == sha:
                 log(f"{tag} is already published ({rel.get('html_url')}); nothing to do.")
@@ -582,7 +607,7 @@ def publish(meta, zip_path, notes_text, gh, cf, log=print, sleep=time.sleep):
                 + (f" Delete the leftover tag {stray} by hand." if stray != tag else ""))
             return "repaired"
     else:
-        state = {"channel": channel, "commit": sha, "version": meta["version"], "curseforge": "not-started"}
+        state = {"channel": channel, "commit": sha, "version": meta["version"], "curseforge": "not-started", "candidate": identity}
         rel = gh.create_draft(tag, sha, tag, with_marker(notes_text, state), meta["prerelease"])
         log(f"Created draft release {tag}.")
 
@@ -602,12 +627,16 @@ def publish(meta, zip_path, notes_text, gh, cf, log=print, sleep=time.sleep):
         for path, name in ((zip_path, asset_name), (rj, "release.json")):
             a = existing.get(name)
             if a and a.get("state") == "uploaded":
+                if gh.asset_sha256(a["id"]) != sha256(path):
+                    raise ReleaseError(f"GitHub asset {name} differs from accepted candidate; reconcile by hand")
                 continue
             if a:
                 gh.delete_asset(a["id"])
             uploaded = gh.upload_asset(rel["id"], path, name) or {}
             if uploaded.get("name", name) != name:
                 raise ReleaseError(f"GitHub stored {name} as {uploaded.get('name')}; release.json would not match it")
+            if gh.asset_sha256(uploaded["id"]) != sha256(path):
+                raise ReleaseError(f"GitHub asset {name} failed SHA256 verification")
             log(f"Attached {name}.")
 
     cf_state = state.get("curseforge")
@@ -662,6 +691,12 @@ def main(argv=None):
     a.add_argument("--repo-url")
     a.add_argument("--github-output")
     a.add_argument("--repo-dir", help="the repository to read (default: the one this script is in)")
+    a = sub.add_parser("internal")
+    a.add_argument("--out", required=True)
+    a = sub.add_parser("seal")
+    a.add_argument("--meta", required=True)
+    a.add_argument("--zip", required=True)
+    a.add_argument("--notes", required=True)
     a = sub.add_parser("stamp")
     a.add_argument("--meta", required=True)
     a = sub.add_parser("check")
@@ -691,8 +726,27 @@ def main(argv=None):
                         v = meta.get(k)
                         f.write(f"{k}={str(v).lower() if isinstance(v, bool) else (v or '')}\n")
             return 0
+        if args.cmd == "internal":
+            commit = git("rev-parse", "HEAD").strip()
+            version = "0.0.0-dev.g" + commit[:12]
+            out = Path(args.out)
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "meta.json").write_text(json.dumps(dict(commit=commit, version=version,
+                channel="internal", publish=False, certified=False), indent=2) + "\n")
+            (out / "notes.md").write_text(f"Internal uncertified build of {commit}.\n")
+            return 0
         meta = json.loads(Path(args.meta).read_text())
-        if args.cmd == "stamp":
+        if args.cmd == "seal":
+            problems = check_archive(args.zip, meta["version"])
+            if problems:
+                raise ReleaseError("; ".join(problems))
+            text = Path(args.notes).read_text(encoding="utf-8")
+            if "candidate" in meta:
+                verify_candidate(meta, args.zip, text)
+            else:
+                meta["candidate"] = candidate_identity(meta, args.zip, text)
+                Path(args.meta).write_text(json.dumps(meta, indent=2) + "\n")
+        elif args.cmd == "stamp":
             stamp(meta["version"])
             print(f"Stamped Version {meta['version']} into {', '.join(TOCS.values())}")
         elif args.cmd == "check":
@@ -705,6 +759,10 @@ def main(argv=None):
         elif args.cmd == "publish":
             if not publication_enabled():
                 raise ReleaseError("publication is held by .github/release-policy.json")
+            verify_candidate(meta, args.zip, Path(args.notes).read_text(encoding="utf-8"))
+            problems = check_archive(args.zip, meta["version"])
+            if problems:
+                raise ReleaseError("; ".join(problems))
             token = os.environ.get("CF_API_KEY")
             if not token:
                 raise ReleaseError("CF_API_KEY is not set")

@@ -280,3 +280,29 @@ Run these sequentially on frozen source, with no competing verification activity
 This is ten launches across four representative catalogs, including Workshop and
 AH replay/negative controls. It is not the complete full/release gate. Results
 and resource limits are in [the verification audit](testing-verification-audit.md).
+
+## Automatic release isolation checks
+
+`./tests/run.sh development release-tools` covers mocked release planning/publishing,
+archive contracts, artifact identity/retry regressions and workflow invariants. No live
+CurseForge upload endpoint is used. PR/main CI selects this for release/docs-only changes;
+unmapped or unreliable scope falls back to complete offline discovery (`./tests/run.sh`).
+No ordinary CI invocation runs the full simulator or release-certification tier.
+Manual main dispatch additionally produces an uncertified internal package even during
+the publication hold. Public promotion/environment approval is pending; static workflow
+checks do not prove GitHub environment configuration or a live Actions execution.
+
+Release-isolation campaign (2026-11-16): 52 unit/mock cases passed via the focused
+runner in 6.057 s (46 release-tool cases plus 6 isolation cases); no simulator run.
+The exact pinned packager built an internal seven-addon archive from implementation
+commit `e6d8c9e8e6fa605dfc413eabb320d2fc6d9068f1` in 80.668 s using `-d`.
+Archive checks, initial seal and re-seal passed. The ZIP SHA256 was
+`4f7b817440278472a060e239afaf860363a2c143c4f8941a03815dac2047e04b`.
+Training data matched committed source after the packager's existing LF-to-CRLF
+conversion (the initial literal-byte comparison detected that expected conversion).
+YAML parsing confirmed PR/main event/job structure. This is local/mock and build-only
+evidence, not an Actions dispatch, environment approval, live publisher test or release
+certification. The first baseline test attempt had three sandbox socket-permission
+errors; the focused runner subsequently passed with localhost fixtures permitted.
+No live CurseForge upload endpoint was contacted. Future promotion still requires
+an end-to-end approved immutable-artifact rehearsal and the full candidate/client gate.
