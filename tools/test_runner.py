@@ -56,8 +56,11 @@ def describe(selection, requested):
         'offline': ['unit tests', 'contracts, migrations, performance, packaging and mutation harnesses as selected by module'],
         'simulators': {s['script']: COVERAGE[s['script']] for s in selection['simulators']},
         'not_established': ['real-client acceptance', 'pixel baseline regression (structural screenshots only)',
-                            'production mutation campaigns (separate policy)', 'release archive certification'],
+                            'production mutation campaigns (separate policy)', 'real-client packaged-install acceptance'],
     }
+    if requested == 'release':
+        selection['selection_reason'] += '; candidate archive checked by existing release checker'
+        selection['coverage_classification']['release_packaging'] = ['existing candidate archive validation']
     return selection
 
 
@@ -354,11 +357,10 @@ def main(argv=None):
         rows = run_tests(REPO, selection['tests'], args.jobs, output_dir, processes, args.timeout, args.measure)
         # No inheritance of pose filters, synthetic settings overrides or asset
         # switches may silently turn a milestone into a partial run.
-        env = simulator_env(output_dir / 'tmp', args.profile)
-        if args.measure:
-            env['SIMLAB_METRICS'] = '1'
         def run_simulator(index, spec, worker=None):
-            env = simulator_env(output_dir / 'tmp', args.profile)
+            tmp = output_dir / 'tmp' if worker is None else output_dir / 'tmp' / f'sim-worker-{worker}'
+            tmp.mkdir(exist_ok=True)
+            env = simulator_env(tmp, args.profile)
             if args.measure:
                 env['SIMLAB_METRICS'] = '1'
             if worker is not None:
@@ -373,7 +375,9 @@ def main(argv=None):
             # Full catalogs can take many launches. Each launch retains its own
             # existing timeout; the whole suite gets a separate generous guard.
             code, output, timed_out = processes.run(cmd, REPO, env, 3600)
-            (output_dir / (str(index) + '-' + spec['script'] + '.log')).write_text(output)
+            duplicate = sum(s['script'] == spec['script'] for s in selection['simulators']) > 1
+            log_name = f'{index}-{spec["script"]}' if duplicate else spec['script']
+            (output_dir / (log_name + '.log')).write_text(output)
             passed = code == 0 and not timed_out
             artifacts = re.findall(r'^artifacts: (.+)$', output, re.M)
             launches, checks, scenarios = 0, 0, []
@@ -386,6 +390,8 @@ def main(argv=None):
                     startup = re.search(r'\[\s*([\d.]+)s\].*\[Startup\] end post-event workarounds', log)
                     stamps = re.findall(r'\[\s*([\d.]+)s\]', log)
                     scenarios.append(dict(scenario=path.stem, structured_assertions=count,
+                                          intentional_negative_control=path.stem == 'wrong',
+                                          failed_assertion_markers=len(re.findall(r'^SIMLAB check FAIL ', log, re.M)),
                                           bootstrap_seconds=float(startup[1]) if startup else None,
                                           last_native_timestamp_seconds=float(stamps[-1]) if stamps else None,
                                           metrics=json.loads(path.with_suffix('.metrics.json').read_text()) if path.with_suffix('.metrics.json').is_file() else None))
@@ -425,9 +431,11 @@ def main(argv=None):
         passed = passed and source_unchanged
         if not source_unchanged:
             print('FAIL source changed during verification; preserve this result and rerun affected checks on frozen source', flush=True)
-        report = dict(simulator_workers=args.sim_jobs, simulator_resource_budget=resource_budget, complete=True, package=package, automated_release_gate_passed=passed and args.tier == 'release' and args.profile == 'local', source=identity, source_after=final_identity, source_unchanged=source_unchanged,
+        report = dict(metrics_enabled=args.measure, simulator_workers=args.sim_jobs, simulator_resource_budget=resource_budget, complete=True, package=package, automated_release_gate_passed=passed and args.tier == 'release' and args.profile == 'local', source=identity, source_after=final_identity, source_unchanged=source_unchanged,
                       exit_code=0 if passed else 1,
                       slowest_tests=sorted(rows, key=lambda r: r['seconds'], reverse=True)[:20],
+                      slowest_scenarios=sorted([dict(catalog=s['script'], **r) for s in sims for r in s['scenarios'] if r['metrics']],
+                                               key=lambda r: r['metrics']['wall_seconds'], reverse=True)[:20],
                       selection=selection, jobs=args.jobs, layout_workers=1, seconds=time.perf_counter() - start,
                       local_milestone_passed=passed and selection['tier'] == 'full' and args.profile == 'local',
                       unsupported_coverage=(['game asset rendering, client fonts and visual fidelity']

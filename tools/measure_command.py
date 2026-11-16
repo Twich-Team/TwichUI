@@ -2,7 +2,8 @@
 """Opt-in Linux command telemetry. No simulator or assertion behavior changes.
 
 Usage: python3 tools/measure_command.py OUTPUT.json -- COMMAND [ARGS ...]
-CPU is reaped child CPU; sampled tree RSS is a lower bound, not peak heap.
+Records sampled process-tree CPU/RSS and separate reaped-child counters.
+Samples are lower bounds; RSS sums are not peak heap measurements.
 """
 import json
 import os

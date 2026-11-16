@@ -145,6 +145,30 @@ class Fails(unittest.TestCase):
         self.assertEqual(env['TMPDIR'], str(self.out / 'tmp'))
         self.assertEqual(env['PYTHONDONTWRITEBYTECODE'], '1')
 
+    def test_parallel_catalog_failure_propagates_and_reports_both_lanes(self):
+        (self.repo / 'sample.lua').write_text('return true')
+        (self.repo / 'tests/test_ok.lua').write_text('print("PASSED")')
+        groups = {name: dict(tests=['test_ok.lua'], syntax=['sample.lua'], dependencies=[],
+                             simulators=[{'script': script}])
+                  for name, script in (('a', 'settings'), ('b', 'reminders'))}
+        (self.repo / 'tests/groups.json').write_text(json.dumps(groups))
+        (self.repo / 'tools/simlab/run.sh').write_text('''set -eu
+test -n "$SIMLAB_WORKER"
+if [ "$1" = reminders ]; then echo 'controlled simulator failure'; exit 7; fi
+exit 0
+''')
+        with (mock.patch.object(runner, 'REPO', self.repo),
+              mock.patch.object(runner, 'syntax_checks', return_value=True),
+              mock.patch.object(runner, 'run_tests', return_value=[]),
+              mock.patch.object(runner, 'simulator_capacity', return_value={'workers': 2}),
+              mock.patch.object(runner, 'source_identity', return_value={'commit': 'frozen'})):
+            code = runner.main(['integration', 'a', '--with-group', 'b', '--sim-jobs', '2'])
+        self.assertEqual(code, 1)
+        report = json.loads(next((self.repo / 'test-output/verification').glob('*/report.json')).read_text())
+        self.assertTrue(report['complete'])
+        self.assertFalse(report['passed'])
+        self.assertEqual([(s['worker'], s['exit_code']) for s in report['simulators']], [(1, 0), (2, 7)])
+
 
 class CloudProfile(unittest.TestCase):
     def test_profile_keeps_filters_cleared_and_selects_assets_explicitly(self):

@@ -11,13 +11,13 @@ esac
   || { echo 'simlab: the read-only installation is incomplete; see docs/simulator-lab.md' >&2; exit 2; }
 case "${SIMLAB_WORKER:-}" in
   '') state="$repo/test-output/simlab"; lock="$repo/test-output/simlab.lock" ;;
-  1|2) state="$repo/test-output/simlab-workers/worker-$SIMLAB_WORKER"; lock="$repo/test-output/simlab-worker-$SIMLAB_WORKER.lock" ;;
+  1|2) state="$repo/test-output/simlab-workers/worker-$SIMLAB_WORKER"; lock="$repo/test-output/simlab-workers/worker-$SIMLAB_WORKER.lock" ;;
   *) echo 'simlab: worker must be 1 or 2' >&2; exit 2 ;;
 esac
 # Never follow an output-directory symlink out of the repository.
 [ "$(realpath -m -- "$state")" = "$state" ] \
   || { echo 'simlab: refusing a symlinked workspace path' >&2; exit 2; }
-mkdir -p "$repo/test-output"
+mkdir -p "$(dirname "$state")"
 [ ! -L "$lock" ] || { echo 'simlab: refusing symlinked lock' >&2; exit 2; }
 exec 9> "$lock"
 flock -n 9 || { echo 'simlab: another repository-local scenario is running; wait for it to finish' >&2; exit 2; }

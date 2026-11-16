@@ -152,7 +152,7 @@ echo "artifacts: $SIMLAB_RUN"
             self.assertEqual((state / 'xdg/cache/wow-ui-sim/blizzard-ui/immutable').read_text(), f'{worker}\n')
             self.assertIn(str(state / 'artifacts'), result.stdout)
         self.assertEqual((self.install / 'xdg/cache/wow-ui-sim/blizzard-ui/immutable').read_text(), 'cache seed')
-        with (self.repo / 'test-output/simlab-worker-1.lock').open('w') as lock:
+        with (self.repo / 'test-output/simlab-workers/worker-1.lock').open('w') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             self.assertEqual(launch(1).returncode, 2)
             self.assertEqual(launch(2).returncode, 0)
