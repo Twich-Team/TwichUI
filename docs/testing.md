@@ -289,8 +289,8 @@ CurseForge upload endpoint is used. PR/main CI selects this for release/docs-onl
 unmapped or unreliable scope falls back to complete offline discovery (`./tests/run.sh`).
 No ordinary CI invocation runs the full simulator or release-certification tier.
 Manual main dispatch additionally produces an uncertified internal package even during
-the publication hold. Public promotion/environment approval is pending; static workflow
-checks do not prove GitHub environment configuration or a live Actions execution.
+the publication hold. Protected promotion is implemented separately; static workflow checks do not prove
+owner-side GitHub environment configuration or a live approved publication.
 
 Release-isolation campaign (2026-11-16): 52 unit/mock cases passed via the focused
 runner in 6.057 s (46 release-tool cases plus 6 isolation cases); no simulator run.

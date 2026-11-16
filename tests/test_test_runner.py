@@ -136,7 +136,11 @@ class Fails(unittest.TestCase):
         self.assertNotEqual(status, 0)
         pid = int(pid_file.read_text())
         stat = Path(f'/proc/{pid}/stat')
-        self.assertTrue(not stat.exists() or stat.read_text().split()[2] == 'Z', 'descendant is still running')
+        try:
+            state = stat.read_text().split()[2]
+        except FileNotFoundError:
+            state = None  # Reaped between timeout cleanup and the /proc read.
+        self.assertIn(state, (None, 'Z'), 'descendant is still running')
 
     def test_generation_and_seed_overrides_are_not_inherited(self):
         harmful = {k: '1' for k in runner.CLEAR_ENV}

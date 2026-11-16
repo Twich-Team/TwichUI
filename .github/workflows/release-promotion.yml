@@ -1,0 +1,86 @@
+name: Promote exact release candidate
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_id:
+        description: Immutable Actions candidate artifact ID
+        required: true
+      source:
+        description: Full source SHA recorded in the candidate
+        required: true
+      version:
+        description: Exact final packaged version (no v prefix)
+        required: true
+      channel:
+        type: choice
+        options: [alpha, beta, stable, hotfix]
+        required: true
+        description: Reviewed candidate purpose
+      sha256:
+        description: Exact ZIP SHA256 (64 hex)
+        required: true
+permissions:
+  contents: read
+  actions: read
+# One lock across ALL channels and the entire approval/publish sequence; never cancel an upload.
+# GitHub may replace an older pending request; a cancelled pending request never uploads.
+concurrency:
+  group: public-release-promotion
+  cancel-in-progress: false
+jobs:
+  preflight:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      enabled: ${{ steps.verify.outputs.enabled }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify immutable candidate and reviewed evidence before approval
+        id: verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ACTOR: ${{ github.triggering_actor }}
+          ARTIFACT: ${{ inputs.artifact_id }}
+          SOURCE: ${{ inputs.source }}
+          VERSION: ${{ inputs.version }}
+          CHANNEL: ${{ inputs.channel }}
+          SHA256: ${{ inputs.sha256 }}
+        run: |
+          python3 -I tools/release_promotion.py --repo "$REPO" --actor "$ACTOR" \
+            --artifact-id "$ARTIFACT" --source "$SOURCE" --version "$VERSION" --channel "$CHANNEL" --sha256 "$SHA256"
+  publish:
+    name: Approve ${{ inputs.channel }} ${{ inputs.version }} artifact ${{ inputs.artifact_id }} SHA256 ${{ inputs.sha256 }}
+    needs: preflight
+    if: github.ref == 'refs/heads/main' && needs.preflight.outputs.enabled == 'true'
+    environment:
+      name: release
+      url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}#summary
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Reverify approved exact bytes and publish without rebuilding
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          REPO: ${{ github.repository }}
+          ACTOR: ${{ github.triggering_actor }}
+          ARTIFACT: ${{ inputs.artifact_id }}
+          SOURCE: ${{ inputs.source }}
+          VERSION: ${{ inputs.version }}
+          CHANNEL: ${{ inputs.channel }}
+          SHA256: ${{ inputs.sha256 }}
+        run: |
+          python3 -I tools/release_promotion.py --publish --repo "$REPO" --actor "$ACTOR" \
+            --artifact-id "$ARTIFACT" --source "$SOURCE" --version "$VERSION" --channel "$CHANNEL" --sha256 "$SHA256"

@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: false
 
 # Deliberately no publish job, environment secrets, tag trigger or contents-write token.
-# Public promotion is pending owner settings and a separately reviewed workflow.
+# Public promotion is isolated in release-promotion.yml behind environment review and the hold.
 jobs:
   verify:
     runs-on: ubuntu-latest
