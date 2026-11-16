@@ -2,6 +2,7 @@
 import copy
 import hashlib
 import json
+import random
 from pathlib import Path
 import shutil
 import subprocess
@@ -28,6 +29,29 @@ def packed(g):
     return {'transport_version':1,'manifest':encoded(h),'records':[encoded(r) for r in g['records']],
             'receipt':encoded({'schema_version':1,'generation_id':g['generation_id'],'desktop_build':'synthetic-reader-test','completed_at':'2026-11-15T13:00:00Z'})}
 class BridgeReader(unittest.TestCase):
+    def test_codec_matches_independent_json_and_sha_vectors(self):
+        values = [
+            None, True, False, 9007199254740991, -9007199254740991,
+            "", 'a"b\\c\n', ''.join(chr(i) for i in range(256)), "😀", "a"*32768,
+            {"z": "😀", "a": "\x00", "values": [None, True, 0, '"\\']},
+        ]
+        lines = []
+        for value in values:
+            text = encoded(value)
+            lines.append('assert(J.Encode(J.Parse('+lua(text)+'))=='+lua(text)+',"independent canonical JSON mismatch")')
+        rng = random.Random(1502026)
+        for size in [0, 1, 55, 56, 63, 64, 65, 127, 128, 4097]:
+            data = bytes(rng.randrange(256) for _ in range(size))
+            literal = '"'+''.join('\\%03d'%b for b in data)+'"'
+            expected = lua(hashlib.sha256(data).hexdigest())
+            lines += ['do local data='+literal,
+                      'assert(J.SHA(data)=='+expected+',"independent SHA mismatch")',
+                      'local hash=J.Hash();for at=1,#data,17 do hash:Update(data:sub(at,at+16))end',
+                      'assert(hash:Finish()=='+expected+',"incremental SHA mismatch") end']
+        for bad in ['"\\ud800"', '"\\udc00"', '{"x":1,"x":2}', '1.5', '1e2', '-0']:
+            lines.append('assert(not pcall(J.Parse,'+lua(bad)+'),"strict encoding unexpectedly accepted")')
+        self.run_lua(lines)
+
     def run_lua(self,lines):
         self.assertIsNotNone(shutil.which('lua5.1'),'Lua 5.1 required')
         setup=['require("bit")','TwichUI={Workshop={}}','TwichUIDB={localProfile="preserved"}',

@@ -37,6 +37,29 @@ def m(id, file, find, replace, why, tests, smoke=False, expect="killed", note=""
 
 
 # M1b external data validation: only disposable synthetic state is mutated.
+m("market.bridge.work-cap", "TwichUI_Workshop/Bridge.lua", "RESUMES=512", "RESUMES=1024",
+  "a nonadvancing clock admits twice the bounded work", ["test_workshop_bridge_performance.lua"])
+m("market.bridge.clockless-work", "TwichUI_Workshop/Bridge.lua",
+  "and B.RESUMES or 32", "and B.RESUMES or 512",
+  "a missing clock expands unmeasured synchronous work", ["test_workshop_bridge_performance.lua"])
+m("market.bridge.elapsed-budget", "TwichUI_Workshop/Bridge.lua",
+  "clock()-start>=budget", "false",
+  "cooperative work ignores its elapsed time budget", ["test_workshop_bridge_performance.lua"])
+m("market.bridge.range-direction", "TwichUI_Workshop/Bridge.lua",
+  "elseif key<variant then", "elseif key>variant then",
+  "binary lookup loses exact variants in a sorted range", ["test_workshop_bridge_performance.lua"])
+m("market.bridge.range-isolation", "TwichUI_Workshop/Bridge.lua",
+  "first+active.variantCounts[item]-1", "#active.variantKeys",
+  "variant lookup can cross into another item's records", ["test_workshop_bridge_performance.lua"])
+m("market.bridge.quote-fast-escape", "TwichUI_Workshop/BridgeCodec.lua",
+  "if #s<=128 and not s:find(", "if #s<=128 or not s:find(",
+  "short unsafe strings bypass canonical escaping", ["test_workshop_bridge_performance.lua"])
+m("market.bridge.sha-choice", "TwichUI_Workshop/BridgeCodec.lua",
+  "bxor(g,band(e,bxor(f,g)))", "bxor(g,bor(e,bxor(f,g)))",
+  "an incorrect equivalent boolean formula corrupts SHA-256", ["test_workshop_bridge.lua"])
+m("market.bridge.encoding-depth", "TwichUI_Workshop/BridgeCodec.lua",
+  "if level>12 then fail() end", "if level>14 then fail() end",
+  "the canonical encoder silently raises its depth bound", ["test_workshop_bridge_performance.lua"])
 m("market.bridge.generation-integrity","TwichUI_Workshop/Bridge.lua","bodyHash:Finish()==h.generation_id","true","a generation identity no longer binds every source record", ["test_workshop_bridge.lua"])
 m("market.bridge.identity-order","TwichUI_Workshop/Bridge.lua","requireData(r.item_id>lastItem or r.item_id==lastItem and r.variant_key>lastVariant)","requireData(true)","duplicate exact variants overwrite the imported index", ["test_workshop_bridge.lua"])
 m("market.bridge.history-window","TwichUI_Workshop/Bridge.lua","math.max(ctx.from,ctx.today-days+1)","ctx.from","a selected history window includes older dates", ["test_workshop_bridge.lua"])
