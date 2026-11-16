@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from unittest import mock
 
 REPO = Path(__file__).resolve().parent.parent
@@ -168,6 +169,28 @@ exit 0
         self.assertTrue(report['complete'])
         self.assertFalse(report['passed'])
         self.assertEqual([(s['worker'], s['exit_code']) for s in report['simulators']], [(1, 0), (2, 7)])
+
+    def test_release_archive_rejection_cannot_set_certification_flags(self):
+        shutil.copyfile(REPO / 'tools/release.py', self.repo / 'tools/release.py')
+        metadata = self.repo / 'meta.json'
+        metadata.write_text(json.dumps({'version': '1.0.0'}))
+        archive = self.repo / 'candidate.zip'
+        with zipfile.ZipFile(archive, 'w'):
+            pass  # Valid ZIP container, missing every required addon.
+        selection = dict(tier='full', group=None, groups=[], tests=[], syntax=[], simulators=[])
+        with (mock.patch.object(runner, 'REPO', self.repo),
+              mock.patch.object(runner, 'plan', return_value=selection),
+              mock.patch.object(runner, 'syntax_checks', return_value=True),
+              mock.patch.object(runner, 'run_tests', return_value=[]),
+              mock.patch.object(runner, 'source_identity', return_value={'commit': 'frozen'})):
+            code = runner.main(['release', '--release-meta', str(metadata), '--release-zip', str(archive)])
+        self.assertEqual(code, 1)
+        report_dir = next((self.repo / 'test-output/verification').iterdir())
+        report = json.loads((report_dir / 'report.json').read_text())
+        self.assertFalse(report['package']['passed'])
+        self.assertFalse(report['local_milestone_passed'])
+        self.assertFalse(report['automated_release_gate_passed'])
+        self.assertIn('missing !!!TwichUI/!!!TwichUI.toc', (report_dir / 'package.log').read_text())
 
 
 class CloudProfile(unittest.TestCase):

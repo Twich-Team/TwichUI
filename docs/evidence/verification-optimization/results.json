@@ -1,0 +1,1064 @@
+{
+  "format": 1,
+  "date": "2026-11-16",
+  "base_commit": "5133a43477237bf7cd97a429a680a751a9533f7c",
+  "measured_candidate_commit": "4c5b545643b9d0f9ee65ccd563f2c7f7b4d1be8a",
+  "final_runtime_code_commit": "88f504fe946f919b4f22bd1eb808c67fa058e338",
+  "production_addon_trees_unchanged": {
+    "!!!TwichUI": "c1fa0556abdcc64469d27f362fc52f6177ae447d",
+    "TwichUI_Diagnostics": "632674f896f74b69e97546277e0c330bb87bd80d",
+    "TwichUI_LayoutWizard": "5dd5ff6962c3c40569a6a4179b05149aa509b253",
+    "TwichUI_Layouts": "f7a538dd5cdf8cf0d63bd6e0a2decd0125f337ae",
+    "TwichUI_LoadTest": "133af1a5dc7f7c66831e75d1276b2fe066df2937",
+    "TwichUI_LoadTestClock": "d0b92075fc6c6b5edfdc38f59b72856e39c53e0f",
+    "TwichUI_NavData": "fb49cd9200ceb23e2a1ff46e65798a662be16ee0",
+    "TwichUI_Settings": "c68f4e23bf678f8b6a173195f0682fe674cf7a6f",
+    "TwichUI_TestLab": "2df3ca0c078aae3a6057ea96a3c4abeb3225e409",
+    "TwichUI_Workshop": "4bfca7a2632e20afd316ac2465a5582c87bb670b"
+  },
+  "lua_tests_fixtures_unchanged": true,
+  "historical_full": {
+    "report": "docs/evidence/bridge-m15/full-cloud.json",
+    "seconds": 2446.2791130110054,
+    "modules": 247,
+    "launches": 192,
+    "structured_assertions": 30552,
+    "cloud_passed": true,
+    "local_gate_passed": false
+  },
+  "offline": {
+    "tested_commit": "7eb12581cf929b643e833b0e748cb355996deb7a",
+    "passed": true,
+    "exit_code": 0,
+    "modules": 248,
+    "python_cases": 149,
+    "seconds": 859.471894539,
+    "reaped_child_cpu_seconds": 1092.397158,
+    "max_child_rss_kib": 4242276,
+    "timing_caveat": "instrumented; first 455 seconds overlapped the baseline feature run; validation and bottleneck evidence, not an isolated speedup comparison",
+    "slowest_twenty": [
+      {
+        "module": "test_layout_wizard.lua",
+        "wall_seconds": 107.62481131599998,
+        "reaped_child_cpu_seconds": 107.405908,
+        "max_child_rss_kib": 4242276
+      },
+      {
+        "module": "test_workshop_history2.lua",
+        "wall_seconds": 91.01856123900006,
+        "reaped_child_cpu_seconds": 83.747983,
+        "max_child_rss_kib": 48016
+      },
+      {
+        "module": "test_layout_publish.lua",
+        "wall_seconds": 73.25193566799999,
+        "reaped_child_cpu_seconds": 73.067329,
+        "max_child_rss_kib": 1127744
+      },
+      {
+        "module": "test_workshop_market_scale.lua",
+        "wall_seconds": 70.90970605300004,
+        "reaped_child_cpu_seconds": 68.17600399999999,
+        "max_child_rss_kib": 162108
+      },
+      {
+        "module": "test_layout_update.lua",
+        "wall_seconds": 64.0220537560001,
+        "reaped_child_cpu_seconds": 63.798548,
+        "max_child_rss_kib": 1330800
+      },
+      {
+        "module": "test_layout_hardening.lua",
+        "wall_seconds": 57.396576545000016,
+        "reaped_child_cpu_seconds": 57.268693999999996,
+        "max_child_rss_kib": 1541224
+      },
+      {
+        "module": "test_onboarding.lua",
+        "wall_seconds": 50.228403431999936,
+        "reaped_child_cpu_seconds": 44.90103,
+        "max_child_rss_kib": 1760940
+      },
+      {
+        "module": "test_layout_presets.lua",
+        "wall_seconds": 47.083088537000094,
+        "reaped_child_cpu_seconds": 47.165272,
+        "max_child_rss_kib": 488124
+      },
+      {
+        "module": "test_layout_complete.lua",
+        "wall_seconds": 42.53182359199991,
+        "reaped_child_cpu_seconds": 42.396339999999995,
+        "max_child_rss_kib": 1618476
+      },
+      {
+        "module": "test_layout_tooltip.lua",
+        "wall_seconds": 39.146498328999996,
+        "reaped_child_cpu_seconds": 39.018888000000004,
+        "max_child_rss_kib": 1330956
+      },
+      {
+        "module": "test_reminder_gallery.py",
+        "wall_seconds": 37.28666828500002,
+        "reaped_child_cpu_seconds": 32.35624,
+        "max_child_rss_kib": 106148
+      },
+      {
+        "module": "test_workshop_valuation.lua",
+        "wall_seconds": 33.17608664099998,
+        "reaped_child_cpu_seconds": 32.473279000000005,
+        "max_child_rss_kib": 94188
+      },
+      {
+        "module": "test_workshop_market_reference.lua",
+        "wall_seconds": 29.544289566999964,
+        "reaped_child_cpu_seconds": 27.631309,
+        "max_child_rss_kib": 13696
+      },
+      {
+        "module": "test_layouts.lua",
+        "wall_seconds": 27.966507583000066,
+        "reaped_child_cpu_seconds": 27.838985,
+        "max_child_rss_kib": 1091448
+      },
+      {
+        "module": "test_workshop_craftplanner.lua",
+        "wall_seconds": 25.848497055000053,
+        "reaped_child_cpu_seconds": 22.08697,
+        "max_child_rss_kib": 14352
+      },
+      {
+        "module": "test_layout_force.lua",
+        "wall_seconds": 23.611577532999945,
+        "reaped_child_cpu_seconds": 23.49925,
+        "max_child_rss_kib": 753556
+      },
+      {
+        "module": "test_testlab_bench.lua",
+        "wall_seconds": 19.960535671000002,
+        "reaped_child_cpu_seconds": 15.893779,
+        "max_child_rss_kib": 77980
+      },
+      {
+        "module": "test_wizard_art.py",
+        "wall_seconds": 18.232833018000065,
+        "reaped_child_cpu_seconds": 15.216106,
+        "max_child_rss_kib": 117532
+      },
+      {
+        "module": "test_settings_window.lua",
+        "wall_seconds": 14.99887649699997,
+        "reaped_child_cpu_seconds": 12.950778999999999,
+        "max_child_rss_kib": 571840
+      },
+      {
+        "module": "test_portable.lua",
+        "wall_seconds": 13.60578415100008,
+        "reaped_child_cpu_seconds": 12.443882,
+        "max_child_rss_kib": 60604
+      }
+    ]
+  },
+  "development": {
+    "baseline": [
+      {
+        "exit_code": 0,
+        "wall_seconds": 8.464574184999947,
+        "reaped_child_cpu_seconds": 10.831988999999993,
+        "runner_seconds": 8.309885816000133
+      },
+      {
+        "exit_code": 0,
+        "wall_seconds": 10.255787670000245,
+        "reaped_child_cpu_seconds": 13.275989999999993,
+        "runner_seconds": 10.039827349999996
+      },
+      {
+        "exit_code": 0,
+        "wall_seconds": 8.631507641999633,
+        "reaped_child_cpu_seconds": 11.364464000000012,
+        "runner_seconds": 8.461492731999897
+      }
+    ],
+    "candidate": [
+      {
+        "exit_code": 0,
+        "wall_seconds": 8.785576421000314,
+        "reaped_child_cpu_seconds": 11.622156000000004,
+        "runner_seconds": 8.612985086999743
+      },
+      {
+        "exit_code": 0,
+        "wall_seconds": 8.667681143000209,
+        "reaped_child_cpu_seconds": 11.071984999999998,
+        "runner_seconds": 8.49467228399999
+      },
+      {
+        "exit_code": 0,
+        "wall_seconds": 8.935571759999675,
+        "reaped_child_cpu_seconds": 11.441168000000005,
+        "runner_seconds": 8.692134473000351
+      }
+    ],
+    "median_wall_seconds": {
+      "baseline": 8.631507641999633,
+      "candidate": 8.785576421000314
+    }
+  },
+  "serial": {
+    "source": {
+      "commit": "4c5b545643b9d0f9ee65ccd563f2c7f7b4d1be8a",
+      "dirty": false,
+      "working_tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "passed": true,
+    "exit_code": 0,
+    "seconds": 319.91281684499995,
+    "workers": 1,
+    "resource_budget": null,
+    "modules": 4,
+    "python_cases": 36,
+    "suites": [
+      {
+        "catalog": "workshop",
+        "exit_code": 0,
+        "seconds": 169.4234908469998,
+        "launches": 3,
+        "structured_assertions": 1595,
+        "screenshots": [
+          "craft.png",
+          "design.png"
+        ],
+        "scenarios": [
+          {
+            "name": "craft",
+            "structured_assertions": 529,
+            "failed_assertion_markers": 0,
+            "intentional_wrong": false,
+            "wall_seconds": 55.65871392400004,
+            "sampled_cpu_seconds": 55.69,
+            "sampled_peak_tree_rss_bytes": 1906495488,
+            "bootstrap_seconds": 13.543,
+            "post_check_render_diagnostic_seconds": 52.723,
+            "render_tail_proxy_seconds": 2.9357139240000407
+          },
+          {
+            "name": "design",
+            "structured_assertions": 537,
+            "failed_assertion_markers": 0,
+            "intentional_wrong": false,
+            "wall_seconds": 55.130404036999835,
+            "sampled_cpu_seconds": 55.65,
+            "sampled_peak_tree_rss_bytes": 1918160896,
+            "bootstrap_seconds": 8.967,
+            "post_check_render_diagnostic_seconds": 52.936,
+            "render_tail_proxy_seconds": 2.1944040369998348
+          },
+          {
+            "name": "wrong",
+            "structured_assertions": 529,
+            "failed_assertion_markers": 1,
+            "intentional_wrong": true,
+            "wall_seconds": 51.84696798899995,
+            "sampled_cpu_seconds": 51.65,
+            "sampled_peak_tree_rss_bytes": 1379315712,
+            "bootstrap_seconds": 8.57,
+            "post_check_render_diagnostic_seconds": null,
+            "render_tail_proxy_seconds": null
+          }
+        ]
+      },
+      {
+        "catalog": "settings",
+        "exit_code": 0,
+        "seconds": 31.846569829999908,
+        "launches": 2,
+        "structured_assertions": 39,
+        "screenshots": [
+          "overview.png",
+          "workshop.png"
+        ],
+        "scenarios": [
+          {
+            "name": "overview",
+            "structured_assertions": 22,
+            "failed_assertion_markers": 0,
+            "intentional_wrong": false,
+            "wall_seconds": 14.709673531999897,
+            "sampled_cpu_seconds": 14.92,
+            "sampled_peak_tree_rss_bytes": 1718882304,
+            "bootstrap_seconds": 10.276,
+            "post_check_render_diagnostic_seconds": 12.707,
+            "render_tail_proxy_seconds": 2.0026735319998963
+          },
+          {
+            "name": "workshop",
+            "structured_assertions": 17,
+            "failed_assertion_markers": 0,
+            "intentional_wrong": false,
+            "wall_seconds": 12.527506603999882,
+            "sampled_cpu_seconds": 12.76,
+            "sampled_peak_tree_rss_bytes": 1700593664,
+            "bootstrap_seconds": 8.92,
+            "post_check_render_diagnostic_seconds": 10.38,
+            "render_tail_proxy_seconds": 2.147506603999881
+          }
+        ]
+      },
+      {
+        "catalog": "reminders",
+        "exit_code": 0,
+        "seconds": 42.50399994700001,
+        "launches": 2,
+        "structured_assertions": 187,
+        "screenshots": [
+          "editor.png",
+          "narrow.png"
+        ],
+        "scenarios": [
+          {
+            "name": "editor",
+            "structured_assertions": 93,
+            "failed_assertion_markers": 0,
+            "intentional_wrong": false,
+            "wall_seconds": 19.59184103000007,
+            "sampled_cpu_seconds": 19.7,
+            "sampled_peak_tree_rss_bytes": 1786462208,
+            "bootstrap_seconds": 9.516,
+            "post_check_render_diagnostic_seconds": 17.147,
+            "render_tail_proxy_seconds": 2.4448410300000702
+          },
+          {
+            "name": "narrow",
+            "structured_assertions": 94,
+            "failed_assertion_markers": 0,
+            "intentional_wrong": false,
+            "wall_seconds": 19.306291083000133,
+            "sampled_cpu_seconds": 19.53,
+            "sampled_peak_tree_rss_bytes": 1776349184,
+            "bootstrap_seconds": 9.238,
+            "post_check_render_diagnostic_seconds": 16.946,
+            "render_tail_proxy_seconds": 2.3602910830001314
+          }
+        ]
+      },
+      {
+        "catalog": "auctionpreview",
+        "exit_code": 0,
+        "seconds": 70.02589358,
+        "launches": 3,
+        "structured_assertions": 390,
+        "screenshots": [
+          "replay.png",
+          "shell.png",
+          "wrong.png"
+        ],
+        "scenarios": [
+          {
+            "name": "replay",
+            "structured_assertions": 130,
+            "failed_assertion_markers": 0,
+            "intentional_wrong": false,
+            "wall_seconds": 21.678561949999903,
+            "sampled_cpu_seconds": 21.98,
+            "sampled_peak_tree_rss_bytes": 1785495552,
+            "bootstrap_seconds": 9.213,
+            "post_check_render_diagnostic_seconds": 18.596,
+            "render_tail_proxy_seconds": 3.082561949999903
+          },
+          {
+            "name": "shell",
+            "structured_assertions": 130,
+            "failed_assertion_markers": 0,
+            "intentional_wrong": false,
+            "wall_seconds": 21.069196838999915,
+            "sampled_cpu_seconds": 21.35,
+            "sampled_peak_tree_rss_bytes": 1785819136,
+            "bootstrap_seconds": 10.51,
+            "post_check_render_diagnostic_seconds": 18.252,
+            "render_tail_proxy_seconds": 2.817196838999916
+          },
+          {
+            "name": "wrong",
+            "structured_assertions": 130,
+            "failed_assertion_markers": 1,
+            "intentional_wrong": true,
+            "wall_seconds": 20.340069661999905,
+            "sampled_cpu_seconds": 20.61,
+            "sampled_peak_tree_rss_bytes": 1786007552,
+            "bootstrap_seconds": 9.772,
+            "post_check_render_diagnostic_seconds": 17.567,
+            "render_tail_proxy_seconds": 2.773069661999905
+          }
+        ]
+      }
+    ],
+    "launches": 10,
+    "screenshots": 9,
+    "structured_assertions": 2211
+  },
+  "parallel": {
+    "source": {
+      "commit": "4c5b545643b9d0f9ee65ccd563f2c7f7b4d1be8a",
+      "dirty": false,
+      "working_tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "passed": true,
+    "exit_code": 0,
+    "seconds": 249.83341532200006,
+    "workers": 2,
+    "resource_budget": {
+      "quota_cpus": 4.0,
+      "available_bytes": 15621926912,
+      "workers": 2,
+      "guard": "admission only; no kernel memory reservation; serial within each catalog"
+    },
+    "modules": 4,
+    "python_cases": 36,
+    "suites": [
+      {
+        "catalog": "workshop",
+        "exit_code": 0,
+        "seconds": 192.17211466299977,
+        "launches": 3,
+        "structured_assertions": 1595,
+        "screenshots": [
+          "craft.png",
+          "design.png"
+        ],
+        "scenarios": [
+          {
+            "name": "craft",
+            "structured_assertions": 529,
+            "failed_assertion_markers": 0,
+            "intentional_wrong": false,
+            "wall_seconds": 59.51520886900016,
+            "sampled_cpu_seconds": 58.66,
+            "sampled_peak_tree_rss_bytes": 1905889280,
+            "bootstrap_seconds": 10.888,
+            "post_check_render_diagnostic_seconds": 56.223,
+            "render_tail_proxy_seconds": 3.292208869000163
+          },
+          {
+            "name": "design",
+            "structured_assertions": 537,
+            "failed_assertion_markers": 0,
+            "intentional_wrong": false,
+            "wall_seconds": 66.80974255399997,
+            "sampled_cpu_seconds": 66.48,
+            "sampled_peak_tree_rss_bytes": 1921634304,
+            "bootstrap_seconds": 9.414,
+            "post_check_render_diagnostic_seconds": 63.19,
+            "render_tail_proxy_seconds": 3.61974255399997
+          },
+          {
+            "name": "wrong",
+            "structured_assertions": 529,
+            "failed_assertion_markers": 1,
+            "intentional_wrong": true,
+            "wall_seconds": 59.620259088999774,
+            "sampled_cpu_seconds": 59.24,
+            "sampled_peak_tree_rss_bytes": 1379135488,
+            "bootstrap_seconds": 11.173,
+            "post_check_render_diagnostic_seconds": null,
+            "render_tail_proxy_seconds": null
+          }
+        ]
+      },
+      {
+        "catalog": "settings",
+        "exit_code": 0,
+        "seconds": 39.53472204699983,
+        "launches": 2,
+        "structured_assertions": 39,
+        "screenshots": [
+          "overview.png",
+          "workshop.png"
+        ],
+        "scenarios": [
+          {
+            "name": "overview",
+            "structured_assertions": 22,
+            "failed_assertion_markers": 0,
+            "intentional_wrong": false,
+            "wall_seconds": 21.40777875899994,
+            "sampled_cpu_seconds": 21.64,
+            "sampled_peak_tree_rss_bytes": 1734164480,
+            "bootstrap_seconds": 13.272,
+            "post_check_render_diagnostic_seconds": 16.655,
+            "render_tail_proxy_seconds": 4.752778758999938
+          },
+          {
+            "name": "workshop",
+            "structured_assertions": 17,
+            "failed_assertion_markers": 0,
+            "intentional_wrong": false,
+            "wall_seconds": 12.769762432000107,
+            "sampled_cpu_seconds": 12.81,
+            "sampled_peak_tree_rss_bytes": 1709633536,
+            "bootstrap_seconds": 8.745,
+            "post_check_render_diagnostic_seconds": 10.339,
+            "render_tail_proxy_seconds": 2.4307624320001064
+          }
+        ]
+      },
+      {
+        "catalog": "reminders",
+        "exit_code": 0,
+        "seconds": 52.42328656599966,
+        "launches": 2,
+        "structured_assertions": 187,
+        "screenshots": [
+          "editor.png",
+          "narrow.png"
+        ],
+        "scenarios": [
+          {
+            "name": "editor",
+            "structured_assertions": 93,
+            "failed_assertion_markers": 0,
+            "intentional_wrong": false,
+            "wall_seconds": 24.36330168199993,
+            "sampled_cpu_seconds": 24.4,
+            "sampled_peak_tree_rss_bytes": 1787277312,
+            "bootstrap_seconds": 11.62,
+            "post_check_render_diagnostic_seconds": 20.75,
+            "render_tail_proxy_seconds": 3.6133016819999284
+          },
+          {
+            "name": "narrow",
+            "structured_assertions": 94,
+            "failed_assertion_markers": 0,
+            "intentional_wrong": false,
+            "wall_seconds": 23.95058651499994,
+            "sampled_cpu_seconds": 24.060000000000002,
+            "sampled_peak_tree_rss_bytes": 1776054272,
+            "bootstrap_seconds": 12.145,
+            "post_check_render_diagnostic_seconds": 20.422,
+            "render_tail_proxy_seconds": 3.5285865149999402
+          }
+        ]
+      },
+      {
+        "catalog": "auctionpreview",
+        "exit_code": 0,
+        "seconds": 78.67433390000019,
+        "launches": 3,
+        "structured_assertions": 390,
+        "screenshots": [
+          "replay.png",
+          "shell.png",
+          "wrong.png"
+        ],
+        "scenarios": [
+          {
+            "name": "replay",
+            "structured_assertions": 130,
+            "failed_assertion_markers": 0,
+            "intentional_wrong": false,
+            "wall_seconds": 19.630817925999963,
+            "sampled_cpu_seconds": 19.64,
+            "sampled_peak_tree_rss_bytes": 1785942016,
+            "bootstrap_seconds": 9.824,
+            "post_check_render_diagnostic_seconds": 17.627,
+            "render_tail_proxy_seconds": 2.0038179259999644
+          },
+          {
+            "name": "shell",
+            "structured_assertions": 130,
+            "failed_assertion_markers": 0,
+            "intentional_wrong": false,
+            "wall_seconds": 28.17651897299993,
+            "sampled_cpu_seconds": 28.03,
+            "sampled_peak_tree_rss_bytes": 1790758912,
+            "bootstrap_seconds": 15.278,
+            "post_check_render_diagnostic_seconds": 25.195,
+            "render_tail_proxy_seconds": 2.981518972999929
+          },
+          {
+            "name": "wrong",
+            "structured_assertions": 130,
+            "failed_assertion_markers": 1,
+            "intentional_wrong": true,
+            "wall_seconds": 22.497073403000286,
+            "sampled_cpu_seconds": 22.46,
+            "sampled_peak_tree_rss_bytes": 1786036224,
+            "bootstrap_seconds": 11.57,
+            "post_check_render_diagnostic_seconds": 19.74,
+            "render_tail_proxy_seconds": 2.7570734030002875
+          }
+        ]
+      }
+    ],
+    "launches": 10,
+    "screenshots": 9,
+    "structured_assertions": 2211
+  },
+  "parallel_wall_reduction_percent": 21.905781148166337,
+  "baseline_representative_workflows": [
+    {
+      "catalog": "workshop",
+      "seconds": 198.42321395500005,
+      "launches": 3,
+      "checks": 1595,
+      "timing_caveat": "overlapped offline verification; no causal speedup claim",
+      "native_cpu_seconds": null
+    },
+    {
+      "catalog": "settings",
+      "seconds": 29.091883326000016,
+      "launches": 2,
+      "native_cpu_seconds": null,
+      "sampled_peak_tree_rss_bytes": 1721360384,
+      "timing_caveat": "reaped-child CPU omits native PID namespace; not attributed to native CPU"
+    },
+    {
+      "catalog": "reminders",
+      "seconds": 38.53534726999999,
+      "launches": 2,
+      "native_cpu_seconds": null,
+      "sampled_peak_tree_rss_bytes": 1789849600,
+      "timing_caveat": "reaped-child CPU omits native PID namespace; not attributed to native CPU"
+    },
+    {
+      "catalog": "auctionpreview",
+      "seconds": 70.36557526699971,
+      "launches": 3,
+      "checks": 390,
+      "sampled_native_tree_cpu_seconds": 70.06,
+      "sampled_peak_tree_rss_bytes": 1799852032
+    }
+  ],
+  "baseline_candidate_transcripts": [
+    {
+      "catalog": "workshop",
+      "scenario": "craft",
+      "literal_identity": true,
+      "identity_preserving_comparison": true,
+      "records": 560
+    },
+    {
+      "catalog": "workshop",
+      "scenario": "design",
+      "literal_identity": true,
+      "identity_preserving_comparison": true,
+      "records": 568
+    },
+    {
+      "catalog": "workshop",
+      "scenario": "wrong",
+      "literal_identity": true,
+      "identity_preserving_comparison": true,
+      "records": 560
+    },
+    {
+      "catalog": "settings",
+      "scenario": "overview",
+      "literal_identity": false,
+      "identity_preserving_comparison": true,
+      "records": 25
+    },
+    {
+      "catalog": "settings",
+      "scenario": "workshop",
+      "literal_identity": true,
+      "identity_preserving_comparison": true,
+      "records": 20
+    },
+    {
+      "catalog": "reminders",
+      "scenario": "editor",
+      "literal_identity": false,
+      "identity_preserving_comparison": true,
+      "records": 102
+    },
+    {
+      "catalog": "reminders",
+      "scenario": "narrow",
+      "literal_identity": false,
+      "identity_preserving_comparison": true,
+      "records": 103
+    },
+    {
+      "catalog": "auctionpreview",
+      "scenario": "replay",
+      "literal_identity": true,
+      "identity_preserving_comparison": true,
+      "records": 140
+    },
+    {
+      "catalog": "auctionpreview",
+      "scenario": "shell",
+      "literal_identity": true,
+      "identity_preserving_comparison": true,
+      "records": 140
+    },
+    {
+      "catalog": "auctionpreview",
+      "scenario": "wrong",
+      "literal_identity": true,
+      "identity_preserving_comparison": true,
+      "records": 140
+    }
+  ],
+  "serial_parallel_transcripts": {
+    "method": "literal comparison; then first-seen per-transcript bijective table-address IDs preserving alias relationships, only for offline evidence. Runtime verdicts and raw logs unchanged.",
+    "rows": [
+      {
+        "catalog": "workshop",
+        "scenario": "craft",
+        "records": 560,
+        "literal_identity": true,
+        "identity_preserving_comparison": true,
+        "failed_assertion_markers": 0
+      },
+      {
+        "catalog": "workshop",
+        "scenario": "design",
+        "records": 568,
+        "literal_identity": true,
+        "identity_preserving_comparison": true,
+        "failed_assertion_markers": 0
+      },
+      {
+        "catalog": "workshop",
+        "scenario": "wrong",
+        "records": 560,
+        "literal_identity": true,
+        "identity_preserving_comparison": true,
+        "failed_assertion_markers": 1
+      },
+      {
+        "catalog": "settings",
+        "scenario": "overview",
+        "records": 25,
+        "literal_identity": false,
+        "identity_preserving_comparison": true,
+        "failed_assertion_markers": 0
+      },
+      {
+        "catalog": "settings",
+        "scenario": "workshop",
+        "records": 20,
+        "literal_identity": false,
+        "identity_preserving_comparison": true,
+        "failed_assertion_markers": 0
+      },
+      {
+        "catalog": "reminders",
+        "scenario": "editor",
+        "records": 102,
+        "literal_identity": false,
+        "identity_preserving_comparison": true,
+        "failed_assertion_markers": 0
+      },
+      {
+        "catalog": "reminders",
+        "scenario": "narrow",
+        "records": 103,
+        "literal_identity": false,
+        "identity_preserving_comparison": true,
+        "failed_assertion_markers": 0
+      },
+      {
+        "catalog": "auctionpreview",
+        "scenario": "replay",
+        "records": 140,
+        "literal_identity": true,
+        "identity_preserving_comparison": true,
+        "failed_assertion_markers": 0
+      },
+      {
+        "catalog": "auctionpreview",
+        "scenario": "shell",
+        "records": 140,
+        "literal_identity": true,
+        "identity_preserving_comparison": true,
+        "failed_assertion_markers": 0
+      },
+      {
+        "catalog": "auctionpreview",
+        "scenario": "wrong",
+        "records": 140,
+        "literal_identity": true,
+        "identity_preserving_comparison": true,
+        "failed_assertion_markers": 1
+      }
+    ]
+  },
+  "final_worker_repeat_transcripts": [
+    {
+      "catalog": "settings",
+      "scenario": "overview",
+      "literal_identity": false,
+      "identity_preserving_comparison": true
+    },
+    {
+      "catalog": "settings",
+      "scenario": "workshop",
+      "literal_identity": false,
+      "identity_preserving_comparison": true
+    },
+    {
+      "catalog": "reminders",
+      "scenario": "editor",
+      "literal_identity": false,
+      "identity_preserving_comparison": true
+    },
+    {
+      "catalog": "reminders",
+      "scenario": "narrow",
+      "literal_identity": false,
+      "identity_preserving_comparison": true
+    }
+  ],
+  "png": {
+    "wall_seconds": [
+      [
+        2.0352921820003758,
+        1.8933271159999094,
+        2.2723939610000343
+      ],
+      [
+        1.8629888390000815,
+        1.721192209000037,
+        1.7764740180000445
+      ]
+    ],
+    "cpu_seconds": [
+      [
+        2.026177407,
+        1.885472376,
+        2.2614978400000005
+      ],
+      [
+        1.8584677840000001,
+        1.7187577489999994,
+        1.7713610190000004
+      ]
+    ],
+    "medians": [
+      2.0352921820003758,
+      1.7764740180000445
+    ],
+    "cpu_medians": [
+      2.026177407,
+      1.7713610190000004
+    ],
+    "identical_rgba_files": [
+      "workshop/craft.png",
+      "workshop/design.png",
+      "settings/overview.png",
+      "settings/workshop.png",
+      "reminders/editor.png",
+      "reminders/narrow.png",
+      "auctionpreview/replay.png",
+      "auctionpreview/shell.png",
+      "auctionpreview/wrong.png"
+    ]
+  },
+  "png_wall_reduction_percent": 12.716511481214132,
+  "png_cpu_reduction_percent": 12.576213075896748,
+  "full_decoder_projection_seconds": 46.06963319205897,
+  "full_projection_caveat": "not measured full-suite impact; assumes all 178 screenshots decode like the representative 1600x1200 Paeth image; no full parallel speedup extrapolated",
+  "staging_and_fixture_generation": {
+    "staging": [
+      [
+        {
+          "phase": "first",
+          "wall_seconds": 0.6110392049999973,
+          "cpu_seconds_quantized": 0.73
+        },
+        {
+          "phase": "cached",
+          "wall_seconds": 0.023058525000124064,
+          "cpu_seconds_quantized": 0.020000000000000018
+        }
+      ],
+      [
+        {
+          "phase": "first",
+          "wall_seconds": 0.30641498199975103,
+          "cpu_seconds_quantized": 0.3
+        },
+        {
+          "phase": "cached",
+          "wall_seconds": 0.0199166829997921,
+          "cpu_seconds_quantized": 0.030000000000000027
+        }
+      ],
+      [
+        {
+          "phase": "first",
+          "wall_seconds": 0.30924105999974927,
+          "cpu_seconds_quantized": 0.36
+        },
+        {
+          "phase": "cached",
+          "wall_seconds": 0.05779723899968303,
+          "cpu_seconds_quantized": 0.06
+        }
+      ]
+    ],
+    "workshop_fixture_generation_including_guards": [
+      {
+        "wall_seconds": 0.35333400600029563,
+        "cpu_seconds": 0.36546900000000004
+      },
+      {
+        "wall_seconds": 0.3522154090001095,
+        "cpu_seconds": 0.351097
+      },
+      {
+        "wall_seconds": 0.31279499699985536,
+        "cpu_seconds": 0.3214229999999998
+      }
+    ]
+  },
+  "workshop_verdict_only": {
+    "wall_seconds": 4.073926159000166,
+    "cpu_seconds": 4.055707999999996,
+    "exit_code": 0
+  },
+  "post_capture_rejection_controls": [
+    {
+      "mutation": "replay-value",
+      "exit_code": 1,
+      "rejected": true
+    },
+    {
+      "mutation": "missing-negative",
+      "exit_code": 1,
+      "rejected": true
+    },
+    {
+      "mutation": "unknown-error",
+      "exit_code": 1,
+      "rejected": true
+    }
+  ],
+  "syntax": {
+    "passed": true,
+    "addon_lua_files": 479,
+    "test_lua_files": 235,
+    "total_lua_files": 714
+  },
+  "lab_guard": {
+    "passed": true,
+    "cases": 36
+  },
+  "resources": {
+    "quota_cpus": 4,
+    "cgroup_memory_limit_bytes": 17179869184,
+    "parallel_admission_minimum_available_bytes": 8589934592,
+    "observed_max_native_launch_tree_rss_bytes": 1921634304,
+    "followup_pipeline_sampled_peak_tree_rss_bytes": 3042467840,
+    "sampler_interval_seconds": 0.1,
+    "caveat": "sampled RSS sums count shared pages multiple times and can miss short peaks; sampled CPU can miss short-lived processes; admission is not a memory reservation",
+    "followup_sampler_exit_code": 1,
+    "followup_sampler_exit_reason": "all native and development phases passed; later report-selection helper chose a development report and raised StopIteration; decoder-only analysis rerun with explicit group selection; no native rerun",
+    "oom_events": 0,
+    "simulator_processes_remaining": 0,
+    "wtf_files_remaining": 0
+  },
+  "not_run": [
+    "full simulator regression on this candidate",
+    "valid release archive certification",
+    "real-client acceptance",
+    "production mutation campaigns (no domain logic changes)"
+  ],
+  "raw_report_checksums": [
+    {
+      "kind": "serial",
+      "sha256": "1dbc5a5613a4532e106f44ccebb5c090aee4941898b6bb9a5a5e80048b5abe2d",
+      "path_within_frozen_worktree": "test-output/verification/feature-verification-tools-kaiq6ixl/report.json"
+    },
+    {
+      "kind": "parallel",
+      "sha256": "2c6191399c692086bd9b26ea996b51c5dbf5d28b5c50897192e2541e1d93c76f",
+      "path_within_frozen_worktree": "test-output/verification/feature-verification-tools-r1o3l47n/report.json"
+    },
+    {
+      "kind": "offline",
+      "sha256": "f60f795257641813caad20a3700f3fd739f69b699a6529bb419375e33e70bdd2",
+      "path_within_frozen_worktree": "test-output/verification/unit-all-o3yn4932/report.json"
+    },
+    {
+      "kind": "baseline-feature",
+      "sha256": "29b96a91bd914f5462cbb60c7c0e17f0970cbdc337a635a3f45f581815e32883",
+      "path_within_frozen_worktree": "test-output/verification/feature-workshop-settings-3_l6aafu/report.json"
+    }
+  ],
+  "native_image_identity": {
+    "serial_parallel": [
+      {
+        "catalog": "workshop",
+        "image": "craft.png",
+        "dimensions_identical": true,
+        "rgba_identical": false,
+        "png_bytes_identical": false
+      },
+      {
+        "catalog": "workshop",
+        "image": "design.png",
+        "dimensions_identical": true,
+        "rgba_identical": true,
+        "png_bytes_identical": true
+      },
+      {
+        "catalog": "settings",
+        "image": "overview.png",
+        "dimensions_identical": true,
+        "rgba_identical": false,
+        "png_bytes_identical": false
+      },
+      {
+        "catalog": "settings",
+        "image": "workshop.png",
+        "dimensions_identical": true,
+        "rgba_identical": false,
+        "png_bytes_identical": false
+      },
+      {
+        "catalog": "reminders",
+        "image": "editor.png",
+        "dimensions_identical": true,
+        "rgba_identical": false,
+        "png_bytes_identical": false
+      },
+      {
+        "catalog": "reminders",
+        "image": "narrow.png",
+        "dimensions_identical": true,
+        "rgba_identical": false,
+        "png_bytes_identical": false
+      },
+      {
+        "catalog": "auctionpreview",
+        "image": "replay.png",
+        "dimensions_identical": true,
+        "rgba_identical": false,
+        "png_bytes_identical": false
+      },
+      {
+        "catalog": "auctionpreview",
+        "image": "shell.png",
+        "dimensions_identical": true,
+        "rgba_identical": false,
+        "png_bytes_identical": false
+      },
+      {
+        "catalog": "auctionpreview",
+        "image": "wrong.png",
+        "dimensions_identical": true,
+        "rgba_identical": false,
+        "png_bytes_identical": false
+      }
+    ],
+    "baseline_serial_repeat": {
+      "rgba_identical": false,
+      "png_bytes_identical": false
+    },
+    "interpretation": "8/9 serial-vs-parallel captures differ in RGBA; an independent baseline serial Workshop repeat also differs. Existing native verdicts check structure/dimensions/colours, not pixel equality. No pixel-determinism or visual-fidelity claim. Old/new decoder parity compares identical input files and is exact."
+  }
+}

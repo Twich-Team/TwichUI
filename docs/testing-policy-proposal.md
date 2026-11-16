@@ -1,14 +1,16 @@
 # Proposal: verification policy and measured runtime
 
-Status: separate documentation proposal requested during PR #19 verification.
-No performance optimization, test selection, assertion, timeout, fixture, runner,
-or default full catalog is changed by this proposal. The already frozen smoke
-correction is documented separately in [AH integration verification](workshop/auction-house/integration-verification.md).
-Do not adopt new infrastructure work as part of that reconciliation.
+Status: developer policy adopted by the isolated verification-optimization change; see [current guidance](testing.md) and [audit](testing-verification-audit.md). The measurements below remain historical.
 
-## Recommended developer policy
+The remaining proposal text and measurements record the earlier PR #19
+reconciliation. Its restriction on adopting infrastructure during reconciliation
+applied to that task; this separately authorized infrastructure campaign adopts
+the developer policy and preserves the complete release gate. The frozen smoke
+correction remains documented in [AH integration verification](workshop/auction-house/integration-verification.md).
 
-Proposed wording for the policy paragraphs in `docs/testing.md`, with matching
+## Recommended developer policy (now adopted)
+
+Historical proposed wording, now reflected in the policy paragraphs in `docs/testing.md`, with matching
 short references in `AGENTS.md` and `CLAUDE.md` in a separately reviewed change:
 
 > Run fast focused tests frequently. Before checkpoint commits, run the affected

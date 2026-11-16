@@ -1,6 +1,13 @@
 # Test and simulator performance
 
-**Current diagnostics status (2026-11-14): resolved.** The follow-up at the end of
+Current source reconciliation, coverage-to-cost matrix, profile policy, representative
+measurements and isolated worker results: [2026-11-16 verification audit](testing-verification-audit.md).
+The newer committed M1.5 cloud report records 247 modules / 192 launches / 30,552
+checks in 2,446.279 seconds. The 6,790-second failed run and the earlier 1,674-second
+run below are historical measurements on different snapshots; neither is a new
+performance claim for the current branch. Current discovery is 248 modules.
+
+**Historical diagnostics status (2026-11-14): resolved.** The follow-up at the end of
 this report corrects the party/guild fixture assumption. Full verification now
 passes: **222 files/modules, 140 simulator launches and 17,487 structured checks**
 in **1,674.207 s (27 min 54.21 s)**, exit **0**. Historical failed results below
