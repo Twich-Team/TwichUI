@@ -260,6 +260,9 @@ class Evidence(unittest.TestCase):
         self.assertEqual(module.select([]), list(module.POSES))
         self.assertEqual(len(module.POSES), 41)
         self.assertTrue({'scopedpriced', 'scopedoutside', 'scopedabsent', 'scopedunknown', 'scopedcorrupt', 'scopedfuture'} <= set(module.POSES))
+        focused = runner.plan(REPO, 'feature', 'auction-preview')['simulators'][0]['only']
+        self.assertTrue({'scopedpriced', 'scopedoutside', 'scopedabsent', 'scopedunknown', 'scopedcorrupt', 'scopedfuture', 'shell', 'replay', 'wrong'} <= set(focused))
+        self.assertEqual(len(module.POSES) - len(focused), 27)
         for names in (['typo'], ['wrong'], ['replay'], ['shell', 'shell']):
             with self.assertRaises(ValueError):
                 module.select(names)

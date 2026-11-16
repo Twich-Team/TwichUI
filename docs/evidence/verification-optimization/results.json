@@ -3,7 +3,6 @@
   "date": "2026-11-16",
   "base_commit": "5133a43477237bf7cd97a429a680a751a9533f7c",
   "measured_candidate_commit": "4c5b545643b9d0f9ee65ccd563f2c7f7b4d1be8a",
-  "final_runtime_code_commit": "88f504fe946f919b4f22bd1eb808c67fa058e338",
   "production_addon_trees_unchanged": {
     "!!!TwichUI": "c1fa0556abdcc64469d27f362fc52f6177ae447d",
     "TwichUI_Diagnostics": "632674f896f74b69e97546277e0c330bb87bd80d",
@@ -1060,5 +1059,110 @@
       "png_bytes_identical": false
     },
     "interpretation": "8/9 serial-vs-parallel captures differ in RGBA; an independent baseline serial Workshop repeat also differs. Existing native verdicts check structure/dimensions/colours, not pixel equality. No pixel-determinism or visual-fidelity claim. Old/new decoder parity compares identical input files and is exact."
+  },
+  "initial_runtime_code_commit": "88f504fe946f919b4f22bd1eb808c67fa058e338",
+  "initial_benchmark_scope": "All measurements outside publication_integration describe the original frozen baseline/candidate source pair; later upstream source is validated separately.",
+  "publication_integration": {
+    "base_commit": "6eabf8aa829e196c9d58da4ac88365f4f37d1980",
+    "tested_commit": "d269ac412715a07e81c837c514cac4f644e70fcb",
+    "production_trees_equal_integrated_base": {
+      "!!!TwichUI": "3f697d158bd294350a7a0d632cb57a514cfd7537",
+      "TwichUI_Diagnostics": "3093544d2aacea7be495d784e8323653503aae01",
+      "TwichUI_LayoutWizard": "5dd5ff6962c3c40569a6a4179b05149aa509b253",
+      "TwichUI_Layouts": "bb42223d0d0cae580c95693824321116581576cb",
+      "TwichUI_LoadTest": "133af1a5dc7f7c66831e75d1276b2fe066df2937",
+      "TwichUI_LoadTestClock": "d0b92075fc6c6b5edfdc38f59b72856e39c53e0f",
+      "TwichUI_NavData": "fb49cd9200ceb23e2a1ff46e65798a662be16ee0",
+      "TwichUI_Settings": "496e0ccac112035d01f88396c6041e82524fa559",
+      "TwichUI_TestLab": "2df3ca0c078aae3a6057ea96a3c4abeb3225e409",
+      "TwichUI_Workshop": "ab913ca69f973b8a1160c21e2510947d205acc06"
+    },
+    "lua_tests_and_fixtures_equal_integrated_base": true,
+    "inventory": {
+      "offline_modules": 250,
+      "lua_modules": 236,
+      "python_modules": 14,
+      "addon_lua_syntax": 475,
+      "total_lua_syntax": 711,
+      "settings_pages": 57,
+      "default_native_launches": 197,
+      "default_screenshots": 183,
+      "auction_preview_default_poses": 41,
+      "scoped_ah_feature_launches": 18,
+      "broad_ah_feature_launches": 45
+    },
+    "offline": {
+      "passed": true,
+      "exit_code": 0,
+      "modules": 250,
+      "python_methods": 160,
+      "seconds": 910.0715664629997
+    },
+    "representative": {
+      "passed": true,
+      "exit_code": 0,
+      "modules": 4,
+      "python_methods": 38,
+      "launches": 10,
+      "structured_assertions": 2211,
+      "screenshots": 9,
+      "workers": 2,
+      "seconds": 289.2796092789995,
+      "source_unchanged": true
+    },
+    "scoped_reader_capture_controls": [
+      {
+        "scenario": "scopedabsent",
+        "assertions": 141,
+        "passed": true
+      },
+      {
+        "scenario": "scopedcorrupt",
+        "assertions": 141,
+        "passed": true
+      },
+      {
+        "scenario": "scopedfuture",
+        "assertions": 141,
+        "passed": true
+      },
+      {
+        "scenario": "scopedoutside",
+        "assertions": 141,
+        "passed": true
+      },
+      {
+        "scenario": "scopedpriced",
+        "assertions": 141,
+        "passed": true
+      },
+      {
+        "scenario": "scopedunknown",
+        "assertions": 141,
+        "passed": true
+      }
+    ],
+    "timing_caveat": "publication acceptance overlapped offline/native verification; different addon source from original experiment; no speedup comparison",
+    "raw_report_checksums": [
+      {
+        "kind": "offline",
+        "sha256": "8a621bcac58318f05af92e167d5f5c573e35a78adf03c1c43ec71748d7b686d1",
+        "path_within_frozen_worktree": "test-output/verification/unit-all-tnq5zd6w/report.json"
+      },
+      {
+        "kind": "representative",
+        "sha256": "e5e8f311cc5c8bde80f237eb8cff98ed753e89fbd4fc42963f1296082b7ee55e",
+        "path_within_frozen_worktree": "test-output/verification/feature-verification-tools-y_jx6vni/report.json"
+      }
+    ],
+    "decoder_only_projection_seconds": 47.36372401206063,
+    "projection_caveat": "Unmeasured full-suite effect; assumes all 183 screenshots decode like the original wide-image benchmark. No full parallel speedup extrapolated."
+  },
+  "runtime_identity": {
+    "python": "3.12.14",
+    "decoder_analysis_zlib": "1.3.2",
+    "clock": "clock_gettime(CLOCK_MONOTONIC)",
+    "simulator_version": "v0.1.37",
+    "simulator_binary_sha256": "5c769c9b60da3a6196941b1e40206856878e4901111a37fd6268fac512758906"
   }
 }

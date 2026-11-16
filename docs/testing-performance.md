@@ -5,7 +5,10 @@ measurements and isolated worker results: [2026-11-16 verification audit](testin
 The newer committed M1.5 cloud report records 247 modules / 192 launches / 30,552
 checks in 2,446.279 seconds. The 6,790-second failed run and the earlier 1,674-second
 run below are historical measurements on different snapshots; neither is a new
-performance claim for the current branch. Current discovery is 248 modules.
+performance claim for the current branch. The frozen audit base had 248 modules;
+publication-base discovery is 250. The subsequently merged L3 full Cloud record
+is 5,701.768 seconds / 198 launches on its own frozen source; the audit separates
+that upstream evidence from candidate validation.
 
 **Historical diagnostics status (2026-11-14): resolved.** The follow-up at the end of
 this report corrects the party/guild fixture assumption. Full verification now

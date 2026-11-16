@@ -131,6 +131,12 @@
           "sell",
           "owned",
           "marketbridge",
+          "scopedpriced",
+          "scopedoutside",
+          "scopedabsent",
+          "scopedunknown",
+          "scopedcorrupt",
+          "scopedfuture",
           "wrong"
         ]
       },

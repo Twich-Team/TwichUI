@@ -4,7 +4,10 @@ Evidence labels: source-inspected, unit-tested and simulator-tested as recorded
 below. No real-client acceptance or game appearance validation is claimed.
 Implementation branch: `feature/test-verification-optimization`, based on
 `feature/workshop` at `5133a43477237bf7cd97a429a680a751a9533f7c`.
-All production addon bytes and existing Lua expectations remain unchanged.
+Within the frozen benchmark pair, all production addon bytes and existing Lua
+expectations remain unchanged. Publication incorporates integrated upstream
+`6eabf8aa829e196c9d58da4ac88365f4f37d1980`; the PR has no production, Lua-test
+or scenario/fixture changes against that base.
 The original checkout, L3 branch, PR, output and simulator workspace are untouched.
 
 ## Baselines and current inventory
@@ -18,12 +21,12 @@ launches, 30,552 checks, 2,446.279 seconds, PASS in cloud mode**. Different sour
 environment and contention prevent attributing the difference to this PR.
 Neither cloud result satisfies the local release gate.
 
-Current discovery is **248 modules: 235 Lua files and 13 Python modules**.
-Current default scripts still define 192 launches and 178 screenshots, assuming
+Frozen benchmark-base discovery is **248 modules: 235 Lua files and 13 Python modules**.
+Those frozen default scripts define 192 launches and 178 screenshots, assuming
 the runtime Settings inventory remains 58 pages. Full Settings discovers the
-catalog from actual registrations; it is never capped at 58. Workshop now has
+catalog from actual registrations; it is never capped at 58. Workshop at that base has
 38 launches/37 screenshots, including Advisor poses; the old 25-launch summary
-in the earlier performance document is historical. AH preview now has 35 poses,
+in the earlier performance document is historical. AH preview at that base has 35 poses,
 including the bridge fixture; the 191-launch report predates that addition.
 The 30,552 total below is observed historical coverage, not a promise that counts
 cannot grow. Smoke construction checks are separate from structured markers.
@@ -114,16 +117,19 @@ record selected/omitted scope, classifications, exit, source identity, timings,
 actual artifacts, checks and the slowest twenty offline modules. Incomplete and
 source-drift results remain failed. A feature PASS never sets a release flag.
 
-`auction-preview` is a new scoped feature group: 67 offline modules plus eight
-preview and four lifecycle launches, versus `auction-house`'s same offline scope
-and 39 launches. It avoids **27 native launches and PNGs** by omitting documented
-additional visual/stress variants. The old `auction-house` group still runs the
-full catalog. Workshop Settings selects 97 offline modules and three launches,
-avoiding 189 of 192 full launches. Development selects 11 direct tests and no
-simulator, avoiding all 192 launches compared with unnecessarily choosing full.
-These savings are scope differences, not equivalent full coverage or measured
-engine speedups. New `verification-tools` selects four infrastructure modules
-and ten representative launches for repeatable diagnostics.
+On the publication base, `auction-preview` selects **71 offline modules, 14
+preview and four lifecycle launches**, versus `auction-house`'s same offline
+scope and 45 launches. All six landed scoped-reader states are included. It
+avoids **27 native launches and PNGs** by omitting additional visual/stress
+variants. `auction-house` still runs the complete 41-pose catalog. Workshop
+Settings now selects 101 offline modules and three launches. Development still
+selects 11 direct tests and no simulator. These are scope differences, not
+claims of equivalent full coverage or engine speedups. `verification-tools`
+selects four infrastructure modules and ten representative launches for repeatable
+diagnostics. Current runtime Settings inventory and total launches are recorded
+in the publication-base acceptance section below; the measured 192-launch
+baseline above remains historical.
+
 
 Simulator execution is serial by default. Opt-in `--sim-jobs 2` schedules whole
 catalogs into two fixed lanes; state-sharing scenarios within a catalog remain
@@ -351,3 +357,50 @@ not a comparison of runner speed.
 | `test_wizard_art.py` | 18.233 | 15.216 | 114.8 |
 | `test_settings_window.lua` | 14.999 | 12.951 | 558.4 |
 | `test_portable.lua` | 13.606 | 12.444 | 59.2 |
+
+## Publication-base integration
+
+While this audit ran, L3 was merged upstream and `6eabf8a` removed the two skins.
+The isolated infrastructure branch incorporates that integrated base, preserving
+`L3_MARKET_ARTIFACT` environment clearing, widened Workshop/Market dependencies,
+all six scoped capture definitions and all 141-check scoped verdict requirements.
+Every legacy unit/fast/feature/full selection equals that integrated upstream
+runner's selection. The new focused AH group includes all six scoped states.
+Only test infrastructure, policy and evidence differ from the integrated base.
+
+The L3 task's [completed full Cloud evidence](workshop/market-bridge-scoped-l3.md)
+records 251 modules, 198 launches, 31,398 checks and 5,701.768 seconds on `9e00d8e`
+prior to skin removal. That is upstream evidence, not a full run of this PR.
+Publication-base discovery is **250 modules (236 Lua, 14 Python)** and syntax
+covers **711 Lua files (475 addon + 236 tests)**. Acceptance on frozen integration
+commit `d269ac4` is recorded separately from the original performance experiment.
+The complete local release gate remains required before certification.
+
+A final telemetry-control run exposed a short-lived probe that could finish
+before a useful RSS sample. Its nonzero-RSS requirement is retained; the probe
+now consumes a defined 0.4 CPU seconds, spanning several 100 ms samples. The
+failed run remains in the audit artifacts, and focused controls were rerun.
+
+Publication-base acceptance on `d269ac4`: **250/250 offline modules and 160 Python
+methods passed**, exit 0, 910.072 seconds. The representative two-worker command
+passed its four infrastructure modules / 38 methods and ten launches / 2,211
+assertions, exit 0, 289.280 seconds. All six additional scoped Market captures
+passed **141 checks each (846 total)**. That is **16 native launches / 3,057
+structured assertions / 15 PNGs** across the current-base acceptance selections.
+These validation runs overlapped and are not performance comparisons with the
+original frozen experiment. No current-base full simulator certification is claimed.
+
+The actual current Settings inventory is **57 pages**. Current default coverage
+is therefore **197 launches / 183 PNGs**, including all 41 AH poses. Development
+avoids all 197 launches compared with choosing full; Workshop Settings avoids
+194; the scoped AH profile avoids 27 versus broad AH (45 → 18). The current
+183-image decoder-only projection is approximately **47 seconds**, assuming the
+same per-wide-image difference; actual full-suite impact remains unmeasured.
+
+The integrated source's all ten addon Git trees, every Lua test and every scenario/
+fixture match upstream `6eabf8a` exactly. The draft's production behavior diff is
+empty. Final source-only profile updates add all six scoped states to the new
+AH profile and assert that coverage explicitly; they do not alter any legacy
+selection or expectation. The published source receives a final focused control
+run after these documentation/profile changes. Full local certification stays
+pending on the final integrated source and candidate archive.
