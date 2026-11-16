@@ -273,19 +273,25 @@ Lab.Step("polish transactions and header ownership", function()
     R.SettingsWidgets.CloseMenu()
     P.Refresh(); Lab.Settle(.1)
     local row = P.Parts().rows[1]
+    local function ContextAction(value)
+        for _, item in ipairs(TwichUISettingsMenu.rows) do
+            if item:IsShown() and item.choice and item.choice.value == value then item:Click(); return end
+        end
+        error("missing reminder context action: " .. value)
+    end
     row:GetScript("OnClick")(row, "RightButton")
-    TwichUISettingsMenu.rows[1]:Click(); Lab.Settle(.1)
+    ContextAction("copy"); Lab.Settle(.1)
     local copy = P.Selected()
     Lab.Check("state", "context Duplicate selects a unique disabled copy", true, copy ~= id and not RM.Get(copy).enabled)
     local copyRow
     for _, item in ipairs(P.Parts().rows) do if item.id == copy then copyRow = item end end
     copyRow:GetScript("OnClick")(copyRow, "RightButton")
-    TwichUISettingsMenu.rows[2]:Click()
+    ContextAction("delete")
     StaticPopupDialogs.TWICHUI_REMINDER_DELETE.OnCancel()
     StaticPopup_Hide("TWICHUI_REMINDER_DELETE")
     Lab.Check("state", "context Delete cancellation keeps its source", true, RM.Get(copy) ~= nil)
     copyRow:GetScript("OnClick")(copyRow, "RightButton")
-    TwichUISettingsMenu.rows[2]:Click()
+    ContextAction("delete")
     StaticPopupDialogs.TWICHUI_REMINDER_DELETE.OnAccept()
     StaticPopup_Hide("TWICHUI_REMINDER_DELETE"); Lab.Settle(.1)
     Lab.Check("state", "confirmed context Delete removes only the copy", true, not RM.Get(copy) and RM.Get(id) ~= nil)
