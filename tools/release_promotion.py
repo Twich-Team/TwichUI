@@ -150,7 +150,7 @@ def main():
             print(summary)
             if os.environ.get('GITHUB_STEP_SUMMARY'):
                 with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
-                    stream.write('### Exact candidate for independent release approval\n```json\n' + summary + '\n```\n')
+                    stream.write('### Exact candidate for protected manual release approval\n```json\n' + summary + '\n```\n')
             if os.environ.get('GITHUB_OUTPUT'):
                 with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
                     stream.write('enabled=' + str(enabled).lower() + '\n')

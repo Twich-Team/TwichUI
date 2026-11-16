@@ -82,8 +82,9 @@ must be full commit SHAs, never floating branch names. Nothing publishes on push
    successful main-dispatched candidate origin, artifact ID/age/expiry, package/hash/notes,
    version history, reviewed evidence and stable tag protection. It displays the exact tuple
    before environment approval. **While publication_enabled is false, publication is skipped.**
-6. After a separately reviewed future authorization lifts the hold, an independent reviewer
-   approves the `release` environment job. Its name includes version, channel, artifact ID
+6. After a separately reviewed future authorization lifts the hold, the authorized maintainer
+   explicitly approves their own release through the `release` environment job (GitHub
+   **Review deployments → Approve and deploy**). Its name includes version, channel, artifact ID
    and full digest; its environment URL links to the exact source/tuple summary. The job
    re-downloads the **same ID**, repeats validation and checks the latest main hold before
    credentials/upload. It never rebuilds or re-stamps. Global concurrency serializes all
@@ -119,44 +120,50 @@ new digest/ID. Never rewrite an accepted release marker to pretend a rebuild mat
 If expiry occurs after a partial public release, reconcile existing destinations and
 retained original bytes manually; automatic promotion does not rebuild or guess identity.
 
-## Required GitHub settings
+## Solo-maintainer GitHub settings
 
-Administrative API attempts on 2026-11-16 returned **HTTP 403 Resource not accessible by
-integration** for main protection, tag ruleset creation and environment creation. Repository
-metadata reported admin access, but the integration token cannot apply these settings.
-No setting is claimed applied. The workflow fails closed until required protection exists.
+One maintainer can request and approve a release. Manual dispatch selects the exact
+candidate; it is **not** approval. After preflight, open the waiting `release` deployment,
+compare its source/version/artifact ID/SHA256 with the certified candidate, then select
+**Review deployments → Approve and deploy**. No second person is required. The environment
+must still have a required reviewer: removing reviewers would remove the manual gate and
+is rejected. A requester still needs repository write/maintain/admin permission.
 
-Owner setup (Settings in Twich-Team/TwichUI):
+Keep these settings:
 
-1. **Branches → main protection**: require pull requests, at least one independent approval,
-   dismiss stale approvals, require last-push approval, require the successful `verify` check
-   with branches up to date. Enforce for administrators; disallow force pushes and deletion.
-   Keep bypass lists empty. No branch synchronization is required.
-2. **Rules → Rulesets → New tag ruleset**: active, target tags `v*` (API include exactly
-   `refs/tags/v*`, no exclusions), restrict updates and deletion, no bypass actors. Creation
-   remains possible for authorized maintainers/Actions; do not give the publisher permission
-   to rewrite historical tags. Preserve the existing v3 ruleset and public history.
-3. **Environments → release**: required reviewer `rldiamond` (or a maintainer team), prevent
-   self-review, disable administrator bypass, deployment branches **protected branches only**.
-   Have another maintainer dispatch when rldiamond is the reviewer; a sole maintainer cannot
-   independently approve their own request. If the GitHub plan cannot enforce these controls,
-   leave publication disabled. The workflow verifies reviewers, self-review prevention and branch
-   restrictions through the REST API. GitHub's published REST/GraphQL schemas do **not** expose
-   the administrator-bypass UI toggle: after disabling it, commit a reviewed owner attestation
-   in `.github/release-policy.json`: set `environment_admin_bypass_disabled: true` and
-   `environment_configuration_evidence` to an HTTPS settings-review issue/report link. Both
-   remain false/empty in this PR. This attestation is a manual trust boundary, not a claim
-   that automation can inspect the toggle. Keep it current if environment settings change.
-4. **Environment secrets → release → CF_API_KEY**: configure a CurseForge upload token there.
-   Existing secret values cannot be read/moved by this integration. After configuring the
-   environment secret, delete the repository-level CF_API_KEY under Actions secrets. Never
-   paste a secret into chat, an issue or a workflow input. Only the protected publish job
-   references this secret. Builds/PR jobs use a read-only GitHub token.
+1. **Rules → main**: require PRs and the `verify` check, prohibit force pushes/deletion,
+   no bypass actors. For solo development, zero required PR approvals and no last-push
+   approval requirement lets the owner merge their own passing PR. Release approval is
+   a separate environment action.
+2. **Rules → release tags**: active `v*` update/deletion protection, no exclusions or
+   bypass actors. Stable/hotfix promotion requires an annotated matching tag. Do not
+   move existing tags. This implementation creates/changes no release tags.
+3. **Environments → release**: add the owner (currently `rldiamond`) as a required reviewer;
+   **Prevent self-review OFF**, **administrator bypass OFF**, deployments limited to
+   **protected branches only**. Review remains mandatory even when the requester approves.
+4. **Environment secrets → release → CF_API_KEY**: configure the upload token here and
+   remove any repository-level copy. Builds and ordinary PR jobs never receive it.
 
-No broad PAT is required: promotion requests job-scoped `contents: write` and `actions: read`;
-preflight has contents/actions read only. If organization policy denies environment or
-ruleset metadata reads to the Actions token, resolve those specific permissions; do not
-remove protection validation. Do not enable publication in this implementation PR.
+Configuration inspection on 2026-11-16 confirmed protected main with PRs/`verify` and no
+force pushes/deletion or bypass actors; the active no-bypass `v*` tag ruleset; and the
+required owner reviewer, self-review allowed and protected-branch restriction in `release`.
+The environment API also explicitly returned `can_admins_bypass=false`, confirming that
+setting for this inspection. Environment-secret listing returned HTTP 403, so the token's
+presence/scope was **not verified**. Confirm it in Settings; never send secret values in chat.
+No GitHub settings were changed by this implementation.
+
+The validator accepts an explicit API `can_admins_bypass=false` and rejects enabled or
+invalid values, even if policy claims otherwise. If GitHub omits that field, automation
+cannot verify the UI toggle: it requires the existing reviewed owner attestation
+(`environment_admin_bypass_disabled=true` and an HTTPS `environment_configuration_evidence`
+link in `.github/release-policy.json`). Do not invent those values. This PR leaves both
+unchanged/empty and keeps `publication_enabled=false`. If the API omits the field later,
+the owner must supply real evidence through a reviewed PR before promotion can proceed.
+
+The publication hold still skips the publishing job. Before the first real release,
+record exact-candidate certification/client acceptance and separately authorize lifting
+the hold. Solo approval changes neither the package hash/version checks nor the safe
+recovery rules below. No public release is performed by this change.
 
 ## Branch policy
 
