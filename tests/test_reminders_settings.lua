@@ -980,11 +980,11 @@ do
   Check(RM.Get(originalId).name ~= "Independent copy", "context duplicate owns its mutable configuration")
   local invoked
   for _, row in ipairs(parts.rows) do if row.id == copy then invoked = row end end
-  invoked:Fire("OnClick", "RightButton"); menu.rows[2]:Fire("OnClick")
+  invoked:Fire("OnClick", "RightButton"); menu.rows[3]:Fire("OnClick")
   Check(S.popup.text:find("Independent copy", 1, true) and RM.Get(copy), "context Delete identifies its target before mutation")
   c.StaticPopupDialogs[S.popup.key].OnCancel(); Flush()
   Check(RM.Get(copy), "canceling context deletion preserves the reminder")
-  invoked:Fire("OnClick", "RightButton"); menu.rows[2]:Fire("OnClick")
+  invoked:Fire("OnClick", "RightButton"); menu.rows[3]:Fire("OnClick")
   c.StaticPopupDialogs[S.popup.key].OnAccept(); Flush()
   Check(not RM.Get(copy) and RM.Get(originalId), "confirmed context deletion removes only its target")
 end
