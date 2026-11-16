@@ -2,8 +2,8 @@
 
 Workshop now consumes exact, scope-complete schema-3 history through its existing reader and Market view while retaining legacy and local behavior. Availability is explicit; imported data does not activate Advisor decisions. Capacity checks pass, but dense payload loading and the nominal 3 ms slice target still need real-client acceptance.
 
-Implementation base: TwichUI `5133a43477237bf7cd97a429a680a751a9533f7c`.
-Producer: Market PR #15, reviewed and merged as `6cef35797f28d562c7ee3db3aa290cfe876f418d` (source `15e2775dab6ceff7a4449d78d6c00c63afc54a60`). No deployment.
+Implementation base: TwichUI `5133a43477237bf7cd97a429a680a751a9533f7c`. Initial implementation `630d81827ef3b467ddb63eafbc07ccc319d5358e`; final frozen runtime `9e00d8e9a05a24461841514b9c717d3ca3c985b4`. Published as [draft TwichUI PR #25](https://github.com/Twich-Team/TwichUI/pull/25), targeting `feature/workshop`.
+Producer: [Market PR #15](https://github.com/Twich-Team/TwichUI-Market/pull/15), reviewed against integrated base `da3ae92dd5fbe02d201869d8d4a06ba01cb98451` and merged as `6cef35797f28d562c7ee3db3aa290cfe876f418d` (source `15e2775dab6ceff7a4449d78d6c00c63afc54a60`). No deployment.
 
 ## Implementation plan
 
@@ -141,7 +141,7 @@ The actual disposable L2 server → Rust archive/projector/publisher → product
 
 Focused simulator evidence includes scoped priced, outside-scope, absent, unknown, corrupt, future-schema and legacy scenes, independent replay and a deliberately wrong expectation. Each scoped scene has 141 structured checks. Screenshots are structural only: the simulator uses fallback fonts/assets and older UI-source APIs. An early screenshot exposed overflowing provenance text; L3 moved full identities to the existing tooltip and retained compact visible context. No simulator or Cloud result establishes real-client visual acceptance.
 
-Final feature/full/mutation outcomes are recorded below after source freeze. The first feature attempt had 44/44 offline files passing but simulator exit 1 because the outer sandbox denied bubblewrap's NETLINK_ROUTE socket. The rerun uses the already authorized simulator permissions. This is not a skipped gate. The repository also documents an existing byte-exact reminder-gallery PNG portability failure; L3 will report the full-profile result without weakening or updating those unrelated assertions.
+Final feature/full/mutation outcomes are recorded below from the frozen source. The first feature attempt had 44/44 offline files passing but simulator exit 1 because the outer sandbox denied bubblewrap's NETLINK_ROUTE socket. The rerun uses the already authorized simulator permissions. This is not a skipped gate. The repository documents an earlier byte-exact reminder-gallery PNG portability failure. The unchanged gallery test **passed in this final Cloud run**; L3 changed no gallery baseline, assertion or dependency. This records the observed environment result, not a claim to have fixed that earlier portability issue.
 
 Use the existing toolchains from `docs/cloud-environment.md` and `docs/testing.md` (Lua 5.1 + bit; Python Market dependencies; Rust). Commands from the addon root:
 
@@ -172,6 +172,68 @@ Owner decisions are limited to the installed-client operating budget and Tier A 
 
 ## Frozen verification status
 
-Affected Market feature gate: **exit 0**, 44 offline files/modules and the four selected Workshop simulator launches passed (314.569 seconds). The final explicit-request label/clock text and additional fixture grouping are also covered by focused checks and the comprehensive run below. Auction House fast gate: **exit 0**, 18 files/modules. Production bridge Python: **exit 0**, 12 methods; L1 mirror/proof: **exit 0**, 4 methods. New scope mutation campaign plus existing generation/range controls: **exit 0**, 18/18 killed (16 assertion detections, two runtime detections), including external 60-marker/local 30-marker controls, zero survivors/invalid/timeouts/infrastructure errors. The legacy catalog-reuse mutation was updated to the renamed focus argument without changing its intent; the complete catalog pattern check is required before source freeze.
+Affected Market feature gate: **exit 0**, 44 offline files/modules and the four selected Workshop simulator launches passed (314.569 seconds). The final explicit-request label/clock text, additional fixture grouping and full 60-marker correction are covered by focused checks and the comprehensive run below. Auction House fast gate: **exit 0**, 18 files/modules. Production bridge Python: **exit 0**, 12 methods; L1 mirror/proof: **exit 0**, 4 methods. New scope mutation campaign plus existing generation/range controls: **exit 0**, 18/18 killed (16 assertion detections, two runtime detections), including external 60-marker/local 30-marker controls, zero survivors/invalid/timeouts/infrastructure errors. The legacy catalog-reuse mutation was updated to the renamed focus argument without changing its intent; the complete catalog pattern check passed (364/364 valid); the 29-method mutation-harness suite also passed.
 
 The first comprehensive attempt on `630d818` was deliberately interrupted with **exit 130** during offline verification, before simulator catalogs, when review found that the existing 30-marker chart cap hid older scoped dates. It is not a completed regression result. The fix permits all 60 external daily markers and preserves the local 30/default 8 caps, with explicit component controls. The final frozen comprehensive/native results below supersede that interrupted attempt; no assertions were weakened.
+
+
+### Completed comprehensive Cloud gate
+
+**PASS, exit 0**, on frozen runtime `9e00d8e9a05a24461841514b9c717d3ca3c985b4`: 251 offline files/modules (including 148 Python test methods), syntax checks over 716 Lua files, all ten simulator catalogs, **198 launches / 31,398 structured checks**, 5,701.768 seconds. Structured check counts include deliberate negative-control failures accepted only by the strict catalog verdicts. No timeout, unexpected Lua failure or assertion weakening. The result explicitly has `local_milestone_passed=false`: Cloud does not establish installed Forever acceptance.
+
+| Full Cloud catalog | Exit | Launches | Structured checks |
+|---|---:|---:|---:|
+| Lab guard | 0 | 0 | 0 |
+| Smoke | 0 | 2 | 0 (uses its separate page verifier) |
+| Interaction | 0 | 4 | 244 |
+| Diagnostics | 0 | 6 | 101 |
+| Auction proof | 0 | 4 | 431 |
+| Auction preview | 0 | 41 | 5,409 |
+| Workshop | 0 | 38 | 20,187 |
+| TestLab | 0 | 9 | 229 |
+| Settings | 0 | 58 | 1,029 |
+| Reminders | 0 | 36 | 3,768 |
+
+Workspace report: `test-output/verification/full-all-gnyzfc_a/report.json`; console: `/tmp/l3-full-cloud-final.log`; shell exit marker: `/tmp/l3-full-cloud-final.exit`. The initial interrupted attempt is separately retained as `/tmp/l3-full-cloud.log` (130) and is not counted as completed coverage. Only documentation changed after the passing frozen run. Benchmark/test artifacts are excluded from commits as requested.
+
+Fresh frozen native acceptance also passed (exit 0): actual merged Market server and native Rust → production reader/UI on `9e00d8e`. `/tmp/l3-e2e-frozen.json` records source fingerprints, native executable fingerprint, source checkpoint, generation and artifact hashes. All consumer source fingerprints and the reader benchmark fingerprints still matched after full regression. The actual native-artifact navigation control completed 50 cycles in 0.629 seconds, worst whole iteration 33.038 ms, retained growth 268,838 bytes. This is mock-handler timing under concurrent Cloud verification, not a frame bound. Near-budget dense measurements above are reader/lookup measurements; full dense installed-UI navigation remains an L4 gate.
+
+Market producer checks on the reviewed PR head `15e2775dab6ceff7a4449d78d6c00c63afc54a60` were freshly confirmed successful:
+
+* [PostgreSQL](https://github.com/Twich-Team/TwichUI-Market/actions/runs/43828016177/job/133166327336)
+* [Windows](https://github.com/Twich-Team/TwichUI-Market/actions/runs/43828016060/job/133166325736)
+* [Browser](https://github.com/Twich-Team/TwichUI-Market/actions/runs/43828016059/job/133166325911)
+* [Signed update verification](https://github.com/Twich-Team/TwichUI-Market/actions/runs/43828016060/job/133166326148)
+
+TwichUI currently configures only the release workflow for main/beta/tags; there is no GitHub PR-check workflow on this feature branch. The Cloud results above are actual executed verification, not invented GitHub CI jobs or a release/deployment run.
+
+### Compatibility outcome
+
+| Producer / reader | Result |
+|---|---|
+| Legacy desktop / legacy addon | Original schemas 1/2 contract retained; no producer changes in L3 |
+| Legacy desktop / L3 addon | Existing schema-1/2 fixtures pass the production reader and legacy Market scene |
+| L2 desktop / legacy addon | Schema 3 remains unsupported by the old dispatch; no automatic subset-to-schema-2 downgrade |
+| L2 desktop / L3 addon | Actual native artifact passes reader, exact queries and Market handlers |
+| Unsupported future schema / features | Reject candidate; preserve validated predecessor |
+| Wrong expected market / request identity | Reject; no local market substitution |
+| Private account/device mismatch | L2 authenticated checkpoint/cache boundary; not an invented Lua account field |
+| Truncated/mixed/corrupt generation or receipt | No partial activation; old validated state remains usable |
+| New valid selected window | New generation/request digest, stable selection identity where appropriate, cleared decoded cache |
+
+The existing selector displays at most 100 variant choices per item with an explicit omission label. The initial 100-variant working set fits that UI bound. Every validated selected identity remains accessible through exact `Record`/`History` and the complete manifest selection; advanced sets with more than 100 variants for one item need a later selector-pagination improvement. This is a presentation bound, not silent removal from a generation or a whole-market completeness claim.
+
+### Screenshot review
+
+The six final-source scenes below were opened and reviewed from `test-output/simlab/artifacts/auctionpreview-LJggLBra/`:
+
+| Scene | Capture |
+|---|---|
+| Priced scoped history | `scopedpriced.png` |
+| Outside the selected set | `scopedoutside.png` |
+| Confirmed absence | `scopedabsent.png` |
+| Unknown coverage | `scopedunknown.png` |
+| Corrupt candidate / no active bridge | `scopedcorrupt.png` |
+| Legacy full-market source | `marketbridge.png` |
+
+Compact provenance stays inside the context cards. Requested hashes remain visible when a record is excluded; unsupported/unknown/absent prices never become zero. The inherited simulator Issue-report overlay and missing/fallback assets/fonts are visible, so these captures establish source/status structure, not installed-client visual fidelity. Future-schema rejection is additionally captured as `scopedfuture.png` and covered by strict checks. No real game installation or SavedVariables was used.
