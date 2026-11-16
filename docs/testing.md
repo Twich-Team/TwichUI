@@ -204,7 +204,7 @@ coverage and the pending client gate: [lifecycle proof](workshop/auction-house/l
 Campaigns remain separate from routine checks and full regression, matching the
 previous suite. The offline suite always runs the mutation runner's own tests.
 For Workshop money, quantities, rounding, ordering or eligibility changes, keep
-[the verification policy](workshop/testing-roadmap.md#verification-policy-for-future-workshop-tasks):
+[the verification policy](workshop/testing-roadmap.md#verification-policy-for-future-workshop-tasks-claudemd-points-here):
 run the matching campaign and add a realistic defect model. For example:
 
 ```sh
@@ -306,3 +306,42 @@ certification. The first baseline test attempt had three sandbox socket-permissi
 errors; the focused runner subsequently passed with localhost fixtures permitted.
 No live CurseForge upload endpoint was contacted. Future promotion still requires
 an end-to-end approved immutable-artifact rehearsal and the full candidate/client gate.
+
+## Source-to-test guidance
+
+Use [architecture](architecture.md) for ownership, then inspect `tests/groups.json`
+and the selected plan. These are manual starting points; there is no automatic
+source dependency analysis. Syntax globs describe checked files, not all consumers.
+
+- Reminders config or its settings page: `feature reminders`.
+- Market bridge/schema/receipt changes: `feature market`; inspect the pinned
+  contracts and scoped Lua/Python tests. Preserve integrity negative controls.
+- AH preview lifecycle: `feature auction-preview`. If editing shared Workshop
+  suspension/services, add `--with-group workshop` using `integration`.
+- Workshop settings/Tooltip Designer: `feature workshop-settings`.
+- A shared style change affecting Settings and Reminders:
+  `integration shared-ui --with-group settings --with-group reminders`.
+  Enumerate all actual consumers; this example does not exhaust them.
+- Global `Core.lua` initialization, `Persist.lua`, `Profiles.lua`, SavedVariables
+  contracts, high-risk migrations or major shared infrastructure: require the
+  existing **full** gate. `development core` is only a diagnostic starting point.
+- Unknown/unmapped paths: inspect callers, manifests and full test inventory;
+  require explicit coverage review. Use complete offline discovery at minimum
+  when scope remains unknown, and the full gate when shared/global risk cannot
+  be excluded. Never interpret no matching feature group as sufficient coverage.
+- Release tooling: `development release-tools`, plus the release-engineering
+  requirements in [RELEASING.md](../RELEASING.md). Documentation-only work uses
+  path/link checks and previews; it needs no simulator certification.
+
+Preview any command above by appending `--list`; inspect tests, syntax and selected
+simulators before running it. Development omits dependency expansion; feature and
+integration expand unit/syntax dependencies, but simulator catalogs come only from
+explicitly requested groups. Add consumer groups explicitly for cross-feature work.
+Workshop money/quantity/eligibility changes also retain the mutation requirements
+in [shared rules](engineering-rules.md) and the Workshop verification policy.
+
+`tools/ci_verify.py` separately selects release-tools for its explicit release/docs
+allowlist, and complete offline discovery otherwise. It is not a source-to-group
+analyzer. This guidance changes neither CI selection nor test coverage. Automatic
+ownership inference and its unmapped/shared-file negative cases are deferred to a
+separately reviewed implementation.
