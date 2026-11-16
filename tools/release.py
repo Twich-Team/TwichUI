@@ -630,13 +630,17 @@ def validate_promotion(meta, zip_path, notes_text, requested, evidence):
     return identity
 
 
-def validate_environment(environment):
+def validate_environment(environment, policy):
     rules = environment.get("protection_rules", [])
     review = next((r for r in rules if r.get("type") == "required_reviewers"), {})
     if not review.get("reviewers") or review.get("prevent_self_review") is not True:
         raise ReleaseError("release environment must require independent review")
-    if environment.get("can_admins_bypass") is not False:
-        raise ReleaseError("release environment must disable administrator bypass")
+    # GitHub's REST/GraphQL environment schema does not expose the UI bypass toggle.
+    # Require a reviewed owner attestation on protected main; never infer it from absent data.
+    if (policy.get("environment_admin_bypass_disabled") is not True or
+            not isinstance(policy.get("environment_configuration_evidence"), str) or
+            not policy["environment_configuration_evidence"].startswith("https://")):
+        raise ReleaseError("reviewed owner evidence that administrator bypass is disabled is required")
     if environment.get("deployment_branch_policy") != {"protected_branches": True, "custom_branch_policies": False}:
         raise ReleaseError("release environment must restrict deployments to protected branches")
 

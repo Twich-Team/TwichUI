@@ -79,8 +79,10 @@ class PromotionTests(unittest.TestCase):
                             version=self.meta['version'], sha256=rel.sha256(self.zip))
         self.evidence = dict(candidate=dict(self.request), verification='https://example.invalid/report',
                              client_acceptance='https://example.invalid/client', limitations='Tester alpha; not certified')
-        self.env = dict(can_admins_bypass=False, deployment_branch_policy=dict(protected_branches=True, custom_branch_policies=False),
+        self.env = dict(deployment_branch_policy=dict(protected_branches=True, custom_branch_policies=False),
                         protection_rules=[dict(type='required_reviewers', reviewers=[{'id':1}], prevent_self_review=True)])
+        self.policy = dict(publication_enabled=False, environment_admin_bypass_disabled=True,
+                           environment_configuration_evidence='https://example.invalid/settings-review')
         self.now = dt.datetime.now(dt.timezone.utc)
         self.artifact = dict(id=42, expired=False, name='candidate-' + self.request['source'] + '-123-1',
                              created_at=(self.now-dt.timedelta(days=1)).isoformat(),
@@ -138,11 +140,17 @@ class PromotionTests(unittest.TestCase):
                 promotion.artifact_record(self.artifact, dict(self.run, **{field:value}), self.request, self.now)
 
     def test_unprotected_environment_rejected(self):
-        rel.validate_environment(self.env)
-        for data in ({}, dict(self.env, can_admins_bypass=True), dict(self.env, deployment_branch_policy=None),
+        rel.validate_environment(self.env, self.policy)
+        for data in ({}, dict(self.env, deployment_branch_policy=None),
                      dict(self.env, protection_rules=[]), dict(self.env, protection_rules=[dict(type='required_reviewers',reviewers=[1],prevent_self_review=False)])):
             with self.assertRaises(rel.ReleaseError):
-                rel.validate_environment(data)
+                rel.validate_environment(data, self.policy)
+
+    def test_missing_owner_bypass_attestation_fails_closed(self):
+        for policy in ({}, dict(self.policy, environment_admin_bypass_disabled=False),
+                       dict(self.policy, environment_configuration_evidence='')):
+            with self.assertRaisesRegex(rel.ReleaseError, 'owner evidence'):
+                rel.validate_environment(self.env, policy)
 
     def test_flat_artifact_only_and_no_rebuilt_fallback(self):
         container = self.root / 'outer.zip'
@@ -159,6 +167,8 @@ class PromotionTests(unittest.TestCase):
                 self.assertEqual(promotion.unpack_candidate(container, target).read_bytes(), self.zip.read_bytes())
 
     def test_prepare_downloads_exact_id_and_uses_main_reviewed_evidence(self):
+        policy_dir = self.root / '.github'; policy_dir.mkdir()
+        (policy_dir / 'release-policy.json').write_text(json.dumps(self.policy))
         ledger = self.root / 'docs/releases'; ledger.mkdir(parents=True)
         (ledger / (self.request['sha256'] + '.json')).write_text(json.dumps(self.evidence))
         container = self.root / 'transport.zip'

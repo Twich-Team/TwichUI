@@ -85,7 +85,8 @@ def prepare(gh, requested, actor, target):
     if not (gh._gh([f'repos/{gh.repo}/branches/main']) or {}).get('protected'):
         raise rel.ReleaseError('main must be protected before promotion')
     environment = gh._gh([f'repos/{gh.repo}/environments/release']) or {}
-    rel.validate_environment(environment)
+    local_policy = json.loads((rel.REPO_ROOT / ".github/release-policy.json").read_text())
+    rel.validate_environment(environment, local_policy)
     artifact = gh._gh([f'repos/{gh.repo}/actions/artifacts/{requested["artifact_id"]}']) or {}
     run_id = artifact.get('workflow_run', {}).get('id')
     run = gh._gh([f'repos/{gh.repo}/actions/runs/{run_id}']) or {}

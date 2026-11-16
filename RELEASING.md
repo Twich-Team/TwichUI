@@ -81,7 +81,7 @@ must be full commit SHAs, never floating branch names. Nothing publishes on push
    Preflight verifies maintainer permission, protected main, protected environment,
    successful main-dispatched candidate origin, artifact ID/age/expiry, package/hash/notes,
    version history, reviewed evidence and stable tag protection. It displays the exact tuple
-   before environment approval. **While the hold is false, publication is skipped.**
+   before environment approval. **While publication_enabled is false, publication is skipped.**
 6. After a separately reviewed future authorization lifts the hold, an independent reviewer
    approves the `release` environment job. Its name includes version, channel, artifact ID
    and full digest; its environment URL links to the exact source/tuple summary. The job
@@ -140,7 +140,13 @@ Owner setup (Settings in Twich-Team/TwichUI):
    self-review, disable administrator bypass, deployment branches **protected branches only**.
    Have another maintainer dispatch when rldiamond is the reviewer; a sole maintainer cannot
    independently approve their own request. If the GitHub plan cannot enforce these controls,
-   leave publication disabled. The workflow verifies these properties before requesting approval.
+   leave publication disabled. The workflow verifies reviewers, self-review prevention and branch
+   restrictions through the REST API. GitHub's published REST/GraphQL schemas do **not** expose
+   the administrator-bypass UI toggle: after disabling it, commit a reviewed owner attestation
+   in `.github/release-policy.json`: set `environment_admin_bypass_disabled: true` and
+   `environment_configuration_evidence` to an HTTPS settings-review issue/report link. Both
+   remain false/empty in this PR. This attestation is a manual trust boundary, not a claim
+   that automation can inspect the toggle. Keep it current if environment settings change.
 4. **Environment secrets → release → CF_API_KEY**: configure a CurseForge upload token there.
    Existing secret values cannot be read/moved by this integration. After configuring the
    environment secret, delete the repository-level CF_API_KEY under Actions secrets. Never
