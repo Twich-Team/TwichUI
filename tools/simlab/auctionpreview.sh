@@ -102,4 +102,4 @@ echo "artifacts: $RUN"
 [ "$repo_before" = "$(git -C "$REPO" status --porcelain --ignored)" ] || { echo 'simlab: repository status changed during run' >&2; exit 1; }
 simlab_disclose
 [ "$status" -eq 0 ] || exit "$status"
-python3 -I "$SIMLAB_DIR/auctionpreview_verdict.py" "$RUN" "${selection[@]}"
+python3 -B -I "$SIMLAB_DIR/auctionpreview_verdict.py" "$RUN" "${selection[@]}"

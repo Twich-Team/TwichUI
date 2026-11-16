@@ -39,6 +39,10 @@ ignore:
   - docs
   - .clinerules
   - KNOWN_BUGS.md
+  # Development handoffs, backlog and style source are not runtime assets.
+  - Project Revision - Complete Requirements and Design Handoff.md
+  - STATUS_AND_BACKLOG.md
+  - TWICHUI_APPROVED_STYLE_2026-10-31.png
   # the in-game Test Lab is a development tool and must never be in a release (docs/testlab.md)
   - TwichUI_TestLab
   # the saved-data load-test companions (a large synthetic saved file and its clock) are development tools too (docs/testlab.md)

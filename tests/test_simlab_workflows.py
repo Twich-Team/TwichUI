@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -196,6 +197,30 @@ class TestLabSelection(unittest.TestCase):
               mock.patch.object(module, 'load') as load, contextlib.redirect_stdout(io.StringIO())):
             self.assertEqual(module.main(), 2)
             load.assert_not_called()
+
+
+class VerifierSourceIsolation(unittest.TestCase):
+    def test_real_judge_flags_prevent_shared_source_bytecode_writes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            shutil.copyfile(SIMLAB / 'known_failures.py', root / 'known_failures.py')
+            probe = root / 'probe.py'
+            probe.write_text('import sys\nfrom pathlib import Path\nsys.path.insert(0,str(Path(__file__).parent))\nimport known_failures\nassert known_failures.RULES\n')
+            # -I ignores PYTHONDONTWRITEBYTECODE: prove a cold import really
+            # writes here before checking the actual catalog invocation flags.
+            subprocess.run([sys.executable, '-I', str(probe)], check=True)
+            caches = list(root.rglob('*.pyc'))
+            self.assertTrue(caches, 'negative control must demonstrate a shared-source write')
+            for path in caches:
+                path.unlink()
+            for name in ('smoke', 'workshop', 'testlab', 'auctionproof', 'diagnose', 'interact', 'auctionpreview'):
+                with self.subTest(catalog=name):
+                    line = next(line for line in (SIMLAB / (name + '.sh')).read_text().splitlines()
+                                if line.startswith('python3 ') and ' -I ' in line)
+                    args = shlex.split(line)
+                    script = next(i for i, value in enumerate(args) if value.endswith('.py'))
+                    subprocess.run([sys.executable, *args[1:script], str(probe)], check=True)
+                    self.assertEqual(list(root.rglob('*.pyc')), [], 'catalog imports must not mutate shared source')
 
 
 if __name__ == '__main__':

@@ -19,6 +19,7 @@ local function Say(fmt, ...) R.Print("workshop: " .. fmt, ...) end
 
 local WHY = {
     EXPERIMENTAL_OFF = "Workshop is experimental and turned off. Enable Workshop — Experimental in TwichUI Settings > Workshop.",
+    SAVED_NEWER = "your settings were saved by a newer TwichUI and are being kept unchanged. Use a compatible version before enabling Workshop.",
     MISSING = "its folder, TwichUI_Workshop, is missing. Reinstall TwichUI to put it back.",
     DISABLED = "TwichUI Workshop is turned off in your AddOns list. Turn it on there, then reload.",
     DEP_DISABLED = "TwichUI Workshop needs TwichUI turned on in your AddOns list.",
@@ -147,7 +148,7 @@ function L.Apply()
 end
 function L.SetEnabled(on)
     if type(on) ~= "boolean" or type(TwichUIDB) ~= "table" then return false, "ERROR" end
-    if R.Persist and R.Persist.IsHeld("TwichUIDB") then return false, "ERROR" end
+    if R.Persist and R.Persist.IsHeld("TwichUIDB") then return false, "SAVED_NEWER" end
     if on and InCombatLockdown and InCombatLockdown() then return false, "COMBAT" end
     L.Migrate()
     TwichUIDB.ui.workshopEnabled = on

@@ -81,8 +81,8 @@ requested feature; dependency tests do not trigger unrelated simulator catalogs.
 A `workshop-settings` feature run includes all Workshop and shared settings/core
 unit tests, then `design`, `craft` and `wrong` simulator launches, preserving
 replay comparison and the deliberately wrong expectation. Fast checks use the
-11 direct test files. This is the starting workflow for Workshop Settings 2.0;
-no Settings 2.0 feature implementation is part of this infrastructure change.
+12 direct test files, including experimental opt-in migration and service lifecycle
+preservation. The infrastructure audit's older 11-file measurements remain historical.
 
 Add new feature tests to their group's patterns. Full/CI discovery automatically
 includes **all** `tests/test_*.lua` and `tests/test_*.py`, including future files;

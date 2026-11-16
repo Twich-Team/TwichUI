@@ -42,5 +42,5 @@ echo "artifacts: $RUN"
 simlab_disclose
 [ "$status" -eq 0 ] || exit "$status"
 [ "$pages" -eq 0 ] || exit "$pages"
-python3 -I "$HERE/verdict.py" "$RUN" "$PAGE" "$TITLE"
+python3 -B -I "$HERE/verdict.py" "$RUN" "$PAGE" "$TITLE"
 [ "$SIMLAB_ASSETS" = "1" ] || echo "note: no game assets, so this PASS covers logic only; the screenshot is not a visual result"
