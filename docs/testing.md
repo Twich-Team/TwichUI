@@ -280,3 +280,14 @@ Run these sequentially on frozen source, with no competing verification activity
 This is ten launches across four representative catalogs, including Workshop and
 AH replay/negative controls. It is not the complete full/release gate. Results
 and resource limits are in [the verification audit](testing-verification-audit.md).
+
+## Automatic release isolation checks
+
+`./tests/run.sh development release-tools` covers mocked release planning/publishing,
+archive contracts, artifact identity/retry regressions and workflow invariants. No live
+CurseForge upload endpoint is used. PR/main CI selects this for release/docs-only changes;
+unmapped or unreliable scope falls back to complete offline discovery (`./tests/run.sh`).
+No ordinary CI invocation runs the full simulator or release-certification tier.
+Manual main dispatch additionally produces an uncertified internal package even during
+the publication hold. Public promotion/environment approval is pending; static workflow
+checks do not prove GitHub environment configuration or a live Actions execution.

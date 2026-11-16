@@ -1,7 +1,7 @@
 # Releasing TwichUI
 
-Releases are built and published by `.github/workflows/release.yml`, with `tools/release.py` deciding the
-version and the release notes. No version or changelog needs editing by hand.
+Verification and internal builds run in `.github/workflows/release.yml`. Public publication
+is disabled. `tools/release.py` retains version/history and publisher integrity tooling.
 
 **v1.3 publication hold:** `.github/release-policy.json` currently disables publication.
 Branch merges can proceed without creating a tag, GitHub release or CurseForge upload.
@@ -30,32 +30,70 @@ without inventing a new public version tag. Keep the packaged version out of
 committed `.toc` files. The consolidation archive uses committed training data;
 it does not silently fetch a different runtime dataset during certification.
 
-| You push | Channel | GitHub | CurseForge |
-| --- | --- | --- | --- |
-| a commit to `main` | alpha | prerelease (never "Latest") | alpha file |
-| a commit to `beta` | beta | prerelease (never "Latest") | beta file |
-| a tag `vMAJOR.MINOR.PATCH` (e.g. `v1.0.0`) | release | release, marked Latest | release file |
+## Development and internal builds
 
-Nothing else publishes: not other branches, not pull requests, not tags of another form (`v1.1.0-beta1` is
-ignored).
+PRs targeting main and pushes to main run `Verify and build internally / verify`.
+They cannot publish: there is no publishing job, tag trigger, write token or secret.
+Manual Actions dispatch on main additionally builds an **uncertified internal** ZIP.
+Use the dispatch's selected main commit; the manifest records the full SHA.
+Publication policy does not gate verification or internal packaging.
 
-## One-time setup
-1. The repository root holds six addon folders, `!!!TwichUI/` (the core addon, with `!!!TwichUI.toc`),
-   `TwichUI_Settings/` (the settings window), `TwichUI_NavData/` (navigation's walking maps), `TwichUI_Diagnostics/`
-   (profiling and support), `TwichUI_Layouts/` (layout packages) and `TwichUI_LayoutWizard/` (the layout setup), beside the repository-level files: `.pkgmeta`, `.github/`, `tests/`,
-   `tools/`, `docs/`, `README.md`, `CHANGELOG.md`, `LICENSE` and `licenses/`.
-2. The CurseForge project ID is in `!!!TwichUI/!!!TwichUI.toc` as `## X-Curse-Project-ID:`.
-3. Repository secret `CF_API_KEY`: a CurseForge API token (CurseForge > My API Tokens) that can upload to the
-   project. GitHub releases use the workflow's own `GITHUB_TOKEN`; no other secret is needed.
-4. Settings > Actions > General > Workflow permissions: the publish job asks for `contents: write`. If an
-   organization policy caps the token at read-only, publishing fails at the GitHub step (before CurseForge).
-5. Create the `beta` branch when you want beta builds; until it exists there are none.
-6. Recommended (repository settings, not done by the workflow): a tag ruleset so only maintainers can create,
-   move or delete `v*` tags; and, if you want a manual approval before anything is published, an environment
-   with required reviewers referenced from the publish job (`environment: release`).
+The small CI selector uses the existing `development release-tools` tier for changes
+confined to release tooling/documentation. All other or unknown scopes use the existing
+complete offline runner, without simulator catalogs. This is deliberately conservative;
+use the documented feature/integration tiers for additional affected-feature evidence.
+
+Internal artifacts include meta.json, notes.md and the checked seven-addon ZIP, retained
+30 days. Names include source SHA, run ID and attempt. No overwrite is allowed. A rerun
+creates a new internal candidate, never permission to replace an accepted public candidate.
+Internal versions (`0.0.0-dev.g<SHA>`) are not public version plans or certified releases.
+
+## Required owner settings and pending public promotion
+
+This PR implements release isolation and publisher integrity, **not a completed public
+promotion workflow**. Keep `.github/release-policy.json` false. No alpha, beta, stable or
+hotfix can be published by Actions in this workflow, even if that flag changes accidentally.
+The retained publisher CLI is an operator tool, not an approval system; do not use it to
+bypass the pending promotion workflow or hold.
+
+Before a separate reviewed promotion implementation:
+
+1. Protect main: require pull requests, owner review and the `verify` check from this
+   workflow (select its actual check context after its first run); prohibit force pushes
+   and deletion. Apply protections to administrators; keep bypass lists restricted.
+2. Protect `v*` release tags against creation, update and deletion except the deliberately
+   authorized release identity. Preserve all existing public tags and release history.
+3. Create a `release` environment with owner/maintainer required reviewers, prevent
+   self-review, disable administrator bypass, and restrict deployment branches to protected
+   main (add a specific temporary release branch only when explicitly needed). If the GitHub
+   plan cannot enforce reviewers, leave publication disabled. Do not weaken these settings.
+4. Move `CF_API_KEY` from repository secrets to that environment. Grant contents-write only
+   to the eventual protected publish job; builds and PRs must have no publication credentials.
+
+The next implementation must support a separate manual promotion selecting immutable
+artifact ID/run, full source SHA, channel, version and SHA256. Display that tuple **before**
+environment approval, download that exact artifact, compare it to the approval inputs,
+verify package/notes/provenance and policy from protected main, and upload without rebuilding.
+Serialize all promotions globally. The approval must not float to a branch's latest commit.
+Plain workflow_dispatch alone is insufficient; protected environment review is the simplest
+supported additional approval. No promotion job or end-to-end approval rehearsal is claimed here.
+
+Release decisions still required: owner real-client v1.3 acceptance; alpha tester scope and
+visible omissions; beta/stable certification for the exact final bytes; stable version from
+existing history; and hotfix scope. Before beta/stable publication run the full release gate
+in docs/testing.md and record client acceptance. That certification is pending, not part of
+this development campaign. If stamping beta as stable changes bytes, certify/bind the new
+final hash; never call those archives byte-identical.
+
+## Branch policy
+
+Use protected main and short-lived feature/bug-fix branches. Use a temporary release branch
+only when concurrent stabilization needs one. Hotfixes may start at the affected public tag;
+port the fix back to main once. Promote releases explicitly. Do not reverse-merge long-lived
+branches just to equalize SHAs after documentation changes. This change deletes/renames no branches.
 
 ## Versions
-One version string per build, used for both `.toc` files, the zip name, the GitHub tag and title, and the
+One version string per build, used for all seven `.toc` files, the zip name, the GitHub tag and title, and the
 CurseForge display name:
 
 - Stable: the tag without its `v`. Tag `v1.0.0` -> `1.0.0`, `!!!TwichUI-v1.0.0-forever.zip`. A stable tag must be
@@ -73,26 +111,23 @@ CurseForge display name:
 - The same commit always gets the same version, so a re-run makes the same release, not a second one.
 - At most 40 characters: shared setups keep the addon version only up to that length.
 
-The version is written into both `.toc` files in the build's working copy only. Nothing is committed and the
+The version is written into all seven `.toc` files in the build's working copy only. Nothing is committed and the
 repository stays as it is, so the `## Version:` committed in the `.toc` files is what an unpackaged copy (a
 local checkout, `tools/deploy.sh`) shows; it is no longer changed for releases. In game, `/tui version`, the
 group check and the diagnostics report the packaged version.
 
 TwichUI's group check compares the `MAJOR.MINOR.PATCH` part only: `1.0.1-alpha.23...` counts as 1.0.1.
 
-## Each stable release
-1. Optional, before tagging: `./tools/update_training_data.sh` and commit it if it changed (the build refreshes
-   the packaged data anyway; committing keeps GitHub's "Source code" archives the same as the zip), and
-   `./tests/run.sh`. `docs/release-hardening.md` has the support scope, the profiling steps and the in-game
-   checklist. If the release changes what is saved, follow `docs/persistence.md` ("Adding a schema 2") first.
-2. Tag the commit and push the tag:
-   `git tag v1.0.1 && git push origin v1.0.1`.
-   To add hand-written highlights above the generated notes, make it an annotated tag:
-   `git tag -a v1.0.1 -F highlights.md` (the message is Markdown; a message that is only the tag name is ignored).
-3. The workflow tests, packages and publishes. Check the run's summary for the version and notes.
+## Reviewed build inputs
 
-Pushing `main` and the tag together is fine: the alpha build of a commit that carries a stable tag is skipped
-(if the branch push is processed before the tag arrives, an alpha of that commit is published as well; harmless).
+Training updates are a development action: fetch a chosen upstream commit with the existing
+update tool, review the generated TrainingData.lua and provenance header, and commit them
+before candidate creation. Packaging uses that committed file; it does not fetch upstream or
+change runtime training data. The packager itself remains pinned by commit. There are no
+external `.pkgmeta` source inputs. Keep source/tag/version and final ZIP hash with certification.
+
+A stable tag identifies the chosen version; pushing it does not authorize or trigger publication.
+The legacy planner retains history-compatible versions/notes for future promotion integration.
 
 ## Release notes
 Generated from commit messages, the same Markdown for GitHub and CurseForge:
@@ -118,7 +153,7 @@ them in the annotated tag.
 `CHANGELOG.md` keeps the notes written by hand during development (the 3.0.x builds) and is no longer updated.
 
 ## Re-runs, failures and recovery
-The publish job works in steps, recording each in the GitHub release it creates:
+The retained publisher (currently unreachable from Actions and blocked by the hold) works in steps:
 
 1. Create a **draft** GitHub release for the tag (not visible to players, no tag yet) and attach the zip and
    `release.json` (read by addon managers that install from GitHub).
@@ -126,7 +161,17 @@ The publish job works in steps, recording each in the GitHub release it creates:
    (`<!-- twichui-release {... "curseforge": "uploaded" ...} -->`).
 3. Publish the GitHub release, which creates its tag on the built commit, and check the tag points there.
 
-Re-run a failed run with **Re-run failed jobs**: the build is not repeated and publishing continues from the
+Candidate metadata must first be sealed with `release.py seal --meta ... --zip ... --notes ...`.
+Sealing validates all packages and records ZIP SHA256, filename, full commit, version, channel
+and notes SHA256. Re-sealing existing metadata verifies it instead of overwriting identity.
+The publisher compares this identity to the draft marker, then downloads and hashes GitHub
+assets before any CurseForge upload. Both destinations receive the same checked local ZIP.
+A changed local ZIP, notes or identity, or corrupt remote asset, fails closed. Historical
+records without candidate metadata require operator reconciliation against retained bytes,
+source and destination evidence; never invent a hash from a newly rebuilt ZIP. The tool
+provides no automatic migration of historical drafts. Preserve uncertain-upload state.
+
+After future promotion is reviewed, **Re-run failed jobs** using the original artifact: the build is not repeated and publishing continues from the
 recorded step. What each failure leaves:
 
 - Tests or packaging failed: nothing was published. Fix and push again.
@@ -147,7 +192,7 @@ recorded step. What each failure leaves:
 TwichUI was built as 3.0.x during development; the first release for WoW: Forever's launch is 1.0.0. The 3.0.x
 tags are kept as `archive/v3.0.1` ... `archive/v3.0.12`: outside `v*`, so they publish nothing and don't count
 as stable tags. Never push a `v3.*` tag again (keep the `archive/` names, and delete stray `v3.*` tags in any
-clone, so `git push --tags` can't bring them back): a pushed `v3.0.x` tag would publish that old version as Latest.
+clone, so `git push --tags` cannot bring them back). Tags alone no longer publish.
 Saved data is upgraded by its schema number, not by the addon version, so going from 3.0.12 to 1.0.0 changes
 nothing for players' saved settings.
 
@@ -158,17 +203,16 @@ Notes stay correct: the next build's notes then start from the nearest prereleas
 last stable tag.
 
 ## Notes
-- The build refreshes `!!!TwichUI/modules/TrainingData.lua` from the newest What's Training? commit before
-  packaging and fails if fetching, generating or validating it fails. It logs the upstream commit and warns when
-  the zip's data differs from the commit's.
-- CurseForge's game version comes from `## Interface:` (16001 -> WoW: Forever 1.60.1, as the packager names it).
-  If CurseForge doesn't list it, the newest lower Forever version is used, with a warning in the run.
+- CurseForge requires an **exact** Forever type/name mapping (Interface 16001 -> 1.60.1,
+  gameVersionTypeID 88568). Missing mappings fail before upload. No compatibility fallback
+  is implemented. Any future override needs explicit owner compatibility approval recorded
+  against the candidate and a separately reviewed implementation; a warning is insufficient.
 - Keep the `!!!` folder name: TwichUI must load before other addons, and the game names saved variables files
   after the folder.
-- The zip holds six folders: `!!!TwichUI`, and `TwichUI_Settings`, `TwichUI_NavData`, `TwichUI_Diagnostics`,
-  `TwichUI_Layouts` and `TwichUI_LayoutWizard` (each load on demand; `.pkgmeta` `move-folders`: the packager builds the
+- The zip holds seven folders: `!!!TwichUI`, and `TwichUI_Settings`, `TwichUI_NavData`, `TwichUI_Diagnostics`,
+  `TwichUI_Layouts`, `TwichUI_LayoutWizard` and `TwichUI_Workshop` (each load on demand; `.pkgmeta` `move-folders`: the packager builds the
   whole repository as the package folder, so the core addon is moved up over it and the others out beside it; the
-  wizard also requires `TwichUI_Layouts`, which the build checks). The build checks the zip: exactly those six folders,
+  wizard also requires `TwichUI_Layouts`, which the build checks). The build checks the zip: exactly those seven folders,
   nothing nested or misspelled, every `.toc` file at the build's version with the committed Interface, every file the
   `.toc` files load present, and no development files, machine paths or secret-like text.
 - The packager (BigWigsMods/packager, pinned in the workflow) only builds; it uploads nothing.

@@ -551,25 +551,29 @@ class FakeGitHub:
             self.calls.append(f"publish latest={fields['make_latest']}")
         return dict(r)
 
+    def asset_sha256(self, aid):
+        return rel.hashlib.sha256(next(a["bytes"] for r in self.releases_ for a in r["assets"] if a["id"] == aid)).hexdigest()
+
     def delete_asset(self, aid):
         for r in self.releases_:
             r["assets"] = [a for a in r["assets"] if a["id"] != aid]
 
     def upload_asset(self, rid, path, name):
         self.calls.append(f"asset {name}")
-        asset = {"id": len(self.calls), "name": name.lstrip("!"), "state": "uploaded"}  # as GitHub renames
+        asset = {"id": len(self.calls), "name": name.lstrip("!"), "state": "uploaded", "bytes": Path(path).read_bytes()}  # as GitHub renames
         self._find(rid)["assets"].append(asset)
         return dict(asset)
 
 
 class FakeCurseForge:
     def __init__(self, results):
-        self.results, self.uploads = list(results), []
+        self.results, self.uploads, self.hashes = list(results), [], []
 
     def game_version_id(self, name):
         return 1234, name, None
 
     def upload(self, zip_path, metadata):
+        self.hashes.append(rel.sha256(zip_path))
         self.uploads.append(metadata)
         return self.results.pop(0)
 
@@ -583,6 +587,7 @@ class PublishTests(unittest.TestCase):
             z.writestr(rel.TOCS[rel.CORE], CORE_TOC)
         self.meta = {"channel": "alpha", "version": "1.0.1-alpha.2.gabcdef0", "tag": "v1.0.1-alpha.2.gabcdef0",
                      "commit": "a" * 40, "prerelease": True, "make_latest": False}
+        self.meta["candidate"] = rel.candidate_identity(self.meta, self.zip, "notes\n")
         self.gh = FakeGitHub()
         self.log = []
 
@@ -597,6 +602,8 @@ class PublishTests(unittest.TestCase):
         self.assertEqual(self.publish(cf), "published")
         self.assertEqual(self.gh.calls, ["create", "asset " + self.zip.name.lstrip("!"), "asset release.json",
                                          "publish latest=false"])
+        self.assertEqual(cf.hashes, [self.meta["candidate"]["sha256"]])
+        self.assertEqual(self.gh.asset_sha256(self.gh.releases_[0]["assets"][0]["id"]), cf.hashes[0])
         self.assertEqual(cf.uploads[0]["releaseType"], "alpha")
         self.assertEqual(cf.uploads[0]["displayName"], "v1.0.1-alpha.2.gabcdef0-forever")
         self.assertEqual(cf.uploads[0]["gameVersions"], [1234])
@@ -622,12 +629,8 @@ class PublishTests(unittest.TestCase):
         stray = self.gh.releases_[0]["tag_name"]
         self.assertTrue(stray.startswith("untagged-"))
         cf = FakeCurseForge([])
-        self.assertEqual(self.publish(cf), "repaired")
-        self.assertEqual(cf.uploads, [], "CurseForge is not uploaded again")
-        self.assertEqual(self.gh.releases_[0]["tag_name"], self.meta["tag"])
-        self.assertEqual(self.gh.tags[self.meta["tag"]], self.meta["commit"])
-        self.assertIn(f"Delete the leftover tag {stray}", self.log[-1])
-        self.assertEqual(self.publish(cf), "already-published")
+        with self.assertRaisesRegex(rel.ReleaseError, "historical metadata"):
+            self.publish(cf)
 
     def test_tag_made_a_moment_late(self):
         real = self.gh.tag_commit
@@ -641,6 +644,7 @@ class PublishTests(unittest.TestCase):
 
     def test_stable_is_marked_latest(self):
         self.meta.update(channel="release", prerelease=False, make_latest=True)
+        self.meta["candidate"] = rel.candidate_identity(self.meta, self.zip, "notes\n")
         cf = FakeCurseForge([("uploaded", 1)])
         self.publish(cf)
         self.assertEqual(cf.uploads[0]["releaseType"], "release")
@@ -684,7 +688,7 @@ class PublishTests(unittest.TestCase):
     def test_interrupted_upload_is_not_retried(self):
         self.gh.create_draft(self.meta["tag"], self.meta["commit"], self.meta["tag"],
                              rel.with_marker("notes", {"channel": "alpha", "commit": self.meta["commit"],
-                                                       "curseforge": "uploading"}), True)
+                                                       "curseforge": "uploading", "candidate": self.meta["candidate"]}), True)
         cf = FakeCurseForge([("uploaded", 1)])
         with self.assertRaisesRegex(rel.ReleaseError, "uploading"):
             self.publish(cf)
@@ -782,9 +786,8 @@ class CurseForgeClientTests(unittest.TestCase):
 
     def test_game_versions(self):
         self.assertEqual(self.cf.game_version_id("1.60.1"), (1, "1.60.1", None))
-        vid, name, warning = self.cf.game_version_id("1.70.0")
-        self.assertEqual((vid, name), (2, "1.50.0"))
-        self.assertIn("no game version 1.70.0", warning)
+        with self.assertRaisesRegex(rel.ReleaseError, "no exact"):
+            self.cf.game_version_id("1.70.0")
         self.assertEqual(self.requests[0][:2], ("/api/game/wow/versions", "secret-token"))
 
     def test_upload_outcomes(self):
