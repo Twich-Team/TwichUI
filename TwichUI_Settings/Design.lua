@@ -60,7 +60,6 @@ Page("classBarsEffects", "Choose the moments your resource bars emphasize.", { "
 Page("barGlows", "Make the action buttons you care about stand out.")
 Page("barGlowsSpells", "Choose spells and customize their glow.")
 Page("skins", "Make supported addons feel at home with TwichUI.")
-Page("speakstone", "Make dialogue comfortable to read.", { "Playback text", "Controls", "Portrait", "Progress line" })
 Page("restedxp", "Choose your guide's behavior and appearance.", { "Window background and border", "Current step", "Header and footer", "Text size", "Spacing", "Scroll bar", "Waypoint arrow", "Timer bars", "Timer bar background and border" })
 Page("targetArt", "Choose dragon artwork for your target frame.", { "Fine-tune each artwork", "Reset" })
 Page("sharing", "Share selected configurations and review incoming changes.")
@@ -123,7 +122,6 @@ local TASKS = {
         { "Reading", "Text", "Current step", "Text size", "Spacing" },
         { "Surfaces", "Window background and border", "Header and footer", "Scroll bar" },
         { "Arrow / timers", "Waypoint arrow", "Timer bars", "Timer bar background and border" } },
-    speakstone = { { "Reading", "SpeakStone speech frame", "Text" }, { "Frame", "Frame", "Portrait", "Progress line" }, { "Advanced", "Playback text", "Controls" } },
     targetArt = { { "Choose artwork", "Target dragon artwork", "Artwork for each kind of enemy", "Preview" },
         { "Appearance", "Appearance", "Fine-tune each artwork", "Reset" } },
     troubleshooting = { { "Status", "Status", "Optional integrations" },
@@ -161,8 +159,6 @@ function D.Summary(text)
     return type(text) == "string" and (text:match("^(.-[.!?])%s") or text) or ""
 end
 local SUMMARIES = {
-    speakstone = { ["SpeakStone speech frame"] = "Style the speech frame. Narration, timing and position stay with SpeakStone.",
-        ["Text"] = "Set the speaker and dialogue text for comfortable reading." },
     restedxp = { ["RestedXP guide window"] = "Style the guide window. Guide content and progress stay with RestedXP." },
     guildLocations = { ["Your location"] = "Sharing sends your current position to guildmates running TwichUI. Invisible receives without sending; Off does neither. No location history." },
     mage = { ["Sell ordinary food and drink"] = "Optional merchant selling or EllesmereUI junk marking. Dry run reports only; turn it off to act. Special, conjured and protected items stay in your bags." },

@@ -7,7 +7,7 @@ dofile(TESTS .. "harness.lua")
 --   * nothing is saved by reading, and the saved tables a test hands in come out as they went in;
 --   * choosing a border texture derives a thickness and color only where the player has not set them, from the look's own defaults;
 --   * the frame is a border choice of the adopted looks and nobody else's: the data bar menus, the Chronicle, the class, healer and
---     RestedXP and SpeakStone looks keep every default they had.
+--     The RestedXP look keeps every default it had.
 -- Synthetic: it proves what is read, resolved and saved, not how any of it is drawn (the simulator screenshots and the client do that).
 local c = MakeClient("Rich", {"!!!TwichUI"})
 local function Any() return setmetatable({}, { __index = function(t, k)
@@ -23,7 +23,7 @@ for _, f in ipairs({ "chronicle/Style.lua", "Look.lua", "FrameLook.lua", "module
   "modules/NotifyLook.lua", "modules/Interact.lua", "modules/SpellMenu.lua", "modules/TrainingData.lua", "modules/MageConjure.lua", "modules/FoodDrink.lua",
   "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua", "modules/Restock.lua", "modules/RestockPrompt.lua", "pins/Pins.lua", "pins/Sync.lua",
   "pins/Look.lua", "nav/Prefs.lua", "chronicle/Appearance.lua", "classbars/Config.lua", "healer/Config.lua", "markers/Markers.lua", "markers/Bar.lua",
-  "modules/RestedXPSkin.lua", "modules/RestedXPTimers.lua", "modules/SpeakStoneSkin.lua" }) do
+  "modules/RestedXPSkin.lua", "modules/RestedXPTimers.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.TwichUIDB = { modules = {} }
@@ -275,7 +275,6 @@ Bar("classBarsLook", R.ClassBars and R.ClassBars.Look)
 Bar("healerWatchBarLook", R.HealerWatch and R.HealerWatch.BarLook)
 Bar("restedxpSkin", R.RestedXPSkin and R.RestedXPSkin.Look)
 Bar("restedxpTimerLook", R.RestedXPSkin and R.RestedXPSkin.Timers and R.RestedXPSkin.Timers.Look)
-Bar("speakstoneSkin", R.SpeakStoneSkin and R.SpeakStoneSkin.Look)
 Bar("markerBarStyle", R.MarkerBar and R.MarkerBar.Style)
 
 -- Chronicle's own palette, which the notification defaults used to read, is not changed by the framed look

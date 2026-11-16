@@ -7,12 +7,12 @@ if key == "skins" and params.integration then
     C_AddOns.LoadAddOn("TwichUI_Settings")
     local kit, state = R.SettingsKit, params.integration
     local originalState, originalLoaded = kit.AddonState, kit.Loaded
-    local targets = { Attune = true, Auctionator = true, ForeverDungeonJournal = true, WhatsTraining = true, EllesmereUI = true }
+    local targets = { Attune = true, ForeverDungeonJournal = true, WhatsTraining = true, EllesmereUI = true }
     kit.AddonState = function(name) if targets[name] then return state == "absent" and "missing" or "loaded" end; return originalState(name) end
     kit.Loaded = function(name) if targets[name] then return state ~= "absent" end; return originalLoaded(name) end
     if state ~= "absent" then R.S = R.S or {} end
     if state == "disabled" then
-        for _, name in ipairs({ "attuneSkin", "auctionatorSkin", "foreverDungeonJournalSkin", "whatsTrainingSkin" }) do R:SetEnabled(name, false) end
+        for _, name in ipairs({ "attuneSkin", "foreverDungeonJournalSkin", "whatsTrainingSkin" }) do R:SetEnabled(name, false) end
     end
 end
 -- Nested rule fixtures need value comparison, including numeric keys; Lab.Digest is intentionally shallow.
@@ -30,10 +30,10 @@ UnitClass = function() return "Mage", "MAGE" end
 TwichUIDB.ui.settingsWindow = { w = params.narrow and 936 or 1240, h = params.narrow and 660 or 960 }
 -- UI contract fixtures only: real integration engines are covered by their dedicated unit tests.
 -- These fixtures never call the third-party addon or claim real-addon compatibility.
-if params.integration and (key == "speakstone" or key == "restedxp") then
-    local skin = key == "speakstone" and R.SpeakStoneSkin or R.RestedXPSkin
+if params.integration and key == "restedxp" then
+    local skin = R.RestedXPSkin
     local state = params.integration
-    R:SetEnabled(key == "speakstone" and "speakstoneSkin" or "restedxpSkin", state ~= "disabled")
+    R:SetEnabled("restedxpSkin", state ~= "disabled")
     skin.Status = function()
         local available = state ~= "absent"
         return { code = state == "disabled" and "off" or available and "active" or key .. "-missing",
@@ -243,7 +243,7 @@ Lab.Step("disclosures and navigation", function()
         end
         UI.Layout(view)
     elseif key == "skins" then
-        for _, name in ipairs({ "attuneSkin", "auctionatorSkin", "foreverDungeonJournalSkin", "whatsTrainingSkin" }) do
+        for _, name in ipairs({ "attuneSkin", "foreverDungeonJournalSkin", "whatsTrainingSkin" }) do
             local row = K.switchRows[name]
             if params.integration == "absent" then
                 Lab.Check("state", name .. " unavailable", false, row:Enabled())
@@ -620,11 +620,11 @@ if key == "statWeights" then
         if params.editor then group.onPick(choices[2].value); group:Click() end
     end)
 end
-if key == "speakstone" or key == "restedxp" then
+if key == "restedxp" then
     Lab.Step("integration preferences", function()
-        local skin = key == "speakstone" and R.SpeakStoneSkin or R.RestedXPSkin
+        local skin = R.RestedXPSkin
         local style = skin.Style or skin.Text
-        local property = key == "speakstone" and "textSize" or "lineSpacing"
+        local property = "lineSpacing"
         local before = style.Get(property)
         style.Set(property, before + 1)
         Lab.Check("state", "appearance preference saved", before + 1, style.Get(property))

@@ -55,9 +55,8 @@ Every feature has its own page in the TwichUI settings (`/tui options`), and eve
 - **Sell leftover food and drink:** Optionally sell ordinary, non-conjured food and drink to a vendor, with a dry-run mode that only reports what would be sold. With EllesmereUI's bags you can instead have TwichUI mark those items as junk there, and let EllesmereUI sell them.
 
 ### Addon skins
-- **EllesmereUI look:** Matching skins for Attune, Auctionator, the Forever Dungeon Journal and WhatsTraining (needs EllesmereUI).
+- **EllesmereUI look:** Matching skins for Attune, the Forever Dungeon Journal and WhatsTraining (needs EllesmereUI).
 - **RestedXP guide window:** A TwichUI look for the window, its waypoint arrow and its timer bars.
-- **SpeakStone:** A TwichUI look for SpeakStone's speech frame.
 
 ### Settings, profiles and sharing
 - **One settings window:** Searchable, organized by feature, and only loaded when you open it.
@@ -68,4 +67,4 @@ Every feature has its own page in the TwichUI settings (`/tui options`), and eve
 - **Troubleshooting:** A status snapshot (versions, whether TwichUI and its optional addons are set up and reachable), a short support report to read and copy when something isn't working, and a fuller diagnostic report. Nothing is sent anywhere.
 
 ### Works with
-EllesmereUI, RestedXP Guides, SpeakStone, Attune, Auctionator, WhatsTraining and Forever Dungeon Journal. All are optional; TwichUI runs fine without any of them.
+EllesmereUI, RestedXP Guides, Attune, WhatsTraining and Forever Dungeon Journal. All are optional; TwichUI runs fine without any of them.
