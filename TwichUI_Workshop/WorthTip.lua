@@ -134,6 +134,7 @@ end
 
 -- The post call for every item tooltip: never lets a fault here take other addons' lines or the item's own tooltip with it
 function T.OnItem(tooltip, data)
+    if not W.Active() then return end
     if tooltip ~= GameTooltip or type(data) ~= "table" then return end
     if tooltip.IsForbidden and tooltip:IsForbidden() then return end
     local ok, err = pcall(Add, tooltip, data)
@@ -147,6 +148,7 @@ function T.OnItem(tooltip, data)
 end
 
 local function OnEvent(_, event, a, b)
+    if not W.Active() then return end
     if event == "MODIFIER_STATE_CHANGED" then
         -- only Shift changes what is shown; a=key ("LSHIFT"/"RSHIFT")
         if type(a) == "string" and a:find("SHIFT", 1, true) and carrying and carrying.IsShown and carrying:IsShown() then Rebuild(carrying) end
@@ -166,7 +168,8 @@ local function OnCleared()
 end
 
 function T.Start()
-    if T.registered or not CreateFrame then return end
+    if not W.Active() or not CreateFrame then return end
+    if T.registered then frame:RegisterEvent("MODIFIER_STATE_CHANGED"); return end
     if not (TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType and GameTooltip) then return end
     T.registered = true
     frame = CreateFrame("Frame")
@@ -176,6 +179,10 @@ function T.Start()
     TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, R.Perf.Wrap("workshop.worth", T.OnItem))
 end
 
-function T.Events() return frame and (waiting and 2 or 1) or 0 end
+function T.Stop()
+    OnCleared()
+    if frame then frame:UnregisterAllEvents() end
+end
+function T.Events() return W.Active() and frame and (waiting and 2 or 1) or 0 end
 
 T.Start()

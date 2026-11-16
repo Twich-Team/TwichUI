@@ -15,6 +15,7 @@ W.Window.Hide()
 R.Workshop=nil
 local chunk=assert(loadfile(ROOT.."WorkshopLauncher.lua"));setfenv(chunk,c);chunk()
 local L=R.WorkshopLauncher
+assert(L.SetEnabled(true),"refused-load fixture explicitly opts in before testing native-frame cleanup")
 local attempts=0
 c.C_AddOns={LoadAddOn=function()
  attempts=attempts+1;assert(L.previewLoading==true,"flag is scoped to explicit load")

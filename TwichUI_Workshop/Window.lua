@@ -408,6 +408,7 @@ end
 -- Opening
 ---------------------------------------------------------------------------
 function Win.Show()
+    if not W.Active() then return false end
     -- Normal Workshop use resumes its existing native scan-button integration
     -- after an earlier preview-only service load.
     if W.AuctionButton then W.AuctionButton.Start() end
@@ -461,4 +462,35 @@ end
 
 W.Open = Win.Show
 W.Toggle = Win.Toggle
+function W.Suspend()
+    if W.suspended then return end
+    W.suspended = true
+    if W.AuctionUI then W.AuctionUI.Hide() end
+    if W.Compact then W.Compact.Hide() end
+    Win.Hide()
+    if W.StrategyView then W.StrategyView.Close() end
+    if W.Notice then W.Notice.Stop() end
+    if W.Scan then W.Scan.Stop() end -- an already-committing atomic save may finish
+    if W.AuctionReads then W.AuctionReads.Stop() end
+    if W.Bridge then W.Bridge.Cancel() end
+    if W.Watch then W.Watch.Stop() end
+    if W.Bank then W.Bank.Stop() end
+    if W.WorthTip then W.WorthTip.Stop() end
+    if W.AuctionButton then W.AuctionButton.Stop() end
+    S.Reset()
+    Q.Unload()
+end
+function W.Resume()
+    if not W.suspended then return end
+    local l = R.WorkshopLauncher
+    if l and l.Enabled and not l.Enabled() then return end
+    W.suspended = nil
+    if not W.Active() then return end
+    if W.Watch then W.Watch.Start() end
+    if W.Bank then W.Bank.Start() end
+    if W.WorthTip then W.WorthTip.Start() end
+    if W.AuctionReads then W.AuctionReads.Start() end
+    if W.AuctionButton then W.AuctionButton.Resume() end
+end
+if not W.Active() then W.suspended = true end
 W.ready = true

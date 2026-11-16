@@ -27,13 +27,41 @@ SHOPPING, VENDOR, OPPS = "TwichUI_Workshop/Shopping.lua", "TwichUI_Workshop/Vend
 
 # `--broad` re-runs a SURVIVOR against these older, broader Workshop tests to say whether anything else notices it (the mutation still counts as
 # a survivor of its focused tests; the note only tells you where the gap is). The default run never uses them.
-SUITE = {"targets": ("TwichUI_Workshop/", "!!!TwichUI/WorkshopAuto.lua"), "broad_tests": ("test_workshop_market.lua", "test_workshop_prices.lua", "test_workshop_shopping.lua", "test_workshop_storage.lua", "test_workshop.lua")}
+SUITE = {"targets": ("TwichUI_Workshop/", "!!!TwichUI/WorkshopAuto.lua", "!!!TwichUI/WorkshopLauncher.lua"), "broad_tests": ("test_workshop_market.lua", "test_workshop_prices.lua", "test_workshop_shopping.lua", "test_workshop_storage.lua", "test_workshop.lua")}
 
 MUTATIONS = []
 
 
 def m(id, file, find, replace, why, tests, smoke=False, expect="killed", note=""):
     MUTATIONS.append(dict(id=id, file=file, find=find, replace=replace, why=why, tests=tuple(tests), smoke=smoke, expect=expect, note=note))
+
+
+# Release opt-in/lifecycle safeguards; copies only, never real SavedVariables.
+m("workshop.optin.default-on", "!!!TwichUI/WorkshopLauncher.lua",
+  "TwichUIDB.ui.workshopEnabled = TwichUIDB.ui.workshopLoadOnLogin == true",
+  "TwichUIDB.ui.workshopEnabled = TwichUIDB.ui.workshopLoadOnLogin ~= false",
+  "a missing legacy preference silently opts fresh profiles in", ["test_workshop_optin.lua"])
+m("workshop.optin.ignore-explicit-off", "!!!TwichUI/WorkshopLauncher.lua",
+  "if type(ui.workshopEnabled) == \"boolean\" then return ui.workshopEnabled end",
+  "if ui.workshopLoadOnLogin == true then return true end",
+  "the old login preference overrides a deliberate new disable", ["test_workshop_optin.lua"])
+m("workshop.optin.launcher-bypass", "!!!TwichUI/WorkshopLauncher.lua",
+  "if not L.Enabled() then return false, \"EXPERIMENTAL_OFF\" end",
+  "-- experimental load guard accidentally removed",
+  "slash/preview loads bypass experimental consent", ["test_workshop_optin.lua"])
+m("workshop.optin.observer-leak", "TwichUI_Workshop/Window.lua",
+  "if W.Watch then W.Watch.Stop() end", "-- recipe observer left active",
+  "disabling leaves profession events registered", ["test_workshop_optin.lua"])
+m("workshop.optin.profile-bypass", "!!!TwichUI/WorkshopLauncher.lua",
+  'R.Profiles.OnApply("views", "workshop-opt-in", L.Apply)',
+  'R.Profiles.OnApply("views", "workshop-opt-in", L.Migrate)',
+  "profile changes update consent without stopping loaded services", ["test_workshop_optin.lua"])
+m("workshop.optin.preview-hooks", "TwichUI_Workshop/AuctionButton.lua",
+  "if wanted then AB.Start() end", "AB.Start()",
+  "resuming a preview-only load attaches controls to Blizzard AH", ["test_workshop_optin.lua"])
+m("workshop.optin.read-listener-leak", "TwichUI_Workshop/Window.lua",
+  "if W.AuctionReads then W.AuctionReads.Stop() end", "-- transport listeners left active",
+  "disabling leaves native read-transport callbacks registered", ["test_workshop_optin.lua"])
 
 
 # M1b external data validation: only disposable synthetic state is mutated.
@@ -745,9 +773,9 @@ m("market.a7.other-market-substituted", FACTS, '    if m == nil then return MK.S
 # ======================================================================================================================
 AUTOT = "test_workshop_auto.lua"
 AUTO, SCAN, WAUTO, SESSION = "TwichUI_Workshop/Auto.lua", "TwichUI_Workshop/Scan.lua", "!!!TwichUI/WorkshopAuto.lua", "TwichUI_Workshop/Session.lua"
-m("market.auto.setting-ignored", WAUTO, 'function WA.Enabled() return WA.POLICY == "auto" and R:Enabled("workshopAutoScan") end', 'function WA.Enabled() return WA.POLICY == "auto" end',
+m("market.auto.setting-ignored", WAUTO, 'function WA.Enabled() return WA.POLICY == "auto" and R.WorkshopLauncher and R.WorkshopLauncher.Enabled()\n    and R:Enabled("workshopAutoScan") end', 'function WA.Enabled() return WA.POLICY == "auto" and R.WorkshopLauncher and R.WorkshopLauncher.Enabled() end',
   "the Auction House opening loads the Workshop and scans although the player turned automatic updates off", [AUTOT], smoke=True)
-m("market.auto.manual-policy-ignored", WAUTO, 'function WA.Enabled() return WA.POLICY == "auto" and R:Enabled("workshopAutoScan") end', 'function WA.Enabled() return R:Enabled("workshopAutoScan") end',
+m("market.auto.manual-policy-ignored", WAUTO, 'function WA.Enabled() return WA.POLICY == "auto" and R.WorkshopLauncher and R.WorkshopLauncher.Enabled()\n    and R:Enabled("workshopAutoScan") end', 'function WA.Enabled() return R.WorkshopLauncher and R.WorkshopLauncher.Enabled() and R:Enabled("workshopAutoScan") end',
   "the owner's manual-only decision is not honoured: a saved switch (or a later default) makes opening the Auction House load the Workshop and offer or start an update", [AUTOT], smoke=True)
 m("market.auto.duplicate-visit", WAUTO, "    if open then return end                                          -- the same visit, said again\n", "",
   "the several events of one opening each count as a visit, so a visit is handled again and again", [AUTOT])

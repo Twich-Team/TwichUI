@@ -239,6 +239,7 @@ local function Build()
     if UISpecialFrames then tinsert(UISpecialFrames, "TwichUIAuctionPreview") end
 end
 function A.Show(initialMode)
+    if not W.Active() then return false, "EXPERIMENTAL_OFF" end
     if InCombatLockdown and InCombatLockdown() then return false, "COMBAT" end
     if not root then R.Perf.Call("auction.previewBuild", Build) end
     if not A.ready then return false, "INCOMPLETE" end

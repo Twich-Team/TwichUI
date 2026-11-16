@@ -71,5 +71,5 @@ find "$ROOT" -name '*.png' -o -name '*.stderr' -o -name '*.stdout' | grep -q . &
 simlab_disclose
 echo "  - MESSAGING (this command): sends are watched by a pass-through observer that records the call and then makes it. The simulator's accept or refuse is what is reported; nothing is delivered, received or decoded by another client."
 [ "$status" -eq 0 ] || exit "$status"
-python3 -I "$SIMLAB_DIR/diagnose_verdict.py" "$RUN" "$WINDOW" || exit 1
+python3 -B -I "$SIMLAB_DIR/diagnose_verdict.py" "$RUN" "$WINDOW" || exit 1
 [ "$leak" -eq 0 ] || exit 1

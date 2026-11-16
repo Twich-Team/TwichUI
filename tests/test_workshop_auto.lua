@@ -69,6 +69,7 @@ local function Setup(opts)
     c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
     c.FireEvent("PLAYER_LOGIN")
     local R = c.TwichUI
+    c.TwichUIDB.ui.workshopEnabled = true -- this fixture explicitly exercises the separate A6 developer policy
     local t = { c = c, R = R, ah = ah, WA = R.WorkshopAuto }
     if opts.manual ~= true then t.WA.POLICY = "auto"; R:SetEnabled("workshopAutoScan", true) end   -- the A6 behaviour under test; the shipped policy is manual (below)
     if opts.capability ~= false then t.WA.CAPABILITY = opts.capability or "supported" end

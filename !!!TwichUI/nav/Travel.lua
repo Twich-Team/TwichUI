@@ -93,8 +93,7 @@ end
 -- The points an open flight map offers: the maps the game may list them under (the continents, the player's own map and its
 -- parents). A point you can fly to (Reachable) or stand at (Current) is learned. Unreachable is not counted: the game's
 -- meaning of it for a point never learned is not known here.
-local function NodesNow()
-    if not (C_TaxiMap and C_TaxiMap.GetAllTaxiNodes) then return nil end
+local function OfferMaps()
     local maps, seen = {}, {}
     local function Add(id)
         id = Plain(id)
@@ -108,6 +107,12 @@ local function NodesNow()
         local ok, info = pcall(C_Map.GetMapInfo, id)
         id = ok and type(info) == "table" and Plain(info.parentMapID) or nil
     end
+    return maps
+end
+
+local function NodesNow()
+    if not (C_TaxiMap and C_TaxiMap.GetAllTaxiNodes) then return nil end
+    local maps = OfferMaps()
     local states = Enum and Enum.FlightPathState
     local CURRENT, REACHABLE = states and states.Current or 0, states and states.Reachable or 1
     local set, any = {}, false
@@ -121,6 +126,23 @@ local function NodesNow()
         end
     end
     return any and set or nil
+end
+
+-- The open flight map's entry for a flight point: { slot (the game's index for it), state (0 here, 1 reachable, 2 not), name },
+-- or nil when the map doesn't list it. For nav/Flight.lua (the highlight and the automatic flight).
+function TV.Offered(node)
+    if not (C_TaxiMap and C_TaxiMap.GetAllTaxiNodes) then return nil end
+    for _, map in ipairs(OfferMaps()) do
+        local ok, nodes = pcall(C_TaxiMap.GetAllTaxiNodes, map)
+        if ok and type(nodes) == "table" then
+            for _, n in ipairs(nodes) do
+                if Plain(n.nodeID) == node then
+                    local slot, state = Plain(n.slotIndex), Plain(n.state)
+                    if type(slot) == "number" and type(state) == "number" then return { slot = slot, state = state, name = Plain(n.name) } end
+                end
+            end
+        end
+    end
 end
 
 -- A flight master's map opened (or a point's status changed while it is open).

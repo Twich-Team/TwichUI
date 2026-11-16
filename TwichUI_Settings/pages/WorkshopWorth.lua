@@ -30,7 +30,11 @@ local AMBER = { 0.93, 0.72, 0.38 }
 local NEWER = "These settings were saved by a newer TwichUI, so they are left alone."
 
 local function Wg() return R.SettingsWidgets end
-local function WL() return R.Workshop and R.Workshop.WorthLayout end
+local function WL()
+    local l = R.WorkshopLauncher
+    if l and l.Enabled and not l.Enabled() then return nil end
+    return R.Workshop and R.Workshop.WorthLayout
+end
 local function Launcher() return R.WorkshopLauncher end
 local function DragKit() local P = R.MagicInventoryPage return P and P.Drag end
 
@@ -546,7 +550,11 @@ function D.Refresh()
         if f.marker then f.marker:Hide() end
         At(f.invite, 4, 4)
         f.invite:SetWidth(W - 8)
-        f.invite:SetText("The tooltip designer needs the Workshop, which loads the first time you ask for it. This loads it; it opens no window and does nothing else.")
+        local l = Launcher()
+        local enabled = l and (not l.Enabled or l.Enabled())
+        f.invite:SetText(enabled and "The tooltip designer needs Workshop. Load it to edit your item information; no window or scan will open."
+            or "Enable Workshop — Experimental in General to use the tooltip designer. Your saved layout is kept while Workshop is off.")
+        f.inviteButton:SetEnabled(enabled and true or false)
         At(f.inviteButton, 4, 4 + (f.invite:GetStringHeight() or 24) + 10)
         f.said:SetText(said or "")
         f.said:SetWidth(W - 8)

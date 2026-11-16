@@ -18,6 +18,8 @@ L.ADDON = "TwichUI_Workshop"
 local function Say(fmt, ...) R.Print("workshop: " .. fmt, ...) end
 
 local WHY = {
+    EXPERIMENTAL_OFF = "Workshop is experimental and turned off. Enable Workshop — Experimental in TwichUI Settings > Workshop.",
+    SAVED_NEWER = "your settings were saved by a newer TwichUI and are being kept unchanged. Use a compatible version before enabling Workshop.",
     MISSING = "its folder, TwichUI_Workshop, is missing. Reinstall TwichUI to put it back.",
     DISABLED = "TwichUI Workshop is turned off in your AddOns list. Turn it on there, then reload.",
     DEP_DISABLED = "TwichUI Workshop needs TwichUI turned on in your AddOns list.",
@@ -39,7 +41,11 @@ function L.Loaded() return R.Workshop ~= nil and R.Workshop.ready == true end
 local function LoadAddOn() return pcall(C_AddOns.LoadAddOn, L.ADDON) end
 
 function L.Load()
-    if L.Loaded() then return true end
+    if not L.Enabled() then return false, "EXPERIMENTAL_OFF" end
+    if L.Loaded() then
+        if R.Workshop.Resume then R.Workshop.Resume() end
+        return true
+    end
     if InCombatLockdown and InCombatLockdown() then return false, "COMBAT" end
     if not (C_AddOns and C_AddOns.LoadAddOn) then return false, "NO_API" end
     L.attempts = L.attempts + 1
@@ -58,6 +64,7 @@ function L.Load()
         return false, "INCOMPLETE"
     end
     L.failed = nil
+    if R.Workshop.Resume then R.Workshop.Resume() end
     return true
 end
 
@@ -113,8 +120,45 @@ end
 
 local loginState, loginMS = "waiting", nil
 function L.Snapshot()
-    return { loaded = L.Loaded(), attempts = L.attempts, failed = L.failed, login = loginState, loginMS = loginMS }
+    return { enabled = L.Enabled(), loaded = L.Loaded(), attempts = L.attempts, failed = L.failed, login = loginState, loginMS = loginMS }
 end
+
+-- Profile-scoped opt-in. Only the old explicit login preference establishes
+-- prior intent; stored recipes/queues/history are never used to infer consent.
+function L.Enabled()
+    local ui = type(TwichUIDB) == "table" and TwichUIDB.ui
+    if type(ui) ~= "table" then return false end
+    if type(ui.workshopEnabled) == "boolean" then return ui.workshopEnabled end
+    return ui.workshopEnabled == nil and ui.workshopLoadOnLogin == true
+end
+function L.Migrate()
+    if type(TwichUIDB) ~= "table" or (R.Persist and R.Persist.IsHeld("TwichUIDB")) then return end
+    if type(TwichUIDB.ui) ~= "table" then TwichUIDB.ui = {} end
+    if TwichUIDB.ui.workshopEnabled == nil then
+        TwichUIDB.ui.workshopEnabled = TwichUIDB.ui.workshopLoadOnLogin == true
+    end
+end
+function L.Apply()
+    L.Migrate()
+    local w = L.Loaded() and R.Workshop
+    if w then
+        if L.Enabled() then if w.Resume then w.Resume() end
+        elseif w.Suspend then w.Suspend() end
+    end
+end
+function L.SetEnabled(on)
+    if type(on) ~= "boolean" or type(TwichUIDB) ~= "table" then return false, "ERROR" end
+    if R.Persist and R.Persist.IsHeld("TwichUIDB") then return false, "SAVED_NEWER" end
+    if on and InCombatLockdown and InCombatLockdown() then return false, "COMBAT" end
+    L.Migrate()
+    TwichUIDB.ui.workshopEnabled = on
+    L.Apply()
+    -- Enabling permits the normal explicit Load/Open path. It does not eagerly
+    -- deserialize a large saved market database or attach native AH controls.
+    return true
+end
+R:OnInit(L.Migrate)
+if R.Profiles and R.Profiles.OnApply then R.Profiles.OnApply("views", "workshop-opt-in", L.Apply) end
 
 -- Lightweight settings access. Reading this never loads the Workshop or its
 -- separate market database. Presentation keys keep their established scope.
@@ -133,7 +177,7 @@ function L.SettingsState()
     local ws = type(TwichUIDB) == "table" and TwichUIDB.workshop
     local view = type(ws) == "table" and type(ws.view) == "table" and ws.view or {}
     local stock = type(ws) == "table" and type(ws.storage) == "table" and ws.storage or {}
-    local w = L.Loaded() and R.Workshop
+    local w = L.Enabled() and L.Loaded() and R.Workshop
     if w then return { prices = w.Session.PriceDetail(), guild = w.Storage.UseGuild(), notices = w.Notice.On(),
         advisorGain = tostring(w.Advisor and w.Advisor.Gain() or 0), objective = w.Session.Objective(), compact = w.Session.CompactMode() } end
     return { prices = view.prices == "detailed", guild = stock.useGuild == true, notices = view.notices ~= false,
@@ -177,7 +221,7 @@ local function ScheduleLogin()
     pending, waiting, loginState = true, false, "scheduled"
     C_Timer.After(2, function()
         pending = false
-        if generation ~= CurrentProfile() or not L.LoadOnLogin() then loginState = "cancelled"; return end
+        if generation ~= CurrentProfile() or not L.Enabled() or not L.LoadOnLogin() then loginState = "cancelled"; return end
         if not R.Life.InWorld() then loginState = "world"; return end
         if L.Loaded() then attempted, loginState = true, "already-loaded"; return end
         if InCombatLockdown and InCombatLockdown() then waiting, loginState = true, "combat"; return end
@@ -196,7 +240,7 @@ R:On("PLAYER_ENTERING_WORLD", function()
         return
     end
     entered = true
-    if not L.LoadOnLogin() then loginState = "off"; return end
+    if not L.Enabled() or not L.LoadOnLogin() then loginState = "off"; return end
     generation = CurrentProfile()
     ScheduleLogin()
 end)

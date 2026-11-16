@@ -344,12 +344,12 @@ RT.Funnel = Funnel
 ---------------------------------------------------------------------------
 -- Planning
 ---------------------------------------------------------------------------
-local function Plan(map, sx, sy, gx, gy, prefer)
+local function Plan(map, sx, sy, gx, gy, prefer, gprefer)
     local gr = ND.Graph(map)
     if not gr then return nil, "no-data" end
     local st, sp, sx2, sy2 = ND.Locate(map, sx, sy, RT.START_REACH, prefer)
     if not st then return nil, "start-off" end
-    local gt, gp, gx2, gy2 = ND.Locate(map, gx, gy, RT.GOAL_REACH)
+    local gt, gp, gx2, gy2 = ND.Locate(map, gx, gy, RT.GOAL_REACH, gprefer)
     if not gt then return nil, "goal-off" end
     Pause()
 
@@ -590,11 +590,11 @@ end
 
 RT.Pause = Pause
 
-function RT.Plan(map, sx, sy, gx, gy, prefer)
-    return RT.Job(function() return Plan(map, sx, sy, gx, gy, prefer) end)
+function RT.Plan(map, sx, sy, gx, gy, prefer, gprefer)
+    return RT.Job(function() return Plan(map, sx, sy, gx, gy, prefer, gprefer) end)
 end
 
 -- The same, at once (tests and tools; never from a game handler).
-function RT.PlanNow(map, sx, sy, gx, gy, prefer)
-    return Plan(map, sx, sy, gx, gy, prefer)
+function RT.PlanNow(map, sx, sy, gx, gy, prefer, gprefer)
+    return Plan(map, sx, sy, gx, gy, prefer, gprefer)
 end

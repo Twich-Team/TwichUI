@@ -101,6 +101,7 @@ schedule=function()
     end)
 end
 function B.Load()
+    if not W.Active() then return false,'disabled' end
     if job then schedule();return false,'loading' end
     local raw=TwichUIMarketData
     if active and active.raw==raw and type(raw)=='table' and raw.manifest==active.manifest then return true end
@@ -114,6 +115,10 @@ function B.Load()
         raw=TwichUIMarketData
     end
     B.Begin(raw,true);schedule();return false,'loading'
+end
+function B.Cancel()
+    token=token+1;job=nil
+    state=active and 'ready' or 'absent'
 end
 function B.Status()
     local s=shallow(stats);s.state=state;s.error=lastError;s.loading=job~=nil;s.ready=active~=nil;s.generation=active and active.header.generation_id

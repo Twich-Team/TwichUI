@@ -51,6 +51,7 @@ local function Seed(W)
 end
 Lab.Step("explicit preview", function()
     Lab.Check("init", "Workshop initially unloaded", false, R.WorkshopLauncher.Loaded())
+    Lab.Check("init", "preview requires explicit experimental opt-in", true, R.WorkshopLauncher.SetEnabled(true))
     Lab.Check("init", "proof disabled", false, R.AuctionHost.Snapshot().leased)
     SlashCmdList.TWICHUI("ahpreview")
     A = R.Workshop.AuctionUI; f = A.Frame()

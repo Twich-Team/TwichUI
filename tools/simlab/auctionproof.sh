@@ -34,5 +34,5 @@ if find "$ROOT" -name '*.png' -o -name '*.stderr' -o -name '*.stdout' | grep -q 
 fi
 simlab_disclose
 [ "$status" -eq 0 ] || exit "$status"
-python3 -I "$SIMLAB_DIR/auctionproof_verdict.py" "$RUN"
+python3 -B -I "$SIMLAB_DIR/auctionproof_verdict.py" "$RUN"
 [ "$leak" -eq 0 ]

@@ -109,6 +109,11 @@ if key == "workshop" and params.filled then
             if row:GetName() == "Workshop options" then load = v.rows[row.id].control end
         end
         Lab.Check("construct", "explicit load action exists", true, load ~= nil)
+        Lab.Check("state", "fresh Workshop starts experimental and off", false, L.Enabled())
+        v.rows.workshopEnabled.control:Click()
+        Lab.Settle(.3) -- dependency controls refresh on the settings window's next frame
+        Lab.Check("interact", "experimental control enables Workshop", true, L.Enabled())
+        Lab.Check("interact", "enabled options action becomes available", true, load:IsEnabled())
         local start = debugprofilestop and debugprofilestop()
         load:Click()
         if start then Lab.Say("timing", "Workshop options load click ms", debugprofilestop() - start) end
@@ -140,10 +145,18 @@ if key == "workshop" and params.filled then
         Lab.Check("state", "preferences keep full window hidden", nil, w.Window.Frame())
         Lab.Check("state", "preferences keep compact window hidden", false, w.Compact.IsShown())
         Lab.Check("state", "unverified progress remains disabled", false, w.Progress.auto)
+        local watchEvents,bankEvents=w.Watch.Events(),w.Bank.Events()
+        Lab.Check("interact", "experimental disable applies immediately", true, L.SetEnabled(false))
+        Lab.Check("state", "disabled Workshop observers stop", "0|0|0", w.Watch.Events().."|"..w.Bank.Events().."|"..w.WorthTip.Events())
+        Lab.Check("state", "disabled Workshop cannot reopen", false, L.Load())
+        Lab.Check("state", "disable keeps crafting preference", "cash", w.Session.Objective())
+        Lab.Check("interact", "experimental re-enable applies immediately", true, L.SetEnabled(true))
+        Lab.Check("state", "Workshop observers resume once", watchEvents.."|"..bankEvents, w.Watch.Events().."|"..w.Bank.Events())
         K.ResetPage("workshop"); Lab.Settle(.2)
         Lab.Check("state", "page defaults restore economic objective", "economic", w.Session.Objective())
         Lab.Check("state", "page defaults restore compact Travel", "travel", w.Session.CompactMode())
         Lab.Check("state", "page defaults leave login loading off", false, L.LoadOnLogin())
+        Lab.Check("state", "page defaults leave experimental Workshop off", false, L.Enabled())
     end)
 end
 Lab.Step("disclosures and navigation", function()

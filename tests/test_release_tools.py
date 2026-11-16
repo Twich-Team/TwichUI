@@ -7,6 +7,9 @@ and CurseForge, so it shows the order of steps and what a re-run does, not that 
 Run: python3 -m unittest discover -s tests -p "test_release_tools.py"
 """
 import os
+import json
+import contextlib
+import io
 import subprocess
 import sys
 import tempfile
@@ -99,6 +102,33 @@ class PlanTests(unittest.TestCase):
         self.assertIn("- add a thing", notes)
         self.assertNotIn("first", notes)
         self.assertIn("compare", notes)
+
+    def test_publication_hold_blocks_all_channels_and_malformed_policy_fails_closed(self):
+        r = self.repo
+        r.commit("candidate")
+        r.tag("v1.3.0")
+        r.write(".github/release-policy.json", json.dumps({"publication_enabled": False}))
+        for ref in ("refs/heads/main", "refs/heads/beta", "refs/tags/v1.3.0"):
+            meta, notes = r.plan(ref)
+            self.assertFalse(meta["publish"])
+            self.assertIsNone(notes)
+            self.assertIn("publication is held", meta["skip_reason"])
+        for value in ("broken", '[]', '{"publication_enabled":"true"}'):
+            r.write(".github/release-policy.json", value)
+            with self.assertRaisesRegex(rel.ReleaseError, "invalid release publication policy"):
+                r.plan("refs/heads/main")
+
+    def test_publish_cli_honors_hold_before_credentials_or_archive_access(self):
+        # Use the real CLI with missing archive/notes: the policy must stop it first.
+        r = self.repo
+        r.write("meta.json", "{}")
+        r.write(".github/release-policy.json", json.dumps({"publication_enabled": False}))
+        from unittest import mock
+        with mock.patch.object(rel, "REPO_ROOT", r.root), contextlib.redirect_stderr(io.StringIO()) as errors:
+            code = rel.main(["publish", "--meta", str(r.root / "meta.json"), "--zip", "missing.zip",
+                             "--notes", "missing.md", "--repo", "example/unused"])
+        self.assertEqual(code, 1)
+        self.assertIn("publication is held", errors.getvalue())
 
     def test_next_alpha_starts_after_the_last_published_alpha(self):
         r = self.repo

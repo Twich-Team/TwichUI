@@ -31,7 +31,8 @@ local AUCTIONEER = (Enum and Enum.PlayerInteractionType and Enum.PlayerInteracti
 local visit, open = 0, false
 local stats = { visits = 0, started = 0, skipped = nil, loads = 0, last = nil }
 
-function WA.Enabled() return WA.POLICY == "auto" and R:Enabled("workshopAutoScan") end
+function WA.Enabled() return WA.POLICY == "auto" and R.WorkshopLauncher and R.WorkshopLauncher.Enabled()
+    and R:Enabled("workshopAutoScan") end
 function WA.Capability()
     local c = WA.CAPABILITY
     return (c == "supported" or c == "click") and c or "unknown"

@@ -554,6 +554,7 @@ do
   Check(R.WorkshopLauncher and not R.Workshop, "only the launcher exists at login")
   Same(loads, 0, "nothing loads at login")
   Check(not R.WorkshopLauncher.Loaded())
+  c.TwichUIDB.ui.workshopEnabled = true -- explicit opt-in fixture for launcher error/combat behavior
   -- combat: refused before asking the game
   c.InCombatLockdown = function() return true end
   local ok, why = R.WorkshopLauncher.Load()

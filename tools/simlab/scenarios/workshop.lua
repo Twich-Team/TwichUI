@@ -256,6 +256,8 @@ end
 Lab.Step("open and navigate", function()
     Check("init", "workshop addon is not loaded before the first open", false, R.WorkshopLauncher.Loaded())
     Check("init", "no workshop window exists before the first open", "nil", tostring(rawget(_G, "TwichUIWorkshop")))
+    Check("init", "fresh Workshop is experimental and off", false, R.WorkshopLauncher.Enabled())
+    Check("init", "explicit experimental opt-in permits loading", true, R.WorkshopLauncher.SetEnabled(true))
     SetBags({ [2447] = 4, [765] = 0, [3371] = 5 })
     SetAuctionHouse(true)
     SlashWorkshop()

@@ -10,6 +10,14 @@ assert(K.pages.workshop and #R.SettingsDesign.Tasks(K.pages.workshop) == 4)
 assert(not L.Loaded() and not L.LoadOnLogin())
 assert(not c.TwichUIDB.ui.workshopLoadOnLogin)
 assert(S.variables.TWICHUI_workshopLoadOnLogin.default == false)
+assert(S.variables.TWICHUI_workshopEnabled.default == false)
+local search = assert(loadfile(REPO .. "TwichUI_Settings/Search.lua")); setfenv(search,c); search()
+local found=false
+for _, result in ipairs(R.SettingsSearch.Run("experimental")) do
+    local entry=result.entry
+    if entry.page=="workshop" and entry.row and entry.row.id=="workshopEnabled" then found=true end
+end
+assert(found and not L.Enabled() and not L.Loaded(), "search discovers the opt-in without loading or enabling Workshop")
 assert(L.SetLoadOnLogin(true) and L.LoadOnLogin())
 local ui = c.TwichUIDB.ui
 c.TwichUIDB.ui = {}
@@ -26,6 +34,7 @@ R.Workshop = { ready = true, Session = {
     SetPriceDetail = function(v) called.prices = v; return true end,
     SetUseGuild = function(v) called.guild = v; return true end,
 }, Notice = { SetOn = function(v) called.notices = v; return true end } }
+assert(L.SetEnabled(true), "an existing loaded Workshop can be explicitly enabled")
 for _, key in ipairs({ "prices", "guild", "notices" }) do
     assert(L.SetOption(key, false) and called[key] == false, "uses existing setter: " .. key)
 end
