@@ -1,0 +1,197 @@
+{
+  "scope": "M1b review candidate; synthetic cross-component and Cloud regression evidence only",
+  "market_code_commit": "e2116007638b23228eace44d524b9fe2a43c2249",
+  "addon_runtime_commit": "4be53dbf105e8b1c3f552040afcb7aeadb0b853e",
+  "foundation_merges": {
+    "market": "2f0b6c850a767c82fe176932326b8086589a3253",
+    "addon": "572da3a04fe1a64581b3d1cd0208038c0104cfe3"
+  },
+  "fixture_commit": "1f76f8468722f07430acb3a10d26d6ad2d20e9cd",
+  "mirrored_files": 14,
+  "checksum_manifests": {
+    "SHA256SUMS.json": "a6f03e07ee18e6add02be7299587ec731bd77c80220cfa62a10a2dfaadda6f32",
+    "SCHEMA2-SHA256SUMS.json": "f260cb5362e9ecf8953a21bea5fb1eb5a3341886036c42b63c96a950ea443450",
+    "E2E-SHA256SUMS.json": "dd6668f2dd52c65148b39fcf2ffbf5d7e56161d6d823c853a433e3a93fd7c5aa"
+  },
+  "contract_version": 1,
+  "transport_version": 1,
+  "schema_versions": [
+    1,
+    2
+  ],
+  "pricing_algorithm": "twichui-pricing-v1",
+  "market_ci": {
+    "backend": 43749501744,
+    "website": 43749501736,
+    "windows": 43749501734,
+    "conclusion": "success",
+    "postgres_tests": 503,
+    "script_tests": 34,
+    "website_unit_tests": 115,
+    "browser_tests": 39,
+    "windows_core_tests": 81,
+    "tauri_unit_tests_passed": 1,
+    "tauri_preexisting_ignored_test": "launch_owner_signed_installer_on_disposable_runner requires the owner signed installer; not M1b installed-owner acceptance"
+  },
+  "linux_rust_tests": 79,
+  "focused_backend_tests": 118,
+  "addon_full_cloud": {
+    "passed": true,
+    "local_milestone_passed": false,
+    "modules_passed": 242,
+    "python_cases": 134,
+    "syntax_lua_files": 709,
+    "seconds": 2437.591850714998,
+    "jobs": 1,
+    "simulators": [
+      {
+        "script": "lab-guard",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "launches": 0,
+        "scenario_checks": 0,
+        "seconds": 0.4196944370014535
+      },
+      {
+        "script": "smoke",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "launches": 2,
+        "scenario_checks": 0,
+        "seconds": 21.87174276600126
+      },
+      {
+        "script": "interact",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "launches": 4,
+        "scenario_checks": 244,
+        "seconds": 22.278871678998257
+      },
+      {
+        "script": "diagnose",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "launches": 6,
+        "scenario_checks": 101,
+        "seconds": 24.889804816000833
+      },
+      {
+        "script": "auctionproof",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "launches": 4,
+        "scenario_checks": 431,
+        "seconds": 19.02139623399853
+      },
+      {
+        "script": "auctionpreview",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "launches": 32,
+        "scenario_checks": 3499,
+        "seconds": 289.19000369999776
+      },
+      {
+        "script": "workshop",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "launches": 38,
+        "scenario_checks": 19997,
+        "seconds": 901.7270745960013
+      },
+      {
+        "script": "testlab",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "launches": 9,
+        "scenario_checks": 229,
+        "seconds": 57.676960423999844
+      },
+      {
+        "script": "settings",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "launches": 58,
+        "scenario_checks": 1029,
+        "seconds": 369.0134509039999
+      },
+      {
+        "script": "reminders",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "launches": 36,
+        "scenario_checks": 3768,
+        "seconds": 314.2991560750015
+      }
+    ],
+    "unsupported_coverage": [
+      "game asset rendering, client fonts and visual fidelity"
+    ]
+  },
+  "mutations": {
+    "tested_commit": "b653197f7e3862442d4b5a9acb8044355434c146",
+    "pricing_and_bridge_reader_unchanged_in_final_caption_commit": true,
+    "selected": 207,
+    "killed": 207,
+    "survived": 0,
+    "invalid": 0,
+    "timeout": 0,
+    "infrastructure_errors": 0
+  },
+  "additional_reader_assertions": {
+    "unittest_methods_passed": 5,
+    "scope": "included in final full verification: exact signed-64 descriptive copper with unsupported Lua conversion; oversized canonical price rejection"
+  },
+  "e2e_generation": "4e6cea38071018d519682ba4690b79566303f8ce67039ef6e99472f107ee453f",
+  "genuine_history_transfer_accepted": false,
+  "production_deployed": false,
+  "game_installation_modified": false,
+  "local_saved_observations_modified": false,
+  "real_client_acceptance": false,
+  "additional_ui_navigation_probe": {
+    "evidence": "offline actual UI handlers using auction_mock; no renderer/client timing claim",
+    "round_trips": 50,
+    "retained_growth_bytes": 140493,
+    "pages": 2,
+    "cache_entries": 1,
+    "local_saved_data_unchanged": true,
+    "auction_calls": 0,
+    "data_addon_loads": 1,
+    "runs": [
+      {
+        "round_trips": 50,
+        "elapsed_us": 31879,
+        "retained_growth_bytes": 140493,
+        "pages": 2,
+        "cache_entries": 1
+      },
+      {
+        "round_trips": 50,
+        "elapsed_us": 40553,
+        "retained_growth_bytes": 140493,
+        "pages": 2,
+        "cache_entries": 1
+      },
+      {
+        "round_trips": 50,
+        "elapsed_us": 40048,
+        "retained_growth_bytes": 140493,
+        "pages": 2,
+        "cache_entries": 1
+      }
+    ],
+    "elapsed_us_min": 31879,
+    "elapsed_us_max": 40553
+  }
+}

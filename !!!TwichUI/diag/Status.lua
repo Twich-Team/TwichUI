@@ -13,7 +13,7 @@
 --   pending reloads      R.Switches.PendingReloads (Switches.lua)
 --   each capability      its own adapter: R.EllesmereJunk.Status, R.FoodDrink.Unlock.Status, R.RestedXPSkin.Status,
 --                        RestedXPSkin.Timers.Status, R.QoLGuideWaypoint.Status, R.RestedXPBroker.Available,
---                        R.SpeakStoneSkin.Status, R.Borders.Ellesmere, R.SettingsWidgets.ColorPicker.Status,
+--                        R.Borders.Ellesmere, R.SettingsWidgets.ColorPicker.Status,
 --                        R.S / R.euiRegistered (Core.lua), and the addon list (R.Setups.AddonState)
 --
 -- The report is an allowlist: every line is written from the fields below, and each value is a fixed word, a
@@ -168,7 +168,7 @@ S.GROUPS = {
         caps = {
             {
                 id = "eui-skin", label = "Skin toolkit",
-                affects = "the finish of TwichUI's own windows, and the Auctionator, What's Training, Forever Dungeon Journal and Attune skins",
+                affects = "the finish of TwichUI's own windows, and the What's Training, Forever Dungeon Journal and Attune skins",
                 fallback = "TwichUI's windows keep their own plain look and those skins stay off.",
                 todo = { ["not-initialized"] = "Turn on third-party addon skins in EllesmereUI and reload, if you want its finish." },
                 check = function()
@@ -404,34 +404,6 @@ S.GROUPS = {
             },
         },
     },
-    {
-        key = "speakstone", title = "SpeakStone", folder = "SpeakStone_Forever_Main",
-        caps = {
-            {
-                id = "speakstone-skin", label = "Skin for SpeakStone", folder = "SpeakStone_Forever_Main",
-                affects = "TwichUI's look for SpeakStone's speech frame",
-                fallback = "SpeakStone's frame keeps its own look.",
-                check = function()
-                    local Skin = R.SpeakStoneSkin
-                    if not (Skin and Skin.Status) then return Result("not-applicable", "not-loaded", "The SpeakStone skin is not part of this install.") end
-                    local s = Skin.Status()
-                    local code, extra = s.code, { wanted = s.switchOn }
-                    if code == "off" then return Result("off", code, "The SpeakStone skin is turned off.") end
-                    if code == "speakstone-missing" then return Result("not-installed", code, nil, extra) end
-                    if code == "speakstone-disabled" then return Result("disabled", code, nil, extra) end
-                    if code == "waiting" then
-                        return Result("not-initialized", code, "SpeakStone builds its frame the first time it has something to show.", extra)
-                    end
-                    if code == "unsupported" or code == "error" then
-                        return Result("unavailable", code, "The skin could not be applied to this SpeakStone.", { wanted = true, actionable = true })
-                    end
-                    return Result("available", code, nil, extra)
-                end,
-            },
-        },
-    },
-    { key = "auctionator", title = "Auctionator", folder = "Auctionator",
-        caps = { EUISkinCapability("auctionator-skin", "Skin for Auctionator", "auctionatorSkin", "Auctionator", "Auctionator") } },
     { key = "whatstraining", title = "What's Training?", folder = "WhatsTraining",
         caps = { EUISkinCapability("whatstraining-skin", "Skin for What's Training?", "whatsTrainingSkin", "WhatsTraining", "What's Training?") } },
     { key = "dungeonjournal", title = "Forever Dungeon Journal", folder = "ForeverDungeonJournal",
@@ -475,7 +447,7 @@ S.FEATURES = {
     { "qolGuideAuto", "Hide the guide in some situations (RestedXP)" },
     { "qolGuideTracker", "EllesmereUI quest tracker on mouseover while the guide is shown (RestedXP)" },
     { "markersTarget", "Target marker cycling" }, { "markersWorld", "World marker cycling" }, { "markersBar", "Marker bar" },
-    { "restedxpSkin", "RestedXP skin" }, { "speakstoneSkin", "SpeakStone skin" }, { "auctionatorSkin", "Auctionator skin" },
+    { "restedxpSkin", "RestedXP skin" },
     { "whatsTrainingSkin", "What's Training? skin" }, { "foreverDungeonJournalSkin", "Forever Dungeon Journal skin" },
     { "attuneSkin", "Attune skin" },
     { "setupSharing", "Configuration sharing" }, { "groupCheck", "Group check" },
@@ -483,7 +455,7 @@ S.FEATURES = {
 }
 -- Switches a reload can be waiting on (Switches.lua's `reload` ones, and the Mage launchers), by readable name.
 local RELOAD_NAMES = {
-    attuneSkin = "Attune skin", auctionatorSkin = "Auctionator skin", foreverDungeonJournalSkin = "Forever Dungeon Journal skin",
+    attuneSkin = "Attune skin", foreverDungeonJournalSkin = "Forever Dungeon Journal skin",
     whatsTrainingSkin = "What's Training? skin", setupSharing = "Configuration sharing", groupCheck = "Group check",
     media = "Custom fonts and sounds", quietLogin = "Hide addon welcome messages",
     mageTravel = "Mage Travel", mageConjure = "Mage Conjuring",

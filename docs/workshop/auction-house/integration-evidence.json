@@ -1,0 +1,574 @@
+{
+  "tested_commit": "cbb48c8b90d3c6949a09537c5fedad67ebe2af23",
+  "target_commit": "572da3a04fe1a64581b3d1cd0208038c0104cfe3",
+  "merge_commit": "e2f5766d214679f6411d70ae522900fc314d0c28",
+  "mutation_initial": {
+    "selected": 218,
+    "killed": 213,
+    "survived": 0,
+    "invalid": 0,
+    "timeouts": 5,
+    "infra": 0,
+    "exit_code": 1
+  },
+  "mutation_serial_retry": {
+    "format": 1,
+    "elapsed_seconds": 581.9,
+    "counts": {
+      "killed": 5,
+      "survived": 0,
+      "invalid": 0,
+      "timeout": 0,
+      "infra": 0
+    },
+    "exit": 0,
+    "baseline": [
+      {
+        "test": "test_workshop_history2.lua",
+        "status": "pass",
+        "seconds": 98.78,
+        "output": ""
+      },
+      {
+        "test": "test_workshop_schema.lua",
+        "status": "pass",
+        "seconds": 3.44,
+        "output": ""
+      }
+    ],
+    "changed_files": []
+  },
+  "smoke_controls": {
+    "corrected_smoke": {
+      "exit_code": 0,
+      "expected_exit_code": 0
+    },
+    "original_contract_same_log": {
+      "exit_code": 1,
+      "expected_exit_code": 1
+    },
+    "unexpected_error": {
+      "exit_code": 1,
+      "expected_exit_code": 1
+    }
+  },
+  "timing_reproductions": {
+    "previous_full": {
+      "path": "/workspace/TwichUI-final-verification/test-output/simlab/artifacts/smoke-a5u7wNac/run.stderr",
+      "sha256": "a04f835d967d94dc296e566044ad00a9aa9d5af415b7ebad27787b2195e10208",
+      "first_tick": 15.523718139,
+      "last_tick": 17.523718139,
+      "errors": [
+        {
+          "message": "string at argument 2 is not valid UTF-8",
+          "last_tick_before_error": 16.423718139
+        },
+        {
+          "message": "C_VoiceChat.CanAccessSettings: settings access has not been supplied",
+          "last_tick_before_error": 17.023718139
+        },
+        {
+          "message": "C_VoiceChat.CanAccessSettings: settings access has not been supplied",
+          "last_tick_before_error": 17.023718139
+        }
+      ]
+    },
+    "previous_isolated_revision": {
+      "path": "/workspace/TwichUI-final-verification/test-output/simlab/artifacts/smoke-fuDSduS0/run.stderr",
+      "sha256": "d31506602687fa32b78bbd257d5acb60cbaf1bc24e4d491960a1d3145d71af08",
+      "first_tick": 12.801625168,
+      "last_tick": 14.801625168,
+      "errors": [
+        {
+          "message": "string at argument 2 is not valid UTF-8",
+          "last_tick_before_error": 14.351625168
+        }
+      ]
+    },
+    "previous_isolated_baseline": {
+      "path": "/workspace/TwichUI-baseline-verification/test-output/simlab/artifacts/smoke-ZWWJZDKy/run.stderr",
+      "sha256": "ff1d54b5036827f064655971da6c9233f6022c47d734b98336da195a7d4c1991",
+      "first_tick": 18.770846734,
+      "last_tick": 20.770846734,
+      "errors": [
+        {
+          "message": "string at argument 2 is not valid UTF-8",
+          "last_tick_before_error": 20.070846734
+        }
+      ]
+    },
+    "no_addon": {
+      "path": "/workspace/twichui-env/reconcile-no-addon-voice.stderr",
+      "sha256": "e2eb8ae2f3019c894ebe863a79044bfda138fe994de73c302854ab667ce244a4",
+      "first_tick": 17.043087242,
+      "last_tick": 23.043087242,
+      "errors": [
+        {
+          "message": "C_VoiceChat.CanAccessSettings: settings access has not been supplied",
+          "last_tick_before_error": 20.043087242
+        },
+        {
+          "message": "C_VoiceChat.CanAccessSettings: settings access has not been supplied",
+          "last_tick_before_error": 20.043087242
+        }
+      ]
+    },
+    "current_target": {
+      "path": "/workspace/twichui-env/reconcile-base-voice.stderr",
+      "sha256": "f31075f94442feda08ca77cb12f47e98859e15365d66bac24301f9758410ab9f",
+      "first_tick": 16.251609707,
+      "last_tick": 22.251609707,
+      "errors": [
+        {
+          "message": "string at argument 2 is not valid UTF-8",
+          "last_tick_before_error": 17.651609707
+        },
+        {
+          "message": "C_VoiceChat.CanAccessSettings: settings access has not been supplied",
+          "last_tick_before_error": 18.651609707
+        },
+        {
+          "message": "C_VoiceChat.CanAccessSettings: settings access has not been supplied",
+          "last_tick_before_error": 18.651609707
+        }
+      ]
+    },
+    "reconciled": {
+      "path": "/workspace/twichui-env/reconcile-revised-voice.stderr",
+      "sha256": "1fc109992ada9bf3d7f5bd5f16f7279b29a7dbbd339f224f4596b13b5fe36194",
+      "first_tick": 11.002369163,
+      "last_tick": 17.002369163,
+      "errors": [
+        {
+          "message": "string at argument 2 is not valid UTF-8",
+          "last_tick_before_error": 12.152369163
+        },
+        {
+          "message": "C_VoiceChat.CanAccessSettings: settings access has not been supplied",
+          "last_tick_before_error": 12.952369163
+        },
+        {
+          "message": "C_VoiceChat.CanAccessSettings: settings access has not been supplied",
+          "last_tick_before_error": 12.952369163
+        }
+      ]
+    }
+  },
+  "log_sha256": {
+    "/workspace/twichui-env/reconcile-mutations.log": "f0caec3dc59b63bf9a5eac07ee07cd387c079ef36d4191ba7215f9ea41bbefc1",
+    "/workspace/twichui-env/reconcile-mutation-retry.log": "d6a9afc9c9a4cafe7db586d2a86af494eb421a1d1d791b85ea39a4c2428bf626",
+    "/workspace/twichui-env/reconcile-feature.log": "5f7699fa7cab58f026c6b1d0b163379629cec87623aad80190c94b8f7721b789",
+    "/workspace/twichui-env/reconcile-smoke.log": "686a2a195012cdee2630a2b6ddf9c485b7c49e4137892e58fdb73b6a6f7597da",
+    "/workspace/twichui-env/reconcile-full.log": "79bb7df986450cbee161549ac7ae415c5c2eec3ce5b44cc0f476b185ec34c750",
+    "/workspace/twichui-env/reconcile-full.exit": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "/workspace/twichui-env/reconcile-timing-analysis.json": "61bc4a164d4d9717163d848e11902bd46540794be9a295e8343de08f2bad2715",
+    "/workspace/twichui-env/reconcile-process-samples.jsonl": "9cc3883d86bdc9008b57ee2601dfbb935d8f4a902447c5328572cf02873629f8"
+  },
+  "full": {
+    "command": "./tests/run.sh full --profile cloud",
+    "tested_commit": "cbb48c8b90d3c6949a09537c5fedad67ebe2af23",
+    "exit_code": 1,
+    "passed": false,
+    "seconds": 6790.0943172829975,
+    "offline_passed": 243,
+    "offline_failed": 0,
+    "lua_syntax_checks": 706,
+    "launches": 191,
+    "structured_checks": 30221,
+    "local_milestone_passed": false,
+    "suites": [
+      {
+        "script": "lab-guard",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "launches": 0,
+        "scenario_checks": 0,
+        "seconds": 0.590514413001074,
+        "artifacts": null
+      },
+      {
+        "script": "smoke",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "launches": 2,
+        "scenario_checks": 0,
+        "seconds": 71.77875157200106,
+        "artifacts": "/workspace/TwichUI-integration-full/test-output/simlab/artifacts/smoke-eAx9EoBX"
+      },
+      {
+        "script": "interact",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "launches": 4,
+        "scenario_checks": 244,
+        "seconds": 69.26461568100058,
+        "artifacts": "/workspace/TwichUI-integration-full/test-output/simlab/artifacts/interact-H9oT0e0J"
+      },
+      {
+        "script": "diagnose",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "launches": 6,
+        "scenario_checks": 101,
+        "seconds": 75.23267470800056,
+        "artifacts": "/workspace/TwichUI-integration-full/test-output/simlab/artifacts/diagnose-g92F7LOM"
+      },
+      {
+        "script": "auctionproof",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "launches": 4,
+        "scenario_checks": 431,
+        "seconds": 55.62808396100081,
+        "artifacts": "/workspace/TwichUI-integration-full/test-output/simlab/artifacts/auctionproof-x7V41PvA"
+      },
+      {
+        "script": "auctionpreview",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "launches": 34,
+        "scenario_checks": 4422,
+        "seconds": 938.087988041003,
+        "artifacts": "/workspace/TwichUI-integration-full/test-output/simlab/artifacts/auctionpreview-BDHM48hx"
+      },
+      {
+        "script": "workshop",
+        "passed": false,
+        "exit_code": 1,
+        "timed_out": false,
+        "launches": 38,
+        "scenario_checks": 19997,
+        "seconds": 2535.870206636002,
+        "artifacts": "/workspace/TwichUI-integration-full/test-output/simlab/artifacts/workshop-R0usarUf"
+      },
+      {
+        "script": "testlab",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "launches": 9,
+        "scenario_checks": 229,
+        "seconds": 168.77771994000068,
+        "artifacts": "/workspace/TwichUI-integration-full/test-output/simlab/artifacts/testlab-pomojWPP"
+      },
+      {
+        "script": "settings",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "launches": 58,
+        "scenario_checks": 1029,
+        "seconds": 1036.521035837999,
+        "artifacts": "/workspace/TwichUI-integration-full/test-output/simlab/artifacts/settings-Uzun5vwc"
+      },
+      {
+        "script": "reminders",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "launches": 36,
+        "scenario_checks": 3768,
+        "seconds": 941.317677973002,
+        "artifacts": "/workspace/TwichUI-integration-full/test-output/simlab/artifacts/reminders-LhEGAQcW"
+      }
+    ],
+    "report": "/workspace/TwichUI-integration-full/test-output/verification/full-all-3ewgjnjt/report.json",
+    "report_sha256": "6af5c9bfd90564f3fa31a606ddd2d65c2d0be42905f6d7edba6028b55a96627f",
+    "blocker": {
+      "suite": "workshop",
+      "cases": [
+        "overview",
+        "empty",
+        "notice"
+      ],
+      "failed_assertions_per_case": 3,
+      "common_vector_comparison_failed": true,
+      "diagnosis": "Existing exact-1.0-second fixture boundary is a candidate; actual delta was not logged, mechanism not proven. Failure retained."
+    },
+    "unexpected_lua_errors": [],
+    "unexpected_assertion_failures": 9
+  },
+  "tested_manifest": {
+    "files": 2401,
+    "canonical_sha256": "8f64df9a5d976ec5a968f5f185cb8bc88a91dd09a9eb478d37170a507c3ec008",
+    "drift": []
+  },
+  "screenshot_review": [
+    {
+      "path": "/workspace/TwichUI-reconcile-verification/test-output/simlab/artifacts/smoke-n9oraI4m/settings.png",
+      "sha256": "a7c559bcfe171b9f56505ddff69cae598922d938b383b0f87282f7ae006976bc",
+      "evidence": "structural only; no game assets or client-font validation"
+    },
+    {
+      "path": "/workspace/TwichUI-reconcile-verification/test-output/simlab/artifacts/auctionpreview-MEzwW5Yw/shell.png",
+      "sha256": "0529972bbb58769effc37964aa52ee7b56d29a014e1f56e152da37256bafa320",
+      "evidence": "structural only; no game assets or client-font validation"
+    },
+    {
+      "path": "/workspace/TwichUI-reconcile-verification/test-output/simlab/artifacts/auctionpreview-MEzwW5Yw/sell.png",
+      "sha256": "8d7214b814916b3bf4563969b6b831b11b09b50ebbdb583cdd94c2b229463010",
+      "evidence": "structural only; no game assets or client-font validation"
+    },
+    {
+      "path": "/workspace/TwichUI-reconcile-verification/test-output/simlab/artifacts/auctionpreview-MEzwW5Yw/marketmetadata.png",
+      "sha256": "2c0fd356976e06e002c0f3732c201839020a92f8480e67f292edb358b1dda01c",
+      "evidence": "structural only; no game assets or client-font validation"
+    }
+  ],
+  "timing": {
+    "total_seconds": 6790.0943172829975,
+    "offline_syntax_orchestration_seconds": 897.0250485199867,
+    "suites": [
+      {
+        "script": "lab-guard",
+        "wall_seconds": 0.590514413001074,
+        "exit_code": 0,
+        "launches": 0,
+        "checks": 0
+      },
+      {
+        "script": "smoke",
+        "wall_seconds": 71.77875157200106,
+        "exit_code": 0,
+        "launches": 2,
+        "checks": 0
+      },
+      {
+        "script": "interact",
+        "wall_seconds": 69.26461568100058,
+        "exit_code": 0,
+        "launches": 4,
+        "checks": 244
+      },
+      {
+        "script": "diagnose",
+        "wall_seconds": 75.23267470800056,
+        "exit_code": 0,
+        "launches": 6,
+        "checks": 101
+      },
+      {
+        "script": "auctionproof",
+        "wall_seconds": 55.62808396100081,
+        "exit_code": 0,
+        "launches": 4,
+        "checks": 431
+      },
+      {
+        "script": "auctionpreview",
+        "wall_seconds": 938.087988041003,
+        "exit_code": 0,
+        "launches": 34,
+        "checks": 4422
+      },
+      {
+        "script": "workshop",
+        "wall_seconds": 2535.870206636002,
+        "exit_code": 1,
+        "launches": 38,
+        "checks": 19997
+      },
+      {
+        "script": "testlab",
+        "wall_seconds": 168.77771994000068,
+        "exit_code": 0,
+        "launches": 9,
+        "checks": 229
+      },
+      {
+        "script": "settings",
+        "wall_seconds": 1036.521035837999,
+        "exit_code": 0,
+        "launches": 58,
+        "checks": 1029
+      },
+      {
+        "script": "reminders",
+        "wall_seconds": 941.317677973002,
+        "exit_code": 0,
+        "launches": 36,
+        "checks": 3768
+      }
+    ],
+    "bootstrap_seconds": 1967.12,
+    "post_boot_to_render_diagnostic_seconds": 2780.124,
+    "render_diagnostic_to_last_artifact_seconds": 382.14051110458377,
+    "other_native_seconds": 109.32467068100004,
+    "outside_native_intervals_seconds": 654.3600869774273,
+    "caveats": [
+      "Artifact birth to last-write is a process wall-time proxy, not exact exit timing.",
+      "Bootstrap is existing native Startup end-post-event-workarounds monotonic timestamp.",
+      "Post-boot to first post-check TexMgr diagnostic includes fixture initialization, assertion evaluation, manual-clock frame work and any unlogged render setup; these are not individually timed.",
+      "After the TexMgr diagnostic includes rendering, PNG encoding, final ticks and exit tail; not pure GPU time.",
+      "Prepare durations are only emitted prepare records, not complete render durations.",
+      "Process sampling began late in Workshop and is not complete-run CPU accounting.",
+      "SIMLAB step-time and simulated seconds are virtual time, not wall time; no per-assertion wall timings exist.",
+      "Outside-launch intervals include staging, fixture generation, verdict/image decoding and orchestration; they are not idle waiting."
+    ]
+  },
+  "bank_boundary_repair": {
+    "source_before": "4d258a5f3a87a7f621dd1549181119d3e4596939",
+    "production_unchanged": true,
+    "files": {
+      "tools/simlab/scenarios/workshop.lua": "8cc3310cf66c43fde758718afc85136558740fb24b5e947464854e6f94603e39",
+      "tests/test_workshop_storage.lua": "7a43d16277e19850227fd9928bcde711e288975202239f0721eaf4934b2c4d23"
+    },
+    "runs": {
+      "original_pinned": {
+        "artifacts": "/workspace/TwichUI-bank-boundary-repro/test-output/simlab/artifacts/workshop-v7McaHZO",
+        "exit_code": 1,
+        "checks": 528,
+        "failures": [
+          [
+            "state",
+            "no answer followed the bag change: the tab may have changed",
+            "true",
+            "false"
+          ],
+          [
+            "display",
+            "its stock is not collected from any more: back to the bank-only list",
+            "Silverleaf | Peacebloom | Tin Ore | Silverleaf | Coarse Thread | Copper Ore | Tin Ore",
+            "Silverleaf | Silverleaf | Peacebloom | Copper Ore | Tin Ore | Coarse Thread | Tin Ore"
+          ],
+          [
+            "display",
+            "and the note says why",
+            "true",
+            "false"
+          ]
+        ],
+        "trace": [
+          "SIMLAB bank-clock answer=31.010000000000002 now=32.009999999999998 age=0.99999999999999645 sim=20.800000000000015",
+          "SIMLAB bank-pending false",
+          "SIMLAB bank-clock answer=33.509999999999998 now=34.810000000000002 age=1.3000000000000043 sim=23.600000000000019",
+          "SIMLAB bank-pending false",
+          "SIMLAB bank-clock answer=33.509999999999998 now=35.409999999999997 age=1.8999999999999986 sim=24.200000000000021",
+          "SIMLAB bank-pending false"
+        ],
+        "done": [
+          "SIMLAB done steps=30 simSeconds=38.1 passed=525 failed=3 aborted=false stopped=false"
+        ],
+        "stderr_sha256": "860a413c36580dc4ed2d62d6b0cedb7a715cc52a5b943320e61b7e8b7c989995"
+      },
+      "fixed_pinned": {
+        "artifacts": "/workspace/TwichUI-bank-boundary-repro/test-output/simlab/artifacts/workshop-0di0Jyzl",
+        "exit_code": 0,
+        "checks": 533,
+        "failures": [],
+        "trace": [
+          "SIMLAB bank-clock answer=31.010000000000002 now=31.91 age=0.89999999999999858 sim=20.700000000000014",
+          "SIMLAB bank-pending false",
+          "SIMLAB bank-clock answer=31.010000000000002 now=32.109999999999999 age=1.0999999999999979 sim=20.900000000000013",
+          "SIMLAB bank-pending true",
+          "SIMLAB bank-clock answer=33.609999999999999 now=34.909999999999997 age=1.2999999999999972 sim=23.700000000000017",
+          "SIMLAB bank-pending false",
+          "SIMLAB bank-clock answer=33.609999999999999 now=35.509999999999998 age=1.8999999999999986 sim=24.300000000000018",
+          "SIMLAB bank-pending false"
+        ],
+        "done": [
+          "SIMLAB done steps=30 simSeconds=38.2 passed=533 failed=0 aborted=false stopped=false"
+        ],
+        "stderr_sha256": "a7b089a5f50ad78acdf5f5e7c68d9ce80d37b685f4156e568fda3b9739775438"
+      }
+    },
+    "diagnosis": "Fixture assumption exposed by normal floating-point subtraction across a clock exponent boundary; native clock advance is correct and unchanged production <1.0 pairing guard correctly ignores a measured age below 1.",
+    "fix": "Explicit paired event at measured age about0.9 and unanswered event about1.1, with precondition/pending/uncertainty checks; original three assertions unchanged.",
+    "clock_probe": [
+      "BANK_CLOCK phase=31.010000000000002 steps=18 delta=0.89999999999999858 paired=true",
+      "BANK_CLOCK phase=31.010000000000002 steps=20 delta=0.99999999999999645 paired=true",
+      "BANK_CLOCK phase=31.010000000000002 steps=22 delta=1.0999999999999979 paired=false"
+    ],
+    "feature": {
+      "command": "./tests/run.sh feature crafting --profile cloud",
+      "passed": true,
+      "exit_code": 0,
+      "offline_modules": 34,
+      "lua_syntax_checks": 139,
+      "launches": 5,
+      "structured_checks": 2645,
+      "seconds": 333.4806485349982,
+      "artifacts": "/workspace/TwichUI-bank-boundary-verification/test-output/simlab/artifacts/workshop-5rXjBkfk",
+      "replay_common_checks": 528,
+      "negative_control": "exactly the doctored check failed; every other one passed"
+    },
+    "original_failure_poses": {
+      "command": "SIMLAB_ONLY='overview empty notice' SIMLAB_ASSETS=0 bash tools/simlab/run.sh workshop",
+      "exit_code": 0,
+      "launches": 3,
+      "checks": {
+        "overview": 533,
+        "empty": 532,
+        "notice": 530
+      },
+      "structured_checks": 1595,
+      "replay_common_checks": 528,
+      "artifacts": "/workspace/TwichUI-bank-boundary-verification/test-output/simlab/artifacts/workshop-XYvCnPGe"
+    },
+    "boundary_mutation": {
+      "transform": "Bank.lua pairing < changed to <=",
+      "exit_code": 0,
+      "counts": {
+        "killed": 1,
+        "survived": 0,
+        "invalid": 0,
+        "timeout": 0,
+        "infra": 0
+      },
+      "detection": "/workspace/twichui-env/runtime/usr/bin/lua5.1: test_workshop_storage.lua:794: exactly one measured second: pending state expected true, got false",
+      "production_copy_only": true
+    },
+    "unit_checks": {
+      "storage_boundary_cases": 5,
+      "storage_passed": true,
+      "simlab_workflow_tests_passed": 8,
+      "auction_house_fast_modules_passed": 16,
+      "auction_house_fast_seconds": 12.893
+    },
+    "comprehensive": {
+      "rerun": false,
+      "current_status": "PENDING RERUN",
+      "previous_status": "FAIL",
+      "previous_exit_code": 1,
+      "previous_tested_commit": "cbb48c8b90d3c6949a09537c5fedad67ebe2af23",
+      "reason_not_rerun": "Same-clock deterministic old/fixed reproduction, boundary unit tests, feature replay/negative controls and all original failing poses establish the local fixture correction; no production or other simulator infrastructure changed."
+    },
+    "log_sha256": {
+      "/workspace/twichui-env/bankfix/clock-boundary.stdout": "65affba5c773f8cf525918b5072de3febb4b8d6c93a0dd6af748a1d6117e9ec1",
+      "/workspace/twichui-env/bankfix/clock-boundary.stderr": "7cd19ba6604a21adc07414968da8f63860d032ee04b1bbd5c6c06a41cf5d3961",
+      "/workspace/twichui-env/bankfix/original-pinned.log": "62c5ad34aa75da93456b3d458bbaa609f1631fa7ab862c85c01d1edaf171bc53",
+      "/workspace/twichui-env/bankfix/fixed-pinned.log": "422b3638491efa9feec596c3bef711b79ca98f4c130ae92bf2cad279f168d611",
+      "/workspace/twichui-env/bankfix/storage.log": "945e979857a00aeaae461be449d6470c978d71fdd37495dd6df7d6c47f8b6662",
+      "/workspace/twichui-env/bankfix/workflows.log": "9ef618c1cd19822bc241bf4ca9eb58f7fe6b28dacd76be597ed5a232e7b7541f",
+      "/workspace/twichui-env/bankfix/boundary-mutation.log": "534537d7e1dd29bfbf60cff342097acea4f4a73e7a1ce4417a2535c6233aba74",
+      "/workspace/twichui-env/bankfix/boundary-mutation.json": "7367b612101a3ca58668c0234583ede2bef35db1ebc6ae6781653cf5828b236b",
+      "/workspace/twichui-env/bankfix/fast-ah.log": "6be6e820e2b2ca931f77e63ee5b5a2d69e8963f20ba428e8bd5abf7b1a552382",
+      "/workspace/twichui-env/bankfix/feature-crafting.log": "5f3e7d3592a561479d2ea775b25243e50abada19bf807345ba20ec698f4f8d85",
+      "/workspace/twichui-env/bankfix/repaired-poses.log": "1f8ff793e3e2a5bba7ff6cf7a3686851ef7d5450952d4862e19ba0cadede332a"
+    },
+    "feature_report_sha256": "48709eeebdb55f9506435fce2e12b163a5586f0d3da50669392d19aec85d2e45",
+    "screenshots": [
+      {
+        "path": "/workspace/TwichUI-bank-boundary-verification/test-output/simlab/artifacts/workshop-XYvCnPGe/overview.png",
+        "sha256": "bec911f95518f6f021a95a2665fc5e98212a30dcb988cb26f179ce7b315bb3ac",
+        "evidence": "captured structural evidence only; not real-client appearance validation"
+      },
+      {
+        "path": "/workspace/TwichUI-bank-boundary-verification/test-output/simlab/artifacts/workshop-XYvCnPGe/empty.png",
+        "sha256": "57d8a787c17cf0605aeff238fb878a417da36de5ae54005116ca66367231587e",
+        "evidence": "captured structural evidence only; not real-client appearance validation"
+      },
+      {
+        "path": "/workspace/TwichUI-bank-boundary-verification/test-output/simlab/artifacts/workshop-XYvCnPGe/notice.png",
+        "sha256": "6e2c98e87060949b91ed7a977ec8035e428333041cfe8ee340b3c122b777c604",
+        "evidence": "captured structural evidence only; not real-client appearance validation"
+      }
+    ]
+  }
+}

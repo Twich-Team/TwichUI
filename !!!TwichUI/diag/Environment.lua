@@ -8,7 +8,7 @@ local D = R.Diag
 
 -- Addons TwichUI works with when they are there; none is required.
 local OPTIONAL_ADDONS = {
-    "EllesmereUI", "EllesmereUIBlizzardSkin", "Auctionator", "WhatsTraining", "ForeverDungeonJournal",
+    "EllesmereUI", "EllesmereUIBlizzardSkin", "WhatsTraining", "ForeverDungeonJournal",
     "Attune", "Leatrix_Plus",
 }
 -- Libraries TwichUI carries itself (LibStub shares one copy between addons, so the loaded copy may be

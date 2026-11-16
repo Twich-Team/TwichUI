@@ -1,0 +1,17 @@
+{
+  "fixtures/cases.json": "321fa797a0cd1558ff0e36e353a1c7b6c113e83464b92bda3323686338ad1037",
+  "fixtures/expectations.json": "49355251ec3c3989ed77e5027b69b32437ee1288019ce17bbd8ecddc2218a428",
+  "fixtures/large-money-scoped.json": "00c348af310008a4938272f55c751038f13eb41a8d98e1f7a93e5996f13fc207",
+  "fixtures/legacy-schema2.json": "86258114f6d75852392dcb0951f091601c90bd1da9e28a5d02f3a071620e0449",
+  "fixtures/receipt.json": "c6526ae6c925ff81dcaed59173579fc9ba0fa6857e09a67847b1cdf37a174ab5",
+  "fixtures/scoped.json": "bc40b8b8a4d81bc66df53600c8bbc23998730284224ecc684fe62f8d83016811",
+  "fixtures/selection.json": "e0dbb593ecbf9be8c424c4d0396805d3cef629a602dcc5a8ded4d5d643724aac",
+  "fixtures/short-window-scoped.json": "753254cb66ec20a05adb06b711514142fdf1f4c75e11de4e08547d36f53549b4",
+  "fixtures/short-window-selection.json": "686acef93a62294e04530abbf2438b9ae7fd5006db7daabdb91c677663c7398a",
+  "fixtures/source.json": "0fc1926e582f7951ff34db936e88a4ae2048d3caa64d7c8b8a71486423d8f61f",
+  "fixtures/unknown-scoped.json": "dac8be265e028cc45834f8f4ef23ee18fa22e36691fcfb7a9a7e3c64856a4da9",
+  "fixtures/unknown-selection.json": "220c8e97a58df3c8eb955338891fa0f88e8115581c6cded63d0a9a8777acf3d0",
+  "fixtures/unknown-source.json": "7d970f347bb4d82b08845d4fa1660918453219aa529cad040a7bee0c91cac8c9",
+  "generation-schema3.schema.json": "3f678267038bf0977d9477fb89aa8ca7940ffb30b443d727a733343bfc6e45f4",
+  "selection.schema.json": "782ae4bc85767be11cc15f6b1f6beaa73351382035021bee3f2c505a3442bf8b"
+}

@@ -19,6 +19,15 @@ local Perf = R.Perf
 -- "!!!TwichUI/", the settings window "TwichUI_Settings/"), where: the function, so a report can name what to read.
 -- every = how often it is expected to run, so a report can tell "runs often" from "runs on demand".
 DX.OPS = {
+    ["auction.readSnapshot"] = { module = "auction", label = "AH experimental read normalization", kind = "rebuild", file = "TwichUI_Workshop/auction/ReadRequests.lua", where = "Event", every = "explicit response only; at most 500 rows" },
+    ["auction.marketDetails"] = { module="auction", label="AH Market selected-item services", kind="rebuild", file="TwichUI_Workshop/auction/MarketData.lua", where="Project", every="selected item/generation change only", visible="auction.previewShown" },
+    ["auction.previewSearch"] = { module = "auction", label = "AH preview: stored catalog/filter/sort slice", kind = "rebuild", file = "TwichUI_Workshop/auction/BrowseData.lua", where = "Job.Step", every = "bounded slices only while Browse is visible", visible = "auction.previewShown" },
+    ["auction.previewPageBuild"] = { module = "auction", label = "AH preview: lazy page construction", kind = "init", file = "TwichUI_Workshop/auction/Window.lua", where = "Page", every = "first visit to each preview page" },
+    ["auction.previewResize"] = { module = "auction", label = "AH preview: resize", kind = "layout", file = "TwichUI_Workshop/auction/Window.lua", where = "A.Resize", every = "at most 20 Hz during an explicit resize drag", visible = "auction.previewShown" },
+    ["auction.previewBuild"] = { module = "auction", label = "AH preview: shell construction", kind = "init", file = "TwichUI_Workshop/auction/Window.lua", where = "Build", every = "first explicit preview open" },
+    ["auction.previewRender"] = { module = "auction", label = "AH preview: visible page render", kind = "rebuild", file = "TwichUI_Workshop/auction/Window.lua", where = "A.Render", every = "visible page changes and coalesced refreshes", visible = "auction.previewShown" },
+    ["auction.proof"] = { module = "auction", label = "AH-1a presentation switch/recovery", kind = "layout", file = "auction/Host.lua", where = "Activate, Restore", every = "explicit diagnostic command, or recovery of its active lease" },
+    ["auction.proofWatch"] = { module = "auction", label = "AH-1a lease check", kind = "update", file = "auction/Host.lua", where = "Watch", every = "every 0.25 s only during the explicit, at most 30-second proof" },
     ["core.savedData"] = { module = "core", label = "Saved data check at load (Persist.LoadMain)", kind = "init", file = "Core.lua", where = "ADDON_LOADED handler > Persist.LoadMain", every = "once per load" },
     ["core.startupHook"] = { module = "core", label = "Start-up hooks (each module's OnInit)", kind = "init", file = "Core.lua", where = "R.initHooks loop", every = "once per load, per module" },
     ["inventory.plan"] = { module = "inventory", label = "Magic Inventory plan (bags read, rules matched)", kind = "rebuild", file = "inventory/Plan.lua", where = "MI.CurrentPlan", every = "when a mailbox, bank or guild bank opens or its bags change (coalesced), and per review drawn" },
@@ -50,6 +59,13 @@ DX.OPS = {
     ["workshop.bank"] = { module = "workshop", label = "Workshop: the open bank (or the shown guild bank tab) read and remembered", kind = "bulk", file = "TwichUI_Workshop/Bank.lua", where = "RunBank, GuildAnswer", every = "per burst of changes (0.4 s settle) while a bank is open and the Workshop addon is loaded; none otherwise" },
     ["workshop.worth"] = { module = "workshop", label = "Workshop: \"What's it worth?\" lines added to an item tooltip (saved prices read, nothing asked of the auction house)", kind = "rebuild", file = "TwichUI_Workshop/WorthTip.lua", where = "T.OnItem > Add", every = "per rebuild of the tooltip of an item in the bags or bank, only after the Workshop was loaded in the session" },
     ["workshop.scan"] = { module = "workshop", label = "Workshop: auction listings read for a price scan (a batch of up to 400) and merged into the saved prices (a step of up to 120 items)", kind = "bulk", file = "TwichUI_Workshop/Scan.lua", where = "BeginRead > Step, SaveStep", every = "per batch or step, only during a scan the player started at the auction house" },
+    ["workshop.advisorSearch"] = { module = "workshop", label = "Workshop: Item Advisor search batch", kind = "rebuild", file = "TwichUI_Workshop/ViewAdvisor.lua", where = "Search > Step", every = "at most 160 cached identities per slice while Item Advisor is open" },
+    ["workshop.advisor"] = { module = "workshop", label = "Workshop: Item Advisor discovery batch", kind = "rebuild", file = "TwichUI_Workshop/AdvisorData.lua", where = "job:Step", every = "bounded discovery batches while the Item Advisor is open" },
+    ["workshop.bridgeLoad"] = { module = "workshop", label = "External data addon load", kind = "init", file = "TwichUI_Workshop/Bridge.lua", where = "B.Load", every = "only after explicit external source selection" },
+    ["workshop.bridgeValidate"] = { module = "workshop", label = "External generation validation slice", kind = "bulk", file = "TwichUI_Workshop/Bridge.lua", where = "B.Step", every = "only after explicit external source selection" },
+    ["workshop.bridgeRecord"] = { module = "workshop", label = "External exact-variant record read", kind = "evaluate", file = "TwichUI_Workshop/Bridge.lua", where = "B.Record", every = "only after explicit external source selection" },
+    ["workshop.bridgeHistory"] = { module = "workshop", label = "External selected history read", kind = "evaluate", file = "TwichUI_Workshop/Bridge.lua", where = "B.History", every = "only after explicit external source selection" },
+    ["workshop.market"] = { module = "workshop", label = "Workshop: one item's market figures read (value, quality, supply, competition) for the Opportunities details or an item tooltip; a cached item costs nothing", kind = "rebuild", file = "TwichUI_Workshop/MarketFacts.lua", where = "F.Of > Ask", every = "per item whose figures are not cached: a recipe selected, a tooltip first shown, or after a scan; never per frame" },
     ["workshop.render"] = { module = "workshop", label = "Workshop: the window drawn (recipe rows, queue, materials against the bags, the shopping list and its plan)", kind = "rebuild", file = "TwichUI_Workshop/Window.lua", where = "Win.Render", every = "per burst of profession, bag or item-name changes and per click, only while the Workshop is shown" },
     ["layouts.load"] = { module = "layouts", label = "Layout tools addon loaded", kind = "init", file = "LayoutsLauncher.lua", where = "L.Load > C_AddOns.LoadAddOn", every = "once per session, for /tui layout or after a reload while an install is being finished" },
     ["layouts.plan"] = { module = "layouts", label = "Layout install planned (package checked, layers composed, each addon read, an update compared with the baseline)", kind = "rebuild", file = "TwichUI_Layouts/Engine.lua", where = "LY.Plan", every = "on request (/tui layout plan, and again inside apply)" },
@@ -123,7 +139,7 @@ DX.OPS = {
 -- to add one next (a scope is `local pt = Perf.on and Perf.Start(id) ... if pt then Perf.Stop(pt) end`, or Perf.Wrap(id, fn)
 -- for a hook or a frame's OnEvent, or Perf.Call(id, fn, ...)).
 DX.UNSCOPED = {
-    "hooksecurefunc / HookScript callbacks on other addons' or Blizzard's frames, except the RestedXP ones named rxp.* (Look.lua, AuctionatorSkin.lua, Arrival.lua, SpeakStoneSkin.lua, WhatsTrainingSkin.lua, gear/Tooltip.lua, gear/Rolls.lua, markers/Bar.lua)",
+    "hooksecurefunc / HookScript callbacks on other addons' or Blizzard's frames, except the RestedXP ones named rxp.* (Look.lua, Arrival.lua, WhatsTrainingSkin.lua, gear/Tooltip.lua, gear/Rolls.lua, markers/Bar.lua)",
     "private event frames not listed above: hazard/Alerts.lua, reminders/Display.lua, modules/Training.lua, modules/FriendLogin.lua, chronicle/Recorder.lua, auction/Window.lua, auction/Scan.lua",
     "C_Timer callbacks (modules/Restock.lua, setup/Share.lua, npcs/Share.lua, setup/Group.lua, pins/PingMap.lua, chronicle/Recorder.lua, qol/Guide*.lua)",
     "other OnUpdate scripts: Look.lua (settings-window easing), guides/CozyBagWindow.lua, setup/Window.lua (transfer line), setup/Share.lua, setup/StoredData.lua, setup/Explorer.lua (background jobs), classbars on-bar scripts",
@@ -174,7 +190,34 @@ local function Field(module, field)
 end
 local function Flag(v) if v == nil then return nil end return v and 1 or 0 end
 
+local function AuctionPreview(field)
+    return function()
+        local A = R.Workshop and R.Workshop.AuctionUI
+        return A and DX.Num(A.Snapshot()[field]) or 0
+    end
+end
 local G = {
+    { "auction.previewReads", "AH experimental pending read", "state", "core", AuctionPreview("reads") },
+    { "auction.previewLiveResults", "AH experimental retained rows (max 500)", "cache", "core", AuctionPreview("liveResults") },
+    { "auction.previewShown", "AH preview shown", "state", "core", AuctionPreview("shown") },
+    { "auction.previewPages", "AH preview pages built (at most five)", "pool", "core", AuctionPreview("pages") },
+    { "auction.previewEvents", "AH preview visible listeners", "listeners", "core", AuctionPreview("events") },
+    { "auction.previewResults", "AH preview retained results", "cache", "core", AuctionPreview("results") },
+    { "auction.previewSubscriptions", "AH preview shared-plan/stock observers", "listeners", "core", AuctionPreview("subscriptions") },
+    { "auction.previewJobs", "AH preview pending catalog jobs", "state", "core", AuctionPreview("jobs") },
+    { "auction.catalogStarts", "AH catalog discovery starts", "counter", "core", AuctionPreview("catalog_starts") },
+    { "auction.catalogCompleted", "AH catalog completions", "counter", "core", AuctionPreview("catalog_completions") },
+    { "auction.catalogCanceled", "AH catalog cancellations", "counter", "core", AuctionPreview("catalog_cancellations") },
+    { "auction.catalogErrors", "AH catalog errors", "counter", "core", AuctionPreview("catalog_errors") },
+    { "auction.catalogActive", "AH active cooperative jobs", "state", "core", AuctionPreview("catalog_active") },
+    { "auction.catalogFilters", "AH cached filter projections", "counter", "core", AuctionPreview("catalog_projections") },
+    { "auction.catalogMetadata", "AH relevant metadata events", "counter", "core", AuctionPreview("catalog_metadata") },
+    { "auction.catalogPatches", "AH changed metadata rows", "counter", "core", AuctionPreview("catalog_patches") },
+    { "auction.catalogRowUpdates", "AH individual visible row updates", "counter", "core", AuctionPreview("catalog_rowUpdates") },
+    { "auction.catalogInvalidations", "AH source invalidations", "counter", "core", AuctionPreview("catalog_invalidations") },
+    { "auction.catalogPaints", "AH result list presentations", "counter", "core", AuctionPreview("catalog_paints") },
+    { "auction.catalogLongest", "AH longest catalog slice (ms)", "state", "core", AuctionPreview("catalog_longest") },
+    { "auction.previewRows", "AH preview pooled rows", "pool", "core", AuctionPreview("rows") },
     { "core.listeners", "TwichUI event bus: listeners", "listeners", "core", Listeners },
     { "core.events", "TwichUI event bus: events listened for", "listeners", "core", Events },
     { "core.switchListeners", "Switch change listeners", "listeners", "core", function() return R.Switches and type(R.Switches.listeners) == "table" and #R.Switches.listeners or nil end },
@@ -237,6 +280,9 @@ local G = {
     { "workshop.vendor", "Workshop: items with a saved vendor price (at most 400)", "state", "core", Field("Workshop", "vendor") },
     { "workshop.stored", "Workshop: item counts remembered from the bank and guild banks (bounded)", "state", "core", Field("Workshop", "storedItems") },
     { "workshop.bankEvents", "Workshop: bank events registered (a few always; more only while a bank is open)", "listeners", "core", Field("Workshop", "bankEvents") },
+    { "workshop.advisorItems", "Workshop: discovered item identities (released when Advisor hides)", "cache", "core", Field("Workshop", "advisorItems") },
+    { "workshop.advisorResults", "Workshop: matching Advisor results", "cache", "core", Field("Workshop", "advisorResults") },
+    { "workshop.marketFacts", "Workshop: items whose market figures are cached for display (at most 48)", "cache", "core", Field("Workshop", "marketFacts") },
     { "workshop.picks", "Workshop: source choices held on the shopping list (this session)", "state", "core", Field("Workshop", "picks") },
     { "camping.events", "Camping bar: events registered", "listeners", "core", Field("Camping", "events") },
     { "camping.buttons", "Camping bar: buttons made (pool)", "pool", "core", Field("Camping", "buttons") },

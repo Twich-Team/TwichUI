@@ -437,7 +437,8 @@ function UI.ItemTip(btn, getItem)
         local item = getItem()
         if GameTooltip and item then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            if not pcall(GameTooltip.SetItemByID, GameTooltip, item) then GameTooltip:Hide() end
+            if not pcall(GameTooltip.SetItemByID, GameTooltip, item) then GameTooltip:Hide()
+            elseif UI.Advisor then GameTooltip:AddLine("Right-click: Item Advisor",0.65,0.58,0.45) end
         end
     end
     local function Leave() if GameTooltip then GameTooltip:Hide() end end
@@ -447,8 +448,10 @@ function UI.ItemTip(btn, getItem)
         btn:SetScript("OnEnter", Enter)
         btn:SetScript("OnLeave", Leave)
     end
-    btn:SetScript("OnClick", function(self, ...)
+    btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    btn:SetScript("OnClick", function(self, button, ...)
         local item = getItem()
+        if item and button=="RightButton" and UI.Advisor then UI.Advisor.Open(item); return end
         if not (item and IsModifiedClick and IsModifiedClick("CHATLINK") and ChatEdit_InsertLink) then
             if self.twichRowClick then self.twichRowClick(self, ...) end   -- an unmodified click chooses the row it sits on
             return
@@ -456,6 +459,37 @@ function UI.ItemTip(btn, getItem)
         local ok, _, link = pcall(C_Item.GetItemInfo, item)
         if ok and type(link) == "string" then pcall(ChatEdit_InsertLink, link) end
     end)
+end
+
+-- Shift-click on an item: its link in the open chat box (nothing else; an unmodified click is the caller's)
+function UI.LinkItem(item)
+    if not (item and IsModifiedClick and IsModifiedClick("CHATLINK") and ChatEdit_InsertLink) then return false end
+    local ok, _, link = pcall(C_Item.GetItemInfo, item)
+    if ok and type(link) == "string" then pcall(ChatEdit_InsertLink, link) return true end
+    return false
+end
+
+-- An item's own tooltip with Workshop's lines under it: extra = { { left, right }, { sentence }, ... }. Without an item (or one the game can't
+-- show yet) the title and the lines alone. One tooltip, drawn once per hover: nothing is added to it later.
+function UI.ItemTipLines(owner, item, extra, title)
+    if not GameTooltip then return end
+    GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+    local shown = item ~= nil and pcall(GameTooltip.SetItemByID, GameTooltip, item)
+    if not shown then
+        if GameTooltip.ClearLines then GameTooltip:ClearLines() end
+        if title then GameTooltip:AddLine(title, 1, 0.82, 0) end
+    end
+    if extra and #extra > 0 then
+        if shown then
+            GameTooltip:AddLine(" ")
+            if title then GameTooltip:AddLine(title, 1, 0.82, 0) end
+        end
+        for _, x in ipairs(extra) do
+            if x[2] then GameTooltip:AddDoubleLine(x[1], x[2], 0.8, 0.8, 0.8, 1, 1, 1)
+            else GameTooltip:AddLine(x[1], 0.8, 0.8, 0.8, true) end
+        end
+    end
+    GameTooltip:Show()
 end
 
 -- Lets a click that a picture would otherwise swallow choose its row: the picture runs the row's own OnClick (the modified-click item link
@@ -677,8 +711,10 @@ local function DayWords(day)
     if ago == 1 then return "seen yesterday" end
     return ("seen %d days ago"):format(ago)
 end
-function UI.PriceChart(parent, w, h)
+function UI.PriceChart(parent, w, h, opt)
+    local maxDots = opt and W.Int(opt.maxDots, 2, 60) or MAX_DOTS
     local c = CreateFrame("Frame", nil, parent)
+    c.maxDots = maxDots
     c:SetSize(w, h)
     UI.Panel(c, "canvas")
     c.plot = CreateFrame("Frame", nil, c)
@@ -692,8 +728,8 @@ function UI.PriceChart(parent, w, h)
         c.guides[i] = g
     end
     c.dots, c.stems = {}, {}
-    for i = 1, MAX_DOTS do
-        c.stems[i] = L.Solid(c.plot, "ARTWORK", K.tealLo, 0.9)
+    for i = 1, maxDots do
+        c.stems[i] = L.Solid(c.plot, "ARTWORK", opt and opt.gold and K.bronzeLo or K.tealLo, 0.9)
         c.stems[i]:SetWidth(2)
         c.dots[i] = L.Solid(c.plot, "OVERLAY", K.bronzeText, 1)
         c.dots[i]:SetSize(7, 7)
@@ -713,36 +749,36 @@ function UI.PriceChart(parent, w, h)
     c.note:SetJustifyH("CENTER")
     c.state = "empty"
     local function Words(self, headline, note)
-        for i = 1, MAX_DOTS do self.dots[i]:Hide(); self.stems[i]:Hide() end
+        for i = 1, maxDots do self.dots[i]:Hide(); self.stems[i]:Hide() end
         for _, g in ipairs(self.guides) do g:Hide() end
         self.hi:SetText(""); self.lo:SetText("")
         self.msg:SetText(headline)
         self.note:SetText(note or "")
         self.msg:Show(); self.note:Show()
     end
-    function c:Set(series, money)
+    function c:Set(series, money, limit)
         local pts = series and series.points or {}
-        local n = math.min(#pts, MAX_DOTS)
+        local n = math.min(#pts, W.Int(limit, 2, maxDots) or maxDots)
         local first = #pts - n + 1
         self.shown = n
         if n == 0 then
             self.state = "empty"
-            Words(self, series and "Only older ranges are kept, so there is no recent day to show." or "No price history for this item yet.",
-                "More scans needed to show a price trend.")
+            Words(self, opt and opt.window and "No observations in this window." or (series and "Only older ranges are kept, so there is no recent day to show." or "No price history for this item yet."),
+                opt and opt.window and "Stored history only; missing days stay empty." or "More scans needed to show a price trend.")
             self.shown = 0
             return
         end
         if n == 1 then
             self.state = "single"
             local p = pts[first]
-            Words(self, "More scans needed to show a price trend.", ("Cheapest seen: %s \194\183 %s"):format(money(p.price), DayWords(p.day)))
+            Words(self, opt and opt.window and "One observation in this window." or "More scans needed to show a price trend.", ("Cheapest seen: %s \194\183 %s"):format(money(p.price), DayWords(p.day)))
             self.shown = 0   -- nothing is drawn: the one observation is in words
             self.observed = 1
             return
         end
         self.state = "series"
         self.msg:Hide(); self.note:Hide()
-        for i = 1, MAX_DOTS do self.dots[i]:Hide(); self.stems[i]:Hide() end
+        for i = 1, maxDots do self.dots[i]:Hide(); self.stems[i]:Hide() end
         local lo, hi, day0, day1
         for i = first, #pts do
             local p = pts[i]
@@ -750,6 +786,10 @@ function UI.PriceChart(parent, w, h)
             if not hi or p.price > hi then hi = p.price end
         end
         day0, day1 = pts[first].day, pts[#pts].day
+        if opt and opt.window and W.Finite(series.from) and W.Finite(series.to) and series.to > series.from then
+            day0, day1 = series.from, series.to
+        end
+        self.fromDay, self.toDay = day0, day1
         local span = math.max(1, day1 - day0)
         local pw, ph = (self.plot:GetWidth() or 0), (self.plot:GetHeight() or 0)
         if pw < 20 then pw = (w or 260) - 84 end
@@ -766,7 +806,7 @@ function UI.PriceChart(parent, w, h)
             st:ClearAllPoints(); st:SetPoint("BOTTOM", self.plot, "BOTTOMLEFT", x, 0); st:SetHeight(math.max(1, y - 3))
             local newest = i == n - 1
             d:SetSize(newest and 9 or 7, newest and 9 or 7)
-            d:SetColorTexture((newest and K.tealHi or K.bronzeText)[1], (newest and K.tealHi or K.bronzeText)[2], (newest and K.tealHi or K.bronzeText)[3], 1)
+            d:SetColorTexture((opt and opt.gold and K.bronzeText or newest and K.tealHi or K.bronzeText)[1], (opt and opt.gold and K.bronzeText or newest and K.tealHi or K.bronzeText)[2], (opt and opt.gold and K.bronzeText or newest and K.tealHi or K.bronzeText)[3], 1)
             d:Show(); st:Show()
         end
         for i, g in ipairs(self.guides) do

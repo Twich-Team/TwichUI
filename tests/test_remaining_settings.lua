@@ -21,9 +21,9 @@ local originalState, originalLoaded = K.AddonState, K.Loaded
 local state = "missing"
 K.AddonState = function() return state end
 K.Loaded = function() return state == "loaded" end
-local skinRow = K.switchRows.auctionatorSkin
+local skinRow = K.switchRows.whatsTrainingSkin
 local card
-for _, row in ipairs(K.pages.skins.rows) do if row.card and row.card.title == "Auctionator look" then card = row.card end end
+for _, row in ipairs(K.pages.skins.rows) do if row.card and row.card.title == "WhatsTraining look" then card = row.card end end
 assert(card.summary():find("Not installed",1,true))
 state = "loaded"; R.S = true
 local enabled = skinRow.setting:GetValue()

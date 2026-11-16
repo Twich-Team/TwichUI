@@ -147,6 +147,8 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `nav.load` (`Perf.Call`) | `nav/Data.lua` `ND.Load`, around `C_AddOns.LoadAddOn` of `TwichUI_NavData` | init |
 | `layouts.load` (`Perf.Call`) | `LayoutsLauncher.lua` `L.Load`, around `C_AddOns.LoadAddOn` of `TwichUI_Layouts` | init |
 | `workshop.load` (`Perf.Call`) | `WorkshopLauncher.lua` `L.Load`, around `C_AddOns.LoadAddOn` of `TwichUI_Workshop` | init |
+| `auction.proof`, `auction.proofWatch` (`Perf.Call`) | `auction/Host.lua` activation/restoration and 0.25 s watchdog, only during the explicit AH-1a diagnostic. Gauges `auction.proofLease` and `auction.proofTimer` are 0 or 1 and never build/load anything. No per-login activation or auction requests | layout, update |
+| `workshop.advisor`, `workshop.advisorSearch` (`Perf.Start`/`Stop`) | `TwichUI_Workshop/AdvisorData.lua` discovery and search jobs, at most 160 identities per slice, only while Item Advisor is open. Gauges `workshop.advisorItems` and `.advisorResults` expose retained catalog/results and return to zero when hidden. Existing `workshop.market` and bounded fact-cache gauges cover selected and visible-item valuation. | rebuild |
 | `workshop.read` (`Perf.Call`), `workshop.render` (`Perf.Start`/`Stop`) | `TwichUI_Workshop/Session.lua` `S.Observe` (the open profession's recipe list read; opening, and a burst of profession window changes while shown) and `S.ReadMerchant` (the open merchant's money-only listings; same bursts), `TwichUI_Workshop/Window.lua` `Win.Render` (a burst of changes or a click, only while shown). Gauges `workshop.queue`, `.recipes`, `.cache`, `.events` (zero while hidden), `.rows`, `.prices` (items with a saved price), `.history` (items with saved price history), `.vendor` (items with a saved vendor price), `.picks` (shopping source choices) | rebuild |
 | `workshop.bank` (`Perf.Call`) | `TwichUI_Workshop/Bank.lua` `RunBank` (the open character bank read: tab list, then every slot of each tab) and `GuildAnswer` (the shown guild bank tab's 98 slots); a burst of changes is one read after 0.4 s, only while a bank is open and the Workshop addon is loaded. Gauges `workshop.stored` (item counts remembered, bounded) and `workshop.bankEvents` (a few always, more only while a bank is open) | bulk |
 | `workshop.worth` (`Perf.Wrap`) | `TwichUI_Workshop/WorthTip.lua` `OnItem` (the "What's it worth?" lines on the tooltip of an item in the bags or bank: a few table reads and one price lookup per rebuild, no auction query); only after the Workshop was loaded in the session. No gauge: it keeps no cache (an event frame, plus one item-information event only while a tooltip waits for an item) | rebuild |
@@ -177,7 +179,7 @@ windows), which the reports name when most TwichUI CPU is outside every scope.
 Gauges (`Gauges.lua`) read what modules already report (`Snapshot()` functions and a few read-only counts): event-bus
 listeners and events (`R.ListenerCounts`, added to `Core.lua`), switch listeners, settings-closed callbacks, effects
 easing, settings shown, pages drawn and search index, world map shown, NPC and pin marker pools and those in use, map
-detail tiles, navigation tiles decoded, reminders running, observation keys and reminders waiting on a time boundary (`reminders.timed`: one timer each, at most one per running reminder), the Reminders condition designer's card and picker-row pools (`reminders.designer.cards`, `reminders.designer.pickerRows`; they grow once, to the sizes a reminder is limited to, and then stay) and whether one of its editors is open, Healer Watch's and class bars' events, and the
+detail tiles, navigation tiles decoded, reminders running, observation keys and reminders waiting on a time boundary (`reminders.timed`: one timer each, at most one per running reminder), the transfers Reminder sharing holds (`reminders.shareTransfers`: those in progress and the ones just finished; no names, reminders or recipients), the Reminders condition designer's card and picker-row pools (`reminders.designer.cards`, `reminders.designer.pickerRows`; they grow once, to the sizes a reminder is limited to, and then stay) and whether one of its editors is open, Healer Watch's and class bars' events, and the
 Cozy Sleeping Bag offer's events (`bag.offer.events`: 0 to 3) and looks so far, with whether its button frame is made and shown
 (`bag.button.built`, `bag.button.shown`).
 The layout setup registers four of its own (`TwichUI_LayoutWizard/Window.lua` and `Overlay.lua`, only once it is loaded):
@@ -401,3 +403,45 @@ identical with a capture recording. `tests/test_release_tools.py`: four folders,
 - No error stack traces for errors TwichUI's handlers catch (the pcall ended them); the game's display has them.
 - No per-module memory: the client's figure is per addon; only `MeasureCall` (opt-in) gives per-call allocation.
 - No live comparison or chart of two metrics on one axis, by design.
+
+## Standalone Auction House preview
+
+`auction.previewBuild` times first explicit shell construction;
+`auction.previewRender` times only the visible page. Both map to
+`TwichUI_Workshop/auction/Window.lua`. Read-only gauges expose shown state,
+page pool (at most five), visible event registrations and row pool. They never
+load Workshop or construct a preview. No native-frame hooks are added.
+
+`auction.previewSearch` maps catalog/filter/cooperative merge-sort slices to
+`TwichUI_Workshop/auction/BrowseData.lua`. Additional gauges count results and
+pending jobs; hidden pages retain neither. Client timing remains unmeasured.
+
+Catalog gauges now distinguish discovery starts, completed/canceled/error jobs,
+active jobs, cached filter projections, relevant metadata events, changed-row
+patches, source invalidations, list presentations and longest slice in ms.
+Counters saturate at one billion, retain no item identities, and require no log.
+Metadata does not invalidate a catalog. Compare starts/invalidations against
+metadata/patches during a client capture: duplicate events should increase the
+event counter without increasing starts or list presentations. Source changes
+and filter projections have separate counters; existing row-pool gauges expose
+frame growth. All mutation work is inside existing preview render/search scopes.
+`auction.catalogRowUpdates` counts individual pooled rows refreshed in place;
+offscreen metadata changes do not repaint unrelated visible rows.
+
+`auction.previewPageBuild` records each lazy page's first construction.
+`auction.previewResize` records the explicit resize drag (at most 20 Hz).
+`auction.previewSubscriptions` counts the independent shared-plan/stock
+observers; it returns to zero when Shopping hides. No new addon memory owner.
+
+The overnight AH preview adds `auction.readSnapshot` for bounded (500-row)
+experimental native-response normalization in `auction/ReadRequests.lua:Event`.
+`auction.previewReads` is a 0/1 pending-read gauge and
+`auction.previewLiveResults` counts retained normalized experimental records.
+Sell bag rebuilding and My Auctions filtering are covered by the existing
+visible-page render scope; no hidden-page updater is introduced.
+
+## Market bridge measurements (M1b)
+
+The external reader registers `workshop.bridgeLoad`, `workshop.bridgeValidate`, `workshop.bridgeRecord` and `workshop.bridgeHistory` for explicit loading, cooperative validation slices and selected record/history reads. Read-only `workshop.bridgeRecords`, `workshop.bridgeBytes` and `workshop.bridgeCache` gauges report bounded retained state without loading or building it. `TwichUI_MarketData` has separate sampled addon memory and ownership markers. No bridge timer runs before an explicit load request or after validation completes. Cloud timing is not client acceptance.
+
+The L3 scoped reader reuses these bridge timing scopes and gauges. `Bridge.Status()` additionally reports active schema/scope and a canonical-byte refusal code; no new background polling or startup load is registered. See [scoped reader evidence](workshop/market-bridge-scoped-l3.md).

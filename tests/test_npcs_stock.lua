@@ -438,6 +438,28 @@ c.NAMES[1], c.QUALITY[1] = "Acorn", 2
 Check(CNI.Name(1) == "Acorn" and CNI.Link(1):find("|Hitem:1|h[Acorn]|h", 1, true))
 local r, g, b = CNI.Color(1)
 Check(r == 0.12 and g == 1 and b == 0)
+-- a name the client already has is not asked for, and is not left waiting
+c.NAMES[3] = "Known Thing"
+Check(CNI.Request({ 3 }) == 0, "the known one is not queued")
+FlushTimers()
+Check(#c.REQUESTED == 0, "the known one is not asked for")
+Check(CNI.Snapshot().waiting == 0, "the known one is not left waiting")
+-- a name the client learns while the ask is still queued is not asked for, and is not left waiting
+local early = {}
+for i = 1, 30 do early[i] = 7000 + i end
+Check(CNI.Request(early) == 30)
+c.NAMES[7001] = "Early Arrival"
+for _ = 1, 3 do FlushTimers() end
+local askedEarly = {}
+for _, id in ipairs(c.REQUESTED) do askedEarly[id] = true end
+Check(not askedEarly[7001], "the one already named is not asked for")
+Check(askedEarly[7002] and askedEarly[7030], "the rest of the batch still goes")
+Check(CNI.Snapshot().waiting == 29, "the named one is not left waiting: " .. CNI.Snapshot().waiting)
+for _, id in ipairs(c.REQUESTED) do c.NAMES[id] = "Arrived " .. id end
+for _, id in ipairs(c.REQUESTED) do c.FireEvent("GET_ITEM_INFO_RECEIVED", id, true) end
+FlushTimers()
+Check(CNI.Snapshot().waiting == 0, "the batch settles: " .. CNI.Snapshot().waiting)
+c.REQUESTED = {}
 c.NAMES[2] = "Plain Thing"
 c.C_Item.GetItemInfo = nil
 Check(CNI.Link(2) == "|cffffffff|Hitem:2|h[Plain Thing]|h|r", "a link made from the name when the game has none: " .. tostring(CNI.Link(2)))
@@ -467,6 +489,24 @@ c.FireEvent("GET_ITEM_INFO_RECEIVED", 5002, true)
 c.FireEvent("GET_ITEM_INFO_RECEIVED", 424242, true)   -- not one we asked for
 FlushTimers()
 Check(told == 1, "told once: " .. told)
+-- an answer for an id the client already knew is not dropped:
+-- it still tells the listeners once, a moment later
+local toldKnown = 0
+CNI.OnNames(function() toldKnown = toldKnown + 1 end)
+c.NAMES[5003] = "Already Known"
+c.FireEvent("GET_ITEM_INFO_RECEIVED", 5003, true)
+FlushTimers()
+Check(toldKnown == 1, "told once for the already-known one: " .. toldKnown)
+-- a name the client learns while the ask is still queued is not asked for, and is not left waiting
+local late = {}
+for i = 1, 30 do late[i] = 6000 + i end
+Check(CNI.Request(late) == 30)
+c.NAMES[6001] = "Early Arrival"
+for _ = 1, 3 do FlushTimers() end
+local askedLate = {}
+for _, id in ipairs(c.REQUESTED) do askedLate[id] = true end
+Check(not askedLate[6001], "the one already named is not asked for")
+Check(askedLate[6002] and askedLate[6030], "the rest of the batch still goes")
 
 ---------------------------------------------------------------------------
 -- 9. Searching by what a merchant sells
@@ -586,6 +626,61 @@ s.NAMES[9998] = "Glowing Lantern"
 s.FireEvent("GET_ITEM_INFO_RECEIVED", 9998, true)
 FlushTimers()
 Check(row.name.text == "Glowing Lantern", "then by name")
+-- a mixed list: the known ones are named at once, the unknown ones by number until their answers arrive late
+Visit(s, 7007, "Mixed Seller", { 1100, 9997, 9996 }, "Alliance", { map = 1429, x = 0.70, y = 0.70 })
+local mixed = SNS.Near(7007, 1429, 7000, 7000)
+s.REQUESTED = {}
+ST.Show(mixed)
+Check(win.status.text:find("3 items noted", 1, true) and win.status.text:find("2 still loading", 1, true), win.status.text)
+local function Row(id)
+    for _, f in ipairs(s.FRAMES) do if f.id == id then return f end end
+    return nil
+end
+Check(Row(1100) and Row(1100).name.text == "Tough Acorn", "the known one is named at once")
+Check(Row(9997) and Row(9997).name.text == "Item 9997", "the unknown one by number, with its icon")
+Check(Row(9996) and Row(9996).name.text == "Item 9996", "the other unknown one by number")
+FlushTimers()
+local askedMixed = {}
+for _, id in ipairs(s.REQUESTED) do askedMixed[id] = true end
+Check(askedMixed[9997] and askedMixed[9996] and not askedMixed[1100], "only the unknown ones are asked for")
+s.NAMES[9997] = "Glowing Lantern"
+s.FireEvent("GET_ITEM_INFO_RECEIVED", 9997, true)
+FlushTimers()
+Check(Row(9997) and Row(9997).name.text == "Glowing Lantern", "the first late answer settles its row: " .. tostring(Row(9997) and Row(9997).name.text))
+Check(Row(9996) and Row(9996).name.text == "Item 9996", "the other row is still by number: " .. tostring(Row(9996) and Row(9996).name.text))
+Check(Row(9996).name.text == "Item 9996" and win.status.text:find("1 still loading", 1, true), win.status.text)
+s.NAMES[9996] = "Dull Lantern"
+s.FireEvent("GET_ITEM_INFO_RECEIVED", 9996, true)
+FlushTimers()
+Check(Row(9996).name.text == "Dull Lantern", "the second late answer settles its row")
+Check(not win.status.text:find("still loading", 1, true), "nothing still loading: " .. win.status.text)
+s.CLICKS = {}
+Row(9996).scripts.OnClick(Row(9996))
+Check(#s.CLICKS == 1 and s.CLICKS[1]:find("|Hitem:9996|h[Dull Lantern]|h", 1, true), "the settled row links the item by its name")
+-- the filter still matches by the settled name, and says when nothing matches
+win.filter.text = "lantern"
+win.filter.hooks.OnTextChanged[#win.filter.hooks.OnTextChanged](win.filter, true)
+Check(win.status.text == "2 of 3 shown.", win.status.text)
+win.filter.text = "zzz"
+win.filter.hooks.OnTextChanged[#win.filter.hooks.OnTextChanged](win.filter, true)
+Check(win.empty:IsShown(), "nothing matches")
+win.filter.text = ""
+win.filter.hooks.OnTextChanged[#win.filter.hooks.OnTextChanged](win.filter, true)
+-- a name the client learns between the ask and the pump is not asked for, and the answer that follows still settles the row
+Visit(s, 7008, "Early Seller", { 9995 }, "Alliance", { map = 1429, x = 0.75, y = 0.75 })
+local earlyRow = SNS.Near(7008, 1429, 7500, 7500)
+s.REQUESTED = {}
+ST.Show(earlyRow)
+assert(win.status.text:find("1 still loading", 1, true), win.status.text)
+s.NAMES[9995] = "Early Lantern"
+FlushTimers()
+assert(#s.REQUESTED == 0, "the one already named is not asked for")
+assert(Row(9995) and Row(9995).name.text == "Item 9995", "still by number until the game's answer arrives")
+s.FireEvent("GET_ITEM_INFO_RECEIVED", 9995, true)
+FlushTimers()
+assert(Row(9995) and Row(9995).name.text == "Early Lantern", "the answer for the already-named one still settles its row: " .. tostring(Row(9995) and Row(9995).name.text))
+assert(not win.status.text:find("still loading", 1, true), "nothing still loading: " .. win.status.text)
+ST.Show(mystery)   -- back to the first merchant, so the "forget" line below still applies
 -- forgetting the merchant closes the window; the feature going off does too
 SNS.Forget(mystery)
 Check(not win:IsShown(), "the merchant left the list")

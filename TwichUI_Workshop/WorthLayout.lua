@@ -4,7 +4,7 @@
 -- preview cannot drift from the tooltip.
 --
 -- THE RULES (docs/workshop.md, "What's it worth?"):
---   * a layout only chooses PRESENTATION: which of the eight line types appear, their order, and "Always" or "Hold Shift" for each. Every
+--   * a layout only chooses PRESENTATION: which of the thirteen line types appear, their order, and "Always" or "Hold Shift" for each. Every
 --     line is built from the same evaluation whether it is shown or not, so hiding a row never changes a figure or the recommendation;
 --   * a qualification that keeps a figure honest belongs to the figure's own row, never to a separate line the player could remove:
 --     "before fees" / "after fees", "old prices" and "partial scan" on the auction row, "average" on the disenchant row, and the
@@ -34,8 +34,8 @@ WL.HINT = "Hold Shift for details"
 ---------------------------------------------------------------------------
 -- label: the designer's name for it; what: one sentence for its tooltip; when: where a new one starts.
 WL.TYPES = {
-    { id = "recommend", label = "Recommendation", when = "always",
-      what = "Suggested: Vendor, Auction house or Disenchant, only when the estimates prove it. Otherwise why not." },
+    { id = "recommend", label = "Workshop recommendation", when = "always",
+      what = "Item Advisor: Vendor, Auction, Disenchant, Keep for crafting, or Insufficient data. Gross estimates never guarantee a sale." },
     { id = "vendor", label = "Vendor value", when = "always", what = "What a vendor pays for one." },
     { id = "auction", label = "Auction value", when = "always",
       what = "The cheapest listing your last scan saw, marked \"before fees\" until the auction house's cut is confirmed." },
@@ -46,6 +46,16 @@ WL.TYPES = {
     { id = "outcomes", label = "Disenchant outcomes", when = "shift",
       what = "What disenchanting may give. There is no outcome data in this version, so this line stays empty." },
     { id = "note", label = "Limits note", when = "shift", what = "One short line: estimates are not sales, and deposits and failed listings are not counted." },
+    { id = "marketvalue", label = "Market value", when = "always",
+      what = "A 14-day reference built from listings your scans saw. Not a selling price and not a promise it will sell." },
+    { id = "recent", label = "Recent price", when = "shift", what = "A representative listing price from your last scan. A listing, not a sale." },
+    { id = "historical", label = "Historical value", when = "shift",
+      what = "A 60-day reference from listings your scans saw, older weeks counted by their average. Not a selling price." },
+    { id = "supply", label = "Supply and competition", when = "shift",
+      what = "How many were listed in your last scan, and how many sit at or below the price you would compete with. Listings, never demand." },
+    { id = "quality", label = "Market data quality", when = "shift", what = "How far the market figures can be trusted (Good, Fair, Limited) and why, in a few words." },
+    { id = "advisorwhy", label = "Advisor explanation", when = "shift", what = "The Item Advisor's factual reason and missing evidence. No extra planning on hover." },
+    { id = "advisorevidence", label = "Advisor evidence", when = "shift", what = "Strong, limited or insufficient evidence, without a statistical confidence claim." },
 }
 WL.BY_ID = {}
 for i, t in ipairs(WL.TYPES) do WL.BY_ID[t.id] = t; t.order = i end
@@ -54,8 +64,9 @@ WL.MAX_LINES = #WL.TYPES
 -- The short layout out of the box: the answer and the values Always; the detail lines under Shift. No outcomes line (it has no data).
 WL.DEFAULT_LINES = {
     { id = "recommend", when = "always" }, { id = "vendor", when = "always" }, { id = "auction", when = "always" },
-    { id = "disenchant", when = "always" }, { id = "status", when = "shift" }, { id = "source", when = "shift" },
-    { id = "note", when = "shift" },
+    { id = "disenchant", when = "always" }, { id = "marketvalue", when = "always" }, { id = "recent", when = "shift" },
+    { id = "historical", when = "shift" }, { id = "supply", when = "shift" }, { id = "quality", when = "shift" },
+    { id = "status", when = "shift" }, { id = "source", when = "shift" }, { id = "note", when = "shift" },
 }
 
 local function Copy(list)
@@ -124,11 +135,51 @@ end
 
 function WL.Enabled() return WL.Get().enabled end
 
+-- Does the layout have a line that needs the market figures (A7)? Then the caller asks MarketFacts; otherwise it asks nothing.
+WL.MARKET_IDS = { marketvalue = true, recent = true, historical = true, supply = true, quality = true }
+function WL.UsesMarket(layout)
+    for _, e in ipairs(layout.lines) do if WL.MARKET_IDS[e.id] then return true end end
+    return false
+end
+
+-- The primary line keeps its established id/default and every saved layout.
+function WL.UsesAdvisor(layout, shift)
+    for _,e in ipairs(layout.lines) do
+        if (e.id=="recommend" or e.id=="advisorwhy" or e.id=="advisorevidence") and (e.when~="shift" or shift) then return true end
+    end
+    return false
+end
+
 -- true, or false and a reason: "newer" (written by a newer TwichUI), "nosave"
 function WL.CanWrite()
     local t = Saved(false)
     if Newer(t) then return false, "newer" end
     if type(TwichUIDB) ~= "table" then return false, "nosave" end
+    return true
+end
+
+-- Validate the entire editor draft before replacing anything. Old setter APIs remain
+-- available to callers; the editor uses this atomic commit for enabled + lines.
+function WL.Set(layout)
+    local ok, why = WL.CanWrite()
+    if not ok then return false, why end
+    if type(layout) ~= "table" or type(layout.enabled) ~= "boolean" or type(layout.lines) ~= "table" then return false, "bad" end
+    local n, seen, lines = 0, {}, {}
+    for k in pairs(layout.lines) do
+        if type(k) ~= "number" or k % 1 ~= 0 or k < 1 or k > WL.MAX_LINES then return false, "bad" end
+        n = n + 1
+    end
+    for i = 1, n do
+        local e = layout.lines[i]
+        if type(e) ~= "table" or not WL.BY_ID[e.id] or seen[e.id] or (e.when ~= "always" and e.when ~= "shift") then return false, "bad" end
+        seen[e.id] = true; lines[i] = { id = e.id, when = e.when }
+    end
+    local old = Saved(false)
+    local out = {}
+    for k, v in pairs(old or {}) do out[k] = v end
+    out.v, out.enabled, out.lines = WL.VERSION, layout.enabled, lines
+    if type(TwichUIDB.ui) ~= "table" then TwichUIDB.ui = {} end
+    TwichUIDB.ui[WL.KEY] = out
     return true
 end
 
@@ -262,6 +313,15 @@ function RENDER.recommend(r)
     return { (rec.tone == "good" and "*" or "~") .. rec.text }
 end
 
+function RENDER.advisorwhy(r)
+    local a=r.advisor
+    if not a then return nil end
+    return { "~" .. (a.reasons[1] or a.text) .. (a.missing[1] and (" " .. a.missing[1]) or "") }
+end
+function RENDER.advisorevidence(r)
+    return r.advisor and { "Workshop evidence", r.advisor.evidenceText } or nil
+end
+
 function RENDER.vendor(r, ctx)
     local v = r.vendor
     return { "Vendor", v.state == "ok" and ctx.money(v.value) or (v.state == "none" and "no sell value" or "unknown") }
@@ -278,6 +338,31 @@ function RENDER.disenchant(r, ctx)
     if not d then return nil end   -- not something that disenchants: no row, not "not applicable"
     if d.state == "ok" and type(d.value) == "number" then return { "Disenchant (average)", ctx.money(d.value) } end
     return { "Disenchant (average)", "no data" }
+end
+
+-- The market figures (A7): one cached read of the Market services, made by the caller (ctx.facts = MarketFacts.Of's answer; nil when it was not
+-- asked or a variant, which is never priced from the base item). The words live in MarketFacts.Line so the details window and this tooltip agree.
+local function Market(id)
+    return function(r, ctx)
+        local F = W.Facts
+        if not (F and ctx.facts) or r.auction.state == "unavailable" then return nil end   -- an item that can't be listed gets no market lines
+        return F.Line(id, ctx.facts, ctx.money)
+    end
+end
+RENDER.marketvalue = Market("marketvalue")
+RENDER.recent = Market("recent")
+RENDER.historical = Market("historical")
+RENDER.supply = Market("supply")
+
+function RENDER.quality(r, ctx)
+    local F = W.Facts
+    if not (F and ctx.facts) or r.auction.state == "unavailable" then return nil end
+    local line = F.Line("quality", ctx.facts, ctx.money)
+    if not line then return nil end
+    local notes = F.QualityNotes(ctx.facts, 2)
+    if #notes == 0 then return line end
+    -- not good: one quiet sentence that wraps, with the reasons ("Market data: Limited, scanned 4 days ago. Only 2 listings.")
+    return { "~" .. line[1] .. ": " .. line[2] .. ". " .. table.concat(notes, " ") }
 end
 
 -- The prices' age, when there is a scan to speak of
@@ -375,16 +460,26 @@ end
 local EXAMPLE_NOW = 1800000000
 local EXAMPLE_MARKET = { label = "the example auction house", side = "Example", at = EXAMPLE_NOW - 3 * 3600, complete = true }
 
+-- The market figures of an example (what MarketFacts.Of would answer), made up for the preview only: prices in copper, a good fresh scan
+local function ExampleFacts(mval, recent, hist, items, ahead, competing, level)
+    local function V(v) return { value = v, notes = {} } end
+    return { item = 0, now = EXAMPLE_NOW, mval = V(mval), recent = V(recent), hist = V(hist), age = 3 * 3600, freshness = "fresh",
+        supply = { items = items }, comp = { competing = competing, ahead = ahead },
+        quality = { level = level, reasons = {}, n = 20 } }
+end
+
 WL.EXAMPLES = {
     { key = "ordinary", label = "Ordinary item",
       facts = { sell = 500, quality = 1, classID = 7, bindType = 0, bound = false, market = EXAMPLE_MARKET,
-          price = { price = 400, at = EXAMPLE_NOW - 3 * 3600, complete = true } } },
-    { key = "higher", label = "Auction looks higher",
+          price = { price = 400, at = EXAMPLE_NOW - 3 * 3600, complete = true } },
+      market = function() return ExampleFacts(420, 400, 450, 24, 9, 400, "good") end },
+    { key = "higher", label = "Crafting material",
       facts = { sell = 500, quality = 1, classID = 7, bindType = 0, bound = false, market = EXAMPLE_MARKET,
-          price = { price = 900, at = EXAMPLE_NOW - 3 * 3600, complete = true } } },
-    { key = "missing", label = "Missing prices",
+          price = { price = 900, at = EXAMPLE_NOW - 3 * 3600, complete = true } },
+      market = function() return ExampleFacts(700, 900, 650, 5, 2, 900, "good") end },
+    { key = "missing", label = "No market data",
       facts = { sell = 300, quality = 2, classID = 4, equipLoc = "INVTYPE_CHEST", bindType = 2, bound = false, market = EXAMPLE_MARKET } },
-    { key = "unavailable", label = "Can't be auctioned",
+    { key = "unavailable", label = "Equipment (bound)",
       facts = { sell = 300, quality = 2, classID = 4, equipLoc = "INVTYPE_CHEST", bindType = 1, bound = true, market = EXAMPLE_MARKET } },
 }
 WL.EXAMPLE_BY_KEY = {}
@@ -397,5 +492,12 @@ function WL.Example(key)
     local f = { now = EXAMPLE_NOW }
     for k, v in pairs(e.facts) do f[k] = v end
     local r = WO.Evaluate(f)
-    return r, { money = WL.Money, ageText = PR.AgeText, market = EXAMPLE_MARKET, now = EXAMPLE_NOW, count = 1 }, e
+    if W.Advisor then
+        local facts = e.market and e.market() or { nomarket=true }
+        facts.comp = facts.comp or {}
+        facts.comp.complete, facts.comp.age = true, 3*3600
+        facts.comp.quality = "good"
+        r.advisor = W.Advisor.Decide(1, { qty=1, minGain=W.Advisor.Gain(), sell=f.sell, bindType=f.bindType, bound=f.bound, facts=facts })
+    end
+    return r, { money = WL.Money, ageText = PR.AgeText, market = EXAMPLE_MARKET, now = EXAMPLE_NOW, count = 1, facts = e.market and e.market() or nil }, e
 end

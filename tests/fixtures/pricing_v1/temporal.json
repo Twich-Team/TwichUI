@@ -1,0 +1,274 @@
+{
+  "fixture_version": 1,
+  "algorithm_proposal": "twichui-pricing-v1",
+  "cases": [
+    {
+      "id": "two-days",
+      "origin": "synthetic",
+      "as_of": "2026-11-15T12:00:00Z",
+      "points": [
+        {
+          "observed_at": "2026-11-14T12:00:00Z",
+          "unit_copper": "100",
+          "state": "listed",
+          "complete": true
+        },
+        {
+          "observed_at": "2026-11-15T12:00:00Z",
+          "unit_copper": "120",
+          "state": "listed",
+          "complete": true
+        }
+      ],
+      "expected": {
+        "market_market_value": "110",
+        "market_historical_value": "110",
+        "workshop_market_value": "100",
+        "workshop_historical_value": null,
+        "canonical_market_value": "100",
+        "canonical_historical_value": null,
+        "canonical_priced_days_60": 2
+      },
+      "derivation": "Mean=(100+120)/2=110. Equal weights use lower median=100. Historical requires three days."
+    },
+    {
+      "id": "recency-weights",
+      "origin": "synthetic",
+      "as_of": "2026-11-15T12:00:00Z",
+      "points": [
+        {
+          "observed_at": "2026-11-08T12:00:00Z",
+          "unit_copper": "100",
+          "state": "listed",
+          "complete": true
+        },
+        {
+          "observed_at": "2026-11-09T12:00:00Z",
+          "unit_copper": "150",
+          "state": "listed",
+          "complete": true
+        },
+        {
+          "observed_at": "2026-11-12T12:00:00Z",
+          "unit_copper": "200",
+          "state": "listed",
+          "complete": true
+        },
+        {
+          "observed_at": "2026-11-13T12:00:00Z",
+          "unit_copper": "400",
+          "state": "listed",
+          "complete": true
+        },
+        {
+          "observed_at": "2026-11-15T12:00:00Z",
+          "unit_copper": "500",
+          "state": "listed",
+          "complete": true
+        }
+      ],
+      "expected": {
+        "market_market_value": "270",
+        "market_historical_value": "270",
+        "workshop_market_value": "400",
+        "workshop_historical_value": "200",
+        "canonical_market_value": "400",
+        "canonical_historical_value": "200",
+        "canonical_priced_days_60": 5
+      },
+      "derivation": "Weights=1,2,2,4,4; half of 13 is crossed at 400. Unweighted lower median=200. Mean=1350/5."
+    },
+    {
+      "id": "missing-day",
+      "origin": "synthetic",
+      "as_of": "2026-11-15T12:00:00Z",
+      "points": [
+        {
+          "observed_at": "2026-11-13T12:00:00Z",
+          "unit_copper": "100",
+          "state": "listed",
+          "complete": true
+        },
+        {
+          "observed_at": "2026-11-15T12:00:00Z",
+          "unit_copper": "300",
+          "state": "listed",
+          "complete": true
+        }
+      ],
+      "expected": {
+        "market_market_value": "200",
+        "market_historical_value": "200",
+        "workshop_market_value": "100",
+        "workshop_historical_value": null,
+        "canonical_market_value": "100",
+        "canonical_historical_value": null,
+        "canonical_priced_days_60": 2
+      },
+      "derivation": "No November 14 observation. Two points, not three; no interpolation."
+    },
+    {
+      "id": "market-calendar-boundary",
+      "origin": "synthetic",
+      "as_of": "2026-11-15T12:00:00Z",
+      "points": [
+        {
+          "observed_at": "2026-11-01T12:00:00Z",
+          "unit_copper": "100",
+          "state": "listed",
+          "complete": true
+        },
+        {
+          "observed_at": "2026-11-15T12:00:00Z",
+          "unit_copper": "200",
+          "state": "listed",
+          "complete": true
+        }
+      ],
+      "expected": {
+        "market_market_value": "150",
+        "market_historical_value": "150",
+        "workshop_market_value": "200",
+        "workshop_historical_value": null,
+        "canonical_market_value": "200",
+        "canonical_historical_value": null,
+        "canonical_priced_days_60": 2
+      },
+      "derivation": "Market includes exact rolling age 14d; canonical/Workshop exclude UTC age 14 from Market Value."
+    },
+    {
+      "id": "historical-calendar-boundary",
+      "origin": "synthetic",
+      "as_of": "2026-11-15T12:00:00Z",
+      "points": [
+        {
+          "observed_at": "2026-09-16T12:00:00Z",
+          "unit_copper": "100",
+          "state": "listed",
+          "complete": true
+        },
+        {
+          "observed_at": "2026-11-14T12:00:00Z",
+          "unit_copper": "200",
+          "state": "listed",
+          "complete": true
+        },
+        {
+          "observed_at": "2026-11-15T12:00:00Z",
+          "unit_copper": "300",
+          "state": "listed",
+          "complete": true
+        }
+      ],
+      "expected": {
+        "market_market_value": "250",
+        "market_historical_value": "200",
+        "workshop_market_value": "200",
+        "workshop_historical_value": null,
+        "canonical_market_value": "200",
+        "canonical_historical_value": null,
+        "canonical_priced_days_60": 2
+      },
+      "derivation": "September 16 has UTC age 60: Market rolling-60 includes it; canonical excludes it and has only two days."
+    },
+    {
+      "id": "historical-outlier",
+      "origin": "synthetic",
+      "as_of": "2026-11-15T12:00:00Z",
+      "points": [
+        {
+          "observed_at": "2026-11-13T12:00:00Z",
+          "unit_copper": "10000",
+          "state": "listed",
+          "complete": true
+        },
+        {
+          "observed_at": "2026-11-14T12:00:00Z",
+          "unit_copper": "100",
+          "state": "listed",
+          "complete": true
+        },
+        {
+          "observed_at": "2026-11-15T12:00:00Z",
+          "unit_copper": "200",
+          "state": "listed",
+          "complete": true
+        }
+      ],
+      "expected": {
+        "market_market_value": "3433",
+        "market_historical_value": "3433",
+        "workshop_market_value": "200",
+        "workshop_historical_value": "200",
+        "canonical_market_value": "200",
+        "canonical_historical_value": "200",
+        "canonical_priced_days_60": 3
+      },
+      "derivation": "10300/3 rounds to 3433; lower median=200 for three days."
+    },
+    {
+      "id": "absent-day-close",
+      "origin": "synthetic",
+      "as_of": "2026-11-15T12:00:00Z",
+      "points": [
+        {
+          "observed_at": "2026-11-12T12:00:00Z",
+          "unit_copper": "100",
+          "state": "listed",
+          "complete": true
+        },
+        {
+          "observed_at": "2026-11-15T08:00:00Z",
+          "unit_copper": "500",
+          "state": "listed",
+          "complete": true
+        },
+        {
+          "observed_at": "2026-11-15T12:00:00Z",
+          "unit_copper": null,
+          "state": "absent",
+          "complete": true
+        }
+      ],
+      "expected": {
+        "market_market_value": "100",
+        "market_historical_value": "100",
+        "workshop_market_value": "500",
+        "workshop_historical_value": null,
+        "canonical_market_value": "100",
+        "canonical_historical_value": null,
+        "canonical_priced_days_60": 1
+      },
+      "derivation": "Market/canonical select absent day close and exclude its price; Workshop retains last listed 500. It outweighs age-3 price 100."
+    },
+    {
+      "id": "incomplete-day-close",
+      "origin": "synthetic",
+      "as_of": "2026-11-15T12:00:00Z",
+      "points": [
+        {
+          "observed_at": "2026-11-15T08:00:00Z",
+          "unit_copper": "100",
+          "state": "listed",
+          "complete": true
+        },
+        {
+          "observed_at": "2026-11-15T12:00:00Z",
+          "unit_copper": "500",
+          "state": "listed",
+          "complete": false
+        }
+      ],
+      "expected": {
+        "market_market_value": "500",
+        "market_historical_value": "500",
+        "workshop_market_value": "500",
+        "workshop_historical_value": null,
+        "canonical_market_value": "100",
+        "canonical_historical_value": null,
+        "canonical_priced_days_60": 1
+      },
+      "derivation": "Market has no partial-import contract; its formula sees supplied latest point. Workshop may retain whole-read partial-info point. Canonical history uses last complete 100."
+    }
+  ]
+}

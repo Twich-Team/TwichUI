@@ -1,0 +1,32 @@
+{
+  "repository": "Twich-Team/TwichUI-Market",
+  "ref": "research/scoped-market-bridge-l1",
+  "commit": "74686fefacb5e43d6ad9d02c827a859859d09082",
+  "directory": "contracts/bridge/scoped-l1",
+  "files": [
+    "fixtures/cases.json",
+    "fixtures/expectations.json",
+    "fixtures/large-money-scoped.json",
+    "fixtures/legacy-schema2.json",
+    "fixtures/receipt.json",
+    "fixtures/scoped.json",
+    "fixtures/selection.json",
+    "fixtures/short-window-scoped.json",
+    "fixtures/short-window-selection.json",
+    "fixtures/source.json",
+    "fixtures/unknown-scoped.json",
+    "fixtures/unknown-selection.json",
+    "fixtures/unknown-source.json",
+    "generation-schema3.schema.json",
+    "selection.schema.json",
+    "SHA256SUMS.json"
+  ],
+  "hash_manifest_sha256": "c5a465e323005735444f3e5fe2ec48241f50942ebdfb7e7078049849206ec2a7",
+  "legacy_schema_dependency": {
+    "directory": "contracts/bridge/v1",
+    "file": "generation-schema2.schema.json",
+    "sha256": "da57e252913b68f9e60d0b7787e6975ba525176834bb40ef0adcfd6054864653",
+    "unchanged_from_market_base": "73617a9e2ce6b32f539700c72caab4592a443a2f"
+  },
+  "verification": "All listed payloads are exact authoritative bytes. Proposed schema 3 only; no production reader change. Existing v1 mirror and its provenance remain unchanged."
+}

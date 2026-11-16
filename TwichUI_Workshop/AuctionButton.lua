@@ -1,5 +1,5 @@
 -- TwichUI Workshop: the progress bar, and the Scan prices button on the auction house window
--- The scan is started only by the player's click, here or in the Workshop's Opportunities view (the same Session.StartScan, the same
+-- The scan is started by the player's click, here or in the Workshop's Opportunities view (or, when automatic updates are on and Auto.lua may, on opening) (the same Session.StartScan, the same
 -- Scan.lua state). While a scan runs both show an overall progress bar (Scan.Progress: asking, waiting, then the reading) and the same
 -- one-line message; afterwards the auction house window keeps the last message until it closes.
 --
@@ -73,10 +73,22 @@ end
 ---------------------------------------------------------------------------
 function AB.Refresh()
     if not btn then return end
+    if not W.Active() then btn:Hide(); bar:Hide(); status:Hide(); return end
+    btn:Show()
     local busy = SC.Busy()
-    btn.text:SetText(busy and "Scanning..." or "Scan prices")
-    btn:SetEnabled(not busy)
+    local A = W.Auto
+    local prompting = not busy and A ~= nil and A.Prompting()
+    -- while a scan runs the button is its Stop (Scan.Stop); during the short saving step it can only wait, so it says so and is off
+    if busy then
+        local saving = SC.phase == "saving"
+        btn.text:SetText(saving and "Saving..." or "Stop")
+        btn:SetEnabled(not saving)
+    else
+        btn.text:SetText(prompting and "Update prices" or "Scan prices")
+        btn:SetEnabled(true)
+    end
     local msg, tone = SC.Message()
+    if prompting and not SC.Busy() then msg, tone = "Prices are due for an update.", "warn" end
     if busy then
         local frac = SC.Progress() or 0
         bar:Set(frac, AB.BarText(msg, frac))
@@ -86,23 +98,28 @@ function AB.Refresh()
         bar:Hide()
         status:SetText(msg or "")
         Paint(status, tone == "good" and K.sage or (tone == "warn" and K.gold or K.textDim))
-        status:SetShown(msg ~= nil and not stale)
+        status:SetShown(msg ~= nil and (prompting or not stale))
     end
 end
 
 local function Attach()
+    if not W.Active() then return end
     if attached or type(AuctionHouseFrame) ~= "table" then return end
     attached = true
     L, K = R.Look, R.Look.pal
     local F = R.FrameLook
     local AH = AuctionHouseFrame
     btn = F.Button(AH, "Scan prices", BTN_W, "primary", function()
-        S.StartScan()
+        -- a click while a scan runs is its Stop; otherwise it is the player's own scan (never marked automatic), which also answers a prompt
+        if SC.Busy() then SC.Stop() else
+            if W.Auto then W.Auto.Answered() end
+            S.StartScan()
+        end
         AB.Refresh()
     end)
     btn:SetHeight(H)
     btn:SetPoint("TOPRIGHT", AH, "BOTTOMRIGHT", -6, -4)
-    R.Interact.Tip(btn, "Scan prices", "Reads every listing at this auction house once, so the Workshop can price your crafts. It only reads: it never buys, bids or posts, and it starts only when you press this. It prices the recipes the Workshop has read this session, so keep the Workshop open while you open your professions. It can take a little while.")
+    R.Interact.Tip(btn, "Scan prices", "Reads listings at this auction house so Workshop can price your crafts. It never buys, bids or posts. A scan starts only when you click Scan prices. While it is reading, this button stops it without saving an incomplete scan. It can take a little while.")
     bar = W.NewBar(AH, BAR_W, H)
     bar:SetPoint("TOPRIGHT", btn, "TOPLEFT", -8, 0)
     bar:Hide()
@@ -127,8 +144,12 @@ function AB.Bar() return bar end
 function AB.Status() return status end
 
 -- Made now when Blizzard's auction house window exists, otherwise when it is loaded (its own load on demand)
+local wanted = false
 function AB.Start()
-    if attached then return end
+    if not W.Active() then return end
+    if attached then AB.Refresh(); return end
+    if R.WorkshopLauncher and R.WorkshopLauncher.previewLoading then return end
+    wanted = true
     if type(AuctionHouseFrame) == "table" then return Attach() end
     ev = ev or CreateFrame("Frame")
     ev:SetScript("OnEvent", function(_, event, name)
@@ -137,6 +158,15 @@ function AB.Start()
     end)
     ev:RegisterEvent("ADDON_LOADED")
     ev:RegisterEvent("AUCTION_HOUSE_SHOW")   -- (the frame may be made by another addon's load)
+end
+
+function AB.Stop()
+    if ev then ev:UnregisterAllEvents() end
+    if btn then btn:Hide(); bar:Hide(); status:Hide() end
+end
+function AB.Resume()
+    -- A preview-only load must remain isolated across opt-in/profile changes.
+    if wanted then AB.Start() end
 end
 
 AB.Start()

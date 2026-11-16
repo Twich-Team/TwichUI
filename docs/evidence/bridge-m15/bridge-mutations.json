@@ -1,0 +1,419 @@
+{
+  "format": 1,
+  "elapsed_seconds": 12.4,
+  "counts": {
+    "killed": 16,
+    "survived": 0,
+    "invalid": 0,
+    "timeout": 0,
+    "infra": 0
+  },
+  "exit": 0,
+  "baseline": [
+    {
+      "test": "test_workshop_auction_market_server.lua",
+      "status": "pass",
+      "seconds": 0.23,
+      "output": ""
+    },
+    {
+      "test": "test_workshop_bridge.lua",
+      "status": "pass",
+      "seconds": 0.06,
+      "output": ""
+    },
+    {
+      "test": "test_workshop_bridge_performance.lua",
+      "status": "pass",
+      "seconds": 3.32,
+      "output": ""
+    }
+  ],
+  "changed_files": [],
+  "results": [
+    {
+      "id": "market.bridge.work-cap",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_bridge_performance.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_bridge_performance.lua",
+          "seconds": 0.77,
+          "status": "fail"
+        }
+      ],
+      "seconds": 0.7859565719991224,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_bridge_performance.lua:42: clock-backed deterministic work cap changed\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_bridge_performance.lua:42: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/Bridge.lua\n+++ b/TwichUI_Workshop/Bridge.lua\n@@ -3,3 +3,3 @@\n local J,S=W.BridgeCodec,W.BridgeValidate\n-local B={ADDON='TwichUI_MarketData',CACHE_MAX=24,SLICE_MS=3,RESUMES=512}\n+local B={ADDON='TwichUI_MarketData',CACHE_MAX=24,SLICE_MS=3,RESUMES=1024}\n W.Bridge=B",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_bridge_performance.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/Bridge.lua",
+      "why": "a nonadvancing clock admits twice the bounded work"
+    },
+    {
+      "id": "market.bridge.clockless-work",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_bridge_performance.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_bridge_performance.lua",
+          "seconds": 1.61,
+          "status": "fail"
+        }
+      ],
+      "seconds": 1.6234818489974714,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_bridge_performance.lua:69: clockless fallback work expanded\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_bridge_performance.lua:69: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/Bridge.lua\n+++ b/TwichUI_Workshop/Bridge.lua\n@@ -63,3 +63,3 @@\n     local budget=math.max(0.5,(W.Int(ms,1,20) or B.SLICE_MS)-1)\n-    local limit=(GetTimePreciseSec or debugprofilestop) and B.RESUMES or 32\n+    local limit=(GetTimePreciseSec or debugprofilestop) and B.RESUMES or 512\n     repeat",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_bridge_performance.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/Bridge.lua",
+      "why": "a missing clock expands unmeasured synchronous work"
+    },
+    {
+      "id": "market.bridge.elapsed-budget",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_bridge_performance.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_bridge_performance.lua",
+          "seconds": 2.47,
+          "status": "fail"
+        }
+      ],
+      "seconds": 2.483203511001193,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_bridge_performance.lua:73: time budget ignored\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_bridge_performance.lua:73: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/Bridge.lua\n+++ b/TwichUI_Workshop/Bridge.lua\n@@ -70,3 +70,3 @@\n         end\n-    until resumes>=limit or clock()-start>=budget\n+    until resumes>=limit or false\n     stats.resumes=stats.resumes+resumes;stats.largest_resumes=math.max(stats.largest_resumes,resumes)",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_bridge_performance.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/Bridge.lua",
+      "why": "cooperative work ignores its elapsed time budget"
+    },
+    {
+      "id": "market.bridge.range-direction",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "runtime-error",
+      "killed_by": "test_workshop_bridge_performance.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_bridge_performance.lua",
+          "seconds": 1.6,
+          "status": "fail"
+        }
+      ],
+      "seconds": 1.6117638829964562,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_bridge_performance.lua:52: attempt to index a nil value\nstack traceback:\n\ttest_workshop_bridge_performance.lua:52: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/Bridge.lua\n+++ b/TwichUI_Workshop/Bridge.lua\n@@ -128,3 +128,3 @@\n         if key==variant then position=mid;break\n-        elseif key<variant then lo=mid+1 else hi=mid-1 end\n+        elseif key>variant then lo=mid+1 else hi=mid-1 end\n     end",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_bridge_performance.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/Bridge.lua",
+      "why": "binary lookup loses exact variants in a sorted range"
+    },
+    {
+      "id": "market.bridge.range-isolation",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "runtime-error",
+      "killed_by": "test_workshop_bridge_performance.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_bridge_performance.lua",
+          "seconds": 1.59,
+          "status": "fail"
+        }
+      ],
+      "seconds": 1.612629115996242,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_bridge_performance.lua:52: attempt to index a nil value\nstack traceback:\n\ttest_workshop_bridge_performance.lua:52: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/Bridge.lua\n+++ b/TwichUI_Workshop/Bridge.lua\n@@ -124,3 +124,3 @@\n     local first=active.index[item];if not first then return nil,'not_observed' end\n-    local lo,hi,position=first,first+active.variantCounts[item]-1\n+    local lo,hi,position=first,#active.variantKeys\n     while lo<=hi do",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_bridge_performance.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/Bridge.lua",
+      "why": "variant lookup can cross into another item's records"
+    },
+    {
+      "id": "market.bridge.quote-fast-escape",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_bridge_performance.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_bridge_performance.lua",
+          "seconds": 0.0,
+          "status": "fail"
+        }
+      ],
+      "seconds": 0.01784440499613993,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_bridge_performance.lua:6: short quoting fast path escaped unsafely\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_bridge_performance.lua:6: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/BridgeCodec.lua\n+++ b/TwichUI_Workshop/BridgeCodec.lua\n@@ -78,3 +78,3 @@\n local function quote(s,tick)\n-    if #s<=128 and not s:find('[%z\\001-\\031\"\\\\\\127-\\255]') then return '\"'..s..'\"' end\n+    if #s<=128 or not s:find('[%z\\001-\\031\"\\\\\\127-\\255]') then return '\"'..s..'\"' end\n     local out={'\"'};local i,units=1,0",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_bridge_performance.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/BridgeCodec.lua",
+      "why": "short unsafe strings bypass canonical escaping"
+    },
+    {
+      "id": "market.bridge.sha-choice",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_bridge.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_bridge.lua",
+          "seconds": 0.0,
+          "status": "fail"
+        }
+      ],
+      "seconds": 0.016465280001284555,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_bridge.lua:29: assertion failed!\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_bridge.lua:29: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/BridgeCodec.lua\n+++ b/TwichUI_Workshop/BridgeCodec.lua\n@@ -172,3 +172,3 @@\n             -- Maj(a,b,c) = (a and b) or (c and (a or b)).\n-            local t1=(z+bxor(bxor(ror(e,6),ror(e,11)),ror(e,25))+bxor(g,band(e,bxor(f,g)))+K[i]+w[i])%4294967296\n+            local t1=(z+bxor(bxor(ror(e,6),ror(e,11)),ror(e,25))+bxor(g,bor(e,bxor(f,g)))+K[i]+w[i])%4294967296\n             local t2=(bxor(bxor(ror(a,2),ror(a,13)),ror(a,22))+bor(band(a,b),band(c,bor(a,b))))%4294967296",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_bridge.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/BridgeCodec.lua",
+      "why": "an incorrect equivalent boolean formula corrupts SHA-256"
+    },
+    {
+      "id": "market.bridge.encoding-depth",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_bridge_performance.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_bridge_performance.lua",
+          "seconds": 0.01,
+          "status": "fail"
+        }
+      ],
+      "seconds": 0.01898702199832769,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_bridge_performance.lua:19: canonical encoder depth bound changed\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_bridge_performance.lua:19: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/BridgeCodec.lua\n+++ b/TwichUI_Workshop/BridgeCodec.lua\n@@ -111,3 +111,3 @@\n     local function emit(value,level)\n-        if level>12 then fail() end;if tick then tick() end\n+        if level>14 then fail() end;if tick then tick() end\n         if value==J.NULL then parts[#parts+1]='null';return end",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_bridge_performance.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/BridgeCodec.lua",
+      "why": "the canonical encoder silently raises its depth bound"
+    },
+    {
+      "id": "market.bridge.generation-integrity",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_bridge.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_bridge.lua",
+          "seconds": 0.03,
+          "status": "fail"
+        }
+      ],
+      "seconds": 0.04501909099781187,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_bridge.lua:20: wrong acceptance\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_bridge.lua:20: in function 'drain'\n\ttest_workshop_bridge.lua:37: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/Bridge.lua\n+++ b/TwichUI_Workshop/Bridge.lua\n@@ -49,3 +49,3 @@\n     recordsHash:Update(']');bodyHash:Update(']'..table.concat(after))\n-    requireData(recordBytes==h.integrity.records_bytes and recordsHash:Finish()==h.integrity.records_sha256 and bodyHash:Finish()==h.generation_id)\n+    requireData(recordBytes==h.integrity.records_bytes and recordsHash:Finish()==h.integrity.records_sha256 and true)\n     out.bytes=#raw.manifest+recordBytes+11;return out",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_bridge.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/Bridge.lua",
+      "why": "a generation identity no longer binds every source record"
+    },
+    {
+      "id": "market.bridge.identity-order",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_bridge.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_bridge.lua",
+          "seconds": 0.05,
+          "status": "fail"
+        }
+      ],
+      "seconds": 0.0640487700002268,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_bridge.lua:20: wrong acceptance\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_bridge.lua:20: in function 'drain'\n\ttest_workshop_bridge.lua:39: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/Bridge.lua\n+++ b/TwichUI_Workshop/Bridge.lua\n@@ -38,3 +38,3 @@\n         local r=J.Parse(text,tick);S.Record(ctx,r,tick);requireData(J.Encode(r,tick)==text)\n-        requireData(r.item_id>lastItem or r.item_id==lastItem and r.variant_key>lastVariant)\n+        requireData(true)\n         -- The contract already requires item/variant order. Retain one range",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_bridge.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/Bridge.lua",
+      "why": "duplicate exact variants overwrite the imported index"
+    },
+    {
+      "id": "market.bridge.history-window",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_bridge.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_bridge.lua",
+          "seconds": 0.01,
+          "status": "fail"
+        }
+      ],
+      "seconds": 0.028955310001038015,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_bridge.lua:36: history outside requested window\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_bridge.lua:36: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/Bridge.lua\n+++ b/TwichUI_Workshop/Bridge.lua\n@@ -155,3 +155,3 @@\n         local days=W.Int(opt and opt.days or 60,1,60);if not days then return nil,'window' end\n-        local ctx=active.context;local from=math.max(ctx.from,ctx.today-days+1)\n+        local ctx=active.context;local from=ctx.from\n         local out={basis=active.header.history_basis,algorithm=active.header.pricing_algorithm,source='market_server',generation=active.header.generation_id,",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_bridge.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/Bridge.lua",
+      "why": "a selected history window includes older dates"
+    },
+    {
+      "id": "market.bridge.local-history",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "runtime-error",
+      "killed_by": "test_workshop_bridge.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_bridge.lua",
+          "seconds": 0.02,
+          "status": "fail"
+        }
+      ],
+      "seconds": 0.02814664299512515,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_bridge.lua:16: attempt to index field 'localScan' (a nil value)\nstack traceback:\n\ttest_workshop_bridge.lua:16: in function 'preserved'\n\ttest_workshop_bridge.lua:20: in function 'drain'\n\ttest_workshop_bridge.lua:33: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/Bridge.lua\n+++ b/TwichUI_Workshop/Bridge.lua\n@@ -68,3 +68,3 @@\n         if coroutine.status(current.co)=='dead' then\n-            active=value;cache,order={},{};job=nil;state,lastError='ready',nil;complete=true;break\n+            TwichUIWorkshopDB.markets={};active=value;cache,order={},{};job=nil;state,lastError='ready',nil;complete=true;break\n         end",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_bridge.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/Bridge.lua",
+      "why": "an import overwrites original local scans"
+    },
+    {
+      "id": "market.bridge.duplicate-json",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_bridge.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_bridge.lua",
+          "seconds": 0.01,
+          "status": "fail"
+        }
+      ],
+      "seconds": 0.016132261996972375,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_bridge.lua:30: duplicate JSON object key\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_bridge.lua:30: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/BridgeCodec.lua\n+++ b/TwichUI_Workshop/BridgeCodec.lua\n@@ -59,3 +59,3 @@\n             i=i+1;local out=setmetatable({},J.OBJECT);ws();if sub(raw,i,i)=='}' then i=i+1;return out end\n-            while true do ws();local k=str();if out[k]~=nil then fail() end;ws();if sub(raw,i,i)~=':' then fail() end;i=i+1;out[k]=value(depth+1);ws();local nextc=sub(raw,i,i);i=i+1;if nextc=='}' then return out elseif nextc~=',' then fail() end end\n+            while true do ws();local k=str();if false then fail() end;ws();if sub(raw,i,i)~=':' then fail() end;i=i+1;out[k]=value(depth+1);ws();local nextc=sub(raw,i,i);i=i+1;if nextc=='}' then return out elseif nextc~=',' then fail() end end\n         elseif c=='[' then",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_bridge.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/BridgeCodec.lua",
+      "why": "duplicate keys silently replace validated fields"
+    },
+    {
+      "id": "market.bridge.integer-range",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_bridge.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_bridge.lua",
+          "seconds": 0.0,
+          "status": "fail"
+        }
+      ],
+      "seconds": 0.015404801000840962,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_bridge.lua:31: integer precision loss\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_bridge.lua:31: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/BridgeCodec.lua\n+++ b/TwichUI_Workshop/BridgeCodec.lua\n@@ -71,3 +71,3 @@\n             local text=sub(raw,start,i-1);local abs=text:gsub('^-','')\n-            if #abs>16 or (#abs==16 and abs>'9007199254740991') then fail() end\n+            if false then fail() end\n             local number=tonumber(text);if not number or text=='-0' then fail() end;return number",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_bridge.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/BridgeCodec.lua",
+      "why": "JSON integers round through the Lua exact-number boundary"
+    },
+    {
+      "id": "market.bridge.catalog-reuse",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_auction_market_server.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_auction_market_server.lua",
+          "seconds": 0.11,
+          "status": "fail"
+        }
+      ],
+      "seconds": 0.12439397200068925,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_auction_market_server.lua:35: assertion failed!\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_auction_market_server.lua:35: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/ServerMarket.lua\n+++ b/TwichUI_Workshop/ServerMarket.lua\n@@ -13,3 +13,3 @@\n     opt=opt or {}\n-    return W.AuctionBrowseData.Job({sources={},market=nil,index=true,catalog=opt.catalog,item=opt.item,query=opt.query,category=opt.category,quality=opt.quality,\n+    return W.AuctionBrowseData.Job({sources={},market=nil,index=true,item=opt.item,query=opt.query,category=opt.category,quality=opt.quality,\n         enumerate=function(add,tick,job)",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_auction_market_server.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/ServerMarket.lua",
+      "why": "external filtering rediscovers identities instead of retaining completed rows"
+    },
+    {
+      "id": "market.bridge.resize-label",
+      "status": "killed",
+      "message": "\t[C]: ?",
+      "kind": "assertion",
+      "killed_by": "test_workshop_auction_market_server.lua",
+      "tests_run": [
+        {
+          "test": "test_workshop_auction_market_server.lua",
+          "seconds": 0.12,
+          "status": "fail"
+        }
+      ],
+      "seconds": 0.13525977400422562,
+      "excerpt": "/workspace/twichui-env/root/usr/bin/lua5.1: test_workshop_auction_market_server.lua:64: resize lost external supply provenance\nstack traceback:\n\t[C]: in function 'assert'\n\ttest_workshop_auction_market_server.lua:64: in main chunk\n\t[C]: ?",
+      "diff": "--- a/TwichUI_Workshop/auction/ViewMarket.lua\n+++ b/TwichUI_Workshop/auction/ViewMarket.lua\n@@ -422,3 +422,3 @@\n         if p.projection then\n-            if p.marketKey==\"server\" then ServerChart(p,p.projection) else p.chart:Set(p.projection.series,UI.Money) end\n+            p.chart:Set(p.projection.series,UI.Money)\n         end",
+      "kept": "",
+      "broad_killed_by": "",
+      "expected": true,
+      "command": "lua5.1 -e require(\"bit\"); ROOT=\"../!!!TwichUI/\"; REPO=\"../\"; TESTS=\"./\" test_workshop_auction_market_server.lua",
+      "expect": "killed",
+      "file": "TwichUI_Workshop/auction/ViewMarket.lua",
+      "why": "resizing labels one external supply observation as cheapest money"
+    }
+  ]
+}

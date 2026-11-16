@@ -24,6 +24,12 @@
 -- After the read the result is merged into the saved market and its history in small steps (phase "saving"), then written at once:
 -- nothing is saved until the last step, and the auction house closing during the saving changes nothing (the listings were read).
 --
+-- (A6) The same scan is started two ways: by the player (the button, the Opportunities view) and, when the player allows it, by Auto.lua on
+-- opening the auction house (SC.Start(priority, { auto = true })). Everything after the request is shared: the same events, settling, reading,
+-- completeness rules and atomic commit. The one difference is provenance: the saved snapshot and scan log carry `auto`. An automatic scan gives
+-- way to the player: if the posting search is busy, or another request goes out while it still waits for its turn, it ends "interrupted"
+-- (why "busy") and writes nothing. SC.Stop() ends any scan that is not yet saving; nothing is written before the last saving step.
+--
 -- States (SC.state): idle, scanning (SC.phase: waiting, awaiting, settling, reading, saving), done, interrupted, failed, unavailable.
 -- The auction house closing, a second click, an old timer or an old event never leaves a half-finished scan behind: a scan ends once,
 -- and its timers and events carry a token that ends with it. Only a finished, valid scan writes anything.
@@ -31,6 +37,7 @@
 local R = TwichUI
 local W = R.Workshop
 local PR = W.Prices
+local D = W.Dist
 local Int, Text = W.Int, W.Text
 local SC = {}
 W.Scan = SC
@@ -41,12 +48,15 @@ local MAX_REREADS = 2        -- reads repeated for that reason, at most
 local MAX_RESTARTS = 3       -- times a read may be started over because the NUMBER of listings changed while it was read
 local MAX_SETTLE = 10        -- seconds a wait for quiet may last: more updates than that no longer push the read back
 local BATCH = 400            -- records read per step; the next step runs on the next timer tick so the interface stays responsive
+local BUILD_MS = 3           -- milliseconds the entries and distributions may be built per timer tick (a step is at most Prices.TIERS_STEP tiers)
+local SAVE_MS = 4            -- (A4) milliseconds of commit steps per timer tick (a step is at most Prices.COMMIT_STEP work units; history folds cost more)
 local MAX_RECORDS = 250000   -- records read, at most (more makes the scan not complete)
 local THROTTLE_WAIT = 30     -- seconds to wait for the auction house to be ready to take a request
 local RESPONSE_WAIT = 90     -- seconds to wait for the listings after the request
 local DROP_WINDOW = 5        -- a dropped message this soon after the request is taken as ours
 
 SC.state, SC.phase, SC.why = "idle", nil, nil
+SC.auto, SC.key = false, nil   -- (A6) whether the latest scan was started by the Workshop on opening the auction house, and its market
 SC.ended = 0                   -- how many scans (or refused starts) have ended this session: a watcher records each once
 SC.OnChange = function() end   -- set by Window.lua
 local listeners = {}           -- more watchers (the auction house button): SC.Listen(fn); each is told whenever the state or progress changes
@@ -58,7 +68,7 @@ end
 function SC.Listen(fn) listeners[#listeners + 1] = fn end
 
 local EVENTS = { "REPLICATE_ITEM_LIST_UPDATE", "AUCTION_HOUSE_THROTTLED_SYSTEM_READY", "AUCTION_HOUSE_THROTTLED_MESSAGE_DROPPED",
-    "AUCTION_HOUSE_CLOSED", "AUCTION_HOUSE_DISABLED" }
+    "AUCTION_HOUSE_THROTTLED_MESSAGE_SENT", "AUCTION_HOUSE_CLOSED", "AUCTION_HOUSE_DISABLED" }
 
 local ev                   -- the event frame, made on the first scan
 local token = 0            -- ends with each scan: its timers and steps do nothing after that
@@ -138,6 +148,16 @@ local function End(state, why)
     Changed()
 end
 
+-- (A6) The player's Stop. A scan that is waiting, asking, settling or reading ends "interrupted" (why "stopped") and writes nothing: the saved
+-- prices and history are only ever read until the last saving step. The saving phase is not stopped: it is short, it only builds the new
+-- tables and then applies them in one step, and a Stop that raced the apply could not promise "nothing was written". Returns true, or false and why.
+function SC.Stop()
+    if SC.state ~= "scanning" or not run then return false, "idle" end
+    if SC.phase == "saving" then return false, "saving" end
+    End("interrupted", "stopped")
+    return true
+end
+
 local function Ready()
     local ok, ready = pcall(C_AuctionHouse.IsThrottledMessageSystemReady)
     return ok and ready == true
@@ -156,7 +176,11 @@ end
 local function SaveStep(mine)
     if mine ~= token or SC.phase ~= "saving" or not run then return end
     local job, result = run.job, run.result
-    local ok, done = pcall(Perf, "workshop.scan", job.Step, job)
+    -- steps of at most Prices.COMMIT_STEP work units, as many as fit in SAVE_MS (none is begun after that), then the frame goes on
+    local clock = type(debugprofilestop) == "function" and debugprofilestop or nil
+    local t0 = clock and clock()
+    local ok, done
+    repeat ok, done = pcall(Perf, "workshop.scan", job.Step, job) until not ok or done or not t0 or clock() - t0 >= SAVE_MS
     if not ok then return End("failed", "unsaved") end
     if not done then
         run.saveFrac = job:Progress()
@@ -167,13 +191,15 @@ local function SaveStep(mine)
     if not (good and applied) then return End("failed", (good and why == "held") and "held" or "unsaved") end
     -- the result is set before the end is announced: a watcher told of the end reads the message at once
     SC.result = { complete = result.complete, used = result.used, read = result.read, items = result.n, partialInfo = result.partialInfo,
-        changed = result.changed, cut = result.cut, dropped = result.dropped, updates = result.updates, restarts = result.restarts }
+        changed = result.changed, cut = result.cut, dropped = result.dropped, updates = result.updates, restarts = result.restarts,
+        alg = job.distOk == true and D.ALG or nil }
     End("done")
 end
 
 local function Finish(result)
-    local scan = { realm = run.realm, side = run.side, at = time(), complete = result.complete, cut = result.cut, changed = result.changed,
-        read = result.read, used = result.used, partial = result.partialInfo, n = result.n, items = result.items }
+    local scan = { realm = run.realm, side = run.side, at = time(), auto = run.auto == true, complete = result.complete, cut = result.cut, changed = result.changed,
+        read = result.read, used = result.used, invalid = result.invalid, noBuyout = result.noBuyout, partial = result.partialInfo, n = result.n,
+        items = result.items, dist = result.dist, alg = result.dist and D.ALG or nil }
     local job, why = PR.BeginCommit(run.key, scan)
     if not job then
         if why == "kept" then return End("failed", "kept") end
@@ -207,10 +233,10 @@ local function EnterSettle(wait)
     Changed()
 end
 
-local function ReadDone(batch, truncated)
-    local items, n, over, dropped = batch:Items()
+local function ReadDone(batch, truncated, items, n, over, dropped, dist)
     local cut = truncated or over
-    local result = { items = items, n = n, read = batch.read, used = batch.used, partialInfo = batch.partialInfo, dropped = dropped,
+    local result = { items = items, n = n, read = batch.read, used = batch.used, invalid = batch.invalid, noBuyout = batch.noBuyout,
+        partialInfo = batch.partialInfo, dropped = dropped, dist = dist,
         cut = cut, complete = batch.partialInfo == 0 and not cut, updates = run.updates, restarts = run.restarts }
     -- more updates during the read are item data arriving, not a different market. A different number of listings is: start
     -- over a few times, and if it never holds still keep what was read as a scan that is NOT complete (never a failure).
@@ -260,7 +286,23 @@ local function BeginRead()
             Changed()
             C_Timer.After(0, Step)
         else
-            ReadDone(batch, truncated)
+            -- the entries are built a step at a time too (Prices.ITEMS_STEP): at 40,000 items the one call was a visible hitch
+            local job = batch:ItemsJob()
+            local function Build()
+                if mine ~= token or g ~= gen or SC.phase ~= "reading" then return end
+                if not SC.AuctionOpen() then return End("interrupted", "closed") end
+                local Perf = R.Perf
+                local bt = Perf and Perf.on and Perf.Start("workshop.scan")
+                -- steps of at most Prices.TIERS_STEP tiers, as many as fit in BUILD_MS (a step is never begun after that), then the frame goes on
+                local clock = type(debugprofilestop) == "function" and debugprofilestop or nil
+                local t0 = clock and clock()
+                local done
+                repeat done = job:Step() until done or not t0 or clock() - t0 >= BUILD_MS
+                if bt then Perf.Stop(bt) end
+                if not done then return C_Timer.After(0, Build) end
+                ReadDone(batch, truncated, job:Result())
+            end
+            C_Timer.After(0, Build)
         end
     end
     Changed()
@@ -279,7 +321,14 @@ end
 ---------------------------------------------------------------------------
 -- Events
 ---------------------------------------------------------------------------
+-- The posting page's one-item search (or the player's own search) is under way: an automatic scan never competes with it
+local function PostingBusy()
+    local posting = R.AuctionScan
+    return posting ~= nil and posting.Busy ~= nil and posting.Busy() == true
+end
+
 local function Send()
+    if run.auto and PostingBusy() then return End("interrupted", "busy") end
     local ok = pcall(C_AuctionHouse.ReplicateItems)
     if not ok then return End("failed", "api") end
     run.sentAt = GetTime()
@@ -307,6 +356,10 @@ OnEvent = function(event)
         End("interrupted", "closed")
     elseif event == "AUCTION_HOUSE_THROTTLED_SYSTEM_READY" then
         if SC.phase == "waiting" then Send() end
+    elseif event == "AUCTION_HOUSE_THROTTLED_MESSAGE_SENT" then
+        -- another request went out while an AUTOMATIC scan still waits for its turn: the player (or another addon) is using the auction house, so
+        -- the scan gives way instead of queueing behind or ahead of it. A manual scan keeps waiting: the player asked for it.
+        if run.auto and SC.phase == "waiting" then End("interrupted", "busy") end
     elseif event == "AUCTION_HOUSE_THROTTLED_MESSAGE_DROPPED" then
         if SC.phase == "awaiting" and run.sentAt and GetTime() - run.sentAt < DROP_WINDOW then End("failed", "dropped") end
     elseif event == "REPLICATE_ITEM_LIST_UPDATE" then
@@ -320,9 +373,11 @@ end
 -- priority: optional set [itemID] = true of items to keep first should the auction house list more than Prices.MAX_ITEMS (the recipes'
 -- items); it limits nothing, and no recipe is needed. Returns true, or false and why. A click while a scan runs does nothing
 -- ("busy"). Every other refusal sets state "unavailable".
-function SC.Start(priority)
+function SC.Start(priority, opts)
     if SC.Busy() then return false, "busy" end
+    local auto = type(opts) == "table" and opts.auto == true
     local function Refuse(why)
+        SC.auto, SC.key = auto, nil
         SC.state, SC.phase, SC.why, SC.progress = "unavailable", nil, why, nil
         SC.ended = SC.ended + 1
         Changed()
@@ -333,14 +388,15 @@ function SC.Start(priority)
         return Refuse("api")
     end
     if not SC.AuctionOpen() then return Refuse("closed") end
-    local posting = R.AuctionScan   -- the posting page's one-item search: never compete with it
-    if posting and posting.Busy and posting.Busy() then return Refuse("posting") end
+    if PostingBusy() then return Refuse("posting") end   -- the posting page's one-item search: never compete with it
     local key, realm, side = SC.Market()
     if not key then return Refuse("market") end
     if PR.Held() then return Refuse("held") end
 
     token, gen = token + 1, gen + 1
-    run = { priority = type(priority) == "table" and priority or nil, key = key, realm = realm, side = side, restarts = 0, rereads = 0, updates = 0 }
+    run = { priority = type(priority) == "table" and priority or nil, key = key, realm = realm, side = side, restarts = 0, rereads = 0, updates = 0,
+        auto = auto }
+    SC.auto, SC.key = auto, key
     SC.prior = PR.Market(key) ~= nil
     SC.result, SC.why, SC.progress = nil, nil, nil
     SC.state, SC.phase = "scanning", "waiting"
@@ -378,6 +434,8 @@ local FAILED = {
     held = "These prices were saved by a newer TwichUI, so they can't be changed here.",
     unsaved = "The prices couldn't be saved.",
 }
+-- (A6) refusals of an automatic scan, said in one plain line (the cause stays in SC.why)
+local AUTO_REFUSED = { api = true, noResponse = true, dropped = true, throttled = true }
 local PHASE = {
     waiting = "Waiting for the auction house to be ready...",
     awaiting = "Asking the auction house for its listings...",
@@ -393,10 +451,12 @@ function SC.Message()
         if SC.phase == "reading" and SC.progress and SC.progress.total > 0 then
             return "Reading listings...", "quiet"
         end
+        if SC.auto then return "Updating market prices...", "quiet" end
         return PHASE[SC.phase] or "Scanning...", "quiet"
     elseif s == "done" then
         local r = SC.result
         if r and r.complete then
+            if SC.auto then return "Market prices updated.", "good" end
             return ("Scan finished. Prices found for %d items."):format(r.items), "good"
         end
         if r and r.changed then
@@ -407,8 +467,11 @@ function SC.Message()
         end
         return "Scan finished, but some listings hadn't fully loaded, so prices may be incomplete.", "warn"
     elseif s == "interrupted" then
+        if SC.why == "stopped" then return "The scan was stopped. Nothing was changed." .. kept, "quiet" end
+        if SC.why == "busy" then return "The automatic update gave way to your auction house use. You can update prices when you like." .. kept, "quiet" end
         return "The scan stopped because the auction house closed." .. kept, "warn"
     elseif s == "failed" then
+        if SC.auto and AUTO_REFUSED[SC.why] then return "Automatic update unavailable. You can update prices manually." .. kept, "warn" end
         local text = FAILED[SC.why] or "The scan didn't finish."
         if SC.why == "kept" or SC.why == "held" or SC.why == "unsaved" then return text, "warn" end
         return text .. kept, "warn"

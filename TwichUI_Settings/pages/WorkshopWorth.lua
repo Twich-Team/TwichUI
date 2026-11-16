@@ -7,7 +7,7 @@
 -- over made-up items (WL.Example) that are labelled as preview data. Nothing is scanned or read from the game, and nothing here changes
 -- a figure: the layout only chooses which lines appear, in what order, and when.
 --
--- LOAD ON DEMAND: the Workshop is not loaded at login. Until it is, this shows one sentence and one button; the button loads the Workshop
+-- LOAD ON DEMAND: unless login loading was explicitly enabled, the Workshop loads only when asked. The invitation button loads it
 -- through its normal safe launcher (never in combat, opens no window). Hovering an item never loads anything.
 --
 -- THE DRAG is the same virtual drag Magic Inventory's editor uses (MagicInventoryDrag.lua): a label follows the pointer while the button
@@ -15,23 +15,26 @@
 -- drag has a click alternative. The handlers (D.Drop, D.GapAt ...) are reachable without a pointer, so they can be driven by tests; real
 -- pointer-driven dragging has to be checked in the game (docs/workshop.md, "What's it worth?").
 --
--- What is saved is the layout and the on/off choice in the profile in use (WL.SetLines / WL.SetEnabled), after every change.
+-- A bounded draft/undo history lives only in this editor. Save validates and atomically applies the active profile layout.
 
 local R = TwichUI
 local D = {}
 R.WorkshopWorthDesigner = D
 
 local W = 644
-local LIST_W, COL_X, MOCK_W = 196, 212, 304
-local SIDE_X = COL_X + MOCK_W + 12
-local SIDE_W = W - SIDE_X
-local INNER, PAD_IN, ROW_H = MOCK_W - 20, 10, 16
+local LIST_W, COL_X, MOCK_W = 232, 276, 348
+local SIDE_W = 104
+local INNER, PAD_IN, ROW_H = MOCK_W - 24, 12, 20
 local TOP = 64                          -- where the body starts under the header
 local AMBER = { 0.93, 0.72, 0.38 }
 local NEWER = "These settings were saved by a newer TwichUI, so they are left alone."
 
 local function Wg() return R.SettingsWidgets end
-local function WL() return R.Workshop and R.Workshop.WorthLayout end
+local function WL()
+    local l = R.WorkshopLauncher
+    if l and l.Enabled and not l.Enabled() then return nil end
+    return R.Workshop and R.Workshop.WorthLayout
+end
 local function Launcher() return R.WorkshopLauncher end
 local function DragKit() local P = R.MagicInventoryPage return P and P.Drag end
 
@@ -96,29 +99,85 @@ function D.Model() return model end
 function D.Row(i) return rows[i] end              -- the i-th row of the mockup (a Button), for tests and the simulator
 function D.ListButton(i) return listButtons[i] end
 
----------------------------------------------------------------------------
--- Changing the layout (each saves at once; the buttons, the drag and the tests all come through here)
----------------------------------------------------------------------------
-local function Commit(list, text)
+-- Drafts belong to the active profile. No preview operation writes saved data.
+local draft, base, owner
+local undo, redo = {}, {}
+local resetPending = false
+local query = ""
+local function Copy(v)
+    local out = { enabled = v.enabled, lines = {} }
+    for i, e in ipairs(v.lines) do out.lines[i] = { id = e.id, when = e.when } end
+    return out
+end
+local function Equal(a, b)
+    if a.enabled ~= b.enabled or #a.lines ~= #b.lines then return false end
+    for i, e in ipairs(a.lines) do if e.id ~= b.lines[i].id or e.when ~= b.lines[i].when then return false end end
+    return true
+end
+function D.Draft()
     local L = WL()
-    if not L then return false end
-    local ok, why = L.SetLines(list)
-    if not ok then
-        Say(why == "newer" and NEWER or "That couldn't be saved.", "warn")
-        D.Refresh()
-        return false
+    if not L then return nil end
+    local ui = TwichUIDB and TwichUIDB.ui
+    if not draft or owner ~= ui then
+        draft, base, owner = L.Get(), L.Get(), ui
+        undo, redo, selected, resetPending = {}, {}, nil, false
+    elseif Equal(draft, base) and not Equal(base, L.Get()) then
+        draft, base, undo, redo = L.Get(), L.Get(), {}, {}
     end
-    if text then Say(text) end
+    return Copy(draft)
+end
+function D.Dirty() local v = D.Draft(); return v and not Equal(v, base) or false end
+local function Change(v, text)
+    D.Draft()
+    local ok, why = WL().CanWrite()
+    if not ok then Say(why == "newer" and NEWER or "That couldn't be saved.", "warn"); D.Refresh(); return false end
+    if not Equal(v, draft) then
+        undo[#undo + 1] = Copy(draft)
+        if #undo > 50 then table.remove(undo, 1) end
+        draft, redo = Copy(v), {}
+    end
+    resetPending = false
+    Say(text)
     D.Refresh()
     return true
 end
+local function Commit(list, text)
+    local v = D.Draft(); if not v then return false end
+    v.lines = list
+    return Change(v, text)
+end
+function D.Save()
+    local v = D.Draft(); if not v then return false end
+    if not Equal(base, WL().Get()) then Say("Your saved layout changed. Cancel to use it before editing again.", "warn"); D.Refresh(); return false end
+    local ok, why = WL().Set(v)
+    if not ok then Say(why == "newer" and NEWER or "That couldn't be saved.", "warn"); D.Refresh(); return false end
+    draft, base, undo, redo = WL().Get(), WL().Get(), {}, {}
+    resetPending = false
+    Say("Layout saved."); D.Refresh(); return true
+end
+function D.Cancel()
+    draft, base, owner, undo, redo, selected, resetPending = nil, nil, nil, {}, {}, nil, false
+    Say("Unsaved changes discarded."); D.Refresh(); return true
+end
+function D.Undo()
+    if #undo == 0 then return false end
+    redo[#redo + 1] = Copy(draft); draft = table.remove(undo)
+    resetPending = false; D.Refresh(); return true
+end
+function D.Redo()
+    if #redo == 0 then return false end
+    undo[#undo + 1] = Copy(draft); draft = table.remove(redo)
+    resetPending = false; D.Refresh(); return true
+end
+function D.Search(text) query = tostring(text or ""):lower():sub(1, 100); D.Refresh() end
+function D.ResetPending() return resetPending end
 
 -- at: the place in the layout (nil = the end). A new line shows in the preview you are looking at: Always in the Normal preview, its
 -- usual choice in the Hold Shift preview.
 function D.AddLine(id, at)
     local L = WL()
     if not L then return false end
-    local list = L.Get().lines
+    local list = D.Draft().lines
     local t = L.BY_ID[id]
     if not t then return false end
     if L.IndexOf(list, id) then
@@ -136,7 +195,7 @@ end
 function D.RemoveLine(id)
     local L = WL()
     if not L then return false end
-    local out = L.Remove(L.Get().lines, id)
+    local out = L.Remove(D.Draft().lines, id)
     if not out then return false end
     if selected == id then selected = nil end
     return Commit(out, "Removed " .. Label(id) .. ".")
@@ -145,7 +204,7 @@ end
 function D.MoveLine(id, before)
     local L = WL()
     if not L then return false end
-    local list = L.Get().lines
+    local list = D.Draft().lines
     local out = L.Move(list, id, before)
     if not out then return false end
     local same = true
@@ -158,7 +217,7 @@ end
 function D.StepLine(id, dir)
     local L = WL()
     if not L then return false end
-    local out = L.Step(L.Get().lines, id, dir, shiftMode)
+    local out = L.Step(D.Draft().lines, id, dir, shiftMode)
     if not out then return false end
     return Commit(out, nil)
 end
@@ -166,7 +225,7 @@ end
 function D.SetWhen(id, when)
     local L = WL()
     if not L then return false end
-    local out = L.SetWhen(L.Get().lines, id, when)
+    local out = L.SetWhen(D.Draft().lines, id, when)
     if not out then return false end
     local text = when == "always" and (Label(id) .. " shows always.") or (Label(id) .. " shows while you hold Shift.")
     if when == "shift" and not shiftMode then
@@ -193,31 +252,19 @@ function D.SetExample(key)
 end
 
 function D.SetEnabled(on)
-    local L = WL()
-    if not L then return false end
-    local ok, why = L.SetEnabled(on and true or false)
-    if not ok then
-        Say(why == "newer" and NEWER or "That couldn't be saved.", "warn")
-    else
-        Say(on and "Tooltip on." or "Tooltip off. Your layout is kept.")
-    end
-    D.Refresh()
-    return ok
+    local v = D.Draft(); if not v or type(on) ~= "boolean" then return false end
+    v.enabled = on
+    return Change(v, on and "Tooltip enabled in this draft." or "Tooltip disabled in this draft.")
 end
-
-function D.ResetLayout()
-    local L = WL()
-    if not L then return false end
-    local ok, why = L.Reset()
-    if not ok then
-        Say(why == "newer" and NEWER or "That couldn't be saved.", "warn")
-    else
-        selected = nil
-        Say("The short default layout is back.")
-    end
-    D.Refresh()
-    return ok
+function D.ResetLayout(confirm)
+    if not WL() then return false end
+    local ok, why = WL().CanWrite()
+    if not ok then Say(why == "newer" and NEWER or "That couldn't be saved.", "warn"); D.Refresh(); return false end
+    if confirm ~= true then resetPending = true; D.Refresh(); return true end
+    selected = nil
+    return Commit(WL().DefaultLines(), "Default layout restored to the draft. Save to apply it.")
 end
+function D.KeepEditing() resetPending = false; D.Refresh() end
 
 ---------------------------------------------------------------------------
 -- Where a drop lands
@@ -279,7 +326,7 @@ end
 function D.StartDrag(src)
     local Dr = DragKit()
     local L = WL()
-    if not (Dr and L and model) then return false end
+    if not (Dr and L and model) or not L.CanWrite() then return false end
     if src.kind == "list" and L.IndexOf(model.layout.lines, src.id) then return false end   -- already in the preview
     if src.kind == "row" then
         for _, fr in ipairs(rows) do if fr.rowId == src.id then fr:SetAlpha(0.4) end end   -- the row being carried
@@ -308,13 +355,13 @@ local function MakeRow(i)
     fr.bar:SetPoint("BOTTOMLEFT", -6, 2)
     fr.bar:SetWidth(2)
     fr.bar:Hide()
-    fr.left = fr:CreateFontString(nil, "OVERLAY", "GameTooltipTextSmall")
+    fr.left = fr:CreateFontString(nil, "OVERLAY", "GameTooltipText")
     fr.left:SetJustifyH("LEFT")
     fr.left:SetPoint("TOPLEFT", 0, -1)
-    fr.right = fr:CreateFontString(nil, "OVERLAY", "GameTooltipTextSmall")
+    fr.right = fr:CreateFontString(nil, "OVERLAY", "GameTooltipText")
     fr.right:SetJustifyH("RIGHT")
     fr.right:SetPoint("TOPRIGHT", 0, -1)
-    fr.wide = fr:CreateFontString(nil, "OVERLAY", "GameTooltipTextSmall")
+    fr.wide = fr:CreateFontString(nil, "OVERLAY", "GameTooltipText")
     fr.wide:SetJustifyH("LEFT")
     fr.wide:SetPoint("TOPLEFT", 0, -1)
     fr.wide:SetWidth(INNER)
@@ -337,8 +384,10 @@ local function PaintRow(fr, row)
     fr.rowId, fr.rowIndex = row.id, row.index
     fr.left:Hide(); fr.right:Hide(); fr.wide:Hide()
     local h = ROW_H
+    fr.wide:SetWidth(INNER)
     if not row.line then
         -- a line with nothing to say for this example: it keeps its place so it can still be moved or removed
+        fr.wide:SetWidth(INNER)
         fr.wide:SetText("(" .. Label(row.id) .. ": nothing to show for this example)")
         Color(fr.wide, C.quiet, 0.8)
         fr.wide:Show()
@@ -374,8 +423,9 @@ local function PaintMock(L, layout)
     local r, ctx = L.Example(exampleKey)
     local sec = L.Rows(r, ctx, layout, shiftMode, true)
     local y = PAD_IN
-    mock.name:ClearAllPoints(); mock.name:SetPoint("TOPLEFT", PAD_IN, -y)
-    y = y + ROW_H + 8   -- the blank line a real tooltip leaves
+    if mock.icon then mock.icon:SetTexture((exampleKey == "missing" or exampleKey == "unavailable") and "Interface\\Icons\\INV_Chest_Cloth_17" or "Interface\\Icons\\INV_Misc_Note_01") end
+    mock.name:ClearAllPoints(); mock.name:SetPoint("TOPLEFT", PAD_IN + 40, -y - 6)
+    y = y + 44   -- the blank line a real tooltip leaves
     mock.title:SetText(sec.title)
     mock.title:ClearAllPoints(); mock.title:SetPoint("TOPLEFT", PAD_IN, -y)
     y = y + ROW_H + 2
@@ -432,14 +482,22 @@ local function BuildList(L)
     local pal = G.pal
     for i, t in ipairs(L.TYPES) do
         local b = CreateFrame("Button", nil, f, "BackdropTemplate")
-        b:SetSize(LIST_W, 28)
+        b:SetSize(LIST_W, 30)
+        b.id = t.id
         G.Well(b)
         if R.SettingsMaterial then R.SettingsMaterial.MaterialHover(b) end
         At(b, 4, TOP + 22 + (i - 1) * 32)
         b.label = G.Text(b, "body")
-        b.label:SetPoint("LEFT", 10, 0)
+        b.icon = b:CreateTexture(nil, "ARTWORK"); b.icon:SetSize(20, 20); b.icon:SetPoint("LEFT", 24, 0)
+        local icons = { recommend = "guide", vendor = "vendors", auction = "auctionHouse", disenchant = "mage",
+            recent = "auctionHouse", marketvalue = "auctionHouse", historical = "reviewChanges", supply = "magicInventory",
+            advisorwhy = "guide", advisorevidence = "troubleshooting", quality = "troubleshooting", status = "reminders", source = "navigation", note = "reviewChanges" }
+        if R.Icons then R.Icons.Apply(b.icon, icons[t.id] or "guide", 20) else b.icon:Hide() end
+        b.label:SetPoint("LEFT", 50, 0)
         b.label:SetWidth(LIST_W - 40)
         b.label:SetWordWrap(false)
+        b.grip = G.Text(b, "meta"); b.grip:SetPoint("LEFT", 8, 0); b.grip:SetText("::")
+        b.plus = G.Text(b, "body"); b.plus:SetPoint("RIGHT", -10, 0); b.plus:SetText("+")
         b.check = b:CreateTexture(nil, "OVERLAY")
         b.check:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
         b.check:SetSize(18, 18)
@@ -476,12 +534,27 @@ function D.Refresh()
     local G = Wg()
     local pal = G.pal
     local old = height
+    W = math.max(500, f:GetWidth() or 644)
+    LIST_W = math.floor(W * .40) - 24
+    COL_X = LIST_W + 44; MOCK_W = W - COL_X - 20
+    INNER = MOCK_W - 24; SIDE_W = math.floor((MOCK_W - 12) / 3)
+    At(f.listTitle, 16, 62); f.listTitle:SetWidth(LIST_W)
+    local searchY = 62 + math.max(24, f.listTitle:GetStringHeight() or 24) + 12
+    At(f.searchLabel, 16, searchY); At(f.search, 16, searchY + 18); f.search:SetWidth(LIST_W)
+    At(f.previewTitle, COL_X, 62); f.previewTitle:SetWidth(MOCK_W)
+    At(f.modeNormal, COL_X, 104); At(f.modeShift, COL_X + 90, 104)
+    At(f.example, COL_X, 142); f.example:SetWidth(MOCK_W)
+    At(f.undo, W - 138, 0); At(f.redo, W - 68, 0)
     if not L then
         ShowGroup(false)
         if f.marker then f.marker:Hide() end
         At(f.invite, 4, 4)
         f.invite:SetWidth(W - 8)
-        f.invite:SetText("The tooltip designer needs the Workshop, which loads the first time you ask for it. This loads it; it opens no window and does nothing else.")
+        local l = Launcher()
+        local enabled = l and (not l.Enabled or l.Enabled())
+        f.invite:SetText(enabled and "The tooltip designer needs Workshop. Load it to edit your item information; no window or scan will open."
+            or "Enable Workshop — Experimental in General to use the tooltip designer. Your saved layout is kept while Workshop is off.")
+        f.inviteButton:SetEnabled(enabled and true or false)
         At(f.inviteButton, 4, 4 + (f.invite:GetStringHeight() or 24) + 10)
         f.said:SetText(said or "")
         f.said:SetWidth(W - 8)
@@ -495,72 +568,107 @@ function D.Refresh()
     BuildList(L)
     ShowGroup(true)
     f.said:Show()
-    local layout = L.Get()
+    local layout = D.Draft()
     if selected and not L.IndexOf(layout.lines, selected) then selected = nil end
 
     -- header
+    local writable, writeWhy = L.CanWrite()
+    f.enable:SetEnabled(writable)
     f.enable:SetChecked(layout.enabled)
-    f.reset:SetEnabled(not L.IsDefault())
+    f.reset:SetEnabled(writable and not Equal({ enabled = layout.enabled, lines = L.DefaultLines() }, layout))
+    f.undo:SetEnabled(#undo > 0); f.redo:SetEnabled(#redo > 0)
+    f.save:SetEnabled(writable and D.Dirty()); f.cancel:SetEnabled(D.Dirty())
     f.modeNormal:SetOn(not shiftMode)
     f.modeShift:SetOn(shiftMode)
     local ex = L.EXAMPLE_BY_KEY[exampleKey] or L.EXAMPLES[1]
     f.example:SetValue(exampleKey, ex.label)
 
-    -- the list of lines
-    for i, t in ipairs(L.TYPES) do
-        local b = listButtons[i]
-        local added = L.IndexOf(layout.lines, t.id) ~= nil
-        b.id, b.added = t.id, added
-        b.label:SetText(t.label)
-        G.Color(b.label, added and pal.stone or pal.text)
-        b.check:SetShown(added)
-        b.hint = added and "In the preview. Click to select it." or "Click to add it, or drag it into the preview."
+    -- Grouped, searchable catalog. Filtering changes no layout or saved value.
+    local groups = {
+        { "Recommendations & values", "recommend", "vendor", "auction", "disenchant" },
+        { "Market information", "recent", "marketvalue", "historical", "supply", "quality" },
+        { "Details & provenance", "advisorwhy", "advisorevidence", "status", "source", "note" },
+    }
+    local listStart = searchY + 56
+    local listY = listStart
+    for gi, group in ipairs(groups) do
+        local heading, any = f.catalogHeaders[gi], false
+        for n = 2, #group do
+            local t = L.BY_ID[group[n]]
+            if query == "" or (t.label .. " " .. t.what):lower():find(query, 1, true) then any = true end
+        end
+        heading:SetShown(any)
+        if any then At(heading, 16, listY); heading:SetWidth(LIST_W); heading:SetText(group[1]); listY = listY + 26 end
+        for n = 2, #group do
+            local t = L.BY_ID[group[n]]
+            local b = listButtons[t.order]
+            local visible = query == "" or (t.label .. " " .. t.what):lower():find(query, 1, true) ~= nil
+            b:SetShown(visible)
+            if visible then
+                local added = L.IndexOf(layout.lines, t.id) ~= nil
+                b.id, b.added = t.id, added
+                b:SetEnabled(writable)
+                At(b, 16, listY); b:SetWidth(LIST_W); b.label:SetWidth(LIST_W - 80)
+                b.label:SetText(t.label); G.Color(b.label, added and pal.stone or pal.text)
+                b.check:SetShown(added); b.plus:SetShown(not added)
+                b.hint = added and "In the preview. Click to select it." or "Click to add it, or drag it into the preview."
+                listY = listY + 34
+            end
+        end
     end
+    listButtons[L.BY_ID.outcomes.order]:Hide()
+    f.noResults:SetShown(listY == listStart); At(f.noResults, 16, listStart)
 
     -- the mockup
     local sec = PaintMock(L, layout)
     local mockH = f.mock:GetHeight() or 120
-    At(f.mock, COL_X, TOP + 36)
+    At(f.mock, COL_X, 184)
     f.mock:SetSize(MOCK_W, mockH)
 
     -- what the preview is
     f.caption:SetText(sec.empty and "For this example the tooltip would show nothing." or
         (shiftMode and "Preview data: a made-up item. A bar marks lines that show only while you hold Shift." or "Preview data: a made-up item. Nothing is read from your game."))
-    At(f.caption, COL_X, TOP + 36 + mockH + 6)
+    At(f.caption, COL_X, 184 + mockH + 10)
     f.caption:SetWidth(MOCK_W)
 
     -- the selected line
     local entry
     for _, e in ipairs(layout.lines) do if e.id == selected then entry = e end end
-    f.selTitle:SetWidth(SIDE_W)
+    f.selTitle:SetWidth(MOCK_W)
     if entry then
-        f.selTitle:SetText(Label(entry.id))
-        G.Color(f.selTitle, pal.bronzeText)
-        f.up:SetEnabled(L.Step(layout.lines, entry.id, -1, shiftMode) ~= nil)
-        f.down:SetEnabled(L.Step(layout.lines, entry.id, 1, shiftMode) ~= nil)
-        f.remove:SetEnabled(true)
+        f.selTitle:SetText(Label(entry.id)); G.Color(f.selTitle, pal.bronzeText)
+        f.up:SetEnabled(writable and L.Step(layout.lines, entry.id, -1, shiftMode) ~= nil)
+        f.down:SetEnabled(writable and L.Step(layout.lines, entry.id, 1, shiftMode) ~= nil)
+        f.remove:SetEnabled(writable)
         f.visLabel:SetText("Shows")
-        f.always:SetOn(entry.when == "always")
-        f.holdShift:SetOn(entry.when == "shift")
+        f.always:SetOn(entry.when == "always"); f.holdShift:SetOn(entry.when == "shift")
     else
-        f.selTitle:SetText("Click a line in the preview to move it, remove it or change when it shows.")
-        G.Color(f.selTitle, pal.textDim)
+        f.selTitle:SetText("Click a preview line to adjust it."); G.Color(f.selTitle, pal.textDim)
     end
     for _, c in ipairs({ f.up, f.down, f.remove, f.visLabel, f.always, f.holdShift }) do c:SetShown(entry ~= nil) end
-    At(f.selTitle, SIDE_X, TOP + 36)
-    local sy = TOP + 36 + math.max(24, (f.selTitle:GetStringHeight() or 24)) + 8
-    At(f.up, SIDE_X, sy); At(f.down, SIDE_X, sy + 30); At(f.remove, SIDE_X, sy + 60)
-    At(f.visLabel, SIDE_X, sy + 94)
-    At(f.always, SIDE_X, sy + 112); At(f.holdShift, SIDE_X, sy + 142)
+    local sy = 184 + mockH + 16 + math.max(28, f.caption:GetStringHeight() or 12)
+    At(f.selTitle, COL_X, sy)
+    for i, c in ipairs({ f.up, f.down, f.remove }) do c:SetWidth(SIDE_W); At(c, COL_X + (i - 1) * (SIDE_W + 6), sy + 28) end
+    At(f.visLabel, COL_X, sy + 66)
+    f.always:SetEnabled(writable); f.holdShift:SetEnabled(writable)
+    f.always:SetWidth(96); f.holdShift:SetWidth(100)
+    At(f.always, COL_X + 44, sy + 60); At(f.holdShift, COL_X + 146, sy + 60)
 
     -- the sentence at the bottom
-    local listBottom = TOP + 22 + #L.TYPES * 32
-    local bottom = math.max(listBottom, TOP + 36 + mockH + 6 + (f.caption:GetStringHeight() or 12), sy + 172)
-    f.said:SetText(said or "")
+    local bottom = math.max(listY + 22, sy + (entry and 112 or 44), 530)
+    At(f.reset, 16, bottom); f.reset:SetWidth(LIST_W)
+    At(f.save, COL_X, bottom); At(f.cancel, COL_X + 112, bottom)
+    f.confirm:SetShown(resetPending)
+    At(f.confirm, COL_X, bottom - 88); f.confirm:SetSize(MOCK_W, 80)
+    f.confirmText:SetWidth(MOCK_W - 24)
+    local stateText = D.Dirty() and "Unsaved changes" or "Saved layout"
+    f.said:SetText(writeWhy == "newer" and NEWER or (stateText .. (said and (" - " .. said) or "")))
     G.Color(f.said, saidTone == "warn" and AMBER or pal.textDim)
-    f.said:SetWidth(W - 8)
-    At(f.said, 4, bottom + 8)
-    height = bottom + 8 + ((said and said ~= "") and 22 or 4)
+    f.said:SetWidth(W - 32); At(f.said, 16, bottom + 42)
+    height = bottom + 76
+    At(f.catalogPanel, 0, 44); f.catalogPanel:SetSize(COL_X - 16, height - 44)
+    At(f.previewPanel, COL_X - 14, 44); f.previewPanel:SetSize(W - COL_X + 14, height - 44)
+
     if height ~= old then Relayout() end
 end
 
@@ -576,6 +684,36 @@ function D.Build()
     f.group = group
     local function Add(c) group[#group + 1] = c return c end
 
+    f.catalogPanel = Add(CreateFrame("Frame", nil, f, "BackdropTemplate"))
+    f.previewPanel = Add(CreateFrame("Frame", nil, f, "BackdropTemplate"))
+    for _, panel in ipairs({ f.catalogPanel, f.previewPanel }) do
+        G.Well(panel)
+        if R.SettingsMaterial then R.SettingsMaterial.Card(panel) end
+        panel:SetFrameLevel(math.max(0, f:GetFrameLevel()))
+        panel:EnableMouse(false)
+    end
+    f.catalogHeaders = {}
+    for i = 1, 3 do f.catalogHeaders[i] = Add(G.Text(f, "section")); G.Color(f.catalogHeaders[i], pal.bronzeText) end
+    f.noResults = Add(G.Text(f, "small")); f.noResults:SetText("No matching information.")
+    f.previewTitle = Add(G.Text(f, "title")); f.previewTitle:SetText("Live tooltip preview")
+    f.search = Add(G.EditBox(f, LIST_W, 28)); f.search:SetAutoFocus(false)
+    f.search:SetMaxLetters(100)
+    f.search:SetScript("OnTextChanged", function(self) D.Search(self:GetText()) end)
+    Tip(f.search, "Search information", "Filter available information by name or description. Your layout stays unchanged.")
+    f.search:SetScript("OnEscapePressed", function(self) self:SetText(""); self:ClearFocus() end)
+    f.searchLabel = Add(G.Text(f, "meta")); f.searchLabel:SetText("Search information")
+    f.undo = Add(G.Button(f, "Undo", 64, "secondary", D.Undo))
+    f.redo = Add(G.Button(f, "Redo", 64, "secondary", D.Redo))
+    f.save = Add(G.Button(f, "Save layout", 106, "primary", D.Save))
+    f.cancel = Add(G.Button(f, "Cancel", 88, "secondary", D.Cancel))
+    f.confirm = Add(CreateFrame("Frame", nil, f, "BackdropTemplate")); G.Well(f.confirm)
+    f.confirm:SetFrameLevel(f:GetFrameLevel() + 10); f.confirm:EnableMouse(true)
+    f.confirmText = G.Text(f.confirm, "small"); f.confirmText:SetPoint("TOPLEFT", 12, -10)
+    f.confirmText:SetText("Restore the default layout? Save applies it to your tooltip.")
+    f.confirmYes = G.Button(f.confirm, "Restore", 96, "danger", function() D.ResetLayout(true) end)
+    f.confirmYes:SetPoint("BOTTOMLEFT", 12, 10)
+    f.confirmNo = G.Button(f.confirm, "Keep editing", 108, "secondary", D.KeepEditing)
+    f.confirmNo:SetPoint("LEFT", f.confirmYes, "RIGHT", 8, 0)
     -- header
     f.enable = Add(G.Checkbox(f, function(v) D.SetEnabled(v) end))
     At(f.enable, 4, 4)
@@ -589,10 +727,10 @@ function D.Build()
     f.instruction = Add(G.Text(f, "small"))
     f.instruction:SetText("Drag lines into the preview.")
     G.Color(f.instruction, pal.textDim)
-    At(f.instruction, 4, 36)
+    At(f.instruction, 4, 28)
 
-    f.listTitle = Add(G.Text(f, "meta"))
-    f.listTitle:SetText("Lines")
+    f.listTitle = Add(G.Text(f, "title"))
+    f.listTitle:SetText("Available information")
     At(f.listTitle, 4, TOP)
 
     -- the preview's choices
@@ -621,12 +759,13 @@ function D.Build()
     mock:SetSize(MOCK_W, 160)
     mock.name = mock:CreateFontString(nil, "OVERLAY", "GameTooltipHeaderText")
     mock.name:SetText("Example item")
-    mock.name:SetTextColor(1, 1, 1)
-    mock.title = mock:CreateFontString(nil, "OVERLAY", "GameTooltipTextSmall")
+    mock.name:SetTextColor(0.8, 0.45, 1)
+    mock.icon = mock:CreateTexture(nil, "ARTWORK"); mock.icon:SetSize(32, 32); mock.icon:SetPoint("TOPLEFT", 12, -12)
+    mock.title = mock:CreateFontString(nil, "OVERLAY", "GameTooltipText")
     mock.title:SetTextColor(1, 0.82, 0)
-    mock.hint = mock:CreateFontString(nil, "OVERLAY", "GameTooltipTextSmall")
+    mock.hint = mock:CreateFontString(nil, "OVERLAY", "GameTooltipText")
     mock.hint:SetTextColor(0.55, 0.55, 0.55)
-    mock.empty = mock:CreateFontString(nil, "OVERLAY", "GameTooltipTextSmall")
+    mock.empty = mock:CreateFontString(nil, "OVERLAY", "GameTooltipText")
     mock.empty:SetWidth(INNER)
     mock.empty:SetJustifyH("LEFT")
     mock.empty:SetText("Drag lines here.")
@@ -676,6 +815,7 @@ function D.Frame()
     f = CreateFrame("Frame")
     f:SetWidth(W)
     f:Hide()
+    f:SetScript("OnSizeChanged", function() if built then D.Refresh() end end)
     f:SetScript("OnShow", function() D.Refresh() end)
     f:SetScript("OnHide", function()
         local Dr = DragKit()
@@ -689,7 +829,7 @@ end
 -- A profile change brings another profile's layout: the selection belongs to the old one.
 if R.Profiles and R.Profiles.OnApply then
     R.Profiles.OnApply("views", "workshop-worth-designer", function()
-        selected = nil
+        draft, base, owner, undo, redo, selected, resetPending = nil, nil, nil, {}, {}, nil, false
         D.Refresh()
     end)
 end

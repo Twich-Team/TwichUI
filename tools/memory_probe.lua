@@ -200,7 +200,7 @@ end
 local env = {}
 -- Optional addons and libraries stay absent (TwichUI's own libraries load from its folder).
 local ABSENT = { LibStub = true, ChatThrottleLib = true, CreateColor = true, EllesmereUI = true, RXP = true, RXPFrame = true,
-    Auctionator = true, SpeakStone = true, WhatsTraining = true, Attune = true, LibDBIcon = true, TomTom = true,
+    WhatsTraining = true, Attune = true, LibDBIcon = true, TomTom = true,
     TwichUI_PackFile = true, EllesmereUIDB = true, ForeverDungeonJournal = true, EUI_Bags = true }
 local stubs = {}
 local function Stub(name)

@@ -1,13 +1,14 @@
 -- Simulator lab diagnostic (docs/simulator-lab.md "Delayed failures"): what happens when the simulated clock runs
--- past TwichUI's group hello timer and Blizzard's own timers, with and without a party. diagnose.sh runs it four
+-- past TwichUI's group hello timer and Blizzard's own timers, with and without a party. diagnose.sh runs it five
 -- times, selected by SIMLAB_PARAMS.mode:
 --   baseline  no addon at all (--no-addons): the simulator and Blizzard's UI alone. Whatever fails here is not TwichUI's.
---   solo      TwichUI loaded, then the character leaves the simulator's sample party (Lab.Solo, state verified)
+--   solo      TwichUI loaded, then no party AND no guild (synthetic membership reads + the real guild-update event)
+--   guildsolo no party, still in the simulator's guild: default Guild Locations must send only the player's own position
 --   grouped   TwichUI loaded, the sample party kept on purpose: this is the run that crosses the hello boundary
 --   login     as grouped, then the lab fires PLAYER_ENTERING_WORLD(true, false) itself (a SYNTHETIC event, not the
 --             simulator's): the one way to reach setup/Group.lua's 6 s login hello, which the simulator's own login
 --             never schedules (it adds the party after that event, and the handler asks IsInGroup() when it runs)
--- All three run the same clock window (SIMLAB_PARAMS.window, in simulated seconds from the script's start).
+-- Each runs its declared window (SIMLAB_PARAMS.window); guildsolo gets at least 21 s to cover the full 5..20 s first-send jitter.
 --
 -- Every send the addon attempts goes through Lab.WatchSends, a pass-through observer (records, then calls the
 -- simulator's own function and returns or raises exactly what it did). No send is stubbed, filtered or skipped.
@@ -18,19 +19,39 @@ local P = rawget(_G, "SIMLAB_PARAMS") or {}
 local mode, window = P.mode, P.window or 12
 local Check, Say = Lab.Check, Lab.Say
 local R = rawget(_G, "TwichUI")
+local solo = mode == "solo" or mode == "guildsolo"
 
 Check("init", "TwichUI is loaded exactly when the run asked for it", mode ~= "baseline", R ~= nil)
 Say("window", mode, "seconds=" .. window)
 
+-- Observe departures as well as the clock window. No send is filtered or suppressed.
+Lab.WatchSends()
 -- Group state first, so the run says what it is a run of.
 local state
-if mode == "solo" then
+if solo then
     state = Lab.Solo()
     Check("init", "solo: the game reports no group", false, state.inGroup)
     Check("init", "solo: not a raid", false, state.inRaid)
     Check("init", "solo: no members counted", 0, state.count)
     Check("init", "solo: no party unit exists", 0, state.partyUnits)
     Check("init", "solo: TwichUI's own member list is empty", 0, state.twichMembers)
+    local GL = R.GuildLoc
+    Check("init", "solo: Guild Locations retains its default sharing choice", "sharing", GL.State())
+    if mode == "solo" then
+        -- Leaving a party does not leave a guild. Model an unguilded character,
+        -- without disabling the feature or intercepting its transport. The real
+        -- PLAYER_GUILD_UPDATE handler must cancel the already-started session.
+        IsInGuild = function() return false end
+        GetGuildInfo = function() return nil end
+        Say("synthetic", "unguilded membership reads; firing PLAYER_GUILD_UPDATE(player)")
+        A_Admin.FireEvent("PLAYER_GUILD_UPDATE", "player")
+        Check("init", "solo: the game reports no guild", false, IsInGuild())
+        Check("state", "solo: leaving the guild ended the position session", false, GL.Snapshot().session)
+        Check("state", "solo: leaving the guild did not disable sharing", "sharing", GL.State())
+    else
+        Check("init", "guildsolo: the game reports a guild", true, IsInGuild())
+        Check("state", "guildsolo: the default position session is active", true, GL.Snapshot().session)
+    end
 else
     state = Lab.GroupState()
     if mode == "grouped" or mode == "login" then
@@ -47,7 +68,6 @@ if R then
 end
 
 A_Admin.SetManualClock(GetTime())
-Lab.WatchSends()
 if mode == "login" then
     Say("synthetic", "firing PLAYER_ENTERING_WORLD(true, false) from the lab while grouped; the simulator did not send this one")
     A_Admin.FireEvent("PLAYER_ENTERING_WORLD", true, false)
@@ -58,6 +78,14 @@ Check("state", "the clock covered the declared window", true, Lab.simSeconds >= 
 
 local sends = Lab.sends
 local attempted = #sends   -- from the timeline alone; the direct and control calls below add more
+-- Log every observed message, including a failed solo run, so the unexpected
+-- prefix/channel/bytes can be identified without changing the scenario again.
+for i = 1, attempted do
+    local e = sends[i]
+    Say("attempt", "n=" .. i, "at=" .. ("%.2f"):format(e.at), "prefix=" .. tostring(e.prefix), "chatType=" .. tostring(e.chatType),
+        "len=" .. tostring(e.len), "strictUtf8=" .. tostring(e.valid), "ok=" .. tostring(e.ok), "result=" .. tostring(e.result),
+        "hex=" .. Lab.Hex(e.message or "", 48))
+end
 if mode == "baseline" then
     Check("state", "baseline: no addon sent anything", 0, attempted)
 elseif mode == "solo" then
@@ -65,14 +93,30 @@ elseif mode == "solo" then
     -- skipped because Group.lua's Broadcast asks IsInGroup() when the timer runs. That is TwichUI's own logic.
     Check("state", "solo: no addon message was attempted across the window", 0, attempted)
     Check("state", "solo: TwichUI's peer list is empty", 0, next(R.Group.peers) and 1 or 0)
-else
-    Check("state", "grouped: at least one addon message was attempted", true, attempted >= 1)
+elseif mode == "guildsolo" then
+    Check("state", "guildsolo: exactly one message in the stationary clock window", 1, attempted)
+    Check("state", "guildsolo: TwichUI's peer list is empty", 0, next(R.Group.peers) and 1 or 0)
+    -- Assert the entire observed set, not just a filtered prefix count. A party
+    -- hello, another prefix, an extra message or an invalid payload must fail.
     for i = 1, attempted do
         local e = sends[i]
-        Say("attempt", "n=" .. i, "at=" .. ("%.2f"):format(e.at), "prefix=" .. tostring(e.prefix), "chatType=" .. tostring(e.chatType),
-            "len=" .. tostring(e.len), "strictUtf8=" .. tostring(e.valid), "ok=" .. tostring(e.ok), "result=" .. tostring(e.result),
-            "hex=" .. Lab.Hex(e.message or "", 48))
+        local kind, _, number, map, x, y = R.GuildLoc.Parse(e.message)
+        local here = C_Map.GetBestMapForUnit("player")
+        local pos = C_Map.GetPlayerMapPosition(here, "player")
+        local px, py = pos:GetXY()
+        Check("state", "guildsolo: prefix " .. i, "TwichUIGuild", e.prefix)
+        Check("state", "guildsolo: channel " .. i, "GUILD", e.chatType)
+        Check("state", "guildsolo: no whisper target " .. i, nil, e.target)
+        Check("state", "guildsolo: a valid position packet " .. i, "p", kind)
+        Check("state", "guildsolo: first position in the session " .. i, 1, number)
+        Check("state", "guildsolo: the player's own map " .. i, here, map)
+        Check("state", "guildsolo: the player's own x " .. i, math.floor(px * 10000 + .5), x)
+        Check("state", "guildsolo: the player's own y " .. i, math.floor(py * 10000 + .5), y)
+        Check("state", "guildsolo: valid UTF-8 " .. i, true, e.valid)
+        Check("state", "guildsolo: accepted by the simulator " .. i, true, e.ok)
     end
+else
+    Check("state", "grouped: at least one addon message was attempted", true, attempted >= 1)
     local hellos = {}
     for i = 1, attempted do if sends[i].prefix == "TwichUISetup" then hellos[#hellos + 1] = sends[i] end end
     if mode == "grouped" then
