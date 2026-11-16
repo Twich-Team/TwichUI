@@ -50,6 +50,7 @@ local variants,cut=B.Variants(2589,100);assert(#variants==100 and cut)
 local expected={}
 for _,r in ipairs(g.records)do
     assert(B.Record(r.item_id,r.variant_key).variant_json==r.variant_json,"sorted range lost exact variant")
+    if r.item_id~=2 then assert(B.Record(2,r.variant_key)==nil,"range lookup crossed an item boundary")end
     if r.item_id==2589 then expected[#expected+1]=r.variant_key end
 end
 for i,key in ipairs(variants)do assert(key==expected[i],"variant selector order changed")end
