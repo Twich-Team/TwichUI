@@ -1,0 +1,83 @@
+name: Build release candidate
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: Full reviewed source commit SHA (40 hex)
+        required: true
+      channel:
+        description: Candidate purpose
+        type: choice
+        options: [alpha, beta, stable, hotfix]
+        required: true
+      version:
+        description: Final packaged version (no v prefix; prereleases use alpha/beta.N.gSHA7)
+        required: true
+      hotfix_base:
+        description: Hotfix only — existing released stable tag (vN.N.N)
+        default: ''
+permissions:
+  contents: read
+jobs:
+  candidate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          path: tooling
+      - name: Authorize candidate request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.triggering_actor }}
+          REPO: ${{ github.repository }}
+        run: |
+          permission=$(gh api "repos/$REPO/collaborators/$ACTOR/permission" --jq .permission)
+          case "$permission" in admin|maintain|write) ;; *) exit 1 ;; esac
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ inputs.source }}
+          fetch-depth: 0
+          persist-credentials: false
+          path: source
+      - name: Plan and stamp candidate with trusted tooling
+        env:
+          SOURCE: ${{ inputs.source }}
+          CHANNEL: ${{ inputs.channel }}
+          VERSION: ${{ inputs.version }}
+          HOTFIX_BASE: ${{ inputs.hotfix_base }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          python3 -I tooling/tools/release.py candidate --source "$SOURCE" --channel "$CHANNEL" \
+            --version "$VERSION" --hotfix-base "$HOTFIX_BASE" --repo-dir "$GITHUB_WORKSPACE/source" \
+            --repo-url "$REPO_URL" --out "$RUNNER_TEMP/candidate"
+          git -C source tag --points-at HEAD | while IFS= read -r tag; do git -C source tag -d -- "$tag"; done
+      - name: Package only — committed source inputs, no credentials
+        uses: BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0 # v2.6.1
+        with:
+          args: -d -t source -n "!!!TwichUI-v${{ inputs.version }}-forever"
+          pandoc: false
+      - name: Check and seal exact bytes
+        run: |
+          shopt -s nullglob
+          zips=(source/.release/*.zip)
+          test "${#zips[@]}" -eq 1
+          python3 -I tooling/tools/release.py seal --meta "$RUNNER_TEMP/candidate/meta.json" \
+            --zip "${zips[0]}" --notes "$RUNNER_TEMP/candidate/notes.md"
+          cp -- "${zips[0]}" "$RUNNER_TEMP/candidate/"
+          cat "$RUNNER_TEMP/candidate/meta.json" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        id: artifact
+        with:
+          name: candidate-${{ inputs.source }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/candidate/
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 30
+      - name: Record immutable artifact ID
+        env:
+          ARTIFACT_ID: ${{ steps.artifact.outputs.artifact-id }}
+        run: echo "Artifact ID $ARTIFACT_ID — certify this candidate before requesting promotion." >> "$GITHUB_STEP_SUMMARY"
