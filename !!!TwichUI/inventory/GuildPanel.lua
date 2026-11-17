@@ -201,7 +201,7 @@ local function Build()
     f.withdraw = Button(f.bar, "Withdraw", 90, "secondary", function() Panel.Act("withdraw") end)
     R.Interact.Tip(f.withdraw, "Withdraw", function()
         if f.withdraw.why then return f.withdraw.why end
-        return "Takes whole stacks out of the tabs your withdrawing rules name, into your bags, up to each rule's target and never past it. You review, then approve."
+        return "Takes items out of the tabs your withdrawing rules name, into your bags, up to each rule's target and never past it. You review, then approve."
     end)
     f.read = Button(f.bar, "Read again", 90, "secondary", function() Panel.ReadAgain() end)
     R.Interact.Tip(f.read, "Read again", "Reads the tabs that were not read, one at a time. Nothing moves.")

@@ -166,11 +166,19 @@ function MIClient(name, opts)
     end
     local _ = src
   end
+  c.C_Container.SplitContainerItem = function(bag, slot, count)
+    local s = c.BAGS[bag] and c.BAGS[bag].slots[slot]
+    if not c.CURSOR and s and not s.locked and count > 0 and count < s.count then
+      c.CURSOR = { bag = bag, slot = slot, id = s.id, count = count }
+    end
+  end
   -- the "server" carries out queued moves and the game says the bags settled
   function c.Settle()
     for _, m in ipairs(c.PENDING_MOVES or {}) do
       if not m.lost then
-        c.BAGS[m.from[1]].slots[m.from[2]] = nil
+        local src = c.BAGS[m.from[1]].slots[m.from[2]]
+        if src and src.count > m.count then src.count = src.count - m.count
+        else c.BAGS[m.from[1]].slots[m.from[2]] = nil end
         if m.guild then
           c.GUILD.tabs[m.to[1]].slots[m.to[2]] = { id = m.id, count = m.count }
         elseif m.merge then

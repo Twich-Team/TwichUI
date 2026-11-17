@@ -174,7 +174,7 @@ c.UNKNOWN_BOUND, c.UNLOADED, c.TOOLTIP_UNREADABLE = nil, {}, {}
 MI.ClearItemCache()
 
 ---------------------------------------------------------------------------
--- 4. Keep amounts: each item, every carried stack, the most any rule keeps; whole stacks only
+-- 4. Keep amounts: each item, every carried stack, the most any rule keeps; partial bank stacks
 ---------------------------------------------------------------------------
 Reset()
 c.Bags({ [0] = { size = 16, slots = { [1] = { 2589, 20 }, [2] = { 2589, 20 }, [3] = { 2589, 8 }, [4] = { 2592, 20 }, [5] = { 2592, 5 } } } })
@@ -188,14 +188,14 @@ Check(linen.keep == 20 and wool.keep == 20, "keep applies to each item")
 MI.SaveRule((function() local x = MI.Rule(keep20); x.keep = 25; return x end)())
 plan = MI.CurrentPlan(nil)
 linen, wool = Entry(plan, 2589), Entry(plan, 2592)
-Check(linen and linen.count == 20 and linen.stacks == 1, "keep 25 of 48 linen: one whole stack of 20 moves")
-Check(linen and linen.extraKept == 3, "and the plan says 3 more than the keep amount stay: " .. tostring(linen and linen.extraKept))
+Check(linen and linen.count == 23 and linen.stacks == 2, "keep 25 of 48 linen: 20 plus a partial stack of 3 move")
+Check(linen and linen.extraKept == nil, "no extra quantity stays when splitting is supported: " .. tostring(linen and linen.extraKept))
 Check(not wool and Find(plan.skipped, 2592, "reason", "keep"), "keep 25 of 25 wool: nothing moves, and it says so")
 -- a Keep in bags rule raises it, whatever its place in the list
 Save({ name = "Keep lots of linen", kind = "keep", include = { [2589] = true }, keep = 30 })
 plan = MI.CurrentPlan(nil)
 linen = Entry(plan, 2589)
-Check(linen and linen.count == 8 and linen.keep == 30 and linen.extraKept == 10, "a Keep in bags rule raises the keep for that item (48 - 30 = 18: the 8 moves, 10 extra stay)")
+Check(linen and linen.count == 18 and linen.keep == 30 and linen.extraKept == nil, "a Keep in bags rule raises the keep for that item (48 - 30 = 18 move)")
 -- two transfer rules can't combine to pass a keep amount: the second only shadows
 local altDest = MI.DestNamed("mail", "Alt")
 MI.SetRecipient(altDest, "Altname")
@@ -204,8 +204,8 @@ plan = MI.CurrentPlan(nil)
 Check(Find(plan.shadowed, 2589, "rule", "Cloth by mail"), "a later matching rule is shadowed")
 local moved = 0
 for _, g in ipairs(plan.groups) do for _, e in ipairs(g.entries) do if e.id == 2589 then moved = moved + e.count end end end
-Check(moved == 8, "and the item is allocated once: " .. moved)
--- splitting: off by default; when allowed the keep amount is met exactly
+Check(moved == 18, "and the item is allocated once: " .. moved)
+-- Explicit capability: splitting meets the target; whole-stack-only adapters retain extras
 local p2 = MI.BuildPlan({ stacks = MI.ReadBags().stacks, rules = MI.Rules(), never = MI.IsNever, resolve = MI.Resolve,
   problem = function(x) return MI.Problem(x, false) end, split = { bank = true } })
 linen = Entry(p2, 2589)
@@ -213,6 +213,9 @@ Check(linen and linen.count == 18, "with splitting allowed, exactly carried - ke
 local partial = false
 for _, t in ipairs(linen.take) do if t.partial then partial = true end end
 Check(partial, "and one stack is partial")
+local whole = MI.BuildPlan({ stacks = MI.ReadBags().stacks, rules = MI.Rules(), split = {} })
+linen = Entry(whole, 2589)
+Check(linen and linen.count == 8 and linen.extraKept == 10, "whole-stack-only adapters still keep the extra 10")
 -- vendor restocking's target counts as a keep amount (only while it protects the item)
 local restockOn = true
 c.TwichUI.Restock = { Protects = function(id) return restockOn and id == 2589 end, Rule = function() return { target = 40 } end }
