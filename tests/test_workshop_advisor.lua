@@ -199,6 +199,44 @@ repeat local t0=os.clock(); local _,err=big:Step(); Check(not err,err); maxms=ma
 Same(#big.rows,20002); Check(count >= 250, "discovery cooperatively sliced")
 print(("advisor catalog 20002: %.4fs, %d slices, max %.3fms"):format(os.clock()-t,count,maxms))
 Check(D.Track(100)); Same(D.Tracked()[100],nil,"toggle tracking")
+-- Cooperative final ordering: independent numeric oracle, exact row identity and
+-- native-run bounds at partial/final run boundaries and non-power-of-two tails.
+local savedSource, savedRecipes = session.PriceSource, session.AllRecipes
+local savedTable, savedContainer = c.table, c.C_Container
+local largestRun = 0
+c.table = {}; for k,v in pairs(table) do c.table[k]=v end
+c.table.sort = function(rows, less)
+    largestRun = math.max(largestRun, #rows)
+    Check(#rows <= 4096, "native sorting is bounded independently of catalog size")
+    table.sort(rows, less)
+end
+session.AllRecipes=function() return {} end
+c.C_Container=nil
+c.TwichUIDB.workshop.view.advisorTracked={}
+c.TwichUIDB.workshop.view.advisorItem=nil
+for _,size in ipairs({0,1,4095,4096,4097,8193}) do
+    for seed=1,3 do
+        local items, expected={},{}
+        for i=size,1,-1 do
+            local id=1000+(i*7919+seed*97)%65521
+            items[id]={}; expected[#expected+1]=id
+        end
+        table.sort(expected)
+        session.PriceSource=function() return {market={items=items}} end
+        local sorted=D.Catalog();local ticks=0
+        repeat local _,err=sorted:Step();Check(not err,err);ticks=ticks+1;Check(ticks<1000,"sort settles") until sorted.done
+        Same(#sorted.rows,#expected,"all identities retained")
+        for i,id in ipairs(expected) do
+            Same(sorted.rows[i].item,id,"numeric reference order")
+            Same(sorted.rows[i],sorted.byID[id],"original row identity")
+            Same(sorted.rows[i].info.name,"Material "..id,"metadata retained")
+        end
+    end
+end
+Check(largestRun>0,"native run sorting exercised")
+session.PriceSource,session.AllRecipes=savedSource,savedRecipes
+c.table,c.C_Container=savedTable,savedContainer
+
 -- Failed item-data requests are bounded until an explicit retry.
 local infoReader=c.C_Item.GetItemInfo
 local metadataRequests=0
