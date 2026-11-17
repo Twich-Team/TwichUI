@@ -15,6 +15,11 @@ local p=A.Page("market")
 same(p.failed,nil,"Market builds");same(#p.rows,2);same(p.selected,10)
 same(p.projection.facts.min.value,20200);same(p.projection.market,m.key)
 same(p.browse:IsEnabled(),true);same(p.advisor:IsEnabled(),true)
+p.chart:Select(p.projection.series.from+1,p.projection.series.to-1)
+local selectedWindow=p.chart.window
+for _,hook in ipairs(p.main.hooks.OnSizeChanged or {}) do hook(p.main) end
+same(p.chart.window,selectedWindow,"page resize preserves chart interval")
+p.chart:Select()
 local history=p.projection.history
 W.AuctionUI.Market.Range(120);same(p.projection.history,history);same(#p.projection.series.groups>0,true)
 W.AuctionUI.Market.Range(2);same(p.projection.series.points[1].kind,"obs")

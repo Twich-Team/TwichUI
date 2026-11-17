@@ -445,6 +445,20 @@ if P.market then
     for _=1,100 do if not p.job then break end;Lab.Settle(0.05) end
     A.Market.Select(7067)
     if P.marketRecent then A.Market.Range(2) elseif P.marketLong then A.Market.Range(120) else A.Market.Range(14) end
+    if P.chartSingle then
+        local s=p.projection.series
+        local one={points={s.points[#s.points]},groups={},gaps={},from=s.from,to=s.to}
+        p.chart:Set(one,W.UI.Money)
+        p.coverage:SetText('One exact daily observation · synthetic presentation fixture')
+    end
+    if P.chartInterval then
+        local s=p.projection.series;p.chart:Select(s.from+3,s.to-2)
+        Lab.Check('interact','Chart interval selected',true,p.chart.window~=nil)
+    end
+    if P.chartHover then
+        local s=p.projection.series;p.chart:Inspect(s.points[#s.points-2].day)
+        Lab.Check('interact','Chart inspection visible',true,p.chart.tip:IsShown())
+    end
     if P.marketTracked then A.Market.Filter("scope","tracked");Lab.Settle(0.5) end
     if P.marketMetadata then
         Lab.Check("construct","Market long title fits its heading",true,p.name:GetText()==itemNames[7067] and not p.name:IsTruncated() and p.name:GetStringHeight()<=p.name:GetHeight())

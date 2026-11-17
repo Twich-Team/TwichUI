@@ -197,5 +197,42 @@
         ]
       }
     ]
+  },
+  "advanced-market-chart": {
+    "tests": [
+      "test_workshop_auction_market*.lua",
+      "test_workshop_history2.lua",
+      "test_workshop_market*.lua",
+      "test_workshop_a7.lua",
+      "test_workshop_bridge*.lua"
+    ],
+    "syntax": [
+      "TwichUI_Workshop/**/*.lua",
+      "TwichUI_Diagnostics/Gauges.lua"
+    ],
+    "dependencies": [
+      "shared-ui"
+    ],
+    "simulators": [
+      {
+        "script": "auctionpreview",
+        "only": [
+          "shell",
+          "replay",
+          "wrong",
+          "market",
+          "markethover",
+          "marketinterval",
+          "marketsingle",
+          "marketsmall",
+          "marketscaled",
+          "marketsparse",
+          "marketempty",
+          "marketlong",
+          "marketmetadata",
+          "marketbridge"
+        ]
+      }
+    ]
   }
 }
