@@ -79,6 +79,7 @@ Design.lua
 Companion.lua
 Previews.lua
 previews\QoL.lua
+previews\ReturnTheFavor.lua
 Cards.lua
 Home.lua
 Window.lua

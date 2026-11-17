@@ -1280,6 +1280,20 @@ do
   local function Click(b) b:GetScript("OnClick")(b) end
   c.LibStub = nil   -- section 5e leaves a stand-in that isn't callable; pages drawn here call LibStub when it exists
 
+  -- Return the Favor uses the same card host, without turning on the feature or its movable sample.
+  local savedBeforePreview = Saved()
+  UI.Navigate("buffBack")
+  local favorCard = K.pages.buffBack.rows[1]
+  assert(favorCard.card.preview == "buffBack.list", "the feature card declares its preview")
+  local favorHost = P.Host(win, favorCard.card.preview, 560)
+  assert(favorHost and not favorHost.broken and #favorHost.scene.list.rows == 5,
+    "the standard preview builds real sample rows")
+  local previewFrames = made
+  favorHost:Reset()
+  assert(made == previewFrames and Saved() == savedBeforePreview and not R.BuffBackList.Previewing(),
+    "refreshing the preview reuses frames and leaves saved data and the movable sample alone")
+  favorHost:Release()
+
   -- 8a. Icons
   local SHEET = { "home", "notifications", "qualityOfLife", "markers", "chatCleaning", "foodAndDrink", "hazardAlerts",
     "vendorRestocking", "auctionHouse", "journeyChronicle", "sleepingBag", "mapsNavigation", "gearComparison",

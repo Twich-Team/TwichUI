@@ -528,6 +528,30 @@ do
   G.combat = false
 end
 
+-- The settings card has its own sample, even while the feature is off or combat is active.
+do
+  Reset()
+  local x, y = BB.Place()
+  local preview = L.CreateSettingsPreview(Fake("Frame"))
+  preview.Refresh(300, 150)
+  Check(#preview.rows == 5 and not L.Previewing(), "inline sample is independent of the movable sample")
+  local row = preview.rows[1]
+  Check(next(row.attrs) == nil and row.mouse == false, "inline sample cannot cast or take clicks")
+  Check(preview.frame.w * preview.frame.scale <= 300 and preview.frame.h * preview.frame.scale <= 150,
+    "inline sample fits the standard preview stage")
+  local made = #frames
+  preview.Refresh(300, 150)
+  Check(#frames == made, "redrawing reuses the sample rows")
+  BB.Set("showSpellName", false)
+  BB.Set("maxRows", 1)
+  G.combat = true
+  preview.Refresh(150, 150)
+  Check(preview.rows[1] == row and not row.skin.spell.shown and not preview.rows[2].shown,
+    "inline sample refreshes appearance and row count in combat")
+  Check(BB.Place() == x and select(2, BB.Place()) == y and not L.Previewing(), "inline sample never moves the list")
+  G.combat = false
+end
+
 ---------------------------------------------------------------------------
 -- 10. EllesmereUI's Unlock Mode
 ---------------------------------------------------------------------------
