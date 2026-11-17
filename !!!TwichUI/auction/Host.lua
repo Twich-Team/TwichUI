@@ -246,7 +246,9 @@ local function Activate(integrated)
         return false, reason
     end
     local owned = lease
-    ticker = C_Timer.NewTicker(0.25, function() if lease == owned then Tick() end end)
+    ticker = C_Timer.NewTicker(0.25, function()
+        if lease == owned and (not owned.integrated or (visiting and visit == owned.visit)) then Tick() end
+    end)
     reason = "parked"
     return true
 end
@@ -355,8 +357,8 @@ local function Switch()
         stats.loadMS = math.max(0, debugprofilestop() - loadAt)
         if not stats.firstLoadMS then stats.firstLoadMS = stats.loadMS end
     end
-    if not ok then R.Fault("auction replacement load", loaded); return Failed("workshop-load-error") end
     if not H.IsCurrent(id) or token ~= request or state ~= "preparing" then return false, "visit-ended" end
+    if not ok then R.Fault("auction replacement load", loaded); return Failed("workshop-load-error") end
     if not loaded then return Failed(loadWhy or "workshop-load-failed") end
     local a = UI()
     if not a or not a.Prepare then return Failed("missing-auction-ui") end
@@ -380,10 +382,15 @@ local function Switch()
     return true
 end
 function H.SwitchToTwichUI()
+    local id = visit
     local start = debugprofilestop and debugprofilestop()
     local ok, good, why = pcall(Perf.Call, "auction.switch", Switch)
     if start then stats.switchMS = math.max(0, debugprofilestop() - start) end
-    if not ok then R.Fault("auction replacement", good); return Failed("activation-error") end
+    if not ok then
+        R.Fault("auction replacement", good)
+        if not visiting or visit ~= id then return false, "visit-ended" end
+        return Failed("activation-error")
+    end
     return good, why
 end
 function H.InterfaceHidden(id)

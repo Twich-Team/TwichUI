@@ -157,4 +157,29 @@ do
     Same(t.H.Snapshot().visiting,false,"unexpected native hide ends restored visit")
     Same(t.H.Control():IsShown(),false,"no stale return overlay")
 end
+-- Cancellation alone is insufficient: callbacks must also reject a retained
+-- recovery lease or a failing load from a previous visit.
+do
+    local t=Setup();t.Start();local oldWatch=t.timer
+    t.combat=true;t.c.FireEvent("PLAYER_REGEN_DISABLED");t.H.Ended()
+    t.available=true;t.f.shown=true;t.H.Opened();t.combat=false
+    local writes=t.nativeMutations
+    oldWatch.fn()
+    Same(t.nativeMutations,writes,"old watchdog cannot restore during a new visit")
+    Same(t.H.Snapshot().pending,1,"new visit retains its initialization timer")
+    t.c.FireEvent("PLAYER_REGEN_ENABLED");t.Restored()
+end
+do
+    local t=Setup();t.Enable()
+    local load=t.R.WorkshopLauncher.LoadAuctionUI
+    t.R.WorkshopLauncher.LoadAuctionUI=function()
+        t.H.Ended();t.H.Opened();error("late old-visit load failure")
+    end
+    t.H.Opened();t.Flush()
+    Same(t.H.Snapshot().pending,1,"old load error cannot cancel a new visit")
+    Same(t.H.Snapshot().state,"preparing")
+    t.R.WorkshopLauncher.LoadAuctionUI=load;t.Flush()
+    Same(t.H.Snapshot().state,"twichui","new visit can finish normally")
+    t.H.Ended();t.Restored()
+end
 print("PASSED: supervised integration "..count.." synthetic lifecycle assertions")
