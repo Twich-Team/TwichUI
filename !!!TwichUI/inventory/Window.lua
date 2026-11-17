@@ -29,6 +29,7 @@ local MAX_RESULT_LINES = 8
 local f
 local rows, used = {}, 0
 local plan, context, leftOut = nil, nil, {}
+local manual, choosingRule, bankDetails, bankDismissed
 local refreshQueued = false
 local buttons = {}           -- the interface buttons, by kind (made the first time each interface opens)
 local counts = {}            -- the count each button shows, by kind (worked out when the interface opens or bags change)
@@ -147,6 +148,9 @@ local function RowButton(row, key, label, w, kind)
         b:SetPoint("TOPRIGHT", -4, -6)
         row[key] = b
     end
+    b:SetWidth(w)
+    b:ClearAllPoints(); b:SetPoint("TOPRIGHT", -4, -6)
+    if context == "bank" and R.CraftLook then R.CraftLook.Dress(b, "secondary") end
     return b
 end
 
@@ -159,10 +163,15 @@ end
 local function Reset(row)
     row.link, row.itemID = nil, nil
     row.icon:Hide()
+    row.icon:SetSize(ICON, ICON)
+    row.icon:ClearAllPoints(); row.icon:SetPoint("TOPLEFT", 4, -4)
     if row.toggle then row.toggle:Hide(); row.toggle.onClick = nil end
     if row.action then row.action:Hide(); row.action.onClick = nil end
+    if row.withdrawAll then row.withdrawAll:Hide(); row.withdrawAll.onClick = nil end
+    if row.face then row.face:SetShown(false); row.face.rim:SetShown(false) end
     row.title:ClearAllPoints(); row.meta:ClearAllPoints()
     row.title:SetText(""); row.meta:SetText("")
+    row.title:SetWordWrap(true); row.meta:SetWordWrap(true)
     Look().Color(row.title, Look().pal.text)
     Look().Color(row.meta, Look().pal.textDim)
 end
@@ -183,7 +192,7 @@ end
 local function Heading(text, sentence, actionLabel, enabled, why, onClick)
     local L = Look()
     local row = Next()
-    local right = actionLabel and 250 or 4
+    local right = actionLabel and (context == "bank" and 144 or 250) or 4
     row.title:SetPoint("TOPLEFT", 4, -8)
     row.title:SetWidth(CONTENT_W - right - 4)
     row.title:SetText(text)
@@ -197,7 +206,8 @@ local function Heading(text, sentence, actionLabel, enabled, why, onClick)
         h = h + math.max(14, row.meta:GetStringHeight() or 14) + 4
     end
     if actionLabel then
-        local action = RowButton(row, "action", "", 240, "primary")
+        local action = RowButton(row, "action", "", context == "bank" and 132 or 240, "primary")
+        action:SetWidth(context == "bank" and 132 or 240)
         action.text:SetText(actionLabel)
         action:SetEnabled(enabled and true or false)
         action.onClick = enabled and onClick or nil
@@ -281,7 +291,7 @@ local function DrawResults(r)
     local total = #res.confirmed + #res.failed + #res.skipped + #res.uncertain
     if total == 0 and r.stopReason == "done" then return end
     Gap(6)
-    local verb = r.kind == "mail" and "sent" or (r.dir == "withdraw" and "withdrawn" or "deposited")
+    local verb = r.kind == "mail" and "sent" or (r.dir == "mixed" and "moved" or (r.dir == "withdraw" and "withdrawn" or "deposited"))
     Heading("Last transfer", ("%d %s and confirmed by the game  \194\183  %d didn't move  \194\183  %d skipped  \194\183  %d not confirmed"):format(
         #res.confirmed, verb, #res.failed, #res.skipped, #res.uncertain))
     if r.stopReason and r.stopReason ~= "done" then
@@ -300,14 +310,170 @@ local function DrawResults(r)
     if more > 0 then Line(("and %d more."):format(more), "quiet") end
 end
 
+-- The character bank has one compact review and one batch action. Details stay available on demand.
+local function BankFace(row)
+    local C = R.CraftLook
+    if C then
+        row.face = row.face or C.PanelFace(row, "walnut")
+        row.face:SetShown(true); row.face.rim:SetShown(true)
+        C.Font(row.title, 14, true, "strong")
+        C.Font(row.meta, 12)
+    end
+end
+
+local function DrawBank(cur)
+    local L = Look()
+    local rules = MI.Rules()
+    local ruleById = {}
+    for _, rule in ipairs(rules) do ruleById[rule.id] = rule end
+    local selected = manual and ruleById[manual.ruleId]
+    f.title:SetText("Magic Inventory")
+    f.sub:Hide(); f.bankSummary:Show()
+    f.box:ClearAllPoints()
+    f.box:SetPoint("TOPLEFT", PAD, -(HEADER + 78))
+    f.box:SetPoint("BOTTOMRIGHT", -PAD, FOOT + 32)
+    local totals, balanced = { deposit = 0, withdraw = 0 }, {}
+    for _, g in ipairs(plan and plan.groups or {}) do
+        if g.kind == "bank" then
+            local dir = g.dir or "deposit"
+            totals[dir] = totals[dir] + g.items
+            for _, e in ipairs(g.entries) do
+                local rule = ruleById[e.ruleId]
+                if not e.leftOut and rule and rule.flow == "balance" then balanced[rule.id] = true end
+            end
+        end
+    end
+    local n = 0
+    for _ in pairs(balanced) do n = n + 1 end
+    f.bankSummary.deposit.value:SetText(Plural(totals.deposit, "item"))
+    f.bankSummary.withdraw.value:SetText(Plural(totals.withdraw, "item"))
+    f.bankSummary.balance.value:SetText(Plural(n, "rule"))
+    local title = selected and ((manual.dir == "withdraw" and "Withdraw all" or "Deposit all") .. " · " .. selected.name) or "Your bank"
+    Heading(title, nil, manual and "Use rules" or (choosingRule and "Back" or "Rule actions"), not cur, nil, function()
+        if manual then manual, leftOut = nil, {} else choosingRule = not choosingRule end
+        bankDetails = false; bankDismissed = Run.Last(); W.said = nil; W.Refresh()
+    end)
+    if choosingRule and not cur then
+        local found = false
+        for _, rule in ipairs(rules) do
+            if rule.kind == "bank" then
+                found = true
+                local row = Next()
+                BankFace(row)
+                row.title:SetPoint("TOPLEFT", 10, -10); row.title:SetWidth(CONTENT_W - 230)
+                row.title:SetWordWrap(false); row.title:SetText(rule.name)
+                row.meta:SetPoint("TOPLEFT", 10, -30); row.meta:SetWidth(CONTENT_W - 230)
+                row.meta:SetText(rule.enabled and "Rule is on" or "Manual use · rule is off")
+                for _, dir in ipairs({ "deposit", "withdraw" }) do
+                    local key = dir == "deposit" and "action" or "withdrawAll"
+                    local label = dir == "deposit" and "Deposit all" or "Withdraw all"
+                    local b = RowButton(row, key, label, 102, "secondary")
+                    b:ClearAllPoints(); b:SetPoint("TOPRIGHT", dir == "deposit" and -114 or -6, -14)
+                    b.text:SetText(label); b:SetEnabled(MI.Enabled()); b:Show()
+                    b.onClick = function()
+                        manual = { ruleId = rule.id, dir = dir }; leftOut = {}; choosingRule = false; bankDetails = false; bankDismissed = Run.Last()
+                        W.said = nil; W.Refresh()
+                    end
+                    R.Interact.Tip(b, label, "Review matching items for this rule only. Its usual target is ignored for this visit; saved rules stay unchanged. Never transfer and item protections still apply. Other Keep in bags rules and restocking targets still protect deposits.")
+                    if R.CraftLook then R.CraftLook.Dress(b, "secondary") end
+                end
+                Place(row, 58); Gap(4)
+            end
+        end
+        if not found then Line("No bank rules yet. Choose Manage rules to create one.", "quiet") end
+    else
+        local any = false
+        for _, g in ipairs(plan and plan.groups or {}) do
+            if g.kind == "bank" then
+                for _, e in ipairs(g.entries) do
+                    any = true
+                    local out = g.dir == "withdraw"
+                    local after = e.carried + (out and e.count or -e.count)
+                    local detail = e.leftOut and "Left out this time" or ((out and "Withdraw " or "Deposit ") .. e.count .. " · Bags " .. e.carried .. " → " .. after)
+                    local startY = y
+                    local row = ItemRow(e.id, e.facts, nil, detail, e.leftOut and "quiet" or nil, not cur and {
+                        label = e.leftOut and "Include" or "Leave out", onClick = function()
+                            leftOut[e.key] = not e.leftOut or nil; W.Refresh()
+                        end } or nil)
+                    BankFace(row)
+                    row.icon:SetSize(32, 32); row.icon:ClearAllPoints(); row.icon:SetPoint("TOPLEFT", 10, -10)
+                    row.title:ClearAllPoints(); row.title:SetPoint("TOPLEFT", 50, -9); row.title:SetWidth(CONTENT_W - 160)
+                    row.title:SetWordWrap(false)
+                    row.meta:ClearAllPoints(); row.meta:SetPoint("TOPLEFT", 50, -29); row.meta:SetWidth(CONTENT_W - 160)
+                    row.meta:SetWordWrap(false)
+                    row:SetHeight(54); y = startY + 54
+                    if row.toggle then row.toggle:ClearAllPoints(); row.toggle:SetPoint("TOPRIGHT", -8, -14) end
+                    Gap(5)
+                end
+            end
+        end
+        if not any then Heading("Nothing to move", manual and "No eligible matching items here." or "Your bags and bank are ready.") end
+        local issues = #(plan and plan.attention or {}) + #(plan and plan.skipped or {}) + #(plan and plan.reserved or {})
+        Heading(issues > 0 and Plural(issues, "item or rule", "items or rules") .. " staying put" or "Transfer details", nil,
+            bankDetails and "Hide details" or "Details", true, nil, function() bankDetails = not bankDetails; W.Refresh() end)
+        if bankDetails and plan then
+            for _, a in ipairs(plan.attention) do Line(a.rule .. ": " .. a.why, "warn") end
+            for _, e in ipairs(plan.skipped) do ItemRow(e.id, e.facts, nil, e.text, "quiet") end
+            for _, e in ipairs(plan.reserved) do ItemRow(e.id, e.facts, nil, "Reserved by " .. e.rule, "quiet") end
+            for _, g in ipairs(plan.groups) do for _, e in ipairs(g.entries) do
+                Line(e.rule .. (e.short and (": " .. e.short .. " short · " .. (e.shortWhy or "")) or ""), "quiet")
+            end end
+            local last = Run.Last()
+            if last and last.kind == "bank" and last ~= bankDismissed and not cur then DrawResults(last) end
+        end
+    end
+    local ok, why = Run.CanBank(plan)
+    f.bankGo:SetShown(not cur and not choosingRule)
+    f.bankGo:SetEnabled(ok and MI.Enabled())
+    f.bankGo.text:SetText(manual and (manual.dir == "withdraw" and "Withdraw all" or "Deposit all") or "Run rules")
+    f.bankGo.onClick = function()
+        local done, err = Run.Bank(plan)
+        if not done then W.Say(err, "warn") end
+    end
+    R.Interact.Tip(f.bankGo, "Run bank transfers", why or "Carries out this review: deposits first, then withdrawals. Stop ends the batch; completed transfers stay done.")
+    f.stop:SetShown(cur ~= nil)
+    f.again:SetEnabled(not cur); f.manage:SetEnabled(not cur)
+    local prog = Run.BankProgress()
+    if not cur and Run.Last() == bankDismissed then prog = nil end
+    f.bankProgress:SetShown(prog ~= nil)
+    local status = "Review the items, then run when ready."
+    if choosingRule then status = "Choose a rule and an action to review."
+    elseif manual then status = "One visit only · saved rule unchanged" end
+    if prog then
+        local frac = prog.total > 0 and prog.confirmed / prog.total or 0
+        f.bankProgress.fill:SetWidth(math.max(1, (WIDTH - PAD * 2 - 4) * frac))
+        f.bankProgress.fill:SetShown(frac > 0)
+        f.bankProgress.text:SetText(prog.confirmed .. " / " .. prog.total .. " moves confirmed")
+        if prog.active then
+            local step = prog.step
+            status = (prog.dir == "withdraw" and "Withdrawing" or "Depositing") .. (step and (" · " .. ItemName(step.entry.facts, step.id)) or "…")
+        else
+            local missed = prog.failed + prog.skipped + prog.uncertain
+            status = prog.reason == "done" and (missed == 0 and "Completed" or "Completed with items left out")
+                or ("Stopped · " .. (MI.STOP_TEXT[prog.reason] or prog.reason or ""))
+            if prog.uncertain > 0 then status = status .. " · Check unconfirmed moves in Details" end
+        end
+    end
+    if not MI.Enabled() then status = "Magic Inventory is off." end
+    f.status:SetText(W.said or status)
+    L.Color(f.status, W.saidTone == "warn" and AMBER or L.pal.textDim)
+    for i = used + 1, #rows do rows[i]:Hide() end
+    f.content:SetHeight(math.max(1, y + 6))
+end
+
 local function Draw()
     if not (f and f:IsShown()) then return end
     local L = Look()
     used, y = 0, 4
     local cur = Run.Current()
     if not cur then
-        plan = MI.CurrentPlan(context, leftOut)
+        plan = MI.CurrentPlan(context, leftOut, context == "bank" and manual or nil)
+        if not plan then manual = nil; plan = MI.CurrentPlan(context, leftOut) end
     end
+    if context == "bank" then DrawBank(cur); return end
+    f.bankSummary:Hide(); f.bankGo:Hide(); f.bankProgress:Hide(); f.sub:Show()
+    f.again:SetEnabled(not cur); f.manage:SetEnabled(true)
+    f.box:ClearAllPoints(); f.box:SetPoint("TOPLEFT", PAD, -(HEADER + 30)); f.box:SetPoint("BOTTOMRIGHT", -PAD, FOOT)
     f.sub:SetText(context and CONTEXT_TITLE[context] or "Preview: what your rules would move, from your bags as they are now. Nothing moves from here.")
 
     if not MI.Enabled() then
@@ -469,6 +635,7 @@ local function Build()
     f.sub:SetJustifyH("LEFT")
 
     local box = CreateFrame("Frame", nil, f)
+    f.box = box
     box:SetPoint("TOPLEFT", PAD, -(HEADER + 30))
     box:SetPoint("BOTTOMRIGHT", -PAD, FOOT)
     f.shell:Recess():Place(box, 0, 0, 0, 0)        -- the list sits in a recess, a step deeper than the interior
@@ -495,11 +662,50 @@ local function Build()
     f.manage:SetPoint("BOTTOMRIGHT", -PAD, 16)
     f.again = F.Button(f, "Review again", 120, "secondary", function()
         W.said = nil
-        if not Run.Current() then leftOut = {} end
+        if not Run.Current() then leftOut = {}; bankDismissed = Run.Last() end
         W.Refresh()
     end)
     f.again:SetPoint("RIGHT", f.manage, "LEFT", -8, 0)
     R.Interact.Tip(f.again, "Review again", "Looks at your bags again and includes everything you left out. Nothing moves.")
+
+    -- Approved crafted materials shared with the rule workspace; no dependency on the settings addon.
+    local C = R.CraftLook
+    if C then
+        if f.shell.grain then f.shell.grain:Hide() end
+        C.Tile(f.shell, "BACKGROUND", -4, "dark", 1, { .90, .94, .98 }):SetAllPoints(f.shell.interior)
+        C.QuietTile(f.shell, "outer", "BACKGROUND", -3):SetAllPoints(f.shell.interior)
+        C.LegacyRails(f.shell, false); f.craftedFrame = C.Frame(f.shell)
+        C.Font(f.title, 23, true, "serif")
+        for _, button in ipairs({ f.stop, f.manage, f.again }) do C.Dress(button, button == f.stop and "danger" or "secondary") end
+    end
+    f.bankGo = F.Button(f, "Run rules", 132, "primary", function(self) if self.onClick then self.onClick() end end)
+    f.bankGo:SetPoint("BOTTOMLEFT", PAD, 16); f.bankGo:Hide()
+    if C then C.Dress(f.bankGo, "confirmation") end
+    f.bankSummary = CreateFrame("Frame", nil, f)
+    f.bankSummary:SetPoint("TOPLEFT", PAD, -(HEADER + 10)); f.bankSummary:SetSize(WIDTH - PAD * 2, 56)
+    for i, dir in ipairs({ "deposit", "withdraw", "balance" }) do
+        local card = CreateFrame("Frame", nil, f.bankSummary)
+        card:SetSize((WIDTH - PAD * 2 - 12) / 3, 54); card:SetPoint("TOPLEFT", (i - 1) * ((WIDTH - PAD * 2 - 12) / 3 + 6), 0)
+        if C then card.face = C.PanelFace(card, "walnut") end
+        local icon = card:CreateTexture(nil, "ARTWORK"); icon:SetSize(30, 30); icon:SetPoint("LEFT", 8, 0)
+        icon:SetTexture(R.PATH .. (dir == "balance" and [[media\npcs\balance-scales-small]] or [[media\guides\status-current-small]]))
+        if dir ~= "balance" then icon:SetRotation(dir == "withdraw" and math.pi / 2 or -math.pi / 2) end
+        card.label = L.Text(card, "small"); card.label:SetPoint("TOPLEFT", 44, -8)
+        card.label:SetWidth(card:GetWidth() - 50)
+        card.label:SetText(({ deposit = "Deposit", withdraw = "Withdraw", balance = "Balance" })[dir])
+        card.value = L.Text(card, "body"); card.value:SetPoint("TOPLEFT", 44, -28); card.value:SetWidth(card:GetWidth() - 50)
+        if C then C.Font(card.label, 13); C.Font(card.value, 14, true, "strong") end
+        f.bankSummary[dir] = card
+    end
+    f.bankSummary:Hide()
+    f.bankProgress = CreateFrame("Frame", nil, f, "BackdropTemplate")
+    f.bankProgress:SetPoint("BOTTOMLEFT", PAD, 76); f.bankProgress:SetSize(WIDTH - PAD * 2, 20)
+    L.Surface(f.bankProgress, L.pal.well, 1, L.pal.bronzeLo, .9)
+    f.bankProgress.fill = f.bankProgress:CreateTexture(nil, "ARTWORK")
+    f.bankProgress.fill:SetPoint("TOPLEFT", 2, -2); f.bankProgress.fill:SetPoint("BOTTOMLEFT", 2, 2)
+    f.bankProgress.fill:SetColorTexture(L.pal.tealHi[1], L.pal.tealHi[2], L.pal.tealHi[3], .9)
+    f.bankProgress.text = L.Text(f.bankProgress, "small"); f.bankProgress.text:SetPoint("CENTER", 0, 0)
+    f.bankProgress:Hide()
 
     -- hooked, not set: the shell's fade and the fit to the screen are hooks of the same scripts
     f:HookScript("OnShow", function() W.said = nil; W.Refresh() end)
@@ -513,7 +719,8 @@ function W.Show(asPreview)
     if not (f or Build()) then R.Print("the Magic Inventory window isn't available right now.") return end
     local now = Run.OpenKind()
     local newContext = (not asPreview) and now or nil
-    if newContext ~= context then leftOut = {} end
+    if newContext ~= context then leftOut, manual, choosingRule, bankDetails = {}, nil, false, false end
+    if newContext ~= context then bankDismissed = Run.Last() end
     context = newContext
     f:Show()
     f:Raise()
@@ -677,6 +884,10 @@ Run.OnUpdate(function(what)
     if type(what) == "string" then
         local kind = what:match("^open:(%a+)$")
         if kind then QueueCount(kind, 0.3) end
+        if what == "close:bank" or what == "leaving" or (what == "refresh" and not MI.Enabled()) then
+            manual, choosingRule, bankDetails, leftOut = nil, false, false, {}
+            bankDismissed = Run.Last()
+        end
         if what:find("^close:") or what == "leaving" or what == "refresh" then
             local closed = what:match("^close:(%a+)$")
             if closed and f and f:IsShown() and context == closed then f:Hide() end
