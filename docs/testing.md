@@ -204,7 +204,7 @@ coverage and the pending client gate: [lifecycle proof](workshop/auction-house/l
 Campaigns remain separate from routine checks and full regression, matching the
 previous suite. The offline suite always runs the mutation runner's own tests.
 For Workshop money, quantities, rounding, ordering or eligibility changes, keep
-[the verification policy](workshop/testing-roadmap.md#verification-policy-for-future-workshop-tasks):
+[the verification policy](workshop/testing-roadmap.md#verification-policy-for-future-workshop-tasks-claudemd-points-here):
 run the matching campaign and add a realistic defect model. For example:
 
 ```sh
@@ -280,3 +280,75 @@ Run these sequentially on frozen source, with no competing verification activity
 This is ten launches across four representative catalogs, including Workshop and
 AH replay/negative controls. It is not the complete full/release gate. Results
 and resource limits are in [the verification audit](testing-verification-audit.md).
+
+## Automatic release isolation checks
+
+`./tests/run.sh development release-tools` covers mocked release planning/publishing,
+archive contracts, artifact identity/retry regressions and workflow invariants. No live
+CurseForge upload endpoint is used. PR/main CI selects this for release/docs-only changes;
+unmapped or unreliable scope falls back to complete offline discovery (`./tests/run.sh`).
+No ordinary CI invocation runs the full simulator or release-certification tier.
+Manual main dispatch additionally produces an uncertified internal package even during
+the publication hold. Protected promotion is implemented separately; static workflow checks do not prove
+owner-side GitHub environment configuration or a live approved publication.
+
+Release-isolation campaign (2026-11-16): 52 unit/mock cases passed via the focused
+runner in 6.057 s (46 release-tool cases plus 6 isolation cases); no simulator run.
+The exact pinned packager built an internal seven-addon archive from implementation
+commit `e6d8c9e8e6fa605dfc413eabb320d2fc6d9068f1` in 80.668 s using `-d`.
+Archive checks, initial seal and re-seal passed. The ZIP SHA256 was
+`4f7b817440278472a060e239afaf860363a2c143c4f8941a03815dac2047e04b`.
+Training data matched committed source after the packager's existing LF-to-CRLF
+conversion (the initial literal-byte comparison detected that expected conversion).
+YAML parsing confirmed PR/main event/job structure. This is local/mock and build-only
+evidence, not an Actions dispatch, environment approval, live publisher test or release
+certification. The first baseline test attempt had three sandbox socket-permission
+errors; the focused runner subsequently passed with localhost fixtures permitted.
+No live CurseForge upload endpoint was contacted. Future promotion still requires
+an end-to-end approved immutable-artifact rehearsal and the full candidate/client gate.
+
+## Source-to-test guidance
+
+Use [architecture](architecture.md) for ownership, then inspect `tests/groups.json`
+and the selected plan. These are manual starting points; there is no automatic
+source dependency analysis. Syntax globs describe checked files, not all consumers.
+
+- Reminders config or its settings page: `feature reminders`.
+- Market bridge/schema/receipt changes: `feature market`; inspect the pinned
+  contracts and scoped Lua/Python tests. Preserve integrity negative controls.
+- AH preview lifecycle: `feature auction-preview`. If editing shared Workshop
+  suspension/services, add `--with-group workshop` using `integration`.
+- Workshop settings/Tooltip Designer: `feature workshop-settings`.
+- A shared style change affecting Settings and Reminders:
+  `integration shared-ui --with-group settings --with-group reminders`.
+  Enumerate all actual consumers; this example does not exhaust them.
+- Global `Core.lua` initialization, `Persist.lua`, `Profiles.lua`, SavedVariables
+  contracts, high-risk migrations or major shared infrastructure: require the
+  existing **full** gate. `development core` is only a diagnostic starting point.
+- Unknown/unmapped paths: inspect callers, manifests and full test inventory;
+  require explicit coverage review. Use complete offline discovery at minimum
+  when scope remains unknown, and the full gate when shared/global risk cannot
+  be excluded. Never interpret no matching feature group as sufficient coverage.
+- Release tooling: `development release-tools`, plus the release-engineering
+  requirements in [RELEASING.md](../RELEASING.md). Documentation-only work uses
+  path/link checks and previews; it needs no simulator certification.
+
+Preview any command above by appending `--list`; inspect tests, syntax and selected
+simulators before running it. Development omits dependency expansion; feature and
+integration expand unit/syntax dependencies, but simulator catalogs come only from
+explicitly requested groups. Add consumer groups explicitly for cross-feature work.
+Workshop money/quantity/eligibility changes also retain the mutation requirements
+in [shared rules](engineering-rules.md) and the Workshop verification policy.
+
+`tools/ci_verify.py` separately selects release-tools for its explicit release/docs
+allowlist, and complete offline discovery otherwise. It is not a source-to-group
+analyzer. This guidance changes neither CI selection nor test coverage. Automatic
+ownership inference and its unmapped/shared-file negative cases are deferred to a
+separately reviewed implementation.
+
+## Evidence retention
+
+See [test evidence retention](evidence/README.md) for bounded CI diagnostics,
+permanent evidence, historical path/hash mappings and rollback. Generated outputs
+remain ignored; CI refuses newly tracked files under `test-output/`. CI artifacts
+expire after 14 days and must not become permanent documentation dependencies.

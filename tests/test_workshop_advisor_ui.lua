@@ -233,3 +233,5 @@ W.UI.Advisor.ItemReady(1010,true); Pump()
 Same(p.list.scroll:GetVerticalScroll(),913,"metadata during discovery retains auctionable-filtered viewport")
 W.Window.Hide(); Pump()
 print("advisor UI: OK")
+-- Reuse the recording client for the opt-in Advisor benchmark; ordinary assertions above are unchanged.
+return { client = c, workshop = W, page = p, game = g, pump = Pump, choose = Choose }

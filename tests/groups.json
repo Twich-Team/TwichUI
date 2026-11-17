@@ -59,6 +59,12 @@
     "dependencies": ["settings", "core"],
     "simulators": [{"script": "smoke"}]
   },
+  "release-tools": {
+    "tests": ["test_release_tools.py", "test_release_isolation.py", "test_release_promotion.py"],
+    "syntax": [],
+    "dependencies": [],
+    "simulators": []
+  },
   "test-tools": {
     "tests": ["test_*.py"],
     "syntax": ["tools/simlab/**/*.lua"],
