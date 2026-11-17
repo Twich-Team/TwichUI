@@ -1,4 +1,4 @@
--- Arrow rotation on mocked frames: route easing, shortest-angle wrap, immediate facing and lifecycle reset.
+-- Arrow display on mocked frames: waypoint distance, route easing, immediate facing and lifecycle reset.
 local frames, ticker = {}, nil
 local function Frame()
   local f = { shown = false }
@@ -9,6 +9,7 @@ local function Frame()
     if key == "GetScale" then return function() return 1 end end
     if key == "CreateTexture" or key == "CreateFontString" then return Frame end
     if key == "SetRotation" then return function(s, angle) s.angle = angle end end
+    if key == "SetText" then return function(s, text) s.text = text end end
     if key:match("^[A-Z]") then return function() end end
   end })
 end
@@ -16,6 +17,7 @@ CreateFrame = function() local f = Frame(); frames[#frames + 1] = f; return f en
 UIParent = Frame()
 local facing, bearing, kind, available, active = 0, 0, "route", true, true
 local dest, route = {}, {}
+local nextDistance = 147.4
 local prefs = { arrow = true, locked = true, arrowScale = 100, textSize = 12 }
 local NV = {}
 TwichUI = { PATH = "", Nav = NV, NavPrefs = {
@@ -28,7 +30,7 @@ NV.Active = function() return active end
 NV.Subscribe = function() end
 NV.AddTicker = function(fn) assert(not ticker); ticker = fn end
 NV.RemoveTicker = function(fn) assert(ticker == fn); ticker = nil end
-NV.Snapshot = function() return { dest = dest, route = route, state = "navigating" } end
+NV.Snapshot = function() return { dest = dest, route = route, state = "navigating", toNext = nextDistance } end
 NV.Target = function() if available then return math.cos(bearing) * 20, math.sin(bearing) * 20, kind end end
 NV.Position = function() return true, 1, 0, 0 end
 NV.Readable = function(v) return v end
@@ -44,6 +46,14 @@ local function Tick(dt) assert(ticker); ticker(dt or 1 / 30) end
 NA.Refresh()
 Tick()
 assert(Near(Angle(), 0), "first target appears immediately")
+assert(frames[1].dist.text == "147", "distance is to the next waypoint, not the 20-yard steering target")
+nextDistance = 37.6
+Tick()
+assert(frames[1].dist.text == "38", "display counts down as the waypoint gets closer")
+nextDistance = 0
+Tick()
+assert(frames[1].dist.text == "0", "zero distance is preserved at the waypoint")
+nextDistance = 147.4
 bearing = math.pi / 2
 Tick()
 assert(Angle() > 0 and Angle() < bearing / 2, "a corner eases instead of snapping sideways")
@@ -74,6 +84,7 @@ assert(Near(Angle(), bearing), "recovered target starts fresh")
 kind, bearing = "direct", -2
 Tick()
 assert(Near(Angle(), bearing), "direct bearing remains direct")
+assert(frames[1].dist.text == "20", "direct bearing shows destination distance rather than stale route progress")
 active = false
 NA.Refresh()
 assert(ticker == nil, "stopping removes the ticker")
