@@ -15,3 +15,5 @@ Edit the repository, preserve user data and unrelated changes, and respect comba
 experimental and publication protections. Commit/push only when requested; never use
 destructive cleanup. Keep changes within the task and label verification honestly.
 [Current status](STATUS_AND_BACKLOG.md) is context, not authorization for more work.
+
+Development follows [protected main and short-lived PR branches](docs/git-workflow.md). Workshop and release/v1.3 are preserved historical branches, not new work targets.

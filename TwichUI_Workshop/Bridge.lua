@@ -97,7 +97,7 @@ local function validate(raw,expected)
 end
 local schedule
 function B.Begin(raw,automatic,expected)
-    rejected=nil;stats.refusal=nil;compatibilityAttempt=nil
+    rejected=nil;stats.refusal=nil;stats.unsupported=nil;compatibilityAttempt=nil
     expected=expected and J.Copy(expected)
     token=token+1;job={co=coroutine.create(function() return validate(raw,expected) end),token=token,automatic=automatic,raw=raw}
     state,lastError='loading',nil;return false,'loading'
@@ -118,7 +118,7 @@ local function step(ms)
     until resumes>=limit or clock()-start>=budget
     stats.resumes=stats.resumes+resumes;stats.largest_resumes=math.max(stats.largest_resumes,resumes)
     local elapsed=math.max(0,clock()-start);stats.validation_ms=stats.validation_ms+elapsed;stats.largest_slice_ms=math.max(stats.largest_slice_ms,elapsed);stats.slices=stats.slices+1
-    if failure then stats.refusal=failureReason=='bridge policy canonical_bytes' and 'canonical_bytes' or nil;rejected=current.raw;job=nil;state=active and 'ready' or 'invalid';lastError='invalid';stats.failures=stats.failures+1;return false,'invalid' end
+    if failure then stats.refusal=failureReason=='bridge policy canonical_bytes' and 'canonical_bytes' or nil;stats.unsupported=compatibilityAttempt and not compatibilityAttempt.compatible and compatibilityAttempt.reason=='newer_addon' or false;rejected=current.raw;job=nil;state=active and 'ready' or 'invalid';lastError='invalid';stats.failures=stats.failures+1;return false,'invalid' end
     if complete then return true end;return false,'loading'
 end
 function B.Step(ms) return measured('workshop.bridgeValidate',step,ms) end
@@ -179,6 +179,55 @@ end
 function B.Market() return active and J.Copy(active.header.market) or nil,lastError or state end
 function B.Manifest() return active and J.Copy(active.header) or nil,lastError or state end
 function B.Receipt() return active and J.Copy(active.receipt) or nil,lastError or state end
+-- Read only the validated in-memory generation. Files on disk and desktop writes
+-- are not observable here; the receipt describes generation preparation only.
+function B.Freshness(now)
+    local s=B.Status()
+    local out={state='unavailable',text='Market data unavailable',tone='quiet',tip={}}
+    if not active then
+        if s.unsupported then out.state='unsupported';out.text='Unsupported Market data'
+        elseif s.loading then out.text='Validating Market data' end
+        out.tip[1]='No validated external generation is loaded. Local scans remain available.'
+    else
+        local h=active.header
+        local o=h.observations[h.current_observation_ref+1]
+        local _,stamp=S.Time(o and o.observed_at)
+        now=now or (time and time())
+        local age=stamp and now and now-stamp
+        out.generation=h.generation_id;out.observed_at=o and o.observed_at;out.age=age
+        out.state=age and age>=0 and (age<=7200 and 'ready' or age<=86400 and 'aging' or 'stale') or 'unknown'
+        out.text=out.state=='ready' and 'Market data ready' or out.state=='aging' and 'Market data aging' or out.state=='stale' and 'Market data stale' or 'Market data age unknown'
+        out.tone=out.state=='ready' and 'good' or 'warn'
+        out.tip={
+            'Loaded generation: '..h.generation_id,
+            'Source: Market server · '..h.pricing_algorithm..(h.synthetic and ' · synthetic test data' or ''),
+            'Market: '..h.market.region:upper()..' · '..(h.market.player_ruleset~=J.NULL and h.market.player_ruleset or 'unverified ruleset')..' · house '..h.market.house_id,
+            'Last loaded observation: '..(out.observed_at or 'unknown')..' UTC',
+            'Loaded observation age: '..(age and age>=0 and math.floor(age/60)..' minutes' or 'unknown; check client clock'),
+            'Validation: schema '..h.schema_version..' · integrity verified'..(s.error and ' · replacement rejected; last good retained' or ''),
+            h.schema_version==3 and ('Selected scope: '..h.scope.requested_count..' exact variants · complete selected history; not whole-market coverage') or ('Legacy coverage: '..h.record_count..' variants'),
+            'History: '..h.coverage.history_from_day..' through '..h.coverage.history_through_day..' UTC',
+            'Generation prepared by desktop: '..active.receipt.completed_at..' (not a file delivery receipt)',
+        }
+    end
+    if s.compatibility_message then out.tip[#out.tip+1]=s.compatibility_message end
+    out.tip[#out.tip+1]='The companion shows actual file delivery. WoW cannot detect newer files while running.'
+    out.tip[#out.tip+1]='Click to review Reload UI after the companion has installed files.'
+    return out
+end
+function B.RequestReload()
+    if not W.Active() then return false,'disabled' end
+    if InCombatLockdown and InCombatLockdown() then return false,'combat' end
+    if not (StaticPopupDialogs and StaticPopup_Show and ReloadUI) then return false,'unavailable' end
+    StaticPopupDialogs.TWICHUI_MARKET_RELOAD={
+        text='Reload UI to read Market files already installed by the companion?\n\nFinish any unsaved edits first. This closes current interactions. A newer file cannot be detected from inside WoW. Saved settings and local scan history are preserved.',
+        button1='Reload UI',button2=CANCEL or 'Cancel',timeout=0,whileDead=true,hideOnEscape=true,preferredIndex=3,
+        OnAccept=function()
+            if W.Active() and not (InCombatLockdown and InCombatLockdown()) then ReloadUI() end
+        end,
+    }
+    StaticPopup_Show('TWICHUI_MARKET_RELOAD');return true
+end
 function B.Variants(item,limit)
     item=W.Int(item,1,W.MAX_ID);limit=W.Int(limit or 20,1,100)
     if not item or not limit then return nil,'identity' end

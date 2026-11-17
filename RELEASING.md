@@ -1,5 +1,7 @@
 # Releasing TwichUI
 
+Development uses protected main and short-lived reviewed branches; see [Git workflow](docs/git-workflow.md). Candidates are frozen from exact verified commits, without a permanent release branch.
+
 Verification and internal builds run in `.github/workflows/release.yml`. Public publication
 is disabled. `tools/release.py` retains version/history and publisher integrity tooling.
 
