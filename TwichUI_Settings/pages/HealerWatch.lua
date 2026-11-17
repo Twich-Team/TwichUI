@@ -10,7 +10,7 @@ local K = R.SettingsKit
 local P = {}
 R.HealerWatchPage = P
 
-local W = 644                 -- the settings window's content width
+local W = 644                 -- initial width; follows the hosted frame when laid out
 local PAD, GAP = 14, 12
 local PREVIEW_H = 128
 local DOT = "  \194\183  "
@@ -302,6 +302,7 @@ local function LayoutPhrases(y)
     local list = HW().Phrases()
     for i, ph in ipairs(list) do
         local row = PhraseRow(i)
+        row:SetWidth(W - PAD * 2)
         row.index = i
         row.text:SetText(ph.text)
         row.mode.text:SetText(ModeLabel(ph.mode))
@@ -403,6 +404,12 @@ end
 
 function P.Refresh()
     if not (f and built and f:IsShown()) then return end
+    W = math.max(1, f:GetWidth())
+    local inner = math.max(1, W - PAD * 2)
+    for _, panel in ipairs({ f.preview, f.phrases, f.diag }) do panel:SetWidth(W) end
+    for _, text in ipairs({ f.previewNote, f.phrasesNote, f.say, f.diagText }) do text:SetWidth(inner) end
+    f.stage:SetWidth(inner)
+    f.testResult:SetWidth(math.max(1, inner - 410))
     local y = 0
     y = y + LayoutPreview(y) + GAP
     y = y + LayoutPhrases(y) + GAP
@@ -434,6 +441,9 @@ function P.Frame()
     f = CreateFrame("Frame")
     f:SetWidth(W)
     f:Hide()
+    f:SetScript("OnSizeChanged", function(self, width)
+        if width ~= W then P.Refresh() end
+    end)
     f:SetScript("OnShow", function()
         if not built then Build() end
         P.Refresh()
