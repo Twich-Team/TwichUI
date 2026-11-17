@@ -132,6 +132,24 @@ do
   end
   local k, n = Kinds("Drink", "Restores 420 mana over 21 sec.  Must remain seated while drinking.")
   assert(k == "D" and n == 420, "plain drink")
+  for _, sample in ipairs({ { "1,344", 1344 }, { "1,992", 1992 }, { "2,934", 2934 }, { "1,234,567", 1234567 } }) do
+    k, n = Kinds("Drink", "Restores " .. sample[1] .. " mana over 30 sec. Must remain seated while drinking.")
+    assert(k == "D" and n == sample[2], "grouped mana amount: " .. sample[1])
+  end
+  k, n = Kinds("Food", "Restores 2,148 health over 30 sec. Must remain seated while eating.")
+  assert(k == "F" and n == 2148, "grouped health amount")
+  k, n = Kinds("Food", "Restores 1,344 health and 1,344 mana over 30 sec.")
+  assert(k == "FD" and n == 1344, "grouped combined restore")
+  for _, sep in ipairs({ ".", " ", "\194\160", "\226\128\175" }) do
+    local kinds, amount = F.Classify("Drink", "Restores 1" .. sep .. "344 mana over 30 sec.", names,
+      { health = "Health", mana = "Mana", separator = sep })
+    assert(kinds and kinds.drink and amount == 1344, "locale separator")
+  end
+  for _, number in ipairs({ "1,34", "12,3456", "1,234,56" }) do
+    assert(Kinds("Drink", "Restores " .. number .. " mana over 30 sec.") == nil, "malformed grouping")
+  end
+  assert(Kinds("Drink", "Restores 1,344 mana over 30 sec. Gain 8 Spirit for 15 min.") == nil,
+    "grouped water with a buff is still excluded by default")
   k, n = Kinds("Food", "Restores 234 health over 21 sec.  Must remain seated while eating.")
   assert(k == "F" and n == 234, "plain food")
   k, n = Kinds("Food", "Restores 282 health and 282 mana over 21 sec. Must remain seated while eating.")
@@ -179,6 +197,19 @@ assert(food.attrs.type == "item" and food.attrs.item == "Red-speckled Mushroom",
 assert(drink.attrs.type == "item" and drink.attrs.item == "Melon Juice", "most drink restored: " .. tostring(drink.attrs.item))
 assert(food.itemID == 4605 and food.count.text == 20)
 assert(food.name.shown == false and food.icon.shown == true)
+
+-- Grouped high-rank water must fill an empty button and outrank lower water. Its
+-- real amount also drives ranking when buff food is enabled, rather than becoming a buff.
+Drink(1645, "Moonberry Juice", 25, 8, 1704, { text = "Restores 1,704 mana over 30 sec. Must remain seated while drinking." })
+Drink(1708, "Sweet Nectar", 15, 20, 1344, { text = "Restores 1,344 mana over 30 sec. Must remain seated while drinking." })
+Bags({ 1708 }); c.FireEvent("BAG_UPDATE_DELAYED"); Look()
+assert(drink.attrs.type == "item" and drink.attrs.item == "Sweet Nectar" and drink.choice.amount == 1344,
+  "grouped water fills an otherwise empty button")
+Bags({ 1205, 1645, 1708 }); c.FireEvent("BAG_UPDATE_DELAYED"); Look()
+assert(drink.attrs.item == "Moonberry Juice" and drink.count.text == 8, "best grouped water wins")
+F.Set("useBuffFood", true); Look()
+assert(drink.attrs.item == "Moonberry Juice" and not drink.choice.buff, "grouping is not a buff")
+F.Set("useBuffFood", false); Look()
 
 -- An item that restores both can win either button.
 Bags({ 3448, 2287 })
