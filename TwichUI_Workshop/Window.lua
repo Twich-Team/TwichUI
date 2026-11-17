@@ -262,7 +262,7 @@ local function BuildShell()
     f.externalChip=UI.Chip(footer,220,22)
     f.externalChip.maxW=260
     f.externalChip:SetPoint('LEFT',f.chip,'RIGHT',8,0)
-    UI.TipFn(f.externalChip,'Loaded Market server data',function(self) return self.tipLines and table.concat(self.tipLines,'\n') end)
+    UI.TipFn(f.externalChip,'Loaded Market server data',function() return table.concat(W.Bridge.Freshness().tip,'\n') end)
     f.externalChip:SetScript('OnMouseUp',function(_,button) if button=='LeftButton' then W.Bridge.RequestReload() end end)
     f.note = UI.Text(footer, 13, K.bronzeText)
     f.note:SetPoint("RIGHT", -10, 0)

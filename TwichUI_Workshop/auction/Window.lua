@@ -225,7 +225,7 @@ local function Build()
     root.marketChip=UI.Chip(root,260,22)
     root.marketChip.maxW=300
     root.marketChip:SetPoint('BOTTOMLEFT',24,12)
-    UI.TipFn(root.marketChip,'Loaded Market server data',function(self) return self.tipLines and table.concat(self.tipLines,'\n') end)
+    UI.TipFn(root.marketChip,'Loaded Market server data',function() return table.concat(W.Bridge.Freshness().tip,'\n') end)
     root.marketChip:SetScript('OnMouseUp',function(_,button) if button=='LeftButton' then W.Bridge.RequestReload() end end)
     root.note:SetPoint("LEFT",root.marketChip,"RIGHT",12,0); root.note:SetPoint("RIGHT", -24, 0)
     root.note:SetText("Standalone preview  •  Replacement off  •  Transactions unavailable")
