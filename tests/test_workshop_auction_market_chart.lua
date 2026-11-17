@@ -18,9 +18,9 @@ local g=C.Geometry(d,400,120);local lines=0;for _,v in ipairs(g) do if v.x2 then
 check(lines==1,'only truthful connected segment')
 local chart=W.UI.AdvancedMarketChart(c.UIParent,600,176)
 chart:Set(s,W.UI.Money);chart:Inspect(1)
-check(chart.tip:IsShown(),'inspection shown');check(chart.tip.text:GetText():find('100 copper',1,true),'exact copper')
-chart:Inspect(4);check(chart.tip.text:GetText():find('Aggregate mean',1,true),'aggregate is interval')
-chart:Inspect(6);check(chart.tip.text:GetText():find('2026-11-17T00:00:00Z',1,true),'external exact timestamp')
+check(chart.tip:IsShown(),'inspection shown');check((chart.tip.date:GetText()..chart.tip.value:GetText()..chart.tip.text:GetText()):find('100 copper',1,true),'exact copper')
+chart:Inspect(4);check((chart.tip.date:GetText()..chart.tip.value:GetText()..chart.tip.text:GetText()):find('Aggregate mean',1,true),'aggregate is interval')
+chart:Inspect(6);check((chart.tip.date:GetText()..chart.tip.value:GetText()..chart.tip.text:GetText()):find('2026-11-17T00:00:00Z',1,true),'external exact timestamp')
 chart:Select(2,6);check(chart.window and #chart.data.points==2,'drag interval')
 chart:Select();check(not chart.window and #chart.data.points==3,'reset')
 -- Drive the actual pointer handlers with scale-correct synthetic cursor coordinates.
@@ -32,26 +32,26 @@ chart.plot.GetWidth=function()return 400 end
 chart.plot.GetHeight=function()return 120 end
 chart:Set(s,W.UI.Money)
 cursor=(100+400/6)*.75
-chart.plot:GetScript('OnEnter')(chart.plot)
-chart.plot:GetScript('OnMouseDown')(chart.plot,'LeftButton')
+chart.hit:GetScript('OnEnter')(chart.plot)
+chart.hit:GetScript('OnMouseDown')(chart.plot,'LeftButton')
 cursor=(100+400*5/6)*.75
-chart.plot:GetScript('OnUpdate')(chart.plot)
+chart.hit:GetScript('OnUpdate')(chart.plot)
 check(chart.selection:IsShown(),'drag preview')
-chart.plot:GetScript('OnMouseUp')(chart.plot,'LeftButton')
+chart.hit:GetScript('OnMouseUp')(chart.plot,'LeftButton')
 check(chart.window and math.abs(chart.window[1]-2)<.001 and math.abs(chart.window[2]-6)<.001,'scaled drag hit testing')
 local window=chart.window
 chart.plot.GetWidth=function()return 450 end
 chart:GetScript('OnSizeChanged')(chart)
 check(chart.window==window and chart.pw==450,'resize keeps selected interval')
-chart.plot:GetScript('OnMouseUp')(chart.plot,'RightButton')
+chart.hit:GetScript('OnMouseUp')(chart.plot,'RightButton')
 check(not chart.window,'right click resets')
-chart.plot:GetScript('OnLeave')(chart.plot)
-check(not chart.plot:GetScript('OnUpdate') and not chart.tip:IsShown(),'leave cancels interaction')
+chart.hit:GetScript('OnLeave')(chart.plot)
+check(not chart.hit:GetScript('OnUpdate') and not chart.tip:IsShown(),'leave cancels interaction')
 local pool=#chart.pool;local strokes=#chart.linePool
 for i=1,100 do chart:Set(s,W.UI.Money) end
 check(#chart.pool==pool and #chart.linePool==strokes,'repeated redraw pool bounded')
 chart:Clear();check(not chart.series and not chart.data and not chart.drawData,'release references')
-check(not chart.tip:IsShown() and not chart.plot:GetScript('OnUpdate'),'hidden interaction cleared')
+check(not chart.tip:IsShown() and not chart.hit:GetScript('OnUpdate'),'hidden interaction cleared')
 chart:Set({from=1,to=2,points={},groups={},gaps={}},W.UI.Money);check(chart.state=='empty','empty')
 chart:Set({from=1,to=2,points={s.points[1]},groups={},gaps={}},W.UI.Money);check(chart.state=='single','single')
 chart:Set(nil);check(#chart.pool==pool,'empty source reuses pool');check(not chart.tip:IsShown(),'no stale tooltip')
@@ -78,7 +78,7 @@ for _,n in ipairs({2,7,14,30,60,120}) do
 
  local prep=bench(function() C.Prepare(x) end,200)
  local oldCPU=bench(function() old:Set(x,W.UI.Money,30) end,200)
- local newCPU=bench(function() new:Set(x,W.UI.Money) end,200)
+ local newCPU=bench(function() new:Clear();new:Set(x,W.UI.Money) end,200)
  local hover=bench(function() C.Nearest(x.points,n/2) end,10000)
  print(string.format('C1 BENCH n=%d prepare=%.2fus old-redraw=%.2fus new-set=%.2fus hit=%.2fus markers=%d stroke-textures=%d',n,prep,oldCPU,newCPU,hover,#new.pool,#new.linePool))
 end

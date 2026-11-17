@@ -1030,7 +1030,7 @@ m("market.scoped.render-window", "TwichUI_Workshop/auction/AdvancedChart.lua",
 # C1 intentionally removed the old local 30-marker cap. Guard the local source
 # instead of treating the complete inspectable window as a regression.
 m("market.scoped.local-chart-source", "TwichUI_Workshop/auction/ViewMarket.lua",
-  "p.chart:Set(x and x.series,UI.Money)", "p.chart:Set(nil,UI.Money)",
+  "p.chart:Set(x and x.series,UI.Money,", "p.chart:Set(nil,UI.Money,",
   "switching back from external data clears local chart evidence instead of displaying it", ["test_workshop_auction_market_scoped.lua"])
 
 # Item Advisor catalog finalization: numeric ID order and complete merge tails.
@@ -1042,3 +1042,15 @@ m("market.advisor.catalog-merge-tail", "TwichUI_Workshop/AdvisorData.lua",
   'for dst = lo, hi do rows[dst] = scratch[dst]; SortTick() end',
   'for dst = lo, hi - 1 do rows[dst] = scratch[dst]; SortTick() end',
   "the last row of each merged run is left stale or duplicated", ["test_workshop_advisor.lua"])
+
+# C1.1 input lifecycle: presentation-only faults, no pricing/data mutations.
+m("market.chart.refresh-input", "TwichUI_Workshop/auction/AdvancedChart.lua",
+  "self.series=series;self.format=format or UI.Money;self:Render();return",
+  "self:ClearHover();self.series=series;self.format=format or UI.Money;self:Render();return",
+  "an unchanged Market refresh silently removes the active inspection updater", ["test_workshop_auction_market_chart_interaction.lua"])
+m("market.chart.leave-drag", "TwichUI_Workshop/auction/AdvancedChart.lua",
+  "if not c.drag then c.hit:SetScript('OnUpdate',nil) end", "c:ClearHover()",
+  "leaving the plot discards the drag before a release outside it can be handled", ["test_workshop_auction_market_chart_interaction.lua"])
+m("market.chart.native-offsets", "TwichUI_Workshop/auction/AdvancedChart.lua",
+  "line:SetStartPoint('CENTER',self.anchors[v.a],0,0)", "line:SetStartPoint('BOTTOMLEFT',self.plot,v.x,v.y)",
+  "a native line reintroduces scale-dependent numeric offsets instead of marker anchors", ["test_workshop_auction_market_chart_interaction.lua"])

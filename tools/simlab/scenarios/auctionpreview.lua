@@ -462,9 +462,40 @@ if P.market then
         local s=p.projection.series;p.chart:Select(s.from+3,s.to-2)
         Lab.Check('interact','Chart interval selected',true,p.chart.window~=nil)
     end
+    if P.chartDrag then
+        local chart=p.chart;local s=p.projection.series
+        local px=(chart.plot:GetLeft()+chart.pw*.28)*chart.plot:GetEffectiveScale()
+        local py=(chart.plot:GetBottom()+chart.ph*.85)*chart.plot:GetEffectiveScale()
+        GetCursorPosition=function()return px,py end
+        IsMouseButtonDown=function()return true end
+        local RC=R.TestLab.Reach
+        Lab.Check('construct','drag plane is reachable','reachable',RC.Analyze(chart.hit,{kind='click',script='OnMouseDown',point={px,py},evidence='simulator-geometry',limit=1000000}).verdict)
+        chart.hit:GetScript('OnEnter')(chart.hit)
+        chart.hit:GetScript('OnMouseDown')(chart.hit,'LeftButton')
+        px=(chart.plot:GetLeft()+chart.pw*.72)*chart.plot:GetEffectiveScale()
+        chart.hit:GetScript('OnUpdate')(chart.hit)
+        Lab.Check('interact','drag selection visibly active',true,chart.selection:IsShown() and chart.drag~=nil)
+        Lab.Check('state','drag temporarily owns release event',true,chart.hit:IsEventRegistered('GLOBAL_MOUSE_UP'))
+    end
     if P.chartHover then
-        local s=p.projection.series;p.chart:Inspect(s.points[#s.points-2].day)
-        Lab.Check('interact','Chart inspection visible',true,p.chart.tip:IsShown())
+        local chart=p.chart;local s=p.projection.series
+        local point=s.points[#s.points-2]
+        local px=(chart.plot:GetLeft()+(point.day-s.from)/(s.to-s.from)*chart.pw)*chart.plot:GetEffectiveScale()
+        local py=(chart.plot:GetBottom()+chart.ph*.9)*chart.plot:GetEffectiveScale()
+        GetCursorPosition=function()return px,py end
+        chart.hit:GetScript('OnEnter')(chart.hit)
+        Lab.Check('interact','Chart inspection visible',true,chart.tip:IsShown())
+        local RC=R.TestLab.Reach;local rect=RC.HitRect(chart.hit).hit;local reachable=0
+        for _,x in ipairs({.01,.5,.99}) do for _,y in ipairs({.01,.5,.99}) do
+            local hit=RC.Analyze(chart.hit,{kind='hover',point={rect[1]+(rect[3]-rect[1])*x,rect[2]+(rect[4]-rect[2])*y},evidence='simulator-geometry',limit=1000000})
+            if hit.verdict=='reachable' then reachable=reachable+1 end
+        end end
+        Lab.Check('construct','whole plot hover geometry',9,reachable)
+        local tx,ty=chart.tip:GetCenter();local scale=chart.tip:GetEffectiveScale()
+        Lab.Check('construct','inspection panel cannot intercept input','reachable',RC.Analyze(chart.hit,{kind='hover',point={tx*scale,ty*scale},evidence='simulator-geometry',limit=1000000}).verdict)
+        local update=chart.hit:GetScript('OnUpdate')
+        chart:Set(R.Workshop.BridgeCodec.Copy(s),chart.format,chart.context)
+        Lab.Check('state','equivalent refresh preserves active inspection',true,chart.hit:GetScript('OnUpdate')==update and chart.tip:IsShown())
     end
     if P.marketTracked then A.Market.Filter("scope","tracked");Lab.Settle(0.5) end
     if P.marketMetadata then

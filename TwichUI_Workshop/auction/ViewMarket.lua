@@ -52,7 +52,7 @@ end
 local function ServerChart(p,x)
     local h=x.header
     local formatter=p.serverMetric=="supply" and function(n)return ("%.0f"):format(n) end or UI.Money
-    p.chart:Set(x.series,formatter)
+    p.chart:Set(x.series,formatter,tostring(p.selected)..':'..p.marketKey..':'..p.serverVariant..':'..p.serverMetric..':'..p.days..':'..tostring(h and h.generation_id))
     if x.series and #x.series.points==1 then
         local point=x.series.points[1]
         local label=p.serverMetric=="supply" and "Observed supply: " or p.serverMetric=="minimum" and "Observed minimum listing: " or
@@ -145,7 +145,7 @@ Detail=function(p)
         tile.value:SetText(tile.id=="quality" and (not r and p.market and "Choose an item" or Quality(f)) or row and row.value or "Unavailable")
         tile.tip=row and row.tip or "No supported value for the selected item and market."
     end
-    p.chart:Set(x and x.series,UI.Money)
+    p.chart:Set(x and x.series,UI.Money,tostring(p.selected)..':'..tostring(p.marketKey)..':'..p.days..':'..tostring(p.stamp))
     if not r then
         p.chart.msg:SetText(p.error and "Stored history unavailable." or "Choose an item to inspect history.")
         p.chart.note:SetText(p.error and "Refresh stored data to retry." or "Current auction availability is unknown.")
