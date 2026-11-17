@@ -468,3 +468,13 @@ Opening latency uses game elapsed time; operation costs use `debugprofilestop`.
 The existing preview pools/jobs/subscriptions/listeners describe both contexts;
 `auction.previewTimers` counts the cancellable coalesced refresh (0/1).
 No gauge builds or loads anything. See the [acceptance procedure](workshop/auction-house/native-integration.md).
+
+Use `/tui perf start auction 2` to record the **Auction House lifecycle** preset.
+It times `auction.` and `workshop.load`, samples memory/resources every five
+seconds, and selects the `auction` gauge group. Its 12 Host fields and seven
+`auction.lifecycle_*` projections (pages, events, rows, jobs, timers,
+subscriptions, reads) register when Diagnostics loads, after legacy builtins.
+This preserves the existing 40-gauge limit and legacy core/settings selections.
+A unit test fits all 19 fields beside 20 existing custom gauges (39 total); the
+supplemental native-simulator probe collected 34 gauges and verified real Host and
+page-pool reads. Real Forever timing remains pending.

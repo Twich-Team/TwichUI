@@ -120,6 +120,7 @@ Enable Workshop — Experimental through existing Settings, then:
 /tui perf
 /tui ahproof confirm-native
 /tui ahproof replacement on
+/tui perf start auction 2
 ```
 
 `confirm-native` is your acknowledgement of the completed Phase A result for
@@ -167,7 +168,60 @@ authorization are required before changing that policy or publishing a release.
 
 ## Automated evidence and performance
 
-Final verification details are recorded below after the frozen-source campaign.
+Verification completed on 2026-11-17; implementation source is `810e190`.
+The final documentation-only commit is reported in the draft PR and delivery.
+
+| Evidence | Result |
+|---|---|
+| `development auction-preview` on final implementation | **Unit-tested:** 23 modules, 90 Lua syntax files, including the complete performance-engine tests and 4,129 synthetic integrated lifecycle assertions; 10.455 s, exit 0 |
+| `feature workshop --profile cloud --measure` on `84d09f8` | **Unit-/simulator-tested:** 87 modules, 217 Lua syntax files; full Workshop 38 launches/20,263 checks and Test Lab 9 launches/229 checks; source unchanged, 1,591.827 s, exit 0 |
+| Complete standalone preview on `c413345` | **Simulator-tested:** all 49 launches/6,587 checks, replay and deliberate failure control; 806.074 s, passed |
+| Final `auctionproof` catalog on `810e190` | **Simulator-tested:** all four original proof launches plus six integrated launches, 1,217 total structured checks; independent replay, narrow/scaled/restored poses and both deliberate failure controls passed |
+| Final `diagnose` catalog on `810e190` | **Simulator-tested:** six launches/101 checks; existing voice-settings and invalid-UTF8 addon-message limitations reproduced and classified, no new error rule or suppression |
+| Supplemental scoped-Diagnostics probe on `810e190` | **Simulator-tested:** 134 integrated assertions, 34 collected gauges under the unchanged 40-gauge cap, actual Host state/page-pool/failure reads passed |
+| GitHub verification of `810e190` | **CI:** `verify` passed, [run 44196828335](https://github.com/Twich-Team/TwichUI/actions/runs/44196828335); internal publication/build job skipped |
+
+Across these affected checks: 88 distinct offline modules and 113 simulator
+launches with 28,531 structured assertions, including expected negative controls.
+The full standalone catalog preceded Host-only callback hardening; the final
+23-module checks, all 10 Host launches, performance-engine checks and diagnostics
+probe cover those changes. Workshop/Test Lab ran on `84d09f8`; their source and
+launcher/page behavior are unchanged by the later diagnostics registration/preset
+adjustment. This is affected-feature coverage, not full/release certification.
+
+The attempted combined integration run was interrupted by an environment
+reconnect after its preview and Host catalogs passed. Its aggregate report remains
+incomplete; it is not represented as a passing combined profile. The remaining
+Workshop/Test Lab catalogs were rerun in the completed feature profile above.
+An earlier development run invalidated by a concurrent edit, initial fixture
+replay/count issues, and supplemental probe setup failures are retained as failed
+or incomplete evidence; no failed assertion was relaxed to obtain the final pass.
+
+### Synthetic timing and retention
+
+One supplementary run with real Workshop loading and Diagnostics present measured:
+
+| Measurement | Observed |
+|---|---|
+| Native-opening event to presentation | 50 ms of manual simulator clock; not CPU/wall latency |
+| First Workshop load call | 23.059 ms |
+| Warm cached load call | 0.006 ms |
+| Native activation/parking | 0.084 ms |
+| Restore and integrated cleanup | 2.219 ms |
+| Warm return to TwichUI | 1.808 ms |
+| Warm repeated switching | Zero frame growth; five pages, four pooled list rows, ten visible listeners, one shared subscription in the empty-data integration fixture |
+| Closing | Zero pending page jobs, page listeners, refresh/initialization timers and shared subscriptions; watchdog cancelled |
+
+Operation costs use `debugprofilestop` in the simulator. These are synthetic
+empty-data measurements, not predictions of real-client loading or frame time.
+The existing chart tests also preserve native-line and texture/stroke pool bounds.
+Captures were screenshot-reviewed for the existing layout and reachable header,
+normal/narrow/scaled sizing; no redesign or real-client appearance approval is
+claimed. `shell.png` is the standalone capture; `integrated.png`,
+`integratedsmall.png`, `integratedscaled.png`, `integratedblizzard.png` are the
+integrated catalog captures. Raw logs/captures and the supplemental fixture remain
+in ignored local test output, with exact build identity recorded in the delivered
+archive manifest.
 Synthetic timing is not native frame-time or server latency. Structural simulator
 captures do not validate real fonts, real pointer/keyboard, bags, gamepad/narration,
 combat protection, taint, server session preservation or actual addon coexistence.
@@ -178,4 +232,7 @@ Diagnostics adds `auction.switch`, state codes 0–4, pending initialization tim
 activation/failure/restoration-failure/switch counters and last opening, first load,
 load, activation, restoration and switch milliseconds. Existing proof watchdog and
 preview page/listener/row/job/subscription gauges remain; the cancellable preview
-refresh timer is counted as well. No separate diagnostics subsystem was introduced.
+refresh timer is counted as well. Use `/tui perf start auction 2` for the scoped
+**Auction House lifecycle** preset: Host gauges and seven passive
+`auction.lifecycle_*` resource projections fit within the existing 40-gauge limit.
+These scoped builtin gauges do not displace legacy core/settings selections. No separate diagnostics subsystem was introduced.
