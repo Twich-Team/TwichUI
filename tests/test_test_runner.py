@@ -24,8 +24,9 @@ class Selection(unittest.TestCase):
         combined = runner.plan(REPO, 'integration', 'market', ['crafting'])
         for group in ('market', 'crafting'):
             self.assertLessEqual(set(runner.plan(REPO, 'feature', group)['tests']), set(combined['tests']))
-        self.assertEqual(len(combined['simulators']), 1)
+        self.assertEqual(len(combined['simulators']), 2)
         self.assertEqual(set(combined['simulators'][0]['only']), {'craft', 'opps', 'history', 'wrong', 'shop', 'strategy', 'shopcollect'})
+        self.assertEqual(combined['simulators'][1], {'script': 'auctionpreview', 'only': ['companionvalid', 'companionnewer', 'companionolder']})
         desc = runner.describe(combined, 'integration')
         self.assertIn('settings', desc['omitted_catalogs'])
         self.assertIn('reminders', desc['omitted_catalogs'])
@@ -262,9 +263,10 @@ class Evidence(unittest.TestCase):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         self.assertEqual(module.select([]), list(module.POSES))
-        self.assertEqual(len(module.POSES), 41)
+        self.assertEqual(len(module.POSES), 44)
         self.assertTrue({'scopedpriced', 'scopedoutside', 'scopedabsent', 'scopedunknown', 'scopedcorrupt', 'scopedfuture'} <= set(module.POSES))
         focused = runner.plan(REPO, 'feature', 'auction-preview')['simulators'][0]['only']
+        self.assertTrue({'companionvalid', 'companionnewer', 'companionolder'} <= set(focused))
         self.assertTrue({'scopedpriced', 'scopedoutside', 'scopedabsent', 'scopedunknown', 'scopedcorrupt', 'scopedfuture', 'shell', 'replay', 'wrong'} <= set(focused))
         self.assertEqual(len(module.POSES) - len(focused), 27)
         for names in (['typo'], ['wrong'], ['replay'], ['shell', 'shell']):
