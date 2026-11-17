@@ -2,7 +2,7 @@
 -- saved market, this character's known recipes and explicit tracked items. No scan.
 local R = TwichUI
 local W = R.Workshop
-local D = { BATCH = 160, TRACK_MAX = 200 }
+local D = { BATCH = 160, TRACK_MAX = 200, SORT_BATCH = 4096 }
 W.AdvisorData = D
 local S, A, O = W.Session, W.Advisor, W.Observe
 local function View(create)
@@ -119,7 +119,43 @@ function D.Catalog()
             end
             Tick()
         end
-        table.sort(rows, function(a,b) return a.item < b.item end)
+        -- Native sort stays fast on bounded runs; merge those runs cooperatively.
+        -- IDs are unique (byID above), so the previous numeric order has no ties.
+        local size, n = D.SORT_BATCH, #rows
+        local function Less(a,b) return a.item < b.item end
+        if n <= size then
+            table.sort(rows, Less)
+        else
+            local run = {}
+            for lo = 1, n, size do
+                local hi = math.min(lo + size - 1, n)
+                for i = lo, hi do run[#run + 1] = rows[i] end
+                table.sort(run, Less)
+                for i = lo, hi do
+                    rows[i] = run[i - lo + 1]; run[i - lo + 1] = nil
+                end
+                coroutine.yield()
+            end
+            local scratch, width, moved = {}, size, 0
+            local function SortTick()
+                moved = moved + 1
+                if moved >= size then moved = 0; coroutine.yield() end
+            end
+            while width < n do
+                for lo = 1, n, width * 2 do
+                    local mid, hi = math.min(lo + width - 1, n), math.min(lo + width * 2 - 1, n)
+                    local left, right = lo, mid + 1
+                    for dst = lo, hi do
+                        if left <= mid and (right > hi or Less(rows[left], rows[right])) then
+                            scratch[dst] = rows[left]; left = left + 1
+                        else scratch[dst] = rows[right]; right = right + 1 end
+                        SortTick()
+                    end
+                    for dst = lo, hi do rows[dst] = scratch[dst]; SortTick() end
+                end
+                width = width * 2
+            end
+        end
         for _, r in ipairs(rows) do
             r.info = D.Info(r.item)
             r.count = O.BagCount(r.item)

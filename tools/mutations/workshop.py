@@ -1030,3 +1030,13 @@ m("market.scoped.render-window", "TwichUI_Workshop/auction/ViewMarket.lua",
 m("market.scoped.local-chart-cap", "TwichUI_Workshop/auction/ViewMarket.lua",
   "p.chart:Set(x and x.series,UI.Money,30)", "p.chart:Set(x and x.series,UI.Money)",
   "the external chart expansion changes the established local-history cap", ["test_workshop_auction_market_scoped.lua"])
+
+# Item Advisor catalog finalization: numeric ID order and complete merge tails.
+m("market.advisor.catalog-run-order", "TwichUI_Workshop/AdvisorData.lua",
+  'local function Less(a,b) return a.item < b.item end',
+  'local function Less(a,b) return a.item > b.item end',
+  "native catalog runs reverse the promised Item ID ordering", ["test_workshop_advisor.lua"])
+m("market.advisor.catalog-merge-tail", "TwichUI_Workshop/AdvisorData.lua",
+  'for dst = lo, hi do rows[dst] = scratch[dst]; SortTick() end',
+  'for dst = lo, hi - 1 do rows[dst] = scratch[dst]; SortTick() end',
+  "the last row of each merged run is left stale or duplicated", ["test_workshop_advisor.lua"])
