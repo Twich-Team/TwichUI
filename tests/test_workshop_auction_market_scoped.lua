@@ -79,7 +79,15 @@ local old=B.Status().generation
 local broken={transport_version=1,manifest='{}',records={},receipt='{}'}
 c.TwichUIMarketData=broken;drain(broken,false);assert(B.Status().generation==old)
 A.Market.Filter('marketKey','server');local p=settle()
-assert(p.kind:GetText():find('previous validated generation retained',1,true))
+assert(p.kind:GetText():find('previous compatible data retained',1,true) and p.source:GetText():find('contract could not be verified',1,true))
+local raw=packet(file('unknown-scoped.json'))
+local future={transport_version=1,records=raw.records,receipt=raw.receipt}
+local header=W.BridgeCodec.Parse(raw.manifest);header.schema_version=4;future.manifest=W.BridgeCodec.Encode(header)
+c.TwichUIMarketData=future;drain(future,false);A.Go('browse');A.Go('market');p=settle()
+assert(p.source:GetText():find('Update TwichUI to import it.',1,true) and p.kind:GetText():find('previous compatible data retained',1,true))
+assert(p.source.h==32,'update guidance needs the existing wrapping status area')
+assert(p.contextText:GetText():find('Market data from Companion',1,true) and not p.contextText:GetText():find('reader contract',1,true))
+assert(p.aggregateText:find('reader contract '..B.Compatibility().minimum_reader_version..' required',1,true))
 A.Go('browse');A.Go('shopping');A.Go('sell');A.Go('market');settle()
 local pages=A.Snapshot().pages;local slices=B.Status().slices
 collectgarbage('collect');local heap=collectgarbage('count');local began=os.clock();local worst=0

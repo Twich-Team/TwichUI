@@ -206,7 +206,8 @@ class AuctionAssertionCount(unittest.TestCase):
         spec.loader.exec_module(module)
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            for name, expected in (('shell', 131), ('loading', 132), ('marketbridge', 142), ('scopedpriced', 142)):
+            for name, expected in (('shell', 131), ('loading', 132), ('marketbridge', 142), ('scopedpriced', 142),
+                                   ('companionvalid', 158), ('companionnewer', 158), ('companionolder', 158)):
                 for count in (expected - 1, expected, expected + 1):
                     with self.subTest(pose=name, count=count):
                         layers = ('init', 'construct', 'interact', 'state')
