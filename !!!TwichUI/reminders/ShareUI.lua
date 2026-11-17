@@ -55,15 +55,16 @@ function UI.Rows()
     local outs = {}
     for _, o in ipairs(RS.out) do if Visible(o) then outs[#outs + 1] = o end end
     if #outs > 3 then
-        local done, failed, pending = 0, 0, 0
+        local done, failed, pending, progress = 0, 0, 0, 0
         for _, o in ipairs(outs) do
+            progress = progress + (RS.TERMINAL[o.stage] and 1 or ((o.total or 0) > 0 and (o.sent or 0) / o.total or 0))
             if o.stage == "done" then done = done + 1
             elseif RS.TERMINAL[o.stage] then failed = failed + 1
             else pending = pending + 1 end
         end
         rows[#rows + 1] = {
             text = ("\"%s\" to %d players: %d have it, %d waiting, %d not sent"):format(outs[1].name, #outs, done, pending, failed),
-            frac = (done + failed) / #outs,
+            frac = progress / #outs,
         }
     else
         for _, o in ipairs(outs) do
@@ -172,44 +173,70 @@ end
 RS:OnChange(UI.Update)
 
 ---------------------------------------------------------------------------
--- Asking who to share with: a name (your target's, when it is a player, is filled in) or your group
+-- Choosing the recipient. The picker is built once, only on a Share click.
 ---------------------------------------------------------------------------
--- say(text, tone) is where the answer goes (the Reminders page's line under the reminder's name).
+local picker
+local function BuildPicker()
+    local F = R.FrameLook
+    picker = CreateFrame("Frame", "TwichUIReminderSharePicker", UIParent)
+    UI.picker = picker
+    picker:SetSize(460, 300)
+    picker:SetPoint("CENTER")
+    picker:SetFrameStrata("DIALOG")
+    picker:SetToplevel(true)
+    picker:SetClampedToScreen(true)
+    picker:EnableMouse(true)
+    picker.shell = F.Shell(picker, { below = true })
+    picker.shell:Header(34)
+    F.Close(picker, function() picker:Hide() end):SetPoint("TOPRIGHT", -14, -12)
+    tinsert(UISpecialFrames, "TwichUIReminderSharePicker")
+    local function Text(font, x, y, width)
+        local t = picker:CreateFontString(nil, "OVERLAY", font)
+        t:SetPoint("TOPLEFT", x, y)
+        t:SetWidth(width)
+        t:SetJustifyH("LEFT")
+        return t
+    end
+    Text("GameFontNormalLarge", 20, -18, 380):SetText("Share a reminder")
+    picker.name = Text("GameFontHighlight", 20, -58, 420)
+    Text("GameFontHighlightSmall", 20, -88, 420):SetText("Each player is asked first. The reminder arrives turned off, ready to view and enable in Reminders.")
+    Text("GameFontNormal", 20, -130, 420):SetText("Player name")
+    picker.player = R.Look.EditBox(picker, 280, 26)
+    picker.player:SetPoint("TOPLEFT", 20, -150)
+    picker.player:SetAutoFocus(false)
+    local function Go(who)
+        local id, say = picker.id, picker.say
+        local ok, text = RS.Send(id, who)
+        say(text, ok and "ok" or "warn")
+        if ok then picker:Hide() else picker.status:SetText(text) end
+    end
+    picker.send = F.Button(picker, "Share", 116, "primary", function() Go(picker.player:GetText()) end)
+    picker.send:SetPoint("TOPLEFT", 314, -150)
+    picker.group = F.Button(picker, "My group", 196, "secondary", function() Go(RS.GROUP) end)
+    picker.group:SetPoint("TOPLEFT", 20, -194)
+    picker.guild = F.Button(picker, "My guild", 196, "secondary", function() Go(RS.GUILD) end)
+    picker.guild:SetPoint("TOPRIGHT", -20, -194)
+    picker.status = Text("GameFontHighlightSmall", 20, -234, 420)
+    picker.player:SetScript("OnEnterPressed", function() Go(picker.player:GetText()) end)
+    picker.player:SetScript("OnEscapePressed", function() picker:Hide() end)
+    picker:SetScript("OnHide", function() picker.id, picker.say = nil, nil; picker.player:ClearFocus() end)
+end
+
 function UI.Ask(id, say)
     say = say or function(text) R.Print("%s", text) end
     local v = RM.Get(id)
     if not v then return end
     local exported, why = RM.Export(id)
-    if not exported then say(why, "warn") return end   -- a reminder that can't be sent says so before a name is asked for
-    local function Go(who)
-        local ok, text = RS.Send(id, who)
-        say(text, ok and "ok" or "warn")
-    end
-    StaticPopupDialogs.TWICHUI_REMINDER_SHARE = {
-        text = "%s", button1 = "Share", button2 = CANCEL, button3 = "My group", hasEditBox = true, maxLetters = 64,
-        OnShow = function(self)
-            local box = self.editBox or self.EditBox
-            if not box then return end
-            local name = UnitIsPlayer and UnitIsPlayer("target") and GetUnitName("target", true) or ""
-            if issecretvalue and issecretvalue(name) then name = "" end
-            box:SetText(type(name) == "string" and name or "")
-            box:HighlightText()
-        end,
-        OnAccept = function(self)
-            local box = self.editBox or self.EditBox
-            local name = box and box:GetText()
-            C_Timer.After(0, function() Go(name) end)   -- after this popup has gone
-        end,
-        OnAlt = function() C_Timer.After(0, function() Go(RS.GROUP) end) end,
-        EditBoxOnEnterPressed = function(box)
-            local name = box:GetText()
-            box:GetParent():Hide()
-            C_Timer.After(0, function() Go(name) end)
-        end,
-        EditBoxOnEscapePressed = function(box) box:GetParent():Hide() end,
-        timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
-    }
-    StaticPopup_Show("TWICHUI_REMINDER_SHARE", ("Share \"%s\" with which player?\n\nType their name, or choose My group to offer it to everyone else in your party or raid (up to %d). Each is asked first; nothing is added unless they accept."):format(v.name, RS.MAX_GROUP))
+    if not exported then say(why, "warn") return end
+    if not picker then BuildPicker() end
+    picker.id, picker.say = id, say
+    picker.name:SetText(v.name)
+    picker.status:SetText("Player uses your Sending options. My group uses the group channel; My guild uses the guild channel for online members.")
+    local name = UnitIsPlayer and UnitIsPlayer("target") and GetUnitName("target", true) or ""
+    if issecretvalue and issecretvalue(name) then name = "" end
+    picker.player:SetText(type(name) == "string" and name or "")
+    picker:Show()
+    R.FrameLook.FadeIn(picker)
 end
 
 ---------------------------------------------------------------------------

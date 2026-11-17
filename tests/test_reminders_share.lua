@@ -177,7 +177,15 @@ PS.Respond("Rich-Forever", true)
 Check(inc.stage == "waiting", "Pal accepted")
 local half = math.floor(inc.expected / 2)
 pal.FireEvent("CHAT_MSG_ADDON", RR.Share.PREFIX, ("x"):rep(half), "WHISPER", "Rich-Forever")
-Check(inc.stage == "receiving" and inc.got == half, "Pal's progress counts what arrived")
+Check(inc.stage == "waiting" and inc.got == 0, "unrelated addon traffic cannot advance reminder progress")
+PR.Share.handlers.remprogress("Rich-Forever", { id = "wrong", sent = half })
+Check(inc.got == 0, "progress for another recipient or transfer is ignored")
+PR.Share.handlers.remprogress("Rich-Forever", { id = inc.id, sent = half })
+Check(inc.stage == "receiving" and inc.got == half, "matching transfer progress is shown")
+PR.Share.handlers.remprogress("Rich-Forever", { id = inc.id, sent = -1 })
+PR.Share.handlers.remprogress("Rich-Forever", { id = inc.id, sent = inc.expected + 1 })
+PR.Share.handlers.remprogress("Rich-Forever", { id = inc.id, sent = half - 1 })
+Check(inc.got == half, "invalid or late progress cannot move the bar backwards")
 local mid = PR.ReminderShareUI.Rows()
 Check(#mid == 1 and mid[1].text:find("Receiving", 1, true) and mid[1].text:find("%d+%%") and mid[1].frac > 0.4 and mid[1].frac < 0.6, "Pal's card shows about half")
 Settle()
@@ -358,6 +366,39 @@ do
   local lines = RR.ReminderShareUI.Rows()
   Check(#lines == 1 and lines[1].text:find("5 players", 1, true) and lines[1].text:find("2 have it", 1, true), "five transfers are one summary line: " .. tostring(lines[1] and lines[1].text))
   RS.out = keep
+end
+
+---------------------------------------------------------------------------
+-- Guild fan-out uses GUILD, skips offline/self, and needs each player's consent.
+---------------------------------------------------------------------------
+do
+  NOW = NOW + 1000
+  RS.out, PS.inc, KR.ReminderShare.inc = {}, {}, {}
+  GUILD = { Rich = true, Pal = true, Kit = true, Offline = false }
+  local palBefore, kitBefore = PRM.Count(), KR.Reminders.Count()
+  local ok, why = RS.Send(id, RS.GUILD)
+  Check(ok and #RS.out == 2, "guild offers only online peers: " .. tostring(why))
+  for _, o in ipairs(RS.out) do Check(o.route[1] == "GUILD", "guild choice uses guild channel despite Direct preference") end
+  Settle()
+  Check(PRM.Count() == palBefore and KR.Reminders.Count() == kitBefore, "guild offers store nothing without consent")
+  local originalInc = PS.inc["Rich-Forever"]
+  -- A second offer from the same sender must not replace the question or data state.
+  PR.Share.handlers.remoffer("Rich-Forever", { id = "999", name = "Other", size = 100, p = PR.Share.PROTOCOL }, "GUILD")
+  Check(PS.inc["Rich-Forever"] == originalInc, "duplicate sender cannot replace an open question")
+  PS.Respond("Rich-Forever", true)
+  PR.Share.handlers.remoffer("Rich-Forever", { id = "998", name = "Other", size = 100, p = PR.Share.PROTOCOL }, "GUILD")
+  Check(PS.inc["Rich-Forever"] == originalInc and originalInc.stage == "waiting", "duplicate sender cannot replace an accepted transfer")
+  KR.ReminderShare.Respond("Rich-Forever", false)
+  Settle()
+  Check(PRM.Count() == palBefore + 1 and KR.Reminders.Count() == kitBefore, "only consenting guild member receives the reminder")
+  local done, declined = 0, 0
+  for _, o in ipairs(RS.out) do
+    if o.stage == "done" then done = done + 1 elseif o.stage == "declined" then declined = declined + 1 end
+  end
+  Check(done == 1 and declined == 1, "sender sees independent guild completion and decline")
+  Check(PRM.Get(originalInc.newId).enabled == false, "guild reminder is disabled on arrival")
+  GUILD = nil
+  Check(RS.Send(id, RS.GUILD) == false, "no guild offers when unguilded")
 end
 
 ---------------------------------------------------------------------------

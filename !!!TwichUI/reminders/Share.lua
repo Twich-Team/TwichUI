@@ -10,7 +10,7 @@
 --   you    -> them : remdata    the reminder, as RM.Export made it
 --   them   -> you  : remdone    stored, or why it was refused
 -- Several can be going at once (a send to your group is one offer per member). Each transfer is answered by the player it
--- was addressed to and by nobody else. Routing is the player's Sending options (R.Share.Route), never switched on its own.
+-- was addressed to and by nobody else. A player send uses Sending options; group/guild choices explicitly select that channel, with no fallback.
 -- Receiving is behind the same switches as setups (setupSharing, acceptSetups) and the reminders switch; the player is
 -- always asked, and what is received goes through RM.Admit (Config.lua), the only door.
 -- docs/reminders.md, "Sharing a reminder".
@@ -27,10 +27,12 @@ local PROTOCOL = SH.PROTOCOL
 local OFFER_TIMEOUT = 120      -- seconds to wait for the other player to answer
 local DATA_TIMEOUT = 60        -- seconds without progress before a transfer is called off
 local MAX_WIRE = 16384         -- the most one reminder message may be (a real one is a few hundred bytes to a few KB)
-local MAX_GROUP = 10           -- the most players one "everyone in my group" send offers to
+local MAX_GROUP = 39           -- the most players one "everyone in my group" send offers to
 local KEEP_FINISHED = 60       -- seconds a finished transfer stays in the list (the progress card hides it sooner)
-local MAX_KEPT = 40            -- finished or not, the most outgoing transfers held
+local MAX_GUILD = 1000          -- bounded roster fan-out
+local MAX_KEPT = 1040          -- finished or not, the most outgoing transfers held
 
+RS.GUILD = "guild"
 RS.GROUP = "group"             -- the "who" that means every other player in your party or raid
 RS.MAX_GROUP = MAX_GROUP
 RS.out = {}                    -- outgoing, in the order they began: { id, target, name, stage, sent, total, route, started, last, reason }
@@ -92,7 +94,13 @@ local function Prune()
     for _, o in ipairs(RS.out) do
         if not TERMINAL[o.stage] or now - (o.ended or now) < KEEP_FINISHED then kept[#kept + 1] = o end
     end
-    while #kept > MAX_KEPT do table.remove(kept, 1) end
+    while #kept > MAX_KEPT do
+        local removed
+        for i, o in ipairs(kept) do
+            if TERMINAL[o.stage] then table.remove(kept, i); removed = true; break end
+        end
+        if not removed then break end
+    end
     RS.out = kept
     for sender, inc in pairs(RS.inc) do
         if TERMINAL[inc.stage] and now - (inc.ended or now) >= KEEP_FINISHED then RS.inc[sender] = nil end
@@ -160,6 +168,22 @@ function RS.GroupMembers()
     return out
 end
 
+-- Snapshot the online roster only when the player asks to share. Offline members
+-- are not offered a transfer that they cannot answer.
+function RS.GuildMembers()
+    local out, seen = {}, {}
+    if not IsInGuild() then return out end
+    for i = 1, (GetNumGuildMembers() or 0) do
+        local name, _, _, _, _, _, _, _, online = GetGuildRosterInfo(i)
+        local full = SH.FullName(name)
+        if online and full and not SH.SameName(full, SH.SelfName()) and not seen[full] then
+            seen[full] = true
+            out[#out + 1] = full
+        end
+    end
+    return out
+end
+
 local function CheckTarget(name)
     local target = SH.FullName(name)
     if not target then return nil, "Type the player's name, or target them." end
@@ -182,6 +206,12 @@ local function SendData(o)
             return
         end
         o.sent, o.total, o.last = sent or o.sent, total or o.total, GetTime()
+        -- Addressed progress is correlated with this transfer. Raw addon events
+        -- also contain data sent to other guild/group members and cannot be counted.
+        if not o.progressAt or GetTime() - o.progressAt >= 1 or o.sent >= o.total then
+            o.progressAt = GetTime()
+            SendMsg(o.target, { t = "remprogress", id = o.id, sent = o.sent }, "NORMAL", o.route)
+        end
         if (o.sent or 0) >= (o.total or 1) then
             o.stage = "delivered"   -- handed to the game; their "remdone" is the confirmation
             o.text = nil
@@ -191,8 +221,9 @@ local function SendData(o)
 end
 
 -- One offer to one player. Returns the transfer, or nil and a sentence.
-local function Begin(payload, target)
-    local route, why = SH.Route(target)
+local function Begin(payload, target, selectedRoute)
+    local route, why = selectedRoute
+    if not route then route, why = SH.Route(target) end
     if not route then return nil, why end
     local o = { id = NewId(), target = target, name = payload.name, stage = "offered", sent = 0, total = 0, route = route, started = GetTime() }
     o.last = o.started
@@ -219,22 +250,34 @@ function RS.Send(id, who)
     local payload, why = RM.Export(id)
     if not payload then return false, why end
 
-    local targets = {}
-    if who == RS.GROUP then
+    if IsInGuild() and C_GuildInfo and C_GuildInfo.GuildRoster then pcall(C_GuildInfo.GuildRoster) end
+    local targets, selectedRoute = {}, nil
+    if who == RS.GUILD then
+        if not IsInGuild() then return false, "You aren't in a guild." end
+        targets = RS.GuildMembers()
+        if #targets == 0 then return false, "No other online guild members are available. Try again after the guild roster updates." end
+        if #targets > MAX_GUILD then return false, "Too many online guild members. Share with one player instead." end
+        selectedRoute = { "GUILD" }
+    elseif who == RS.GROUP then
         local members = RS.GroupMembers()
         if #members == 0 then return false, "You aren't in a group with anyone else." end
         if #members > MAX_GROUP then
             return false, ("Your group has %d other players; \"everyone\" is for up to %d. Send it to one player instead."):format(#members, MAX_GROUP)
         end
         targets = members
+        local dist = LE_PARTY_CATEGORY_INSTANCE and IsInGroup(LE_PARTY_CATEGORY_INSTANCE) and "INSTANCE_CHAT"
+            or (IsInRaid() and "RAID" or "PARTY")
+        selectedRoute = { dist }
     else
         local target, bad = CheckTarget(who)
         if not target then return false, bad end
         targets[1] = target
     end
 
-    if IsInGuild() and C_GuildInfo and C_GuildInfo.GuildRoster then pcall(C_GuildInfo.GuildRoster) end
     Prune()
+    local active = 0
+    for _, o in ipairs(RS.out) do if not TERMINAL[o.stage] then active = active + 1 end end
+    if active + #targets > MAX_KEPT then return false, "Too many shares are in progress. Wait for them to finish." end
     local offered, problems, firstProblem = 0, 0, nil
     for _, target in ipairs(targets) do
         local busy
@@ -244,14 +287,14 @@ function RS.Send(id, who)
         if busy then
             problems, firstProblem = problems + 1, firstProblem or ("Already sending to %s."):format(Short(target))
         else
-            local o, bad = Begin(payload, target)
+            local o, bad = Begin(payload, target, selectedRoute)
             if o then offered = offered + 1 else problems, firstProblem = problems + 1, firstProblem or bad end
         end
     end
     if offered == 0 then return false, firstProblem end
     Ensure()
     Changed()
-    if who ~= RS.GROUP then return true, ("Asked %s if they want \"%s\"."):format(Short(targets[1]), payload.name) end
+    if who ~= RS.GROUP and who ~= RS.GUILD then return true, ("Asked %s if they want \"%s\"."):format(Short(targets[1]), payload.name) end
     local text = ("Asked %d player%s if they want \"%s\"."):format(offered, offered == 1 and "" or "s", payload.name)
     if problems > 0 then text = text .. (" %d couldn't be reached: %s"):format(problems, firstProblem) end
     return true, text
@@ -376,7 +419,7 @@ SH.handlers.remoffer = function(sender, msg, dist)
     if not canAdd then return Decline(code) end
     -- one question at a time: a second offer while one is open is answered "busy", not queued behind it
     for other, inc in pairs(RS.inc) do
-        if not SH.SameName(other, sender) and inc.stage == "asking" then return Decline("busy") end
+        if inc.stage == "asking" or (SH.SameName(other, sender) and not TERMINAL[inc.stage]) then return Decline("busy") end
     end
 
     local inc = { id = msg.id, name = name, sender = sender, stage = "asking", got = 0, expected = size, route = route, started = GetTime() }
@@ -394,6 +437,13 @@ SH.handlers.remdata = function(sender, msg)
     local inc = RS.inc[sender]
     if not inc or inc.id ~= msg.id or (inc.stage ~= "waiting" and inc.stage ~= "receiving") then
         Trace("ignored", "data-not-for-a-current-transfer", sender)
+        return
+    end
+    local canAdd, code, why = CanAdd()
+    if not R:Enabled("acceptSetups") or not canAdd then
+        Fail(inc, why or "Receiving was turned off.", "receiving-unavailable")
+        SendMsg(sender, { t = "remdone", id = inc.id, ok = false, code = code or "invalid" }, "ALERT", inc.route)
+        Changed()
         return
     end
     inc.stage = "checking"
@@ -419,18 +469,16 @@ SH.handlers.remdata = function(sender, msg)
     for _, fn in ipairs(arrivals) do pcall(fn, sender, inc) end
 end
 
--- Receive progress: the pieces of the reminder's message as they arrive, counted against the size they offered.
-R:On("CHAT_MSG_ADDON", function(prefix, text, _, sender)
-    if prefix ~= SH.PREFIX then return end
-    if issecretvalue and (issecretvalue(text) or issecretvalue(sender)) then return end
-    if type(text) ~= "string" or type(sender) ~= "string" then return end
-    local inc = RS.inc[SH.FullName(sender)]
-    if not inc or (inc.stage ~= "waiting" and inc.stage ~= "receiving") then return end
-    inc.stage = "receiving"
-    inc.got = math.min(inc.expected, inc.got + #text)
-    inc.last = GetTime()
-    if not inc.tick or GetTime() - inc.tick > 0.25 then inc.tick = GetTime(); Changed() end
-end)
+-- Sender queue progress, addressed to the accepting player and matched by id.
+-- Completion is still confirmed only by remdata validation and remdone.
+SH.handlers.remprogress = function(sender, msg)
+    local inc = RS.inc[sender]
+    if not inc or inc.id ~= msg.id or (inc.stage ~= "waiting" and inc.stage ~= "receiving") then return end
+    local sent = msg.sent
+    if type(sent) ~= "number" or sent ~= sent or sent % 1 ~= 0 or sent < 0 or sent > inc.expected then return end
+    inc.stage, inc.got, inc.last = "receiving", math.max(inc.got, sent), GetTime()
+    Changed()
+end
 
 ---------------------------------------------------------------------------
 -- Ending things: sharing switched off, or the player cancelling
