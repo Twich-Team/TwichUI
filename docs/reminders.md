@@ -442,7 +442,7 @@ The Test section's simulations go through the same `Evaluate.Run` on a table bui
 ## Sharing a reminder
 
 Settings > Reminders > **Share…** (also in a row's right-click menu) offers one reminder to another player, or to everyone else in
-your group. Nothing is shared unless you choose it, nothing happens to the other player's reminders unless they accept, and
+your group, or online guild members. Nothing is shared unless you choose it, nothing happens to the other player's reminders unless they accept, and
 nothing is ever turned on for them. Code: `reminders/Share.lua` (the transfer), `reminders/ShareUI.lua` (the progress card and the
 two questions), `RM.Export` and `RM.Admit` in `reminders/Config.lua` (what is sent and the one door a received reminder goes through).
 
@@ -453,13 +453,16 @@ TwichUI that doesn't know them ignores them):
 |---|---|---|
 | `remoffer` | you, them | the protocol, an id, the reminder's name and the size of what will follow |
 | `remreply` | them, you | accepted, or why not: `off`, `version`, `unavailable`, `full`, `busy`, `declined` |
+| `remprogress` | you, them | addressed, transfer-specific queue progress, at most once per second plus completion |
 | `remdata` | you, them | the reminder (the table below), sent only after they accepted |
 | `remdone` | them, you | stored, or refused with `full`, `newer` or `invalid` |
 
-Routing, throttling, name rules and the "instance restrictions" check are setup sharing's (`R.Share.Route`): your Sending options
-(Direct, Party or Guild) decide, and a failed send is never repeated over another channel. Over Party or Guild everyone on that
-channel receives the data and only the named player's TwichUI reads it (the same limit setup sharing explains). **Everyone in my
-group** is one offer per member, each answered on its own, and is refused for more than 10 other players. Receiving is behind the
+The framed destination picker offers a player name, **My group**, and **My guild**. A player send uses your Sending options
+(Direct, Party or Guild). My group explicitly uses PARTY, RAID or INSTANCE_CHAT; My guild explicitly uses GUILD. No failed send
+falls back to another channel. Each recipient gets an addressed offer and decides independently; declining affects only that
+recipient. Group sends allow up to 39 other players, guild sends up to 1000 online peers, excluding yourself and offline members.
+The guild roster is refreshed on request; if it has not arrived yet, try again when it updates. Over a group or guild channel everyone
+receives the data, and only the addressed player's TwichUI reads it: this is filtering, not privacy. Receiving is behind the
 switches setup sharing has: sharing on (`setupSharing`) and accepting offers on (`acceptSetups`), plus Reminders on. There is no
 "always accept". One question is open at a time; a second offer meanwhile is answered "busy". An offer not answered in 2 minutes is
 answered "not now"; a transfer that stops for a minute ends. Switching sharing or receiving off ends everything in progress.
@@ -476,7 +479,7 @@ range, artwork or an icon this version doesn't have. Nothing is added when it is
 receiver can widen it in the editor. The sound is kept by name like any reminder's: if they don't have it, it plays nothing.
 
 **What the players see:** a small card with one progress bar per transfer, on both sides (for the sender: waiting for the answer, then
-sending; for the receiver: receiving, then "added, off until you turn it on"). More than three outgoing transfers become one line.
+sending; for the receiver: receiving, then "added, off until you turn it on"). More than three outgoing transfers become one line with aggregate byte progress. Progress messages identify the transfer, so traffic addressed to other guild members cannot advance the receiving bar.
 It goes a few seconds after the last transfer ends; a click opens Reminders on the new reminder, a right-click cancels offers nobody has
 answered. When a reminder has arrived the receiver is asked once whether to open the Reminders settings (not during combat: the
 question waits until it ends). The answer to the click that started a send is said under the reminder's name on the page; chat prints

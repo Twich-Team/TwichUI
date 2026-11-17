@@ -41,6 +41,24 @@ Lab.Step("open and populate", function()
     Lab.Check("construct", "preview visible", true, PV.Shown())
     Lab.Check("state", "disabled reminder preserved", false, RM.Get(id).enabled)
 end)
+Lab.Step("reminder share destination picker", function()
+    local share = R.ReminderShareUI
+    share.Ask(id, function() end)
+    local picker = share.picker
+    Lab.Check("construct", "share picker uses the shared framed shell", true, picker.shell ~= nil and picker:IsShown())
+    Lab.Check("construct", "player, group and guild actions are visible", true,
+        picker.player:IsShown() and picker.send:IsShown() and picker.group:IsShown() and picker.guild:IsShown())
+    picker.player:SetText("")
+    picker.send:Click()
+    Lab.Check("interact", "invalid player leaves a readable refusal in the picker", true,
+        picker:IsShown() and picker.status:GetText():find("name", 1, true) ~= nil)
+    picker:Hide()
+    Lab.Check("state", "closing releases the selected reminder and callback", true, picker.id == nil and picker.say == nil)
+    share.Ask(id, function() end)
+    Lab.Check("construct", "reopening reuses the picker", picker, share.picker)
+    picker:Hide()
+    Lab.Check("state", "choosing a destination did not enable the reminder", false, RM.Get(id).enabled)
+end)
 Lab.Step("navigation and handoffs", function()
     local size = Ed.sections[1].size
     size.slider:SetValue(80)
