@@ -5,6 +5,31 @@ local B={ADDON='TwichUI_MarketData',CACHE_MAX=24,SLICE_MS=3,RESUMES=512}
 W.Bridge=B
 -- Delivery policy; schema-3's separate contract ceiling is 32 MiB / 1,000 records.
 B.SCOPED_BYTES=2*1024*1024
+-- Contract profiles, not marketing release numbers. Receipt/build data is outside
+-- the immutable generation hash; no new transport fields or executable input.
+local READER_CONTRACT=3
+local SCHEMAS={[1]=1,[2]=2,[3]=3}
+local compatibilityAttempt
+local MESSAGES={newer_addon='This market data needs a newer TwichUI addon. Update TwichUI to import it.',
+    older_companion='This market data uses an older contract. Update TwichUI Market Companion and export it again.',
+    invalid_contract='The market data contract could not be verified. Re-export it from the Companion.'}
+function B.CheckCompatibility(transport,contract,schema,receiptSchema)
+    receiptSchema=receiptSchema==nil and 1 or receiptSchema
+    local out={reader_contract_version=READER_CONTRACT,transport_version=transport,contract_version=contract,schema_version=schema,receipt_schema_version=receiptSchema,compatible=false}
+    if not W.Int(receiptSchema,0,2147483647) or not W.Int(transport,0,2147483647) or not W.Int(contract,0,2147483647) or not W.Int(schema,0,2147483647) then
+        out.reason='invalid_contract'
+    else
+        local old=transport<1 or contract<1 or schema<1 or receiptSchema<1
+        local newer=receiptSchema>1 or transport>1 or contract>1 or not SCHEMAS[schema] and schema>0
+        out.minimum_reader_version=SCHEMAS[schema]
+        if old and newer then out.reason='invalid_contract'
+        elseif old then out.reason='older_companion'
+        elseif newer then out.reason='newer_addon'
+        else out.compatible=true end
+    end
+    out.message=out.reason and MESSAGES[out.reason] or nil
+    return out
+end
 local active,job,token=nil,nil,0
 local rejected
 local cache,order={},{}
@@ -16,10 +41,12 @@ local function requireData(ok) if not ok then error('invalid bridge generation',
 local function shallow(t) local out={};for k,v in pairs(t) do out[k]=v end;return out end
 local function validate(raw,expected)
     local function tick() coroutine.yield() end
-    requireData(type(raw)=='table' and getmetatable(raw)==nil and raw.transport_version==1 and type(raw.manifest)=='string' and #raw.manifest<=256*1024
+    requireData(type(raw)=='table' and getmetatable(raw)==nil and type(raw.transport_version)=='number' and type(raw.manifest)=='string' and #raw.manifest<=256*1024
         and type(raw.records)=='table' and getmetatable(raw.records)==nil and type(raw.receipt)=='string' and #raw.receipt<=4096)
     local n=0;for k in pairs(raw) do requireData(k=='transport_version' or k=='manifest' or k=='records' or k=='receipt');n=n+1 end;requireData(n==4)
     local h=J.Parse(raw.manifest,tick,256*1024);requireData(J.Encode(h,tick)==raw.manifest)
+    compatibilityAttempt=B.CheckCompatibility(raw.transport_version,h.contract_version,h.schema_version)
+    if not compatibilityAttempt.compatible then error('bridge compatibility '..compatibilityAttempt.reason,0) end
     local ctx=S.Header(h,tick);local count=h.record_count
     if expected then
         if expected.market then requireData(J.Encode(expected.market,tick)==J.Encode(h.market,tick)) end
@@ -33,7 +60,10 @@ local function validate(raw,expected)
         if h.schema_version==3 and inputBytes>B.SCOPED_BYTES then error('bridge policy canonical_bytes',0) end
         requireData(inputBytes<=32*1024*1024);tick()
     end;requireData(n==count)
-    local receipt=J.Parse(raw.receipt,tick);requireData(getmetatable(receipt)==J.OBJECT and receipt.schema_version==1 and receipt.generation_id==h.generation_id and type(receipt.desktop_build)=='string' and #receipt.desktop_build>=1 and #receipt.desktop_build<=80 and S.Time(receipt.completed_at))
+    local receipt=J.Parse(raw.receipt,tick);requireData(getmetatable(receipt)==J.OBJECT)
+    compatibilityAttempt=B.CheckCompatibility(raw.transport_version,h.contract_version,h.schema_version,receipt.schema_version)
+    if not compatibilityAttempt.compatible then error('bridge compatibility '..compatibilityAttempt.reason,0) end
+    requireData(receipt.generation_id==h.generation_id and type(receipt.desktop_build)=='string' and #receipt.desktop_build>=1 and #receipt.desktop_build<=80 and S.Time(receipt.completed_at))
     if h.schema_version==3 then requireData(S.Time(receipt.completed_at)>=S.Time(h.generated_at)) end
     n=0;for k in pairs(receipt) do requireData(k=='schema_version' or k=='generation_id' or k=='desktop_build' or k=='completed_at');n=n+1 end;requireData(n==4)
     local keys={};for k in pairs(h) do if k~='generation_id' and k~='integrity' then keys[#keys+1]=k end end;keys[#keys+1]='records';table.sort(keys)
@@ -67,7 +97,7 @@ local function validate(raw,expected)
 end
 local schedule
 function B.Begin(raw,automatic,expected)
-    rejected=nil;stats.refusal=nil
+    rejected=nil;stats.refusal=nil;compatibilityAttempt=nil
     expected=expected and J.Copy(expected)
     token=token+1;job={co=coroutine.create(function() return validate(raw,expected) end),token=token,automatic=automatic,raw=raw}
     state,lastError='loading',nil;return false,'loading'
@@ -123,7 +153,28 @@ end
 function B.Status()
     local s=shallow(stats);s.state=state;s.error=lastError;s.loading=job~=nil;s.ready=active~=nil;s.generation=active and active.header.generation_id
     s.records=active and active.header.record_count or 0;s.items=active and #active.itemIds or 0;s.bytes=active and active.bytes or 0;s.cache_entries=#order;s.schema=active and active.header.schema_version;s.scoped=active and active.header.schema_version==3 or false
+    s.compatibility_message=compatibilityAttempt and not compatibilityAttempt.compatible and compatibilityAttempt.message or nil
+    s.compatibility_reason=compatibilityAttempt and not compatibilityAttempt.compatible and compatibilityAttempt.reason or nil
+    s.desktop_build=active and active.receipt.desktop_build or nil
+    s.transport_version=active and active.header.transport_version or nil
+    s.contract_version=active and active.header.contract_version or nil
+    s.reader_contract_version=READER_CONTRACT
+    s.minimum_reader_version=active and SCHEMAS[active.header.schema_version] or nil
     return s
+end
+function B.Compatibility()
+    if not active then return nil,lastError or state end
+    local out=B.CheckCompatibility(active.header.transport_version,active.header.contract_version,active.header.schema_version)
+    out.desktop_build=active.receipt.desktop_build
+    return out
+end
+function B.CompatibilityText(diagnostics)
+    local out=B.Compatibility();if not out then return nil end
+    local build=out.desktop_build:gsub('|','||'):gsub('[%c]',' ')
+    local summary='Market data from Companion '..build
+    if not diagnostics then return summary end
+    return summary..'\ntransport '..out.transport_version..' · contract '..out.contract_version..' · schema '..out.schema_version..
+        ' · receipt '..out.receipt_schema_version..'\nreader contract '..out.minimum_reader_version..' required · installed '..out.reader_contract_version
 end
 function B.Market() return active and J.Copy(active.header.market) or nil,lastError or state end
 function B.Manifest() return active and J.Copy(active.header) or nil,lastError or state end

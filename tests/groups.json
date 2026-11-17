@@ -39,7 +39,10 @@
     "tests": ["test_workshop.lua", "test_workshop_prices.lua", "test_workshop_market*.lua", "test_workshop_dist.lua", "test_workshop_history2.lua", "test_workshop_valuation.lua", "test_workshop_schema.lua", "test_workshop_a7.lua", "test_workshop_auto.lua", "test_workshop_worth.lua", "test_workshop_pricing_v1.lua", "test_pricing_conformance.py", "test_workshop_bridge*.py", "test_workshop_scoped_bridge_l1.py", "test_workshop_bridge*.lua", "test_workshop_auction_market*.lua"],
     "syntax": ["TwichUI_Workshop/**/*.lua", "!!!TwichUI/WorkshopAuto.lua"],
     "dependencies": ["shared-ui", "core"],
-    "simulators": [{"script": "workshop", "only": ["craft", "opps", "history", "wrong"]}]
+    "simulators": [
+      {"script": "workshop", "only": ["craft", "opps", "history", "wrong"]},
+      {"script": "auctionpreview", "only": ["companionvalid", "companionnewer", "companionolder"]}
+    ]
   },
   "reminders": {
     "tests": ["test_reminders*.lua", "test_reminder_gallery.lua", "test_reminder_gallery.py"],
@@ -143,6 +146,9 @@
           "scopedunknown",
           "scopedcorrupt",
           "scopedfuture",
+          "companionvalid",
+          "companionnewer",
+          "companionolder",
           "wrong"
         ]
       },

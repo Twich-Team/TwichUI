@@ -1,0 +1,134 @@
+{
+  "policy_version": 1,
+  "reader_contract_version": 3,
+  "supported_transport_versions": [
+    1
+  ],
+  "supported_contract_versions": [
+    1
+  ],
+  "supported_receipt_schema_versions": [
+    1
+  ],
+  "schemas": {
+    "1": {
+      "minimum_reader_version": 1
+    },
+    "2": {
+      "minimum_reader_version": 2
+    },
+    "3": {
+      "minimum_reader_version": 3
+    }
+  },
+  "desktop_build_source": "delivery_receipt.desktop_build",
+  "marketing_versions_control_compatibility": false,
+  "cases": [
+    {
+      "name": "legacy schema 1",
+      "transport": 1,
+      "contract": 1,
+      "schema": 1,
+      "compatible": true,
+      "minimum_reader_version": 1
+    },
+    {
+      "name": "immutable schema 2",
+      "transport": 1,
+      "contract": 1,
+      "schema": 2,
+      "compatible": true,
+      "minimum_reader_version": 2
+    },
+    {
+      "name": "scoped schema 3",
+      "transport": 1,
+      "contract": 1,
+      "schema": 3,
+      "compatible": true,
+      "minimum_reader_version": 3
+    },
+    {
+      "name": "new transport",
+      "transport": 2,
+      "contract": 1,
+      "schema": 2,
+      "compatible": false,
+      "reason": "newer_addon"
+    },
+    {
+      "name": "new contract",
+      "transport": 1,
+      "contract": 2,
+      "schema": 2,
+      "compatible": false,
+      "reason": "newer_addon"
+    },
+    {
+      "name": "new schema",
+      "transport": 1,
+      "contract": 1,
+      "schema": 4,
+      "compatible": false,
+      "reason": "newer_addon"
+    },
+    {
+      "name": "old transport",
+      "transport": 0,
+      "contract": 1,
+      "schema": 2,
+      "compatible": false,
+      "reason": "older_companion"
+    },
+    {
+      "name": "old contract",
+      "transport": 1,
+      "contract": 0,
+      "schema": 2,
+      "compatible": false,
+      "reason": "older_companion"
+    },
+    {
+      "name": "old schema",
+      "transport": 1,
+      "contract": 1,
+      "schema": 0,
+      "compatible": false,
+      "reason": "older_companion"
+    },
+    {
+      "name": "malformed version",
+      "transport": 1,
+      "contract": 1,
+      "schema": "future",
+      "compatible": false,
+      "reason": "invalid_contract"
+    },
+    {
+      "name": "contradictory versions",
+      "transport": 2,
+      "contract": 1,
+      "schema": 0,
+      "compatible": false,
+      "reason": "invalid_contract"
+    },
+    {
+      "name": "new receipt",
+      "transport": 1,
+      "contract": 1,
+      "schema": 2,
+      "receipt": 2,
+      "compatible": false,
+      "reason": "newer_addon"
+    },
+    {
+      "name": "old receipt",
+      "transport": 1,
+      "contract": 1,
+      "schema": 2,
+      "receipt": 0,
+      "compatible": false,
+      "reason": "older_companion"
+    }
+  ]
+}

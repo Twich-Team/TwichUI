@@ -509,5 +509,39 @@ if P.scopedState then
     Lab.Check('state','generation stays inactive after rejection',valid,B.Status().ready)
     Lab.Check('state','scoped observations cannot trade',false,p.browse:IsEnabled() or p.advisor:IsEnabled() or p.track:IsEnabled())
     Lab.Check('state','scoped local history unchanged',before,fingerprint(TwichUIWorkshopDB))
+    if P.compatibility then
+        local J=W.BridgeCodec
+        local generation=B.Status().generation
+        local receipt=J.Encode((B.Receipt()))
+        local record=J.Encode((B.Record(item,variant)))
+        Lab.Check('state','Companion summary','Market data from Companion synthetic-simulator',B.CompatibilityText())
+        Lab.Check('state','explicit contract diagnostics',true,B.CompatibilityText(true):find('transport 1 · contract 1 · schema 3',1,true)~=nil)
+        Lab.Check('state','minimum reader capability',3,B.Compatibility().minimum_reader_version)
+        Lab.Check('state','validated receipt producer','synthetic-simulator',B.Status().desktop_build)
+        local candidate=J.Copy(SIMLAB_BRIDGE)
+        if P.compatibility=='newer' then
+            local header=J.Parse(candidate.manifest);header.schema_version=999;candidate.manifest=J.Encode(header)
+        elseif P.compatibility=='older' then candidate.transport_version=0 end
+        TwichUIMarketData=candidate
+        B.Begin(candidate)
+        local accepted
+        for i=1,3000 do local ok,why=B.Step(3);if why~='loading' then accepted=ok;break end end
+        Lab.Check('state','replacement compatibility',P.compatibility=='valid',accepted)
+        Lab.Check('state','validated generation retained',generation,B.Status().generation)
+        Lab.Check('state','validated receipt retained',receipt,J.Encode((B.Receipt())))
+        Lab.Check('state','replacement leaves local history unchanged',before,fingerprint(TwichUIWorkshopDB))
+        Lab.Check('state','validated record retained',record,J.Encode((B.Record(item,variant))))
+        Lab.Check('state','previous dataset remains ready',true,B.Status().ready)
+        A.OpenMarket(item,{market='server',serverVariant=variant});Lab.Settle(0.8)
+        p=A.Page('market')
+        Lab.Check('state','player provenance visible',true,p.contextText:GetText():find('Market data from Companion synthetic-simulator',1,true)~=nil)
+        Lab.Check('state','contract internals are optional',false,p.contextText:GetText():find('transport ',1,true)~=nil)
+        Lab.Check('state','receipt diagnostics available',true,p.aggregateText:find('receipt 1',1,true)~=nil)
+        local reason=({newer='newer_addon',older='older_companion'})[P.compatibility]
+        Lab.Check('state','correct update direction',reason,B.Status().compatibility_reason)
+        local message=({newer='Update TwichUI to import it.',older='Update TwichUI Market Companion'})[P.compatibility]
+        Lab.Check('state','player update instruction visible',true,message and p.source:GetText():find(message,1,true)~=nil or not message)
+        Lab.Check('state','player sees retained data status',P.compatibility~='valid',p.kind:GetText():find('previous compatible data retained',1,true)~=nil)
+    end
 end
 Lab.Finish()
