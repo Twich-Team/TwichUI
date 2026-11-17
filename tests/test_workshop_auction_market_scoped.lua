@@ -51,7 +51,7 @@ if artifact then
 else
     local generation=file('scoped.json');local raw=packet(generation);c.TwichUIMarketData=raw;drain(raw,true)
     local p=open(10001,generation.records[2].variant_key)
-    assert(p.chart.maxDots==60,'Market cannot display the complete scoped daily window')
+    assert(p.chart.data and #p.chart.data.points==#p.projection.series.points,'Market must preserve the complete scoped daily window')
     assert(#p.projection.series.points==2 and p.projection.series.points[1].price==100)
     assert(p.contextText:GetText():find('Scope complete',1,true) and p.contextText:GetText():find('not whole-market complete',1,true))
     assert(#p.projection.series.gaps==1 and p.projection.history.scope.scope_complete)
@@ -108,9 +108,9 @@ W.Market.History=function()
     return h
 end
 W.AuctionMarketData.Clear()
-A.Market.Range(60);assert(#p.projection.series.points==60 and p.chart.shown==30,'local 30-marker cap changed')
+A.Market.Range(60);assert(#p.projection.series.points==60 and p.chart.shown==60,'complete local window must remain inspectable')
 for _,hook in ipairs(p.main.hooks.OnSizeChanged or {}) do hook(p.main) end
-assert(p.chart.shown==30,'resize changed local marker cap')
+assert(p.chart.shown==60,'resize discarded local evidence')
 W.Market.History=history
 A.Hide();assert(p.job==nil and p.catalog==nil)
 print('PASSED: scoped Market page; exact prices/history, absence/unknown/exclusion, retention, navigation, local isolation')

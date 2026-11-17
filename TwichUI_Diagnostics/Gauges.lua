@@ -19,6 +19,8 @@ local Perf = R.Perf
 -- "!!!TwichUI/", the settings window "TwichUI_Settings/"), where: the function, so a report can name what to read.
 -- every = how often it is expected to run, so a report can tell "runs often" from "runs on demand".
 DX.OPS = {
+    ["auction.chartPrepare"] = { module="auction", label="Market chart preparation", kind="rebuild", file="TwichUI_Workshop/auction/AdvancedChart.lua", where="Set", every="evidence replacement", visible="auction.previewShown" },
+    ["auction.chartDraw"] = { module="auction", label="Market chart geometry", kind="layout", file="TwichUI_Workshop/auction/AdvancedChart.lua", where="Render", every="evidence or geometry change", visible="auction.previewShown" },
     ["auction.readSnapshot"] = { module = "auction", label = "AH experimental read normalization", kind = "rebuild", file = "TwichUI_Workshop/auction/ReadRequests.lua", where = "Event", every = "explicit response only; at most 500 rows" },
     ["auction.marketDetails"] = { module="auction", label="AH Market selected-item services", kind="rebuild", file="TwichUI_Workshop/auction/MarketData.lua", where="Project", every="selected item/generation change only", visible="auction.previewShown" },
     ["auction.previewSearch"] = { module = "auction", label = "AH preview: stored catalog/filter/sort slice", kind = "rebuild", file = "TwichUI_Workshop/auction/BrowseData.lua", where = "Job.Step", every = "bounded slices only while Browse is visible", visible = "auction.previewShown" },

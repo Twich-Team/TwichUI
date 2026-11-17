@@ -445,3 +445,8 @@ visible-page render scope; no hidden-page updater is introduced.
 The external reader registers `workshop.bridgeLoad`, `workshop.bridgeValidate`, `workshop.bridgeRecord` and `workshop.bridgeHistory` for explicit loading, cooperative validation slices and selected record/history reads. Read-only `workshop.bridgeRecords`, `workshop.bridgeBytes` and `workshop.bridgeCache` gauges report bounded retained state without loading or building it. `TwichUI_MarketData` has separate sampled addon memory and ownership markers. No bridge timer runs before an explicit load request or after validation completes. Cloud timing is not client acceptance.
 
 The L3 scoped reader reuses these bridge timing scopes and gauges. `Bridge.Status()` additionally reports active schema/scope and a canonical-byte refusal code; no new background polling or startup load is registered. See [scoped reader evidence](workshop/market-bridge-scoped-l3.md).
+
+Market C1 scopes: `auction.chartPrepare` measures evidence preparation and
+`auction.chartDraw` measures viewport geometry/rendering in
+`TwichUI_Workshop/auction/AdvancedChart.lua`. Hover uses binary search and updates
+only when the selected record changes; no history decoding occurs there.

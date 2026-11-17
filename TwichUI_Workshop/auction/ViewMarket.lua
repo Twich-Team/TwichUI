@@ -38,7 +38,6 @@ local function ChartWords(p,x)
     end
     local coverage=(s.recent and (#s.points.." recorded observations") or (#s.points.." observed daily closings"))..
         " · "..#s.gaps.." stored gap ranges · "..#s.groups.." aggregate ranges"
-    if #s.points>30 then coverage=coverage.." · newest 30 markers shown" end
     local sources,partial={},false
     for _,list in ipairs({s.points,s.groups}) do for _,r in ipairs(list) do
         if r.provenance then sources[r.provenance]=true end
@@ -53,7 +52,7 @@ end
 local function ServerChart(p,x)
     local h=x.header
     local formatter=p.serverMetric=="supply" and function(n)return ("%.0f"):format(n) end or UI.Money
-    p.chart:Set(x.series,formatter)
+    p.chart:Set(x.series,formatter,tostring(p.selected)..':'..p.marketKey..':'..p.serverVariant..':'..p.serverMetric..':'..p.days..':'..tostring(h and h.generation_id))
     if x.series and #x.series.points==1 then
         local point=x.series.points[1]
         local label=p.serverMetric=="supply" and "Observed supply: " or p.serverMetric=="minimum" and "Observed minimum listing: " or
@@ -146,7 +145,7 @@ Detail=function(p)
         tile.value:SetText(tile.id=="quality" and (not r and p.market and "Choose an item" or Quality(f)) or row and row.value or "Unavailable")
         tile.tip=row and row.tip or "No supported value for the selected item and market."
     end
-    p.chart:Set(x and x.series,UI.Money,30)
+    p.chart:Set(x and x.series,UI.Money,tostring(p.selected)..':'..tostring(p.marketKey)..':'..p.days..':'..tostring(p.stamp))
     if not r then
         p.chart.msg:SetText(p.error and "Stored history unavailable." or "Choose an item to inspect history.")
         p.chart.note:SetText(p.error and "Refresh stored data to retry." or "Current auction availability is unknown.")
@@ -163,7 +162,7 @@ Detail=function(p)
         tr.older.n.." older and "..tr.newer.n.." newer observed days."
         or "Insufficient history for a 14-day trend."
     local q=f.quality
-    p.trends:SetText(not r and "Choose an item to inspect its observed trend and coverage." or trend.."\n\n"..Quality(f)..(q and q.n and (" · "..q.n.." / 30 observed days") or "")..
+    p.trends:SetText(not r and "Choose an item to inspect its observed trend and coverage." or trend.."\n"..Quality(f)..(q and q.n and (" · "..q.n.." / 30 observed days") or "")..
         "\n"..table.concat(W.Facts.QualityNotes(f,2),"\n"))
     local sup=f.supply
     local dist=x and x.distribution
@@ -402,47 +401,44 @@ local function Build(p)
     end,30);p.advisor:SetPoint("LEFT",p.browse,"RIGHT",8,0)
     UI.Tip(p.advisor,"Item Advisor","Opens the existing Workshop Item Advisor with this base item. Advisor uses its own existing market selection; Market's temporary research selector does not change it.")
     p.source=A.Text(main,"",11,12,-84,-12,UI.K.textDim);Wrap(p.source,32)
-    p.chartCard=A.Card(main,"Lowest seen · observed daily closings",224)
+    p.chartCard=A.Card(main,"Lowest seen · observed daily closings",248)
     p.chartCard:SetPoint("TOPLEFT",8,-124);p.chartCard:SetPoint("TOPRIGHT",-8,-124)
-    p.chart=UI.PriceChart(p.chartCard,800,136,{maxDots=60,window=true,gold=true})
+    p.chart=UI.AdvancedMarketChart(p.chartCard,800,160)
     p.metricDrop=A.Dropdown(p.chartCard,190,function()return W.ServerMarket and W.ServerMarket.METRICS or {} end,
         function()return p.serverMetric end,V.Metric)
     p.metricDrop:SetPoint("TOPRIGHT",-8,-2);p.metricDrop:Hide()
     p.chart:SetPoint("TOPLEFT",10,-36);p.chart:SetPoint("TOPRIGHT",-10,-36)
-    p.axis=A.Text(p.chartCard,"",11,12,-176,-12,UI.K.textDim)
-    p.coverage=A.Text(p.chartCard,"",11,12,-194,-12,UI.K.textDim);Wrap(p.coverage,26)
-    UI.TipFn(p.chart,"Stored minimum listing history",function() return p.chartTip end)
+    p.axis=A.Text(p.chartCard,"",11,12,-200,-12,UI.K.textDim)
+    p.coverage=A.Text(p.chartCard,"",11,12,-218,-12,UI.K.textDim);Wrap(p.coverage,26)
     p.tiles={}
     local definitions={{"market","Market value · 14d"},{"recent","Recent listing"},{"hist","Historical · 60d"},
         {"supply","Observed supply"},{"comp","Competing price"},{"quality","Data quality"}}
     for _,def in ipairs(definitions) do
-        local tile=A.Card(main,def[2],86);tile.id=def[1]
+        local tile=A.Card(main,def[2],70);tile.id=def[1]
         UI.CL.Font(tile.heading,12)
-        tile.value=A.Text(tile,"Unavailable",14,10,-37,-8,UI.K.text);Wrap(tile.value,40)
+        tile.value=A.Text(tile,"Unavailable",14,10,-30,-8,UI.K.text);Wrap(tile.value,36)
         UI.TipFn(tile,def[2],function() return tile.tip end)
         p.tiles[#p.tiles+1]=tile
     end
     p.trendCard=A.Card(main,"Trend & coverage",100)
-    p.trends=A.Text(p.trendCard,"",12,12,-36,-12);Wrap(p.trends,144)
+    p.trends=A.Text(p.trendCard,"",11,12,-30,-12);Wrap(p.trends,94)
     UI.TipFn(p.trendCard,"Market quality",function()
         local f=p.projection and p.projection.facts
         return f and f.quality and (f.quality.basis.."\n"..table.concat(W.Facts.QualityNotes(f,10),"\n"))
     end)
     p.contextCard=A.Card(main,"Observed price context",100)
-    p.contextText=A.Text(p.contextCard,"",12,12,-36,-12);Wrap(p.contextText,144)
+    p.contextText=A.Text(p.contextCard,"",11,12,-30,-12);Wrap(p.contextText,94)
     UI.TipFn(p.contextCard,"Stored context and aggregate ranges",function()
         return "Listing prices and observed supply are not sales, demand or current availability.\n"..(p.aggregateText or "")
     end)
     local function Layout()
         local w=main:GetWidth();if not w or w<100 then w=888 end
         local tileW=(w-16-5*6)/6
-        for i,tile in ipairs(p.tiles) do tile:ClearAllPoints();tile:SetWidth(tileW);tile:SetPoint("TOPLEFT",8+(i-1)*(tileW+6),-358) end
+        for i,tile in ipairs(p.tiles) do tile:ClearAllPoints();tile:SetWidth(tileW);tile:SetPoint("TOPLEFT",8+(i-1)*(tileW+6),-382) end
         local half=(w-26)/2
-        p.trendCard:SetWidth(half);p.trendCard:SetPoint("TOPLEFT",8,-454);p.trendCard:SetPoint("BOTTOMLEFT",8,8)
+        p.trendCard:SetWidth(half);p.trendCard:SetPoint("TOPLEFT",8,-462);p.trendCard:SetPoint("BOTTOMLEFT",8,8)
         p.contextCard:SetPoint("TOPLEFT",p.trendCard,"TOPRIGHT",10,0);p.contextCard:SetPoint("BOTTOMRIGHT",-8,8)
-        if p.projection then
-            if p.marketKey=="server" then ServerChart(p,p.projection) else p.chart:Set(p.projection.series,UI.Money,30) end
-        end
+        if p.projection then p.chart:Render() end -- geometry only; keep the inspected interval
     end
     main:HookScript("OnSizeChanged",Layout);Layout()
     p:SetScript("OnEvent",function(_,event,item,ok)
@@ -475,6 +471,7 @@ end
 local function Release(p)
     p.viewport=p.pendingView or (p.rows and A.Capture(p.list,Key)) or p.viewport
     if p.job and p.job.Cancel then p.job:Cancel() end
+    p.chart:Clear()
     p.catalog,p.dirty,p.refilter=nil,nil,nil
     p.token=p.token+1;p.job,p.rows,p.index,p.known,p.market,p.projection,p.chosen,p.stamp,p.pendingView=nil,nil,nil,nil,nil,nil,nil,nil,nil
     p.list:SetData({});p:UnregisterAllEvents();p.listening=false

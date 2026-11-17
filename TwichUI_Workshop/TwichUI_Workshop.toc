@@ -106,6 +106,7 @@ auction/ViewShopping.lua
 auction/SellData.lua
 auction/ViewSell.lua
 auction/ViewOwned.lua
+auction/AdvancedChart.lua
 auction/ViewMarket.lua
 # The window: the shell, the page list and the events (last: it tells TwichUI the addon is ready)
 Window.lua

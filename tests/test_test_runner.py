@@ -279,12 +279,16 @@ class Evidence(unittest.TestCase):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         self.assertEqual(module.select([]), list(module.POSES))
-        self.assertEqual(len(module.POSES), 44)
+        self.assertEqual(len(module.POSES), 49)
+        chart_poses = {'markethover', 'marketdrag', 'marketinterval', 'marketsingle', 'marketcopper'}
+        self.assertTrue(chart_poses <= set(module.POSES))
+        chart = runner.plan(REPO, 'feature', 'advanced-market-chart')['simulators'][0]['only']
+        self.assertTrue(chart_poses | {'shell', 'replay', 'wrong'} <= set(chart))
         self.assertTrue({'scopedpriced', 'scopedoutside', 'scopedabsent', 'scopedunknown', 'scopedcorrupt', 'scopedfuture'} <= set(module.POSES))
         focused = runner.plan(REPO, 'feature', 'auction-preview')['simulators'][0]['only']
         self.assertTrue({'companionvalid', 'companionnewer', 'companionolder'} <= set(focused))
         self.assertTrue({'scopedpriced', 'scopedoutside', 'scopedabsent', 'scopedunknown', 'scopedcorrupt', 'scopedfuture', 'shell', 'replay', 'wrong'} <= set(focused))
-        self.assertEqual(len(module.POSES) - len(focused), 27)
+        self.assertEqual(len(module.POSES) - len(focused), 32)
         for names in (['typo'], ['wrong'], ['replay'], ['shell', 'shell']):
             with self.assertRaises(ValueError):
                 module.select(names)

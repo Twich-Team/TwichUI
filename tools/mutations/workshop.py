@@ -148,9 +148,9 @@ m("market.bridge.catalog-reuse", "TwichUI_Workshop/ServerMarket.lua",
   "index=true,catalog=opt.catalog,item=focus", "index=true,item=focus",
   "external filtering rediscovers identities instead of retaining completed rows", ["test_workshop_auction_market_server.lua"])
 m("market.bridge.resize-label", "TwichUI_Workshop/auction/ViewMarket.lua",
-  'if p.marketKey=="server" then ServerChart(p,p.projection) else p.chart:Set(p.projection.series,UI.Money,30) end',
-  'p.chart:Set(p.projection.series,UI.Money,30)',
-  "resizing labels one external supply observation as cheapest money", ["test_workshop_auction_market_server.lua"])
+  'if p.projection then p.chart:Render() end',
+  'if p.projection then p.chart:Set(p.projection.series,UI.Money) end',
+  "resizing replaces external supply formatting and loses its observation caption", ["test_workshop_auction_market_server.lua"])
 
 # Dormant M1a calculator: mutations exercise exact boundaries without enabling it.
 m("market.canonical.half-anchor", "TwichUI_Workshop/PricingV1.lua",
@@ -1024,12 +1024,14 @@ m("market.scoped.actual-budget", "TwichUI_Workshop/Bridge.lua",
   "inputBytes=inputBytes+#v+(n>0 and 1 or 0)", "inputBytes=inputBytes",
   "a falsely small manifest size permits an over-budget candidate to be decoded", SCOPED_TEST)
 
-m("market.scoped.render-window", "TwichUI_Workshop/auction/ViewMarket.lua",
-  "{maxDots=60,window=true,gold=true}", "{maxDots=30,window=true,gold=true}",
-  "older selected daily closes are hidden by the legacy chart cap", ["test_workshop_auction_market_scoped.lua"])
-m("market.scoped.local-chart-cap", "TwichUI_Workshop/auction/ViewMarket.lua",
-  "p.chart:Set(x and x.series,UI.Money,30)", "p.chart:Set(x and x.series,UI.Money)",
-  "the external chart expansion changes the established local-history cap", ["test_workshop_auction_market_scoped.lua"])
+m("market.scoped.render-window", "TwichUI_Workshop/auction/AdvancedChart.lua",
+  "then d.points[#d.points+1]=p end", "and #d.points<30 then d.points[#d.points+1]=p end",
+  "the chart preparation silently caps the complete selected window at 30 observations", ["test_workshop_auction_market_scoped.lua"])
+# C1 intentionally removed the old local 30-marker cap. Guard the local source
+# instead of treating the complete inspectable window as a regression.
+m("market.scoped.local-chart-source", "TwichUI_Workshop/auction/ViewMarket.lua",
+  "p.chart:Set(x and x.series,UI.Money,", "p.chart:Set(nil,UI.Money,",
+  "switching back from external data clears local chart evidence instead of displaying it", ["test_workshop_auction_market_scoped.lua"])
 
 # Item Advisor catalog finalization: numeric ID order and complete merge tails.
 m("market.advisor.catalog-run-order", "TwichUI_Workshop/AdvisorData.lua",
@@ -1040,3 +1042,15 @@ m("market.advisor.catalog-merge-tail", "TwichUI_Workshop/AdvisorData.lua",
   'for dst = lo, hi do rows[dst] = scratch[dst]; SortTick() end',
   'for dst = lo, hi - 1 do rows[dst] = scratch[dst]; SortTick() end',
   "the last row of each merged run is left stale or duplicated", ["test_workshop_advisor.lua"])
+
+# C1.1 input lifecycle: presentation-only faults, no pricing/data mutations.
+m("market.chart.refresh-input", "TwichUI_Workshop/auction/AdvancedChart.lua",
+  "self.series=series;self.format=format or UI.Money;self:Render();return",
+  "self:ClearHover();self.series=series;self.format=format or UI.Money;self:Render();return",
+  "an unchanged Market refresh silently removes the active inspection updater", ["test_workshop_auction_market_chart_interaction.lua"])
+m("market.chart.leave-drag", "TwichUI_Workshop/auction/AdvancedChart.lua",
+  "if not c.drag then c.hit:SetScript('OnUpdate',nil) end", "c:ClearHover()",
+  "leaving the plot discards the drag before a release outside it can be handled", ["test_workshop_auction_market_chart_interaction.lua"])
+m("market.chart.native-offsets", "TwichUI_Workshop/auction/AdvancedChart.lua",
+  "line:SetStartPoint('CENTER',self.anchors[v.a],0,0)", "line:SetStartPoint('BOTTOMLEFT',self.plot,v.x,v.y)",
+  "a native line reintroduces scale-dependent numeric offsets instead of marker anchors", ["test_workshop_auction_market_chart_interaction.lua"])
