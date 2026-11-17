@@ -3,6 +3,8 @@ local W=c.TwichUI.Workshop
 W.UI.Init()
 local C=W.AdvancedChart
 local function check(v,m) assert(v,m) end
+check(C.Axis(100000000000,'min',W.UI.Money)=='10.0M gold','large copper axis units')
+check(C.Axis(100000000000,'supply',tostring)=='100000000000','quantities never become currency')
 local s={from=1,to=7,points={{day=1,price=100,at=86400,provenance='local'},
  {day=2,price=140,partial=true},{day=6,price=80,at='2026-11-17T00:00:00Z',provenance='external'}},
  groups={{from=3,to=5,average=110,low=90,high=150,n=2,partial=true,provenance='local'}},gaps={{from=3,to=5}}}
@@ -73,7 +75,7 @@ for _,n in ipairs({2,7,14,30,60,120}) do
  local new=W.UI.AdvancedMarketChart(c.UIParent,800,176)
  old.plot.GetWidth=function()return 682 end;old.plot.GetHeight=function()return 128 end
  new.plot.GetWidth=function()return 682 end;new.plot.GetHeight=function()return 128 end
- 
+
  local prep=bench(function() C.Prepare(x) end,200)
  local oldCPU=bench(function() old:Set(x,W.UI.Money,30) end,200)
  local newCPU=bench(function() new:Set(x,W.UI.Money) end,200)

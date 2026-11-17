@@ -28,6 +28,15 @@ function C.Prepare(s,from,to)
     d.low=math.max(0,(lo or 0)-pad);d.high=(hi or 1)+pad
     return d
 end
+-- Compact axis units prevent large copper amounts from colliding with the plot.
+-- Inspection always retains exact copper and the caller's full formatter.
+function C.Axis(value,metric,format)
+    if metric~='supply' then
+        if value>=1e10 then return ('%.1fM gold'):format(value/1e10) end
+        if value>=1e8 then return ('%.1fk gold'):format(value/1e7) end
+    end
+    return format(value)
+end
 function C.Nearest(points,day)
     local a,b=1,#points
     if b==0 then return nil end
@@ -165,7 +174,7 @@ function UI.AdvancedMarketChart(parent,w,h)
         end
         for i=1,4 do local y=(i-1)*ph/3
             local g,l=self.guides[i],self.labels[i];g:ClearAllPoints();g:SetPoint('BOTTOMLEFT',0,y);g:SetSize(pw,1);g:Show()
-            l:ClearAllPoints();l:SetPoint('RIGHT',self.plot,'BOTTOMLEFT',-10,y);l:SetText(self.format(d.low+(d.high-d.low)*(i-1)/3))
+            l:ClearAllPoints();l:SetPoint('RIGHT',self.plot,'BOTTOMLEFT',-10,y);l:SetText(C.Axis(d.low+(d.high-d.low)*(i-1)/3,d.metric,self.format))
         end
         self.start:SetText(Day(d.from));self.finish:SetText(Day(d.to))
         self.hint:SetText(#d.groups>0 and 'Shaded intervals: aggregates · drag to select · right-click to reset' or #d.points>math.min(C.MAX_COLUMNS,pw) and 'Pixel min/max ranges · exact hover · drag to select · right-click to reset' or 'Drag to inspect interval · right-click to reset · UTC')

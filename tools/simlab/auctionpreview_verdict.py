@@ -9,7 +9,7 @@ from verdict import read_rgba, distinct_colours
 import known_failures as kf
 CHECK = re.compile(r'^SIMLAB check (PASS|FAIL) \[(\w+)\] (.*?) \| expected=(.*?) \| actual=(.*)$', re.M)
 DONE = re.compile(r'^SIMLAB done steps=(\d+) simSeconds=([\d.]+) passed=(\d+) failed=(\d+) aborted=(\w+) stopped=(\w+)$', re.M)
-POSES = ('shell', 'replay', 'small', 'scaled', 'empty', 'filtered', 'resized', 'shopping', 'shoppingsmall', 'shoppingpurpose', 'categories', 'loading', 'liveprepare', 'sell', 'sellobserved', 'sellsmall', 'sellscaled', 'sellempty', 'owned', 'ownedsmall', 'ownedempty', 'market', 'markethover', 'marketinterval', 'marketsingle', 'marketsmall', 'marketscaled', 'marketsparse', 'marketempty', 'marketrecent', 'marketlong', 'markettracked', 'marketlarge', 'marketmetadata', 'marketstale', 'marketerror', 'marketbridge', 'scopedpriced', 'scopedoutside', 'scopedabsent', 'scopedunknown', 'scopedcorrupt', 'scopedfuture', 'companionvalid', 'companionnewer', 'companionolder', 'wrong')
+POSES = ('shell', 'replay', 'small', 'scaled', 'empty', 'filtered', 'resized', 'shopping', 'shoppingsmall', 'shoppingpurpose', 'categories', 'loading', 'liveprepare', 'sell', 'sellobserved', 'sellsmall', 'sellscaled', 'sellempty', 'owned', 'ownedsmall', 'ownedempty', 'market', 'markethover', 'marketinterval', 'marketsingle', 'marketcopper', 'marketsmall', 'marketscaled', 'marketsparse', 'marketempty', 'marketrecent', 'marketlong', 'markettracked', 'marketlarge', 'marketmetadata', 'marketstale', 'marketerror', 'marketbridge', 'scopedpriced', 'scopedoutside', 'scopedabsent', 'scopedunknown', 'scopedcorrupt', 'scopedfuture', 'companionvalid', 'companionnewer', 'companionolder', 'wrong')
 
 
 def select(names):

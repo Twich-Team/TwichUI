@@ -445,6 +445,13 @@ if P.market then
     for _=1,100 do if not p.job then break end;Lab.Settle(0.05) end
     A.Market.Select(7067)
     if P.marketRecent then A.Market.Range(2) elseif P.marketLong then A.Market.Range(120) else A.Market.Range(14) end
+    if P.chartCopper then
+        local original=p.projection.series
+        local s={from=original.from,to=original.to,points={},groups={},gaps={},metric='min'}
+        for i=1,7 do s.points[i]={day=s.to-7+i,price=90000000000+i*1000000000,provenance='synthetic local-format stress'} end
+        p.chart:Set(s,W.UI.Money);p.chart:Inspect(s.points[4].day)
+        p.coverage:SetText('Synthetic large-copper presentation stress · saved valuations unchanged')
+    end
     if P.chartSingle then
         local s=p.projection.series
         local one={points={s.points[#s.points]},groups={},gaps={},from=s.from,to=s.to}
