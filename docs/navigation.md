@@ -123,7 +123,9 @@ never in a profile or shared). Without one the Hearthstone is not offered, and N
 left. A walk before a boat ends at "Stormwind dock", before a zeppelin at "Orgrimmar zeppelin tower", before a flight at
 "Stormwind flight master". A boat leg says to board it and what to expect ("Wait for it here: about 2 min, then about 3 min
 aboard (estimates)"); a flight says to talk to the flight master and choose the destination; a teleport names the spell; the
-Hearthstone says to use it. Nothing is ever cast, ridden or clicked for you.
+Hearthstone shows a cooldown countdown when waiting plus the cast and onward travel is faster than the alternatives,
+then says to use it. A missing, disabled or unreadable cooldown excludes the stone from new plans. Cooldowns are read
+when planning; use Recalculate if availability changes during a journey. Nothing is ever cast, ridden or clicked for you.
 
 **Following one.** A walk ends when you are within a few yards of its place and the next leg becomes the current one. Aboard
 a boat or on a flight path (`UnitOnTaxi`) the state is "riding": nothing to follow, the plan is held. A boat's arrival (you

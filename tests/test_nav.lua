@@ -530,9 +530,61 @@ local bx2, by2 = W(1202, 34, 18)
 assert(TV.SetBind(9202, bx2, by2) and TV.Bind().c == 9202, "the bind point is kept for this character")
 local h = TV.Hearth()
 assert(h and h.cont == 9202 and h.seconds == 10, "ready: " .. tostring(h and h.seconds))
-c.C_Item.GetItemCooldown = function() return CLOCK - 100, 1800, 1 end
+-- Exercise Forever's container API even if the older item API incorrectly says ready.
+local oldContainer = c.C_Container
+c.C_Container = { GetItemCooldown = function(id)
+  assert(id == 6948)
+  return CLOCK - 100, 1800, 1
+end }
 assert(math.abs(TV.Hearth().seconds - (10 + 1700)) < 1, "what is left of the cooldown counts")
-c.C_Item.GetItemCooldown = function() return 0, 0, 1 end
+At(1201, 5, 21)
+assert(NV.StartAt(1202, eu, ev, "Beta Peak", "pin"))
+Run(1)
+assert(S().legKind == "walk" and S().steps == 3, "a long cooldown makes the ferry faster")
+NV.Stop("test")
+for _, read in ipairs({
+  function() return nil end,
+  function() error("unavailable") end,
+  function() return 0, 0, 0 end,
+  function() return 0, 0, false end,
+  function() return "secret", 1800, 1 end,
+}) do
+  c.C_Container.GetItemCooldown = read
+  assert(TV.Hearth() == nil and TV.HearthWhy(), "unknown or disabled is never assumed ready")
+end
+c.issecretvalue = function(v) return v == "secret" end
+c.C_Container.GetItemCooldown = function() return "secret", 1800, 1 end
+assert(TV.Hearth() == nil, "secret cooldown is not used")
+c.issecretvalue = nil
+c.C_Container.GetItemCooldown = function() return 1, 1, true end
+assert(TV.Hearth().seconds == 10, "expired cooldown is ready")
+c.C_Container.GetItemCooldown = nil
+c.C_Item.GetItemCooldown = nil
+assert(TV.Hearth() == nil, "missing cooldown APIs are not ready")
+c.C_Container.GetItemCooldown = function() return 0, 0, 1 end
+c.InCombatLockdown = function() return true end
+assert(TV.Hearth() == nil, "no cooldown reads in combat")
+c.InCombatLockdown = function() return false end
+-- A short wait wins against the same ferry and counts down without polling the API.
+local readyAt = CLOCK + 20
+c.C_Container.GetItemCooldown = function() return readyAt - 20, 20, 1 end
+At(1201, 5, 21)
+assert(NV.StartAt(1202, eu, ev, "Beta Peak", "pin"))
+Run(1)
+s = S()
+assert(s.legKind == "hearth" and s.instruction == "Wait for your Hearthstone", "a short cooldown is worth waiting for")
+assert(NV.LegDetail(s.legs[s.leg]):find("Ready in", 1, true), "the wait is explained")
+local eta = s.eta
+c.C_Container.GetItemCooldown = function() error("the countdown must not poll cooldowns") end
+Run(5)
+assert(S().eta < eta - 4, "waiting reduces the remaining ETA")
+Run(20)
+s = S()
+assert(s.instruction == "Use your Hearthstone", "the instruction changes when ready")
+assert(not NV.LegDetail(s.legs[s.leg]):find("Ready in", 1, true), "no stale wait detail")
+NV.Stop("test")
+c.C_Container = oldContainer
+c.C_Item.GetItemCooldown = function() return 0, 0, true end
 assert(c.TwichUIDB.ui.navTravel[c.UnitGUID("player")].bind, "saved on this character's record")
 At(1201, 5, 21)
 assert(NV.StartAt(1202, eu, ev, "Beta Peak", "pin"))

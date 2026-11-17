@@ -217,22 +217,29 @@ function TV.SetBind(cont, x, y)
     return true
 end
 
--- Seconds left on the Hearthstone's cooldown (0 when ready or unknown).
+-- Seconds left on the Hearthstone's cooldown; nil means it cannot safely be used.
+-- Forever exposes the bag-item API under C_Container (as used by camping/Rest.lua).
 local function HearthCooldown()
-    local f = C_Item and C_Item.GetItemCooldown
-    if not f then return 0 end
-    local ok, start, duration = pcall(f, HEARTH_ITEM)
-    start, duration = ok and Plain(start), ok and Plain(duration)
-    if type(start) ~= "number" or type(duration) ~= "number" or start <= 0 then return 0 end
+    if InCombatLockdown and InCombatLockdown() then return nil end
+    local f = C_Container and C_Container.GetItemCooldown or C_Item and C_Item.GetItemCooldown
+    if not f then return nil end
+    local ok, start, duration, enabled = pcall(f, HEARTH_ITEM)
+    if not ok then return nil end
+    start, duration, enabled = Plain(start), Plain(duration), Plain(enabled)
+    if enabled ~= 1 and enabled ~= true then return nil end
+    if type(start) ~= "number" or type(duration) ~= "number" or start < 0 or duration < 0 then return nil end
+    if start == 0 or duration == 0 then return 0 end
     return math.max(0, start + duration - GetTime())
 end
 
--- { cont, x, y, seconds } (the cast and what is left of the cooldown) or nil: no stone in the bags, or no bind point known.
+-- { cont, x, y, seconds, readyAt } or nil: requires a stone, bind point and readable, enabled cooldown.
 function TV.Hearth()
     if Count(HEARTH_ITEM) <= 0 then return nil end
     local b = TV.Bind()
     if not b then return nil end
-    return { cont = b.c, x = b.x, y = b.y, seconds = HEARTH_CAST + HearthCooldown() }
+    local cooldown = HearthCooldown()
+    if cooldown == nil then return nil end
+    return { cont = b.c, x = b.x, y = b.y, seconds = HEARTH_CAST + cooldown, readyAt = GetTime() + cooldown }
 end
 
 -- Why the Hearthstone isn't offered, in words (for the settings), or nil when it is.
@@ -240,6 +247,7 @@ function TV.HearthWhy()
     if not NP.Get("useHearth") then return "Turned off." end
     if Count(HEARTH_ITEM) <= 0 then return "No Hearthstone in your bags." end
     if not TV.Bind() then return "Your bind point isn't known to TwichUI yet. Talk to an innkeeper (bind again), or use the Hearthstone once during a journey." end
+    if HearthCooldown() == nil then return "Your Hearthstone cooldown is unavailable or the item is disabled." end
     return nil
 end
 

@@ -279,7 +279,7 @@ local function Plan(req)
         elseif e.kind == "teleport" then
             legs[#legs + 1] = { kind = "teleport", seconds = e.info.cast, from = e.u, to = e.to, spell = e.info.spell }
         else
-            legs[#legs + 1] = { kind = "hearth", seconds = e.seconds, from = e.u, to = e.to }
+            legs[#legs + 1] = { kind = "hearth", seconds = e.seconds, readyAt = e.info.readyAt, from = e.u, to = e.to }
         end
     end
     for _, leg in ipairs(legs) do
