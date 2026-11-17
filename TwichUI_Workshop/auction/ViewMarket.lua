@@ -95,17 +95,21 @@ local function ServerDetail(p,r)
     local _,observedSeconds=W.BridgeValidate.Time(obs and obs.observed_at)
     local age=observedSeconds and time and time()-observedSeconds
     local ageText=age and (age>=0 and (' · '..math.floor(age/3600)..'h old') or ' · source time ahead of client') or ''
-    if status.compatibility_message then p.kind:SetText(status.compatibility_message..(status.ready and ' Previous compatible data is retained.' or ' Local history is unchanged.'))
+    if status.compatibility_message then
+        p.kind:SetText(status.ready and 'Replacement rejected; previous compatible data retained.' or 'External data rejected; local history is unchanged.')
+        p.source:SetText(status.compatibility_message)
     elseif status.error then p.kind:SetText(status.ready and 'Replacement rejected; previous validated generation retained.' or 'External generation rejected; local history is unchanged.')
     elseif status.loading then p.kind:SetText('Validating external generation; previous data remains usable.') end
     p.trends:SetText(selected and (availability.."\n"..selected.current.coverage.priced_days_14.." priced dates in the 14-day reference\n"..
         selected.current.coverage.priced_days_60.." priced dates in the 60-day reference\nNo local competition or selling authorization.") or (availability.."\nNo item-ID aggregate is substituted.\n"..(x.availability.state=="outside_scope" and "Can be selected for a future desktop update." or "")))
     local window=h and (h.coverage.history_from_day..' — '..h.coverage.history_through_day..' UTC') or 'External history unavailable'
     local requested=type(x.variant)=='string' and #x.variant==64 and not x.variant:find('[^0-9a-f]') and x.variant
+    local provenance=W.Bridge.CompatibilityText()
     p.contextText:SetText((selected and ('Variant: '..selected.variant_key:sub(1,16)..' · generation: '..h.generation_id:sub(1,12)..'\nObserved: '..obs.observed_at..ageText..
-        '\nUpstream: '..(obs.upstream_updated_at~=W.BridgeCodec.NULL and obs.upstream_updated_at or 'unknown')) or requested and ('Requested variant: '..requested:sub(1,16)..'\nNot delivered; provenance unavailable.') or 'Choose a variant to inspect its provenance.')..'\n'..scopeText..'\n'..window..(W.Bridge.CompatibilityText() and ('\n'..W.Bridge.CompatibilityText()) or ''))
+        '\nUpstream: '..(obs.upstream_updated_at~=W.BridgeCodec.NULL and obs.upstream_updated_at or 'unknown')) or requested and ('Requested variant: '..requested:sub(1,16)..'\nNot delivered; provenance unavailable.') or 'Choose a variant to inspect its provenance.')..'\n'..scopeText..'\n'..window..(provenance and ('\n'..provenance) or ''))
     p.aggregateText=(selected and ('Variant SHA256: '..selected.variant_key..'\nGeneration: '..h.generation_id..'\n') or requested and ('Requested variant SHA256: '..requested..'\n') or '')..
-        (scope and scope.selection_id and ('Selection: '..scope.selection_id..'\nRequest: '..scope.request_digest..'\nWatermark: '..scope.watermark_observation_id..'\n') or '')..scopeText..'\n'..window
+        (scope and scope.selection_id and ('Selection: '..scope.selection_id..'\nRequest: '..scope.request_digest..'\nWatermark: '..scope.watermark_observation_id..'\n') or '')..scopeText..'\n'..window..
+        (provenance and ('\n'..W.Bridge.CompatibilityText(true)) or '')
     p.chartTip=(h and h.history_basis or 'External history unavailable')..'\nExact available daily observations; no interpolation, sale proceeds or mature-window claim. The current UTC day remains provisional.'
 end
 Detail=function(p)

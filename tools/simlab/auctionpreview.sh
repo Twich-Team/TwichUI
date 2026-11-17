@@ -74,6 +74,11 @@ for pose in priced outside absent unknown corrupt future; do
   cat "$LAB/fixtures/bridge-$pose.lua" "$LAB/fixtures/auctionpreview-scoped$pose.lua" > "$LAB/fixtures/bridge-combined.lua"
   mv "$LAB/fixtures/bridge-combined.lua" "$LAB/fixtures/auctionpreview-scoped$pose.lua"
 done
+for mode in valid newer older; do
+  fixture "companion$mode" "{ bridge = true, scopedState = \"priced\", compatibility = \"$mode\" }"
+  cat "$LAB/fixtures/bridge-priced.lua" "$LAB/fixtures/auctionpreview-companion$mode.lua" > "$LAB/fixtures/bridge-combined.lua"
+  mv "$LAB/fixtures/bridge-combined.lua" "$LAB/fixtures/auctionpreview-companion$mode.lua"
+done
 fixture wrong '{ wrongAt = "Browse default" }'
 repo_before="$(git -C "$REPO" status --porcelain --ignored)"
 status=0

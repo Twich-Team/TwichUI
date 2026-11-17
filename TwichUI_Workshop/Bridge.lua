@@ -168,10 +168,13 @@ function B.Compatibility()
     out.desktop_build=active.receipt.desktop_build
     return out
 end
-function B.CompatibilityText()
+function B.CompatibilityText(diagnostics)
     local out=B.Compatibility();if not out then return nil end
     local build=out.desktop_build:gsub('|','||'):gsub('[%c]',' ')
-    return 'Companion '..build..' · transport '..out.transport_version..' · contract '..out.contract_version..' · schema '..out.schema_version..' · reader contract '..out.minimum_reader_version..' required'
+    local summary='Market data from Companion '..build
+    if not diagnostics then return summary end
+    return summary..'\ntransport '..out.transport_version..' · contract '..out.contract_version..' · schema '..out.schema_version..
+        ' · receipt '..out.receipt_schema_version..'\nreader contract '..out.minimum_reader_version..' required · installed '..out.reader_contract_version
 end
 function B.Market() return active and J.Copy(active.header.market) or nil,lastError or state end
 function B.Manifest() return active and J.Copy(active.header) or nil,lastError or state end
