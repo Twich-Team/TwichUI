@@ -118,7 +118,7 @@ local function step(ms)
     until resumes>=limit or clock()-start>=budget
     stats.resumes=stats.resumes+resumes;stats.largest_resumes=math.max(stats.largest_resumes,resumes)
     local elapsed=math.max(0,clock()-start);stats.validation_ms=stats.validation_ms+elapsed;stats.largest_slice_ms=math.max(stats.largest_slice_ms,elapsed);stats.slices=stats.slices+1
-    if failure then stats.unsupported=compatibilityAttempt and not compatibilityAttempt.compatible and compatibilityAttempt.reason=='newer_addon' or false;stats.refusal=failureReason=='bridge policy canonical_bytes' and 'canonical_bytes' or nil;rejected=current.raw;job=nil;state=active and 'ready' or 'invalid';lastError='invalid';stats.failures=stats.failures+1;return false,'invalid' end
+    if failure then stats.refusal=failureReason=='bridge policy canonical_bytes' and 'canonical_bytes' or nil;stats.unsupported=compatibilityAttempt and not compatibilityAttempt.compatible and compatibilityAttempt.reason=='newer_addon' or false;rejected=current.raw;job=nil;state=active and 'ready' or 'invalid';lastError='invalid';stats.failures=stats.failures+1;return false,'invalid' end
     if complete then return true end;return false,'loading'
 end
 function B.Step(ms) return measured('workshop.bridgeValidate',step,ms) end
