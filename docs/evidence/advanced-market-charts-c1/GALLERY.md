@@ -79,4 +79,3 @@ Older ranges are bands, not daily observations; exact days and gaps remain separ
 Synthetic 90–97 billion copper stress; axes use explicit compact gold units, hover retains exact copper.
 
 ![Large copper labels](marketcopper.png)
-
