@@ -136,12 +136,28 @@ class Fails(unittest.TestCase):
         self.assertTrue(timed_out)
         self.assertNotEqual(status, 0)
         pid = int(pid_file.read_text())
+        self.assertDescendantStopped(pid)
+
+    def assertDescendantStopped(self, pid):
         stat = Path(f'/proc/{pid}/stat')
         try:
             state = stat.read_text().split()[2]
         except (FileNotFoundError, ProcessLookupError):
             state = None  # Reaped before open (ENOENT) or during read (ESRCH).
-        self.assertIn(state, (None, 'Z'), 'descendant is still running')
+        # Linux can expose EXIT_DEAD (X) briefly while the killed task is reaped.
+        self.assertIn(state, (None, 'Z', 'X'), 'descendant is still running')
+
+    def test_descendant_check_accepts_dead_states_and_rejects_live_states(self):
+        for state in ('Z', 'X', 'R', 'S', 'D', 'T', 't', 'I'):
+            with self.subTest(state=state), mock.patch.object(Path, 'read_text', return_value=f'123 (sleep) {state} 0'):
+                if state in ('Z', 'X'):
+                    self.assertDescendantStopped(123)
+                else:
+                    with self.assertRaisesRegex(AssertionError, 'descendant is still running'):
+                        self.assertDescendantStopped(123)
+        for error in (FileNotFoundError, ProcessLookupError):
+            with self.subTest(error=error), mock.patch.object(Path, 'read_text', side_effect=error):
+                self.assertDescendantStopped(123)
 
     def test_generation_and_seed_overrides_are_not_inherited(self):
         harmful = {k: '1' for k in runner.CLEAR_ENV}
