@@ -1,6 +1,6 @@
 # Detailed engineering rules
 
-Moved out of `CLAUDE.md` so every session does not load them. Read the section a task touches; `CLAUDE.md` keeps the always-needed rules and links here. The text is unchanged from the former `CLAUDE.md` sections.
+Feature-specific detail supplements [shared engineering rules](engineering-rules.md). Read only the sections the task touches; start at [AGENTS.md](../AGENTS.md).
 
 ## Settings architecture
 
