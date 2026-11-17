@@ -379,6 +379,10 @@ local function SpellLabel(id)
     return TV and TV.SpellName(id) or "Teleport"
 end
 
+local function HearthWait(L)
+    return L.readyAt and math.max(0, L.readyAt - Now()) or 0
+end
+
 -- The words of a leg that is not a walk (a walk's come from its route, Instruction above).
 local function LegInstruction(L)
     if L.kind == "ferry" then
@@ -392,6 +396,7 @@ local function LegInstruction(L)
     elseif L.kind == "teleport" then
         return ("Cast %s (to %s)"):format(SpellLabel(L.spell), L.toName), "teleport"
     elseif L.kind == "hearth" then
+        if HearthWait(L) > 0 then return "Wait for your Hearthstone", "hearth" end
         return "Use your Hearthstone", "hearth"
     end
     return "", "walk"
@@ -420,7 +425,13 @@ function NV.LegDetail(L)
     elseif L.kind == "teleport" then
         return "About 10 seconds to cast. Uses a Rune of Teleportation."
     elseif L.kind == "hearth" then
-        return "About 10 seconds to cast, if it is ready."
+        local wait = HearthWait(L)
+        if wait > 0 then
+            local seconds = math.ceil(wait)
+            return ("Ready in %d:%02d, then about 10 seconds to cast. Waiting is the fastest estimated route."):format(
+                math.floor(seconds / 60), seconds % 60)
+        end
+        return "About 10 seconds to cast."
     end
     return ""
 end
@@ -446,6 +457,7 @@ local function UpdateProgress()
     end
     local eta = (L.kind == "walk" and route) and (route.cost and route.cost / speed or prog.remaining / speed) or L.seconds
     if L.kind == "walk" and route then eta = prog.remaining / speed end
+    if L.kind == "hearth" and L.readyAt then eta = HearthWait(L) + 10 end
     for i = leg + 1, #journey.legs do eta = eta + journey.legs[i].seconds end
     prog.eta = eta
     local nxt = journey.legs[leg + 1]
