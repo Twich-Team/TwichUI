@@ -384,7 +384,7 @@ function MI.BuildWithdraw(opts)
                 local total = 0
                 for _, s in ipairs(list) do total = total + s.count end
                 local have = carried[id] or 0
-                local need = rule.keep - have
+                local need = opts.all and total or (rule.keep - have)
                 if opts.never and opts.never(id) then
                     Skip(id, facts, "never", total, rule)
                 elseif protectedBy then
@@ -437,6 +437,7 @@ function MI.BuildWithdraw(opts)
                         local e = { key = key, id = id, facts = facts, rule = rule.name, ruleId = rule.id, target = rule.keep, carried = have,
                             take = take, count = got, stacks = #take, short = short > 0 and short or nil, shortWhy = shortWhy, tab = tab,
                             leftOut = leftOut[key] or nil }
+                        if opts.all then e.target, e.all = nil, true end
                         out.entries[#out.entries + 1] = e
                         if not e.leftOut then out.stacks, out.items = out.stacks + #take, out.items + got end
                     end
@@ -478,7 +479,7 @@ MI.WithdrawGroup = WithdrawGroup
 
 -- The plan for what is in the bags now, with the settings as they are: the one place the game is read for a plan.
 -- context: "mail", "bank", "guild" or nil. leftOut: entry keys the player removed from this operation.
-function MI.CurrentPlan(context, leftOut)
+function MI.CurrentPlan(context, leftOut, manual)
     local pt = R.Perf.on and R.Perf.Start("inventory.plan")
     local bags = MI.ReadBags()
     local guildNow = false
@@ -490,9 +491,27 @@ function MI.CurrentPlan(context, leftOut)
             guildNow = nil
         end
     end
+    -- One-visit override: saved rules are never edited. Other transfer rules do not own a manual selection;
+    -- explicit Never transfer / Keep in bags rules and vendor restocking still protect deposits.
+    local rules = MI.Rules()
+    if manual then
+        local selected = MI.Rule(manual.ruleId)
+        if context ~= "bank" or not selected or selected.kind ~= "bank"
+            or (manual.dir ~= "deposit" and manual.dir ~= "withdraw") then
+            if pt then R.Perf.Stop(pt) end
+            return nil
+        end
+        selected.enabled, selected.flow = true, manual.dir
+        selected.keep = manual.dir == "withdraw" and MI.MAX_KEEP or 0
+        local filtered = { selected }
+        for _, rule in ipairs(rules) do
+            if rule.kind == "never" or rule.kind == "keep" then filtered[#filtered + 1] = rule end
+        end
+        rules = filtered
+    end
     local RS = R.Restock
     local plan = MI.BuildPlan({
-        stacks = bags.stacks, rules = MI.Rules(), never = MI.IsNever, resolve = MI.Resolve,
+        stacks = bags.stacks, rules = rules, never = MI.IsNever, resolve = MI.Resolve,
         problem = function(rule)
             -- an arrangement rule says where items belong in a guild bank, slot by slot; nothing here carries that out, so it
             -- never deposits anything: its items are listed as needing attention (and, as everywhere, no lower rule takes them)
@@ -508,10 +527,11 @@ function MI.CurrentPlan(context, leftOut)
         attach = tonumber(_G.ATTACHMENTS_MAX_SEND) or MI.ATTACH_FALLBACK,
         generation = MI.Generation(), made = GetTime and GetTime() or 0,
     })
+    plan.manual = manual and { ruleId = manual.ruleId, dir = manual.dir } or nil
     -- at the bank, what rules that withdraw would take out (the bank's bags are read only while it is open)
     if (context == "bank" or context == nil) and MI.Run and MI.Run.IsOpen("bank") then
-        local w = MI.BuildWithdraw({ kind = "bank", source = MI.ReadBank(), carried = bags.stacks, rules = MI.Rules(), never = MI.IsNever,
-            problem = function(rule) return MI.Problem(rule, guildNow) end, resolve = MI.Resolve, leftOut = leftOut, split = MI.SPLIT.bank })
+        local w = MI.BuildWithdraw({ kind = "bank", source = MI.ReadBank(), carried = bags.stacks, rules = rules, never = MI.IsNever,
+            problem = function(rule) return MI.Problem(rule, guildNow) end, resolve = MI.Resolve, leftOut = leftOut, split = MI.SPLIT.bank, all = manual and manual.dir == "withdraw" })
         for _, e in ipairs(w.skipped) do plan.skipped[#plan.skipped + 1] = e end
         for _, a in ipairs(w.attention) do
             local seen = false

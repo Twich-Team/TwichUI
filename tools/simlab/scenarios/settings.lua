@@ -753,4 +753,7 @@ if PTR_IssueReporter then
     PTR_IssueReporter:ClearAllPoints()
     PTR_IssueReporter:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 8, -200)
 end
+if key == "magicInventory" and params.bankReview then
+    Lab.Step("character bank review", function() Lab.BankReview(params.bankReview) end)
+end
 Lab.Finish()
