@@ -56,6 +56,7 @@ local JUMP = 120               -- yards between two readings that count as a jum
 local ARRIVED_HOLD = 4         -- seconds "Arrived" stays before navigation ends
 local RETRY = { 5, 10, 20, 30 } -- seconds before trying a failed plan again (it also waits for you to move)
 local NAME_MAX = 60
+local ARROW_AHEAD = 20       -- yards ahead on the current straight stretch; never skip a bend
 
 local sqrt, atan2, abs, floor, pi = math.sqrt, math.atan2, math.abs, math.floor, math.pi
 
@@ -320,6 +321,12 @@ local function Remaining(px, py)
     return d, d + rest
 end
 
+-- Only redundant points on the same straight line can be passed without reaching a corner.
+local function Straight(ax, ay, bx, by)
+    local dot = ax * bx + ay * by
+    return dot > 0 and abs(ax * by - ay * bx) <= dot * 0.000001
+end
+
 -- The corner the player has reached, by order: within reach of the next corner, or past it along the next leg and
 -- nearer that leg than the current one. At most three corners in one update.
 local function Advance(px, py)
@@ -331,9 +338,10 @@ local function Advance(px, py)
         if sqrt((px - cx) ^ 2 + (py - cy) ^ 2) <= reach then
             seg = seg + 1
         else
-            local dCur = SegDist(px, py, xs[seg], ys[seg], cx, cy)
+            local dCur, along = SegDist(px, py, xs[seg], ys[seg], cx, cy)
             local dNext, t = SegDist(px, py, cx, cy, xs[seg + 2], ys[seg + 2])
-            if t > 0 and dNext + 1 < dCur and dNext < NP.Get("offRouteYards") then
+            local pastStraight = along >= 1 and Straight(cx - xs[seg], cy - ys[seg], xs[seg + 2] - cx, ys[seg + 2] - cy)
+            if t > 0 and (dNext + 1 < dCur or pastStraight) and dNext < NP.Get("offRouteYards") then
                 seg = seg + 1
             else
                 return
@@ -903,15 +911,34 @@ function NV.Snapshot()
     }
 end
 
--- The point the arrow should point at: the next corner of the route, or (labelled by the caller) the destination itself
+-- The arrow aims ahead of the player's projection on the route, stopping at bends and the walk's end.
+-- With no route it can point at (labelled by the caller) the destination itself
 -- when there is no route but you are on its continent. Returns x, y, kind ("route" or "direct"), or nil.
 function NV.Target()
     if not (dest and pos.ok) then return nil end
     local L = CurLeg()
     if L and L.kind ~= "walk" and (state == "navigating" or state == "recalculating") then return nil end   -- nothing to walk toward
     if route and (state == "navigating" or state == "recalculating") and pos.cont == route.map then
-        local i = math.min(seg + 1, route.n)
-        return route.xs[i], route.ys[i], "route"
+        local xs, ys = route.xs, route.ys
+        local i = math.min(seg, route.n - 1)
+        local _, t = SegDist(pos.x, pos.y, xs[i], ys[i], xs[i + 1], ys[i + 1])
+        t = math.max(0, math.min(1, t))
+        local x, y = xs[i] + (xs[i + 1] - xs[i]) * t, ys[i] + (ys[i + 1] - ys[i]) * t
+        local ahead = ARROW_AHEAD
+        -- Bounded even for routes with repeated or very densely spaced points.
+        for _ = 1, 8 do
+            local dx, dy = xs[i + 1] - x, ys[i + 1] - y
+            local distance = sqrt(dx * dx + dy * dy)
+            if distance > ahead then return x + dx * ahead / distance, y + dy * ahead / distance, "route" end
+            x, y = xs[i + 1], ys[i + 1]
+            ahead = ahead - distance
+            if i >= route.n - 1 then break end
+            local ax, ay = xs[i + 1] - xs[i], ys[i + 1] - ys[i]
+            local bx, by = xs[i + 2] - x, ys[i + 2] - y
+            if (ax ~= 0 or ay ~= 0) and not Straight(ax, ay, bx, by) then break end
+            i = i + 1
+        end
+        return x, y, "route"
     end
     if state == "noroute" and pos.cont == dest.continent then return dest.wx, dest.wy, "direct" end
     return nil
