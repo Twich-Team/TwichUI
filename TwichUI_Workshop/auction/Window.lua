@@ -1,11 +1,17 @@
--- AH-1b: an explicitly opened companion preview. No dependency on AuctionHost,
--- Blizzard frames, auctioneer interaction or transaction APIs. Nothing opens on load.
+-- One lazy five-page shell for standalone preview and Host-owned auctioneer mode.
+-- Native geometry/session lifecycle belongs exclusively to AuctionHost.
 local R, W = TwichUI, TwichUI.Workshop
 local UI = W.UI
 local A = { pages = {}, views = {}, nav = {} }
 W.AuctionUI = A
 local root, active = nil, "browse"
+local context, hostVisit = "preview", nil
 local epoch, scheduled, renders = 0, false, 0
+local refreshTimer
+local function StopRefresh()
+    if refreshTimer then refreshTimer:Cancel(); refreshTimer = nil end
+    scheduled = false
+end
 local destinations = {
     { "browse", "Browse", "diagOverview", "Browse Auctions" },
     { "shopping", "Shopping", "npc:reagent-pouch", "Shopping List" },
@@ -18,15 +24,19 @@ local events = { "DISPLAY_SIZE_CHANGED", "UI_SCALE_CHANGED" }
 function A.Register(key, def) A.pages[key] = def end
 function A.Frame() return root end
 function A.Mode() return active end
+function A.Context() return context end
 function A.IsShown() return root ~= nil and root:IsShown() end
 function A.Page(key) return A.views[key] end
-function A.Note(text) if root then root.note:SetText("Preview · Replacement off · " .. (text or "Transactions unavailable")) end end
+function A.Note(text)
+    if root then root.note:SetText((context == "auctioneer" and "TwichUI Auction House · " or "Preview · Replacement off · ") .. (text or "Transactions unavailable")) end
+end
 function A.Schedule()
     if not A.IsShown() or scheduled then return end
     scheduled = true
     local mine = epoch
-    C_Timer.After(0.15, function()
+    refreshTimer = C_Timer.NewTimer(0.15, function()
         if mine ~= epoch then return end
+        refreshTimer = nil
         scheduled = false
         A.Render()
     end)
@@ -53,6 +63,7 @@ function A.Render()
         root.failure:SetText("This page could not be displayed. Close the preview and try again. Blizzard's Auction House is unchanged.")
         root.failure:Show()
         R.Fault("auction preview", err)
+        if context == "auctioneer" then R.AuctionHost.ToBlizzard() end
     end
 end
 local function Page(key)
@@ -102,7 +113,8 @@ function A.Go(key)
         button.on = k == key; button.sel:SetShown(button.on)
         UI.Paint(button.text, button.on and UI.K.text or UI.K.textDim)
     end
-    if page then A.Render() end
+    if page then A.Render()
+    elseif context == "auctioneer" then R.AuctionHost.ToBlizzard() end
     return page ~= nil
 end
 local function Band(frame)
@@ -192,11 +204,17 @@ local function Build()
     root.close = F.Close(header, function() root:Hide() end)
     root.close:SetSize(30, 30); CL.Control(root.close); root.close:SetPoint("RIGHT", -8, 0)
     root.blizzard = UI.Button(header, "Blizzard Auction House", 220, "secondary", function()
-        root:Hide()
-        R.Print("Auction House replacement is not enabled. Preview closed; Blizzard's Auction House is unchanged.")
+        if context == "auctioneer" then R.AuctionHost.ToBlizzard()
+        else
+            root:Hide()
+            R.Print("Auction House replacement is not enabled. Preview closed; Blizzard's Auction House is unchanged.")
+        end
     end, 32)
     root.blizzard:SetPoint("RIGHT", root.close, "LEFT", -10, 0)
-    UI.Tip(root.blizzard, "Blizzard Auction House", "Replacement mode is not enabled. This closes only the preview. Visit an auctioneer normally to use Blizzard's window.")
+    UI.TipFn(root.blizzard, "Blizzard Auction House", function()
+        return context == "auctioneer" and "Return to Blizzard's Auction House during this visit."
+            or "Closes only the preview. Visit an auctioneer normally to use Blizzard's window."
+    end)
     local nav = CreateFrame("Frame", nil, root)
     nav:SetPoint("TOPLEFT", 14, -78); nav:SetPoint("BOTTOMLEFT", 14, 42); nav:SetWidth(205)
     UI.Panel(nav, "espresso"); root.nav = nav
@@ -231,26 +249,52 @@ local function Build()
     root.note:SetText("Standalone preview  •  Replacement off  •  Transactions unavailable")
     root:SetScript("OnEvent", function() StopSizing(); R.FitToScreen(root); A.Schedule() end)
     root:HookScript("OnShow", function()
-        epoch = epoch + 1; scheduled = false
+        epoch = epoch + 1; StopRefresh()
         R.FitToScreen(root)
         for _, event in ipairs(events) do root:RegisterEvent(event) end
         A.Go(active)
     end)
     root:HookScript("OnHide", function()
-        epoch = epoch + 1; scheduled = false; StopSizing(); root:UnregisterAllEvents()
+        epoch = epoch + 1; StopRefresh(); StopSizing(); root:UnregisterAllEvents()
         for key, page in pairs(A.views) do
             Release(key, page)
         end
+        local id = hostVisit
+        context, hostVisit = "preview", nil
+        if id and R.AuctionHost then R.AuctionHost.InterfaceHidden(id) end
     end)
     ResizeGrip()
     A.ready = true
     if UISpecialFrames then tinsert(UISpecialFrames, "TwichUIAuctionPreview") end
 end
-function A.Show(initialMode)
+-- Build hidden before Host leases any native geometry. No render, query or
+-- Market load is required. Page objects remain pooled across switches/visits.
+function A.Prepare()
     if not W.Active() then return false, "EXPERIMENTAL_OFF" end
     if InCombatLockdown and InCombatLockdown() then return false, "COMBAT" end
     if not root then R.Perf.Call("auction.previewBuild", Build) end
     if not A.ready then return false, "INCOMPLETE" end
+    return Page("browse") ~= nil
+end
+function A.ShowIntegrated(id)
+    local h = R.AuctionHost
+    if not h or not h.IsCurrent(id) or h.Snapshot().state ~= "preparing" or not h.Snapshot().leased then return false end
+    if A.IsShown() then A.Hide() end
+    context, hostVisit = "auctioneer", id
+    active = "browse" -- switching never implicitly selects/loads an external Market
+    A.Note()
+    root:Show()
+    return A.IsShown() and context == "auctioneer" and A.Page(active) and not A.Page(active).failed and not root.failure:IsShown()
+end
+function A.Show(initialMode)
+    if not W.Active() then return false, "EXPERIMENTAL_OFF" end
+    if InCombatLockdown and InCombatLockdown() then return false, "COMBAT" end
+    -- A preview request while integrated is already open must not detach Host.
+    if context == "auctioneer" then return true end
+    if not root then R.Perf.Call("auction.previewBuild", Build) end
+    if not A.ready then return false, "INCOMPLETE" end
+    context, hostVisit = "preview", nil
+    A.Note()
     active = initialMode == "market" and "market" or "browse"
     if root:IsShown() then A.Go(active) else root:Show() end
     return true
@@ -266,7 +310,7 @@ function A.Snapshot()
         if p.job then jobs = jobs + 1 end
         if A.IsShown() and p.listening then listeners = listeners + (p.eventCount or 2) end
     end
-    local out={ reads = W.AuctionReads and W.AuctionReads.Pending() or 0, liveResults = W.AuctionReads and W.AuctionReads.snapshot and #W.AuctionReads.snapshot.rows or 0, shown = A.IsShown() and 1 or 0, pages = pages, events = listeners, rows = rows, results = results, jobs = jobs, subscriptions = (W.Strategy.ListenerCount and W.Strategy.ListenerCount() or 0) + (W.Storage.ListenerCount and W.Storage.ListenerCount() or 0), renders = renders, sizing = root and root.sizing and 1 or 0 }
+    local out={ timers = refreshTimer and 1 or 0, reads = W.AuctionReads and W.AuctionReads.Pending() or 0, liveResults = W.AuctionReads and W.AuctionReads.snapshot and #W.AuctionReads.snapshot.rows or 0, shown = A.IsShown() and 1 or 0, pages = pages, events = listeners, rows = rows, results = results, jobs = jobs, subscriptions = (W.Strategy.ListenerCount and W.Strategy.ListenerCount() or 0) + (W.Storage.ListenerCount and W.Storage.ListenerCount() or 0), renders = renders, sizing = root and root.sizing and 1 or 0 }
     for k,v in pairs(W.AuctionBrowseData and W.AuctionBrowseData.Stats() or {}) do out["catalog_"..k]=v end
     return out
 end

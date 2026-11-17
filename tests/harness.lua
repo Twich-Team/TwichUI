@@ -56,6 +56,12 @@ function MakeClient(charName, addons)
   env.geterrorhandler = function() return function(e) print("["..charName.."] ERROR: "..tostring(e)) end end
   -- Short timers run on the next FlushTimers(); longer ones (timeouts, delayed hellos) wait for RunLongTimers(seconds).
   env.C_Timer = {After = function(d, fn) if d <= 1 then table.insert(TIMERS, fn) else table.insert(LONG_TIMERS, {d = d, fn = fn}) end end, NewTicker = function(_, fn) local t = {fn = fn}; function t:Cancel() self.cancelled = true end; TICKERS = TICKERS or {}; table.insert(TICKERS, t); return t end}
+  env.C_Timer.NewTimer = function(delay, fn)
+    local timer = { cancelled = false }
+    function timer:Cancel() self.cancelled = true end
+    env.C_Timer.After(delay, function() if not timer.cancelled then fn() end end)
+    return timer
+  end
   env.UnitGUID = function() return "Player-1-" .. charName end
   env.IsInGroup = function() return GROUP ~= nil and GROUP[charName] ~= nil end
   env.IsInRaid = function() return false end
