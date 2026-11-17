@@ -341,7 +341,7 @@ local function Draw()
             local out = g.dir == "withdraw"
             local free = Run.IsOpen(g.kind) and Run.FreeSlots(out and "bags" or g.kind, g.where)
             sentence = Plural(g.stacks, "stack") .. (free and ("  \194\183  %d free %s %s"):format(free, free == 1 and "slot" or "slots", out and "in your bags" or "there") or "")
-            if out then sentence = sentence .. "\nWhole stacks only, never past a rule's target." end
+            if out then sentence = sentence .. "\nStacks are split when needed, never past a rule's target." end
             if free and free < g.stacks then sentence = sentence .. "\nNot all of these fit: it stops when the room runs out." end
         end
         Heading(DestText(g), sentence, label, enabled, why, onClick)

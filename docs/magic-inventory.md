@@ -116,20 +116,19 @@ needs: without one it can't be turned on, "no-target"). Decided per item, for th
 - **Protections:** the Never transfer list and an enabled Never transfer rule block withdrawals too (nothing on them moves either way);
   the rule's own Never include list; a locked stack or one whose lock the game didn't say. A soulbound item may come out of your
   own bank (it is going to you).
-- **How much:** target minus what the bags carry now. **Whole stacks only, never past the target:** the bank's stacks are taken
-  largest first while each still fits. With 25 carried, a target of 40 and stacks of 20, 20, 10 and 5, the 10 and the 5 come out
-  (40). With 30 carried and only stacks of 20, nothing comes out (50 would pass 40), and the review says "Short by 10: only whole
-  stacks are taken, and the next stack would go over 40". What isn't in the bank stays missing.
+- **How much:** target minus what the bags carry now, never past the target. Whole stacks that fit are preferred;
+  when needed, the character bank and guild panel split a stack for the remaining amount. With 30 carried,
+  a target of 40 and a bank stack of 20, 10 come out and 10 remain in the bank. What isn't in the bank stays missing.
 - **No ping-pong:** every enabled rule that withdraws counts its target as a keep amount for the item (Precedence, step 4), so a
   deposit or mail rule never sends away what a withdrawing rule tops up. A rule that only withdraws never owns an item for deposits
   or mail; a balance rule owns it as a depositing rule does.
 - **Balance:** above the target it deposits (as Deposit extras), below it withdraws; never both for one item at once.
 
 **At your bank** (`Run.lua`, the review's "Withdraw from your bank" group): only while the bank is open (its bags are read then:
-`C_Bank.FetchPurchasedBankTabIDs`, `C_Container`); the settings' Preview lists no withdrawals. Each stack: found again in the bank
+`C_Bank.FetchPurchasedBankTabIDs`, `C_Container`); the settings' Preview includes withdrawals while the character bank is open. Each stack: found again in the bank
 by item and count, judged again, and **skipped** when the bags now carry so much that it would pass the target (the bags may change
 after the review); then picked up and put on a bag stack of the same item with room, else an empty slot in a bag that can hold it.
-Confirmed when the bank slot no longer holds it and the bag slot shows the right count. No room: "your bags are full", it stops.
+Confirmed when the bank slot shows the expected remainder (or is empty) and the bag slot shows the right count. No room: "your bags are full", it stops.
 
 **At a guild bank** (the panel's **Withdraw**, shown with an enabled withdrawing rule whose tab is in this guild; GuildPrep reads the
 bank for it as it does for an arrangement): `MI.CurrentGuildPlan("withdraw")` plans one move a stack from the rule's tab to the bags;
@@ -164,10 +163,10 @@ rights, allowance, full bags, a change mid-run), the Withdraw button in `tests/t
    takes what a bank rule above owns (shown as "Reserved by ..."), and an unavailable destination (no recipient here,
    another guild) never reroutes anything; the owning rule is listed as needing attention.
 
-**Whole stacks only.** Eligible stacks are taken largest first while they fit under (carried − keep); a stack that would
+**Deposit quantities.** Eligible stacks are taken largest first while they fit under (carried − keep); a stack that would
 pass the keep amount stays, and the review says how many more than the keep amount stay. With splitting allowed
-(`MI.SPLIT`, off everywhere) the last stack would be split to meet the keep amount exactly; the planner supports it and the
-tests cover it, but no adapter splits.
+(`MI.SPLIT.bank` is enabled) the last stack is split to meet the keep amount exactly. Mail and the older guild
+review still move whole stacks; the guild panel uses its own split-capable adapter.
 
 ## Moving (`inventory/Run.lua`)
 

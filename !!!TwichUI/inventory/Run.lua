@@ -233,11 +233,13 @@ end
 ---------------------------------------------------------------------------
 local function SlotKey(bag, slot) return bag * 1000 + slot end
 
+local CarriedCount
+
 local function Resolve(r, step)
     local rule = step.entry and MI.Rule(step.entry.ruleId)
     if not rule then return nil, "stale" end
     local function Usable(s)
-        if not s or s.id ~= step.id or s.count ~= step.count or r.used[SlotKey(s.bag, s.slot)] then return false end
+        if not s or s.id ~= step.id or s.count ~= (step.stack and step.stack.count or step.count) or r.used[SlotKey(s.bag, s.slot)] then return false end
         return true
     end
     local s = MI.ReadSlot(step.bag, step.slot)
@@ -255,6 +257,7 @@ local function Resolve(r, step)
     if MI.IsNever(s.id) then return nil, "never" end
     local why = MI.StackProblem(s, r.kind, rule)
     if why then return nil, why, s end
+    if r.kind == "bank" and step.entry and CarriedCount(s.id) - step.count < step.entry.keep then return nil, "stale" end
     return s
 end
 
@@ -264,8 +267,12 @@ local function PutBack()
 end
 
 -- Picks up a stack. Returns true when the cursor now holds exactly that item.
-local function PickUp(s)
-    C_Container.PickupContainerItem(s.bag, s.slot)
+local function PickUp(s, count)
+    if count and count < s.count then
+        C_Container.SplitContainerItem(s.bag, s.slot, count)
+    else
+        C_Container.PickupContainerItem(s.bag, s.slot)
+    end
     if CursorItem() == s.id then return true end
     PutBack()   -- whatever is on the cursor now came from this pickup (it was empty before)
     return false
@@ -659,7 +666,7 @@ end
 local function BagTarget(r, s) return BankTarget(r, s, CarriedBags()) end
 
 -- How many of an item the bags hold now (a light count: no item details).
-local function CarriedCount(id)
+CarriedCount = function(id)
     local n = 0
     for bag = 0, MI.LastBag() do
         for slot = 1, C_Container.GetContainerNumSlots(bag) or 0 do
@@ -677,7 +684,7 @@ local function ResolveWithdraw(r, step)
     local rule = step.entry and MI.Rule(step.entry.ruleId)
     if not rule or not MI.Withdraws(rule) or rule.keep ~= step.target then return nil, "stale" end
     local function Usable(x)
-        return x ~= nil and x.id == step.id and x.count == step.count and not r.used[SlotKey(x.bag, x.slot)]
+        return x ~= nil and x.id == step.id and x.count == (step.stack and step.stack.count or step.count) and not r.used[SlotKey(x.bag, x.slot)]
     end
     local s = MI.ReadSlot(step.bag, step.slot)
     if not Usable(s) then
@@ -694,7 +701,7 @@ local function ResolveWithdraw(r, step)
     if MI.IsNever(s.id) then return nil, "never" end
     if s.locked == true then return nil, "locked", s end
     if s.locked == nil then return nil, "lock-unknown", s end
-    if CarriedCount(s.id) + s.count > step.target then return nil, "w-over", s end
+    if CarriedCount(s.id) + step.count > step.target then return nil, "w-over", s end
     return s
 end
 MI.REASON["w-over"] = "You carry enough now: taking it would go over the target"
@@ -770,7 +777,7 @@ local function MoveSettled(r, timedOut)
     local w = r.waiting
     if not w then return end
     local src = MI.ReadSlot(w.s.bag, w.s.slot)
-    local srcGone = not (src and src.id == w.s.id and src.count == w.s.count)
+    local srcGone = not (src and src.id == w.s.id and src.count == w.sourceCount)
     local arrived
     if r.kind == "bank" then
         local info = C_Container.GetContainerItemInfo(w.bag, w.slot)
@@ -779,7 +786,9 @@ local function MoveSettled(r, timedOut)
         local id, count = GuildSlotItem(w.bag, w.slot)
         arrived = id == w.s.id and count == w.s.count
     end
-    if srcGone and arrived then
+    local remaining = w.sourceCount - w.s.count
+    local sourceConfirmed = remaining == 0 and not src or remaining > 0 and src and src.id == w.s.id and src.count == remaining
+    if sourceConfirmed and arrived then
         r.waiting = nil
         Record(r, "confirmed", w.step)
         r.index = r.index + 1
@@ -820,9 +829,12 @@ DepositNext = function(r)
         r.index = r.index + 1
         return DepositNext(r)
     end
+    local moved = {}
+    for k, v in pairs(s) do moved[k] = v end
+    moved.count = step.count
     local bag, slot, before
-    if withdraw then bag, slot, before = BagTarget(r, s)
-    elseif r.kind == "bank" then bag, slot, before = BankTarget(r, s)
+    if withdraw then bag, slot, before = BagTarget(r, moved)
+    elseif r.kind == "bank" then bag, slot, before = BankTarget(r, moved)
     else bag, slot, before = GuildTarget(r, r.where.tab) end
     if not bag then
         for i = r.index, #r.steps do Record(r, "skipped", r.steps[i], withdraw and "No room left in your bags" or "No room left") end
@@ -831,7 +843,7 @@ DepositNext = function(r)
     end
     if not CursorFree() then Finish(r, "cursor") return end
     local pt = R.Perf.on and R.Perf.Start("inventory.step")
-    if not PickUp(s) then
+    if not PickUp(s, step.count) then
         if pt then R.Perf.Stop(pt) end
         Record(r, "failed", step, "The game didn't pick it up")
         Finish(r, "move-failed")
@@ -850,7 +862,7 @@ DepositNext = function(r)
     if pt then R.Perf.Stop(pt) end
     token = token + 1
     local t = token
-    r.waiting = { step = step, s = s, bag = bag, slot = slot, before = before, token = t }
+    r.waiting = { step = step, s = moved, sourceCount = s.count, bag = bag, slot = slot, before = before, token = t }
     Notify("progress")
     C_Timer.After(MOVE_WAIT, function()
         if r == run and r.waiting and r.waiting.token == t then MoveSettled(r, true) end

@@ -66,7 +66,7 @@ MI.KIND_LABEL = {
 MI.TRANSFER = { mail = true, bank = true, guild = true }   -- kinds that move items (keep and never only protect)
 MI.NEEDS_DEST = { mail = true, guild = true }
 
--- Which way a bank or guild bank rule moves items. Withdrawing takes whole stacks only and never goes over the rule's
+-- Which way a bank or guild bank rule moves items. Withdrawing never goes over the rule's
 -- keep amount (its target); the item has to be in that bank.
 MI.HAS_FLOW = { bank = true, guild = true }
 MI.FLOW_ORDER = { "deposit", "withdraw", "balance" }

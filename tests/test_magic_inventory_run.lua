@@ -434,7 +434,7 @@ Check(Group(plan, "deposit") == nil, "a rule that only withdraws deposits nothin
 g = Group(plan, "withdraw")
 Check(g and #g.steps == 2 and g.items == 15, "15 to reach 40: the 10 and the 5, never a stack of 20")
 Check(#c.PICKUPS == 0, "planning picked nothing up")
-Check(MI.CurrentPlan(nil).groups[1] == nil, "the preview with the bank unread lists no withdrawal")
+Check(Group(MI.CurrentPlan(nil), "withdraw") ~= nil, "the settings preview includes withdrawals while the bank is open")
 ok = Run.Deposit(plan, g)
 Check(ok and Run.Current() and Run.Current().dir == "withdraw", "Withdraw starts at the player's click")
 c.Settle(); c.Settle()
@@ -445,16 +445,18 @@ Check(Said("withdrew from your bank"), "one summary line says so")
 plan = MI.CurrentPlan("bank")
 Check(Group(plan, "withdraw") == nil and Group(plan, "deposit") == nil, "at the target: nothing either way")
 
--- the next stack would go over: nothing is taken, and the review says why
+-- A larger bank stack is split to reach the target exactly.
 Reset()
 c.OpenBank()
 c.Bags({ [0] = { size = 16, slots = { [1] = { 2447, 20 }, [2] = { 2447, 10 } } }, [6] = { size = 8, slots = { [1] = { 2447, 20 } } } })
 Rule({ name = "Keep 40 Peacebloom", cats = { "7:9" }, flow = "withdraw", keep = 40 })
 plan = MI.CurrentPlan("bank")
-Check(Group(plan, "withdraw") == nil, "a stack of 20 would make 50: not taken")
-local why
-for _, e in ipairs(plan.skipped) do if e.withdraw then why = e.text end end
-Check(why and why:find("Short by 10") and why:find("go over 40"), "it says so: " .. tostring(why))
+g = Group(plan, "withdraw")
+Check(g and g.items == 10 and g.steps[1].partial, "only the missing 10 are planned from the stack of 20")
+Run.Deposit(plan, g)
+c.Settle()
+Check(Run.CarriedCount(2447) == 40 and c.BAGS[6].slots[1].count == 10, "partial withdrawal leaves the remainder in the bank")
+Check(Run.Last().results.confirmed[1] ~= nil, "partial withdrawal confirmed from both sides")
 
 -- not enough in the bank: takes what there is
 Reset()
