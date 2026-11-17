@@ -450,3 +450,21 @@ Market C1 scopes: `auction.chartPrepare` measures evidence preparation and
 `auction.chartDraw` measures viewport geometry/rendering in
 `TwichUI_Workshop/auction/AdvancedChart.lua`. Hover uses binary search and updates
 only when the selected record changes; no history decoding occurs there.
+
+### AH-7A supervised native integration
+
+`auction.switch` (`Perf.Call`, layout) maps to `auction/Host.lua:Switch`, only on a
+test-enabled native opening or explicit return action. Existing `auction.proof`
+measures native activation/restoration; `auction.proofWatch` monitors an owned
+proof or integrated visit at 0.25 s. Existing `workshop.load` remains the load scope.
+
+Read-only gauges: `auction.hostState` (0 Blizzard, 1 preparing, 2 TwichUI,
+3 restoring, 4 recovery), `auction.hostPending` (0/1 initialization timer),
+`auction.host_activations`, `auction.host_failed`, `auction.host_restoreFailed`,
+`auction.host_switches`; `auction.host_openMS`, `auction.host_firstLoadMS`,
+`auction.host_loadMS`, `auction.host_activateMS`, `auction.host_restoreMS`,
+`auction.host_switchMS` (last measured milliseconds, with first load retained).
+Opening latency uses game elapsed time; operation costs use `debugprofilestop`.
+The existing preview pools/jobs/subscriptions/listeners describe both contexts;
+`auction.previewTimers` counts the cancellable coalesced refresh (0/1).
+No gauge builds or loads anything. See the [acceptance procedure](workshop/auction-house/native-integration.md).
