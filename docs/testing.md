@@ -345,3 +345,10 @@ allowlist, and complete offline discovery otherwise. It is not a source-to-group
 analyzer. This guidance changes neither CI selection nor test coverage. Automatic
 ownership inference and its unmapped/shared-file negative cases are deferred to a
 separately reviewed implementation.
+
+## Evidence retention
+
+See [test evidence retention](evidence/README.md) for bounded CI diagnostics,
+permanent evidence, historical path/hash mappings and rollback. Generated outputs
+remain ignored; CI refuses newly tracked files under `test-output/`. CI artifacts
+expire after 14 days and must not become permanent documentation dependencies.

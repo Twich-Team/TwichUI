@@ -25,6 +25,20 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Refuse new tracked test outputs
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if git rev-parse --verify "${BASE}^{commit}" >/dev/null 2>&1; then
+            added=$(git diff --no-renames --name-only --diff-filter=A "$BASE" HEAD -- test-output/)
+            if [ -n "$added" ]; then
+              echo "Generated evidence belongs in artifacts; retain selected permanent evidence under docs/evidence/."
+              printf '%s\n' "$added"
+              exit 1
+            fi
+          else
+            echo "No comparable base; tracked-output addition check unavailable."
+          fi
       - name: Install Lua
         run: |
           sudo apt-get update -qq
@@ -33,6 +47,18 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: python3 -I tools/ci_verify.py --base "$BASE"
+      - name: Collect verification diagnostics
+        if: ${{ always() }}
+        run: python3 -I tools/collect_verification_evidence.py --out "$RUNNER_TEMP/verification-evidence"
+      - name: Retain bounded verification diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: verification-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/verification-evidence/
+          if-no-files-found: warn
+          overwrite: false
+          retention-days: 14
 
   internal:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
