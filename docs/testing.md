@@ -251,7 +251,7 @@ SIMLAB_ONLY='shell replay wrong' bash tools/simlab/run.sh auctionpreview
 
 The new AH filter validates names, refuses duplicates and requires `shell` when
 `replay` or `wrong` is selected. Selected verdicts read only selected artifacts and
-print FOCUSED ONLY. Default invocation executes all 44 launches, retaining every
+print FOCUSED ONLY. Default invocation executes all 48 launches (including four C1 chart review poses), retaining every
 original expectation and adding three Companion compatibility poses. Narrow AH captures preserve every check for each selected
 launch; they do not certify omitted resizing, scaling, metadata/error and long-list
 poses. Use `auction-house` or full/release for the complete existing catalog.

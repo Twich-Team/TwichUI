@@ -199,3 +199,17 @@ Changed files (plus the approved evidence in this directory):
 - `tools/simlab/auctionpreview.sh`
 - `tools/simlab/auctionpreview_verdict.py`
 - `tools/simlab/scenarios/auctionpreview.lua`
+
+## CI catalog follow-up
+
+The first PR CI run passed 259 offline modules and failed two infrastructure tests:
+`test_test_runner.py` still expected the old 44-pose catalog, and `test_mutate.py`
+found three mutation patterns tied to the replaced chart. The count now remains exact
+at 48 and explicitly checks the four C1 poses and replay/negative-control inclusion.
+Mutation entries now target the current resize render path and complete-window
+preparation. The retired local-cap mutant is replaced with loss of local chart evidence,
+matching C1's intentional removal of that cap. All three refreshed mutations are killed
+by assertions in their existing focused tests; all 373 catalog entries match and parse.
+Runner tests: 16 passed; mutation harness tests: 29 passed. This follow-up changes no
+runtime code or visual geometry, so the retained gallery and performance evidence still
+represent the implementation. The GitHub PR checks record the complete CI rerun.
