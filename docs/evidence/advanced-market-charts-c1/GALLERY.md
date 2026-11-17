@@ -1,5 +1,7 @@
 # C1 before/after gallery
 
+Current refinement: [C1.1 report](c11/README.md) and [updated comparison gallery](c11/GALLERY.md). This document retains the original C1 evidence.
+
 [Implementation, measurements and acceptance limits](README.md).
 These are unedited simulator captures over synthetic data. Native game fonts, currency
 icons and game assets are unavailable; this is structural owner review, not Forever

@@ -1,5 +1,7 @@
 # Advanced Market Charts — C1 owner review
 
+Current refinement: [C1.1 report](c11/README.md) and [updated comparison gallery](c11/GALLERY.md). This document retains the original C1 evidence.
+
 Presentation-only work based on protected main `36cdb04b35ca132650673463ecc09a0bbeadb6dc`.
 No merge, deployment, release, beta.5 distribution, U1/U2 or M2 changes are authorized by this PR.
 

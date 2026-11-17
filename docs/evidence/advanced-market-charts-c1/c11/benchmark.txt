@@ -1,0 +1,12 @@
+C1 init 1392.07us objects 3/49/10/0
+C1 mock-heap-per-full=375.388KiB mock-heap-per-idle=0.000KiB
+C1 prep=116.68 full=2936.80 refresh=2361.99 hover=5.37 idle=0.57 drag=3.55 select-reset=4424.49 resize=2329.16 unchanged-scale=0.27 retained=0.219KiB
+C1 peak 3/960/10/0 pool=911
+C1.1-native init 328.33us objects 4/50/12/0
+C1.1-native mock-heap-per-full=167.678KiB mock-heap-per-idle=0.219KiB
+C1.1-native prep=90.50 full=850.82 refresh=50.15 hover=8.09 idle=2.01 drag=1.52 select-reset=1105.08 resize=643.28 unchanged-scale=0.28 retained=0.219KiB
+C1.1-native peak 4/170/12/238 pool=358
+C1.1-raster init 328.63us objects 4/50/12/0
+C1.1-raster mock-heap-per-full=414.795KiB mock-heap-per-idle=0.219KiB
+C1.1-raster prep=75.34 full=3829.60 refresh=52.01 hover=7.94 idle=2.36 drag=1.67 select-reset=3891.24 resize=2205.82 unchanged-scale=0.29 retained=0.219KiB
+C1.1-raster peak 4/961/12/0 pool=911

@@ -1,0 +1,17 @@
+{
+  "rectangle": [
+    620,
+    562,
+    1472,
+    720
+  ],
+  "dimensions": [
+    852,
+    158
+  ],
+  "resampling": false,
+  "sources": {
+    "c1": "parent directory original C1 screenshots",
+    "c11": "unedited captures in this directory"
+  }
+}
