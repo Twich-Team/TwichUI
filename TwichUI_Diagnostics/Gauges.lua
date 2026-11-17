@@ -312,6 +312,26 @@ for _, g in ipairs(G) do
     Perf.Gauge(g[1], { label = g[2], kind = g[3], group = g[4], unit = "count", read = g[5], builtin = true })
 end
 
+-- Keep Host metrics out of the legacy capture's first-40 budget. The scoped
+-- Auction House preset selects these builtin gauges without displacing existing
+-- core/settings measurements. All reads are passive snapshots.
+for _, entry in ipairs({ {"hostState", "stateCode"}, {"hostPending", "pending"},
+    {"host_activations", "activations"}, {"host_failed", "failed"}, {"host_restoreFailed", "restoreFailed"},
+    {"host_switches", "switches"}, {"host_openMS", "openMS"}, {"host_loadMS", "loadMS"},
+    {"host_firstLoadMS", "firstLoadMS"}, {"host_activateMS", "activateMS"},
+    {"host_restoreMS", "restoreMS"}, {"host_switchMS", "switchMS"} }) do
+    local field = entry[2]
+    Perf.Gauge("auction." .. entry[1], { label = "Auction House " .. field, kind = "state", group = "auction", builtin = true,
+        unit = field:match("MS$") and "ms" or "count", read = function()
+            local s = Snap("AuctionHost")
+            return s and DX.Num(s[field]) or 0
+        end })
+end
+for _, field in ipairs({"pages", "events", "rows", "jobs", "timers", "subscriptions", "reads"}) do
+    Perf.Gauge("auction.lifecycle_" .. field, { label = "Auction House " .. field, kind = "state", group = "auction", builtin = true,
+        unit = "count", read = AuctionPreview(field) })
+end
+
 -- The gauges a capture reads (groups nil: all), in registration order.
 function DX.GaugeList(groups)
     local out = {}

@@ -10,6 +10,7 @@ local controlReady = false
 local enabled, confirmed, visiting = false, false, false
 local visit, request, pending = 0, 0, nil
 local state = "blizzard"
+local stateCodes = { blizzard = 0, preparing = 1, twichui = 2, restoring = 3, recovery = 4 }
 local openedAt
 local stats = { activations = 0, failed = 0, restoreFailed = 0, switches = 0 }
 local UpdateControl
@@ -270,7 +271,7 @@ end
 function H.Snapshot()
     return { mode = not lease and "blizzard" or (reason == "parked" and "parked" or "restore-pending"),
         reason = reason, leased = lease ~= nil, watching = ticker ~= nil, control = control ~= nil,
-        state = state, enabled = enabled, nativeConfirmed = confirmed, visit = visit, visiting = visiting,
+        state = state, stateCode = stateCodes[state], enabled = enabled, nativeConfirmed = confirmed, visit = visit, visiting = visiting,
         pending = pending and 1 or 0, activations = stats.activations, failed = stats.failed,
         restoreFailed = stats.restoreFailed, switches = stats.switches, openMS = stats.openMS,
         loadMS = stats.loadMS, firstLoadMS = stats.firstLoadMS, activateMS = stats.activateMS, restoreMS = stats.restoreMS, switchMS = stats.switchMS }
@@ -471,13 +472,3 @@ Perf.Gauge("auction.proofLease", { label = "AH-1a presentation lease", unit = "c
     read = function() return lease and 1 or 0 end })
 Perf.Gauge("auction.proofTimer", { label = "AH-1a watchdog", unit = "count", kind = "state",
     read = function() return ticker and 1 or 0 end })
-
-local stateCodes = { blizzard = 0, preparing = 1, twichui = 2, restoring = 3, recovery = 4 }
-Perf.Gauge("auction.hostState", { label = "AH lifecycle (0 Blizzard, 1 preparing, 2 TwichUI, 3 restoring, 4 recovery)", unit = "state", kind = "state",
-    read = function() return stateCodes[state] end })
-Perf.Gauge("auction.hostPending", { label = "AH initialization timer", unit = "count", kind = "state", read = function() return pending and 1 or 0 end })
-for _, key in ipairs({ "activations", "failed", "restoreFailed", "switches", "openMS", "loadMS", "firstLoadMS", "activateMS", "restoreMS", "switchMS" }) do
-    local field = key
-    Perf.Gauge("auction.host_" .. field, { label = "AH " .. field, unit = field:match("MS$") and "ms" or "count", kind = "state",
-        read = function() return stats[field] or 0 end })
-end
