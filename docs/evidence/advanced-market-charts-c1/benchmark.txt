@@ -1,0 +1,8 @@
+PASSED: Advanced Market chart preparation, integrity, interaction, fallback and pooling
+C1 BENCH n=2 prepare=2.79us old-redraw=27.26us new-set=476.23us hit=0.12us markers=2 stroke-textures=81
+C1 BENCH n=7 prepare=3.74us old-redraw=36.86us new-set=1157.54us hit=0.27us markers=7 stroke-textures=399
+C1 BENCH n=14 prepare=7.59us old-redraw=48.04us new-set=1444.49us hit=0.26us markers=14 stroke-textures=586
+C1 BENCH n=30 prepare=15.22us old-redraw=79.30us new-set=1478.48us hit=0.31us markers=30 stroke-textures=650
+C1 BENCH n=60 prepare=33.70us old-redraw=82.65us new-set=1779.29us hit=0.38us markers=60 stroke-textures=717
+C1 BENCH n=120 prepare=67.53us old-redraw=84.41us new-set=2335.21us hit=0.44us markers=120 stroke-textures=791
+C1 DETAIL old-init=644.40us new-init=299.53us changed-hover=9.74us idle-hover=0.65us resize=3355.75us unchanged=0.27us reopen-growth=0.00KiB pool=911
