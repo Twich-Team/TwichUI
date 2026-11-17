@@ -72,7 +72,7 @@ local function ServerDetail(p,r)
     local status=W.Bridge.Status()
     local availability=W.ServerMarket.AvailabilityText(x.availability and x.availability.state or x.why)
     if x.historyWhy=='outside_scope' then availability='Requested history dates are outside this update.' end
-    p.source:SetText(x.label.."\n"..(h and (h.pricing_algorithm.." · "..h.history_basis..(h.synthetic and " · synthetic" or "")) or
+    p.source:SetText(W.Bridge.Freshness().text..' · '..x.label.."\n"..(h and (h.pricing_algorithm.." · "..h.history_basis..(h.synthetic and " · synthetic" or "")) or
         (status.loading and "Validating external generation…" or "Bridge unavailable; local scan data is unchanged.")))
     local rows={};for _,v in ipairs(W.ServerMarket.Rows(x,UI.Money)) do rows[v.id]=v end
     for _,tile in ipairs(p.tiles) do

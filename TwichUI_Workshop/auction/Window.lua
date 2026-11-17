@@ -39,6 +39,9 @@ local function Release(key, page)
 end
 function A.Render()
     if not A.IsShown() then return end
+    local fresh=W.Bridge.Freshness()
+    root.marketChip.tipLines=fresh.tip
+    root.marketChip:Set(fresh.text..' · Reload…',nil,UI.K.textDim)
     local def, page = A.pages[active], A.views[active]
     if not (def and def.Render and page and page.built and not page.failed) then return end
     local function Draw() renders = renders + 1; def.Render(page) end
@@ -219,7 +222,12 @@ local function Build()
     root.failure:SetPoint("TOPLEFT", root.content, "TOPLEFT", 14, -14); root.failure:SetPoint("RIGHT", root.content, "RIGHT", -14, 0)
     root.failure:SetWordWrap(true); root.failure:Hide()
     root.note = UI.Text(root, 12, K.textDim)
-    root.note:SetPoint("BOTTOMLEFT", 24, 18); root.note:SetPoint("RIGHT", -24, 0)
+    root.marketChip=UI.Chip(root,260,22)
+    root.marketChip.maxW=300
+    root.marketChip:SetPoint('BOTTOMLEFT',24,12)
+    UI.TipFn(root.marketChip,'Loaded Market server data',function(self) return self.tipLines and table.concat(self.tipLines,'\n') end)
+    root.marketChip:SetScript('OnMouseUp',function(_,button) if button=='LeftButton' then W.Bridge.RequestReload() end end)
+    root.note:SetPoint("LEFT",root.marketChip,"RIGHT",12,0); root.note:SetPoint("RIGHT", -24, 0)
     root.note:SetText("Standalone preview  •  Replacement off  •  Transactions unavailable")
     root:SetScript("OnEvent", function() StopSizing(); R.FitToScreen(root); A.Schedule() end)
     root:HookScript("OnShow", function()

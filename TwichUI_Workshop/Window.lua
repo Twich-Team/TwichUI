@@ -65,6 +65,9 @@ local function PaintStatus()
     f.chip.tipLines = st.tip
     f.chip:Set(st.text, st.icon, K[TONES[st.tone] or "text"])
     f.chip.state = st.state
+    local external=W.Bridge.Freshness()
+    f.externalChip.tipLines=external.tip
+    f.externalChip:Set(external.text..' · Reload…',nil,K[TONES[external.tone] or 'textDim'])
 end
 
 function Win.Render()
@@ -256,9 +259,14 @@ local function BuildShell()
     f.chip.maxW = 330
     f.chip:SetPoint("LEFT", 8, 0)
     UI.TipFn(f.chip, "Market prices", function(self) return self.tipLines and table.concat(self.tipLines, "\n") or nil end)
+    f.externalChip=UI.Chip(footer,220,22)
+    f.externalChip.maxW=260
+    f.externalChip:SetPoint('LEFT',f.chip,'RIGHT',8,0)
+    UI.TipFn(f.externalChip,'Loaded Market server data',function(self) return self.tipLines and table.concat(self.tipLines,'\n') end)
+    f.externalChip:SetScript('OnMouseUp',function(_,button) if button=='LeftButton' then W.Bridge.RequestReload() end end)
     f.note = UI.Text(footer, 13, K.bronzeText)
     f.note:SetPoint("RIGHT", -10, 0)
-    f.note:SetPoint("LEFT", f.chip, "RIGHT", 16, 0)
+    f.note:SetPoint("LEFT", f.externalChip, "RIGHT", 12, 0)
     f.note:SetJustifyH("RIGHT")
     f.footer = footer
 end
