@@ -122,13 +122,28 @@ function F.Classify(spellName, text, names, words, allowBuff)
     if not (spellName and text) or text == "" or text:find("\n", 1, true) then return nil end
     local plain = (spellName == names.food and "food") or (spellName == names.drink and "drink") or nil
     if not plain and not allowBuff then return nil end
+    -- Spell descriptions may group thousands (1,344). Read a whole grouped
+    -- integer before counting numbers, or higher-rank water looks like extra effects.
+    -- Keep the original text offsets for the buff restore-clause check below.
+    local separator = words.separator or ","
     local first, count, clauseEnd = nil, 0, nil
     local at = 1
     while true do
         local s, e = text:find("%d+", at)
         if not s then break end
+        local number, grouped = text:sub(s, e), false
+        if separator ~= "" then
+            while text:sub(e + 1, e + #separator) == separator do
+                local nextAt = e + #separator + 1
+                local gs, ge = text:find("%d+", nextAt)
+                if gs ~= nextAt then break end   -- punctuation after a number
+                if (not grouped and #number > 3) or ge - gs + 1 ~= 3 then return nil end
+                number, grouped = number .. text:sub(gs, ge), true
+                e = ge
+            end
+        end
         count = count + 1
-        first = first or tonumber(text:sub(s, e))
+        first = first or tonumber(number)
         if count == 2 then clauseEnd = e end
         at = e + 1
     end
@@ -162,7 +177,7 @@ end
 -- as Classify wants them. A name or word that can't be read is nil.
 function F.Vocabulary()
     return { food = Plain(C_Spell.GetSpellName(FOOD_SPELL)), drink = Plain(C_Spell.GetSpellName(DRINK_SPELL)) },
-        { health = Plain(HEALTH), mana = Plain(MANA) }
+        { health = Plain(HEALTH), mana = Plain(MANA), separator = Plain(LARGE_NUMBER_SEPERATOR) }
 end
 
 -- What the game says one item is, apart from who is looking: { id, name, icon, kinds, amount,
