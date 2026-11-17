@@ -200,6 +200,54 @@ assert(S().state == "idle" and not NV.Active(), "navigation ends after a moment"
 assert(not (Driver() and Driver().scripts.OnUpdate), "the driver stops")
 print("4 arrival ok")
 
+-- Steering on synthetic planner output: look ahead on straight stretches, preserve bends and leg endpoints.
+do
+  local RT = R.NavRoute
+  local plan = RT.Plan
+  local ox, oy = W(1001, 20, 20)
+  local function Steering(points)
+    NV.Stop("test")
+    At(1001, 20, 20)
+    local xs, ys, swim = {}, {}, {}
+    for i, point in ipairs(points) do xs[i], ys[i], swim[i] = ox + point[1], oy + point[2], false end
+    local r = { xs = xs, ys = ys, n = #xs, swim = swim, map = 9001, cost = 100,
+      goalX = xs[#xs], goalY = ys[#ys], startX = ox, startY = oy }
+    RT.Plan = function() return { Step = function() return "done", r end } end
+    assert(NV.StartAt(1001, (m.y0 - r.goalY) / m.size, (m.x0 - r.goalX) / m.size))
+    Run(0.5)
+    assert(S().route == r, "controlled route is followed")
+  end
+  local function Target(x, y, why)
+    local tx, ty, kind = NV.Target()
+    assert(kind == "route" and math.abs(tx - ox - x) < 0.01 and math.abs(ty - oy - y) < 0.01, why)
+  end
+  Steering({ {0, 0}, {100, 0} })
+  Target(20, 0, "initial target is ahead, rather than at the distant endpoint")
+  P.x, P.y = ox + 40, oy + 6
+  Run(0.5)
+  Target(60, 0, "target advances from the player's projection despite lateral offset")
+  Steering({ {0, 0}, {15, 0}, {100, 0} })
+  Target(20, 0, "lookahead passes redundant points on a straight stretch")
+  P.x, P.y = ox + 24, oy + 8
+  Run(0.5)
+  assert(S().seg == 2, "a missed straight waypoint is passed without an exact visit")
+  Target(44, 0, "the target stays ahead after passing beside a waypoint")
+  Steering({ {0, 0}, {15, 0}, {15, 100} })
+  Target(15, 0, "lookahead stops at a real bend instead of pointing through the inside obstacle")
+  P.x, P.y = ox + 24, oy - 8
+  Run(0.5)
+  assert(S().seg == 1, "passing the bend's plane on the wrong side does not skip it")
+  Target(15, 0, "projection beyond a bend still aims at that bend")
+  Steering({ {0, 0}, {15, 0} })
+  Target(15, 0, "a short walk ends at its destination, with no overshoot")
+  Steering({ {0, 0}, {0, 0}, {100, 0} })
+  Target(20, 0, "duplicate points do not produce an undefined bearing")
+  NV.Stop("test")
+  RT.Plan = plan
+end
+print("4b steering ok")
+
+
 ---------------------------------------------------------------------------
 -- 3. Across the obstacle: no skipping; off the route plans again after the hold
 ---------------------------------------------------------------------------

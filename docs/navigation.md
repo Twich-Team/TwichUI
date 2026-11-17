@@ -194,8 +194,9 @@ to the destination). With no route only the straight line is given, and called a
   shown only while it is chosen; Classic's background and border are cleared then and drawn again on switching back. Content sits 10
   units in instead of 8. Only the look's two opacities still apply (background: the leather; border: the frame). Appearance only: the
   route, the destination and every other behaviour are untouched.
-- **Arrow** (`nav/Arrow.lua`, `media/textures/nav-arrow-bronze.tga`, built by `tools/make_nav_arrow_art.py` from `assets/nav-arrow-source.png`; white by default, no tint): points at the route's next corner, turned
-  by the bearing less your facing (`GetPlayerFacing`), at most 30 times a second while shown. A direct bearing is grey and
+- **Arrow** (`nav/Arrow.lua`, `media/textures/nav-arrow-bronze.tga`, built by `tools/make_nav_arrow_art.py` from `assets/nav-arrow-source.png`; white by default, no tint): aims 20 yards ahead along the current straight stretch, stopping at bends and the end of the walk.
+  Passing beside a redundant straight-line waypoint continues forward. Route-bearing changes ease over about 0.12 seconds;
+  your facing (`GetPlayerFacing`) stays immediate, at most 30 updates a second while shown. A direct bearing is grey and
   labelled "Direct bearing, not a route". With no position, no facing, while calculating or on arrival: a word, no arrow.
   On its own or in the frame.
 - **EllesmereUI's Unlock Mode** (`nav/Unlock.lua`, optional): Appearance > Frame and arrow > **Move them in EllesmereUI's Unlock Mode**,
