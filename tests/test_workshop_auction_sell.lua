@@ -132,7 +132,11 @@ same(p.money:GetCopper(),20304);same(p.draft.gross,101520)
 same(p.priceOrigin,"Your unit price");same(p.matched,nil,"manual edit clears the matched row")
 p.quantity:SetText("1");Press.Must(p.max);same(p.quantity:GetText(),"5")
 p.money.silver:SetText("100");same(p.money:GetCopper(),nil)
-same(p.post:IsEnabled(),false);same(p.post:GetScript("OnClick"),nil)
+same(p.post:IsEnabled(),false)
+local prepare=W.AuctionActions.PreparePost
+W.AuctionActions.PreparePost=function() error("standalone cannot prepare or send a posting") end
+p.post:GetScript("OnClick")()
+W.AuctionActions.PreparePost=prepare
 qty=6;A.Render();same(p.selected,nil);same(p.money:GetCopper(),nil,"bag race clears draft price")
 A.Hide();same(p.competition,nil);same(p.request,nil);same(A.Snapshot().subscriptions,0)
 p.money.copper:GetScript("OnTextChanged")(p.money.copper)

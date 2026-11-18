@@ -1,4 +1,4 @@
--- No cancellation/repost handler and no inferred sale reconciliation.
+-- Explicit owned-listing reviews; no inferred sale reconciliation.
 local W=TwichUI.Workshop
 local A,UI,Q,AD=W.AuctionUI,W.UI,W.AuctionReads,W.AdvisorData
 local function Money(n) return n and UI.Money(n) or "No buyout / unknown" end
@@ -6,6 +6,10 @@ local function Detail(p)
     local chosen
     for _,r in ipairs(p.rows or {}) do if r.auctionID==p.selected then chosen=r end end
     p.chosen=chosen;p.detail.market:SetEnabled(chosen~=nil)
+    p.cancel:SetEnabled(A.Live() and chosen~=nil and chosen.status==0 and p.complete)
+    p.repost:SetEnabled(A.Live() and chosen~=nil)
+    p.cancel.text:SetText(A.Live() and "Review cancellation" or "Cancel unavailable")
+    p.repost.text:SetText(A.Live() and "Prepare repost" or "Repost unavailable")
     p.detail.name:SetText(chosen and AD.Info(chosen.item).name or "Choose an owned listing")
     p.detail.pic.tex:SetTexture(chosen and AD.Info(chosen.item).icon or UI.ICON_BLANK)
     p.detail.kind:SetText("Owned listings")
@@ -41,7 +45,7 @@ local function Render(p)
             end
         end
     end
-    local empty=Q.Pending()>0 and "Loading your auctions…" or "Your auctions are unavailable. Live refresh awaits client verification."
+    local empty=Q.Pending()>0 and "Loading your auctions…" or "Your auctions are unavailable. Click Refresh listings at an auctioneer."
     if snapshot and snapshot.kind=="owned" and snapshot.epoch==Q.epoch and Q.Available() then
         empty=#snapshot.rows>0 and "No returned owned listings match this filter." or
             p.complete and "No owned listings returned." or "No owned listings returned; this response may be partial."
@@ -59,7 +63,7 @@ local function Build(p)
         if not ok then A.Note(why) end
         Render(p)
     end,32);p.refresh:SetPoint("TOPLEFT",0,0)
-    UI.Tip(p.refresh,"Live refresh","Requires the existing experimental read gate and a fresh verified auctioneer visit. No refresh runs automatically; cancel and repost remain unavailable.")
+    UI.Tip(p.refresh,"Live refresh","Refresh runs only when clicked during an integrated auctioneer visit. Cancellation requires a separate review and native activation.")
     p.filters=A.Dropdown(p,240,function() return {{"all","All returned listings"},{"active","Active at read"},{"soon","Expiring within 1 hour (known)"}} end,
         function() return p.filter end,function(v) p.filter=v;Render(p) end)
     p.filters:SetPoint("LEFT",p.refresh,"RIGHT",12,0)
@@ -87,8 +91,15 @@ local function Build(p)
     p.detail=A.Details(p,370);p.detail:SetPoint("TOPRIGHT",0,-48);p.detail:SetPoint("BOTTOMRIGHT",0,0)
     p.info=A.Text(p.detail.body,"",13,12,-112);p.info:SetWordWrap(true);p.info:SetHeight(260)
     p.advice=A.Text(p.detail.body,"",12,12,-390);p.advice:SetWordWrap(true);p.advice:SetHeight(200)
-    p.cancel=UI.Button(p.detail,"Cancel unavailable",158,"secondary",nil,30);p.cancel:SetPoint("BOTTOMLEFT",10,10);p.cancel:SetEnabled(false)
-    p.repost=UI.Button(p.detail,"Repost unavailable",158,"secondary",nil,30);p.repost:SetPoint("BOTTOMRIGHT",-10,10);p.repost:SetEnabled(false)
+    p.cancel=UI.Button(p.detail,"Cancel unavailable",158,"secondary",function()
+        if not A.Live() then return end
+        local id,why=W.AuctionActions.PrepareCancel(p.chosen);A.ReviewAction(id,why)
+    end,30);p.cancel:SetPoint("BOTTOMLEFT",10,10);p.cancel:SetEnabled(false)
+    p.repost=UI.Button(p.detail,"Repost unavailable",158,"secondary",function()
+        if not A.Live() then return end
+        local ok,why=W.AuctionActions.PrepareRepost(p.chosen)
+        A.Note(ok and W.AuctionActions.message or why)
+    end,30);p.repost:SetPoint("BOTTOMRIGHT",-10,10);p.repost:SetEnabled(false)
     UI.Tip(p.cancel,"Cancellation disabled","Exact real-client ownership, transaction and confirmation acceptance pending.")
     UI.Tip(p.repost,"Reposting disabled","No automatic cancellation or posting. Real-client acceptance pending.")
     p.detail.market=A.HistoryButton(p.detail.body,function()

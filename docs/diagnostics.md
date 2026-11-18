@@ -478,3 +478,12 @@ This preserves the existing 40-gauge limit and legacy core/settings selections.
 A unit test fits all 19 fields beside 20 existing custom gauges (39 total); the
 supplemental native-simulator probe collected 34 gauges and verified real Host and
 page-pool reads. Real Forever timing remains pending.
+
+
+The integrated AH development workflow adds `auction.actionReview` (explicit
+Prepare/Confirm validation and submission, `TwichUI_Workshop/auction/Actions.lua`).
+The `auction` preset includes action pending/listener/timer cleanup gauges, retaining
+19 scoped gauges and the unchanged 40-gauge limit. Redundant Host activation/load
+samples remain in Host snapshots and the compact panel rather than displacing
+cleanup gauges. The panel's frame time is an FPS-derived estimate; Diagnostics
+captures actual sampled frame times. No permanent panel ticker or auto-query exists.

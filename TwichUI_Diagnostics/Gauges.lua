@@ -19,6 +19,7 @@ local Perf = R.Perf
 -- "!!!TwichUI/", the settings window "TwichUI_Settings/"), where: the function, so a report can name what to read.
 -- every = how often it is expected to run, so a report can tell "runs often" from "runs on demand".
 DX.OPS = {
+    ["auction.actionReview"] = {module="auction", label="AH action validation and explicit submission", kind="evaluate", file="TwichUI_Workshop/auction/Actions.lua", where="Prepare/Confirm", every="explicit review or confirmation only", visible="auction.previewShown"},
     ["auction.chartPrepare"] = { module="auction", label="Market chart preparation", kind="rebuild", file="TwichUI_Workshop/auction/AdvancedChart.lua", where="Set", every="evidence replacement", visible="auction.previewShown" },
     ["auction.chartDraw"] = { module="auction", label="Market chart geometry", kind="layout", file="TwichUI_Workshop/auction/AdvancedChart.lua", where="Render", every="evidence or geometry change", visible="auction.previewShown" },
     ["auction.readSnapshot"] = { module = "auction", label = "AH experimental read normalization", kind = "rebuild", file = "TwichUI_Workshop/auction/ReadRequests.lua", where = "Event", every = "explicit response only; at most 500 rows" },
@@ -316,9 +317,9 @@ end
 -- Auction House preset selects these builtin gauges without displacing existing
 -- core/settings measurements. All reads are passive snapshots.
 for _, entry in ipairs({ {"hostState", "stateCode"}, {"hostPending", "pending"},
-    {"host_activations", "activations"}, {"host_failed", "failed"}, {"host_restoreFailed", "restoreFailed"},
-    {"host_switches", "switches"}, {"host_openMS", "openMS"}, {"host_loadMS", "loadMS"},
-    {"host_firstLoadMS", "firstLoadMS"}, {"host_activateMS", "activateMS"},
+    {"host_failed", "failed"}, {"host_restoreFailed", "restoreFailed"},
+    {"host_switches", "switches"}, {"host_openMS", "openMS"},
+    {"host_firstLoadMS", "firstLoadMS"},
     {"host_restoreMS", "restoreMS"}, {"host_switchMS", "switchMS"} }) do
     local field = entry[2]
     Perf.Gauge("auction." .. entry[1], { label = "Auction House " .. field, kind = "state", group = "auction", builtin = true,
@@ -330,6 +331,14 @@ end
 for _, field in ipairs({"pages", "events", "rows", "jobs", "timers", "subscriptions", "reads"}) do
     Perf.Gauge("auction.lifecycle_" .. field, { label = "Auction House " .. field, kind = "state", group = "auction", builtin = true,
         unit = "count", read = AuctionPreview(field) })
+end
+
+for _,field in ipairs({"pending","listeners","timers"}) do
+    local key=field
+    Perf.Gauge("auction.action_"..key,{label="Auction action "..key,kind="state",group="auction",builtin=true,unit="count",read=function()
+        local w=R.Workshop;local t=w and w.AuctionActions
+        local s=t and t.Snapshot();return s and s[key] or 0
+    end})
 end
 
 -- The gauges a capture reads (groups nil: all), in registration order.

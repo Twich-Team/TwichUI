@@ -1,11 +1,12 @@
-# AH-7A: supervised native Auction House integration
+# Integrated Auction House development mode
 
 The existing five-page Auction House now has a Host-owned auctioneer context.
 **Default replacement is off. Forever acceptance remains pending.** This is a
 supervised test implementation, not release readiness or permission to publish.
-No purchasing, bidding, posting, cancel/repost, automatic searches or scans were
-added. Existing manual scan policy, transaction/read gates, SavedVariables and
-external Market contracts are unchanged.
+Live searches and explicit purchase/post/cancel review controllers are implemented.
+Each unverified native transaction mode stays disabled independently. No automatic
+queries, purchases, posting, cancellation or scans were added. Market Companion
+and saved market contracts are unchanged.
 
 ## Implementation and ownership
 
@@ -21,7 +22,7 @@ button attachment. It neither opens the crafting window nor requests Market data
 native anchors. It reuses the five lazy pages, materials, sizing, navigation and
 cleanup. `/tui ahpreview` remains independent and does not change native geometry;
 asking for preview while the integrated window is already open keeps that context.
-Every entry to integrated presentation selects saved Browse, avoiding an implicit
+Every entry to integrated presentation selects live Browse without sending a query, avoiding an implicit
 external Market load when returning from Blizzard. Page frames and chart widgets
 remain pooled; retained records, jobs and subscriptions follow existing Release
 methods. The coalesced shell refresh timer is now cancellable on hide.
@@ -81,158 +82,87 @@ panel-manager behavior. Native OnHide still closes the auction interaction and
 bags/popups, so hiding is unsuitable for switching. No reference code was copied
 or changed. Relative native event/server/input timing is still unverified.
 
-## Executable Forever acceptance checklist
+## Normal owner workflow
 
-Use a development install of this branch and its `TwichUI_TestLab` addon. Preserve
-your usual addon installation and data. Record build, scale, resolution, competing
-addons, errors/taint, actual pointer behavior and Diagnostics. No test below buys,
-bids, posts, cancels, or starts a price scan. Load Test Lab and Diagnostics before
-integrated testing: loading another addon intentionally restores Blizzard.
+Use the private development ZIP and the [short test procedure](development-test.md).
+Workshop's **Use TwichUI Auction House (Experimental)** setting and
+`/tui ahdebug on | off | status` are the ordinary entry points. The preference
+survives reloads in development builds. Core `auction/Build.lua` is false in the
+repository and ordinary release archives; those builds ignore a saved true value.
+The private builder stamps only that marker, records the committed source identity
+and every archived file hash, and enables no transaction modes.
 
-### A. Prove native presentation before enabling integration
+Debug presentation has no acknowledgement requirement or 30-second limit. The
+old `/tui ahproof` lifecycle harness remains an optional developer tool.
+`/tui ahproof restore` remains emergency recovery. Combat, genuine interaction,
+competing ownership and native restoration guards remain in the same Host.
 
-1. Reload. `/tui ahproof status` must say test mode off. Visit an auctioneer;
-   Blizzard opens normally. Perform one normal read-only native search manually,
-   then return to idle Browse with no focus, popup or scan.
-2. Run `/tui ahproof on`. The proof may refuse; record the reason and do not
-   bypass a guard. If it parks, check within 30 seconds:
+## Five pages and controllers
 
-   ```lua
-   /dump C_PlayerInteractionManager.IsInteractingWithNpcOfType(Enum.PlayerInteractionType.Auctioneer), C_PlayerInteractionManager.IsValidNPCInteraction(Enum.PlayerInteractionType.Auctioneer), AuctionHouseFrame:IsShown(), AuctionHouseFrame:IsVisible()
-   ```
+- Browse sends supported live queries only on Search, Inspect, More or Refresh.
+  Filters form the native query. Saved prices are never substituted in live mode.
+  Matching responses are bounded to 500 normalized rows; oversized/invalid/truncated
+  snapshots remain partial, completed zero responses are empty, and failures/timeouts
+  are unverified. Passive partial-result events update the current snapshot.
+- Shopping opens an exact item-key search from actual planned quantity. Item
+  buyouts review the whole stack, exact native total and excess. Commodity reviews
+  estimate actual non-owned tiers, then require an authoritative quote and a second
+  explicit confirmation bound to the displayed quote version and total. Purchase
+  completion never decrements the plan speculatively; actual bag changes reconcile it.
+- Sell uses selected bag identity, unreserved stock, native mode/count/deposit,
+  `AuctionPrice.Check`, vendor warning/hold and duration. Both item and commodity
+  competition can be searched explicitly. Confirmation rechecks bag quantity,
+  identity, money, price/deposit and vendor value. Native warning acceptance is a
+  separate player action, scoped to the sole pending draft.
+- My Auctions explicitly refreshes owned data. Cancel reviews native permission,
+  exact ID and cancellation cost, then revalidates. Repost preparation retains only
+  this visit's intent: cancel separately, retrieve mail yourself, then review a fresh
+  bag draft. Disappearance never confirms a sale. Multisell waits for its full result.
+- Market retains its research/history/chart services and contracts.
 
-   All must be true. Follow the existing [AH-1a read-response procedure](lifecycle-proof.md#real-forever-client-acceptance--pending)
-   to prove a new explicit read-only response while parked, not just cached data.
-3. Click Restore or `/tui ahproof off`. Verify exact previous geometry/scale,
-   ordinary native search, bag controls, focus, mouse, keyboard and tooltips.
-   Repeat close/reopen, Escape, natural proof expiry, UI-scale/resolution changes,
-   reload, protected/combat refusal and a known conflicting AH addon.
-4. Any lost interaction, unusable input, detached popup, blocked action, taint or
-   unsafe recovery fails Phase A. Stop there and retain Blizzard as fallback.
-   Record evidence in the PR; simulator results cannot satisfy this phase.
+`auction/Actions.lua` owns one transient reviewed intent, bounded completion
+listeners and one cancellable deadline. Dispatch occurs only from explicit UI/native
+warning acceptance. Events reconcile; they cannot send transactions. Foreign native
+calls, lost visits, errors or timeouts invalidate ownership; unknown outcomes require
+checking Blizzard before a new visit. No retries or action queue exist.
 
-### B. Explicit integration testing after A succeeds
+Read events have no request IDs. Correlation is serialized local intent plus native
+item identity, never advertised as server-token correlation. Foreign reads/timeouts
+poison attribution until a fresh visit. Leaving with a read pending can require a new
+visit, rather than attributing its late reply to a different search.
 
-Enable Workshop — Experimental through existing Settings, then:
+## Native activation gates
 
-```text
-/run C_AddOns.LoadAddOn("TwichUI_TestLab")
-/tui perf
-/tui ahproof confirm-native
-/tui ahproof replacement on
-/tui perf start auction 2
-```
+The development archive enables presentation and read workflows. All money-moving
+modes remain off in `AuctionBuild.verified` until native evidence exists for that mode.
+Controllers are exercised with synthetic native adapters; this is not native proof.
 
-`confirm-native` is your acknowledgement of the completed Phase A result for
-this reload. It is not automated proof, persisted acceptance or a release switch.
-Close the Test Lab/Diagnostics windows before visiting the auctioneer.
+| Mode | Implemented call/review | Exact remaining native evidence |
+|---|---|---|
+| Item buyout | `PlaceBid(id, exact full buyoutAmount)` | Hardware/permission behavior in this window; ID-correlated completion and rejection |
+| Commodity purchase | `StartCommoditiesPurchase(itemID, quantity)`, quote, second-click `ConfirmCommoditiesPurchase` | Generated two-argument Start contract differs from native frame's three-argument call; settle signature, quote permissions and completion ownership |
+| Item post | `PostItem(location, duration, quantity, nil, unitPrice)` and guarded `ConfirmPostItem` | Existing Sell from Bags native warning/hardware path in this integrated window; multisell completion |
+| Commodity post | `PostCommodity` and guarded `ConfirmPostCommodity` | Deposit, native warning, hardware permissions and completion in this window |
+| Cancel | `CanCancelAuction`, `GetCancelCost`, `CancelAuction(id)` | Native permissions/cost and ID-correlated cancellation completion |
 
-1. Visit normally: the existing five-page window should open automatically under
-   this explicit test gate. Navigate Browse, Shopping, Sell, My Auctions and
-   Market. Transactions remain unavailable. No search or price scan starts.
-2. Click **Blizzard Auction House**. Search manually using Blizzard; check bag
-   windows, tabs, focus, popups/tooltips and native controls. Clear native focus
-   and return to idle Browse before clicking **TwichUI Auction House**. Verify
-   the same interaction predicates remain true throughout switching.
-3. Physically click header controls, each page, dropdowns, scrollbar/scroll wheel,
-   tooltips and disabled transaction controls. Check other screen areas for
-   invisible native input interception. Repeat at narrow resolution and your
-   normal/larger UI scales. A handler invocation is insufficient evidence.
-4. For recorded pointer evidence, open `/tuilab`, tick **Auction House pointer
-   (guided)**, and run its individual cases, one at a time:
-   `ui.pointer.auction-blizzard`, `ui.pointer.auction-return`,
-   `ui.pointer.auction-dropdown`. Follow each prompt and press F9 over the target.
-   The Lab samples real `GetMouseFoci`; it never clicks or switches an interface.
-   Change interfaces yourself between cases. Copy its report. Test Lab content
-   steps aside during guided runs; move its prompt if it covers the target.
-5. Close with the custom close button and Escape; walk away from the auctioneer;
-   reopen ten times. Repeat switching ten times after visiting all five pages.
-   Verify no ghost controls, stale jobs/popups/focus or growing frame pools.
-   Exercise environmental changes and combat only in an appropriate test setting;
-   leave combat and restore if recovery was deferred. Never bypass protection.
-6. Record `/tui ahproof status`, `/dump TwichUI.AuctionHost.Snapshot()` and a
-   Diagnostics capture covering cold opening, warm switches, restore and repeated
-   visits. Existing `workshop.load` and new `auction.switch` scopes identify work.
-   Compare timings and frame-time/resource gauges after warming all pages.
-7. Emergency stop: `/tui ahproof off` disarms future automatic test visits and
-   attempts restoration; `/tui ahproof replacement off` does the same. If deferred,
-   leave combat and retry. If another writer owns the anchors, preserve them;
-   close/reopen or reload rather than force a position fight.
+No simulator or offline test may set a production native acceptance claim. No money
+operation should be enabled just because presentation or read tests pass.
 
-### C. Default activation remains blocked
+## TSM comparison
 
-Reload resets both acknowledgement and test enablement. There is no saved
-replacement setting, schema migration or production default activation in this
-milestone. Owner review of successful Forever evidence and separate explicit
-authorization are required before changing that policy or publishing a release.
+The packaged TSM 4.15 Forever-compatible source was not present in this workspace.
+The public [TSM-derived AuctionUI reference](https://github.com/Keoo88/TradeSkillMaster-3.3.5-backport/blob/fd89c63cdc13646447eaea301e0d456ede094458/TradeSkillMaster/Core/UI/AuctionUI/Core.lua)
+was inspected read-only at `fd89c63cdc13646447eaea301e0d456ede094458`.
+It is not evidence of TSM 4.15 behavior. No TSM or Blizzard code was copied.
 
-## Automated evidence and performance
-
-Verification completed on 2026-11-17; implementation source is `810e190`.
-The final documentation-only commit is reported in the draft PR and delivery.
-
-| Evidence | Result |
+| Public reference concept | Forever/Host decision |
 |---|---|
-| `development auction-preview` on final implementation | **Unit-tested:** 23 modules, 90 Lua syntax files, including the complete performance-engine tests and 4,129 synthetic integrated lifecycle assertions; 10.455 s, exit 0 |
-| `feature workshop --profile cloud --measure` on `84d09f8` | **Unit-/simulator-tested:** 87 modules, 217 Lua syntax files; full Workshop 38 launches/20,263 checks and Test Lab 9 launches/229 checks; source unchanged, 1,591.827 s, exit 0 |
-| Complete standalone preview on `c413345` | **Simulator-tested:** all 49 launches/6,587 checks, replay and deliberate failure control; 806.074 s, passed |
-| Final `auctionproof` catalog on `810e190` | **Simulator-tested:** all four original proof launches plus six integrated launches, 1,217 total structured checks; independent replay, narrow/scaled/restored poses and both deliberate failure controls passed |
-| Final `diagnose` catalog on `810e190` | **Simulator-tested:** six launches/101 checks; existing voice-settings and invalid-UTF8 addon-message limitations reproduced and classified, no new error rule or suppression |
-| Supplemental scoped-Diagnostics probe on `810e190` | **Simulator-tested:** 134 integrated assertions, 34 collected gauges under the unchanged 40-gauge cap, actual Host state/page-pool/failure reads passed |
-| GitHub verification of `810e190` | **CI:** `verify` passed, [run 44196828335](https://github.com/Twich-Team/TwichUI/actions/runs/44196828335); internal publication/build job skipped |
+| Independent auction window and return action/tab | Reuse the five-page shell and Host's same-visit return control |
+| Auctioneer lifecycle ownership | Preserve the sole Host visit/restoration authority and genuine interaction checks |
+| Native root reduced to scale `.001` | Retain anchor-only parking; leave native scale/input/parent untouched |
+| Unregister native show events | Do not adopt: preserve native initialization and close/bag/popup behavior |
+| Native close interception on an older path | Do not adopt; normal explicit close restores first, then uses `HideUIPanel` |
 
-Across these affected checks: 88 distinct offline modules and 113 simulator
-launches with 28,531 structured assertions, including expected negative controls.
-The full standalone catalog preceded Host-only callback hardening; the final
-23-module checks, all 10 Host launches, performance-engine checks and diagnostics
-probe cover those changes. Workshop/Test Lab ran on `84d09f8`; their source and
-launcher/page behavior are unchanged by the later diagnostics registration/preset
-adjustment. This is affected-feature coverage, not full/release certification.
-
-The attempted combined integration run was interrupted by an environment
-reconnect after its preview and Host catalogs passed. Its aggregate report remains
-incomplete; it is not represented as a passing combined profile. The remaining
-Workshop/Test Lab catalogs were rerun in the completed feature profile above.
-An earlier development run invalidated by a concurrent edit, initial fixture
-replay/count issues, and supplemental probe setup failures are retained as failed
-or incomplete evidence; no failed assertion was relaxed to obtain the final pass.
-
-### Synthetic timing and retention
-
-One supplementary run with real Workshop loading and Diagnostics present measured:
-
-| Measurement | Observed |
-|---|---|
-| Native-opening event to presentation | 50 ms of manual simulator clock; not CPU/wall latency |
-| First Workshop load call | 23.059 ms |
-| Warm cached load call | 0.006 ms |
-| Native activation/parking | 0.084 ms |
-| Restore and integrated cleanup | 2.219 ms |
-| Warm return to TwichUI | 1.808 ms |
-| Warm repeated switching | Zero frame growth; five pages, four pooled list rows, ten visible listeners, one shared subscription in the empty-data integration fixture |
-| Closing | Zero pending page jobs, page listeners, refresh/initialization timers and shared subscriptions; watchdog cancelled |
-
-Operation costs use `debugprofilestop` in the simulator. These are synthetic
-empty-data measurements, not predictions of real-client loading or frame time.
-The existing chart tests also preserve native-line and texture/stroke pool bounds.
-Captures were screenshot-reviewed for the existing layout and reachable header,
-normal/narrow/scaled sizing; no redesign or real-client appearance approval is
-claimed. `shell.png` is the standalone capture; `integrated.png`,
-`integratedsmall.png`, `integratedscaled.png`, `integratedblizzard.png` are the
-integrated catalog captures. Raw logs/captures and the supplemental fixture remain
-in ignored local test output, with exact build identity recorded in the delivered
-archive manifest.
-Synthetic timing is not native frame-time or server latency. Structural simulator
-captures do not validate real fonts, real pointer/keyboard, bags, gamepad/narration,
-combat protection, taint, server session preservation or actual addon coexistence.
-A restored-native simulator image depicts a clearly labeled synthetic native
-boundary, not Blizzard's real Auction House. Those remain mandatory client checks.
-
-Diagnostics adds `auction.switch`, state codes 0–4, pending initialization timer,
-activation/failure/restoration-failure/switch counters and last opening, first load,
-load, activation, restoration and switch milliseconds. Existing proof watchdog and
-preview page/listener/row/job/subscription gauges remain; the cancellable preview
-refresh timer is counted as well. Use `/tui perf start auction 2` for the scoped
-**Auction House lifecycle** preset: Host gauges and seven passive
-`auction.lifecycle_*` resource projections fit within the existing 40-gauge limit.
-These scoped builtin gauges do not displace legacy core/settings selections. No separate diagnostics subsystem was introduced.
+Native root OnHide closes the interaction, which is why hiding cannot implement a
+same-visit switch. The current reversible anchor backend meets the presentation
+needs; no additional backend is justified by the available evidence.

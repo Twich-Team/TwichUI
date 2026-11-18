@@ -1,3 +1,7 @@
+> Implemented development behavior is documented in [native integration](native-integration.md).
+> This design document retains proposed future extraction boundaries. Current code
+> keeps one core Host, Workshop ReadRequests/Actions and the existing five pages.
+
 # AH-0: Replacement-window architecture
 
 Status: [AH-7A supervised native integration](native-integration.md) connects the

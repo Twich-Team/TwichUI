@@ -758,10 +758,12 @@ do
   assert(preset and preset.gauges[1] == "auction")
   local gauges, ids = kit.GaugeList(preset.gauges), {}
   for _, g in ipairs(gauges) do ids[g.id] = g.read() end
-  assert(#gauges == 39, "20 existing custom gauges plus 19 scoped AH gauges fit the unchanged cap")
+  assert(#gauges == 39, "20 existing custom gauges plus 19 scoped AH lifecycle/action gauges fit the unchanged cap")
   assert(ids["auction.hostState"] == 2 and ids["auction.hostPending"] == 1)
   assert(ids["auction.host_failed"] == 4 and ids["auction.host_restoreFailed"] == 5)
   assert(ids["auction.host_firstLoadMS"] == 9 and ids["auction.host_switchMS"] == 12)
+  assert(ids["auction.action_pending"] == 0 and ids["auction.action_listeners"] == 0 and ids["auction.action_timers"] == 0, "all action cleanup gauges fit without truncation")
+  assert(kit.Op("auction.actionReview").file == "TwichUI_Workshop/auction/Actions.lua")
   assert(ids["auction.lifecycle_rows"] == 4 and ids["auction.lifecycle_events"] == 10 and ids["auction.lifecycle_jobs"] == 0)
   for _, g in ipairs(kit.GaugeList({"core", "settings"})) do
     assert(g.group ~= "auction", "scoped AH gauges never crowd legacy core/settings selections")

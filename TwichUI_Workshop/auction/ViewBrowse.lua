@@ -6,6 +6,7 @@ local V = {}
 A.Browse = V
 local page
 local Start, Paint, Detail
+local SubmitLive
 local function Key(r)
     if r.auctionID then return "auction:"..r.auctionID end
     local k=r.itemKey
@@ -50,7 +51,9 @@ Detail = function(p)
     d.track:SetEnabled(chosen ~= nil)
     d.compare:SetEnabled(chosen ~= nil)
     d.market:SetEnabled(chosen ~= nil)
-    d.buy:SetEnabled(false)
+    d.buy:SetEnabled(A.Live() and p.liveMode==true and chosen~=nil and chosen.source=="live" and chosen.auctionID~=nil
+        and W.AuctionReads.snapshot and W.AuctionReads.snapshot.complete==true)
+    d.buy.text:SetText(A.Live() and "Review buyout" or "Buy unavailable")
     d.inspect:SetEnabled(p.liveMode==true and chosen~=nil and chosen.itemKey~=nil and W.AuctionReads.Available())
     if not chosen then
         d.track.text:SetText("Track")
@@ -73,6 +76,15 @@ Detail = function(p)
     local variant=k and ((k.itemLevel or 0)~=0 or (k.itemSuffix or 0)~=0 or (k.battlePetSpeciesID or 0)~=0) or false
     local facts = W.Facts.Of(item, {market = p.market,variant=variant})
     DetailRows(d, facts)
+    if chosen.source=="live" then
+        d.summary.heading:SetText(chosen.auctionID and "Live listing · exact amounts" or "Live item group · inspect listings")
+        local lines={"Quantity: "..tostring(chosen.qty or "Unknown"),"Unit: "..Money(chosen.unit),
+            "Exact buyout total: "..Money(chosen.total),"Bid: "..Money(chosen.bid),
+            "Auction ID: "..tostring(chosen.auctionID or "Group only"),
+            "Ownership: "..(chosen.ownershipKnown and (chosen.own or chosen.account) and "Your account" or chosen.ownershipKnown and "Other account" or "Unverified"),
+            "Complete response: "..(W.AuctionReads.snapshot and W.AuctionReads.snapshot.complete and "Yes" or "No")}
+        for i,t in ipairs(d.factLines) do t:SetText(lines[i] or "") end
+    else d.summary.heading:SetText("Market Summary · stored") end
     d.fresh:SetText((p.market and (W.Prices.Label(p.market) .. " · ") or "") .. (W.Facts.Freshness(facts) or "No saved observation"))
     d.chart:Set(W.Facts.Chart(facts), UI.Money)
     -- Real bag quantity, never invented ownership to obtain a recommendation.
@@ -175,7 +187,15 @@ end
 local function Filter(p, name, value)
     if p[name] == value then return end
     p[name] = value
-    p.liveMode=false -- editing local research filters never relabels saved rows as live
+    if A.Live() then
+        p.liveMode=true;p.liveSnapshot=nil
+        if p.job and p.job.Cancel then p.job:Cancel();p.job=nil end
+        W.AuctionReads.Cancel("Filters changed; click Search to request fresh live results.")
+        p.rows={};p.list:SetData({},"Filters changed. Click Search for fresh live results.")
+        if p.categoryDrop then p.categoryDrop:Refresh();p.qualityDrop:Refresh();p.sortDrop:Refresh() end
+        A.Schedule();return
+    end
+    p.liveMode=false -- editing research never relabels stored rows as live
     if name=="category" and p.expanded then
         local key=value
         while type(key)=="string" do
@@ -196,7 +216,7 @@ function V.Filter(name, value)
 end
 function V.Search(query)
     if not page then return end
-    page.liveMode=false
+    page.liveMode=false;page.researchSaved=true
     page.query = W.Text(query, 200) or ""
     page.search:SetText(page.query)
     page.search.hint:SetShown(page.query == "" and not page.search:HasFocus())
@@ -213,6 +233,13 @@ function A.OpenBrowse(item, qty, opt)
     item = W.Int(item, 1, W.MAX_ID)
     if not item or not A.IsShown() then return false end
     A.Go("browse")
+    if A.Live() and opt and opt.live then
+        page.neededQuantity=qty;page.neededItem=item;page.researchSaved=false;page.liveMode=true
+        page.search:SetText(AD.Info(item).name)
+        local ok,why=W.AuctionReads.Search({itemID=item,itemLevel=0,itemSuffix=0,battlePetSpeciesID=0})
+        if not ok then A.Note(why) end
+        A.Schedule();return ok
+    end
     page.researchMarketKey=opt and opt.market or nil
     page.forceItem = item
     page.category, page.quality, page.exact, page.auctionable = "all", -1, false, false
@@ -274,7 +301,9 @@ local function BuildDetail(p)
     d.inspect=UI.Button(d.body,"Inspect live listings",300,"secondary",function()
         local chosen=d.data
         if not (p.liveMode and chosen and chosen.itemKey) then A.Note("Select a live item group first.");return end
-        local ok,why=W.AuctionReads.Begin("item",chosen.itemKey)
+        local ok,why
+        if A.Live() then ok,why=W.AuctionReads.Search(chosen.itemKey)
+        else ok,why=W.AuctionReads.Begin("item",chosen.itemKey) end
         if not ok then A.Note(why) else p.liveSnapshot=nil;A.Schedule() end
     end,28)
     d.inspect:SetPoint("TOPLEFT",12,-580)
@@ -283,8 +312,17 @@ local function BuildDetail(p)
         return row and row.item,{market=p.market and p.market.key or p.researchMarketKey,itemKey=row and row.itemKey}
     end,300)
     d.market:SetPoint("TOPLEFT",12,-618)
-    d.body:SetHeight(662)
-    d.buy = UI.Button(d, "Buy unavailable", 122, "primary", nil, 32)
+    d.quantity=UI.L.EditBox(d.body,110,28);UI.CL.Dress(d.quantity,"field")
+    d.quantity:SetPoint("TOPLEFT",12,-658);d.quantity:SetMaxLetters(8);d.quantity:SetText("1")
+    local quantityLabel=A.Text(d.body,"Commodity quantity / shopping need",12,130,-665,-12,UI.K.textDim)
+    d.body:SetHeight(712)
+    d.buy = UI.Button(d, "Buy unavailable", 122, "primary", function()
+        if not A.Live() then return end
+        local row=d.data
+        local desired=row and row.item==p.neededItem and p.neededQuantity or tonumber(d.quantity:GetText())
+        local id,why=W.AuctionActions.PrepareBuy(row,desired)
+        A.ReviewAction(id,why)
+    end, 32)
     d.buy:SetPoint("BOTTOMLEFT", 10, 10); d.buy:SetEnabled(false)
     d.compare = UI.Button(d, "Compare", 100, "secondary", function() d.scroll:SetVerticalScroll(98) end, 32)
     d.compare:SetPoint("LEFT", d.buy, "RIGHT", 6, 0)
@@ -304,9 +342,11 @@ local function Build(p)
     p.sortDrop=A.Dropdown(p,146,function() return {{"Price","Lowest price"},{"PriceDesc","Highest price"},{"Name","Item name"}} end,
         function() return p.sort end,function(v) Filter(p,"sort",v) end)
     p.sortDrop:SetPoint("LEFT",p.qualityDrop,"RIGHT",10,0)
-    p.submit = UI.Button(p,"Search Saved Data",164,"primary",function() V.Search(p.search:GetText()) end,32)
+    p.submit = UI.Button(p,"Search Saved Data",164,"primary",function()
+        if A.Live() then SubmitLive(p) else V.Search(p.search:GetText()) end
+    end,32)
     p.submit:SetPoint("TOPRIGHT",0,0)
-    p.search:SetScript("OnEnterPressed",function(self) self:ClearFocus(); V.Search(self:GetText()) end)
+    p.search:SetScript("OnEnterPressed",function(self) self:ClearFocus();if A.Live() then SubmitLive(p) else V.Search(self:GetText()) end end)
     p.search:SetScript("OnEscapePressed",function(self) self:ClearFocus() end)
     p.search:HookScript("OnTextChanged",function(self)
         self.hint:SetShown(self:GetText()=="" and not self:HasFocus())
@@ -407,22 +447,15 @@ local function Build(p)
     p.scope=scope
     p.liveState=A.Text(tableCard,"Saved Market Data · historical observations",11,12,-1,-12,UI.K.textDim)
     p.liveState:ClearAllPoints();p.liveState:SetPoint("BOTTOMLEFT",12,86)
-    p.live=UI.Button(filters,"Prepare live search",194,"secondary",function()
-        local node=p.nativeByID and p.nativeByID[p.category]
-        local query,reason=W.AuctionReads.BrowseQuery({text=p.search:GetText(),category=node,quality=p.quality,exact=p.exact,
-            sort=p.sort=="Name" and "Name" or "Price",reverse=p.sort=="PriceDesc"})
-        if not query then A.Note(reason);return end
-        local ready=W.AuctionReads.Available()
-        local ok,why=W.AuctionReads.Begin("browse",query)
-        if ok then
-            if p.job and p.job.Cancel then p.job:Cancel() end
-            p.token=p.token+1;p.job=nil;p.rows={};p.liveMode=true;p.liveSnapshot=nil
-            p.list:SetData({},"Loading explicit live query…")
-        else A.Note(ready and why or "Live search awaits client verification. Use Search Saved Data for historical prices.") end
-        A.Schedule()
-    end,26)
+    p.live=UI.Button(filters,"Prepare live search",194,"secondary",function() SubmitLive(p) end,26)
     p.live:SetPoint("BOTTOMLEFT",12,64)
     UI.Tip(p.live,"Experimental read-only search","Live search awaits Forever client acceptance. The existing developer opt-in and fresh auctioneer visit are required; it sends only this explicit query. Search Saved Data continues historical research.")
+    p.more=UI.Button(tableCard,"More results",112,"secondary",function()
+        local ok,why=W.AuctionReads.More();if not ok then A.Note(why) end
+    end,24);p.more:SetPoint("BOTTOMRIGHT",-12,8);p.more:Hide()
+    p.refreshLive=UI.Button(tableCard,"Refresh",90,"secondary",function()
+        local ok,why=W.AuctionReads.Refresh();if not ok then A.Note(why) end
+    end,24);p.refreshLive:SetPoint("RIGHT",p.more,"LEFT",-6,0);p.refreshLive:Hide()
     BuildDetail(p)
     p:SetScript("OnEvent",function(_,event,item,ok)
         if p.liveMode then
@@ -434,17 +467,38 @@ local function Build(p)
         A.Schedule()
     end)
 end
+SubmitLive=function(p)
+    local node=p.nativeByID and p.nativeByID[p.category]
+    local query,reason=W.AuctionReads.BrowseQuery({text=p.search:GetText(),category=node,quality=p.quality,exact=p.exact,
+        sort=p.sort=="Name" and "Name" or "Price",reverse=p.sort=="PriceDesc"})
+    if not query then A.Note(reason);return false end
+    if p.job and p.job.Cancel then p.job:Cancel() end
+    p.token=p.token+1;p.job=nil;p.rows={};p.liveMode=true;p.researchSaved=false;p.liveSnapshot=nil;p.detail.cached=nil
+    p.list:SetData({},"Waiting for a live search response…")
+    local ok,why=W.AuctionReads.Begin("browse",query)
+    if not ok then p.list:SetData({},why);A.Note(why) end
+    A.Schedule();return ok
+end
 local function Render(p)
     p.UpdateCategories()
+    if A.Live() and not p.researchSaved and not p.liveMode then
+        p.liveMode=true;p.rows={};p.liveSnapshot=nil;p.list:SetData({},"Search the live Auction House. No request starts when this page opens.")
+    end
+    p.submit.text:SetText(A.Live() and "Search" or "Search Saved Data")
+    p.live.text:SetText(A.Live() and "Search live auctions" or "Prepare live search")
+    p.tradeButton:SetEnabled(not A.Live())
+    p.more:SetShown(A.Live() and p.liveMode==true);p.refreshLive:SetShown(A.Live() and p.liveMode==true)
     local reads=W.AuctionReads
     if p.liveMode then
         p.qtyHead:SetText(reads.snapshot and reads.snapshot.kind=="item" and "Stack" or "Available");p.totalHead:SetText("Total / bid")
         p.unitHead:SetText(reads.snapshot and reads.snapshot.kind=="item" and "Unit price" or "Native min")
-        p.scope:SetText("Explicit experimental response · read-only.\nGrouped minima are not exact listing totals.")
+        p.scope:SetText(A.Live() and "Live response · grouped minima require inspection.\nPurchases use exact listing totals or a separately reviewed commodity quote." or "Explicit experimental response · read-only.\nGrouped minima are not exact listing totals.")
+        p.more:SetEnabled(reads.Pending()==0 and reads.snapshot~=nil and not reads.snapshot.complete and #reads.snapshot.rows<reads.MAX)
+        p.refreshLive:SetEnabled(reads.Pending()==0 and reads.snapshot~=nil)
         local snap=reads.snapshot
         if snap and (snap.epoch~=reads.epoch or not reads.Available()) then snap=nil end
         p.liveState:SetText("Live Auction House · experimental · " .. reads.state)
-        if snap and snap~=p.liveSnapshot and (snap.kind=="browse" or snap.kind=="item") then
+        if snap and snap~=p.liveSnapshot and (snap.kind=="browse" or snap.kind=="item" or snap.kind=="commodity") then
             local view=A.Capture(p.list,Key)
             p.liveSnapshot=snap;p.rows={};p.liveKnown={};p.liveDirty=nil;p.detail.cached=nil
             for _,r in ipairs(snap.rows) do
@@ -452,14 +506,14 @@ local function Render(p)
                 row.info=LiveInfo(row);row.source="live";p.rows[#p.rows+1]=row;p.liveKnown[row.item]=true
             end
             p.selected=p.rows[1] and Key(p.rows[1])
-            p.list:SetData(p.rows,"No results in this experimental response.")
+            p.list:SetData(p.rows,snap.complete and "Live search completed: no auctions returned." or "No validated rows; this response is partial or unverified.")
             p.status:SetText(snap.complete and "Current experimental response · client acceptance pending" or "Partial / completeness unverified · no purchase actions")
             Detail(p);A.Restore(p.list,view,Key)
         elseif snap and p.liveDirty then
             for _,row in ipairs(p.rows) do if p.liveDirty[row.item] then row.info=LiveInfo(row) end end
             A.PatchRows(p.list,p.liveDirty);p.liveDirty=nil;p.detail.cached=nil;Detail(p)
         elseif not snap and reads.state~="loading" then
-            p.rows={};p.liveKnown=nil;p.list:SetData({},"Live results unavailable. Use saved data or reopen the Auction House.")
+            p.rows={};p.liveKnown=nil;p.list:SetData({},"Live search: "..reads.state..". Click Search to request results.")
             p.status:SetText("Live results unavailable");Detail(p)
         end
         return

@@ -23,6 +23,7 @@ libs\LibDeflate\LibDeflate.lua
 
 # Core
 Core.lua
+auction\Build.lua
 Persist.lua
 Profiles.lua
 Switches.lua

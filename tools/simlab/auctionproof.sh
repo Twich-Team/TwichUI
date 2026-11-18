@@ -23,9 +23,15 @@ integration_fixture integratedsmall '{}'
 integration_fixture integratedscaled '{ scaled = true }'
 integration_fixture integratedblizzard '{ restored = true }'
 integration_fixture integratedwrong '{ wrongAt = "existing five-page shell is integrated" }'
+debug_fixture() {
+  { printf 'SIMLAB_PARAMS = %s\n' "$2"; cat "$SIMLAB_DIR/scenarios/lib.lua"; printf 'do\n'; cat "$REPO/TwichUI_TestLab/Reach.lua"; printf '\nend\n'; cat "$SIMLAB_DIR/scenarios/auctiondebug.lua"; } > "$LAB/fixtures/auctionproof-$1.lua"
+}
+debug_fixture debug '{}'
+debug_fixture debugreplay '{}'
+debug_fixture debugwrong '{ wrongAt = "full interface opens directly" }'
 repo_before="$(git -C "$REPO" status --porcelain --ignored)"
 status=0
-for name in unloaded replay loaded wrong; do
+for name in unloaded replay loaded wrong debug debugreplay debugwrong; do
   simlab_stage
   set +e
   timeout 280 "$SIMLAB_DIR/sim.sh" --no-saved-vars --addons-path "$ROOT" --exec-lua "@$LAB/fixtures/auctionproof-$name.lua" dump-tree \
@@ -56,4 +62,5 @@ simlab_disclose
 [ "$status" -eq 0 ] || exit "$status"
 python3 -B -I "$SIMLAB_DIR/auctionproof_verdict.py" "$RUN"
 python3 -B -I "$SIMLAB_DIR/auctionintegration_verdict.py" "$RUN"
+python3 -B -I "$SIMLAB_DIR/auctiondebug_verdict.py" "$RUN"
 [ "$leak" -eq 0 ]

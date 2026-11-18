@@ -1054,3 +1054,20 @@ m("market.chart.leave-drag", "TwichUI_Workshop/auction/AdvancedChart.lua",
 m("market.chart.native-offsets", "TwichUI_Workshop/auction/AdvancedChart.lua",
   "line:SetStartPoint('CENTER',self.anchors[v.a],0,0)", "line:SetStartPoint('BOTTOMLEFT',self.plot,v.x,v.y)",
   "a native line reintroduces scale-dependent numeric offsets instead of marker anchors", ["test_workshop_auction_market_chart_interaction.lua"])
+
+# Integrated AH exact money and consent boundaries.
+m("market.auction-action-exact-total", "TwichUI_Workshop/auction/Actions.lua",
+  "return Send(p,C_AuctionHouse.PlaceBid,p.auctionID,p.total)", "return Send(p,C_AuctionHouse.PlaceBid,p.auctionID,p.unit*p.quantity)",
+  "a rounded unit price overpays a whole-listing buyout", ["test_workshop_auction_actions.lua"])
+m("market.auction-quote-consent", "TwichUI_Workshop/auction/Actions.lua",
+  "not consent or consent.quoteVersion~=p.quoteVersion or consent.total~=p.total or consent.quantity~=p.quantity", "false",
+  "a quote that changed after painting can be purchased without reviewing its new total", ["test_workshop_auction_actions.lua"])
+m("market.auction-tier-total", "TwichUI_Workshop/auction/Actions.lua",
+  "total=total+tier.unit*take", "total=total+tier.unit",
+  "multi-tier estimates omit the quantity at each price", ["test_workshop_auction_actions.lua"])
+m("market.auction-post-deposit-race", "TwichUI_Workshop/auction/Actions.lua",
+  " or fresh.deposit~=p.deposit", "",
+  "posting accepts an upfront deposit that changed since review", ["test_workshop_auction_actions.lua"])
+m("crafting.auction-bag-quantity-race", "TwichUI_Workshop/auction/Actions.lua",
+  " and row.qty==p.bagQuantity", "",
+  "a bag stack changed after the reviewed shopping/posting quantity was captured", ["test_workshop_auction_actions.lua"])

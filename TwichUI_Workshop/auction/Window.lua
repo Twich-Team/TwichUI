@@ -25,6 +25,7 @@ function A.Register(key, def) A.pages[key] = def end
 function A.Frame() return root end
 function A.Mode() return active end
 function A.Context() return context end
+function A.Live() return context=="auctioneer" and R.AuctionHost and R.AuctionHost.DebugEnabled and R.AuctionHost.DebugEnabled() or false end
 function A.IsShown() return root ~= nil and root:IsShown() end
 function A.Page(key) return A.views[key] end
 function A.Note(text)
@@ -49,6 +50,8 @@ local function Release(key, page)
 end
 function A.Render()
     if not A.IsShown() then return end
+    if A.UpdateDebug then A.UpdateDebug() end
+    if A.UpdateReview then A.UpdateReview() end
     local fresh=W.Bridge.Freshness()
     root.marketChip.tipLines=fresh.tip
     root.marketChip:Set(fresh.text..' · Reload…',nil,UI.K.textDim)
@@ -92,6 +95,7 @@ function A.Go(key)
     for _, d in ipairs(destinations) do if d[1] == key then found = d end end
     if not found then return false end
     if not root then active = key; return true end
+    if active~=key and A.HideReview then A.HideReview() end
     for other, page in pairs(A.views) do
         if other ~= key and page:IsShown() then
             Release(other, page)
@@ -211,6 +215,8 @@ local function Build()
         end
     end, 32)
     root.blizzard:SetPoint("RIGHT", root.close, "LEFT", -10, 0)
+    root.debug=UI.Button(header,"Debug",80,"secondary",function() if A.ToggleDebug then A.ToggleDebug() end end,28)
+    root.debug:SetPoint("RIGHT",root.blizzard,"LEFT",-10,0);root.debug:Hide()
     UI.TipFn(root.blizzard, "Blizzard Auction House", function()
         return context == "auctioneer" and "Return to Blizzard's Auction House during this visit."
             or "Closes only the preview. Visit an auctioneer normally to use Blizzard's window."
@@ -259,6 +265,7 @@ local function Build()
         for key, page in pairs(A.views) do
             Release(key, page)
         end
+        if A.HideExtras then A.HideExtras() end
         local id = hostVisit
         context, hostVisit = "preview", nil
         if id and R.AuctionHost then R.AuctionHost.InterfaceHidden(id) end
@@ -282,7 +289,8 @@ function A.ShowIntegrated(id)
     if A.IsShown() then A.Hide() end
     context, hostVisit = "auctioneer", id
     active = "browse" -- switching never implicitly selects/loads an external Market
-    A.Note()
+    A.Note("Development mode · Live search available; transaction permissions are shown per action")
+    root.debug:SetShown(R.AuctionHost.Development and R.AuctionHost.Development() or false)
     root:Show()
     return A.IsShown() and context == "auctioneer" and A.Page(active) and not A.Page(active).failed and not root.failure:IsShown()
 end
@@ -294,6 +302,7 @@ function A.Show(initialMode)
     if not root then R.Perf.Call("auction.previewBuild", Build) end
     if not A.ready then return false, "INCOMPLETE" end
     context, hostVisit = "preview", nil
+    root.debug:Hide()
     A.Note()
     active = initialMode == "market" and "market" or "browse"
     if root:IsShown() then A.Go(active) else root:Show() end

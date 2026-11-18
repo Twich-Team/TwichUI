@@ -137,11 +137,14 @@ local function Conflict()
     end
     return false
 end
-local function Busy(f)
+local function Busy(f, allowOwnedWarning)
     -- Native confirmations/progress can live outside the root's geometry.
     -- Observe them, never dismiss a player's transaction to take presentation.
     for _, key in ipairs({ "BUYOUT_AUCTION", "BID_AUCTION", "CANCEL_AUCTION", "AUCTION_HOUSE_POST_WARNING", "AUCTION_HOUSE_POST_ERROR", "PURCHASE_AUCTION_UNIQUE" }) do
-        if StaticPopup_Visible and StaticPopup_Visible(key) then return true end
+        if StaticPopup_Visible and StaticPopup_Visible(key) then
+            local t=R.Workshop and R.Workshop.AuctionActions
+            if not (allowOwnedWarning and key=="AUCTION_HOUSE_POST_WARNING" and t and t.OwnsNativeWarning()) then return true end
+        end
     end
     if AuctionHouseMultisellProgressFrame and AuctionHouseMultisellProgressFrame:IsShown() then return true end
     local w = R.Workshop
@@ -163,7 +166,7 @@ local function Watch()
     if Combat() then H.Restore("combat"); return end
     if not Available() then H.Restore("interaction-ended"); return end
     if AuctionHouseFrame ~= l.frame or not l.frame:IsVisible() then H.Restore("native-hidden"); return end
-    if not control:IsVisible() or Conflict() or Busy(l.frame) or Focused(l.frame)
+    if not control:IsVisible() or Conflict() or Busy(l.frame, l.integrated) or Focused(l.frame)
         or l.frame:GetParent() ~= l.parent or l.frame:GetScale() ~= l.scale
         or l.frame:IsClampedToScreen() or not SamePoints(l.frame, l.parked) or not Offscreen(l.frame) then
         H.Restore("external-change"); return
@@ -298,7 +301,10 @@ function H.Command(arg)
         R.Print(ok and "AH-1a proof active for at most 30 seconds. Restore button or /tui ahproof off."
             or ("AH-1a proof refused: " .. tostring(why) .. ". Use idle Blizzard Browse outside combat."))
     elseif arg == "off" or arg == "restore" then
-        if arg == "off" then enabled = false end -- emergency stop also disarms future visits
+        if arg == "off" then
+            enabled = false
+            if type(TwichUIDB) == "table" and type(TwichUIDB.ui) == "table" and not (R.Persist and R.Persist.IsHeld("TwichUIDB")) then TwichUIDB.ui.auctionDebug = false end
+        end -- emergency stop also disarms future visits
         local ok, why = H.Restore("disabled")
         R.Print(ok and "AH-1a proof off; owned anchors restored (external anchors preserved)."
             or ("AH-1a restoration pending: " .. tostring(why) .. ". Leave combat, retry /tui ahproof off; Escape or leave the auctioneer, then /reload if needed."))
@@ -327,6 +333,52 @@ UpdateControl = function()
         control:Show()
     else control:Hide() end
 end
+function H.Development() return R.AuctionBuild and R.AuctionBuild.development == true or false end
+function H.DebugEnabled()
+    local ui = type(TwichUIDB) == "table" and TwichUIDB.ui
+    return H.Development() and not (R.Persist and R.Persist.IsHeld("TwichUIDB"))
+        and type(ui) == "table" and ui.auctionDebug == true
+        and R.WorkshopLauncher and R.WorkshopLauncher.Enabled() or false
+end
+function H.SetDebug(on)
+    if type(on) ~= "boolean" then return false, "Invalid option." end
+    if on and not H.Development() then return false, "Install the Auction House development build to use this option." end
+    if on and Combat() then return false, "Blizzard's Auction House is being used during combat." end
+    if on and not (R.WorkshopLauncher and R.WorkshopLauncher.Enabled()) then return false, "Enable Workshop — Experimental first." end
+    if type(TwichUIDB) ~= "table" or R.Persist and R.Persist.IsHeld("TwichUIDB") then
+        if not on then enabled=false;return H.Restore("debug-disabled") end
+        return false, "Saved settings are read-only."
+    end
+    if type(TwichUIDB.ui) ~= "table" then TwichUIDB.ui = {} end
+    TwichUIDB.ui.auctionDebug = on
+    -- Debug presentation requires genuine native state, not a procedural proof.
+    if on then
+        confirmed, enabled = true, true
+        if visiting and not lease then H.SwitchToTwichUI() end
+        return true
+    end
+    enabled = false
+    return H.Restore("debug-disabled")
+end
+function H.ApplyDebug()
+    if H.DebugEnabled() then enabled, confirmed = true, true
+    else
+        enabled = false; H.Restore("debug-disabled")
+    end
+end
+function H.DebugCommand(arg)
+    arg = (arg or ""):lower():match("^%s*(.-)%s*$")
+    if arg == "on" or arg == "off" then
+        local ok, why = H.SetDebug(arg == "on")
+        R.Print(ok and (arg == "on" and "TwichUI Auction House development mode on. Visit an auctioneer normally." or "Auction House development mode off; Blizzard restored.")
+            or tostring(why or "Restoration is pending; leave combat and retry /tui ahdebug off."))
+    elseif arg == "status" then
+        R.Print("Auction House development mode " .. (H.DebugEnabled() and "on" or "off") .. "; interface " .. state .. "; " .. reason .. ".")
+    else R.Print("/tui ahdebug on | off | status. Development build required; off restores Blizzard.") end
+end
+R:OnInit(H.ApplyDebug)
+if R.Profiles and R.Profiles.OnApply then R.Profiles.OnApply("views", "auction-debug", H.ApplyDebug) end
+
 function H.IsCurrent(id) return enabled and visiting and visit == id and Available() end
 function H.ToBlizzard() return H.Restore("player-switch") end
 
@@ -361,6 +413,10 @@ local function Switch()
     if not H.IsCurrent(id) or token ~= request or state ~= "preparing" then return false, "visit-ended" end
     if not ok then R.Fault("auction replacement load", loaded); return Failed("workshop-load-error") end
     if not loaded then return Failed(loadWhy or "workshop-load-failed") end
+    local reads = R.Workshop and R.Workshop.AuctionReads
+    if reads and reads.AttachVisit then reads.AttachVisit(id) end
+    local actions = R.Workshop and R.Workshop.AuctionActions
+    if actions then actions.Visit(id) end
     local a = UI()
     if not a or not a.Prepare then return Failed("missing-auction-ui") end
     -- A currently open preview must finish its own jobs before presentation changes.
@@ -444,6 +500,7 @@ end
 local function Opened()
     if visiting then return end
     visiting = true; visit = visit + 1
+    if H.DebugEnabled() then enabled, confirmed = true, true end
     if not enabled then return end
     CancelPending()
     local id, token = visit, request

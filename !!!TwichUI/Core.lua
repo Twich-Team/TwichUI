@@ -507,6 +507,9 @@ COMMANDS = {
     { name = "ahpreview", usage = "ahpreview", desc = "open the standalone Auction House preview (replacement and transactions off)", hidden = true, fn = function()
         if R.WorkshopLauncher then R.WorkshopLauncher.AuctionPreview() else Unavailable("Auction House preview") end
     end },
+    { name = "ahdebug", usage = "ahdebug on|off|status", desc = "experimental Auction House development mode", fn = function(arg)
+        if R.AuctionHost then R.AuctionHost.DebugCommand(arg) else Unavailable("Auction House") end
+    end },
     { name = "ahproof", usage = "ahproof [on|off|status]", desc = "AH-1a lifecycle diagnostic (default off, 30 seconds, no replacement pages)", hidden = true, fn = function(arg)
         if R.AuctionHost then R.AuctionHost.Command(arg) else Unavailable("AH-1a diagnostic") end
     end },
