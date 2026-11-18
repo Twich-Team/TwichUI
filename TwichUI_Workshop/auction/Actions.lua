@@ -86,7 +86,7 @@ function T.Review()
 end
 local function LiveRow(p)
     local snap=Q.snapshot
-    if not snap or snap~=p.snapshot or snap.epoch~=Q.epoch or not Q.Available() or GetTime()-snap.at>=30 or GetTime()<snap.at then return nil end
+    if not snap or snap~=p.snapshot or snap.epoch~=Q.epoch or not Q.Available() or not Q.Fresh(snap) then return nil end
     for _,row in ipairs(snap.rows) do if row.auctionID==p.auctionID then return row end end
 end
 function T.CommodityEstimate(rows,item,quantity)
@@ -109,7 +109,7 @@ function T.CommodityEstimate(rows,item,quantity)
 end
 function T.PrepareBuy(row,desired)
     local snap=Q.snapshot
-    if not row or not snap or not Q.Available() or not snap.complete then return nil,"Inspect a complete, current live listing first." end
+    if not row or not snap or not Q.Available() or not Q.Fresh(snap) or not snap.complete then return nil,"Inspect a complete, current live listing first." end
     local selected
     for _,r in ipairs(snap.rows) do
         if r.auctionID==row.auctionID and r.qty==row.qty and r.total==row.total and SameKey(r.itemKey,row.itemKey) then selected=r;break end
@@ -117,7 +117,7 @@ function T.PrepareBuy(row,desired)
     if not selected then return nil,"The selected live listing changed; inspect it again." end
     row=selected
     if row.ownershipKnown~=true or row.own or row.account then return nil,"The selected listing's ownership is unavailable or belongs to your account." end
-    local key=Key(row.itemKey);local quantity=Int(row.qty,1,W.MAX_ID);local total=Int(row.total,1)
+    local key=Key(row.itemKey);local quantity=Int(row.purchaseQty or row.qty,1,W.MAX_ID);local total=Int(row.total,1)
     if not key or not quantity or not total then return nil,"This listing has no supported buyout or complete identity." end
     if snap.kind=="commodity" then
         local qty=Int(desired,1,W.MAX_ID)
@@ -155,7 +155,7 @@ function T.PreparePost(row,quantity,price,duration)
 end
 function T.PrepareCancel(row)
     local snap=Q.snapshot
-    if not snap or snap.kind~="owned" or not snap.complete or not Q.Available() or not row or row.status~=0 then return nil,"Refresh and select an active owned listing first." end
+    if not snap or snap.kind~="owned" or not snap.complete or not Q.Available() or not Q.Fresh(snap) or not row or row.status~=0 then return nil,"Refresh and select an active owned listing first." end
     local found=false;for _,r in ipairs(snap.rows) do if r==row then found=true;break end end
     if not found then return nil,"The owned listing changed; refresh it." end
     local id=Int(row.auctionID,1,9007199254740991)
@@ -178,15 +178,15 @@ local function Recheck(p)
     local money=Money();if not money then return false,"Your money is unreadable." end
     if p.kind=="buyItem" then
         local row=LiveRow(p);local native=C_AuctionHouse.GetAuctionInfoByID(p.auctionID)
-        if not row or row.qty~=p.quantity or row.total~=p.total or row.own or row.account or row.ownershipKnown~=true
+        if not row or (row.purchaseQty or row.qty)~=p.quantity or row.total~=p.total or row.own or row.account or row.ownershipKnown~=true
             or type(native)~="table" or not SameKey(native.itemKey,p.itemKey) or Int(native.buyoutAmount,1)~=p.total then return false,"The auction changed. Refresh and review it again." end
         local fresh
         local count=Int(C_AuctionHouse.GetNumItemSearchResults(p.itemKey),0,W.MAX_ID)
         for i=1,math.min(count or 0,Q.MAX) do
-            local r=Q.Listing(C_AuctionHouse.GetItemSearchResultInfo(p.itemKey,i))
+            local r=Q.Listing(C_AuctionHouse.GetItemSearchResultInfo(p.itemKey,i),"item")
             if r and r.auctionID==p.auctionID then fresh=r;break end
         end
-        if not fresh or not SameKey(fresh.itemKey,p.itemKey) or fresh.qty~=p.quantity or fresh.total~=p.total or
+        if not fresh or not SameKey(fresh.itemKey,p.itemKey) or (fresh.purchaseQty or fresh.qty)~=p.quantity or fresh.total~=p.total or
             fresh.ownershipKnown~=true or fresh.own or fresh.account then return false,"The live auction ownership or price changed; refresh it." end
         if p.total>money then return false,"Not enough money for this whole auction." end
     elseif p.kind=="buyCommodity" then

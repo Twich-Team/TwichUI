@@ -52,7 +52,7 @@ Detail = function(p)
     d.compare:SetEnabled(chosen ~= nil)
     d.market:SetEnabled(chosen ~= nil)
     d.buy:SetEnabled(A.Live() and p.liveMode==true and chosen~=nil and chosen.source=="live" and chosen.auctionID~=nil
-        and W.AuctionReads.snapshot and W.AuctionReads.snapshot.complete==true)
+        and W.AuctionReads.snapshot and W.AuctionReads.snapshot.complete==true and W.AuctionReads.Fresh())
     d.buy.text:SetText(A.Live() and "Review buyout" or "Buy unavailable")
     d.inspect:SetEnabled(p.liveMode==true and chosen~=nil and chosen.itemKey~=nil and W.AuctionReads.Available())
     if not chosen then
@@ -77,9 +77,9 @@ Detail = function(p)
     local facts = W.Facts.Of(item, {market = p.market,variant=variant})
     DetailRows(d, facts)
     if chosen.source=="live" then
-        d.summary.heading:SetText(chosen.auctionID and "Live listing · exact amounts" or "Live item group · inspect listings")
-        local lines={"Quantity: "..tostring(chosen.qty or "Unknown"),"Unit: "..Money(chosen.unit),
-            "Exact buyout total: "..Money(chosen.total),"Bid: "..Money(chosen.bid),
+        d.summary.heading:SetText(chosen.priceEach and "Live price · per item" or chosen.auctionID and "Live listing · exact amounts" or "Live item group · inspect listings")
+        local lines={(chosen.priceEach and "Available at this price: " or "Quantity: ")..tostring(chosen.qty or "Unknown"),"Unit price: "..Money(chosen.unit),
+            (chosen.priceEach and "Buyout for one: " or "Exact buyout total: ")..Money(chosen.total),"Bid: "..Money(chosen.bid),
             "Auction ID: "..tostring(chosen.auctionID or "Group only"),
             "Ownership: "..(chosen.ownershipKnown and (chosen.own or chosen.account) and "Your account" or chosen.ownershipKnown and "Other account" or "Unverified"),
             "Complete response: "..(W.AuctionReads.snapshot and W.AuctionReads.snapshot.complete and "Yes" or "No")}
@@ -265,12 +265,13 @@ local function MakeRow(parent)
         self.unit:SetText(Money(data.unit)); self.total:SetText(data.source=="live" and
             (data.total and Money(data.total) or data.bid and ("Bid "..Money(data.bid)) or "—") or
             data.estimate and ("~" .. UI.Money(data.estimate)) or "—")
-        self.sub:SetText((data.source=="live" and "Live experimental · " or "Stored · ") .. (data.info.category or "Metadata unavailable") .. (data.source=="live" and (data.total and " · exact listing total" or data.bid and " · bid only" or " · grouped minimum") or data.at and (" · " .. UI.Ago(data.at)) or " · no saved price"))
+        self.sub:SetText((data.source=="live" and "Live experimental · " or "Stored · ") .. (data.info.category or "Metadata unavailable") .. (data.source=="live" and (data.priceEach and " · price per item" or data.total and " · exact listing total" or data.bid and " · bid only" or " · grouped minimum") or data.at and (" · " .. UI.Ago(data.at)) or " · no saved price"))
         self:SetSelected(page.selected == Key(data))
     end
     UI.TipFn(r, "Listing price evidence", function()
         return r.data and (r.data.info.name .. (r.data.source=="live" and
-            "\nExplicit experimental response. Item-auction totals are exact; unit prices are rounded up to copper. A grouped minimum is not a listing total. Purchasing remains disabled." or
+            (r.data.priceEach and "\nQuantity is available at this price, not a stack. Buyout and bid amounts apply to one item. Purchasing remains disabled." or
+            "\nExplicit experimental response. A browse minimum is not a listing total; commodity tier values are not purchase quotes. Purchasing remains disabled.") or
             "\nQuantity is aggregated at the cheapest observed tier, not a stack. Unit prices are rounded up to copper. Estimated value is not an auction total; current availability is unknown."))
     end)
     return r
@@ -490,10 +491,11 @@ local function Render(p)
     p.more:SetShown(A.Live() and p.liveMode==true);p.refreshLive:SetShown(A.Live() and p.liveMode==true)
     local reads=W.AuctionReads
     if p.liveMode then
-        p.qtyHead:SetText(reads.snapshot and reads.snapshot.kind=="item" and "Stack" or "Available");p.totalHead:SetText("Total / bid")
-        p.unitHead:SetText(reads.snapshot and reads.snapshot.kind=="item" and "Unit price" or "Native min")
-        p.scope:SetText(A.Live() and "Live response · grouped minima require inspection.\nPurchases use exact listing totals or a separately reviewed commodity quote." or "Explicit experimental response · read-only.\nGrouped minima are not exact listing totals.")
-        p.more:SetEnabled(reads.Pending()==0 and reads.snapshot~=nil and not reads.snapshot.complete and #reads.snapshot.rows<reads.MAX)
+        p.qtyHead:SetText("Available")
+        p.totalHead:SetText(reads.snapshot and reads.snapshot.kind=="item" and "Buyout / bid" or "Tier value")
+        p.unitHead:SetText(reads.snapshot and reads.snapshot.kind~="browse" and "Unit price" or "Native min")
+        p.scope:SetText(A.Live() and "Available quantities are not stacks. Item buyouts are per item.\nCommodity purchases require a separately reviewed quote." or "Explicit experimental response · read-only.\nGrouped minima are not exact listing totals.")
+        p.more:SetEnabled(reads.Pending()==0 and reads.Fresh() and reads.snapshot~=nil and not reads.snapshot.complete and #reads.snapshot.rows<reads.MAX)
         p.refreshLive:SetEnabled(reads.Pending()==0 and reads.snapshot~=nil)
         local snap=reads.snapshot
         if snap and (snap.epoch~=reads.epoch or not reads.Available()) then snap=nil end
@@ -507,7 +509,7 @@ local function Render(p)
             end
             p.selected=p.rows[1] and Key(p.rows[1])
             p.list:SetData(p.rows,snap.complete and "Live search completed: no auctions returned." or "No validated rows; this response is partial or unverified.")
-            p.status:SetText(snap.complete and "Current experimental response · client acceptance pending" or "Partial / completeness unverified · no purchase actions")
+            p.status:SetText(snap.complete and "Current search results" or "Partial / completeness unverified · no purchase actions")
             Detail(p);A.Restore(p.list,view,Key)
         elseif snap and p.liveDirty then
             for _,row in ipairs(p.rows) do if p.liveDirty[row.item] then row.info=LiveInfo(row) end end
@@ -515,6 +517,11 @@ local function Render(p)
         elseif not snap and reads.state~="loading" then
             p.rows={};p.liveKnown=nil;p.list:SetData({},"Live search: "..reads.state..". Click Search to request results.")
             p.status:SetText("Live results unavailable");Detail(p)
+        end
+        if snap then
+            p.status:SetText(not reads.Fresh(snap) and "Last search results · refresh to check current availability"
+                or snap.complete and "Current search results" or "Partial / completeness unverified · no purchase actions")
+            Detail(p) -- freshness changes also update review controls without clearing rows
         end
         return
     end

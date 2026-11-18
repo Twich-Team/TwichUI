@@ -26,6 +26,14 @@ local function Context()
 end
 function Q.Pending() return pending and 1 or 0 end
 function Q.Available() return W.Active() and (Q.experimental or Q.Integrated()) and Context() and not Q.ambiguous end
+-- Display lifetime and action freshness differ: old results remain readable,
+-- while reviews and continuation requests require a fresh response.
+function Q.Fresh(snapshot)
+    snapshot=snapshot or Q.snapshot
+    if not snapshot or snapshot.epoch~=Q.epoch or snapshot.stale then return false end
+    local age=GetTime()-snapshot.at
+    return age>=0 and age<30
+end
 function Q.End(reason)
     StopTimers()
     Q.epoch=Q.epoch+1
@@ -78,7 +86,7 @@ local function Same(a,b)
         a.itemSuffix==b.itemSuffix and a.battlePetSpeciesID==b.battlePetSpeciesID
 end
 local function Amount(v) return W.Int(W.Plain(v),1,W.Prices.MAX_COPPER) end
-function Q.Listing(x,commodity)
+function Q.Listing(x,mode)
     x=W.Plain(x)
     if type(x)~="table" then return nil end
     local qty=W.Int(W.Plain(x.quantity),1,W.MAX_ID)
@@ -86,12 +94,19 @@ function Q.Listing(x,commodity)
     local key=Q.Key(x.itemKey or {itemID=x.itemID})
     if not qty or not id or not key then return nil end
     local unit,total
-    if commodity then
+    local priceEach=mode=="item"
+    if mode==true or mode=="commodity" then
         unit=Amount(x.unitPrice)
         total=unit and W.Int(unit*qty,1,W.Prices.MAX_COPPER)
+    elseif priceEach then
+        -- Forever item-search quantity is availability at this price, not a
+        -- stack sold for buyoutAmount. The native buy frame uses that amount
+        -- directly for the representative auction; never divide it by stock.
+        total=Amount(x.buyoutAmount);unit=total
     else total=Amount(x.buyoutAmount);unit=total and math.ceil(total/qty) end
     local own,account=W.Plain(x.containsOwnerItem),W.Plain(x.containsAccountItem)
     return {auctionID=id,itemKey=key,item=key.itemID,link=W.Text(W.Plain(x.itemLink),1000),qty=qty,unit=unit,total=total,
+        priceEach=priceEach,purchaseQty=priceEach and 1 or qty,
         bid=Amount(x.bidAmount) or Amount(x.minBid),status=W.Int(W.Plain(x.status),0,1),
         seconds=W.Int(W.Plain(x.timeLeftSeconds),0,W.MAX_ID),band=W.Int(W.Plain(x.timeLeft),0,10),
         own=own==true,account=account==true,
@@ -110,7 +125,10 @@ local function Finish(state,rows,complete,event,rawCount)
     stream=Q.Integrated() and not complete and current or nil
     local snapshot=Q.snapshot
     expiry=C_Timer.NewTimer(30,function()
-        if Q.snapshot==snapshot then Q.End("stale; refresh live results") end
+        if Q.snapshot~=snapshot then return end
+        expiry=nil
+        snapshot.stale=true;stream=nil;Q.state="stale; refresh live results"
+        if W.AuctionUI then W.AuctionUI.Schedule() end
     end)
     if W.AuctionUI then W.AuctionUI.Schedule() end
 end
@@ -221,6 +239,7 @@ function Q.Begin(kind,arg,more)
 end
 function Q.More()
     local snap=Q.snapshot
+    if snap and not Q.Fresh(snap) then return false,"Refresh these results before requesting more listings." end
     if not snap or snap.epoch~=Q.epoch or snap.complete or #snap.rows>=Q.MAX or snap.kind=="owned" then
         return false,"Refine the search or refresh; no further results can be requested."
     end
@@ -270,7 +289,7 @@ function Q.Event(event,key)
         elseif p.kind=="item" and (event=="ITEM_SEARCH_RESULTS_UPDATED" or event=="ITEM_SEARCH_RESULTS_ADDED") and Same(p.arg,key) then
             local count=api.GetNumItemSearchResults(p.arg);rawCount=count
             for i=1,math.min(count,Q.MAX) do
-                local r=Q.Listing(api.GetItemSearchResultInfo(p.arg,i))
+                local r=Q.Listing(api.GetItemSearchResultInfo(p.arg,i),"item")
                 if r and Same(r.itemKey,p.arg) then rows[#rows+1]=r end
             end
             complete=api.HasFullItemSearchResults(p.arg) and count<=Q.MAX and #rows==count

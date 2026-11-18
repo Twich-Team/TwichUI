@@ -6,7 +6,7 @@ local function Detail(p)
     local chosen
     for _,r in ipairs(p.rows or {}) do if r.auctionID==p.selected then chosen=r end end
     p.chosen=chosen;p.detail.market:SetEnabled(chosen~=nil)
-    p.cancel:SetEnabled(A.Live() and chosen~=nil and chosen.status==0 and p.complete)
+    p.cancel:SetEnabled(A.Live() and chosen~=nil and chosen.status==0 and p.complete and Q.Fresh())
     p.repost:SetEnabled(A.Live() and chosen~=nil)
     p.cancel.text:SetText(A.Live() and "Review cancellation" or "Cancel unavailable")
     p.repost.text:SetText(A.Live() and "Prepare repost" or "Repost unavailable")
@@ -52,7 +52,8 @@ local function Render(p)
     end
     p.list:SetData(p.rows,empty)
     p.refresh:SetEnabled(Q.Available() and Q.Pending()==0)
-    p.status:SetText(#p.rows>0 and (#p.rows.." returned listings"..(p.complete and "" or " · partial response")) or "")
+    p.status:SetText(#p.rows>0 and (#p.rows.." returned listings"..(p.complete and "" or " · partial response")
+        ..(Q.Fresh(snapshot) and "" or " · refresh to check current status")) or "")
     A.Restore(p.list,view,function(r) return r.auctionID end)
     Detail(p)
 end
