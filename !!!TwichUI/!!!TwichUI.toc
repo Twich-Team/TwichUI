@@ -423,6 +423,7 @@ inventory\Picker.lua
 qol\QoL.lua
 qol\Summons.lua
 qol\ErrorMessages.lua
+qol\LootSparkles.lua
 qol\Resurrect.lua
 qol\ReleasePvP.lua
 qol\Duels.lua

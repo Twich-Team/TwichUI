@@ -78,6 +78,7 @@ TC.LOCAL = {
     -- the rest
     ["modules.restedxpSkin"] = "other", ["modules.qolTwichUISettingsButton"] = "other",
     ["modules.qolHideErrors"] = "other", ["modules.qolHideErrorsKeep"] = "other", ["modules.qolHideErrorSpeech"] = "other",
+    ["modules.qolLootSparkles"] = "other",
     ["modules.reminders"] = "other", ["ui.reminders"] = "other",
     ["ui.magicInventory"] = "other", ["magicInventory"] = "other",
     ["ui.restedxpSkinState"] = "other", ["ui.showAdvanced"] = "other", ["gear.trees"] = "other",

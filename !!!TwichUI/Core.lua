@@ -85,6 +85,7 @@ local DEFAULT_MODULES = {
     qolInvites = false,      -- ... accept a group invitation from the friends and/or guild members you choose
     qolDeclineInvites = false, -- ... decline group invitations (except from the friends and/or guild members you choose)
     qolQuickKeybind = false, -- ... a Quick Keybind button in the Game Menu
+    qolLootSparkles = false, -- ... keep the game's quest item sparkles on, including after graphics preset changes
     qolHideErrors = false,   -- ... hide the red error messages (and their voice and sound); see qol/ErrorMessages.lua
     qolHideErrorsKeep = true, -- ... but still show a full bag, a full quest log and a few others (needs the one above)
     qolHideErrorSpeech = false, -- ... silence the spoken part of error messages (the game's Enable Error Speech setting)

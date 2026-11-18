@@ -49,7 +49,7 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 83, "every module has a toggle: " .. n)
+assert(n == 84, "every module has a toggle: " .. n)
 assert(defaults.barGlows == true, "action bar glows are on by default (each spell can be turned off)")
 assert(defaults.hazardAlerts == false, "hazard alerts are opt-in")
 assert(defaults.reminders == true, "reminders are on (none exist until made, and each starts turned off)")
@@ -261,6 +261,7 @@ for variable, page in pairs({
   TWICHUI_chronicle = "Journey Chronicle", TWICHUI_chronicleClock = "Journey Chronicle", TWICHUI_chronicleSound = "Journey Chronicle", TWICHUI_welcomeBack = "Journey Chronicle",
   TWICHUI_auctionPosting = "Auction House", TWICHUI_mailGoldSummary = "Auction House",
   TWICHUI_qolSummons = "Quality of life", TWICHUI_qolSummonsFrom = "Quality of life", TWICHUI_qolSummonsWait = "Quality of life",
+  TWICHUI_qolLootSparkles = "Quality of life",
   TWICHUI_qolResurrect = "Quality of life", TWICHUI_qolResurrectCombat = "Quality of life", TWICHUI_qolReleasePvP = "Quality of life",
   TWICHUI_qolReleaseWait = "Quality of life", TWICHUI_qolDuels = "Quality of life", TWICHUI_qolDuelsFrom = "Quality of life",
   TWICHUI_qolDuelsToDeath = "Quality of life", TWICHUI_qolInvites = "Quality of life", TWICHUI_qolInvitesFrom = "Quality of life", TWICHUI_qolDeclineInvites = "Quality of life", TWICHUI_qolDeclineInvitesFrom = "Quality of life", TWICHUI_qolQuickKeybind = "Quality of life",
@@ -540,7 +541,7 @@ assert(rows["Addon skins"].status():find("of") or rows["Addon skins"].status():f
 
 -- Quality of life: everything is opt-in, the only invite settings are accepting a group invitation and from whom
 -- (nothing invites anyone), choices read and write the saved options, and the waits sit with what they wait for.
-for _, key in ipairs({ "qolSummons", "qolResurrect", "qolResurrectCombat", "qolReleasePvP", "qolDuels", "qolDuelsToDeath", "qolInvites", "qolDeclineInvites", "qolQuickKeybind", "qolGuideWaypoint" }) do
+for _, key in ipairs({ "qolSummons", "qolResurrect", "qolResurrectCombat", "qolReleasePvP", "qolDuels", "qolDuelsToDeath", "qolInvites", "qolDeclineInvites", "qolQuickKeybind", "qolLootSparkles", "qolGuideWaypoint" }) do
   assert(defaults[key] == false, key .. " is off by default")
 end
 for variable in pairs(variables) do
@@ -585,7 +586,7 @@ c.TwichUIDB.modules.qolSummons = false; summonToggle.setting.changed(); assert(n
 local qolRow = assert(rows["Quality of life"], "the Quality of life page has a status")
 assert(qolRow.status():find("Off"), qolRow.status())
 c.TwichUIDB.modules.qolDuels, c.TwichUIDB.modules.qolReleasePvP = true, true; summonToggle.setting.changed()
-assert(qolRow.status():find("2 of 7 on"), qolRow.status())
+assert(qolRow.status():find("2 of 8 on"), qolRow.status())
 -- The RestedXP destination row (on the RestedXP page now): off, visible, and its tooltip says what it is doing right now.
 do
   local guideRow; for _, i in ipairs(initializers) do if i.setting and i.setting.name == "Mark RestedXP's destination" then guideRow = i end end
@@ -868,7 +869,7 @@ do
     assert(row and not row.advanced and row.section, v .. " is a plain setting in a section of its own page")
   end
   -- nothing is offered that has no effect: no spark, no width
-  for _, i in ipairs(initializers) do
+  for _, i in ipairs(K.pages.restedxp.rows) do
     local name = i.data.name or ""
     assert(not name:lower():find("spark", 1, true) and not name:find("Timer width", 1, true), "no control without an effect: " .. name)
   end

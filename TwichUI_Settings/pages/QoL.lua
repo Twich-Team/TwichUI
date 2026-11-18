@@ -9,15 +9,16 @@ local K = R.SettingsKit
 K.Page({
     key = "qol", icon = "qualityOfLife", name = "Quality of life", order = 30, group = "everyday",
     description = "Small opt-in conveniences. Each is off until you turn it on, and each does only the one thing it says.",
-    keywords = "summon resurrect res rez battleground release spirit duel decline group party invite invitation block keybind quick keybind error errors message voice speech leatrix",
+    keywords = "summon resurrect res rez battleground release spirit duel decline group party invite invitation block keybind quick keybind error errors message voice speech leatrix loot sparkle sparkles quest pickup ground",
     when = function() return R.QoL ~= nil end,
     overview = {
-        label = "Quality of life", tip = "Small opt-in conveniences: accepting summons and resurrection, releasing in battlegrounds, declining duels, joining or declining group invitations, a Quick Keybind button in the Game Menu, and hiding error messages or their voice.",
+        label = "Quality of life", tip = "Small opt-in conveniences: accepting summons and resurrection, releasing in battlegrounds, declining duels, joining or declining group invitations, a Quick Keybind button in the Game Menu, quest item sparkles, and hiding error messages or their voice.",
         status = function()
             local on = (R:Enabled("qolSummons") and 1 or 0) + (R:Enabled("qolResurrect") and 1 or 0)
                 + (R:Enabled("qolReleasePvP") and 1 or 0) + (R:Enabled("qolDuels") and 1 or 0)
                 + (R:Enabled("qolInvites") and 1 or 0) + (R:Enabled("qolDeclineInvites") and 1 or 0) + (R:Enabled("qolQuickKeybind") and 1 or 0)
-            local total = 7
+                + (R:Enabled("qolLootSparkles") and 1 or 0)
+            local total = 8
             return K.OnOff(on > 0, ("%d of %d on"):format(on, total), "Off")
         end,
     },
@@ -240,5 +241,17 @@ K.Page({
             hideErrors, function() return R:Enabled("qolHideErrors") end, "Turn on \"Hide error messages\" to choose this.")
         QolToggle("qolHideErrorSpeech", "Silence error speech",
             "Silences the spoken part of error messages (\"I can't do that yet\") and leaves the text. It turns off the game's own Enable Error Speech setting (Settings > Audio) and puts it back as it was when you turn this off; if you change that setting yourself meanwhile, your choice stands. Not needed while \"Hide error messages\" is on, which hides the voice with the text.")
+
+        K.Card({
+            title = "Quest item sparkles",
+            icon = "qualityOfLife",
+            what = "Keeps the game's sparkle effect on quest items on the ground, even after graphics preset changes.",
+            consequence = "Turning this off restores the setting TwichUI changed. Restart the game fully to remove visible sparkles; /reload is not enough.",
+            details = {
+                { "What sparkles?", "The game chooses which quest items and quest NPCs get the effect. It does not add sparkles to every pickup, herb, ore vein or corpse. The game shows either sparkles or an outline on a quest item, depending on your outline settings." },
+            },
+        })
+        QolToggle("qolLootSparkles", "Show quest item sparkles",
+            "Keeps the game's sparkle effect on quest items on the ground, including after graphics preset changes. The game chooses which objects and quest NPCs sparkle; this does not add effects to every pickup, herb, ore vein or corpse. Your outline and interact settings stay as you chose them. Changes wait until combat ends. Turning this off restores the setting TwichUI changed; restart the game fully to remove visible sparkles (/reload is not enough).")
     end,
 })

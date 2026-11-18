@@ -12,8 +12,8 @@
     "simulators": [{"script": "interact"}]
   },
   "settings": {
-    "tests": ["test_settings_*.lua", "test_*_settings.lua", "test_remaining_settings.lua", "test_specialized_settings.lua"],
-    "syntax": ["TwichUI_Settings/**/*.lua"],
+    "tests": ["test_settings_*.lua", "test_*_settings.lua", "test_remaining_settings.lua", "test_specialized_settings.lua", "test_qol_loot_sparkles.lua"],
+    "syntax": ["TwichUI_Settings/**/*.lua", "!!!TwichUI/qol/LootSparkles.lua"],
     "dependencies": ["shared-ui", "core"],
     "simulators": [{"script": "smoke"}, {"script": "settings"}]
   },
