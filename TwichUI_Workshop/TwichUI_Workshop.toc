@@ -12,10 +12,12 @@
 
 # Names, limits and small checks (no game calls, no frames); it creates R.Workshop
 Data.lua
-# Explicit external source; loading Workshop alone does not load or validate the data addon.
+# Explicit external source; active Workshop recognizes the small delivered header only.
 BridgeCodec.lua
 BridgeSchema.lua
 BridgeValidate.lua
+SummarySchema.lua
+Summary.lua
 Bridge.lua
 ServerMarket.lua
 # The combined materials and what is still needed (pure)

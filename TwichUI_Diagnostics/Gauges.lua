@@ -19,6 +19,9 @@ local Perf = R.Perf
 -- "!!!TwichUI/", the settings window "TwichUI_Settings/"), where: the function, so a report can name what to read.
 -- every = how often it is expected to run, so a report can tell "runs often" from "runs on demand".
 DX.OPS = {
+    ["workshop.summaryLoad"] = { module="workshop",label="Summary partition addon load",kind="init",file="TwichUI_Workshop/Summary.lua",where="loadPart",every="once per requested partition" },
+    ["workshop.summaryValidate"] = { module="workshop",label="Summary validation slice",kind="work",file="TwichUI_Workshop/Summary.lua",where="Q.Step",every="while validating header or requested partition" },
+    ["workshop.summaryLookup"] = { module="workshop",label="Exact summary lookup",kind="work",file="TwichUI_Workshop/Summary.lua",where="Q.Record",every="external research only" },
     ["auction.chartPrepare"] = { module="auction", label="Market chart preparation", kind="rebuild", file="TwichUI_Workshop/auction/AdvancedChart.lua", where="Set", every="evidence replacement", visible="auction.previewShown" },
     ["auction.chartDraw"] = { module="auction", label="Market chart geometry", kind="layout", file="TwichUI_Workshop/auction/AdvancedChart.lua", where="Render", every="evidence or geometry change", visible="auction.previewShown" },
     ["auction.readSnapshot"] = { module = "auction", label = "AH experimental read normalization", kind = "rebuild", file = "TwichUI_Workshop/auction/ReadRequests.lua", where = "Event", every = "explicit response only; at most 500 rows" },

@@ -1054,3 +1054,14 @@ m("market.chart.leave-drag", "TwichUI_Workshop/auction/AdvancedChart.lua",
 m("market.chart.native-offsets", "TwichUI_Workshop/auction/AdvancedChart.lua",
   "line:SetStartPoint('CENTER',self.anchors[v.a],0,0)", "line:SetStartPoint('BOTTOMLEFT',self.plot,v.x,v.y)",
   "a native line reintroduces scale-dependent numeric offsets instead of marker anchors", ["test_workshop_auction_market_chart_interaction.lua"])
+
+# Automatic external summaries must never become native identity or local competition.
+m("market.summary.identity-route", "TwichUI_Workshop/Summary.lua",
+  "r[1]%64==p.bucket", "true",
+  "a valid part hash admits an item routed to another bucket", ["test_workshop_summary.lua"])
+m("market.summary.historical-support", "TwichUI_Workshop/Summary.lua",
+  "r[12]>=3", "r[12]>=2",
+  "two closes become a falsely supported historical reference", ["test_workshop_summary.lua"])
+m("market.summary.exact-variant", "TwichUI_Workshop/Summary.lua",
+  "r[1]==item and r[2]==variant", "r[1]==item",
+  "an unknown variant silently inherits another variant's price", ["test_workshop_summary.lua"])
