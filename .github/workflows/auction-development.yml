@@ -15,7 +15,7 @@ permissions:
 jobs:
   artifact:
     if: >-
-      (github.event_name == 'pull_request' && github.event.pull_request.number == 52 &&
+      (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feature/auction-house-native-integration' &&
        github.event.pull_request.head.repo.full_name == github.repository) ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/feature/auction-house-native-integration')
     runs-on: ubuntu-latest
