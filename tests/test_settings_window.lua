@@ -401,6 +401,13 @@ for _, result in ipairs(sparkles) do
   if result.entry.row.id == "qolLootSparkles" then sparkleRow = result.entry end
 end
 assert(sparkleRow and sparkleRow.page == "qol" and made == drawn, "sparkles are searchable without constructing a page")
+for _, query in ipairs({ { "herbalism sparkles", "qolHerbSparkles" }, { "mining sparkles", "qolOreSparkles" } }) do
+  local found
+  for _, hit in ipairs(Search.Run(query[1])) do
+    if hit.entry.row and hit.entry.row.id == query[2] then found = hit.entry end
+  end
+  assert(found and found.page == "qol" and made == drawn, query[1] .. " finds its control without making a page")
+end
 assert(#Search.Run("") == 0 and #Search.Run("   ") == 0, "an empty query finds nothing")
 assert(#Search.Run("xyzzy-nothing") == 0)
 assert(#Search.Run("%a+") == 0, "a query is plain text, not a pattern")
@@ -1358,7 +1365,7 @@ do
   -- 8b. Quality of life's cards
   local cards = {}
   for _, row in ipairs(K.pages.qol.rows) do if row.card then cards[#cards + 1] = row end end
-  assert(#cards == 9, "nine cards on Quality of life: " .. #cards)
+  assert(#cards == 11, "eleven cards on Quality of life: " .. #cards)
   for _, card in ipairs(cards) do assert(Icons.Get(card.card.icon), card:GetName() .. " has an icon") end
   for _, card in ipairs(cards) do
     assert(card.primary and card.primary.kind == "checkbox" and card.primary.switch, card:GetName() .. " has its switch")
@@ -1366,6 +1373,8 @@ do
   end
   assert(K.rowsById.qolSummonsWait.ruleOf == cards[1] and K.rowsById.qolDuelsToDeath.ruleOf == cards[4], "rules belong to their cards")
   assert(cards[2].card.inline and K.rowsById.qolResurrectCombat.ruleOf == cards[2], "the combat-resurrection rule is inline")
+  assert(K.rowsById.qolHerbSparkles.primaryOf == cards[10] and K.rowsById.qolOreSparkles.primaryOf == cards[11],
+    "each gathering category has its own heading switch, including ore-only configurations")
 
   local calls = {}
   local function Spy(name) return function() calls[#calls + 1] = name end end
@@ -1439,7 +1448,8 @@ do
   for _, card in ipairs(cards) do
     local s = view.sectionsById[card.id]
     -- The native world sparkle cannot be previewed in a settings frame. Existing sample previews stay intact.
-    assert(s.preview or card.primary.switch == "qolLootSparkles", card:GetName() .. " has a preview")
+    assert(s.preview or card.primary.switch == "qolLootSparkles" or card.primary.switch == "qolHerbSparkles"
+      or card.primary.switch == "qolOreSparkles", card:GetName() .. " has a preview")
     if s.play then
       Click(s.play)
       assert(s.preview:IsPlaying() and P.Playing() == 1, card:GetName() .. " plays")
