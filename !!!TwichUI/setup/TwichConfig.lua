@@ -81,6 +81,7 @@ TC.LOCAL = {
     ["modules.qolLootSparkles"] = "other",
     ["modules.qolHerbSparkles"] = "other", ["modules.qolOreSparkles"] = "other",
     ["modules.reminders"] = "other", ["ui.reminders"] = "other",
+    ["ui.auctionHouse"] = "acts",
     ["ui.magicInventory"] = "other", ["magicInventory"] = "other",
     ["ui.restedxpSkinState"] = "other", ["ui.showAdvanced"] = "other", ["gear.trees"] = "other",
     ["pins"] = "other", ["npcs"] = "other", ["ui.mapToolsIntro"] = "other", ["ui.navTravel"] = "other", ["ui.cozyBagOffer"] = "other", ["ui.barGlows"] = "other", ["ui.barGlowsMemory"] = "other", ["setup"] = "other", ["storedData"] = "other", ["whisperProbe"] = "other", ["welcome"] = "other", ["onboarding"] = "other",

@@ -243,9 +243,9 @@ local function SellLive(W,p)
     Q.serial=505
     p.request={intent=505,epoch=Q.epoch,itemKey=key,marketStamp=market and market.key..":"..W.Valuation.Generation(market) or "none"}
     Q.snapshot={kind="item",intent=505,epoch=Q.epoch,at=GetTime(),complete=true,rows={
-        Q.Listing({auctionID=201,itemKey=key,quantity=3,buyoutAmount=299,containsOwnerItem=false,containsAccountItem=false}),
-        Q.Listing({auctionID=202,itemKey=key,quantity=20,buyoutAmount=405000,containsOwnerItem=false,containsAccountItem=false}),
-        Q.Listing({auctionID=203,itemKey=key,quantity=1,buyoutAmount=1,containsOwnerItem=true,containsAccountItem=false})}}
+        Q.Listing({auctionID=201,itemKey=key,quantity=3,buyoutAmount=299,containsOwnerItem=false,containsAccountItem=false},"item"),
+        Q.Listing({auctionID=202,itemKey=key,quantity=20,buyoutAmount=405000,containsOwnerItem=false,containsAccountItem=false},"item"),
+        Q.Listing({auctionID=203,itemKey=key,quantity=1,buyoutAmount=1,containsOwnerItem=true,containsAccountItem=false},"item")}}
     Q.state="results";A.Render()
 end
 Lab.Step("Market research and cross-page safety",function()
@@ -282,7 +282,8 @@ Lab.Step("Market research and cross-page safety",function()
     Lab.Check("state","Market absent faction honest",true,p.projection.facts.nomarket)
     Lab.Check("state","Market zero native operations",0,calls)
     A.Go("shopping")
-    Lab.Check("state","Market hidden cache released",0,W.AuctionMarketData.Stats().cache)
+    Lab.Check("state","Shopping owns one bounded shared chart projection",1,W.AuctionMarketData.Stats().cache)
+    Lab.Check("state","Shopping chart context replaces Market",true,A.Page("shopping").detail.chart.context:find(":shopping:",1,true)~=nil)
     Lab.Check("state","Market hidden index released",nil,p.index)
     Lab.Check("state","Market hidden events released",false,p.listening)
     TwichUIWorkshopDB=saved;W.Facts.CacheClear()
@@ -347,9 +348,9 @@ Lab.Step("Sell price preparation without transactions",function()
     SellLive(W,p)
     Lab.Check("state","Sell excludes owned competition",2,#p.competition.rows)
     Lab.Check("state","Sell exact competing total",299,p.competition.rows[1].total)
-    Lab.Check("state","Sell normalized competing unit",100,p.competition.rows[1].unit)
+    Lab.Check("state","Sell per-item competing price",299,p.competition.rows[1].unit)
     p.competitionList.rows[1]:Click()
-    Lab.Check("interact","Sell click copies only unit price",100,p.money:GetCopper())
+    Lab.Check("interact","Sell click copies only unit price",299,p.money:GetCopper())
     Lab.Settle(0.2)
     Lab.Check("state","Sell deferred match provenance",true,p.priceOrigin=="Matched current listing" and p.matched==201)
     Lab.Check("state","Sell broker total unmodified",299,Q.snapshot.rows[1].total)
@@ -418,7 +419,7 @@ if P.owned then
     local Q=R.Workshop.AuctionReads
     Q.Available=function() return true end
     Q.state=P.ownedEmpty and "empty" or "results"
-    Q.snapshot={epoch=Q.epoch,kind="owned",rows=P.ownedEmpty and {} or {
+    Q.snapshot={epoch=Q.epoch,at=GetTime(),complete=true,kind="owned",rows=P.ownedEmpty and {} or {
         {auctionID=21,item=7067,itemKey={itemID=7067,itemLevel=0,itemSuffix=0},qty=3,total=299,unit=100,status=0,seconds=1800},
         {auctionID=22,item=4306,itemKey={itemID=4306,itemLevel=0,itemSuffix=0},qty=20,total=12000,unit=600,status=0,band=2}
     }}
@@ -496,8 +497,11 @@ if P.market then
             if hit.verdict=='reachable' then reachable=reachable+1 end
         end end
         Lab.Check('construct','whole plot hover geometry',9,reachable)
-        local tx,ty=chart.tip:GetCenter();local scale=chart.tip:GetEffectiveScale()
-        Lab.Check('construct','inspection panel cannot intercept input','reachable',RC.Analyze(chart.hit,{kind='hover',point={tx*scale,ty*scale},evidence='simulator-geometry',limit=1000000}).verdict)
+        local scale=chart.tip:GetEffectiveScale()
+        local left,right=chart.tip:GetLeft()*scale,chart.tip:GetRight()*scale
+        local bottom,top=chart.tip:GetBottom()*scale,chart.tip:GetTop()*scale
+        Lab.Check('construct','inspection docks outside the plot',true,right<=rect[1] or left>=rect[3] or top<=rect[2] or bottom>=rect[4])
+        Lab.Check('construct','inspection panel cannot intercept input',false,chart.tip:IsMouseEnabled())
         local update=chart.hit:GetScript('OnUpdate')
         chart:Set(R.Workshop.BridgeCodec.Copy(s),chart.format,chart.context)
         Lab.Check('state','equivalent refresh preserves active inspection',true,chart.hit:GetScript('OnUpdate')==update and chart.tip:IsShown())

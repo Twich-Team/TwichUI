@@ -26,6 +26,23 @@ function P.Cost(row, money)
     if row.costState=="range" and row.high then return W.Strategy.CostText({low=row.low,high=row.high},money) end
     return W.Shopping.CostWords(row,money)
 end
+-- Resolve crafting purposes from actual queue/recipe outputs. Names remain a
+-- fallback when an output identity is unavailable; never guess an item ID.
+function P.PurposeItems(row)
+    local out,seen,names={},{},{}
+    for _,name in ipairs(row.forNames or {}) do names[name]=true end
+    local function Add(rec,queued)
+        local used=false
+        for _,mat in ipairs(rec.mats or {}) do if mat.item==row.item then used=true;break end end
+        local item=W.Int(rec.outItem,1,W.MAX_ID)
+        if used and item and (queued or names[rec.name]) and not seen[item] and #out<12 then
+            seen[item]=true;out[#out+1]={item=item,name=rec.name}
+        end
+    end
+    for _,rec in ipairs(W.Queue.Entries()) do Add(rec,true) end
+    if next(names) then for _,rec in ipairs(W.Session.AllRecipes()) do Add(rec,false) end end
+    return out
+end
 function P.Rows(plan, ctx, opt)
     opt=opt or {}
     local out={}

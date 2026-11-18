@@ -47,7 +47,7 @@ end
 K.Page({
     key = "workshop", icon = "guide", name = "Workshop", order = 46, group = "everyday",
     description = "Experimental professions, crafting plans, shopping and market research. Enable it when you want to try it.",
-    keywords = "workshop experimental enable opt in tooltip designer normal shift price market history scan crafting shopping guild bank progress login load",
+    keywords = "workshop experimental enable opt in tooltip designer normal shift price market history scan crafting shopping guild bank progress login load auction house ah selling duration maximum quantity advisor recommendations",
     overview = { label = "Workshop", tip = "Crafting plans, shopping and item information.",
         when = function() return Launcher() ~= nil end,
         status = function() return not Enabled() and "Experimental · Off" or (Shown() and "Open" or (Loaded() and "Enabled" or "Ready to load")) end },
@@ -65,16 +65,6 @@ K.Page({
                 info, infoAt = nil, nil
                 K.RefreshOverview()
             end)
-        local auction = K.ProxyToggle("auctionDebug", "Use TwichUI Auction House (Experimental)",
-            "Open the existing five-page Auction House when visiting an auctioneer. No proof commands are required. Turning this off restores Blizzard. Individual unverified transaction modes remain unavailable.", false,
-            function() return R.AuctionHost and R.AuctionHost.DebugEnabled() or false end,
-            function(on)
-                local ok, why = R.AuctionHost.SetDebug(on)
-                if not ok then R.Print(tostring(why)) end
-                K.RefreshOverview()
-            end)
-        auction:AddModifyPredicate(function() return Enabled() and R.AuctionHost ~= nil end)
-        auction.why = "Enable Workshop — Experimental first."
         local login = K.ProxyToggle("workshopLoadOnLogin", "Load Workshop when I log in",
             "Load Workshop after your next login or reload. Opens no window and starts no scan. Large saved market databases can pause the game while loading. Off by default.", false,
             function() local l = Launcher(); return l and l.LoadOnLogin and l.LoadOnLogin() or false end,
@@ -95,6 +85,29 @@ K.Page({
             "Open Workshop. You can also use /tui workshop.")
         open:AddModifyPredicate(Enabled)
         open.why = "Enable Workshop — Experimental first."
+
+        K.Header("Auction House", "Choose the auction interface and defaults for new selling drafts. Every auction action still requires your confirmation.")
+        local auction = K.ProxyToggle("auctionDebug", "Use TwichUI Auction House (Experimental)",
+            "Open the existing five-page Auction House when visiting an auctioneer. No proof commands are required. Turning this off restores Blizzard. Purchases, posts and cancellations require your own confirmation.", false,
+            function() return R.AuctionHost and R.AuctionHost.DebugEnabled() or false end,
+            function(on)
+                local ok, why = R.AuctionHost.SetDebug(on)
+                if not ok then R.Print(tostring(why)) end
+                K.RefreshOverview()
+            end)
+        auction:AddModifyPredicate(function() return Enabled() and R.AuctionHost ~= nil end)
+        auction.why = "Enable Workshop — Experimental first."
+        local function AuctionSetting(key) return Launcher().AuctionSettings()[key] end
+        K.ProxyToggle("workshopAuctionAdvisorOnly", "Start Sell with advisor recommendations only",
+            "Start each visit to the Sell tab with the Advisor: auction recommendations only filter enabled. You can still change the filter in the Sell tab.", false,
+            function() return AuctionSetting("advisorOnly") end, function(on) Launcher().SetAuctionOption("advisorOnly",on) end)
+        K.ProxyToggle("workshopAuctionMaxQuantity", "Start with maximum sell quantity",
+            "Select the maximum usable quantity when choosing a bag item. Off starts with one. Locked, bound and crafting-protected items remain excluded; nothing is posted automatically.", true,
+            function() return AuctionSetting("maxQuantity") end, function(on) Launcher().SetAuctionOption("maxQuantity",on) end)
+        K.Choice("workshopAuctionDuration", "Default auction duration", "The starting duration when choosing an item to sell. Changing this setting keeps the current draft unchanged.", K.STRING,"1",
+            function() return tostring(AuctionSetting("duration")) end,
+            function(value) Launcher().SetAuctionOption("duration",tonumber(value)) end,
+            {{"1",AUCTION_DURATION_ONE or "Short"},{"2",AUCTION_DURATION_TWO or "Medium"},{"3",AUCTION_DURATION_THREE or "Long"}})
 
         K.Header("Tooltip Designer", "Arrange Normal and Hold Shift item information using safe preview data.")
 

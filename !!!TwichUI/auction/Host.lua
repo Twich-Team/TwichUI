@@ -13,7 +13,9 @@ local state = "blizzard"
 local stateCodes = { blizzard = 0, preparing = 1, twichui = 2, restoring = 3, recovery = 4 }
 local openedAt
 local stats = { activations = 0, failed = 0, restoreFailed = 0, switches = 0 }
-local UpdateControl
+local UpdateControl, Failed
+local failedVisit
+local opening = {}
 local function UI() return R.Workshop and R.Workshop.AuctionUI end
 local function CancelPending()
     request = request + 1
@@ -36,45 +38,143 @@ local function Available()
         and p.IsInteractingWithNpcOfType(t) == true and p.IsValidNPCInteraction(t) == true or false
 end
 
+-- Frame coordinates are in each frame's effective-scale units, not UIParent's.
+-- IsVisible includes ancestors but says nothing about alpha or viewport overlap.
+local function Finite(n) return type(n) == "number" and n == n and math.abs(n) < math.huge end
+local function Presentation(f, full)
+    local s = { usable = false, why = "missing-frame" }
+    if not f or not UIParent then return s end
+    s.shown, s.visible = f:IsShown(), f:IsVisible()
+    s.scale, s.strata = f:GetEffectiveScale(), f:GetFrameStrata()
+    local ancestor, alpha, depth, ancestorsShown = f, 1, 0, true
+    while ancestor and depth < 32 do
+        if not ancestor:IsShown() then ancestorsShown = false end
+        alpha = alpha * ancestor:GetAlpha()
+        ancestor, depth = ancestor:GetParent(), depth + 1
+    end
+    s.alpha, s.ancestors = alpha, depth
+    local scale, viewportScale = s.scale, UIParent:GetEffectiveScale()
+    if not Finite(scale) or scale <= 0 or not Finite(viewportScale) or viewportScale <= 0 then
+        s.why = "invalid-scale"; return s
+    end
+    local function Bounds(frame, k)
+        local l, b, r, t = frame:GetLeft(), frame:GetBottom(), frame:GetRight(), frame:GetTop()
+        if not (Finite(l) and Finite(b) and Finite(r) and Finite(t)) then return end
+        return { left = l*k, bottom = b*k, right = r*k, top = t*k }
+    end
+    s.bounds, s.viewport = Bounds(f, scale), Bounds(UIParent, viewportScale)
+    local b, v = s.bounds, s.viewport
+    if not b or not v or b.right <= b.left or b.top <= b.bottom or v.right <= v.left or v.top <= v.bottom then
+        s.why = "invalid-geometry"; return s
+    end
+    if ancestor or not ancestorsShown or not s.shown or not s.visible or not Finite(alpha) or alpha <= 0 then
+        s.why = "invisible-frame"; return s
+    end
+    if full then
+        s.usable = b.left >= v.left-1 and b.bottom >= v.bottom-1 and b.right <= v.right+1 and b.top <= v.top+1
+    else
+        s.usable = math.min(b.right,v.right)-math.max(b.left,v.left) >= 48
+            and math.min(b.top,v.top)-math.max(b.bottom,v.bottom) >= 48
+    end
+    s.why = s.usable and "visible" or "offscreen"
+    return s
+end
+function H.Presentation(f, full)
+    local ok, s = pcall(Presentation, f, full)
+    return ok and s or { usable = false, why = "geometry-error" }
+end
+local function NativeStatus()
+    local s = H.Presentation(AuctionHouseFrame)
+    opening.native = s
+    return s.usable
+end
+
 local function Points(f)
     local p = {}
     for i = 1, f:GetNumPoints() do p[i] = { f:GetPoint(i) } end
     return p
 end
-local function SamePoints(f, points)
-    if f:GetNumPoints() ~= #points then return false end
-    for i, p in ipairs(points) do
-        local now = { f:GetPoint(i) }
-        for j = 1, 5 do if now[j] ~= p[j] then return false end end
+-- SetPoint/GetPoint can round coordinates through the client's UI scale.
+-- Allow that only when validating a write; ownership checks use the exact
+-- returned snapshot so a later foreign anchor change still relinquishes it.
+local POINT_EPSILON = 0.01
+local function ComparePoints(actual, expected, tolerance)
+    if #actual ~= #expected then return false, "anchor-count" end
+    for i, point in ipairs(expected) do
+        local now = actual[i]
+        for j = 1, 3 do
+            if now[j] ~= point[j] then return false, "anchor-field-" .. j end
+        end
+        for j = 4, 5 do
+            if not Finite(now[j]) or not Finite(point[j]) or math.abs(now[j] - point[j]) > (tolerance or 0) then
+                return false, "offset-" .. (j == 4 and "x" or "y")
+            end
+        end
     end
     return true
 end
+local function SamePoints(f, points, tolerance)
+    return ComparePoints(Points(f), points, tolerance)
+end
+local function DescribePoints(points)
+    local text = {}
+    for i = 1, math.min(#points, 4) do
+        local p = points[i]
+        local relative = p[2] == UIParent and "UIParent" or p[2] == nil and "nil" or "other-frame"
+        local x = Finite(p[4]) and ("%.9f"):format(p[4]) or "invalid"
+        local y = Finite(p[5]) and ("%.9f"):format(p[5]) or "invalid"
+        text[i] = tostring(p[1]) .. "/" .. relative .. "/" .. tostring(p[3]) .. " x=" .. x .. " y=" .. y
+    end
+    return table.concat(text, "; ")
+end
 local function StopTimer()
     if ticker then ticker:Cancel(); ticker = nil end
+end
+
+local function HideSafely()
+    local ok, err = pcall(HideUI)
+    if not ok then R.Fault("auction replacement cleanup", err) end
+end
+local function KeepVisibleOrHide()
+    local a = UI()
+    local ok, s = pcall(function() return a and a.Presentation and a.Presentation() end)
+    -- Keep an already working interface until native recovery is possible.
+    -- Host's recovery state blocks reads/actions; do not create our own blank.
+    if not enabled or not visiting or not ok or not s or not s.usable then HideSafely() end
 end
 
 -- Keep the lease after a failed restore, including a partially applied anchor
 -- list. Each SetPoint is attempted independently; retry never loses the snapshot.
 local function Restore(why)
     reason = why
+    opening.restoreReason = why
     StopTimer()
     CancelPending()
     state = "restoring"
-    -- UI cleanup faults must never prevent native anchor recovery.
-    local hidden, fault = pcall(HideUI)
-    if not hidden then R.Fault("auction replacement cleanup", fault) end
     if not lease then
-        state = "blizzard"
+        HideSafely()
+        local usable = NativeStatus()
+        local ended = not visiting or (not usable and not Available())
+        state = (usable or ended) and "blizzard" or "recovery"
+        opening.restoration = usable and "visible" or ended and "session-ended" or "native-unavailable"
         if UpdateControl then UpdateControl() end
-        return true
+        return usable or ended, opening.restoration
     end
-    if Combat() then reason = "restore-after-combat"; state = "recovery"; return false, reason end
+    if Combat() then
+        reason = "restore-after-combat"; state = "recovery"; opening.restoration = reason
+        KeepVisibleOrHide()
+        if UpdateControl then UpdateControl() end
+        return false, reason
+    end
     local l = lease
     local ok, err = pcall(function()
         -- A foreign anchor change ends our ownership. Do not overwrite it.
         if l.recoveryPoints then
-            if not SamePoints(l.frame, l.recoveryPoints) then return end
-        elseif not l.partial and not SamePoints(l.frame, l.parked) then return end
+            if not SamePoints(l.frame, l.recoveryPoints) then l.foreign = true; return end
+        elseif not l.partial and not SamePoints(l.frame, l.parked) then l.foreign = true; return end
+        -- Protection may have changed since parking. Never bypass a new owner.
+        if l.frame:IsProtected() then error("native frame became protected", 0) end
+        l.foreign = false
         l.partial = true
         l.frame:ClearAllPoints()
         local first
@@ -83,19 +183,34 @@ local function Restore(why)
             if not good and not first then first = fault end
         end
         if first then error(first, 0) end
-        if not SamePoints(l.frame, l.points) then error("AH-1a: native anchors did not restore", 0) end
+        if not SamePoints(l.frame, l.points, POINT_EPSILON) then error("AH-1a: native anchors did not restore", 0) end
+        l.recoveryPoints = Points(l.frame)
     end)
+    local usable = NativeStatus()
+    local ended = not usable and not Available()
+    if ok and not usable and not ended then
+        ok, err = false, l.foreign and "foreign native anchors remain unavailable" or "native presentation remains unavailable"
+    end
     if not ok then
         local read, points = pcall(Points, l.frame)
-        if read then l.recoveryPoints = points end
-        reason = "restore-failed"
+        if read and not l.foreign then l.recoveryPoints = points end
+        reason = l.foreign and "restore-blocked-owner" or "restore-failed"
+        opening.restoration = reason
         state = "recovery"
         stats.restoreFailed = stats.restoreFailed + 1
+        KeepVisibleOrHide()
+        if UpdateControl then UpdateControl() end
+        if l.foreign and opening.parkingMismatch then
+            err = tostring(err) .. " (" .. opening.parkingMismatch .. "; requested " .. opening.parkExpected
+                .. "; returned " .. opening.parkActual .. ")"
+        end
         R.Fault("auction proof restore", err)
         return false, reason
     end
+    opening.restoration = usable and (l.foreign and "foreign-visible" or "visible") or "session-ended"
     lease = nil
     state = "blizzard"
+    HideSafely() -- native is usable (or the genuine session ended) before hiding
     if control then control:Hide() end
     if UpdateControl then UpdateControl() end
     return true
@@ -109,6 +224,9 @@ function H.Restore(why)
         state, reason = "recovery", "restore-failed"
         stats.restoreFailed = stats.restoreFailed + 1
         StopTimer()
+        CancelPending()
+        opening.restoration = "restore-failed"
+        if UpdateControl then pcall(UpdateControl) end
         R.Fault("auction proof restore", good)
         return false, reason
     end
@@ -160,27 +278,34 @@ local function Offscreen(f)
     local left, right = f:GetLeft(), UIParent:GetRight()
     return left and right and left * f:GetEffectiveScale() > right * UIParent:GetEffectiveScale()
 end
+local function WatchRestore(why)
+    opening.watchdog = why
+    if lease and lease.integrated then return Failed(why) end
+    return H.Restore(why)
+end
 local function Watch()
     local l = lease
     if not l then return end
-    if Combat() then H.Restore("combat"); return end
-    if not Available() then H.Restore("interaction-ended"); return end
-    if AuctionHouseFrame ~= l.frame or not l.frame:IsVisible() then H.Restore("native-hidden"); return end
-    if not control:IsVisible() or Conflict() or Busy(l.frame, l.integrated) or Focused(l.frame)
+    if Combat() then WatchRestore("combat"); return end
+    if not Available() then WatchRestore("interaction-ended"); return end
+    if AuctionHouseFrame ~= l.frame or not l.frame:IsVisible() then WatchRestore("native-hidden"); return end
+    if (not l.integrated and not control:IsVisible()) or Conflict() or Busy(l.frame, l.integrated) or Focused(l.frame)
         or l.frame:GetParent() ~= l.parent or l.frame:GetScale() ~= l.scale
         or l.frame:IsClampedToScreen() or not SamePoints(l.frame, l.parked) or not Offscreen(l.frame) then
-        H.Restore("external-change"); return
+        WatchRestore("external-change"); return
     end
     if l.integrated then
         local a, launcher = UI(), R.WorkshopLauncher
-        if not enabled or not launcher or not launcher.Enabled() or not a or not a.IsShown()
-            or a.Context() ~= "auctioneer" then H.Restore("replacement-unavailable") end
-    elseif GetTime() >= l.untilTime then H.Restore("timeout") end
+        local presentation = a and a.Presentation and a.Presentation()
+        opening.custom = presentation
+        if not enabled or not launcher or not launcher.Enabled() or not a or not presentation or not presentation.usable
+            or a.Context() ~= "auctioneer" then WatchRestore("replacement-unavailable") end
+    elseif GetTime() >= l.untilTime then WatchRestore("timeout") end
 end
 local function Tick()
     if not lease then return end
     local ok, err = pcall(Perf.Call, "auction.proofWatch", Watch)
-    if not ok then H.Restore("watch-error"); R.Fault("auction proof watch", err) end
+    if not ok then WatchRestore("watch-error"); R.Fault("auction proof watch", err) end
 end
 
 local function BuildControl()
@@ -194,7 +319,8 @@ local function BuildControl()
     control:SetFrameStrata("DIALOG")
     control:SetText("AH-1a proof: Restore Blizzard (30s limit)")
     control:SetScript("OnClick", function()
-        if lease then H.Restore("player-switch")
+        if R.PlayMenuSound then R:PlayMenuSound() end
+        if lease or state == "recovery" then H.Restore("player-switch")
         elseif enabled and visiting then H.SwitchToTwichUI()
         else H.Command("off") end
     end)
@@ -242,13 +368,26 @@ local function Activate(integrated)
     lease = { frame = f, points = points, scale = f:GetScale(), parent = f:GetParent(), partial = true,
         parked = { { "TOPLEFT", UIParent, "TOPRIGHT", OFFSET, 0 } }, untilTime = GetTime() + SECONDS,
         integrated = integrated, visit = visit }
+    opening.parking = "attempted"
+    opening.parkExpected = DescribePoints(lease.parked)
     f:ClearAllPoints()
     f:SetPoint(unpack(lease.parked[1]))
+    local actual = Points(f)
+    local matched, mismatch = ComparePoints(actual, lease.parked, POINT_EPSILON)
+    opening.parkActual, opening.parkingMismatch = DescribePoints(actual), mismatch
+    -- Snapshot only a verified version of our write, never arbitrary foreign
+    -- anchors. Retaining the requested numbers mistakes rounding for ownership.
+    if matched then lease.parked = actual end
     lease.partial = false
-    if not f:IsVisible() or not Available() or not SamePoints(f, lease.parked) or not Offscreen(f) then
+    local refusal = not f:IsVisible() and "native-hidden" or not Available() and "interaction-ended"
+        or not matched and mismatch or not SamePoints(f, lease.parked) and "anchors-changed"
+        or not Offscreen(f) and "still-onscreen"
+    if refusal then
+        opening.parking = "refused-" .. refusal
         H.Restore("parking-refused")
         return false, reason
     end
+    opening.parking = "verified"
     local owned = lease
     ticker = C_Timer.NewTicker(0.25, function()
         if lease == owned and (not owned.integrated or (visiting and visit == owned.visit)) then Tick() end
@@ -272,9 +411,10 @@ function H.Activate(integrated)
 end
 
 function H.Snapshot()
-    return { mode = not lease and "blizzard" or (reason == "parked" and "parked" or "restore-pending"),
+    return { mode = state == "recovery" and "restore-pending" or not lease and "blizzard" or (reason == "parked" and "parked" or "restore-pending"),
         reason = reason, leased = lease ~= nil, watching = ticker ~= nil, control = control ~= nil,
         state = state, stateCode = stateCodes[state], enabled = enabled, nativeConfirmed = confirmed, visit = visit, visiting = visiting,
+        opening = opening, failedVisit = failedVisit, nativeUsable = opening.native and opening.native.usable,
         pending = pending and 1 or 0, activations = stats.activations, failed = stats.failed,
         restoreFailed = stats.restoreFailed, switches = stats.switches, openMS = stats.openMS,
         loadMS = stats.loadMS, firstLoadMS = stats.firstLoadMS, activateMS = stats.activateMS, restoreMS = stats.restoreMS, switchMS = stats.switchMS }
@@ -319,8 +459,16 @@ end
 -- Return action exists only for an explicitly enabled, genuine current visit.
 -- It is independent of the native root so it remains reachable during recovery.
 UpdateControl = function()
-    if not control or not controlReady or lease then return end
-    if enabled and visiting and not Combat() and Available() and AuctionHouseFrame and AuctionHouseFrame:IsVisible() then
+    if not control or not controlReady then return end
+    -- A healthy integrated window already owns the styled header switch. Keep
+    -- the independent control ready for recovery without duplicating that action.
+    if lease and lease.integrated and state == "twichui" then control:Hide(); return end
+    if lease or state == "recovery" then
+        control:SetText("Restore Blizzard Auction House · Retry")
+        control:Show()
+        return
+    end
+    if enabled and visiting and not Combat() and NativeStatus() then
         control:ClearAllPoints(); control:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 24)
         local failed = reason == "other-auction-addon" or reason:find("failed", 1, true) or reason == "activation-error"
         control:SetText(failed and "TwichUI unavailable · Retry" or "TwichUI Auction House")
@@ -328,7 +476,7 @@ UpdateControl = function()
             R.Interact.Tip(control, "TwichUI Auction House", reason == "other-auction-addon"
                 and "Another Auction House addon is controlling this window. Blizzard's window is available."
                 or failed and "TwichUI couldn't open its Auction House. Blizzard's window is available. Click to retry."
-                or "Switch interfaces during this auctioneer visit. Transactions remain unavailable in TwichUI.")
+                or "Switch interfaces during this auctioneer visit.")
         end
         control:Show()
     else control:Hide() end
@@ -380,10 +528,30 @@ if R.Profiles and R.Profiles.OnApply then R.Profiles.OnApply("views", "auction-d
 function H.IsCurrent(id) return enabled and visiting and visit == id and Available() end
 function H.ToBlizzard() return H.Restore("player-switch") end
 
-local function Failed(why)
+Failed = function(why)
+    local first = failedVisit ~= visit
+    failedVisit = visit
     stats.failed = stats.failed + 1
-    H.Restore(why or "replacement-failed")
-    return false, why or reason
+    pcall(BuildControl) -- recovery is independent even if opening failed before a lease
+    local a = UI()
+    if a and a.Presentation then
+        local ok, s = pcall(a.Presentation)
+        if ok then opening.custom = s end
+    end
+    opening.failure, opening.failureState = why or "replacement-failed", state
+    -- Activate already attempted recovery on a refused native write. A second
+    -- automatic Restore repeats the same fault without new state or ownership.
+    local restored = false
+    if state == "recovery" then CancelPending(); StopTimer()
+    else restored = H.Restore(why or "replacement-failed") end
+    if first then
+        R.Print(NativeStatus() and "TwichUI Auction House couldn't open. Blizzard's Auction House is available."
+            or "TwichUI Auction House couldn't open. Blizzard recovery is pending; use Restore Blizzard Auction House or /tui ahdebug off.")
+    end
+    return false, why or reason, restored
+end
+function H.ReplacementFailed(id, why)
+    if visiting and visit == id and (state == "preparing" or state == "twichui") then return Failed(why) end
 end
 local function Switch()
     if not enabled or not confirmed then return false, "test-gate" end
@@ -391,6 +559,8 @@ local function Switch()
     if state == "twichui" then return true end
     CancelPending()
     local id, token = visit, request
+    opening = { visit = id, state = "preparing", load = "pending", build = "pending", parking = "untouched" }
+    NativeStatus()
     local good, why = Prerequisites()
     if not good then return Failed(why) end
     state = "preparing"
@@ -409,6 +579,7 @@ local function Switch()
         if not stats.firstLoadMS then stats.firstLoadMS = stats.loadMS end
     end
     if not H.IsCurrent(id) or token ~= request or state ~= "preparing" then return false, "visit-ended" end
+    opening.load = ok and (loaded and "loaded" or tostring(loadWhy or "failed")) or "exception"
     if not ok then R.Fault("auction replacement load", loaded); return Failed("workshop-load-error") end
     if not loaded then return Failed(loadWhy or "workshop-load-failed") end
     local reads = R.Workshop and R.Workshop.AuctionReads
@@ -422,16 +593,25 @@ local function Switch()
     local prepared, built = pcall(a.Prepare)
     if not prepared then R.Fault("auction replacement build", built) end
     if not H.IsCurrent(id) or token ~= request or state ~= "preparing" then return false, "visit-ended" end
+    opening.build = prepared and built and "built" or "failed"
     if not prepared or not built then return Failed("window-build-failed") end
+    -- Render while Blizzard is still usable. Show alone is not a render receipt.
+    local shown, result = pcall(a.ShowIntegrated, id)
+    opening.custom = a.Presentation and a.Presentation()
+    if not shown then R.Fault("auction replacement show", result) end
+    if not H.IsCurrent(id) or token ~= request or state ~= "preparing" then return false, "visit-ended" end
+    if not shown or result ~= true or not opening.custom or not opening.custom.usable then return Failed("window-show-failed") end
+    opening.presented = opening.custom
     local start = debugprofilestop and debugprofilestop()
     local parked, parkWhy = H.Activate(true) -- rechecks every guard after loading/building
     if start then stats.activateMS = math.max(0, debugprofilestop() - start) end
     if not parked then return Failed(parkWhy) end
-    local shown, result = pcall(a.ShowIntegrated, id)
-    if not shown then R.Fault("auction replacement show", result) end
     if not H.IsCurrent(id) or token ~= request or not lease then return false, "visit-ended" end
-    if not shown or result ~= true or not a.IsShown() then return Failed("window-show-failed") end
+    opening.custom = a.Presentation()
+    if not opening.custom.usable then return Failed("window-commit-failed") end
     state, reason = "twichui", "parked"
+    UpdateControl()
+    opening.state = state
     stats.activations, stats.switches = stats.activations + 1, stats.switches + 1
     if openedAt then stats.openMS = math.max(0, (GetTime() - openedAt) * 1000); openedAt = nil end
     return true
@@ -484,20 +664,20 @@ local function ScheduleLook(id, token, tries, delay)
     end)
 end
 Look = function(id, token, tries)
-    if not enabled or not visiting or visit ~= id or request ~= token then return end
+    if not enabled or not visiting or visit ~= id or request ~= token or failedVisit == id then return end
     pending = nil
     if Combat() then reason = "combat"; state = "blizzard"; return end
     if not Available() or not AuctionHouseFrame or not AuctionHouseFrame:IsVisible() then
         if tries < 20 then
             ScheduleLook(id, token, tries + 1, 0.1)
-        else reason = "native-not-ready"; state = "blizzard"; stats.failed = stats.failed + 1 end
+        else Failed("native-not-ready") end
         return
     end
     H.SwitchToTwichUI() -- one attempt; never retry load/build/guard failures automatically
 end
 local function Opened()
     if visiting then return end
-    visiting = true; visit = visit + 1
+    visiting = true; visit = visit + 1; failedVisit = nil
     if H.DebugEnabled() then enabled, confirmed = true, true end
     if not enabled then return end
     CancelPending()

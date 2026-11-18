@@ -26,10 +26,19 @@ local function Context()
 end
 function Q.Pending() return pending and 1 or 0 end
 function Q.Available() return W.Active() and (Q.experimental or Q.Integrated()) and Context() and not Q.ambiguous end
+-- Display lifetime and action freshness differ: old results remain readable,
+-- while reviews and continuation requests require a fresh response.
+function Q.Fresh(snapshot)
+    snapshot=snapshot or Q.snapshot
+    if not snapshot or snapshot.epoch~=Q.epoch or snapshot.stale or not W.Finite(snapshot.at) then return false end
+    local age=GetTime()-snapshot.at
+    return age>=0 and age<30
+end
 function Q.End(reason)
     StopTimers()
     Q.epoch=Q.epoch+1
     pending=nil;stream=nil;Q.snapshot=nil;Q.state=reason or "unavailable"
+    if W.AuctionActions and W.AuctionActions.ReadEnded then W.AuctionActions.ReadEnded(Q.state) end
     if W.AuctionUI then W.AuctionUI.Schedule() end
 end
 function Q.Cancel(reason)
@@ -78,20 +87,30 @@ local function Same(a,b)
         a.itemSuffix==b.itemSuffix and a.battlePetSpeciesID==b.battlePetSpeciesID
 end
 local function Amount(v) return W.Int(W.Plain(v),1,W.Prices.MAX_COPPER) end
-function Q.Listing(x,commodity)
+function Q.Listing(x,mode,requestedItem)
     x=W.Plain(x)
     if type(x)~="table" then return nil end
     local qty=W.Int(W.Plain(x.quantity),1,W.MAX_ID)
     local id=W.Int(W.Plain(x.auctionID),1,9007199254740991)
-    local key=Q.Key(x.itemKey or {itemID=x.itemID})
-    if not qty or not id or not key then return nil end
+    local commodity=mode==true or mode=="commodity"
+    local key=commodity and Q.Key({itemID=x.itemID or requestedItem}) or Q.Key(x.itemKey or {itemID=x.itemID})
+    if not qty or not key or (not commodity and not id) then return nil end
     local unit,total
+    local priceEach=mode=="item"
     if commodity then
         unit=Amount(x.unitPrice)
-        total=unit and W.Int(unit*qty,1,W.Prices.MAX_COPPER)
+        if not unit then return nil end
+        total=W.Int(unit*qty,1,W.Prices.MAX_COPPER)
+    elseif priceEach then
+        -- Forever item-search quantity is availability at this price, not a
+        -- stack sold for buyoutAmount. The native buy frame uses that amount
+        -- directly for the representative auction; never divide it by stock.
+        total=Amount(x.buyoutAmount);unit=total
     else total=Amount(x.buyoutAmount);unit=total and math.ceil(total/qty) end
     local own,account=W.Plain(x.containsOwnerItem),W.Plain(x.containsAccountItem)
     return {auctionID=id,itemKey=key,item=key.itemID,link=W.Text(W.Plain(x.itemLink),1000),qty=qty,unit=unit,total=total,
+        priceEach=priceEach,purchaseQty=priceEach and 1 or qty,commodity=commodity,
+        listingKey=commodity and ("commodity:"..key.itemID..":"..("%.0f"):format(unit)) or nil,
         bid=Amount(x.bidAmount) or Amount(x.minBid),status=W.Int(W.Plain(x.status),0,1),
         seconds=W.Int(W.Plain(x.timeLeftSeconds),0,W.MAX_ID),band=W.Int(W.Plain(x.timeLeft),0,10),
         own=own==true,account=account==true,
@@ -107,11 +126,21 @@ local function Finish(state,rows,complete,event,rawCount)
         complete=complete==true,at=GetTime(),experimental=true,visit=Q.visit,
         rawCount=rawCount or #(rows or {}),response=event,correlation="serialized-local"}
     Q.state=state;Q.lastResponse=event;pending=nil
-    stream=Q.Integrated() and not complete and current or nil
+    -- Owned updates are unsolicited cache changes as well as query replies.
+    -- Keep the sole visit-bound owned stream until another read or teardown;
+    -- this observes sold/cancelled state without issuing recurring queries.
+    stream=Q.Integrated() and (not complete or current.kind=="owned") and current or nil
     local snapshot=Q.snapshot
     expiry=C_Timer.NewTimer(30,function()
-        if Q.snapshot==snapshot then Q.End("stale; refresh live results") end
+        if Q.snapshot~=snapshot then return end
+        expiry=nil
+        snapshot.stale=true
+        if snapshot.kind~="owned" then stream=nil end
+        Q.state="stale; refresh live results"
+        if W.AuctionActions and W.AuctionActions.ReadEnded then W.AuctionActions.ReadEnded("The refreshed listings are no longer current. Try reviewing again.") end
+        if W.AuctionUI then W.AuctionUI.Schedule() end
     end)
+    if W.AuctionActions and W.AuctionActions.ReadReady then W.AuctionActions.ReadReady(snapshot) end
     if W.AuctionUI then W.AuctionUI.Schedule() end
 end
 function Q.AttachVisit(id)
@@ -205,6 +234,7 @@ function Q.Begin(kind,arg,more)
     local mine=Q.serial
     pending={id=mine,epoch=Q.epoch,kind=kind,arg=arg};Q.state="loading";Q.snapshot=nil
     Q.lastRequest=kind..(more and " continuation" or " search");Q.lastResponse=nil;Q.lastError=nil
+    if W.AuctionUI then W.AuctionUI.Schedule() end
     sending=true
     local ok,hasFull=pcall(fn,unpack(args))
     sending=false
@@ -221,6 +251,7 @@ function Q.Begin(kind,arg,more)
 end
 function Q.More()
     local snap=Q.snapshot
+    if snap and not Q.Fresh(snap) then return false,"Refresh these results before requesting more listings." end
     if not snap or snap.epoch~=Q.epoch or snap.complete or #snap.rows>=Q.MAX or snap.kind=="owned" then
         return false,"Refine the search or refresh; no further results can be requested."
     end
@@ -240,6 +271,7 @@ function Q.Event(event,key)
         Q.open=false;Q.Cancel("unavailable");return
     end
     if event=="AUCTION_HOUSE_THROTTLED_SYSTEM_READY" then
+        if W.AuctionActions and W.AuctionActions.ReadReady then W.AuctionActions.ReadReady(Q.snapshot) end
         if W.AuctionUI then W.AuctionUI.Schedule() end
         return
     end
@@ -251,6 +283,12 @@ function Q.Event(event,key)
     end
     local api=C_AuctionHouse
     local function Read()
+        -- RECEIVED has no item-ID payload on Forever. Only read it for our
+        -- sole commodity request, with native evidence for that queried item.
+        if event=="COMMODITY_SEARCH_RESULTS_RECEIVED" and p.kind=="commodity" and key==nil then
+            if not api.HasSearchResults or not api.HasSearchResults(Q.Key({itemID=p.arg})) then return end
+            key=p.arg
+        end
         local rows,complete,rawCount={},false,0
         if p.kind=="browse" and (event=="AUCTION_HOUSE_BROWSE_RESULTS_UPDATED" or event=="AUCTION_HOUSE_BROWSE_RESULTS_ADDED") then
             local native=api.GetBrowseResults();rawCount=#(native or {})
@@ -270,14 +308,14 @@ function Q.Event(event,key)
         elseif p.kind=="item" and (event=="ITEM_SEARCH_RESULTS_UPDATED" or event=="ITEM_SEARCH_RESULTS_ADDED") and Same(p.arg,key) then
             local count=api.GetNumItemSearchResults(p.arg);rawCount=count
             for i=1,math.min(count,Q.MAX) do
-                local r=Q.Listing(api.GetItemSearchResultInfo(p.arg,i))
+                local r=Q.Listing(api.GetItemSearchResultInfo(p.arg,i),"item")
                 if r and Same(r.itemKey,p.arg) then rows[#rows+1]=r end
             end
             complete=api.HasFullItemSearchResults(p.arg) and count<=Q.MAX and #rows==count
-        elseif p.kind=="commodity" and (event=="COMMODITY_SEARCH_RESULTS_UPDATED" or event=="COMMODITY_SEARCH_RESULTS_ADDED") and key==p.arg then
+        elseif p.kind=="commodity" and (event=="COMMODITY_SEARCH_RESULTS_UPDATED" or event=="COMMODITY_SEARCH_RESULTS_ADDED" or event=="COMMODITY_SEARCH_RESULTS_RECEIVED") and key==p.arg then
             local count=api.GetNumCommoditySearchResults(p.arg);rawCount=count
             for i=1,math.min(count,Q.MAX) do
-                local r=Q.Listing(api.GetCommoditySearchResultInfo(p.arg,i),true)
+                local r=Q.Listing(api.GetCommoditySearchResultInfo(p.arg,i),true,p.arg)
                 if r and r.item==p.arg then r.commodity=true;rows[#rows+1]=r end
             end
             complete=api.HasFullCommoditySearchResults(p.arg) and count<=Q.MAX and #rows==count
@@ -289,7 +327,7 @@ function Q.Event(event,key)
 end
 local events={"AUCTION_HOUSE_SHOW","AUCTION_HOUSE_CLOSED","AUCTION_HOUSE_DISABLED","PLAYER_LEAVING_WORLD",
     "AUCTION_HOUSE_THROTTLED_SYSTEM_READY","AUCTION_HOUSE_BROWSE_RESULTS_UPDATED","AUCTION_HOUSE_BROWSE_RESULTS_ADDED","AUCTION_HOUSE_BROWSE_FAILURE", "AUCTION_HOUSE_THROTTLED_MESSAGE_DROPPED",
-    "ITEM_SEARCH_RESULTS_UPDATED","ITEM_SEARCH_RESULTS_ADDED","COMMODITY_SEARCH_RESULTS_UPDATED","COMMODITY_SEARCH_RESULTS_ADDED","OWNED_AUCTIONS_UPDATED"}
+    "ITEM_SEARCH_RESULTS_UPDATED","ITEM_SEARCH_RESULTS_ADDED","COMMODITY_SEARCH_RESULTS_UPDATED","COMMODITY_SEARCH_RESULTS_ADDED","COMMODITY_SEARCH_RESULTS_RECEIVED","OWNED_AUCTIONS_UPDATED"}
 local handlers,listening={},false
 function Q.Start()
     if listening or not W.Active() then return end

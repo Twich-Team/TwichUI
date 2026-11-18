@@ -12,15 +12,18 @@ end
 -- Familiar denomination fields using the same coin atlases as the native
 -- money input used by Sell from Bags. No search decoration or raw-copper field.
 function A.MoneyInputs(parent,changed)
-    local f=CreateFrame("Frame",nil,parent);f:SetSize(286,60)
+    local f=CreateFrame("Frame",nil,parent);f:SetSize(286,34)
     f.fields={}
     for i,def in ipairs({{"Gold",110,"coin-gold"},{"Silver",80,"coin-silver"},{"Copper",80,"coin-copper"}}) do
         local x=i==1 and 0 or i==2 and 118 or 206
-        local label=UI.Text(f,12,UI.K.textDim);label:SetPoint("TOPLEFT",x,0);label:SetText(def[1])
-        local box=UI.L.EditBox(f,def[2],38);UI.CL.Dress(box,"field")
-        box:SetPoint("TOPLEFT",x,-20);box:SetTextInsets(8,24,0,0);box:SetMaxLetters(i==1 and 7 or 2)
+        local box=UI.L.EditBox(f,def[2],32);UI.CL.Dress(box,"field")
+        box:SetPoint("TOPLEFT",x,0);box:SetTextInsets(8,30,0,0);box:SetMaxLetters(i==1 and 7 or 2);box:SetNumeric(true)
         box:SetJustifyH("RIGHT")
-        box.coin=box:CreateTexture(nil,"ARTWORK");box.coin:SetSize(14,16);box.coin:SetPoint("RIGHT",-7,0);box.coin:SetAtlas(def[3])
+        -- The field skin uses child frames; keep coin art above that skin.
+        box.coinFrame=CreateFrame("Frame",nil,box);box.coinFrame:SetSize(20,20)
+        box.coinFrame:SetPoint("RIGHT",-6,0);box.coinFrame:SetFrameLevel(box:GetFrameLevel()+3);box.coinFrame:EnableMouse(false)
+        box.coin=box.coinFrame:CreateTexture(nil,"OVERLAY");box.coin:SetAllPoints();box.coin:SetAtlas(def[3])
+        UI.Tip(box,def[1],def[1].." portion of the price per item.")
         box:SetScript("OnTextChanged",function() if not f.setting and changed then changed() end end)
         box:SetScript("OnEscapePressed",function(self) self:ClearFocus() end)
         f.fields[i]=box
@@ -59,6 +62,7 @@ function A.Dropdown(parent, width, choices, current, choose)
         for _, entry in ipairs(choices()) do
             local value, text = entry[1], entry[2]
             desc:CreateRadio(text, function() return current() == value end, function()
+                if A.MenuSound then A.MenuSound() end
                 choose(value)
                 b:Refresh()
             end)

@@ -1,11 +1,11 @@
--- Market-only presentation. Typed evidence in, pooled geometry out; no saved data.
+-- Shared auction chart presentation. Typed evidence in, pooled geometry out; no saved data.
 local R,W=TwichUI,TwichUI.Workshop
 local UI=W.UI
 local C={MAX_COLUMNS=1024}
-local activeChart
+local charts=setmetatable({}, {__mode="k"})
 if R.Perf.Gauge then
-    R.Perf.Gauge('auction.chartPool',{label='Market chart pooled regions',unit='count',kind='pool',group='auction',read=function() return activeChart and #activeChart.pool+#activeChart.linePool+#activeChart.nativePool or 0 end})
-    R.Perf.Gauge('auction.chartRecords',{label='Market chart visible evidence',unit='count',kind='cache',group='auction',read=function() return activeChart and activeChart.data and #activeChart.data.points+#activeChart.data.groups or 0 end})
+    R.Perf.Gauge('auction.chartPool',{label='Market chart pooled regions',unit='count',kind='pool',group='auction',read=function() local n=0;for chart in pairs(charts) do n=n+#chart.pool+#chart.linePool+#chart.nativePool end;return n end})
+    R.Perf.Gauge('auction.chartRecords',{label='Market chart visible evidence',unit='count',kind='cache',group='auction',read=function() local n=0;for chart in pairs(charts) do if chart.data then n=n+#chart.data.points+#chart.data.groups end end;return n end})
 end
 W.AdvancedChart=C
 local function Clamp(v,a,b) return math.max(a,math.min(b,v)) end
@@ -110,7 +110,7 @@ function C.Geometry(d,w,h)
 end
 function UI.AdvancedMarketChart(parent,w,h)
     local c=CreateFrame('Frame',nil,parent);c:SetSize(w,h);UI.Panel(c,'canvas')
-    c.pool={};c.linePool={};c.nativePool={};c.anchors={};c.guides={};c.labels={};activeChart=c
+    c.pool={};c.linePool={};c.nativePool={};c.anchors={};c.guides={};c.labels={};charts[c]=true
     c.plot=CreateFrame('Frame',nil,c);c.plot:SetPoint('TOPLEFT',100,-12);c.plot:SetPoint('BOTTOMRIGHT',-18,36)
     c.hit=CreateFrame('Button',nil,c.plot);c.hit:SetAllPoints(c.plot)
     c.hit:SetFrameLevel(c:GetFrameLevel()+12);c.hit:EnableMouse(true)
@@ -128,7 +128,7 @@ function UI.AdvancedMarketChart(parent,w,h)
     c.cross=Solid(c.plot,UI.K.textDim,.5);c.marker=Solid(c.plot,UI.K.bronzeText,1)
     c.selection=Solid(c.plot,UI.K.bronzeText,.10)
     c.halo=Solid(c.plot,UI.K.bronzeLo,.28);c.halo:SetSize(10,10)
-    c.tip=CreateFrame('Frame',nil,c,'BackdropTemplate');UI.Panel(c.tip,'espresso');c.tip:SetSize(316,112);c.tip:SetFrameLevel(c:GetFrameLevel()+20);c.tip:EnableMouse(false)
+    c.tip=CreateFrame('Frame',nil,UIParent,'BackdropTemplate');UI.Panel(c.tip,'espresso');c.tip:SetSize(316,112);c.tip:SetFrameStrata('TOOLTIP');c.tip:SetClampedToScreen(true);c.tip:EnableMouse(false);c.tip:Hide()
     c.tip.date=UI.Text(c.tip,10,UI.K.bronzeText);c.tip.date:SetPoint('TOPLEFT',10,-8);c.tip.date:SetWidth(296);c.tip.date:SetHeight(24);c.tip.date:SetJustifyH('LEFT')
     c.tip.value=UI.Text(c.tip,13,UI.K.text);c.tip.value:SetPoint('TOPLEFT',10,-32);c.tip.value:SetWidth(296);c.tip.value:SetHeight(28);c.tip.value:SetJustifyH('LEFT');c.tip.value:SetWordWrap(true)
     c.tip.text=UI.Text(c.tip,10,UI.K.textDim);c.tip.text:SetPoint('TOPLEFT',10,-64);c.tip.text:SetWidth(296);c.tip.text:SetHeight(36);c.tip.text:SetJustifyH('LEFT');c.tip.text:SetWordWrap(true)
@@ -174,7 +174,22 @@ function UI.AdvancedMarketChart(parent,w,h)
         local value=g and g.average or p and p.price
         self.tip.value:SetText(value and (self.format(value)..(d.metric=='supply' and ' items' or (' · '..string.format('%.0f',value)..' copper'))) or 'No supported value at this date')
         self.tip.text:SetText(record and ((record.provenance or 'Unknown source')..(record.partial and ' · partial observation' or '')..'\nListing evidence; not completed sales') or ((why=='observed_absent' and 'Observed absent; no supported value.\nNo sale or demand is inferred.') or (why=='no_supported_buyout' and 'Listings lacked a supported buyout.\nNo price is substituted.') or (why=='unknown_variant_state' and 'Variant observation state is unknown.\nNo absence or price is inferred.') or 'No supported observation; coverage is missing or incomplete.\nNo absence or price is inferred.'))
-        self.tip:ClearAllPoints();self.tip:SetPoint('TOPLEFT',self,'TOPLEFT',Clamp(100+anchorX+(anchorX>self.pw/2 and -326 or 10),4,math.max(4,self:GetWidth()-320)),-4);self.tip:Show()
+        -- Dock outside the entire chart, never under the pointer or plot.
+        -- UIParent ownership also keeps inspection clear of scroll clipping.
+        local scale=self:GetEffectiveScale()
+        local screenScale=UIParent:GetEffectiveScale()
+        self.tip:SetScale(scale/screenScale)
+        local right=(UIParent:GetRight() or UIParent:GetWidth())*screenScale/scale
+        local top=(UIParent:GetTop() or UIParent:GetHeight())*screenScale/scale
+        self.tip:ClearAllPoints()
+        if right-(self:GetRight() or right)>=332 then
+            self.tip:SetPoint('TOPLEFT',self,'TOPRIGHT',12,0)
+        elseif (self:GetLeft() or 0)>=332 then
+            self.tip:SetPoint('TOPRIGHT',self,'TOPLEFT',-12,0)
+        elseif top-(self:GetTop() or top)>=128 then
+            self.tip:SetPoint('BOTTOM',self,'TOP',0,12)
+        else self.tip:SetPoint('TOP',self,'BOTTOM',0,-12) end
+        self.tip:Show()
     end
     function c:CursorDay()
         local x=GetCursorPosition()/self.plot:GetEffectiveScale()

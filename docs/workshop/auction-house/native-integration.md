@@ -4,8 +4,11 @@ The existing five-page Auction House now has a Host-owned auctioneer context.
 **Default replacement is off. Forever acceptance remains pending.** This is a
 supervised test implementation, not release readiness or permission to publish.
 Live searches and explicit purchase/post/cancel review controllers are implemented.
-Each unverified native transaction mode stays disabled independently. No automatic
-queries, purchases, posting, cancellation or scans were added. Market Companion
+The owner has requested integrated purchase, posting and cancellation activation for in-game
+iteration. These five modes are enabled in `AuctionBuild.integrated`, separately
+from the still-empty native `verified` evidence.
+Every purchase/post/cancel requires player confirmation; unavailable purchases may refresh
+listings for a revised review, with no automatic spending or posting. Market Companion
 and saved market contracts are unchanged.
 
 ## Implementation and ownership
@@ -53,13 +56,15 @@ than presenting a partially successful replacement.
 Only anchors are changed. Native Show/Hide, scripts, scale, parent, alpha, input
 flags, interaction manager and panel metadata are not changed by switching.
 The active-only 0.25-second watchdog yields on native geometry/owner/focus/busy
-changes, hidden controls, lost interaction or unavailable Workshop. A foreign
+changes, a hidden diagnostic-proof control, lost interaction or unavailable Workshop. A foreign
 anchor change ends ownership and is preserved, without repeatedly reparking.
 A failed restore retains its complete snapshot and partial restore points for a
 later safe retry. UI cleanup errors do not skip native anchor restoration.
 
 The header's **Blizzard Auction House** action restores without closing the
-auctioneer. A small independent button near the bottom of the viewport returns
+auctioneer. The independent recovery control stays hidden while the integrated
+window is healthy; failed/deferred restoration shows it again. A small independent
+button near the bottom of the viewport returns
 to **TwichUI Auction House** in the same visit. It disappears when the visit ends
 or testing is disarmed. It never starts an interaction. Known activation failures
 show a retry label and concise tooltip; detailed reason codes are in Host status.
@@ -71,6 +76,22 @@ This deliberately closes the interaction and invokes native bag/popup cleanup;
 it is never the presentation-switching technique. During combat, safe restoration
 can be deferred; the independent recovery button remains available. This is a
 client acceptance blocker, not a claim of immediate recovery in all conditions.
+
+## Auction House defaults
+
+Workshop > Auction House also configures the initial Advisor auction-only filter
+(default off), maximum usable quantity when choosing an item (default on), and
+native duration choice (default first duration). Feature-owned getters/setters in
+WorkshopLauncher validate these small profile-local `ui.auctionHouse` preferences
+without loading Workshop, opening a window, starting a query or touching its market
+database. Reads do not write defaults; explicit false values and newer-data holds
+are preserved. These action-related defaults are excluded from configuration
+sharing. New Sell visits apply the filter default, and new item selections apply
+quantity/duration defaults; current drafts keep their manual edits. Settings uses
+its existing lazy page construction, searchable controls and Workshop task tabs;
+no new addon or startup frame is introduced. Performance is not measured in this
+iteration. Pre-merge unit, simulator and profile/share-contract coverage is recorded
+below; package validation is recorded in PR #60.
 
 ## Source review
 
@@ -85,11 +106,13 @@ or changed. Relative native event/server/input timing is still unverified.
 ## Normal owner workflow
 
 Install TwichUI normally and follow the [short procedure](development-test.md).
-Workshop's **Use TwichUI Auction House (Experimental)** setting and
+Workshop's **Auction House** settings tab contains **Use TwichUI Auction House
+(Experimental)**; it retains the same saved setting. This tab and
 `/tui ahdebug on | off | status` are the ordinary entry points. The existing
 `ui.auctionDebug` preference is retained across reloads and profiles, off when
 missing, and inactive while Workshop is disabled. Presentation has no build gate.
-`auction/Build.lua` contains only reviewed per-operation transaction evidence.
+`auction/Build.lua` separates owner-requested integrated buy/post/cancel activation from
+per-operation native verification. No acceptance evidence is inferred from activation.
 The obsolete custom development archive builder has been removed; ordinary release
 and internal packaging include the feature within the existing seven addons.
 
@@ -105,27 +128,59 @@ competing ownership and native restoration guards remain in the same Host.
   Matching responses are bounded to 500 normalized rows; oversized/invalid/truncated
   snapshots remain partial, completed zero responses are empty, and failures/timeouts
   are unverified. Passive partial-result events update the current snapshot.
-- Shopping opens an exact item-key search from actual planned quantity. Item
-  buyouts review the whole stack, exact native total and excess. Commodity reviews
-  estimate actual non-owned tiers, then require an authoritative quote and a second
-  explicit confirmation bound to the displayed quote version and total. Purchase
+  Inspection offers Back to search results, retaining one bounded browse snapshot,
+  the query/filter state and scroll position for this page/visit. This restores the
+  displayed results without another query; Refresh reissues Browse, and historical
+  cached groups never gain item-listing purchase identity. Native shift-click
+  SetSearchText calls are followed only while the integrated Browse search has
+  focus, filling the name without issuing a query. Category rows reuse TwichUI's
+  existing painted art, with native item-class mappings and descendant fallbacks.
+- Shopping offers Quick buy from actual missing quantities. Individual item
+  buyouts review one item at the native buyout price; available stock is not a stack.
+  Commodity Review total requests a native quote directly from the player's click,
+  then requires Confirm bound to the displayed quote version, quantity and total. Purchase
   completion never decrements the plan speculatively; actual bag changes reconcile it.
-- Sell uses selected bag identity, unreserved stock, native mode/count/deposit,
+- Sell groups matching physical stacks across equipped/reagent bags into one row
+  with a total quantity, retaining individual slot/quantity/link/lock identities for
+  revalidation. Commodities group by their native item ID; individual item variants
+  retain their full native key and hyperlink. The representative unlocked eligible
+  location and native available-post count cap the usable group quantity; no bag
+  moves or splitting are sent. Sell uses selected bag identity, unreserved stock, native mode/count/deposit,
   `AuctionPrice.Check`, vendor warning/hold and duration. Both item and commodity
   competition can be searched explicitly. Confirmation rechecks bag quantity,
   identity, money, price/deposit and vendor value. Native warning acceptance is a
   separate player action, scoped to the sole pending draft.
-- My Auctions explicitly refreshes owned data. Cancel reviews native permission,
-  exact ID and cancellation cost, then revalidates. Repost preparation retains only
-  this visit's intent: cancel separately, retrieve mail yourself, then review a fresh
-  bag draft. Disappearance never confirms a sale. Multisell waits for its full result.
+- My Auctions adds Posted value alongside active/sold/incoming summaries: it
+  totals active buyout prices (or the reported bid on bid-only auctions), keeping
+  sold payments separate and partial/unknown valuations labelled as lower bounds.
+  It requests owned data on page entry, waiting for the existing native
+  throttle/action owner when necessary. It shows active/sold/incoming summaries,
+  native item tooltips and quality colors, Sold success art, and separate status,
+  price/payment and timing cards. Sold is taken only from the returned status enum;
+  incoming amounts use the returned buyout (or winning bid for bid-only sales),
+  without inventing fees, deposits, net proceeds or collected mail. Exact time-left
+  seconds count down from the response time; otherwise the native time band or an
+  unavailable label is shown. A single page-owned clock updates visible countdowns
+  without issuing queries and is cancelled on Release, with its timer counted in
+  existing diagnostics. Current owned-cache events update the same visit-bound read
+  stream, including after display freshness expires; another read/teardown clears it.
+  Successful cancellation/new bids request a fresh owned snapshot, without polling.
+  Cancel refreshes stale data before review, binds the exact ID and item key to the
+  read intent, and checks native owned identity, quantity/status, permission, cost
+  and money again at Confirm. Sold/missing auctions cannot be cancelled. Cost or
+  identity changes require a new review; only the player's Confirm sends the call.
+  Repost preparation retains only this visit's intent: cancel separately, retrieve
+  mail yourself, then review a fresh bag draft. Disappearance never confirms a sale.
 - Market retains its research/history/chart services and contracts.
 
 `auction/Actions.lua` owns one transient reviewed intent, bounded completion
 listeners and one cancellable deadline. Dispatch occurs only from explicit UI/native
 warning acceptance. Events reconcile; they cannot send transactions. Foreign native
 calls, lost visits, errors or timeouts invalidate ownership; unknown outcomes require
-checking Blizzard before a new visit. No retries or action queue exist.
+checking Blizzard before a new visit. A definitive unavailable/failed purchase can
+refresh listings and open a revised review; a further player click is required.
+Commodity retries request a fresh quote before a separate purchase confirmation.
+Read refreshes wait on the existing throttle-ready event; no transaction queue exists.
 
 Read events have no request IDs. Correlation is serialized local intent plus native
 item identity, never advertised as server-token correlation. Foreign reads/timeouts
@@ -134,20 +189,55 @@ visit, rather than attributing its late reply to a different search.
 
 ## Native activation gates
 
-The ordinary installation enables opt-in presentation and read workflows. All money-moving
-modes remain off in code-level `AuctionBuild.verified` until native evidence exists for that mode.
-Controllers are exercised with synthetic native adapters; this is not native proof.
+The ordinary installation enables opt-in presentation and read workflows. The
+owner-requested buy/post/cancel iteration now enables the five corresponding modes via
+`AuctionBuild.integrated`. `AuctionBuild.verified` is
+still empty. Automated pre-merge coverage is recorded below; it does not establish
+native acceptance. Runtime permission, appearance and completion behavior still
+require actual Forever evidence.
 
 | Mode | Implemented call/review | Exact remaining native evidence |
 |---|---|---|
-| Item buyout | `PlaceBid(id, exact full buyoutAmount)` | Hardware/permission behavior in this window; ID-correlated completion and rejection |
-| Commodity purchase | `StartCommoditiesPurchase(itemID, quantity)`, quote, second-click `ConfirmCommoditiesPurchase` | Generated two-argument Start contract differs from native frame's three-argument call; settle signature, quote permissions and completion ownership |
+| Item buyout | `PlaceBid(id, exact native buyoutAmount)` for one item | Hardware/permission behavior in this window; ID-correlated completion and rejection |
+| Commodity purchase | `StartCommoditiesPurchase(itemID, quantity, unitPrice)`, quote, second-click `ConfirmCommoditiesPurchase` | Matches the native frame call (the generated documentation lists two arguments); confirm runtime signature/permissions, exact quotes and completion ownership in Forever |
 | Item post | `PostItem(location, duration, quantity, nil, unitPrice)` and guarded `ConfirmPostItem` | Existing Sell from Bags native warning/hardware path in this integrated window; multisell completion |
 | Commodity post | `PostCommodity` and guarded `ConfirmPostCommodity` | Deposit, native warning, hardware permissions and completion in this window |
 | Cancel | `CanCancelAuction`, `GetCancelCost`, `CancelAuction(id)` | Native permissions/cost and ID-correlated cancellation completion |
 
-No simulator or offline test may set a production native acceptance claim. No money
-operation should be enabled just because presentation or read tests pass.
+No simulator or offline test may set a production native acceptance claim. The owner-requested activation above is not inferred from presentation or read tests.
+
+## Pre-merge verification — 2026-11-18
+
+- **Unit-tested:** all 276 offline modules passed, including the 108-check iteration
+  regression; all 747 addon Lua files passed Lua 5.1 syntax checks. This includes
+  settings defaults/profile holds, sharing classification, native availability,
+  grouped reagent bags and member races, quote consent/retry, owned sales/timers,
+  item tooltips/colors, cached Browse return and focused shift-click behavior.
+- **Mutation-tested:** all 389 Workshop and five presentation mutations were killed;
+  no survivors, invalid mutations, timeouts or infrastructure errors. Baselines passed.
+  The redundant aggregate-quantity mutant was replaced by a physical-member identity
+  race with an unchanged aggregate quantity.
+- **Simulator-tested:** the full default catalogs executed 217 launches. Nine catalogs
+  passed directly. All 52 Auction House preview captures passed their behavioral,
+  replay, negative-control and image checks; the full runner retained a failed verdict
+  because its exact assertion counts had not included the new chart checks. After
+  correcting those counts, the strict verifier passed on the same retained captures.
+  Its 12-test harness also passed, including missing/extra assertion rejection.
+  No assertions or default poses were dropped and the failed report was preserved.
+- **Simulator-tested:** an additional Workshop Settings load/preferences scenario
+  passed 50 checks with Workshop included in its disposable install. An earlier
+  invocation omitted that addon and failed; its log is retained.
+
+Local evidence: `test-output/verification/full-all-0udy2v7r/report.json`,
+`test-output/auction-preview-rejudged.log`, `test-output/auction-verifier-count-tests.log`,
+`test-output/auction-mutations-final.json`, `test-output/auction-host-mutations-final.json`
+and `test-output/auction-settings-integration-with-workshop.log`.
+The first diagnostic full run was interrupted after identifying stale scenario
+assumptions; it remains incomplete and is not passing evidence. The later full report
+also remains failed for the count mismatch above; the targeted verifier result is
+separate. Screenshots establish structure, not real-client appearance. No automated
+run sets native verification flags or certifies a public release. Internal package
+validation and CI outcomes are recorded on [PR #60](https://github.com/Twich-Team/TwichUI/pull/60).
 
 ## TSM comparison
 

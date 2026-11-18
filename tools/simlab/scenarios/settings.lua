@@ -178,7 +178,9 @@ if key == "workshop" and params.filled then
         Lab.Check("state", "loading options starts no scan", false, w.Scan.Busy())
         v.rows.workshopDetailedPrices.control:Click()
         Lab.Check("interact", "price control calls existing preference", true, w.Session.PriceDetail())
-        v.taskButtons[4]:Click(); Lab.Settle(.2)
+        local found
+        for i,task in ipairs(v.tasks) do if task[1]=="Crafting & Shopping" then v.taskButtons[i]:Click();found=true;break end end
+        Lab.Check("construct","Crafting & Shopping task exists",true,found==true);Lab.Settle(.2)
         local function Pick(id, value)
             v.rows[id].control:Click()
             local menu = rawget(_G, "TwichUISettingsMenu")

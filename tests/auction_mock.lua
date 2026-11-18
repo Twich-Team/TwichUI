@@ -30,16 +30,30 @@ local c = MIClient("Rich", {
       fr.RegisterForDrag = function() end
       fr.SetDontSavePosition = function() end
       fr.UnregisterAllEvents = function(s) s.events = {} end
-      fr.SetFrameStrata = function() end
+      fr.SetFrameStrata = function(s, v) s.strata = v end
+      fr.GetFrameStrata = function(s) return s.strata or "MEDIUM" end
+      fr.GetParent = function(s) return s.parent end
+      fr.SetScale = function(s, v) s.scale = v end
+      fr.GetScale = function(s) return s.scale or 1 end
+      fr.GetEffectiveScale = function(s) return s:GetScale() * (s.parent and s.parent:GetEffectiveScale() or 1) end
+      fr.GetLeft = function(s) return (cl.UIParent:GetWidth()/s:GetScale()-s:GetWidth())/2 end
+      fr.GetBottom = function(s) return (cl.UIParent:GetHeight()/s:GetScale()-s:GetHeight())/2 end
+      fr.GetRight = function(s) return s:GetLeft()+s:GetWidth() end
+      fr.GetTop = function(s) return s:GetBottom()+s:GetHeight() end
       fr.SetMotionScriptsWhileDisabled = function() end
       fr.CreateTexture = function(s) local t = MIFake("Texture", s); t.SetColorTexture = function() end t.SetVertexColor = function() end t.SetTexCoord = function() end t.SetTexture = function(x, v) x.texture = v end t.SetAtlas = function(x,v) x.atlas=v end return t end
-      fr.CreateFontString = function(s) local t = MIFake("FontString", s); t.SetFont = function() return true end t.SetJustifyV = function() end t.SetWordWrap = function() end t.SetTextColor = function() end t.SetDirection = function() error("FontString has no SetDirection API") end return t end
+      fr.CreateFontString = function(s) local t = MIFake("FontString", s); t.SetFont = function() return true end t.SetJustifyV = function() end t.SetWordWrap = function() end t.SetTextColor = function(self,...) self.textColor={...} end t.SetDirection = function() error("FontString has no SetDirection API") end return t end
       Press.Instrument(fr, name)   -- last, so it replaces the no-op EnableMouse above with one that records
       if cl.testFrames then cl.testFrames[#cl.testFrames+1] = fr end
       if name then cl[name] = fr end
       return fr
     end
     cl.UIParent = MIFake("Frame"); cl.UIParent.w, cl.UIParent.h = 1920, 1080
+    cl.UIParent.GetParent = function() return nil end
+    cl.UIParent.GetLeft = function() return 0 end
+    cl.UIParent.GetBottom = function() return 0 end
+    cl.UIParent.GetRight = function(s) return s:GetWidth() end
+    cl.UIParent.GetTop = function(s) return s:GetHeight() end
     cl.GameTooltip = MIFake("GameTooltip")
     cl.UISpecialFrames = {}
     cl.testFrames = {}
@@ -51,6 +65,7 @@ local c = MIClient("Rich", {
 })
 c.TwichUIDB = c.TwichUIDB or {}
 local R = c.TwichUI
+local host = assert(loadfile(ROOT .. "auction/Host.lua")); setfenv(host, c); host()
 
 -- the fake game (as in test_workshop.lua)
 local g = { bags = {}, names = { [10] = "Peacebloom", [11] = "Silverleaf" }, recipes = {}, schem = {}, opened = {} }
@@ -74,14 +89,17 @@ c.C_Item = {
 c.InCombatLockdown = function() return false end
 c.IsShiftKeyDown = function() return false end
 
-if options.preview then R.WorkshopLauncher = { previewLoading = true } end
+-- Match the normal core load order. Fixtures opt in explicitly; opening
+-- settings/preview must not be the source of runtime feature services.
+c.TwichUIDB.ui=c.TwichUIDB.ui or {}
+c.TwichUIDB.ui.workshopEnabled=not options.experimentalOff
+for _,file in ipairs({"WorkshopLauncher.lua","auction/Price.lua"}) do
+    local chunk=assert(loadfile(ROOT..file));setfenv(chunk,c);chunk("!!!TwichUI",{})
+end
+if options.preview then R.WorkshopLauncher.previewLoading=true end
 if options.experimentalOff then
-    c.TwichUIDB.ui = c.TwichUIDB.ui or {}
-    c.TwichUIDB.ui.workshopEnabled = false
-    local chunk = assert(loadfile(ROOT .. "WorkshopLauncher.lua")); setfenv(chunk, c); chunk("!!!TwichUI", {})
-    c.Enum.TooltipDataType = { Item = 1 }
-    c.tooltipCallbacks = {}
-    c.TooltipDataProcessor = { AddTooltipPostCall = function(_, fn) c.tooltipCallbacks[#c.tooltipCallbacks + 1] = fn end }
+    c.Enum.TooltipDataType={Item=1};c.tooltipCallbacks={}
+    c.TooltipDataProcessor={AddTooltipPostCall=function(_,fn) c.tooltipCallbacks[#c.tooltipCallbacks+1]=fn end}
 end
 if options.native then
     c.AuctionHouseFrame = c.CreateFrame("Frame", "AuctionHouseFrame", c.UIParent)

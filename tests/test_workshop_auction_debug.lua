@@ -7,9 +7,11 @@ local function Setup(dev,saved)
  c.TwichUIDB={ui={workshopEnabled=true,auctionDebug=saved}}
  R.AuctionBuild={development=dev,verified={}}
  local shown,ctx=false,"preview"
+ local custom=t.Frame(c.UIParent);custom.shown=false
  R.Workshop={AuctionUI={Context=function() return ctx end,IsShown=function() return shown end,
-  Prepare=function() return true end,ShowIntegrated=function(id) Same(id,H.Snapshot().visit);shown,ctx=true,"auctioneer";return true end,
-  Hide=function() shown,ctx=false,"preview" end}}
+  Prepare=function() return true end,ShowIntegrated=function(id) Same(id,H.Snapshot().visit);shown,ctx=true,"auctioneer";custom:Show();return true end,
+  Presentation=function() return H.Presentation(custom,true) end,
+  Hide=function() custom:Hide();shown,ctx=false,"preview" end}}
  R.WorkshopLauncher={Enabled=function() return true end,Load=function() end,LoadAuctionUI=function() t.loads=t.loads+1;return true end}
  return t
 end

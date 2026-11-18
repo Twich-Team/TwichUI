@@ -42,17 +42,23 @@ local function Setup()
             self.points[#self.points + 1] = { ... }
         end
         function f:GetLeft()
+            if self == c.UIParent then return 0 end
             if self.badGeometry then return nil end
             local p = self.points[1]
             return p and p[3] == "TOPRIGHT" and (c.UIParent:GetRight() * c.UIParent:GetEffectiveScale() / self:GetEffectiveScale() + p[4]) or 40
         end
-        function f:GetRight() return 1920 end
+        function f:GetRight() return self == c.UIParent and 1920 or self:GetLeft() and self:GetLeft()+800 end
+        function f:GetBottom() return self == c.UIParent and 0 or 80 end
+        function f:GetTop() return self == c.UIParent and 1080 or 580 end
+        function f:GetAlpha() return self.alpha or 1 end
+        function f:GetFrameStrata() return self.strata or "HIGH" end
         function f:IsShown() return self.shown end
         function f:IsVisible() return self.shown and (not self.parent or self.parent:IsVisible()) end
         function f:Show() self.shown = true; self.shows = (self.shows or 0) + 1 end
         function f:Hide()
             local shown = self.shown
             self.shown = false
+            if self == t.f then t.available = false end -- native OnHide closes the session
             if shown then for _, fn in ipairs(self.hooks.OnHide or {}) do fn(self) end end
         end
         function f:HookScript(k, fn)

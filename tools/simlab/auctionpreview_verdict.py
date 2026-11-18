@@ -35,7 +35,7 @@ def judge(run, names=None):
         failures = [c for c in checks if c[0] == 'FAIL']; transcripts[name] = checks
         check(f'{name}: all steps complete', done and done[1] == '9' and done[5] == done[6] == 'false')
         check(f'{name}: counts agree', done and int(done[3]) == len(checks)-len(failures) and int(done[4]) == len(failures))
-        check(f'{name}: full assertions', len(checks) == (144 if name.startswith('summary') else 158 if name.startswith('companion') else 142 if name=='marketbridge' or name.startswith('scoped') else 135 if name=='markethover' else 134 if name=='marketdrag' else 132 if name in ('loading','marketmetadata','marketinterval') else 131) and {c[1] for c in checks} == {'init','construct','interact','state'})
+        check(f'{name}: full assertions', len(checks) == (145 if name.startswith('summary') else 159 if name.startswith('companion') else 143 if name=='marketbridge' or name.startswith('scoped') else 137 if name=='markethover' else 135 if name=='marketdrag' else 133 if name in ('loading','marketmetadata','marketinterval') else 132) and {c[1] for c in checks} == {'init','construct','interact','state'})
         check(f'{name}: expected outcomes', (len(failures)==1 and failures[0][2]=='Browse default') if name=='wrong' else not failures)
         for label, passed, detail in kf.verdict_lines(kf.classify(text, allow=('voice-settings-unsupplied',), require=('voice-settings-unsupplied',))):
             check(f'{name}: {label} {detail}', passed)

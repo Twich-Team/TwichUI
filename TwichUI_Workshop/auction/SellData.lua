@@ -33,19 +33,19 @@ function D.Max(row)
     if not row or row.locked or row.bound~=false or row.pending or (row.reserved or 0)>0 or row.eligible==false then return 0 end
     return math.min(row.qty,row.available or row.qty)
 end
-function D.Bags(query)
+local function Stacks(query)
     local rows={}
     local api=C_Container
     if not (api and api.GetContainerNumSlots and api.GetContainerItemInfo) then return rows,"Bag data unavailable" end
     query=(W.Text(query,200) or ""):lower()
-    for bag=0,(NUM_BAG_SLOTS or 4) do
+    for bag=0,(NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4) do
         for slot=1,math.min(api.GetContainerNumSlots(bag) or 0,200) do
             if #rows>=D.MAX then return rows,"Bag list limited" end
             local x=api.GetContainerItemInfo(bag,slot)
             if type(x)=="table" then
                 local item=W.Int(W.Plain(x.itemID),1,W.MAX_ID)
                 local qty=W.Int(W.Plain(x.stackCount),1,W.MAX_ID)
-                if item and qty then
+                if item and qty and W.Plain(x.isBound)==false then
                     local info=W.AdvisorData.Info(item)
                     if query=="" or (info.name.." "..item):lower():find(query,1,true) then
                         local link=W.Text(W.Plain(x.hyperlink),1000)
@@ -58,6 +58,10 @@ function D.Bags(query)
                             local ah=C_AuctionHouse
                             local ok=pcall(function()
                                 r.location=ItemLocation:CreateFromBagAndSlot(bag,slot)
+                                if C_Item and C_Item.IsBound then
+                                    local bound=W.Plain(C_Item.IsBound(r.location))
+                                    if type(bound)=="boolean" then r.bound=bound end
+                                end
                                 if ah.IsSellItemValid then r.eligible=W.Plain(ah.IsSellItemValid(r.location,false))==true end
                                 if ah.GetItemKeyFromItem then r.itemKey=Key(ah.GetItemKeyFromItem(r.location)) end
                                 if r.itemKey and r.itemKey.itemID~=item then r.itemKey=nil;r.eligible=false end
@@ -67,11 +71,18 @@ function D.Bags(query)
                             end)
                             if not ok then r.eligible,r.itemKey,r.available,r.mode,r.copper=nil,nil,nil,nil,nil end
                         end
+                        -- Commodity searches use item ID alone, even if the bag
+                        -- item's native key carries a nonzero display item level.
+                        r.bagItemKey=r.itemKey
+                        local types=Enum and Enum.ItemCommodityStatus
+                        if types and r.mode==types.Commodity and r.itemKey then
+                            r.itemKey=Key({itemID=item});r.variantKind=nil;r.variant=false;r.keyComparable=true
+                        end
                         local k=r.itemKey
                         r.identityKnown=k~=nil or link and (link:match("^item:%d+")~=nil or link:find("|Hitem:",1,true)~=nil) or false
                         r.variant=r.variant or k and (k.itemLevel~=0 or k.itemSuffix~=0 or k.battlePetSpeciesID~=0) or false
                         r.identity=r.key..":"..item..":"..(link or "")..":"..(k and table.concat({k.itemLevel,k.itemSuffix,k.battlePetSpeciesID},":") or "unknown")
-                        rows[#rows+1]=r
+                        if r.bound==false and r.eligible~=false then rows[#rows+1]=r end
                     end
                 end
             end
@@ -79,13 +90,44 @@ function D.Bags(query)
     end
     return rows
 end
+-- One row per exact item/commodity, retaining each physical stack for
+-- revalidation. Native GetAvailablePostCount supplies the cross-bag posting cap,
+-- just as it does for Sell from Bags; no stack moves or splitting are needed.
+function D.Bags(query)
+    local stacks,err=Stacks(query)
+    local groups,order={},{}
+    for _,part in ipairs(stacks) do
+        local k=part.itemKey
+        local commodity=Enum and Enum.ItemCommodityStatus and Enum.ItemCommodityStatus.Commodity
+        local key=commodity and part.mode==commodity and k and ("commodity:"..part.item)
+            or k and ("item:"..part.item..":"..k.itemLevel..":"..k.itemSuffix..":"..k.battlePetSpeciesID..":"..(part.link or ""))
+            or ("link:"..part.item..":"..(part.link or part.key))
+        local g=groups[key]
+        if not g then g={key=key,rep=part,qty=0,usable=0,members={},identities={}};groups[key]=g;order[#order+1]=g end
+        g.qty=g.qty+part.qty;g.members[#g.members+1]=part
+        g.identities[#g.identities+1]=part.identity..":"..part.qty..":"..tostring(part.locked)
+        if not part.locked and part.eligible==true then
+            g.usable=g.usable+part.qty
+            if g.rep.locked or g.rep.eligible~=true then g.rep=part end
+        end
+    end
+    local rows={}
+    for _,g in ipairs(order) do
+        local row={};for key,value in pairs(g.rep) do row[key]=value end
+        row.key=g.key;row.identity=g.key.."|"..table.concat(g.identities,"|")
+        row.members=g.members;row.qty=g.qty;row.stacks=#g.members
+        row.available=math.min(g.usable,g.rep.available or g.usable)
+        rows[#rows+1]=row
+    end
+    return rows,err
+end
 function D.Draft(row,quantity,price,duration)
     local result={valid=false,deposit=nil,fees=nil,net=nil}
     if not row then result.reason="Choose a bag item.";return result end
     if duration~=nil and not W.Int(duration,1,3) then result.reason="Choose a supported auction duration.";return result end
     if row.pending or (row.reserved or 0)>0 then result.reason="Crafting reservations or a pending plan protect this item.";return result end
     quantity=W.Int(quantity,1,W.MAX_ID);price=W.Int(price,1,PR.MAX_COPPER)
-    if not quantity or quantity>row.qty or row.available and quantity>row.available then result.reason="Quantity exceeds the selected stack or available posting count.";return result end
+    if not quantity or quantity>row.qty or row.available and quantity>row.available then result.reason="Quantity exceeds the usable bag total or available posting count.";return result end
     if not price then result.reason="Enter a valid unit price.";return result end
     local proceeds=W.Sell.Proceeds(price,quantity)
     if proceeds.state~="ok" then result.reason="Proposed total is out of range.";return result end
@@ -109,25 +151,33 @@ function D.Draft(row,quantity,price,duration)
             end
         end
     end
-    result.valid=true;result.reason="Preparation only · posting awaits client acceptance."
+    result.valid=true;result.reason="Review the quantity, price and duration before posting."
     return result
 end
 local function Market() return W.Market.Source().market end
 local function Stamp(m) return m and m.key..":"..W.Valuation.Generation(m) or "none" end
-function D.BagCurrent(row)
+local function StackCurrent(row,grouped)
     local api=C_Container
     if not (row and api and api.GetContainerItemInfo) then return false end
     local ok,valid=pcall(function()
         local x=api.GetContainerItemInfo(row.bag,row.slot)
         if type(x)~="table" or W.Plain(x.itemID)~=row.item or W.Plain(x.stackCount)~=row.qty or
-            W.Plain(x.isLocked)~=false or W.Plain(x.isBound)~=false or W.Text(W.Plain(x.hyperlink),1000)~=row.link then return false end
+            (grouped and W.Plain(x.isLocked)~=row.locked or not grouped and W.Plain(x.isLocked)~=false) or W.Plain(x.isBound)~=false or W.Text(W.Plain(x.hyperlink),1000)~=row.link then return false end
         if row.itemKey then
             if not Q.Available() or not C_AuctionHouse.GetItemKeyFromItem then return false end
-            return Same(row.itemKey,C_AuctionHouse.GetItemKeyFromItem(row.location))
+            return Same(row.bagItemKey or row.itemKey,C_AuctionHouse.GetItemKeyFromItem(row.location))
         end
         return row.identityKnown==true
     end)
     return ok and valid==true
+end
+function D.BagCurrent(row)
+    if not row then return false end
+    if row.members then
+        for _,part in ipairs(row.members) do if not StackCurrent(part,true) then return false end end
+        return #row.members>0
+    end
+    return StackCurrent(row,false)
 end
 function D.Current(ctx,row)
     if not ctx or not row or ctx.identity~=row.identity or not D.BagCurrent(row) then return false end
@@ -149,18 +199,20 @@ function D.Competition(row,opt)
         opt.epoch==Q.epoch and row.itemKey and row.keyComparable~=false and Same(row.itemKey,opt.itemKey) and
         opt.marketStamp==out.stamp and Q.Available() and W.Finite(snap.at) and GetTime()>=snap.at and GetTime()-snap.at<30 then
         out.source,out.complete,out.at,out.epoch,out.snapshot,out.itemKey="live",snap.complete,snap.at,snap.epoch,snap,row.itemKey
+        out.kind=snap.kind;out.returned=snap.rawCount or #snap.rows
         local seen={}
         for i,r in ipairs(snap.rows or {}) do
             if i>Q.MAX then break end
-            if Same(r.itemKey,row.itemKey) and not r.own and not r.account then
-                local id=W.Int(r.auctionID,1,9007199254740991)
+            local matches=snap.kind=="commodity" and r.item==row.item or snap.kind~="commodity" and Same(r.itemKey,row.itemKey)
+            if matches and not r.own and not r.account then
+                local id=snap.kind=="commodity" and r.listingKey or W.Int(r.auctionID,1,9007199254740991)
                 local qty=W.Int(r.qty,1,W.MAX_ID)
                 local total=W.Int(r.total,1,PR.MAX_COPPER)
-                local unit=qty and total and math.ceil(total/qty)
+                local unit=W.Int(r.unit,1,PR.MAX_COPPER)
                 if id and seen[id] then out.complete=false end
-                if id and not seen[id] and qty and (total or W.Int(r.bid,1,PR.MAX_COPPER)) then
+                if id and not seen[id] and qty and (total or snap.kind=="commodity" and unit or W.Int(r.bid,1,PR.MAX_COPPER)) then
                     seen[id]=true
-                    out.rows[#out.rows+1]={key=id,qty=qty,unit=unit,total=total,bid=r.bid,
+                    out.rows[#out.rows+1]={key=id,qty=qty,unit=unit,total=total,bid=r.bid,priceEach=r.priceEach,
                         copy=out.complete==true and unit~=nil and r.ownershipKnown==true}
                 end
             end
@@ -178,11 +230,27 @@ function D.Competition(row,opt)
             end
         end
     end
+    table.sort(out.rows,function(a,b)
+        if (a.unit~=nil)~=(b.unit~=nil) then return a.unit~=nil end
+        if a.unit~=b.unit then return (a.unit or 0)<(b.unit or 0) end
+        return a.key<b.key
+    end)
     return out
 end
 function D.Copy(ctx,tier,row)
     if not D.Current(ctx,row) then return nil end
-    for _,r in ipairs(ctx.rows) do if r==tier and r.copy then return W.Int(r.unit,1,PR.MAX_COPPER) end end
+    for _,r in ipairs(ctx.rows) do
+        if r==tier and r.copy then
+            local price=TwichUI.AuctionPrice.Suggest({lowest=r.unit,comparable=1},row.copper~=false)
+            return price and price.price,price and price.rounded
+        end
+    end
+end
+function D.Advice(row,facts)
+    if not row then return nil end
+    return W.AdvisorData.Tooltip({item=row.item,count=row.qty,sell=row.info.sell,bindType=row.info.bindType,
+        bound=row.bound,variant=row.variant,quality=row.info.quality,classID=row.info.classID,equipLoc=row.info.equipLoc},
+        facts or W.Facts.Of(row.item,{variant=row.variant}))
 end
 function D.Guidance(row,ctx)
     if not row then return nil,nil end
@@ -194,8 +262,19 @@ function D.Guidance(row,ctx)
         live.comp=low and {competing=low,complete=true,cut=false,age=0,notes={}} or nil
         f=live
     end
-    local rec=W.AdvisorData.Tooltip({item=row.item,count=row.qty,sell=row.info.sell,bindType=row.info.bindType,
-        bound=row.bound,variant=row.variant,quality=row.info.quality,classID=row.info.classID,equipLoc=row.info.equipLoc},f)
+    local rec=D.Advice(row,f)
+    if ctx.source=="live" and ctx.complete and D.Current(ctx,row) and D.Max(row)>0 then
+        local summary={comparable=0}
+        for _,tier in ipairs(ctx.rows) do
+            if tier.copy then
+                summary.comparable=summary.comparable+1
+                summary.lowest=math.min(summary.lowest or tier.unit,tier.unit)
+            end
+        end
+        local price=TwichUI.AuctionPrice.Suggest(summary,row.copper~=false)
+        return {state=price and "ok" or "nocompetition",price=price and price.price,source="live",
+            limited=price and price.limited,rounded=price and price.rounded},rec,f
+    end
     local suggestion=W.Sell.Suggest(row.item,row.qty,{facts=f})
     for _,flag in ipairs(suggestion.flags or {}) do
         if flag=="belowusual" then

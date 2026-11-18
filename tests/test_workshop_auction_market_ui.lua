@@ -5,7 +5,7 @@ local A,D=W.AuctionUI,W.AuctionMarketData
 local n=0
 local function same(a,b,msg) n=n+1;assert(a==b,(msg or "").." expected "..tostring(b)..", got "..tostring(a)) end
 local calls=0
-c.C_AuctionHouse=setmetatable({},{__index=function(_,k) return function() calls=calls+1;error("native "..k) end end})
+c.C_AuctionHouse=setmetatable({GetItemKeyInfo=function() return nil end},{__index=function(_,k) return function() calls=calls+1;error("native "..k) end end})
 local function Settle()
     for i=1,1500 do FlushTimers();local p=A.Page("market");if not p or not p.job then return end end
     error("Market job did not terminate")
@@ -92,7 +92,7 @@ A.Go("sell");same(sell.money:GetCopper(),nil,"changing pages does not price a po
 same(sell.post:IsEnabled(),false)
 -- Attributed owned result is passed by identity; navigation cannot cancel/repost.
 local Q=W.AuctionReads;Q.Available=function() return true end
-Q.snapshot={kind="owned",epoch=Q.epoch,complete=true,rows={{auctionID=2,item=10,itemKey={itemID=10,itemLevel=0,itemSuffix=4},qty=3,total=300,unit=100,status=0}}}
+Q.snapshot={kind="owned",epoch=Q.epoch,at=c.GetTime(),complete=true,rows={{auctionID=2,item=10,itemKey={itemID=10,itemLevel=0,itemSuffix=4},qty=3,total=300,unit=100,status=0}}}
 A.Go("owned");local owned=A.Page("owned");Press.Must(owned.list.rows[1]);Press.Must(owned.detail.market);Settle()
 same(p.context.itemKey.itemSuffix,4);same(p.projection.facts.min,nil)
 -- Deterministic cancellation, deadline and error terminal states.

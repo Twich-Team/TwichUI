@@ -7,7 +7,7 @@ local function Settle() for i=1,3000 do FlushTimers();local p=A.Page("browse");i
 c.AuctionCategories={{name="Weapons and exceptionally long native category labels",filters={{classID=2}},
  subCategories={{name="One-handed weapons",filters={{classID=2,subClassID=0}},subCategories={{name="Swords",filters={{classID=2,subClassID=7}}}}}}}}
 local calls=0
-c.C_AuctionHouse=setmetatable({},{__index=function() return function() calls=calls+1;error("unexpected native request") end end})
+c.C_AuctionHouse=setmetatable({GetItemKeyInfo=function() return nil end},{__index=function() return function() calls=calls+1;error("unexpected native request") end end})
 A.Show();Settle();local p=A.Page("browse")
 same(p.submit.text:GetText(),"Search Saved Data","saved search has an honest action label")
 same(p.filters:GetWidth(),222);same(p.categoryList.rowH,42)
@@ -49,7 +49,7 @@ A.Browse.Filter("quality",2);Settle()
 same(p.liveMode,false,"local filters return to explicitly labeled saved research")
 Q.Begin=begin
 A.Browse.Filter("quality",-1);A.Browse.Filter("category","all");Settle()
-Q.snapshot={kind="item",epoch=Q.epoch,complete=true,rows={{auctionID=71,item=10,
+Q.snapshot={kind="item",epoch=Q.epoch,at=c.GetTime(),complete=true,rows={{auctionID=71,item=10,
  itemKey={itemID=10,itemLevel=0,itemSuffix=4,battlePetSpeciesID=0},qty=3,total=299,unit=100}}}
 Q.state="results";p.liveMode=true;A.Render()
 same(p.list.rows[1].total:GetText(),W.UI.Money(299),"exact totals survive normalized unit rounding")

@@ -23,6 +23,10 @@ local A,f
 local function CheckState(label)
  Lab.Check("state",label.." state","twichui",H.Snapshot().state)
  Lab.Check("state",label.." live interaction",true,available)
+ local presentation=A.Presentation()
+ Lab.Check("construct",label.." custom visible in viewport",true,presentation.usable)
+ Lab.Check("construct",label.." completed initialization",true,presentation.initialized)
+ Lab.Check("construct",label.." completed page render",true,presentation.rendered)
  Lab.Check("state",label.." native still visible",true,native:IsVisible())
  Lab.Check("state",label.." native offscreen",true,native:GetLeft()*native:GetEffectiveScale()>UIParent:GetRight()*UIParent:GetEffectiveScale())
 end
@@ -94,7 +98,7 @@ end)
 Lab.Step("combat recovery and environmental changes",function()
  combat=true;R.frame:GetScript("OnEvent")(R.frame,"PLAYER_REGEN_DISABLED")
  Lab.Check("state","combat retains recovery snapshot","recovery",H.Snapshot().state)
- Lab.Check("state","combat suspends replacement",false,A.IsShown())
+ Lab.Check("state","combat retains visible replacement until recovery",true,A.IsShown())
  combat=false;R.frame:GetScript("OnEvent")(R.frame,"PLAYER_REGEN_ENABLED")
  Lab.Check("state","combat exit restores only","blizzard",H.Snapshot().state)
  Lab.Check("state","combat exit native x",30,select(4,native:GetPoint(1)))
@@ -103,6 +107,53 @@ Lab.Step("combat recovery and environmental changes",function()
  Lab.Check("state","scale change restores native","blizzard",H.Snapshot().state)
  H.Control():Click();Lab.Settle(.2)
  CheckState("after scale fallback")
+end)
+Lab.Step("empty-screen failures recover visibly",function()
+ H.ToBlizzard()
+ local left,right=f.GetLeft,f.GetRight
+ f.GetLeft=function() return 100000 end;f.GetRight=function() return 101420 end
+ H.Control():Click();Lab.Settle(.2)
+ Lab.Check("state","offscreen replacement refused","blizzard",H.Snapshot().state)
+ Lab.Check("construct","offscreen failure restores usable native",true,H.Presentation(native).usable)
+ Lab.Check("state","offscreen failure never retains hidden replacement",false,A.IsShown())
+ local attempts=H.Snapshot().failed
+ H.Opened();Lab.Settle(.2)
+ Lab.Check("state","failed visit does not retry automatically",attempts,H.Snapshot().failed)
+ f.GetLeft,f.GetRight=left,right
+ -- The opening callback must acknowledge its completion even when the client
+ -- catches script errors. Intercept only this deliberate fixture's fault.
+ local fit,fault=R.FitToScreen,R.Fault
+ local caught=0
+ R.FitToScreen=function() error("injected opening layout failure",0) end
+ R.Fault=function(source,err)
+  if source=="auction window show" and tostring(err)=="injected opening layout failure" then caught=caught+1
+  else fault(source,err) end
+ end
+ H.Control():Click();Lab.Settle(.2)
+ R.FitToScreen,R.Fault=fit,fault
+ Lab.Check("state","OnShow exception captured",1,caught)
+ Lab.Check("state","OnShow exception refuses takeover","blizzard",H.Snapshot().state)
+ Lab.Check("construct","OnShow exception leaves usable native",true,H.Presentation(native).usable)
+ Lab.Check("state","failed opening cancels initialization",0,H.Snapshot().pending)
+ Reach("failure recovery control reachable",H.Control())
+ H.Control():Click();Lab.Settle(.2)
+ CheckState("explicit recovery")
+ -- Foreign anchors still outside the viewport are never reported restored.
+ native:ClearAllPoints();native:SetPoint("TOPLEFT",UIParent,"TOPRIGHT",5000,0)
+ local restoreFault=R.Fault
+ R.Fault=function(source,err)
+  if source~="auction proof restore" or tostring(err)~="foreign native anchors remain unavailable" then restoreFault(source,err) end
+ end
+ local restored=H.ToBlizzard()
+ Lab.Check("state","offscreen foreign anchors block recovery",false,restored)
+ Lab.Check("state","blocked recovery retains lease",true,H.Snapshot().leased)
+ Lab.Check("state","blocked recovery is truthful","restore-blocked-owner",H.Snapshot().reason)
+ Reach("blocked recovery action reachable",H.Control())
+ native:ClearAllPoints();native:SetPoint("TOPLEFT",UIParent,"TOPLEFT",30,-100)
+ H.Control():Click();R.Fault=restoreFault
+ Lab.Check("state","foreign visible recovery releases lease",false,H.Snapshot().leased)
+ Lab.Check("construct","foreign recovery verifies usable native",true,H.Presentation(native).usable)
+ H.Control():Click();Lab.Settle(.2)
 end)
 Lab.Step("retention and diagnostics",function()
  local before=A.Snapshot()

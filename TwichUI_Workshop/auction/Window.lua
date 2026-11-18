@@ -8,6 +8,13 @@ local root, active = nil, "browse"
 local context, hostVisit = "preview", nil
 local epoch, scheduled, renders = 0, false, 0
 local refreshTimer
+local initialized, lastError
+local function Fault(where, err)
+    initialized = nil
+    lastError = tostring(err):sub(1, 1000)
+    if context == "auctioneer" and R.AuctionHost then R.AuctionHost.ReplacementFailed(hostVisit, where) end
+    R.Fault(where, err)
+end
 local function StopRefresh()
     if refreshTimer then refreshTimer:Cancel(); refreshTimer = nil end
     scheduled = false
@@ -28,6 +35,43 @@ function A.Context() return context end
 function A.Live() return context=="auctioneer" and R.AuctionHost and R.AuctionHost.DebugEnabled and R.AuctionHost.DebugEnabled() or false end
 function A.IsShown() return root ~= nil and root:IsShown() end
 function A.Page(key) return A.views[key] end
+-- Bind only this window's controls, once. Pooled rows opt in when created;
+-- page and dialog construction binds their remaining buttons and fields.
+local sounded=setmetatable({}, {__mode="k"})
+function A.MenuSound() if R.PlayMenuSound then R:PlayMenuSound() end end
+function A.BindSound(frame)
+    if sounded[frame] or not root then return end
+    local parent=frame
+    while parent and parent~=root do parent=parent:GetParent() end
+    if parent~=root then return end
+    local kind=frame:GetObjectType()
+    if kind=="Button" or kind=="CheckButton" or kind=="EditBox" or kind=="Slider"
+        or frame:GetScript("OnMouseDown") or frame:GetScript("OnMouseUp") then
+        sounded[frame]=true
+        frame:HookScript("OnMouseDown",A.MenuSound)
+        if kind=="EditBox" then frame:HookScript("OnEnterPressed",A.MenuSound) end
+    end
+end
+function A.BindSounds(frame)
+    A.BindSound(frame)
+    for _,child in ipairs({frame:GetChildren()}) do A.BindSounds(child) end
+end
+-- One passive indicator for the existing read/action controllers. The native
+-- spinner animates only while visible; no polling, new timers or requests.
+function A.UpdateBusy()
+    if not root or not root.busy then return end
+    local reads,actions=W.AuctionReads,W.AuctionActions
+    local view=A.views[active]
+    local waiting=actions and (actions.state=="waiting" or actions.state=="quoting" or actions.state=="refreshing")
+    local text=reads and reads.Pending()>0 and "Loading auctions…"
+        or waiting and "Waiting for Auction House…" or view and view.job and "Preparing results…"
+    if not text and context=="auctioneer" and reads and reads.Available() and C_AuctionHouse
+        and C_AuctionHouse.IsThrottledMessageSystemReady and not reads.Snapshot().throttle then
+        text="Auction House busy…"
+    end
+    root.busy:SetShown(text~=nil and text~=false)
+    root.busy.text:SetText(text or "")
+end
 function A.Note(text)
     if root then root.note:SetText((context == "auctioneer" and "TwichUI Auction House · " or "Preview · Replacement off · ") .. (text or "Transactions unavailable")) end
 end
@@ -49,25 +93,28 @@ local function Release(key, page)
     if not ok then R.Fault("auction preview cleanup", err) end
 end
 function A.Render()
-    if not A.IsShown() then return end
-    if A.UpdateDebug then A.UpdateDebug() end
-    if A.UpdateReview then A.UpdateReview() end
-    local fresh=W.Bridge.Freshness()
-    root.marketChip.tipLines=fresh.tip
-    root.marketChip:Set(fresh.text..' · Reload…',nil,UI.K.textDim)
+    if not A.IsShown() then return false end
     local def, page = A.pages[active], A.views[active]
-    if not (def and def.Render and page and page.built and not page.failed) then return end
-    local function Draw() renders = renders + 1; def.Render(page) end
-    local ok, err = pcall(function() R.Perf.Call("auction.previewRender", Draw) end)
+    if page and page.failed then return false end
+    local ok, err = pcall(function()
+        if A.UpdateDebug then A.UpdateDebug() end
+        if A.UpdateReview then A.UpdateReview() end
+        local fresh = W.Bridge.Freshness()
+        root.marketChip.tipLines = fresh.tip
+        root.marketChip:Set(fresh.text..' · Reload…', nil, UI.K.textDim)
+        if not (def and def.Render and page and page.built and not page.failed) then error("page-not-ready", 0) end
+        R.Perf.Call("auction.previewRender", def.Render, page)
+        A.UpdateBusy()
+        renders = renders + 1
+        page.rendered = epoch -- only a completed render counts
+    end)
     if not ok then
-        Release(active, page)
-        page.failed = true
-        page:Hide()
-        root.failure:SetText("This page could not be displayed. Close the preview and try again. Blizzard's Auction House is unchanged.")
+        if page then Release(active, page); page.failed = true; page:Hide() end
+        root.failure:SetText("This page could not be displayed. Close the window and try again.")
         root.failure:Show()
-        R.Fault("auction preview", err)
-        if context == "auctioneer" then R.AuctionHost.ToBlizzard() end
+        Fault("auction page render", err)
     end
+    return ok
 end
 local function Page(key)
     if A.views[key] then return A.views[key].built and A.views[key] or nil end
@@ -78,7 +125,7 @@ local function Page(key)
     local def = A.pages[key]
     if def then
         local ok, err = pcall(function() R.Perf.Call("auction.previewPageBuild", def.Build, page) end)
-        if not ok then R.Fault("auction preview build", err); return nil end
+        if not ok then Fault("auction preview build", err); return nil end
     else
         local text = UI.Text(page, 16, UI.K.textDim)
         text:SetPoint("TOPLEFT", 12, -12); text:SetPoint("RIGHT", -12, 0)
@@ -87,10 +134,11 @@ local function Page(key)
             "Preview only. This page belongs to a later milestone and has no auction actions.")
         page.placeholder = text
     end
+    A.BindSounds(page)
     page.built = true
     return page
 end
-function A.Go(key)
+local function Go(key)
     local found
     for _, d in ipairs(destinations) do if d[1] == key then found = d end end
     if not found then return false end
@@ -105,7 +153,7 @@ function A.Go(key)
     active = key
     root.heading:SetText(found[4])
     root.sub:SetText(key == "browse" and "Search stored observations and compare prices and market history." or
-        key == "shopping" and "Gather what your existing Workshop queue and crafting plan still need." or key == "sell" and "Prepare bag items and pricing. Posting remains disabled." or key == "owned" and "Review your listings. Cancel and repost remain unavailable." or "Inspect stored market history, listing prices and observation coverage.")
+        key == "shopping" and "Gather what your existing Workshop queue and crafting plan still need." or key == "sell" and "Choose bag items, compare current listings and review a posting." or key == "owned" and "Track your active auctions, incoming payments and time remaining." or "Inspect stored market history, listing prices and observation coverage.")
     root.failure:Hide()
     local page = Page(key)
     if page then page.failed = nil; page:Show()
@@ -117,9 +165,14 @@ function A.Go(key)
         button.on = k == key; button.sel:SetShown(button.on)
         UI.Paint(button.text, button.on and UI.K.text or UI.K.textDim)
     end
-    if page then A.Render()
-    elseif context == "auctioneer" then R.AuctionHost.ToBlizzard() end
-    return page ~= nil
+    if page then return A.Render() end
+    if context == "auctioneer" then R.AuctionHost.ReplacementFailed(hostVisit, "page-build-failed") end
+    return false
+end
+function A.Go(key)
+    local ok, result = pcall(Go, key)
+    if not ok then Fault("auction page navigation", result); return false end
+    return result
 end
 local function Band(frame)
     local CL = R.CraftLook
@@ -180,6 +233,16 @@ local function ResizeGrip()
     end)
     grip:SetScript("OnMouseUp",StopSizing)
 end
+local function Cleanup()
+    local id = hostVisit
+    context, hostVisit = "preview", nil
+    epoch = epoch + 1; initialized = nil; StopRefresh(); StopSizing(); root:UnregisterAllEvents()
+    for key, page in pairs(A.views) do
+        Release(key, page)
+    end
+    if A.HideExtras then A.HideExtras() end
+    if id and R.AuctionHost then R.AuctionHost.InterfaceHidden(id) end
+end
 local function Build()
     UI.Init()
     local CL, F, K = R.CraftLook, R.FrameLook, UI.K
@@ -205,6 +268,13 @@ local function Build()
     root.brand:SetPoint("LEFT", crest, "RIGHT", 10, 0); root.brand:SetText("TwichUI")
     root.title = UI.Text(header, 26, K.bronzeText, "serif")
     root.title:SetPoint("LEFT", root.brand, "RIGHT", 8, 0); root.title:SetText("Auction House")
+    root.busy=CreateFrame("Frame",nil,header)
+    root.busy:SetSize(240,28);root.busy:SetPoint("LEFT",root.title,"RIGHT",18,0);root.busy:EnableMouse(false)
+    root.busy.spinner=CreateFrame("Frame",nil,root.busy,"SpinnerTemplate")
+    root.busy.spinner:SetSize(22,22);root.busy.spinner:SetPoint("LEFT");root.busy.spinner:EnableMouse(false)
+    root.busy.text=UI.Text(root.busy,13,K.bronzeText)
+    root.busy.text:SetPoint("LEFT",root.busy.spinner,"RIGHT",8,0)
+    root.busy:Hide()
     root.close = F.Close(header, function() root:Hide() end)
     root.close:SetSize(30, 30); CL.Control(root.close); root.close:SetPoint("RIGHT", -8, 0)
     root.blizzard = UI.Button(header, "Blizzard Auction House", 220, "secondary", function()
@@ -253,28 +323,26 @@ local function Build()
     root.marketChip:SetScript('OnMouseUp',function(_,button) if button=='LeftButton' then W.Bridge.RequestReload() end end)
     root.note:SetPoint("LEFT",root.marketChip,"RIGHT",12,0); root.note:SetPoint("RIGHT", -24, 0)
     root.note:SetText("Standalone preview  •  Replacement off  •  Transactions unavailable")
-    root:SetScript("OnEvent", function() StopSizing(); R.FitToScreen(root); A.Schedule() end)
+    root:SetScript("OnEvent", function()
+        local ok, err = pcall(function() StopSizing(); R.FitToScreen(root); A.Schedule() end)
+        if not ok then Fault("auction window layout", err) end
+    end)
     root:HookScript("OnShow", function()
-        epoch = epoch + 1; StopRefresh()
-        R.FitToScreen(root)
-        for _, event in ipairs(events) do root:RegisterEvent(event) end
-        A.Go(active)
+        epoch = epoch + 1; StopRefresh(); initialized = nil
+        local ok, err = pcall(function()
+            R.FitToScreen(root)
+            for _, event in ipairs(events) do root:RegisterEvent(event) end
+            if A.Go(active) then initialized = epoch end
+        end)
+        if not ok then Fault("auction window show", err) end
     end)
-    root:HookScript("OnHide", function()
-        epoch = epoch + 1; StopRefresh(); StopSizing(); root:UnregisterAllEvents()
-        for key, page in pairs(A.views) do
-            Release(key, page)
-        end
-        if A.HideExtras then A.HideExtras() end
-        local id = hostVisit
-        context, hostVisit = "preview", nil
-        if id and R.AuctionHost then R.AuctionHost.InterfaceHidden(id) end
-    end)
+    root:HookScript("OnHide", Cleanup)
     ResizeGrip()
+    A.BindSounds(root)
     A.ready = true
     if UISpecialFrames then tinsert(UISpecialFrames, "TwichUIAuctionPreview") end
 end
--- Build hidden before Host leases any native geometry. No render, query or
+-- Build hidden before Host leases any native geometry. No query or
 -- Market load is required. Page objects remain pooled across switches/visits.
 function A.Prepare()
     if not W.Active() then return false, "EXPERIMENTAL_OFF" end
@@ -285,14 +353,36 @@ function A.Prepare()
 end
 function A.ShowIntegrated(id)
     local h = R.AuctionHost
-    if not h or not h.IsCurrent(id) or h.Snapshot().state ~= "preparing" or not h.Snapshot().leased then return false end
+    if not h or not h.IsCurrent(id) or h.Snapshot().state ~= "preparing" then return false end
     if A.IsShown() then A.Hide() end
     context, hostVisit = "auctioneer", id
+    initialized, lastError = nil, nil
     active = "browse" -- switching never implicitly selects/loads an external Market
     A.Note("Live search available; transaction permissions are shown per action")
     root.debug:Show()
+    -- Only our own root is positioned; foreign parent/ancestor state is never changed.
+    if root:GetParent() ~= UIParent then return false end
+    root:ClearAllPoints(); root:SetPoint("CENTER", UIParent, "CENTER")
+    root:SetFrameStrata("HIGH"); root:Raise()
     root:Show()
-    return A.IsShown() and context == "auctioneer" and A.Page(active) and not A.Page(active).failed and not root.failure:IsShown()
+    return context == "auctioneer" and A.Presentation().usable
+end
+-- Passive health check shared with Host's commit and watchdog. A Show callback
+-- can be swallowed by the client: require its completion and a render receipt.
+function A.Presentation()
+    local h = R.AuctionHost
+    local s = h and h.Presentation and h.Presentation(root, true) or { usable = false, why = "missing-host" }
+    local page = A.views[active]
+    s.initialized = initialized == epoch
+    s.browse = A.views.browse and A.views.browse.built or false
+    s.rendered = page and page.rendered == epoch or false
+    s.error = lastError
+    if not A.ready or not root or root:GetParent() ~= UIParent or s.strata ~= "HIGH" or not s.initialized or not s.rendered
+        or not page or page.failed or not page:IsVisible() or page:GetAlpha() <= 0
+        or not root.content:IsVisible() or root.content:GetAlpha() <= 0 or root.failure:IsShown() then
+        s.usable, s.why = false, "render-incomplete"
+    end
+    return s
 end
 function A.Show(initialMode)
     if not W.Active() then return false, "EXPERIMENTAL_OFF" end
@@ -308,18 +398,22 @@ function A.Show(initialMode)
     if root:IsShown() then A.Go(active) else root:Show() end
     return true
 end
-function A.Hide() if root then root:Hide() end end
+function A.Hide()
+    if not root then return end
+    if root:IsShown() then root:Hide() else Cleanup() end
+end
 function A.Snapshot()
-    local pages, listeners, rows, results, jobs = 0, 0, 0, 0, 0
+    local pages, listeners, rows, results, jobs, timers = 0, 0, 0, 0, 0, refreshTimer and 1 or 0
     for _ in pairs(A.views) do pages = pages + 1 end
     if A.IsShown() then listeners = #events end
     for _, p in pairs(A.views) do
         if p.list then rows = rows + #p.list.rows end
         results = results + #(p.rows or {})
         if p.job then jobs = jobs + 1 end
+        if p.clock then timers=timers+1 end
         if A.IsShown() and p.listening then listeners = listeners + (p.eventCount or 2) end
     end
-    local out={ timers = refreshTimer and 1 or 0, reads = W.AuctionReads and W.AuctionReads.Pending() or 0, liveResults = W.AuctionReads and W.AuctionReads.snapshot and #W.AuctionReads.snapshot.rows or 0, shown = A.IsShown() and 1 or 0, pages = pages, events = listeners, rows = rows, results = results, jobs = jobs, subscriptions = (W.Strategy.ListenerCount and W.Strategy.ListenerCount() or 0) + (W.Storage.ListenerCount and W.Storage.ListenerCount() or 0), renders = renders, sizing = root and root.sizing and 1 or 0 }
+    local out={ timers = timers, reads = W.AuctionReads and W.AuctionReads.Pending() or 0, liveResults = W.AuctionReads and W.AuctionReads.snapshot and #W.AuctionReads.snapshot.rows or 0, shown = A.IsShown() and 1 or 0, pages = pages, events = listeners, rows = rows, results = results, jobs = jobs, subscriptions = (W.Strategy.ListenerCount and W.Strategy.ListenerCount() or 0) + (W.Storage.ListenerCount and W.Storage.ListenerCount() or 0), renders = renders, sizing = root and root.sizing and 1 or 0 }
     for k,v in pairs(W.AuctionBrowseData and W.AuctionBrowseData.Stats() or {}) do out["catalog_"..k]=v end
     return out
 end

@@ -85,8 +85,12 @@ for _, change in ipairs({ "anchors", "scale", "parent", "focus", "geometry", "co
     elseif change == "replacement" then t.c.AuctionHouseFrame = t.Frame(t.c.UIParent)
     elseif change == "timeout" then t.now = 30 end
     t.Tick()
-    Same(t.H.Snapshot().leased, false, change)
+    Same(t.H.Snapshot().leased, change == "geometry", change)
     Same(t.H.Snapshot().watching, false, "cancel watchdog")
+    if change == "geometry" then
+        Same(t.H.Snapshot().state, "recovery", "unknown viewport retains recovery")
+        t.f.badGeometry = nil; Same(t.H.Restore(), true)
+    end
     if change == "anchors" then Same(select(4, t.f:GetPoint(1)), 11, "preserve foreign anchors")
     else Same(select(4, t.f:GetPoint(1)), 27, "restore owned anchors") end
     if change == "scale" then Same(t.f.scale, 0.6, "preserve external scale") end
@@ -129,9 +133,15 @@ do
 end
 for _, method in ipairs({ "failClear", "failPoint", "badGeometry" }) do
     local t = Setup(); t.f[method] = true
-    Same(t.H.Activate(), false, method); t.Restored()
+    Same(t.H.Activate(), false, method)
+    if method == "badGeometry" then
+        Same(t.H.Snapshot().state, "recovery")
+        Same(t.H.Snapshot().leased, true, "invalid geometry cannot report successful restoration")
+        t.f.badGeometry = nil; Same(t.H.Restore(), true)
+    end
+    t.Restored()
     Same(t.H.Control():IsShown(), false)
-    Same(#t.faults, method == "badGeometry" and 0 or 1, "own errors reported")
+    Same(#t.faults, 1, "own errors reported")
 end
 do
     local t = Setup(); Same(t.H.Activate(), true)

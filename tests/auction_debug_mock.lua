@@ -9,7 +9,8 @@ c.Enum.PlayerInteractionType={Auctioneer=21};c.Enum.ItemCommodityStatus={Item=1,
 c.C_PlayerInteractionManager={IsInteractingWithNpcOfType=function() return s.connected~=false end,IsValidNPCInteraction=function() return s.connected~=false end}
 c.InCombatLockdown=function() return s.combat==true end
 R.AuctionBuild={verified={}}
-R.AuctionHost={DebugEnabled=function() return s.debug~=false end,
+local presentation=R.AuctionHost.Presentation
+R.AuctionHost={Presentation=presentation,ReplacementFailed=function() s.state="blizzard";W.AuctionUI.Hide() end,DebugEnabled=function() return s.debug~=false end,
  Snapshot=function() return {state=s.state,leased=true,enabled=true,visit=s.visit,reason="test",openMS=1,switchMS=1} end,
  IsCurrent=function(id) return id==s.visit and s.connected~=false end,
  InterfaceHidden=function() end,ToBlizzard=function() s.state="blizzard";W.AuctionUI.Hide();return true end}
@@ -45,7 +46,13 @@ c.C_AuctionHouse={
 }
 for _,name in ipairs({"SendBrowseQuery","SendSearchQuery","QueryOwnedAuctions","RequestMoreBrowseResults","RequestMoreItemSearchResults","RequestMoreCommoditySearchResults",
  "PlaceBid","StartCommoditiesPurchase","ConfirmCommoditiesPurchase","CancelCommoditiesPurchase","CancelAuction","PostItem","PostCommodity","ConfirmPostItem","ConfirmPostCommodity"}) do
- local method=name;c.C_AuctionHouse[method]=function(...) return Call(method,...) end
+ local method=name;c.C_AuctionHouse[method]=function(...)
+  local result=Call(method,...)
+  if method=="PlaceBid" and s.syncComplete then W.AuctionActions.Event("AUCTION_HOUSE_PURCHASE_COMPLETED",select(1,...)) end
+  if method=="StartCommoditiesPurchase" and s.syncQuote then W.AuctionActions.Event("COMMODITY_PRICE_UPDATED",s.quoteUnit or 103,s.quoteTotal or select(2,...)*103) end
+  if (method=="PostItem" or method=="PostCommodity") and s.warning then return true end
+  return result
+ end
 end
 c.ItemLocation={CreateFromBagAndSlot=function(_,bag,slot) return {bag=bag,slot=slot} end}
 c.C_Container={GetContainerNumSlots=function(bag) return bag==0 and 1 or 0 end,

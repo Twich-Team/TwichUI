@@ -16,11 +16,11 @@ do
  s.browse={{itemKey={itemID=10},totalQuantity=3,minPrice=99}}
  Q.Event("AUCTION_HOUSE_BROWSE_RESULTS_UPDATED");A.Render()
  Check(#p.rows==1 and p.rows[1].source=="live")
- Press.Must(p.detail.inspect);Check(s.Count("SendSearchQuery")==1)
+ Press.Must(p.list.rows[1]);Check(s.Count("SendSearchQuery")==1)
  s.items={{auctionID=4,itemKey={itemID=10},quantity=3,buyoutAmount=299,containsOwnerItem=false,containsAccountItem=false}}
  Q.Event("ITEM_SEARCH_RESULTS_UPDATED",{itemID=11});Check(Q.Pending()==1)
  Q.Event("ITEM_SEARCH_RESULTS_UPDATED",{itemID=10});A.Render()
- Check(p.rows[1].total==299 and p.rows[1].unit==100)
+ Check(p.rows[1].total==299 and p.rows[1].unit==299)
  Press.Must(p.detail.buy);Check(W.AuctionActions.Review().total==299)
  Check(not W.AuctionActions.Review().allowed,"native activation remains per-mode")
  A.Go("market");Check(W.AuctionActions.Review()==nil,"navigation invalidates an old confirmation")
@@ -78,11 +78,10 @@ do
  Check(S.Observe());local rec=S.Current().recipes[1];W.Observe.Fill(rec);Check(S.Add(rec));S.PickSource(10,"auction")
  A.Go("shopping");for i=1,45 do FlushTimers() end;A.Render()
  local p=A.Page("shopping");Check(p.detail.data.row.qty==5 and p.detail.buy:IsEnabled(),"actual crafting deficit enables acquisition search")
- Press.Must(p.detail.buy);Check(A.Mode()=="browse" and s.Count("SendSearchQuery")==1)
+ Press.Must(p.detail.buy);Check(A.Mode()=="shopping" and s.Count("SendSearchQuery")==1,"quick buy stays on Shopping")
  s.items={{auctionID=44,itemKey={itemID=10},quantity=7,buyoutAmount=699,containsOwnerItem=false,containsAccountItem=false}}
  W.AuctionReads.Event("ITEM_SEARCH_RESULTS_UPDATED",{itemID=10});A.Render()
- Press.Must(A.Page("browse").detail.buy)
- local d=W.AuctionActions.Review();Check(d.desired==5 and d.quantity==7 and d.excess==2 and d.total==699,"shopping review carries exact need, stack and excess")
+ local d=W.AuctionActions.Review();Check(d.desired==1 and d.quantity==1 and d.excess==0 and d.total==699,"individual acquisition reviews one item, not the available stock")
  Check(W.Queue.Count()==1 and g.bags[10]==0,"review does not invent acquired stock")
 end
 print("PASSED: integrated live search "..count.." checks")

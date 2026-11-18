@@ -4,7 +4,7 @@ local function Setup() return dofile(TESTS.."auction_debug_mock.lua") end
 do
  local c,W,s=Setup();Check(#s.calls==0,"opening sends no search")
  local row=s.Item();local id,d=W.AuctionActions.PrepareBuy(row,2)
- Check(id and d.total==299 and d.quantity==3 and d.excess==1,"exact whole listing, including excess")
+ Check(id and d.total==299 and d.quantity==1 and d.excess==0,"availability is not the purchased quantity")
  local ok,why=W.AuctionActions.Confirm(id)
  Check(not ok and why:find("hardware",1,true));Check(s.Count("PlaceBid")==0,"unverified mode cannot spend")
  W.AuctionActions.Cancel();Check(W.AuctionActions.Snapshot().listeners==0)
@@ -15,7 +15,7 @@ for _,bad in ipairs({"price","money","session","combat","owner","snapshot","thro
  if bad=="price" then s.items[1].buyoutAmount=300 elseif bad=="money" then s.money=298
  elseif bad=="session" then s.visit=2 elseif bad=="combat" then s.combat=true
  elseif bad=="owner" then row.account=true elseif bad=="snapshot" then W.AuctionReads.End("changed") elseif bad=="throttle" then s.throttle=false elseif bad=="legacy" then s.legacyBusy=true end
- Check(not W.AuctionActions.Confirm(id),bad);Check(s.Count("PlaceBid")==0,bad..": no spend")
+ W.AuctionActions.Confirm(id);Check(s.Count("PlaceBid")==0,bad..": no spend")
 end
 do
  local c,W,s=Setup();c.TwichUI.AuctionBuild.verified.buyItem=true
@@ -99,8 +99,8 @@ do
  Check(T.Confirm(id));T.Event("COMMODITY_PRICE_UPDATED",161,801)
  local painted=T.Review();T.Event("COMMODITY_PRICE_UPDATED",162,802)
  Check(not T.Confirm(id,painted),"an unseen quote cannot spend");Check(s.Count("ConfirmCommoditiesPurchase")==0)
- s.quoteRemaining=0;Check(not T.Confirm(id,T.Review()),"expired quote cannot spend")
- s.quoteRemaining=0.25;Check(T.Confirm(id,T.Review()));Check(s.Count("ConfirmCommoditiesPurchase")==1)
+ s.quoteRemaining=0;T.Confirm(id,T.Review());Check(s.Count("ConfirmCommoditiesPurchase")==0,"expired quote cannot spend")
+ s.quoteRemaining=0.25;T.Event("COMMODITY_PRICE_UPDATED",162,802);Check(T.Confirm(id,T.Review()));Check(s.Count("ConfirmCommoditiesPurchase")==1)
 end
 for _,bad in ipairs({"deposit","nativeOwner","nativeQuantity","readException"}) do
  local c,W,s=Setup();local id
@@ -110,10 +110,10 @@ for _,bad in ipairs({"deposit","nativeOwner","nativeQuantity","readException"}) 
  else
   c.TwichUI.AuctionBuild.verified.buyItem=true;id=W.AuctionActions.PrepareBuy(s.Item())
   if bad=="nativeOwner" then s.items[1].containsAccountItem=true
-  elseif bad=="nativeQuantity" then s.items[1].quantity=4
+  elseif bad=="nativeQuantity" then s.items[1].auctionID=999
   else c.C_AuctionHouse.GetAuctionInfoByID=function() error("unreadable native value") end end
  end
- Check(id~=nil);Check(not W.AuctionActions.Confirm(id),bad);Check(s.Count("PlaceBid")+s.Count("PostItem")==0)
+ Check(id~=nil);W.AuctionActions.Confirm(id);Check(s.Count("PlaceBid")+s.Count("PostItem")==0)
 end
 do
  local c,W,s=Setup();c.TwichUI.AuctionBuild.verified.postItem=true

@@ -2,16 +2,20 @@
 local W=TwichUI.Workshop
 local A,UI,D,AD=W.AuctionUI,W.UI,W.AuctionSellData,W.AdvisorData
 local function Money(n) return n~=nil and UI.Money(n) or "Unavailable" end
-local Detail,Refresh
+local Detail,Refresh,Find
+local function Fields(p)
+    return table.concat({p.money.gold:GetText(),p.money.silver:GetText(),p.money.copper:GetText()},":")
+end
 local function SetPrice(p,n,origin)
-    p.settingDraft=true;p.filledPrice=n;p.priceOrigin=origin;p.money:SetCopper(n);p.settingDraft=false
+    p.autoPrice=nil
+    p.settingDraft=true;p.filledPrice=n;p.priceOrigin=origin;p.money:SetCopper(n);p.filledFields=Fields(p);p.settingDraft=false
     Detail(p)
 end
 local function Copy(p,tier)
-    local amount=D.Copy(p.competition,tier,p.chosen)
+    local amount,rounded=D.Copy(p.competition,tier,p.chosen)
     if not amount then A.Note("That price is unavailable or its item/market context changed. Refresh competition.");return end
     p.matched=tier.key
-    SetPrice(p,amount,p.competition.source=="live" and "Matched current listing" or "Matched historical observation")
+    SetPrice(p,amount,p.competition.source=="live" and (rounded and "Matched listing · rounded to silver" or "Matched current listing") or "Matched historical observation")
 end
 Detail=function(p)
     if not p.controlsReady or p.releasing or not p:IsShown() or not A.IsShown() or A.Mode()~="sell" then return end
@@ -21,7 +25,7 @@ Detail=function(p)
     p.detail.market:SetEnabled(row~=nil)
     p.detail.name:SetText(row and row.info.name or "Choose a bag item")
     p.detail.pic.tex:SetTexture(row and row.info.icon or UI.ICON_BLANK)
-    p.detail.kind:SetText(row and (row.qty.." in selected stack"..(row.variant and " · exact variant" or "")) or "Choose an item from your bags")
+    p.detail.kind:SetText(row and (row.qty.." in your bags"..(row.variant and " · exact variant" or "")) or "Choose an item from your bags")
     local quantity=tonumber(p.quantity:GetText())
     local price,why=p.money:GetCopper()
     local draft=D.Draft(row,quantity,price,p.durationIndex or 1)
@@ -29,23 +33,59 @@ Detail=function(p)
     p.post.text:SetText(A.Live() and "Review posting" or "Post unavailable")
     p.draft=draft;p.max:SetEnabled(D.Max(row)>0)
     p.validation:SetText(row and D.Max(row)>0 and not price and why or draft.reason)
-    p.total:SetText("Price per item   "..Money(price).."\nQuantity   "..(W.Int(quantity,1,W.MAX_ID) or "—")..
-        "\nGross if sold   "..Money(draft.gross).."\nDeposit upfront   "..Money(draft.deposit)..
-        "\nCommission   Not yet verified\nEstimated net if sold   Unavailable")
+    p.total:SetText("Gross if sold   "..Money(draft.gross).."\nDeposit upfront   "..Money(draft.deposit)..
+        "\nFees / net proceeds   Not yet verified")
+    local vendor=row and row.info.sell
+    local warning,close
+    if price and vendor and vendor>0 then
+        if price<=vendor then warning="At or below vendor value. A vendor offers "..Money(vendor).." per item."
+        elseif price-vendor<=math.floor(vendor/10) then
+            warning="Within 10% of vendor value ("..Money(vendor).."). Fees and unsold listings may make vendoring preferable."
+            close=true
+        end
+    end
+    p.vendorWarning:SetShown(row~=nil)
+    p.vendorIcon:SetShown(warning~=nil)
+    p.vendorText:SetText(warning or (vendor and vendor>0 and "Vendor value: "..Money(vendor).." per item." or vendor==0 and "This item has no vendor value." or "Vendor value is still loading."))
+    UI.Paint(p.vendorText,warning and (close and UI.K.bronzeText or UI.K.danger.text) or UI.K.textDim)
     local ctx=D.Competition(row,p.request or {})
     p.competition=ctx
     p.suggestion,p.recommendation,p.facts=D.Guidance(row,ctx)
+    local advice=p.recommendation
+    p.advisorTitle:SetText(advice and advice.text or "Item Advisor")
+    p.advisorNote:SetText(advice and ((advice.reasons or {})[1] or advice.evidenceText or "") or "Choose an item to see its recommendation.")
+    local art={auction="gavel",vendor="coins",craft="hammer",disenchant="inscribed-stone",watch="balance-scales",unknown="sealed-scroll"}
+    UI.Art(p.advisorArt,"npc:"..(art[advice and advice.action] or "sealed-scroll"),48)
+    if p.autoPrice==p.request and p.autoPrice and ctx.source=="live" and ctx.complete then
+        p.autoPrice=nil
+        if p.suggestion and p.suggestion.state=="ok" then
+            SetPrice(p,p.suggestion.price,p.suggestion.rounded and "Lowest current price · rounded to silver" or "Lowest comparable current listing")
+            return
+        end
+        p.priceOrigin="No comparable buyout price returned"
+    elseif p.autoPrice and W.AuctionReads.Pending()==0 and ctx.source=="live" then
+        p.priceOrigin="Partial current results · no automatic price yet"
+    elseif p.autoPrice and W.AuctionReads.Pending()==0 and ctx.source~="live" then
+        p.autoPrice=nil;p.priceOrigin="No current price available"
+    end
     local live=ctx.source=="live"
     p.origin:SetText(p.priceOrigin=="Matched current listing" and not live and "Previously matched listing · verify price" or p.priceOrigin or "No price selected")
     p.competitionCard.heading:SetText(live and "Current listings · experimental" or "Observed historical competition")
-    p.qtyHead:SetText(live and "Stack qty" or "Seen qty*")
-    p.totalHead:SetText(live and "Exact total" or "Est. value*")
-    p.competitionNote:SetText(live and (ctx.complete and "Complete response · click a valid price to match" or "Partial response · matching unavailable") or
-        (ctx.at and ("Observed "..UI.Ago(ctx.at).." · *aggregate tiers, not stacks") or "No saved competition · live search awaits client acceptance"))
+    p.qtyHead:SetText(live and "Available" or "Seen qty*")
+    p.totalHead:SetText(live and (ctx.kind=="item" and "Buyout each" or "Tier value") or "Est. value*")
+    p.competitionNote:SetText(live and (ctx.complete and "Click a listing to use its price" or "Partial response · matching unavailable") or
+        (ctx.at and ("Observed "..UI.Ago(ctx.at).." · *aggregate tiers, not stacks") or "No comparable listings"))
     if p.request and not live then p.competitionNote:SetText(W.AuctionReads.Pending()>0 and
         "Searching current listings… Historical tiers below." or "Live results unavailable · showing historical tiers") end
-    p.competitionList:SetData(ctx.rows,row and (row.keyComparable==false and "Variant-specific competition is unavailable." or
-        row.variant and "No comparable saved variant tiers." or "No comparable saved price tiers.") or "Select a bag item.")
+    local empty="Select a bag item."
+    if row then
+        if p.request and W.AuctionReads.Pending()>0 then empty="Loading current listings…"
+        elseif live then empty=ctx.returned==0 and "No current listings were returned." or "No comparable current prices could be shown."
+        elseif p.request then empty="Current listings unavailable. Click Refresh listings to try again."
+        elseif row.keyComparable==false then empty="Comparable item identity is unavailable."
+        else empty="Select the item to search its current listings." end
+    end
+    p.competitionList:SetData(ctx.rows,empty)
     local lowest
     for _,r in ipairs(ctx.rows) do if r.copy and (not lowest or r.unit<lowest.unit) then lowest=r end end
     p.lowestTier=lowest
@@ -63,10 +103,12 @@ Detail=function(p)
     local rec=p.recommendation or {}
     local s=p.suggestion
     p.advice:SetText((rec.text or "Insufficient evidence")..
-        (s and s.state=="ok" and ("\nSuggested: "..Money(s.price)..(s.source=="live" and " · current match" or " · saved reference")) or
+        (s and s.state=="ok" and ("\nSuggested: "..Money(s.price)..(s.source=="live" and " · current match" or " · saved reference")..(s.limited and " · few listings" or "")) or
         rec.observed and ("\nTentative observation: "..Money(rec.observed.value)) or "\nNo supported default price."))
     p.guidanceTip=table.concat(rec.reasons or {},"\n")..(s and s.caution and ("\n"..s.caution) or "")
-    p.chart:Set(W.Facts.Chart(p.facts),UI.Money)
+    local market=W.Market.Source().market
+    local projection=W.AuctionMarketData.Project(row.item,market,14,{variant=row.variant})
+    p.chart:Set(projection and projection.series,UI.Money,row.item..":sell:"..tostring(market and market.key)..":"..tostring(row.variant))
 end
 local function Reset(p)
     Detail(p)
@@ -77,6 +119,14 @@ Refresh=function(p)
     local view=A.Capture(p.list,function(r) return r.key end)
     local old=p.chosen
     p.rows,p.error=D.Bags(p.search:GetText())
+    if p.advisorOnly then
+        local filtered={}
+        for _,r in ipairs(p.rows) do
+            local _,rec=D.Guidance(r,D.Competition(r,r.key==p.selected and p.request or {}))
+            if rec and rec.action=="auction" then filtered[#filtered+1]=r end
+        end
+        p.rows=filtered
+    end
     local current
     for _,r in ipairs(p.rows) do if r.key==p.selected then current=r;break end end
     if old and (not current or current.identity~=old.identity or current.qty~=old.qty or current.locked~=old.locked or current.bound~=old.bound) then
@@ -84,13 +134,28 @@ Refresh=function(p)
         p.selected,p.chosen,p.request,p.matched=nil,nil,nil,nil
         SetPrice(p,nil,nil);p.quantity:SetText("1")
     end
-    p.list:SetData(p.rows,p.error or "No matching bag items.")
+    p.list:SetData(p.rows,p.error or (p.advisorOnly and "No items currently recommended for auctioning." or "No matching bag items."))
     A.Restore(p.list,view,function(r) return r.key end)
     Detail(p)
+end
+Find=function(p)
+    if not p.chosen or D.Max(p.chosen)==0 then return end
+    local request,why=D.Search(p.chosen)
+    if request then
+        p.request,p.autoPrice,p.matched=request,request,nil
+        p.priceOrigin="Searching current listings…"
+        Detail(p);A.Schedule()
+    else p.autoPrice=nil;A.Note(why) end
 end
 local function Build(p)
     p.search=UI.Search(p,300,32,"Filter bag items…");p.search:SetPoint("TOPLEFT",0,0)
     p.search:SetScript("OnEnterPressed",function(self) self:ClearFocus();Refresh(p) end)
+    p.advisorOnly=false
+    p.advisorFilter=UI.Switch(p,"Advisor: auction recommendations only",function()
+        if W.AuctionReads.Pending()>0 then A.Note("Wait for the current auction search to finish.");return end
+        p.advisorOnly=not p.advisorOnly;p.advisorFilter:SetOn(p.advisorOnly);Refresh(p)
+    end)
+    p.advisorFilter:SetPoint("TOPLEFT",650,-8)
     local left=A.Card(p,"Bag inventory",100)
     left:SetWidth(270);left:SetPoint("TOPLEFT",0,-48);left:SetPoint("BOTTOMLEFT",0,0)
     p.list=UI.List(left,58,function(parent)
@@ -102,69 +167,85 @@ local function Build(p)
             self.data=x;self.name:SetText(x.info.name);self.pic.tex:SetTexture(x.info.icon or UI.ICON_BLANK)
             local color=ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[x.info.quality or 1]
             if color then self.name:SetTextColor(color.r,color.g,color.b) else UI.Paint(self.name,UI.K.text) end
-            self.sub:SetText(x.qty.." in stack"..(x.locked and " · locked" or (x.reserved or 0)>0 and " · crafting reserved" or x.bound~=false and " · binding unknown / bound" or ""))
+            self.sub:SetText(x.qty.." in bags"..(x.locked and " · locked" or (x.reserved or 0)>0 and " · crafting reserved" or x.bound~=false and " · binding unknown / bound" or ""))
             self:SetSelected(p.selected==x.key)
         end
         r:SetScript("OnClick",function()
             if not r.data then return end
+            if W.AuctionReads.Pending()>0 then A.Note("Wait for the current auction search to finish.");return end
             if p.request and W.AuctionReads.serial==p.request.intent then W.AuctionReads.Cancel("selected item changed") end
             p.selected,p.request,p.matched=r.data.key,nil,nil
-            p.quantity:SetText(tostring(D.Max(r.data)));AD.Request(r.data.item)
-            Reset(p);p.list:Layout()
+            local defaults=TwichUI.WorkshopLauncher.AuctionSettings()
+            p.durationIndex=defaults.duration;p.duration:Refresh()
+            p.quantity:SetText(tostring(defaults.maxQuantity and math.max(1,D.Max(r.data)) or 1));AD.Request(r.data.item)
+            SetPrice(p,nil,nil);p.list:Layout()
+            if A.Live() then Find(p) else Reset(p) end
         end)
-        r:SetScript("OnEnter",function()
+        r.TipEnter=function()
             if r.data and GameTooltip and GameTooltip.SetBagItem then
                 GameTooltip:SetOwner(r,"ANCHOR_RIGHT");GameTooltip:SetBagItem(r.data.bag,r.data.slot);GameTooltip:Show()
             end
-        end)
-        r:SetScript("OnLeave",function() if GameTooltip then GameTooltip:Hide() end end)
+        end
+        r.TipLeave=function(self) TwichUI.Interact.HideTip(self) end
         return r
     end,400,false)
     p.list.box:SetPoint("TOPLEFT",4,-36);p.list.box:SetPoint("BOTTOMRIGHT",-4,8)
     local form=A.Card(p,"Posting preparation",100)
     form:SetPoint("TOPLEFT",left,"TOPRIGHT",10,0);form:SetPoint("BOTTOMRIGHT",-420,0)
-    A.Text(form,"Quantity · selected stack",14,12,-48)
-    p.quantity=UI.L.EditBox(form,132,38);UI.CL.Dress(p.quantity,"field");p.quantity:SetPoint("TOPLEFT",12,-74);p.quantity:SetMaxLetters(10)
+    local formCard=form
+    local scroll=CreateFrame("ScrollFrame",nil,formCard,"UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT",6,-36);scroll:SetPoint("BOTTOMRIGHT",-26,56);UI.CL.ScrollRail(scroll)
+    form=CreateFrame("Frame",nil,scroll);form:SetSize(320,582);scroll:SetScrollChild(form)
+    scroll:HookScript("OnSizeChanged",function(_,w) if w and w>1 then form:SetWidth(w) end end)
+    p.advisorBanner=CreateFrame("Frame",nil,form);UI.Panel(p.advisorBanner,"espresso")
+    p.advisorBanner:SetPoint("TOPLEFT",6,-4);p.advisorBanner:SetPoint("TOPRIGHT",-6,-4);p.advisorBanner:SetHeight(78)
+    p.advisorArt=p.advisorBanner:CreateTexture(nil,"ARTWORK");p.advisorArt:SetSize(48,48);p.advisorArt:SetPoint("LEFT",8,0)
+    p.advisorTitle=A.Text(p.advisorBanner,"Item Advisor",15,64,-10,-10,UI.K.bronzeText);p.advisorTitle:SetHeight(22)
+    p.advisorNote=A.Text(p.advisorBanner,"",11,64,-34,-10,UI.K.textDim);p.advisorNote:SetHeight(36);p.advisorNote:SetWordWrap(true)
+    A.Text(form,"Quantity",12,12,-100)
+    p.quantity=UI.L.EditBox(form,132,30);UI.CL.Dress(p.quantity,"field");p.quantity:SetPoint("TOPLEFT",12,-120);p.quantity:SetMaxLetters(10);p.quantity:SetNumeric(true)
     p.quantity:SetText("1");p.quantity:SetScript("OnTextChanged",function() Detail(p) end)
-    p.max=UI.Button(form,"Max",72,"secondary",function() p.quantity:SetText(tostring(D.Max(p.chosen)));Detail(p) end,38)
+    p.max=UI.Button(form,"Max",72,"secondary",function() p.quantity:SetText(tostring(D.Max(p.chosen)));Detail(p) end,30)
     p.max:SetPoint("LEFT",p.quantity,"RIGHT",8,0)
-    UI.Tip(p.max,"Maximum usable quantity","Uses only the selected bag stack, capped by the available native count when verified. Locked, bound and crafting-protected items are excluded. Stacks are never combined or split.")
-    A.Text(form,"Price per item",16,12,-130)
+    UI.Tip(p.max,"Maximum usable quantity","Uses matching items across your bags, capped by the native available posting count. Locked, bound and crafting-protected items are excluded. No stacks are moved or split.")
+    A.Text(form,"Price per item",14,12,-166)
     p.money=A.MoneyInputs(form,function()
         -- Native SetText callbacks may arrive after the guarded write finishes.
-        if not p.settingDraft and p.money:GetCopper()~=p.filledPrice then
-            p.filledPrice=nil;p.priceOrigin="Your unit price";p.matched=nil
+        if not p.settingDraft and Fields(p)~=p.filledFields then
+            p.filledPrice=nil;p.priceOrigin="Your unit price";p.matched=nil;p.autoPrice=nil
         end
         Detail(p)
-    end);p.money:SetPoint("TOPLEFT",12,-156)
-    p.origin=A.Text(form,"No price selected",11,12,-226,-12,UI.K.textDim)
-    A.Text(form,"Duration",14,12,-266)
+    end);p.money:SetPoint("TOPLEFT",12,-188)
+    p.origin=A.Text(form,"No price selected",11,12,-228,-12,UI.K.textDim)
+    A.Text(form,"Duration",12,12,-258)
     p.duration=A.Dropdown(form,286,function()
         return {{1,AUCTION_DURATION_ONE or "Duration 1 (unverified)"},{2,AUCTION_DURATION_TWO or "Duration 2 (unverified)"},{3,AUCTION_DURATION_THREE or "Duration 3 (unverified)"}}
     end,function() return p.durationIndex or 1 end,function(i) p.durationIndex=i;Detail(p) end)
-    p.duration:SetPoint("TOPLEFT",12,-292)
+    p.duration:SetPoint("TOPLEFT",12,-278)
     p.match=UI.Button(form,"Use suggested price",172,"secondary",function()
         local s=p.suggestion
         if s and s.state=="ok" and D.Current(p.competition,p.chosen) then SetPrice(p,s.price,"Qualified competition reference") end
-    end,32);p.match:SetPoint("TOPLEFT",12,-342)
-    p.reset=UI.Button(form,"Reset price",106,"secondary",function() Reset(p) end,32);p.reset:SetPoint("LEFT",p.match,"RIGHT",8,0)
-    p.total=A.Text(form,"",13,12,-402,-12);p.total:SetWordWrap(true);p.total:SetHeight(128)
-    UI.Tip(form,"Costs and conditional proceeds","Gross proceeds assume the full draft sells. Deposit is an upfront native quote only when exact item mode, identity, quantity and duration are available. Commission and deposit refund treatment remain unverified; net proceeds are unavailable. A refundable deposit must not be treated as a permanent selling fee.")
-    p.validation=A.Text(form,"",12,12,-544,-12,UI.K.textDim);p.validation:SetWordWrap(true);p.validation:SetHeight(42)
-    p.post=UI.Button(form,"Post unavailable",196,"primary",function()
+    end,28);p.match:SetPoint("TOPLEFT",12,-322)
+    p.reset=UI.Button(form,"Reset price",106,"secondary",function() Reset(p) end,28);p.reset:SetPoint("LEFT",p.match,"RIGHT",8,0)
+    p.vendorWarning=CreateFrame("Frame",nil,form);UI.Panel(p.vendorWarning,"espresso")
+    p.vendorWarning:SetPoint("TOPLEFT",12,-364);p.vendorWarning:SetPoint("TOPRIGHT",-12,-364);p.vendorWarning:SetHeight(70)
+    p.vendorIcon=p.vendorWarning:CreateTexture(nil,"OVERLAY");p.vendorIcon:SetSize(20,20);p.vendorIcon:SetPoint("TOPLEFT",8,-10)
+    p.vendorIcon:SetTexture(TwichUI.PATH..[[media\auction\vendor-warning-small]])
+    p.vendorText=A.Text(p.vendorWarning,"",12,36,-10,-8,UI.K.textDim);p.vendorText:SetWordWrap(true);p.vendorText:SetHeight(50)
+    p.total=A.Text(form,"",13,12,-450,-12);p.total:SetWordWrap(true);p.total:SetHeight(76)
+    p.validation=A.Text(form,"",12,12,-542,-12,UI.K.textDim);p.validation:SetWordWrap(true);p.validation:SetHeight(42)
+    p.post=UI.Button(formCard,"Post unavailable",196,"primary",function()
         if not A.Live() then return end
         local price=p.money:GetCopper()
         local id,why=W.AuctionActions.PreparePost(p.chosen,tonumber(p.quantity:GetText()),price,p.durationIndex or 1)
         A.ReviewAction(id,why)
     end,34);p.post:SetPoint("BOTTOMLEFT",12,12);p.post:SetEnabled(false)
-    UI.Tip(p.post,"Posting disabled","Real-client transaction, confirmation and runtime acceptance are pending. Draft edits never submit an auction.")
     p.detail=A.Details(p,410);p.detail:SetPoint("TOPRIGHT",0,-48);p.detail:SetPoint("BOTTOMRIGHT",0,0)
     p.history=A.Text(p.detail.body,"",12,12,-108,-12);p.history:SetWordWrap(true);p.history:SetHeight(60)
-    p.find=UI.Button(p.detail.body,"Find competition",186,"secondary",function()
-        local request,why=D.Search(p.chosen)
-        if request then p.request=request;p.matched=nil;A.Schedule() else A.Note(why) end
+    p.find=UI.Button(p.detail.body,"Refresh listings",186,"secondary",function()
+        Find(p)
     end,30);p.find:SetPoint("TOPLEFT",12,-178)
-    UI.Tip(p.find,"Explicit read-only search","Requests current competition for the exact item identity during the integrated auctioneer visit. Clicking selects no transaction. No search is sent on item selection.")
+    UI.Tip(p.find,"Explicit read-only search","Refreshes comparable listings for the selected bag item. Selecting an item also starts this read-only search; neither action posts an auction.")
     p.competitionCard=A.Card(p.detail.body,"Observed historical competition",226)
     p.competitionCard:SetPoint("TOPLEFT",4,-218);p.competitionCard:SetPoint("TOPRIGHT",-4,-218)
     UI.CL.Font(p.competitionCard.heading,14)
@@ -181,10 +262,13 @@ local function Build(p)
             self:SetSelected(p.matched==x.key);self:SetAlpha(x.copy and 1 or 0.6)
         end
         r:SetScript("OnClick",function() if r.data then Copy(p,r.data) end end)
-        UI.TipFn(r,"Competition price",function()
-            return p.competition.source=="live" and "Exact listing total; unit price is rounded up to whole copper. Own/account listings are excluded. Matching requires a complete current response and known ownership." or
-                "Historical aggregated price tier; quantity is not a stack and estimated value is not an auction total. Click to copy the observed unit price into this draft."
-        end)
+        r.TipEnter=function(self)
+            if not GameTooltip then return end
+            GameTooltip:SetOwner(self,"ANCHOR_RIGHT");GameTooltip:SetText("Use this listing's unit price")
+            GameTooltip:AddLine(p.competition.source=="live" and "Available quantity is not a stack. Own listings are excluded." or "Saved price evidence; current availability is unknown.",nil,nil,nil,true)
+            GameTooltip:Show()
+        end
+        r.TipLeave=function(self) TwichUI.Interact.HideTip(self) end
         return r
     end,144,false)
     p.competitionList.box:SetPoint("TOPLEFT",4,-56);p.competitionList.box:SetPoint("BOTTOMRIGHT",-4,36)
@@ -195,8 +279,10 @@ local function Build(p)
     local advice=A.Card(p.detail.body,"Item Advisor",92);advice:SetPoint("TOPLEFT",4,-496);advice:SetPoint("TOPRIGHT",-4,-496)
     p.advice=A.Text(advice,"",13,12,-30,-12);p.advice:SetWordWrap(true);p.advice:SetHeight(54)
     UI.TipFn(advice,"Price guidance evidence",function() return p.guidanceTip end)
-    p.chart=UI.PriceChart(p.detail.body,350,86);p.chart:SetPoint("TOPLEFT",8,-602);p.chart:SetPoint("TOPRIGHT",-8,-602)
-    p.detail.body:SetHeight(704)
+    local history=A.Card(p.detail.body,"Cheapest seen · observed days",220)
+    history:SetPoint("TOPLEFT",4,-600);history:SetPoint("TOPRIGHT",-4,-600)
+    p.chart=UI.AdvancedMarketChart(history,350,178);p.chart:SetPoint("TOPLEFT",8,-32);p.chart:SetPoint("TOPRIGHT",-8,-32)
+    p.detail.body:SetHeight(832)
     p.detail.market=A.HistoryButton(p.detail,function() return p.chosen and p.chosen.item,{variant=p.chosen and p.chosen.variant,itemKey=p.chosen and p.chosen.itemKey} end,370)
     p.detail.market:SetPoint("BOTTOMLEFT",10,10)
     p.controlsReady=true
@@ -204,8 +290,11 @@ local function Build(p)
 end
 A.Register("sell",{Build=Build,Render=function(p)
     if not p.listening then
-        for _,event in ipairs({"BAG_UPDATE_DELAYED","GET_ITEM_INFO_RECEIVED","ITEM_SEARCH_RESULTS_UPDATED","AUCTION_HOUSE_CLOSED","AUCTION_HOUSE_DISABLED"}) do p:RegisterEvent(event) end
-        W.Strategy.Listen(A.Schedule,true);p.listening=true;p.eventCount=5
+        local defaults=TwichUI.WorkshopLauncher.AuctionSettings()
+        p.advisorOnly=defaults.advisorOnly;p.advisorFilter:SetOn(p.advisorOnly)
+        p.durationIndex=defaults.duration;p.duration:Refresh()
+        for _,event in ipairs({"BAG_UPDATE_DELAYED","GET_ITEM_INFO_RECEIVED","ITEM_DATA_LOAD_RESULT","ITEM_SEARCH_RESULTS_UPDATED","AUCTION_HOUSE_CLOSED","AUCTION_HOUSE_DISABLED"}) do p:RegisterEvent(event) end
+        W.Strategy.Listen(A.Schedule,true);p.listening=true;p.eventCount=6
     end
     Refresh(p)
 end,Release=function(p)
@@ -213,7 +302,7 @@ end,Release=function(p)
     if p.request and W.AuctionReads.serial==p.request.intent then W.AuctionReads.Cancel("page hidden") end
     W.Strategy.Listen(A.Schedule,false)
     p:UnregisterAllEvents();p.listening=false;p.rows=nil;p.chosen=nil;p.suggestion=nil;p.recommendation=nil;p.facts=nil
-    p.selected,p.request,p.matched,p.competition,p.lowestTier,p.draft,p.guidanceTip=nil,nil,nil,nil,nil,nil,nil
+    p.selected,p.request,p.matched,p.competition,p.lowestTier,p.draft,p.guidanceTip,p.autoPrice=nil,nil,nil,nil,nil,nil,nil,nil
     p.quantity:SetText("1");SetPrice(p,nil,nil)
     p.list:SetData({});p.competitionList:SetData({});p.detail.market:SetEnabled(false)
     for _,list in ipairs({p.list,p.competitionList}) do for _,row in ipairs(list.rows) do row.data=nil end end

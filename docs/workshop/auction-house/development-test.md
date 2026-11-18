@@ -4,13 +4,15 @@ Install or update TwichUI normally, then reload. The standard seven-addon packag
 contains the complete Auction House; no separate addon, custom ZIP or development
 marker is required. Test Lab remains a development tool and is not needed.
 
-1. Open `/tui settings`, choose **Workshop**, enable Workshop if needed, then enable
+1. Open `/tui settings`, choose **Workshop**, enable Workshop if needed, then open its **Auction House** tab and enable
    **Use TwichUI Auction House (Experimental)**. Alternatively use `/tui ahdebug on`.
 2. Visit an auctioneer. Use Browse, Shopping, Sell, My Auctions and Market normally.
-   Click Search or Refresh to request live results. Opening pages never starts a scan.
+   Click Search or Refresh to request live results; My Auctions requests your listings
+   on entry. Opening pages never starts a scan.
 3. Inspect listings and review quantities, exact totals, posting drafts or cancellation
-   costs. Each final transaction button explains its native activation gate. TwichUI
-   enables no transaction modes: Forever hardware/permission/completion checks remain
+   costs. Buy, post and cancel modes are enabled for owner-requested in-game iteration;
+   only your explicit confirmation sends an action. Native posting warnings and vendor
+   safeguards remain in place. Forever hardware/permission/completion acceptance remains
    outstanding. Saved Market research remains available independently.
 4. Use **Blizzard Auction House** in the header, then the **TwichUI Auction House**
    return button to switch back during the same visit.

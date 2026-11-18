@@ -10,12 +10,14 @@ local function Setup()
     local t=Base();local c,R,H=t.c,t.R,t.H
     local shown,context,id=false,"preview",nil
     local A={}
+    t.custom=t.Frame(c.UIParent);t.custom.shown=false
     R.Workshop={AuctionUI=A}
     function A.Context() return context end
     function A.Prepare() t.builds=(t.builds or 0)+1;return true end
-    function A.ShowIntegrated(v) shown,context,id=true,"auctioneer",v;return true end
+    function A.ShowIntegrated(v) shown,context,id=true,"auctioneer",v;t.custom:Show();return true end
     function A.IsShown() return shown end
-    function A.Hide() shown=false;context="preview";if id then H.InterfaceHidden(id) end;id=nil end
+    function A.Presentation() return H.Presentation(t.custom,true) end
+    function A.Hide() t.custom:Hide();shown=false;context="preview";if id then H.InterfaceHidden(id) end;id=nil end
     R.WorkshopLauncher={Enabled=function() return true end,Load=function() end,
         LoadAuctionUI=function() t.loads=t.loads+1;return true end}
     c.HideUIPanel=function(f) t.closed=(t.closed or 0)+1;t.available=false;f:Hide();H.Ended() end
@@ -64,8 +66,8 @@ end
 do
     local t=Setup();t.Enable();t.c.AuctionHouseFrame=nil;t.H.Opened()
     for i=1,25 do t.Flush() end
-    Same(t.H.Snapshot().pending,0);Same(t.H.Snapshot().state,"blizzard")
-    Same(t.loads,0);Same(t.mutations,0)
+    Same(t.H.Snapshot().pending,0);Same(t.H.Snapshot().state,"recovery")
+    Same(t.loads,0);Same(t.nativeMutations or 0,0)
     t.H.Ended();t.c.AuctionHouseFrame=t.f;t.H.Opened();t.H.Ended();t.Flush()
     Same(t.loads,0,"close before initialization never loads")
 end
@@ -99,7 +101,12 @@ for _,event in ipairs({"AUCTION_HOUSE_CLOSED","AUCTION_HOUSE_DISABLED","PLAYER_L
     Same(t.R.Workshop.AuctionUI.IsShown(),false,event)
     Same(t.H.Snapshot().pending,0,event)
 end
-for _,foreign in ipairs({"anchors","parent","scale","addon","focus","native-hidden","control-hidden","busy"}) do
+do
+    local t=Setup();t.Start();Same(t.H.Control():IsVisible(),false,"healthy integration hides the duplicate control")
+    t.Tick();Same(t.H.Snapshot().state,"twichui","the header provides the normal return action")
+    t.H.ToBlizzard();t.Restored();Same(t.H.Control():IsVisible(),true,"native view retains the return action")
+end
+for _,foreign in ipairs({"anchors","parent","scale","addon","focus","native-hidden","busy"}) do
     local t=Setup();t.Start()
     if foreign=="anchors" then t.f.points={{"CENTER",t.c.UIParent,"CENTER",99,0}}
     elseif foreign=="parent" then t.f.parent=t.Frame(t.c.UIParent)
@@ -117,7 +124,7 @@ do
     local t=Setup();t.Start();local writes=t.mutations
     t.combat=true;t.c.FireEvent("PLAYER_REGEN_DISABLED")
     Same(t.H.Snapshot().state,"recovery");Same(t.mutations,writes)
-    Same(t.R.Workshop.AuctionUI.IsShown(),false)
+    Same(t.R.Workshop.AuctionUI.IsShown(),true,"working custom UI remains visible until native can restore")
     t.H.Ended();t.combat=false;t.c.FireEvent("PLAYER_REGEN_ENABLED");t.Restored()
     Same(t.H.Snapshot().visiting,false,"combat exit cannot reopen closed UI")
 end
