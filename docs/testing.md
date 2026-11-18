@@ -358,3 +358,26 @@ See [test evidence retention](evidence/README.md) for bounded CI diagnostics,
 permanent evidence, historical path/hash mappings and rollback. Generated outputs
 remain ignored; CI refuses newly tracked files under `test-output/`. CI artifacts
 expire after 14 days and must not become permanent documentation dependencies.
+
+## AH-7A integration selection
+
+`./tests/run.sh integration auction-house --with-group workshop --profile cloud --measure`
+selects the complete AH preview catalog, AH proof/integration, Workshop and Test Lab
+regressions plus recursive offline dependencies. `auctionproof` preserves all four
+original proof launches and adds six integration launches (normal, replay, narrow,
+scaled, restored synthetic native boundary, deliberate wrong expectation). Each new
+launch has 131 structured lifecycle/geometry/resource checks. Replay compares
+frame-growth deltas; raw global frame totals remain logged because unrelated
+Blizzard frames vary between fresh processes. This does not establish real input,
+server-session safety, combat/taint or native acceptance. The cloud profile cannot
+satisfy local/native acceptance gates. No money/quantity/price logic changed, so
+production mutation campaigns are not required for this presentation milestone.
+
+The final affected campaign is recorded in [AH-7A evidence](workshop/auction-house/native-integration.md#automated-evidence-and-performance).
+The combined attempt was interrupted by an environment reconnect; completed
+catalog verdicts were preserved and the remaining Workshop/Test Lab catalogs ran
+in a passing feature profile. Final Host callback hardening and the scoped
+Diagnostics preset have their own passing focused checks and simulator evidence.
+`auction-house` and `auction-preview` now also select `test_perf_engine.lua` and
+the two changed Diagnostics source files. No full/release certification or native
+client acceptance is inferred from this campaign.

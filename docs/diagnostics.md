@@ -454,3 +454,40 @@ only when the selected record changes; no history decoding occurs there.
 ## Automatic Workshop summaries (candidate)
 
 `workshop.summaryLoad` measures each requested partition's unavoidable synchronous addon compilation/load. `workshop.summaryValidate` measures cooperative 3 ms-budget validation callbacks, including parse, canonical encoding and SHA-256; `workshop.summaryLookup` measures exact research reads. Read-only gauges `summaryBytes`, `summaryParts`, `summaryDecoded` and `summaryChecked` report retained raw bytes, loaded partitions, decoded rows (one bounded partition) and checked partitions. Fixed A/B partition names are included in ownership attribution; expensive memory sampling reports their aggregate separately from the small MarketData root. No diagnostic read loads a partition. Initial recognition reads only the summary-marked root after Workshop consent; opening research may request partitions. These are instrumented costs, not Forever frame-time acceptance.
+
+### AH-7A supervised native integration
+
+`auction.switch` (`Perf.Call`, layout) maps to `auction/Host.lua:Switch`, only on a
+test-enabled native opening or explicit return action. Existing `auction.proof`
+measures native activation/restoration; `auction.proofWatch` monitors an owned
+proof or integrated visit at 0.25 s. Existing `workshop.load` remains the load scope.
+
+Read-only gauges: `auction.hostState` (0 Blizzard, 1 preparing, 2 TwichUI,
+3 restoring, 4 recovery), `auction.hostPending` (0/1 initialization timer),
+`auction.host_activations`, `auction.host_failed`, `auction.host_restoreFailed`,
+`auction.host_switches`; `auction.host_openMS`, `auction.host_firstLoadMS`,
+`auction.host_loadMS`, `auction.host_activateMS`, `auction.host_restoreMS`,
+`auction.host_switchMS` (last measured milliseconds, with first load retained).
+Opening latency uses game elapsed time; operation costs use `debugprofilestop`.
+The existing preview pools/jobs/subscriptions/listeners describe both contexts;
+`auction.previewTimers` counts the cancellable coalesced refresh (0/1).
+No gauge builds or loads anything. See the [acceptance procedure](workshop/auction-house/native-integration.md).
+
+Use `/tui perf start auction 2` to record the **Auction House lifecycle** preset.
+It times `auction.` and `workshop.load`, samples memory/resources every five
+seconds, and selects the `auction` gauge group. Its 12 Host fields and seven
+`auction.lifecycle_*` projections (pages, events, rows, jobs, timers,
+subscriptions, reads) register when Diagnostics loads, after legacy builtins.
+This preserves the existing 40-gauge limit and legacy core/settings selections.
+A unit test fits all 19 fields beside 20 existing custom gauges (39 total); the
+supplemental native-simulator probe collected 34 gauges and verified real Host and
+page-pool reads. Real Forever timing remains pending.
+
+
+The integrated AH development workflow adds `auction.actionReview` (explicit
+Prepare/Confirm validation and submission, `TwichUI_Workshop/auction/Actions.lua`).
+The `auction` preset includes action pending/listener/timer cleanup gauges, retaining
+19 scoped gauges and the unchanged 40-gauge limit. Redundant Host activation/load
+samples remain in Host snapshots and the compact panel rather than displacing
+cleanup gauges. The panel's frame time is an FPS-derived estimate; Diagnostics
+captures actual sampled frame times. No permanent panel ticker or auto-query exists.

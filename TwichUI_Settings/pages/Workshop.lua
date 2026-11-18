@@ -65,6 +65,16 @@ K.Page({
                 info, infoAt = nil, nil
                 K.RefreshOverview()
             end)
+        local auction = K.ProxyToggle("auctionDebug", "Use TwichUI Auction House (Experimental)",
+            "Development builds only. Open the existing five-page Auction House when visiting an auctioneer. No proof commands are required. Turning this off restores Blizzard. Individual unverified transaction modes remain unavailable.", false,
+            function() return R.AuctionHost and R.AuctionHost.DebugEnabled() or false end,
+            function(on)
+                local ok, why = R.AuctionHost.SetDebug(on)
+                if not ok then R.Print(tostring(why)) end
+                K.RefreshOverview()
+            end)
+        auction:AddModifyPredicate(function() return Enabled() and R.AuctionHost and R.AuctionHost.Development() end)
+        auction.why = "Enable Workshop — Experimental and install the Auction House development build."
         local login = K.ProxyToggle("workshopLoadOnLogin", "Load Workshop when I log in",
             "Load Workshop after your next login or reload. Opens no window and starts no scan. Large saved market databases can pause the game while loading. Off by default.", false,
             function() local l = Launcher(); return l and l.LoadOnLogin and l.LoadOnLogin() or false end,

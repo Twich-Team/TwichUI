@@ -594,3 +594,21 @@ do
 end
 
 print("PASSED test_testlab_ui")
+
+-- AH-7A cases keep the original pointer group intact and never switch modes.
+do
+  local t = Setup(); local S = Scene(t)
+  local a = { blizzard = S.add }
+  t.R.Workshop.AuctionUI = { Context = function() return "auctioneer" end, IsShown = function() return true end,
+    Frame = function() return a end, Mode = function() return "browse" end, Page = function() return {categoryDrop=S.add} end }
+  t.R.AuctionHost = { Snapshot = function() return {state="blizzard",visiting=true} end, Control = function() return S.add end }
+  Check(t.TL.categories.auctionpointer.manual and t.TL.categories.auctionpointer.guided, "AH probes are opt-in individual observations")
+  Same(#t.TL.Select({auctionpointer=true}),0,"a group run never changes or chains interfaces")
+  for _, key in ipairs({"blizzard","return","dropdown"}) do
+    S.w:Cursor(1090,258)
+    t.Run({"ui.pointer.auction-"..key},{"auctionpointer"});t.Frames(2);t.Key();t.Frames(10)
+    Same(t.Result().status,"pass",key..": actual pointer sampling uses the existing judge")
+    Same(t.Bound(),0,"AH pointer observation releases its key")
+  end
+  Same(S.clicks,0,"guided probes never invoke an auction control")
+end

@@ -167,9 +167,9 @@ m("market.canonical.rounding-range", "TwichUI_Workshop/PricingV1.lua",
   "doubling the band accumulator silently loses exact rounding", ["test_workshop_pricing_v1.lua"])
 
 
-# ======================================================================================================================
+# ===============================================================================================================
 # MARKET AND PRICING: the batch (cheapest price per item), history, statistics, quotes and the craft estimate
-# ======================================================================================================================
+# ===============================================================================================================
 # --- the batch: fractional unit prices, cheapest, quantity at the cheapest tier, next higher price ------------------------
 m("market.batch.compare-rounded-units", PRICES,
   "local lhs, rhs = buyout * a.c, a.b * count   -- compares the unit prices exactly, with no division",
@@ -368,9 +368,9 @@ m("market.estimate.inverted-output-range", PRICES, "if lo and hi < lo then lo, h
 m("market.cut.rounding", PRICES, "return math.floor(amount * rate + 0.5)", "return math.floor(amount * rate)",
   "the cut is truncated instead of rounded to the nearest copper", [CRF])
 
-# ======================================================================================================================
+# ===============================================================================================================
 # CRAFTING: materials, stock, shopping, make-versus-buy, Opportunities
-# ======================================================================================================================
+# ===============================================================================================================
 # --- allocation of owned items (W.Split) -------------------------------------------------------------------------------
 m("crafting.split.guild-before-bank", DATA,
   "    local k = math.min(want, Have(bank))\n    want = want - k\n    local g = math.min(want, Have(guild))\n    return b, k, g, want - g",
@@ -747,9 +747,9 @@ m("market.value.range-legacy-double-count", VALUATION, "            local limit 
   "            local limit = today", "legacy minimum days after version-2 recording began are counted beside the version-2 days", [VAL])
 
 
-# ======================================================================================================================
+# ===============================================================================================================
 # CONSUMERS OF THE MARKET SERVICES (A7): Shopping over Market.Cost, MarketFacts
-# ======================================================================================================================
+# ===============================================================================================================
 A7T = "test_workshop_a7.lua"
 SHOP, FACTS = "TwichUI_Workshop/Shopping.lua", "TwichUI_Workshop/MarketFacts.lua"
 m("market.a7.range-shown-as-low", SHOP, 'return money(r.low) .. " to " .. money(r.high), "Auctions may require buying larger stacks."', 'return money(r.low), nil',
@@ -768,9 +768,9 @@ m("market.a7.other-market-substituted", FACTS, '    if m == nil then return MK.S
   '    if m == nil then return MK.Source().market end\n    if type(m) == "string" then return PR.Market(m) or MK.Source().market end',
   "a market with no scan shows another auction house's figures", [A7T])
 
-# ======================================================================================================================
+# ===============================================================================================================
 # AUTOMATIC PRICE UPDATES (A6): the setting, the visit, the cooldown and backoff, the market, Stop and provenance
-# ======================================================================================================================
+# ===============================================================================================================
 AUTOT = "test_workshop_auto.lua"
 AUTO, SCAN, WAUTO, SESSION = "TwichUI_Workshop/Auto.lua", "TwichUI_Workshop/Scan.lua", "!!!TwichUI/WorkshopAuto.lua", "TwichUI_Workshop/Session.lua"
 m("market.auto.setting-ignored", WAUTO, 'function WA.Enabled() return WA.POLICY == "auto" and R.WorkshopLauncher and R.WorkshopLauncher.Enabled()\n    and R:Enabled("workshopAutoScan") end', 'function WA.Enabled() return WA.POLICY == "auto" and R.WorkshopLauncher and R.WorkshopLauncher.Enabled() end',
@@ -802,9 +802,9 @@ m("market.auto.refusal-not-remembered", AUTO, "    elseif SC.state == \"failed\"
   "    elseif SC.state == \"failed\" and SC.auto and key and REFUSED[SC.why] then\n        backoff[key] = nil", "a refused automatic request is forgotten, so the backoff never applies", [AUTOT])
 
 
-# ======================================================================================================================
+# ===============================================================================================================
 # EXAMINED AND LEFT OUT (equivalent mutants: no test can tell them from the original, so they would only ever "survive")
-# ======================================================================================================================
+# ===============================================================================================================
 #   Prices.Unit  `return math.max(q, 1)` -> `return q`: the round-up loop above it already lifts a zero to 1.
 #   CraftPlanner.Consider  `VecCmp(v, b.v) >= 0` -> `> 0`: it differs only when the two plans' costs AND choice vectors are equal, i.e. the
 #       same plan, so replacing it changes nothing observable.
@@ -1069,3 +1069,25 @@ m("market.summary.exact-variant", "TwichUI_Workshop/Summary.lua",
 m("market.summary.focus-catalog", "TwichUI_Workshop/ServerMarket.lua",
   "if focus and B.Status().summary then return end", "-- accidentally enumerate the whole catalogue before focused research",
   "one item lookup loads unrelated summary partitions and delays the page", ["test_workshop_auction_market_summary.lua"])
+
+# Integrated AH exact money and consent boundaries.
+m("market.auction-action-exact-total", "TwichUI_Workshop/auction/Actions.lua",
+  "return Send(p,C_AuctionHouse.PlaceBid,p.auctionID,p.total)", "return Send(p,C_AuctionHouse.PlaceBid,p.auctionID,p.unit*p.quantity)",
+  "a rounded unit price overpays a whole-listing buyout", ["test_workshop_auction_actions.lua"])
+m("market.auction-quote-consent", "TwichUI_Workshop/auction/Actions.lua",
+  "not consent or consent.quoteVersion~=p.quoteVersion or consent.total~=p.total or consent.quantity~=p.quantity", "false",
+  "a quote that changed after painting can be purchased without reviewing its new total", ["test_workshop_auction_actions.lua"])
+m("market.auction-tier-total", "TwichUI_Workshop/auction/Actions.lua",
+  "total=total+tier.unit*take", "total=total+tier.unit",
+  "multi-tier estimates omit the quantity at each price", ["test_workshop_auction_actions.lua"])
+m("market.auction-post-deposit-race", "TwichUI_Workshop/auction/Actions.lua",
+  " or fresh.deposit~=p.deposit", "",
+  "posting accepts an upfront deposit that changed since review", ["test_workshop_auction_actions.lua"])
+m("crafting.auction-bag-quantity-race", "TwichUI_Workshop/auction/Actions.lua",
+  " and row.qty==p.bagQuantity", "",
+  "a bag stack changed after the reviewed shopping/posting quantity was captured", ["test_workshop_auction_actions.lua"])
+
+m("market.auction-legacy-post-race", "TwichUI_Workshop/auction/Actions.lua",
+  'if R.AuctionWindow and R.AuctionWindow.LifecycleBusy() then return false,"Sell from Bags became busy; dismiss this review and check Blizzard." end',
+  'if false then return false,"Sell from Bags became busy; dismiss this review and check Blizzard." end',
+  "a legacy posting operation started after review no longer prevents a competing transaction", ["test_workshop_auction_actions.lua"])

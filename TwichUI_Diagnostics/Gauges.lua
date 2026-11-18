@@ -22,6 +22,8 @@ DX.OPS = {
     ["workshop.summaryLoad"] = { module="workshop",label="Summary partition addon load",kind="init",file="TwichUI_Workshop/Summary.lua",where="loadPart",every="once per requested partition" },
     ["workshop.summaryValidate"] = { module="workshop",label="Summary validation slice",kind="work",file="TwichUI_Workshop/Summary.lua",where="Q.Step",every="while validating header or requested partition" },
     ["workshop.summaryLookup"] = { module="workshop",label="Exact summary lookup",kind="work",file="TwichUI_Workshop/Summary.lua",where="Q.Record",every="external research only" },
+
+    ["auction.actionReview"] = {module="auction", label="AH action validation and explicit submission", kind="evaluate", file="TwichUI_Workshop/auction/Actions.lua", where="Prepare/Confirm", every="explicit review or confirmation only", visible="auction.previewShown"},
     ["auction.chartPrepare"] = { module="auction", label="Market chart preparation", kind="rebuild", file="TwichUI_Workshop/auction/AdvancedChart.lua", where="Set", every="evidence replacement", visible="auction.previewShown" },
     ["auction.chartDraw"] = { module="auction", label="Market chart geometry", kind="layout", file="TwichUI_Workshop/auction/AdvancedChart.lua", where="Render", every="evidence or geometry change", visible="auction.previewShown" },
     ["auction.readSnapshot"] = { module = "auction", label = "AH experimental read normalization", kind = "rebuild", file = "TwichUI_Workshop/auction/ReadRequests.lua", where = "Event", every = "explicit response only; at most 500 rows" },
@@ -31,8 +33,9 @@ DX.OPS = {
     ["auction.previewResize"] = { module = "auction", label = "AH preview: resize", kind = "layout", file = "TwichUI_Workshop/auction/Window.lua", where = "A.Resize", every = "at most 20 Hz during an explicit resize drag", visible = "auction.previewShown" },
     ["auction.previewBuild"] = { module = "auction", label = "AH preview: shell construction", kind = "init", file = "TwichUI_Workshop/auction/Window.lua", where = "Build", every = "first explicit preview open" },
     ["auction.previewRender"] = { module = "auction", label = "AH preview: visible page render", kind = "rebuild", file = "TwichUI_Workshop/auction/Window.lua", where = "A.Render", every = "visible page changes and coalesced refreshes", visible = "auction.previewShown" },
+    ["auction.switch"] = { module = "auction", label = "AH supervised interface switch", kind = "layout", file = "auction/Host.lua", where = "Switch", every = "explicit test visit or return action only" },
     ["auction.proof"] = { module = "auction", label = "AH-1a presentation switch/recovery", kind = "layout", file = "auction/Host.lua", where = "Activate, Restore", every = "explicit diagnostic command, or recovery of its active lease" },
-    ["auction.proofWatch"] = { module = "auction", label = "AH-1a lease check", kind = "update", file = "auction/Host.lua", where = "Watch", every = "every 0.25 s only during the explicit, at most 30-second proof" },
+    ["auction.proofWatch"] = { module = "auction", label = "AH-1a lease check", kind = "update", file = "auction/Host.lua", where = "Watch", every = "every 0.25 s only while Host owns a proof or supervised replacement" },
     ["core.savedData"] = { module = "core", label = "Saved data check at load (Persist.LoadMain)", kind = "init", file = "Core.lua", where = "ADDON_LOADED handler > Persist.LoadMain", every = "once per load" },
     ["core.startupHook"] = { module = "core", label = "Start-up hooks (each module's OnInit)", kind = "init", file = "Core.lua", where = "R.initHooks loop", every = "once per load, per module" },
     ["inventory.plan"] = { module = "inventory", label = "Magic Inventory plan (bags read, rules matched)", kind = "rebuild", file = "inventory/Plan.lua", where = "MI.CurrentPlan", every = "when a mailbox, bank or guild bank opens or its bags change (coalesced), and per review drawn" },
@@ -209,6 +212,7 @@ local G = {
     { "auction.previewEvents", "AH preview visible listeners", "listeners", "core", AuctionPreview("events") },
     { "auction.previewResults", "AH preview retained results", "cache", "core", AuctionPreview("results") },
     { "auction.previewSubscriptions", "AH preview shared-plan/stock observers", "listeners", "core", AuctionPreview("subscriptions") },
+    { "auction.previewTimers", "AH preview refresh timer", "state", "core", AuctionPreview("timers") },
     { "auction.previewJobs", "AH preview pending catalog jobs", "state", "core", AuctionPreview("jobs") },
     { "auction.catalogStarts", "AH catalog discovery starts", "counter", "core", AuctionPreview("catalog_starts") },
     { "auction.catalogCompleted", "AH catalog completions", "counter", "core", AuctionPreview("catalog_completions") },
@@ -311,6 +315,34 @@ local G = {
 }
 for _, g in ipairs(G) do
     Perf.Gauge(g[1], { label = g[2], kind = g[3], group = g[4], unit = "count", read = g[5], builtin = true })
+end
+
+-- Keep Host metrics out of the legacy capture's first-40 budget. The scoped
+-- Auction House preset selects these builtin gauges without displacing existing
+-- core/settings measurements. All reads are passive snapshots.
+for _, entry in ipairs({ {"hostState", "stateCode"}, {"hostPending", "pending"},
+    {"host_failed", "failed"}, {"host_restoreFailed", "restoreFailed"},
+    {"host_switches", "switches"}, {"host_openMS", "openMS"},
+    {"host_firstLoadMS", "firstLoadMS"},
+    {"host_restoreMS", "restoreMS"}, {"host_switchMS", "switchMS"} }) do
+    local field = entry[2]
+    Perf.Gauge("auction." .. entry[1], { label = "Auction House " .. field, kind = "state", group = "auction", builtin = true,
+        unit = field:match("MS$") and "ms" or "count", read = function()
+            local s = Snap("AuctionHost")
+            return s and DX.Num(s[field]) or 0
+        end })
+end
+for _, field in ipairs({"pages", "events", "rows", "jobs", "timers", "subscriptions", "reads"}) do
+    Perf.Gauge("auction.lifecycle_" .. field, { label = "Auction House " .. field, kind = "state", group = "auction", builtin = true,
+        unit = "count", read = AuctionPreview(field) })
+end
+
+for _,field in ipairs({"pending","listeners","timers"}) do
+    local key=field
+    Perf.Gauge("auction.action_"..key,{label="Auction action "..key,kind="state",group="auction",builtin=true,unit="count",read=function()
+        local w=R.Workshop;local t=w and w.AuctionActions
+        local s=t and t.Snapshot();return s and s[key] or 0
+    end})
 end
 
 -- The gauges a capture reads (groups nil: all), in registration order.

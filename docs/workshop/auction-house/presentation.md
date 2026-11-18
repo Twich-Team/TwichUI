@@ -13,6 +13,10 @@ Blizzard switch closes only the preview and explains that replacement is off.
 Close/Escape and viewport changes operate solely on the independent root.
 No presentation state is persisted.
 
+AH-7A adds a second, explicitly gated [auctioneer context](native-integration.md)
+to this same shell and pages. `/tui ahpreview` retains the standalone behavior
+above. No transaction controls or native read gates are enabled by integration.
+
 ## Checkpoint 1
 
 Shared leather/bronze shell, header branding, five left navigation destinations,

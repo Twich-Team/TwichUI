@@ -212,7 +212,7 @@ local function Judge(def, snap)
 end
 
 local function Guided(def)
-    TL.Case{ id = def.id, cat = "pointer", class = "guided", budget = 120, run = function(t)
+    TL.Case{ id = def.id, cat = def.cat or "pointer", class = "guided", step = def.step, about = def.about, after = def.after, budget = 120, run = function(t)
         local ok, why = G.Begin{ title = def.title, lines = def.lines, capture = function(source, attempt) return Capture(def, source, attempt) end }
         if not ok then t:Skip(why) end
         local verdict
@@ -357,3 +357,41 @@ Guided{
         Add(snap.relations[1] == "self", "the topmost frame is not the picture itself (see the focus list)")
     end,
 }
+
+-- AH-7A reuses the same read-only client-foci sampler. The owner changes
+-- presentation explicitly between individual cases; the Lab never takes over.
+TL.Category{ id = "auctionpointer", label = "Auction House pointer (guided)",
+    blurb = "individual observations of the supervised Auction House; no interface switching", guided = true, manual = true }
+local function AuctionTarget(key)
+    local a = R.Workshop and R.Workshop.AuctionUI
+    if not a or a.Context() ~= "auctioneer" or not a.IsShown() then return nil end
+    if key == "dropdown" then
+        local page = a.Mode() == "browse" and a.Page("browse")
+        return page and page.categoryDrop
+    end
+    return a.Frame() and a.Frame().blizzard
+end
+for step, key in ipairs({ "blizzard", "return", "dropdown" }) do
+    local control = key
+    Guided{ id = "ui.pointer.auction-" .. control, key = "ui.auction." .. control, cat = "auctionpointer", step = step, kind = "click",
+        about = control == "return" and "Observe Blizzard's return-to-TwichUI action" or "Observe the integrated Auction House control",
+        title = "Auction House pointer: " .. control,
+        lines = { control == "return" and "Switch to Blizzard yourself. Keep the auctioneer open."
+                or "Open the supervised TwichUI Auction House at an auctioneer; select Browse.",
+            "Move the prompt away. Place the pointer over " .. (control == "blizzard" and "Blizzard Auction House" or control == "return" and "TwichUI Auction House near the bottom of the screen" or "All Categories") .. ". Do not click.",
+            "Press F9 to record the client's actual pointer target." },
+        what = "the Auction House " .. control .. " control",
+        missing = "The requested Auction House control is unavailable. Follow the native integration checklist before sampling.",
+        where = "Place the pointer inside the requested Auction House control, then press F9.",
+        after = "Copy the report. Switch interfaces yourself before running the next individual observation.",
+        target = function()
+            if control ~= "return" then return AuctionTarget(control) end
+            local h = R.AuctionHost
+            local s = h and h.Snapshot()
+            if s and s.state == "blizzard" and s.visiting then return h.Control() end
+        end,
+        expect = function(snap, v, Add)
+            Add(snap.relations[1] == "self", "The intended Auction House control must be the client's topmost pointer target; inspect the recorded stack for an obstruction.")
+        end,
+    }
+end

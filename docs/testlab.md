@@ -496,3 +496,15 @@ Rows the supplied summary did **not** cover: a non-propagating mouse-enabled upp
 ### Offline tests
 
 `tests/test_testlab_api.lua` (stand-in frames that answer the way each test says, several different ways on purpose): registration, safety classes and opt-in; the mouse-state matrix (and a client without the newer methods, and one whose `IsMouseEnabled` disagrees); the click counters (a lenient, a strict, a broken and a raising `Click`); the hit-rectangle round trip (rounding, refusal, missing method); the binding probe (combat, a held key, no API, a raising call, `GetBindingAction` missing or raising, and `TwichUIDB` unchanged); release on error, normal end without cleanup, Stop, timeout, combat and a closed window; the click trial (bounded, outside the square, finished after a quiet moment); the guided flows (a button press is not a key press, Skip, Cancel, combat, timeout, unsupported methods, answers kept apart from `GetMouseFoci` and `OnClick`, the equal-level observation under three different stand-in clients, the hit-rectangle model disagreeing with the pointer); and that no fact is cut at 60 characters. **They assert no Forever behaviour**: they prove the probes measure and report whatever the frames did and clean up. Hand-made defects were checked against them (release dropped, trial kept, clear dropped, `ups` counted as clicks, key requirement dropped, outside-square clicks counted, opt-in dropped, inset reset dropped, mouse not turned off, control dropped): all killed.
+
+## AH-7A Auction House pointer observations
+
+The opt-in **Auction House pointer (guided)** category (`auctionpointer`) reuses
+the existing Guided/Capture/Judge mechanism. It is manual: cases run individually,
+never as a group or default selection. `ui.pointer.auction-blizzard` samples the
+integrated header's Blizzard button; `ui.pointer.auction-return` samples the
+return action while Blizzard is active; `ui.pointer.auction-dropdown` samples
+Browse's category dropdown. The owner follows the [native acceptance checklist](workshop/auction-house/native-integration.md),
+changes interfaces manually, places the pointer and presses F9. The report records
+real client foci and eligibility; no auction control is clicked, hooked or changed.
+These cases have offline sampler/cleanup tests; real Forever results are pending.

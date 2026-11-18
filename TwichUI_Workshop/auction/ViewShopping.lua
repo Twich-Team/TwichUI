@@ -24,7 +24,8 @@ local function Detail(p)
     for _,v in ipairs(p.rows) do if v.key==p.selected then selected=v;break end end
     if not selected and p.rows[1] then selected=p.rows[1];p.selected=selected.key end
     d.data=selected
-    d.buy:SetEnabled(false)
+    d.buy:SetEnabled(A.Live() and selected~=nil and p.current and selected.row.kind=="buy" and W.Int(selected.row.qty,1,W.MAX_ID)~=nil)
+    d.buy.text:SetText(A.Live() and "Find live auctions" or "Purchasing unavailable")
     d.track:SetEnabled(selected~=nil)
     d.market:SetEnabled(selected~=nil)
     d.browse:SetEnabled(selected~=nil and p.current)
@@ -151,15 +152,19 @@ local function BuildDetail(p)
     end,28);d.vendor:SetPoint("BOTTOMLEFT",7,10)
     d.browse=UI.Button(d,"Browse",99,"secondary",function()
         local v=d.data
-        if v and p.current then A.OpenBrowse(v.row.item,v.row.qty) end
+        if v and p.current then A.OpenBrowse(v.row.item,v.row.qty,A.Live() and {live=true} or nil) end
     end,28);d.browse:SetPoint("LEFT",d.vendor,"RIGHT",4,0)
     d.recipe=UI.Button(d,"Open recipe",91,"secondary",function()
         if d.recipeID and p.current then S.OpenRecipe(d.recipeID) end
     end,28);d.recipe:SetPoint("LEFT",d.browse,"RIGHT",4,0)
     d.track=A.TrackButton(d,function() return d.data and d.data.row.item end)
     d.track:SetWidth(86);d.track:SetHeight(28);d.track:SetPoint("BOTTOMRIGHT",-7,10)
-    -- Kept in the approved purchase-action area, explicitly disabled without a handler.
-    d.buy=UI.Button(p,"Purchasing unavailable",186,"primary",nil,30)
+    -- Reuse the existing purchase-action area for an individually reviewed search.
+    d.buy=UI.Button(p,"Purchasing unavailable",186,"primary",function()
+        if not A.Live() then return end
+        local v=d.data
+        if v and p.current then A.OpenBrowse(v.row.item,v.row.qty,{live=true}) end
+    end,30)
     d.buy:SetPoint("BOTTOMRIGHT",d,"BOTTOMLEFT",-12,12);d.buy:SetEnabled(false)
 end
 
@@ -225,7 +230,7 @@ local function Render(p)
         #p.plan.rows==0 and "No missing materials. Open Workshop to review or add recipes." or "No requirements match these filters.")
     p.total:SetText(P.Total(p.plan,UI.Money,p.ctx))
     local stockNote=S.StockNote(p.ctx.summary,p.ctx.stock)
-    p.scope:SetText(W.Stock.Scope(p.ctx.stock)..(stockNote and ("\n"..stockNote) or "").."\nObserved costs are estimates; purchasing is unavailable.")
+    p.scope:SetText(W.Stock.Scope(p.ctx.stock)..(stockNote and ("\n"..stockNote) or "")..(A.Live() and "\nObserved costs are estimates. Find live auctions, inspect listings, and review each acquisition separately." or "\nObserved costs are estimates; purchasing is unavailable."))
     p.guild:SetOn(S.UseGuild())
     Detail(p);p.list:Layout();A.Restore(p.list,view,Key)
 end
