@@ -8,15 +8,21 @@ function C.Tree()
         local rows = {}
         for i, node in ipairs(nodes or {}) do
             if #rows >= 100 then break end
-            local key = prefix .. i
-            local r = {key=key, name=W.Text(node.name,200) or "Category unavailable", filters={},
-                implicit=node.implicitFilter, depth=depth}
-            for j, f in ipairs(node.filters or {}) do
-                if j > 100 then break end
-                r.filters[#r.filters+1]={classID=f.classID,subClassID=f.subClassID,inventoryType=f.inventoryType}
+            local token=node.flags and node.flags.WOW_TOKEN_FLAG or (TOKEN_FILTER_LABEL and node.name==TOKEN_FILTER_LABEL)
+            for _,filter in ipairs(node.filters or {}) do
+                if ITEM_CLASS_WOW_TOKEN and filter.classID==ITEM_CLASS_WOW_TOKEN then token=true end
             end
-            if depth < 3 then r.children=Copy(node.subCategories,key..".",depth+1) end
-            out[key]=r; rows[#rows+1]=r
+            if not token then
+                local key = prefix .. i
+                local r = {key=key, name=W.Text(node.name,200) or "Category unavailable", filters={},
+                    implicit=node.implicitFilter, depth=depth}
+                for j, f in ipairs(node.filters or {}) do
+                    if j > 100 then break end
+                    r.filters[#r.filters+1]={classID=f.classID,subClassID=f.subClassID,inventoryType=f.inventoryType}
+                end
+                if depth < 3 then r.children=Copy(node.subCategories,key..".",depth+1) end
+                out[key]=r; rows[#rows+1]=r
+            end
         end
         return rows
     end

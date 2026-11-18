@@ -62,7 +62,7 @@ function A.UpdateBusy()
     if not root or not root.busy then return end
     local reads,actions=W.AuctionReads,W.AuctionActions
     local view=A.views[active]
-    local waiting=actions and (actions.state=="waiting" or actions.state=="quoting")
+    local waiting=actions and (actions.state=="waiting" or actions.state=="quoting" or actions.state=="refreshing")
     local text=reads and reads.Pending()>0 and "Loading auctions…"
         or waiting and "Waiting for Auction House…" or view and view.job and "Preparing results…"
     if not text and context=="auctioneer" and reads and reads.Available() and C_AuctionHouse

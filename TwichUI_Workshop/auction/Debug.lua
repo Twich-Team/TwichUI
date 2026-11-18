@@ -33,30 +33,85 @@ function A.ToggleDebug()
     A.BindSounds(panel)
     panel:SetShown(not panel:IsShown());A.UpdateDebug()
 end
+-- Compact reusable item header. Keep the exact hyperlink for variants and
+-- use the real item tooltip rather than pricing evidence.
+local function ItemHeader(parent,y)
+    local h=CreateFrame("Button",nil,parent);h:SetPoint("TOPLEFT",16,y);h:SetPoint("TOPRIGHT",-16,y);h:SetHeight(62)
+    UI.Panel(h,"espresso")
+    h.pic=UI.ItemIcon(h,44);h.pic:SetPoint("LEFT",9,0)
+    h.name=A.Text(h,"",16,64,-10,-10);h.name:SetHeight(38);h.name:SetWordWrap(true)
+    h:SetScript("OnEnter",function(self)
+        if not self.item or not GameTooltip then return end
+        GameTooltip:SetOwner(self,"ANCHOR_RIGHT")
+        if self.link then GameTooltip:SetHyperlink(self.link) else GameTooltip:SetItemByID(self.item) end
+        GameTooltip:Show()
+    end)
+    h:SetScript("OnLeave",function(self) R.Interact.HideTip(self) end)
+    h:SetScript("OnClick",function(self) if self.link and HandleModifiedItemClick then HandleModifiedItemClick(self.link) end end)
+    function h:SetItem(item,key,link)
+        local info=W.AdvisorData.Info(item)
+        if key and C_AuctionHouse and C_AuctionHouse.GetItemKeyInfo then
+            local ok,native=pcall(C_AuctionHouse.GetItemKeyInfo,key)
+            if ok and type(native)=="table" then
+                if not info.known then info.name=W.Text(W.Plain(native.itemName),200) or info.name end
+                info.icon=info.icon or W.Plain(native.iconFileID)
+                info.quality=info.quality or W.Int(W.Plain(native.quality),0,20)
+            end
+        end
+        self.item,self.link=item,link or info.link
+        self.pic.tex:SetTexture(info.icon or UI.ICON_BLANK)
+        self.name:SetText(self.link or info.name)
+        local c=ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[info.quality or 1]
+        if c then self.name:SetTextColor(c.r,c.g,c.b) else UI.Paint(self.name,UI.K.text) end
+        W.AdvisorData.Request(item)
+    end
+    return h
+end
 function A.UpdateReview()
     if not review or not review:IsShown() then return end
     local d=W.AuctionActions.Review()
     if not d then review:Hide();return end
-    review.id=d.id
-    review.displayed=d
-    local state=d.state=="quoted" and "Authoritative quote — confirm this total" or d.state=="review" and "Review auction action" or "Waiting for native result"
-    local vendor=d.vendor and (d.vendor.status=="below" and "\nWARNING: below vendor value. Confirmation is held for one second." or d.vendor.status=="unknown" and "\nVendor value is unavailable." or "") or ""
-    review.text:SetText(state.."\n"..W.AdvisorData.Info(d.item).name.."\nQuantity: "..d.quantity..
-        (d.desired and (" · Needed: "..d.desired.." · Excess: "..d.excess) or "")..
-        (d.estimated and "\nEstimate (quote required): " or "\nTotal: ")..Money(d.total)..(d.deposit and ("\nDeposit upfront: "..Money(d.deposit)) or "")..
-        (d.duration and ("\nDuration choice: "..d.duration) or "")..vendor..
-        "\n"..(d.reason or d.message or "Every action needs your explicit confirmation."))
-    review.confirm.text:SetText(d.kind=="buyCommodity" and d.state=="review" and "Request quote" or "Confirm")
+    review.id,review.displayed=d.id,d
+    local buying=d.kind=="buyCommodity" or d.kind=="buyItem"
+    local posting=d.kind=="postCommodity" or d.kind=="postItem"
+    review.heading:SetText(buying and "Review purchase" or posting and "Review posting" or "Review cancellation")
+    UI.Art(review.art,buying and "npc:coins" or "npc:gavel",30)
+    review.item:SetItem(d.item,d.itemKey,d.link)
+    local duration=d.duration and ({AUCTION_DURATION_ONE,AUCTION_DURATION_TWO,AUCTION_DURATION_THREE})[d.duration]
+    review.quantities:SetText("Quantity: |cffffffff"..d.quantity.."|r"..(duration and ("    ·    "..duration) or ""))
+    review.totalLabel:SetText(posting and "Gross if sold" or d.estimated and "Estimated total" or "Total cost")
+    review.total:SetText(Money(d.total))
+    review.extra:SetText(d.deposit and ("Deposit upfront: "..Money(d.deposit)) or d.excess and d.excess>0 and ("Needed: "..d.desired.." · Extra: "..d.excess) or "")
+    local waiting=d.state=="waiting" or d.state=="quoting" or d.state=="native-warning"
+    local message=d.reason or d.message or "Review the quantity and total before confirming."
+    if d.state=="quoted" then message=d.retry and "Updated total · confirm to retry this purchase." or "Price confirmed. Your purchase will be delivered by mail."
+    elseif d.state=="quoting" then message="Getting your total…"
+    elseif d.state=="native-warning" then message="Please review the game's posting warning."
+    elseif d.state=="waiting" then message=posting and "Posting your auction…" or "Completing your purchase…" end
+    if d.vendor and d.vendor.status=="below" then message="Below vendor value. Posting requires an additional confirmation." end
+    review.note:SetText(message)
+    UI.Paint(review.note,d.retry and UI.K.bronzeText or UI.K.textDim)
+    local quote=d.kind=="buyCommodity" and d.state=="review"
+    review.confirm.text:SetText(waiting and "Please wait…" or quote and (d.retry and "Retry quote" or "Get total") or d.retry and "Retry purchase" or posting and "Confirm posting" or "Confirm")
     review.confirm:SetEnabled(d.allowed and (d.state=="review" or d.state=="quoted"))
+    review.spinner:SetShown(waiting)
 end
 function A.ReviewAction(id,why)
     if not id then A.Note(why);return false end
     if not review then
         review=CreateFrame("Frame",nil,A.Frame(),"BackdropTemplate")
-        review:SetSize(540,300);review:SetPoint("CENTER");review:SetFrameStrata("DIALOG");review:EnableMouse(true)
+        review:SetSize(440,306);review:SetPoint("CENTER");review:SetFrameStrata("DIALOG");review:EnableMouse(true)
         UI.Panel(review,"card")
-        review.text=A.Text(review,"",14,18,-18,-18);review.text:SetHeight(214);review.text:SetWordWrap(true)
-        review.confirm=UI.Button(review,"Confirm",180,"primary",function()
+        review.heading=A.Text(review,"",19,18,-16,-56,UI.K.bronzeText);review.heading:SetHeight(26)
+        review.art=review:CreateTexture(nil,"ARTWORK");review.art:SetSize(30,30);review.art:SetPoint("TOPRIGHT",-18,-12)
+        review.item=ItemHeader(review,-52)
+        review.quantities=A.Text(review,"",12,20,-126,-20,UI.K.textDim);review.quantities:SetHeight(18)
+        review.totalLabel=A.Text(review,"Total cost",13,20,-153,-220,UI.K.textDim)
+        review.total=UI.Text(review,18,UI.K.bronzeText);review.total:SetPoint("TOPRIGHT",-20,-151);review.total:SetWidth(220);review.total:SetJustifyH("RIGHT")
+        review.extra=A.Text(review,"",12,20,-181,-20,UI.K.textDim);review.extra:SetHeight(18)
+        review.note=A.Text(review,"",12,20,-207,-20,UI.K.textDim);review.note:SetHeight(42);review.note:SetWordWrap(true)
+        review.spinner=CreateFrame("Frame",nil,review,"SpinnerTemplate");review.spinner:SetSize(18,18);review.spinner:SetPoint("BOTTOM",0,23);review.spinner:Hide()
+        review.confirm=UI.Button(review,"Confirm",174,"primary",function()
             local d=W.AuctionActions.Review();if not d or d.id~=review.id then return end
             local function Confirm()
                 local ok,reason=W.AuctionActions.Confirm(d.id,review.displayed)
@@ -64,12 +119,12 @@ function A.ReviewAction(id,why)
                 A.UpdateReview();A.UpdateDebug()
             end
             if d.vendor and d.vendor.status=="below" then
-                R.Interact.Confirm("TWICHUI_AH_VENDOR_REVIEW",R.AuctionPrice.VendorQuestion(d.vendor,"the reviewed item",Money),Confirm,{accept="Post anyway",hold=1})
+                R.Interact.Confirm("TWICHUI_AH_VENDOR_REVIEW",R.AuctionPrice.VendorQuestion(d.vendor,review.item.link or W.AdvisorData.Info(d.item).name,Money),Confirm,{accept="Post anyway",hold=1})
             else Confirm() end
-        end,32)
-        review.confirm:SetPoint("BOTTOMLEFT",18,18)
-        review.cancel=UI.Button(review,"Dismiss",180,"secondary",function() W.AuctionActions.Cancel();review:Hide() end,32)
-        review.cancel:SetPoint("BOTTOMRIGHT",-18,18)
+        end,30)
+        review.confirm:SetPoint("BOTTOMLEFT",18,16)
+        review.cancel=UI.Button(review,"Cancel",174,"secondary",function() W.AuctionActions.Cancel();review:Hide() end,30)
+        review.cancel:SetPoint("BOTTOMRIGHT",-18,16)
     end
     A.BindSounds(review)
     review:Show();A.UpdateReview();return true
@@ -79,7 +134,7 @@ function A.RequestBuy(row,quantity)
     if not ok then A.Note(why) end
     return ok
 end
-function A.QuickBuy(row)
+function A.QuickBuy(row,defaultQuantity)
     A.MenuSound()
     if not A.Live() or not row or not row.itemKey then return false end
     local ok,info=pcall(C_AuctionHouse.GetItemKeyInfo,row.itemKey)
@@ -95,12 +150,13 @@ function A.QuickBuy(row)
     row=commodityRow
     if not quantityBox then
         quantityBox=CreateFrame("Frame",nil,A.Frame(),"BackdropTemplate")
-        quantityBox:SetSize(420,190);quantityBox:SetPoint("CENTER");quantityBox:SetFrameStrata("DIALOG");quantityBox:EnableMouse(true)
+        quantityBox:SetSize(400,224);quantityBox:SetPoint("CENTER");quantityBox:SetFrameStrata("DIALOG");quantityBox:EnableMouse(true)
         UI.Panel(quantityBox,"card")
-        quantityBox.name=A.Text(quantityBox,"",18,16,-16,-16);quantityBox.name:SetHeight(42);quantityBox.name:SetWordWrap(true)
-        local label=A.Text(quantityBox,"Quantity to buy",13,16,-66,-16,UI.K.textDim)
+        quantityBox.title=A.Text(quantityBox,"Quick buy",19,16,-14,-16,UI.K.bronzeText)
+        quantityBox.item=ItemHeader(quantityBox,-44)
+        local label=A.Text(quantityBox,"Quantity to buy",13,16,-120,-16,UI.K.textDim)
         quantityBox.amount=UI.L.EditBox(quantityBox,110,30);UI.CL.Dress(quantityBox.amount,"field")
-        quantityBox.amount:SetPoint("TOPLEFT",16,-88);quantityBox.amount:SetMaxLetters(8);quantityBox.amount:SetNumeric(true)
+        quantityBox.amount:SetPoint("TOPLEFT",16,-140);quantityBox.amount:SetMaxLetters(8);quantityBox.amount:SetNumeric(true)
         local function Continue()
             local quantity=W.Int(tonumber(quantityBox.amount:GetText()),1,W.MAX_ID)
             if not quantity then A.Note("Enter a whole quantity greater than zero.");return end
@@ -115,8 +171,8 @@ function A.QuickBuy(row)
         quantityBox:Hide()
     end
     A.BindSounds(quantityBox)
-    quantityBox.row=row;quantityBox.name:SetText(row.info and row.info.name or info.itemName or "Quick buy")
-    quantityBox.amount:SetText("1");quantityBox:Show();quantityBox.amount:SetFocus();quantityBox.amount:HighlightText()
+    quantityBox.row=row;quantityBox.item:SetItem(row.itemKey.itemID,row.itemKey,row.link)
+    quantityBox.amount:SetText(tostring(W.Int(defaultQuantity,1,W.MAX_ID) or 1));quantityBox:Show();quantityBox.amount:SetFocus();quantityBox.amount:HighlightText()
     return true
 end
 function A.HideExtras()

@@ -7,6 +7,7 @@ local T={serial=0,state="idle"}
 W.AuctionActions=T
 local ticket,timeout,listening,sending,hooked
 local buyRequest
+local RefreshBuy
 local transactionHooks
 local handlers={}
 local EVENTS={"AUCTION_HOUSE_PURCHASE_COMPLETED","COMMODITY_PRICE_UPDATED","COMMODITY_PRICE_UNAVAILABLE",
@@ -41,7 +42,13 @@ end
 function T.Busy() return ticket~=nil and T.state~="review" end
 function T.Capability(mode)
     local b=R.AuctionBuild
-    if not b or type(b.verified)~="table" or b.verified[mode]~=true then return false,REASONS[mode] or "This auction operation is unsupported." end
+    local enabled=b and ((b.verified and b.verified[mode]==true) or (b.integrated and b.integrated[mode]==true))
+    if not enabled then return false,REASONS[mode] or "This auction operation is unsupported." end
+    local needed={buyItem={"PlaceBid"},buyCommodity={"StartCommoditiesPurchase","ConfirmCommoditiesPurchase","GetQuoteDurationRemaining"},
+        postItem={"PostItem","ConfirmPostItem"},postCommodity={"PostCommodity","ConfirmPostCommodity"},cancel={"CancelAuction"}}
+    for _,name in ipairs(needed[mode] or {}) do
+        if not C_AuctionHouse or type(C_AuctionHouse[name])~="function" then return false,"This client does not provide the required auction operation." end
+    end
     return true
 end
 local function Listen(on)
@@ -87,7 +94,7 @@ function T.Review()
     local allowed,why=T.Capability(p.kind)
     return {id=p.id,kind=p.kind,item=p.item,quantity=p.quantity,total=p.total,unit=p.unit,deposit=p.deposit,
         desired=p.desired,excess=p.desired and math.max(0,p.quantity-p.desired) or 0,
-        duration=p.duration,vendor=p.vendor,quoteVersion=p.quoteVersion,estimated=p.kind=="buyCommodity" and T.state=="review",biddingCost=p.cost,allowed=allowed,reason=why,state=T.state,message=T.message}
+        itemKey=p.itemKey,link=p.link,retry=p.retry,duration=p.duration,vendor=p.vendor,quoteVersion=p.quoteVersion,estimated=p.kind=="buyCommodity" and T.state=="review",biddingCost=p.cost,allowed=allowed,reason=why,state=T.state,message=T.message}
 end
 local function LiveRow(p)
     local snap=Q.snapshot
@@ -132,11 +139,11 @@ function T.PrepareBuy(row,desired)
         local estimate,why=T.CommodityEstimate(snap.rows,key.itemID,qty)
         if not estimate then return nil,why end
         local unit=math.ceil(estimate/qty)
-        return Review({kind="buyCommodity",item=key.itemID,itemKey=key,quantity=qty,total=estimate,unit=unit,snapshot=snap,desired=qty,auctionID=row.auctionID,listingKey=row.listingKey})
+        return Review({kind="buyCommodity",item=key.itemID,itemKey=key,quantity=qty,total=estimate,unit=unit,snapshot=snap,link=row.link,desired=qty,auctionID=row.auctionID,listingKey=row.listingKey})
     end
     if snap.kind~="item" then return nil,"A browse group is not a purchasable auction. Inspect its live listings." end
     return Review({kind="buyItem",item=key.itemID,itemKey=key,auctionID=Int(row.auctionID,1,9007199254740991),
-        quantity=quantity,total=total,unit=math.ceil(total/quantity),snapshot=snap,desired=Int(desired,1,W.MAX_ID)})
+        quantity=quantity,total=total,unit=math.ceil(total/quantity),link=row.link,snapshot=snap,desired=Int(desired,1,W.MAX_ID)})
 end
 -- A review may need fresh read evidence, but it never sends a transaction.
 -- Keep this intent in the existing action owner and bind it to the read token,
@@ -153,6 +160,20 @@ function T.RequestBuy(row,quantity)
     if not key then return false,"Choose an identifiable live item first." end
     quantity=Int(quantity or 1,1,W.MAX_ID)
     if not quantity then return false,"Enter a valid quantity." end
+    local info=C_AuctionHouse.GetItemKeyInfo(key)
+    if type(info)=="table" and W.Plain(info.isCommodity)==true then
+        local unit=Int(row.unit,1)
+        local estimate=unit and unit<=math.floor(W.Prices.MAX_COPPER/quantity) and unit*quantity or nil
+        local id,reason=Review({kind="buyCommodity",item=key.itemID,itemKey=Key({itemID=key.itemID}),
+            quantity=quantity,desired=quantity,total=estimate,unit=unit,link=row.link,directQuote=true})
+        if not id then return false,reason end
+        if W.AuctionUI then W.AuctionUI.ReviewAction(id) end
+        local sent,why=T.Quote(id)
+        if not sent and ticket then T.message=why or T.message;Notify() end
+        -- The quantity prompt can close once the review owns this intent,
+        -- including a retryable quote refusal shown inside that review.
+        return true,why
+    end
     local snap=Q.snapshot
     if snap and Q.Fresh(snap) and snap.complete and (snap.kind=="item" or snap.kind=="commodity") then
         for _,current in ipairs(snap.rows) do
@@ -174,7 +195,16 @@ function T.ReadEnded(reason)
 end
 function T.ReadReady(snapshot)
     local request=buyRequest
-    if not request or not snapshot then return end
+    if not request then return end
+    if request.needsSearch then
+        if not Context() or request.visit~=R.AuctionHost.Snapshot().visit then T.ReadEnded("The auctioneer visit changed.");return end
+        if Q.Pending()>0 or not C_AuctionHouse.IsThrottledMessageSystemReady() then return end
+        request.needsSearch=nil;request.epoch=Q.epoch;request.intent=Q.serial+1
+        local ok,why=Q.Search(request.key)
+        if not ok then T.ReadEnded(why) end
+        return
+    end
+    if not snapshot then return end
     if not Context() or request.visit~=R.AuctionHost.Snapshot().visit or request.epoch~=Q.epoch
         or snapshot.intent~=request.intent or not Q.Fresh(snapshot) then
         buyRequest=nil;T.state="idle";return
@@ -191,15 +221,31 @@ function T.ReadReady(snapshot)
         local chosen
         for _,row in ipairs(snapshot.rows) do
             if row.ownershipKnown and not row.own and not row.account and (row.total or row.commodity and row.unit)
-                and (not request.auctionID or row.auctionID==request.auctionID)
+                and (not request.auctionID or request.retry or row.auctionID==request.auctionID)
                 and (not chosen or (row.unit or row.total)<(chosen.unit or chosen.total)) then chosen=row end
         end
-        if chosen then BuyReview(chosen,request.quantity);return end
+        if chosen then
+            local ok=BuyReview(chosen,request.quantity)
+            if ok and request.retry and ticket then
+                ticket.retry=true;T.message="That auction is no longer available. Review the updated quantity and total before retrying."
+                Notify()
+            end
+            return
+        end
         T.message=request.auctionID and "That listing is no longer available. Choose an updated listing."
             or "No available buyout listings were returned for this item."
     end
     if W.AuctionUI then W.AuctionUI.Note(T.message) end
     Notify()
+end
+RefreshBuy=function(p,unavailable)
+    StopTimer();Listen(false);ticket=nil
+    local request={key=p.itemKey,quantity=p.desired or p.quantity,visit=p.visit,retry=unavailable~=false,needsSearch=true}
+    buyRequest=request;T.state="refreshing";T.message=unavailable==false and "Refreshing the current listing and total…" or "That auction is no longer available. Finding the next listing…"
+    T.ReadReady()
+    if W.AuctionUI then W.AuctionUI.Note(T.message) end
+    Notify()
+    return false,T.message
 end
 local function FreshBag(p)
     for _,row in ipairs(D.Bags("")) do if row.key==p.bagKey and row.identity==p.identity and row.qty==p.bagQuantity then return row end end
@@ -216,7 +262,7 @@ local function PostCheck(row,quantity,price,duration)
     local kind=types and (row.mode==types.Item and "postItem" or row.mode==types.Commodity and "postCommodity")
     if not kind then return nil,"The native item/commodity posting mode is unknown." end
     return {kind=kind,item=row.item,itemKey=Key(row.itemKey),bagKey=row.key,identity=row.identity,bagQuantity=row.qty,quantity=quantity,
-        unit=price,total=draft.gross,duration=duration,deposit=draft.deposit,location=row.location,
+        unit=price,total=draft.gross,duration=duration,deposit=draft.deposit,location=row.location,link=row.link,
         vendorEach=row.info.sell,vendor=p.VendorCheck(p.VendorPlan(kind=="postCommodity" and "commodity" or "item",quantity,price,row.info.sell))}
 end
 function T.PreparePost(row,quantity,price,duration)
@@ -260,8 +306,8 @@ local function Recheck(p)
             fresh.ownershipKnown~=true or fresh.own or fresh.account then return false,"The live auction ownership or price changed; refresh it." end
         if p.total>money then return false,"Not enough money for this whole auction." end
     elseif p.kind=="buyCommodity" then
-        if not LiveRow(p) and T.state~="quoted" then return false,"Commodity listings changed; inspect them again." end
-        if p.total>money then return false,"Not enough money for the reviewed quantity." end
+        if not p.directQuote and not LiveRow(p) and T.state~="quoted" then return false,"Commodity listings changed; inspect them again." end
+        if p.total and p.total>money then return false,"Not enough money for the reviewed quantity." end
         local remaining=T.state=="quoted" and W.Plain(C_AuctionHouse.GetQuoteDurationRemaining())
         if T.state=="quoted" and (not p.quoteAt or not W.Finite(remaining) or remaining<=0) then return false,"The commodity quote expired. Request a new quote." end
     elseif p.kind=="cancel" then
@@ -279,13 +325,23 @@ end
 local function Wait(p,state)
     StopTimer();T.state=state;Listen(true);Notify()
     timeout=C_Timer.NewTimer(12,function()
-        if ticket==p then Finish("unknown","No matching completion arrived. Check Blizzard before retrying; no automatic retry was sent.") end
+        if ticket==p then
+            if p.kind=="buyCommodity" and p.phase=="quote" then
+                StopTimer();T.state="review";p.retry=true;T.message="A price quote was not returned. Retry to request a new total.";Notify()
+            else Finish("unknown","No matching completion arrived. Check Blizzard before retrying; no automatic retry was sent.") end
+        end
     end)
 end
 local function Send(p,fn,...)
     Wait(p,"waiting") -- synchronous native responses must already have an owner
     sending=true;local ok,result=pcall(fn,...);sending=false
-    if not ok then Finish("unknown","The game refused the call or its outcome is unknown. Check Blizzard before retrying.");return false end
+    if not ok then
+        if p.kind=="buyCommodity" and p.phase=="quote" then
+            StopTimer();T.state="review";p.retry=true
+            T.message="The game could not request a quote. Retry to get the current total.";Notify();return false,T.message
+        end
+        Finish("unknown","The game refused the call or its outcome is unknown. Check Blizzard before retrying.");return false
+    end
     return true,result
 end
 local function WarningHook()
@@ -303,15 +359,36 @@ end
 local function TransactionHooks()
     if transactionHooks then return true end
     if not hooksecurefunc then return false end
-    for _,name in ipairs({"PlaceBid","StartCommoditiesPurchase","ConfirmCommoditiesPurchase","PostItem","PostCommodity","ConfirmPostItem","ConfirmPostCommodity","CancelAuction"}) do
+    for _,name in ipairs({"PlaceBid","StartCommoditiesPurchase","ConfirmCommoditiesPurchase","CancelCommoditiesPurchase","PostItem","PostCommodity","ConfirmPostItem","ConfirmPostCommodity","CancelAuction"}) do
         if type(C_AuctionHouse[name])=="function" then hooksecurefunc(C_AuctionHouse,name,T.Foreign) end
     end
     transactionHooks=true;return true
 end
+-- Called only by a buy/review/retry button. A quote reserves a price; it never
+-- confirms spending. Use the native frame's optional unit-price argument.
+function T.Quote(id)
+    local p=ticket
+    if not p or p.id~=id or p.kind~="buyCommodity" or (T.state~="review" and T.state~="quoted") then return false,"That purchase review is no longer current." end
+    if not Current(p) or Q.Pending()>0 or not C_AuctionHouse.IsThrottledMessageSystemReady() then return false,"Wait for the Auction House to be ready, then retry." end
+    local allowed,why=T.Capability(p.kind);if not allowed then return false,why end
+    if not TransactionHooks() then return false,"Native operation ownership cannot be monitored." end
+    p.phase="quote";p.quoteAt=nil;T.message="Getting your total…"
+    local sent=Send(p,C_AuctionHouse.StartCommoditiesPurchase,p.item,p.quantity,p.unit)
+    if sent and ticket==p and T.state=="waiting" then T.state="quoting" end
+    Notify();return sent
+end
 function T.Confirm(id,consent)
     local p=ticket
     if not p or p.id~=id or (T.state~="review" and T.state~="quoted") then return false,"That review is no longer current." end
-    local ok,why=Recheck(p);if not ok then T.message=why;Notify();return false,why end
+    if p.kind=="buyCommodity" then
+        local remaining=p.quoteAt and W.Plain(C_AuctionHouse.GetQuoteDurationRemaining())
+        if T.state=="review" or not W.Finite(remaining) or remaining<=0 then return T.Quote(id) end
+    end
+    local ok,why=Recheck(p)
+    if not ok then
+        if p.kind=="buyItem" and Current(p) and (not Q.Fresh(p.snapshot) or why:find("changed",1,true)) then return RefreshBuy(p,Q.Fresh(p.snapshot)) end
+        T.message=why;Notify();return false,why
+    end
     if not TransactionHooks() then return false,"Native operation ownership cannot be monitored." end
     if p.kind=="buyItem" then return Send(p,C_AuctionHouse.PlaceBid,p.auctionID,p.total)
     elseif p.kind=="cancel" then return Send(p,C_AuctionHouse.CancelAuction,p.auctionID)
@@ -322,12 +399,7 @@ function T.Confirm(id,consent)
             end
             p.phase="purchase";return Send(p,C_AuctionHouse.ConfirmCommoditiesPurchase,p.item,p.quantity)
         end
-        p.phase="quote"
-        -- Only the generated two-argument contract is implemented. Activation
-        -- remains blocked until the Forever discrepancy is actually settled.
-        local sent=Send(p,C_AuctionHouse.StartCommoditiesPurchase,p.item,p.quantity)
-        if sent and ticket==p and T.state=="waiting" then T.state="quoting" end
-        return sent
+        return T.Quote(id)
     else
         if not WarningHook() then return false,"Native posting confirmation integration is unavailable." end
         local fn=p.kind=="postCommodity" and C_AuctionHouse.PostCommodity or C_AuctionHouse.PostItem
@@ -350,11 +422,12 @@ function T.Event(event,a,b)
         local unit,total=Int(a,1),Int(b,1)
         if not unit or not total or not Money() or total>Money() then Finish("cancelled","The quote is invalid or exceeds your money.");return end
         -- The authoritative tiered total is not reconstructed from a rounded unit.
+        StopTimer()
         p.unit,p.total,p.quoteAt=unit,total,GetTime();p.quoteVersion=(p.quoteVersion or 0)+1;T.state="quoted";T.message="Authoritative quote received. Review its total and confirm explicitly.";Notify()
     elseif event=="AUCTION_HOUSE_PURCHASE_COMPLETED" and p.kind=="buyItem" and a==p.auctionID and T.state=="waiting" then
-        Finish("complete","Purchase confirmed for this auction ID. Delivery may arrive by mail; shopping quantities still follow actual bag stock.")
+        Finish("complete","Purchase complete. Your item will arrive by mail.")
     elseif event=="COMMODITY_PURCHASE_SUCCEEDED" and p.kind=="buyCommodity" and p.phase=="purchase" and T.state=="waiting" then
-        Finish("complete","Commodity purchase confirmed for the sole pending intent; delivery must still be reconciled from bags/mail.")
+        Finish("complete","Purchase complete. Your items will arrive by mail.")
     elseif event=="AUCTION_CANCELED" and p.kind=="cancel" and a==p.auctionID and T.state=="waiting" then
         Finish("complete","Cancellation confirmed for this auction ID. Collect returned mail yourself before preparing a new post.")
     elseif event=="AUCTION_HOUSE_AUCTION_CREATED" and (p.kind=="postItem" or p.kind=="postCommodity") and T.state=="waiting" then
@@ -362,11 +435,14 @@ function T.Event(event,a,b)
         if id then p.created=p.created or {};p.created[id]=true end
         -- Creation has no request token; multiple item postings require their
         -- multisell completion rather than assuming the first ID means all posted.
-        if p.kind=="postCommodity" or p.quantity==1 then Finish("complete","Posting creation event received for the sole pending draft; refresh My Auctions to reconcile.") end
+        if p.kind=="postCommodity" or p.quantity==1 then Finish("complete","Auction posted. View it under My Auctions.") end
     elseif event=="AUCTION_MULTISELL_UPDATE" and p.kind=="postItem" and T.state=="waiting" and a==p.quantity and b==p.quantity then
-        Finish("complete","The native multisell reports all reviewed item postings completed; refresh My Auctions.")
-    elseif event=="COMMODITY_PRICE_UNAVAILABLE" and p.kind=="buyCommodity" then Finish("cancelled","A commodity quote is unavailable; nothing was confirmed.")
-    elseif event=="COMMODITY_PURCHASE_FAILED" or event=="AUCTION_MULTISELL_FAILURE" or event=="AUCTION_HOUSE_SHOW_ERROR" or event=="AUCTION_HOUSE_POST_ERROR" then
+        Finish("complete","All reviewed auctions were posted. View them under My Auctions.")
+    elseif (event=="COMMODITY_PRICE_UNAVAILABLE" or event=="COMMODITY_PURCHASE_FAILED") and p.kind=="buyCommodity" then
+        RefreshBuy(p)
+    elseif event=="AUCTION_HOUSE_SHOW_ERROR" and p.kind=="buyItem" and Enum and Enum.AuctionHouseError and a==Enum.AuctionHouseError.ItemNotFound then
+        RefreshBuy(p)
+    elseif event=="AUCTION_MULTISELL_FAILURE" or event=="AUCTION_HOUSE_SHOW_ERROR" or event=="AUCTION_HOUSE_POST_ERROR" then
         Finish("unknown","The game reported an error. Reconcile in Blizzard before retrying; disappearance is not a confirmed sale.")
     end
 end
@@ -377,7 +453,9 @@ function T.Cancel()
     if not ticket then return end
     if T.state=="review" then Finish("cancelled","Review dismissed; no action sent.")
     elseif T.state=="quoted" or T.state=="quoting" then
-        if not InCombatLockdown() and R.AuctionHost.IsCurrent(ticket.visit) and C_AuctionHouse.CancelCommoditiesPurchase then pcall(C_AuctionHouse.CancelCommoditiesPurchase) end
+        if not InCombatLockdown() and R.AuctionHost.IsCurrent(ticket.visit) and C_AuctionHouse.CancelCommoditiesPurchase then
+            sending=true;pcall(C_AuctionHouse.CancelCommoditiesPurchase);sending=false
+        end
         Finish("cancelled","Commodity quote dismissed; no purchase confirmation sent.")
     elseif T.state=="native-warning" then
         Finish("cancelled","Native posting review was dismissed; no confirmation was sent.")
@@ -395,7 +473,7 @@ end
 
 -- Keep unfamiliar native read failures local and visible. A failure after dispatch
 -- remains unknown; it can never become permission for an automatic retry.
-for _,name in ipairs({"RequestBuy","PrepareBuy","PreparePost","PrepareCancel","PrepareRepost","Confirm","ConfirmWarning"}) do
+for _,name in ipairs({"RequestBuy","Quote","PrepareBuy","PreparePost","PrepareCancel","PrepareRepost","Confirm","ConfirmWarning"}) do
     local fn=T[name]
     T[name]=function(...)
         local ok,a,b=pcall(R.Perf.Call,"auction.actionReview",fn,...)

@@ -120,7 +120,7 @@ function D.Draft(row,quantity,price,duration)
             end
         end
     end
-    result.valid=true;result.reason="Preparation only · posting awaits client acceptance."
+    result.valid=true;result.reason="Review the quantity, price and duration before posting."
     return result
 end
 local function Market() return W.Market.Source().market end
@@ -207,6 +207,12 @@ function D.Copy(ctx,tier,row)
         end
     end
 end
+function D.Advice(row,facts)
+    if not row then return nil end
+    return W.AdvisorData.Tooltip({item=row.item,count=row.qty,sell=row.info.sell,bindType=row.info.bindType,
+        bound=row.bound,variant=row.variant,quality=row.info.quality,classID=row.info.classID,equipLoc=row.info.equipLoc},
+        facts or W.Facts.Of(row.item,{variant=row.variant}))
+end
 function D.Guidance(row,ctx)
     if not row then return nil,nil end
     local f=ctx.facts or W.Facts.Of(row.item,{market=ctx.market,variant=row.variant})
@@ -217,8 +223,7 @@ function D.Guidance(row,ctx)
         live.comp=low and {competing=low,complete=true,cut=false,age=0,notes={}} or nil
         f=live
     end
-    local rec=W.AdvisorData.Tooltip({item=row.item,count=row.qty,sell=row.info.sell,bindType=row.info.bindType,
-        bound=row.bound,variant=row.variant,quality=row.info.quality,classID=row.info.classID,equipLoc=row.info.equipLoc},f)
+    local rec=D.Advice(row,f)
     if ctx.source=="live" and ctx.complete and D.Current(ctx,row) and D.Max(row)>0 then
         local summary={comparable=0}
         for _,tier in ipairs(ctx.rows) do

@@ -4,8 +4,11 @@ The existing five-page Auction House now has a Host-owned auctioneer context.
 **Default replacement is off. Forever acceptance remains pending.** This is a
 supervised test implementation, not release readiness or permission to publish.
 Live searches and explicit purchase/post/cancel review controllers are implemented.
-Each unverified native transaction mode stays disabled independently. No automatic
-queries, purchases, posting, cancellation or scans were added. Market Companion
+The owner has requested integrated purchase and posting activation for in-game
+iteration. These four modes are enabled in `AuctionBuild.integrated`, separately
+from the still-empty native `verified` evidence. Cancellation remains disabled.
+Every purchase/post requires player confirmation; unavailable purchases may refresh
+listings for a revised review, with no automatic spending or posting. Market Companion
 and saved market contracts are unchanged.
 
 ## Implementation and ownership
@@ -89,7 +92,8 @@ Workshop's **Use TwichUI Auction House (Experimental)** setting and
 `/tui ahdebug on | off | status` are the ordinary entry points. The existing
 `ui.auctionDebug` preference is retained across reloads and profiles, off when
 missing, and inactive while Workshop is disabled. Presentation has no build gate.
-`auction/Build.lua` contains only reviewed per-operation transaction evidence.
+`auction/Build.lua` separates owner-requested integrated buy/post activation from
+per-operation native verification. No acceptance evidence is inferred from activation.
 The obsolete custom development archive builder has been removed; ordinary release
 and internal packaging include the feature within the existing seven addons.
 
@@ -105,10 +109,10 @@ competing ownership and native restoration guards remain in the same Host.
   Matching responses are bounded to 500 normalized rows; oversized/invalid/truncated
   snapshots remain partial, completed zero responses are empty, and failures/timeouts
   are unverified. Passive partial-result events update the current snapshot.
-- Shopping opens an exact item-key search from actual planned quantity. Item
-  buyouts review the whole stack, exact native total and excess. Commodity reviews
-  estimate actual non-owned tiers, then require an authoritative quote and a second
-  explicit confirmation bound to the displayed quote version and total. Purchase
+- Shopping offers Quick buy from actual missing quantities. Individual item
+  buyouts review one item at the native buyout price; available stock is not a stack.
+  Commodity Review total requests a native quote directly from the player's click,
+  then requires Confirm bound to the displayed quote version, quantity and total. Purchase
   completion never decrements the plan speculatively; actual bag changes reconcile it.
 - Sell uses selected bag identity, unreserved stock, native mode/count/deposit,
   `AuctionPrice.Check`, vendor warning/hold and duration. Both item and commodity
@@ -125,7 +129,10 @@ competing ownership and native restoration guards remain in the same Host.
 listeners and one cancellable deadline. Dispatch occurs only from explicit UI/native
 warning acceptance. Events reconcile; they cannot send transactions. Foreign native
 calls, lost visits, errors or timeouts invalidate ownership; unknown outcomes require
-checking Blizzard before a new visit. No retries or action queue exist.
+checking Blizzard before a new visit. A definitive unavailable/failed purchase can
+refresh listings and open a revised review; a further player click is required.
+Commodity retries request a fresh quote before a separate purchase confirmation.
+Read refreshes wait on the existing throttle-ready event; no transaction queue exists.
 
 Read events have no request IDs. Correlation is serialized local intent plus native
 item identity, never advertised as server-token correlation. Foreign reads/timeouts
@@ -134,20 +141,23 @@ visit, rather than attributing its late reply to a different search.
 
 ## Native activation gates
 
-The ordinary installation enables opt-in presentation and read workflows. All money-moving
-modes remain off in code-level `AuctionBuild.verified` until native evidence exists for that mode.
-Controllers are exercised with synthetic native adapters; this is not native proof.
+The ordinary installation enables opt-in presentation and read workflows. The
+owner-requested buy/post iteration now enables the four corresponding modes via
+`AuctionBuild.integrated`; cancellation remains gated. `AuctionBuild.verified` is
+still empty. The current changes are syntax-checked only: unit, mutation, simulator
+and packaging checks are deferred at the owner's request until in-game iteration
+succeeds, and must run before merge. Runtime permission, appearance and completion
+behavior still require actual Forever evidence.
 
 | Mode | Implemented call/review | Exact remaining native evidence |
 |---|---|---|
 | Item buyout | `PlaceBid(id, exact full buyoutAmount)` | Hardware/permission behavior in this window; ID-correlated completion and rejection |
-| Commodity purchase | `StartCommoditiesPurchase(itemID, quantity)`, quote, second-click `ConfirmCommoditiesPurchase` | Generated two-argument Start contract differs from native frame's three-argument call; settle signature, quote permissions and completion ownership |
+| Commodity purchase | `StartCommoditiesPurchase(itemID, quantity, unitPrice)`, quote, second-click `ConfirmCommoditiesPurchase` | Matches the native frame call (the generated documentation lists two arguments); confirm runtime signature/permissions, exact quotes and completion ownership in Forever |
 | Item post | `PostItem(location, duration, quantity, nil, unitPrice)` and guarded `ConfirmPostItem` | Existing Sell from Bags native warning/hardware path in this integrated window; multisell completion |
 | Commodity post | `PostCommodity` and guarded `ConfirmPostCommodity` | Deposit, native warning, hardware permissions and completion in this window |
 | Cancel | `CanCancelAuction`, `GetCancelCost`, `CancelAuction(id)` | Native permissions/cost and ID-correlated cancellation completion |
 
-No simulator or offline test may set a production native acceptance claim. No money
-operation should be enabled just because presentation or read tests pass.
+No simulator or offline test may set a production native acceptance claim. The owner-requested activation above is not inferred from presentation or read tests.
 
 ## TSM comparison
 

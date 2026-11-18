@@ -19,13 +19,56 @@ local function Evidence(d,view,p)
     for _,line in ipairs(lines) do text[#text+1]=line[1]..(line[2] and ": "..line[2] or "") end
     d.basis=table.concat(text,"\n")
 end
+local function QuickBuy(v)
+    if not A.Live() or not page.current or not v or v.row.kind~="buy" then return end
+    local qty=W.Int(v.row.qty,1,W.MAX_ID)
+    if not qty then return end
+    A.QuickBuy({item=v.row.item,itemKey=W.AuctionReads.Key({itemID=v.row.item}),info=v.info},qty)
+end
+local function Purposes(d,v)
+    local items=v and P.PurposeItems(v.row) or {}
+    d.purposeRows=d.purposeRows or {}
+    d.needed:SetText(#items==0 and (v and v.purpose or "") or "")
+    for i,data in ipairs(items) do
+        local b=d.purposeRows[i]
+        if not b then
+            b=CreateFrame("Button",nil,d.used);UI.Hover(b)
+            b:SetPoint("TOPLEFT",10,-28-(i-1)*36);b:SetPoint("RIGHT",-10,0);b:SetHeight(34)
+            b.pic=UI.ItemIcon(b,28);b.pic:SetPoint("LEFT",2,0)
+            b.name=A.Text(b,"",12,38,-6,-6);b.name:SetHeight(24)
+            b.TipEnter=function(self)
+                if not self.item or not GameTooltip then return end
+                GameTooltip:SetOwner(self,"ANCHOR_RIGHT")
+                if self.link then GameTooltip:SetHyperlink(self.link) else GameTooltip:SetItemByID(self.item) end
+                GameTooltip:Show()
+            end
+            b.TipLeave=function(self) R.Interact.HideTip(self) end
+            b:SetScript("OnClick",function(self) if self.link and HandleModifiedItemClick then HandleModifiedItemClick(self.link) end end)
+            d.purposeRows[i]=b
+        end
+        local info=W.AdvisorData.Info(data.item)
+        b.item,b.link=data.item,info.link
+        b.pic.tex:SetTexture(info.icon or UI.ICON_BLANK);b.name:SetText(info.link or (info.known and info.name or data.name))
+        local c=ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[info.quality or 1]
+        if c then b.name:SetTextColor(c.r,c.g,c.b) else UI.Paint(b.name,UI.K.text) end
+        if not info.known and not d.purposeRequested[data.item] then d.purposeRequested[data.item]=true;W.AdvisorData.Request(data.item,true) end
+        b:Show()
+    end
+    for i=#items+1,#d.purposeRows do d.purposeRows[i].item=nil;d.purposeRows[i]:Hide() end
+    local h=math.max(62,32+#items*36)
+    d.used:SetHeight(h)
+    d.adviceCard:ClearAllPoints();d.adviceCard:SetPoint("TOPLEFT",d.used,"BOTTOMLEFT",0,-8);d.adviceCard:SetPoint("TOPRIGHT",d.used,"BOTTOMRIGHT",0,-8)
+    d.market:ClearAllPoints();d.market:SetPoint("TOPLEFT",d.adviceCard,"BOTTOMLEFT",8,-14)
+    d.body:SetHeight(564+h+8+68+14+42)
+    A.BindSounds(d.used)
+end
 local function Detail(p)
     local d,selected=p.detail
     for _,v in ipairs(p.rows) do if v.key==p.selected then selected=v;break end end
     if not selected and p.rows[1] then selected=p.rows[1];p.selected=selected.key end
     d.data=selected
     d.buy:SetEnabled(A.Live() and selected~=nil and p.current and selected.row.kind=="buy" and W.Int(selected.row.qty,1,W.MAX_ID)~=nil)
-    d.buy.text:SetText(A.Live() and "Find live auctions" or "Purchasing unavailable")
+    d.buy.text:SetText(A.Live() and "Quick buy needed…" or "Purchasing unavailable")
     d.track:SetEnabled(selected~=nil)
     d.market:SetEnabled(selected~=nil)
     d.browse:SetEnabled(selected~=nil and p.current)
@@ -41,7 +84,7 @@ local function Detail(p)
         d.kind:SetText(incomplete and "Some recipe or bag data is missing." or "The shared Workshop queue is unchanged.")
         d.quantities:SetText(incomplete and "Unknown quantities are not counted as owned." or "Choose a material to inspect its quantities.")
         d.sourceText:SetText("");d.cost:SetText("Unknown");d.costNote:SetText("")
-        d.needed:SetText("");d.advice:SetText(incomplete and "Open the profession and refresh stock." or "Add recipes in Workshop to build a shopping list.")
+        Purposes(d,nil);d.advice:SetText(incomplete and "Open the profession and refresh stock." or "Add recipes in Workshop to build a shopping list.")
         d.chart:Set(nil,UI.Money);d.basis=nil;return
     end
     local r=selected.row
@@ -62,9 +105,10 @@ local function Detail(p)
         for _,k in ipairs(W.Shopping.Choices(r)) do choices[k]=true end
         for k,b in pairs(d.choices) do b:SetEnabled(choices[k]==true and not W.Queue.Held());b:SetOn(r.source==k) end
     end
-    d.needed:SetText(selected.purpose)
-    local facts=W.Facts.Of(r.item)
-    d.chart:Set(W.Facts.Chart(facts),UI.Money)
+    Purposes(d,selected)
+    local market=W.Market.Source().market
+    local projection=W.AuctionMarketData.Project(r.item,market,14)
+    d.chart:Set(projection and projection.series,UI.Money,r.item..":shopping:"..tostring(market and market.key))
     local rec=W.AdvisorData.Decide(r.item,false)
     d.advice:SetText((rec.text or "Limited evidence")..(p.current and "" or "\nWait for the plan to finish."))
     d.advisorTip=table.concat(rec.reasons or {},"\n")
@@ -80,7 +124,9 @@ local function Row(parent)
         local t=UI.Text(r,12,UI.K.text);t:SetWidth(w);t:SetJustifyH("RIGHT");t:SetPoint("RIGHT",x,7);return t
     end
     r.need=Cell(46,-454);r.have=Cell(46,-402);r.missing=Cell(46,-350)
-    r.source=Cell(82,-246);r.cost=Cell(110,-126);r.purpose=Cell(112,-8)
+    r.source=Cell(82,-246);r.cost=Cell(110,-126)
+    r.buy=UI.Button(r,"Quick buy…",108,"secondary",function() QuickBuy(r.data) end,28)
+    r.buy:SetPoint("RIGHT",-8,0);A.BindSound(r.buy)
     UI.CL.Font(r.source,11)
     r.sourceIcon=r:CreateTexture(nil,"ARTWORK");r.sourceIcon:SetSize(18,18);r.sourceIcon:SetPoint("RIGHT",-332,7)
     r:SetScript("OnClick",function(self) if self.data then Select(self.data.key) end end)
@@ -93,18 +139,23 @@ local function Row(parent)
         self.source:SetText(cue[1]);UI.Art(self.sourceIcon,cue[2],18)
         UI.Paint(self.source,v.source=="auction" and UI.K.bronzeText or UI.K.text)
         self.cost:SetText((P.Cost(v.row,UI.Money)) or "Unknown")
-        self.purpose:SetText(v.purpose)
+        self.buy:SetEnabled(A.Live() and page.current and v.row.kind=="buy" and W.Int(v.missing,1,W.MAX_ID)~=nil)
+        local c=ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[v.info.quality or 1]
+        if c then self.name:SetTextColor(c.r,c.g,c.b) else UI.Paint(self.name,UI.K.text) end
+        if not v.info.known and not page.itemRequested[v.row.item] then page.itemRequested[v.row.item]=true;W.AdvisorData.Request(v.row.item,true) end
         self.sub:SetText(v.row.picked and "Your source choice" or v.row.kind=="collect" and
             (v.row.where=="guild" and "Guild bank stock" or "Personal bank stock") or
             v.row.kind=="make" and "Planned craft" or v.row.at and ("Observed "..UI.Ago(v.row.at)) or "")
         self:SetSelected(page.selected==v.key)
     end
-    UI.TipFn(r,"Shared shopping requirement",function()
-        if not r.data then return end
-        local v=r.data
-        return v.info.name.."\nRequired: "..Num(v.need).." · In bags: "..Num(v.have).." · Still to get: "..Num(v.missing)..
-            "\nNeeded for: "..v.purpose.."\n"..((P.Cost(v.row,UI.Money)) or "Price unknown")
-    end)
+    r.TipEnter=function(self)
+        if not self.data or not GameTooltip then return end
+        GameTooltip:SetOwner(self,"ANCHOR_RIGHT")
+        local v=self.data
+        if v.info.link then GameTooltip:SetHyperlink(v.info.link) else GameTooltip:SetItemByID(v.row.item) end
+        GameTooltip:Show()
+    end
+    r.TipLeave=function(self) R.Interact.HideTip(self) end
     return r
 end
 local function BuildDetail(p)
@@ -133,14 +184,13 @@ local function BuildDetail(p)
     d.cost=A.Text(costs,"",15,12,-28,-12,UI.K.bronzeText)
     d.costNote=A.Text(costs,"",11,12,-47);d.costNote:SetWordWrap(true);d.costNote:SetHeight(22)
     UI.TipFn(costs,"Source and cost evidence",function() return d.basis end)
-    local chart=A.Card(d.body,"Cheapest seen · observed days",84)
+    local chart=A.Card(d.body,"Cheapest seen · observed days",214)
     chart:SetPoint("TOPLEFT",4,-342);chart:SetPoint("TOPRIGHT",-4,-342)
-    d.chart=UI.PriceChart(chart,342,48);d.chart:SetPoint("TOPLEFT",8,-28);d.chart:SetPoint("TOPRIGHT",-8,-28)
-    local used=A.Card(d.body,"Needed For",58)
-    used:SetPoint("TOPLEFT",4,-434);used:SetPoint("TOPRIGHT",-4,-434)
+    d.chart=UI.AdvancedMarketChart(chart,342,176);d.chart:SetPoint("TOPLEFT",8,-28);d.chart:SetPoint("TOPRIGHT",-8,-28)
+    local used=A.Card(d.body,"Needed For",62);d.used=used;d.purposeRequested={}
+    used:SetPoint("TOPLEFT",4,-564);used:SetPoint("TOPRIGHT",-4,-564)
     d.needed=A.Text(used,"",11,12,-29);d.needed:SetWordWrap(true);d.needed:SetHeight(24)
-    UI.TipFn(used,"Crafting purpose",function() return d.data and d.data.purpose end)
-    local advice=A.Card(d.body,"Item Advisor",68)
+    local advice=A.Card(d.body,"Item Advisor",68);d.adviceCard=advice
     advice:SetPoint("TOPLEFT",4,-500);advice:SetPoint("TOPRIGHT",-4,-500)
     d.advice=A.Text(advice,"",11,12,-29);d.advice:SetWordWrap(true);d.advice:SetHeight(34)
     UI.TipFn(advice,"Advisor evidence",function() return d.advisorTip end)
@@ -163,13 +213,13 @@ local function BuildDetail(p)
     d.buy=UI.Button(p,"Purchasing unavailable",186,"primary",function()
         if not A.Live() then return end
         local v=d.data
-        if v and p.current then A.OpenBrowse(v.row.item,v.row.qty,{live=true}) end
+        if v and p.current then QuickBuy(v) end
     end,30)
     d.buy:SetPoint("BOTTOMRIGHT",d,"BOTTOMLEFT",-12,12);d.buy:SetEnabled(false)
 end
 
 local function Build(p)
-    page=p;p.eventCount=5;p.query,p.source,p.group="","all","item";p.rows={}
+    page=p;p.eventCount=6;p.itemRequested={};p.query,p.source,p.group="","all","item";p.rows={}
     p.search=UI.Search(p,300,32,"Search needed items…")
     p.search:SetPoint("TOPLEFT",0,0);p.search:SetMaxLetters(200)
     local function Change()
@@ -187,7 +237,7 @@ local function Build(p)
     local tableCard=A.Card(p,"Shopping requirements",200);p.tableCard=tableCard
     tableCard:SetPoint("TOPLEFT",0,-52);tableCard:SetPoint("BOTTOMRIGHT",-410,0);tableCard.heading:Hide()
     A.Text(tableCard,"Item",13,14,-14,-500,UI.K.bronzeText)
-    for _,h in ipairs({{"Need",46,-478},{"Bags",46,-426},{"Missing",46,-374},{"Source",92,-274},{"Est. cost",118,-150},{"Needed for",112,-32}}) do
+    for _,h in ipairs({{"Need",46,-478},{"Bags",46,-426},{"Missing",46,-374},{"Source",92,-274},{"Est. cost",118,-150},{"Purchase",112,-32}}) do
         local t=UI.Head(tableCard,h[1],h[2],"RIGHT");t:SetPoint("TOPRIGHT",h[3],-14)
     end
     p.list=UI.List(tableCard,58,Row,360,false)
@@ -213,7 +263,7 @@ local function Build(p)
 end
 local function Render(p)
     if not p.listening then
-        for _,event in ipairs({"BAG_UPDATE_DELAYED","GET_ITEM_INFO_RECEIVED","MERCHANT_SHOW","MERCHANT_UPDATE","TRADE_SKILL_LIST_UPDATE"}) do p:RegisterEvent(event) end
+        for _,event in ipairs({"BAG_UPDATE_DELAYED","GET_ITEM_INFO_RECEIVED","ITEM_DATA_LOAD_RESULT","MERCHANT_SHOW","MERCHANT_UPDATE","TRADE_SKILL_LIST_UPDATE"}) do p:RegisterEvent(event) end
         W.Strategy.Listen(Watch,true);W.Storage.Listen(StockWatch,true)
         p.listening=true
     end
@@ -230,7 +280,7 @@ local function Render(p)
         #p.plan.rows==0 and "No missing materials. Open Workshop to review or add recipes." or "No requirements match these filters.")
     p.total:SetText(P.Total(p.plan,UI.Money,p.ctx))
     local stockNote=S.StockNote(p.ctx.summary,p.ctx.stock)
-    p.scope:SetText(W.Stock.Scope(p.ctx.stock)..(stockNote and ("\n"..stockNote) or "")..(A.Live() and "\nObserved costs are estimates. Find live auctions, inspect listings, and review each acquisition separately." or "\nObserved costs are estimates; purchasing is unavailable."))
+    p.scope:SetText(W.Stock.Scope(p.ctx.stock)..(stockNote and ("\n"..stockNote) or "")..(A.Live() and "\nObserved costs are estimates. Quick buy reviews the current total for the missing quantity." or "\nObserved costs are estimates; purchasing is unavailable."))
     p.guild:SetOn(S.UseGuild())
     Detail(p);p.list:Layout();A.Restore(p.list,view,Key)
 end

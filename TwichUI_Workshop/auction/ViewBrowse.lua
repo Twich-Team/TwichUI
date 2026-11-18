@@ -18,9 +18,16 @@ local function Money(n) return n and UI.Money(n) or "Unavailable" end
 local function LiveInfo(row)
     local info=AD.Info(row.link or row.item)
     info.item=row.item
-    if not info.quality and row.itemKey and C_AuctionHouse and C_AuctionHouse.GetItemKeyInfo then
+    if row.itemKey and C_AuctionHouse and C_AuctionHouse.GetItemKeyInfo then
         local ok,native=pcall(C_AuctionHouse.GetItemKeyInfo,row.itemKey)
-        if ok and type(native)=="table" then info.quality=W.Int(W.Plain(native.quality),0,20) end
+        if ok and type(native)=="table" then
+            info.quality=info.quality or W.Int(W.Plain(native.quality),0,20)
+            info.icon=info.icon or W.Plain(native.iconFileID)
+            if not info.known then
+                local name=W.Text(W.Plain(native.itemName),200)
+                if name then info.name=name end
+            end
+        end
     end
     return info
 end
@@ -301,6 +308,12 @@ local function MakeRow(parent)
     end)
     r.fill = function(self, data)
         self.data = data
+        if data.source=="live" and (not data.info.known or not data.info.icon) then
+            page.liveRequested=page.liveRequested or {}
+            if not page.liveRequested[data.item] then
+                page.liveRequested[data.item]=true;AD.Request(data.item,true)
+            end
+        end
         local browse=data.source=="live" and data.liveKind=="browse"
         local shift=browse and 110 or 0
         self.total:SetShown(not browse)
@@ -545,11 +558,12 @@ local function Build(p)
     BuildDetail(p)
     p:SetScript("OnEvent",function(_,event,item,ok)
         if p.liveMode then
-            local id=W.Int(W.Plain(item),1,W.MAX_ID)
+            local payload=W.Plain(item)
+            local id=W.Int(type(payload)=="table" and W.Plain(payload.itemID) or payload,1,W.MAX_ID)
             if ok~=false and id and p.liveKnown and p.liveKnown[id] then p.liveDirty=p.liveDirty or {};p.liveDirty[id]=true end
             A.Schedule();return
         end
-        if event=="GET_ITEM_INFO_RECEIVED" or event=="ITEM_KEY_ITEM_INFO_RECEIVED" then D.Metadata(p,item,ok) end
+        if event=="GET_ITEM_INFO_RECEIVED" or event=="ITEM_DATA_LOAD_RESULT" or event=="ITEM_KEY_ITEM_INFO_RECEIVED" then D.Metadata(p,item,ok) end
         A.Schedule()
     end)
 end
@@ -560,6 +574,7 @@ SubmitLive=function(p)
     if not query then A.Note(reason);return false end
     if p.job and p.job.Cancel then p.job:Cancel() end
     p.token=p.token+1;p.job=nil;p.rows={};p.liveMode=true;p.researchSaved=false;p.liveSnapshot=nil;p.detail.cached=nil;p.inspecting=false
+    p.liveRequested={}
     p.list:SetData({},"Waiting for a live search response…")
     local ok,why=W.AuctionReads.Begin("browse",query)
     if not ok then p.list:SetData({},why);A.Note(why) end
@@ -571,7 +586,7 @@ Inspect=function(p,row)
     if A.Live() then ok,why=W.AuctionReads.Search(row.itemKey)
     else ok,why=W.AuctionReads.Begin("item",row.itemKey) end
     if not ok then A.Note(why);return false end
-    p.inspecting=true;p.liveSnapshot=nil;p.rows={};p.selected=nil;p.liveKnown=nil;p.detail.cached=nil
+    p.inspecting=true;p.liveSnapshot=nil;p.rows={};p.selected=nil;p.liveKnown=nil;p.liveRequested={};p.detail.cached=nil
     p.detail.scroll:SetVerticalScroll(0)
     p.list:SetData({},"Loading live listings…")
     A.Schedule();return true
@@ -592,6 +607,14 @@ local function PriceColumns(p, browse)
     p.unitHead:ClearAllPoints();p.unitHead:SetPoint("TOPRIGHT",-138+shift,-14)
 end
 local function Render(p)
+    -- Metadata events are needed in live mode too. Registration used to sit
+    -- below that mode's early return, leaving names/icons unresolved forever.
+    if not p.listening then
+        W.Strategy.Listen(A.Schedule,true)
+        for _,event in ipairs({"GET_ITEM_INFO_RECEIVED","ITEM_DATA_LOAD_RESULT","ITEM_KEY_ITEM_INFO_RECEIVED","BAG_UPDATE_DELAYED",
+            "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED","ITEM_SEARCH_RESULTS_UPDATED","AUCTION_HOUSE_BROWSE_FAILURE","AUCTION_HOUSE_CLOSED","AUCTION_HOUSE_SHOW"}) do p:RegisterEvent(event) end
+        p.eventCount=9;p.listening=true
+    end
     p.UpdateCategories()
     if A.Live() and not p.researchSaved and not p.liveMode then
         p.liveMode=true;p.rows={};p.liveSnapshot=nil;p.list:SetData({},"Search the live Auction House. No request starts when this page opens.")
@@ -646,12 +669,6 @@ local function Render(p)
         end
         return
     end
-    if not p.listening then
-        W.Strategy.Listen(A.Schedule,true)
-        p:RegisterEvent("GET_ITEM_INFO_RECEIVED");p:RegisterEvent("ITEM_KEY_ITEM_INFO_RECEIVED"); p:RegisterEvent("BAG_UPDATE_DELAYED")
-        for _,e in ipairs({"AUCTION_HOUSE_BROWSE_RESULTS_UPDATED","ITEM_SEARCH_RESULTS_UPDATED","AUCTION_HOUSE_BROWSE_FAILURE","AUCTION_HOUSE_CLOSED","AUCTION_HOUSE_SHOW"}) do p:RegisterEvent(e) end
-        p.eventCount=8;p.listening=true
-    end
     LayoutResults(p,true)
     p.detail.inspect:Hide()
     PriceColumns(p,false)
@@ -678,7 +695,7 @@ local function Release(p)
     p.state="canceled"
     if p.job and p.job.Cancel then p.job:Cancel() end
     p.catalog,p.known,p.dirty,p.refilter=nil,nil,nil,nil
-    p.liveKnown,p.liveDirty=nil,nil
+    p.liveKnown,p.liveDirty,p.liveRequested=nil,nil,nil
     p.token=p.token+1; p.job,p.rows,p.market,p.stamp,p.pendingView=nil,nil,nil,nil,nil
     p.list:SetData({}); p:UnregisterAllEvents(); p.listening=false
     W.Strategy.Listen(A.Schedule,false)
