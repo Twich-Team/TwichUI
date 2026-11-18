@@ -17,3 +17,7 @@ destructive cleanup. Keep changes within the task and label verification honestl
 [Current status](STATUS_AND_BACKLOG.md) is context, not authorization for more work.
 
 Development follows [protected main and short-lived PR branches](docs/git-workflow.md). Workshop and release/v1.3 are preserved historical branches, not new work targets.
+
+Development builds intended for owner testing must be delivered as downloadable
+GitHub Actions artifacts. Verify source identity and archive contents, then provide
+the completed run link and artifact name. A local workspace path is not delivery.

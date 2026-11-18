@@ -1,0 +1,68 @@
+name: Deliver Auction House development build
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/auction-development.yml
+      - tools/verify_auction_dev.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Isolated owner-test delivery. No production packager, stamping, tags or releases.
+jobs:
+  artifact:
+    if: >-
+      (github.event_name == 'pull_request' && github.event.pull_request.number == 52 &&
+       github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/feature/auction-house-native-integration')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SOURCE_COMMIT: 27b42d8595c9509780dfacd3f9178742f399622c
+      ZIP_NAME: TwichUI-AuctionHouse-dev-27b42d8.zip
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: tooling
+          persist-credentials: false
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ env.SOURCE_COMMIT }}
+          path: source
+          persist-credentials: false
+      - name: Build exact committed development source
+        run: |
+          mkdir -p "$RUNNER_TEMP/auction-development"
+          python3 source/tools/build_auction_dev.py --repo source \
+            --output "$RUNNER_TEMP/auction-development/$ZIP_NAME"
+      - name: Verify source, all eight addons, marker and manifest
+        run: |
+          python3 tooling/tools/verify_auction_dev.py --repo source \
+            --zip "$RUNNER_TEMP/auction-development/$ZIP_NAME" --commit "$SOURCE_COMMIT" \
+            > "$RUNNER_TEMP/auction-development/verification.json"
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, zipfile
+          out = pathlib.Path(os.environ['RUNNER_TEMP'])/'auction-development'
+          archive = out/os.environ['ZIP_NAME']
+          with zipfile.ZipFile(archive) as bundle:
+              (out/'AUCTION-HOUSE-BUILD.json').write_bytes(bundle.read('AUCTION-HOUSE-BUILD.json'))
+          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+          (out/(archive.name+'.sha256')).write_text(digest+'  '+archive.name+'\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('Source: `'+os.environ['SOURCE_COMMIT']+'`\n\n')
+              summary.write('Download artifact **TwichUI-AuctionHouse-dev-27b42d8** below.\n\n')
+              summary.write('ZIP SHA256: `'+digest+'`\n\nEight addons verified; development marker enabled; native transaction modes remain disabled.\n')
+          PY
+      - name: Deliver owner-test artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: TwichUI-AuctionHouse-dev-27b42d8
+          path: ${{ runner.temp }}/auction-development/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+          overwrite: false
