@@ -395,6 +395,12 @@ for _, r in ipairs(results) do labels[#labels + 1] = r.entry.label end
 local text = table.concat(labels, " | ")
 assert(text:find("Show pins on the minimap", 1, true) and text:find("Pin names on the minimap", 1, true), text)
 assert(results[1].entry.label:lower():find("minimap"), "label matches first")
+local sparkles = Search.Run("quest item sparkles")
+local sparkleRow
+for _, result in ipairs(sparkles) do
+  if result.entry.row.id == "qolLootSparkles" then sparkleRow = result.entry end
+end
+assert(sparkleRow and sparkleRow.page == "qol" and made == drawn, "sparkles are searchable without constructing a page")
 assert(#Search.Run("") == 0 and #Search.Run("   ") == 0, "an empty query finds nothing")
 assert(#Search.Run("xyzzy-nothing") == 0)
 assert(#Search.Run("%a+") == 0, "a query is plain text, not a pattern")
@@ -1338,7 +1344,7 @@ do
   -- 8b. Quality of life's cards
   local cards = {}
   for _, row in ipairs(K.pages.qol.rows) do if row.card then cards[#cards + 1] = row end end
-  assert(#cards == 8, "eight cards on Quality of life: " .. #cards)
+  assert(#cards == 9, "nine cards on Quality of life: " .. #cards)
   for _, card in ipairs(cards) do assert(Icons.Get(card.card.icon), card:GetName() .. " has an icon") end
   for _, card in ipairs(cards) do
     assert(card.primary and card.primary.kind == "checkbox" and card.primary.switch, card:GetName() .. " has its switch")
@@ -1418,7 +1424,8 @@ do
   local played = 0
   for _, card in ipairs(cards) do
     local s = view.sectionsById[card.id]
-    assert(s.preview, card:GetName() .. " has a preview")
+    -- The native world sparkle cannot be previewed in a settings frame. Existing sample previews stay intact.
+    assert(s.preview or card.primary.switch == "qolLootSparkles", card:GetName() .. " has a preview")
     if s.play then
       Click(s.play)
       assert(s.preview:IsPlaying() and P.Playing() == 1, card:GetName() .. " plays")
@@ -1429,7 +1436,7 @@ do
       end
       assert(not s.preview:IsPlaying() and s.preview.done, card:GetName() .. " plays once and stops")
       played = played + 1
-    else
+    elseif s.preview then
       assert(s.preview.def.static, card:GetName() .. "'s preview is a still picture")
     end
   end
