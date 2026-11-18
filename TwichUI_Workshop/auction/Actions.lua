@@ -174,6 +174,7 @@ end
 local function Recheck(p)
     if not Current(p) then return false,"The auctioneer visit or interface changed." end
     local allowed,why=T.Capability(p.kind);if not allowed then return false,why end
+    if R.AuctionWindow and R.AuctionWindow.LifecycleBusy() then return false,"Sell from Bags became busy; dismiss this review and check Blizzard." end
     if not C_AuctionHouse.IsThrottledMessageSystemReady() or Q.Pending()>0 then return false,"The Auction House is busy." end
     local money=Money();if not money then return false,"Your money is unreadable." end
     if p.kind=="buyItem" then

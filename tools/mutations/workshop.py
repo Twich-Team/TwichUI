@@ -1071,3 +1071,8 @@ m("market.auction-post-deposit-race", "TwichUI_Workshop/auction/Actions.lua",
 m("crafting.auction-bag-quantity-race", "TwichUI_Workshop/auction/Actions.lua",
   " and row.qty==p.bagQuantity", "",
   "a bag stack changed after the reviewed shopping/posting quantity was captured", ["test_workshop_auction_actions.lua"])
+
+m("market.auction-legacy-post-race", "TwichUI_Workshop/auction/Actions.lua",
+  'if R.AuctionWindow and R.AuctionWindow.LifecycleBusy() then return false,"Sell from Bags became busy; dismiss this review and check Blizzard." end',
+  'if false then return false,"Sell from Bags became busy; dismiss this review and check Blizzard." end',
+  "a legacy posting operation started after review no longer prevents a competing transaction", ["test_workshop_auction_actions.lua"])

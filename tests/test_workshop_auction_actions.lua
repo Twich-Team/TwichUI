@@ -9,12 +9,12 @@ do
  Check(not ok and why:find("hardware",1,true));Check(s.Count("PlaceBid")==0,"unverified mode cannot spend")
  W.AuctionActions.Cancel();Check(W.AuctionActions.Snapshot().listeners==0)
 end
-for _,bad in ipairs({"price","money","session","combat","owner","snapshot","throttle"}) do
+for _,bad in ipairs({"price","money","session","combat","owner","snapshot","throttle","legacy"}) do
  local c,W,s=Setup();local row=s.Item();c.TwichUI.AuctionBuild.verified.buyItem=true
  local id=W.AuctionActions.PrepareBuy(row,2);Check(id~=nil)
  if bad=="price" then s.items[1].buyoutAmount=300 elseif bad=="money" then s.money=298
  elseif bad=="session" then s.visit=2 elseif bad=="combat" then s.combat=true
- elseif bad=="owner" then row.account=true elseif bad=="snapshot" then W.AuctionReads.End("changed") elseif bad=="throttle" then s.throttle=false end
+ elseif bad=="owner" then row.account=true elseif bad=="snapshot" then W.AuctionReads.End("changed") elseif bad=="throttle" then s.throttle=false elseif bad=="legacy" then s.legacyBusy=true end
  Check(not W.AuctionActions.Confirm(id),bad);Check(s.Count("PlaceBid")==0,bad..": no spend")
 end
 do
