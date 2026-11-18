@@ -215,6 +215,16 @@ function T.ReadReady(snapshot)
     buyRequest=nil;T.state="idle"
     local key=snapshot.kind=="commodity" and {itemID=snapshot.arg} or snapshot.kind=="item" and snapshot.arg
     if not SameKey(key,request.key) then return end
+    if snapshot.kind=="commodity" then
+        -- A partial book may inform an estimate, but only the native quote can
+        -- authorize its total. Leave quote dispatch to the player's next click.
+        local total=T.CommodityEstimate(snapshot.rows,key.itemID,request.quantity)
+        local id,why=Review({kind="buyCommodity",item=key.itemID,itemKey=Key(key),quantity=request.quantity,
+            desired=request.quantity,total=total,directQuote=true,retry=request.retry})
+        if id and request.retry then T.message="That auction is no longer available. Retry to review the current total, then confirm your purchase.";Notify() end
+        if W.AuctionUI then W.AuctionUI.ReviewAction(id,why) end
+        return
+    end
     if not snapshot.complete then
         T.message="The refreshed results are incomplete. Load the remaining listings before reviewing a purchase."
     else
