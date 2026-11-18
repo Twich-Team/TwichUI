@@ -56,13 +56,15 @@ than presenting a partially successful replacement.
 Only anchors are changed. Native Show/Hide, scripts, scale, parent, alpha, input
 flags, interaction manager and panel metadata are not changed by switching.
 The active-only 0.25-second watchdog yields on native geometry/owner/focus/busy
-changes, hidden controls, lost interaction or unavailable Workshop. A foreign
+changes, a hidden diagnostic-proof control, lost interaction or unavailable Workshop. A foreign
 anchor change ends ownership and is preserved, without repeatedly reparking.
 A failed restore retains its complete snapshot and partial restore points for a
 later safe retry. UI cleanup errors do not skip native anchor restoration.
 
 The header's **Blizzard Auction House** action restores without closing the
-auctioneer. A small independent button near the bottom of the viewport returns
+auctioneer. The independent recovery control stays hidden while the integrated
+window is healthy; failed/deferred restoration shows it again. A small independent
+button near the bottom of the viewport returns
 to **TwichUI Auction House** in the same visit. It disappears when the visit ends
 or testing is disarmed. It never starts an interaction. Known activation failures
 show a retry label and concise tooltip; detailed reason codes are in Host status.

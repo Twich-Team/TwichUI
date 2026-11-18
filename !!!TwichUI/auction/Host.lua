@@ -289,7 +289,7 @@ local function Watch()
     if Combat() then WatchRestore("combat"); return end
     if not Available() then WatchRestore("interaction-ended"); return end
     if AuctionHouseFrame ~= l.frame or not l.frame:IsVisible() then WatchRestore("native-hidden"); return end
-    if not control:IsVisible() or Conflict() or Busy(l.frame, l.integrated) or Focused(l.frame)
+    if (not l.integrated and not control:IsVisible()) or Conflict() or Busy(l.frame, l.integrated) or Focused(l.frame)
         or l.frame:GetParent() ~= l.parent or l.frame:GetScale() ~= l.scale
         or l.frame:IsClampedToScreen() or not SamePoints(l.frame, l.parked) or not Offscreen(l.frame) then
         WatchRestore("external-change"); return
@@ -460,6 +460,9 @@ end
 -- It is independent of the native root so it remains reachable during recovery.
 UpdateControl = function()
     if not control or not controlReady then return end
+    -- A healthy integrated window already owns the styled header switch. Keep
+    -- the independent control ready for recovery without duplicating that action.
+    if lease and lease.integrated and state == "twichui" then control:Hide(); return end
     if lease or state == "recovery" then
         control:SetText("Restore Blizzard Auction House · Retry")
         control:Show()
@@ -473,7 +476,7 @@ UpdateControl = function()
             R.Interact.Tip(control, "TwichUI Auction House", reason == "other-auction-addon"
                 and "Another Auction House addon is controlling this window. Blizzard's window is available."
                 or failed and "TwichUI couldn't open its Auction House. Blizzard's window is available. Click to retry."
-                or "Switch interfaces during this auctioneer visit. Transactions remain unavailable in TwichUI.")
+                or "Switch interfaces during this auctioneer visit.")
         end
         control:Show()
     else control:Hide() end
@@ -607,6 +610,7 @@ local function Switch()
     opening.custom = a.Presentation()
     if not opening.custom.usable then return Failed("window-commit-failed") end
     state, reason = "twichui", "parked"
+    UpdateControl()
     opening.state = state
     stats.activations, stats.switches = stats.activations + 1, stats.switches + 1
     if openedAt then stats.openMS = math.max(0, (GetTime() - openedAt) * 1000); openedAt = nil end
