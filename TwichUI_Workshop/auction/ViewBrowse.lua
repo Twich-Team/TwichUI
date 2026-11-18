@@ -260,6 +260,12 @@ local function MakeRow(parent)
     r:SetScript("OnClick", function(self) if self.data then V.Select(self.data.item,Key(self.data)) end end)
     r.fill = function(self, data)
         self.data = data
+        local browse=data.source=="live" and data.liveKind=="browse"
+        local shift=browse and 110 or 0
+        self.total:SetShown(not browse)
+        self.qty:ClearAllPoints();self.qty:SetPoint("RIGHT",-222+shift,6)
+        self.unit:ClearAllPoints();self.unit:SetPoint("RIGHT",-116+shift,6)
+        self.name:ClearAllPoints();self.name:SetPoint("TOPLEFT",50,-10);self.name:SetPoint("RIGHT",-274+shift,0)
         self.pic.tex:SetTexture(data.info.icon or UI.ICON_BLANK); self.name:SetText(data.info.name)
         self.qty:SetText(data.qty and tostring(data.qty) or "—")
         self.unit:SetText(Money(data.unit)); self.total:SetText(data.source=="live" and
@@ -480,6 +486,12 @@ SubmitLive=function(p)
     if not ok then p.list:SetData({},why);A.Note(why) end
     A.Schedule();return ok
 end
+local function PriceColumns(p, browse)
+    local shift=browse and 110 or 0
+    p.totalHead:SetShown(not browse)
+    p.qtyHead:ClearAllPoints();p.qtyHead:SetPoint("TOPRIGHT",-246+shift,-14)
+    p.unitHead:ClearAllPoints();p.unitHead:SetPoint("TOPRIGHT",-138+shift,-14)
+end
 local function Render(p)
     p.UpdateCategories()
     if A.Live() and not p.researchSaved and not p.liveMode then
@@ -491,9 +503,11 @@ local function Render(p)
     p.more:SetShown(A.Live() and p.liveMode==true);p.refreshLive:SetShown(A.Live() and p.liveMode==true)
     local reads=W.AuctionReads
     if p.liveMode then
+        local kind=reads.snapshot and reads.snapshot.kind
+        PriceColumns(p,kind==nil or kind=="browse")
         p.qtyHead:SetText("Available")
-        p.totalHead:SetText(reads.snapshot and reads.snapshot.kind=="item" and "Buyout / bid" or "Tier value")
-        p.unitHead:SetText(reads.snapshot and reads.snapshot.kind~="browse" and "Unit price" or "Native min")
+        p.totalHead:SetText(kind=="item" and "Buyout / bid" or "Value at price")
+        p.unitHead:SetText((kind==nil or kind=="browse") and "Lowest price" or "Unit price")
         p.scope:SetText(A.Live() and "Available quantities are not stacks. Item buyouts are per item.\nCommodity purchases require a separately reviewed quote." or "Explicit experimental response · read-only.\nGrouped minima are not exact listing totals.")
         p.more:SetEnabled(reads.Pending()==0 and reads.Fresh() and reads.snapshot~=nil and not reads.snapshot.complete and #reads.snapshot.rows<reads.MAX)
         p.refreshLive:SetEnabled(reads.Pending()==0 and reads.snapshot~=nil)
@@ -505,7 +519,7 @@ local function Render(p)
             p.liveSnapshot=snap;p.rows={};p.liveKnown={};p.liveDirty=nil;p.detail.cached=nil
             for _,r in ipairs(snap.rows) do
                 local row={};for key,value in pairs(r) do row[key]=value end
-                row.info=LiveInfo(row);row.source="live";p.rows[#p.rows+1]=row;p.liveKnown[row.item]=true
+                row.info=LiveInfo(row);row.source="live";row.liveKind=snap.kind;p.rows[#p.rows+1]=row;p.liveKnown[row.item]=true
             end
             p.selected=p.rows[1] and Key(p.rows[1])
             p.list:SetData(p.rows,snap.complete and "Live search completed: no auctions returned." or "No validated rows; this response is partial or unverified.")
@@ -531,6 +545,7 @@ local function Render(p)
         for _,e in ipairs({"AUCTION_HOUSE_BROWSE_RESULTS_UPDATED","ITEM_SEARCH_RESULTS_UPDATED","AUCTION_HOUSE_BROWSE_FAILURE","AUCTION_HOUSE_CLOSED","AUCTION_HOUSE_SHOW"}) do p:RegisterEvent(e) end
         p.eventCount=8;p.listening=true
     end
+    PriceColumns(p,false)
     p.qtyHead:SetText("Seen qty*");p.unitHead:SetText("Seen / item");p.totalHead:SetText("Est. value*")
     p.scope:SetText("*Aggregated quantity at the cheapest tier.\nStored history; no current auctions or exact stacks.")
     p.liveState:SetText("Saved Market Data · historical observations")
