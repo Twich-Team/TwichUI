@@ -187,7 +187,10 @@ local function Restore(why)
         l.recoveryPoints = Points(l.frame)
     end)
     local usable = NativeStatus()
-    local ended = not usable and not Available()
+    -- CloseAuctionHouse can deliver the close event from native OnHide before
+    -- interaction-manager readback changes. Ended() already ended this visit;
+    -- its hidden frame must not be required to become visible again.
+    local ended = not visiting or (not usable and not Available())
     if ok and not usable and not ended then
         ok, err = false, l.foreign and "foreign native anchors remain unavailable" or "native presentation remains unavailable"
     end
