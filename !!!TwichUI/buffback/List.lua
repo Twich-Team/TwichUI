@@ -429,19 +429,15 @@ local function BuildSample()
     sample:SetScript("OnDragStop", SaveDrag)
 end
 
-local function DrawSample()
-    if not (sample and previewing) then return end
-    Place(sample)
-    local U = Unlock()
-    local moving = not (U and U.Drives())
-    sample.hint:SetText(moving and "Return the Favor (a sample): drag to move it" or "Return the Favor (a sample): move it in EllesmereUI's Unlock Mode")
+-- Shared by the movable sample and the settings card; these rows have no secure actions.
+local function DrawSampleRows(frame, set)
     local count = math.min(#SAMPLES, BB.Get("maxRows"))
     local now = GetTime()
     for i = 1, count do
-        local row = sampleRows[i]
+        local row = set[i]
         if not row then
-            row = NewRow(sample, false, i)
-            sampleRows[i] = row
+            row = NewRow(frame, false, i)
+            set[i] = row
         end
         local s = SAMPLES[i]
         local name = S.SpellName(s.spellId)
@@ -452,8 +448,32 @@ local function DrawSample()
         Fill(row)
         row:Show()
     end
-    for i = count + 1, #sampleRows do sampleRows[i]:Hide() end
-    Stack(sample, sampleRows, count)
+    for i = count + 1, #set do set[i]:Hide() end
+    Stack(frame, set, count)
+end
+
+-- An isolated, inert surface. Refresh reads current settings; it never moves or hides the live list.
+function L.CreateSettingsPreview(parent)
+    local frame = CreateFrame("Frame", nil, parent)
+    local set = {}
+    local function Refresh(width, height)
+        local w, h = BB.Footprint()
+        frame:SetSize(w, h)
+        frame:SetScale(math.min(BB.Get("scale") / 100, width / w, height / h))
+        frame:ClearAllPoints()
+        frame:SetPoint("CENTER", parent, "CENTER")
+        DrawSampleRows(frame, set)
+    end
+    return { frame = frame, rows = set, Refresh = Refresh }
+end
+
+local function DrawSample()
+    if not (sample and previewing) then return end
+    Place(sample)
+    local U = Unlock()
+    local moving = not (U and U.Drives())
+    sample.hint:SetText(moving and "Return the Favor (a sample): drag to move it" or "Return the Favor (a sample): move it in EllesmereUI's Unlock Mode")
+    DrawSampleRows(sample, sampleRows)
 end
 
 -- Shows or hides the sample. Out of combat only. Returns true, or false and a reason code ("combat").

@@ -66,6 +66,7 @@ K.Page({
         -- 1. Who buffed you
         K.Card({
             title = "Who buffed you", icon = "resurrection",
+            preview = "buffBack.list",
             what = "When another player buffs you, their name appears in a short list with the buff's icon. Click their name to buff them back with something your class can give.",
             summary = function()
                 if not On() then return "Off." end
