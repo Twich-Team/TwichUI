@@ -64,7 +64,9 @@ function A.UpdateBusy()
     local view=A.views[active]
     local waiting=actions and (actions.state=="waiting" or actions.state=="quoting" or actions.state=="refreshing")
     local text=reads and reads.Pending()>0 and "Loading auctions…"
-        or waiting and "Waiting for Auction House…" or view and view.job and "Preparing results…"
+        or waiting and "Waiting for Auction House…"
+        or view and view.planState=="planning" and "Checking crafting reservations…"
+        or view and view.job and "Preparing results…"
     if not text and context=="auctioneer" and reads and reads.Available() and C_AuctionHouse
         and C_AuctionHouse.IsThrottledMessageSystemReady and not reads.Snapshot().throttle then
         text="Auction House busy…"

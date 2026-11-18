@@ -3,6 +3,7 @@ local W=TwichUI.Workshop
 local A,UI,D,AD=W.AuctionUI,W.UI,W.AuctionSellData,W.AdvisorData
 local function Money(n) return n~=nil and UI.Money(n) or "Unavailable" end
 local Detail,Refresh,Find
+local function StockWatch() W.Strategy.Bump();A.Schedule() end
 local function Fields(p)
     return table.concat({p.money.gold:GetText(),p.money.silver:GetText(),p.money.copper:GetText()},":")
 end
@@ -33,6 +34,10 @@ Detail=function(p)
     p.post.text:SetText(A.Live() and "Review posting" or "Post unavailable")
     p.draft=draft;p.max:SetEnabled(D.Max(row)>0)
     p.validation:SetText(row and D.Max(row)>0 and not price and why or draft.reason)
+    if row and row.pending then
+        p.validation:SetText(p.planState=="planning" and "Checking crafting reservations…" or
+            "Crafting requirements are incomplete. Open Workshop to update your queued recipes.")
+    end
     p.total:SetText("Gross if sold   "..Money(draft.gross).."\nDeposit upfront   "..Money(draft.deposit)..
         "\nFees / net proceeds   Not yet verified")
     local vendor=row and row.info.sell
@@ -56,7 +61,8 @@ Detail=function(p)
     p.advisorNote:SetText(advice and ((advice.reasons or {})[1] or advice.evidenceText or "") or "Choose an item to see its recommendation.")
     local art={auction="gavel",vendor="coins",craft="hammer",disenchant="inscribed-stone",watch="balance-scales",unknown="sealed-scroll"}
     UI.Art(p.advisorArt,"npc:"..(art[advice and advice.action] or "sealed-scroll"),48)
-    if p.autoPrice==p.request and p.autoPrice and ctx.source=="live" and ctx.complete then
+    if p.autoPrice==p.request and p.autoPrice and ctx.source=="live" and ctx.complete and
+        not (row and row.pending and p.planState=="planning") then
         p.autoPrice=nil
         if p.suggestion and p.suggestion.state=="ok" then
             SetPrice(p,p.suggestion.price,p.suggestion.rounded and "Lowest current price · rounded to silver" or "Lowest comparable current listing")
@@ -64,7 +70,7 @@ Detail=function(p)
         end
         p.priceOrigin="No comparable buyout price returned"
     elseif p.autoPrice and W.AuctionReads.Pending()==0 and ctx.source=="live" then
-        p.priceOrigin="Partial current results · no automatic price yet"
+        p.priceOrigin=p.planState=="planning" and "Checking crafting reservations…" or "Partial current results · no automatic price yet"
     elseif p.autoPrice and W.AuctionReads.Pending()==0 and ctx.source~="live" then
         p.autoPrice=nil;p.priceOrigin="No current price available"
     end
@@ -139,7 +145,9 @@ Refresh=function(p)
     Detail(p)
 end
 Find=function(p)
-    if not p.chosen or D.Max(p.chosen)==0 then return end
+    -- Reading competition is safe while crafting reservations are being resolved.
+    -- Quantity and posting stay guarded by D.Max/D.Draft and the action review.
+    if not p.chosen then return end
     local request,why=D.Search(p.chosen)
     if request then
         p.request,p.autoPrice,p.matched=request,request,nil
@@ -286,7 +294,10 @@ local function Build(p)
     p.detail.market=A.HistoryButton(p.detail,function() return p.chosen and p.chosen.item,{variant=p.chosen and p.chosen.variant,itemKey=p.chosen and p.chosen.itemKey} end,370)
     p.detail.market:SetPoint("BOTTOMLEFT",10,10)
     p.controlsReady=true
-    p:SetScript("OnEvent",function() A.Schedule() end)
+    p:SetScript("OnEvent",function(_,event)
+        if event=="BAG_UPDATE_DELAYED" then W.Strategy.Bump() end
+        A.Schedule()
+    end)
 end
 A.Register("sell",{Build=Build,Render=function(p)
     if not p.listening then
@@ -294,13 +305,18 @@ A.Register("sell",{Build=Build,Render=function(p)
         p.advisorOnly=defaults.advisorOnly;p.advisorFilter:SetOn(p.advisorOnly)
         p.durationIndex=defaults.duration;p.duration:Refresh()
         for _,event in ipairs({"BAG_UPDATE_DELAYED","GET_ITEM_INFO_RECEIVED","ITEM_DATA_LOAD_RESULT","ITEM_SEARCH_RESULTS_UPDATED","AUCTION_HOUSE_CLOSED","AUCTION_HOUSE_DISABLED"}) do p:RegisterEvent(event) end
-        W.Strategy.Listen(A.Schedule,true);p.listening=true;p.eventCount=6
+        W.Strategy.Listen(A.Schedule,true);W.Storage.Listen(StockWatch,true)
+        p.listening=true;p.eventCount=6
     end
+    -- Reserved() is intentionally passive for tooltips. Sell must request the
+    -- shared queue plan so a nonempty queue does not remain pending forever.
+    p.planState=W.Session.QueueStrategy()
     Refresh(p)
 end,Release=function(p)
     p.releasing=true
     if p.request and W.AuctionReads.serial==p.request.intent then W.AuctionReads.Cancel("page hidden") end
-    W.Strategy.Listen(A.Schedule,false)
+    W.Strategy.Listen(A.Schedule,false);W.Storage.Listen(StockWatch,false)
+    p.planState=nil
     p:UnregisterAllEvents();p.listening=false;p.rows=nil;p.chosen=nil;p.suggestion=nil;p.recommendation=nil;p.facts=nil
     p.selected,p.request,p.matched,p.competition,p.lowestTier,p.draft,p.guidanceTip,p.autoPrice=nil,nil,nil,nil,nil,nil,nil,nil
     p.quantity:SetText("1");SetPrice(p,nil,nil)
