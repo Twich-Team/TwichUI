@@ -26,6 +26,10 @@ local function SameKey(a,b)
     a,b=Key(a),Key(b)
     return a and b and a.itemID==b.itemID and a.itemLevel==b.itemLevel and a.itemSuffix==b.itemSuffix and a.battlePetSpeciesID==b.battlePetSpeciesID
 end
+local function SameListing(a,b)
+    if a.commodity or b.commodity then return a.commodity and b.commodity and a.listingKey and a.listingKey==b.listingKey end
+    return a.auctionID~=nil and a.auctionID==b.auctionID
+end
 local function Money() return GetMoney and Int(GetMoney(),0,9007199254740991) end
 local function Notify() if W.AuctionUI then W.AuctionUI.Schedule() end end
 local function Context()
@@ -88,7 +92,9 @@ end
 local function LiveRow(p)
     local snap=Q.snapshot
     if not snap or snap~=p.snapshot or snap.epoch~=Q.epoch or not Q.Available() or not Q.Fresh(snap) then return nil end
-    for _,row in ipairs(snap.rows) do if row.auctionID==p.auctionID then return row end end
+    for _,row in ipairs(snap.rows) do
+        if p.listingKey and row.listingKey==p.listingKey or not p.listingKey and row.auctionID==p.auctionID then return row end
+    end
 end
 function T.CommodityEstimate(rows,item,quantity)
     quantity=Int(quantity,1,W.MAX_ID)
@@ -113,20 +119,20 @@ function T.PrepareBuy(row,desired)
     if not row or not snap or not Q.Available() or not Q.Fresh(snap) or not snap.complete then return nil,"Inspect a complete, current live listing first." end
     local selected
     for _,r in ipairs(snap.rows) do
-        if r.auctionID==row.auctionID and r.qty==row.qty and r.total==row.total and SameKey(r.itemKey,row.itemKey) then selected=r;break end
+        if SameListing(r,row) and r.qty==row.qty and r.total==row.total and SameKey(r.itemKey,row.itemKey) then selected=r;break end
     end
     if not selected then return nil,"The selected live listing changed; inspect it again." end
     row=selected
     if row.ownershipKnown~=true or row.own or row.account then return nil,"The selected listing's ownership is unavailable or belongs to your account." end
     local key=Key(row.itemKey);local quantity=Int(row.purchaseQty or row.qty,1,W.MAX_ID);local total=Int(row.total,1)
-    if not key or not quantity or not total then return nil,"This listing has no supported buyout or complete identity." end
+    if not key or not quantity or (snap.kind~="commodity" and not total) then return nil,"This listing has no supported buyout or complete identity." end
     if snap.kind=="commodity" then
         local qty=Int(desired,1,W.MAX_ID)
         if not qty then return nil,"Enter a valid commodity quantity." end
         local estimate,why=T.CommodityEstimate(snap.rows,key.itemID,qty)
         if not estimate then return nil,why end
         local unit=math.ceil(estimate/qty)
-        return Review({kind="buyCommodity",item=key.itemID,itemKey=key,quantity=qty,total=estimate,unit=unit,snapshot=snap,desired=qty,auctionID=row.auctionID})
+        return Review({kind="buyCommodity",item=key.itemID,itemKey=key,quantity=qty,total=estimate,unit=unit,snapshot=snap,desired=qty,auctionID=row.auctionID,listingKey=row.listingKey})
     end
     if snap.kind~="item" then return nil,"A browse group is not a purchasable auction. Inspect its live listings." end
     return Review({kind="buyItem",item=key.itemID,itemKey=key,auctionID=Int(row.auctionID,1,9007199254740991),
@@ -150,7 +156,7 @@ function T.RequestBuy(row,quantity)
     local snap=Q.snapshot
     if snap and Q.Fresh(snap) and snap.complete and (snap.kind=="item" or snap.kind=="commodity") then
         for _,current in ipairs(snap.rows) do
-            if current.auctionID==row.auctionID and SameKey(current.itemKey,key) then return BuyReview(current,quantity) end
+            if SameListing(current,row) and SameKey(current.itemKey,key) then return BuyReview(current,quantity) end
         end
     end
     local request={key=key,quantity=quantity,visit=R.AuctionHost.Snapshot().visit,epoch=Q.epoch,intent=Q.serial+1,
@@ -184,7 +190,7 @@ function T.ReadReady(snapshot)
     else
         local chosen
         for _,row in ipairs(snapshot.rows) do
-            if row.ownershipKnown and not row.own and not row.account and row.total
+            if row.ownershipKnown and not row.own and not row.account and (row.total or row.commodity and row.unit)
                 and (not request.auctionID or row.auctionID==request.auctionID)
                 and (not chosen or (row.unit or row.total)<(chosen.unit or chosen.total)) then chosen=row end
         end

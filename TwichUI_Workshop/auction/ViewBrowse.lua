@@ -8,6 +8,7 @@ local page
 local Start, Paint, Detail
 local SubmitLive, Inspect
 local function Key(r)
+    if r.listingKey then return r.listingKey end
     if r.auctionID then return "auction:"..r.auctionID end
     local k=r.itemKey
     if k then return table.concat({k.itemID,k.itemLevel or 0,k.itemSuffix or 0,k.battlePetSpeciesID or 0},":") end
@@ -55,7 +56,7 @@ Detail = function(p)
     d.track:SetEnabled(chosen ~= nil)
     d.compare:SetEnabled(chosen ~= nil)
     d.market:SetEnabled(chosen ~= nil)
-    d.buy:SetEnabled(A.Live() and p.liveMode==true and chosen~=nil and chosen.source=="live" and chosen.auctionID~=nil
+    d.buy:SetEnabled(A.Live() and p.liveMode==true and chosen~=nil and chosen.source=="live" and (chosen.auctionID~=nil or chosen.commodity)
         and W.AuctionReads.Available() and W.AuctionReads.Pending()==0)
     d.buy.text:SetText(A.Live() and "Review buyout" or "Buy unavailable")
     local commodity=chosen and chosen.liveKind=="commodity"
@@ -96,9 +97,9 @@ Detail = function(p)
     local facts = W.Facts.Of(item, {market = p.market,variant=variant})
     DetailRows(d, facts)
     if chosen.source=="live" then
-        d.summary.heading:SetText(chosen.priceEach and "Live price · per item" or chosen.auctionID and "Live listing · exact amounts" or "Live item group · inspect listings")
-        local lines={(chosen.priceEach and "Available at this price: " or "Quantity: ")..tostring(chosen.qty or "Unknown"),"Unit price: "..Money(chosen.unit),
-            (chosen.priceEach and "Buyout for one: " or "Exact buyout total: ")..Money(chosen.total),"Bid: "..Money(chosen.bid)}
+        d.summary.heading:SetText(chosen.commodity and "Live commodity price" or chosen.priceEach and "Live price · per item" or chosen.auctionID and "Live listing · exact amounts" or "Live item group · inspect listings")
+        local lines={((chosen.priceEach or chosen.commodity) and "Available at this price: " or "Quantity: ")..tostring(chosen.qty or "Unknown"),"Unit price: "..Money(chosen.unit),
+            (chosen.commodity and "Value at this price: " or chosen.priceEach and "Buyout for one: " or "Exact buyout total: ")..Money(chosen.total),"Bid: "..Money(chosen.bid)}
         for i,t in ipairs(d.factLines) do t:SetText(lines[i] or "");t:SetShown(lines[i]~=nil) end
     else d.summary.heading:SetText("Market Summary · stored") end
     if not age then d.fresh:SetText(facts.age and UI.Ago(time()-facts.age) or "No saved data") end
@@ -313,7 +314,7 @@ local function MakeRow(parent)
         self.unit:SetText(Money(data.unit)); self.total:SetText(data.source=="live" and
             (data.total and Money(data.total) or data.bid and ("Bid "..Money(data.bid)) or "—") or
             data.estimate and ("~" .. UI.Money(data.estimate)) or "—")
-        self.sub:SetText((data.source=="live" and "Live experimental · " or "Stored · ") .. (data.info.category or "Metadata unavailable") .. (data.source=="live" and (data.priceEach and " · price per item" or data.total and " · exact listing total" or data.bid and " · bid only" or " · grouped minimum") or data.at and (" · " .. UI.Ago(data.at)) or " · no saved price"))
+        self.sub:SetText((data.source=="live" and "Live experimental · " or "Stored · ") .. (data.info.category or "Metadata unavailable") .. (data.source=="live" and (data.commodity and " · available at this price" or data.priceEach and " · price per item" or data.total and " · exact listing total" or data.bid and " · bid only" or " · grouped minimum") or data.at and (" · " .. UI.Ago(data.at)) or " · no saved price"))
         self:SetSelected(not browse and page.selected == Key(data))
     end
     -- UI.Hover owns the mouse scripts. Attaching the tooltip through its

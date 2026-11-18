@@ -57,6 +57,9 @@ Detail=function(p)
             SetPrice(p,p.suggestion.price,p.suggestion.rounded and "Lowest current price · rounded to silver" or "Lowest comparable current listing")
             return
         end
+        p.priceOrigin="No comparable buyout price returned"
+    elseif p.autoPrice and W.AuctionReads.Pending()==0 and ctx.source=="live" then
+        p.priceOrigin="Partial current results · no automatic price yet"
     elseif p.autoPrice and W.AuctionReads.Pending()==0 and ctx.source~="live" then
         p.autoPrice=nil;p.priceOrigin="No current price available"
     end
@@ -69,8 +72,15 @@ Detail=function(p)
         (ctx.at and ("Observed "..UI.Ago(ctx.at).." · *aggregate tiers, not stacks") or "No comparable listings"))
     if p.request and not live then p.competitionNote:SetText(W.AuctionReads.Pending()>0 and
         "Searching current listings… Historical tiers below." or "Live results unavailable · showing historical tiers") end
-    p.competitionList:SetData(ctx.rows,row and (row.keyComparable==false and "Variant-specific competition is unavailable." or
-        row.variant and "No comparable saved variant tiers." or "No comparable saved price tiers.") or "Select a bag item.")
+    local empty="Select a bag item."
+    if row then
+        if p.request and W.AuctionReads.Pending()>0 then empty="Loading current listings…"
+        elseif live then empty=ctx.returned==0 and "No current listings were returned." or "No comparable current prices could be shown."
+        elseif p.request then empty="Current listings unavailable. Click Refresh listings to try again."
+        elseif row.keyComparable==false then empty="Comparable item identity is unavailable."
+        else empty="Select the item to search its current listings." end
+    end
+    p.competitionList:SetData(ctx.rows,empty)
     local lowest
     for _,r in ipairs(ctx.rows) do if r.copy and (not lowest or r.unit<lowest.unit) then lowest=r end end
     p.lowestTier=lowest

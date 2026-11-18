@@ -87,18 +87,20 @@ local function Same(a,b)
         a.itemSuffix==b.itemSuffix and a.battlePetSpeciesID==b.battlePetSpeciesID
 end
 local function Amount(v) return W.Int(W.Plain(v),1,W.Prices.MAX_COPPER) end
-function Q.Listing(x,mode)
+function Q.Listing(x,mode,requestedItem)
     x=W.Plain(x)
     if type(x)~="table" then return nil end
     local qty=W.Int(W.Plain(x.quantity),1,W.MAX_ID)
     local id=W.Int(W.Plain(x.auctionID),1,9007199254740991)
-    local key=Q.Key(x.itemKey or {itemID=x.itemID})
-    if not qty or not id or not key then return nil end
+    local commodity=mode==true or mode=="commodity"
+    local key=commodity and Q.Key({itemID=x.itemID or requestedItem}) or Q.Key(x.itemKey or {itemID=x.itemID})
+    if not qty or not key or (not commodity and not id) then return nil end
     local unit,total
     local priceEach=mode=="item"
-    if mode==true or mode=="commodity" then
+    if commodity then
         unit=Amount(x.unitPrice)
-        total=unit and W.Int(unit*qty,1,W.Prices.MAX_COPPER)
+        if not unit then return nil end
+        total=W.Int(unit*qty,1,W.Prices.MAX_COPPER)
     elseif priceEach then
         -- Forever item-search quantity is availability at this price, not a
         -- stack sold for buyoutAmount. The native buy frame uses that amount
@@ -107,7 +109,8 @@ function Q.Listing(x,mode)
     else total=Amount(x.buyoutAmount);unit=total and math.ceil(total/qty) end
     local own,account=W.Plain(x.containsOwnerItem),W.Plain(x.containsAccountItem)
     return {auctionID=id,itemKey=key,item=key.itemID,link=W.Text(W.Plain(x.itemLink),1000),qty=qty,unit=unit,total=total,
-        priceEach=priceEach,purchaseQty=priceEach and 1 or qty,
+        priceEach=priceEach,purchaseQty=priceEach and 1 or qty,commodity=commodity,
+        listingKey=commodity and ("commodity:"..key.itemID..":"..("%.0f"):format(unit)) or nil,
         bid=Amount(x.bidAmount) or Amount(x.minBid),status=W.Int(W.Plain(x.status),0,1),
         seconds=W.Int(W.Plain(x.timeLeftSeconds),0,W.MAX_ID),band=W.Int(W.Plain(x.timeLeft),0,10),
         own=own==true,account=account==true,
@@ -275,6 +278,12 @@ function Q.Event(event,key)
     end
     local api=C_AuctionHouse
     local function Read()
+        -- RECEIVED has no item-ID payload on Forever. Only read it for our
+        -- sole commodity request, with native evidence for that queried item.
+        if event=="COMMODITY_SEARCH_RESULTS_RECEIVED" and p.kind=="commodity" and key==nil then
+            if not api.HasSearchResults or not api.HasSearchResults(Q.Key({itemID=p.arg})) then return end
+            key=p.arg
+        end
         local rows,complete,rawCount={},false,0
         if p.kind=="browse" and (event=="AUCTION_HOUSE_BROWSE_RESULTS_UPDATED" or event=="AUCTION_HOUSE_BROWSE_RESULTS_ADDED") then
             local native=api.GetBrowseResults();rawCount=#(native or {})
@@ -298,10 +307,10 @@ function Q.Event(event,key)
                 if r and Same(r.itemKey,p.arg) then rows[#rows+1]=r end
             end
             complete=api.HasFullItemSearchResults(p.arg) and count<=Q.MAX and #rows==count
-        elseif p.kind=="commodity" and (event=="COMMODITY_SEARCH_RESULTS_UPDATED" or event=="COMMODITY_SEARCH_RESULTS_ADDED") and key==p.arg then
+        elseif p.kind=="commodity" and (event=="COMMODITY_SEARCH_RESULTS_UPDATED" or event=="COMMODITY_SEARCH_RESULTS_ADDED" or event=="COMMODITY_SEARCH_RESULTS_RECEIVED") and key==p.arg then
             local count=api.GetNumCommoditySearchResults(p.arg);rawCount=count
             for i=1,math.min(count,Q.MAX) do
-                local r=Q.Listing(api.GetCommoditySearchResultInfo(p.arg,i),true)
+                local r=Q.Listing(api.GetCommoditySearchResultInfo(p.arg,i),true,p.arg)
                 if r and r.item==p.arg then r.commodity=true;rows[#rows+1]=r end
             end
             complete=api.HasFullCommoditySearchResults(p.arg) and count<=Q.MAX and #rows==count
@@ -313,7 +322,7 @@ function Q.Event(event,key)
 end
 local events={"AUCTION_HOUSE_SHOW","AUCTION_HOUSE_CLOSED","AUCTION_HOUSE_DISABLED","PLAYER_LEAVING_WORLD",
     "AUCTION_HOUSE_THROTTLED_SYSTEM_READY","AUCTION_HOUSE_BROWSE_RESULTS_UPDATED","AUCTION_HOUSE_BROWSE_RESULTS_ADDED","AUCTION_HOUSE_BROWSE_FAILURE", "AUCTION_HOUSE_THROTTLED_MESSAGE_DROPPED",
-    "ITEM_SEARCH_RESULTS_UPDATED","ITEM_SEARCH_RESULTS_ADDED","COMMODITY_SEARCH_RESULTS_UPDATED","COMMODITY_SEARCH_RESULTS_ADDED","OWNED_AUCTIONS_UPDATED"}
+    "ITEM_SEARCH_RESULTS_UPDATED","ITEM_SEARCH_RESULTS_ADDED","COMMODITY_SEARCH_RESULTS_UPDATED","COMMODITY_SEARCH_RESULTS_ADDED","COMMODITY_SEARCH_RESULTS_RECEIVED","OWNED_AUCTIONS_UPDATED"}
 local handlers,listening={},false
 function Q.Start()
     if listening or not W.Active() then return end

@@ -87,6 +87,12 @@ function A.QuickBuy(row)
         A.Note("Item type is still loading. Try again shortly.");return false
     end
     if not info.isCommodity then return A.RequestBuy(row,1) end
+    -- A browse key may include display item level; commodity reviews are
+    -- identified by the base item ID, just like the native price-tier search.
+    local commodityRow={}
+    for field,value in pairs(row) do commodityRow[field]=value end
+    commodityRow.itemKey=W.AuctionReads.Key({itemID=row.itemKey.itemID});commodityRow.commodity=true
+    row=commodityRow
     if not quantityBox then
         quantityBox=CreateFrame("Frame",nil,A.Frame(),"BackdropTemplate")
         quantityBox:SetSize(420,190);quantityBox:SetPoint("CENTER");quantityBox:SetFrameStrata("DIALOG");quantityBox:EnableMouse(true)

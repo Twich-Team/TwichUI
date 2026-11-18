@@ -71,6 +71,13 @@ function D.Bags(query)
                             end)
                             if not ok then r.eligible,r.itemKey,r.available,r.mode,r.copper=nil,nil,nil,nil,nil end
                         end
+                        -- Commodity searches use item ID alone, even if the bag
+                        -- item's native key carries a nonzero display item level.
+                        r.bagItemKey=r.itemKey
+                        local types=Enum and Enum.ItemCommodityStatus
+                        if types and r.mode==types.Commodity and r.itemKey then
+                            r.itemKey=Key({itemID=item});r.variantKind=nil;r.variant=false;r.keyComparable=true
+                        end
                         local k=r.itemKey
                         r.identityKnown=k~=nil or link and (link:match("^item:%d+")~=nil or link:find("|Hitem:",1,true)~=nil) or false
                         r.variant=r.variant or k and (k.itemLevel~=0 or k.itemSuffix~=0 or k.battlePetSpeciesID~=0) or false
@@ -127,7 +134,7 @@ function D.BagCurrent(row)
             W.Plain(x.isLocked)~=false or W.Plain(x.isBound)~=false or W.Text(W.Plain(x.hyperlink),1000)~=row.link then return false end
         if row.itemKey then
             if not Q.Available() or not C_AuctionHouse.GetItemKeyFromItem then return false end
-            return Same(row.itemKey,C_AuctionHouse.GetItemKeyFromItem(row.location))
+            return Same(row.bagItemKey or row.itemKey,C_AuctionHouse.GetItemKeyFromItem(row.location))
         end
         return row.identityKnown==true
     end)
@@ -153,17 +160,18 @@ function D.Competition(row,opt)
         opt.epoch==Q.epoch and row.itemKey and row.keyComparable~=false and Same(row.itemKey,opt.itemKey) and
         opt.marketStamp==out.stamp and Q.Available() and W.Finite(snap.at) and GetTime()>=snap.at and GetTime()-snap.at<30 then
         out.source,out.complete,out.at,out.epoch,out.snapshot,out.itemKey="live",snap.complete,snap.at,snap.epoch,snap,row.itemKey
-        out.kind=snap.kind
+        out.kind=snap.kind;out.returned=snap.rawCount or #snap.rows
         local seen={}
         for i,r in ipairs(snap.rows or {}) do
             if i>Q.MAX then break end
-            if Same(r.itemKey,row.itemKey) and not r.own and not r.account then
-                local id=W.Int(r.auctionID,1,9007199254740991)
+            local matches=snap.kind=="commodity" and r.item==row.item or snap.kind~="commodity" and Same(r.itemKey,row.itemKey)
+            if matches and not r.own and not r.account then
+                local id=snap.kind=="commodity" and r.listingKey or W.Int(r.auctionID,1,9007199254740991)
                 local qty=W.Int(r.qty,1,W.MAX_ID)
                 local total=W.Int(r.total,1,PR.MAX_COPPER)
                 local unit=W.Int(r.unit,1,PR.MAX_COPPER)
                 if id and seen[id] then out.complete=false end
-                if id and not seen[id] and qty and (total or W.Int(r.bid,1,PR.MAX_COPPER)) then
+                if id and not seen[id] and qty and (total or snap.kind=="commodity" and unit or W.Int(r.bid,1,PR.MAX_COPPER)) then
                     seen[id]=true
                     out.rows[#out.rows+1]={key=id,qty=qty,unit=unit,total=total,bid=r.bid,priceEach=r.priceEach,
                         copy=out.complete==true and unit~=nil and r.ownershipKnown==true}
