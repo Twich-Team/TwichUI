@@ -38,8 +38,8 @@ Detail=function(p)
         p.validation:SetText(p.planState=="planning" and "Checking crafting reservations…" or
             "Crafting requirements are incomplete. Open Workshop to update your queued recipes.")
     end
-    p.total:SetText("Gross if sold   "..Money(draft.gross).."\nDeposit upfront   "..Money(draft.deposit)..
-        "\nFees / net proceeds   Not yet verified")
+    p.grossValue:SetText(Money(draft.gross))
+    p.depositValue:SetText(Money(draft.deposit))
     local vendor=row and row.info.sell
     local warning,close
     if price and vendor and vendor>0 then
@@ -165,7 +165,7 @@ local function Build(p)
     end)
     p.advisorFilter:SetPoint("TOPLEFT",650,-8)
     local left=A.Card(p,"Bag inventory",100)
-    left:SetWidth(270);left:SetPoint("TOPLEFT",0,-48);left:SetPoint("BOTTOMLEFT",0,0)
+    left:SetWidth(270);left:SetPoint("TOPLEFT",0,-48);left:SetPoint("BOTTOMLEFT",0,158)
     p.list=UI.List(left,58,function(parent)
         local r=CreateFrame("Button",nil,parent);UI.Hover(r)
         r.pic=UI.ItemIcon(r,34);r.pic:SetPoint("LEFT",6,0)
@@ -199,11 +199,11 @@ local function Build(p)
     end,400,false)
     p.list.box:SetPoint("TOPLEFT",4,-36);p.list.box:SetPoint("BOTTOMRIGHT",-4,8)
     local form=A.Card(p,"Posting preparation",100)
-    form:SetPoint("TOPLEFT",left,"TOPRIGHT",10,0);form:SetPoint("BOTTOMRIGHT",-420,0)
+    form:SetPoint("TOPLEFT",left,"TOPRIGHT",10,0);form:SetPoint("BOTTOMRIGHT",-420,158)
     local formCard=form
     local scroll=CreateFrame("ScrollFrame",nil,formCard,"UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT",6,-36);scroll:SetPoint("BOTTOMRIGHT",-26,56);UI.CL.ScrollRail(scroll)
-    form=CreateFrame("Frame",nil,scroll);form:SetSize(320,582);scroll:SetScrollChild(form)
+    scroll:SetPoint("TOPLEFT",6,-36);scroll:SetPoint("BOTTOMRIGHT",-26,12);UI.CL.ScrollRail(scroll)
+    form=CreateFrame("Frame",nil,scroll);form:SetSize(320,446);scroll:SetScrollChild(form)
     scroll:HookScript("OnSizeChanged",function(_,w) if w and w>1 then form:SetWidth(w) end end)
     p.advisorBanner=CreateFrame("Frame",nil,form);UI.Panel(p.advisorBanner,"espresso")
     p.advisorBanner:SetPoint("TOPLEFT",6,-4);p.advisorBanner:SetPoint("TOPRIGHT",-6,-4);p.advisorBanner:SetHeight(78)
@@ -240,15 +240,37 @@ local function Build(p)
     p.vendorIcon=p.vendorWarning:CreateTexture(nil,"OVERLAY");p.vendorIcon:SetSize(20,20);p.vendorIcon:SetPoint("TOPLEFT",8,-10)
     p.vendorIcon:SetTexture(TwichUI.PATH..[[media\auction\vendor-warning-small]])
     p.vendorText=A.Text(p.vendorWarning,"",12,36,-10,-8,UI.K.textDim);p.vendorText:SetWordWrap(true);p.vendorText:SetHeight(50)
-    p.total=A.Text(form,"",13,12,-450,-12);p.total:SetWordWrap(true);p.total:SetHeight(76)
-    p.validation=A.Text(form,"",12,12,-542,-12,UI.K.textDim);p.validation:SetWordWrap(true);p.validation:SetHeight(42)
-    p.post=UI.Button(formCard,"Post unavailable",196,"primary",function()
+    local footer=CreateFrame("Frame",nil,p)
+    footer:SetPoint("BOTTOMLEFT",0,0);footer:SetPoint("BOTTOMRIGHT",0,0);footer:SetHeight(148)
+    local totals={}
+    for i,def in ipairs({
+        {"Gross if sold","npc:coins","Before fees; sale not guaranteed.",UI.K.bronzeText},
+        {"Deposit upfront","npc:gavel","Paid upfront when posting.",UI.K.text},
+        {"Fees / net proceeds","npc:balance-scales","No verified fee or net estimate.",UI.K.textDim},
+    }) do
+        local card=CreateFrame("Frame",nil,footer);UI.Panel(card,"card");card:SetHeight(92)
+        local art=card:CreateTexture(nil,"ARTWORK");art:SetSize(36,36);art:SetPoint("LEFT",12,0);UI.Art(art,def[2],36)
+        A.Text(card,def[1],14,60,-10,-12,UI.K.bronzeText)
+        card.value=A.Text(card,i==3 and "Not yet verified" or "Unavailable",24,60,-32,-12,def[4]);card.value:SetHeight(30)
+        local note=A.Text(card,def[3],11,60,-68,-12,UI.K.textDim);note:SetHeight(16)
+        totals[i]=card
+    end
+    local function SizeTotals(_,width)
+        local w=math.max(1,(width-20)/3)
+        for i,card in ipairs(totals) do
+            card:ClearAllPoints();card:SetPoint("TOPLEFT",(i-1)*(w+10),0);card:SetWidth(w)
+        end
+    end
+    footer:SetScript("OnSizeChanged",SizeTotals);SizeTotals(footer,footer:GetWidth())
+    p.grossValue,p.depositValue,p.feesValue=totals[1].value,totals[2].value,totals[3].value
+    p.validation=A.Text(footer,"",12,12,-106,-220,UI.K.textDim);p.validation:SetWordWrap(true);p.validation:SetHeight(36)
+    p.post=UI.Button(footer,"Post unavailable",196,"primary",function()
         if not A.Live() then return end
         local price=p.money:GetCopper()
         local id,why=W.AuctionActions.PreparePost(p.chosen,tonumber(p.quantity:GetText()),price,p.durationIndex or 1)
         A.ReviewAction(id,why)
-    end,34);p.post:SetPoint("BOTTOMLEFT",12,12);p.post:SetEnabled(false)
-    p.detail=A.Details(p,410);p.detail:SetPoint("TOPRIGHT",0,-48);p.detail:SetPoint("BOTTOMRIGHT",0,0)
+    end,34);p.post:SetPoint("BOTTOMRIGHT",0,8);p.post:SetEnabled(false)
+    p.detail=A.Details(p,410);p.detail:SetPoint("TOPRIGHT",0,-48);p.detail:SetPoint("BOTTOMRIGHT",0,158)
     p.history=A.Text(p.detail.body,"",12,12,-108,-12);p.history:SetWordWrap(true);p.history:SetHeight(60)
     p.find=UI.Button(p.detail.body,"Refresh listings",186,"secondary",function()
         Find(p)
