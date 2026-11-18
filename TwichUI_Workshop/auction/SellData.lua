@@ -45,7 +45,7 @@ function D.Bags(query)
             if type(x)=="table" then
                 local item=W.Int(W.Plain(x.itemID),1,W.MAX_ID)
                 local qty=W.Int(W.Plain(x.stackCount),1,W.MAX_ID)
-                if item and qty then
+                if item and qty and W.Plain(x.isBound)==false then
                     local info=W.AdvisorData.Info(item)
                     if query=="" or (info.name.." "..item):lower():find(query,1,true) then
                         local link=W.Text(W.Plain(x.hyperlink),1000)
@@ -58,6 +58,10 @@ function D.Bags(query)
                             local ah=C_AuctionHouse
                             local ok=pcall(function()
                                 r.location=ItemLocation:CreateFromBagAndSlot(bag,slot)
+                                if C_Item and C_Item.IsBound then
+                                    local bound=W.Plain(C_Item.IsBound(r.location))
+                                    if type(bound)=="boolean" then r.bound=bound end
+                                end
                                 if ah.IsSellItemValid then r.eligible=W.Plain(ah.IsSellItemValid(r.location,false))==true end
                                 if ah.GetItemKeyFromItem then r.itemKey=Key(ah.GetItemKeyFromItem(r.location)) end
                                 if r.itemKey and r.itemKey.itemID~=item then r.itemKey=nil;r.eligible=false end
@@ -71,7 +75,7 @@ function D.Bags(query)
                         r.identityKnown=k~=nil or link and (link:match("^item:%d+")~=nil or link:find("|Hitem:",1,true)~=nil) or false
                         r.variant=r.variant or k and (k.itemLevel~=0 or k.itemSuffix~=0 or k.battlePetSpeciesID~=0) or false
                         r.identity=r.key..":"..item..":"..(link or "")..":"..(k and table.concat({k.itemLevel,k.itemSuffix,k.battlePetSpeciesID},":") or "unknown")
-                        rows[#rows+1]=r
+                        if r.bound==false and r.eligible~=false then rows[#rows+1]=r end
                     end
                 end
             end
@@ -149,6 +153,7 @@ function D.Competition(row,opt)
         opt.epoch==Q.epoch and row.itemKey and row.keyComparable~=false and Same(row.itemKey,opt.itemKey) and
         opt.marketStamp==out.stamp and Q.Available() and W.Finite(snap.at) and GetTime()>=snap.at and GetTime()-snap.at<30 then
         out.source,out.complete,out.at,out.epoch,out.snapshot,out.itemKey="live",snap.complete,snap.at,snap.epoch,snap,row.itemKey
+        out.kind=snap.kind
         local seen={}
         for i,r in ipairs(snap.rows or {}) do
             if i>Q.MAX then break end
@@ -156,11 +161,11 @@ function D.Competition(row,opt)
                 local id=W.Int(r.auctionID,1,9007199254740991)
                 local qty=W.Int(r.qty,1,W.MAX_ID)
                 local total=W.Int(r.total,1,PR.MAX_COPPER)
-                local unit=qty and total and math.ceil(total/qty)
+                local unit=W.Int(r.unit,1,PR.MAX_COPPER)
                 if id and seen[id] then out.complete=false end
                 if id and not seen[id] and qty and (total or W.Int(r.bid,1,PR.MAX_COPPER)) then
                     seen[id]=true
-                    out.rows[#out.rows+1]={key=id,qty=qty,unit=unit,total=total,bid=r.bid,
+                    out.rows[#out.rows+1]={key=id,qty=qty,unit=unit,total=total,bid=r.bid,priceEach=r.priceEach,
                         copy=out.complete==true and unit~=nil and r.ownershipKnown==true}
                 end
             end
@@ -178,11 +183,21 @@ function D.Competition(row,opt)
             end
         end
     end
+    table.sort(out.rows,function(a,b)
+        if (a.unit~=nil)~=(b.unit~=nil) then return a.unit~=nil end
+        if a.unit~=b.unit then return (a.unit or 0)<(b.unit or 0) end
+        return a.key<b.key
+    end)
     return out
 end
 function D.Copy(ctx,tier,row)
     if not D.Current(ctx,row) then return nil end
-    for _,r in ipairs(ctx.rows) do if r==tier and r.copy then return W.Int(r.unit,1,PR.MAX_COPPER) end end
+    for _,r in ipairs(ctx.rows) do
+        if r==tier and r.copy then
+            local price=TwichUI.AuctionPrice.Suggest({lowest=r.unit,comparable=1},row.copper~=false)
+            return price and price.price,price and price.rounded
+        end
+    end
 end
 function D.Guidance(row,ctx)
     if not row then return nil,nil end
@@ -196,6 +211,18 @@ function D.Guidance(row,ctx)
     end
     local rec=W.AdvisorData.Tooltip({item=row.item,count=row.qty,sell=row.info.sell,bindType=row.info.bindType,
         bound=row.bound,variant=row.variant,quality=row.info.quality,classID=row.info.classID,equipLoc=row.info.equipLoc},f)
+    if ctx.source=="live" and ctx.complete and D.Current(ctx,row) and D.Max(row)>0 then
+        local summary={comparable=0}
+        for _,tier in ipairs(ctx.rows) do
+            if tier.copy then
+                summary.comparable=summary.comparable+1
+                summary.lowest=math.min(summary.lowest or tier.unit,tier.unit)
+            end
+        end
+        local price=TwichUI.AuctionPrice.Suggest(summary,row.copper~=false)
+        return {state=price and "ok" or "nocompetition",price=price and price.price,source="live",
+            limited=price and price.limited,rounded=price and price.rounded},rec,f
+    end
     local suggestion=W.Sell.Suggest(row.item,row.qty,{facts=f})
     for _,flag in ipairs(suggestion.flags or {}) do
         if flag=="belowusual" then

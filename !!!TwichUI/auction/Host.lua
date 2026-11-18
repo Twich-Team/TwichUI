@@ -319,6 +319,7 @@ local function BuildControl()
     control:SetFrameStrata("DIALOG")
     control:SetText("AH-1a proof: Restore Blizzard (30s limit)")
     control:SetScript("OnClick", function()
+        if R.PlayMenuSound then R:PlayMenuSound() end
         if lease or state == "recovery" then H.Restore("player-switch")
         elseif enabled and visiting then H.SwitchToTwichUI()
         else H.Command("off") end

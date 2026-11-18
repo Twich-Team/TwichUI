@@ -192,6 +192,10 @@ function UI.Hover(row, corner)
         Apply(fade and fade.value or (self.hovered and 1 or 0))   -- hover and the chosen state share the row: re-weigh them
     end
     function row:SetStripe(on) stripe:SetShown(on and not self.selected and true or false); self.striped = on and true or false end
+    -- Auction rows are pooled after page construction. The binder scopes itself
+    -- to the Auction House root, leaving other Workshop rows untouched.
+    local auction=W.AuctionUI
+    if auction and auction.BindSound then auction.BindSound(row) end
 end
 
 function UI.ItemIcon(parent, size)

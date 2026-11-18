@@ -35,6 +35,27 @@ function A.Context() return context end
 function A.Live() return context=="auctioneer" and R.AuctionHost and R.AuctionHost.DebugEnabled and R.AuctionHost.DebugEnabled() or false end
 function A.IsShown() return root ~= nil and root:IsShown() end
 function A.Page(key) return A.views[key] end
+-- Bind only this window's controls, once. Pooled rows opt in when created;
+-- page and dialog construction binds their remaining buttons and fields.
+local sounded=setmetatable({}, {__mode="k"})
+function A.MenuSound() if R.PlayMenuSound then R:PlayMenuSound() end end
+function A.BindSound(frame)
+    if sounded[frame] or not root then return end
+    local parent=frame
+    while parent and parent~=root do parent=parent:GetParent() end
+    if parent~=root then return end
+    local kind=frame:GetObjectType()
+    if kind=="Button" or kind=="CheckButton" or kind=="EditBox" or kind=="Slider"
+        or frame:GetScript("OnMouseDown") or frame:GetScript("OnMouseUp") then
+        sounded[frame]=true
+        frame:HookScript("OnMouseDown",A.MenuSound)
+        if kind=="EditBox" then frame:HookScript("OnEnterPressed",A.MenuSound) end
+    end
+end
+function A.BindSounds(frame)
+    A.BindSound(frame)
+    for _,child in ipairs({frame:GetChildren()}) do A.BindSounds(child) end
+end
 -- One passive indicator for the existing read/action controllers. The native
 -- spinner animates only while visible; no polling, new timers or requests.
 function A.UpdateBusy()
@@ -113,6 +134,7 @@ local function Page(key)
             "Preview only. This page belongs to a later milestone and has no auction actions.")
         page.placeholder = text
     end
+    A.BindSounds(page)
     page.built = true
     return page
 end
@@ -316,6 +338,7 @@ local function Build()
     end)
     root:HookScript("OnHide", Cleanup)
     ResizeGrip()
+    A.BindSounds(root)
     A.ready = true
     if UISpecialFrames then tinsert(UISpecialFrames, "TwichUIAuctionPreview") end
 end

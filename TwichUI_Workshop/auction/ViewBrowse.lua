@@ -292,9 +292,9 @@ local function MakeRow(parent)
                 menu:CreateTitle(row.info.name)
                 if A.Live() and row.source=="live" then
                     menu:CreateButton("Quick buy…",function() A.QuickBuy(row) end)
-                    menu:CreateButton("Inspect live listings",function() Inspect(page,row) end)
+                    menu:CreateButton("Inspect live listings",function() A.MenuSound();Inspect(page,row) end)
                 end
-                menu:CreateButton("Open Market history",function() A.OpenMarket(row.item,{itemKey=row.itemKey}) end)
+                menu:CreateButton("Open Market history",function() A.MenuSound();A.OpenMarket(row.item,{itemKey=row.itemKey}) end)
             end)
         else V.Select(row.item,Key(row)) end
     end)

@@ -30,6 +30,7 @@ function A.ToggleDebug()
         panel.close=R.FrameLook.Close(panel,function() panel:Hide() end);panel.close:SetPoint("TOPRIGHT",-4,-4)
         panel:Hide()
     end
+    A.BindSounds(panel)
     panel:SetShown(not panel:IsShown());A.UpdateDebug()
 end
 function A.UpdateReview()
@@ -70,6 +71,7 @@ function A.ReviewAction(id,why)
         review.cancel=UI.Button(review,"Dismiss",180,"secondary",function() W.AuctionActions.Cancel();review:Hide() end,32)
         review.cancel:SetPoint("BOTTOMRIGHT",-18,18)
     end
+    A.BindSounds(review)
     review:Show();A.UpdateReview();return true
 end
 function A.RequestBuy(row,quantity)
@@ -78,6 +80,7 @@ function A.RequestBuy(row,quantity)
     return ok
 end
 function A.QuickBuy(row)
+    A.MenuSound()
     if not A.Live() or not row or not row.itemKey then return false end
     local ok,info=pcall(C_AuctionHouse.GetItemKeyInfo,row.itemKey)
     if not ok or type(info)~="table" or type(W.Plain(info.isCommodity))~="boolean" then
@@ -105,6 +108,7 @@ function A.QuickBuy(row)
         quantityBox:HookScript("OnHide",function() quantityBox.amount:ClearFocus();quantityBox.row=nil end)
         quantityBox:Hide()
     end
+    A.BindSounds(quantityBox)
     quantityBox.row=row;quantityBox.name:SetText(row.info and row.info.name or info.itemName or "Quick buy")
     quantityBox.amount:SetText("1");quantityBox:Show();quantityBox.amount:SetFocus();quantityBox.amount:HighlightText()
     return true
