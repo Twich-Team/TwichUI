@@ -289,8 +289,8 @@ function A.ShowIntegrated(id)
     if A.IsShown() then A.Hide() end
     context, hostVisit = "auctioneer", id
     active = "browse" -- switching never implicitly selects/loads an external Market
-    A.Note("Development mode · Live search available; transaction permissions are shown per action")
-    root.debug:SetShown(R.AuctionHost.Development and R.AuctionHost.Development() or false)
+    A.Note("Live search available; transaction permissions are shown per action")
+    root.debug:Show()
     root:Show()
     return A.IsShown() and context == "auctioneer" and A.Page(active) and not A.Page(active).failed and not root.failure:IsShown()
 end

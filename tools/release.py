@@ -368,6 +368,14 @@ def check_archive(zip_path, version, root=None):
                     listed = f"{addon}/" + line.replace("\\", "/")
                     if listed not in files:
                         problems.append(f"{rel} loads {line}, which is not in the package")
+        # Auction presentation must behave like committed source in normal packages.
+        # Build.lua is never version-stamped; normalize only packager line endings.
+        auction_build = "!!!TwichUI/auction/Build.lua"
+        if "auction\\Build.lua" in tocs.get(CORE, ""):
+            if auction_build not in files:
+                problems.append("missing normal Auction House capability file")
+            elif z.read(auction_build).replace(b"\r\n", b"\n") != (root / auction_build).read_bytes().replace(b"\r\n", b"\n"):
+                problems.append("Auction House capability file differs from committed source")
         if len(tocs) == len(TOCS):
             core = tocs[CORE]
             for addon in LOAD_ON_DEMAND:

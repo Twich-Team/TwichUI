@@ -53,7 +53,7 @@ Detail=function(p)
     p.lowest.text:SetText(live and "Match lowest listing" or "Use lowest observed")
     p.match:SetEnabled(p.suggestion~=nil and p.suggestion.state=="ok" and D.Current(ctx,row))
     local types=Enum and Enum.ItemCommodityStatus
-    p.find:SetEnabled(row~=nil and row.itemKey~=nil and row.keyComparable~=false and W.AuctionReads.Available() and types~=nil and (row.mode==types.Item or W.AuctionReads.Development() and row.mode==types.Commodity) and W.AuctionReads.Pending()==0)
+    p.find:SetEnabled(row~=nil and row.itemKey~=nil and row.keyComparable~=false and W.AuctionReads.Available() and types~=nil and (row.mode==types.Item or W.AuctionReads.Integrated() and row.mode==types.Commodity) and W.AuctionReads.Pending()==0)
     if not row then
         p.history:SetText("");p.advice:SetText("Select an item for market and Item Advisor guidance.")
         p.chart:Set(nil,UI.Money);p.guidanceTip=nil;return

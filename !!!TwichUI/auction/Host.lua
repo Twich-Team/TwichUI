@@ -333,16 +333,14 @@ UpdateControl = function()
         control:Show()
     else control:Hide() end
 end
-function H.Development() return R.AuctionBuild and R.AuctionBuild.development == true or false end
 function H.DebugEnabled()
     local ui = type(TwichUIDB) == "table" and TwichUIDB.ui
-    return H.Development() and not (R.Persist and R.Persist.IsHeld("TwichUIDB"))
+    return not (R.Persist and R.Persist.IsHeld("TwichUIDB"))
         and type(ui) == "table" and ui.auctionDebug == true
         and R.WorkshopLauncher and R.WorkshopLauncher.Enabled() or false
 end
 function H.SetDebug(on)
     if type(on) ~= "boolean" then return false, "Invalid option." end
-    if on and not H.Development() then return false, "Install the Auction House development build to use this option." end
     if on and Combat() then return false, "Blizzard's Auction House is being used during combat." end
     if on and not (R.WorkshopLauncher and R.WorkshopLauncher.Enabled()) then return false, "Enable Workshop — Experimental first." end
     if type(TwichUIDB) ~= "table" or R.Persist and R.Persist.IsHeld("TwichUIDB") then
@@ -351,7 +349,7 @@ function H.SetDebug(on)
     end
     if type(TwichUIDB.ui) ~= "table" then TwichUIDB.ui = {} end
     TwichUIDB.ui.auctionDebug = on
-    -- Debug presentation requires genuine native state, not a procedural proof.
+    -- Auction House presentation requires genuine native state, not a procedural proof.
     if on then
         confirmed, enabled = true, true
         if visiting and not lease then H.SwitchToTwichUI() end
@@ -370,11 +368,11 @@ function H.DebugCommand(arg)
     arg = (arg or ""):lower():match("^%s*(.-)%s*$")
     if arg == "on" or arg == "off" then
         local ok, why = H.SetDebug(arg == "on")
-        R.Print(ok and (arg == "on" and "TwichUI Auction House development mode on. Visit an auctioneer normally." or "Auction House development mode off; Blizzard restored.")
+        R.Print(ok and (arg == "on" and "TwichUI Auction House replacement on. Visit an auctioneer normally." or "Auction House replacement off; Blizzard restored.")
             or tostring(why or "Restoration is pending; leave combat and retry /tui ahdebug off."))
     elseif arg == "status" then
-        R.Print("Auction House development mode " .. (H.DebugEnabled() and "on" or "off") .. "; interface " .. state .. "; " .. reason .. ".")
-    else R.Print("/tui ahdebug on | off | status. Development build required; off restores Blizzard.") end
+        R.Print("Auction House replacement " .. (H.DebugEnabled() and "on" or "off") .. "; interface " .. state .. "; " .. reason .. ".")
+    else R.Print("/tui ahdebug on | off | status. Off restores Blizzard.") end
 end
 R:OnInit(H.ApplyDebug)
 if R.Profiles and R.Profiles.OnApply then R.Profiles.OnApply("views", "auction-debug", H.ApplyDebug) end

@@ -1,4 +1,4 @@
-# Integrated Auction House development mode
+# Integrated Auction House (Experimental)
 
 The existing five-page Auction House now has a Host-owned auctioneer context.
 **Default replacement is off. Forever acceptance remains pending.** This is a
@@ -84,13 +84,14 @@ or changed. Relative native event/server/input timing is still unverified.
 
 ## Normal owner workflow
 
-Use the private development ZIP and the [short test procedure](development-test.md).
+Install TwichUI normally and follow the [short procedure](development-test.md).
 Workshop's **Use TwichUI Auction House (Experimental)** setting and
-`/tui ahdebug on | off | status` are the ordinary entry points. The preference
-survives reloads in development builds. Core `auction/Build.lua` is false in the
-repository and ordinary release archives; those builds ignore a saved true value.
-The private builder stamps only that marker, records the committed source identity
-and every archived file hash, and enables no transaction modes.
+`/tui ahdebug on | off | status` are the ordinary entry points. The existing
+`ui.auctionDebug` preference is retained across reloads and profiles, off when
+missing, and inactive while Workshop is disabled. Presentation has no build gate.
+`auction/Build.lua` contains only reviewed per-operation transaction evidence.
+The obsolete custom development archive builder has been removed; ordinary release
+and internal packaging include the feature within the existing seven addons.
 
 Debug presentation has no acknowledgement requirement or 30-second limit. The
 old `/tui ahproof` lifecycle harness remains an optional developer tool.
@@ -133,8 +134,8 @@ visit, rather than attributing its late reply to a different search.
 
 ## Native activation gates
 
-The development archive enables presentation and read workflows. All money-moving
-modes remain off in `AuctionBuild.verified` until native evidence exists for that mode.
+The ordinary installation enables opt-in presentation and read workflows. All money-moving
+modes remain off in code-level `AuctionBuild.verified` until native evidence exists for that mode.
 Controllers are exercised with synthetic native adapters; this is not native proof.
 
 | Mode | Implemented call/review | Exact remaining native evidence |

@@ -1,6 +1,6 @@
 -- One explicit-action controller. Events/timers reconcile outcomes; they never
 -- send a purchase, post or cancellation. Native per-mode evidence is independent
--- of the development presentation switch.
+-- of the presentation preference.
 local R,W=TwichUI,TwichUI.Workshop
 local Q,D=W.AuctionReads,W.AuctionSellData
 local T={serial=0,state="idle"}
@@ -36,8 +36,7 @@ end
 function T.Busy() return ticket~=nil and T.state~="review" end
 function T.Capability(mode)
     local b=R.AuctionBuild
-    if not b or b.development~=true then return false,"Auction transactions require a development build." end
-    if type(b.verified)~="table" or b.verified[mode]~=true then return false,REASONS[mode] or "This auction operation is unsupported." end
+    if not b or type(b.verified)~="table" or b.verified[mode]~=true then return false,REASONS[mode] or "This auction operation is unsupported." end
     return true
 end
 local function Listen(on)
@@ -64,7 +63,7 @@ local function Current(p)
     return ticket==p and Context() and h.Snapshot().visit==p.visit
 end
 local function Idle()
-    if not Context() then return false,"Use the integrated development Auction House at a valid auctioneer outside combat." end
+    if not Context() then return false,"Use the integrated TwichUI Auction House at a valid auctioneer outside combat." end
     if ticket then return false,"Finish or dismiss the current review first." end
     if T.state=="unknown" then return false,"The last result is unknown. Check Blizzard before reopening the auctioneer; no automatic retry is safe." end
     if Q.Pending()>0 or not C_AuctionHouse.IsThrottledMessageSystemReady() then return false,"Wait for the current live request to finish." end

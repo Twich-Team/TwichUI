@@ -1,16 +1,15 @@
 # Try the TwichUI Auction House
 
-This private development ZIP enables the development setting. It does not enable
-unverified money-moving operations or change your saved auction/market records.
-Install its eight addon folders in your development AddOns installation, then reload.
-Keep your usual installation and saved data backup.
+Install or update TwichUI normally, then reload. The standard seven-addon package
+contains the complete Auction House; no separate addon, custom ZIP or development
+marker is required. Test Lab remains a development tool and is not needed.
 
 1. Open `/tui settings`, choose **Workshop**, enable Workshop if needed, then enable
    **Use TwichUI Auction House (Experimental)**. Alternatively use `/tui ahdebug on`.
 2. Visit an auctioneer. Use Browse, Shopping, Sell, My Auctions and Market normally.
    Click Search or Refresh to request live results. Opening pages never starts a scan.
 3. Inspect listings and review quantities, exact totals, posting drafts or cancellation
-   costs. Each final transaction button explains its native activation gate. This build
+   costs. Each final transaction button explains its native activation gate. TwichUI
    enables no transaction modes: Forever hardware/permission/completion checks remain
    outstanding. Saved Market research remains available independently.
 4. Use **Blizzard Auction House** in the header, then the **TwichUI Auction House**

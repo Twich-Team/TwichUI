@@ -444,6 +444,19 @@ class ArchiveTests(unittest.TestCase):
     def test_good_package(self):
         self.assertEqual(self.make(), [])
 
+    def test_auction_capabilities_are_not_patched_by_packaging(self):
+        core = self.root / rel.TOCS[rel.CORE]
+        core.write_text(core.read_text()+"\nauction\\Build.lua\n")
+        path = self.root / "!!!TwichUI/auction/Build.lua"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        source = "TwichUI.AuctionBuild = { verified = {} }\n"
+        path.write_text(source)
+        toc = CORE_TOC.replace("1.0.0", self.VERSION)+"\nauction\\Build.lua\n"
+        files = {rel.TOCS[rel.CORE]: toc, "!!!TwichUI/auction/Build.lua": source}
+        self.assertEqual(self.make(files), [])
+        files["!!!TwichUI/auction/Build.lua"] = source+"-- patched\n"
+        self.assertTrue(any("capability file differs" in p for p in self.make(files)))
+
     def test_good_package_with_windows_line_endings(self):
         # the packager writes CRLF unless told otherwise (-u)
         crlf = {rel.TOCS[rel.CORE]: CORE_TOC.replace("1.0.0", self.VERSION).replace("\n", "\r\n"),

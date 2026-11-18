@@ -1091,3 +1091,8 @@ m("market.auction-legacy-post-race", "TwichUI_Workshop/auction/Actions.lua",
   'if R.AuctionWindow and R.AuctionWindow.LifecycleBusy() then return false,"Sell from Bags became busy; dismiss this review and check Blizzard." end',
   'if false then return false,"Sell from Bags became busy; dismiss this review and check Blizzard." end',
   "a legacy posting operation started after review no longer prevents a competing transaction", ["test_workshop_auction_actions.lua"])
+
+m("market.auction-standard-unverified-mode", "TwichUI_Workshop/auction/Actions.lua",
+  'if not b or type(b.verified)~="table" or b.verified[mode]~=true then',
+  'if false then',
+  "removing the presentation build gate accidentally also permits unverified money operations", ["test_workshop_auction_actions.lua"])

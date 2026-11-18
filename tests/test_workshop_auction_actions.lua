@@ -132,4 +132,17 @@ do
  Check(not W.AuctionActions.Confirm(id));Check(s.Count("PlaceBid")==1,"timeout never retries")
  Check(W.AuctionActions.Snapshot().timers==0 and W.AuctionActions.Snapshot().listeners==0)
 end
+
+
+do
+ local c,W,s=Setup()
+ c.TwichUIDB.ui=c.TwichUIDB.ui or {}
+ c.TwichUIDB.ui.auctionDebug=true;c.TwichUIDB.ui.development=true
+ c.TwichUIDB.ui.verified={buyItem=true,buyCommodity=true,postItem=true,postCommodity=true,cancel=true}
+ c.TwichUIWorkshopDB={verified=c.TwichUIDB.ui.verified}
+ for _,mode in ipairs({"buyItem","buyCommodity","postItem","postCommodity","cancel"}) do
+  Check(not W.AuctionActions.Capability(mode),"saved values cannot authorize "..mode)
+ end
+end
+
 print("PASSED: integrated auction action controller "..count.." checks (synthetic, no real transactions)")
