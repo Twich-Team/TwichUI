@@ -66,6 +66,8 @@ D.Register("auctionPresentation", { title = "Auction House presentation", order 
     local function Line(fmt, ...) lines[#lines+1] = fmt:format(...) end
     Line("host: %s; reason: %s; visit: %d; visiting: %s; pending: %d", s.state, s.reason, s.visit, D.Flag(s.visiting), s.pending)
     Line("opening visit: %s; load: %s; construction: %s; parking: %s", tostring(o.visit), tostring(o.load), tostring(o.build), tostring(o.parking))
+    Line("parking expected: %s", tostring(o.parkExpected))
+    Line("parking returned: %s; mismatch: %s", tostring(o.parkActual), tostring(o.parkingMismatch))
     Line("failure: %s (%s); watchdog: %s; restoration: %s (%s)", tostring(o.failure), tostring(o.failureState), tostring(o.watchdog), tostring(o.restoration), tostring(o.restoreReason))
     for _, key in ipairs({ "presented", "custom", "native" }) do
         local f = o[key] or {}

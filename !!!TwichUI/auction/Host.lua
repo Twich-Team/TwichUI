@@ -94,13 +94,38 @@ local function Points(f)
     for i = 1, f:GetNumPoints() do p[i] = { f:GetPoint(i) } end
     return p
 end
-local function SamePoints(f, points)
-    if f:GetNumPoints() ~= #points then return false end
-    for i, p in ipairs(points) do
-        local now = { f:GetPoint(i) }
-        for j = 1, 5 do if now[j] ~= p[j] then return false end end
+-- SetPoint/GetPoint can round coordinates through the client's UI scale.
+-- Allow that only when validating a write; ownership checks use the exact
+-- returned snapshot so a later foreign anchor change still relinquishes it.
+local POINT_EPSILON = 0.01
+local function ComparePoints(actual, expected, tolerance)
+    if #actual ~= #expected then return false, "anchor-count" end
+    for i, point in ipairs(expected) do
+        local now = actual[i]
+        for j = 1, 3 do
+            if now[j] ~= point[j] then return false, "anchor-field-" .. j end
+        end
+        for j = 4, 5 do
+            if not Finite(now[j]) or not Finite(point[j]) or math.abs(now[j] - point[j]) > (tolerance or 0) then
+                return false, "offset-" .. (j == 4 and "x" or "y")
+            end
+        end
     end
     return true
+end
+local function SamePoints(f, points, tolerance)
+    return ComparePoints(Points(f), points, tolerance)
+end
+local function DescribePoints(points)
+    local text = {}
+    for i = 1, math.min(#points, 4) do
+        local p = points[i]
+        local relative = p[2] == UIParent and "UIParent" or p[2] == nil and "nil" or "other-frame"
+        local x = Finite(p[4]) and ("%.9f"):format(p[4]) or "invalid"
+        local y = Finite(p[5]) and ("%.9f"):format(p[5]) or "invalid"
+        text[i] = tostring(p[1]) .. "/" .. relative .. "/" .. tostring(p[3]) .. " x=" .. x .. " y=" .. y
+    end
+    return table.concat(text, "; ")
 end
 local function StopTimer()
     if ticker then ticker:Cancel(); ticker = nil end
@@ -158,7 +183,7 @@ local function Restore(why)
             if not good and not first then first = fault end
         end
         if first then error(first, 0) end
-        if not SamePoints(l.frame, l.points) then error("AH-1a: native anchors did not restore", 0) end
+        if not SamePoints(l.frame, l.points, POINT_EPSILON) then error("AH-1a: native anchors did not restore", 0) end
         l.recoveryPoints = Points(l.frame)
     end)
     local usable = NativeStatus()
@@ -175,6 +200,10 @@ local function Restore(why)
         stats.restoreFailed = stats.restoreFailed + 1
         KeepVisibleOrHide()
         if UpdateControl then UpdateControl() end
+        if l.foreign and opening.parkingMismatch then
+            err = tostring(err) .. " (" .. opening.parkingMismatch .. "; requested " .. opening.parkExpected
+                .. "; returned " .. opening.parkActual .. ")"
+        end
         R.Fault("auction proof restore", err)
         return false, reason
     end
@@ -339,10 +368,21 @@ local function Activate(integrated)
         parked = { { "TOPLEFT", UIParent, "TOPRIGHT", OFFSET, 0 } }, untilTime = GetTime() + SECONDS,
         integrated = integrated, visit = visit }
     opening.parking = "attempted"
+    opening.parkExpected = DescribePoints(lease.parked)
     f:ClearAllPoints()
     f:SetPoint(unpack(lease.parked[1]))
+    local actual = Points(f)
+    local matched, mismatch = ComparePoints(actual, lease.parked, POINT_EPSILON)
+    opening.parkActual, opening.parkingMismatch = DescribePoints(actual), mismatch
+    -- Snapshot only a verified version of our write, never arbitrary foreign
+    -- anchors. Retaining the requested numbers mistakes rounding for ownership.
+    if matched then lease.parked = actual end
     lease.partial = false
-    if not f:IsVisible() or not Available() or not SamePoints(f, lease.parked) or not Offscreen(f) then
+    local refusal = not f:IsVisible() and "native-hidden" or not Available() and "interaction-ended"
+        or not matched and mismatch or not SamePoints(f, lease.parked) and "anchors-changed"
+        or not Offscreen(f) and "still-onscreen"
+    if refusal then
+        opening.parking = "refused-" .. refusal
         H.Restore("parking-refused")
         return false, reason
     end
@@ -495,7 +535,11 @@ Failed = function(why)
         if ok then opening.custom = s end
     end
     opening.failure, opening.failureState = why or "replacement-failed", state
-    local restored = H.Restore(why or "replacement-failed")
+    -- Activate already attempted recovery on a refused native write. A second
+    -- automatic Restore repeats the same fault without new state or ownership.
+    local restored = false
+    if state == "recovery" then CancelPending(); StopTimer()
+    else restored = H.Restore(why or "replacement-failed") end
     if first then
         R.Print(NativeStatus() and "TwichUI Auction House couldn't open. Blizzard's Auction House is available."
             or "TwichUI Auction House couldn't open. Blizzard recovery is pending; use Restore Blizzard Auction House or /tui ahdebug off.")
