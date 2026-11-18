@@ -223,6 +223,7 @@ function Q.Begin(kind,arg,more)
     local mine=Q.serial
     pending={id=mine,epoch=Q.epoch,kind=kind,arg=arg};Q.state="loading";Q.snapshot=nil
     Q.lastRequest=kind..(more and " continuation" or " search");Q.lastResponse=nil;Q.lastError=nil
+    if W.AuctionUI then W.AuctionUI.Schedule() end
     sending=true
     local ok,hasFull=pcall(fn,unpack(args))
     sending=false

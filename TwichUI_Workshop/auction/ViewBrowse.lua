@@ -1,12 +1,12 @@
--- AH-2 presentation: only stored observations. Selecting, filtering, comparing
--- or tracking never sends a query. No row holds a live purchase handle.
+-- Stored research and explicit live search/inspection. Clicking a live browse
+-- group inspects that item's listings; no row click performs a transaction.
 local R, W = TwichUI, TwichUI.Workshop
 local A, UI, D, AD = W.AuctionUI, W.UI, W.AuctionBrowseData, W.AdvisorData
 local V = {}
 A.Browse = V
 local page
 local Start, Paint, Detail
-local SubmitLive
+local SubmitLive, Inspect
 local function Key(r)
     if r.auctionID then return "auction:"..r.auctionID end
     local k=r.itemKey
@@ -103,6 +103,7 @@ Paint = function(p)
     p.list.box:SetAlpha(1)
     p.detail.buy:SetEnabled(false)
     Detail(p)
+    if A.UpdateBusy then A.UpdateBusy() end
 end
 Start = function(p, reset)
     if p.job and p.job.discovering and D.SameMarket(p.market,SavedMarket(p)) and p.stamp==Stamp(SavedMarket(p),p) then
@@ -188,7 +189,7 @@ local function Filter(p, name, value)
     if p[name] == value then return end
     p[name] = value
     if A.Live() then
-        p.liveMode=true;p.liveSnapshot=nil
+        p.liveMode=true;p.liveSnapshot=nil;p.inspecting=false
         if p.job and p.job.Cancel then p.job:Cancel();p.job=nil end
         W.AuctionReads.Cancel("Filters changed; click Search to request fresh live results.")
         p.rows={};p.list:SetData({},"Filters changed. Click Search for fresh live results.")
@@ -216,7 +217,7 @@ function V.Filter(name, value)
 end
 function V.Search(query)
     if not page then return end
-    page.liveMode=false;page.researchSaved=true
+    page.liveMode=false;page.researchSaved=true;page.inspecting=false
     page.query = W.Text(query, 200) or ""
     page.search:SetText(page.query)
     page.search.hint:SetShown(page.query == "" and not page.search:HasFocus())
@@ -227,6 +228,11 @@ function V.Select(item, key)
     page.selected = key or item; AD.Request(item)
     page.detail.scroll:SetVerticalScroll(0)
     for _, r in ipairs(page.list.rows) do if r.data then r:SetSelected(Key(r.data) == page.selected) end end
+    for _, row in ipairs(page.rows or {}) do
+        if Key(row)==page.selected and page.liveMode and row.liveKind=="browse" then
+            Inspect(page,row);return
+        end
+    end
     Detail(page)
 end
 function A.OpenBrowse(item, qty, opt)
@@ -234,7 +240,7 @@ function A.OpenBrowse(item, qty, opt)
     if not item or not A.IsShown() then return false end
     A.Go("browse")
     if A.Live() and opt and opt.live then
-        page.neededQuantity=qty;page.neededItem=item;page.researchSaved=false;page.liveMode=true
+        page.neededQuantity=qty;page.neededItem=item;page.researchSaved=false;page.liveMode=true;page.inspecting=true
         page.search:SetText(AD.Info(item).name)
         local ok,why=W.AuctionReads.Search({itemID=item,itemLevel=0,itemSuffix=0,battlePetSpeciesID=0})
         if not ok then A.Note(why) end
@@ -274,12 +280,30 @@ local function MakeRow(parent)
         self.sub:SetText((data.source=="live" and "Live experimental · " or "Stored · ") .. (data.info.category or "Metadata unavailable") .. (data.source=="live" and (data.priceEach and " · price per item" or data.total and " · exact listing total" or data.bid and " · bid only" or " · grouped minimum") or data.at and (" · " .. UI.Ago(data.at)) or " · no saved price"))
         self:SetSelected(page.selected == Key(data))
     end
-    UI.TipFn(r, "Listing price evidence", function()
-        return r.data and (r.data.info.name .. (r.data.source=="live" and
-            (r.data.priceEach and "\nQuantity is available at this price, not a stack. Buyout and bid amounts apply to one item. Purchasing remains disabled." or
-            "\nExplicit experimental response. A browse minimum is not a listing total; commodity tier values are not purchase quotes. Purchasing remains disabled.") or
-            "\nQuantity is aggregated at the cheapest observed tier, not a stack. Unit prices are rounded up to copper. Estimated value is not an auction total; current availability is unknown."))
-    end)
+    -- UI.Hover owns the mouse scripts. Attaching the tooltip through its
+    -- supported hooks preserves highlights and refreshes recycled rows safely.
+    r.TipEnter=function(self)
+        local row=self.data
+        if not row or not GameTooltip then return end
+        GameTooltip:SetOwner(self,"ANCHOR_RIGHT")
+        local link=row.link
+        if not link and row.itemKey and C_AuctionHouse and C_AuctionHouse.GetItemKeySampleLink then
+            local ok,value=pcall(C_AuctionHouse.GetItemKeySampleLink,row.itemKey)
+            if ok and type(value)=="string" then link=value end
+        end
+        local ok
+        if link then ok=pcall(GameTooltip.SetHyperlink,GameTooltip,link)
+        elseif row.itemKey and GameTooltip.SetItemKey then
+            local level
+            if C_AuctionHouse and C_AuctionHouse.GetItemKeyRequiredLevel then
+                local read,value=pcall(C_AuctionHouse.GetItemKeyRequiredLevel,row.itemKey)
+                if read then level=value end
+            end
+            ok=pcall(GameTooltip.SetItemKey,GameTooltip,row.itemKey.itemID,row.itemKey.itemLevel,row.itemKey.itemSuffix,level)
+        else ok=pcall(GameTooltip.SetItemByID,GameTooltip,row.item) end
+        if ok then GameTooltip:Show() else GameTooltip:Hide() end
+    end
+    r.TipLeave=function(self) R.Interact.HideTip(self) end
     return r
 end
 local function BuildDetail(p)
@@ -308,10 +332,7 @@ local function BuildDetail(p)
     d.inspect=UI.Button(d.body,"Inspect live listings",300,"secondary",function()
         local chosen=d.data
         if not (p.liveMode and chosen and chosen.itemKey) then A.Note("Select a live item group first.");return end
-        local ok,why
-        if A.Live() then ok,why=W.AuctionReads.Search(chosen.itemKey)
-        else ok,why=W.AuctionReads.Begin("item",chosen.itemKey) end
-        if not ok then A.Note(why) else p.liveSnapshot=nil;A.Schedule() end
+        Inspect(p,chosen)
     end,28)
     d.inspect:SetPoint("TOPLEFT",12,-580)
     d.market=A.HistoryButton(d.body,function()
@@ -401,7 +422,11 @@ local function Build(p)
             UI.Paint(self.text,n.depth==0 and UI.K.bronzeText or UI.K.text)
             self:SetSelected(p.category==n.key)
         end
-        UI.TipFn(r,"Category",function() return r.data and r.data.name end)
+        r.TipEnter=function(self)
+            if not self.data or not GameTooltip then return end
+            GameTooltip:SetOwner(self,"ANCHOR_RIGHT");GameTooltip:SetText(self.data.name);GameTooltip:Show()
+        end
+        r.TipLeave=function(self) R.Interact.HideTip(self) end
         return r
     end
     p.categoryList=UI.List(filters,42,CategoryRow,360,false)
@@ -480,11 +505,31 @@ SubmitLive=function(p)
         sort=p.sort=="Name" and "Name" or "Price",reverse=p.sort=="PriceDesc"})
     if not query then A.Note(reason);return false end
     if p.job and p.job.Cancel then p.job:Cancel() end
-    p.token=p.token+1;p.job=nil;p.rows={};p.liveMode=true;p.researchSaved=false;p.liveSnapshot=nil;p.detail.cached=nil
+    p.token=p.token+1;p.job=nil;p.rows={};p.liveMode=true;p.researchSaved=false;p.liveSnapshot=nil;p.detail.cached=nil;p.inspecting=false
     p.list:SetData({},"Waiting for a live search response…")
     local ok,why=W.AuctionReads.Begin("browse",query)
     if not ok then p.list:SetData({},why);A.Note(why) end
     A.Schedule();return ok
+end
+Inspect=function(p,row)
+    if not row or not row.itemKey then return false end
+    local ok,why
+    if A.Live() then ok,why=W.AuctionReads.Search(row.itemKey)
+    else ok,why=W.AuctionReads.Begin("item",row.itemKey) end
+    if not ok then A.Note(why);return false end
+    p.inspecting=true;p.liveSnapshot=nil;p.rows={};p.selected=nil;p.liveKnown=nil;p.detail.cached=nil
+    p.detail.scroll:SetVerticalScroll(0)
+    p.list:SetData({},"Loading live listings…")
+    A.Schedule();return true
+end
+local function LayoutResults(p,details)
+    if p.detailsShown==details then return end
+    p.detailsShown=details
+    p.detail:SetShown(details)
+    p.tableCard:ClearAllPoints()
+    p.tableCard:SetPoint("TOPLEFT",p.filters,"TOPRIGHT",10,0)
+    p.tableCard:SetPoint("BOTTOMRIGHT",details and -380 or 0,0)
+    p.list:Layout()
 end
 local function PriceColumns(p, browse)
     local shift=browse and 110 or 0
@@ -498,12 +543,15 @@ local function Render(p)
         p.liveMode=true;p.rows={};p.liveSnapshot=nil;p.list:SetData({},"Search the live Auction House. No request starts when this page opens.")
     end
     p.submit.text:SetText(A.Live() and "Search" or "Search Saved Data")
-    p.live.text:SetText(A.Live() and "Search live auctions" or "Prepare live search")
+    p.live.text:SetText(A.Live() and (p.inspecting and "Back to search results" or "Search live auctions") or "Prepare live search")
     p.tradeButton:SetEnabled(not A.Live())
     p.more:SetShown(A.Live() and p.liveMode==true);p.refreshLive:SetShown(A.Live() and p.liveMode==true)
     local reads=W.AuctionReads
     if p.liveMode then
         local kind=reads.snapshot and reads.snapshot.kind
+        if kind=="item" or kind=="commodity" then p.inspecting=true end
+        LayoutResults(p,p.inspecting==true)
+        p.detail.inspect:Hide()
         PriceColumns(p,kind==nil or kind=="browse")
         p.qtyHead:SetText("Available")
         p.totalHead:SetText(kind=="item" and "Buyout / bid" or "Value at price")
@@ -545,6 +593,8 @@ local function Render(p)
         for _,e in ipairs({"AUCTION_HOUSE_BROWSE_RESULTS_UPDATED","ITEM_SEARCH_RESULTS_UPDATED","AUCTION_HOUSE_BROWSE_FAILURE","AUCTION_HOUSE_CLOSED","AUCTION_HOUSE_SHOW"}) do p:RegisterEvent(e) end
         p.eventCount=8;p.listening=true
     end
+    LayoutResults(p,true)
+    p.detail.inspect:Show()
     PriceColumns(p,false)
     p.qtyHead:SetText("Seen qty*");p.unitHead:SetText("Seen / item");p.totalHead:SetText("Est. value*")
     p.scope:SetText("*Aggregated quantity at the cheapest tier.\nStored history; no current auctions or exact stacks.")
@@ -575,5 +625,6 @@ local function Release(p)
     W.Strategy.Listen(A.Schedule,false)
     for _,r in ipairs(p.list.rows) do r.data=nil end
     p.detail.data,p.detail.cached,p.detail.recommendation=nil,nil,nil
+    p.inspecting,p.detailsShown=nil,nil
 end
 A.Register("browse",{Build=Build,Render=Render,Release=Release})

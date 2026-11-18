@@ -207,7 +207,7 @@ local function Recheck(p)
     return true
 end
 local function Wait(p,state)
-    StopTimer();T.state=state;Listen(true)
+    StopTimer();T.state=state;Listen(true);Notify()
     timeout=C_Timer.NewTimer(12,function()
         if ticket==p then Finish("unknown","No matching completion arrived. Check Blizzard before retrying; no automatic retry was sent.") end
     end)

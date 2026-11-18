@@ -35,6 +35,22 @@ function A.Context() return context end
 function A.Live() return context=="auctioneer" and R.AuctionHost and R.AuctionHost.DebugEnabled and R.AuctionHost.DebugEnabled() or false end
 function A.IsShown() return root ~= nil and root:IsShown() end
 function A.Page(key) return A.views[key] end
+-- One passive indicator for the existing read/action controllers. The native
+-- spinner animates only while visible; no polling, new timers or requests.
+function A.UpdateBusy()
+    if not root or not root.busy then return end
+    local reads,actions=W.AuctionReads,W.AuctionActions
+    local view=A.views[active]
+    local waiting=actions and (actions.state=="waiting" or actions.state=="quoting")
+    local text=reads and reads.Pending()>0 and "Loading auctions…"
+        or waiting and "Waiting for Auction House…" or view and view.job and "Preparing results…"
+    if not text and context=="auctioneer" and reads and reads.Available() and C_AuctionHouse
+        and C_AuctionHouse.IsThrottledMessageSystemReady and not reads.Snapshot().throttle then
+        text="Auction House busy…"
+    end
+    root.busy:SetShown(text~=nil and text~=false)
+    root.busy.text:SetText(text or "")
+end
 function A.Note(text)
     if root then root.note:SetText((context == "auctioneer" and "TwichUI Auction House · " or "Preview · Replacement off · ") .. (text or "Transactions unavailable")) end
 end
@@ -67,6 +83,7 @@ function A.Render()
         root.marketChip:Set(fresh.text..' · Reload…', nil, UI.K.textDim)
         if not (def and def.Render and page and page.built and not page.failed) then error("page-not-ready", 0) end
         R.Perf.Call("auction.previewRender", def.Render, page)
+        A.UpdateBusy()
         renders = renders + 1
         page.rendered = epoch -- only a completed render counts
     end)
@@ -229,6 +246,13 @@ local function Build()
     root.brand:SetPoint("LEFT", crest, "RIGHT", 10, 0); root.brand:SetText("TwichUI")
     root.title = UI.Text(header, 26, K.bronzeText, "serif")
     root.title:SetPoint("LEFT", root.brand, "RIGHT", 8, 0); root.title:SetText("Auction House")
+    root.busy=CreateFrame("Frame",nil,header)
+    root.busy:SetSize(240,28);root.busy:SetPoint("LEFT",root.title,"RIGHT",18,0);root.busy:EnableMouse(false)
+    root.busy.spinner=CreateFrame("Frame",nil,root.busy,"SpinnerTemplate")
+    root.busy.spinner:SetSize(22,22);root.busy.spinner:SetPoint("LEFT");root.busy.spinner:EnableMouse(false)
+    root.busy.text=UI.Text(root.busy,13,K.bronzeText)
+    root.busy.text:SetPoint("LEFT",root.busy.spinner,"RIGHT",8,0)
+    root.busy:Hide()
     root.close = F.Close(header, function() root:Hide() end)
     root.close:SetSize(30, 30); CL.Control(root.close); root.close:SetPoint("RIGHT", -8, 0)
     root.blizzard = UI.Button(header, "Blizzard Auction House", 220, "secondary", function()
