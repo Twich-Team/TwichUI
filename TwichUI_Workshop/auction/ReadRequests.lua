@@ -126,12 +126,17 @@ local function Finish(state,rows,complete,event,rawCount)
         complete=complete==true,at=GetTime(),experimental=true,visit=Q.visit,
         rawCount=rawCount or #(rows or {}),response=event,correlation="serialized-local"}
     Q.state=state;Q.lastResponse=event;pending=nil
-    stream=Q.Integrated() and not complete and current or nil
+    -- Owned updates are unsolicited cache changes as well as query replies.
+    -- Keep the sole visit-bound owned stream until another read or teardown;
+    -- this observes sold/cancelled state without issuing recurring queries.
+    stream=Q.Integrated() and (not complete or current.kind=="owned") and current or nil
     local snapshot=Q.snapshot
     expiry=C_Timer.NewTimer(30,function()
         if Q.snapshot~=snapshot then return end
         expiry=nil
-        snapshot.stale=true;stream=nil;Q.state="stale; refresh live results"
+        snapshot.stale=true
+        if snapshot.kind~="owned" then stream=nil end
+        Q.state="stale; refresh live results"
         if W.AuctionActions and W.AuctionActions.ReadEnded then W.AuctionActions.ReadEnded("The refreshed listings are no longer current. Try reviewing again.") end
         if W.AuctionUI then W.AuctionUI.Schedule() end
     end)

@@ -45,7 +45,7 @@ function T.Capability(mode)
     local enabled=b and ((b.verified and b.verified[mode]==true) or (b.integrated and b.integrated[mode]==true))
     if not enabled then return false,REASONS[mode] or "This auction operation is unsupported." end
     local needed={buyItem={"PlaceBid"},buyCommodity={"StartCommoditiesPurchase","ConfirmCommoditiesPurchase","GetQuoteDurationRemaining"},
-        postItem={"PostItem","ConfirmPostItem"},postCommodity={"PostCommodity","ConfirmPostCommodity"},cancel={"CancelAuction"}}
+        postItem={"PostItem","ConfirmPostItem"},postCommodity={"PostCommodity","ConfirmPostCommodity"},cancel={"CancelAuction","CanCancelAuction","GetCancelCost","GetOwnedAuctions"}}
     for _,name in ipairs(needed[mode] or {}) do
         if not C_AuctionHouse or type(C_AuctionHouse[name])~="function" then return false,"This client does not provide the required auction operation." end
     end
@@ -213,6 +213,19 @@ function T.ReadReady(snapshot)
     -- Reuse that native event to finish the review; never resend the query.
     if not C_AuctionHouse.IsThrottledMessageSystemReady() then return end
     buyRequest=nil;T.state="idle"
+    if request.kind=="cancel" then
+        local chosen
+        if snapshot.kind=="owned" then
+            for _,row in ipairs(snapshot.rows) do
+                if row.auctionID==request.auctionID and SameKey(row.itemKey,request.key) then chosen=row;break end
+            end
+        end
+        if chosen then
+            local id,why=T.PrepareCancel(chosen)
+            if W.AuctionUI then W.AuctionUI.ReviewAction(id,why) end
+        elseif W.AuctionUI then W.AuctionUI.Note("That auction is no longer available to cancel. It may have sold or expired.") end
+        Notify();return
+    end
     local key=snapshot.kind=="commodity" and {itemID=snapshot.arg} or snapshot.kind=="item" and snapshot.arg
     if not SameKey(key,request.key) then return end
     if snapshot.kind=="commodity" then
@@ -279,16 +292,49 @@ function T.PreparePost(row,quantity,price,duration)
     local p,why=PostCheck(row,quantity,price,duration);if not p then return nil,why end
     return Review(p)
 end
+local function NativeOwned(id)
+    for i,raw in ipairs(C_AuctionHouse.GetOwnedAuctions() or {}) do
+        if i>Q.MAX then break end
+        if W.Plain(raw.auctionID)==id then return Q.Listing(raw) end
+    end
+end
+-- Stale cancellation reviews refresh through the same sole read-intent slot as
+-- buy reviews. Only the final Confirm click can send CancelAuction.
+function T.RequestCancel(row,force)
+    local ok,why=Idle();if not ok then return false,why end
+    if buyRequest then return false,"An auction review is already refreshing." end
+    local id=row and Int(row.auctionID,1,9007199254740991)
+    local key=row and Key(row.itemKey)
+    if not id or not key then return false,"Choose an active auction first." end
+    local snap=Q.snapshot
+    if not force and snap and snap.kind=="owned" and snap.complete and Q.Fresh(snap) then
+        for _,current in ipairs(snap.rows) do
+            if current.auctionID==id and SameKey(current.itemKey,key) then
+                local review,reason=T.PrepareCancel(current)
+                if W.AuctionUI then W.AuctionUI.ReviewAction(review,reason) end
+                return review~=nil,reason
+            end
+        end
+    end
+    local request={kind="cancel",key=key,auctionID=id,visit=R.AuctionHost.Snapshot().visit,epoch=Q.epoch,intent=Q.serial+1}
+    buyRequest=request;T.state="refreshing";T.message="Refreshing your auction and cancellation fee…"
+    local sent,reason=Q.Begin("owned")
+    if not sent and buyRequest==request then buyRequest=nil;T.state="idle";T.message=reason end
+    Notify();return sent,reason
+end
 function T.PrepareCancel(row)
+    if row and row.status==1 then return nil,"This auction has already sold and cannot be cancelled." end
     local snap=Q.snapshot
     if not snap or snap.kind~="owned" or not snap.complete or not Q.Available() or not Q.Fresh(snap) or not row or row.status~=0 then return nil,"Refresh and select an active owned listing first." end
     local found=false;for _,r in ipairs(snap.rows) do if r==row then found=true;break end end
     if not found then return nil,"The owned listing changed; refresh it." end
     local id=Int(row.auctionID,1,9007199254740991)
-    if not id or not C_AuctionHouse.CanCancelAuction(id) then return nil,"The game does not permit cancelling this listing." end
+    local native=id and NativeOwned(id)
+    if not native or native.status~=0 or native.qty~=row.qty or not SameKey(native.itemKey,row.itemKey)
+        or W.Plain(C_AuctionHouse.CanCancelAuction(id))~=true then return nil,row.status==1 and "This auction has already sold." or "This auction is no longer available to cancel." end
     local cost=Int(C_AuctionHouse.GetCancelCost(id),0)
     if not cost or not Money() or cost>Money() then return nil,"Cancellation cost is unavailable or exceeds your money." end
-    return Review({kind="cancel",item=row.item,itemKey=Key(row.itemKey),auctionID=id,quantity=row.qty,total=cost,cost=cost,snapshot=snap})
+    return Review({kind="cancel",item=row.item,itemKey=Key(row.itemKey),auctionID=id,quantity=row.qty,total=cost,cost=cost,link=row.link,snapshot=snap})
 end
 function T.PrepareRepost(row)
     if not row or not Key(row.itemKey) or not Int(row.qty,1,W.MAX_ID) then return false,"Select an identifiable owned listing." end
@@ -321,8 +367,9 @@ local function Recheck(p)
         local remaining=T.state=="quoted" and W.Plain(C_AuctionHouse.GetQuoteDurationRemaining())
         if T.state=="quoted" and (not p.quoteAt or not W.Finite(remaining) or remaining<=0) then return false,"The commodity quote expired. Request a new quote." end
     elseif p.kind=="cancel" then
-        local row=LiveRow(p)
-        if not row or row.status~=0 or not C_AuctionHouse.CanCancelAuction(p.auctionID)
+        local row=LiveRow(p);local native=NativeOwned(p.auctionID)
+        if not row or row.status~=0 or not native or native.status~=0 or native.qty~=p.quantity
+            or not SameKey(native.itemKey,p.itemKey) or W.Plain(C_AuctionHouse.CanCancelAuction(p.auctionID))~=true
             or Int(C_AuctionHouse.GetCancelCost(p.auctionID),0)~=p.cost or p.cost>money then return false,"The owned listing or cancellation cost changed. Refresh it." end
     else
         local row=FreshBag(p);local fresh,why=PostCheck(row,p.quantity,p.unit,p.duration)
@@ -397,6 +444,10 @@ function T.Confirm(id,consent)
     local ok,why=Recheck(p)
     if not ok then
         if p.kind=="buyItem" and Current(p) and (not Q.Fresh(p.snapshot) or why:find("changed",1,true)) then return RefreshBuy(p,Q.Fresh(p.snapshot)) end
+        if p.kind=="cancel" and Current(p) and (not Q.Fresh(p.snapshot) or why:find("changed",1,true)) then
+            StopTimer();Listen(false);ticket=nil;T.state="idle"
+            return T.RequestCancel({auctionID=p.auctionID,itemKey=p.itemKey},true)
+        end
         T.message=why;Notify();return false,why
     end
     if not TransactionHooks() then return false,"Native operation ownership cannot be monitored." end
@@ -439,7 +490,7 @@ function T.Event(event,a,b)
     elseif event=="COMMODITY_PURCHASE_SUCCEEDED" and p.kind=="buyCommodity" and p.phase=="purchase" and T.state=="waiting" then
         Finish("complete","Purchase complete. Your items will arrive by mail.")
     elseif event=="AUCTION_CANCELED" and p.kind=="cancel" and a==p.auctionID and T.state=="waiting" then
-        Finish("complete","Cancellation confirmed for this auction ID. Collect returned mail yourself before preparing a new post.")
+        Finish("complete","Auction cancelled. Your items will be returned by mail.")
     elseif event=="AUCTION_HOUSE_AUCTION_CREATED" and (p.kind=="postItem" or p.kind=="postCommodity") and T.state=="waiting" then
         local id=Int(a,1,9007199254740991)
         if id then p.created=p.created or {};p.created[id]=true end
@@ -458,7 +509,7 @@ function T.Event(event,a,b)
 end
 function T.Cancel()
     if buyRequest then
-        buyRequest=nil;T.state="idle";Q.Cancel("Purchase review cancelled.")
+        buyRequest=nil;T.state="idle";Q.Cancel("Auction review cancelled.")
     end
     if not ticket then return end
     if T.state=="review" then Finish("cancelled","Review dismissed; no action sent.")
@@ -483,12 +534,12 @@ end
 
 -- Keep unfamiliar native read failures local and visible. A failure after dispatch
 -- remains unknown; it can never become permission for an automatic retry.
-for _,name in ipairs({"RequestBuy","Quote","PrepareBuy","PreparePost","PrepareCancel","PrepareRepost","Confirm","ConfirmWarning"}) do
+for _,name in ipairs({"RequestBuy","RequestCancel","Quote","PrepareBuy","PreparePost","PrepareCancel","PrepareRepost","Confirm","ConfirmWarning"}) do
     local fn=T[name]
     T[name]=function(...)
         local ok,a,b=pcall(R.Perf.Call,"auction.actionReview",fn,...)
         if ok then return a,b end
-        if name=="RequestBuy" then T.ReadEnded("Listing refresh failed.") end
+        if name=="RequestBuy" or name=="RequestCancel" then T.ReadEnded("Listing refresh failed.") end
         T.message="The client could not validate this action. Check Blizzard before retrying."
         if ticket and T.state~="review" and T.state~="quoted" then Finish("unknown",T.message) else Notify() end
         return nil,T.message

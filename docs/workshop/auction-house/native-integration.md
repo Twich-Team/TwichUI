@@ -4,10 +4,10 @@ The existing five-page Auction House now has a Host-owned auctioneer context.
 **Default replacement is off. Forever acceptance remains pending.** This is a
 supervised test implementation, not release readiness or permission to publish.
 Live searches and explicit purchase/post/cancel review controllers are implemented.
-The owner has requested integrated purchase and posting activation for in-game
-iteration. These four modes are enabled in `AuctionBuild.integrated`, separately
-from the still-empty native `verified` evidence. Cancellation remains disabled.
-Every purchase/post requires player confirmation; unavailable purchases may refresh
+The owner has requested integrated purchase, posting and cancellation activation for in-game
+iteration. These five modes are enabled in `AuctionBuild.integrated`, separately
+from the still-empty native `verified` evidence.
+Every purchase/post/cancel requires player confirmation; unavailable purchases may refresh
 listings for a revised review, with no automatic spending or posting. Market Companion
 and saved market contracts are unchanged.
 
@@ -94,7 +94,7 @@ Workshop's **Use TwichUI Auction House (Experimental)** setting and
 `/tui ahdebug on | off | status` are the ordinary entry points. The existing
 `ui.auctionDebug` preference is retained across reloads and profiles, off when
 missing, and inactive while Workshop is disabled. Presentation has no build gate.
-`auction/Build.lua` separates owner-requested integrated buy/post activation from
+`auction/Build.lua` separates owner-requested integrated buy/post/cancel activation from
 per-operation native verification. No acceptance evidence is inferred from activation.
 The obsolete custom development archive builder has been removed; ordinary release
 and internal packaging include the feature within the existing seven addons.
@@ -121,10 +121,24 @@ competing ownership and native restoration guards remain in the same Host.
   competition can be searched explicitly. Confirmation rechecks bag quantity,
   identity, money, price/deposit and vendor value. Native warning acceptance is a
   separate player action, scoped to the sole pending draft.
-- My Auctions explicitly refreshes owned data. Cancel reviews native permission,
-  exact ID and cancellation cost, then revalidates. Repost preparation retains only
-  this visit's intent: cancel separately, retrieve mail yourself, then review a fresh
-  bag draft. Disappearance never confirms a sale. Multisell waits for its full result.
+- My Auctions requests owned data on page entry, waiting for the existing native
+  throttle/action owner when necessary. It shows active/sold/incoming summaries,
+  native item tooltips and quality colors, Sold success art, and separate status,
+  price/payment and timing cards. Sold is taken only from the returned status enum;
+  incoming amounts use the returned buyout (or winning bid for bid-only sales),
+  without inventing fees, deposits, net proceeds or collected mail. Exact time-left
+  seconds count down from the response time; otherwise the native time band or an
+  unavailable label is shown. A single page-owned clock updates visible countdowns
+  without issuing queries and is cancelled on Release, with its timer counted in
+  existing diagnostics. Current owned-cache events update the same visit-bound read
+  stream, including after display freshness expires; another read/teardown clears it.
+  Successful cancellation/new bids request a fresh owned snapshot, without polling.
+  Cancel refreshes stale data before review, binds the exact ID and item key to the
+  read intent, and checks native owned identity, quantity/status, permission, cost
+  and money again at Confirm. Sold/missing auctions cannot be cancelled. Cost or
+  identity changes require a new review; only the player's Confirm sends the call.
+  Repost preparation retains only this visit's intent: cancel separately, retrieve
+  mail yourself, then review a fresh bag draft. Disappearance never confirms a sale.
 - Market retains its research/history/chart services and contracts.
 
 `auction/Actions.lua` owns one transient reviewed intent, bounded completion
@@ -144,8 +158,8 @@ visit, rather than attributing its late reply to a different search.
 ## Native activation gates
 
 The ordinary installation enables opt-in presentation and read workflows. The
-owner-requested buy/post iteration now enables the four corresponding modes via
-`AuctionBuild.integrated`; cancellation remains gated. `AuctionBuild.verified` is
+owner-requested buy/post/cancel iteration now enables the five corresponding modes via
+`AuctionBuild.integrated`. `AuctionBuild.verified` is
 still empty. The current changes are syntax-checked only: unit, mutation, simulator
 and packaging checks are deferred at the owner's request until in-game iteration
 succeeds, and must run before merge. Runtime permission, appearance and completion

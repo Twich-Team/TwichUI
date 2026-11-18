@@ -79,20 +79,22 @@ function A.UpdateReview()
     review.item:SetItem(d.item,d.itemKey,d.link)
     local duration=d.duration and ({AUCTION_DURATION_ONE,AUCTION_DURATION_TWO,AUCTION_DURATION_THREE})[d.duration]
     review.quantities:SetText("Quantity: |cffffffff"..d.quantity.."|r"..(duration and ("    ·    "..duration) or ""))
-    review.totalLabel:SetText(posting and "Gross if sold" or d.estimated and "Estimated total" or "Total cost")
+    review.totalLabel:SetText(d.kind=="cancel" and "Cancellation fee" or posting and "Gross if sold" or d.estimated and "Estimated total" or "Total cost")
     review.total:SetText(Money(d.total))
     review.extra:SetText(d.deposit and ("Deposit upfront: "..Money(d.deposit)) or d.excess and d.excess>0 and ("Needed: "..d.desired.." · Extra: "..d.excess) or "")
     local waiting=d.state=="waiting" or d.state=="quoting" or d.state=="native-warning"
     local message=d.reason or d.message or "Review the quantity and total before confirming."
-    if d.state=="quoted" then message=d.retry and "Updated total · confirm to retry this purchase." or "Price confirmed. Your purchase will be delivered by mail."
+    if d.kind=="cancel" and d.state=="review" and not d.reason then message="Your items will be returned by mail. Review the cancellation fee before confirming."
+    elseif d.state=="quoted" then message=d.retry and "Updated total · confirm to retry this purchase." or "Price confirmed. Your purchase will be delivered by mail."
     elseif d.state=="quoting" then message="Getting your total…"
     elseif d.state=="native-warning" then message="Please review the game's posting warning."
-    elseif d.state=="waiting" then message=posting and "Posting your auction…" or "Completing your purchase…" end
+    elseif d.state=="waiting" then message=posting and "Posting your auction…" or d.kind=="cancel" and "Cancelling your auction…" or "Completing your purchase…" end
     if d.vendor and d.vendor.status=="below" then message="Below vendor value. Posting requires an additional confirmation." end
     review.note:SetText(message)
     UI.Paint(review.note,d.retry and UI.K.bronzeText or UI.K.textDim)
     local quote=d.kind=="buyCommodity" and d.state=="review"
-    review.confirm.text:SetText(waiting and "Please wait…" or quote and (d.retry and "Retry quote" or "Get total") or d.retry and "Retry purchase" or posting and "Confirm posting" or "Confirm")
+    review.confirm.text:SetText(waiting and "Please wait…" or quote and (d.retry and "Retry quote" or "Get total") or d.retry and "Retry purchase" or posting and "Confirm posting" or d.kind=="cancel" and "Confirm cancellation" or "Confirm")
+    review.cancel.text:SetText(d.kind=="cancel" and "Keep auction" or "Cancel")
     review.confirm:SetEnabled(d.allowed and (d.state=="review" or d.state=="quoted"))
     review.spinner:SetShown(waiting)
 end

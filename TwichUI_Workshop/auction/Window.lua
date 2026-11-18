@@ -153,7 +153,7 @@ local function Go(key)
     active = key
     root.heading:SetText(found[4])
     root.sub:SetText(key == "browse" and "Search stored observations and compare prices and market history." or
-        key == "shopping" and "Gather what your existing Workshop queue and crafting plan still need." or key == "sell" and "Prepare bag items and pricing. Posting remains disabled." or key == "owned" and "Review your listings. Cancel and repost remain unavailable." or "Inspect stored market history, listing prices and observation coverage.")
+        key == "shopping" and "Gather what your existing Workshop queue and crafting plan still need." or key == "sell" and "Choose bag items, compare current listings and review a posting." or key == "owned" and "Track your active auctions, incoming payments and time remaining." or "Inspect stored market history, listing prices and observation coverage.")
     root.failure:Hide()
     local page = Page(key)
     if page then page.failed = nil; page:Show()
@@ -403,16 +403,17 @@ function A.Hide()
     if root:IsShown() then root:Hide() else Cleanup() end
 end
 function A.Snapshot()
-    local pages, listeners, rows, results, jobs = 0, 0, 0, 0, 0
+    local pages, listeners, rows, results, jobs, timers = 0, 0, 0, 0, 0, refreshTimer and 1 or 0
     for _ in pairs(A.views) do pages = pages + 1 end
     if A.IsShown() then listeners = #events end
     for _, p in pairs(A.views) do
         if p.list then rows = rows + #p.list.rows end
         results = results + #(p.rows or {})
         if p.job then jobs = jobs + 1 end
+        if p.clock then timers=timers+1 end
         if A.IsShown() and p.listening then listeners = listeners + (p.eventCount or 2) end
     end
-    local out={ timers = refreshTimer and 1 or 0, reads = W.AuctionReads and W.AuctionReads.Pending() or 0, liveResults = W.AuctionReads and W.AuctionReads.snapshot and #W.AuctionReads.snapshot.rows or 0, shown = A.IsShown() and 1 or 0, pages = pages, events = listeners, rows = rows, results = results, jobs = jobs, subscriptions = (W.Strategy.ListenerCount and W.Strategy.ListenerCount() or 0) + (W.Storage.ListenerCount and W.Storage.ListenerCount() or 0), renders = renders, sizing = root and root.sizing and 1 or 0 }
+    local out={ timers = timers, reads = W.AuctionReads and W.AuctionReads.Pending() or 0, liveResults = W.AuctionReads and W.AuctionReads.snapshot and #W.AuctionReads.snapshot.rows or 0, shown = A.IsShown() and 1 or 0, pages = pages, events = listeners, rows = rows, results = results, jobs = jobs, subscriptions = (W.Strategy.ListenerCount and W.Strategy.ListenerCount() or 0) + (W.Storage.ListenerCount and W.Storage.ListenerCount() or 0), renders = renders, sizing = root and root.sizing and 1 or 0 }
     for k,v in pairs(W.AuctionBrowseData and W.AuctionBrowseData.Stats() or {}) do out["catalog_"..k]=v end
     return out
 end
