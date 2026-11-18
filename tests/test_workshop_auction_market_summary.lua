@@ -10,12 +10,19 @@ local function fingerprint(t)
  local o={};for _,k in ipairs(keys)do o[#o+1]=tostring(k)..'='..fingerprint(t[k])end;return table.concat(o,'|')
 end
 local before=fingerprint(profile)..fingerprint(db)
-local manifest=fixture.manifest;local loads={}
+-- A second real contract partition detects accidental whole-catalog work on focus.
+local manifest=fixture.manifest;local extra=J.Parse(fixture.parts['29'])[1]
+extra[1]=2590;extra[2]=J.SHA('{"id":2590}')
+fixture.parts['30']=J.Encode(setmetatable({extra},J.ARRAY))
+manifest.partitions[2]=setmetatable({bucket=30,bytes=#fixture.parts['30'],record_count=1,sha256=J.SHA(fixture.parts['30'])},J.OBJECT)
+manifest.record_count=2;manifest.coverage.source_records=2;manifest.coverage.delivered_records=2
+local body=J.Copy(manifest);body.generation_id=nil;manifest.generation_id=J.SHA(J.Encode(body))
+local loads={}
 c.C_AddOns={GetAddOnMetadata=function(_,field) return field=='X-TwichUI-Summary' and '1' end,LoadAddOn=function(name)
  loads[name]=(loads[name] or 0)+1
  if name=='TwichUI_MarketData' then
   c.TwichUIMarketData={summary_version=1,bank='A',manifest=J.Encode(manifest),receipt=J.Encode(setmetatable({schema_version=1,generation_id=manifest.generation_id,desktop_build='synthetic-presentation',completed_at='2026-11-18T00:00:00Z'},J.OBJECT))}
- elseif name=='TwichUI_MarketPartA29' then c.TwichUIMarketParts={A29=fixture.parts['29']}
+ elseif name=='TwichUI_MarketPartA29' or name=='TwichUI_MarketPartA30' then c.TwichUIMarketParts=c.TwichUIMarketParts or {};local bucket=name:sub(-2);c.TwichUIMarketParts['A'..bucket]=fixture.parts[bucket]
  else error('unexpected partition '..name)end
  return true
 end}
@@ -44,6 +51,7 @@ local function settle()
 end
 assert(A.Show('market'));settle()
 assert(A.OpenMarket(item,{market='server'}));local p=settle()
+assert(B.Status().loaded_parts<=1,'focused research walked unrelated partitions')
 assert(p.projection.record and p.projection.facts.recent.value==recent and (market=='unavailable' and p.projection.facts.mval==nil or market~='unavailable' and p.projection.facts.mval and p.projection.facts.mval.value==100),'real Market references differ from independent fixture expectations')
 assert(p.projection.facts.supply.items==10 and p.projection.facts.comp==nil)
 assert(p.projection.series==nil and p.chart.msg:GetText():find('not a daily price series',1,true),'summary became a daily chart')

@@ -26,7 +26,7 @@ class Selection(unittest.TestCase):
             self.assertLessEqual(set(runner.plan(REPO, 'feature', group)['tests']), set(combined['tests']))
         self.assertEqual(len(combined['simulators']), 2)
         self.assertEqual(set(combined['simulators'][0]['only']), {'craft', 'opps', 'history', 'wrong', 'shop', 'strategy', 'shopcollect'})
-        self.assertEqual(combined['simulators'][1], {'script': 'auctionpreview', 'only': ['companionvalid', 'companionnewer', 'companionolder']})
+        self.assertEqual(combined['simulators'][1], {'script': 'auctionpreview', 'only': ['companionvalid', 'companionnewer', 'companionolder', 'summaryvalid', 'summarycorrupt', 'summaryfuture']})
         desc = runner.describe(combined, 'integration')
         self.assertIn('settings', desc['omitted_catalogs'])
         self.assertIn('reminders', desc['omitted_catalogs'])
@@ -279,7 +279,7 @@ class Evidence(unittest.TestCase):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         self.assertEqual(module.select([]), list(module.POSES))
-        self.assertEqual(len(module.POSES), 49)
+        self.assertEqual(len(module.POSES), 52)
         chart_poses = {'markethover', 'marketdrag', 'marketinterval', 'marketsingle', 'marketcopper'}
         self.assertTrue(chart_poses <= set(module.POSES))
         chart = runner.plan(REPO, 'feature', 'advanced-market-chart')['simulators'][0]['only']
@@ -288,7 +288,7 @@ class Evidence(unittest.TestCase):
         focused = runner.plan(REPO, 'feature', 'auction-preview')['simulators'][0]['only']
         self.assertTrue({'companionvalid', 'companionnewer', 'companionolder'} <= set(focused))
         self.assertTrue({'scopedpriced', 'scopedoutside', 'scopedabsent', 'scopedunknown', 'scopedcorrupt', 'scopedfuture', 'shell', 'replay', 'wrong'} <= set(focused))
-        self.assertEqual(len(module.POSES) - len(focused), 32)
+        self.assertEqual(len(module.POSES) - len(focused), 35)
         for names in (['typo'], ['wrong'], ['replay'], ['shell', 'shell']):
             with self.assertRaises(ValueError):
                 module.select(names)

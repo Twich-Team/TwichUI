@@ -64,4 +64,10 @@ end
 assert(TwichUIDB.sentinel=='profile' and TwichUIWorkshopDB.sentinel=='local observations')
 local same=pack(h);B.Begin(same);drain();same.manifest='{}';B.Begin(same);drain();assert(B.Status().generation==generation and B.Status().error,'mutable raw reference bypassed revalidation')
 assert(B.Capabilities().summary_contract==1 and B.Status().decoded_parts<=1)
+local multiple=J.Copy(h);local r1=J.Parse(fixture.parts['29'])[1];local r2=J.Copy(r1);r2[2]=string.rep('f',64);r2[4]='999'
+local raw=J.Encode(setmetatable({r1,r2},J.ARRAY));multiple.partitions[1].bytes=#raw;multiple.partitions[1].record_count=2;multiple.partitions[1].sha256=J.SHA(raw)
+multiple.record_count=2;multiple.coverage.source_records=2;multiple.coverage.delivered_records=2;seal(multiple);TwichUIMarketParts.A29=raw
+load(multiple);B.Variants(2589);drain();local variants,cut=B.Variants(2589)
+assert(#variants==2 and not cut and not B.Record(2589),'ambiguous item acquired an item-ID aggregate')
+assert(B.Value(2589,variants[1]).value==120 and B.Value(2589,variants[2]).value==999,'exact variants collapsed')
 print('PASSED summary integrity, closed contracts, pinned identity, lazy loading, references, last-good preservation and economic isolation')

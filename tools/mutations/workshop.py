@@ -1065,3 +1065,7 @@ m("market.summary.historical-support", "TwichUI_Workshop/Summary.lua",
 m("market.summary.exact-variant", "TwichUI_Workshop/Summary.lua",
   "r[1]==item and r[2]==variant", "r[1]==item",
   "an unknown variant silently inherits another variant's price", ["test_workshop_summary.lua"])
+
+m("market.summary.focus-catalog", "TwichUI_Workshop/ServerMarket.lua",
+  "if focus and B.Status().summary then return end", "-- accidentally enumerate the whole catalogue before focused research",
+  "one item lookup loads unrelated summary partitions and delays the page", ["test_workshop_auction_market_summary.lua"])

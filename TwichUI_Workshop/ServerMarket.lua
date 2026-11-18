@@ -20,6 +20,7 @@ function M.Catalog(opt)
     local focus=W.Int(opt.item or tonumber(opt.query),1,W.MAX_ID)
     return W.AuctionBrowseData.Job({sources={},market=nil,index=true,catalog=opt.catalog,item=focus,query=opt.query,category=opt.category,quality=opt.quality,
         enumerate=function(add,tick,job)
+            if focus and B.Status().summary then return end
             if opt.scope=='tracked' then
                 for id,on in pairs(W.AdvisorData.Tracked()) do if on then add(id);tick();if job.capped then break end end end
             elseif opt.scope=='bags' then
