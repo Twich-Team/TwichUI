@@ -1,11 +1,11 @@
--- Market-only presentation. Typed evidence in, pooled geometry out; no saved data.
+-- Shared auction chart presentation. Typed evidence in, pooled geometry out; no saved data.
 local R,W=TwichUI,TwichUI.Workshop
 local UI=W.UI
 local C={MAX_COLUMNS=1024}
-local activeChart
+local charts=setmetatable({}, {__mode="k"})
 if R.Perf.Gauge then
-    R.Perf.Gauge('auction.chartPool',{label='Market chart pooled regions',unit='count',kind='pool',group='auction',read=function() return activeChart and #activeChart.pool+#activeChart.linePool+#activeChart.nativePool or 0 end})
-    R.Perf.Gauge('auction.chartRecords',{label='Market chart visible evidence',unit='count',kind='cache',group='auction',read=function() return activeChart and activeChart.data and #activeChart.data.points+#activeChart.data.groups or 0 end})
+    R.Perf.Gauge('auction.chartPool',{label='Market chart pooled regions',unit='count',kind='pool',group='auction',read=function() local n=0;for chart in pairs(charts) do n=n+#chart.pool+#chart.linePool+#chart.nativePool end;return n end})
+    R.Perf.Gauge('auction.chartRecords',{label='Market chart visible evidence',unit='count',kind='cache',group='auction',read=function() local n=0;for chart in pairs(charts) do if chart.data then n=n+#chart.data.points+#chart.data.groups end end;return n end})
 end
 W.AdvancedChart=C
 local function Clamp(v,a,b) return math.max(a,math.min(b,v)) end
@@ -110,7 +110,7 @@ function C.Geometry(d,w,h)
 end
 function UI.AdvancedMarketChart(parent,w,h)
     local c=CreateFrame('Frame',nil,parent);c:SetSize(w,h);UI.Panel(c,'canvas')
-    c.pool={};c.linePool={};c.nativePool={};c.anchors={};c.guides={};c.labels={};activeChart=c
+    c.pool={};c.linePool={};c.nativePool={};c.anchors={};c.guides={};c.labels={};charts[c]=true
     c.plot=CreateFrame('Frame',nil,c);c.plot:SetPoint('TOPLEFT',100,-12);c.plot:SetPoint('BOTTOMRIGHT',-18,36)
     c.hit=CreateFrame('Button',nil,c.plot);c.hit:SetAllPoints(c.plot)
     c.hit:SetFrameLevel(c:GetFrameLevel()+12);c.hit:EnableMouse(true)

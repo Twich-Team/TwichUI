@@ -2,7 +2,7 @@
 -- and passive snapshots. No update driver and no native calls on page opening.
 local R,W=TwichUI,TwichUI.Workshop
 local A,UI=W.AuctionUI,W.UI
-local panel,review
+local panel,review,quantityBox
 local function Money(n) return n~=nil and UI.Money(n) or "Unavailable" end
 function A.DebugShown() return panel and panel:IsShown() or false end
 function A.UpdateDebug()
@@ -40,7 +40,7 @@ function A.UpdateReview()
     review.displayed=d
     local state=d.state=="quoted" and "Authoritative quote — confirm this total" or d.state=="review" and "Review auction action" or "Waiting for native result"
     local vendor=d.vendor and (d.vendor.status=="below" and "\nWARNING: below vendor value. Confirmation is held for one second." or d.vendor.status=="unknown" and "\nVendor value is unavailable." or "") or ""
-    review.text:SetText(state.."\n"..d.kind.." · Item "..d.item.."\nQuantity: "..d.quantity..
+    review.text:SetText(state.."\n"..W.AdvisorData.Info(d.item).name.."\nQuantity: "..d.quantity..
         (d.desired and (" · Needed: "..d.desired.." · Excess: "..d.excess) or "")..
         (d.estimated and "\nEstimate (quote required): " or "\nTotal: ")..Money(d.total)..(d.deposit and ("\nDeposit upfront: "..Money(d.deposit)) or "")..
         (d.duration and ("\nDuration choice: "..d.duration) or "")..vendor..
@@ -72,13 +72,52 @@ function A.ReviewAction(id,why)
     end
     review:Show();A.UpdateReview();return true
 end
+function A.RequestBuy(row,quantity)
+    local ok,why=W.AuctionActions.RequestBuy(row,quantity)
+    if not ok then A.Note(why) end
+    return ok
+end
+function A.QuickBuy(row)
+    if not A.Live() or not row or not row.itemKey then return false end
+    local ok,info=pcall(C_AuctionHouse.GetItemKeyInfo,row.itemKey)
+    if not ok or type(info)~="table" or type(W.Plain(info.isCommodity))~="boolean" then
+        A.Note("Item type is still loading. Try again shortly.");return false
+    end
+    if not info.isCommodity then return A.RequestBuy(row,1) end
+    if not quantityBox then
+        quantityBox=CreateFrame("Frame",nil,A.Frame(),"BackdropTemplate")
+        quantityBox:SetSize(420,190);quantityBox:SetPoint("CENTER");quantityBox:SetFrameStrata("DIALOG");quantityBox:EnableMouse(true)
+        UI.Panel(quantityBox,"card")
+        quantityBox.name=A.Text(quantityBox,"",18,16,-16,-16);quantityBox.name:SetHeight(42);quantityBox.name:SetWordWrap(true)
+        local label=A.Text(quantityBox,"Quantity to buy",13,16,-66,-16,UI.K.textDim)
+        quantityBox.amount=UI.L.EditBox(quantityBox,110,30);UI.CL.Dress(quantityBox.amount,"field")
+        quantityBox.amount:SetPoint("TOPLEFT",16,-88);quantityBox.amount:SetMaxLetters(8);quantityBox.amount:SetNumeric(true)
+        local function Continue()
+            local quantity=W.Int(tonumber(quantityBox.amount:GetText()),1,W.MAX_ID)
+            if not quantity then A.Note("Enter a whole quantity greater than zero.");return end
+            if A.RequestBuy(quantityBox.row,quantity) then quantityBox:Hide() end
+        end
+        quantityBox.next=UI.Button(quantityBox,"Review total",170,"primary",Continue,30);quantityBox.next:SetPoint("BOTTOMLEFT",16,16)
+        quantityBox.cancel=UI.Button(quantityBox,"Cancel",170,"secondary",function() quantityBox:Hide() end,30)
+        quantityBox.cancel:SetPoint("BOTTOMRIGHT",-16,16)
+        quantityBox.amount:SetScript("OnEnterPressed",Continue)
+        quantityBox.amount:SetScript("OnEscapePressed",function() quantityBox:Hide() end)
+        quantityBox:HookScript("OnHide",function() quantityBox.amount:ClearFocus();quantityBox.row=nil end)
+        quantityBox:Hide()
+    end
+    quantityBox.row=row;quantityBox.name:SetText(row.info and row.info.name or info.itemName or "Quick buy")
+    quantityBox.amount:SetText("1");quantityBox:Show();quantityBox.amount:SetFocus();quantityBox.amount:HighlightText()
+    return true
+end
 function A.HideExtras()
+    if quantityBox then quantityBox:Hide() end
     if panel then panel:Hide() end
     if review then review:Hide() end
     W.AuctionActions.Cancel()
 end
 
 function A.HideReview()
+    if quantityBox then quantityBox:Hide() end
     if review then review:Hide() end
     W.AuctionActions.Cancel()
 end

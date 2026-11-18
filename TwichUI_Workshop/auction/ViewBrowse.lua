@@ -17,6 +17,10 @@ local function Money(n) return n and UI.Money(n) or "Unavailable" end
 local function LiveInfo(row)
     local info=AD.Info(row.link or row.item)
     info.item=row.item
+    if not info.quality and row.itemKey and C_AuctionHouse and C_AuctionHouse.GetItemKeyInfo then
+        local ok,native=pcall(C_AuctionHouse.GetItemKeyInfo,row.itemKey)
+        if ok and type(native)=="table" then info.quality=W.Int(W.Plain(native.quality),0,20) end
+    end
     return info
 end
 local function SavedMarket(p)
@@ -52,23 +56,38 @@ Detail = function(p)
     d.compare:SetEnabled(chosen ~= nil)
     d.market:SetEnabled(chosen ~= nil)
     d.buy:SetEnabled(A.Live() and p.liveMode==true and chosen~=nil and chosen.source=="live" and chosen.auctionID~=nil
-        and W.AuctionReads.snapshot and W.AuctionReads.snapshot.complete==true and W.AuctionReads.Fresh())
+        and W.AuctionReads.Available() and W.AuctionReads.Pending()==0)
     d.buy.text:SetText(A.Live() and "Review buyout" or "Buy unavailable")
+    local commodity=chosen and chosen.liveKind=="commodity"
+    d.quantity:SetEnabled(A.Live() and commodity and W.AuctionReads.Pending()==0)
+    d.quantityHint:SetText(commodity and "Items to buy" or "One item")
+    if not commodity then d.quantity:SetText("1") end
+    if chosen and d.quantityItem~=chosen.item then
+        d.quantityItem=chosen.item
+        if commodity and chosen.item==p.neededItem then d.quantity:SetText(tostring(p.neededQuantity or 1)) end
+    end
     d.inspect:SetEnabled(p.liveMode==true and chosen~=nil and chosen.itemKey~=nil and W.AuctionReads.Available())
     if not chosen then
         d.track.text:SetText("Track")
         d.name:SetText("Choose an item"); d.kind:SetText("Stored observations only")
         d.pic.tex:SetTexture(UI.ICON_BLANK)
         for _, t in ipairs(d.factLines) do t:SetText("") end
-        d.fresh:SetText("No current auction listings are shown.")
-        d.chart:Set(nil, UI.Money); d.advice:SetText("Select an item to inspect its history.")
+        d.fresh:SetText("")
+        d.chart:Set(nil, UI.Money,"browse-empty"); d.advice:SetText("Select an item to inspect its history.")
         d.evidence:SetText(""); d.cached = nil
         return
     end
     local item = chosen.item
-    d.name:SetText(chosen.info.name); d.pic.tex:SetTexture(chosen.info.icon or UI.ICON_BLANK)
+    d:LayoutSummary(chosen.source=="live")
+    d.name:SetText(chosen.info.name)
+    local quality=ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[chosen.info.quality or 1]
+    if quality then d.name:SetTextColor(quality.r,quality.g,quality.b) else UI.Paint(d.name,UI.K.text) end
+    d.pic.tex:SetTexture(chosen.info.icon or UI.ICON_BLANK)
     d.kind:SetText((chosen.info.category or "Category unavailable") .. (chosen.info.sub and " · " .. chosen.info.sub or ""))
     d.track.text:SetText(AD.Tracked()[item] and "Untrack" or "Track")
+    local snapshot=chosen.source=="live" and (W.AuctionReads.snapshot or p.liveSnapshot)
+    local age=snapshot and math.max(0,GetTime()-snapshot.at)
+    if age then d.fresh:SetText(UI.Ago(time()-age)) end
     local stamp = (p.stamp or "live") .. ":" .. tostring(p.selected) .. ":" .. W.Strategy.epoch
     if d.cached == stamp then return end
     d.cached = stamp
@@ -79,14 +98,13 @@ Detail = function(p)
     if chosen.source=="live" then
         d.summary.heading:SetText(chosen.priceEach and "Live price · per item" or chosen.auctionID and "Live listing · exact amounts" or "Live item group · inspect listings")
         local lines={(chosen.priceEach and "Available at this price: " or "Quantity: ")..tostring(chosen.qty or "Unknown"),"Unit price: "..Money(chosen.unit),
-            (chosen.priceEach and "Buyout for one: " or "Exact buyout total: ")..Money(chosen.total),"Bid: "..Money(chosen.bid),
-            "Auction ID: "..tostring(chosen.auctionID or "Group only"),
-            "Ownership: "..(chosen.ownershipKnown and (chosen.own or chosen.account) and "Your account" or chosen.ownershipKnown and "Other account" or "Unverified"),
-            "Complete response: "..(W.AuctionReads.snapshot and W.AuctionReads.snapshot.complete and "Yes" or "No")}
-        for i,t in ipairs(d.factLines) do t:SetText(lines[i] or "") end
+            (chosen.priceEach and "Buyout for one: " or "Exact buyout total: ")..Money(chosen.total),"Bid: "..Money(chosen.bid)}
+        for i,t in ipairs(d.factLines) do t:SetText(lines[i] or "");t:SetShown(lines[i]~=nil) end
     else d.summary.heading:SetText("Market Summary · stored") end
-    d.fresh:SetText((p.market and (W.Prices.Label(p.market) .. " · ") or "") .. (W.Facts.Freshness(facts) or "No saved observation"))
-    d.chart:Set(W.Facts.Chart(facts), UI.Money)
+    if not age then d.fresh:SetText(facts.age and UI.Ago(time()-facts.age) or "No saved data") end
+    local market=p.market or SavedMarket(p)
+    local projection=W.AuctionMarketData.Project(item,market,14,{variant=variant})
+    d.chart:Set(projection and projection.series,UI.Money,tostring(item)..":browse:"..tostring(market and market.key)..":"..tostring(variant))
     -- Real bag quantity, never invented ownership to obtain a recommendation.
     local rec = variant and {text="Variant-specific advice unavailable",reasons={"Base-item prices are excluded."}} or AD.Decide(item, false)
     d.recommendation = rec
@@ -225,14 +243,15 @@ function V.Search(query)
 end
 function V.Select(item, key)
     if not page then return end
-    page.selected = key or item; AD.Request(item)
-    page.detail.scroll:SetVerticalScroll(0)
-    for _, r in ipairs(page.list.rows) do if r.data then r:SetSelected(Key(r.data) == page.selected) end end
-    for _, row in ipairs(page.rows or {}) do
-        if Key(row)==page.selected and page.liveMode and row.liveKind=="browse" then
-            Inspect(page,row);return
+    local selected=key or item
+    for _,row in ipairs(page.rows or {}) do
+        if Key(row)==selected and page.liveMode and row.liveKind=="browse" then
+            AD.Request(item);Inspect(page,row);return
         end
     end
+    page.selected=selected;AD.Request(item)
+    page.detail.scroll:SetVerticalScroll(0)
+    for _,r in ipairs(page.list.rows) do if r.data then r:SetSelected(Key(r.data)==selected) end end
     Detail(page)
 end
 function A.OpenBrowse(item, qty, opt)
@@ -263,7 +282,22 @@ local function MakeRow(parent)
     r.qty = UI.Text(r, 13, UI.K.text); r.qty:SetWidth(42); r.qty:SetJustifyH("RIGHT"); r.qty:SetPoint("RIGHT", -222, 6)
     r.unit = UI.Text(r, 13, UI.K.text); r.unit:SetWidth(100); r.unit:SetJustifyH("RIGHT"); r.unit:SetPoint("RIGHT", -116, 6)
     r.total = UI.Text(r, 13, UI.K.text); r.total:SetWidth(106); r.total:SetJustifyH("RIGHT"); r.total:SetPoint("RIGHT", -8, 6)
-    r:SetScript("OnClick", function(self) if self.data then V.Select(self.data.item,Key(self.data)) end end)
+    r:RegisterForClicks("LeftButtonUp","RightButtonUp")
+    r:SetScript("OnClick", function(self,button)
+        local row=self.data
+        if not row then return end
+        if button=="RightButton" then
+            R.Interact.HideTip(self)
+            MenuUtil.CreateContextMenu(self,function(_,menu)
+                menu:CreateTitle(row.info.name)
+                if A.Live() and row.source=="live" then
+                    menu:CreateButton("Quick buy…",function() A.QuickBuy(row) end)
+                    menu:CreateButton("Inspect live listings",function() Inspect(page,row) end)
+                end
+                menu:CreateButton("Open Market history",function() A.OpenMarket(row.item,{itemKey=row.itemKey}) end)
+            end)
+        else V.Select(row.item,Key(row)) end
+    end)
     r.fill = function(self, data)
         self.data = data
         local browse=data.source=="live" and data.liveKind=="browse"
@@ -273,12 +307,14 @@ local function MakeRow(parent)
         self.unit:ClearAllPoints();self.unit:SetPoint("RIGHT",-116+shift,6)
         self.name:ClearAllPoints();self.name:SetPoint("TOPLEFT",50,-10);self.name:SetPoint("RIGHT",-274+shift,0)
         self.pic.tex:SetTexture(data.info.icon or UI.ICON_BLANK); self.name:SetText(data.info.name)
+        local quality=ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[data.info.quality or 1]
+        if quality then self.name:SetTextColor(quality.r,quality.g,quality.b) else UI.Paint(self.name,UI.K.text) end
         self.qty:SetText(data.qty and tostring(data.qty) or "—")
         self.unit:SetText(Money(data.unit)); self.total:SetText(data.source=="live" and
             (data.total and Money(data.total) or data.bid and ("Bid "..Money(data.bid)) or "—") or
             data.estimate and ("~" .. UI.Money(data.estimate)) or "—")
         self.sub:SetText((data.source=="live" and "Live experimental · " or "Stored · ") .. (data.info.category or "Metadata unavailable") .. (data.source=="live" and (data.priceEach and " · price per item" or data.total and " · exact listing total" or data.bid and " · bid only" or " · grouped minimum") or data.at and (" · " .. UI.Ago(data.at)) or " · no saved price"))
-        self:SetSelected(page.selected == Key(data))
+        self:SetSelected(not browse and page.selected == Key(data))
     end
     -- UI.Hover owns the mouse scripts. Attaching the tooltip through its
     -- supported hooks preserves highlights and refreshes recycled rows safely.
@@ -309,18 +345,21 @@ end
 local function BuildDetail(p)
     local d = A.Details(p, 370); p.detail = d
     d:SetPoint("TOPRIGHT", 0, -52); d:SetPoint("BOTTOMRIGHT", 0, 0)
-    d.summary = A.Card(d.body, "Market Summary · stored", 184)
+    d.scroll:ClearAllPoints();d.scroll:SetPoint("TOPLEFT",6,-6);d.scroll:SetPoint("BOTTOMRIGHT",-24,132)
+    d.summary = A.Card(d.body, "Market Summary · stored", 126)
     d.summary:SetPoint("TOPLEFT", 4, -100); d.summary:SetPoint("TOPRIGHT", -4, -100)
     d.factLines = {}
     for i=1,8 do d.factLines[i] = A.Text(d.summary,"",12,12,-31-(i-1)*18) end
     d.fresh = A.Text(d.body, "", 11, 10, -290, -8, UI.K.textDim)
-    d.fresh:SetHeight(44); d.fresh:SetWordWrap(true)
-    local chartCard = A.Card(d.body, "Cheapest seen · observed days", 100)
-    chartCard:SetPoint("TOPLEFT", 4, -342); chartCard:SetPoint("TOPRIGHT", -4, -342)
-    d.chart = UI.PriceChart(chartCard, 320, 62)
-    d.chart:SetPoint("TOPLEFT", 8, -33); d.chart:SetPoint("TOPRIGHT", -8, -33)
+    d.fresh:ClearAllPoints();d.fresh:SetPoint("TOPLEFT",12,-234);d.fresh:SetPoint("RIGHT",-8,0)
+    d.fresh:SetHeight(18);d.fresh:SetWordWrap(false)
+    local chartCard = A.Card(d.body, "Cheapest seen · 14 days", 222)
+    chartCard:SetPoint("TOPLEFT",4,-262);chartCard:SetPoint("TOPRIGHT",-4,-262)
+    d.chartCard=chartCard
+    d.chart=UI.AdvancedMarketChart(chartCard,320,180)
+    d.chart:SetPoint("TOPLEFT",8,-34);d.chart:SetPoint("TOPRIGHT",-8,-34)
     d.advisor = A.Card(d.body, "Item Advisor", 112)
-    d.advisor:SetPoint("TOPLEFT", 4, -450); d.advisor:SetPoint("TOPRIGHT", -4, -450)
+    d.advisor:SetPoint("TOPLEFT",4,-496);d.advisor:SetPoint("TOPRIGHT",-4,-496)
     d.advice = A.Text(d.advisor, "", 14, 12, -31, -12, UI.K.bronzeText)
     d.advice:SetWordWrap(true); d.advice:SetHeight(32)
     d.evidence = A.Text(d.advisor, "", 11, 12, -68, -12, UI.K.textDim)
@@ -339,23 +378,37 @@ local function BuildDetail(p)
         local row=d.data
         return row and row.item,{market=p.market and p.market.key or p.researchMarketKey,itemKey=row and row.itemKey}
     end,300)
-    d.market:SetPoint("TOPLEFT",12,-618)
-    d.quantity=UI.L.EditBox(d.body,110,28);UI.CL.Dress(d.quantity,"field")
-    d.quantity:SetPoint("TOPLEFT",12,-658);d.quantity:SetMaxLetters(8);d.quantity:SetText("1")
-    local quantityLabel=A.Text(d.body,"Commodity quantity / shopping need",12,130,-665,-12,UI.K.textDim)
-    d.body:SetHeight(712)
-    d.buy = UI.Button(d, "Buy unavailable", 122, "primary", function()
+    d.market:SetPoint("TOPLEFT",12,-620)
+    d.body:SetHeight(664)
+    d.footer=CreateFrame("Frame",nil,d);d.footer:SetHeight(122)
+    d.footer:SetPoint("BOTTOMLEFT",4,4);d.footer:SetPoint("BOTTOMRIGHT",-4,4);UI.Panel(d.footer,"espresso")
+    local quantityLabel=A.Text(d.footer,"Quantity",12,10,-8,-10,UI.K.textDim)
+    d.quantity=UI.L.EditBox(d.footer,90,28);UI.CL.Dress(d.quantity,"field")
+    d.quantity:SetPoint("TOPLEFT",10,-28);d.quantity:SetMaxLetters(8);d.quantity:SetNumeric(true);d.quantity:SetText("1")
+    d.quantityHint=UI.Text(d.footer,11,UI.K.textDim);d.quantityHint:SetPoint("LEFT",d.quantity,"RIGHT",10,0)
+    d.buy = UI.Button(d.footer, "Buy unavailable", 122, "primary", function()
         if not A.Live() then return end
         local row=d.data
-        local desired=row and row.item==p.neededItem and p.neededQuantity or tonumber(d.quantity:GetText())
-        local id,why=W.AuctionActions.PrepareBuy(row,desired)
-        A.ReviewAction(id,why)
+        A.RequestBuy(row,tonumber(d.quantity:GetText()))
     end, 32)
     d.buy:SetPoint("BOTTOMLEFT", 10, 10); d.buy:SetEnabled(false)
-    d.compare = UI.Button(d, "Compare", 100, "secondary", function() d.scroll:SetVerticalScroll(98) end, 32)
+    d.compare = UI.Button(d.footer, "Compare", 100, "secondary", function() d.scroll:SetVerticalScroll(98) end, 32)
     d.compare:SetPoint("LEFT", d.buy, "RIGHT", 6, 0)
-    d.track = A.TrackButton(d, function() return d.data and d.data.item end)
+    d.track = A.TrackButton(d.footer, function() return d.data and d.data.item end)
     d.track:SetPoint("BOTTOMRIGHT", -10, 10)
+    function d:LayoutSummary(live)
+        if self.summaryLive==live then return end
+        self.summaryLive=live
+        local extra=live and 0 or 58
+        self.summary:SetHeight(126+extra)
+        self.fresh:ClearAllPoints();self.fresh:SetPoint("TOPLEFT",12,-234-extra);self.fresh:SetPoint("RIGHT",-8,0)
+        for _,entry in ipairs({{self.chartCard,262},{self.advisor,496}}) do
+            entry[1]:ClearAllPoints()
+            entry[1]:SetPoint("TOPLEFT",4,-entry[2]-extra);entry[1]:SetPoint("TOPRIGHT",-4,-entry[2]-extra)
+        end
+        self.market:ClearAllPoints();self.market:SetPoint("TOPLEFT",12,-620-extra)
+        self.body:SetHeight(664+extra)
+    end
 end
 local function Build(p)
     page = p
@@ -569,7 +622,12 @@ local function Render(p)
                 local row={};for key,value in pairs(r) do row[key]=value end
                 row.info=LiveInfo(row);row.source="live";row.liveKind=snap.kind;p.rows[#p.rows+1]=row;p.liveKnown[row.item]=true
             end
-            p.selected=p.rows[1] and Key(p.rows[1])
+            local selected
+            if snap.kind~="browse" then
+                for _,row in ipairs(p.rows) do if Key(row)==p.selected then selected=p.selected;break end end
+                selected=selected or (p.rows[1] and Key(p.rows[1]))
+            end
+            p.selected=selected
             p.list:SetData(p.rows,snap.complete and "Live search completed: no auctions returned." or "No validated rows; this response is partial or unverified.")
             p.status:SetText(snap.complete and "Current search results" or "Partial / completeness unverified · no purchase actions")
             Detail(p);A.Restore(p.list,view,Key)
@@ -594,7 +652,7 @@ local function Render(p)
         p.eventCount=8;p.listening=true
     end
     LayoutResults(p,true)
-    p.detail.inspect:Show()
+    p.detail.inspect:Hide()
     PriceColumns(p,false)
     p.qtyHead:SetText("Seen qty*");p.unitHead:SetText("Seen / item");p.totalHead:SetText("Est. value*")
     p.scope:SetText("*Aggregated quantity at the cheapest tier.\nStored history; no current auctions or exact stacks.")

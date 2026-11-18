@@ -38,6 +38,7 @@ function Q.End(reason)
     StopTimers()
     Q.epoch=Q.epoch+1
     pending=nil;stream=nil;Q.snapshot=nil;Q.state=reason or "unavailable"
+    if W.AuctionActions and W.AuctionActions.ReadEnded then W.AuctionActions.ReadEnded(Q.state) end
     if W.AuctionUI then W.AuctionUI.Schedule() end
 end
 function Q.Cancel(reason)
@@ -128,8 +129,10 @@ local function Finish(state,rows,complete,event,rawCount)
         if Q.snapshot~=snapshot then return end
         expiry=nil
         snapshot.stale=true;stream=nil;Q.state="stale; refresh live results"
+        if W.AuctionActions and W.AuctionActions.ReadEnded then W.AuctionActions.ReadEnded("The refreshed listings are no longer current. Try reviewing again.") end
         if W.AuctionUI then W.AuctionUI.Schedule() end
     end)
+    if W.AuctionActions and W.AuctionActions.ReadReady then W.AuctionActions.ReadReady(snapshot) end
     if W.AuctionUI then W.AuctionUI.Schedule() end
 end
 function Q.AttachVisit(id)
@@ -260,6 +263,7 @@ function Q.Event(event,key)
         Q.open=false;Q.Cancel("unavailable");return
     end
     if event=="AUCTION_HOUSE_THROTTLED_SYSTEM_READY" then
+        if W.AuctionActions and W.AuctionActions.ReadReady then W.AuctionActions.ReadReady(Q.snapshot) end
         if W.AuctionUI then W.AuctionUI.Schedule() end
         return
     end

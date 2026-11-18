@@ -6,6 +6,7 @@ local Q,D=W.AuctionReads,W.AuctionSellData
 local T={serial=0,state="idle"}
 W.AuctionActions=T
 local ticket,timeout,listening,sending,hooked
+local buyRequest
 local transactionHooks
 local handlers={}
 local EVENTS={"AUCTION_HOUSE_PURCHASE_COMPLETED","COMMODITY_PRICE_UPDATED","COMMODITY_PRICE_UNAVAILABLE",
@@ -130,6 +131,69 @@ function T.PrepareBuy(row,desired)
     if snap.kind~="item" then return nil,"A browse group is not a purchasable auction. Inspect its live listings." end
     return Review({kind="buyItem",item=key.itemID,itemKey=key,auctionID=Int(row.auctionID,1,9007199254740991),
         quantity=quantity,total=total,unit=math.ceil(total/quantity),snapshot=snap,desired=Int(desired,1,W.MAX_ID)})
+end
+-- A review may need fresh read evidence, but it never sends a transaction.
+-- Keep this intent in the existing action owner and bind it to the read token,
+-- visit and epoch, so unrelated responses cannot open a different review.
+local function BuyReview(row,quantity)
+    local id,why=T.PrepareBuy(row,quantity)
+    if W.AuctionUI then W.AuctionUI.ReviewAction(id,why) end
+    return id~=nil,why
+end
+function T.RequestBuy(row,quantity)
+    local ok,why=Idle();if not ok then return false,why end
+    if buyRequest then return false,"A purchase review is already refreshing." end
+    local key=row and Key(row.itemKey)
+    if not key then return false,"Choose an identifiable live item first." end
+    quantity=Int(quantity or 1,1,W.MAX_ID)
+    if not quantity then return false,"Enter a valid quantity." end
+    local snap=Q.snapshot
+    if snap and Q.Fresh(snap) and snap.complete and (snap.kind=="item" or snap.kind=="commodity") then
+        for _,current in ipairs(snap.rows) do
+            if current.auctionID==row.auctionID and SameKey(current.itemKey,key) then return BuyReview(current,quantity) end
+        end
+    end
+    local request={key=key,quantity=quantity,visit=R.AuctionHost.Snapshot().visit,epoch=Q.epoch,intent=Q.serial+1,
+        auctionID=row.liveKind=="item" and row.auctionID or nil}
+    buyRequest=request;T.state="refreshing";T.message="Refreshing listings before review…"
+    local sent,reason=Q.Search(key)
+    if not sent and buyRequest==request then buyRequest=nil;T.state="idle";T.message=reason end
+    Notify();return sent,reason
+end
+function T.ReadEnded(reason)
+    if not buyRequest then return end
+    buyRequest=nil;T.state="idle";T.message=reason or "Listing refresh ended."
+    if W.AuctionUI then W.AuctionUI.Note(T.message) end
+    Notify()
+end
+function T.ReadReady(snapshot)
+    local request=buyRequest
+    if not request or not snapshot then return end
+    if not Context() or request.visit~=R.AuctionHost.Snapshot().visit or request.epoch~=Q.epoch
+        or snapshot.intent~=request.intent or not Q.Fresh(snapshot) then
+        buyRequest=nil;T.state="idle";return
+    end
+    -- Results and throttle-ready notifications can arrive in either order.
+    -- Reuse that native event to finish the review; never resend the query.
+    if not C_AuctionHouse.IsThrottledMessageSystemReady() then return end
+    buyRequest=nil;T.state="idle"
+    local key=snapshot.kind=="commodity" and {itemID=snapshot.arg} or snapshot.kind=="item" and snapshot.arg
+    if not SameKey(key,request.key) then return end
+    if not snapshot.complete then
+        T.message="The refreshed results are incomplete. Load the remaining listings before reviewing a purchase."
+    else
+        local chosen
+        for _,row in ipairs(snapshot.rows) do
+            if row.ownershipKnown and not row.own and not row.account and row.total
+                and (not request.auctionID or row.auctionID==request.auctionID)
+                and (not chosen or (row.unit or row.total)<(chosen.unit or chosen.total)) then chosen=row end
+        end
+        if chosen then BuyReview(chosen,request.quantity);return end
+        T.message=request.auctionID and "That listing is no longer available. Choose an updated listing."
+            or "No available buyout listings were returned for this item."
+    end
+    if W.AuctionUI then W.AuctionUI.Note(T.message) end
+    Notify()
 end
 local function FreshBag(p)
     for _,row in ipairs(D.Bags("")) do if row.key==p.bagKey and row.identity==p.identity and row.qty==p.bagQuantity then return row end end
@@ -301,6 +365,9 @@ function T.Event(event,a,b)
     end
 end
 function T.Cancel()
+    if buyRequest then
+        buyRequest=nil;T.state="idle";Q.Cancel("Purchase review cancelled.")
+    end
     if not ticket then return end
     if T.state=="review" then Finish("cancelled","Review dismissed; no action sent.")
     elseif T.state=="quoted" or T.state=="quoting" then
@@ -315,18 +382,19 @@ function T.Visit(id)
     if T.visit~=id then T.Cancel();T.visit=id;T.state="idle";T.message=nil;T.repost=nil end
 end
 function T.Snapshot()
-    return {state=T.state,message=T.message,pending=ticket and 1 or 0,kind=ticket and ticket.kind or T.last and T.last.kind,
+    return {state=T.state,message=T.message,pending=(ticket or buyRequest) and 1 or 0,kind=ticket and ticket.kind or T.last and T.last.kind,
         quantity=ticket and ticket.quantity or 0,total=ticket and ticket.total or 0,
         listeners=listening and #EVENTS or 0,timers=timeout and 1 or 0}
 end
 
 -- Keep unfamiliar native read failures local and visible. A failure after dispatch
 -- remains unknown; it can never become permission for an automatic retry.
-for _,name in ipairs({"PrepareBuy","PreparePost","PrepareCancel","PrepareRepost","Confirm","ConfirmWarning"}) do
+for _,name in ipairs({"RequestBuy","PrepareBuy","PreparePost","PrepareCancel","PrepareRepost","Confirm","ConfirmWarning"}) do
     local fn=T[name]
     T[name]=function(...)
         local ok,a,b=pcall(R.Perf.Call,"auction.actionReview",fn,...)
         if ok then return a,b end
+        if name=="RequestBuy" then T.ReadEnded("Listing refresh failed.") end
         T.message="The client could not validate this action. Check Blizzard before retrying."
         if ticket and T.state~="review" and T.state~="quoted" then Finish("unknown",T.message) else Notify() end
         return nil,T.message
