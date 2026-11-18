@@ -763,7 +763,11 @@ Lab.Step("what's it worth: tooltip designer", function()
     if R.SettingsUI then R.SettingsUI.Close() end
     TwichUIDB.ui.settingsWindow = { w = 1240, h = 1060 }
     local ok = Lab.Open("workshop")
-    R.SettingsUI.View("workshop").taskButtons[2]:Click()
+    do
+        local view=R.SettingsUI.View("workshop");local found
+        for i,task in ipairs(view.tasks) do if task[1]=="Tooltip Designer" then view.taskButtons[i]:Click();found=true;break end end
+        assert(found,"Tooltip Designer task exists")
+    end
     Check("init", "the settings window opened on the Workshop page", true, ok == true)
     local D = R.WorkshopWorthDesigner
     Check("init", "the designer is loaded with the settings window", "table", type(D))
@@ -2305,7 +2309,11 @@ Lab.Step("pose for the screenshot", function()
         if params.size == "scaled" then UIParent:SetScale(.8) end
         TwichUIDB.ui.settingsWindow = params.size == "narrow" and { w = 936, h = 660 } or { w = 1380, h = 1120 }
         Lab.Open("workshop")
-        R.SettingsUI.View("workshop").taskButtons[2]:Click()
+        do
+            local view=R.SettingsUI.View("workshop");local found
+            for i,task in ipairs(view.tasks) do if task[1]=="Tooltip Designer" then view.taskButtons[i]:Click();found=true;break end end
+            assert(found,"Tooltip Designer task exists")
+        end
         local D = R.WorkshopWorthDesigner
         D.Cancel()
         local frame = D.Frame()

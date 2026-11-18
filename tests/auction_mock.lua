@@ -42,7 +42,7 @@ local c = MIClient("Rich", {
       fr.GetTop = function(s) return s:GetBottom()+s:GetHeight() end
       fr.SetMotionScriptsWhileDisabled = function() end
       fr.CreateTexture = function(s) local t = MIFake("Texture", s); t.SetColorTexture = function() end t.SetVertexColor = function() end t.SetTexCoord = function() end t.SetTexture = function(x, v) x.texture = v end t.SetAtlas = function(x,v) x.atlas=v end return t end
-      fr.CreateFontString = function(s) local t = MIFake("FontString", s); t.SetFont = function() return true end t.SetJustifyV = function() end t.SetWordWrap = function() end t.SetTextColor = function() end t.SetDirection = function() error("FontString has no SetDirection API") end return t end
+      fr.CreateFontString = function(s) local t = MIFake("FontString", s); t.SetFont = function() return true end t.SetJustifyV = function() end t.SetWordWrap = function() end t.SetTextColor = function(self,...) self.textColor={...} end t.SetDirection = function() error("FontString has no SetDirection API") end return t end
       Press.Instrument(fr, name)   -- last, so it replaces the no-op EnableMouse above with one that records
       if cl.testFrames then cl.testFrames[#cl.testFrames+1] = fr end
       if name then cl[name] = fr end
@@ -89,14 +89,17 @@ c.C_Item = {
 c.InCombatLockdown = function() return false end
 c.IsShiftKeyDown = function() return false end
 
-if options.preview then R.WorkshopLauncher = { previewLoading = true } end
+-- Match the normal core load order. Fixtures opt in explicitly; opening
+-- settings/preview must not be the source of runtime feature services.
+c.TwichUIDB.ui=c.TwichUIDB.ui or {}
+c.TwichUIDB.ui.workshopEnabled=not options.experimentalOff
+for _,file in ipairs({"WorkshopLauncher.lua","auction/Price.lua"}) do
+    local chunk=assert(loadfile(ROOT..file));setfenv(chunk,c);chunk("!!!TwichUI",{})
+end
+if options.preview then R.WorkshopLauncher.previewLoading=true end
 if options.experimentalOff then
-    c.TwichUIDB.ui = c.TwichUIDB.ui or {}
-    c.TwichUIDB.ui.workshopEnabled = false
-    local chunk = assert(loadfile(ROOT .. "WorkshopLauncher.lua")); setfenv(chunk, c); chunk("!!!TwichUI", {})
-    c.Enum.TooltipDataType = { Item = 1 }
-    c.tooltipCallbacks = {}
-    c.TooltipDataProcessor = { AddTooltipPostCall = function(_, fn) c.tooltipCallbacks[#c.tooltipCallbacks + 1] = fn end }
+    c.Enum.TooltipDataType={Item=1};c.tooltipCallbacks={}
+    c.TooltipDataProcessor={AddTooltipPostCall=function(_,fn) c.tooltipCallbacks[#c.tooltipCallbacks+1]=fn end}
 end
 if options.native then
     c.AuctionHouseFrame = c.CreateFrame("Frame", "AuctionHouseFrame", c.UIParent)

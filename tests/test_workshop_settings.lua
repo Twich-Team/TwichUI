@@ -8,8 +8,23 @@ local c, S = SettingsClient({ beforeInit = function(c)
 end })
 local R, K = c.TwichUI, S.K
 local L = R.WorkshopLauncher
-assert(K.pages.workshop and #R.SettingsDesign.Tasks(K.pages.workshop) == 4)
+assert(K.pages.workshop and #R.SettingsDesign.Tasks(K.pages.workshop) == 5)
 assert(not L.Loaded() and not L.LoadOnLogin())
+assert(S.variables.TWICHUI_workshopAuctionAdvisorOnly.default==false)
+assert(S.variables.TWICHUI_workshopAuctionMaxQuantity.default==true)
+assert(S.variables.TWICHUI_workshopAuctionDuration.default=="1")
+S.variables.TWICHUI_workshopAuctionMaxQuantity:SetValue(false)
+S.variables.TWICHUI_workshopAuctionAdvisorOnly:SetValue(true)
+S.variables.TWICHUI_workshopAuctionDuration:SetValue("3")
+local auctionDefaults=L.AuctionSettings()
+assert(not auctionDefaults.maxQuantity and auctionDefaults.advisorOnly and auctionDefaults.duration==3)
+assert(not L.Loaded(),"auction defaults never load Workshop")
+local section,foundAuction
+for _,row in ipairs(K.pages.workshop.rows) do
+    if row.kind=="header" then section=row:GetName() end
+    if row.id=="auctionDebug" then assert(section=="Auction House");foundAuction=true end
+end
+assert(foundAuction,"the existing interface toggle moved into the new task tab")
 assert(not c.TwichUIDB.ui.workshopLoadOnLogin)
 assert(S.variables.TWICHUI_workshopLoadOnLogin.default == false)
 assert(S.variables.TWICHUI_workshopEnabled.default == false)
@@ -53,7 +68,7 @@ local headers = {}
 for _, row in ipairs(K.pages.workshop.rows) do
     if row.kind == "header" then headers[#headers + 1] = row:GetName() end
 end
-assert(table.concat(headers, "|") == "General|Tooltip Designer|Market Data|Crafting & Shopping")
+assert(table.concat(headers, "|") == "General|Auction House|Tooltip Designer|Market Data|Crafting & Shopping")
 assert(K.pages.workshop.def.hostAfter == "Tooltip Designer")
 -- Market descriptions use real source summaries, with honest empty/future states.
 local status = {}

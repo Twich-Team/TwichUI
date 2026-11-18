@@ -173,7 +173,7 @@ local function Render(p)
         empty=total>0 and "No auctions match this filter." or p.complete and "You have no active auctions or pending sales." or "No auctions returned yet."
     end
     p.list:SetData(p.rows,empty)
-    p.refresh:SetEnabled(Q.Available() and Q.Pending()==0 and not PendingAction())
+    p.refresh:SetEnabled(A.Live() and Q.Available() and Q.Pending()==0 and not PendingAction())
     p.refresh.text:SetText(Q.Pending()>0 and "Refreshing…" or "Refresh listings")
     p.status:SetText(snapshot and (#p.rows..(#p.rows==1 and " auction" or " auctions")..(partial and " · partial results" or "")..
         " · Updated "..UI.Ago(time()-math.max(0,GetTime()-snapshot.at))) or "")

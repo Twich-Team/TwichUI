@@ -160,14 +160,14 @@ same(p.state,"data unavailable");same(faults,1,"setup error is reported")
 W.Market.Source=source;c.TwichUI.Fault=fault
 
 p.liveMode=true;Q.state="results"
-Q.snapshot={kind="item",epoch=Q.epoch,rows={{auctionID=71,item=10,itemKey={itemID=10},qty=3,total=299,unit=100}}}
+Q.snapshot={kind="item",epoch=Q.epoch,at=c.GetTime(),rows={{auctionID=71,item=10,itemKey={itemID=10},qty=3,total=299,unit=100}}}
 A.Render()
-same(p.totalHead:GetText(),"Total / bid","live columns do not claim historical estimates")
+same(p.totalHead:GetText(),"Buyout / bid","live columns do not claim historical estimates")
 same(p.scope:GetText():find("Explicit experimental",1,true)~=nil,true)
 same(p.rows[1].total,299,"live exact total remains distinct")
 same(p.unitHead:GetText(),"Unit price")
-Q.snapshot={kind="browse",epoch=Q.epoch,rows={{item=10,itemKey={itemID=10},qty=12,unit=100}}}
-A.Render();same(p.unitHead:GetText(),"Native min","group minimum not asserted to be unit price")
+Q.snapshot={kind="browse",epoch=Q.epoch,at=c.GetTime(),rows={{item=10,itemKey={itemID=10},qty=12,unit=100}}}
+A.Render();same(p.unitHead:GetText(),"Lowest price","group minimum not asserted to be unit price")
 
 A.Hide()
 local qty=5
@@ -185,11 +185,11 @@ A.Hide()
 A.Show();A.Go("owned")
 local owned=A.Page("owned")
 local available=Q.Available;Q.Available=function() return true end
-Q.state="empty";Q.snapshot={kind="owned",epoch=Q.epoch,complete=true,rows={}}
+Q.state="empty";Q.snapshot={kind="owned",epoch=Q.epoch,at=c.GetTime(),complete=true,rows={}}
 A.Render()
-same(owned.list.empty:GetText(),"No owned listings returned.","empty is distinct from unavailable")
+same(owned.list.empty:GetText(),"You have no active auctions or pending sales.","empty is distinct from unavailable")
 local listing=Q.Listing({auctionID=9,itemKey={itemID=10},quantity=2,buyoutAmount=101,status=0})
-Q.snapshot={kind="owned",epoch=Q.epoch,complete=false,rows={listing,listing}}
+Q.snapshot={kind="owned",epoch=Q.epoch,at=c.GetTime(),complete=false,rows={listing,listing}}
 A.Render()
 same(#owned.rows,1,"duplicate native IDs do not duplicate view")
 A.Hide();Q.Available=available

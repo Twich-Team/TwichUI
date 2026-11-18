@@ -140,6 +140,7 @@ do
   Check(HP.restore(undo) == 2 and A.TwichUIDB.ui.healerWatch.phrases == nil and #HW.Phrases() == 3, "undo: back to the defaults, untouched")
 end
 
+assert(TC.LOCAL["ui.auctionHouse"]=="acts", "auction action defaults are kept local")
 -- every key the settings window can change (the contract fixture's saved layout) is shared or kept local
 do
   local fixture = dofile(TESTS .. "fixtures/settings_contract.lua")

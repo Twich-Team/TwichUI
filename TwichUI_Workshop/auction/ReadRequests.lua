@@ -30,7 +30,7 @@ function Q.Available() return W.Active() and (Q.experimental or Q.Integrated()) 
 -- while reviews and continuation requests require a fresh response.
 function Q.Fresh(snapshot)
     snapshot=snapshot or Q.snapshot
-    if not snapshot or snapshot.epoch~=Q.epoch or snapshot.stale then return false end
+    if not snapshot or snapshot.epoch~=Q.epoch or snapshot.stale or not W.Finite(snapshot.at) then return false end
     local age=GetTime()-snapshot.at
     return age>=0 and age<30
 end

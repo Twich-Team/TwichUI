@@ -101,7 +101,12 @@ for _,event in ipairs({"AUCTION_HOUSE_CLOSED","AUCTION_HOUSE_DISABLED","PLAYER_L
     Same(t.R.Workshop.AuctionUI.IsShown(),false,event)
     Same(t.H.Snapshot().pending,0,event)
 end
-for _,foreign in ipairs({"anchors","parent","scale","addon","focus","native-hidden","control-hidden","busy"}) do
+do
+    local t=Setup();t.Start();Same(t.H.Control():IsVisible(),false,"healthy integration hides the duplicate control")
+    t.Tick();Same(t.H.Snapshot().state,"twichui","the header provides the normal return action")
+    t.H.ToBlizzard();t.Restored();Same(t.H.Control():IsVisible(),true,"native view retains the return action")
+end
+for _,foreign in ipairs({"anchors","parent","scale","addon","focus","native-hidden","busy"}) do
     local t=Setup();t.Start()
     if foreign=="anchors" then t.f.points={{"CENTER",t.c.UIParent,"CENTER",99,0}}
     elseif foreign=="parent" then t.f.parent=t.Frame(t.c.UIParent)

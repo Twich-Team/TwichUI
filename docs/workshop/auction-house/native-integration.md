@@ -90,8 +90,8 @@ sharing. New Sell visits apply the filter default, and new item selections apply
 quantity/duration defaults; current drafts keep their manual edits. Settings uses
 its existing lazy page construction, searchable controls and Workshop task tabs;
 no new addon or startup frame is introduced. Performance is not measured in this
-iteration. Unit, simulator, profile/share-contract and packaging checks are deferred
-at the owner's request until the final pre-merge verification.
+iteration. Pre-merge unit, simulator and profile/share-contract coverage is recorded
+below; package validation is recorded in PR #60.
 
 ## Source review
 
@@ -192,20 +192,52 @@ visit, rather than attributing its late reply to a different search.
 The ordinary installation enables opt-in presentation and read workflows. The
 owner-requested buy/post/cancel iteration now enables the five corresponding modes via
 `AuctionBuild.integrated`. `AuctionBuild.verified` is
-still empty. The current changes are syntax-checked only: unit, mutation, simulator
-and packaging checks are deferred at the owner's request until in-game iteration
-succeeds, and must run before merge. Runtime permission, appearance and completion
-behavior still require actual Forever evidence.
+still empty. Automated pre-merge coverage is recorded below; it does not establish
+native acceptance. Runtime permission, appearance and completion behavior still
+require actual Forever evidence.
 
 | Mode | Implemented call/review | Exact remaining native evidence |
 |---|---|---|
-| Item buyout | `PlaceBid(id, exact full buyoutAmount)` | Hardware/permission behavior in this window; ID-correlated completion and rejection |
+| Item buyout | `PlaceBid(id, exact native buyoutAmount)` for one item | Hardware/permission behavior in this window; ID-correlated completion and rejection |
 | Commodity purchase | `StartCommoditiesPurchase(itemID, quantity, unitPrice)`, quote, second-click `ConfirmCommoditiesPurchase` | Matches the native frame call (the generated documentation lists two arguments); confirm runtime signature/permissions, exact quotes and completion ownership in Forever |
 | Item post | `PostItem(location, duration, quantity, nil, unitPrice)` and guarded `ConfirmPostItem` | Existing Sell from Bags native warning/hardware path in this integrated window; multisell completion |
 | Commodity post | `PostCommodity` and guarded `ConfirmPostCommodity` | Deposit, native warning, hardware permissions and completion in this window |
 | Cancel | `CanCancelAuction`, `GetCancelCost`, `CancelAuction(id)` | Native permissions/cost and ID-correlated cancellation completion |
 
 No simulator or offline test may set a production native acceptance claim. The owner-requested activation above is not inferred from presentation or read tests.
+
+## Pre-merge verification — 2026-11-18
+
+- **Unit-tested:** all 276 offline modules passed, including the 108-check iteration
+  regression; all 747 addon Lua files passed Lua 5.1 syntax checks. This includes
+  settings defaults/profile holds, sharing classification, native availability,
+  grouped reagent bags and member races, quote consent/retry, owned sales/timers,
+  item tooltips/colors, cached Browse return and focused shift-click behavior.
+- **Mutation-tested:** all 389 Workshop and five presentation mutations were killed;
+  no survivors, invalid mutations, timeouts or infrastructure errors. Baselines passed.
+  The redundant aggregate-quantity mutant was replaced by a physical-member identity
+  race with an unchanged aggregate quantity.
+- **Simulator-tested:** the full default catalogs executed 217 launches. Nine catalogs
+  passed directly. All 52 Auction House preview captures passed their behavioral,
+  replay, negative-control and image checks; the full runner retained a failed verdict
+  because its exact assertion counts had not included the new chart checks. After
+  correcting those counts, the strict verifier passed on the same retained captures.
+  Its 12-test harness also passed, including missing/extra assertion rejection.
+  No assertions or default poses were dropped and the failed report was preserved.
+- **Simulator-tested:** an additional Workshop Settings load/preferences scenario
+  passed 50 checks with Workshop included in its disposable install. An earlier
+  invocation omitted that addon and failed; its log is retained.
+
+Local evidence: `test-output/verification/full-all-0udy2v7r/report.json`,
+`test-output/auction-preview-rejudged.log`, `test-output/auction-verifier-count-tests.log`,
+`test-output/auction-mutations-final.json`, `test-output/auction-host-mutations-final.json`
+and `test-output/auction-settings-integration-with-workshop.log`.
+The first diagnostic full run was interrupted after identifying stale scenario
+assumptions; it remains incomplete and is not passing evidence. The later full report
+also remains failed for the count mismatch above; the targeted verifier result is
+separate. Screenshots establish structure, not real-client appearance. No automated
+run sets native verification flags or certifies a public release. Internal package
+validation and CI outcomes are recorded on [PR #60](https://github.com/Twich-Team/TwichUI/pull/60).
 
 ## TSM comparison
 

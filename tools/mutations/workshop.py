@@ -121,8 +121,8 @@ m("market.sell.unknown-owner", SELL_PREP, "and r.ownershipKnown==true", "",
 m("market.sell.partial-complete", SELL_PREP, '="live",snap.complete,snap.at', '="live",true,snap.at',
   "a partial response is promoted to complete and supplies draft prices", SELL_TEST)
 m("market.sell.deposit-is-fee", SELL_PREP,
-  'result.valid=true;result.reason="Preparation only · posting awaits client acceptance."',
-  'result.net=result.gross-(result.deposit or 0);result.valid=true;result.reason="Preparation only · posting awaits client acceptance."',
+  'result.valid=true;result.reason="Review the quantity, price and duration before posting."',
+  'result.net=result.gross-(result.deposit or 0);result.valid=true;result.reason="Review the quantity, price and duration before posting."',
   "unknown commission and refundable-deposit treatment become a fabricated net estimate", SELL_TEST)
 m("market.sell.foreign-row", SELL_PREP, "if r==tier and r.copy then", "if r.copy then",
   "a price from outside the selected competition result is accepted", SELL_TEST)
@@ -136,7 +136,7 @@ m("market.sell.hidden-repaint", "TwichUI_Workshop/auction/ViewSell.lua",
 
 
 m("market.sell.deferred-provenance", "TwichUI_Workshop/auction/ViewSell.lua",
-  " and p.money:GetCopper()~=p.filledPrice", "",
+  " and Fields(p)~=p.filledFields", "",
   "deferred programmatic money callbacks erase the matched price provenance and selection", SELL_TEST)
 m("market.sell.deposit-precision", SELL_PREP, "amount=math.ceil(amount/100)*100", "amount=amount",
   "a whole-silver auctioneer displays the unrounded copper deposit instead of the native upfront cost", SELL_TEST)
@@ -1072,8 +1072,8 @@ m("market.summary.focus-catalog", "TwichUI_Workshop/ServerMarket.lua",
 
 # Integrated AH exact money and consent boundaries.
 m("market.auction-action-exact-total", "TwichUI_Workshop/auction/Actions.lua",
-  "return Send(p,C_AuctionHouse.PlaceBid,p.auctionID,p.total)", "return Send(p,C_AuctionHouse.PlaceBid,p.auctionID,p.unit*p.quantity)",
-  "a rounded unit price overpays a whole-listing buyout", ["test_workshop_auction_actions.lua"])
+  "return Send(p,C_AuctionHouse.PlaceBid,p.auctionID,p.total)", "return Send(p,C_AuctionHouse.PlaceBid,p.auctionID,p.total*LiveRow(p).qty)",
+  "available stock is multiplied into the reviewed per-item buyout", ["test_workshop_auction_actions.lua"])
 m("market.auction-quote-consent", "TwichUI_Workshop/auction/Actions.lua",
   "not consent or consent.quoteVersion~=p.quoteVersion or consent.total~=p.total or consent.quantity~=p.quantity", "false",
   "a quote that changed after painting can be purchased without reviewing its new total", ["test_workshop_auction_actions.lua"])
@@ -1083,9 +1083,11 @@ m("market.auction-tier-total", "TwichUI_Workshop/auction/Actions.lua",
 m("market.auction-post-deposit-race", "TwichUI_Workshop/auction/Actions.lua",
   " or fresh.deposit~=p.deposit", "",
   "posting accepts an upfront deposit that changed since review", ["test_workshop_auction_actions.lua"])
-m("crafting.auction-bag-quantity-race", "TwichUI_Workshop/auction/Actions.lua",
-  " and row.qty==p.bagQuantity", "",
-  "a bag stack changed after the reviewed shopping/posting quantity was captured", ["test_workshop_auction_actions.lua"])
+# The old quantity-only removal is equivalent: grouped identity includes each
+# member quantity. Remove identity instead and test redistribution at equal total.
+m("crafting.auction-bag-member-race", "TwichUI_Workshop/auction/Actions.lua",
+  " and row.identity==p.identity", "",
+  "physical bag members change while aggregate quantity stays equal", ["test_workshop_auction_iteration.lua"])
 
 m("market.auction-legacy-post-race", "TwichUI_Workshop/auction/Actions.lua",
   'if R.AuctionWindow and R.AuctionWindow.LifecycleBusy() then return false,"Sell from Bags became busy; dismiss this review and check Blizzard." end',
@@ -1093,6 +1095,14 @@ m("market.auction-legacy-post-race", "TwichUI_Workshop/auction/Actions.lua",
   "a legacy posting operation started after review no longer prevents a competing transaction", ["test_workshop_auction_actions.lua"])
 
 m("market.auction-standard-unverified-mode", "TwichUI_Workshop/auction/Actions.lua",
-  'if not b or type(b.verified)~="table" or b.verified[mode]~=true then',
+  'if not enabled then',
   'if false then',
   "removing the presentation build gate accidentally also permits unverified money operations", ["test_workshop_auction_actions.lua"])
+
+# In-game iteration regressions: native availability and cross-bag grouping.
+m("market.auction-availability-unit", "TwichUI_Workshop/auction/ReadRequests.lua",
+  "        total=Amount(x.buyoutAmount);unit=total\n    else total", "        total=Amount(x.buyoutAmount);unit=total and math.ceil(total/qty)\n    else total",
+  "item availability is mistaken for stack quantity and divides the per-item price", ["test_workshop_auction_iteration.lua"])
+m("crafting.auction-group-total", "TwichUI_Workshop/auction/SellData.lua",
+  "row.members=g.members;row.qty=g.qty;row.stacks=#g.members", "row.members=g.members;row.qty=g.rep.qty;row.stacks=#g.members",
+  "grouped inventory silently drops other stacks including the reagent bag", ["test_workshop_auction_iteration.lua"])
