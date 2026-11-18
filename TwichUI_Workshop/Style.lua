@@ -25,7 +25,8 @@
 --   UI.ArtButton(parent, label, art, w, kind, onClick, h)   a button with painted artwork ("npc:hammer", an Icons id) or "plus" before its label
 --   UI.Glyph(parent, "+"|"-", onClick, size)               a square button drawn with a plus or a minus (no font character)
 --   UI.Meter(parent, w, h)                  a recessed progress bar (:SetFraction(0..1), :SetTone(color))
---   UI.PriceChart(parent, w, h)             a lightweight chart of observed daily prices (:Set(series, formatMoney)); only real days are drawn
+--   UI.AdvancedMarketChart(parent, w, h)    shared interactive history (auction/AdvancedChart.lua); :Set(series, money, context)
+--   UI.PriceChart(parent, w, h)             legacy presentation helper retained for compatibility; no Workshop page uses it
 --   UI.Ago(at), UI.Shorten(text, n)         "5h ago"; text cut to n characters with an ellipsis
 --   UI.TipFn(frame, title, fn)              a tooltip whose text is worked out when it opens
 

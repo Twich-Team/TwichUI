@@ -1,4 +1,4 @@
--- Shared auction chart presentation. Typed evidence in, pooled geometry out; no saved data.
+-- Shared Workshop and Auction House chart presentation. Typed evidence in, pooled geometry out; no saved data.
 local R,W=TwichUI,TwichUI.Workshop
 local UI=W.UI
 local C={MAX_COLUMNS=1024}
@@ -10,6 +10,28 @@ end
 W.AdvancedChart=C
 local function Clamp(v,a,b) return math.max(a,math.min(b,v)) end
 local function Day(d) return date('!%Y-%m-%d',math.floor(d*86400)) end
+-- Workshop's existing minimum-history service includes the latest observed day
+-- and older aggregate intervals. Copy that presentation shape without changing
+-- prices, synthesizing observations, or modifying the cached facts.
+function C.FromObserved(series)
+    if not series then return nil end
+    local out={points={},groups={},gaps={},metric='min',today=series.today,basis=series.basis}
+    local from,to
+    local function Span(a,b) from=math.min(from or a,a);to=math.max(to or b,b) end
+    for _,p in ipairs(series.points or {}) do
+        out.points[#out.points+1]={day=p.day,price=p.price,kind='day',
+            provenance='Saved local scan history',at=Day(p.day)..' UTC · minimum listing observation'}
+        Span(p.day,p.day)
+    end
+    for _,g in ipairs(series.groups or {}) do
+        out.groups[#out.groups+1]={from=g.from,to=g.to,low=g.low,high=g.high,average=g.average,n=g.n,
+            kind='aggregate',provenance='Saved local scan history'}
+        Span(g.from,g.to)
+    end
+    if not from then return nil end
+    out.to=math.max(to,series.today or to);out.from=math.min(from,out.to-1)
+    return out
+end
 -- Preparation is deliberately separate from pointer work. Preserve original records.
 function C.Prepare(s,from,to)
     local d={points={},groups={},gaps=s and s.gaps or {},from=from or s and s.from or 0,to=to or s and s.to or 1}

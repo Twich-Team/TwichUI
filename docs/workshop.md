@@ -95,6 +95,17 @@ synthetic verified snapshots. Right-click a Workshop item icon to research it.
 See [A8 implementation and verification](workshop/item-advisor.md). The older
 "What's it worth?" discussion below describes the pre-A8 comparison policy.
 
+**Shared advanced charts (in-game iteration).** Opportunities and Item Advisor now
+use the same interactive chart as the Auction House, with exact-value hover details
+docked outside the chart, drag-to-zoom and right-click reset. The adapter preserves
+the existing minimum-history observations and aggregate ranges; it does not change
+prices or saved history. Opportunities scrolls its facts and chart below the item
+header with Add to crafting plan fixed below. Item Advisor gives the chart the full
+detail width and places recommendation reasons underneath. The shared chart file
+loads after Style and before the views. Its existing diagnostics cover both windows.
+Lua syntax and diff checks only; automated and simulator checks are deferred at the
+owner's request during in-game iteration. Older chart descriptions above are historical.
+
 **Market figures (A7).** The Opportunities details show Lowest listing, Competing price, Recent price, Market value (14d), Historical value (60d), Supply and Data quality (`MarketFacts.lua`, over the Market services), with the existing chart below; the tooltip has a Market value line (Always) and four Hold Shift lines; Shopping prices the auction option for the quantity still missing with `Market.Cost` (exact, a range, "at least", or not enough listed). Profit still uses the lowest listing. See "A7 as built".
 
 **On the auction house window** (`AuctionButton.lua`): the same **Scan prices** button sits under the window's lower right corner, with the same progress bar and message beside it while a scan runs and the last message
