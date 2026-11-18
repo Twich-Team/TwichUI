@@ -357,7 +357,11 @@ Lab.Step("Sell price preparation without transactions",function()
     Q.snapshot.complete=false;A.Render();p.money:SetCopper(777);p.competitionList.rows[1]:Click()
     Lab.Check("state","Sell partial response cannot copy",777,p.money:GetCopper())
     Lab.Check("state","Sell post stays disabled",false,p.post:IsEnabled())
-    Lab.Check("state","Sell has no post handler",nil,p.post:GetScript("OnClick"))
+    local reviewed,prepare=0,W.AuctionActions.PreparePost
+    W.AuctionActions.PreparePost=function() reviewed=reviewed+1;return nil,"Unexpected standalone posting review" end
+    p.post:GetScript("OnClick")(p.post) -- bypass disabled UI to exercise the central page guard
+    W.AuctionActions.PreparePost=prepare
+    Lab.Check("state","Sell standalone handler refuses posting",0,reviewed)
     Lab.Check("state","Sell preparation sends no native operation",before,calls)
     A.Go("browse");Lab.Settle(0.3)
     Lab.Check("state","Sell hidden competition released",nil,p.competition)

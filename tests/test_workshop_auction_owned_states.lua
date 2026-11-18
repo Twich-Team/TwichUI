@@ -25,7 +25,11 @@ A.Render();Press.Must(p.list.rows[1])
 same(p.chosen.auctionID,7);same(p.chosen.seconds,0)
 same(p.advice:GetText():find("Variant-specific advice unavailable",1,true)~=nil,true)
 same(p.cancel:IsEnabled(),false);same(p.repost:IsEnabled(),false)
-same(p.cancel:GetScript("OnClick"),nil);same(p.repost:GetScript("OnClick"),nil)
+local cancel,repost=W.AuctionActions.PrepareCancel,W.AuctionActions.PrepareRepost
+W.AuctionActions.PrepareCancel=function() error("standalone cannot cancel") end
+W.AuctionActions.PrepareRepost=function() error("standalone cannot repost") end
+p.cancel:GetScript("OnClick")();p.repost:GetScript("OnClick")()
+W.AuctionActions.PrepareCancel,W.AuctionActions.PrepareRepost=cancel,repost
 Press.Must(p.refresh);same(refreshes,1,"only an explicit refresh invokes the broker")
 Q.epoch=Q.epoch+1;A.Render();same(#p.rows,0,"stale visit rows disappear")
 same(p.chosen,nil,"stale selection does not keep a detail record")

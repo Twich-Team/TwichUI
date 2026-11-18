@@ -1,4 +1,4 @@
--- Read-only posting preparation. Every price action edits a transient draft.
+-- Posting drafts and explicit reviews. Price edits never submit an auction.
 local W=TwichUI.Workshop
 local A,UI,D,AD=W.AuctionUI,W.UI,W.AuctionSellData,W.AdvisorData
 local function Money(n) return n~=nil and UI.Money(n) or "Unavailable" end
@@ -25,6 +25,8 @@ Detail=function(p)
     local quantity=tonumber(p.quantity:GetText())
     local price,why=p.money:GetCopper()
     local draft=D.Draft(row,quantity,price,p.durationIndex or 1)
+    p.post:SetEnabled(A.Live() and draft.valid)
+    p.post.text:SetText(A.Live() and "Review posting" or "Post unavailable")
     p.draft=draft;p.max:SetEnabled(D.Max(row)>0)
     p.validation:SetText(row and D.Max(row)>0 and not price and why or draft.reason)
     p.total:SetText("Price per item   "..Money(price).."\nQuantity   "..(W.Int(quantity,1,W.MAX_ID) or "—")..
@@ -51,7 +53,7 @@ Detail=function(p)
     p.lowest.text:SetText(live and "Match lowest listing" or "Use lowest observed")
     p.match:SetEnabled(p.suggestion~=nil and p.suggestion.state=="ok" and D.Current(ctx,row))
     local types=Enum and Enum.ItemCommodityStatus
-    p.find:SetEnabled(row~=nil and row.itemKey~=nil and row.keyComparable~=false and W.AuctionReads.Available() and types~=nil and row.mode==types.Item and W.AuctionReads.Pending()==0)
+    p.find:SetEnabled(row~=nil and row.itemKey~=nil and row.keyComparable~=false and W.AuctionReads.Available() and types~=nil and (row.mode==types.Item or W.AuctionReads.Development() and row.mode==types.Commodity) and W.AuctionReads.Pending()==0)
     if not row then
         p.history:SetText("");p.advice:SetText("Select an item for market and Item Advisor guidance.")
         p.chart:Set(nil,UI.Money);p.guidanceTip=nil;return
@@ -149,7 +151,12 @@ local function Build(p)
     p.total=A.Text(form,"",13,12,-402,-12);p.total:SetWordWrap(true);p.total:SetHeight(128)
     UI.Tip(form,"Costs and conditional proceeds","Gross proceeds assume the full draft sells. Deposit is an upfront native quote only when exact item mode, identity, quantity and duration are available. Commission and deposit refund treatment remain unverified; net proceeds are unavailable. A refundable deposit must not be treated as a permanent selling fee.")
     p.validation=A.Text(form,"",12,12,-544,-12,UI.K.textDim);p.validation:SetWordWrap(true);p.validation:SetHeight(42)
-    p.post=UI.Button(form,"Post unavailable",196,"primary",nil,34);p.post:SetPoint("BOTTOMLEFT",12,12);p.post:SetEnabled(false)
+    p.post=UI.Button(form,"Post unavailable",196,"primary",function()
+        if not A.Live() then return end
+        local price=p.money:GetCopper()
+        local id,why=W.AuctionActions.PreparePost(p.chosen,tonumber(p.quantity:GetText()),price,p.durationIndex or 1)
+        A.ReviewAction(id,why)
+    end,34);p.post:SetPoint("BOTTOMLEFT",12,12);p.post:SetEnabled(false)
     UI.Tip(p.post,"Posting disabled","Real-client transaction, confirmation and runtime acceptance are pending. Draft edits never submit an auction.")
     p.detail=A.Details(p,410);p.detail:SetPoint("TOPRIGHT",0,-48);p.detail:SetPoint("BOTTOMRIGHT",0,0)
     p.history=A.Text(p.detail.body,"",12,12,-108,-12);p.history:SetWordWrap(true);p.history:SetHeight(60)
@@ -157,7 +164,7 @@ local function Build(p)
         local request,why=D.Search(p.chosen)
         if request then p.request=request;p.matched=nil;A.Schedule() else A.Note(why) end
     end,30);p.find:SetPoint("TOPLEFT",12,-178)
-    UI.Tip(p.find,"Explicit read-only search","Requires the existing experimental gate, an attributable auctioneer visit and the exact item search mode. Clicking selects no transaction. No search is sent on item selection; commodity searches and continuation await client acceptance.")
+    UI.Tip(p.find,"Explicit read-only search","Requests current competition for the exact item identity during the integrated auctioneer visit. Clicking selects no transaction. No search is sent on item selection.")
     p.competitionCard=A.Card(p.detail.body,"Observed historical competition",226)
     p.competitionCard:SetPoint("TOPLEFT",4,-218);p.competitionCard:SetPoint("TOPRIGHT",-4,-218)
     UI.CL.Font(p.competitionCard.heading,14)

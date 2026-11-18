@@ -46,6 +46,12 @@ DX.PRESETS = {
         cost = "Moderate: the client's memory update every 5 seconds, which can show as a small hitch each time.",
     },
     {
+        key = "auction", name = "Auction House lifecycle", mode = "standard", minutes = 2, memorySeconds = 5, gaugeSeconds = 5,
+        filter = { "auction.", "workshop.load" }, gauges = { "auction" },
+        what = "Open, switch and close the supervised Auction House. Record Host recovery, page resources and load/switch costs without starting an auction request.",
+        cost = "Moderate: read-only lifecycle gauges and the client's memory update every 5 seconds. Native acceptance is recorded separately.",
+    },
+    {
         key = "focused", name = "Focused trace", mode = "focused", minutes = 2, memorySeconds = 30, gaugeSeconds = 5, stacks = true,
         what = "One subsystem in detail: only its operations are timed, and the slowest calls keep the call path that led to them.",
         cost = "Higher for that subsystem: a call path for a new slowest call, at most one a second. Optionally the client's own allocation measurement around each call.",

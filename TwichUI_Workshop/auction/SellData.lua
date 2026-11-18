@@ -145,7 +145,7 @@ function D.Competition(row,opt)
     local out={rows={},source="saved",market=market,stamp=Stamp(market),identity=row and row.identity}
     if not row then return out end
     local snap=Q.snapshot
-    if opt.intent and snap and snap.kind=="item" and snap.intent==opt.intent and snap.epoch==Q.epoch and
+    if opt.intent and snap and (snap.kind=="item" or Q.Development() and snap.kind=="commodity") and snap.intent==opt.intent and snap.epoch==Q.epoch and
         opt.epoch==Q.epoch and row.itemKey and row.keyComparable~=false and Same(row.itemKey,opt.itemKey) and
         opt.marketStamp==out.stamp and Q.Available() and W.Finite(snap.at) and GetTime()>=snap.at and GetTime()-snap.at<30 then
         out.source,out.complete,out.at,out.epoch,out.snapshot,out.itemKey="live",snap.complete,snap.at,snap.epoch,snap,row.itemKey
@@ -213,8 +213,9 @@ function D.Search(row)
         return nil,"Live competition awaits verified item identity and auctioneer reads."
     end
     local types=Enum and Enum.ItemCommodityStatus
-    if not types or row.mode~=types.Item then return nil,"This item's live search mode is not yet verified." end
-    local ok,why=Q.Begin("item",row.itemKey)
+    if not types or (row.mode~=types.Item and not (Q.Development() and row.mode==types.Commodity)) then return nil,"This item's live search mode is not yet verified." end
+    local commodity=row.mode==types.Commodity
+    local ok,why=Q.Begin(commodity and "commodity" or "item",commodity and row.itemKey.itemID or row.itemKey)
     if not ok then return nil,why end
     return {intent=Q.serial,epoch=Q.epoch,itemKey=Key(row.itemKey),marketStamp=Stamp(Market())}
 end

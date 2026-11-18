@@ -104,6 +104,8 @@ auction/MarketData.lua
 auction/ShoppingData.lua
 auction/ViewShopping.lua
 auction/SellData.lua
+auction/Actions.lua
+auction/Debug.lua
 auction/ViewSell.lua
 auction/ViewOwned.lua
 auction/AdvancedChart.lua

@@ -4,6 +4,12 @@ Date: 2026-11-14. Scope: diagnostic lifecycle infrastructure only. No replacemen
 window, pages, transactions or scan policy changes. **Real-client acceptance is
 pending; native replacement is blocked.** The proof must stay disabled by default. Later authorization permits the independent [presentation preview](presentation.md); it does not accept this lifecycle mechanism or activate replacement.
 
+AH-7A update: the separately authorized [native integration candidate](native-integration.md)
+extends this same Host and reuses the existing preview. The 30-second proof stays
+available; supervised integration requires acknowledgement of Phase A and a second
+explicit opt-in for each reload. The historical AH-1a evidence below is unchanged;
+no Forever acceptance has been inferred or recorded by this implementation.
+
 ## Source review and decision
 
 Reviewed on clean `feature/workshop` at `b89f84b9`. Forever source is read-only

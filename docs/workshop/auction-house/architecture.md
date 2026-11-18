@@ -1,11 +1,16 @@
+> Implemented development behavior is documented in [native integration](native-integration.md).
+> This design document retains proposed future extraction boundaries. Current code
+> keeps one core Host, Workshop ReadRequests/Actions and the existing five pages.
+
 # AH-0: Replacement-window architecture
 
-Status: the full replacement below remains proposed. AH-1a implements only the
-disabled diagnostic [lifecycle proof](lifecycle-proof.md), with no shell/pages or
-automatic takeover. **Real-client acceptance is pending; native replacement is blocked.** The separately authorized [standalone presentation](presentation.md) implements the shell, Browse and Shopping without takeover. Source facts and unresolved API
-contracts are in [api-capabilities.md](api-capabilities.md). This document does
-not authorize AH-1. The approved result is one complete Auction House window
-with Browse, Shopping, Sell, My Auctions and Market in its left sidebar.
+Status: [AH-7A supervised native integration](native-integration.md) connects the
+existing five-page preview to the existing Host under explicit, reload-local
+acknowledgement and test enablement. Replacement remains off by default;
+**Forever acceptance is pending**. The full transaction architecture below
+remains proposed. The [standalone presentation](presentation.md) and
+[AH-1a proof](lifecycle-proof.md) remain available. Source facts and unresolved API
+contracts are in [api-capabilities.md](api-capabilities.md).
 
 ## Decision and constraints
 

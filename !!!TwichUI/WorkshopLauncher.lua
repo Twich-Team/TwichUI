@@ -90,6 +90,18 @@ end
 function L.Open() return Run("Open") end
 function L.Toggle() return Run("Toggle") end
 
+-- Shared guarded service load for both AH contexts; never attaches native scan
+-- controls merely to change presentation. Existing Load owns consent/diagnostics.
+function L.LoadAuctionUI()
+    if InCombatLockdown and InCombatLockdown() then return false, "COMBAT" end
+    local previous = L.previewLoading
+    L.previewLoading = true
+    local ok, loaded, why = pcall(L.Load)
+    L.previewLoading = previous
+    if not ok then R.Fault("auction UI load", loaded); return false, "ERROR" end
+    return loaded, why
+end
+
 -- Explicit standalone preview; never touches the native Auction House or Host.
 function L.AuctionPreview()
     if InCombatLockdown and InCombatLockdown() then Say("%s", L.Explain("COMBAT")); return false end
@@ -140,6 +152,7 @@ function L.Migrate()
 end
 function L.Apply()
     L.Migrate()
+    if not L.Enabled() and R.AuctionHost then R.AuctionHost.SetTestEnabled(false) end
     local w = L.Loaded() and R.Workshop
     if w then
         if L.Enabled() then if w.Resume then w.Resume() end

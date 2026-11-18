@@ -8,6 +8,11 @@ AH-1a follow-up: the disabled diagnostic lifecycle proof is implemented and
 offline/simulator verification is recorded in [lifecycle-proof.md](lifecycle-proof.md).
 Real Forever acceptance remains pending; native takeover and transaction activation remain blocked. The separately authorized [standalone presentation campaign](presentation.md) implements the shell, read-only Browse and shared Shopping without satisfying or bypassing those gates.
 
+AH-7A follow-up (explicitly authorized): [supervised native integration](native-integration.md)
+reuses the existing five-page shell and Host. The candidate activation path is
+implemented behind session-only gates; its existence does not satisfy AH-1a
+acceptance. Default activation, transactions and publication remain blocked.
+
 Read [API capabilities](api-capabilities.md), [architecture](architecture.md),
 [integration and mockup fidelity](integration.md), `AGENTS.md`, `CLAUDE.md`,
 [testing](../../testing.md), [testing performance](../../testing-performance.md)
@@ -64,6 +69,7 @@ scope. Commit/push then requires that campaign's authorization, as AH-0 has here
 | **AH-5a — Owned records** | Owned snapshot provider, completeness, ID reconciliation, exact/banded expiry and optional current competing reads; depends AH-2a | Accurate owned rows and stable selection; lower comparable external competition only gives qualified undercut; disappearing ID never means sold; sales stats unavailable |
 | **AH-5b — Manual cancel and repost preparation** | Explicit cost-aware cancel intent and matching completion; prepare Sell after actual item return; depends AH-5a and AH-4b for repost | CanCancel/cost rechecked; cancel success requires ID evidence; no automatic cancel loop or post after event; separate Post click, uncertain results stay unknown |
 | **AH-6 — Market and shared chart adaptation** | Approved tracked-list/fact/trend layout over existing services, sparse-history presentation, bounded shared one-metric chart adaptation; depends shell, Facts and tracking; no transaction dependency | Actual observation ranges/gaps and buckets, accurate metric names, honest competition/supply/quality, no demand or forecast; existing Workshop charts unchanged by default; C1 remains deferred |
+| **AH-7A — Supervised native presentation** | Existing Host owns visit preparation, parking, switching, restoration and recovery; existing preview gains an auctioneer context | Automated recovery/geometry evidence; real Forever acceptance pending; reload-local test opt-in only; default off |
 | **AH-7 — Final integration and polish** | Five-page cross-navigation, accessibility/scale, failure recovery, coexistence, large database, regression and supervised acceptance | All enabled modes pass client gates; five images reviewed at real UI scale; full verification tier passes; release readiness reported without publishing a release |
 
 Prefer this sequence for a functional minimum. AH-5a and AH-6 can be read-only

@@ -82,13 +82,17 @@
   },
   "auction-house": {
     "tests": [
+      "test_perf_engine.lua",
       "test_workshop_auction*.lua",
+      "test_auction_dev_build.py",
       "test_auction_host.lua",
       "test_auction_window.lua",
       "test_workshop_window.lua",
       "test_workshop_login.lua"
     ],
     "syntax": [
+      "TwichUI_Diagnostics/Gauges.lua",
+      "TwichUI_Diagnostics/Presets.lua",
       "TwichUI_Workshop/**/*.lua",
       "!!!TwichUI/WorkshopLauncher.lua",
       "!!!TwichUI/Core.lua"
@@ -111,13 +115,17 @@
   },
   "auction-preview": {
     "tests": [
+      "test_perf_engine.lua",
       "test_workshop_auction*.lua",
+      "test_auction_dev_build.py",
       "test_auction_host.lua",
       "test_auction_window.lua",
       "test_workshop_window.lua",
       "test_workshop_login.lua"
     ],
     "syntax": [
+      "TwichUI_Diagnostics/Gauges.lua",
+      "TwichUI_Diagnostics/Presets.lua",
       "TwichUI_Workshop/**/*.lua",
       "!!!TwichUI/WorkshopLauncher.lua",
       "!!!TwichUI/Core.lua"
