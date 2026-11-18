@@ -112,7 +112,8 @@ local function Tick(elapsed)
     if not (tx and ok) then active.bearing = nil return Show(active, nil, nil, nil, WORDS[snap.state] or "No route") end
     local facing = NV.Readable(GetPlayerFacing())
     if not facing then active.bearing = nil return Show(active, nil, nil, nil, "Facing unavailable") end
-    local d = math.sqrt((tx - px) ^ 2 + (ty - py) ^ 2)
+    -- Steering looks ahead; the label still measures progress to the next route waypoint.
+    local d = kind == "route" and snap.toNext or math.sqrt((tx - px) ^ 2 + (ty - py) ^ 2)
     local bearing = NV.Bearing(px, py, tx, ty)
     if kind == "route" and active.bearing then
         local turn = (bearing - active.bearing + math.pi) % (2 * math.pi) - math.pi

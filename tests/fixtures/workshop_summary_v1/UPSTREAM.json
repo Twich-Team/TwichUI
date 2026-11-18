@@ -3,9 +3,10 @@
   "source_directory": "contracts/workshop-summary/v1",
   "synthetic": true,
   "sha256": {
-    "row.schema.json": "eab895c336f084362623879759875eb107176bb96c3af72307e8ac71d1881f21",
+    "row.schema.json": "8b1f1d49547bf27f4ec88a6230fe049a391a93288923d97144710fe9e585d538",
     "synthetic.json": "d2f103a61c145c52356d70244c2976ff0c0d136ac07c07112ead85d670dfae10",
     "manifest.schema.json": "bbddcc1d038e3c5528b2e45b699e69d15d834e2e1670883bbfb482fb908e0c92"
   },
-  "source_commit": "caee737f6bf08487d9d3082b15a3dbb174391bf1"
+  "source_commit": "caee737f6bf08487d9d3082b15a3dbb174391bf1",
+  "candidate_amendment": "Source-bound zero age and 14-day support ceilings made explicit; paired candidate final source is pinned in review evidence."
 }

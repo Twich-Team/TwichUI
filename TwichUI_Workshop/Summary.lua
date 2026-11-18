@@ -61,7 +61,7 @@ local function rows(raw,p)
         elseif r[3]==1 then need(not has and r[9]==1 and W.Int(r[7],1,9007199254740991))
         elseif r[3]==2 then need(not has and r[9]==1 and r[7]==0)
         elseif r[3]==3 then need(not has and r[9]==1 and r[7]==N)
-        else need(not has and r[9]==1 and (r[7]==N or W.Int(r[7],0,9007199254740991))) end
+        else need(not has and r[9]==1 and r[7]==N) end
         need(W.Int(r[11],0,14) and W.Int(r[12],0,60) and W.Int(r[13],0,60) and r[11]<=r[12] and r[12]<=r[13])
         need((r[10]==N or r[12]>=3) and (r[5]==N or r[11]>0));tick()
     end

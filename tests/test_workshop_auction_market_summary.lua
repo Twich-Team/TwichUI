@@ -35,20 +35,23 @@ if artifact then
   assert(loadfile(addons..'/'..name..'/Data.lua'))();c.TwichUIMarketParts=TwichUIMarketParts;return true
  end
 end
+local item=tonumber(os.getenv('WORKSHOP_SUMMARY_EXPECTED_ITEM')) or 2589
+local recent=tonumber(os.getenv('WORKSHOP_SUMMARY_EXPECTED_RECENT')) or 120
+local market=os.getenv('WORKSHOP_SUMMARY_EXPECTED_MARKET')
 local function settle()
  for i=1,5000 do FlushTimers();local p=A.Page('market');if p and not p.job and not p.summaryWaiting and not B.Status().loading then return p end end
  error('Market summary did not settle')
 end
 assert(A.Show('market'));settle()
-assert(A.OpenMarket(2589,{market='server'}));local p=settle()
-assert(p.projection.record and p.projection.facts.recent.value==120 and p.projection.facts.mval.value==100,'real Market references differ from independent fixture expectations')
+assert(A.OpenMarket(item,{market='server'}));local p=settle()
+assert(p.projection.record and p.projection.facts.recent.value==recent and (market=='unavailable' and p.projection.facts.mval==nil or market~='unavailable' and p.projection.facts.mval and p.projection.facts.mval.value==100),'real Market references differ from independent fixture expectations')
 assert(p.projection.facts.supply.items==10 and p.projection.facts.comp==nil)
 assert(p.projection.series==nil and p.chart.msg:GetText():find('not a daily price series',1,true),'summary became a daily chart')
 assert(p.contextText:GetText():find('Horde',1,true) and p.coverage:GetText():find('current observed exact variants',1,true))
 assert(p.aggregateText:find(B.Status().generation,1,true),'diagnostics lost actual generation')
 assert(#p.serverVariant==64 and not p.contextText:GetText():find(p.serverVariant,1,true),'ordinary view requires a variant hash')
 A.Market.Variant('');settle()
-local evidence=W.ServerMarket.Evidence(2589,p.serverVariant)
+local evidence=W.ServerMarket.Evidence(item,p.serverVariant)
 assert(evidence.tier=='broad_summary' and not evidence.local_competition)
 for i=1,25 do A.Go('browse');A.Go('market');settle()end
 assert(fingerprint(profile)..fingerprint(db)==before,'external research rewrote local scans, history or preferences')

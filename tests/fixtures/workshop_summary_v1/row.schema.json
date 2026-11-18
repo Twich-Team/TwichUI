@@ -74,7 +74,7 @@
     {
       "type": "integer",
       "minimum": 0,
-      "maximum": 2147483647
+      "maximum": 0
     },
     {
       "type": "integer",
@@ -97,7 +97,7 @@
     {
       "type": "integer",
       "minimum": 0,
-      "maximum": 60
+      "maximum": 14
     },
     {
       "type": "integer",
