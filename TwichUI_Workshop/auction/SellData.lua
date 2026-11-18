@@ -38,7 +38,7 @@ function D.Bags(query)
     local api=C_Container
     if not (api and api.GetContainerNumSlots and api.GetContainerItemInfo) then return rows,"Bag data unavailable" end
     query=(W.Text(query,200) or ""):lower()
-    for bag=0,(NUM_BAG_SLOTS or 4) do
+    for bag=0,(NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4) do
         for slot=1,math.min(api.GetContainerNumSlots(bag) or 0,200) do
             if #rows>=D.MAX then return rows,"Bag list limited" end
             local x=api.GetContainerItemInfo(bag,slot)
