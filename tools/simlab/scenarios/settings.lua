@@ -26,6 +26,59 @@ local function RuleDigest(value)
 end
 A_Admin.SetManualClock(GetTime())
 Lab.Solo()
+if key == "qol" then
+    -- Isolated handler/real-frame fixture, not native object detection or combat acceptance.
+    Lab.Step("gathering sparkle lifecycle", function()
+        local G = R.QoLGathering
+        Lab.Check("init", "gathering module loads before settings", true, G ~= nil)
+        local originals = { get = C_CVar.GetCVar, set = C_CVar.SetCVar, plate = C_NamePlate.GetNamePlateForUnit,
+            object = UnitIsGameObject, exists = UnitExists, guid = UnitGUID, cursor = SetUnitCursorTexture }
+        local values = { SoftTargetInteract = "0", SoftTargetNameplateInteract = "0", SoftTargetInteractRange = "10",
+            SoftTargetInteractArc = "1", SoftTargetInteractOnlyInRange = "1", SoftTargetIconGameObject = "0" }
+        local target = "herb"
+        local plate = CreateFrame("Frame", nil, UIParent)
+        plate:SetSize(80, 30); plate:SetPoint("CENTER"); plate:Show()
+        plate.UnitFrame = CreateFrame("Frame", nil, plate); plate.UnitFrame:SetAlpha(0.8)
+        local probes = {}
+        C_CVar.GetCVar = function(name) if values[name] then return values[name] end; return originals.get(name) end
+        C_CVar.SetCVar = function(name, value)
+            if values[name] then values[name] = tostring(value); return true end
+            return originals.set(name, value)
+        end
+        UnitIsGameObject = function(unit) if unit == "softinteract" then return values.SoftTargetInteract ~= "0" end; return originals.object(unit) end
+        UnitExists = function(unit) if unit == "softinteract" then return false end; return originals.exists(unit) end
+        UnitGUID = function(unit) if unit == "softinteract" then return "GameObject-fixture-" .. target end; return originals.guid(unit) end
+        C_NamePlate.GetNamePlateForUnit = function(unit, ...)
+            if unit == "softinteract" then return values.SoftTargetNameplateInteract == "1" and plate or nil end
+            return originals.plate(unit, ...)
+        end
+        SetUnitCursorTexture = function(texture, unit, ...)
+            if unit ~= "softinteract" then return originals.cursor(texture, unit, ...) end
+            if not probes[texture] then probes[texture] = texture.GetTexture end
+            texture.GetTexture = function() return target == "herb" and "Interface\\Cursor\\GatherHerbs" or "Interface\\Cursor\\Mine" end
+            return true
+        end
+        R:SetEnabled("qolHerbSparkles", true)
+        Lab.Check("state", "herb fixture gets one overlay", 1, G.stats.shown)
+        Lab.Check("state", "one reusable effect frame", 1, G.stats.frames)
+        Lab.Check("state", "one bounded poll ticker", 1, G.stats.timers)
+        target = "ore"; G.Poll()
+        Lab.Check("state", "herb choice does not enable ore", 0, G.stats.shown)
+        R:SetEnabled("qolOreSparkles", true)
+        Lab.Check("state", "ore has its own switch", 1, G.stats.shown)
+        R:SetEnabled("qolHerbSparkles", false); R:SetEnabled("qolOreSparkles", false)
+        Lab.Check("cleanup", "disabled overlay is hidden", 0, G.stats.shown)
+        Lab.Check("cleanup", "disabled ticker is cancelled", 0, G.stats.timers)
+        Lab.Check("cleanup", "disabled listeners removed", 0, G.stats.listeners)
+        Lab.Check("cleanup", "native targeting restored", "0", values.SoftTargetInteract)
+        Lab.Check("cleanup", "native range restored", "10", values.SoftTargetInteractRange)
+        Lab.Check("cleanup", "nameplate alpha restored", true, math.abs(plate.UnitFrame:GetAlpha() - 0.8) < 0.001)
+        C_CVar.GetCVar, C_CVar.SetCVar, C_NamePlate.GetNamePlateForUnit = originals.get, originals.set, originals.plate
+        UnitIsGameObject, UnitExists, UnitGUID, SetUnitCursorTexture = originals.object, originals.exists, originals.guid, originals.cursor
+        for texture, getter in pairs(probes) do texture.GetTexture = getter end
+        plate:Hide()
+    end)
+end
 UnitClass = function() return "Mage", "MAGE" end
 TwichUIDB.ui.settingsWindow = { w = params.narrow and 936 or 1240, h = params.narrow and 660 or 960 }
 -- UI contract fixtures only: real integration engines are covered by their dedicated unit tests.
