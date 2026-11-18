@@ -6,7 +6,8 @@ local V = {}
 A.Browse = V
 local page
 local Start, Paint, Detail
-local SubmitLive, Inspect
+local SubmitLive, Inspect, Back
+local linkHooks=setmetatable({}, {__mode="k"})
 local function Key(r)
     if r.listingKey then return r.listingKey end
     if r.auctionID then return "auction:"..r.auctionID end
@@ -215,7 +216,7 @@ local function Filter(p, name, value)
     if p[name] == value then return end
     p[name] = value
     if A.Live() then
-        p.liveMode=true;p.liveSnapshot=nil;p.inspecting=false
+        p.liveMode=true;p.liveSnapshot=nil;p.inspecting=false;p.returnBrowse=nil;p.showBrowseCache=false
         if p.job and p.job.Cancel then p.job:Cancel();p.job=nil end
         W.AuctionReads.Cancel("Filters changed; click Search to request fresh live results.")
         p.rows={};p.list:SetData({},"Filters changed. Click Search for fresh live results.")
@@ -243,7 +244,7 @@ function V.Filter(name, value)
 end
 function V.Search(query)
     if not page then return end
-    page.liveMode=false;page.researchSaved=true;page.inspecting=false
+    page.liveMode=false;page.researchSaved=true;page.inspecting=false;page.returnBrowse=nil;page.showBrowseCache=false
     page.query = W.Text(query, 200) or ""
     page.search:SetText(page.query)
     page.search.hint:SetShown(page.query == "" and not page.search:HasFocus())
@@ -304,6 +305,8 @@ local function MakeRow(parent)
                 end
                 menu:CreateButton("Open Market history",function() A.MenuSound();A.OpenMarket(row.item,{itemKey=row.itemKey}) end)
             end)
+        elseif page.search:HasFocus() and IsModifiedClick("CHATLINK") then
+            page.search:SetText(row.info.name);page.search:SetCursorPosition(#page.search:GetText())
         else V.Select(row.item,Key(row)) end
     end)
     r.fill = function(self, data)
@@ -470,6 +473,7 @@ local function Build(p)
     local function CategoryRow(parent)
         local r=CreateFrame("Button",nil,parent); UI.Hover(r)
         r.text=A.Text(r,"",13,22,-6,-8);r.text:SetWordWrap(true);r.text:SetHeight(32)
+        r.art=r:CreateTexture(nil,"ARTWORK");r.art:SetSize(28,28)
         r.arrow=UI.Chevron(r,18);r.arrow:SetWidth(10);r.arrow:SetHeight(18)
         r.arrow:SetPoint("LEFT",7,0)
         r:SetScript("OnClick",function()
@@ -480,9 +484,11 @@ local function Build(p)
         end)
         r.fill=function(self,n)
             self.data=n
-            self.text:ClearAllPoints();self.text:SetPoint("TOPLEFT",22+n.depth*12,-6);self.text:SetPoint("RIGHT",-8,0)
+            self.text:ClearAllPoints();self.text:SetPoint("TOPLEFT",56+n.depth*6,-6);self.text:SetPoint("RIGHT",-8,0)
             self.text:SetText(n.name)
-            self.arrow:ClearAllPoints();self.arrow:SetPoint("LEFT",7+n.depth*12,0)
+            self.art:ClearAllPoints();self.art:SetPoint("LEFT",22+n.depth*6,0)
+            UI.Art(self.art,W.AuctionCategories.Art(n),28)
+            self.arrow:ClearAllPoints();self.arrow:SetPoint("LEFT",7+n.depth*6,0)
             self.arrow:SetShown(#(n.children or {})>0)
             self.arrow:SetText(p.expanded[n.key] and "▾" or "›")
             self.arrow:SetAlpha(p.expanded[n.key] and 1 or 0.65)
@@ -535,7 +541,11 @@ local function Build(p)
     local function Head(text,w,x)
         local h=UI.Head(tableCard,text,w,"RIGHT"); h:SetPoint("TOPRIGHT",x,-14);return h
     end
-    local itemHead=A.Text(tableCard,"Item",13,14,-14,-280,UI.K.bronzeText)
+    local itemHead=A.Text(tableCard,"Item",13,14,-14,-280,UI.K.bronzeText);p.itemHead=itemHead
+    p.back=UI.Button(tableCard,"‹ Back to search results",210,"secondary",function() Back(p) end,28)
+    p.back:SetPoint("TOPLEFT",10,-8);p.back:Hide();p.itemHead=itemHead
+    p.back=UI.Button(tableCard,"‹ Back to search results",210,"secondary",function() Back(p) end,28)
+    p.back:SetPoint("TOPLEFT",8,-8);p.back:Hide()
     p.qtyHead=Head("Seen qty*",64,-246); p.unitHead=Head("Seen / item",100,-138); p.totalHead=Head("Est. value*",110,-28)
     p.list=UI.List(tableCard,56,MakeRow,360,false)
     p.list.box:SetPoint("TOPLEFT",4,-36); p.list.box:SetPoint("BOTTOMRIGHT",-4,72)
@@ -546,13 +556,18 @@ local function Build(p)
     p.scope=scope
     p.liveState=A.Text(tableCard,"Saved Market Data · historical observations",11,12,-1,-12,UI.K.textDim)
     p.liveState:ClearAllPoints();p.liveState:SetPoint("BOTTOMLEFT",12,86)
-    p.live=UI.Button(filters,"Prepare live search",194,"secondary",function() SubmitLive(p) end,26)
+    p.live=UI.Button(filters,"Prepare live search",194,"secondary",function()
+        if p.inspecting and p.returnBrowse then Back(p) else SubmitLive(p) end
+    end,26)
     p.live:SetPoint("BOTTOMLEFT",12,64)
-    UI.Tip(p.live,"Experimental read-only search","Live search awaits Forever client acceptance. The existing developer opt-in and fresh auctioneer visit are required; it sends only this explicit query. Search Saved Data continues historical research.")
+    UI.TipFn(p.live,"Browse auctions",function()
+        return p.inspecting and p.returnBrowse and "Return to your previous search results and scroll position." or "Search current auctions using these filters."
+    end)
     p.more=UI.Button(tableCard,"More results",112,"secondary",function()
         local ok,why=W.AuctionReads.More();if not ok then A.Note(why) end
     end,24);p.more:SetPoint("BOTTOMRIGHT",-12,8);p.more:Hide()
     p.refreshLive=UI.Button(tableCard,"Refresh",90,"secondary",function()
+        if p.showBrowseCache then SubmitLive(p);return end
         local ok,why=W.AuctionReads.Refresh();if not ok then A.Note(why) end
     end,24);p.refreshLive:SetPoint("RIGHT",p.more,"LEFT",-6,0);p.refreshLive:Hide()
     BuildDetail(p)
@@ -574,7 +589,7 @@ SubmitLive=function(p)
     if not query then A.Note(reason);return false end
     if p.job and p.job.Cancel then p.job:Cancel() end
     p.token=p.token+1;p.job=nil;p.rows={};p.liveMode=true;p.researchSaved=false;p.liveSnapshot=nil;p.detail.cached=nil;p.inspecting=false
-    p.liveRequested={}
+    p.returnBrowse=nil;p.showBrowseCache=false;p.liveRequested={}
     p.list:SetData({},"Waiting for a live search response…")
     local ok,why=W.AuctionReads.Begin("browse",query)
     if not ok then p.list:SetData({},why);A.Note(why) end
@@ -582,19 +597,34 @@ SubmitLive=function(p)
 end
 Inspect=function(p,row)
     if not row or not row.itemKey then return false end
+    local previous=p.liveSnapshot
+    if previous and previous.kind=="browse" then
+        p.returnBrowse={snapshot=previous,view=A.Capture(p.list,Key),text=p.search:GetText(),category=p.category,quality=p.quality,sort=p.sort,exact=p.exact}
+    end
     local ok,why
     if A.Live() then ok,why=W.AuctionReads.Search(row.itemKey)
     else ok,why=W.AuctionReads.Begin("item",row.itemKey) end
     if not ok then A.Note(why);return false end
-    p.inspecting=true;p.liveSnapshot=nil;p.rows={};p.selected=nil;p.liveKnown=nil;p.liveRequested={};p.detail.cached=nil
+    p.showBrowseCache=false;p.inspecting=true;p.liveSnapshot=nil;p.rows={};p.selected=nil;p.liveKnown=nil;p.liveRequested={};p.detail.cached=nil
     p.detail.scroll:SetVerticalScroll(0)
     p.list:SetData({},"Loading live listings…")
     A.Schedule();return true
 end
+Back=function(p)
+    local previous=p.returnBrowse
+    if not previous then return end
+    p.showBrowseCache=true;p.liveMode=true;p.researchSaved=false;p.inspecting=false;p.liveSnapshot=nil;p.selected=nil
+    p.search:SetText(previous.text);p.category,p.quality,p.sort,p.exact=previous.category,previous.quality,previous.sort,previous.exact
+    p.categoryDrop:Refresh();p.qualityDrop:Refresh();p.sortDrop:Refresh();p.exactButton:SetOn(p.exact);p.categoryList:Layout()
+    A.Render();A.Restore(p.list,previous.view,Key)
+end
 local function LayoutResults(p,details)
-    if p.detailsShown==details then return end
-    p.detailsShown=details
-    p.detail:SetShown(details)
+    local offset=details and p.returnBrowse and 40 or 0
+    if p.detailsShown==details and p.headerOffset==offset then return end
+    p.detailsShown,p.headerOffset=details,offset
+    p.detail:SetShown(details);p.back:SetShown(offset>0)
+    p.itemHead:ClearAllPoints();p.itemHead:SetPoint("TOPLEFT",14,-14-offset);p.itemHead:SetPoint("RIGHT",-280,0)
+    p.list.box:ClearAllPoints();p.list.box:SetPoint("TOPLEFT",4,-36-offset);p.list.box:SetPoint("BOTTOMRIGHT",-4,72)
     p.tableCard:ClearAllPoints()
     p.tableCard:SetPoint("TOPLEFT",p.filters,"TOPRIGHT",10,0)
     p.tableCard:SetPoint("BOTTOMRIGHT",details and -380 or 0,0)
@@ -603,8 +633,9 @@ end
 local function PriceColumns(p, browse)
     local shift=browse and 110 or 0
     p.totalHead:SetShown(not browse)
-    p.qtyHead:ClearAllPoints();p.qtyHead:SetPoint("TOPRIGHT",-246+shift,-14)
-    p.unitHead:ClearAllPoints();p.unitHead:SetPoint("TOPRIGHT",-138+shift,-14)
+    p.totalHead:ClearAllPoints();p.totalHead:SetPoint("TOPRIGHT",-28,-14-(p.headerOffset or 0))
+    p.qtyHead:ClearAllPoints();p.qtyHead:SetPoint("TOPRIGHT",-246+shift,-14-(p.headerOffset or 0))
+    p.unitHead:ClearAllPoints();p.unitHead:SetPoint("TOPRIGHT",-138+shift,-14-(p.headerOffset or 0))
 end
 local function Render(p)
     -- Metadata events are needed in live mode too. Registration used to sit
@@ -615,18 +646,31 @@ local function Render(p)
             "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED","ITEM_SEARCH_RESULTS_UPDATED","AUCTION_HOUSE_BROWSE_FAILURE","AUCTION_HOUSE_CLOSED","AUCTION_HOUSE_SHOW"}) do p:RegisterEvent(event) end
         p.eventCount=9;p.listening=true
     end
+    local native=AuctionHouseFrame
+    if native and native.SetSearchText and not linkHooks[native] and hooksecurefunc then
+        hooksecurefunc(native,"SetSearchText",function(_,text)
+            -- Follow the client's shift-click link path; never replace chat or
+            -- bag handlers, and never send a search until Search/Enter is used.
+            if A.IsShown() and A.Live() and A.Mode()=="browse" and p.search:HasFocus() and IsModifiedClick("CHATLINK") then
+                local name=W.Text(text,200)
+                if name then p.search:SetText(name);p.search:SetCursorPosition(#name) end
+            end
+        end)
+        linkHooks[native]=true
+    end
     p.UpdateCategories()
     if A.Live() and not p.researchSaved and not p.liveMode then
         p.liveMode=true;p.rows={};p.liveSnapshot=nil;p.list:SetData({},"Search the live Auction House. No request starts when this page opens.")
     end
     p.submit.text:SetText(A.Live() and "Search" or "Search Saved Data")
-    p.live.text:SetText(A.Live() and (p.inspecting and "Back to search results" or "Search live auctions") or "Prepare live search")
+    p.live.text:SetText(A.Live() and (p.inspecting and p.returnBrowse and "Back to search results" or "Search live auctions") or "Prepare live search")
     p.tradeButton:SetEnabled(not A.Live())
     p.more:SetShown(A.Live() and p.liveMode==true);p.refreshLive:SetShown(A.Live() and p.liveMode==true)
     local reads=W.AuctionReads
     if p.liveMode then
-        local kind=reads.snapshot and reads.snapshot.kind
-        if kind=="item" or kind=="commodity" then p.inspecting=true end
+        local display=p.showBrowseCache and p.returnBrowse and p.returnBrowse.snapshot or reads.snapshot
+        local kind=display and display.kind
+        if kind=="item" or kind=="commodity" then p.inspecting=true elseif kind=="browse" then p.inspecting=false end
         LayoutResults(p,p.inspecting==true)
         p.detail.inspect:Hide()
         PriceColumns(p,kind==nil or kind=="browse")
@@ -634,9 +678,9 @@ local function Render(p)
         p.totalHead:SetText(kind=="item" and "Buyout / bid" or "Value at price")
         p.unitHead:SetText((kind==nil or kind=="browse") and "Lowest price" or "Unit price")
         p.scope:SetText(A.Live() and "Available quantities are not stacks. Item buyouts are per item.\nCommodity purchases require a separately reviewed quote." or "Explicit experimental response · read-only.\nGrouped minima are not exact listing totals.")
-        p.more:SetEnabled(reads.Pending()==0 and reads.Fresh() and reads.snapshot~=nil and not reads.snapshot.complete and #reads.snapshot.rows<reads.MAX)
-        p.refreshLive:SetEnabled(reads.Pending()==0 and reads.snapshot~=nil)
-        local snap=reads.snapshot
+        p.more:SetEnabled(not p.showBrowseCache and reads.Pending()==0 and reads.Fresh() and reads.snapshot~=nil and not reads.snapshot.complete and #reads.snapshot.rows<reads.MAX)
+        p.refreshLive:SetEnabled(reads.Pending()==0 and (p.showBrowseCache or reads.snapshot~=nil))
+        local snap=display
         if snap and (snap.epoch~=reads.epoch or not reads.Available()) then snap=nil end
         p.liveState:SetText("Live Auction House · experimental · " .. reads.state)
         if snap and snap~=p.liveSnapshot and (snap.kind=="browse" or snap.kind=="item" or snap.kind=="commodity") then
@@ -695,6 +739,7 @@ local function Release(p)
     p.state="canceled"
     if p.job and p.job.Cancel then p.job:Cancel() end
     p.catalog,p.known,p.dirty,p.refilter=nil,nil,nil,nil
+    p.returnBrowse,p.showBrowseCache=nil,nil
     p.liveKnown,p.liveDirty,p.liveRequested=nil,nil,nil
     p.token=p.token+1; p.job,p.rows,p.market,p.stamp,p.pendingView=nil,nil,nil,nil,nil
     p.list:SetData({}); p:UnregisterAllEvents(); p.listening=false

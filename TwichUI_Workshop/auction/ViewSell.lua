@@ -25,7 +25,7 @@ Detail=function(p)
     p.detail.market:SetEnabled(row~=nil)
     p.detail.name:SetText(row and row.info.name or "Choose a bag item")
     p.detail.pic.tex:SetTexture(row and row.info.icon or UI.ICON_BLANK)
-    p.detail.kind:SetText(row and (row.qty.." in selected stack"..(row.variant and " · exact variant" or "")) or "Choose an item from your bags")
+    p.detail.kind:SetText(row and (row.qty.." in your bags"..(row.variant and " · exact variant" or "")) or "Choose an item from your bags")
     local quantity=tonumber(p.quantity:GetText())
     local price,why=p.money:GetCopper()
     local draft=D.Draft(row,quantity,price,p.durationIndex or 1)
@@ -167,7 +167,7 @@ local function Build(p)
             self.data=x;self.name:SetText(x.info.name);self.pic.tex:SetTexture(x.info.icon or UI.ICON_BLANK)
             local color=ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[x.info.quality or 1]
             if color then self.name:SetTextColor(color.r,color.g,color.b) else UI.Paint(self.name,UI.K.text) end
-            self.sub:SetText(x.qty.." in stack"..(x.locked and " · locked" or (x.reserved or 0)>0 and " · crafting reserved" or x.bound~=false and " · binding unknown / bound" or ""))
+            self.sub:SetText(x.qty.." in bags"..(x.locked and " · locked" or (x.reserved or 0)>0 and " · crafting reserved" or x.bound~=false and " · binding unknown / bound" or ""))
             self:SetSelected(p.selected==x.key)
         end
         r:SetScript("OnClick",function()
@@ -175,7 +175,9 @@ local function Build(p)
             if W.AuctionReads.Pending()>0 then A.Note("Wait for the current auction search to finish.");return end
             if p.request and W.AuctionReads.serial==p.request.intent then W.AuctionReads.Cancel("selected item changed") end
             p.selected,p.request,p.matched=r.data.key,nil,nil
-            p.quantity:SetText(tostring(D.Max(r.data)));AD.Request(r.data.item)
+            local defaults=TwichUI.WorkshopLauncher.AuctionSettings()
+            p.durationIndex=defaults.duration;p.duration:Refresh()
+            p.quantity:SetText(tostring(defaults.maxQuantity and math.max(1,D.Max(r.data)) or 1));AD.Request(r.data.item)
             SetPrice(p,nil,nil);p.list:Layout()
             if A.Live() then Find(p) else Reset(p) end
         end)
@@ -205,7 +207,7 @@ local function Build(p)
     p.quantity:SetText("1");p.quantity:SetScript("OnTextChanged",function() Detail(p) end)
     p.max=UI.Button(form,"Max",72,"secondary",function() p.quantity:SetText(tostring(D.Max(p.chosen)));Detail(p) end,30)
     p.max:SetPoint("LEFT",p.quantity,"RIGHT",8,0)
-    UI.Tip(p.max,"Maximum usable quantity","Uses only the selected bag stack, capped by the available native count when verified. Locked, bound and crafting-protected items are excluded. Stacks are never combined or split.")
+    UI.Tip(p.max,"Maximum usable quantity","Uses matching items across your bags, capped by the native available posting count. Locked, bound and crafting-protected items are excluded. No stacks are moved or split.")
     A.Text(form,"Price per item",14,12,-166)
     p.money=A.MoneyInputs(form,function()
         -- Native SetText callbacks may arrive after the guarded write finishes.
@@ -288,6 +290,9 @@ local function Build(p)
 end
 A.Register("sell",{Build=Build,Render=function(p)
     if not p.listening then
+        local defaults=TwichUI.WorkshopLauncher.AuctionSettings()
+        p.advisorOnly=defaults.advisorOnly;p.advisorFilter:SetOn(p.advisorOnly)
+        p.durationIndex=defaults.duration;p.duration:Refresh()
         for _,event in ipairs({"BAG_UPDATE_DELAYED","GET_ITEM_INFO_RECEIVED","ITEM_DATA_LOAD_RESULT","ITEM_SEARCH_RESULTS_UPDATED","AUCTION_HOUSE_CLOSED","AUCTION_HOUSE_DISABLED"}) do p:RegisterEvent(event) end
         W.Strategy.Listen(A.Schedule,true);p.listening=true;p.eventCount=6
     end

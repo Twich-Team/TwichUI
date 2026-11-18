@@ -138,13 +138,17 @@ local function Render(p)
     local view=A.Capture(p.list,function(row) return row.auctionID end)
     p.rows={};p.infoByID={};p.known={}
     p.complete=snapshot and snapshot.complete==true
-    local active,sold,incoming,missing,total=0,0,0,0,0
+    local active,sold,incoming,missing,total,posted,unpriced=0,0,0,0,0,0,0
     if snapshot then
         local seen={}
         for _,row in ipairs(snapshot.rows) do
             if not seen[row.auctionID] then
                 seen[row.auctionID]=true;total=total+1;p.known[row.item]=true
-                if row.status==ACTIVE then active=active+1 end
+                if row.status==ACTIVE then
+                    active=active+1
+                    local value=row.total or row.bid
+                    if value then posted=posted+value else unpriced=unpriced+1 end
+                end
                 if Sold(row) then
                     sold=sold+1
                     local amount=Incoming(row)
@@ -159,6 +163,7 @@ local function Render(p)
         end
     end
     local partial=snapshot and not p.complete
+    p.postedValue:SetText(snapshot and (((partial or unpriced>0) and "≥ " or "")..Money(posted)) or "—")
     p.activeValue:SetText(snapshot and ((partial and "≥ " or "")..active) or "—")
     p.soldValue:SetText(snapshot and ((partial and "≥ " or "")..sold) or "—")
     p.incomingValue:SetText(snapshot and (((partial or missing>0) and "≥ " or "")..Money(incoming)) or "—")
@@ -183,19 +188,20 @@ local function Build(p)
     p.filters:SetPoint("LEFT",p.refresh,"RIGHT",12,0)
     local summary=CreateFrame("Frame",nil,p);summary:SetPoint("TOPLEFT",0,-48);summary:SetPoint("TOPRIGHT",0,-48);summary:SetHeight(76)
     local metrics={}
-    for i,def in ipairs({{"Active auctions","npc:gavel",UI.K.bronzeText},{"Sold",nil,UI.K.sage},{"Incoming", "npc:coins",UI.K.sage}}) do
+    for i,def in ipairs({{"Active auctions","npc:gavel",UI.K.bronzeText},{"Sold",nil,UI.K.sage},{"Incoming", "npc:coins",UI.K.sage},{"Posted value","npc:balance-scales",UI.K.bronzeText}}) do
         local m=CreateFrame("Frame",nil,summary);UI.Panel(m,"card");m:SetHeight(76)
         m.art=m:CreateTexture(nil,"ARTWORK");m.art:SetSize(32,32);m.art:SetPoint("LEFT",12,0)
         if def[2] then UI.Art(m.art,def[2],32) else m.art:SetTexture(DONE) end
-        m.value=A.Text(m,"—",20,56,-14,-10,def[3]);m.value:SetHeight(26)
+        m.value=A.Text(m,"—",i>=3 and 16 or 20,56,-14,-10,def[3]);m.value:SetHeight(26)
         m.label=A.Text(m,def[1],12,56,-45,-10,UI.K.textDim);metrics[i]=m
     end
     local function SizeSummary(_,width)
-        local w=math.max(1,(width-20)/3)
+        local w=math.max(1,(width-30)/4)
         for i,m in ipairs(metrics) do m:ClearAllPoints();m:SetPoint("TOPLEFT",(i-1)*(w+10),0);m:SetWidth(w) end
     end
     summary:SetScript("OnSizeChanged",SizeSummary);SizeSummary(summary,summary:GetWidth())
-    p.activeValue,p.soldValue,p.incomingValue=metrics[1].value,metrics[2].value,metrics[3].value
+    p.activeValue,p.soldValue,p.incomingValue,p.postedValue=metrics[1].value,metrics[2].value,metrics[3].value,metrics[4].value
+    UI.Tip(metrics[4],"Posted value","Total buyout value of active auctions. Bid-only auctions use their current bid when available. Sold payments are shown separately under Incoming.")
     local card=A.Card(p,"My Auctions",100);card:SetPoint("TOPLEFT",0,-136);card:SetPoint("BOTTOMRIGHT",-380,0);card.heading:Hide()
     A.Text(card,"Item",12,12,-14,-330,UI.K.bronzeText)
     local amountHead=UI.Head(card,"Amount",160,"RIGHT");amountHead:SetPoint("TOPRIGHT",-196,-14)

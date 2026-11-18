@@ -33,7 +33,7 @@ function D.Max(row)
     if not row or row.locked or row.bound~=false or row.pending or (row.reserved or 0)>0 or row.eligible==false then return 0 end
     return math.min(row.qty,row.available or row.qty)
 end
-function D.Bags(query)
+local function Stacks(query)
     local rows={}
     local api=C_Container
     if not (api and api.GetContainerNumSlots and api.GetContainerItemInfo) then return rows,"Bag data unavailable" end
@@ -90,13 +90,44 @@ function D.Bags(query)
     end
     return rows
 end
+-- One row per exact item/commodity, retaining each physical stack for
+-- revalidation. Native GetAvailablePostCount supplies the cross-bag posting cap,
+-- just as it does for Sell from Bags; no stack moves or splitting are needed.
+function D.Bags(query)
+    local stacks,err=Stacks(query)
+    local groups,order={},{}
+    for _,part in ipairs(stacks) do
+        local k=part.itemKey
+        local commodity=Enum and Enum.ItemCommodityStatus and Enum.ItemCommodityStatus.Commodity
+        local key=commodity and part.mode==commodity and k and ("commodity:"..part.item)
+            or k and ("item:"..part.item..":"..k.itemLevel..":"..k.itemSuffix..":"..k.battlePetSpeciesID..":"..(part.link or ""))
+            or ("link:"..part.item..":"..(part.link or part.key))
+        local g=groups[key]
+        if not g then g={key=key,rep=part,qty=0,usable=0,members={},identities={}};groups[key]=g;order[#order+1]=g end
+        g.qty=g.qty+part.qty;g.members[#g.members+1]=part
+        g.identities[#g.identities+1]=part.identity..":"..part.qty..":"..tostring(part.locked)
+        if not part.locked and part.eligible==true then
+            g.usable=g.usable+part.qty
+            if g.rep.locked or g.rep.eligible~=true then g.rep=part end
+        end
+    end
+    local rows={}
+    for _,g in ipairs(order) do
+        local row={};for key,value in pairs(g.rep) do row[key]=value end
+        row.key=g.key;row.identity=g.key.."|"..table.concat(g.identities,"|")
+        row.members=g.members;row.qty=g.qty;row.stacks=#g.members
+        row.available=math.min(g.usable,g.rep.available or g.usable)
+        rows[#rows+1]=row
+    end
+    return rows,err
+end
 function D.Draft(row,quantity,price,duration)
     local result={valid=false,deposit=nil,fees=nil,net=nil}
     if not row then result.reason="Choose a bag item.";return result end
     if duration~=nil and not W.Int(duration,1,3) then result.reason="Choose a supported auction duration.";return result end
     if row.pending or (row.reserved or 0)>0 then result.reason="Crafting reservations or a pending plan protect this item.";return result end
     quantity=W.Int(quantity,1,W.MAX_ID);price=W.Int(price,1,PR.MAX_COPPER)
-    if not quantity or quantity>row.qty or row.available and quantity>row.available then result.reason="Quantity exceeds the selected stack or available posting count.";return result end
+    if not quantity or quantity>row.qty or row.available and quantity>row.available then result.reason="Quantity exceeds the usable bag total or available posting count.";return result end
     if not price then result.reason="Enter a valid unit price.";return result end
     local proceeds=W.Sell.Proceeds(price,quantity)
     if proceeds.state~="ok" then result.reason="Proposed total is out of range.";return result end
@@ -125,13 +156,13 @@ function D.Draft(row,quantity,price,duration)
 end
 local function Market() return W.Market.Source().market end
 local function Stamp(m) return m and m.key..":"..W.Valuation.Generation(m) or "none" end
-function D.BagCurrent(row)
+local function StackCurrent(row,grouped)
     local api=C_Container
     if not (row and api and api.GetContainerItemInfo) then return false end
     local ok,valid=pcall(function()
         local x=api.GetContainerItemInfo(row.bag,row.slot)
         if type(x)~="table" or W.Plain(x.itemID)~=row.item or W.Plain(x.stackCount)~=row.qty or
-            W.Plain(x.isLocked)~=false or W.Plain(x.isBound)~=false or W.Text(W.Plain(x.hyperlink),1000)~=row.link then return false end
+            (grouped and W.Plain(x.isLocked)~=row.locked or not grouped and W.Plain(x.isLocked)~=false) or W.Plain(x.isBound)~=false or W.Text(W.Plain(x.hyperlink),1000)~=row.link then return false end
         if row.itemKey then
             if not Q.Available() or not C_AuctionHouse.GetItemKeyFromItem then return false end
             return Same(row.bagItemKey or row.itemKey,C_AuctionHouse.GetItemKeyFromItem(row.location))
@@ -139,6 +170,14 @@ function D.BagCurrent(row)
         return row.identityKnown==true
     end)
     return ok and valid==true
+end
+function D.BagCurrent(row)
+    if not row then return false end
+    if row.members then
+        for _,part in ipairs(row.members) do if not StackCurrent(part,true) then return false end end
+        return #row.members>0
+    end
+    return StackCurrent(row,false)
 end
 function D.Current(ctx,row)
     if not ctx or not row or ctx.identity~=row.identity or not D.BagCurrent(row) then return false end

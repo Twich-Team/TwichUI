@@ -77,6 +77,22 @@ it is never the presentation-switching technique. During combat, safe restoratio
 can be deferred; the independent recovery button remains available. This is a
 client acceptance blocker, not a claim of immediate recovery in all conditions.
 
+## Auction House defaults
+
+Workshop > Auction House also configures the initial Advisor auction-only filter
+(default off), maximum usable quantity when choosing an item (default on), and
+native duration choice (default first duration). Feature-owned getters/setters in
+WorkshopLauncher validate these small profile-local `ui.auctionHouse` preferences
+without loading Workshop, opening a window, starting a query or touching its market
+database. Reads do not write defaults; explicit false values and newer-data holds
+are preserved. These action-related defaults are excluded from configuration
+sharing. New Sell visits apply the filter default, and new item selections apply
+quantity/duration defaults; current drafts keep their manual edits. Settings uses
+its existing lazy page construction, searchable controls and Workshop task tabs;
+no new addon or startup frame is introduced. Performance is not measured in this
+iteration. Unit, simulator, profile/share-contract and packaging checks are deferred
+at the owner's request until the final pre-merge verification.
+
 ## Source review
 
 Read-only Forever reference: `bebcb6bf309cf41b41bd74f8ca651e6a105b2676`,
@@ -90,7 +106,8 @@ or changed. Relative native event/server/input timing is still unverified.
 ## Normal owner workflow
 
 Install TwichUI normally and follow the [short procedure](development-test.md).
-Workshop's **Use TwichUI Auction House (Experimental)** setting and
+Workshop's **Auction House** settings tab contains **Use TwichUI Auction House
+(Experimental)**; it retains the same saved setting. This tab and
 `/tui ahdebug on | off | status` are the ordinary entry points. The existing
 `ui.auctionDebug` preference is retained across reloads and profiles, off when
 missing, and inactive while Workshop is disabled. Presentation has no build gate.
@@ -111,17 +128,32 @@ competing ownership and native restoration guards remain in the same Host.
   Matching responses are bounded to 500 normalized rows; oversized/invalid/truncated
   snapshots remain partial, completed zero responses are empty, and failures/timeouts
   are unverified. Passive partial-result events update the current snapshot.
+  Inspection offers Back to search results, retaining one bounded browse snapshot,
+  the query/filter state and scroll position for this page/visit. This restores the
+  displayed results without another query; Refresh reissues Browse, and historical
+  cached groups never gain item-listing purchase identity. Native shift-click
+  SetSearchText calls are followed only while the integrated Browse search has
+  focus, filling the name without issuing a query. Category rows reuse TwichUI's
+  existing painted art, with native item-class mappings and descendant fallbacks.
 - Shopping offers Quick buy from actual missing quantities. Individual item
   buyouts review one item at the native buyout price; available stock is not a stack.
   Commodity Review total requests a native quote directly from the player's click,
   then requires Confirm bound to the displayed quote version, quantity and total. Purchase
   completion never decrements the plan speculatively; actual bag changes reconcile it.
-- Sell uses selected bag identity, unreserved stock, native mode/count/deposit,
+- Sell groups matching physical stacks across equipped/reagent bags into one row
+  with a total quantity, retaining individual slot/quantity/link/lock identities for
+  revalidation. Commodities group by their native item ID; individual item variants
+  retain their full native key and hyperlink. The representative unlocked eligible
+  location and native available-post count cap the usable group quantity; no bag
+  moves or splitting are sent. Sell uses selected bag identity, unreserved stock, native mode/count/deposit,
   `AuctionPrice.Check`, vendor warning/hold and duration. Both item and commodity
   competition can be searched explicitly. Confirmation rechecks bag quantity,
   identity, money, price/deposit and vendor value. Native warning acceptance is a
   separate player action, scoped to the sole pending draft.
-- My Auctions requests owned data on page entry, waiting for the existing native
+- My Auctions adds Posted value alongside active/sold/incoming summaries: it
+  totals active buyout prices (or the reported bid on bid-only auctions), keeping
+  sold payments separate and partial/unknown valuations labelled as lower bounds.
+  It requests owned data on page entry, waiting for the existing native
   throttle/action owner when necessary. It shows active/sold/incoming summaries,
   native item tooltips and quality colors, Sold success art, and separate status,
   price/payment and timing cards. Sold is taken only from the returned status enum;

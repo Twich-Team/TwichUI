@@ -85,7 +85,7 @@ end
 -- Long forms expose one player task at a time. The original rows, dependencies and setters stay authoritative.
 -- Small forms and already focused card/list editors intentionally have no task strip.
 local TASKS = {
-    workshop = { { "General", "General" }, { "Tooltip Designer", "Tooltip Designer" },
+    workshop = { { "General", "General" }, { "Auction House", "Auction House" }, { "Tooltip Designer", "Tooltip Designer" },
         { "Market Data", "Market Data" }, { "Crafting & Shopping", "Crafting & Shopping" } },
     notifications = { { "Arrivals", "Zone arrival" }, { "Training", "New training" }, { "Friends", "Friend login" }, { "Party", "Party deaths" },
         { "Comfort", "Accessibility" }, { "Try it", "Notification previews", "Appearance" } },

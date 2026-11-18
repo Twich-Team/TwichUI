@@ -186,6 +186,27 @@ function L.SetLoadOnLogin(on)
     TwichUIDB.ui.workshopLoadOnLogin = on or nil
     return true
 end
+-- Auction defaults stay lightweight and profile-local. Reading them never
+-- loads Workshop or creates saved data; existing drafts keep their edits.
+L.AuctionDefaults={advisorOnly=false,maxQuantity=true,duration=1}
+function L.AuctionSettings()
+    local ui=type(TwichUIDB)=="table" and TwichUIDB.ui
+    local saved=type(ui)=="table" and type(ui.auctionHouse)=="table" and ui.auctionHouse or {}
+    return {advisorOnly=saved.advisorOnly==true,maxQuantity=saved.maxQuantity~=false,
+        duration=type(saved.duration)=="number" and saved.duration%1==0 and saved.duration>=1 and saved.duration<=3 and saved.duration or 1}
+end
+function L.SetAuctionOption(key,value)
+    if key=="duration" then
+        if type(value)~="number" or value%1~=0 or value<1 or value>3 then return false end
+    elseif key=="advisorOnly" or key=="maxQuantity" then
+        if type(value)~="boolean" then return false end
+    else return false end
+    if type(TwichUIDB)~="table" or R.Persist and R.Persist.IsHeld("TwichUIDB") then return false end
+    if type(TwichUIDB.ui)~="table" then TwichUIDB.ui={} end
+    if type(TwichUIDB.ui.auctionHouse)~="table" then TwichUIDB.ui.auctionHouse={} end
+    TwichUIDB.ui.auctionHouse[key]=value
+    return true
+end
 function L.SettingsState()
     local ws = type(TwichUIDB) == "table" and TwichUIDB.workshop
     local view = type(ws) == "table" and type(ws.view) == "table" and ws.view or {}

@@ -215,7 +215,7 @@ local function BuildDetail(p)
         local v=d.data
         if v and p.current then QuickBuy(v) end
     end,30)
-    d.buy:SetPoint("BOTTOMRIGHT",d,"BOTTOMLEFT",-12,12);d.buy:SetEnabled(false)
+    d.buy:SetPoint("BOTTOMRIGHT",d,"BOTTOMLEFT",-24,12);d.buy:SetEnabled(false)
 end
 
 local function Build(p)
