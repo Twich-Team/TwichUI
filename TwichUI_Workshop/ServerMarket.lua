@@ -7,7 +7,7 @@ M.AVAILABILITY={priced='Priced observations available',supply_only='Supply obser
     observed_absent='Observed absent; price unavailable',unknown_coverage='Observation coverage unknown',
     outside_scope='Market history not included in this update.',unsupported='External evidence unsupported',
     invalid_generation='External generation rejected',unavailable='External history unavailable',variant_required='Choose an exact server variant',
-    not_observed='No delivered record; absence is not established'}
+    not_observed='No delivered record; absence is not established',summary_only='Detailed history is not delivered in a compact summary',loading='Validating this market partition',combat='Open again after combat'}
 function M.AvailabilityText(state) return M.AVAILABILITY[state] or 'External history unavailable' end
 function M.Context()
     local m=B.Market();local status=B.Status()
@@ -20,6 +20,7 @@ function M.Catalog(opt)
     local focus=W.Int(opt.item or tonumber(opt.query),1,W.MAX_ID)
     return W.AuctionBrowseData.Job({sources={},market=nil,index=true,catalog=opt.catalog,item=focus,query=opt.query,category=opt.category,quality=opt.quality,
         enumerate=function(add,tick,job)
+            if focus and B.Status().summary then return end
             if opt.scope=='tracked' then
                 for id,on in pairs(W.AdvisorData.Tracked()) do if on then add(id);tick();if job.capped then break end end end
             elseif opt.scope=='bags' then
@@ -30,12 +31,12 @@ function M.Catalog(opt)
                     if id then add(id) end
                     tick();if job.capped then return end
                 end end
-            else B.EachItem(add,tick,function()return job.capped end) end
+            else local ok,why=B.EachItem(add,tick,function()return job.capped end);if not ok then job.unavailable=why end end
         end})
 end
 function M.Variants(item)
     local out={{'','Choose exact server variant'}};local variants,cut=B.Variants(item or 0,100)
-    for _,key in ipairs(variants or {}) do out[#out+1]={key,'Variant '..key:sub(1,16)} end
+    for i,key in ipairs(variants or {}) do out[#out+1]={key,B.Status().summary and ('Observed variant '..i) or ('Variant '..key:sub(1,16))} end
     if cut then out[#out+1]={'','More variants omitted from this selector'} end
     return out
 end
@@ -73,8 +74,8 @@ end
 -- Summary coverage is independent and currently unavailable; this does not load anything.
 function M.Evidence(item,variant)
     local a=B.Availability(item,variant)
-    local out={api=1,role='external_evidence',source='market_server',tier='detailed_history',
-        state=a.state,included=a.included,summary_coverage='unavailable',local_competition=false,
+    local out={api=1,role='external_evidence',source='market_server',tier=B.Status().summary and 'broad_summary' or 'detailed_history',
+        state=a.state,included=a.included,summary_coverage=B.Status().summary and 'current_observed_exact_variants' or 'unavailable',native_identity_mapping='unavailable',local_competition=false,
         confidence=a.state=='priced' and 'limited' or 'insufficient',market_identity=B.Market(),generation=B.Status().generation,scope=B.Scope()}
     if a.included then
         out.recent=B.Value(item,variant,'recent');out.market=B.Value(item,variant,'market')

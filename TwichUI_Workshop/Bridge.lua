@@ -346,3 +346,68 @@ if R.Perf and R.Perf.Gauge then
     R.Perf.Gauge('workshop.bridgeBytes',{label='Retained external payload bytes',kind='cache',group='workshop',unit='bytes',read=function() return active and active.bytes or 0 end})
     R.Perf.Gauge('workshop.bridgeCache',{label='Decoded external records (bounded)',kind='cache',group='workshop',unit='count',read=function() return #order end})
 end
+
+-- Keep all legacy formats and validation paths. The separate summary contract
+-- becomes selected only after its header has passed validation.
+if W.Summary then
+    local Q=W.Summary
+    local begin,step,load,cancel=B.Begin,B.Step,B.Load,B.Cancel
+    function B.Begin(raw,automatic,expected)
+        if type(raw)=='table' and raw.summary_version~=nil then return Q.Begin(raw,expected,active~=nil) end
+        Q.Cancel();return begin(raw,automatic,expected)
+    end
+    function B.Step(ms)
+        if Q.Pending() then return Q.Step(ms) end
+        if Q.Selected() and not job then local status=Q.Status();return status.ready,status.error end
+        local ok,why=step(ms);if ok and active then Q.Deactivate() end;return ok,why
+    end
+    function B.Load()
+        if not W.Active() then return false,'disabled' end
+        if type(TwichUIMarketData)=='table' and TwichUIMarketData.summary_version~=nil then
+            if InCombatLockdown and InCombatLockdown() then return false,'combat' end
+            return Q.Begin(TwichUIMarketData,nil,active~=nil)
+        end
+        return load()
+    end
+    function B.Cancel() Q.Cancel();return cancel() end
+    for _,name in ipairs({'Status','Manifest','Market','Receipt','Scope','Variants','EachItem','Record','Availability','Value','History','Freshness'}) do
+        local legacy=B[name]
+        B[name]=function(...)
+            if Q.Selected() then return Q[name](...) end
+            return legacy(...)
+        end
+    end
+    local status=B.Status
+    function B.Status()
+        local out=status()
+        if not Q.Selected() then
+            local q=Q.Status();out.loading=out.loading or q.loading
+            if q.error then out.error=q.error;out.compatibility_message=q.compatibility_message end
+        end
+        return out
+    end
+    local compatibility,text=B.Compatibility,B.CompatibilityText
+    function B.Compatibility()
+        if not Q.Selected() then return compatibility() end
+        local s=Q.Status();return {compatible=s.ready,desktop_build=s.desktop_build or 'unknown',summary=true,
+            transport_version=1,contract_version=1,schema_version=1,receipt_schema_version=1,minimum_reader_version=1,reader_contract_version=1}
+    end
+    function B.CompatibilityText(diagnostics)
+        if not Q.Selected() then return text(diagnostics) end
+        local s=Q.Status();if not s.ready then return nil end
+        return 'Market summary from Companion '..s.desktop_build:gsub('|','||'):gsub('[%c]',' ')..
+            (diagnostics and '\nSummary contract 1; header verified; partitions validated on demand.' or '')
+    end
+    local capabilities=B.Capabilities
+    function B.Capabilities() local c=capabilities();c.summary_index=true;c.summary_contract=1;return c end
+    function B.RecognizeSummary()
+        if not W.Active() or InCombatLockdown and InCombatLockdown() then return false end
+        local get=C_AddOns and C_AddOns.GetAddOnMetadata
+        if TwichUIMarketData==nil and get then
+            local ok,version=pcall(get,B.ADDON,'X-TwichUI-Summary')
+            if ok and version=='1' and C_AddOns.LoadAddOn then measured('workshop.bridgeLoad',function()return pcall(C_AddOns.LoadAddOn,B.ADDON)end) end
+        end
+        if type(TwichUIMarketData)=='table' and TwichUIMarketData.summary_version~=nil then return B.Load() end
+        return false
+    end
+end

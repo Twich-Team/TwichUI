@@ -33,7 +33,9 @@ function S.Time(v)
     return day..'T'..('%02d:%02d:%02d'):format(h,m,s)..'.'..fraction..string.rep('0',6-#fraction),number*86400+h*3600+m*60+s,number
 end
 local function pattern(p,v)
-    if p=='^[0-9a-f]{64}$' then return #v==64 and not v:find('[^0-9a-f]')
+    if p=='Z$' then return v:sub(-1)=='Z'
+    elseif p=='^[1-9][0-9]*$' then return money(v,true)
+    elseif p=='^[0-9a-f]{64}$' then return #v==64 and not v:find('[^0-9a-f]')
     elseif p=='^(0|[1-9][0-9]{0,18})$' then return money(v,false)
     elseif p=='^[1-9][0-9]{0,18}$' then return money(v,true)
     elseif p=='^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then return S.Date(v)~=nil

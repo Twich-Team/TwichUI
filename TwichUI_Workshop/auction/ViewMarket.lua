@@ -60,11 +60,53 @@ local function ServerChart(p,x)
         p.chart.note:SetText(label..formatter(point.price).." · "..Date(point.day).." UTC")
     end
 end
+local function SummaryDetail(p,r)
+    local B=W.Bridge
+    -- Research selection only: this never resolves a native bag/equipment link.
+    if r and p.serverVariant=='' then
+        local variants,cut=B.Variants(r.item,2)
+        if variants and #variants==1 and not cut then p.serverVariant=variants[1];p.variantDrop:Refresh() end
+    end
+    local x=W.ServerMarket.Project(r and r.item,p.serverVariant,p.serverMetric,p.days);p.projection=x
+    local h,status=x.header,B.Status()
+    local why=W.ServerMarket.AvailabilityText(x.availability.state)
+    p.kind:SetText('External listing summary · exact server variants · native item equivalence unavailable')
+    p.source:SetText(B.Freshness().text..' · '..x.label..(h and h.synthetic and ' · synthetic fixture' or ''))
+    local rows={};for _,v in ipairs(W.ServerMarket.Rows(x,UI.Money)) do rows[v.id]=v end
+    for _,tile in ipairs(p.tiles) do
+        if tile.localHeading==nil then tile.localHeading=tile.heading:GetText() end
+        local v=rows[tile.id];tile.value:SetText(v and v.value or 'Unavailable');tile.tip=v and v.tip or why
+        tile.heading:SetText(v and v.label or tile.localHeading)
+    end
+    ServerChart(p,x)
+    p.chartCard.heading:SetText('Detailed history unavailable in compact updates')
+    p.chart.msg:SetText('This update contains price references, not a daily price series.')
+    p.chart.note:SetText('Choose a saved local market to inspect genuine local history.')
+    p.coverage:SetText(h and (h.record_count..' current observed exact variants; historical-only items are excluded.') or why)
+    p.axis:SetText('No synthetic daily observations or interpolated trends')
+    if status.error then p.kind:SetText(status.ready and 'Replacement rejected; previous validated data retained.' or 'Summary rejected; local history is unchanged.') end
+    if status.compatibility_message then p.source:SetText(status.compatibility_message) end
+    local current=x.record and x.record.current
+    p.trends:SetText(why..(current and ('\n'..current.coverage.priced_days_14..' priced reference dates in 14 days; '..current.coverage.priced_days_60..' in 60 days.') or '')..'\nNo local competition or selling authorization.')
+    p.contextText:SetText(h and ('Observed: '..h.source_observation.observed_at..' UTC\n'..h.market.faction..' · '..h.market.player_ruleset..' · house '..h.market.house_id..
+        '\nMarket server · '..h.pricing_algorithm..'\nPartitions validate on demand: '..status.checked_parts..'/'..status.parts) or why)
+    p.aggregateText=h and ('Generation: '..h.generation_id..'\nIssuer: '..h.issuer_id..'\n'..(x.record and ('Exact upstream variant: '..x.record.variant_key..'\n') or '')..
+        'Summary contract 1 · current observed exact variants only\nDetailed history not delivered; missing records are unavailable, never zero.') or why
+    p.chartTip='Historical reference support is genuine server evidence; summary references are not chart observations.'
+    if status.loading and not p.summaryWaiting then
+        p.summaryWaiting=true
+        C_Timer.After(0.05,function()
+            p.summaryWaiting=nil
+            if A.IsShown() and A.Mode()=='market' and p.marketKey=='server' then Detail(p) end
+        end)
+    end
+end
 local function ServerDetail(p,r)
     p.track:SetEnabled(false);p.browse:SetEnabled(false);p.advisor:SetEnabled(false)
     p.variantDrop:Show();p.qualityDrop:Hide();p.metricDrop:Show();p.variantDrop:Refresh()
     p.name:SetText(r and r.info.name or "Choose a server item")
     p.pic.tex:SetTexture(r and r.info.icon or UI.ICON_BLANK)
+    if W.Bridge.Status().summary then SummaryDetail(p,r);return end
     p.kind:SetText("External observations · choose an exact upstream variant · local prices stay separate")
     local x=W.ServerMarket.Project(r and r.item,p.serverVariant,p.serverMetric,p.days);p.projection=x
     local h=x.header;local selected=x.record

@@ -451,6 +451,10 @@ Market C1 scopes: `auction.chartPrepare` measures evidence preparation and
 `TwichUI_Workshop/auction/AdvancedChart.lua`. Hover uses binary search and updates
 only when the selected record changes; no history decoding occurs there.
 
+## Automatic Workshop summaries (candidate)
+
+`workshop.summaryLoad` measures each requested partition's unavoidable synchronous addon compilation/load. `workshop.summaryValidate` measures cooperative 3 ms-budget validation callbacks, including parse, canonical encoding and SHA-256; `workshop.summaryLookup` measures exact research reads. Read-only gauges `summaryBytes`, `summaryParts`, `summaryDecoded` and `summaryChecked` report retained raw bytes, loaded partitions, decoded rows (one bounded partition) and checked partitions. Fixed A/B partition names are included in ownership attribution; expensive memory sampling reports their aggregate separately from the small MarketData root. No diagnostic read loads a partition. Initial recognition reads only the summary-marked root after Workshop consent; opening research may request partitions. These are instrumented costs, not Forever frame-time acceptance.
+
 ### AH-7A supervised native integration
 
 `auction.switch` (`Perf.Call`, layout) maps to `auction/Host.lua:Switch`, only on a

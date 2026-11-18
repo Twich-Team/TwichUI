@@ -5,6 +5,7 @@ if P.categories then
     AuctionCategories={{name="Fixture trade group",filters={{classID=7}},
         subCategories={{name="Fixture subclass",filters={{classID=7,subClassID=0}}}}}}
 end
+if P.summary then TwichUIMarketData=SIMLAB_SUMMARY;TwichUIMarketParts=SIMLAB_SUMMARY_PARTS end
 if P.bridge then TwichUIMarketData=SIMLAB_BRIDGE end -- data is present while Workshop is still unloaded
 local R = TwichUI
 A_Admin.SetManualClock(GetTime())
@@ -599,5 +600,23 @@ if P.scopedState then
         Lab.Check('state','player update instruction visible',true,message and p.source:GetText():find(message,1,true)~=nil or not message)
         Lab.Check('state','player sees retained data status',P.compatibility~='valid',p.kind:GetText():find('previous compatible data retained',1,true)~=nil)
     end
+end
+if P.summary then
+    local W=R.Workshop;local B=W.Bridge;local valid=P.summary=='valid'
+    Lab.Settle(0.5)
+    Lab.Check('init','summary automatically recognized',valid,B.Status().ready)
+    Lab.Check('state','root does not eagerly decode parts',0,B.Status().loaded_parts)
+    Lab.Check('interact','summary research navigation',true,A.OpenMarket(2589,{market='server'}))
+    Lab.Settle(1);local p=A.Page('market');local x=p.projection
+    Lab.Check('state','supported current reference',valid and 120 or nil,x.facts and x.facts.recent and x.facts.recent.value)
+    Lab.Check('state','supported market reference',valid and 100 or nil,x.facts and x.facts.mval and x.facts.mval.value)
+    Lab.Check('state','summary contains no daily series',nil,x.series)
+    Lab.Check('state','local competition not supplied',nil,x.facts and x.facts.comp)
+    Lab.Check('state','two closes do not imply historical value',nil,x.facts and x.facts.hist)
+    Lab.Check('state','no transactions authorized',false,p.browse:IsEnabled() or p.advisor:IsEnabled() or p.track:IsEnabled())
+    Lab.Check('state','valid summary preserves market faction',valid and 'Horde' or nil,B.Market() and B.Market().faction)
+    Lab.Check('state','active decoded partition bounded',true,B.Status().decoded_parts<=1)
+    Lab.Check('state','declared coverage only when valid',valid,B.Scope()~=nil)
+    Lab.Check('state','future contract actionable',P.summary=='future',B.Status().compatibility_message~=nil)
 end
 Lab.Finish()

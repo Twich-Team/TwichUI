@@ -84,6 +84,25 @@ for mode in valid newer older; do
   cat "$LAB/fixtures/bridge-priced.lua" "$LAB/fixtures/auctionpreview-companion$mode.lua" > "$LAB/fixtures/bridge-combined.lua"
   mv "$LAB/fixtures/bridge-combined.lua" "$LAB/fixtures/auctionpreview-companion$mode.lua"
 done
+# Paired compact summary fixtures are synthetic; no provider or game writes.
+python3 - "$REPO/tests/fixtures/workshop_summary_v1/synthetic.json" "$LAB/fixtures" <<'PYSUMMARY'
+import json,sys
+from pathlib import Path
+source=json.loads(Path(sys.argv[1]).read_text());out=Path(sys.argv[2])
+def raw(v):return json.dumps(v,sort_keys=True,separators=(',',':'),ensure_ascii=True)
+def q(s):return '"'+''.join('\\%03d'%b for b in s.encode())+'"'
+for pose in ('valid','corrupt','future'):
+ h=json.loads(json.dumps(source['manifest']))
+ if pose=='future':h['schema_version']=999
+ receipt=dict(schema_version=1,generation_id=h['generation_id'],desktop_build='synthetic-summary-simulator',completed_at='2026-11-18T00:00:00Z')
+ manifest=raw(h)+(' ' if pose=='corrupt' else '')
+ (out/('summary-'+pose+'.lua')).write_text('SIMLAB_SUMMARY={summary_version=1,bank="A",manifest='+q(manifest)+',receipt='+q(raw(receipt))+'}\nSIMLAB_SUMMARY_PARTS={A29='+q(source['parts']['29'])+'}\n')
+PYSUMMARY
+for mode in valid corrupt future; do
+ fixture "summary$mode" "{ summary = \"$mode\" }"
+ cat "$LAB/fixtures/summary-$mode.lua" "$LAB/fixtures/auctionpreview-summary$mode.lua" > "$LAB/fixtures/summary-combined.lua"
+ mv "$LAB/fixtures/summary-combined.lua" "$LAB/fixtures/auctionpreview-summary$mode.lua"
+done
 fixture wrong '{ wrongAt = "Browse default" }'
 repo_before="$(git -C "$REPO" status --porcelain --ignored)"
 status=0

@@ -494,6 +494,7 @@ function W.Resume()
     if l and l.Enabled and not l.Enabled() then return end
     W.suspended = nil
     if not W.Active() then return end
+    if W.Bridge and W.Bridge.RecognizeSummary then W.Bridge.RecognizeSummary() end
     if W.Watch then W.Watch.Start() end
     if W.Bank then W.Bank.Start() end
     if W.WorthTip then W.WorthTip.Start() end
@@ -502,3 +503,4 @@ function W.Resume()
 end
 if not W.Active() then W.suspended = true end
 W.ready = true
+if W.Bridge and W.Bridge.RecognizeSummary then W.Bridge.RecognizeSummary() end

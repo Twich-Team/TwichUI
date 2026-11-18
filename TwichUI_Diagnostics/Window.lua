@@ -731,6 +731,7 @@ local MEMS = {
     { key = "layoutwizard", label = "TwichUI_LayoutWizard" },
     { key = "workshop", label = "TwichUI_Workshop" },
     { key = "marketdata", label = "TwichUI_MarketData" },
+    { key = "summaryparts", label = "Market summary parts (aggregate)" },
     { key = "diag", label = "TwichUI Diagnostics" },
     { key = "heap", label = "Whole UI heap" },
 }
