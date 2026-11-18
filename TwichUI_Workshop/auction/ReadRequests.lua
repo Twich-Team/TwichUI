@@ -9,7 +9,7 @@ local function StopTimers()
     if deadline then deadline:Cancel();deadline=nil end
     if expiry then expiry:Cancel();expiry=nil end
 end
-function Q.Development()
+function Q.Integrated()
     local h=R.AuctionHost
     if not h or not h.DebugEnabled or not h.DebugEnabled() then return false end
     local x=h.Snapshot()
@@ -25,7 +25,7 @@ local function Context()
     return ok and a==true and b==true and not (InCombatLockdown and InCombatLockdown())
 end
 function Q.Pending() return pending and 1 or 0 end
-function Q.Available() return W.Active() and (Q.experimental or Q.Development()) and Context() and not Q.ambiguous end
+function Q.Available() return W.Active() and (Q.experimental or Q.Integrated()) and Context() and not Q.ambiguous end
 function Q.End(reason)
     StopTimers()
     Q.epoch=Q.epoch+1
@@ -54,7 +54,7 @@ local function Hooks()
     end
     hooked=true;return true
 end
--- Explicit development opt-in, not persisted. Must be enabled before a fresh visit.
+-- Advanced diagnostic read opt-in, not persisted. Must be enabled before a fresh visit.
 function Q.EnableExperimental(on)
     Q.experimental=on==true;Q.ambiguous=true;Q.End("reopen auctioneer after experimental opt-in")
 end
@@ -102,12 +102,12 @@ local function Finish(state,rows,complete,event,rawCount)
     if not current then return end
     if deadline then deadline:Cancel();deadline=nil end
     if expiry then expiry:Cancel();expiry=nil end
-    if Q.Development() and state=="empty" and not complete then state="unverified" end
+    if Q.Integrated() and state=="empty" and not complete then state="unverified" end
     Q.snapshot={epoch=current.epoch,intent=current.id,kind=current.kind,rows=rows or {},arg=current.arg,
         complete=complete==true,at=GetTime(),experimental=true,visit=Q.visit,
         rawCount=rawCount or #(rows or {}),response=event,correlation="serialized-local"}
     Q.state=state;Q.lastResponse=event;pending=nil
-    stream=Q.Development() and not complete and current or nil
+    stream=Q.Integrated() and not complete and current or nil
     local snapshot=Q.snapshot
     expiry=C_Timer.NewTimer(30,function()
         if Q.snapshot==snapshot then Q.End("stale; refresh live results") end
@@ -115,7 +115,7 @@ local function Finish(state,rows,complete,event,rawCount)
     if W.AuctionUI then W.AuctionUI.Schedule() end
 end
 function Q.AttachVisit(id)
-    if not Q.Development() then return end
+    if not Q.Integrated() then return end
     if Q.visit~=id then
         Q.visit=id;Q.open=true;Q.used={};Q.sent={};Q.ambiguous=false;Q.End("ready")
         if not Hooks() then Q.ambiguous=true;Q.state="Live read hooks unavailable" end
@@ -172,10 +172,10 @@ function Q.BrowseQuery(opt)
     return query
 end
 function Q.Begin(kind,arg,more)
-    if not Q.Available() then return false,"Live search unavailable: "..(Q.ambiguous and "another request or a timeout made the response uncertain; reopen the auctioneer." or "use the integrated development Auction House at an auctioneer.") end
+    if not Q.Available() then return false,"Live search unavailable: "..(Q.ambiguous and "another request or a timeout made the response uncertain; reopen the auctioneer." or "use the integrated TwichUI Auction House at an auctioneer.") end
     if pending then return false,"A live request is already pending." end
     if W.AuctionActions and W.AuctionActions.Busy() then return false,"An auction action is awaiting its result." end
-    if not Q.Development() and Q.used and Q.used[kind] then return false,"Repeat reads cannot be attributed safely; reopen the auctioneer." end
+    if not Q.Integrated() and Q.used and Q.used[kind] then return false,"Repeat reads cannot be attributed safely; reopen the auctioneer." end
     local api=C_AuctionHouse
     if not api or not Hooks() then return false,"Read APIs unavailable." end
     if not api.IsThrottledMessageSystemReady() then return false,"Auction House is busy; click Search again when ready." end
@@ -211,7 +211,7 @@ function Q.Begin(kind,arg,more)
     if not ok then Q.lastError=tostring(hasFull);Q.Cancel("search failed");return false,"Search failed; details are in Diagnostics." end
     if pending then
         deadline=C_Timer.NewTimer(10,function()
-            if pending and pending.id==mine then Q.lastError="No matching response before timeout";Q.Cancel(Q.Development() and "search timed out; result unknown" or "search timed out") end
+            if pending and pending.id==mine then Q.lastError="No matching response before timeout";Q.Cancel(Q.Integrated() and "search timed out; result unknown" or "search timed out") end
         end)
     end
     if more and hasFull==true then
@@ -234,7 +234,7 @@ end
 function Q.Event(event,key)
     if not W.Active() then return end
     if event=="AUCTION_HOUSE_SHOW" then
-        if not Q.open then Q.open=true;Q.used={};Q.End("ready");Q.ambiguous=not ((Q.experimental or Q.Development()) and Context() and Hooks()) end
+        if not Q.open then Q.open=true;Q.used={};Q.End("ready");Q.ambiguous=not ((Q.experimental or Q.Integrated()) and Context() and Hooks()) end
         return
     elseif event=="AUCTION_HOUSE_CLOSED" or event=="AUCTION_HOUSE_DISABLED" or event=="PLAYER_LEAVING_WORLD" then
         Q.open=false;Q.Cancel("unavailable");return
@@ -285,7 +285,7 @@ function Q.Event(event,key)
         Finish(#rows>0 and "results" or "empty",rows,complete,event,rawCount)
     end
     local ok,err=pcall(function() R.Perf.Call("auction.readSnapshot",Read) end)
-    if not ok then Q.lastError=tostring(err);Q.Cancel(Q.Development() and "data unavailable; response unverified" or "data unavailable") end
+    if not ok then Q.lastError=tostring(err);Q.Cancel(Q.Integrated() and "data unavailable; response unverified" or "data unavailable") end
 end
 local events={"AUCTION_HOUSE_SHOW","AUCTION_HOUSE_CLOSED","AUCTION_HOUSE_DISABLED","PLAYER_LEAVING_WORLD",
     "AUCTION_HOUSE_THROTTLED_SYSTEM_READY","AUCTION_HOUSE_BROWSE_RESULTS_UPDATED","AUCTION_HOUSE_BROWSE_RESULTS_ADDED","AUCTION_HOUSE_BROWSE_FAILURE", "AUCTION_HOUSE_THROTTLED_MESSAGE_DROPPED",

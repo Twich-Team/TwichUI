@@ -2,7 +2,9 @@
 dofile(TESTS .. "harness.lua")
 dofile(TESTS .. "settings_mock.lua")
 local c, S = SettingsClient({ beforeInit = function(c)
-    local chunk = assert(loadfile(ROOT .. "WorkshopLauncher.lua")); setfenv(chunk, c); chunk()
+    for _, file in ipairs({"WorkshopLauncher.lua", "auction/Build.lua", "auction/Host.lua"}) do
+        local chunk = assert(loadfile(ROOT .. file)); setfenv(chunk, c); chunk()
+    end
 end })
 local R, K = c.TwichUI, S.K
 local L = R.WorkshopLauncher
@@ -35,6 +37,11 @@ R.Workshop = { ready = true, Session = {
     SetUseGuild = function(v) called.guild = v; return true end,
 }, Notice = { SetOn = function(v) called.notices = v; return true end } }
 assert(L.SetEnabled(true), "an existing loaded Workshop can be explicitly enabled")
+assert(S.variables.TWICHUI_auctionDebug.default == false)
+S.variables.TWICHUI_auctionDebug:SetValue(true)
+assert(R.AuctionHost.DebugEnabled() and c.TwichUIDB.ui.auctionDebug == true, "standard Settings enables without a development marker")
+S.variables.TWICHUI_auctionDebug:SetValue(false)
+assert(not R.AuctionHost.DebugEnabled() and c.TwichUIDB.ui.auctionDebug == false)
 for _, key in ipairs({ "prices", "guild", "notices" }) do
     assert(L.SetOption(key, false) and called[key] == false, "uses existing setter: " .. key)
 end

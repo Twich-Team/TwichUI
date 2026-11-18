@@ -8,8 +8,8 @@ c.GetFramerate=function() return 60 end
 c.Enum.PlayerInteractionType={Auctioneer=21};c.Enum.ItemCommodityStatus={Item=1,Commodity=2}
 c.C_PlayerInteractionManager={IsInteractingWithNpcOfType=function() return s.connected~=false end,IsValidNPCInteraction=function() return s.connected~=false end}
 c.InCombatLockdown=function() return s.combat==true end
-R.AuctionBuild={development=true,verified={}}
-R.AuctionHost={DebugEnabled=function() return s.debug~=false end,Development=function() return true end,
+R.AuctionBuild={verified={}}
+R.AuctionHost={DebugEnabled=function() return s.debug~=false end,
  Snapshot=function() return {state=s.state,leased=true,enabled=true,visit=s.visit,reason="test",openMS=1,switchMS=1} end,
  IsCurrent=function(id) return id==s.visit and s.connected~=false end,
  InterfaceHidden=function() end,ToBlizzard=function() s.state="blizzard";W.AuctionUI.Hide();return true end}

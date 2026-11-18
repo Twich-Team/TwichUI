@@ -23,9 +23,8 @@ local function Reach(name,button)
  local hit=R.TestLab.Reach.Analyze(button,{kind="click",evidence="simulator-geometry",limit=1000000})
  Lab.Check("construct",name,"reachable",hit.verdict)
 end
-Lab.Step("development opt-in",function()
- Lab.Check("init","ordinary build remains off",false,H.Development())
- R.AuctionBuild.development=true -- fixture only; private archive stamps this marker
+Lab.Step("ordinary opt-in",function()
+ Lab.Check("init","ordinary preference defaults off",false,H.DebugEnabled())
  R.WorkshopLauncher.SetEnabled(true)
  Lab.Check("interact","debug enable needs no proof",true,H.SetDebug(true))
  Lab.Check("state","choice is saved",true,TwichUIDB.ui.auctionDebug)
