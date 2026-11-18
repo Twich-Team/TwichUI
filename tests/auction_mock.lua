@@ -30,7 +30,16 @@ local c = MIClient("Rich", {
       fr.RegisterForDrag = function() end
       fr.SetDontSavePosition = function() end
       fr.UnregisterAllEvents = function(s) s.events = {} end
-      fr.SetFrameStrata = function() end
+      fr.SetFrameStrata = function(s, v) s.strata = v end
+      fr.GetFrameStrata = function(s) return s.strata or "MEDIUM" end
+      fr.GetParent = function(s) return s.parent end
+      fr.SetScale = function(s, v) s.scale = v end
+      fr.GetScale = function(s) return s.scale or 1 end
+      fr.GetEffectiveScale = function(s) return s:GetScale() * (s.parent and s.parent:GetEffectiveScale() or 1) end
+      fr.GetLeft = function(s) return (cl.UIParent:GetWidth()/s:GetScale()-s:GetWidth())/2 end
+      fr.GetBottom = function(s) return (cl.UIParent:GetHeight()/s:GetScale()-s:GetHeight())/2 end
+      fr.GetRight = function(s) return s:GetLeft()+s:GetWidth() end
+      fr.GetTop = function(s) return s:GetBottom()+s:GetHeight() end
       fr.SetMotionScriptsWhileDisabled = function() end
       fr.CreateTexture = function(s) local t = MIFake("Texture", s); t.SetColorTexture = function() end t.SetVertexColor = function() end t.SetTexCoord = function() end t.SetTexture = function(x, v) x.texture = v end t.SetAtlas = function(x,v) x.atlas=v end return t end
       fr.CreateFontString = function(s) local t = MIFake("FontString", s); t.SetFont = function() return true end t.SetJustifyV = function() end t.SetWordWrap = function() end t.SetTextColor = function() end t.SetDirection = function() error("FontString has no SetDirection API") end return t end
@@ -40,6 +49,11 @@ local c = MIClient("Rich", {
       return fr
     end
     cl.UIParent = MIFake("Frame"); cl.UIParent.w, cl.UIParent.h = 1920, 1080
+    cl.UIParent.GetParent = function() return nil end
+    cl.UIParent.GetLeft = function() return 0 end
+    cl.UIParent.GetBottom = function() return 0 end
+    cl.UIParent.GetRight = function(s) return s:GetWidth() end
+    cl.UIParent.GetTop = function(s) return s:GetHeight() end
     cl.GameTooltip = MIFake("GameTooltip")
     cl.UISpecialFrames = {}
     cl.testFrames = {}
@@ -51,6 +65,7 @@ local c = MIClient("Rich", {
 })
 c.TwichUIDB = c.TwichUIDB or {}
 local R = c.TwichUI
+local host = assert(loadfile(ROOT .. "auction/Host.lua")); setfenv(host, c); host()
 
 -- the fake game (as in test_workshop.lua)
 local g = { bags = {}, names = { [10] = "Peacebloom", [11] = "Silverleaf" }, recipes = {}, schem = {}, opened = {} }

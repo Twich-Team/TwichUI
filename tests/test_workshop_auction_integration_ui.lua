@@ -2,7 +2,10 @@ local c,g,Press=dofile(TESTS.."auction_mock.lua")
 local R,W=c.TwichUI,c.TwichUI.Workshop
 local A=W.AuctionUI
 local current,leased,closed,restored=true,false,0,0
+local presentation=R.AuctionHost.Presentation
 R.AuctionHost={
+ Presentation=presentation,
+ ReplacementFailed=function() restored=restored+1;A.Hide() end,
  IsCurrent=function(id) return current and id==7 end,
  Snapshot=function() return {state="preparing",leased=leased} end,
  ToBlizzard=function() restored=restored+1;A.Hide();return true end,
@@ -10,7 +13,7 @@ R.AuctionHost={
 }
 assert(A.Prepare());local root=A.Frame()
 assert(not A.IsShown() and A.Page("browse"),"preparation builds hidden before native mutation")
-assert(not A.ShowIntegrated(7),"presentation needs Host lease")
+assert(A.ShowIntegrated(7),"render precedes Host lease");A.Hide();closed=0
 leased=true;assert(A.ShowIntegrated(7));assert(A.Context()=="auctioneer")
 assert(root.note:GetText():find("TwichUI Auction House",1,true))
 for _,key in ipairs({"shopping","sell","owned","market","browse"}) do
