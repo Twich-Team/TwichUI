@@ -27,7 +27,7 @@ SHOPPING, VENDOR, OPPS = "TwichUI_Workshop/Shopping.lua", "TwichUI_Workshop/Vend
 
 # `--broad` re-runs a SURVIVOR against these older, broader Workshop tests to say whether anything else notices it (the mutation still counts as
 # a survivor of its focused tests; the note only tells you where the gap is). The default run never uses them.
-SUITE = {"targets": ("TwichUI_Workshop/", "!!!TwichUI/WorkshopAuto.lua", "!!!TwichUI/WorkshopLauncher.lua"), "broad_tests": ("test_workshop_market.lua", "test_workshop_prices.lua", "test_workshop_shopping.lua", "test_workshop_storage.lua", "test_workshop.lua")}
+SUITE = {"targets": ("TwichUI_Workshop/", "!!!TwichUI/WorkshopAuto.lua", "!!!TwichUI/WorkshopLauncher.lua", "!!!TwichUI/auction/Ledger.lua", "!!!TwichUI/auction/Mail.lua"), "broad_tests": ("test_workshop_market.lua", "test_workshop_prices.lua", "test_workshop_shopping.lua", "test_workshop_storage.lua", "test_workshop.lua")}
 
 MUTATIONS = []
 
@@ -1247,6 +1247,42 @@ m("market.tooltip.recommendation-art", "TwichUI_Workshop/WorthLayout.lua",
 m("market.tooltip.recommendation-color", "TwichUI_Workshop/WorthLayout.lua",
   'recommendation=art and (r.advisor and r.advisor.action or rec.pick) or nil', 'recommendation=nil',
   "tentative sale recommendations stay gray instead of using the action color", ["test_workshop_advisor_market.lua"])
+
+
+# The gold ledger (docs/workshop/gold-ledger.md): the recorder's arithmetic, its evidence matching and the page's totals. Disposable copies only.
+JOURNAL, ATTRIB, LEDGERUI = "test_ledger_journal.lua", "test_ledger_attribution.lua", "test_workshop_ledger.lua"
+LEDGER, MAIL, ACTIONS = "!!!TwichUI/auction/Ledger.lua", "!!!TwichUI/auction/Mail.lua", "TwichUI_Workshop/auction/Actions.lua"
+LQUERY = "TwichUI_Workshop/LedgerQuery.lua"
+m("ledger.delta.sign", LEDGER, "local delta = now - base", "local delta = base - now",
+  "a gain is recorded as a loss (and the reverse)", [JOURNAL], smoke=True)
+m("ledger.baseline.other-character", LEDGER, "if baseKey ~= key then base, baseKey = nil, key end", "baseKey = key",
+  "another character's balance is compared with the previous character's: a phantom gain or loss", [JOURNAL])
+m("ledger.duplicate.zero-entry", LEDGER, "stats.duplicate = stats.duplicate + 1 return end", "stats.duplicate = stats.duplicate + 1 end",
+  "a repeated notification with an unchanged balance records an entry of nothing", [JOURNAL])
+m("ledger.saturate.wrap", LEDGER, "    if s > MAX then return MAX end\n    return s", "    return s",
+  "daily totals pass the largest exact integer and silently lose exactness", [JOURNAL])
+m("ledger.retention.unbounded", LEDGER, "local over = #entries - cut - Lg.MAX_ENTRIES", "local over = #entries - cut - Lg.MAX_ENTRIES * 100",
+  "the journal grows without bound", [JOURNAL])
+m("ledger.move.drops-amount", LEDGER, "    split[to] = Add(split[to] or 0, v)\n", "",
+  "a classified entry leaves \"other\" but is never counted under its source: the day no longer adds up", [ATTRIB], smoke=True)
+m("ledger.evidence.direction", LEDGER, "(amount > 0) ~= (src.dir > 0)", "(amount > 0) == (src.dir > 0)",
+  "a purchase receipt is accepted as income (and mail as spending)", [ATTRIB])
+m("ledger.evidence.ambiguous", LEDGER, "    elseif count > 1 then\n        stats.ambiguous", "    elseif count > 99 then\n        stats.ambiguous",
+  "two identical unexplained changes: the evidence is given to whichever came last instead of to neither", [ATTRIB])
+m("ledger.evidence.repeat", LEDGER, "if ev.corr and seen[ev.corr] then stats.repeated = stats.repeated + 1 return \"repeated\" end", "",
+  "one completed transaction reported twice by overlapping hooks is counted twice", [ATTRIB])
+m("ledger.mail.group-amount", MAIL, "Credit(gain, matched)", "Credit(matched[1].amount, matched)",
+  "two takes reported as one change vouch for only the first one's amount, so neither is attributed", [ATTRIB])
+m("ledger.mail.plain-is-sale", MAIL, 'if req.kind ~= "ahSale" then kind = "mail" end', 'if req.kind == nil then kind = "ahSale" end',
+  "every mailbox payment is called an auction sale", [ATTRIB])
+m("ledger.purchase.sign", ACTIONS, "amount=-total", "amount=total",
+  "a completed purchase is reported as income, so it is never matched to the gold that left", [ATTRIB])
+m("ledger.query.net", LQUERY, "net = inn - out, n = n, covered = cov", "net = inn + out, n = n, covered = cov",
+  "a day's net change adds its spending", [LEDGERUI], smoke=True)
+m("ledger.query.window", LQUERY, "local from = today - filter.days + 1", "local from = today - filter.days",
+  "a seven day window is eight days (and its comparison overlaps)", [LEDGERUI])
+m("ledger.query.compare-incomplete", LQUERY, "if pcovered == #pdays and #pdays > 0 then", "if #pdays > 0 then",
+  "a percentage is shown against a prior period that was only partly recorded", [LEDGERUI])
 
 m("market.junk.vendor-only", "TwichUI_Workshop/Junk.lua",
   'advice.action=="vendor"', 'advice.action=="auction"',

@@ -3,7 +3,7 @@
 ## Notes: A carefully crafted UI enhancement addon for WoW Forever that makes the game interface feel a little cleaner, more cohesive, and more considered, without making it feel modernized beyond recognition.
 ## Author: twichie
 ## Version: 1.0.0
-## SavedVariables: TwichUIDB, TwichUIBackupDB, TwichUIShareDB, TwichUIRestoreDB, TwichUIChronicleDB
+## SavedVariables: TwichUIDB, TwichUIBackupDB, TwichUIShareDB, TwichUIRestoreDB, TwichUIChronicleDB, TwichUILedgerDB
 ## IconTexture: Interface\AddOns\!!!TwichUI\media\icon
 ## AddonCompartmentFunc: TwichUI_OnCompartmentClick
 ## AddonCompartmentFuncOnEnter: TwichUI_OnCompartmentEnter
@@ -411,7 +411,9 @@ auction\Price.lua
 auction\Scan.lua
 auction\Window.lua
 auction\Host.lua
-# Mailbox gold summary: one chat line per mailbox visit (auction\Mail.lua)
+# The gold ledger's recorder: gold gained and spent, kept while the Workshop is on, even with the Workshop not loaded (auction\Ledger.lua; docs/workshop/gold-ledger.md)
+auction\Ledger.lua
+# Mailbox gold summary: one chat line per mailbox visit, and exact evidence for the ledger (auction\Mail.lua)
 auction\Mail.lua
 
 # Magic Inventory: rules that pick out items to mail to a character you name or deposit in your bank or a guild bank tab.

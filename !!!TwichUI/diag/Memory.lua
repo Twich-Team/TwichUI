@@ -78,6 +78,7 @@ function M.Saved()
     parts[#parts + 1] = { key = "settings", label = "settings, profiles, map pins and sharing lists (TwichUIDB)", values = all - inReceived }
     Add("received", "setups friends sent you", received, Count(received))
     Add("chronicle", "Journey Chronicle (TwichUIChronicleDB)", TwichUIChronicleDB)
+    Add("ledger", "Gold ledger (TwichUILedgerDB)", TwichUILedgerDB)
     local points = type(TwichUIRestoreDB) == "table" and type(TwichUIRestoreDB.points) == "table" and TwichUIRestoreDB.points or nil
     local largest = 0
     for _, p in ipairs(points or {}) do largest = math.max(largest, (M.Values(p))) end

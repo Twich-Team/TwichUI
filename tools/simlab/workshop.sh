@@ -25,6 +25,7 @@
 #   planning  (P2) the same, the plan of the chosen recipe still being worked out (the job never finishes), then a screenshot
 #   nodata    (P2) the same, a recipe whose materials aren't known chosen: no strategy and no invented figure, then a screenshot
 #   override  (P2) the same, Shopping with the player's own source chosen for the made material, then a screenshot
+#   ledger, ledgersmall  the same, ending on the Gold Ledger over a synthetic journal (normal screen; 1000x700), then a screenshot
 #   wrong   the whole scenario with one expectation made deliberately wrong: it must FAIL on that check and on no other
 #
 #   SIMLAB_ONLY="opps craft"  run only the named launches (a quick look while working; the full run, with none named, is the evidence)
@@ -40,7 +41,7 @@ set -euo pipefail
 selection=()
 read -r -a selection <<< "${SIMLAB_ONLY:-}"
 for pose in "${selection[@]}"; do
-  case " overview craft opps shop design small smallov empty history craftlong shopmix shopcollect strategy confirm stratlong planning nodata override compact compactcraft tooltip smallstrat shopafter notice advisor advisorsmall advisorempty advisorscaled advisorlong advisorvacant advisoralt advisorsource advisorcategory advisorscroll advisortentative advisorbags advisorfiltered wrong " in
+  case " overview craft opps shop design small smallov empty history craftlong shopmix shopcollect strategy confirm stratlong planning nodata override compact compactcraft tooltip smallstrat shopafter notice advisor advisorsmall advisorempty advisorscaled advisorlong advisorvacant advisoralt advisorsource advisorcategory advisorscroll advisortentative advisorbags advisorfiltered ledger ledgersmall wrong " in
     *" $pose "*) ;; *) echo "simlab: unknown Workshop pose: $pose" >&2; exit 2 ;;
   esac
 done
@@ -100,6 +101,8 @@ fixture advisorscroll '{ view = "advisorscroll" }'
 fixture advisortentative '{ view = "advisortentative" }'
 fixture advisorbags '{ view = "advisorbags" }'
 fixture advisorfiltered '{ view = "advisorfiltered" }'
+fixture ledger '{ view = "ledger" }'
+fixture ledgersmall '{ view = "ledgersmall" }'
 fixture wrong "{ view = \"craft\", wrongAt = \"$WRONG_AT\" }"
 
 repo_before="$(git -C "$REPO" status --porcelain --ignored)"
@@ -155,6 +158,8 @@ launch advisorscroll screenshot --png -o "$RUN/advisorscroll.png" --width 1600 -
 launch advisortentative screenshot --png -o "$RUN/advisortentative.png" --width 1600 --height 1200
 launch advisorbags screenshot --png -o "$RUN/advisorbags.png" --width 1600 --height 1200
 launch advisorfiltered screenshot --png -o "$RUN/advisorfiltered.png" --width 1600 --height 1200
+launch ledger screenshot --png -o "$RUN/ledger.png" --width 1600 --height 1200
+launch ledgersmall screenshot --png -o "$RUN/ledgersmall.png" --width 1000 --height 700
 launch wrong dump-tree --visible-only
 
 echo "artifacts: $RUN"

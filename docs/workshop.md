@@ -134,6 +134,7 @@ Materials the player keeps in the personal bank or the guild bank are planned wi
 |---|---|
 | `!!!TwichUI/WorkshopLauncher.lua` | core: `R.WorkshopLauncher` (`Load`, `Open`, `Toggle`, `Command`, `Snapshot`); loads on first use or after world entry when the active profile opts in (default off), never in combat (`COMBAT`), plain-words failures like `DiagnosticsLauncher.lua`; scope `workshop.load` |
 | `TwichUI_Workshop/` | the addon (`## LoadOnDemand: 1`, `RequiredDeps: !!!TwichUI`, `## SavedVariables: TwichUIWorkshopDB`: the market data only, loaded by the game when the Workshop loads) |
+| `LedgerQuery.lua`, `LedgerChart.lua`, `ViewLedger.lua`; core `!!!TwichUI/auction/Ledger.lua` | The **Gold Ledger** page (second navigation group) and its recorder, which keeps gold gained and spent in its own `TwichUILedgerDB` while the Workshop is on, with the addon not loaded: [workshop/gold-ledger.md](workshop/gold-ledger.md) |
 | `Data.lua` | `R.Workshop` (W): limits, `Plain` (drops secret values), `Int`, `Text`, difficulty words, `PerCraft`, `Expected` (pure) |
 | `Materials.lua` | `W.Materials.Rows`: combine first, then apply bag counts once per item; states empty/partial/short/ready (pure) |
 | `Queue.lua` | the saved queue (`TwichUIDB.workshop`), checking every record, `Refresh` from an observation |

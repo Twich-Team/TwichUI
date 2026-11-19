@@ -90,6 +90,9 @@ AuctionButton.lua
 Style.lua
 # Shared interactive market charts for Workshop and Auction House pages
 auction/AdvancedChart.lua
+# The Gold Ledger: what its page reads (pure) and its Gold Flow chart; the recorder is the core's auction/Ledger.lua (docs/workshop/gold-ledger.md)
+LedgerQuery.lua
+LedgerChart.lua
 # The pages, in the order the page list shows them (each builds once and draws what Session.lua says)
 ViewOverview.lua
 ViewOpportunities.lua
@@ -98,6 +101,8 @@ ViewShopping.lua
 ViewAdvisor.lua
 # The full strategy view and the confirmation before an optimized plan is added to the queue (P2)
 ViewStrategy.lua
+# The Gold Ledger page: gold gained and spent, by day and by source (reads only; the core records)
+ViewLedger.lua
 # The compact companion: Travel and Craft, a small panel in the window's place (P2.1)
 Compact.lua
 # Progress notices through TwichUI's notification coordinator (P2.1)

@@ -61,9 +61,22 @@ local function Listen(on)
     end
 end
 local function StopTimer() if timeout then timeout:Cancel();timeout=nil end end
+-- A completed purchase is evidence for the gold ledger (the core's auction/Ledger.lua): that exactly this amount left, once.
+-- It never records money itself; the ledger attaches it only to a balance change of exactly this amount. A commodity total is
+-- the reviewed estimate, so a purchase whose real price differs simply stays unclassified there. Postings, cancellations and
+-- every other outcome report nothing: they are not purchases, and a posting is never revenue.
+local function Report(p)
+    local L=R.Ledger
+    local total=p and Int(p.total,1)
+    if not (L and L.Evidence and total) then return end
+    local ok,err=pcall(L.Evidence,{kind="ahBuy",amount=-total,item=Int(p.item,1,W.MAX_ID),qty=Int(p.quantity,1,W.MAX_ID),
+        corr="ah:"..tostring(p.visit)..":"..tostring(p.id)})
+    if not ok then R.Fault("gold ledger",err) end
+end
 local function Finish(state,message)
     StopTimer();Listen(false)
     T.state,T.message=state,message
+    if state=="complete" and ticket and (ticket.kind=="buyItem" or ticket.kind=="buyCommodity") then Report(ticket) end
     T.last=ticket and {id=ticket.id,kind=ticket.kind,visit=ticket.visit,item=ticket.item,quantity=ticket.quantity,total=ticket.total,
         auctionID=ticket.auctionID,state=state,message=message} or T.last
     ticket=nil

@@ -237,7 +237,7 @@ local function Lists() return Win().Lists() end
 
 local function Tab(name)   -- the page list on the left
     local f = Frame()
-    local b = ({ Overview = f.tabOverview, Crafting = f.tabCraft, Shopping = f.tabShop, Opportunities = f.tabOpps })[name]
+    local b = ({ Overview = f.tabOverview, Crafting = f.tabCraft, Shopping = f.tabShop, Opportunities = f.tabOpps, ["Gold Ledger"] = f.tabLedger })[name]
     Click(b, "tab " .. name)
     Lab.Settle(0.1)   -- the page switch is synchronous; the next frame runs the page's batched reading
 end
@@ -2486,6 +2486,55 @@ Lab.Step("pose for the screenshot", function()
             row:TipEnter()
             Check("display", "pose: the row's tooltip is the item's own, owned by the row", "true", tostring(GameTooltip:IsShown() and GameTooltip:GetOwner() == row))
         end
+    elseif view == "ledger" or view == "ledgersmall" then
+        -- the Gold Ledger over a SYNTHETIC journal written straight into TwichUILedgerDB (the recorder's own events are not simulated here; the
+        -- offline tests cover them). Days are relative to today (UTC). EXPECTED VALUES are hand arithmetic, never read from the code under test:
+        --   today-0: +100000 mail, -25000 auction purchase (Peacebloom x2), +5000 unclassified
+        --   today-1: +30000 auction sale (Silverleaf); today-2: recorded, nothing moved; today-3: -7000 unclassified; today-4: not recorded
+        --   today-5: +20000 unclassified; today-10: +50000 mail
+        --   7 days: in 155000 (15g 50s), out 32000 (3g 20s), net 123000 (12g 30s); attributed in 130000, attributed out 25000, unclassified +18000
+        local W, DAY = R.Workshop, 86400
+        local today = math.floor(GetServerTime() / DAY)
+        local rec = { name = UnitName("player"), realm = GetRealmName(), since = (today - 20) * DAY, nextId = 1, entries = {}, days = {} }
+        local EV = { mail = "mailbox", ahSale = "mailinvoice", ahBuy = "auctionpurchase" }
+        local function Add(off, amount, k, extra)
+            local day = today - off
+            local d = rec.days[day]
+            if not d then d = { i = 0, o = 0, n = 0, ci = {}, co = {} }; rec.days[day] = d end
+            local e = { id = rec.nextId, t = day * DAY + 3600 + rec.nextId, a = amount, e = k and EV[k] or "balance", k = k }
+            for kk, v in pairs(extra or {}) do e[kk] = v end
+            rec.nextId = rec.nextId + 1
+            rec.entries[#rec.entries + 1] = e
+            local code = k or "other"
+            if amount > 0 then d.i = d.i + amount; d.ci[code] = (d.ci[code] or 0) + amount else d.o = d.o - amount; d.co[code] = (d.co[code] or 0) - amount end
+            d.n = d.n + 1
+        end
+        Add(10, 50000, "mail"); Add(5, 20000); Add(3, -7000)
+        rec.days[today - 2] = { i = 0, o = 0, n = 0, ci = {}, co = {} }
+        Add(1, 30000, "ahSale", { n = "Silverleaf" })
+        Add(0, 100000, "mail"); Add(0, -25000, "ahBuy", { i = 2447, q = 2 }); Add(0, 5000)
+        TwichUILedgerDB.chars[R.Ledger.CharKey()] = rec
+        W.LedgerQuery.ResetCache()
+        Tab("Gold Ledger")
+        local V = W.UI.LedgerView
+        Check("display", "pose: the Gold Ledger page is shown", true, Win().Page("ledger"):IsShown())
+        Check("display", "pose: net change, gold in and gold out of seven days", "+12g 30s 0c | +15g 50s 0c | -3g 20s 0c",
+            Txt(V.cards.net.value) .. " | " .. Txt(V.cards.inn.value) .. " | " .. Txt(V.cards.out.value))
+        Check("display", "pose: attributed income, spending and the unclassified net", "+13g 0s 0c | -2g 50s 0c | +1g 80s 0c",
+            Txt(V.cards.attrIn.value) .. " | " .. Txt(V.cards.attrOut.value) .. " | " .. Txt(V.cards.unk.value))
+        Check("display", "pose: six transactions, newest first, the first an unclassified +5000", "6 | +50s 0c | Unclassified",
+            #V.rows .. " | " .. Txt(V.list.rows[1].amount) .. " | " .. Txt(V.list.rows[1].src))
+        -- of the seven days (today-6 .. today) today-6 and today-4 have no record; today-2 is recorded with nothing moved
+        Check("display", "pose: a day outside the recorded days is not a zero (two uncovered columns, one recorded quiet day)", "2 | 1",
+            #V.chart.geometry.uncovered .. " | " .. #V.chart.geometry.ticks)
+        Check("display", "pose: the profession panel says it is not available", "Profession profitability isn't available yet.", Txt(V.prof.head))
+        local split = 0
+        for _, r in ipairs(W.LedgerQuery.SourceRows(V.summary)) do split = split + r.dir * r.amount end
+        Check("state", "pose: the sources add up to Net Change", 123000, split)
+        V.SetFilter("days", 30); Lab.Settle(0.2)
+        Check("display", "pose: thirty days add the +50000 mail", "+20g 50s 0c", Txt(V.cards.inn.value))
+        V.SetFilter("days", 7); Lab.Settle(0.2)
+        Rows(Lists().ledger)[1]:SetHot(true)   -- a row under the pointer, for the screenshot (the art only)
     elseif view == "shop" then
         -- the mixed-source list with a Make row: take the Smelt Bronze entry back out through its Remove button
         Tab("Crafting")
