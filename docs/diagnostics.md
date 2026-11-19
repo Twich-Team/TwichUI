@@ -495,3 +495,5 @@ The `auction` preset includes action pending/listener/timer cleanup gauges, reta
 samples remain in Host snapshots and the compact panel rather than displacing
 cleanup gauges. The panel's frame time is an FPS-derived estimate; Diagnostics
 captures actual sampled frame times. No permanent panel ticker or auto-query exists.
+
+`workshop.summaryHistory` measures the negotiated history reader’s selected-item daily projection (at most 60 dated observations). It allocates no retained cache. Existing raw-byte/partition/decoded/checked gauges cover both supported summary contracts; contract 2 is negotiated only with a matching installed Companion consumer declaration.

@@ -1,1 +1,20 @@
-{"format":"twichui-market-consumer","capability_version":1,"contract_version":1,"transport_version":1,"schema_versions":[3],"canonical_bytes":2097152,"lua_bytes":3145728,"automatic_reload":false,"game":"wow-forever","interface":16001,"summary_delivery_version":1,"summary_partition_bytes":131072,"summary_total_bytes":8388608}
+{
+  "format": "twichui-market-consumer",
+  "capability_version": 1,
+  "contract_version": 1,
+  "transport_version": 1,
+  "schema_versions": [
+    3
+  ],
+  "canonical_bytes": 2097152,
+  "lua_bytes": 3145728,
+  "automatic_reload": false,
+  "game": "wow-forever",
+  "interface": 16001,
+  "summary_delivery_version": 1,
+  "summary_partition_bytes": 131072,
+  "summary_total_bytes": 8388608,
+  "summary_history_contract": 2,
+  "summary_history_partition_bytes": 1048576,
+  "summary_history_total_bytes": 67108864
+}

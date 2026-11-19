@@ -2,6 +2,7 @@
 local R,W=TwichUI,TwichUI.Workshop
 local UI=W.UI
 local C={MAX_COLUMNS=1024}
+local SOURCE_WORDS={["local"]="Your Auction House scans",["local+legacy"]="Your scans + imported local history",legacy="Imported local history"}
 local charts=setmetatable({}, {__mode="k"})
 if R.Perf.Gauge then
     R.Perf.Gauge('auction.chartPool',{label='Market chart pooled regions',unit='count',kind='pool',group='auction',read=function() local n=0;for chart in pairs(charts) do n=n+#chart.pool+#chart.linePool+#chart.nativePool end;return n end})
@@ -195,7 +196,7 @@ function UI.AdvancedMarketChart(parent,w,h)
         self.tip.date:SetText(stamp)
         local value=g and g.average or p and p.price
         self.tip.value:SetText(value and (self.format(value)..(d.metric=='supply' and ' items' or (' · '..string.format('%.0f',value)..' copper'))) or 'No supported value at this date')
-        self.tip.text:SetText(record and ((record.provenance or 'Unknown source')..(record.partial and ' · partial observation' or '')..'\nListing evidence; not completed sales') or ((why=='observed_absent' and 'Observed absent; no supported value.\nNo sale or demand is inferred.') or (why=='no_supported_buyout' and 'Listings lacked a supported buyout.\nNo price is substituted.') or (why=='unknown_variant_state' and 'Variant observation state is unknown.\nNo absence or price is inferred.') or 'No supported observation; coverage is missing or incomplete.\nNo absence or price is inferred.'))
+        self.tip.text:SetText(record and ((SOURCE_WORDS[record.provenance] or record.provenance or 'Unknown source')..(record.partial and ' · partial observation' or '')..'\nListing evidence; not completed sales') or ((why=='observed_absent' and 'Observed absent; no supported value.\nNo sale or demand is inferred.') or (why=='no_supported_buyout' and 'Listings lacked a supported buyout.\nNo price is substituted.') or (why=='unknown_variant_state' and 'Variant observation state is unknown.\nNo absence or price is inferred.') or 'No supported observation; coverage is missing or incomplete.\nNo absence or price is inferred.'))
         -- Dock outside the entire chart, never under the pointer or plot.
         -- UIParent ownership also keeps inspection clear of scroll clipping.
         local scale=self:GetEffectiveScale()

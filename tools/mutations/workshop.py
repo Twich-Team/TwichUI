@@ -1094,6 +1094,11 @@ m("market.auction-legacy-post-race", "TwichUI_Workshop/auction/Actions.lua",
   'if false then return false,"Sell from Bags became busy; dismiss this review and check Blizzard." end',
   "a legacy posting operation started after review no longer prevents a competing transaction", ["test_workshop_auction_actions.lua"])
 
+# Negotiated Market history must retain dated values rather than current prices.
+m("market.summary-history-current-price", "TwichUI_Workshop/Summary.lua",
+  "local raw=p[column];local value=raw~=N and tonumber(raw) or nil",
+  "local raw=column==2 and r.current.metrics.recent_copper or p[column];local value=raw~=N and tonumber(raw) or nil",
+  "daily points are silently replaced with the current summary price", ["test_workshop_summary.lua"])
 m("market.auction-standard-unverified-mode", "TwichUI_Workshop/auction/Actions.lua",
   'if not enabled then',
   'if false then',

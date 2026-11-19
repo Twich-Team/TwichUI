@@ -71,3 +71,72 @@ load(multiple);B.Variants(2589);drain();local variants,cut=B.Variants(2589)
 assert(#variants==2 and not cut and not B.Record(2589),'ambiguous item acquired an item-ID aggregate')
 assert(B.Value(2589,variants[1]).value==120 and B.Value(2589,variants[2]).value==999,'exact variants collapsed')
 print('PASSED summary integrity, closed contracts, pinned identity, lazy loading, references, last-good preservation and economic isolation')
+
+-- Negotiated producer-generated history: actual closes, gaps and standalone fallback.
+local hf=assert(io.open(TESTS..'fixtures/workshop_summary_v2/synthetic.json'));local historyFixture=J.Parse(hf:read('*a'));hf:close()
+local hh=historyFixture.manifest
+local schema2=assert(io.open(TESTS..'fixtures/workshop_summary_v2/manifest.schema.json'));assert(J.Encode(J.Parse(schema2:read('*a')))==J.Encode(W.SummaryHistorySchema),'history schema mirror drift');schema2:close()
+Q.Deactivate();TwichUIMarketParts={A29=historyFixture.parts['29']};load(hh)
+assert(B.Status().ready and B.Status().contract_version==2 and B.Scope().history_delivered)
+assert(not B.Record(2589,key));drain()
+local series=assert(B.History(2589,key,'recent',{days=14}))
+assert(series.source=='market_server' and #series.points==2 and #series.gaps==12)
+assert(series.points[1].v==100 and series.points[2].v==120)
+assert(series.points[1].observation_id=='100' and series.points[2].observation_id=='902')
+assert(series.points[1].provenance:find('Market server',1,true))
+assert(series.points[1].from<series.points[2].from and series.points[1].synthetic)
+local exposed=B.Record(2589,key);exposed.daily[1][2]='999'
+assert(B.History(2589,key,'recent',{days=14}).points[1].v==100,'caller modified retained history')
+assert(B.Compatibility().contract_version==2 and B.CompatibilityText(true):find('contract 2',1,true))
+local projection=W.ServerMarket.Project(2589,key,'recent',14)
+assert(projection.series.external and #projection.series.points==2 and projection.facts.recent.value==120)
+assert(B.History(2589,key,'supply',{days=14}).points[2].v==10)
+assert(B.History(2589,key,'unsupported')==nil and B.History(2589,key,'recent',{days=61})==nil)
+local raw=J.Parse(historyFixture.parts['29']);local goodGeneration=B.Status().generation
+for _,change in ipairs({
+    function(p)table.remove(p)end,
+    function(p)p[1][2]='0'end,
+    function(p)p[1]=setmetatable({3,J.NULL,J.NULL,0},J.ARRAY)end,
+    function(p)p[1][4]=-1 end,
+}) do
+    local badRows=J.Copy(raw);change(badRows[1][14]);local part=J.Encode(badRows);local bad=J.Copy(hh)
+    bad.partitions[1].bytes=#part;bad.partitions[1].sha256=J.SHA(part);seal(bad)
+    TwichUIMarketParts={A29=part};load(bad);B.Record(2589,key);drain()
+    assert(B.Status().generation==goodGeneration and B.History(2589,key,'recent',{days=14}).points[2].v==120,'corrupt history replaced validated generation')
+end
+Q.Deactivate();TwichUIMarketParts=nil
+assert(not B.Status().ready and B.History(2589,key)==nil,'absent Companion data must not manufacture a curve')
+assert(TwichUIDB.sentinel=='profile' and TwichUIWorkshopDB.sentinel=='local observations','Market history mutated standalone data')
+print('PASSED negotiated actual history, explicit gaps, corrupt replacement preservation and absent-data fallback')
+
+-- While WoW keeps an old root in memory, two later bank publications can
+-- overwrite a not-yet-loaded A partition. Never use it under the old manifest.
+Q.Deactivate();load(hh)
+local updatedRows=J.Copy(raw);updatedRows[1][4]='999';updatedRows[1][14][2][2]='999'
+local updatedPart=J.Encode(updatedRows);local updated=J.Copy(hh)
+updated.source_watermark='903';updated.source_observation.observation_id='903';updated.source_observation.observed_at='2026-11-15T12:01:00Z';updated.generated_at=updated.source_observation.observed_at
+updated.observations[2].observation_id='903';updated.observations[2].observed_at=updated.generated_at
+updated.partitions[1].bytes=#updatedPart;updated.partitions[1].sha256=J.SHA(updatedPart);seal(updated)
+TwichUIMarketParts={A29=updatedPart}
+assert(not B.Record(2589,key));drain()
+assert(B.Status().generation==hh.generation_id and B.Status().reload_required and not B.Record(2589,key),'late bank overwrite escaped generation pin')
+load(updated);assert(not B.Record(2589,key));drain()
+assert(B.Status().generation==updated.generation_id and not B.Status().reload_required and B.Value(2589,key).value==999,'explicit reload did not apply validated replacement')
+print('PASSED pinned in-memory generation, late bank overwrite refusal and explicit reload')
+
+-- Queued data requested before combat must resume afterward without being
+-- mislabeled as changed files, or leaving a permanently failed partition.
+Q.Deactivate()
+local combatHeader=J.Copy(hh);local extra=J.Copy(raw);extra[1][1]=2590;extra[1][2]=J.SHA('{"id":2590}')
+local extraRaw=J.Encode(extra)
+combatHeader.partitions[2]=setmetatable({bucket=30,bytes=#extraRaw,record_count=1,sha256=J.SHA(extraRaw)},J.OBJECT)
+combatHeader.record_count=2;combatHeader.coverage.source_records=2;combatHeader.coverage.delivered_records=2;seal(combatHeader)
+TwichUIMarketParts={A29=historyFixture.parts['29'],A30=extraRaw};load(combatHeader)
+assert(not B.Record(2589,key));assert(not B.Record(2590,extra[1][2]))
+InCombatLockdown=function()return true end;drain()
+assert(B.Status().error=='combat' and not B.Status().reload_required,'combat deferral was mislabeled as changed files')
+assert(select(2,B.Record(2590,extra[1][2]))=='combat')
+InCombatLockdown=nil
+assert(not B.Record(2590,extra[1][2]));drain()
+assert(B.Value(2590,extra[1][2]).value==120 and not B.Status().error,'combat deferral did not resume on the next request')
+print('PASSED queued combat deferral and retry without a false reload message')

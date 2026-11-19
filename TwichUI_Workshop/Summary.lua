@@ -1,7 +1,7 @@
 -- Archive-free, research-only external evidence. No saved data or native identity mapping.
 local R,W=TwichUI,TwichUI.Workshop
 local J,S=W.BridgeCodec,W.BridgeValidate
-local Q={PART_BYTES=131072,TOTAL_BYTES=8388608,SLICE_MS=3,RESUMES=512}
+local Q={PART_BYTES=1048576,TOTAL_BYTES=67108864,SLICE_MS=3,RESUMES=512}
 W.Summary=Q
 local N=J.NULL
 local active,job,rejected,selected=nil,nil,nil,false
@@ -25,19 +25,31 @@ local function header(raw,expected)
     closed(raw,{summary_version=true,manifest=true,bank=true,receipt=true})
     need(raw.summary_version==1 and (raw.bank=='A' or raw.bank=='B') and type(raw.manifest)=='string' and #raw.manifest<=65536)
     local h=J.Parse(raw.manifest,tick)
-    if type(h)=='table' and (W.Int(h.schema_version,2,2147483647) or W.Int(h.contract_version,2,2147483647)) then error('summary newer_addon',0) end
-    S.Schema(W.SummarySchema,h,tick)
+    if type(h)=='table' and (W.Int(h.schema_version,3,2147483647) or W.Int(h.contract_version,3,2147483647)) then error('summary newer_addon',0) end
+    S.Schema(h.contract_version==2 and W.SummaryHistorySchema or W.SummarySchema,h,tick)
     need(J.Encode(h,tick)==raw.manifest and digest(h.generation_id))
     local body=J.Object();for k,v in pairs(h) do if k~='generation_id' then body[k]=v end end
     need(J.SHA(J.Encode(body,tick),tick)==h.generation_id)
     need(h.issuer_id==h.issuer_id:lower() and h.generated_at==h.source_observation.observed_at)
     need(S.CompareMoney(h.source_observation.observation_id,h.source_watermark)<=0)
     if expected and expected.market then need(J.Encode(expected.market,tick)==J.Encode(h.market,tick)) end
+    local history=h.contract_version==2
+    if history then
+        local _,ending=S.Time(h.generated_at);local lastDay;local seen={}
+        for _,o in ipairs(h.observations) do
+            local _,at=S.Time(o.observed_at);local day=math.floor(at/86400)
+            need((not lastDay or day>lastDay) and at<=ending and math.floor(ending/86400)-day<60)
+            need(not seen[o.observation_id] and S.CompareMoney(o.observation_id,h.source_watermark)<=0 and (not o.synthetic or h.synthetic));seen[o.observation_id]=true
+            lastDay=day;tick()
+        end
+        local last=h.observations[#h.observations]
+        need(last.observation_id==h.source_observation.observation_id and last.observed_at==h.source_observation.observed_at)
+    end
     local parts,total,count,last={},0,0,-1
     for _,p in ipairs(h.partitions) do
         need(p.bucket>last);last=p.bucket;parts[p.bucket]=p;count=count+p.record_count;total=total+p.bytes;tick()
     end
-    need(count==h.record_count and total<=Q.TOTAL_BYTES and h.coverage.source_records==count and h.coverage.delivered_records==count)
+    need(count==h.record_count and total<=h.partitioning.max_total_bytes and h.coverage.source_records==count and h.coverage.delivered_records==count)
     need(type(raw.receipt)=='string' and #raw.receipt<=4096)
     local receipt=J.Parse(raw.receipt,tick)
     closed(receipt,{schema_version=true,generation_id=true,desktop_build=true,completed_at=true})
@@ -46,13 +58,13 @@ local function header(raw,expected)
     return {header=h,raw=raw,bank=raw.bank,manifest=raw.manifest,receiptText=raw.receipt,receipt=receipt,parts=parts,checked={},failed={},loaded={},total_bytes=total,loaded_bytes=0,loaded_parts=0,checked_count=0}
 end
 local function money(v) return v==N or S.Money(v,true) and #v<=11 and (#v<11 or v<='99999999999') end
-local function rows(raw,p)
-    need(type(raw)=='string' and #raw<=Q.PART_BYTES and #raw==p.bytes and J.SHA(raw,tick)==p.sha256)
-    local out=J.Parse(raw,tick,Q.PART_BYTES)
+local function rows(raw,p,h)
+    need(type(raw)=='string' and #raw<=h.partitioning.max_partition_bytes and #raw==p.bytes and J.SHA(raw,tick)==p.sha256)
+    local out=J.ParseSummary(raw,tick,h.partitioning.max_partition_bytes)
     need(getmetatable(out)==J.ARRAY and #out==p.record_count and J.Encode(out,tick)==raw)
     local lastItem,lastVariant=0,''
     for _,r in ipairs(out) do
-        need(getmetatable(r)==J.ARRAY and #r==13 and W.Int(r[1],1,2147483647) and r[1]%64==p.bucket and digest(r[2]))
+        need(getmetatable(r)==J.ARRAY and #r==(h.contract_version==2 and 14 or 13) and W.Int(r[1],1,2147483647) and r[1]%64==p.bucket and digest(r[2]))
         need(r[1]>lastItem or r[1]==lastItem and r[2]>lastVariant);lastItem,lastVariant=r[1],r[2]
         need(W.Int(r[3],0,4) and W.Int(r[9],0,1) and r[8]==0)
         for _,i in ipairs({4,5,6,10}) do need(money(r[i])) end
@@ -63,7 +75,18 @@ local function rows(raw,p)
         elseif r[3]==3 then need(not has and r[9]==1 and r[7]==N)
         else need(not has and r[9]==1 and r[7]==N) end
         need(W.Int(r[11],0,14) and W.Int(r[12],0,60) and W.Int(r[13],0,60) and r[11]<=r[12] and r[12]<=r[13])
-        need((r[10]==N or r[12]>=3) and (r[5]==N or r[11]>0));tick()
+        need((r[10]==N or r[12]>=3) and (r[5]==N or r[11]>0))
+        if h.contract_version==2 then
+            need(type(r[14])=='table' and getmetatable(r[14])==J.ARRAY and #r[14]==#h.observations)
+            for _,p in ipairs(r[14]) do
+                need(getmetatable(p)==J.ARRAY and #p==4 and W.Int(p[1],0,4) and money(p[2]) and money(p[3]))
+                if p[1]==0 then need(p[2]~=N and p[3]~=N and W.Int(p[4],1,9007199254740991))
+                elseif p[1]==1 then need(p[2]==N and p[3]==N and W.Int(p[4],1,9007199254740991))
+                elseif p[1]==2 then need(p[2]==N and p[3]==N and p[4]==0)
+                else need(p[2]==N and p[3]==N and p[4]==N) end
+                tick()
+            end
+        end;tick()
     end
     return out
 end
@@ -74,7 +97,7 @@ function Q.Begin(raw,expected,suppressPendingSelection)
     if active and active.raw==raw and active.manifest==raw.manifest and active.bank==raw.bank and active.receiptText==raw.receipt then selected=true;return true end
     if rejected==raw then return false,'invalid' end
     if job and job.raw==raw then schedule();return false,'loading' end
-    rejected=nil;lastError=nil;stats.unsupported=nil
+    rejected=nil;lastError=nil;stats.unsupported=nil;stats.reload_required=nil
     job={kind='header',raw=raw,co=coroutine.create(function()return header(raw,expected)end)}
     if not active and not suppressPendingSelection then selected=true end
     schedule();return false,'loading'
@@ -98,7 +121,7 @@ local function loadPart(p)
         active.loaded_parts=active.loaded_parts+1;active.loaded_bytes=active.loaded_bytes+#raw
         need(active.loaded_bytes<=Q.TOTAL_BYTES)
     end
-    job={kind='part',bucket=p.bucket,raw=raw,co=coroutine.create(function()return rows(raw,p)end)}
+    job={kind='part',bucket=p.bucket,raw=raw,co=coroutine.create(function()return rows(raw,p,active.header)end)}
     return true
 end
 startNext=function()
@@ -120,7 +143,7 @@ function Q.Step(ms)
             if not ok then
                 stats.failures=stats.failures+1;lastError='invalid';stats.unsupported=value=='summary newer_addon'
                 if current.kind=='header' then rejected=current.raw else
-                    active.failed[current.bucket]='invalid'
+                    active.failed[current.bucket]='invalid';stats.reload_required=true
                     if previous then rejected=active.raw;active,cached=previous,previousCache;previous,previousCache=nil,nil;queue,queued={},{} end
                 end
                 job=nil;break
@@ -157,6 +180,9 @@ local function request(bucket)
     if not active then return nil,'unavailable' end
     if not active.parts[bucket] then return {},'not_observed' end
     if cached and cached.bucket==bucket then return cached.rows end
+    if active.failed[bucket]=='combat' and not(InCombatLockdown and InCombatLockdown()) then
+        active.failed[bucket]=nil;if lastError=='combat' then lastError=nil end
+    end
     if active.failed[bucket] then return nil,active.failed[bucket] end
     if not queued[bucket] and not(job and job.bucket==bucket) then
         if InCombatLockdown and InCombatLockdown() then return nil,'combat' end
@@ -170,7 +196,10 @@ function Q.Status()
     out.ready=active~=nil;out.loading=job~=nil;out.error=lastError
     out.generation=active and active.header.generation_id;out.records=active and active.header.record_count or 0
     out.bytes=(active and active.loaded_bytes+#active.manifest or 0)+(previous and previous.loaded_bytes+#previous.manifest or 0);out.cache_entries=cached and #cached.rows or 0
-    out.summary=true;out.schema=1;out.contract_version=1;out.reader_contract_version=1;out.minimum_reader_version=1;out.transport_version=1
+    out.summary=true;out.schema=active and active.header.schema_version or 1;out.contract_version=active and active.header.contract_version or 1;out.reader_contract_version=2;out.minimum_reader_version=out.contract_version;out.transport_version=1
+    out.history=active and active.header.contract_version==2 or false
+    out.reload_required=stats.reload_required==true
+    if active then for _,why in pairs(active.failed) do if why~='combat' then out.reload_required=true;break end end end
     out.compatibility_message=stats.unsupported and 'Update TwichUI to read this newer Workshop summary.' or nil
     out.desktop_build=active and active.receipt.desktop_build
     out.checked_parts=active and active.checked_count or 0;out.parts=active and #active.header.partitions or 0
@@ -182,7 +211,7 @@ function Q.Market() return active and J.Copy(active.header.market) or nil end
 function Q.Receipt() return active and J.Copy(active.receipt) or nil end
 function Q.Scope()
     return active and {type='current_observed_exact_variants',scope_complete=true,whole_market_complete=false,
-        requested_count=active.header.record_count,generation=active.header.generation_id,history_delivered=false} or nil
+        requested_count=active.header.record_count,generation=active.header.generation_id,history_delivered=active.header.contract_version==2} or nil
 end
 function Q.Variants(item,limit)
     item=W.Int(item,1,2147483647);limit=W.Int(limit or 20,1,100)
@@ -212,7 +241,7 @@ function Q.Record(item,variant)
         if not W.Int(item,1,2147483647) or not digest(variant) then return nil,'variant_required' end
         local part,why=request(item%64);if not part then return nil,why end
         for _,r in ipairs(part) do if r[1]==item and r[2]==variant then
-            return {item_id=item,variant_key=variant,summary=true,current={state=active.header.states[r[3]+1],supply=r[7],complete=true,
+            return {item_id=item,variant_key=variant,summary=true,daily=r[14] and J.Copy(r[14]),current={state=active.header.states[r[3]+1],supply=r[7],complete=true,
                 arithmetic_status=r[3]==4 and 'unsupported' or 'supported',observation_ref=0,
                 metrics={recent_copper=r[4],market_value_copper=r[5],minimum_copper=r[6],historical_value_copper=r[10]},
                 coverage={priced_days_14=r[11],priced_days_60=r[12],observed_days_60=r[13]}}}
@@ -236,7 +265,32 @@ function Q.Value(item,variant,metric)
     return {copper=v,value=tonumber(v),algorithm=active.header.pricing_algorithm,basis='Market server summary · listing evidence',
         generation=active.header.generation_id,source='market_server',observation=J.Copy(active.header.source_observation),quality='limited'}
 end
-function Q.History() return nil,'summary_only' end
+local function history(item,variant,metric,opt)
+    if not active or active.header.contract_version~=2 then return nil,'summary_only' end
+    local r,why=Q.Record(item,variant);if not r then return nil,why end
+    metric=metric or 'recent';local column=({recent=2,minimum=3,supply=4})[metric]
+    if not column then return nil,'metric' end
+    local days=W.Int(opt and opt.days or 60,1,60);if not days then return nil,'window' end
+    local h=active.header;local _,at=S.Time(h.generated_at);local today=math.floor(at/86400);local from=today-days+1
+    local out={basis=h.history_basis,algorithm=h.pricing_algorithm,source='market_server',generation=h.generation_id,
+        scope=Q.Scope(),market=J.Copy(h.market),coverage=J.Copy(h.coverage),metric=metric,points={},gaps={},from=from,to=today,observed_days=0,synthetic=h.synthetic}
+    local present={}
+    for index,p in ipairs(r.daily) do
+        local o=h.observations[index];local _,stamp=S.Time(o.observed_at);local day=math.floor(stamp/86400)
+        if day>=from and day<=today then
+            present[day]=true;out.observed_days=out.observed_days+1
+            local raw=p[column];local value=raw~=N and tonumber(raw) or nil
+            local reason=not value and (p[1]==2 and 'observed_absent' or p[1]==3 and 'unknown_variant_state' or p[1]==4 and 'unsupported' or 'no_supported_buyout') or nil
+            if reason then out.gaps[#out.gaps+1]={from=day,to=day,why=reason} end
+            out.points[#out.points+1]={kind='day',from=day,to=day,v=value,copper=metric~='supply' and raw~=N and raw or nil,
+                state=({'listed','supply_only','absent','unknown','unsupported'})[p[1]+1],reason=reason,at=o.observed_at,
+                observation_id=o.observation_id,provenance='Market server · '..h.pricing_algorithm,synthetic=o.synthetic,partial=false}
+        end
+    end
+    for day=from,today do if not present[day] then out.gaps[#out.gaps+1]={from=day,to=day,why='no_server_observation'} end end
+    return out
+end
+function Q.History(...) return measured("workshop.summaryHistory",history,...) end
 function Q.Freshness(now)
     if not active then return {state='unavailable',text=job and 'Validating Market summary' or 'Market summary unavailable',tone='quiet',tip={'Local scans and history are unchanged.'}} end
     local h=active.header;local _,stamp=S.Time(h.source_observation.observed_at);now=now or time and time()
@@ -246,7 +300,8 @@ function Q.Freshness(now)
         tip={'Loaded generation: '..h.generation_id,'Market server · '..h.market.region:upper()..' · '..h.market.player_ruleset..' · '..h.market.faction..' · house '..h.market.house_id,
             'Observed: '..h.source_observation.observed_at..' UTC'..(h.synthetic and ' · synthetic fixture' or ''),
             h.record_count..' current observed exact variants declared; partitions validate on demand ('..active.checked_count..'/'..#h.partitions..').',
-            'Historical references only; detailed charts are not delivered. Native item-link equivalence is unavailable.',
+            h.contract_version==2 and 'Actual Market daily closings are loaded; missing observations remain gaps.' or 'Historical references only; detailed charts are not delivered.',
+            'Native item-link equivalence is unavailable. Local scans remain independent.',
             'Publication in Companion does not prove game consumption. Files are read on login or a player-approved reload.'}}
 end
 if R.Perf and R.Perf.Gauge then
