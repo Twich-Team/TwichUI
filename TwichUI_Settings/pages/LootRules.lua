@@ -411,7 +411,7 @@ local function LayoutEditor(v, w)
     f.resultLabel:SetText("Show the result afterward")
     Put(f.resultLabel, f.editor, PAD + 30, y + 5)
     f.resultBox:SetChecked(v.result)
-    Put(f.resultBox, f.editor, w - PAD - 20, y + 3)
+    Put(f.resultBox, f.editor, w - PAD - 32, y + 4)   -- the switch is 32 wide: its right edge sits on the padding
     y = y + 34
 
     -- the sentence
@@ -500,7 +500,7 @@ local function Build()
     M.PanelFace(f.strip, "canvas")
     f.stripBox = G.Checkbox(f.strip, function(on) LR().Set("auto", on and true or false) end)
     f.stripBox:SetPoint("LEFT", 12, 0)
-    f.stripText = G.Text(f.strip, "body"); f.stripText:SetPoint("LEFT", 40, 0)
+    f.stripText = G.Text(f.strip, "body"); f.stripText:SetPoint("LEFT", f.stripBox, "RIGHT", 12, 0)   -- a clear gap after the switch (it is 32 units wide)
     f.stripState = G.Text(f.strip, "small"); f.stripState:SetPoint("RIGHT", -12, 0); f.stripState:SetJustifyH("RIGHT")
     f.stripText:SetText("Roll automatically using these rules")
     R.Interact.Tip(f.stripBox, "Roll automatically", "The same switch as \"Roll automatically using my rules\" below. Off: no rule chooses anything. On: a matching rule starts a countdown on its card that you can stop.")
