@@ -2486,7 +2486,7 @@ Lab.Step("pose for the screenshot", function()
             row:TipEnter()
             Check("display", "pose: the row's tooltip is the item's own, owned by the row", "true", tostring(GameTooltip:IsShown() and GameTooltip:GetOwner() == row))
         end
-    elseif view == "ledger" or view == "ledgersmall" then
+    elseif view == "ledger" or view == "ledgersmall" or view == "ledgervendor" or view == "ledgervendorsmall" then
         -- the Gold Ledger over a SYNTHETIC journal written straight into TwichUILedgerDB (the recorder's own events are not simulated here; the
         -- offline tests cover them). Days are relative to today (UTC). EXPECTED VALUES are hand arithmetic, never read from the code under test:
         --   today-0: +100000 mail, -25000 auction purchase (Peacebloom x2), +5000 unclassified
@@ -2534,6 +2534,31 @@ Lab.Step("pose for the screenshot", function()
         V.SetFilter("days", 30); Lab.Settle(0.2)
         Check("display", "pose: thirty days add the +50000 mail", "+20g 50s 0c", Txt(V.cards.inn.value))
         V.SetFilter("days", 7); Lab.Settle(0.2)
+        if view == "ledgervendor" or view == "ledgervendorsmall" then
+            -- Additive UI fixture only: merchant native callbacks/outcomes are independently exercised offline.
+            Add(0, -25, "vendorBuy", { i = 159, q = 5, e = "merchantpurchase" })
+            Add(0, 18, "vendorSell", { i = 7073, q = 2, e = "merchantsale" })
+            Add(0, -12400, "repair", { n = "Equipment repairs", e = "merchantrepair" })
+            W.LedgerQuery.ResetCache(); V.Draw(); Lab.Settle(0.2)
+            Check("state", "vendor pose: all eight signed source rows are available", 8, #V.sourceList.data)
+            Check("display", "vendor pose: exact net and attributed spending", "+11g 5s 93c | -3g 74s 25c",
+                Txt(V.cards.net.value) .. " | " .. Txt(V.cards.attrOut.value))
+            Check("display", "vendor pose: the repair description uses the existing transaction row", "Repairs | Equipment repairs",
+                Txt(V.list.rows[1].src) .. " | " .. Txt(V.list.rows[1].note))
+            for _, code in ipairs({ "vendorBuy", "vendorSell", "repair" }) do
+                V.SetFilter("source", code); Lab.Settle(0.1)
+                Check("state", "vendor pose: source filter " .. code, 1, #V.rows)
+                Check("display", "vendor pose: source label " .. code, W.LedgerQuery.ROW_LABELS[code], Txt(V.list.rows[1].src))
+            end
+            V.SetFilter("source", nil); Lab.Settle(0.1)
+            local total = 0
+            for _, source in ipairs(V.sourceList.data) do total = total + source.dir * source.amount end
+            Check("state", "vendor pose: all displayed sources reconcile with net", 110593, total)
+            V.sourceList.scroll:SetVerticalScroll(3 * 26); V.sourceList:Layout()
+            local found = false
+            for _, row in ipairs(V.srcRows) do if row:IsShown() and row.data.code == "vendorSell" then found = true end end
+            Check("state", "vendor pose: scrolling exposes the smallest source", true, found)
+        end
         Rows(Lists().ledger)[1]:SetHot(true)   -- a row under the pointer, for the screenshot (the art only)
     elseif view == "shop" then
         -- the mixed-source list with a Make row: take the Smelt Bronze entry back out through its Remove button

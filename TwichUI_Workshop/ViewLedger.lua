@@ -37,7 +37,6 @@ function V.Draws() return draws end
 
 local SCOPES = { { "current", "This character" }, { "all", "All characters" } }
 local SOURCES = { { "all", "All sources" } }
-for _, code in ipairs({ "ahSale", "mail", "ahBuy", "other" }) do SOURCES[#SOURCES + 1] = { code, LQ.LABELS[code] } end
 local CARD_DEFS = {
     { key = "net", title = "Net Change", art = "npc:balance-scales",
       tip = "Gold in minus gold out over the chosen days: how your gold changed, as recorded. It is not profit: purchases of materials, repairs and gold you moved between your own characters count as gold out." },
@@ -46,11 +45,11 @@ local CARD_DEFS = {
     { key = "out", title = "Gold Out", art = "npc:reagent-pouch",
       tip = "All gold that left in the chosen days, whatever the reason." },
     { key = "attrIn", title = "Attributed Income", art = "npc:gavel",
-      tip = "Gold in whose source was confirmed by a completed transaction of exactly that amount (for now: money you took from the mailbox, and sold-auction invoices)." },
+      tip = "Mailbox money, auction-sale invoices and verified vendor sales, matched to the exact gold received." },
     { key = "attrOut", title = "Attributed Spending", art = "npc:hammer",
-      tip = "Gold out whose source was confirmed by a completed transaction of exactly that amount (for now: purchases made through TwichUI's Auction House window)." },
+      tip = "Auction purchases, verified vendor purchases and player-paid repairs, matched to the exact gold spent." },
     { key = "unk", title = "Unclassified", art = "npc:sealed-scroll",
-      tip = "Gold that moved with nothing to say why: loot, quests, vendors, repairs, trades, postage and more. It is kept, never hidden. The figure is its net." },
+      tip = "Gold that moved with nothing to say why: loot, quests, uncertain merchant activity, trades, postage and more. It is kept, never hidden. The figure is its net." },
 }
 
 ---------------------------------------------------------------------------
@@ -223,11 +222,9 @@ local function BuildSources()
     p:SetSize(w, MID_H)
     p:SetPoint("TOPRIGHT", page, "TOPRIGHT", 0, MID_TOP)
     V.sources = p
-    for i = 1, 5 do
-        local row = CreateFrame("Frame", nil, p)
+    local function MakeSource(parent)
+        local row = CreateFrame("Frame", nil, parent)
         row:SetHeight(ROW_H)
-        row:SetPoint("TOPLEFT", 12, -34 - (i - 1) * ROW_H)
-        row:SetPoint("TOPRIGHT", -12, -34 - (i - 1) * ROW_H)
         row.label = UI.Text(row, 12, K.text)
         row.label:SetPoint("LEFT", 0, 0)
         row.label:SetWidth(134)
@@ -238,41 +235,35 @@ local function BuildSources()
         row.bar = UI.Meter(row, 80, 10)
         row.bar:SetPoint("LEFT", row.label, "RIGHT", 6, 0)
         row.bar:SetPoint("RIGHT", row.amount, "LEFT", -8, 0)
-        V.srcRows[i] = row
+        row.fill = function(self, r)
+            self.label:SetText(r.label)
+            self.amount:SetText(LQ.Money(r.dir * r.amount, true))
+            UI.Paint(self.amount, r.dir > 0 and K.sage or K.ember)
+            self.bar:SetFraction(V.sourceTop > 0 and r.amount / V.sourceTop or 0)
+            self.bar:SetTone(r.dir > 0 and K.sage or K.ember)
+            self.data = r
+        end
+        return row
     end
+    -- Keep the existing panel and row styling; scrolling exposes every source when more than five are present.
+    V.sourceList = UI.List(p, ROW_H, MakeSource, ROW_H * 5, false)
+    V.sourceList.box:SetPoint("TOPLEFT", 8, -30)
+    V.sourceList.box:SetPoint("BOTTOMRIGHT", -8, 34)
+    V.srcRows = V.sourceList.rows
+    p.empty = V.sourceList.empty
     p.note = UI.Text(p, 11, K.stone)
     p.note:SetPoint("BOTTOMLEFT", 14, 8)
     p.note:SetPoint("RIGHT", p, "RIGHT", -12, 0)
     p.note:SetHeight(26)
     p.note:SetWordWrap(true)
     p.note:SetJustifyV("BOTTOM")
-    p.empty = UI.Text(p, 13, K.textDim)
-    p.empty:SetPoint("TOPLEFT", 14, -40)
-    p.empty:SetPoint("RIGHT", p, "RIGHT", -14, 0)
-    p.empty:SetWordWrap(true)
-    p.empty:SetJustifyV("TOP")
 end
 
 local function PaintSources(s)
     local p = V.sources
     local rows = LQ.SourceRows(s)
-    local top = rows[1] and rows[1].amount or 0
-    for i, row in ipairs(V.srcRows) do
-        local r = rows[i]
-        if r then
-            row:Show()
-            row.label:SetText(r.label)
-            row.amount:SetText(LQ.Money(r.dir * r.amount, true))
-            UI.Paint(row.amount, r.dir > 0 and K.sage or K.ember)
-            row.bar:SetFraction(top > 0 and r.amount / top or 0)
-            row.bar:SetTone(r.dir > 0 and K.sage or K.ember)
-            row.data = r
-        else
-            row:Hide()
-            row.data = nil
-        end
-    end
-    p.empty:SetText(#rows == 0 and "No gold has moved in this period." or "")
+    V.sourceTop = rows[1] and rows[1].amount or 0
+    V.sourceList:SetData(rows, "No gold has moved in this period.")
     local note = {}
     if #rows > 0 then note[1] = "Together these add up to Net Change." end
     if s and s.characters > 1 then note[#note + 1] = "All characters: gold you moved between your own characters counts in and out." end
@@ -474,6 +465,7 @@ end
 local function BuildFilters()
     V.scope = Dropdown(page, 168, SCOPES, function() return filter.scope end, function(v) V.SetFilter("scope", v) end)
     V.scope:SetPoint("TOPLEFT", page, "TOPLEFT", 0, -46)
+    for _, code in ipairs(R.Ledger and R.Ledger.ORDER or {}) do SOURCES[#SOURCES + 1] = { code, LQ.LABELS[code] } end
     V.source = Dropdown(page, 168, SOURCES, function() return filter.source or "all" end, function(v) V.SetFilter("source", v ~= "all" and v or nil) end)
     V.source:SetPoint("TOPLEFT", V.scope, "TOPRIGHT", 10, 0)
     V.status = UI.Text(page, 11, K.stone)

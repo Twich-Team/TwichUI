@@ -524,4 +524,35 @@ do
     Check(#snap.entries >= 7 and snap.since, "the journal and its start are in the saved variable")
 end
 
+-- Vendor classifications use the same cards, chart, filters, item tooltips and persistence fields.
+-- All eight signed source rows remain accessible in the existing panel, including the least-valued source.
+do
+    local r = NewRec("Rich")
+    Add(r, 0, 100, "mail"); Add(r, 0, 50, "ahSale"); Add(r, 0, -200, "ahBuy")
+    Add(r, 0, -25, "vendorBuy", { i = 10, q = 5, e = "merchantpurchase" })
+    Add(r, 0, 18, "vendorSell", { i = 11, q = 2, e = "merchantsale" })
+    Add(r, 0, -124, "repair", { n = "Equipment repairs", e = "merchantrepair" })
+    Add(r, 0, 7); Add(r, 0, -3)
+    Install({ ["Rich - Forever"] = r }); g.names[10] = "Refreshing Spring Water"
+    V.Draw(); Reconciles("all vendor sources")
+    Same(Card("attrIn"), "+1s 68c"); Same(Card("attrOut"), "-3s 49c")
+    Same(#LQ.SourceRows(V.summary), 8); Same(#V.sourceList.data, 8)
+    V.sourceList.scroll:SetVerticalScroll(3 * 26); V.sourceList:Layout()
+    local lastSeen = false
+    for _, sourceRow in ipairs(V.srcRows) do
+        if sourceRow:IsShown() and sourceRow.data.code == "other" and sourceRow.data.dir == -1 then lastSeen = true end
+    end
+    Check(lastSeen, "scrolling reaches the eighth source instead of silently omitting it")
+    for _, source in ipairs({ { "vendorBuy", "Vendor Purchase", "Refreshing Spring Water \195\1515" },
+        { "vendorSell", "Vendor Sale", "Silverleaf \195\1512" }, { "repair", "Repairs", "Equipment repairs" } }) do
+        V.SetFilter("source", source[1]); Same(#V.rows, 1); Reconciles(source[1])
+        Same(V.list.rows[1].src:GetText(), source[2]); Same(V.list.rows[1].note:GetText(), source[3])
+        V.list.rows[1]:GetScript("OnEnter")(V.list.rows[1])
+        Check(TipText():find("Source: " .. source[2] .. " (confirmed)", 1, true), TipText())
+        Check(TipText():find(L.EVIDENCE[L.SOURCES[source[1]].evidence], 1, true), "distinct evidence details")
+        if source[1] ~= "repair" then Check(V.list.rows[1].itemIcon:IsShown(), "known items keep their icon and tooltip") end
+    end
+    V.SetFilter("source", nil); V.sourceList:ScrollTop(); V.Draw()
+end
+
 print("LEDGER PAGE OK")

@@ -49,6 +49,7 @@ Replace `workshop-settings` with one of these nonempty groups:
 
 | Group | Direct scope |
 |---|---|
+| `ledger` | Gold recorder, exact evidence targets, merchant attribution, mailbox and vendor integration, Ledger page; smoke and both Ledger simulator poses |
 | `workshop-settings` | Workshop settings, Tooltip Designer, worth layout/tips and Workshop window |
 | `item-advisor` | Advisor recommendations, selling and disenchant evidence, discovery, page, market/crafting dependencies and selected Advisor simulator poses |
 | `workshop` | All Workshop tests and Test Lab tests |

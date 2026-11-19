@@ -27,10 +27,13 @@ local function Ledger() return R.Ledger end
 ---------------------------------------------------------------------------
 LQ.LABELS = {
     ahSale = "Auction sales", mail = "Mail collected", ahBuy = "Auction purchases", other = "Unclassified",
+    vendorBuy = "Vendor purchases", vendorSell = "Vendor sales", repair = "Repairs",
 }
 LQ.ART = { ahSale = "npc:gavel", mail = "npc:sealed-scroll", ahBuy = "npc:reagent-pouch", other = "npc:coins" }
+LQ.ART.vendorBuy, LQ.ART.vendorSell, LQ.ART.repair = "npc:reagent-pouch", "npc:coins", "npc:hammer"
 -- The source a transaction row names: the single word for the table (a direction is the amount's sign).
 LQ.ROW_LABELS = { ahSale = "Auction Sale", mail = "Mail Collected", ahBuy = "Auction Purchase", other = "Unclassified" }
+LQ.ROW_LABELS.vendorBuy, LQ.ROW_LABELS.vendorSell, LQ.ROW_LABELS.repair = "Vendor Purchase", "Vendor Sale", "Repairs"
 
 -- 1234567 -> "123g 45s 67c"; the leading zero units are left out, never the exact copper. signed: "+" for a gain.
 function LQ.Money(copper, signed)
@@ -255,6 +258,9 @@ function LQ.Note(row)
     local name = ItemName(row.item)
     if row.item then
         local base = name or ("Item " .. row.item)
+        if row.qty and row.qty > 1 and (row.code == "vendorBuy" or row.code == "vendorSell") then
+            return ("%s \195\151%d"):format(base, row.qty)
+        end
         return row.qty and row.qty > 1 and ("%s (%d)"):format(base, row.qty) or base
     end
     if row.note then return row.note end
