@@ -33,31 +33,49 @@ local CONDITIONS = {
     { key = "kind", name = "Item type", category = "Item", art = "leather-backpack",
         blurb = "Gear, materials, recipes, supplies or other.",
         tip = "Choose gear, materials, recipes, supplies or other. Quest items and keys are never candidates, whatever the rule says." },
+    { key = "armor", name = "Armor type", category = "Item", art = "tabard",
+        blurb = "Cloth, leather, mail, plate, shields.",
+        tip = "The armor class of the item: cloth, leather, mail, plate or shields. Anything that is not armor is none of these." },
     { key = "quality", name = "Quality range", category = "Item", art = "inscribed-stone",
         blurb = "From Poor to Legendary.",
         tip = "The item's quality, from Poor (gray) to Legendary. Pick the first and last quality the rule may match." },
+    { key = "tool", name = "Profession tool", category = "Item", art = "hammer",
+        blurb = "Mining pick, skinning knife, rods, fishing poles.",
+        tip = "Profession tools: miscellaneous tool weapons (mining pick, blacksmith hammer, skinning knife), fishing poles, and a short list of known rods and spanners. Judged from the item's type; not read from a Forever client yet." },
+    { key = "camping", name = "Camping item", category = "Item", art = "paw",
+        blurb = "Campfire kits and camp objects.",
+        tip = "Campfire kits and the camp objects the professions make, from the camping bar's item list. The Cozy Sleeping Bag is always protected anyway." },
     { key = "wearable", name = "Wearable now", category = "Your character", art = "tabard",
         blurb = "Whether you can wear it.",
         tip = "Whether your character can wear or use it right now, read from the item's tooltip. Only armor and weapons are judged; for anything else this stays unknown and the rule leaves the item alone." },
-    { key = "upgrade", name = "Gear upgrade", category = "Your character", art = "hammer-and-chisel",
-        blurb = "Whether it would improve your gear.",
-        tip = "Whether TwichUI's gear comparison thinks it would improve what you wear: an estimate, and only for armor and weapons." },
+    { key = "upgrade", name = "Gear Advisor upgrade", category = "Your character", art = "hammer-and-chisel",
+        blurb = "Whether the Gear Advisor sees an upgrade.",
+        tip = "Whether TwichUI's gear comparison (the Gear Advisor) thinks it would improve what you wear: is an upgrade, or is not. An estimate, and only for armor and weapons." },
+    { key = "unlearnedRecipe", name = "Unlearned recipe", category = "Your character", art = "sealed-scroll",
+        blurb = "A recipe for my profession I don't know.",
+        tip = "A recipe for one of your professions that you have not learned: its tooltip does not say Already known. Your professions are the ones whose window TwichUI has read, so open each profession once." },
     { key = "classReagent", name = "Class reagent", category = "Crafting", art = "reagent-pouch",
         blurb = "A reagent your class uses.",
         tip = "A reagent your class uses, from the vendor restocking list. TwichUI can confirm an item is on it, never that it is not." },
     { key = "profession", name = "Recipe material", category = "Crafting", art = "sealed-scroll",
         blurb = "Used by a recipe you know.",
         tip = "An ingredient in a recipe your characters have learned (remembered by the Workshop). TwichUI can confirm an item is used, never that it is not." },
+    { key = "professionMaterial", name = "Profession material", category = "Crafting", art = "cloth-bolts",
+        blurb = "A trade good for one of my professions.",
+        tip = "A trade good (cloth, leather, ore and stone, herbs, meat, enchanting materials, parts) used by one of your professions, judged from its type. Your professions are the ones whose window TwichUI has read." },
+    { key = "vendor", name = "Workshop recommends Vendor", category = "Workshop", art = "coins",
+        blurb = "Workshop's advice is to vendor it.",
+        tip = "Workshop's Item Advisor recommends selling this to a vendor (using your price source, crafting plans and disenchant value). Older rules had this built in; now it is a condition you can keep, flip or remove. Needs Item Advisor loaded." },
     { key = "all", name = "All of these (AND)", category = "Groups", icon = "profiles",
         blurb = "Every condition inside must be true.",
-        tip = "A group where every condition inside must be true: \"this and that\". Use groups to build rules like: Gear, and (Poor or Common)." },
+        tip = "A group where every condition inside must be true: this and that. Use groups to build rules like: Gear, and (Poor or Common)." },
     { key = "any", name = "Any of these (OR)", category = "Groups", icon = "profilesSharing",
         blurb = "At least one condition inside.",
-        tip = "A group where at least one condition inside must be true: \"this or that\"." },
+        tip = "A group where at least one condition inside must be true: this or that." },
 }
 local BY_KEY = {}
 for _, c in ipairs(CONDITIONS) do BY_KEY[c.key] = c end
-local CATEGORIES = { "Item", "Your character", "Crafting", "Groups" }
+local CATEGORIES = { "Item", "Your character", "Crafting", "Workshop", "Groups" }
 
 local function ApplyArt(texture, key, size)
     local c = BY_KEY[key]
@@ -80,6 +98,11 @@ local OPERATOR = {
 local BOOL_CHOICES = {
     wearable = { { value = true, label = "Can be worn now" }, { value = false, label = "Can't be worn now" } },
     upgrade = { { value = true, label = "Is an upgrade" }, { value = false, label = "Is not an upgrade" } },
+    vendor = { { value = true, label = "Recommends Vendor" }, { value = false, label = "Doesn't recommend Vendor" } },
+    unlearnedRecipe = { { value = true, label = "Is one I haven't learned" }, { value = false, label = "Is not" } },
+    professionMaterial = { { value = true, label = "Is a material for my professions" }, { value = false, label = "Is not" } },
+    tool = { { value = true, label = "Is a profession tool" }, { value = false, label = "Is not a tool" } },
+    camping = { { value = true, label = "Is a camping item" }, { value = false, label = "Is not a camping item" } },
     classReagent = { { value = true, label = "Is a reagent for my class" }, { value = false, label = "Is not (never matches)" } },
     profession = { { value = true, label = "Used by a recipe I know" }, { value = false, label = "Is not (never matches)" } },
 }
@@ -151,12 +174,10 @@ local function Describe(res)
     if S().Tree() then Walk(S().Tree()) end
     if res.verdict == "match" then
         local detail
-        if res.vendor == true and (res.reserved or 0) == 0 and not res.touched then
-            detail = res.wanted and "Workshop recommends Vendor, so with this rule on it would be marked."
-                or "Workshop recommends Vendor. Marking is off or waiting, so nothing is marked now."
-        elseif (res.reserved or 0) > 0 then detail = "It is reserved for your crafting plan, so it would not be marked."
+        if (res.reserved or 0) > 0 then detail = "It is reserved for your crafting plan, so it would not be marked."
         elseif res.touched then detail = "You unmarked it earlier this session, so it is left alone."
-        else detail = ("Workshop recommends %s for it, so it would not be marked."):format(ADVICE[res.advice] or "something else") end
+        elseif res.wanted then detail = "With this rule on, it would be marked."
+        else detail = "Marking is off or waiting, so nothing is marked now." end
         return "Matches this rule", "met", detail
     elseif res.verdict == "nomatch" then
         return "Does not match", "unmet", #failing > 0 and ("Not met: " .. table.concat(failing, "; ") .. ".") or "None of the rule's conditions are met."
@@ -276,7 +297,7 @@ function B.New()
     Discard(function()
         Reset()
         if not S().BeginNew("New rule") then
-            Say("Eight rules is the most, or saved rules are not available.", "warn")
+            Say("The rule limit is reached, or saved rules are not available.", "warn")
         else
             Say("Pick the first condition from the list, or start from an example.")
         end
@@ -368,7 +389,7 @@ function B.Duplicate()
     end
     -- The copy starts from what is on screen, unsaved edits included; the saved original stays as it was.
     Reset()
-    if S().BeginCopy() then Say("This is a copy. Save to keep it.") else Say("Eight rules is the most.", "warn") end
+    if S().BeginCopy() then Say("This is a copy. Save to keep it.") else Say("The rule limit is reached.", "warn") end
     B.Refresh()
 end
 
@@ -489,7 +510,7 @@ function B.Build()
     left.new:SetHeight(34)
     left.new:SetPoint("TOPLEFT", 22, -390)
     m.ContextTip(left.new, "New rule", function()
-        return "Starts an empty rule, switched off. It marks nothing until you add a condition and turn it on. Eight rules at most.",
+        return "Starts an empty rule, switched off. It marks nothing until you add a condition and turn it on. Up to 32 rules.",
             "Any enabled rule can mark an item. Rule order does not matter."
     end)
     Divider(left, 436)
@@ -764,6 +785,10 @@ function B.Build()
         elseif value == "duplicate" then B.Duplicate()
         elseif value == "delete" then B.Delete() end
     end)
+    rule.delete = Button(rule, "Delete", 80, "danger", function() B.Delete() end)
+    rule.delete:SetHeight(32)
+    rule.delete:SetPoint("TOPRIGHT", -116, -12)
+    m.ContextTip(rule.delete, "Delete rule", "Deletes this rule after asking. Items it already marked stay marked; unmark them in EllesmereUI.")
     rule.more:SetHeight(32)
     rule.more:SetPoint("TOPRIGHT", -14, -12)
     rule.more:SetValue(nil, "Rule")
@@ -782,7 +807,7 @@ function B.Build()
     rule.heading:SetPoint("TOPLEFT", 16, -64)
     rule.heading:SetText("Mark an item as junk when")
     m.ContextTip(rule.heading, "How rules work", function()
-        return "An item is marked only when an enabled rule matches AND Workshop recommends Vendor for every copy you carry.",
+        return "An item is marked only when an enabled rule matches every copy you carry.",
             "Never mark items, quest items, keys and the Cozy Sleeping Bag are always left alone, whatever a rule says."
     end)
     rule.scroll, rule.content = g.Scroll(rule, RULE_W)
@@ -1185,10 +1210,13 @@ local function Draw(st, node, parent, index, depth, x, w, y)
             left = 118 * 2 + 40
         else
             c.value:ClearAllPoints(); c.value:SetPoint("RIGHT", c, "RIGHT", right, 0); c.value:Show()
-            if node.type == "kind" then
-                c.value:SetChoices(Kinds())
+            if node.type == "kind" or node.type == "armor" then
+                local list = node.type == "kind" and T().KINDS or T().ARMOR
+                local choices = {}
+                for i, k in ipairs(list) do choices[i] = { value = k[1], label = k[2] } end
+                c.value:SetChoices(choices)
                 local label
-                for _, k in ipairs(T().KINDS) do if k[1] == node.value then label = k[2] end end
+                for _, k in ipairs(list) do if k[1] == node.value then label = k[2] end end
                 c.value:SetValue(node.value, label)
             else
                 local choices = BOOL_CHOICES[node.type] or {}
@@ -1316,7 +1344,7 @@ local function Layout()
     local list = {}
     for i, r in ipairs(rows) do list[i] = r end
     if active and S().IsNew() then list[#list + 1] = { index = S().Index(), name = S().Name() or "New rule", on = S().On(), brief = "Not saved yet", unsaved = true } end
-    left.count:SetText(held and "Unavailable" or (#rows .. " / 8"))
+    left.count:SetText(held and "Unavailable" or (#rows .. " / " .. L().JUNK_MAX_RULES))
     left.empty:SetShown(#list == 0)
     for i, r in ipairs(list) do
         local row = B.Row(i)
@@ -1345,14 +1373,14 @@ local function Layout()
         end
         left.shownIndex = at
     end
-    left.new:SetEnabled(not held and #rows < 8)
+    left.new:SetEnabled(not held and #rows < L().JUNK_MAX_RULES)
     local never = #L().JunkIgnoreList()
     left.protect:SetText(("Never mark list: %d item%s. The Cozy Sleeping Bag, quest items and keys are always protected."):format(never, never == 1 and "" or "s"))
 
     -- the right side
     f.title:SetText(active and ("Junk rule: " .. (S().Name() or "New rule")) or "Junk marking")
     f.rule.blank:SetShown(not active)
-    for _, el in ipairs({ f.rule.name, f.rule.pill, f.rule.onText, f.rule.more, f.rule.line, f.rule.heading, f.rule.scroll }) do el:SetShown(active) end
+    for _, el in ipairs({ f.rule.name, f.rule.pill, f.rule.onText, f.rule.more, f.rule.delete, f.rule.line, f.rule.heading, f.rule.scroll }) do el:SetShown(active) end
     f.strip:SetShown(true)
     f.search:SetEnabled(active)
     left.summary:SetText(active and S().Summary() or "Choose a rule to see what it does.")
@@ -1478,7 +1506,7 @@ local function Layout()
         wd.text:SetPoint("TOPLEFT", 14, -34)
         wd.text:SetWidth(RULE_W - 8 - 28)
         wd.text:SetWordWrap(true)
-        wd.text:SetText("This rule only names candidates. An item is still left alone if it is on your Never mark list, is a quest item or key, has a locked or reserved copy, or Workshop does not recommend Vendor for every copy you carry.")
+        wd.text:SetText("This rule only names candidates. An item is still left alone if it is on your Never mark list, is a quest item or key, or has a locked or crafting-reserved copy. Every copy you carry must match.")
         g.Color(wd.text, pal.textDim)
         f.rule.words = wd
     end

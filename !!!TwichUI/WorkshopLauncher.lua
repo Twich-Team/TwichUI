@@ -249,8 +249,12 @@ L.JunkRuleTypes={"gear","materials","recipes","consumables","other"}
 -- Bounded condition trees. UI paths/drag targets reference draft nodes only.
 local T={MAX_NODES=32,MAX_DEPTH=4}
 L.JunkTree=T
-local bools={wearable=true,upgrade=true,classReagent=true,profession=true}
+local bools={wearable=true,upgrade=true,classReagent=true,profession=true,vendor=true,unlearnedRecipe=true,
+    professionMaterial=true,tool=true,camping=true}
+L.JUNK_MAX_RULES=32
+local MAX_RULES=L.JUNK_MAX_RULES
 local kinds={gear=true,materials=true,recipes=true,consumables=true,other=true}
+local armors={cloth=true,leather=true,mail=true,plate=true,shield=true,other=true}
 function T.Copy(node)
     local count,seen=0,{}
     local function Read(n,depth)
@@ -263,6 +267,7 @@ function T.Copy(node)
             for _,child in ipairs(n.children) do local c=Read(child,depth+1);if not c then return nil end;children[#children+1]=c end
             return {type="group",match=n.match,children=children,strict=n.strict==true or nil}
         elseif n.type=="kind" and kinds[n.value] then return {type="kind",value=n.value}
+        elseif n.type=="armor" and armors[n.value] then return {type="armor",value=n.value}
         elseif n.type=="quality" then
             if type(n.min)~="number" or type(n.max)~="number" or n.min%1~=0 or n.max%1~=0 or n.min<0 or n.max>5 or n.min>n.max then return nil end
             return {type="quality",min=n.min,max=n.max}
@@ -312,6 +317,7 @@ function T.Eval(n,f,trace)
             if unknown and (n.strict or (n.match=="all" and yes) or (n.match=="any" and not yes)) then v=nil else v=yes end
         end
     elseif n.type=="kind" then v=f.kind==n.value
+    elseif n.type=="armor" then if f.armor~=nil then v=f.armor==n.value end
     elseif n.type=="quality" then
         if type(f.quality)=="number" then v=f.quality>=n.min and f.quality<=n.max end
     elseif bools[n.type] then
@@ -321,18 +327,26 @@ function T.Eval(n,f,trace)
     return v
 end
 function T.Match(n,f) return T.Eval(n,f) end
+T.ARMOR={{"cloth","Cloth"},{"leather","Leather"},{"mail","Mail"},{"plate","Plate"},{"shield","Shields"},{"other","Other armor"}}
 T.KINDS={{"gear","Gear"},{"materials","Materials"},{"recipes","Recipes"},{"consumables","Supplies"},{"other","Other"}}
 T.QUALITY={"Poor","Common","Uncommon","Rare","Epic","Legendary"}
 local kindLabel={};for _,k in ipairs(T.KINDS) do kindLabel[k[1]]=k[2] end
+local armorLabel={};for _,k in ipairs(T.ARMOR) do armorLabel[k[1]]=k[2] end
 local boolWords={
     wearable={[true]="you can wear it now",[false]="you can't wear it now"},
     upgrade={[true]="it is a gear upgrade for you",[false]="it is not a gear upgrade for you"},
     classReagent={[true]="it is a known reagent for your class",[false]="it is not a known reagent for your class"},
     profession={[true]="a recipe you know uses it",[false]="no recipe you know uses it"},
+    vendor={[true]="Workshop recommends Vendor",[false]="Workshop does not recommend Vendor"},
+    unlearnedRecipe={[true]="it is a recipe for one of your professions that you have not learned",[false]="it is not an unlearned recipe for your professions"},
+    professionMaterial={[true]="it is a material for one of your professions",[false]="it is not a material for your professions"},
+    tool={[true]="it is a profession tool",[false]="it is not a profession tool"},
+    camping={[true]="it is a camping item",[false]="it is not a camping item"},
 }
 -- A short plain phrase for one condition; the sentence below and the editor cards share these words.
 function T.Phrase(n)
     if n.type=="kind" then return "it is "..(kindLabel[n.value] or "an item")
+    elseif n.type=="armor" then return "its armor type is "..(armorLabel[n.value] or "unknown")
     elseif n.type=="quality" then
         local lo,hi=T.QUALITY[n.min+1] or "?",T.QUALITY[n.max+1] or "?"
         return n.min==n.max and ("its quality is "..lo) or ("its quality is "..lo.." to "..hi)
@@ -411,7 +425,7 @@ local function RuleCopy(r)
     if type(r)~="table" then return nil end
     local kinds={gear=true,materials=true,recipes=true,consumables=true,other=true}
     if not kinds[r.kind] then return nil end
-    local out={kind=r.kind,on=r.on==true,match=r.match=="any" and "any" or "all"}
+    local out={kind=r.kind,on=r.on==true,match=r.match=="any" and "any" or "all",free=r.free==true or nil}
     if r.name~=nil then
         if type(r.name)~="string" or #r.name>60 or r.name:find("[%c|]") then return nil end
         out.name=r.name
@@ -432,7 +446,7 @@ end
 function L.JunkRules()
     local cfg=JunkConfig();local saved=cfg and cfg.rules
     if saved~=nil then
-        if type(saved)~="table" or (saved.v~=1 and saved.v~=2) or type(saved.rows)~="table" or #saved.rows>8 then return {},true end
+        if type(saved)~="table" or (saved.v~=1 and saved.v~=2) or type(saved.rows)~="table" or #saved.rows>MAX_RULES then return {},true end
         local rows={}
         for _,r in ipairs(saved.rows) do local copy=RuleCopy(r);if not copy then return {},true end;rows[#rows+1]=copy end
         return rows,false
@@ -444,7 +458,7 @@ function L.JunkRules()
     end
     return rows,false
 end
-local RULE_KEYS={"name","kind","on","match","qualityMin","qualityMax","wearable","upgrade","classReagent","profession"}
+local RULE_KEYS={"name","kind","on","free","match","qualityMin","qualityMax","wearable","upgrade","classReagent","profession"}
 local function SameRows(expected,rows)
     if type(expected)~="table" or #expected~=#rows then return false end
     for i,r in ipairs(rows) do
@@ -462,13 +476,13 @@ end
 local function Incomplete(clean) return clean.on and clean.tree and #T.Problems(clean.tree)>0 end
 -- A fresh rule: off, with an empty tree. An empty rule never matches, so an unfinished rule cannot mark anything.
 function L.NewJunkRule(name)
-    return {kind="other",name=name or "New rule",on=false,match="all",qualityMin=0,qualityMax=5,
+    return {kind="other",name=name or "New rule",on=false,free=true,match="all",qualityMin=0,qualityMax=5,
         wearable="any",upgrade="any",classReagent="any",profession="any",tree={type="group",match="all",children={}}}
 end
 -- Commit the complete settings draft once, refusing stale profile/list edits.
 function L.SaveJunkRule(index,rule,expected)
     local rows,held=L.JunkRules()
-    if held or type(index)~="number" or index%1~=0 or index<1 or index>math.min(8,#rows+1) then return false,"held" end
+    if held or type(index)~="number" or index%1~=0 or index<1 or index>math.min(MAX_RULES,#rows+1) then return false,"held" end
     if not SameRows(expected,rows) then return false,"stale" end
     local clean=RuleCopy(rule);if not clean then return false,"invalid" end
     if Incomplete(clean) then return false,"incomplete" end
@@ -476,7 +490,7 @@ function L.SaveJunkRule(index,rule,expected)
 end
 function L.SetJunkRule(index,key,value)
     if not ({kind=true,name=true,on=true,match=true,qualityMin=true,qualityMax=true,wearable=true,upgrade=true,classReagent=true,profession=true})[key] then return false end
-    if type(index)~="number" or index%1~=0 or index<1 or index>8 then return false end
+    if type(index)~="number" or index%1~=0 or index<1 or index>MAX_RULES then return false end
     local rows,held=L.JunkRules();if held or not rows[index] then return false end
     local r=rows[index];r[key]=value;r=RuleCopy(r);if not r then return false end
     if Incomplete(r) then return false,"incomplete" end
@@ -486,7 +500,7 @@ end
 -- A disabled copy at the end of the list, taken from a saved rule.
 function L.DuplicateJunkRule(index)
     local rows,held=L.JunkRules()
-    if held or type(index)~="number" or index%1~=0 or index<1 or index>#rows or #rows>=8 then return false end
+    if held or type(index)~="number" or index%1~=0 or index<1 or index>#rows or #rows>=MAX_RULES then return false end
     local source=rows[index]
     local copy=RuleCopy(source);if not copy then return false end
     copy.on=false;copy.tree=T.FromRule(source)
@@ -497,7 +511,7 @@ function L.DuplicateJunkRule(index)
 end
 function L.JunkTemplate(index,kind)
     local rows,held=L.JunkRules()
-    if held or type(index)~="number" or index%1~=0 or index<1 or index>math.min(8,#rows+1) then return false end
+    if held or type(index)~="number" or index%1~=0 or index<1 or index>math.min(MAX_RULES,#rows+1) then return false end
     local templates={poor={kind="gear",qualityMax=0},nonupgrade={kind="gear",upgrade="no",qualityMax=2},
         materials={kind="materials"},recipes={kind="recipes",qualityMax=1},custom={kind="other"}}
     local t=templates[kind];if not t then return false end
@@ -512,8 +526,20 @@ function L.RemoveJunkRule(index,expected)
 end
 -- One rule against one item's facts: true, false or nil (cannot tell). A rule saved without a tree is judged
 -- through the tree the editor shows, so the editor, the summary and the marking engine share one expression.
-local function RuleValue(r,kind,facts,trace)
+-- A rule saved before the builder made Workshop's Vendor advice an ordinary condition (no `free` mark) still needs
+-- it: it is judged as "Workshop recommends Vendor, and the rule". The builder shows that as a real condition.
+function T.Effective(r)
     local tree=r.tree or T.FromRule(r)
+    if r.free then return tree end
+    if tree.match=="all" and not tree.strict then
+        local children={{type="vendor",value=true}}
+        for _,c in ipairs(tree.children) do children[#children+1]=c end
+        return {type="group",match="all",children=children}
+    end
+    return {type="group",match="all",children={{type="vendor",value=true},tree}}
+end
+local function RuleValue(r,kind,facts,trace)
+    local tree=T.Effective(r)
     local f={};for k,v in pairs(facts) do f[k]=v end;f.kind=kind
     return T.Eval(tree,f,trace),tree
 end
@@ -535,16 +561,31 @@ function L.JunkJudge(id,class,facts,rows,trace)
     end
     return unknown and "unknown" or "nomatch"
 end
-function L.JunkAllows(id,class,facts)
+-- The decision marking acts on: JunkJudge over the saved rules, or (until the player first edits a rule) the older
+-- per-type switches, which always required Workshop's Vendor advice.
+function L.JunkVerdict(id,class,facts)
     local cfg=JunkConfig()
-    -- Legacy toggles remain authoritative until the player first edits a rule.
     if not (cfg and cfg.rules~=nil) then
-        if L.JunkIgnored(id) or type(class)~="number" or class~=class or class%1~=0 or class<0 or class>20
-            or class==12 or class==13 then return false end
-        return L.JunkFilter(JUNK_CLASS[class] or "other")
+        if L.JunkIgnored(id) then return "protected" end
+        if type(class)~="number" or class~=class or class%1~=0 or class<0 or class>20 or class==12 or class==13 then return "class" end
+        if not L.JunkFilter(JUNK_CLASS[class] or "other") then return "nomatch" end
+        local v=facts and facts.vendor
+        if v==true then return "match" elseif v==false then return "nomatch" end
+        return "unknown"
     end
+    local rows,held=L.JunkRules();if held then return "nomatch" end
+    return L.JunkJudge(id,class,facts,rows)
+end
+function L.JunkAllows(id,class,facts) return L.JunkVerdict(id,class,facts)=="match" end
+-- Whether any rule in force depends on Workshop's advice (the costly fact), so marking asks for it only then.
+function L.JunkNeedsAdvisor()
+    local cfg=JunkConfig()
+    if not (cfg and cfg.rules~=nil) then return true end
     local rows,held=L.JunkRules();if held then return false end
-    return L.JunkJudge(id,class,facts,rows)=="match"
+    for _,r in ipairs(rows) do
+        if r.on and (not r.free or T.Uses(r.tree or T.FromRule(r),"vendor")) then return true end
+    end
+    return false
 end
 function L.LoadOnLogin()
     local ui = type(TwichUIDB) == "table" and TwichUIDB.ui

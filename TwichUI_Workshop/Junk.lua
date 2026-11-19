@@ -7,7 +7,7 @@ W.Junk = J
 local frame, active, pending, generation = nil, false, false, 0
 local epoch=0
 local professionItems,classItems={},{}
-local needWear,needUpgrade=false,false
+local needWear,needUpgrade,needRecipe,needAdvisor=false,false,false,false
 local touched, touchedCount = {}, 0 -- bounded; respect a manual unmark this session
 local EVENTS = {"BAG_UPDATE_DELAYED", "GET_ITEM_INFO_RECEIVED", "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED",
     "PLAYER_ENTERING_WORLD", "PLAYER_LEAVING_WORLD", "ADDON_LOADED", "SPELLS_CHANGED", "SKILL_LINES_CHANGED", "PLAYER_EQUIPMENT_CHANGED", "PLAYER_TALENT_UPDATE"}
@@ -28,11 +28,29 @@ local function Ready()
         and (not R.Life or R.Life.InWorld()) and R.EllesmereJunk and R.EllesmereJunk.Ready()
 end
 
+-- Item facts that need no price or tooltip. Armor, trade goods and recipes are told apart by the game's own
+-- item class and subclass; none of this has been read from a Forever client (see docs/workshop/item-advisor.md).
+local ARMOR = {[0]="other",[1]="cloth",[2]="leather",[3]="mail",[4]="plate",[6]="shield"}
+local RECIPE_PROF = {[1]="leatherworking",[2]="tailoring",[3]="engineering",[4]="blacksmithing",[5]="cooking",[6]="alchemy",
+    [7]="first aid",[8]="enchanting",[9]="fishing",[10]="jewelcrafting"}
+local GOODS_PROF = {[1]={"engineering"},[2]={"engineering"},[3]={"engineering"},[4]={"jewelcrafting"},[5]={"tailoring"},
+    [6]={"leatherworking"},[7]={"blacksmithing","engineering","jewelcrafting"},[8]={"cooking"},[9]={"alchemy"},
+    [10]={"alchemy","enchanting","engineering"},[12]={"enchanting"}}
+local TOOL_IDS = {[2901]=true,[5956]=true,[7005]=true,[6219]=true,[6339]=true,[11130]=true,[11145]=true,[16207]=true}
+local myProfs, campItems = nil, nil
+local function Camping(id)
+    if not campItems and R.CampingData then
+        campItems = {}
+        for _, item in ipairs(R.CampingData.ITEMS or {}) do campItems[item] = true end
+    end
+    return campItems ~= nil and campItems[id] == true
+end
+
 -- One held copy, using the same item fields and actual-level rules as WorthTip. Returns nil for an empty slot, false
 -- for an occupied slot that cannot be read (it may be another copy of anything), or the item's facts. An unknown,
 -- locked, quest or protected copy carries `veto`, and vetoes marking the entire item ID.
 -- `wear` and `upgrade` say whether a rule asks for those facts: they are the costly ones.
-local function Gather(bag, slot, wear, upgrade)
+local function Gather(bag, slot, wear, upgrade, recipe)
     local x = C_Container.GetContainerItemInfo(bag, slot)
     if type(x) ~= "table" then return nil end
     local id = W.Int(W.Plain(x.itemID), 1, W.MAX_ID)
@@ -45,7 +63,7 @@ local function Gather(bag, slot, wear, upgrade)
     info.link = link
     local quest = C_Container.GetContainerItemQuestInfo and C_Container.GetContainerItemQuestInfo(bag, slot)
     if type(quest) ~= "table" or W.Plain(quest.isQuestItem) ~= false or W.Plain(quest.questID) then info.veto = "quest"; return info end
-    local name, _, quality, level, _, _, _, _, equip, icon, sell, class, _, bind = C_Item.GetItemInfo(link)
+    local name, _, quality, level, _, _, _, _, equip, icon, sell, class, subclass, bind = C_Item.GetItemInfo(link)
     name = W.Text(W.Plain(name), 200)
     if not name then info.veto = "unknown"; return info end
     class=W.Plain(class)
@@ -63,6 +81,32 @@ local function Gather(bag, slot, wear, upgrade)
             if verdict=="likely" or verdict=="possible" or verdict=="empty" then facts.upgrade=true
             elseif verdict=="similar" or verdict=="worse" then facts.upgrade=false end
         end
+    end
+    -- Facts the item's own class settles are true or false; the ones that need the player's professions stay unknown
+    -- until a profession window has been read (then Known has them).
+    subclass = W.Plain(subclass)
+    facts.armor = class == 4 and (ARMOR[subclass] or "other") or class ~= nil and "none" or nil
+    facts.tool = (class == 2 and (subclass == 14 or subclass == 20)) or TOOL_IDS[id] == true
+    facts.camping = Camping(id)
+    if myProfs then
+        local mine = false
+        if class == 7 then
+            for _, p in ipairs(GOODS_PROF[subclass] or {}) do if myProfs[p] then mine = true end end
+        end
+        facts.professionMaterial = mine
+        local unlearned = false
+        if class == 9 and myProfs[RECIPE_PROF[subclass] or ""] then
+            local data = recipe and C_TooltipInfo and C_TooltipInfo.GetBagItem and C_TooltipInfo.GetBagItem(bag, slot)
+            if data and type(data.lines) == "table" and #data.lines > 0 then
+                local known = false
+                for _, line in ipairs(data.lines) do
+                    local text = W.Plain(line.leftText)
+                    if type(text) == "string" and ITEM_SPELL_KNOWN and text:find(ITEM_SPELL_KNOWN, 1, true) then known = true end
+                end
+                unlearned = not known
+            else unlearned = nil end
+        end
+        facts.unlearnedRecipe = unlearned
     end
     info.facts = facts
     return info
@@ -91,19 +135,27 @@ local function Advise(info)
 end
 
 local function Read(bag, slot)
-    local info = Gather(bag, slot, needWear, needUpgrade)
+    local info = Gather(bag, slot, needWear, needUpgrade, needRecipe)
     if info == nil or info == false then return info end
-    if info.veto or not R.WorkshopLauncher.JunkAllows(info.id, info.class, info.facts) then return info.id end
-    local vendor = Advise(info)
-    if vendor == nil then return info.id end
-    return info.id, vendor, info.quality
+    if info.veto then return info.id end
+    local L = R.WorkshopLauncher
+    local verdict = L.JunkVerdict(info.id, info.class, info.facts)
+    -- Workshop's advice is only asked for when a rule's answer depends on it: it is the costly fact.
+    if verdict == "unknown" and needAdvisor then
+        info.facts.vendor = (Advise(info))
+        verdict = L.JunkVerdict(info.id, info.class, info.facts)
+    end
+    return info.id, verdict == "match", info.quality
 end
 
 -- What the "Recipe material" and "Class reagent" conditions know: remembered recipes and this class's reagents.
 local function Learn()
     professionItems,classItems={},{}
-    needWear,needUpgrade=false,false
+    needWear,needUpgrade,needRecipe,needAdvisor=false,false,false,false
+    myProfs=nil
     for _,p in ipairs(W.Known and W.Known.Load() or {}) do
+        myProfs=myProfs or {}
+        myProfs[(p.profName or ""):lower()]=true
         for _,rec in ipairs(p.recipes or {}) do
             for _,mat in ipairs(rec.mats or {}) do professionItems[mat.item]=true end
         end
@@ -119,8 +171,10 @@ local function Scan()
         if rule.on then
             needWear=needWear or (rule.tree and R.WorkshopLauncher.JunkTree.Uses(rule.tree,"wearable") or not rule.tree and rule.wearable~="any")
             needUpgrade=needUpgrade or (rule.tree and R.WorkshopLauncher.JunkTree.Uses(rule.tree,"upgrade") or not rule.tree and rule.upgrade~="any")
+            needRecipe=needRecipe or (rule.tree and R.WorkshopLauncher.JunkTree.Uses(rule.tree,"unlearnedRecipe") or false)
         end
     end
+    needAdvisor=R.WorkshopLauncher.JunkNeedsAdvisor()
     local candidates, order, slots = {}, {}, 0
     for bag=0,math.min(NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4,10) do
         local n=W.Int(W.Plain(C_Container.GetContainerNumSlots(bag)),0,200)
@@ -130,7 +184,7 @@ local function Scan()
             if id==false then return end -- an unreadable occupied slot may be another copy
             if id then
                 if not candidates[id] then candidates[id]={ok=true,quality=quality};order[#order+1]=id end
-                if not vendor then candidates[id].ok=false end
+                if not vendor then candidates[id].ok=false end -- (third value: this copy matched a rule)
             end
             slots=slots+1
             if slots%40==0 then coroutine.yield() end
@@ -188,7 +242,7 @@ function Inspect(bag, slot, rule)
     local out = {bag = bag, slot = slot, state = "unavailable"}
     if not Bags() or not rule or not rule.tree then return out end
     Learn()
-    local info = Gather(bag, slot, Uses(rule, "wearable"), Uses(rule, "upgrade"))
+    local info = Gather(bag, slot, Uses(rule, "wearable"), Uses(rule, "upgrade"), Uses(rule, "unlearnedRecipe"))
     if info == nil then out.state = "empty"; return out end
     if info == false then out.state = "unreadable"; return out end
     out.state = "ok"
@@ -213,10 +267,11 @@ function Inspect(bag, slot, rule)
     end
     if veto then out.verdict, out.block = "blocked", veto; return out end
     local trace = {}
+    local vendor, advice = Advise(info)
+    info.facts.vendor = vendor
     local verdict = R.WorkshopLauncher.JunkJudge(info.id, info.class, info.facts, {rule}, trace)
     out.verdict, out.trace = verdict, trace
     if verdict == "protected" then out.why = info.id == 211527 and "cozy" or "never" end
-    local vendor, advice = Advise(info)
     out.vendor, out.advice = vendor, advice and advice.action or nil
     out.reserved = W.AdvisorData.Reserved(info.id)
     out.marker = R.EllesmereJunk and R.EllesmereJunk.Peek(info.id, info.quality) or "unavailable"
@@ -245,17 +300,23 @@ function J.Survey(rule, done)
     local mine = surveyToken
     if not Bags() or not rule or not rule.tree then done({unavailable = true}); return false end
     Learn()
-    local wear, upgrade = Uses(rule, "wearable"), Uses(rule, "upgrade")
+    local wear, upgrade, recipe = Uses(rule, "wearable"), Uses(rule, "upgrade"), Uses(rule, "unlearnedRecipe")
     local job = coroutine.create(function()
         local seen, result, slots = {}, {items = 0, match = 0, protected = 0, unknown = 0, blocked = 0, names = {}}, 0
         EachSlot(function(bag, slot)
-            local info = Gather(bag, slot, wear, upgrade)
+            local info = Gather(bag, slot, wear, upgrade, recipe)
             if info and not seen[info.id] then
                 seen[info.id] = true
                 result.items = result.items + 1
                 local verdict = "blocked"
                 if info.veto == "protected" then verdict = "protected"
-                elseif not info.veto then verdict = R.WorkshopLauncher.JunkJudge(info.id, info.class, info.facts, {rule}) end
+                elseif not info.veto then
+                    verdict = R.WorkshopLauncher.JunkJudge(info.id, info.class, info.facts, {rule})
+                    if verdict == "unknown" and Uses(rule, "vendor") then
+                        info.facts.vendor = (Advise(info))
+                        verdict = R.WorkshopLauncher.JunkJudge(info.id, info.class, info.facts, {rule})
+                    end
+                end
                 if verdict == "match" then
                     result.match = result.match + 1
                     if #result.names < 5 then result.names[#result.names + 1] = info.name or ("Item " .. info.id) end

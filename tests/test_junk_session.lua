@@ -114,6 +114,38 @@ local copy=assert(S.Duplicate(either));assert(#root.children==3 and root.childre
 assert(S.Remove(copy) and #root.children==2)
 assert(not S.Remove(root),'the top level is permanent')
 assert(S.Remove(either) and #root.children==1 and S.Target()==root,'removing the group being added to falls back to the parent')
+---------------------------------------------------------------- Workshop advice is a condition; new conditions; migration
+do
+ local cases={
+  {{type='armor',value='plate'},{armor='plate'},{armor='cloth'},{armor='none'},"its armor type is Plate"},
+  {{type='vendor',value=true},{vendor=true},{vendor=false},nil,'Workshop recommends Vendor'},
+  {{type='unlearnedRecipe',value=true},{unlearnedRecipe=true},{unlearnedRecipe=false},nil,'it is a recipe for one of your professions that you have not learned'},
+  {{type='professionMaterial',value=false},{professionMaterial=false},{professionMaterial=true},nil,'it is not a material for your professions'},
+  {{type='tool',value=true},{tool=true},{tool=false},nil,'it is a profession tool'},
+  {{type='camping',value=true},{camping=true},{camping=false},nil,'it is a camping item'},
+ }
+ for i,k in ipairs(cases) do
+  assert(T.Eval(k[1],k[2])==true and T.Eval(k[1],k[3])==false,'new condition '..i)
+  assert(T.Eval(k[1],{})==nil,'unknown is not no, condition '..i)
+  assert(T.Phrase(k[1])==k[5],T.Phrase(k[1]));assert(T.Copy(k[1]),'persists '..i)
+ end
+ assert(not T.Copy({type='armor',value='wool'}),'unknown armor type refused')
+ Reset(0);S.BeginNew('N')
+ for _,key in ipairs({'armor','vendor','unlearnedRecipe','professionMaterial','tool','camping'}) do local n=assert(S.Add(key));assert(S.Remove(n)) end
+ local ar=assert(S.Add('armor'));assert(ar.value=='cloth' and S.Set(ar,'value','leather') and ar.value=='leather' and not S.Set(ar,'value','wool'))
+ local v=assert(S.Add('vendor'));assert(v.value==true and S.Set(v,'value',false) and v.value==false)
+ assert(S.Cancel() or true)
+ -- a rule saved before the change keeps its Vendor requirement, shown as a real condition; saving makes it explicit
+ Reset(0);db.ui.workshopJunk.rules={v=2,rows={{kind='gear',on=true,match='all',qualityMin=0,qualityMax=0,wearable='any',upgrade='any',classReagent='any',profession='any',
+    tree={type='group',match='all',children={{type='kind',value='gear'},{type='quality',min=0,max=0}}}}}}
+ assert(L.JunkJudge(1,2,{quality=0},L.JunkRules())=='unknown','old rule without an answer from Workshop never marks')
+ assert(L.JunkJudge(1,2,{quality=0,vendor=true},L.JunkRules())=='match')
+ assert(S.Begin(1) and S.Tree().children[1].type=='vendor' and not S.Dirty())
+ S.Remove(S.Tree().children[1]);assert(S.Save() and L.JunkRules()[1].free==true,'saving without the condition frees the rule')
+ assert(L.JunkJudge(1,2,{quality=0},L.JunkRules())=='match','a freed rule no longer needs Workshop');S.Cancel()
+ assert(L.JunkJudge(1,2,{quality=0},{L.NewJunkRule('x')})=='nomatch')
+ Reset(0);assert(S.BeginNew('limits'))
+end
 ---------------------------------------------------------------- limits
 local many=assert(S.Add('any'))
 local n=#S.Tree().children
@@ -179,7 +211,7 @@ assert(S.BeginNew('x') and S.Delete() and #L.JunkRules()==2,'deleting an unsaved
 -- the list
 local list=S.Rows();assert(#list==2 and list[1].name=='Source' and list[1].brief=='It is Gear')
 -- eight rules is the maximum
-Reset(8);assert(not S.BeginNew('nine') and not L.DuplicateJunkRule(1))
+Reset(32);assert(not S.BeginNew('over') and not L.DuplicateJunkRule(1),'the limit is 32 rules');Reset(9);assert(S.BeginNew('ninth') and L.DuplicateJunkRule(1),'more than eight rules are allowed');S.Cancel()
 -- switching a saved rule from the list
 Reset(2);S.Begin(1);S.Add('kind');assert(S.Save());S.Cancel()
 assert(S.ToggleSaved(1,true) and L.JunkRules()[1].on==true,'list switch saves at once')
@@ -192,13 +224,14 @@ assert(not S.ToggleSaved(1,'yes'))
 ---------------------------------------------------------------- legacy and malformed data
 Reset(0)
 db.ui.workshopJunk.rules={v=1,rows={{kind='gear',on=true,match='all',qualityMin=0,qualityMax=2,wearable='any',upgrade='no',classReagent='any',profession='any'}}}
-assert(S.Begin(1) and S.Summary()=='Mark an item as junk when it is Gear, its quality is Poor to Uncommon and it is not a gear upgrade for you.',S.Summary())
-assert(L.JunkJudge(9,2,{quality=1,upgrade=false},{S.TestRule()})=='match' and L.JunkJudge(9,2,{quality=1},{S.TestRule()})=='unknown')
-assert(L.JunkAllows(9,2,{quality=1,upgrade=false}),'legacy rows judge exactly as their editor tree')
-assert(L.JunkJudge(9,2,{quality=1,upgrade=false},L.JunkRules())=='match','same through the saved-row path')
+assert(S.Begin(1) and S.Summary()=='Mark an item as junk when Workshop recommends Vendor, it is Gear, its quality is Poor to Uncommon and it is not a gear upgrade for you.',S.Summary(),'a rule from before the change shows its built-in Vendor requirement as a condition')
+assert(L.JunkJudge(9,2,{vendor=true,quality=1,upgrade=false},{S.TestRule()})=='match' and L.JunkJudge(9,2,{vendor=true,quality=1},{S.TestRule()})=='unknown' and L.JunkJudge(9,2,{vendor=false,quality=1,upgrade=false},{S.TestRule()})=='nomatch')
+assert(not S.Dirty(),'opening a rule from before the change is not an edit')
+assert(L.JunkAllows(9,2,{vendor=true,quality=1,upgrade=false}),'legacy rows judge exactly as their editor tree')
+assert(L.JunkJudge(9,2,{vendor=true,quality=1,upgrade=false},L.JunkRules())=='match','same through the saved-row path')
 S.Cancel()
 db.ui.workshopJunk.rules={v=2,rows={{kind='gear',on=true,match='any',qualityMin=0,qualityMax=0,wearable='yes',upgrade='any',classReagent='any',profession='any'}}}
-assert(L.JunkAllows(9,2,{quality=3,wearable=true}),'legacy OR')
+assert(L.JunkAllows(9,2,{vendor=true,quality=3,wearable=true}),'legacy OR')
 assert(S.Begin(1) and S.Summary():find('Poor') and S.Summary():find(' or ') or true);S.Cancel()
 db.ui.workshopJunk.rules={v=2,rows={{kind='gear',on=true,tree={type='group',match='any',children={{type='alien'}}},match='all',qualityMin=0,qualityMax=5,wearable='any',upgrade='any',classReagent='any',profession='any'}}}
 assert(select(2,L.JunkRules()),'a malformed tree holds the whole list rather than guess');assert(not S.Begin(1) and not L.JunkAllows(9,2,{quality=0}))
@@ -208,7 +241,7 @@ db.ui.workshopJunk.rules={v=2,rows={{kind='gear',on=true}}}
 assert(select(2,L.JunkRules()),'a partly populated row is held, not guessed')
 ---------------------------------------------------------------- protections come before any rule
 Reset(0)
-local always={{on=true,tree=Group('all',Quality(0,5))}}
+local always={{on=true,free=true,tree=Group('all',Quality(0,5))}}
 assert(L.JunkJudge(7,2,{quality=1},always)=='match')
 L.SetJunkIgnored(7,true)
 assert(L.JunkJudge(7,2,{quality=1},always)=='protected','Never mark beats a matching rule')
@@ -216,10 +249,10 @@ assert(L.JunkJudge(211527,2,{quality=1},always)=='protected','Cozy Sleeping Bag 
 assert(L.JunkJudge(8,12,{quality=1},always)=='class' and L.JunkJudge(8,13,{quality=1},always)=='class','quest items and keys are never candidates')
 assert(L.JunkJudge(8,99,{quality=1},always)=='class','an unknown class is not a candidate')
 assert(L.JunkJudge(8,'x',{quality=1},always)=='class')
-assert(L.JunkJudge(8,2,{quality=1},{{on=false,tree=Group('all',Quality(0,5))}})=='nomatch','disabled rules never mark')
+assert(L.JunkJudge(8,2,{quality=1},{{on=false,free=true,tree=Group('all',Quality(0,5))}})=='nomatch','disabled rules never mark')
 assert(L.JunkJudge(8,2,{quality=1},{})=='nomatch')
-assert(L.JunkJudge(8,2,{},{{on=true,tree=Group('all',Quality(0,5))},{on=true,tree=Group('all',Kind('gear'))}})=='match','one rule may be unknown while another is proven')
-assert(L.JunkJudge(8,2,{},{{on=true,tree=Group('all',Quality(0,5))},{on=true,tree=Group('all',Kind('materials'))}})=='unknown')
+assert(L.JunkJudge(8,2,{},{{on=true,free=true,tree=Group('all',Quality(0,5))},{on=true,free=true,tree=Group('all',Kind('gear'))}})=='match','one rule may be unknown while another is proven')
+assert(L.JunkJudge(8,2,{},{{on=true,free=true,tree=Group('all',Quality(0,5))},{on=true,free=true,tree=Group('all',Kind('materials'))}})=='unknown')
 local hold=R.Persist.IsHeld;R.Persist.IsHeld=function() return true end
 assert(not L.SetJunkRule(1,'name','x') and not L.DuplicateJunkRule(1) and not L.SaveJunkRule(1,L.NewJunkRule('x'),L.JunkRules()))
 R.Persist.IsHeld=hold
@@ -228,7 +261,7 @@ Reset(0)
 local rowsBig={}
 for i=1,8 do
     local g=Group('any');for j=1,6 do g.children[j]=Group('all',Kind('gear'),Quality(0,j%6),{type='upgrade',value=j%2==0}) end
-    rowsBig[i]={on=true,tree=Group('all',g)}
+    rowsBig[i]={on=true,free=true,tree=Group('all',g)}
 end
 local nodes=0;local function N(x) nodes=nodes+1;for _,ch in ipairs(x.children or {}) do N(ch) end end;N(rowsBig[1].tree)
 assert(nodes>25,'fixture is large: '..nodes)

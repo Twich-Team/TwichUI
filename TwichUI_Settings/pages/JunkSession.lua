@@ -6,7 +6,8 @@ local R = TwichUI
 local S = {}
 R.JunkSession = S
 
-local MAX_HISTORY, MAX_RULES = 100, 8
+local MAX_HISTORY = 100
+local MAX_RULES = 32
 local st          -- nil while closed: { index, baseline, draft, base, saved, undo, redo, target, revision, new }
 
 local function L() return R.WorkshopLauncher end
@@ -55,7 +56,9 @@ function S.On() return st and st.draft.on end
 local function Open(index, rule, new, rows)
     local draft = {}
     for k, v in pairs(rule) do if k ~= "tree" then draft[k] = v end end
-    draft.tree = T().FromRule(rule)
+    -- A rule from before Workshop's advice became a condition shows it as one, so what is drawn is what is judged.
+    draft.tree = T().Copy(T().Effective(rule))
+    draft.free = true
     if not draft.tree then return false end
     st = { index = index, baseline = rows, draft = draft, undo = {}, redo = {}, revision = 0, new = new, target = {} }
     st.saved = Snap()
@@ -108,7 +111,7 @@ function S.Summary() return T().Summary(st and st.draft.tree) end
 
 -- "Its type is Gear and its quality is Poor" for the rail: the sentence without its lead-in.
 function S.Brief(rule)
-    local tree = rule and (rule.tree or T().FromRule(rule))
+    local tree = rule and T().Effective(rule)
     if not tree or (tree.type == "group" and #tree.children == 0) then return "Nothing chosen yet" end
     local text = T().Summary(tree):gsub("^Mark an item as junk when ", ""):gsub("%.$", "")
     return text:sub(1, 1):upper() .. text:sub(2)
@@ -118,7 +121,7 @@ end
 -- can be read back node by node.
 function S.TestRule()
     if not st then return nil end
-    return { on = true, tree = st.draft.tree, kind = st.draft.kind }
+    return { on = true, free = true, tree = st.draft.tree, kind = st.draft.kind }
 end
 
 -- Rows for the saved-rule list.
@@ -178,6 +181,10 @@ local function Make(key)
     if key == "all" or key == "any" then return { type = "group", match = key, children = {} } end
     if key == "kind" then return { type = "kind", value = "gear" } end
     if key == "quality" then return { type = "quality", min = 0, max = 1 } end
+    if key == "armor" then return { type = "armor", value = "cloth" } end
+    if key == "vendor" or key == "unlearnedRecipe" or key == "professionMaterial" or key == "tool" or key == "camping" then
+        return { type = key, value = true }
+    end
     if key == "wearable" or key == "upgrade" then return { type = key, value = false } end
     if key == "classReagent" or key == "profession" then return { type = key, value = true } end
 end
@@ -324,7 +331,11 @@ function S.Set(node, field, value)
         if node.min > node.max then
             if field == "min" then node.max = value else node.min = value end
         end
-    elseif (node.type == "wearable" or node.type == "upgrade" or node.type == "classReagent" or node.type == "profession")
+    elseif node.type == "armor" and field == "value" and ({ cloth = 1, leather = 1, mail = 1, plate = 1, shield = 1, other = 1 })[value] then
+        if node.value == value then return true end
+        node.value = value
+    elseif (node.type == "wearable" or node.type == "upgrade" or node.type == "classReagent" or node.type == "profession" or node.type == "vendor"
+        or node.type == "unlearnedRecipe" or node.type == "professionMaterial" or node.type == "tool" or node.type == "camping")
         and field == "value" and type(value) == "boolean" then
         if node.value == value then return true end
         node.value = value
@@ -338,16 +349,16 @@ end
 
 -- Examples that fill an empty rule. Each is an ordinary tree the player can then change.
 S.TEMPLATES = {
-    { key = "poorGear", name = "Poor-quality gear", blurb = "Gear of Poor quality." },
+    { key = "poorGear", name = "Poor-quality gear", blurb = "Gear of Poor quality that Workshop recommends selling to a vendor." },
     { key = "oldGear", name = "Gear that is not an upgrade", blurb = "Poor to Uncommon gear that will not improve what you wear." },
     { key = "materials", name = "Vendor materials", blurb = "Trade goods and reagents." },
     { key = "recipes", name = "Common recipes", blurb = "Poor and Common recipes." },
 }
 local TEMPLATE_TREE = {
-    poorGear = function() return { type = "group", match = "all", children = { { type = "kind", value = "gear" }, { type = "quality", min = 0, max = 0 } } } end,
-    oldGear = function() return { type = "group", match = "all", children = { { type = "kind", value = "gear" }, { type = "quality", min = 0, max = 2 }, { type = "upgrade", value = false } } } end,
-    materials = function() return { type = "group", match = "all", children = { { type = "kind", value = "materials" } } } end,
-    recipes = function() return { type = "group", match = "all", children = { { type = "kind", value = "recipes" }, { type = "quality", min = 0, max = 1 } } } end,
+    poorGear = function() return { type = "group", match = "all", children = { { type = "vendor", value = true }, { type = "kind", value = "gear" }, { type = "quality", min = 0, max = 0 } } } end,
+    oldGear = function() return { type = "group", match = "all", children = { { type = "vendor", value = true }, { type = "kind", value = "gear" }, { type = "quality", min = 0, max = 2 }, { type = "upgrade", value = false } } } end,
+    materials = function() return { type = "group", match = "all", children = { { type = "vendor", value = true }, { type = "kind", value = "materials" } } } end,
+    recipes = function() return { type = "group", match = "all", children = { { type = "vendor", value = true }, { type = "kind", value = "recipes" }, { type = "quality", min = 0, max = 1 } } } end,
 }
 -- Only into an empty rule, so nothing the player built is replaced.
 function S.Template(key)

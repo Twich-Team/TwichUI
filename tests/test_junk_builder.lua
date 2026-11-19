@@ -50,24 +50,25 @@ assert(f.rule.templates and f.rule.templates.buttons[1]:IsShown(),'an empty rule
 assert(f.palette.where:GetText()=='Adding to: Top level','the next condition goes to the top level')
 
 ---------------------------------------------------------------- palette: click adds to the chosen group; search and category filter
-local function Visible() local out={} for i=1,8 do local row=B.PaletteRow(i);if row:IsShown() then out[#out+1]=row.key end end return out end
-assert(#Visible()==8,'every supported condition is offered: '..#Visible())
-local want={kind=1,quality=1,wearable=1,upgrade=1,classReagent=1,profession=1,all=1,any=1}
+local function Visible() local out={} for i=1,14 do local row=B.PaletteRow(i);if row:IsShown() then out[#out+1]=row.key end end return out end
+assert(#Visible()==14,'every supported condition is offered: '..#Visible())
+local want={kind=1,armor=1,quality=1,tool=1,camping=1,wearable=1,upgrade=1,unlearnedRecipe=1,classReagent=1,profession=1,professionMaterial=1,vendor=1,all=1,any=1}
 for _,k in ipairs(Visible()) do assert(want[k],'only supported conditions: '..k);want[k]=nil end
 assert(next(want)==nil)
 f.search:SetText('qual');f.search:GetScript('OnTextChanged')(f.search,true)
 assert(#Visible()==1 and Visible()[1]=='quality','search filters the catalog')
 f.search:SetText('');f.search:GetScript('OnTextChanged')(f.search,true)
 f.category.onPick('Groups')
-assert(#Visible()==2,'category filter');f.category.onPick('all');assert(#Visible()==8)
+assert(#Visible()==2,'category filter');f.category.onPick('all');assert(#Visible()==14)
 local row=B.PaletteRow(1);assert(row.key=='kind')
 row:Click()
 assert(#SS.Tree().children==1 and SS.Tree().children[1].type=='kind','clicking a condition adds it to the draft')
 assert(#L.JunkRules()==0,'nothing saved yet')
 assert(f.save:IsEnabled() and f.cancel:IsEnabled() and f.undo:IsEnabled() and f.dirty:GetText()=='Unsaved changes')
 assert(not f.rule.templates.buttons[1]:IsShown(),'examples go away once there is a condition')
-B.PaletteRow(2):Click()
+B.PaletteRow(3):Click()
 assert(SS.Summary()=='Mark an item as junk when it is Gear and its quality is Poor to Common.')
+assert(f.rule.delete:IsShown(),'Delete is a visible button, not only a menu entry')
 f.undo:Click();assert(#SS.Tree().children==1);f.redo:Click();assert(#SS.Tree().children==2)
 
 ---------------------------------------------------------------- cards: one per condition, editable, with working controls
@@ -80,9 +81,9 @@ quality.to.onPick(4);assert(SS.Tree().children[2].max==4)
 assert(SS.Summary():find('Materials') and SS.Summary():find('Uncommon to Epic'))
 
 ---------------------------------------------------------------- groups: add, operator, nesting by click and by drag
-B.PaletteRow(8):Click()  -- any group, becomes the target
+B.PaletteRow(14):Click()  -- any group, becomes the target
 local any=SS.Target();assert(any~=SS.Tree() and any.match=='any' and f.palette.where:GetText():find('Group 1'),'a new group is where the next condition goes')
-B.PaletteRow(2):Click();B.PaletteRow(2):Click()
+B.PaletteRow(3):Click();B.PaletteRow(3):Click()
 assert(#any.children==2)
 local box=B.groups()[2];assert(box.node==any and box.any and box.all)
 box.all:Click();assert(any.match=='all','operator segment changes the group');box.any:Click();assert(any.match=='any')
@@ -145,7 +146,7 @@ SS.Select=nil;SS.Add('quality');B.Refresh();assert(B.Row(1).brief:GetText()=='Un
 B.Duplicate();assert(SS.IsNew() and SS.Name()=='Mixed rule copy' and SS.On()==false and #L.JunkRules()==2)
 f.save:Click();assert(#L.JunkRules()==3)
 -- delete confirms, removes only that rule
-B.Delete();assert(#confirms==1 and #L.JunkRules()==3,'delete asks first');Accept();assert(#L.JunkRules()==2 and SS.Active() and not SS.IsNew())
+f.rule.delete:Click();assert(#confirms==1 and #L.JunkRules()==3,'delete asks first');Accept();assert(#L.JunkRules()==2 and SS.Active() and not SS.IsNew())
 -- close with unsaved changes asks; Escape path
 SS.Add('quality');B.RequestClose();assert(#confirms==1 and B.Shown());Accept();assert(not B.Shown() and not SS.Active() and workspace==false)
 
@@ -164,7 +165,7 @@ SS.Cancel();SS.Begin(2);B.Refresh()
 B.TestSlot(0,1)
 local strip=f.strip
 assert(strip.itemName:GetText()=='Boots' and strip.result:GetText()=='Matches this rule',strip.result:GetText())
-assert(strip.reason:GetText():find('Vendor'))
+assert(strip.reason:GetText():find('marked'))
 assert(next(L.JunkIgnoreList())==nil and not R.Workshop.junkMarked,'testing changes nothing')
 -- the cards show what each condition said
 local rule2=SS.Tree();SS.Add('upgrade',rule2);B.Refresh()
@@ -223,7 +224,7 @@ assert(shownCards==25 and B.Snapshot().cards==25 and B.Snapshot().groups==4,'one
 local poolsBefore=B.Snapshot();for i=1,10 do B.Refresh() end
 local poolsAfter=B.Snapshot();assert(poolsBefore.cards==poolsAfter.cards and poolsBefore.groups==poolsAfter.groups and poolsBefore.rows==poolsAfter.rows,'redraws reuse frames')
 assert(B.Row(8):IsShown() and B.Snapshot().rows==8,'eight rail rows for eight rules')
-assert(not SS.BeginNew('ninth'),'a ninth rule is refused')
+assert(SS.BeginNew('ninth'),'more than eight rules are allowed');SS.Cancel()
 SS.Cancel();B.Select(1)
 local addMore=0 for i=1,40 do if select(1,SS.Add('kind',SS.Tree())) then addMore=addMore+1 end end
 assert(addMore==3,'a rule stops at 32 nodes: '..addMore)

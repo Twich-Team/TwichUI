@@ -21,14 +21,14 @@ local function RuleStatus()
 end
 
 K.Page({key="junkMarking",name="Junk marking",icon="vendors",group="everyday",order=45.5,
-    description="Choose which Vendor recommendations may be marked using your own rules.",
+    description="Choose which items are marked as junk using your own rules.",
     keywords="junk rules rule builder conditions templates quality gear upgrade ignore never mark protections bags vendor",
     when=function() return Launcher()~=nil end,
     overview={label="Junk marking",tip="Mark selected Advisor Vendor recommendations in EllesmereUI Bags.",
         status=Status},
     build=function()
-        K.Header("Junk marking", "Marks carried items in EllesmereUI Bags when Workshop recommends Vendor for every copy and one of your rules matches. Existing EllesmereUI marks must be removed with its junk coin.")
-        local junk=K.ProxyToggle("workshopVendorJunk", "Mark Vendor recommendations as junk",
+        K.Header("Junk marking", "Marks carried items in EllesmereUI Bags when one of your rules matches every copy you carry. Add \"Workshop recommends Vendor\" to a rule to let Workshop's advice decide. Existing EllesmereUI marks must be removed with its junk coin.")
+        local junk=K.ProxyToggle("workshopVendorJunk", "Mark items as junk",
             "Off by default. Marks carried items when Workshop recommends Vendor for every carried copy. Requires EllesmereUI Bags and its Junk Marker. Marks apply to every copy of an item ID across your account, including future copies. EllesmereUI may sell them through Auto Sell Junk or its Sell Junk button. Turning this off leaves existing marks; unmark with EllesmereUI's junk coin. Workshop respects manual unmarking for the rest of the session and leaves custom categories alone. Workshop itself sells nothing. Uses the Item Advisor service. Use Load Item Advisor below once; enabled junk marking loads the authorized service on future logins.", false,
             function() return Launcher().VendorJunkEnabled() end,
             function(on) Launcher().SetVendorJunkEnabled(on) end)

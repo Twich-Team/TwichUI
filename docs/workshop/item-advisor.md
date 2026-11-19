@@ -18,13 +18,28 @@ this feature adds no new sale-value calculation or posting quote.
 Item Advisor service, **Marking rules** (a count and **Open the rule builder**) and **Protections** (the Never mark
 picker and list). The rules are built in a workspace of their own, a sibling of the Reminders "When" builder
 (`TwichUI_Settings/pages/JunkBuilder.lua`; model `JunkSession.lua`): a rail of saved rules with New rule, a
-searchable catalog of every supported condition (Item type, Quality range, Wearable now, Gear upgrade, Class reagent,
-Recipe material, All-of and Any-of groups), the rule drawn as cards and nested groups under "Mark an item as junk
+searchable catalog of every supported condition (Item type, Armor type, Quality range, Profession tool, Camping item, Wearable now,
+Gear Advisor upgrade, Unlearned recipe, Class reagent, Recipe material, Profession material, Workshop recommends Vendor,
+All-of and Any-of groups), the rule drawn as cards and nested groups under "Mark an item as junk
 when", a plain-language sentence built from the saved tree, and a **Try an item** strip over Undo, Redo, Cancel and
 Save. A rule is a draft until Save: Cancel restores the saved rule, switching rules or closing with unsaved changes
 asks first, Duplicate makes an unsaved disabled copy of the rule on screen, and Delete confirms. Drafts refuse to
-overwrite or delete externally changed rules. Up to eight rules; **order has no meaning**: any enabled matching
-rule permits marking. Rule edits persist the same bounded version-2 rows as before (no schema change).
+overwrite or delete externally changed rules. Up to 32 rules (a visible Delete button removes one after asking); **order has no meaning**: any enabled matching
+rule permits marking. Rule edits persist the same bounded version-2 rows (rows may now be up to 32 and carry `free = true`).
+
+**Workshop's advice is a condition, not a hidden requirement.** Marking used to need Workshop to recommend Vendor for
+every copy. Now `Workshop recommends Vendor` is an ordinary condition (true or false). Rules saved before this (no `free`
+mark) are still judged as "Vendor, and the rule" (`JunkTree.Effective`), the builder shows that as a real first
+condition, and saving makes the rule `free`. New rules and the examples are free; the examples include the Vendor
+condition. The costly Advisor read happens only when an enabled rule depends on it (`JunkNeedsAdvisor`). The per-type
+switches used before the first edit still require Vendor advice.
+
+**New conditions and where their facts come from** (none read from a Forever client yet): Armor type (cloth, leather,
+mail, plate, shield from the item subclass; other items are "none"), Profession tool (misc tool weapons, fishing poles,
+a short ID list), Camping item (`CampingData.ITEMS`), Profession material (trade-good subclass mapped to professions) and
+Unlearned recipe (recipe subclass mapped to a profession of yours, tooltip lacks `ITEM_SPELL_KNOWN`). Your professions
+are those whose window Workshop has read (`Known`); until then the last two are unknown and leave items alone. Gear
+Advisor upgrade is the existing GearHints comparison.
 
 Each rule is a nested AND/OR tree of 32 nodes and four levels. Click a condition (it goes to the highlighted group,
 chosen with that group's **Add a condition** button) or drag it onto a group or a card edge; the same moves exist in
@@ -47,8 +62,8 @@ once, in slices of 30 slots, only on request. Both need Item Advisor loaded.
 
 **Precedence (unchanged by the builder).** A rule only names candidates. In order: the Cozy Sleeping Bag and the Never
 mark list, then Mage Sell and restocking protections; any locked, quest or not-yet-loaded copy of the item ID; quest
-items and keys by class; then the rules (`JunkJudge`: protected, class, then match, no match or unknown); then
-Workshop must recommend Vendor for every carried copy, the item must not be reserved for crafting or unmarked by hand
+items and keys by class; then the rules (`JunkJudge`: protected, class, then match, no match or unknown; every carried copy must match, and Workshop's advice
+counts only through the Vendor condition); then the item must not be reserved for crafting or unmarked by hand
 this session, and EllesmereUI must not have it filed in a category of its own. Matching a rule never overrides an
 earlier step.
 
