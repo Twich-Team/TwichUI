@@ -97,14 +97,7 @@ K.Page({
             function(on) Launcher().SetVendorJunkEnabled(on) end)
         junk:AddModifyPredicate(Loaded)
         junk.why="Enable Workshop and load its options first."
-        for _,option in ipairs({{"gear","Mark gear",true}, {"materials","Mark trade goods and reagents",true},
-            {"recipes","Mark recipes",false}, {"consumables","Mark consumables",false}, {"other","Mark other item types",false}}) do
-            local key,label,default=unpack(option)
-            K.ProxyToggle("workshopJunk"..key,label,
-                "Allow this item type only when the Advisor recommends Vendor. Never mark items and existing safety checks always take priority. Turning this off leaves existing EllesmereUI marks.",default,
-                function() return Launcher().JunkFilter(key) end,
-                function(on) Launcher().SetJunkFilter(key,on) end)
-        end
+        R.WorkshopJunkRulesSettings.Build()
         K.Button("Never mark items", "Choose from bags / drop item", function() R.WorkshopJunkSettings.Open() end,
             "Choose bag items or drop them into the ignore area. The list is shared across your account and covers every copy of each item ID. This prevents new Workshop marks; remove existing junk marks in EllesmereUI.")
         K.Status("Never mark list", function() return #Launcher().JunkIgnoreList().." items · Cozy Sleeping Bag always protected" end)

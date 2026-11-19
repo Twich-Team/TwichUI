@@ -245,10 +245,95 @@ function L.SetJunkIgnored(id,on)
     if on and ignore[id]~=true and #L.JunkIgnoreList()>=512 then return false end
     ignore[id]=on or nil;JunkChanged();return true
 end
-function L.JunkAllows(id,class)
+L.JunkRuleTypes={"gear","materials","recipes","consumables","other"}
+local function RuleCopy(r)
+    if type(r)~="table" then return nil end
+    local kinds={gear=true,materials=true,recipes=true,consumables=true,other=true}
+    if not kinds[r.kind] then return nil end
+    local out={kind=r.kind,on=r.on==true,match=r.match=="any" and "any" or "all"}
+    for _,key in ipairs({"qualityMin","qualityMax"}) do
+        local n=r[key]
+        if type(n)~="number" or n~=n or n%1~=0 or n<0 or n>5 then return nil end
+        out[key]=n
+    end
+    if out.qualityMin>out.qualityMax then return nil end
+    for _,key in ipairs({"wearable","upgrade","classReagent","profession"}) do
+        if r[key]~=nil and r[key]~="any" and r[key]~="yes" and r[key]~="no" then return nil end
+        out[key]=r[key] or "any"
+    end
+    return out
+end
+function L.JunkRules()
+    local cfg=JunkConfig();local saved=cfg and cfg.rules
+    if saved~=nil then
+        if type(saved)~="table" or saved.v~=1 or type(saved.rows)~="table" or #saved.rows>8 then return {},true end
+        local rows={}
+        for _,r in ipairs(saved.rows) do local copy=RuleCopy(r);if not copy then return {},true end;rows[#rows+1]=copy end
+        return rows,false
+    end
+    local rows={}
+    for _,kind in ipairs(L.JunkRuleTypes) do
+        rows[#rows+1]={kind=kind,on=L.JunkFilter(kind),match="all",qualityMin=0,qualityMax=5,
+            wearable="any",upgrade="any",classReagent="any",profession="any"}
+    end
+    return rows,false
+end
+function L.SetJunkRule(index,key,value)
+    if not ({kind=true,on=true,match=true,qualityMin=true,qualityMax=true,wearable=true,upgrade=true,classReagent=true,profession=true})[key] then return false end
+    if type(index)~="number" or index%1~=0 or index<1 or index>8 then return false end
+    local rows,held=L.JunkRules();if held or not rows[index] then return false end
+    local r=rows[index];r[key]=value;r=RuleCopy(r);if not r then return false end
+    rows[index]=r
+    local cfg=JunkConfig(true);if not cfg then return false end
+    cfg.rules={v=1,rows=rows};JunkChanged();return true
+end
+function L.JunkTemplate(index,kind)
+    local rows,held=L.JunkRules()
+    if held or type(index)~="number" or index%1~=0 or index<1 or index>math.min(8,#rows+1) then return false end
+    local templates={poor={kind="gear",qualityMax=0},nonupgrade={kind="gear",upgrade="no",qualityMax=2},
+        materials={kind="materials"},recipes={kind="recipes",qualityMax=1},custom={kind="other"}}
+    local t=templates[kind];if not t then return false end
+    rows[index]=RuleCopy({kind=t.kind,on=false,match="all",qualityMin=0,qualityMax=t.qualityMax or 5,upgrade=t.upgrade})
+    local cfg=JunkConfig(true);if not cfg then return false end
+    cfg.rules={v=1,rows=rows};JunkChanged();return true
+end
+function L.RemoveJunkRule(index)
+    local rows,held=L.JunkRules()
+    if held or type(index)~="number" or index%1~=0 or index<1 or index>#rows then return false end
+    local cfg=JunkConfig(true);if not cfg then return false end
+    table.remove(rows,index);cfg.rules={v=1,rows=rows};JunkChanged();return true
+end
+function L.JunkAllows(id,class,facts)
     if L.JunkIgnored(id) or type(class)~="number" or class~=class or class%1~=0 or class<0 or class>20
-        or class==12 or class==13 then return false end -- quest items and keys are always protected
-    return L.JunkFilter(JUNK_CLASS[class] or "other")
+        or class==12 or class==13 then return false end
+    local cfg=JunkConfig()
+    -- Legacy toggles remain authoritative until the player first edits a rule.
+    if not (cfg and cfg.rules~=nil) then return L.JunkFilter(JUNK_CLASS[class] or "other") end
+    local rows,held=L.JunkRules();if held then return false end
+    facts=facts or {}
+    for _,r in ipairs(rows) do
+        if r.on and r.kind==(JUNK_CLASS[class] or "other") then
+            local checks={}
+            local unknown=false
+            if r.qualityMin>0 or r.qualityMax<5 then
+                if type(facts.quality)~="number" then unknown=true end
+                checks[#checks+1]=type(facts.quality)=="number" and facts.quality>=r.qualityMin and facts.quality<=r.qualityMax
+            end
+            for _,key in ipairs({"wearable","upgrade","classReagent","profession"}) do
+                if r[key]~="any" then
+                    if type(facts[key])~="boolean" then unknown=true end
+                    checks[#checks+1]=type(facts[key])=="boolean" and facts[key]==(r[key]=="yes")
+                end
+            end
+            local pass=r.match=="all"
+            for _,check in ipairs(checks) do
+                if r.match=="all" then pass=pass and check else pass=pass or check end
+            end
+            if #checks==0 then pass=true end
+            if pass and not unknown then return true end
+        end
+    end
+    return false
 end
 function L.LoadOnLogin()
     local ui = type(TwichUIDB) == "table" and TwichUIDB.ui

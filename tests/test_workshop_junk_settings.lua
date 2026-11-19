@@ -25,6 +25,11 @@ c.ClearCursor=function() cursor=nil;cleared=(cleared or 0)+1 end
 assert(#P.Entries("bags")==3,"bag picker deduplicates item IDs")
 assert(#P.Entries("bags","200")==1)
 assert(not L.Loaded() and not L.Enabled())
+S.variables.TWICHUI_junkRule1qualityMax:SetValue("2")
+S.variables.TWICHUI_junkRule1upgrade:SetValue("no")
+assert(L.JunkRules()[1].qualityMax==2 and L.JunkRules()[1].upgrade=="no")
+assert(not L.JunkAllows(301,2,{quality=1,upgrade=true}))
+assert(L.JunkAllows(301,2,{quality=1,upgrade=false}))
 local settings=c.CreateFrame("Frame",nil,c.UIParent);settings:Show()
 R.SettingsUI.Frame=function() return settings end
 R.SettingsUI.IsShown=function() return settings:IsShown() end
@@ -32,9 +37,9 @@ R.SettingsUI.Close=function() settings:Hide();R.SettingsLauncher.Closed() end
 local section,button
 for _,row in ipairs(S.K.pages.workshop.rows) do
     if row.kind=="header" then section=row:GetName() end
-    if row:GetName()=="Never mark items" then assert(section=="Junk marking");button=row end
+    if row:GetName()=="Never mark items" then assert(R.SettingsDesign.TaskFor(S.K.pages.workshop,section)=="Junk marking");button=row end
 end
-assert(button and R.SettingsDesign.TaskFor(S.K.pages.workshop,"Junk marking")=="General")
+assert(button and R.SettingsDesign.TaskFor(S.K.pages.workshop,"Junk marking")=="Junk marking")
 local found=false
 for _,result in ipairs(R.SettingsSearch.Run("never mark")) do
     if result.entry.page=="workshop" and result.entry.row==button then found=true end

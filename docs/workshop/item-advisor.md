@@ -14,12 +14,29 @@ Vendor. Locked, quest, incomplete, never-sell and restock-protected copies preve
 marking that ID. Unknown prices retain the Advisor's existing known-option policy;
 this feature adds no new sale-value calculation or posting quote.
 
-**General → Junk marking** groups the master switch, item-type filters and
-**Never mark items** picker. Gear and trade goods/reagents default on; recipes,
-consumables and other types default off. Filters only permit the Advisor's Vendor
-decision; they never force a recommendation. Cozy Sleeping Bag (211527), quest
-item classes and keys are always protected, even if other item types are enabled.
-These safer defaults also apply to existing installations without saved filters.
+**Workshop → Junk marking** is a dedicated tab with illustrated item categories,
+a master switch, up to eight editable rules, and the Never mark picker. Each
+rule selects an item type and combines a quality range, wearable-now requirements,
+estimated upgrades, known class reagents and remembered-recipe materials using
+All (AND) or Any (OR). Any enabled matching rule permits the existing Advisor
+Vendor decision; no rule forces a sale recommendation. Missing requested facts
+block matching, including negative conditions. Cozy Sleeping Bag, quest items,
+keys and Never mark IDs always veto marking.
+
+Templates (poor gear, uncommon-or-lower non-upgrades, materials, common recipes,
+and custom) start disabled for review. Existing type switches become equivalent
+rules without resetting preferences. Rule edits persist a bounded version-1
+extension; malformed or newer rules refuse marking and edits. Existing marks are
+never undone. Rules can be disabled, removed or replaced with a template.
+
+Wearability means the native bag tooltip has no unmet requirements (including
+level), rather than a separate guess at class proficiency. Upgrade comparisons
+reuse GearHints: possible/likely/empty count as upgrades, similar/worse as not;
+failed, missing and unsupported comparisons remain unknown. This is estimated
+gear suitability, not the sale Advisor's value judgment. Class relevance uses
+Restock's known class suggestions. Profession relevance means used by this
+character's remembered recipes; absence from these limited lists is unknown,
+not proof an item is irrelevant. Refresh profession knowledge in normal gameplay.
 
 Choose an item from the picker's bag list or drag it onto the drop area. This
 saves its item ID in the account-wide ignore list (up to 512 IDs), covering
