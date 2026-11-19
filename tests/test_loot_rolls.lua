@@ -88,6 +88,7 @@ local function PendingTimers() local n = 0 for _, t in ipairs(timers) do if not 
 -- the items and the rolls
 local TOOLTIP_KNOWN
 c.ITEM_SPELL_KNOWN = "Already known"
+c.ITEM_MIN_LEVEL = "Requires Level %d"
 c.LOOT_ROLL_INELIGIBLE_REASON1 = "This item is not for your class."
 c.INVTYPE_HEAD = "Head"
 c.INVTYPE_2HWEAPON = "Two-Hand"
@@ -99,6 +100,9 @@ local ITEMS = {
   ["item:102"] = { id = 102, name = "Recipe: Elixir", quality = 2, class = 9, sub = 6, loc = "", bind = 1, price = 80, icon = 1003, type = "Recipe", subType = "Alchemy" },
   ["item:103"] = { id = 103, name = "Recipe: Known", quality = 2, class = 9, sub = 6, loc = "", bind = 1, price = 80, icon = 1004, type = "Recipe", subType = "Alchemy", known = true },
   ["item:104"] = { id = 104, name = "Linen Cloth", quality = 1, class = 7, sub = 5, loc = "", bind = 0, price = 13, icon = 1005, type = "Trade Goods", subType = "Cloth" },
+  ["item:106"] = { id = 106, name = "Silk Robe", quality = 2, class = 4, sub = 1, loc = "INVTYPE_ROBE", bind = 2, price = 90, icon = 1007, type = "Armor", subType = "Cloth" },
+  ["item:107"] = { id = 107, name = "Mail Hauberk", quality = 2, class = 4, sub = 3, loc = "INVTYPE_CHEST", bind = 2, price = 90, icon = 1008, type = "Armor", subType = "Mail", redLine = "Mail" },
+  ["item:108"] = { id = 108, name = "Lofty Cowl", quality = 3, class = 4, sub = 1, loc = "INVTYPE_HEAD", bind = 2, price = 90, icon = 1009, type = "Armor", subType = "Cloth", redLine = "Requires Level 60" },
   ["item:105"] = { id = 105, name = "Recipe: Enchant", quality = 3, class = 9, sub = 8, loc = "", bind = 1, price = 80, icon = 1006, type = "Recipe", subType = "Enchanting" },
 }
 local MISSING = {}   -- links the game has not loaded
@@ -125,6 +129,7 @@ c.C_TooltipInfo = { GetLootRollItem = function(id)
   if not r or r.noTooltip then return nil end
   local it = ITEMS[r.link]
   local lines = { { leftText = it.name } }
+  if it.redLine then lines[#lines + 1] = { leftText = it.redLine, leftColor = { r = 1, g = 0.1, b = 0.1 } } end
   if it.known then lines[#lines + 1] = { leftText = "Already known", leftColor = { r = 1, g = 0.1, b = 0.1 } } end
   return { lines = lines }
 end }
@@ -170,6 +175,12 @@ end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
 local R = c.TwichUI
 local Ru, LR, Ro, A, B, C = R.LootRules, R.LootRolls, R.LootRoll, R.LootAuto, R.LootBlizzard, R.LootCards
+-- the game's own red-line count (gear/Data.lua), as the real one counts it
+R.GearData = { RedLines = function(lines)
+  local n = 0
+  for _, l in ipairs(lines) do local k = l.leftColor if k and k.r > 0.9 and k.g < 0.3 and k.b < 0.3 then n = n + 1 end end
+  return n
+end }
 R.GearHints = { Judge = function(link) return JUDGED[link] end, Noteworthy = function(j) return j and j.up == true end }
 R.FrameLook = { Shell = function() return Fake("shell") end }
 
@@ -196,6 +207,31 @@ do
   Check(Ru.EvalCondition({ type = "class", value = "equipment" }, { classID = 4, equipLoc = "INVTYPE_NON_EQUIP" }) == false, "a shirt with no slot is not equipment")
   Check(Ru.EvalCondition({ type = "class", value = "equipment" }, { classID = 4 }) == nil, "equipment without a slot fact is unknown")
   Check(Ru.EvalCondition({ type = "class", value = 9 }, { classID = 9 }) == true, "the recipe class matches")
+  -- armor type
+  local silk, mail = { classID = 4, subClassID = 1 }, { classID = 4, subClassID = 3 }
+  local cloth = { type = "armor", value = 1 }
+  Check(Ru.EvalCondition(cloth, silk) == true, "cloth armor matches cloth")
+  Check(Ru.EvalCondition(cloth, mail) == false, "mail is not cloth")
+  Check(Ru.EvalCondition({ type = "armor", value = 3 }, mail) == true, "mail armor matches mail")
+  Check(Ru.EvalCondition(cloth, { classID = 2, subClassID = 1 }) == false, "a weapon is no kind of armor, whatever its sub-type number")
+  Check(Ru.EvalCondition(cloth, { classID = 9, subClassID = 1 }) == false, "a recipe is no kind of armor")
+  Check(Ru.EvalCondition(cloth, {}) == nil, "an item the game has not described is unknown")
+  Check(Ru.EvalCondition(cloth, { classID = 4 }) == nil, "armor without its sub-type is unknown")
+  Check(Ru.EvalCondition({ type = "armor", value = 3, negate = true }, silk) == true, "not mail matches cloth")
+  Check(Ru.EvalCondition({ type = "armor", value = 3, negate = true }, {}) == nil, "a negated unknown armor type stays unknown")
+  Check(Ru.CheckCondition({ type = "armor", value = 5 }) ~= nil and Ru.CheckCondition({ type = "armor", value = "cloth" }) ~= nil, "only the armor types offered are valid")
+  Check(Ru.CheckCondition({ type = "armor", value = 4 }) == nil and Ru.CheckCondition(Ru.NewCondition("armor")) == nil, "plate is valid and a new condition is complete")
+  Check(Ru.TYPES.armor.phrase({ value = 1 }) == "is cloth armor", "its sentence")
+  -- can I equip it
+  local can = { type = "equippable", value = true }
+  Check(Ru.EvalCondition(can, { equippable = true }) == true, "equippable matches an item the player can equip")
+  Check(Ru.EvalCondition(can, { equippable = false }) == false, "and not one they can't")
+  Check(Ru.EvalCondition({ type = "equippable", value = false }, { equippable = false }) == true, "can't-equip matches an unwearable item")
+  Check(Ru.EvalCondition(can, {}) == nil, "no fact is unknown, never a match")
+  Check(Ru.EvalCondition({ type = "equippable", value = true, negate = true }, {}) == nil, "a negated unknown stays unknown")
+  Check(Ru.CheckCondition({ type = "equippable", value = "yes" }) ~= nil and Ru.CheckCondition(Ru.NewCondition("equippable")) == nil, "it needs a true or false")
+  Check(Ru.TYPES.equippable.phrase(can) == "is something I can equip" and Ru.TYPES.equippable.phrase({ value = false }) == "is something I can't equip", "its sentence")
+  Check(Ru.Summary({ action = "pass", conditions = { { type = "equippable", value = false } } }):find("when the item is something I can't equip", 1, true) ~= nil, "it reads in a rule's summary")
   Check(Ru.EvalCondition({ type = "equip", value = "INVTYPE_HEAD" }, green) == true, "a head slot matches")
   Check(Ru.EvalCondition({ type = "equip", value = "INVTYPE_CHEST" }, { equipLoc = "INVTYPE_ROBE" }) == true, "a robe is a chest piece")
   Check(Ru.EvalCondition({ type = "item", id = 100 }, green) == true and Ru.EvalCondition({ type = "item", id = 101 }, green) == false, "a specific item matches by id")
@@ -642,6 +678,41 @@ do
   Check(roll.state == "pending", "and stops counting when the permission is withdrawn")
   EndRoll(id)
   JUDGED["item:100"] = nil
+
+  -- equippable and armor type, read from the roll the way the game gives it
+  Fresh(); LR.Set("auto", true)
+  local function Facts(link)
+    local rid = StartRoll(link); local r = Ro.Find(rid)
+    local obs = r.obs
+    EndRoll(rid)
+    return obs
+  end
+  Check(Facts("item:106").equippable == true, "gear with a clean tooltip can be equipped (a robe included)")
+  Check(Facts("item:107").equippable == false, "gear with a red armor-type line cannot")
+  Check(Facts("item:108").equippable == true, "a red level requirement alone does not count: the level fixes itself")
+  Check(Facts("item:102").equippable == false and Facts("item:104").equippable == false, "a recipe and a trade good are not gear")
+  local noTip = StartRoll("item:107", { noTooltip = true })
+  Check(Ro.Find(noTip).obs.equippable == nil, "without a tooltip it is unknown, not yes")
+  EndRoll(noTip)
+  local cloth = Rule("blank")
+  LR.RemoveCondition(cloth, 1); LR.AddCondition(cloth, "armor"); LR.SetCondition(cloth, 1, { value = 1 })
+  id = StartRoll("item:106"); roll = Ro.Find(id)
+  Check(roll.state == "scheduled", "a cloth rule takes a cloth robe")
+  EndRoll(id)
+  id = StartRoll("item:107"); roll = Ro.Find(id)
+  Check(roll.state == "pending", "and leaves mail alone")
+  EndRoll(id)
+  LR.SetCondition(cloth, 1, { negate = true })
+  id = StartRoll("item:107"); roll = Ro.Find(id)
+  Check(roll.state == "scheduled", "'not cloth' takes mail")
+  EndRoll(id)
+  LR.RemoveCondition(cloth, 1); LR.AddCondition(cloth, "equippable"); LR.SetCondition(cloth, 1, { value = false })
+  id = StartRoll("item:107"); roll = Ro.Find(id)
+  Check(roll.state == "scheduled", "a rule for what I can't equip takes the mail piece")
+  EndRoll(id)
+  id = StartRoll("item:106"); roll = Ro.Find(id)
+  Check(roll.state == "pending", "and not the robe")
+  EndRoll(id)
 
   -- pause cancels what is pending and keeps the rules
   Fresh(); LR.Set("auto", true); greedId = Rule("greenGear")

@@ -88,6 +88,10 @@ local function Choices(kind, cond)
         for q = 0, 5 do out[#out + 1] = { value = tostring(q), label = Rules.QualityName(q) } end
     elseif kind == "class" then
         for _, c in ipairs(Rules.CLASS_CHOICES) do out[#out + 1] = { value = tostring(c[1]), label = Rules.ClassName(c[1]) } end
+    elseif kind == "armor" then
+        for _, c in ipairs(Rules.ARMOR_CHOICES) do out[#out + 1] = { value = tostring(c[1]), label = Rules.ArmorName(c[1]) } end
+    elseif kind == "equippable" then
+        out = { { value = "true", label = "I can equip it" }, { value = "false", label = "I can't equip it" } }
     elseif kind == "equip" then
         for _, c in ipairs(Rules.EQUIP_CHOICES) do out[#out + 1] = { value = c[1], label = Rules.EquipName(c[1]) } end
     elseif kind == "recipe" then
@@ -111,9 +115,9 @@ end
 
 -- The value a condition holds, as the drop-down's string.
 local function ValueText(c)
-    if c.type == "quality" or c.type == "class" then return tostring(c.value) end
+    if c.type == "quality" or c.type == "class" or c.type == "armor" then return tostring(c.value) end
     if c.type == "recipe" then return c.mode end
-    if c.type == "upgrade" then return tostring(c.value) end
+    if c.type == "upgrade" or c.type == "equippable" then return tostring(c.value) end
     return c.value
 end
 
@@ -249,10 +253,10 @@ local function CondRow(i)
     c.value = G.Dropdown(c.frame, 150, function(value)
         if not (c.index and selected) then return end
         local kind = c.kind
-        if kind == "quality" or kind == "class" then
+        if kind == "quality" or kind == "class" or kind == "armor" then
             Apply(selected, c.index, { value = (value == "equipment") and value or tonumber(value) })
         elseif kind == "recipe" then Apply(selected, c.index, { mode = value })
-        elseif kind == "upgrade" then Apply(selected, c.index, { value = value == "true" })
+        elseif kind == "upgrade" or kind == "equippable" then Apply(selected, c.index, { value = value == "true" })
         else Apply(selected, c.index, { value = value }) end
     end)
     c.id = G.EditBox(c.frame, 150, 22)
@@ -646,7 +650,7 @@ end
 K.Page({
     key = "lootRules", name = "Loot rules", nav = "Loot rules", parent = "lootRolls", order = 27,
     description = "Rules that choose Need, Greed or Pass for you, with a countdown you can stop.",
-    keywords = "loot rule rules automatic auto roll need greed pass recipe quality green uncommon equipment profession known duplicate item upgrade condition countdown pause stop",
+    keywords = "loot rule rules automatic auto roll need greed pass recipe quality green uncommon equipment equippable wear armor type cloth leather mail plate profession known duplicate item upgrade condition countdown pause stop",
     when = function() return R.LootRolls ~= nil and R.LootCards ~= nil end,
     build = function()
         local lr = R.LootRolls

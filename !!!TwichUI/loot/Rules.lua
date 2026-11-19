@@ -15,7 +15,8 @@
 --
 -- The facts (an "observation") are a plain table; a missing field is unknown:
 --   link, itemID, name, quality (0-5), classID, subClassID, equipLoc ("INVTYPE_..." or ""), bindType (0 none, 1 pickup, 2 equip, 3 use, 4 quest),
---   upgrade (true / false), recipe = { isRecipe, profession (the player has this recipe's profession), known, canLearn },
+--   equippable (true: the player can equip it now; false: it is not gear, or the game marks something about it as unusable; the level
+--   requirement does not count, since level fixes itself), upgrade (true / false), recipe = { isRecipe, profession (the player has this recipe's profession), known, canLearn },
 --   context = { instanceType ("none", "party", "raid", ...), inRaidGroup }
 
 local R = TwichUI
@@ -78,6 +79,16 @@ function Ru.EquipName(loc)
     return GameString(loc, EQUIP_NAME[loc] or "?")
 end
 
+-- Armor types (item class 4). The sub-class numbers are the game's; the words come from the game's own item strings when it has them.
+Ru.ARMOR_CHOICES = { { 1, "Cloth" }, { 2, "Leather" }, { 3, "Mail" }, { 4, "Plate" }, { 6, "Shield" } }
+local ARMOR_NAME = {}
+for _, c in ipairs(Ru.ARMOR_CHOICES) do ARMOR_NAME[c[1]] = c[2] end
+function Ru.ArmorName(sub)
+    local name = Whole(sub) and GetItemSubClassInfo and GetItemSubClassInfo(4, sub)
+    if type(name) == "string" and name ~= "" then return name end
+    return ARMOR_NAME[sub] or "?"
+end
+
 Ru.RECIPE_CHOICES = {
     { "profession", "A recipe for one of my professions" },
     { "learnable", "A recipe I can learn now" },
@@ -103,7 +114,7 @@ end
 ---------------------------------------------------------------------------
 local T = {}
 Ru.TYPES = T
-Ru.ORDER = { "quality", "class", "equip", "recipe", "item", "bind", "upgrade", "context" }
+Ru.ORDER = { "quality", "class", "armor", "equippable", "equip", "recipe", "item", "bind", "upgrade", "context" }
 
 T.quality = {
     label = "Item quality", icon = "lootQuality",
@@ -147,6 +158,33 @@ T.class = {
         return id == c.value
     end,
     phrase = function(c) return "is " .. (c.value == "equipment" and "equipment" or Ru.ClassName(c.value):lower()) end,
+}
+
+T.armor = {
+    label = "Armor type", icon = "lootType",
+    new = function() return { type = "armor", value = 1 } end,
+    check = function(c) if not (Whole(c.value) and ARMOR_NAME[c.value] ~= nil) then return "Choose an armor type." end end,
+    eval = function(c, obs)
+        local id = obs.classID
+        if not Whole(id) then return nil end
+        if id ~= 4 then return false end   -- a weapon, a potion or a recipe is no kind of armor
+        local sub = obs.subClassID
+        if not Whole(sub) then return nil end
+        return sub == c.value
+    end,
+    phrase = function(c) return "is " .. Ru.ArmorName(c.value):lower() .. " armor" end,
+}
+
+T.equippable = {
+    label = "Can I equip it", icon = "lootSlot",
+    new = function() return { type = "equippable", value = true } end,
+    check = function(c) if type(c.value) ~= "boolean" then return "Choose whether you can equip it." end end,
+    eval = function(c, obs)
+        local e = obs.equippable
+        if type(e) ~= "boolean" then return nil end
+        return e == c.value
+    end,
+    phrase = function(c) return c.value and "is something I can equip" or "is something I can't equip" end,
 }
 
 T.equip = {

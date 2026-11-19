@@ -161,6 +161,32 @@ local function RecipeFacts(roll, obs, lines)
     return facts
 end
 
+-- "Requires Level %d" as a pattern, in the game's own words (nil when it does not say).
+local function LevelPattern()
+    local text = ITEM_MIN_LEVEL
+    if type(text) ~= "string" or not text:find("%%d") then return nil end
+    return "^" .. text:gsub("[%^%$%(%)%.%[%]%*%+%-%?]", "%%%0"):gsub("%%d", "%%d+") .. "$"
+end
+
+-- Can the player equip it now? Gear (anything with a slot) whose tooltip has no red line: red is the game saying class, armor type, weapon
+-- skill or a reputation stands in the way. A red level requirement is not counted, since it fixes itself. nil while the item or its tooltip
+-- is not there yet, or when the tooltip cannot be judged.
+local function EquippableFact(obs, lines)
+    local loc = obs.equipLoc
+    if obs.classID == nil or type(loc) ~= "string" then return nil end
+    if loc == "" or loc == "INVTYPE_NON_EQUIP" then return false end
+    local D = R.GearData
+    if not (lines and D and D.RedLines) then return nil end
+    local level, kept = LevelPattern(), {}
+    for _, line in ipairs(lines) do
+        local text = Plain(line.leftText)
+        if not (level and type(text) == "string" and text:find(level)) then kept[#kept + 1] = line end
+    end
+    local ok, red = Call(D.RedLines, kept)
+    if not ok or type(red) ~= "number" then return nil end
+    return red == 0
+end
+
 local function UpgradeFact(link, lines)
     local H = R.GearHints
     if not (H and H.Judge and link and lines) then return nil end
@@ -235,6 +261,7 @@ function Ro.Observe(roll)
     end
     local lines = Lines(id)
     obs.recipe = RecipeFacts(roll, obs, lines)
+    obs.equippable = EquippableFact(obs, lines)
     obs.upgrade = UpgradeFact(roll.link, lines)
     roll.upgrade = obs.upgrade
     obs.context = ContextFacts()

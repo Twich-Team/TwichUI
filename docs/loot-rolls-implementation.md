@@ -76,12 +76,17 @@ invalid one, is incomplete: skipped and explained in the editor. Negating an unk
 
 Conditions: item quality (is / at least / at most), item type (equipment, weapon, armor, recipe, consumable, ...), equipment slot (by the
 game's `INVTYPE_*` and its own words), profession recipe (for one of my professions / one I can learn / one I already know / any), specific
-item, binding (when picked up / when equipped), potential upgrade (informational; only counts when upgrade-based rules are allowed), where
+item, armor type (cloth / leather / mail / plate / shield, from the item's class and sub-class), can I equip it, binding (when picked up / when equipped), potential upgrade (informational; only counts when upgrade-based rules are allowed), where
 you are (outside raids, in raids, in dungeons, outside dungeons).
 
 Recipe facts: the profession comes from `GetItemSubClassInfo(9, subclass)` compared with the player's skill lines (both the game's own words);
 "already known" is the tooltip line equal to the game's `ITEM_SPELL_KNOWN`; "can learn" additionally needs the item to have no red
 requirement line (`GearData.RedLines`). Without the tooltip those facts are unknown, not guessed.
+
+"Can I equip it" is true for gear (anything with a slot) whose tooltip has no red line, the game's own way of saying class, armor type, weapon
+skill or reputation is in the way (`GearData.RedLines`). A red "Requires Level" line is ignored (matched from `ITEM_MIN_LEVEL`), since the level
+fixes itself. Items that are not gear are "can't equip". Without the tooltip it is unknown. "Armor type" is true only for armor (class 4) of
+that sub-class; cloaks are cloth, so a cloth rule takes them too.
 
 ## Automation safety
 
@@ -149,7 +154,9 @@ window, as it does for the other pages.
 6. Automation: one Greed rule, master switch on, a matching green item: the card counts down visibly; Stop works; letting it finish sends Greed
    once and the game accepts it. Then Need: confirm it is refused until Need automation is allowed.
 7. Recipe rules: confirm "already known" and "one of my professions" are read correctly for real recipe drops.
-8. Two rolls at once, a roll that runs out, `/reload` in the middle of a roll.
+8. Equip and armor-type rules: on a character that wears cloth, a mail drop reads "can't equip" (red type line) and a cloth drop reads "can";
+   an item above your level still reads "can equip"; a cloth rule takes cloth and not mail. (Unit-tested with a fake tooltip only.)
+9. Two rolls at once, a roll that runs out, `/reload` in the middle of a roll.
 
 ## Remaining limitations
 
