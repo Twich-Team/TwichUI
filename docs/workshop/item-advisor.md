@@ -6,13 +6,67 @@ House replacement, posting, automatic scans, selling automation or chart engine.
 ## Optional Vendor junk marking
 
 The separately requested **Mark Vendor recommendations as junk** switch is in
-Workshop's General settings and defaults off. It runs only while Workshop is
+its own Junk marking feature settings and defaults off. It runs only while Workshop is
 loaded and enabled. It uses the same Advisor decision as the item tooltip,
 including Market/local prices, crafting reservations and disenchant alternatives.
 Only carried items are examined, and every carried copy of an item ID must favor
 Vendor. Locked, quest, incomplete, never-sell and restock-protected copies prevent
 marking that ID. Unknown prices retain the Advisor's existing known-option policy;
 this feature adds no new sale-value calculation or posting quote.
+
+**Junk marking** (its own All features card) is a dedicated settings page with a split rule list
+and focused editor, following Loot Rolls, Magic Inventory and Reminders. Choose
+a named rule or start a disabled template, select an illustrated item type, and
+add/remove only the conditions you need. A live sentence explains All/Any logic.
+Save commits the whole draft once; Cancel, closing the page and profile changes
+discard it. Drafts refuse to overwrite or delete externally changed rules.
+The page includes illustrated item categories,
+a master switch, up to eight editable rules, and the Never mark picker. Each
+rule contains a nested AND/OR tree: drag conditions from the palette into groups,
+reorder conditions or whole groups with insertion markers, or use group + and
+Move menus. Item type is a condition, so one rule can combine different item
+types. Quality ranges, wearable-now requirements, estimated upgrades, known class
+reagents and remembered-recipe use are leaves. Trees allow 32 nodes and four
+levels; empty groups never match. Click Add here to select a destination group. Any enabled matching rule permits the existing Advisor
+Vendor decision; no rule forces a sale recommendation. Unknown facts cannot satisfy negative conditions. New OR groups can match when
+another branch is fully proven; AND groups require all children. Migrated flat
+filter groups retain their previous stricter unknown behavior until their group
+logic is deliberately edited. Cozy Sleeping Bag, quest items,
+keys and Never mark IDs always veto marking.
+
+Templates (poor gear, uncommon-or-lower non-upgrades, materials, common recipes,
+and custom) start disabled for review. Existing type switches become equivalent
+rules without resetting preferences. Rule edits persist a bounded version-2
+extension (version-1 flat rules read safely without writes, converted on Save); malformed or newer rules refuse marking and edits. Existing marks are
+never undone. Older versions refuse this extension rather than guessing at new
+trees. The standalone settings page loads without Workshop. Its explicit Load
+Item Advisor action enables/loads the experimental dependency without opening a
+Workshop window or initiating a scan. Enabled junk marking then loads that
+authorized dependency on login, even with Workshop's login preference off.
+Rules can be disabled, removed or replaced with a template.
+
+Wearability means the native bag tooltip has no unmet requirements (including
+level), rather than a separate guess at class proficiency. Upgrade comparisons
+reuse GearHints: possible/likely/empty count as upgrades, similar/worse as not;
+failed, missing and unsupported comparisons remain unknown. This is estimated
+gear suitability, not the sale Advisor's value judgment. Class relevance uses
+Restock's known class suggestions. Profession relevance means used by this
+character's remembered recipes; absence from these limited lists is unknown,
+not proof an item is irrelevant. Refresh profession knowledge in normal gameplay.
+
+Choose an item from the picker's bag list or drag it onto the drop area. This
+saves its item ID in the account-wide ignore list (up to 512 IDs), covering
+all copies across profiles, and cancels any pending marking scan. Search,
+pagination and an Ignored items view allow review/removal, including items no longer carried.
+The picker works without loading Workshop or market data. Its bag/item listeners
+exist only while it is visible. Existing EllesmereUI marks are retained: **remove
+any mistaken mark with EllesmereUI's junk coin before visiting a merchant**.
+
+Sell's recommendation, bag tooltips and junk marking use the same held-item
+Advisor path and selected Workshop pricing source. Sell's live/local competition
+still supplies posting-price guidance, but cannot replace the recommendation's
+evidence. The held link and actual item level are used for variant/disenchant
+checks. Listing prices remain observations, not guaranteed sale proceeds.
 
 The shared `R.EllesmereJunk` adapter performs marking through EllesmereUI Bags.
 Custom categories are preserved. A mark covers that item ID across the account,
@@ -30,7 +84,7 @@ Forever acceptance still needs enabling the switch, receiving Vendor/Auction/DE
 items, manually unmarking one, changing profiles and reloading with EllesmereUI
 Bags present/absent. No simulator or real-client acceptance is claimed here.
 
-Offline verification: 79 Workshop modules, 13 Workshop/settings modules, 15 core
+Initial marker verification (before these guardrails): 79 Workshop modules, 13 Workshop/settings modules, 15 core
 modules, the existing Mage junk-marking test and Lua syntax checks pass. All 309
 Market mutations are detected, with zero survivors/invalid/timeouts/infra errors.
 Final evidence: `test-output/workshop-junk-completed-{workshop,settings}.log`,

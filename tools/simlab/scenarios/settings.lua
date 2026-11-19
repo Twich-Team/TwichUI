@@ -152,6 +152,49 @@ Lab.Step("open", function()
         Lab.Say("inventory", page.key, page.name, "rows=" .. #page.rows, "host=" .. tostring(page.def.host ~= nil))
     end
 end)
+if key == "workshop" and params.editor then
+    Lab.Step("Workshop junk safeguards", function()
+        local L,P=R.WorkshopLauncher,R.WorkshopJunkSettings
+        -- Disposable bag identities; never use, move, mark or sell an item.
+        local names={[211527]="Cozy Sleeping Bag",[12037]="Mystery Meat",[2589]="Linen Cloth"}
+        local ids={211527,12037,2589}
+        local oldInfo=C_Item.GetItemInfo
+        C_Item.GetItemInfo=function(id)
+            if names[id] then return names[id],nil,1,1,1,"Trade Goods","",1,"",134400,10,7,0,0 end
+            return oldInfo(id)
+        end
+        C_Container.GetContainerNumSlots=function(bag) return bag==0 and #ids or 0 end
+        C_Container.GetContainerItemInfo=function(bag,slot)
+            if bag==0 and ids[slot] then return {itemID=ids[slot]} end
+        end
+        local loaded=L.Loaded()
+        Lab.Check("interact","never-mark picker opens",true,P.Open())
+        Lab.Settle(.2)
+        Lab.Check("state","picker keeps Workshop load state",loaded,L.Loaded())
+        local f=P.Frame()
+        Lab.Check("construct","bag choices are bounded",7,#f.rows)
+        Lab.Check("state","bag choices include held items",3,#P.Entries("bags"))
+        for _,row in ipairs(f.rows) do
+            if row.entry and row.entry.id==211527 then
+                Lab.Check("state","sleeping bag cannot lose protection",false,row.action:IsEnabled())
+            elseif row.entry and row.entry.id==12037 then
+                row.action:Click()
+                Lab.Check("interact","bag choice is saved",true,L.JunkIgnored(12037))
+            end
+        end
+        local cursor,clear=GetCursorInfo,ClearCursor
+        GetCursorInfo=function() return "item",2589 end
+        local cleared=false
+        ClearCursor=function() cleared=true end
+        f.drop:GetScript("OnReceiveDrag")()
+        GetCursorInfo,ClearCursor=cursor,clear
+        Lab.Check("interact","drop saves item ID",true,L.JunkIgnored(2589))
+        Lab.Check("interact","drop returns cursor item",true,cleared)
+        f.ignored:Click()
+        Lab.Check("state","ignored list is visible",2,#P.Entries("ignored"))
+        f.bags:Click();Lab.Settle(.2)
+    end)
+end
 if key == "workshop" and params.filled then
     Lab.Step("Workshop preference integration", function()
         local K, UI, L = R.SettingsKit, R.SettingsUI, R.WorkshopLauncher
@@ -812,5 +855,48 @@ if PTR_IssueReporter then
 end
 if key == "magicInventory" and params.bankReview then
     Lab.Step("character bank review", function() Lab.BankReview(params.bankReview) end)
+end
+if key=="workshop" and params.editor then
+    Lab.Step("never-mark picker capture",function()
+        R.SettingsUI.Navigate("workshop")
+        Lab.Check("interact","picker reopens after settings lifecycle checks",true,R.WorkshopJunkSettings.Open())
+        Lab.Settle(.2)
+    end)
+end
+if key=="junkMarking" and params.editor then
+    Lab.Step("junk rule draft editor",function()
+        local P,L=R.WorkshopJunkRulesSettings,R.WorkshopLauncher
+        local count=#L.JunkRules()
+        local f=P.Frame()
+        f.rows[1]:Click()
+        Lab.Check("interact","rule list opens a draft",true,P.Draft()~=nil)
+        P.Add("quality");P.Set("qualityMax",1)
+        Lab.Check("state","condition draft leaves saved rule unchanged",5,L.JunkRules()[1].qualityMax)
+        f.cancel:Click()
+        Lab.Check("interact","Cancel discards draft",nil,P.Draft())
+        P.New("poor")
+        Lab.Check("state","template starts off",false,P.Draft().on)
+        Lab.Check("state","template is not saved yet",count,#L.JunkRules())
+        f.save:Click()
+        Lab.Check("interact","Save creates one rule",count+1,#L.JunkRules())
+        L.RemoveJunkRule(count+1)
+        P.New("custom")
+        P.Set("name","Low quality OR non-upgrade gear")
+        local root=P.Root()
+        local alternatives=P.Insert("any",root)
+        local gear=P.Insert("all",alternatives)
+        local item=P.Insert("kind",gear);item.value="gear"
+        local quality=P.Insert("quality",gear);quality.max=2
+        local other=P.Insert("all",alternatives)
+        local item2=P.Insert("kind",other);item2.value="gear"
+        local upgrade=P.Insert("upgrade",other);upgrade.value=false
+        P.Refresh()
+        Lab.Check("interact","condition can move between groups",true,P.Move(quality,other,1))
+        Lab.Check("interact","condition can move back",true,P.Move(quality,gear,2))
+        Lab.Check("state","nested groups remain draft only",count,#L.JunkRules())
+        Lab.Check("construct","nested editor root visible",true,f.nodes[1]:IsShown())
+        Lab.Check("interact","Save button can be revealed",true,R.SettingsUI.RevealFrame(f.save))
+        Lab.Settle(.2)
+    end)
 end
 Lab.Finish()

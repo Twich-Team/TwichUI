@@ -6,11 +6,14 @@ local J = {}
 W.Junk = J
 local frame, active, pending, generation = nil, false, false, 0
 local epoch=0
+local professionItems,classItems={},{}
+local needWear,needUpgrade=false,false
 local touched, touchedCount = {}, 0 -- bounded; respect a manual unmark this session
 local EVENTS = {"BAG_UPDATE_DELAYED", "GET_ITEM_INFO_RECEIVED", "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED",
-    "PLAYER_ENTERING_WORLD", "PLAYER_LEAVING_WORLD", "ADDON_LOADED", "SPELLS_CHANGED", "SKILL_LINES_CHANGED"}
+    "PLAYER_ENTERING_WORLD", "PLAYER_LEAVING_WORLD", "ADDON_LOADED", "SPELLS_CHANGED", "SKILL_LINES_CHANGED", "PLAYER_EQUIPMENT_CHANGED", "PLAYER_TALENT_UPDATE"}
 local function Protected(id)
-    return R.MageSell and R.MageSell.IsExcluded(id) or R.Restock and R.Restock.Protects(id)
+    return R.WorkshopLauncher.JunkIgnored(id)
+        or R.MageSell and R.MageSell.IsExcluded(id) or R.Restock and R.Restock.Protects(id)
 end
 local function Wanted()
     local l = R.WorkshopLauncher
@@ -35,6 +38,21 @@ local function Read(bag, slot)
     if type(quest) ~= "table" or W.Plain(quest.isQuestItem) ~= false or W.Plain(quest.questID) then return id end
     local name, _, quality, level, _, _, _, _, equip, _, sell, class, _, bind = C_Item.GetItemInfo(link)
     if not W.Text(W.Plain(name), 200) then return id end
+    class=W.Plain(class)
+    local facts={quality=W.Plain(quality),profession=professionItems[id],classReagent=classItems[id]}
+    if class==2 or class==4 then
+        local data=needWear and C_TooltipInfo and C_TooltipInfo.GetBagItem and C_TooltipInfo.GetBagItem(bag,slot)
+        if needWear and data and type(data.lines)=="table" and #data.lines>0 and R.GearData then
+            facts.wearable=R.GearData.RedLines(data.lines)==0
+        end
+        if needUpgrade and R.GearHints then
+            local judged=R.GearHints.Judge(link,nil,nil,bag,slot)
+            local verdict=judged and judged.result and judged.result.verdict
+            if verdict=="likely" or verdict=="possible" or verdict=="empty" then facts.upgrade=true
+            elseif verdict=="similar" or verdict=="worse" then facts.upgrade=false end
+        end
+    end
+    if not R.WorkshopLauncher.JunkAllows(id,W.Plain(class),facts) then return id end
     local f = {item=id, count=W.Int(W.Plain(x.stackCount),1,W.MAX_ID), sell=W.Plain(sell), quality=W.Plain(quality),
         itemLevel=W.Int(W.Plain(level),1,1000), classID=W.Plain(class), equipLoc=W.Plain(equip), bindType=W.Plain(bind),
         bound=W.Plain(x.isBound), variant=W.Worth.LinkVariant(link), now=time()}
@@ -49,14 +67,27 @@ local function Read(bag, slot)
     end
     local source=W.Session.PriceSource()
     f.marketTable=source.market
-    local facts=W.Facts.Of(id,{market=source.market,variant=f.variant~=nil,now=f.now})
-    local advice=W.AdvisorData.Tooltip(f,facts)
+    local advice=W.AdvisorData.Tooltip(f)
     return id, advice.action=="vendor", f.quality
 end
 
 local function Scan()
     if not Ready() or not (C_Container and C_Container.GetContainerNumSlots and C_Container.GetContainerItemInfo
         and C_Item and C_Item.GetItemInfo) then return end
+    professionItems,classItems={},{}
+    needWear,needUpgrade=false,false
+    for _,rule in ipairs(R.WorkshopLauncher.JunkRules()) do
+        if rule.on then
+            needWear=needWear or (rule.tree and R.WorkshopLauncher.JunkTree.Uses(rule.tree,"wearable") or not rule.tree and rule.wearable~="any")
+            needUpgrade=needUpgrade or (rule.tree and R.WorkshopLauncher.JunkTree.Uses(rule.tree,"upgrade") or not rule.tree and rule.upgrade~="any")
+        end
+    end
+    for _,p in ipairs(W.Known and W.Known.Load() or {}) do
+        for _,rec in ipairs(p.recipes or {}) do
+            for _,mat in ipairs(rec.mats or {}) do professionItems[mat.item]=true end
+        end
+    end
+    for _,entry in ipairs(R.Restock and R.Restock.Suggestions and R.Restock.Suggestions() or {}) do classItems[entry.id]=true end
     local candidates, order, slots = {}, {}, 0
     for bag=0,math.min(NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4,10) do
         local n=W.Int(W.Plain(C_Container.GetContainerNumSlots(bag)),0,200)
@@ -136,4 +167,5 @@ if R.Perf and R.Perf.Gauge then
     R.Perf.Gauge("workshop.junkListeners",{label="Workshop junk listeners",kind="events",group="workshop",unit="count",read=J.Events})
     R.Perf.Gauge("workshop.junkTouched",{label="Workshop junk session identities",kind="cache",group="workshop",unit="count",read=J.Retained})
 end
+if R.GearHints and R.GearHints.OnChange then R.GearHints:OnChange(J.Request) end
 J.Start()

@@ -1978,6 +1978,8 @@ function escape:Hide()
     local catalog, designer, picker = R.RemindersCatalog, R.RemindersDesigner, R.RemindersImagePicker
     if Wg.MenuShown() then
         Wg.CloseMenu()
+    elseif R.WorkshopJunkSettings and R.WorkshopJunkSettings.Shown() then
+        R.WorkshopJunkSettings.Close()
     elseif R.MagicInventoryPage and R.MagicInventoryPage.CloseItemFilters and R.MagicInventoryPage.CloseItemFilters() then
         -- The focused editor closes without saving or closing its parent rule draft.
     elseif picker and picker.Shown() then
