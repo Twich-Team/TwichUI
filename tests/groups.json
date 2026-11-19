@@ -30,8 +30,8 @@
     "simulators": []
   },
   "workshop-settings": {
-    "tests": ["test_workshop_junk.lua", "test_workshop_junk_settings.lua", "test_workshop_junk_rules.lua", "test_workshop_optin.lua", "test_workshop_strategy.lua", "test_workshop_compact.lua", "test_workshop_login.lua", "test_workshop_settings.lua", "test_workshop_worth.lua", "test_workshop_worth_designer.lua", "test_workshop_worth_layout.lua", "test_workshop_window.lua", "test_settings_contract.lua", "test_settings_design.lua", "test_settings_window_size.lua"],
-    "syntax": ["!!!TwichUI/WorkshopLauncher.lua", "TwichUI_Settings/pages/Workshop*.lua", "TwichUI_Settings/pages/JunkMarking.lua", "TwichUI_Workshop/Worth*.lua", "TwichUI_Workshop/Window.lua", "TwichUI_Workshop/Session.lua", "TwichUI_Workshop/Compact.lua"],
+    "tests": ["test_junk_session.lua", "test_junk_inspect.lua", "test_workshop_junk.lua", "test_workshop_junk_settings.lua", "test_workshop_junk_rules.lua", "test_workshop_optin.lua", "test_workshop_strategy.lua", "test_workshop_compact.lua", "test_workshop_login.lua", "test_workshop_settings.lua", "test_workshop_worth.lua", "test_workshop_worth_designer.lua", "test_workshop_worth_layout.lua", "test_workshop_window.lua", "test_settings_contract.lua", "test_settings_design.lua", "test_settings_window_size.lua"],
+    "syntax": ["!!!TwichUI/WorkshopLauncher.lua", "TwichUI_Settings/pages/Workshop*.lua", "TwichUI_Settings/pages/Junk*.lua", "TwichUI_Workshop/Junk.lua", "TwichUI_Workshop/Worth*.lua", "TwichUI_Workshop/Window.lua", "TwichUI_Workshop/Session.lua", "TwichUI_Workshop/Compact.lua"],
     "dependencies": ["settings", "workshop"],
     "simulators": [{"script": "workshop", "only": ["design", "craft", "wrong"]}]
   },
