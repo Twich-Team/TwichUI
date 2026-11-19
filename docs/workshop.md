@@ -103,8 +103,9 @@ prices or saved history. Opportunities scrolls its facts and chart below the ite
 header with Add to crafting plan fixed below. Item Advisor gives the chart the full
 detail width and places recommendation reasons underneath. The shared chart file
 loads after Style and before the views. Its existing diagnostics cover both windows.
-Lua syntax and diff checks only; automated and simulator checks are deferred at the
-owner's request during in-game iteration. Older chart descriptions above are historical.
+The follow-up pull request records focused unit, mutation, simulator and package
+verification after the initial in-game iteration. Native appearance and pointer
+behavior still require Forever acceptance. Older chart descriptions above are historical.
 
 **Market figures (A7).** The Opportunities details show Lowest listing, Competing price, Recent price, Market value (14d), Historical value (60d), Supply and Data quality (`MarketFacts.lua`, over the Market services), with the existing chart below; the tooltip has a Market value line (Always) and four Hold Shift lines; Shopping prices the auction option for the quantity still missing with `Market.Cost` (exact, a range, "at least", or not enough listed). Profit still uses the lowest listing. See "A7 as built".
 

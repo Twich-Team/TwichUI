@@ -1106,3 +1106,17 @@ m("market.auction-availability-unit", "TwichUI_Workshop/auction/ReadRequests.lua
 m("crafting.auction-group-total", "TwichUI_Workshop/auction/SellData.lua",
   "row.members=g.members;row.qty=g.qty;row.stacks=#g.members", "row.members=g.members;row.qty=g.rep.qty;row.stacks=#g.members",
   "grouped inventory silently drops other stacks including the reagent bag", ["test_workshop_auction_iteration.lua"])
+
+# Sell planning must resolve the passive reservation guard, including stock changes.
+m("crafting.auction-sell-start-plan", "TwichUI_Workshop/auction/ViewSell.lua",
+  "p.planState=W.Session.QueueStrategy()", 'p.planState="ready"',
+  "a nonempty crafting queue blocks every sale because no plan is requested", ["test_workshop_auction_sell_planning.lua"])
+m("crafting.auction-sell-stock-invalidation", "TwichUI_Workshop/auction/ViewSell.lua",
+  "local function StockWatch() W.Strategy.Bump();A.Schedule() end", "local function StockWatch() A.Schedule() end",
+  "changed bank stock leaves the prior crafting allocation current", ["test_workshop_auction_sell_planning.lua"])
+m("market.chart-workshop-copper", "TwichUI_Workshop/auction/AdvancedChart.lua",
+  "out.points[#out.points+1]={day=p.day,price=p.price,kind='day',", "out.points[#out.points+1]={day=p.day,price=p.price*100,kind='day',",
+  "the Workshop chart converts copper observations again", ["test_workshop_auction_market_chart.lua"])
+m("market.chart-workshop-aggregates", "TwichUI_Workshop/auction/AdvancedChart.lua",
+  "for _,g in ipairs(series.groups or {}) do", "for _,g in ipairs({}) do",
+  "the Workshop adapter silently drops retained older aggregate intervals", ["test_workshop_auction_market_chart.lua"])

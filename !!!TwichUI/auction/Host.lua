@@ -187,10 +187,9 @@ local function Restore(why)
         l.recoveryPoints = Points(l.frame)
     end)
     local usable = NativeStatus()
-    -- CloseAuctionHouse can deliver the close event from native OnHide before
-    -- interaction-manager readback changes. Ended() already ended this visit;
-    -- its hidden frame must not be required to become visible again.
-    local ended = not visiting or (not usable and not Available())
+    -- Native OnHide can deliver a close event before interaction readback changes.
+    -- Only that explicit receipt ends a lease: proof mode need not have a visit.
+    local ended = l.ended==true or (not usable and not Available())
     if ok and not usable and not ended then
         ok, err = false, l.foreign and "foreign native anchors remain unavailable" or "native presentation remains unavailable"
     end
@@ -651,6 +650,7 @@ function H.SetTestEnabled(on)
     return true
 end
 local function Ended()
+    if lease then lease.ended=true end
     visiting, openedAt = false, nil
     CancelPending()
     H.Restore("interaction-ended")

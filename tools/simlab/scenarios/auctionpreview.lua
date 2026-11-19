@@ -343,6 +343,14 @@ Lab.Step("Sell price preparation without transactions",function()
     Lab.Check("interact","Sell copper input","45",p.money.copper:GetText())
     Lab.Check("state","Sell integer gross",37035,p.draft.gross)
     Lab.Check("state","Sell quoted upfront deposit",123,p.draft.deposit)
+    Lab.Check("state","Sell gross footer amount",W.UI.Money(37035),p.grossValue:GetText())
+    Lab.Check("state","Sell deposit footer amount",W.UI.Money(123),p.depositValue:GetText())
+    Lab.Check("state","Sell fee footer stays unknown","Not yet verified",p.feesValue:GetText())
+    local footer=p.post:GetParent()
+    Lab.Check("construct","Sell fixed footer and review fit",true,
+        footer:GetParent()==p and p.grossValue:GetParent():GetParent()==footer and
+        p.post:GetBottom()>=footer:GetBottom()-1 and p.post:GetRight()<=footer:GetRight()+1 and
+        p.post:GetTop()<=p.grossValue:GetParent():GetBottom()+1)
     Lab.Check("state","Sell commission remains unknown",nil,p.draft.fees)
     Lab.Check("state","Sell net remains unknown",nil,p.draft.net)
     SellLive(W,p)

@@ -77,7 +77,7 @@ c.C_Item = {
 c.InCombatLockdown = function() return false end
 c.IsShiftKeyDown = function() return false end
 
-for _, f in ipairs({ "Data.lua", "BridgeCodec.lua", "BridgeSchema.lua", "BridgeValidate.lua", "Bridge.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "CraftPlanner.lua", "Strategy.lua", "Scan.lua", "Market.lua", "Valuation.lua", "MarketFacts.lua", "Session.lua", "AuctionButton.lua", "Style.lua", "ViewOverview.lua", "ViewOpportunities.lua", "ViewCrafting.lua", "ViewShopping.lua", "ViewStrategy.lua", "Window.lua" }) do
+for _, f in ipairs({ "Data.lua", "BridgeCodec.lua", "BridgeSchema.lua", "BridgeValidate.lua", "Bridge.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "CraftPlanner.lua", "Strategy.lua", "Scan.lua", "Market.lua", "Valuation.lua", "MarketFacts.lua", "Session.lua", "AuctionButton.lua", "Style.lua", "auction/AdvancedChart.lua", "ViewOverview.lua", "ViewOpportunities.lua", "ViewCrafting.lua", "ViewShopping.lua", "ViewStrategy.lua", "Window.lua" }) do
   local chunk = assert(loadfile(ROOT .. "../TwichUI_Workshop/" .. f)); setfenv(chunk, c); chunk("TwichUI_Workshop", {})
 end
 local W = R.Workshop
@@ -856,42 +856,38 @@ do
   r2:GetScript("OnClick")(r2)
   Check(r2.selected == true and not L_.rows[1].selected, "choosing a row marks it and only it")
   Same(opps.detail.name:GetText(), "Mana Potion")
-  -- Mana Potion has one observed day: no mostly empty plot with one floating dot, but the words and the one price (no dot, no stem, no line)
+  -- The shared advanced chart retains one real sample and exact day spacing.
   local chart = opps.detail.chart
-  Same(chart.state, "single"); Same(chart.shown, 0)
-  Check(not chart.dots[1]:IsShown() and not chart.stems[1]:IsShown(), "one observation draws nothing: a lone dot says no more than the number")
-  Same(chart.msg:GetText(), "More scans needed to show a price trend."); Check(chart.msg:IsShown() and chart.note:IsShown())
-  Check(chart.note:GetText():find("Cheapest seen: ", 1, true) and chart.note:GetText():find("seen today", 1, true), "the one observed price and when: " .. chart.note:GetText())
-  Same(chart.hi:GetText(), ""); Same(chart.lo:GetText(), "")
+  Same(chart.state, "single");Same(chart.shown,1)
+  Same(#chart.data.points,1);Same(#chart.data.groups,0)
+  Same(chart.data.points[1].day,today)
   Same(opps.detail.chartNote:GetText(), "1 observed day")
   r1:GetScript("OnClick")(r1)
   Same(opps.detail.name:GetText(), "Healing Potion")
-  -- Healing Potion: three observed days (today-3, today-2, today): the dots sit at their real days, the gap before today is a gap
-  Same(chart.state, "series")
-  Same(chart.shown, 3); Check(chart.dots[1]:IsShown() and chart.dots[3]:IsShown() and not chart.dots[4]:IsShown(), "three observations, three dots")
-  Check(not chart.msg:IsShown() and not chart.note:IsShown(), "no message over a real chart")
-  local function X(i) local pt = chart.dots[i].points[#chart.dots[i].points] return pt[4] end
-  Check(X(1) < X(2) and X(2) < X(3), "oldest to newest, left to right")
-  Check(math.abs((X(3) - X(2)) - 2 * (X(2) - X(1))) < 0.01, "spacing follows the days (a missing day is a gap): " .. X(1) .. " " .. X(2) .. " " .. X(3))
-  Same(opps.detail.chartNote:GetText(), "3 observed days")
-  Check(chart.hi:GetText() == "1100c" and chart.lo:GetText() == "900c", "its range is the lowest and highest observed: " .. chart.hi:GetText() .. " / " .. chart.lo:GetText())
-  -- older groups are named, not drawn
+  Same(chart.state,"series");Same(chart.shown,3)
+  Same(chart.data.points[1].price,900);Same(chart.data.points[2].price,1000);Same(chart.data.points[3].price,1100)
+  local geometry=W.AdvancedChart.Geometry(chart.data,400,120);local xs,lines={},0
+  for _,v in ipairs(geometry) do if v.index then xs[v.index]=v.x elseif v.x2 then lines=lines+1 end end
+  Same(lines,1,"no segment spans the missing observation day")
+  Check(math.abs((xs[3]-xs[2])-2*(xs[2]-xs[1]))<.01,"real day spacing preserved")
+  Same(opps.detail.chartNote:GetText(),"3 observed days")
+  Check(chart.data.low<900 and chart.data.high>1100,"axes include all observed prices")
   c.TwichUIWorkshopDB.markets["Realm|Alliance"].hist[501] = (today - 1) .. ",1000;" .. today .. ",1100|" .. math.floor((today - 40) / 28) .. ",800,950,1750,2"
   Win.Render()
-  Same(chart.shown, 2); Check(opps.detail.chartNote:GetText():find("plus older ranges", 1, true), "older days are named, never drawn: " .. opps.detail.chartNote:GetText())
-  -- only older ranges: nothing to draw, and it says so
+  Same(chart.shown,2);Same(#chart.data.groups,1,"older aggregates remain intervals")
+  Check(opps.detail.chartNote:GetText():find("plus older ranges",1,true),"aggregate context remains visible")
   c.TwichUIWorkshopDB.markets["Realm|Alliance"].hist[501] = "|" .. math.floor((today - 40) / 28) .. ",800,950,1750,2"
   Win.Render()
-  Same(chart.state, "empty"); Same(chart.shown, 0)
-  Check(chart.msg:IsShown() and chart.msg:GetText():find("older ranges", 1, true), chart.msg:GetText())
-  -- no history at all
+  Same(chart.shown,0);Same(#chart.data.groups,1)
+  Same(opps.detail.chartNote:GetText(),"older ranges only")
+  Check(chart.msg:GetText()=="","supported aggregate bands do not claim no history")
   c.TwichUIWorkshopDB.markets["Realm|Alliance"].hist[501] = nil
   Win.Render()
-  Same(chart.shown, 0); Check(chart.msg:GetText():find("No price history", 1, true) and chart.hi:GetText() == "", chart.msg:GetText())
-  -- a malformed history is no history (never repaired by guessing)
+  Same(chart.data,nil);Check(chart.msg:GetText():find("No supported history",1,true),chart.msg:GetText())
+  Same(chart.labels[1]:GetText(),"","no stale axis values")
   c.TwichUIWorkshopDB.markets["Realm|Alliance"].hist[501] = "garbage"
   Win.Render()
-  Same(chart.shown, 0)
+  Same(chart.data,nil,"malformed history is never replaced with invented observations")
   c.TwichUIWorkshopDB.markets["Realm|Alliance"].hist[501] = (today - 3) .. ",900;" .. (today - 2) .. ",1000;" .. today .. ",1100|"
   Win.Render()
   -- the materials of one craft: each with its item tooltip and its quantity

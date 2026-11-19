@@ -21,4 +21,11 @@ MUTATIONS = [
          find='if context == "auctioneer" and R.AuctionHost then R.AuctionHost.ReplacementFailed(hostVisit, where) end',
          replace='-- render failure no longer restores the native window',
          why="later render exceptions leave the native window parked", tests=(TEST,)),
+    dict(id="auction.restore.lose-close-receipt", file=HOST,
+         find='    if lease then lease.ended=true end', replace='    -- close receipt lost',
+         why="hidden native close faults while interaction readback still says active", tests=("test_auction_host.lua",)),
+    dict(id="auction.restore.proof-implies-closed", file=HOST,
+         find='local ended = l.ended==true or (not usable and not Available())',
+         replace='local ended = not visiting or (not usable and not Available())',
+         why="proof mode without a normal visit discards a failed restoration lease", tests=("test_auction_host.lua",)),
 ]
