@@ -24,7 +24,7 @@ function B.Refresh()
         type = "data source",
         label = "Attune",
         text = "",
-        icon = [[Interface\Icons\INV_Misc_Key_03]],
+        icon = R.PATH .. [[media\textures\attune-broker]],
         OnClick = B.Toggle,
         OnTooltipShow = function(tip)
             tip:AddLine("Attune", 1, 1, 1)

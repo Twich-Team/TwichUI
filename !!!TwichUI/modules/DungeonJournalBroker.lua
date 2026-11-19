@@ -13,7 +13,7 @@ local B = {}
 R.DungeonJournalBroker = B
 
 local NAME = "TwichUI Dungeon Journal"
-local ICON = R.PATH .. [[media\textures\dungeon-journal-broker]]   -- a leather-bound journal with a gate (64 x 64)
+local ICON = R.PATH .. [[media\textures\dungeon-journal-broker]]   -- supplied book with a gate (64 x 64)
 local obj
 local loggedIn = false
 
