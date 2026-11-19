@@ -171,14 +171,15 @@ end
 ---------------------------------------------------------------------------
 -- Editing. Each returns true (or the new node) or false and a reason; a refused edit changes nothing.
 ---------------------------------------------------------------------------
--- New conditions start on the careful side: "is not" for the yes/no facts, Poor to Common for quality.
+-- New conditions start on the careful side: "is not" for what can be proven false, Poor to Common for quality. A
+-- known reagent or recipe material can only be confirmed, never ruled out (marking has no "not on the list"
+-- evidence), so those start as "is".
 local function Make(key)
     if key == "all" or key == "any" then return { type = "group", match = key, children = {} } end
     if key == "kind" then return { type = "kind", value = "gear" } end
     if key == "quality" then return { type = "quality", min = 0, max = 1 } end
-    if key == "wearable" or key == "upgrade" or key == "classReagent" or key == "profession" then
-        return { type = key, value = false }
-    end
+    if key == "wearable" or key == "upgrade" then return { type = key, value = false } end
+    if key == "classReagent" or key == "profession" then return { type = key, value = true } end
 end
 S.Make = Make
 
@@ -235,6 +236,25 @@ function S.Shift(node, delta)
     if to < 1 or to > #parent.children then return false, REFUSE.place end
     -- Move takes the slot as it is before the node is lifted out.
     return S.Move(node, parent, delta > 0 and to + 1 or to)
+end
+
+-- "Top level" or "Group 2": the same numbering the Move menu uses, counted down the tree.
+function S.GroupLabel(group)
+    if not st then return "" end
+    if group == st.draft.tree then return "Top level" end
+    local count, found = 0, nil
+    local function Walk(n)
+        for _, c in ipairs(n.children or {}) do
+            if c.type == "group" then
+                count = count + 1
+                if c == group then found = count; return end
+                Walk(c)
+                if found then return end
+            end
+        end
+    end
+    Walk(st.draft.tree)
+    return found and ("Group " .. found) or "Top level"
 end
 
 -- Groups a condition could move into, with a readable label, for the Move menu.
@@ -316,6 +336,33 @@ function S.Set(node, field, value)
     return true
 end
 
+-- Examples that fill an empty rule. Each is an ordinary tree the player can then change.
+S.TEMPLATES = {
+    { key = "poorGear", name = "Poor-quality gear", blurb = "Gear of Poor quality." },
+    { key = "oldGear", name = "Gear that is not an upgrade", blurb = "Poor to Uncommon gear that will not improve what you wear." },
+    { key = "materials", name = "Vendor materials", blurb = "Trade goods and reagents." },
+    { key = "recipes", name = "Common recipes", blurb = "Poor and Common recipes." },
+}
+local TEMPLATE_TREE = {
+    poorGear = function() return { type = "group", match = "all", children = { { type = "kind", value = "gear" }, { type = "quality", min = 0, max = 0 } } } end,
+    oldGear = function() return { type = "group", match = "all", children = { { type = "kind", value = "gear" }, { type = "quality", min = 0, max = 2 }, { type = "upgrade", value = false } } } end,
+    materials = function() return { type = "group", match = "all", children = { { type = "kind", value = "materials" } } } end,
+    recipes = function() return { type = "group", match = "all", children = { { type = "kind", value = "recipes" }, { type = "quality", min = 0, max = 1 } } } end,
+}
+-- Only into an empty rule, so nothing the player built is replaced.
+function S.Template(key)
+    if not st then return false, REFUSE.closed end
+    local make = TEMPLATE_TREE[key]
+    if not make or #st.draft.tree.children > 0 then return false, REFUSE.place end
+    local before = Snap()
+    st.draft.tree = make()
+    st.target = {}
+    local base = ({ poorGear = "Poor-quality gear", oldGear = "Gear that is not an upgrade", materials = "Vendor materials", recipes = "Common recipes" })[key]
+    if st.draft.name == nil or st.draft.name == "New rule" then st.draft.name = base end
+    Remember(before)
+    return true
+end
+
 function S.SetName(text)
     if not st or type(text) ~= "string" then return false, REFUSE.closed end
     text = text:gsub("[%c|]", ""):sub(1, 60):gsub("[\192-\255][\128-\191]*$", "")
@@ -376,6 +423,23 @@ function S.Save()
     st.baseline = L().JunkRules()
     st.saved, st.new, st.undo, st.redo = Snap(), false, {}, {}
     Changed()
+    return true
+end
+
+-- Switch a saved rule on or off from the list, at once: an explicit change to the saved rule, like a Reminders row.
+-- A rule open in the editor takes the new state without counting as an edit, and the list is re-read so the draft
+-- can still be saved.
+function S.ToggleSaved(index, on)
+    if type(on) ~= "boolean" then return false, REASON.invalid end
+    local ok, why = L().SetJunkRule(index, "on", on)
+    if not ok then return false, REASON[why] or REASON.invalid end
+    if st then
+        st.baseline = L().JunkRules()
+        if st.index == index and not st.new then
+            st.saved.on, st.draft.on = on, on
+            Changed()
+        end
+    end
     return true
 end
 

@@ -178,7 +178,13 @@ end
 -- state "empty" | "unreadable" | "unavailable" | "ok". When ok: item, verdict ("protected", "blocked", "class",
 -- "match", "nomatch", "unknown"), trace (node -> "yes"/"no"/"unknown"), why (never, cozy, mage, restock), block
 -- (locked, quest, unknown), advice (the Advisor's action), vendor, reserved, touched, marker, wanted.
+local Inspect
 function J.Inspect(bag, slot, rule)
+    local Perf = R.Perf
+    if Perf and Perf.Call then return Perf.Call("workshop.junkTest", Inspect, bag, slot, rule) end
+    return Inspect(bag, slot, rule)
+end
+function Inspect(bag, slot, rule)
     local out = {bag = bag, slot = slot, state = "unavailable"}
     if not Bags() or not rule or not rule.tree then return out end
     Learn()
@@ -264,7 +270,9 @@ function J.Survey(rule, done)
     end)
     local function Step()
         if mine ~= surveyToken then return end
+        local pt = R.Perf and R.Perf.on and R.Perf.Start("workshop.junkTest")
         local ok, result = coroutine.resume(job)
+        if pt then R.Perf.Stop(pt) end
         if not ok then if R.Fault then R.Fault("workshop.junk", result) end; done({unavailable = true}); return end
         if coroutine.status(job) == "dead" then done(result) else C_Timer.After(0, Step) end
     end

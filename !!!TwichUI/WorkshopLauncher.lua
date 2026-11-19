@@ -361,6 +361,11 @@ function T.Summary(tree)
     local text=Clause(tree,false)
     return "Mark an item as junk when "..text.."."
 end
+-- Conditions that cannot be satisfied today: marking reads "a known reagent for my class" and "used by a recipe I
+-- know" only as confirmed (true) or unknown, never as proven false. The editor says so instead of hiding it.
+T.NEVER={classReagent="TwichUI can confirm an item is on this list, never that it is not, so \"is not\" never matches.",
+    profession="TwichUI can confirm an item is used by a recipe you know, never that it is not, so \"is not\" never matches."}
+function T.Never(n) return n.value==false and T.NEVER[n.type] or nil end
 -- What stops a rule from being switched on: nothing in it, or a group with nothing in it (it never matches).
 function T.Problems(tree)
     local out={}

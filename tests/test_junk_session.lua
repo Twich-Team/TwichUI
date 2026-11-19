@@ -33,7 +33,7 @@ assert(not S.Save() == false or true)
 local gear=assert(S.Add('kind'));assert(gear.value=='gear')
 local quality=assert(S.Add('quality'));assert(quality.min==0 and quality.max==1)
 for _,key in ipairs({'wearable','upgrade','classReagent','profession'}) do
-    local n=assert(S.Add(key));assert(n.type==key and n.value==false,key..' starts on the careful side')
+    local n=assert(S.Add(key));assert(n.type==key and n.value==(key=='classReagent' or key=='profession'),key..' starts on the careful side')
     assert(S.Remove(n))
 end
 assert(S.Dirty() and S.CanUndo())
@@ -180,6 +180,15 @@ assert(S.BeginNew('x') and S.Delete() and #L.JunkRules()==2,'deleting an unsaved
 local list=S.Rows();assert(#list==2 and list[1].name=='Source' and list[1].brief=='It is Gear')
 -- eight rules is the maximum
 Reset(8);assert(not S.BeginNew('nine') and not L.DuplicateJunkRule(1))
+-- switching a saved rule from the list
+Reset(2);S.Begin(1);S.Add('kind');assert(S.Save());S.Cancel()
+assert(S.ToggleSaved(1,true) and L.JunkRules()[1].on==true,'list switch saves at once')
+local okT,whyT=S.ToggleSaved(2,true);assert(not okT and whyT:find('Add a condition') and L.JunkRules()[2].on==false,'an empty rule cannot be switched on from the list either')
+assert(S.Begin(1));S.SetName('Mid-edit');assert(S.Dirty())
+assert(S.ToggleSaved(1,false) and S.On()==false and L.JunkRules()[1].on==false and S.Dirty(),'the open rule takes the switch without losing its other edits')
+assert(S.Save() and L.JunkRules()[1].name=='Mid-edit' and L.JunkRules()[1].on==false,'and can still be saved afterwards')
+assert(S.Begin(1));S.SetName('Again');assert(S.ToggleSaved(2,false));assert(S.Save(),'toggling another rule does not make this draft stale');S.Cancel()
+assert(not S.ToggleSaved(1,'yes'))
 ---------------------------------------------------------------- legacy and malformed data
 Reset(0)
 db.ui.workshopJunk.rules={v=1,rows={{kind='gear',on=true,match='all',qualityMin=0,qualityMax=2,wearable='any',upgrade='no',classReagent='any',profession='any'}}}

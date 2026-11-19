@@ -864,38 +864,76 @@ if key=="workshop" and params.editor then
     end)
 end
 if key=="junkMarking" and params.editor then
-    Lab.Step("junk rule draft editor",function()
-        local P,L=R.WorkshopJunkRulesSettings,R.WorkshopLauncher
-        local count=#L.JunkRules()
-        local f=P.Frame()
-        f.rows[1]:Click()
-        Lab.Check("interact","rule list opens a draft",true,P.Draft()~=nil)
-        P.Add("quality");P.Set("qualityMax",1)
-        Lab.Check("state","condition draft leaves saved rule unchanged",5,L.JunkRules()[1].qualityMax)
-        f.cancel:Click()
-        Lab.Check("interact","Cancel discards draft",nil,P.Draft())
-        P.New("poor")
-        Lab.Check("state","template starts off",false,P.Draft().on)
-        Lab.Check("state","template is not saved yet",count,#L.JunkRules())
-        f.save:Click()
-        Lab.Check("interact","Save creates one rule",count+1,#L.JunkRules())
-        L.RemoveJunkRule(count+1)
-        P.New("custom")
-        P.Set("name","Low quality OR non-upgrade gear")
-        local root=P.Root()
-        local alternatives=P.Insert("any",root)
-        local gear=P.Insert("all",alternatives)
-        local item=P.Insert("kind",gear);item.value="gear"
-        local quality=P.Insert("quality",gear);quality.max=2
-        local other=P.Insert("all",alternatives)
-        local item2=P.Insert("kind",other);item2.value="gear"
-        local upgrade=P.Insert("upgrade",other);upgrade.value=false
-        P.Refresh()
-        Lab.Check("interact","condition can move between groups",true,P.Move(quality,other,1))
-        Lab.Check("interact","condition can move back",true,P.Move(quality,gear,2))
-        Lab.Check("state","nested groups remain draft only",count,#L.JunkRules())
-        Lab.Check("construct","nested editor root visible",true,f.nodes[1]:IsShown())
-        Lab.Check("interact","Save button can be revealed",true,R.SettingsUI.RevealFrame(f.save))
+    -- The rule builder over synthetic saved rules and a synthetic bag. Handler-level input; the item test uses the
+    -- real evaluator (JunkJudge and its trace) over fixture facts, because the Workshop addon is not loaded here.
+    local pose=type(params.editor)=="string" and params.editor or "simple"
+    Lab.Step("junk rule builder: "..pose,function()
+        local B,S,L=R.JunkBuilder,R.JunkSession,R.WorkshopLauncher
+        local function Group(match,...) return {type="group",match=match,children={...}} end
+        while #L.JunkRules()>0 do L.RemoveJunkRule(1) end
+        local function Save(name,on,tree)
+            local rule=L.NewJunkRule(name);rule.on=on;rule.tree=tree
+            assert(L.SaveJunkRule(#L.JunkRules()+1,rule,L.JunkRules()))
+        end
+        Save("Poor-quality gear",true,Group("all",{type="kind",value="gear"},{type="quality",min=0,max=0}))
+        Save("Gear that is not an upgrade",true,Group("all",{type="kind",value="gear"},{type="quality",min=0,max=2},{type="upgrade",value=false}))
+        Save("Poor or Common gear",true,Group("all",{type="kind",value="gear"},Group("any",{type="quality",min=0,max=0},{type="quality",min=1,max=1})))
+        Save("Spare materials",false,Group("all",{type="kind",value="materials"},{type="profession",value=true}))
+        L.SetJunkIgnored(2589,true);L.SetJunkIgnored(2592,true)
+        -- the item test, over a synthetic bag
+        local items={
+            {id=4306,name="Silk Cloth",icon=132905,class=7,quality=1,facts={profession=true}},
+            {id=2589,name="Linen Cloth",icon=132905,class=7,quality=1,facts={}},
+            {id=1625,name="Worn Leather Boots",icon=132537,class=4,quality=1,facts={upgrade=false,wearable=true}},
+        }
+        R.Workshop={Junk={Start=function() end,
+            Find=function(id) for i,x in ipairs(items) do if x.id==id then return {bag=0,slot=i} end end end,
+            Inspect=function(bag,slot,rule)
+                local x=items[slot];if not x then return {state="empty"} end
+                x.facts.quality=x.quality
+                local out={state="ok",bag=bag,slot=slot,item={id=x.id,name=x.name,icon=x.icon,count=1},quality=x.quality,class=x.class,facts=x.facts,wanted=true,touched=false}
+                local trace={}
+                out.verdict=L.JunkJudge(x.id,x.class,x.facts,{rule},trace)
+                out.trace=trace;out.why=L.JunkIgnored(x.id) and "never" or nil
+                out.vendor=true;out.advice="vendor";out.reserved=0;out.marker="markable"
+                return out
+            end,
+            Survey=function(rule,done) done({items=3,match=1,protected=1,unknown=0,blocked=0,names={"Worn Leather Boots"}}) end,
+        }}
+        R.WorkshopJunkSettings.Entries=function() local out={} for i,x in ipairs(items) do out[i]={id=x.id,name=x.name,icon=x.icon,bag=0,slot=i} end return out end
+        local escape=R.SettingsUI
+        Lab.Check("interact","the page opens the builder",true,(function() R.SettingsKit.RefreshOverview();return B.Open(pose=="nested" and 3 or (pose=="tested" or pose=="nomatch" or pose=="protected") and 2 or 1) end)())
+        Lab.Check("construct","builder window is shown",true,B.Shown())
+        Lab.Check("construct","rail lists the saved rules",4,#S.Rows())
+        if pose=="nested" then
+            Lab.Check("state","nested rule has a group",true,S.Tree().children[2].type=="group")
+            Lab.Check("state","its sentence is the saved tree",S.Summary(),"Mark an item as junk when it is Gear and (its quality is Poor or its quality is Common).")
+        elseif pose=="list" then
+            Lab.Check("interact","New rule starts an empty unsaved rule",true,(function() B.New();return S.IsNew() and #S.Tree().children==0 end)())
+            Lab.Check("state","the new rule is not saved",4,#L.JunkRules())
+            Lab.Check("state","an empty rule cannot be switched on",false,(S.SetOn(true)))
+        elseif pose=="tested" then
+            Lab.Check("interact","an item is tested",true,(function() B.TestSlot(0,3);return B.Frame().strip.result:GetText()~=nil end)())
+            B.Survey()
+        elseif pose=="nomatch" then
+            Lab.Check("interact","a non-matching item is tested",true,(function() B.TestSlot(0,1);return B.Frame().strip.result:GetText()=="Does not match" end)())
+        elseif pose=="protected" then
+            Lab.Check("interact","a never-mark item is reported as protected",true,(function() B.TestSlot(0,2);return B.Frame().strip.result:GetText():find("Protected")~=nil end)())
+        elseif pose=="build" then
+            -- edit through the same handlers the buttons and menus call
+            B.New()
+            local root=S.Tree()
+            B.Do(S.Add("kind"))
+            local any=S.Add("any");B.Do(any)
+            S.Add("quality",any);S.Add("quality",any)
+            S.Set(any.children[1],"min",0);S.Set(any.children[1],"max",0);S.Set(any.children[2],"min",1);S.Set(any.children[2],"max",1)
+            Lab.Check("state","built nested rule saved nothing yet",4,#L.JunkRules())
+            Lab.Check("state","built sentence",S.Summary(),"Mark an item as junk when it is Gear and (its quality is Poor or its quality is Common).")
+            Lab.Check("interact","switch on",true,(S.SetOn(true)))
+            Lab.Check("interact","Save",true,(B.Save()))
+            Lab.Check("state","Save stored one rule",5,#L.JunkRules())
+        end
+        B.Refresh()
         Lab.Settle(.2)
     end)
 end

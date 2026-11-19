@@ -14,25 +14,43 @@ Vendor. Locked, quest, incomplete, never-sell and restock-protected copies preve
 marking that ID. Unknown prices retain the Advisor's existing known-option policy;
 this feature adds no new sale-value calculation or posting quote.
 
-**Junk marking** (its own All features card) is a dedicated settings page with a split rule list
-and focused editor, following Loot Rolls, Magic Inventory and Reminders. Choose
-a named rule or start a disabled template, select an illustrated item type, and
-add/remove only the conditions you need. A live sentence explains All/Any logic.
-Save commits the whole draft once; Cancel, closing the page and profile changes
-discard it. Drafts refuse to overwrite or delete externally changed rules.
-The page includes illustrated item categories,
-a master switch, up to eight editable rules, and the Never mark picker. Each
-rule contains a nested AND/OR tree: drag conditions from the palette into groups,
-reorder conditions or whole groups with insertion markers, or use group + and
-Move menus. Item type is a condition, so one rule can combine different item
-types. Quality ranges, wearable-now requirements, estimated upgrades, known class
-reagents and remembered-recipe use are leaves. Trees allow 32 nodes and four
-levels; empty groups never match. Click Add here to select a destination group. Any enabled matching rule permits the existing Advisor
-Vendor decision; no rule forces a sale recommendation. Unknown facts cannot satisfy negative conditions. New OR groups can match when
-another branch is fully proven; AND groups require all children. Migrated flat
-filter groups retain their previous stricter unknown behavior until their group
-logic is deliberately edited. Cozy Sleeping Bag, quest items,
-keys and Never mark IDs always veto marking.
+**Junk marking** (its own All features card) is a settings page with three sections: the master switch and
+Item Advisor service, **Marking rules** (a count and **Open the rule builder**) and **Protections** (the Never mark
+picker and list). The rules are built in a workspace of their own, a sibling of the Reminders "When" builder
+(`TwichUI_Settings/pages/JunkBuilder.lua`; model `JunkSession.lua`): a rail of saved rules with New rule, a
+searchable catalog of every supported condition (Item type, Quality range, Wearable now, Gear upgrade, Class reagent,
+Recipe material, All-of and Any-of groups), the rule drawn as cards and nested groups under "Mark an item as junk
+when", a plain-language sentence built from the saved tree, and a **Try an item** strip over Undo, Redo, Cancel and
+Save. A rule is a draft until Save: Cancel restores the saved rule, switching rules or closing with unsaved changes
+asks first, Duplicate makes an unsaved disabled copy of the rule on screen, and Delete confirms. Drafts refuse to
+overwrite or delete externally changed rules. Up to eight rules; **order has no meaning**: any enabled matching
+rule permits marking. Rule edits persist the same bounded version-2 rows as before (no schema change).
+
+Each rule is a nested AND/OR tree of 32 nodes and four levels. Click a condition (it goes to the highlighted group,
+chosen with that group's **Add a condition** button) or drag it onto a group or a card edge; the same moves exist in
+every card's More menu (move up/down, into any other group, duplicate, remove), so dragging is never required.
+Empty groups never match, and **an empty rule never marks anything**: a new rule starts off and empty, and a rule with
+nothing in it or an empty group cannot be switched on (refused centrally in `SaveJunkRule` and `SetJunkRule`, not just
+by a disabled control; saved while off, an unfinished rule marks nothing). New conditions start on the careful side
+("is not an upgrade", "can't be worn", Poor to Common). A known reagent or recipe material can only be confirmed,
+never ruled out, so those start as "is" and "is not" is labelled "never matches". Unknown facts cannot satisfy a
+condition; an OR group can still match when another branch is fully proven, and AND groups need every child.
+Migrated flat "all" filters now sit beside the item type in one list (same answer); migrated "any" filters keep their
+stricter unknown behavior in their own group.
+
+**Try an item** reads one bag item through the production reader (`TwichUI_Workshop/Junk.lua`: `Gather`, `Advise`,
+`WorkshopLauncher.JunkJudge`) and writes nothing: no mark, no timer, no saved data. It shows four answers: Matches this rule,
+Does not match, Protected (never marked), or Cannot determine, with the reason, and each card shows Met, Not met or
+Can't tell from the same evaluator's trace. It also reports what Workshop recommends and whether the item is
+reserved for crafting or was unmarked by hand. **Check my bags** counts the distinct bag items a rule would pick out,
+once, in slices of 30 slots, only on request. Both need Item Advisor loaded.
+
+**Precedence (unchanged by the builder).** A rule only names candidates. In order: the Cozy Sleeping Bag and the Never
+mark list, then Mage Sell and restocking protections; any locked, quest or not-yet-loaded copy of the item ID; quest
+items and keys by class; then the rules (`JunkJudge`: protected, class, then match, no match or unknown); then
+Workshop must recommend Vendor for every carried copy, the item must not be reserved for crafting or unmarked by hand
+this session, and EllesmereUI must not have it filed in a category of its own. Matching a rule never overrides an
+earlier step.
 
 Templates (poor gear, uncommon-or-lower non-upgrades, materials, common recipes,
 and custom) start disabled for review. Existing type switches become equivalent
