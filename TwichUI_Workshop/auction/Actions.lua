@@ -64,7 +64,7 @@ local function StopTimer() if timeout then timeout:Cancel();timeout=nil end end
 -- A completed purchase is evidence for the gold ledger (the core's auction/Ledger.lua): that exactly this amount left, once.
 -- It never records money itself; the ledger attaches it only to a balance change of exactly this amount. A commodity total is
 -- the reviewed estimate, so a purchase whose real price differs simply stays unclassified there. Postings, cancellations and
--- every other outcome report nothing: they are not purchases, and a posting is never revenue.
+-- every other outcome are not purchases; deposit/cancellation evidence uses LedgerAuction's exact targets instead.
 local function Report(p)
     local L=R.Ledger
     local total=p and Int(p.total,1)
@@ -75,6 +75,7 @@ local function Report(p)
 end
 local function Finish(state,message)
     StopTimer();Listen(false)
+    if state~="complete" and ticket and ticket.ledger and R.AuctionLedger then R.AuctionLedger.Abort(ticket.ledger) end
     T.state,T.message=state,message
     if state=="complete" and ticket and (ticket.kind=="buyItem" or ticket.kind=="buyCommodity") then Report(ticket) end
     T.last=ticket and {id=ticket.id,kind=ticket.kind,visit=ticket.visit,item=ticket.item,quantity=ticket.quantity,total=ticket.total,
@@ -404,7 +405,16 @@ local function Wait(p,state)
 end
 local function Send(p,fn,...)
     Wait(p,"waiting") -- synchronous native responses must already have an owner
+    local audit=R.AuctionLedger
+    if audit and (p.kind=="postItem" or p.kind=="postCommodity" or p.kind=="cancel") then
+        local visit=p.visit
+        p.ledger=audit.Begin(p.kind,p.kind=="cancel" and p.cost or p.deposit,p.item,p.quantity,p.auctionID,function()
+            return W.Active() and R.AuctionHost.IsCurrent(visit) and not InCombatLockdown()
+        end)
+    end
+    if audit then audit.Sending(p.ledger,true) end
     sending=true;local ok,result=pcall(fn,...);sending=false
+    if audit then audit.Sending(p.ledger,false) end
     if not ok then
         if p.kind=="buyCommodity" and p.phase=="quote" then
             StopTimer();T.state="review";p.retry=true
@@ -480,7 +490,10 @@ function T.Confirm(id,consent)
         local sent,warning
         if p.kind=="postCommodity" then sent,warning=Send(p,fn,p.location,p.duration,p.quantity,p.unit)
         else sent,warning=Send(p,fn,p.location,p.duration,p.quantity,nil,p.unit) end
-        if sent and warning and ticket==p then T.state="native-warning";T.message="Review and accept the game's native posting warning.";Notify() end
+        if sent and warning and ticket==p then
+            if R.AuctionLedger then R.AuctionLedger.Warning(p.ledger) end
+            p.ledger=nil;T.state="native-warning";T.message="Review and accept the game's native posting warning.";Notify()
+        end
         return sent
     end
 end
@@ -503,14 +516,19 @@ function T.Event(event,a,b)
     elseif event=="COMMODITY_PURCHASE_SUCCEEDED" and p.kind=="buyCommodity" and p.phase=="purchase" and T.state=="waiting" then
         Finish("complete","Purchase complete. Your items will arrive by mail.")
     elseif event=="AUCTION_CANCELED" and p.kind=="cancel" and a==p.auctionID and T.state=="waiting" then
+        if R.AuctionLedger then R.AuctionLedger.Complete(p.ledger,a) end
         Finish("complete","Auction cancelled. Your items will be returned by mail.")
     elseif event=="AUCTION_HOUSE_AUCTION_CREATED" and (p.kind=="postItem" or p.kind=="postCommodity") and T.state=="waiting" then
         local id=Int(a,1,9007199254740991)
         if id then p.created=p.created or {};p.created[id]=true end
         -- Creation has no request token; multiple item postings require their
         -- multisell completion rather than assuming the first ID means all posted.
-        if p.kind=="postCommodity" or p.quantity==1 then Finish("complete","Auction posted. View it under My Auctions.") end
+        if p.kind=="postCommodity" or p.quantity==1 then
+            if R.AuctionLedger then R.AuctionLedger.Complete(p.ledger,a) end
+            Finish("complete","Auction posted. View it under My Auctions.")
+        end
     elseif event=="AUCTION_MULTISELL_UPDATE" and p.kind=="postItem" and T.state=="waiting" and a==p.quantity and b==p.quantity then
+        if R.AuctionLedger then R.AuctionLedger.Complete(p.ledger,nil,a,b) end
         Finish("complete","All reviewed auctions were posted. View them under My Auctions.")
     elseif (event=="COMMODITY_PRICE_UNAVAILABLE" or event=="COMMODITY_PURCHASE_FAILED") and p.kind=="buyCommodity" then
         RefreshBuy(p)

@@ -28,12 +28,15 @@ local function Ledger() return R.Ledger end
 LQ.LABELS = {
     ahSale = "Auction sales", mail = "Mail collected", ahBuy = "Auction purchases", other = "Unclassified",
     vendorBuy = "Vendor purchases", vendorSell = "Vendor sales", repair = "Repairs",
+    ahDeposit = "Auction deposits", ahCancelFee = "Cancellation fees",
 }
 LQ.ART = { ahSale = "npc:gavel", mail = "npc:sealed-scroll", ahBuy = "npc:reagent-pouch", other = "npc:coins" }
 LQ.ART.vendorBuy, LQ.ART.vendorSell, LQ.ART.repair = "npc:reagent-pouch", "npc:coins", "npc:hammer"
 -- The source a transaction row names: the single word for the table (a direction is the amount's sign).
 LQ.ROW_LABELS = { ahSale = "Auction Sale", mail = "Mail Collected", ahBuy = "Auction Purchase", other = "Unclassified" }
 LQ.ROW_LABELS.vendorBuy, LQ.ROW_LABELS.vendorSell, LQ.ROW_LABELS.repair = "Vendor Purchase", "Vendor Sale", "Repairs"
+LQ.ROW_LABELS.ahDeposit, LQ.ROW_LABELS.ahCancelFee = "Auction Deposit", "Auction Cancellation Fee"
+LQ.ART.ahDeposit, LQ.ART.ahCancelFee = "npc:gavel", "npc:coins"
 
 -- 1234567 -> "123g 45s 67c"; the leading zero units are left out, never the exact copper. signed: "+" for a gain.
 function LQ.Money(copper, signed)
@@ -258,16 +261,42 @@ function LQ.Note(row)
     local name = ItemName(row.item)
     if row.item then
         local base = name or ("Item " .. row.item)
-        if row.qty and row.qty > 1 and (row.code == "vendorBuy" or row.code == "vendorSell") then
+        if row.qty and row.qty > 1 and (row.code == "vendorBuy" or row.code == "vendorSell" or row.code == "ahDeposit" or row.code == "ahCancelFee") then
             return ("%s \195\151%d"):format(base, row.qty)
         end
         return row.qty and row.qty > 1 and ("%s (%d)"):format(base, row.qty) or base
     end
-    if row.note then return row.note end
+    if row.note then
+        return row.code == "ahSale" and row.qty and row.qty > 1 and ("%s \195\151%d"):format(row.note, row.qty) or row.note
+    end
     if row.code == "mail" then return "Money from the mailbox" end
     if row.code == "ahBuy" then return "Completed purchase" end
     if row.code == "ahSale" then return "Sale proceeds" end
     return "Gold balance change"
+end
+
+-- Settlement is descriptive metadata on the collected cash entry; these amounts never enter totals again.
+function LQ.AuctionDetails(row)
+    local lines = {}
+    if row.auction then lines[#lines + 1] = "Auction ID: " .. row.auction end
+    if row.code ~= "ahSale" then return lines end
+    lines[#lines + 1] = "Collected: " .. LQ.Money(row.a)
+    local L = Ledger()
+    local s = L and L.Settlement(row.settlement, row.a)
+    if not s then lines[#lines + 1] = "Fee unavailable"; return lines end
+    lines[#lines + 1] = "Gross sale: " .. LQ.Money(s.g)
+    lines[#lines + 1] = "Auction fee: " .. LQ.Money(s.f) .. " - verified invoice"
+    lines[#lines + 1] = "Returned deposit: " .. LQ.Money(s.d) .. " (included in collected)"
+    if #s.invoices > 1 then
+        lines[#lines + 1] = "Seller invoices: " .. #s.invoices
+        for i = 1, math.min(3, #s.invoices) do
+            local r = s.invoices[i]
+            local name = r.n or "Sold item"
+            if r.q and r.q > 1 then name = ("%s \195\151%d"):format(name, r.q) end
+            lines[#lines + 1] = name .. ": " .. LQ.Money(r.c)
+        end
+    end
+    return lines
 end
 
 -- The newest transactions of the window, newest first, at most `limit`. A k-way merge of the characters' journals (each is oldest
@@ -303,6 +332,7 @@ function LQ.Rows(filter, today, limit)
         local code = best.k or "other"
         if not filter.source or filter.source == code then
             local row = { id = best.id, t = best.t, a = best.a, code = code, item = best.i, qty = best.q, note = best.n, evidence = best.e,
+                settlement = best.s, auction = best.u,
                 attributed = best.k ~= nil, char = records[bi].name, key = records[bi].key, realm = records[bi].realm }
             row.text = LQ.Note(row)
             local keep = true

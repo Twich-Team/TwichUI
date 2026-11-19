@@ -56,6 +56,26 @@ end
 
 D.Register("lifecycle", { title = "Start-up and lifecycle", order = 12, snapshot = Lifecycle })
 
+-- Immediate read-only ledger evidence diagnostic. No capture session, history scan, item/name/ID or money export.
+D.Register("goldLedger", { title = "Gold Ledger evidence", order = 14, snapshot = function()
+    local L = R.Ledger
+    if not L then return { status = "unavailable", reason = "not-loaded" } end
+    local s, lines = L.Snapshot(), {}
+    lines[#lines + 1] = ("recording: %s; held: %s; journal entries: %d; pending evidence: %d"):format(D.Flag(s.active), D.Flag(s.held), s.entries, s.pending)
+    for _, spec in ipairs({ { "auction", R.AuctionLedger, { "pending", "blocked", "attributed", "noMoney", "mismatch", "ambiguous", "expired", "interrupted", "observerError" } },
+        { "mail", R.MailGold, { "waiting", "deferred", "ambiguous", "settlement", "unavailable" } },
+        { "vendor", R.VendorGold, { "candidates", "events", "attributed", "refused" } } }) do
+        local values = spec[2] and spec[2].Snapshot and spec[2].Snapshot()
+        if values then
+            local parts = {}
+            for _, key in ipairs(spec[3]) do parts[#parts + 1] = key .. "=" .. tostring(values[key] or 0) end
+            lines[#lines + 1] = spec[1] .. ": " .. table.concat(parts, "; ")
+        end
+    end
+    return { status = s.active and "ready" or "unavailable", reason = s.held and "future-schema" or nil, lines = lines,
+        limits = { "Session counters only; no item, auction/mail/character IDs, counterparties, subject text or copper values. Native acceptance remains deferred." } }
+end })
+
 -- Host retains the last opening automatically, including failures before a
 -- Diagnostics capture starts. No additional load, probing procedure or timer.
 D.Register("auctionPresentation", { title = "Auction House presentation", order = 13, snapshot = function()

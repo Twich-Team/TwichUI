@@ -413,6 +413,7 @@ auction\Window.lua
 auction\Host.lua
 # The gold ledger's recorder: gold gained and spent, kept while the Workshop is on, even with the Workshop not loaded (auction\Ledger.lua; docs/workshop/gold-ledger.md)
 auction\Ledger.lua
+auction\LedgerAuction.lua
 # Mailbox gold summary: one chat line per mailbox visit, and exact evidence for the ledger (auction\Mail.lua)
 auction\Mail.lua
 # Merchant evidence only; Ledger.lua remains the sole money recorder.

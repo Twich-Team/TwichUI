@@ -96,10 +96,30 @@ for _,kind in ipairs({"missing-launcher","missing-dependency","load-false","load
     if kind~="show-false" and kind~="show-throw" and kind~="close-showing" then Same(t.nativeMutations or 0,0,"preflight before native geometry: "..kind) end
 end
 
-for _,event in ipairs({"AUCTION_HOUSE_CLOSED","AUCTION_HOUSE_DISABLED","PLAYER_LEAVING_WORLD","PLAYER_LOGOUT","UI_SCALE_CHANGED","DISPLAY_SIZE_CHANGED","ADDON_LOADED"}) do
+for _,event in ipairs({"AUCTION_HOUSE_CLOSED","AUCTION_HOUSE_DISABLED","PLAYER_LEAVING_WORLD","PLAYER_LOGOUT","UI_SCALE_CHANGED","DISPLAY_SIZE_CHANGED"}) do
     local t=Setup();t.Start();t.c.FireEvent(event);t.Restored()
     Same(t.R.Workshop.AuctionUI.IsShown(),false,event)
     Same(t.H.Snapshot().pending,0,event)
+end
+-- Background and tooltip-triggered lazy loads are not a presentation failure.
+-- The integrated window has no proof-mode 30-second lifetime.
+for _,addon in ipairs({"Blizzard_ProfessionsBook","Blizzard_ItemInteractionUI","TwichUI_MarketData"}) do
+    local t=Setup();t.Start()
+    t.now=120;t.Tick();Same(t.H.Snapshot().state,"twichui","idle visit stays open")
+    local writes=t.mutations
+    t.c.LOADED[addon]=true;t.c.FireEvent("ADDON_LOADED",addon)
+    t.Tick()
+    Same(t.H.Snapshot().state,"twichui","unrelated lazy load: "..addon)
+    Same(t.R.Workshop.AuctionUI.IsShown(),true)
+    Same(t.mutations,writes,"no native restoration for unrelated loads")
+end
+for _,change in ipairs({"auction-addon","native-root"}) do
+    local t=Setup();t.Start()
+    if change=="auction-addon" then t.c.LOADED.Auctionator=true
+    else t.c.AuctionHouseFrame=t.Frame(t.c.UIParent) end
+    t.c.FireEvent("ADDON_LOADED",change=="auction-addon" and "Auctionator" or "Blizzard_AuctionHouseUI")
+    Same(t.H.Snapshot().leased,false,"addon-load recovery remains: "..change)
+    Same(t.R.Workshop.AuctionUI.IsShown(),false)
 end
 do
     local t=Setup();t.Start();Same(t.H.Control():IsVisible(),false,"healthy integration hides the duplicate control")

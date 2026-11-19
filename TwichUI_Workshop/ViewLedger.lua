@@ -47,7 +47,7 @@ local CARD_DEFS = {
     { key = "attrIn", title = "Attributed Income", art = "npc:gavel",
       tip = "Mailbox money, auction-sale invoices and verified vendor sales, matched to the exact gold received." },
     { key = "attrOut", title = "Attributed Spending", art = "npc:hammer",
-      tip = "Auction purchases, verified vendor purchases and player-paid repairs, matched to the exact gold spent." },
+      tip = "Auction purchases, verified posting deposits and cancellation fees, vendor purchases and player-paid repairs, matched to the exact gold spent." },
     { key = "unk", title = "Unclassified", art = "npc:sealed-scroll",
       tip = "Gold that moved with nothing to say why: loot, quests, uncertain merchant activity, trades, postage and more. It is kept, never hidden. The figure is its net." },
 }
@@ -354,6 +354,7 @@ local function RowTip(self)
     GameTooltip:AddLine("Source: " .. LQ.ROW_LABELS[d.code] .. (d.attributed and " (confirmed)" or " (not identified)"), K.text[1], K.text[2], K.text[3])
     local words = R.Ledger and R.Ledger.EVIDENCE and R.Ledger.EVIDENCE[d.evidence or "balance"]
     if words then GameTooltip:AddLine(words, K.textDim[1], K.textDim[2], K.textDim[3], true) end
+    for _, line in ipairs(LQ.AuctionDetails(d)) do GameTooltip:AddLine(line, K.text[1], K.text[2], K.text[3], true) end
     if filter.scope == "all" and d.char then GameTooltip:AddLine("Character: " .. d.char, K.stone[1], K.stone[2], K.stone[3]) end
     GameTooltip:Show()
 end
@@ -372,6 +373,7 @@ local function MakeRow(parent)
     row.src = UI.Text(row, 12, K.text)
     row.src:SetPoint("LEFT", row.srcIcon, "RIGHT", 6, 0)
     row.src:SetWidth(112)
+    row.src:SetHeight(ROW_H - 2)
     row.itemIcon = row:CreateTexture(nil, "ARTWORK")
     row.itemIcon:SetSize(16, 16)
     row.itemIcon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
@@ -387,6 +389,7 @@ local function MakeRow(parent)
         self.time:SetText(date("!%b %d  %H:%M", d.t))
         UI.Art(self.srcIcon, LQ.ART[d.code] or LQ.ART.other, 18)
         self.src:SetText(LQ.ROW_LABELS[d.code])
+        self.src:SetWordWrap(d.code == "ahCancelFee")
         UI.Paint(self.src, d.attributed and K.text or K.textDim)
         self.note:ClearAllPoints()
         local x = 232
