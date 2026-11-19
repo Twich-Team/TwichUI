@@ -27,7 +27,7 @@ SHOPPING, VENDOR, OPPS = "TwichUI_Workshop/Shopping.lua", "TwichUI_Workshop/Vend
 
 # `--broad` re-runs a SURVIVOR against these older, broader Workshop tests to say whether anything else notices it (the mutation still counts as
 # a survivor of its focused tests; the note only tells you where the gap is). The default run never uses them.
-SUITE = {"targets": ("TwichUI_Workshop/", "!!!TwichUI/WorkshopAuto.lua", "!!!TwichUI/WorkshopLauncher.lua", "!!!TwichUI/auction/Ledger.lua", "!!!TwichUI/auction/Mail.lua", "!!!TwichUI/auction/Vendor.lua", "!!!TwichUI/modules/Restock.lua"), "broad_tests": ("test_workshop_market.lua", "test_workshop_prices.lua", "test_workshop_shopping.lua", "test_workshop_storage.lua", "test_workshop.lua")}
+SUITE = {"targets": ("TwichUI_Workshop/", "!!!TwichUI/WorkshopAuto.lua", "!!!TwichUI/WorkshopLauncher.lua", "!!!TwichUI/auction/Ledger.lua", "!!!TwichUI/auction/LedgerAuction.lua", "!!!TwichUI/auction/Mail.lua", "!!!TwichUI/auction/Vendor.lua", "!!!TwichUI/modules/Restock.lua"), "broad_tests": ("test_workshop_market.lua", "test_workshop_prices.lua", "test_workshop_shopping.lua", "test_workshop_storage.lua", "test_workshop.lua")}
 
 MUTATIONS = []
 
@@ -1319,6 +1319,35 @@ m("ledger.vendor.target-reuse", LEDGER, 'if slot.e.k or slot.e.a ~= ev.amount th
   "the same journal target can move into source totals twice with different correlation IDs", [VTEST])
 m("ledger.vendor.late-timer", VENDOR, 'or now >= c.expires', '',
   "an overdue settle callback claims money after the request expired during a stalled frame", [VTEST])
+
+AU, AUTEST, ST = "!!!TwichUI/auction/LedgerAuction.lua", "test_ledger_auction.lua", "test_ledger_settlement.lua"
+m("ledger.auction.completion", AU, '    if not p.complete then return end\n', '',
+  "a matching debit is called a deposit before posting completion", [AUTEST])
+m("ledger.auction.quote", AU, 'e.a ~= -p.cost', 'false',
+  "a changed posting charge is accepted against the reviewed deposit", [AUTEST])
+m("ledger.auction.foreign", AU, 'pending and sending ~= pending', 'false',
+  "a foreign native operation supplies a competing charge or completion", [AUTEST])
+m("ledger.auction.cursor", AU, 'char = key, entry = rec.nextId,', 'char = key, entry = rec.nextId - 1,',
+  "a successful post without a debit steals earlier equal-amount spending", [AUTEST])
+m("ledger.auction.cancel-id", AU, 'if auction ~= token.auction then return false end', 'if false then return false end',
+  "another auction ID completes the cancellation fee", [AUTEST])
+m("ledger.auction.multisell", AU,
+  'if Int(created, 1) ~= token.qty or Int(total, 1) ~= token.qty then return false end', 'if false then return false end',
+  "an inconsistent multisell count claims the whole reviewed deposit", [AUTEST])
+m("ledger.auction.warning", AU, 'else Clear() end -- a warning is not a posting', 'else token.complete = true end -- a warning is not a posting',
+  "a pending warning keeps a stale money correlation instead of restarting on acceptance", [AUTEST])
+m("ledger.settlement.equation", LEDGER, 'or g + d - f ~= c', '',
+  "an inconsistent seller breakdown is displayed as verified", [ST])
+m("ledger.settlement.fee-sum", LEDGER, 's[key] = s[key] + n', 's[key] = s[key] + (key == "f" and 0 or n)',
+  "commissions disappear when combined invoices are aggregated", [ST])
+m("ledger.settlement.bound", LEDGER, 'Lg.MAX_INVOICES = 8', 'Lg.MAX_INVOICES = 800',
+  "a collected batch can persist an unbounded invoice report", [ST])
+m("ledger.settlement.mixed", MAIL, 'if unique then Credit(gain, matched) end', 'if true then Credit(gain, matched) end',
+  "ambiguous equal payments or competing subsets are assigned an invoice", [ST])
+m("ledger.settlement.target", MAIL, 'entry = matched.entry, char = matched.char', 'entry = nil, char = nil',
+  "a payment the recorder refused borrows an older equal-amount movement", [ST])
+m("ledger.settlement.seller", MAIL, 'if kind ~= "seller" then return nil end', 'if kind == "buyer" then return nil end',
+  "refund-like or temporary invoices are called realized auction sales", [ST])
 
 m("market.junk.vendor-only", "TwichUI_Workshop/Junk.lua",
   'advice.action=="vendor"', 'advice.action=="auction"',

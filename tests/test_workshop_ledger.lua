@@ -555,4 +555,29 @@ do
     V.SetFilter("source", nil); V.sourceList:ScrollTop(); V.Draw()
 end
 
+-- Posting/cancellation spending and seller settlement extend existing rows/hover; fees are never counted twice.
+do
+    local r = NewRec("Rich")
+    Add(r, 0, 99500, "ahSale", { n = "Runecloth", q = 20, s = { v = 1,
+        invoices = { { n = "Runecloth", q = 20, g = 100000, d = 4500, f = 5000, c = 99500 } } } })
+    Install({ ["Rich - Forever"] = r }); V.Draw()
+    Same(Card("inn"), "+9g 95s 0c"); Same(Card("out"), "0c"); Same(#V.rows, 1)
+    Same(V.list.rows[1].note:GetText(), "Runecloth \195\15120")
+    V.list.rows[1]:GetScript("OnEnter")(V.list.rows[1])
+    Check(TipText():find("Collected: 9g 95s 0c", 1, true)); Check(TipText():find("Auction fee: 50s 0c", 1, true))
+    Check(TipText():find("Returned deposit: 45s 0c (included in collected)", 1, true))
+    Add(r, 0, -4500, "ahDeposit", { i = 11, q = 20, u = 501, e = "auctiondeposit" })
+    Add(r, 0, -1200, "ahCancelFee", { i = 10, q = 1, u = 42, e = "auctioncancel" })
+    LQ.ResetCache(); V.Draw(); Same(Card("out"), "-57s 0c"); Reconciles("auction settlement is not extra cash")
+    for _, code in ipairs({ "ahDeposit", "ahCancelFee" }) do
+        V.SetFilter("source", code); Same(#V.rows, 1); Reconciles(code)
+        Same(V.list.rows[1].src:GetText(), LQ.ROW_LABELS[code])
+        V.list.rows[1]:GetScript("OnEnter")(V.list.rows[1]); Check(TipText():find("Auction ID:", 1, true))
+    end
+    V.SetFilter("source", nil)
+    r.entries[1].s = { v = 2, future = "not interpreted" }; LQ.ResetCache(); V.Draw()
+    V.SetFilter("source", "ahSale"); V.list.rows[1]:GetScript("OnEnter")(V.list.rows[1])
+    Check(TipText():find("Fee unavailable", 1, true)); Check(not TipText():find("Gross sale:", 1, true))
+    V.SetFilter("source", nil)
+end
 print("LEDGER PAGE OK")

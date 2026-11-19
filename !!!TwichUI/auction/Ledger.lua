@@ -14,6 +14,8 @@
 --   * The mailbox (auction/Mail.lua) reports money it was asked to take and then saw arrive; the Auction House purchase
 --     controller (TwichUI_Workshop/auction/Actions.lua) reports a completed purchase. A posting, a server-reported sale
 --     that is not yet collected, an open vendor or mailbox window prove nothing and are never evidence.
+--   * LedgerAuction.lua correlates owned completed postings/cancellations to their exact deposit/fee debit.
+--     Seller invoice gross/fee/returned-deposit fields describe the collected entry; they are never extra cash.
 --
 -- What is NOT recorded: gold that changed while the character was logged out, while the Workshop was turned off, or between
 -- the last reading of a session and the next (the first reading of a session is only a baseline and makes no entry), and
@@ -33,6 +35,7 @@
 --         k,                         source code (SOURCES); absent = unclassified
 --         e,                         evidence code (EVIDENCE): how the classification, if any, was established
 --         i, q, n, x,                optional: item id, quantity, a short note, a correlation id
+--         u, s,                      optional: native auction ID; bounded versioned seller settlement (s.v = 1)
 --     }, ... },
 --     days = { [utcDay] = {          one per UTC day the recorder was running for this character (RETAIN_DAYS kept)
 --         i, o, n,                   copper in, copper out (a positive number), entries counted
@@ -67,9 +70,11 @@ Lg.SOURCES = {
     vendorBuy = { label = "Vendor Purchase", dir = -1, evidence = "merchantpurchase" },
     vendorSell = { label = "Vendor Sale", dir = 1, evidence = "merchantsale" },
     repair = { label = "Repairs", dir = -1, evidence = "merchantrepair" },
+    ahDeposit = { label = "Auction Deposit", dir = -1, evidence = "auctiondeposit" },
+    ahCancelFee = { label = "Auction Cancellation Fee", dir = -1, evidence = "auctioncancel" },
     other = { label = "Unclassified", evidence = "balance" },
 }
-Lg.ORDER = { "ahSale", "mail", "ahBuy", "vendorBuy", "vendorSell", "repair", "other" }
+Lg.ORDER = { "ahSale", "mail", "ahBuy", "vendorBuy", "vendorSell", "repair", "ahDeposit", "ahCancelFee", "other" }
 -- How the classification was established, in the words the details show.
 Lg.EVIDENCE = {
     balance = "Only your gold balance changed. Nothing identifies the source.",
@@ -79,6 +84,8 @@ Lg.EVIDENCE = {
     merchantpurchase = "A gold-only merchant purchase request and the exact items received, matched to the observed spending.",
     merchantsale = "A merchant sale request, the removed stack and a new matching buyback receipt, matched to the gold received.",
     merchantrepair = "A player-paid repair-all request and the verified repair cost cleared, matched to the observed spending.",
+    auctiondeposit = "An owned posting completed, matched to its native deposit quote and exact observed debit.",
+    auctioncancel = "The reviewed auction ID was cancelled, matched to its verified cancellation cost and exact observed debit.",
 }
 
 local active, held, ready = false, false, false
@@ -155,6 +162,35 @@ local function CharKey()
 end
 Lg.CharKey = function() return (CharKey()) end
 
+-- Optional settlement extension on ONE cash entry, not more money entries. Native seller invoices describe
+-- gross + returned deposit - commission = collected. At most eight invoices; no sender/buyer or mail text.
+-- v is independent of the root schema. Unknown extension versions are retained but never interpreted.
+Lg.MAX_INVOICES = 8
+function Lg.Settlement(raw, amount)
+    if type(raw) ~= "table" or raw.v ~= 1 or not Signed(amount) or amount < 0 or type(raw.invoices) ~= "table" then return nil end
+    local count = 0
+    for k in pairs(raw.invoices) do
+        if not Whole(k, 1, Lg.MAX_INVOICES) then return nil end
+        count = count + 1; if count > Lg.MAX_INVOICES then return nil end
+    end
+    if count == 0 then return nil end
+    local s = { v = 1, g = 0, f = 0, d = 0, c = 0, invoices = {} }
+    for i = 1, count do
+        local r = raw.invoices[i]
+        if type(r) ~= "table" then return nil end
+        local g, f, d, c = Whole(r.g, 1, MAX), Whole(r.f, 0, MAX), Whole(r.d, 0, MAX), Whole(r.c, 1, MAX)
+        if not (g and f and d and c) or g > MAX - d or f > g + d or g + d - f ~= c then return nil end
+        for key, n in pairs({ g = g, f = f, d = d, c = c }) do
+            if s[key] > MAX - n then return nil end
+            s[key] = s[key] + n
+        end
+        s.invoices[i] = { g = g, f = f, d = d, c = c, n = Note(r.n), q = Whole(r.q, 1, MAX_QTY) }
+    end
+    if s.c ~= amount then return nil end
+    for _, key in ipairs({ "g", "f", "d", "c" }) do if raw[key] ~= nil and raw[key] ~= s[key] then return nil end end
+    return s
+end
+
 ---------------------------------------------------------------------------
 -- Cleaning what was read from the saved file (never trusts it; repairs narrowly, never resets a record for one bad field)
 ---------------------------------------------------------------------------
@@ -172,6 +208,9 @@ local function CleanEntry(e)
     e.i, e.q = Whole(e.i, 1, MAX_ITEM), Whole(e.q, 1, MAX_QTY)
     e.n = Note(e.n)
     e.x = type(e.x) == "string" and #e.x <= MAX_CORR and e.x or nil
+    e.u = (e.k == "ahDeposit" or e.k == "ahCancelFee") and Whole(e.u, 1, MAX) or nil
+    local future = type(e.s) == "table" and Whole(e.s.v, 2, MAX)
+    if not future then e.s = e.k == "ahSale" and Lg.Settlement(e.s, e.a) or nil end
     return e
 end
 
@@ -369,6 +408,7 @@ local function Attach(slot, ev)
     Move(slot.rec, math.floor(e.t / DAY), e.a, "other", ev.kind)
     e.k, e.e = ev.kind, Lg.SOURCES[ev.kind].evidence
     e.i, e.q, e.n, e.x = ev.item, ev.qty, ev.note, ev.corr
+    e.u, e.s = ev.auction, ev.settlement
     Remember(ev.corr)
     stats.attributed = stats.attributed + 1
 end
@@ -393,7 +433,9 @@ local function Valid(ev)
     local entry = ev.entry ~= nil and Whole(ev.entry, 1, MAX) or nil
     if (ev.entry ~= nil or ev.char ~= nil) and (not entry or type(Plain(ev.char)) ~= "string" or Plain(ev.char) ~= CharKey()) then return nil end
     return { kind = ev.kind, amount = amount, item = Whole(ev.item, 1, MAX_ITEM), qty = Whole(ev.qty, 1, MAX_QTY),
-        note = Note(ev.note), corr = corr, entry = entry, char = ev.char }
+        note = Note(ev.note), corr = corr, entry = entry, char = ev.char,
+        auction = (ev.kind == "ahDeposit" or ev.kind == "ahCancelFee") and Whole(ev.auction, 1, MAX) or nil,
+        settlement = ev.kind == "ahSale" and Lg.Settlement(ev.settlement, amount) or nil }
 end
 
 -- Offers one completed transaction. Returns "attributed", "pending" (its money has not been seen yet), "ambiguous",
@@ -584,6 +626,7 @@ function Lg.Refresh()
     end
     if R.MailGold then R.MailGold.Refresh() end   -- the mailbox reports its money to the ledger while this records
     if R.VendorGold then R.VendorGold.Refresh() end
+    if R.AuctionLedger then R.AuctionLedger.Refresh() end
 end
 
 function Lg.Active() return active end

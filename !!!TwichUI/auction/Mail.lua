@@ -39,6 +39,9 @@ local watching = {}       -- event -> handler, for the events heard only while t
 local known = {}          -- inbox position -> money the mailbox showed at its last update (cash-on-delivery mail is left out)
 local knownInvoice = {}   -- inbox position -> { kind, item } of a seller's invoice seen at that update (only while the ledger records)
 local credits = 0         -- evidence sent to the ledger so far (its correlation ids)
+local moneyKey, moneyEntry -- next journal ID before this visit's next nonzero PLAYER_MONEY
+local deferred, deferredCount = {}, 0 -- at most eight exact targets waiting for recorder event order
+local stats = { ambiguous = 0, settlement = 0, unavailable = 0 }
 
 local function Num(v)
     if v == nil or (issecretvalue and issecretvalue(v)) then return nil end
@@ -61,16 +64,27 @@ function MG.Enabled() return R:Enabled("mailGoldSummary") end
 -- Listening is needed for the chat summary, or for the gold ledger's evidence; the chat line is said only for the former.
 local function LedgerOn() return R.Ledger ~= nil and R.Ledger.Active ~= nil and R.Ledger.Active() == true end
 local function Tracking() return MG.Enabled() or LedgerOn() end
+local function Cursor()
+    local L = R.Ledger
+    if not LedgerOn() then return end
+    local key = L.CharKey()
+    local rec = key and L.Record(key)
+    return key, rec and rec.nextId
+end
 
 -- A sold-auction invoice, when the mailbox offers one for this message: "ahSale" and the item's name. Whether the game gives it
 -- before the message is opened is unverified; with no invoice the money is plain mail.
-local function Invoice(index)
+local function Invoice(index, money)
     if type(GetInboxInvoiceInfo) ~= "function" then return nil end
-    local ok, kind, item = pcall(GetInboxInvoiceInfo, index)
+    local ok, kind, item, player, bid, buyout, deposit, fee, delay, hour, minute, count = pcall(GetInboxInvoiceInfo, index)
     if not ok or type(kind) ~= "string" or (issecretvalue and issecretvalue(kind)) then return nil end
     if kind ~= "seller" then return nil end
     if type(item) ~= "string" or (issecretvalue and issecretvalue(item)) then item = nil end
-    return "ahSale", item
+    count = Num(count)
+    if not count or count < 1 or count > 2147483647 or math.floor(count) ~= count then count = nil end
+    local L = R.Ledger
+    local settlement = L and L.Settlement and L.Settlement({ v = 1, invoices = { { g = bid, d = deposit, f = fee, c = money, n = item, q = count } } }, money)
+    return "ahSale", item, count, settlement
 end
 
 local function MoneyText(copper)
@@ -100,8 +114,8 @@ local function Snapshot()
         if money and money > 0 and cod == 0 then
             known[i] = money
             if ledger then
-                local kind, item = Invoice(i)
-                if kind then knownInvoice[i] = { kind, item } end
+                local kind, item, qty, settlement = Invoice(i, money)
+                if kind then knownInvoice[i] = { kind, item, qty, settlement } end
             end
         end
     end
@@ -128,6 +142,7 @@ end
 local function Finish(req, collected)
     if req.done then return end
     req.done = true
+    if req.session.inflight[req.index] == req then req.session.inflight[req.index] = nil end
     for i = 1, #queue do
         if queue[i] == req then table.remove(queue, i) break end
     end
@@ -142,15 +157,37 @@ end
 -- every message in it is a seller's invoice, otherwise mail collected.
 local function Credit(amount, matched)
     local L = R.Ledger
-    if not (L and L.Evidence) then return end
-    local kind, note = "ahSale", nil
+    if not (LedgerOn() and L and L.Evidence and matched.entry and matched.char) then return end
+    local kind, note, qty = "ahSale", nil, nil
+    local invoices = {}
     for _, req in ipairs(matched) do
         if req.kind ~= "ahSale" then kind = "mail" end
+        if req.settlement then invoices[#invoices + 1] = req.settlement.invoices[1] end
     end
-    if kind == "ahSale" and #matched == 1 then note = matched[1].note end
+    if kind == "ahSale" and #matched == 1 then note, qty = matched[1].note, matched[1].qty end
+    local settlement = kind == "ahSale" and #invoices == #matched and L.Settlement({ v = 1, invoices = invoices }, amount) or nil
+    if kind == "ahSale" then
+        local field = settlement and "settlement" or "unavailable"
+        stats[field] = stats[field] + 1
+    end
     credits = credits + 1
-    local ok, err = pcall(L.Evidence, { kind = kind, amount = amount, note = note, corr = "mail:" .. credits })
-    if not ok then R.Fault("mailbox gold summary", err) end
+    local ev = { kind = kind, amount = amount, note = note, qty = qty, settlement = settlement,
+        corr = "mail:" .. credits, entry = matched.entry, char = matched.char }
+    local function Offer()
+        if not LedgerOn() then return end
+        local ok, err = pcall(L.Evidence, ev)
+        if not ok then R.Fault("mailbox gold summary", err) end
+    end
+    local rec = L.Record(matched.char)
+    if rec and rec.nextId == matched.entry then
+        if deferredCount >= 8 then return end
+        deferred[ev], deferredCount = true, deferredCount + 1
+        C_Timer.After(0, function()
+            if not deferred[ev] then return end
+            deferred[ev], deferredCount = nil, deferredCount - 1
+            Offer()
+        end)
+    else Offer() end
 end
 
 local function OnMoney()
@@ -159,7 +196,15 @@ local function OnMoney()
     lastMoney = now
     if not (now and before) then return end
     local gain = now - before
+    local key, nextId = Cursor()
+    local target
+    if gain ~= 0 and key == moneyKey and moneyEntry and nextId and (nextId == moneyEntry or nextId == moneyEntry + 1) then target = moneyEntry end
+    moneyKey, moneyEntry = key, target and target + 1 or nextId
     if gain <= 0 or #queue == 0 then return end
+    -- A stalled frame must not let an overdue request claim later money before its timer runs.
+    local mono = GetTime and Num(GetTime())
+    for i = #queue, 1, -1 do if mono and queue[i].expires and mono >= queue[i].expires then Finish(queue[i], false) end end
+    if #queue == 0 then return end
     local matched
     if queue[1].amount == gain then
         matched = { queue[1] }
@@ -179,8 +224,18 @@ local function OnMoney()
         end
     end
     if not matched then return end
+    local chosen, unique = {}, target ~= nil
+    for _, req in ipairs(matched) do chosen[req] = true; if req.ambiguous or req.char ~= key then unique = false end end
+    -- Positive amounts: a selected prefix is unique if every unselected request exceeds the entire gain.
+    -- Otherwise retain the V1 chat summary but refuse attribution for the ambiguous outstanding requests.
+    for _, req in ipairs(queue) do if not chosen[req] and req.amount <= gain then unique = false end end
+    if not unique then
+        for _, req in ipairs(queue) do req.ambiguous = true end
+        stats.ambiguous = stats.ambiguous + 1
+    end
+    matched.entry, matched.char = target, key
     for _, req in ipairs(matched) do Finish(req, true) end
-    Credit(gain, matched)
+    if unique then Credit(gain, matched) end
 end
 
 local function OnFailed(itemID)
@@ -201,8 +256,9 @@ end
 
 local function OnShow()
     if session then CloseVisit(session) end   -- the last visit never said it closed: it is over
-    session = { open = true, total = 0, waiting = 0 }
+    session = { open = true, total = 0, waiting = 0, inflight = {} }
     lastMoney = Num(GetMoney())
+    moneyKey, moneyEntry = Cursor()
     Want("PLAYER_MONEY", OnMoney, true)
     Want("MAIL_FAILED", OnFailed, true)
     Want("MAIL_INBOX_UPDATE", Snapshot, true)
@@ -218,6 +274,7 @@ local function OnLeaving()
     if session then CloseVisit(session) end
     while queue[1] do Finish(queue[1], false) end
     lastMoney = nil
+    moneyKey, moneyEntry = nil, nil
 end
 
 -- A take is asked for. Noted only; whether it worked is for PLAYER_MONEY to say.
@@ -231,15 +288,19 @@ local function Record(index)
     known[index] = nil   -- this position's money is being taken; a second call must not use it again
     if money <= 0 then money = remembered end
     if not money or money <= 0 then return end
-    local kind, note
+    local kind, note, qty, settlement
     if LedgerOn() then
-        kind, note = Invoice(index)
+        kind, note, qty, settlement = Invoice(index, money)
         local seenBefore = knownInvoice[index]
-        if not kind and seenBefore then kind, note = seenBefore[1], seenBefore[2] end
+        if not kind and seenBefore then kind, note, qty, settlement = unpack(seenBefore) end
     end
     knownInvoice[index] = nil
-    local req = { session = s, amount = money, kind = kind, note = note }
+    local duplicate = s.inflight[index]
+    if duplicate then duplicate.ambiguous = true end
+    local req = { session = s, index = index, amount = money, kind = kind, note = note, qty = qty, settlement = settlement, ambiguous = duplicate ~= nil,
+        char = LedgerOn() and R.Ledger.CharKey() or nil, expires = GetTime and GetTime() + EXPIRY or nil }
     queue[#queue + 1] = req
+    s.inflight[index] = req
     s.waiting = s.waiting + 1
     C_Timer.After(EXPIRY, function() Finish(req, false) end)
 end
@@ -262,6 +323,9 @@ local function Abandon()
     for _, req in ipairs(queue) do req.done, req.session.printed = true, true end
     for i = #queue, 1, -1 do queue[i] = nil end
     lastMoney = nil
+    moneyKey, moneyEntry = nil, nil
+    for ev in pairs(deferred) do deferred[ev] = nil end
+    deferredCount = 0
     for k in pairs(known) do known[k] = nil end
     for k in pairs(knownInvoice) do knownInvoice[k] = nil end
     Want("MAIL_INBOX_UPDATE", nil, false)
@@ -277,9 +341,25 @@ function MG.Refresh()
     Want("MAIL_CLOSED", OnClosed, on)
     Want("PLAYER_LEAVING_WORLD", OnLeaving, on)
     if not on then Abandon() end
+    if on and session and LedgerOn() and not moneyEntry then moneyKey, moneyEntry = Cursor() end
 end
 
 -- Counts only, for the tests: whether a visit is open and how many requests wait.
-function MG.Snapshot() return { open = session ~= nil, waiting = #queue } end
+function MG.Snapshot() return { open = session ~= nil, waiting = #queue, deferred = deferredCount,
+    ambiguous = stats.ambiguous, settlement = stats.settlement, unavailable = stats.unavailable } end
+
+if R.Perf and R.Perf.Gauge then
+    for _, key in ipairs({ "waiting", "deferred", "ambiguous", "settlement", "unavailable" }) do
+        local field = key
+        R.Perf.Gauge("ledger.mail." .. field, { label = "Ledger mailbox: " .. field, group = "workshop",
+            unit = "count", kind = "cache", read = function() return MG.Snapshot()[field] end })
+    end
+end
+
+if R.Perf and R.Perf.Wrap then
+    OnMoney = R.Perf.Wrap("ledger.mail", OnMoney)
+    Snapshot = R.Perf.Wrap("ledger.mail", Snapshot)
+    Record = R.Perf.Wrap("ledger.mail", Record)
+end
 
 R:OnInit(MG.Refresh)

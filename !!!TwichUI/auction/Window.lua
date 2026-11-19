@@ -841,7 +841,8 @@ local function PostEvents(on)
 end
 
 local postToken = 0
-local function EndPost(text)
+local function EndPost(text, completed)
+    if not completed and post.current and post.current.ledger and R.AuctionLedger then R.AuctionLedger.Abort(post.current.ledger) end
     post.state, post.pending, post.current = "idle", nil, nil
     postToken = postToken + 1
     PostEvents(false)
@@ -867,19 +868,39 @@ local function Sent()
     A.UpdatePost()
 end
 
+local function BeginLedgerPost(p)
+    if not R.AuctionLedger then return end
+    local ok, deposit = pcall(Deposit, p.loc, p.quantity)
+    if not ok or deposit ~= p.deposit then return end
+    return R.AuctionLedger.Begin(p.kind == "commodity" and "postCommodity" or "postItem", deposit, p.itemID, p.quantity, nil,
+        function() return session == p.session and not InCombatLockdown() end)
+end
+-- Preserve each explicit controller call and its arguments, while marking ownership for the read-only evidence guard.
+local function CallPost(p, confirm)
+    local audit = R.AuctionLedger
+    if audit then audit.Sending(p.ledger, true) end
+    local ok, result
+    if p.kind == "commodity" then
+        ok, result = pcall(confirm and C_AuctionHouse.ConfirmPostCommodity or C_AuctionHouse.PostCommodity, p.loc, p.duration, p.quantity, p.price)
+    else
+        ok, result = pcall(confirm and C_AuctionHouse.ConfirmPostItem or C_AuctionHouse.PostItem, p.loc, p.duration, p.quantity, nil, p.price)
+    end
+    if audit then audit.Sending(p.ledger, false) end
+    if not ok then if audit and p.ledger then audit.Abort(p.ledger) end; error(result, 0) end
+    return result
+end
+
 -- Sends a prepared posting to the game.
 local function Submit(p)
     message = nil
     p.from, p.after, p.session = selected.key, KeysAfterSelected(), session
     post.current = p
+    p.ledger = BeginLedgerPost(p)
     Sent()   -- before the call: the game may answer while we are still in it
-    local needsConfirmation
-    if p.kind == "commodity" then
-        needsConfirmation = C_AuctionHouse.PostCommodity(p.loc, p.duration, p.quantity, p.price)
-    else
-        needsConfirmation = C_AuctionHouse.PostItem(p.loc, p.duration, p.quantity, nil, p.price)
-    end
+    local needsConfirmation = CallPost(p, false)
     if needsConfirmation then
+        if R.AuctionLedger then R.AuctionLedger.Warning(p.ledger) end
+        p.ledger = nil
         -- The game shows its own confirmation (Blizzard's Auction House window
         -- handles that event). Its Accept is followed below and confirms this one.
         postToken = postToken + 1
@@ -993,12 +1014,9 @@ local function OnBlizzardConfirm()
     local p = post.pending
     if post.state ~= "confirm" or not p or not (page and page:IsShown()) then return end
     post.pending = nil
-    if p.kind == "commodity" then
-        C_AuctionHouse.ConfirmPostCommodity(p.loc, p.duration, p.quantity, p.price)
-    else
-        C_AuctionHouse.ConfirmPostItem(p.loc, p.duration, p.quantity, nil, p.price)
-    end
-    Sent()
+    p.ledger = BeginLedgerPost(p)
+    Sent() -- ownership/state must exist before a synchronous confirmation response
+    CallPost(p, true)
 end
 
 -- The dialog closed; if it wasn't accepted, nothing was posted.
@@ -1008,11 +1026,12 @@ end
 
 local AdvanceAfterPost   -- below, with the selection code it uses
 
-local function Posted(p)
+local function Posted(p, auction, created, total)
+    if p and R.AuctionLedger then R.AuctionLedger.Complete(p.ledger, auction, created, total) end
     local what = p and p.name or "item"
     local text = p and ("Posted %d x %s at %s each."):format(p.quantity, what, Money(p.price)) or "Posted."
     SC.MarkStale()
-    EndPost(text)
+    EndPost(text, true)
     if page and page:IsShown() then RefreshMarket() end
     AdvanceAfterPost(p, text)
 end
@@ -1162,7 +1181,7 @@ ev:SetScript("OnEvent", function(_, event, a1, a2)
         -- Several of one item are posted one auction at a time; the multisell
         -- events below say when that run is finished.
         local p = post.current
-        if post.state == "posting" and not (p and p.kind == "item" and p.quantity > 1) then Posted(p) end
+        if post.state == "posting" and not (p and p.kind == "item" and p.quantity > 1) then Posted(p, a1) end
     elseif event == "AUCTION_MULTISELL_START" then
         if post.state == "posting" then
             post.state = "multisell"
@@ -1172,7 +1191,7 @@ ev:SetScript("OnEvent", function(_, event, a1, a2)
         end
     elseif event == "AUCTION_MULTISELL_UPDATE" then
         if post.state == "multisell" then
-            if a1 and a2 and a1 >= a2 then Posted(post.current)
+            if a1 and a2 and a1 >= a2 then Posted(post.current, nil, a1, a2)
             else message = ("Posting %d of %d..."):format(a1 or 0, a2 or 0); A.UpdatePost() end
         end
     elseif event == "AUCTION_MULTISELL_FAILURE" then
@@ -1199,6 +1218,7 @@ function A.OnPageShown()
 end
 
 function A.OnPageHidden()
+    if post.current and post.current.ledger and R.AuctionLedger then R.AuctionLedger.Abort(post.current.ledger) end
     for _, e in ipairs(PAGE_EVENTS) do ev:UnregisterEvent(e) end
     if SC.Busy() then SC.Stop() end
     if post.state == "multisell" then C_AuctionHouse.CancelSell() end   -- as Blizzard's sell frame does

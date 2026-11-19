@@ -201,6 +201,21 @@ env.TwichUI = {
   Enabled = function(_, key) return not (env.DISABLED or {})[key] end,
 }
 local function Emit(e, ...) for _, fn in ipairs(listeners[e] or {}) do fn(...) end end
+-- The core posting controller must pass quotes, completion identity and warning ownership to the ledger,
+-- without adding native calls. The real journal/evidence adapter is exercised in test_ledger_auction.lua.
+local audits, evidence = {}, {}
+env.TwichUI.AuctionLedger = {
+  Begin = function(mode, cost, item, qty)
+    local token = { mode = mode, cost = cost, item = item, qty = qty }
+    audits[#audits + 1] = token; return token
+  end,
+  Sending = function() end,
+  Warning = function(token) if token then token.warning = true end end,
+  Abort = function(token) if token then token.aborted = true end end,
+  Complete = function(token, auction, created, total)
+    if token then evidence[#evidence + 1] = { token = token, auction = auction, created = created, total = total } end
+  end,
+}
 for _, file in ipairs({ "modules/Interact.lua", "chronicle/Style.lua", "auction/Price.lua", "auction/Scan.lua", "auction/Window.lua" }) do
   local chunk = assert(loadfile(ROOT .. file)); setfenv(chunk, env); chunk("!!!TwichUI", {})
 end
@@ -290,7 +305,9 @@ postButton.scripts.OnClick(postButton)
 assert(#AH.posts == 1)
 local p = AH.posts[1]
 assert(p[1] == "commodity" and p[3] == 2 and p[4] == 20 and p[5] == 1500, "duration 2, 20 (first stack), 1500 each")
+assert(audits[1].mode == "postCommodity" and audits[1].qty == 20 and type(audits[1].cost) == "number")
 Fire("AUCTION_HOUSE_AUCTION_CREATED", 1)
+assert(evidence[1].token == audits[1] and evidence[1].auction == 1, "cash proof is the native created ID")
 -- The next row (the sword) is chosen and searched, as a click would; it is not posted.
 assert(sword.sel.shown and not linen.sel.shown, "the next item is chosen after posting")
 assert(AH.sent[#AH.sent][1] == "sell" and AH.sent[#AH.sent][2].itemID == 6097 and #AH.posts == 1)
@@ -312,10 +329,12 @@ AH.needsConfirmation = true
 popupVisible = true
 postButton.scripts.OnClick(postButton)
 assert(#AH.posts == 2 and #AH.confirms == 0)
+assert(audits[#audits].warning, "a pending native warning is not a completed deposit")
 assert(not postButton.enabled, "no second post while waiting")
 RunTimers(1)
 AHF.ItemSellFrame:ConfirmPost()                      -- the player clicked Accept
 assert(#AH.confirms == 1 and AH.confirms[1][1] == "item" and AH.confirms[1][6] == 45000)
+assert(not audits[#audits].warning and audits[#audits].mode == "postItem", "acceptance starts fresh cash correlation")
 AHF:SetDialogOverlayShown(false)
 Fire("AUCTION_HOUSE_AUCTION_CREATED", 2)
 assert(not sword.sel.shown and not postButton.enabled, "the sword was the last row: nothing is chosen now")

@@ -2486,7 +2486,7 @@ Lab.Step("pose for the screenshot", function()
             row:TipEnter()
             Check("display", "pose: the row's tooltip is the item's own, owned by the row", "true", tostring(GameTooltip:IsShown() and GameTooltip:GetOwner() == row))
         end
-    elseif view == "ledger" or view == "ledgersmall" or view == "ledgervendor" or view == "ledgervendorsmall" then
+    elseif view == "ledger" or view == "ledgersmall" or view == "ledgervendor" or view == "ledgervendorsmall" or view == "ledgerauction" or view == "ledgerauctionsmall" then
         -- the Gold Ledger over a SYNTHETIC journal written straight into TwichUILedgerDB (the recorder's own events are not simulated here; the
         -- offline tests cover them). Days are relative to today (UTC). EXPECTED VALUES are hand arithmetic, never read from the code under test:
         --   today-0: +100000 mail, -25000 auction purchase (Peacebloom x2), +5000 unclassified
@@ -2534,7 +2534,7 @@ Lab.Step("pose for the screenshot", function()
         V.SetFilter("days", 30); Lab.Settle(0.2)
         Check("display", "pose: thirty days add the +50000 mail", "+20g 50s 0c", Txt(V.cards.inn.value))
         V.SetFilter("days", 7); Lab.Settle(0.2)
-        if view == "ledgervendor" or view == "ledgervendorsmall" then
+        if view == "ledgervendor" or view == "ledgervendorsmall" or view == "ledgerauction" or view == "ledgerauctionsmall" then
             -- Additive UI fixture only: merchant native callbacks/outcomes are independently exercised offline.
             Add(0, -25, "vendorBuy", { i = 159, q = 5, e = "merchantpurchase" })
             Add(0, 18, "vendorSell", { i = 7073, q = 2, e = "merchantsale" })
@@ -2559,7 +2559,36 @@ Lab.Step("pose for the screenshot", function()
             for _, row in ipairs(V.srcRows) do if row:IsShown() and row.data.code == "vendorSell" then found = true end end
             Check("state", "vendor pose: scrolling exposes the smallest source", true, found)
         end
-        Rows(Lists().ledger)[1]:SetHot(true)   -- a row under the pointer, for the screenshot (the art only)
+        if view == "ledgerauction" or view == "ledgerauctionsmall" then
+            Add(0, 99500, "ahSale", { n = "Runecloth", q = 20, e = "mailinvoice", s = { v = 1,
+                invoices = { { n = "Runecloth", q = 20, g = 100000, d = 4500, f = 5000, c = 99500 } } } })
+            Add(0, -4500, "ahDeposit", { i = 14047, q = 20, u = 501, e = "auctiondeposit" })
+            Add(0, -1200, "ahCancelFee", { i = 12359, q = 1, u = 42, e = "auctioncancel" })
+            W.LedgerQuery.ResetCache(); V.Draw(); Lab.Settle(0.2)
+            Check("state", "auction pose: ten signed source rows retained", 10, #V.sourceList.data)
+            Check("display", "auction pose: exact net and spending, settlement is not cash twice", "+20g 43s 93c | -4g 31s 25c",
+                Txt(V.cards.net.value) .. " | " .. Txt(V.cards.attrOut.value))
+            for _, code in ipairs({ "ahDeposit", "ahCancelFee" }) do
+                V.SetFilter("source", code); Lab.Settle(0.1)
+                Check("state", "auction pose: source filter " .. code, 1, #V.rows)
+                Check("display", "auction pose: source label " .. code, W.LedgerQuery.ROW_LABELS[code], Txt(V.list.rows[1].src))
+            end
+            V.SetFilter("source", "ahSale"); Lab.Settle(0.1)
+            Check("display", "auction pose: sold name and quantity", "Runecloth \195\15120", Txt(V.list.rows[1].note))
+            local details = table.concat(W.LedgerQuery.AuctionDetails(V.rows[1]), " | ")
+            Check("state", "auction pose: verified fee and bundled deposit details", true,
+                details:find("Auction fee: 50s 0c", 1, true) ~= nil and details:find("Returned deposit: 45s 0c (included in collected)", 1, true) ~= nil)
+            V.SetFilter("source", nil); Lab.Settle(0.1)
+            V.sourceList.scroll:SetVerticalScroll(5 * 26); V.sourceList:Layout()
+            Check("state", "auction pose: retained cancellation ID", 42, V.rows[1].auction)
+            local total = 0; for _, source in ipairs(V.sourceList.data) do total = total + source.dir * source.amount end
+            Check("state", "auction pose: all source totals reconcile", 204393, total)
+            Rows(Lists().ledger)[3]:SetHot(true)
+            Rows(Lists().ledger)[3]:TipEnter()
+            Check("display", "auction pose: settlement tooltip uses the existing transaction hover", true, GameTooltip:IsShown())
+        else
+            Rows(Lists().ledger)[1]:SetHot(true) -- art only
+        end
     elseif view == "shop" then
         -- the mixed-source list with a Make row: take the Smelt Bronze entry back out through its Remove button
         Tab("Crafting")
