@@ -152,6 +152,49 @@ Lab.Step("open", function()
         Lab.Say("inventory", page.key, page.name, "rows=" .. #page.rows, "host=" .. tostring(page.def.host ~= nil))
     end
 end)
+if key == "workshop" and params.editor then
+    Lab.Step("Workshop junk safeguards", function()
+        local L,P=R.WorkshopLauncher,R.WorkshopJunkSettings
+        -- Disposable bag identities; never use, move, mark or sell an item.
+        local names={[211527]="Cozy Sleeping Bag",[12037]="Mystery Meat",[2589]="Linen Cloth"}
+        local ids={211527,12037,2589}
+        local oldInfo=C_Item.GetItemInfo
+        C_Item.GetItemInfo=function(id)
+            if names[id] then return names[id],nil,1,1,1,"Trade Goods","",1,"",134400,10,7,0,0 end
+            return oldInfo(id)
+        end
+        C_Container.GetContainerNumSlots=function(bag) return bag==0 and #ids or 0 end
+        C_Container.GetContainerItemInfo=function(bag,slot)
+            if bag==0 and ids[slot] then return {itemID=ids[slot]} end
+        end
+        local loaded=L.Loaded()
+        Lab.Check("interact","never-mark picker opens",true,P.Open())
+        Lab.Settle(.2)
+        Lab.Check("state","picker keeps Workshop load state",loaded,L.Loaded())
+        local f=P.Frame()
+        Lab.Check("construct","bag choices are bounded",7,#f.rows)
+        Lab.Check("state","bag choices include held items",3,#P.Entries("bags"))
+        for _,row in ipairs(f.rows) do
+            if row.entry and row.entry.id==211527 then
+                Lab.Check("state","sleeping bag cannot lose protection",false,row.action:IsEnabled())
+            elseif row.entry and row.entry.id==12037 then
+                row.action:Click()
+                Lab.Check("interact","bag choice is saved",true,L.JunkIgnored(12037))
+            end
+        end
+        local cursor,clear=GetCursorInfo,ClearCursor
+        GetCursorInfo=function() return "item",2589 end
+        local cleared=false
+        ClearCursor=function() cleared=true end
+        f.drop:GetScript("OnReceiveDrag")()
+        GetCursorInfo,ClearCursor=cursor,clear
+        Lab.Check("interact","drop saves item ID",true,L.JunkIgnored(2589))
+        Lab.Check("interact","drop returns cursor item",true,cleared)
+        f.ignored:Click()
+        Lab.Check("state","ignored list is visible",2,#P.Entries("ignored"))
+        f.bags:Click();Lab.Settle(.2)
+    end)
+end
 if key == "workshop" and params.filled then
     Lab.Step("Workshop preference integration", function()
         local K, UI, L = R.SettingsKit, R.SettingsUI, R.WorkshopLauncher
@@ -812,5 +855,12 @@ if PTR_IssueReporter then
 end
 if key == "magicInventory" and params.bankReview then
     Lab.Step("character bank review", function() Lab.BankReview(params.bankReview) end)
+end
+if key=="workshop" and params.editor then
+    Lab.Step("never-mark picker capture",function()
+        R.SettingsUI.Navigate("workshop")
+        Lab.Check("interact","picker reopens after settings lifecycle checks",true,R.WorkshopJunkSettings.Open())
+        Lab.Settle(.2)
+    end)
 end
 Lab.Finish()

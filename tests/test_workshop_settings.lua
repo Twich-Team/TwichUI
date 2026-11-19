@@ -14,6 +14,38 @@ assert(not L.VendorJunkEnabled() and S.variables.TWICHUI_workshopVendorJunk.defa
 assert(L.SetVendorJunkEnabled(true) and L.VendorJunkEnabled() and not L.Loaded(),"junk preference never eagerly loads Workshop")
 assert(L.SetVendorJunkEnabled(false) and not L.VendorJunkEnabled())
 assert(not L.SetVendorJunkEnabled("yes"))
+assert(L.JunkFilter("gear") and L.JunkFilter("materials") and not L.JunkFilter("recipes"))
+assert(not L.JunkFilter("consumables") and not L.JunkFilter("other"))
+assert(L.JunkIgnored(211527) and not L.SetJunkIgnored(211527,false))
+assert(L.JunkAllows(123,2) and L.JunkAllows(123,4) and not L.JunkAllows(123,9))
+assert(not L.JunkAllows(123,nil) and not L.JunkAllows(123,12) and not L.JunkAllows(123,13))
+assert(not L.SetJunkFilter("bad",true) and not L.SetJunkFilter("gear",1))
+for _,id in ipairs({0,-1,1.5,math.huge,"123"}) do assert(not L.SetJunkIgnored(id,true)) end
+assert(L.SetJunkIgnored(123,true) and not L.JunkAllows(123,2))
+local cfg=c.TwichUIDB.ui
+c.TwichUIDB.ui={}
+assert(L.JunkIgnored(123),"changing profiles must not lift never-mark protection")
+c.TwichUIDB.ui=cfg
+assert(L.JunkIgnored(123),"profile restore keeps ignored IDs")
+assert(L.SetJunkFilter("gear",false) and not L.JunkAllows(124,2))
+assert(L.SetJunkFilter("gear",true))
+assert(not L.Loaded(),"editing junk safeguards does not load Workshop")
+-- Saved-variable text round trip through the project's non-executable codec.
+local codec=c.LibStub("LibSerialize")
+local encoded=codec:Serialize({filters=c.TwichUIDB.ui.workshopJunk,ignore=c.TwichUIDB.workshopJunkIgnore})
+local decodedOK,decoded=codec:Deserialize(encoded)
+assert(decodedOK)
+c.TwichUIDB.ui.workshopJunk=decoded.filters
+c.TwichUIDB.workshopJunkIgnore=decoded.ignore
+assert(L.JunkIgnored(123) and L.JunkFilter("gear"))
+assert(L.SetJunkIgnored(123,false))
+for id=1,512 do assert(L.SetJunkIgnored(id,true)) end
+assert(not L.SetJunkIgnored(513,true) and L.SetJunkIgnored(1,false) and L.SetJunkIgnored(513,true))
+c.TwichUIDB.workshopJunkIgnore={bad=true,[4]="true",[5]=true}
+c.TwichUIDB.ui.workshopJunk={recipes="yes"}
+assert(#L.JunkIgnoreList()==1 and L.JunkIgnored(5) and not L.JunkFilter("recipes"))
+c.TwichUIDB.ui.workshopJunk=nil
+c.TwichUIDB.workshopJunkIgnore=nil
 assert(S.variables.TWICHUI_workshopAuctionAdvisorOnly.default==false)
 assert(S.variables.TWICHUI_workshopAuctionMaxQuantity.default==true)
 assert(S.variables.TWICHUI_workshopAuctionDuration.default=="1")
@@ -72,7 +104,7 @@ local headers = {}
 for _, row in ipairs(K.pages.workshop.rows) do
     if row.kind == "header" then headers[#headers + 1] = row:GetName() end
 end
-assert(table.concat(headers, "|") == "General|Auction House|Tooltip Designer|Market Data|Crafting & Shopping")
+assert(table.concat(headers, "|") == "General|Junk marking|Auction House|Tooltip Designer|Market Data|Crafting & Shopping")
 assert(K.pages.workshop.def.hostAfter == "Tooltip Designer")
 -- Market descriptions use real source summaries, with honest empty/future states.
 local status = {}

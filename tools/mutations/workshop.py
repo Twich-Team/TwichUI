@@ -1293,3 +1293,15 @@ m("market.junk.all-copies", "TwichUI_Workshop/Junk.lua",
 m("market.junk.stale-slice", "TwichUI_Workshop/Junk.lua",
   'if mine~=generation or not Ready() then return end', 'if not Ready() then return end',
   "a changed inventory leaves an old marking job alive", ["test_workshop_junk.lua"])
+m("market.junk.ignore-save", "!!!TwichUI/WorkshopLauncher.lua",
+  'ignore[id]=on or nil', 'ignore[id]=nil',
+  "ignoring a bag item silently leaves it eligible for junk marking", ["test_workshop_junk.lua"])
+m("market.junk.type-filter", "TwichUI_Workshop/Junk.lua",
+  'if not R.WorkshopLauncher.JunkAllows(id,W.Plain(class)) then return id end', 'if false then return id end',
+  "disabled recipes and other item types can still be marked", ["test_workshop_junk.lua"])
+m("market.junk.sleeping-bag", "!!!TwichUI/WorkshopLauncher.lua",
+  'if id==211527 then return true end', 'if false then return true end',
+  "enabling other items permits marking the Cozy Sleeping Bag", ["test_workshop_junk.lua"])
+m("market.advisor.sell-source", "TwichUI_Workshop/auction/SellData.lua",
+  'local rec=D.Advice(row)', 'local rec=D.Advice(row,f)',
+  "Sell uses local/live competition to contradict the bag tooltip recommendation", ["test_workshop_auction_sell.lua"])

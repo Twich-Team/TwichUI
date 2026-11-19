@@ -14,6 +14,27 @@ Vendor. Locked, quest, incomplete, never-sell and restock-protected copies preve
 marking that ID. Unknown prices retain the Advisor's existing known-option policy;
 this feature adds no new sale-value calculation or posting quote.
 
+**General → Junk marking** groups the master switch, item-type filters and
+**Never mark items** picker. Gear and trade goods/reagents default on; recipes,
+consumables and other types default off. Filters only permit the Advisor's Vendor
+decision; they never force a recommendation. Cozy Sleeping Bag (211527), quest
+item classes and keys are always protected, even if other item types are enabled.
+These safer defaults also apply to existing installations without saved filters.
+
+Choose an item from the picker's bag list or drag it onto the drop area. This
+saves its item ID in the account-wide ignore list (up to 512 IDs), covering
+all copies across profiles, and cancels any pending marking scan. Search,
+pagination and an Ignored items view allow review/removal, including items no longer carried.
+The picker works without loading Workshop or market data. Its bag/item listeners
+exist only while it is visible. Existing EllesmereUI marks are retained: **remove
+any mistaken mark with EllesmereUI's junk coin before visiting a merchant**.
+
+Sell's recommendation, bag tooltips and junk marking use the same held-item
+Advisor path and selected Workshop pricing source. Sell's live/local competition
+still supplies posting-price guidance, but cannot replace the recommendation's
+evidence. The held link and actual item level are used for variant/disenchant
+checks. Listing prices remain observations, not guaranteed sale proceeds.
+
 The shared `R.EllesmereJunk` adapter performs marking through EllesmereUI Bags.
 Custom categories are preserved. A mark covers that item ID across the account,
 including future copies; disabling Workshop or the switch does not undo it.
@@ -30,7 +51,7 @@ Forever acceptance still needs enabling the switch, receiving Vendor/Auction/DE
 items, manually unmarking one, changing profiles and reloading with EllesmereUI
 Bags present/absent. No simulator or real-client acceptance is claimed here.
 
-Offline verification: 79 Workshop modules, 13 Workshop/settings modules, 15 core
+Initial marker verification (before these guardrails): 79 Workshop modules, 13 Workshop/settings modules, 15 core
 modules, the existing Mage junk-marking test and Lua syntax checks pass. All 309
 Market mutations are detected, with zero survivors/invalid/timeouts/infra errors.
 Final evidence: `test-output/workshop-junk-completed-{workshop,settings}.log`,

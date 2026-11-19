@@ -2,7 +2,8 @@
 local c=dofile(TESTS..'auction_mock.lua')
 local R,W=c.TwichUI,c.TwichUI.Workshop
 local enabled,combat,world,available=false,false,true,true
-R.WorkshopLauncher={Enabled=function()return true end,VendorJunkEnabled=function()return enabled end}
+local L=R.WorkshopLauncher
+L.VendorJunkEnabled=function()return enabled end
 R.Life={InWorld=function()return world end}
 c.InCombatLockdown=function()return combat end
 local timers={}
@@ -11,7 +12,7 @@ local function Flush()
  for i=1,100 do local q=timers;timers={};for _,fn in ipairs(q)do fn()end;if #timers==0 then return end end
  error('junk marking did not settle')
 end
-local bags,prices,des,reserved={},{},{},{}
+local bags,prices,des,reserved,classes={},{},{},{},{}
 local assignments,calls,repaints={},0,0
 c.C_AddOns.IsAddOnLoaded=function()return available end
 c.EllesmereUIDB={bagItemAssignments=assignments}
@@ -26,7 +27,7 @@ c.C_Container={GetContainerNumSlots=function()return #bags end,GetContainerItemI
  GetContainerItemQuestInfo=function(_,slot)return {isQuestItem=bags[slot].quest==true}end}
 c.C_Item.GetItemInfo=function(link)
  local id=tonumber(link:match('item:(%d+)'))
- return 'Fixture','item:'..id,1,10,1,'Trade Goods','',1,'',1,100,7,0,0
+ return 'Fixture','item:'..id,1,10,1,'Trade Goods','',1,'',1,100,classes[id] or 7,0,0
 end
 c.C_Item.GetDetailedItemLevelInfo=function()return 10,nil,10 end
 W.Session.PriceSource=function()return {}end
@@ -73,4 +74,23 @@ J.Start();Flush();assert(not assignments[112] and not assignments[113],'never-se
 R.MageSell=nil;R.Restock=nil
 bags={Item(114)};W.suspended=true;J.Start();Flush();assert(not assignments[114] and J.Events()==0,'Workshop suspension stops marking')
 W.suspended=nil;J.Start();Flush();assert(assignments[114]=='junk')
+-- Ignore IDs and type filters veto all copies, including new arrivals after reload.
+bags={Item(201),Item(201),Item(211527),Item(202),Item(203),Item(204),Item(205)}
+classes[202]=9;classes[203]=0;classes[204]=15;classes[205]=2
+assert(L.SetJunkIgnored(201,true));Flush()
+assert(not assignments[201] and not assignments[211527], 'ignored and Cozy Sleeping Bag must never be marked')
+assert(not assignments[202] and not assignments[203] and not assignments[204], 'recipes, consumables and other types default off')
+assert(assignments[205]=='junk','gear remains eligible')
+assert(L.SetJunkFilter('recipes',true));Flush();assert(assignments[202]=='junk')
+assert(L.SetJunkFilter('other',true));Flush();assert(assignments[204]=='junk' and not assignments[211527])
+assert(L.SetJunkFilter('consumables',true));Flush();assert(assignments[203]=='junk')
+assert(L.SetJunkIgnored(201,false));Flush();assert(assignments[201]=='junk')
+bags={Item(206),Item(207),Item(208)};classes[206]=12;classes[207]=13;classes[208]=2
+assert(L.SetJunkFilter('gear',false));Flush()
+assert(not assignments[206] and not assignments[207] and not assignments[208],'quest classes, keys and disabled gear protected')
+-- A settings edit during a yielded inventory scan invalidates the old candidate job.
+bags={};for i=1,80 do bags[i]=Item(209)end
+J.Request();local q=timers;timers={};for _,fn in ipairs(q) do fn() end
+assert(L.SetJunkIgnored(209,true));Flush();assert(not assignments[209],'ignore cancels stale slices')
+assert(L.SetJunkFilter('materials',false));bags={Item(210)};J.Request();Flush();assert(not assignments[210])
 print('PASSED Workshop junk: actual sale policy, adapter, all-copy veto, opt-in, categories, manual unmark, combat, lifecycle and stale slices')

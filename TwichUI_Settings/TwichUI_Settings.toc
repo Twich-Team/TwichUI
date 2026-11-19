@@ -63,6 +63,7 @@ pages\NpcKnowledge.lua
 pages\CozyBag.lua
 pages\Auction.lua
 pages\WorkshopWorth.lua
+pages\WorkshopJunk.lua
 pages\Workshop.lua
 pages\Skins.lua
 pages\RestedXP.lua

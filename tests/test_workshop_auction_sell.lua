@@ -66,6 +66,16 @@ local oldQuotes=quotes;live=false;same(D.Draft(row,3,100,2).deposit,nil);same(qu
 local saved=D.Competition(row)
 saved.facts={item=10,key=m.key,comp={competing=500,complete=true,cut=false,age=0,at=now,notes={}},
  quality={level="good",reasons={},facts={distribution=true}}}
+-- The held-item Advisor uses the same source as the tooltip, independently
+-- from the competition table that supplies a posting price.
+local advisorMarket={key="tooltip-source"}
+local sourceFacts=saved.facts
+local factsOf=W.Facts.Of
+W.Session.PriceSource=function() return {market=advisorMarket} end
+W.Facts.Of=function(item,opt)
+    if opt and opt.market==advisorMarket then return sourceFacts end
+    return factsOf(item,opt)
+end
 local suggestion,rec=D.Guidance(row,saved)
 same(suggestion.state,"ok");same(suggestion.price,500,"existing policy supplies the qualified reference")
 same(rec.action,"auction");same(rec.level,"supported")
@@ -84,6 +94,17 @@ local request={intent=41,epoch=Q.epoch,itemKey=key,marketStamp=saved.stamp}
 Q.snapshot={kind="item",intent=41,epoch=Q.epoch,at=clock,complete=true,rows={
  Listing(1,3,299,false,false),Listing(2,2,2,true,false),Listing(3,2,4,false,true),Listing(4,1,nil,false,false)}}
 local ctx=D.Competition(row,request)
+local liveSuggestion,liveAdvice=D.Guidance(row,ctx)
+local tooltipAdvice=W.AdvisorData.Tooltip({item=row.item,count=row.qty,sell=40,bindType=0,bound=false,classID=7,quality=1})
+same(liveAdvice.action,tooltipAdvice.action,"Sell and tooltip agree despite low live competition")
+same(liveAdvice.level,tooltipAdvice.level,"Sell and tooltip use identical evidence")
+same(liveSuggestion.price,100,"live posting price remains independent of advice")
+local originalFacts=sourceFacts
+sourceFacts={recent={value=10,source="market_server"}}
+local _,cheapAdvice=D.Guidance(row,ctx)
+local cheapTooltip=W.AdvisorData.Tooltip({item=row.item,count=row.qty,sell=40,bindType=0,bound=false,classID=7,quality=1})
+same(cheapAdvice.action,"vendor");same(cheapAdvice.action,cheapTooltip.action,"changed source is read afresh")
+sourceFacts=originalFacts
 same(ctx.source,"live");same(#ctx.rows,2,"own and account competition excluded")
 same(ctx.rows[1].unit,100);same(ctx.rows[1].total,299,"exact total retained")
 same(D.Copy(ctx,ctx.rows[1],row),100,"copy normalized unit price")

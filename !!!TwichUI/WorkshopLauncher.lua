@@ -187,6 +187,69 @@ function L.SetVendorJunkEnabled(on)
     if R.Workshop and R.Workshop.Junk then R.Workshop.Junk.Start() end
     return true
 end
+-- Profile-local filters and account-wide protections, without loading Workshop.
+local JUNK_DEFAULTS = {gear=true, materials=true, recipes=false, consumables=false, other=false}
+local JUNK_CLASS = {[0]="consumables", [2]="gear", [4]="gear", [5]="materials", [7]="materials", [9]="recipes"}
+local function JunkID(id)
+    return not (issecretvalue and issecretvalue(id)) and type(id)=="number" and id==id
+        and id>=1 and id<=2147483647 and id%1==0
+end
+local function JunkConfig(write)
+    local ui=type(TwichUIDB)=="table" and TwichUIDB.ui
+    if write then
+        if type(TwichUIDB)~="table" or R.Persist and R.Persist.IsHeld("TwichUIDB") then return nil end
+        if type(ui)~="table" then ui={};TwichUIDB.ui=ui end
+        if type(ui.workshopJunk)~="table" then ui.workshopJunk={} end
+    end
+    return type(ui)=="table" and type(ui.workshopJunk)=="table" and ui.workshopJunk or nil
+end
+function L.JunkFilter(key)
+    local cfg=JunkConfig()
+    local value=cfg and cfg[key]
+    if type(value)=="boolean" then return value end
+    return JUNK_DEFAULTS[key]==true
+end
+local function JunkChanged()
+    if R.Workshop and R.Workshop.Junk then R.Workshop.Junk.Start() end
+end
+function L.SetJunkFilter(key,on)
+    if JUNK_DEFAULTS[key]==nil or type(on)~="boolean" then return false end
+    local cfg=JunkConfig(true);if not cfg then return false end
+    cfg[key]=on;JunkChanged();return true
+end
+local function JunkIgnores(write)
+    if type(TwichUIDB)~="table" then return nil end
+    if write then
+        if R.Persist and R.Persist.IsHeld("TwichUIDB") then return nil end
+        if type(TwichUIDB.workshopJunkIgnore)~="table" then TwichUIDB.workshopJunkIgnore={} end
+    end
+    -- Outside the profile groups: changing profiles must not lift protection.
+    return type(TwichUIDB.workshopJunkIgnore)=="table" and TwichUIDB.workshopJunkIgnore or nil
+end
+function L.JunkIgnored(id)
+    if not JunkID(id) then return true end
+    if id==211527 then return true end -- Cozy Sleeping Bag, also used by camping/Data.lua
+    local ignore=JunkIgnores()
+    return ignore and ignore[id]==true or false
+end
+function L.JunkIgnoreList()
+    local out={}
+    for id,on in pairs(JunkIgnores() or {}) do
+        if on==true and JunkID(id) then out[#out+1]=id end
+    end
+    table.sort(out);return out
+end
+function L.SetJunkIgnored(id,on)
+    if not JunkID(id) or type(on)~="boolean" or id==211527 then return false end
+    local ignore=JunkIgnores(true);if not ignore then return false end
+    if on and ignore[id]~=true and #L.JunkIgnoreList()>=512 then return false end
+    ignore[id]=on or nil;JunkChanged();return true
+end
+function L.JunkAllows(id,class)
+    if L.JunkIgnored(id) or type(class)~="number" or class~=class or class%1~=0 or class<0 or class>20
+        or class==12 or class==13 then return false end -- quest items and keys are always protected
+    return L.JunkFilter(JUNK_CLASS[class] or "other")
+end
 function L.LoadOnLogin()
     local ui = type(TwichUIDB) == "table" and TwichUIDB.ui
     return type(ui) == "table" and ui.workshopLoadOnLogin == true or false

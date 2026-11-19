@@ -248,9 +248,21 @@ function D.Copy(ctx,tier,row)
 end
 function D.Advice(row,facts)
     if not row then return nil end
-    return W.AdvisorData.Tooltip({item=row.item,count=row.qty,sell=row.info.sell,bindType=row.info.bindType,
-        bound=row.bound,variant=row.variant,quality=row.info.quality,classID=row.info.classID,equipLoc=row.info.equipLoc},
-        facts or W.Facts.Of(row.item,{variant=row.variant}))
+    local info=row.info
+    -- Read the held link (not just the base ID), as the bag tooltip does.
+    if row.link then info=W.AdvisorData.Info(row.item,row.link) end
+    local source=W.Session.PriceSource()
+    local f={item=row.item,count=row.qty,sell=info.sell,bindType=info.bindType,
+        bound=row.bound,variant=row.variant and (row.variantKind or true) or nil,quality=info.quality,
+        classID=info.classID,equipLoc=info.equipLoc,itemLevel=info.itemLevel,marketTable=source.market,now=time()}
+    f.actualLevel=f.itemLevel~=nil and not f.variant
+    if row.link and C_Item and C_Item.GetDetailedItemLevelInfo then
+        local actual,_,base=C_Item.GetDetailedItemLevelInfo(row.link)
+        actual,base=W.Plain(actual),W.Plain(base)
+        if W.Int(actual,1,1000) then f.itemLevel=actual;f.actualLevel=true end
+        if not f.variant and type(actual)=="number" and type(base)=="number" and actual~=base then f.variant="level" end
+    end
+    return W.AdvisorData.Tooltip(f,facts)
 end
 function D.Guidance(row,ctx)
     if not row then return nil,nil end
@@ -262,7 +274,7 @@ function D.Guidance(row,ctx)
         live.comp=low and {competing=low,complete=true,cut=false,age=0,notes={}} or nil
         f=live
     end
-    local rec=D.Advice(row,f)
+    local rec=D.Advice(row)
     if ctx.source=="live" and ctx.complete and D.Current(ctx,row) and D.Max(row)>0 then
         local summary={comparable=0}
         for _,tier in ipairs(ctx.rows) do

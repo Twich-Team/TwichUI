@@ -10,7 +10,8 @@ local touched, touchedCount = {}, 0 -- bounded; respect a manual unmark this ses
 local EVENTS = {"BAG_UPDATE_DELAYED", "GET_ITEM_INFO_RECEIVED", "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED",
     "PLAYER_ENTERING_WORLD", "PLAYER_LEAVING_WORLD", "ADDON_LOADED", "SPELLS_CHANGED", "SKILL_LINES_CHANGED"}
 local function Protected(id)
-    return R.MageSell and R.MageSell.IsExcluded(id) or R.Restock and R.Restock.Protects(id)
+    return R.WorkshopLauncher.JunkIgnored(id)
+        or R.MageSell and R.MageSell.IsExcluded(id) or R.Restock and R.Restock.Protects(id)
 end
 local function Wanted()
     local l = R.WorkshopLauncher
@@ -35,6 +36,7 @@ local function Read(bag, slot)
     if type(quest) ~= "table" or W.Plain(quest.isQuestItem) ~= false or W.Plain(quest.questID) then return id end
     local name, _, quality, level, _, _, _, _, equip, _, sell, class, _, bind = C_Item.GetItemInfo(link)
     if not W.Text(W.Plain(name), 200) then return id end
+    if not R.WorkshopLauncher.JunkAllows(id,W.Plain(class)) then return id end
     local f = {item=id, count=W.Int(W.Plain(x.stackCount),1,W.MAX_ID), sell=W.Plain(sell), quality=W.Plain(quality),
         itemLevel=W.Int(W.Plain(level),1,1000), classID=W.Plain(class), equipLoc=W.Plain(equip), bindType=W.Plain(bind),
         bound=W.Plain(x.isBound), variant=W.Worth.LinkVariant(link), now=time()}
@@ -49,8 +51,7 @@ local function Read(bag, slot)
     end
     local source=W.Session.PriceSource()
     f.marketTable=source.market
-    local facts=W.Facts.Of(id,{market=source.market,variant=f.variant~=nil,now=f.now})
-    local advice=W.AdvisorData.Tooltip(f,facts)
+    local advice=W.AdvisorData.Tooltip(f)
     return id, advice.action=="vendor", f.quality
 end
 

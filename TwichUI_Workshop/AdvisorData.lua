@@ -50,10 +50,10 @@ function D.Track(item)
     v.advisorTracked = t
     return true
 end
-function D.Info(item)
+function D.Info(item, heldLink)
     local name, link, quality, itemLevel, _, kind, sub, _, equip, icon, sell, class, subclass, bind
     if C_Item and C_Item.GetItemInfo then
-        name, link, quality, itemLevel, _, kind, sub, _, equip, icon, sell, class, subclass, bind = C_Item.GetItemInfo(item)
+        name, link, quality, itemLevel, _, kind, sub, _, equip, icon, sell, class, subclass, bind = C_Item.GetItemInfo(heldLink or item)
     end
     return { item = item, known = W.Text(name,200)~=nil, name = W.Text(name, 200) or ("Item " .. item), link = W.Text(link, 1000), quality = W.Int(quality, 0, 20),
         category = W.Text(kind, 60), sub = W.Text(sub, 60), icon = W.Int(icon, 0, W.MAX_ID) or W.Text(icon, 300), sell = W.Int(sell, 0, W.Prices.MAX_COPPER),
@@ -191,6 +191,12 @@ function D.Reserved(item)
     return reserved, W.Queue.Count() > 0
 end
 function D.Tooltip(f, facts)
+    -- Held-item recommendations share the tooltip's selected pricing source.
+    -- A live posting quote is a separate concern and must not replace advice.
+    if not facts then
+        local source=S.PriceSource()
+        facts=W.Facts.Of(f.item,{market=source.market,variant=f.variant~=nil and f.variant~=false,now=f.now})
+    end
     local reserved, pending = D.Reserved(f.item)
     return A.Decide(f.item, { qty = f.count or 1, sell = f.sell, bindType = f.bindType, bound = f.bound, variant = f.variant,
         now = f.now, minGain = A.Gain(), facts = facts, pendingPlan = pending, crafting = { uses = {}, reserved = reserved },

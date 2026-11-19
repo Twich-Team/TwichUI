@@ -51,7 +51,7 @@ end
 K.Page({
     key = "workshop", icon = "guide", name = "Workshop", order = 46, group = "everyday",
     description = "Experimental professions, crafting plans, shopping and market research. Enable it when you want to try it.",
-    keywords = "workshop experimental enable opt in tooltip designer normal shift price market history scan crafting shopping guild bank progress login load auction house ah selling duration maximum quantity advisor recommendations",
+    keywords = "workshop experimental enable opt in tooltip designer normal shift price market history scan crafting shopping guild bank progress login load auction house ah selling duration maximum quantity advisor recommendations junk ignore never mark gear recipes bags",
     overview = { label = "Workshop", tip = "Crafting plans, shopping and item information.",
         when = function() return Launcher() ~= nil end,
         status = function() return not Enabled() and "Experimental · Off" or (Shown() and "Open" or (Loaded() and "Enabled" or "Ready to load")) end },
@@ -90,12 +90,24 @@ K.Page({
         open:AddModifyPredicate(Enabled)
         open.why = "Enable Workshop — Experimental first."
 
+        K.Header("Junk marking", "Only Vendor recommendations in the item types you allow are marked. Cozy Sleeping Bag, quest items, keys and your Never mark list are protected. Existing EllesmereUI marks must be removed with its junk coin.")
         local junk=K.ProxyToggle("workshopVendorJunk", "Mark Vendor recommendations as junk",
             "Off by default. Marks carried items when Workshop recommends Vendor for every carried copy. Requires EllesmereUI Bags and its Junk Marker. Marks apply to every copy of an item ID across your account, including future copies. EllesmereUI may sell them through Auto Sell Junk or its Sell Junk button. Turning this off leaves existing marks; unmark with EllesmereUI's junk coin. Workshop respects manual unmarking for the rest of the session and leaves custom categories alone. Workshop itself sells nothing. Runs after Workshop is loaded; enable Load Workshop when I log in for future sessions.", false,
             function() return Launcher().VendorJunkEnabled() end,
             function(on) Launcher().SetVendorJunkEnabled(on) end)
         junk:AddModifyPredicate(Loaded)
         junk.why="Enable Workshop and load its options first."
+        for _,option in ipairs({{"gear","Mark gear",true}, {"materials","Mark trade goods and reagents",true},
+            {"recipes","Mark recipes",false}, {"consumables","Mark consumables",false}, {"other","Mark other item types",false}}) do
+            local key,label,default=unpack(option)
+            K.ProxyToggle("workshopJunk"..key,label,
+                "Allow this item type only when the Advisor recommends Vendor. Never mark items and existing safety checks always take priority. Turning this off leaves existing EllesmereUI marks.",default,
+                function() return Launcher().JunkFilter(key) end,
+                function(on) Launcher().SetJunkFilter(key,on) end)
+        end
+        K.Button("Never mark items", "Choose from bags / drop item", function() R.WorkshopJunkSettings.Open() end,
+            "Choose bag items or drop them into the ignore area. The list is shared across your account and covers every copy of each item ID. This prevents new Workshop marks; remove existing junk marks in EllesmereUI.")
+        K.Status("Never mark list", function() return #Launcher().JunkIgnoreList().." items · Cozy Sleeping Bag always protected" end)
         K.Status("Junk marking",function()
             if not Launcher().VendorJunkEnabled() then return "Off" end
             if not Loaded() then return "Waiting for Workshop" end
