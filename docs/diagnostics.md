@@ -111,6 +111,7 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | Id | Where | Kind |
 |---|---|---|
 | `event:<EVENT>` | `Core.lua` event bus dispatch | event |
+| `bugsack.broker.update` | `modules/BugSackBroker.lua` current-session count, on BugSack's `UpdateDisplay` | hook |
 | `core.savedData`, `core.startupHook` (detail: hook index) | `Core.lua` ADDON_LOADED | init |
 | `inventory.plan` | `inventory/Plan.lua` `MI.CurrentPlan` (an interface opening with the feature on, its bags changing, coalesced; the review) | rebuild |
 | `inventory.guildRead` | `inventory/GuildBank.lua` `GB.Capture` (the guild bank opening, showing a tab or changing; only with the feature on) | rebuild |
