@@ -120,19 +120,19 @@ K.Page({
         data:AddShownPredicate(function() return not Loaded() end)
         data:AddModifyPredicate(Enabled)
         data.why = "Enable Workshop — Experimental first."
-        K.Status("Selected market", function() return Value("label", Loaded() and "No observations yet" or "Not loaded") end,
+        K.Status("Local scan market", function() return Value("label", Loaded() and "No observations yet" or "Not loaded") end,
             function() return Info() and "Matches the open Auction House; otherwise the latest scan for this realm." or "Open the Auction House and choose Scan prices to collect observations." end)
-        K.Status("Faction", function() return Value("side", "Not available") end)
-        K.Status("Last scan", function()
+        K.Status("Local scan faction", function() return Value("side", "Not available") end)
+        K.Status("Last local scan", function()
             local i = Info(); local w = R.Workshop
             return i and w.Market.AgeShort(i.age) or "No scan recorded"
         end)
-        K.Status("Freshness", function() local i = Info(); local words = { fresh = "Fresh", aging = "Aging", old = "Old" }; return i and words[R.Workshop.Market.Freshness(i.age)] or "Unknown" end)
-        K.Status("Coverage", function()
+        K.Status("Local scan freshness", function() local i = Info(); local words = { fresh = "Fresh", aging = "Aging", old = "Old" }; return i and words[R.Workshop.Market.Freshness(i.age)] or "Unknown" end)
+        K.Status("Local scan coverage", function()
             local i = Info(); if not i then return "No observations" end
             return i.complete and "Whole scan" or "Partial observations"
         end, function() local i = Info(); return i and (tostring(i.items or 0) .. " items observed. Listings do not establish demand or sales.") or nil end)
-        K.Status("History", function()
+        K.Status("Local scan history", function()
             local i = Info(); local h = i and i.history
             if h and h.state == "future" then return "Newer format" end
             return h and h.from and ("Since " .. date("!%d %b %Y", h.from * 86400)) or "No retained history"
@@ -152,10 +152,18 @@ K.Page({
             if s.ready then return s.contract_version==2 and "Loaded · prices and actual daily history" or "Loaded · price references only" end
             return s.error and "Rejected · local scans remain available" or "Not loaded · local scans remain available"
         end)
+        K.Status("Companion market", function()
+            local w=Loaded() and R.Workshop;local b=w and w.Bridge
+            local s=b and b.Status();local m=s and s.ready and b.Market and b.Market()
+            if not m then return "Unavailable" end
+            return (type(m.region)=="string" and m.region:upper() or "Unknown region").." · "..
+                (type(m.player_ruleset)=="string" and m.player_ruleset or "Unknown ruleset").." · "..
+                (type(m.faction)=="string" and m.faction or "Unknown faction").." · house "..tostring(m.house_id or "unknown")
+        end)
         K.Status("Loaded Market generation", function()
             local s=Companion();return s and s.ready and s.generation or "None validated"
         end)
-        K.Status("Market observations", function()
+        K.Status("Companion observations", function()
             local w=Loaded() and R.Workshop;local h=w and w.Bridge and w.Bridge.Manifest()
             return h and h.source_observation and h.source_observation.observed_at or "Unavailable"
         end)
