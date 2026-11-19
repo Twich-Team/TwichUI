@@ -402,7 +402,7 @@ local function PaintRow(fr, row)
             fr.left:SetText(a)
             Color(fr.left, C.left)
             fr.left:Show()
-            h = math.max(ROW_H, (fr.left:GetStringHeight() or 12) + 4)
+            h = math.max(ROW_H, (fr.left:GetStringHeight() or 12) + 4,(fr.right:GetStringHeight() or 12)+4)
         else
             fr.wide:SetText(a)
             Color(fr.wide, C[kind] or C.plain)

@@ -32,7 +32,8 @@ assert(result.value==195,'armor: floor(0.8*1.5*133 + 0.2*1.5*119)')
 assert(estimate({classID=2}).value==182,'weapon: floor(0.8*1.5*119 + 0.2*1.5*133)')
 assert(result.value==result.expectedGross and result.outcomeReference and result.quality=='limited')
 assert(result.priceSource=='market_server' and #result.materials==2)
-assert(result.outcomes:find('Strange Dust',1,true) and result.why:find('Classic',1,true))
+assert(result.outcomes:find('Strange Dust',1,true) and result.source:find('Classic',1,true))
+assert(not result.why:find('Classic',1,true))
 assert(estimate({classID=2}).expectedGross==expected(D.Find(2,2,5)),'weapon/armor yields differ')
 -- Every captured client bracket, at both boundaries; no cross-bracket guessing.
 local csv=assert(io.open(TESTS..'fixtures/disenchant_forever/brackets.csv'))
@@ -92,12 +93,26 @@ c.GetProfessions=nil;c.GetProfessionInfo=nil;assert(DE.Character().canDisenchant
 local layout={enabled=true,lines={{id='disenchant',when='always'},{id='outcomes',when='shift'}}}
 local r={disenchant=result,vendor={state='ok',value=1},auction={state='unavailable'}}
 local rec=W.Worth.Recommend(r)
-assert(rec.kind=='possible' and not rec.pick and rec.text:find('Classic DE estimate',1,true),'direct worth comparison promoted a reference into a proven winner')
+assert(rec.kind=='possible' and not rec.pick and not rec.text:find('Classic',1,true),'direct worth comparison promoted a reference into a proven winner')
 local originalVendor=r.vendor.value;r.vendor.value=result.value*2
 assert(W.Worth.Recommend(r).kind=='possible','a vendor comparison is also qualified when DE uses a reference')
 r.vendor.value=originalVendor
 local lines=W.WorthLayout.Lines(r,{money=tostring},layout,false)
-assert(lines[2][1]=='Disenchant (Classic estimate)' and lines[2][2]==tostring(result.value))
+assert(lines[2][1]=='Disenchant (average)' and lines[2][2]==tostring(result.value))
 assert(W.WorthLayout.UsesDisenchant(layout,false))
 assert(not W.WorthLayout.UsesDisenchant({lines={{id='vendor',when='always'}}},false))
+-- One configured field expands to a right-column list, one icon per material.
+result.outcomes='fixture';result.yields={{item=11137,min=1,max=2,chance=75},{item=11135,min=1,max=2,chance=20},{item=11139,min=1,max=1,chance=5}}
+local yieldLayout={enabled=true,lines={{id='outcomes',when='always'}}}
+local yieldContext={money=tostring,itemIcon=function(id)return id+9000 end}
+local list=W.WorthLayout.Lines(r,yieldContext,yieldLayout,false)
+assert(#list==4 and list[2][1]=='Disenchant yields' and list[3][1]=='' and list[4][1]=='')
+for i,m in ipairs(result.yields) do
+ assert(list[i+1][2]:find('|T'..(m.item+9000)..':14:14:0:0|t',1,true),'material icon missing')
+ assert(not list[i+1][2]:find('\n',1,true) and not list[i+1][2]:find(';',1,true),'materials share a horizontal line')
+end
+assert(list[2][2]:find('Vision Dust',1,true) and list[2][2]:find('1–2 (75%)',1,true))
+local preview=W.WorthLayout.Rows(r,yieldContext,yieldLayout,false)
+local _,breaks=preview.rows[1].line[2]:gsub('\n','')
+assert(breaks==2,'designer must retain the same vertical material list')
 print('PASSED all client brackets, independent expected-value model, exclusions, missing/fresh prices, character context and shared layout')

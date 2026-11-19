@@ -61,11 +61,12 @@ generation()
 for i=1,1000 do FlushTimers();if not B.Status().loading then break end end
 assert(B.Status().ready and B.Status().checked_parts==0)
 local initial=draw()
-assert(not initial:find('Disenchant (Classic estimate) | 360',1,true),'unvalidated material data was displayed')
+assert(not initial:find('Disenchant (average) | 360',1,true),'unvalidated material data was displayed')
 for i=1,2000 do FlushTimers() end
 local text=draw()
-assert(text:find('Workshop: Disenchant (Classic estimate)',1,true),'actual tooltip did not use the material estimate: '..text..' reader error='..tostring(B.Status().error))
-assert(text:find('Disenchant (Classic estimate) | 360',1,true),'per-item expected value differs from 80%*1.5*200 + 20%*1.5*400')
+assert(not text:find('Classic',1,true),'unwanted source wording in tooltip')
+assert(text:find('Workshop: Disenchant',1,true),'actual tooltip did not use the material estimate: '..text..' reader error='..tostring(B.Status().error))
+assert(text:find('Disenchant (average) | 360',1,true),'per-item expected value differs from 80%*1.5*200 + 20%*1.5*400')
 assert(refreshes>0 and B.Status().checked_parts==3,'material completion did not refresh the open tooltip')
 local facts=W.Facts.Of(100)
 local result=W.AdvisorData.Tooltip(W.WorthTip.Read({guid='synthetic-item'}),facts)
@@ -73,6 +74,11 @@ assert(result.action=='disenchant' and result.level=='tentative' and not result.
 assert(result.disenchant.priceSource=='market_server' and result.provenance.source=='disenchant')
 assert(result.disenchant.value==360 and result.qty==5,'stack count changed a per-item estimate')
 assert(W.Worth.Recommend({advisor=result}).kind=='possible')
+local savedShift=c.IsShiftKeyDown;c.IsShiftKeyDown=function()return true end
+local expanded=draw()
+assert(expanded:find('Disenchant yields | |T15940:14:14:0:0|t',1,true))
+assert(expanded:find('\n | |T15938:14:14:0:0|t',1,true),'second yield must be a separate right-column row')
+c.IsShiftKeyDown=savedShift
 liveLevel=26;local actual=W.WorthTip.Read({guid='synthetic-item'})
 assert(actual.itemLevel==26 and actual.actualLevel and actual.variant=='level','actual copy level was lost')
 liveLevel=5
@@ -81,13 +87,13 @@ for i=1,100 do FlushTimers() end
 assert(refreshes==completed and B.Status().slices==slices,'completed material prices restarted decoding')
 sell=1000;local vendorText=draw()
 assert(vendorText:find('Workshop: Vendor',1,true),'lower DE must lose to vendor')
-assert(vendorText:find('Classic DE estimate',1,true),'primary comparison hid its Classic yield basis')
+assert(not vendorText:find('Classic',1,true),'primary comparison retained unwanted source wording')
 sell=10;variant=true
-assert(not draw():find('Workshop: Disenchant',1,true),'unknown auction variant value was ignored')
+assert(draw():find('Workshop: Disenchant',1,true),'known DE and vendor values can be compared without an auction quote')
 unknownLevel=true;local unresolved=W.WorthTip.Read({guid='synthetic-item'})
 assert(not unresolved.actualLevel and DE.ForItem(unresolved).state=='unknown','a missing detailed level was replaced by the variant base level')
 unknownLevel=false
-bound=true;assert(draw():find('Workshop: Disenchant (Classic estimate)',1,true),'a bound suffix item can use its actual level for DE')
+bound=true;assert(draw():find('Workshop: Disenchant',1,true),'a bound suffix item can use its actual level for DE')
 can=false;eventFrame:GetScript('OnEvent')(eventFrame,'SPELLS_CHANGED')
 assert(table.concat(drawn,' '):find('does not know Disenchant',1,true),'character without Disenchant remained eligible after spell change')
 assert(W.WorthTip.Events()==3,'character listener count must remain bounded')
@@ -95,7 +101,7 @@ can=true;bound=false;variant=false
 -- Replacement missing a material must discard the complete old value.
 h.issuer_id='00000000-0000-4000-8000-000000000002';generation(10938)
 for i=1,2000 do FlushTimers() end
-text=draw();assert(not text:find('Disenchant (Classic estimate) | 360',1,true) and text:find('price is missing',1,true),'replacement reused an old material quote')
+text=draw();assert(not text:find('Disenchant (average) | 360',1,true) and text:find('price is missing',1,true),'replacement reused an old material quote')
 -- The same feature works with local scan data and no Companion generation.
 W.Summary.Deactivate()
 local batch=W.Prices.NewBatch();batch:Add(10938,2,800,true);batch:Add(10940,2,400,true);batch:Add(100,2,240,true)

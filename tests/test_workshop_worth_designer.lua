@@ -149,7 +149,7 @@ for _, e in ipairs(L.EXAMPLES) do
   end
 end
 D.SetExample("ordinary"); D.SetMode(false)
-Same(table.concat(Mock(), "\n"), "Suggested: Vendor\nVendor | 500c\nAuction (before fees) | 400c\n(Disenchant value (average): nothing to show for this example)\nMarket value (14 days) | 420c",
+Same(table.concat(Mock(), "\n"), "|T"..c.TwichUI.PATH..[[media\npcs\balance-scales-small:18:18:0:0|t ]].."Suggested: Vendor\nVendor | 500c\nAuction (before fees) | 400c\n(Disenchant value (average): nothing to show for this example)\nMarket value (14 days) | 420c",
   "ordinary item, Normal") -- coin text is the fallback in this harness
 Check(f.mock.hint.shown ~= false and f.mock.hint.text == "Hold Shift for details", "the hint in Normal")
 D.SetMode(true)
@@ -445,6 +445,21 @@ for _, width in ipairs({ 500, 644, 1088 }) do
   Check(f.mock:GetWidth() > 200, "preview retains a usable width")
 end
 f:SetWidth(644); D.Refresh()
+
+-- Right-column multiline yields determine the preview row's height too.
+local originalExample=L.Example
+L.Example=function()
+ return {disenchant={state='ok',value=1,outcomes='fixture',yields={{item=10940,min=1,max=2,chance=80},{item=10938,min=1,max=2,chance=20}}}},
+  {money=tostring,itemIcon=function()return 134400 end}
+end
+c.TwichUIDB.ui.workshopWorth={v=1,enabled=true,lines={{id='outcomes',when='always'}}};D.Cancel()
+local yieldRow=D.Row(1);local originalHeight=yieldRow.right.GetStringHeight
+yieldRow.right.GetStringHeight=function()return 48 end
+D.Refresh()
+Check(yieldRow:GetHeight()>=52,'multiline right column clips or overlaps the next row')
+Check(yieldRow.right:GetText():find('\n',1,true),'preview material list must be vertical')
+yieldRow.right.GetStringHeight=originalHeight;L.Example=originalExample
+c.TwichUIDB.ui.workshopWorth=nil;D.Cancel()
 
 if failures > 0 then error(failures .. " check(s) failed", 0) end
 print("PASSED")

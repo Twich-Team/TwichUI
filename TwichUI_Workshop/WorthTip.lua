@@ -32,6 +32,11 @@ local frame          -- the event frame (modifier changes; item information only
 local faulted = false
 
 local function Shift() return IsShiftKeyDown and IsShiftKeyDown() == true end
+function T.ItemIcon(item)
+    local icon=C_Item and C_Item.GetItemIconByID and Plain(C_Item.GetItemIconByID(item))
+    if not icon and C_Item and C_Item.GetItemInfoInstant then local _,_,_,_,tex=C_Item.GetItemInfoInstant(item);icon=Plain(tex) end
+    return Int(icon,1,W.MAX_ID) or 134400
+end
 
 -- Everything the evaluation needs, from the game. Returns facts, or nil (not an item of the player's: nothing is added), or nil and
 -- "pending" (the item's information has not arrived yet).
@@ -121,7 +126,7 @@ local function Add(tooltip, data)
         f.disenchantValue=W.Disenchant.ForItem(f,{market=f.marketTable,now=f.now})
         r.disenchant=f.disenchantValue
     end
-    local ctx = { money = WL.Money, ageText = PR.AgeText, market = f.market, now = f.now, count = f.count }
+    local ctx = { money = WL.Money, ageText = PR.AgeText, market = f.market, now = f.now, count = f.count,itemIcon=T.ItemIcon }
     -- the market figures (A7), only when the layout has a line that uses them and there is a saved market; one cached read per item (MarketFacts),
     -- so a Shift rebuild of the same tooltip decodes nothing again. A variant is never priced from the base item's listings (facts say so).
     if W.Facts and f.market and WL.UsesMarket(layout) then

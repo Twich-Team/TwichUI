@@ -107,10 +107,12 @@ local function tooltip(expected)
  drawn={};W.WorthTip.OnItem(c.GameTooltip,{guid='Fixture-item'})
  assert(table.concat(drawn,' '):find(expected,1,true),'tooltip did not show '..expected..': '..table.concat(drawn,' '))
 end
-tooltip('Workshop: Auction (Market estimate)')
-vendorCopper=100;tooltip('Workshop: Vendor (Market comparison)')
-tipItem=2653;gear=true;tooltip('disenchant unpriced')
-tipItem=2717;gear=false;tooltip('Workshop: Auction price unavailable')
+tooltip('Workshop: Auction')
+vendorCopper=100;tooltip('Workshop: Vendor')
+tipItem=2653;gear=true;tooltip('Workshop: Vendor')
+local gearFacts=W.AdvisorData.Tooltip(W.WorthTip.Read({guid='Fixture-item'}),W.Facts.Of(tipItem))
+assert(gearFacts.disenchantUnpriced and gearFacts.disenchant.state=='unknown','unknown alternative remains in the evidence snapshot')
+tipItem=2717;gear=false;tooltip('Workshop: Vendor')
 assert(W.WorthTip.faults==0,'Market recommendation tooltip faulted')
 c.C_Item.GetItemInfo=info
 -- A local scan remains unmodified and provides missing records independently.

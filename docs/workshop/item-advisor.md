@@ -31,10 +31,13 @@ competition is far above/below the reference; they never supply a posting price.
 `Sell.Proceeds` reports gross unit price times quantity with bounded arithmetic.
 Fees, deposit and sale probability remain unknown. It never reports net proceeds.
 
-`Advisor.Decide` API 1 / policy 4 keeps active-plan materials first, using the existing
+`Advisor.Decide` API 1 / policy 5 keeps active-plan materials first, using the existing
 planner's allocation. Known recipe uses alone never prove crafting profit. A
 bound item may be vendored when its sell value is known. Missing disenchant
-data never blocks a supported Vendor or Auction recommendation. Comparisons too weak for the separate tentative policy remain Unknown. A supported auction suggestion must exceed vendor by 1.5x and
+data never blocks a supported Vendor or Auction recommendation. Available priced
+options can be compared even when another value is missing; an unpriced suffix
+can still favor Vendor or Disenchant. Tooltip recommendations contain only the
+three sale choices, and are omitted for protected or unpriced contexts. A supported auction suggestion must exceed vendor by 1.5x and
 the player's minimum worthwhile gain; that gain defaults to zero copper (no
 universal gold floor). Auction advice says *consider*, uses gross value and
 never promises a sale or profit. Watch is a choice with manual refresh, not a

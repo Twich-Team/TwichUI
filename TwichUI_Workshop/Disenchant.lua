@@ -53,7 +53,7 @@ function DE.Evaluate(f, snapshot)
     r.value=r.expectedGross
     if reference then
         r.outcomeReference=true;r.quality="limited"
-        r.why="Classic yield estimate using Forever item brackets; average quantities assume the midpoint of each range. Material prices are listing estimates before fees."
+        r.why="Expected material value using average quantities and current material prices."
     end
     return r
 end
@@ -98,12 +98,13 @@ function DE.ForItem(f,opt)
     local row=data.Find(input.classID,input.quality,level)
     if not row or row.unconfirmed then unavailable.why="No supported yield estimate exists for this item bracket.";return unavailable end
     local snapshot={reference=REFERENCE,item=input.item,source="DisenchantForever / Classic yield reference",eligible=true,outcomes={},values={}}
-    local materials,words,sources={},{},{}
+    local materials,words,sources,yields={},{},{},{}
     local missing,pending
     local now=opt.now or f.now or time()
     local pricing=W.Pricing or W.Market
     for i=3,#row do
         local chance,low,high,item=unpack(row[i])
+        yields[#yields+1]={item=item,chance=chance,min=low,max=high}
         snapshot.outcomes[#snapshot.outcomes+1]={p=chance/100,materials={{item=item,qty=(low+high)/2}}}
         local quote,why=pricing.Price(item,{market=opt.market,now=now})
         local at=quote and W.Plain(quote.at)
@@ -121,11 +122,13 @@ function DE.ForItem(f,opt)
     if missing then
         unavailable.why=pending and "Loading disenchant material prices." or missing
         unavailable.pending=pending;unavailable.outcomeReference=true;unavailable.outcomes=table.concat(words,"; ")
+        unavailable.yields=yields
         return unavailable
     end
     local result=DE.Evaluate(input,snapshot)
     if result.state=="ok" then
         result.materials,result.outcomes=materials,table.concat(words,"; ")
+        result.yields=yields
         result.priceSource=sources.market_server and (sources["local"] and "mixed" or "market_server") or "local"
         result.bracketsBuild=data.BRACKETS_BUILD
         result.why=result.why.." Prices: "..(result.priceSource=="market_server" and "Market server" or result.priceSource=="mixed" and "Market server + local scans" or "local scans").."."

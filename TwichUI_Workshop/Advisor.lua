@@ -2,7 +2,7 @@
 -- Decide has no planning, history decoding, inventory reads, saved writes or frames.
 -- Gain/SetGain are the small existing-account preference adapter; callers snapshot it.
 local W = TwichUI.Workshop
-local A = { POLICY = 4, API = 1 }
+local A = { POLICY = 5, API = 1 }
 W.Advisor = A
 A.LABEL = { auction = "Recommended: Auction", vendor = "Recommended: Vendor", craft = "Keep for crafting plan",
     disenchant = "Consider disenchanting", watch = "Watch this item", unknown = "Not enough data to compare" }
@@ -118,14 +118,34 @@ function A.Decide(item, ctx)
     local de = r.disenchant
     r.disenchantUnpriced=ctx.disenchant==true and de.state=="unknown"
     local auctionValue=s.state=="ok" and s.price or r.observed and r.observed.value or r.reference and r.reference.value
-    if r.action ~= "craft" and not ctx.pendingPlan and W.Int(item,1,W.MAX_ID) and qty and qty > 0 and sell ~= nil and de.state == "ok" and de.expectedGross
-        and (eligible == false or (eligible == true and auctionValue)) then
-        local ceiling = math.max(sell, auctionValue or 0)
+    local canChoose=r.action~="craft" and not ctx.pendingPlan and W.Int(item,1,W.MAX_ID) and qty and qty>0
+    -- Compare the priced options we actually have. An unpriced suffix never
+    -- supplies an auction quote or blocks known vendor/disenchant alternatives.
+    if canChoose and r.action=="unknown" then
+        if eligible==true and not ctx.variant and not auctionValue then
+            local observed=W.Sell.Observation(r.facts)
+            local reference=r.facts.recent
+            if observed then r.observed=observed;auctionValue=observed.value
+            elseif reference and reference.source=="market_server" and W.Int(reference.value,1,W.Prices.MAX_COPPER) then
+                r.reference=reference;auctionValue=reference.value
+            end
+        end
+        if sell and sell>0 then
+            r.action,r.level,r.evidence="vendor","tentative","limited"
+            Reason("Vendor is the available priced sale option.")
+        elseif sell==nil and eligible==true and not ctx.variant and auctionValue then
+            r.action,r.level,r.evidence="auction","tentative","limited"
+            Reason("Auction is the available priced sale option.")
+        end
+    end
+    if canChoose and de.state == "ok" and W.Int(de.expectedGross,1,W.Prices.MAX_COPPER) then
+        local ceiling=auctionValue
+        if sell~=nil then ceiling=math.max(sell,ceiling or 0) end
         local gain = W.Int(ctx.minGain, 0, W.Prices.MAX_COPPER) or 0
-        if de.expectedGross > ceiling and de.expectedGross >= ceiling * 1.5 and de.expectedGross - ceiling >= gain then
+        if ceiling==nil or de.expectedGross > ceiling and de.expectedGross >= ceiling * 1.5 and de.expectedGross - ceiling >= gain then
             r.action, r.evidence = "disenchant", "limited"
             if de.outcomeReference then r.level="tentative" end
-            r.reasons = { de.outcomeReference and "Classic yield estimates favor disenchanting over the available sale values." or "Verified outcomes support a higher expected material value.",de.why or "Disenchant outcomes and material sales are uncertain; this is not guaranteed proceeds." }
+            r.reasons = { "Estimated material value favors disenchanting over the available sale values.",de.why or "Estimated material value." }
             r.provenance={source="disenchant",outcomes=de.source,prices=de.priceSource}
             r.proceeds=nil -- the previous auction comparison is not disenchant proceeds
         end
@@ -149,7 +169,6 @@ function A.Decide(item, ctx)
     r.level=r.action=="unknown" and "insufficient" or r.level or "supported"
     r.text = r.action=="unknown" and (r.unknownText or A.LABEL.unknown) or r.level=="tentative" and
         ((r.reference and "Market comparison: " or "Possible: ")..A.TOOLTIP[r.action]) or A.LABEL[r.action]
-    if r.action=="disenchant" and de.outcomeReference then r.text="Consider disenchanting (Classic estimate)" end
     r.evidenceText = A.EVIDENCE[r.evidence]
     return r
 end
@@ -160,18 +179,6 @@ function A.Short(r)
     if r.level~="tentative" then return text end
     return r.reference and text.." (Market)" or "Possible "..text
 end
-local function TooltipWords(r)
-    if r.action=="unknown" then return r.unknownText or A.TOOLTIP.unknown end
-    if r.action=="disenchant" then return r.disenchant and r.disenchant.outcomeReference and "Disenchant (Classic estimate)" or "Disenchant (expected value)" end
-    local text=A.TOOLTIP[r.action] or A.TOOLTIP.unknown
-    if r.level~="tentative" then return text end
-    if r.reference then return text..(r.action=="vendor" and " (Market comparison)" or " (Market estimate)") end
-    return "Possible "..text
-end
 function A.Tooltip(r)
-    local text="Workshop: "..TooltipWords(r)
-    if r.disenchantUnpriced and r.action~="craft" then text=text.." · disenchant unpriced" end
-    if r.disenchant and r.disenchant.state=="ok" and r.disenchant.outcomeReference and
-        (r.action=="vendor" or r.action=="auction") then text=text.." · Classic DE estimate" end
-    return text
+    if r.action=="vendor" or r.action=="auction" or r.action=="disenchant" then return "Workshop: "..A.TOOLTIP[r.action] end
 end

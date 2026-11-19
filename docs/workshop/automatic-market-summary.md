@@ -292,3 +292,45 @@ Final staging normalized trailing blank lines in the new data/license/provenance
 files. The two disenchant tests and both data-file syntax checks pass again after
 that whitespace-only correction; the complete campaign's executable behavior is
 unchanged. No other executable or fixture edits follow the complete campaign.
+
+### Tooltip presentation and available sale choices
+
+The owner requested concise recommendation text and a vertical yield breakdown.
+Tooltip recommendations now display only Auction, Disenchant or Vendor. Advisor
+policy 5 compares known options even when another price is absent: an unpriced
+suffix can still favor its vendor value or its actual-level disenchant estimate.
+Auction prices are never borrowed from a mismatched base variant. Missing values
+remain unknown in the evidence snapshot; no quoted value or posting price is
+invented. Existing worthwhile-gain margins apply when comparing known values.
+Invalid/empty inventory context and active/unresolved crafting reservations still
+block sale advice; no extra status label substitutes for a sale recommendation.
+
+The numeric row reads `Disenchant (average)`. The yields field expands to separate
+right-column native tooltip rows, each with an item icon, name, quantity range and
+chance. The designer uses the same list and measures the right column's height.
+Source provenance and the bundled license remain in the data/docs rather than in
+user-facing labels. Existing layouts, field ordering and Shift visibility remain.
+
+Regression coverage includes the reported suffix comparison (vendor 32s94c versus
+DE 20s54c), a suffix with higher DE value, the three allowed labels, no eligible
+priced option, native icon rendering, multiple right-column rows and designer
+height. The earlier recommendation-source wording tests were updated to the
+owner's new presentation contract. A redundant-branch-removal mutant no longer
+represented a defect after known-option fallback was added; it is replaced by an
+incorrect vendor-to-auction selection mutation, with the earlier result retained.
+This update does not change yield probabilities or material-value arithmetic.
+
+The owner also requested recommendation artwork on the same line as its text.
+The shared tooltip/designer builder reuses TwichUI's painted balance-scales,
+gavel and magic-enchanting small assets for Vendor, Auction and Disenchant.
+Recommendation artwork uses addon assets; the yield list uses each material's
+ordinary item icon. No generated artwork, new assets, frame or listener is added.
+
+Final unit verification passes 78 Workshop modules and 12 Workshop/settings
+modules, including Lua syntax checks. The complete Market mutation campaign
+detects all 305 selected defects, with no survivors, invalid mutations, timeouts
+or infrastructure errors. Evidence: `test-output/tooltip-yields-final-workshop.log`,
+`tooltip-yields-final-settings.log` and `tooltip-yields-final-mutations.{log,json}`.
+These runs used unchanged executable source; the evidence paragraph is docs-only.
+Earlier failed/stopped runs remain retained and are not counted as passes.
+Simulator and real-client appearance checks remain unrun.

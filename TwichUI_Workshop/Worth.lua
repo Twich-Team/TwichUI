@@ -189,9 +189,11 @@ end
 function WO.Recommend(r)
     if r.advisor and W.Advisor then
         local a=r.advisor
-        if a.level=="tentative" then return {kind="possible",text=W.Advisor.Tooltip(a),tone="quiet"} end
+        local text=W.Advisor.Tooltip(a)
+        if not text then return nil end
+        if a.level=="tentative" then return {kind="possible",text=text,tone="quiet"} end
         return { kind=a.action=="unknown" and "more" or "pick", pick=a.action~="unknown" and a.action or nil,
-            text=W.Advisor.Tooltip(a), tone=a.action=="unknown" and "quiet" or "good" }
+            text=text, tone=a.action=="unknown" and "quiet" or "good" }
     end
     local v, a, d = r.vendor, r.auction, r.disenchant
     local good = function(kind, text, key) return { kind = kind, text = text, tone = "good", pick = key } end
@@ -208,8 +210,8 @@ function WO.Recommend(r)
     if a.reference then return quiet("reference","Market reference estimate; check current listings before selling") end
     if d and d.state=="ok" and d.outcomeReference then
         local outcome,key=Compare(r)
-        if outcome=="pick" then return quiet("possible","Possible: "..LABEL[key].." (Classic DE estimate)") end
-        return quiet("estimate","Classic disenchant estimate; compare available values and fees")
+        if outcome=="pick" then return quiet("possible","Possible: "..LABEL[key]) end
+        return nil
     end
     local tags = AuctionTags(a)
     local outcome, key = Compare(r)

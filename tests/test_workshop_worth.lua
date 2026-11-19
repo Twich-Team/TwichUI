@@ -150,7 +150,7 @@ do
   local function Flat(lines) local t = {} for _, l in ipairs(lines or {}) do t[#t + 1] = l[1] .. (l[2] and (" | " .. l[2]) or "") end return table.concat(t, "\n"), #(lines or {}) end
   local function Short(f, ctx, shift) return Flat(WL.Lines(WO.Evaluate(F(f)), ctx or Ctx(), WL.Get(), shift)) end
   local text, n = Short({ sell = 300 })
-  Same(text, "What's it worth?\n*Suggested: Vendor\nVendor | [300]\nAuction (before fees) | [200]\n~Hold Shift for details")
+  Same(text, "What's it worth?\n*|T"..c0.TwichUI.PATH..[[media\npcs\balance-scales-small:18:18:0:0|t ]].."Suggested: Vendor\nVendor | [300]\nAuction (before fees) | [200]\n~Hold Shift for details")
   Check(n >= 4 and n <= 6, "four to six lines")
   text = Short()
   Check(text:find("~No suggestion: auction fee unknown", 1, true) and not text:find("Suggested", 1, true), "no winner while the fee is unknown")

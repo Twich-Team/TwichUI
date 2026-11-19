@@ -40,11 +40,11 @@ WL.TYPES = {
     { id = "auction", label = "Auction value", when = "always",
       what = "The cheapest listing your last scan saw, marked \"before fees\" until the auction house's cut is confirmed." },
     { id = "disenchant", label = "Disenchant value (average)", when = "always",
-      what = "Expected material listing value for supported weapons and armor. Classic yield estimates, missing prices and character eligibility stay explicit." },
+      what = "Average material value for supported weapons and armor." },
     { id = "status", label = "Price age / status", when = "shift", what = "When the prices were scanned, and if the scan was partial." },
     { id = "source", label = "Price source", when = "shift", what = "Which auction house the prices came from." },
     { id = "outcomes", label = "Disenchant outcomes", when = "shift",
-      what = "Possible materials, chances and quantity ranges from the same estimate. Classic-derived yields are labeled; unsupported brackets stay unavailable." },
+      what = "A list of possible materials with item icons, chances and quantity ranges." },
     { id = "note", label = "Limits note", when = "shift", what = "One short line: estimates are not sales, and deposits and failed listings are not counted." },
     { id = "marketvalue", label = "Market value", when = "always",
       what = "A 14-day reference built from listings your scans saw. Not a selling price and not a promise it will sell." },
@@ -315,11 +315,14 @@ local function AuctionLabel(a)
 end
 
 local RENDER = {}
+local RECOMMEND_ART={vendor=[[media\npcs\balance-scales-small]],auction=[[media\npcs\gavel-small]],disenchant=[[media\icons\magic-enchanting-small]]}
 
 function RENDER.recommend(r)
     local rec = WO.Recommend(r)
     if not rec then return nil end
-    return { (rec.tone == "good" and "*" or "~") .. rec.text }
+    local art=RECOMMEND_ART[r.advisor and r.advisor.action or rec.pick]
+    local text=art and ("|T"..R.PATH..art..":18:18:0:0|t "..rec.text) or rec.text
+    return { (rec.tone == "good" and "*" or "~") .. text }
 end
 
 function RENDER.advisorwhy(r)
@@ -346,7 +349,7 @@ function RENDER.disenchant(r, ctx)
     local d = r.disenchant
     if not d then return nil end   -- not something that disenchants: no row, not "not applicable"
     if d.state == "ok" and type(d.value) == "number" then
-        return { d.outcomeReference and "Disenchant (Classic estimate)" or "Disenchant (average)", ctx.money(d.value) }
+        return { "Disenchant (average)", ctx.money(d.value) }
     end
     if d.state=="unavailable" then return {"Disenchant",d.why or "Unavailable"} end
     if d.why and d.why~="nodata" then return {"Disenchant",d.why} end
@@ -400,7 +403,18 @@ end
 function RENDER.outcomes(r, ctx)
     local d = r.disenchant
     if not (d and type(d.outcomes) == "string" and d.outcomes ~= "") then return nil end
-    return { d.outcomeReference and "Disenchant (Classic yields)" or "Disenchant gives", d.outcomes }
+    local yields=d.yields or d.materials
+    if yields and #yields>0 then
+        local rows={}
+        for _,m in ipairs(yields) do
+            local icon=ctx.itemIcon and ctx.itemIcon(m.item) or 134400
+            local name=W.DisenchantData and W.DisenchantData.names[m.item] or ("Item "..m.item)
+            local qty=tostring(m.min)..(m.max~=m.min and ("–"..m.max) or "")
+            rows[#rows+1]="|T"..icon..":14:14:0:0|t "..name.." × "..qty.." ("..m.chance.."%)"
+        end
+        return {"Disenchant yields",table.concat(rows,"\n"),rightRows=rows}
+    end
+    return { "Disenchant yields", (d.outcomes:gsub("; ","\n")) }
 end
 
 function RENDER.note(r)
@@ -440,7 +454,11 @@ function WL.Lines(r, ctx, layout, shift)
     local s = WL.Rows(r, ctx, layout, shift)
     if not s then return nil end
     local out = { { s.title } }
-    for _, row in ipairs(s.rows) do if row.line then out[#out + 1] = row.line end end
+    for _, row in ipairs(s.rows) do if row.line then
+        if row.line.rightRows then
+            for i,text in ipairs(row.line.rightRows) do out[#out+1]={i==1 and row.line[1] or "",text} end
+        else out[#out + 1] = row.line end
+    end end
     if s.hint then out[#out + 1] = { "~" .. s.hint } end
     return out
 end
@@ -511,5 +529,5 @@ function WL.Example(key)
         facts.comp.quality = "good"
         r.advisor = W.Advisor.Decide(1, { qty=1, minGain=W.Advisor.Gain(), sell=f.sell, bindType=f.bindType, bound=f.bound, facts=facts })
     end
-    return r, { money = WL.Money, ageText = PR.AgeText, market = EXAMPLE_MARKET, now = EXAMPLE_NOW, count = 1, facts = e.market and e.market() or nil }, e
+    return r, { money = WL.Money, ageText = PR.AgeText, market = EXAMPLE_MARKET, now = EXAMPLE_NOW, count = 1, facts = e.market and e.market() or nil,itemIcon=W.WorthTip and W.WorthTip.ItemIcon }, e
 end

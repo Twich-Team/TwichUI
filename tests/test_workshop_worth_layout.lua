@@ -324,7 +324,7 @@ do
   Same(#WL.EXAMPLES, 4)
   local def = { enabled = true, lines = WL.DefaultLines() }
   local want = {
-    ordinary = "*Suggested: Vendor", higher = "~No suggestion: auction fee unknown", missing = "~More prices needed",
+    ordinary = "*|T"..c.TwichUI.PATH..[[media\npcs\balance-scales-small:18:18:0:0|t Suggested: Vendor]], higher = "~No suggestion: auction fee unknown", missing = "~More prices needed",
     unavailable = "~Disenchant value unknown",
   }
   for _, e in ipairs(WL.EXAMPLES) do
