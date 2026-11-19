@@ -110,12 +110,13 @@ K.Page({
     end,
 })
 
--- Stat weights: how each talent tree values stats (gear/Window.lua). A ranked list and a table of numbers, so
--- the feature draws it itself; the window shows it as a page.
+-- Stat weights: how each talent tree values stats (gear/Window.lua). Talent-tree cards, a ranking you drag into order
+-- and a card of numbers per stat group, so the feature draws it itself, from the window's own controls; the window
+-- shows it as a page and gives it the height it asks for.
 K.Page({
     key = "statWeights", name = "Stat weights", parent = "gear", order = 11,
     description = "How each of your talent trees values stats. Optional: change them only to follow a guide.",
     keywords = "stat priority weights guide simulator rank hit crit",
     when = function() return R.GearWindow ~= nil and R.GearWindow.Frame ~= nil end,
-    host = function() return R.GearWindow.Frame() end,
+    host = function() return R.GearWindow.Frame() end, hostHeight = function() return R.GearWindow.Height() end,
 })
