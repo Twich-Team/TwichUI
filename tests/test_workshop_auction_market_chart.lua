@@ -5,6 +5,20 @@ local C=W.AdvancedChart
 local function check(v,m) assert(v,m) end
 check(C.Axis(100000000000,'min',W.UI.Money)=='10.0M gold','large copper axis units')
 check(C.Axis(100000000000,'supply',tostring)=='100000000000','quantities never become currency')
+-- Existing Workshop minimum-history records enter the shared renderer unchanged.
+local observed={today=20,basis='saved',points={{day=12,price=49999},{day=14,price=70000}},
+ groups={{from=1,to=7,low=100,high=1000,average=500,n=3}}}
+local copied=C.FromObserved(observed)
+check(copied.from==1 and copied.to==20,'axis includes aggregate intervals and today')
+check(copied.points[1].day==12 and copied.points[1].price==49999 and copied.points[2].price==70000,'no currency or time conversion')
+check(copied.groups[1].average==500 and copied.groups[1].low==100 and copied.groups[1].high==1000 and copied.groups[1].n==3,'retain aggregate evidence')
+check(copied.points~=observed.points and copied.points[1]~=observed.points[1] and copied.groups[1]~=observed.groups[1],'copy does not mutate cached facts')
+check(observed.points[1].at==nil and observed.groups[1].kind==nil,'cached source remains untouched')
+local prepared=C.Prepare(copied)
+check(not C.Connected(prepared.points[1],prepared.points[2],prepared.gaps),'adapter keeps observation gaps')
+check(C.FromObserved(nil)==nil and C.FromObserved({points={},groups={}})==nil,'missing evidence stays missing')
+local single=C.FromObserved({today=14,points={{day=14,price=100}}})
+check(single.from==13 and single.to==14 and #single.points==1,'single point has an axis span without extra samples')
 local s={from=1,to=7,points={{day=1,price=100,at=86400,provenance='local'},
  {day=2,price=140,partial=true},{day=6,price=80,at='2026-11-17T00:00:00Z',provenance='external'}},
  groups={{from=3,to=5,average=110,low=90,high=150,n=2,partial=true,provenance='local'}},gaps={{from=3,to=5}}}

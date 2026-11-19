@@ -447,10 +447,13 @@ The external reader registers `workshop.bridgeLoad`, `workshop.bridgeValidate`, 
 
 The L3 scoped reader reuses these bridge timing scopes and gauges. `Bridge.Status()` additionally reports active schema/scope and a canonical-byte refusal code; no new background polling or startup load is registered. See [scoped reader evidence](workshop/market-bridge-scoped-l3.md).
 
-Market C1 scopes: `auction.chartPrepare` measures evidence preparation and
-`auction.chartDraw` measures viewport geometry/rendering in
-`TwichUI_Workshop/auction/AdvancedChart.lua`. Hover uses binary search and updates
-only when the selected record changes; no history decoding occurs there.
+Shared market-chart scopes: `auction.chartPrepare` measures evidence preparation
+and `auction.chartDraw` measures viewport geometry/rendering in
+`TwichUI_Workshop/auction/AdvancedChart.lua`. Both Workshop (Opportunities and Item
+Advisor) and Auction House charts use these scopes and the existing chart pool and
+record gauges. The scopes have no Auction House-only visibility restriction.
+Hover uses binary search and updates only when the selected record changes; no
+history decoding occurs there.
 
 ## Automatic Workshop summaries (candidate)
 

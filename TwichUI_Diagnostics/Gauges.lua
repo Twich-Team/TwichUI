@@ -27,8 +27,8 @@ DX.OPS = {
     ["workshop.summaryLookup"] = { module="workshop",label="Exact summary lookup",kind="work",file="TwichUI_Workshop/Summary.lua",where="Q.Record",every="external research only" },
 
     ["auction.actionReview"] = {module="auction", label="AH action validation and explicit submission", kind="evaluate", file="TwichUI_Workshop/auction/Actions.lua", where="Prepare/Confirm", every="explicit review or confirmation only", visible="auction.previewShown"},
-    ["auction.chartPrepare"] = { module="auction", label="Market chart preparation", kind="rebuild", file="TwichUI_Workshop/auction/AdvancedChart.lua", where="Set", every="evidence replacement", visible="auction.previewShown" },
-    ["auction.chartDraw"] = { module="auction", label="Market chart geometry", kind="layout", file="TwichUI_Workshop/auction/AdvancedChart.lua", where="Render", every="evidence or geometry change", visible="auction.previewShown" },
+    ["auction.chartPrepare"] = { module="auction", label="Market chart preparation", kind="rebuild", file="TwichUI_Workshop/auction/AdvancedChart.lua", where="Set", every="evidence replacement" },
+    ["auction.chartDraw"] = { module="auction", label="Market chart geometry", kind="layout", file="TwichUI_Workshop/auction/AdvancedChart.lua", where="Render", every="evidence or geometry change" },
     ["auction.readSnapshot"] = { module = "auction", label = "AH experimental read normalization", kind = "rebuild", file = "TwichUI_Workshop/auction/ReadRequests.lua", where = "Event", every = "explicit response only; at most 500 rows" },
     ["auction.marketDetails"] = { module="auction", label="AH Market selected-item services", kind="rebuild", file="TwichUI_Workshop/auction/MarketData.lua", where="Project", every="selected item/generation change only", visible="auction.previewShown" },
     ["auction.previewSearch"] = { module = "auction", label = "AH preview: stored catalog/filter/sort slice", kind = "rebuild", file = "TwichUI_Workshop/auction/BrowseData.lua", where = "Job.Step", every = "bounded slices only while Browse is visible", visible = "auction.previewShown" },

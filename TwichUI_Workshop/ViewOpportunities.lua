@@ -16,16 +16,16 @@ local UI = W.UI
 local F = W.Facts
 local Sg = W.Strategy
 
-local OPP_H, COL_W, DETAIL_W = 52, 80, 400
+local OPP_H, COL_W, DETAIL_W = 52, 80, 430
+local BODY_W = DETAIL_W - 26
 local MAT_ROWS, MAT_H = 3, 22
 local MK_ROW = 14          -- one market fact's row
 local MK_ROWS = 7          -- most facts shown (Market.Value x4 and Competition, Supply, Data quality)
--- the details, top to bottom (all measured from the details' top edge): the head, the three money boxes, a line for why a figure is missing, the
--- Crafting Strategy block, the materials of one craft beside the market facts, then the price history, which takes what is left above the button
-local BOX_Y, WHY_Y, STRAT_Y, STRAT_H, COLS_Y = -66, -112, -126, 108, -240
+-- Scroll the facts and a full-height interactive chart below the fixed item
+-- header. The Add button stays outside the scroll area.
+local BOX_Y, WHY_Y, STRAT_Y, STRAT_H, COLS_Y = -4, -50, -64, 108, -178
 local MATS_W, FACT_X = 196, 212
 local CHART_Y = COLS_Y - 126   -- the history's caption row (the facts column is 7 rows of 14 under its heading)
-local BOTTOM = 58          -- the button's room under the chart
 local RIGHT = 8   -- a row's right margin before the profit column
 local TOP = -100  -- the list's top edge on the page (the chips sit above it)
 
@@ -214,10 +214,11 @@ local function RenderDetail(rows)
     if not r and rows[1] then r = rows[1]; selected = r.rec.id end
     local shown = r ~= nil
     d.head:SetShown(shown)
-    d.body:SetShown(shown)
+    d.scroll:SetShown(shown);d.body:SetShown(shown)
     d.add:SetShown(shown)
     d.empty:SetShown(not shown)
     if not shown then
+        d.chart:Clear()
         selected = nil
         d.empty:SetText(oppView and oppView.empty or "Choose a recipe to see its details.")
         return
@@ -282,9 +283,9 @@ local function RenderDetail(rows)
     end
     -- the facts sit beside the materials and the history has the whole width under both (a fixed place: the strategy block never takes its room)
     local series = f and F.Chart(f) or nil
-    d.chart:Set(series, UI.Money)
+    d.chart:Set(W.AdvancedChart.FromObserved(series), UI.Money,
+        "workshop:opportunities:"..tostring(rec.outItem)..":"..tostring(series and series.market))
     d.chartNote:SetText(ChartNote(series))   -- the days the history really covers; when the listings were scanned is on the Data quality row
-    d.chartTip = series and ChartNote(series) or nil
     Opps.PaintStrategy(rec)
     -- the button: what it does now (add), what already happened (queued, with a check) or why it can't (the queue is full)
     local queued = S.IsQueued(rec.id)
@@ -475,11 +476,14 @@ local function BuildDetail()
     d.name:SetJustifyV("TOP")
     d.prof = UI.Text(d.head, 13, K.textDim)
     d.prof:SetPoint("BOTTOMLEFT", d.iconFrame, "BOTTOMRIGHT", 10, 1)
-    local body = CreateFrame("Frame", nil, d)
-    body:SetAllPoints()
+    local scroll=CreateFrame("ScrollFrame",nil,d,"UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT",0,-62);scroll:SetPoint("BOTTOMRIGHT",-26,58)
+    UI.CL.ScrollRail(scroll);d.scroll=scroll
+    local body = CreateFrame("Frame", nil, scroll)
+    body:SetSize(BODY_W,-CHART_Y+216);scroll:SetScrollChild(body)
     d.body = body
     -- the three money boxes in a row: cost to make, sell price, profit (the one-level estimate the list is ranked by)
-    local bw = math.floor((DETAIL_W - 28 - 16) / 3)
+    local bw = math.floor((BODY_W - 28 - 16) / 3)
     local function Box(label, i)
         local b = CreateFrame("Frame", nil, body)
         b:SetSize(bw, 42)
@@ -522,9 +526,9 @@ local function BuildDetail()
     -- what to do, in one line; then the planning figure, large, with the gold needed now beside it; then the saving and View strategy
     st.headline = UI.Text(st, 13, K.text, "strong")
     st.headline:SetPoint("TOPLEFT", 10, -27)
-    st.headline:SetWidth(DETAIL_W - 28 - 20)
+    st.headline:SetWidth(BODY_W - 28 - 20)
     st.pairs = {}
-    local colw = math.floor((DETAIL_W - 28 - 20) / 2)
+    local colw = math.floor((BODY_W - 28 - 20) / 2)
     local LABELS = { "Estimated cost", "Gold needed now" }
     for i = 1, 2 do
         local x = 10 + (i - 1) * colw
@@ -548,7 +552,7 @@ local function BuildDetail()
     end
     st.save = UI.Text(st, 12, K.textDim)
     st.save:SetPoint("BOTTOMLEFT", 10, 10)
-    st.save:SetWidth(DETAIL_W - 28 - 20 - 112)
+    st.save:SetWidth(BODY_W - 28 - 20 - 112)
     st.save:SetJustifyH("LEFT")
     d.view = UI.Button(st, "View strategy", 104, "secondary", function()
         if d.rec and UI.StrategyView then UI.StrategyView.Open("opp", d.rec) end
@@ -617,7 +621,7 @@ local function BuildDetail()
     local ch = CreateFrame("Frame", nil, body)
     d.chartBox = ch
     ch:SetPoint("TOPLEFT", body, "TOPLEFT", 0, CHART_Y)
-    ch:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", 0, BOTTOM)
+    ch:SetPoint("TOPRIGHT", body, "TOPRIGHT", 0, CHART_Y);ch:SetHeight(208)
     local chh = UI.Text(ch, 12, K.bronzeText, "strong")
     chh:SetPoint("TOPLEFT", 14, 0)
     chh:SetText("Price history")
@@ -627,18 +631,10 @@ local function BuildDetail()
     d.serverHistory:SetPoint("TOPLEFT", 106, 4)
     UI.Tip(d.serverHistory, "Server history", "Opens the separate Market server source. Choose an exact server variant; local prices and advice stay unchanged.")
     d.chartNote = UI.Text(ch, 11, K.stone)
-    d.chartNote:SetPoint("TOPRIGHT", -14, -1)
-    d.chartNote:SetJustifyH("RIGHT")
-    d.chart = UI.PriceChart(ch, DETAIL_W - 28, 56)
-    d.chart:ClearAllPoints()
-    d.chart:SetPoint("TOPLEFT", 14, -16)
-    d.chart:SetPoint("BOTTOMRIGHT", -14, 0)
-    d.chart:EnableMouse(true)
-    UI.TipFn(d.chart, "Price history", function()
-        local note = d.chartTip
-        return "The lowest listing on each day a scan saw the item" .. (note and (": " .. note .. ".") or ".") ..
-            " A day without a scan has no dot. Not a sale price, and nothing before your first scan is known."
-    end)
+    d.chartNote:SetPoint("TOPLEFT",14,-22);d.chartNote:SetPoint("RIGHT",-14,0);d.chartNote:SetHeight(16)
+    d.chartNote:SetJustifyH("LEFT")
+    d.chart = UI.AdvancedMarketChart(ch, BODY_W - 28, 168)
+    d.chart:SetPoint("TOPLEFT",14,-40);d.chart:SetPoint("TOPRIGHT",-14,-40)
     -- what these figures are, on the Market heading only
     local why = CreateFrame("Frame", nil, mk)
     why:SetPoint("TOPLEFT", 6, 0); why:SetPoint("TOPRIGHT", -14, 0); why:SetHeight(20)

@@ -116,7 +116,7 @@ local function BuildDetails(parent)
     d.scroll=CreateFrame("ScrollFrame",nil,d,"UIPanelScrollFrameTemplate")
     d.scroll:SetPoint("TOPLEFT",6,-6); d.scroll:SetPoint("BOTTOMRIGHT",-22,52)
     UI.CL.ScrollRail(d.scroll)
-    local b=CreateFrame("Frame",nil,d.scroll); d.body=b; b:SetSize(540,566); d.scroll:SetScrollChild(b)
+    local b=CreateFrame("Frame",nil,d.scroll); d.body=b; b:SetSize(540,828); d.scroll:SetScrollChild(b)
     d.icon=UI.ItemIcon(b,44); d.icon:SetPoint("TOPLEFT",10,-8)
     d.itemButton=CreateFrame("Button",nil,b); d.itemButton:SetAllPoints(d.icon); UI.ItemTip(d.itemButton,function() return selected end)
     d.name=Text(b,23,K.text,64,-8,-10); d.name:SetWordWrap(true); d.name:SetMaxLines(2)
@@ -134,11 +134,11 @@ local function BuildDetails(parent)
         d.cards[i]=f
     end
     d.history=Text(b,16,K.text,10,-246,-10); d.history:SetText("Observed price history")
-    d.chart=UI.PriceChart(b,280,106); d.chart:SetPoint("TOPLEFT",8,-268)
-    d.chartLabel=Text(b,10,K.stone,12,-378,-10)
-    d.why=UI.Text(b,16,K.bronzeText,"serif"); d.why:SetPoint("TOPLEFT",d.chart,"TOPRIGHT",12,22); d.why:SetText("Why this recommendation?")
-    d.reasons=UI.Text(b,12,K.textDim); d.reasons:SetPoint("TOPLEFT",d.chart,"TOPRIGHT",12,0); d.reasons:SetPoint("RIGHT",-10,0); d.reasons:SetHeight(106); d.reasons:SetWordWrap(true); d.reasons:SetJustifyV("TOP")
-    d.alt=CreateFrame("Frame",nil,b); d.alt:SetPoint("TOPLEFT",8,-398); d.alt:SetPoint("TOPRIGHT",-8,-398); d.alt:SetHeight(136); UI.Panel(d.alt,"canvas")
+    d.chart=UI.AdvancedMarketChart(b,524,184); d.chart:SetPoint("TOPLEFT",8,-268)
+    d.chartLabel=Text(b,10,K.stone,12,-460,-10)
+    d.why=UI.Text(b,16,K.bronzeText,"serif"); d.why:SetPoint("TOPLEFT",12,-490);d.why:SetPoint("RIGHT",-12,0);d.why:SetHeight(22); d.why:SetText("Why this recommendation?")
+    d.reasons=UI.Text(b,12,K.textDim); d.reasons:SetPoint("TOPLEFT",12,-518); d.reasons:SetPoint("RIGHT",-10,0); d.reasons:SetHeight(106); d.reasons:SetWordWrap(true); d.reasons:SetJustifyV("TOP")
+    d.alt=CreateFrame("Frame",nil,b); d.alt:SetPoint("TOPLEFT",8,-640); d.alt:SetPoint("TOPRIGHT",-8,-640); d.alt:SetHeight(136); UI.Panel(d.alt,"canvas")
     d.altTitle=Text(d.alt,17,K.bronzeText,10,-7,-10); d.altTitle:SetText("Alternatives")
     d.alts={}
     for i=1,5 do
@@ -147,7 +147,7 @@ local function BuildDetails(parent)
         f.value=Text(f,12,K.textDim,80,0,-10)
         d.alts[i]=f
     end
-    d.limit=Text(b,11,K.stone,12,-542,-12); d.limit:SetWordWrap(true); d.limit:SetHeight(32)
+    d.limit=Text(b,11,K.stone,12,-784,-12); d.limit:SetWordWrap(true); d.limit:SetHeight(32)
     d.track=UI.ArtButton(d,"Track item","guide",150,"secondary",function() if selected then D.Track(selected); stamp=nil; Render() end end,30)
     d.recipes=UI.ArtButton(d,"Recipe uses","npc:hammer",150,"secondary",Uses,30)
     d.sources=UI.ArtButton(d,"Shopping sources","npc:leather-backpack",150,"secondary",function()
@@ -166,14 +166,13 @@ local function BuildDetails(parent)
         d.rec:ClearAllPoints(); d.rec:SetPoint("TOPLEFT",8,-66-extra); d.rec:SetPoint("TOPRIGHT",-8,-66-extra)
         for i,f in ipairs(d.cards) do f:ClearAllPoints(); f:SetPoint("TOPLEFT",8+((i-1)%3)*(cw+6),-(144+extra+math.floor((i-1)/3)*51)) end
         d.history:ClearAllPoints(); d.history:SetPoint("TOPLEFT",10,-246-extra)
-        d.chart:ClearAllPoints(); d.chart:SetPoint("TOPLEFT",8,-268-extra)
-        d.chartLabel:ClearAllPoints(); d.chartLabel:SetPoint("TOPLEFT",12,-378-extra)
-        d.alt:ClearAllPoints(); d.alt:SetPoint("TOPLEFT",8,-398-extra); d.alt:SetPoint("TOPRIGHT",-8,-398-extra)
-        d.limit:ClearAllPoints(); d.limit:SetPoint("TOPLEFT",12,-542-extra); d.limit:SetPoint("RIGHT",-12,0)
-        b:SetHeight(578+extra)
-        d.chart:SetWidth(math.floor(w*0.51))
-        d.why:SetWidth(w*0.49-34)
-        d.reasons:ClearAllPoints(); d.reasons:SetPoint("TOPLEFT",d.chart,"TOPRIGHT",12,0); d.reasons:SetWidth(w*0.49-34)
+        d.chart:ClearAllPoints(); d.chart:SetPoint("TOPLEFT",8,-268-extra);d.chart:SetPoint("TOPRIGHT",-8,-268-extra)
+        d.chartLabel:ClearAllPoints(); d.chartLabel:SetPoint("TOPLEFT",12,-460-extra)
+        d.why:ClearAllPoints();d.why:SetPoint("TOPLEFT",12,-490-extra);d.why:SetPoint("RIGHT",-12,0)
+        d.reasons:ClearAllPoints();d.reasons:SetPoint("TOPLEFT",12,-518-extra);d.reasons:SetPoint("RIGHT",-12,0)
+        d.alt:ClearAllPoints(); d.alt:SetPoint("TOPLEFT",8,-640-extra); d.alt:SetPoint("TOPRIGHT",-8,-640-extra)
+        d.limit:ClearAllPoints(); d.limit:SetPoint("TOPLEFT",12,-784-extra); d.limit:SetPoint("RIGHT",-12,0)
+        b:SetHeight(828+extra)
         local bw=(d:GetWidth()-32)/3
         for _,button in ipairs({d.track,d.recipes,d.sources}) do button:SetWidth(bw) end
     end
@@ -185,7 +184,7 @@ local function PaintDetail()
     local row = catalog and catalog.byID[selected]
     d.empty:SetShown(not row); d.scroll:SetShown(row~=nil)
     d.track:SetShown(row~=nil); d.recipes:SetShown(row~=nil); d.sources:SetShown(row~=nil)
-    if not row then result=nil; return end
+    if not row then d.chart:Clear();result=nil; return end
     local r=D.Decide(selected,true,row); result=r; page.result=r
     local f=r.facts or {}; local info=row.info
     d.name:SetText(info.name); Color(d.name,info.quality); d.icon.tex:SetTexture(info.icon or UI.ICON_BLANK)
@@ -199,7 +198,8 @@ local function PaintDetail()
             (i==6 and "Actual vendor sell value for one item, not the price to buy it." or "Observed listings only. Historical values are references, not selling prices."))
     end
     d.reasons:SetText(WhyText(r))
-    d.chart:Set(W.Facts.Chart(f),UI.Money)
+    d.chart:Set(W.AdvancedChart.FromObserved(W.Facts.Chart(f)),UI.Money,
+        "workshop:advisor:"..tostring(selected)..":"..tostring(f.key))
     d.chartLabel:SetText("Observed daily lows \194\183 gaps remain unfilled")
     for i,alt in ipairs(r.alternatives) do
         local line=d.alts[i]

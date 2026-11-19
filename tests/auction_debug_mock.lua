@@ -57,6 +57,7 @@ end
 c.ItemLocation={CreateFromBagAndSlot=function(_,bag,slot) return {bag=bag,slot=slot} end}
 c.C_Container={GetContainerNumSlots=function(bag) return bag==0 and 1 or 0 end,
  GetContainerItemInfo=function() return {itemID=s.bagItem or 10,stackCount=s.qty,isLocked=s.locked==true,isBound=s.bound==true,hyperlink="item:"..(s.bagItem or 10)..":0:0:0:0:0:0"} end}
+s.RealReserved=W.AdvisorData.Reserved
 W.AdvisorData.Reserved=function() return s.reserved or 0,false end
 c.StaticPopupDialogs={AUCTION_HOUSE_POST_WARNING={OnAccept=function() end,OnHide=function() end}};c.StaticPopup_Hide=function() end
 W.AuctionReads.AttachVisit(s.visit)

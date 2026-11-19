@@ -71,6 +71,29 @@ do
     t.Open(); t.Restored()
 end
 
+-- Close events are authoritative while interaction-manager readback is still true.
+-- Hidden state is set directly to emulate the event fired inside native OnHide.
+for _,event in ipairs({"AUCTION_HOUSE_CLOSED","AUCTION_HOUSE_DISABLED","PLAYER_INTERACTION_MANAGER_FRAME_HIDE"}) do
+    local t=Setup();Same(t.H.Activate(),true)
+    local shows=t.f.shows
+    t.f.shown=false
+    t.c.FireEvent(event,21)
+    t.Restored();Same(t.available,true,"interaction readback deliberately lags")
+    Same(t.f:IsShown(),false,"a closing native frame stays hidden")
+    Same(t.f.shows,shows,"cleanup never calls Show")
+    Same(#t.faults,0,"ordinary close is not a restoration error")
+    t.c.FireEvent(event,21);Same(#t.faults,0,"duplicate close is harmless")
+end
+do
+    local t=Setup();Same(t.H.Activate(),true)
+    local writes=t.mutations;t.combat=true;t.f.shown=false
+    t.c.FireEvent("AUCTION_HOUSE_CLOSED")
+    Same(t.mutations,writes,"close in combat defers anchor writes")
+    Same(t.H.Snapshot().leased,true)
+    t.combat=false;t.c.FireEvent("PLAYER_REGEN_ENABLED")
+    t.Restored();Same(#t.faults,0,"deferred close keeps its explicit receipt")
+end
+
 -- External writers: restore our anchors when still owned, preserve their anchors.
 for _, change in ipairs({ "anchors", "scale", "parent", "focus", "geometry", "control", "owner", "context", "replacement", "timeout" }) do
     local t = Setup(); Same(t.H.Activate(), true)
