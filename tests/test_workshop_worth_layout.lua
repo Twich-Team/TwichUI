@@ -321,11 +321,12 @@ end
 -- The examples (preview data, no game)
 ---------------------------------------------------------------------------
 do
-  Same(#WL.EXAMPLES, 4)
+  Same(#WL.EXAMPLES, 5)
   local def = { enabled = true, lines = WL.DefaultLines() }
   local want = {
     ordinary = "*|T"..c.TwichUI.PATH..[[media\npcs\balance-scales-small:18:18:0:0|t Suggested: Vendor]], higher = "~No suggestion: auction fee unknown", missing = "~More prices needed",
     unavailable = "~Disenchant value unknown",
+    disenchant = "~Possible: Disenchant",
   }
   for _, e in ipairs(WL.EXAMPLES) do
     local r, ctx = WL.Example(e.key)

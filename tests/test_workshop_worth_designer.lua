@@ -112,8 +112,8 @@ local L = R.Workshop.WorthLayout
 ---------------------------------------------------------------------------
 Same(Ids(), DEFAULT, "the short default")
 for i, t in ipairs(L.TYPES) do
-  if t.id ~= "outcomes" then Same(D.ListButton(i).label.text, t.label, "list: " .. t.label)
-  else Check(D.ListButton(i).shown == false, "unsupported outcomes are not offered") end
+  Same(D.ListButton(i).label.text, t.label, "list: " .. t.label)
+  Check(D.ListButton(i).shown ~= false, "catalog offers " .. t.label)
 end
 Check(Has(f, "Drag lines into the preview."), "the one instruction")
 Check(Has(f, "Preview data"), "the example values are labelled as preview data")
@@ -123,7 +123,7 @@ Check(f.enable:GetChecked() == true, "Enable tooltip is on by default")
 Check(f.reset.enabled == false, "nothing to reset yet")
 for i, t in ipairs(L.TYPES) do
   local added = L.IndexOf(L.Get().lines, t.id) ~= nil
-  Check(t.id == "outcomes" or (D.ListButton(i).check.shown ~= false) == added, "check mark on " .. t.id .. " iff it is in the preview")
+  Check((D.ListButton(i).check.shown ~= false) == added, "check mark on " .. t.id .. " iff it is in the preview")
 end
 
 -- the mockup IS the tooltip builder's output: every example, both previews
@@ -163,7 +163,7 @@ D.SetExample("unavailable")
 Check(table.concat(Mock(), "\n"):find("can't be listed (bound)", 1, true) and table.concat(Mock(), "\n"):find("Disenchant value unknown", 1, true), "an action that cannot be done, and an unknown value, side by side")
 do   -- the dropdown's list: a value and a label each (what the shared menu draws)
   local choices = f.example.choices()
-  Same(#choices, 4, "four examples")
+  Same(#choices, 5, "five examples")
   for i, e in ipairs(L.EXAMPLES) do Check(choices[i].value == e.key and choices[i].label == e.label, "example choice " .. e.key) end
   f.example.onPick("missing")   -- what picking an entry does
   Same(table.concat(Mock(), "\n"):find("More prices needed", 1, true) ~= nil, true, "picking an example redraws the mockup")
@@ -211,7 +211,7 @@ Check(D.AddLine("vendor") == false and Ids() == before and Has(f, "already in th
 Click(D.ListButton(2)); Same(D.Selected(), nil, "an added line's button selects it (toggle)")
 D.AddLine("vendor")   -- selected again; no change
 -- adding a detail line in the Hold Shift preview keeps its usual Hold Shift choice; in Normal it starts Always so it is seen
-D.AddLine("outcomes"); Check(Ids():find("outcomes,", 1, true) or Ids():find("outcomes$"), "outcomes added")
+Click(D.ListButton(L.BY_ID.outcomes.order)); Check(Ids():find("outcomes,", 1, true) or Ids():find("outcomes$"), "yield catalog click adds the field")
 Check(not Ids():find("outcomes*", 1, true), "added in Normal: Always, so it shows where you are looking")
 D.RemoveLine("outcomes"); D.SetMode(true); D.AddLine("outcomes")
 Check(Ids():find("outcomes*", 1, true), "added in the Hold Shift preview: its usual choice (Hold Shift)")
@@ -276,7 +276,7 @@ do
   lb.scripts.OnDragStart(lb)
   local ghost
   for _, fr in ipairs(made_frames) do if fr.label and fr.tex and fr.scripts.OnUpdate then ghost = fr end end
-  Check(ghost ~= nil and ghost.label.text == "Disenchant outcomes", "a label of the line follows the pointer")
+  Check(ghost ~= nil and ghost.label.text == "Disenchant yields", "a label of the line follows the pointer")
   Point(RowMid(2) + 1)
   ghost.scripts.OnUpdate(ghost)
   local pt = f.marker.points[#f.marker.points]
@@ -407,6 +407,9 @@ Check(D.ListButton(11).shown ~= false and D.ListButton(2).shown == false, "searc
 Check(not D.Dirty(), "mode, sample and search do not dirty the layout")
 D.Search("nothing matches this"); Check(f.noResults.shown ~= false, "empty search is explicit")
 D.Search(""); D.SetMode(false)
+D.Search("disenchant yields")
+Check(D.ListButton(L.BY_ID.outcomes.order).shown ~= false and f.noResults.shown == false,"yield field is searchable by its tooltip name")
+D.Search("")
 D.MoveLine("vendor", 1); D.SetWhen("auction", "shift"); D.SetEnabled(false)
 Check(D.Save(), "Save commits the complete intended layout")
 Check(not L.Enabled() and L.Get().lines[1].id == "vendor" and L.Get().lines[2].id == "recommend", "saved order and enabled state")
@@ -446,6 +449,27 @@ for _, width in ipairs({ 500, 644, 1088 }) do
   Check(f.mock:GetWidth() > 200, "preview retains a usable width")
 end
 f:SetWidth(644); D.Refresh()
+
+-- Add and arrange the actual populated yields example through visible controls.
+c.TwichUIDB.ui.workshopWorth=nil;D.Cancel();D.SetMode(false);D.SetExample("disenchant")
+local yieldButton=D.ListButton(L.BY_ID.outcomes.order)
+Same(yieldButton.label.text,"Disenchant yields")
+Check(yieldButton.shown~=false and not yieldButton.added,"yield field is available to add")
+Click(yieldButton)
+local yieldIndex=L.IndexOf(D.Draft().lines,"outcomes")
+Check(yieldIndex~=nil and D.Selected()=="outcomes","adding selects the yield field")
+local function YieldRow()
+ for i,row in ipairs(D.Model().sec.rows)do if row.id=="outcomes"then return D.Row(i) end end
+end
+Check(YieldRow().right:GetText():find("\n",1,true),"equipment example previews a vertical yield list")
+local previous=L.IndexOf(D.Draft().lines,"marketvalue")
+Click(f.up)
+Same(L.IndexOf(D.Draft().lines,"outcomes"),previous,"Move up moves the complete yield list past the previous visible row")
+Click(f.holdShift);Check(Ids():find("outcomes*",1,true),"yield visibility changes to Hold Shift")
+Click(f.save);D.Cancel();D.SetMode(true)
+Check(D.ListButton(L.BY_ID.outcomes.order).check.shown~=false,"saved yield field remains in the catalog")
+Check(YieldRow().right:GetText():find("\n",1,true),"saved yields remain visible in the Shift preview")
+D.SetMode(false);D.SetExample("ordinary")
 
 -- Right-column multiline yields determine the preview row's height too.
 local originalExample=L.Example

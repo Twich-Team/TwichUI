@@ -43,7 +43,7 @@ WL.TYPES = {
       what = "Average material value for supported weapons and armor." },
     { id = "status", label = "Price age / status", when = "shift", what = "When the prices were scanned, and if the scan was partial." },
     { id = "source", label = "Price source", when = "shift", what = "Which auction house the prices came from." },
-    { id = "outcomes", label = "Disenchant outcomes", when = "shift",
+    { id = "outcomes", label = "Disenchant yields", when = "shift",
       what = "A list of possible materials with item icons, chances and quantity ranges." },
     { id = "note", label = "Limits note", when = "shift", what = "One short line: estimates are not sales, and deposits and failed listings are not counted." },
     { id = "marketvalue", label = "Market value", when = "always",
@@ -516,6 +516,14 @@ WL.EXAMPLES = {
       facts = { sell = 300, quality = 2, classID = 4, equipLoc = "INVTYPE_CHEST", bindType = 2, bound = false, market = EXAMPLE_MARKET } },
     { key = "unavailable", label = "Equipment (bound)",
       facts = { sell = 300, quality = 2, classID = 4, equipLoc = "INVTYPE_CHEST", bindType = 1, bound = true, market = EXAMPLE_MARKET } },
+    { key = "disenchant", label = "Disenchantable equipment",
+      facts = { sell = 300, quality = 2, classID = 4, equipLoc = "INVTYPE_CHEST", bindType = 2, bound = false, market = EXAMPLE_MARKET,
+          price = { price = 400, at = EXAMPLE_NOW - 3 * 3600, complete = true } },
+      -- Fixed preview data, never character inventory or live material prices.
+      disenchant = { state = "ok", value = 1000, expectedGross = 1000, outcomeReference = true,
+          outcomes = "75% Vision Dust; 20% Greater Mystic Essence; 5% Large Glowing Shard",
+          yields = { { item = 11137, min = 1, max = 2, chance = 75 }, { item = 11135, min = 1, max = 2, chance = 20 },
+              { item = 11139, min = 1, max = 1, chance = 5 } } } },
 }
 WL.EXAMPLE_BY_KEY = {}
 for _, e in ipairs(WL.EXAMPLES) do WL.EXAMPLE_BY_KEY[e.key] = e end
@@ -527,12 +535,14 @@ function WL.Example(key)
     local f = { now = EXAMPLE_NOW }
     for k, v in pairs(e.facts) do f[k] = v end
     local r = WO.Evaluate(f)
+    if e.disenchant then r.disenchant = e.disenchant end
     if W.Advisor then
         local facts = e.market and e.market() or { nomarket=true }
         facts.comp = facts.comp or {}
         facts.comp.complete, facts.comp.age = true, 3*3600
         facts.comp.quality = "good"
-        r.advisor = W.Advisor.Decide(1, { qty=1, minGain=W.Advisor.Gain(), sell=f.sell, bindType=f.bindType, bound=f.bound, facts=facts })
+        r.advisor = W.Advisor.Decide(1, { qty=1, minGain=W.Advisor.Gain(), sell=f.sell, bindType=f.bindType, bound=f.bound, facts=facts,
+            disenchant=e.disenchant~=nil,disenchantValue=e.disenchant })
     end
     return r, { money = WL.Money, ageText = PR.AgeText, market = EXAMPLE_MARKET, now = EXAMPLE_NOW, count = 1, facts = e.market and e.market() or nil,itemIcon=W.WorthTip and W.WorthTip.ItemIcon }, e
 end

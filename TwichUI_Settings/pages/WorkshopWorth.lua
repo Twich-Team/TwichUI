@@ -585,7 +585,7 @@ function D.Refresh()
 
     -- Grouped, searchable catalog. Filtering changes no layout or saved value.
     local groups = {
-        { "Recommendations & values", "recommend", "vendor", "auction", "disenchant" },
+        { "Recommendations & values", "recommend", "vendor", "auction", "disenchant", "outcomes" },
         { "Market information", "recent", "marketvalue", "historical", "supply", "quality" },
         { "Details & provenance", "advisorwhy", "advisorevidence", "status", "source", "note" },
     }
@@ -616,7 +616,6 @@ function D.Refresh()
             end
         end
     end
-    listButtons[L.BY_ID.outcomes.order]:Hide()
     f.noResults:SetShown(listY == listStart); At(f.noResults, 16, listStart)
 
     -- the mockup
