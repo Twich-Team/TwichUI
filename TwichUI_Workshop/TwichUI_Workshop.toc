@@ -83,6 +83,7 @@ Watch.lua
 Bank.lua
 # The "What's it worth?" lines on the tooltip of an item in the bags or bank (after load only; reads saved prices, never the auction house)
 WorthTip.lua
+Junk.lua
 # The progress bar and the Scan prices button on the auction house window (the click goes through Session)
 AuctionButton.lua
 # The window's presentation helpers: the settings window's crafted look through the core's CraftLook.lua (TwichUI_Settings is never loaded)

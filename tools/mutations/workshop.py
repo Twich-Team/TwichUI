@@ -1283,3 +1283,13 @@ m("ledger.query.window", LQUERY, "local from = today - filter.days + 1", "local 
   "a seven day window is eight days (and its comparison overlaps)", [LEDGERUI])
 m("ledger.query.compare-incomplete", LQUERY, "if pcovered == #pdays and #pdays > 0 then", "if #pdays > 0 then",
   "a percentage is shown against a prior period that was only partly recorded", [LEDGERUI])
+
+m("market.junk.vendor-only", "TwichUI_Workshop/Junk.lua",
+  'advice.action=="vendor"', 'advice.action=="auction"',
+  "auction advice is marked as vendor junk", ["test_workshop_junk.lua"])
+m("market.junk.all-copies", "TwichUI_Workshop/Junk.lua",
+  'if not vendor then candidates[id].ok=false end', 'if false then candidates[id].ok=false end',
+  "one eligible copy permits marking a locked or protected copy", ["test_workshop_junk.lua"])
+m("market.junk.stale-slice", "TwichUI_Workshop/Junk.lua",
+  'if mine~=generation or not Ready() then return end', 'if not Ready() then return end',
+  "a changed inventory leaves an old marking job alive", ["test_workshop_junk.lua"])

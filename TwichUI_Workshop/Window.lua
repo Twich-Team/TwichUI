@@ -484,6 +484,7 @@ function W.Suspend()
     if W.Watch then W.Watch.Stop() end
     if W.Bank then W.Bank.Stop() end
     if W.WorthTip then W.WorthTip.Stop() end
+    if W.Junk then W.Junk.Stop() end
     if W.AuctionButton then W.AuctionButton.Stop() end
     S.Reset()
     Q.Unload()
@@ -498,6 +499,7 @@ function W.Resume()
     if W.Watch then W.Watch.Start() end
     if W.Bank then W.Bank.Start() end
     if W.WorthTip then W.WorthTip.Start() end
+    if W.Junk then W.Junk.Start() end
     if W.AuctionReads then W.AuctionReads.Start() end
     if W.AuctionButton then W.AuctionButton.Resume() end
 end

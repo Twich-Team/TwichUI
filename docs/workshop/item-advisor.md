@@ -3,6 +3,42 @@
 Approved scope: one Workshop page in the existing left navigation. No Auction
 House replacement, posting, automatic scans, selling automation or chart engine.
 
+## Optional Vendor junk marking
+
+The separately requested **Mark Vendor recommendations as junk** switch is in
+Workshop's General settings and defaults off. It runs only while Workshop is
+loaded and enabled. It uses the same Advisor decision as the item tooltip,
+including Market/local prices, crafting reservations and disenchant alternatives.
+Only carried items are examined, and every carried copy of an item ID must favor
+Vendor. Locked, quest, incomplete, never-sell and restock-protected copies prevent
+marking that ID. Unknown prices retain the Advisor's existing known-option policy;
+this feature adds no new sale-value calculation or posting quote.
+
+The shared `R.EllesmereJunk` adapter performs marking through EllesmereUI Bags.
+Custom categories are preserved. A mark covers that item ID across the account,
+including future copies; disabling Workshop or the switch does not undo it.
+EllesmereUI's own junk coin removes marks; Workshop does not re-mark an ID it
+marked earlier in this session. EllesmereUI handles selling according to its own
+settings. Workshop calls no sell, destroy, use, purchase or auction action.
+
+Inventory, item-info, character, price and strategy changes schedule bounded work,
+coalesced for 0.5 seconds. Combat/loading pauses marking; settings/profile changes
+invalidate pending work. Session identities cap at 2048, after which new marks
+wait for reload. `workshop.junk` and its listener/identity gauges expose the work.
+Unit tests use the real Advisor and EllesmereJunk adapter over synthetic bags;
+Forever acceptance still needs enabling the switch, receiving Vendor/Auction/DE
+items, manually unmarking one, changing profiles and reloading with EllesmereUI
+Bags present/absent. No simulator or real-client acceptance is claimed here.
+
+Offline verification: 79 Workshop modules, 13 Workshop/settings modules, 15 core
+modules, the existing Mage junk-marking test and Lua syntax checks pass. All 309
+Market mutations are detected, with zero survivors/invalid/timeouts/infra errors.
+Final evidence: `test-output/workshop-junk-completed-{workshop,settings}.log`,
+`workshop-junk-core.log` and `workshop-junk-completed-mutations.{log,json}`.
+Earlier broad runs stopped before completion for the final marking-batch bound
+are retained separately and are not counted as passes. This evidence paragraph
+changes no tested executable source.
+
 ## Checkpoints and acceptance
 
 1. Engine: versioned deterministic recommendations; competitive prices from

@@ -155,7 +155,7 @@ function L.Apply()
     if not L.Enabled() and R.AuctionHost then R.AuctionHost.SetTestEnabled(false) end
     local w = L.Loaded() and R.Workshop
     if w then
-        if L.Enabled() then if w.Resume then w.Resume() end
+        if L.Enabled() then if w.Resume then w.Resume() end; if w.Junk then w.Junk.Start() end
         elseif w.Suspend then w.Suspend() end
     end
     if R.Ledger then R.Ledger.Refresh() end   -- the gold ledger records while the Workshop is on, loaded or not
@@ -176,6 +176,17 @@ if R.Profiles and R.Profiles.OnApply then R.Profiles.OnApply("views", "workshop-
 
 -- Lightweight settings access. Reading this never loads the Workshop or its
 -- separate market database. Presentation keys keep their established scope.
+function L.VendorJunkEnabled()
+    local ui=type(TwichUIDB)=="table" and TwichUIDB.ui
+    return type(ui)=="table" and ui.workshopVendorJunk==true or false
+end
+function L.SetVendorJunkEnabled(on)
+    if type(on)~="boolean" or type(TwichUIDB)~="table" or R.Persist and R.Persist.IsHeld("TwichUIDB") then return false end
+    if type(TwichUIDB.ui)~="table" then TwichUIDB.ui={} end
+    TwichUIDB.ui.workshopVendorJunk=on
+    if R.Workshop and R.Workshop.Junk then R.Workshop.Junk.Start() end
+    return true
+end
 function L.LoadOnLogin()
     local ui = type(TwichUIDB) == "table" and TwichUIDB.ui
     return type(ui) == "table" and ui.workshopLoadOnLogin == true or false

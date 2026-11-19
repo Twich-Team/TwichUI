@@ -21,6 +21,7 @@ function A.SetGain(value)
     if type(ws) ~= "table" then ws = { v = W.SAVED_VERSION }; TwichUIDB.workshop = ws end
     if type(ws.view) ~= "table" then ws.view = {} end
     ws.view.advisorGain = value
+    if W.Junk then W.Junk.Request() end
     return true
 end
 function A.Decide(item, ctx)
