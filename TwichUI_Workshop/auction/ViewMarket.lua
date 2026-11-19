@@ -10,7 +10,14 @@ local function Key(r) return r.item end
 local function Money(n) return n and UI.Money(n) or "Unavailable" end
 local function Date(day) return date("!%b %d",math.floor(day*86400)) end
 local function Stamp(p,m)
-    if m and m.external then local b=W.Bridge.Status();return m.key..":"..b.state..":"..tostring(b.loading)..":"..p.scope..":"..p.bags..(p.scope=="tracked" and ":"..D.TrackStamp() or "") end
+    if m and m.external then
+        local b=W.Bridge.Status()
+        -- Partition decoding does not change the immutable item catalog. A
+        -- focused summary lookup, however, is not a complete name-search index.
+        local focus=b.summary and W.Int(p.focusItem or tonumber(p.query),1,W.MAX_ID)
+        return m.key..":"..b.state..":"..tostring(b.failures)..":"..tostring(focus)..":"..p.scope..":"..p.bags..
+            (p.scope=="tracked" and ":"..D.TrackStamp() or "")
+    end
     return (m and m.key..":"..W.Valuation.Generation(m) or "none")..":"..p.scope..":"..p.bags..
         (p.scope=="tracked" and ":"..D.TrackStamp() or "")
 end
@@ -66,13 +73,29 @@ local function ServerChart(p,x)
 end
 local function SummaryDetail(p,r)
     local B=W.Bridge
-    -- Research selection only: this never resolves a native bag/equipment link.
-    if r and p.serverVariant=='' then
-        local variants,cut=B.Variants(r.item,2)
-        if variants and #variants==1 and not cut then p.serverVariant=variants[1];p.variantDrop:Refresh() end
+    local status=B.Status()
+    local item=r and r.item
+    if p.summaryItem~=item then p.summaryItem=item;p.serverVariant="" end
+    local function Key()
+        return table.concat({status.generation or status.state,tostring(status.failures),tostring(item),p.serverVariant,p.serverMetric,p.days},":")
     end
-    local x=W.ServerMarket.Project(r and r.item,p.serverVariant,p.serverMetric,p.days);p.projection=x
-    local h,status=x.header,B.Status()
+    local key=Key()
+    local saved=p.summaryDetail
+    -- Research selection only: this never resolves a native bag/equipment link.
+    if not (saved and saved.key==key) and r and p.serverVariant=='' then
+        local variants,cut=B.Variants(r.item,2)
+        if variants and #variants==1 and not cut then p.serverVariant=variants[1] end
+    end
+    key=Key()
+    local x=saved and saved.key==key and saved.projection or W.ServerMarket.Project(item,p.serverVariant,p.serverMetric,p.days)
+    -- Keep one selected immutable projection, including history, rather than
+    -- requesting its evicted partition on every search/metadata repaint.
+    if x.record and not (saved and saved.key==key) then
+        p.summaryDetail={key=key,projection=x};p.variantDrop:Refresh()
+    end
+    p.projection=x
+    local h=x.header
+    status=B.Status()
     local why=W.ServerMarket.AvailabilityText(x.availability.state)
     p.kind:SetText('External listing summary · exact server variants · native item equivalence unavailable')
     p.source:SetText(B.Freshness().text..' · '..x.label..(h and h.synthetic and ' · synthetic fixture' or ''))
@@ -105,7 +128,7 @@ local function SummaryDetail(p,r)
     p.aggregateText=h and ('Generation: '..h.generation_id..'\nIssuer: '..h.issuer_id..'\n'..(x.record and ('Exact upstream variant: '..x.record.variant_key..'\n') or '')..
         'Summary contract 1 · current observed exact variants only\nDetailed history not delivered; missing records are unavailable, never zero.') or why
     p.chartTip='Historical reference support is genuine server evidence; summary references are not chart observations.'
-    if status.loading and not p.summaryWaiting then
+    if not x.record and status.loading and not p.summaryWaiting then
         p.summaryWaiting=true
         C_Timer.After(0.05,function()
             p.summaryWaiting=nil
@@ -115,10 +138,11 @@ local function SummaryDetail(p,r)
 end
 local function ServerDetail(p,r)
     p.track:SetEnabled(false);p.browse:SetEnabled(false);p.advisor:SetEnabled(false)
-    p.variantDrop:Show();p.qualityDrop:Hide();p.metricDrop:Show();p.variantDrop:Refresh()
+    p.variantDrop:Show();p.qualityDrop:Hide();p.metricDrop:Show()
     p.name:SetText(r and r.info.name or "Choose a server item")
     p.pic.tex:SetTexture(r and r.info.icon or UI.ICON_BLANK)
     if W.Bridge.Status().summary then SummaryDetail(p,r);return end
+    p.variantDrop:Refresh()
     p.kind:SetText("External observations · choose an exact upstream variant · local prices stay separate")
     local x=W.ServerMarket.Project(r and r.item,p.serverVariant,p.serverMetric,p.days);p.projection=x
     local h=x.header;local selected=x.record
@@ -358,6 +382,7 @@ function A.OpenMarket(item,opt)
     if not ctx or not A.IsShown() then return false end
     A.Go("market")
     page.context=ctx;page.marketKey=ctx.market or "auto";page.serverVariant=ctx.serverVariant or ""
+    page.summaryItem=ctx.item
     page.scope,page.category,page.quality="all","all",-1
     page.selected,page.focusItem=ctx.item,ctx.item
     page.query=tostring(ctx.item);page.search:SetText(page.query);page.search.hint:Hide()
@@ -527,7 +552,7 @@ local function Release(p)
     p.viewport=p.pendingView or (p.rows and A.Capture(p.list,Key)) or p.viewport
     if p.job and p.job.Cancel then p.job:Cancel() end
     p.chart:Clear()
-    p.catalog,p.dirty,p.refilter=nil,nil,nil
+    p.catalog,p.dirty,p.refilter,p.summaryDetail,p.summaryItem=nil,nil,nil,nil,nil
     p.token=p.token+1;p.job,p.rows,p.index,p.known,p.market,p.projection,p.chosen,p.stamp,p.pendingView=nil,nil,nil,nil,nil,nil,nil,nil,nil
     p.list:SetData({});p:UnregisterAllEvents();p.listening=false
     W.Strategy.Listen(A.Schedule,false)

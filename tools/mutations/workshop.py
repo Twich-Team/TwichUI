@@ -1137,3 +1137,18 @@ m("market.consumption.pending-refresh", "TwichUI_Workshop/Pricing.lua", "if reas
 m("market.consumption.cache-decoder-coupling", "TwichUI_Workshop/Pricing.lua", "local current=dataStamp()", "local current=P.Generation()", "decoder progress repeatedly discards completed prices", ["test_workshop_market_consumption_async.lua"])
 
 m("market.consumption.capacity-loop", "TwichUI_Workshop/Pricing.lua", "if not reserved and count+pendingCount>=P.MAX_CACHE then", "if false then", "cache overflow repeatedly restarts decoding instead of falling back", ["test_workshop_market_consumption_async.lua"])
+
+m("market.search.loading-identity", "TwichUI_Workshop/auction/ViewMarket.lua",
+  'tostring(b.failures)..":"..tostring(focus)', 'tostring(b.loading)..":"..tostring(focus)',
+  "transient partition work changes the catalog identity and restarts finished searches", ["test_workshop_auction_market_search.lua"])
+m("market.search.focused-catalog", "TwichUI_Workshop/auction/ViewMarket.lua",
+  'local focus=b.summary and W.Int(p.focusItem or tonumber(p.query),1,W.MAX_ID)', 'local focus=nil',
+  "name search reuses a one-item focused catalog", ["test_workshop_auction_market_search.lua"])
+m("market.search.selected-history", "TwichUI_Workshop/auction/ViewMarket.lua",
+  'local x=saved and saved.key==key and saved.projection or W.ServerMarket.Project(item,p.serverVariant,p.serverMetric,p.days)',
+  'local x=W.ServerMarket.Project(item,p.serverVariant,p.serverMetric,p.days)',
+  "selected history repeatedly reloads an evicted partition and disappears during search", ["test_workshop_auction_market_search.lua"])
+m("market.search.item-selection", "TwichUI_Workshop/auction/ViewMarket.lua",
+  'if p.summaryItem~=item then p.summaryItem=item;p.serverVariant="" end',
+  'if false then p.summaryItem=item;p.serverVariant="" end',
+  "a newly selected item inherits another item's exact variant", ["test_workshop_auction_market_search.lua"])

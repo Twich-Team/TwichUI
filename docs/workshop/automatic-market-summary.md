@@ -151,3 +151,33 @@ separate AH Sell comparison; financial/identity guards are rechecked by the focu
 campaign. The final async case also verifies no lookup of an already resolved
 price when a different partition completes. Main merge, production deployment and public addon publication are outside this
 draft-review scope. No new Companion release is needed for this base-item integration.
+
+### Market search and chart refresh regression
+
+The Market research page now treats the validated generation and focused-item
+scope as catalog identity. Partition loading is temporary work, so it no longer
+invalidates a completed name-search index. A focused item-ID result is not reused
+as if it contained the whole catalog. The page retains one selected validated
+summary projection while other partitions decode; generation, validation failure,
+item, exact variant, metric and date-window changes invalidate that snapshot, and
+leaving the page releases it. This avoids repeatedly evicting/reloading the
+selected chart's partition during search. An automatically changed selection also
+resolves its own variant rather than inheriting the previous item's variant.
+
+The real-reader regression uses three disposable contract-2 partitions, staggered
+validation, and a name search started during another partition read. It checks
+complete results, an uninterrupted existing chart, stable idle work, selection and
+window changes, replacement generations, explicit research context and cleanup.
+The original code fails the chart-retention assertion. Four focused mutations
+restore transient catalog identity, incomplete focused-catalog reuse, repeated
+chart reads and stale item variants; all four are detected. This is offline
+handler/reader evidence. The reported Forever-client search and appearance still
+need owner retesting; no simulator or real-client acceptance is claimed here.
+
+The final frozen-source checks pass both `development market` (34 modules) and
+`development auction-preview` (33 modules), including Lua syntax checks. The four
+search mutations also pass on the final test. An earlier Market run passed its
+modules but was rejected by the source-change guard while the new regression
+coverage was still being edited; that evidence is retained separately. The later
+frozen-source runs report unchanged source and PASS. The subsequent documentation
+placement correction changes no executable source.
