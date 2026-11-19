@@ -221,7 +221,12 @@ function UI.GoldFlowChart(parent, w, h)
         local g = C.Geometry(d.days, pw, ph, self.show)
         self.geometry = g
         self:ClearInspection()
-        self.msg:SetText(not d.recording and "Nothing is recorded yet." or (d.totals.n == 0 and "No gold moved on the recorded days." or ""))
+        -- nothing to show: no axis, line or scale (an arbitrary band would read as a real amount), only the words; recorded quiet days
+        -- and days outside coverage keep their marks
+        local empty = not d.recording or d.totals.n == 0
+        if empty then g.grid, g.points, g.segments, g.zeroY = {}, {}, {}, nil end
+        self.empty = empty
+        self.msg:SetText(not d.recording and "Gold tracking hasn't started yet." or (empty and "No gold activity recorded in this period." or ""))
         -- zero line and guides
         local n = 0
         for _, line in ipairs(g.grid) do

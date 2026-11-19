@@ -182,12 +182,13 @@ Check(Win.Page("ledger"):IsShown() and not Win.Overview():IsShown())
 Same(Win.Page("ledger").heading:GetText(), "Gold Ledger")
 local EMDASH = "\226\128\148"
 for _, key in ipairs({ "net", "inn", "out", "attrIn", "attrOut", "unk" }) do Same(V.cards[key].value:GetText(), EMDASH, key .. ": no figure when nothing is recorded") end
-Same(V.chart.msg:GetText(), "Nothing is recorded yet.")
+Same(V.chart.msg:GetText(), "Gold tracking hasn't started yet.")
+Check(V.chart.empty and #V.chart.geometry.grid == 0 and not V.chart.zero:IsShown(), "no arbitrary axis when nothing is recorded")
 Check(V.list.empty:GetText():find("Nothing recorded yet", 1, true), "an explained empty list")
 Check(V.status:GetText():find("Not recording", 1, true), "it says it is not recording: " .. V.status:GetText())
 Same(V.prof.head:GetText(), "Profession profitability isn't available yet.")
 Check(V.prof.head:IsShown() and V.profShown == false, "the profession panel says it is unavailable and shows no figure")
-Check(V.prof.body:GetText():find("estimates nothing", 1, true))
+Check(V.prof.body:GetText():find("completed sales and recorded material costs", 1, true))
 Check(V.sources.empty:GetText() ~= "", "the source panel says nothing has moved")
 Same(#V.rows, 0)
 
@@ -200,7 +201,8 @@ Same(V.Draws(), draws0, "a burst of changes waits for one redraw")
 Fire()
 Same(V.Draws(), draws0 + 1)
 Check(V.status:GetText():find("Recording since " .. LQ.Day(TODAY), 1, true), "it says since when it records, in UTC: " .. V.status:GetText())
-Check(V.chart.msg:GetText():find("No gold moved on the recorded days", 1, true), "no activity is not the same as nothing recorded")
+Same(V.chart.msg:GetText(), "No gold activity recorded in this period.", "no activity is not the same as nothing recorded")
+Check(V.chart.empty and #V.chart.geometry.grid == 0, "and shows no money scale")
 Same(V.cards.net.value:GetText(), "0c"); Same(V.cards.out.value:GetText(), "0c")
 Check(V.list.empty:GetText():find("No gold changes recorded in the last 7 days", 1, true))
 -- gold moves: the transaction and the chart update by themselves
@@ -285,9 +287,9 @@ Same(Card("net"), "+12g 30s 0c"); Same(Card("inn"), "+15g 50s 0c"); Same(Card("o
 Same(Card("attrIn"), "+13g 0s 0c"); Same(Card("attrOut"), "-2g 50s 0c"); Same(Card("unk"), "+1g 80s 0c" == "x" and "" or LQ.Money(25000 - 7000, true))
 Reconciles("7D")
 Same(V.cards.net.sub:GetText(), "Last 7 days")
-Same(V.cards.net.cmp:GetText(), "No prior period to compare", "the window before was not recorded: no comparison")
-Same(V.cards.inn.cmp:GetText(), "No prior period to compare")
-Same(V.cards.attrIn.cmp:GetText(), "of 15g 50s 0c in")
+Check(not V.cards.net.cmp:IsShown() and V.cards.net.cmp:GetText() == "", "the window before was not recorded: no comparison line at all")
+Check(not V.cards.inn.cmp:IsShown())
+Same(V.cards.attrIn.sub:GetText(), "Confirmed sources"); Check(not V.cards.attrIn.cmp:IsShown())
 Same(#V.rows, 6, "journal rows in the window"); Same(Sum(V.rows), 123000, "and they add up to the same figure")
 Same(V.rows[1].a, 5000); Same(V.rows[6].a, 20000, "newest first")
 -- the rows' words
@@ -346,7 +348,7 @@ Same(Card("inn"), "+20g 50s 0c"); Same(Card("attrIn"), "+18g 0s 0c"); Reconciles
 Check(V.flow.ranges[30].on == true and V.flow.ranges[7].on == false and V.flow.ranges[90].on == false, "the chosen range is marked")
 V.SetFilter("days", 90)
 Same(Card("inn"), "+20g 60s 0c"); Reconciles("90D"); Same(#V.chart.hits, 90)
-Same(V.cards.net.cmp:GetText(), "No prior period to compare", "90 days have no earlier period inside the retention")
+Check(not V.cards.net.cmp:IsShown(), "90 days have no earlier period inside the retention")
 V.SetFilter("days", 7)
 
 -- all characters
@@ -392,7 +394,7 @@ do
     -- the prior window (days 7 to 13 back) holds the +50,000 of day 10 and the +10,000 added above: 60,000; this one 155,000
     Same(V.cards.inn.cmp:GetText(), ("+%d%% vs. prior 7d"):format(math.floor((155000 - 60000) / 60000 * 100 + 0.5)))
     Same(V.cards.net.cmp:GetText(), "Prior 7d: +6g 0s 0c")
-    Same(V.cards.out.cmp:GetText(), "No prior period to compare", "no percentage from a zero base")
+    Check(not V.cards.out.cmp:IsShown(), "no percentage from a zero base")
     Reconciles("compared")
 end
 

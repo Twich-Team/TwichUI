@@ -124,17 +124,20 @@ local function BuildCards()
         UI.Art(c.icon, def.art, 20)
         c.width = w - 18
         c.title = UI.Text(c, 12, K.textDim)
+        c.icon:SetPoint("TOPLEFT", 10, -9)
         c.title:SetPoint("LEFT", c.icon, "RIGHT", 6, 0)
-        c.title:SetWidth(w - 9 - 20 - 6 - 6)
-        Fit(c.title, def.title, w - 9 - 20 - 6 - 6, 12, 9)
+        c.title:SetWidth(w - 10 - 20 - 6 - 6)
+        Fit(c.title, def.title, w - 10 - 20 - 6 - 6, 12, 10)
         c.value = UI.Text(c, 19, K.text, "serif")
-        c.value:SetPoint("TOPLEFT", 10, -28)
-        c.sub = UI.Text(c, 11, K.stone)
-        c.sub:SetPoint("TOPLEFT", 10, -52)
+        c.value:SetPoint("TOPLEFT", 10, -33)
+        c.sub = UI.Text(c, 12, K.stone)
+        c.sub:SetPoint("TOPLEFT", 10, -58)
         c.sub:SetWidth(c.width)
-        c.cmp = UI.Text(c, 10, K.stone)
-        c.cmp:SetPoint("TOPLEFT", 10, -64)
+        c.cmp = UI.Text(c, 11, K.stone)   -- only when a complete earlier period exists; hidden otherwise
+        c.cmp:SetPoint("TOPRIGHT", c, "TOPRIGHT", -10, -58)
         c.cmp:SetWidth(c.width)
+        c.cmp:SetJustifyH("RIGHT")
+        c.cmp:Hide()
         UI.Tip(c, def.title, def.tip)
         V.cards[def.key] = c
     end
@@ -152,22 +155,22 @@ local function PaintCards(s)
             if def.key == "net" then
                 value, tone = LQ.Money(t.net, true), Tone(t.net)
                 local p = LQ.Compare(s, "net")
-                cmp = p and p.text or "No prior period to compare"
+                cmp = p and p.text or ""
             elseif def.key == "inn" then
                 value, tone = LQ.Money(t.inn, true), t.inn > 0 and K.sage or K.text
                 local p = LQ.Compare(s, "inn")
-                cmp = p and p.text or "No prior period to compare"
+                cmp = p and p.text or ""
             elseif def.key == "out" then
                 value, tone = t.out > 0 and LQ.Money(-t.out) or LQ.Money(0), t.out > 0 and K.ember or K.text
                 local p = LQ.Compare(s, "out")
-                cmp = p and p.text or "No prior period to compare"
+                cmp = p and p.text or ""
             elseif def.key == "attrIn" then
-                value, tone, sub, cmp = LQ.Money(t.attrIn, true), t.attrIn > 0 and K.sage or K.text, "Confirmed sources", ("of %s in"):format(LQ.Money(t.inn))
+                value, tone, sub = LQ.Money(t.attrIn, true), t.attrIn > 0 and K.sage or K.text, "Confirmed sources"
             elseif def.key == "attrOut" then
-                value, tone, sub, cmp = t.attrOut > 0 and LQ.Money(-t.attrOut) or LQ.Money(0), t.attrOut > 0 and K.ember or K.text, "Confirmed sources", ("of %s out"):format(LQ.Money(t.out))
+                value, tone, sub = t.attrOut > 0 and LQ.Money(-t.attrOut) or LQ.Money(0), t.attrOut > 0 and K.ember or K.text, "Confirmed sources"
             else
                 local net = t.unkIn - t.unkOut
-                value, tone, sub, cmp = LQ.Money(net, true), Tone(net), "Source unknown", ("in %s · out %s"):format(LQ.Money(t.unkIn), LQ.Money(t.unkOut))
+                value, tone, sub = LQ.Money(net, true), Tone(net), "Source unknown"
             end
         else
             value = "\226\128\148"
@@ -175,8 +178,17 @@ local function PaintCards(s)
         end
         Fit(c.value, value, c.width, 19, 12, "serif")
         UI.Paint(c.value, tone)
-        Fit(c.sub, sub, c.width, 11, 9)
-        Fit(c.cmp, cmp, c.width, 10, 8)
+        Fit(c.sub, sub, c.width, 12, 10)
+        -- a comparison sits on its own line only when there is a real one; otherwise nothing is said
+        c.cmp:SetShown(cmp ~= "")
+        if cmp ~= "" then
+            c.sub:SetWidth(c.width * 0.45)
+            c.cmp:SetWidth(c.width * 0.55)
+            Fit(c.cmp, cmp, c.width * 0.55, 11, 10)
+        else
+            c.sub:SetWidth(c.width)
+            c.cmp:SetText("")
+        end
     end
 end
 
@@ -274,24 +286,24 @@ local function BuildProfessions()
     p:SetPoint("TOPRIGHT", page, "TOPRIGHT", 0, BOT_TOP)
     V.prof = p
     p.art = p:CreateTexture(nil, "ARTWORK")
-    p.art:SetSize(40, 40)
-    p.art:SetPoint("TOPLEFT", 16, -44)
-    UI.Art(p.art, "npc:hammer-and-chisel", 40)
-    p.art:SetAlpha(0.7)
+    p.art:SetSize(48, 48)
+    p.art:SetPoint("TOPLEFT", 18, -62)
+    UI.Art(p.art, "npc:hammer-and-chisel", 48)
+    p.art:SetAlpha(0.8)
     p.head = UI.Text(p, 14, K.text, "strong")
-    p.head:SetPoint("TOPLEFT", p.art, "TOPRIGHT", 12, -2)
-    p.head:SetWidth(w - 16 - 40 - 12 - 14)
-    p.head:SetHeight(40)
+    p.head:SetPoint("TOPLEFT", p.art, "TOPRIGHT", 14, 1)
+    p.head:SetWidth(w - 18 - 48 - 14 - 16)
+    p.head:SetHeight(38)
     p.head:SetWordWrap(true)
     p.head:SetJustifyV("TOP")
     p.head:SetText("Profession profitability isn't available yet.")
     p.body = UI.Text(p, 12, K.textDim)
-    p.body:SetPoint("TOPLEFT", p.art, "BOTTOMLEFT", 0, -12)
-    p.body:SetWidth(w - 16 - 14)
-    p.body:SetHeight(70)
+    p.body:SetPoint("TOPLEFT", p.head, "BOTTOMLEFT", 0, -8)
+    p.body:SetWidth(w - 18 - 48 - 14 - 16)
+    p.body:SetHeight(36)
     p.body:SetWordWrap(true)
     p.body:SetJustifyV("TOP")
-    p.body:SetText("Real profit needs each craft linked to what its materials cost and to the sales that were actually paid. The ledger only records gold as it moves, so it estimates nothing and shows no figure it cannot stand behind.")
+    p.body:SetText("Accurate profit requires completed sales and recorded material costs.")
     for i = 1, 5 do
         local row = CreateFrame("Frame", nil, p)
         row:SetHeight(ROW_H - 2)
@@ -360,7 +372,7 @@ local function MakeRow(parent)
     UI.Hover(row, 6)
     local rule = UI.Rule(row, 0.18)
     rule:SetPoint("BOTTOMLEFT", 4, 0); rule:SetPoint("BOTTOMRIGHT", -4, 0)
-    row.time = UI.Text(row, 12, K.textDim)
+    row.time = UI.Text(row, 12, K.textDim)   -- dimmer than the source, so the eye finds the source and the amount first
     row.time:SetPoint("LEFT", 8, 0)
     row.time:SetWidth(92)
     row.srcIcon = row:CreateTexture(nil, "ARTWORK")
@@ -372,7 +384,7 @@ local function MakeRow(parent)
     row.itemIcon = row:CreateTexture(nil, "ARTWORK")
     row.itemIcon:SetSize(16, 16)
     row.itemIcon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-    row.amount = UI.Text(row, 12, K.text)
+    row.amount = UI.Text(row, 13, K.text, "strong")
     row.amount:SetPoint("RIGHT", -8, 0)
     row.amount:SetWidth(106)
     row.amount:SetJustifyH("RIGHT")
@@ -464,7 +476,7 @@ local function BuildFilters()
     V.scope:SetPoint("TOPLEFT", page, "TOPLEFT", 0, -46)
     V.source = Dropdown(page, 168, SOURCES, function() return filter.source or "all" end, function(v) V.SetFilter("source", v ~= "all" and v or nil) end)
     V.source:SetPoint("TOPLEFT", V.scope, "TOPRIGHT", 10, 0)
-    V.status = UI.Text(page, 12, K.stone)
+    V.status = UI.Text(page, 11, K.stone)
     V.status:SetPoint("TOPRIGHT", page, "TOPRIGHT", 0, -53)
     V.status:SetJustifyH("RIGHT")
     V.search = UI.Search(page, 260, 28, "Search transactions")
