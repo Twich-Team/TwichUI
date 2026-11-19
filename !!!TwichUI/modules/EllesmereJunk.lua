@@ -1,5 +1,5 @@
 -- TwichUI: the one place that talks to EllesmereUI's Bags Junk Marker
--- Used by Mage selling's "Mark as junk with EllesmereUI" mode (MageSell.lua). Nothing here decides what is
+-- Used by Mage selling and Workshop's opt-in Vendor marking. Nothing here decides what is
 -- worth marking; it only says whether EllesmereUI can be asked, and asks.
 --
 -- What was read, in EllesmereUI Bags 9.5.5 (EllesmereUIBags_Categories.lua, EllesmereUIBags.lua):

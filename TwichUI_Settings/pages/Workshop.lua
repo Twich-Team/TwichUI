@@ -90,6 +90,20 @@ K.Page({
         open:AddModifyPredicate(Enabled)
         open.why = "Enable Workshop — Experimental first."
 
+        local junk=K.ProxyToggle("workshopVendorJunk", "Mark Vendor recommendations as junk",
+            "Off by default. Marks carried items when Workshop recommends Vendor for every carried copy. Requires EllesmereUI Bags and its Junk Marker. Marks apply to every copy of an item ID across your account, including future copies. EllesmereUI may sell them through Auto Sell Junk or its Sell Junk button. Turning this off leaves existing marks; unmark with EllesmereUI's junk coin. Workshop respects manual unmarking for the rest of the session and leaves custom categories alone. Workshop itself sells nothing. Runs after Workshop is loaded; enable Load Workshop when I log in for future sessions.", false,
+            function() return Launcher().VendorJunkEnabled() end,
+            function(on) Launcher().SetVendorJunkEnabled(on) end)
+        junk:AddModifyPredicate(Loaded)
+        junk.why="Enable Workshop and load its options first."
+        K.Status("Junk marking",function()
+            if not Launcher().VendorJunkEnabled() then return "Off" end
+            if not Loaded() then return "Waiting for Workshop" end
+            local ej=R.EllesmereJunk
+            local status=ej and ej.Status() or "not-ready"
+            return status=="ready" and "On" or (ej and ej.REASONS[status] or "EllesmereUI Bags is unavailable.")
+        end)
+
         K.Header("Auction House", "Choose the auction interface and defaults for new selling drafts. Every auction action still requires your confirmation.")
         local auction = K.ProxyToggle("auctionDebug", "Use TwichUI Auction House (Experimental)",
             "Open the existing five-page Auction House when visiting an auctioneer. No proof commands are required. Turning this off restores Blizzard. Purchases, posts and cancellations require your own confirmation.", false,
