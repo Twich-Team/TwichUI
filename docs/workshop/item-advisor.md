@@ -14,7 +14,13 @@ Vendor. Locked, quest, incomplete, never-sell and restock-protected copies preve
 marking that ID. Unknown prices retain the Advisor's existing known-option policy;
 this feature adds no new sale-value calculation or posting quote.
 
-**Workshop → Junk marking** is a dedicated tab with illustrated item categories,
+**Workshop → Junk marking** is a dedicated settings page with a split rule list
+and focused editor, following Loot Rolls, Magic Inventory and Reminders. Choose
+a named rule or start a disabled template, select an illustrated item type, and
+add/remove only the conditions you need. A live sentence explains All/Any logic.
+Save commits the whole draft once; Cancel, closing the page and profile changes
+discard it. Drafts refuse to overwrite or delete externally changed rules.
+The page includes illustrated item categories,
 a master switch, up to eight editable rules, and the Never mark picker. Each
 rule selects an item type and combines a quality range, wearable-now requirements,
 estimated upgrades, known class reagents and remembered-recipe materials using

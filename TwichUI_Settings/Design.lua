@@ -35,6 +35,7 @@ Page("restock", "Choose what to keep stocked at merchants.", { "Question window 
 Page("restockItems", "Set a target quantity for each item you keep stocked.")
 Page("magicInventory", "Choose where your items belong, then review the moves.")
 Page("auction", "Keep selling and collecting mail close at hand.")
+Page("workshopJunk", "Choose a rule, build its conditions, then save when it says what you mean.")
 Page("workshop", "Experimental crafting, shopping and market research. Enable it when you want to try it.")
 Page("chronicle", "Keep a journal of your adventures.")
 Page("chronicleLook", "Make your journal comfortable to read.", { "Border", "Controls and accents" })
@@ -87,7 +88,7 @@ end
 -- Long forms expose one player task at a time. The original rows, dependencies and setters stay authoritative.
 -- Small forms and already focused card/list editors intentionally have no task strip.
 local TASKS = {
-    workshop = { { "General", "General" }, { "Junk marking", "Junk marking", "Marking rule 1", "Marking rule 2", "Marking rule 3", "Marking rule 4", "Marking rule 5", "Marking rule 6", "Marking rule 7", "Marking rule 8" }, { "Auction House", "Auction House" }, { "Tooltip Designer", "Tooltip Designer" },
+    workshop = { { "General", "General" }, { "Auction House", "Auction House" }, { "Tooltip Designer", "Tooltip Designer" },
         { "Market Data", "Market Data" }, { "Crafting & Shopping", "Crafting & Shopping" } },
     notifications = { { "Arrivals", "Zone arrival" }, { "Training", "New training" }, { "Friends", "Friend login" }, { "Party", "Party deaths" },
         { "Comfort", "Accessibility" }, { "Try it", "Notification previews", "Appearance" } },

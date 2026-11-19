@@ -863,4 +863,27 @@ if key=="workshop" and params.editor then
         Lab.Settle(.2)
     end)
 end
+if key=="workshopJunk" and params.editor then
+    Lab.Step("junk rule draft editor",function()
+        local P,L=R.WorkshopJunkRulesSettings,R.WorkshopLauncher
+        local count=#L.JunkRules()
+        local f=P.Frame()
+        f.rows[1]:Click()
+        Lab.Check("interact","rule list opens a draft",true,P.Draft()~=nil)
+        P.Add("quality");P.Set("qualityMax",1)
+        Lab.Check("state","condition draft leaves saved rule unchanged",5,L.JunkRules()[1].qualityMax)
+        f.cancel:Click()
+        Lab.Check("interact","Cancel discards draft",nil,P.Draft())
+        P.New("poor")
+        Lab.Check("state","template starts off",false,P.Draft().on)
+        Lab.Check("state","template is not saved yet",count,#L.JunkRules())
+        f.save:Click()
+        Lab.Check("interact","Save creates one rule",count+1,#L.JunkRules())
+        L.RemoveJunkRule(count+1)
+        f.rows[1]:Click();P.Add("quality");P.Set("qualityMax",2);P.Add("upgrade");P.Set("upgrade","no")
+        Lab.Check("construct","condition card visible",true,f.cards.upgrade:IsShown())
+        Lab.Check("interact","Save button can be revealed",true,R.SettingsUI.RevealFrame(f.save))
+        Lab.Settle(.2)
+    end)
+end
 Lab.Finish()

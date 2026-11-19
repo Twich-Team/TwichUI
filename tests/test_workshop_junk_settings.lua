@@ -25,24 +25,37 @@ c.ClearCursor=function() cursor=nil;cleared=(cleared or 0)+1 end
 assert(#P.Entries("bags")==3,"bag picker deduplicates item IDs")
 assert(#P.Entries("bags","200")==1)
 assert(not L.Loaded() and not L.Enabled())
-S.variables.TWICHUI_junkRule1qualityMax:SetValue("2")
-S.variables.TWICHUI_junkRule1upgrade:SetValue("no")
-assert(L.JunkRules()[1].qualityMax==2 and L.JunkRules()[1].upgrade=="no")
-assert(not L.JunkAllows(301,2,{quality=1,upgrade=true}))
-assert(L.JunkAllows(301,2,{quality=1,upgrade=false}))
+local editor=R.WorkshopJunkRulesSettings
+editor.Frame():Show()
+local before=L.JunkRules()
+assert(editor.Edit(1))
+editor.Set("name","Saved gear rule");editor.Add("quality");editor.Set("qualityMax",1);editor.Add("upgrade");editor.Set("upgrade","no")
+assert(L.JunkRules()[1].qualityMax==before[1].qualityMax,"draft edits do not persist")
+editor.Cancel();assert(L.JunkRules()[1].name==nil,"Cancel discards name")
+assert(editor.New("nonupgrade"));assert(#L.JunkRules()==#before,"template browsing creates no saved rule")
+assert(editor.Draft().on==false)
+assert(editor.Save());assert(#L.JunkRules()==#before+1)
+assert(editor.Edit(1));editor.Set("name","Saved gear rule");assert(editor.Save())
+assert(L.JunkRules()[1].name=="Saved gear rule")
+assert(editor.Edit(1));L.SetJunkRule(1,"on",false);assert(not editor.Save(),"stale draft refuses overwrite");editor.Cancel()
+assert(editor.Edit(1));editor.Set("qualityMin",4);editor.Set("qualityMax",1)
+assert(not editor.Save(),"invalid draft range cannot persist");editor.Cancel()
+assert(editor.Edit(1));local n=#L.JunkRules();L.SetJunkRule(1,"on",true)
+editor.Frame().delete:Click();assert(#L.JunkRules()==n,"stale deletion cannot remove a changed rule");editor.Cancel()
+assert(editor.Edit(1));editor.Frame():Hide();assert(not editor.Draft(),"closing discards draft")
 local settings=c.CreateFrame("Frame",nil,c.UIParent);settings:Show()
 R.SettingsUI.Frame=function() return settings end
 R.SettingsUI.IsShown=function() return settings:IsShown() end
 R.SettingsUI.Close=function() settings:Hide();R.SettingsLauncher.Closed() end
 local section,button
-for _,row in ipairs(S.K.pages.workshop.rows) do
+for _,row in ipairs(S.K.pages.workshopJunk.rows) do
     if row.kind=="header" then section=row:GetName() end
-    if row:GetName()=="Never mark items" then assert(R.SettingsDesign.TaskFor(S.K.pages.workshop,section)=="Junk marking");button=row end
+    if row:GetName()=="Never mark items" then assert(section=="Junk marking");button=row end
 end
-assert(button and R.SettingsDesign.TaskFor(S.K.pages.workshop,"Junk marking")=="Junk marking")
+assert(button and S.K.pages.workshopJunk.parent=="workshop")
 local found=false
 for _,result in ipairs(R.SettingsSearch.Run("never mark")) do
-    if result.entry.page=="workshop" and result.entry.row==button then found=true end
+    if result.entry.page=="workshopJunk" and result.entry.row==button then found=true end
 end
 assert(found,"settings search discovers the picker without opening it")
 button.click()

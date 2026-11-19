@@ -8,7 +8,7 @@ local c, S = SettingsClient({ beforeInit = function(c)
 end })
 local R, K = c.TwichUI, S.K
 local L = R.WorkshopLauncher
-assert(K.pages.workshop and #R.SettingsDesign.Tasks(K.pages.workshop) == 6)
+assert(K.pages.workshop and #R.SettingsDesign.Tasks(K.pages.workshop) == 5)
 assert(not L.Loaded() and not L.LoadOnLogin())
 assert(not L.VendorJunkEnabled() and S.variables.TWICHUI_workshopVendorJunk.default==false)
 assert(L.SetVendorJunkEnabled(true) and L.VendorJunkEnabled() and not L.Loaded(),"junk preference never eagerly loads Workshop")
@@ -104,7 +104,7 @@ local headers = {}
 for _, row in ipairs(K.pages.workshop.rows) do
     if row.kind == "header" then headers[#headers + 1] = row:GetName() end
 end
-assert(table.concat(headers, "|") == "General|Junk marking|Marking rule 1|Marking rule 2|Marking rule 3|Marking rule 4|Marking rule 5|Marking rule 6|Marking rule 7|Marking rule 8|Auction House|Tooltip Designer|Market Data|Crafting & Shopping")
+assert(table.concat(headers, "|") == "General|Auction House|Tooltip Designer|Market Data|Crafting & Shopping")
 assert(K.pages.workshop.def.hostAfter == "Tooltip Designer")
 -- Market descriptions use real source summaries, with honest empty/future states.
 local status = {}

@@ -251,6 +251,10 @@ local function RuleCopy(r)
     local kinds={gear=true,materials=true,recipes=true,consumables=true,other=true}
     if not kinds[r.kind] then return nil end
     local out={kind=r.kind,on=r.on==true,match=r.match=="any" and "any" or "all"}
+    if r.name~=nil then
+        if type(r.name)~="string" or #r.name>60 or r.name:find("[%c|]") then return nil end
+        out.name=r.name
+    end
     for _,key in ipairs({"qualityMin","qualityMax"}) do
         local n=r[key]
         if type(n)~="number" or n~=n or n%1~=0 or n<0 or n>5 then return nil end
@@ -278,6 +282,20 @@ function L.JunkRules()
     end
     return rows,false
 end
+-- Commit the complete settings draft once, refusing stale profile/list edits.
+function L.SaveJunkRule(index,rule,expected)
+    local rows,held=L.JunkRules()
+    if held or type(index)~="number" or index%1~=0 or index<1 or index>math.min(8,#rows+1) then return false end
+    if type(expected)~="table" or #expected~=#rows then return false end
+    for i,r in ipairs(rows) do
+        for _,key in ipairs({"name","kind","on","match","qualityMin","qualityMax","wearable","upgrade","classReagent","profession"}) do
+            if type(expected[i])~="table" or expected[i][key]~=r[key] then return false end
+        end
+    end
+    local clean=RuleCopy(rule);if not clean then return false end
+    local cfg=JunkConfig(true);if not cfg then return false end
+    rows[index]=clean;cfg.rules={v=1,rows=rows};JunkChanged();return true
+end
 function L.SetJunkRule(index,key,value)
     if not ({kind=true,on=true,match=true,qualityMin=true,qualityMax=true,wearable=true,upgrade=true,classReagent=true,profession=true})[key] then return false end
     if type(index)~="number" or index%1~=0 or index<1 or index>8 then return false end
@@ -297,9 +315,17 @@ function L.JunkTemplate(index,kind)
     local cfg=JunkConfig(true);if not cfg then return false end
     cfg.rules={v=1,rows=rows};JunkChanged();return true
 end
-function L.RemoveJunkRule(index)
+function L.RemoveJunkRule(index,expected)
     local rows,held=L.JunkRules()
     if held or type(index)~="number" or index%1~=0 or index<1 or index>#rows then return false end
+    if expected then
+        if #expected~=#rows then return false end
+        for i,r in ipairs(rows) do
+            for _,key in ipairs({"name","kind","on","match","qualityMin","qualityMax","wearable","upgrade","classReagent","profession"}) do
+                if type(expected[i])~="table" or expected[i][key]~=r[key] then return false end
+            end
+        end
+    end
     local cfg=JunkConfig(true);if not cfg then return false end
     table.remove(rows,index);cfg.rules={v=1,rows=rows};JunkChanged();return true
 end
