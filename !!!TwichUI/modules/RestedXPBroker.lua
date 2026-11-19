@@ -34,7 +34,7 @@ R.RestedXPBroker = B
 
 local NAME = "TwichUI RestedXP Guide"
 local ADDON = "RXPGuides"
-local ICON = R.PATH .. [[media\textures\restedxp-broker]]   -- an open book with a guiding light (64 x 64)
+local ICON = R.PATH .. [[media\textures\restedxp-broker]]   -- supplied upward arrow (64 x 64)
 local obj
 local rxp
 local hooked = false

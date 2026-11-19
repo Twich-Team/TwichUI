@@ -46,7 +46,7 @@ function B.Refresh()
         type = "data source",
         label = "BugSack",
         text = "0",
-        icon = [[Interface\AddOns\BugSack\Media\icon]],
+        icon = R.PATH .. [[media\textures\bugsack-broker]],
         OnClick = OnClick,
         OnTooltipShow = function(tip)
             tip:AddLine("BugSack", 1, 1, 1)
