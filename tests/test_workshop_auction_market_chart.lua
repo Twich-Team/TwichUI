@@ -19,21 +19,6 @@ check(not C.Connected(prepared.points[1],prepared.points[2],prepared.gaps),'adap
 check(C.FromObserved(nil)==nil and C.FromObserved({points={},groups={}})==nil,'missing evidence stays missing')
 local single=C.FromObserved({today=14,points={{day=14,price=100}}})
 check(single.from==13 and single.to==14 and #single.points==1,'single point has an axis span without extra samples')
--- The Workshop adapter preserves exact observed prices/day spacing and keeps
--- older ranges as aggregates; it never mutates cached facts or invents days.
-local observed={today=14,basis="minimum listings",points={{day=10,price=900},{day=12,price=1100}},
- groups={{from=1,to=7,low=600,high=1200,average=950,n=4}}}
-local converted=C.FromObserved(observed)
-check(converted.from==1 and converted.to==14,'bounds include aggregates and the current day')
-check(#converted.points==2 and converted.points[1].day==10 and converted.points[2].day==12,'missing day stays missing')
-check(converted.points[1].price==900 and converted.points[2].price==1100,'copper amounts are unchanged')
-check(converted.groups[1].average==950 and converted.groups[1].low==600 and converted.groups[1].high==1200 and converted.groups[1].n==4,'aggregate evidence unchanged')
-check(converted.points~=observed.points and converted.groups~=observed.groups,'copied presentation records')
-check(observed.from==nil and observed.points[1].provenance==nil and observed.groups[1].kind==nil,'cached facts not mutated')
-check(not C.Connected(converted.points[1],converted.points[2],converted.gaps),'adapter does not connect missing days')
-check(C.FromObserved(nil)==nil and C.FromObserved({points={},groups={}})==nil,'unsupported history stays empty')
-local one=C.FromObserved({points={{day=4,price=49999}},groups={},today=4})
-check(#one.points==1 and one.points[1].price==49999 and one.from<one.to,'single observation is not repeated')
 local s={from=1,to=7,points={{day=1,price=100,at=86400,provenance='local'},
  {day=2,price=140,partial=true},{day=6,price=80,at='2026-11-17T00:00:00Z',provenance='external'}},
  groups={{from=3,to=5,average=110,low=90,high=150,n=2,partial=true,provenance='local'}},gaps={{from=3,to=5}}}

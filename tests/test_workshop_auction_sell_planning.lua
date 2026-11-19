@@ -3,8 +3,6 @@ local c,W,s,Press,g=dofile(TESTS.."auction_debug_mock.lua")
 local build=assert(loadfile(ROOT.."auction/Build.lua"));setfenv(build,c);build()
 W.AdvisorData.Reserved=s.RealReserved
 local A,Q,D,T=W.AuctionUI,W.AuctionReads,W.AuctionSellData,W.AuctionActions
-local build=assert(loadfile(ROOT.."auction/Build.lua"));setfenv(build,c);build()
-W.AdvisorData.Reserved=s.RealReserved
 local checks=0
 local function Check(v,why) checks=checks+1;assert(v,why or "Sell planning regression") end
 local function Same(a,b,why) Check(a==b,(why or "value")..": "..tostring(a).." ~= "..tostring(b)) end
