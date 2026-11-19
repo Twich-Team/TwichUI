@@ -11,6 +11,7 @@ c.UIParent=MIFake("Frame");c.UIParent:SetSize(1600,1200)
 c.CreateFrame=function(kind,_,parent)
     local frame=MIFake(kind,parent)
     frame.UnregisterAllEvents=function(self) self.events={} end
+    if kind=='Frame' then frame.IsEnabled=nil end   -- the game's plain Frame has no IsEnabled
     frame.Click=function(self) if self:IsEnabled() and self:GetScript("OnClick") then self:GetScript("OnClick")(self) end end
     return frame
 end

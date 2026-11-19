@@ -1084,6 +1084,8 @@ local function NewCard()
     local function Font(fs, size, ivory, role) return m.ReminderFont(fs, size, ivory, role) end
     local c = CreateFrame("Frame", nil, f.rule.tree, "BackdropTemplate")
     m.PanelFace(c, "walnut")
+    -- MaterialHover asks the frame whether it is enabled; a plain Frame has no such method in the game.
+    function c:IsEnabled() return true end
     m.MaterialHover(c)
     c.grip = Grip(c)
     c.grip:SetPoint("TOPLEFT", 3, -20)
