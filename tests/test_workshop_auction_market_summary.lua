@@ -2,7 +2,7 @@
 local c=dofile(TESTS..'auction_mock.lua')
 local W=dofile(TESTS..'auction_market_fixture.lua')(c)
 local B,Q,J,A=W.Bridge,W.Summary,W.BridgeCodec,W.AuctionUI
-local f=assert(io.open(TESTS..'fixtures/workshop_summary_v1/synthetic.json'));local fixture=J.Parse(f:read('*a'));f:close()
+local f=assert(io.open(TESTS..(WORKSHOP_SUMMARY_HISTORY and 'fixtures/workshop_summary_v2/synthetic.json' or 'fixtures/workshop_summary_v1/synthetic.json')));local fixture=J.Parse(f:read('*a'));f:close()
 local profile=c.TwichUIDB;local db=c.TwichUIWorkshopDB
 local function fingerprint(t)
  if type(t)~='table' then return tostring(t) end
@@ -49,12 +49,18 @@ local function settle()
  for i=1,5000 do FlushTimers();local p=A.Page('market');if p and not p.job and not p.summaryWaiting and not B.Status().loading then return p end end
  error('Market summary did not settle')
 end
-assert(A.Show('market'));settle()
+assert(A.Show('market'));local initial=settle();assert(initial.projection.source=='market_server','automatic research source ignored loaded Companion data')
+local initiallyLoaded=B.Status().loaded_parts
 assert(A.OpenMarket(item,{market='server'}));local p=settle()
-assert(B.Status().loaded_parts<=1,'focused research walked unrelated partitions')
-assert(p.projection.record and p.projection.facts.recent.value==recent and (market=='unavailable' and p.projection.facts.mval==nil or market~='unavailable' and p.projection.facts.mval and p.projection.facts.mval.value==100),'real Market references differ from independent fixture expectations')
+assert(B.Status().loaded_parts<=math.max(1,initiallyLoaded),'focused research walked unrelated partitions')
+assert(p.projection.record and p.projection.facts.recent.value==recent and (market=='unavailable' and p.projection.facts.mval==nil or market~='unavailable' and p.projection.facts.mval and p.projection.facts.mval.value==100),'Market references differ: record='..tostring(p.projection.record)..' variant='..tostring(p.serverVariant)..' recent='..tostring(p.projection.facts and p.projection.facts.recent and p.projection.facts.recent.value)..' market='..tostring(p.projection.facts and p.projection.facts.mval and p.projection.facts.mval.value)..' state='..tostring(p.projection.why)..' selected='..tostring(p.selected)..' chosen='..tostring(p.chosen and p.chosen.item)..' rows='..tostring(#p.rows)..' error='..tostring(p.error)..' checked='..tostring(B.Status().checked_parts)..' readerError='..tostring(B.Status().error))
 assert(p.projection.facts.supply.items==10 and p.projection.facts.comp==nil)
-assert(p.projection.series==nil and p.chart.msg:GetText():find('not a daily price series',1,true),'summary became a daily chart')
+if B.Manifest().contract_version==2 then
+ assert(p.projection.series and #p.projection.series.points>=1 and p.projection.series.points[#p.projection.series.points].price==recent,'actual Market daily chart missing')
+ assert(p.chartCard.heading:GetText():find('actual daily observations',1,true))
+else
+ assert(p.projection.series==nil and p.chart.msg:GetText():find('not a daily price series',1,true),'summary became a daily chart')
+end
 assert(p.contextText:GetText():find('Horde',1,true) and p.coverage:GetText():find('current observed exact variants',1,true))
 assert(p.aggregateText:find(B.Status().generation,1,true),'diagnostics lost actual generation')
 assert(#p.serverVariant==64 and not p.contextText:GetText():find(p.serverVariant,1,true),'ordinary view requires a variant hash')

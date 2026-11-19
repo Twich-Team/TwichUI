@@ -5,6 +5,7 @@ local A,UI,D,AD=W.AuctionUI,W.UI,W.AuctionMarketData,W.AdvisorData
 local V={}
 A.Market=V
 local page,Start,Detail,Paint
+local function External(p) return p and (p.marketKey=='server' or p.marketKey=='auto' and W.Bridge and W.Bridge.Status().ready) end
 local function Key(r) return r.item end
 local function Money(n) return n and UI.Money(n) or "Unavailable" end
 local function Date(day) return date("!%b %d",math.floor(day*86400)) end
@@ -14,7 +15,7 @@ local function Stamp(p,m)
         (p.scope=="tracked" and ":"..D.TrackStamp() or "")
 end
 local function Options(p)
-    return {external=p.marketKey=="server",market=p.market,scope=p.scope,query=p.query,category=p.category,quality=p.quality,item=p.focusItem}
+    return {external=External(p),market=p.market,scope=p.scope,query=p.query,category=p.category,quality=p.quality,item=p.focusItem}
 end
 local function Context(p,item)
     return p.context and p.context.item==item and p.context or {}
@@ -28,13 +29,16 @@ local function Quality(f)
     return q and (q.level=="good" and "Good coverage" or q.level=="fair" and "Fair coverage" or
         q.level=="limited" and "Limited observations" or "Insufficient history") or "Unavailable"
 end
+local function SourceWords(source)
+    return source=='local' and 'Your Auction House scans' or source=='local+legacy' and 'Your scans + imported local history' or source=='legacy' and 'Imported local history' or source
+end
 local function ChartWords(p,x)
     local s=x and x.series
     if not s then return "History unavailable · "..(W.Facts.WHY[x and x.why] or "no stored observations"),"" end
     local parts={}
     for _,g in ipairs(s.groups) do
         parts[#parts+1]=Date(g.from).."–"..Date(g.to)..": "..Money(g.average).." mean · "..g.n.." observed days"..
-            (g.partial and " · partial" or "").." · "..(g.provenance or "unknown source")
+            (g.partial and " · partial" or "").." · "..(SourceWords(g.provenance) or "unknown source")
     end
     local coverage=(s.recent and (#s.points.." recorded observations") or (#s.points.." observed daily closings"))..
         " · "..#s.gaps.." stored gap ranges · "..#s.groups.." aggregate ranges"
@@ -43,7 +47,7 @@ local function ChartWords(p,x)
         if r.provenance then sources[r.provenance]=true end
         partial=partial or r.partial
     end end
-    local names={};for name in pairs(sources) do names[#names+1]=name end;table.sort(names)
+    local names={};for name in pairs(sources) do names[#names+1]=SourceWords(name) end;table.sort(names)
     if #names>0 then coverage=coverage.." · "..table.concat(names," + ") end
     if partial then coverage=coverage.." · partial records" end
     if s.damaged then coverage=coverage.." · some history unreadable" end
@@ -79,13 +83,20 @@ local function SummaryDetail(p,r)
         tile.heading:SetText(v and v.label or tile.localHeading)
     end
     ServerChart(p,x)
-    p.chartCard.heading:SetText('Detailed history unavailable in compact updates')
-    p.chart.msg:SetText('This update contains price references, not a daily price series.')
-    p.chart.note:SetText('Choose a saved local market to inspect genuine local history.')
+    local hasHistory=h and h.contract_version==2
+    p.chartCard.heading:SetText(hasHistory and 'Market history · actual daily observations' or 'History unavailable in this summary format')
+    if not hasHistory then
+        p.chart.msg:SetText('This update contains price references, not a daily price series.')
+        p.chart.note:SetText('Update Companion and TwichUI for Market history, or choose your local scans.')
+    elseif not x.series or #x.series.points==0 then
+        p.chart.msg:SetText('No supported Market observations for this exact variant and period.')
+        p.chart.note:SetText('Missing observations stay gaps. Your local scans are available in the source selector.')
+    end
     p.coverage:SetText(h and (h.record_count..' current observed exact variants; historical-only items are excluded.') or why)
     p.axis:SetText('No synthetic daily observations or interpolated trends')
     if status.error then p.kind:SetText(status.ready and 'Replacement rejected; previous validated data retained.' or 'Summary rejected; local history is unchanged.') end
     if status.compatibility_message then p.source:SetText(status.compatibility_message) end
+    if status.reload_required then p.source:SetText('Market files changed or could not be verified. Reload UI to read a complete generation.') end
     local current=x.record and x.record.current
     p.trends:SetText(why..(current and ('\n'..current.coverage.priced_days_14..' priced reference dates in 14 days; '..current.coverage.priced_days_60..' in 60 days.') or '')..'\nNo local competition or selling authorization.')
     p.contextText:SetText(h and ('Observed: '..h.source_observation.observed_at..' UTC\n'..h.market.faction..' · '..h.market.player_ruleset..' · house '..h.market.house_id..
@@ -97,7 +108,7 @@ local function SummaryDetail(p,r)
         p.summaryWaiting=true
         C_Timer.After(0.05,function()
             p.summaryWaiting=nil
-            if A.IsShown() and A.Mode()=='market' and p.marketKey=='server' then Detail(p) end
+            if A.IsShown() and A.Mode()=='market' and External(p) then Detail(p) end
         end)
     end
 end
@@ -156,7 +167,7 @@ end
 Detail=function(p)
     local r=p.index and p.index[p.selected]
     p.chosen=r
-    if p.marketKey=="server" and W.ServerMarket then ServerDetail(p,r);return end
+    if External(p) and W.ServerMarket then ServerDetail(p,r);return end
     if p.variantDrop then p.variantDrop:Hide();p.qualityDrop:Show();p.metricDrop:Hide() end
     for _,tile in ipairs(p.tiles or {}) do if tile.localHeading then tile.heading:SetText(tile.localHeading) end end
     local ctx=Context(p,p.selected)
@@ -325,16 +336,16 @@ function V.Filter(key,value)
     end
 end
 function V.Variant(key)
-    if not page or page.marketKey~="server" then return false end
+    if not page or not External(page) then return false end
     if key~="" and not W.Bridge.Record(page.selected,key) then return false end
     page.serverVariant=key;page.variantDrop:Refresh();Detail(page);return true
 end
 function V.Metric(metric)
-    if not page or page.marketKey~="server" or not ({minimum=true,recent=true,supply=true})[metric] then return false end
+    if not page or not External(page) or not ({minimum=true,recent=true,supply=true})[metric] then return false end
     page.serverMetric=metric;page.metricDrop:Refresh();Detail(page);return true
 end
 function V.Range(days)
-    if not page or page.marketKey=="server" and days>60 then return end
+    if not page or External(page) and days>60 then return end
     for _,v in ipairs(D.RANGES) do if v[1]==days then page.days=days;page.rangeDrop:Refresh();Detail(page);return end end
 end
 function V.Select(item)
@@ -361,6 +372,7 @@ end
 local function Build(p)
     page=p
     p.query,p.scope,p.category,p.quality,p.days,p.marketKey="","all","all",-1,14,"auto"
+    if W.Bridge and W.Bridge.Status().ready then p.scope="bags" end
     p.metadata,p.bags,p.token=0,0,0
     p.serverVariant,p.serverMetric="","recent"
     p.search=UI.Search(p,292,32,"Search market items or ID…");p.search:SetPoint("TOPLEFT",0,0);p.search:SetMaxLetters(200)
@@ -374,7 +386,7 @@ local function Build(p)
     p.scopeDrop:SetPoint("LEFT",p.search,"RIGHT",10,0)
     p.categoryDrop=Drop(180,function() return W.AuctionBrowseData.CATEGORIES end,"category")
     p.categoryDrop:SetPoint("LEFT",p.scopeDrop,"RIGHT",10,0)
-    p.rangeDrop=A.Dropdown(p,170,function() if p.marketKey~="server" then return D.RANGES end local ranges={} for _,entry in ipairs(D.RANGES)do if entry[1]<=60 then ranges[#ranges+1]={entry[1],entry[1]==2 and "2-day window" or entry[2]} end end return ranges end,function() return p.days end,V.Range)
+    p.rangeDrop=A.Dropdown(p,170,function() if not External(p) then return D.RANGES end local ranges={} for _,entry in ipairs(D.RANGES)do if entry[1]<=60 then ranges[#ranges+1]={entry[1],entry[1]==2 and "2-day window" or entry[2]} end end return ranges end,function() return p.days end,V.Range)
     p.rangeDrop:SetPoint("TOPRIGHT",0,0)
     p.marketDrop=Drop(494,function()
         local entries=D.Markets()

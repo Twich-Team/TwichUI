@@ -24,6 +24,7 @@ DX.OPS = {
     ["gathering.animate"] = { module = "qol", label = "Gathering sparkle animation", kind = "update", file = "!!!TwichUI/qol/GatheringSparklesDisplay.lua", where = "Animate", every = "per frame while the one gathering overlay is shown" },
     ["workshop.summaryLoad"] = { module="workshop",label="Summary partition addon load",kind="init",file="TwichUI_Workshop/Summary.lua",where="loadPart",every="once per requested partition" },
     ["workshop.summaryValidate"] = { module="workshop",label="Summary validation slice",kind="work",file="TwichUI_Workshop/Summary.lua",where="Q.Step",every="while validating header or requested partition" },
+    ["workshop.summaryHistory"] = { module="workshop",label="Market daily history projection",kind="work",file="TwichUI_Workshop/Summary.lua",where="Q.History",every="selected external item/metric/window" },
     ["workshop.summaryLookup"] = { module="workshop",label="Exact summary lookup",kind="work",file="TwichUI_Workshop/Summary.lua",where="Q.Record",every="external research only" },
 
     ["auction.actionReview"] = {module="auction", label="AH action validation and explicit submission", kind="evaluate", file="TwichUI_Workshop/auction/Actions.lua", where="Prepare/Confirm", every="explicit review or confirmation only", visible="auction.previewShown"},

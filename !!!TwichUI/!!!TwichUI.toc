@@ -9,6 +9,7 @@
 ## AddonCompartmentFuncOnEnter: TwichUI_OnCompartmentEnter
 ## AddonCompartmentFuncOnLeave: TwichUI_OnCompartmentLeave
 ## X-License: MIT (code); SIL OFL 1.1 (fonts); see LICENSE and licenses/
+## Group: !!!TwichUI
 ## Category: Interface Enhancements
 ## X-Curse-Project-ID: 1719280
 

@@ -390,13 +390,13 @@ if W.Summary then
     function B.Compatibility()
         if not Q.Selected() then return compatibility() end
         local s=Q.Status();return {compatible=s.ready,desktop_build=s.desktop_build or 'unknown',summary=true,
-            transport_version=1,contract_version=1,schema_version=1,receipt_schema_version=1,minimum_reader_version=1,reader_contract_version=1}
+            transport_version=1,contract_version=s.contract_version,schema_version=s.schema,receipt_schema_version=1,minimum_reader_version=s.minimum_reader_version,reader_contract_version=2}
     end
     function B.CompatibilityText(diagnostics)
         if not Q.Selected() then return text(diagnostics) end
         local s=Q.Status();if not s.ready then return nil end
         return 'Market summary from Companion '..s.desktop_build:gsub('|','||'):gsub('[%c]',' ')..
-            (diagnostics and '\nSummary contract 1; header verified; partitions validated on demand.' or '')
+            (diagnostics and ('\nMarket data contract '..s.contract_version..'; header verified; partitions validated on demand.') or '')
     end
     local capabilities=B.Capabilities
     function B.Capabilities() local c=capabilities();c.summary_index=true;c.summary_contract=1;return c end

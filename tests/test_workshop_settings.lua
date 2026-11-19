@@ -97,3 +97,16 @@ market.history = { state = "future" }; now = now + 1
 assert(status.History.value() == "Newer format")
 assert(status["Data quality"].value() == "Shown per item", "no fabricated aggregate quality")
 print("PASSED")
+
+-- The collection label reflects the loaded bridge, never on-disk publication.
+assert(status.Collection.value()=="Manual Auction House scans")
+local companion={ready=true,contract_version=2,generation='synthetic-loaded-generation',checked_parts=1,parts=3}
+R.Workshop.Bridge={Status=function()return companion end,Manifest=function()return {source_observation={observed_at='2026-11-15T12:00:00Z'}}end}
+assert(status.Collection.value():find('Companion Market data',1,true))
+assert(status['Companion data'].value()=='Loaded · prices and actual daily history')
+assert(status['Loaded Market generation'].value()=='synthetic-loaded-generation')
+assert(status['Market observations'].value()=='2026-11-15T12:00:00Z')
+assert(status['Market validation'].value()=='1 / 3 data partitions checked on demand')
+companion.ready=false;companion.error='invalid'
+assert(status.Collection.value()=='Manual Auction House scans')
+assert(status['Companion data'].value()=='Rejected · local scans remain available')

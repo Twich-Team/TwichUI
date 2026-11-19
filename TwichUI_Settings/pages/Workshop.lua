@@ -41,6 +41,10 @@ local function Info()
     if not infoAt or now - infoAt > 0.1 then info, infoAt = w.Market.Info(), now end
     return info
 end
+local function Companion()
+    local w=Loaded() and R.Workshop
+    return w and w.Bridge and w.Bridge.Status() or nil
+end
 local function Value(key, empty)
     local i = Info(); return i and i[key] or empty or "Not available"
 end
@@ -135,7 +139,30 @@ K.Page({
         end, function() return "Item-level quality and history depend on what your scans actually observed." end)
         K.Status("Data quality", function() return "Shown per item" end,
             function() return "Good, Fair or Limited describes each item's observed data in its tooltip, not the entire market." end)
-        K.Status("Collection", function() return "Manual Auction House scans" end)
+        K.Status("Collection", function()
+            local s=Companion()
+            return s and s.ready and "Companion Market data + manual Auction House scans" or "Manual Auction House scans"
+        end, function() return "Local scans work independently. Companion observations are a separate source in Market research." end)
+        K.Status("Companion data", function()
+            local s=Companion()
+            if not Loaded() then return "Load Workshop to inspect" end
+            if not s then return "Unavailable · local scans work independently" end
+            if s.reload_required then return "Reload UI to read updated Market files" end
+            if s.loading then return "Validating Market data" end
+            if s.ready then return s.contract_version==2 and "Loaded · prices and actual daily history" or "Loaded · price references only" end
+            return s.error and "Rejected · local scans remain available" or "Not loaded · local scans remain available"
+        end)
+        K.Status("Loaded Market generation", function()
+            local s=Companion();return s and s.ready and s.generation or "None validated"
+        end)
+        K.Status("Market observations", function()
+            local w=Loaded() and R.Workshop;local h=w and w.Bridge and w.Bridge.Manifest()
+            return h and h.source_observation and h.source_observation.observed_at or "Unavailable"
+        end)
+        K.Status("Market validation", function()
+            local s=Companion()
+            return s and s.ready and ((s.checked_parts or 0).." / "..(s.parts or 0).." data partitions checked on demand") or "No loaded data"
+        end)
 
         K.Header("Crafting & Shopping", "Use saved observations and choose what is included in your plans.")
         local craft = K.Button("Crafting options", "Load options", LoadOptions, "Load Workshop options without opening its window or starting a plan.")

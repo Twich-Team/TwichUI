@@ -11,17 +11,20 @@ function D.Stats() return {cache=cached and 1 or 0,points=last and last.series a
     groups=last and last.series and #last.series.groups or 0} end
 function D.Resolve(key)
     if key=="server" and W.ServerMarket then return W.ServerMarket.Context() end
-    if not key or key=="auto" then return MK.Source().market end
+    if not key or key=="auto" then
+        if W.Bridge and W.Bridge.Status().ready and W.ServerMarket then return W.ServerMarket.Context() end
+        return MK.Source().market
+    end
     return PR.Market(key) -- an unavailable explicit market never falls back
 end
 function D.Markets()
-    local out={{"auto","Automatic saved market"}}
+    local out={{"auto","Automatic: Companion or local scans"}}
     local keys=PR.Keys();table.sort(keys)
     for _,key in ipairs(keys) do
         local m=PR.Market(key)
         if m then out[#out+1]={key,PR.Label(m)} end
     end
-    if W.ServerMarket then out[#out+1]={"server","Market server (external)"} end
+    if W.ServerMarket then out[#out+1]={"server","Companion · Market server"} end
     return out
 end
 function D.Context(item,opt)
