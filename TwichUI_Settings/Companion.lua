@@ -5,7 +5,8 @@ local W, M = R.SettingsWidgets, R.SettingsMaterial
 local C = {}
 R.SettingsCompanion = C
 local families = { notifications = "notification", notificationsLook = "notification", healerWatch = "healer",
-    chronicle = "journal", chronicleLook = "journal", navigation = "navigation", navigationLook = "navigation" }
+    chronicle = "journal", chronicleLook = "journal", navigation = "navigation", navigationLook = "navigation",
+    lootRolls = "loot", lootRules = "loot" }
 local scenes, muted = {}, {}
 local f, active, current, updating
 local WIDTH, PAD = 318, 16
@@ -49,7 +50,7 @@ local function Build()
     f.caption:SetWidth(WIDTH - PAD * 2 - 4); f.caption:SetWordWrap(true)
     f.jump = W.Button(f, "Adjust appearance", WIDTH - PAD * 2, "secondary", function()
         local key = current == "notification" and "notificationsLook" or current == "journal" and "chronicleLook"
-            or current == "navigation" and "navigationLook" or "healerWatch"
+            or current == "navigation" and "navigationLook" or current == "loot" and "lootRolls" or "healerWatch"
         R.SettingsUI.Navigate(key)
         local view = R.SettingsUI.View(key)
         if current == "healer" and view and view.taskButtons then view.taskButtons[3]:Click() end
@@ -108,6 +109,11 @@ local function Scene(family)
     elseif family == "navigation" then
         s.nav = R.NavFrame.New(true, "TwichUISettingsNavigationSample")
         s.nav.f:SetParent(s.frame); s.nav.f:SetFrameStrata("DIALOG")
+    elseif family == "loot" then
+        -- the real card renderer (loot/Cards.lua), drawn from a made-up view; it reads no roll and sends nothing
+        s.card = R.LootCards.NewCard(s.frame, { preview = true })
+        s.card:SetPoint("CENTER", s.frame, "CENTER", 0, 0)
+        s.choice = "manual"
     end
     s.hits = {}
     local function Hit(name, parent, region, page, row)
@@ -130,7 +136,8 @@ local function Scene(family)
         Hit("title", s.card, s.title, "chronicleLook", "chronicleHeadingFont")
         Hit("text", s.card, s.body, "chronicleLook", "chronicleFont")
     elseif family == "healer" then Hit("panel", s.frame, s.surface, "healerWatch", "healerWatchPreset")
-    elseif family == "navigation" then Hit("panel", s.nav.f, s.nav.f, "navigationLook", "navigationFrameScale") end
+    elseif family == "navigation" then Hit("panel", s.nav.f, s.nav.f, "navigationLook", "navigationFrameScale")
+    elseif family == "loot" then Hit("card", s.frame, s.card, "lootRolls", "lootRollsScale") end
     scenes[family] = s
     return s
 end
@@ -162,9 +169,10 @@ function C.Update(view)
     current, active = family, key
     for _, s in pairs(scenes) do s.frame:Hide() end
     local s = Scene(family); s.frame:Show()
-    f.pick:SetShown(family == "notification" or family == "healer")
+    local picks = family == "notification" or family == "healer" or family == "loot"
+    f.pick:SetShown(picks)
     f.canvas:ClearAllPoints()
-    f.canvas:SetPoint("TOPLEFT", PAD, (family == "notification" or family == "healer") and -116 or -78)
+    f.canvas:SetPoint("TOPLEFT", PAD, picks and -116 or -78)
     if family == "healer" then
         local watcher = R.HealerWatcher
         local choices = {}
@@ -197,6 +205,22 @@ function C.Update(view)
         NL.Fit(scope, s.card, { top = s.title, bottom = s.detail, width = 250 })
         f.sub:SetText("Notifications · " .. (scope == "shared" and "shared look" or (NL.LABELS[scope] or "sample")))
         f.caption:SetText("Click the text to adjust it. Compact style sample; Try it shows the full card in its real position. Always silent, even while disabled.")
+    elseif family == "loot" then
+        local LC = R.LootCards
+        local choices = {}
+        for _, e in ipairs(LC.SAMPLES) do choices[#choices + 1] = { value = e[1], label = e[2] } end
+        local label = s.choice
+        for _, choice in ipairs(choices) do if choice.value == s.choice then label = choice.label end end
+        f.pick:SetChoices(choices); f.pick:SetValue(s.choice, label)
+        local page = R.LootRulesPage
+        local rule = key == "lootRules" and page and page.Selected and page.Selected() or nil
+        if key == "lootRules" and s.task ~= key then s.choice = "auto"; s.task = key; label = "A rule is about to roll"; f.pick:SetValue("auto", label) end
+        if key ~= "lootRules" then s.task = nil end
+        local h = LC.Draw(s.card, LC.SampleView(s.choice, rule))
+        local fit = math.min(1, (WIDTH - PAD * 2 - 8) / 384, (238 - 12) / h)
+        s.card:SetScale(fit)
+        f.sub:SetText("Loot Rolls · sample card")
+        f.caption:SetText("Click the card to adjust how it looks. A made-up item and rolls, drawn with your settings: nothing is rolled, no group or loot is read, and it never appears on its own.")
     elseif family == "journal" then
         local A = R.ChronicleAppearance
         A.Sync(); A.Prepare(); A.Surface(s.card)

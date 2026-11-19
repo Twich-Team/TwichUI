@@ -361,7 +361,14 @@ function Wg.Dropdown(parent, w, onPick, compact)
     Wg.Recess(b, 0.9)   -- it shows a value, like a field; only its arrowhead says it opens a list
     local hover = Wg.Hover(b, pal.text, 0.05)
     b:HookScript("OnEnter", function() if b.twichReminderMaterial then hover:Set(0) end end)
-    function b:SetChoices(fn) self.choices = fn end
+    -- the list of choices, or a function that returns it (the sample preview's picker hands over the list itself)
+    function b:SetChoices(fn)
+        if type(fn) == "table" then
+            local list = fn
+            fn = function() return list end
+        end
+        self.choices = fn
+    end
     function b:SetValue(v, label)
         self.value = v
         self.text:SetText(label or tostring(v or ""))

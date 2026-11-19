@@ -95,6 +95,21 @@ local list = {
     healerWatch = { file = R.PATH .. [[media\healerwatch\vessel]], small = R.PATH .. [[media\healerwatch\vessel-small]], size = 64, pad = 2, source = "healerWatch" },   -- a mana flask
     healerWatchDrink = { file = R.PATH .. [[media\healerwatch\cup]], small = R.PATH .. [[media\healerwatch\cup-small]], size = 64, pad = 2, source = "healerWatch" },   -- a ceramic cup
     -- Guild Locations' settings illustration (assets/guild-locations-settings-source.png, cut by tools/make_guild_locations_art.py)
+    -- Loot Rolls (tools/make_loot_roll_art.py, cut from assets/LOOT_ROLLS_*_MOCKUP.png)
+    lootNeed = { file = R.PATH .. [[media\loot\need]], small = R.PATH .. [[media\loot\need-small]], size = 64, pad = 3, source = "lootRolls" },
+    lootGreed = { file = R.PATH .. [[media\loot\greed]], small = R.PATH .. [[media\loot\greed-small]], size = 64, pad = 3, source = "lootRolls" },
+    lootPass = { file = R.PATH .. [[media\loot\pass]], small = R.PATH .. [[media\loot\pass-small]], size = 64, pad = 3, source = "lootRolls" },
+    lootQuality = { file = R.PATH .. [[media\loot\gem]], small = R.PATH .. [[media\loot\gem-small]], size = 64, pad = 3, source = "lootRolls" },
+    lootType = { file = R.PATH .. [[media\loot\chest]], small = R.PATH .. [[media\loot\chest-small]], size = 64, pad = 3, source = "lootRolls" },
+    lootSlot = { file = R.PATH .. [[media\loot\chest]], small = R.PATH .. [[media\loot\chest-small]], size = 64, pad = 3, source = "lootRolls" },
+    lootRecipe = { file = R.PATH .. [[media\loot\scroll]], small = R.PATH .. [[media\loot\scroll-small]], size = 64, pad = 3, source = "lootRolls" },
+    lootItem = { file = R.PATH .. [[media\loot\crystals]], small = R.PATH .. [[media\loot\crystals-small]], size = 64, pad = 3, source = "lootRolls" },
+    lootBind = { file = R.PATH .. [[media\loot\scroll-no]], small = R.PATH .. [[media\loot\scroll-no-small]], size = 64, pad = 3, source = "lootRolls" },
+    lootUpgrade = { file = R.PATH .. [[media\loot\upgrade]], small = R.PATH .. [[media\loot\upgrade-small]], size = 64, pad = 3, source = "lootRolls" },
+    lootWhere = { file = R.PATH .. [[media\loot\door]], small = R.PATH .. [[media\loot\door-small]], size = 64, pad = 3, source = "lootRolls" },
+    lootDelay = { file = R.PATH .. [[media\loot\hourglass]], small = R.PATH .. [[media\loot\hourglass-small]], size = 64, pad = 3, source = "lootRolls" },
+    lootResult = { file = R.PATH .. [[media\loot\horn]], small = R.PATH .. [[media\loot\horn-small]], size = 64, pad = 3, source = "lootRolls" },
+    lootRolls = { file = R.PATH .. [[media\loot\greed]], small = R.PATH .. [[media\loot\greed-small]], size = 64, pad = 3, source = "lootRolls" },   -- the feature's own: a stack of coins
     guildLocations = { file = R.PATH .. [[media\guildloc\settings]], small = R.PATH .. [[media\guildloc\settings-small]], size = 64, pad = 3, source = "guildLocations" },   -- a parchment map with three pins and a pennant
     -- Action bar glows' settings illustration (assets/bar-glows-source.png, cut by tools/make_bar_glows_art.py)
     barGlows = { file = R.PATH .. [[media\barglows\settings]], small = R.PATH .. [[media\barglows\settings-small]], size = 64, pad = 2, source = "barGlows" },   -- a leather action bar strip with three ability icons, the middle one glowing

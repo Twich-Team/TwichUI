@@ -261,6 +261,9 @@ Define("reminders", { apply = Refresh("ReminderController") })
 Define("healerWatch", { apply = Refresh("HealerWatcher") })
 Define("buffBack", { apply = Refresh("BuffBackWatch") })
 
+-- Loot Rolls: off removes every card and event at once and gives the game's roll frames back; your rules are kept
+Define("lootRolls", { apply = Refresh("LootRolls") })
+
 -- Action bar glows: off removes every glow, faded bar and event at once; your choices are kept
 Define("barGlows", { apply = Refresh("BarGlowController") })
 

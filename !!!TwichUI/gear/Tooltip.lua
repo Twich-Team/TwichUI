@@ -116,6 +116,17 @@ local function Present(judged)
     return { glance = { head }, detail = detail }
 end
 
+-- The lines the tooltip shows when the reveal key is held (the verdict, what it is compared with, the stat changes, the basis), for
+-- another window to show on hover (the loot cards' "Potential upgrade"). nil without a judgement. The first line is a spacer.
+function H.DetailLines(judged)
+    if type(judged) ~= "table" or not (judged.result and judged.who and judged.who.basis) then return nil end
+    local ok, lines = pcall(function()
+        judged.lines = judged.lines or Present(judged)
+        return judged.lines.detail
+    end)
+    return ok and lines or nil
+end
+
 local function Plain(value)
     if issecretvalue and issecretvalue(value) then return nil end
     return value
