@@ -456,7 +456,9 @@ function WL.Lines(r, ctx, layout, shift)
     local out = { { s.title } }
     for _, row in ipairs(s.rows) do if row.line then
         if row.line.rightRows then
-            for i,text in ipairs(row.line.rightRows) do out[#out+1]={i==1 and row.line[1] or "",text} end
+            -- Native tooltips measure row height from the left string. Keep a
+            -- spacer on continuation rows so the right-column list has room.
+            for i,text in ipairs(row.line.rightRows) do out[#out+1]={i==1 and row.line[1] or " ",text} end
         else out[#out + 1] = row.line end
     end end
     if s.hint then out[#out + 1] = { "~" .. s.hint } end

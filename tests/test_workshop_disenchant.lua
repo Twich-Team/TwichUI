@@ -106,7 +106,10 @@ result.outcomes='fixture';result.yields={{item=11137,min=1,max=2,chance=75},{ite
 local yieldLayout={enabled=true,lines={{id='outcomes',when='always'}}}
 local yieldContext={money=tostring,itemIcon=function(id)return id+9000 end}
 local list=W.WorthLayout.Lines(r,yieldContext,yieldLayout,false)
-assert(#list==4 and list[2][1]=='Disenchant yields' and list[3][1]=='' and list[4][1]=='')
+assert(#list==4 and list[2][1]=='Disenchant yields')
+-- Native tooltip row height comes from the left text: empty continuation
+-- strings collapse the right-hand material list onto the same baseline.
+assert(list[3][1]==' ' and list[4][1]==' ','yield continuation rows must reserve native tooltip height')
 for i,m in ipairs(result.yields) do
  assert(list[i+1][2]:find('|T'..(m.item+9000)..':14:14:0:0|t',1,true),'material icon missing')
  assert(not list[i+1][2]:find('\n',1,true) and not list[i+1][2]:find(';',1,true),'materials share a horizontal line')

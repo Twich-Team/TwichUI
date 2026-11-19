@@ -46,7 +46,10 @@ c.C_Item.GetStackCount=function()return 5 end
 c.C_Item.GetItemInfo=function()return 'Fixture armor','item:100',2,5,1,'Armor','',1,'INVTYPE_CHEST',1,sell,4,1,0 end
 c.C_Item.GetDetailedItemLevelInfo=function()if unknownLevel then return nil,nil,5 end;return liveLevel,nil,5 end
 local drawn,refreshes={},0
-local tip={IsShown=function()return true end,AddLine=function(_,s)drawn[#drawn+1]=s end,AddDoubleLine=function(_,a,b)drawn[#drawn+1]=a..' | '..b end}
+local tip={IsShown=function()return true end,AddLine=function(_,s)drawn[#drawn+1]=s end,AddDoubleLine=function(_,a,b)
+ assert(a~='', 'native tooltip needs left text to reserve height for the right column')
+ drawn[#drawn+1]=a..' | '..b
+end}
 c.GameTooltip=tip
 local function draw()drawn={};W.WorthTip.OnItem(tip,{guid='synthetic-item'});return table.concat(drawn,'\n')end
 tip.RefreshData=function()refreshes=refreshes+1;draw()end
@@ -77,7 +80,7 @@ assert(W.Worth.Recommend({advisor=result}).kind=='possible')
 local savedShift=c.IsShiftKeyDown;c.IsShiftKeyDown=function()return true end
 local expanded=draw()
 assert(expanded:find('Disenchant yields | |T15940:14:14:0:0|t',1,true))
-assert(expanded:find('\n | |T15938:14:14:0:0|t',1,true),'second yield must be a separate right-column row')
+assert(expanded:find('\n  | |T15938:14:14:0:0|t',1,true),'second yield must reserve a separate right-column row')
 c.IsShiftKeyDown=savedShift
 liveLevel=26;local actual=W.WorthTip.Read({guid='synthetic-item'})
 assert(actual.itemLevel==26 and actual.actualLevel and actual.variant=='level','actual copy level was lost')
