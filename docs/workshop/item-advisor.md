@@ -6,7 +6,7 @@ House replacement, posting, automatic scans, selling automation or chart engine.
 ## Optional Vendor junk marking
 
 The separately requested **Mark Vendor recommendations as junk** switch is in
-Workshop's General settings and defaults off. It runs only while Workshop is
+its own Junk marking feature settings and defaults off. It runs only while Workshop is
 loaded and enabled. It uses the same Advisor decision as the item tooltip,
 including Market/local prices, crafting reservations and disenchant alternatives.
 Only carried items are examined, and every carried copy of an item ID must favor
@@ -14,7 +14,7 @@ Vendor. Locked, quest, incomplete, never-sell and restock-protected copies preve
 marking that ID. Unknown prices retain the Advisor's existing known-option policy;
 this feature adds no new sale-value calculation or posting quote.
 
-**Workshop → Junk marking** is a dedicated settings page with a split rule list
+**Junk marking** (its own All features card) is a dedicated settings page with a split rule list
 and focused editor, following Loot Rolls, Magic Inventory and Reminders. Choose
 a named rule or start a disabled template, select an illustrated item type, and
 add/remove only the conditions you need. A live sentence explains All/Any logic.
@@ -22,18 +22,28 @@ Save commits the whole draft once; Cancel, closing the page and profile changes
 discard it. Drafts refuse to overwrite or delete externally changed rules.
 The page includes illustrated item categories,
 a master switch, up to eight editable rules, and the Never mark picker. Each
-rule selects an item type and combines a quality range, wearable-now requirements,
-estimated upgrades, known class reagents and remembered-recipe materials using
-All (AND) or Any (OR). Any enabled matching rule permits the existing Advisor
-Vendor decision; no rule forces a sale recommendation. Missing requested facts
-block matching, including negative conditions. Cozy Sleeping Bag, quest items,
+rule contains a nested AND/OR tree: drag conditions from the palette into groups,
+reorder conditions or whole groups with insertion markers, or use group + and
+Move menus. Item type is a condition, so one rule can combine different item
+types. Quality ranges, wearable-now requirements, estimated upgrades, known class
+reagents and remembered-recipe use are leaves. Trees allow 32 nodes and four
+levels; empty groups never match. Click Add here to select a destination group. Any enabled matching rule permits the existing Advisor
+Vendor decision; no rule forces a sale recommendation. Unknown facts cannot satisfy negative conditions. New OR groups can match when
+another branch is fully proven; AND groups require all children. Migrated flat
+filter groups retain their previous stricter unknown behavior until their group
+logic is deliberately edited. Cozy Sleeping Bag, quest items,
 keys and Never mark IDs always veto marking.
 
 Templates (poor gear, uncommon-or-lower non-upgrades, materials, common recipes,
 and custom) start disabled for review. Existing type switches become equivalent
-rules without resetting preferences. Rule edits persist a bounded version-1
-extension; malformed or newer rules refuse marking and edits. Existing marks are
-never undone. Rules can be disabled, removed or replaced with a template.
+rules without resetting preferences. Rule edits persist a bounded version-2
+extension (version-1 flat rules read safely without writes, converted on Save); malformed or newer rules refuse marking and edits. Existing marks are
+never undone. Older versions refuse this extension rather than guessing at new
+trees. The standalone settings page loads without Workshop. Its explicit Load
+Item Advisor action enables/loads the experimental dependency without opening a
+Workshop window or initiating a scan. Enabled junk marking then loads that
+authorized dependency on login, even with Workshop's login preference off.
+Rules can be disabled, removed or replaced with a template.
 
 Wearability means the native bag tooltip has no unmet requirements (including
 level), rather than a separate guess at class proficiency. Upgrade comparisons

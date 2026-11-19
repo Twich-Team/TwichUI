@@ -65,6 +65,7 @@ pages\Auction.lua
 pages\WorkshopWorth.lua
 pages\WorkshopJunk.lua
 pages\WorkshopJunkRules.lua
+pages\JunkMarking.lua
 pages\Workshop.lua
 pages\Skins.lua
 pages\RestedXP.lua

@@ -27,6 +27,8 @@ assert(#P.Entries("bags","200")==1)
 assert(not L.Loaded() and not L.Enabled())
 local editor=R.WorkshopJunkRulesSettings
 editor.Frame():Show()
+assert(S.K.pages.junkMarking.def.overview and S.K.pages.junkMarking.parent==nil,"standalone feature has its own card")
+for _,row in ipairs(S.K.pages.workshop.rows) do assert(row.id~="workshopVendorJunk","Workshop no longer owns junk controls") end
 local before=L.JunkRules()
 assert(editor.Edit(1))
 editor.Set("name","Saved gear rule");editor.Add("quality");editor.Set("qualityMax",1);editor.Add("upgrade");editor.Set("upgrade","no")
@@ -43,19 +45,45 @@ assert(not editor.Save(),"invalid draft range cannot persist");editor.Cancel()
 assert(editor.Edit(1));local n=#L.JunkRules();L.SetJunkRule(1,"on",true)
 editor.Frame().delete:Click();assert(#L.JunkRules()==n,"stale deletion cannot remove a changed rule");editor.Cancel()
 assert(editor.Edit(1));editor.Frame():Hide();assert(not editor.Draft(),"closing discards draft")
+-- Tree editing uses real node identities and the same virtual drag kit as Reminders.
+editor.Frame():Show();assert(editor.New("custom"))
+local root=editor.Root()
+local either=editor.Insert("any",root)
+local gear=editor.Insert("all",either)
+local item=editor.Insert("kind",gear);item.value="gear"
+local upgrade=editor.Insert("upgrade",gear);upgrade.value=false
+local material=editor.Insert("all",either)
+local materialType=editor.Insert("kind",material);materialType.value="materials"
+local profession=editor.Insert("profession",material)
+assert(editor.Move(upgrade,material,1));assert(editor.Move(upgrade,gear,2))
+assert(not editor.Move(either,gear,1),"cannot move parent into descendant")
+local ef=editor.Frame()
+local find=ef.drag.Find
+c.GetCursorPosition=function() return 100,100 end
+-- Keep real Begin/Stop/cancel handlers, supply a deterministic pointer target.
+ef.drag.Find=function() return {target={parent=gear,frame=ef.nodes[1],depth=1},index=#gear.children+1} end
+local paint=ef.drag.Paint;ef.drag.Paint=function() end -- geometry is tested by RemindersRuleDrag's own tests
+local count=#gear.children
+ef.palette[2]:GetScript("OnDragStart")()
+assert(R.MagicInventoryPage.Drag.Active(),"drag grip starts shared virtual drag")
+ef.palette[2]:GetScript("OnDragStop")()
+assert(#gear.children==count+1 and gear.children[#gear.children].type=="quality","palette drop inserts into selected group")
+assert(not R.MagicInventoryPage.Drag.Active())
+ef.drag.Find=find;ef.drag.Paint=paint
+editor.Cancel();assert(not editor.Draft())
 local settings=c.CreateFrame("Frame",nil,c.UIParent);settings:Show()
 R.SettingsUI.Frame=function() return settings end
 R.SettingsUI.IsShown=function() return settings:IsShown() end
 R.SettingsUI.Close=function() settings:Hide();R.SettingsLauncher.Closed() end
 local section,button
-for _,row in ipairs(S.K.pages.workshopJunk.rows) do
+for _,row in ipairs(S.K.pages.junkMarking.rows) do
     if row.kind=="header" then section=row:GetName() end
     if row:GetName()=="Never mark items" then assert(section=="Junk marking");button=row end
 end
-assert(button and S.K.pages.workshopJunk.parent=="workshop")
+assert(button and S.K.pages.junkMarking.parent==nil)
 local found=false
 for _,result in ipairs(R.SettingsSearch.Run("never mark")) do
-    if result.entry.page=="workshopJunk" and result.entry.row==button then found=true end
+    if result.entry.page=="junkMarking" and result.entry.row==button then found=true end
 end
 assert(found,"settings search discovers the picker without opening it")
 button.click()

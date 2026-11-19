@@ -69,4 +69,12 @@ for _, reason in ipairs({ "MISSING", "DISABLED", "throw" }) do
     assert(t.L.Snapshot().login == (reason == "throw" and "ERROR" or reason))
     assert(t.Faults() == (reason == "throw" and 1 or 0), "load exception is reported once")
 end
+local junk=Setup(false)
+assert(junk.L.SetEnabled(true) and junk.L.SetVendorJunkEnabled(true))
+junk.World();assert(junk.Pending()==1);junk.Tick()
+assert(junk.Loads()==1 and junk.L.Loaded(),"standalone junk feature loads its authorized Advisor dependency without Workshop login preference")
+local junkOff=Setup(false)
+assert(junkOff.L.SetEnabled(true) and junkOff.L.SetVendorJunkEnabled(true))
+junkOff.World();junkOff.L.SetVendorJunkEnabled(false);junkOff.Tick()
+assert(junkOff.Loads()==0,"disabled junk startup cancels its dependency load")
 print("PASSED")

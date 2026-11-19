@@ -77,9 +77,9 @@ local function Scan()
     professionItems,classItems={},{}
     needWear,needUpgrade=false,false
     for _,rule in ipairs(R.WorkshopLauncher.JunkRules()) do
-        if rule.on and rule.kind=="gear" then
-            needWear=needWear or rule.wearable~="any"
-            needUpgrade=needUpgrade or rule.upgrade~="any"
+        if rule.on then
+            needWear=needWear or (rule.tree and R.WorkshopLauncher.JunkTree.Uses(rule.tree,"wearable") or not rule.tree and rule.wearable~="any")
+            needUpgrade=needUpgrade or (rule.tree and R.WorkshopLauncher.JunkTree.Uses(rule.tree,"upgrade") or not rule.tree and rule.upgrade~="any")
         end
     end
     for _,p in ipairs(W.Known and W.Known.Load() or {}) do

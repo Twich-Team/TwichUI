@@ -863,7 +863,7 @@ if key=="workshop" and params.editor then
         Lab.Settle(.2)
     end)
 end
-if key=="workshopJunk" and params.editor then
+if key=="junkMarking" and params.editor then
     Lab.Step("junk rule draft editor",function()
         local P,L=R.WorkshopJunkRulesSettings,R.WorkshopLauncher
         local count=#L.JunkRules()
@@ -880,8 +880,21 @@ if key=="workshopJunk" and params.editor then
         f.save:Click()
         Lab.Check("interact","Save creates one rule",count+1,#L.JunkRules())
         L.RemoveJunkRule(count+1)
-        f.rows[1]:Click();P.Add("quality");P.Set("qualityMax",2);P.Add("upgrade");P.Set("upgrade","no")
-        Lab.Check("construct","condition card visible",true,f.cards.upgrade:IsShown())
+        P.New("custom")
+        P.Set("name","Low quality OR non-upgrade gear")
+        local root=P.Root()
+        local alternatives=P.Insert("any",root)
+        local gear=P.Insert("all",alternatives)
+        local item=P.Insert("kind",gear);item.value="gear"
+        local quality=P.Insert("quality",gear);quality.max=2
+        local other=P.Insert("all",alternatives)
+        local item2=P.Insert("kind",other);item2.value="gear"
+        local upgrade=P.Insert("upgrade",other);upgrade.value=false
+        P.Refresh()
+        Lab.Check("interact","condition can move between groups",true,P.Move(quality,other,1))
+        Lab.Check("interact","condition can move back",true,P.Move(quality,gear,2))
+        Lab.Check("state","nested groups remain draft only",count,#L.JunkRules())
+        Lab.Check("construct","nested editor root visible",true,f.nodes[1]:IsShown())
         Lab.Check("interact","Save button can be revealed",true,R.SettingsUI.RevealFrame(f.save))
         Lab.Settle(.2)
     end)
