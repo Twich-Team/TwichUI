@@ -158,6 +158,7 @@ function L.Apply()
         if L.Enabled() then if w.Resume then w.Resume() end
         elseif w.Suspend then w.Suspend() end
     end
+    if R.Ledger then R.Ledger.Refresh() end   -- the gold ledger records while the Workshop is on, loaded or not
 end
 function L.SetEnabled(on)
     if type(on) ~= "boolean" or type(TwichUIDB) ~= "table" then return false, "ERROR" end

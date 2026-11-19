@@ -17,6 +17,9 @@
 --     request (a loot drop, a trade) is ignored too.
 --   * A request is dropped when MAIL_FAILED arrives without an item (a refusal), or after EXPIRY seconds with
 --     no matching gain (a call the game ignored). It then counts for nothing.
+--   * The gold ledger (auction/Ledger.lua) is told once for each matched gain, as evidence of exactly that amount: "Mail
+--     collected", or "Auction sale" when every message in the gain carries a seller's invoice. Nothing else here reaches the
+--     ledger: a call alone, a refusal, an expiry, a loss or a gain that matches no request is never evidence.
 -- A visit that closes with requests still waiting is finished once they are answered or have expired (a few
 -- seconds at most); a late gain goes to the visit its request came from, never to the next one.
 
@@ -34,6 +37,8 @@ local hooked = false      -- the hooks are installed once and cannot be removed;
 local active = false
 local watching = {}       -- event -> handler, for the events heard only while there is something to watch
 local known = {}          -- inbox position -> money the mailbox showed at its last update (cash-on-delivery mail is left out)
+local knownInvoice = {}   -- inbox position -> { kind, item } of a seller's invoice seen at that update (only while the ledger records)
+local credits = 0         -- evidence sent to the ledger so far (its correlation ids)
 
 local function Num(v)
     if v == nil or (issecretvalue and issecretvalue(v)) then return nil end
@@ -53,6 +58,21 @@ end
 
 function MG.Enabled() return R:Enabled("mailGoldSummary") end
 
+-- Listening is needed for the chat summary, or for the gold ledger's evidence; the chat line is said only for the former.
+local function LedgerOn() return R.Ledger ~= nil and R.Ledger.Active ~= nil and R.Ledger.Active() == true end
+local function Tracking() return MG.Enabled() or LedgerOn() end
+
+-- A sold-auction invoice, when the mailbox offers one for this message: "ahSale" and the item's name. Whether the game gives it
+-- before the message is opened is unverified; with no invoice the money is plain mail.
+local function Invoice(index)
+    if type(GetInboxInvoiceInfo) ~= "function" then return nil end
+    local ok, kind, item = pcall(GetInboxInvoiceInfo, index)
+    if not ok or type(kind) ~= "string" or (issecretvalue and issecretvalue(kind)) then return nil end
+    if kind ~= "seller" then return nil end
+    if type(item) ~= "string" or (issecretvalue and issecretvalue(item)) then item = nil end
+    return "ahSale", item
+end
+
 local function MoneyText(copper)
     local RS = R.Restock
     if RS and RS.ColorMoney then return RS.ColorMoney(copper) end
@@ -71,11 +91,19 @@ end
 -- What the mailbox shows now, kept per position for Record. Bounded by the inbox size.
 local function Snapshot()
     for k in pairs(known) do known[k] = nil end
+    for k in pairs(knownInvoice) do knownInvoice[k] = nil end
     if type(GetInboxNumItems) ~= "function" then return end
     local n = Num((GetInboxNumItems())) or 0
+    local ledger = LedgerOn()
     for i = 1, math.min(n, MAX_WAITING) do
         local money, cod = Read(i)
-        if money and money > 0 and cod == 0 then known[i] = money end
+        if money and money > 0 and cod == 0 then
+            known[i] = money
+            if ledger then
+                local kind, item = Invoice(i)
+                if kind then knownInvoice[i] = { kind, item } end
+            end
+        end
     end
 end
 
@@ -83,7 +111,7 @@ end
 local function Summarize(s)
     if s.printed then return end
     s.printed = true
-    if s.total > 0 and MG.Enabled() then
+    if s.total > 0 and MG.Enabled() then   -- the line is the summary switch's; the ledger needs none of it
         R.Print("Collected %s from mail.", MoneyText(s.total))
     end
 end
@@ -110,6 +138,21 @@ local function Finish(req, collected)
     Rest()
 end
 
+-- One matched gain is one piece of evidence for the ledger, whatever number of requests it paid: an auction sale only when
+-- every message in it is a seller's invoice, otherwise mail collected.
+local function Credit(amount, matched)
+    local L = R.Ledger
+    if not (L and L.Evidence) then return end
+    local kind, note = "ahSale", nil
+    for _, req in ipairs(matched) do
+        if req.kind ~= "ahSale" then kind = "mail" end
+    end
+    if kind == "ahSale" and #matched == 1 then note = matched[1].note end
+    credits = credits + 1
+    local ok, err = pcall(L.Evidence, { kind = kind, amount = amount, note = note, corr = "mail:" .. credits })
+    if not ok then R.Fault("mailbox gold summary", err) end
+end
+
 local function OnMoney()
     local now = Num(GetMoney())
     local before = lastMoney
@@ -117,21 +160,27 @@ local function OnMoney()
     if not (now and before) then return end
     local gain = now - before
     if gain <= 0 or #queue == 0 then return end
-    if queue[1].amount == gain then Finish(queue[1], true) return end
-    -- Two or more of the oldest, reported as one change.
-    local sum, group = queue[1].amount, { queue[1] }
-    for k = 2, #queue do
-        sum = sum + queue[k].amount
-        group[k] = queue[k]
-        if sum == gain then
-            for i = 1, k do Finish(group[i], true) end
-            return
+    local matched
+    if queue[1].amount == gain then
+        matched = { queue[1] }
+    else
+        -- Two or more of the oldest, reported as one change.
+        local sum, group = queue[1].amount, { queue[1] }
+        for k = 2, #queue do
+            sum = sum + queue[k].amount
+            group[k] = queue[k]
+            if sum == gain then matched = group break end
+            if sum > gain then break end
         end
-        if sum > gain then break end
+        if not matched then
+            for i = 2, #queue do
+                if queue[i].amount == gain then matched = { queue[i] } break end
+            end
+        end
     end
-    for i = 2, #queue do
-        if queue[i].amount == gain then Finish(queue[i], true) return end
-    end
+    if not matched then return end
+    for _, req in ipairs(matched) do Finish(req, true) end
+    Credit(gain, matched)
 end
 
 local function OnFailed(itemID)
@@ -144,6 +193,7 @@ local function CloseVisit(s)
     s.open = false
     if session == s then session = nil end
     for k in pairs(known) do known[k] = nil end
+    for k in pairs(knownInvoice) do knownInvoice[k] = nil end
     Want("MAIL_INBOX_UPDATE", nil, false)
     if s.waiting == 0 then Summarize(s) end
     Rest()
@@ -181,7 +231,14 @@ local function Record(index)
     known[index] = nil   -- this position's money is being taken; a second call must not use it again
     if money <= 0 then money = remembered end
     if not money or money <= 0 then return end
-    local req = { session = s, amount = money }
+    local kind, note
+    if LedgerOn() then
+        kind, note = Invoice(index)
+        local seenBefore = knownInvoice[index]
+        if not kind and seenBefore then kind, note = seenBefore[1], seenBefore[2] end
+    end
+    knownInvoice[index] = nil
+    local req = { session = s, amount = money, kind = kind, note = note }
     queue[#queue + 1] = req
     s.waiting = s.waiting + 1
     C_Timer.After(EXPIRY, function() Finish(req, false) end)
@@ -206,13 +263,14 @@ local function Abandon()
     for i = #queue, 1, -1 do queue[i] = nil end
     lastMoney = nil
     for k in pairs(known) do known[k] = nil end
+    for k in pairs(knownInvoice) do knownInvoice[k] = nil end
     Want("MAIL_INBOX_UPDATE", nil, false)
     Rest()
 end
 
 -- Safe to call any time, as often as you like: makes the listening match the switch.
 function MG.Refresh()
-    local on = MG.Enabled()
+    local on = Tracking()
     if on and not hooked then Hook() end
     active = on
     Want("MAIL_SHOW", OnShow, on)

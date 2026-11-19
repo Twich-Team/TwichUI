@@ -102,7 +102,7 @@ assert(SD.Status("Lazy") == "waiting")
 assert(select(2, SD.Status("Offy")) == "Off")
 assert(SD.Status("Gone") == "missing")
 local list = SD.Addons()
-assert(list[1].own and list[1].title == "TwichUI" and #list[1].vars == 5, "TwichUI first, with its five")
+assert(list[1].own and list[1].title == "TwichUI" and #list[1].vars == 6, "TwichUI first, with its six")
 local byName = {}
 for _, a in ipairs(list) do byName[a.name] = a end
 assert(not byName.Blizzard_Thing, "Blizzard addons aren't listed")

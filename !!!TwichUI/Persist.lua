@@ -73,6 +73,9 @@ P.CODES = {
     ["restore-point-dropped"] = true,
     ["chronicle-record-dropped"] = true, -- a character's Chronicle record that was not a table
     ["chronicle-entry-dropped"] = true,  -- a Chronicle entry with nothing readable in it
+    ["ledger-record-dropped"] = true,    -- a character's gold ledger record that was not a table
+    ["ledger-entry-dropped"] = true,     -- a gold ledger entry or day total with nothing readable in it
+    ["ledger-repaired"] = false,         -- the gold ledger's version number was unreadable; read as the current layout
     ["migration-failed"] = true,
     ["future-schema"] = true,
     ["onboarding-repaired"] = false,     -- the onboarding record was unreadable; kept as an existing installation's
@@ -571,7 +574,7 @@ end
 local function ValidSchemaNumber(n) return P.IsCount(n) end
 
 -- Whether any other TwichUI saved variable holds something (read as loaded from disk; nothing is created).
-local OTHER_ROOTS = { "TwichUIChronicleDB", "TwichUIBackupDB", "TwichUIShareDB", "TwichUIRestoreDB" }
+local OTHER_ROOTS = { "TwichUIChronicleDB", "TwichUIBackupDB", "TwichUIShareDB", "TwichUIRestoreDB", "TwichUILedgerDB" }
 local function HasOtherData()
     for _, name in ipairs(OTHER_ROOTS) do
         local t = _G[name]

@@ -22,7 +22,7 @@ local SD = {}
 R.StoredData = SD
 
 -- TwichUI's own saved variables, as the .toc declares them (all account-wide).
-SD.OWN = { "TwichUIDB", "TwichUIBackupDB", "TwichUIShareDB", "TwichUIRestoreDB", "TwichUIChronicleDB" }
+SD.OWN = { "TwichUIDB", "TwichUIBackupDB", "TwichUIShareDB", "TwichUIRestoreDB", "TwichUIChronicleDB", "TwichUILedgerDB" }
 local own = {}
 for _, name in ipairs(SD.OWN) do own[name] = true end
 
