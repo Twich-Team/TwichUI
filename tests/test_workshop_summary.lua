@@ -123,3 +123,20 @@ assert(B.Status().generation==hh.generation_id and B.Status().reload_required an
 load(updated);assert(not B.Record(2589,key));drain()
 assert(B.Status().generation==updated.generation_id and not B.Status().reload_required and B.Value(2589,key).value==999,'explicit reload did not apply validated replacement')
 print('PASSED pinned in-memory generation, late bank overwrite refusal and explicit reload')
+
+-- Queued data requested before combat must resume afterward without being
+-- mislabeled as changed files, or leaving a permanently failed partition.
+Q.Deactivate()
+local combatHeader=J.Copy(hh);local extra=J.Copy(raw);extra[1][1]=2590;extra[1][2]=J.SHA('{"id":2590}')
+local extraRaw=J.Encode(extra)
+combatHeader.partitions[2]=setmetatable({bucket=30,bytes=#extraRaw,record_count=1,sha256=J.SHA(extraRaw)},J.OBJECT)
+combatHeader.record_count=2;combatHeader.coverage.source_records=2;combatHeader.coverage.delivered_records=2;seal(combatHeader)
+TwichUIMarketParts={A29=historyFixture.parts['29'],A30=extraRaw};load(combatHeader)
+assert(not B.Record(2589,key));assert(not B.Record(2590,extra[1][2]))
+InCombatLockdown=function()return true end;drain()
+assert(B.Status().error=='combat' and not B.Status().reload_required,'combat deferral was mislabeled as changed files')
+assert(select(2,B.Record(2590,extra[1][2]))=='combat')
+InCombatLockdown=nil
+assert(not B.Record(2590,extra[1][2]));drain()
+assert(B.Value(2590,extra[1][2]).value==120 and not B.Status().error,'combat deferral did not resume on the next request')
+print('PASSED queued combat deferral and retry without a false reload message')

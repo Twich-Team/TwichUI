@@ -94,7 +94,8 @@ local function SummaryDetail(p,r)
     end
     p.coverage:SetText(h and (h.record_count..' current observed exact variants; historical-only items are excluded.') or why)
     p.axis:SetText('No synthetic daily observations or interpolated trends')
-    if status.error then p.kind:SetText(status.ready and 'Replacement rejected; previous validated data retained.' or 'Summary rejected; local history is unchanged.') end
+    if status.error=='combat' then p.kind:SetText('Market data is paused for combat. Retry this selection afterward.')
+    elseif status.error then p.kind:SetText(status.ready and 'Replacement rejected; previous validated data retained.' or 'Summary rejected; local history is unchanged.') end
     if status.compatibility_message then p.source:SetText(status.compatibility_message) end
     if status.reload_required then p.source:SetText('Market files changed or could not be verified. Reload UI to read a complete generation.') end
     local current=x.record and x.record.current

@@ -180,6 +180,9 @@ local function request(bucket)
     if not active then return nil,'unavailable' end
     if not active.parts[bucket] then return {},'not_observed' end
     if cached and cached.bucket==bucket then return cached.rows end
+    if active.failed[bucket]=='combat' and not(InCombatLockdown and InCombatLockdown()) then
+        active.failed[bucket]=nil;if lastError=='combat' then lastError=nil end
+    end
     if active.failed[bucket] then return nil,active.failed[bucket] end
     if not queued[bucket] and not(job and job.bucket==bucket) then
         if InCombatLockdown and InCombatLockdown() then return nil,'combat' end
@@ -191,12 +194,12 @@ function Q.Status()
     local out={};for k,v in pairs(stats) do out[k]=v end
     out.state=active and 'ready' or job and 'loading' or lastError and 'invalid' or 'absent'
     out.ready=active~=nil;out.loading=job~=nil;out.error=lastError
-    out.reload_required=stats.reload_required or active and next(active.failed)~=nil or false
     out.generation=active and active.header.generation_id;out.records=active and active.header.record_count or 0
     out.bytes=(active and active.loaded_bytes+#active.manifest or 0)+(previous and previous.loaded_bytes+#previous.manifest or 0);out.cache_entries=cached and #cached.rows or 0
     out.summary=true;out.schema=active and active.header.schema_version or 1;out.contract_version=active and active.header.contract_version or 1;out.reader_contract_version=2;out.minimum_reader_version=out.contract_version;out.transport_version=1
     out.history=active and active.header.contract_version==2 or false
-    out.reload_required=stats.reload_required or active and next(active.failed)~=nil or false
+    out.reload_required=stats.reload_required==true
+    if active then for _,why in pairs(active.failed) do if why~='combat' then out.reload_required=true;break end end end
     out.compatibility_message=stats.unsupported and 'Update TwichUI to read this newer Workshop summary.' or nil
     out.desktop_build=active and active.receipt.desktop_build
     out.checked_parts=active and active.checked_count or 0;out.parts=active and #active.header.partitions or 0
