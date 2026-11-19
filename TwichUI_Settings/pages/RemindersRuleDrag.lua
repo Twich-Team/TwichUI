@@ -116,7 +116,7 @@ function RD.New(clip, validate, commit)
         self.source = source
         ghost:SetScale(clip:GetEffectiveScale() / UIParent:GetEffectiveScale())
         ghost.title:SetText(label)
-        R.RemindersPlain.ApplyArt(ghost.art, source.condition, 24)
+        if source.art then source.art(ghost.art, 24) else R.RemindersPlain.ApplyArt(ghost.art, source.condition, 24) end
         kit.Start({ src = source, ghost = ghost,
             find = function() return self:Find(GetCursorPosition()) end,
             hover = function(target) self:Paint(target) end,

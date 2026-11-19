@@ -64,7 +64,8 @@ pages\CozyBag.lua
 pages\Auction.lua
 pages\WorkshopWorth.lua
 pages\WorkshopJunk.lua
-pages\WorkshopJunkRules.lua
+pages\JunkSession.lua
+pages\JunkBuilder.lua
 pages\JunkMarking.lua
 pages\Workshop.lua
 pages\Skins.lua

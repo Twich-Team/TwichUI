@@ -17,7 +17,7 @@ assert(not L.SetVendorJunkEnabled("yes"))
 assert(L.JunkFilter("gear") and L.JunkFilter("materials") and not L.JunkFilter("recipes"))
 assert(not L.JunkFilter("consumables") and not L.JunkFilter("other"))
 assert(L.JunkIgnored(211527) and not L.SetJunkIgnored(211527,false))
-assert(L.JunkAllows(123,2) and L.JunkAllows(123,4) and not L.JunkAllows(123,9))
+assert(L.JunkAllows(123,2,{vendor=true}) and L.JunkAllows(123,4,{vendor=true}) and not L.JunkAllows(123,9,{vendor=true}) and not L.JunkAllows(123,2),"the older per-type switches still need Workshop to recommend Vendor")
 assert(not L.JunkAllows(123,nil) and not L.JunkAllows(123,12) and not L.JunkAllows(123,13))
 assert(not L.SetJunkFilter("bad",true) and not L.SetJunkFilter("gear",1))
 for _,id in ipairs({0,-1,1.5,math.huge,"123"}) do assert(not L.SetJunkIgnored(id,true)) end

@@ -1988,6 +1988,8 @@ function escape:Hide()
         catalog.Hide()
     elseif designer and designer.Shown() then
         if not designer.CancelDrag() then designer.RequestClose() end
+    elseif R.JunkBuilder and R.JunkBuilder.Shown() then
+        if not R.JunkBuilder.CancelDrag() then R.JunkBuilder.RequestClose() end
     else
         UI.Close()
     end

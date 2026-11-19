@@ -18,9 +18,9 @@ local function Info(id)
 end
 -- Only called on explicit open/refresh or events while the picker is visible.
 function P.Entries(source,query)
-    local ids,seen={},{}
-    local function Add(id)
-        id=ID(id);if id and not seen[id] then seen[id]=true;ids[#ids+1]=id end
+    local ids,seen,where={},{},{}
+    local function Add(id,bag,slot)
+        id=ID(id);if id and not seen[id] then seen[id]=true;ids[#ids+1]=id;where[id]={bag,slot} end
     end
     if source=="ignored" then
         for _,id in ipairs(L().JunkIgnoreList()) do Add(id) end
@@ -30,7 +30,7 @@ function P.Entries(source,query)
             if type(slots)=="number" then
                 for slot=1,math.min(slots,200) do
                     local x=C_Container.GetContainerItemInfo(bag,slot)
-                    if type(x)=="table" then Add(x.itemID) end
+                    if type(x)=="table" then Add(x.itemID,bag,slot) end
                 end
             end
         end
@@ -39,7 +39,7 @@ function P.Entries(source,query)
     for _,id in ipairs(ids) do
         local name,icon=Info(id)
         if query=="" or (name.." "..id):lower():find(query,1,true) then
-            out[#out+1]={id=id,name=name,icon=icon,ignored=L().JunkIgnored(id),fixed=id==211527}
+            out[#out+1]={id=id,name=name,icon=icon,ignored=L().JunkIgnored(id),fixed=id==211527,bag=where[id] and where[id][1],slot=where[id] and where[id][2]}
         end
     end
     table.sort(out,function(a,b) if a.name~=b.name then return a.name<b.name end;return a.id<b.id end)
