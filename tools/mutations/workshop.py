@@ -1235,7 +1235,7 @@ m("market.disenchant.unresolved-copy-level", "TwichUI_Workshop/WorthTip.lua",
 
 
 m("market.tooltip.yields-horizontal", "TwichUI_Workshop/WorthLayout.lua",
-  'for i,text in ipairs(row.line.rightRows) do out[#out+1]={i==1 and row.line[1] or "",text} end',
+  'for i,text in ipairs(row.line.rightRows) do out[#out+1]={i==1 and row.line[1] or " ",text} end',
   'out[#out+1]={row.line[1],table.concat(row.line.rightRows,"; ")}',
   "yield materials become a single horizontal tooltip line", ["test_workshop_disenchant.lua"])
 m("market.tooltip.yields-icons", "TwichUI_Workshop/WorthTip.lua",
@@ -1244,3 +1244,6 @@ m("market.tooltip.yields-icons", "TwichUI_Workshop/WorthTip.lua",
 m("market.tooltip.recommendation-art", "TwichUI_Workshop/WorthLayout.lua",
   'local art=RECOMMEND_ART[r.advisor and r.advisor.action or rec.pick]', 'local art=nil',
   "sale recommendations lose their matching addon artwork", ["test_workshop_advisor_market.lua"])
+m("market.tooltip.recommendation-color", "TwichUI_Workshop/WorthLayout.lua",
+  'recommendation=art and (r.advisor and r.advisor.action or rec.pick) or nil', 'recommendation=nil',
+  "tentative sale recommendations stay gray instead of using the action color", ["test_workshop_advisor_market.lua"])

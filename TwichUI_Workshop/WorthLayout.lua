@@ -322,7 +322,8 @@ function RENDER.recommend(r)
     if not rec then return nil end
     local art=RECOMMEND_ART[r.advisor and r.advisor.action or rec.pick]
     local text=art and ("|T"..R.PATH..art..":18:18:0:0|t "..rec.text) or rec.text
-    return { (rec.tone == "good" and "*" or "~") .. text }
+    return { (rec.tone == "good" and "*" or "~") .. text,
+        recommendation=art and (r.advisor and r.advisor.action or rec.pick) or nil }
 end
 
 function RENDER.advisorwhy(r)
@@ -470,10 +471,12 @@ end
 WL.COLORS = {
     title = { 1, 0.82, 0 }, good = { 0.62, 0.92, 0.55 }, quiet = { 0.55, 0.55, 0.55 }, warn = { 1, 0.82, 0.3 }, plain = { 0.8, 0.8, 0.8 },
     left = { 0.8, 0.8, 0.8 }, right = { 1, 1, 1 },
+    vendor = { 0.9, 0.75, 0.45 }, auction = { 0.45, 0.85, 0.55 }, disenchant = { 0.75, 0.58, 0.95 },
 }
 
 function WL.Style(line)
     if line[2] ~= nil then return "double", line[1], line[2] end
+    if line.recommendation and WL.COLORS[line.recommendation] then return line.recommendation, line[1]:sub(2) end
     local first = line[1]:sub(1, 1)
     if first == "*" then return "good", line[1]:sub(2) end
     if first == "!" then return "warn", line[1]:sub(2) end

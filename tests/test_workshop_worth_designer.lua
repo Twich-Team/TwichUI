@@ -151,6 +151,7 @@ end
 D.SetExample("ordinary"); D.SetMode(false)
 Same(table.concat(Mock(), "\n"), "|T"..c.TwichUI.PATH..[[media\npcs\balance-scales-small:18:18:0:0|t ]].."Suggested: Vendor\nVendor | 500c\nAuction (before fees) | 400c\n(Disenchant value (average): nothing to show for this example)\nMarket value (14 days) | 420c",
   "ordinary item, Normal") -- coin text is the fallback in this harness
+for i=1,3 do Same(D.Row(1).wide.color[i],L.COLORS.vendor[i],"preview uses Vendor recommendation color") end
 Check(f.mock.hint.shown ~= false and f.mock.hint.text == "Hold Shift for details", "the hint in Normal")
 D.SetMode(true)
 Check(f.mock.hint.shown == false, "no hint while previewing Hold Shift")

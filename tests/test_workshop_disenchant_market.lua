@@ -46,7 +46,11 @@ c.C_Item.GetStackCount=function()return 5 end
 c.C_Item.GetItemInfo=function()return 'Fixture armor','item:100',2,5,1,'Armor','',1,'INVTYPE_CHEST',1,sell,4,1,0 end
 c.C_Item.GetDetailedItemLevelInfo=function()if unknownLevel then return nil,nil,5 end;return liveLevel,nil,5 end
 local drawn,refreshes={},0
-local tip={IsShown=function()return true end,AddLine=function(_,s)drawn[#drawn+1]=s end,AddDoubleLine=function(_,a,b)
+local recommendationColor
+local tip={IsShown=function()return true end,AddLine=function(_,s,r,g,b)
+ if s:find('Workshop: ',1,true) then recommendationColor={r,g,b} end
+ drawn[#drawn+1]=s
+end,AddDoubleLine=function(_,a,b)
  assert(a~='', 'native tooltip needs left text to reserve height for the right column')
  drawn[#drawn+1]=a..' | '..b
 end}
@@ -69,6 +73,7 @@ for i=1,2000 do FlushTimers() end
 local text=draw()
 assert(not text:find('Classic',1,true),'unwanted source wording in tooltip')
 assert(text:find('Workshop: Disenchant',1,true),'actual tooltip did not use the material estimate: '..text..' reader error='..tostring(B.Status().error))
+for i=1,3 do assert(recommendationColor[i]==W.WorthLayout.COLORS.disenchant[i],'native tooltip must use the Disenchant color') end
 assert(text:find('Disenchant (average) | 360',1,true),'per-item expected value differs from 80%*1.5*200 + 20%*1.5*400')
 assert(refreshes>0 and B.Status().checked_parts==3,'material completion did not refresh the open tooltip')
 local facts=W.Facts.Of(100)
@@ -90,6 +95,7 @@ for i=1,100 do FlushTimers() end
 assert(refreshes==completed and B.Status().slices==slices,'completed material prices restarted decoding')
 sell=1000;local vendorText=draw()
 assert(vendorText:find('Workshop: Vendor',1,true),'lower DE must lose to vendor')
+for i=1,3 do assert(recommendationColor[i]==W.WorthLayout.COLORS.vendor[i],'native tooltip must use the Vendor color') end
 assert(not vendorText:find('Classic',1,true),'primary comparison retained unwanted source wording')
 sell=10;variant=true
 assert(draw():find('Workshop: Disenchant',1,true),'known DE and vendor values can be compared without an auction quote')

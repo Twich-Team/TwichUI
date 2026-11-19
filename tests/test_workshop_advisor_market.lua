@@ -71,5 +71,10 @@ for _,advice in ipairs({vendor,auction,higher})do
  assert(#lines==2 and lines[2][1]:find(art[advice.action],1,true),'matching addon artwork missing')
  assert(lines[2][1]:find('|T',1,true) and lines[2][1]:find('|t Workshop:',1,true),'artwork and suggestion must share a line')
  assert(not lines[2][1]:find('Interface\\Icons',1,true),'recommendation must use addon artwork')
+ local kind,text=W.WorthLayout.Style(lines[2])
+ assert(kind==advice.action,'recommendation color must follow the action, including tentative advice')
+ assert(text:find('|t Workshop: '..A.TOOLTIP[advice.action],1,true))
+ local color=W.WorthLayout.COLORS[kind]
+ assert(color and not (color[1]==color[2] and color[2]==color[3]),'recommendation must not be gray')
 end
 print('PASSED two-way Market recommendations, independent margins, qualifications, specific missing reasons and verified DE comparisons')
