@@ -703,9 +703,19 @@ R:On("PLAYER_REGEN_DISABLED", function() H.Restore("combat") end)
 R:On("PLAYER_REGEN_ENABLED", function() if lease then H.Restore("combat-ended") end end)
 R:On("PLAYER_LEAVING_WORLD", Ended)
 R:On("PLAYER_LOGOUT", function() enabled = false; Ended() end)
-for _, event in ipairs({ "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED", "ADDON_LOADED" }) do
+for _, event in ipairs({ "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED" }) do
     R:On(event, function() if lease then H.Restore("environment-change") end end)
 end
+R:On("ADDON_LOADED", function()
+    -- Tooltip/background addons can load during a healthy visit. Loading one
+    -- does not relinquish the integrated window's native presentation lease.
+    -- Keep the short proof's stricter boundary, and recover immediately when a
+    -- competing auction addon loads or the native root is replaced. The normal
+    -- watchdog still detects foreign geometry, focus, dialogs and hidden UI.
+    if lease and (not lease.integrated or Conflict() or AuctionHouseFrame ~= lease.frame) then
+        H.Restore("environment-change")
+    end
+end)
 Perf.Gauge("auction.proofLease", { label = "AH-1a presentation lease", unit = "count", kind = "state",
     read = function() return lease and 1 or 0 end })
 Perf.Gauge("auction.proofTimer", { label = "AH-1a watchdog", unit = "count", kind = "state",
