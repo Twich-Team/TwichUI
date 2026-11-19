@@ -18,14 +18,17 @@ local BATCH = 120
 local EVENTS = { "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDATE", "TRADE_SKILL_DATA_SOURCE_CHANGED", "PLAYER_REGEN_ENABLED" }
 
 local frame
+local active = false
 local pending = false
 local token = 0
+local requestGeneration = 0
 Wt.reads = 0
 
 local function WindowShown() return W.Window ~= nil and W.Window.IsShown() end
 
 -- Reads the open profession now (unless the window is shown and does it), then its recipes' details a batch at a time
 function Wt.Run()
+    if not active or not W.Active() then return false end
     if WindowShown() then return false end
     token = token + 1
     local mine = token
@@ -43,21 +46,31 @@ function Wt.Run()
 end
 
 function Wt.Request()
-    if pending then return end
+    if pending or not active or not W.Active() then return end
     pending = true
+    local mine = requestGeneration
     C_Timer.After(SETTLE, function()
+        if mine ~= requestGeneration or not active or not W.Active() then return end
         pending = false
         Wt.Run()
     end)
 end
 
 function Wt.Start()
-    if frame or not CreateFrame then return end
-    frame = CreateFrame("Frame")
-    frame:SetScript("OnEvent", function() Wt.Request() end)
+    if active or not CreateFrame or not W.Active() then return end
+    active = true
+    if not frame then
+        frame = CreateFrame("Frame")
+        frame:SetScript("OnEvent", function() Wt.Request() end)
+    end
     for _, e in ipairs(EVENTS) do frame:RegisterEvent(e) end
     Wt.Request()   -- a profession that is already open when the addon loads
 end
 
-function Wt.Events() return frame and #EVENTS or 0 end
+function Wt.Stop()
+    active, pending, token = false, false, token + 1
+    requestGeneration = requestGeneration + 1
+    if frame then frame:UnregisterAllEvents() end
+end
+function Wt.Events() return active and frame and #EVENTS or 0 end
 Wt.Start()

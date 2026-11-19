@@ -13,3 +13,7 @@ TASK_NOTES.md
 tools/navbake/.deps/
 tools/navbake/build/
 __pycache__/
+
+# Generated verification, simulator and benchmark output stays local or in CI artifacts.
+# Selected permanent evidence belongs under docs/evidence/; do not force-add outputs.
+test-output/

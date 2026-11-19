@@ -1,0 +1,255 @@
+{
+  "core": {
+    "tests": ["test_auction_host.lua", "test_auction_window.lua", "test_auction_price.lua", "test_simlab_diagnostics.lua", "test_commands.lua", "test_defaults.lua", "test_lifecycle.lua", "test_persist.lua", "test_profiles.lua", "test_lod_apply.lua", "test_routing.lua", "test_storage.lua", "test_stored_data.lua", "test_status.lua", "test_cleanup.lua"],
+    "syntax": ["!!!TwichUI/*.lua", "!!!TwichUI/setup/*.lua", "!!!TwichUI/auction/*.lua"],
+    "dependencies": ["shared-ui"],
+    "simulators": [{"script": "smoke"}, {"script": "diagnose"}, {"script": "auctionproof"}]
+  },
+  "shared-ui": {
+    "tests": ["test_frame_look.lua", "test_menu_style.lua", "test_media_border.lua", "test_notify.lua", "test_notify_look.lua", "test_theme_defaults.lua", "test_window_smoke.lua", "test_press.lua", "test_reach.lua"],
+    "syntax": ["!!!TwichUI/*Look.lua", "TwichUI_Settings/*.lua"],
+    "dependencies": [],
+    "simulators": [{"script": "interact"}]
+  },
+  "settings": {
+    "tests": ["test_settings_*.lua", "test_*_settings.lua", "test_remaining_settings.lua", "test_specialized_settings.lua", "test_qol_loot_sparkles.lua", "test_qol_gathering_sparkles.lua"],
+    "syntax": ["TwichUI_Settings/**/*.lua", "!!!TwichUI/qol/LootSparkles.lua", "!!!TwichUI/qol/GatheringSparkles*.lua"],
+    "dependencies": ["shared-ui", "core"],
+    "simulators": [{"script": "smoke"}, {"script": "settings"}]
+  },
+  "loot-rolls": {
+    "tests": ["test_loot_rolls.lua"],
+    "syntax": ["!!!TwichUI/loot/**/*.lua", "TwichUI_Settings/pages/Loot*.lua", "TwichUI_Settings/Companion.lua", "tools/simlab/scenarios/loot.lua"],
+    "dependencies": ["settings", "core"],
+    "simulators": []
+  },
+  "workshop-settings": {
+    "tests": ["test_workshop_optin.lua", "test_workshop_strategy.lua", "test_workshop_compact.lua", "test_workshop_login.lua", "test_workshop_settings.lua", "test_workshop_worth.lua", "test_workshop_worth_designer.lua", "test_workshop_worth_layout.lua", "test_workshop_window.lua", "test_settings_contract.lua", "test_settings_design.lua", "test_settings_window_size.lua"],
+    "syntax": ["!!!TwichUI/WorkshopLauncher.lua", "TwichUI_Settings/pages/Workshop*.lua", "TwichUI_Workshop/Worth*.lua", "TwichUI_Workshop/Window.lua", "TwichUI_Workshop/Session.lua", "TwichUI_Workshop/Compact.lua"],
+    "dependencies": ["settings", "workshop"],
+    "simulators": [{"script": "workshop", "only": ["design", "craft", "wrong"]}]
+  },
+  "workshop": {
+    "tests": ["test_workshop*.lua", "test_testlab*.lua", "test_pricing_conformance.py", "test_workshop_bridge*.py", "test_workshop_scoped_bridge_l1.py", "test_workshop_summary*.lua", "test_workshop_bridge*.lua", "test_workshop_auction_market*.lua"],
+    "syntax": ["TwichUI_Workshop/**/*.lua", "TwichUI_TestLab/**/*.lua", "!!!TwichUI/Workshop*.lua"],
+    "dependencies": ["shared-ui", "core"],
+    "simulators": [{"script": "workshop"}, {"script": "testlab"}]
+  },
+  "crafting": {
+    "tests": ["test_workshop.lua", "test_workshop_crafting_reference.lua", "test_workshop_craftplanner.lua", "test_workshop_shopping.lua", "test_workshop_storage.lua", "test_workshop_memory.lua", "test_workshop_strategy*.lua", "test_workshop_compact.lua", "test_workshop_vendor_places.lua"],
+    "syntax": ["TwichUI_Workshop/**/*.lua"],
+    "dependencies": ["shared-ui", "core"],
+    "simulators": [{"script": "workshop", "only": ["craft", "shop", "strategy", "shopcollect", "wrong"]}]
+  },
+  "market": {
+    "tests": ["test_workshop.lua", "test_workshop_prices.lua", "test_workshop_market*.lua", "test_workshop_dist.lua", "test_workshop_history2.lua", "test_workshop_valuation.lua", "test_workshop_schema.lua", "test_workshop_a7.lua", "test_workshop_auto.lua", "test_workshop_worth.lua", "test_workshop_pricing_v1.lua", "test_pricing_conformance.py", "test_workshop_bridge*.py", "test_workshop_scoped_bridge_l1.py", "test_workshop_summary*.lua", "test_workshop_bridge*.lua", "test_workshop_auction_market*.lua"],
+    "syntax": ["TwichUI_Workshop/**/*.lua", "!!!TwichUI/WorkshopAuto.lua"],
+    "dependencies": ["shared-ui", "core"],
+    "simulators": [
+      {"script": "workshop", "only": ["craft", "opps", "history", "wrong"]},
+      {"script": "auctionpreview", "only": ["companionvalid", "companionnewer", "companionolder", "summaryvalid", "summarycorrupt", "summaryfuture"]}
+    ]
+  },
+  "reminders": {
+    "tests": ["test_reminders*.lua", "test_reminder_gallery.lua", "test_reminder_gallery.py"],
+    "syntax": ["!!!TwichUI/reminders/**/*.lua", "TwichUI_Settings/pages/Remind*.lua"],
+    "dependencies": ["settings"],
+    "simulators": [{"script": "reminders"}]
+  },
+  "navigation": {
+    "tests": ["test_nav*.lua", "test_map*.lua", "test_way.lua", "test_arrival.lua", "test_explorer.lua", "test_guide_waypoint.lua", "test_party_pins*.lua", "test_pins*.lua", "test_npcs*.lua", "test_npc*.lua", "test_guild_locations*.lua", "test_markers*.lua", "test_marker_bar.lua"],
+    "syntax": ["!!!TwichUI/nav/**/*.lua", "!!!TwichUI/map/**/*.lua", "!!!TwichUI/pins/**/*.lua", "!!!TwichUI/npcs/**/*.lua", "!!!TwichUI/guildloc/**/*.lua", "TwichUI_NavData/**/*.lua"],
+    "dependencies": ["settings", "core"],
+    "simulators": [{"script": "smoke"}]
+  },
+  "layouts": {
+    "tests": ["test_layout*.lua", "test_wizard_art.py"],
+    "syntax": ["TwichUI_Layouts/**/*.lua", "TwichUI_LayoutWizard/**/*.lua"],
+    "dependencies": ["settings", "core"],
+    "simulators": [{"script": "smoke"}]
+  },
+  "release-tools": {
+    "tests": ["test_release_tools.py", "test_release_isolation.py", "test_release_promotion.py"],
+    "syntax": [],
+    "dependencies": [],
+    "simulators": []
+  },
+  "test-tools": {
+    "tests": ["test_*.py"],
+    "syntax": ["tools/simlab/**/*.lua"],
+    "dependencies": [],
+    "simulators": []
+  },
+  "item-advisor": {
+    "tests": ["test_workshop_advisor*.lua"],
+    "syntax": ["TwichUI_Workshop/**/*.lua"],
+    "dependencies": ["market", "crafting"],
+    "simulators": [{"script": "workshop", "only": ["advisor", "advisorsmall", "advisorempty", "advisorscaled", "advisorsource", "advisorcategory", "advisorscroll", "advisortentative", "advisorbags", "advisorfiltered", "craft", "wrong"]}]
+  },
+  "auction-house": {
+    "tests": [
+      "test_perf_engine.lua",
+      "test_diagnostics.lua",
+      "test_workshop_auction*.lua",
+      "test_auction_host.lua",
+      "test_auction_window.lua",
+      "test_workshop_window.lua",
+      "test_workshop_login.lua"
+    ],
+    "syntax": [
+      "!!!TwichUI/diag/Lifecycle.lua",
+      "TwichUI_Diagnostics/Gauges.lua",
+      "TwichUI_Diagnostics/Presets.lua",
+      "TwichUI_Workshop/**/*.lua",
+      "!!!TwichUI/WorkshopLauncher.lua",
+      "!!!TwichUI/Core.lua"
+    ],
+    "dependencies": [
+      "shared-ui",
+      "core",
+      "crafting",
+      "market",
+      "item-advisor"
+    ],
+    "simulators": [
+      {
+        "script": "auctionpreview"
+      },
+      {
+        "script": "auctionproof"
+      }
+    ]
+  },
+  "auction-preview": {
+    "tests": [
+      "test_perf_engine.lua",
+      "test_diagnostics.lua",
+      "test_workshop_auction*.lua",
+      "test_auction_host.lua",
+      "test_auction_window.lua",
+      "test_workshop_window.lua",
+      "test_workshop_login.lua"
+    ],
+    "syntax": [
+      "!!!TwichUI/diag/Lifecycle.lua",
+      "TwichUI_Diagnostics/Gauges.lua",
+      "TwichUI_Diagnostics/Presets.lua",
+      "TwichUI_Workshop/**/*.lua",
+      "!!!TwichUI/WorkshopLauncher.lua",
+      "!!!TwichUI/Core.lua"
+    ],
+    "dependencies": [
+      "shared-ui",
+      "core",
+      "crafting",
+      "market",
+      "item-advisor"
+    ],
+    "simulators": [
+      {
+        "script": "auctionpreview",
+        "only": [
+          "shell",
+          "replay",
+          "shopping",
+          "market",
+          "sell",
+          "owned",
+          "marketbridge",
+          "scopedpriced",
+          "scopedoutside",
+          "scopedabsent",
+          "scopedunknown",
+          "scopedcorrupt",
+          "scopedfuture",
+          "companionvalid",
+          "companionnewer",
+          "companionolder",
+          "wrong"
+        ]
+      },
+      {
+        "script": "auctionproof"
+      }
+    ]
+  },
+  "verification-tools": {
+    "tests": [
+      "test_test_runner.py",
+      "test_simlab_*.py"
+    ],
+    "syntax": [
+      "tools/simlab/scenarios/*.lua"
+    ],
+    "dependencies": [],
+    "simulators": [
+      {
+        "script": "workshop",
+        "only": [
+          "craft",
+          "design",
+          "wrong"
+        ]
+      },
+      {
+        "script": "settings",
+        "args": [
+          "workshop"
+        ]
+      },
+      {
+        "script": "reminders",
+        "args": [
+          "editor",
+          "narrow"
+        ]
+      },
+      {
+        "script": "auctionpreview",
+        "only": [
+          "shell",
+          "replay",
+          "wrong"
+        ]
+      }
+    ]
+  },
+  "advanced-market-chart": {
+    "tests": [
+      "test_workshop_auction_market*.lua",
+      "test_workshop_history2.lua",
+      "test_workshop_market*.lua",
+      "test_workshop_a7.lua",
+      "test_workshop_bridge*.lua"
+    ],
+    "syntax": [
+      "TwichUI_Workshop/**/*.lua",
+      "TwichUI_Diagnostics/Gauges.lua"
+    ],
+    "dependencies": [
+      "shared-ui"
+    ],
+    "simulators": [
+      {
+        "script": "auctionpreview",
+        "only": [
+          "shell",
+          "replay",
+          "wrong",
+          "market",
+          "markethover",
+          "marketdrag",
+          "marketinterval",
+          "marketsingle",
+          "marketsmall",
+          "marketscaled",
+          "marketsparse",
+          "marketempty",
+          "marketlong",
+          "marketcopper",
+          "marketbridge"
+        ]
+      }
+    ]
+  }
+}

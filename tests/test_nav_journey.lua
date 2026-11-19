@@ -19,7 +19,7 @@ env.wipe = function(t) for k in pairs(t) do t[k] = nil end return t end
 env.C_AddOns = { DoesAddOnExist = function() return true end, GetAddOnEnableState = function() return 2 end,
   IsAddOnLoaded = function() return true end, LoadAddOn = function() return true end }
 env.UnitName = function() return "Tester" end
-for _, f in ipairs({ "nav/Data.lua", "nav/Route.lua", "nav/Journey.lua" }) do
+for _, f in ipairs({ "nav/Data.lua", "nav/Route.lua", "nav/Lifts.lua", "nav/Journey.lua" }) do
   local chunk = assert(loadfile(ROOT .. f))
   setfenv(chunk, env)
   chunk()
@@ -105,6 +105,10 @@ do
   assert(Kinds(ready) == "hearth,walk", "ready: " .. Kinds(ready))
   assert(ready.legs[1].to == "H" and ready.legs[1].tcont == 9202, "to the bind point, on its continent")
   assert(ready.seconds < 20, "ten seconds and a short walk: " .. ready.seconds)
+  local waiting = assert(J.PlanNow(Req({ hearth = { cont = 9202, x = bind.x, y = bind.y, seconds = 30, readyAt = 1020 } })))
+  assert(Kinds(waiting) == "hearth,walk", "a short wait is faster than the ferry")
+  assert(waiting.legs[1].readyAt == 1020, "the controller receives the cooldown deadline")
+  assert(Near(waiting.seconds - ready.seconds, 20, 0.01), "the wait counts toward arrival time")
   local cooling = assert(J.PlanNow(Req({ hearth = { cont = 9202, x = bind.x, y = bind.y, seconds = 10 + 1200 } })))
   assert(Kinds(cooling) == "walk,ferry,walk", "with 20 minutes of cooldown left the ferry is better: " .. Kinds(cooling))
   print("4 hearth ok", math.floor(ready.seconds), "s")
@@ -184,6 +188,36 @@ do
   print("9 job ok in", steps, "steps")
 end
 
+-- 9b. Lifts: a ride between two stand points, both ways, on the right floor
+do
+  local a, b = P(9201, 6, 21), P(9201, 34, 20)
+  local LIFT = { id = "t", name = "Test Lift", cont = 9201, faction = 3, seconds = 10,
+    base = { x = a.x, y = a.y, z = 0 }, top = { x = b.x, y = b.y, z = 0 } }
+  local goal = P(9201, 35, 20)
+  local j = assert(J.PlanNow(Req({ goal = goal, ships = false, lifts = { LIFT } })))
+  assert(Kinds(j) == "walk,lift,walk", "a lift beats thirty cells on foot: " .. Kinds(j))
+  local L = j.legs[2]
+  assert(L.up == true and L.lift == LIFT and L.fromName == "Test Lift (bottom)" and L.toName == "Test Lift (top)", "named by its ends")
+  assert(j.legs[1].to == "L:t:base" and j.legs[3].from == "L:t:top" and j.legs[1].tprefer and j.legs[3].fprefer, "walks to and from its stand polygons")
+  assert(j.legs[1].toLabel == "Test Lift (bottom)", "a walk to a lift ends at it: " .. tostring(j.legs[1].toLabel))
+  assert(j.seconds < 25, "a short walk, the ride, a short walk: " .. j.seconds)
+  -- the other way: the ride goes down
+  local back = assert(J.PlanNow(Req({ start = P(9201, 35, 20), goal = P(9201, 5, 21), ships = false, lifts = { LIFT } })))
+  assert(Kinds(back) == "walk,lift,walk" and back.legs[2].up == false, "and down: " .. Kinds(back))
+  -- a lift for the other faction, or none: walked
+  assert(J.PlanNow(Req({ goal = goal, ships = false, lifts = { LIFT }, faction = 2 })).seconds < 25, "faction 3 is both")
+  LIFT.faction = 2
+  assert(J.PlanNow(Req({ goal = goal, ships = false, lifts = { LIFT } })).walkOnly, "the other faction's lift is not used")
+  LIFT.faction = 3
+  -- a slow lift is not worth it; a stand point with no floor at that height leaves the lift out
+  LIFT.seconds = 400
+  assert(J.PlanNow(Req({ goal = goal, ships = false, lifts = { LIFT } })).walkOnly, "a slow lift is not taken")
+  LIFT.seconds = 10
+  LIFT.top = { x = b.x, y = b.y, z = 500 }
+  assert(J.PlanNow(Req({ goal = goal, ships = false, lifts = { LIFT } })).walkOnly, "no floor at that height, no lift")
+  print("9b lifts ok", math.floor(j.seconds), "s")
+end
+
 -- 10. The real network (TwichUI_NavData): what the bake made, planned over
 do
   local DATA = REPO .. "TwichUI_NavData/"
@@ -217,7 +251,7 @@ do
         loaded = true
         return true
       end }
-    for _, f in ipairs({ "nav/Data.lua", "nav/Route.lua", "nav/Journey.lua" }) do
+    for _, f in ipairs({ "nav/Data.lua", "nav/Route.lua", "nav/Lifts.lua", "nav/Journey.lua" }) do
       local chunk = assert(loadfile(ROOT .. f))
       setfenv(chunk, e2)
       chunk()
@@ -245,7 +279,7 @@ do
     local function CheckWalks(j, label)
       for _, l in ipairs(j.legs) do
         if l.kind == "walk" then
-          local r, why = RR.PlanNow(l.cont, l.fx, l.fy, l.tx, l.ty)
+          local r, why = RR.PlanNow(l.cont, l.fx, l.fy, l.tx, l.ty, l.fprefer, l.tprefer)
           assert(r, label .. ": the walk " .. l.fromName .. " > " .. l.toName .. " has a route: " .. tostring(why))
           for i = 1, r.n - 1 do
             for f = 0, 1, 0.1 do
@@ -296,6 +330,47 @@ do
     assert(tele.legs[1].kind == "teleport" and tele.seconds < 5 * 60, "a Horde mage teleports home: " .. JJ.Minutes(tele.seconds))
     local bad = assert(Journey({ start = UC, goal = ORG, faction = 2, teleports = { { spell = 1, place = 0, cast = 10 }, land } }))
     assert(bad.legs[1].kind == "teleport", "a landing the data doesn't know is ignored")
+    -- Lifts, on the real map: Freewind Post's plateau is cut off from the lowland on foot (no route), and the lift is the way down
+    do
+      local FW, LOW = Pt(1, -5407.8, -2414.3), Pt(1, -5370, -2495)
+      assert(not RR.PlanNow(1, FW.x, FW.y, LOW.x, LOW.y), "no walking route between the two")
+      local down = assert(Journey({ start = FW, goal = LOW, ships = false, flights = {} }))
+      local lift = assert(Uses(down, "lift"), "the lift is used: " .. #down.legs)
+      assert(lift.lift.id == "freewind" and lift.up == false and lift.toName == "Freewind Post lift (bottom)", "down Freewind's lift")
+      assert(down.legs[1].kind == "walk" and down.legs[#down.legs].kind == "walk", "walk, lift, walk")
+      CheckWalks(down, "freewind down")
+      local up = assert(Journey({ start = LOW, goal = FW, ships = false, flights = {} }))
+      assert(Uses(up, "lift").up == true, "and up")
+      CheckWalks(up, "freewind up")
+      -- the Great Lift joins land that is already joined: it is a shortcut, taken when it is faster
+      local g = assert(Journey({ start = Pt(1, -4690, -1870), goal = Pt(1, -4640, -1830), ships = false, flights = {} }))
+      CheckWalks(g, "great lift")
+      -- Orgrimmar: the flight master's stairs, in place of a 900-yard loop round the city
+      local street, fm = Pt(1, 1640, -4330), Pt(1, 1677.6, -4315.8)
+      assert(RR.PlanNow(1, street.x, street.y, fm.x, fm.y).cost > 600, "the walk round is long")
+      local org = assert(Journey({ start = street, goal = fm, ships = false, flights = {} }))
+      local st = assert(Uses(org, "lift"), "the stairs are used: " .. Kinds(org))
+      assert(st.lift.stairs and st.up and org.seconds < 120, "up the stairs: " .. org.seconds)
+      CheckWalks(org, "orgrimmar stairs")
+      local downs = assert(Journey({ start = fm, goal = street, ships = false, flights = {} }))
+      assert(Uses(downs, "lift") and not Uses(downs, "lift").up, "and down")
+      CheckWalks(downs, "orgrimmar stairs down")
+      assert(R and e2.TwichUI.NavLifts.Near(1, street.x, street.y, 0, 0, 250) and not e2.TwichUI.NavLifts.Near(1, 5000, 5000, 5000, 5000, 250), "the gate for short walks")
+      -- Thunder Bluff: from the road below to the flight point on the mesa, by a lift, and back
+      local below, tbfp = Pt(1, -1300, 230), Pt(1, -1186.9, 26.3)
+      local tb = assert(Journey({ start = below, goal = tbfp, ships = false, flights = {} }))
+      local tl = assert(Uses(tb, "lift"), "a Thunder Bluff lift is used: " .. Kinds(tb))
+      assert(tl.lift.id:find("^tb") and tl.up, "up a Thunder Bluff lift: " .. tl.lift.id)
+      CheckWalks(tb, "thunder bluff up")
+      local tbd = assert(Journey({ start = tbfp, goal = below, ships = false, flights = {} }))
+      assert(Uses(tbd, "lift") and not Uses(tbd, "lift").up, "and down")
+      CheckWalks(tbd, "thunder bluff down")
+      -- every one of the four lifts has both its ends on the map
+      for _, lf in ipairs(e2.TwichUI.NavLifts.LIFTS) do
+        assert(e2.TwichUI.NavLifts.Stand(lf.cont, lf.base) and e2.TwichUI.NavLifts.Stand(lf.cont, lf.top), lf.id .. ": both ends are on the walking map")
+      end
+      print("10b lifts ok:", #down.legs, "legs down,", math.floor(down.seconds), "s")
+    end
     print("10 real network ok:", #net.ferries, "ferries,", nFlights, "flight points,", n, "journeys planned")
   end
 end

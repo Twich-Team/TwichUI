@@ -4,18 +4,23 @@
 -- bar at the foot adds the queue up and leads to Shopping. The player's own recipes are a second list in the same left card (Craft queue /
 -- Recipes), so browsing never takes the workspace away. It draws what Session.lua says and asks it to do everything else; it never crafts,
 -- buys or sends. Colour is always beside a word (Orange/Yellow/Green/Grey, "Still needed", "Unknown").
+-- P2: above the materials a Crafting Strategy strip says what the multilevel planner would do for the WHOLE queue (one plan over the combined
+-- demand, never a sum of per-recipe plans): its status, craft / buy / collect counts, the economic cost, the cash needed now and the savings,
+-- with View strategy; each material row carries one line on how the plan gets it. The estimates in the boxes and the bar are unchanged.
 
 local R = TwichUI
 local W = R.Workshop
 local S, O, PR, K2 = W.Session, W.Observe, W.Prices, W.Stock
+local Sg = W.Strategy
 local UI = W.UI
 
-local LEFT_W, PANEL_H, BAR_H, GAP = 350, 164, 56, 10
+local LEFT_W, PANEL_H, BAR_H, GAP = 350, 126, 56, 10
 local TOP = -66
-local REC_H, QUE_H, MAT_H = 48, 66, 26
+local REC_H, QUE_H, MAT_H = 48, 66, 32   -- (a material row holds its name and, under it, the plan's one line)
+local STRIP_H = 40      -- the Crafting Strategy strip above the materials
+local STRIP_SHIFT = STRIP_H + 6
 local MC_SHORT, MC_STORED, MC_HAVE, MC_NEED, MC_GAP = 84, 58, 56, 46, 4
-local USE_GUILD_TIP = "Plans with materials remembered from your guild bank that your guild rank may be able to take. It never withdraws anything. "
-    .. "Guild stock is shared with other members, so what was seen may be gone, and a daily limit may apply. Off unless you turn it on."
+local USE_GUILD_TIP = "Plan with what your guild bank was last seen to hold. Nothing is withdrawn.\nShared stock: it may be gone, and a daily limit may apply."
 UI.USE_GUILD_TIP = USE_GUILD_TIP
 
 local K
@@ -382,7 +387,7 @@ local function RenderDetail(queue, byId, totals)
     if not r then
         selected = nil
         d.head:Hide()
-        d.open:Hide(); d.remove:Hide()
+        d.open:Hide(); d.remove:Hide(); d.done:Hide(); d.undo:Hide()
         d.empty:SetText("Queued crafts appear here: what each makes, what its materials may cost, and what it may sell for. Choose Add recipe to plan one.")
         d.empty:Show()
         return
@@ -390,6 +395,7 @@ local function RenderDetail(queue, byId, totals)
     local e = r.entry
     d.empty:Hide()
     d.head:Show()
+    d.item=e.outItem
     d.name:SetText(e.name)
     d.icon:SetTexture(e.icon or UI.ICON_BLANK)
     d.prof:SetText(e.profName or "")
@@ -400,10 +406,11 @@ local function RenderDetail(queue, byId, totals)
         d.makes:SetText("What it makes isn't known yet.")
     end
     if r.unresolved then
-        d.state:SetText("Its materials aren't known. Open " .. (e.profName or "its profession") .. " to update.")
-        UI.Paint(d.state, K.bronzeText)
+        -- the warning takes the line of what it makes (known materials are in the list; only a warning is worth the room here)
+        d.makes:SetText("Its materials aren't known. Open " .. (e.profName or "its profession") .. " to update.")
+        UI.Paint(d.makes, K.bronzeText)
     else
-        d.state:SetText("")   -- known materials are in the list; only a warning is worth the room here
+        UI.Paint(d.makes, K.textDim)
     end
     -- what the crafts may cost and earn: the Opportunities estimate times the crafts; unknown stays unknown
     local x = byId[e.id]
@@ -417,7 +424,11 @@ local function RenderDetail(queue, byId, totals)
         UI.Paint(d.cost, K.stone); UI.Paint(d.sell, K.stone); UI.Paint(d.profit, K.stone)
     end
     d.profitLabel:SetText(totals.rate and "Estimated profit" or "Profit before fees")
-    d.open:Show(); d.remove:Show()
+    d.open:Show(); d.remove:Show(); d.done:Show()
+    d.undo:SetShown(W.Progress ~= nil and W.Progress.CanUndo())
+    d.makes:ClearAllPoints()
+    d.makes:SetPoint("TOPLEFT", d.prof, "BOTTOMLEFT", 0, -3)
+    d.makes:SetPoint("RIGHT", d.undo:IsShown() and d.undo or d.done, "LEFT", -8, 0)
 end
 
 local function RenderBar(queue, totals, sum)
@@ -436,6 +447,47 @@ local function RenderBar(queue, totals, sum)
     local partial = priced and totals.unpriced > 0
     bar.partial:SetText(partial and ("%d of %d priced"):format(totals.priced, n) or "")
     bar.shop:SetEnabled(n > 0)
+end
+
+-- one short line on how the plan gets a material: what is made, bought or collected (nothing for what the bags already cover)
+local function Notes(line)
+    if not line then return nil end
+    local parts = {}
+    if line.source == "make" and line.make then
+        parts[#parts + 1] = ("Craft %s \195\151 %d"):format(UI.Shorten(line.make.name, 18), line.make.crafts)
+    elseif line.buy and (line.source == "vendor" or line.source == "auction") then
+        parts[#parts + 1] = ("Buy %d %s"):format(line.rest, line.source == "vendor" and "from a vendor" or "at auction")
+    end
+    local stored = (line.owned.bank or 0) + (line.owned.guild or 0)
+    if stored > 0 then parts[#parts + 1] = ("Collect %d"):format(stored) end
+    if #parts == 0 then return nil end
+    return table.concat(parts, " \194\183 ")
+end
+
+-- the strip above the materials
+local function PaintStrategy(state, plan, why, n)
+    local st = page.strat
+    st.view:SetEnabled(state == "ready")
+    if n == 0 then
+        st.line1:SetText("Add recipes to see the best way to make them.")
+        st.line2:SetText("")
+        UI.Paint(st.line1, K.textDim)
+        return
+    end
+    if state ~= "ready" then
+        st.line1:SetText(state == "planning" and "Planning..." or "The strategy couldn't be worked out.")
+        st.line2:SetText(state == "planning" and "Working out the best way to get the materials." or "Shopping shows its basic list instead.")
+        UI.Paint(st.line1, K.textDim)
+        return
+    end
+    local w = Sg.Summary(plan, UI.Money)
+    st.line1:SetText(w.status .. " \194\183 " .. w.headline)
+    UI.Paint(st.line1, w.tone == "good" and K.sage or (w.tone == "warn" and K.bronzeText or K.textDim))
+    local parts = {}
+    if w.cost then parts[#parts + 1] = "Estimated cost " .. w.cost end
+    if w.cash then parts[#parts + 1] = "Gold needed now " .. w.cash end
+    st.line2:SetText(table.concat(parts, " \194\183 "))
+    st.words = w
 end
 
 local function Render()
@@ -464,13 +516,21 @@ local function Render()
     -- materials
     local mats, sum, view = S.Materials()
     matView = view
+    local sstate, splan, swhy = S.QueueStrategy()
+    if sstate == "ready" then
+        local by = {}
+        for _, l in ipairs(splan.items) do by[l.item] = l end
+        for _, m in ipairs(mats) do m.note = Notes(by[m.item]) end
+    end
     UI.lists.mats:SetData(mats, sum.state == "empty" and "Materials for the queue appear here." or nil)
+    PaintStrategy(sstate, splan, swhy, #queue)
     local text, tone = S.Headline(sum)
     f.headline:SetText(text)
     UI.Paint(f.headline, tone == "good" and K.sage or (tone == "warn" and K.bronzeText or K.textDim))
     f.storeNote:SetText(S.StockNote(sum, view) or "")
     f.scope:SetText(("Counts %s."):format(K2.Scope(view)))
     f.useGuild:SetOn(view.guild.enabled)
+    if page.notices then page.notices:SetOn(W.Notice ~= nil and W.Notice.On()) end
     RenderBar(queue, totals, sum)
 end
 
@@ -545,6 +605,8 @@ local function BuildDetail()
     d.iconFrame = UI.ItemIcon(d.head, 48)
     d.iconFrame:SetPoint("TOPLEFT", 14, -12)
     d.icon = d.iconFrame.tex
+    d.advisorItem=CreateFrame("Button",nil,d.head); d.advisorItem:SetAllPoints(d.iconFrame)
+    UI.ItemTip(d.advisorItem,function() return d.item end)
     d.name = UI.Text(d.head, 19, K.text, "serif")
     d.name:SetPoint("TOPLEFT", 74, -10)
     d.name:SetPoint("RIGHT", d.head, "RIGHT", -14, 0)
@@ -553,9 +615,31 @@ local function BuildDetail()
     d.prof:SetPoint("TOPLEFT", d.name, "BOTTOMLEFT", 1, -3)
     d.crafts = UI.Text(d.head, 14, K.bronzeText, "strong")
     d.crafts:SetPoint("LEFT", d.prof, "RIGHT", 10, 0)
+    -- the actions sit at the right of the name block (the room under the name is free there), so the panel needs no row of its own for them
+    d.remove = UI.Button(d, "Remove", 76, "secondary", function()
+        if selected then S.Remove(selected); UI.Redraw() end
+    end, 26)
+    d.remove:SetPoint("TOPRIGHT", -14, -40)
+    UI.Tip(d.remove, "Remove", "Takes this recipe out of the queue. Nothing else changes.")
+    d.open = UI.ArtButton(d, "Open recipe", "npc:hammer", 124, "secondary", function()
+        if selected then S.OpenRecipe(selected); UI.Redraw() end
+    end, 26)
+    d.open:SetPoint("RIGHT", d.remove, "LEFT", -4, 0)
+    UI.Tip(d.open, "Open recipe", "Shows this recipe in the game's profession window. It makes nothing.")
+    -- the player's own progress: one craft done (Session.MarkCrafted); the queue counts down and the entry goes after its last craft
+    d.done = UI.Button(d, "Done", 60, "secondary", function()
+        if selected then S.MarkCrafted(selected); UI.Redraw() end
+    end, 26)
+    UI.Tip(d.done, "Crafted one", "Count one craft as done. The last one takes the recipe off the plan.")
+    d.done:SetPoint("RIGHT", d.open, "LEFT", -4, 0)
     d.makes = UI.Text(d.head, 13, K.textDim)
     d.makes:SetPoint("TOPLEFT", d.prof, "BOTTOMLEFT", 0, -3)
-    d.makes:SetPoint("RIGHT", d.head, "RIGHT", -14, 0)
+    d.undo = UI.Button(d, "Undo", 56, "secondary", function() S.UndoCrafted(); UI.Redraw() end, 26)
+    d.undo:SetPoint("RIGHT", d.done, "LEFT", -4, 0)
+    UI.Tip(d.undo, "Undo", "Take back your last Crafted one.")
+    d.undo:Hide()
+    d.makes:SetPoint("RIGHT", d.undo, "LEFT", -8, 0)
+    d.makes:SetHeight(16)
     -- what the crafts may cost and earn: three boxes across the panel
     local gap = 8
     local function Box(label, i)
@@ -570,7 +654,7 @@ local function BuildDetail()
         local v = UI.Text(b, 16, K.text, "strong")
         v:SetPoint("BOTTOMLEFT", 10, 6)
         v:SetPoint("RIGHT", -8, 0)
-        UI.Tip(b, "Estimates", "From the cheapest auction listings your last scan saw: one craft's estimate times the crafts. A listing is not a sale, and the auction house's cut is not taken off until it is confirmed.")
+        UI.Tip(b, "Estimates", "From the cheapest listings of your last scan, before the auction house's cut.")
         return b, v, l
     end
     local b1, v1 = Box("Total cost", 1)
@@ -593,23 +677,6 @@ local function BuildDetail()
     d.empty:SetPoint("RIGHT", -16, 0)
     d.empty:SetWordWrap(true)
     d.empty:SetJustifyV("TOP")
-    d.remove = UI.Button(d, "Remove", 92, "secondary", function()
-        if selected then S.Remove(selected); UI.Redraw() end
-    end, 30)
-    d.remove:SetPoint("BOTTOMRIGHT", -14, 12)
-    UI.Tip(d.remove, "Remove", "Takes this recipe out of the queue. Nothing else changes.")
-    d.open = UI.ArtButton(d, "Open recipe", "npc:hammer", 140, "secondary", function()
-        if selected then S.OpenRecipe(selected); UI.Redraw() end
-    end, 30)
-    d.open:SetPoint("RIGHT", d.remove, "LEFT", -8, 0)
-    UI.Tip(d.open, "Open recipe", "Shows this recipe in the game's profession window. It makes nothing.")
-    -- the warning about unknown materials sits at the left of the actions, in the room they leave
-    d.state = UI.Text(d.head, 12, K.textDim)
-    d.state:SetPoint("BOTTOMLEFT", d.head, "BOTTOMLEFT", 14, 12)
-    d.state:SetPoint("RIGHT", d.open, "LEFT", -10, 0)
-    d.state:SetHeight(30)
-    d.state:SetWordWrap(true)
-    d.state:SetJustifyV("MIDDLE")
     page.open, page.remove = d.open, d.remove
 end
 
@@ -630,17 +697,51 @@ local function BuildMaterials()
     f.headline = UI.Text(mc, 13, K.textDim)
     f.headline:SetPoint("TOPLEFT", 14, -38)
     f.headline:SetPoint("RIGHT", -14, 0)
+    -- the Crafting Strategy strip: the whole queue's plan in two lines, and the way to the full strategy
+    local st = CreateFrame("Frame", nil, mc)
+    st:SetPoint("TOPLEFT", 14, -60)
+    st:SetPoint("TOPRIGHT", -14, -60)
+    st:SetHeight(STRIP_H)
+    UI.Panel(st, "canvas")
+    st.line1 = UI.Text(st, 12, K.sage, "strong")
+    st.line1:SetPoint("TOPLEFT", 10, -6)
+    st.line1:SetPoint("RIGHT", -116, 0)
+    st.line1:SetJustifyH("LEFT")
+    st.line2 = UI.Text(st, 11, K.textDim)
+    st.line2:SetPoint("TOPLEFT", 10, -22)
+    st.line2:SetPoint("RIGHT", -116, 0)
+    st.line2:SetJustifyH("LEFT")
+    st.line2:SetHeight(14)
+    st.view = UI.Button(st, "View strategy", 100, "secondary", function()
+        if UI.StrategyView then UI.StrategyView.Open("queue") end
+    end, 24)
+    st.view:SetPoint("RIGHT", -8, 0)
+    UI.Tip(st.view, "View strategy", "See every step of the plan, with prices and comparisons.")
+    st:EnableMouse(true)
+    UI.TipFn(st, "Crafting strategy", function()
+        local w = st.words
+        local lines = "One plan for the whole queue: shared materials are counted once."
+        if w then
+            local top = {}
+            if w.costTip then top[#top + 1] = w.costTip end
+            if w.direct then top[#top + 1] = "Buying every material directly: " .. w.direct end
+            if w.saveLine then top[#top + 1] = w.saveLine end
+            if #top > 0 then lines = table.concat(top, "\n") .. "\n" .. lines end
+        end
+        return lines
+    end)
+    page.strat = st
     local item = UI.Head(mc, "Material", 120, "LEFT")
-    item:SetPoint("TOPLEFT", 14, -62)
+    item:SetPoint("TOPLEFT", 14, -62 - STRIP_SHIFT)
     local rx = -(4 + 16 + 8)   -- the rows' right edge: the list's inset, its scroll gutter and the columns' own margin
-    local hs = UI.Head(mc, "Still needed", MC_SHORT); hs:SetPoint("TOPRIGHT", rx, -62)
+    local hs = UI.Head(mc, "Still needed", MC_SHORT); hs:SetPoint("TOPRIGHT", rx, -62 - STRIP_SHIFT)
     local hst = UI.Head(mc, "Stored", MC_STORED); hst:SetPoint("RIGHT", hs, "LEFT", -MC_GAP, 0)
     local hb = UI.Head(mc, "In bags", MC_HAVE); hb:SetPoint("RIGHT", hst, "LEFT", -MC_GAP, 0)
     local hn = UI.Head(mc, "Need", MC_NEED); hn:SetPoint("RIGHT", hb, "LEFT", -MC_GAP, 0)
     local rule = UI.Rule(mc, 0.5)
-    rule:SetPoint("TOPLEFT", 12, -80); rule:SetPoint("TOPRIGHT", -12, -80)
+    rule:SetPoint("TOPLEFT", 12, -80 - STRIP_SHIFT); rule:SetPoint("TOPRIGHT", -12, -80 - STRIP_SHIFT)
     local mats = UI.List(mc, MAT_H, MakeMaterialRow, 160, false)
-    mats.box:SetPoint("TOPLEFT", 4, -82)
+    mats.box:SetPoint("TOPLEFT", 4, -82 - STRIP_SHIFT)
     mats.box:SetPoint("BOTTOMRIGHT", -4, 28)
     UI.lists.mats = mats
     f.storeNote = UI.Text(mc, 12, K.stone)   -- what has not been seen yet ("Open your bank with Workshop loaded to update.")
@@ -675,10 +776,10 @@ local function BuildBar()
     bar.partial = UI.Text(bar, 11, K.bronzeText)
     bar.partial:SetPoint("TOPLEFT", 190, -42)
     bar.partial:SetPoint("TOPRIGHT", bar, "TOPLEFT", 600, -42)
-    UI.Tip(bar, "Plan totals", "The estimates of the queued crafts added up: the cheapest auction listings of your last scan, a craft at a time. A listing is not a sale; the auction house's cut is not taken off until it is confirmed. A recipe that couldn't be priced is left out and counted in 'priced'.")
+    UI.Tip(bar, "Plan totals", "The queued crafts' estimates added up, before the auction house's cut.\nA recipe without a price is left out.")
     bar.shop = UI.ArtButton(bar, "Shopping list", "npc:reagent-pouch", 150, "primary", function() UI.Go("shop") end, 38)
     bar.shop:SetPoint("RIGHT", -10, 0)
-    UI.Tip(bar.shop, "Shopping list", "What your queue still needs, where to get it and what that may cost. Nothing is bought.")
+    UI.Tip(bar.shop, "Shopping list", "What your queue still needs and where to get it.")
 end
 
 local function Build(p, frame)
@@ -691,6 +792,13 @@ local function Build(p, frame)
     page.addRecipe = UI.ArtButton(page, "Add recipe", "plus", 140, "secondary", function() ShowLeft("recipes"); UI.Redraw() end, 32)
     page.addRecipe:SetPoint("TOPRIGHT", -2, -4)
     UI.Tip(page.addRecipe, "Add recipe", "Shows your recipes so you can choose what to add to the plan.")
+    -- progress notices (Notice.lua): a short card when a craft is counted or a recipe's materials are all in your bags; on unless turned off
+    page.notices = UI.Switch(page, "Progress notices", function()
+        if W.Notice then W.Notice.SetOn(not W.Notice.On()) end
+        UI.Redraw()
+    end)
+    page.notices:SetPoint("RIGHT", page.addRecipe, "LEFT", -18, 0)
+    UI.Tip(page.notices, "Progress notices", "A short notice when a craft is counted or a recipe's materials are ready.")
 end
 
 UI.Register({

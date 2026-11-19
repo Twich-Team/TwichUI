@@ -1,0 +1,1627 @@
+{
+  "images": [
+    {
+      "path": "assets/reminder-gallery/reminder-arcane-sigil.png",
+      "old_sha256": "3a5ab042d4c4b438b63ac2a515e502ba4040abd278c0e340cf6509ac45aa1220",
+      "old_size": 60892,
+      "scanlines_sha256": "f24eb98bdb3df5f9361051cac6a596c7d2dbdf36e99391f7db5d310008052bf7",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          60835
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "5345a4e75bf22b6c78eaf5c3b3db936929f6d78c9b32d0ef009b1523380270a6",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-arcane-spellbook.png",
+      "old_sha256": "08398c8e40d5c4bfd970c325e2faba33304702a8388cb7c8b879d764c09bcb5e",
+      "old_size": 57255,
+      "scanlines_sha256": "b9f05115a891826e2c30857a9c927b7ec5dbfcccde7fb5ee43d1fca7e70a321b",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          57198
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "b16cf78a4d6564ed1a7bb96217bc32d8cba72db4df3651b3a204b2500a3ffe60",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-arcane-ward.png",
+      "old_sha256": "f18403cc64af4e242bacd2e622d83d45d654390c5258dbef535478c2da18686c",
+      "old_size": 62051,
+      "scanlines_sha256": "c2812624a6487745edfd74c42760c292bffa46a16aaa0ec4ee4fd6b6d0fab2b4",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          61994
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "a890104e418ee0ab94bc5a12abf6932a965912172ba723db5ada2239708606a4",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-arrow-quiver.png",
+      "old_sha256": "061b59547113253f87f03b9720fb7733d7491f7f94086d3303295d103a68de0e",
+      "old_size": 48222,
+      "scanlines_sha256": "b9167fd8b5f49561d687d05753a3fc4222c8888935f28f39fb18c0a2484a417d",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          48165
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "c24b97af16b9fd906fdd7c85e77db559dcbe3a8d85ba63b944530ba0559e5742",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-aura-stacks.png",
+      "old_sha256": "a30e08bf443c958597669c79b98fe6ea3b3406ceeccccd78ef0041aac16f30a2",
+      "old_size": 51737,
+      "scanlines_sha256": "fecc3a6dc50b3dfed9baeb834562c6f9df10beffc583a458dd18ad5fadce393f",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          51680
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "a5c588c75bd447a9398966aff62a203aaab90f671af59de2fe77c626cc3f673d",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-bandages.png",
+      "old_sha256": "4838ca5a53ac982d1740c390dcb3927090244c1501a2a8548f6937f9cf8bc869",
+      "old_size": 48896,
+      "scanlines_sha256": "30fbdb3542ce25a685f247dd2505e38f401ebff9424cc8547304a416ae7cc1f8",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          48839
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "bcd0b4fed35c7b29987c4c7767f03de2293060bc4007912743b5158c577a9db2",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-battle-emblem.png",
+      "old_sha256": "b06d7dce2cea82edcadc82d0cafa2ea5a981f383fc17db552688302addd9c55d",
+      "old_size": 47456,
+      "scanlines_sha256": "39e9b148dd6310436f68eb9f4113d95f01993ebad32f03cf35204d0e4a1fc74a",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          47399
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "7035f830097697855a81f02726d6a8057c93397e9b5c067c14cd1602fcb7b759",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-bedroll.png",
+      "old_sha256": "0cc93156921eceaa3e223c940dabb3e72a8f45758938d98af576f2953b047e11",
+      "old_size": 56244,
+      "scanlines_sha256": "362b22d0a0cb6ac53fea5888aecbd48fd4df82aa1bb267fa9b22eabd774a4f8f",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          56187
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "05c0fa30603ef1d50b90f027a7e6020ab06967d7909b903b4949f9f7440bb9a4",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-blessing-hand.png",
+      "old_sha256": "6183884bf7e25351023879a312bede01a928b9b242dbed50775522c3666d5cc6",
+      "old_size": 53914,
+      "scanlines_sha256": "79137540dfef8a33e27eac62ef85d93dfd86fb0e819a32e7b9b151b788ca027f",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          53857
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "26eefa3267fe4f660134dd7a8b54dd8bd9e0f12d947ba48ae6fee9047bdf1f46",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-blue-crystal.png",
+      "old_sha256": "6869d60c1bdc0d473ad8bf6834e8b55e3cda2e0f9c6d8b264b3ea8f9a52bc954",
+      "old_size": 59567,
+      "scanlines_sha256": "2d6ac63a8c165b865468dd21e35c46eb7880c636d9788b3a32164c0fcd065d45",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          59510
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "58584965961e630ef66b3d33548ce1cb17097f164ae3532e57424af4484a10f4",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-bread-and-cheese.png",
+      "old_sha256": "f863277ab3755ee9bd1bba2ab933294a0efffefcf4009df5135e43cbc512f09b",
+      "old_size": 51079,
+      "scanlines_sha256": "b9072fb3ab3c473e18b6670079d88b058f68b5658baf8dd30ca8c922fd7a3fc2",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          51022
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "f34efb7f4ca4a16f416b1cd73200f3644256d67e613f170e9beed4bc096fb4b6",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-breastplate.png",
+      "old_sha256": "16507295fe1f1bfdca8910f83616aa65fd212405b6fb693444a2d5777bd70349",
+      "old_size": 56887,
+      "scanlines_sha256": "4ca817c5d102315d796c8c7da0bb42ecb6d1e40e3575dafcfe4f025e81f499a3",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          56830
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "c4a73384c18517cfc3a3d1a47b95b1f8e270b63c67d64d17f9ad45f8ee12a24d",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-broken-shield.png",
+      "old_sha256": "42343a4430026e9cda6758223a915db88e1e994688884bead90dc0355a93f1dc",
+      "old_size": 59082,
+      "scanlines_sha256": "62195e2ccdae5f31f3164792776c3e6262a7c7fb253069aea20303b14f37d859",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          59025
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "d6f726aa218fe2cb24236a80723acdd1ac7fa96eb535313824f6a2fd923eff2c",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-bronze-bell.png",
+      "old_sha256": "25c60a093840e91f00b3723d4ee965e2b33d5801c5bcb0067aee958a0755f171",
+      "old_size": 61268,
+      "scanlines_sha256": "96d411bb867757c39e6b145305070b3d84864e43baed393742b14fb8af46af44",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          61211
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "e14cd6dea48945823758f080185818552aa386dcc02de87529d4840f46d550f5",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-camp-tent.png",
+      "old_sha256": "b0fa125655cd643d066b3d77b8e54d680965c08bf57faa4d0f6f9820ef6a5c71",
+      "old_size": 48975,
+      "scanlines_sha256": "69250d418a2ddeed8b62156e30fcf9be29cdc43ba0084ac9d6bcc49dd89d68bc",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          48918
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "cbe59a437192b468bfdb080a36550a9b9b4f4a3471934d7e2bd5a9249fade690",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-caster-preparation.png",
+      "old_sha256": "ead18d1b2cd11e4fb437432d8d97915c8fb5cb06bd2b9458e11b0007c80aeaff",
+      "old_size": 44060,
+      "scanlines_sha256": "a555cbd3c0a2e00fe88ac02eb3a4f51b08ee67f49d954cedad3533c941630fb6",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          44003
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "07e120486f5b06dd90de20a29bb5acbed2a8c69d15be5209575b0d2e0136cd24",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-combat-loadout.png",
+      "old_sha256": "375183c8858b8356eb9f88f73352c8f1e37657d11c30346151596150f9e6dc12",
+      "old_size": 59688,
+      "scanlines_sha256": "ec6c59c34aa23bdc7e0019e96ecebad66f4de941b7770036d5cb97adb78e34d2",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          59631
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "445f7efaf6abce9a95110442f9ce5c2e1d96b4a821d9ae8b1b9cd9e719714540",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-companion-crests.png",
+      "old_sha256": "d0a22308bd93299f85c6b1890d90c078053ae03f6466c567c5369889f48a6760",
+      "old_size": 64116,
+      "scanlines_sha256": "10d681774a1684b6b7e8b120135acff92e2579a5274ebaf44f3e7fd706c8aedd",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          64059
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "3d407dd7954f11ac9410bc4206af857cec6d580e4d03252b97f8fbfb075b791b",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-cooldown-ready.png",
+      "old_sha256": "febcdc4a2697cebb5582688d7a8f449280ce5f47fd8f0f5ae8bf0cf8b346558d",
+      "old_size": 55065,
+      "scanlines_sha256": "2eac7bfa16e496521790fa0ce5a8a642b5fd971cd9212ec62d16f744f9584270",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          55008
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "620e72eb09d96d8835ab603cc7c3c256bbb3fd3f69c5fa7b5bcdf0ebdfab979f",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-crystal-pouch.png",
+      "old_sha256": "6bcf0910ff08132f7ca0eac1e431072bdbea23f79a5229ed323ecab74ab9f834",
+      "old_size": 57245,
+      "scanlines_sha256": "005bbd7b3229fab95804616693b11ab16af476f03f6575cd265390a00f6ee32d",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          57188
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "b79b9e61d6a94066db3d23255f87b3a301efb4b034fe8f785b73febc137796d3",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-curse-skull.png",
+      "old_sha256": "0264ceedfb3cca81173eaea500a47af4eeffa7934ada31a7e2f062b9fba8868c",
+      "old_size": 65647,
+      "scanlines_sha256": "7b21a1b9e7e66df1285b9fd68a8b9e78c28a52d63514dfd814e2957adda73e1d",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          65590
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "ccbc8bad0b9e952c1587dc242434247cabcdeeac3e921db5b26df937638cf974",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-dungeon-entrance.png",
+      "old_sha256": "59ff7b0f546ad4f44688654805cb410c42f1f55da23a6480ae14b93942116da9",
+      "old_size": 53415,
+      "scanlines_sha256": "7526f6dcc610797784dff6311b9dd4ce5f08702cd1e0c0c830b370a8549abb3d",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          53358
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "a60f5183602868ec74548da7c73c1e5a1e7dbe6d2b2d8c93002a3913a73a69b5",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-enchanted-sword.png",
+      "old_sha256": "a7692655a09a3ce085066329779cd07fe1065ac0f4c6577f437dc5f493ce19ca",
+      "old_size": 69365,
+      "scanlines_sha256": "0788247be0cd66eb6cbe25cc4a248feaeee286c183c601220176863e604b3b22",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          69308
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "35defbb1a1f0f17276160e37bf4aa2487d4e2c1325e3f3ec3d523bf580e7b5d6",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-expiring-buff.png",
+      "old_sha256": "fb57885d6f48c5e1fee6189fe9c01dfb3dec8d207e43c7826f238f6b8ffef67a",
+      "old_size": 56337,
+      "scanlines_sha256": "48088b63f0b235640b5b4827641535ada5baab21095eee316da370bbf436b07e",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          56280
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "acce4695e177aad9c4ed50a8fb269d1f379f12c3a3d8e239c77509016356456d",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-fishing-rod.png",
+      "old_sha256": "5771de0e647aa397f37c4bc68ca585a948da62d5dbb6f89f374f2251fc61d350",
+      "old_size": 28507,
+      "scanlines_sha256": "83c7f08b608eca6f0e3a7a2b19e92ec825c654afe2e8619969b5015971d8bddd",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          28450
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "fbbe137a0c7cd639394eb611270659d6b55b7cb89cbeaf7a6d2f373c13728e2c",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-full-inventory.png",
+      "old_sha256": "0de8bf6b7a781450b1099ff111a6c3d487550a4b2983cd0d4ea73309f098c6fe",
+      "old_size": 62895,
+      "scanlines_sha256": "4cda7d6496c7e646472f74fdb886a0ee45e1095b211dcd067c1778504630cd00",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          62838
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "b749f7ffcd2ed21c3cda9c4e52d1e18acad2281ed26f1009c7f3f0363e396bdc",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-golden-rings.png",
+      "old_sha256": "68dc508854648dae85d4d53caf65c553ffc51a29a0650e026cb5db160e709084",
+      "old_size": 59578,
+      "scanlines_sha256": "f60bc5c706e5f3184ccd56dbdcfcc791e8a36999709aad13a744092463bb12b1",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          59521
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "1110abacbf4c44bae1f825bcdb2c3131456993895f76579305c1ceb1afebe899",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-group-preparation.png",
+      "old_sha256": "ab223848f186c8d839a467b2a95a90862852f3857f82ddef14c2012c8b69cd3a",
+      "old_size": 54716,
+      "scanlines_sha256": "2721e93eaa9ca2ccf4057b7aca21b7b0b381581eab2fff238cc4ab6bc6b1db4d",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          54659
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "5f59ac2021fddd417b1ac5ef1f17ba98a972de6b7ca4d04c0908e842fd8662b2",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-hammer-and-anvil.png",
+      "old_sha256": "c29a847384693d62c1d446b6cffa690743972722044fa2089d41ac6e2e5d9494",
+      "old_size": 54124,
+      "scanlines_sha256": "70834505e1a1f50624ac82cbed0af36aa698d631e75373a20ba389674b9ccfcb",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          54067
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "7f71b663888967d36e726049bf5ec8df9c4e31d629724a0c90bc7c42ca5c451b",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-harmful-debuff.png",
+      "old_sha256": "87b07d3c6d0068e0f291a4ed801d693b32c671d4124adcd4f0ed90559e661596",
+      "old_size": 61084,
+      "scanlines_sha256": "c32732f00a9708a47f2c5a547937865c1cdd48a19ef6d254f09caf7dfdfe1910",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          61027
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "bf15b52f2f48d9434488ffaa0f8f3143a1644be2ebbd9e768bbfef7c61d6222b",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-healer-preparation.png",
+      "old_sha256": "cdce5d6717896cb990d4c22bcba5fd36a317917e4f920349e449c1d7388b137d",
+      "old_size": 60227,
+      "scanlines_sha256": "e0f4c5d354f67dfcdee23da2ae80a030dd3ab5c0d546cae460048d78ab6e6f0f",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          60170
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "fd7bb3ef9d15acfbed3ca0470d31d1c1622d54c74697c48091c348cf0db4b74e",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-healing-light.png",
+      "old_sha256": "cf2c326795d9aea95706f66b2702be2f34a7ca2e0de3bc37e055035c2a132d20",
+      "old_size": 53319,
+      "scanlines_sha256": "b14d415d3b5e6378c548f155094c948f2ca5a2d4aa26c06e6ef68f76b0d7ffb4",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          53262
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "8c3687886296bbe23953fda2bdc88def6d10c0b43a797154e13343edca9d29d6",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-health-potion.png",
+      "old_sha256": "2301830345d3fcc0748d92ad08b4cca260a6e3cce83509e7429a6fac2b109c00",
+      "old_size": 56305,
+      "scanlines_sha256": "b8cd52c405a4454e965d47a39c1f7ec1bf79703b002d8f6d21f483c437588563",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          56248
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "ae8486471936ab7e086a5b9d9f5d50580f4c3430bdc6794e8e220e8c1aa018ac",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-helmet.png",
+      "old_sha256": "02ce97f71d0926571a0e0ac224886dd59088b2670c3d60e29ff12c067a497b11",
+      "old_size": 58971,
+      "scanlines_sha256": "cd445b6e706aad15206e833e22683c8136dd2192c129914659d968e4925dc7ec",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          58914
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "603fe91eb5e84593321d60340f210774679a60342b3150a51e9f118258458b35",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-horse.png",
+      "old_sha256": "4a8e32768ddee7b88ddb81226f52f233893c4a1194a2d7f00d176852b23a18a9",
+      "old_size": 61251,
+      "scanlines_sha256": "bc20072bc7c5f74f530d8927abc794009d17931963521685757a546a54dac921",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          61194
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "4d3bd22ddaa33eb956767667dd59f852792367f9254b1a5540f4ed8b3276fe20",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-hourglass.png",
+      "old_sha256": "4b9632a41f8487d6bc32265c0d5dc2e697c67631d94bbcd2cec6f188acb95f6b",
+      "old_size": 64507,
+      "scanlines_sha256": "bf625f3f15efd874431e183c544ad190fedb29a85a562f5936c858cfeb49d412",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          64450
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "0c2c76b8cd154004b788ba4961074d7e424f30f368d8234c07cde25977f07b94",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-leather-backpack.png",
+      "old_sha256": "0c521b6996271468e2eb5daa5f26dca6d4fc941ab8b1051be163c607e14fdad3",
+      "old_size": 62027,
+      "scanlines_sha256": "738321e0196a4cea74e522ec837712a9d428730d107afa6b787ac83a1620ff72",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          61970
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "2cf0f7184dea10d2730384d009c440aed011bb929bcc9c37d62a8cf511220186",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-lightning-rune.png",
+      "old_sha256": "0fdad1ddf49ac426ee9865bd9561bb892a05f1a763495069394a95a00dd2cd0a",
+      "old_size": 61056,
+      "scanlines_sha256": "5d84288ea3defffa8947c3e46c8d648ab226b93d1366ecb4087388c35cdd431c",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          60999
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "6462436ad76c8512d6555a73c30dec26f4f8d43cf4c6f2f1deb27ce9fa68e930",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-lion-shield.png",
+      "old_sha256": "1c6caa23e7692f2ffe215ced698eec71af9ac7c7ba3d00f1576934275065d1e4",
+      "old_size": 56130,
+      "scanlines_sha256": "297e1beeec5609f8abc52b5fc51cde8a3eda2125d149b6e54e5ac891252ab3ec",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          56073
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "1ff21e89f42c3e949c0663e5866ff1e975bba07dcdd6b75c6d4e09c524db541d",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-low-drink.png",
+      "old_sha256": "9df03cfbe728decfa3d6fddc518c8810f52d83853b050f3bcd774c2e89f94bc4",
+      "old_size": 57779,
+      "scanlines_sha256": "a0e268cdce6a15de93d9393d87b3091608c8a79babc4ce63cad8b2b6cb2ab5a6",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          57722
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "96b6d03fbb56330b02b0e11e9cea12d698c418107eb3623d88de829a0ffc04da",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-low-energy.png",
+      "old_sha256": "9ba3a097ffe9858a84d7e6b0f3a2d33eada76f65d746860fc2c21ec10fdcf87e",
+      "old_size": 52806,
+      "scanlines_sha256": "fd8c8c72d28861d5f01df26def48d1bcc39edbf6bd967c7de18532a4016d93a6",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          52749
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "932637809eab65903e48be9adfecc549ccd3631494674712c320e9b2faf3b142",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-low-food.png",
+      "old_sha256": "a2d85becd9cf109088d8593f55530b00035ff7dfd81f8b46adc618a6cc54de83",
+      "old_size": 57055,
+      "scanlines_sha256": "e22202f7988382d590ad5a5a9972fc45dde71cb3760a1c2be8aad5e339cd25f5",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          56998
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "7bd1d790ad1201b042440a0b74aa6a8cf8685f9c95143cf66a4e38fbcd64a102",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-low-health.png",
+      "old_sha256": "da6020ff84eaecf19cda3150966313c245b02322042bde65cc4a026fa391fb5b",
+      "old_size": 58373,
+      "scanlines_sha256": "fc8d146398d12d9f0e02be481adef7820ac0252a3b84e65608c563539dadf7d1",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          58316
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "f58b13984ad07cd7364cec7771e72903a89109eed6b06775b4b709167ac9c96b",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-low-mana.png",
+      "old_sha256": "cc9bdd7bee43c8a34ad6e0525f6ccf107ea967ac24616557340ee194488295ba",
+      "old_size": 55802,
+      "scanlines_sha256": "2f79094d38e292642b92f7c3b497aca75bf0a2e2e9550c3ea1809324240257cf",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          55745
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "c3192a31b3122889f8eca671dea916d180c9a5f68d1e174b39528d985feae551",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-low-rage.png",
+      "old_sha256": "7c15531b255c3d84bf69a86fb6f0cc1a4116b3584a2c0a213119ab6cc3289a09",
+      "old_size": 55512,
+      "scanlines_sha256": "008e6e2b07215096253295fd01fb3e280cd86e35bd669926c5b2649e923652ca",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          55455
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "0bd56f5e78218a58d2ebaa67775c9850dd9db95389c8554e467dd69f55e49bb2",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-low-reagents.png",
+      "old_sha256": "936720e94c9af537bd29d2f6eab95ff6e8843d60186b1d56f3dec4dfa512f4a7",
+      "old_size": 57508,
+      "scanlines_sha256": "5aa8092950b4acf8a85950bf6dd80400352e79ccb635e338730c578f78dc3a22",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          57451
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "33e449a7b99f4f85487fd62f76968c1cba6624eb208801c6db7a32f308ce37f0",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-mana-potion.png",
+      "old_sha256": "d8988b3aa46e779683ba74e8a044a07cb4da3ba7f5ce68ed5bcbbb5d1cd3cca5",
+      "old_size": 56959,
+      "scanlines_sha256": "89528bced4957b97974f3cecd19de88bde297a56e0183464f4ba0cffdf1e269f",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          56902
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "99209040cfbfe87e692cc93c189460db2da02f72f768a689af340961adcad984",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-marked-map.png",
+      "old_sha256": "8a924c6be5943ec17485bfa6455b2838394d6245dd50dca23052adc1e16068f2",
+      "old_size": 55408,
+      "scanlines_sha256": "34afd92976307472507267cbd75efb25ad48500364b561e761e5d3146dfa5859",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          55351
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "bdcdebd927df79f8ea0d260c0deaa1ca7ee4722c8477a72438f211d2a0206f22",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-missing-buff.png",
+      "old_sha256": "47e86272766a4b5219c5254568f24872fe7118a9c8acd83434ceb80f2372a131",
+      "old_size": 53510,
+      "scanlines_sha256": "89028a5cfb500ba95fcfcc15bff0681d2a2777e3bb8061c735b1a5383e8f0c27",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          53453
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "8b1136960da674a253127cb7d0428463782049e32c8db82cf3db8723cd0269ee",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-missing-class-reagents.png",
+      "old_sha256": "0063afbd080372f2263560576d9928ff668718f3a3fa1fe85e245d6c6134b4e4",
+      "old_size": 54801,
+      "scanlines_sha256": "0d06247f4ee11e8dc0939aa95f18612030a9ed0e48ab92b8682375375723e13e",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          54744
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "fb8e4b613136ea1c26618e904c4fe058aec23c253c11eb1e61056a8df4bb294e",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-open-spellbook.png",
+      "old_sha256": "1ea563a81e02bb4e45ed88eea8718219ea02e0e1516dc0a0f6a69c070e2966d8",
+      "old_size": 53122,
+      "scanlines_sha256": "b996dd3df24a6031a2ea2284adef82487e189391301418185d620a1fff2ef91a",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          53065
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "4bf34266822a06a473512a7c68e73e707154a5dbb636ff8db9234551fc8ef9ce",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-poisoned-dagger.png",
+      "old_sha256": "5fda5fc9d84358c3b9212d9f53283ff76fadbf9c99a6758bc1297dc17740ed8f",
+      "old_size": 48282,
+      "scanlines_sha256": "bfe487e9f31ec087e4edf9cb291733e72f98a4d214f3e7dd6a0876187e986853",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          48225
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "3f4ffd4183f66bab57dfc1d19c83251330e757e6bf74bc9f27c873a958ab1694",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-purple-elixir.png",
+      "old_sha256": "39dbdfdb4dfef7b647d68a0b92343cdf6cdb63db38db2c65f82331bbace16f57",
+      "old_size": 49706,
+      "scanlines_sha256": "7c0229ba39cda3fc0e77f9b8e28e7425c3ea089663acafb542f6304efc30638e",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          49649
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "614627d0ffa749762741be5b8744ff4c7c7ceb34041db08d377ec7a8b464ab37",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-raid-gate.png",
+      "old_sha256": "61c5f9dbe85d1e24174ce7a5c2e65291347cf7627fda2f2ed99b2e9e345fbd47",
+      "old_size": 57218,
+      "scanlines_sha256": "656ff0d408dd8d133703692493deadd9ad6973abd0b2ec1fb36d061ea8705a10",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          57161
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "addc05e415e871c2e476e5d98e7f2e7744d73aaa3577d1955c703ed903b06ab3",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-red-crystal.png",
+      "old_sha256": "e11ab59087bc4dda77b8f12bbdde9fb2d3332c2b9842bb6c70ead9a407ab1254",
+      "old_size": 52524,
+      "scanlines_sha256": "50565e093bf33ca0393db6146d19da265df92b68fc53c83f53ea47d76ca3d027",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          52467
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "c5cfb99b70429610b426acc9f25a12013482048d3cafb3884d2f70947a313e64",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-rogue-preparation.png",
+      "old_sha256": "af7a009d4197fa81f3c3578a91b5751ae9b4d0db94d2325c64e7f366dedb64cf",
+      "old_size": 58420,
+      "scanlines_sha256": "378650b1b958b845020b8c642ad97a8ab72b493fcb0e4a81f89d273417cb54c0",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          58363
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "616386352860e1a91ca74305e4e57771fd317da5e7de7591721c301c479e7bea",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-sharpening-stone.png",
+      "old_sha256": "d14ff69d54120649ab57f483e5a3acd866f71db2da7fe6cdb1c739a37c706054",
+      "old_size": 48762,
+      "scanlines_sha256": "d48b6e9e1b249a0de7e37173fc6007f2366698e9c3343743c021ec1c97e35093",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          48705
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "add3f6eb51afc3eb2113a79a2d0471f6017ca6a411cb66895ad8745112aace1c",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-spell-not-learned.png",
+      "old_sha256": "7e6a3a79fb7af1bfceb99f924b7146ad4ad3268da1b0d4fe13bcde6930f3f814",
+      "old_size": 56458,
+      "scanlines_sha256": "bd050be4540d52e3f735a01678f92e40f79b62f9f6284cc329a58248b36fa246",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          56401
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "4ba170f3e44320e12913b2fd8f157e73acf03350fa4c14bbef01892daa17465e",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-stained-cloth.png",
+      "old_sha256": "b84c76b84077acfb7659d7e6f8c0969a8efbd1fc996cf1a85baeb6f3ffbed247",
+      "old_size": 61742,
+      "scanlines_sha256": "13523b8345c17e036884cc2a5cbb529b01e646f6def8f3a6bdc3a9c2e4bf0275",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          61685
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "7aba497a31e1b3a6ebe63f73c5d3ad3c8a8e8d06d42f7fda5a05c24447494668",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-supply-pack.png",
+      "old_sha256": "659ad08bad479d36c4662503748930a703ebfb76461ab90ccfaaa8f92ef371ad",
+      "old_size": 59454,
+      "scanlines_sha256": "fd1116da15db743dc9258b245634638cb8184362f15cdd2c49c147fdfc423b53",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          59397
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "a03d8561ba398cd7cfa979ce4ebaaa8fc43bb1b9a9fc901a45d5a54cb66417f8",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-talent-learned.png",
+      "old_sha256": "8525a8346bb3f169e1eec3697be0d19512c29d55ed641fb7181b520eb486f6b7",
+      "old_size": 59115,
+      "scanlines_sha256": "8fd719a55d07ef732bb9e6f30c868765fa59541b33aaf6bcee7cd3cfd4ad4acb",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          59058
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "40ab5ce692d5fdc5ba2ae22d21473bedcf950da9a7d9c214c9be986a57d4da22",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-talent-missing.png",
+      "old_sha256": "553e74116d9842b0c2d4f6da1081d4bec370b4842334a54f218eda78837a2e3f",
+      "old_size": 55100,
+      "scanlines_sha256": "7e649c5d216c43c384a9a0f167c3de5f7f22d9c8c05c63b8524896d4044a8b25",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          55043
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "eb9ecafa23c71e7d53a3265399d94d4736dd1ceb767fd3ac504e8b7d290e18ca",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-talent-specialization.png",
+      "old_sha256": "a93779ebe4cfc0a68464671be0c90bb42dd7b616e854728f56d7dc9aee6c18e7",
+      "old_size": 60693,
+      "scanlines_sha256": "2d112dc7328a395be0cf7a0fac154e8d0f20e7c81846cc7d4c84c9ad49462c9e",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          60636
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "91515bc43b9709d2f6051557c789085355cc18d00be07f8562999df9c179bd4c",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-tank-preparation.png",
+      "old_sha256": "fcb3dfb75fc639d34e9077124410c74be94ba099a2c372c4c4c8fdb7ceddf593",
+      "old_size": 61813,
+      "scanlines_sha256": "f7dcdb876023d29041e6f1c99fe794e90bd7afa166bab1a86cdb8fcd6cb0322d",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          61756
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "d84cba037298faba654a76aa767dcae8e9c829973005ad3ccc6eeb4c8382af79",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-war-horn.png",
+      "old_sha256": "340f5bd860f71ee72e2d1ef8b5a45f50e1946d693f9f9c8ed329141027a9d0d2",
+      "old_size": 51419,
+      "scanlines_sha256": "df8675df3ac5e0d2c5692370394263c55551495445d098074ff4b011b981c609",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          51362
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "a551cd6cc9a6547fc1d82de2cc92957b8ddff2c664e8110314de21266a1744f9",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-warrior-banner.png",
+      "old_sha256": "4e104c08e79c9ec63723361a5f9fbaed99ff7ba4616063fffac4598ed84f4a34",
+      "old_size": 63363,
+      "scanlines_sha256": "e8e3c4137ffb11f9fca748937d7d12540e8b0523cec92785329699d53eb0d5e6",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          63306
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "189de5018831fbdb98619c9d0684f30d32252856b4cdfc326341933b389a96ec",
+      "new_size": 147726
+    },
+    {
+      "path": "assets/reminder-gallery/reminder-waterskin.png",
+      "old_sha256": "0853c7122f4b1220c12b6e2024042bf28367338f01e814a9bc5530fe683a3284",
+      "old_size": 56360,
+      "scanlines_sha256": "d95f4b8f2839a8e4f9bc9e11adce5e7072044b93e16417d6e2d0d831add52030",
+      "chunks": [
+        [
+          "IHDR",
+          13
+        ],
+        [
+          "IDAT",
+          56303
+        ],
+        [
+          "IEND",
+          0
+        ]
+      ],
+      "new_sha256": "7eafe1f2ea64f9b6c00cef8e94d2fa3e329d583d846b3386762bc35e5fdfd983",
+      "new_size": 147726
+    }
+  ],
+  "tgas": {
+    "!!!TwichUI/media/reminders/gallery/reminder-arcane-sigil-small.tga": "74b4b3726ae40c00d5deb68177ee22c27a33589c6cdf792301508e0c3420081a",
+    "!!!TwichUI/media/reminders/gallery/reminder-arcane-sigil.tga": "02c88e07d608084b32373c495782bae023846a86151f544ff6ef151afbc4ca60",
+    "!!!TwichUI/media/reminders/gallery/reminder-arcane-spellbook-small.tga": "4e4793ac4e0f82bad3459b23e5c572faf7a258c5e0fad2e858768cc4dd9aae1c",
+    "!!!TwichUI/media/reminders/gallery/reminder-arcane-spellbook.tga": "c008d200c50b6d3ca377be55afa8fe4bf2107a98a90b255b11cd946dddfe6344",
+    "!!!TwichUI/media/reminders/gallery/reminder-arcane-ward-small.tga": "a0b337254963e576f7aa7f2bea775fe706e89f695253ad7e8cb65450e2b374bc",
+    "!!!TwichUI/media/reminders/gallery/reminder-arcane-ward.tga": "c8e941462d2e22fd4973dfc74c2a442dc0262b560c81f0f44066c36459f5fc5b",
+    "!!!TwichUI/media/reminders/gallery/reminder-arrow-quiver-small.tga": "0180dda22efd2a90e1f7743b24bfb884eae755b7afd9c4f47ada5971013f989d",
+    "!!!TwichUI/media/reminders/gallery/reminder-arrow-quiver.tga": "4629f246da98b80b0b71285aa3be64d4e2084ff4f4cc8c8c571d84b9ab2497ea",
+    "!!!TwichUI/media/reminders/gallery/reminder-aura-stacks-small.tga": "8566c6a9afc15b0ecd3c4be2f1226232525c7aba77e183a72e6f2835d4576caf",
+    "!!!TwichUI/media/reminders/gallery/reminder-aura-stacks.tga": "fc4abc3d791500c60b9cc9be67e5b7be890593b2780224b212788cc3e91671fd",
+    "!!!TwichUI/media/reminders/gallery/reminder-bandages-small.tga": "3966bd84a651d83e147e944c2f9a6735794960c19d8adc07f6952d9d3756e5bf",
+    "!!!TwichUI/media/reminders/gallery/reminder-bandages.tga": "1a3383c364842810f192cfc1677ed48cdf141795924bdbcd6447d924477ab67c",
+    "!!!TwichUI/media/reminders/gallery/reminder-battle-emblem-small.tga": "3a8082b7f986d4d1cb2d12713208a781a8b02a9a0fa0a56aaddf34b9932b5717",
+    "!!!TwichUI/media/reminders/gallery/reminder-battle-emblem.tga": "413465b5f9b79af41fe7c81c0e2dbd44a1257a2ec9a71c084a1a294a49a997e2",
+    "!!!TwichUI/media/reminders/gallery/reminder-bedroll-small.tga": "89dafe407de022be43860e08add349a2d9b35249ae2fba72c4a5e40273be0b11",
+    "!!!TwichUI/media/reminders/gallery/reminder-bedroll.tga": "a52abed79ce40bea17ed1a359a402d56c44e5a1a8c9ceb273c3a2f24b6d29e3d",
+    "!!!TwichUI/media/reminders/gallery/reminder-blessing-hand-small.tga": "c257e7479283657ff91cef466d94b8c64445e26b9164b52399f7b173cd463f36",
+    "!!!TwichUI/media/reminders/gallery/reminder-blessing-hand.tga": "cb97fde6376973caf3d5ad702aba659a67cdc84a70532da3ab62e99607654090",
+    "!!!TwichUI/media/reminders/gallery/reminder-blue-crystal-small.tga": "796945c2771e65170a849ec9d90c9ae57003658dc66dde0af624bccb09279a01",
+    "!!!TwichUI/media/reminders/gallery/reminder-blue-crystal.tga": "5e62667c7f4d8d9784f8d1de475e68dc6981cce327c1673d0a0b59739b419d3b",
+    "!!!TwichUI/media/reminders/gallery/reminder-bread-and-cheese-small.tga": "88e60f25facafd5e33c3f8bec7dd618dc6cc133256724773ceacbac802c4c832",
+    "!!!TwichUI/media/reminders/gallery/reminder-bread-and-cheese.tga": "bb938adf0a9b95555b9b9fb579f603685a75771249effd5a623fd1d604ac416f",
+    "!!!TwichUI/media/reminders/gallery/reminder-breastplate-small.tga": "20b12e39d40611226da75746abd917aa2a6c79dc0c6f153dc7c4c512d364e9c1",
+    "!!!TwichUI/media/reminders/gallery/reminder-breastplate.tga": "e25fbc864be7940c7e60f76965b373633f4d1a79dafec0fea999dce09f64f27b",
+    "!!!TwichUI/media/reminders/gallery/reminder-broken-shield-small.tga": "40a32df173d4dd134e0afc5d514003ca43cff3081f1d52d933286ecaa4cd6a81",
+    "!!!TwichUI/media/reminders/gallery/reminder-broken-shield.tga": "d7b6223a75c457837c15cc4d7615efaf4be2d9ce87e227ed79c007fc7938df4b",
+    "!!!TwichUI/media/reminders/gallery/reminder-bronze-bell-small.tga": "c4c22e1c7dc77d0075e08e86008f45d0036b0b7aac6fef107e620ccb8485a81a",
+    "!!!TwichUI/media/reminders/gallery/reminder-bronze-bell.tga": "c5e6ae39a4ed315da6bf984a21ff2f113a30e63f3a94c8b7e8680efa4605408c",
+    "!!!TwichUI/media/reminders/gallery/reminder-camp-tent-small.tga": "67844100e086c09d38187cbf2f58169c60221e716f01d66bbd8eba0f1fe499fe",
+    "!!!TwichUI/media/reminders/gallery/reminder-camp-tent.tga": "d6495ffc925e499fa8662295cce2dda210f3a85f1f8eab4046101fd6a6c019d8",
+    "!!!TwichUI/media/reminders/gallery/reminder-caster-preparation-small.tga": "880dc685925ca2f8f83a09af71f23529a32a191495e9f515e86355932ca4b600",
+    "!!!TwichUI/media/reminders/gallery/reminder-caster-preparation.tga": "7f33b0911d2e74dbfce17afe333dda39819acf5fec6da0a5c3e3d1a1f9245e5a",
+    "!!!TwichUI/media/reminders/gallery/reminder-combat-loadout-small.tga": "35823faf6cdb1a706a4e1e854784ef9292ec462262bfbf83396edc7c55209c49",
+    "!!!TwichUI/media/reminders/gallery/reminder-combat-loadout.tga": "fdee94f47e2f0c60e57f1c3b1a43a8bed8a24a2d114dd1a3fe55af5f10821965",
+    "!!!TwichUI/media/reminders/gallery/reminder-companion-crests-small.tga": "930f8f36e644e417ca9f978321a827b918010826ea103fcbccf5f0d126a040c6",
+    "!!!TwichUI/media/reminders/gallery/reminder-companion-crests.tga": "531942b518a98cae44e6cb44814626bc052430a2664804376c8cf917c9b79ac5",
+    "!!!TwichUI/media/reminders/gallery/reminder-cooldown-ready-small.tga": "dd38924e4b921efc54c59d6fabb17230f74468b8834882692c1e9a20390ab1ee",
+    "!!!TwichUI/media/reminders/gallery/reminder-cooldown-ready.tga": "04e92f1b988a3883826cd26cecb363f8f31dce271fc62289a22a2f846b2daf84",
+    "!!!TwichUI/media/reminders/gallery/reminder-crystal-pouch-small.tga": "5eb311c29d99a39793666841f4fb4018a962e8f1ad79cb3cecf499a40f67e93b",
+    "!!!TwichUI/media/reminders/gallery/reminder-crystal-pouch.tga": "7b6bf16678100c822e03620c52b1d13818c2120acccb292bfab94c6346f075ca",
+    "!!!TwichUI/media/reminders/gallery/reminder-curse-skull-small.tga": "0e2491bb3777b403429f1f071cd520e80542de5350367bfa586a6cbfbfc1e1ef",
+    "!!!TwichUI/media/reminders/gallery/reminder-curse-skull.tga": "18cb38fc4dabad83c4ddf95648d517b4b5b32dae94c917eaa88df867be6a3bdd",
+    "!!!TwichUI/media/reminders/gallery/reminder-dungeon-entrance-small.tga": "2fc89bb20f2a14cb93729f03743c175a9e6acdd9240c9acc989144c7a0f2e1f0",
+    "!!!TwichUI/media/reminders/gallery/reminder-dungeon-entrance.tga": "e9c321fadedca03801fe50adda45225d06403e52f186ffa3b90c90708a68567d",
+    "!!!TwichUI/media/reminders/gallery/reminder-enchanted-sword-small.tga": "c4c3bb0904ea9b6e40dfda891661679de9a158290c0c1d78aff6afa5e6e15e0b",
+    "!!!TwichUI/media/reminders/gallery/reminder-enchanted-sword.tga": "02acd849cd19f1beb6886bcd4e59101040ed451ed75746f0a0d424d9d2ff3c9f",
+    "!!!TwichUI/media/reminders/gallery/reminder-expiring-buff-small.tga": "4eeb4cbd5d166c031b4e3cb90e019fc6ad02c59665a56b196e37825ed8db81c7",
+    "!!!TwichUI/media/reminders/gallery/reminder-expiring-buff.tga": "5061337c86fb4f0b2e4f17045d9eba94606a6190da70608b60ce29776002a566",
+    "!!!TwichUI/media/reminders/gallery/reminder-fishing-rod-small.tga": "f6ae650a6867d7a41184d5896d985f2c1218e769a70c35a0b87cebc5eec93f7a",
+    "!!!TwichUI/media/reminders/gallery/reminder-fishing-rod.tga": "0b354916c9b9248161f21b95d45fec21aa4d50113cd5f93c2dbfdfc908953f20",
+    "!!!TwichUI/media/reminders/gallery/reminder-full-inventory-small.tga": "e1d145b8e48762d24b9b87b809a54dc09c0a77ea04465954f418759e0484f2cc",
+    "!!!TwichUI/media/reminders/gallery/reminder-full-inventory.tga": "da89d6173902043de0a8e7aaf7a70ac255d4c0597a746e423cf0599c1194b0e1",
+    "!!!TwichUI/media/reminders/gallery/reminder-golden-rings-small.tga": "06cb9ac61694692c3e9093ca8974f6a51e25fc3f7e3a790987c9982e215633ad",
+    "!!!TwichUI/media/reminders/gallery/reminder-golden-rings.tga": "534defb198f6077f370ad08f54fb844605a1cb31c89fc362b81fb31e538c6c89",
+    "!!!TwichUI/media/reminders/gallery/reminder-group-preparation-small.tga": "a6daf94f9074d6d6d693640794016086812aa18ebfacb75f5cc2fcbacde285fc",
+    "!!!TwichUI/media/reminders/gallery/reminder-group-preparation.tga": "653a472f97405d0370877f34f5ba5269757d628be9a0c40f1b4a779ea01d7e7b",
+    "!!!TwichUI/media/reminders/gallery/reminder-hammer-and-anvil-small.tga": "fbad52220628e6eda990b0cf1873e04b92848128b36c43dc892b5cdac74328e0",
+    "!!!TwichUI/media/reminders/gallery/reminder-hammer-and-anvil.tga": "9d71cc568262d0283e3060f273ed80cc5c3d64c1b245a55fd1b702021d586d25",
+    "!!!TwichUI/media/reminders/gallery/reminder-harmful-debuff-small.tga": "807705f1641d534ae4a02876a25949cd4f2f562902c6c2c4aac1457ff2257560",
+    "!!!TwichUI/media/reminders/gallery/reminder-harmful-debuff.tga": "ead0cf8034772cee8accb0ec6edcde0cadcd0d736196e9ba332a6d72f72e4307",
+    "!!!TwichUI/media/reminders/gallery/reminder-healer-preparation-small.tga": "0c2803f26634cfebec591de64a406a055954bacd2ce8b7fb886a47aa88941c33",
+    "!!!TwichUI/media/reminders/gallery/reminder-healer-preparation.tga": "289f23d82d8f1842ca2b49fa110f693d37a2800d114f74515d2a6514a51704f6",
+    "!!!TwichUI/media/reminders/gallery/reminder-healing-light-small.tga": "4ea5445aa21f0b2a68a1070a0db7cd962aaa1d2ff65b9821fd97b384566a454c",
+    "!!!TwichUI/media/reminders/gallery/reminder-healing-light.tga": "7a32e510939457283811677c212a68463f479953b85d976e2a81883cb9ba6362",
+    "!!!TwichUI/media/reminders/gallery/reminder-health-potion-small.tga": "c16f4ed3af8b8fedec48faf971a6fb4c25c423e98e768608e201c03aee4885d4",
+    "!!!TwichUI/media/reminders/gallery/reminder-health-potion.tga": "b3e6116f91e5465c046a7f46bb89f6e3a83376aed4daa725a92887e1bd20dfe7",
+    "!!!TwichUI/media/reminders/gallery/reminder-helmet-small.tga": "83a7a8ed3e8eae4d1a715266c744996e45f26554d285b8a33ebc65839971148d",
+    "!!!TwichUI/media/reminders/gallery/reminder-helmet.tga": "61f28b5094c5460e1f031bb6474fcfb1e4c2f66be5bb2fb151119389b3338a0f",
+    "!!!TwichUI/media/reminders/gallery/reminder-horse-small.tga": "9f8d5b21c5cac604f75309d050d230a578d4f434ea17f3beec9cf8c365b09cdf",
+    "!!!TwichUI/media/reminders/gallery/reminder-horse.tga": "1ac0cf1f555b1697afdbe73646e71ae899cbff534c6f705ece2da4305a4eff2d",
+    "!!!TwichUI/media/reminders/gallery/reminder-hourglass-small.tga": "42a9506eb3b29e3a25026b7a52af41bc34bf66659bf8a8dc552b9eca34496916",
+    "!!!TwichUI/media/reminders/gallery/reminder-hourglass.tga": "091dec5d4cde6e210e3dc71b30ef0764161530268f2732b9e01fd0e354fcbcbe",
+    "!!!TwichUI/media/reminders/gallery/reminder-leather-backpack-small.tga": "6ceaec9ef91ab0814cac10dc8d6512b1982689322469f57f51e26653ef1f954f",
+    "!!!TwichUI/media/reminders/gallery/reminder-leather-backpack.tga": "055753f1d39cbfef6283d8f387dff32672c6521844fb11733d845fd49d85c5d9",
+    "!!!TwichUI/media/reminders/gallery/reminder-lightning-rune-small.tga": "8e14a5be2fe845d80cc6859c6d145ccefff5dd681b045d2209ca32905b8e0f54",
+    "!!!TwichUI/media/reminders/gallery/reminder-lightning-rune.tga": "34e35ec9928270836a27155fc814264357078bc7abc1ac15c6cdd9dc58883fe5",
+    "!!!TwichUI/media/reminders/gallery/reminder-lion-shield-small.tga": "a89bd296a71aa368fc0ec030e343c2490a6a2168edbaee50412703ce3e2923f5",
+    "!!!TwichUI/media/reminders/gallery/reminder-lion-shield.tga": "c6d2007b89f5884efed575c61e6cd5ea7271a769f564a3fd43e2c833c9df0839",
+    "!!!TwichUI/media/reminders/gallery/reminder-low-drink-small.tga": "3f89ed4b1a84e978b8559c1ce1596ebe7625bb5f8d3d7c7fc0d674807aa29f17",
+    "!!!TwichUI/media/reminders/gallery/reminder-low-drink.tga": "6b957993071bdbf46481b8697d4a49edd32c42e0039b1370b25f383295b8c11e",
+    "!!!TwichUI/media/reminders/gallery/reminder-low-energy-small.tga": "022a89824e0ba08dbf30095a1bd45768f19254ac1656c4d19c349ccd86f431c5",
+    "!!!TwichUI/media/reminders/gallery/reminder-low-energy.tga": "26cbaf5885c2a63d7af53b82d6e776a0d96b86660bf9b80010606e57a86805a8",
+    "!!!TwichUI/media/reminders/gallery/reminder-low-food-small.tga": "f3a4274e037202cea2a786c312ee62447537674a6f4e78eb5d2a5690521a0f5a",
+    "!!!TwichUI/media/reminders/gallery/reminder-low-food.tga": "c7b73f4f062a3c40fe98957843cbc0debb920455e86be8c86f1e55b7cdefef13",
+    "!!!TwichUI/media/reminders/gallery/reminder-low-health-small.tga": "48efd2415d9adde7d5cbb55ac28212c19915ab18ff305ba24ca3a9080665ca19",
+    "!!!TwichUI/media/reminders/gallery/reminder-low-health.tga": "a68c272724de7fd9c3e056beb1a1523ec5806fcc84f49fe70f79af2a2545642d",
+    "!!!TwichUI/media/reminders/gallery/reminder-low-mana-small.tga": "82ee9d4be2fded6919dbe7deb96dd993487ef51edebc0c89fd9a5a3e2f16a0f2",
+    "!!!TwichUI/media/reminders/gallery/reminder-low-mana.tga": "635b673f25f132056447bd6d995770865dbe9d8623c942565fe0a6756c225925",
+    "!!!TwichUI/media/reminders/gallery/reminder-low-rage-small.tga": "388f500bf649126566e4f9240741e8f458a58f53ad70da20416699dac1d60677",
+    "!!!TwichUI/media/reminders/gallery/reminder-low-rage.tga": "f8e61dc5b0e2647997fe2f6251d019f9e41284234c771d5376daa98d6c16bca6",
+    "!!!TwichUI/media/reminders/gallery/reminder-low-reagents-small.tga": "cec973e08293ae8b564bd4b5090958b69a346b7a65ec93db9323bf7327e5164b",
+    "!!!TwichUI/media/reminders/gallery/reminder-low-reagents.tga": "607ea60492c5de7e64cece10732de9fb762414d7e155920177f62f3372175afc",
+    "!!!TwichUI/media/reminders/gallery/reminder-mana-potion-small.tga": "a42c93ecaf4632037f05d5c13e3ee21b5548b3d55f78d06d1e47f832597195ad",
+    "!!!TwichUI/media/reminders/gallery/reminder-mana-potion.tga": "cc8e57eae8bbf631b131c648270a78859e60e97086c56006cc678b310db1f50c",
+    "!!!TwichUI/media/reminders/gallery/reminder-marked-map-small.tga": "85265add1e99c7034f9c795fcb3f50f84d39243bbef0a3c23d8cd6657c79a422",
+    "!!!TwichUI/media/reminders/gallery/reminder-marked-map.tga": "7bf11e61c02cee0a96ebd0fcf4e538601a918a66db7af201ab06c53bd518059d",
+    "!!!TwichUI/media/reminders/gallery/reminder-missing-buff-small.tga": "153d009be61c98fab1bda072490fe44b763951515c3f4fbf0e3821c0706fa939",
+    "!!!TwichUI/media/reminders/gallery/reminder-missing-buff.tga": "c040620575ac0510fbc9d950ef7487b4a89c437572ae3c71d411fb59d8ba4c2d",
+    "!!!TwichUI/media/reminders/gallery/reminder-missing-class-reagents-small.tga": "e564870d11de49854f1c44dadebcc2c025dbe1b3d4e98ead1d162d5b553aff97",
+    "!!!TwichUI/media/reminders/gallery/reminder-missing-class-reagents.tga": "0dd889d7437042e7525307732b223e8d0a378d7d27f280b186a7a27356a24463",
+    "!!!TwichUI/media/reminders/gallery/reminder-open-spellbook-small.tga": "701180e282e1c6fb42e73010c38863a6f739822ae2a2ff214128b3ed33cdbcf9",
+    "!!!TwichUI/media/reminders/gallery/reminder-open-spellbook.tga": "2d11e1a0fd1f544194fc50b8423ec104bcab8f6d3f951688c199a83e381af90b",
+    "!!!TwichUI/media/reminders/gallery/reminder-poisoned-dagger-small.tga": "72ffe9097236cdddb2dbd7539accaf32335bab5f302bcefdb150134016784bf3",
+    "!!!TwichUI/media/reminders/gallery/reminder-poisoned-dagger.tga": "80713a71d233ff0e3c38095adf4b39b7d6ac6fa573b33e6aa5040a4cdaa617fa",
+    "!!!TwichUI/media/reminders/gallery/reminder-purple-elixir-small.tga": "0d62ea1716ed4a77cdb30f5a096e7fa8302244f6237ce990546322bfbc9c3d81",
+    "!!!TwichUI/media/reminders/gallery/reminder-purple-elixir.tga": "3f68e9744941e31d4cc0d113afe1d737aa5545bc2e0496c0ac04a0553cff6969",
+    "!!!TwichUI/media/reminders/gallery/reminder-raid-gate-small.tga": "b7075faafb8bc9797fa1548d17ef4292597beb285381a7ed71c686e85b8194dc",
+    "!!!TwichUI/media/reminders/gallery/reminder-raid-gate.tga": "f1363a13da8551fcb6ed40e572e443a21373cbae73bd86d1de40382bbbcc509a",
+    "!!!TwichUI/media/reminders/gallery/reminder-red-crystal-small.tga": "999c4e31321e5169e5012cbc0283426809fc190732e5d775c9dbea9889723803",
+    "!!!TwichUI/media/reminders/gallery/reminder-red-crystal.tga": "10d730ab092e45cc0b3bb33ac74224549899ad246e3fdce2385e8d4c14d1099c",
+    "!!!TwichUI/media/reminders/gallery/reminder-rogue-preparation-small.tga": "90c6730d862ea74f86324577216ba8a16b3cc1f6d76f75651244613958b435bd",
+    "!!!TwichUI/media/reminders/gallery/reminder-rogue-preparation.tga": "70401e9aca166f682b339ad052b2ddcac830c17850e38f60163337fcb1ad6b54",
+    "!!!TwichUI/media/reminders/gallery/reminder-sharpening-stone-small.tga": "3592ed61b3ded884162171f951d666d8dcaebe9d062a6e6b47d720f99703f89c",
+    "!!!TwichUI/media/reminders/gallery/reminder-sharpening-stone.tga": "6ee860f025bd4db2fcc78e6ba4cff78e644db9735750183689cafab1359550c5",
+    "!!!TwichUI/media/reminders/gallery/reminder-spell-not-learned-small.tga": "da63763dc8cbc5ef68729733e3a0ac173ee75f85b49bb6595a29fca0a14675ed",
+    "!!!TwichUI/media/reminders/gallery/reminder-spell-not-learned.tga": "f2641ac20b8969674c509969b7168e85ed7c159bcc27980c433b1b7f83f6ee4b",
+    "!!!TwichUI/media/reminders/gallery/reminder-stained-cloth-small.tga": "6d0c2e258d4c8a10623c3e472319428b6a24b1c41f94cb00c6a89286f6dd7052",
+    "!!!TwichUI/media/reminders/gallery/reminder-stained-cloth.tga": "6e5879ca766bff92d3bffc59631da1a7938a7c35b5bfe68d50e309a28b0f4ad2",
+    "!!!TwichUI/media/reminders/gallery/reminder-supply-pack-small.tga": "fcca0c2ed711244fdf81fd38e2d5ddbe7cd23bd81e48212a2c524f06d299a2a7",
+    "!!!TwichUI/media/reminders/gallery/reminder-supply-pack.tga": "551385ed6b6e78fd67b46f18aee808dd4cf1815f29039962f88a26f17d95c124",
+    "!!!TwichUI/media/reminders/gallery/reminder-talent-learned-small.tga": "9517953860c8add7a89a3a458b05e9a0bb3a5ccba47b78597b1efeeb7c3bfda1",
+    "!!!TwichUI/media/reminders/gallery/reminder-talent-learned.tga": "2c20cc91f87c101c44c22a9aa4ddc74df0763d16fd378b290b17ed889803022d",
+    "!!!TwichUI/media/reminders/gallery/reminder-talent-missing-small.tga": "4e71a89a337cc09f3bac331c0d8883be0934bd3665db2a762f6d606c15fa5b11",
+    "!!!TwichUI/media/reminders/gallery/reminder-talent-missing.tga": "7a49c54ab370a8e5740017b526517ce11dd21e1054b6ff5814216e607821d3a3",
+    "!!!TwichUI/media/reminders/gallery/reminder-talent-specialization-small.tga": "0ad57d782c1e1600cd8ea5f9cdda52e01ec2e491b799fec7068e0d7160f184db",
+    "!!!TwichUI/media/reminders/gallery/reminder-talent-specialization.tga": "12f48decdb31bb58e89d3b20f93cef6f612fdfa62dab50aea1c78c2661c27157",
+    "!!!TwichUI/media/reminders/gallery/reminder-tank-preparation-small.tga": "f1871a47e29c81f34a0e3cfc01f3d02cc9c5703d5305d13e3e25e8b12a402498",
+    "!!!TwichUI/media/reminders/gallery/reminder-tank-preparation.tga": "674572ed20f2138531f6a6703d775ba6aff6ed19f054b3b3a8045ee546de407b",
+    "!!!TwichUI/media/reminders/gallery/reminder-war-horn-small.tga": "cce8d022f66a81b152fe7928cde53015a8230a2a9c497981da4fb58b1774cbfd",
+    "!!!TwichUI/media/reminders/gallery/reminder-war-horn.tga": "44a102f9e57d5f6cf484c513b03290d218eb1835ed4f3852513fde99792152b8",
+    "!!!TwichUI/media/reminders/gallery/reminder-warrior-banner-small.tga": "5165c5d5951ea976ded9acce8b35a56ddf1b71589f525c807dee31aa9442d63f",
+    "!!!TwichUI/media/reminders/gallery/reminder-warrior-banner.tga": "cab236df94c231fa923478ee01e1cc557e6109b32c699119d63f32e7ccab0d56",
+    "!!!TwichUI/media/reminders/gallery/reminder-waterskin-small.tga": "370e1d941df6bd234511f50ac9720291190dd02268decbbda6c7e52630c77758",
+    "!!!TwichUI/media/reminders/gallery/reminder-waterskin.tga": "ab1dbf282fe84658ec6e24143a3a02ff07804c6fad9f1d54eac581258d1ac9e3"
+  },
+  "others": {
+    "assets/reminder-gallery/manifest.json": "e2c6f0eee3ff315b35908337b4b82141cece9890e2b3394296668a7442362166",
+    "!!!TwichUI/reminders/ArtData.lua": "4b5a2236c6325dc3190cc9ab81b7eee0c24ca3b23ef12a4a0a56d60cb8e9305a",
+    "docs/reminders-revision/icon-grid-1.png": "b2d4fb46584931e351c7300792a748a2dee139c7911b8446fdb64bc1c6e211d9",
+    "docs/reminders-revision/icon-grid-2.png": "d5098755ffd93bbe6fc754936d080826e4c43da034a20b972859b6a5168e379c"
+  },
+  "format": "gallery-rgba-stored-v1",
+  "base": "916a0a97458d1acfb533ac736ea7bc269e9c6a9d",
+  "python_builds": [
+    "3.12.14",
+    "3.13.5"
+  ],
+  "preservation": "Exact unfiltered decompressed scanlines, including hidden RGB and alpha; identical IHDR; all 134 runtime TGA hashes unchanged"
+}

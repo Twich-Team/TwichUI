@@ -6,6 +6,12 @@ local R = TwichUI
 local W = R.Workshop or {}
 R.Workshop = W
 
+-- Non-removable hooks consult this too; disabling never discards saved data.
+function W.Active()
+    local l = R.WorkshopLauncher
+    return not W.suspended and (not l or not l.Enabled or l.Enabled())
+end
+
 W.ADDON = "TwichUI_Workshop"
 W.SAVED_VERSION = 1      -- the shape of TwichUIDB.workshop; a higher number was written by a newer TwichUI and is left alone
 W.MAX_QUEUE = 30         -- recipes in one character's queue
@@ -21,12 +27,30 @@ local function Plain(v)
 end
 W.Plain = Plain
 
--- A whole number from lo to hi, or nil (a secret, a fraction, NaN, a string, out of range)
+-- Is v a finite number (not NaN, not an infinity)? Decided WITHOUT comparing v with anything. OBSERVED in WoW: Forever 1.60.1 build 70888
+-- (Test Lab run, 2026-11-12): a NaN equals itself, equals 0, and is both less and greater than ordinary numbers, so no comparison tells a
+-- NaN from a number there (desktop Lua says NaN ~= NaN and rejects it). A finite number prints as digits, a point, an exponent and signs
+-- only; a NaN or an infinity prints with letters (nan, inf, -nan(ind), ...). Run this BEFORE any comparison of a value that came from
+-- outside (an auction record, a game call); compare only what it accepted. A secret value is not a number here (Plain first).
+function W.Finite(v)
+    if type(v) ~= "number" then return false end
+    return tostring(v):find("^[%d%.eE%+%-]+$") ~= nil
+end
+local Finite = W.Finite
+
+-- A whole number from lo to hi, or nil (a secret, a fraction, NaN, an infinity, a string, out of range)
 function W.Int(v, lo, hi)
     v = Plain(v)
-    if type(v) ~= "number" or v ~= v or v < lo or v > hi or math.floor(v) ~= v then return nil end
+    if not Finite(v) or v < lo or v > hi or math.floor(v) ~= v then return nil end
     return v
 end
+
+-- A held item count (bags, bank, guild bank): a whole number from 0 up, or nil. Unknown stays nil and is never zero. This is THE boundary every
+-- count read from the game passes (Observe.BagCount) or is judged by (Materials.Rows, Stock.Craft): W.Int decides finiteness without a
+-- comparison, so a NaN, an infinity (either sign), a fraction, a negative, a secret value and a non-number are all "not a count" in every
+-- client. The old guard `n ~= n or n < 0` let a positive infinity through (it is not NaN and not negative) and, where a NaN compares oddly,
+-- depended on the interpreter. OBSERVED: Forever 1.60.1 build 70888 (Test Lab core report): numeric.held.inf made a craft "ready".
+function W.Count(v) return W.Int(v, 0, W.MAX_ID) end
 
 -- Cuts a string to at most `max` bytes without leaving half of a multi-byte character at the end
 local function Cut(s, max)

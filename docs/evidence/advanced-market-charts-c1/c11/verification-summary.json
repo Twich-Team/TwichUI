@@ -1,0 +1,313 @@
+{
+  "passed": true,
+  "complete": true,
+  "exit_code": 0,
+  "seconds": 293.0261962650002,
+  "source": {
+    "commit": "e4e1f080fcd229847eb575e7ffdb4e2ba1b95638",
+    "dirty": true,
+    "working_tree_sha256": "68b06b73dc5c9e823a57965d6031afe156253973a9448f9730f170dd02897343"
+  },
+  "source_after": {
+    "commit": "e4e1f080fcd229847eb575e7ffdb4e2ba1b95638",
+    "dirty": true,
+    "working_tree_sha256": "68b06b73dc5c9e823a57965d6031afe156253973a9448f9730f170dd02897343"
+  },
+  "source_unchanged": true,
+  "syntax_passed": true,
+  "unsupported_coverage": [
+    "game asset rendering, client fonts and visual fidelity"
+  ],
+  "tests": [
+    {
+      "test": "test_frame_look.lua",
+      "passed": true,
+      "seconds": 0.028848353000284988
+    },
+    {
+      "test": "test_media_border.lua",
+      "passed": true,
+      "seconds": 0.042189499999949476
+    },
+    {
+      "test": "test_menu_style.lua",
+      "passed": true,
+      "seconds": 0.024829534000673448
+    },
+    {
+      "test": "test_notify.lua",
+      "passed": true,
+      "seconds": 0.03064594900024531
+    },
+    {
+      "test": "test_notify_look.lua",
+      "passed": true,
+      "seconds": 0.053012707001471426
+    },
+    {
+      "test": "test_press.lua",
+      "passed": true,
+      "seconds": 0.007449663000443252
+    },
+    {
+      "test": "test_reach.lua",
+      "passed": true,
+      "seconds": 0.05081782300112536
+    },
+    {
+      "test": "test_theme_defaults.lua",
+      "passed": true,
+      "seconds": 0.04214240500004962
+    },
+    {
+      "test": "test_window_smoke.lua",
+      "passed": true,
+      "seconds": 0.06525681699895358
+    },
+    {
+      "test": "test_workshop_a7.lua",
+      "passed": true,
+      "seconds": 0.08450033699955384
+    },
+    {
+      "test": "test_workshop_auction_market.lua",
+      "passed": true,
+      "seconds": 0.870848272999865
+    },
+    {
+      "test": "test_workshop_auction_market_chart.lua",
+      "passed": true,
+      "seconds": 4.754130385999815
+    },
+    {
+      "test": "test_workshop_auction_market_chart_interaction.lua",
+      "passed": true,
+      "seconds": 0.07406223100042553
+    },
+    {
+      "test": "test_workshop_auction_market_scoped.lua",
+      "passed": true,
+      "seconds": 0.5477950900003634
+    },
+    {
+      "test": "test_workshop_auction_market_server.lua",
+      "passed": true,
+      "seconds": 0.3085072339999897
+    },
+    {
+      "test": "test_workshop_auction_market_ui.lua",
+      "passed": true,
+      "seconds": 4.514617155000451
+    },
+    {
+      "test": "test_workshop_bridge.lua",
+      "passed": true,
+      "seconds": 0.07906955700127583
+    },
+    {
+      "test": "test_workshop_bridge_freshness.lua",
+      "passed": true,
+      "seconds": 0.07484406799994758
+    },
+    {
+      "test": "test_workshop_bridge_performance.lua",
+      "passed": true,
+      "seconds": 5.7116602810001496
+    },
+    {
+      "test": "test_workshop_bridge_scoped.lua",
+      "passed": true,
+      "seconds": 0.5457619059998251
+    },
+    {
+      "test": "test_workshop_history2.lua",
+      "passed": true,
+      "seconds": 49.864925768999456
+    },
+    {
+      "test": "test_workshop_market.lua",
+      "passed": true,
+      "seconds": 1.3211394490008388
+    },
+    {
+      "test": "test_workshop_market_reference.lua",
+      "passed": true,
+      "seconds": 20.202497584999946
+    },
+    {
+      "test": "test_workshop_market_scale.lua",
+      "passed": true,
+      "seconds": 34.71477348700137
+    }
+  ],
+  "simulators": [
+    {
+      "script": "auctionpreview",
+      "only": [
+        "shell",
+        "replay",
+        "wrong",
+        "market",
+        "markethover",
+        "marketdrag",
+        "marketinterval",
+        "marketsingle",
+        "marketsmall",
+        "marketscaled",
+        "marketsparse",
+        "marketempty",
+        "marketlong",
+        "marketcopper",
+        "marketbridge"
+      ],
+      "passed": true,
+      "launches": 15,
+      "scenario_checks": 1984,
+      "seconds": 225.77991616700092,
+      "scenarios": [
+        {
+          "scenario": "market",
+          "structured_assertions": 131,
+          "intentional_negative_control": false,
+          "failed_assertion_markers": 0,
+          "bootstrap_seconds": 5.347,
+          "last_native_timestamp_seconds": 11.699,
+          "metrics": null
+        },
+        {
+          "scenario": "marketbridge",
+          "structured_assertions": 142,
+          "intentional_negative_control": false,
+          "failed_assertion_markers": 0,
+          "bootstrap_seconds": 5.172,
+          "last_native_timestamp_seconds": 15.776,
+          "metrics": null
+        },
+        {
+          "scenario": "marketcopper",
+          "structured_assertions": 131,
+          "intentional_negative_control": false,
+          "failed_assertion_markers": 0,
+          "bootstrap_seconds": 4.966,
+          "last_native_timestamp_seconds": 11.315,
+          "metrics": null
+        },
+        {
+          "scenario": "marketdrag",
+          "structured_assertions": 134,
+          "intentional_negative_control": false,
+          "failed_assertion_markers": 0,
+          "bootstrap_seconds": 5.771,
+          "last_native_timestamp_seconds": 12.565,
+          "metrics": null
+        },
+        {
+          "scenario": "marketempty",
+          "structured_assertions": 131,
+          "intentional_negative_control": false,
+          "failed_assertion_markers": 0,
+          "bootstrap_seconds": 5.471,
+          "last_native_timestamp_seconds": 11.321,
+          "metrics": null
+        },
+        {
+          "scenario": "markethover",
+          "structured_assertions": 135,
+          "intentional_negative_control": false,
+          "failed_assertion_markers": 0,
+          "bootstrap_seconds": 5.153,
+          "last_native_timestamp_seconds": 16.169,
+          "metrics": null
+        },
+        {
+          "scenario": "marketinterval",
+          "structured_assertions": 132,
+          "intentional_negative_control": false,
+          "failed_assertion_markers": 0,
+          "bootstrap_seconds": 5.027,
+          "last_native_timestamp_seconds": 11.071,
+          "metrics": null
+        },
+        {
+          "scenario": "marketlong",
+          "structured_assertions": 131,
+          "intentional_negative_control": false,
+          "failed_assertion_markers": 0,
+          "bootstrap_seconds": 4.98,
+          "last_native_timestamp_seconds": 11.632,
+          "metrics": null
+        },
+        {
+          "scenario": "marketscaled",
+          "structured_assertions": 131,
+          "intentional_negative_control": false,
+          "failed_assertion_markers": 0,
+          "bootstrap_seconds": 4.986,
+          "last_native_timestamp_seconds": 10.717,
+          "metrics": null
+        },
+        {
+          "scenario": "marketsingle",
+          "structured_assertions": 131,
+          "intentional_negative_control": false,
+          "failed_assertion_markers": 0,
+          "bootstrap_seconds": 5.336,
+          "last_native_timestamp_seconds": 11.758,
+          "metrics": null
+        },
+        {
+          "scenario": "marketsmall",
+          "structured_assertions": 131,
+          "intentional_negative_control": false,
+          "failed_assertion_markers": 0,
+          "bootstrap_seconds": 4.881,
+          "last_native_timestamp_seconds": 10.991,
+          "metrics": null
+        },
+        {
+          "scenario": "marketsparse",
+          "structured_assertions": 131,
+          "intentional_negative_control": false,
+          "failed_assertion_markers": 0,
+          "bootstrap_seconds": 5.044,
+          "last_native_timestamp_seconds": 11.031,
+          "metrics": null
+        },
+        {
+          "scenario": "replay",
+          "structured_assertions": 131,
+          "intentional_negative_control": false,
+          "failed_assertion_markers": 0,
+          "bootstrap_seconds": 5.25,
+          "last_native_timestamp_seconds": 10.031,
+          "metrics": null
+        },
+        {
+          "scenario": "shell",
+          "structured_assertions": 131,
+          "intentional_negative_control": false,
+          "failed_assertion_markers": 0,
+          "bootstrap_seconds": 7.038,
+          "last_native_timestamp_seconds": 12.347,
+          "metrics": null
+        },
+        {
+          "scenario": "wrong",
+          "structured_assertions": 131,
+          "intentional_negative_control": true,
+          "failed_assertion_markers": 1,
+          "bootstrap_seconds": 4.877,
+          "last_native_timestamp_seconds": 9.814,
+          "metrics": null
+        }
+      ]
+    }
+  ],
+  "implementation_commit": "f526f69680ed00ebbdbadad8dea89a258798bf9b",
+  "runtime_sha256": {
+    "TwichUI_Workshop/auction/AdvancedChart.lua": "9dc4064ae0157c9cabe41c4f3c3f518faef557aab56b112b9603fd3da798498e",
+    "TwichUI_Workshop/auction/ViewMarket.lua": "c40f52bcb2399f197f41905705721bf1dbd047de78c8f31aa79dce70b4a9fcef",
+    "TwichUI_Workshop/media/chart-marker.tga": "479f53b26fbbfdbb218fcbe59c21dd1679b966afffb39ae7c03832ed752e705f"
+  },
+  "simulator_sha256": "5c769c9b60da3a6196941b1e40206856878e4901111a37fd6268fac512758906"
+}

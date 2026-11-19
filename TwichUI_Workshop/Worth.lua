@@ -187,6 +187,12 @@ local function Compare(r)
 end
 
 function WO.Recommend(r)
+    if r.advisor and W.Advisor then
+        local a=r.advisor
+        if a.level=="tentative" then return {kind="possible",text=W.Advisor.Tooltip(a),tone="quiet"} end
+        return { kind=a.action=="unknown" and "more" or "pick", pick=a.action~="unknown" and a.action or nil,
+            text=W.Advisor.Tooltip(a), tone=a.action=="unknown" and "quiet" or "good" }
+    end
     local v, a, d = r.vendor, r.auction, r.disenchant
     local good = function(kind, text, key) return { kind = kind, text = text, tone = "good", pick = key } end
     local quiet = function(kind, text) return { kind = kind, text = text, tone = "quiet" } end

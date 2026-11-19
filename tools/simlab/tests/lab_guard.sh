@@ -10,6 +10,12 @@ pass=0; fail=0
 SIMLAB_LIB_DEFER=1
 # shellcheck source=../lib.sh
 . "$HERE/../lib.sh"
+actual_repo="$REPO"
+# The runner gives every child a private TMPDIR, which can itself be inside the
+# checkout. Use a stand-in repository, just as for home and the game install,
+# so marked temporary labs remain outside the repository being tested.
+REPO="$T/source-repository"
+mkdir -p "$REPO"
 
 try() {  # name expect(0|2) mode lab -- the check runs in a subshell with home and the game install replaced by temp folders
   local name="$1" want="$2" mode="$3" lab="$4" got
@@ -22,7 +28,9 @@ touch "$T/foreign/notes.txt"
 printf 'wrong\n' > "$T/foreign/$SIMLAB_MARKER"
 ln -s "$T/good" "$T/linktogood"
 
-# the repository and home are the real ones for the names below only where REPO is concerned (the check reads REPO from lib.sh)
+# Protected paths are stand-ins; also check the actual checkout read-only.
+REPO="$actual_repo" try "actual repository" 2 use "$actual_repo"
+REPO="$actual_repo" try "actual repository child" 2 use "$actual_repo/tools"
 try "empty path"            2 use   ""
 try "relative path"         2 use   "lab"
 try "filesystem root"       2 use   "/"
@@ -59,6 +67,47 @@ mkdir -p "$T/good/roots" "$T/elsewhere" && touch "$T/elsewhere/keep"
 ln -s "$T/elsewhere" "$T/good/roots/twichui"
 [ "$(stage "$T/good")" = 2 ] && [ -e "$T/elsewhere/keep" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL symlinked root was followed"; }
 rm -f "$T/good/roots/twichui"
+
+# The local launcher has one narrow exception: use an already-marked ignored
+# workspace, never adopt the repository or allow arbitrary children/siblings.
+original_repo="$REPO"
+REPO="$T/checkout"
+mkdir -p "$REPO/test-output/simlab" "$REPO/test-output/other"
+printf '%s\n' "$SIMLAB_MARKER_TEXT" > "$REPO/test-output/simlab/$SIMLAB_MARKER"
+SIMLAB_LOCAL=1 try 'local workspace: marked use' 0 use "$REPO/test-output/simlab"
+SIMLAB_LOCAL=0 try 'local workspace: requires opt-in' 2 use "$REPO/test-output/simlab"
+SIMLAB_LOCAL=1 try 'local workspace: never adopt' 2 adopt "$REPO/test-output/simlab"
+SIMLAB_LOCAL=1 try 'local workspace: sibling refused' 2 use "$REPO/test-output/other"
+SIMLAB_LOCAL=1 try 'local workspace: child refused' 2 use "$REPO/test-output/simlab/child"
+REPO="$original_repo"
+
+# Reuse only this invocation's immutable snapshot, not a previous invocation's
+# stale root, a changed addon selection, or nonempty saved-variable storage.
+(
+  REPO="$T/stage-source" LAB="$T/good" ROOT="$T/good/roots/twichui"
+  HOME="$T/home" SIMLAB_WOW="$T/wow" SIMLAB_STAGE_ONCE=1 SIMLAB_SHIM=0
+  unset _SIMLAB_STAGED_KEY
+  mkdir -p "$REPO/!!!TwichUI" "$REPO/TwichUI_Settings" "$REPO/TwichUI_Extra"
+  printf 'first\n' > "$REPO/!!!TwichUI/snapshot.txt"
+  simlab_stage || exit 1
+  touch "$ROOT/old-extra"
+  printf 'second\n' > "$REPO/!!!TwichUI/snapshot.txt"
+  simlab_stage || exit 1
+  [ "$(cat "$ROOT/!!!TwichUI/snapshot.txt")" = first ] || exit 1
+  # A new script has no cache key and must replace all previous staged files.
+  unset _SIMLAB_STAGED_KEY
+  simlab_stage || exit 1
+  [ "$(cat "$ROOT/!!!TwichUI/snapshot.txt")" = second ] && [ ! -e "$ROOT/old-extra" ] || exit 1
+  SIMLAB_EXTRA=TwichUI_Extra
+  simlab_stage || exit 1
+  [ -d "$ROOT/TwichUI_Extra" ] || exit 1
+  SIMLAB_SHIM=1
+  simlab_stage || exit 1
+  [ -d "$ROOT/!!!!SimLabShims" ] || exit 1
+  touch "$LAB/wtf/unsafe"
+  simlab_stage >/dev/null 2>&1 && exit 1
+  rm "$LAB/wtf/unsafe"
+) && pass=$((pass+1)) || { fail=$((fail+1)); echo 'FAIL stage snapshot isolation'; }
 
 # unsupported shell: a runner started by zsh must stop before it creates anything
 if command -v zsh >/dev/null 2>&1; then

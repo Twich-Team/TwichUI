@@ -3,6 +3,7 @@
 -- recipes, queue and materials, and its buttons queue, change and remove. Synthetic: it proves what is drawn and kept, not how
 -- the game draws it.
 dofile(TESTS .. "mi_mock.lua")
+local Press = dofile(TESTS .. "press.lua")   -- opt-in (M5): frames record the mouse state, and Press refuses a control that could not take a click
 
 local function Check(cond, msg) if not cond then error(msg, 2) end end
 local function Same(a, b, msg) if a ~= b then error((msg or "") .. " expected " .. tostring(b) .. ", got " .. tostring(a), 2) end end
@@ -28,7 +29,6 @@ local c = MIClient("Rich", {
       fr.SetTextInsets = function() end
       fr.SetJustifyV = function() end
       fr.SetWordWrap = function() end
-      fr.EnableMouse = function() end
       fr.SetToplevel = function() end
       fr.SetMovable = function() end
       fr.SetClampedToScreen = function() end
@@ -39,6 +39,7 @@ local c = MIClient("Rich", {
       fr.SetMotionScriptsWhileDisabled = function() end
       fr.CreateTexture = function(s) local t = MIFake("Texture", s); t.SetColorTexture = function() end t.SetVertexColor = function() end t.SetTexCoord = function() end t.SetTexture = function(x, v) x.texture = v end return t end
       fr.CreateFontString = function(s) local t = MIFake("FontString", s); t.SetFont = function() return true end t.SetJustifyV = function() end t.SetWordWrap = function() end t.SetTextColor = function() end return t end
+      Press.Instrument(fr, name)   -- last, so it replaces the no-op EnableMouse above with one that records
       if name then cl[name] = fr end
       return fr
     end
@@ -76,7 +77,7 @@ c.C_Item = {
 c.InCombatLockdown = function() return false end
 c.IsShiftKeyDown = function() return false end
 
-for _, f in ipairs({ "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua", "AuctionButton.lua", "Style.lua", "ViewOverview.lua", "ViewOpportunities.lua", "ViewCrafting.lua", "ViewShopping.lua", "Window.lua" }) do
+for _, f in ipairs({ "Data.lua", "BridgeCodec.lua", "BridgeSchema.lua", "BridgeValidate.lua", "Bridge.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "CraftPlanner.lua", "Strategy.lua", "Scan.lua", "Market.lua", "Valuation.lua", "MarketFacts.lua", "Session.lua", "AuctionButton.lua", "Style.lua", "auction/AdvancedChart.lua", "ViewOverview.lua", "ViewOpportunities.lua", "ViewCrafting.lua", "ViewShopping.lua", "ViewStrategy.lua", "Window.lua" }) do
   local chunk = assert(loadfile(ROOT .. "../TwichUI_Workshop/" .. f)); setfenv(chunk, c); chunk("TwichUI_Workshop", {})
 end
 local W = R.Workshop
@@ -127,9 +128,14 @@ Check(rows[1].sub:GetText() == "Makes 1-2", rows[1].sub:GetText())
 Check(rows[2].diff:GetText() == "Orange")
 
 -- queue it with the row's own button, then change and remove
-rows[1].add:GetScript("OnClick")(rows[1].add)
+Press.Must(rows[1].add)   -- the row's own Add button: shown, enabled, mouse on, in a shown window (Press refuses otherwise)
 Same(#Q.Entries(), 1); Same(Q.Entries()[1].name, "Healing Potion")
 Check(rows[1].mark:IsShown() and rows[1].mark.text:GetText() == "Queued" and not rows[1].add:IsShown(), "a queued recipe says Queued (in the compact mark, not on a stretched button) and can't be added twice")
+do
+  local again = Press(rows[1].add)
+  Check(not again.invoked and again.reasons[1] == "hidden", "and its Add button is not a live control any more: " .. again.text)
+  Same(#Q.Entries(), 1, "so a second press adds nothing")
+end
 local qrow = Win.Lists().queue.rows[1]
 Check(qrow:IsShown() and qrow.name:GetText() == "Healing Potion")
 local detail = Win.Craft().detail
@@ -169,7 +175,7 @@ remove:GetScript("OnClick")(remove)
 Same(#Q.Entries(), 0); Check(f.note:GetText():find("Removed", 1, true))
 
 -- events: a burst of changes is one redraw, a stale one is dropped, hidden stops everything
-rows[2].add:GetScript("OnClick")(rows[2].add)
+Press.Must(rows[2].add)
 local before = W.Snapshot().renders
 Fire("BAG_UPDATE_DELAYED"); Fire("BAG_UPDATE_DELAYED"); Fire("GET_ITEM_INFO_RECEIVED")
 Same(W.Snapshot().renders, before, "nothing is drawn until the burst settles")
@@ -292,8 +298,8 @@ do
   FlushTimers()
   Check(opps.bar:IsShown() and ahBar:IsShown(), "a bar in both places while scanning")
   Check(opps.bar.text:GetText():find("Asking the auction house for its listings 3%", 1, true), opps.bar.text:GetText())
-  Same(ahBtn.text:GetText(), "Scanning..."); Check(ahBtn.enabled == false, "the auction house button can't start a second scan")
-  ahBtn:GetScript("OnClick")(ahBtn); Same(ah.sent, 1, "and a click on it does nothing meanwhile")
+  -- (A6) while a scan runs the auction house button is its Stop: it is on and cannot start a second scan; pressing it is tested in test_workshop_auto.lua
+  Same(ahBtn.text:GetText(), "Stop"); Check(ahBtn.enabled == true, "the auction house button offers Stop while a scan runs"); Same(ah.sent, 1, "and no second request was made")
   FireScan("REPLICATE_ITEM_LIST_UPDATE")
   Same(W.Scan.phase, "settling"); Same(W.Scan.Progress(), 0.08, "listings are arriving: past the asking")
   Advance(7)
@@ -360,11 +366,20 @@ do
   local add1 = opps.detail.add
   Same(opps.detail.name:GetText(), "Healing Potion", "the chosen row's details")
   Check(add1.text:GetText() == "Add to crafting plan" and add1.enabled)
-  add1:GetScript("OnClick")(add1)
+  Press.Must(add1)   -- pressed as a player would: the control must be eligible first
+  do   -- P2.1: Add is the optimized plan, behind the confirmation; nothing is queued until it is accepted
+    local _, cdw = W.StrategyView.Frames()
+    Check(cdw:IsShown(), "Add opens the confirmation")
+    Same(#Q.Entries(), queued, "nothing is added by asking")
+    -- this recipe's output isn't known, so no optimized plan can be made: the confirmation says so and offers the recipe on its own, named as such
+    Check(not cdw.ok:IsEnabled() and cdw.plain:IsShown(), "the deliberate fallback, never an optimized plan that isn't one: " .. cdw.text:GetText())
+    Press.Must(cdw.plain)
+    Check(not cdw:IsShown(), "accepted")
+  end
   Same(#Q.Entries(), queued + 1); Check(Q.Find(1), "Healing Potion is in the one queue")
   Same(opps.detail.add.text:GetText(), "In your queue"); Check(opps.detail.add.enabled == false)
   Check(L_.rows[1].sub:GetText():find("In your queue", 1, true), "and the row says so")
-  Check(f.note:GetText():find("Added Healing Potion", 1, true))
+  Check(f.note:GetText():find("Healing Potion", 1, true), f.note:GetText())
   f.tabCraft:GetScript("OnClick")(f.tabCraft)
   Same(Win.Mode(), "craft"); Check(not opps:IsShown())
   Same(#Win.Lists().queue.data, #Q.Entries(), "and the Crafting view shows it")
@@ -461,12 +476,12 @@ do
   local function Select(r) r:GetScript("OnClick")(r) return shop.detail end   -- a row chosen: its details are shown
   local sd = Select(make)
   Same(make.name:GetText(), "Peacebloom"); Same(make.need:GetText(), "2")
-  Same(make.kind:GetText(), "Make", "the row says Make in words as well as in its picture")
+  Same(make.kind:GetText(), "Craft", "the row says Craft in words as well as in its picture")
   Check(sd.choose.make.on and not sd.choose.auction.on, "the details light Make")
   Same(sd.name:GetText(), "Peacebloom")
-  Check(sd.explain:GetText():find("Make 2 x Peacebloom Bundle", 1, true), sd.explain:GetText())
+  Check(sd.explain:GetText():find("Craft 2 x Peacebloom Bundle", 1, true), sd.explain:GetText())
   Check(sd.explain:GetText():find("Making this looks cheaper than buying at the auction house", 1, true), sd.explain:GetText())
-  Same(sd.act.text:GetText(), "Add to crafting plan"); Check(sd.act:IsShown())
+  Same(sd.act.text:GetText(), "Add optimized plan")   -- P2: the multilevel plan adds its crafts through a confirmation; Check(sd.act:IsShown())
   -- the suggestion and the player's own choice are told apart, in words: Make is suggested (the lowest cost), nothing is overridden yet
   Same(sd.tags.make:GetText(), "Suggested"); Same(sd.tags.auction:GetText(), ""); Same(sd.tags.vendor:GetText(), "")
   Check(not sd.useSuggestion:IsShown(), "no override: no Use suggestion")
@@ -476,7 +491,7 @@ do
   Same(sd.tags.make:GetText(), "Suggested", "the suggestion stays marked while it is overridden")
   Same(sd.tags.auction:GetText(), "Your choice")
   Check(sd.useSuggestion:IsShown(), "an override offers Use suggestion")
-  Check(sd.choose.make.twichuiTip.body(sd.choose.make):find("suggestion", 1, true), "the suggested source's tooltip says so")
+  Check(sd.choose.make.twichuiTip.body(sd.choose.make):find("Suggested", 1, true), "the suggested source's tooltip says so")
   sd.useSuggestion:GetScript("OnClick")(sd.useSuggestion)
   Same(S.picks[10], nil, "Use suggestion drops the choice"); Check(sd.choose.make.on and not sd.useSuggestion:IsShown())
   Same(sd.tags.make:GetText(), "Suggested"); Same(sd.tags.auction:GetText(), "")
@@ -486,7 +501,7 @@ do
   Same(S.picks[10], nil)
   sd = Select(seed)
   Same(seed.name:GetText(), "Seed"); Same(seed.need:GetText(), "2"); Same(seed.spend.a:GetText(), "20c", "2 seeds at 10 each")
-  Same(seed.kind:GetText(), "Buy")
+  Same(seed.kind:GetText(), "Auction", "an auction purchase says Auction, not just Buy")
   Check(sd.explain:GetText():find("Needed to make Peacebloom Bundle", 1, true), sd.explain:GetText())
   Check(seed.spend.b:GetText():find("1 day ago", 1, true), "the price age is shown: " .. seed.spend.b:GetText())
   Check(sd.costNote:GetText():find("1 day ago", 1, true), "and in the details: " .. sd.costNote:GetText())
@@ -499,14 +514,22 @@ do
   c.GameTooltip.AddDoubleLine = function(_, a, b) lines[#lines + 1] = a .. " | " .. b end
   make:GetScript("OnEnter")(make)
   local all = table.concat(lines, "\n")
-  Check(all:find("Make | worth 20c", 1, true) and all:find("Cooldowns, tools and stations aren't checked", 1, true), all)
-  -- adding the made material to the queue: explicit, once; nothing is counted twice
+  Check(all:find("Make | part of the multilevel plan", 1, true) and all:find("Cooldowns, tools and stations aren't checked", 1, true), all)
+  -- adding the made material to the queue (P2): the button asks for a confirmation first; nothing changes until it is confirmed, once; nothing is counted twice
   local makeAct = Select(make).act
   makeAct:GetScript("OnClick")(makeAct)
+  Same(#Q.Entries(), 1, "the click alone changed nothing: a confirmation is shown")
+  local svw, cdw = W.StrategyView.Frames()
+  Check(svw:IsShown() and cdw:IsShown(), "the strategy view and its confirmation are open")
+  local cok = cdw.ok
+  Check(cok:IsEnabled(), "the plan was ready, so the confirmation can be accepted")
+  cok:GetScript("OnClick")(cok)
   Same(#Q.Entries(), 2, "the bundle is queued"); Same(Q.Find(3).crafts, 2)
+  Check(not cdw:IsShown(), "the confirmation closes once it is accepted")
   Same(#SL.data, 1, "Peacebloom is now made by the queue: one row left"); Same(SL.rows[1].item, 12)
   Same(SL.rows[1].need:GetText(), "2", "the seeds are counted once")
   Check(f.note:GetText():find("Queued 2 crafts of Peacebloom Bundle", 1, true), f.note:GetText())
+  svw:Hide()
   -- the Crafting view's Materials agree: the bundle's output is not "still needed"
   f.tabCraft:GetScript("OnClick")(f.tabCraft)
   local mrow
@@ -525,7 +548,7 @@ do
   local auction = pd.choose.auction
   auction:GetScript("OnClick")(auction)
   Check(S.picks[12] == "auction" and pd.choose.auction.on, "the player's choice, lit in the details")
-  Same(SL.rows[1].detail:GetText(), "Auction house", "and named under the row")
+  Same(SL.rows[1].detail:GetText(), "Buy at Auction House", "and named under the row in full")
   auction:GetScript("OnClick")(auction)
   Check(S.picks[12] == nil, "chosen again: back to the suggestion")
 
@@ -548,12 +571,15 @@ do
   Same(W.Vendor.Entry(12).p, 4); Same(W.Vendor.Entry(12).npc, 4567)
   sr = SL.rows[1]
   pd = Select(sr)
-  Check(pd.choose.vendor.on and sr.detail:GetText() == "Vendor", "4 each at the vendor against 10 at the auction house"); Same(sr.spend.a:GetText(), "8c")
+  Check(pd.choose.vendor.on and sr.detail:GetText() == "Buy from vendor" and sr.kind:GetText() == "Vendor", "4 each at the vendor against 10 at the auction house"); Same(sr.spend.a:GetText(), "8c")
   Check(not pd.act:IsShown(), "no place is known for the vendor, so no Show vendor")
   local located
   R.NpcStore = { Entries = function() return { { id = 4567, n = "Mira", m = 1, x = 5000, y = 5000, s = { 12 }, own = true } } end,
     ValidMap = function() return true end, Usable = function() return true end, MyFaction = function() return nil end, COORD = 10000 }
-  R.NpcMap = { Locate = function(e) located = e; return true end }
+  local marked, tracked = nil, nil
+  R.NpcMap = { Locate = function(e) located = e; return true end, SetWaypoint = function(e) marked = e; return true end }
+  local savedST = c.C_SuperTrack
+  c.C_SuperTrack = { SetSuperTrackedUserWaypoint = function(on) tracked = on end }
   local enabled = R.Enabled
   R.Enabled = function(_, key) if key == "npcMap" then return true end return enabled(R, key) end
   Win.Render()
@@ -561,8 +587,39 @@ do
   pd = Select(sr)
   Check(pd.act:IsShown() and pd.act.text:GetText() == "Show vendor", "a seen place: Show vendor")
   pd.act:GetScript("OnClick")(pd.act)
-  Check(located and located.n == "Mira", "the map is asked to show that vendor, nothing else")
-  Check(f.note:GetText():find("Showing Mira on the map", 1, true), f.note:GetText())
+  Check(located and located.n == "Mira", "the map is asked to show that vendor")
+  Check(marked == located, "the game's waypoint is put on the same vendor")
+  Same(tracked, true, "and tracked, so its marker shows in the world")
+  Check(f.note:GetText():find("Showing Mira on the map. Waypoint set.", 1, true), f.note:GetText())
+  -- a map the game won't put a waypoint on: the vendor is still shown, nothing is tracked, and the words don't claim a waypoint
+  marked, tracked = nil, nil
+  R.NpcMap.SetWaypoint = function(e) marked = e; return false end
+  pd.act:GetScript("OnClick")(pd.act)
+  Same(tracked, nil, "no waypoint: nothing tracked"); Check(not f.note:GetText():find("Waypoint", 1, true), f.note:GetText())
+  -- the map couldn't be opened, but the waypoint could: still a way to find it
+  R.NpcMap.Locate = function() return false end
+  R.NpcMap.SetWaypoint = function(e) marked = e; return true end
+  pd.act:GetScript("OnClick")(pd.act)
+  Check(f.note:GetText():find("Waypoint set on Mira", 1, true), f.note:GetText())
+  -- WaypointUI loaded: its public API makes the waypoint, named after the NPC (map, x and y in percent); the game's unnamed one is not set as well
+  R.NpcMap.Locate = function(e) located = e; return true end
+  local asked
+  c.WaypointUIAPI = { Navigation = { NewUserNavigation = function(o) asked = o; return { name = o.name } end } }
+  marked, tracked = nil, nil
+  pd.act:GetScript("OnClick")(pd.act)
+  Check(asked and asked.name == "Mira" and asked.mapID == 1 and asked.x == 50 and asked.y == 50, "WaypointUI's waypoint carries the NPC's name and place")
+  Same(marked, nil, "the game's unnamed waypoint is not set as well"); Same(tracked, nil, "WaypointUI tracks its own")
+  Check(f.note:GetText():find("Waypoint set.", 1, true), f.note:GetText())
+  -- WaypointUI fails (an error, or no waypoint made): the game's own waypoint instead, so Show vendor still marks the NPC
+  c.WaypointUIAPI = { Navigation = { NewUserNavigation = function() error("boom") end } }
+  pd.act:GetScript("OnClick")(pd.act)
+  Check(marked and marked.n == "Mira" and tracked == true, "an error in WaypointUI falls back to the game's waypoint")
+  marked, tracked = nil, nil
+  c.WaypointUIAPI = { Navigation = { NewUserNavigation = function() return nil end } }
+  pd.act:GetScript("OnClick")(pd.act)
+  Check(marked and tracked == true, "and so does a refusal")
+  c.WaypointUIAPI = nil
+  c.C_SuperTrack = savedST
   R.Enabled = enabled; R.NpcStore, R.NpcMap = nil, nil
 
   -- a material with no price: a known subtotal and a clear message, never a complete-looking total
@@ -646,7 +703,7 @@ do
   shop.useGuild:GetScript("OnClick")(shop.useGuild)
   Check(not S.UseGuild(), "the same choice from the Shopping view")
   Same(#SL.data, 2); Same(SL.rows[1].kind:GetText(), "Collect")
-  Same(SL.rows[2].kind:GetText(), "Buy", "the second row is now a buy row")
+  Same(SL.rows[2].kind:GetText(), "No source", "the second row is now a row to buy, with no source priced")
   Check(Select(SL.rows[2]).choose.auction:IsShown(), "with its source choices")
   Same(SL.rows[2].need:GetText(), "3"); Same(SL.rows[2].spend.a:GetText(), "Unknown", "unpriced: unknown, not zero")
   Check(shop.total:GetText():find("price missing", 1, true), shop.total:GetText())
@@ -799,42 +856,38 @@ do
   r2:GetScript("OnClick")(r2)
   Check(r2.selected == true and not L_.rows[1].selected, "choosing a row marks it and only it")
   Same(opps.detail.name:GetText(), "Mana Potion")
-  -- Mana Potion has one observed day: no mostly empty plot with one floating dot, but the words and the one price (no dot, no stem, no line)
+  -- The shared advanced chart retains one real sample and exact day spacing.
   local chart = opps.detail.chart
-  Same(chart.state, "single"); Same(chart.shown, 0)
-  Check(not chart.dots[1]:IsShown() and not chart.stems[1]:IsShown(), "one observation draws nothing: a lone dot says no more than the number")
-  Same(chart.msg:GetText(), "More scans needed to show a price trend."); Check(chart.msg:IsShown() and chart.note:IsShown())
-  Check(chart.note:GetText():find("Cheapest seen: ", 1, true) and chart.note:GetText():find("seen today", 1, true), "the one observed price and when: " .. chart.note:GetText())
-  Same(chart.hi:GetText(), ""); Same(chart.lo:GetText(), "")
+  Same(chart.state, "single");Same(chart.shown,1)
+  Same(#chart.data.points,1);Same(#chart.data.groups,0)
+  Same(chart.data.points[1].day,today)
   Same(opps.detail.chartNote:GetText(), "1 observed day")
   r1:GetScript("OnClick")(r1)
   Same(opps.detail.name:GetText(), "Healing Potion")
-  -- Healing Potion: three observed days (today-3, today-2, today): the dots sit at their real days, the gap before today is a gap
-  Same(chart.state, "series")
-  Same(chart.shown, 3); Check(chart.dots[1]:IsShown() and chart.dots[3]:IsShown() and not chart.dots[4]:IsShown(), "three observations, three dots")
-  Check(not chart.msg:IsShown() and not chart.note:IsShown(), "no message over a real chart")
-  local function X(i) local pt = chart.dots[i].points[#chart.dots[i].points] return pt[4] end
-  Check(X(1) < X(2) and X(2) < X(3), "oldest to newest, left to right")
-  Check(math.abs((X(3) - X(2)) - 2 * (X(2) - X(1))) < 0.01, "spacing follows the days (a missing day is a gap): " .. X(1) .. " " .. X(2) .. " " .. X(3))
-  Same(opps.detail.chartNote:GetText(), "3 observed days")
-  Check(chart.hi:GetText() == "1100c" and chart.lo:GetText() == "900c", "its range is the lowest and highest observed: " .. chart.hi:GetText() .. " / " .. chart.lo:GetText())
-  -- older groups are named, not drawn
+  Same(chart.state,"series");Same(chart.shown,3)
+  Same(chart.data.points[1].price,900);Same(chart.data.points[2].price,1000);Same(chart.data.points[3].price,1100)
+  local geometry=W.AdvancedChart.Geometry(chart.data,400,120);local xs,lines={},0
+  for _,v in ipairs(geometry) do if v.index then xs[v.index]=v.x elseif v.x2 then lines=lines+1 end end
+  Same(lines,1,"no segment spans the missing observation day")
+  Check(math.abs((xs[3]-xs[2])-2*(xs[2]-xs[1]))<.01,"real day spacing preserved")
+  Same(opps.detail.chartNote:GetText(),"3 observed days")
+  Check(chart.data.low<900 and chart.data.high>1100,"axes include all observed prices")
   c.TwichUIWorkshopDB.markets["Realm|Alliance"].hist[501] = (today - 1) .. ",1000;" .. today .. ",1100|" .. math.floor((today - 40) / 28) .. ",800,950,1750,2"
   Win.Render()
-  Same(chart.shown, 2); Check(opps.detail.chartNote:GetText():find("plus older ranges", 1, true), "older days are named, never drawn: " .. opps.detail.chartNote:GetText())
-  -- only older ranges: nothing to draw, and it says so
+  Same(chart.shown,2);Same(#chart.data.groups,1,"older aggregates remain intervals")
+  Check(opps.detail.chartNote:GetText():find("plus older ranges",1,true),"aggregate context remains visible")
   c.TwichUIWorkshopDB.markets["Realm|Alliance"].hist[501] = "|" .. math.floor((today - 40) / 28) .. ",800,950,1750,2"
   Win.Render()
-  Same(chart.state, "empty"); Same(chart.shown, 0)
-  Check(chart.msg:IsShown() and chart.msg:GetText():find("older ranges", 1, true), chart.msg:GetText())
-  -- no history at all
+  Same(chart.shown,0);Same(#chart.data.groups,1)
+  Same(opps.detail.chartNote:GetText(),"older ranges only")
+  Check(chart.msg:GetText()=="","supported aggregate bands do not claim no history")
   c.TwichUIWorkshopDB.markets["Realm|Alliance"].hist[501] = nil
   Win.Render()
-  Same(chart.shown, 0); Check(chart.msg:GetText():find("No price history", 1, true) and chart.hi:GetText() == "", chart.msg:GetText())
-  -- a malformed history is no history (never repaired by guessing)
+  Same(chart.data,nil);Check(chart.msg:GetText():find("No supported history",1,true),chart.msg:GetText())
+  Same(chart.labels[1]:GetText(),"","no stale axis values")
   c.TwichUIWorkshopDB.markets["Realm|Alliance"].hist[501] = "garbage"
   Win.Render()
-  Same(chart.shown, 0)
+  Same(chart.data,nil,"malformed history is never replaced with invented observations")
   c.TwichUIWorkshopDB.markets["Realm|Alliance"].hist[501] = (today - 3) .. ",900;" .. (today - 2) .. ",1000;" .. today .. ",1100|"
   Win.Render()
   -- the materials of one craft: each with its item tooltip and its quantity
@@ -886,7 +939,10 @@ do
   Check(qrow.less.enabled == false, "minus is off at one craft"); Check(Win.Lists().queue.rows[1].less.enabled == true)
   Check(#qrow.less.bars == 1 and #qrow.more.bars == 2, "the controls are drawn (a bar, and two bars): no font glyph")
   -- the materials list: an optional note per material (for a planner that knows how it is made) is shown only when given
-  Check(Win.Lists().mats.rows[1].note:IsShown() == false, "no note, no second line")
+  -- P2: the multilevel plan gives a material that is bought, made or collected its one line; a material the plan has nothing to do for has none
+  for _, mr in ipairs(Win.Lists().mats.rows) do
+    if mr:IsShown() then Check(mr.note:IsShown() == (mr.row.note ~= nil), "a material shows its note exactly when the plan gave it one") end
+  end
 
   -- Shopping: the details of the chosen material
   Win.SetMode("shop"); Win.Render()
@@ -906,16 +962,17 @@ do
   Same(d.qty[3].l:GetText(), "To get"); Same(d.qty[3].v:GetText(), "5")
   Check(d.usedFor:GetText():find("Needed for: Healing Potion, Mana Potion", 1, true), d.usedFor:GetText())
   Same(d.cost:GetText(), "500c", "5 at 100 each"); Check(d.costNote:GetText():find("Auction house", 1, true), d.costNote:GetText())
-  Same(row10.kind:GetText(), "Buy"); Check(not d.act:IsShown(), "Buy has no action here: nothing is bought for you")
+  Same(row10.kind:GetText(), "Auction"); Check(not d.act:IsShown(), "Auction has no action here: nothing is bought for you")
+  Same(d.kindWord:GetText(), "Buy at Auction House", "the details say the acquisition in full")
   Check(d.choose.auction.on and d.choose.auction.enabled and not d.choose.vendor.enabled, "only the possible sources can be chosen")
-  Check(shop.counts.buy.n:GetText() == "2" and shop.counts.make.n:GetText() == "0" and shop.counts.collect.n:GetText() == "0", "the plan counts")
+  Check(shop.counts.auction.n:GetText() == "2" and shop.counts.vendor.n:GetText() == "0" and shop.counts.make.n:GetText() == "0" and shop.counts.collect.n:GetText() == "0", "the plan counts")
   Check(shop.total:GetText():find("Estimated spending: 550c", 1, true), shop.total:GetText())
   -- only collect rows
   g.bags = { [10] = 0, [11] = 0 }
   W.Storage.StoreBank({ ids = { 6 }, tabs = { [6] = { [10] = 5, [11] = 1 } }, incomplete = 0 }, Q.Now() - 600)
   Win.Render()
   Same(#SL.data, 2); Check(SL.rows[1].kind:GetText() == "Collect" and SL.rows[2].kind:GetText() == "Collect", "everything is stored: two collect rows")
-  Check(shop.counts.collect.n:GetText() == "2" and shop.counts.buy.n:GetText() == "0")
+  Check(shop.counts.collect.n:GetText() == "2" and shop.counts.auction.n:GetText() == "0" and shop.counts.vendor.n:GetText() == "0")
   Same(shop.total:GetText(), "Nothing to buy: collect what is stored.")
   local cd = shop.detail
   Check(not cd.choose.vendor:IsShown() and not cd.act:IsShown(), "collect: no source choice, no action")
@@ -997,13 +1054,25 @@ do
   Check(chosenId and not Q.Find(chosenId), "a recipe is chosen and is not queued")
   Same(add.text:GetText(), "Add to crafting plan"); Check(add:IsEnabled() and add:IsShown() and add.check:IsShown() == false)
   Check(#add.artParts == 2 and add.artParts[1]:IsShown() and add.artParts[2]:IsShown(), "the plus is drawn")
-  local scripts = add:GetScript("OnClick")
-  Check(type(scripts) == "function", "the button has a click handler")
-  scripts(add, "LeftButton")   -- the control's own handler, not Session.Add
+  Check(type(add:GetScript("OnClick")) == "function", "the button has a click handler")
+  local pressed = Press(add)   -- the control's own handler, run only if the button could take a click (shown, enabled, mouse on, in a shown window)
+  Check(pressed.invoked, pressed.text)
+  Same(pressed.calls[1], "OnClick"); Same(pressed.button, "LeftButton")
+  do
+    local _, cdw = W.StrategyView.Frames()
+    Check(cdw:IsShown() and not Q.Find(chosenId), "the optimized confirmation first: nothing queued yet")
+    local okp = Press(cdw.ok:IsEnabled() and cdw.ok or cdw.plain)
+    Check(okp.invoked, okp.text)
+  end
   Check(Q.Find(chosenId), "the chosen recipe is in the queue")
   Same(Q.Find(chosenId).crafts, 1, "queued once")
   Same(add.text:GetText(), "In your queue"); Check(add:IsEnabled() == false and add.check:IsShown() and not add.artParts[1]:IsShown(), "the button says it, with a check in place of the plus")
-  Check(f.note:GetText():find("Added ", 1, true), "the footer says what happened: " .. f.note:GetText())
+  do
+    local again = Press(add)
+    Check(not again.invoked and again.reasons[1] == "disabled", "a queued recipe's Add button is disabled, and Press refuses it: " .. again.text)
+    Same(Q.Find(chosenId).crafts, 1, "so pressing it again did not queue a second craft")
+  end
+  Check(f.note:GetText():find("Queued ", 1, true), "the footer says what happened: " .. f.note:GetText())
   Check(first.sub:GetText():find("In your queue", 1, true), "the list row says so too")
   Check(add.twichuiTip.body(add):find("in your crafting plan", 1, true), "and the button's tooltip explains")
   f.tabCraft:GetScript("OnClick")(f.tabCraft)
@@ -1348,6 +1417,10 @@ end
 ---------------------------------------------------------------------------
 do
   local f = Win.Frame()
+  -- A fixed clock for this block: the Workshop stamps saved records through Q.Now (a recipe record's `at`), which reads the real
+  -- time(). With the wall clock a tick between the two comparisons below made "wrote nothing" fail about 3 % of runs. Restored at the end.
+  local realNow = Q.Now
+  Q.Now = function() return 1700000000 end
   local function Dump(v, out)   -- a stable text of a saved table, to compare before and after
     out = out or {}
     if type(v) ~= "table" then out[#out + 1] = tostring(v) return out end
@@ -1391,6 +1464,7 @@ do
     Check(#l.rows <= math.ceil(l.minH / l.rowH) + 1, ("the %s pool is bounded by what it can show (%d rows)"):format(name, #l.rows))
   end
   Same(table.concat(Dump(c.TwichUIDB.workshop), " "), saved, "and navigating wrote nothing to the saved data")
+  Q.Now = realNow
   Same(Events(f), 0, "closed: no events")
   f:Show()
   Same(Win.Mode(), "overview", "the page shown is kept while the game runs")

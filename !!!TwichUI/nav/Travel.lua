@@ -93,8 +93,7 @@ end
 -- The points an open flight map offers: the maps the game may list them under (the continents, the player's own map and its
 -- parents). A point you can fly to (Reachable) or stand at (Current) is learned. Unreachable is not counted: the game's
 -- meaning of it for a point never learned is not known here.
-local function NodesNow()
-    if not (C_TaxiMap and C_TaxiMap.GetAllTaxiNodes) then return nil end
+local function OfferMaps()
     local maps, seen = {}, {}
     local function Add(id)
         id = Plain(id)
@@ -108,6 +107,12 @@ local function NodesNow()
         local ok, info = pcall(C_Map.GetMapInfo, id)
         id = ok and type(info) == "table" and Plain(info.parentMapID) or nil
     end
+    return maps
+end
+
+local function NodesNow()
+    if not (C_TaxiMap and C_TaxiMap.GetAllTaxiNodes) then return nil end
+    local maps = OfferMaps()
     local states = Enum and Enum.FlightPathState
     local CURRENT, REACHABLE = states and states.Current or 0, states and states.Reachable or 1
     local set, any = {}, false
@@ -121,6 +126,23 @@ local function NodesNow()
         end
     end
     return any and set or nil
+end
+
+-- The open flight map's entry for a flight point: { slot (the game's index for it), state (0 here, 1 reachable, 2 not), name },
+-- or nil when the map doesn't list it. For nav/Flight.lua (the highlight and the automatic flight).
+function TV.Offered(node)
+    if not (C_TaxiMap and C_TaxiMap.GetAllTaxiNodes) then return nil end
+    for _, map in ipairs(OfferMaps()) do
+        local ok, nodes = pcall(C_TaxiMap.GetAllTaxiNodes, map)
+        if ok and type(nodes) == "table" then
+            for _, n in ipairs(nodes) do
+                if Plain(n.nodeID) == node then
+                    local slot, state = Plain(n.slotIndex), Plain(n.state)
+                    if type(slot) == "number" and type(state) == "number" then return { slot = slot, state = state, name = Plain(n.name) } end
+                end
+            end
+        end
+    end
 end
 
 -- A flight master's map opened (or a point's status changed while it is open).
@@ -195,22 +217,29 @@ function TV.SetBind(cont, x, y)
     return true
 end
 
--- Seconds left on the Hearthstone's cooldown (0 when ready or unknown).
+-- Seconds left on the Hearthstone's cooldown; nil means it cannot safely be used.
+-- Forever exposes the bag-item API under C_Container (as used by camping/Rest.lua).
 local function HearthCooldown()
-    local f = C_Item and C_Item.GetItemCooldown
-    if not f then return 0 end
-    local ok, start, duration = pcall(f, HEARTH_ITEM)
-    start, duration = ok and Plain(start), ok and Plain(duration)
-    if type(start) ~= "number" or type(duration) ~= "number" or start <= 0 then return 0 end
+    if InCombatLockdown and InCombatLockdown() then return nil end
+    local f = C_Container and C_Container.GetItemCooldown or C_Item and C_Item.GetItemCooldown
+    if not f then return nil end
+    local ok, start, duration, enabled = pcall(f, HEARTH_ITEM)
+    if not ok then return nil end
+    start, duration, enabled = Plain(start), Plain(duration), Plain(enabled)
+    if enabled ~= 1 and enabled ~= true then return nil end
+    if type(start) ~= "number" or type(duration) ~= "number" or start < 0 or duration < 0 then return nil end
+    if start == 0 or duration == 0 then return 0 end
     return math.max(0, start + duration - GetTime())
 end
 
--- { cont, x, y, seconds } (the cast and what is left of the cooldown) or nil: no stone in the bags, or no bind point known.
+-- { cont, x, y, seconds, readyAt } or nil: requires a stone, bind point and readable, enabled cooldown.
 function TV.Hearth()
     if Count(HEARTH_ITEM) <= 0 then return nil end
     local b = TV.Bind()
     if not b then return nil end
-    return { cont = b.c, x = b.x, y = b.y, seconds = HEARTH_CAST + HearthCooldown() }
+    local cooldown = HearthCooldown()
+    if cooldown == nil then return nil end
+    return { cont = b.c, x = b.x, y = b.y, seconds = HEARTH_CAST + cooldown, readyAt = GetTime() + cooldown }
 end
 
 -- Why the Hearthstone isn't offered, in words (for the settings), or nil when it is.
@@ -218,6 +247,7 @@ function TV.HearthWhy()
     if not NP.Get("useHearth") then return "Turned off." end
     if Count(HEARTH_ITEM) <= 0 then return "No Hearthstone in your bags." end
     if not TV.Bind() then return "Your bind point isn't known to TwichUI yet. Talk to an innkeeper (bind again), or use the Hearthstone once during a journey." end
+    if HearthCooldown() == nil then return "Your Hearthstone cooldown is unavailable or the item is disabled." end
     return nil
 end
 

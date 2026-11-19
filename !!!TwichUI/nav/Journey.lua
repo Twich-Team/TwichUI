@@ -1,7 +1,7 @@
 -- TwichUI: Navigation, planning a journey across continents
 -- The cheapest way, by estimated seconds, from where you are to a destination, using what you have: walking, the flights you
 -- have learned, boats and zeppelins, Mage teleports you know (and have a rune for), and your Hearthstone. No frames. The
--- result is a list of legs: walk, flight, ferry (boat or zeppelin), teleport, hearth. Nothing here moves, casts or
+-- result is a list of legs: walk, flight, ferry (boat or zeppelin), lift, teleport, hearth. Nothing here moves, casts or
 -- interacts; a leg is words and places, and what the player does with it is theirs.
 --
 -- The model (all of it estimates, and the interface says so):
@@ -19,14 +19,19 @@
 --     region); the real spot may differ by some yards, and it is learned nowhere.
 --   * Hearthstone: the cast time plus whatever is left of its cooldown, from anywhere, to the bind point the player's own
 --     bind (or a use of it) taught TwichUI; with no known bind point it is not offered.
+--   * Lifts (nav/Lifts.lua): the lift's own estimate (the wait and the ride) between its two stand points, which are joined to
+--     the walking map at plan time like the start and the goal. Both ways. Only on the continents the journey starts, ends or
+--     has its bind point on.
 -- It is the cheapest under this model, not a proof of the fastest way: waits are averages, speeds are estimates, and nothing
 -- about mounts, buffs or the flight master's queue is known.
 --
 -- req = { start = { cont, x, y }, goal = { cont, x, y }, prefer, speed, faction (1 Alliance, 2 Horde),
 --         flights = { [taxi node ID] = true } or nil, ships = bool, teleports = { { spell, place, cast } ... },
---         hearth = { cont, x, y, seconds } or nil, ride = { [ "a>b" ] = seconds } or nil }
+--         hearth = { cont, x, y, seconds } or nil, ride = { [ "a>b" ] = seconds } or nil, lifts = a list as in nav/Lifts.lua or nil
+--         (nil: that file's) }
 -- Result (via the job): { legs, seconds }. A leg is { kind, seconds, from, to, cont, fx, fy, tx, ty, fromName, toName, ... }
--- where from and to are place IDs, or "S" (your position), "G" (the destination) or "H" (the bind point).
+-- where from and to are place IDs, "S" (your position), "G" (the destination), "H" (the bind point) or a lift's end
+-- ("L:<id>:base" and "L:<id>:top"). A walk leg to or from a lift end carries fprefer / tprefer, the polygon to start from or end on.
 
 local R = TwichUI
 local ND, RT = R.NavData, R.NavRoute
@@ -78,6 +83,36 @@ local function Plan(req)
     RT.Pause()
     if not aG then return nil, Graph(G.cont) and "goal-off" or "no-data" end
 
+    -- Lifts: each end joined to the walking map, on the continents of the start, the goal and the bind point
+    local ends, endIds = {}, {}
+    local LF = R.NavLifts
+    for _, lf in ipairs(req.lifts or (LF and LF.On(S.cont, G.cont, H and H.cont)) or {}) do
+        if Allows(lf.faction or 3, req.faction) and Graph(lf.cont) then
+            local b, t = LF.Stand(lf.cont, lf.base), LF.Stand(lf.cont, lf.top)
+            local ab = b and RT.AttachOf(lf.cont, b.x, b.y, b.prefer, 1)
+            local at = t and RT.AttachOf(lf.cont, t.x, t.y, t.prefer, 1)
+            if ab and at then
+                local ib, it = "L:" .. lf.id .. ":base", "L:" .. lf.id .. ":top"
+                ends[ib] = { id = ib, other = it, lift = lf, cont = lf.cont, x = b.x, y = b.y, att = ab, prefer = b.prefer, name = lf.name .. " (bottom)" }
+                ends[it] = { id = it, other = ib, lift = lf, cont = lf.cont, x = t.x, y = t.y, att = at, prefer = t.prefer, name = lf.name .. " (top)" }
+                endIds[#endIds + 1] = ib
+                endIds[#endIds + 1] = it
+            end
+        end
+    end
+    RT.Pause()
+    -- Standing on a pocket of ground the map doesn't join to the land (a pier) counts as standing on the land nearby. A lift
+    -- is what joins some pockets (Freewind Post's plateau): there you stand where you are.
+    if aS and #endIds > 0 then
+        local at = {}
+        for _, id in ipairs(endIds) do
+            local a = ends[id].att
+            at[a.tile.comp[a.poly] or 0] = true
+        end
+        local here = RT.AttachOf(S.cont, S.x, S.y, req.prefer, RT.START_REACH)
+        if here and here.tile.comp[here.poly] and at[here.tile.comp[here.poly]] then aS = here end
+    end
+
     local function Targets(cont, extra)
         local t = {}
         local g = Places(cont)
@@ -85,19 +120,32 @@ local function Plan(req)
         for k, v in pairs(extra) do t[k] = v end
         return t
     end
+    local function WithEnds(cont, extra)       -- `extra` and the lift ends on that continent, as walking targets
+        for _, id in ipairs(endIds) do
+            if ends[id].cont == cont then extra[id] = ends[id].att end
+        end
+        return extra
+    end
     local costS, costH = {}, {}
     if aS then
-        costS = RT.CostsFrom(S.cont, aS, Targets(S.cont, (G.cont == S.cont) and { G = aG } or {}))
+        costS = RT.CostsFrom(S.cont, aS, Targets(S.cont, WithEnds(S.cont, (G.cont == S.cont) and { G = aG } or {})))
         RT.Pause()
     end
-    local costG = RT.CostsFrom(G.cont, aG, Targets(G.cont, {}))
+    local costG = RT.CostsFrom(G.cont, aG, Targets(G.cont, WithEnds(G.cont, {})))
     RT.Pause()
     if aH then
-        costH = RT.CostsFrom(H.cont, aH, Targets(H.cont, (G.cont == H.cont) and { G = aG } or {}))
+        costH = RT.CostsFrom(H.cont, aH, Targets(H.cont, WithEnds(H.cont, (G.cont == H.cont) and { G = aG } or {})))
         RT.Pause()
     end
 
-    -- The search: nodes are place IDs and "S", "G", "H"
+    -- From each lift end: the walk to every place on its map and to the destination
+    for _, id in ipairs(endIds) do
+        local e = ends[id]
+        e.cost = RT.CostsFrom(e.cont, e.att, Targets(e.cont, (G.cont == e.cont) and { G = aG } or {}))
+        RT.Pause()
+    end
+
+    -- The search: nodes are place IDs and "S", "G", "H" and the lift ends
     local dist, prev, done = { S = 0 }, {}, {}
     local order = { "S" }
     local function Visit(u)
@@ -112,7 +160,7 @@ local function Plan(req)
             end
         end
         -- walking
-        local from = (u == "S" and costS) or (u == "H" and costH) or nil
+        local from = (u == "S" and costS) or (u == "H" and costH) or (ends[u] and ends[u].cost) or nil
         if from then
             for v, c in pairs(from) do Try(v, c / speed, "walk") end
         elseif u ~= "G" then
@@ -121,7 +169,17 @@ local function Plan(req)
             local w = g and g.walk[u]
             if w then for v, c in pairs(w) do Try(v, c / speed, "walk") end end
             if pl and pl.cont == G.cont and costG[u] then Try("G", costG[u] / speed, "walk") end
+            -- on to a lift: its end's walk to this place, the same both ways
+            if pl then
+                for _, id in ipairs(endIds) do
+                    local c = ends[id].cont == pl.cont and ends[id].cost[u]
+                    if c then Try(id, c / speed, "walk") end
+                end
+            end
         end
+        -- the lift itself, from this end to the other
+        local e = ends[u]
+        if e then Try(e.other, e.lift.seconds, "lift", e) end
         if not tr then return end
         -- rides, from a place
         if type(u) == "number" then
@@ -182,6 +240,7 @@ local function Plan(req)
         if n == "S" then return S.cont, S.x, S.y end
         if n == "G" then return G.cont, G.x, G.y end
         if n == "H" then return H.cont, H.x, H.y end
+        if ends[n] then return ends[n].cont, ends[n].x, ends[n].y end
         local cont, x, y = ND.Stand(n)
         return cont, x, y
     end
@@ -189,6 +248,7 @@ local function Plan(req)
         if n == "S" then return "where you are" end
         if n == "G" then return "the destination" end
         if n == "H" then return "your bind point" end
+        if ends[n] then return ends[n].name end
         local pl = tr.place[n]
         return pl and pl.town or "?"
     end
@@ -213,10 +273,13 @@ local function Plan(req)
             legs[#legs + 1] = { kind = "ferry", seconds = e.seconds, from = e.u, to = e.to,
                 transport = f.kind == 2 and "zeppelin" or "boat", travel = req.ride and req.ride[f.a .. ">" .. f.b] or f.travel,
                 wait = J.WaitSeconds(f) }
+        elseif e.kind == "lift" then
+            legs[#legs + 1] = { kind = "lift", seconds = e.seconds, from = e.u, to = e.to, lift = e.info.lift,
+                up = e.to == "L:" .. e.info.lift.id .. ":top" }
         elseif e.kind == "teleport" then
             legs[#legs + 1] = { kind = "teleport", seconds = e.info.cast, from = e.u, to = e.to, spell = e.info.spell }
         else
-            legs[#legs + 1] = { kind = "hearth", seconds = e.seconds, from = e.u, to = e.to }
+            legs[#legs + 1] = { kind = "hearth", seconds = e.seconds, readyAt = e.info.readyAt, from = e.u, to = e.to }
         end
     end
     for _, leg in ipairs(legs) do
@@ -225,6 +288,7 @@ local function Plan(req)
         leg.cont, leg.fcont, leg.fx, leg.fy, leg.tcont, leg.tx, leg.ty = tc, fc, fx, fy, tc, tx, ty
         if leg.kind == "walk" then leg.cont = fc end
         leg.fromName, leg.toName = Name(leg.from), Name(leg.to)
+        leg.fprefer, leg.tprefer = ends[leg.from] and ends[leg.from].prefer, ends[leg.to] and ends[leg.to].prefer
     end
     -- what a walk ends at, in words: the boat's dock, the zeppelin's tower, the flight master
     for i, leg in ipairs(legs) do

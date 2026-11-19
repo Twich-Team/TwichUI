@@ -9,7 +9,7 @@ local ROOT = ROOT
 local FILES = {
  "libs/LibStub/LibStub.lua","libs/CallbackHandler-1.0/CallbackHandler-1.0.lua","libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua",
  "libs/AceComm-3.0/ChatThrottleLib.lua","libs/AceComm-3.0/AceComm-3.0.lua","libs/LibSerialize/LibSerialize.lua","libs/LibDeflate/LibDeflate.lua",
- "Core.lua","Persist.lua","Profiles.lua","Switches.lua","QuietScreen.lua","SettingsLauncher.lua","LayoutsLauncher.lua","modules/Interact.lua","modules/QuietLogin.lua","modules/Media.lua","modules/AuctionatorSkin.lua","setup/PackFile.lua","setup/Setups.lua","setup/Ellesmere.lua","setup/TwichConfig.lua","setup/Share.lua","setup/Group.lua","setup/CommTest.lua","setup/Restore.lua","setup/Portable.lua","chronicle/Data.lua","chronicle/Filter.lua","chronicle/Recorder.lua","chronicle/Broker.lua",
+ "Core.lua","Persist.lua","Profiles.lua","Switches.lua","QuietScreen.lua","SettingsLauncher.lua","LayoutsLauncher.lua","modules/Interact.lua","modules/QuietLogin.lua","modules/Media.lua","setup/PackFile.lua","setup/Setups.lua","setup/Ellesmere.lua","setup/TwichConfig.lua","setup/Share.lua","setup/Group.lua","setup/CommTest.lua","setup/Restore.lua","setup/Portable.lua","chronicle/Data.lua","chronicle/Filter.lua","chronicle/Recorder.lua","chronicle/Broker.lua",
 }
 NET = {}   -- queued deliveries {toEnv, prefix, text, sender}
 function MakeClient(charName, addons)
@@ -56,6 +56,12 @@ function MakeClient(charName, addons)
   env.geterrorhandler = function() return function(e) print("["..charName.."] ERROR: "..tostring(e)) end end
   -- Short timers run on the next FlushTimers(); longer ones (timeouts, delayed hellos) wait for RunLongTimers(seconds).
   env.C_Timer = {After = function(d, fn) if d <= 1 then table.insert(TIMERS, fn) else table.insert(LONG_TIMERS, {d = d, fn = fn}) end end, NewTicker = function(_, fn) local t = {fn = fn}; function t:Cancel() self.cancelled = true end; TICKERS = TICKERS or {}; table.insert(TICKERS, t); return t end}
+  env.C_Timer.NewTimer = function(delay, fn)
+    local timer = { cancelled = false }
+    function timer:Cancel() self.cancelled = true end
+    env.C_Timer.After(delay, function() if not timer.cancelled then fn() end end)
+    return timer
+  end
   env.UnitGUID = function() return "Player-1-" .. charName end
   env.IsInGroup = function() return GROUP ~= nil and GROUP[charName] ~= nil end
   env.IsInRaid = function() return false end

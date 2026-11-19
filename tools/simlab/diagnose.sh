@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # The delayed-failure diagnostics (docs/simulator-lab.md "Delayed failures"). Runs the simulated clock over a declared
-# window (SIMLAB_WINDOW, default 12 simulated seconds) in five launches and judges each one's whole log. Writes to
+# window (SIMLAB_WINDOW, default 12 simulated seconds) in six launches and judges each one's whole log. Writes to
 # $WOWSIM_LAB/artifacts/diagnose-<time>/.
 #
 #   contract  NO addons    what C_ChatInfo.SendAddonMessage accepts (scenarios/message_contract.lua). Minimal reproduction.
 #   baseline  NO addons    the clock over the window with only the simulator and Blizzard's UI (scenarios/group_timers.lua)
-#   solo      TwichUI      the character leaves the sample party; the hello timer runs out; nothing may be sent
+#   solo      TwichUI      no party and synthetic unguilded membership; nothing may be sent (sharing stays enabled)
+#   guildsolo TwichUI      no party, default guild/sharing; exactly one valid own-position GUILD packet, no party traffic
 #   grouped   TwichUI      the sample party kept on purpose: the clock crosses the hello timer and the send is observed
 #   login     TwichUI      as grouped, then the lab fires PLAYER_ENTERING_WORLD itself (synthetic) to reach the 6 s login hello
 #
@@ -22,7 +23,7 @@ set -euo pipefail
 # shellcheck source=lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 WINDOW="${SIMLAB_WINDOW:-12}"
-RUN="$LAB/artifacts/diagnose-$(date +%Y%m%d-%H%M%S)"
+RUN="${SIMLAB_RUN:-$LAB/artifacts/diagnose-$(date +%Y%m%d-%H%M%S)}"
 mkdir -p "$RUN"
 
 export SIMLAB_ASSETS=0
@@ -35,6 +36,9 @@ fixture() {  # name params scenario
 fixture contract '{}' message_contract
 fixture baseline "{ mode = \"baseline\", window = $WINDOW }" group_timers
 fixture solo "{ mode = \"solo\", window = $WINDOW }" group_timers
+# Cover the entire 5..20 s first-position interval, independent of jitter. The
+# stationary fixture must not create a second position before its heartbeat.
+fixture guildsolo "{ mode = \"guildsolo\", window = math.max($WINDOW, 21) }" group_timers
 fixture grouped "{ mode = \"grouped\", window = $WINDOW }" group_timers
 fixture login "{ mode = \"login\", window = $WINDOW }" group_timers
 
@@ -55,6 +59,7 @@ launch() {  # name addons(0|1): the simulator from a freshly staged root; its ex
 launch contract 0
 launch baseline 0
 launch solo 1
+launch guildsolo 1
 launch grouped 1
 launch login 1
 
@@ -66,5 +71,5 @@ find "$ROOT" -name '*.png' -o -name '*.stderr' -o -name '*.stdout' | grep -q . &
 simlab_disclose
 echo "  - MESSAGING (this command): sends are watched by a pass-through observer that records the call and then makes it. The simulator's accept or refuse is what is reported; nothing is delivered, received or decoded by another client."
 [ "$status" -eq 0 ] || exit "$status"
-python3 -I "$SIMLAB_DIR/diagnose_verdict.py" "$RUN" "$WINDOW" || exit 1
+python3 -B -I "$SIMLAB_DIR/diagnose_verdict.py" "$RUN" "$WINDOW" || exit 1
 [ "$leak" -eq 0 ] || exit 1

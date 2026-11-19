@@ -394,7 +394,7 @@ do
       end
     end
   end
-  Check(n == 206, "206 TwichUI looks (" .. n .. ")")
+  Check(n == 189, "189 TwichUI looks (" .. n .. ")")
   for id in pairs(CAP.twichui.places) do Check(TA.PLACES[id], "TwichUI place " .. id .. " is registered") end
   -- the data file is plain data: no functions, no code; it reads back as what the capture tool wrote
   local f = assert(io.open(REPO .. "TwichUI_Layouts/ClassicData.lua", "rb"))
@@ -720,7 +720,7 @@ do
     return res.adapters.twichui
   end
   local tk, tc = compose(CMP), compose(VAR)
-  Check(#tk.list == #tc.list and #tk.list > 200 and LY.Same(tk.units, tc.units), "TwichUI's looks and places are the same for both layouts (" .. #tk.list .. " units)")
+  Check(#tk.list == #tc.list and #tk.list > 190 and LY.Same(tk.units, tc.units), "TwichUI's looks and places are the same for both layouts (" .. #tk.list .. " units)")
 end
 
 ---------------------------------------------------------------------------

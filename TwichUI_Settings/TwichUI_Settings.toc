@@ -66,7 +66,6 @@ pages\WorkshopWorth.lua
 pages\Workshop.lua
 pages\Skins.lua
 pages\RestedXP.lua
-pages\SpeakStone.lua
 pages\TargetArt.lua
 pages\Sharing.lua
 pages\Profiles.lua
@@ -82,6 +81,7 @@ Design.lua
 Companion.lua
 Previews.lua
 previews\QoL.lua
+previews\ReturnTheFavor.lua
 Cards.lua
 Home.lua
 Window.lua

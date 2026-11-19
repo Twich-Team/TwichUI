@@ -59,7 +59,54 @@ One short entry per feature that has a continuing handoff. Details live in the f
 - The revision reuses existing artwork and game icons. Its panel faces and optional header switch are reusable through opt-in settings components. Reminders is the first adopter.
 - The component pass covered all eighteen existing simulator poses plus item/artwork-only alternatives, with 65–68 handler/state checks per pose and follow-up clean/dirty footer captures. Full unit suite: 187/0. Latest smoke passed 56/56 page construction without captured errors. The [revision record](docs/reminders-revision/implementation.md) retains screenshot anomalies, exact commands, component comparisons, remaining visual differences and client checks; visual acceptance is still pending.
 
-## Workshop (TwichUI_Workshop) - milestones 1 to 3 built, uncommitted on feature/workbench; the window opens and works in game (player-confirmed); milestone 2 reported complete by the player (not itemized); milestone 3 not tried in game
+## Workshop Settings 2.0 — feature/workshop (2026-11-14)
+
+Four local settings tabs, a two-column tooltip draft editor, real economic/cash and
+compact preferences, and optional safe login loading are implemented. Existing v1
+layouts and account preferences are retained. Manual AH scanning and disabled
+automatic craft completion remain unchanged. Checkpoints: `f0971531`, `9659435c`,
+`04a7fe12`; final polish and all four checkpoints are complete. Full regression:
+224 files/modules, 140 simulator launches, 18,047 structured checks passed. The record is in
+[docs/workshop/settings-v2.md](docs/workshop/settings-v2.md). Real-client mouse,
+font, combat/reload and large-database startup acceptance remain pending. Stop
+before A8; perform those acceptance checks before requesting the next mockup.
+
+## Workshop A8 Item Advisor — complete on feature/workshop (2026-11-14)
+
+The separately approved A8 campaign adds the fifth left-sidebar page, conservative
+competition-based advice, Normal tooltip recommendations through the existing
+Designer field, known-recipe/plan integration, tracking, source navigation and
+bounded discovery/search. Missing disenchant data no longer blocks supported
+Vendor/Auction advice. The expected disenchant evaluator is tested on synthetic
+verified snapshots; production outcomes remain unknown until a verified,
+distributable Forever dataset exists. No probabilities or fees were invented.
+
+Engine/page/integration checkpoints: `aac4b4bc`, `3c08abdd`, `ca4df5ca` (pushed).
+Final comprehensive verification passed: **226 files/modules, 677 Lua syntax
+checks, 147 simulator launches and 21,930 structured checks**, exit 0. Market
+mutations 183/183; crafting mutations 112/112. Screenshots personally reviewed;
+real-client input, fonts, reload/profile persistence and timing remain pending.
+[Implementation, evidence and limitations](docs/workshop/item-advisor.md).
+This supersedes the pre-A8 tooltip recommendation policy described below.
+**Stop at A8:** no Auction House replacement, automated posting or another
+mockup-dependent milestone was begun.
+
+## Workshop A8.1 Item Advisor refinement — complete on feature/workshop (2026-11-14)
+
+Native source/category dropdowns, saved bags-first discovery, stable viewport/
+selection across background metadata refresh and page return, and a separate
+qualified `Possible Auction` policy are implemented. Supported posting rules,
+Tooltip Designer customization, ownership/plan protection and verified-only
+Disenchant estimates remain intact. Fast checks, Advisor/Settings feature checks
+and 189 market mutations have passed. Comprehensive verification passed 226
+files/modules, 677 Lua syntax checks and all default simulator suites (153
+launches / 25,368 structured checks). A final missing-metadata guard was added
+after that run and verified with fast Advisor plus the complete Advisor feature
+selection (44 files/modules, 12 launches / 6,338 checks). Structural screenshots
+were reviewed; real-client acceptance remains outstanding. Evidence is tracked in [item-advisor.md](docs/workshop/item-advisor.md).
+Stop after A8.1; another feature milestone requires a separate request.
+
+## Workshop (TwichUI_Workshop) — feature/workshop; foundation and market milestones built, real-client verification incomplete
 
 Reference: [docs/workshop.md](docs/workshop.md) (files, saved data, the exact pricing and shopping rules, scan facts and unknowns, client facts, licensing limits, evidence, checks).
 

@@ -16,12 +16,10 @@ R.GREEN = "|cff8FB35A"
 
 local DEFAULT_MODULES = {
     media = true,            -- fonts and sounds for LibSharedMedia
-    auctionatorSkin = true,  -- EllesmereUI look for Auctionator
     whatsTrainingSkin = true, -- EllesmereUI look for WhatsTraining's window
     foreverDungeonJournalSkin = true, -- EllesmereUI look for Forever Dungeon Journal
     attuneSkin = true,       -- EllesmereUI look for Attune
     restedxpSkin = false,    -- TwichUI's look for the RestedXP guide window (needs RestedXP; opt-in; not through EllesmereUI)
-    speakstoneSkin = false,  -- TwichUI's look for SpeakStone's speech frame (needs SpeakStone; opt-in; not through EllesmereUI)
     setupSharing = true,     -- capture / send / receive / apply setups
     acceptSetups = true,     -- let friends offer setups (always asks first)
     quietLogin = true,       -- hide addon welcome messages at login/reload
@@ -66,6 +64,7 @@ local DEFAULT_MODULES = {
     mageSellDrink = true,    -- ... ordinary drink (needs the first one)
     mageSellDryRun = true,   -- ... only say what would be sold, sell nothing (on until turned off)
     auctionPosting = true,   -- "Sell from Bags" tab in the Auction House (searches only when you pick an item)
+    workshopAutoScan = false, -- Workshop: kept for a later decision; prices are updated only by the player's own Scan prices click (WorkshopAuto.POLICY = "manual"), whatever this says
     mailGoldSummary = true,  -- one chat line when you close the mailbox: the money you took from mail during that visit (nothing is saved)
     restock = false,         -- Vendor restocking: keep chosen items at a target in your bags, bought from merchants (opt-in, explicit true only; asks first unless you confirm otherwise)
     magicInventory = false,  -- Magic Inventory: rules that prepare items to mail or deposit; moves them only when you review and click at a mailbox, bank or guild bank (opt-in, explicit true only; inventory/)
@@ -87,6 +86,9 @@ local DEFAULT_MODULES = {
     qolInvites = false,      -- ... accept a group invitation from the friends and/or guild members you choose
     qolDeclineInvites = false, -- ... decline group invitations (except from the friends and/or guild members you choose)
     qolQuickKeybind = false, -- ... a Quick Keybind button in the Game Menu
+    qolLootSparkles = false, -- ... keep the game's quest item sparkles on, including after graphics preset changes
+    qolHerbSparkles = false, -- ... sparkle on the nearby herb selected by the game's interaction targeting
+    qolOreSparkles = false,  -- ... sparkle on the nearby ore selected by the game's interaction targeting
     qolHideErrors = false,   -- ... hide the red error messages (and their voice and sound); see qol/ErrorMessages.lua
     qolHideErrorsKeep = true, -- ... but still show a full bag, a full quest log and a few others (needs the one above)
     qolHideErrorSpeech = false, -- ... silence the spoken part of error messages (the game's Enable Error Speech setting)
@@ -506,14 +508,20 @@ COMMANDS = {
     { name = "layout", usage = "layout", desc = "the interface layout setup: review, apply with a way back, check, restore (listed on the Home page and Troubleshooting; loads only when used; /tui layout help lists the developer commands)", hidden = true, fn = function(arg)
         if R.LayoutsLauncher then R.LayoutsLauncher.Command(arg) else Unavailable("Layout setup") end
     end },
+    { name = "ahpreview", usage = "ahpreview", desc = "open the standalone Auction House preview (replacement and transactions off)", hidden = true, fn = function()
+        if R.WorkshopLauncher then R.WorkshopLauncher.AuctionPreview() else Unavailable("Auction House preview") end
+    end },
+    { name = "ahdebug", usage = "ahdebug on|off|status", desc = "experimental Auction House replacement", fn = function(arg)
+        if R.AuctionHost then R.AuctionHost.DebugCommand(arg) else Unavailable("Auction House") end
+    end },
+    { name = "ahproof", usage = "ahproof [on|off|status]", desc = "AH-1a lifecycle diagnostic (default off, 30 seconds, no replacement pages)", hidden = true, fn = function(arg)
+        if R.AuctionHost then R.AuctionHost.Command(arg) else Unavailable("AH-1a diagnostic") end
+    end },
     { name = "workshop", usage = "workshop", desc = "the Workshop: your professions' recipes, a craft queue and the materials still needed (listed on the Workshop page and the TwichUI menu; loads only when opened)", hidden = true, fn = function(arg)
         if R.WorkshopLauncher then R.WorkshopLauncher.Command(arg) else Unavailable("The Workshop") end
     end },
     { name = "hidden", usage = "hidden", desc = "welcome messages hidden at login", fn = function()
         if R.Quiet then R.Quiet:ShowHidden() else Unavailable("Quiet login") end
-    end },
-    { name = "skin", usage = "skin [apply]", desc = "Auctionator skin status; apply re-runs it", fn = function(arg)
-        if R.SkinCommand then R.SkinCommand(arg) else Unavailable("Auctionator skin") end
     end },
     { name = "commtest", usage = "commtest party|guild|direct <name>", desc = "test addon messages with another TwichUI user", fn = function(arg)
         if R.CommTest then R.CommTest.Run(arg) else Unavailable("Comm test") end

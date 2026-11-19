@@ -18,7 +18,7 @@ set -euo pipefail
 HERE="$SIMLAB_DIR"
 PAGE="${SIMLAB_PAGE:-qol}"
 TITLE="${SIMLAB_TITLE:-Quality of life}"
-RUN="$LAB/artifacts/smoke-$(date +%Y%m%d-%H%M%S)"
+RUN="${SIMLAB_RUN:-$LAB/artifacts/smoke-$(date +%Y%m%d-%H%M%S)}"
 mkdir -p "$RUN"
 
 simlab_stage
@@ -42,5 +42,5 @@ echo "artifacts: $RUN"
 simlab_disclose
 [ "$status" -eq 0 ] || exit "$status"
 [ "$pages" -eq 0 ] || exit "$pages"
-python3 -I "$HERE/verdict.py" "$RUN" "$PAGE" "$TITLE"
+python3 -B -I "$HERE/verdict.py" "$RUN" "$PAGE" "$TITLE"
 [ "$SIMLAB_ASSETS" = "1" ] || echo "note: no game assets, so this PASS covers logic only; the screenshot is not a visual result"

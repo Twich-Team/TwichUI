@@ -1,6 +1,6 @@
 -- TwichUI: Navigation, the direction arrow
--- An arrow that points where to walk next: at the route's next corner (Nav.Target), not at the destination through
--- whatever is in between. Turned by the bearing from you to that corner (in continent yards, Nav.lua's checked frame)
+-- An arrow that points where to walk next: ahead along the route (Nav.Target), stopping at bends, not at the destination through
+-- whatever is in between. Turned by the bearing from you to that target (in continent yards, Nav.lua's checked frame)
 -- less the way you face (GetPlayerFacing, counter-clockwise from north, as the bearing), so up on the arrow is ahead.
 --   No route but on the destination's continent: the arrow points straight at the destination, drawn in stone grey and
 --     labelled "Direct bearing, not a route". Arrived, calculating, no position or no facing: no arrow, a word instead.
@@ -20,6 +20,7 @@ R.NavArrow = NA
 local TEXTURE = R.PATH .. [[media\textures\nav-arrow-bronze]]   -- 128 x 128, pointing up
 local SIZE = 40
 local EVERY = 1 / 30
+local TURN_TIME = 0.12       -- seconds: ease route-bearing changes, while facing stays immediate
 local STONE = { 0.62, 0.60, 0.56 }
 
 local function NewArrow(parent, name)
@@ -97,17 +98,35 @@ local WORDS = { calculating = "Calculating…", recalculating = nil, loading = "
 local function Tick(elapsed)
     wait = wait + elapsed
     if wait < EVERY then return end
+    local dt = wait
     wait = 0
     if not (active and active:IsShown()) then return end
     local snap = NV.Snapshot()
+    if active.destination ~= snap.dest or active.route ~= snap.route then
+        active.bearing = nil
+        active.destination, active.route = snap.dest, snap.route
+    end
     local tx, ty, kind = NV.Target()
     local ok, _, px, py = NV.Position()
     if snap.state == "arrived" then return Show(active, nil, nil, nil, "Arrived") end
-    if not (tx and ok) then return Show(active, nil, nil, nil, WORDS[snap.state] or "No route") end
+    if not (tx and ok) then active.bearing = nil return Show(active, nil, nil, nil, WORDS[snap.state] or "No route") end
     local facing = NV.Readable(GetPlayerFacing())
-    if not facing then return Show(active, nil, nil, nil, "Facing unavailable") end
-    local d = math.sqrt((tx - px) ^ 2 + (ty - py) ^ 2)
-    Show(active, NV.Bearing(px, py, tx, ty) - facing, kind, math.floor(d + 0.5))
+    if not facing then active.bearing = nil return Show(active, nil, nil, nil, "Facing unavailable") end
+    -- Steering looks ahead; the label still measures progress to the next route waypoint.
+    local d = kind == "route" and snap.toNext or math.sqrt((tx - px) ^ 2 + (ty - py) ^ 2)
+    local bearing = NV.Bearing(px, py, tx, ty)
+    if kind == "route" and active.bearing then
+        local turn = (bearing - active.bearing + math.pi) % (2 * math.pi) - math.pi
+        bearing = active.bearing + turn * (1 - math.exp(-dt / TURN_TIME))
+    end
+    active.bearing = kind == "route" and bearing or nil
+    Show(active, bearing - facing, kind, math.floor(d + 0.5))
+end
+
+local function Hide(h)
+    if not h then return end
+    h:Hide()
+    h.bearing, h.route, h.destination = nil, nil, nil
 end
 
 local function SetTicking(on)
@@ -156,15 +175,15 @@ function NA.Refresh(frameObj)
     frameObj = frameObj or (R.NavFrame and R.NavFrame.Main())
     local attached = NP.Get("arrowAttached") and NP.Get("frame") and frameObj ~= nil
     if not Wanted() then
-        if own then own:Hide() end
-        if inFrame then inFrame:Hide() end
+        Hide(own)
+        Hide(inFrame)
         if frameObj then frameObj.arrowSlot = nil end
         active = nil
         SetTicking(false)
         return
     end
     if attached then
-        if own then own:Hide() end
+        Hide(own)
         if not inFrame then inFrame = NewArrow(frameObj.f, nil) inFrame:SetScale(0.8) end
         Style(inFrame)
         frameObj.arrowSlot = inFrame
@@ -172,7 +191,7 @@ function NA.Refresh(frameObj)
         frameObj.dirty = true
         active = inFrame
     else
-        if inFrame then inFrame:Hide() end
+        Hide(inFrame)
         if frameObj then frameObj.arrowSlot = nil; frameObj.dirty = true end
         MakeOwn()
         own:SetScale(NP.Get("arrowScale") / 100)

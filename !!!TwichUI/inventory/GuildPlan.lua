@@ -407,7 +407,7 @@ local function BuildGuildWithdraw(opts)
         end
     end
     table.sort(source, function(a, b) if a.tab ~= b.tab then return a.tab < b.tab end return a.slot < b.slot end)
-    local w = MI.BuildWithdraw({ kind = "guild", source = source, carried = opts.stacks, rules = opts.rules, never = opts.never, resolve = opts.resolve,
+    local w = MI.BuildWithdraw({ kind = "guild", source = source, carried = opts.stacks, rules = opts.rules, never = opts.never, resolve = opts.resolve, split = opts.split,
         problem = function(rule)
             local tp = tabProblem[rule.id]
             if tp then return tp.code, tp.why end
@@ -422,7 +422,7 @@ local function BuildGuildWithdraw(opts)
             local view = bank.tabs[tab]
             local left = view and view.remaining
             local o = { kind = "withdraw", id = e.id, count = t.count, from = { kind = "bank", tab = tab, slot = t.stack.slot, link = t.stack.link },
-                to = { kind = "bag" }, rule = e.rule, ruleId = e.ruleId, needs = { "withdraw:" .. tab }, link = t.stack.link, target = e.target, status = "ok" }
+                to = { kind = "bag" }, rule = e.rule, ruleId = e.ruleId, needs = t.partial and { "split", "withdraw:" .. tab } or { "withdraw:" .. tab }, link = t.stack.link, target = e.target, split = t.partial, status = "ok" }
             taken[tab] = (taken[tab] or 0) + 1
             if type(left) == "number" and left >= 0 and taken[tab] > left then
                 o.status, o.code, o.why = "blocked", "limit", Text("limit", tab, left)

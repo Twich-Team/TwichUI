@@ -12,6 +12,14 @@
 
 # Names, limits and small checks (no game calls, no frames); it creates R.Workshop
 Data.lua
+# Explicit external source; active Workshop recognizes the small delivered header only.
+BridgeCodec.lua
+BridgeSchema.lua
+BridgeValidate.lua
+SummarySchema.lua
+Summary.lua
+Bridge.lua
+ServerMarket.lua
 # The combined materials and what is still needed (pure)
 Materials.lua
 # The saved queue of the current character (TwichUIDB.workshop; the market data has its own saved variables, TwichUIWorkshopDB)
@@ -26,6 +34,10 @@ Storage.lua
 Stock.lua
 # The price history of one item: a compact, bounded string per item (pure)
 History.lua
+# The price distribution of one item: quartiles, the Recent Price, the saved text and its checked reading (pure)
+Dist.lua
+# The version-2 history of one item: the 48-hour ring, 30 daily points, weekly and two-week buckets, the append path (pure)
+History2.lua
 # Auction prices: collecting a scan, the saved markets (TwichUIWorkshopDB), what one craft costs and earns (no game calls, no frames)
 Prices.lua
 # The Opportunities list: rows, filter, sort, the basis text (pure)
@@ -34,6 +46,10 @@ Opportunities.lua
 Vendor.lua
 # The shopping list: where to get each missing material, or whether to make it (pure)
 Shopping.lua
+# The multilevel crafting planner: buy or make every material of the whole chain, combined demand, owned stock once (pure; P1, no window uses it yet)
+CraftPlanner.lua
+# The crafting strategy: words for the planner's plan, its cooperative jobs and the adapter to the shopping rows (P2; pure, plus a frame timer)
+Strategy.lua
 # "What's it worth?": vendor, auction and disenchant for one item (pure; disenchant has no outcome data, so it is only ever "no data")
 Worth.lua
 # The "What's it worth?" lines the player chose and their order: the saved layout and the one builder the tooltip and the designer share (pure)
@@ -42,8 +58,21 @@ WorthLayout.lua
 Scan.lua
 # The market data API: current prices, history, quotes, markets (one source for every feature; reads saved data only)
 Market.lua
+Valuation.lua
+# Market figures for display: one cached read and the words of each (A7; pure)
+MarketFacts.lua
+# A8: competition-based selling suggestions and deterministic item advice
+Sell.lua
+Disenchant.lua
+Advisor.lua
+# Opening the auction house: when a price update is due, and what to do about it (A6; pure policy plus one entry point)
+Auto.lua
 # What the window shows and does, without any frame
 Session.lua
+# A8: item discovery, preferences and the adapter to existing planning services
+AdvisorData.lua
+# Progress on the plan: the player's "Crafted one"; the game's evidence is off until verified (P2.1)
+Progress.lua
 # Remembers the player's own professions' recipes while the window is closed (after load only; reads, never opens anything)
 Watch.lua
 # Remembers the bank and the guild bank while they are open, window hidden or not (after load only; reads, never moves anything)
@@ -54,10 +83,35 @@ WorthTip.lua
 AuctionButton.lua
 # The window's presentation helpers: the settings window's crafted look through the core's CraftLook.lua (TwichUI_Settings is never loaded)
 Style.lua
+# Shared interactive market charts for Workshop and Auction House pages
+auction/AdvancedChart.lua
 # The pages, in the order the page list shows them (each builds once and draws what Session.lua says)
 ViewOverview.lua
 ViewOpportunities.lua
 ViewCrafting.lua
 ViewShopping.lua
+ViewAdvisor.lua
+# The full strategy view and the confirmation before an optimized plan is added to the queue (P2)
+ViewStrategy.lua
+# The compact companion: Travel and Craft, a small panel in the window's place (P2.1)
+Compact.lua
+# Progress notices through TwichUI's notification coordinator (P2.1)
+Notice.lua
+# Standalone AH presentation preview; no native takeover or transaction actions
+auction/Window.lua
+auction/Components.lua
+auction/ReadRequests.lua
+auction/Categories.lua
+auction/BrowseData.lua
+auction/ViewBrowse.lua
+auction/MarketData.lua
+auction/ShoppingData.lua
+auction/ViewShopping.lua
+auction/SellData.lua
+auction/Actions.lua
+auction/Debug.lua
+auction/ViewSell.lua
+auction/ViewOwned.lua
+auction/ViewMarket.lua
 # The window: the shell, the page list and the events (last: it tells TwichUI the addon is ready)
 Window.lua

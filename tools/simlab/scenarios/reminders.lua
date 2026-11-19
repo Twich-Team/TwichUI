@@ -41,6 +41,24 @@ Lab.Step("open and populate", function()
     Lab.Check("construct", "preview visible", true, PV.Shown())
     Lab.Check("state", "disabled reminder preserved", false, RM.Get(id).enabled)
 end)
+Lab.Step("reminder share destination picker", function()
+    local share = R.ReminderShareUI
+    share.Ask(id, function() end)
+    local picker = share.picker
+    Lab.Check("construct", "share picker uses the shared framed shell", true, picker.shell ~= nil and picker:IsShown())
+    Lab.Check("construct", "player, group and guild actions are visible", true,
+        picker.player:IsShown() and picker.send:IsShown() and picker.group:IsShown() and picker.guild:IsShown())
+    picker.player:SetText("")
+    picker.send:Click()
+    Lab.Check("interact", "invalid player leaves a readable refusal in the picker", true,
+        picker:IsShown() and picker.status:GetText():find("name", 1, true) ~= nil)
+    picker:Hide()
+    Lab.Check("state", "closing releases the selected reminder and callback", true, picker.id == nil and picker.say == nil)
+    share.Ask(id, function() end)
+    Lab.Check("construct", "reopening reuses the picker", picker, share.picker)
+    picker:Hide()
+    Lab.Check("state", "choosing a destination did not enable the reminder", false, RM.Get(id).enabled)
+end)
 Lab.Step("navigation and handoffs", function()
     local size = Ed.sections[1].size
     size.slider:SetValue(80)
@@ -273,19 +291,25 @@ Lab.Step("polish transactions and header ownership", function()
     R.SettingsWidgets.CloseMenu()
     P.Refresh(); Lab.Settle(.1)
     local row = P.Parts().rows[1]
+    local function ContextAction(value)
+        for _, item in ipairs(TwichUISettingsMenu.rows) do
+            if item:IsShown() and item.choice and item.choice.value == value then item:Click(); return end
+        end
+        error("missing reminder context action: " .. value)
+    end
     row:GetScript("OnClick")(row, "RightButton")
-    TwichUISettingsMenu.rows[1]:Click(); Lab.Settle(.1)
+    ContextAction("copy"); Lab.Settle(.1)
     local copy = P.Selected()
     Lab.Check("state", "context Duplicate selects a unique disabled copy", true, copy ~= id and not RM.Get(copy).enabled)
     local copyRow
     for _, item in ipairs(P.Parts().rows) do if item.id == copy then copyRow = item end end
     copyRow:GetScript("OnClick")(copyRow, "RightButton")
-    TwichUISettingsMenu.rows[2]:Click()
+    ContextAction("delete")
     StaticPopupDialogs.TWICHUI_REMINDER_DELETE.OnCancel()
     StaticPopup_Hide("TWICHUI_REMINDER_DELETE")
     Lab.Check("state", "context Delete cancellation keeps its source", true, RM.Get(copy) ~= nil)
     copyRow:GetScript("OnClick")(copyRow, "RightButton")
-    TwichUISettingsMenu.rows[2]:Click()
+    ContextAction("delete")
     StaticPopupDialogs.TWICHUI_REMINDER_DELETE.OnAccept()
     StaticPopup_Hide("TWICHUI_REMINDER_DELETE"); Lab.Settle(.1)
     Lab.Check("state", "confirmed context Delete removes only the copy", true, not RM.Get(copy) and RM.Get(id) ~= nil)

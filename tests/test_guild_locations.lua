@@ -166,14 +166,19 @@ end
 Section("1 policy wording")
 do
   local function Read(p) local f = assert(io.open(REPO .. p)); local s = f:read("*a"); f:close(); return s end
+  local shared = Read("docs/engineering-rules.md")
   local claude, rules, dev = Read("CLAUDE.md"), Read(".clinerules"), Read("docs/dev-rules.md")
-  Check(claude:find("Never broadcast Chronicle feedback or Chronicle data", 1, true), "CLAUDE.md keeps the Chronicle prohibition")
-  Check(claude:find("Guild Locations (`docs/guild-locations.md`) may default on and send the local player's current map position over the GUILD addon channel only", 1, true), "CLAUDE.md names the one exception")
-  Check(claude:find("party pins, map pings, NPC lists", 1, true) and claude:find("not affected", 1, true), "party features are not contradicted")
-  Check(not claude:find("Never broadcast Chronicle feedback or location", 1, true), "the blanket sentence is gone")
+  Check(shared:find("Never broadcast Chronicle feedback or Chronicle data", 1, true), "shared rules keep the Chronicle prohibition")
+  Check(shared:find("Guild Locations (`docs/guild-locations.md`) may default on and send the local player's current map position over the GUILD addon channel only", 1, true), "shared rules name the one exception")
+  Check(shared:find("party pins, map pings, NPC lists", 1, true) and shared:find("not affected", 1, true), "voluntary sharing features are not contradicted")
+  Check(not shared:find("Never broadcast Chronicle feedback or location", 1, true), "the blanket sentence is gone")
+  Check(shared:find("never chat, with Sharing/Invisible/Off controls, bounded expiry, no history and no relaying, and never with Chronicle data", 1, true), "the exception retains its privacy boundaries")
   Check(dev:find("sole exception is Guild Locations", 1, true) and dev:find("Chronicle prohibition below is unchanged", 1, true), "dev-rules names it")
   Check(dev:find("Never broadcast Chronicle feedback to Party, Guild or public chat", 1, true), "the Chronicle rule is untouched")
-  Check(rules:find("The only exception is Guild Locations", 1, true) and rules:find("keep their own rules", 1, true), ".clinerules agrees")
+  Check(dev:find("GUILD addon channel only, Sharing/Invisible/Off controls, bounded expiry, no history, no relaying", 1, true), "feature rules retain the same privacy boundaries")
+  Check(dev:find("Party pins and map pings share places the player chooses, not live position, and keep their own rules", 1, true), "feature rules preserve separate voluntary sharing")
+  Check(claude:find("docs/engineering-rules.md", 1, true) and claude:find("docs/dev-rules.md", 1, true), "Claude adapter points to shared and feature policy")
+  Check(rules:find("docs/engineering-rules.md", 1, true) and rules:find("docs/dev-rules.md", 1, true), "Cline adapter points to shared and feature policy")
 end
 
 ---------------------------------------------------------------------------

@@ -21,14 +21,22 @@ _simlab_within() { [ "$1" = "$2" ] || case "$1" in "$2"/*) return 0 ;; *) return
 # its resolved path. "use" (every runner) needs the marker. "adopt" (setup.sh only) also accepts a folder that does not
 # exist, is empty, or holds nothing but the folders setup.sh makes. Nothing is created or deleted here.
 simlab_check_lab() {
-  local mode="${1:-use}" canon wow home entry
+  local mode="${1:-use}" canon wow home entry local_workspace=0
   wow="$(realpath -m -- "${SIMLAB_WOW:-/mnt/c/Program Files (x86)/World of Warcraft}")" || return 2
   home=""
   [ -z "${HOME:-}" ] || home="$(realpath -m -- "$HOME")" || return 2
   [ -n "${LAB:-}" ] || { echo "simlab: the lab path is empty" >&2; return 2; }
   case "$LAB" in /*) ;; *) echo "simlab: the lab path must be absolute: $LAB" >&2; return 2 ;; esac
   canon="$(realpath -m -- "$LAB")" || return 2
-  if [ "$canon" = "/" ] || [ "$canon" = "$home" ] || _simlab_within "$canon" "$REPO" || _simlab_within "$REPO" "$canon" \
+  # Only the dedicated ignored workspace is allowed inside this repository.
+  # setup/adopt still refuses every in-repository path, including this one.
+  if [ "${SIMLAB_LOCAL:-0}" = "1" ] && [ "$mode" = use ] \
+     && [ "$LAB" = "$canon" ]; then
+    case "$canon" in
+      "$REPO/test-output/simlab"|"$REPO/test-output/simlab-workers/worker-1"|"$REPO/test-output/simlab-workers/worker-2") local_workspace=1 ;;
+    esac
+  fi
+  if [ "$canon" = "/" ] || [ "$canon" = "$home" ] || { [ "$local_workspace" = 0 ] && _simlab_within "$canon" "$REPO"; } || _simlab_within "$REPO" "$canon" \
      || { [ -z "$home" ] || _simlab_within "$home" "$canon"; } || _simlab_within "$canon" "$wow" || _simlab_within "$wow" "$canon"; then
     echo "simlab: refusing $canon (filesystem root, home, the repository or the game install, or a folder holding one)" >&2
     return 2
@@ -69,6 +77,12 @@ simlab_stage() {
     echo "simlab: $LAB/wtf holds files, so a run would not start as a new install; empty it" >&2
     return 2
   fi
+  # The simulator sees this root read-only. Reuse it only within this shell
+  # invocation, with identical addon/shim selection; a new script stages anew.
+  local stage_key="$ROOT|${SIMLAB_EXTRA:-}|${SIMLAB_SHIM:-1}"
+  if [ "${SIMLAB_STAGE_ONCE:-0}" = 1 ] && [ "${_SIMLAB_STAGED_KEY:-}" = "$stage_key" ] && [ -d "$ROOT" ]; then
+    return 0
+  fi
   # Only what a page needs: the core and its load-on-demand settings window.
   local copy=("$REPO/!!!TwichUI" "$REPO/TwichUI_Settings")
   # SIMLAB_EXTRA: more load-on-demand addon folders of the repository to stage (names, space separated; workshop.sh sets
@@ -87,6 +101,7 @@ simlab_stage() {
   else
     [ ! -e "$ROOT/!!!!SimLabShims" ] || { echo "simlab: the shim is in the root though SIMLAB_SHIM=0" >&2; return 2; }
   fi
+  _SIMLAB_STAGED_KEY="$stage_key"
 }
 
 simlab_disclose() {

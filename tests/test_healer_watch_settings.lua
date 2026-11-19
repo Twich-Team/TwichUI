@@ -223,6 +223,28 @@ f.diagToggle.scripts.OnClick(f.diagToggle)
 Flush()
 Check(f.diagText.shown and f.diagText.text:find("Selection:", 1, true) and f.diagText.text:find("Panel:", 1, true), "open: the live diagnostics")
 
+-- The window gives its hosted page a new width when resized. Check both directions,
+-- including a width assigned while hidden, without rebuilding widgets.
+local resizedCount = made
+for _, width in ipairs({ 980, 644 }) do
+  f:SetWidth(width)
+  f:Fire("OnSizeChanged", width, f:GetHeight())
+  Flush()
+  Check(f.preview.w == width and f.phrases.w == width and f.diag.w == width, "all Try it panels fill width " .. width)
+  Check(f.stage.w == width - 28 and rows[1].w == width - 28, "sample and phrase rows follow width " .. width)
+  Check(f.phrasesNote.w == width - 28 and f.diagText.w == width - 28, "wrapped text follows width " .. width)
+  Check(f.move.points[1][4] + f.move.w == width - 14 and f.diagToggle.points[1][4] + f.diagToggle.w == width - 14,
+    "right-side controls follow the panel edge at width " .. width)
+  Check(f.testResult.points[1][4] + f.testResult.w == width - 14, "phrase test result stays inside its panel at width " .. width)
+end
+f:Hide()
+f:SetWidth(900)
+f:Fire("OnSizeChanged", 900, f:GetHeight())
+f:Show()
+Flush()
+Check(f.preview.w == 900 and f.phrases.w == 900 and f.diag.w == 900, "reopening uses the width assigned while hidden")
+Check(made == resizedCount, "resizing reuses existing widgets")
+
 local count = made
 for _ = 1, 5 do P.Refresh(); Flush() end
 Check(made == count, "redrawing makes nothing new: " .. (made - count))

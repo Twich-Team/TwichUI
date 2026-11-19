@@ -79,8 +79,14 @@ do
   Rule(MI, { name = "Keep 40 Peacebloom", dest = dest, cats = { "7:9" }, flow = "withdraw", keep = 40 })
   S.Open(3)
   local plan = MI.CurrentGuildPlan("withdraw")
-  Check(#plan.ops == 0, "a stack of 20 would make 50, and the 5 is in another tab: nothing")
-  Check(plan.untouched[1] and plan.untouched[1].text:find("go over 40"), "it says why: " .. tostring(plan.untouched[1] and plan.untouched[1].text))
+  Check(#plan.ops == 1 and plan.ops[1].count == 10 and plan.ops[1].split, "split only the missing 10 from the correct tab")
+  local rv = MI.GuildRun.Review("withdraw")
+  Check(rv.ok and rv.splits == 1, "partial withdrawal appears in the review")
+  Check(MI.GuildRun.Start(rv), "start the reviewed partial withdrawal")
+  S.Pump()
+  Check(MI.GuildRun.Last().outcome == "completed" and Carried(c, 2447) == 40 and S.TabCount(3, 2447) == 10,
+    "partial withdrawal confirmed, with 10 remaining in its tab")
+  Check(S.TabCount(2, 2447) == 5, "the other tab was untouched")
   c.ITEMS[2447].maxStack = 20
 end
 do

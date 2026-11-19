@@ -741,6 +741,35 @@ do
   assert(okLoad and asked == 1 and loadOp and loadOp.calls == 1, "loading the navigation data runs inside a nav.load scope")
 end
 
+-- The Auction House preset must fit the existing 40-gauge budget even with
+-- other core feature gauges, without displacing legacy core/settings captures.
+do
+  local ac = boot("AuctionGauges")
+  local ar = ac.TwichUI
+  for i = 1, 20 do ar.Perf.Gauge("fixture.native." .. i, { read = function() return 0 end }) end
+  local values = { stateCode=2, pending=1, activations=3, failed=4, restoreFailed=5, switches=6,
+    openMS=7, loadMS=8, firstLoadMS=9, activateMS=10, restoreMS=11, switchMS=12 }
+  ar.AuctionHost = { Snapshot = function() return values end }
+  ar.Workshop = { AuctionUI = { Snapshot = function() return { pages=5,events=10,rows=4,jobs=0,timers=0,subscriptions=1,reads=0 } end } }
+  assert(ar.DiagnosticsLauncher.Load())
+  local kit = ar.DiagnosticsKit
+  local preset
+  for _, p in ipairs(kit.PRESETS) do if p.key == "auction" then preset = p end end
+  assert(preset and preset.gauges[1] == "auction")
+  local gauges, ids = kit.GaugeList(preset.gauges), {}
+  for _, g in ipairs(gauges) do ids[g.id] = g.read() end
+  assert(#gauges == 39, "20 existing custom gauges plus 19 scoped AH lifecycle/action gauges fit the unchanged cap")
+  assert(ids["auction.hostState"] == 2 and ids["auction.hostPending"] == 1)
+  assert(ids["auction.host_failed"] == 4 and ids["auction.host_restoreFailed"] == 5)
+  assert(ids["auction.host_firstLoadMS"] == 9 and ids["auction.host_switchMS"] == 12)
+  assert(ids["auction.action_pending"] == 0 and ids["auction.action_listeners"] == 0 and ids["auction.action_timers"] == 0, "all action cleanup gauges fit without truncation")
+  assert(kit.Op("auction.actionReview").file == "TwichUI_Workshop/auction/Actions.lua")
+  assert(ids["auction.lifecycle_rows"] == 4 and ids["auction.lifecycle_events"] == 10 and ids["auction.lifecycle_jobs"] == 0)
+  for _, g in ipairs(kit.GaugeList({"core", "settings"})) do
+    assert(g.group ~= "auction", "scoped AH gauges never crowd legacy core/settings selections")
+  end
+end
+
 assert(#c.HANDLED == 0, "no error reached the game's handler: " .. tostring(c.HANDLED[1]))
 assert(#armed.HANDLED == 0, "none in the start-up capture either: " .. tostring(armed.HANDLED[1]))
 print("PERF ENGINE TEST PASSED")

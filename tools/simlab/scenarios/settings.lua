@@ -7,12 +7,12 @@ if key == "skins" and params.integration then
     C_AddOns.LoadAddOn("TwichUI_Settings")
     local kit, state = R.SettingsKit, params.integration
     local originalState, originalLoaded = kit.AddonState, kit.Loaded
-    local targets = { Attune = true, Auctionator = true, ForeverDungeonJournal = true, WhatsTraining = true, EllesmereUI = true }
+    local targets = { Attune = true, ForeverDungeonJournal = true, WhatsTraining = true, EllesmereUI = true }
     kit.AddonState = function(name) if targets[name] then return state == "absent" and "missing" or "loaded" end; return originalState(name) end
     kit.Loaded = function(name) if targets[name] then return state ~= "absent" end; return originalLoaded(name) end
     if state ~= "absent" then R.S = R.S or {} end
     if state == "disabled" then
-        for _, name in ipairs({ "attuneSkin", "auctionatorSkin", "foreverDungeonJournalSkin", "whatsTrainingSkin" }) do R:SetEnabled(name, false) end
+        for _, name in ipairs({ "attuneSkin", "foreverDungeonJournalSkin", "whatsTrainingSkin" }) do R:SetEnabled(name, false) end
     end
 end
 -- Nested rule fixtures need value comparison, including numeric keys; Lab.Digest is intentionally shallow.
@@ -26,14 +26,67 @@ local function RuleDigest(value)
 end
 A_Admin.SetManualClock(GetTime())
 Lab.Solo()
+if key == "qol" then
+    -- Isolated handler/real-frame fixture, not native object detection or combat acceptance.
+    Lab.Step("gathering sparkle lifecycle", function()
+        local G = R.QoLGathering
+        Lab.Check("init", "gathering module loads before settings", true, G ~= nil)
+        local originals = { get = C_CVar.GetCVar, set = C_CVar.SetCVar, plate = C_NamePlate.GetNamePlateForUnit,
+            object = UnitIsGameObject, exists = UnitExists, guid = UnitGUID, cursor = SetUnitCursorTexture }
+        local values = { SoftTargetInteract = "0", SoftTargetNameplateInteract = "0", SoftTargetInteractRange = "10",
+            SoftTargetInteractArc = "1", SoftTargetInteractOnlyInRange = "1", SoftTargetIconGameObject = "0" }
+        local target = "herb"
+        local plate = CreateFrame("Frame", nil, UIParent)
+        plate:SetSize(80, 30); plate:SetPoint("CENTER"); plate:Show()
+        plate.UnitFrame = CreateFrame("Frame", nil, plate); plate.UnitFrame:SetAlpha(0.8)
+        local probes = {}
+        C_CVar.GetCVar = function(name) if values[name] then return values[name] end; return originals.get(name) end
+        C_CVar.SetCVar = function(name, value)
+            if values[name] then values[name] = tostring(value); return true end
+            return originals.set(name, value)
+        end
+        UnitIsGameObject = function(unit) if unit == "softinteract" then return values.SoftTargetInteract ~= "0" end; return originals.object(unit) end
+        UnitExists = function(unit) if unit == "softinteract" then return false end; return originals.exists(unit) end
+        UnitGUID = function(unit) if unit == "softinteract" then return "GameObject-fixture-" .. target end; return originals.guid(unit) end
+        C_NamePlate.GetNamePlateForUnit = function(unit, ...)
+            if unit == "softinteract" then return values.SoftTargetNameplateInteract == "1" and plate or nil end
+            return originals.plate(unit, ...)
+        end
+        SetUnitCursorTexture = function(texture, unit, ...)
+            if unit ~= "softinteract" then return originals.cursor(texture, unit, ...) end
+            if not probes[texture] then probes[texture] = texture.GetTexture end
+            texture.GetTexture = function() return target == "herb" and "Interface\\Cursor\\GatherHerbs" or "Interface\\Cursor\\Mine" end
+            return true
+        end
+        R:SetEnabled("qolHerbSparkles", true)
+        Lab.Check("state", "herb fixture gets one overlay", 1, G.stats.shown)
+        Lab.Check("state", "one reusable effect frame", 1, G.stats.frames)
+        Lab.Check("state", "one bounded poll ticker", 1, G.stats.timers)
+        target = "ore"; G.Poll()
+        Lab.Check("state", "herb choice does not enable ore", 0, G.stats.shown)
+        R:SetEnabled("qolOreSparkles", true)
+        Lab.Check("state", "ore has its own switch", 1, G.stats.shown)
+        R:SetEnabled("qolHerbSparkles", false); R:SetEnabled("qolOreSparkles", false)
+        Lab.Check("cleanup", "disabled overlay is hidden", 0, G.stats.shown)
+        Lab.Check("cleanup", "disabled ticker is cancelled", 0, G.stats.timers)
+        Lab.Check("cleanup", "disabled listeners removed", 0, G.stats.listeners)
+        Lab.Check("cleanup", "native targeting restored", "0", values.SoftTargetInteract)
+        Lab.Check("cleanup", "native range restored", "10", values.SoftTargetInteractRange)
+        Lab.Check("cleanup", "nameplate alpha restored", true, math.abs(plate.UnitFrame:GetAlpha() - 0.8) < 0.001)
+        C_CVar.GetCVar, C_CVar.SetCVar, C_NamePlate.GetNamePlateForUnit = originals.get, originals.set, originals.plate
+        UnitIsGameObject, UnitExists, UnitGUID, SetUnitCursorTexture = originals.object, originals.exists, originals.guid, originals.cursor
+        for texture, getter in pairs(probes) do texture.GetTexture = getter end
+        plate:Hide()
+    end)
+end
 UnitClass = function() return "Mage", "MAGE" end
 TwichUIDB.ui.settingsWindow = { w = params.narrow and 936 or 1240, h = params.narrow and 660 or 960 }
 -- UI contract fixtures only: real integration engines are covered by their dedicated unit tests.
 -- These fixtures never call the third-party addon or claim real-addon compatibility.
-if params.integration and (key == "speakstone" or key == "restedxp") then
-    local skin = key == "speakstone" and R.SpeakStoneSkin or R.RestedXPSkin
+if params.integration and key == "restedxp" then
+    local skin = R.RestedXPSkin
     local state = params.integration
-    R:SetEnabled(key == "speakstone" and "speakstoneSkin" or "restedxpSkin", state ~= "disabled")
+    R:SetEnabled("restedxpSkin", state ~= "disabled")
     skin.Status = function()
         local available = state ~= "absent"
         return { code = state == "disabled" and "off" or available and "active" or key .. "-missing",
@@ -99,6 +152,68 @@ Lab.Step("open", function()
         Lab.Say("inventory", page.key, page.name, "rows=" .. #page.rows, "host=" .. tostring(page.def.host ~= nil))
     end
 end)
+if key == "workshop" and params.filled then
+    Lab.Step("Workshop preference integration", function()
+        local K, UI, L = R.SettingsKit, R.SettingsUI, R.WorkshopLauncher
+        local v = UI.View("workshop")
+        v.taskButtons[1]:Click()
+        local load
+        for _, row in ipairs(K.pages.workshop.rows) do
+            if row:GetName() == "Workshop options" then load = v.rows[row.id].control end
+        end
+        Lab.Check("construct", "explicit load action exists", true, load ~= nil)
+        Lab.Check("state", "fresh Workshop starts experimental and off", false, L.Enabled())
+        v.rows.workshopEnabled.control:Click()
+        Lab.Settle(.3) -- dependency controls refresh on the settings window's next frame
+        Lab.Check("interact", "experimental control enables Workshop", true, L.Enabled())
+        Lab.Check("interact", "enabled options action becomes available", true, load:IsEnabled())
+        local start = debugprofilestop and debugprofilestop()
+        load:Click()
+        if start then Lab.Say("timing", "Workshop options load click ms", debugprofilestop() - start) end
+        Lab.Settle(.3)
+        local w = R.Workshop
+        Lab.Check("state", "options action loads Workshop", true, L.Loaded())
+        Lab.Check("state", "loading options builds no Workshop window", nil, w.Window.Frame())
+        Lab.Check("state", "loading options starts no plan", 0, w.Strategy.Stats().started)
+        Lab.Check("state", "loading options starts no scan", false, w.Scan.Busy())
+        v.rows.workshopDetailedPrices.control:Click()
+        Lab.Check("interact", "price control calls existing preference", true, w.Session.PriceDetail())
+        local found
+        for i,task in ipairs(v.tasks) do if task[1]=="Crafting & Shopping" then v.taskButtons[i]:Click();found=true;break end end
+        Lab.Check("construct","Crafting & Shopping task exists",true,found==true);Lab.Settle(.2)
+        local function Pick(id, value)
+            v.rows[id].control:Click()
+            local menu = rawget(_G, "TwichUISettingsMenu")
+            for _, row in ipairs(menu and menu.rows or {}) do
+                if row:IsShown() and row.choice and row.choice.value == value then row:Click(); return true end
+            end
+            return false
+        end
+        Lab.Check("interact", "cash objective is selectable", true, Pick("workshopObjective", "cash"))
+        Lab.Check("state", "objective changes the real planner preference", "cash", w.Session.Objective())
+        Lab.Check("interact", "compact Craft is selectable", true, Pick("workshopCompactMode", "craft"))
+        Lab.Check("state", "compact mode is saved and applied", "craft", w.Compact.Mode())
+        v.rows.workshopUseGuild.control:Click()
+        Lab.Check("interact", "guild control uses existing stock preference", true, w.Storage.UseGuild())
+        v.rows.workshopProgressNotices.control:Click()
+        Lab.Check("interact", "notice control uses existing preference", false, w.Notice.On())
+        Lab.Check("state", "preferences keep full window hidden", nil, w.Window.Frame())
+        Lab.Check("state", "preferences keep compact window hidden", false, w.Compact.IsShown())
+        Lab.Check("state", "unverified progress remains disabled", false, w.Progress.auto)
+        local watchEvents,bankEvents=w.Watch.Events(),w.Bank.Events()
+        Lab.Check("interact", "experimental disable applies immediately", true, L.SetEnabled(false))
+        Lab.Check("state", "disabled Workshop observers stop", "0|0|0", w.Watch.Events().."|"..w.Bank.Events().."|"..w.WorthTip.Events())
+        Lab.Check("state", "disabled Workshop cannot reopen", false, L.Load())
+        Lab.Check("state", "disable keeps crafting preference", "cash", w.Session.Objective())
+        Lab.Check("interact", "experimental re-enable applies immediately", true, L.SetEnabled(true))
+        Lab.Check("state", "Workshop observers resume once", watchEvents.."|"..bankEvents, w.Watch.Events().."|"..w.Bank.Events())
+        K.ResetPage("workshop"); Lab.Settle(.2)
+        Lab.Check("state", "page defaults restore economic objective", "economic", w.Session.Objective())
+        Lab.Check("state", "page defaults restore compact Travel", "travel", w.Session.CompactMode())
+        Lab.Check("state", "page defaults leave login loading off", false, L.LoadOnLogin())
+        Lab.Check("state", "page defaults leave experimental Workshop off", false, L.Enabled())
+    end)
+end
 Lab.Step("disclosures and navigation", function()
     local K, UI, W = R.SettingsKit, R.SettingsUI, R.SettingsWidgets
     local view = assert(UI.View(key))
@@ -196,7 +311,7 @@ Lab.Step("disclosures and navigation", function()
         end
         UI.Layout(view)
     elseif key == "skins" then
-        for _, name in ipairs({ "attuneSkin", "auctionatorSkin", "foreverDungeonJournalSkin", "whatsTrainingSkin" }) do
+        for _, name in ipairs({ "attuneSkin", "foreverDungeonJournalSkin", "whatsTrainingSkin" }) do
             local row = K.switchRows[name]
             if params.integration == "absent" then
                 Lab.Check("state", name .. " unavailable", false, row:Enabled())
@@ -573,11 +688,11 @@ if key == "statWeights" then
         if params.editor then group.onPick(choices[2].value); group:Click() end
     end)
 end
-if key == "speakstone" or key == "restedxp" then
+if key == "restedxp" then
     Lab.Step("integration preferences", function()
-        local skin = key == "speakstone" and R.SpeakStoneSkin or R.RestedXPSkin
+        local skin = R.RestedXPSkin
         local style = skin.Style or skin.Text
-        local property = key == "speakstone" and "textSize" or "lineSpacing"
+        local property = "lineSpacing"
         local before = style.Get(property)
         style.Set(property, before + 1)
         Lab.Check("state", "appearance preference saved", before + 1, style.Get(property))
@@ -692,5 +807,8 @@ end
 if PTR_IssueReporter then
     PTR_IssueReporter:ClearAllPoints()
     PTR_IssueReporter:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 8, -200)
+end
+if key == "magicInventory" and params.bankReview then
+    Lab.Step("character bank review", function() Lab.BankReview(params.bankReview) end)
 end
 Lab.Finish()

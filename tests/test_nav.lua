@@ -200,6 +200,54 @@ assert(S().state == "idle" and not NV.Active(), "navigation ends after a moment"
 assert(not (Driver() and Driver().scripts.OnUpdate), "the driver stops")
 print("4 arrival ok")
 
+-- Steering on synthetic planner output: look ahead on straight stretches, preserve bends and leg endpoints.
+do
+  local RT = R.NavRoute
+  local plan = RT.Plan
+  local ox, oy = W(1001, 20, 20)
+  local function Steering(points)
+    NV.Stop("test")
+    At(1001, 20, 20)
+    local xs, ys, swim = {}, {}, {}
+    for i, point in ipairs(points) do xs[i], ys[i], swim[i] = ox + point[1], oy + point[2], false end
+    local r = { xs = xs, ys = ys, n = #xs, swim = swim, map = 9001, cost = 100,
+      goalX = xs[#xs], goalY = ys[#ys], startX = ox, startY = oy }
+    RT.Plan = function() return { Step = function() return "done", r end } end
+    assert(NV.StartAt(1001, (m.y0 - r.goalY) / m.size, (m.x0 - r.goalX) / m.size))
+    Run(0.5)
+    assert(S().route == r, "controlled route is followed")
+  end
+  local function Target(x, y, why)
+    local tx, ty, kind = NV.Target()
+    assert(kind == "route" and math.abs(tx - ox - x) < 0.01 and math.abs(ty - oy - y) < 0.01, why)
+  end
+  Steering({ {0, 0}, {100, 0} })
+  Target(20, 0, "initial target is ahead, rather than at the distant endpoint")
+  P.x, P.y = ox + 40, oy + 6
+  Run(0.5)
+  Target(60, 0, "target advances from the player's projection despite lateral offset")
+  Steering({ {0, 0}, {15, 0}, {100, 0} })
+  Target(20, 0, "lookahead passes redundant points on a straight stretch")
+  P.x, P.y = ox + 24, oy + 8
+  Run(0.5)
+  assert(S().seg == 2, "a missed straight waypoint is passed without an exact visit")
+  Target(44, 0, "the target stays ahead after passing beside a waypoint")
+  Steering({ {0, 0}, {15, 0}, {15, 100} })
+  Target(15, 0, "lookahead stops at a real bend instead of pointing through the inside obstacle")
+  P.x, P.y = ox + 24, oy - 8
+  Run(0.5)
+  assert(S().seg == 1, "passing the bend's plane on the wrong side does not skip it")
+  Target(15, 0, "projection beyond a bend still aims at that bend")
+  Steering({ {0, 0}, {15, 0} })
+  Target(15, 0, "a short walk ends at its destination, with no overshoot")
+  Steering({ {0, 0}, {0, 0}, {100, 0} })
+  Target(20, 0, "duplicate points do not produce an undefined bearing")
+  NV.Stop("test")
+  RT.Plan = plan
+end
+print("4b steering ok")
+
+
 ---------------------------------------------------------------------------
 -- 3. Across the obstacle: no skipping; off the route plans again after the hold
 ---------------------------------------------------------------------------
@@ -530,9 +578,61 @@ local bx2, by2 = W(1202, 34, 18)
 assert(TV.SetBind(9202, bx2, by2) and TV.Bind().c == 9202, "the bind point is kept for this character")
 local h = TV.Hearth()
 assert(h and h.cont == 9202 and h.seconds == 10, "ready: " .. tostring(h and h.seconds))
-c.C_Item.GetItemCooldown = function() return CLOCK - 100, 1800, 1 end
+-- Exercise Forever's container API even if the older item API incorrectly says ready.
+local oldContainer = c.C_Container
+c.C_Container = { GetItemCooldown = function(id)
+  assert(id == 6948)
+  return CLOCK - 100, 1800, 1
+end }
 assert(math.abs(TV.Hearth().seconds - (10 + 1700)) < 1, "what is left of the cooldown counts")
-c.C_Item.GetItemCooldown = function() return 0, 0, 1 end
+At(1201, 5, 21)
+assert(NV.StartAt(1202, eu, ev, "Beta Peak", "pin"))
+Run(1)
+assert(S().legKind == "walk" and S().steps == 3, "a long cooldown makes the ferry faster")
+NV.Stop("test")
+for _, read in ipairs({
+  function() return nil end,
+  function() error("unavailable") end,
+  function() return 0, 0, 0 end,
+  function() return 0, 0, false end,
+  function() return "secret", 1800, 1 end,
+}) do
+  c.C_Container.GetItemCooldown = read
+  assert(TV.Hearth() == nil and TV.HearthWhy(), "unknown or disabled is never assumed ready")
+end
+c.issecretvalue = function(v) return v == "secret" end
+c.C_Container.GetItemCooldown = function() return "secret", 1800, 1 end
+assert(TV.Hearth() == nil, "secret cooldown is not used")
+c.issecretvalue = nil
+c.C_Container.GetItemCooldown = function() return 1, 1, true end
+assert(TV.Hearth().seconds == 10, "expired cooldown is ready")
+c.C_Container.GetItemCooldown = nil
+c.C_Item.GetItemCooldown = nil
+assert(TV.Hearth() == nil, "missing cooldown APIs are not ready")
+c.C_Container.GetItemCooldown = function() return 0, 0, 1 end
+c.InCombatLockdown = function() return true end
+assert(TV.Hearth() == nil, "no cooldown reads in combat")
+c.InCombatLockdown = function() return false end
+-- A short wait wins against the same ferry and counts down without polling the API.
+local readyAt = CLOCK + 20
+c.C_Container.GetItemCooldown = function() return readyAt - 20, 20, 1 end
+At(1201, 5, 21)
+assert(NV.StartAt(1202, eu, ev, "Beta Peak", "pin"))
+Run(1)
+s = S()
+assert(s.legKind == "hearth" and s.instruction == "Wait for your Hearthstone", "a short cooldown is worth waiting for")
+assert(NV.LegDetail(s.legs[s.leg]):find("Ready in", 1, true), "the wait is explained")
+local eta = s.eta
+c.C_Container.GetItemCooldown = function() error("the countdown must not poll cooldowns") end
+Run(5)
+assert(S().eta < eta - 4, "waiting reduces the remaining ETA")
+Run(20)
+s = S()
+assert(s.instruction == "Use your Hearthstone", "the instruction changes when ready")
+assert(not NV.LegDetail(s.legs[s.leg]):find("Ready in", 1, true), "no stale wait detail")
+NV.Stop("test")
+c.C_Container = oldContainer
+c.C_Item.GetItemCooldown = function() return 0, 0, true end
 assert(c.TwichUIDB.ui.navTravel[c.UnitGUID("player")].bind, "saved on this character's record")
 At(1201, 5, 21)
 assert(NV.StartAt(1202, eu, ev, "Beta Peak", "pin"))

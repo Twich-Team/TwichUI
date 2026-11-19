@@ -9,6 +9,7 @@
 ## AddonCompartmentFuncOnEnter: TwichUI_OnCompartmentEnter
 ## AddonCompartmentFuncOnLeave: TwichUI_OnCompartmentLeave
 ## X-License: MIT (code); SIL OFL 1.1 (fonts); see LICENSE and licenses/
+## Group: !!!TwichUI
 ## Category: Interface Enhancements
 ## X-Curse-Project-ID: 1719280
 
@@ -23,6 +24,7 @@ libs\LibDeflate\LibDeflate.lua
 
 # Core
 Core.lua
+auction\Build.lua
 Persist.lua
 Profiles.lua
 Switches.lua
@@ -35,6 +37,8 @@ DiagnosticsLauncher.lua
 LayoutsLauncher.lua
 # The Workshop (recipes, a craft queue, combined materials) is an addon of its own, loaded the first time it is opened (docs/workshop.md)
 WorkshopLauncher.lua
+# The Auction House visit that may update the Workshop's prices: a light detector, one timer chain per visit, loads the Workshop only when due (docs/workshop/market-data-foundation-v2.md, section 8)
+WorkshopAuto.lua
 # First-install setup: offers the layout setup on a new installation and coordinates EllesmereUI's own first run (docs/onboarding.md)
 Onboarding.lua
 # The welcome shown while that setup gets ready (presentation only; Onboarding.lua calls it)
@@ -42,7 +46,6 @@ FirstRunWelcome.lua
 modules\Interact.lua
 modules\QuietLogin.lua
 modules\Media.lua
-modules\AuctionatorSkin.lua
 modules\WhatsTrainingSkin.lua
 modules\ForeverDungeonJournalSkin.lua
 modules\AttuneSkin.lua
@@ -211,10 +214,6 @@ modules\RestedXPBroker.lua
 # menus above (modules\SpellMenu.lua and modules\MenuStyle.lua)
 modules\SettingsBrokerMenu.lua
 
-# SpeakStone skin: a TwichUI look for SpeakStone's speech frame (off until turned on; uses
-# modules\MenuStyle.lua; needs SpeakStone, and works without EllesmereUI)
-modules\SpeakStoneSkin.lua
-
 # Party pins: named map pins of your own, and ones shared with party members who have TwichUI (on by default,
 # can be turned off; their own addon prefix, never chat; uses the Chronicle palette, modules\MenuStyle.lua and setup\Share.lua's names)
 # Map pings (Ping.lua, PingMap.lua): a spot on the world map shared with your group for a few seconds, with a recent list
@@ -243,10 +242,12 @@ pins\Broker.lua
 nav\Prefs.lua
 nav\Data.lua
 nav\Route.lua
+nav\Lifts.lua
 nav\Journey.lua
 nav\Nav.lua
 nav\Auto.lua
 nav\Travel.lua
+nav\Flight.lua
 nav\Paint.lua
 nav\Unlock.lua
 nav\Frame.lua
@@ -343,6 +344,8 @@ reminders\Character.lua
 reminders\Context.lua
 reminders\Display.lua
 reminders\Controller.lua
+reminders\Share.lua
+reminders\ShareUI.lua
 
 # Healer Watch: one healer's mana, confirmed drinking and recent mana-related chat in a small panel, in five-player
 # dungeons by default (off until turned on). The healer is the one with the Healer role, or the one you choose for the
@@ -407,6 +410,7 @@ targetart\Display.lua
 auction\Price.lua
 auction\Scan.lua
 auction\Window.lua
+auction\Host.lua
 # Mailbox gold summary: one chat line per mailbox visit (auction\Mail.lua)
 auction\Mail.lua
 
@@ -433,6 +437,9 @@ inventory\Picker.lua
 qol\QoL.lua
 qol\Summons.lua
 qol\ErrorMessages.lua
+qol\LootSparkles.lua
+qol\GatheringSparkles.lua
+qol\GatheringSparklesDisplay.lua
 qol\Resurrect.lua
 qol\ReleasePvP.lua
 qol\Duels.lua
@@ -468,7 +475,6 @@ diag\Food.lua
 diag\Refreshments.lua
 diag\MageSell.lua
 diag\RestedXPSkin.lua
-diag\SpeakStoneSkin.lua
 diag\ChronicleLook.lua
 diag\Zones.lua
 diag\Sharing.lua

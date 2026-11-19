@@ -66,7 +66,7 @@ for _, g in ipairs(groups) do
   Check(TC.Usable(g), "group " .. g.id .. " is usable")
 end
 for _, id in ipairs({ "general", "notifications", "notificationLook", "qol", "food", "auction", "chronicle", "chronicleLook", "pins", "pinsLook",
-    "gear", "gearWeights", "mage", "skins", "restedxp", "speakstone" }) do
+    "gear", "gearWeights", "mage", "skins", "restedxp" }) do
   Check(ids[id], "group " .. id .. " exists")
 end
 Check(#TC.GroupList() == #groups, "the window lists every group")
@@ -91,11 +91,11 @@ local REGISTRY = {
   partyPins = A.TwichUI.PinsLook.PREF_DEFAULTS, pinsAppearance = A.TwichUI.PinsLook.DEFAULTS,
   pinsMapText = A.TwichUI.PinsLook.MapText.DEFAULTS, pinsBroker = A.TwichUI.PinsLook.Bar.DEFAULTS,
   pinsSound = A.TwichUI.PinsLook.Sound.DEFAULTS, pinsPing = A.TwichUI.PinsLook.Ping.DEFAULTS, restedxpSkinText = A.TwichUI.RestedXPSkin.Text.DEFAULTS,
-  restedxpTimerText = A.TwichUI.RestedXPSkin.Timers.Opt.DEFAULTS, speakstoneSkinStyle = A.TwichUI.SpeakStoneSkin.Style.DEFAULTS,
+  restedxpTimerText = A.TwichUI.RestedXPSkin.Timers.Opt.DEFAULTS,
   gear = A.TwichUI.GearPrefs.DEFAULTS, brokerMenu = A.TwichUI.MenuStyle.DEFAULTS,
   refreshmentsStyle = A.TwichUI.RefreshmentsPanel.Style.DEFAULTS, restedxpSkin = A.TwichUI.RestedXPSkin.Look.DEFAULTS,
   pinsLook = A.TwichUI.PinsLook.Look.DEFAULTS, pinsBrokerMenu = A.TwichUI.PinsLook.MenuLook.DEFAULTS,
-  pinsEditorLook = A.TwichUI.PinsLook.EditorLook.DEFAULTS, speakstoneSkin = A.TwichUI.SpeakStoneSkin.Look.DEFAULTS,
+  pinsEditorLook = A.TwichUI.PinsLook.EditorLook.DEFAULTS,
   restedxpTimerLook = A.TwichUI.RestedXPSkin.Timers.Look.DEFAULTS, chronicleLook = A.TwichUI.ChronicleAppearance.LOOK_DEFAULTS,
   notifyLook = A.TwichUI.NotifyLook.DEFAULTS, restockPromptStyle = A.TwichUI.RestockPrompt.Style.DEFAULTS,
   classBars = A.TwichUI.ClassBars.DEFAULTS, classBarsLook = A.TwichUI.ClassBars.Look.DEFAULTS,
@@ -140,6 +140,7 @@ do
   Check(HP.restore(undo) == 2 and A.TwichUIDB.ui.healerWatch.phrases == nil and #HW.Phrases() == 3, "undo: back to the defaults, untouched")
 end
 
+assert(TC.LOCAL["ui.auctionHouse"]=="acts", "auction action defaults are kept local")
 -- every key the settings window can change (the contract fixture's saved layout) is shared or kept local
 do
   local fixture = dofile(TESTS .. "fixtures/settings_contract.lua")
@@ -218,7 +219,6 @@ local function Customise(c)
   R.PinsLook.Set("textSize", 14); R.PinsLook.SetPref("labels", "always"); R.PinsLook.SetPref("minimap", false)
   R.PinsLook.Bar.Set("flashSeconds", 5); R.PinsLook.Sound.Set("enabled", false)
   R.RestedXPSkin.Text.Set("futureFade", 0); R.RestedXPSkin.Text.Set("showCog", false); R.RestedXPSkin.Look.Set("bgOpacity", 40)
-  R.SpeakStoneSkin.Style.Set("textSize", 18); R.SpeakStoneSkin.Style.Set("showPortrait", false)
   R.GearPrefs.Set("reveal", "always"); R.GearPrefs.Set("strictness", "eager"); R.GearPrefs.Set("glancePossible", false)
   R.MenuStyle.Set("bgOpacity", 10)
   R.Refreshments.SetShare("party", "DRUID", "water", 0)

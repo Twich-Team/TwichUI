@@ -236,7 +236,7 @@ do
       assert(inSide[page.key], page.key .. " is in the sidebar")
     end
   end
-  assert(children == 25, "twenty-five secondary pages: " .. children)
+  assert(children == 24, "twenty-four secondary pages: " .. children)
   assert(#K.Tabs("overview") == 0 and #K.Tabs("auction") == 0, "a feature without pages under it has no tabs")
   do   -- Markers: its own list in Everyday, then the two kinds of marker cycling and the bar, each a tab of its own
     local labels = {}
@@ -245,9 +245,7 @@ do
     assert(#K.Tabs("qol") == 0, "Quality of life has no tabs")
   end
   assert(#K.Tabs("notifications") == 2 and K.Tabs("notifications")[2].key == "notificationsLook", "Notifications has its appearance tab")
-  local tabs = {}
-  for _, t in ipairs(K.Tabs("skins")) do tabs[#tabs + 1] = K.TabLabel(t) end
-  assert(table.concat(tabs, ",") == "General,SpeakStone speech frame", table.concat(tabs, ","))
+  assert(#K.Tabs("skins") == 0, "Addon skins has no pages under it, so no tabs")
 
   -- each secondary page: opened directly, it is shown under its parent's sidebar row
   for _, page in ipairs(K.NavOrder()) do
@@ -397,6 +395,19 @@ for _, r in ipairs(results) do labels[#labels + 1] = r.entry.label end
 local text = table.concat(labels, " | ")
 assert(text:find("Show pins on the minimap", 1, true) and text:find("Pin names on the minimap", 1, true), text)
 assert(results[1].entry.label:lower():find("minimap"), "label matches first")
+local sparkles = Search.Run("quest item sparkles")
+local sparkleRow
+for _, result in ipairs(sparkles) do
+  if result.entry.row.id == "qolLootSparkles" then sparkleRow = result.entry end
+end
+assert(sparkleRow and sparkleRow.page == "qol" and made == drawn, "sparkles are searchable without constructing a page")
+for _, query in ipairs({ { "herbalism sparkles", "qolHerbSparkles" }, { "mining sparkles", "qolOreSparkles" } }) do
+  local found
+  for _, hit in ipairs(Search.Run(query[1])) do
+    if hit.entry.row and hit.entry.row.id == query[2] then found = hit.entry end
+  end
+  assert(found and found.page == "qol" and made == drawn, query[1] .. " finds its control without making a page")
+end
 assert(#Search.Run("") == 0 and #Search.Run("   ") == 0, "an empty query finds nothing")
 assert(#Search.Run("xyzzy-nothing") == 0)
 assert(#Search.Run("%a+") == 0, "a query is plain text, not a pattern")
@@ -1282,6 +1293,20 @@ do
   local function Click(b) b:GetScript("OnClick")(b) end
   c.LibStub = nil   -- section 5e leaves a stand-in that isn't callable; pages drawn here call LibStub when it exists
 
+  -- Return the Favor uses the same card host, without turning on the feature or its movable sample.
+  local savedBeforePreview = Saved()
+  UI.Navigate("buffBack")
+  local favorCard = K.pages.buffBack.rows[1]
+  assert(favorCard.card.preview == "buffBack.list", "the feature card declares its preview")
+  local favorHost = P.Host(win, favorCard.card.preview, 560)
+  assert(favorHost and not favorHost.broken and #favorHost.scene.list.rows == 5,
+    "the standard preview builds real sample rows")
+  local previewFrames = made
+  favorHost:Reset()
+  assert(made == previewFrames and Saved() == savedBeforePreview and not R.BuffBackList.Previewing(),
+    "refreshing the preview reuses frames and leaves saved data and the movable sample alone")
+  favorHost:Release()
+
   -- 8a. Icons
   local SHEET = { "home", "notifications", "qualityOfLife", "markers", "chatCleaning", "foodAndDrink", "hazardAlerts",
     "vendorRestocking", "auctionHouse", "journeyChronicle", "sleepingBag", "mapsNavigation", "gearComparison",
@@ -1342,7 +1367,7 @@ do
   -- 8b. Quality of life's cards
   local cards = {}
   for _, row in ipairs(K.pages.qol.rows) do if row.card then cards[#cards + 1] = row end end
-  assert(#cards == 8, "eight cards on Quality of life: " .. #cards)
+  assert(#cards == 11, "eleven cards on Quality of life: " .. #cards)
   for _, card in ipairs(cards) do assert(Icons.Get(card.card.icon), card:GetName() .. " has an icon") end
   for _, card in ipairs(cards) do
     assert(card.primary and card.primary.kind == "checkbox" and card.primary.switch, card:GetName() .. " has its switch")
@@ -1350,6 +1375,8 @@ do
   end
   assert(K.rowsById.qolSummonsWait.ruleOf == cards[1] and K.rowsById.qolDuelsToDeath.ruleOf == cards[4], "rules belong to their cards")
   assert(cards[2].card.inline and K.rowsById.qolResurrectCombat.ruleOf == cards[2], "the combat-resurrection rule is inline")
+  assert(K.rowsById.qolHerbSparkles.primaryOf == cards[10] and K.rowsById.qolOreSparkles.primaryOf == cards[11],
+    "each gathering category has its own heading switch, including ore-only configurations")
 
   local calls = {}
   local function Spy(name) return function() calls[#calls + 1] = name end end
@@ -1422,7 +1449,9 @@ do
   local played = 0
   for _, card in ipairs(cards) do
     local s = view.sectionsById[card.id]
-    assert(s.preview, card:GetName() .. " has a preview")
+    -- The native world sparkle cannot be previewed in a settings frame. Existing sample previews stay intact.
+    assert(s.preview or card.primary.switch == "qolLootSparkles" or card.primary.switch == "qolHerbSparkles"
+      or card.primary.switch == "qolOreSparkles", card:GetName() .. " has a preview")
     if s.play then
       Click(s.play)
       assert(s.preview:IsPlaying() and P.Playing() == 1, card:GetName() .. " plays")
@@ -1433,7 +1462,7 @@ do
       end
       assert(not s.preview:IsPlaying() and s.preview.done, card:GetName() .. " plays once and stops")
       played = played + 1
-    else
+    elseif s.preview then
       assert(s.preview.def.static, card:GetName() .. "'s preview is a still picture")
     end
   end

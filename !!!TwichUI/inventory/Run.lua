@@ -156,6 +156,7 @@ local function Summary(r, reason)
     local done = #res.confirmed
     local where
     if r.kind == "mail" then where = ("sent %d %s to %s"):format(r.mailsSent or 0, Plural(r.mailsSent or 0, "mail"), r.recipient or "?")
+    elseif r.kind == "bank" and r.dir == "mixed" then where = "updated your bank"
     elseif r.kind == "bank" and r.dir == "withdraw" then where = "withdrew from your bank"
     elseif r.kind == "bank" then where = "deposited in your bank"
     else where = ("deposited in %s"):format(r.where and r.where.tabName and ("the guild bank tab \"" .. r.where.tabName .. "\"") or "the guild bank") end
@@ -233,11 +234,13 @@ end
 ---------------------------------------------------------------------------
 local function SlotKey(bag, slot) return bag * 1000 + slot end
 
+local CarriedCount
+
 local function Resolve(r, step)
     local rule = step.entry and MI.Rule(step.entry.ruleId)
     if not rule then return nil, "stale" end
     local function Usable(s)
-        if not s or s.id ~= step.id or s.count ~= step.count or r.used[SlotKey(s.bag, s.slot)] then return false end
+        if not s or s.id ~= step.id or s.count ~= (step.stack and step.stack.count or step.count) or r.used[SlotKey(s.bag, s.slot)] then return false end
         return true
     end
     local s = MI.ReadSlot(step.bag, step.slot)
@@ -255,6 +258,7 @@ local function Resolve(r, step)
     if MI.IsNever(s.id) then return nil, "never" end
     local why = MI.StackProblem(s, r.kind, rule)
     if why then return nil, why, s end
+    if r.kind == "bank" and step.entry and CarriedCount(s.id) - step.count < step.entry.keep then return nil, "stale" end
     return s
 end
 
@@ -264,8 +268,12 @@ local function PutBack()
 end
 
 -- Picks up a stack. Returns true when the cursor now holds exactly that item.
-local function PickUp(s)
-    C_Container.PickupContainerItem(s.bag, s.slot)
+local function PickUp(s, count)
+    if count and count < s.count then
+        C_Container.SplitContainerItem(s.bag, s.slot, count)
+    else
+        C_Container.PickupContainerItem(s.bag, s.slot)
+    end
     if CursorItem() == s.id then return true end
     PutBack()   -- whatever is on the cursor now came from this pickup (it was empty before)
     return false
@@ -659,7 +667,7 @@ end
 local function BagTarget(r, s) return BankTarget(r, s, CarriedBags()) end
 
 -- How many of an item the bags hold now (a light count: no item details).
-local function CarriedCount(id)
+CarriedCount = function(id)
     local n = 0
     for bag = 0, MI.LastBag() do
         for slot = 1, C_Container.GetContainerNumSlots(bag) or 0 do
@@ -675,9 +683,11 @@ Run.CarriedCount = CarriedCount
 -- run hasn't used. Taking it must not take the bags past the rule's target (the bags may have changed since the review).
 local function ResolveWithdraw(r, step)
     local rule = step.entry and MI.Rule(step.entry.ruleId)
-    if not rule or not MI.Withdraws(rule) or rule.keep ~= step.target then return nil, "stale" end
+    local manual = r.plan.manual
+    local all = manual and manual.ruleId == (rule and rule.id) and manual.dir == "withdraw" and step.entry.all
+    if not rule or (not all and (not MI.Withdraws(rule) or rule.keep ~= step.target)) then return nil, "stale" end
     local function Usable(x)
-        return x ~= nil and x.id == step.id and x.count == step.count and not r.used[SlotKey(x.bag, x.slot)]
+        return x ~= nil and x.id == step.id and x.count == (step.stack and step.stack.count or step.count) and not r.used[SlotKey(x.bag, x.slot)]
     end
     local s = MI.ReadSlot(step.bag, step.slot)
     if not Usable(s) then
@@ -694,7 +704,7 @@ local function ResolveWithdraw(r, step)
     if MI.IsNever(s.id) then return nil, "never" end
     if s.locked == true then return nil, "locked", s end
     if s.locked == nil then return nil, "lock-unknown", s end
-    if CarriedCount(s.id) + s.count > step.target then return nil, "w-over", s end
+    if step.target and CarriedCount(s.id) + step.count > step.target then return nil, "w-over", s end
     return s
 end
 MI.REASON["w-over"] = "You carry enough now: taking it would go over the target"
@@ -770,7 +780,7 @@ local function MoveSettled(r, timedOut)
     local w = r.waiting
     if not w then return end
     local src = MI.ReadSlot(w.s.bag, w.s.slot)
-    local srcGone = not (src and src.id == w.s.id and src.count == w.s.count)
+    local srcGone = not (src and src.id == w.s.id and src.count == w.sourceCount)
     local arrived
     if r.kind == "bank" then
         local info = C_Container.GetContainerItemInfo(w.bag, w.slot)
@@ -779,7 +789,9 @@ local function MoveSettled(r, timedOut)
         local id, count = GuildSlotItem(w.bag, w.slot)
         arrived = id == w.s.id and count == w.s.count
     end
-    if srcGone and arrived then
+    local remaining = w.sourceCount - w.s.count
+    local sourceConfirmed = remaining == 0 and not src or remaining > 0 and src and src.id == w.s.id and src.count == remaining
+    if sourceConfirmed and arrived then
         r.waiting = nil
         Record(r, "confirmed", w.step)
         r.index = r.index + 1
@@ -789,7 +801,7 @@ local function MoveSettled(r, timedOut)
     if not timedOut then return end   -- the game hasn't finished: bag events before then change nothing
     r.waiting = nil
     if srcGone then
-        Record(r, "uncertain", w.step, r.dir == "withdraw" and "It left your bank, but the game didn't show where" or "It left your bags, but the game didn't show where")
+        Record(r, "uncertain", w.step, w.step.withdraw and "It left your bank, but the game didn't show where" or "It left your bags, but the game didn't show where")
         Finish(r, "uncertain")
     else
         Record(r, "failed", w.step, r.error or MI.STOP_TEXT["move-failed"])
@@ -811,7 +823,8 @@ DepositNext = function(r)
     end
     local step = r.steps[r.index]
     if not step then Finish(r, "done") return end
-    local withdraw = r.dir == "withdraw"
+    local withdraw = step.withdraw == true or r.dir == "withdraw"
+    r.state = withdraw and "withdrawing" or "depositing"
     local s, problem
     if withdraw then s, problem = ResolveWithdraw(r, step) else s, problem = Resolve(r, step) end
     if not s then
@@ -820,9 +833,12 @@ DepositNext = function(r)
         r.index = r.index + 1
         return DepositNext(r)
     end
+    local moved = {}
+    for k, v in pairs(s) do moved[k] = v end
+    moved.count = step.count
     local bag, slot, before
-    if withdraw then bag, slot, before = BagTarget(r, s)
-    elseif r.kind == "bank" then bag, slot, before = BankTarget(r, s)
+    if withdraw then bag, slot, before = BagTarget(r, moved)
+    elseif r.kind == "bank" then bag, slot, before = BankTarget(r, moved)
     else bag, slot, before = GuildTarget(r, r.where.tab) end
     if not bag then
         for i = r.index, #r.steps do Record(r, "skipped", r.steps[i], withdraw and "No room left in your bags" or "No room left") end
@@ -831,7 +847,7 @@ DepositNext = function(r)
     end
     if not CursorFree() then Finish(r, "cursor") return end
     local pt = R.Perf.on and R.Perf.Start("inventory.step")
-    if not PickUp(s) then
+    if not PickUp(s, step.count) then
         if pt then R.Perf.Stop(pt) end
         Record(r, "failed", step, "The game didn't pick it up")
         Finish(r, "move-failed")
@@ -850,7 +866,7 @@ DepositNext = function(r)
     if pt then R.Perf.Stop(pt) end
     token = token + 1
     local t = token
-    r.waiting = { step = step, s = s, bag = bag, slot = slot, before = before, token = t }
+    r.waiting = { step = step, s = moved, sourceCount = s.count, bag = bag, slot = slot, before = before, token = t }
     Notify("progress")
     C_Timer.After(MOVE_WAIT, function()
         if r == run and r.waiting and r.waiting.token == t then MoveSettled(r, true) end
@@ -880,7 +896,7 @@ end
 function Run.Deposit(plan, group)
     local ok, why = Run.CanDeposit(plan, group)
     if not ok then return false, why end
-    local r = { kind = group.kind, dir = group.dir == "withdraw" and "withdraw" or "deposit", plan = plan, group = group,
+    local r = { kind = group.kind, dir = group.dir == "mixed" and "mixed" or (group.dir == "withdraw" and "withdraw" or "deposit"), plan = plan, group = group,
         generation = plan.generation, where = group.where,
         steps = group.steps, index = 1, results = NewResults(), used = {}, targets = {}, state = group.dir == "withdraw" and "withdrawing" or "depositing" }
     run = r
@@ -893,6 +909,49 @@ function Run.Deposit(plan, group)
     Notify(r.state)
     DepositNext(r)
     return true
+end
+
+-- A single reviewed character-bank batch, deposits first to make bag room, then withdrawals.
+-- Copy steps so lock retries and direction never mutate the reviewed groups.
+local function BankGroup(plan)
+    local group = { kind = "bank", dir = "mixed", entries = {}, steps = {} }
+    for _, dir in ipairs({ "deposit", "withdraw" }) do
+        for _, g in ipairs(plan and plan.groups or {}) do
+            if g.kind == "bank" and (g.dir or "deposit") == dir then
+                for _, step in ipairs(g.steps or {}) do
+                    local copy = {}
+                    for k, v in pairs(step) do copy[k] = v end
+                    copy.withdraw = dir == "withdraw"
+                    group.steps[#group.steps + 1] = copy
+                end
+            end
+        end
+    end
+    return group
+end
+
+function Run.CanBank(plan)
+    if not plan or plan.context ~= "bank" then return false, "Review your bank first." end
+    local group = BankGroup(plan)
+    if #group.steps == 0 then return false, "Nothing to move." end
+    return Run.CanDeposit(plan, group)
+end
+
+function Run.Bank(plan)
+    local ok, why = Run.CanBank(plan)
+    if not ok then return false, why end
+    return Run.Deposit(plan, BankGroup(plan))
+end
+
+-- Confirmed progress only; attempted or uncertain moves never fill the bar.
+function Run.BankProgress()
+    local r = run or last
+    if not r or r.kind ~= "bank" then return nil end
+    local res = r.results
+    return { total = #r.steps, confirmed = #res.confirmed, skipped = #res.skipped,
+        failed = #res.failed, uncertain = #res.uncertain, active = r == run,
+        dir = r.state == "withdrawing" and "withdraw" or "deposit",
+        step = r == run and r.steps[r.index] or nil, reason = r.stopReason }
 end
 
 function Run.OnBlocked(addon)

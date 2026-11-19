@@ -221,9 +221,9 @@ function P.Sentence(rule)
     local dest = P.DestText(rule)
     local keep = rule.keep > 0 and (" Keep %d of each in your bags."):format(rule.keep) or ""
     if rule.flow == "withdraw" then
-        keep = rule.keep > 0 and (" Take out whole stacks until you carry %d of each, never more; what isn't there stays missing."):format(rule.keep) or ""
+        keep = rule.keep > 0 and (" Take out items until you carry %d of each, never more; what isn't there stays missing."):format(rule.keep) or ""
     elseif rule.flow == "balance" then
-        keep = rule.keep > 0 and (" Keep %d of each in your bags: deposit what is above it, and take out whole stacks to reach it, never more."):format(rule.keep) or ""
+        keep = rule.keep > 0 and (" Keep %d of each in your bags: deposit what is above it, and take out items to reach it, never more."):format(rule.keep) or ""
     end
     if rule.kind == "guild" and rule.flow ~= "withdraw" and (rule.stack or 0) > 0 then keep = keep .. (" Stacks end at %d, and one smaller stack holds the rest."):format(rule.stack) end
     return ("%s: %s.%s It only moves when you open the %s, review it and press the action yourself."):format(dest, items, keep,
@@ -1164,8 +1164,8 @@ local function DrawDestStep(y)
         y = y + 22
         local FLOW_ABOUT = {
             deposit = "Moves what is above your keep amount from your bags into it.",
-            withdraw = "Takes whole stacks out of it until you carry your target, never more. What isn't there stays missing.",
-            balance = "Both: deposits what is above the target and takes out whole stacks to reach it, never more.",
+            withdraw = "Takes items out of it until you carry your target, never more. What isn't there stays missing.",
+            balance = "Both: deposits what is above the target and takes out items to reach it, never more.",
         }
         for _, flow in ipairs(mi.FLOW_ORDER) do
             Radio("e2f" .. flow, PAD, y, mi.FLOW_LABEL[flow], (r.flow or "deposit") == flow, function()
@@ -1306,9 +1306,9 @@ local function DrawKeepStep(y)
     local note = Text("e3keepNote", "small")
     Wide(note, PAD, y)
     if withdraws then
-        note:SetText("Counted for each kind of item over every stack you carry. Withdrawing takes whole stacks only and never goes over this amount, so you may end a little under it; the review says by how much. Other rules never send away what this rule keeps.")
+        note:SetText("Counted for each kind of item over every stack you carry. Withdrawing never goes over this amount. A stack is split when needed; what is missing from the bank stays missing. Other rules never send away what this rule keeps.")
     else
-        note:SetText("Counted for each kind of item over every stack you carry (not one amount shared by the whole category), and never in your bank or mail. Only whole stacks move, so sometimes a few more than this stay.")
+        note:SetText("Counted for each kind of item over every stack you carry (not one amount shared by the whole category), and never in your bank or mail. The character bank and guild panel can split stacks to keep this amount exactly. Mail moves whole stacks, so a few more may stay.")
     end
     Tone(note, "dim")
     y = y + H(note) + 8
@@ -1564,7 +1564,7 @@ local function DrawEditor(y)
         t:SetText("This action has no transfer direction. No items move while editing.")
     end
     local flowHelp = Text("selectedFlowHelp", "small"); Wide(flowHelp, left + 12, bottom + 170, col - 24)
-    local flowWords = { deposit = "Deposit extras above the keep amount.", withdraw = "Withdraw whole stacks up to the target, never over it.", balance = "Deposit extras and withdraw whole stacks up to the target." }
+    local flowWords = { deposit = "Deposit extras above the keep amount.", withdraw = "Withdraw items up to the target, never over it.", balance = "Deposit extras and withdraw items up to the target." }
     flowHelp:SetText(MI().HAS_FLOW[r.kind] and not r.design and flowWords[r.flow or "deposit"] or "")
     local ky = Panel("limitsPanel", "What should stay?", mid, bottom, col, 244)
     local qty = Edit("builderKeep", 72); At(qty, mid + 140, ky); qty:SetWidth(60)
@@ -1830,14 +1830,14 @@ K.Page({
     build = function()
         K.Card({
             title = "Magic Inventory", icon = "magicInventory", inPageHeader = true, compact = true,
-            help = "Nothing moves by itself. Review the proposed moves at the mailbox, bank or guild bank and press the action yourself. Sent mail and deposits cannot be undone. No money is sent and C.O.D. is never used. Withdrawals require a rule and take whole stacks without passing its target.\n\nQuest items, conjured items, equipment-set items, locked items and the Never transfer list are protected. Soulbound items never go by mail or to guild banks. Uncertain item data is left alone.\n\nRecipients belong to this character unless you choose All my characters; they stay out of configuration shares and backups. Names are checked for form, not whether the recipient exists.",
+            help = "Nothing moves by itself. Review the proposed moves at the mailbox, bank or guild bank and press the action yourself. Sent mail and deposits cannot be undone. No money is sent and C.O.D. is never used. Withdrawals require a rule and take items without passing its target.\n\nQuest items, conjured items, equipment-set items, locked items and the Never transfer list are protected. Soulbound items never go by mail or to guild banks. Uncertain item data is left alone.\n\nRecipients belong to this character unless you choose All my characters; they stay out of configuration shares and backups. Names are checked for form, not whether the recipient exists.",
             what = "Picks out items by rules you make (cloth for your bank alt, herbs for your bank, green gear for a friend) and lists them when you open a mailbox, bank or guild bank.",
             summary = function()
                 local n, on = Count()
                 if n == 0 then return "No rules yet." end
                 return ("%d %s, %d turned on."):format(n, n == 1 and "rule" or "rules", on)
             end,
-            consequence = "Nothing moves by itself. At the mailbox, bank or guild bank a small Magic Inventory button opens a review of exactly what would move and where; you prepare and send each mail, or deposit, with your own click. Sent mail and deposits can't be undone. No money is sent and C.O.D. is never used. Nothing is taken out of a bank unless a rule says to withdraw, and then only whole stacks, never past its target.",
+            consequence = "Nothing moves by itself. At the mailbox, bank or guild bank a small Magic Inventory button opens a review of exactly what would move and where; you prepare and send each mail, or deposit, with your own click. Sent mail and deposits can't be undone. No money is sent and C.O.D. is never used. Nothing is taken out of a bank unless a rule says to withdraw, and then never past its target.",
             details = {
                 { "Which items are never moved?", "Quest items, conjured items, items in an equipment set, locked items, anything on the Never transfer list, and soulbound items by mail or to a guild bank (your own bank can take them). An item the game hasn't fully described yet is left where it is." },
                 { "Who gets my recipients?", "Only the character you set them on, unless you tick \"All my characters\". Recipients are kept out of shared settings and backups. TwichUI checks a name's form, not whether the character exists or who plays it." },

@@ -146,6 +146,10 @@ end
 -- The list
 ---------------------------------------------------------------------------
 local Delete
+-- Asks who to share it with (reminders/ShareUI.lua); the answer is said under the reminder's name.
+local function Share(id)
+    if R.ReminderShareUI then R.ReminderShareUI.Ask(id, P.Say) end
+end
 local function Duplicate(id)
     local ok, copy = RM().Duplicate(id)
     if not ok then P.Say(copy, "warn"); return end
@@ -193,8 +197,8 @@ local function Row(i)
         if not row.id then return end
         if button == "RightButton" then
             local id = row.id -- actions belong to the invoked row, even if selection changes
-            G.ContextMenu(row, { { value = "copy", label = "Duplicate" }, { value = "delete", label = "Delete…" } }, function(action)
-                if action == "copy" then Duplicate(id) elseif action == "delete" then Delete(id) end
+            G.ContextMenu(row, { { value = "copy", label = "Duplicate" }, { value = "share", label = "Share…" }, { value = "delete", label = "Delete…" } }, function(action)
+                if action == "copy" then Duplicate(id) elseif action == "share" then Share(id) elseif action == "delete" then Delete(id) end
             end)
         else G.CloseMenu(); P.Select(row.id) end
     end)
@@ -404,6 +408,9 @@ local function Build()
     end)
     I.Tip(f.duplicate, "Duplicate", "A copy with its own identity, right after this one, turned off. Changing either never changes the other.")
     Mat().ReminderControl(f.duplicate, "secondary")
+    f.share = G.Button(f.editor, "Share…", 100, "secondary", function() if selected then Share(selected) end end)
+    I.Tip(f.share, "Share", "Offers this reminder to another player, your group, or your online guild members. They are asked first. It arrives turned off and limited to their character, and the characters it is limited to here are never sent.")
+    Mat().ReminderControl(f.share, "secondary")
     f.delete = G.Button(f.editor, "Delete", 90, "danger", function() if selected then Delete(selected) end end)
     Mat().ReminderControl(f.delete, "danger")
     I.Tip(f.delete, "Delete", "Removes this reminder, after asking. Nothing else changes.")
@@ -475,12 +482,14 @@ function P.Refresh()
             if sectionHeight > 0 then y = y + sectionHeight + GAP end
         end
         Put(f.duplicate, f.editor, 0, y)
-        Put(f.delete, f.editor, 108, y)
+        Put(f.share, f.editor, 108, y)
+        Put(f.delete, f.editor, 216, y)
         y = y + 30
     else
         f.head:Hide()
         f.place:Hide()
         f.duplicate:Hide()
+        f.share:Hide()
         f.delete:Hide()
         f.previewBox:Hide()
         f.previewLabel:Hide()

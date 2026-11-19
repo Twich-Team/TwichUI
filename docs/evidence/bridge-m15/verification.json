@@ -1,0 +1,42 @@
+{
+  "milestone": "M1.5",
+  "frozen_code_test_commit": "febed289d7db429d00d02fcff73cdbf262d541c2",
+  "measured_addon_runtime": "a779e227d32d65c90871c00c347f5dd9ce91ce31",
+  "runtime_bytes_unchanged": true,
+  "market_final_source": "529e7ba354e1ceaec9a02fb0f7e2b089cf7af6a9",
+  "market_final_ci": {
+    "backend": {
+      "run": 43790478694,
+      "result": "success"
+    },
+    "windows_companion": {
+      "run": 43790478664,
+      "result": "success"
+    },
+    "private_website": {
+      "run": 43790478716,
+      "result": "success"
+    }
+  },
+  "command": "./tests/run.sh full --profile cloud --jobs 1",
+  "full_runs_on_final_source": 1,
+  "modules_passed": 247,
+  "python_methods_passed": 138,
+  "simulator_suites": 10,
+  "launches": 192,
+  "scenario_checks": 30552,
+  "seconds": 2446.2791130110054,
+  "cloud_passed": true,
+  "local_milestone_passed": false,
+  "unsupported_coverage": [
+    "game asset rendering, client fonts and visual fidelity"
+  ],
+  "genuine_history_accessed": false,
+  "real_client_tested": false,
+  "source_sha256": {
+    "TwichUI_Workshop/Bridge.lua": "64ab3a1fe0ca52d1eee6d9ce85e64cae58ae06acb3edf1b9bd8ed464de866a8f",
+    "TwichUI_Workshop/BridgeCodec.lua": "d5aeddb5e70bd371ba83e3a2bafedc0a87efddd0e5c74f893e8c459a61a60ea1",
+    "TwichUI_Workshop/BridgeSchema.lua": "a08c50a52f9690c511f6f3c7b5686c9d838cbc13088607aa2be54d5896f87449",
+    "TwichUI_Workshop/BridgeValidate.lua": "7981864daf405c8bd8202d5b980c92d98b51a540d3c94ad9c5f91dbeaad9446c"
+  }
+}

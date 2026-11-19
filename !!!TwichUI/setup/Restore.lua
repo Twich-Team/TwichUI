@@ -44,6 +44,8 @@ end
 RS.OWN_KEYS = { "modules", "ui", "gear", "shareTransport", "profiles", "profileKeys", "profileState" }
 RS.OWN_SETUP = { "selection", "recommend", "trusted", "twichui" }   -- the parts of TwichUIDB.setup that are choices
 RS.OWN_LEFT_OUT = {
+    lootSparklesWas = "the native loot sparkle CVar before TwichUI changed it; a recovery record, not a setting",
+    gatheringSparklesCVars = "the interaction CVars owned by gathering sparkles; a recovery record outside profiles and backups",
     pins = "map pins and the party session: what you placed, not settings. A restore never removes a pin.",
     npcs = "the vendors and trainers you noted or were sent: records, not settings. A restore never removes one.",
     guildLoc = "Guild Locations' account-wide privacy choice (sharing, invisible or off), its interval and the epoch it last used: kept out so a backup, a profile or a restore can never change whether your position is shared (guildloc/State.lua)",

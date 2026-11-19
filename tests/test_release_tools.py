@@ -7,6 +7,9 @@ and CurseForge, so it shows the order of steps and what a re-run does, not that 
 Run: python3 -m unittest discover -s tests -p "test_release_tools.py"
 """
 import os
+import json
+import contextlib
+import io
 import subprocess
 import sys
 import tempfile
@@ -99,6 +102,33 @@ class PlanTests(unittest.TestCase):
         self.assertIn("- add a thing", notes)
         self.assertNotIn("first", notes)
         self.assertIn("compare", notes)
+
+    def test_publication_hold_blocks_all_channels_and_malformed_policy_fails_closed(self):
+        r = self.repo
+        r.commit("candidate")
+        r.tag("v1.3.0")
+        r.write(".github/release-policy.json", json.dumps({"publication_enabled": False}))
+        for ref in ("refs/heads/main", "refs/heads/beta", "refs/tags/v1.3.0"):
+            meta, notes = r.plan(ref)
+            self.assertFalse(meta["publish"])
+            self.assertIsNone(notes)
+            self.assertIn("publication is held", meta["skip_reason"])
+        for value in ("broken", '[]', '{"publication_enabled":"true"}'):
+            r.write(".github/release-policy.json", value)
+            with self.assertRaisesRegex(rel.ReleaseError, "invalid release publication policy"):
+                r.plan("refs/heads/main")
+
+    def test_publish_cli_honors_hold_before_credentials_or_archive_access(self):
+        # Use the real CLI with missing archive/notes: the policy must stop it first.
+        r = self.repo
+        r.write("meta.json", "{}")
+        r.write(".github/release-policy.json", json.dumps({"publication_enabled": False}))
+        from unittest import mock
+        with mock.patch.object(rel, "REPO_ROOT", r.root), contextlib.redirect_stderr(io.StringIO()) as errors:
+            code = rel.main(["publish", "--meta", str(r.root / "meta.json"), "--zip", "missing.zip",
+                             "--notes", "missing.md", "--repo", "example/unused"])
+        self.assertEqual(code, 1)
+        self.assertIn("publication is held", errors.getvalue())
 
     def test_next_alpha_starts_after_the_last_published_alpha(self):
         r = self.repo
@@ -414,6 +444,19 @@ class ArchiveTests(unittest.TestCase):
     def test_good_package(self):
         self.assertEqual(self.make(), [])
 
+    def test_auction_capabilities_are_not_patched_by_packaging(self):
+        core = self.root / rel.TOCS[rel.CORE]
+        core.write_text(core.read_text()+"\nauction\\Build.lua\n")
+        path = self.root / "!!!TwichUI/auction/Build.lua"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        source = "TwichUI.AuctionBuild = { verified = {} }\n"
+        path.write_text(source)
+        toc = CORE_TOC.replace("1.0.0", self.VERSION)+"\nauction\\Build.lua\n"
+        files = {rel.TOCS[rel.CORE]: toc, "!!!TwichUI/auction/Build.lua": source}
+        self.assertEqual(self.make(files), [])
+        files["!!!TwichUI/auction/Build.lua"] = source+"-- patched\n"
+        self.assertTrue(any("capability file differs" in p for p in self.make(files)))
+
     def test_good_package_with_windows_line_endings(self):
         # the packager writes CRLF unless told otherwise (-u)
         crlf = {rel.TOCS[rel.CORE]: CORE_TOC.replace("1.0.0", self.VERSION).replace("\n", "\r\n"),
@@ -425,9 +468,35 @@ class ArchiveTests(unittest.TestCase):
                 rel.TOCS[rel.WORKSHOP]: WORKSHOP_TOC.replace("1.0.0", self.VERSION).replace("\n", "\r\n")}
         self.assertEqual(self.make(crlf), [])
 
+    def test_test_lab_is_excluded_from_every_package(self):
+        # the development-only Test Lab (TwichUI_TestLab/) is refused wherever it lands, and the packager is told to leave it out
+        for name in ("TwichUI_TestLab/Lab.lua", "!!!TwichUI/TwichUI_TestLab/TwichUI_TestLab.toc"):
+            with self.subTest(name):
+                self.assertTrue(any("TwichUI_TestLab" in p for p in self.make({name: "-- lab\n"})), name)
+        pkgmeta = (Path(__file__).resolve().parent.parent / ".pkgmeta").read_text(encoding="utf-8")
+        ignore = pkgmeta.split("\nignore:", 1)[1]
+        self.assertIn("\n  - TwichUI_TestLab\n", ignore + "\n")
+        moved = pkgmeta.split("move-folders:", 1)[1].split("enable-nolib-creation", 1)[0]
+        self.assertNotIn("TwichUI_TestLab", moved, "the Lab is never one of the folders the packager moves into the zip")
+        self.assertNotIn("TwichUI_TestLab", rel.ADDONS)
+
+    def test_load_test_companions_are_excluded_from_every_package(self):
+        # the development-only saved-data load test (TwichUI_LoadTest/, TwichUI_LoadTestClock/) is refused and left out like the Lab
+        pkgmeta = (Path(__file__).resolve().parent.parent / ".pkgmeta").read_text(encoding="utf-8")
+        ignore = pkgmeta.split("\nignore:", 1)[1]
+        moved = pkgmeta.split("move-folders:", 1)[1].split("enable-nolib-creation", 1)[0]
+        for folder in ("TwichUI_LoadTest", "TwichUI_LoadTestClock"):
+            with self.subTest(folder):
+                self.assertTrue(any(folder in p for p in self.make({folder + "/x.lua": "-- dev\n"})), folder)
+                self.assertIn("\n  - " + folder + "\n", ignore + "\n")
+                self.assertNotIn(folder, moved)
+                self.assertNotIn(folder, rel.ADDONS)
+
     def test_problems_are_found(self):
         cases = {
             "top-level": {"TwichUI/Core.lua": ""},
+            "test lab beside the addons": {"TwichUI_TestLab/Lab.lua": "-- lab\n"},
+            "test lab inside the core": {"!!!TwichUI/TwichUI_TestLab/Lab.lua": "-- lab\n"},
             "nested addon": {"!!!TwichUI/TwichUI_Settings/Kit.lua": ""},
             "misspelled": {"TwitchUI_Settings/x.lua": ""},
             "development file": {"!!!TwichUI/tests/test.lua": ""},
@@ -436,7 +505,8 @@ class ArchiveTests(unittest.TestCase):
         }
         for what, extra in cases.items():
             with self.subTest(what):
-                self.assertTrue(any(what in p for p in self.make(extra)), self.make(extra))
+                key = "top-level" if what == "test lab beside the addons" else ("development file" if what == "test lab inside the core" else what)
+                self.assertTrue(any(key in p for p in self.make(extra)), self.make(extra))
         self.assertTrue(any("Version" in p for p in self.make(version="1.0.0")))
         self.assertTrue(any("loads Core.lua" in p for p in self.make(drop=("!!!TwichUI/Core.lua",))))
         lod = SETTINGS_TOC.replace("## LoadOnDemand: 1\n", "").replace("1.0.0", self.VERSION)
@@ -494,25 +564,29 @@ class FakeGitHub:
             self.calls.append(f"publish latest={fields['make_latest']}")
         return dict(r)
 
+    def asset_sha256(self, aid):
+        return rel.hashlib.sha256(next(a["bytes"] for r in self.releases_ for a in r["assets"] if a["id"] == aid)).hexdigest()
+
     def delete_asset(self, aid):
         for r in self.releases_:
             r["assets"] = [a for a in r["assets"] if a["id"] != aid]
 
     def upload_asset(self, rid, path, name):
         self.calls.append(f"asset {name}")
-        asset = {"id": len(self.calls), "name": name.lstrip("!"), "state": "uploaded"}  # as GitHub renames
+        asset = {"id": len(self.calls), "name": name.lstrip("!"), "state": "uploaded", "bytes": Path(path).read_bytes()}  # as GitHub renames
         self._find(rid)["assets"].append(asset)
         return dict(asset)
 
 
 class FakeCurseForge:
     def __init__(self, results):
-        self.results, self.uploads = list(results), []
+        self.results, self.uploads, self.hashes = list(results), [], []
 
     def game_version_id(self, name):
         return 1234, name, None
 
     def upload(self, zip_path, metadata):
+        self.hashes.append(rel.sha256(zip_path))
         self.uploads.append(metadata)
         return self.results.pop(0)
 
@@ -526,6 +600,7 @@ class PublishTests(unittest.TestCase):
             z.writestr(rel.TOCS[rel.CORE], CORE_TOC)
         self.meta = {"channel": "alpha", "version": "1.0.1-alpha.2.gabcdef0", "tag": "v1.0.1-alpha.2.gabcdef0",
                      "commit": "a" * 40, "prerelease": True, "make_latest": False}
+        self.meta["candidate"] = rel.candidate_identity(self.meta, self.zip, "notes\n")
         self.gh = FakeGitHub()
         self.log = []
 
@@ -540,6 +615,8 @@ class PublishTests(unittest.TestCase):
         self.assertEqual(self.publish(cf), "published")
         self.assertEqual(self.gh.calls, ["create", "asset " + self.zip.name.lstrip("!"), "asset release.json",
                                          "publish latest=false"])
+        self.assertEqual(cf.hashes, [self.meta["candidate"]["sha256"]])
+        self.assertEqual(self.gh.asset_sha256(self.gh.releases_[0]["assets"][0]["id"]), cf.hashes[0])
         self.assertEqual(cf.uploads[0]["releaseType"], "alpha")
         self.assertEqual(cf.uploads[0]["displayName"], "v1.0.1-alpha.2.gabcdef0-forever")
         self.assertEqual(cf.uploads[0]["gameVersions"], [1234])
@@ -565,12 +642,8 @@ class PublishTests(unittest.TestCase):
         stray = self.gh.releases_[0]["tag_name"]
         self.assertTrue(stray.startswith("untagged-"))
         cf = FakeCurseForge([])
-        self.assertEqual(self.publish(cf), "repaired")
-        self.assertEqual(cf.uploads, [], "CurseForge is not uploaded again")
-        self.assertEqual(self.gh.releases_[0]["tag_name"], self.meta["tag"])
-        self.assertEqual(self.gh.tags[self.meta["tag"]], self.meta["commit"])
-        self.assertIn(f"Delete the leftover tag {stray}", self.log[-1])
-        self.assertEqual(self.publish(cf), "already-published")
+        with self.assertRaisesRegex(rel.ReleaseError, "historical metadata"):
+            self.publish(cf)
 
     def test_tag_made_a_moment_late(self):
         real = self.gh.tag_commit
@@ -584,6 +657,7 @@ class PublishTests(unittest.TestCase):
 
     def test_stable_is_marked_latest(self):
         self.meta.update(channel="release", prerelease=False, make_latest=True)
+        self.meta["candidate"] = rel.candidate_identity(self.meta, self.zip, "notes\n")
         cf = FakeCurseForge([("uploaded", 1)])
         self.publish(cf)
         self.assertEqual(cf.uploads[0]["releaseType"], "release")
@@ -627,7 +701,7 @@ class PublishTests(unittest.TestCase):
     def test_interrupted_upload_is_not_retried(self):
         self.gh.create_draft(self.meta["tag"], self.meta["commit"], self.meta["tag"],
                              rel.with_marker("notes", {"channel": "alpha", "commit": self.meta["commit"],
-                                                       "curseforge": "uploading"}), True)
+                                                       "curseforge": "uploading", "candidate": self.meta["candidate"]}), True)
         cf = FakeCurseForge([("uploaded", 1)])
         with self.assertRaisesRegex(rel.ReleaseError, "uploading"):
             self.publish(cf)
@@ -725,9 +799,8 @@ class CurseForgeClientTests(unittest.TestCase):
 
     def test_game_versions(self):
         self.assertEqual(self.cf.game_version_id("1.60.1"), (1, "1.60.1", None))
-        vid, name, warning = self.cf.game_version_id("1.70.0")
-        self.assertEqual((vid, name), (2, "1.50.0"))
-        self.assertIn("no game version 1.70.0", warning)
+        with self.assertRaisesRegex(rel.ReleaseError, "no exact"):
+            self.cf.game_version_id("1.70.0")
         self.assertEqual(self.requests[0][:2], ("/api/game/wow/versions", "secret-token"))
 
     def test_upload_outcomes(self):

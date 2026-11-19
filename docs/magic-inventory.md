@@ -33,8 +33,9 @@ own panel instead: "The guild bank at the bank window"). Clicking it opens the r
 
 - **Mail:** "Prepare mail 1 of 2 to Bankalt" attaches up to 12 stacks in the game's Send Mail window (where the player
   can see them); "Send mail 1 of 2 to Bankalt" sends exactly that mail. Each mail is two clicks; one recipient per mail.
-- **Bank:** "Deposit 8 stacks" moves them one at a time, each confirmed by the game before the next; "Withdraw 2 stacks"
-  takes what withdrawing rules top the bags up with, the same way.
+- **Bank:** **Run rules** carries out the entire review with one click: deposits first, then withdrawals. A progress
+  bar counts only moves confirmed by the game; **Stop** ends the batch. **Rule actions** offers a temporary **Deposit all**
+  or **Withdraw all** review for one bank rule, followed by its primary action. Nothing moves when selecting an action.
 - **Guild bank:** the panel at the bank window (Deposit, Organize bank, Arrangement..., and Withdraw with a withdrawing rule), below.
 
 Off by default (`modules.magicInventory`, only an explicit `true` is on). Opening an interface never opens the review,
@@ -116,20 +117,19 @@ needs: without one it can't be turned on, "no-target"). Decided per item, for th
 - **Protections:** the Never transfer list and an enabled Never transfer rule block withdrawals too (nothing on them moves either way);
   the rule's own Never include list; a locked stack or one whose lock the game didn't say. A soulbound item may come out of your
   own bank (it is going to you).
-- **How much:** target minus what the bags carry now. **Whole stacks only, never past the target:** the bank's stacks are taken
-  largest first while each still fits. With 25 carried, a target of 40 and stacks of 20, 20, 10 and 5, the 10 and the 5 come out
-  (40). With 30 carried and only stacks of 20, nothing comes out (50 would pass 40), and the review says "Short by 10: only whole
-  stacks are taken, and the next stack would go over 40". What isn't in the bank stays missing.
+- **How much:** target minus what the bags carry now, never past the target. Whole stacks that fit are preferred;
+  when needed, the character bank and guild panel split a stack for the remaining amount. With 30 carried,
+  a target of 40 and a bank stack of 20, 10 come out and 10 remain in the bank. What isn't in the bank stays missing.
 - **No ping-pong:** every enabled rule that withdraws counts its target as a keep amount for the item (Precedence, step 4), so a
   deposit or mail rule never sends away what a withdrawing rule tops up. A rule that only withdraws never owns an item for deposits
   or mail; a balance rule owns it as a depositing rule does.
 - **Balance:** above the target it deposits (as Deposit extras), below it withdraws; never both for one item at once.
 
 **At your bank** (`Run.lua`, the review's "Withdraw from your bank" group): only while the bank is open (its bags are read then:
-`C_Bank.FetchPurchasedBankTabIDs`, `C_Container`); the settings' Preview lists no withdrawals. Each stack: found again in the bank
+`C_Bank.FetchPurchasedBankTabIDs`, `C_Container`); the settings' Preview includes withdrawals while the character bank is open. Each stack: found again in the bank
 by item and count, judged again, and **skipped** when the bags now carry so much that it would pass the target (the bags may change
 after the review); then picked up and put on a bag stack of the same item with room, else an empty slot in a bag that can hold it.
-Confirmed when the bank slot no longer holds it and the bag slot shows the right count. No room: "your bags are full", it stops.
+Confirmed when the bank slot shows the expected remainder (or is empty) and the bag slot shows the right count. No room: "your bags are full", it stops.
 
 **At a guild bank** (the panel's **Withdraw**, shown with an enabled withdrawing rule whose tab is in this guild; GuildPrep reads the
 bank for it as it does for an arrangement): `MI.CurrentGuildPlan("withdraw")` plans one move a stack from the rule's tab to the bags;
@@ -164,10 +164,10 @@ rights, allowance, full bags, a change mid-run), the Withdraw button in `tests/t
    takes what a bank rule above owns (shown as "Reserved by ..."), and an unavailable destination (no recipient here,
    another guild) never reroutes anything; the owning rule is listed as needing attention.
 
-**Whole stacks only.** Eligible stacks are taken largest first while they fit under (carried − keep); a stack that would
+**Deposit quantities.** Eligible stacks are taken largest first while they fit under (carried − keep); a stack that would
 pass the keep amount stays, and the review says how many more than the keep amount stay. With splitting allowed
-(`MI.SPLIT`, off everywhere) the last stack would be split to meet the keep amount exactly; the planner supports it and the
-tests cover it, but no adapter splits.
+(`MI.SPLIT.bank` is enabled) the last stack is split to meet the keep amount exactly. Mail and the older guild
+review still move whole stacks; the guild panel uses its own split-capable adapter.
 
 ## Moving (`inventory/Run.lua`)
 
@@ -196,7 +196,9 @@ the cursor is never touched and refuses the action.
 **Bank:** a stack goes onto a bank stack of the same item with room for all of it, else an empty slot in a bank bag
 that can hold it (bag family). Confirmed when the bag slot no longer holds it and the bank slot shows exactly the right
 count; uncertain when it left the bag but didn't show up within 4 s; failed when it never left. No room stops the run.
-Nothing is withdrawn by a deposit (withdrawals are their own action: "Withdrawing"), no bank tab is bought, nothing else in the bank is moved.
+The combined bank action (`Run.Bank`) copies the reviewed steps into one deposit-first batch, followed by withdrawals.
+Each step retains its direction and target and is revalidated before pickup. A refusal, full destination, combat, closure,
+or uncertain step ends the batch; no next group is started after a stop. No bank tab is bought and unrelated bank items stay put.
 
 **Guild bank:** only into the chosen tab, in the guild it was chosen in, with that tab shown in the guild bank window
 and its name unchanged, and only when `canDeposit` is true; empty slots only. Another guild, a renamed tab or no deposit
@@ -208,11 +210,51 @@ change, `ADDON_ACTION_BLOCKED`/`FORBIDDEN`, Stop, no room, a refused step, an un
 nothing is undone or offered as undoable. One line in your own chat per run: confirmed, didn't move, skipped, not
 confirmed, and why it stopped.
 
+## Character-bank review and manual actions
+
+The standard bank review uses the crafted frame, dark leather, walnut cards and confirmation button from `CraftLook`,
+with existing direction-arrow and balance-scales illustrations. Summary cards count deposit items, withdrawal items,
+and matching balance rules. Each item row shows its native icon/name, direction, quantity and bag count before/after.
+**Leave out / Include** affects this operation only. Explanations, protected/reserved items, shortfalls and the last
+transfer's evidence are behind **Details**; the result/progress remains visible until another review or visit.
+A settings preview stays read-only. Opening the bank only exposes the launcher, never the review or a transfer.
+
+**Rule actions** lists saved character-bank rules, including disabled ones, with **Deposit all** and **Withdraw all**.
+Choosing one builds a private, one-visit plan (`MI.CurrentPlan("bank", leftOut, { ruleId, dir })`): the selected rule's
+filters and exclusions are kept, its usual keep/flow is overridden, and no saved rule, enabled flag or generation is written.
+Manual selection deliberately ignores other transfer rules' destination priority. The Never transfer list and rules,
+per-item deposit protections, locked/unknown source stacks and ordinary capacity checks still apply. Deposits also keep
+explicit **Keep in bags** rules and vendor restocking targets. Withdraw all takes all eligible matching bank stock,
+including amounts beyond MAX_KEEP; it does not use a top-up target. Other items are untouched. **Use rules** returns
+to normal planning; closing the bank, leaving the world or disabling the feature clears the override.
+
+One approval (`Run.Bank`) covers both directions in the exact reviewed batch. Progress (`Run.BankProgress`) counts
+confirmed moves, separately retaining skipped, failed and uncertain counts; attempts never fill the bar. Review controls
+are disabled while running. Closing only the review hides it; **Stop**, bank closure, combat and the existing lifecycle
+protections stop the run. The existing inventory frame/listener gauges cover the pooled review lifecycle; no new
+background watcher, saved-data contract or recurring work is introduced.
+
+Verification: `tests/test_magic_inventory_bank.lua` covers mixed batches, deposit-first space recovery, manual overrides,
+protections, cancellation and guard failures. `tests/test_magic_inventory_bank_ui.lua` covers the compact controls,
+confirmed progress, details, manual review/execute boundaries, exclusions, visit cleanup and bounded frame/listener reuse.
+The other Magic Inventory tests retain normal bank, mail, guild and settings coverage. Magic Inventory has no dedicated
+verification group; inspect the complete offline plan (`./tests/run.sh --list`) and use `./tests/run.sh` for broader coverage.
+The settings simulator has opt-in synthetic bank captures (no live actions):
+
+```sh
+SIMLAB_SETTINGS_BANK_REVIEW='"ready"' bash tools/simlab/run.sh settings magicInventory
+# Also: actions, manual, run, complete, stopped. Use SIMLAB_ASSETS=0 for the documented cloud limitation.
+```
+
+These are handler/state and structural screenshot checks, not real input, fonts, combat/taint or server proof.
+Client acceptance: mixed deposit/withdraw rules, large banks, full bags, partial stacks, Stop/close/combat,
+manual all-actions with protected items, native fonts and third-party bank anchoring.
+
 ## The review and the buttons (`inventory/Window.lua`)
 
-- Groups by destination: `Send by mail to Bankalt` (stacks, mails, one recipient per mail, postage once prepared), `Deposit
+- Mail and the older guild review group by destination: `Send by mail to Bankalt` (stacks, mails, one recipient per mail, postage once prepared), `Deposit
   in your bank` (stacks, free slots), `Deposit in the guild bank of <Guild>, tab 2 "Mats"`.
-- Each item: icon, name, count, stacks, the rule, the keep amount, and "N more than the keep amount stay" when whole
+- In those reviews each item shows icon, name, count, stacks, the rule, the keep amount, and "N more than the keep amount stay" when whole
   stacks leave extra. **Leave out** removes it from this operation only (the rule is unchanged); **Review again** puts
   everything back.
 - Needs attention (rules that match but can't run), Reserved by other rules, Staying in your bags (each reason), Shadowed

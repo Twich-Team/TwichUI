@@ -439,6 +439,55 @@ to what live reminders read or listen for.
 The Test section's simulations go through the same `Evaluate.Run` on a table built from the scenarios
 (`Evaluate.Simulate`) and never see the live one. `/tui diagnostics` has a Reminders section with counts only (including the sound counts, never a sound's name).
 
+## Sharing a reminder
+
+Settings > Reminders > **Share…** (also in a row's right-click menu) offers one reminder to another player, or to everyone else in
+your group, or online guild members. Nothing is shared unless you choose it, nothing happens to the other player's reminders unless they accept, and
+nothing is ever turned on for them. Code: `reminders/Share.lua` (the transfer), `reminders/ShareUI.lua` (the progress card and the
+two questions), `RM.Export` and `RM.Admit` in `reminders/Config.lua` (what is sent and the one door a received reminder goes through).
+
+**The conversation** (addressed control messages on setup sharing's prefix, `TwichUISetup`; the message types are their own, so a
+TwichUI that doesn't know them ignores them):
+
+| Message | From, to | Carries |
+|---|---|---|
+| `remoffer` | you, them | the protocol, an id, the reminder's name and the size of what will follow |
+| `remreply` | them, you | accepted, or why not: `off`, `version`, `unavailable`, `full`, `busy`, `declined` |
+| `remprogress` | you, them | addressed, transfer-specific queue progress, at most once per second plus completion |
+| `remdata` | you, them | the reminder (the table below), sent only after they accepted |
+| `remdone` | them, you | stored, or refused with `full`, `newer` or `invalid` |
+
+The framed destination picker offers a player name, **My group**, and **My guild**. A player send uses your Sending options
+(Direct, Party or Guild). My group explicitly uses PARTY, RAID or INSTANCE_CHAT; My guild explicitly uses GUILD. No failed send
+falls back to another channel. Each recipient gets an addressed offer and decides independently; declining affects only that
+recipient. Group sends allow up to 39 other players, guild sends up to 1000 online peers, excluding yourself and offline members.
+The guild roster is refreshed on request; if it has not arrived yet, try again when it updates. Over a group or guild channel everyone
+receives the data, and only the addressed player's TwichUI reads it: this is filtering, not privacy. Receiving is behind the
+switches setup sharing has: sharing on (`setupSharing`) and accepting offers on (`acceptSetups`), plus Reminders on. There is no
+"always accept". One question is open at a time; a second offer meanwhile is answered "busy". An offer not answered in 2 minutes is
+answered "not now"; a transfer that stops for a minute ends. Switching sharing or receiving off ends everything in progress.
+
+**What is sent** (`RM.Export`): the name, all/any, the conditions and groups (each as its own kind checks it), the display (every
+value), the place, the sound's *name*, and the class limit if there is one. **Never** the characters it is limited to, the id, or
+whether it is on. A reminder with anything unfinished (a problem the editor lists) is not sent.
+
+**What arrives** (`RM.Admit`): the table is another player's text, so the reminder is rebuilt field by field from checked values and
+refused whole on the first thing that can't be used: another version, a name with markup or too long, a condition of a kind this
+version doesn't know or that fails its own kind's check, groups nested too deeply or too many conditions, a display value out of
+range, artwork or an icon this version doesn't have. Nothing is added when it is refused. What is added has an id of its own, starts
+**off**, and is limited to the **receiving character** (the way the built-in templates are; a class limit comes across). The
+receiver can widen it in the editor. The sound is kept by name like any reminder's: if they don't have it, it plays nothing.
+
+**What the players see:** a small card with one progress bar per transfer, on both sides (for the sender: waiting for the answer, then
+sending; for the receiver: receiving, then "added, off until you turn it on"). More than three outgoing transfers become one line with aggregate byte progress. Progress messages identify the transfer, so traffic addressed to other guild members cannot advance the receiving bar.
+It goes a few seconds after the last transfer ends; a click opens Reminders on the new reminder, a right-click cancels offers nobody has
+answered. When a reminder has arrived the receiver is asked once whether to open the Reminders settings (not during combat: the
+question waits until it ends). The answer to the click that started a send is said under the reminder's name on the page; chat prints
+only the refusal when the receiver accepts a reminder they have no room for. The Quiet screen does not hide the card or the questions
+(setup sharing's progress doesn't either): they answer something the players just did.
+
+A reminder is a few hundred bytes to a few KB; at the game's addon-message rate the bar is quick, and the limit is 16 KB.
+
 ## Events and performance
 
 | Moment | What happens |
@@ -499,7 +548,8 @@ their sources (`ST.Source` after State.lua, with `ST.Plain` / `ST.Number` / `ST.
   from "doesn't use charges"). The off hand and the main hand only; no ranged slot. A fishing pole counts as nothing to enchant.
 - Well Fed: only whether the buff is there, not which food gave it (a buff condition, `aura`, can ask how long a chosen
   buff has left). It is unknown, so nothing shows, while the game hides your buffs from addons.
-- Not in this release: Lua, dynamic clones, a volume or channel per sound, sharing, health (always secret to addons),
+- Not in this release: Lua, dynamic clones, a volume or channel per sound, sharing your whole list or a profile (one reminder can be
+  shared: below), health (always secret to addons),
   swimming (no event), a talent's rank, automation of any kind.
 
 ## In-game checklist
@@ -591,6 +641,16 @@ their sources (`ST.Source` after State.lua, with `ST.Plain` / `ST.Number` / `ST.
     back for the same reminder; **Use template** shows it for the new one. Drag the window to the right edge of the screen
     and at a larger window scale: the companion flips to the left or stays on screen, and never overlaps the window.
     Close the settings and reopen: one preview, none left behind.
+29. **Sharing.** With a second character (or a friend running this build): Settings > Reminders > a finished reminder > **Share…**,
+    type the other character's name (or target them first: it is filled in). The other side gets a question naming the reminder; the
+    sender's card says it is waiting. **Not now** says "They declined." on your side and adds nothing. Ask again and **Receive**: both
+    cards show a bar, the sender's says "has it", the receiver's says it is off, and the receiver is asked about opening the settings;
+    **Open Reminders** opens the page on the new reminder, which is off and limited to that character. Check the artwork, the words and
+    the sound came across, a class limit stayed, and the sender's character limit did not. Try with Sending options on Direct, Party
+    and Guild. **My group** in a party of three: each member is asked on their own, one accepting and one declining. Offer again
+    while a question is open on the other side: "answering another offer". Switch receiving off on the other side: "turned off
+    receiving". Accept during combat: the reminder is added and the settings question waits until combat ends. Open the sender's
+    share question and close it with Esc: nothing is sent. With 24 reminders on the other side: "list is full" at the offer.
 
 
 Condition-type art is resolved centrally by `RemindersPlain.ApplyArt`: enchanted blade for weapon enchant, separate

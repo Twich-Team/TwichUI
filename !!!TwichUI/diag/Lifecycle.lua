@@ -55,3 +55,32 @@ local function Lifecycle()
 end
 
 D.Register("lifecycle", { title = "Start-up and lifecycle", order = 12, snapshot = Lifecycle })
+
+-- Host retains the last opening automatically, including failures before a
+-- Diagnostics capture starts. No additional load, probing procedure or timer.
+D.Register("auctionPresentation", { title = "Auction House presentation", order = 13, snapshot = function()
+    local h = R.AuctionHost
+    if not h then return { status = "unavailable", reason = "not-loaded" } end
+    local s, lines = h.Snapshot(), {}
+    local o = s.opening or {}
+    local function Line(fmt, ...) lines[#lines+1] = fmt:format(...) end
+    Line("host: %s; reason: %s; visit: %d; visiting: %s; pending: %d", s.state, s.reason, s.visit, D.Flag(s.visiting), s.pending)
+    Line("opening visit: %s; load: %s; construction: %s; parking: %s", tostring(o.visit), tostring(o.load), tostring(o.build), tostring(o.parking))
+    Line("parking expected: %s", tostring(o.parkExpected))
+    Line("parking returned: %s; mismatch: %s", tostring(o.parkActual), tostring(o.parkingMismatch))
+    Line("failure: %s (%s); watchdog: %s; restoration: %s (%s)", tostring(o.failure), tostring(o.failureState), tostring(o.watchdog), tostring(o.restoration), tostring(o.restoreReason))
+    for _, key in ipairs({ "presented", "custom", "native" }) do
+        local f = o[key] or {}
+        Line("%s: usable %s; shown %s; visible %s; scale %s; alpha %s; strata %s; reason %s", key,
+            D.Flag(f.usable), D.Flag(f.shown), D.Flag(f.visible), tostring(f.scale), tostring(f.alpha), tostring(f.strata), tostring(f.why))
+        for _, field in ipairs({ "bounds", "viewport" }) do
+            local b = f[field] or {}
+            Line("%s %s: left %s; bottom %s; right %s; top %s", key, field, tostring(b.left), tostring(b.bottom), tostring(b.right), tostring(b.top))
+        end
+        if key ~= "native" then
+            Line("initialization complete: %s; Browse built: %s; page rendered: %s; exception: %s",
+                D.Flag(f.initialized), D.Flag(f.browse), D.Flag(f.rendered), tostring(f.error))
+        end
+    end
+    return { status = s.state == "recovery" and "unavailable" or "ready", reason = s.reason, lines = lines }
+end })
