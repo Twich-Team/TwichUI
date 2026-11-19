@@ -64,15 +64,21 @@ Lg.SOURCES = {
     ahSale = { label = "Auction sale", dir = 1, evidence = "mailinvoice" },
     mail = { label = "Mail collected", dir = 1, evidence = "mailbox" },
     ahBuy = { label = "Auction purchase", dir = -1, evidence = "auctionpurchase" },
+    vendorBuy = { label = "Vendor Purchase", dir = -1, evidence = "merchantpurchase" },
+    vendorSell = { label = "Vendor Sale", dir = 1, evidence = "merchantsale" },
+    repair = { label = "Repairs", dir = -1, evidence = "merchantrepair" },
     other = { label = "Unclassified", evidence = "balance" },
 }
-Lg.ORDER = { "ahSale", "mail", "ahBuy", "other" }
+Lg.ORDER = { "ahSale", "mail", "ahBuy", "vendorBuy", "vendorSell", "repair", "other" }
 -- How the classification was established, in the words the details show.
 Lg.EVIDENCE = {
     balance = "Only your gold balance changed. Nothing identifies the source.",
     mailbox = "Mailbox money you took, matched to the exact amount that arrived.",
     mailinvoice = "A sold-auction invoice in the mailbox, matched to the exact amount that arrived.",
     auctionpurchase = "A completed Auction House purchase, matched to the exact amount that left.",
+    merchantpurchase = "A gold-only merchant purchase request and the exact items received, matched to the observed spending.",
+    merchantsale = "A merchant sale request, the removed stack and a new matching buyback receipt, matched to the gold received.",
+    merchantrepair = "A player-paid repair-all request and the verified repair cost cleared, matched to the observed spending.",
 }
 
 local active, held, ready = false, false, false
@@ -382,8 +388,12 @@ local function Valid(ev)
     if not (src and amount) or (src.dir and (amount > 0) ~= (src.dir > 0)) then return nil end
     local corr = ev.corr
     if corr ~= nil and (type(corr) ~= "string" or corr == "" or #corr > MAX_CORR) then return nil end
+    -- Optional exact journal target for observers that have already verified a particular movement.
+    -- These fields are session-only; they never change the saved schema or enter the pending queue.
+    local entry = ev.entry ~= nil and Whole(ev.entry, 1, MAX) or nil
+    if (ev.entry ~= nil or ev.char ~= nil) and (not entry or type(Plain(ev.char)) ~= "string" or Plain(ev.char) ~= CharKey()) then return nil end
     return { kind = ev.kind, amount = amount, item = Whole(ev.item, 1, MAX_ITEM), qty = Whole(ev.qty, 1, MAX_QTY),
-        note = Note(ev.note), corr = corr }
+        note = Note(ev.note), corr = corr, entry = entry, char = ev.char }
 end
 
 -- Offers one completed transaction. Returns "attributed", "pending" (its money has not been seen yet), "ambiguous",
@@ -395,6 +405,18 @@ function Lg.Evidence(raw)
     if ev.corr and seen[ev.corr] then stats.repeated = stats.repeated + 1 return "repeated" end
     local now = Mono()
     Prune(now)
+    if ev.entry then
+        local rec = Lg.Record(ev.char)
+        for _, slot in ipairs(recent) do
+            if slot.rec == rec and slot.e.id == ev.entry then
+                if slot.e.k or slot.e.a ~= ev.amount then return false, "target" end
+                Attach(slot, ev)
+                Changed()
+                return "attributed"
+            end
+        end
+        return false, "target"
+    end
     -- the money moved in this very frame: the entry the event just made
     local last = recent[#recent]
     if last and last.gt == now and not last.e.k and last.e.a == ev.amount then
@@ -561,6 +583,7 @@ function Lg.Refresh()
         Stop()
     end
     if R.MailGold then R.MailGold.Refresh() end   -- the mailbox reports its money to the ledger while this records
+    if R.VendorGold then R.VendorGold.Refresh() end
 end
 
 function Lg.Active() return active end

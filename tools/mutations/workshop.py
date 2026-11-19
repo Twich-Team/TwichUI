@@ -27,7 +27,7 @@ SHOPPING, VENDOR, OPPS = "TwichUI_Workshop/Shopping.lua", "TwichUI_Workshop/Vend
 
 # `--broad` re-runs a SURVIVOR against these older, broader Workshop tests to say whether anything else notices it (the mutation still counts as
 # a survivor of its focused tests; the note only tells you where the gap is). The default run never uses them.
-SUITE = {"targets": ("TwichUI_Workshop/", "!!!TwichUI/WorkshopAuto.lua", "!!!TwichUI/WorkshopLauncher.lua", "!!!TwichUI/auction/Ledger.lua", "!!!TwichUI/auction/Mail.lua"), "broad_tests": ("test_workshop_market.lua", "test_workshop_prices.lua", "test_workshop_shopping.lua", "test_workshop_storage.lua", "test_workshop.lua")}
+SUITE = {"targets": ("TwichUI_Workshop/", "!!!TwichUI/WorkshopAuto.lua", "!!!TwichUI/WorkshopLauncher.lua", "!!!TwichUI/auction/Ledger.lua", "!!!TwichUI/auction/Mail.lua", "!!!TwichUI/auction/Vendor.lua", "!!!TwichUI/modules/Restock.lua"), "broad_tests": ("test_workshop_market.lua", "test_workshop_prices.lua", "test_workshop_shopping.lua", "test_workshop_storage.lua", "test_workshop.lua")}
 
 MUTATIONS = []
 
@@ -1283,6 +1283,42 @@ m("ledger.query.window", LQUERY, "local from = today - filter.days + 1", "local 
   "a seven day window is eight days (and its comparison overlaps)", [LEDGERUI])
 m("ledger.query.compare-incomplete", LQUERY, "if pcovered == #pdays and #pdays > 0 then", "if #pdays > 0 then",
   "a percentage is shown against a prior period that was only partly recorded", [LEDGERUI])
+
+VENDOR, VTEST = "!!!TwichUI/auction/Vendor.lua", "test_ledger_vendor.lua"
+m("ledger.vendor.missing-item", VENDOR,
+  '    if item and (b[item] or 0) - (a[item] or 0) ~= delta then return false end\n', '',
+  "a matching debit with the purchased item absent from both snapshots is called a purchase", [VTEST])
+m("ledger.vendor.inventory", VENDOR,
+  'confirmed = SameCounts(c.before.counts, after.counts, c.item, c.qty)', 'confirmed = true',
+  "the requested item need not arrive before a debit is attributed", [VTEST])
+m("ledger.vendor.receipt-price", VENDOR, 'receipt.price ~= amount', 'false',
+  "a buyback receipt with a different payment identifies unrelated income", [VTEST])
+m("ledger.vendor.receipt", VENDOR,
+  'and SaleReceipt(c.before.buyback, after.buyback, c, e.a)', 'and true',
+  "an item consumed at a merchant plus unrelated income is called a sale", [VTEST])
+m("ledger.vendor.repair-outcome", VENDOR,
+  'confirmed = after.repair == 0 and SameCounts(c.before.counts, after.counts)',
+  'confirmed = SameCounts(c.before.counts, after.counts)',
+  "repair spending is classified without any verified repair outcome", [VTEST])
+m("ledger.vendor.guild", VENDOR, '(guild ~= nil and guild ~= false)', 'false',
+  "a guild-funded repair request claims later unrelated personal spending", [VTEST])
+m("ledger.vendor.overlap", VENDOR, 'if candidate or poisoned or not c', 'if poisoned or not c',
+  "the last overlapping request replaces an unresolved attempt and claims an ambiguous debit", [VTEST])
+m("ledger.vendor.currency", "!!!TwichUI/modules/Restock.lua",
+  'local otherCost = extended ~= false or currency ~= nil', 'local otherCost = false',
+  "native listing eligibility ignores extended currencies, admitting them as gold-only offers", [VTEST])
+m("ledger.vendor.stale-offer", VENDOR,
+  'if not ok or not current or current.why or current.id ~= listing.id',
+  'if not ok or not current or current.id ~= listing.id',
+  "a cached gold-only offer vouches for a newly token-funded purchase", [VTEST])
+m("ledger.vendor.exact-target", LEDGER, '    if ev.entry then\n', '    if false then\n',
+  "targeted merchant evidence falls back to another equal-amount transaction or the pending queue", [VTEST])
+m("ledger.vendor.target-amount", LEDGER, 'if slot.e.k or slot.e.a ~= ev.amount then', 'if slot.e.k then',
+  "an exact journal target accepts a contradictory amount", [VTEST])
+m("ledger.vendor.target-reuse", LEDGER, 'if slot.e.k or slot.e.a ~= ev.amount then', 'if slot.e.a ~= ev.amount then',
+  "the same journal target can move into source totals twice with different correlation IDs", [VTEST])
+m("ledger.vendor.late-timer", VENDOR, 'or now >= c.expires', '',
+  "an overdue settle callback claims money after the request expired during a stalled frame", [VTEST])
 
 m("market.junk.vendor-only", "TwichUI_Workshop/Junk.lua",
   'advice.action=="vendor"', 'advice.action=="auction"',

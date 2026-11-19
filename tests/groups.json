@@ -1,4 +1,10 @@
 {
+  "ledger": {
+    "tests": ["test_ledger*.lua", "test_workshop_ledger.lua", "test_mail_gold.lua", "test_restock.lua", "test_mage_sell.lua", "test_mage_sell_mark.lua", "test_workshop_junk.lua", "test_perf_engine.lua"],
+    "syntax": ["!!!TwichUI/auction/*.lua", "!!!TwichUI/modules/Restock.lua", "!!!TwichUI/modules/MageSell.lua", "!!!TwichUI/modules/EllesmereJunk.lua", "TwichUI_Workshop/Ledger*.lua", "TwichUI_Workshop/ViewLedger.lua", "TwichUI_Diagnostics/Gauges.lua"],
+    "dependencies": ["core"],
+    "simulators": [{"script": "smoke"}, {"script": "workshop", "only": ["ledgervendor", "ledgervendorsmall"]}]
+  },
   "core": {
     "tests": ["test_auction_host.lua", "test_auction_window.lua", "test_auction_price.lua", "test_simlab_diagnostics.lua", "test_commands.lua", "test_defaults.lua", "test_lifecycle.lua", "test_persist.lua", "test_profiles.lua", "test_lod_apply.lua", "test_routing.lua", "test_storage.lua", "test_stored_data.lua", "test_status.lua", "test_cleanup.lua"],
     "syntax": ["!!!TwichUI/*.lua", "!!!TwichUI/setup/*.lua", "!!!TwichUI/auction/*.lua"],

@@ -42,9 +42,9 @@ VIEWS = {"overview": "TwichUIWorkshop", "craft": "TwichUIWorkshop", "opps": "Twi
          "shopmix": "TwichUIWorkshop", "shopcollect": "TwichUIWorkshop", "strategy": "TwichUIWorkshop", "confirm": "TwichUIWorkshop",
          "stratlong": "TwichUIWorkshop", "planning": "TwichUIWorkshop", "nodata": "TwichUIWorkshop", "override": "TwichUIWorkshop",
          "compact": "TwichUIWorkshopCompact", "compactcraft": "TwichUIWorkshopCompact", "tooltip": "TwichUIWorkshop", "smallstrat": "TwichUIWorkshop",
-         "shopafter": "TwichUIWorkshop", "notice": "TwichUIWorkshop", "advisor": "TwichUIWorkshop", "advisorsmall": "TwichUIWorkshop", "advisorempty": "TwichUIWorkshop", "advisorscaled": "TwichUIWorkshop", "advisorlong": "TwichUIWorkshop", "advisorvacant": "TwichUIWorkshop", "advisoralt": "TwichUIWorkshop", "advisorsource": "TwichUIWorkshop", "advisorcategory": "TwichUIWorkshop", "advisorscroll": "TwichUIWorkshop", "advisortentative": "TwichUIWorkshop", "advisorbags": "TwichUIWorkshop", "advisorfiltered": "TwichUIWorkshop", "ledger": "TwichUIWorkshop", "ledgersmall": "TwichUIWorkshop"}
+         "shopafter": "TwichUIWorkshop", "notice": "TwichUIWorkshop", "advisor": "TwichUIWorkshop", "advisorsmall": "TwichUIWorkshop", "advisorempty": "TwichUIWorkshop", "advisorscaled": "TwichUIWorkshop", "advisorlong": "TwichUIWorkshop", "advisorvacant": "TwichUIWorkshop", "advisoralt": "TwichUIWorkshop", "advisorsource": "TwichUIWorkshop", "advisorcategory": "TwichUIWorkshop", "advisorscroll": "TwichUIWorkshop", "advisortentative": "TwichUIWorkshop", "advisorbags": "TwichUIWorkshop", "advisorfiltered": "TwichUIWorkshop", "ledger": "TwichUIWorkshop", "ledgersmall": "TwichUIWorkshop", "ledgervendor": "TwichUIWorkshop", "ledgervendorsmall": "TwichUIWorkshop"}
 SHOTS = ("overview", "craft", "opps", "shop", "design", "small", "smallov", "empty", "history", "craftlong", "shopmix", "shopcollect",
-         "strategy", "confirm", "stratlong", "planning", "nodata", "override", "compact", "compactcraft", "tooltip", "smallstrat", "shopafter", "notice", "advisor", "advisorsmall", "advisorempty", "advisorscaled", "advisorlong", "advisorvacant", "advisoralt", "advisorsource", "advisorcategory", "advisorscroll", "advisortentative", "advisorbags", "advisorfiltered", "ledger", "ledgersmall")
+         "strategy", "confirm", "stratlong", "planning", "nodata", "override", "compact", "compactcraft", "tooltip", "smallstrat", "shopafter", "notice", "advisor", "advisorsmall", "advisorempty", "advisorscaled", "advisorlong", "advisorvacant", "advisoralt", "advisorsource", "advisorcategory", "advisorscroll", "advisortentative", "advisorbags", "advisorfiltered", "ledger", "ledgersmall", "ledgervendor", "ledgervendorsmall")
 VOICE, UTF8 = "voice-settings-unsupplied", "addon-message-invalid-utf8"
 CHECK = re.compile(r"^SIMLAB check (PASS|FAIL) \[([^\]]+)\] (.*?) \| expected=(.*?) \| actual=(.*)$", re.M)
 
@@ -137,10 +137,10 @@ def main():
     print("Screenshots (files only; whether they look right is for a person to judge):")
     for n in shots:
         path = run / f"{n}.png"
-        size = (1000, 700) if n in ("small", "smallov", "smallstrat", "advisorsmall", "ledgersmall") else (1600, 1200)
+        size = (1000, 700) if n in ("small", "smallov", "smallstrat", "advisorsmall", "ledgersmall", "ledgervendorsmall") else (1600, 1200)
         # the Workshop window is 1080x700, centred (the settings window of the design shot is smaller, centred too); on the small screen
         # it is scaled to fit, so the middle of the screen is inside it
-        box = (150, 120, 700, 460) if n in ("small", "smallov", "smallstrat", "advisorsmall", "ledgersmall") else ((650, 450, 950, 750) if n in ("compact", "compactcraft") else (260, 250, 1080, 700))
+        box = (150, 120, 700, 460) if n in ("small", "smallov", "smallstrat", "advisorsmall", "ledgersmall", "ledgervendorsmall") else ((650, 450, 950, 750) if n in ("compact", "compactcraft") else (260, 250, 1080, 700))
         try:
             width, height, pixels = read_rgba(path)
             check(f"{n}.png is {size[0]}x{size[1]}", (width, height) == size, f"{width}x{height}")
