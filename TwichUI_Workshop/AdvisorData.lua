@@ -195,6 +195,7 @@ function D.Tooltip(f, facts)
     local can = C_SpellBook and C_SpellBook.ContainsAnyDisenchantSpell and W.Plain(C_SpellBook.ContainsAnyDisenchantSpell())
     return A.Decide(f.item, { qty = f.count or 1, sell = f.sell, bindType = f.bindType, bound = f.bound, variant = f.variant,
         now = f.now, minGain = A.Gain(), facts = facts, pendingPlan = pending, crafting = { uses = {}, reserved = reserved },
+        disenchant = W.Worth.DisenchantRelevant(f),
         disenchantValue = W.Disenchant.Evaluate({item=f.item,quality=f.quality,classID=f.classID,equipLoc=f.equipLoc,canDisenchant=can}) })
 end
 -- Select-only heavy context. QueueStrategy reuses P2's cooperative job and its

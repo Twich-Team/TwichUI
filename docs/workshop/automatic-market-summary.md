@@ -181,3 +181,33 @@ modules but was rejected by the source-change guard while the new regression
 coverage was still being edited; that evidence is retained separately. The later
 frozen-source runs report unchanged source and PASS. The subsequent documentation
 placement correction changes no executable source.
+
+### Tooltip recommendations from available prices
+
+Advisor policy 3 compares usable Market Recent Price references against the known
+vendor value in both directions. The existing 1.5x vendor margin and the player's
+minimum worthwhile gain still determine whether auctioning is worth the effort.
+The primary tooltip says `Auction (Market estimate)` or `Vendor (Market comparison)`;
+limited local observations can similarly support `Possible Vendor`. These remain
+tentative comparisons and do not supply posting prices or predicted proceeds.
+Missing or pending evidence gets a specific primary message, such as `Loading
+Market price`, `Check variant price`, or `Auction price unavailable`. Crafting
+reservations and pending plans still take precedence over a sale comparison.
+
+Disenchant values are compared against the same available auction/vendor evidence
+when the existing evaluator supplies a verified expected value. Production still
+has no verified Forever outcome dataset, so this repair does not invent a
+Disenchant recommendation. Relevant gear with unknown outcomes includes
+`disenchant unpriced` on the primary recommendation, even with all detail rows
+hidden. The new tests include an independent integer-margin model and the actual
+tooltip adapter/renderer over the real validated Market reader. These are offline
+synthetic checks; actual Forever hover appearance remains for owner retesting.
+
+Verification for this repair: `development workshop --profile cloud` passes all
+76 modules plus Lua syntax; `development workshop-settings --profile cloud`
+passes all 12 modules plus syntax. Both report unchanged source. The complete
+Market mutation campaign detects all 285 selected defects, including the eight
+new recommendation defects. The original vendor fall-through is reproduced in
+`test-output/tooltip-advice-negative-vendor.log`; final evidence is retained in
+`test-output/tooltip-advice-{workshop,settings,mutations}.*`. The simulator is not
+installed on this host, so simulator and real-client appearance are not claimed.

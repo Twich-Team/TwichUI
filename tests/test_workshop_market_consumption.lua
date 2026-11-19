@@ -87,6 +87,32 @@ local advice=W.Advisor.Decide(2589,{qty=1,sell=0,bindType=0,now=now+60,minGain=0
 assert(advice.level=='tentative' and advice.reference and not advice.suggestion.price and advice.provenance.source=='market_server')
 local worth=W.Worth.Evaluate({sell=1,bindType=0,market={at=now},price=p,now=now+60,rate=0.05})
 assert(worth.auction.reference and W.Worth.Recommend(worth).kind=='reference','a price reference is not a proven vendor/auction winner')
+-- Actual tooltip path, default primary line only: source/DE qualifications must
+-- remain visible without Shift details or a local scan.
+local drawn={}
+local tipItem,vendorCopper,gear=2589,10,false
+c.GameTooltip={AddLine=function(_,s)drawn[#drawn+1]=s end,AddDoubleLine=function(_,a,b)drawn[#drawn+1]=a..' '..b end}
+c.C_Item.GetItemLocation=function()return {IsBagAndSlot=function()return true end}end
+c.C_Item.DoesItemExist=function()return true end
+c.C_Item.GetItemID=function()return tipItem end
+c.C_Item.GetItemLink=function()return 'item:'..tipItem end
+c.C_Item.IsBound=function()return false end
+c.C_Item.GetStackCount=function()return 1 end
+local info=c.C_Item.GetItemInfo
+c.C_Item.GetItemInfo=function()
+ return 'Fixture item','item:'..tipItem,gear and 2 or 1,1,1,gear and 'Armor' or 'Trade Goods','',1,gear and 'INVTYPE_CHEST' or '',134572,vendorCopper,gear and 4 or 7,1,0
+end
+assert(W.WorthLayout.Set({enabled=true,lines={{id='recommend',when='always'}}}))
+local function tooltip(expected)
+ drawn={};W.WorthTip.OnItem(c.GameTooltip,{guid='Fixture-item'})
+ assert(table.concat(drawn,' '):find(expected,1,true),'tooltip did not show '..expected..': '..table.concat(drawn,' '))
+end
+tooltip('Workshop: Auction (Market estimate)')
+vendorCopper=100;tooltip('Workshop: Vendor (Market comparison)')
+tipItem=2653;gear=true;tooltip('disenchant unpriced')
+tipItem=2717;gear=false;tooltip('Workshop: Auction price unavailable')
+assert(W.WorthTip.faults==0,'Market recommendation tooltip faulted')
+c.C_Item.GetItemInfo=info
 -- A local scan remains unmodified and provides missing records independently.
 local batch=W.Prices.NewBatch();batch:Add(2589,10,3000,true);batch:Add(999,10,7000,true)
 local items,n,_,_,dist=batch:Items()

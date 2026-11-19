@@ -1,8 +1,8 @@
--- A8.1 policy v2: supported and tentative advice over one evidence snapshot.
+-- Supported and tentative advice over one evidence snapshot.
 -- Decide has no planning, history decoding, inventory reads, saved writes or frames.
 -- Gain/SetGain are the small existing-account preference adapter; callers snapshot it.
 local W = TwichUI.Workshop
-local A = { POLICY = 2, API = 1 }
+local A = { POLICY = 3, API = 1 }
 W.Advisor = A
 A.LABEL = { auction = "Recommended: Auction", vendor = "Recommended: Vendor", craft = "Keep for crafting plan",
     disenchant = "Consider disenchanting", watch = "Watch this item", unknown = "Not enough data to compare" }
@@ -30,6 +30,7 @@ function A.Decide(item, ctx)
         reasons = {}, missing = {}, alternatives = {}, facts = ctx.facts or {nomarket=true}, crafting = ctx.crafting,
         provenance = { source = "local", at = ctx.facts and ctx.facts.at, market = ctx.facts and ctx.facts.key } }
     local function Reason(s) r.reasons[#r.reasons + 1] = s end
+    local function Unknown(text, reason) r.unknownText=text;Reason(reason) end
     local sell = W.Int(ctx.sell, 0, W.Prices.MAX_COPPER)
     r.vendor = { state = sell == nil and "unknown" or (sell == 0 and "unavailable" or "ok"), value = sell }
     local eligible
@@ -50,19 +51,20 @@ function A.Decide(item, ctx)
         { action = "disenchant", state = r.disenchant.state, value = r.disenchant.expectedGross, note = r.disenchant.why },
         { action = "watch", state = "choice", note = "Refresh manually; future price direction is unknown." },
     }
-    if not W.Int(item, 1, W.MAX_ID) then Reason("The item identity is unavailable.")
-    elseif qty == nil then Reason("The available bag quantity is unknown.")
-    elseif qty == 0 then Reason("No copies are currently available in your bags.")
+    if not W.Int(item, 1, W.MAX_ID) then Unknown("Item data unavailable", "The item identity is unavailable.")
+    elseif qty == nil then Unknown("Bag quantity unavailable", "The available bag quantity is unknown.")
+    elseif qty == 0 then Unknown("No bag copies", "No copies are currently available in your bags.")
     elseif ctx.crafting and (ctx.crafting.reserved or 0) > 0 then
         r.action, r.evidence = "craft", "strong"
         Reason("This material is needed by your active crafting plan.")
         Reason("Keep the required quantity before considering a sale.")
-    elseif ctx.pendingPlan then Reason("Crafting plan dependencies are not fully checked yet.")
+    elseif ctx.pendingPlan then Unknown("Check crafting plan", "Crafting plan dependencies are not fully checked yet.")
     elseif eligible == false then
         if sell and sell > 0 then r.action, r.evidence = "vendor", "strong" end
+        r.unknownText="No vendor sale value"
         Reason("This item cannot be listed on the Auction House.")
-    elseif eligible == nil then Reason("Auction eligibility is not known.")
-    elseif ctx.variant then Reason("This variant is not priced separately.")
+    elseif eligible == nil then Unknown("Check item binding", "Auction eligibility is not known.")
+    elseif ctx.variant then Unknown("Check variant price", "This variant is not priced separately.")
     elseif s.state == "ok" and sell ~= nil then
         local gain = W.Int(ctx.minGain, 0, W.Prices.MAX_COPPER) or 0
         if s.price >= sell * 1.5 and s.price - sell >= gain and s.price > sell then
@@ -72,6 +74,7 @@ function A.Decide(item, ctx)
         elseif sell > 0 then
             r.action = "vendor"
             Reason(s.price <= sell and "Vendor value meets or exceeds the gross competing listing." or "The listing gain does not meet your worthwhile-gain preference and margin.")
+        else Unknown("Auction gain below preference", "The auction gain does not meet your worthwhile-gain preference.")
         end
         r.evidence = r.action == "unknown" and "insufficient" or (s.quality == "good" and "strong" or "limited")
     else
@@ -84,20 +87,40 @@ function A.Decide(item, ctx)
             Reason("The observed listing is not a suggested posting price; a sale is not guaranteed.")
             local alt=r.alternatives[2]
             alt.state,alt.value,alt.note="observed",observed.value,"Observed current listing per item, not a suggested posting price. Limited evidence; fees and sale outcome unknown."
+        elseif observed and sell~=nil then
+            r.observed=observed
+            if sell>0 then
+                r.action,r.level,r.evidence="vendor","tentative","limited"
+                Reason("The observed auction gain does not meet your worthwhile-gain preference and margin; vendoring is the simpler option.")
+            else Unknown("Auction gain below preference", "The auction gain does not meet your worthwhile-gain preference.") end
+            for _,why in ipairs(observed.reasons) do Reason(why) end
+            local alt=r.alternatives[2]
+            alt.state,alt.value,alt.note="observed",observed.value,"Observed current listing per item, not a suggested posting price. Limited evidence; fees and sale outcome unknown."
         elseif r.facts.recent and r.facts.recent.source=="market_server" and sell~=nil
-            and r.facts.recent.value>=sell*1.5 and r.facts.recent.value-sell>=gain and r.facts.recent.value>sell then
-            r.action,r.level,r.evidence="auction","tentative","limited"
+            and W.Int(r.facts.recent.value,1,W.Prices.MAX_COPPER) then
+            r.level,r.evidence="tentative","limited"
             r.reference=r.facts.recent
             r.provenance={source="market_server",at=r.reference.at,generation=r.reference.generation,market=r.facts.key}
-            Reason("Market server references suggest auctioning may be worthwhile. Check current listings before choosing a posting price.")
+            if r.reference.value>=sell*1.5 and r.reference.value-sell>=gain and r.reference.value>sell then
+                r.action="auction"
+                Reason("Market server references favor auctioning over vendoring. Check current listings before choosing a posting price.")
+            elseif sell>0 then
+                r.action="vendor"
+                Reason("The Market reference gain does not meet your worthwhile-gain preference and margin; vendoring is the simpler option.")
+            else Unknown("Auction gain below preference", "The Market reference gain does not meet your worthwhile-gain preference.")
+            end
             r.alternatives[2].state,r.alternatives[2].value,r.alternatives[2].note="reference",r.reference.value,"Market reference estimate; no live competing offer or suggested posting price."
-        else Reason("Vendor and current auction evidence do not support a reliable comparison.") end
+        elseif sell==nil then Unknown("Vendor value unavailable", "Vendor sell value is unknown.")
+        elseif r.facts.referenceWhy=="loading" then Unknown("Loading Market price", "The item's Market partition is still being validated.")
+        else Unknown("Auction price unavailable", "No supported current auction price is available; sync Market data or scan the Auction House.") end
         for _, why in ipairs(s.reasons or {}) do r.missing[#r.missing + 1] = why end
     end
     local de = r.disenchant
+    r.disenchantUnpriced=ctx.disenchant==true and de.state=="unknown"
+    local auctionValue=s.state=="ok" and s.price or r.observed and r.observed.value or r.reference and r.reference.value
     if r.action ~= "craft" and not ctx.pendingPlan and W.Int(item,1,W.MAX_ID) and qty and qty > 0 and sell ~= nil and de.state == "ok" and de.expectedGross
-        and (eligible == false or (eligible == true and s.state == "ok")) then
-        local ceiling = math.max(sell, s.price or 0)
+        and (eligible == false or (eligible == true and auctionValue)) then
+        local ceiling = math.max(sell, auctionValue or 0)
         local gain = W.Int(ctx.minGain, 0, W.Prices.MAX_COPPER) or 0
         if de.expectedGross > ceiling and de.expectedGross >= ceiling * 1.5 and de.expectedGross - ceiling >= gain then
             r.action, r.evidence = "disenchant", "limited"
@@ -105,6 +128,7 @@ function A.Decide(item, ctx)
         end
     end
     if ctx.disenchant and de.state == "unknown" then r.missing[#r.missing + 1] = de.why end
+    if r.action=="unknown" and eligible==false and r.disenchantUnpriced then r.unknownText="Check disenchant value" end
     if sell == nil then r.missing[#r.missing + 1] = "Vendor sell value is unknown." end
     if ctx.crafting and #(ctx.crafting.uses or {}) > 0 and r.action ~= "craft" then
         Reason("Known recipes use this item; compare their crafting strategy before selling.")
@@ -116,11 +140,29 @@ function A.Decide(item, ctx)
             if flag == "aboveusual" then Reason("Competition is above the historical reference; it may not sell at this price.") end
         end
     end
-    r.level=r.level or (r.action=="unknown" and "insufficient" or "supported")
-    r.text, r.evidenceText = r.level=="tentative" and "Possible: Auction" or A.LABEL[r.action], A.EVIDENCE[r.evidence]
+    r.level=r.action=="unknown" and "insufficient" or r.level or "supported"
+    r.text = r.action=="unknown" and (r.unknownText or A.LABEL.unknown) or r.level=="tentative" and
+        ((r.reference and "Market comparison: " or "Possible: ")..A.TOOLTIP[r.action]) or A.LABEL[r.action]
+    r.evidenceText = A.EVIDENCE[r.evidence]
     return r
 end
 
 A.TOOLTIP = {vendor="Vendor",auction="Auction",disenchant="Disenchant",craft="Keep for crafting",watch="Watch",unknown="Not enough data"}
-function A.Short(r) return r.level=="tentative" and "Possible Auction" or A.SHORT[r.action] end
-function A.Tooltip(r) return "Workshop: " .. (r.level=="tentative" and "Possible Auction" or A.TOOLTIP[r.action] or A.TOOLTIP.unknown) end
+function A.Short(r)
+    local text=A.SHORT[r.action] or A.SHORT.unknown
+    if r.level~="tentative" then return text end
+    return r.reference and text.." (Market)" or "Possible "..text
+end
+local function TooltipWords(r)
+    if r.action=="unknown" then return r.unknownText or A.TOOLTIP.unknown end
+    if r.action=="disenchant" then return "Disenchant (expected value)" end
+    local text=A.TOOLTIP[r.action] or A.TOOLTIP.unknown
+    if r.level~="tentative" then return text end
+    if r.reference then return text..(r.action=="vendor" and " (Market comparison)" or " (Market estimate)") end
+    return "Possible "..text
+end
+function A.Tooltip(r)
+    local text="Workshop: "..TooltipWords(r)
+    if r.disenchantUnpriced and r.action~="craft" then text=text.." · disenchant unpriced" end
+    return text
+end
