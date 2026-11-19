@@ -327,14 +327,22 @@ do
         db.chars["Char" .. k .. " - Forever"] = { name = "Char" .. k, realm = "Forever", since = T0 - 3000, nextId = 2001, entries = entries, days = days }
     end
     local c = Client({ db = db })
+    collectgarbage(); collectgarbage()
+    local memBefore = collectgarbage("count")
     local started = os.clock()
     local list = c.L.Characters()
     local took = os.clock() - started
     Same(#list, 11, "ten stored characters and this one")
     Check(took < 1.5, "cleaning ten full journals took " .. took)
+    -- measured, not asserted: what a full journal costs in plain Lua 5.1 on the development machine (the client's allocator differs)
+    collectgarbage(); collectgarbage()
+    print(("ledger journal: cleaning 10 full journals (20,000 entries) %.0f ms; %.0f KB for the ten (%.0f bytes an entry, in memory)")
+        :format(took * 1000, collectgarbage("count") - memBefore, (collectgarbage("count") - memBefore) * 1024 / 20000))
     local before = os.clock()
     for i = 1, 200 do c.Set(1000000 + i) end
-    Check(os.clock() - before < 1, "a money event does not scan the history")
+    local perEvent = (os.clock() - before) / 200
+    Check(perEvent < 0.005, "a money event does not scan the history")
+    print(("ledger journal: a money event with ten full journals loaded %.3f ms"):format(perEvent * 1000))
 end
 
 print("LEDGER JOURNAL PASSED")

@@ -30,7 +30,7 @@
     "simulators": [{"script": "workshop", "only": ["design", "craft", "wrong"]}]
   },
   "workshop": {
-    "tests": ["test_workshop*.lua", "test_testlab*.lua", "test_pricing_conformance.py", "test_workshop_bridge*.py", "test_workshop_scoped_bridge_l1.py", "test_workshop_summary*.lua", "test_workshop_bridge*.lua", "test_workshop_auction_market*.lua"],
+    "tests": ["test_ledger*.lua", "test_workshop*.lua", "test_testlab*.lua", "test_pricing_conformance.py", "test_workshop_bridge*.py", "test_workshop_scoped_bridge_l1.py", "test_workshop_summary*.lua", "test_workshop_bridge*.lua", "test_workshop_auction_market*.lua"],
     "syntax": ["TwichUI_Workshop/**/*.lua", "TwichUI_TestLab/**/*.lua", "!!!TwichUI/Workshop*.lua"],
     "dependencies": ["shared-ui", "core"],
     "simulators": [{"script": "workshop"}, {"script": "testlab"}]
