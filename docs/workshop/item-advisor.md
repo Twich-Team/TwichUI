@@ -19,7 +19,7 @@ Item Advisor service, **Marking rules** (a count and **Open the rule builder**) 
 picker and list). The rules are built in a workspace of their own, a sibling of the Reminders "When" builder
 (`TwichUI_Settings/pages/JunkBuilder.lua`; model `JunkSession.lua`): a rail of saved rules with New rule, a
 searchable catalog of every supported condition (Item type, Armor type, Quality range, Profession tool, Camping item, Wearable now,
-Gear Advisor upgrade, Unlearned recipe, Class reagent, Recipe material, Profession material, Workshop recommends Vendor,
+Gear Advisor upgrade, Recipe knowledge, Class reagent, Recipe material, Profession material, Workshop recommends Vendor,
 All-of and Any-of groups), the rule drawn as cards and nested groups under "Mark an item as junk
 when", a plain-language sentence built from the saved tree, and a **Try an item** strip over Undo, Redo, Cancel and
 Save. A rule is a draft until Save: Cancel restores the saved rule, switching rules or closing with unsaved changes
@@ -37,7 +37,7 @@ switches used before the first edit still require Vendor advice.
 **New conditions and where their facts come from** (none read from a Forever client yet): Armor type (cloth, leather,
 mail, plate, shield from the item subclass; other items are "none"), Profession tool (misc tool weapons, fishing poles,
 a short ID list), Camping item (`CampingData.ITEMS`), Profession material (trade-good subclass mapped to professions) and
-Unlearned recipe (recipe subclass mapped to a profession of yours, tooltip lacks `ITEM_SPELL_KNOWN`). Your professions
+Recipe knowledge ("I have not learned it"/"I have learned it"; recipe subclass mapped to a profession of yours, tooltip lacks `ITEM_SPELL_KNOWN`). Your professions
 are those whose window Workshop has read (`Known`); until then the last two are unknown and leave items alone. Gear
 Advisor upgrade is the existing GearHints comparison.
 
