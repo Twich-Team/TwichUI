@@ -91,7 +91,9 @@ Data Explorer's cleanup. Entry: `{ id, n (name), m (map), x, y (0..10000), tags,
   yet". At most 300 at once.
 - **Behind the markers** (optional, off by default): a shadow (a dark copy of the icon's shape, offset down and right) or a dark
   plate (a square), on the map and the minimap alike, for reading markers over busy map art.
-- A click opens the NPC's actions: **Set waypoint** (the game's own; replaces yours), **Pin this place** (the new pin
+- A click opens the NPC's actions: **Set waypoint** (replaces yours; named after the NPC through WaypointUI when available,
+  otherwise the game's own waypoint, which has no custom name; a missing, failing or refusing WaypointUI API falls back
+  to the game), **Pin this place** (the new pin
   window; needs Party pins), **Navigate here** (while Navigation is on), **Forget this NPC**; a merchant also has
   **Show items for sale** (first), greyed with its reason until some stock is noted. Nothing happens until one
   is chosen. Alt, Shift and Ctrl clicks go to the map's own click handlers, so the pin and ping shortcuts work over a

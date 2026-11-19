@@ -3,7 +3,8 @@
 -- kinds chosen, class trainers for your class unless every class is chosen, and reports (dimmed and greyed) only while
 -- chosen; the icon is the first shown kind's; a change to the list or a choice redraws an open map; at most 300 are
 -- drawn; a click opens the NPC's actions (nothing is done until one is chosen), a modifier click goes to the map's own
--- handlers; Set waypoint sets the game's; Forget asks first and removes only that NPC; switching off takes them off.
+-- handlers; Set waypoint names it through WaypointUI or falls back to the game's; Forget asks first and removes only
+-- that NPC; switching off takes them off.
 -- The map is a stand-in for the game's (WorldMapFrame, its canvas and data providers), as in test_party_pins_ui.lua.
 dofile(TESTS .. "harness.lua")
 
@@ -226,6 +227,51 @@ assert(table.concat(labels, ",") == "Set waypoint,Pin this place,Forget this NPC
 assert(#waypoints == 0, "nothing done yet")
 m.choices[1].run()
 assert(#waypoints == 1 and waypoints[1].uiMapID == 1429 and waypoints[1].x == 0.5, "the game's waypoint at the NPC")
+-- WaypointUI is optional and can become available after the map has loaded. Its public API uses percentages.
+local sounds, namedCalls, namedArgs = 0, 0, nil
+c.SOUNDKIT = { UI_MAP_WAYPOINT_CONTROL_CLICK = 123 }
+c.PlaySound = function(id) assert(id == 123); sounds = sounds + 1 end
+c.WaypointUIAPI = { Navigation = { NewUserNavigation = function(args)
+  namedCalls, namedArgs = namedCalls + 1, args
+  return {}
+end } }
+local count = NMAP.Snapshot().waypoints
+m.choices[1].run()
+assert(namedCalls == 1 and #waypoints == 1, "a named waypoint doesn't also set an unnamed one")
+assert(namedArgs.name == b.entry.n and namedArgs.mapID == b.entry.m, "the selected NPC's name and map")
+assert(namedArgs.x == b.entry.x / NS.COORD * 100 and namedArgs.y == b.entry.y / NS.COORD * 100,
+  "WaypointUI coordinates are percentages")
+assert(namedArgs.suppressAudio == true and sounds == 1 and NMAP.Snapshot().waypoints == count + 1,
+  "one click sound and one successful waypoint")
+-- Missing or incomplete API, explicit refusal, nil result and exceptions all use Blizzard's waypoint.
+local function fallback(api)
+  c.WaypointUIAPI = api
+  local before = #waypoints
+  assert(NMAP.SetWaypoint(b.entry), "Blizzard fallback succeeds")
+  local p = waypoints[#waypoints]
+  assert(#waypoints == before + 1 and p.uiMapID == b.entry.m
+    and p.x == b.entry.x / NS.COORD and p.y == b.entry.y / NS.COORD, "Blizzard coordinates stay normalized")
+end
+fallback(nil)
+fallback({})
+fallback({ Navigation = {} })
+fallback({ Navigation = { NewUserNavigation = function() return false end } })
+fallback({ Navigation = { NewUserNavigation = function() return nil end } })
+fallback({ Navigation = { NewUserNavigation = function() error("unavailable") end } })
+-- Map restrictions are checked before either API. Failed Blizzard calls must not report success or play a sound.
+c.WaypointUIAPI = { Navigation = { NewUserNavigation = function() error("must not be called") end } }
+local before, soundBefore, countBefore = #waypoints, sounds, NMAP.Snapshot().waypoints
+assert(not NMAP.SetWaypoint({ m = 1436, x = b.entry.x, y = b.entry.y, n = b.entry.n }))
+assert(#waypoints == before and sounds == soundBefore and NMAP.Snapshot().waypoints == countBefore,
+  "a restricted map leaves the waypoint alone")
+c.WaypointUIAPI = nil
+local setWaypoint = c.C_Map.SetUserWaypoint
+c.C_Map.SetUserWaypoint = function() return false end
+assert(not NMAP.SetWaypoint(b.entry), "Blizzard refusal is a failure")
+c.C_Map.SetUserWaypoint = function() error("unavailable") end
+assert(not NMAP.SetWaypoint(b.entry), "Blizzard errors are contained")
+assert(sounds == soundBefore and NMAP.Snapshot().waypoints == countBefore, "failed attempts aren't counted or sounded")
+c.C_Map.SetUserWaypoint = setWaypoint
 ALT = true
 b.scripts.OnClick(b, "LeftButton")
 ALT = false
