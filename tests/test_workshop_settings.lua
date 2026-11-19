@@ -10,6 +10,10 @@ local R, K = c.TwichUI, S.K
 local L = R.WorkshopLauncher
 assert(K.pages.workshop and #R.SettingsDesign.Tasks(K.pages.workshop) == 5)
 assert(not L.Loaded() and not L.LoadOnLogin())
+assert(not L.VendorJunkEnabled() and S.variables.TWICHUI_workshopVendorJunk.default==false)
+assert(L.SetVendorJunkEnabled(true) and L.VendorJunkEnabled() and not L.Loaded(),"junk preference never eagerly loads Workshop")
+assert(L.SetVendorJunkEnabled(false) and not L.VendorJunkEnabled())
+assert(not L.SetVendorJunkEnabled("yes"))
 assert(S.variables.TWICHUI_workshopAuctionAdvisorOnly.default==false)
 assert(S.variables.TWICHUI_workshopAuctionMaxQuantity.default==true)
 assert(S.variables.TWICHUI_workshopAuctionDuration.default=="1")

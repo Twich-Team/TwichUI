@@ -1247,3 +1247,13 @@ m("market.tooltip.recommendation-art", "TwichUI_Workshop/WorthLayout.lua",
 m("market.tooltip.recommendation-color", "TwichUI_Workshop/WorthLayout.lua",
   'recommendation=art and (r.advisor and r.advisor.action or rec.pick) or nil', 'recommendation=nil',
   "tentative sale recommendations stay gray instead of using the action color", ["test_workshop_advisor_market.lua"])
+
+m("market.junk.vendor-only", "TwichUI_Workshop/Junk.lua",
+  'advice.action=="vendor"', 'advice.action=="auction"',
+  "auction advice is marked as vendor junk", ["test_workshop_junk.lua"])
+m("market.junk.all-copies", "TwichUI_Workshop/Junk.lua",
+  'if not vendor then candidates[id].ok=false end', 'if false then candidates[id].ok=false end',
+  "one eligible copy permits marking a locked or protected copy", ["test_workshop_junk.lua"])
+m("market.junk.stale-slice", "TwichUI_Workshop/Junk.lua",
+  'if mine~=generation or not Ready() then return end', 'if not Ready() then return end',
+  "a changed inventory leaves an old marking job alive", ["test_workshop_junk.lua"])

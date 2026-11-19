@@ -206,6 +206,7 @@ function P.Changed()
     if W.UI and W.UI.Redraw then W.UI.Redraw() end
     if W.AuctionUI and W.AuctionUI.Schedule then W.AuctionUI.Schedule() end
     if W.WorthTip and W.WorthTip.Refresh then W.WorthTip.Refresh() end
+    if W.Junk then W.Junk.Request() end
 end
 if R.Perf and R.Perf.Gauge then
     R.Perf.Gauge('workshop.pricingReferences',{label='Cached Market price references',kind='cache',group='workshop',unit='count',read=P.CacheSize})
