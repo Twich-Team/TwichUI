@@ -7,7 +7,7 @@
 local R = TwichUI
 local W = R.Workshop
 local Q, M, O, KN = W.Queue, W.Materials, W.Observe, W.Known
-local PR, Op, SC, MK = W.Prices, W.Opps, W.Scan, W.Market
+local PR, Op, SC, MK = W.Prices, W.Opps, W.Scan, W.Pricing or W.Market
 local V, Sh = W.Vendor, W.Shopping
 -- Strategy.lua loads before this file (the .toc); a test that loads the session alone has no planner and nothing to invalidate
 local Sg = W.Strategy or { Bump = function() end, Reset = function() end }
@@ -663,9 +663,10 @@ function S.PlanEstimates(v)
         t.crafts = t.crafts + e.crafts
         local est = rows[e.id]
         if est and est.state == "ok" then
-            local x = { crafts = e.crafts, cost = est.cost * e.crafts, sellLow = est.sellLow * e.crafts, sellHigh = est.sellHigh * e.crafts,
+            local x = { reference=est.reference, crafts = e.crafts, cost = est.cost * e.crafts, sellLow = est.sellLow * e.crafts, sellHigh = est.sellHigh * e.crafts,
                 profitLow = est.profitLow * e.crafts, profitHigh = est.profitHigh * e.crafts }
             byId[e.id] = x
+            t.reference=t.reference or est.reference
             t.priced = t.priced + 1
             t.cost, t.sellLow, t.sellHigh = t.cost + x.cost, t.sellLow + x.sellLow, t.sellHigh + x.sellHigh
             t.profitLow, t.profitHigh = t.profitLow + x.profitLow, t.profitHigh + x.profitHigh
@@ -793,7 +794,7 @@ function S.PlanKey(scope, entries, view, src, extra, nopicks)
     -- what the remembered bank and guild bank can supply right now (a tab turning uncertain, or read again, changes it without a new time)
     local stock = table.concat({ tostring(g.tabs), tostring(g.unread), tostring(g.uncertain), tostring(g.limitedTabs), b.counted and "B" or "b", tostring(b.tabs) }, ".")
     return table.concat({ Sg.epoch, scope, S.Objective(), extra or "", table.concat(q, ","), table.concat(bags, ","), nopicks and "" or PicksSig(), g.enabled and "G" or "g", tostring(g.at or 0),
-        tostring(b.at or 0), stock, mk and (tostring(src.label) .. "@" .. tostring(mk.at)) or "none", tostring(SC.ended or 0), V.Count(), S.observations }, "|")
+        tostring(b.at or 0), stock, mk and (tostring(src.label) .. "@" .. tostring(mk.at) .. ":" .. tostring(src.generation or "")) or "none", tostring(SC.ended or 0), V.Count(), S.observations }, "|")
 end
 
 -- the planner's input for a list of queue-shaped entries: Shopping's functions over the same price, vendor, stock and recipe services

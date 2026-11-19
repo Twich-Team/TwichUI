@@ -165,6 +165,7 @@ local function AuctionQuote(P, nd, qty)
     if aq.state == "none" then Keep(P, t, qty, false) return nil end
     q = { source = "auction", at = aq.at, complete = aq.complete, unit = aq.unit }
     local cost = Num(aq.cost)
+    if aq.reference then q.reference=true;P.references=true end
     if aq.state == "few" or not cost then
         q.state, q.why = "few", "few"
     elseif aq.state == "exact" then
@@ -709,6 +710,7 @@ function CP.Compare(x, y)
 end
 
 local function Alternatives(P, C, line, k)
+    if P.references then return end
     local nd = P.nodes[k]
     if #nd.dom < 2 or P.altItems >= P.L.alternatives then return end
     P.altItems = P.altItems + 1
@@ -791,7 +793,7 @@ local function Assemble(P, comps)
                     line.source = q.source
                     line.buy = { source = q.source, qty = d.rest, state = q.state, low = q.low, high = q.high, atMost = q.atMost, exact = q.exact == true,
                         at = q.at, surplus = q.surplus, purchases = q.purchases, why = q.why, quality = q.quality, freshness = q.freshness,
-                        complete = q.complete, legacy = q.legacy }
+                        complete = q.complete, legacy = q.legacy, reference=q.reference }
                     if q.low then
                         res.buy[#res.buy + 1] = line.buy
                         line.buy.item = nd.item
@@ -877,8 +879,10 @@ local function Assemble(P, comps)
     if not s.exhaustive then Reason("states") end
     for code in pairs(P.limits) do s.limits[#s.limits + 1] = code end
     table.sort(s.limits)
+    s.reference=P.references or nil
+    s.cash.reference,s.economic.reference=s.reference,s.reference
     s.optimization = s.exhaustive and "exhaustive" or "bounded"
-    s.proven = s.exhaustive and #s.limits == 0
+    s.proven = s.exhaustive and #s.limits == 0 and not s.reference
     s.complete = not s.unavailable and s.missing == 0 and P.unknownEntries == 0 and P.invalidEntries == 0 and not reasons.counts
     if P.entries == 0 then s.status = "empty"
     elseif s.unavailable then s.status = "unavailable"
@@ -888,17 +892,18 @@ local function Assemble(P, comps)
     if base.ok and not s.unavailable then
         local bl = { economic = Range(base.cash + base.owned, base.cashHigh and (base.cashHigh + base.owned) or nil),
             cash = Range(base.cash, base.cashHigh), missing = base.missing }
+        bl.economic.reference,bl.cash.reference=s.reference,s.reference
         s.baseline = bl
         local plan = { ok = true, economic = s.economic, missing = s.missing }
         local bf = { ok = true, economic = bl.economic, missing = bl.missing }
-        bl.compare = CP.Compare(plan, bf)   -- the plan against the baseline: "lower" = certainly cheaper
+        bl.compare = s.reference and "uncertain" or CP.Compare(plan, bf)   -- the plan against the baseline: "lower" = certainly cheaper
         if s.missing == 0 and bl.missing == 0 then
             -- the saving lies between (baseline low - plan high) and (baseline high - plan low), each nil when that end is open; `lowerBounds`
             -- compares the lower bounds the plans are ranked by, and is never a promise
             s.savings = { lowerBounds = bl.economic.low - s.economic.low,
                 low = s.economic.high and (bl.economic.low - s.economic.high) or nil,
                 high = bl.economic.high and (bl.economic.high - s.economic.low) or nil }
-            s.savings.confident = s.savings.low ~= nil and s.savings.low > 0
+            s.savings.confident = not s.reference and s.savings.low ~= nil and s.savings.low > 0
         end
     end
     s.work = { evals = P.evals, states = P.states, pruned = P.pruned, leaves = P.leaves, improve = P.improve, passes = P.passes,

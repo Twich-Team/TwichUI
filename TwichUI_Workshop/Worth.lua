@@ -6,9 +6,9 @@
 --   * every value is for ONE item, at the same basis for every option;
 --   * Vendor is the item's own sell value; Auction is the cheapest buyout listing the newest scan saw (Prices.lua), minus the auction
 --     house's cut ONLY when that cut is confirmed (Prices.CUT): until then it is "before fees" and no after-fees winner is claimed;
---   * Disenchant is NOT estimated: there is no legally reusable, Forever-appropriate table of outcomes (docs/workshop.md, "Disenchant
---     outcome data"), so a disenchantable-looking item shows "no data" and, because that competing option is unknown, no best option
---     is suggested for it ("Disenchant value unknown"). Nothing here invents a chance or a quantity;
+--   * Disenchant.ForItem supplies separately qualified bundled estimates. This
+--     pure base evaluation retains unknown when that context has not been read.
+--     Classic-reference values never become a proven winner in either API;
 --   * a missing price or an unknown outcome is never zero; an action that cannot be done (a bound item cannot be auctioned) is
 --     "unavailable", which is not the same as an unknown estimate: only an UNKNOWN competitor blocks a suggestion;
 --   * a variant (random properties, bonus IDs, a changed item level) is never priced from the base item's listings: the scan keeps
@@ -102,7 +102,7 @@ function WO.Evaluate(f)
         r.auction = { state = "unknown", why = "noprice" }
     else
         local gross = f.price.price
-        local a = { state = "ok", gross = gross, at = f.price.at, complete = f.price.complete == true }
+        local a = { state = "ok", gross = gross, at = f.price.at, complete = f.price.complete == true, reference=f.price.reference, source=f.price.source }
         a.age = PR.Age(a.at, f.now)
         a.old = a.age ~= nil and a.age > PR.OLD_AFTER
         if type(f.rate) == "number" and f.rate >= 0 and f.rate < 1 then
@@ -189,9 +189,11 @@ end
 function WO.Recommend(r)
     if r.advisor and W.Advisor then
         local a=r.advisor
-        if a.level=="tentative" then return {kind="possible",text=W.Advisor.Tooltip(a),tone="quiet"} end
+        local text=W.Advisor.Tooltip(a)
+        if not text then return nil end
+        if a.level=="tentative" then return {kind="possible",text=text,tone="quiet"} end
         return { kind=a.action=="unknown" and "more" or "pick", pick=a.action~="unknown" and a.action or nil,
-            text=W.Advisor.Tooltip(a), tone=a.action=="unknown" and "quiet" or "good" }
+            text=text, tone=a.action=="unknown" and "quiet" or "good" }
     end
     local v, a, d = r.vendor, r.auction, r.disenchant
     local good = function(kind, text, key) return { kind = kind, text = text, tone = "good", pick = key } end
@@ -205,6 +207,12 @@ function WO.Recommend(r)
     end
     if v.state == "unknown" then return quiet("more", "More prices needed") end
 
+    if a.reference then return quiet("reference","Market reference estimate; check current listings before selling") end
+    if d and d.state=="ok" and d.outcomeReference then
+        local outcome,key=Compare(r)
+        if outcome=="pick" then return quiet("possible","Possible: "..LABEL[key]) end
+        return nil
+    end
     local tags = AuctionTags(a)
     local outcome, key = Compare(r)
     if d and d.state == "unknown" then

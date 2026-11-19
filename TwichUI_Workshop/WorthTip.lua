@@ -17,7 +17,7 @@
 
 local R = TwichUI
 local W = R.Workshop
-local WO, WL, PR, S, MK = W.Worth, W.WorthLayout, W.Prices, W.Session, W.Market
+local WO, WL, PR, S, MK = W.Worth, W.WorthLayout, W.Prices, W.Session, W.Pricing or W.Market
 local Plain, Int = W.Plain, W.Int
 local T = {}
 W.WorthTip = T
@@ -32,6 +32,11 @@ local frame          -- the event frame (modifier changes; item information only
 local faulted = false
 
 local function Shift() return IsShiftKeyDown and IsShiftKeyDown() == true end
+function T.ItemIcon(item)
+    local icon=C_Item and C_Item.GetItemIconByID and Plain(C_Item.GetItemIconByID(item))
+    if not icon and C_Item and C_Item.GetItemInfoInstant then local _,_,_,_,tex=C_Item.GetItemInfoInstant(item);icon=Plain(tex) end
+    return Int(icon,1,W.MAX_ID) or 134400
+end
 
 -- Everything the evaluation needs, from the game. Returns facts, or nil (not an item of the player's: nothing is added), or nil and
 -- "pending" (the item's information has not arrived yet).
@@ -47,7 +52,7 @@ function T.Read(data)
     local id = Int(C_Item.GetItemID(loc), 1, W.MAX_ID)
     if not id then return nil end
 
-    local name, _, quality, _, _, _, _, _, equipLoc, _, sell, classID, _, bindType = C_Item.GetItemInfo(link or id)
+    local name, _, quality, itemLevel, _, _, _, _, equipLoc, _, sell, classID, _, bindType = C_Item.GetItemInfo(link or id)
     name = Plain(name)
     if not name then
         if C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(id) end
@@ -55,16 +60,18 @@ function T.Read(data)
     end
 
     local f = { item = id, sell = Plain(sell), quality = Plain(quality), classID = Plain(classID), bindType = Plain(bindType),
-        equipLoc = Plain(equipLoc), now = time() }
+        equipLoc = Plain(equipLoc), itemLevel=Int(itemLevel,1,1000), now = time() }
     if C_Item.IsBound then f.bound = Plain(C_Item.IsBound(loc)) end
     if f.bound ~= true and f.bound ~= false then f.bound = nil end
     if C_Item.GetStackCount then f.count = Int(C_Item.GetStackCount(loc), 1, 100000) end
 
     f.variant = WO.LinkVariant(link)
-    if not f.variant and link and C_Item.GetDetailedItemLevelInfo then
+    f.actualLevel=f.itemLevel~=nil and not f.variant
+    if link and C_Item.GetDetailedItemLevelInfo then
         local actual, _, base = C_Item.GetDetailedItemLevelInfo(link)
         actual, base = Plain(actual), Plain(base)
-        if type(actual) == "number" and type(base) == "number" and actual ~= base then f.variant = "level" end
+        if Int(actual,1,1000) then f.itemLevel=actual;f.actualLevel=true end
+        if not f.variant and type(actual) == "number" and type(base) == "number" and actual ~= base then f.variant = "level" end
     end
 
     local src = S.PriceSource()
@@ -115,7 +122,11 @@ local function Add(tooltip, data)
     local layout = WL.Get()
     if not layout.enabled then return end
     local r = WO.Evaluate(f)
-    local ctx = { money = WL.Money, ageText = PR.AgeText, market = f.market, now = f.now, count = f.count }
+    if W.Disenchant and WL.UsesDisenchant(layout,Shift()) and WO.DisenchantRelevant(f) then
+        f.disenchantValue=W.Disenchant.ForItem(f,{market=f.marketTable,now=f.now})
+        r.disenchant=f.disenchantValue
+    end
+    local ctx = { money = WL.Money, ageText = PR.AgeText, market = f.market, now = f.now, count = f.count,itemIcon=T.ItemIcon }
     -- the market figures (A7), only when the layout has a line that uses them and there is a saved market; one cached read per item (MarketFacts),
     -- so a Shift rebuild of the same tooltip decodes nothing again. A variant is never priced from the base item's listings (facts say so).
     if W.Facts and f.market and WL.UsesMarket(layout) then
@@ -133,6 +144,10 @@ local function Add(tooltip, data)
 end
 
 -- The post call for every item tooltip: never lets a fault here take other addons' lines or the item's own tooltip with it
+function T.Refresh()
+    if W.Active() and carrying and carrying.IsShown and carrying:IsShown() then Rebuild(carrying) end
+end
+
 function T.OnItem(tooltip, data)
     if not W.Active() then return end
     if tooltip ~= GameTooltip or type(data) ~= "table" then return end
@@ -152,6 +167,8 @@ local function OnEvent(_, event, a, b)
     if event == "MODIFIER_STATE_CHANGED" then
         -- only Shift changes what is shown; a=key ("LSHIFT"/"RSHIFT")
         if type(a) == "string" and a:find("SHIFT", 1, true) and carrying and carrying.IsShown and carrying:IsShown() then Rebuild(carrying) end
+    elseif event=="SKILL_LINES_CHANGED" or event=="SPELLS_CHANGED" then
+        T.Refresh()
     elseif event == "GET_ITEM_INFO_RECEIVED" then
         -- a=itemID, b=success. Only the item being waited for counts, and it is waited for once.
         local w = waiting
@@ -169,12 +186,15 @@ end
 
 function T.Start()
     if not W.Active() or not CreateFrame then return end
-    if T.registered then frame:RegisterEvent("MODIFIER_STATE_CHANGED"); return end
+    if T.registered then
+        frame:RegisterEvent("MODIFIER_STATE_CHANGED");frame:RegisterEvent("SKILL_LINES_CHANGED");frame:RegisterEvent("SPELLS_CHANGED");return
+    end
     if not (TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType and GameTooltip) then return end
     T.registered = true
     frame = CreateFrame("Frame")
     frame:SetScript("OnEvent", OnEvent)
     frame:RegisterEvent("MODIFIER_STATE_CHANGED")
+    frame:RegisterEvent("SKILL_LINES_CHANGED");frame:RegisterEvent("SPELLS_CHANGED")
     if GameTooltip.HookScript then GameTooltip:HookScript("OnTooltipCleared", OnCleared) end
     TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, R.Perf.Wrap("workshop.worth", T.OnItem))
 end
@@ -183,6 +203,6 @@ function T.Stop()
     OnCleared()
     if frame then frame:UnregisterAllEvents() end
 end
-function T.Events() return W.Active() and frame and (waiting and 2 or 1) or 0 end
+function T.Events() return W.Active() and frame and (waiting and 4 or 3) or 0 end
 
 T.Start()

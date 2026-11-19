@@ -890,7 +890,7 @@ m("market.advisor.unit-total", "TwichUI_Workshop/Sell.lua",
   "gross return for a stack is reported as one item", ["test_workshop_advisor.lua"])
 
 m("market.advisor.unknown-quantity", "TwichUI_Workshop/Advisor.lua",
-  'elseif qty == nil then Reason', 'elseif false then Reason',
+  'elseif qty == nil then Unknown', 'elseif false then Unknown',
   "unknown bag quantities can receive a sale recommendation", ["test_workshop_advisor.lua"])
 m("market.disenchant.unverified-table", "TwichUI_Workshop/Disenchant.lua",
   'snapshot and snapshot.verified == true and snapshot.client', 'snapshot and snapshot.client',
@@ -924,12 +924,10 @@ m("market.advisor.tentative-margin", "TwichUI_Workshop/Advisor.lua",
 m("market.advisor.tentative-upgrade", "TwichUI_Workshop/Advisor.lua",
   '"auction","tentative","limited",observed', '"auction","supported","limited",observed',
   "an uncertain observation is promoted to supported Auction advice", ["test_workshop_advisor.lua"])
-m("market.advisor.tentative-tooltip-upgrade", "TwichUI_Workshop/Advisor.lua",
-  'function A.Tooltip(r) return "Workshop: " .. (r.level=="tentative"',
-  'function A.Tooltip(r) return "Workshop: " .. (false',
-  "the Normal tooltip loses the Possible qualification", ["test_workshop_advisor.lua"])
+m("market.advisor.tooltip-allowed-actions", "TwichUI_Workshop/Advisor.lua",
+  'if r.action=="vendor" or r.action=="auction" or r.action=="disenchant" then return', 'if A.TOOLTIP[r.action] then return',
+  "non-sale actions and diagnostics appear in the sale recommendation", ["test_workshop_advisor_market.lua"])
 
-# AH-2 observation presentation: reuse normalization, preserve estimates and sort.
 m("market.ah.value-not-multiplied", "TwichUI_Workshop/auction/BrowseData.lua",
   "W.Int(unit * qty, 1, W.Prices.MAX_COPPER)", "W.Int(unit, 1, W.Prices.MAX_COPPER)",
   "aggregate tier value shown as the price of one item", ["test_workshop_auction_browse.lua"])
@@ -1125,3 +1123,127 @@ m("market.chart-workshop-copper", "TwichUI_Workshop/auction/AdvancedChart.lua",
 m("market.chart-workshop-aggregates", "TwichUI_Workshop/auction/AdvancedChart.lua",
   "for _,g in ipairs(series.groups or {}) do", "for _,g in ipairs({}) do",
   "the Workshop adapter silently drops retained older aggregate intervals", ["test_workshop_auction_market_chart.lua"])
+
+m("market.consumption.base-identity", "TwichUI_Workshop/Pricing.lua", "if opt and opt.variant then return nil,'variant' end", "if false then return nil,'variant' end", "a native variant inherits a base-item reference", ["test_workshop_market_consumption.lua"])
+m("market.consumption.faction", "TwichUI_Workshop/Pricing.lua", "if side~=h.market.faction then", "if false then", "a character uses another faction's reference prices", ["test_workshop_market_consumption.lua"])
+m("market.consumption.quantity", "TwichUI_Workshop/Prices.lua", "q.state,q.cost,q.reference,q.source=\"estimate\",p.price*qty,true,p.source", "q.state,q.cost,q.reference,q.source=\"estimate\",p.price,true,p.source", "reference estimates lose the requested quantity", ["test_workshop_market_consumption.lua"])
+m("crafting.consumption.certainty", "TwichUI_Workshop/CraftPlanner.lua", "and not s.reference", "", "reference estimates become a verified plan", ["test_workshop_market_consumption.lua"])
+
+m("market.consumption.worth-certainty", "TwichUI_Workshop/Worth.lua", "if a.reference then return quiet(\"reference\",\"Market reference estimate; check current listings before selling\") end", "", "a Market reference becomes a proven vendor/auction comparison", ["test_workshop_market_consumption.lua"])
+
+m("market.consumption.pending-refresh", "TwichUI_Workshop/Pricing.lua", "if reason=='loading' then", "if false then", "different partitions never resolve into a complete feature snapshot", ["test_workshop_market_consumption_async.lua"])
+m("market.consumption.cache-decoder-coupling", "TwichUI_Workshop/Pricing.lua", "local current=dataStamp()", "local current=P.Generation()", "decoder progress repeatedly discards completed prices", ["test_workshop_market_consumption_async.lua"])
+
+m("market.consumption.capacity-loop", "TwichUI_Workshop/Pricing.lua", "if not reserved and count+pendingCount>=P.MAX_CACHE then", "if false then", "cache overflow repeatedly restarts decoding instead of falling back", ["test_workshop_market_consumption_async.lua"])
+
+m("market.search.loading-identity", "TwichUI_Workshop/auction/ViewMarket.lua",
+  'tostring(b.failures)..":"..tostring(focus)', 'tostring(b.loading)..":"..tostring(focus)',
+  "transient partition work changes the catalog identity and restarts finished searches", ["test_workshop_auction_market_search.lua"])
+m("market.search.focused-catalog", "TwichUI_Workshop/auction/ViewMarket.lua",
+  'local focus=b.summary and W.Int(p.focusItem or tonumber(p.query),1,W.MAX_ID)', 'local focus=nil',
+  "name search reuses a one-item focused catalog", ["test_workshop_auction_market_search.lua"])
+m("market.search.selected-history", "TwichUI_Workshop/auction/ViewMarket.lua",
+  'local x=saved and saved.key==key and saved.projection or W.ServerMarket.Project(item,p.serverVariant,p.serverMetric,p.days)',
+  'local x=W.ServerMarket.Project(item,p.serverVariant,p.serverMetric,p.days)',
+  "selected history repeatedly reloads an evicted partition and disappears during search", ["test_workshop_auction_market_search.lua"])
+m("market.search.item-selection", "TwichUI_Workshop/auction/ViewMarket.lua",
+  'if p.summaryItem~=item then p.summaryItem=item;p.serverVariant="" end',
+  'if false then p.summaryItem=item;p.serverVariant="" end',
+  "a newly selected item inherits another item's exact variant", ["test_workshop_auction_market_search.lua"])
+
+m("market.advisor.reference-vendor", "TwichUI_Workshop/Advisor.lua",
+  'elseif sell>0 then\n                r.action="vendor"', 'elseif sell>0 then\n                r.action="auction"',
+  "a Market price below the vendor margin incorrectly selects auction", ["test_workshop_advisor_market.lua"])
+m("market.advisor.reference-gain", "TwichUI_Workshop/Advisor.lua",
+  'r.reference.value-sell>=gain', 'r.reference.value-sell>=0',
+  "Market advice ignores the user's minimum worthwhile gain", ["test_workshop_advisor_market.lua"])
+m("market.advisor.reference-margin", "TwichUI_Workshop/Advisor.lua",
+  'r.reference.value>=sell*1.5', 'r.reference.value>=sell',
+  "Market advice ignores the vendor margin", ["test_workshop_advisor_market.lua"])
+m("market.advisor.tooltip-action-label", "TwichUI_Workshop/Advisor.lua",
+  'return "Workshop: "..A.TOOLTIP[r.action]', 'return "Workshop: "..A.TOOLTIP.unknown',
+  "a known sale choice is replaced by an unknown-data label", ["test_workshop_advisor_market.lua"])
+
+m("market.advisor.known-vendor-fallback", "TwichUI_Workshop/Advisor.lua",
+  'if sell and sell>0 then', 'if false then',
+  "an unknown auction quote blocks the known vendor option", ["test_workshop_advisor_market.lua"])
+
+m("market.advisor.de-tooltip-context", "TwichUI_Workshop/AdvisorData.lua",
+  'disenchant = W.Worth.DisenchantRelevant(f),', 'disenchant = false,',
+  "real tooltips omit missing disenchant evidence from their advice", ["test_workshop_market_consumption.lua"])
+m("market.advisor.de-reference-ceiling", "TwichUI_Workshop/Advisor.lua",
+  'local ceiling=auctionValue\n        if sell~=nil then ceiling=math.max(sell,ceiling or 0) end', 'local ceiling=sell',
+  "disenchant advice ignores a known auction value", ["test_workshop_advisor_market.lua"])
+
+m("market.advisor.pending-reference", "TwichUI_Workshop/Advisor.lua",
+  'elseif ctx.pendingPlan then Unknown', 'elseif false then Unknown',
+  "a Market recommendation bypasses unresolved crafting reservations", ["test_workshop_advisor_market.lua"])
+
+# Bundled disenchant references: admission, yields, prices, context and display.
+m("market.disenchant.reference-token", "TwichUI_Workshop/Disenchant.lua",
+  'snapshot.reference==REFERENCE', 'snapshot.reference~=nil',
+  "caller-supplied unverified tables impersonate the bundled dataset", ["test_workshop_disenchant.lua"])
+m("market.disenchant.midpoint", "TwichUI_Workshop/Disenchant.lua",
+  'qty=(low+high)/2', 'qty=low',
+  "expected material amounts use minimum quantities", ["test_workshop_disenchant.lua"])
+m("market.disenchant.fresh-materials", "TwichUI_Workshop/Disenchant.lua",
+  'now-at<=W.Prices.OLD_AFTER', 'true',
+  "old material prices remain current estimates", ["test_workshop_disenchant.lua"])
+m("market.disenchant.limited-reference-prices", "TwichUI_Workshop/Disenchant.lua",
+  'or reference and p.quality=="limited"', 'or false and p.quality=="limited"',
+  "ordinary Market material estimates are rejected as if they needed full local competition", ["test_workshop_disenchant.lua"])
+m("market.disenchant.excluded-item", "TwichUI_Workshop/Disenchant.lua",
+  'data.excluded[f.item]', 'false',
+  "known nondisenchantable items receive material values", ["test_workshop_disenchant.lua"])
+m("market.disenchant.special-rewards", "TwichUI_Workshop/Disenchant.lua",
+  'if not data or data.special[input.item] then return unavailable end', 'if not data then return unavailable end',
+  "special-reward items use ordinary material brackets", ["test_workshop_disenchant.lua"])
+m("market.disenchant.unconfirmed-bracket", "TwichUI_Workshop/Disenchant.lua",
+  'if not row or row.unconfirmed then', 'if not row then',
+  "unsupported low-level rare items receive invented ordinary yields", ["test_workshop_disenchant.lua"])
+m("market.disenchant.variant-level", "TwichUI_Workshop/Disenchant.lua",
+  'f.variant and not f.actualLevel', 'false',
+  "an unresolved variant is valued using a generic base item level", ["test_workshop_disenchant.lua"])
+m("market.disenchant.character-false", "TwichUI_Workshop/Disenchant.lua",
+  'if can==nil then can=rank~=nil and rank>0 end', 'if can~=true then can=rank~=nil and rank>0 end',
+  "profession metadata overrides a definite lack of Disenchant spell knowledge", ["test_workshop_disenchant.lua"])
+m("market.disenchant.actual-level", "TwichUI_Workshop/WorthTip.lua",
+  'then f.itemLevel=actual;f.actualLevel=true end', 'then f.itemLevel=base;f.actualLevel=true end',
+  "held-item level adjustments are discarded before looking up yields", ["test_workshop_disenchant_market.lua"])
+m("market.disenchant.shared-value", "TwichUI_Workshop/WorthTip.lua",
+  'r.disenchant=f.disenchantValue', 'r.disenchant=r.disenchant',
+  "the recommendation updates but its numeric tooltip row stays unavailable", ["test_workshop_disenchant_market.lua"])
+m("market.disenchant.suffix-comparison", "TwichUI_Workshop/Advisor.lua",
+  'if canChoose and de.state == "ok"', 'if canChoose and not ctx.variant and de.state == "ok"',
+  "a known disenchant value is blocked just because auction variant pricing is missing", ["test_workshop_advisor_market.lua"])
+
+m("market.disenchant.bracket-boundary", "TwichUI_Workshop/DisenchantData.lua",
+  'level >= row[1] and level <= row[2]', 'level > row[1] and level <= row[2]',
+  "the first item level of every bracket is omitted", ["test_workshop_disenchant.lua"])
+m("market.disenchant.weapon-class", "TwichUI_Workshop/DisenchantData.lua",
+  '[2] = WEAPON_UNCOMMON', '[2] = ARMOR_UNCOMMON',
+  "weapons use armor yield probabilities", ["test_workshop_disenchant.lua"])
+m("market.disenchant.auction-proceeds", "TwichUI_Workshop/Advisor.lua",
+  'r.proceeds=nil -- the previous auction comparison is not disenchant proceeds', '',
+  "a disenchant recommendation retains an unrelated auction proceeds amount", ["test_workshop_advisor.lua"])
+m("market.disenchant.legacy-qualification", "TwichUI_Workshop/Worth.lua",
+  'if d and d.state=="ok" and d.outcomeReference then', 'if false then',
+  "direct worth comparisons promote a Classic estimate into a proven winner", ["test_workshop_disenchant.lua"])
+m("market.disenchant.unresolved-copy-level", "TwichUI_Workshop/WorthTip.lua",
+  'f.actualLevel=f.itemLevel~=nil and not f.variant', 'f.actualLevel=true',
+  "a held variant with no detailed level is treated as resolved", ["test_workshop_disenchant_market.lua"])
+
+
+m("market.tooltip.yields-horizontal", "TwichUI_Workshop/WorthLayout.lua",
+  'for i,text in ipairs(row.line.rightRows) do out[#out+1]={i==1 and row.line[1] or " ",text} end',
+  'out[#out+1]={row.line[1],table.concat(row.line.rightRows,"; ")}',
+  "yield materials become a single horizontal tooltip line", ["test_workshop_disenchant.lua"])
+m("market.tooltip.yields-icons", "TwichUI_Workshop/WorthTip.lua",
+  'itemIcon=T.ItemIcon', 'itemIcon=nil',
+  "actual tooltip yields fail to use item icons", ["test_workshop_disenchant_market.lua"])
+m("market.tooltip.recommendation-art", "TwichUI_Workshop/WorthLayout.lua",
+  'local art=RECOMMEND_ART[r.advisor and r.advisor.action or rec.pick]', 'local art=nil',
+  "sale recommendations lose their matching addon artwork", ["test_workshop_advisor_market.lua"])
+m("market.tooltip.recommendation-color", "TwichUI_Workshop/WorthLayout.lua",
+  'recommendation=art and (r.advisor and r.advisor.action or rec.pick) or nil', 'recommendation=nil',
+  "tentative sale recommendations stay gray instead of using the action color", ["test_workshop_advisor_market.lua"])

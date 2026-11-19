@@ -51,13 +51,13 @@ function D.Track(item)
     return true
 end
 function D.Info(item)
-    local name, link, quality, _, _, kind, sub, _, equip, icon, sell, class, subclass, bind
+    local name, link, quality, itemLevel, _, kind, sub, _, equip, icon, sell, class, subclass, bind
     if C_Item and C_Item.GetItemInfo then
-        name, link, quality, _, _, kind, sub, _, equip, icon, sell, class, subclass, bind = C_Item.GetItemInfo(item)
+        name, link, quality, itemLevel, _, kind, sub, _, equip, icon, sell, class, subclass, bind = C_Item.GetItemInfo(item)
     end
     return { item = item, known = W.Text(name,200)~=nil, name = W.Text(name, 200) or ("Item " .. item), link = W.Text(link, 1000), quality = W.Int(quality, 0, 20),
         category = W.Text(kind, 60), sub = W.Text(sub, 60), icon = W.Int(icon, 0, W.MAX_ID) or W.Text(icon, 300), sell = W.Int(sell, 0, W.Prices.MAX_COPPER),
-        classID = W.Int(class, 0, 100), subClassID = W.Int(subclass, 0, 100), bindType = W.Int(bind, 0, 20), equipLoc = W.Text(equip, 80) }
+        classID = W.Int(class, 0, 100), subClassID = W.Int(subclass, 0, 100), bindType = W.Int(bind, 0, 20), equipLoc = W.Text(equip, 80),itemLevel=W.Int(itemLevel,1,1000) }
 end
 -- Request only an explicitly selected item, never the whole saved catalog.
 local requestedItem
@@ -192,10 +192,10 @@ function D.Reserved(item)
 end
 function D.Tooltip(f, facts)
     local reserved, pending = D.Reserved(f.item)
-    local can = C_SpellBook and C_SpellBook.ContainsAnyDisenchantSpell and W.Plain(C_SpellBook.ContainsAnyDisenchantSpell())
     return A.Decide(f.item, { qty = f.count or 1, sell = f.sell, bindType = f.bindType, bound = f.bound, variant = f.variant,
         now = f.now, minGain = A.Gain(), facts = facts, pendingPlan = pending, crafting = { uses = {}, reserved = reserved },
-        disenchantValue = W.Disenchant.Evaluate({item=f.item,quality=f.quality,classID=f.classID,equipLoc=f.equipLoc,canDisenchant=can}) })
+        disenchant = W.Worth.DisenchantRelevant(f),
+        disenchantValue = f.disenchantValue or W.Disenchant.ForItem(f,{market=f.marketTable,now=f.now}) })
 end
 -- Select-only heavy context. QueueStrategy reuses P2's cooperative job and its
 -- actual allocation. Direct queued demand is kept while a newer plan runs.
@@ -224,8 +224,7 @@ function D.Context(item, full, row)
             end
         end
     end
-    local can = C_SpellBook and C_SpellBook.ContainsAnyDisenchantSpell and W.Plain(C_SpellBook.ContainsAnyDisenchantSpell())
-    ctx.disenchantValue = W.Disenchant.Evaluate({ item = item, quality = f.quality, classID = f.classID, equipLoc = f.equipLoc, canDisenchant = can })
+    ctx.disenchantValue = W.Disenchant.ForItem({item=item,quality=f.quality,classID=f.classID,equipLoc=f.equipLoc,itemLevel=f.itemLevel,variant=ctx.variant},{now=ctx.now})
     ctx.crafting = craft
     return ctx
 end

@@ -415,7 +415,7 @@ local function RenderDetail(queue, byId, totals)
     -- what the crafts may cost and earn: the Opportunities estimate times the crafts; unknown stays unknown
     local x = byId[e.id]
     if x then
-        d.cost:SetText(UI.Money(x.cost)); UI.Paint(d.cost, K.text)
+        d.cost:SetText((x.reference and "about " or "")..UI.Money(x.cost)); UI.Paint(d.cost, K.text)
         d.sell:SetText(Range(x.sellLow, x.sellHigh)); UI.Paint(d.sell, K.text)
         d.profit:SetText(Range(x.profitLow, x.profitHigh))
         UI.Paint(d.profit, x.profitLow > 0 and K.sage or (x.profitHigh < 0 and K.ember or K.text))
@@ -437,7 +437,7 @@ local function RenderBar(queue, totals, sum)
     bar.title:SetText(("Total (%d %s)"):format(n, UI.Plural(n, "recipe", "recipes")))
     bar.sub:SetText(n == 0 and "Nothing queued" or ("%d %s to make"):format(totals.crafts, UI.Plural(totals.crafts, "craft", "crafts")))
     local priced = totals.priced > 0
-    bar.cost:SetText(priced and UI.Money(totals.cost) or "Unknown")
+    bar.cost:SetText(priced and ((totals.reference and "about " or "")..UI.Money(totals.cost)) or "Unknown")
     bar.value:SetText(priced and Range(totals.sellLow, totals.sellHigh ~= totals.sellLow and totals.sellHigh or nil) or "Unknown")
     bar.profit:SetText(priced and Range(totals.profitLow, totals.profitHigh ~= totals.profitLow and totals.profitHigh or nil) or "Unknown")
     UI.Paint(bar.cost, priced and K.text or K.stone)

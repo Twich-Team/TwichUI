@@ -402,7 +402,7 @@ local function PaintRow(fr, row)
             fr.left:SetText(a)
             Color(fr.left, C.left)
             fr.left:Show()
-            h = math.max(ROW_H, (fr.left:GetStringHeight() or 12) + 4)
+            h = math.max(ROW_H, (fr.left:GetStringHeight() or 12) + 4,(fr.right:GetStringHeight() or 12)+4)
         else
             fr.wide:SetText(a)
             Color(fr.wide, C[kind] or C.plain)
@@ -585,7 +585,7 @@ function D.Refresh()
 
     -- Grouped, searchable catalog. Filtering changes no layout or saved value.
     local groups = {
-        { "Recommendations & values", "recommend", "vendor", "auction", "disenchant" },
+        { "Recommendations & values", "recommend", "vendor", "auction", "disenchant", "outcomes" },
         { "Market information", "recent", "marketvalue", "historical", "supply", "quality" },
         { "Details & provenance", "advisorwhy", "advisorevidence", "status", "source", "note" },
     }
@@ -616,7 +616,6 @@ function D.Refresh()
             end
         end
     end
-    listButtons[L.BY_ID.outcomes.order]:Hide()
     f.noResults:SetShown(listY == listStart); At(f.noResults, 16, listStart)
 
     -- the mockup

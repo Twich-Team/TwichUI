@@ -285,7 +285,7 @@ local function RenderDetail(rows)
     local series = f and F.Chart(f) or nil
     d.chart:Set(W.AdvancedChart.FromObserved(series), UI.Money,
         "workshop:opportunities:"..tostring(rec.outItem)..":"..tostring(series and series.market))
-    d.chartNote:SetText(ChartNote(series))   -- the days the history really covers; when the listings were scanned is on the Data quality row
+    d.chartNote:SetText((series and series.external and "Market server · Recent Price · " or "")..ChartNote(series))   -- the days the history really covers; when the listings were scanned is on the Data quality row
     Opps.PaintStrategy(rec)
     -- the button: what it does now (add), what already happened (queued, with a check) or why it can't (the queue is full)
     local queued = S.IsQueued(rec.id)

@@ -142,7 +142,15 @@ K.Page({
         K.Status("Collection", function()
             local s=Companion()
             return s and s.ready and "Companion Market data + manual Auction House scans" or "Manual Auction House scans"
-        end, function() return "Local scans work independently. Companion observations are a separate source in Market research." end)
+        end, function() return "Local scans work independently. Matched base items use Companion estimates and history throughout Workshop; local scans remain the fallback." end)
+        K.Status("Pricing source", function()
+            local w=Loaded() and R.Workshop
+            if not (w and w.Pricing) then return "Load Workshop to inspect" end
+            local src=w.Pricing.Source()
+            if src.reference then return "Market estimates + local scan fallback" end
+            local why=({stale="Market data is old",market_mismatch="Companion market has another faction",unavailable="Market data not loaded",unsupported="Market format unavailable"})[src.referenceWhy or "unavailable"]
+            return "Local scans · "..(why or "Market reference unavailable")
+        end, function() return "Crafting, Shopping, Advisor, tooltips and embedded charts use matched Market base-item references. Live auctions remain game observations. The Market selected in Companion supplies region and ruleset; faction must match." end)
         K.Status("Companion data", function()
             local s=Companion()
             if not Loaded() then return "Load Workshop to inspect" end

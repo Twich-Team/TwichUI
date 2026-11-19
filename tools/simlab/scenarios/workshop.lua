@@ -874,7 +874,7 @@ Lab.Step("what's it worth: tooltip designer", function()
     -- Legacy saved outcome entries remain editable, though never offered as a capability.
     D.AddLine("outcomes"); Apply()
     Check("state", "outcomes added", true, Layout():find("outcomes", 1, true) ~= nil)
-    Check("display", "the mockup holds its place and says there is nothing to show", true, Mock():find("(Disenchant outcomes: nothing to show for this example)", 1, true) ~= nil)
+    Check("display", "the mockup holds its place and says there is nothing to show", true, Mock():find("(Disenchant yields: nothing to show for this example)", 1, true) ~= nil)
     Check("direct", "the live tooltip shows no outcomes line", false, Live(true):find("Disenchant gives", 1, true) ~= nil)
     w.SetShift(false)
     Click(f.remove, "Remove outcomes")
@@ -893,7 +893,7 @@ Lab.Step("what's it worth: tooltip designer", function()
     end
     local Drag = R.MagicInventoryPage.Drag
     local model = D.Model()
-    -- drag "Disenchant outcomes" from the list and let go between Recommendation and Auction (gap 1)
+    -- drag "Disenchant yields" from the list and let go between Recommendation and Auction (gap 1)
     local b = D.ListButton(7)
     D.StartDrag({ kind = "list", id = "outcomes" })
     Check("direct", "[handler] OnDragStart on a list line starts a carry", true, Drag.Active())

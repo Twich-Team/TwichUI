@@ -547,6 +547,11 @@ Guild bank (a character with a guild and a bank you can view):
 
 ## What's it worth? (built 2026-11-09: vendor and auction only; DISENCHANT NOT BUILT; tooltip designer 2026-11-10)
 
+**Current development candidate:** the approved branch now adds labeled Classic
+disenchant estimates over bundled Forever item brackets/exclusions, using Market
+or local material prices. See [Disenchant support](workshop/automatic-market-summary.md#disenchant-support).
+The dated implementation notes and source audit below describe the original checkpoint.
+
 **Status: partly implemented, honestly.** The tooltip comparison of **Vendor** and **Auction** exists, with a short **Suggested:** line, and the player can choose and order its lines in a visual **designer** on the Workshop settings page (below). The **Disenchant** estimate does **not** exist: no legally reusable, Forever-appropriate source of disenchant outcomes could be established (below, re-checked: nothing changed), so a disenchantable-looking item shows **"Disenchant (average) | no data"** and a disenchant winner is never named. Nothing invents a chance or a quantity. **The user reported (2026-11-10) that the tooltip works in the real game** (before the designer; not itemized against the checks below). The designer and the new lines are **not real-client-tested**, and real pointer-driven drag-and-drop has never been run.
 
 ### Disenchant outcome data: what was checked and why it is blocked
