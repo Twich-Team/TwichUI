@@ -84,6 +84,13 @@ function A.Decide(item, ctx)
             Reason("The observed listing is not a suggested posting price; a sale is not guaranteed.")
             local alt=r.alternatives[2]
             alt.state,alt.value,alt.note="observed",observed.value,"Observed current listing per item, not a suggested posting price. Limited evidence; fees and sale outcome unknown."
+        elseif r.facts.recent and r.facts.recent.source=="market_server" and sell~=nil
+            and r.facts.recent.value>=sell*1.5 and r.facts.recent.value-sell>=gain and r.facts.recent.value>sell then
+            r.action,r.level,r.evidence="auction","tentative","limited"
+            r.reference=r.facts.recent
+            r.provenance={source="market_server",at=r.reference.at,generation=r.reference.generation,market=r.facts.key}
+            Reason("Market server references suggest auctioning may be worthwhile. Check current listings before choosing a posting price.")
+            r.alternatives[2].state,r.alternatives[2].value,r.alternatives[2].note="reference",r.reference.value,"Market reference estimate; no live competing offer or suggested posting price."
         else Reason("Vendor and current auction evidence do not support a reliable comparison.") end
         for _, why in ipairs(s.reasons or {}) do r.missing[#r.missing + 1] = why end
     end

@@ -1,4 +1,6 @@
--- TwichUI Workshop: the market data API (W.Market)
+-- TwichUI Workshop: local observation API (W.Market). Reference-aware Workshop
+-- consumers use W.Pricing through Session/MarketFacts; native auction actions
+-- continue to use these independent local observations.
 -- THE one place the rest of the Workshop (and anything later) asks "what does this item cost at the auction house": the Opportunities
 -- view, the shopping list and the "What's it worth?" tooltip all come through here, so they cannot disagree. It reads the saved
 -- markets (Prices.lua) and their history (History.lua); it changes nothing, calls no auction house function and returns copies, never
@@ -101,6 +103,7 @@ end
 --   complete (a whole read with every record's information loaded), cut (listings may be missing), partial (records whose information
 --   had not loaded when read; their prices were used), items (how many are priced), read/used (records read / used for a price)
 function MK.Info(opt)
+    if opt and type(opt.market)=="table" and opt.market.pricing and W.Pricing then return W.Pricing.Info(opt) end
     local m = Resolve(opt)
     if not m then return nil, "nomarket" end
     return Summary(m, Now(opt))

@@ -192,15 +192,16 @@ local function PaintDetail()
     d.action:SetText(r.text); d.evidence:SetText(r.evidenceText)
     local vals={r.suggestion.price, f.mval and f.mval.value, f.recent and f.recent.value, f.hist and f.hist.value, false, info.sell}
     for i,card in ipairs(d.cards) do card.value:SetText(vals[i]~=nil and vals[i]~=false and UI.Money(vals[i]) or "Unavailable") end
-    d.cards[5].value:SetText(f.supply and (UI.Num(f.supply.items) .. " items / " .. UI.Num(f.supply.listings) .. " listings") or "Unknown")
+    d.cards[5].value:SetText(f.supply and (UI.Num(f.supply.items) .. " items / " .. (f.supply.listings and UI.Num(f.supply.listings) or "unknown") .. " listings") or "Unknown")
     for i,card in ipairs(d.cards) do
         UI.Tip(card,card.label:GetText(),i==1 and "Match the lowest supported competing tier per item. Gross listing value; a sale is not guaranteed." or
             (i==6 and "Actual vendor sell value for one item, not the price to buy it." or "Observed listings only. Historical values are references, not selling prices."))
     end
     d.reasons:SetText(WhyText(r))
-    d.chart:Set(W.AdvancedChart.FromObserved(W.Facts.Chart(f)),UI.Money,
+    local chartSeries=W.Facts.Chart(f)
+    d.chart:Set(W.AdvancedChart.FromObserved(chartSeries),UI.Money,
         "workshop:advisor:"..tostring(selected)..":"..tostring(f.key))
-    d.chartLabel:SetText("Observed daily lows \194\183 gaps remain unfilled")
+    d.chartLabel:SetText(chartSeries and chartSeries.external and "Market server · Recent Price · gaps remain unfilled" or "Observed daily lows \194\183 gaps remain unfilled")
     for i,alt in ipairs(r.alternatives) do
         local line=d.alts[i]
         line.name:SetText(alt.action=="craft" and "Craft" or (alt.action=="auction" and "Auction" or (alt.action=="vendor" and "Vendor" or (alt.action=="disenchant" and "Disenchant" or "Watch"))))
@@ -277,7 +278,7 @@ end
 function V.Stats() return { items=catalog and #catalog.rows or 0, results=#filtered, running=catalog and not catalog.done or false } end
 local function Key()
     local m=S.PriceSource().market
-    return table.concat({m and W.Valuation.Generation(m) or "none",tostring(W.Strategy.epoch),tostring(S.observations)},"|")
+    return table.concat({m and (m.generation or W.Valuation.Generation(m)) or "none",tostring(W.Strategy.epoch),tostring(S.observations)},"|")
 end
 Render=function()
     if not page or not page:IsShown() then return end

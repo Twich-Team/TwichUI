@@ -113,8 +113,15 @@ Detail=function(p)
         rec.observed and ("\nTentative observation: "..Money(rec.observed.value)) or "\nNo supported default price."))
     p.guidanceTip=table.concat(rec.reasons or {},"\n")..(s and s.caution and ("\n"..s.caution) or "")
     local market=W.Market.Source().market
+    local references=W.Facts.Of(row.item,{market=market,references=true,variant=row.variant})
+    p.referenceFacts=references
     local projection=W.AuctionMarketData.Project(row.item,market,14,{variant=row.variant})
-    p.chart:Set(projection and projection.series,UI.Money,row.item..":sell:"..tostring(market and market.key)..":"..tostring(row.variant))
+    local series=references.reference and W.Facts.Chart(references) or projection and projection.series
+    p.chart:Set(series,UI.Money,row.item..":sell:"..tostring(references.generation or market and market.key)..":"..tostring(row.variant))
+    if references.recent and references.recent.source=="market_server" then
+        p.history:SetText("Vendor / item: "..Money(row.info.sell).." · Reserved: "..(row.reserved or 0)..
+            "\nMarket recent / item: "..Money(references.recent.value).." · estimate\n"..W.Prices.AgeText(references.recent.age))
+    end
 end
 local function Reset(p)
     Detail(p)

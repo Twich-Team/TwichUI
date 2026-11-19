@@ -59,6 +59,8 @@ Scan.lua
 # The market data API: current prices, history, quotes, markets (one source for every feature; reads saved data only)
 Market.lua
 Valuation.lua
+# Companion reference pricing with independent local scan fallback
+Pricing.lua
 # Market figures for display: one cached read and the words of each (A7; pure)
 MarketFacts.lua
 # A8: competition-based selling suggestions and deterministic item advice

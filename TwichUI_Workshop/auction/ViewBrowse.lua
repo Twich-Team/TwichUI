@@ -102,7 +102,7 @@ Detail = function(p)
     d.cached = stamp
     local k=chosen.itemKey
     local variant=k and ((k.itemLevel or 0)~=0 or (k.itemSuffix or 0)~=0 or (k.battlePetSpeciesID or 0)~=0) or false
-    local facts = W.Facts.Of(item, {market = p.market,variant=variant})
+    local facts = W.Facts.Of(item,{references=true,market = p.market,variant=variant})
     DetailRows(d, facts)
     if chosen.source=="live" then
         d.summary.heading:SetText(chosen.commodity and "Live commodity price" or chosen.priceEach and "Live price · per item" or chosen.auctionID and "Live listing · exact amounts" or "Live item group · inspect listings")

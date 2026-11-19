@@ -102,7 +102,7 @@ function WO.Evaluate(f)
         r.auction = { state = "unknown", why = "noprice" }
     else
         local gross = f.price.price
-        local a = { state = "ok", gross = gross, at = f.price.at, complete = f.price.complete == true }
+        local a = { state = "ok", gross = gross, at = f.price.at, complete = f.price.complete == true, reference=f.price.reference, source=f.price.source }
         a.age = PR.Age(a.at, f.now)
         a.old = a.age ~= nil and a.age > PR.OLD_AFTER
         if type(f.rate) == "number" and f.rate >= 0 and f.rate < 1 then
@@ -205,6 +205,7 @@ function WO.Recommend(r)
     end
     if v.state == "unknown" then return quiet("more", "More prices needed") end
 
+    if a.reference then return quiet("reference","Market reference estimate; check current listings before selling") end
     local tags = AuctionTags(a)
     local outcome, key = Compare(r)
     if d and d.state == "unknown" then

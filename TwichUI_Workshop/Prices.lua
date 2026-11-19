@@ -546,6 +546,7 @@ end
 
 -- Which auction house a market is, in words
 function PR.Label(market)
+    if market and market.pricing then return market.label end
     if type(market) ~= "table" then return nil end
     local realm = market.realm or "this realm"
     if market.side and market.side ~= "unknown" then return ("the %s auction house on %s"):format(market.side, realm) end
@@ -1119,6 +1120,11 @@ function PR.Quote(p, qty)
     qty = Int(qty, 1, W.MAX_ID)
     if not qty or type(p) ~= "table" or not p.price then return { state = "none", qty = qty } end
     local q = { qty = qty, unit = p.price, listed = p.qty, total = p.total, at = p.at, complete = p.complete }
+    if p.reference then
+        if p.price > 9007199254740991 / qty then return {state="none",qty=qty,why="overflow"} end
+        q.state,q.cost,q.reference,q.source="estimate",p.price*qty,true,p.source
+        return q
+    end
     if p.total and p.total < qty then
         q.state = "few"
     else
@@ -1147,6 +1153,7 @@ function PR.Estimate(rec, lookup, rate)
     local e = { state = "unknown", mats = {}, missing = 0, cutRate = rate }
     local oldest, incomplete, cheapest = nil, false, false
     local function Seen(p)
+        if p.reference then e.reference=true end
         if not oldest or p.at < oldest then oldest = p.at end
         if p.complete ~= true then incomplete = true end
     end
@@ -1170,6 +1177,7 @@ function PR.Estimate(rec, lookup, rate)
             end
             if p then
                 row.unit, row.at, row.complete = p.price, p.at, p.complete
+                row.source,row.generation,row.reference=p.source,p.generation,p.reference
                 row.total = quote.cost
                 row.cheapest = p.qty ~= nil and m.qty > p.qty
                 cost = cost + row.total

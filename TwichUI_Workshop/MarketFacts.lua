@@ -80,6 +80,7 @@ end
 -- The facts of one item. opt: { market = a key, a market table or a Market.Source() answer (nil: the market the views use), variant = true for an
 -- item that is a variant (never priced from the base item's listings), now }. Always a table; a market that is absent says `nomarket`.
 function F.Of(item, opt)
+    if W.Pricing and W.Pricing.Wants(opt) then return W.Pricing.Facts(item,opt) end
     local now = opt and opt.now or time()
     local variant = opt and opt.variant == true
     local m = ResolveMarket(opt)
@@ -149,7 +150,12 @@ end
 -- f: F.Of's answer; money(copper) -> text; the rows exist whatever the data: a missing figure says why in the value column.
 function F.Rows(f, money)
     local rows = {}
-    local function Add(id, label, value, tone, tip) rows[#rows + 1] = { id = id, label = label, value = value, tone = tone or "text", tip = tip } end
+    local function Add(id, label, value, tone, tip)
+        local v=f[({market="mval"})[id] or id]
+        local names={min="low",recent="recent",market="value",hist="history",comp="competition",supply="supply",quality="quality"}
+        if type(v)=="table" and v.source=="market_server" then label="Market "..(names[id] or label)
+        elseif f.reference and type(v)=="table" then label="Local "..(names[id] or label) end
+        rows[#rows + 1] = { id = id, label = label, value = value, tone = tone or "text", tip = tip } end
     local function Miss(why) return WHY[why] or "unknown" end
     if f.nomarket then
         Add("min", "Lowest listing", "not scanned yet", "quiet")
@@ -207,6 +213,9 @@ function F.Rows(f, money)
         if q.n then lines[#lines + 1] = ("Observed on %d of the last 30 days."):format(q.n) end
         Add("quality", "Data quality", text, (q.level == "good" or q.level == "fair") and "text" or "dim", table.concat(lines, " "))
     end
+    if f.reference then
+        Add("source", "Price source", "Market server", "text", f.label .. "; missing references use local scans. Live competition remains local.")
+    end
     return rows
 end
 
@@ -214,7 +223,7 @@ end
 function F.Freshness(f)
     if f.nomarket then return "no scan of this auction house yet" end
     if f.age == nil then return nil end
-    local t = "listings scanned " .. PR.AgeText(f.age)
+    local t = (f.reference and "Market server observed " or "listings scanned ") .. PR.AgeText(f.age)
     if f.freshness == "old" or f.freshness == "stale" then t = t .. " (old)" end
     return t
 end
@@ -226,6 +235,10 @@ function F.Line(id, f, money)
     if f.variant then return nil end
     local function Money(v) return money(v.value) end
     if f.nomarket then return nil end
+    if f.reference and (id == "marketvalue" or id == "recent" or id == "historical") then
+        local v=f[({marketvalue="mval",recent="recent",historical="hist"})[id]]
+        if v then return {(v.source=="market_server" and "Market server · " or "Local scan · ")..({marketvalue="Market value (14 days)",recent="Recent price",historical="Historical value (60 days)"})[id],money(v.value)} end
+    end
     if id == "marketvalue" then
         if f.mval then
             local tags = Tags(f.mval)
@@ -254,7 +267,7 @@ function F.Line(id, f, money)
         local q = f.quality
         if not q or q.level == "none" then return nil end
         local text = QUALITY[q.level]
-        if f.age then text = text .. ", scanned " .. PR.AgeText(f.age) end
+        if f.age then text = text .. (f.reference and ", observed " or ", scanned ") .. PR.AgeText(f.age) end
         return { "Market data", text }
     end
 end
@@ -283,6 +296,7 @@ end
 -- 48-hour observations only stand in for a day that has no daily point yet (the day's last observation). Nothing is interpolated.
 -- Returns series or nil and a reason; memoised on the facts while the item's saved strings are the same ones (a scan replaces the facts).
 function F.Chart(f)
+    if f.reference and W.Pricing then return W.Pricing.Chart(f) end
     if f.nomarket or f.variant or not f.key then return nil, f.variant and "variant" or "nomarket" end
     local m = ResolveMarket({ market = f.key })
     if not m then return nil, "nomarket" end

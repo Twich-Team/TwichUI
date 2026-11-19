@@ -9,6 +9,12 @@ local previous,previousCache
 local cached,queue,queued=nil,{},{}
 local stats={validation_ms=0,largest_slice_ms=0,slices=0,failures=0,load_ms=0,largest_load_ms=0,lookup_calls=0}
 local lastError
+local notificationPending=false
+local function changed()
+    if notificationPending or not W.Pricing or not C_Timer or not C_Timer.After then return end
+    notificationPending=true
+    C_Timer.After(0.1,function() notificationPending=false;if W.Active() then W.Pricing.Changed() end end)
+end
 local function clock() return GetTimePreciseSec and GetTimePreciseSec()*1000 or debugprofilestop and debugprofilestop() or 0 end
 local function measured(id,fn,...) if R.Perf and R.Perf.Call then return R.Perf.Call(id,fn,...) end;return fn(...) end
 local function need(ok) if not ok then error('invalid Workshop summary',0) end end
@@ -141,7 +147,7 @@ function Q.Step(ms)
         repeat
             local ok,value=coroutine.resume(current.co);n=n+1
             if not ok then
-                stats.failures=stats.failures+1;lastError='invalid';stats.unsupported=value=='summary newer_addon'
+                stats.failures=stats.failures+1;changed();lastError='invalid';stats.unsupported=value=='summary newer_addon'
                 if current.kind=='header' then rejected=current.raw else
                     active.failed[current.bucket]='invalid';stats.reload_required=true
                     if previous then rejected=active.raw;active,cached=previous,previousCache;previous,previousCache=nil,nil;queue,queued={},{} end
@@ -149,13 +155,16 @@ function Q.Step(ms)
                 job=nil;break
             end
             if coroutine.status(current.co)=='dead' then
+                if current.kind=='header' or not active.checked[current.bucket] then changed() end
                 if current.kind=='header' then previous,previousCache=active,cached;active=value;cached=nil;queue,queued={},{};selected=true
                 else
                     if not active.checked[current.bucket] then active.checked_count=active.checked_count+1 end
                     active.checked[current.bucket]=true;active.failed[current.bucket]=nil
                     cached={bucket=current.bucket,rows=value}
                 end
-                job=nil;break
+                job=nil
+                if current.kind=="part" and W.Pricing then W.Pricing.Decoded(current.bucket) end
+                break
             end
         until n>=limit or clock()-start>=budget
         local elapsed=math.max(0,clock()-start)

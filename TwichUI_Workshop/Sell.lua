@@ -13,8 +13,8 @@ function S.Suggest(item, qty, opt)
     if not W.Int(item, 1, W.MAX_ID) or not W.Int(qty, 1, W.MAX_ID) then r.reasons[1] = "Invalid item or quantity." return r end
     if opt.strategy and opt.strategy ~= "match" then r.reasons[1] = "That posting strategy is unavailable." return r end
     local f = opt.facts or W.Facts.Of(item, opt)
-    local c, q = f.comp, f.quality
-    r.at, r.age, r.market, r.provenance = f.at, f.age, f.key, "local"
+    local c, q = f.comp, f.localQuality or f.quality
+    r.at, r.age, r.market, r.provenance = c and c.at or f.at, c and c.age or f.age, f.key, "local"
     r.quality, r.competition = q and q.level or "none", c
     if not c or not c.competing then
         r.state = "nocompetition"
@@ -49,7 +49,7 @@ end
 -- normalized competing tier still comes from A5's outlier-aware service. Only
 -- known thin coverage/history may qualify, with stricter 24-hour freshness.
 function S.Observation(f)
-    local c,q=f and f.comp,f and f.quality
+    local c,q=f and f.comp,f and (f.localQuality or f.quality)
     if not c or not q or f.variant or not W.Int(c.competing,1,W.Prices.MAX_COPPER)
         or not W.Finite(c.age) or c.age<0 or c.age>W.Valuation.GOOD_AGE or c.cut
         or (c.complete~=true and c.complete~=false) or not q.facts or q.facts.distribution~=true or Has(c.notes,"mixedvariants")

@@ -17,7 +17,7 @@
 
 local R = TwichUI
 local W = R.Workshop
-local WO, WL, PR, S, MK = W.Worth, W.WorthLayout, W.Prices, W.Session, W.Market
+local WO, WL, PR, S, MK = W.Worth, W.WorthLayout, W.Prices, W.Session, W.Pricing or W.Market
 local Plain, Int = W.Plain, W.Int
 local T = {}
 W.WorthTip = T
@@ -133,6 +133,10 @@ local function Add(tooltip, data)
 end
 
 -- The post call for every item tooltip: never lets a fault here take other addons' lines or the item's own tooltip with it
+function T.Refresh()
+    if W.Active() and carrying and carrying.IsShown and carrying:IsShown() then Rebuild(carrying) end
+end
+
 function T.OnItem(tooltip, data)
     if not W.Active() then return end
     if tooltip ~= GameTooltip or type(data) ~= "table" then return end

@@ -126,6 +126,7 @@ function Op.Tip(row, src, money, now)
     local e, out = row.est, {}
     local function L(left, right) out[#out + 1] = { left, right } end
     L(row.rec.name)
+    if e.reference then L("Market server reference estimates; current listings and sale outcomes may differ.") end
     if e.cost then L("Cost to make", money(e.cost)) end
     if e.sellLow then L("Sell price", Range(e.sellLow, e.sellHigh, money)) end
     if e.state == "ok" then
@@ -136,6 +137,7 @@ function Op.Tip(row, src, money, now)
     local status = Op.ScanWords(src, now)
     local extra = {}
     for _, m in ipairs(e.mats or {}) do
+        if m.reference then extra[1] = "Market server estimates" break end
         if m.cheapest then extra[1] = "Cheapest listing only" break end
     end
     if status or extra[1] then

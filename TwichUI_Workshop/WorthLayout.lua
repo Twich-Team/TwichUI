@@ -298,6 +298,7 @@ local AUCTION_WORDS = {
 WL.AUCTION_WORDS = AUCTION_WORDS
 
 local function AuctionLabel(a)
+    if a.reference then return "Market server · Auction estimate" end
     local tags = {}
     if a.beforeFees then tags[#tags + 1] = "before fees" else tags[#tags + 1] = "after fees" end
     if a.old then tags[#tags + 1] = "old prices" end

@@ -30,6 +30,7 @@ St.onChange = nil       -- fn() called when a job finished (or was dropped by a 
 -- lower figure is only what is known.
 function St.RangeText(r, money, lowerOnly)
     if not r or r.low == nil then return nil end
+    if r.reference then return "about " .. money(r.low) end
     if lowerOnly or r.high == nil then return "at least " .. money(r.low) end
     if r.high == r.low then return money(r.low) end
     return money(r.low) .. " to " .. money(r.high)
@@ -46,6 +47,7 @@ St.detailed = false
 function St.CostText(r, money, lowerOnly, detailed)
     if not r or r.low == nil then return nil end
     if detailed == nil then detailed = St.detailed end
+    if r.reference then return "about " .. money(r.low), "Market server reference estimate; live prices and available quantities may differ." end
     if lowerOnly then return "at least " .. money(r.low), "Some prices are missing, so this is only the part that is known." end
     if r.high == nil then return "at least " .. money(r.low), "Part of it is an auction estimate with no known upper end: buying that many may cost more." end
     if r.high == r.low then return money(r.low), nil end
@@ -59,6 +61,7 @@ function St.Status(s)
     if not s or s.status == "empty" then return "Nothing to plan", "quiet" end
     if s.status == "unavailable" then return "No plan could be made", "warn" end
     if s.status == "incomplete" then return "Partial plan: some prices or recipes are missing", "warn" end
+    if s.reference then return "Plan using Market estimates", "warn" end
     if s.proven then return "Best verified plan", "good" end
     return "Best plan found", "good"
 end
@@ -106,6 +109,7 @@ St.NO_SAVING = "Buying the materials directly is the best supported option."
 St.NO_COMPARE = "Not enough price information to compare every route."
 function St.Savings(s, money)
     local sv = s and s.savings
+    if s and s.reference then return "Estimated savings",sv and ("about "..money(sv.lowerBounds or 0)) or "Unknown","warn","Comparison at Market reference estimates; current prices and availability may differ." end
     if not sv then return "Potential savings", "Unknown", "quiet", St.NO_COMPARE end
     if sv.confident then
         return "Savings", "at least " .. money(sv.low), "good", "Certainly cheaper than buying directly: the price ranges do not overlap."
@@ -434,7 +438,7 @@ function St.Adapt(plan, ctx)
     local stepNames = {}
     for _, c in ipairs(plan.crafts or {}) do stepNames[c.recipe] = c.name end
     local rows = {}
-    local totals = { cash = s.cash.low or 0, low = s.cash.low or 0, high = s.cash.high, open = s.cash.high == nil, priced = 0, missing = 0,
+    local totals = { reference=s.reference, cash = s.cash.low or 0, low = s.cash.low or 0, high = s.cash.high, open = s.cash.high == nil, priced = 0, missing = 0,
         estimate = false, makes = #(plan.crafts or {}), incomplete = false, collect = 0 }
     -- who uses an item as a reagent: the names of the crafts (one per recipe)
     local function ForNames(line)
@@ -693,7 +697,7 @@ function St.Detail(plan, name, money, ageText, now, showAlts)
     end
     local function BuyRow(kind, l)
         local b = l.buy
-        local text, rangeTip = St.CostText({ low = b.low, high = b.high }, money)
+        local text, rangeTip = St.CostText({ low = b.low, high = b.high, reference=b.reference }, money)
         local tip = {}
         if rangeTip then tip[#tip + 1] = { rangeTip } end
         if b.surplus and b.surplus > 0 then tip[#tip + 1] = { "Left over", tostring(b.surplus) } end

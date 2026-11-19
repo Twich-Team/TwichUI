@@ -74,7 +74,7 @@ local function AuctionOption(inp, item, qty, memo)
     end
     local aq = PR.Quote(p, qty)
     if aq.state == "none" then return nil end
-    local o = { kind = "auction", state = aq.state, cost = aq.cost, quote = aq, at = aq.at, estimate = aq.state == "estimate" }
+    local o = { kind = "auction", state = aq.state, cost = aq.cost, quote = aq, at = aq.at, estimate = aq.state == "estimate", reference=aq.reference }
     if aq.cost then o.low = aq.cost end
     if aq.state == "exact" then o.high = aq.cost end
     return o
@@ -361,6 +361,7 @@ function Sh.Plan(inp)
         local o = src and opts[src] or nil
         if o and o.cost then
             row.cash, row.at, row.estimate = o.cost, o.at, o.estimate
+            row.reference=o.reference;totals.reference=totals.reference or o.reference
             row.costState, row.low, row.high, row.costInfo = (o.kind == "vendor" and "exact" or o.state), o.low or o.cost, o.high, o.info
             totals.low = totals.low + (o.low or o.cost)
             if o.high then totals.high = totals.high + o.high else totals.open = true end
@@ -438,6 +439,9 @@ function Sh.CostWords(r, money)
     local st = r.costState or r.state
     local cash = r.cash or r.cost
     if cash == nil then return nil end
+    if r.reference or r.quote and r.quote.reference or r.options and r.options.auction and r.options.auction.reference and r.source=="auction" then
+        return "about " .. money(cash), "Market server reference estimate; current availability and purchase cost are unknown."
+    end
     if st == "range" then
         return money(r.low) .. " to " .. money(r.high), "Auctions may require buying larger stacks."
     elseif st == "estimate" and (r.costInfo or r.info) then

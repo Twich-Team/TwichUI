@@ -185,8 +185,8 @@ local function Build(p)
         local info = MK.Info({ market = m })
         local lines = { (src.label or "the auction house"):gsub("^%l", string.upper) }
         local age = PR.Age(m.at)
-        lines[#lines + 1] = "Scanned " .. PR.AgeText(age) .. (age and age > PR.OLD_AFTER and " (old)" or "")
-        lines[#lines + 1] = info and info.complete and "A complete scan." or "Some listings may be missing from this scan."
+        lines[#lines + 1] = (src.reference and "Market observed " or "Scanned ") .. PR.AgeText(age) .. (age and age > PR.OLD_AFTER and " (old)" or "")
+        lines[#lines + 1] = src.reference and "Market estimates for matched base items; other items use local scans. Live quantity and sale outcomes are unknown." or (info and info.complete and "A complete scan." or "Some listings may be missing from this scan.")
         return table.concat(lines, "\n")
     end)
     UI.TipFn(cards.profs, "Profession progress", function()
@@ -422,7 +422,7 @@ local function Render()
     local age = market and PR.Age(market.at) or nil
     local mf = {}
     if market then
-        SetStat(cards.market, UI.Num(info and info.items or 0), Plural(info and info.items or 0, "item priced", "items priced"),
+        SetStat(cards.market, UI.Num(info and info.items or 0), (src.reference and "server variant references" or Plural(info and info.items or 0, "item priced", "items priced")),
             (info and (info.scans or 0) > 0) and ("%d %s of history"):format(info.scans, Plural(info.scans, "day", "days")) or nil)
     else
         SetStat(cards.market, "\226\128\148", "no prices yet", nil)

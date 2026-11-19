@@ -182,6 +182,7 @@ function V.CacheStats()
 end
 
 local function Generation(m)
+    if m.pricing then return m.generation end
     local s, hi = m.snap, m.h2info
     return ("%s:%s:%s:%s:%s:%s:%s"):format(tostring(s and s.seq), tostring(m.at), tostring(s and s.at), tostring(s and s.alg), tostring(m.scope),
         tostring(hi and hi.at), tostring(hi and hi.bytes))

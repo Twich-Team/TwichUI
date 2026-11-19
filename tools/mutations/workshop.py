@@ -1125,3 +1125,15 @@ m("market.chart-workshop-copper", "TwichUI_Workshop/auction/AdvancedChart.lua",
 m("market.chart-workshop-aggregates", "TwichUI_Workshop/auction/AdvancedChart.lua",
   "for _,g in ipairs(series.groups or {}) do", "for _,g in ipairs({}) do",
   "the Workshop adapter silently drops retained older aggregate intervals", ["test_workshop_auction_market_chart.lua"])
+
+m("market.consumption.base-identity", "TwichUI_Workshop/Pricing.lua", "if opt and opt.variant then return nil,'variant' end", "if false then return nil,'variant' end", "a native variant inherits a base-item reference", ["test_workshop_market_consumption.lua"])
+m("market.consumption.faction", "TwichUI_Workshop/Pricing.lua", "if side~=h.market.faction then", "if false then", "a character uses another faction's reference prices", ["test_workshop_market_consumption.lua"])
+m("market.consumption.quantity", "TwichUI_Workshop/Prices.lua", "q.state,q.cost,q.reference,q.source=\"estimate\",p.price*qty,true,p.source", "q.state,q.cost,q.reference,q.source=\"estimate\",p.price,true,p.source", "reference estimates lose the requested quantity", ["test_workshop_market_consumption.lua"])
+m("crafting.consumption.certainty", "TwichUI_Workshop/CraftPlanner.lua", "and not s.reference", "", "reference estimates become a verified plan", ["test_workshop_market_consumption.lua"])
+
+m("market.consumption.worth-certainty", "TwichUI_Workshop/Worth.lua", "if a.reference then return quiet(\"reference\",\"Market reference estimate; check current listings before selling\") end", "", "a Market reference becomes a proven vendor/auction comparison", ["test_workshop_market_consumption.lua"])
+
+m("market.consumption.pending-refresh", "TwichUI_Workshop/Pricing.lua", "if reason=='loading' then", "if false then", "different partitions never resolve into a complete feature snapshot", ["test_workshop_market_consumption_async.lua"])
+m("market.consumption.cache-decoder-coupling", "TwichUI_Workshop/Pricing.lua", "local current=dataStamp()", "local current=P.Generation()", "decoder progress repeatedly discards completed prices", ["test_workshop_market_consumption_async.lua"])
+
+m("market.consumption.capacity-loop", "TwichUI_Workshop/Pricing.lua", "if not reserved and count+pendingCount>=P.MAX_CACHE then", "if false then", "cache overflow repeatedly restarts decoding instead of falling back", ["test_workshop_market_consumption_async.lua"])
