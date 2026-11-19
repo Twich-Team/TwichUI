@@ -499,13 +499,22 @@ end
 NMAP.Tooltip = Tooltip   -- the minimap's markers (npcs/Minimap.lua) say the same
 
 -- The game's waypoint at the NPC, only when asked; it replaces the waypoint you had, as setting one in the game does.
+-- WaypointUI's public API names it for the NPC and takes coordinates in percent. If unavailable or unsuccessful,
+-- fall back to the game's own waypoint, which has no name. Suppress its audio so this click still sounds only once.
 function NMAP.SetWaypoint(e)
     local x, y = e.x / NS.COORD, e.y / NS.COORD
-    local ok = pcall(function()
+    local ok, set = pcall(function()
         if C_Map.CanSetUserWaypointOnMap and not C_Map.CanSetUserWaypointOnMap(e.m) then error("no") end
-        C_Map.SetUserWaypoint(UiMapPoint.CreateFromCoordinates(e.m, x, y))
+        local api = type(WaypointUIAPI) == "table" and type(WaypointUIAPI.Navigation) == "table" and WaypointUIAPI.Navigation or nil
+        if api and type(api.NewUserNavigation) == "function" then
+            local named, nav = pcall(api.NewUserNavigation, {
+                name = e.n, mapID = e.m, x = x * 100, y = y * 100, suppressAudio = true,
+            })
+            if named and nav then return true end
+        end
+        return C_Map.SetUserWaypoint(UiMapPoint.CreateFromCoordinates(e.m, x, y))
     end)
-    if not ok then Notice("The game doesn't allow a waypoint on this map.") return false end
+    if not ok or not set then Notice("The game doesn't allow a waypoint on this map.") return false end
     stats.waypoints = stats.waypoints + 1
     if PlaySound and SOUNDKIT and SOUNDKIT.UI_MAP_WAYPOINT_CONTROL_CLICK then PlaySound(SOUNDKIT.UI_MAP_WAYPOINT_CONTROL_CLICK) end
     return true
