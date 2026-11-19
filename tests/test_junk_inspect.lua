@@ -142,6 +142,15 @@ assert(J.Inspect(0,5,cloth).verdict=='nomatch','a non-armor item is no armor typ
 assert(J.Inspect(0,3,Free(Group('all',{type='tool',value=true}))).verdict=='match' and J.Inspect(0,1,Free(Group('all',{type='tool',value=true}))).verdict=='nomatch','profession tool')
 c.TwichUI.CampingData=c.TwichUI.CampingData or {ITEMS={279981}}
 assert(J.Inspect(0,4,Free(Group('all',{type='camping',value=true}))).verdict=='match' and J.Inspect(0,1,Free(Group('all',{type='camping',value=true}))).verdict=='nomatch','camping item')
+-- undeciphered mage scrolls: a consumable named "Scroll: ..."
+local realInfo=c.C_Item.GetItemInfo
+c.C_Item.GetItemInfo=function(link) local n,a,b,d,e,f,g,h,i,j,k,l,m,o=realInfo(link);local id=tonumber(link:match('item:(%d+)'))
+ if id==211853 then n='Scroll: VOCE WELL' elseif id==215257 then n='Scroll of Comprehension' end return n,a,b,d,e,f,g,h,i,j,k,l,m,o end
+classes[211853]=0;classes[215257]=0;classes[211854]=7
+bags={Item(211853),Item(215257),Item(211854)}
+local ms=Free(Group('all',{type='mageScroll',value=true}))
+assert(J.Inspect(0,1,ms).verdict=='match' and J.Inspect(0,2,ms).verdict=='nomatch' and J.Inspect(0,3,ms).verdict=='nomatch','undeciphered scrolls only')
+c.C_Item.GetItemInfo=realInfo
 -- material for one of my professions (Tailoring: cloth, trade goods subclass 5)
 classes[510]=7;subs[510]=5;classes[511]=7;subs[511]=6
 bags={Item(510),Item(511)}

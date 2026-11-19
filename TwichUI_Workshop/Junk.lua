@@ -88,6 +88,9 @@ local function Gather(bag, slot, wear, upgrade, recipe)
     facts.armor = class == 4 and (ARMOR[subclass] or "other") or class ~= nil and "none" or nil
     facts.tool = (class == 2 and (subclass == 14 or subclass == 20)) or TOOL_IDS[id] == true
     facts.camping = Camping(id)
+    -- Mage scrolls that drop everywhere before a Mage deciphers them are consumables named "Scroll: WORD WORD"
+    -- (deciphered ones are "Scroll of ..."). One sample item is the evidence; see docs/workshop/item-advisor.md.
+    facts.mageScroll = class == 0 and name:sub(1, 8) == "Scroll: "
     if myProfs then
         local mine = false
         if class == 7 then

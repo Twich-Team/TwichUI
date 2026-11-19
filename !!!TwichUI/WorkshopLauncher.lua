@@ -250,7 +250,7 @@ L.JunkRuleTypes={"gear","materials","recipes","consumables","other"}
 local T={MAX_NODES=32,MAX_DEPTH=4}
 L.JunkTree=T
 local bools={wearable=true,upgrade=true,classReagent=true,profession=true,vendor=true,unlearnedRecipe=true,
-    professionMaterial=true,tool=true,camping=true}
+    professionMaterial=true,tool=true,camping=true,mageScroll=true}
 L.JUNK_MAX_RULES=32
 local MAX_RULES=L.JUNK_MAX_RULES
 local kinds={gear=true,materials=true,recipes=true,consumables=true,other=true}
@@ -342,6 +342,7 @@ local boolWords={
     professionMaterial={[true]="it is a material for one of your professions",[false]="it is not a material for your professions"},
     tool={[true]="it is a profession tool",[false]="it is not a profession tool"},
     camping={[true]="it is a camping item",[false]="it is not a camping item"},
+    mageScroll={[true]="it is an undeciphered mage scroll",[false]="it is not an undeciphered mage scroll"},
 }
 -- A short plain phrase for one condition; the sentence below and the editor cards share these words.
 function T.Phrase(n)

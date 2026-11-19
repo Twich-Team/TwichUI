@@ -182,7 +182,7 @@ local function Make(key)
     if key == "kind" then return { type = "kind", value = "gear" } end
     if key == "quality" then return { type = "quality", min = 0, max = 1 } end
     if key == "armor" then return { type = "armor", value = "cloth" } end
-    if key == "vendor" or key == "unlearnedRecipe" or key == "professionMaterial" or key == "tool" or key == "camping" then
+    if key == "vendor" or key == "unlearnedRecipe" or key == "professionMaterial" or key == "tool" or key == "camping" or key == "mageScroll" then
         return { type = key, value = true }
     end
     if key == "wearable" or key == "upgrade" then return { type = key, value = false } end
@@ -335,7 +335,7 @@ function S.Set(node, field, value)
         if node.value == value then return true end
         node.value = value
     elseif (node.type == "wearable" or node.type == "upgrade" or node.type == "classReagent" or node.type == "profession" or node.type == "vendor"
-        or node.type == "unlearnedRecipe" or node.type == "professionMaterial" or node.type == "tool" or node.type == "camping")
+        or node.type == "unlearnedRecipe" or node.type == "professionMaterial" or node.type == "tool" or node.type == "camping" or node.type == "mageScroll")
         and field == "value" and type(value) == "boolean" then
         if node.value == value then return true end
         node.value = value

@@ -35,7 +35,7 @@ condition. The costly Advisor read happens only when an enabled rule depends on 
 switches used before the first edit still require Vendor advice.
 
 **New conditions and where their facts come from** (none read from a Forever client yet): Armor type (cloth, leather,
-mail, plate, shield from the item subclass; other items are "none"), Profession tool (misc tool weapons, fishing poles,
+mail, plate, shield from the item subclass; other items are "none"), Mage scroll (a consumable whose name starts "Scroll: ", the undeciphered mage scrolls; evidence is one sample item, 211853 "Scroll: VOCE WELL", plus the guides' "Scroll of ..." naming for deciphered ones), Profession tool (misc tool weapons, fishing poles,
 a short ID list), Camping item (`CampingData.ITEMS`), Profession material (trade-good subclass mapped to professions) and
 Recipe knowledge ("I have not learned it"/"I have learned it"; recipe subclass mapped to a profession of yours, tooltip lacks `ITEM_SPELL_KNOWN`). Your professions
 are those whose window Workshop has read (`Known`); until then the last two are unknown and leave items alone. Gear

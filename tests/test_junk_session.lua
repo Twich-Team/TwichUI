@@ -123,6 +123,7 @@ do
   {{type='professionMaterial',value=false},{professionMaterial=false},{professionMaterial=true},nil,'it is not a material for your professions'},
   {{type='tool',value=true},{tool=true},{tool=false},nil,'it is a profession tool'},
   {{type='camping',value=true},{camping=true},{camping=false},nil,'it is a camping item'},
+  {{type='mageScroll',value=true},{mageScroll=true},{mageScroll=false},nil,'it is an undeciphered mage scroll'},
  }
  for i,k in ipairs(cases) do
   assert(T.Eval(k[1],k[2])==true and T.Eval(k[1],k[3])==false,'new condition '..i)
@@ -131,7 +132,7 @@ do
  end
  assert(not T.Copy({type='armor',value='wool'}),'unknown armor type refused')
  Reset(0);S.BeginNew('N')
- for _,key in ipairs({'armor','vendor','unlearnedRecipe','professionMaterial','tool','camping'}) do local n=assert(S.Add(key));assert(S.Remove(n)) end
+ for _,key in ipairs({'armor','vendor','unlearnedRecipe','professionMaterial','tool','camping','mageScroll'}) do local n=assert(S.Add(key));assert(S.Remove(n)) end
  local ar=assert(S.Add('armor'));assert(ar.value=='cloth' and S.Set(ar,'value','leather') and ar.value=='leather' and not S.Set(ar,'value','wool'))
  local v=assert(S.Add('vendor'));assert(v.value==true and S.Set(v,'value',false) and v.value==false)
  assert(S.Cancel() or true)

@@ -51,16 +51,16 @@ assert(f.rule.templates and f.rule.templates.buttons[1]:IsShown(),'an empty rule
 assert(f.palette.where:GetText()=='Adding to: Top level','the next condition goes to the top level')
 
 ---------------------------------------------------------------- palette: click adds to the chosen group; search and category filter
-local function Visible() local out={} for i=1,14 do local row=B.PaletteRow(i);if row:IsShown() then out[#out+1]=row.key end end return out end
-assert(#Visible()==14,'every supported condition is offered: '..#Visible())
-local want={kind=1,armor=1,quality=1,tool=1,camping=1,wearable=1,upgrade=1,unlearnedRecipe=1,classReagent=1,profession=1,professionMaterial=1,vendor=1,all=1,any=1}
+local function Visible() local out={} for i=1,15 do local row=B.PaletteRow(i);if row:IsShown() then out[#out+1]=row.key end end return out end
+assert(#Visible()==15,'every supported condition is offered: '..#Visible())
+local want={kind=1,armor=1,quality=1,tool=1,camping=1,mageScroll=1,wearable=1,upgrade=1,unlearnedRecipe=1,classReagent=1,profession=1,professionMaterial=1,vendor=1,all=1,any=1}
 for _,k in ipairs(Visible()) do assert(want[k],'only supported conditions: '..k);want[k]=nil end
 assert(next(want)==nil)
 f.search:SetText('qual');f.search:GetScript('OnTextChanged')(f.search,true)
 assert(#Visible()==1 and Visible()[1]=='quality','search filters the catalog')
 f.search:SetText('');f.search:GetScript('OnTextChanged')(f.search,true)
 f.category.onPick('Groups')
-assert(#Visible()==2,'category filter');f.category.onPick('all');assert(#Visible()==14)
+assert(#Visible()==2,'category filter');f.category.onPick('all');assert(#Visible()==15)
 local row=B.PaletteRow(1);assert(row.key=='kind')
 row:Click()
 assert(#SS.Tree().children==1 and SS.Tree().children[1].type=='kind','clicking a condition adds it to the draft')
@@ -84,7 +84,7 @@ quality.to.onPick(4);assert(SS.Tree().children[2].max==4)
 assert(SS.Summary():find('Materials') and SS.Summary():find('Uncommon to Epic'))
 
 ---------------------------------------------------------------- groups: add, operator, nesting by click and by drag
-B.PaletteRow(14):Click()  -- any group, becomes the target
+B.PaletteRow(15):Click()  -- any group, becomes the target
 local any=SS.Target();assert(any~=SS.Tree() and any.match=='any' and f.palette.where:GetText():find('Group 1'),'a new group is where the next condition goes')
 B.PaletteRow(3):Click();B.PaletteRow(3):Click()
 assert(#any.children==2)
