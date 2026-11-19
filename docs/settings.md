@@ -91,7 +91,9 @@ motion, which is the cards' and is not read here. Closing, leaving a page, and c
 `Motion.Settle()` or `fade:Set(1)`, so no alpha is left part-way.
 
 `gear/Window.lua` (Stat weights) and `modules/RefreshmentsShares.lua` (Refreshment shares) stay in the core: each
-exposes `Frame()`, built the first time it is shown, which the window shows as a page. A hosted page whose content
+exposes `Frame()`, built the first time it is shown, which the window shows as a page. Stat weights is drawn like
+the Loot rules page and the Reminders When builder (talent-tree cards, a ranking whose cards are dragged with
+Magic Inventory's virtual drag, a card per stat group) and gives `hostHeight` through `GearWindow.Height()`. A hosted page whose content
 grows (Reminders' list and editor) gives `hostHeight` as a function and calls `R.SettingsUI.Refresh()`, on the next
 frame, when its height changes; the window reads the height each time it lays the page out.
 

@@ -661,31 +661,33 @@ if key == "ammoCustom" or key == "restockItems" or key == "chatCleanChannels" th
 end
 if key == "statWeights" then
     Lab.Step("stat group browsing", function()
-        local frame = R.GearWindow.Frame()
-        local group, mode
-        for _, control in ipairs({ frame:GetChildren() }) do
-            if type(control.choices) == "function" then
-                for _, choice in ipairs(control.choices()) do
-                    if choice.value == "all" then group = control end
-                    if choice.value == "weights" then mode = control end
-                end
-            end
-        end
-        Lab.Check("construct", "stat group selector", true, group ~= nil)
-        mode.onPick("weights")
-        local choices = group.choices()
-        group.onPick(choices[2].value)
-        Lab.Check("interact", "selected stat group", choices[2].value, group.value)
-        group.onPick("all")
-        Lab.Check("interact", "all groups restored", "all", group.value)
+        local GW = R.GearWindow
+        local frame = GW.Frame()
+        local parts = GW.Parts()
+        local function ClickIt(control) control:Click() Lab.Settle(.1) end
+        Lab.Check("construct", "a card for each talent tree", true, #parts.trees >= 2 and parts.trees[1]:IsShown())
+        Lab.Check("construct", "stat group buttons", true, frame.filters ~= nil and #frame.filters > 2)
+        ClickIt(frame.modeWeights)
+        local filter = frame.filters[2]
+        ClickIt(filter)
+        local shown = 0
+        for _, group in ipairs(parts.groups) do if group.box:IsShown() then shown = shown + 1 end end
+        Lab.Check("interact", "one group's card is shown", 1, shown)
+        ClickIt(frame.filters[1])
+        shown = 0
+        for _, group in ipairs(parts.groups) do if group.box:IsShown() then shown = shown + 1 end end
+        Lab.Check("interact", "all groups restored", #parts.groups, shown)
+        ClickIt(frame.modePriority)
+        Lab.Check("construct", "a card for each ranked stat", true, parts.ranked[1] ~= nil and parts.ranked[1]:IsShown())
+        Lab.Check("construct", "the unranked stats can be dragged in", true, next(parts.chips) ~= nil)
         local class = UnitClass
         UnitClass = function() return "Unsupported", "UNSUPPORTED" end
-        R.GearWindow:Refresh()
+        GW:Refresh()
         Lab.Check("state", "unsupported class explained", true, frame.noClass:IsShown())
         UnitClass = class
-        R.GearWindow:Refresh()
+        GW:Refresh()
         Lab.Check("state", "class controls restored", false, frame.noClass:IsShown())
-        if params.editor then group.onPick(choices[2].value); group:Click() end
+        if params.editor then ClickIt(frame.modeWeights); ClickIt(frame.filters[1]) end   -- the weights pose: every group's card
     end)
 end
 if key == "restedxp" then
