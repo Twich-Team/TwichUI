@@ -153,6 +153,12 @@ camping\Unlock.lua
 # that addon and a data bar addon that provides LibDataBroker)
 modules\DungeonJournalBroker.lua
 
+# Attune on a data bar: an icon that opens or closes its window (needs Attune and LibDataBroker).
+modules\AttuneBroker.lua
+
+# BugSack on a data bar: current-session bug count, click to open, right-click to clear stored bugs.
+modules\BugSackBroker.lua
+
 # Mage spells on a data bar: Mage Travel (teleports and portals) and Mage Conjuring (food and
 # water), sharing one menu (uses the Chronicle palette, the arrival card's fonts and the training data)
 # and one background and border for it (game textures and LibSharedMedia's; uses modules\Borders.lua)
