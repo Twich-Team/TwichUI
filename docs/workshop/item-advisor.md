@@ -7,7 +7,7 @@ House replacement, posting, automatic scans, selling automation or chart engine.
 
 1. Engine: versioned deterministic recommendations; competitive prices from
    Market.Competition; unknown fees and missing evidence remain explicit;
-   disenchant expected-value evaluation with verified eligibility/outcomes only;
+   disenchant expected-value evaluation with labeled bundled references or verified snapshots;
    focused edge cases, feature verification and market mutations pass.
 2. Page: searchable real item identities, pooled results, selected-item advice,
    market cards, actual observed history, reasons, alternatives and actions;
@@ -31,7 +31,7 @@ competition is far above/below the reference; they never supply a posting price.
 `Sell.Proceeds` reports gross unit price times quantity with bounded arithmetic.
 Fees, deposit and sale probability remain unknown. It never reports net proceeds.
 
-`Advisor.Decide` API 1 / policy 2 keeps active-plan materials first, using the existing
+`Advisor.Decide` API 1 / policy 4 keeps active-plan materials first, using the existing
 planner's allocation. Known recipe uses alone never prove crafting profit. A
 bound item may be vendored when its sell value is known. Missing disenchant
 data never blocks a supported Vendor or Auction recommendation. Comparisons too weak for the separate tentative policy remain Unknown. A supported auction suggestion must exceed vendor by 1.5x and
@@ -42,12 +42,13 @@ prediction that an item will appreciate.
 
 The policy is deliberately more conservative than the older A8 roadmap's
 vendor fallback when auction evidence is missing, as required by this campaign.
-Disenchant is a first-class alternative. Its pure evaluator accepts only explicit
-verified Forever eligibility, skill requirements and complete probability/output
-snapshots with reliable material values. No distributable verified dataset exists
-in the inspected sources, so production reports uncertain outcomes. Synthetic
-regressions cover expected gross material values and selection; no outcome tables
-or game rules are invented.
+Disenchant is a first-class alternative. Production uses the bundled, MIT-licensed
+DisenchantForever item brackets/exclusions with explicitly labeled Classic yield
+estimates and current Market/local material prices. A known Disenchant ability is
+required. Missing prices and unsupported brackets remain unknown. The separate
+verified-snapshot evaluator retains its eligibility/skill/probability checks.
+See [Disenchant support](automatic-market-summary.md#disenchant-support) for source
+identity, arithmetic, character context, qualifications and remaining client checks.
 
 `AdvisorData` discovers identities from the selected market's current price-entry identities, bags, this
 character's remembered/available recipes, explicit tracking and saved selection.
@@ -110,7 +111,11 @@ are cancelled and catalog, row and popup references released on hide. Diagnostic
 expose discovery/search scopes, catalog/result counts and existing bounded market
 fact caches.
 
-## Disenchant evidence audit (2026-11-14)
+## Historical disenchant evidence audit (2026-11-14)
+
+This audit records the earlier inspected candidates. The later approved bundled
+reference implementation is described above; Classic-derived probabilities are
+estimates, not newly verified Forever observations.
 
 The local `wow-ui-source` Forever branch documents
 `C_SpellBook.ContainsAnyDisenchantSpell` (SpellBookDocumentation.lua) and

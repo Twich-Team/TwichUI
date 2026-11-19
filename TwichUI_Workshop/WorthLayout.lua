@@ -40,11 +40,11 @@ WL.TYPES = {
     { id = "auction", label = "Auction value", when = "always",
       what = "The cheapest listing your last scan saw, marked \"before fees\" until the auction house's cut is confirmed." },
     { id = "disenchant", label = "Disenchant value (average)", when = "always",
-      what = "Only for weapons and armor that might disenchant. There is no outcome data yet, so it says \"no data\"." },
+      what = "Expected material listing value for supported weapons and armor. Classic yield estimates, missing prices and character eligibility stay explicit." },
     { id = "status", label = "Price age / status", when = "shift", what = "When the prices were scanned, and if the scan was partial." },
     { id = "source", label = "Price source", when = "shift", what = "Which auction house the prices came from." },
     { id = "outcomes", label = "Disenchant outcomes", when = "shift",
-      what = "What disenchanting may give. There is no outcome data in this version, so this line stays empty." },
+      what = "Possible materials, chances and quantity ranges from the same estimate. Classic-derived yields are labeled; unsupported brackets stay unavailable." },
     { id = "note", label = "Limits note", when = "shift", what = "One short line: estimates are not sales, and deposits and failed listings are not counted." },
     { id = "marketvalue", label = "Market value", when = "always",
       what = "A 14-day reference built from listings your scans saw. Not a selling price and not a promise it will sell." },
@@ -61,7 +61,8 @@ WL.BY_ID = {}
 for i, t in ipairs(WL.TYPES) do WL.BY_ID[t.id] = t; t.order = i end
 WL.MAX_LINES = #WL.TYPES
 
--- The short layout out of the box: the answer and the values Always; the detail lines under Shift. No outcomes line (it has no data).
+-- The short default: answer and values Always, details under Shift. The optional
+-- outcomes breakdown can be added without migrating any existing saved layout.
 WL.DEFAULT_LINES = {
     { id = "recommend", when = "always" }, { id = "vendor", when = "always" }, { id = "auction", when = "always" },
     { id = "disenchant", when = "always" }, { id = "marketvalue", when = "always" }, { id = "recent", when = "shift" },
@@ -146,6 +147,13 @@ end
 function WL.UsesAdvisor(layout, shift)
     for _,e in ipairs(layout.lines) do
         if (e.id=="recommend" or e.id=="advisorwhy" or e.id=="advisorevidence") and (e.when~="shift" or shift) then return true end
+    end
+    return false
+end
+function WL.UsesDisenchant(layout,shift)
+    if WL.UsesAdvisor(layout,shift) then return true end
+    for _,e in ipairs(layout.lines) do
+        if (e.id=="disenchant" or e.id=="outcomes") and (e.when~="shift" or shift) then return true end
     end
     return false
 end
@@ -337,7 +345,11 @@ end
 function RENDER.disenchant(r, ctx)
     local d = r.disenchant
     if not d then return nil end   -- not something that disenchants: no row, not "not applicable"
-    if d.state == "ok" and type(d.value) == "number" then return { "Disenchant (average)", ctx.money(d.value) } end
+    if d.state == "ok" and type(d.value) == "number" then
+        return { d.outcomeReference and "Disenchant (Classic estimate)" or "Disenchant (average)", ctx.money(d.value) }
+    end
+    if d.state=="unavailable" then return {"Disenchant",d.why or "Unavailable"} end
+    if d.why and d.why~="nodata" then return {"Disenchant",d.why} end
     return { "Disenchant (average)", "no data" }
 end
 
@@ -384,12 +396,11 @@ function RENDER.source(r, ctx)
     return { "Prices from", m.label }
 end
 
--- Disenchant outcomes (what it may give): no legally reusable outcome data exists for this version (docs/workshop.md), so there is
--- nothing to show. The line type exists so a layout can hold the place; it draws only when an evaluation carries outcomes.
+-- Optional breakdown from the same estimate as the value and recommendation.
 function RENDER.outcomes(r, ctx)
     local d = r.disenchant
-    if not (d and d.state == "ok" and type(d.outcomes) == "string" and d.outcomes ~= "") then return nil end
-    return { "Disenchant gives", d.outcomes }
+    if not (d and type(d.outcomes) == "string" and d.outcomes ~= "") then return nil end
+    return { d.outcomeReference and "Disenchant (Classic yields)" or "Disenchant gives", d.outcomes }
 end
 
 function RENDER.note(r)

@@ -2,7 +2,7 @@
 -- Decide has no planning, history decoding, inventory reads, saved writes or frames.
 -- Gain/SetGain are the small existing-account preference adapter; callers snapshot it.
 local W = TwichUI.Workshop
-local A = { POLICY = 3, API = 1 }
+local A = { POLICY = 4, API = 1 }
 W.Advisor = A
 A.LABEL = { auction = "Recommended: Auction", vendor = "Recommended: Vendor", craft = "Keep for crafting plan",
     disenchant = "Consider disenchanting", watch = "Watch this item", unknown = "Not enough data to compare" }
@@ -124,10 +124,16 @@ function A.Decide(item, ctx)
         local gain = W.Int(ctx.minGain, 0, W.Prices.MAX_COPPER) or 0
         if de.expectedGross > ceiling and de.expectedGross >= ceiling * 1.5 and de.expectedGross - ceiling >= gain then
             r.action, r.evidence = "disenchant", "limited"
-            r.reasons = { "Verified outcomes support a higher expected material value.", "Disenchant outcomes and material sales are uncertain; this is not guaranteed proceeds." }
+            if de.outcomeReference then r.level="tentative" end
+            r.reasons = { de.outcomeReference and "Classic yield estimates favor disenchanting over the available sale values." or "Verified outcomes support a higher expected material value.",de.why or "Disenchant outcomes and material sales are uncertain; this is not guaranteed proceeds." }
+            r.provenance={source="disenchant",outcomes=de.source,prices=de.priceSource}
+            r.proceeds=nil -- the previous auction comparison is not disenchant proceeds
         end
     end
     if ctx.disenchant and de.state == "unknown" then r.missing[#r.missing + 1] = de.why end
+    if de.state=="ok" and de.outcomeReference and r.action~="unknown" and r.action~="craft" then
+        r.level,r.evidence="tentative","limited"
+    end
     if r.action=="unknown" and eligible==false and r.disenchantUnpriced then r.unknownText="Check disenchant value" end
     if sell == nil then r.missing[#r.missing + 1] = "Vendor sell value is unknown." end
     if ctx.crafting and #(ctx.crafting.uses or {}) > 0 and r.action ~= "craft" then
@@ -143,6 +149,7 @@ function A.Decide(item, ctx)
     r.level=r.action=="unknown" and "insufficient" or r.level or "supported"
     r.text = r.action=="unknown" and (r.unknownText or A.LABEL.unknown) or r.level=="tentative" and
         ((r.reference and "Market comparison: " or "Possible: ")..A.TOOLTIP[r.action]) or A.LABEL[r.action]
+    if r.action=="disenchant" and de.outcomeReference then r.text="Consider disenchanting (Classic estimate)" end
     r.evidenceText = A.EVIDENCE[r.evidence]
     return r
 end
@@ -155,7 +162,7 @@ function A.Short(r)
 end
 local function TooltipWords(r)
     if r.action=="unknown" then return r.unknownText or A.TOOLTIP.unknown end
-    if r.action=="disenchant" then return "Disenchant (expected value)" end
+    if r.action=="disenchant" then return r.disenchant and r.disenchant.outcomeReference and "Disenchant (Classic estimate)" or "Disenchant (expected value)" end
     local text=A.TOOLTIP[r.action] or A.TOOLTIP.unknown
     if r.level~="tentative" then return text end
     if r.reference then return text..(r.action=="vendor" and " (Market comparison)" or " (Market estimate)") end
@@ -164,5 +171,7 @@ end
 function A.Tooltip(r)
     local text="Workshop: "..TooltipWords(r)
     if r.disenchantUnpriced and r.action~="craft" then text=text.." · disenchant unpriced" end
+    if r.disenchant and r.disenchant.state=="ok" and r.disenchant.outcomeReference and
+        (r.action=="vendor" or r.action=="auction") then text=text.." · Classic DE estimate" end
     return text
 end

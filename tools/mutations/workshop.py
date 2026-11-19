@@ -1176,3 +1176,57 @@ m("market.advisor.de-reference-ceiling", "TwichUI_Workshop/Advisor.lua",
 m("market.advisor.pending-reference", "TwichUI_Workshop/Advisor.lua",
   'elseif ctx.pendingPlan then Unknown', 'elseif false then Unknown',
   "a Market recommendation bypasses unresolved crafting reservations", ["test_workshop_advisor_market.lua"])
+
+# Bundled disenchant references: admission, yields, prices, context and display.
+m("market.disenchant.reference-token", "TwichUI_Workshop/Disenchant.lua",
+  'snapshot.reference==REFERENCE', 'snapshot.reference~=nil',
+  "caller-supplied unverified tables impersonate the bundled dataset", ["test_workshop_disenchant.lua"])
+m("market.disenchant.midpoint", "TwichUI_Workshop/Disenchant.lua",
+  'qty=(low+high)/2', 'qty=low',
+  "expected material amounts use minimum quantities", ["test_workshop_disenchant.lua"])
+m("market.disenchant.fresh-materials", "TwichUI_Workshop/Disenchant.lua",
+  'now-at<=W.Prices.OLD_AFTER', 'true',
+  "old material prices remain current estimates", ["test_workshop_disenchant.lua"])
+m("market.disenchant.limited-reference-prices", "TwichUI_Workshop/Disenchant.lua",
+  'or reference and p.quality=="limited"', 'or false and p.quality=="limited"',
+  "ordinary Market material estimates are rejected as if they needed full local competition", ["test_workshop_disenchant.lua"])
+m("market.disenchant.excluded-item", "TwichUI_Workshop/Disenchant.lua",
+  'data.excluded[f.item]', 'false',
+  "known nondisenchantable items receive material values", ["test_workshop_disenchant.lua"])
+m("market.disenchant.special-rewards", "TwichUI_Workshop/Disenchant.lua",
+  'if not data or data.special[input.item] then return unavailable end', 'if not data then return unavailable end',
+  "special-reward items use ordinary material brackets", ["test_workshop_disenchant.lua"])
+m("market.disenchant.unconfirmed-bracket", "TwichUI_Workshop/Disenchant.lua",
+  'if not row or row.unconfirmed then', 'if not row then',
+  "unsupported low-level rare items receive invented ordinary yields", ["test_workshop_disenchant.lua"])
+m("market.disenchant.variant-level", "TwichUI_Workshop/Disenchant.lua",
+  'f.variant and not f.actualLevel', 'false',
+  "an unresolved variant is valued using a generic base item level", ["test_workshop_disenchant.lua"])
+m("market.disenchant.character-false", "TwichUI_Workshop/Disenchant.lua",
+  'if can==nil then can=rank~=nil and rank>0 end', 'if can~=true then can=rank~=nil and rank>0 end',
+  "profession metadata overrides a definite lack of Disenchant spell knowledge", ["test_workshop_disenchant.lua"])
+m("market.disenchant.actual-level", "TwichUI_Workshop/WorthTip.lua",
+  'then f.itemLevel=actual;f.actualLevel=true end', 'then f.itemLevel=base;f.actualLevel=true end',
+  "held-item level adjustments are discarded before looking up yields", ["test_workshop_disenchant_market.lua"])
+m("market.disenchant.shared-value", "TwichUI_Workshop/WorthTip.lua",
+  'r.disenchant=f.disenchantValue', 'r.disenchant=r.disenchant',
+  "the recommendation updates but its numeric tooltip row stays unavailable", ["test_workshop_disenchant_market.lua"])
+m("market.disenchant.primary-source", "TwichUI_Workshop/Advisor.lua",
+  'r.disenchant and r.disenchant.outcomeReference and "Disenchant (Classic estimate)"',
+  'false and "Disenchant (Classic estimate)"',
+  "the primary recommendation hides Classic yield provenance", ["test_workshop_disenchant_market.lua"])
+m("market.disenchant.bracket-boundary", "TwichUI_Workshop/DisenchantData.lua",
+  'level >= row[1] and level <= row[2]', 'level > row[1] and level <= row[2]',
+  "the first item level of every bracket is omitted", ["test_workshop_disenchant.lua"])
+m("market.disenchant.weapon-class", "TwichUI_Workshop/DisenchantData.lua",
+  '[2] = WEAPON_UNCOMMON', '[2] = ARMOR_UNCOMMON',
+  "weapons use armor yield probabilities", ["test_workshop_disenchant.lua"])
+m("market.disenchant.auction-proceeds", "TwichUI_Workshop/Advisor.lua",
+  'r.proceeds=nil -- the previous auction comparison is not disenchant proceeds', '',
+  "a disenchant recommendation retains an unrelated auction proceeds amount", ["test_workshop_advisor.lua"])
+m("market.disenchant.legacy-qualification", "TwichUI_Workshop/Worth.lua",
+  'if d and d.state=="ok" and d.outcomeReference then', 'if false then',
+  "direct worth comparisons promote a Classic estimate into a proven winner", ["test_workshop_disenchant.lua"])
+m("market.disenchant.unresolved-copy-level", "TwichUI_Workshop/WorthTip.lua",
+  'f.actualLevel=f.itemLevel~=nil and not f.variant', 'f.actualLevel=true',
+  "a held variant with no detailed level is treated as resolved", ["test_workshop_disenchant_market.lua"])

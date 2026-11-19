@@ -50,7 +50,7 @@ Shopping.lua
 CraftPlanner.lua
 # The crafting strategy: words for the planner's plan, its cooperative jobs and the adapter to the shopping rows (P2; pure, plus a frame timer)
 Strategy.lua
-# "What's it worth?": vendor, auction and disenchant for one item (pure; disenchant has no outcome data, so it is only ever "no data")
+# "What's it worth?": vendor, auction and disenchant for one item
 Worth.lua
 # The "What's it worth?" lines the player chose and their order: the saved layout and the one builder the tooltip and the designer share (pure)
 WorthLayout.lua
@@ -65,6 +65,8 @@ Pricing.lua
 MarketFacts.lua
 # A8: competition-based selling suggestions and deterministic item advice
 Sell.lua
+DisenchantData.lua
+DisenchantExclusions.lua
 Disenchant.lua
 Advisor.lua
 # Opening the auction house: when a price update is due, and what to do about it (A6; pure policy plus one entry point)

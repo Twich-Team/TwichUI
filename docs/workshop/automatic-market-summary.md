@@ -92,7 +92,7 @@ server confidence remains Limited. Reference-only Advisor advice is tentative an
 provides no suggested posting price. Worth comparisons cannot declare a proven
 vendor/auction winner from a reference. Vendor quotes, stock, recipes, owned
 auctions and transaction confirmation remain native observations. Disenchant
-outcomes remain unavailable until verified Forever outcome data exists.
+uses the separately labeled bundled estimates described under [Disenchant support](#disenchant-support).
 
 Partition/header completion coalesces dependent price/facts/plan refreshes. A
 previously checked partition decoded solely for a chart wakes that pending chart
@@ -211,3 +211,84 @@ new recommendation defects. The original vendor fall-through is reproduced in
 `test-output/tooltip-advice-negative-vendor.log`; final evidence is retained in
 `test-output/tooltip-advice-{workshop,settings,mutations}.*`. The simulator is not
 installed on this host, so simulator and real-client appearance are not claimed.
+
+### Disenchant support
+
+The owner approved bundling an outcome reference and implementing the feature.
+`DisenchantData.lua` and `DisenchantExclusions.lua` adapt the MIT-licensed
+[DisenchantForever](https://github.com/APGM82/DisenchantForever) data at immutable
+commit `ab223e6750b8e1aa24b76f66437deee461c27b47`. Its copyright and complete license
+ship in `licenses/MIT-DisenchantForever.txt`; blob identities are retained in
+`tests/fixtures/disenchant_forever/UPSTREAM.json`. No third-party UI, transaction
+code, updater, logging or Auctionator dependency is included.
+
+The 54 captured weapon/armor brackets use Forever client build `1.60.1.70425`;
+excluded/special-reward item flags come from build `1.60.1.70888`. Yield chances
+and quantity ranges are Classic 1.12 references from vmangos, cross-checked by
+upstream against cmangos, with their disagreements retained in source comments.
+They are not newly confirmed Forever outcomes. Low-level rare brackets (5–15),
+items outside supported ranges and special-reward items stay unavailable. Known
+nondisenchantable items, shirts and tabards are excluded.
+
+Expected copper is the sum of `probability × midpoint quantity × material unit
+price`, rounded down once after summing. The midpoint is a modeling assumption,
+not a measured quantity distribution. Every material needs a positive quote no
+more than 24 hours old; absent, future-dated or stale prices do not become zero
+or a partial total. Quotes use existing Market pricing and its local-scan fallback.
+Asynchronous price completion refreshes an open tooltip through the existing
+pricing notifications. Outcomes may still be displayed without a numeric value.
+No new Companion format or server deployment is needed.
+
+Tooltip reads retain the actual item-copy level. Generic unresolved variant rows
+cannot substitute a base level. Character context reads numeric profession ID 333
+and Disenchant spell knowledge through APIs already used in the project. A
+known false spell result stays false. The bundled bracket source supplies no
+per-item rank requirements, so the adapter does not invent a Classic/TBC skill
+threshold. Character skill/spell events refresh the existing tooltip listener;
+no new frame or recurring timer is added. Actual game eligibility remains a
+required client check for this versioned reference.
+
+Advisor and the tooltip numeric/outcome rows share one computed estimate. A
+Disenchant recommendation is tentative and says `Disenchant (Classic estimate)`;
+sale recommendations that compare it also retain the Classic source qualification.
+The existing 1.5× margin, worthwhile-gain preference, crafting reservations and
+unresolved-plan guards remain in force. Auction proceeds are cleared when
+Disenchant wins. Estimates neither supply posting prices nor claim guaranteed
+proceeds. Hiding detail rows cannot turn a Classic comparison into strong evidence.
+Existing layouts/settings and all SavedVariables are preserved.
+
+Tests cover both boundaries of all 54 captured brackets (52 supported, two
+unconfirmed), hand-worked armor/weapon examples, an independent integer-arithmetic
+reference over 96 deterministic cases, exclusions, missing/fresh material prices,
+character ability, actual item levels and source labels. A real-reader synthetic
+integration drives the actual tooltip through material validation/automatic refresh,
+checks idle work settles, generation replacement discards old quotes, and verifies
+local-only fallback without Companion. These prove offline handlers and arithmetic;
+Forever hover appearance, current-build eligibility and actual yields remain for
+owner acceptance. The simulator installation is unavailable on this host.
+
+Diagnostics: the tooltip's existing `workshop.worth` scope covers this bounded work;
+Market decoding/pricing retains its existing scopes and gauges. At most three
+cached material quotes and a fixed bracket lookup are added per estimate. There
+is no separate retained estimate cache, background loop or observation collection.
+
+Final offline verification on the completed runtime passes 78 Workshop modules
+and Lua syntax, 12 Workshop/settings modules and syntax, and 18 test/packaging
+infrastructure modules. All report unchanged source. The final complete Market
+campaign detects all 302 selected defects; the 19 focused disenchant mutations
+also pass. Evidence is retained in `test-output/disenchant-release-check-*.log`,
+`disenchant-test-tools.log`, `disenchant-copy-level-mutations.*` and
+`disenchant-complete-market-mutations.*`. The log name `release-check` denotes
+these development checks, not release certification. Earlier fixture-construction
+failures and two intentionally stopped broad campaigns are retained; both stopped
+campaigns preceded final comparison/copy-level review corrections and are not
+counted as completed verification. Subsequent documentation-only evidence updates
+change no tested executable input. Simulator and real-Forever acceptance remain
+unrun. In-game acceptance: check a known enchanter's green armor/weapon, an excluded
+wand/PvP item, a missing material price, an actual-level variant, spell/skill changes
+with the tooltip open, and local-scan fallback after disabling delivered Market data.
+
+Final staging normalized trailing blank lines in the new data/license/provenance
+files. The two disenchant tests and both data-file syntax checks pass again after
+that whitespace-only correction; the complete campaign's executable behavior is
+unchanged. No other executable or fixture edits follow the complete campaign.

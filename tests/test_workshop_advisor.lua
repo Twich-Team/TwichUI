@@ -167,6 +167,7 @@ ds.values[201]=nil; Same(DE.Evaluate(df,ds).state,"unknown"); ds.values[201]={va
 ds.outcomes[2].p=0.1; Same(DE.Evaluate(df,ds).state,"unknown"); ds.outcomes[2].p=0.25
 Healthy()
 Same(Decide({disenchantValue=DE.Evaluate(df,ds)}).action,"disenchant")
+Same(Decide({disenchantValue=DE.Evaluate(df,ds)}).proceeds,nil,"auction proceeds do not describe a disenchant recommendation")
 Same(Decide({bound=true,disenchantValue=DE.Evaluate(df,ds)}).action,"disenchant")
 Same(Decide({bound=true,disenchant=true}).action,"vendor", "unknown disenchant never blocks vendor")
 Same(Decide({disenchantValue={state="ok",expectedGross=90}}).action,"auction", "lower expected value cannot win")

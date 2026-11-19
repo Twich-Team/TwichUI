@@ -1,0 +1,12 @@
+{
+  "repository": "https://github.com/APGM82/DisenchantForever",
+  "commit": "ab223e6750b8e1aa24b76f66437deee461c27b47",
+  "license": "MIT",
+  "files": {
+    "DisenchantForever/Materials.lua": "644aebc9af19dc4cc2bbc6d25834a698bdc55b77",
+    "DisenchantForever/NoDisenchant.lua": "567628e85eaa8cfc0507884e5f9d50f0ee949bc0",
+    "DisenchantForever/OwnLoot.lua": "e60d25c8c0e8bc2d5c4715aba3e8fa50c318ca16",
+    "LICENSE": "19a45df5392d97ad86624f47b85a376ab5abd5c2",
+    "herramientas/ItemDisenchantLoot.csv": "722b6ea1d6efe703d552f0c648a71df5158f6a0b"
+  }
+}

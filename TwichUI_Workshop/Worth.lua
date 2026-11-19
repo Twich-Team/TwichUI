@@ -6,9 +6,9 @@
 --   * every value is for ONE item, at the same basis for every option;
 --   * Vendor is the item's own sell value; Auction is the cheapest buyout listing the newest scan saw (Prices.lua), minus the auction
 --     house's cut ONLY when that cut is confirmed (Prices.CUT): until then it is "before fees" and no after-fees winner is claimed;
---   * Disenchant is NOT estimated: there is no legally reusable, Forever-appropriate table of outcomes (docs/workshop.md, "Disenchant
---     outcome data"), so a disenchantable-looking item shows "no data" and, because that competing option is unknown, no best option
---     is suggested for it ("Disenchant value unknown"). Nothing here invents a chance or a quantity;
+--   * Disenchant.ForItem supplies separately qualified bundled estimates. This
+--     pure base evaluation retains unknown when that context has not been read.
+--     Classic-reference values never become a proven winner in either API;
 --   * a missing price or an unknown outcome is never zero; an action that cannot be done (a bound item cannot be auctioned) is
 --     "unavailable", which is not the same as an unknown estimate: only an UNKNOWN competitor blocks a suggestion;
 --   * a variant (random properties, bonus IDs, a changed item level) is never priced from the base item's listings: the scan keeps
@@ -206,6 +206,11 @@ function WO.Recommend(r)
     if v.state == "unknown" then return quiet("more", "More prices needed") end
 
     if a.reference then return quiet("reference","Market reference estimate; check current listings before selling") end
+    if d and d.state=="ok" and d.outcomeReference then
+        local outcome,key=Compare(r)
+        if outcome=="pick" then return quiet("possible","Possible: "..LABEL[key].." (Classic DE estimate)") end
+        return quiet("estimate","Classic disenchant estimate; compare available values and fees")
+    end
     local tags = AuctionTags(a)
     local outcome, key = Compare(r)
     if d and d.state == "unknown" then
