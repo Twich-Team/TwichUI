@@ -62,6 +62,25 @@ Native event ordering and post-hook visibility still need owner testing. If data
 
 ## Saved variable
 
+### Auction Accounting V3 capability contract
+
+Source reviewed: Forever `bebcb6b` (1.60.1, build 70938), generated `AuctionHouseDocumentation.lua`,
+native Auction House sell/cancellation handlers and `Blizzard_MailFrame/MailFrame.lua` seller-invoice rendering.
+V3 is stacked on V2; neither branch has native V2/V3 acceptance yet. Existing transaction capability gates stay unchanged.
+
+| Supported signal | Expected order / required money evidence | Classification / limits |
+| --- | --- | --- |
+| Existing core and Workshop posting controllers; `CalculateItemDeposit(location,duration,quantity)` / `CalculateCommodityDeposit(itemID,duration,quantity)` | Review/recheck native quote, dispatch owned post, native completion and one new exact debit (either completion/money order) | Auction Deposit. Item quantity >1 additionally requires exact final `AUCTION_MULTISELL_UPDATE(createdCount,totalToCreate)`; partial/multiple debits remain Unclassified. Whole-silver rounding follows the existing native-frame quote convention. |
+| Native posting warning | No successful post is established until the owner accepts and the controller re-dispatches | No attribution while warning is pending/rejected; restart money correlation at accepted confirmation. Changed/unavailable quotes refuse attribution. |
+| Existing owned-auction cancellation review; `GetCancelCost(auctionID)` / `CanCancelAuction` | Recheck exact ID/status/fee, dispatch, `AUCTION_CANCELED(auctionID)` and one exact new debit | Auction Cancellation Fee. Zero cost creates nothing; missing/wrong completion or changed/stale identity cannot classify. |
+| Seller invoice from `GetInboxInvoiceInfo`: type, item name, bid, deposit, consignment, count | Explicit mailbox take and exact collected payment. Native invoice arithmetic is `bid + deposit - consignment` | Auction Sale stays one cash entry. Gross, fee and returned deposit are settlement metadata only when all invoice fields reconcile with that payment. Buyer/temporary invoices are not seller receipts; item IDs are not inferred from names. |
+| Several explicit money takes | One actual combined gain; every selected receipt must be uniquely supported | All seller invoices can describe one combined sale entry, with bounded invoice details. Mixed personal/auction mail remains Mail Collected; ambiguous matches remain Unclassified. |
+| Sold/expired/cancelled listing notifications or remembered deposits | No independently identified refund payment or standalone refund-kind invoice found in the supported source | No guessed Auction Refund category. Bundled returned deposits remain seller-invoice details; other collected payments keep their existing classification. |
+
+Posting creation events have no request token. Only one owned operation may supply evidence; foreign operations,
+overlap, interruption and expired outcomes invalidate correlation. No new native-interface observer or gameplay action is introduced.
+Actual native event ordering, quote/charge equality and invoice availability remain deferred owner checks.
+
 `TwichUILedgerDB = { version = 1, chars = { ["Name - Realm"] = record } }`, declared in the core `.toc`. A newer version is set aside untouched (`Persist.Hold`) and nothing is recorded to it. Damaged parts are repaired narrowly (dropped entries are counted as `ledger-entry-dropped`).
 
 Record: `name`, `realm`, `since`, `nextId`, `entries` (oldest first), `days`.
