@@ -2,7 +2,7 @@ dofile(TESTS .. "harness.lua")
 dofile(TESTS .. "settings_mock.lua")
 local c, S = SettingsClient({ beforeInit = function(c)
   -- Describe the optional Workshop settings without loading or opening its window.
-  c.TwichUI.WorkshopLauncher = { Loaded = function() return false end }
+  c.TwichUI.WorkshopLauncher = { JunkRules = function() return {} end, Loaded = function() return false end }
 end })
 local K, D = S.K, c.TwichUI.SettingsDesign
 assert(D and D.pages)
