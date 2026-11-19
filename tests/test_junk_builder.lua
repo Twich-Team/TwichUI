@@ -11,7 +11,7 @@ c.UIParent=MIFake("Frame");c.UIParent:SetSize(1600,1200)
 c.CreateFrame=function(kind,_,parent)
     local frame=MIFake(kind,parent)
     frame.UnregisterAllEvents=function(self) self.events={} end
-    if kind=='Frame' then frame.IsEnabled=nil end   -- the game's plain Frame has no IsEnabled
+    if kind=='Frame' then frame.IsEnabled=function() error('a plain Frame has no IsEnabled in the game') end end
     frame.Click=function(self) if self:IsEnabled() and self:GetScript("OnClick") then self:GetScript("OnClick")(self) end end
     return frame
 end
@@ -76,6 +76,8 @@ f.undo:Click();assert(#SS.Tree().children==1);f.redo:Click();assert(#SS.Tree().c
 local function Cards() local out={} for _,card in ipairs(B.cards()) do if card:IsShown() then out[#out+1]=card end end return out end
 assert(#Cards()==2)
 local kind,quality=Cards()[1],Cards()[2]
+-- hovering a card runs the shared hover sheet, which asks IsEnabled
+for _,card in ipairs(Cards()) do assert(card.IsEnabled(card)==true) end
 kind.value.onPick('materials');assert(SS.Tree().children[1].value=='materials')
 quality.from.onPick(2);assert(SS.Tree().children[2].min==2 and SS.Tree().children[2].max==2 or SS.Tree().children[2].max>=2,'from moves the range')
 quality.to.onPick(4);assert(SS.Tree().children[2].max==4)
