@@ -33,6 +33,13 @@ LR.DEFAULTS = {
     -- the cards
     scale = 100, spacing = 8, growth = "down", maxCards = 4, afterResult = 8,
     showUpgrade = true, showValue = true, showResults = true, timer = "both", animate = true,
+    -- fading (milliseconds; "animate" is the master switch) and the countdown bar
+    fadeIn = 250, fadeOut = 450,
+    -- Sheer (EllesmereUI's bar texture; drawn flat where it is not installed), and the colors: weathered sage, antique gold, burnished ember,
+    -- muted crimson (a roll that ran out), and a deep espresso track. A rule's countdown starts from the sage.
+    barTexture = "eui:sheer", barHeight = 14, barShine = false, barShift = true,
+    barColorHigh = "ff91ad78", barColorMid = "ffd0aa60", barColorLow = "ffd18450", barColorExpired = "ffba5d55", barColorRule = "ff91ad78",
+    barTrack = "ff211a16",
     -- automation (everything starts off)
     auto = false, autoNeed = false, autoUpgrade = false, paused = false, autoDelay = 3,
     -- where the stack sits: its top centre as an offset from the screen's centre, in screen units
@@ -41,6 +48,7 @@ LR.DEFAULTS = {
 
 LR.LIMITS = {
     scale = { 50, 160 }, spacing = { 0, 30 }, maxCards = { 1, 6 }, afterResult = { 2, 60 }, autoDelay = { 1, 15 },
+    fadeIn = { 0, 1000 }, fadeOut = { 0, 2000 }, barHeight = { 8, 24 },
     x = { -LR.POSITION_LIMIT, LR.POSITION_LIMIT }, y = { -LR.POSITION_LIMIT, LR.POSITION_LIMIT },
 }
 
@@ -55,6 +63,10 @@ LR.CHOICES = {
         { "number", "Seconds only", "Only the time left." },
     },
 }
+-- Settings that are text and not a choice: a bar texture's id (MenuStyle.StatusBars: "solid", "eui:<key>" or a LibSharedMedia name) and
+-- colors ("AARRGGBB", as the swatches save them).
+LR.TEXT = { barTexture = "texture", barColorHigh = "color", barColorMid = "color", barColorLow = "color", barColorExpired = "color", barColorRule = "color", barTrack = "color" }
+LR.COLOR_KEYS = { "barColorHigh", "barColorMid", "barColorLow", "barColorExpired", "barColorRule", "barTrack" }
 LR.ENUM = {}
 for key, list in pairs(LR.CHOICES) do
     local set = {}
@@ -66,6 +78,9 @@ function LR.Valid(key, value)
     local default = LR.DEFAULTS[key]
     if default == nil then return false end
     if type(default) == "boolean" then return type(value) == "boolean" end
+    local text = LR.TEXT[key]
+    if text == "color" then return type(value) == "string" and value:match("^%x%x%x%x%x%x%x%x$") ~= nil end
+    if text == "texture" then return type(value) == "string" and #value > 0 and #value <= 100 and not value:find("[%c|]") end
     if type(default) == "number" then
         local lim = LR.LIMITS[key]
         return Whole(value) and lim ~= nil and value >= lim[1] and value <= lim[2]

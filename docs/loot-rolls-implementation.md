@@ -11,8 +11,10 @@ Nothing in this feature has been **real-client-tested**. Every statement below a
 
 Two parts, both off until the player turns them on.
 
-1. **Loot cards** (`loot/Cards.lua`, switch `modules.lootRolls`): a card for each group-loot roll in the framed look (espresso and aged
-   bronze) with painted Need, Greed and Pass icons, the item, its quality, an optional vendor price, a "Potential upgrade" mark from the
+1. **Loot cards** (`loot/Cards.lua`, switch `modules.lootRolls`): a card for each group-loot roll in the settings window's look (`R.CraftLook`:
+   the sculpted bronze frame over espresso and quiet leather, painted buttons and chips, Spectral/Alegreya type; the old framed look is the
+   fallback when the core's look is missing) with painted Need, Greed and Pass icons, the item, its quality, an optional vendor price shown as
+   gold, silver and copper with the game's coin pictures, a "Potential upgrade" mark from the
    existing upgrade judge, a countdown, and, when the game gives it, the other players' rolls and the winner.
 2. **Loot rules** (`loot/Rules.lua`, `loot/Config.lua`, `loot/Auto.lua`): "when an item matches these conditions, choose Need, Greed or
    Pass", with a visible countdown on the card that the player can stop, roll early, or override by choosing. Automation has its own master
@@ -106,11 +108,33 @@ Any error while drawing hands every roll back to the game's frames (`Cards.lua` 
 `R.Fault`. Switching the feature off removes every card and listener and gives the frames back. `GetActiveLootRollIDs()` takes a roll that is
 already open (a reload, or the switch turned on mid-roll) back in with the time it has left.
 
+## Appearance settings
+
+Loot cards tab: fade in and out (`animate` master switch, `fadeIn` 0-1000 ms, `fadeOut` 0-2000 ms, steps of 50; 0 is instant) and a
+Countdown bar card: `barTexture` (MenuStyle.StatusBars id: flat, EllesmereUI's, or any LibSharedMedia status bar texture; default `eui:sheer`, drawn flat where
+EllesmereUI is not installed; one that has gone stays chosen), `barHeight` 8-24 (14), `barShine` (off), `barShift` (change color as time runs
+out), `barColorHigh/Mid/Low` (plenty / about half gone / nearly out: weathered sage 91AD78, antique gold D0AA60, burnished ember D18450),
+`barColorExpired` (muted crimson BA5D55: the full bar on a card whose roll ran out), `barColorRule` (a rule's countdown, sage) and `barTrack`
+(deep espresso 211A16); colors saved as AARRGGBB, `LR.TEXT` says which keys are text. A card that leaves keeps the stack frame visible until its fade ends (the stack used to hide with the last card, which cut the fade).
+The preview (`PreviewStart`) fades the same way.
+
+## Hover
+
+Every part of a card explains itself: the icon and name show the item's tooltip (the game's own for a live roll, which already carries the gear
+comparison's line; the item's link once the roll is over; a made-up one on a sample card); the **Potential upgrade** chip shows why in the gear
+comparison's own words (`GearHints.DetailLines`: the verdict, what it was compared with, the stat changes, the basis: the lines the item tooltip
+shows with the reveal key held), with a note that it is a hint; the Auto, Chosen, Resolved, Won, Expired and Closed chips say what they mean;
+Need, Greed, Pass, Roll now and Stop say what they do (an unavailable choice gives the game's reason, in red); the bar says what it counts
+and what ends it; the price line shows the price with its coins (the rule's name and delay while a rule counts down).
+
 ## Settings
 
 `TwichUI_Settings/pages/LootRolls.lua` (the **Loot cards** tab: the switch, size and place, what a card shows; "Place the cards" opens a
-sample card you drag, kept only on Finish, refused in combat and while a roll is open) and `pages/LootRules.lua` (the **Loot rules** tab: the
-automatic rolling strip and switches, the rule list, the rule editor). The live preview beside the window is `Companion.lua`'s `loot` family:
+sample card you drag, kept only on Finish, refused in combat and while a roll is open; "Preview a sample roll" shows a made-up roll on a real card
+in the real place and size, even while the cards are off: it counts down, Need/Greed/Pass work and end with made-up results, nothing is rolled,
+`LootCards.PreviewStart` owns it and has its own frame and clock, and a real roll (or Place) takes its place) and `pages/LootRules.lua` (the **Loot rules** tab: the
+automatic rolling strip and switches, the rule list, the rule editor; "Preview this rule" plays the selected rule's countdown on a sample card,
+with Roll now and Stop working harmlessly). The live preview beside the window is `Companion.lua`'s `loot` family:
 the real card renderer (`LootCards.Draw`) over a made-up item (`LootCards.SampleView`), with a picker for the card's states (waiting for your
 choice, a rule about to roll, choice sent, resolved with the rolls, ran out of time). It reads no roll and sends nothing; clicking it opens the
 appearance settings. Saved data: `TwichUIDB.ui.lootRolls` (a profile's; `docs/profiles.md` rules apply). Sharing: the whole group stays local
@@ -121,8 +145,9 @@ appearance settings. Saved data: `TwichUIDB.ui.lootRolls` (a profile's; `docs/pr
 * **unit-tested** (`tests/test_loot_rolls.lua`): rules, conditions, priority and unknown handling; configuration and rule editing; roll lifecycle,
   eligibility, one send per roll, confirmation, results from the history, ambiguity, secret values, missing APIs, reload adoption; automation
   (opt-ins, stop, override, pause, edits, deadlines, stale timers, duplicate events); frame handover and fallback; cards and failure.
-* **simulator-tested** (`bash tools/simlab/loot.sh`, 13 views, all pass): manual, stack, auto, resolved, waiting, expired, unavailable cards;
-  rules, builder, cards, narrow, empty settings views; placement (cancel keeps the place, Finish saves it, refused while a roll is open).
+* **simulator-tested** (`bash tools/simlab/loot.sh`, 14 views, all pass): manual, stack, auto, resolved, waiting, expired, unavailable cards;
+  rules, builder, cards, narrow, empty settings views; placement (cancel keeps the place, Finish saves it, refused while a roll is open); the sample-roll preview from both pages (refused while a roll
+  is open, Greed shows the choice then made-up results, a rule's preview shows its countdown, nothing rolled).
   Handler-level checks over synthetic rolls only (see `docs/simulator-lab.md`, "The Loot Rolls scenario").
 * **screenshot-reviewed** (structure only: the simulator draws solid colors lighter and falls back to the game font): compared against
   `assets/LOOT_ROLLS_CARD_MOCKUP.png` and `assets/LOOT_ROLLS_RULE_BUILDER_MOCKUP.png`, three rounds for the cards and four for the editor.
@@ -154,9 +179,11 @@ window, as it does for the other pages.
 6. Automation: one Greed rule, master switch on, a matching green item: the card counts down visibly; Stop works; letting it finish sends Greed
    once and the game accepts it. Then Need: confirm it is refused until Need automation is allowed.
 7. Recipe rules: confirm "already known" and "one of my professions" are read correctly for real recipe drops.
-8. Equip and armor-type rules: on a character that wears cloth, a mail drop reads "can't equip" (red type line) and a cloth drop reads "can";
+8. Preview a sample roll (Loot cards tab) and Preview this rule (Loot rules tab): the card appears where your cards do and is not hidden by or
+   hiding anything it shouldn't; it can be dismissed; start a real roll while a preview shows and the real card replaces it.
+9. Equip and armor-type rules: on a character that wears cloth, a mail drop reads "can't equip" (red type line) and a cloth drop reads "can";
    an item above your level still reads "can equip"; a cloth rule takes cloth and not mail. (Unit-tested with a fake tooltip only.)
-9. Two rolls at once, a roll that runs out, `/reload` in the middle of a roll.
+10. Two rolls at once, a roll that runs out, `/reload` in the middle of a roll.
 
 ## Remaining limitations
 

@@ -181,6 +181,20 @@ out = Hover("chest:caster")
 assert(Has(out, "Probably not an upgrade") and Has(out, "-10 Strength"), "explains a downgrade on request")
 assert(Has(out, "Not weighed for Fury: Intellect") and not Has(out, "Not weighed for Fury: Armor"), "says which stats it ignored")
 
+-- Other windows (the loot cards' "Potential upgrade" hover) read the same reasoning without the reveal key.
+modifier = false
+do
+  local judged = c.TwichUI.GearHints.Judge("chest:better", {})
+  local lines = c.TwichUI.GearHints.DetailLines(judged)
+  assert(lines and lines[1][1] == " " and lines[2][1] == "Likely upgrade for Fury", "DetailLines gives the reasoning, spacer first")
+  local texts = {}
+  for _, l in ipairs(lines) do texts[#texts + 1] = l[1] end
+  local joined = table.concat(texts, " | ")
+  assert(joined:find("Compared with", 1, true) and joined:find("+4 Strength", 1, true) and joined:find("Rough estimate, weighed for Fury", 1, true), "with what it was compared with, the changes and the basis: " .. joined)
+  assert(c.TwichUI.GearHints.DetailLines(nil) == nil and c.TwichUI.GearHints.DetailLines(false) == nil and c.TwichUI.GearHints.DetailLines({}) == nil, "no judgement, no lines")
+end
+modifier = true
+
 -- Can't use it (red requirement text other than level): nothing, even on request.
 Changed("SKILL_LINES_CHANGED")
 assert(#Hover("chest:better", { { leftText = "Chest", rightText = "Plate", rightColor = RED } }) == 0, "unusable: nothing")

@@ -46,6 +46,11 @@ local function StartPlacement()
     bar:Show()
 end
 
+local function Preview()
+    local ok, why = R.LootCards.PreviewStart()
+    if not ok then R.Print("%s", "Loot cards: " .. (why or "can't preview now.")) end
+end
+
 function R.LootCardsPageStatus()
     local lr = LR()
     if not On() then return "Off" end
@@ -82,6 +87,9 @@ K.Page({
         end
         local function Check(key, label, tip)
             return Under(K.Checkbox(Setting(key, BOOL, label, function(v) lr.Set(key, v and true or false) end), tip), main, On)
+        end
+        local function Swatch(key, label, tip, cond)
+            return Under(K.Swatch(Setting(key, STRING, label), tip), main, cond or On)
         end
         local function Pick(key, label, tip)
             return Under(K.Dropdown(Setting(key, STRING, label), function() return lr.CHOICES[key] end, tip), main, On)
@@ -129,6 +137,8 @@ K.Page({
         Pick("growth", "Stack grows", "Downwards: the first roll is at the top. Upwards: the first roll is at the bottom.")
         Under(K.Button("Place the cards", "Place...", StartPlacement,
             "Shows a sample card you drag where you want the stack. The settings window steps aside; Finish keeps the place, Cancel leaves it as it was. Not available in combat or while a roll is open."), main, On)
+        K.Button("Preview a sample roll", "Preview", Preview,
+            "Shows a made-up roll on a real card, in your place and at your size. Need, Greed and Pass work, it counts down and ends with made-up results, and nothing is rolled. Works even while loot cards are off. A real roll takes its place.")
         Under(K.Button("Position", "Reset", function() lr.ResetPlace() end, "Puts the cards back at their default place. Only their place changes."), main, On)
 
         -- What a card shows
@@ -146,7 +156,43 @@ K.Page({
         Check("showResults", "Show other players' rolls", "After the roll, who rolled what and who won, when the game's loot history gives it. Only what it gives is shown.")
         Pick("timer", "Timer", "How a roll's countdown is drawn.")
         Range("afterResult", "Keep a finished card for (seconds)", "How long a card stays after its roll ends, with the result if there is one.")
-        Check("animate", "Animate cards", "A brief fade and slide as a card appears. Off: cards appear at once.")
+        Check("animate", "Fade cards in and out", "A card fades in when a roll starts and fades out when it ends or is closed. Off: cards appear and go at once, whatever the times below say.")
+        local function Fades() return On() and lr.Get("animate") end
+        local fadeIn = Under(K.Slider(Setting("fadeIn", NUMBER, "Fade in (milliseconds)", function(v) lr.Set("fadeIn", math.floor(v / 50 + 0.5) * 50) end), 0, 1000,
+            "How long a card takes to fade in. 0 shows it at once."), main, Fades)
+        local fadeOut = Under(K.Slider(Setting("fadeOut", NUMBER, "Fade out (milliseconds)", function(v) lr.Set("fadeOut", math.floor(v / 50 + 0.5) * 50) end), 0, 2000,
+            "How long a card takes to fade out. 0 takes it away at once."), main, Fades)
+        if fadeIn and fadeIn.options then fadeIn.options.step = 50 end
+        if fadeOut and fadeOut.options then fadeOut.options.step = 50 end
+
+        -- The countdown bar
+        K.Card({
+            title = "Countdown bar", icon = "lootDelay", switch = false,
+            what = "How the bar that empties while a roll is open is drawn: its texture, height and colors.",
+            summary = function()
+                local id, label = lr.Get("barTexture"), nil
+                for _, choice in ipairs(R.MenuStyle.StatusBars.Choices(id)) do if choice[1] == id then label = choice[2] end end
+                label = label or id
+                return table.concat({ label, ("%d high"):format(lr.Get("barHeight")), lr.Get("barShift") and "changes color as time runs out" or "one color" }, DOT)
+            end,
+            consequence = "Only how the bar looks changes: what it counts, and when a roll ends, does not. A rule's countdown always shows its bar and its seconds, and keeps its own color so it can't be mistaken for the roll's time.",
+            details = {
+                { "Where do the textures come from?", "Flat color, EllesmereUI's bar textures while it is installed, and every LibSharedMedia status bar texture, the same list as the other TwichUI bars. A texture that has gone is drawn flat and stays chosen." },
+            },
+        })
+        Under(K.Dropdown(Setting("barTexture", STRING, "Bar texture"),
+            function() return R.MenuStyle.StatusBars.Choices(lr.Get("barTexture")) end,
+            "The picture the bar is filled with, tinted by the colors below. Sheer is EllesmereUI's; without EllesmereUI the bar is drawn flat until you choose another. Flat color is a plain fill."), main, On)
+        Range("barHeight", "Bar height", "How tall the countdown bar is.")
+        Check("barShine", "Highlight along the top of the bar", "A thin light line along the top of the fill. Off draws none.")
+        Check("barShift", "Change color as time runs out", "On: the bar uses the plenty-of-time color, then the half-gone color, then the nearly-out color. Off: it keeps the first color to the end.")
+        local function Shifts() return On() and lr.Get("barShift") end
+        Swatch("barColorHigh", "Bar color", "The bar's color while plenty of time is left (the whole bar's color when it doesn't change).")
+        Swatch("barColorMid", "Half-gone color", "The bar's color when about half the time is gone.", Shifts)
+        Swatch("barColorLow", "Nearly-out color", "The bar's color when the roll is nearly out of time.", Shifts)
+        Swatch("barColorExpired", "Ran-out color", "The full bar on a card whose roll ran out before you chose.")
+        Swatch("barColorRule", "Rule countdown color", "The bar's color while a rule counts down to roll for you.")
+        Swatch("barTrack", "Track color", "The empty part of the bar, behind the fill.")
 
         K.ResetButton("Loot card settings", resettable, function() lr.ResetSettings() end,
             "Puts the settings on this page back to their defaults. The switch, the place, your rules and the automatic rolling choices are kept.")

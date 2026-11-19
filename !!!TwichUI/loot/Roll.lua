@@ -194,7 +194,7 @@ local function UpgradeFact(link, lines)
     if not ok or judged == nil then return nil end
     if judged == false then return false end
     local noteworthy = H.Noteworthy and select(2, Call(H.Noteworthy, judged))
-    return noteworthy == true
+    return noteworthy == true, judged   -- the judgement too: the card's hover explains it
 end
 
 local function ContextFacts()
@@ -262,7 +262,7 @@ function Ro.Observe(roll)
     local lines = Lines(id)
     obs.recipe = RecipeFacts(roll, obs, lines)
     obs.equippable = EquippableFact(obs, lines)
-    obs.upgrade = UpgradeFact(roll.link, lines)
+    obs.upgrade, roll.judged = UpgradeFact(roll.link, lines)
     roll.upgrade = obs.upgrade
     obs.context = ContextFacts()
     obs.ready = roll.itemKnown == true

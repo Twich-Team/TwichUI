@@ -32,6 +32,7 @@ Methods = {
   IsEventRegistered = function(s, e) return s.events ~= nil and s.events[e] == true end,
   CreateTexture = function(s) local t = Fake("texture"); t.parent = s; return t end,
   CreateFontString = function(s) local t = Fake("font"); t.parent = s; return t end,
+  SetTexture = function(s, v) s.texture = v end,
   SetText = function(s, v) s.text = v end, GetText = function(s) return s.text end,
   GetStringWidth = function(s) return 40 end,
   SetTextColor = function(s, r, g, b) s.color = { r, g, b } end,
@@ -181,7 +182,8 @@ R.GearData = { RedLines = function(lines)
   for _, l in ipairs(lines) do local k = l.leftColor if k and k.r > 0.9 and k.g < 0.3 and k.b < 0.3 then n = n + 1 end end
   return n
 end }
-R.GearHints = { Judge = function(link) return JUDGED[link] end, Noteworthy = function(j) return j and j.up == true end }
+R.GearHints = { Judge = function(link) return JUDGED[link] end, Noteworthy = function(j) return j and j.up == true end,
+  DetailLines = function(j) return j and j.lines end }
 R.FrameLook = { Shell = function() return Fake("shell") end }
 
 ---------------------------------------------------------------------------
@@ -902,8 +904,9 @@ do
   c.GetTime = c.GetTime
   C.Tick(0.1)
   Check(fadeCard.alpha < 1 and fadeCard:IsShown(), "partway through the fade")
-  C.Tick(0.2)
+  C.Tick(0.4)
   Check(not fadeCard:IsShown() and not fadeCard.leaving and fadeCard.alpha == 1, "then hidden and free")
+  Check(not c.TwichUILootCards:IsShown(), "and with no card left the stack goes too")
   LR.Set("animate", false)
   local fadeId2 = StartRoll("item:104")
   local card3 = C.Card(Ro.Find(fadeId2).key)
@@ -950,6 +953,264 @@ do
   c.TwichUIDB.modules.lootRolls = false; LR.Refresh()
   c.TwichUIDB.modules.lootRolls = true; LR.Refresh()
   Check(not C.Failed() and C.Ready(), "switching it off and on is a fresh start")
+end
+
+---------------------------------------------------------------------------
+-- 6b. The sample-roll preview (settings): a made-up roll that plays through and sends nothing
+---------------------------------------------------------------------------
+do
+  for _, r in ipairs({ unpack(Ro.Rolls()) }) do Ro.Remove(r) end
+  rolled = {}
+  local function Tick(seconds) local f = c.TwichUILootCardsPreview; local n = math.floor(seconds / 0.1 + 0.5) for _ = 1, n do f.scripts.OnUpdate(f, 0.1) end end
+  local ok = C.PreviewStart()
+  local f, card = c.TwichUILootCardsPreview, C.PreviewCard()
+  Check(ok and f:IsShown() and card.name.text == "Verdant Scholar's Mantle", "a sample roll is shown on a card")
+  Check(card.buttons.need:IsShown() and card.buttons.greed:IsShown() and card.buttons.pass:IsShown() and card.live, "with Need, Greed and Pass")
+  Check(f.scale == LR.Get("scale") / 100, "at the player's size")
+  Tick(2)
+  Check(card.time.text ~= nil and card.view.state == "pending", "it counts down")
+  card.buttons.greed.scripts.OnClick(card.buttons.greed)
+  Check(card.view.state == "submitted" and card.view.choice == "greed" and card.status:IsShown(), "choosing shows the choice")
+  Tick(1.5)
+  Check(card.view.state == "resolved" and card.view.result and card.view.result.winner ~= nil, "then made-up results")
+  Check(#rolled == 0 and #Ro.Rolls() == 0, "and no roll was made, and no roll exists")
+  Tick(LR.Get("afterResult") + 1)
+  Check(not f:IsShown(), "the card goes after a while, as a real one does")
+
+  C.PreviewStart()
+  card.buttons.need.scripts.OnClick(card.buttons.need); Tick(1.5)
+  Check(card.view.result.winner.self == true, "Need in the sample wins the made-up roll")
+  card.close.scripts.OnClick(card.close)
+  Tick(0.2)
+  Check(f:IsShown() and f.alpha < 1 and f.alpha > 0, "the x fades it out")
+  Tick(1)
+  Check(not f:IsShown() and f.alpha == 1, "and then it is gone")
+
+  C.PreviewStart({ name = "Greed on green gear", action = "greed", delay = 3 })
+  Check(card.view.state == "scheduled" and card.buttons.now:IsShown() and card.buttons.stop:IsShown() and card.line3.text:find("Greed on green gear", 1, true), "a rule's preview shows its countdown")
+  card.buttons.stop.scripts.OnClick(card.buttons.stop)
+  Check(card.view.state == "pending" and card.buttons.greed:IsShown() and card.view.autoNote ~= nil, "Stop gives the choice back")
+  Tick(5)
+  Check(card.view.state == "pending", "and nothing is chosen afterwards")
+  C.PreviewStart({ name = "Pass", action = "pass", delay = 3 }); Tick(2)
+  Check(card.view.state == "scheduled", "the countdown runs its delay")
+  Tick(1.2)
+  Check(card.view.state == "submitted" and card.view.choice == "pass", "and then 'chooses' what the rule says")
+  C.PreviewStart({ name = "Now", action = "greed", delay = 9 })
+  card.buttons.now.scripts.OnClick(card.buttons.now)
+  Check(card.view.state == "submitted" and card.view.choice == "greed", "Roll now does it at once")
+  Check(#rolled == 0, "a rule's preview sends nothing either")
+
+  C.PreviewStart(); Tick(21)
+  Check(card.view.state == "ended" and card.view.endReason == "expired", "an ignored sample runs out")
+  C.PreviewStop()
+
+  -- a real roll is never hidden by it, and takes its place
+  C.PreviewStart()
+  local idp = StartRoll("item:100")
+  Check(not f:IsShown() and C.Card(Ro.Find(idp).key):IsShown(), "a real roll that starts takes the preview's place")
+  Check(select(1, C.PreviewStart()) == false, "and no preview is offered while one is open")
+  EndRoll(idp)
+  for _, r in ipairs({ unpack(Ro.Rolls()) }) do Ro.Remove(r) end
+  rolled = {}
+end
+
+---------------------------------------------------------------------------
+-- 6c. Appearance: fading, the countdown bar, the price
+---------------------------------------------------------------------------
+do
+  for _, r in ipairs({ unpack(Ro.Rolls()) }) do Ro.Remove(r) end
+  LR.Set("animate", true)
+  -- settings are checked
+  Check(LR.Get("fadeIn") == 250 and LR.Get("fadeOut") == 450 and LR.Get("barTexture") == "eui:sheer" and LR.Get("barHeight") == 14, "the appearance defaults: Sheer, 14 high, fading")
+  Check(LR.Get("barShine") == false, "the highlight along the top is off by default")
+  Check(LR.Get("barColorHigh") == "ff91ad78" and LR.Get("barColorMid") == "ffd0aa60" and LR.Get("barColorLow") == "ffd18450"
+    and LR.Get("barColorExpired") == "ffba5d55" and LR.Get("barTrack") == "ff211a16", "the default colors: sage, gold, ember, crimson, espresso")
+  Check(LR.Set("fadeIn", 600) and LR.Get("fadeIn") == 600, "a fade time can be set")
+  Check(not LR.Set("fadeIn", 5000) and not LR.Set("fadeOut", -1) and not LR.Set("barHeight", 3), "and out-of-range values are refused")
+  Check(LR.Set("barColorHigh", "ff112233") and LR.Get("barColorHigh") == "ff112233", "a bar color can be set")
+  Check(not LR.Set("barColorHigh", "red") and not LR.Set("barColorHigh", "ff1122") and not LR.Set("barColorHigh", 5), "and only AARRGGBB is accepted")
+  Check(LR.Set("barTexture", "Smooth") and LR.Get("barTexture") == "Smooth" and not LR.Set("barTexture", "") and not LR.Set("barTexture", "a|b"), "a texture id is a plain name")
+  LR.Set("barColorHigh", LR.DEFAULTS.barColorHigh); LR.Set("barTexture", LR.DEFAULTS.barTexture); LR.Set("fadeIn", 250)
+
+  -- fade in: a new card starts clear and rises to solid; no sudden appearance
+  local id = StartRoll("item:100")
+  local card = C.Card(Ro.Find(id).key)
+  Check(card:IsShown() and card.alpha == 0, "a new card starts fully clear")
+  C.Tick(0.1)
+  Check(card.alpha > 0 and card.alpha < 1, "and fades in")
+  C.Tick(0.4)
+  Check(card.alpha == 1, "to solid in the time chosen")
+  -- fade out: the last card's fade is drawn (the stack stays until it is gone)
+  EndRoll(id); LR.Set("afterResult", 2)
+  Ro.Remove(Ro.Find(id))
+  Check(card.leaving and c.TwichUILootCards:IsShown(), "the stack stays while the last card fades")
+  C.Tick(0.2)
+  Check(card.alpha > 0 and card.alpha < 1 and c.TwichUILootCards:IsShown(), "partway through")
+  C.Tick(0.5)
+  Check(not card:IsShown() and not c.TwichUILootCards:IsShown(), "then both are gone")
+  -- the times are the player's
+  LR.Set("fadeIn", 1000); LR.Set("fadeOut", 1000)
+  id = StartRoll("item:100"); card = C.Card(Ro.Find(id).key)
+  C.Tick(0.5)
+  Check(card.alpha > 0 and card.alpha < 1, "a longer fade is still going at half a second")
+  C.Tick(0.6)
+  Check(card.alpha == 1, "and done at the end of it")
+  LR.Set("fadeIn", 0); LR.Set("fadeOut", 0)
+  EndRoll(id); Ro.Remove(Ro.Find(id))
+  Check(not card:IsShown() and not card.leaving, "no fade-out time: gone at once")
+  id = StartRoll("item:100"); card = C.Card(Ro.Find(id).key)
+  Check(card.alpha == 1, "no fade-in time: there at once")
+  EndRoll(id); Ro.Remove(Ro.Find(id))
+  LR.Set("fadeIn", 250); LR.Set("fadeOut", 450)
+  LR.Set("animate", false)
+  id = StartRoll("item:100"); card = C.Card(Ro.Find(id).key)
+  Check(card.alpha == 1, "Animate off overrides the times: no fading")
+  EndRoll(id); Ro.Remove(Ro.Find(id))
+  LR.Set("animate", true)
+
+  -- the countdown bar: colors by time, one color, the rule's own; the player's texture
+  local function Rgb(hex) return tonumber(hex:sub(3, 4), 16) / 255, tonumber(hex:sub(5, 6), 16) / 255, tonumber(hex:sub(7, 8), 16) / 255 end
+  local function Same(a, b, c1, d, e, f2) return math.abs(a - d) < 0.002 and math.abs(b - e) < 0.002 and math.abs(c1 - f2) < 0.002 end
+  local r, g, b = C.BarColor(0.9, false)
+  Check(Same(r, g, b, Rgb("ff91ad78")), "plenty of time: the plenty color")
+  r, g, b = C.BarColor(0.4, false)
+  Check(Same(r, g, b, Rgb("ffd0aa60")), "about half gone: the middle color")
+  r, g, b = C.BarColor(0.1, false)
+  Check(Same(r, g, b, Rgb("ffd18450")), "nearly out: the last color")
+  LR.Set("barColorLow", "ff0000ff"); LR.Set("barColorRule", "ff00ff00")
+  r, g, b = C.BarColor(0.1, false)
+  Check(Same(r, g, b, 0, 0, 1), "a color the player chose is used")
+  r, g, b = C.BarColor(0.1, true)
+  Check(Same(r, g, b, 0, 1, 0), "a rule's countdown has its own color, whatever the time left")
+  LR.Set("barShift", false)
+  r, g, b = C.BarColor(0.1, false)
+  Check(Same(r, g, b, Rgb("ff91ad78")), "with 'change color' off one color is kept to the end")
+  r, g, b = C.BarColor(0, false, true)
+  Check(Same(r, g, b, Rgb("ffba5d55")), "a roll that ran out has the run-out color")
+  LR.Set("barShift", true); LR.Set("barColorLow", LR.DEFAULTS.barColorLow); LR.Set("barColorRule", LR.DEFAULTS.barColorRule)
+  LR.Set("barShine", LR.DEFAULTS.barShine)
+
+  R.MenuStyle = { StatusBars = { Resolve = function(id) if id == "Smooth" then return [[Interface\Smooth]], "ok" end return nil, "missing" end } }
+  C.PreviewStart(); local pc = C.PreviewCard()
+  LR.Set("barTexture", "Smooth"); LR.Set("barHeight", 20)
+  C.PaintTimer(pc, pc.view)
+  Check(pc.timer.fill.texture == [[Interface\Smooth]] and pc.timer:GetHeight() == 20, "the bar is drawn with the player's texture and height")
+  LR.Set("barTexture", "Gone")
+  C.PaintTimer(pc, pc.view)
+  Check(pc.timer.fill.texture == [[Interface\Buttons\WHITE8x8]], "a texture that has gone is drawn flat, not blank")
+  LR.Set("barShine", false); C.PaintTimer(pc, pc.view)
+  Check(not pc.timer.hi:IsShown(), "the shine can be turned off")
+  LR.Set("barShine", true); LR.Set("barTexture", LR.DEFAULTS.barTexture); LR.Set("barHeight", 14)
+  C.PreviewStop(true)
+  R.MenuStyle = nil
+
+  -- the price: gold, silver and copper, each with its coin
+  local text = C.CoinText(123456)
+  Check(text:find("12", 1, true) and text:find("UI%-GoldIcon") and text:find("UI%-SilverIcon") and text:find("UI%-CopperIcon"), "a price shows gold, silver and copper with the game's coin pictures")
+  Check(text:find("34", 1, true) and text:find("56", 1, true), "with each amount")
+  local t2 = C.CoinText(1850)
+  Check(not t2:find("GoldIcon") and t2:find("18", 1, true) and t2:find("SilverIcon") and t2:find("50", 1, true) and t2:find("CopperIcon"), "no gold: silver and copper only")
+  local t3 = C.CoinText(10000)
+  Check(t3:find("GoldIcon") and t3:find("SilverIcon") and t3:find("CopperIcon"), "an even amount still shows the lower coins")
+  Check(C.CoinText(7):find("CopperIcon") and not C.CoinText(7):find("SilverIcon"), "copper alone")
+  Check(C.CoinText(0) == nil and C.CoinText(nil) == nil and C.CoinText(-5) == nil and C.CoinText("x") == nil, "no price, no line")
+  rolled = {}
+end
+
+---------------------------------------------------------------------------
+-- 6d. Hover: what each part of a card explains
+---------------------------------------------------------------------------
+do
+  for _, r in ipairs({ unpack(Ro.Rolls()) }) do Ro.Remove(r) end
+  rolled = {}
+  local tip = { lines = {} }
+  function tip:SetOwner(o, a) self.owner, self.lines, self.shown, self.lootRoll, self.link = o, {}, false, nil, nil end
+  function tip:SetText(t) self.lines[#self.lines + 1] = t end
+  function tip:AddLine(t) self.lines[#self.lines + 1] = t end
+  function tip:Show() self.shown = true end
+  function tip:Hide() self.shown = false end
+  function tip:NumLines() return #self.lines end
+  function tip:SetLootRollItem(id) self.lootRoll = id; self.lines[#self.lines + 1] = "ITEM TOOLTIP" end
+  function tip:SetHyperlink(l) self.link = l; self.lines[#self.lines + 1] = "LINK TOOLTIP" end
+  local real = c.GameTooltip
+  c.GameTooltip = tip
+  local function Text() return table.concat(tip.lines, " | ") end
+  local function Enter(f) f.scripts.OnEnter(f) end
+
+  -- a live roll: the game's own item tooltip, on the icon and the name
+  JUDGED["item:100"] = { up = true, lines = { { " ", 1, 1, 1 }, { "Likely upgrade for Fury", 0.5, 0.7, 0.3, false }, { "Compared with Old Helm", 0.6, 0.6, 0.6, true },
+    { "+12 Strength", 0.5, 0.7, 0.3, false } } }
+  local id = StartRoll("item:100"); local roll = Ro.Find(id); local card = C.Card(roll.key)
+  Enter(card.iconHit)
+  Check(tip.shown and tip.lootRoll == id, "hovering the item shows the game's tooltip for the roll")
+  -- the whole header line, not just the icon
+  Check(card.iconHit.points[2] and card.iconHit.points[2][2] == card.body, "the hover area reaches across the name, not only the icon")
+  card.iconHit.scripts.OnLeave(card.iconHit)
+  Check(not tip.shown, "and it goes when the pointer leaves")
+
+  -- the upgrade chip says why, in the gear comparison's own words
+  local chip = card.pillTop.tip == C.PillTips.upgrade and card.pillTop or (card.pillBottom.tip == C.PillTips.upgrade and card.pillBottom)
+  Check(chip and chip:IsShown(), "a Potential upgrade chip is shown")
+  Enter(chip)
+  Check(tip.shown and Text():find("Potential upgrade", 1, true) and Text():find("Likely upgrade for Fury", 1, true)
+    and Text():find("Compared with Old Helm", 1, true) and Text():find("+12 Strength", 1, true), "hovering it explains why, from the gear comparison")
+  Check(not Text():find(" | %s*$") and Text():find("never a reason to roll Need", 1, true), "and says it is a hint")
+  JUDGED["item:100"].lines = nil
+  Enter(chip)
+  Check(Text():find("may be better than what you wear", 1, true), "with no detail to give it still says what the chip means")
+
+  -- the choices
+  card.buttons.need.onTip(card.buttons.need)
+  Check(Text():find("Need", 1, true) and Text():find("intend to use", 1, true), "Need explains itself")
+  card.buttons.greed.onTip(card.buttons.greed)
+  Check(Text():find("nobody rolls Need", 1, true), "Greed explains itself")
+  card.buttons.pass.onTip(card.buttons.pass)
+  Check(Text():find("Nothing is rolled for you", 1, true), "Pass explains itself")
+  -- the bar and the price
+  Enter(card.timer)
+  Check(Text():find("Time to roll", 1, true) and Text():find("you pass", 1, true), "the bar says what it counts")
+  Enter(card.line3Hit)
+  Check(Text():find("Vendor price", 1, true) and Text():find("UI%-CopperIcon"), "the price line shows the price with its coins")
+  -- a roll that is over: the item's link
+  EndRoll(id)
+  roll.state = "ended"; roll.endReason = "expired"; Ro.Tell("updated", roll)
+  tip.lootRoll = nil
+  Enter(card.iconHit)
+  Check(tip.shown and tip.link == "item:100", "once the roll is over the item's link is shown instead")
+  Check(card.timer:IsShown(), "a roll that ran out shows its bar, spent")
+  Enter(card.timer)
+  Check(Text():find("Ran out", 1, true), "and the bar says it ran out")
+  Ro.Remove(roll)
+  JUDGED["item:100"] = nil
+
+  -- a rule's countdown
+  LR.Set("auto", true)
+  local _, rid = LR.Create("blank"); LR.SetAction(rid, "greed"); LR.RemoveCondition(rid, 1); LR.AddCondition(rid, "item"); LR.SetCondition(rid, 1, { id = 101 }); LR.SetEnabled(rid, true)
+  local id2 = StartRoll("item:101"); local r2 = Ro.Find(id2); local c2 = C.Card(r2.key)
+  Check(r2.state == "scheduled" and c2.buttons.now:IsShown(), "a rule is counting down")
+  c2.buttons.now.onTip(c2.buttons.now)
+  Check(Text():find("Roll now", 1, true), "Roll now explains itself")
+  c2.buttons.stop.onTip(c2.buttons.stop)
+  Check(Text():find("Cancels the automatic choice", 1, true), "Stop explains itself")
+  Enter(c2.timer)
+  Check(Text():find("Rule countdown", 1, true), "the bar says a rule is counting down")
+  local autoPill = c2.pillTop.tip == C.PillTips.auto and c2.pillTop or c2.pillBottom
+  Enter(autoPill)
+  Check(Text():find("will choose it for you", 1, true), "the Auto chip explains the rule")
+  EndRoll(id2); Ro.Remove(r2); LR.Delete(rid); LR.Set("auto", false)
+
+  -- a sample card has a made-up item tooltip, and the made-up reasons
+  C.PreviewStart(); local pc = C.PreviewCard()
+  Enter(pc.iconHit)
+  Check(Text():find("Verdant Scholar's Mantle", 1, true) and Text():find("made up for the preview", 1, true) and tip.lootRoll == nil and tip.link == nil,
+    "a sample's item tooltip is made up and reads no roll")
+  local pchip = pc.pillTop.tip == C.PillTips.upgrade and pc.pillTop or pc.pillBottom
+  Enter(pchip)
+  Check(Text():find("Likely upgrade for Arcane", 1, true), "and so is its upgrade explanation")
+  C.PreviewStop(true)
+  c.GameTooltip = real
+  rolled = {}
 end
 
 ---------------------------------------------------------------------------

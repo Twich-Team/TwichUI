@@ -426,6 +426,8 @@ local function LayoutEditor(v, w)
     local bh = math.max(34, (f.barText:GetStringHeight() or 14) + 20)
     f.bar:SetHeight(bh)
     y = y + bh + 8
+    Put(f.previewRule, f.editor, PAD, y)
+    y = y + 34
     f.say:SetWidth(w - PAD * 2)
     Put(f.say, f.editor, PAD, y)
     f.say:SetText(say or "")
@@ -616,6 +618,15 @@ local function Build()
     M.PanelFace(f.bar, "canvas")
     f.barIcon = f.bar:CreateTexture(nil, "ARTWORK"); f.barIcon:SetSize(22, 22); f.barIcon:SetPoint("LEFT", 12, 0)
     f.barText = G.Text(f.bar, "body"); f.barText:SetPoint("LEFT", 44, 0); f.barText:SetWordWrap(true)
+    f.previewRule = Part(G.Button(e, "Preview this rule", 150, "secondary", function()
+        local v = selected and LR().Rule(selected)
+        if not v then return end
+        if v.incomplete then P.Say("Finish the rule first: " .. v.incomplete, "warn") P.QueueRefresh() return end
+        local ok, why = R.LootCards.PreviewStart({ name = v.name, action = v.action, delay = v.delay })
+        if not ok then P.Say(why or "Can't preview now.", "warn") else P.Say(nil) end
+        P.QueueRefresh()
+    end))
+    R.Interact.Tip(f.previewRule, "Preview this rule", "Shows a made-up roll with this rule's countdown on a card, where your cards appear. Roll now, Stop and your own choice all work, and nothing is rolled: no item, no group and no game call is involved.")
     f.say = Part(G.Text(e, "small")); f.say:SetWordWrap(true)
     built = true
     f:SetScript("OnSizeChanged", function() P.QueueRefresh() end)

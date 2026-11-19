@@ -245,7 +245,7 @@ scenarios, exact run IDs, discrepancies and native-client gaps. The older 49-pag
 
 ## The Loot Rolls scenario
 
-`bash tools/simlab/loot.sh [view ...]` (views: `manual stack auto resolved waiting expired unavailable rules builder cards narrow empty place`; all by
+`bash tools/simlab/loot.sh [view ...]` (views: `manual stack auto resolved waiting expired unavailable rules builder cards narrow empty place preview`; all by
 default) runs `scenarios/loot.lua` once per view from a fresh root, with a screenshot each, written to `$WOWSIM_LAB/artifacts/loot-<time>/`.
 It exercises the real `loot/` code and the Loot Rolls settings pages over **synthetic** rolls: the game-API boundary (`GetLootRollItemInfo`,
 `GetLootRollItemLink`, `GetLootRollTimeLeft`, `GetActiveLootRollIDs`, `RollOnLoot`, `C_Item`, `C_LootHistory`, the skill lines) is faked in the

@@ -268,6 +268,49 @@ if view == "place" then
     end)
 end
 
+if view == "preview" then
+    Lab.Step("sample-roll preview", function()
+        rolled = {}
+        local id = Start("item:20005", 30)
+        local ok = C.PreviewStart()
+        Check("state", "a sample is refused while a roll is open", false, ok)
+        active[id] = nil
+        A_Admin.FireEvent("CANCEL_ALL_LOOT_ROLLS")
+        Lab.Settle(0.3)
+        for _, r in ipairs({ unpack(Ro.Rolls()) }) do Ro.Remove(r) end
+        -- the Loot cards page's Preview button, then the card's own buttons
+        local opened = Lab.Open("lootRolls")
+        Check("init", "the Loot cards page opened", true, opened)
+        Lab.Settle(0.3)
+        Check("interact", "the sample starts", true, (C.PreviewStart()))
+        Lab.Settle(0.4)
+        local card = C.PreviewCard()
+        Check("display", "a card shows a made-up item", "Verdant Scholar's Mantle", card.name:GetText())
+        card.buttons.greed:Click()
+        Lab.Settle(0.3)
+        Check("interact", "Greed on the sample shows the choice", "submitted", card.view.state)
+        Check("state", "and nothing was rolled", 0, #rolled)
+        Lab.Settle(1.5)
+        Check("display", "then made-up results", "resolved", card.view.state)
+        -- a rule's preview, from the rules page
+        local ok2 = Lab.Open("lootRules")
+        Check("init", "the Loot rules page opened", true, ok2)
+        Lab.Settle(0.4)
+        local P = R.LootRulesPage
+        local _, ruleId = LR.Create("greenGear"); LR.SetName(ruleId, "Greed on green gear"); LR.SetEnabled(ruleId, true)
+        Lab.Settle(0.3)
+        P.Select(ruleId)
+        Lab.Settle(0.4)
+        P.Parts().frame.previewRule:Click()
+        Lab.Settle(0.5)
+        card = C.PreviewCard()
+        Check("interact", "Preview this rule shows the rule's countdown", "scheduled", card.view.state)
+        Check("display", "named after the rule", true, (card.line3:GetText() or ""):find("Greed on green gear", 1, true) ~= nil)
+        Check("state", "and still nothing was rolled", 0, #rolled)
+        Lab.Settle(0.2)
+    end)
+end
+
 -- Screenshot fixture only: move Blizzard's PTR feedback button beside the addon.
 if PTR_IssueReporter then
     PTR_IssueReporter:ClearAllPoints()

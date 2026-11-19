@@ -9,6 +9,7 @@
 --   C.View(roll)             the view of a live roll (Roll.lua's record)
 --   C.Ready()                the stack was built and nothing failed: automatic choices need this (a countdown must be visible)
 --   C.Shows(roll)            a card for this roll is on screen
+--   C.PreviewStart(rule)     a made-up roll on screen that plays through (settings' "Preview a sample roll"); sends nothing
 --
 -- A view: state (pending, scheduled, submitted, resolved, ended), name, icon, quality, count, typeText, sellPrice, upgrade (true or nil),
 -- canNeed, canGreed, reasonNeed, reasonGreed (words), remaining and duration (seconds), choice, placed, needsConfirm, auto = { name, action,
@@ -36,6 +37,64 @@ local COL = {
     faceOn = { 0.285, 0.190, 0.095 }, track = { 0.055, 0.045, 0.038 }, red = { 0.80, 0.36, 0.30 },
 }
 
+-- The card wears the settings look (R.CraftLook: the sculpted bronze frame, quiet leather, painted buttons and chips), with the same
+-- ivory, dim, stone and antique gold as the settings window, when the core has them; the colors above are its fallback.
+do
+    local pal = R.Look and R.Look.pal
+    if pal and pal.text then
+        COL.ivory, COL.dim, COL.quiet, COL.gold, COL.sage = pal.text, pal.textDim, pal.stone, pal.bronzeText, pal.sage
+    end
+end
+
+-- A painted sheet (a button, a chip) on a host; a stand-in that draws nothing when the core's look is not there.
+local function Sheet(host, skin, opts)
+    local CL = R.CraftLook
+    if CL and CL.Sheet then return CL.Sheet(host, skin, opts) end
+    return { SetSkin = function() end, SetTint = function() end, SetShown = function() end, SetAlpha = function() end }
+end
+
+-- Tooltips. Info explains in the card's own quiet words; Tip is the red one for a choice that is not available.
+local function Info(btn, title, line)
+    btn.onTip = function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText(title, COL.ivory[1], COL.ivory[2], COL.ivory[3])
+        if line then GameTooltip:AddLine(line, COL.dim[1], COL.dim[2], COL.dim[3], true) end
+        GameTooltip:Show()
+    end
+end
+local function Tip(btn, title, line)
+    btn.onTip = function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText(title)
+        if line then GameTooltip:AddLine(line, 1, 0.5, 0.45, true) end
+        GameTooltip:Show()
+    end
+end
+
+-- A part of the card that explains itself on hover: fn(frame, card) fills GameTooltip (SetOwner first) from the card's current view.
+local function Hover(frame, fn)
+    frame:EnableMouse(true)
+    frame:SetScript("OnEnter", function(self)
+        local card = self:GetParent():GetParent()
+        if card and card.view then fn(self, card, card.view) end
+    end)
+    frame:SetScript("OnLeave", function() GameTooltip:Hide() end)
+end
+
+local function Lines(owner, title, lines, anchor)
+    GameTooltip:SetOwner(owner, anchor or "ANCHOR_RIGHT")
+    GameTooltip:SetText(title, COL.ivory[1], COL.ivory[2], COL.ivory[3])
+    for _, text in ipairs(lines or {}) do GameTooltip:AddLine(text, COL.dim[1], COL.dim[2], COL.dim[3], true) end
+    GameTooltip:Show()
+end
+
+-- Seconds a card takes to fade in or out (0: it appears or goes at once). "Animate cards" is the master switch.
+local function Fade(which)
+    if not LR.Get("animate") then return 0 end
+    return LR.Get(which) / 1000
+end
+C.FadeSeconds = Fade
+
 local stack, built, failed
 local cards = {}          -- the pool
 local shown = {}          -- [roll key] = card
@@ -49,12 +108,15 @@ local function Paint(t, c, a) t:SetColorTexture(c[1], c[2], c[3], a or 1) end
 local function Font(parent, size, kind, color)
     local fs = parent:CreateFontString(nil, "OVERLAY")
     local path = STANDARD_TEXT_FONT or [[Fonts\FRIZQT__.TTF]]
-    local ok = false
-    if kind == "title" then
+    fs:SetFont(path, size, "")
+    local CL = R.CraftLook
+    if CL and CL.Font then
+        -- the settings window's type: Spectral for the item's name, Alegreya Sans for the rest (the game's own for Korean, Chinese, Russian)
+        CL.Font(fs, size, false, kind == "title" and "serif" or nil)
+    elseif kind == "title" then
         local locale = GetLocale and GetLocale()
-        if not (locale == "koKR" or locale == "zhCN" or locale == "zhTW" or locale == "ruRU") then ok = fs:SetFont(FONT_TITLE, size, "") end
+        if not (locale == "koKR" or locale == "zhCN" or locale == "zhTW" or locale == "ruRU") then fs:SetFont(FONT_TITLE, size, "") end
     end
-    if not ok then fs:SetFont(path, size, "") end
     local c = color or COL.ivory
     fs:SetTextColor(c[1], c[2], c[3])
     fs:SetJustifyH("LEFT")
@@ -83,14 +145,26 @@ local function Outline(frame, layer, sub)
     return o
 end
 
-local function CoinText(copper)
-    if type(copper) ~= "number" or copper <= 0 then return nil end
-    if GetCoinTextureString then
-        local ok, text = pcall(GetCoinTextureString, copper)
-        if ok and type(text) == "string" then return text end
+-- A price as gold, silver and copper, each a number with the game's own coin picture after it, from the highest coin it has down to
+-- copper (zero silver in the middle still shows). The numbers are tinted like the coins.
+local COIN_ART = { gold = [[Interface\MoneyFrame\UI-GoldIcon]], silver = [[Interface\MoneyFrame\UI-SilverIcon]], copper = [[Interface\MoneyFrame\UI-CopperIcon]] }
+local COIN_INK = { gold = { 1.00, 0.84, 0.30 }, silver = { 0.80, 0.82, 0.86 }, copper = { 0.88, 0.56, 0.36 } }
+local function CoinText(copper, size)
+    if type(copper) ~= "number" or copper ~= copper or copper <= 0 or copper == math.huge then return nil end
+    copper = math.floor(copper)
+    size = size or 13
+    local gold, silver, rest = math.floor(copper / 10000), math.floor(copper % 10000 / 100), copper % 100
+    local out = {}
+    local function Add(kind, n)
+        out[#out + 1] = ("%s%s|r|T%s:%d:%d:2:0|t"):format(Hex(COIN_INK[kind]), BreakUpLargeNumbers and gold > 0 and kind == "gold" and BreakUpLargeNumbers(n) or tostring(n),
+            COIN_ART[kind], size, size)
     end
-    return ("%d copper"):format(copper)
+    if gold > 0 then Add("gold", gold) end
+    if gold > 0 or silver > 0 then Add("silver", silver) end
+    Add("copper", rest)
+    return table.concat(out, "  ")
 end
+C.CoinText = CoinText
 
 ---------------------------------------------------------------------------
 -- A choice button: Need, Greed, Pass, Roll now, Stop auto roll
@@ -98,15 +172,7 @@ end
 local function Button(parent, icon, label)
     local b = CreateFrame("Button", nil, parent)
     b:SetHeight(34)
-    b.face = b:CreateTexture(nil, "BACKGROUND", nil, 1)
-    b.face:SetAllPoints()
-    b.rim = Outline(b, "BORDER", 1)
-    b.sheen = b:CreateTexture(nil, "ARTWORK", nil, 0)
-    b.sheen:SetPoint("TOPLEFT", 1, -1); b.sheen:SetPoint("TOPRIGHT", -1, -1); b.sheen:SetHeight(1)
-    b.shade = b:CreateTexture(nil, "ARTWORK", nil, 0)
-    b.shade:SetPoint("BOTTOMLEFT", 1, 1); b.shade:SetPoint("BOTTOMRIGHT", -1, 1); b.shade:SetHeight(1)
-    b.glow = b:CreateTexture(nil, "ARTWORK", nil, 1)
-    b.glow:SetPoint("TOPLEFT", 2, -2); b.glow:SetPoint("BOTTOMRIGHT", -2, 2)
+    b.art = Sheet(b, "button", { layer = "ARTWORK", sub = 4, corner = 8 })   -- the settings window's painted button
     b.icon = b:CreateTexture(nil, "OVERLAY", nil, 2)
     b.icon:SetSize(26, 26)
     b.icon:SetTexture(MEDIA .. icon)
@@ -123,13 +189,8 @@ local function Button(parent, icon, label)
     function b:Paint()
         local st = self.state
         local on, hot, press, off = st == "selected", self.hot and st ~= "disabled", self.press and st ~= "disabled", st == "disabled" or st == "unavailable"
-        local face = on and COL.faceOn or (press and COL.facePress) or (hot and COL.faceHot) or COL.face
-        Paint(self.face, face)
-        self.rim:Color(on and COL.gold or (hot and COL.bronzeHi) or COL.bronze, off and 0.5 or 1)
-        self.rim:Width(on and 2 or 1)
-        Paint(self.sheen, on and COL.gold or COL.bronzeHi, off and 0.1 or (on and 0.55 or 0.22))
-        Paint(self.shade, { 0, 0, 0 }, 0.45)
-        Paint(self.glow, COL.gold, on and 0.12 or 0)
+        local skin = off and "button-off" or (on and "primary") or (press and "button-down") or (hot and "button-hot") or "button"
+        self.art:SetSkin(skin)
         self.icon:SetDesaturated(off)
         self.icon:SetAlpha(off and 0.5 or 1)
         local c = off and COL.quiet or COL.ivory
@@ -152,17 +213,20 @@ end
 local function Pill(parent)
     local p = CreateFrame("Frame", nil, parent)
     p:SetHeight(20)
-    p.face = p:CreateTexture(nil, "BACKGROUND", nil, 1)
-    p.face:SetAllPoints()
-    p.rim = Outline(p, "BORDER", 1)
+    p.art = Sheet(p, "chip", { layer = "ARTWORK", sub = 4, corner = 10 })   -- the settings window's chip
+    p.art:SetSkin("chip")
     p.icon = p:CreateTexture(nil, "OVERLAY", nil, 2)
     p.icon:SetSize(14, 14)
     p.text = Font(p, 11, "body")
+    p:EnableMouse(true)
+    p:SetScript("OnEnter", function(self)
+        local card = self:GetParent():GetParent()
+        if self.tip and card and card.view then self.tip(self, card, card.view) end
+    end)
+    p:SetScript("OnLeave", function() GameTooltip:Hide() end)
     function p:Set(text, icon, tone)
-        local rim = tone == "ok" and { 0.36, 0.55, 0.22 } or (tone == "gold" and COL.bronzeHi) or { 0.30, 0.25, 0.20 }
         local tc = tone == "ok" and COL.sage or (tone == "gold" and COL.gold) or COL.dim
-        Paint(self.face, tone == "ok" and { 0.10, 0.17, 0.07 } or { 0.12, 0.092, 0.07 })
-        self.rim:Color(rim)
+        if tone == "ok" then self.art:SetTint(0.80, 1.0, 0.72, 1) elseif tone == "gold" then self.art:SetTint(1.0, 0.92, 0.68, 1) else self.art:SetTint(1, 1, 1, 1) end
         self.text:SetText(text)
         self.text:SetTextColor(tc[1], tc[2], tc[3])
         self.icon:ClearAllPoints()
@@ -192,8 +256,18 @@ function C.NewCard(parent, opts)
     local card = CreateFrame("Frame", nil, parent)
     card:SetSize(W_CARD, 150)
     card.preview = opts and opts.preview or false
-    -- the framed look, a shade deeper than a window's so a card reads as leather and bronze over the world behind it
-    card.shell = FL.Shell(card, { below = false, style = { interior = { 0.082, 0.064, 0.052 }, grainInterior = 0.045 } })
+    local CL = R.CraftLook
+    if CL and CL.Frame and CL.Tile and CL.QuietTile and CL.LegacyRails then
+        -- the settings window's materials, as the Workshop's window wears them: neutral espresso, quiet leather, the sculpted bronze frame
+        card.shell = FL.Shell(card, { below = true })
+        if card.shell.grain then card.shell.grain:Hide() end
+        CL.Tile(card.shell, "BACKGROUND", -4, "dark", 1, { 0.90, 0.94, 0.98 }):SetAllPoints(card.shell.interior)
+        CL.QuietTile(card.shell, "outer", "BACKGROUND", -3):SetAllPoints(card.shell.interior)
+        CL.LegacyRails(card.shell, false)
+        card.frameArt = CL.Frame(card.shell)
+    else
+        card.shell = FL.Shell(card, { below = false, style = { interior = { 0.082, 0.064, 0.052 }, grainInterior = 0.045 } })
+    end
     card.body = CreateFrame("Frame", nil, card)
     card.body:SetAllPoints()
     card.body:SetFrameLevel(card:GetFrameLevel() + 3)
@@ -212,15 +286,14 @@ function C.NewCard(parent, opts)
     card.iconRim:Width(2)
     card.count = Font(card.iconFrame, 11, "body")
     card.count:SetPoint("BOTTOMRIGHT", -3, 3)
+    -- the item's own tooltip, on the icon and the name beside it (a pill or the price line sits over its own part)
     card.iconHit = CreateFrame("Frame", nil, body)
-    card.iconHit:SetAllPoints(card.iconFrame)
+    card.iconHit:SetPoint("TOPLEFT", card.iconFrame, "TOPLEFT", 0, 0)
+    card.iconHit:SetPoint("BOTTOMRIGHT", body, "TOPRIGHT", -40, -62)
     card.iconHit:EnableMouse(true)
     card.iconHit:SetScript("OnEnter", function(self)
         local c = self:GetParent():GetParent()
-        if c.preview or not c.rollID then return end
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        if GameTooltip.SetLootRollItem then GameTooltip:SetLootRollItem(c.rollID) end
-        GameTooltip:Show()
+        if c.view then C.ItemTip(self, c.view) end
     end)
     card.iconHit:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
@@ -239,11 +312,11 @@ function C.NewCard(parent, opts)
     card.close = CreateFrame("Button", nil, body)
     card.close:SetSize(18, 18)
     card.close:SetPoint("TOPRIGHT", -10, -10)
-    card.close.face = card.close:CreateTexture(nil, "BACKGROUND"); card.close.face:SetAllPoints(); Paint(card.close.face, COL.face)
-    card.close.rim = Outline(card.close, "BORDER", 1); card.close.rim:Color(COL.bronze)
+    card.close.art = Sheet(card.close, "button", { layer = "ARTWORK", sub = 4, corner = 6 })
+    card.close.art:SetSkin("button")
     card.close.text = Font(card.close, 12, "body"); card.close.text:SetPoint("CENTER", 0, 0); card.close.text:SetText("x")
     card.close:SetScript("OnEnter", function(self)
-        Paint(self.face, COL.faceHot); self.rim:Color(COL.bronzeHi)
+        self.art:SetSkin("button-hot")
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         local c = self:GetParent():GetParent()
         if c.live then
@@ -254,7 +327,9 @@ function C.NewCard(parent, opts)
         end
         GameTooltip:Show()
     end)
-    card.close:SetScript("OnLeave", function(self) Paint(self.face, COL.face); self.rim:Color(COL.bronze); GameTooltip:Hide() end)
+    card.close:SetScript("OnLeave", function(self) self.art:SetSkin("button"); GameTooltip:Hide() end)
+    card.close:SetScript("OnMouseDown", function(self) self.art:SetSkin("button-down") end)
+    card.close:SetScript("OnMouseUp", function(self) self.art:SetSkin(self:IsMouseOver() and "button-hot" or "button") end)
     card.close:SetScript("OnClick", function(self) local c = self:GetParent():GetParent(); if c.onDismiss then c.onDismiss(c) end end)
 
     card.pillTop = Pill(body)
@@ -270,13 +345,17 @@ function C.NewCard(parent, opts)
     card.timer = CreateFrame("Frame", nil, body)
     card.timer:SetHeight(14)
     card.timer.track = card.timer:CreateTexture(nil, "BACKGROUND"); card.timer.track:SetAllPoints(); Paint(card.timer.track, COL.track)
-    card.timer.rim = Outline(card.timer, "BORDER", 1); card.timer.rim:Color({ 0.28, 0.21, 0.15 })
+    card.timer.rim = Outline(card.timer, "BORDER", 1); card.timer.rim:Color({ 0.36, 0.27, 0.16 })
     card.timer.fill = card.timer:CreateTexture(nil, "ARTWORK")
     card.timer.fill:SetPoint("TOPLEFT", 1, -1); card.timer.fill:SetPoint("BOTTOMLEFT", 1, 1)
     card.timer.hi = card.timer:CreateTexture(nil, "OVERLAY")
     card.timer.hi:SetPoint("TOPLEFT", card.timer.fill, "TOPLEFT", 0, 0); card.timer.hi:SetPoint("TOPRIGHT", card.timer.fill, "TOPRIGHT", 0, 0); card.timer.hi:SetHeight(3)
     card.time = Font(body, 13, "body")
     card.time:SetJustifyH("RIGHT")
+    Hover(card.timer, function(self, c, v) C.TimerTip(self, v) end)
+    card.line3Hit = CreateFrame("Frame", nil, body)
+    card.line3Hit:SetSize(210, 16)
+    Hover(card.line3Hit, function(self, c, v) C.LineTip(self, v) end)
 
     -- choices
     card.buttons = {
@@ -291,8 +370,12 @@ function C.NewCard(parent, opts)
     -- after a choice
     card.status = CreateFrame("Frame", nil, body)
     card.status:SetHeight(34)
-    card.status.face = card.status:CreateTexture(nil, "BACKGROUND"); card.status.face:SetAllPoints(); Paint(card.status.face, { 0.12, 0.092, 0.07 })
-    card.status.rim = Outline(card.status, "BORDER", 1); card.status.rim:Color({ 0.30, 0.24, 0.17 })
+    if R.CraftLook and R.CraftLook.PanelFace then
+        R.CraftLook.PanelFace(card.status, "canvas")   -- the settings window's deep well
+    else
+        card.status.face = card.status:CreateTexture(nil, "BACKGROUND"); card.status.face:SetAllPoints(); Paint(card.status.face, { 0.12, 0.092, 0.07 })
+        card.status.rim = Outline(card.status, "BORDER", 1); card.status.rim:Color({ 0.30, 0.24, 0.17 })
+    end
     card.status.icon = card.status:CreateTexture(nil, "OVERLAY"); card.status.icon:SetSize(24, 24); card.status.icon:SetPoint("LEFT", 8, 0)
     card.status.text = Font(card.status, 12, "body")
     card.status.text:SetPoint("LEFT", card.status.icon, "RIGHT", 8, 0)
@@ -304,8 +387,7 @@ function C.NewCard(parent, opts)
     card.divider = body:CreateTexture(nil, "ARTWORK"); card.divider:SetWidth(1); Paint(card.divider, { 0.28, 0.21, 0.15 })
     card.banner = CreateFrame("Frame", nil, body)
     card.banner:SetHeight(28)
-    card.banner.face = card.banner:CreateTexture(nil, "BACKGROUND"); card.banner.face:SetAllPoints()
-    card.banner.rim = Outline(card.banner, "BORDER", 1)
+    card.banner.art = Sheet(card.banner, "button", { layer = "ARTWORK", sub = 4, corner = 8 })
     card.banner.icon = card.banner:CreateTexture(nil, "OVERLAY"); card.banner.icon:SetSize(20, 20)
     card.banner.icon:SetTexture(MEDIA .. "crown")
     card.banner.text = Font(card.banner, 14, "body")
@@ -348,16 +430,6 @@ local function Seconds(s)
     return ("%.1fs"):format(math.max(0, s))
 end
 
--- the tooltip of an unavailable choice
-local function Tip(btn, title, line)
-    btn.onTip = function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_TOP")
-        GameTooltip:SetText(title)
-        if line then GameTooltip:AddLine(line, 1, 0.5, 0.45, true) end
-        GameTooltip:Show()
-    end
-end
-
 local function Place(frame, card, x, y, w)
     frame:ClearAllPoints()
     frame:SetPoint("TOPLEFT", card, "TOPLEFT", x, -y)
@@ -367,18 +439,50 @@ end
 
 local WORD = { need = "Need", greed = "Greed", pass = "Pass", transmog = "Transmog", none = "No roll" }
 
--- Colors and position of the countdown for the time left.
-local function Timer(card, remaining, duration, x, width, y)
+-- "AARRGGBB" as r, g, b (0..1)
+local function Rgb(hex)
+    local r, g, b = hex:match("^%x%x(%x%x)(%x%x)(%x%x)$")
+    if not r then return 1, 1, 1 end
+    return tonumber(r, 16) / 255, tonumber(g, 16) / 255, tonumber(b, 16) / 255
+end
+
+-- The bar's file: the player's texture, or a flat fill when it is gone (the choice stays saved; the card never shows a hole).
+local function BarFile()
+    local id = LR.Get("barTexture")
+    local MS = R.MenuStyle
+    local file = id ~= "solid" and MS and MS.StatusBars and MS.StatusBars.Resolve and MS.StatusBars.Resolve(id) or nil
+    return file or WHITE, file ~= nil and file ~= WHITE
+end
+
+-- The bar's color for the time left: the rule's own color while a rule counts down, else one color, or (the default) plenty / half gone /
+-- nearly out.
+function C.BarColor(frac, scheduled, expired)
+    local key
+    if expired then key = "barColorExpired"
+    elseif scheduled then key = "barColorRule"
+    elseif not LR.Get("barShift") or frac > 0.5 then key = "barColorHigh"
+    elseif frac > 0.2 then key = "barColorMid"
+    else key = "barColorLow" end
+    return Rgb(LR.Get(key))
+end
+
+-- Colors, texture, height and position of the countdown for the time left.
+local function Timer(card, remaining, duration, x, width, y, expired)
     local t = card.timer
+    t:SetHeight(LR.Get("barHeight"))
     Place(t, card, x, y, width)
     local frac = duration and duration > 0 and math.max(0, math.min(1, (remaining or 0) / duration)) or 0
     local fill = t.fill
+    local file, textured = BarFile()
     fill:SetWidth(math.max(0.001, (width - 2) * frac))
-    local c = (card.view and card.view.state == "scheduled") and { 0.45, 0.78, 0.14 }
-        or (frac > 0.5 and { 0.45, 0.78, 0.14 } or (frac > 0.2 and { 0.88, 0.66, 0.18 } or { 0.82, 0.32, 0.22 }))
-    Paint(fill, c)
+    if t.file ~= file then t.file = file; fill:SetTexture(file) end
+    if textured then fill:SetTexCoord(0, math.max(0.001, frac), 0, 1) else fill:SetTexCoord(0, 1, 0, 1) end
+    local r, g, b = C.BarColor(frac, card.view and card.view.state == "scheduled", expired)
+    fill:SetVertexColor(r, g, b, 1)
+    local tr, tg, tb = Rgb(LR.Get("barTrack"))
+    t.track:SetColorTexture(tr, tg, tb, 1)
     t.hi:SetColorTexture(1, 1, 1, 0.22)
-    t.hi:SetShown(frac > 0)
+    t.hi:SetShown(frac > 0 and LR.Get("barShine"))
 end
 
 -- The countdown's bar and number (what changes every step; Draw places them, this only refreshes them).
@@ -411,6 +515,112 @@ function C.PaintTimer(card, view)
         card.time:Hide()
     end
 end
+
+---------------------------------------------------------------------------
+-- What hovering explains
+---------------------------------------------------------------------------
+C.CHOICE_HELP = {
+    need = "Roll Need if you intend to use this item yourself. A Need roll beats any Greed roll.",
+    greed = "Roll Greed if you would like the item but don't need it. It wins only if nobody rolls Need.",
+    pass = "Pass if you don't want it. Nothing is rolled for you.",
+}
+local WHY_HINT = "From TwichUI's gear comparison (Gear upgrades). A hint to weigh, never a reason to roll Need by itself."
+
+-- The item: the game's own tooltip for the roll (which already carries the gear comparison's line); the item's link when the roll is
+-- over; a made-up one on a sample card.
+function C.ItemTip(owner, view)
+    GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+    if view.preview then
+        local qc = Ru.QUALITY_COLOR[view.quality] or Ru.QUALITY_COLOR[1]
+        GameTooltip:SetText(view.name or "Sample item", qc[1], qc[2], qc[3])
+        for _, line in ipairs(view.sampleLines or {}) do GameTooltip:AddLine(line, 1, 1, 1) end
+        if view.sellPrice then GameTooltip:AddLine("Sell price:  " .. (CoinText(view.sellPrice) or ""), 1, 1, 1) end
+        GameTooltip:AddLine("A sample item, made up for the preview.", COL.quiet[1], COL.quiet[2], COL.quiet[3], true)
+        GameTooltip:Show()
+        return
+    end
+    local done = false
+    if view.rollID and GameTooltip.SetLootRollItem and (view.state == "pending" or view.state == "scheduled" or view.state == "submitted") then
+        done = pcall(GameTooltip.SetLootRollItem, GameTooltip, view.rollID)
+        if done and GameTooltip.NumLines and GameTooltip:NumLines() == 0 then done = false end
+    end
+    if not done and view.link and GameTooltip.SetHyperlink then done = pcall(GameTooltip.SetHyperlink, GameTooltip, view.link) end
+    if done then GameTooltip:Show() else GameTooltip:Hide() end
+end
+
+-- The countdown bar: what it counts, and what ends it.
+function C.TimerTip(owner, view)
+    if view.state == "scheduled" and view.auto then
+        Lines(owner, "Rule countdown", {
+            ("%s will choose %s in %s unless you stop it."):format(view.auto.name or "A rule", ChoiceLabel[view.auto.action] or "a choice", Seconds(view.auto.remaining)),
+            "Stop auto roll cancels it, Roll now does it at once, and choosing yourself always wins.",
+        })
+    elseif view.state == "ended" and view.endReason == "expired" then
+        Lines(owner, "Ran out", { "The roll closed before you chose, so nothing was rolled for you." })
+    else
+        Lines(owner, "Time to roll", {
+            ("%s left before this roll closes."):format(Seconds(view.remaining)),
+            "If you haven't chosen by then, you pass.",
+        })
+    end
+end
+
+-- The line under the name: the rule that is counting down, or what a vendor pays.
+function C.LineTip(owner, view)
+    if view.state == "scheduled" and view.auto then
+        Lines(owner, "Rule: " .. (view.auto.name or ""), {
+            ("This rule matched the item and will choose %s after %s second%s."):format(ChoiceLabel[view.auto.action] or "a choice",
+                tostring(view.auto.delay or 3), (view.auto.delay or 3) == 1 and "" or "s"),
+            "You can stop it or roll at once; the rules are on the Loot rules tab.",
+        })
+    elseif view.sellPrice then
+        GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Vendor price", COL.ivory[1], COL.ivory[2], COL.ivory[3])
+        GameTooltip:AddLine(CoinText(view.sellPrice) or "", 1, 1, 1)
+        if (view.count or 1) > 1 then
+            GameTooltip:AddLine(("%d together: %s"):format(view.count, CoinText(view.sellPrice * view.count) or ""), COL.dim[1], COL.dim[2], COL.dim[3], true)
+        end
+        GameTooltip:AddLine("What a vendor pays for one. What it sells for elsewhere may be more.", COL.dim[1], COL.dim[2], COL.dim[3], true)
+        GameTooltip:Show()
+    end
+end
+
+C.PillTips = {
+    auto = function(self, card, v)
+        Lines(self, "Automatic " .. (ChoiceLabel[v.auto and v.auto.action] or "choice"), {
+            ("The rule \"%s\" will choose it for you when the countdown ends."):format(v.auto and v.auto.name or ""),
+            "Stop auto roll cancels it; choosing yourself always wins.",
+        })
+    end,
+    sent = function(self, card, v)
+        Lines(self, v.placed and "Chosen" or "Sending", { v.placed and ("You chose %s. The result shows when everyone has rolled."):format(ChoiceLabel[v.choice] or "a choice")
+            or "Sent to the game; it confirms in a moment." })
+    end,
+    resolved = function(self, card, v) Lines(self, "Resolved", { "Everyone has rolled. Who rolled what, and who won, is below when the game gives it." }) end,
+    won = function(self, card, v) Lines(self, "You won", { "The item is yours, or will be in your bags shortly." }) end,
+    expired = function(self, card, v) Lines(self, "Expired", { "The roll closed before you chose, so nothing was rolled for you." }) end,
+    closed = function(self, card, v) Lines(self, "Closed", { "This roll was closed." }) end,
+    -- why the gear comparison thinks it may be an upgrade: its own words, as the item's tooltip shows them when the reveal key is held
+    upgrade = function(self, card, v)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Potential upgrade", COL.gold[1], COL.gold[2], COL.gold[3])
+        local lines = v.upgradeLines
+        if not lines then
+            local GH = R.GearHints
+            lines = v.judged and GH and GH.DetailLines and GH.DetailLines(v.judged) or nil
+        end
+        local any = false
+        for _, l in ipairs(lines or {}) do
+            if type(l[1]) == "string" and l[1] ~= " " then
+                GameTooltip:AddLine(l[1], l[2] or 1, l[3] or 1, l[4] or 1, l[5] or false)
+                any = true
+            end
+        end
+        if not any then GameTooltip:AddLine("TwichUI's gear comparison thinks this may be better than what you wear.", COL.dim[1], COL.dim[2], COL.dim[3], true) end
+        GameTooltip:AddLine(WHY_HINT, COL.quiet[1], COL.quiet[2], COL.quiet[3], true)
+        GameTooltip:Show()
+    end,
+}
 
 -- Fits the card's height, lays out and fills it. Returns the height.
 function C.Draw(card, view)
@@ -446,30 +656,37 @@ function C.Draw(card, view)
         card.line3:SetPoint("TOPLEFT", 70, -53)
     end
     card.line3:SetText(line3 or "")
+    if line3 then
+        card.line3Hit:ClearAllPoints()
+        card.line3Hit:SetPoint("TOPLEFT", body, "TOPLEFT", 70, -51)
+        card.line3Hit:Show()
+    else
+        card.line3Hit:Hide()
+    end
 
     -- pills (right of the header)
     local pills = {}
     if view.state == "scheduled" and view.auto then
-        pills[#pills + 1] = { ("Auto %s"):format(ChoiceLabel[view.auto.action] or ""), "autocheck", "ok" }
+        pills[#pills + 1] = { ("Auto %s"):format(ChoiceLabel[view.auto.action] or ""), "autocheck", "ok", C.PillTips.auto }
     elseif view.state == "submitted" then
-        pills[#pills + 1] = { view.placed and "Chosen" or "Sent", "check", nil }
+        pills[#pills + 1] = { view.placed and "Chosen" or "Sent", "check", nil, C.PillTips.sent }
     elseif view.state == "resolved" then
         local w = view.result and view.result.winner
-        if w and w.self then pills[#pills + 1] = { "Won", "crown", "gold" } else pills[#pills + 1] = { "Resolved", "check", nil } end
+        if w and w.self then pills[#pills + 1] = { "Won", "crown", "gold", C.PillTips.won } else pills[#pills + 1] = { "Resolved", "check", nil, C.PillTips.resolved } end
     elseif view.state == "ended" then
-        pills[#pills + 1] = { view.endReason == "expired" and "Expired" or "Closed", nil, nil }
+        pills[#pills + 1] = { view.endReason == "expired" and "Expired" or "Closed", nil, nil, view.endReason == "expired" and C.PillTips.expired or C.PillTips.closed }
     end
     if view.upgrade and LR.Get("showUpgrade") and (view.state == "pending" or view.state == "scheduled") then
-        pills[#pills + 1] = { "Potential upgrade", "upgrade", "gold" }
+        pills[#pills + 1] = { "Potential upgrade", "upgrade", "gold", C.PillTips.upgrade }
     end
     local top, bottom = card.pillTop, card.pillBottom
     top:ClearAllPoints(); bottom:ClearAllPoints()
     if pills[1] then
-        top:Set(pills[1][1], pills[1][2], pills[1][3]); top:Show()
+        top:Set(pills[1][1], pills[1][2], pills[1][3]); top.tip = pills[1][4]; top:Show()
         top:SetPoint("TOPRIGHT", body, "TOPRIGHT", -PAD, -34)
     else top:Hide() end
     if pills[2] then
-        bottom:Set(pills[2][1], pills[2][2], pills[2][3]); bottom:Show()
+        bottom:Set(pills[2][1], pills[2][2], pills[2][3]); bottom.tip = pills[2][4]; bottom:Show()
         bottom:SetPoint("TOPRIGHT", body, "TOPRIGHT", -PAD, -58)
     else bottom:Hide() end
     -- the item's lines stop where a pill begins
@@ -502,7 +719,7 @@ function C.Draw(card, view)
         end
         card.timerY = y
         C.PaintTimer(card, view)
-        y = y + 26
+        y = y + LR.Get("barHeight") + 12
         local b = card.buttons
         local scheduled = view.state == "scheduled" and view.auto
         if scheduled then
@@ -513,6 +730,8 @@ function C.Draw(card, view)
                 btn:SetVisual("normal"); btn:Layout()
                 btn.onTip = nil
             end
+            Info(b.now, "Roll now", ("Chooses %s at once instead of waiting out the countdown."):format(ChoiceLabel[view.auto.action] or "the rule's choice"))
+            Info(b.stop, "Stop auto roll", "Cancels the automatic choice for this item. The roll stays open so you can choose yourself.")
             b.now.text:SetText("Roll now"); b.stop.text:SetText("Stop auto roll")
             b.now:Layout(); b.stop:Layout()
         else
@@ -524,7 +743,8 @@ function C.Draw(card, view)
                 btn:SetWidth(w3); Place(btn, card, PAD + (i - 1) * (w3 + 8), y)
                 btn:SetVisual(avail[key] == false and "unavailable" or "normal")
                 btn.onTip = nil
-                if avail[key] == false then Tip(btn, ChoiceLabel[key] .. " isn't available", why[key] or "You can't roll this on this item.") end
+                if avail[key] == false then Tip(btn, ChoiceLabel[key] .. " isn't available", why[key] or "You can't roll this on this item.")
+                else Info(btn, ChoiceLabel[key], C.CHOICE_HELP[key]) end
                 btn:Layout()
             end
         end
@@ -569,8 +789,7 @@ function C.Draw(card, view)
             elseif w.self then text, strong = "You won  -  " .. (WORD[w.choice] or "") .. (w.roll and (" " .. w.roll) or ""), true
             else text = ("Won by %s  -  %s%s"):format(w.name, WORD[w.choice] or "", w.roll and (" " .. w.roll) or "") end
             Place(card.banner, card, PAD, y, inner)
-            Paint(card.banner.face, strong and { 0.24, 0.17, 0.07 } or { 0.17, 0.125, 0.075 })
-            card.banner.rim:Color(strong and COL.gold or COL.bronze)
+            card.banner.art:SetSkin(strong and "primary" or "button")   -- antique gold for a win, as the settings reserve it for what matters
             card.banner.text:SetText(text)
             card.banner.icon:SetShown(not res.allPassed)
             card.banner.text:ClearAllPoints(); card.banner.text:SetPoint("CENTER", card.banner, "CENTER", res.allPassed and 0 or 12, 0)
@@ -578,6 +797,10 @@ function C.Draw(card, view)
             y = y + 28
         end
     else   -- ended
+        if view.endReason == "expired" then
+            Timer(card, 1, 1, PAD, inner, y, true)   -- a full bar in the run-out color: the time is spent
+            y = y + LR.Get("barHeight") + 12
+        end
         Place(card.status, card, PAD, y, inner)
         card.status.icon:SetTexture(MEDIA .. "pass")
         card.status.text:SetText(view.endReason == "expired" and "The roll ran out before you chose." or "This roll was closed.")
@@ -612,6 +835,7 @@ function C.View(roll)
         remaining = Ro.Remaining(roll), duration = roll.duration, choice = roll.choice, placed = roll.placed,
         needsConfirm = roll.needsConfirm, confirmWord = type(roll.needsConfirm) == "number" and ({ [0] = "Pass", "Need", "Greed" })[roll.needsConfirm] or nil,
         autoNote = roll.autoNote, result = roll.result, endReason = roll.endReason,
+        link = roll.link, judged = roll.judged,
     }
     if roll.auto and roll.state == "scheduled" then
         v.auto = { name = roll.auto.name, action = roll.auto.action, delay = roll.auto.delay, remaining = math.max(0, roll.auto.fireAt - GetTime()) }
@@ -743,7 +967,8 @@ local function Layout()
             end
             card = card or CardFor(#cards + 1)
             card.rollKey = roll.key
-            card.enter = LR.Get("animate") and 0 or 1
+            card.enter = Fade("fadeIn") > 0 and 0 or 1
+            card:SetAlpha(card.enter < 1 and 0 or 1)
             shown[roll.key] = card
         end
         used[roll.key] = true
@@ -759,8 +984,8 @@ local function Layout()
         if not used[key] then
             shown[key] = nil
             card.rollKey, card.rollID = nil, nil
-            if LR.Get("animate") and card:IsShown() and not C.Placing() then
-                card.leaving, card.leave = true, 0   -- a short fade (Tick), then it is free again
+            if Fade("fadeOut") > 0 and card:IsShown() and not C.Placing() then
+                card.leaving, card.leave = true, 0   -- a fade (Tick), then it is free again
                 leaving[#leaving + 1] = card
             else
                 card:Hide()
@@ -768,7 +993,7 @@ local function Layout()
         end
     end
     stack:SetHeight(math.max(10, y - gap))
-    stack:SetShown(#list > 0)
+    stack:SetShown(#list > 0 or #leaving > 0)   -- the last card's fade is drawn on the stack: it stays until the card has gone
     -- a roll that gained or lost its card changes who may act on it
     if R.LootBlizzard then R.LootBlizzard.Sync() end
     for _, roll in ipairs(list) do
@@ -803,6 +1028,7 @@ function C.FinishLeaving(card)
     card:Hide()
     card:SetAlpha(1)
     for i = #leaving, 1, -1 do if leaving[i] == card then table.remove(leaving, i) end end
+    if stack and #leaving == 0 and next(shown) == nil then stack:Hide() end
 end
 
 -- One step of the countdowns and the entrance (only while a card is live or coming in).
@@ -813,17 +1039,15 @@ function C.Tick(dt)
     local ok, err = pcall(function()
         for i = #leaving, 1, -1 do
             local card = leaving[i]
-            card.leave = card.leave + dt / 0.18
+            local seconds = Fade("fadeOut")
+            card.leave = card.leave + (seconds > 0 and dt / seconds or 1)
             if card.leave >= 1 then C.FinishLeaving(card) else card:SetAlpha(1 - card.leave) end
         end
         for key, card in pairs(shown) do
             if card.enter < 1 then
-                card.enter = math.min(1, card.enter + dt / 0.18)
-                local e = 1 - (1 - card.enter) * (1 - card.enter)
-                card:SetAlpha(e)
-                local off = (1 - e) * 8
-                card:ClearAllPoints()
-                if LR.Get("growth") == "up" then card:SetPoint("BOTTOMLEFT", stack, "TOPLEFT", 0, card.baseY - off) else card:SetPoint("TOPLEFT", stack, "TOPLEFT", 0, -(card.baseY) + off) end
+                local seconds = Fade("fadeIn")
+                card.enter = math.min(1, card.enter + (seconds > 0 and dt / seconds or 1))
+                card:SetAlpha(1 - (1 - card.enter) * (1 - card.enter))
             end
         end
         if step then
@@ -859,6 +1083,14 @@ function C.SampleView(kind, rule)
         preview = true, state = "pending", name = "Verdant Scholar's Mantle", quality = 2, count = 1, typeText = "Shoulder",
         icon = [[Interface\Icons\INV_Shoulder_23]], sellPrice = 1850, upgrade = true, canNeed = true, canGreed = true,
         remaining = 7.3, duration = 30,
+        sampleLines = { "Binds when picked up", "Shoulder  -  Cloth", "+11 Intellect", "+7 Spirit" },
+        upgradeLines = {
+            { "Likely upgrade for Arcane", 0.56, 0.70, 0.35, false },
+            { "Compared with Weathered Mantle", 0.62, 0.60, 0.56, true },
+            { "+11 Intellect", 0.56, 0.70, 0.35, false }, { "+7 Spirit", 0.56, 0.70, 0.35, false }, { "-3 Stamina", 0.80, 0.42, 0.38, false },
+            { "Rough estimate, weighed for Arcane", 0.62, 0.60, 0.56, true },
+            { "A sample, made up for the preview.", 0.62, 0.60, 0.56, true },
+        },
     }
     if kind == "auto" then
         v.state = "scheduled"
@@ -888,6 +1120,7 @@ function C.Placing() return mover ~= nil and mover:IsShown() end
 
 function C.PlaceStart(onDone)
     if C.Placing() then return false, "Already placing." end
+    C.PreviewStop(true)
     if InCombatLockdown and InCombatLockdown() then return false, "Not in combat." end
     for _, r in ipairs(Ro.Rolls()) do
         if Ro.IsLive(r) then return false, "A roll is open right now." end
@@ -945,6 +1178,147 @@ function C.PlaceFinish(save)
     return ok
 end
 
+---------------------------------------------------------------------------
+-- Preview: one made-up roll on screen, in the real place, size and look, that plays through like a real one (a countdown; Need, Greed and
+-- Pass; or a rule's countdown with Roll now and Stop) and ends with made-up results. It has its own frame and its own clock. It never
+-- reads a roll, never touches Roll.lua or Auto.lua and never sends anything: no roll is made, whatever is pressed. It is not offered while
+-- a real roll is open, and a real roll that starts takes its place at once.
+---------------------------------------------------------------------------
+local pv
+local PREVIEW_SECONDS = 20
+
+function C.Previewing() return pv ~= nil and pv.frame:IsShown() and not pv.closing end
+
+local function PreviewResult(choice)
+    local rolls = {
+        { name = "Arcanebloom", choice = "greed", roll = 84 }, { name = "Stoneshield", choice = "need", roll = 67 },
+        { name = "You", choice = choice, roll = choice ~= "pass" and 42 or nil, self = true }, { name = "Briarfang", choice = "greed", roll = 17 },
+    }
+    if choice == "need" then rolls[3].roll = 91 end
+    local winner = choice == "need" and rolls[3] or rolls[1]
+    winner.winner = true
+    return { rolls = rolls, winner = winner }
+end
+
+-- What the card says right now, from the phase and the seconds in it.
+local function PreviewView()
+    local phase, t = pv.phase, pv.t
+    local v
+    if phase == "auto" then
+        v = C.SampleView("auto", pv.rule)
+        v.auto.remaining = math.max(0, v.auto.delay - t)
+    elseif phase == "sent" then
+        v = C.SampleView("sent"); v.choice = pv.choice
+    elseif phase == "resolved" then
+        v = C.SampleView("resolved"); v.choice = pv.choice; v.upgrade = nil
+        v.result = PreviewResult(pv.choice)
+    elseif phase == "expired" then
+        v = C.SampleView("expired")
+    else
+        v = C.SampleView("manual")
+        v.remaining = math.max(0, PREVIEW_SECONDS - pv.elapsed)
+        if pv.stopped then v.autoNote = "Automatic rolling stopped. The choice is yours." end
+    end
+    v.duration = PREVIEW_SECONDS
+    return v
+end
+
+local function PreviewDraw()
+    local view = PreviewView()
+    pv.sig = pv.phase .. "|" .. tostring(pv.stopped)
+    local h = C.Draw(pv.card, view)
+    pv.frame:SetSize(W_CARD, h)
+end
+
+local function PreviewPhase(phase, choice)
+    pv.phase, pv.t = phase, 0
+    if choice then pv.choice = choice end
+    if phase == "waiting" then pv.stopped = true end
+    PreviewDraw()
+end
+
+local function PreviewStep(dt)
+    pv.t = pv.t + dt
+    pv.elapsed = pv.elapsed + dt
+    if pv.closing then
+        local seconds = Fade("fadeOut")
+        pv.closing = pv.closing + (seconds > 0 and dt / seconds or 1)
+        if pv.closing >= 1 then pv.closing = nil; pv.frame:Hide(); pv.frame:SetAlpha(1) else pv.frame:SetAlpha(1 - pv.closing) end
+        return
+    end
+    if pv.enter < 1 then
+        local seconds = Fade("fadeIn")
+        pv.enter = math.min(1, pv.enter + (seconds > 0 and dt / seconds or 1))
+        pv.frame:SetAlpha(1 - (1 - pv.enter) * (1 - pv.enter))
+    end
+    local phase = pv.phase
+    if phase == "auto" and pv.t >= (pv.rule and pv.rule.delay or 3) then return PreviewPhase("sent", pv.rule and pv.rule.action or "greed") end
+    if phase == "sent" and pv.t >= 1.2 then return PreviewPhase("resolved") end
+    if phase == "waiting" and pv.elapsed >= PREVIEW_SECONDS then return PreviewPhase("expired") end
+    if (phase == "resolved" or phase == "expired") and pv.t >= LR.Get("afterResult") then return C.PreviewStop() end
+    if pv.card.live then
+        pv.step = (pv.step or 0) + dt
+        if pv.step >= 0.05 then pv.step = 0; C.PaintTimer(pv.card, PreviewView()) end
+    end
+end
+
+local function PreviewChoose(card, key)
+    if not pv then return end
+    if key == "now" then return PreviewPhase("sent", pv.rule and pv.rule.action or "greed") end
+    if key == "stop" then return PreviewPhase("waiting") end
+    if pv.phase == "auto" or pv.phase == "waiting" then PreviewPhase("sent", key) end
+end
+
+-- rule = { name, action, delay } shows a rule's countdown first (its action is what it would roll); nothing = a roll waiting for you.
+function C.PreviewStart(rule)
+    if C.Placing() then return false, "Finish placing the cards first." end
+    for _, r in ipairs(Ro.Rolls()) do
+        if Ro.IsLive(r) then return false, "A roll is open right now." end
+    end
+    if not pv then
+        local frame = CreateFrame("Frame", "TwichUILootCardsPreview", UIParent)
+        frame:SetFrameStrata("DIALOG")
+        frame:SetClampedToScreen(false)
+        pv = { frame = frame }
+        pv.card = C.NewCard(frame, { preview = true })
+        pv.card:SetPoint("TOPLEFT")
+        pv.card.onChoice = PreviewChoose
+        pv.card.onDismiss = function() C.PreviewStop() end
+        frame:SetScript("OnUpdate", function(self, dt) if pv then local ok = pcall(PreviewStep, dt) if not ok then C.PreviewStop(true) end end end)
+        frame:RegisterEvent("START_LOOT_ROLL")   -- a real roll takes the preview's place, even while the cards are switched off
+        frame:SetScript("OnEvent", function() C.PreviewStop(true) end)
+        frame:Hide()
+    end
+    local scale = LR.Get("scale") / 100
+    pv.frame:SetScale(scale)
+    local x, y = LR.Place()
+    pv.frame:ClearAllPoints()
+    pv.frame:SetPoint(LR.Get("growth") == "up" and "BOTTOM" or "TOP", UIParent, "CENTER", x / scale, y / scale)
+    pv.rule = rule
+    pv.elapsed, pv.stopped, pv.choice = 0, false, nil
+    pv.enter = Fade("fadeIn") > 0 and 0 or 1
+    pv.closing = nil
+    pv.frame:SetAlpha(pv.enter < 1 and 0 or 1)
+    pv.phase, pv.t = rule and "auto" or "waiting", 0
+    if rule then pv.rule = { name = rule.name, action = rule.action, delay = tonumber(rule.delay) or 3 } end
+    PreviewDraw()
+    pv.frame:Show()
+    return true
+end
+
+function C.PreviewCard() return pv and pv.card end   -- for the tests and the simulator
+
+-- now = true takes it away at once (a real roll, placing, switching off); otherwise it fades as a card does.
+function C.PreviewStop(now)
+    if not (pv and pv.frame:IsShown()) then return end
+    if now or pv.closing or Fade("fadeOut") <= 0 then
+        pv.closing = nil
+        pv.frame:Hide(); pv.frame:SetAlpha(1)
+    else
+        pv.closing = 0
+    end
+end
+
 function C.Enable()
     failed = false
     Build()
@@ -955,6 +1329,7 @@ end
 
 function C.Disable()
     if mover and mover:IsShown() then C.PlaceFinish(false) end
+    C.PreviewStop(true)
     if stack then stack:Hide(); stack:SetScript("OnUpdate", nil) end
     driver = false
     for key, card in pairs(shown) do shown[key] = nil; card.rollKey, card.rollID = nil, nil; card:Hide() end
