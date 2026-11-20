@@ -1,0 +1,16 @@
+{
+  "canvas": "1254x1254 RGBA",
+  "purpose": "decorative player portrait mounts",
+  "classes": [
+    "Warrior",
+    "Paladin",
+    "Hunter",
+    "Rogue",
+    "Priest",
+    "Shaman",
+    "Mage",
+    "Warlock",
+    "Druid"
+  ],
+  "notes": "Artwork only; in-game positioning and WoW texture conversion not tested."
+}
