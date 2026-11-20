@@ -80,8 +80,8 @@ K.Page({
             local styles = {}
             for i, style in ipairs(B.STYLES) do styles[i] = { style.key, style.label } end
             local styleRow = Choice("gearBagStyle", "Bag mark style",
-                "The mark on upgrades in your bags and on loot rolls. All use the game's own art. The square beside the list shows how it looks on a bag slot.",
-                STRING, "gilded",
+                "The mark on upgrades in your bags and on loot rolls. The default is TwichUI's gold-edged green arrow; the others use the game's own art. The square beside the list shows how it looks on a bag slot.",
+                STRING, "gold",
                 function() return P.Get("bagStyle") end,
                 function(value) P.Set("bagStyle", value) end,
                 styles)
