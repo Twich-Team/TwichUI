@@ -414,6 +414,23 @@ assert(#Search.Run("%a+") == 0, "a query is plain text, not a pattern")
 local hold = Search.Run("how long the zone card")
 assert(hold[1] and hold[1].entry.row.id == "arrivalHold" and Search.Note(hold[1].entry) == nil, "a formerly advanced setting is an ordinary result")
 assert(#Search.Run("show advanced options") == 0 or Search.Run("show advanced options")[1].entry.label ~= "Show advanced options", "the removed switch is not found")
+-- a control inside a collapsed secondary section: search finds it and opening the result expands its section first
+do
+  UI.Navigate("sharing")
+  local view = UI.View("sharing")
+  local sending
+  for _, sec in pairs(view.sectionsById) do if sec.header and sec.header:GetName() == "Sending options" then sending = sec end end
+  assert(sending and sending.collapsible, "sharing's transport options are a secondary section")
+  sending.expanded = false
+  local hit
+  for _, r in ipairs(Search.Run("send configurations by")) do if r.entry.page == "sharing" and r.entry.row then hit = r end end
+  assert(hit, "search finds the transport choice")
+  UI.Navigate(hit.entry.page, hit.entry.row.id)
+  assert(sending.expanded, "and opening it expands the section that holds it")
+  local open
+  for _, sec in pairs(view.sectionsById) do if sec.header and sec.header:GetName() == "Addon configurations" then open = sec end end
+  assert(open and not open.collapsible, "enabling, receiving and Open stay in the always-open section")
+end
 -- a secondary page's results name the feature and the tab, and open on that tab
 do
   local checked = 0

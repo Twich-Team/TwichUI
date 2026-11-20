@@ -483,6 +483,12 @@ local function Build()
     bar:SetFrameLevel(root:GetFrameLevel() + 20)
     bar:EnableMouse(true)
     L.Surface(bar, pal.band, 0.97, pal.rimLo, 1)
+    if R.CraftLook and R.FrameLook then
+        -- the crafted settings family (CraftLook.lua): its frame and interior replace the plain band; the bar's buttons wear its sheet
+        bar:SetBackdropColor(0, 0, 0, 0); bar:SetBackdropBorderColor(0, 0, 0, 0)
+        bar.shell = R.FrameLook.Shell(bar, { below = true })
+        R.CraftLook.Window(bar, bar.shell)
+    end
     bar.banner = L.Text(bar, "heading")
     bar.banner:SetPoint("TOPLEFT", 12, -10)
     bar.banner:SetTextColor(pal.bronzeText[1], pal.bronzeText[2], pal.bronzeText[3])

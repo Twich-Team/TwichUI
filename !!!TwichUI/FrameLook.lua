@@ -12,7 +12,9 @@
 --                                     MenuStyle look: offered as one of that look's own borders (options.extraBorders), it is the default
 --   F.PANEL_BG, F.PANEL_BORDER        the espresso and aged bronze (as "AARRGGBB") such a look starts from; the look's owner puts them in its
 --                                     own defaults, so a look that does not is never touched
---   F.Frame(frame, look)              the frame only (no interior) on `frame` while `look`'s border is F.BORDER, hidden otherwise; returns
+--   F.CRAFTED_BORDER(_LABEL)          a second such border id: the crafted settings family's sculpted frame (CraftLook.lua), frame only
+--   F.Frame(frame, look)              the frame only (no interior) on `frame` while `look`'s border is F.BORDER (or the crafted frame while it is
+--                                     F.CRAFTED_BORDER), hidden otherwise; returns
 --                                     how far content must sit in from the edge (0 when it is not drawn). Call it after look.Apply(frame):
 --                                     the player's background, and any border they chose instead, are theirs and are never drawn over
 --   F.Shell(parent, opts)             the frame and interior on a frame of its own, under the parent's content
@@ -71,6 +73,10 @@ local ROCK = [[Interface\FrameGeneral\UI-Background-Rock]]   -- a client texture
 -- a color (the two numbers in DEFAULT below, to the nearest byte; tests/test_frame_look.lua keeps them together).
 F.BORDER = "twichui-frame"
 F.BORDER_LABEL = "TwichUI frame (default)"
+-- The crafted settings family's sculpted bronze frame (CraftLook.lua), offered beside it as a choice; never a default. Frame only: the
+-- player's background is still the player's.
+F.CRAFTED_BORDER = "twichui-crafted"
+F.CRAFTED_BORDER_LABEL = "TwichUI crafted frame"
 F.PANEL_BG = "ff1b1613"
 F.PANEL_BORDER = "ffa8804a"
 
@@ -330,15 +336,25 @@ end
 -- look's border is F.BORDER the frame is drawn, one shell made the first time it is wanted; for any other border it is hidden, so the
 -- artwork is never laid over a border or background the player chose. Returns how far content sits in from the edge (0: not drawn).
 function F.Frame(frame, look)
-    local on = look.Get("borderTexture") == F.BORDER
-    local s = frame.twichFrame
-    if not s then
-        if not on then return 0 end
+    local border = look.Get("borderTexture")
+    local on = border == F.BORDER
+    local crafted = border == F.CRAFTED_BORDER and R.CraftLook ~= nil
+    local s = rawget(frame, "twichFrame")
+    if not s and on then
         s = F.Shell(frame, { bare = true, follow = true })
         frame.twichFrame = s
     end
-    s:SetShown(on)
-    return on and math.max(CL, CT, CR, CB) or 0
+    if s then s:SetShown(on) end
+    -- the crafted frame: a bare shell of its own (no interior, no grain), its rails swapped for the sculpted frame, made once when chosen
+    local c = rawget(frame, "twichCraftFrame")
+    if not c and crafted then
+        c = F.Shell(frame, { bare = true, follow = true })
+        R.CraftLook.LegacyRails(c, false)
+        c.crafted = R.CraftLook.Frame(c)
+        frame.twichCraftFrame = c
+    end
+    if c then c:SetShown(crafted) end
+    return (on or crafted) and math.max(CL, CT, CR, CB) or 0
 end
 
 ---------------------------------------------------------------------------
@@ -446,6 +462,7 @@ function F.Button(parent, label, w, kind, onClick, opts)
     local b = S.Button(parent, label, w, kind == "primary" and "primary" or "secondary", onClick, pal)
     b:SetMotionScriptsWhileDisabled(true)
     Bevel(b, kind == "primary", style)
+    b.twichKind = kind
     function b:Restyle(overrides)
         local lk = self.twichLook
         lk.style = F.Style(overrides)
@@ -454,6 +471,8 @@ function F.Button(parent, label, w, kind, onClick, opts)
         lk.Still()
         lk.State()
     end
+    -- inside a window in the crafted family (CraftLook.Window), the button wears that family's painted sheet instead
+    if R.CraftLook and R.CraftLook.InWindow(parent) then R.CraftLook.DressFrameLook(b, kind) end
     return b
 end
 
@@ -469,6 +488,8 @@ function F.Close(parent, onClick, opts)
     Colors(style)
     local b = S.Close(parent, onClick, pal)
     Bevel(b, false, style)
+    b.twichCloseBox = true
+    if R.CraftLook and R.CraftLook.InWindow(parent) then R.CraftLook.DressFrameLook(b, nil, true) end
     function b:Restyle(overrides)
         local st = F.Style(overrides)
         Colors(st)
@@ -487,6 +508,7 @@ function F.Toggle(parent, label, w, onClick, opts)
     local pal = Fill(setmetatable({}, { __index = Look().pal }), style, false)
     local b = S.Toggle(parent, label, w, onClick, pal)
     Bevel(b, false, style)
+    b.twichToggle = true   -- keeps this bevel in a crafted window too: its on state is the shared toggle's own
     function b:Restyle(overrides)
         local lk = self.twichLook
         lk.style = F.Style(overrides)

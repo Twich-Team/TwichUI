@@ -1068,6 +1068,7 @@ local function BuildDialog()
     dlg.shell = F.Shell(dlg, { below = true })    -- the shared frame and interior (FrameLook.lua), under everything below
     F.FadeIn(dlg)
     dlg.shell:Header(HEAD)
+    if R.CraftLook then R.CraftLook.Window(dlg, dlg.shell, { header = HEAD }) end   -- the crafted settings family (CraftLook.lua)
 
     -- A dim layer over the explorer, so nothing behind is clicked by accident.
     dlg.dim = CreateFrame("Frame", nil, f)
@@ -1616,6 +1617,7 @@ local function Build()
     local title = Text(f, "GameFontNormalLarge")
     title:SetPoint("LEFT", logo, "RIGHT", 8, 0)
     title:SetText("Saved Data Explorer")
+    if R.CraftLook then R.CraftLook.Window(f, f.shell, { header = HEAD, title = title }) end   -- the crafted settings family (CraftLook.lua)
     local sub = Text(f, "GameFontDisableSmall")
     sub:SetPoint("LEFT", title, "RIGHT", 10, -1)
     sub:SetText("what TwichUI keeps between sessions · read-only")

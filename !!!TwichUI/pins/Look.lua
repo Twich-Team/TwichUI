@@ -152,7 +152,7 @@ end
 -- The window's defaults are the framed look's (FrameLook.lua): its espresso and its frame, drawn while the border is that one. The
 -- data bar menu below keeps the launchers' (it is a menu, not a window), and the new pin window starts as a copy of this.
 local FL = R.FrameLook
-local FRAMED = { { FL.BORDER, FL.BORDER_LABEL } }
+local FRAMED = { { FL.BORDER, FL.BORDER_LABEL }, { FL.CRAFTED_BORDER, FL.CRAFTED_BORDER_LABEL } }
 PL.Look = R.MenuStyle.New("pinsLook", {
     bgTexture = "solid", bgColor = FL.PANEL_BG, bgOpacity = 98,
     borderTexture = FL.BORDER, borderColor = FL.PANEL_BORDER, borderOpacity = 90, borderSize = 1,

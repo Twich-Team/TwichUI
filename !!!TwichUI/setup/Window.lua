@@ -207,6 +207,7 @@ local function Framed(p, headerH)
     p.shell = F.Shell(p, { below = true })
     F.FadeIn(p)
     local head = p.shell:Header(headerH)
+    if R.CraftLook then R.CraftLook.Window(p, p.shell, { header = headerH }) end   -- the crafted settings family (CraftLook.lua)
     p.closeBox = F.Close(p, function() p:Hide() end)
     p.closeBox:SetPoint("TOPRIGHT", -(CR + 2), -12)
     return head
@@ -230,6 +231,7 @@ local function MakePopup(name, w, h, title, dx, dy)
     p.title = Text(p, "GameFontNormalLarge")
     p.title:SetPoint("TOPLEFT", 16, -14)
     p.title:SetText(title)
+    if R.CraftLook then R.CraftLook.Font(p.title, 19, true, "serif") end
     return p
 end
 
@@ -2611,6 +2613,7 @@ function W:ShowEditMode()
         em:HookScript("OnShow", R.FitToScreen)
         em.shell = R.FrameLook.Shell(em, { below = true })   -- a compact dialog: the frame and interior, no title strip
         R.FrameLook.FadeIn(em)
+        if R.CraftLook then R.CraftLook.Window(em, em.shell) end   -- the crafted settings family (CraftLook.lua)
         em.text = Text(em, "GameFontHighlightSmall")
         em.text:SetPoint("TOPLEFT", 16, -(14 + DT))
         em.text:SetPoint("TOPRIGHT", -16, -(14 + DT))

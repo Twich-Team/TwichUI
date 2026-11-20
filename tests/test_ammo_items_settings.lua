@@ -205,6 +205,24 @@ f:Hide()
 Check(not f.events.ITEM_DATA_LOAD_RESULT and not f.events.GET_ITEM_INFO_RECEIVED, "nothing is listened for while hidden")
 f:Show()
 
+-- dragging comes first; typing an ID is the secondary way, shown on request
+Check(f.dropLabel.text:find("Drag an item", 1, true) and f.dropSub.text:find("Classified automatically", 1, true), "the add area leads with dragging and automatic classification")
+P.ShowManual(false)
+Check(not f.idBox.shown and not f.addKind.shown and f.manual.shown, "the item ID entry waits behind its own button")
+f.manual:Fire("OnClick")
+Check(P.ManualShown() and f.idBox.shown and f.addKind.shown, "and appears when asked")
+Check(f.columns.kind.text == "Classification", "the list column is the classification, an override")
+-- the page follows the window's width
+local function X(frame) local p = frame.points[1]; return p and p[#p - 1] end
+AI.Add(2512, "arrow"); P.Refresh()
+local row = RowFor(2512)
+f:SetWidth(900); P.Refresh()
+Check(row.w == 900 - 38 and f.well.w == 900, "a wider window gives the list its width")
+local wide = X(row.kind)
+f:SetWidth(644); P.Refresh()
+Check(row.w == 644 - 38 and X(row.kind) < wide, "and a narrower one gives it back")
+AI.Remove(2512)
+
 -- the list is bounded
 for i = 1, AI.MAX do AI.Add(200000 + i, "arrow") end
 Check(not P.AddFromText("999999") and P.lastSaid:find("holds " .. AI.MAX, 1, true), "a full list says so")

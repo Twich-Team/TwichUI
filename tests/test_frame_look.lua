@@ -26,6 +26,8 @@ local function Rec(fr, kind)
     return Rec(MIFake("Texture", s), "Texture")
   end
   fr.CreateFontString = function(s) return Rec(MIFake("FontString", s), "FontString") end
+  fr.GetParent = function(s) return s.parent end
+  fr.GetChildren = function(s) local out = {} for _, ch in ipairs(s.children or {}) do if ch.kind ~= "Texture" and ch.kind ~= "FontString" then out[#out + 1] = ch end end return unpack(out) end
   return fr
 end
 local function Descendants(f)
@@ -294,6 +296,47 @@ do
   local t2 = made.textures
   Check(F.Frame(fp2, look) == 13 and fp2.twichFrame == shell2 and shell2.shown ~= false and made.textures == t2, "chosen again: the same shell comes back, none is made")
   Check(F.PANEL_BG == "ff1b1613" and F.PANEL_BORDER == "ffa8804a", "the colors a panel look starts from: the espresso and the aged bronze")
+end
+
+---------------------------------------------------------------------------
+-- The crafted settings family on a standalone window (CraftLook.Window) and the crafted frame as a border choice (F.CRAFTED_BORDER)
+---------------------------------------------------------------------------
+do
+  local chunk = assert(loadfile(ROOT .. "CraftLook.lua")); setfenv(chunk, c); chunk("!!!TwichUI", {})
+  local CL = R.CraftLook
+  Check(CL and CL.Window and CL.InWindow, "the crafted family's window helper is in the core")
+  -- a window with a FrameLook shell, a button and a close box made before it is dressed
+  local win = Parent(500, 300)
+  win.shell = F.Shell(win, { below = true })
+  local early = F.Button(win, "Early", 80, "secondary", function() end)
+  local close = F.Close(win, function() end)
+  local toggle = F.Toggle(win, "Mode", 80, function() end)
+  local outside = F.Button(Parent(), "Elsewhere", 80, "primary", function() end)
+  local parts = CL.Window(win, win.shell, { header = 40 })
+  Check(parts and parts.frame and parts.dark and parts.quiet and parts.header, "the frame, the dark and quiet interior and the title band")
+  Check(win.shell.grain.shown == false, "the older grain is put away under it")
+  Check(win.shell.corner.tl:GetAlpha() == 0, "FrameLook's rails are hidden under the sculpted frame")
+  Check(early.twichCraft and close.twichCraft, "buttons and close boxes made before are painted")
+  Check(not toggle.twichCraft, "a two-state toggle keeps its own on state")
+  Check(not outside.twichCraft, "a button in another window is left alone")
+  local child = c.CreateFrame("Frame", nil, win)
+  local later = F.Button(child, "Later", 80, "primary", function() end)
+  Check(later.twichCraft and CL.InWindow(later), "a button made later inside it paints itself")
+  local t0 = made.textures
+  Check(CL.Window(win, win.shell, { header = 40 }) == parts and made.textures == t0, "dressing again returns the same parts and makes nothing")
+  -- the crafted frame as a border choice on a player's surface: frame only, never an interior
+  local style = { border = F.CRAFTED_BORDER }
+  local look = { Get = function(k) return k == "borderTexture" and style.border or nil end }
+  local panel = Parent(300, 120)
+  local reach = F.Frame(panel, look)
+  local shell = rawget(panel, "twichCraftFrame")
+  Check(reach > 0 and shell and shell.crafted and shell.interior == nil and shell.grain == nil, "chosen: the sculpted frame over a bare shell, no interior or grain")
+  Check(rawget(panel, "twichFrame") == nil, "and not the older frame as well")
+  style.border = "eui:Pixels Textured"
+  Check(F.Frame(panel, look) == 0 and shell.shown == false, "another border puts it away and reserves nothing")
+  style.border = F.BORDER
+  Check(F.Frame(panel, look) > 0 and shell.shown == false and rawget(panel, "twichFrame").shown ~= false, "the default frame is still its own choice")
+  Check(F.CRAFTED_BORDER ~= F.BORDER and F.BORDER_LABEL == "TwichUI frame (default)", "the default border is unchanged")
 end
 
 ---------------------------------------------------------------------------

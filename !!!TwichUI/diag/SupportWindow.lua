@@ -46,6 +46,7 @@ local function Build()
     local title = L.Text(f, "title")
     title:SetPoint("LEFT", logo, "RIGHT", 8, 0)
     title:SetText("Support information")
+    if R.CraftLook then R.CraftLook.Window(f, f.shell, { header = HEADER, title = title }) end   -- the crafted settings family (CraftLook.lua)
     local close = F.Close(f, function() f:Hide() end)
     close:SetPoint("TOPRIGHT", -(CR + 2), -12)
 

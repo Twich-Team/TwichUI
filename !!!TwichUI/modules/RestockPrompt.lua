@@ -48,7 +48,7 @@ if R.MenuStyle and R.MenuStyle.New then
     P.Style = R.MenuStyle.New("restockPromptStyle", {
         bgTexture = "solid", bgColor = F.PANEL_BG, bgOpacity = 98,
         borderTexture = P.FRAMED, borderColor = F.PANEL_BORDER, borderOpacity = 90, borderSize = 1,
-    }, { extraBorders = { { P.FRAMED, F.BORDER_LABEL }, { P.LEDGER, "TwichUI rim" } }, sources = true })
+    }, { extraBorders = { { P.FRAMED, F.BORDER_LABEL }, { F.CRAFTED_BORDER, F.CRAFTED_BORDER_LABEL }, { P.LEDGER, "TwichUI rim" } }, sources = true })
 end
 
 local function Plain(v)

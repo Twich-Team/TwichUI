@@ -712,6 +712,31 @@ do
     if row.ch and row.ch.key == "custom:paused" and row.shown then paused = row end
   end
   Check(paused and not paused.clean:GetChecked() and paused.status.text:find("Not joined", 1, true), "paused unjoined choice remains editable")
+  -- the list leads with name, Clean and a filter summary; one channel's filters are shown at a time
+  local function RowOf(key) for _, row in ipairs(fc.content.children) do if row.ch and row.ch.key == key and row.shown then return row end end end
+  local lfg = RowOf("zone:26")
+  Check(lfg and lfg.summary.text:find("Spam", 1, true) and lfg.summary.text:find("custom rule", 1, true), "a summary of its filters and rules: " .. tostring(lfg and lfg.summary.text))
+  Check(paused.summary.text:find("^Off"), "an off channel says so first")
+  Check(not lfg.cats.spam.shown and not paused.cats.spam.shown, "filters are folded away at first")
+  lfg.toggle.scripts.OnClick(lfg.toggle)
+  Check(lfg.cats.spam.shown and lfg.toggle.text.text == "Hide filters" and PC.OpenKey() == "zone:26", "Filters opens that channel's filters")
+  paused.toggle.scripts.OnClick(paused.toggle)
+  Check(paused.cats.spam.shown and not lfg.cats.spam.shown, "opening another closes the first")
+  Check(paused.offNote.shown and not paused.cats.spam.active, "an off channel's filters say why they wait")
+  Check(lfg.cats.spam:GetChecked() and CC.Channels()["zone:26"].spam, "folding changes no choice")
+  paused.toggle.scripts.OnClick(paused.toggle)
+  Check(PC.OpenKey() == nil and not paused.cats.spam.shown, "and Hide filters folds it again")
+  Check(PC.OpenChannel("zone:26") and lfg.cats.spam.shown, "direct navigation can open one channel's filters")
+  -- the page follows the window's width
+  fc:SetWidth(900); PC.Refresh()
+  Check(lfg.w == 900 - 38 and fc.well.w == 900, "a wider window gives the list its width")
+  fc:SetWidth(644); PC.Refresh()
+  Check(lfg.w == 644 - 38, "and a narrower one gives it back")
+  Check(fc.reset.text.text == "Restore recommended channels", "the reset says it restores the recommended channels")
+  local before = CC.Channels()["custom:paused"] ~= nil
+  fc.reset.scripts.OnClick(fc.reset)
+  Check(S.popup and S.popup.key == "TWICHUI_CHATCLEAN_CHANNELS" and S.popup.text:find("General and Trade", 1, true) and S.popup.text:find("custom rules are kept", 1, true), "it asks first, with its exact scope")
+  Check(before and CC.Channels()["custom:paused"] ~= nil, "nothing changes before the answer")
   fc:Hide()
 
   -- the tester on the live tab

@@ -168,7 +168,9 @@ R:OnInit(function()
     local MS = R.MenuStyle
     if not (MS and MS.New) then return end
     A.Look = MS.New("chronicleLook", LOOK_DEFAULTS, {
-        extraBorders = { { A.LEDGER, "Chronicle ledger (default)" } },
+        -- the ledger rim stays the default; the crafted settings frame (FrameLook.Frame) is a choice beside it, frame only
+        extraBorders = { { A.LEDGER, "Chronicle ledger (default)" },
+            R.FrameLook and R.FrameLook.CRAFTED_BORDER and { R.FrameLook.CRAFTED_BORDER, R.FrameLook.CRAFTED_BORDER_LABEL } or nil },
         sources = true,
     })
     A.Look.Subscribe(function() Changed(false) end)
@@ -403,9 +405,15 @@ function A.Surface(frame)
     -- the fill's color, exactly: the default is the ledger's own umber, not its nearest 8-bit neighbour
     frame:SetBackdropColor(pal.bg[1], pal.bg[2], pal.bg[3], pal.bgAlpha)
     S.PaintFrame(frame, pal, ledger, true)
+    -- the crafted frame, only while it is the chosen border (hidden again for any other): over the player's background, never instead of it
+    local FL = R.FrameLook
+    local framed = 0
+    if Look and FL and FL.CRAFTED_BORDER and (Look.Get("borderTexture") == FL.CRAFTED_BORDER or rawget(frame, "twichCraftFrame")) then
+        framed = FL.Frame(frame, Look)
+    end
     frame:SetAlpha(A.Get("windowOpacity") / 100)
     frame.paintScale = frame:GetScale() or 1     -- the scale the border's pixels were worked out at
-    local inset = ledger and A.MIN_INSET or math.max(A.MIN_INSET, math.ceil(edge or 0))
+    local inset = ledger and A.MIN_INSET or math.max(A.MIN_INSET, framed > 0 and framed or math.ceil(edge or 0))
     return inset + A.Get("padding"), drawn
 end
 
@@ -419,7 +427,7 @@ function A.BorderHasWidth()
     local Look = A.Look
     if not Look then return false end
     local name = Look.Get("borderTexture")
-    return name ~= A.LEDGER and name ~= "none"
+    return name ~= A.LEDGER and name ~= "none" and not (R.FrameLook and name == R.FrameLook.CRAFTED_BORDER)
 end
 
 function A.BorderIsShown()

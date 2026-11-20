@@ -22,7 +22,7 @@ Per profile, `TwichUIDB.ui.restock`:
 
 | Key | Meaning |
 |---|---|
-| `items` | `{ { id, target, enabled }, ... }`. Item ID, a whole number 1–9999, on/off. The order is the priority. At most 60. |
+| `items` | `{ { id, target, enabled }, ... }`. Item ID, a whole number 1–9999, on/off. The order is the purchase priority (the Restock items tab numbers it and moves it under **Purchase priority**: what is bought first when money or the spending limit can't cover everything). At most 60. |
 | `mode` | `"ask"` (default) or `"auto"`. |
 | `useLimit` | `false` (default): no limit of TwichUI's own. `true`: at most `limit` per merchant visit. |
 | `limit` | copper, 0–99,999,999 (default 10,000 = 1g). 0 is a real limit: nothing is bought. Kept while `useLimit` is off. |

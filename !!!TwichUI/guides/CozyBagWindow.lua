@@ -472,6 +472,7 @@ local function Build()
     title:SetPoint("TOPLEFT", PAD, -13)
     title:SetText(D.title)
     f.title = title
+    if R.CraftLook then R.CraftLook.Window(f, f.shell, { title = title }) end   -- the crafted settings family; its title strip follows the view, so no fixed band
     f.titleSmall = L.Text(f, "heading")   -- the compact view's thinner title bar
     f.titleSmall:SetPoint("TOPLEFT", COMPACT_PAD, -13)
     f.titleSmall:SetText(D.title)
