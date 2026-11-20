@@ -18,7 +18,7 @@ local DEFAULTS = {
     futureLevels = true,      -- hint at gear you can wear once you reach its level
     reveal = "compare",       -- reasoning on: "compare" (Shift), "alt", "ctrl" or "always"
     strictness = "balanced",  -- how big a gain counts: "cautious", "balanced" or "eager"
-    bagStyle = "gilded",      -- bag icon: "gilded", "green" or "badge"
+    bagStyle = "gold",        -- bag icon: "gold", "gilded", "green" or "badge"
 }
 P.DEFAULTS = DEFAULTS   -- Profiles.lua: what a profile that leaves one out takes
 

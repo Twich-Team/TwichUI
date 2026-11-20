@@ -140,7 +140,7 @@ for variable, s in pairs(proxies) do
 end
 local trees = dropdowns.TWICHUI_gearTree()
 assert(trees[1].value == 0 and #trees == 4, "automatic and the mage's three trees: " .. #trees)
-assert(#dropdowns.TWICHUI_gearStrictness() == 3 and #dropdowns.TWICHUI_gearReveal() == 4 and #dropdowns.TWICHUI_gearBagStyle() == 3)
+assert(#dropdowns.TWICHUI_gearStrictness() == 3 and #dropdowns.TWICHUI_gearReveal() == 4 and #dropdowns.TWICHUI_gearBagStyle() == 4)
 
 -- Zone arrival card: how long it stays, saved with the UI options.
 local hold = proxies.TWICHUI_arrivalHold
