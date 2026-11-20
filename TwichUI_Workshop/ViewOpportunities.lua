@@ -490,7 +490,7 @@ end
 
 local function BuildDetail()
     local d = CreateFrame("Frame", nil, opps)
-    d:SetPoint("TOPRIGHT", 0, -44)
+    d:SetPoint("TOPRIGHT", 0, -80)
     d:SetPoint("BOTTOMRIGHT", 0, 0)
     d:SetWidth(DETAIL_W)
     UI.Panel(d, "card")
@@ -722,11 +722,11 @@ local function Build(p)
         return text
     end)
 
-    -- two toggles over the list: hide Low-confidence crafts, and rank by profit per copper spent
+    -- Two toggles above the details, below Scan prices, clear of the page title.
     opps.hideLow = UI.Segment(opps, "Hide low confidence", 156, function()
         S.ToggleHideLow(); UI.lists.opps:ScrollTop(); UI.Redraw()
     end)
-    opps.hideLow:SetPoint("TOPLEFT", 0, -6)
+    opps.hideLow:SetPoint("TOPLEFT", opps, "TOPRIGHT", -DETAIL_W, -44)
     UI.Tip(opps.hideLow, "Hide low confidence", "Hide crafts whose estimate rests on thin, capped or reference data. Unknown estimates stay, with their reason.")
     opps.margin = UI.Segment(opps, "Best margin first", 138, function()
         S.SortBy(S.opp.sort == "margin" and "profit" or "margin"); UI.lists.opps:ScrollTop(); UI.Redraw()
