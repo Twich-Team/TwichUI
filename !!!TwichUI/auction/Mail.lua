@@ -258,12 +258,20 @@ local function Credit(amount, matched, ways)
     for i = 2, #ways do if SetSignature(ways[i]) ~= first then same = false end end
     if #ways > 1 then stats.ambiguous = stats.ambiguous + 1; Why(same and "equal-alternatives" or "ambiguous") end
     if #matched > 1 then stats.combined = stats.combined + 1 end
-    local note, qty, settlement
+    local note, qty, settlement, parts
     if kind == "ahSale" and same then
         if #matched == 1 and not matched[1].unsure then note, qty = matched[1].note, matched[1].qty end
         local invoices = {}
         for _, req in ipairs(matched) do if req.settlement and not req.unsure then invoices[#invoices + 1] = req.settlement.invoices[1] end end
         if #invoices == #matched then settlement = L.Settlement({ v = 1, invoices = invoices }, amount) end
+        -- without a full invoice breakdown, each message's own collected amount and item are still the components of this one entry
+        if not settlement and #matched > 1 then
+            parts = {}
+            for _, req in ipairs(matched) do
+                if req.unsure or not req.note then parts = nil break end
+                parts[#parts + 1] = { c = req.amount, n = req.note, q = req.qty }
+            end
+        end
     end
     if kind == "ahSale" then
         local field = settlement and "settlement" or "unavailable"
@@ -272,7 +280,7 @@ local function Credit(amount, matched, ways)
         for _, req in ipairs(matched) do if req.kind == "ahSale" and not req.unsureKind then Why("mixed") break end end
     end
     credits = credits + 1
-    local ev = { kind = kind, amount = amount, note = note, qty = qty, settlement = settlement,
+    local ev = { kind = kind, amount = amount, note = note, qty = qty, settlement = settlement, parts = parts,
         evidence = kind == "ahSale" and how == "soldmail" and "mailauction" or nil,
         corr = "mail:" .. credits, entry = matched.entry, char = matched.char }
     local function Offer()

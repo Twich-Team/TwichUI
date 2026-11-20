@@ -70,11 +70,14 @@ local function Client(opts)
     end
     c.TakeInboxMoney, c.AutoLootMailItem = Take, Take
     c.hooksecurefunc = function(name, fn) local original = c[name]; c[name] = function(...) original(...); fn(...) end end
-    for _, name in ipairs({ "modules/Restock.lua", "WorkshopLauncher.lua", "auction/Ledger.lua", "auction/Mail.lua" }) do
+    local files = { "modules/Restock.lua", "WorkshopLauncher.lua", "auction/Ledger.lua", "auction/Mail.lua" }
+    if opts.cost then files[#files + 1] = "auction/LedgerCost.lua" end
+    for _, name in ipairs(files) do
         local f = assert(loadfile(ROOT .. name)); setfenv(f, c); f()
     end
     c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI"); c.FireEvent("PLAYER_LOGIN"); c.FireEvent("PLAYER_ENTERING_WORLD", true, false)
     c.L, c.MG = c.TwichUI.Ledger, c.TwichUI.MailGold
+    if opts.cost then c.TwichUI.LedgerCost.Init(); c.TwichUI.LedgerCost.Refresh() end
     function c.Entries() local r = c.TwichUILedgerDB.chars["Rich - Forever"]; return r and r.entries or {} end
     function c.Open(inbox) c.INBOX = inbox; c.FireEvent("MAIL_SHOW") end
     function c.Money(n) c.MONEY = c.MONEY + n; c.SENT[#c.SENT + 1] = n; c.FireEvent("PLAYER_MONEY") end
@@ -236,6 +239,55 @@ Run("unread invoices", Sales(12), { moneyLag = 0.2, invoice = "read" }, function
 end)
 Run("no invoices at all", Sales(6), { invoice = "never" }, function(c, n)
     Same(n.ahSale, 6, "no invoices: sold-auction mail still recognised")
+end)
+
+---------------------------------------------------------------------------
+-- Components of one combined payment (V5): each sale is an Item Result of its own, the cash stays one entry
+---------------------------------------------------------------------------
+local function Results(c) local rec = c.TwichUI.LedgerCost.Rec("Rich - Forever", false); return rec and rec.results or {} end
+Run("components with invoices", Sales(6, true), { moneyLag = 0.2, combine = true, cost = true }, function(c, n)
+    Same(n.total, 3, "three combined cash entries"); Same(#Results(c), 6, "six sales, even of the same item")
+    for _, e in ipairs(c.Entries()) do
+        local sum = 0
+        for _, r in ipairs(Results(c)) do if r.x == e.id then sum = sum + r.a end end
+        Same(sum, e.a, "components reconcile to the collected payment")
+    end
+end)
+Run("components without invoices", Sales(6), { moneyLag = 0.2, combine = true, invoice = "never", cost = true }, function(c, n)
+    Same(n.ahSale, 3, "auction sales"); Same(n.settled, 0, "no invented fees")
+    Same(#Results(c), 6, "one result per sold-auction mail")
+    for _, e in ipairs(c.Entries()) do
+        local sum, named = 0, 0
+        for _, r in ipairs(Results(c)) do if r.x == e.id then sum = sum + r.a; if r.n == "Linen Cloth" then named = named + 1 end end end
+        Same(sum, e.a, "components reconcile"); Same(named, 2, "each component names its item")
+        Same(e.p, nil, "components are never saved on the cash entry")
+    end
+end)
+do
+    -- components that do not reconcile to the payment are not kept: one result for the whole, never a share invented
+    local c = Client({ cost = true })
+    c.Open({})
+    c.Money(1000)
+    local ok = c.L.Evidence({ kind = "ahSale", amount = 1000, parts = { { c = 600, n = "Silk Cloth" }, { c = 300, n = "Silk Cloth" } } })
+    Same(ok, "attributed", "the payment is still an auction sale")
+    Same(#Results(c), 1, "components that do not add up are dropped"); Same(Results(c)[1].a, 1000, "the one result is the whole payment")
+end
+do
+    -- an equal-amount sale left over from an earlier payment may carry the other's item: in a later combined payment it is no
+    -- named component, so the whole payment is one result without guessed items
+    local c = Client({ cost = true, invoice = "never" })
+    c.Open({ Sale("Copper Ore", 3000, 150, 20), Sale("Tin Ore", 3000, 150, 20), Sale("Silk Cloth", 5000, 250, 50) })
+    for i = 1, 3 do c.TakeInboxMoney(i); c.PENDING = nil end
+    c.Money(2870); c.RunDue()
+    c.Money(2870 + 4800); c.RunDue()
+    local last = c.Entries()[#c.Entries()]
+    Same(last.k, "ahSale", "still auction sales")
+    local mine = {}
+    for _, r in ipairs(Results(c)) do if r.x == last.id then mine[#mine + 1] = r end end
+    Same(#mine, 1, "no named components with an uncertain item"); Same(mine[1].n, nil, "and no guessed item name")
+end
+Run("components mixed", { Sale("Copper Ore", 3000, 150, 20), Personal(777) }, { moneyLag = 0.2, combine = true, invoice = "never", cost = true }, function(c, n)
+    Same(n.mail, 1, "mixed payment stays mail"); Same(#Results(c), 0, "and makes no sale result")
 end)
 
 ---------------------------------------------------------------------------

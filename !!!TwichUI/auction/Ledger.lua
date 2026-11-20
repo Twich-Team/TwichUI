@@ -520,7 +520,21 @@ local function Valid(ev)
         local key, before, after = Plain(ev.stock.key), Whole(ev.stock.before, 0, MAX_QTY), Whole(ev.stock.after, 0, MAX_QTY)
         if type(key) == "string" and #key <= 160 and before and after then stock = { key = key, before = before, after = after } end
     end
-    return { kind = ev.kind, amount = amount, item = Whole(ev.item, 1, MAX_ITEM), qty = Whole(ev.qty, 1, MAX_QTY),
+    -- Optional, session-only components of one seller payment that has no full invoice breakdown (V5): each sold-auction mail's own
+    -- collected amount and item. Never saved on the entry, never cash; observers (the cost basis) may keep them as per-item results.
+    local parts
+    if ev.kind == "ahSale" and type(ev.parts) == "table" then
+        local sum = 0
+        parts = {}
+        for i, p in ipairs(ev.parts) do
+            local c = type(p) == "table" and Whole(p.c, 1, MAX) or nil
+            if not c or i > Lg.MAX_INVOICES or sum > MAX - c then parts = nil break end
+            sum = sum + c
+            parts[i] = { c = c, n = Note(p.n), q = Whole(p.q, 1, MAX_QTY) }
+        end
+        if parts and (sum ~= amount or #parts < 2) then parts = nil end
+    end
+    return { kind = ev.kind, amount = amount, item = Whole(ev.item, 1, MAX_ITEM), qty = Whole(ev.qty, 1, MAX_QTY), parts = parts,
         evidence = type(ev.evidence) == "string" and EvidenceFor(ev.kind, ev.evidence) or nil,
         note = Note(ev.note), corr = corr, entry = entry, char = ev.char, stock = stock,
         auction = (ev.kind == "ahDeposit" or ev.kind == "ahCancelFee") and Whole(ev.auction, 1, MAX) or nil,

@@ -334,3 +334,28 @@ review or a repeated creation event keep nothing. The list is optional inside co
 **Realized profit.** Unchanged: verified vendor sales of identified (bought or crafted) stock. No Auction House sale produces realized profit
 in V5, because the link between its payment and its posting cannot be proven from native evidence. If Forever exposes an auction id on the
 seller invoice (or on the sold-auction mail), the provenance above is the half of the chain that is already in place.
+
+## V5: combined seller payments and the page
+
+* One Open All change that paid several seller mails stays **one** cash entry. With every invoice it carries the existing settlement
+  (gross, fee, returned deposit, each invoice). Without full invoices (sold-auction mails), each mail's own collected amount and item
+  are passed to the cost basis as session-only components (`parts`, never saved on the cash entry, at most eight, summing exactly to the
+  payment, none from a request whose item could be another payment's). Each sale is then an Item Result of its own (two sales of the
+  same item are two results; V4 kept only the first of the same name). The transaction details list them, with any unexplained remainder
+  named **Unidentified**, never spread.
+* Item Results for an auction sale add, as facts beside it, the player's own TwichUI postings of that item in the period: how many, how
+  many were seen sold, and the verified cost of their units. They are **not matched** to the payment: no profit, status or total changes.
+
+## V5 verification and owner check
+
+* `tests/test_ledger_openall.lua` (Open All simulation, components, diagnostics), `tests/test_ledger_lineage.lua` (posting provenance
+  through the real action controller), additions to `test_ledger_settlement.lua` and `test_workshop_ledger.lua`. Mutations: `bash
+  tools/mutate.sh --group ledger` (95, including 14 new Open All and lineage defects). **Unit-tested only**; not simulator-tested
+  (no simulator in the cloud environment), not real-client-tested.
+* Owner check (normal play, no special build):
+  1. Install the regular build from the V5 branch.
+  2. Collect several genuine auction-sale payments with Open All.
+  3. Workshop → Gold Ledger: they are Auction Sale; hover one for its invoice details or its sold-auction mails.
+  4. Item Results: one row per item sold; any TwichUI postings of it are listed beside it, not as profit.
+  5. `/reload`: entries and results are unchanged.
+  6. If any payment is not an Auction Sale, open `/tui diagnostics` and copy the **Gold Ledger evidence** section (counters only).

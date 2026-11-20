@@ -1305,6 +1305,10 @@ m("ledger.query.window", LQUERY, "local from = today - filter.days + 1", "local 
 m("ledger.query.compare-incomplete", LQUERY, "if pcovered == #pdays and #pdays > 0 then", "if #pdays > 0 then",
   "a percentage is shown against a prior period that was only partly recorded", [LEDGERUI])
 
+m("ledger.mail.parts-unreconciled", LEDGER, "if parts and (sum ~= amount or #parts < 2) then parts = nil end", "if parts and #parts < 2 then parts = nil end",
+  "components of a payment that do not add up to it become Item Results anyway", ["test_ledger_openall.lua"])
+m("ledger.mail.parts-unsure", MAIL, "                if req.unsure or not req.note then parts = nil break end", "                if not req.note then parts = nil break end",
+  "a component whose invoice could be another payment's keeps an item name", ["test_ledger_openall.lua"])
 # V5 posting provenance (auction/LedgerCost.lua). Disposable copies only.
 COSTF, LINEAGE = "!!!TwichUI/auction/LedgerCost.lua", "test_ledger_lineage.lua"
 m("ledger.lineage.skip-stock-check", COSTF, "elseif not (token.before and after) or token.before - after ~= token.qty then",

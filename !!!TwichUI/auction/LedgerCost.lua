@@ -513,18 +513,31 @@ local function OnAhBuy(rec, e, ev)
 end
 
 local function OnAhSale(rec, e, ev)
+    -- one collected payment is attached once; its results are added together (two sales of the same item are two results)
+    if HasResult(rec, e.id, "ahSale") then stats.duplicate = stats.duplicate + 1 return end
     local s = ev.settlement
     if s and type(s.invoices) == "table" then
         for _, inv in ipairs(s.invoices) do
-            local name = inv.n or "Sold item"
-            if not HasResult(rec, e.id, "ahSale", name) then
-                AddResult(rec, { t = e.t, src = "ahSale", x = e.id, n = name, q = inv.q or 1, a = inv.c, g = inv.g, fee = inv.f, d = inv.d,
-                    st = "unknown", w = "auctionid", al = {} })
-            end
+            AddResult(rec, { t = e.t, src = "ahSale", x = e.id, n = inv.n or "Sold item", q = inv.q or 1, a = inv.c, g = inv.g, fee = inv.f, d = inv.d,
+                st = "unknown", w = "auctionid", al = {} })
         end
-    elseif not HasResult(rec, e.id, "ahSale") and e.a > 0 then
-        AddResult(rec, { t = e.t, src = "ahSale", x = e.id, q = ev.qty or 1, a = e.a, st = "unknown", w = "auctionid", al = {} })
+    elseif type(ev.parts) == "table" and #ev.parts > 1 then
+        -- one collected payment of several sold-auction mails: one result per mail (its item and its own collected amount)
+        for _, p in ipairs(ev.parts) do
+            AddResult(rec, { t = e.t, src = "ahSale", x = e.id, n = p.n or "Sold item", q = p.q or 1, a = p.c, st = "unknown", w = "auctionid", al = {} })
+        end
+    elseif e.a > 0 then
+        AddResult(rec, { t = e.t, src = "ahSale", x = e.id, n = ev.note, q = ev.qty or 1, a = e.a, st = "unknown", w = "auctionid", al = {} })
     end
+end
+
+-- The results one cash entry produced (its components, for the transaction details). Read only.
+function C.ResultsFor(char, entry)
+    local rec = Rec(char, false)
+    local out = {}
+    if not rec then return out end
+    for _, r in ipairs(rec.results) do if r.x == entry then out[#out + 1] = r end end
+    return out
 end
 
 local function Dispatch(key, e, ev)

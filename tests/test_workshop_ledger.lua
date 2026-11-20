@@ -684,6 +684,15 @@ do
     Same(rc.profit, nil, "a posting never makes an auction sale profitable"); Same(rc.status, "unavailable")
     Same(r2.verified, r.verified, "postings never change verified profit"); Same(r2.sales, r.sales, "nor the sale count")
     costRec.posts = nil; LQ.ResetCache()
+    -- V5 components of one combined payment without invoices, in the transaction details
+    costRec.results[#costRec.results + 1] = Res({ id = 50, src = "ahSale", n = "Silk Cloth", q = 2, a = 700, st = "unknown", w = "auctionid", x = 60 })
+    costRec.results[#costRec.results + 1] = Res({ id = 51, src = "ahSale", n = "Silk Cloth", q = 1, a = 300, st = "unknown", w = "auctionid", x = 60 })
+    local details = table.concat(LQ.AuctionDetails({ code = "ahSale", a = 1000, id = 60, key = "Rich - Forever" }), "|")
+    Check(details:find("Fee unavailable", 1, true) and details:find("Sold-auction mails in this payment: 2", 1, true), details)
+    Check(details:find("Silk Cloth \195\1512: 7s 0c", 1, true) and not details:find("Unidentified", 1, true), details)
+    details = table.concat(LQ.AuctionDetails({ code = "ahSale", a = 1200, id = 60, key = "Rich - Forever" }), "|")
+    Check(details:find("Unidentified: 2s 0c", 1, true), "an unexplained part is named, never spread: " .. details)
+    table.remove(costRec.results); table.remove(costRec.results)
 
     -- the page: one panel, two views
     Same(V.mode, "transactions"); V.tx.modeResults:GetScript("OnClick")(V.tx.modeResults)

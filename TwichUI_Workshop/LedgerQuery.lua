@@ -302,7 +302,26 @@ function LQ.AuctionDetails(row, fmt)
     lines[#lines + 1] = "Collected: " .. M(row.a)
     local L = Ledger()
     local s = L and L.Settlement(row.settlement, row.a)
-    if not s then lines[#lines + 1] = "Fee unavailable"; return lines end
+    if not s then
+        lines[#lines + 1] = "Fee unavailable"
+        -- V5: the sold-auction mails one combined payment held (each mail's own collected amount), from the cost basis's results
+        local C = R.LedgerCost
+        local parts = C and C.ResultsFor and row.key and row.id and C.ResultsFor(row.key, row.id) or {}
+        if #parts > 1 then
+            local sum = 0
+            for _, r in ipairs(parts) do sum = sum + (r.a or 0) end
+            lines[#lines + 1] = ("Sold-auction mails in this payment: %d"):format(#parts)
+            for i = 1, math.min(3, #parts) do
+                local r = parts[i]
+                local name = r.n or "Sold item"
+                if r.q and r.q > 1 then name = ("%s \195\151%d"):format(name, r.q) end
+                lines[#lines + 1] = name .. ": " .. M(r.a)
+            end
+            if #parts > 3 then lines[#lines + 1] = ("and %d more"):format(#parts - 3) end
+            if sum ~= row.a then lines[#lines + 1] = "Unidentified: " .. M(row.a - sum) end
+        end
+        return lines
+    end
     lines[#lines + 1] = "Gross sale: " .. M(s.g)
     lines[#lines + 1] = "Auction fee: " .. M(s.f) .. " - verified invoice"
     lines[#lines + 1] = "Returned deposit: " .. M(s.d) .. " (included in collected)"
