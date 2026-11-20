@@ -23,9 +23,14 @@ the only saved value is the switch.
 | `PLAYER_MONEY` + `GetMoney()` | the money *arrived*: a gain exactly equal to a waiting request | |
 | `MAIL_FAILED` with no item ID | a refused take | `MailFrame.lua` treats an item ID as an item failure |
 
-A request counts only when the matching gain arrives (oldest request first; the oldest several together if the game reports them as one
-change). The message's position is read once, at the call, and never again, so shifting inbox positions cannot misattribute anything.
-A request is dropped on `MAIL_FAILED` (no item), on switching off, on a loading screen, or after 4 seconds without a matching gain.
+A request counts only when the matching gain arrives: one waiting request, or several the game reported as one change. When more than
+one set of waiting requests could explain the gain, the oldest set pays the chat total (V5). The message's position is read once, at the
+call, and never again, so shifting inbox positions cannot misattribute anything. A repeated call for the same message (same position,
+header and amount, no inbox update since) is a *spare*: never matched to money, it only waits out its expiry, which keeps V1's line
+timing. After `MAIL_INBOX_UPDATE` a position can hold another message (Blizzard's Open All takes position 1 again after each paid mail is
+deleted), so in-flight positions are forgotten at each update. A request is dropped on `MAIL_FAILED` (no item), on switching off, on a
+loading screen, or after 4 seconds without a matching gain; while `C_Mail.IsCommandPending()` says a mail command is still pending it waits
+a second at a time, never past 15 seconds.
 Messages with a COD charge never make a request. Postage, COD payments and any spending are losses and ignored; a gain that matches no
 waiting request is ignored. `MAIL_SUCCESS` and `MAIL_INBOX_UPDATE` are not used: neither carries an amount, and the first is shared with sending.
 
@@ -47,6 +52,8 @@ line per visit at most; a duplicate `MAIL_CLOSED` does nothing; a `MAIL_SHOW` wi
 - The remembered amount is per position and refreshed at each inbox update; if positions shift without an update, a stale amount could be
   read for a message that already reads empty. It still counts only if a gain of exactly that amount arrives within the wait.
 - Whether the real client orders `PLAYER_MONEY`, `MAIL_FAILED` and `MAIL_CLOSED` as the test models is unverified.
+- Two messages with identical sender, subject, days left and amount at the same position, taken again with no inbox update between, cannot
+  be told apart: the second is a spare and its money is not counted. Blizzard's Open All waits for the update that follows each deletion.
 
 ## In-game checklist (use a throwaway character with small amounts; do not take or send real money to test)
 

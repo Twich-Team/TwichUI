@@ -267,3 +267,96 @@ Deferred until the owner is available; all real-game actions below are optional 
 3. Buy the same item while already holding some: the later sale must read *Unavailable* (mixed stock), not a profit.
 4. If you craft a recipe whose materials you bought from a vendor, sell the product to a vendor: the profession panel shows the result; a craft from materials you did not buy shows *Insufficient verified data*.
 5. Reload; the results persist. Native V2/V3 acceptance remains a separate open item.
+
+## V5: Open All and seller payments
+
+**Reported:** after collecting many auction payments with Open All, only a couple of entries were Auction Sale.
+
+**Root cause (reproduced, `tests/test_ledger_openall.lua`; V4 output kept in `tests/fixtures/ledger_openall/v4-baseline.txt`).**
+Blizzard's Open All (classic-era `OpenAllMailMixin`) takes one message at a time, at least 0.15 s apart, waiting while
+`C_Mail.IsCommandPending()`, and restarts at position 1 after the inbox count changes. A seller's mail with nothing else is deleted once
+paid, so every take is `TakeInboxMoney(1)`. When a payment's `PLAYER_MONEY` arrived after the next take, V4 took the second call on
+position 1 for a duplicate of the first, marked both ambiguous, then marked **every** waiting request ambiguous. With money after the
+next take V4 recognised 0 of 12 sales; with jittered latency 2 of 12; with money first, 12 of 12.
+
+**Fix (`auction/Mail.lua`).**
+* In-flight positions are forgotten at each `MAIL_INBOX_UPDATE`; a repeat needs the same position, header and amount with no update
+  between, and it is then a *spare* (never matched, only expires).
+* No ambiguity spreads to other requests. A gain is matched against every set of waiting requests that adds up to it (oldest 12,
+  at most 16 explanations; more and nothing is claimed). The ledger is told only what all explanations agree on: Auction Sale only if
+  every explanation is seller mail; item name and invoice details only if they are identical in all. Otherwise Mail collected. Requests
+  of an explanation that was not taken keep no item/invoice details later, and become plain mail if the explanations differed in kind.
+* Expiry waits while a mail command is pending, a second at a time, never past 15 s.
+* **Unread mail.** Blizzard's mail frame reads `GetInboxText` (its `isInvoice`) before `GetInboxInvoiceInfo`; an unopened message may
+  give no invoice. Without one, the Auction House's own sold-auction mail is still recognised: the client's `AUCTION_SOLD_MAIL_SUBJECT`
+  on a message that cannot be answered (`canReply == false`), not from a GM, not returned, with no attachment. It is an Auction Sale with
+  evidence `mailauction`; fee and deposit are unavailable, never guessed. An invoice of another type is never overruled by a subject.
+  A player's letter titled the same way can be answered, so it stays Mail collected. TwichUI never opens or marks a message read.
+* Mixed batches keep the combined cash entry as Mail collected; several seller invoices in one change stay one Auction Sale entry with
+  each invoice in its settlement.
+
+**Diagnostics.** `/tui diagnostics` → Gold Ledger evidence → `mail:` shows requests, verified invoices, sold-auction mails, combined
+payments and exact journal matches; `mail reasons:` gives fixed codes (`invoice-missing`, `sold-mail`, `plain-mail`, `duplicate`,
+`ambiguous`, `equal-alternatives`, `mixed`, `expired`, `unmatched-gain`, `too-many-ways`, `no-target`, `deferred-full`, `ledger-*`).
+No names, subjects, senders, items or copper values.
+
+**Unverified in the real client:** that Forever's Open All and its server behave like the classic-era source, whether
+`GetInboxInvoiceInfo` answers for an unread message, and that `AUCTION_SOLD_MAIL_SUBJECT` and `canReply` read as modelled.
+
+## V5: auction-to-item lineage
+
+**Capability matrix** (Forever API names as used by the existing controllers; native behaviour unverified without the client):
+
+| Stage | Available evidence | Can identity be proven? |
+|---|---|---|
+| Item in bags | `C_Container.GetContainerItemInfo`: item id, stack count, hyperlink → `LedgerCost.Key` (id plus enchant/gems/suffix/bonus ids) | **Yes**: exact identity and count |
+| Auction posted (TwichUI Sell) | The reviewed draft: bag `ItemLocation`, link, quantity, unit price, deposit, duration; `AUCTION_HOUSE_AUCTION_CREATED(auctionID)` (one unit or a commodity), `AUCTION_MULTISELL_UPDATE(n, n)` (multi-post, ids optional) | **Yes**: identity, quantity, price, deposit and the native auction id(s) the game created |
+| Auction sold | `C_AuctionHouse.GetOwnedAuctions()`: `auctionID`, `status` (1 = sold), quantity, prices; `AUCTION_CANCELED(auctionID)` | **Yes, by auction id**, only while the Auction House is open and its list is read |
+| Sale mail received | `GetInboxInvoiceInfo`: type, item **name**, buyer, bid, buyout, deposit, consignment, count. No auction id, no item id | **No**. Identity is lost here |
+| Gold collected | Ledger cash entry (exact `PLAYER_MONEY` change) with seller settlement | Already supported (V1–V5) |
+
+**Where identity is lost:** the seller's mail. Nothing in it names the auction or the exact item, and a name, a count and a price that
+match a posting are a candidate, never a proof. Another posting of the same item can hold the same tuple: one made outside TwichUI or before
+it ran, one whose mail is still waiting, or one sold while this posting's mail is delayed. So V5 does **not** tie a collected sale to a posting or a
+cost lot. Its Item Result keeps the confirmed sale, collected gold, verified fee and returned deposit, item name and count, and
+**Cost basis unavailable** (`w = "auctionid"`).
+
+**What V5 records (posting provenance, `LedgerCost.lua`, `posts` in the cost component).** A TwichUI posting is kept only when the game
+created it. Kept: identity key, item id, name from the link, quantity, unit price, deposit, duration, native auction id(s), and the cost of
+the posted units. That cost is taken out of the identified stock under the existing rule: every carried unit of that identity must be an
+identified lot unit, and the bags must have lost exactly the posted units. Otherwise the cost is `mixed`/`missing`/`short`/`nostock` and
+the pool is forgotten, or `nolot` for stock with no verified acquisition, or `unknown` for an identified lot of unknown cost. This also
+keeps the pool equal to the carried units after a posting, where V4 would later have found a mismatch and forgotten the lots. State
+changes only by the posting's own native id: `sold` from the owned list, `cancelled` on `AUCTION_CANCELED`, `ended` when a **complete**
+owned list no longer has it. Returned (cancelled or expired) units come back by mail as unknown-cost stock; the reserved cost is never moved back to a lot.
+Bounded: 200 postings per character, 35 days (an auction lasts two days and its mail thirty). Intent, a failed post, a dismissed
+review or a repeated creation event keep nothing. The list is optional inside cost component version 1: older builds leave it untouched.
+
+**Realized profit.** Unchanged: verified vendor sales of identified (bought or crafted) stock. No Auction House sale produces realized profit
+in V5, because the link between its payment and its posting cannot be proven from native evidence. If Forever exposes an auction id on the
+seller invoice (or on the sold-auction mail), the provenance above is the half of the chain that is already in place.
+
+## V5: combined seller payments and the page
+
+* One Open All change that paid several seller mails stays **one** cash entry. With every invoice it carries the existing settlement
+  (gross, fee, returned deposit, each invoice). Without full invoices (sold-auction mails), each mail's own collected amount and item
+  are passed to the cost basis as session-only components (`parts`, never saved on the cash entry, at most eight, summing exactly to the
+  payment, none from a request whose item could be another payment's). Each sale is then an Item Result of its own (two sales of the
+  same item are two results; V4 kept only the first of the same name). The transaction details list them, with any unexplained remainder
+  named **Unidentified**, never spread.
+* Item Results for an auction sale add, as facts beside it, the player's own TwichUI postings of that item in the period: how many, how
+  many were seen sold, and the verified cost of their units. They are **not matched** to the payment: no profit, status or total changes.
+
+## V5 verification and owner check
+
+* `tests/test_ledger_openall.lua` (Open All simulation, components, diagnostics), `tests/test_ledger_lineage.lua` (posting provenance
+  through the real action controller), additions to `test_ledger_settlement.lua` and `test_workshop_ledger.lua`. Mutations: `bash
+  tools/mutate.sh --group ledger` (95, including 14 new Open All and lineage defects). **Unit-tested only**; not simulator-tested
+  (no simulator in the cloud environment), not real-client-tested.
+* Owner check (normal play, no special build):
+  1. Install the regular build from the V5 branch.
+  2. Collect several genuine auction-sale payments with Open All.
+  3. Workshop → Gold Ledger: they are Auction Sale; hover one for its invoice details or its sold-auction mails.
+  4. Item Results: one row per item sold; any TwichUI postings of it are listed beside it, not as profit.
+  5. `/reload`: entries and results are unchanged.
+  6. If any payment is not an Auction Sale, open `/tui diagnostics` and copy the **Gold Ledger evidence** section (counters only).

@@ -63,7 +63,7 @@ D.Register("goldLedger", { title = "Gold Ledger evidence", order = 14, snapshot 
     local s, lines = L.Snapshot(), {}
     lines[#lines + 1] = ("recording: %s; held: %s; journal entries: %d; pending evidence: %d"):format(D.Flag(s.active), D.Flag(s.held), s.entries, s.pending)
     for _, spec in ipairs({ { "auction", R.AuctionLedger, { "pending", "blocked", "attributed", "noMoney", "mismatch", "ambiguous", "expired", "interrupted", "observerError" } },
-        { "mail", R.MailGold, { "waiting", "deferred", "ambiguous", "settlement", "unavailable" } },
+        { "mail", R.MailGold, { "requests", "verified", "soldMail", "combined", "exact", "waiting", "deferred", "ambiguous", "settlement", "unavailable" }, "reasons" },
         { "vendor", R.VendorGold, { "candidates", "events", "visits", "calls", "batches", "attributed", "refused" } },
         { "quest", R.QuestGold, { "events", "reported", "ignored" } } }) do
         local values = spec[2] and spec[2].Snapshot and spec[2].Snapshot()
@@ -77,7 +77,7 @@ D.Register("goldLedger", { title = "Gold Ledger evidence", order = 14, snapshot 
                 table.sort(codes)
                 local list = {}
                 for _, code in ipairs(codes) do list[#list + 1] = code .. "=" .. tostring(values.why[code]) end
-                lines[#lines + 1] = spec[1] .. " not attributed: " .. table.concat(list, "; ")
+                lines[#lines + 1] = spec[1] .. " " .. (spec[4] or "not attributed") .. ": " .. table.concat(list, "; ")
             end
         end
     end

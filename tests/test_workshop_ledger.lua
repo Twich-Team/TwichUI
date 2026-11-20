@@ -670,6 +670,29 @@ do
     local lines = table.concat(LQ.ResultLines(by.i11), "|"); Check(lines:find("Cost basis unavailable", 1, true) and lines:find("No verified purchase", 1, true), lines)
     Check(table.concat(LQ.ResultLines(by.i12), "|"):find("Realized result: +30s 0c", 1, true))
     Check(table.concat(LQ.ResultLines(by.Runecloth), "|"):find("auction fee 50s 0c", 1, true))
+    -- V5 posting provenance beside an auction sale: facts only, never a match, a profit or a total
+    costRec.posts = { { id = 1, t = now, k = "i20", i = 20, n = "Runecloth", q = 20, u = 5000, dep = 4500, a = 777, ac = { 777 }, st = "sold", cs = "ok", c = 60000, al = {} },
+        { id = 2, t = now, k = "i20", i = 20, n = "Runecloth", q = 20, u = 5000, dep = 4500, a = 778, ac = { 778 }, st = "posted", cs = "nolot", al = {} },
+        { id = 3, t = now, k = "i21", i = 21, n = "Mageweave", q = 5, u = 100, dep = 10, a = 779, ac = { 779 }, st = "posted", cs = "ok", c = 50, al = {} } }
+    LQ.ResetCache(); c.TwichUILedgerDB.cost.chars["Rich - Forever"] = costRec
+    local r2 = LQ.Results({ scope = "current", days = 7 })
+    local rc
+    for _, row in ipairs(r2.rows) do if row.name == "Runecloth" then rc = row end end
+    local text = table.concat(LQ.ResultLines(rc), "|")
+    Check(text:find("Your TwichUI postings of this item in this period: 2 (1 seen sold)", 1, true), text)
+    Check(text:find("Verified cost of the units in 1 of them: 6g 0s 0c", 1, true) and text:find("not matched to payments", 1, true), text)
+    Same(rc.profit, nil, "a posting never makes an auction sale profitable"); Same(rc.status, "unavailable")
+    Same(r2.verified, r.verified, "postings never change verified profit"); Same(r2.sales, r.sales, "nor the sale count")
+    costRec.posts = nil; LQ.ResetCache()
+    -- V5 components of one combined payment without invoices, in the transaction details
+    costRec.results[#costRec.results + 1] = Res({ id = 50, src = "ahSale", n = "Silk Cloth", q = 2, a = 700, st = "unknown", w = "auctionid", x = 60 })
+    costRec.results[#costRec.results + 1] = Res({ id = 51, src = "ahSale", n = "Silk Cloth", q = 1, a = 300, st = "unknown", w = "auctionid", x = 60 })
+    local details = table.concat(LQ.AuctionDetails({ code = "ahSale", a = 1000, id = 60, key = "Rich - Forever" }), "|")
+    Check(details:find("Fee unavailable", 1, true) and details:find("Sold-auction mails in this payment: 2", 1, true), details)
+    Check(details:find("Silk Cloth \195\1512: 7s 0c", 1, true) and not details:find("Unidentified", 1, true), details)
+    details = table.concat(LQ.AuctionDetails({ code = "ahSale", a = 1200, id = 60, key = "Rich - Forever" }), "|")
+    Check(details:find("Unidentified: 2s 0c", 1, true), "an unexplained part is named, never spread: " .. details)
+    table.remove(costRec.results); table.remove(costRec.results)
 
     -- the page: one panel, two views
     Same(V.mode, "transactions"); V.tx.modeResults:GetScript("OnClick")(V.tx.modeResults)

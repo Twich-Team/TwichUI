@@ -85,6 +85,7 @@ Lg.EVIDENCE = {
     mailbox = "Mailbox money you took, matched to the exact amount that arrived.",
     questreward = "A quest you turned in paid this exact gold, matched to the amount that arrived.",
     mailinvoice = "A sold-auction invoice in the mailbox, matched to the exact amount that arrived.",
+    mailauction = "The Auction House's sold-auction mail (the game gave no invoice for it), matched to the exact amount that arrived. Its fee and deposit are unavailable.",
     auctionpurchase = "A completed Auction House purchase, matched to the exact amount that left.",
     merchantpurchase = "A gold-only merchant purchase request and the exact items received, matched to the observed spending.",
     merchantsale = "A merchant sale request, the removed stack and a new matching buyback receipt, matched to the gold received.",
@@ -92,6 +93,13 @@ Lg.EVIDENCE = {
     auctiondeposit = "An owned posting completed, matched to its native deposit quote and exact observed debit.",
     auctioncancel = "The reviewed auction ID was cancelled, matched to its verified cancellation cost and exact observed debit.",
 }
+
+-- A source may be established in more than one way: the other evidence codes it accepts besides its own.
+Lg.ALT_EVIDENCE = { ahSale = { mailauction = true } }
+local function EvidenceFor(kind, code)
+    if code and Lg.ALT_EVIDENCE[kind] and Lg.ALT_EVIDENCE[kind][code] then return code end
+    return Lg.SOURCES[kind].evidence
+end
 
 local active, held, ready = false, false, false
 local base, baseKey            -- this session's balance baseline and the character it belongs to (never saved)
@@ -235,7 +243,7 @@ local function CleanEntry(e)
     local src = type(e.k) == "string" and e.k ~= "other" and Lg.SOURCES[e.k] or nil
     if src and src.dir and (a > 0) ~= (src.dir > 0) then src = nil end   -- a source cannot move gold the other way
     if not src then e.k = nil end
-    if type(e.e) ~= "string" or not Lg.EVIDENCE[e.e] or (e.k and Lg.SOURCES[e.k].evidence ~= e.e) then
+    if type(e.e) ~= "string" or not Lg.EVIDENCE[e.e] or (e.k and EvidenceFor(e.k, e.e) ~= e.e) then
         e.e = e.k and Lg.SOURCES[e.k].evidence or "balance"
     end
     e.i, e.q = Whole(e.i, 1, MAX_ITEM), Whole(e.q, 1, MAX_QTY)
@@ -477,7 +485,7 @@ end
 local function Attach(slot, ev)
     local e = slot.e
     Move(slot.rec, Lg.DayOf(e.t), e.a, "other", ev.kind)
-    e.k, e.e = ev.kind, Lg.SOURCES[ev.kind].evidence
+    e.k, e.e = ev.kind, EvidenceFor(ev.kind, ev.evidence)
     e.i, e.q, e.n, e.x = ev.item, ev.qty, ev.note, ev.corr
     e.u, e.s, e.r = ev.auction, ev.settlement, ev.duration
     Remember(ev.corr)
@@ -513,7 +521,22 @@ local function Valid(ev)
         local key, before, after = Plain(ev.stock.key), Whole(ev.stock.before, 0, MAX_QTY), Whole(ev.stock.after, 0, MAX_QTY)
         if type(key) == "string" and #key <= 160 and before and after then stock = { key = key, before = before, after = after } end
     end
-    return { kind = ev.kind, amount = amount, item = Whole(ev.item, 1, MAX_ITEM), qty = Whole(ev.qty, 1, MAX_QTY),
+    -- Optional, session-only components of one seller payment that has no full invoice breakdown (V5): each sold-auction mail's own
+    -- collected amount and item. Never saved on the entry, never cash; observers (the cost basis) may keep them as per-item results.
+    local parts
+    if ev.kind == "ahSale" and type(ev.parts) == "table" then
+        local sum = 0
+        parts = {}
+        for i, p in ipairs(ev.parts) do
+            local c = type(p) == "table" and Whole(p.c, 1, MAX) or nil
+            if not c or i > Lg.MAX_INVOICES or sum > MAX - c then parts = nil break end
+            sum = sum + c
+            parts[i] = { c = c, n = Note(p.n), q = Whole(p.q, 1, MAX_QTY) }
+        end
+        if parts and (sum ~= amount or #parts < 2) then parts = nil end
+    end
+    return { kind = ev.kind, amount = amount, item = Whole(ev.item, 1, MAX_ITEM), qty = Whole(ev.qty, 1, MAX_QTY), parts = parts,
+        evidence = type(ev.evidence) == "string" and EvidenceFor(ev.kind, ev.evidence) or nil,
         note = Note(ev.note), corr = corr, entry = entry, char = ev.char, stock = stock,
         auction = (ev.kind == "ahDeposit" or ev.kind == "ahCancelFee") and Whole(ev.auction, 1, MAX) or nil,
         duration = ev.kind == "ahDeposit" and Whole(ev.duration, 1, 3) or nil,

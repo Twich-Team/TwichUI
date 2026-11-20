@@ -302,7 +302,26 @@ function LQ.AuctionDetails(row, fmt)
     lines[#lines + 1] = "Collected: " .. M(row.a)
     local L = Ledger()
     local s = L and L.Settlement(row.settlement, row.a)
-    if not s then lines[#lines + 1] = "Fee unavailable"; return lines end
+    if not s then
+        lines[#lines + 1] = "Fee unavailable"
+        -- V5: the sold-auction mails one combined payment held (each mail's own collected amount), from the cost basis's results
+        local C = R.LedgerCost
+        local parts = C and C.ResultsFor and row.key and row.id and C.ResultsFor(row.key, row.id) or {}
+        if #parts > 1 then
+            local sum = 0
+            for _, r in ipairs(parts) do sum = sum + (r.a or 0) end
+            lines[#lines + 1] = ("Sold-auction mails in this payment: %d"):format(#parts)
+            for i = 1, math.min(3, #parts) do
+                local r = parts[i]
+                local name = r.n or "Sold item"
+                if r.q and r.q > 1 then name = ("%s \195\151%d"):format(name, r.q) end
+                lines[#lines + 1] = name .. ": " .. M(r.a)
+            end
+            if #parts > 3 then lines[#lines + 1] = ("and %d more"):format(#parts - 3) end
+            if sum ~= row.a then lines[#lines + 1] = "Unidentified: " .. M(row.a - sum) end
+        end
+        return lines
+    end
     lines[#lines + 1] = "Gross sale: " .. M(s.g)
     lines[#lines + 1] = "Auction fee: " .. M(s.f) .. " - verified invoice"
     lines[#lines + 1] = "Returned deposit: " .. M(s.d) .. " (included in collected)"
@@ -382,7 +401,7 @@ LQ.WHY = {
     nostock = "The bags could not confirm exactly which units were sold.",
     unknowncost = "The cost of some of the materials was never verified.",
     manylots = "The sale drew on too many separate purchases to keep.",
-    auctionid = "A seller invoice names the item but proves no item identity, so no purchase is matched to it.",
+    auctionid = "The seller's mail names the item but no auction and no exact item, so it cannot be tied to a posting or a purchase.",
 }
 local resultCache
 
@@ -440,6 +459,24 @@ function LQ.Results(filter, today)
             end
         end
     end
+    -- V5 posting provenance: the player's own TwichUI postings of an item sold at auction in the window, as facts beside the sale.
+    -- Never matched to a payment (no auction id on the seller's mail), so they never change a result, a profit or a total.
+    if C.Posts then
+        local byName = {}
+        for _, g in ipairs(order) do if g.src == "ahSale" then byName[g.name] = g end end
+        if next(byName) then
+            for _, post in ipairs(C.Posts(keys, first, last)) do
+                local g = post.n and byName[post.n]
+                if g then
+                    local info = g.postings or { count = 0, sold = 0, units = 0, verified = 0, costed = 0 }
+                    g.postings = info
+                    info.count, info.units = info.count + 1, info.units + post.q
+                    if post.st == "sold" then info.sold = info.sold + 1 end
+                    if post.cs == "ok" and post.c then info.costed, info.verified = info.costed + 1, info.verified + post.c end
+                end
+            end
+        end
+    end
     table.sort(order, function(a, b) if a.t ~= b.t then return a.t > b.t end return a.name < b.name end)
     local rows, more = {}, false
     for _, g in ipairs(order) do
@@ -475,6 +512,14 @@ function LQ.ResultLines(row, fmt)
         lines[#lines + 1] = "Cost basis unavailable. Profit unavailable."
     end
     if row.status ~= "verified" and row.why and LQ.WHY[row.why] then lines[#lines + 1] = LQ.WHY[row.why] end
+    local posts = row.postings
+    if posts and posts.count > 0 then
+        lines[#lines + 1] = ("Your TwichUI postings of this item in this period: %d (%d seen sold)"):format(posts.count, posts.sold)
+        if posts.costed > 0 then
+            lines[#lines + 1] = ("Verified cost of the units in %d of them: %s"):format(posts.costed, M(posts.verified))
+        end
+        lines[#lines + 1] = "Postings are not matched to payments, so no profit is shown."
+    end
     return lines
 end
 

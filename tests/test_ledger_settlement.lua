@@ -101,14 +101,18 @@ for _,mode in ipairs({"missing","mismatch","negative","fractional","nan","overfl
     else local secret={};c.issecretvalue=function(v) return v==secret end;m.f=secret end
     c.Open({m});c.TakeInboxMoney(1);c.Deliver({1},99500);Same(c.Last().k,"ahSale");Same(c.Last().s,nil,mode)
 end
--- Duplicate requests/events and ambiguous equal amounts keep the actual money but supply no classification.
+-- Duplicate requests/events and ambiguous equal amounts keep the actual money once. V5: a repeated call for the same message is a
+-- spare (never matched), so the one payment keeps its invoice; when a sale and plain letters could each explain the gain, every
+-- explanation is mailbox money, so it is Mail collected, never an auction sale and never a guessed invoice.
 for _,mode in ipairs({"duplicate","equal","subset"}) do
     local c=Client({summary=true})
     local rows={Sale("Runecloth",1,100,0,0,100),{money=100}}
     if mode=="subset" then rows={Sale("Runecloth",1,100,0,0,100),{money=40},{money=60}} end
     c.Open(rows);c.TakeInboxMoney(1)
     if mode=="duplicate" then c.AutoLootMailItem(1) else for i=2,#rows do c.TakeInboxMoney(i) end end
-    c.Deliver({1},100);Same(c.Last().k,nil,mode);Same(c.Last().s,nil);Same(#c.Entries(),1)
+    c.Deliver({1},100);Same(#c.Entries(),1)
+    if mode=="duplicate" then Same(c.Last().k,"ahSale",mode);Same(c.Last().s.c,100,mode)
+    else Same(c.Last().k,"mail",mode);Same(c.Last().s,nil,mode) end
     c.FireEvent("PLAYER_MONEY");c.Advance(5);Same(#c.Entries(),1)
     c.FireEvent("MAIL_CLOSED");Same(#c.OUT,1,"summary still counts actual gain once")
 end

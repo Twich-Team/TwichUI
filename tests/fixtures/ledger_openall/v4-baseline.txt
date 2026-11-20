@@ -1,0 +1,24 @@
+# test_ledger_openall.lua against V4 auction/Mail.lua (main 34bc760), before the V5 fix.
+# Each FAIL is a scenario V4 got wrong; V5 must pass all of them.
+lua5.1: test_ledger_openall.lua:316: attempt to compare number with nil
+stack traceback:
+	test_ledger_openall.lua:316: in main chunk
+	[C]: ?
+FAIL: throttled, late money: all sales: expected 12, got 0
+FAIL: throttled, late money: settlement details: expected 12, got 0
+FAIL: jittered latency: all sales: expected 12, got 2
+FAIL: equal sales, late money: all sales: expected 10, got 0
+FAIL: slow server: all sales: expected 10, got 0
+FAIL: repeated updates: all sales: expected 10, got 0
+FAIL: combined: every entry is an auction sale: expected 5, got 0
+FAIL: combined: each combined entry lists its two invoices: expected 5, got 0
+FAIL: unread invoices: still auction sales: expected 12, got 0
+FAIL: unread invoices: evidence says it came from the sold-auction mail, not an invoice: expected mailauction, got balance
+FAIL: no invoices: sold-auction mail still recognised: expected 6, got 0
+FAIL: mixed: the three sales: expected 3, got 0
+FAIL: mixed: the two letters stay Mail collected: expected 2, got 0
+FAIL: mixed combined: Mail collected: expected 1, got 0
+FAIL: equal mixed: both entries classified as mail at least: expected 2, got 0
+FAIL: close during collection: what was collected is still recognised
+FAIL: the expiry is counted
+FAIL: a pending command keeps its request alive (bounded): expected ahSale, got nil
