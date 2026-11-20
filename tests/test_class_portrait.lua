@@ -22,7 +22,7 @@ local function frame(parent)
     function f:ClearAllPoints() check(not combat, 'clear in combat') end
     function f:EnableMouse(v) self.mouse = v end
     function f:GetFrameLevel() return self.level end
-    function f:GetFrameStrata() return 'MEDIUM' end
+    function f:GetFrameStrata() return self.strata or 'MEDIUM' end
     function f:SetFrameLevel(v) self.level = v end
     function f:SetFrameStrata(v) self.strata = v end
     function f:CreateTexture()
@@ -36,6 +36,13 @@ local function frame(parent)
         return t
     end
     return f
+end
+hooksecurefunc = function(object, method, after)
+    local original = object[method]
+    object[method] = function(...)
+        original(...)
+        after(...)
+    end
 end
 CreateFrame = function(_,_,p) return frame(p) end
 C_Timer = { After = function(_, fn) timers[#timers+1] = fn end }
@@ -65,6 +72,17 @@ check(D.Status() == 'ready', 'delayed attach'); check(D.Holder():GetParent() == 
 local holder,t = D.Holder(),D.Texture()
 check(holder.mouse == false and holder.level < f.level, 'inert, behind frame')
 check(t.path:match('WARRIOR$'), 'own artwork'); check(holder.texCount == 1, 'one texture')
+check(not C.Get('above') and C.Get('strata') == 'inherit', 'layer defaults preserve old behavior')
+C.Set('above',true); check(holder.level > p.level and holder.level > f.level, 'above portrait and text')
+p:SetFrameLevel(45); check(holder.level == 65, 'follow portrait level changes')
+p:SetFrameLevel(10)
+f:SetFrameStrata('LOW'); check(holder.strata == 'LOW', 'follow host strata changes')
+C.Set('strata','HIGH'); check(holder.strata == 'HIGH', 'explicit strata')
+f:SetFrameStrata('MEDIUM'); check(holder.strata == 'HIGH', 'explicit strata kept across host changes')
+check(TwichUIDB.ui.classPortrait.above and TwichUIDB.ui.classPortrait.strata == 'HIGH', 'layer persistence')
+C.Reset(); check(C.Get('above') and C.Get('strata') == 'HIGH', 'fit reset keeps layer preferences')
+check(not C.Set('strata','TOOLTIP') and not C.Set('strata',1) and not C.Set('above','yes'), 'invalid layers rejected')
+C.Set('above',false); C.Set('strata','inherit')
 local count = 0
 for token,a in pairs(C.ART) do
     count = count+1
@@ -91,7 +109,12 @@ local f2,p2 = player(); EllesmereUIUnitFrames_Player = f2
 combat = true; event('UI_SCALE_CHANGED'); check(not t.shown, 'hide stale in combat'); check(holder.parent == p, 'defer reparent')
 combat = false; event('PLAYER_REGEN_ENABLED'); check(holder.parent == p2 and t.shown, 'reattach after combat')
 combat = true; event('PLAYER_REGEN_DISABLED'); check(t.shown, 'existing art remains in combat')
+local previousLevel = holder.level
+C.Set('above',true); C.Set('strata','DIALOG')
+check(holder.level == previousLevel and holder.strata == 'MEDIUM', 'layer writes deferred in combat')
 C.Set('size',130); check(t.shown, 'combat edit deferred'); combat = false; event('PLAYER_REGEN_ENABLED'); near(t.w,base*1.3)
+check(holder.level > p2.level and holder.strata == 'DIALOG', 'deferred layers applied after combat')
+C.Set('above',false); C.Set('strata','inherit')
 for i=1,10 do D.Refresh() end
 check(D.Holder() == holder and holder.texCount == 1, 'no duplicates'); check(classQueries == 1, 'class cached')
 f2.unit = 'target'; D.Refresh(); check(not t.shown and D.Status() == 'missing', 'reject unrelated frame')
