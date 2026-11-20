@@ -27,7 +27,7 @@ SHOPPING, VENDOR, OPPS = "TwichUI_Workshop/Shopping.lua", "TwichUI_Workshop/Vend
 
 # `--broad` re-runs a SURVIVOR against these older, broader Workshop tests to say whether anything else notices it (the mutation still counts as
 # a survivor of its focused tests; the note only tells you where the gap is). The default run never uses them.
-SUITE = {"targets": ("TwichUI_Workshop/", "!!!TwichUI/WorkshopAuto.lua", "!!!TwichUI/WorkshopLauncher.lua", "!!!TwichUI/auction/Ledger.lua", "!!!TwichUI/auction/LedgerAuction.lua", "!!!TwichUI/auction/Mail.lua", "!!!TwichUI/auction/Vendor.lua", "!!!TwichUI/modules/Restock.lua"), "broad_tests": ("test_workshop_market.lua", "test_workshop_prices.lua", "test_workshop_shopping.lua", "test_workshop_storage.lua", "test_workshop.lua")}
+SUITE = {"targets": ("TwichUI_Workshop/", "!!!TwichUI/WorkshopAuto.lua", "!!!TwichUI/WorkshopLauncher.lua", "!!!TwichUI/auction/Ledger.lua", "!!!TwichUI/auction/LedgerAuction.lua", "!!!TwichUI/auction/LedgerCost.lua", "!!!TwichUI/auction/LedgerCostWatch.lua", "!!!TwichUI/auction/LedgerQuest.lua", "!!!TwichUI/auction/Mail.lua", "!!!TwichUI/auction/Vendor.lua", "!!!TwichUI/modules/Restock.lua"), "broad_tests": ("test_workshop_market.lua", "test_workshop_prices.lua", "test_workshop_shopping.lua", "test_workshop_storage.lua", "test_workshop.lua")}
 
 MUTATIONS = []
 
@@ -1291,10 +1291,10 @@ m("ledger.vendor.missing-item", VENDOR,
 m("ledger.vendor.inventory", VENDOR,
   'confirmed = SameCounts(c.before.counts, after.counts, c.item, c.qty)', 'confirmed = true',
   "the requested item need not arrive before a debit is attributed", [VTEST])
-m("ledger.vendor.receipt-price", VENDOR, 'receipt.price ~= amount', 'false',
+m("ledger.vendor.receipt-price", VENDOR, 'if sum > e.a then Kill("receipts-do-not-sum-to-money"); break end', 'if false then Kill("receipts-do-not-sum-to-money"); break end',
   "a buyback receipt with a different payment identifies unrelated income", [VTEST])
 m("ledger.vendor.receipt", VENDOR,
-  'and SaleReceipt(c.before.buyback, after.buyback, c, e.a)', 'and true',
+  'if not BagsMatch(b, after) then b.wait = "bag-count-differs"; break end', 'if false then b.wait = "bag-count-differs"; break end',
   "an item consumed at a merchant plus unrelated income is called a sale", [VTEST])
 m("ledger.vendor.repair-outcome", VENDOR,
   'confirmed = after.repair == 0 and SameCounts(c.before.counts, after.counts)',
@@ -1302,7 +1302,7 @@ m("ledger.vendor.repair-outcome", VENDOR,
   "repair spending is classified without any verified repair outcome", [VTEST])
 m("ledger.vendor.guild", VENDOR, '(guild ~= nil and guild ~= false)', 'false',
   "a guild-funded repair request claims later unrelated personal spending", [VTEST])
-m("ledger.vendor.overlap", VENDOR, 'if candidate or poisoned or not c', 'if poisoned or not c',
+m("ledger.vendor.overlap", VENDOR, 'if candidate or batch or poisoned or not c', 'if poisoned or not c',
   "the last overlapping request replaces an unresolved attempt and claims an ambiguous debit", [VTEST])
 m("ledger.vendor.currency", "!!!TwichUI/modules/Restock.lua",
   'local otherCost = extended ~= false or currency ~= nil', 'local otherCost = false',
@@ -1381,3 +1381,99 @@ m("market.junk.tree-empty", "!!!TwichUI/WorkshopLauncher.lua",
 m("market.junk.tree-move-preview", "!!!TwichUI/WorkshopLauncher.lua",
   'if not apply or not valid then table.remove', 'if not valid then table.remove',
   "hovering a drag target changes the saved draft order", ["test_workshop_junk_rules.lua"])
+
+# Cost basis and realized results (docs/workshop/gold-ledger.md): the identified-stock rule, exact apportionment, deliveries and crafts.
+COSTTEST = "test_ledger_cost.lua"
+
+m("ledger.cost.mixed-stock", "!!!TwichUI/auction/LedgerCost.lua", '    if carried ~= pool then\n        C.Disturb(rec, key)\n        stats.mixed', '    if false then\n        C.Disturb(rec, key)\n        stats.mixed',
+  'a sale is matched to cost although the bags hold stock that is not an identified lot', [COSTTEST])
+m("ledger.cost.no-discard", "!!!TwichUI/auction/LedgerCost.lua", '        C.Disturb(rec, key)\n        stats.mixed = stats.mixed + 1\n        return false, carried > pool', '        stats.mixed = stats.mixed + 1\n        return false, carried > pool',
+  'stock that could not be told apart keeps its stale lots and later gets a cost it never had', [COSTTEST])
+m("ledger.cost.consume-once", "!!!TwichUI/auction/LedgerCost.lua", '            lot.r = lot.r - take\n', '            lot.r = lot.r\n',
+  'the same purchased units are matched to several sales', [COSTTEST])
+m("ledger.cost.rounding", "!!!TwichUI/auction/LedgerCost.lua", 'return a * u + math.floor(b * u / q)', 'return a * u + math.ceil(b * u / q)',
+  "apportioned costs no longer add up to the lot's exact copper", [COSTTEST])
+m("ledger.cost.unknown-is-zero", "!!!TwichUI/auction/LedgerCost.lua", '            if lot.c then share = Scaled(lot.c, used + take, lot.q) - Scaled(lot.c, used, lot.q) end', '            share = lot.c and (Scaled(lot.c, used + take, lot.q) - Scaled(lot.c, used, lot.q)) or 0',
+  'an unknown cost becomes zero and invents profit', [COSTTEST])
+m("ledger.cost.variant-key", "!!!TwichUI/auction/LedgerCost.lua", 'if #parts > 0 then return "i" .. item .. ":" .. table.concat(parts, ":") end', 'if false then return "i" .. item end',
+  'a variant with bonus ids or a random suffix is pooled with the plain item', [COSTTEST])
+m("ledger.cost.buy-mixed", "!!!TwichUI/auction/LedgerCost.lua", '    if C.Pool(rec, st.key) ~= st.before then   -- the bags held other stock', '    if false then   -- the bags held other stock',
+  'a purchase mixed with older unidentified stock is trusted as a clean lot', [COSTTEST])
+m("ledger.cost.delivery-mixed", "!!!TwichUI/auction/LedgerCost.lua", '    if C.Pool(rec, key) ~= before then   -- other stock of this identity', '    if false then   -- other stock of this identity',
+  'an Auction House delivery mixed with older stock is trusted as a clean lot', [COSTTEST])
+m("ledger.cost.ah-ambiguous", "!!!TwichUI/auction/LedgerCost.lua", 'if not (first.c and o.c and first.c * o.q == o.c * first.q) then return false, "ambiguous" end', 'if false then return false, "ambiguous" end',
+  'two different-price purchases of one item are assigned to a delivery arbitrarily', [COSTTEST])
+m("ledger.cost.profit-partial", "TwichUI_Workshop/LedgerQuery.lua", 'g.profit = g.vsales > 0 and (g.vcollected - g.vcost) or nil', 'g.profit = g.vsales > 0 and (g.collected - g.vcost) or nil',
+  'a partly verified item reports profit on sales whose cost is unknown', [LEDGERUI])
+m("ledger.watch.invoice", "!!!TwichUI/auction/LedgerCostWatch.lua", 'or invoice ~= "buyer" then return end', 'then return end',
+  'any mail attachment is treated as the delivery of a purchase', [COSTTEST])
+m("ledger.watch.delivery-count", "!!!TwichUI/auction/LedgerCostWatch.lua", 'if gained ~= m.count then', 'if false then',
+  'a delivery is accepted although the bags gained a different number of units', [COSTTEST])
+m("ledger.watch.mail-overlap", "!!!TwichUI/auction/LedgerCostWatch.lua", '    if mail then   -- two requests', '    if false then   -- two requests',
+  'overlapping mail takes are both attributed', [COSTTEST])
+m("ledger.watch.craft-materials", "!!!TwichUI/auction/LedgerCostWatch.lua", 'if (c.before[m.key] or 0) - (now[m.key] or 0) ~= m.qty then exact = false end', 'if false then exact = false end',
+  'a craft is verified although the materials did not leave the bags in the schematic quantity', [COSTTEST])
+m("ledger.watch.craft-output", "!!!TwichUI/auction/LedgerCostWatch.lua", 'local exact = (not c.bad) and gained == total', 'local exact = not c.bad',
+  'a craft is verified although the bags did not gain the reported output', [COSTTEST])
+m("ledger.watch.craft-learned", "!!!TwichUI/auction/LedgerCostWatch.lua", 'Plain(info.learned) ~= true then return nil end', 'false then return nil end',
+  'a recipe the player has not learned is accepted', [COSTTEST])
+m("ledger.watch.craft-overlap", "!!!TwichUI/auction/LedgerCostWatch.lua", '    if candidate then   -- a second craft began', '    if false then   -- a second craft began',
+  'two crafts in flight are both verified', [COSTTEST])
+
+# Local calendar days (docs/workshop/gold-ledger.md): bucketing, day edges, and the one-time move of UTC-bucketed records.
+m("ledger.day.offset", "!!!TwichUI/auction/Ledger.lua", 'function Lg.DayOf(t) return math.floor((t + Lg.UtcOffset(t)) / DAY) end', 'function Lg.DayOf(t) return math.floor(t / DAY) end',
+  "changes are filed under the UTC day instead of the player's day", [JOURNAL])
+m("ledger.day.start", "!!!TwichUI/auction/Ledger.lua", '    return day * DAY - Lg.UtcOffset(s)\nend', '    return day * DAY\nend',
+  'retention and windows start at UTC midnight while days are local', [JOURNAL])
+m("ledger.day.rebuild-skipped", "!!!TwichUI/auction/Ledger.lua", '    if rec.tz ~= 1 then Rebuild(rec) end', '    if false then Rebuild(rec) end',
+  'an old UTC-bucketed record is read as local days without being rebuilt', [JOURNAL])
+m("ledger.day.rebuild-trimmed", "!!!TwichUI/auction/Ledger.lua", 'local cut = (first and first.id > 1) and math.floor(first.t / DAY) or -1', 'local cut = -1',
+  'trimmed history loses its totals when a record moves to local days', [JOURNAL])
+m("ledger.day.query-window", "TwichUI_Workshop/LedgerQuery.lua", '    local first = LQ.DayStart(today - filter.days + 1)\n', '    local first = (today - filter.days + 1) * DAY\n',
+  'the transaction list starts at UTC midnight while the cards use local days', [LEDGERUI])
+
+# Coins and the Gold Flow chart (presentation): the amount's exactness, aggregation, coverage, input lifecycle.
+COINT = "test_ledger_coins.lua"
+
+m("ledger.coins.sign", "TwichUI_Workshop/Coins.lua", '    if neg then return "-" .. text end\n', '    if neg then return text end\n',
+  'a loss is shown as a gain', [COINT])
+m("ledger.coins.zero-part", "TwichUI_Workshop/Coins.lua", 'if level < 3 and s > 0 then parts[#parts + 1] = Unit("silver", s, height) end', 'if level < 3 then parts[#parts + 1] = Unit("silver", s, height) end',
+  'a zero silver part is shown between gold and copper', [COINT])
+m("ledger.coins.fraction", "TwichUI_Workshop/Coins.lua", 'or math.floor(copper) ~= copper then return nil end', 'then return nil end',
+  'a fractional or damaged amount is formatted as if it were exact copper', [COINT])
+m("ledger.coins.exact-kept", "TwichUI_Workshop/Coins.lua", 'fs.exact, fs.compact, fs.level = Plain(copper), (o.level or 1) > 1, o.level or 1', 'fs.exact, fs.compact, fs.level = nil, false, 1',
+  'a compacted figure loses its exact amount for the hover', [COINT])
+m("ledger.coins.helper-paths", "TwichUI_Workshop/Coins.lua", 'if #list == 3 and not list[1]:find("[%c]") then found', 'if #list >= 1 then found',
+  'a half-understood helper answer replaces the artwork paths', [COINT])
+m("ledger.chart.column-sum", "TwichUI_Workshop/LedgerChart.lua", 'col.inn, col.out, col.n = col.inn + d.inn, col.out + d.out, col.n + d.n', 'col.inn, col.out, col.n = col.inn + d.inn, col.out, col.n + d.n',
+  'a longer column drops the spending of its days', [LEDGERUI])
+m("ledger.chart.unrecorded-day", "TwichUI_Workshop/LedgerChart.lua", '            if d.covered then\n                col.recorded = col.recorded + 1', '            if true then\n                col.recorded = col.recorded + 1',
+  'a day outside coverage counts as recorded in its column', [LEDGERUI])
+m("ledger.chart.join-partial", "TwichUI_Workshop/LedgerChart.lua", 'and not d.partial and not prev.partial then g.segments', 'then g.segments',
+  'the net line is drawn into and out of a partly recorded column', [LEDGERUI])
+m("ledger.chart.zoom-context", "TwichUI_Workshop/LedgerChart.lua", '            self.view = nil\n            self.pointer:Cancel()', '            self.pointer:Cancel()',
+  'a zoom survives a change of range, scope or source', [LEDGERUI])
+m("ledger.chart.hide-input", "TwichUI_Workshop/LedgerChart.lua", 'c:SetScript("OnHide", function() c.pointer:Cancel() end)', 'c:SetScript("OnHide", function() end)',
+  'a drag or hover survives hiding the chart', [LEDGERUI])
+m("ledger.chart.drag-threshold", "TwichUI_Workshop/ChartKit.lua", 'if math.abs(x - from) >= Kit.DRAG then h.commit(from, x) end', 'if math.abs(x - from) >= 0 then h.commit(from, x) end',
+  'a click or a tiny drag zooms', [LEDGERUI])
+m("ledger.chart.min-bar", "TwichUI_Workshop/LedgerChart.lua", 'local h = math.max(C.MIN_BAR, g.zeroY - Y(-d.out))', 'local h = g.zeroY - Y(-d.out)',
+  'a very small expense vanishes next to a large income', [LEDGERUI])
+
+# Quest rewards as a ledger source.
+QUESTT = "test_ledger_quest.lua"
+
+m("ledger.quest.payload", "!!!TwichUI/auction/LedgerQuest.lua", 'if not (active and L and questID and money) then', 'if not (L and money) then',
+  'a damaged quest event or one received while the ledger is off is offered as evidence', [QUESTT])
+m("ledger.quest.direction", "!!!TwichUI/auction/Ledger.lua", 'quest = { label = "Quest reward", dir = 1,', 'quest = { label = "Quest reward",',
+  'a quest reward can be attached to gold that left', [QUESTT])
+
+# Sale batches (EllesmereUI's junk selling): the request is only a marker; receipts, bag counts and money decide.
+m("ledger.vendor.unrequested-receipt", VENDOR, 'if q > (b.requested[id] or 0) then Kill("receipt-without-request"); break end', 'if false then Kill("receipt-without-request"); break end',
+  "a receipt for an item nobody asked to sell is attributed", [VTEST])
+m("ledger.vendor.receipt-alignment", VENDOR, 'for shift = 0, (n == BUYBACK) and (n - 1) or 0 do', 'for shift = 0, (n == BUYBACK) and n or 0 do',
+  "a shift of the whole buyback list is allowed to match, so a normal sale in a full list is called indistinguishable", [VTEST])
+m("ledger.vendor.frame-shown", VENDOR, 'R.Ledger.CharKey() == visit.key and NPC() == visit.npc\nend', 'R.Ledger.CharKey() == visit.key and NPC() == visit.npc and (not MerchantFrame or MerchantFrame:IsShown())\nend',
+  'an automatic seller that starts before the merchant frame is shown silently closes the observer for the visit', [VTEST])
+m("ledger.vendor.bank-argument", VENDOR, 'if unit ~= nil or (BankFrame and BankFrame.IsShown and BankFrame:IsShown()) then', 'if unit ~= nil or bank ~= nil then',
+  "the merchant frame's own right-click (which passes a bank argument) is refused as not a plain sale", [VTEST])

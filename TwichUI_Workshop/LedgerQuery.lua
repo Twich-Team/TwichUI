@@ -6,7 +6,7 @@
 -- What the numbers are (and are not): every figure is observed gold movement, the exact difference between readings of the
 -- character's gold, split into money in and money out. "Net Change" is in minus out. None of it is profit: a purchase of materials, a
 -- repair or a transfer between your own characters is also gold out, and gold from a sale only counts when it reached your gold.
--- Days are UTC days. A day with no record is outside the recorder's coverage, which is not the same as a day with no activity.
+-- Days are the player's LOCAL calendar days (the recorder's Lg.DayOf / Lg.DayStart). A day with no record is outside the recorder's coverage, which is not the same as a day with no activity.
 --
 -- Filter: { scope = "current" | "all", source = nil | a source code, days = 7 | 30 | 90, search = "" }. Character scope, source and
 -- the day window apply to the totals, the series and the transactions alike; search only narrows the transaction list (the daily totals
@@ -27,14 +27,16 @@ local function Ledger() return R.Ledger end
 ---------------------------------------------------------------------------
 LQ.LABELS = {
     ahSale = "Auction sales", mail = "Mail collected", ahBuy = "Auction purchases", other = "Unclassified",
-    vendorBuy = "Vendor purchases", vendorSell = "Vendor sales", repair = "Repairs",
+    vendorBuy = "Vendor purchases", vendorSell = "Vendor sales", repair = "Repairs", quest = "Quest rewards",
     ahDeposit = "Auction deposits", ahCancelFee = "Cancellation fees",
 }
 LQ.ART = { ahSale = "npc:gavel", mail = "npc:sealed-scroll", ahBuy = "npc:reagent-pouch", other = "npc:coins" }
 LQ.ART.vendorBuy, LQ.ART.vendorSell, LQ.ART.repair = "npc:reagent-pouch", "npc:coins", "npc:hammer"
+LQ.ART.quest = "npc:inscribed-stone"
 -- The source a transaction row names: the single word for the table (a direction is the amount's sign).
 LQ.ROW_LABELS = { ahSale = "Auction Sale", mail = "Mail Collected", ahBuy = "Auction Purchase", other = "Unclassified" }
 LQ.ROW_LABELS.vendorBuy, LQ.ROW_LABELS.vendorSell, LQ.ROW_LABELS.repair = "Vendor Purchase", "Vendor Sale", "Repairs"
+LQ.ROW_LABELS.quest = "Quest Reward"
 LQ.ROW_LABELS.ahDeposit, LQ.ROW_LABELS.ahCancelFee = "Auction Deposit", "Auction Cancellation Fee"
 LQ.ART.ahDeposit, LQ.ART.ahCancelFee = "npc:gavel", "npc:coins"
 
@@ -55,15 +57,28 @@ function LQ.Money(copper, signed)
     return (signed and n > 0) and ("+" .. text) or text
 end
 
+-- A day is a local calendar-day number: its label is that date itself, so it is formatted without a zone shift.
 function LQ.Day(day) return date("!%Y-%m-%d", day * DAY) end
 function LQ.DayShort(day) return date("!%b %d", day * DAY) end
-function LQ.Stamp(t) return date("!%Y-%m-%d %H:%M", t) .. " UTC" end
+-- A moment is shown in the player's own time.
+function LQ.Stamp(t) return date("%Y-%m-%d %H:%M", t) end
+function LQ.Clock(t) return date("%b %d  %H:%M", t) end
+
+-- The local day a unix time falls on, and the unix time a local day begins (the recorder's own, so the page and the journal agree).
+function LQ.DayOf(t)
+    local L = Ledger()
+    return L and L.DayOf and L.DayOf(t) or math.floor(t / DAY)
+end
+function LQ.DayStart(day)
+    local L = Ledger()
+    return L and L.DayStart and L.DayStart(day) or day * DAY
+end
 
 function LQ.Today()
     local f = GetServerTime or time
     local ok, t = pcall(f)
     if not ok or type(t) ~= "number" or t ~= t or t < 0 then return nil end
-    return math.floor(t / DAY)
+    return LQ.DayOf(t)
 end
 
 ---------------------------------------------------------------------------
@@ -166,7 +181,7 @@ local function Key(filter, today, records)
 end
 
 -- The whole answer for the cards, the chart and the source panel. Cached until the recorder changes or the filter or the day does.
---   from, to            first and last UTC day (today is last)
+--   from, to            first and last local day (today is last)
 --   days                { { day, inn, out, net, n, covered } } for each day, oldest first
 --   totals              inn, out, net, attrIn, attrOut (identified sources), unkIn, unkOut (unclassified), n
 --   by                  { [code] = { inn, out } }
@@ -228,11 +243,12 @@ function LQ.SourceRows(summary)
 end
 
 -- The words for a comparison with the window before. nil when that window was not fully recorded: no percentage is made from partial data.
-function LQ.Compare(summary, field)
+function LQ.Compare(summary, field, fmt)
+    local M = fmt or LQ.Money
     local p = summary and summary.prev
     if not p then return nil end
     local now, before = summary.totals[field], p[field]
-    if field == "net" then return { prior = before, text = "Prior " .. summary.filter.days .. "d: " .. LQ.Money(before, true) } end
+    if field == "net" then return { prior = before, text = "Prior " .. summary.filter.days .. "d: " .. M(before, true) } end
     if before <= 0 then return nil end
     local pct = math.floor((now - before) / before * 100 + 0.5)
     return { prior = before, pct = pct, text = ("%s%d%% vs. prior %dd"):format(pct > 0 and "+" or "", pct, summary.filter.days) }
@@ -270,30 +286,33 @@ function LQ.Note(row)
         return row.code == "ahSale" and row.qty and row.qty > 1 and ("%s \195\151%d"):format(row.note, row.qty) or row.note
     end
     if row.code == "mail" then return "Money from the mailbox" end
+    if row.code == "quest" then return "Quest reward" end
     if row.code == "ahBuy" then return "Completed purchase" end
     if row.code == "ahSale" then return "Sale proceeds" end
     return "Gold balance change"
 end
 
 -- Settlement is descriptive metadata on the collected cash entry; these amounts never enter totals again.
-function LQ.AuctionDetails(row)
+-- fmt(amount, signed) writes an amount (default: the plain text; the page passes the coin artwork).
+function LQ.AuctionDetails(row, fmt)
+    local M = fmt or LQ.Money
     local lines = {}
     if row.auction then lines[#lines + 1] = "Auction ID: " .. row.auction end
     if row.code ~= "ahSale" then return lines end
-    lines[#lines + 1] = "Collected: " .. LQ.Money(row.a)
+    lines[#lines + 1] = "Collected: " .. M(row.a)
     local L = Ledger()
     local s = L and L.Settlement(row.settlement, row.a)
     if not s then lines[#lines + 1] = "Fee unavailable"; return lines end
-    lines[#lines + 1] = "Gross sale: " .. LQ.Money(s.g)
-    lines[#lines + 1] = "Auction fee: " .. LQ.Money(s.f) .. " - verified invoice"
-    lines[#lines + 1] = "Returned deposit: " .. LQ.Money(s.d) .. " (included in collected)"
+    lines[#lines + 1] = "Gross sale: " .. M(s.g)
+    lines[#lines + 1] = "Auction fee: " .. M(s.f) .. " - verified invoice"
+    lines[#lines + 1] = "Returned deposit: " .. M(s.d) .. " (included in collected)"
     if #s.invoices > 1 then
         lines[#lines + 1] = "Seller invoices: " .. #s.invoices
         for i = 1, math.min(3, #s.invoices) do
             local r = s.invoices[i]
             local name = r.n or "Sold item"
             if r.q and r.q > 1 then name = ("%s \195\151%d"):format(name, r.q) end
-            lines[#lines + 1] = name .. ": " .. LQ.Money(r.c)
+            lines[#lines + 1] = name .. ": " .. M(r.c)
         end
     end
     return lines
@@ -308,8 +327,8 @@ function LQ.Rows(filter, today, limit)
     local L = Ledger()
     if not (L and today) then return {}, false end
     local records = Records(filter.scope)
-    local first = (today - filter.days + 1) * DAY
-    local last = (today + 1) * DAY
+    local first = LQ.DayStart(today - filter.days + 1)
+    local last = LQ.DayStart(today + 1)
     local needle = filter.search ~= "" and filter.search:lower() or nil
     local ptr = {}
     for i, r in ipairs(records) do ptr[i] = #r.rec.entries end
@@ -350,11 +369,122 @@ function LQ.Rows(filter, today, limit)
 end
 
 ---------------------------------------------------------------------------
--- Profession profitability: not available yet
+-- Realized item results: what a verified sale earned against the verified cost of exactly those units
 ---------------------------------------------------------------------------
--- A later version may register a provider that links crafts, material costs and realized sales. Until one exists the page says
--- it is not available; unknown costs are never shown as zero. A provider is a function(filter) returning nil (nothing to say) or
--- { rows = { { name, icon, amount (signed copper), partial = true when some cost or sale is unknown } }, note = "plain words" }.
+-- Read from the core's cost basis (auction/LedgerCost.lua). Nothing here estimates: a result carries a profit only when the
+-- sale's collected gold and the cost of the exact units sold were both verified; otherwise the row says why it cannot.
+LQ.MAX_RESULT_ROWS = 100
+LQ.WHY = {
+    nolot = "No verified purchase or craft of this item was on record.",
+    mixed = "Other stock of the same item was in your bags, so these units could not be told from it.",
+    missing = "Some verified units of this item were no longer in your bags.",
+    short = "The bags could not confirm exactly which units were sold.",
+    nostock = "The bags could not confirm exactly which units were sold.",
+    unknowncost = "The cost of some of the materials was never verified.",
+    manylots = "The sale drew on too many separate purchases to keep.",
+    auctionid = "A seller invoice names the item but proves no item identity, so no purchase is matched to it.",
+}
+local resultCache
+
+local function Cost() return R.LedgerCost end
+
+local function CharKeys(records)
+    local keys = {}
+    for i, r in ipairs(records) do keys[i] = r.key end
+    return keys
+end
+
+local function Window(filter, today) return LQ.DayStart(today - filter.days + 1), LQ.DayStart(today + 1) end
+
+-- { rows, verified (profit of verified sales), sales, unavailable (sales without a verified result) } or nil without a cost basis.
+-- A row groups the window's sales of one item identity:
+--   name, item, src, qty, sales, collected (all sales), vsales/vqty/vcollected/vcost (the verified ones), profit (nil unless some are
+--   verified), status ("verified" | "partial" | "unavailable"), why, gross/fee/deposit (auction invoices), t (newest sale)
+function LQ.Results(filter, today)
+    filter = Normalize(filter)
+    today = today or LQ.Today()
+    local C, L = Cost(), Ledger()
+    if not (C and L and today) then return nil end
+    local records = Records(filter.scope)
+    local keys = CharKeys(records)
+    local key = table.concat({ L.Revision(), filter.scope, filter.source or "-", filter.days, today, filter.search, table.concat(keys, "|") }, ":")
+    if resultCache and resultCache.key == key then return resultCache.value end
+    local pt = R.Perf and R.Perf.on and R.Perf.Start("ledger.costquery")
+    local first, last = Window(filter, today)
+    local needle = filter.search ~= "" and filter.search:lower() or nil
+    local groups, order = {}, {}
+    local total = { verified = 0, sales = 0, unavailable = 0 }
+    for _, r in ipairs(C.Results(keys, first, last)) do
+        if not filter.source or filter.source == r.src then
+            local name = ItemName(r.i) or r.n or (r.i and ("Item " .. r.i)) or "Sold item"
+            if not needle or name:lower():find(needle, 1, true) then
+                local gk = r.src .. ":" .. (r.k or ("n:" .. (r.n or "?")))
+                local g = groups[gk]
+                if not g then
+                    g = { name = name, item = r.i, src = r.src, qty = 0, sales = 0, collected = 0, vsales = 0, vqty = 0, vcollected = 0, vcost = 0,
+                        gross = 0, fee = 0, deposit = 0, t = r.t, whys = {} }
+                    groups[gk] = g
+                    order[#order + 1] = g
+                end
+                g.qty, g.sales, g.collected = g.qty + r.q, g.sales + 1, g.collected + r.a
+                if r.t > g.t then g.t = r.t end
+                total.sales = total.sales + 1
+                if r.st == "ok" then
+                    g.vsales, g.vqty, g.vcollected, g.vcost = g.vsales + 1, g.vqty + r.q, g.vcollected + r.a, g.vcost + r.c
+                    total.verified = total.verified + (r.a - r.c)
+                else
+                    total.unavailable = total.unavailable + 1
+                    if r.w and not g.whys[r.w] then g.whys[r.w] = true; g.why = g.why or r.w end
+                    if r.src == "ahSale" then g.gross, g.fee, g.deposit = g.gross + (r.g or 0), g.fee + (r.fee or 0), g.deposit + (r.d or 0) end
+                end
+            end
+        end
+    end
+    table.sort(order, function(a, b) if a.t ~= b.t then return a.t > b.t end return a.name < b.name end)
+    local rows, more = {}, false
+    for _, g in ipairs(order) do
+        if #rows >= LQ.MAX_RESULT_ROWS then more = true break end
+        g.status = g.vsales == g.sales and "verified" or (g.vsales > 0 and "partial" or "unavailable")
+        g.profit = g.vsales > 0 and (g.vcollected - g.vcost) or nil
+        rows[#rows + 1] = g
+    end
+    local value = { rows = rows, more = more, verified = total.verified, sales = total.sales, unavailable = total.unavailable }
+    resultCache = { key = key, value = value }
+    if pt then R.Perf.Stop(pt) end
+    return value
+end
+
+-- The words of one result row's hover: only verified figures, and the reason for any that are missing.
+function LQ.ResultLines(row, fmt)
+    local M = fmt or LQ.Money
+    local lines = {}
+    if row.src == "ahSale" then
+        lines[#lines + 1] = "Auction sale: " .. M(row.collected) .. " collected"
+        if row.gross > 0 then lines[#lines + 1] = "Gross sale " .. M(row.gross) .. ", auction fee " .. M(row.fee) .. ", returned deposit " .. M(row.deposit) end
+    else
+        lines[#lines + 1] = row.sales == 1 and "1 vendor sale" or (row.sales .. " vendor sales")
+    end
+    if row.status == "verified" then
+        lines[#lines + 1] = "Verified cost: " .. M(row.vcost)
+        lines[#lines + 1] = "Collected: " .. M(row.vcollected)
+        lines[#lines + 1] = "Realized result: " .. M(row.profit, true)
+    elseif row.status == "partial" then
+        lines[#lines + 1] = ("%d of %d sales have a verified cost"):format(row.vsales, row.sales)
+        lines[#lines + 1] = "Verified: collected " .. M(row.vcollected) .. ", cost " .. M(row.vcost) .. " = " .. M(row.profit, true)
+    else
+        lines[#lines + 1] = "Cost basis unavailable. Profit unavailable."
+    end
+    if row.status ~= "verified" and row.why and LQ.WHY[row.why] then lines[#lines + 1] = LQ.WHY[row.why] end
+    return lines
+end
+
+---------------------------------------------------------------------------
+-- Profit by Profession
+---------------------------------------------------------------------------
+-- Only a verified craft sold with every material's cost known counts toward a profession; sales with an unknown cost are named
+-- as partial; a profession with crafts but no such sale says so. Vendor resale of bought goods and gathered goods are never attributed.
+-- A provider is a function(filter) returning nil (nothing to say) or { rows = { { name, icon, amount (signed copper), partial,
+-- text (replaces the amount), tip = { lines } } }, note = "plain words" }. The cost basis registers itself below.
 function LQ.SetProfessionProvider(fn) LQ.professionProvider = type(fn) == "function" and fn or nil end
 function LQ.Professions(filter)
     local f = LQ.professionProvider
@@ -364,4 +494,35 @@ function LQ.Professions(filter)
     return result
 end
 
-function LQ.ResetCache() cache = nil end
+local function CostProfessions(filter)
+    local C, L = Cost(), Ledger()
+    local today = LQ.Today()
+    if not (C and L and today) then return nil end
+    local keys = CharKeys(Records(filter.scope))
+    local first, last = Window(filter, today)
+    local rows = {}
+    for _, p in ipairs(C.Professions(keys, first, last)) do
+        local row = { name = p.name, partial = p.partial > 0 and p.sales > 0, tip = {} }
+        if p.sales > 0 then
+            row.amount = p.profit
+            row.name = ("%s \194\183 %d %s verified"):format(p.name, p.sales, p.sales == 1 and "sale" or "sales")
+            row.tip[#row.tip + 1] = ("Verified: collected %s, cost %s"):format(LQ.Money(p.collected), LQ.Money(p.cost))
+            row.tipFn = function(fmt)   -- the same words with the page's own money presentation
+                local lines = { ("Verified: collected %s, cost %s"):format(fmt(p.collected), fmt(p.cost)) }
+                for i = 2, #row.tip do lines[i] = row.tip[i] end
+                return lines
+            end
+            if p.partial > 0 then row.tip[#row.tip + 1] = p.partial .. " more " .. (p.partial == 1 and "sale has" or "sales have") .. " a craft with an unknown cost and are not counted." end
+        else
+            row.text = "Insufficient verified data"
+            row.tip[#row.tip + 1] = p.crafts .. (p.crafts == 1 and " craft" or " crafts") .. " recorded; no sale with a complete verified cost yet."
+        end
+        rows[#rows + 1] = row
+    end
+    if #rows == 0 then return nil end
+    return { rows = rows, note = "Only crafts the game confirmed, sold with every material's cost verified." }
+end
+LQ.CostProfessions = CostProfessions
+LQ.SetProfessionProvider(CostProfessions)
+
+function LQ.ResetCache() cache = nil; resultCache = nil end

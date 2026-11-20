@@ -2488,20 +2488,20 @@ Lab.Step("pose for the screenshot", function()
         end
     elseif view == "ledger" or view == "ledgersmall" or view == "ledgervendor" or view == "ledgervendorsmall" or view == "ledgerauction" or view == "ledgerauctionsmall" then
         -- the Gold Ledger over a SYNTHETIC journal written straight into TwichUILedgerDB (the recorder's own events are not simulated here; the
-        -- offline tests cover them). Days are relative to today (UTC). EXPECTED VALUES are hand arithmetic, never read from the code under test:
+        -- offline tests cover them). Days are relative to today (the player's local day). EXPECTED VALUES are hand arithmetic, never read from the code under test:
         --   today-0: +100000 mail, -25000 auction purchase (Peacebloom x2), +5000 unclassified
         --   today-1: +30000 auction sale (Silverleaf); today-2: recorded, nothing moved; today-3: -7000 unclassified; today-4: not recorded
         --   today-5: +20000 unclassified; today-10: +50000 mail
         --   7 days: in 155000 (15g 50s), out 32000 (3g 20s), net 123000 (12g 30s); attributed in 130000, attributed out 25000, unclassified +18000
         local W, DAY = R.Workshop, 86400
-        local today = math.floor(GetServerTime() / DAY)
-        local rec = { name = UnitName("player"), realm = GetRealmName(), since = (today - 20) * DAY, nextId = 1, entries = {}, days = {} }
+        local today = R.Ledger.DayOf(GetServerTime())
+        local rec = { name = UnitName("player"), realm = GetRealmName(), since = R.Ledger.DayStart(today - 20), nextId = 1, entries = {}, days = {}, tz = 1 }
         local EV = { mail = "mailbox", ahSale = "mailinvoice", ahBuy = "auctionpurchase" }
         local function Add(off, amount, k, extra)
             local day = today - off
             local d = rec.days[day]
             if not d then d = { i = 0, o = 0, n = 0, ci = {}, co = {} }; rec.days[day] = d end
-            local e = { id = rec.nextId, t = day * DAY + 3600 + rec.nextId, a = amount, e = k and EV[k] or "balance", k = k }
+            local e = { id = rec.nextId, t = R.Ledger.DayStart(day) + 3600 + rec.nextId, a = amount, e = k and EV[k] or "balance", k = k }
             for kk, v in pairs(extra or {}) do e[kk] = v end
             rec.nextId = rec.nextId + 1
             rec.entries[#rec.entries + 1] = e
@@ -2518,11 +2518,11 @@ Lab.Step("pose for the screenshot", function()
         Tab("Gold Ledger")
         local V = W.UI.LedgerView
         Check("display", "pose: the Gold Ledger page is shown", true, Win().Page("ledger"):IsShown())
-        Check("display", "pose: net change, gold in and gold out of seven days", "+12g 30s 0c | +15g 50s 0c | -3g 20s 0c",
+        Check("display", "pose: net change, gold in and gold out of seven days", "+12g 30s | +15g 50s | -3g 20s",
             Txt(V.cards.net.value) .. " | " .. Txt(V.cards.inn.value) .. " | " .. Txt(V.cards.out.value))
-        Check("display", "pose: attributed income, spending and the unclassified net", "+13g 0s 0c | -2g 50s 0c | +1g 80s 0c",
+        Check("display", "pose: attributed income, spending and the unclassified net", "+13g | -2g 50s | +1g 80s",
             Txt(V.cards.attrIn.value) .. " | " .. Txt(V.cards.attrOut.value) .. " | " .. Txt(V.cards.unk.value))
-        Check("display", "pose: six transactions, newest first, the first an unclassified +5000", "6 | +50s 0c | Unclassified",
+        Check("display", "pose: six transactions, newest first, the first an unclassified +5000", "6 | +50s | Unclassified",
             #V.rows .. " | " .. Txt(V.list.rows[1].amount) .. " | " .. Txt(V.list.rows[1].src))
         -- of the seven days (today-6 .. today) today-6 and today-4 have no record; today-2 is recorded with nothing moved
         Check("display", "pose: a day outside the recorded days is not a zero (two uncovered columns, one recorded quiet day)", "2 | 1",
@@ -2532,7 +2532,7 @@ Lab.Step("pose for the screenshot", function()
         for _, r in ipairs(W.LedgerQuery.SourceRows(V.summary)) do split = split + r.dir * r.amount end
         Check("state", "pose: the sources add up to Net Change", 123000, split)
         V.SetFilter("days", 30); Lab.Settle(0.2)
-        Check("display", "pose: thirty days add the +50000 mail", "+20g 50s 0c", Txt(V.cards.inn.value))
+        Check("display", "pose: thirty days add the +50000 mail", "+20g 50s", Txt(V.cards.inn.value))
         V.SetFilter("days", 7); Lab.Settle(0.2)
         if view == "ledgervendor" or view == "ledgervendorsmall" or view == "ledgerauction" or view == "ledgerauctionsmall" then
             -- Additive UI fixture only: merchant native callbacks/outcomes are independently exercised offline.
@@ -2554,7 +2554,7 @@ Lab.Step("pose for the screenshot", function()
             local total = 0
             for _, source in ipairs(V.sourceList.data) do total = total + source.dir * source.amount end
             Check("state", "vendor pose: all displayed sources reconcile with net", 110593, total)
-            V.sourceList.scroll:SetVerticalScroll(3 * 26); V.sourceList:Layout()
+            V.sourceList.scroll:SetVerticalScroll(3 * 32); V.sourceList:Layout()
             local found = false
             for _, row in ipairs(V.srcRows) do if row:IsShown() and row.data.code == "vendorSell" then found = true end end
             Check("state", "vendor pose: scrolling exposes the smallest source", true, found)
@@ -2588,6 +2588,89 @@ Lab.Step("pose for the screenshot", function()
             Check("display", "auction pose: settlement tooltip uses the existing transaction hover", true, GameTooltip:IsShown())
         else
             Rows(Lists().ledger)[1]:SetHot(true) -- art only
+        end
+    elseif view == "ledgerhover" or view == "ledgersparse" or view == "ledger90" or view == "ledgerexpand" or view == "ledgerbig" then
+        -- Gold Flow chart poses over SYNTHETIC journals written straight into TwichUILedgerDB. Hover and zoom are driven by calling the chart's
+        -- own inspection (the simulator has no pointer); the card is a real frame, so the captures show it. Expected figures are hand arithmetic.
+        local W = R.Workshop
+        local today = R.Ledger.DayOf(GetServerTime())
+        local rec = { name = UnitName("player"), realm = GetRealmName(), since = R.Ledger.DayStart(today - 100), nextId = 1, entries = {}, days = {}, tz = 1 }
+        local EV = { mail = "mailbox", ahSale = "mailinvoice", ahBuy = "auctionpurchase", repair = "merchantrepair", vendorSell = "merchantsale" }
+        local function Quiet(off) rec.days[today - off] = rec.days[today - off] or { i = 0, o = 0, n = 0, ci = {}, co = {} } end
+        local function Add(off, amount, k, extra)
+            Quiet(off)
+            local day, d = today - off, rec.days[today - off]
+            local e = { id = rec.nextId, t = R.Ledger.DayStart(day) + 3600 + rec.nextId, a = amount, e = k and EV[k] or "balance", k = k }
+            for kk, v in pairs(extra or {}) do e[kk] = v end
+            rec.nextId = rec.nextId + 1
+            rec.entries[#rec.entries + 1] = e
+            local code = k or "other"
+            if amount > 0 then d.i = d.i + amount; d.ci[code] = (d.ci[code] or 0) + amount else d.o = d.o - amount; d.co[code] = (d.co[code] or 0) - amount end
+            d.n = d.n + 1
+        end
+        local expectIn, expectOut = 0, 0
+        local function Sum(amount) if amount > 0 then expectIn = expectIn + amount else expectOut = expectOut - amount end end
+        if view == "ledgerhover" then
+            Add(10, 50000, "mail"); Add(5, 20000); Add(3, -7000); Quiet(2); Add(1, 30000, "ahSale", { n = "Silverleaf" })
+            Add(0, 100000, "mail"); Add(0, -25000, "ahBuy", { i = 2447, q = 2 }); Add(0, 5000)
+        elseif view == "ledgersparse" then
+            -- one busy day among covered quiet days and two days the ledger was not recording
+            for off = 0, 6 do if off ~= 4 and off ~= 5 then Quiet(off) end end
+            Add(3, 820000, "mail"); Add(3, -140000, "ahBuy", { i = 2447, q = 40 }); Add(3, -3500, "repair", { n = "Equipment repairs" })
+            Add(3, 61000, "vendorSell", { i = 2447, q = 12 })
+            Sum(820000); Sum(-140000); Sum(-3500); Sum(61000)
+        elseif view == "ledger90" or view == "ledgerexpand" then
+            for off = 0, 89 do
+                if not ((off >= 30 and off <= 37) or off == 61 or off == 62) then   -- two stretches the ledger was not recording
+                    Quiet(off)
+                    if off % 3 ~= 1 then
+                        local gain = ((off * 37) % 11 + 1) * 4200 + (off % 4 == 0 and 250000 or 0)
+                        Add(off, gain, off % 2 == 0 and "mail" or nil); if off < (view == "ledgerexpand" and 30 or 90) then Sum(gain) end
+                        if off % 5 ~= 0 then local loss = -(((off * 17) % 7 + 1) * 3100); Add(off, loss, off % 3 == 0 and "ahBuy" or nil, off % 3 == 0 and { i = 2447, q = 3 } or nil); if off < (view == "ledgerexpand" and 30 or 90) then Sum(loss) end end
+                    end
+                end
+            end
+        else   -- ledgerbig: very large and very small amounts together
+            Add(6, 12345678901, "mail"); Sum(12345678901); Add(5, -987654321, "ahBuy", { i = 2447, q = 90 }); Sum(-987654321)
+            Add(4, 7); Sum(7); Add(3, -4950, "repair", { n = "Equipment repairs" }); Sum(-4950); Add(2, 25000000, "ahSale", { n = "Thorium Bar", q = 40 }); Sum(25000000)
+            Add(1, -9990001); Sum(-9990001); Add(0, 3, "vendorSell", { i = 2447, q = 1 }); Sum(3)
+        end
+        TwichUILedgerDB.chars[R.Ledger.CharKey()] = rec
+        W.LedgerQuery.ResetCache()
+        Tab("Gold Ledger")
+        local V = W.UI.LedgerView
+        if view == "ledger90" then V.SetFilter("days", 90) elseif view == "ledgerexpand" then V.SetFilter("days", 30) end
+        V.Draw(); Lab.Settle(0.3)
+        Check("display", "pose: chart: the page is shown", true, Win().Page("ledger"):IsShown())
+        if view ~= "ledgerhover" then
+            Check("state", "pose: chart: the cards add up to the journal (gold in / gold out)", expectIn .. " | " .. expectOut,
+                V.summary.totals.inn .. " | " .. V.summary.totals.out)
+        end
+        local chart = V.chart
+        if view == "ledgerhover" then
+            Check("state", "pose: chart: seven columns, the net line backend is named", "7 | true", #chart.cols .. " | " .. tostring(chart.backend == "native" or chart.backend == "raster"))
+            chart:InspectIndex(7); Lab.Settle(0.2)
+            Check("display", "pose: chart: the card names today and shows exact amounts", "true", tostring(chart:CardFrame():IsShown() and Txt(chart:CardFrame().rows[1].value) == "+10g 50s"))
+        elseif view == "ledgersparse" then
+            chart:InspectIndex(4); Lab.Settle(0.2)   -- the busy day (today-3 is column 4 of 7)
+            Check("display", "pose: chart: sparse week, the busy day's card", "+88g 10s | -14g 35s", Txt(chart:CardFrame().rows[1].value) .. " | " .. Txt(chart:CardFrame().rows[2].value))
+            Check("state", "pose: chart: days the ledger did not record are columns of their own, not zeros", 2, #chart.geometry.uncovered)
+        elseif view == "ledger90" then
+            local weekly = chart.cols[1].span == 7
+            Check("state", "pose: chart: 90 days become longer columns, every day's copper counted once", "true", tostring(weekly))
+            local sum = 0
+            for _, col in ipairs(chart.cols) do sum = sum + col.inn end
+            Check("state", "pose: chart: the columns add up to the window's gold in", V.summary.totals.inn, sum)
+            chart:InspectIndex(5); Lab.Settle(0.2)
+        elseif view == "ledgerexpand" then
+            V.OpenExpanded(); Lab.Settle(0.4)
+            Check("state", "pose: chart: the expanded view is open and shares the data", "true", tostring(V.ExpandedShown() and V.bigChart.model == V.summary))
+            local n = #V.bigChart.cols
+            V.bigChart:InspectIndex(math.max(1, math.floor(n * 0.4))); Lab.Settle(0.3)
+            Check("state", "pose: chart: the expanded card is inside the plot, away from the pointer", "true", tostring(V.bigChart:CardFrame():IsShown()))
+        else
+            Check("display", "pose: chart: a very large amount shows every digit of gold", "true", tostring(Txt(V.cards.inn.value):find("1,2", 1, true) ~= nil))
+            chart:InspectIndex(1); Lab.Settle(0.2)
         end
     elseif view == "shop" then
         -- the mixed-source list with a Make row: take the Smelt Bronze entry back out through its Remove button

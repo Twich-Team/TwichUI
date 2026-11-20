@@ -1,7 +1,8 @@
 -- TwichUI Workshop: the Gold Ledger page
 -- What the core's recorder (!!!TwichUI/auction/Ledger.lua) has kept of the gold this character (or all of them) gained and spent: six
--- summary cards, the Gold Flow chart, the split by source, the newest transactions, and a Profit by Profession panel that says plainly
--- it is not available yet. Everything is read through LedgerQuery.lua (pure); nothing is scanned, estimated or saved here. The filters
+-- summary cards, the Gold Flow chart, the split by source, the newest transactions (or, one click away in the same panel, the
+-- Realized Item Results: a sale's verified proceeds against the verified cost of exactly those units), and a Profit by Profession panel
+-- that shows only verified craft-to-sale results and otherwise says plainly that none exist. Everything is read through LedgerQuery.lua (pure); nothing is scanned, estimated or saved here. The filters
 -- (character, source, 7/30/90 days, search) are kept for the session only and apply to every panel at once.
 --
 -- Net Change is the safe centre of the page: gold in minus gold out. It is not profit (materials, repairs and moves between your own
@@ -12,17 +13,22 @@ local R = TwichUI
 local W = R.Workshop
 local UI = W.UI
 local LQ = W.LedgerQuery
+local Co = UI.Coins
 
 local GAP = 8
 local CARD_H, CARD_TOP = 76, -82
 local MID_TOP, MID_H, MID_L = -166, 196, 568
 local BOT_TOP, BOT_H = -370, 185
 local ROW_H = 26
+local SRC_ROW_H = 32
+local CARD_ICON = 10   -- every card's coins are cut at one size, whatever font its figure needed to fit
 local DRAW_DELAY = 0.3     -- a burst of money changes is one redraw
 local SEARCH_DELAY = 0.15
 
 local K
-local V = { cards = {}, srcRows = {}, profRows = {} }
+-- A money amount for a tooltip line or a plain text: the coin artwork (the pure LedgerQuery.Money stays the text form for queries and tests).
+local function Cash(amount, signed) return Co.Text(amount, { signed = signed, height = 12 }) end
+local V = { cards = {}, srcRows = {}, profRows = {}, mode = "transactions" }
 UI.LedgerView = V
 local page
 local filter = { scope = "current", source = nil, days = 7, search = "" }
@@ -45,7 +51,7 @@ local CARD_DEFS = {
     { key = "out", title = "Gold Out", art = "npc:reagent-pouch",
       tip = "All gold that left in the chosen days, whatever the reason." },
     { key = "attrIn", title = "Attributed Income", art = "npc:gavel",
-      tip = "Mailbox money, auction-sale invoices and verified vendor sales, matched to the exact gold received." },
+      tip = "Mailbox money, auction-sale invoices, quest rewards and verified vendor sales, matched to the exact gold received." },
     { key = "attrOut", title = "Attributed Spending", art = "npc:hammer",
       tip = "Auction purchases, verified posting deposits and cancellation fees, vendor purchases and player-paid repairs, matched to the exact gold spent." },
     { key = "unk", title = "Unclassified", art = "npc:sealed-scroll",
@@ -137,7 +143,10 @@ local function BuildCards()
         c.cmp:SetWidth(c.width)
         c.cmp:SetJustifyH("RIGHT")
         c.cmp:Hide()
-        UI.Tip(c, def.title, def.tip)
+        UI.TipFn(c, def.title, function(self)
+            local exact = self.value.exact
+            return def.tip .. (exact and ("\n\nExact: " .. Cash(exact, true) .. (self.value.compact and " (shortened on the card)" or "")) or "")
+        end)
         V.cards[def.key] = c
     end
 end
@@ -149,33 +158,40 @@ local function PaintCards(s)
     local days = filter.days
     for _, def in ipairs(CARD_DEFS) do
         local c = V.cards[def.key]
-        local value, tone, sub, cmp = "", K.textDim, ("Last %d days"):format(days), ""
+        local amount, signed                      -- exact copper (and whether a gain shows a "+"), or a plain word in `value`
+        local value, tone, sub, cmp = nil, K.textDim, ("Last %d days"):format(days), ""
         if t then
             if def.key == "net" then
-                value, tone = LQ.Money(t.net, true), Tone(t.net)
-                local p = LQ.Compare(s, "net")
+                amount, signed, tone = t.net, true, Tone(t.net)
+                local p = LQ.Compare(s, "net", Cash)
                 cmp = p and p.text or ""
             elseif def.key == "inn" then
-                value, tone = LQ.Money(t.inn, true), t.inn > 0 and K.sage or K.text
-                local p = LQ.Compare(s, "inn")
+                amount, signed, tone = t.inn, true, t.inn > 0 and K.sage or K.text
+                local p = LQ.Compare(s, "inn", Cash)
                 cmp = p and p.text or ""
             elseif def.key == "out" then
-                value, tone = t.out > 0 and LQ.Money(-t.out) or LQ.Money(0), t.out > 0 and K.ember or K.text
-                local p = LQ.Compare(s, "out")
+                amount, tone = -t.out, t.out > 0 and K.ember or K.text
+                local p = LQ.Compare(s, "out", Cash)
                 cmp = p and p.text or ""
             elseif def.key == "attrIn" then
-                value, tone, sub = LQ.Money(t.attrIn, true), t.attrIn > 0 and K.sage or K.text, "Confirmed sources"
+                amount, signed, tone, sub = t.attrIn, true, t.attrIn > 0 and K.sage or K.text, "Confirmed sources"
             elseif def.key == "attrOut" then
-                value, tone, sub = t.attrOut > 0 and LQ.Money(-t.attrOut) or LQ.Money(0), t.attrOut > 0 and K.ember or K.text, "Confirmed sources"
+                amount, tone, sub = -t.attrOut, t.attrOut > 0 and K.ember or K.text, "Confirmed sources"
             else
                 local net = t.unkIn - t.unkOut
-                value, tone, sub = LQ.Money(net, true), Tone(net), "Source unknown"
+                amount, signed, tone, sub = net, true, Tone(net), "Source unknown"
             end
         else
             value = "\226\128\148"
             sub, cmp = "Nothing recorded yet", ""
         end
-        Fit(c.value, value, c.width, 19, 12, "serif")
+        if amount ~= nil then
+            c.value:SetText("")
+            Co.Fit(c.value, amount, { size = 19, min = 14, width = c.width, signed = signed, role = "serif", icon = CARD_ICON })
+        else
+            c.value.exact = nil
+            Fit(c.value, value, c.width, 19, 12, "serif")
+        end
         UI.Paint(c.value, tone)
         Fit(c.sub, sub, c.width, 12, 10)
         -- a comparison sits on its own line only when there is a real one; otherwise nothing is said
@@ -210,6 +226,18 @@ local function BuildFlow()
         UI.Tip(b, days .. " days", "The last " .. days .. " days, today included. Every card and panel on this page follows.")
         p.ranges[days] = b
     end
+    -- Expand: the same chart, much larger (an overlay inside the Workshop, not another window)
+    p.expand = CreateFrame("Button", nil, p)
+    p.expand:SetSize(26, 26)
+    p.expand:SetPoint("TOPRIGHT", p, "TOPRIGHT", x - 2, -5)
+    p.expand.tex = p.expand:CreateTexture(nil, "ARTWORK")
+    p.expand.tex:SetAllPoints()
+    p.expand.tex:SetTexture("Interface\\AddOns\\TwichUI_Workshop\\media\\chart-expand")   -- a diagonal double arrow in a rounded rim
+    p.expand.tex:SetVertexColor(K.bronzeText[1], K.bronzeText[2], K.bronzeText[3], 0.8)
+    p.expand:SetScript("OnEnter", function(self) self.tex:SetVertexColor(1, 0.86, 0.55, 1) end)
+    p.expand:SetScript("OnLeave", function(self) self.tex:SetVertexColor(K.bronzeText[1], K.bronzeText[2], K.bronzeText[3], 0.8) end)
+    p.expand:SetScript("OnClick", function() V.OpenExpanded() end)
+    UI.Tip(p.expand, "Expand chart", "Open Gold Flow in a larger view with more room to inspect and zoom. Your date range, character and source filters carry over.")
     local chart = UI.GoldFlowChart(p, MID_L - 16, MID_H - 40)
     chart:SetPoint("TOPLEFT", p, "TOPLEFT", 8, -34)
     chart:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -8, 6)
@@ -223,21 +251,37 @@ local function BuildSources()
     p:SetPoint("TOPRIGHT", page, "TOPRIGHT", 0, MID_TOP)
     V.sources = p
     local function MakeSource(parent)
-        local row = CreateFrame("Frame", nil, parent)
-        row:SetHeight(ROW_H)
+        local row = CreateFrame("Button", nil, parent)
+        UI.Hover(row, 6)
         row.label = UI.Text(row, 12, K.text)
-        row.label:SetPoint("LEFT", 0, 0)
-        row.label:SetWidth(134)
+        row.label:SetPoint("TOPLEFT", 6, -3)
+        row.label:SetWidth(170)
         row.amount = UI.Text(row, 12, K.text)
-        row.amount:SetPoint("RIGHT", 0, 0)
-        row.amount:SetWidth(92)
+        row.amount:SetPoint("TOPRIGHT", -6, -3)
+        row.amount:SetWidth(150)
         row.amount:SetJustifyH("RIGHT")
-        row.bar = UI.Meter(row, 80, 10)
-        row.bar:SetPoint("LEFT", row.label, "RIGHT", 6, 0)
-        row.bar:SetPoint("RIGHT", row.amount, "LEFT", -8, 0)
+        -- the bar sits under its words, full width and a legible thickness; a nonzero amount always shows at least a small tick
+        row.bar = UI.Meter(row, 100, 10)
+        row.bar:SetPoint("BOTTOMLEFT", 6, 4)
+        row.bar:SetPoint("BOTTOMRIGHT", -6, 4)
+        row.TipEnter = function(self)
+            local d = self.data
+            if not (d and GameTooltip) then return end
+            GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+            GameTooltip:AddLine(d.label, 1, 0.82, 0)
+            GameTooltip:AddLine(Cash(d.dir * d.amount, true), (d.dir > 0 and K.sage or K.ember)[1], (d.dir > 0 and K.sage or K.ember)[2], (d.dir > 0 and K.sage or K.ember)[3])
+            local t = V.summary and V.summary.totals
+            local whole = t and (d.dir > 0 and t.inn or t.out) or 0
+            if whole > 0 then
+                GameTooltip:AddLine(("%.1f%% of all gold %s in this period"):format(d.amount / whole * 100, d.dir > 0 and "in" or "out"), K.textDim[1], K.textDim[2], K.textDim[3], true)
+            end
+            GameTooltip:AddLine("Bars are proportional to the largest source; a very small amount keeps a minimum visible tick.", K.stone[1], K.stone[2], K.stone[3], true)
+            GameTooltip:Show()
+        end
+        row.TipLeave = function() if GameTooltip then GameTooltip:Hide() end end
         row.fill = function(self, r)
             self.label:SetText(r.label)
-            self.amount:SetText(LQ.Money(r.dir * r.amount, true))
+            Co.Set(self.amount, r.dir * r.amount, { signed = true, size = 12 })
             UI.Paint(self.amount, r.dir > 0 and K.sage or K.ember)
             self.bar:SetFraction(V.sourceTop > 0 and r.amount / V.sourceTop or 0)
             self.bar:SetTone(r.dir > 0 and K.sage or K.ember)
@@ -246,7 +290,7 @@ local function BuildSources()
         return row
     end
     -- Keep the existing panel and row styling; scrolling exposes every source when more than five are present.
-    V.sourceList = UI.List(p, ROW_H, MakeSource, ROW_H * 5, false)
+    V.sourceList = UI.List(p, SRC_ROW_H, MakeSource, SRC_ROW_H * 4, false)
     V.sourceList.box:SetPoint("TOPLEFT", 8, -30)
     V.sourceList.box:SetPoint("BOTTOMRIGHT", -8, 34)
     V.srcRows = V.sourceList.rows
@@ -309,6 +353,16 @@ local function BuildProfessions()
         row.amount:SetPoint("RIGHT", 0, 0)
         row.amount:SetJustifyH("RIGHT")
         row.name:SetPoint("RIGHT", row.amount, "LEFT", -8, 0)
+        row:EnableMouse(true)
+        row:SetScript("OnEnter", function(self)
+            local d = self.data
+            if not (d and GameTooltip) then return end
+            GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+            GameTooltip:AddLine(tostring(d.name or ""), 1, 0.82, 0)
+            for _, line in ipairs(d.tipFn and d.tipFn(Cash) or d.tip or {}) do GameTooltip:AddLine(line, K.text[1], K.text[2], K.text[3], true) end
+            GameTooltip:Show()
+        end)
+        row:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
         row:Hide()
         V.profRows[i] = row
     end
@@ -325,9 +379,15 @@ local function PaintProfessions()
         if r then
             row:Show()
             if r.icon then row.icon:SetTexture(r.icon) end
+            row.data = r
             row.name:SetText(tostring(r.name or "") .. (r.partial and " (partial)" or ""))
-            row.amount:SetText(type(r.amount) == "number" and LQ.Money(r.amount, true) or "")
-            UI.Paint(row.amount, (type(r.amount) == "number" and r.amount < 0) and K.ember or K.sage)
+            if type(r.amount) == "number" then
+                Co.Set(row.amount, r.amount, { signed = true, size = 13 })
+                UI.Paint(row.amount, r.amount < 0 and K.ember or K.sage)
+            else
+                row.amount:SetText(tostring(r.text or ""))
+                UI.Paint(row.amount, K.textDim)
+            end
         else
             row:Hide()
         end
@@ -350,11 +410,11 @@ local function RowTip(self)
     end
     GameTooltip:AddLine(" ")
     GameTooltip:AddLine(LQ.Stamp(d.t), K.textDim[1], K.textDim[2], K.textDim[3])
-    GameTooltip:AddLine((d.a > 0 and "Gold in: " or "Gold out: ") .. LQ.Money(d.a, true), (d.a > 0 and K.sage or K.ember)[1], (d.a > 0 and K.sage or K.ember)[2], (d.a > 0 and K.sage or K.ember)[3])
+    GameTooltip:AddLine((d.a > 0 and "Gold in: " or "Gold out: ") .. Cash(d.a, true), (d.a > 0 and K.sage or K.ember)[1], (d.a > 0 and K.sage or K.ember)[2], (d.a > 0 and K.sage or K.ember)[3])
     GameTooltip:AddLine("Source: " .. LQ.ROW_LABELS[d.code] .. (d.attributed and " (confirmed)" or " (not identified)"), K.text[1], K.text[2], K.text[3])
     local words = R.Ledger and R.Ledger.EVIDENCE and R.Ledger.EVIDENCE[d.evidence or "balance"]
     if words then GameTooltip:AddLine(words, K.textDim[1], K.textDim[2], K.textDim[3], true) end
-    for _, line in ipairs(LQ.AuctionDetails(d)) do GameTooltip:AddLine(line, K.text[1], K.text[2], K.text[3], true) end
+    for _, line in ipairs(LQ.AuctionDetails(d, Cash)) do GameTooltip:AddLine(line, K.text[1], K.text[2], K.text[3], true) end
     if filter.scope == "all" and d.char then GameTooltip:AddLine("Character: " .. d.char, K.stone[1], K.stone[2], K.stone[3]) end
     GameTooltip:Show()
 end
@@ -379,14 +439,14 @@ local function MakeRow(parent)
     row.itemIcon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
     row.amount = UI.Text(row, 13, K.text, "strong")
     row.amount:SetPoint("RIGHT", -8, 0)
-    row.amount:SetWidth(106)
+    row.amount:SetWidth(150)
     row.amount:SetJustifyH("RIGHT")
     row.note = UI.Text(row, 12, K.text)
     row.TipEnter = RowTip
     row.TipLeave = function() if GameTooltip then GameTooltip:Hide() end end
     row.fill = function(self, d)
         self.data = d
-        self.time:SetText(date("!%b %d  %H:%M", d.t))
+        self.time:SetText(LQ.Clock(d.t))
         UI.Art(self.srcIcon, LQ.ART[d.code] or LQ.ART.other, 18)
         self.src:SetText(LQ.ROW_LABELS[d.code])
         self.src:SetWordWrap(d.code == "ahCancelFee")
@@ -405,10 +465,78 @@ local function MakeRow(parent)
         self.note:SetPoint("LEFT", self, "LEFT", x, 0)
         self.note:SetPoint("RIGHT", self.amount, "LEFT", -8, 0)
         self.note:SetText(filter.scope == "all" and d.char and (d.text .. " \194\183 " .. d.char) or d.text)
-        self.amount:SetText(LQ.Money(d.a, true))
+        Co.Set(self.amount, d.a, { signed = true, size = 13 })
         UI.Paint(self.amount, d.a > 0 and K.sage or K.ember)
     end
     return row
+end
+
+local function ResultTip(self)
+    local d = self.data
+    if not (d and GameTooltip) then return end
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    local shown = false
+    if d.item then shown = pcall(GameTooltip.SetItemByID, GameTooltip, d.item) end
+    if not shown then
+        GameTooltip:ClearLines()
+        GameTooltip:AddLine(d.name, 1, 0.82, 0)
+    end
+    GameTooltip:AddLine(" ")
+    for _, line in ipairs(LQ.ResultLines(d, Cash)) do GameTooltip:AddLine(line, K.text[1], K.text[2], K.text[3], true) end
+    GameTooltip:Show()
+end
+
+local function MakeResultRow(parent)
+    local row = CreateFrame("Button", nil, parent)
+    UI.Hover(row, 6)
+    local rule = UI.Rule(row, 0.18)
+    rule:SetPoint("BOTTOMLEFT", 4, 0); rule:SetPoint("BOTTOMRIGHT", -4, 0)
+    row.itemIcon = row:CreateTexture(nil, "ARTWORK")
+    row.itemIcon:SetSize(16, 16)
+    row.itemIcon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    row.itemIcon:SetPoint("LEFT", 8, 0)
+    row.name = UI.Text(row, 12, K.text)
+    row.name:SetPoint("LEFT", 30, 0)
+    row.name:SetWidth(134)
+    row.name:SetWordWrap(false)
+    row.collected = UI.Text(row, 12, K.text)
+    row.collected:SetPoint("LEFT", 168, 0)
+    row.collected:SetWidth(124)
+    row.collected:SetJustifyH("RIGHT")
+    row.cost = UI.Text(row, 12, K.text)
+    row.cost:SetPoint("LEFT", 294, 0)
+    row.cost:SetWidth(124)
+    row.cost:SetJustifyH("RIGHT")
+    row.result = UI.Text(row, 13, K.text, "strong")
+    row.result:SetPoint("RIGHT", -8, 0)
+    row.result:SetWidth(134)
+    row.result:SetJustifyH("RIGHT")
+    row.TipEnter = ResultTip
+    row.TipLeave = function() if GameTooltip then GameTooltip:Hide() end end
+    row.fill = function(self, d)
+        self.data = d
+        if d.item then self.itemIcon:SetTexture(LQ.ItemIcon(d.item) or UI.ICON_BLANK); self.itemIcon:Show() else self.itemIcon:Hide() end
+        self.name:SetText(d.qty > 1 and ("%s \195\151%d"):format(d.name, d.qty) or d.name)
+        Co.Fit(self.collected, d.collected, { size = 12, min = 11, width = 124 })
+        if d.vsales > 0 then
+            Co.Fit(self.cost, d.vcost, { size = 12, min = 11, width = 124 }); UI.Paint(self.cost, K.text)
+        else
+            self.cost:SetText("Unknown"); UI.Paint(self.cost, K.textDim)
+        end
+        if d.profit then
+            Co.Fit(self.result, d.profit, { size = 13, min = 11, width = d.status == "partial" and 126 or 134, signed = true, role = "strong" })
+            if d.status == "partial" then self.result:SetText(self.result:GetText() .. "*") end
+            UI.Paint(self.result, d.profit < 0 and K.ember or K.sage)
+        else
+            self.result:SetText("Unavailable"); UI.Paint(self.result, K.textDim)
+        end
+    end
+    return row
+end
+
+local function SetMode(mode)
+    V.mode = mode == "results" and "results" or "transactions"
+    V.Draw()
 end
 
 local function BuildTransactions()
@@ -419,19 +547,42 @@ local function BuildTransactions()
     p.count = UI.Text(p, 11, K.stone)
     p.count:SetPoint("TOPRIGHT", -14, -13)
     p.count:SetJustifyH("RIGHT")
-    for _, h in ipairs({ { "Time (UTC)", 92, 12 }, { "Source", 112, 128 }, { "Item / Note", 200, 232 } }) do
+    -- one panel, two views of the same recorded history: the cash transactions, or what verified sales realized
+    p.modeResults = UI.Segment(p, "Item Results", 92, function() SetMode("results") end)
+    p.modeResults:SetPoint("TOPRIGHT", p, "TOPRIGHT", -116, -6)
+    p.modeTx = UI.Segment(p, "Transactions", 96, function() SetMode("transactions") end)
+    p.modeTx:SetPoint("TOPRIGHT", p.modeResults, "TOPLEFT", -2, 0)
+    UI.Tip(p.modeResults, "Realized item results", "What items you sold actually earned: the gold collected against the verified cost of exactly those units. A profit appears only when both are verified; everything else says why it cannot.")
+    UI.Tip(p.modeTx, "Transactions", "Every recorded gold movement, newest first.")
+    V.txHeads, V.resHeads = {}, {}
+    for _, h in ipairs({ { "Time", 92, 12 }, { "Source", 112, 128 }, { "Item / Note", 200, 232 } }) do
         local fs = UI.Head(p, h[1], h[2], "LEFT")
         fs:SetPoint("TOPLEFT", p, "TOPLEFT", h[3], -32)
+        V.txHeads[#V.txHeads + 1] = fs
     end
-    local amountHead = UI.Head(p, "Amount", 106, "RIGHT")
+    local amountHead = UI.Head(p, "Amount", 150, "RIGHT")
     amountHead:SetPoint("TOPRIGHT", p, "TOPRIGHT", -30, -32)
+    V.txHeads[#V.txHeads + 1] = amountHead
     local rule = UI.Rule(p, 0.45)
     rule:SetPoint("TOPLEFT", 10, -48); rule:SetPoint("TOPRIGHT", -10, -48)
+    for _, h in ipairs({ { "Item", 134, 30, "LEFT" }, { "Collected", 124, 168, "RIGHT" }, { "Verified cost", 124, 294, "RIGHT" } }) do
+        local fs = UI.Head(p, h[1], h[2], h[4])
+        fs:SetPoint("TOPLEFT", p, "TOPLEFT", h[3] + 6, -32)
+        V.resHeads[#V.resHeads + 1] = fs
+    end
+    local resultHead = UI.Head(p, "Realized result", 134, "RIGHT")
+    resultHead:SetPoint("TOPRIGHT", p, "TOPRIGHT", -30, -32)
+    V.resHeads[#V.resHeads + 1] = resultHead
     local list = UI.List(p, ROW_H, MakeRow, ROW_H * 4, false)
     list.box:SetPoint("TOPLEFT", 6, -50)
     list.box:SetPoint("BOTTOMRIGHT", -6, 6)
     UI.lists.ledger = list
     V.list = list
+    local rlist = UI.List(p, ROW_H, MakeResultRow, ROW_H * 4, false)
+    rlist.box:SetPoint("TOPLEFT", 6, -50)
+    rlist.box:SetPoint("BOTTOMRIGHT", -6, 6)
+    UI.lists.ledgerResults = rlist
+    V.rlist = rlist
 end
 
 local function EmptyText(s)
@@ -451,6 +602,34 @@ local function PaintTransactions(s)
     V.tx.count:SetText(#rows == 0 and "" or (more and ("Newest %d shown"):format(#rows) or ("%d %s"):format(#rows, #rows == 1 and "transaction" or "transactions")))
 end
 
+local function ResultsEmpty(r)
+    if not r then return "Realized results are not available: the cost basis is not loaded." end
+    if filter.search ~= "" or filter.source then return "No sales match these filters." end
+    return "No sales with a verified result in the last " .. filter.days .. " days. Items bought at a vendor, delivered from an Auction House purchase or crafted while the Workshop is on can be matched to their sale; everything else is shown as unavailable, never as a guess."
+end
+
+local function PaintResults()
+    local r = LQ.Results(filter)
+    V.results = r
+    local rows = r and r.rows or {}
+    V.rlist:SetData(rows, #rows == 0 and ResultsEmpty(r) or nil)
+    local text = ""
+    if r and #rows > 0 then
+        text = Cash(r.verified, true) .. " verified"
+    end
+    V.tx.count:SetText(text)
+end
+
+local function ApplyMode()
+    local results = V.mode == "results"
+    V.tx.title:SetText(results and "Realized Results" or "Recent Transactions")
+    V.tx.modeTx:SetOn(not results); V.tx.modeResults:SetOn(results)
+    for _, fs in ipairs(V.txHeads) do fs:SetShown(not results) end
+    for _, fs in ipairs(V.resHeads) do fs:SetShown(results) end
+    V.list.box:SetShown(not results)
+    V.rlist.box:SetShown(results)
+end
+
 ---------------------------------------------------------------------------
 -- Filters and the page's own status line
 ---------------------------------------------------------------------------
@@ -461,7 +640,7 @@ local function Status(s)
     if st.why == "off" then return "Not recording: Workshop is off" end
     if st.why then return "Not recording" end
     local since = s and s.coverage.since or st.since
-    if since then return "Recording since " .. LQ.Day(math.floor(since / 86400)) .. " (UTC) \194\183 older gold is not counted" end
+    if since then return "Recording since " .. LQ.Day(LQ.DayOf(since)) .. " \194\183 older gold is not counted" end
     return "Recording starts when you next gain or spend gold"
 end
 
@@ -486,7 +665,69 @@ local function BuildFilters()
             V.Draw(true)
         end)
     end)
-    UI.Tip(V.search, "Search transactions", "Narrows the list of transactions below by source, item or note. The totals and the chart count every transaction and do not change.")
+    UI.Tip(V.search, "Search transactions", "Narrows the list below by source, item or note (the item name, in Realized Results). The totals and the chart count every transaction and do not change.")
+end
+
+---------------------------------------------------------------------------
+-- The expanded Gold Flow (an overlay over the Ledger page, inside the Workshop window; one extra chart object, made on first use)
+---------------------------------------------------------------------------
+local function FilterWords()
+    local scope = filter.scope == "all" and "All characters" or "This character"
+    local source = filter.source and LQ.LABELS[filter.source] or "All sources"
+    return scope .. " \194\183 " .. source .. " \194\183 last " .. filter.days .. " days"
+end
+
+local function BuildExpanded()
+    local host = page:GetParent() or page
+    local f = CreateFrame("Frame", nil, host)
+    f:SetAllPoints(host)
+    f:SetFrameLevel((page:GetFrameLevel() or 1) + 40)
+    f:EnableMouse(true)
+    UI.Panel(f, "espresso")
+    f.title = UI.Text(f, 28, K.text, "serif")
+    f.title:SetPoint("TOPLEFT", 22, -16)
+    f.title:SetText("Gold Flow")
+    f.sub = UI.Text(f, 13, K.textDim)
+    f.sub:SetPoint("TOPLEFT", f.title, "BOTTOMLEFT", 2, -2)
+    f.back = UI.Button(f, "Back to Ledger", 150, "secondary", function() V.CloseExpanded() end, 28)
+    f.back:SetPoint("TOPRIGHT", f, "TOPRIGHT", -22, -20)
+    f.ranges = {}
+    local x = -8
+    for i = #LQ.RANGES, 1, -1 do
+        local days = LQ.RANGES[i]
+        local b = UI.Segment(f, days .. "D", 52, function() V.SetFilter("days", days) end)
+        b:SetPoint("TOPRIGHT", f.back, "TOPLEFT", x, 0)
+        x = x - 54
+        b.days = days
+        f.ranges[days] = b
+    end
+    f.chart = UI.GoldFlowChart(f, 960, 470, { expanded = true })
+    f.chart:SetPoint("TOPLEFT", f, "TOPLEFT", 22, -74)
+    f.chart:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -22, 22)
+    f:SetScript("OnHide", function() f.chart:Clear() end)
+    f:Hide()
+    V.big = f
+    V.bigChart = f.chart
+    return f
+end
+
+function V.OpenExpanded()
+    if not (page and page:IsShown()) then return end
+    if not V.big then BuildExpanded() end
+    if V.chart then V.chart:ClearInspection() end
+    V.big:Show()
+    V.Draw()
+end
+function V.CloseExpanded()
+    if V.big and V.big:IsShown() then V.big:Hide() end
+end
+function V.ExpandedShown() return V.big ~= nil and V.big:IsShown() end
+
+local function PaintExpanded(s)
+    if not (V.big and V.big:IsShown()) then return end
+    V.big.sub:SetText(FilterWords())
+    for days, b in pairs(V.big.ranges) do b:SetOn(days == filter.days) end
+    V.bigChart:Set(s)
 end
 
 ---------------------------------------------------------------------------
@@ -508,8 +749,10 @@ function V.Draw(rowsOnly)
     V.status:SetText(Status(s))
     V.chart:Set(s)
     PaintSources(s)
-    PaintTransactions(s)
+    ApplyMode()
+    if V.mode == "results" then PaintResults() else PaintTransactions(s) end
     PaintProfessions()
+    PaintExpanded(s)
     if pt then Perf.Stop(pt) end
 end
 
@@ -522,6 +765,7 @@ function V.SetFilter(key, value)
         if V.search and (V.search:GetText() or "") ~= filter.search then V.search:SetText(filter.search) end
     else return end
     if V.list then V.list:ScrollTop() end
+    if V.rlist then V.rlist:ScrollTop() end
     V.Draw()
 end
 
@@ -560,6 +804,7 @@ local function Reset()
     generation = generation + 1
     drawPending = false
     Unsubscribe()
+    V.CloseExpanded()
     if V.chart then V.chart:ClearInspection() end
     if GameTooltip then GameTooltip:Hide() end
 end
@@ -575,7 +820,7 @@ local function Build(p)
     BuildTransactions()
     BuildProfessions()
     -- leaving the page releases the subscription at once (the window's hide releases it too)
-    p:HookScript("OnHide", function() generation = generation + 1; drawPending = false; Unsubscribe() end)
+    p:HookScript("OnHide", function() generation = generation + 1; drawPending = false; Unsubscribe(); V.CloseExpanded() end)
 end
 
 UI.Register({

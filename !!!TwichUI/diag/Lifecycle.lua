@@ -64,12 +64,21 @@ D.Register("goldLedger", { title = "Gold Ledger evidence", order = 14, snapshot 
     lines[#lines + 1] = ("recording: %s; held: %s; journal entries: %d; pending evidence: %d"):format(D.Flag(s.active), D.Flag(s.held), s.entries, s.pending)
     for _, spec in ipairs({ { "auction", R.AuctionLedger, { "pending", "blocked", "attributed", "noMoney", "mismatch", "ambiguous", "expired", "interrupted", "observerError" } },
         { "mail", R.MailGold, { "waiting", "deferred", "ambiguous", "settlement", "unavailable" } },
-        { "vendor", R.VendorGold, { "candidates", "events", "attributed", "refused" } } }) do
+        { "vendor", R.VendorGold, { "candidates", "events", "visits", "calls", "batches", "attributed", "refused" } },
+        { "quest", R.QuestGold, { "events", "reported", "ignored" } } }) do
         local values = spec[2] and spec[2].Snapshot and spec[2].Snapshot()
         if values then
             local parts = {}
             for _, key in ipairs(spec[3]) do parts[#parts + 1] = key .. "=" .. tostring(values[key] or 0) end
             lines[#lines + 1] = spec[1] .. ": " .. table.concat(parts, "; ")
+            if type(values.why) == "table" and next(values.why) then   -- why requests were not attributed: fixed codes and counts only
+                local codes = {}
+                for code in pairs(values.why) do codes[#codes + 1] = code end
+                table.sort(codes)
+                local list = {}
+                for _, code in ipairs(codes) do list[#list + 1] = code .. "=" .. tostring(values.why[code]) end
+                lines[#lines + 1] = spec[1] .. " not attributed: " .. table.concat(list, "; ")
+            end
         end
     end
     return { status = s.active and "ready" or "unavailable", reason = s.held and "future-schema" or nil, lines = lines,

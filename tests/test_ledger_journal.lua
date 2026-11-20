@@ -31,6 +31,7 @@ local function Client(opts)
     for _, f in ipairs({ "WorkshopLauncher.lua", "auction/Ledger.lua" }) do
         local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
     end
+    if opts.offset then c.TwichUI.Ledger.UtcOffset = opts.offset end   -- a stood-in time zone, set before the record is first read
     c.LOADED["!!!TwichUI"] = true
     c.FireEvent("ADDON_LOADED", "!!!TwichUI")
     c.FireEvent("PLAYER_LOGIN")
@@ -153,7 +154,7 @@ do
     Same(#c.TwichUILedgerDB.chars["Rich - Forever"].entries, 1)
 end
 
--- 8. UTC date boundaries
+-- 8. Date boundaries (the test client's own clock is UTC)
 do
     local c = Client({ now = 20001 * DAY - 1 })
     c.Set(1000010)                       -- 23:59:59 of day 20000
@@ -167,6 +168,75 @@ do
     c.NOW = 20003 * DAY; c.Set(1000025, true)
     Check(rec.days[20003] and rec.days[20003].n == 0, "quiet day recorded")
     Check(rec.days[20002] == nil, "a day with no session is outside coverage")
+end
+
+-- 8b. Local calendar days: a stood-in zone decides which day a change belongs to, where a day starts, and how an old UTC record moves.
+do
+    local WEST, EAST = function() return -8 * 3600 end, function() return 13 * 3600 end
+    -- 03:00 UTC of day 20001 is still the evening of day 20000 in a zone eight hours west, and noon of day 20001 far east
+    local t = 20001 * DAY + 3 * 3600
+    local c = Client({ now = t, offset = WEST })
+    c.Set(1000010)
+    local rec = c.Rec()
+    Same(rec.tz, 1); Check(rec.days[20000] and not rec.days[20001], "the baseline day is the local day")
+    c.NOW = t + 60; c.Set(1000030)
+    Same(rec.days[20000].i, 30, "changes at 19:00 and 19:01 local belong to the previous local day")
+    Same(c.L.DayOf(t), 20000); Same(c.L.DayStart(20000), 20000 * DAY + 8 * 3600); Same(c.L.DayStart(20001), 20001 * DAY + 8 * 3600)
+    Check(c.L.DayStart(20001) <= 20001 * DAY + 8 * 3600 and c.L.DayOf(c.L.DayStart(20001) - 1) == 20000 and c.L.DayOf(c.L.DayStart(20001)) == 20001, "day edges agree with DayOf")
+    local e = Client({ now = 20001 * DAY + 12 * 3600, offset = EAST })
+    Same(e.L.DayOf(20001 * DAY + 12 * 3600), 20002, "far east, noon UTC is already the next day")
+    -- evidence moves an amount inside the same local day
+    local m = Client({ now = t, offset = WEST }); m.Set(1000010); m.Set(1000030)
+    Same(m.L.Evidence({ kind = "mail", amount = 20 }), "attributed")
+    Check(m.Rec().days[20000].ci.mail == 20 and m.Rec().days[20000].ci.other == 10, "the classified amount moved within the local day")
+    -- daylight saving: a zone whose offset changes at a known moment keeps every moment on exactly one day
+    local change = 20010 * DAY + 10 * 3600
+    local DST = function(x) return x >= change and -7 * 3600 or -8 * 3600 end
+    local d = Client({ now = t, offset = DST })
+    for day = 20005, 20015 do
+        local start, nxt = d.L.DayStart(day), d.L.DayStart(day + 1)
+        Check(start < nxt and d.L.DayOf(start) == day and d.L.DayOf(nxt - 1) == day and d.L.DayOf(nxt) == day + 1, "day " .. day .. " is one unbroken span")
+    end
+    Same(d.L.DayStart(20012) - d.L.DayStart(20011), DAY, "an ordinary day is 24 hours")
+    Same(d.L.DayStart(20011) - d.L.DayStart(20010), DAY - 3600, "the day the clocks moved is 23 hours")
+    -- an unreadable or implausible offset is UTC
+    local u = Client()
+    Same(u.L.UtcOffset(T0), 0)
+end
+
+-- 8c. A record made before local days (UTC-bucketed, no tz) is rebuilt from its journal once; nothing in the journal changes.
+do
+    local base = 20000 * DAY
+    local function Old(trimmed)
+        return { version = 1, chars = { ["Rich - Forever"] = { name = "Rich", realm = "Forever", since = base, nextId = trimmed and 40 or 4,
+            entries = trimmed and {
+                { id = 38, t = base + 20 * 3600, a = 700, e = "balance" }, { id = 39, t = base + DAY + 2 * 3600, a = -300, k = "repair", e = "merchantrepair" } }
+                or { { id = 1, t = base + 2 * 3600, a = 1000, e = "balance" }, { id = 2, t = base + 20 * 3600, a = -400, e = "balance" },
+                     { id = 3, t = base + DAY + 2 * 3600, a = 50, e = "balance" } },
+            days = trimmed and {
+                [19999] = { i = 900, o = 100, n = 4, ci = { other = 900 }, co = { other = 100 } },
+                [20000] = { i = 700, o = 0, n = 1, ci = { other = 700 }, co = {} },
+                [20001] = { i = 0, o = 300, n = 1, ci = {}, co = { repair = 300 } } }
+                or { [20000] = { i = 1000, o = 400, n = 2, ci = { other = 1000 }, co = { other = 400 } }, [20001] = { i = 50, o = 0, n = 1, ci = { other = 50 }, co = {} }, [20003] = { i = 0, o = 0, n = 0, ci = {}, co = {} } } } } }
+    end
+    local WEST = function() return -8 * 3600 end
+    local c = Client({ db = Old(false), offset = WEST, now = base + 2 * DAY })
+    local rec = c.Rec()
+    Same(rec.tz, 1)
+    -- 02:00 UTC of 20000 is the evening of 19999 local; 20:00 UTC is noon of 20000; 02:00 UTC of 20001 is 19:00 of 20000
+    Same(rec.days[19999].i, 1000); Same(rec.days[20000].o, 400); Same(rec.days[20000].i, 50)
+    Same(Sum(rec, "i"), 1050); Same(Sum(rec, "o"), 400, "totals are unchanged by the move")
+    Check(rec.days[20003] ~= nil and rec.days[20002] ~= nil, "a recorded UTC day keeps recorded local days (coverage)")
+    Same(#rec.entries, 3); Same(rec.entries[2].a, -400); Same(rec.entries[3].t, base + DAY + 2 * 3600, "no entry changed")
+    local before = Fingerprint(rec); c.L.Characters(); c.L.Record("Rich - Forever"); Same(Fingerprint(rec), before, "the move happens once")
+    -- a trimmed journal: days older than its first entry cannot be re-split and are carried whole
+    local t = Client({ db = Old(true), offset = WEST, now = base + 3 * DAY })
+    local tr = t.Rec()
+    Same(Sum(tr, "i"), 1600); Same(Sum(tr, "o"), 400, "trimmed history keeps every total")
+    Same(tr.days[20000] and tr.days[20000].co.repair, 300, "the entry-covered part is rebuilt into its local day, with its source")
+    -- UTC users: the move changes nothing but the marker
+    local z = Client({ db = Old(false), now = base + 2 * DAY })
+    Same(z.Rec().days[20000].i, 1000); Same(z.Rec().days[20000].o, 400); Same(z.Rec().days[20001].i, 50); Same(z.Rec().tz, 1)
 end
 
 -- 9. Retention: the journal is bounded, its totals are kept; old days and old entries go together

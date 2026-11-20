@@ -1,28 +1,34 @@
 -- TwichUI Workshop: the Gold Flow chart (UI.GoldFlowChart)
--- Daily gold in (muted green, above the zero line), gold out (restrained red, below it) and the net change (an antique-gold line), over the
--- window the page chose. The geometry is pure (C.Geometry: days in, rectangles and points out) so it is tested without frames; the frame
--- pools its textures, draws only when its data or size changed, and listens to nothing: the pointer is read through one small button per
--- day (enter and leave), never an OnUpdate. It shares the Workshop chart family's materials (UI.Panel, UI.L.Solid, the bronze guide
--- lines, native lines with a drawn fallback) but not its price-line renderer: this one is made of bars and a line, with no zoom.
+-- Daily gold in (muted sage columns above the zero line), gold out (restrained rust columns below it) and the net change (an antique-gold
+-- line with round markers), over the window the page chose. It belongs to the same chart family as the advanced Market chart
+-- (auction/AdvancedChart.lua) and shares its presentation pieces through ChartKit.lua: the two-stroke line anchored to marker regions with
+-- a portable raster fallback, the espresso inspection card, the pointer with a six-pixel drag threshold and right-click reset. It does not
+-- share its price-line data model: this one is made of columns and a net line.
 --
--- A day with no record is "outside recorded coverage": drawn as a faint empty column and named so on inspection, never as zero. A day the
--- recorder covered with no gold moving is a thin tick on the zero line ("recorded, nothing moved"). The net line is never drawn through
--- a day that was not recorded.
+--   * The geometry is pure (C.Columns, C.Geometry: days in, rectangles and points out) and tested without frames.
+--   * The frame pools its regions, draws only when its data, view or size changed, and has an OnUpdate only while the pointer is over it
+--     or a drag is open (ChartKit.Pointer).
+--   * Drag to zoom selects columns; right-click resets to the chosen 7D / 30D / 90D window, which always stays authoritative: a change of
+--     window, character scope or source clears an old zoom. A window too long for its width is shown in 7-, 14- or 30-day columns
+--     built by adding the exact recorded copper of their days; such a column says so, and a column with unrecorded days is marked as
+--     partly recorded and is never joined into the net line.
+--   * A day with no record is "outside recorded coverage": drawn as a faint empty column and named so on inspection, never as zero. A day
+--     the recorder covered with no gold moving is a thin tick on the zero line ("recorded, nothing moved").
 
 local R = TwichUI
 local W = R.Workshop
 local UI = W.UI
 local LQ = W.LedgerQuery
-local C = { MIN_BAR = 1 }
+local C = { MIN_BAR = 2, MIN_SLOT = 11 }
 W.LedgerChart = C
 
-local GREEN = { 0.40, 0.58, 0.34 }
-local RED = { 0.68, 0.28, 0.25 }
+local GREEN = { 0.32, 0.47, 0.31 }
+local RED = { 0.58, 0.27, 0.22 }
 C.GREEN, C.RED = GREEN, RED
 local charts = setmetatable({}, { __mode = "k" })
 if R.Perf and R.Perf.Gauge then
     R.Perf.Gauge("ledger.chartPool", { label = "Gold Ledger chart pooled regions", unit = "count", kind = "pool", group = "workshop",
-        read = function() local n = 0 for chart in pairs(charts) do n = n + #chart.bars + #chart.dots + #chart.lines + #chart.hits + #chart.labels end return n end })
+        read = function() local n = 0 for chart in pairs(charts) do n = n + chart:RegionCount() end return n end })
 end
 
 ---------------------------------------------------------------------------
@@ -38,7 +44,7 @@ function C.NiceStep(span, parts)
     return math.max(1, nice * pow)
 end
 
--- Compact axis text: "300g", "-50g", "12k", "40s", "0g".
+-- Compact axis text: "300g", "-50g", "12k", "40s", "0g". (The page draws the coin artwork version, UI.Coins.Axis; this is the plain form.)
 function C.AxisText(v)
     if v == 0 then return "0g" end
     local neg = v < 0
@@ -51,9 +57,59 @@ function C.AxisText(v)
     return neg and ("-" .. text) or text
 end
 
+-- The columns of a view: days v1..v2 of `days` (LedgerQuery.Summary(...).days), added into columns of k days when they would be narrower
+-- than C.MIN_SLOT pixels. Exact recorded copper only: a day outside coverage adds nothing and is not a zero.
+--   { day, last (first and last day number), from, to (indexes into days), span, recorded (days with a record), inn, out, net, n,
+--     covered (any day recorded), partial (some but not all) }
+function C.Columns(days, v1, v2, pw)
+    v1, v2 = v1 or 1, v2 or #days
+    local n = v2 - v1 + 1
+    if n <= 0 then return {}, 1 end
+    local maxCols = math.max(4, math.floor((pw or 0) / C.MIN_SLOT))
+    local k = 1
+    for _, candidate in ipairs({ 1, 7, 14, 30 }) do
+        k = candidate
+        if math.ceil(n / candidate) <= maxCols then break end
+    end
+    local cols = {}
+    for start = v1, v2, k do
+        local stop = math.min(v2, start + k - 1)
+        local col = { day = days[start].day, last = days[stop].day, from = start, to = stop, span = stop - start + 1, recorded = 0, inn = 0, out = 0, n = 0 }
+        for i = start, stop do
+            local d = days[i]
+            if d.covered then
+                col.recorded = col.recorded + 1
+                col.inn, col.out, col.n = col.inn + d.inn, col.out + d.out, col.n + d.n
+            end
+        end
+        col.net = col.inn - col.out
+        col.covered = col.recorded > 0
+        col.partial = col.recorded > 0 and col.recorded < col.span
+        cols[#cols + 1] = col
+    end
+    return cols, k
+end
+
+-- "Thursday, November 19" (the day number is a local calendar day, so it is formatted without a zone shift)
+function C.DayLong(day)
+    return (date("!%A, %B %d", day * 86400):gsub(" 0(%d)$", " %1"))
+end
+
+-- The first and last index of `days` inside the absolute day numbers d1..d2 (nil when the view lies outside them)
+function C.ViewRange(days, d1, d2)
+    local v1, v2
+    for i, d in ipairs(days) do
+        if d.day >= d1 and not v1 then v1 = i end
+        if d.day <= d2 then v2 = i end
+    end
+    if not (v1 and v2) or v2 < v1 then return nil end
+    return v1, v2
+end
+
 -- days: LedgerQuery.Summary(...).days; show: { inn, out, net } booleans; pw, ph: the plot's size.
-function C.Geometry(days, pw, ph, show)
+function C.Geometry(days, pw, ph, show, opts)
     show = show or { inn = true, out = true, net = true }
+    opts = opts or {}
     local n = #days
     local g = { bars = {}, uncovered = {}, ticks = {}, points = {}, segments = {}, grid = {}, xlabels = {}, n = n, pw = pw, ph = ph }
     if n == 0 or pw <= 0 or ph <= 0 then g.scale = { top = 0, bottom = 0, step = 0 } return g end
@@ -74,7 +130,7 @@ function C.Geometry(days, pw, ph, show)
     g.zeroY = Y(0)
     for v = -yBottom, yTop, step do g.grid[#g.grid + 1] = { value = v, y = Y(v) } end
     local slot = pw / n
-    local bw = math.max(3, math.min(34, math.floor(slot * 0.6)))
+    local bw = math.max(3, math.min(opts.maxBar or 40, math.floor(slot * (opts.fill or 0.62))))
     g.slot, g.barW = slot, bw
     local prev
     for i, d in ipairs(days) do
@@ -92,16 +148,16 @@ function C.Geometry(days, pw, ph, show)
             end
             if d.inn == 0 and d.out == 0 then g.ticks[#g.ticks + 1] = { x = x0, y = g.zeroY - 0.5, w = bw, h = 1, index = i } end
             if show.net then
-                local p = { x = cx, y = Y(d.net), index = i }
+                local p = { x = cx, y = Y(d.net), index = i, partial = d.partial }
                 g.points[#g.points + 1] = p
-                if prev and prev.index == i - 1 then g.segments[#g.segments + 1] = { a = prev, b = p } end
+                if prev and prev.index == i - 1 and not d.partial and not prev.partial then g.segments[#g.segments + 1] = { a = prev, b = p } end
                 prev = p
             else
                 prev = nil
             end
         end
     end
-    local every = n <= 10 and 1 or (n <= 31 and 5 or 15)
+    local every = opts.labelEvery or (n <= 10 and 1 or (n <= 31 and 5 or 15))
     for i, d in ipairs(days) do
         if (n - i) % every == 0 then g.xlabels[#g.xlabels + 1] = { x = (i - 0.5) * slot, text = LQ.DayShort(d.day), index = i } end
     end
@@ -110,7 +166,7 @@ end
 
 -- The inspection lines of one day: { title, { text, tone } ... }. The words of a day outside coverage never read as zero.
 function C.TipLines(d)
-    local lines = { LQ.Day(d.day) .. " (UTC day)" }
+    local lines = { LQ.Day(d.day) }
     if not d.covered then
         lines[#lines + 1] = { "Not recorded", "stone" }
         lines[#lines + 1] = { "The ledger was not recording on this day. Gold that moved while it was not recording is not counted.", "textDim" }
@@ -124,223 +180,486 @@ function C.TipLines(d)
     return lines
 end
 
+
 ---------------------------------------------------------------------------
 -- The frame
 ---------------------------------------------------------------------------
-local LEFT, RIGHT, TOP, XROW, LEGEND = 50, 10, 8, 16, 24
+local MARKER = "Interface\\AddOns\\TwichUI_Workshop\\media\\chart-marker"
+local function Round(v) return math.floor(v + 0.5) end
+local function Lighten(c, f) return { c[1] + (1 - c[1]) * f, c[2] + (1 - c[2]) * f, c[3] + (1 - c[3]) * f } end
 
-function UI.GoldFlowChart(parent, w, h)
-    local K = UI.K
+-- opts.expanded: the large view (more room, larger type, the card sits inside the plot away from the pointer)
+function UI.GoldFlowChart(parent, w, h, opts)
+    opts = opts or {}
+    local K, Co, Kit = UI.K, UI.Coins, W.ChartKit
+    local big = opts.expanded == true
+    local M = { left = big and 84 or 62, right = 14, top = big and 24 or 14, xrow = big and 26 or 18, legend = big and 30 or 24 }
+    local AX = big and 12 or 10
     local c = CreateFrame("Frame", nil, parent)
     c:SetSize(w, h)
     charts[c] = true
-    c.bars, c.dots, c.lines, c.hits, c.labels, c.guides, c.cols = {}, {}, {}, {}, {}, {}, {}
+    c.big = big
     c.show = { inn = true, out = true, net = true }
-    c.plot = CreateFrame("Frame", nil, c)
-    c.plot:SetPoint("TOPLEFT", LEFT, -TOP)
-    c.plot:SetPoint("BOTTOMRIGHT", -RIGHT, XROW + LEGEND)
-    local function Solid(color, alpha, layer) return UI.L.Solid(c.plot, layer or "ARTWORK", color, alpha) end
-    c.zero = Solid(K.bronzeHi, 0.55, "ARTWORK")
-    c.highlight = Solid(K.bronzeText, 0.10, "BACKGROUND")
-    c.highlight:Hide()
-    c.msg = UI.Text(c, 13, K.textDim)
-    c.msg:SetPoint("CENTER", c.plot, "CENTER")
-    c.msg:SetWidth(w - 120)
-    c.msg:SetJustifyH("CENTER")
-    c.msg:SetWordWrap(true)
-
+    c.pool = { body = {}, shade = {}, cap = {}, wash = {}, tick = {}, marker = {}, guide = {}, xlabel = {} }
+    -- the plotting well: a dark recessed face with the axis labels inside it
+    c.well = CreateFrame("Frame", nil, c)
+    c.well:SetPoint("TOPLEFT", c, "TOPLEFT", 0, 0)
+    c.well:SetPoint("BOTTOMRIGHT", c, "BOTTOMRIGHT", 0, M.legend)
+    UI.Panel(c.well, "canvas")
+    c.plot = CreateFrame("Frame", nil, c.well)
+    c.plot:SetPoint("TOPLEFT", c.well, "TOPLEFT", M.left, -M.top)
+    c.plot:SetPoint("BOTTOMRIGHT", c.well, "BOTTOMRIGHT", -M.right, M.xrow)
+    local plot = c.plot
+    local function Solid(color, alpha, sub, layer)
+        local t = UI.L.Solid(plot, layer or "ARTWORK", color, alpha)
+        if t.SetDrawLayer then t:SetDrawLayer(layer or "ARTWORK", math.max(-8, math.min(7, sub or 0))) end   -- the client accepts sublevels -8 to 7 only
+        return t
+    end
+    local function Place(t, x, y, tw, th)
+        t:ClearAllPoints(); t:SetPoint("BOTTOMLEFT", plot, "BOTTOMLEFT", x, y); t:SetSize(tw, th); t:Show()
+    end
     local function Pooled(pool, make, i)
         local t = pool[i]
         if not t then t = make(); pool[i] = t end
         return t
     end
-    local function Hide(pool, from) for i = from or 1, #pool do pool[i]:Hide() end end
+    local function HideFrom(pool, from) for i = from, #pool do pool[i]:Hide() end end
 
-    -- the legend: three toggles (a swatch and the words); the page fills the totals
+    -- a faint warm sheen from the top, so the well is leather rather than a flat fill
+    c.sheen = plot:CreateTexture(nil, "BACKGROUND")
+    c.sheen:SetAllPoints(plot)
+    UI.L.Fade(c.sheen, K.bronzeLo, 0.12, 0.0)
+    c.zero = Solid(K.bronzeHi, 0.62, 1)
+    c.highlight = Solid(K.bronzeText, 0.11, 0, "BACKGROUND")
+    c.cross = Solid(K.textDim, 0.55, 6, "OVERLAY")
+    c.selection = Solid(K.bronzeText, 0.14, 1, "BACKGROUND")
+    c.selEdgeA, c.selEdgeB = Solid(K.bronzeText, 0.6, 1, "BACKGROUND"), Solid(K.bronzeText, 0.6, 1, "BACKGROUND")
+    c.halo = Solid(K.bronzeLo, 0.2, 7, "OVERLAY"); c.halo:SetTexture(MARKER); c.halo:SetVertexColor(K.bronzeText[1], K.bronzeText[2], K.bronzeText[3], 0.22)
+    c.pick = Solid(K.bronzeText, 1, 7, "OVERLAY"); c.pick:SetTexture(MARKER); c.pick:SetVertexColor(K.bronzeText[1], K.bronzeText[2], K.bronzeText[3], 1)
+    for _, t in ipairs({ c.highlight, c.cross, c.selection, c.selEdgeA, c.selEdgeB, c.halo, c.pick }) do t:Hide() end
+    c.strokes = Kit.Strokes(plot, function(color, alpha, sub) return Solid(color, alpha, sub) end)
+
+    c.msg = UI.Text(c.well, big and 15 or 13, K.textDim)
+    c.msg:SetPoint("CENTER", plot, "CENTER")
+    c.msg:SetWidth(math.max(120, w - 120))
+    c.msg:SetJustifyH("CENTER")
+    c.msg:SetWordWrap(true)
+    c.hint = UI.Text(c.well, 10, K.stone)
+    c.hint:SetPoint("TOPRIGHT", c.well, "TOPRIGHT", -M.right, -4)
+    c.hint:SetJustifyH("RIGHT")
+
+    ---------------------------------------------------------------------------
+    -- The legend: three toggles with their totals in the visible interval
+    ---------------------------------------------------------------------------
     c.legendButtons = {}
-    local lx = LEFT
-    for _, def in ipairs({ { "inn", "Gold in", GREEN }, { "out", "Gold out", RED }, { "net", "Net change", K.bronzeText } }) do
+    local defs = { { "inn", "Gold in", GREEN }, { "out", "Gold out", RED }, { "net", "Net change", K.bronzeText } }
+    for i, def in ipairs(defs) do
         local b = CreateFrame("Button", nil, c)
-        b:SetSize(150, 20)
-        b:SetPoint("BOTTOMLEFT", c, "BOTTOMLEFT", lx, 0)
-        lx = lx + 156
+        b:SetHeight(M.legend - 2)
         b.swatch = UI.L.Solid(b, "ARTWORK", def[3], 0.9)
-        b.swatch:SetSize(11, 11)
-        b.swatch:SetPoint("LEFT", 0, 0)
-        b.text = UI.Text(b, 12, K.textDim)
-        b.text:SetPoint("LEFT", b.swatch, "RIGHT", 6, 0)
-        b.key, b.name = def[1], def[2]
+        b.swatch:SetSize(10, 10)
+        b.swatch:SetPoint("LEFT", 4, 0)
+        if def[1] == "net" then   -- the net line is drawn as a line with a round marker
+            b.swatch:SetSize(14, 2)
+            b.dot = b:CreateTexture(nil, "OVERLAY")
+            b.dot:SetTexture(MARKER); b.dot:SetVertexColor(def[3][1], def[3][2], def[3][3], 1)
+            b.dot:SetSize(7, 7); b.dot:SetPoint("CENTER", b.swatch, "CENTER", 0, 0)
+        end
+        b.name = UI.Text(b, big and 13 or 12, K.textDim)
+        b.name:SetPoint("LEFT", b.swatch, "RIGHT", 6, 0)
+        b.name:SetText(def[2])
+        b.value = UI.Text(b, big and 13 or 12, K.text)
+        b.value:SetPoint("LEFT", b.name, "RIGHT", 6, 0)
+        b.key = def[1]
         b:SetScript("OnClick", function(self) c:SetShow(self.key, not c.show[self.key]) end)
-        UI.TipFn(b, def[2], function(self) return c.show[self.key] and "Click to hide this from the chart." or "Click to show this on the chart." end)
+        UI.TipFn(b, def[2], function(self)
+            local exact = self.value.exact
+            return (c.show[self.key] and "Click to hide this from the chart." or "Click to show this on the chart.")
+                .. (exact and ("\n\nExact: " .. Co.Text(exact, { signed = self.key ~= "out", height = 12 })) or "")
+        end)
         c.legendButtons[def[1]] = b
+    end
+    local function LayoutLegend()
+        local total = math.max(60, (c:GetWidth() or w))
+        local each = math.floor(total / 3)
+        for i, def in ipairs(defs) do
+            local b = c.legendButtons[def[1]]
+            b:ClearAllPoints()
+            b:SetPoint("BOTTOMLEFT", c, "BOTTOMLEFT", (i - 1) * each, 0)
+            b:SetWidth(each - 4)
+            b.room = each - 4 - 4 - 10 - 6 - (b.name:GetStringWidth() or 60) - 6 - 4
+        end
     end
 
     local function PaintLegend()
-        local d = c.model
-        local totals = d and d.totals
+        local cols = c.cols or {}
+        local inn, out = 0, 0
+        for _, col in ipairs(cols) do inn, out = inn + col.inn, out + col.out end
+        local sums = { inn = inn, out = -out, net = inn - out }
         for key, b in pairs(c.legendButtons) do
             local on = c.show[key]
-            local value = totals and (key == "inn" and LQ.Money(totals.inn) or key == "out" and LQ.Money(-totals.out) or LQ.Money(totals.net, true)) or nil
-            b.text:SetText(b.name .. (value and (" (" .. value .. ")") or ""))
-            UI.Paint(b.text, on and K.text or K.stone)
+            if c.model and c.model.recording then
+                Co.Fit(b.value, sums[key], { size = big and 13 or 12, min = 10, width = math.max(30, b.room or 90), signed = key ~= "out" })
+            else
+                b.value.exact = nil; b.value:SetText("")
+            end
+            UI.Paint(b.name, on and K.text or K.stone)
+            UI.Paint(b.value, on and (key == "inn" and K.sage or key == "out" and K.ember or K.bronzeText) or K.stone)
             b.swatch:SetAlpha(on and 0.9 or 0.25)
+            if b.dot then b.dot:SetAlpha(on and 1 or 0.25) end
         end
     end
 
-    local function Inspect(i)
-        local d = c.model and c.model.days[i]
-        if not d or not GameTooltip then return end
-        local g = c.geometry
-        c.highlight:ClearAllPoints()
-        c.highlight:SetPoint("BOTTOMLEFT", c.plot, "BOTTOMLEFT", (i - 1) * g.slot, 0)
-        c.highlight:SetSize(g.slot, c.plot:GetHeight() or g.ph)
-        c.highlight:Show()
-        GameTooltip:SetOwner(c.hits[i], "ANCHOR_RIGHT")
-        local lines = C.TipLines(d)
-        GameTooltip:AddLine(lines[1], 1, 0.82, 0)
-        for k = 2, #lines do
-            local line = lines[k]
-            local col = K[line[2]] or K.text
-            GameTooltip:AddLine(line[1], col[1], col[2], col[3], true)
+    ---------------------------------------------------------------------------
+    -- The inspection card (made on first use; one for the chart, never one per hover)
+    ---------------------------------------------------------------------------
+    local card
+    local CARD_W = big and 340 or 304
+    local function EnsureCard()
+        if card then return card end
+        card = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+        UI.Panel(card, "espresso")
+        card:SetSize(CARD_W, 128)
+        card:SetFrameStrata("TOOLTIP")
+        card:SetClampedToScreen(true)
+        card:EnableMouse(false)
+        card:Hide()
+        card.title = UI.Text(card, big and 13 or 12, K.bronzeText, "strong")
+        card.title:SetPoint("TOPLEFT", 12, -9)
+        card.title:SetWidth(CARD_W - 24)
+        card.rows = {}
+        for i, def in ipairs({ { "Gold In" }, { "Gold Out" }, { "Net Change" } }) do
+            local label = UI.Text(card, big and 13 or 12, K.textDim)
+            label:SetPoint("TOPLEFT", 12, -(30 + (i - 1) * 21))
+            label:SetText(def[1])
+            local value = UI.Text(card, big and 14 or 13, K.text, "strong")
+            value:SetPoint("TOPRIGHT", -12, -(29 + (i - 1) * 21))
+            value:SetWidth(CARD_W - 100)
+            value:SetJustifyH("RIGHT")
+            card.rows[i] = { label = label, value = value }
         end
-        GameTooltip:Show()
-        c.inspected = i
+        local rule = UI.Rule(card, 0.4)
+        rule:SetPoint("TOPLEFT", 10, -94); rule:SetPoint("TOPRIGHT", -10, -94)
+        card.rule = rule
+        card.foot = UI.Text(card, 11, K.stone)
+        card.foot:SetPoint("TOPLEFT", 12, -100)
+        card.foot:SetWidth(CARD_W - 24)
+        card.foot:SetWordWrap(true)
+        card.note = UI.Text(card, 12, K.textDim)
+        card.note:SetPoint("TOPLEFT", 12, -32)
+        card.note:SetWidth(CARD_W - 24)
+        card.note:SetWordWrap(true)
+        card.note:SetJustifyV("TOP")
+        return card
+    end
+
+    local function CardTitle(col)
+        if col.span == 1 then return C.DayLong(col.day) end
+        return ("%s \226\128\147 %s \194\183 %d days"):format(LQ.DayShort(col.day), LQ.DayShort(col.last), col.span)
+    end
+
+    local function FillCard(col)
+        local t = EnsureCard()
+        t.title:SetText(CardTitle(col))
+        local hintLine = "Drag to zoom \194\183 Right-click to reset"
+        if not col.covered then
+            for _, r in ipairs(t.rows) do r.label:Hide(); r.value:Hide() end
+            t.note:Show(); t.rule:Show()
+            t.note:SetText(col.span == 1 and "Not recorded. The ledger was not recording on this day; gold that moved while it was not recording is not counted, and it is not shown as zero."
+                or "Not recorded. The ledger was not recording on any of these days; this is not zero.")
+            UI.Paint(t.note, K.textDim)
+            t.rule:ClearAllPoints(); t.rule:SetPoint("TOPLEFT", 10, -86); t.rule:SetPoint("TOPRIGHT", -10, -86)
+            t.foot:ClearAllPoints(); t.foot:SetPoint("TOPLEFT", 12, -92)
+            t.foot:SetText(hintLine)
+            t:SetHeight(112)
+            return
+        end
+        t.note:Hide()
+        local amounts = { col.inn, -col.out, col.net }
+        local tones = { col.inn > 0 and K.sage or K.textDim, col.out > 0 and K.ember or K.textDim, col.net > 0 and K.sage or (col.net < 0 and K.ember or K.text) }
+        for i, r in ipairs(t.rows) do
+            r.label:Show(); r.value:Show()
+            Co.Fit(r.value, amounts[i], { size = big and 14 or 13, min = 11, width = CARD_W - 100, signed = i ~= 2, role = "strong" })
+            UI.Paint(r.value, tones[i])
+        end
+        local foot
+        if col.n == 0 then foot = "Recorded: no gold moved"
+        else foot = ("%d recorded %s"):format(col.n, col.n == 1 and "change" or "changes") end
+        if col.span > 1 then
+            foot = foot .. (col.partial and (" \194\183 %d of %d days recorded"):format(col.recorded, col.span) or (" \194\183 %d days"):format(col.span))
+        end
+        t.rule:ClearAllPoints(); t.rule:SetPoint("TOPLEFT", 10, -94); t.rule:SetPoint("TOPRIGHT", -10, -94); t.rule:Show()
+        t.foot:ClearAllPoints(); t.foot:SetPoint("TOPLEFT", 12, -100)
+        t.foot:SetText(foot .. "\n" .. hintLine)
+        t:SetHeight(big and 134 or 132)
+        if col.partial then UI.Paint(t.foot, K.bronzeText) else UI.Paint(t.foot, K.stone) end
+    end
+
+    ---------------------------------------------------------------------------
+    -- Inspection
+    ---------------------------------------------------------------------------
+    local function HideMarks()
+        c.highlight:Hide(); c.cross:Hide(); c.halo:Hide(); c.pick:Hide()
+        if card then card:Hide() end
     end
     function c:ClearInspection()
-        self.highlight:Hide()
+        HideMarks()
         self.inspected = nil
-        if GameTooltip then GameTooltip:Hide() end
     end
 
-    function c:Render()
-        local d = self.model
-        if not d then return end
-        local pw, ph = self.plot:GetWidth() or 0, self.plot:GetHeight() or 0
-        if pw < 20 then pw = w - LEFT - RIGHT end
-        if ph < 20 then ph = h - TOP - XROW - LEGEND end
-        local g = C.Geometry(d.days, pw, ph, self.show)
-        self.geometry = g
-        self:ClearInspection()
-        -- nothing to show: no axis, line or scale (an arbitrary band would read as a real amount), only the words; recorded quiet days
-        -- and days outside coverage keep their marks
-        local empty = not d.recording or d.totals.n == 0
+    -- Shows column i: the interval, the crosshair, the net marker and the card.
+    function c:InspectIndex(i)
+        local g, col = self.geometry, self.cols and self.cols[i]
+        if not (g and col) then return end
+        if self.inspected == i and card and card:IsShown() then return end
+        self.inspected = i
+        local cx = (i - 0.5) * g.slot
+        Place(self.highlight, (i - 1) * g.slot, 0, g.slot, g.ph)
+        Place(self.cross, Round(cx), 0, 1, g.ph)
+        self.halo:Hide(); self.pick:Hide()
+        local p
+        for _, pt in ipairs(g.points) do if pt.index == i then p = pt break end end
+        if p then
+            self.halo:ClearAllPoints(); self.halo:SetPoint("CENTER", plot, "BOTTOMLEFT", p.x, p.y); self.halo:SetSize(big and 24 or 20, big and 24 or 20); self.halo:Show()
+            self.pick:ClearAllPoints(); self.pick:SetPoint("CENTER", plot, "BOTTOMLEFT", p.x, p.y); self.pick:SetSize(big and 11 or 9, big and 11 or 9); self.pick:Show()
+        end
+        FillCard(col)
+        Kit.Dock(card, self, { plot = plot, side = i <= #self.cols / 2 and "right" or "left", inside = big })
+        card:Show()
+    end
+
+    function c:CursorX()
+        local scale = plot:GetEffectiveScale() or 1
+        return GetCursorPosition() / scale - (plot:GetLeft() or 0)
+    end
+    local function IndexAt(x)
+        local g = c.geometry
+        if not (g and g.slot and g.slot > 0 and c.cols) then return nil end
+        return math.max(1, math.min(#c.cols, math.floor(x / g.slot) + 1))
+    end
+
+    -- the zoom: absolute day numbers, so a refresh that moves the window by a day keeps what was chosen
+    function c:IsZoomed() return self.view ~= nil end
+    function c:ResetZoom()
+        if not self.view then return end
+        self.view = nil
+        self.drawn = nil
+        if self.onView then self.onView(nil) end
+        self:Render()
+    end
+    function c:Zoom(d1, d2)
+        if not self.model or not d1 or not d2 then return end
+        if d2 < d1 then d1, d2 = d2, d1 end
+        local days = self.model.days
+        if #days == 0 then return end
+        local first, last = days[1].day, days[#days].day
+        d1, d2 = math.max(first, d1), math.min(last, d2)
+        if d2 <= d1 then   -- never a single day: the next one (or the one before, at the end)
+            if d2 < last then d2 = d1 + 1 elseif d1 > first then d1 = d2 - 1 end
+        end
+        if d1 <= first and d2 >= last then return self:ResetZoom() end
+        self.view = { d1, d2 }
+        self.drawn = nil
+        if self.onView then self.onView(self.view) end
+        self:Render()
+    end
+
+    c.hit = CreateFrame("Button", nil, plot)
+    c.hit:SetAllPoints(plot)
+    c.hit:SetFrameLevel((plot:GetFrameLevel() or 1) + 12)
+    c.hit:EnableMouse(true)
+    c.hit:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    c.pointer = Kit.Pointer(c.hit, {
+        ready = function() return c.model ~= nil and c.geometry ~= nil and c.cols ~= nil and #c.cols > 0 and not c.empty end,
+        x = function() return c:CursorX() end,
+        width = function() return c.geometry and c.geometry.pw or 1 end,
+        hover = function(x) local i = IndexAt(x); if i then c:InspectIndex(i) end end,
+        dragging = function(x0, x)
+            if not x0 then c.selection:Hide(); c.selEdgeA:Hide(); c.selEdgeB:Hide(); return end
+            local g = c.geometry
+            local a, b = IndexAt(x0), IndexAt(x)
+            if a > b then a, b = b, a end
+            local left, width = (a - 1) * g.slot, (b - a + 1) * g.slot
+            Place(c.selection, left, 0, width, g.ph)
+            Place(c.selEdgeA, left, 0, 1, g.ph); Place(c.selEdgeB, left + width - 1, 0, 1, g.ph)
+        end,
+        leave = function() c:ClearInspection() end,
+        commit = function(x0, x1)
+            local a, b = IndexAt(x0), IndexAt(x1)
+            if a > b then a, b = b, a end
+            c:Zoom(c.cols[a].day, c.cols[b].last)
+        end,
+        reset = function() c:ResetZoom() end,
+    })
+
+    ---------------------------------------------------------------------------
+    -- Drawing
+    ---------------------------------------------------------------------------
+    local function Draw()
+        local model = c.model
+        if not model then return end
+        local pw, ph = plot:GetWidth() or 0, plot:GetHeight() or 0
+        if pw < 40 then pw = w - M.left - M.right end
+        if ph < 30 then ph = h - M.top - M.xrow - M.legend end
+        pw, ph = Round(pw), Round(ph)
+        local days = model.days
+        local v1, v2 = 1, #days
+        if c.view then
+            local a, b = C.ViewRange(days, c.view[1], c.view[2])
+            if a then v1, v2 = a, b else c.view = nil; if c.onView then c.onView(nil) end end
+        end
+        local show = c.show
+        local key = table.concat({ tostring(model), v1, v2, pw, ph, show.inn and 1 or 0, show.out and 1 or 0, show.net and 1 or 0, c.strokes.mode or "-" }, ":")
+        if key == c.drawn then return end
+        c.drawn = key
+        local cols = C.Columns(days, v1, v2, pw)
+        local labelWidth = big and 78 or 58
+        local every = math.max(1, math.ceil(#cols / math.max(1, math.floor(pw / labelWidth))))
+        local g = C.Geometry(cols, pw, ph, show, { maxBar = big and 64 or 40, labelEvery = every })
+        c.cols, c.geometry = cols, g
+        c:ClearInspection()
+        local empty = not model.recording or model.totals.n == 0
         if empty then g.grid, g.points, g.segments, g.zeroY = {}, {}, {}, nil end
-        self.empty = empty
-        self.msg:SetText(not d.recording and "Gold tracking hasn't started yet." or (empty and "No gold activity recorded in this period." or ""))
-        -- zero line and guides
+        c.empty = empty
+        c.msg:SetText(not model.recording and "Gold tracking hasn't started yet." or (empty and "No gold activity recorded in this period." or ""))
+        c.hint:SetText(c.view and "Zoomed \194\183 Right-click to reset" or (big and "Drag to zoom \194\183 Right-click to reset" or ""))
+        -- guides and axis labels (the zero line is its own stronger line)
         local n = 0
         for _, line in ipairs(g.grid) do
             n = n + 1
-            local gl = Pooled(self.guides, function() return { line = Solid(K.bronzeLo, 0.28), label = UI.Text(c, 10, K.bronzeText) } end, n)
-            gl.line:ClearAllPoints(); gl.line:SetPoint("BOTTOMLEFT", self.plot, "BOTTOMLEFT", 0, line.y); gl.line:SetSize(pw, 1); gl.line:Show()
-            gl.label:ClearAllPoints(); gl.label:SetPoint("RIGHT", self.plot, "BOTTOMLEFT", -8, line.y)
-            gl.label:SetWidth(LEFT - 12); gl.label:SetJustifyH("RIGHT")
-            gl.label:SetText(C.AxisText(line.value)); gl.label:Show()
+            local gl = Pooled(c.pool.guide, function()
+                local fs = UI.Text(c.well, AX, K.bronzeText)
+                fs:SetJustifyH("RIGHT"); fs:SetWidth(M.left - 12)
+                return { line = Solid(K.bronzeLo, 0.30, 0), label = fs }
+            end, n)
+            if line.value == 0 then gl.line:Hide() else Place(gl.line, 0, Round(line.y), pw, 1) end
+            gl.label:ClearAllPoints(); gl.label:SetPoint("RIGHT", plot, "BOTTOMLEFT", -8, Round(line.y))
+            gl.label:SetText(Co.Axis(line.value, AX))
+            UI.Paint(gl.label, line.value == 0 and K.text or K.bronzeText)
+            gl.label:Show()
         end
-        for i = n + 1, #self.guides do self.guides[i].line:Hide(); self.guides[i].label:Hide() end
-        if g.zeroY then
-            self.zero:ClearAllPoints(); self.zero:SetPoint("BOTTOMLEFT", self.plot, "BOTTOMLEFT", 0, g.zeroY - 0.5)
-            self.zero:SetSize(pw, 1); self.zero:Show()
-        else
-            self.zero:Hide()
+        for i = n + 1, #c.pool.guide do c.pool.guide[i].line:Hide(); c.pool.guide[i].label:Hide() end
+        if g.zeroY then Place(c.zero, 0, Round(g.zeroY), pw, 1) else c.zero:Hide() end
+        -- days outside coverage, recorded quiet days
+        for i, u in ipairs(g.uncovered) do
+            local t = Pooled(c.pool.wash, function() return Solid(K.bronzeLo, 0.07, 0, "BACKGROUND") end, i)
+            Place(t, Round(u.x) + 1, 0, math.max(1, Round(u.w) - 2), ph)
         end
-        -- columns outside coverage, bars and ticks share one pool of solids
-        local used = 0
-        local function Rect(r, color, alpha)
-            used = used + 1
-            local t = Pooled(self.bars, function() return Solid(color, alpha) end, used)
-            t:ClearAllPoints(); t:SetPoint("BOTTOMLEFT", self.plot, "BOTTOMLEFT", r.x, r.y)
-            t:SetSize(r.w, r.h); t:SetColorTexture(color[1], color[2], color[3], alpha); t:Show()
-            return t
+        HideFrom(c.pool.wash, #g.uncovered + 1)
+        for i, tk in ipairs(g.ticks) do
+            local t = Pooled(c.pool.tick, function() return Solid(K.bronzeText, 0.6, 3) end, i)
+            Place(t, Round(tk.x), Round(tk.y + 0.5) - 1, Round(tk.w), 2)
         end
-        for _, u in ipairs(g.uncovered) do Rect({ x = u.x + 1, y = 0, w = math.max(1, u.w - 2), h = ph }, K.bronzeLo, 0.07) end
-        for _, t in ipairs(g.ticks) do Rect(t, K.bronzeText, 0.55) end
-        for _, b in ipairs(g.bars) do Rect(b, b.kind == "in" and GREEN or RED, 0.86) end
-        Hide(self.bars, used + 1)
-        self.barCount = #g.bars
-        -- the net line: dots, and native lines anchored to them (or a drawn fallback)
+        HideFrom(c.pool.tick, #g.ticks + 1)
+        -- the columns: a flat sage or rust body, a darker half toward the baseline and a lit end (three regions each; flat tones, no
+        -- gradient, as the Workshop's own meters are drawn)
+        for i, b in ipairs(g.bars) do
+            local body = Pooled(c.pool.body, function() return Solid(GREEN, 0.92, 2) end, i)
+            local shade = Pooled(c.pool.shade, function() return Solid({ 0, 0, 0 }, 0.26, 3) end, i)
+            local cap = Pooled(c.pool.cap, function() return Solid(GREEN, 0.85, 4) end, i)
+            local x, bw = Round(b.x), math.max(2, Round(b.w))
+            local y, bh = Round(b.y), math.max(C.MIN_BAR, Round(b.h))
+            Place(body, x, y, bw, bh)
+            if body.kind ~= b.kind then
+                body.kind = b.kind
+                local col = b.kind == "in" and GREEN or RED
+                body:SetColorTexture(col[1], col[2], col[3], 0.92)
+                local light = Lighten(col, 0.30)
+                cap:SetColorTexture(light[1], light[2], light[3], 0.9)
+            end
+            if bh >= 6 then
+                local half = math.floor(bh * 0.4)
+                Place(shade, x, b.kind == "in" and y or (y + bh - half), bw, half)
+            else
+                shade:Hide()
+            end
+            if bh >= 4 then Place(cap, x, b.kind == "in" and (y + bh - 1) or y, bw, 1) else cap:Hide() end
+        end
+        HideFrom(c.pool.body, #g.bars + 1); HideFrom(c.pool.shade, #g.bars + 1); HideFrom(c.pool.cap, #g.bars + 1)
+        -- the net line: round markers, then two strokes anchored to them
         for i, p in ipairs(g.points) do
-            local dot = Pooled(self.dots, function() local t = Solid(K.bronzeText, 1, "OVERLAY"); t:SetSize(5, 5); return t end, i)
-            dot:ClearAllPoints(); dot:SetPoint("CENTER", self.plot, "BOTTOMLEFT", p.x, p.y); dot:SetColorTexture(K.bronzeText[1], K.bronzeText[2], K.bronzeText[3], 1); dot:Show()
+            local dot = Pooled(c.pool.marker, function()
+                local t = Solid(K.bronzeText, 1, 6, "OVERLAY"); t:SetTexture(MARKER); return t
+            end, i)
+            local size = big and 8 or 7
+            dot:SetVertexColor(K.bronzeText[1], K.bronzeText[2], K.bronzeText[3], p.partial and 0.55 or 1)
+            dot:ClearAllPoints(); dot:SetPoint("CENTER", plot, "BOTTOMLEFT", p.x, p.y); dot:SetSize(size, size); dot:Show()
             p.dot = dot
         end
-        Hide(self.dots, #g.points + 1)
-        local native = type(self.plot.CreateLine) == "function"
-        local drawn = 0
-        for i, s in ipairs(g.segments) do
-            local ok = native and pcall(function()
-                local line = Pooled(self.lines, function()
-                    local l = self.plot:CreateLine(nil, "ARTWORK", nil, 1)
-                    assert(l and l.SetStartPoint and l.SetEndPoint and l.SetThickness)
-                    return l
-                end, i)
-                line:SetColorTexture(K.bronzeText[1], K.bronzeText[2], K.bronzeText[3], 0.95)
-                line:SetThickness(1.6)
-                line:SetStartPoint("CENTER", s.a.dot, 0, 0); line:SetEndPoint("CENTER", s.b.dot, 0, 0); line:Show()
-            end)
-            if ok then drawn = drawn + 1 else native = false end
-        end
-        if native then Hide(self.lines, drawn + 1) else Hide(self.lines) end
-        -- a drawn fallback: small steps along each segment (bounded), when the client offers no line object
-        self.stepCount = 0
-        if not native then
-            local used2 = #g.points
-            for _, s in ipairs(g.segments) do
-                local dx, dy = s.b.x - s.a.x, s.b.y - s.a.y
-                local steps = math.min(24, math.floor(math.sqrt(dx * dx + dy * dy) / 4))
-                for k = 1, steps - 1 do
-                    used2 = used2 + 1
-                    local dot = Pooled(self.dots, function() local t = Solid(K.bronzeText, 1, "OVERLAY"); t:SetSize(5, 5); return t end, used2)
-                    dot:ClearAllPoints(); dot:SetPoint("CENTER", self.plot, "BOTTOMLEFT", s.a.x + dx * k / steps, s.a.y + dy * k / steps)
-                    dot:SetSize(2, 2); dot:Show()
-                    self.stepCount = self.stepCount + 1
-                end
-            end
-            Hide(self.dots, used2 + 1)
-        end
-        -- day labels under the plot
+        HideFrom(c.pool.marker, #g.points + 1)
+        local segs = {}
+        for _, s in ipairs(g.segments) do segs[#segs + 1] = { x1 = s.a.x, y1 = s.a.y, x2 = s.b.x, y2 = s.b.y, a = s.a.dot, b = s.b.dot } end
+        c.backend = c.strokes:Draw(segs, pw)
+        -- day labels
         for i, xl in ipairs(g.xlabels) do
-            local fs = Pooled(self.labels, function() local t = UI.Text(c, 10, K.bronzeText); t:SetJustifyH("CENTER"); t:SetWidth(54); return t end, i)
-            fs:ClearAllPoints(); fs:SetPoint("TOP", self.plot, "BOTTOMLEFT", xl.x, -3); fs:SetText(xl.text); fs:Show()
+            local fs = Pooled(c.pool.xlabel, function() local t = UI.Text(c.well, AX, K.bronzeText); t:SetJustifyH("CENTER"); t:SetWidth(labelWidth + 6); return t end, i)
+            fs:ClearAllPoints(); fs:SetPoint("TOP", plot, "BOTTOMLEFT", xl.x, -4); fs:SetText(xl.text); fs:Show()
         end
-        Hide(self.labels, #g.xlabels + 1)
-        -- one pointer region for each day (enter and leave only)
-        for i = 1, g.n do
-            local hit = Pooled(self.hits, function()
-                local b = CreateFrame("Button", nil, self.plot)
-                b:SetFrameLevel((self.plot:GetFrameLevel() or 1) + 6)
-                b:SetScript("OnEnter", function(s) Inspect(s.index) end)
-                b:SetScript("OnLeave", function() c:ClearInspection() end)
-                return b
-            end, i)
-            hit.index = i
-            hit:ClearAllPoints(); hit:SetPoint("BOTTOMLEFT", self.plot, "BOTTOMLEFT", (i - 1) * g.slot, 0)
-            hit:SetSize(math.max(1, g.slot), ph); hit:Show()
-        end
-        Hide(self.hits, g.n + 1)
+        HideFrom(c.pool.xlabel, #g.xlabels + 1)
+        c.barCount, c.stepCount = #g.bars, c.strokes.backend == "raster" and c.strokes.used or 0
+        LayoutLegend()
         PaintLegend()
+    end
+
+    function c:Render()
+        if not self.model then return end
+        if R.Perf and R.Perf.Call then R.Perf.Call("ledger.chartDraw", Draw) else Draw() end
+    end
+
+    function c:CardFrame() return card end   -- (the tests)
+    function c:RegionCount()
+        local n = 14 + self.strokes:Count()
+        for _, pool in pairs(self.pool) do n = n + #pool end
+        return n
+    end
+
+    -- regions in use right now (the pools keep hidden spares): textures, lines and font strings the plot is showing
+    function c:VisibleRegions()
+        local n = (self.strokes.used or 0)
+        for _, pool in pairs(self.pool) do
+            for _, t in ipairs(pool) do
+                if t.IsShown then if t:IsShown() then n = n + 1 end
+                else if t.line:IsShown() then n = n + 1 end; if t.label:IsShown() then n = n + 1 end end
+            end
+        end
+        return n
+    end
+
+    function c:Clear()
+        self.pointer:Cancel()
+        self:ClearInspection()
+        for _, pool in pairs(self.pool) do
+            for _, t in ipairs(pool) do if t.Hide then t:Hide() else t.line:Hide(); t.label:Hide() end end
+        end
+        self.strokes:Hide()
+        self.zero:Hide(); self.selection:Hide(); self.selEdgeA:Hide(); self.selEdgeB:Hide()
+        self.msg:SetText(""); self.hint:SetText("")
+        self.geometry, self.cols, self.drawn = nil, nil, nil
     end
 
     -- model: LedgerQuery.Summary(...) or nil
     function c:Set(model)
-        self.model = model
-        if not model then
-            self:ClearInspection()
-            for _, pool in ipairs({ self.bars, self.dots, self.lines, self.hits, self.labels }) do Hide(pool) end
-            for _, gl in ipairs(self.guides) do gl.line:Hide(); gl.label:Hide() end
-            self.zero:Hide()
-            self.msg:SetText("")
-            self.geometry = nil
-            return
+        local ctx = model and (model.filter.scope .. "|" .. tostring(model.filter.source) .. "|" .. model.filter.days) or nil
+        if ctx ~= self.context then   -- another window, scope or source: an old zoom and any open input no longer apply
+            if self.view and self.onView then self.onView(nil) end
+            self.view = nil
+            self.pointer:Cancel()
         end
+        self.context, self.model = ctx, model
+        if not model then self:Clear(); return end
         self:Render()
+        self.pointer:Resume()
     end
+
     function c:SetShow(key, on)
         if self.show[key] == nil then return end
         self.show[key] = on and true or false
         if self.model then self:Render() end
     end
-    c:SetScript("OnSizeChanged", function() if c.model and c:IsShown() then c:Render() end end)
-    c:SetScript("OnHide", function() c:ClearInspection() end)
+    function c:SetStrokeMode(mode) self.strokes:SetMode(mode); self.drawn = nil; self:Render() end
+
+    c:SetScript("OnSizeChanged", function() if c.model and c:IsShown() then c.drawn = nil; c:Render() end end)
+    c:SetScript("OnHide", function() c.pointer:Cancel() end)
+    LayoutLegend()
     return c
 end
