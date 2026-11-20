@@ -13,7 +13,8 @@ Observed movement, **not profit**, except in the separate *Realized Results* vie
 | Evidence: merchants | `!!!TwichUI/auction/Vendor.lua` (`R.VendorGold`) | Observes native requests and verified outcomes, then targets the corresponding existing journal entry. Works with Workshop unloaded. |
 | Cost basis (V4) | `!!!TwichUI/auction/LedgerCost.lua` (`R.LedgerCost`), `LedgerCostWatch.lua` | Lots, realized results and verified crafts, stored inside `TwichUILedgerDB.cost`. A separate interpretation of already-verified activity; never records or changes money. |
 | Reading side | `TwichUI_Workshop/LedgerQuery.lua` | Pure: totals, daily series, source split, transaction merge, comparison. Cached. |
-| Chart | `TwichUI_Workshop/LedgerChart.lua` | Pure geometry plus the pooled-region frame (`UI.GoldFlowChart`). |
+| Chart | `TwichUI_Workshop/LedgerChart.lua`, `ChartKit.lua` | Pure geometry and columns plus the pooled-region frame (`UI.GoldFlowChart`); ChartKit holds the strokes, card docking and pointer shared in spirit with the Market chart. |
+| Coins | `TwichUI_Workshop/Coins.lua` | `UI.Coins`: exact copper as gold / silver / copper coin artwork. Presentation only. |
 | Page | `TwichUI_Workshop/ViewLedger.lua` | The registered **Gold Ledger** page (second navigation group). |
 
 ## Recording
@@ -210,6 +211,20 @@ Header and filters: character (this / all), source, range (7/30/90 D, in the cha
 Character, source and range apply to every panel; search narrows the list only (daily totals are kept by source, not by item). Prior-period text is shown only when every day of the prior window was recorded; percentages only for gold in/out with a non-zero base. Multi-character totals carry a note: gold you moved between your own characters counts in and out.
 
 Vendor sources use the same six cards, filters, item icons and hover details. Gold by Source retains its panel and row styling; it scrolls when all eight signed source rows are present, so totals are never hidden by a five-row limit.
+
+## Presentation: coins and the Gold Flow chart
+
+*Money.* Every amount the page draws (cards, legend, chart card and axis, Gold by Source, transactions and their hover, Item Results and their hover, profession rows) is exact copper shown as **coin artwork** by `UI.Coins`: `1[gold] 55[silver] 24[copper]`, `-97[silver] 85[copper]`, `16[copper]`. Zero parts are left out, zero is `0[copper]`, gold has thousands separators. The coin texture paths are read once from `C_CurrencyInfo.GetCoinTextureString` (the documented helper; its text is not reused because it cannot group, sign or compact) and fall back to `Interface\MoneyFrame\UI-{Gold,Silver,Copper}Icon`; the deprecated global is never called. Icons are cut to the font size (8-32 px). Where a figure will not fit, the font shrinks a little (never below a stated minimum), then a **compact level** is used (no copper; largest part only; `1.2k` gold) and the exact amount stays on the font string for the hover ("Exact: ..."). `LedgerQuery.Money` is untouched: it is still the pure text form used by queries, descriptions and tests; `Compare`, `AuctionDetails` and `ResultLines` take an optional formatter so tooltips can use the artwork.
+
+*Gold Flow.* A recessed plotting well with a faint warm sheen; muted sage income columns above a stronger zero baseline and rust expense columns below it (each a vertical tone and a lit end, two regions); the net change as an antique-gold line over a bronze support stroke with round `chart-marker` markers (native lines anchored to the markers, or bounded raster runs when the client refuses lines); thin guides; compact coin axis labels. A day outside recording coverage is a faint empty column named "Not recorded" (never zero); a recorded quiet day is a tick on the zero line; the net line is never drawn across an unrecorded day, into or out of a partly recorded column. Scales are exact (a very small amount keeps a 2 px minimum mark, noted as a marker, not as area).
+
+*Inspection.* One transparent button over the plot (hover, drag, release, right-click) with an OnUpdate only while the pointer is inside or a drag is open. Hover shows the column's interval band, a crosshair, the net marker with a halo and one espresso card (day, Gold In / Gold Out / Net Change in coins, changes recorded, "partly recorded" notes) docked beside the chart or, in the expanded view, inside the plot on the side away from the pointer. **Drag** over columns (6 px threshold, release anywhere) zooms to that interval; **right-click** resets; the 7D/30D/90D buttons stay authoritative (a change of range, character or source clears a zoom). A window too long for its width is added into 7-, 14- or 30-day columns from the exact recorded copper of their days; the card says "N days" and "x of N days recorded" and never presents a longer column as one day.
+
+*Expanded view.* The expand icon in the panel header opens an overlay over the Ledger page inside the Workshop window (one more chart object, made on first use, over the same `LedgerQuery.Summary`; no second journal read or listener) with its own range buttons and *Back to Ledger*. It closes when the page is hidden or left.
+
+*Gold by Source.* Two-line rows (name and amount over a full-width bar), the same scrollable list, hover with the exact amount and its share of gold in/out; bars are proportional to the largest source with a minimum visible tick, so a dominant Unclassified source does not hide small ones. Nothing is relabelled.
+
+Region budget (7 days, populated): about 20-30 pooled textures for the plot plus a few font strings; 90 days adds at most two regions per column and is bounded by the plot width. Diagnostics: scope `ledger.chartDraw`, gauge `ledger.chartPool`.
 
 ## Verification
 

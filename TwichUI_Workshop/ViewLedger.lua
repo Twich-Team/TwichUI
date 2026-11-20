@@ -225,6 +225,23 @@ local function BuildFlow()
         UI.Tip(b, days .. " days", "The last " .. days .. " days, today included. Every card and panel on this page follows.")
         p.ranges[days] = b
     end
+    -- Expand: the same chart, much larger (an overlay inside the Workshop, not another window)
+    p.expand = CreateFrame("Button", nil, p)
+    p.expand:SetSize(22, 22)
+    p.expand:SetPoint("TOPRIGHT", p, "TOPRIGHT", x - 2, -8)
+    p.expand.parts = {}
+    for _, corner in ipairs({ { "TOPLEFT", 1, -1, 1, -1 }, { "TOPRIGHT", -1, -1, -1, -1 }, { "BOTTOMLEFT", 1, 1, 1, 1 }, { "BOTTOMRIGHT", -1, 1, -1, 1 } }) do
+        -- an L-shaped bracket in each corner: two thin bars
+        local a = UI.L.Solid(p.expand, "ARTWORK", K.bronzeText, 0.75)
+        a:SetSize(7, 2); a:SetPoint(corner[1], p.expand, corner[1], corner[2] * 4, corner[3] * 4)
+        local b = UI.L.Solid(p.expand, "ARTWORK", K.bronzeText, 0.75)
+        b:SetSize(2, 7); b:SetPoint(corner[1], p.expand, corner[1], corner[2] * 4, corner[3] * 4)
+        p.expand.parts[#p.expand.parts + 1] = a; p.expand.parts[#p.expand.parts + 1] = b
+    end
+    p.expand:SetScript("OnEnter", function(self) for _, t in ipairs(self.parts) do t:SetAlpha(1) end end)
+    p.expand:SetScript("OnLeave", function(self) for _, t in ipairs(self.parts) do t:SetAlpha(0.75) end end)
+    p.expand:SetScript("OnClick", function() V.OpenExpanded() end)
+    UI.Tip(p.expand, "Expand chart", "Open Gold Flow in a larger view with more room to inspect and zoom. Your date range, character and source filters carry over.")
     local chart = UI.GoldFlowChart(p, MID_L - 16, MID_H - 40)
     chart:SetPoint("TOPLEFT", p, "TOPLEFT", 8, -34)
     chart:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -8, 6)
@@ -656,6 +673,68 @@ local function BuildFilters()
 end
 
 ---------------------------------------------------------------------------
+-- The expanded Gold Flow (an overlay over the Ledger page, inside the Workshop window; one extra chart object, made on first use)
+---------------------------------------------------------------------------
+local function FilterWords()
+    local scope = filter.scope == "all" and "All characters" or "This character"
+    local source = filter.source and LQ.LABELS[filter.source] or "All sources"
+    return scope .. " \194\183 " .. source .. " \194\183 last " .. filter.days .. " days"
+end
+
+local function BuildExpanded()
+    local host = page:GetParent() or page
+    local f = CreateFrame("Frame", nil, host)
+    f:SetAllPoints(host)
+    f:SetFrameLevel((page:GetFrameLevel() or 1) + 40)
+    f:EnableMouse(true)
+    UI.Panel(f, "espresso")
+    f.title = UI.Text(f, 28, K.text, "serif")
+    f.title:SetPoint("TOPLEFT", 22, -16)
+    f.title:SetText("Gold Flow")
+    f.sub = UI.Text(f, 13, K.textDim)
+    f.sub:SetPoint("TOPLEFT", f.title, "BOTTOMLEFT", 2, -2)
+    f.back = UI.Button(f, "Back to Ledger", 150, "secondary", function() V.CloseExpanded() end, 28)
+    f.back:SetPoint("TOPRIGHT", f, "TOPRIGHT", -22, -20)
+    f.ranges = {}
+    local x = -8
+    for i = #LQ.RANGES, 1, -1 do
+        local days = LQ.RANGES[i]
+        local b = UI.Segment(f, days .. "D", 52, function() V.SetFilter("days", days) end)
+        b:SetPoint("TOPRIGHT", f.back, "TOPLEFT", x, 0)
+        x = x - 54
+        b.days = days
+        f.ranges[days] = b
+    end
+    f.chart = UI.GoldFlowChart(f, 960, 470, { expanded = true })
+    f.chart:SetPoint("TOPLEFT", f, "TOPLEFT", 22, -74)
+    f.chart:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -22, 22)
+    f:SetScript("OnHide", function() f.chart:Clear() end)
+    f:Hide()
+    V.big = f
+    V.bigChart = f.chart
+    return f
+end
+
+function V.OpenExpanded()
+    if not (page and page:IsShown()) then return end
+    if not V.big then BuildExpanded() end
+    if V.chart then V.chart:ClearInspection() end
+    V.big:Show()
+    V.Draw()
+end
+function V.CloseExpanded()
+    if V.big and V.big:IsShown() then V.big:Hide() end
+end
+function V.ExpandedShown() return V.big ~= nil and V.big:IsShown() end
+
+local function PaintExpanded(s)
+    if not (V.big and V.big:IsShown()) then return end
+    V.big.sub:SetText(FilterWords())
+    for days, b in pairs(V.big.ranges) do b:SetOn(days == filter.days) end
+    V.bigChart:Set(s)
+end
+
+---------------------------------------------------------------------------
 -- Drawing
 ---------------------------------------------------------------------------
 function V.Draw(rowsOnly)
@@ -677,6 +756,7 @@ function V.Draw(rowsOnly)
     ApplyMode()
     if V.mode == "results" then PaintResults() else PaintTransactions(s) end
     PaintProfessions()
+    PaintExpanded(s)
     if pt then Perf.Stop(pt) end
 end
 
@@ -728,6 +808,7 @@ local function Reset()
     generation = generation + 1
     drawPending = false
     Unsubscribe()
+    V.CloseExpanded()
     if V.chart then V.chart:ClearInspection() end
     if GameTooltip then GameTooltip:Hide() end
 end
@@ -743,7 +824,7 @@ local function Build(p)
     BuildTransactions()
     BuildProfessions()
     -- leaving the page releases the subscription at once (the window's hide releases it too)
-    p:HookScript("OnHide", function() generation = generation + 1; drawPending = false; Unsubscribe() end)
+    p:HookScript("OnHide", function() generation = generation + 1; drawPending = false; Unsubscribe(); V.CloseExpanded() end)
 end
 
 UI.Register({

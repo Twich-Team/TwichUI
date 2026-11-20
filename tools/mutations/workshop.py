@@ -1431,3 +1431,31 @@ m("ledger.day.rebuild-trimmed", "!!!TwichUI/auction/Ledger.lua", 'local cut = (f
   'trimmed history loses its totals when a record moves to local days', [JOURNAL])
 m("ledger.day.query-window", "TwichUI_Workshop/LedgerQuery.lua", '    local first = LQ.DayStart(today - filter.days + 1)\n', '    local first = (today - filter.days + 1) * DAY\n',
   'the transaction list starts at UTC midnight while the cards use local days', [LEDGERUI])
+
+# Coins and the Gold Flow chart (presentation): the amount's exactness, aggregation, coverage, input lifecycle.
+COINT = "test_ledger_coins.lua"
+
+m("ledger.coins.sign", "TwichUI_Workshop/Coins.lua", '    if neg then return "-" .. text end\n', '    if neg then return text end\n',
+  'a loss is shown as a gain', [COINT])
+m("ledger.coins.zero-part", "TwichUI_Workshop/Coins.lua", 'if level < 3 and s > 0 then parts[#parts + 1] = Unit("silver", s, height) end', 'if level < 3 then parts[#parts + 1] = Unit("silver", s, height) end',
+  'a zero silver part is shown between gold and copper', [COINT])
+m("ledger.coins.fraction", "TwichUI_Workshop/Coins.lua", 'or math.floor(copper) ~= copper then return nil end', 'then return nil end',
+  'a fractional or damaged amount is formatted as if it were exact copper', [COINT])
+m("ledger.coins.exact-kept", "TwichUI_Workshop/Coins.lua", 'fs.exact, fs.compact, fs.level = Plain(copper), (o.level or 1) > 1, o.level or 1', 'fs.exact, fs.compact, fs.level = nil, false, 1',
+  'a compacted figure loses its exact amount for the hover', [COINT])
+m("ledger.coins.helper-paths", "TwichUI_Workshop/Coins.lua", 'if #list == 3 and not list[1]:find("[%c]") then found', 'if #list >= 1 then found',
+  'a half-understood helper answer replaces the artwork paths', [COINT])
+m("ledger.chart.column-sum", "TwichUI_Workshop/LedgerChart.lua", 'col.inn, col.out, col.n = col.inn + d.inn, col.out + d.out, col.n + d.n', 'col.inn, col.out, col.n = col.inn + d.inn, col.out, col.n + d.n',
+  'a longer column drops the spending of its days', [LEDGERUI])
+m("ledger.chart.unrecorded-day", "TwichUI_Workshop/LedgerChart.lua", '            if d.covered then\n                col.recorded = col.recorded + 1', '            if true then\n                col.recorded = col.recorded + 1',
+  'a day outside coverage counts as recorded in its column', [LEDGERUI])
+m("ledger.chart.join-partial", "TwichUI_Workshop/LedgerChart.lua", 'and not d.partial and not prev.partial then g.segments', 'then g.segments',
+  'the net line is drawn into and out of a partly recorded column', [LEDGERUI])
+m("ledger.chart.zoom-context", "TwichUI_Workshop/LedgerChart.lua", '            self.view = nil\n            self.pointer:Cancel()', '            self.pointer:Cancel()',
+  'a zoom survives a change of range, scope or source', [LEDGERUI])
+m("ledger.chart.hide-input", "TwichUI_Workshop/LedgerChart.lua", 'c:SetScript("OnHide", function() c.pointer:Cancel() end)', 'c:SetScript("OnHide", function() end)',
+  'a drag or hover survives hiding the chart', [LEDGERUI])
+m("ledger.chart.drag-threshold", "TwichUI_Workshop/ChartKit.lua", 'if math.abs(x - from) >= Kit.DRAG then h.commit(from, x) end', 'if math.abs(x - from) >= 0 then h.commit(from, x) end',
+  'a click or a tiny drag zooms', [LEDGERUI])
+m("ledger.chart.min-bar", "TwichUI_Workshop/LedgerChart.lua", 'local h = math.max(C.MIN_BAR, g.zeroY - Y(-d.out))', 'local h = g.zeroY - Y(-d.out)',
+  'a very small expense vanishes next to a large income', [LEDGERUI])

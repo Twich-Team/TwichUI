@@ -41,7 +41,7 @@ set -euo pipefail
 selection=()
 read -r -a selection <<< "${SIMLAB_ONLY:-}"
 for pose in "${selection[@]}"; do
-  case " overview craft opps shop design small smallov empty history craftlong shopmix shopcollect strategy confirm stratlong planning nodata override compact compactcraft tooltip smallstrat shopafter notice advisor advisorsmall advisorempty advisorscaled advisorlong advisorvacant advisoralt advisorsource advisorcategory advisorscroll advisortentative advisorbags advisorfiltered ledger ledgersmall ledgervendor ledgervendorsmall ledgerauction ledgerauctionsmall wrong " in
+  case " overview craft opps shop design small smallov empty history craftlong shopmix shopcollect strategy confirm stratlong planning nodata override compact compactcraft tooltip smallstrat shopafter notice advisor advisorsmall advisorempty advisorscaled advisorlong advisorvacant advisoralt advisorsource advisorcategory advisorscroll advisortentative advisorbags advisorfiltered ledger ledgersmall ledgervendor ledgervendorsmall ledgerauction ledgerauctionsmall ledgerhover ledgersparse ledger90 ledgerexpand ledgerbig wrong " in
     *" $pose "*) ;; *) echo "simlab: unknown Workshop pose: $pose" >&2; exit 2 ;;
   esac
 done
@@ -107,6 +107,7 @@ fixture ledgervendor '{ view = "ledgervendor" }'
 fixture ledgervendorsmall '{ view = "ledgervendorsmall" }'
 fixture ledgerauction '{ view = "ledgerauction" }'
 fixture ledgerauctionsmall '{ view = "ledgerauctionsmall" }'
+for pose in ledgerhover ledgersparse ledger90 ledgerexpand ledgerbig; do fixture "$pose" "{ view = \"$pose\" }"; done
 fixture wrong "{ view = \"craft\", wrongAt = \"$WRONG_AT\" }"
 
 repo_before="$(git -C "$REPO" status --porcelain --ignored)"
@@ -168,6 +169,7 @@ launch ledgervendor screenshot --png -o "$RUN/ledgervendor.png" --width 1600 --h
 launch ledgervendorsmall screenshot --png -o "$RUN/ledgervendorsmall.png" --width 1000 --height 700
 launch ledgerauction screenshot --png -o "$RUN/ledgerauction.png" --width 1600 --height 1200
 launch ledgerauctionsmall screenshot --png -o "$RUN/ledgerauctionsmall.png" --width 1000 --height 700
+for pose in ledgerhover ledgersparse ledger90 ledgerexpand ledgerbig; do launch "$pose" screenshot --png -o "$RUN/$pose.png" --width 1600 --height 1200; done
 launch wrong dump-tree --visible-only
 
 echo "artifacts: $RUN"

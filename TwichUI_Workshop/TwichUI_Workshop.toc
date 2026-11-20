@@ -94,6 +94,7 @@ auction/AdvancedChart.lua
 # Coin artwork for money in the Ledger (gold, silver and copper icons instead of letters); presentation only
 Coins.lua
 LedgerQuery.lua
+ChartKit.lua
 LedgerChart.lua
 # The pages, in the order the page list shows them (each builds once and draws what Session.lua says)
 ViewOverview.lua
