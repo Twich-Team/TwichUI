@@ -305,6 +305,8 @@ function Q.Event(event,key)
             end
             complete=type(api.HasFullOwnedAuctionResults)=="function" and
                 api.HasFullOwnedAuctionResults() and #native<=Q.MAX and #rows==#native or false
+            -- posting provenance follows its own auctions by native id only (LedgerCost.lua); it never changes this read
+            if R.LedgerCost and R.LedgerCost.Owned then pcall(R.LedgerCost.Owned,rows,complete) end
         elseif p.kind=="item" and (event=="ITEM_SEARCH_RESULTS_UPDATED" or event=="ITEM_SEARCH_RESULTS_ADDED") and Same(p.arg,key) then
             local count=api.GetNumItemSearchResults(p.arg);rawCount=count
             for i=1,math.min(count,Q.MAX) do

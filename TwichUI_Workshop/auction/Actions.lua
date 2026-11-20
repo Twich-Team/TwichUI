@@ -412,6 +412,10 @@ local function Send(p,fn,...)
             return W.Active() and R.AuctionHost.IsCurrent(visit) and not InCombatLockdown()
         end)
     end
+    if (p.kind=="postItem" or p.kind=="postCommodity") and R.LedgerCost and R.LedgerCost.PostIntent then
+        -- posting provenance (LedgerCost.lua): the identity and bags before; kept only once the game creates the auction
+        local okIntent,intent=pcall(R.LedgerCost.PostIntent,p);p.lineage=okIntent and intent or nil
+    end
     if audit then audit.Sending(p.ledger,true) end
     sending=true;local ok,result=pcall(fn,...);sending=false
     if audit then audit.Sending(p.ledger,false) end
@@ -503,6 +507,13 @@ function T.ConfirmWarning(id)
     if p.kind=="postCommodity" then return Send(p,C_AuctionHouse.ConfirmPostCommodity,p.location,p.duration,p.quantity,p.unit) end
     return Send(p,C_AuctionHouse.ConfirmPostItem,p.location,p.duration,p.quantity,nil,p.unit)
 end
+local function Provenance(p,ids)
+    local cost=R.LedgerCost
+    if not (p.lineage and cost and cost.Posted) then return end
+    local token=p.lineage;p.lineage=nil
+    local ok,err=pcall(cost.Posted,token,ids)
+    if not ok and R.Fault then R.Fault("gold ledger posting provenance",err) end
+end
 function T.Event(event,a,b)
     local p=ticket;if not p or not Current(p) then return end
     if event=="COMMODITY_PRICE_UPDATED" and p.kind=="buyCommodity" and p.phase=="quote" and (T.state=="quoting" or T.state=="waiting" or T.state=="quoted") then
@@ -525,10 +536,13 @@ function T.Event(event,a,b)
         -- multisell completion rather than assuming the first ID means all posted.
         if p.kind=="postCommodity" or p.quantity==1 then
             if R.AuctionLedger then R.AuctionLedger.Complete(p.ledger,a) end
+            Provenance(p,{id})
             Finish("complete","Auction posted. View it under My Auctions.")
         end
     elseif event=="AUCTION_MULTISELL_UPDATE" and p.kind=="postItem" and T.state=="waiting" and a==p.quantity and b==p.quantity then
         if R.AuctionLedger then R.AuctionLedger.Complete(p.ledger,nil,a,b) end
+        local ids={};for id in pairs(p.created or {}) do ids[#ids+1]=id end;table.sort(ids)
+        Provenance(p,ids)
         Finish("complete","All reviewed auctions were posted. View them under My Auctions.")
     elseif (event=="COMMODITY_PRICE_UNAVAILABLE" or event=="COMMODITY_PURCHASE_FAILED") and p.kind=="buyCommodity" then
         RefreshBuy(p)

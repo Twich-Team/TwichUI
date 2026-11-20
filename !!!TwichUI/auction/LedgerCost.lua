@@ -31,6 +31,9 @@
 --                   st ("ok"|"incomplete"|"unknown"), w (why unavailable), pf (profession), al = { { l, q, c, s, f, p } } } },
 --     crafts  = { { id, t, r (recipe), p (profession id), i, q, c (cost, nil = unknown), st ("ok"|"incomplete"), m = { { i, q, c } } } },
 --     profs   = { [professionId] = "name" },
+--     posts   = { { id, t, k, i, n (name from the link), q, u (unit price), dep (deposit), dur, a (auction id), ac (auction ids),
+--                   st ("posted"|"sold"|"cancelled"|"ended"), cs ("ok"|"unknown"|"nolot"|"mixed"|"missing"|"short"|"nostock"),
+--                   c (cost of the posted units, nil = unknown), al = { ... } } },      V5 posting provenance (below)
 -- } } }
 -- It lives inside TwichUILedgerDB (no new saved variable) and carries its own version: a newer component is left untouched.
 
@@ -49,6 +52,9 @@ C.MAX_CRAFTS = 200
 C.MAX_ALLOC = 6
 C.MAX_QTY = 10000000      -- a lot's quantity bound: keeps every product below exact-integer range
 C.MAX_PROFS = 24
+C.MAX_POSTS = 200         -- remembered postings per character
+C.POST_DAYS = 35          -- an auction lasts two days at most, and its mail thirty: a posting older than this is forgotten
+C.MAX_POST_IDS = 8
 local MAX = L.MAX_MONEY
 local DAY = 86400
 local MAX_ITEM = 2147483647
@@ -186,6 +192,33 @@ local function CleanCraft(t)
     return out
 end
 
+local POST_STATES = { posted = true, sold = true, cancelled = true, ended = true }
+local COST_STATES = { ok = true, unknown = true, nolot = true, mixed = true, missing = true, short = true, nostock = true }
+local function CleanPost(t)
+    if type(t) ~= "table" then return nil end
+    local id, at, q, i = Whole(t.id, 1, MAX), Whole(t.t, 0, 4102444800), Whole(t.q, 1, C.MAX_QTY), Whole(t.i, 1, MAX_ITEM)
+    local k = Text(t.k, 160)
+    if not (id and at and q and i and k) then return nil end
+    local out = { id = id, t = at, k = k, i = i, q = q, n = Text(t.n, 60), u = Whole(t.u, 1, MAX), dep = Whole(t.dep, 0, MAX),
+        dur = Whole(t.dur, 1, 3), a = Whole(t.a, 1, MAX), st = POST_STATES[t.st] and t.st or "ended",
+        cs = COST_STATES[t.cs] and t.cs or "unknown", c = Whole(t.c, 0, MAX), al = {}, ac = {} }
+    if out.cs ~= "ok" then out.c = nil end
+    if out.cs == "ok" and not out.c then out.cs = "unknown" end
+    if type(t.ac) == "table" then
+        for _, v in ipairs(P.Sequence(t.ac)) do
+            local a = Whole(v, 1, MAX)
+            if a and #out.ac < C.MAX_POST_IDS then out.ac[#out.ac + 1] = a end
+        end
+    end
+    if type(t.al) == "table" then
+        for _, row in ipairs(P.Sequence(t.al)) do
+            local clean = CleanAlloc(row)
+            if clean and #out.al < C.MAX_ALLOC then out.al[#out.al + 1] = clean end
+        end
+    end
+    return out
+end
+
 local function CleanList(list, clean, counterKey, max)
     local out, top = {}, 0
     if type(list) == "table" then
@@ -208,6 +241,10 @@ local function CleanRec(rec)
     local results, topResult = CleanList(rec.results, CleanResult, "results", C.MAX_RESULTS)
     local crafts, topCraft = CleanList(rec.crafts, CleanCraft, "crafts", C.MAX_CRAFTS)
     rec.lots, rec.results, rec.crafts = lots, results, crafts
+    local posts, topPost = CleanList(rec.posts, CleanPost, "posts", C.MAX_POSTS)
+    rec.posts = posts
+    local np = Whole(rec.nextPost, 1, MAX)
+    rec.nextPost = (np and np > topPost) and np or topPost + 1
     local n = Whole(rec.nextLot, 1, MAX)
     rec.nextLot = (n and n > topLot) and n or topLot + 1
     n = Whole(rec.nextResult, 1, MAX)
@@ -244,6 +281,13 @@ local function Compact(rec, now)
     for _, cr in ipairs(rec.crafts) do if cr.t >= limit then out[#out + 1] = cr end end
     rec.crafts = out
     while #rec.crafts > C.MAX_CRAFTS do table.remove(rec.crafts, 1) end
+    if type(rec.posts) == "table" then
+        local postLimit = now - C.POST_DAYS * DAY
+        out = {}
+        for _, post in ipairs(rec.posts) do if post.t >= postLimit then out[#out + 1] = post end end
+        rec.posts = out
+        while #rec.posts > C.MAX_POSTS do table.remove(rec.posts, 1) end
+    end
 end
 
 function C.Init()
@@ -592,6 +636,151 @@ function C.Disturbed(char, keys)
 end
 
 ---------------------------------------------------------------------------
+-- Posting provenance (V5). What a TwichUI posting proves, and only that:
+--   * the exact item identity (its bag link -> C.Key), the quantity, unit price, deposit and duration the player reviewed;
+--   * that the game created the auction (AUCTION_HOUSE_AUCTION_CREATED with its native auction id; all of a multi-post through
+--     AUCTION_MULTISELL_UPDATE), never the intent alone;
+--   * the cost of the posted units, taken out of the identified stock under the same rule as a sale (every carried unit of that
+--     identity must be an identified lot unit, and the bags must have lost exactly the posted units); otherwise the posted units'
+--     cost is unknown and the pool is forgotten, never guessed;
+--   * its later state by that native auction id only: "sold" when the owned-auction list shows it sold, "cancelled" on
+--     AUCTION_CANCELED for it, "ended" when a complete owned-auction list no longer has it (expired, or sold and paid).
+-- A seller invoice names an item and a count but no auction id and no item id, so a collected sale is never tied to a posting here:
+-- the sale's Item Result keeps "Cost basis unavailable". Nothing here is a cash movement or a realized result.
+---------------------------------------------------------------------------
+local function LinkName(link)
+    link = Plain(link)
+    return type(link) == "string" and Text(link:match("|h%[(.-)%]|h"), 60) or nil
+end
+
+-- A reviewed posting is about to be sent: what it is and the bags before it. Intent only: nothing is kept unless the game creates it.
+function C.PostIntent(p)
+    if blocked or type(p) ~= "table" then return nil end
+    local char = L.CharKey()
+    local item, qty = Whole(p.item, 1, MAX_ITEM), Whole(p.quantity, 1, C.MAX_QTY)
+    if not (char and item and qty and L.Active()) then return nil end
+    local key = C.Key(p.link, item)
+    local watch = R.LedgerCostWatch
+    local bags = watch and watch.Carried and watch.Carried()
+    return { char = char, key = key, item = item, qty = qty, name = LinkName(p.link), unit = Whole(p.unit, 1, MAX),
+        deposit = Whole(p.deposit, 0, MAX), duration = Whole(p.duration, 1, 3), before = bags and (bags[key] or 0) or nil }
+end
+
+local function FindPost(rec, auction)
+    for i = #rec.posts, 1, -1 do
+        local post = rec.posts[i]
+        if post.a == auction then return post end
+        for _, a in ipairs(post.ac) do if a == auction then return post end end
+    end
+end
+
+-- The game created the posting's auction(s). ids: the native auction ids seen ({ id, ... }, at least one for an item posting of
+-- one unit or a commodity; possibly none for a multi-post the game confirmed as complete). Returns the post, or nil and why.
+function C.Posted(token, ids)
+    if blocked or type(token) ~= "table" or L.CharKey() ~= token.char then return nil, "context" end
+    local rec = Rec(token.char, true)
+    if not rec then return nil, "record" end
+    if type(rec.posts) ~= "table" then rec.posts, rec.nextPost = {}, rec.nextPost or 1 end
+    local list = {}
+    for _, v in ipairs(type(ids) == "table" and ids or {}) do
+        local a = Whole(v, 1, MAX)
+        if a and #list < C.MAX_POST_IDS then list[#list + 1] = a end
+        if a and FindPost(rec, a) then stats.duplicate = stats.duplicate + 1 return nil, "duplicate" end
+    end
+    local now = Now()
+    if not now then return nil, "clock" end
+    local post = { id = rec.nextPost or 1, t = now, k = token.key, i = token.item, n = token.name, q = token.qty, u = token.unit,
+        dep = token.deposit, dur = token.duration, a = list[1], ac = list, st = "posted", cs = "unknown", al = {} }
+    rec.nextPost = post.id + 1
+    -- the posted units leave the identified stock exactly as a sale's would, or the pool is forgotten
+    local watch = R.LedgerCostWatch
+    local bags = watch and watch.Carried and watch.Carried()
+    local after = bags and (bags[token.key] or 0) or nil
+    if C.Pool(rec, token.key) == 0 then
+        post.cs = "nolot"
+    elseif not (token.before and after) or token.before - after ~= token.qty then
+        post.cs = "nostock"
+        C.Disturb(rec, token.key)
+    else
+        local ok, allocs, cost = C.Take(rec, token.key, token.qty, token.before)
+        if ok then
+            local rows, cut = Compress(allocs)
+            post.al = rows
+            if cost and not cut then post.cs, post.c = "ok", cost end
+        else
+            post.cs = allocs
+        end
+    end
+    rec.posts[#rec.posts + 1] = post
+    while #rec.posts > C.MAX_POSTS do table.remove(rec.posts, 1) end
+    stats.posts = (stats.posts or 0) + 1
+    L.Touch()
+    return post
+end
+
+-- AUCTION_CANCELED for one of this character's postings. Its units come back by mail with no carried cost (they rejoin the bags as
+-- unknown-cost stock): the reserved cost is kept on the posting for the record, never moved back to a lot.
+function C.AuctionCancelled(auction)
+    auction = Whole(auction, 1, MAX)
+    local key = L.CharKey()
+    local rec = auction and key and Rec(key, false)
+    if not (rec and type(rec.posts) == "table") then return false end
+    local post = FindPost(rec, auction)
+    if not post or post.st == "cancelled" then return false end
+    post.st = "cancelled"
+    L.Touch()
+    return true
+end
+
+-- An owned-auction list as read by the Auction House pages: rows { auctionID, status (0 active, 1 sold) }; complete = the list is the
+-- whole of it. Only this character's postings, and only by their native auction ids, change state.
+function C.Owned(rows, complete)
+    local key = L.CharKey()
+    local rec = key and Rec(key, false)
+    if blocked or not (rec and type(rec.posts) == "table") or type(rows) ~= "table" then return 0 end
+    local status = {}
+    for _, row in ipairs(rows) do
+        local a = type(row) == "table" and Whole(row.auctionID, 1, MAX)
+        if a then status[a] = Whole(row.status, 0, 1) or 0 end
+    end
+    local changed = 0
+    for _, post in ipairs(rec.posts) do
+        if post.st == "posted" or post.st == "sold" then
+            local ids = #post.ac > 0 and post.ac or { post.a }
+            local seen, sold = false, false
+            for _, a in ipairs(ids) do
+                if status[a] ~= nil then seen = true; if status[a] == 1 then sold = true end end
+            end
+            local was = post.st
+            if sold then post.st = "sold"
+            elseif not seen and complete == true and #ids > 0 then post.st = "ended" end
+            if post.st ~= was then changed = changed + 1 end
+        end
+    end
+    if changed > 0 then L.Touch() end
+    return changed
+end
+
+-- Postings of the window, newest first. { { ..post, char } }
+function C.Posts(chars, firstTime, lastTime)
+    local out = {}
+    for _, key in ipairs(chars) do
+        local rec = Rec(key, false)
+        if rec and type(rec.posts) == "table" then
+            for _, post in ipairs(rec.posts) do
+                if post.t >= firstTime and post.t < lastTime then
+                    local copy = { char = key }
+                    for k, v in pairs(post) do copy[k] = v end
+                    out[#out + 1] = copy
+                end
+            end
+        end
+    end
+    table.sort(out, function(a, b) if a.t ~= b.t then return a.t > b.t end return a.id > b.id end)
+    return out
+end
+
+---------------------------------------------------------------------------
 -- Reading (for the Workshop's Ledger page)
 ---------------------------------------------------------------------------
 -- Results of the window, newest first, from one record or all. { { ..result, char } }
@@ -664,26 +853,32 @@ function C.Snapshot()
     local transit = 0
     if rec then for _, lot in ipairs(rec.lots) do if lot.tq then transit = transit + 1 end end end
     return { blocked = blocked, lots = rec and #rec.lots or 0, results = rec and #rec.results or 0, crafts = rec and #rec.crafts or 0,
-        transit = transit, stats = copy }
+        transit = transit, posts = rec and type(rec.posts) == "table" and #rec.posts or 0, stats = copy }
 end
 
 ---------------------------------------------------------------------------
 -- Wiring
 ---------------------------------------------------------------------------
 local subscribed = false
+local function OnCancelled(auction)
+    local ok, err = pcall(C.AuctionCancelled, auction)
+    if not ok and R.Fault then R.Fault("gold ledger cost basis", err) end
+end
 function C.Refresh()
     if L.Active() and not blocked and not subscribed then
         subscribed = true
         L.OnAttached(Attached)
+        R:On("AUCTION_CANCELED", OnCancelled)
     elseif not L.Active() and subscribed then
         subscribed = false
         L.OnAttached(nil, Attached)
+        R:Off("AUCTION_CANCELED", OnCancelled)
     end
     if R.LedgerCostWatch then R.LedgerCostWatch.Refresh(L.Active() and not blocked) end
 end
 
 if R.Perf and R.Perf.Gauge then
-    for _, field in ipairs({ "lots", "results", "crafts", "transit" }) do
+    for _, field in ipairs({ "lots", "results", "crafts", "transit", "posts" }) do
         local name = field
         R.Perf.Gauge("ledger.cost." .. name, { label = "Gold ledger cost basis: " .. name .. " (bounded)", unit = "count", kind = "cache",
             group = "workshop", read = function() return C.Snapshot()[name] end })

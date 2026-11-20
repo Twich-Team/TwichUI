@@ -301,3 +301,36 @@ No names, subjects, senders, items or copper values.
 
 **Unverified in the real client:** that Forever's Open All and its server behave like the classic-era source, whether
 `GetInboxInvoiceInfo` answers for an unread message, and that `AUCTION_SOLD_MAIL_SUBJECT` and `canReply` read as modelled.
+
+## V5: auction-to-item lineage
+
+**Capability matrix** (Forever API names as used by the existing controllers; native behaviour unverified without the client):
+
+| Stage | Available evidence | Can identity be proven? |
+|---|---|---|
+| Item in bags | `C_Container.GetContainerItemInfo`: item id, stack count, hyperlink → `LedgerCost.Key` (id plus enchant/gems/suffix/bonus ids) | **Yes**: exact identity and count |
+| Auction posted (TwichUI Sell) | The reviewed draft: bag `ItemLocation`, link, quantity, unit price, deposit, duration; `AUCTION_HOUSE_AUCTION_CREATED(auctionID)` (one unit or a commodity), `AUCTION_MULTISELL_UPDATE(n, n)` (multi-post, ids optional) | **Yes**: identity, quantity, price, deposit and the native auction id(s) the game created |
+| Auction sold | `C_AuctionHouse.GetOwnedAuctions()`: `auctionID`, `status` (1 = sold), quantity, prices; `AUCTION_CANCELED(auctionID)` | **Yes, by auction id**, only while the Auction House is open and its list is read |
+| Sale mail received | `GetInboxInvoiceInfo`: type, item **name**, buyer, bid, buyout, deposit, consignment, count. No auction id, no item id | **No**. Identity is lost here |
+| Gold collected | Ledger cash entry (exact `PLAYER_MONEY` change) with seller settlement | Already supported (V1–V5) |
+
+**Where identity is lost:** the seller's mail. Nothing in it names the auction or the exact item, and a name, a count and a price that
+match a posting are a candidate, never a proof. Another posting of the same item can hold the same tuple: one made outside TwichUI or before
+it ran, one whose mail is still waiting, or one sold while this posting's mail is delayed. So V5 does **not** tie a collected sale to a posting or a
+cost lot. Its Item Result keeps the confirmed sale, collected gold, verified fee and returned deposit, item name and count, and
+**Cost basis unavailable** (`w = "auctionid"`).
+
+**What V5 records (posting provenance, `LedgerCost.lua`, `posts` in the cost component).** A TwichUI posting is kept only when the game
+created it. Kept: identity key, item id, name from the link, quantity, unit price, deposit, duration, native auction id(s), and the cost of
+the posted units. That cost is taken out of the identified stock under the existing rule: every carried unit of that identity must be an
+identified lot unit, and the bags must have lost exactly the posted units. Otherwise the cost is `mixed`/`missing`/`short`/`nostock` and
+the pool is forgotten, or `nolot` for stock with no verified acquisition, or `unknown` for an identified lot of unknown cost. This also
+keeps the pool equal to the carried units after a posting, where V4 would later have found a mismatch and forgotten the lots. State
+changes only by the posting's own native id: `sold` from the owned list, `cancelled` on `AUCTION_CANCELED`, `ended` when a **complete**
+owned list no longer has it. Returned (cancelled or expired) units come back by mail as unknown-cost stock; the reserved cost is never moved back to a lot.
+Bounded: 200 postings per character, 35 days (an auction lasts two days and its mail thirty). Intent, a failed post, a dismissed
+review or a repeated creation event keep nothing. The list is optional inside cost component version 1: older builds leave it untouched.
+
+**Realized profit.** Unchanged: verified vendor sales of identified (bought or crafted) stock. No Auction House sale produces realized profit
+in V5, because the link between its payment and its posting cannot be proven from native evidence. If Forever exposes an auction id on the
+seller invoice (or on the sold-auction mail), the provenance above is the half of the chain that is already in place.

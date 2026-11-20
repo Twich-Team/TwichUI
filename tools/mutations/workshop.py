@@ -1305,6 +1305,20 @@ m("ledger.query.window", LQUERY, "local from = today - filter.days + 1", "local 
 m("ledger.query.compare-incomplete", LQUERY, "if pcovered == #pdays and #pdays > 0 then", "if #pdays > 0 then",
   "a percentage is shown against a prior period that was only partly recorded", [LEDGERUI])
 
+# V5 posting provenance (auction/LedgerCost.lua). Disposable copies only.
+COSTF, LINEAGE = "!!!TwichUI/auction/LedgerCost.lua", "test_ledger_lineage.lua"
+m("ledger.lineage.skip-stock-check", COSTF, "elseif not (token.before and after) or token.before - after ~= token.qty then",
+  "elseif not (token.before and after) then",
+  "a posting whose bags changed by a different count still takes a verified cost from the identified lots", [LINEAGE])
+m("ledger.lineage.cancel-any", COSTF, "        if post.a == auction then return post end", "        if true then return post end",
+  "another auction's cancellation is taken for one of the player's postings", [LINEAGE])
+m("ledger.lineage.incomplete-ends", COSTF, "elseif not seen and complete == true and #ids > 0 then", "elseif not seen and #ids > 0 then",
+  "a partial owned-auction list ends postings that are still listed", [LINEAGE])
+m("ledger.lineage.duplicate-id", COSTF, 'if a and FindPost(rec, a) then stats.duplicate = stats.duplicate + 1 return nil, "duplicate" end', "",
+  "the same native auction is remembered twice, so its units' cost is taken twice", [LINEAGE])
+m("ledger.lineage.mixed-cost", COSTF, "            if cost and not cut then post.cs, post.c = \"ok\", cost end",
+  "            post.cs, post.c = \"ok\", cost or 0",
+  "a posting of partly unknown-cost stock reads as a verified (or zero) cost", [LINEAGE])
 VENDOR, VTEST = "!!!TwichUI/auction/Vendor.lua", "test_ledger_vendor.lua"
 m("ledger.vendor.missing-item", VENDOR,
   '    if item and (b[item] or 0) - (a[item] or 0) ~= delta then return false end\n', '',
