@@ -517,6 +517,20 @@ kept).
 - **Not tested:** the real client (Forever's cut and deposit, `GetRecipeCooldown`, `UnitFactionGroup("npc")` at a
   neutral auctioneer, appearance and fit of the new toggles and lines).
 
+### First real-client report (2026-11-20) and what changed
+
+- **The two toggles overlapped the page title.** The page's own title and subtitle are drawn inside the page's top-left, which the first
+  build took to be free. The toggles now sit in a footer row inside the list card, under the rows (`ViewOpportunities.lua`, `FOOT_H`).
+- **"Open one of your professions" although professions had been opened.** Not caused by the pricing changes: no profession was remembered
+  for the character (no profession chips were shown). Two causes are possible and the client report can't tell them apart yet:
+  1. Professions are read only while the Workshop addon is loaded. It loads on demand, so a profession opened before it loaded this session
+     is never seen (`Watch.lua`), unless "Load Workshop when I log in" is on.
+  2. The reader refuses a window the game doesn't confirm as the player's own: `IsNPCCrafting`, `IsTradeSkillGuild` and
+     `IsTradeSkillLinked` must each answer an explicit `false`. Blizzard's Forever code only tests them for true, and two of the three are
+     absent from the generated API documentation, so a `nil` answer would refuse every profession silently.
+  The rule is unchanged (it is deliberate and tested). The empty page now says which applies: the last refusal with the check that refused
+  and what it returned (e.g. "IsTradeSkillLinked gave nil"), or the load-on-demand explanation with the setting (`Session.NoRecipesText`).
+
 ### Real-client checks (none done)
 
 1. Sell 3 or more items at a faction auction house; Settings "Cut in your sales" should read the same rate, and
@@ -526,6 +540,8 @@ kept).
 3. Open the auction house at a neutral auctioneer and check what side the market is saved under.
 4. A recipe on cooldown should say "On cooldown" with the time the profession window shows.
 5. The two toggles, the row lines and the details' line must fit at the window's size.
+6. With the Workshop loaded, open a profession, then Opportunities: the recipes appear. If the page says the window wasn't confirmed as
+   your own, report the check it names: that decides whether the ownership rule should follow Blizzard's true-only test.
 
 ## 11. Limits that stay
 

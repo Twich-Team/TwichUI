@@ -370,6 +370,12 @@ do
   heads.cost:GetScript("OnClick")(heads.cost); Same(L_.rows[1].name:GetText(), "Healing Potion", "the same column again reverses it")
   heads.profit:GetScript("OnClick")(heads.profit)
   Same(S.opp.sort, "profit"); Same(L_.rows[1].name:GetText(), "Healing Potion")
+  -- the two toggles sit in the list card's footer, under the rows, never over the page's title (2026-11-20 real-client report)
+  Same(opps.hideLow.parent, opps.card, "the toggles belong to the list card"); Same(opps.margin.parent, opps.card)
+  Same(opps.hideLow.points[1][1], "BOTTOMLEFT", "at the card's bottom")
+  local boxBottom
+  for _, pt in ipairs(L_.box.points) do if pt[1] == "BOTTOMRIGHT" then boxBottom = pt[3] end end
+  Check(boxBottom and boxBottom >= 36, "the rows end above the footer: " .. tostring(boxBottom))
   -- the two toggles: rank by margin (Healing 750 / 250 against Mana 150 / 150), and hide Low-confidence crafts (both are: thin fake listings)
   opps.margin:GetScript("OnClick")(opps.margin)
   Same(S.opp.sort, "margin"); Check(opps.margin.on, "the toggle shows its state"); Same(L_.rows[1].name:GetText(), "Healing Potion")

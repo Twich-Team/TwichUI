@@ -29,6 +29,7 @@ local BOX_Y, WHY_Y, STRAT_Y, STRAT_H, COLS_Y = -4, -50, -64, 108, -178
 local MATS_W, FACT_X = 196, 212
 local CHART_Y = COLS_Y - 126   -- the history's caption row (the facts column is 7 rows of 14 under its heading)
 local RIGHT = 8   -- a row's right margin before the profit column
+local FOOT_H = 38 -- the list card's footer (the two toggles) under the rows
 local TOP = -100  -- the list's top edge on the page (the chips sit above it)
 
 local K
@@ -722,18 +723,6 @@ local function Build(p)
         return text
     end)
 
-    -- two toggles over the list: hide Low-confidence crafts, and rank by profit per copper spent
-    opps.hideLow = UI.Segment(opps, "Hide low confidence", 156, function()
-        S.ToggleHideLow(); UI.lists.opps:ScrollTop(); UI.Redraw()
-    end)
-    opps.hideLow:SetPoint("TOPLEFT", 0, -6)
-    UI.Tip(opps.hideLow, "Hide low confidence", "Hide crafts whose estimate rests on thin, capped or reference data. Unknown estimates stay, with their reason.")
-    opps.margin = UI.Segment(opps, "Best margin first", 138, function()
-        S.SortBy(S.opp.sort == "margin" and "profit" or "margin"); UI.lists.opps:ScrollTop(); UI.Redraw()
-    end)
-    opps.margin:SetPoint("LEFT", opps.hideLow, "RIGHT", 6, 0)
-    UI.Tip(opps.margin, "Best margin first", "Rank by profit for each copper the materials cost, so cheap crafts that pay well come first. Click again to rank by profit.")
-
     -- the list
     local card = CreateFrame("Frame", nil, opps)
     card:SetPoint("TOPLEFT", 0, TOP)
@@ -765,8 +754,22 @@ local function Build(p)
     rule:SetPoint("TOPLEFT", 12, -34); rule:SetPoint("TOPRIGHT", -12, -34)
     local list = UI.List(card, OPP_H, MakeOppRow, 360, false)
     list.box:SetPoint("TOPLEFT", 4, -36)
-    list.box:SetPoint("BOTTOMRIGHT", -4, 4)
+    list.box:SetPoint("BOTTOMRIGHT", -4, FOOT_H)
     UI.lists.opps = list
+    -- the list's footer: hide Low-confidence crafts, and rank by profit per copper spent (inside the card, under the rows: the page's title,
+    -- subtitle and profession chips keep the space above the list)
+    local footRule = UI.Rule(card, 0.5)
+    footRule:SetPoint("BOTTOMLEFT", 12, FOOT_H - 2); footRule:SetPoint("BOTTOMRIGHT", -12, FOOT_H - 2)
+    opps.hideLow = UI.Segment(card, "Hide low confidence", 156, function()
+        S.ToggleHideLow(); UI.lists.opps:ScrollTop(); UI.Redraw()
+    end)
+    opps.hideLow:SetPoint("BOTTOMLEFT", 10, 6)
+    UI.Tip(opps.hideLow, "Hide low confidence", "Hide crafts whose estimate rests on thin, capped or reference data. Unknown estimates stay, with their reason.")
+    opps.margin = UI.Segment(card, "Best margin first", 138, function()
+        S.SortBy(S.opp.sort == "margin" and "profit" or "margin"); UI.lists.opps:ScrollTop(); UI.Redraw()
+    end)
+    opps.margin:SetPoint("LEFT", opps.hideLow, "RIGHT", 6, 0)
+    UI.Tip(opps.margin, "Best margin first", "Rank by profit for each copper the materials cost, so cheap crafts that pay well come first. Click again to rank by profit.")
 
     BuildDetail()
 end

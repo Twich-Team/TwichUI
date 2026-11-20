@@ -270,7 +270,20 @@ do
   local saved = T.IsTradeSkillLinked
   T.IsTradeSkillLinked = nil
   Same(select(2, O.Read()), "not-own", "a window the game can't confirm as the player's own is not used")
+  Same(select(3, O.Read()), "IsTradeSkillLinked is missing", "and it says which check could not confirm it")
+  T.IsTradeSkillLinked = function() return nil end
+  Same(select(2, O.Read()), "not-own", "an answer that isn't an explicit false is not a confirmation")
+  Same(select(3, O.Read()), "IsTradeSkillLinked gave nil")
   T.IsTradeSkillLinked = saved
+  g.guild = true; Same(select(3, O.Read()), "IsTradeSkillGuild gave true", "a guild list names its check"); g.guild = false
+  -- the Session keeps the reason for the empty Opportunities page
+  local S = c.TwichUI.Workshop.Session
+  T.IsTradeSkillLinked = function() return nil end
+  Same(S.Observe(), false)
+  Check(S.NoRecipesText():find("didn't confirm it as your own (IsTradeSkillLinked gave nil)", 1, true), S.NoRecipesText())
+  T.IsTradeSkillLinked = saved
+  S.Reset()
+  Check(S.NoRecipesText():find("Load Workshop when I log in", 1, true), "with no read this session it explains the load-on-demand gap: " .. S.NoRecipesText())
   g.changing = true; Same(select(2, O.Read()), "busy"); g.changing = false
   g.combat = true; Same(select(2, O.Read()), "combat"); g.combat = false
   g.prof = { professionID = 0, professionName = "" }; Same(select(2, O.Read()), "none")

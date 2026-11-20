@@ -1555,3 +1555,6 @@ m("market.cost.bait-boundary", VALUATION, "if skipBelow and 2 * t.p < d.a then",
   "a tier at exactly half the anchor (a real competing price) is skipped as bait", ["test_workshop_valuation.lua"])
 m("market.cost.bait-still-available", VALUATION, "r.qty, r.available = n, d.t - skipItems", "r.qty, r.available = n, d.t",
   "the bait's items are counted as buyable, so too few listed reads as enough", ["test_workshop_valuation.lua"])
+m("crafting.observe.unconfirmed-own", OBSERVE, "        if v ~= false then\n            return nil, \"not-own\"",
+  "        if v == true then\n            return nil, \"not-own\"",
+  "an ownership check that answers nothing (or is missing) is taken as the player's own profession", ["test_workshop.lua"])

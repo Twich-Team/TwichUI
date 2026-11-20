@@ -25,6 +25,7 @@ local loaded = false   -- the remembered professions have been brought in
 local dirty = {}       -- [professionID] = true: changed since it was last kept
 local current          -- the professionID being browsed
 local lastWhy          -- why the last read gave nothing, or nil
+local lastDetail       -- for "not-own": which check refused and what it gave (Observe.Read)
 local note             -- the last thing an action said, until the next action
 local lastShop         -- the last finished multilevel shopping package (shown, marked as updating, while a newer plan is computed)
 
@@ -170,8 +171,8 @@ end
 -- information of any queued recipe in it up to date. A read that gives nothing leaves what was seen before as it was.
 -- Returns true, or false and why (see Observe.Read).
 function S.Observe()
-    local r, why = O.Read()
-    lastWhy = why
+    local r, why, detail = O.Read()
+    lastWhy, lastDetail = why, detail
     if not r then return false, why end
     Ensure()
     S.observations = S.observations + 1
@@ -234,7 +235,7 @@ end
 -- Forgets what is held in memory (the window closed); what changed is kept first, and the saved queue and recipes are untouched
 function S.Reset()
     S.Save()
-    profs, order, current, lastWhy, note = {}, {}, nil, nil, nil
+    profs, order, current, lastWhy, lastDetail, note = {}, {}, nil, nil, nil, nil
     loaded, dirty = false, {}
     S.filter = ""
     S.opp.prof = nil
@@ -307,7 +308,20 @@ function S.Notices()
     return out
 end
 
-function S.Why() return lastWhy end
+function S.Why() return lastWhy, lastDetail end
+
+-- Why Opportunities (or the Overview) has no recipes, in a sentence: the last read's refusal when there was one this session, otherwise
+-- that professions are read only while the Workshop is loaded (it loads on demand: one opened before it loaded was not seen).
+function S.NoRecipesText()
+    local base = "Open one of your professions to see which crafts could be worth making."
+    if lastWhy == "not-own" then
+        return base .. " The last profession window wasn't used: the game didn't confirm it as your own" .. (lastDetail and (" (" .. lastDetail .. ")") or "") .. "."
+    elseif lastWhy == "combat" then return base .. " It can be read when combat ends."
+    elseif lastWhy == "api" then return "This game version doesn't offer profession recipes to TwichUI."
+    elseif lastWhy == "busy" or lastWhy == "empty" then return base .. " The last profession window had no recipe list yet; open it again in a moment."
+    end
+    return base .. " Professions are read while the Workshop is loaded, so one opened before it loaded this session wasn't seen. To have them read whenever you open them, turn on Load Workshop when I log in (Settings, Workshop)."
+end
 
 ---------------------------------------------------------------------------
 -- The queue
@@ -700,7 +714,9 @@ function S.Opportunities()
     elseif out.summary.priced == 0 then out.state = "noprices"
     elseif #rows == 0 then out.state = S.opp.profitOnly and "noprofit" or (S.opp.hideLow and #Op.Select(all, { prof = S.opp.prof }) > 0 and "lowonly" or "nofilter")
     else out.state = "ok" end
-    if out.state == "noscan" then
+    if out.state == "norecipes" then
+        out.empty = S.NoRecipesText()
+    elseif out.state == "noscan" then
         out.empty = src.open and "No prices for this auction house yet. Choose Scan prices."
             or "No prices saved yet. Open the auction house and choose Scan prices."
     else

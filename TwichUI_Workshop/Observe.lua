@@ -118,7 +118,8 @@ local function Cooldown(T, id)
 end
 
 -- Returns { prof, profName, complete, unlearned = { [id] = true } (listed and explicitly not learned), recipes = { { id, name, icon,
--- diff, prof, profName, cd (Cooldown's answer, memory only) }, ... } }, or nil and why:
+-- diff, prof, profName, cd (Cooldown's answer, memory only) }, ... } }, or nil, why and (for "not-own") which check refused and what it gave,
+-- e.g. "IsTradeSkillLinked gave nil" (so a refusal in the real client can be told apart from a genuine link, guild list or NPC crafting):
 --   "api" (the game offers no profession interface), "combat", "busy" (the window is still loading its list), "not-own"
 --   (linked, guild, NPC or unconfirmed), "none" (no profession is open), "empty" (it has no recipe list yet)
 function O.Read()
@@ -127,8 +128,13 @@ function O.Read()
     if InCombatLockdown and InCombatLockdown() then return nil, "combat" end
     if Call(T.IsDataSourceChanging) == true then return nil, "busy" end
     if T.IsTradeSkillReady and Call(T.IsTradeSkillReady) == false then return nil, "none" end   -- no profession window is ready
-    if Call(T.IsNPCCrafting) ~= false or Call(T.IsTradeSkillGuild) ~= false or Call(T.IsTradeSkillLinked) ~= false then
-        return nil, "not-own"
+    -- each must answer an explicit false: a window the game can't confirm as the player's own is not used (tests/test_workshop.lua)
+    for _, name in ipairs({ "IsNPCCrafting", "IsTradeSkillGuild", "IsTradeSkillLinked" }) do
+        local fn = T[name]
+        local v = Call(fn)
+        if v ~= false then
+            return nil, "not-own", name .. (type(fn) ~= "function" and " is missing" or (" gave " .. tostring(v)))
+        end
     end
     local base = Call(T.GetBaseProfessionInfo)
     local prof = type(base) == "table" and Int(base.professionID, 1, W.MAX_ID) or nil
