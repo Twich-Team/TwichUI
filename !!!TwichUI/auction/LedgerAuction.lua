@@ -60,7 +60,7 @@ Try = function()
     if not e or e.id ~= p.entry or e.k or e.a ~= -p.cost then A.Abort(p, "mismatch"); return end
     if not p.complete then return end
     Clear() -- Evidence can notify synchronously
-    local result = L.Evidence({ kind = p.kind, amount = e.a, item = p.item, qty = p.qty, auction = p.auction,
+    local result = L.Evidence({ kind = p.kind, amount = e.a, item = p.item, qty = p.qty, auction = p.auction, duration = p.duration,
         entry = p.entry, char = p.char, corr = "auctioncash:" .. p.serial })
     if result == "attributed" then stats.attributed = stats.attributed + 1 end
 end
@@ -82,7 +82,7 @@ local function Hooks()
     hooked = true
     return true
 end
-function A.Begin(kind, cost, item, qty, auction, context)
+function A.Begin(kind, cost, item, qty, auction, context, duration)
     if not active or not L.Active() then return nil end
     if pending then A.Abort(pending, "ambiguous"); return nil end
     if blocked or (kind ~= "postItem" and kind ~= "postCommodity" and kind ~= "cancel") then return nil end
@@ -96,7 +96,8 @@ function A.Begin(kind, cost, item, qty, auction, context)
     serial = serial + 1
     local p = { mode = kind, kind = kind == "cancel" and "ahCancelFee" or "ahDeposit", cost = cost,
         item = item, qty = qty, auction = auction, context = context, char = key, entry = rec.nextId,
-        started = Now(), expires = Now() + 8, serial = serial }
+        started = Now(), expires = Now() + 8, serial = serial,
+        duration = kind ~= "cancel" and Int(duration, 1) and duration <= 3 and duration or nil }
     pending = p
     L.Subscribe(Changed)
     timer = C_Timer.NewTimer(8, function()

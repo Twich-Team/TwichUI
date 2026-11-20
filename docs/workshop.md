@@ -71,6 +71,8 @@ each option with its price and **how old it is**, the making plan with every rea
 - **Auction search:** not offered. No existing safe integration starts a general auction search (`auction/Scan.lua` is the posting page's one-item search), so the row gives the item link/tooltip instead.
 
 ### Opportunities (milestone 2)
+**Since 2026-11-20 the figures are the planning estimate** ([pricing realism](workshop/pricing-realism-proposal.md), section 10A): materials are the cheaper of a known vendor and the auction listings walked for the quantity needed (listings far below the rest left out), the sell price is the lowest competing listing capped at 115% of Market Value (or what a merchant pays when that is more), the auction house's cut is deducted (5% / 15%, labelled assumed; Settings can turn it off), the deposit at risk is shown from the player's own postings, and every estimate carries a confidence (High / Medium / Low) with its reasons. **Hide low confidence** and **Best margin first** sit above the list; the Overview headlines the best craft that isn't Low confidence; the queue estimate prices all of a recipe's crafts at once. The milestone-2 description below is the original basis and is kept for history; where it says "cheapest listing" or "before fees" the planning estimate now applies.
+
 For every recipe read this session (all professions seen, not only the one browsed), **one craft**: item icon (hover for the item, Shift-click puts its link in an open chat box),
 recipe name, what it makes, **Cost to make**, **Sell price**, **Estimated profit**, and **Add** (the same queue as Crafting). Default order: highest estimated profit first; the three
 money headings sort (a second click reverses); profession buttons filter; **Profitable only** hides losses and unknown ones *(the switch was removed from the page on 2026-11-12; the logic stays)*. Unknown estimates ("Unknown", with the reason under the name,
@@ -107,7 +109,7 @@ The follow-up pull request records focused unit, mutation, simulator and package
 verification after the initial in-game iteration. Native appearance and pointer
 behavior still require Forever acceptance. Older chart descriptions above are historical.
 
-**Market figures (A7).** The Opportunities details show Lowest listing, Competing price, Recent price, Market value (14d), Historical value (60d), Supply and Data quality (`MarketFacts.lua`, over the Market services), with the existing chart below; the tooltip has a Market value line (Always) and four Hold Shift lines; Shopping prices the auction option for the quantity still missing with `Market.Cost` (exact, a range, "at least", or not enough listed). Profit still uses the lowest listing. See "A7 as built".
+**Market figures (A7).** The Opportunities details show Lowest listing, Competing price, Recent price, Market value (14d), Historical value (60d), Supply and Data quality (`MarketFacts.lua`, over the Market services), with the existing chart below; the tooltip has a Market value line (Always) and four Hold Shift lines; Shopping prices the auction option for the quantity still missing with `Market.Cost` (exact, a range, "at least", or not enough listed). Profit used the lowest listing until 2026-11-20; it now uses the planning estimate (above). See "A7 as built".
 
 **On the auction house window** (`AuctionButton.lua`): the same **Scan prices** button sits under the window's lower right corner, with the same progress bar and message beside it while a scan runs and the last message
 (not shown again after the window has been closed) afterwards. It is the same scan (`Session.StartScan`), so either button shows the other's progress. It exists once the Workshop has been loaded this session (the addon is
@@ -234,6 +236,7 @@ Target client: Forever 1.60.1, UI source `forever` branch. Forever has no classi
 - `GetRecipeInfo`/`OpenRecipe` take `SecretArguments = "AllowedWhenUntainted"`; every value read goes through `Plain` and `Int`/`Text`.
 
 ## Prices: the exact basis (milestone 2)
+*Superseded for Opportunities, the Overview and the queue estimate on 2026-11-20 by the planning estimate (`Estimate.lua`, `Fees.lua`; [pricing realism](workshop/pricing-realism-proposal.md), sections 5 and 10A). `Prices.Estimate` below is unchanged and still tested; Shopping and the planner keep their exact listing walk.*
 
 *Proposal (not built): [Completing Opportunities](workshop/pricing-realism-proposal.md) analyses every Workshop price consumer and the missing fees, deposits, vendor values and cooldowns, with a work plan (WP0 to WP9).*
 

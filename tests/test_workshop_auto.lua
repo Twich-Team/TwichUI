@@ -8,7 +8,7 @@ local function Check(cond, msg) if not cond then error(msg or "check failed", 2)
 local function Same(a, b, msg) if a ~= b then error((msg or "") .. " expected " .. tostring(b) .. ", got " .. tostring(a), 2) end end
 
 local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua",
-    "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Auto.lua", "Session.lua" }
+    "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Auto.lua", "Fees.lua", "Estimate.lua", "Session.lua" }
 
 local function Ser(v)
     if type(v) ~= "table" then return type(v) == "string" and ("%q"):format(v) or tostring(v) end

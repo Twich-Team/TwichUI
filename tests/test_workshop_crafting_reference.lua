@@ -19,7 +19,7 @@ dofile(TESTS .. "mi_mock.lua")
 dofile(TESTS .. "client_format.lua")   -- string.format refuses what the client refuses (%d beyond 32 bits, NaN)
 
 local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua",
-    "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua" }
+    "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Fees.lua", "Estimate.lua", "Session.lua" }
 local LAB = ROOT .. "../TwichUI_TestLab/"
 
 local ONLY = tonumber(os.getenv("CRAFT_SEED") or "")

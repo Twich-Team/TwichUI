@@ -199,6 +199,7 @@ Record: `name`, `realm`, `since`, `tz` (1 = local days), `nextId`, `entries` (ol
 
 * Entry: `id` (stable, never reused), `t` (unix), `a` (signed copper, never 0), optional `k` (source; absent = unclassified), `e` (evidence code), `i` (item id), `q` (quantity), `n` (note, <= 60 bytes, no control or `|`), `x` (correlation id).
 * V3 optional entry fields: `u` (validated native auction ID for deposits/cancellation fees), `s` (seller settlement). `s = {v=1,g,f,d,c,invoices={...}}`; each invoice retains only `g,f,d,c,n,q` (gross, fee, returned deposit, actual collected amount, safe item name and optional quantity). At most eight invoices, exact finite integer copper, validated equation and aggregates. Corrupt metadata is dropped narrowly without dropping the cash entry; unknown newer extension versions are retained untouched and not interpreted. No migration/root-version change is needed.
+* Optional deposit field (2026-11-20): `r` on an `ahDeposit` entry is the listing duration the poster chose (1 to 3, the client's three durations). Older entries simply lack it; an invalid value is dropped. Workshop's deposit estimates read it (`TwichUI_Workshop/Fees.lua`).
 * Day (`days[utcDay]`): `i`, `o` (copper in / out), `n` (entries), `ci`, `co` (the same split by source). A day **record** means "the recorder was running that day" (`n = 0`: nothing moved); **no record = outside coverage**, which is not the same as zero.
 * Sums saturate at 2^53 - 1 (exact integers).
 

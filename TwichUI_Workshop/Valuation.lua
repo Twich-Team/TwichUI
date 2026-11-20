@@ -1000,18 +1000,37 @@ function MK.Cost(item, qty, opt)
     local d, dwhy = SnapDist(cx)
     if not d then return None(dwhy, cx) end
     local r = Base("purchase", "cost", cx)
-    r.qty, r.available = n, d.t
+    -- opt.fromCompeting (a planning estimate, docs/workshop/pricing-realism-proposal.md R2): leave out the tiers under half the anchor (the
+    -- bait tiers Competition marks `below`); they are reported in `skipped`. When every kept tier is under that line nothing is left out.
+    local skipBelow = cx.opt and cx.opt.fromCompeting == true or false
+    if skipBelow then
+        local any = false
+        for _, t in ipairs(d.tiers) do if 2 * t.p >= d.a then any = true break end end
+        if not any then skipBelow = false end
+    end
+    local skipItems = 0
+    if skipBelow then
+        r.skipped = { items = 0, listings = 0, price = d.tiers[1].p }
+        for _, t in ipairs(d.tiers) do
+            if 2 * t.p < d.a then r.skipped.items, r.skipped.listings = r.skipped.items + t.q, r.skipped.listings + t.l end
+        end
+        skipItems = r.skipped.items
+        if skipItems == 0 then r.skipped = nil end
+    end
+    r.qty, r.available = n, d.t - skipItems
     r.at, r.age, r.freshness, r.complete, r.cut, r.partial = s.at, s.age, s.freshness, s.complete, s.cut, s.partial
     r.quality = QualityOf(cx).level
     SnapNotes(r, s, Mixed(cx))
-    if d.t < n then
+    if r.available < n then
         r.state = "few"
         Note(r, "few")
         return r
     end
     local rem, low, base, used = n, 0, 0, {}
     for k, t in ipairs(d.tiers) do
-        if rem <= t.q then
+        if skipBelow and 2 * t.p < d.a then
+            -- a bait tier: not counted (r.skipped)
+        elseif rem <= t.q then
             low = base + rem * t.p
             local largest = t.m or (t.q - t.l + 1)              -- the largest listing is at most what the other listings leave
             local whole
@@ -1026,10 +1045,11 @@ function MK.Cost(item, qty, opt)
             r.last = { tier = k, price = t.p, need = rem, items = t.q, listings = t.l, largest = largest, overbuy = whole - rem }
             rem = 0
             break
+        else
+            used[#used + 1] = { p = t.p, q = t.q }
+            base = base + t.q * t.p
+            rem = rem - t.q
         end
-        used[#used + 1] = { p = t.p, q = t.q }
-        base = base + t.q * t.p
-        rem = rem - t.q
     end
     r.used = used
     if rem > 0 then

@@ -410,7 +410,7 @@ local function Send(p,fn,...)
         local visit=p.visit
         p.ledger=audit.Begin(p.kind,p.kind=="cancel" and p.cost or p.deposit,p.item,p.quantity,p.auctionID,function()
             return W.Active() and R.AuctionHost.IsCurrent(visit) and not InCombatLockdown()
-        end)
+        end,p.duration)
     end
     if audit then audit.Sending(p.ledger,true) end
     sending=true;local ok,result=pcall(fn,...);sending=false

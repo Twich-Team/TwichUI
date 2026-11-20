@@ -103,8 +103,22 @@ local function Call(fn, ...)
     return Plain(a)
 end
 
+-- A recipe's cooldown as the game reports it now: C_TradeSkillUI.GetRecipeCooldown(id) -> cooldown (seconds left, nil when none runs),
+-- isDayCooldown, charges, maxCharges (wow-ui-source forever, Blizzard_Professions.lua IsRecipeOnCooldown and the schematic form read it so).
+-- { left (seconds, nil when none runs), day, charges, max, at (time()) } or nil for a recipe with neither a running cooldown nor charges.
+-- Memory only: Known.lua saves fixed fields and never this.
+local function Cooldown(T, id)
+    if type(T.GetRecipeCooldown) ~= "function" then return nil end
+    local ok, cd, day, charges, most = pcall(T.GetRecipeCooldown, id)
+    if not ok then return nil end
+    cd, charges, most = Plain(cd), Int(charges, 0, 1000), Int(most, 0, 1000)
+    local left = type(cd) == "number" and W.Finite(cd) and cd > 0 and cd or nil
+    if not left and not (most and most > 0) then return nil end
+    return { left = left, day = Plain(day) == true, charges = charges, max = most, at = time and time() or 0 }
+end
+
 -- Returns { prof, profName, complete, unlearned = { [id] = true } (listed and explicitly not learned), recipes = { { id, name, icon,
--- diff, prof, profName }, ... } }, or nil and why:
+-- diff, prof, profName, cd (Cooldown's answer, memory only) }, ... } }, or nil and why:
 --   "api" (the game offers no profession interface), "combat", "busy" (the window is still loading its list), "not-own"
 --   (linked, guild, NPC or unconfirmed), "none" (no profession is open), "empty" (it has no recipe list yet)
 function O.Read()
@@ -146,7 +160,7 @@ function O.Read()
                 if name then
                     recipes[#recipes + 1] = {
                         id = id, name = name, icon = Int(info.icon, 0, W.MAX_ID), diff = Int(info.relativeDifficulty, 0, 3),
-                        prof = prof, profName = profName,
+                        prof = prof, profName = profName, cd = Cooldown(T, id),
                     }
                 end
             end

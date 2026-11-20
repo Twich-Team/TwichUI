@@ -597,6 +597,15 @@ do
   RawMarket(t, KEY2, { at = At(T, 10), noDist = true, listings = { [3] = { { 100, 1 } } } })
   Same(MK.Cost(3, 1, { market = KEY2, now = now }).state, "none") Same(MK.Cost(3, 1, { market = KEY2, now = now }).why, "noevidence")
   Same(MK.Cost(3, 1, Opt(now)).unit, 100)
+  -- fromCompeting (the planning estimate, pricing-realism-proposal R2): tiers under half the anchor are left out and reported, never bought
+  x = MK.Cost(1, 2, Opt(now, { fromCompeting = true }))
+  Same(x.state, "range", "one listing of 40") Same(x.low, 10000, "the 1-copper bait is not counted: 2 x 5000") Same(x.skipped.items, 1) Same(x.skipped.price, 1)
+  Same(x.available, 50, "the bait's item is not available to the estimate")
+  Same(MK.Cost(1, 2, Opt(now)).low, 5001, "without the option the walk is unchanged: 1 + 5000")
+  x = MK.Cost(1, 51, Opt(now, { fromCompeting = true })) Same(x.state, "few", "51 are needed and 50 are left once the bait is out") Same(x.available, 50)
+  x = MK.Cost(2, 3, Opt(now, { fromCompeting = true }))
+  Same(x.skipped, nil, "every kept tier is under the line: nothing is left out") Same(x.cost, 10 + 11 + 12)
+  x = MK.Cost(6, 6, Opt(now, { fromCompeting = true })) Same(x.low, 110, "no bait: the same walk") Same(x.skipped, nil)
 end
 
 ---------------------------------------------------------------------------

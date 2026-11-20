@@ -107,6 +107,8 @@ function DE.ForItem(f,opt)
         yields[#yields+1]={item=item,chance=chance,min=low,max=high}
         snapshot.outcomes[#snapshot.outcomes+1]={p=chance/100,materials={{item=item,qty=(low+high)/2}}}
         local quote,why=pricing.Price(item,{market=opt.market,now=now})
+        -- a material is valued at its competing price, not one cheap listing (Estimate.AtCompeting; a reference keeps its Recent Price)
+        if W.Estimate and quote then quote=W.Estimate.AtCompeting(quote,item,{market=opt.market,now=now}) end
         local at=quote and W.Plain(quote.at)
         if not (quote and W.Int(quote.price,1,W.Prices.MAX_COPPER) and W.Finite(at) and at<=now and now-at<=W.Prices.OLD_AFTER) then
             missing=missing or ("A current price is missing for "..(data.names[item] or ("item "..item))..".")

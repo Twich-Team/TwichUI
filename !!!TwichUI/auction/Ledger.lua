@@ -242,6 +242,7 @@ local function CleanEntry(e)
     e.n = Note(e.n)
     e.x = type(e.x) == "string" and #e.x <= MAX_CORR and e.x or nil
     e.u = (e.k == "ahDeposit" or e.k == "ahCancelFee") and Whole(e.u, 1, MAX) or nil
+    e.r = e.k == "ahDeposit" and Whole(e.r, 1, 3) or nil   -- the listing duration (1 to 3) of a deposit, when the poster said it
     local future = type(e.s) == "table" and Whole(e.s.v, 2, MAX)
     if not future then e.s = e.k == "ahSale" and Lg.Settlement(e.s, e.a) or nil end
     return e
@@ -478,7 +479,7 @@ local function Attach(slot, ev)
     Move(slot.rec, Lg.DayOf(e.t), e.a, "other", ev.kind)
     e.k, e.e = ev.kind, Lg.SOURCES[ev.kind].evidence
     e.i, e.q, e.n, e.x = ev.item, ev.qty, ev.note, ev.corr
-    e.u, e.s = ev.auction, ev.settlement
+    e.u, e.s, e.r = ev.auction, ev.settlement, ev.duration
     Remember(ev.corr)
     stats.attributed = stats.attributed + 1
     for fn in pairs(attachListeners) do
@@ -515,6 +516,7 @@ local function Valid(ev)
     return { kind = ev.kind, amount = amount, item = Whole(ev.item, 1, MAX_ITEM), qty = Whole(ev.qty, 1, MAX_QTY),
         note = Note(ev.note), corr = corr, entry = entry, char = ev.char, stock = stock,
         auction = (ev.kind == "ahDeposit" or ev.kind == "ahCancelFee") and Whole(ev.auction, 1, MAX) or nil,
+        duration = ev.kind == "ahDeposit" and Whole(ev.duration, 1, 3) or nil,
         settlement = ev.kind == "ahSale" and Lg.Settlement(ev.settlement, amount) or nil }
 end
 

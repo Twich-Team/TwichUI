@@ -873,7 +873,7 @@ local function BeginLedgerPost(p)
     local ok, deposit = pcall(Deposit, p.loc, p.quantity)
     if not ok or deposit ~= p.deposit then return end
     return R.AuctionLedger.Begin(p.kind == "commodity" and "postCommodity" or "postItem", deposit, p.itemID, p.quantity, nil,
-        function() return session == p.session and not InCombatLockdown() end)
+        function() return session == p.session and not InCombatLockdown() end, p.duration)
 end
 -- Preserve each explicit controller call and its arguments, while marking ownership for the read-only evidence guard.
 local function CallPost(p, confirm)

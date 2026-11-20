@@ -77,7 +77,7 @@ c.C_Item = {
 c.InCombatLockdown = function() return false end
 c.IsShiftKeyDown = function() return false end
 
-for _, f in ipairs({ "Data.lua", "BridgeCodec.lua", "BridgeSchema.lua", "BridgeValidate.lua", "Bridge.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "CraftPlanner.lua", "Strategy.lua", "Scan.lua", "Market.lua", "Valuation.lua", "MarketFacts.lua", "Session.lua", "AuctionButton.lua", "Style.lua", "auction/AdvancedChart.lua", "ViewOverview.lua", "ViewOpportunities.lua", "ViewCrafting.lua", "ViewShopping.lua", "ViewStrategy.lua", "Window.lua" }) do
+for _, f in ipairs({ "Data.lua", "BridgeCodec.lua", "BridgeSchema.lua", "BridgeValidate.lua", "Bridge.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "CraftPlanner.lua", "Strategy.lua", "Scan.lua", "Market.lua", "Valuation.lua", "MarketFacts.lua", "Fees.lua", "Estimate.lua", "Session.lua", "AuctionButton.lua", "Style.lua", "auction/AdvancedChart.lua", "ViewOverview.lua", "ViewOpportunities.lua", "ViewCrafting.lua", "ViewShopping.lua", "ViewStrategy.lua", "Window.lua" }) do
   local chunk = assert(loadfile(ROOT .. "../TwichUI_Workshop/" .. f)); setfenv(chunk, c); chunk("TwichUI_Workshop", {})
 end
 local W = R.Workshop
@@ -119,6 +119,9 @@ Same(d.strat.headline:GetText(), "Craft 1 intermediate \194\183 Buy 1", "what to
 Same(d.strat.pairs[1].l:GetText(), "Estimated cost"); Same(d.strat.pairs[1].v:GetText(), Money(1000), "one planning figure: the optimized cost (exact here)")
 Same(d.strat.pairs[2].l:GetText(), "Gold needed now"); Same(d.strat.pairs[2].v:GetText(), Money(700), "the cash needed now")
 Check(d.strat.pairs[1].tip:find(Money(1200), 1, true), "buying the bars directly is in the cost's tooltip, not a box of its own")
+-- the profit this route gives (R8): the Sword sells for 3000, less the assumed 5% cut, against the route's 1000
+Check(d.strat.pairs[1].tip:find("Profit with this route: " .. Money(2850 - 1000), 1, true), d.strat.pairs[1].tip)
+Same(d.strat.routeProfit, 1850)
 Same(d.strat.save:GetText(), "Saves at least " .. Money(200), "a certain saving is said as such")
 for _, p in ipairs(d.strat.pairs) do Check(not p.v:GetText():find(" to ", 1, true), "no inline range in the simple view") end
 Same(d.cost:GetText(), Money(1200), "the existing one-level cost to make is unchanged and is not the optimized cost")

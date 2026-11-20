@@ -172,7 +172,7 @@ Same(Decide({bound=true,disenchantValue=DE.Evaluate(df,ds)}).action,"disenchant"
 Same(Decide({bound=true,disenchant=true}).action,"vendor", "unknown disenchant never blocks vendor")
 Same(Decide({disenchantValue={state="ok",expectedGross=90}}).action,"auction", "lower expected value cannot win")
 -- Adapter: supported identity sources, saved preferences and a large sliced catalog.
-for _, file in ipairs({ "Worth.lua", "CraftPlanner.lua", "Strategy.lua", "Session.lua", "AdvisorData.lua" }) do
+for _, file in ipairs({ "Worth.lua", "CraftPlanner.lua", "Strategy.lua", "Fees.lua", "Estimate.lua", "Session.lua", "AdvisorData.lua" }) do
   local chunk = assert(loadfile(ROOT .. "../TwichUI_Workshop/" .. file)); setfenv(chunk,c); chunk()
 end
 local D, session = W.AdvisorData, W.Session

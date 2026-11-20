@@ -82,6 +82,10 @@ assert(not L.SetOption("prices", true), "unloaded settings cannot implicitly loa
 c.TwichUIDB.workshop = { view = { prices = "detailed", notices = false }, storage = { useGuild = true } }
 local before = L.SettingsState()
 assert(before.prices and before.guild and not before.notices, "existing account preferences are retained")
+assert(before.cut == "assumed", "the auction house cut is deducted by default")
+c.TwichUIDB.workshop.view.cut = "off"
+assert(L.SettingsState().cut == "off", "a saved cut choice is read without loading Workshop's code")
+c.TwichUIDB.workshop.view.cut = nil
 local called = {}
 R.Workshop = { ready = true, Session = {
     SetPriceDetail = function(v) called.prices = v; return true end,
@@ -100,6 +104,10 @@ assert(not L.SetOption("unknown", true))
 R.Workshop.Advisor={SetGain=function(v) called.gain=v; return v~=nil end}
 assert(L.SetChoice("advisorGain","1000") and called.gain==1000,"minimum gain uses the Advisor setter")
 assert(not L.SetChoice("advisorGain","invalid"),"invalid minimum gain is refused")
+-- the auction house cut in estimates: the saved choice before loading, and the Fees setter once loaded
+R.Workshop.Fees={SetMode=function(v) called.cut=v; return v=="assumed" or v=="off" end, Mode=function() return called.cut or "off" end}
+assert(L.SetChoice("cut","assumed") and called.cut=="assumed","the cut uses the Fees setter")
+assert(not L.SetChoice("cut","sometimes"),"an unknown cut choice is refused")
 local headers = {}
 for _, row in ipairs(K.pages.workshop.rows) do
     if row.kind == "header" then headers[#headers + 1] = row:GetName() end

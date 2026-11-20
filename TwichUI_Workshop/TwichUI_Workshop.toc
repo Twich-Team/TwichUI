@@ -63,6 +63,10 @@ Valuation.lua
 Pricing.lua
 # Market figures for display: one cached read and the words of each (A7; pure)
 MarketFacts.lua
+# Auction house fees for estimates: the cut (assumed or matching the Gold Ledger) and the deposit from the player's own postings
+Fees.lua
+# The planning estimate of a craft: depth-aware, vendor-aware materials, a competition-based sell price, fees, confidence (pure)
+Estimate.lua
 # A8: competition-based selling suggestions and deterministic item advice
 Sell.lua
 DisenchantData.lua

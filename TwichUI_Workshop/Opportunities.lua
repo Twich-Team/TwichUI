@@ -1,5 +1,6 @@
 -- TwichUI Workshop: the Opportunities list (pure)
--- Turns recipes and a price lookup into rows (Prices.Estimate for ONE craft each), then filters and sorts them. Unknown estimates are
+-- Turns recipes into rows (the planning estimator, Estimate.lua, or Prices.Estimate over a price lookup, for ONE craft each), then filters and
+-- sorts them. Unknown estimates are
 -- never mixed in with known ones: they come after every known row, whatever the sort. A range of output is sorted and filtered by its
 -- LOW end (what you get if the craft gives the least), so a recipe is "profitable" only when it is even at its worst case.
 
@@ -9,25 +10,43 @@ local PR = W.Prices
 local Op = {}
 W.Opps = Op
 
-Op.DEFAULTS = { sort = "profit", desc = true, prof = nil, profitOnly = false }
-local FIRST_DIRECTION = { profit = true, sell = true, cost = false }   -- descending first for profit and sell price, cheapest first for cost
+Op.DEFAULTS = { sort = "profit", desc = true, prof = nil, profitOnly = false, hideLow = false }
+local FIRST_DIRECTION = { profit = true, sell = true, cost = false, margin = true }   -- descending first for profit, sell price and margin
 
 local VALUE = {
     profit = function(e) return e.profitLow end,
     cost = function(e) return e.cost end,
     sell = function(e) return e.sellLow end,
+    -- profit for each copper spent (a free craft ranks by its profit above every costed one)
+    margin = function(e) return e.cost and e.cost > 0 and e.profitLow / e.cost or (e.profitLow > 0 and math.huge or e.profitLow) end,
 }
+local CONFIDENCE = { high = 3, medium = 2, low = 1 }
 
 -- recipes: the rows the window read (id, name, prof, outItem, outMin, outMax, mats). Returns { { rec, est, avail } ... }
 -- avail (optional): function(rec) -> Stock.Craft's answer for one craft ("ready" in the bags, "collect" from the bank or guild bank, "short", "unknown").
 -- It is carried beside the estimate and never goes into it: stored materials are not free, so the cost, the sell price and the profit are
 -- what they are without them (the material list priced is always the full one).
-function Op.Rows(recipes, lookup, rate, avail)
+-- estimator (optional): Estimate.New's answer; with it every row is its planning estimate and lookup / rate are not used.
+function Op.Rows(recipes, lookup, rate, avail, estimator)
     local rows = {}
     for i, rec in ipairs(recipes) do
-        rows[i] = { rec = rec, est = PR.Estimate(rec, lookup, rate), avail = avail and avail(rec) or nil }
+        local est = estimator and estimator:Craft(rec, 1) or PR.Estimate(rec, lookup, rate)
+        rows[i] = { rec = rec, est = est, avail = avail and avail(rec) or nil }
     end
     return rows
+end
+
+-- The craft the Overview headlines: the most profitable one whose estimate is not Low confidence (a single listing on an empty market can't
+-- headline). Returns the row and whether only Low-confidence crafts were profitable (then the best of them is the second answer).
+function Op.Best(rows)
+    local best, low
+    for _, r in ipairs(Op.Select(rows, Op.DEFAULTS)) do
+        local e = r.est
+        if e.state ~= "ok" or e.profitLow <= 0 then break end
+        if e.confidence ~= "low" then best = r break end
+        low = low or r
+    end
+    return best, low
 end
 
 -- The words for a craft's availability: "Ready to craft" (all in the bags) or "Collect materials" (some in the bank or guild bank), else nil
@@ -58,6 +77,7 @@ function Op.Select(rows, opts)
     for _, r in ipairs(rows) do
         local keep = opts.prof == nil or r.rec.prof == opts.prof
         if keep and opts.profitOnly then keep = r.est.state == "ok" and r.est.profitLow > 0 end
+        if keep and opts.hideLow then keep = not (r.est.state == "ok" and r.est.confidence == "low") end
         if keep then out[#out + 1] = r end
     end
     local desc = opts.desc ~= false
@@ -70,6 +90,9 @@ function Op.Select(rows, opts)
                 if desc then return va > vb end
                 return va < vb
             end
+            -- equal figures: the surer estimate first
+            local ca, cb = CONFIDENCE[a.est.confidence] or 0, CONFIDENCE[b.est.confidence] or 0
+            if ca ~= cb then return ca > cb end
         end
         local na, nb = a.rec.name:lower(), b.rec.name:lower()
         if na ~= nb then return na < nb end
@@ -122,7 +145,13 @@ end
 
 -- The short tooltip of a row: its name, what it costs, sells for and earns, and one status line. { text } or { left, right }.
 -- The first line is the title; a line starting with "!" is a warning and "~" a quiet hint (the window colours them).
+local LegacyTip, LegacyBasis
+local PlanTip, PlanBasis
 function Op.Tip(row, src, money, now)
+    if row.est.role == "estimate" then return PlanTip(row, src, money, now) end
+    return LegacyTip(row, src, money, now)
+end
+LegacyTip = function(row, src, money, now)
     local e, out = row.est, {}
     local function L(left, right) out[#out + 1] = { left, right } end
     L(row.rec.name)
@@ -150,6 +179,10 @@ end
 -- The estimate's details, as lines for a tooltip (Shift): the market, every material, the cut and the limits. { text } or { left, right }.
 -- src: { label (the auction house), at, complete }. name(itemID) -> text; money(copper) -> text (negative amounts allowed).
 function Op.Basis(row, src, name, money, now)
+    if row.est.role == "estimate" then return PlanBasis(row, src, name, money, now) end
+    return LegacyBasis(row, src, name, money, now)
+end
+LegacyBasis = function(row, src, name, money, now)
     local e, out = row.est, {}
     local function L(left, right) out[#out + 1] = { left, right } end
     L(row.rec.name)
@@ -195,5 +228,156 @@ function Op.Basis(row, src, name, money, now)
     end
     if e.state == "ok" then L(Op.ProfitLabel(row), Range(e.profitLow, e.profitHigh, money)) end
     L("Cheapest buyout listings, not sales. Deposits and unsold listings aren't counted.")
+    return out
+end
+
+---------------------------------------------------------------------------
+-- The planning estimate's words (Estimate.lua rows)
+---------------------------------------------------------------------------
+local function Signed(v, money) return (v > 0 and "+" or "") .. money(v) end
+
+-- "Confidence: Low", or nil for an estimate without one (unknown)
+function Op.ConfidenceText(e)
+    local w = W.Estimate and W.Estimate.ConfidenceWord(e.confidence)
+    return w and ("Confidence: " .. w) or nil
+end
+
+-- The cooldown, in a few words: "On cooldown, 3 h left", or nil
+local function Span(sec)
+    if sec < 3600 then return ("%d min"):format(math.max(1, math.ceil(sec / 60))) end
+    if sec < 86400 then return ("%d h"):format(math.floor(sec / 3600)) end
+    local d = math.floor(sec / 86400)
+    local h = math.floor((sec - d * 86400) / 3600)
+    return h > 0 and ("%d d %d h"):format(d, h) or ("%d d"):format(d)
+end
+Op.Span = Span
+function Op.CooldownText(e)
+    local c = e.cooldown
+    if not (c and c.left and c.left > 0) then return nil end
+    return "On cooldown, " .. Span(c.left) .. " left"
+end
+
+-- The cut line's words: "5%, assumed" / "5%, matches your sales" / "not deducted (turned off)" / "not deducted (auction house type unknown)"
+function Op.CutText(e)
+    if e.cut then return e.cut.label end
+    return e.cutWhy == "off" and "not deducted (turned off)" or "not deducted (auction house type unknown)"
+end
+
+PlanTip = function(row, src, money, now)
+    local e, out = row.est, {}
+    if W.Estimate then W.Estimate.Typical(e) end
+    local function L(left, right) out[#out + 1] = { left, right } end
+    L(row.rec.name)
+    if e.reference then L("Market server reference estimates; current listings and sale outcomes may differ.") end
+    if e.cost then L("Cost to make", Range(e.cost, e.costHigh or e.cost, money)) end
+    if e.sellLow then L(e.outlet == "vendor" and "Sell to a vendor" or "Sell price", Range(e.sellLow, e.sellHigh, money)) end
+    if e.state == "ok" then
+        L(Op.ProfitLabel(row), Range(e.profitLow, e.profitHigh, money))
+        -- the usual profit only when it tells a different story
+        if e.nowOnly then L("!Profitable now only: usually " .. Signed(e.typical.profit, money) .. ".") end
+        if e.usually then L("~Usually profitable (" .. Signed(e.typical.profit, money) .. "): current prices are unusual.") end
+    else
+        L("!" .. (Op.WhyText(e) or "Not priced"))
+    end
+    local cd = Op.CooldownText(e)
+    if cd then L("!" .. cd) end
+    -- one status line: how sure the estimate is (and the first reason), then the scan's age
+    local parts = {}
+    local c = e.state == "ok" and Op.ConfidenceText(e) or nil
+    if c then
+        local first = e.reasons and e.reasons[1]
+        parts[1] = c .. (first and (" (" .. first.text:gsub("%.$", "") .. ")") or "")
+    end
+    local status = Op.ScanWords(src, now)
+    if status then parts[#parts + 1] = status end
+    if #parts > 0 then L((e.confidence == "low" and "!" or "") .. table.concat(parts, " \194\183 ")) end
+    L("~Hold Shift for details")
+    return out
+end
+
+PlanBasis = function(row, src, name, money, now)
+    local e, out = row.est, {}
+    if W.Estimate then W.Estimate.Typical(e) end
+    local function L(left, right) out[#out + 1] = { left, right } end
+    L(row.rec.name)
+    if src and src.at then
+        L(("Prices: %s, scanned %s%s"):format(src.label or "this auction house", PR.AgeText(PR.Age(src.at, now)),
+            src.complete and "" or " (not a complete scan)"))
+    end
+    L(e.crafts and e.crafts > 1 and ("For %d crafts"):format(e.crafts) or "For one craft")
+    for _, m in ipairs(e.mats) do
+        local left = ("%d x %s"):format(m.qty, name(m.item))
+        if m.total then
+            local how
+            if m.source == "vendor" then how = "vendor"
+            elseif m.typical then how = "usual value"
+            elseif m.reference then how = "Market server"
+            elseif m.cheapest then how = "cheapest listing only" end
+            local total = m.high and m.high ~= m.total and Range(m.total, m.high, money) or money(m.total)
+            L(left, ("%s each = %s%s"):format(money(m.unit), total, how and (" (" .. how .. ")") or ""))
+            if m.skipped then L(("~  %d listed far below at %s not counted"):format(m.skipped.items, money(m.skipped.price))) end
+        elseif m.unavailable == "few" then
+            L(left, "not enough listed")
+        else
+            L(left, "no price")
+        end
+    end
+    if e.cost then L("Cost to make", Range(e.cost, e.costHigh or e.cost, money)) end
+    local a = row.avail
+    if a and a.state ~= "unknown" then
+        if a.state == "short" then
+            L("For one craft you hold", ("%d in bags, %d in storage; %d %s lacking"):format(a.bags, a.bank + a.guild, a.missing, a.missing == 1 and "material" or "materials"))
+        else
+            L("For one craft you hold", ("%d in bags, %d in storage"):format(a.bags, a.bank + a.guild))
+        end
+        L("~Owned materials are not free: the cost above counts them at their price.")
+    end
+    if e.outMin then
+        local lo, hi = e.outLow or e.outMin, e.outHigh or e.outMax
+        local made = lo == hi and tostring(lo) or (lo .. "-" .. hi)
+        if e.unit and e.outlet == "vendor" then
+            L(("Makes %s; a merchant pays %s each"):format(made, money(e.unit)), Range(e.sellLow, e.sellHigh, money))
+            if e.auctionNetLow then L(("~The auction house would leave %s after its cut."):format(money(e.auctionNetLow))) end
+        elseif e.unit then
+            L(("Makes %s, sold at %s each"):format(made, money(e.unit)), Range(e.sellLow, e.sellHigh, money))
+            local basis = W.Estimate and W.Estimate.BASIS_WORDS[e.sellBasis]
+            if basis then L("~  From " .. basis .. ".") end
+            if e.capped then L(("~  Listed at %s; counted at 115%% of its Market Value."):format(money(e.listed))) end
+            if e.bait then L(("~  %d listed far below at %s not counted."):format(e.bait.items, money(e.bait.price))) end
+        else
+            L(("Makes %s"):format(made), "no price")
+        end
+    end
+    if e.sellLow and e.outlet ~= "vendor" then
+        if e.cutRate then
+            L(("Auction house cut (%s)"):format(e.cut and e.cut.label or (tostring(math.floor(e.cutRate * 1000 + 0.5) / 10) .. "%")),
+                Range(e.cutLow, e.cutHigh, function(v) return "-" .. money(v) end))
+        else
+            L("Auction house cut", Op.CutText(e))
+        end
+    end
+    if e.state == "ok" then
+        L(Op.ProfitLabel(row), Range(e.profitLow, e.profitHigh, money))
+        if e.outlet ~= "vendor" then
+            if e.depositTotal then
+                L("Deposit, refunded on a sale", money(e.depositTotal))
+                if e.covers then
+                    L(("~  Covers %d failed %s."):format(e.covers, e.covers == 1 and "listing" or "listings"))
+                else
+                    L("!  One failed listing loses more than the profit.")
+                end
+                if e.deposit and not e.deposit.durationKnown then L("~  From your postings of it; their duration wasn't recorded.") end
+            else
+                L("Deposit", "not known yet")
+            end
+        end
+        if e.typical then L("Usually (Market Values)", Signed(e.typical.profit, money)) end
+        local c = Op.ConfidenceText(e)
+        if c then L(c) end
+        for _, r in ipairs(e.reasons or {}) do L("~  " .. r.text) end
+    end
+    local cd = Op.CooldownText(e)
+    if cd then L("!" .. cd) end
+    L("Listings, not sales. Deposits are refunded when an item sells and lost when it doesn't.")
     return out
 end

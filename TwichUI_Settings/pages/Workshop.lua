@@ -51,7 +51,7 @@ end
 K.Page({
     key = "workshop", icon = "guide", name = "Workshop", order = 46, group = "everyday",
     description = "Experimental professions, crafting plans, shopping and market research. Enable it when you want to try it.",
-    keywords = "workshop experimental enable opt in tooltip designer normal shift price market history scan crafting shopping guild bank progress login load auction house ah selling duration maximum quantity advisor recommendations",
+    keywords = "workshop experimental enable opt in tooltip designer normal shift price market history scan crafting shopping guild bank progress login load auction house ah selling duration maximum quantity advisor recommendations cut fee fees deposit house cut profit",
     overview = { label = "Workshop", tip = "Crafting plans, shopping and item information.",
         when = function() return Launcher() ~= nil end,
         status = function() return not Enabled() and "Experimental · Off" or (Shown() and "Open" or (Loaded() and "Enabled" or "Ready to load")) end },
@@ -191,6 +191,15 @@ K.Page({
         Choice("compact", "workshopCompactMode", "Compact view", "travel", {
             { "travel", "Travel: materials to gather" }, { "craft", "Craft: recipe progress" },
         }, "The compact panel's saved view. This changes its display without opening it.")
+        Choice("cut", "workshopCutMode", "Auction house cut in estimates", "assumed", {
+            { "assumed", "Deduct 5% (faction) or 15% (neutral)" }, { "off", "Don't deduct (profit before fees)" },
+        }, "Opportunities, the Overview and the queue take the auction house's cut off a sale. The rates are the documented ones, labelled assumed until your verified sales in the Gold Ledger show the same rate. An auction house whose kind isn't known is never given a rate.")
+        K.Status("Cut in your sales", function()
+            local w = Loaded() and R.Workshop
+            return w and w.Fees and w.Fees.EvidenceText() or "Load Workshop to inspect"
+        end, function() return "From the Gold Ledger's verified seller invoices: the fee against the sale price. An invoice doesn't say which auction house it came from." end)
+        K.Status("Deposits in estimates", function() return "From your own postings" end,
+            function() return "A deposit is refunded when an item sells. Estimates show it, and how many failed listings a profit covers, only for items you have posted through TwichUI with the Gold Ledger on, at the Default auction duration when one was recorded." end)
         Option("guild", "workshopUseGuild", "Include guild-bank materials",
             "Use remembered, permitted guild-bank stock when planning. Unknown or unreadable stock is never treated as available.", false)
         Option("notices", "workshopProgressNotices", "Crafting progress notifications",

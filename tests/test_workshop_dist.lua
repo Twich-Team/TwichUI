@@ -22,7 +22,7 @@ local ONLY = tonumber(os.getenv("DIST_SEED") or "")
 local N = tonumber(os.getenv("DIST_SCENARIOS") or "") or 150
 local LAB = ROOT .. "../TwichUI_TestLab/"
 local NOW = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua",
-    "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua" }
+    "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Fees.lua", "Estimate.lua", "Session.lua" }
 local V13 = { "Data.lua", "Materials.lua", "Queue.lua", "History.lua", "Prices.lua", "Scan.lua", "Market.lua" }
 
 local function Ser(v)

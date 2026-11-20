@@ -1,8 +1,9 @@
 # Completing Opportunities: pricing realism, fees and the remaining gaps
 
-Status: **proposal for owner review. Nothing here is built.** No code, saved data, defaults or tests change
-with this document. Each numbered decision (R1 to R13) needs an owner answer before the work package that
-uses it starts. Sections 1 to 4 are the analysis; 5 to 8 the model; 9 the decisions; 10 the work plan.
+Status: **built in part (2026-11-20, branch `claude/opportunities-completion`)**, with the recommended answer to
+each decision R1 to R13 taken as approved when the owner said "work this". Sections 1 to 4 are the analysis; 5 to
+8 the model; 9 the decisions; 10 the work plan; **10A what was built, where it differs from the plan, and what is
+not built**. Nothing here is real-client-tested.
 
 ## 1. Summary
 
@@ -432,6 +433,89 @@ WP9 follow in any order.
 2. A posted item's deposit matches the estimate for the chosen duration, at a faction and a neutral house.
 3. Cases like A to C in section 4 on real items read sensibly; Low-confidence rows explain why.
 4. A 500-recipe Opportunities page opens without a visible hitch.
+
+## 10A. As built (2026-11-20)
+
+### What was built
+
+| WP | Built | Where |
+|---|---|---|
+| WP0 | **Only the Ledger duration (R13)**: `ahDeposit` entries keep the posting's duration as the optional field `r` (1 to 3), from both posting paths. The Test Lab probes are **not built** | `!!!TwichUI/auction/Ledger.lua`, `LedgerAuction.lua`, `auction/Window.lua`, `TwichUI_Workshop/auction/Actions.lua`; [gold-ledger.md](gold-ledger.md) |
+| WP1 | Materials: vendor against auction (tie to the vendor), the listing walk for the quantity needed (`Market.Cost(..., { fromCompeting = true })` leaves bait tiers out and reports them in `skipped`), the old unit quote when a scan has no tiers, the stale rule, and the queue estimate for all of a recipe's crafts at once | `Estimate.lua`, `Valuation.lua` (`MK.Cost`), `Session.lua` (`S.Estimator`, `S.PlanEstimates`) |
+| WP2 | Sell price: the competing price, the 115% Market Value cap (`ceil`), fallbacks (lowest listing when no tiers, Market Value, Historical Value, the reference's Recent Price capped by the reference's Market Value), the vendor floor | `Estimate.lua` |
+| WP3 | `Fees.lua`: the cut (assumed 5% / 15%, "matches your sales" with 3 agreeing Ledger invoices, "Don't deduct" setting), the deposit from the player's own postings (median per item, the chosen duration when recorded), `Covers`; Settings rows for the cut, the Ledger's evidence and how deposits are found | `Fees.lua`, `TwichUI_Settings/pages/Workshop.lua`, `WorkshopLauncher.lua` |
+| WP4 | Net profit everywhere the estimate is shown (rows, details, tooltip, Overview, queue totals); the deposit and "Covers N failed listings" in the details; the Crafting bar's notes (Low confidence, more than the market holds, deposits) | `Opportunities.lua`, `ViewOpportunities.lua`, `ViewOverview.lua`, `ViewCrafting.lua` |
+| WP5 | Confidence (High / Medium / Low) and reasons, the "usually" figure (worked out when shown) and its two flags, **Hide low confidence** and **Best margin first** toggles, Low rows after others at equal profit, the Overview headlining the best non-Low craft | same |
+| WP6 | `C_TradeSkillUI.GetRecipeCooldown` read with each recipe (memory only; the return values are Blizzard's own use in the Forever source), shown on the row, the tooltip and the details. **The queue estimate is not capped** by the cooldown | `Observe.lua`, `Estimate.lua`, `Opportunities.lua` |
+| WP7 | R7 (a newer local full scan beats the reference; `Pricing.Reference` keeps the reference's usual values), R8 (the route's profit in the strategy cost tooltip), the worth tooltip and Disenchant valued at the competing price (`Estimate.AtCompeting`) | `Pricing.lua`, `ViewOpportunities.lua`, `WorthTip.lua`, `Disenchant.lua` |
+| WP8, WP9 | **Not built** | — |
+
+### Where it differs from sections 5 to 9
+
+- **R3 (stale materials) is by age only.** A material whose quality is Limited but whose scan is fresh is walked
+  as listed; its thinness lowers the estimate's confidence instead. Using Market Value for a thin fresh listing
+  overstated costs the tests could see (a 2-listing herb at 100 became 117).
+- **Absorption (R6)** compares the items sold with **everything listed now** (Competition's total) or the usual
+  14-day supply, and only when 2 or more are sold. Comparing with the items at the competing price flagged every
+  single-item craft in a thin market, which Low confidence already says.
+- **Shopping and the planner keep the exact listing walk** (bait listings included). Shopping is what the player
+  buys at the auction house, and a bait listing really can be bought there. Only the Opportunities estimate skips
+  bait. The planner's owned-material value is unchanged (the lowest listing or vendor price).
+- **The worth tooltip's cut stays confirmed-only** (`Prices.CUT`, empty), so it still says "before fees", while its
+  auction value is now the competing price. Applying the assumed cut there changes which recommendation wins and
+  is left for its own change.
+- **Deposits** come only from the player's own postings through TwichUI with the Ledger on. No game quote is cached
+  (whether `CalculateCommodityDeposit` answers with nothing selected is unverified) and no rate is assumed (R10).
+- **The house kind** comes from the market's side. Whether a neutral auctioneer reports "Neutral" is unverified,
+  so a neutral house may get no cut ("auction house type unknown"), never the wrong one.
+- **No rising-supply confidence step.** It needed `Market.Supply` (which reads the item's history) for every
+  row, the most expensive service measured. Supply is asked for only when 2 or more are sold (absorption).
+- **The "usually" figure is worked out when it is shown** (`Estimate.Typical`: the row's tooltip, details or
+  Shift details), not for every row: it asks for every material's Market Value and is never sorted on.
+
+### Performance [measured offline, plain Lua 5.1 on the development container; synthetic; not the game's figures]
+
+Every Valuation service decodes an item's saved tiers per call (about 0.1 ms here), so the estimator is **kept
+between draws** (`Session.Estimator`) while its inputs are unchanged: the market and its scan (`snap.seq`,
+`Scan.ended`), the reference generation, the cut, the vendor records, the Ledger revision, the listing duration, the
+recipes read and the hour. An answer still "loading" is asked again; at most 20,000 answers are kept.
+
+| 500 recipes over a 3,000-item market with price tiers | old (`Prices.Estimate`) | first draw | redraw (kept) |
+|---|---|---|---|
+| 300 distinct materials (a realistic mix) | 31 ms | 194 ms | 26 ms |
+| 1,500 distinct materials (pessimistic) | 34 ms | 405 ms | 31 ms |
+
+The first draw after a scan, a merchant visit, a Ledger change or a settings change pays the full cost once. A
+stepped (cooperative) first draw, like the planner's jobs, is the follow-up if the real client shows a hitch.
+Diagnostics: scope `workshop.estimate` (in `TwichUI_Diagnostics/Gauges.lua`), gauge `workshop.estimate` (answers
+kept).
+
+### Verification (this branch; offline)
+
+- Unit-tested: `tests/test_workshop_estimate.lua` (new: the worked cases A to C, the cap's edge, every fallback,
+  vendor ties and the floor, cut and deposit arithmetic, confidence steps, the typical profit, many crafts,
+  cooldowns, the list's sorts and filter, the fees against a fake Ledger, the words, `AtCompeting`);
+  `test_workshop_valuation.lua` (`fromCompeting`); `test_ledger_auction.lua` (the duration field);
+  `test_workshop_market_consumption.lua` (R7); `test_workshop_strategy_ui.lua` (R8); `test_workshop_settings.lua`
+  (the cut setting); `test_workshop_window.lua` (the walked cost, the assumed cut, the toggles, the Crafting
+  bar). Existing expectations that changed are the intended corrections: a 2-item cost that only 1 cheap listing
+  could cover (200c → 250c) and profits net of the assumed 5% cut.
+- Mutation-tested: 16 new catalog entries (cap edge and rounding, crafts and output multiplication, vendor tie and
+  floor, deposit subtraction and per-craft count, single-item absorption, the stale rule, the covers rounding, the
+  Ledger window, an unknown house given a rate, the deposit duration, the bait boundary and availability), all
+  killed. Two existing entries were re-pointed at the restructured `Market.Cost` loop.
+- **Not tested:** the real client (Forever's cut and deposit, `GetRecipeCooldown`, `UnitFactionGroup("npc")` at a
+  neutral auctioneer, appearance and fit of the new toggles and lines), simulator scenarios and screenshots.
+
+### Real-client checks (none done)
+
+1. Sell 3 or more items at a faction auction house; Settings "Cut in your sales" should read the same rate, and
+   the cut line should say "matches your sales".
+2. Post an item through TwichUI's Auction House; its next estimate should show "Deposit, refunded on a sale" with
+   the deposit just paid for that duration.
+3. Open the auction house at a neutral auctioneer and check what side the market is saved under.
+4. A recipe on cooldown should say "On cooldown" with the time the profession window shows.
+5. The two toggles, the row lines and the details' line must fit at the window's size.
 
 ## 11. Limits that stay
 
