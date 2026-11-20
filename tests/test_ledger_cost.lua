@@ -42,7 +42,7 @@ local function Client(opts)
     }
     c.GetNumBuybackItems = function() return #c.BUYBACK end
     c.GetBuybackItemInfo = function(i) local r = c.BUYBACK[i]; if r then return "Sold item", 1, r.price, r.qty end end
-    c.GetBuybackItemLink = function(i) local r = c.BUYBACK[i]; return r and ("item:" .. r.id) end
+    c.GetBuybackItemLink = function(i) local r = c.BUYBACK[i]; return r and (r.link or ("item:" .. r.id)) end
     c.CanMerchantRepair = function() return false end
     c.InRepairMode = function() return false end
     c.SpellIsTargeting = function() return false end
@@ -128,9 +128,10 @@ local function Client(opts)
         local it = c.BAGS[0][slot]
         c.C_Container.UseContainerItem(0, slot)
         c.BAGS[0][slot] = nil
-        c.BUYBACK[#c.BUYBACK + 1] = { id = it.itemID, qty = it.stackCount, price = paid }
+        c.BUYBACK[#c.BUYBACK + 1] = { id = it.itemID, qty = it.stackCount, price = paid, link = it.hyperlink }
         if #c.BUYBACK > 12 then table.remove(c.BUYBACK, 1) end
         c.Money(paid); c.Bag(); c.Advance(0.1)
+        c.Advance(1.1)   -- a sale batch closes after a quiet second
     end
     function c.Settle() c.Bag(); c.Advance(0.1) end   -- the game announces every bag change; the observer re-reads then
     function c.Results() local r = c.Cost(); return r and r.results or {} end
@@ -506,6 +507,18 @@ do
     c.DT = 100 * 86400; c.Buy(5, 25)   -- the day changes: compaction runs once and the stores stay within their bounds
     Check(#c.Cost().lots <= c.K.MAX_LOTS and #c.Cost().results <= c.K.MAX_RESULTS and #c.Cost().crafts <= c.K.MAX_CRAFTS, "bounded")
     Check(c.V.Snapshot().candidates == 0, "no candidate is left behind")
+end
+
+-- Sales through a junk sweep (EllesmereUI's button or its one-request-per-0.08-s Junk Marker) keep their cost: an entry covering exactly one
+-- receipt carries the item, quantity and carried counts, so the vendor resale is matched to the exact lot as before.
+do
+    local c = Client(); c.Open(); c.Buy(5, 25)
+    c.C_MerchantFrame.SellAllJunkItems()
+    local it = c.BAGS[0][1]; c.BAGS[0][1] = nil
+    c.BUYBACK[#c.BUYBACK + 1] = { id = it.itemID, qty = it.stackCount, price = 31 }; c.Money(31); c.Bag(); c.Advance(2)
+    local r = c.Results()[1]
+    Check(r, "a result"); Same(r.st, "ok"); Same(r.c, 25); Same(r.a, 31); Same(r.q, 5)
+    Same(c.Entries()[2].k, "vendorSell")
 end
 
 print("LEDGER COST OK")

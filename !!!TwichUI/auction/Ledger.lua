@@ -63,7 +63,7 @@ local MAX = Lg.MAX_MONEY
 local DAY = 86400
 local MAX_TIME = 4102444800   -- 2100-01-01 UTC: later times are not plausible clocks
 local MAX_ITEM, MAX_QTY, MAX_NOTE, MAX_CORR = 2147483647, 2147483647, 60, 64
-local MAX_RECENT, MAX_PENDING, MAX_SEEN = 8, 8, 64
+local MAX_RECENT, MAX_PENDING, MAX_SEEN = 64, 8, 256   -- recent: a junk sweep can make dozens of entries within the evidence window
 
 -- Where a change came from. dir: the direction the source can only have (1 in, -1 out); absent = either.
 Lg.SOURCES = {

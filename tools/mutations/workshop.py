@@ -1291,10 +1291,10 @@ m("ledger.vendor.missing-item", VENDOR,
 m("ledger.vendor.inventory", VENDOR,
   'confirmed = SameCounts(c.before.counts, after.counts, c.item, c.qty)', 'confirmed = true',
   "the requested item need not arrive before a debit is attributed", [VTEST])
-m("ledger.vendor.receipt-price", VENDOR, 'receipt.price ~= amount', 'false',
+m("ledger.vendor.receipt-price", VENDOR, 'if sum > e.a then Kill("receipts-do-not-sum-to-money"); break end', 'if false then Kill("receipts-do-not-sum-to-money"); break end',
   "a buyback receipt with a different payment identifies unrelated income", [VTEST])
 m("ledger.vendor.receipt", VENDOR,
-  'and SaleReceipt(c.before.buyback, after.buyback, c, e.a)', 'and true',
+  'if not BagsMatch(b, after) then b.wait = "bag-count-differs"; break end', 'if false then b.wait = "bag-count-differs"; break end',
   "an item consumed at a merchant plus unrelated income is called a sale", [VTEST])
 m("ledger.vendor.repair-outcome", VENDOR,
   'confirmed = after.repair == 0 and SameCounts(c.before.counts, after.counts)',
@@ -1302,7 +1302,7 @@ m("ledger.vendor.repair-outcome", VENDOR,
   "repair spending is classified without any verified repair outcome", [VTEST])
 m("ledger.vendor.guild", VENDOR, '(guild ~= nil and guild ~= false)', 'false',
   "a guild-funded repair request claims later unrelated personal spending", [VTEST])
-m("ledger.vendor.overlap", VENDOR, 'if candidate or poisoned or not c', 'if poisoned or not c',
+m("ledger.vendor.overlap", VENDOR, 'if candidate or batch or poisoned or not c', 'if poisoned or not c',
   "the last overlapping request replaces an unresolved attempt and claims an ambiguous debit", [VTEST])
 m("ledger.vendor.currency", "!!!TwichUI/modules/Restock.lua",
   'local otherCost = extended ~= false or currency ~= nil', 'local otherCost = false',
@@ -1467,3 +1467,9 @@ m("ledger.quest.payload", "!!!TwichUI/auction/LedgerQuest.lua", 'if not (active 
   'a damaged quest event or one received while the ledger is off is offered as evidence', [QUESTT])
 m("ledger.quest.direction", "!!!TwichUI/auction/Ledger.lua", 'quest = { label = "Quest reward", dir = 1,', 'quest = { label = "Quest reward",',
   'a quest reward can be attached to gold that left', [QUESTT])
+
+# Sale batches (EllesmereUI's junk selling): the request is only a marker; receipts, bag counts and money decide.
+m("ledger.vendor.unrequested-receipt", VENDOR, 'if q > (b.requested[id] or 0) then Kill("receipt-without-request"); break end', 'if false then Kill("receipt-without-request"); break end',
+  "a receipt for an item nobody asked to sell is attributed", [VTEST])
+m("ledger.vendor.receipt-alignment", VENDOR, 'for shift = 0, (n == BUYBACK) and (n - 1) or 0 do', 'for shift = 0, (n == BUYBACK) and n or 0 do',
+  "a shift of the whole buyback list is allowed to match, so a normal sale in a full list is called indistinguishable", [VTEST])
