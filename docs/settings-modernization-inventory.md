@@ -1183,7 +1183,7 @@ Navigation: sidebar; class. Presentation: Choose where you see estimated gear up
 | gear:stat-weights | Stat weights | button | — | — |
 | gear:bag-marks | Bag marks | header | — | — |
 | gearBagIcons | Mark upgrades in my bags | checkbox | TWICHUI_gearBagIcons = false | — |
-| gearBagStyle | Bag mark style | dropdown | TWICHUI_gearBagStyle = gilded | Mark upgrades in my bags |
+| gearBagStyle | Bag mark style | dropdown | TWICHUI_gearBagStyle = gold | Mark upgrades in my bags |
 | gear:loot-rolls | Loot rolls | header | — | — |
 | gearRollIcons | Mark upgrades on loot rolls | checkbox | TWICHUI_gearRollIcons = false | — |
 

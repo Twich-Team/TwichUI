@@ -3,8 +3,8 @@
 -- holding gear that would get an upgrade line in its tooltip (a fainter mark
 -- for "possible" upgrades). Gear you can't wear yet isn't marked.
 --
--- The marks use the game's own art: its bag upgrade arrow (as is, or gilded
--- to suit the old-world look) or the pet battle "strong against" badge.
+-- The marks are TwichUI's gold-edged green arrow (the default), or the game's own art: its bag upgrade
+-- arrow (as is, or gilded to suit the old-world look) or the pet battle "strong against" badge.
 -- Works with Blizzard's bags, separate or combined, and with EllesmereUI Bags
 -- (through its item overlay API; see the end of this file). Other bag addons
 -- draw their own slots and aren't marked.
@@ -17,6 +17,7 @@ local B = {}
 R.GearBags = B
 
 B.STYLES = {
+    { key = "gold",   label = "Gold-edged green arrow", file = R.PATH .. [[media\textures\upgrade-arrow]], size = 16 },
     { key = "gilded", label = "Gilded arrow", atlas = "bags-greenarrow", desaturate = true, color = { 0.98, 0.80, 0.40 } },
     { key = "green",  label = "Green arrow", atlas = "bags-greenarrow" },
     { key = "badge",  label = "Badge", file = [[Interface\PetBattles\BattleBar-AbilityBadge-Strong]], size = 18 },
@@ -26,7 +27,7 @@ for _, style in ipairs(B.STYLES) do STYLE[style.key] = style end
 
 -- Paints a texture in one of the styles (also used for the preview in the window).
 function B.ApplyStyle(texture, key)
-    local style = STYLE[key] or STYLE.gilded
+    local style = STYLE[key] or STYLE.gold
     if texture.twichStyle == style then return end
     texture.twichStyle = style
     if style.atlas then
