@@ -68,10 +68,10 @@ assert(higher.action=='disenchant' and A.Tooltip(higher)=='Workshop: Disenchant'
 local art={vendor='balance-scales-small',auction='gavel-small',disenchant='magic-enchanting-small'}
 for _,advice in ipairs({vendor,auction,higher})do
  local lines=W.WorthLayout.Lines({advisor=advice},{},{enabled=true,lines={{id='recommend',when='always'}}},false)
- assert(#lines==2 and lines[2][1]:find(art[advice.action],1,true),'matching addon artwork missing')
- assert(lines[2][1]:find('|T',1,true) and lines[2][1]:find('|t Workshop:',1,true),'artwork and suggestion must share a line')
- assert(not lines[2][1]:find('Interface\\Icons',1,true),'recommendation must use addon artwork')
- local kind,text=W.WorthLayout.Style(lines[2])
+ assert(#lines==1 and lines[1][1]:find(art[advice.action],1,true),'matching addon artwork missing')
+ assert(lines[1][1]:find('|T',1,true) and lines[1][1]:find('|t Workshop:',1,true),'artwork and suggestion must share a line')
+ assert(not lines[1][1]:find('Interface\\Icons',1,true),'recommendation must use addon artwork')
+ local kind,text=W.WorthLayout.Style(lines[1])
  assert(kind==advice.action,'recommendation color must follow the action, including tentative advice')
  assert(text:find('|t Workshop: '..A.TOOLTIP[advice.action],1,true))
  local color=W.WorthLayout.COLORS[kind]

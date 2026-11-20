@@ -82,7 +82,7 @@ local function Mock()   -- the rows shown, top to bottom
 end
 local function Ids()
   local out = {}
-  for _, e in ipairs(D.Draft().lines) do out[#out + 1] = e.id .. (e.when == "shift" and "*" or "") end
+  for _, e in ipairs(D.Draft().lines) do if e.id ~= "text#1" then out[#out + 1] = e.id .. (e.when == "shift" and "*" or "") end end   -- (the default heading is tested on its own)
   return table.concat(out, ",")
 end
 local DEFAULT = "recommend,vendor,auction,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*"
@@ -136,7 +136,7 @@ local function Expect(exampleKey, shift)
       local kind, a, b = L.Style(row.line)
       want[#want + 1] = kind == "double" and (a .. " | " .. b) or a
     else
-      want[#want + 1] = "(" .. L.BY_ID[row.id].label .. ": nothing to show for this example)"
+      want[#want + 1] = "(" .. (L.BY_ID[row.id] and L.BY_ID[row.id].label or row.id) .. ": nothing to show for this example)"
     end
   end
   return table.concat(want, "\n")
@@ -145,17 +145,16 @@ for _, e in ipairs(L.EXAMPLES) do
   for _, shift in ipairs({ false, true }) do
     D.SetExample(e.key); D.SetMode(shift)
     Same(table.concat(Mock(), "\n"), Expect(e.key, shift), "preview rows = builder rows: " .. e.key .. (shift and " + Shift" or ""))
-    Same(f.mock.title.text, "What's it worth?")
   end
 end
 D.SetExample("ordinary"); D.SetMode(false)
-Same(table.concat(Mock(), "\n"), "|T"..c.TwichUI.PATH..[[media\npcs\balance-scales-small:18:18:0:0|t ]].."Suggested: Vendor\nVendor | 500c\nAuction (before fees) | 400c\n(Disenchant value (average): nothing to show for this example)\nMarket value (14 days) | 420c",
+Same(table.concat(Mock(), "\n"), "What's it worth?\n|T"..c.TwichUI.PATH..[[media\npcs\balance-scales-small:18:18:0:0|t ]].."Suggested: Vendor\nVendor | 500c\nAuction (before fees) | 400c\n(Disenchant value (average): nothing to show for this example)\nMarket value (14 days) | 420c",
   "ordinary item, Normal") -- coin text is the fallback in this harness
-for i=1,3 do Same(D.Row(1).wide.color[i],L.COLORS.vendor[i],"preview uses Vendor recommendation color") end
+for i=1,3 do Same(D.Row(2).wide.color[i],L.COLORS.vendor[i],"preview uses Vendor recommendation color") end
 Check(f.mock.hint.shown ~= false and f.mock.hint.text == "Hold Shift for details", "the hint in Normal")
 D.SetMode(true)
 Check(f.mock.hint.shown == false, "no hint while previewing Hold Shift")
-Check(#Mock() == 12, "Hold Shift adds the Shift lines to the Always lines")
+Check(#Mock() == 13, "Hold Shift adds the Shift lines to the Always lines")
 D.SetMode(false)
 D.SetExample("missing")
 Check(table.concat(Mock(), "\n"):find("More prices needed", 1, true) and table.concat(Mock(), "\n"):find("Auction | no price", 1, true), "missing prices")
@@ -175,6 +174,7 @@ D.SetExample("ordinary")
 ---------------------------------------------------------------------------
 -- Select, move, remove, visibility, click to add
 ---------------------------------------------------------------------------
+D.RemoveLine("text#1")   -- the default heading is one more row; the rows below are numbered without it
 Click(D.Row(2)); Same(D.Selected(), "vendor", "clicking a row selects it")
 Check(f.selTitle.text == "Vendor value" and f.up.shown ~= false and f.up.enabled == true, "its controls appear")
 Click(D.Row(2)); Same(D.Selected(), nil, "again deselects")
@@ -257,6 +257,7 @@ local Drag = R.MagicInventoryPage.Drag
 local function RowMid(i) local m = D.Model() return (m.tops[i] + m.bottoms[i]) / 2 end
 
 D.SetMode(false)
+D.RemoveLine("text#1")   -- the rows below are numbered without the default heading
 D.RemoveLine("auction")
 Same(Ids(), "recommend,vendor,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*")
 -- drag "Auction value" from the list and let go above the second row
@@ -410,6 +411,7 @@ D.Search(""); D.SetMode(false)
 D.Search("disenchant yields")
 Check(D.ListButton(L.BY_ID.outcomes.order).shown ~= false and f.noResults.shown == false,"yield field is searchable by its tooltip name")
 D.Search("")
+D.RemoveLine("text#1")
 D.MoveLine("vendor", 1); D.SetWhen("auction", "shift"); D.SetEnabled(false)
 Check(D.Save(), "Save commits the complete intended layout")
 Check(not L.Enabled() and L.Get().lines[1].id == "vendor" and L.Get().lines[2].id == "recommend", "saved order and enabled state")
@@ -426,12 +428,12 @@ D.ResetLayout(); Check(D.ResetPending() and D.Save() and not D.ResetPending(), "
 D.Cancel()
 -- The real profile service keeps the ui table and applies new contents in place.
 D.RemoveLine("vendor")
-c.TwichUIDB.ui.workshopWorth = { v = 1, lines = { { id = "auction", when = "shift" } } }
+c.TwichUIDB.ui.workshopWorth = { v = 1, headings = true, lines = { { id = "auction", when = "shift" } } }
 Check(type(applyViews) == "function", "profile views callback registered once")
 applyViews()
 Check(not D.Dirty() and #D.Draft().lines == 1 and D.Draft().lines[1].id == "auction", "profile apply discards the previous profile draft")
 Check(not D.Undo() and not D.Redo(), "history cannot cross profiles")
-c.TwichUIDB.ui.workshopWorth = { v = 1, enabled = false, lines = {} }; D.Cancel()
+c.TwichUIDB.ui.workshopWorth = { v = 1, headings = true, enabled = false, lines = {} }; D.Cancel()
 Check(#D.Draft().lines == 0 and not D.Draft().enabled, "saved empty/off v1 layout preserved")
 Check(not D.Dirty(), "opening an old layout does not save")
 D.AddLine("vendor"); D.Cancel(); Check(#L.Get().lines == 0, "cancel preserves intentional empty layout")
@@ -477,7 +479,7 @@ L.Example=function()
  return {disenchant={state='ok',value=1,outcomes='fixture',yields={{item=10940,min=1,max=2,chance=80},{item=10938,min=1,max=2,chance=20}}}},
   {money=tostring,itemIcon=function()return 134400 end}
 end
-c.TwichUIDB.ui.workshopWorth={v=1,enabled=true,lines={{id='outcomes',when='always'}}};D.Cancel()
+c.TwichUIDB.ui.workshopWorth={v=1,headings=true,enabled=true,lines={{id='outcomes',when='always'}}};D.Cancel()
 local yieldRow=D.Row(1);local originalHeight=yieldRow.right.GetStringHeight
 yieldRow.right.GetStringHeight=function()return 48 end
 D.Refresh()
@@ -485,6 +487,59 @@ Check(yieldRow:GetHeight()>=52,'multiline right column clips or overlaps the nex
 Check(yieldRow.right:GetText():find('\n',1,true),'preview material list must be vertical')
 yieldRow.right.GetStringHeight=originalHeight;L.Example=originalExample
 c.TwichUIDB.ui.workshopWorth=nil;D.Cancel()
+
+---------------------------------------------------------------------------
+-- Separators: blank space, divider line, editable text heading
+---------------------------------------------------------------------------
+c.TwichUIDB.ui.workshopWorth = nil; D.Cancel(); D.SetMode(false); D.SetExample("ordinary")
+do
+  Check(D.Row(1).wide.text == "What's it worth?" and D.Row(1).wide.shown ~= false, "the default heading is the first row, a text heading")
+  for i = 1, 3 do Check(f.sepButtons[i].shown ~= false and f.sepButtons[i].enabled ~= false, "separator button " .. i) end
+  Check(Has(f, "Separators"), "a Separators group in the catalog")
+  -- blank space and divider: added after the selected line, or last
+  D.Select("vendor")
+  Click(f.sepButtons[1]); Same(D.Selected(), "space#1"); Check(Ids():find("vendor,space#1,auction", 1, true), "added after the selected line: " .. Ids())
+  local rows = D.Model().sec.rows
+  Same(rows[4].id, "space#1"); Same(rows[4].separator, "space")
+  Click(f.sepButtons[2]); Check(Ids():find("space#1,line#1,auction", 1, true), "a divider after the blank space")
+  Check(D.Row(5).rule.shown ~= false and D.Row(5).wide.shown == false, "the divider row draws a line, not words")
+  Check(f.textBox.shown == false and f.swatches[1].shown == false, "no text controls for a divider")
+  Check(f.remove.shown ~= false, "but it can be moved and removed like any line")
+  Click(f.remove); Check(not Ids():find("line#1", 1, true), "removed")
+  D.Select("space#1"); Click(f.remove); Check(not Ids():find("space#1", 1, true), "removed too")
+  -- a text heading: its words and colour
+  D.Select(nil)
+  Click(f.sepButtons[3]); Same(D.Selected(), "text#2")
+  Check(f.textBox.shown ~= false and f.swatches[1].shown ~= false and f.textBox:GetText() == "New heading", "the heading's controls appear")
+  f.textBox:SetText("Gold value"); f.textBox.scripts.OnEnterPressed(f.textBox)
+  Same(D.Draft().lines[#D.Draft().lines].text, "Gold value", "the words are changed")
+  Check(Has(f, "Gold value"), "and the preview shows them")
+  f.swatches[5].scripts.OnClick(f.swatches[5])
+  Same(D.Draft().lines[#D.Draft().lines].color, L.TEXT_COLORS[5][2], "the colour is changed")
+  local fs = D.Row(#D.Model().sec.rows).wide
+  Check(math.abs(fs.color[1] - L.Hex(L.TEXT_COLORS[5][2])[1]) < 0.01, "and the preview paints it")
+  f.textBox:SetText("   "); f.textBox.scripts.OnEnterPressed(f.textBox)
+  Same(D.Draft().lines[#D.Draft().lines].text, "Gold value", "empty words are refused, the heading keeps its words")
+  Check(Has(f, "needs some words"), "and it says why")
+  -- the default heading: reworded, recoloured, removed
+  D.Select("text#1"); D.SetText("text#1", "Worth to me", "ff6666")
+  Same(D.Draft().lines[1].text, "Worth to me")
+  D.Undo(); D.Undo(); Same(D.Draft().lines[1].text, "What's it worth?", "undo steps back through text and colour")
+  Click(f.remove); Check(not Ids():find("text#1", 1, true) and D.Row(1).rowId ~= "text#1", "the default heading can be removed")
+  -- save: kept
+  D.SetText("text#2", "Mine", "66b3ff"); Check(D.Save())
+  local saved = L.Get().lines
+  Same(saved[#saved].id, "text#2"); Same(saved[#saved].text, "Mine"); Same(saved[#saved].color, "66b3ff")
+  Check(L.Lines(L.Example("ordinary"), select(2, L.Example("ordinary")), L.Get(), false)[1][1] ~= nil, "and the live builder uses it")
+  -- the limit
+  for _ = 1, L.MAX_SEPARATORS do D.AddSeparator("line") end
+  Check(Has(f, "most separators"), "at the limit it says so")
+  local n = 0
+  for _, e in ipairs(D.Draft().lines) do if L.SeparatorOf(e.id) then n = n + 1 end end
+  Same(n, L.MAX_SEPARATORS)
+  D.Cancel()
+end
+c.TwichUIDB.ui.workshopWorth = nil; D.Cancel()
 
 if failures > 0 then error(failures .. " check(s) failed", 0) end
 print("PASSED")

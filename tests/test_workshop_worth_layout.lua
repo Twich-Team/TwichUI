@@ -45,6 +45,7 @@ local function Ctx(extra)
 end
 local function Rec(t) local r = WO.Recommend(WO.Evaluate(F(t))); return r and r.text, r and r.kind end
 local function Flat(lines) local t = {} for _, l in ipairs(lines or {}) do t[#t + 1] = l[1] .. (l[2] and (" | " .. l[2]) or "") end return table.concat(t, "\n") end
+local function Headed(l) table.insert(l.lines, 1, { id = "text#1", when = "always", text = WL.TITLE, color = WL.DEFAULT_COLOR }) return l end
 local function Layout(ids) local l = {} for _, e in ipairs(ids) do l[#l + 1] = { id = e[1], when = e[2] or "always" } end return { enabled = true, lines = l } end
 local function Ids(list) local t = {} for _, e in ipairs(list) do t[#t + 1] = e.id .. (e.when == "shift" and "*" or "") end return table.concat(t, ",") end
 local function Keys(t) local n = {} for k in pairs(t) do n[#n + 1] = k end table.sort(n) return table.concat(n, ",") end
@@ -111,7 +112,8 @@ end
 -- Changing a layout
 ---------------------------------------------------------------------------
 do
-  local base = WL.DefaultLines()
+  Same(Ids(WL.DefaultLines()), "text#1,recommend,vendor,auction,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*", "the short default starts with the heading")
+  local base = WL.Remove(WL.DefaultLines(), "text#1")   -- the lines alone: the heading is just one more entry, tested below
   Same(Ids(base), "recommend,vendor,auction,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*", "the short default")
   Same(Keys(WL.BY_ID), "advisorevidence,advisorwhy,auction,disenchant,historical,marketvalue,note,outcomes,quality,recent,recommend,source,status,supply,vendor", "registered line types include Advisor details")
   -- add: at a place, at the end, refused twice, unknown refused
@@ -148,7 +150,7 @@ do
   l = WL.SetWhen(base, "vendor", "shift"); Same(Ids(l), "recommend,vendor*,auction,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*")
   l, why = WL.SetWhen(base, "vendor", "sometimes"); Same(l, nil); Same(why, "bad")
   -- every operation keeps a valid layout
-  local ops = { WL.Add(base, "outcomes", 3), WL.Remove(base, "note"), WL.Move(base, "auction", 1), WL.Step(base, "vendor", 1, true), WL.SetWhen(base, "note", "always") }
+  local ops = { WL.Add(base, "outcomes", 2), WL.Remove(base, "note"), WL.Move(base, "auction", 1), WL.Step(base, "vendor", 1, true), WL.SetWhen(base, "note", "always") }
   for _, o in ipairs(ops) do Same(Ids(WL.Clean(o)), Ids(o), "an operation's result is already clean") end
   Check(#WL.Add(WL.Remove(base, "note"), "note") == 12, "removed and added back")
 end
@@ -161,8 +163,8 @@ do
   local def = { enabled = true, lines = WL.DefaultLines() }
   local ids = function(s) local t = {} for _, row in ipairs(s.rows) do t[#t + 1] = row.id end return table.concat(t, ",") end
   local normal, shift = WL.Rows(r, Ctx(), def, false), WL.Rows(r, Ctx(), def, true)
-  Same(ids(normal), "recommend,vendor,auction,disenchant,marketvalue", "Normal: the Always lines")
-  Same(ids(shift), "recommend,vendor,auction,disenchant,marketvalue,recent,historical,supply,quality,status,source,note", "Hold Shift: the Always lines and the Shift lines, in the configured order, none twice")
+  Same(ids(normal), "text#1,recommend,vendor,auction,disenchant,marketvalue", "Normal: the Always lines")
+  Same(ids(shift), "text#1,recommend,vendor,auction,disenchant,marketvalue,recent,historical,supply,quality,status,source,note", "Hold Shift: the Always lines and the Shift lines, in the configured order, none twice")
   Same(normal.hint, "Hold Shift for details", "details exist: the hint")
   Same(shift.hint, nil, "no hint while Shift is held")
   -- Shift lines in the middle keep their place
@@ -179,13 +181,13 @@ do
   Same(WL.Lines(r, Ctx(), { enabled = true, lines = {} }, false), nil, "no lines chosen: nothing, not an empty heading")
   Same(WL.Lines(r, Ctx(), Layout({ { "outcomes" } }), false), nil, "only lines with nothing to say: nothing")
   Same(WL.Lines(WO.Evaluate(F()), Ctx(), Layout({ { "disenchant" } }), true), nil, "a disenchant row on an item that cannot be disenchanted: nothing, not 'not applicable'")
-  Same(Flat(WL.Lines(r, Ctx(), Layout({ { "status", "shift" } }), false)), "What's it worth?\n~Hold Shift for details", "only Shift lines, Shift not held: the heading and the hint")
-  Same(Flat(WL.Lines(r, Ctx(), Layout({ { "vendor" } }), false)), "What's it worth?\nVendor | [300]", "just the vendor value, no hint")
+  Same(Flat(WL.Lines(r, Ctx(), Headed(Layout({ { "status", "shift" } })), false)), "What's it worth?\n~Hold Shift for details", "only Shift lines, Shift not held: the heading and the hint")
+  Same(Flat(WL.Lines(r, Ctx(), Headed(Layout({ { "vendor" } })), false)), "What's it worth?\nVendor | [300]", "just the vendor value, no hint")
   -- a stack
   Check(WL.Lines(r, Ctx({ count = 5 }), def, false)[1][1] == "What's it worth? (each)")
   -- the rows the designer shows include empty places (they have no line), so a line without content can still be moved
   local d = WL.Rows(WO.Evaluate(F()), Ctx(), def, false)
-  Check(d.rows[4].id == "disenchant" and d.rows[4].line == nil and d.rows[4].index == 4, "an empty place is a row without a line")
+  Check(d.rows[5].id == "disenchant" and d.rows[5].line == nil and d.rows[5].index == 5, "an empty place is a row without a line")
 end
 
 ---------------------------------------------------------------------------
@@ -243,8 +245,8 @@ do
   local text = Flat(WL.Lines(r, Ctx(), Layout({ { "status" }, { "source" }, { "auction" } }), false))
   Same(select(2, text:gsub("auction house on Realm", "")), 1)
   -- scan state words
-  Same(Flat(WL.Lines(WO.Evaluate(F({ market = "nil", price = "nil" })), Ctx({ market = false }), Layout({ { "status" } }), false)), "What's it worth?\nScanned | not yet")
-  Same(Flat(WL.Lines(WO.Evaluate(F({ price = "nil" })), Ctx(), Layout({ { "status" }, { "source" } }), false)),
+  Same(Flat(WL.Lines(WO.Evaluate(F({ market = "nil", price = "nil" })), Ctx({ market = false }), Headed(Layout({ { "status" } })), false)), "What's it worth?\nScanned | not yet")
+  Same(Flat(WL.Lines(WO.Evaluate(F({ price = "nil" })), Ctx(), Headed(Layout({ { "status" }, { "source" } })), false)),
     "What's it worth?\nScanned | 1 minute ago\nPrices from | the Alliance auction house on Realm", "no listing of this item, but the scan is still described")
   Same(WL.Lines(WO.Evaluate(F({ bound = true })), Ctx(), Layout({ { "status" }, { "source" } }), false), nil, "an unlistable item: no price detail")
   Same(WL.Lines(WO.Evaluate(F({ variant = "bonus" })), Ctx(), Layout({ { "status" }, { "source" } }), false), nil, "a variant is not priced: no price detail")
@@ -264,8 +266,8 @@ do
   local g = WL.Get()
   Same(g.enabled, true); Same(Ids(g.lines), Ids(WL.DEFAULT_LINES))
   g.lines[1].id = "note"; g.lines[2] = nil
-  Same(Ids(WL.Get().lines), "recommend,vendor,auction,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*", "changing a copy never changes the defaults")
-  Same(Ids(WL.DEFAULT_LINES), "recommend,vendor,auction,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*")
+  Same(Ids(WL.Get().lines), "text#1,recommend,vendor,auction,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*", "changing a copy never changes the defaults")
+  Same(Ids(WL.DEFAULT_LINES), "text#1,recommend,vendor,auction,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*")
   Check(WL.IsDefault())
   Same(c.TwichUIDB.ui.workshopWorth, nil, "reading writes nothing")
   c.TwichUIDB = nil
@@ -290,17 +292,17 @@ do
   -- damaged saves read narrowly: a good entry survives a bad neighbour; nothing is rewritten by reading
   Fresh()
   c.TwichUIDB.ui.workshopWorth = { v = 1, enabled = "maybe", lines = { { id = "auction", when = "shift" }, 7, { id = 5 }, { id = "vendor", when = false }, { id = "auction" } } }
-  Same(Ids(WL.Get().lines), "auction*,vendor"); Same(WL.Get().enabled, true, "an unusable switch value reads as the default")
+  Same(Ids(WL.Get().lines), "text#1,auction*,vendor", "an older save keeps its heading, now the first line"); Same(WL.Get().enabled, true, "an unusable switch value reads as the default")
   Same(#c.TwichUIDB.ui.workshopWorth.lines, 5, "reading left the saved table as it was")
   c.TwichUIDB.ui.workshopWorth = { v = 1, lines = "not a list" }; Same(Ids(WL.Get().lines), Ids(WL.DEFAULT_LINES), "a damaged list reads as the default")
   c.TwichUIDB.ui.workshopWorth = "garbage"; Same(Ids(WL.Get().lines), Ids(WL.DEFAULT_LINES), "a damaged table reads as the default")
   Check(WL.SetLines({ { id = "vendor" } }) and Ids(WL.Get().lines) == "vendor", "and a save replaces it")
   local big = {}
   for i = 1, 5000 do big[i] = { id = "vendor" } end
-  c.TwichUIDB.ui.workshopWorth = { v = 1, lines = big }; Same(Ids(WL.Get().lines), "vendor", "a huge damaged list is bounded")
+  c.TwichUIDB.ui.workshopWorth = { v = 1, lines = big }; Same(Ids(WL.Get().lines), "text#1,vendor", "a huge damaged list is bounded")
   -- an older save: before this feature nothing was saved; a table without a version is read as version 1
   c.TwichUIDB.ui.workshopWorth = { lines = { { id = "note", when = "always" } } }
-  Same(Ids(WL.Get().lines), "note"); Check(WL.SetEnabled(true)); Same(c.TwichUIDB.ui.workshopWorth.v, 1)
+  Same(Ids(WL.Get().lines), "text#1,note"); Check(WL.SetEnabled(true)); Same(c.TwichUIDB.ui.workshopWorth.v, 1)
   c.TwichUIDB.ui = nil; Same(Ids(WL.Get().lines), Ids(WL.DEFAULT_LINES)); Check(WL.SetLines({ { id = "vendor" } }), "saving builds the container"); Same(Ids(WL.Get().lines), "vendor")
   -- written by a NEWER TwichUI: read as defaults, never overwritten
   c.TwichUIDB.ui.workshopWorth = { v = 2, enabled = false, lines = { { id = "vendor" } }, future = { 1 } }
@@ -311,7 +313,7 @@ do
   Same(c.TwichUIDB.ui.workshopWorth.v, 2); Same(c.TwichUIDB.ui.workshopWorth.lines[1].id, "vendor"); Check(c.TwichUIDB.ui.workshopWorth.future, "the newer data is untouched")
   -- presentation only: no price, scan or item data is ever put in it
   Fresh(); WL.SetLines(WL.DefaultLines()); WL.SetEnabled(true)
-  Same(Keys(c.TwichUIDB.ui.workshopWorth), "enabled,lines,v", "only the layout and the switch")
+  Same(Keys(c.TwichUIDB.ui.workshopWorth), "enabled,headings,lines,v", "only the layout and the switch")
   Same(c.TwichUIDB.workshop, nil, "nothing is written to the account-wide Workshop record")
   -- where it lives is a profile group, so a profile carries it
   Check(c.TwichUIDB.ui.workshopWorth ~= nil)
@@ -344,6 +346,77 @@ do
     local rr = WL.Example(e.key)
     Check(not (WO.Recommend(rr) and WO.Recommend(rr).text == "Suggested: Auction house"), "no preview shows what the live tooltip cannot")
   end
+end
+
+---------------------------------------------------------------------------
+-- Separators: blank space, divider line, text heading
+---------------------------------------------------------------------------
+do
+  local r = WO.Evaluate(F({ sell = 300 }))
+  local base = WL.DefaultLines()
+  -- adding: ids are made, never repeated, and the argument is never changed
+  local l, id = WL.AddSeparator(base, "space", 3)
+  Same(id, "space#1"); Same(Ids(l), "text#1,recommend,space#1,vendor,auction,disenchant,marketvalue,recent*,historical*,supply*,quality*,status*,source*,note*")
+  local l2, id2 = WL.AddSeparator(l, "space")
+  Same(id2, "space#2", "a second blank space is its own entry"); Same(#base, 13, "the argument is untouched")
+  local l3, id3 = WL.AddSeparator(l2, "text", 1)
+  Same(id3, "text#2"); Same(l3[1].text, "New heading"); Same(l3[1].color, WL.DEFAULT_COLOR)
+  Same(select(2, WL.AddSeparator(base, "wavy")), "unknown")
+  -- removing one frees its number; removing the default heading is allowed
+  Same(select(2, WL.AddSeparator(WL.Remove(l2, "space#1"), "space")), "space#1")
+  Check(WL.Remove(base, "text#1") ~= nil, "the default heading can be removed")
+  -- a limit
+  local many = {}
+  for i = 1, WL.MAX_SEPARATORS do many = WL.AddSeparator(many, "line") end
+  local full, why = WL.AddSeparator(many, "line"); Same(full, nil); Same(why, "full")
+  -- the words and the colour of a heading
+  local t = WL.SetText(base, "text#1", "Value", "FF0000")
+  Same(t[1].text, "Value"); Same(t[1].color, "ff0000"); Same(base[1].text, WL.TITLE)
+  Same(select(2, WL.SetText(base, "text#1", "   ")), "empty", "a heading needs words")
+  Same(select(2, WL.SetText(base, "text#1", nil, "red")), "bad", "a colour is six hex digits")
+  Same(select(2, WL.SetText(base, "vendor", "x")), "bad", "only a heading has words")
+  -- reading damaged saves: bad headings and ids are skipped, words are cleaned
+  local clean = WL.Clean({ { id = "text#1", text = "  a|cffff0000b\n " , color = "zz" }, { id = "text#2", text = "" }, { id = "wavy#1" }, { id = "line#x" },
+      { id = "line#4", when = "shift" }, { id = "line#4" } })
+  Same(#clean, 2); Same(clean[1].text, "a|cffff0000b", "control characters go"); Same(clean[1].color, WL.DEFAULT_COLOR, "a bad colour reads as the default")
+  Same(clean[2].id .. clean[2].when, "line#4shift")
+  Same(#WL.Clean({ { id = "text#1", text = ("x"):rep(500) } })[1].text, WL.MAX_TEXT, "words are bounded")
+  -- what they draw
+  local function Lines(list, shift, ctx) return WL.Lines(r, ctx or Ctx(), { enabled = true, lines = list }, shift) end
+  local heading = { id = "text#1", when = "always", text = "My values", color = "00ff00" }
+  local out = Lines({ heading, { id = "vendor", when = "always" } }, false)
+  Same(Flat(out), "My values\nVendor | [300]")
+  local kind, a, rgb = WL.Style(out[1]); Same(kind, "custom"); Same(a, "My values"); Same(rgb[2], 1); Same(rgb[1], 0)
+  Same(select(2, WL.Style(WL.Lines(r, Ctx(), { enabled = true, lines = { { id = "text#1", when = "always", text = "a|b", color = "ffffff" }, { id = "vendor", when = "always" } } }, false)[1])), "a||b", "a typed bar can never start a colour code")
+  Same(WL.Style(Lines({ { id = "space#1", when = "always" }, { id = "vendor", when = "always" } }, false)[1]), "double", "a leading space is dropped, so the first line is the vendor row")
+  local A = function(id, w) return { id = id, when = w or "always" } end
+  local sp = Lines({ A("vendor"), A("space#1"), A("line#1"), A("auction") }, false)
+  Same(#sp, 3, "a space beside a divider collapses to one"); Same(WL.Style(sp[2]), "space")
+  Same(WL.Style(Lines({ A("vendor"), A("line#1"), A("auction") }, false)[2]), "rule")
+  Same(#Lines({ A("vendor"), A("line#1") }, false), 1, "a trailing divider is dropped")
+  Same(Lines({ A("space#1"), A("line#1"), heading }, false), nil, "only separators: nothing, not a heading on its own")
+  -- Hold Shift: a separator can be Shift-only, and never makes the hint
+  local sh = { A("vendor"), A("line#1", "shift"), A("auction", "shift") }
+  Same(#Lines(sh, false), 2, "Normal: the vendor row and the hint"); Same(#Lines(sh, true), 3)
+  Same(WL.Rows(r, Ctx(), { enabled = true, lines = { A("vendor"), A("line#1", "shift") } }, false).hint, nil, "a Shift separator alone adds no hint")
+  -- the designer's rows keep their places and say they are separators
+  local rows = WL.Rows(r, Ctx(), { enabled = true, lines = { { id = "space#1", when = "always" }, { id = "vendor", when = "always" } } }, false).rows
+  Same(rows[1].separator, "space"); Same(rows[2].separator, nil)
+  -- a stack: only the default words say "(each)"
+  Same(Lines({ { id = "text#1", when = "always", text = WL.TITLE }, { id = "vendor", when = "always" } }, false, Ctx({ count = 5 }))[1][1], "What's it worth? (each)")
+  Same(Lines({ { id = "text#1", when = "always", text = "Mine" }, { id = "vendor", when = "always" } }, false, Ctx({ count = 5 }))[1][1], "Mine")
+  -- saving: kept, validated, and a layout saved before headings keeps its heading as the first line
+  c.TwichUIDB = { ui = {}, modules = {} }
+  local mine = { heading, { id = "line#1", when = "always" }, { id = "vendor", when = "shift" } }
+  Check(WL.Set({ enabled = true, lines = mine }), "saves")
+  local back = WL.Get().lines
+  Same(Ids(back), "text#1,line#1,vendor*"); Same(back[1].text, "My values"); Same(back[1].color, "00ff00")
+  Same(select(2, WL.Set({ enabled = true, lines = { { id = "text#1", when = "always", text = "", color = "ffffff" } } })), "bad", "an empty heading is refused whole")
+  Same(select(2, WL.Set({ enabled = true, lines = { { id = "wavy#1", when = "always" } } })), "bad")
+  Check(WL.Reset() and WL.IsDefault(), "reset puts the default heading back")
+  c.TwichUIDB.ui.workshopWorth = { v = 1, lines = { { id = "vendor" } } }
+  Same(Ids(WL.Get().lines), "text#1,vendor", "a layout from before keeps its heading")
+  Check(WL.SetLines({ { id = "vendor" } })); Same(Ids(WL.Get().lines), "vendor", "once saved by this version, no heading is added")
 end
 
 print("PASSED")

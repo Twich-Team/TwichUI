@@ -259,12 +259,12 @@ Check(table.concat(default[2]," "):find("Workshop: Vendor",1,true),"default Norm
 for _,action in ipairs({"vendor","auction","disenchant","craft","unknown"}) do
   eval.advisor.action=action
   local lines=WL.Lines(eval,ctx,{enabled=true,lines={{id="recommend",when="always"}}},false)
-  if A.Tooltip(eval.advisor) then Check(lines[2][1]:find(A.Tooltip(eval.advisor),1,true),"simple primary wording " .. action) else Check(lines==nil,"non-sale action stays out of sale recommendation") end
+  if A.Tooltip(eval.advisor) then Check(lines[1][1]:find(A.Tooltip(eval.advisor),1,true),"simple primary wording " .. action) else Check(lines==nil,"non-sale action stays out of sale recommendation") end
 end
 Healthy({complete=false})
 eval.advisor=Decide()
 local tentativeLines=WL.Lines(eval,ctx,{enabled=true,lines={{id="recommend",when="always"}}},false)
-Check(tentativeLines[2][1]:find("Workshop: Auction",1,true),"Normal configurable field preserves qualification")
+Check(tentativeLines[1][1]:find("Workshop: Auction",1,true),"Normal configurable field preserves qualification")
 local shifted={enabled=true,lines={{id="recommend",when="shift"}}}
 local normal=WL.Lines(eval,ctx,shifted,false) or {}
 for _,line in ipairs(normal) do Check(not line[1]:find("Workshop:",1,true),"Shift-only recommendation hidden normally") end

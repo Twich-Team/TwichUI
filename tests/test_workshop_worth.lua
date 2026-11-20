@@ -362,7 +362,7 @@ do
     local t = {}
     for i, l in ipairs(lines or {}) do
       local kind, a, b = L.Style(l)   -- the tooltip draws the text without its style mark
-      t[#t + 1] = i == 1 and l[1] or (kind == "double" and (a .. " | " .. b) or a)
+      t[#t + 1] = (kind == "double" and (a .. " | " .. b) or a)
     end
     return table.concat(t, "\n")
   end
@@ -370,7 +370,7 @@ do
   Hover(g, 111)
   Same(Mine(), Section(false), "the default layout: the tooltip draws what the shared builder builds")
   -- a customised layout: Vendor only on Shift, the note moved to the top, no recommendation
-  Check(L.SetLines({ { id = "note", when = "shift" }, { id = "auction", when = "always" }, { id = "vendor", when = "shift" } }))
+  Check(L.SetLines({ { id = "text#1", when = "always", text = "What's it worth?" }, { id = "note", when = "shift" }, { id = "auction", when = "always" }, { id = "vendor", when = "shift" } }))
   Hover(g, 111)
   local t = Texts(g)
   Check(t:find("Auction (before fees) | [200]", 1, true) and not t:find("Vendor |", 1, true) and not t:find("Suggested", 1, true) and not t:find("No suggestion", 1, true),
@@ -392,7 +392,7 @@ do
   t = Texts(g)
   Check(not t:find("Vendor |", 1, true) and not t:find("Estimates", 1, true) and Count(t, "What's it worth%?") == 1, "released: no stale Shift lines")
   -- the layout is read at each hover: a change takes effect on the next one, no reload
-  Check(L.SetLines({ { id = "vendor", when = "always" } }))
+  Check(L.SetLines({ { id = "text#1", when = "always", text = "What's it worth?" }, { id = "vendor", when = "always" } }))
   Hover(g, 111)
   Same(Mine(), "What's it worth?\nVendor | [50]", "just the vendor line, no hint (nothing more to show)")
   -- nothing to show: no heading

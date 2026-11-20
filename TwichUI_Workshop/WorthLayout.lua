@@ -59,11 +59,52 @@ WL.TYPES = {
 }
 WL.BY_ID = {}
 for i, t in ipairs(WL.TYPES) do WL.BY_ID[t.id] = t; t.order = i end
-WL.MAX_LINES = #WL.TYPES
+
+-- Separators (the player's own): any number up to MAX_SEPARATORS, each its own entry with an id like "line#2".
+--   space = a blank row; line = a thin divider; text = a heading the player words and colours (the default "What's it worth?" is one).
+-- They are presentation only: they never count as content, so a tooltip with nothing but separators shows nothing.
+WL.SEPARATORS = {
+    { kind = "space", label = "Blank space", what = "An empty row, to set one part of the tooltip apart from the next.", when = "always" },
+    { kind = "line", label = "Divider line", what = "A thin line that fades at the edges, to divide the tooltip into parts.", when = "always" },
+    { kind = "text", label = "Text heading", what = "A line of your own words, in a colour you pick. The default \"What's it worth?\" heading is one.", when = "always" },
+}
+WL.SEPARATOR_BY_KIND = {}
+for _, sp in ipairs(WL.SEPARATORS) do WL.SEPARATOR_BY_KIND[sp.kind] = sp end
+WL.MAX_SEPARATORS = 12
+WL.MAX_TEXT = 60
+WL.MAX_LINES = #WL.TYPES + WL.MAX_SEPARATORS
+-- the colours a heading can have (name, hex); the first is the default heading gold
+WL.TEXT_COLORS = {
+    { "gold", "ffd100" }, { "white", "ffffff" }, { "grey", "8c8c8c" }, { "green", "9eeb8c" },
+    { "blue", "66b3ff" }, { "purple", "bf94f2" }, { "orange", "ff9933" }, { "red", "ff6666" },
+}
+WL.DEFAULT_COLOR = "ffd100"
+
+-- "line#2" -> "line", 2; nil for anything that is not a separator id
+function WL.SeparatorOf(id)
+    if type(id) ~= "string" then return nil end
+    local kind, n = id:match("^(%a+)#(%d+)$")
+    if kind and WL.SEPARATOR_BY_KIND[kind] and #n <= 3 then return kind, tonumber(n) end
+    return nil
+end
+function WL.Known(id) return WL.BY_ID[id] ~= nil or WL.SeparatorOf(id) ~= nil end
+
+-- Words the player typed: no control characters, "|" doubled so it can never start a colour or texture code, trimmed, bounded.
+function WL.CleanText(text)
+    if type(text) ~= "string" then return nil end
+    text = text:gsub("[%c]", " "):gsub("^%s+", ""):gsub("%s+$", "")
+    if text == "" then return nil end
+    return text:sub(1, WL.MAX_TEXT)
+end
+function WL.CleanColor(hex)
+    if type(hex) == "string" and hex:match("^%x%x%x%x%x%x$") then return hex:lower() end
+    return WL.DEFAULT_COLOR
+end
 
 -- The short default: answer and values Always, details under Shift. The optional
 -- outcomes breakdown can be added without migrating any existing saved layout.
 WL.DEFAULT_LINES = {
+    { id = "text#1", when = "always", text = WL.TITLE, color = WL.DEFAULT_COLOR },
     { id = "recommend", when = "always" }, { id = "vendor", when = "always" }, { id = "auction", when = "always" },
     { id = "disenchant", when = "always" }, { id = "marketvalue", when = "always" }, { id = "recent", when = "shift" },
     { id = "historical", when = "shift" }, { id = "supply", when = "shift" }, { id = "quality", when = "shift" },
@@ -72,7 +113,7 @@ WL.DEFAULT_LINES = {
 
 local function Copy(list)
     local out = {}
-    for i, e in ipairs(list) do out[i] = { id = e.id, when = e.when } end
+    for i, e in ipairs(list) do out[i] = { id = e.id, when = e.when, text = e.text, color = e.color } end
     return out
 end
 
@@ -89,9 +130,16 @@ function WL.Clean(list)
     for i = 1, WL.MAX_LINES * 4 do   -- bounded: a damaged table cannot make this long
         local e = list[i]
         if e == nil and i > #list then break end
-        if type(e) == "table" and type(e.id) == "string" and WL.BY_ID[e.id] and not seen[e.id] then
-            seen[e.id] = true
-            out[#out + 1] = { id = e.id, when = e.when == "shift" and "shift" or "always" }
+        if type(e) == "table" and type(e.id) == "string" and WL.Known(e.id) and not seen[e.id] then
+            local entry = { id = e.id, when = e.when == "shift" and "shift" or "always" }
+            if WL.SeparatorOf(e.id) == "text" then
+                entry.text = WL.CleanText(e.text)
+                entry.color = WL.CleanColor(e.color)
+            end
+            if WL.SeparatorOf(e.id) ~= "text" or entry.text then   -- a heading with no words is skipped
+                seen[e.id] = true
+                out[#out + 1] = entry
+            end
         end
     end
     return out
@@ -130,7 +178,13 @@ function WL.Get()
     local t = Saved(false)
     if t == nil or Newer(t) then return { enabled = true, lines = WL.DefaultLines() } end
     local lines
-    if type(t.lines) == "table" then lines = WL.Clean(t.lines) else lines = WL.DefaultLines() end   -- {} is the player's own choice: kept
+    if type(t.lines) == "table" then
+        lines = WL.Clean(t.lines)   -- {} is the player's own choice: kept
+        -- a layout saved before headings could be edited: its "What's it worth?" heading was always drawn, so it stays as the first line
+        if not t.headings then table.insert(lines, 1, { id = "text#1", when = "always", text = WL.TITLE, color = WL.DEFAULT_COLOR }) end
+    else
+        lines = WL.DefaultLines()
+    end
     return { enabled = t.enabled ~= false, lines = lines }
 end
 
@@ -177,15 +231,23 @@ function WL.Set(layout)
         if type(k) ~= "number" or k % 1 ~= 0 or k < 1 or k > WL.MAX_LINES then return false, "bad" end
         n = n + 1
     end
+    local seps = 0
     for i = 1, n do
         local e = layout.lines[i]
-        if type(e) ~= "table" or not WL.BY_ID[e.id] or seen[e.id] or (e.when ~= "always" and e.when ~= "shift") then return false, "bad" end
+        if type(e) ~= "table" or not WL.Known(e.id) or seen[e.id] or (e.when ~= "always" and e.when ~= "shift") then return false, "bad" end
         seen[e.id] = true; lines[i] = { id = e.id, when = e.when }
+        if WL.SeparatorOf(e.id) then seps = seps + 1 end
+        if WL.SeparatorOf(e.id) == "text" then
+            local text = WL.CleanText(e.text)
+            if not text or text ~= e.text or (e.color ~= nil and WL.CleanColor(e.color) ~= e.color) then return false, "bad" end
+            lines[i].text, lines[i].color = text, WL.CleanColor(e.color)
+        end
     end
+    if seps > WL.MAX_SEPARATORS then return false, "bad" end
     local old = Saved(false)
     local out = {}
     for k, v in pairs(old or {}) do out[k] = v end
-    out.v, out.enabled, out.lines = WL.VERSION, layout.enabled, lines
+    out.v, out.enabled, out.lines, out.headings = WL.VERSION, layout.enabled, lines, true
     if type(TwichUIDB.ui) ~= "table" then TwichUIDB.ui = {} end
     TwichUIDB.ui[WL.KEY] = out
     return true
@@ -208,6 +270,7 @@ function WL.SetLines(lines)
     local t = Saved(true)
     t.v = WL.VERSION
     t.lines = WL.Clean(lines)
+    t.headings = true
     return true
 end
 
@@ -216,14 +279,16 @@ function WL.Reset()
     local ok, why = WL.CanWrite()
     if not ok then return false, why end
     local t = Saved(false)
-    if t then t.lines = nil end
+    if t then t.lines, t.headings = nil, nil end
     return true
 end
 
 function WL.IsDefault()
     local a, b = WL.Get().lines, WL.DEFAULT_LINES
     if #a ~= #b then return false end
-    for i = 1, #a do if a[i].id ~= b[i].id or a[i].when ~= b[i].when then return false end end
+    for i = 1, #a do
+        if a[i].id ~= b[i].id or a[i].when ~= b[i].when or a[i].text ~= b[i].text or a[i].color ~= b[i].color then return false end
+    end
     return true
 end
 
@@ -248,6 +313,44 @@ function WL.Add(list, id, at, when)
     return out
 end
 
+-- A new separator of `kind` ("space", "line", "text") at place `at` (nil = last). Returns the new list and the new entry's id.
+function WL.AddSeparator(list, kind, at, when)
+    local sp = WL.SEPARATOR_BY_KIND[kind]
+    if not sp then return nil, "unknown" end
+    local n, count, used = 1, 0, {}
+    for _, e in ipairs(list) do
+        local k, num = WL.SeparatorOf(e.id)
+        if k then count = count + 1; used[e.id] = true end
+    end
+    if count >= WL.MAX_SEPARATORS then return nil, "full" end
+    while used[kind .. "#" .. n] do n = n + 1 end
+    local id = kind .. "#" .. n
+    local out = Copy(list)
+    local pos = Clamp(math.floor(tonumber(at) or (#out + 1)), 1, #out + 1)
+    local entry = { id = id, when = when == "shift" and "shift" or "always" }
+    if kind == "text" then entry.text, entry.color = "New heading", WL.DEFAULT_COLOR end
+    table.insert(out, pos, entry)
+    return out, id
+end
+
+-- The words and/or colour of a text heading (nil leaves that one as it is).
+function WL.SetText(list, id, text, color)
+    local i = IndexOf(list, id)
+    if not i then return nil, "missing" end
+    if WL.SeparatorOf(id) ~= "text" then return nil, "bad" end
+    local out = Copy(list)
+    if text ~= nil then
+        local t = WL.CleanText(text)
+        if not t then return nil, "empty" end
+        out[i].text = t
+    end
+    if color ~= nil then
+        if not (type(color) == "string" and color:match("^%x%x%x%x%x%x$")) then return nil, "bad" end
+        out[i].color = color:lower()
+    end
+    return out
+end
+
 function WL.Remove(list, id)
     local i = IndexOf(list, id)
     if not i then return nil, "missing" end
@@ -267,6 +370,15 @@ function WL.Move(list, id, before)
     if pos > from then pos = pos - 1 end   -- the line itself came out of the list first
     table.insert(out, pos, entry)
     return out
+end
+
+-- The separators' rows. A heading with the default words says "(each)" for a stack, as the fixed heading always did.
+local function SeparatorLine(kind, e, ctx)
+    if kind == "space" then return { " ", sep = "space" } end
+    if kind == "line" then return { "", sep = "line" } end
+    local text = e.text or WL.TITLE
+    if text == WL.TITLE and (ctx.count or 1) > 1 then text = text .. " (each)" end
+    return { text, sep = "text", color = e.color or WL.DEFAULT_COLOR }
 end
 
 local function Shown(e, shift) return e.when == "always" or shift == true end
@@ -436,32 +548,38 @@ end
 function WL.Rows(r, ctx, layout, shift, keep)
     local rows, more, content = {}, false, 0
     for i, e in ipairs(layout.lines) do
-        local line = RENDER[e.id](r, ctx)
+        local sep = WL.SeparatorOf(e.id)
+        local line
+        if sep then line = SeparatorLine(sep, e, ctx) else line = RENDER[e.id](r, ctx) end
         if Shown(e, shift) then
-            rows[#rows + 1] = { id = e.id, when = e.when, line = line, index = i }
-            if line then content = content + 1 end
-        elseif line then
+            rows[#rows + 1] = { id = e.id, when = e.when, line = line, index = i, separator = sep }
+            if line and not sep then content = content + 1 end
+        elseif line and not sep then
             more = true
         end
     end
     local hint = (not shift and more) and WL.HINT or nil
     local empty = content == 0 and not hint
     if empty and not keep then return nil end
-    return { title = WL.TITLE .. ((ctx.count or 1) > 1 and " (each)" or ""), rows = rows, hint = hint, empty = empty }
+    return { rows = rows, hint = hint, empty = empty }
 end
 
 -- The same section as the flat lines the tooltip draws: the heading, each line that has something to say, the hint.
 function WL.Lines(r, ctx, layout, shift)
     local s = WL.Rows(r, ctx, layout, shift)
     if not s then return nil end
-    local out = { { s.title } }
-    for _, row in ipairs(s.rows) do if row.line then
+    local out = {}
+    -- a blank space or divider never opens or closes the section, and never sits next to another one (a line with nothing to say would
+    -- otherwise leave two in a row); headings are the player's words and always stay
+    local function Gap(line) return line.sep == "space" or line.sep == "line" end
+    for _, row in ipairs(s.rows) do if row.line and not (Gap(row.line) and (#out == 0 or Gap(out[#out]))) then
         if row.line.rightRows then
             -- Native tooltips measure row height from the left string. Keep a
             -- spacer on continuation rows so the right-column list has room.
             for i,text in ipairs(row.line.rightRows) do out[#out+1]={i==1 and row.line[1] or " ",text} end
         else out[#out + 1] = row.line end
     end end
+    while #out > 0 and Gap(out[#out]) do out[#out] = nil end
     if s.hint then out[#out + 1] = { "~" .. s.hint } end
     return out
 end
@@ -474,7 +592,20 @@ WL.COLORS = {
     vendor = { 0.9, 0.75, 0.45 }, auction = { 0.45, 0.85, 0.55 }, disenchant = { 0.75, 0.58, 0.95 },
 }
 
+-- A divider line is one tooltip-sized strip of the game's own divider art (it fades at both ends, so it sits quietly in any tooltip)
+WL.DIVIDER = "|TInterface\\COMMON\\UI-TooltipDivider-Transparent:8:200:0:0|t"
+WL.DIVIDER_ART = "Interface\\COMMON\\UI-TooltipDivider-Transparent"
+
+function WL.Hex(hex)
+    hex = WL.CleanColor(hex)
+    return { tonumber(hex:sub(1, 2), 16) / 255, tonumber(hex:sub(3, 4), 16) / 255, tonumber(hex:sub(5, 6), 16) / 255 }
+end
+
+-- "space", "rule" (the divider) and "custom" (a heading: the third value is its { r, g, b }) are the separators' kinds.
 function WL.Style(line)
+    if line.sep == "space" then return "space", " " end
+    if line.sep == "line" then return "rule", WL.DIVIDER end
+    if line.sep == "text" then return "custom", (line[1]:gsub("|", "||")), WL.Hex(line.color) end
     if line[2] ~= nil then return "double", line[1], line[2] end
     if line.recommendation and WL.COLORS[line.recommendation] then return line.recommendation, line[1]:sub(2) end
     local first = line[1]:sub(1, 1)

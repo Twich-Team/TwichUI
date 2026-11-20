@@ -802,7 +802,7 @@ Lab.Step("what's it worth: tooltip designer", function()
     Check("display", "one instruction", "Drag lines into the preview.", Txt(f.instruction))
 
     local function Mock()   -- what the mockup shows, top to bottom (rows without anything to say are the designer's own placeholders)
-        local out = { Txt(f.mock.title) }
+        local out = {}   -- the heading is the first row now (a text heading)
         for i = 1, #D.Model().sec.rows do
             local r = D.Row(i)
             local text = r.wide:IsShown() and Txt(r.wide) or (Txt(r.left) .. " | " .. Txt(r.right))
