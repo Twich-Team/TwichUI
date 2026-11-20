@@ -231,8 +231,8 @@ end
 -- 4. The built textures
 ---------------------------------------------------------------------------
 do
-  Check(#TA.ART_ORDER == 6, "six artworks")
-  for _, id in ipairs({ "rareWide", "bossWide", "eliteWide" }) do
+  Check(#TA.ART_ORDER == 9, "nine artworks")
+  for _, id in ipairs({ "rareWide", "bossWide", "eliteWide", "rareSpear", "bossSpear", "eliteSpear" }) do
     Check(TA.ART[id].width == 256 and TA.ART[id].height < 256, id .. " is wider than tall")
   end
   for _, id in ipairs(TA.ART_ORDER) do

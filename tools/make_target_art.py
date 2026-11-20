@@ -39,6 +39,9 @@ ART = {
     "rare-wide": "target-art-rare-wide-source.png",
     "boss-wide": "target-art-boss-wide-source.png",
     "elite-wide": "target-art-elite-wide-source.png",
+    "rare-spear": "target-art-rare-spear-source.png",
+    "boss-spear": "target-art-boss-spear-source.png",
+    "elite-spear": "target-art-elite-spear-source.png",
 }
 
 

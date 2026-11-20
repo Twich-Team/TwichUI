@@ -46,8 +46,15 @@ TA.ART = {
         crookY = 0.411, restX = 0.04, restY = 0.05 },
     eliteWide = { label = "Elite dragon (wide)", path = MEDIA .. "elite-wide", width = 256, height = 207, crookX = 0.656,
         crookY = 0.388, restX = 0.04, restY = 0.05 },
+    -- the spear set: a long horizontal spear with the dragon's head and claw curled at its end, wider than tall
+    rareSpear = { label = "Rare spawn (spear)", path = MEDIA .. "rare-spear", width = 256, height = 105, crookX = 0.843,
+        crookY = 0.535, restX = 0.04, restY = 0.05 },
+    bossSpear = { label = "Boss dragon (spear)", path = MEDIA .. "boss-spear", width = 256, height = 112, crookX = 0.663,
+        crookY = 0.443, restX = 0.04, restY = 0.05 },
+    eliteSpear = { label = "Elite dragon (spear)", path = MEDIA .. "elite-spear", width = 256, height = 105, crookX = 0.845,
+        crookY = 0.545, restX = 0.04, restY = 0.05 },
 }
-TA.ART_ORDER = { "rare", "boss", "elite", "rareWide", "bossWide", "eliteWide" }
+TA.ART_ORDER = { "rare", "boss", "elite", "rareWide", "bossWide", "eliteWide", "rareSpear", "bossSpear", "eliteSpear" }
 TA.TEXTURE_SIZE = 256
 
 -- The kinds of enemy a mapping is kept for, in the order settings lists them. "boss" is the game's own boss flag
