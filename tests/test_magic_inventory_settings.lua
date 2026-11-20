@@ -388,4 +388,5 @@ Check(P.ControlCount() == n, "redrawing the page makes no new controls: " .. n .
 Check(#c.PICKUPS == 0 and c.CURSOR == nil, "and nothing was picked up")
 
 Check(P.CategoryArtwork("forever:crate"):find("hammer-and-chisel", 1, true) and P.CategoryArtwork("forever:writ"):find("inscribed-stone", 1, true), "Forever families have their own art")
+Check(P.CategoryArtwork("1"):find("leather-backpack", 1, true) and P.CategoryArtwork("11"):find("arrow-and-cartridge", 1, true), "bags and quivers have art")
 if failures == 0 then print("PASSED test_magic_inventory_settings") else print(failures .. " failures") os.exit(1) end

@@ -54,7 +54,7 @@ function MIClient(name, opts)
       local names = { ["7:5"] = "Cloth", ["7:9"] = "Herb", ["7:7"] = "Metal & Stone", ["7:6"] = "Leather", ["0:5"] = "Food & Drink" }
       return names[cls .. ":" .. sub]
     end,
-    GetItemClassInfo = function(cls) return ({ [7] = "Trade Goods", [0] = "Consumable", [5] = "Reagent", [9] = "Recipe", [3] = "Gem", [6] = "Projectile", [15] = "Miscellaneous" })[cls] end,
+    GetItemClassInfo = function(cls) return ({ [7] = "Trade Goods", [0] = "Consumable", [5] = "Reagent", [9] = "Recipe", [3] = "Gem", [6] = "Projectile", [15] = "Miscellaneous", [1] = "Container", [11] = "Quiver" })[cls] end,
     GetItemFamily = function() return 0 end,
   }
   c.C_AuctionHouse = { GetAuctionItemSubClasses = function(cls) if cls == 7 then return { 5, 6, 7, 9 } elseif cls == 0 then return { 5 } end return {} end }

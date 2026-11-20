@@ -584,6 +584,7 @@ local CATEGORY_ART = {
     ["7:5"] = NPC .. "cloth-bolts-small", ["7:6"] = Painted("leather"), ["7:7"] = Painted("ore"), ["7:9"] = Painted("herbs"),
     ["0:1"] = [[media\healerwatch\vessel-small]], ["0:2"] = Painted("elixir"), ["0:3"] = Painted("elixir"),
     ["0:4"] = NPC .. "sealed-scroll-small", ["0:5"] = NPC .. "bread-and-tankard-small", ["0:7"] = NPC .. "cloth-bolts-small",
+    ["1"] = NPC .. "leather-backpack-small", ["11"] = NPC .. "arrow-and-cartridge-small",
     ["3"] = Painted("quality-rare"), ["6"] = NPC .. "arrow-and-cartridge-small", ["5"] = NPC .. "reagent-pouch-small",
     ["9"] = NPC .. "sealed-scroll-small", ["15"] = NPC .. "leather-backpack-small",
     -- WoW: Forever families (MI.InForeverFamily): crates are opened and filled by hand, writs are signed orders

@@ -118,15 +118,17 @@ function MI.CategoryName(key)
 end
 
 -- The categories offered when choosing items: Trade goods by subclass, Consumables by subclass, and a few whole
--- classes, each named as the game names it. Subclasses come from the game (C_AuctionHouse.GetAuctionItemSubClasses,
+-- classes, each named as the game names it. Gem (3) is not offered: Forever files gems as Trade goods, and saved
+-- rules that already use "3" still work. Subclasses come from the game (C_AuctionHouse.GetAuctionItemSubClasses,
 -- the list the Auction House browses by), so only what this client has is offered. Built when first asked for.
 -- { { key, label, group }, ... }
 local CLASS_GROUPS = {
     { class = 7, split = true },    -- Trade goods
     { class = 0, split = true },    -- Consumable
-    { class = 5 },                  -- Reagent
+    { class = 5 },                  -- Reagent (Ankh, Arcane Powder: still class 5 in Forever)
     { class = 9, split = true },    -- Recipe
-    { class = 3 },                  -- Gem
+    { class = 1, split = true },    -- Container (bags, ammo pouches, profession bags)
+    { class = 11 },                 -- Quiver
     { class = 6 },                  -- Projectile
     { class = 15 },                 -- Miscellaneous
 }

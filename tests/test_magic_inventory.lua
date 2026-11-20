@@ -407,6 +407,8 @@ do
   local keys = {}
   for _, cat in ipairs(MI.Categories()) do keys[cat.key] = cat end
   Check(keys["forever:crate"] and keys["forever:crate"].label == "Waylaid Crates" and keys["forever:crate"].group == "WoW: Forever", "the picker offers Waylaid Crates")
+  Check(keys["1"] and keys["11"] and keys["5"] and not keys["3"], "bags and quivers are offered, Reagent stays, Gem is gone")
+  Check(MI.CategoryName("3") == "Gem" or MI.CategoryName("3") == nil, "a saved Gem category still resolves")
   Check(keys["forever:writ"] and keys["forever:writ"].label == "Craftsman's Writs", "and Craftsman's Writs")
   Check(MI.CategoryName("forever:crate") == "Waylaid Crates", "named without the client's help")
   local function In(key, id) return MI.Match(Rule({ cats = { key } }), (MI.ItemFacts(id))) == "matched" end
