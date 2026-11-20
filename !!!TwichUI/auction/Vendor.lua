@@ -30,7 +30,7 @@ local batch
 local settleTimer, expiryTimer
 local generation, serial = 0, 0
 local watching, hooked = {}, {}
-local stats = { attributed = 0, refused = 0 }
+local stats = { attributed = 0, refused = 0, calls = 0, visits = 0, batches = 0 }
 -- Why a request was not attributed: fixed codes only (no item, price or name), counted for this session and shown in the diagnostics
 -- report, so a purchase or sale that stays Unclassified in the real client can be traced to the step that refused it.
 local reasons = {}
@@ -65,9 +65,10 @@ local function Record()
     return key, key and L.Record(key)
 end
 local function NPC() return UnitGUID and Plain(UnitGUID("npc")) or nil end
+-- The visit is the interaction (MERCHANT_SHOW to MERCHANT_CLOSED), not the frame being visible: EllesmereUI starts selling at
+-- MERCHANT_SHOW, before the merchant frame is shown, and a visible-frame test closed the observer silently for the whole visit.
 local function Context()
-    return active and visit and R.Ledger.Active() and R.Ledger.CharKey() == visit.key
-        and NPC() == visit.npc and (not MerchantFrame or not MerchantFrame.IsShown or MerchantFrame:IsShown())
+    return active and visit and R.Ledger.Active() and R.Ledger.CharKey() == visit.key and NPC() == visit.npc
 end
 local function Cancel(timer) if timer and timer.Cancel then timer:Cancel() end end
 local function Clear()
@@ -378,6 +379,7 @@ local function AddSale(item, junk)
         local snap = visit.snapshot
         if not snap then Why("no-bag-snapshot"); Invalidate(); return end
         if not snap.buyback then Why("buyback-unreadable"); Invalidate(); return end
+        stats.batches = stats.batches + 1
         batch = { before = snap, anchor = snap.anchor, bb = snap.buyback, receipts = {}, requested = {}, ei = 0, ri = 0, started = now }
     end
     batch.last = now
@@ -405,7 +407,9 @@ local function Sell(bag, slot, unit, bank, reagent)
     bag, slot = Whole(bag, 0, 8), Whole(slot, 1, LIMIT)
     local before = visit.snapshot
     local item = before and bag and slot and before.slots[bag] and before.slots[bag][slot]
-    if unit ~= nil or bank ~= nil or reagent == true then Invalidate("sell-not-a-plain-use"); return end
+    -- The merchant frame calls UseContainerItem(bag, slot, nil, <active bank type>, false): the bank arguments say nothing at a merchant.
+    -- A use aimed at a unit, or with the bank open, is not a sale.
+    if unit ~= nil or (BankFrame and BankFrame.IsShown and BankFrame:IsShown()) then Invalidate("sell-not-a-plain-use"); return end
     if not item then Invalidate("sell-slot-not-in-snapshot"); return end
     if item.locked then Invalidate("sell-item-locked"); return end
     if (InRepairMode and InRepairMode()) or (SpellIsTargeting and SpellIsTargeting()) then Invalidate("sell-cursor-mode"); return end
@@ -420,8 +424,9 @@ local function Hook(owner, name, fn)
     local key = (owner and "container." or "global.") .. name
     if hooked[key] or not hooksecurefunc or type((owner or _G)[name]) ~= "function" then return end
     local callback = function(...)
-        if not visit then return end
-        if not Context() then Close(); return end
+        stats.calls = stats.calls + 1   -- a native call reached the observer (whatever came of it)
+        if not visit then Why("no-merchant-visit-open"); return end
+        if not Context() then Why("merchant-context-lost"); Close(); return end
         return Scoped(fn, ...)
     end
     if owner then hooksecurefunc(owner, name, callback) else hooksecurefunc(name, callback) end
@@ -461,6 +466,7 @@ local function Open()
     if not active then return end
     local key = R.Ledger.CharKey()
     if not key then return end
+    stats.visits = stats.visits + 1
     visit = { key = key, npc = NPC(), snapshot = Read() }
     InstallHooks()
     R.Ledger.Subscribe(Changed)
@@ -475,6 +481,7 @@ function V.Refresh()
     Close() -- a refresh also marks a profile/consent boundary, even if recording remains enabled
     local on = R.Ledger and R.Ledger.Active() == true
     active = on
+    if on then InstallHooks() end   -- permanent post-hooks: a call made before this visit's setup is counted, never lost silently
     Want("MERCHANT_SHOW", OpenObserved, on)
     Want("MERCHANT_CLOSED", Close, on)
     Want("PLAYER_ENTERING_WORLD", World, on)
@@ -485,7 +492,7 @@ function V.Snapshot()
     local n = 0; for _ in pairs(watching) do n = n + 1 end
     return { active = active, open = visit ~= nil, candidates = (candidate and 1 or 0) + (batch and 1 or 0), events = n,
         slots = visit and visit.snapshot and visit.snapshot.size or 0,
-        attributed = stats.attributed, refused = stats.refused, why = reasons }
+        attributed = stats.attributed, refused = stats.refused, why = reasons, calls = stats.calls, visits = stats.visits, batches = stats.batches }
 end
 if R.Perf and R.Perf.Gauge then
     for _, field in ipairs({ "candidates", "events", "slots" }) do

@@ -64,7 +64,7 @@ D.Register("goldLedger", { title = "Gold Ledger evidence", order = 14, snapshot 
     lines[#lines + 1] = ("recording: %s; held: %s; journal entries: %d; pending evidence: %d"):format(D.Flag(s.active), D.Flag(s.held), s.entries, s.pending)
     for _, spec in ipairs({ { "auction", R.AuctionLedger, { "pending", "blocked", "attributed", "noMoney", "mismatch", "ambiguous", "expired", "interrupted", "observerError" } },
         { "mail", R.MailGold, { "waiting", "deferred", "ambiguous", "settlement", "unavailable" } },
-        { "vendor", R.VendorGold, { "candidates", "events", "attributed", "refused" } },
+        { "vendor", R.VendorGold, { "candidates", "events", "visits", "calls", "batches", "attributed", "refused" } },
         { "quest", R.QuestGold, { "events", "reported", "ignored" } } }) do
         local values = spec[2] and spec[2].Snapshot and spec[2].Snapshot()
         if values then

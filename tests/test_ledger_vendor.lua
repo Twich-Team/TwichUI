@@ -212,6 +212,7 @@ for _, mode in ipairs({ "failed", "moved", "consumed", "receipt", "wrongPrice", 
     local c = Client()
     if mode == "unknown" then c.BAGS[0][2].itemID = nil end
     if mode == "repairMode" then c.REPAIR_MODE = true end
+    if mode == "bank" then c.BankFrame = { IsShown = function() return true end } end   -- a bank open at the same time is not a sale
     c.Open(); c.C_Container.UseContainerItem(0, 2, nil, mode == "bank" and 1 or nil)
     if mode == "failed" then c.FireEvent("UI_ERROR_MESSAGE", 1, "failed") end
     if mode == "bulk" then c.C_Container.UseContainerItem(0, 3) end -- external seller: unknown/overlapping item
@@ -340,6 +341,27 @@ do
     Same(c.Last().k, nil)
 end
 
+
+-- What the real client does (from the diagnostic of a real session): the merchant frame's right-click passes bank arguments even though no
+-- bank is open, and EllesmereUI starts selling at MERCHANT_SHOW, before the merchant frame is shown. Neither is a reason to refuse.
+do
+    for _, args in ipairs({ { 0, 2, nil, nil, false }, { 0, 2, nil, 0, false }, { 0, 2, nil, false, false } }) do
+        local c = Client(); c.Open(); c.C_Container.UseContainerItem(unpack(args, 1, 5))
+        c.Sale(18); c.Class("vendorSell", 18, 11, 2)
+    end
+    -- the frame is not shown yet when the first sale arrives (an automatic seller on MERCHANT_SHOW)
+    local c = Client(); c.OPEN = false; c.FireEvent("MERCHANT_SHOW")
+    c.C_MerchantFrame.SellAllJunkItems()
+    c.BAGS[0][2] = nil; c.Receipt(11, 2, 18); c.Money(18); c.Bag(); c.Advance(2)
+    c.Class("vendorSell", 18, 11, 2)
+    Same(c.V.Snapshot().visits, 1); Check(c.V.Snapshot().calls >= 1, "native calls are counted")
+    -- a call before any visit, and after the interaction ended, is counted and never silent
+    c = Client(); c.C_Container.UseContainerItem(0, 2)
+    Same((c.V.Snapshot().why or {})["no-merchant-visit-open"], 1)
+    c = Client(); c.Open(); c.NPC = "Vendor-2"; c.C_Container.UseContainerItem(0, 2)
+    Same((c.V.Snapshot().why or {})["merchant-context-lost"], 1)
+end
+
 -- Repair-all: actual personal spending AND the quoted cost cleared. No repair money is invented.
 do
     local c = Client(); c.Open(); c.RepairAllItems(); Same(#c.Entries(), 0)
@@ -442,7 +464,7 @@ do
     c = Client(); c.Open(); c.BAGS[0][2].isLocked = true; c.Bag(); c.Advance(0.2); c.C_Container.UseContainerItem(0, 2); Same(Why(c, "sell-item-locked"), 1)
     c = Client(); c.Open(); c.LISTINGS[1].price = 99; c.BuyMerchantItem(1, 5); Same(Why(c, "buy-offer-changed-or-extended-cost"), 1, "a changed offer")
     c = Client(); c.Open(); c.BuyMerchantItem(1, 3); Same(Why(c, "buy-quantity-not-a-whole-stack"), 1)
-    c = Client(); c.Open(); c.C_Container.UseContainerItem(0, 2, nil, 2); Same(Why(c, "sell-not-a-plain-use"), 1)
+    c = Client(); c.Open(); c.C_Container.UseContainerItem(0, 2, "target"); Same(Why(c, "sell-not-a-plain-use"), 1)
     -- an item whose lock state the client does not give is not treated as locked
     c = Client(); c.BAGS[0][2].isLocked = nil; c.Open(); c.C_Container.UseContainerItem(0, 2)
     Same(Why(c, "sell-item-locked"), 0)

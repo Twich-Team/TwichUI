@@ -1473,3 +1473,7 @@ m("ledger.vendor.unrequested-receipt", VENDOR, 'if q > (b.requested[id] or 0) th
   "a receipt for an item nobody asked to sell is attributed", [VTEST])
 m("ledger.vendor.receipt-alignment", VENDOR, 'for shift = 0, (n == BUYBACK) and (n - 1) or 0 do', 'for shift = 0, (n == BUYBACK) and n or 0 do',
   "a shift of the whole buyback list is allowed to match, so a normal sale in a full list is called indistinguishable", [VTEST])
+m("ledger.vendor.frame-shown", VENDOR, 'R.Ledger.CharKey() == visit.key and NPC() == visit.npc\nend', 'R.Ledger.CharKey() == visit.key and NPC() == visit.npc and (not MerchantFrame or MerchantFrame:IsShown())\nend',
+  'an automatic seller that starts before the merchant frame is shown silently closes the observer for the visit', [VTEST])
+m("ledger.vendor.bank-argument", VENDOR, 'if unit ~= nil or (BankFrame and BankFrame.IsShown and BankFrame:IsShown()) then', 'if unit ~= nil or bank ~= nil then',
+  "the merchant frame's own right-click (which passes a bank argument) is refused as not a plain sale", [VTEST])
