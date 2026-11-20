@@ -177,7 +177,7 @@ function Home.Build(parent, width, env)
         hero.looks[#hero.looks + 1] = row
     end
     for _, page in ipairs(K.NavOrder()) do
-        if page.nav == "Appearance" or page.key == "skins" or page.key == "targetArt" then Look(page) end
+        if page.nav == "Appearance" or page.key == "skins" or page.key == "targetArt" or page.key == "classPortrait" then Look(page) end
     end
 
     hero.empty = Wg.Text(frame, "small")

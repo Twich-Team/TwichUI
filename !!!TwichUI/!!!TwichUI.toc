@@ -411,6 +411,9 @@ glows\Controller.lua
 targetart\Config.lua
 targetart\Ellesmere.lua
 targetart\Display.lua
+classportrait\Config.lua
+classportrait\Art.lua
+classportrait\Display.lua
 
 # Sell from Bags: Auction House posting tab (uses the Chronicle palette)
 auction\Price.lua

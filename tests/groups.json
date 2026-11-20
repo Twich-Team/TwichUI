@@ -1,4 +1,10 @@
 {
+  "class-portrait": {
+    "tests": ["test_class_portrait*.lua", "test_class_portrait*.py", "test_twichui_share.lua"],
+    "syntax": ["!!!TwichUI/classportrait/**/*.lua", "!!!TwichUI/setup/TwichConfig.lua", "TwichUI_Settings/pages/ClassPortrait.lua"],
+    "dependencies": ["settings"],
+    "simulators": [{"script": "smoke"}, {"script": "settings", "args": ["classPortrait"]}]
+  },
   "ledger": {
     "tests": ["test_ledger*.lua", "test_workshop_ledger.lua", "test_mail_gold.lua", "test_restock.lua", "test_mage_sell.lua", "test_mage_sell_mark.lua", "test_workshop_junk.lua", "test_perf_engine.lua", "test_diagnostics.lua", "test_auction_window.lua", "test_workshop_auction_actions.lua", "test_workshop_auction_reads.lua", "test_workshop_auction_owned_states.lua", "test_workshop_auction_sell*.lua", "test_workshop_auction_lifecycle.lua"],
     "syntax": ["!!!TwichUI/auction/*.lua", "!!!TwichUI/diag/Lifecycle.lua", "!!!TwichUI/modules/Restock.lua", "!!!TwichUI/modules/MageSell.lua", "!!!TwichUI/modules/EllesmereJunk.lua", "TwichUI_Workshop/Ledger*.lua", "TwichUI_Workshop/ViewLedger.lua", "TwichUI_Workshop/auction/Actions.lua", "TwichUI_Diagnostics/Gauges.lua"],
