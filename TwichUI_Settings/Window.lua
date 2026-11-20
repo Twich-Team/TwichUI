@@ -24,6 +24,7 @@ local Motion = Wg.Motion
 local M = R.SettingsMaterial   -- the leather and bronze (Material.lua); this window only
 local Design = R.SettingsDesign
 local Companion = R.SettingsCompanion
+local QA = R.SettingsQuick   -- which features this character opens most (QuickAccess.lua)
 local T = Motion.TIME   -- every duration used here is in Widgets.lua's table
 local Perf = R.Perf     -- TwichUI Diagnostics' scopes (they do nothing unless it is recording)
 local UI = {}
@@ -1085,6 +1086,9 @@ function UI.Navigate(key, rowId)
     if not page then return end
     Wg.CloseMenu()
     local changed = state.page ~= page.key
+    -- how the window came here (UI.Open says: "restore" is the window coming back to where it was left) and where from
+    local visitKind, fromRoot = state.visitKind, state.page and K.Root(state.page)
+    state.visitKind = nil
     if state.searching then
         state.leavingSearch = true   -- the scroll offset is the results', not the page's
         state.clearing = true
@@ -1133,6 +1137,15 @@ function UI.Navigate(key, rowId)
         if not ok then R.Fault("settings page " .. page.key, err) end
     end
     Layout(view)
+    -- Quick access learns from a visit the player made: not the window returning to its last page, not the same feature
+    -- again (a tab of it, a row on it), and only for a feature (Home and the configuration pages are not offered).
+    if QA and visitKind ~= "restore" then
+        local root = K.Root(page.key)
+        if root and (visitKind == "open" or fromRoot ~= root) and QA.Eligible(root, state.pinned or {}) and QA.Visit(root.key)
+            and state.RefreshQuick then
+            state.RefreshQuick()
+        end
+    end
     PaintNav()
     -- a page returned to is where it was left; a row asked for is scrolled to below
     if arriving and not row then ScrollTo(state.scrollOf[page.key] or 0) end
@@ -1205,8 +1218,10 @@ local function BuildNav()
         { label = "Everyday", keys = { "notifications", "reminders", "healerWatch", "qol" } },
         { label = "Adventure", keys = { "chronicle", "navigation" } },
         { label = "Tools", keys = { "workshop", "magicInventory", "auction" } },
+        { label = "Quick access", keys = {}, tip = "Features you visit often or recently." },
         { label = "More features", keys = {} },
     }
+    local quickGroup, moreGroup = groups[4], groups[5]
     for _, group in ipairs(groups) do
         group.frame = CreateFrame("Frame", nil, child)
         group.frame:SetHeight(NAV_GROUP)
@@ -1214,15 +1229,28 @@ local function BuildNav()
         rule:SetHeight(1); rule:SetPoint("TOPLEFT", 10, 0); rule:SetPoint("TOPRIGHT", -10, 0)
         local text = M.ReminderFont(Wg.Text(group.frame, "meta"), 12)
         text:SetPoint("TOPLEFT", 12, -10); text:SetText(group.label:upper())
+        if group.tip then
+            group.frame:EnableMouse(true)
+            I.Tip(group.frame, group.label, group.tip)
+        end
     end
     local pinned = { overview = true }
     for _, group in ipairs(groups) do for _, key in ipairs(group.keys) do pinned[key] = true end end
+    state.pinned = pinned
+    -- Quick access: looked at when the window opens and when a visit is counted, never otherwise. A change only
+    -- marks the list to be laid out again.
+    local quickSig, laidQuick = "", nil
+    state.RefreshQuick = function()
+        local keys = QA.Suggest(function(key) return byKey[key] ~= nil and QA.Eligible(K.pages[key], pinned) end)
+        quickGroup.keys = { unpack(keys) }
+        quickSig = table.concat(keys, ",")
+    end
     local lastRoot
     state.LayoutNav = function()
         local root = K.Root(state.page)
         local rootKey = root and root.key or ""
-        if lastRoot == rootKey then return end
-        lastRoot = rootKey
+        if lastRoot == rootKey and laidQuick == quickSig then return end
+        lastRoot, laidQuick = rootKey, quickSig
         for _, item in ipairs(state.navItems) do item:Hide() end
         local y = 0
         local function Place(key)
@@ -1233,7 +1261,10 @@ local function BuildNav()
             item:Show(); y = y + NAV_ROW
         end
         Place("overview")
-        groups[4].keys = root and not pinned[root.key] and { root.key } or {}
+        -- the page being shown, when it has no row of its own above (a shortcut already is its row)
+        local listed = {}
+        for _, key in ipairs(quickGroup.keys) do listed[key] = true end
+        moreGroup.keys = root and not pinned[root.key] and not listed[root.key] and { root.key } or {}
         for _, group in ipairs(groups) do
             local exists = false
             for _, key in ipairs(group.keys) do if byKey[key] then exists = true end end
@@ -1274,6 +1305,7 @@ local function BuildNav()
         local most = math.max(0, child:GetHeight() - self:GetHeight())
         self:SetVerticalScroll(math.max(0, math.min(most, self:GetVerticalScroll() - delta * NAV_ROW * 2)))
     end)
+    state.RefreshQuick()
     state.LayoutNav()
 end
 
@@ -1896,7 +1928,14 @@ function UI.Open(page, setting)
     if row then key = row.page
     elseif page ~= nil then key = K.pages[page] and page or "overview"   -- an unknown page: the start page
     else key = state.page or "overview" end                              -- none named: where it was left
-    if not win:IsShown() then R:PlayMenuSound() end
+    local wasShown = win:IsShown()
+    if not wasShown then
+        R:PlayMenuSound()
+        if state.RefreshQuick then state.RefreshQuick() end   -- the window opens: look at what has been used
+    end
+    -- Naming nothing brings the window back to where it was left, which is not a visit to count; asking for a page
+    -- (a command, a button elsewhere) is, even for the page that was left.
+    state.visitKind = (page == nil and not row) and "restore" or (not wasShown and "open" or nil)
     win:Show()
     win:Raise()
     UI.Navigate(key, row and row.id or nil)
