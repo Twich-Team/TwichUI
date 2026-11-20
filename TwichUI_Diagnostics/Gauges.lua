@@ -21,6 +21,7 @@ local Perf = R.Perf
 DX.OPS = {
     ["bugsack.broker.update"] = { module = "bugsack", label = "BugSack broker: current-session count", kind = "hook", file = "modules/BugSackBroker.lua", where = "OnUpdate (hook BugSack.UpdateDisplay)", every = "when BugSack updates its display" },
     ["gathering.evaluate"] = { module = "qol", label = "Gathering target and interaction settings", kind = "evaluate", file = "!!!TwichUI/qol/GatheringSparkles.lua", where = "G.Poll", every = "interaction/nameplate events and every 0.2 seconds while enabled" },
+    ["qol.groupFinderZones.row"] = { module = "qol", label = "Group Finder zones: a listing row drawn", kind = "hook", file = "!!!TwichUI/qol/GroupFinderZones.lua", where = "Z.Draw (hook LFGBrowseSearchEntry_Update)", every = "each Group Finder row the game draws or updates, only after the switch was first turned on" },
     ["gathering.refresh"] = { module = "qol", label = "Gathering sparkle lifecycle", kind = "work", file = "!!!TwichUI/qol/GatheringSparkles.lua", where = "G.Refresh", every = "settings, profiles, login and addon changes" },
     ["gathering.animate"] = { module = "qol", label = "Gathering sparkle animation", kind = "update", file = "!!!TwichUI/qol/GatheringSparklesDisplay.lua", where = "Animate", every = "per frame while the one gathering overlay is shown" },
     ["workshop.summaryLoad"] = { module="workshop",label="Summary partition addon load",kind="init",file="TwichUI_Workshop/Summary.lua",where="loadPart",every="once per requested partition" },

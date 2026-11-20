@@ -1384,7 +1384,7 @@ do
   -- 8b. Quality of life's cards
   local cards = {}
   for _, row in ipairs(K.pages.qol.rows) do if row.card then cards[#cards + 1] = row end end
-  assert(#cards == 11, "eleven cards on Quality of life: " .. #cards)
+  assert(#cards == 12, "twelve cards on Quality of life: " .. #cards)
   for _, card in ipairs(cards) do assert(Icons.Get(card.card.icon), card:GetName() .. " has an icon") end
   for _, card in ipairs(cards) do
     assert(card.primary and card.primary.kind == "checkbox" and card.primary.switch, card:GetName() .. " has its switch")
@@ -1392,7 +1392,7 @@ do
   end
   assert(K.rowsById.qolSummonsWait.ruleOf == cards[1] and K.rowsById.qolDuelsToDeath.ruleOf == cards[4], "rules belong to their cards")
   assert(cards[2].card.inline and K.rowsById.qolResurrectCombat.ruleOf == cards[2], "the combat-resurrection rule is inline")
-  assert(K.rowsById.qolHerbSparkles.primaryOf == cards[10] and K.rowsById.qolOreSparkles.primaryOf == cards[11],
+  assert(K.rowsById.qolHerbSparkles.primaryOf == cards[11] and K.rowsById.qolOreSparkles.primaryOf == cards[12],
     "each gathering category has its own heading switch, including ore-only configurations")
 
   local calls = {}

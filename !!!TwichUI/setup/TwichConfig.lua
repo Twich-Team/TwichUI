@@ -79,7 +79,7 @@ TC.LOCAL = {
     -- the rest
     ["modules.restedxpSkin"] = "other", ["modules.qolTwichUISettingsButton"] = "other",
     ["modules.qolHideErrors"] = "other", ["modules.qolHideErrorsKeep"] = "other", ["modules.qolHideErrorSpeech"] = "other",
-    ["modules.qolLootSparkles"] = "other",
+    ["modules.qolLootSparkles"] = "other", ["modules.qolGroupFinderZones"] = "other",
     ["modules.qolHerbSparkles"] = "other", ["modules.qolOreSparkles"] = "other",
     ["modules.reminders"] = "other", ["ui.reminders"] = "other",
     ["ui.auctionHouse"] = "acts",
