@@ -1733,4 +1733,163 @@ do
   for _, setting in ipairs(K.settings) do assert(before[setting.variable] == setting:GetValue(), "tasks and samples preserve " .. setting.variable) end
 end
 
+---------------------------------------------------------------------------
+-- Quick access: the shortcuts under the list's fixed groups, and which navigation teaches them
+---------------------------------------------------------------------------
+do
+  local QA = R.SettingsQuick
+  local now = 1900000000
+  QA.Now = function() return now end
+  local MIN = 60
+  local function Reset() c.TwichUIDB.quickAccess = nil; QA.shown = {} end
+  -- the list's rows: every frame the window made for a page of the left-hand list (they carry a hover fader)
+  local function Items(frame, out)
+    if frame.hoverFade and frame.page and frame.scripts.OnClick then out[#out + 1] = frame end
+    for _, ch in ipairs(frame.children or {}) do Items(ch, out) end
+    return out
+  end
+  local function Shown()   -- keys of the rows now in the list, top to bottom
+    local rows = {}
+    for _, item in ipairs(Items(win, {})) do if item.shown then rows[#rows + 1] = item end end
+    table.sort(rows, function(a, b) return a.navTop < b.navTop end)
+    local keys = {}
+    for _, item in ipairs(rows) do keys[#keys + 1] = item.page.key end
+    return keys, rows
+  end
+  local function Click(key)
+    for _, item in ipairs(Items(win, {})) do if item.page.key == key then item.scripts.OnClick(item); return end end
+    error("no row for " .. key)
+  end
+  local function Has(text) for _, t in ipairs(ShownText(win, {})) do if t == text then return true end end return false end
+  local function Index(keys, key) for i, k in ipairs(keys) do if k == key then return i end end end
+  local function Score(key)
+    local f = QA.Records()
+    return f and f[key] and f[key].s or 0
+  end
+
+  UI.Close(); Reset()
+  R:OpenSettings("overview")
+  local keys = Shown()
+  assert(not Has("QUICK ACCESS"), "no history: no section")
+  assert(c.TwichUIDB.quickAccess == nil, "opening and looking writes nothing")
+  assert(Has("EVERYDAY") and Has("ADVENTURE") and Has("TOOLS"), "the fixed groups are as they were")
+  local fixed = {}   -- Home and the three groups, in order (a page this build does not have is not in the list)
+  for _, key in ipairs({ "overview", "notifications", "reminders", "healerWatch", "qol", "chronicle", "navigation", "workshop", "magicInventory", "auction" }) do
+    if K.pages[key] then fixed[#fixed + 1] = key end
+  end
+  assert(table.concat(keys, ",") == table.concat(fixed, ","), "the fixed list and its order are unchanged: " .. table.concat(keys, ","))
+
+  -- a feature opened once is not yet a habit; opened again later it is offered
+  Click("pins"); assert(Score("pins") == 1, "a click on a row counts")
+  Click("overview"); now = now + 11 * MIN
+  assert(not Has("QUICK ACCESS"), "one visit offers nothing")
+  Click("pins")
+  assert(Score("pins") > 1.9, "the second visit counts")
+  keys = Shown()
+  assert(Has("QUICK ACCESS"), "the section appears without a reload")
+  local at = Index(keys, "pins")
+  assert(at and at > Index(keys, "auction") and #keys == #fixed + 1, "its shortcut sits below Tools: " .. table.concat(keys, ","))
+  local seen = 0 for _, k in ipairs(keys) do if k == "pins" then seen = seen + 1 end end
+  assert(seen == 1, "shown once, even though it is the page on screen")
+
+  -- the heading explains itself the way the other controls do
+  local heading
+  local function Find(frame)
+    if frame.twichuiTip and frame.twichuiTip.title == "Quick access" then heading = frame end
+    for _, ch in ipairs(frame.children or {}) do Find(ch) end
+  end
+  Find(win)
+  assert(heading and heading.twichuiTip.body == "Features you visit often or recently.", "a short tooltip on the heading")
+
+  -- the same feature again is not a visit: a tab of it, a row on it, the row itself, a rerender
+  now = now + 30 * MIN
+  local score = Score("pins")
+  Click("pins"); UI.Navigate("pinsLook"); UI.Navigate("pins"); UI.Navigate("pins", "pinsLookBgColor"); UI.Refresh()
+  assert(Score("pins") == score, "staying in a feature adds nothing")
+  -- leaving for a tab-less page and coming back counts once
+  Click("overview"); UI.Navigate("pinsLook")
+  assert(Score("pins") > score, "arriving at a feature's tab from elsewhere is a visit to the feature, not to the tab")
+  assert(QA.Records().pinsLook == nil, "tabs are never recorded under their own name")
+  score = Score("pins")
+  Click("overview"); Click("pins")
+  assert(Score("pins") == score, "rapid navigation inside the cooldown adds nothing")
+
+  -- the shortcut works, and a Home card, search and the All features button are routes that count too
+  Click("overview")
+  Click("pins")
+  assert(UI.Selected() == "pins", "choosing a shortcut opens its page")
+  now = now + 11 * MIN
+  UI.Navigate("overview"); UI.Navigate("food")   -- a Home card, a link: Navigate is the one route
+  assert(Score("food") == 1, "navigation from anywhere counts: food")
+  UI.SetQuery("gear"); UI.Go({ entry = { page = "gear" } })
+  assert(Score("gear") == 1, "a search result counts")
+
+  -- Home and the configuration pages are not features
+  for _, key in ipairs({ "overview", "profiles", "sharing", "troubleshooting" }) do UI.Navigate(key); now = now + 11 * MIN; UI.Navigate("overview"); now = now + 11 * MIN end
+  local f = QA.Records()
+  assert(f.overview == nil and f.profiles == nil and f.sharing == nil and f.troubleshooting == nil, "utility pages are never counted")
+  -- nor the fixed features
+  UI.Navigate("chronicle"); UI.Navigate("auction")
+  assert(f.chronicle == nil and f.auction == nil, "features already in the list are not tracked")
+
+  -- the window coming back is not a visit; a command naming a page is
+  Reset(); now = now + 86400
+  UI.Close()
+  R:OpenSettings("hazard")
+  assert(Score("hazard") == 1, "a named page counts when the window opens at it")
+  UI.Close(); now = now + 30 * MIN
+  R:OpenSettings()
+  assert(UI.Selected() == "hazard" and Score("hazard") == 1, "restoring the last page is not a visit")
+  R:OpenSettings("hazard")
+  assert(Score("hazard") == 1, "naming the page already shown, with the window open, is not a visit")
+  UI.Close(); now = now + 30 * MIN
+  R:OpenSettings("hazard")
+  assert(Score("hazard") > 1.9, "naming it when the window opens counts again")
+
+  -- the list is looked at when the window opens, not while it is used: a page that crosses the line mid-session
+  -- is picked up (and the shown ones do not move)
+  Reset()
+  UI.Close(); R:OpenSettings("overview")
+  for _, key in ipairs({ "pins", "food", "hazard" }) do
+    for _ = 1, 3 do Click(key); now = now + 11 * MIN; Click("overview"); now = now + 11 * MIN end
+  end
+  keys = Shown()
+  local order = { Index(keys, "pins"), Index(keys, "food"), Index(keys, "hazard") }
+  assert(order[1] and order[1] < order[2] and order[2] < order[3], "the order they became habits: " .. table.concat(keys, ","))
+  for _ = 1, 5 do Click("hazard"); now = now + 11 * MIN; Click("overview"); now = now + 11 * MIN end
+  keys = Shown()
+  assert(Index(keys, "pins") < Index(keys, "food") and Index(keys, "food") < Index(keys, "hazard"), "using a shortcut does not move it")
+  for _, key in ipairs({ "gear", "mage", "cozyBag" }) do
+    for _ = 1, 2 do Click(key); now = now + 11 * MIN; Click("overview"); now = now + 11 * MIN end
+  end
+  keys = Shown()
+  local quick = 0
+  for _, k in ipairs(keys) do if k == "pins" or k == "food" or k == "hazard" or k == "gear" or k == "mage" or k == "cozyBag" then quick = quick + 1 end end
+  assert(quick == 3, "never more than three shortcuts: " .. table.concat(keys, ","))
+
+  -- a page that is not a shortcut still shows in the list while it is on screen, once
+  Click("restedxp")
+  keys = Shown()
+  assert(Index(keys, "restedxp") and Index(keys, "restedxp") == #keys, "the page being shown is the last row")
+  local n = 0 for _, k in ipairs(keys) do if k == "restedxp" then n = n + 1 end end
+  assert(n == 1)
+
+  -- the page is as the rows above say; everything stays inside the scrolling list, and All features is outside it
+  local all
+  local function FindAll(frame)
+    if frame.text == "All features..." then all = frame end
+    for _, ch in ipairs(frame.children or {}) do FindAll(ch) end
+  end
+  FindAll(win)
+  assert(all, "the All features button is still there")
+  local _, rows = Shown()
+  local inList = rows[1].parent
+  assert(inList.parent and inList.parent.GetScrollChild and inList.parent:GetScrollChild() == inList, "rows live in the scrolling list")
+  assert(all.parent ~= inList and all.parent ~= inList.parent, "All features is anchored outside the scrolling list")
+  for i = 2, #rows do assert(rows[i].navTop > rows[i - 1].navTop, "rows do not overlap") end
+  assert(inList.h >= rows[#rows].navTop + 38, "the list is as tall as its rows, so it scrolls when the window is small")
+
+  UI.Close(); QA.Now = function() return time() end; Reset()
+end
+
 print("PASSED")

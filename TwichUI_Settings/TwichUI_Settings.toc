@@ -76,7 +76,7 @@ pages\Profiles.lua
 pages\Troubleshooting.lua
 
 # Search over the pages' descriptions, the controls the window draws with, sample previews and feature cards,
-# Home's ways in, and the window (last: it tells TwichUI the settings are ready)
+# Home's ways in, Quick access (which features the left-hand list offers) and the window (last: it tells TwichUI the settings are ready)
 Search.lua
 Widgets.lua
 Material.lua
@@ -88,4 +88,5 @@ previews\QoL.lua
 previews\ReturnTheFavor.lua
 Cards.lua
 Home.lua
+QuickAccess.lua
 Window.lua

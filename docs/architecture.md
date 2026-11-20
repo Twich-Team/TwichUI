@@ -7,7 +7,7 @@ manifest before adding a file. This map is an entry point, not a dependency anal
 | Production package | Ownership | Loading |
 |---|---|---|
 | `!!!TwichUI` | Namespace/events, persistence, profiles, feature engines and companion launchers | Always loaded |
-| `TwichUI_Settings` | `Kit.lua`, `pages/`, search, widgets, window; calls feature-owned setters | Load on demand; core dependency |
+| `TwichUI_Settings` | `Kit.lua`, `pages/`, search, widgets, window, `QuickAccess.lua` (the list's learned shortcuts); calls feature-owned setters | Load on demand; core dependency |
 | `TwichUI_NavData` | Generated walking maps and crossing/transit data | Load on demand; core dependency |
 | `TwichUI_Diagnostics` | Opt-in captures, gauges and reports | Load on demand; core dependency |
 | `TwichUI_Layouts` | Canonical packages, composition, adapters and transactional install | Load on demand; core dependency |
