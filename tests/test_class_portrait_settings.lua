@@ -5,6 +5,7 @@ local R,K = c.TwichUI,S.K
 local C,D = R.ClassPortrait,R.ClassPortraitDisplay
 local page = assert(K.pages.classPortrait)
 assert(page.def.overview and page.def.icon == 'classPortrait')
+assert(S.variables.TWICHUI_classPortraitabove and S.variables.TWICHUI_classPortraitstrata, 'layer controls registered')
 local reset,preview
 for _,row in ipairs(page.rows) do
     if row:GetName() == 'Reset to Automatic' then reset = row end

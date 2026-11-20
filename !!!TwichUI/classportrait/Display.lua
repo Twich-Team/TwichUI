@@ -65,6 +65,7 @@ local function Observe(f)
     f:HookScript("OnHide", function() if Wanted() then D.Refresh() end end)
     if hooksecurefunc then
         hooksecurefunc(f, "SetFrameStrata", function() if Wanted() then D.Refresh() end end)
+        hooksecurefunc(f, "SetFrameLevel", function() if Wanted() then D.Refresh() end end)
     end
 end
 function D.Refresh()
@@ -101,9 +102,13 @@ function D.Refresh()
             Observe(f); Observe(p)
             holder:ClearAllPoints()
             holder:SetAllPoints(p)
-            holder:SetFrameStrata(f:GetFrameStrata())
-            -- Behind the unit frame's bars, text, portrait background and model.
-            holder:SetFrameLevel(math.max(0, f:GetFrameLevel() - 1))
+            local strata = C.Get("strata")
+            holder:SetFrameStrata(strata == "inherit" and f:GetFrameStrata() or strata)
+            -- Only our visual holder changes. Above clears the portrait and the
+            -- verified text host (+15); a strata override takes priority over levels.
+            local level = C.Get("above") and (math.max(f:GetFrameLevel(), p:GetFrameLevel()) + 20)
+                or math.max(0, f:GetFrameLevel() - 1)
+            holder:SetFrameLevel(level)
             local w, h = p:GetWidth(), p:GetHeight()
             local size, x, y
             if Plain(w) and Plain(h) and type(w) == "number" and type(h) == "number" then

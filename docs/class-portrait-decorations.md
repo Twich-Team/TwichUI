@@ -33,7 +33,7 @@ Detection runs at login, relevant addon loads, entering the world, display/UI
 scale changes, combat end, profile application and settings changes. Four bounded
 startup/load retries (0, 0.5, 2, 5 seconds) cover creation after event delivery.
 Only the verified player frame and backdrop get size/show/hide script hooks and
-secure post-hooks on their strata setters, once per reference. There is no
+secure post-hooks on their strata and frame-level setters, once per reference. There is no
 OnUpdate, hierarchy enumeration, global layout hook or recurring timer. Hooks
 remain inert while off. One reusable holder/texture is reparented only outside
 combat; missing/incompatible references hide the texture. Recreated references
@@ -41,8 +41,15 @@ are checked on each relevant event/hook; recreation that emits none of these
 signals after the startup window waits for the next event or opening Settings.
 Unknown structures fail closed. No EllesmereUI saved data is read or changed.
 
-The holder is mouse-disabled, parented to the portrait backdrop, and placed one
-frame level behind the player frame within its strata. Portrait backgrounds,
+The holder is mouse-disabled and parented to the portrait backdrop. By default it is placed one
+frame level behind the player frame within its strata. The new **Draw above unit frame**
+setting raises it 20 levels above the higher of the player frame and portrait,
+clearing the verified text host. **Frame strata** defaults to Follow unit frame;
+Low, Medium, High and Dialog override it. Strata takes priority over frame levels.
+Both choices persist per profile, participate in configuration sharing, and defer
+until combat ends. Reset to Automatic keeps these layering preferences; Reset
+this page restores them. Above mode may cover bars/text but never captures clicks.
+With the defaults, portrait backgrounds,
 models, health/resource bars and text therefore paint over it. Hidden portraits
 stay hidden, including during preview. Foreground overlap and another addon's
 native ornament may obscure this decoration; TwichUI does not hide native art.
@@ -93,7 +100,7 @@ the bars. Other portrait positions/shapes may be less suitable aesthetically.
 ## Settings and persistence
 
 The existing profile-owned `TwichUIDB.ui.classPortrait` stores `enabled` (default
-false), `automatic` (true), `size` (100; 50–150%), `x` and `y` (0; −100–100).
+false), `automatic` (true), `size` (100; 50–150%), `x` and `y` (0; −100–100), `above` (false), and `strata` (inherit).
 Getters validate values without erasing invalid input; setters reject invalid
 values. Defaults are lazy; no schema migration or separate database is needed.
 Reset to Automatic restores automatic fit, size and offsets, preserving enabled.
@@ -148,3 +155,8 @@ Before accepting the draft PR in WoW Forever:
 8. Inspect against light/dark world backgrounds, and confirm target/focus/pet/
    party/raid frames never receive this artwork. Record client/EllesmereUI
    versions, portrait style and screenshots for any alignment discrepancy.
+
+Layering acceptance: toggle Draw above unit frame, compare Follow unit frame and
+High strata, check text/bar overlap and click-through, change layers in combat,
+and confirm profile switches/reloads retain them. Real-client layering remains
+an acceptance check.

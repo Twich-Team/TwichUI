@@ -1862,7 +1862,7 @@ local function Define()
 
     g = Group("classPortrait", "Class Portrait Decorations", { page = "classPortrait",
         note = "Class artwork around the EllesmereUI player portrait, with automatic fit and relative size and position adjustments. Needs a compatible EllesmereUI player portrait on the receiving side." })
-    Table(g, { "ui", "classPortrait" }, R.ClassPortrait, { "enabled", "automatic", "size", "x", "y" })
+    Table(g, { "ui", "classPortrait" }, R.ClassPortrait, { "enabled", "automatic", "size", "x", "y", "above", "strata" }, R.ClassPortrait and R.ClassPortrait.ENUM)
 
     g = Group("hazard", "Hazard alerts", { page = "hazard",
         note = "Whether the alerts are on, which categories play and the sound each uses. The game plays the sounds when an aura you list is put on you. No combat log is read." })

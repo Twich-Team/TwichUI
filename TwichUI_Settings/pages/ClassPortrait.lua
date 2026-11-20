@@ -10,7 +10,7 @@ local STATUS = {
 K.Page({
     key = "classPortrait", name = "Class Portrait Decorations", icon = "classPortrait", order = 98, group = "addons",
     description = "Add a class-themed decorative frame around your EllesmereUI player portrait.",
-    keywords = "class portrait decorations ellesmereui player artwork automatic fit size offset preview",
+    keywords = "class portrait decorations ellesmereui player artwork automatic fit size offset preview strata layer above front z level",
     overview = { label = "Class Portrait Decorations", tip = "Class artwork around your player portrait.",
         status = function() return K.OnOff(C.Get("enabled")) end },
     when = function() return C ~= nil and D ~= nil end,
@@ -18,11 +18,12 @@ K.Page({
         D.Refresh()
         K.Header("Class Portrait Decorations", "Add a class-themed decorative frame around your EllesmereUI player portrait.")
         local function Setting(key, label)
-            local boolean = type(C.DEFAULTS[key]) == "boolean"
-            return K.Proxy("classPortrait" .. key, boolean and K.BOOL or K.NUMBER, label, C.DEFAULTS[key],
+            local kind = type(C.DEFAULTS[key])
+            local boolean = kind == "boolean"
+            return K.Proxy("classPortrait" .. key, boolean and K.BOOL or (kind == "string" and K.STRING or K.NUMBER), label, C.DEFAULTS[key],
                 function() return C.Get(key) end,
                 function(v)
-                    if boolean then C.Set(key, v) else C.Set(key, math.floor(v + 0.5)) end
+                    if boolean or kind == "string" then C.Set(key, v) else C.Set(key, math.floor(v + 0.5)) end
                 end)
         end
         K.Checkbox(Setting("enabled", "Enable Class Decoration"),
@@ -36,8 +37,12 @@ K.Page({
             { "y", "Vertical Offset", "Nudge up or down from the portrait. Your adjustment follows the player frame." } }) do
             K.Slider(Setting(row[1], row[2]), C.LIMITS[row[1]][1], C.LIMITS[row[1]][2], row[3])
         end
+        K.Checkbox(Setting("above", "Draw above unit frame"),
+            "Draw the decoration over the player frame and portrait instead of behind them. Artwork may cover text or bars, but never takes mouse clicks. Changes in combat wait until combat ends.")
+        K.Dropdown(Setting("strata", "Frame strata"), function() return C.CHOICES.strata end,
+            "Choose the decoration's overall screen layer. Follow unit frame keeps EllesmereUI's layer. A higher strata can place the artwork above other windows; strata takes priority over the above/behind preference. Changes in combat wait until combat ends.")
         K.Button("Reset to Automatic", "Reset", function() C.Reset(); K.RefreshOverview() end,
-            "Restore Automatic Fit, 100% size and zero offsets. Keeps your enabled preference.")
+            "Restore Automatic Fit, 100% size and zero offsets. Keeps your enabled and layering preferences.")
         K.Button("Show Decoration Preview", "Preview", function()
             if D.PreviewActive() then D.PreviewStop() else D.PreviewStart() end
             K.RefreshOverview()

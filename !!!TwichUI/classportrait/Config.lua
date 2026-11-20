@@ -2,8 +2,13 @@
 local R = TwichUI
 local C = {}
 R.ClassPortrait = C
-C.DEFAULTS = { enabled = false, automatic = true, size = 100, x = 0, y = 0 }
+C.DEFAULTS = { enabled = false, automatic = true, size = 100, x = 0, y = 0, above = false, strata = "inherit" }
 C.LIMITS = { size = { 50, 150 }, x = { -100, 100 }, y = { -100, 100 } }
+C.CHOICES = { strata = {
+    { "inherit", "Follow unit frame" }, { "LOW", "Low" }, { "MEDIUM", "Medium" },
+    { "HIGH", "High" }, { "DIALOG", "Dialog" },
+} }
+C.ENUM = { strata = { inherit = true, LOW = true, MEDIUM = true, HIGH = true, DIALOG = true } }
 local listeners = {}
 function C.Subscribe(fn) listeners[#listeners + 1] = fn end
 function C.Notify()
@@ -25,6 +30,7 @@ function C.Valid(key, v)
     local d = C.DEFAULTS[key]
     if d == nil then return false end
     if type(d) == "boolean" then return type(v) == "boolean" end
+    if type(d) == "string" then return type(v) == "string" and C.ENUM[key][v] == true end
     local l = C.LIMITS[key]
     return type(v) == "number" and v == v and v >= l[1] and v <= l[2] and v % 1 == 0
 end
