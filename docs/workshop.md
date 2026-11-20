@@ -235,6 +235,8 @@ Target client: Forever 1.60.1, UI source `forever` branch. Forever has no classi
 
 ## Prices: the exact basis (milestone 2)
 
+*Proposal (not built): [pricing realism](workshop/pricing-realism-proposal.md) analyses every Workshop price consumer and proposes depth-aware costs, competition-based sell prices, fees and confidence.*
+
 - **Latest-listing estimate.** A price is the **cheapest buyout among the listings the newest scan of that auction house saw**, per single item: stack buyout / stack count, rounded **up** to whole copper, never
   below 1. It is a **listing** price, not a sale price, not a "market value", not a sale rate; no external data. Since 2026-11-11 the scans also build a **history** of these listing prices (see below); it is still not a sales history.
 - Bid-only auctions (buyout 0) are ignored. A price, count or item id that is not a whole number in range (or is a secret value) is an invalid record and is skipped. A missing or invalid price is **unknown**
