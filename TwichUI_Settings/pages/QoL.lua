@@ -1,5 +1,5 @@
 -- TwichUI settings: Quality of life (qol/: summons, resurrection, battleground release, duels,
--- group invitations, Quick Keybind). Everything here is off until turned on. The game's waypoint on RestedXP's destination is
+-- group invitations, Quick Keybind, Group Finder zones). Everything here is off until turned on. The game's waypoint on RestedXP's destination is
 -- on the RestedXP page. Each convenience is a feature card (K.Card) with a sample preview (previews/QoL.lua);
 -- the settings, their names and their tooltips are the ones this page has always had.
 
@@ -9,17 +9,17 @@ local K = R.SettingsKit
 K.Page({
     key = "qol", icon = "qualityOfLife", name = "Quality of life", order = 30, group = "everyday",
     description = "Small opt-in conveniences. Each is off until you turn it on, and each does only the one thing it says.",
-    keywords = "summon resurrect res rez battleground release spirit duel decline group party invite invitation block keybind quick keybind error errors message voice speech leatrix loot sparkle sparkles quest pickup ground gathering herbalism mining herb ore node",
+    keywords = "group finder lfg looking for group listing zone location nearby leader summon resurrect res rez battleground release spirit duel decline group party invite invitation block keybind quick keybind error errors message voice speech leatrix loot sparkle sparkles quest pickup ground gathering herbalism mining herb ore node",
     when = function() return R.QoL ~= nil end,
     overview = {
-        label = "Quality of life", tip = "Small opt-in conveniences: accepting summons and resurrection, releasing in battlegrounds, declining duels, joining or declining group invitations, a Quick Keybind button in the Game Menu, quest item sparkles, and hiding error messages or their voice.",
+        label = "Quality of life", tip = "Small opt-in conveniences: accepting summons and resurrection, releasing in battlegrounds, declining duels, joining or declining group invitations, a Quick Keybind button in the Game Menu, the leader's zone on Group Finder listings, quest item sparkles, and hiding error messages or their voice.",
         status = function()
             local on = (R:Enabled("qolSummons") and 1 or 0) + (R:Enabled("qolResurrect") and 1 or 0)
                 + (R:Enabled("qolReleasePvP") and 1 or 0) + (R:Enabled("qolDuels") and 1 or 0)
                 + (R:Enabled("qolInvites") and 1 or 0) + (R:Enabled("qolDeclineInvites") and 1 or 0) + (R:Enabled("qolQuickKeybind") and 1 or 0)
-                + (R:Enabled("qolLootSparkles") and 1 or 0)
+                + (R:Enabled("qolLootSparkles") and 1 or 0) + (R:Enabled("qolGroupFinderZones") and 1 or 0)
                 + (R:Enabled("qolHerbSparkles") and 1 or 0) + (R:Enabled("qolOreSparkles") and 1 or 0)
-            local total = 10
+            local total = 11
             return K.OnOff(on > 0, ("%d of %d on"):format(on, total), "Off")
         end,
     },
@@ -220,6 +220,22 @@ K.Page({
         })
         QolToggle("qolQuickKeybind", "Quick Keybind button",
             "Adds a Quick Keybind button to the Game Menu, below Macros. It opens the game's own Quick Keybind Mode, the one in Settings > Keybindings, with its usual instructions and Okay and Cancel buttons; entering it changes no bindings. Like the game's own, it can't be opened in combat, and the button is dimmed until combat ends.")
+
+        K.Card({
+            title = "Group Finder zones",
+            icon = "qualityOfLife",
+            what = "Shows, on each Group Finder listing, the zone the game gives for the player or group leader, after the activity.",
+            summary = function() return "Your zone is marked with a check" end,
+            preview = "qol.groupFinderZones",
+            consequence = "It only shows what the game sends with your search: it invites, whispers and searches for nothing, and nothing is sent to anyone.",
+            details = {
+                { "Whose zone?", "The game gives a zone only for a listing's leader: for a single player, that player; for a group, its leader. The other members' zones are not given." },
+                { "When is it marked?", "When the zone is the one you are in, by any name the game gives for where you are (the zone or the subzone). Nearby zones are not marked, and a leader in another part of your zone may not be." },
+                { "How fresh is it?", "As fresh as your last search: search again to update it." },
+            },
+        })
+        QolToggle("qolGroupFinderZones", "Show zones in the Group Finder",
+            "Adds the zone the game gives for each listing's leader (for a single player, that player) after the activity name in the Group Finder's list. A listing in the zone you are in is marked with a check and drawn in green. The zone is the one sent with your last search, so search again to update it. With too little room on a row the zone is left out. It only shows information: nothing is invited, whispered or sent. Off: the list is the game's own.")
 
         K.Card({
             title = "Hide error messages",

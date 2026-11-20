@@ -418,6 +418,41 @@ P.Register("qol.quickKeybind", {
 ---------------------------------------------------------------------------
 -- Hide error messages: the red line in the middle of the screen and the one kept (a still picture: nothing to play)
 ---------------------------------------------------------------------------
+---------------------------------------------------------------------------
+-- Group Finder zones: two sample listings, the zone after each activity, yours marked
+---------------------------------------------------------------------------
+P.Register("qol.groupFinderZones", {
+    height = 84,
+    static = true,
+    Create = function(stage)
+        local sc = {}
+        sc.list = P.Popup(stage, 250, 70)
+        sc.list:SetPoint("TOPLEFT", 12, -7)
+        local check = R.QoLGroupFinderZones and R.QoLGroupFinderZones.CHECK or (R.PATH .. [[media\guides\status-done-small]])
+        local samples = {
+            { "Ashwyn", "Westfall Quests", ("|T%s:0|t Westfall"):format(check), true },
+            { "Torvald", "The Deadmines", "Stranglethorn Vale", false },
+        }
+        for i, s in ipairs(samples) do
+            local y = -6 - (i - 1) * 32
+            local name = Line(sc.list, "small", 10, y)
+            name:SetText(s[1])
+            local activity = Line(sc.list, "meta", 10, y - 14)
+            activity:SetText(s[2])
+            local zone = Wg.Text(sc.list, "meta")
+            zone:SetPoint("LEFT", activity, "RIGHT", 6, 0)
+            zone:SetText(s[3])
+            if s[4] then Wg.Color(zone, pal.sage) end
+        end
+        sc.note = Line(stage, "meta", 280, -14, 300)
+        sc.note:SetText("Each Group Finder listing shows where its leader is. A listing in the zone you are in is marked.")
+        return sc
+    end,
+    Caption = function()
+        return "Sample listings. The zone is the leader's, as of your last search; members' zones aren't given by the game."
+    end,
+})
+
 P.Register("qol.hideErrors", {
     height = 84,
     static = true,

@@ -29,6 +29,7 @@ local ALIASES = {
     foodDrinkUnlock = "move position anchor /unlock",
     navigationUnlockMode = "move position anchor /unlock ellesmere mover",
     qolQuickKeybind = "keybind bindings hotkey game menu escape",
+    qolGroupFinderZones = "group finder lfg looking for group listing zone location where nearby leader invite",
     qolHerbSparkles = "gather gathering herbalism herb herbs plant plants node nodes sparkle sparkles loot",
     qolOreSparkles = "gather gathering mining mine mineral ore vein veins node nodes sparkle sparkles loot",
     qolHideErrors = "error errors red text message messages hide quiet mute not enough rage mana out of range spell not ready ui errors frame",

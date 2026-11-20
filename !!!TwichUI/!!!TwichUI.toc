@@ -466,6 +466,8 @@ qol\Invites.lua
 qol\DeclineInvites.lua
 # Invite nearby players: a key (Key Bindings > TwichUI) invites the friendly players close to you
 qol\NearbyInvite.lua
+# Group Finder zones: the leader's zone on each Group Finder listing, marked when it is where you are
+qol\GroupFinderZones.lua
 qol\QuickKeybind.lua
 qol\GuideWaypoint.lua
 qol\GuideAutoHide.lua

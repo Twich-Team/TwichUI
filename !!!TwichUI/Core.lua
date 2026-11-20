@@ -87,6 +87,7 @@ local DEFAULT_MODULES = {
     qolDeclineInvites = false, -- ... decline group invitations (except from the friends and/or guild members you choose)
     qolQuickKeybind = false, -- ... a Quick Keybind button in the Game Menu
     qolLootSparkles = false, -- ... keep the game's quest item sparkles on, including after graphics preset changes
+    qolGroupFinderZones = false, -- ... show the leader's zone on each Group Finder listing, marked when it is your zone
     qolHerbSparkles = false, -- ... sparkle on the nearby herb selected by the game's interaction targeting
     qolOreSparkles = false,  -- ... sparkle on the nearby ore selected by the game's interaction targeting
     qolHideErrors = false,   -- ... hide the red error messages (and their voice and sound); see qol/ErrorMessages.lua
