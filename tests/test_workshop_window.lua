@@ -347,7 +347,7 @@ do
   W.Fees.SetMode("assumed"); Win.Render()
   Same(Win.Heads().profit.text:GetText() .. " " .. Win.Heads().profit.sub:GetText(), "Profit after the cut")
   Same(L_.rows[1].profit.a:GetText(), "700c", "1000 - 50 - 250"); Same(L_.rows[1].profit.b:GetText(), "to 1650c", "2000 - 100 - 250")
-  Check(StatusTip():find("after the auction house's cut (5%, assumed)", 1, true), StatusTip())
+  Check(StatusTip():find("Profit is after the auction house's cut. 5%, assumed.", 1, true), StatusTip())
   tip = {}
   Fire("MODIFIER_STATE_CHANGED")
   all = table.concat(tip, "\n")

@@ -282,6 +282,11 @@ do
   Same(cut.rate, 0.05) Same(cut.source, "assumed") Same(cut.label, "5%, assumed")
   Same(F.Cut("Neutral").rate, 0.15) Same(select(2, F.Cut(nil)), "house", "an unknown side is never given a rate")
   Same(F.CutOf(1000, cut), 50) Same(F.CutOf(1000, nil), 0) Same(F.RateText(0.125), "12.5%")
+  PR.CUT.unknown = 0.03
+  cut = assert(F.Cut("unknown"))
+  Same(cut.rate, 0.03) Same(cut.source, "confirmed", "a rate confirmed in the code comes first") Same(cut.label, "3%, confirmed")
+  PR.CUT.Horde = 0.04 Same(F.Cut("Horde").rate, 0.04, "even over the assumed rate")
+  PR.CUT.unknown, PR.CUT.Horde = nil, nil
   -- a fake Ledger: three 5% invoices, one 15%, deposits of item 300 at two durations
   local entries = {
     { t = NOW - 100, k = "ahSale", s = { invoices = { { g = 1000, f = 50 }, { g = 2000, f = 100 } } } },
@@ -353,7 +358,7 @@ do
   Check(Has(tip, "Sell to a vendor | 500c"), Dump(tip))
   e = E.New(Ctx({ cost = mats, comp = { [300] = Comp(300) }, cutWhy = "house" })):Craft(REC, 1)
   basis = Op.Basis({ rec = REC, est = e }, nil, Name, Money, NOW)
-  Check(Has(basis, "Auction house cut | not deducted (auction house type unknown)") and Has(basis, "Deposit | not known yet"), Dump(basis))
+  Check(Has(basis, "Auction house cut | not deducted (not confirmed)") and Has(basis, "Deposit | not known yet"), Dump(basis))
   Same(Op.ProfitLabel({ est = e }), "Profit before fees")
   -- many crafts say so
   e = E.New(Ctx({ cost = mats, comp = { [300] = Comp(300) } })):Craft(REC, 4)

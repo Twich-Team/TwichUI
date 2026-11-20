@@ -619,8 +619,8 @@ S.VendorSell = VendorSell
 -- The planning estimator (Estimate.lua) over one price source: the same market every price comes from, its local scan for the valuation
 -- services, the vendor records, the cut and the deposit (Fees.lua). nil without a market or without Estimate.lua (then Prices.Estimate is used).
 -- The estimator is KEPT between draws while nothing its answers depend on changes (the window draws often; every Market service decodes an
--- item's saved tiers per call): the market and its scan, the reference generation, the cut, the vendor records, the Gold Ledger, the
--- listing duration and an hour of time (ages and the stale rule: their thresholds are a day and more). Anything else (a scan, a merchant, a sale) makes a new one.
+-- item's saved tiers per call): the market and its scan, the reference generation, the cut, the vendor records, the Ledger's sales and deposits,
+-- the listing duration and an hour of time (ages and the stale rule: their thresholds are a day and more). Anything else (a scan, a merchant, a sale) makes a new one.
 local lastEstimator, lastKey, lastCut, lastCutWhy
 S.ESTIMATE_MEMO_MAX = 20000   -- answers kept at most; beyond it the next draw starts a new estimator
 function S.Estimator(src)
@@ -632,12 +632,15 @@ function S.Estimator(src)
     local local_ = lm and { market = lm } or nil
     local cut, cutWhy
     if Fe then cut, cutWhy = Fe.Cut(market.side) end
-    local L = R.Ledger
+    -- the Gold Ledger counts only through what the fees read from it (verified sales and deposits): any other gold change (loot, repairs)
+    -- moves its revision without changing an estimate
+    local ev = Fe and Fe.Evidence and Fe.Evidence() or nil
+    local fees = ev and (ev.invoices .. ":" .. ev.depositCount .. ":" .. ev.match.faction .. ":" .. ev.match.neutral) or ""
     local snap = lm and lm.snap
     local key = table.concat({ tostring(market.key), tostring(market.at), tostring(lm and lm.at), tostring(snap and snap.seq), tostring(SC.ended or 0),
         tostring(src.generation or ""),
         tostring(cut and cut.rate), tostring(cut and cut.source), tostring(cutWhy), tostring(V.Count and V.Count() or 0),
-        tostring(L and L.Revision and L.Revision() or 0), tostring(Fe and Fe.Duration() or 0), tostring(math.floor(Q.Now() / 3600)),
+        fees, tostring(Fe and Fe.Duration() or 0), tostring(math.floor(Q.Now() / 3600)),
         tostring(S.observations) }, "|")
     if lastEstimator and lastKey == key and lastEstimator.size < S.ESTIMATE_MEMO_MAX then return lastEstimator, lastCut, lastCutWhy end
     local function Local(fn) return (LM and LM[fn] and local_) and fn or nil end
@@ -670,7 +673,7 @@ function S.Opportunities()
     local src = S.PriceSource()
     local recipes = S.AllRecipes()
     local market = src.market
-    local estimator, cut = S.Estimator(src)
+    local estimator, cut, cutWhy = S.Estimator(src)
     local rate
     if estimator then rate = cut and cut.rate or nil
     else rate = market and PR.CutRate(market.side) or nil end
@@ -687,7 +690,7 @@ function S.Opportunities()
         return n or nil
     end
     -- all: every row before the page's filter and sort (the Overview reads its best one; nothing is priced twice)
-    local out = { rows = rows, all = all, summary = Op.Summary(all), source = src, rate = rate, cut = cut, estimator = estimator, lookup = lookup, incomplete = false, stock = view,
+    local out = { rows = rows, all = all, summary = Op.Summary(all), source = src, rate = rate, cut = cut, cutWhy = cutWhy, estimator = estimator, lookup = lookup, incomplete = false, stock = view,
         avail = function(rec) return K.Craft(rec.mats, Have, view) end }
     for _, id in ipairs(order) do
         if not profs[id].complete then out.incomplete = true end

@@ -477,7 +477,7 @@ WP9 follow in any order.
 
 Every Valuation service decodes an item's saved tiers per call (about 0.1 ms here), so the estimator is **kept
 between draws** (`Session.Estimator`) while its inputs are unchanged: the market and its scan (`snap.seq`,
-`Scan.ended`), the reference generation, the cut, the vendor records, the Ledger revision, the listing duration, the
+`Scan.ended`), the reference generation, the cut, the vendor records, the Ledger's verified sales and deposits (not every gold change), the listing duration, the
 recipes read and the hour. An answer still "loading" is asked again; at most 20,000 answers are kept.
 
 | 500 recipes over a 3,000-item market with price tiers | old (`Prices.Estimate`) | first draw | redraw (kept) |

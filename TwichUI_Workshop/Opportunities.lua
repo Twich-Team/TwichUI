@@ -257,10 +257,11 @@ function Op.CooldownText(e)
     return "On cooldown, " .. Span(c.left) .. " left"
 end
 
--- The cut line's words: "5%, assumed" / "5%, matches your sales" / "not deducted (turned off)" / "not deducted (auction house type unknown)"
+-- The cut line's words: "5%, assumed" / "5%, matches your sales" / "not deducted (turned off)" / "not deducted (not confirmed)" (an auction house
+-- whose kind isn't known: no rate is assumed for it)
 function Op.CutText(e)
     if e.cut then return e.cut.label end
-    return e.cutWhy == "off" and "not deducted (turned off)" or "not deducted (auction house type unknown)"
+    return e.cutWhy == "off" and "not deducted (turned off)" or "not deducted (not confirmed)"
 end
 
 PlanTip = function(row, src, money, now)

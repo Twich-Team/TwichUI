@@ -146,10 +146,15 @@ end
 ---------------------------------------------------------------------------
 -- The cut
 ---------------------------------------------------------------------------
--- The cut for a market's side: { rate, kind, source = "assumed" | "ledger", matches (invoices at this rate), label } or nil and why:
--- "off" (the player chose not to deduct it) or "house" (which kind of auction house it is isn't known).
+-- The cut for a market's side: { rate, kind, source = "confirmed" | "assumed" | "ledger", matches (invoices at this rate), label } or nil and
+-- why: "off" (the player chose not to deduct it) or "house" (which kind of auction house it is isn't known). A rate confirmed in the code
+-- (Prices.CUT, the documented place for a rate read from the game) comes first.
 function F.Cut(side, now)
     if F.Mode() == "off" then return nil, "off" end
+    local confirmed = PR.CutRate and PR.CutRate(side)
+    if confirmed then
+        return { rate = confirmed, kind = F.HouseKind(side), source = "confirmed", matches = 0, label = F.RateText(confirmed) .. ", confirmed" }
+    end
     local kind = F.HouseKind(side)
     if not kind then return nil, "house" end
     local rate = F.ASSUMED[kind]

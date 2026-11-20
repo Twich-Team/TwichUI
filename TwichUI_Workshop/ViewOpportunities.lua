@@ -712,9 +712,11 @@ local function Build(p)
         local text = ("Prices: %s \194\183 %s"):format(src.label, Op.ScanWords({ at = src.market.at, complete = src.market.complete }) or "")
         text = text .. "\nListings, not sales: costs walk the listings for the quantity needed, sell prices follow the lowest competing listing."
         if oppView.rate then
-            text = text .. ("\nProfit is after the auction house's cut (%s)."):format(oppView.cut and oppView.cut.label or "confirmed")
+            text = text .. "\nProfit is after the auction house's cut." .. (oppView.cut and (" " .. oppView.cut.label:gsub("^%l", string.upper) .. ".") or "")
+        elseif oppView.cutWhy == "off" then
+            text = text .. "\nProfit is before fees: you chose not to deduct the auction house's cut."
         else
-            text = text .. "\nProfit is before fees: the auction house's cut isn't deducted."
+            text = text .. "\nProfit is before fees: the auction house's cut isn't confirmed."
         end
         if oppView.incomplete then text = text .. "\nSome recipes may be missing: a profession's window lists only what its filters allow." end
         return text
