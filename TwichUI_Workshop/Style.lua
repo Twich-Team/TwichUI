@@ -12,7 +12,7 @@
 --   UI.Search(parent, w, h, placeholder)    a search field (box.hint)
 --   UI.List(parent, rowH, make, minH)       a pooled scrolling list: only the rows that can show exist; :SetData(rows, emptyText)
 --   UI.ItemIcon(parent, size)               an item picture in a thin bronze frame (.tex)
---   UI.Art(texture, id, size)               feature artwork (an Icons id, or "npc:<name>" for the vendor/trainer paintings)
+--   UI.Art(texture, id, size)               feature artwork (Icons id, "npc:<name>", or "auction:<subcategory>")
 --   UI.Rule(parent)                         a quiet divider line
 --   UI.Hover(row)                           a row's painted hover and selection (row:SetSelected(bool), row:SetHot(bool), row:Follow(child),
 --                                           row:SyncHover()); the row owns OnEnter / OnLeave, tooltips go in row.TipEnter / row.TipLeave
@@ -221,8 +221,14 @@ function UI.ItemIcon(parent, size)
     return holder
 end
 
--- Feature artwork: an Icons id ("home", "auctionHouse", ...) or one of the vendor/trainer paintings ("npc:coins")
+-- Feature artwork: an Icons id, vendor/trainer painting ("npc:coins"), or AH subcategory ("auction:cloth-head").
 function UI.Art(texture, id, size)
+    local category = id:match("^auction:(.+)$")
+    if category then
+        texture:SetTexture(R.PATH .. [[media\auction\categories\]] .. category .. ((size or 64) <= 26 and "-small" or ""))
+        texture:SetTexCoord(0, 1, 0, 1)
+        return
+    end
     local npc = id:match("^npc:(.+)$")
     if npc then
         texture:SetTexture(R.PATH .. [[media\npcs\]] .. npc .. ((size or 64) <= 26 and "-small" or ""))
