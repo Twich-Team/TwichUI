@@ -403,7 +403,7 @@ local function MakeRow(parent)
     row.TipLeave = function() if GameTooltip then GameTooltip:Hide() end end
     row.fill = function(self, d)
         self.data = d
-        self.time:SetText(date("!%b %d  %H:%M", d.t))
+        self.time:SetText(LQ.Clock(d.t))
         UI.Art(self.srcIcon, LQ.ART[d.code] or LQ.ART.other, 18)
         self.src:SetText(LQ.ROW_LABELS[d.code])
         self.src:SetWordWrap(d.code == "ahCancelFee")
@@ -511,7 +511,7 @@ local function BuildTransactions()
     UI.Tip(p.modeResults, "Realized item results", "What items you sold actually earned: the gold collected against the verified cost of exactly those units. A profit appears only when both are verified; everything else says why it cannot.")
     UI.Tip(p.modeTx, "Transactions", "Every recorded gold movement, newest first.")
     V.txHeads, V.resHeads = {}, {}
-    for _, h in ipairs({ { "Time (UTC)", 92, 12 }, { "Source", 112, 128 }, { "Item / Note", 200, 232 } }) do
+    for _, h in ipairs({ { "Time", 92, 12 }, { "Source", 112, 128 }, { "Item / Note", 200, 232 } }) do
         local fs = UI.Head(p, h[1], h[2], "LEFT")
         fs:SetPoint("TOPLEFT", p, "TOPLEFT", h[3], -32)
         V.txHeads[#V.txHeads + 1] = fs
@@ -596,7 +596,7 @@ local function Status(s)
     if st.why == "off" then return "Not recording: Workshop is off" end
     if st.why then return "Not recording" end
     local since = s and s.coverage.since or st.since
-    if since then return "Recording since " .. LQ.Day(math.floor(since / 86400)) .. " (UTC) \194\183 older gold is not counted" end
+    if since then return "Recording since " .. LQ.Day(LQ.DayOf(since)) .. " \194\183 older gold is not counted" end
     return "Recording starts when you next gain or spend gold"
 end
 

@@ -43,8 +43,22 @@ function MakeClient(charName, addons)
   -- WoW's xpcall passes the extra arguments on (stock Lua 5.1's does not); ChatThrottleLib sends through it
   env.xpcall = function(f, handler, ...) local n, args = select("#", ...), {...}; return xpcall(function() return f(unpack(args, 1, n)) end, handler) end
   env.GetTime = os.clock
-  env.time = os.time
-  env.date = os.date
+  -- The client's clock is pinned to UTC so a test does not depend on the machine's time zone (a zone is stood in with Ledger.UtcOffset).
+  env.time = function(t)
+    if type(t) ~= "table" then return os.time() end
+    local y, m = t.year, t.month
+    if m <= 2 then y = y - 1 end
+    local era = math.floor(y / 400)
+    local yoe = y - era * 400
+    local doy = math.floor((153 * (m + (m > 2 and -3 or 9)) + 2) / 5) + t.day - 1
+    local doe = yoe * 365 + math.floor(yoe / 4) - math.floor(yoe / 100) + doy
+    return (era * 146097 + doe - 719468) * 86400 + (t.hour or 12) * 3600 + (t.min or 0) * 60 + (t.sec or 0)
+  end
+  env.date = function(fmt, t)
+    fmt = fmt or "%c"
+    if fmt:sub(1, 1) ~= "!" then fmt = "!" .. fmt end
+    return os.date(fmt, t)
+  end
   env.UnitName = function() return (charName:gsub(" .*$", "")) end
   env.GetRealmName = function() return "Forever" end
   env.GetNormalizedRealmName = function() return "Forever" end

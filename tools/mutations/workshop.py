@@ -1419,3 +1419,15 @@ m("ledger.watch.craft-learned", "!!!TwichUI/auction/LedgerCostWatch.lua", 'Plain
   'a recipe the player has not learned is accepted', [COSTTEST])
 m("ledger.watch.craft-overlap", "!!!TwichUI/auction/LedgerCostWatch.lua", '    if candidate then   -- a second craft began', '    if false then   -- a second craft began',
   'two crafts in flight are both verified', [COSTTEST])
+
+# Local calendar days (docs/workshop/gold-ledger.md): bucketing, day edges, and the one-time move of UTC-bucketed records.
+m("ledger.day.offset", "!!!TwichUI/auction/Ledger.lua", 'function Lg.DayOf(t) return math.floor((t + Lg.UtcOffset(t)) / DAY) end', 'function Lg.DayOf(t) return math.floor(t / DAY) end',
+  "changes are filed under the UTC day instead of the player's day", [JOURNAL])
+m("ledger.day.start", "!!!TwichUI/auction/Ledger.lua", '    return day * DAY - Lg.UtcOffset(s)\nend', '    return day * DAY\nend',
+  'retention and windows start at UTC midnight while days are local', [JOURNAL])
+m("ledger.day.rebuild-skipped", "!!!TwichUI/auction/Ledger.lua", '    if rec.tz ~= 1 then Rebuild(rec) end', '    if false then Rebuild(rec) end',
+  'an old UTC-bucketed record is read as local days without being rebuilt', [JOURNAL])
+m("ledger.day.rebuild-trimmed", "!!!TwichUI/auction/Ledger.lua", 'local cut = (first and first.id > 1) and math.floor(first.t / DAY) or -1', 'local cut = -1',
+  'trimmed history loses its totals when a record moves to local days', [JOURNAL])
+m("ledger.day.query-window", "TwichUI_Workshop/LedgerQuery.lua", '    local first = LQ.DayStart(today - filter.days + 1)\n', '    local first = (today - filter.days + 1) * DAY\n',
+  'the transaction list starts at UTC midnight while the cards use local days', [LEDGERUI])

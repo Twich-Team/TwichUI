@@ -21,7 +21,7 @@ Observed movement, **not profit**, except in the separate *Realized Results* vie
 * Opt-in boundary: the Workshop being turned on (`R.WorkshopLauncher.Enabled`). Off stops *new* records and keeps the old ones; on again re-baselines (the gap is never turned into income).
 * One entry per observed change: the exact difference between two valid `GetMoney()` readings, in signed integer copper. The **first reading of a session is only a baseline** (no entry); an unchanged balance makes none; an unreadable, secret, negative, fractional or non-finite reading is ignored and changes nothing. A reload or login never treats the change since the last session as income or expense.
 * Nothing before the world is entered is read (the balance may not be loaded yet). The recorder listens to `PLAYER_MONEY` (and `PLAYER_ENTERING_WORLD`, `PLAYER_LOGOUT` for bookkeeping) **only while recording**; there are no timers and no polling.
-* Gold that changed while logged out, or while the Workshop was off, is not recorded, and history is never rebuilt from the current balance. The page says since when it records (UTC).
+* Gold that changed while logged out, or while the Workshop was off, is not recorded, and history is never rebuilt from the current balance. The page says since when it records (your local date).
 
 ## Attribution (conservative)
 
@@ -182,14 +182,14 @@ mail text or copper values. Ordinary performance scopes/gauges are also register
 
 `TwichUILedgerDB = { version = 1, chars = { ["Name - Realm"] = record } }`, declared in the core `.toc`. A newer version is set aside untouched (`Persist.Hold`) and nothing is recorded to it. Damaged parts are repaired narrowly (dropped entries are counted as `ledger-entry-dropped`).
 
-Record: `name`, `realm`, `since`, `nextId`, `entries` (oldest first), `days`.
+Record: `name`, `realm`, `since`, `tz` (1 = local days), `nextId`, `entries` (oldest first), `days`.
 
 * Entry: `id` (stable, never reused), `t` (unix), `a` (signed copper, never 0), optional `k` (source; absent = unclassified), `e` (evidence code), `i` (item id), `q` (quantity), `n` (note, <= 60 bytes, no control or `|`), `x` (correlation id).
 * V3 optional entry fields: `u` (validated native auction ID for deposits/cancellation fees), `s` (seller settlement). `s = {v=1,g,f,d,c,invoices={...}}`; each invoice retains only `g,f,d,c,n,q` (gross, fee, returned deposit, actual collected amount, safe item name and optional quantity). At most eight invoices, exact finite integer copper, validated equation and aggregates. Corrupt metadata is dropped narrowly without dropping the cash entry; unknown newer extension versions are retained untouched and not interpreted. No migration/root-version change is needed.
 * Day (`days[utcDay]`): `i`, `o` (copper in / out), `n` (entries), `ci`, `co` (the same split by source). A day **record** means "the recorder was running that day" (`n = 0`: nothing moved); **no record = outside coverage**, which is not the same as zero.
 * Sums saturate at 2^53 - 1 (exact integers).
 
-Retention: 90 UTC days of daily totals (today included); journal entries older than that are dropped with their days; at most **2,000 entries per character** (trimmed in one step once 50 over), the dropped entries' totals stay in their days; at most 100 characters. Compaction is deterministic and runs when a record is first read and when the day changes. Nothing in `TwichUIWorkshopDB` or `TwichUIDB` is touched.
+Retention: 90 local days of daily totals (today included); journal entries older than that are dropped with their days; at most **2,000 entries per character** (trimmed in one step once 50 over), the dropped entries' totals stay in their days; at most 100 characters. Compaction is deterministic and runs when a record is first read and when the day changes. Nothing in `TwichUIWorkshopDB` or `TwichUIDB` is touched.
 
 V2 is additive: schema version remains 1; source/evidence definitions and existing optional item/quantity/note fields suffice. No migration, retention change, reset or retrospective reclassification occurs. Existing IDs, amounts and daily totals remain intact. New source splits survive the same cleaning/reload path; future schemas remain held aside. Downgrading to a V1 binary does not understand the new source codes, so use the V2 branch for the reload check.
 
@@ -199,11 +199,13 @@ source codes and may strip that attribution while cleaning; avoid downgrading re
 V3 branch starts from V2 `aa51de8`; its draft PR targets the V2 branch. Once V2 passes native acceptance
 and is merged, retarget V3 to `main`, reconcile and reverify against that merged source before review/merge.
 
-Days and times are **UTC**, as the Workshop's market charts. (Local-day bucketing would need the zone at record time; not done.)
+Days and times are the player's **local** calendar days and clock. A change is filed under the local day it happened on (`Lg.DayOf(t)`; the offset is read from the client's `date("*t")` / `date("!*t")` at that moment, so a daylight-saving change is followed), a day begins at local midnight (`Lg.DayStart(day)`), and the page's windows, "today", timestamps and day labels use the same two functions. A client that cannot give an offset falls back to UTC days. A day is filed once, when it is recorded: travelling to another zone does not re-file earlier days.
+
+**Move from UTC days (one time, per record).** Records made before this carried no `tz` marker and their `days` were UTC days. On first read each is rebuilt from its journal into local days (`rec.tz = 1`): every entry is counted again into its local day with its source, a recorded UTC day keeps a record on each local day it overlapped (coverage is unchanged), and no entry changes. Where the journal no longer reaches back (its oldest entry is not number 1, because the entry bound or retention trimmed it) the old totals of the UTC days up to and including that entry's day cannot be re-split, so each is carried whole onto the local day of its middle: the only approximation, only for days older than the journal, and totals are never lost (`test_ledger_journal.lua` 8c). A record needs no second move; a client in UTC gets the same numbers as before.
 
 ## The page (mockup mapping)
 
-Header and filters: character (this / all), source, range (7/30/90 D, in the chart header), search. Cards: Net Change, Gold In, Gold Out, Attributed Income, Attributed Spending, Unclassified (the mockup's Revenue/Expenses/Auction Sales/Purchases/Fees are not all supportable). Gold Flow: green bars up, red bars down, antique-gold net line, grid, day labels, per-day hover; legend entries toggle a series. Gold by Source (the mockup's "Profit by Source"). Recent Transactions (Time / Source / Item-Note / Amount, newest first, pooled rows, item icon + tooltip when a real item is known, details on hover). Profit by Profession: an honest placeholder ("Profession profitability isn't available yet."); `LedgerQuery.SetProfessionProvider` is the seam for a later provider (a provider's rows are labelled partial; unknown amounts stay blank).
+Header and filters: character (this / all), source, range (7/30/90 D, in the chart header; days are local days), search. Cards: Net Change, Gold In, Gold Out, Attributed Income, Attributed Spending, Unclassified (the mockup's Revenue/Expenses/Auction Sales/Purchases/Fees are not all supportable). Gold Flow: green bars up, red bars down, antique-gold net line, grid, day labels, per-day hover; legend entries toggle a series. Gold by Source (the mockup's "Profit by Source"). Recent Transactions (Time / Source / Item-Note / Amount, newest first, pooled rows, item icon + tooltip when a real item is known, details on hover). Profit by Profession: an honest placeholder ("Profession profitability isn't available yet."); `LedgerQuery.SetProfessionProvider` is the seam for a later provider (a provider's rows are labelled partial; unknown amounts stay blank).
 
 Character, source and range apply to every panel; search narrows the list only (daily totals are kept by source, not by item). Prior-period text is shown only when every day of the prior window was recorded; percentages only for gold in/out with a non-zero base. Multi-character totals carry a note: gold you moved between your own characters counts in and out.
 

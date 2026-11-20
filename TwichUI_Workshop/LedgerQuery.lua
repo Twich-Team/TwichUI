@@ -6,7 +6,7 @@
 -- What the numbers are (and are not): every figure is observed gold movement, the exact difference between readings of the
 -- character's gold, split into money in and money out. "Net Change" is in minus out. None of it is profit: a purchase of materials, a
 -- repair or a transfer between your own characters is also gold out, and gold from a sale only counts when it reached your gold.
--- Days are UTC days. A day with no record is outside the recorder's coverage, which is not the same as a day with no activity.
+-- Days are the player's LOCAL calendar days (the recorder's Lg.DayOf / Lg.DayStart). A day with no record is outside the recorder's coverage, which is not the same as a day with no activity.
 --
 -- Filter: { scope = "current" | "all", source = nil | a source code, days = 7 | 30 | 90, search = "" }. Character scope, source and
 -- the day window apply to the totals, the series and the transactions alike; search only narrows the transaction list (the daily totals
@@ -55,15 +55,28 @@ function LQ.Money(copper, signed)
     return (signed and n > 0) and ("+" .. text) or text
 end
 
+-- A day is a local calendar-day number: its label is that date itself, so it is formatted without a zone shift.
 function LQ.Day(day) return date("!%Y-%m-%d", day * DAY) end
 function LQ.DayShort(day) return date("!%b %d", day * DAY) end
-function LQ.Stamp(t) return date("!%Y-%m-%d %H:%M", t) .. " UTC" end
+-- A moment is shown in the player's own time.
+function LQ.Stamp(t) return date("%Y-%m-%d %H:%M", t) end
+function LQ.Clock(t) return date("%b %d  %H:%M", t) end
+
+-- The local day a unix time falls on, and the unix time a local day begins (the recorder's own, so the page and the journal agree).
+function LQ.DayOf(t)
+    local L = Ledger()
+    return L and L.DayOf and L.DayOf(t) or math.floor(t / DAY)
+end
+function LQ.DayStart(day)
+    local L = Ledger()
+    return L and L.DayStart and L.DayStart(day) or day * DAY
+end
 
 function LQ.Today()
     local f = GetServerTime or time
     local ok, t = pcall(f)
     if not ok or type(t) ~= "number" or t ~= t or t < 0 then return nil end
-    return math.floor(t / DAY)
+    return LQ.DayOf(t)
 end
 
 ---------------------------------------------------------------------------
@@ -166,7 +179,7 @@ local function Key(filter, today, records)
 end
 
 -- The whole answer for the cards, the chart and the source panel. Cached until the recorder changes or the filter or the day does.
---   from, to            first and last UTC day (today is last)
+--   from, to            first and last local day (today is last)
 --   days                { { day, inn, out, net, n, covered } } for each day, oldest first
 --   totals              inn, out, net, attrIn, attrOut (identified sources), unkIn, unkOut (unclassified), n
 --   by                  { [code] = { inn, out } }
@@ -308,8 +321,8 @@ function LQ.Rows(filter, today, limit)
     local L = Ledger()
     if not (L and today) then return {}, false end
     local records = Records(filter.scope)
-    local first = (today - filter.days + 1) * DAY
-    local last = (today + 1) * DAY
+    local first = LQ.DayStart(today - filter.days + 1)
+    local last = LQ.DayStart(today + 1)
     local needle = filter.search ~= "" and filter.search:lower() or nil
     local ptr = {}
     for i, r in ipairs(records) do ptr[i] = #r.rec.entries end
@@ -375,7 +388,7 @@ local function CharKeys(records)
     return keys
 end
 
-local function Window(filter, today) return (today - filter.days + 1) * DAY, (today + 1) * DAY end
+local function Window(filter, today) return LQ.DayStart(today - filter.days + 1), LQ.DayStart(today + 1) end
 
 -- { rows, verified (profit of verified sales), sales, unavailable (sales without a verified result) } or nil without a cost basis.
 -- A row groups the window's sales of one item identity:

@@ -2488,20 +2488,20 @@ Lab.Step("pose for the screenshot", function()
         end
     elseif view == "ledger" or view == "ledgersmall" or view == "ledgervendor" or view == "ledgervendorsmall" or view == "ledgerauction" or view == "ledgerauctionsmall" then
         -- the Gold Ledger over a SYNTHETIC journal written straight into TwichUILedgerDB (the recorder's own events are not simulated here; the
-        -- offline tests cover them). Days are relative to today (UTC). EXPECTED VALUES are hand arithmetic, never read from the code under test:
+        -- offline tests cover them). Days are relative to today (the player's local day). EXPECTED VALUES are hand arithmetic, never read from the code under test:
         --   today-0: +100000 mail, -25000 auction purchase (Peacebloom x2), +5000 unclassified
         --   today-1: +30000 auction sale (Silverleaf); today-2: recorded, nothing moved; today-3: -7000 unclassified; today-4: not recorded
         --   today-5: +20000 unclassified; today-10: +50000 mail
         --   7 days: in 155000 (15g 50s), out 32000 (3g 20s), net 123000 (12g 30s); attributed in 130000, attributed out 25000, unclassified +18000
         local W, DAY = R.Workshop, 86400
-        local today = math.floor(GetServerTime() / DAY)
-        local rec = { name = UnitName("player"), realm = GetRealmName(), since = (today - 20) * DAY, nextId = 1, entries = {}, days = {} }
+        local today = R.Ledger.DayOf(GetServerTime())
+        local rec = { name = UnitName("player"), realm = GetRealmName(), since = R.Ledger.DayStart(today - 20), nextId = 1, entries = {}, days = {}, tz = 1 }
         local EV = { mail = "mailbox", ahSale = "mailinvoice", ahBuy = "auctionpurchase" }
         local function Add(off, amount, k, extra)
             local day = today - off
             local d = rec.days[day]
             if not d then d = { i = 0, o = 0, n = 0, ci = {}, co = {} }; rec.days[day] = d end
-            local e = { id = rec.nextId, t = day * DAY + 3600 + rec.nextId, a = amount, e = k and EV[k] or "balance", k = k }
+            local e = { id = rec.nextId, t = R.Ledger.DayStart(day) + 3600 + rec.nextId, a = amount, e = k and EV[k] or "balance", k = k }
             for kk, v in pairs(extra or {}) do e[kk] = v end
             rec.nextId = rec.nextId + 1
             rec.entries[#rec.entries + 1] = e

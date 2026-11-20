@@ -276,7 +276,10 @@ do
     local db = { version = 1, chars = { ["Rich - Forever"] = { name = "Rich", realm = "Forever", since = T0, nextId = 10,
         entries = { { id = 9, t = T0, a = -36, e = "balance" } },
         days = { [20000] = { i = 0, o = 36, n = 1, ci = {}, co = { other = 36 } } } } } }
-    local old = Text(db); local c = Client({ db = Copy(db) }); Same(Text(c.TwichUILedgerDB), old)
+    local c = Client({ db = Copy(db) })
+    local migrated = Copy(db); migrated.chars["Rich - Forever"].tz = 1   -- only the local-day marker is new; ids, amounts and totals are identical
+    Same(Text(c.TwichUILedgerDB), Text(migrated))
+    local old = Text(migrated)
     c.Open(); c.BuyMerchantItem(1, 5); c.Purchase(5, 25)
     c.C_Container.UseContainerItem(0, 2); c.Sale(18)
     c.RepairAllItems(); c.REPAIR = 0; c.Money(-12400); c.Advance(0.1)

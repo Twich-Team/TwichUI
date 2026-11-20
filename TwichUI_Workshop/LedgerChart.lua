@@ -110,7 +110,7 @@ end
 
 -- The inspection lines of one day: { title, { text, tone } ... }. The words of a day outside coverage never read as zero.
 function C.TipLines(d)
-    local lines = { LQ.Day(d.day) .. " (UTC day)" }
+    local lines = { LQ.Day(d.day) }
     if not d.covered then
         lines[#lines + 1] = { "Not recorded", "stone" }
         lines[#lines + 1] = { "The ledger was not recording on this day. Gold that moved while it was not recording is not counted.", "textDim" }

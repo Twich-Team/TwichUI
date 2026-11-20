@@ -29,6 +29,7 @@
 -- TwichUILedgerDB = { version = 1, chars = { ["Name - Realm"] = {
 --     name, realm,                   the character's identity (also the key)
 --     since,                         unix time of the first reading that made this record (recording started)
+--     tz,                            1 = days are local calendar days (absent/0: UTC days, rebuilt on first read)
 --     nextId,                        the next journal id (ids are never reused)
 --     entries = { {                  the journal, oldest first, at most MAX_ENTRIES (+ TRIM_SLACK)
 --         id, t, a,                  stable id, unix time, signed copper (positive in, negative out; never zero)
@@ -37,12 +38,14 @@
 --         i, q, n, x,                optional: item id, quantity, a short note, a correlation id
 --         u, s,                      optional: native auction ID; bounded versioned seller settlement (s.v = 1)
 --     }, ... },
---     days = { [utcDay] = {          one per UTC day the recorder was running for this character (RETAIN_DAYS kept)
+--     days = { [localDay] = {        one per local calendar day the recorder was running for this character (RETAIN_DAYS kept)
 --         i, o, n,                   copper in, copper out (a positive number), entries counted
 --         ci = { [source] = copper }, co = { [source] = copper }      the same split by source ("other" = unclassified)
 --     } },
 -- } } }
 -- A day record with n = 0 means "recorded, and nothing happened"; no record means "not recorded" (outside coverage).
+-- Days are the player's LOCAL calendar days (rec.tz = 1; records made before that were bucketed by UTC day and are rebuilt from their
+-- journal once, see Rebuild). The day number is local-midnight based: day N covers [DayStart(N), DayStart(N+1)).
 
 local R = TwichUI
 local P = R.Persist
@@ -141,13 +144,40 @@ local function Note(v)
     return v
 end
 
+-- Local calendar days. UtcOffset(t) is local minus UTC in seconds at unix time t (0 when the client cannot say, which is UTC days).
+-- It is a field so a test can stand a time zone in; everything below goes through it.
+local offsets = {}
+function Lg.UtcOffset(t)
+    local half = math.floor(t / 1800)
+    local hit = offsets[half]
+    if hit then return hit end
+    local off = 0
+    local ok, l, g = pcall(function() return date("*t", t), date("!*t", t) end)
+    if ok and type(l) == "table" and type(g) == "table" then
+        l.isdst, g.isdst = false, false
+        local ok2, a, b = pcall(function() return time(l), time(g) end)
+        if ok2 and Finite(a) and Finite(b) then
+            off = a - b
+            if off % 900 ~= 0 or off < -50400 or off > 50400 then off = 0 end   -- no real zone: not a zone
+        end
+    end
+    offsets[half] = off
+    return off
+end
+function Lg.DayOf(t) return math.floor((t + Lg.UtcOffset(t)) / DAY) end
+-- The unix time local day `day` begins (the offset is read at that moment, so a daylight-saving change is followed).
+function Lg.DayStart(day)
+    local s = day * DAY - Lg.UtcOffset(day * DAY)
+    return day * DAY - Lg.UtcOffset(s)
+end
+
 local function Clock()
     local f = GetServerTime or time
     if type(f) ~= "function" then return nil end
     local ok, t = pcall(f)
     t = ok and Whole(t, 0, MAX_TIME) or nil
     if not t then return nil end
-    return t, math.floor(t / DAY)
+    return t, Lg.DayOf(t)
 end
 local function Mono()
     if type(GetTime) ~= "function" then return 0 end
@@ -248,6 +278,7 @@ local function ByTime(a, b)
     return a.id < b.id
 end
 
+local Rebuild   -- defined with the aggregates below
 -- Makes one character's record usable; false when it is not a record at all. Idempotent.
 local function CleanRecord(key, rec)
     if type(rec) ~= "table" then return false end
@@ -273,6 +304,8 @@ local function CleanRecord(key, rec)
     local nextId = Whole(rec.nextId, 1, MAX)
     rec.nextId = (nextId and nextId > maxId) and nextId or (maxId + 1)
     rec.days = CleanDays(rec.days)
+    rec.tz = Whole(rec.tz, 0, 9)
+    if rec.tz ~= 1 then Rebuild(rec) end
     return true
 end
 
@@ -285,7 +318,7 @@ local function Compact(rec, today)
     end
     local entries = rec.entries
     local cut = 0
-    local limit = firstDay * DAY
+    local limit = Lg.DayStart(firstDay)
     while cut < #entries and entries[cut + 1].t < limit do cut = cut + 1 end
     local over = #entries - cut - Lg.MAX_ENTRIES
     if over > 0 then cut = cut + over end
@@ -370,6 +403,31 @@ local function Bump(rec, day, amount, code)
     end
     d.n = Add(d.n, 1)
 end
+-- One-time move of a record from UTC days to local days. The journal is the truth: its entries are counted again into local days.
+-- Where the journal no longer reaches back (its oldest entry is not number 1: the 2,000-entry bound or retention trimmed it), the
+-- old totals of the UTC days up to and including the oldest entry's day cannot be re-split, so each is carried whole onto the local
+-- day of its middle; that is the only approximation, and only for days older than the journal. Coverage is kept: every local day
+-- a recorded UTC day overlapped has a record. Nothing is invented and no entry changes.
+Rebuild = function(rec)
+    local old, entries = rec.days, rec.entries
+    local first = entries[1]
+    local cut = (first and first.id > 1) and math.floor(first.t / DAY) or -1
+    rec.days = {}
+    for d, v in pairs(old) do
+        for _, day in ipairs({ Lg.DayOf(d * DAY), Lg.DayOf(d * DAY + DAY - 1) }) do DayRecord(rec, day) end
+        if d <= cut then
+            local row = DayRecord(rec, Lg.DayOf(d * DAY + DAY / 2))
+            row.i, row.o, row.n = Add(row.i, v.i), Add(row.o, v.o), Add(row.n, v.n)
+            for code, n in pairs(v.ci) do row.ci[code] = Add(row.ci[code] or 0, n) end
+            for code, n in pairs(v.co) do row.co[code] = Add(row.co[code] or 0, n) end
+        end
+    end
+    for _, e in ipairs(entries) do
+        if math.floor(e.t / DAY) > cut then Bump(rec, Lg.DayOf(e.t), e.a, e.k or "other") end
+    end
+    rec.tz = 1
+end
+
 -- An entry was classified after it was counted: its amount moves from "other" to its source, in the same day.
 local function Move(rec, day, amount, from, to)
     local d = rec.days[day]
@@ -415,7 +473,7 @@ end
 
 local function Attach(slot, ev)
     local e = slot.e
-    Move(slot.rec, math.floor(e.t / DAY), e.a, "other", ev.kind)
+    Move(slot.rec, Lg.DayOf(e.t), e.a, "other", ev.kind)
     e.k, e.e = ev.kind, Lg.SOURCES[ev.kind].evidence
     e.i, e.q, e.n, e.x = ev.item, ev.qty, ev.note, ev.corr
     e.u, e.s = ev.auction, ev.settlement
@@ -554,7 +612,7 @@ local function Writable(key, name, realm, t)
     local count = 0
     for _ in pairs(db.chars) do count = count + 1 end
     if count >= Lg.MAX_CHARS then return nil end
-    rec = { name = name, realm = realm, since = t, nextId = 1, entries = {}, days = {} }
+    rec = { name = name, realm = realm, since = t, nextId = 1, entries = {}, days = {}, tz = 1 }
     db.chars[key] = rec
     cleaned[key] = true
     return rec

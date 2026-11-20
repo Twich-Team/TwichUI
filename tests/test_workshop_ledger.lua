@@ -120,7 +120,7 @@ Same(LQ.Money(0), "0c"); Same(LQ.Money(5), "5c"); Same(LQ.Money(100), "1s 0c"); 
 Same(LQ.Money(123000, true), "+12g 30s 0c"); Same(LQ.Money(-25000), "-2g 50s 0c"); Same(LQ.Money(5, true), "+5c"); Same(LQ.Money(0, true), "0c")
 Same(LQ.Money(12345678901), "1,234,567g 89s 1c", "thousands separated, exact copper")
 Same(LQ.Money(0 / 0), "", "not a number")
-Same(LQ.Day(TODAY), os.date("!%Y-%m-%d", TODAY * DAY)); Check(LQ.Stamp(TODAY * DAY):find("UTC", 1, true))
+Same(LQ.Day(TODAY), os.date("!%Y-%m-%d", TODAY * DAY)); Same(LQ.Stamp(TODAY * DAY), os.date("!%Y-%m-%d %H:%M", TODAY * DAY), "a moment is shown in the player's own time (the test client is pinned to UTC), without a zone label")
 
 ---------------------------------------------------------------------------
 -- Chart geometry (pure)
@@ -304,7 +304,7 @@ Same(#V.chart.hits, 7, "one pointer region for each day")
 do
     local h = V.chart.hits[7]
     h:GetScript("OnEnter")(h)
-    Check(TipText():find("(UTC day)", 1, true) and TipText():find("Gold in: +10g 50s 0c", 1, true) and TipText():find("Gold out: -2g 50s 0c", 1, true), TipText())
+    Check(TipText():find(LQ.Day(TODAY), 1, true) and not TipText():find("UTC", 1, true) and TipText():find("Gold in: +10g 50s 0c", 1, true) and TipText():find("Gold out: -2g 50s 0c", 1, true), TipText())
     Check(V.chart.highlight:IsShown() == true or V.chart.inspected == 7)
     h:GetScript("OnLeave")(h)
     Check(V.chart.inspected == nil, "leaving clears the inspection")
@@ -657,5 +657,29 @@ do
     -- a held or missing cost component shows an honest line
     c.TwichUILedgerDB.cost = nil; K.Init(); LQ.ResetCache()
     Same(#(LQ.Results({ scope = "current", days = 7 }).rows), 0)
+end
+
+---------------------------------------------------------------------------
+-- Local days: the page's window, "today" and timestamps follow the recorder's local calendar day, not UTC
+---------------------------------------------------------------------------
+do
+    local saved = L.UtcOffset
+    L.UtcOffset = function() return -8 * 3600 end        -- eight hours west of UTC
+    local keep = c.NOW
+    c.NOW = (TODAY + 1) * DAY + 3 * 3600                  -- 03:00 UTC = 19:00 the evening before, locally
+    Same(LQ.Today(), TODAY, "today is the local day")
+    Same(LQ.DayStart(TODAY), TODAY * DAY + 8 * 3600); Same(LQ.DayOf(TODAY * DAY + 8 * 3600), TODAY); Same(LQ.DayOf(TODAY * DAY + 8 * 3600 - 1), TODAY - 1)
+    -- a 7-day window starts at local midnight of TODAY-6 = (TODAY-6)*DAY + 8h UTC: one second earlier is outside it
+    local rec = NewRec("Rich"); rec.tz = 1
+    Cover(rec, 0)
+    local start = LQ.DayStart(TODAY - 6)
+    rec.entries[#rec.entries + 1] = { id = 1, t = start - 1, a = 500, e = "balance" }
+    rec.entries[#rec.entries + 1] = { id = 2, t = start, a = 700, e = "balance" }
+    rec.nextId = 3
+    c.TwichUILedgerDB.chars["Rich - Forever"] = rec; LQ.ResetCache()
+    local rows = LQ.Rows({ scope = "current", days = 7 }, TODAY, 10)
+    Same(#rows, 1, "the window starts at local midnight"); Same(rows[1].a, 700)
+    Same(LQ.Clock(TODAY * DAY + 9 * 3600), os.date("!%b %d  %H:%M", TODAY * DAY + 9 * 3600), "times use the client's local date()")
+    L.UtcOffset = saved; c.NOW = keep; LQ.ResetCache()
 end
 print("LEDGER PAGE OK")
