@@ -97,6 +97,7 @@ local recent, pending = {}, {}
 local seen, seenList = {}, {}
 local cleaned, compacted = {}, {}
 local watching = {}
+local attachListeners = {}
 
 ---------------------------------------------------------------------------
 -- Small checks. A value from the game or from a file is decided to be a plain, finite, whole number BEFORE it is compared
@@ -403,6 +404,13 @@ local function Remember(corr)
     if #seenList > MAX_SEEN then seen[table.remove(seenList, 1)] = nil end
 end
 
+-- Observers of verified transactions (the cost basis, auction/LedgerCost.lua). They are told AFTER an entry was classified, with the
+-- entry, the evidence and the character it belongs to; they can never change the entry or create one.
+function Lg.OnAttached(fn, remove)
+    if type(remove) == "function" then attachListeners[remove] = nil end
+    if type(fn) == "function" then attachListeners[fn] = true end
+end
+
 local function Attach(slot, ev)
     local e = slot.e
     Move(slot.rec, math.floor(e.t / DAY), e.a, "other", ev.kind)
@@ -411,6 +419,10 @@ local function Attach(slot, ev)
     e.u, e.s = ev.auction, ev.settlement
     Remember(ev.corr)
     stats.attributed = stats.attributed + 1
+    for fn in pairs(attachListeners) do
+        local ok, err = pcall(fn, slot.key, e, ev)
+        if not ok and R.Fault then R.Fault("gold ledger", err) end
+    end
 end
 
 local function Prune(now)
@@ -432,8 +444,14 @@ local function Valid(ev)
     -- These fields are session-only; they never change the saved schema or enter the pending queue.
     local entry = ev.entry ~= nil and Whole(ev.entry, 1, MAX) or nil
     if (ev.entry ~= nil or ev.char ~= nil) and (not entry or type(Plain(ev.char)) ~= "string" or Plain(ev.char) ~= CharKey()) then return nil end
+    -- Optional, session-only bag facts from an observer that verified them (never saved): the item identity and its carried count.
+    local stock
+    if type(ev.stock) == "table" then
+        local key, before, after = Plain(ev.stock.key), Whole(ev.stock.before, 0, MAX_QTY), Whole(ev.stock.after, 0, MAX_QTY)
+        if type(key) == "string" and #key <= 160 and before and after then stock = { key = key, before = before, after = after } end
+    end
     return { kind = ev.kind, amount = amount, item = Whole(ev.item, 1, MAX_ITEM), qty = Whole(ev.qty, 1, MAX_QTY),
-        note = Note(ev.note), corr = corr, entry = entry, char = ev.char,
+        note = Note(ev.note), corr = corr, entry = entry, char = ev.char, stock = stock,
         auction = (ev.kind == "ahDeposit" or ev.kind == "ahCancelFee") and Whole(ev.auction, 1, MAX) or nil,
         settlement = ev.kind == "ahSale" and Lg.Settlement(ev.settlement, amount) or nil }
 end
@@ -509,14 +527,14 @@ end
 ---------------------------------------------------------------------------
 -- Recording
 ---------------------------------------------------------------------------
-local function Append(rec, t, day, delta)
+local function Append(rec, t, day, delta, key)
     local e = { id = rec.nextId, t = t, a = delta, e = "balance" }
     rec.nextId = rec.nextId + 1
     local entries = rec.entries
     entries[#entries + 1] = e
     Bump(rec, day, delta, "other")
     if #entries > Lg.MAX_ENTRIES + Lg.TRIM_SLACK then Compact(rec, day) end
-    local slot = { rec = rec, e = e, gt = Mono() }
+    local slot = { rec = rec, e = e, gt = Mono(), key = key }
     recent[#recent + 1] = slot
     if #recent > MAX_RECENT then table.remove(recent, 1) end
     stats.recorded = stats.recorded + 1
@@ -568,7 +586,7 @@ function Lg.Observe()
     local delta = now - base
     if delta == 0 then stats.duplicate = stats.duplicate + 1 return end
     base = now
-    Append(rec, t, day, delta)
+    Append(rec, t, day, delta, key)
     Changed()
 end
 
@@ -627,6 +645,7 @@ function Lg.Refresh()
     if R.MailGold then R.MailGold.Refresh() end   -- the mailbox reports its money to the ledger while this records
     if R.VendorGold then R.VendorGold.Refresh() end
     if R.AuctionLedger then R.AuctionLedger.Refresh() end
+    if R.LedgerCost then R.LedgerCost.Refresh() end
 end
 
 function Lg.Active() return active end

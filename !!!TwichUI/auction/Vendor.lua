@@ -67,7 +67,8 @@ local function Snapshot()
     if not (C_Container and C_Container.GetContainerNumSlots and C_Container.GetContainerItemInfo) then return nil end
     local bags = Whole(NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4, 0, 8)
     if not bags then return nil end
-    local s = { key = key, anchor = rec.nextId, counts = {}, slots = {}, listings = {}, size = 0 }
+    local s = { key = key, anchor = rec.nextId, counts = {}, keys = {}, slots = {}, listings = {}, size = 0 }
+    local Cost = R.LedgerCost
     for bag = 0, bags do
         local n = Whole(C_Container.GetContainerNumSlots(bag), 0, LIMIT)
         if not n or s.size + n > LIMIT then return nil end
@@ -80,7 +81,10 @@ local function Snapshot()
                 local id, q = ID(info.itemID), ID(info.stackCount)
                 if not (id and q) then return nil end
                 s.counts[id] = (s.counts[id] or 0) + q
-                s.slots[bag][slot] = { id = id, qty = q, locked = Plain(info.isLocked) ~= false }
+                -- the exact identity (supported variant fields) for the cost basis; a plain id when it cannot be read
+                local ik = Cost and Cost.Key(info.hyperlink, id) or ("i" .. id)
+                s.keys[ik] = (s.keys[ik] or 0) + q
+                s.slots[bag][slot] = { id = id, qty = q, key = ik, locked = Plain(info.isLocked) ~= false }
             end
         end
     end
@@ -170,7 +174,12 @@ Try = function()
     Clear() -- Evidence notifies subscribers synchronously: no candidate may be claimed again
     visit.snapshot = after
     serial = serial + 1
-    local result = R.Ledger.Evidence({ kind = c.kind, amount = e.a, item = c.item, qty = c.qty,
+    -- exact carried counts of this identity before and after the verified outcome, for the cost basis (never for money)
+    local stock
+    if c.key and c.kind ~= "repair" then
+        stock = { key = c.key, before = c.before.keys[c.key] or 0, after = after.keys[c.key] or 0 }
+    end
+    local result = R.Ledger.Evidence({ kind = c.kind, amount = e.a, item = c.item, qty = c.qty, stock = stock,
         note = c.kind == "repair" and "Equipment repairs" or nil,
         corr = "vendor:" .. generation .. ":" .. serial, entry = e.id, char = key })
     if result == "attributed" then stats.attributed = stats.attributed + 1 end
@@ -225,7 +234,7 @@ local function Buy(index, qty)
     local price, stack = Whole(listing.price, 1, R.Ledger.MAX_MONEY), ID(listing.stack)
     if not (ID(listing.id) and qty and price and stack) or qty % stack ~= 0
         or qty / stack > R.Ledger.MAX_MONEY / price then Invalidate(); return end
-    Begin({ kind = "vendorBuy", item = listing.id, qty = qty, amount = -(qty / stack * price) })
+    Begin({ kind = "vendorBuy", item = listing.id, qty = qty, amount = -(qty / stack * price), key = R.LedgerCost and R.LedgerCost.Key(nil, listing.id) or ("i" .. listing.id) })
 end
 local function Sell(bag, slot, unit, bank, reagent)
     bag, slot = Whole(bag, 0, 8), Whole(slot, 1, LIMIT)
@@ -233,7 +242,7 @@ local function Sell(bag, slot, unit, bank, reagent)
     local item = before and bag and slot and before.slots[bag] and before.slots[bag][slot]
     if unit ~= nil or bank ~= nil or reagent == true or not item or item.locked
         or (InRepairMode and InRepairMode()) or (SpellIsTargeting and SpellIsTargeting()) then Invalidate(); return end
-    Begin({ kind = "vendorSell", item = item.id, qty = item.qty })
+    Begin({ kind = "vendorSell", item = item.id, qty = item.qty, key = item.key })
 end
 local function Repair(guild)
     local cost = visit.snapshot and visit.snapshot.repair
