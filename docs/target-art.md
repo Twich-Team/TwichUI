@@ -14,7 +14,7 @@ Nothing here has been checked in the game yet; see "In-game checklist".
 | `targetart/Ellesmere.lua` | `R.TargetArtEllesmere`: finding EllesmereUI's target frame, and hiding EllesmereUI's own target dragon by alpha |
 | `targetart/Display.lua` | `R.TargetArtDisplay`: events, the holder frame and texture, the preview |
 | `TwichUI_Settings/pages/TargetArt.lua` | the page and its preview surface |
-| `media/targetart/{rare,boss,elite,rare-wide,boss-wide,elite-wide}.tga` | the artwork, built by `tools/make_target_art.py` from `assets/target-art-*-source.png` |
+| `media/targetart/{rare,boss,elite,rare-wide,boss-wide,elite-wide,rare-spear,boss-spear,elite-spear}.tga` | the artwork, built by `tools/make_target_art.py` from `assets/target-art-*-source.png` |
 | `tests/test_target_art.lua` | offline tests with stand-in frames |
 
 ## EllesmereUI
@@ -78,11 +78,16 @@ there is no friendly/hostile filter (EllesmereUI's own dragon has none either).
 | `rareWide` | Rare spawn (wide) | 256 x 187 | 0.674, 0.423 |
 | `bossWide` | Boss dragon (wide) | 256 x 187 | 0.665, 0.411 |
 | `eliteWide` | Elite dragon (wide) | 256 x 207 | 0.656, 0.388 |
+| `rareSpear` | Rare spawn (spear) | 256 x 105 | 0.843, 0.535 |
+| `bossSpear` | Boss dragon (spear) | 256 x 112 | 0.663, 0.443 |
+| `eliteSpear` | Elite dragon (spear) | 256 x 105 | 0.845, 0.545 |
 
 The wide set (711 x 454, 745 x 450 and 732 x 481 sources) are the same dragons with a longer spear arm and wings,
 wider than tall, so the tool fits their width instead of their height. They rest in 0.04/0.05: the spear lies along the
 frame's top edge and the neck sits on the corner, clear of the health text. The rare wide painting's content reaches
 the bottom row of its source image (the elite's to 1 px of it), so their tail tips may already be cut in the source.
+
+The spear set (elite gold, rare silver, boss bronze with a red crest) is a long horizontal spear with the dragon's head and claw curled at its end, 3:1 wide. Its sources are the three bands of one 1254 x 1254 painting on white, cut out by flood-filling the white from the edges (`assets/target-art-*-spear-source.png`); the crook is the tool's computed one, rest 0.04/0.05 like the wide set, not yet judged by eye in game.
 
 Sources: 1254 x 1254, 1254 x 1254 and 1230 x 1278 RGBA PNGs with real transparency (no background), each a dragon
 curled round a top-right corner. The tool crops each to its visible content, scales it to 254 px tall keeping its
