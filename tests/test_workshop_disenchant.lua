@@ -98,7 +98,7 @@ local originalVendor=r.vendor.value;r.vendor.value=result.value*2
 assert(W.Worth.Recommend(r).kind=='possible','a vendor comparison is also qualified when DE uses a reference')
 r.vendor.value=originalVendor
 local lines=W.WorthLayout.Lines(r,{money=tostring},layout,false)
-assert(lines[2][1]=='Disenchant (average)' and lines[2][2]==tostring(result.value))
+assert(lines[1][1]=='Disenchant (average)' and lines[1][2]==tostring(result.value))
 assert(W.WorthLayout.UsesDisenchant(layout,false))
 assert(not W.WorthLayout.UsesDisenchant({lines={{id='vendor',when='always'}}},false))
 -- One configured field expands to a right-column list, one icon per material.
