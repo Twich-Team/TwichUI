@@ -2256,7 +2256,9 @@ Lab.Step("pose for the screenshot", function()
         local ov = Win().Overview()
         Check("display", "pose: the market card says how many items were priced and that the scan was whole", "13 | Scan complete \194\183 just now",
             Txt(ov.cards.market.stat) .. " | " .. Txt(ov.cards.market.facts[1].text))
-        Check("display", "pose: the opportunities card counts what is profitable and names the best", "4 | of 5 priced | Top profit: Smelt Bronze",
+        -- (2026-11-20) the vendor-priced Copper Belt Buckle is the fifth profitable craft; every estimate over these thin fakes is Low confidence,
+        -- so the card names the best of them as such (Opportunities.Best headlines only a craft that isn't Low)
+        Check("display", "pose: the opportunities card counts what is profitable and names the best", "5 | of 6 priced | Top profit, low confidence: Copper Belt Buckle",
             Txt(ov.cards.opps.stat) .. " | " .. Txt(ov.cards.opps.side) .. " | " .. Txt(ov.cards.opps.facts[1].text))
         Check("display", "pose: the activity names the scan and the plan changes of this run", true, Txt(ov.activity[1].text) ~= "" and ov.activity[3]:IsShown())
     elseif view == "history" then
