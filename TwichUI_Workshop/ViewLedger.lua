@@ -51,7 +51,7 @@ local CARD_DEFS = {
     { key = "out", title = "Gold Out", art = "npc:reagent-pouch",
       tip = "All gold that left in the chosen days, whatever the reason." },
     { key = "attrIn", title = "Attributed Income", art = "npc:gavel",
-      tip = "Mailbox money, auction-sale invoices and verified vendor sales, matched to the exact gold received." },
+      tip = "Mailbox money, auction-sale invoices, quest rewards and verified vendor sales, matched to the exact gold received." },
     { key = "attrOut", title = "Attributed Spending", art = "npc:hammer",
       tip = "Auction purchases, verified posting deposits and cancellation fees, vendor purchases and player-paid repairs, matched to the exact gold spent." },
     { key = "unk", title = "Unclassified", art = "npc:sealed-scroll",

@@ -19,6 +19,13 @@ local settleTimer, expiryTimer
 local generation, serial = 0, 0
 local watching, hooked = {}, {}
 local stats = { attributed = 0, refused = 0 }
+-- Why a request was not attributed: fixed codes only (no item, price or name), counted for this session and shown in the diagnostics
+-- report, so a purchase or sale that stays Unclassified in the real client can be traced to the step that refused it.
+local reasons = {}
+local function Why(code)
+    reasons[code] = (reasons[code] or 0) + 1
+    stats.refused = stats.refused + 1
+end
 local Close, Schedule, Try
 
 local function Plain(v)
@@ -84,7 +91,7 @@ local function Snapshot()
                 -- the exact identity (supported variant fields) for the cost basis; a plain id when it cannot be read
                 local ik = Cost and Cost.Key(info.hyperlink, id) or ("i" .. id)
                 s.keys[ik] = (s.keys[ik] or 0) + q
-                s.slots[bag][slot] = { id = id, qty = q, key = ik, locked = Plain(info.isLocked) ~= false }
+                s.slots[bag][slot] = { id = id, qty = q, key = ik, locked = Plain(info.isLocked) == true }
             end
         end
     end
@@ -147,20 +154,20 @@ Try = function()
     local c = candidate
     local now = Clock()
     if not now or now < c.started or now >= c.expires then
-        stats.refused = stats.refused + 1; Clear(); visit.snapshot = Read(); return
+        Why(c.last or "expired"); Clear(); visit.snapshot = Read(); return
     end
     local key, rec = Record()
     if key ~= c.before.key or not rec or rec.nextId > c.before.anchor + 1 then
-        stats.refused = stats.refused + 1; Clear(); visit.snapshot = Read(); return
+        Why(rec and key == c.before.key and "several-money-changes" or "other-character"); Clear(); visit.snapshot = Read(); return
     end
-    if rec.nextId ~= c.before.anchor + 1 then return end -- no observed money: an action alone counts for nothing
+    if rec.nextId ~= c.before.anchor + 1 then c.last = "no-money-seen"; return end -- no observed money: an action alone counts for nothing
     local e = rec.entries[#rec.entries]
     if not e or e.id ~= c.before.anchor or e.k
         or (c.kind == "vendorSell" and e.a <= 0) or (c.amount and e.a ~= c.amount) then
-        stats.refused = stats.refused + 1; Clear(); visit.snapshot = Read(); return
+        Why(e and e.k and "money-already-classified" or (c.amount and e.a ~= c.amount and "amount-differs-from-price") or "money-wrong-direction"); Clear(); visit.snapshot = Read(); return
     end
     local after = Read()
-    if not after then return end
+    if not after then c.last = "bags-unreadable"; return end
     local confirmed
     if c.kind == "vendorBuy" then
         confirmed = SameCounts(c.before.counts, after.counts, c.item, c.qty)
@@ -170,7 +177,11 @@ Try = function()
     else
         confirmed = after.repair == 0 and SameCounts(c.before.counts, after.counts)
     end
-    if not confirmed then return end -- inventory/merchant updates may arrive after PLAYER_MONEY
+    if not confirmed then   -- inventory/merchant updates may arrive after PLAYER_MONEY; what is still missing is kept for the expiry
+        if c.kind == "vendorSell" and SameCounts(c.before.counts, after.counts, c.item, -c.qty) then c.last = "no-matching-buyback-receipt"
+        else c.last = c.kind == "repair" and "repair-not-cleared" or "bag-count-differs" end
+        return
+    end
     Clear() -- Evidence notifies subscribers synchronously: no candidate may be claimed again
     visit.snapshot = after
     serial = serial + 1
@@ -197,25 +208,27 @@ Schedule = function()
         if mine == generation and visit then Scoped(Try) end
     end)
 end
-local function Invalidate()
+local function Invalidate(code)
     if not visit then return end
+    if type(code) == "string" then Why(code) end
     Clear(); poisoned = true; Schedule()
 end
 local function Begin(c)
     if not Context() then Close(); return end
     if candidate or poisoned or not c or not visit.snapshot or not (C_Timer and C_Timer.NewTimer) then
+        Why(candidate and "overlapping-requests" or poisoned and "earlier-action-in-doubt" or not visit.snapshot and "no-bag-snapshot" or "no-timer")
         Invalidate(); return
     end
     c.before = visit.snapshot
     local now = Clock()
-    if not now then Invalidate(); return end
+    if not now then Why("no-clock"); Invalidate(); return end
     c.started, c.expires = now, now + WAIT
     candidate = c
     local mine = generation
     expiryTimer = C_Timer.NewTimer(WAIT, function()
         if mine == generation and candidate == c then
             expiryTimer = nil
-            Scoped(function() stats.refused = stats.refused + 1; Clear(); visit.snapshot = Read() end)
+            Scoped(function() Why(c.last or "no-money-seen"); Clear(); visit.snapshot = Read() end)
         end
     end)
     Schedule()
@@ -223,30 +236,32 @@ end
 local function Buy(index, qty)
     index = Whole(index, 1, LISTINGS)
     local listing = index and visit.snapshot and visit.snapshot.listings[index]
-    if not listing or listing.why then Invalidate(); return end
+    if not listing or listing.why then Invalidate(not listing and "buy-offer-not-in-snapshot" or "buy-unsupported-offer"); return end
     -- A stale gold-only listing must not vouch for a changed price, item or extended-currency offer.
     local ok, current = pcall(R.Restock.Listing, index)
     local costOK, costs = pcall(GetMerchantItemCostInfo, index)
     if not ok or not current or current.why or current.id ~= listing.id
         or current.price ~= listing.price or current.stack ~= listing.stack
-        or not costOK or Whole(costs, 0, R.Ledger.MAX_MONEY) ~= 0 then Invalidate(); return end
+        or not costOK or Whole(costs, 0, R.Ledger.MAX_MONEY) ~= 0 then Invalidate("buy-offer-changed-or-extended-cost"); return end
     qty = qty == nil and listing.stack or ID(qty)
     local price, stack = Whole(listing.price, 1, R.Ledger.MAX_MONEY), ID(listing.stack)
     if not (ID(listing.id) and qty and price and stack) or qty % stack ~= 0
-        or qty / stack > R.Ledger.MAX_MONEY / price then Invalidate(); return end
+        or qty / stack > R.Ledger.MAX_MONEY / price then Invalidate("buy-quantity-not-a-whole-stack"); return end
     Begin({ kind = "vendorBuy", item = listing.id, qty = qty, amount = -(qty / stack * price), key = R.LedgerCost and R.LedgerCost.Key(nil, listing.id) or ("i" .. listing.id) })
 end
 local function Sell(bag, slot, unit, bank, reagent)
     bag, slot = Whole(bag, 0, 8), Whole(slot, 1, LIMIT)
     local before = visit.snapshot
     local item = before and bag and slot and before.slots[bag] and before.slots[bag][slot]
-    if unit ~= nil or bank ~= nil or reagent == true or not item or item.locked
-        or (InRepairMode and InRepairMode()) or (SpellIsTargeting and SpellIsTargeting()) then Invalidate(); return end
+    if unit ~= nil or bank ~= nil or reagent == true then Invalidate("sell-not-a-plain-use"); return end
+    if not item then Invalidate("sell-slot-not-in-snapshot"); return end
+    if item.locked then Invalidate("sell-item-locked"); return end
+    if (InRepairMode and InRepairMode()) or (SpellIsTargeting and SpellIsTargeting()) then Invalidate("sell-cursor-mode"); return end
     Begin({ kind = "vendorSell", item = item.id, qty = item.qty, key = item.key })
 end
 local function Repair(guild)
     local cost = visit.snapshot and visit.snapshot.repair
-    if (guild ~= nil and guild ~= false) or not cost or cost <= 0 then Invalidate(); return end
+    if (guild ~= nil and guild ~= false) or not cost or cost <= 0 then Invalidate("repair-not-supported"); return end
     Begin({ kind = "repair", amount = -cost })
 end
 local function Hook(owner, name, fn)
@@ -264,9 +279,11 @@ local function InstallHooks()
     Hook(nil, "BuyMerchantItem", Buy)
     Hook(C_Container, "UseContainerItem", Sell)
     Hook(nil, "RepairAllItems", Repair)
-    for _, name in ipairs({ "BuybackItem", "PickupMerchantItem", "SellCursorItem", "PickupContainerItem" }) do Hook(nil, name, Invalidate) end
-    if C_Container then Hook(C_Container, "PickupContainerItem", Invalidate) end
-    if C_MerchantFrame then Hook(C_MerchantFrame, "SellAllJunkItems", Invalidate) end
+    for _, name in ipairs({ "BuybackItem", "PickupMerchantItem", "SellCursorItem", "PickupContainerItem" }) do
+        Hook(nil, name, function() Invalidate("cursor-or-buyback:" .. name) end)
+    end
+    if C_Container then Hook(C_Container, "PickupContainerItem", function() Invalidate("cursor-or-buyback:PickupContainerItem") end) end
+    if C_MerchantFrame then Hook(C_MerchantFrame, "SellAllJunkItems", function() Invalidate("sell-all-junk-button") end) end
 end
 local function Changed()
     if not Context() then Close(); return end
@@ -298,8 +315,8 @@ local function Open()
     Want("MERCHANT_UPDATE", Update, true)
     Want("BAG_UPDATE_DELAYED", Update, true)
     Want("UPDATE_INVENTORY_DURABILITY", Update, true)
-    Want("UI_ERROR_MESSAGE", Invalidate, true)
-    Want("PLAYER_REGEN_DISABLED", Invalidate, true)
+    Want("UI_ERROR_MESSAGE", function() Invalidate(candidate and "ui-error-message" or nil) end, true)
+    Want("PLAYER_REGEN_DISABLED", function() Invalidate(candidate and "combat" or nil) end, true)
 end
 local function OpenObserved() return Scoped(Open) end
 function V.Refresh()
@@ -316,7 +333,7 @@ function V.Snapshot()
     local n = 0; for _ in pairs(watching) do n = n + 1 end
     return { active = active, open = visit ~= nil, candidates = candidate and 1 or 0, events = n,
         slots = visit and visit.snapshot and visit.snapshot.size or 0,
-        attributed = stats.attributed, refused = stats.refused }
+        attributed = stats.attributed, refused = stats.refused, why = reasons }
 end
 if R.Perf and R.Perf.Gauge then
     for _, field in ipairs({ "candidates", "events", "slots" }) do

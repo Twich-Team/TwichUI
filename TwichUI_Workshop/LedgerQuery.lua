@@ -27,14 +27,16 @@ local function Ledger() return R.Ledger end
 ---------------------------------------------------------------------------
 LQ.LABELS = {
     ahSale = "Auction sales", mail = "Mail collected", ahBuy = "Auction purchases", other = "Unclassified",
-    vendorBuy = "Vendor purchases", vendorSell = "Vendor sales", repair = "Repairs",
+    vendorBuy = "Vendor purchases", vendorSell = "Vendor sales", repair = "Repairs", quest = "Quest rewards",
     ahDeposit = "Auction deposits", ahCancelFee = "Cancellation fees",
 }
 LQ.ART = { ahSale = "npc:gavel", mail = "npc:sealed-scroll", ahBuy = "npc:reagent-pouch", other = "npc:coins" }
 LQ.ART.vendorBuy, LQ.ART.vendorSell, LQ.ART.repair = "npc:reagent-pouch", "npc:coins", "npc:hammer"
+LQ.ART.quest = "npc:inscribed-stone"
 -- The source a transaction row names: the single word for the table (a direction is the amount's sign).
 LQ.ROW_LABELS = { ahSale = "Auction Sale", mail = "Mail Collected", ahBuy = "Auction Purchase", other = "Unclassified" }
 LQ.ROW_LABELS.vendorBuy, LQ.ROW_LABELS.vendorSell, LQ.ROW_LABELS.repair = "Vendor Purchase", "Vendor Sale", "Repairs"
+LQ.ROW_LABELS.quest = "Quest Reward"
 LQ.ROW_LABELS.ahDeposit, LQ.ROW_LABELS.ahCancelFee = "Auction Deposit", "Auction Cancellation Fee"
 LQ.ART.ahDeposit, LQ.ART.ahCancelFee = "npc:gavel", "npc:coins"
 
@@ -284,6 +286,7 @@ function LQ.Note(row)
         return row.code == "ahSale" and row.qty and row.qty > 1 and ("%s \195\151%d"):format(row.note, row.qty) or row.note
     end
     if row.code == "mail" then return "Money from the mailbox" end
+    if row.code == "quest" then return "Quest reward" end
     if row.code == "ahBuy" then return "Completed purchase" end
     if row.code == "ahSale" then return "Sale proceeds" end
     return "Gold balance change"

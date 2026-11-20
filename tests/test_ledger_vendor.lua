@@ -322,4 +322,26 @@ do
         Same(inn, day.i); Same(out, day.o); Same(day.n, moneyEvents)
     end
 end
+
+-- Why a request was not attributed: fixed codes, counted (the diagnostics report lists them), so an Unclassified purchase or sale in the
+-- real client can be traced to the step that refused it. Counting changes nothing about what is attributed.
+do
+    local function Why(c, code) return (c.V.Snapshot().why or {})[code] or 0 end
+    local c = Client(); c.Open(); c.BuyMerchantItem(1, 5); c.BuyMerchantItem(1, 5); c.Advance(3)
+    Check(Why(c, "overlapping-requests") >= 1, "overlap is named")
+    c = Client(); c.Open(); c.BuyMerchantItem(1, 5); c.Advance(3); Same(Why(c, "no-money-seen"), 1, "an action with no money")
+    c = Client(); c.Open(); c.BuyMerchantItem(1, 5); c.Money(-25); c.Bag(); c.Advance(3); Same(Why(c, "bag-count-differs"), 1, "money but no matching items")
+    c = Client(); c.Open(); c.C_Container.UseContainerItem(0, 2); c.BAGS[0][2] = nil; c.Money(18); c.Bag(); c.Advance(3)
+    Same(Why(c, "no-matching-buyback-receipt"), 1, "items gone and money in, but no buyback receipt")
+    c = Client(); c.Open(); c.C_MerchantFrame.SellAllJunkItems(); Same(Why(c, "sell-all-junk-button"), 1, "the junk button is named")
+    c = Client(); c.Open(); c.BAGS[0][2].isLocked = true; c.Bag(); c.Advance(0.2); c.C_Container.UseContainerItem(0, 2); Same(Why(c, "sell-item-locked"), 1)
+    c = Client(); c.Open(); c.LISTINGS[1].price = 99; c.BuyMerchantItem(1, 5); Same(Why(c, "buy-offer-changed-or-extended-cost"), 1, "a changed offer")
+    c = Client(); c.Open(); c.BuyMerchantItem(1, 3); Same(Why(c, "buy-quantity-not-a-whole-stack"), 1)
+    c = Client(); c.Open(); c.C_Container.UseContainerItem(0, 2, nil, 2); Same(Why(c, "sell-not-a-plain-use"), 1)
+    -- an item whose lock state the client does not give is not treated as locked
+    c = Client(); c.BAGS[0][2].isLocked = nil; c.Open(); c.C_Container.UseContainerItem(0, 2)
+    Same(Why(c, "sell-item-locked"), 0)
+    -- nothing refused: no codes
+    c = Client(); c.Open(); c.BuyMerchantItem(1, 5); c.Purchase(5, 25); Same(next(c.V.Snapshot().why), nil, "an attributed purchase counts no refusal")
+end
 print("LEDGER VENDOR OK")

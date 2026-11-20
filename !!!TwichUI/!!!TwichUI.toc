@@ -427,6 +427,8 @@ auction\LedgerCostWatch.lua
 auction\Mail.lua
 # Merchant evidence only; Ledger.lua remains the sole money recorder.
 auction\Vendor.lua
+# Quest reward evidence only (QUEST_TURNED_IN carries the exact gold); Ledger.lua remains the sole money recorder.
+auction\LedgerQuest.lua
 
 # Magic Inventory: rules that pick out items to mail to a character you name or deposit in your bank or a guild bank tab.
 # Off until turned on. Nothing moves by itself: at a mailbox, bank or guild bank a small button opens a review, and each

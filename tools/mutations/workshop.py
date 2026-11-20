@@ -27,7 +27,7 @@ SHOPPING, VENDOR, OPPS = "TwichUI_Workshop/Shopping.lua", "TwichUI_Workshop/Vend
 
 # `--broad` re-runs a SURVIVOR against these older, broader Workshop tests to say whether anything else notices it (the mutation still counts as
 # a survivor of its focused tests; the note only tells you where the gap is). The default run never uses them.
-SUITE = {"targets": ("TwichUI_Workshop/", "!!!TwichUI/WorkshopAuto.lua", "!!!TwichUI/WorkshopLauncher.lua", "!!!TwichUI/auction/Ledger.lua", "!!!TwichUI/auction/LedgerAuction.lua", "!!!TwichUI/auction/LedgerCost.lua", "!!!TwichUI/auction/LedgerCostWatch.lua", "!!!TwichUI/auction/Mail.lua", "!!!TwichUI/auction/Vendor.lua", "!!!TwichUI/modules/Restock.lua"), "broad_tests": ("test_workshop_market.lua", "test_workshop_prices.lua", "test_workshop_shopping.lua", "test_workshop_storage.lua", "test_workshop.lua")}
+SUITE = {"targets": ("TwichUI_Workshop/", "!!!TwichUI/WorkshopAuto.lua", "!!!TwichUI/WorkshopLauncher.lua", "!!!TwichUI/auction/Ledger.lua", "!!!TwichUI/auction/LedgerAuction.lua", "!!!TwichUI/auction/LedgerCost.lua", "!!!TwichUI/auction/LedgerCostWatch.lua", "!!!TwichUI/auction/LedgerQuest.lua", "!!!TwichUI/auction/Mail.lua", "!!!TwichUI/auction/Vendor.lua", "!!!TwichUI/modules/Restock.lua"), "broad_tests": ("test_workshop_market.lua", "test_workshop_prices.lua", "test_workshop_shopping.lua", "test_workshop_storage.lua", "test_workshop.lua")}
 
 MUTATIONS = []
 
@@ -1459,3 +1459,11 @@ m("ledger.chart.drag-threshold", "TwichUI_Workshop/ChartKit.lua", 'if math.abs(x
   'a click or a tiny drag zooms', [LEDGERUI])
 m("ledger.chart.min-bar", "TwichUI_Workshop/LedgerChart.lua", 'local h = math.max(C.MIN_BAR, g.zeroY - Y(-d.out))', 'local h = g.zeroY - Y(-d.out)',
   'a very small expense vanishes next to a large income', [LEDGERUI])
+
+# Quest rewards as a ledger source.
+QUESTT = "test_ledger_quest.lua"
+
+m("ledger.quest.payload", "!!!TwichUI/auction/LedgerQuest.lua", 'if not (active and L and questID and money) then', 'if not (L and money) then',
+  'a damaged quest event or one received while the ledger is off is offered as evidence', [QUESTT])
+m("ledger.quest.direction", "!!!TwichUI/auction/Ledger.lua", 'quest = { label = "Quest reward", dir = 1,', 'quest = { label = "Quest reward",',
+  'a quest reward can be attached to gold that left', [QUESTT])

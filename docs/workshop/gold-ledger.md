@@ -32,6 +32,7 @@ Classification is metadata on the one money entry, attached only by **evidence**
 | --- | --- | --- |
 | Mail collected | `R.MailGold` asked for the take **and** `PLAYER_MONEY` then showed a gain of exactly that amount | in |
 | Auction sale | the same, and every message in the gain carries a seller's invoice (`GetInboxInvoiceInfo` = `"seller"`; **unverified in the real client**) | in |
+| Quest reward (`quest`) | `QUEST_TURNED_IN(questID, xpReward, moneyReward)` with a positive `moneyReward` (`auction/LedgerQuest.lua`), and a gain of exactly that amount | in |
 | Auction purchase | a completed purchase through TwichUI's controller, and a loss of exactly the reviewed total | out |
 | Vendor Purchase (`vendorBuy`) | one gold-only native request, exact carried item increase and matching observed expenditure | out |
 | Vendor Sale (`vendorSell`) | one native bag-use request, exact carried stack decrease and a new matching buyback receipt with the observed payment | in |
@@ -43,6 +44,8 @@ Evidence waits up to 10 s for its money (and money for its evidence). It attache
 V1 did not attribute vendor activity. V2 adds merchant evidence; V3 adds the supported auction evidence below. Quest/loot, trades, unsupported deposits/fees and crafting costs remain Unclassified. Fees deducted before a seller payment are settlement details, not another expense or a seventh summary card. Full crafting profit remains unavailable.
 
 ## Vendor attribution (V2)
+
+**Why a purchase or sale can stay Unclassified, and how to see it.** Vendor attribution is deliberately strict and, until a real-client run, has not been verified natively. Every request the observer does not attribute is counted under a fixed code (no item, name, price or copper), and **/tui diagnostics > Gold Ledger evidence** lists them on a `vendor not attributed:` line, for example `overlapping-requests` (several sells/buys before the first settled, as an automatic junk seller does), `sell-all-junk-button`, `cursor-or-buyback:PickupContainerItem` (a drag or buyback), `sell-slot-not-in-snapshot`, `sell-item-locked`, `buy-offer-changed-or-extended-cost`, `no-money-seen`, `several-money-changes`, `no-matching-buyback-receipt`, `bag-count-differs`, `amount-differs-from-price`. Counters never change what is attributed.
 
 **Money authority remains `Ledger.lua` / `PLAYER_MONEY`.** The observer never reads a balance delta, calls `Observe`, creates a journal entry, or initiates a gameplay action. A hook alone produces no evidence. Once an outcome is verified, `R.Ledger.Evidence` receives the exact signed amount of the already-recorded entry, its stable ID and current character key. An exact target cannot fall back to another equal-amount entry or enter the pending queue. Existing mailbox/Auction House evidence behavior is unchanged.
 

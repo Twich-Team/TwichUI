@@ -69,6 +69,7 @@ local MAX_RECENT, MAX_PENDING, MAX_SEEN = 8, 8, 64
 Lg.SOURCES = {
     ahSale = { label = "Auction sale", dir = 1, evidence = "mailinvoice" },
     mail = { label = "Mail collected", dir = 1, evidence = "mailbox" },
+    quest = { label = "Quest reward", dir = 1, evidence = "questreward" },
     ahBuy = { label = "Auction purchase", dir = -1, evidence = "auctionpurchase" },
     vendorBuy = { label = "Vendor Purchase", dir = -1, evidence = "merchantpurchase" },
     vendorSell = { label = "Vendor Sale", dir = 1, evidence = "merchantsale" },
@@ -77,11 +78,12 @@ Lg.SOURCES = {
     ahCancelFee = { label = "Auction Cancellation Fee", dir = -1, evidence = "auctioncancel" },
     other = { label = "Unclassified", evidence = "balance" },
 }
-Lg.ORDER = { "ahSale", "mail", "ahBuy", "vendorBuy", "vendorSell", "repair", "ahDeposit", "ahCancelFee", "other" }
+Lg.ORDER = { "ahSale", "mail", "quest", "ahBuy", "vendorBuy", "vendorSell", "repair", "ahDeposit", "ahCancelFee", "other" }
 -- How the classification was established, in the words the details show.
 Lg.EVIDENCE = {
     balance = "Only your gold balance changed. Nothing identifies the source.",
     mailbox = "Mailbox money you took, matched to the exact amount that arrived.",
+    questreward = "A quest you turned in paid this exact gold, matched to the amount that arrived.",
     mailinvoice = "A sold-auction invoice in the mailbox, matched to the exact amount that arrived.",
     auctionpurchase = "A completed Auction House purchase, matched to the exact amount that left.",
     merchantpurchase = "A gold-only merchant purchase request and the exact items received, matched to the observed spending.",
@@ -704,6 +706,7 @@ function Lg.Refresh()
     end
     if R.MailGold then R.MailGold.Refresh() end   -- the mailbox reports its money to the ledger while this records
     if R.VendorGold then R.VendorGold.Refresh() end
+    if R.QuestGold then R.QuestGold.Refresh() end
     if R.AuctionLedger then R.AuctionLedger.Refresh() end
     if R.LedgerCost then R.LedgerCost.Refresh() end
 end
