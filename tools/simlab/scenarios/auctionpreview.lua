@@ -2,8 +2,141 @@
 -- No real auctioneer, server, pointer, combat, font or taint evidence.
 if P.categories then
     -- Synthetic hierarchy tests presentation; runtime data comes from Blizzard.
-    AuctionCategories={{name="Fixture trade group",filters={{classID=7}},
-        subCategories={{name="Fixture subclass",filters={{classID=7,subClassID=0}}}}}}
+    AuctionCategories = {
+        {
+            name = "Fixture trade group",
+            filters = {
+                {
+                    classID = 7
+                }
+            },
+            subCategories = {
+                {
+                    name = "Fixture subclass",
+                    filters = {
+                        {
+                            classID = 7,
+                            subClassID = 0
+                        }
+                    }
+                },
+                {
+                    name = "Cloth supplies",
+                    filters = {
+                        {
+                            classID = 7,
+                            subClassID = 5
+                        }
+                    }
+                }
+            }
+        },
+        {
+            name = "Weapons",
+            filters = {
+                {
+                    classID = 2
+                }
+            },
+            subCategories = {
+                {
+                    name = "One-handed weapons",
+                    filters = {
+                        {
+                            classID = 2,
+                            subClassID = 0
+                        },
+                        {
+                            classID = 2,
+                            subClassID = 4
+                        },
+                        {
+                            classID = 2,
+                            subClassID = 7
+                        },
+                        {
+                            classID = 2,
+                            subClassID = 15
+                        },
+                        {
+                            classID = 2,
+                            subClassID = 13
+                        },
+                        {
+                            classID = 2,
+                            subClassID = 19
+                        }
+                    },
+                    subCategories = {
+                        {
+                            name = "Axes",
+                            filters = {
+                                {
+                                    classID = 2,
+                                    subClassID = 0
+                                }
+                            }
+                        },
+                        {
+                            name = "Swords",
+                            filters = {
+                                {
+                                    classID = 2,
+                                    subClassID = 7
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            name = "Armor",
+            filters = {
+                {
+                    classID = 4
+                }
+            },
+            subCategories = {
+                {
+                    name = "Cloth",
+                    filters = {
+                        {
+                            classID = 4,
+                            subClassID = 1
+                        }
+                    },
+                    subCategories = {
+                        {
+                            name = "Head",
+                            filters = {
+                                {
+                                    classID = 4,
+                                    subClassID = 1,
+                                    inventoryType = 1
+                                }
+                            }
+                        },
+                        {
+                            name = "Chest",
+                            filters = {
+                                {
+                                    classID = 4,
+                                    subClassID = 1,
+                                    inventoryType = 5
+                                },
+                                {
+                                    classID = 4,
+                                    subClassID = 1,
+                                    inventoryType = 20
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 end
 if P.summary then TwichUIMarketData=SIMLAB_SUMMARY;TwichUIMarketParts=SIMLAB_SUMMARY_PARTS end
 if P.bridge then TwichUIMarketData=SIMLAB_BRIDGE end -- data is present while Workshop is still unloaded
@@ -391,6 +524,17 @@ if P.categories then
     local p=A.Page("browse")
     p.categoryList.rows[2]:Click();Lab.Settle(0.3)
     p.categoryList.rows[3]:Click();Lab.Settle(0.3)
+    local C=R.Workshop.AuctionCategories
+    Lab.Check("construct","trade child has dedicated artwork","auction:trade-general",C.Art(p.nativeByID["native:1.1"]))
+    Lab.Check("construct","weapon group has dedicated artwork","auction:group-one-handed",C.Art(p.nativeByID["native:2.1"]))
+    Lab.Check("construct","weapon child has dedicated artwork","auction:weapon-one-hand-sword",C.Art(p.nativeByID["native:2.1.2"]))
+    Lab.Check("construct","armor slot has dedicated artwork","auction:cloth-head",C.Art(p.nativeByID["native:3.1.1"]))
+    Lab.Check("construct","robes keep Chest artwork","auction:cloth-chest",C.Art(p.nativeByID["native:3.1.2"]))
+    if not P.livePrepare then
+        p.expanded["native:2"]=true;p.expanded["native:2.1"]=true
+        p.expanded["native:3"]=true;p.expanded["native:3.1"]=true
+        p.RefreshCategories();Lab.Settle(0.2)
+    end
 end
 if P.sell then
     MarketSeed(R.Workshop)

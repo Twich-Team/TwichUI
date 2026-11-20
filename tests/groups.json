@@ -128,6 +128,7 @@
   },
   "auction-preview": {
     "tests": [
+      "test_workshop_auction_category_art.py",
       "test_perf_engine.lua",
       "test_diagnostics.lua",
       "test_workshop_auction*.lua",
@@ -157,6 +158,7 @@
         "only": [
           "shell",
           "replay",
+          "categories",
           "shopping",
           "market",
           "sell",

@@ -1,0 +1,1395 @@
+{
+  "icons": [
+    {
+      "id": "weapon-one-hand-axe",
+      "description": "a compact single-bladed one-handed axe",
+      "class": 2,
+      "subclass": 0,
+      "sheet": 10,
+      "cell": 0
+    },
+    {
+      "id": "weapon-two-hand-axe",
+      "description": "a long double-bladed two-handed battleaxe",
+      "class": 2,
+      "subclass": 1,
+      "sheet": 10,
+      "cell": 1
+    },
+    {
+      "id": "weapon-bow",
+      "description": "a curved wooden bow with taut string",
+      "class": 2,
+      "subclass": 2,
+      "sheet": 10,
+      "cell": 2
+    },
+    {
+      "id": "weapon-gun",
+      "description": "a short bronze flintlock rifle",
+      "class": 2,
+      "subclass": 3,
+      "sheet": 10,
+      "cell": 3
+    },
+    {
+      "id": "weapon-one-hand-mace",
+      "description": "a short round-headed iron mace",
+      "class": 2,
+      "subclass": 4,
+      "sheet": 10,
+      "cell": 4
+    },
+    {
+      "id": "weapon-two-hand-mace",
+      "description": "a heavy long-handled square warhammer",
+      "class": 2,
+      "subclass": 5,
+      "sheet": 10,
+      "cell": 5
+    },
+    {
+      "id": "weapon-polearm",
+      "description": "a long spear with a broad leaf-shaped head",
+      "class": 2,
+      "subclass": 6,
+      "sheet": 10,
+      "cell": 6
+    },
+    {
+      "id": "weapon-one-hand-sword",
+      "description": "a short straight arming sword",
+      "class": 2,
+      "subclass": 7,
+      "sheet": 10,
+      "cell": 7
+    },
+    {
+      "id": "weapon-two-hand-sword",
+      "description": "a large long-bladed two-handed greatsword",
+      "class": 2,
+      "subclass": 8,
+      "sheet": 11,
+      "cell": 0
+    },
+    {
+      "id": "weapon-staff",
+      "description": "a carved wooden staff with a restrained amber crystal",
+      "class": 2,
+      "subclass": 10,
+      "sheet": 11,
+      "cell": 1
+    },
+    {
+      "id": "weapon-fist-weapon",
+      "description": "a leather fist weapon with three bronze claws",
+      "class": 2,
+      "subclass": 13,
+      "sheet": 11,
+      "cell": 2
+    },
+    {
+      "id": "weapon-other-weapon",
+      "description": "a rugged wooden fighting club bound with iron",
+      "class": 2,
+      "subclass": 14,
+      "sheet": 11,
+      "cell": 3
+    },
+    {
+      "id": "weapon-dagger",
+      "description": "a short curved steel dagger",
+      "class": 2,
+      "subclass": 15,
+      "sheet": 11,
+      "cell": 4
+    },
+    {
+      "id": "weapon-thrown",
+      "description": "three small throwing knives fanned out",
+      "class": 2,
+      "subclass": 16,
+      "sheet": 11,
+      "cell": 5
+    },
+    {
+      "id": "weapon-crossbow",
+      "description": "a wooden crossbow with metal bow arms",
+      "class": 2,
+      "subclass": 18,
+      "sheet": 11,
+      "cell": 6
+    },
+    {
+      "id": "weapon-wand",
+      "description": "a slender ivory wand with a small blue tip",
+      "class": 2,
+      "subclass": 19,
+      "sheet": 11,
+      "cell": 7
+    },
+    {
+      "id": "weapon-fishing-pole",
+      "description": "a bent fishing rod with a hook and cork float",
+      "class": 2,
+      "subclass": 20,
+      "sheet": 2,
+      "cell": 0
+    },
+    {
+      "id": "group-one-handed",
+      "description": "a short sword crossed with a small hatchet",
+      "group": "one-handed",
+      "sheet": 2,
+      "cell": 1,
+      "filters": [
+        {
+          "classID": 2,
+          "subClassID": 0
+        },
+        {
+          "classID": 2,
+          "subClassID": 4
+        },
+        {
+          "classID": 2,
+          "subClassID": 7
+        },
+        {
+          "classID": 2,
+          "subClassID": 15
+        },
+        {
+          "classID": 2,
+          "subClassID": 13
+        },
+        {
+          "classID": 2,
+          "subClassID": 19
+        }
+      ]
+    },
+    {
+      "id": "group-two-handed",
+      "description": "a greatsword crossed with a long warhammer",
+      "group": "two-handed",
+      "sheet": 2,
+      "cell": 2,
+      "filters": [
+        {
+          "classID": 2,
+          "subClassID": 1
+        },
+        {
+          "classID": 2,
+          "subClassID": 5
+        },
+        {
+          "classID": 2,
+          "subClassID": 8
+        },
+        {
+          "classID": 2,
+          "subClassID": 6
+        },
+        {
+          "classID": 2,
+          "subClassID": 10
+        }
+      ]
+    },
+    {
+      "id": "group-ranged",
+      "description": "a bow crossed with a flintlock",
+      "group": "ranged",
+      "sheet": 2,
+      "cell": 3,
+      "filters": [
+        {
+          "classID": 2,
+          "subClassID": 2
+        },
+        {
+          "classID": 2,
+          "subClassID": 18
+        },
+        {
+          "classID": 2,
+          "subClassID": 3
+        },
+        {
+          "classID": 2,
+          "subClassID": 16
+        }
+      ]
+    },
+    {
+      "id": "group-misc-weapons",
+      "description": "a fishing float beside a rough fighting club",
+      "group": "misc-weapons",
+      "sheet": 2,
+      "cell": 4,
+      "filters": [
+        {
+          "classID": 2,
+          "subClassID": 20
+        },
+        {
+          "classID": 2,
+          "subClassID": 14
+        }
+      ]
+    },
+    {
+      "id": "armor-cloth",
+      "description": "a folded swatch of ivory and muted blue woven cloth",
+      "class": 4,
+      "subclass": 1,
+      "sheet": 2,
+      "cell": 5
+    },
+    {
+      "id": "cloth-head",
+      "description": "a hood or helmet made from ivory and muted blue woven cloth",
+      "class": 4,
+      "subclass": 1,
+      "inventory": 1,
+      "sheet": 2,
+      "cell": 6
+    },
+    {
+      "id": "cloth-shoulders",
+      "description": "a pair of shoulder guards made from ivory and muted blue woven cloth",
+      "class": 4,
+      "subclass": 1,
+      "inventory": 3,
+      "sheet": 2,
+      "cell": 7
+    },
+    {
+      "id": "cloth-chest",
+      "description": "a torso garment or breastplate made from ivory and muted blue woven cloth",
+      "class": 4,
+      "subclass": 1,
+      "inventory": 5,
+      "sheet": 2,
+      "cell": 8
+    },
+    {
+      "id": "cloth-waist",
+      "description": "a belt with a buckle made from ivory and muted blue woven cloth",
+      "class": 4,
+      "subclass": 1,
+      "inventory": 6,
+      "sheet": 2,
+      "cell": 9
+    },
+    {
+      "id": "cloth-legs",
+      "description": "a pair of leggings made from ivory and muted blue woven cloth",
+      "class": 4,
+      "subclass": 1,
+      "inventory": 7,
+      "sheet": 2,
+      "cell": 10
+    },
+    {
+      "id": "cloth-feet",
+      "description": "a pair of boots made from ivory and muted blue woven cloth",
+      "class": 4,
+      "subclass": 1,
+      "inventory": 8,
+      "sheet": 2,
+      "cell": 11
+    },
+    {
+      "id": "cloth-wrists",
+      "description": "two wrist bracers made from ivory and muted blue woven cloth",
+      "class": 4,
+      "subclass": 1,
+      "inventory": 9,
+      "sheet": 2,
+      "cell": 12
+    },
+    {
+      "id": "cloth-hands",
+      "description": "a pair of gloves or gauntlets made from ivory and muted blue woven cloth",
+      "class": 4,
+      "subclass": 1,
+      "inventory": 10,
+      "sheet": 2,
+      "cell": 13
+    },
+    {
+      "id": "cloth-relic",
+      "description": "a small ritual relic wrapped in this material made from ivory and muted blue woven cloth",
+      "class": 4,
+      "subclass": 1,
+      "inventory": 28,
+      "sheet": 2,
+      "cell": 14
+    },
+    {
+      "id": "armor-leather",
+      "description": "a folded swatch of warm brown stitched leather",
+      "class": 4,
+      "subclass": 2,
+      "sheet": 2,
+      "cell": 15
+    },
+    {
+      "id": "leather-head",
+      "description": "a hood or helmet made from warm brown stitched leather",
+      "class": 4,
+      "subclass": 2,
+      "inventory": 1,
+      "sheet": 3,
+      "cell": 0
+    },
+    {
+      "id": "leather-shoulders",
+      "description": "a pair of shoulder guards made from warm brown stitched leather",
+      "class": 4,
+      "subclass": 2,
+      "inventory": 3,
+      "sheet": 3,
+      "cell": 1
+    },
+    {
+      "id": "leather-chest",
+      "description": "a torso garment or breastplate made from warm brown stitched leather",
+      "class": 4,
+      "subclass": 2,
+      "inventory": 5,
+      "sheet": 3,
+      "cell": 2
+    },
+    {
+      "id": "leather-waist",
+      "description": "a belt with a buckle made from warm brown stitched leather",
+      "class": 4,
+      "subclass": 2,
+      "inventory": 6,
+      "sheet": 3,
+      "cell": 3
+    },
+    {
+      "id": "leather-legs",
+      "description": "a pair of leggings made from warm brown stitched leather",
+      "class": 4,
+      "subclass": 2,
+      "inventory": 7,
+      "sheet": 3,
+      "cell": 4
+    },
+    {
+      "id": "leather-feet",
+      "description": "a pair of boots made from warm brown stitched leather",
+      "class": 4,
+      "subclass": 2,
+      "inventory": 8,
+      "sheet": 3,
+      "cell": 5
+    },
+    {
+      "id": "leather-wrists",
+      "description": "two wrist bracers made from warm brown stitched leather",
+      "class": 4,
+      "subclass": 2,
+      "inventory": 9,
+      "sheet": 3,
+      "cell": 6
+    },
+    {
+      "id": "leather-hands",
+      "description": "a pair of gloves or gauntlets made from warm brown stitched leather",
+      "class": 4,
+      "subclass": 2,
+      "inventory": 10,
+      "sheet": 3,
+      "cell": 7
+    },
+    {
+      "id": "leather-relic",
+      "description": "a small ritual relic wrapped in this material made from warm brown stitched leather",
+      "class": 4,
+      "subclass": 2,
+      "inventory": 28,
+      "sheet": 3,
+      "cell": 8
+    },
+    {
+      "id": "armor-mail",
+      "description": "a folded swatch of dark silver interlocking chainmail",
+      "class": 4,
+      "subclass": 3,
+      "sheet": 3,
+      "cell": 9
+    },
+    {
+      "id": "mail-head",
+      "description": "a hood or helmet made from dark silver interlocking chainmail",
+      "class": 4,
+      "subclass": 3,
+      "inventory": 1,
+      "sheet": 3,
+      "cell": 10
+    },
+    {
+      "id": "mail-shoulders",
+      "description": "a pair of shoulder guards made from dark silver interlocking chainmail",
+      "class": 4,
+      "subclass": 3,
+      "inventory": 3,
+      "sheet": 3,
+      "cell": 11
+    },
+    {
+      "id": "mail-chest",
+      "description": "a torso garment or breastplate made from dark silver interlocking chainmail",
+      "class": 4,
+      "subclass": 3,
+      "inventory": 5,
+      "sheet": 3,
+      "cell": 12
+    },
+    {
+      "id": "mail-waist",
+      "description": "a belt with a buckle made from dark silver interlocking chainmail",
+      "class": 4,
+      "subclass": 3,
+      "inventory": 6,
+      "sheet": 3,
+      "cell": 13
+    },
+    {
+      "id": "mail-legs",
+      "description": "a pair of leggings made from dark silver interlocking chainmail",
+      "class": 4,
+      "subclass": 3,
+      "inventory": 7,
+      "sheet": 3,
+      "cell": 14
+    },
+    {
+      "id": "mail-feet",
+      "description": "a pair of boots made from dark silver interlocking chainmail",
+      "class": 4,
+      "subclass": 3,
+      "inventory": 8,
+      "sheet": 3,
+      "cell": 15
+    },
+    {
+      "id": "mail-wrists",
+      "description": "two wrist bracers made from dark silver interlocking chainmail",
+      "class": 4,
+      "subclass": 3,
+      "inventory": 9,
+      "sheet": 4,
+      "cell": 0
+    },
+    {
+      "id": "mail-hands",
+      "description": "a pair of gloves or gauntlets made from dark silver interlocking chainmail",
+      "class": 4,
+      "subclass": 3,
+      "inventory": 10,
+      "sheet": 4,
+      "cell": 1
+    },
+    {
+      "id": "mail-relic",
+      "description": "a small ritual relic wrapped in this material made from dark silver interlocking chainmail",
+      "class": 4,
+      "subclass": 3,
+      "inventory": 28,
+      "sheet": 4,
+      "cell": 2
+    },
+    {
+      "id": "armor-plate",
+      "description": "a folded swatch of aged steel plate with restrained bronze edging",
+      "class": 4,
+      "subclass": 4,
+      "sheet": 4,
+      "cell": 3
+    },
+    {
+      "id": "plate-head",
+      "description": "a hood or helmet made from aged steel plate with restrained bronze edging",
+      "class": 4,
+      "subclass": 4,
+      "inventory": 1,
+      "sheet": 4,
+      "cell": 4
+    },
+    {
+      "id": "plate-shoulders",
+      "description": "a pair of shoulder guards made from aged steel plate with restrained bronze edging",
+      "class": 4,
+      "subclass": 4,
+      "inventory": 3,
+      "sheet": 4,
+      "cell": 5
+    },
+    {
+      "id": "plate-chest",
+      "description": "a torso garment or breastplate made from aged steel plate with restrained bronze edging",
+      "class": 4,
+      "subclass": 4,
+      "inventory": 5,
+      "sheet": 4,
+      "cell": 6
+    },
+    {
+      "id": "plate-waist",
+      "description": "a belt with a buckle made from aged steel plate with restrained bronze edging",
+      "class": 4,
+      "subclass": 4,
+      "inventory": 6,
+      "sheet": 4,
+      "cell": 7
+    },
+    {
+      "id": "plate-legs",
+      "description": "a pair of leggings made from aged steel plate with restrained bronze edging",
+      "class": 4,
+      "subclass": 4,
+      "inventory": 7,
+      "sheet": 4,
+      "cell": 8
+    },
+    {
+      "id": "plate-feet",
+      "description": "a pair of boots made from aged steel plate with restrained bronze edging",
+      "class": 4,
+      "subclass": 4,
+      "inventory": 8,
+      "sheet": 4,
+      "cell": 9
+    },
+    {
+      "id": "plate-wrists",
+      "description": "two wrist bracers made from aged steel plate with restrained bronze edging",
+      "class": 4,
+      "subclass": 4,
+      "inventory": 9,
+      "sheet": 4,
+      "cell": 10
+    },
+    {
+      "id": "plate-hands",
+      "description": "a pair of gloves or gauntlets made from aged steel plate with restrained bronze edging",
+      "class": 4,
+      "subclass": 4,
+      "inventory": 10,
+      "sheet": 4,
+      "cell": 11
+    },
+    {
+      "id": "plate-relic",
+      "description": "a small ritual relic wrapped in this material made from aged steel plate with restrained bronze edging",
+      "class": 4,
+      "subclass": 4,
+      "inventory": 28,
+      "sheet": 4,
+      "cell": 12
+    },
+    {
+      "id": "armor-misc",
+      "description": "a small jewelry box with clasp and shirt cuff",
+      "class": 4,
+      "subclass": 0,
+      "sheet": 4,
+      "cell": 13
+    },
+    {
+      "id": "armor-neck",
+      "description": "an amber pendant on a chain",
+      "class": 4,
+      "subclass": 0,
+      "inventory": 2,
+      "sheet": 4,
+      "cell": 14
+    },
+    {
+      "id": "armor-cloak",
+      "description": "a folded forest-green cloak with a bronze clasp",
+      "class": 4,
+      "subclass": 1,
+      "inventory": 16,
+      "sheet": 4,
+      "cell": 15
+    },
+    {
+      "id": "armor-ring",
+      "description": "a gold ring with a garnet",
+      "class": 4,
+      "subclass": 0,
+      "inventory": 11,
+      "sheet": 5,
+      "cell": 0
+    },
+    {
+      "id": "armor-trinket",
+      "description": "a pocket sundial trinket",
+      "class": 4,
+      "subclass": 0,
+      "inventory": 12,
+      "sheet": 5,
+      "cell": 1
+    },
+    {
+      "id": "armor-held",
+      "description": "a carved wooden orb held in an ornate stand",
+      "class": 4,
+      "subclass": 0,
+      "inventory": 23,
+      "sheet": 5,
+      "cell": 2
+    },
+    {
+      "id": "armor-shirt",
+      "description": "an ivory linen shirt",
+      "class": 4,
+      "subclass": 0,
+      "inventory": 4,
+      "sheet": 5,
+      "cell": 3
+    },
+    {
+      "id": "armor-shield",
+      "description": "a broad wood and iron kite shield",
+      "class": 4,
+      "subclass": 6,
+      "sheet": 5,
+      "cell": 4
+    },
+    {
+      "id": "armor-libram",
+      "description": "a small closed sacred book with a sun clasp",
+      "class": 4,
+      "subclass": 7,
+      "sheet": 5,
+      "cell": 5
+    },
+    {
+      "id": "armor-idol",
+      "description": "a carved antler and leaf idol",
+      "class": 4,
+      "subclass": 8,
+      "sheet": 5,
+      "cell": 6
+    },
+    {
+      "id": "armor-totem",
+      "description": "a small wooden totem with blue feathers",
+      "class": 4,
+      "subclass": 9,
+      "sheet": 5,
+      "cell": 7
+    },
+    {
+      "id": "group-relics",
+      "description": "a sacred book, totem and carved idol clustered together",
+      "group": "relics",
+      "sheet": 5,
+      "cell": 8,
+      "filters": [
+        {
+          "classID": 4,
+          "subClassID": 7
+        },
+        {
+          "classID": 4,
+          "subClassID": 8
+        },
+        {
+          "classID": 4,
+          "subClassID": 9
+        }
+      ]
+    },
+    {
+      "id": "container-bag",
+      "description": "a plain tan adventurer backpack with two buckles",
+      "class": 1,
+      "subclass": 0,
+      "sheet": 5,
+      "cell": 9
+    },
+    {
+      "id": "container-soul",
+      "description": "a violet soul pouch with a smoky purple gem",
+      "class": 1,
+      "subclass": 1,
+      "sheet": 5,
+      "cell": 10
+    },
+    {
+      "id": "container-herb",
+      "description": "a green herb bag with leaves protruding",
+      "class": 1,
+      "subclass": 2,
+      "sheet": 5,
+      "cell": 11
+    },
+    {
+      "id": "container-enchanting",
+      "description": "a dark blue enchanting bag with a small crystal",
+      "class": 1,
+      "subclass": 3,
+      "sheet": 5,
+      "cell": 12
+    },
+    {
+      "id": "container-engineering",
+      "description": "a leather engineering toolbox bag with a gear",
+      "class": 1,
+      "subclass": 4,
+      "sheet": 5,
+      "cell": 13
+    },
+    {
+      "id": "container-mining",
+      "description": "a heavy canvas ore sack with copper ore",
+      "class": 1,
+      "subclass": 6,
+      "sheet": 5,
+      "cell": 14
+    },
+    {
+      "id": "container-leatherworking",
+      "description": "a hide satchel with leather scraps",
+      "class": 1,
+      "subclass": 7,
+      "sheet": 5,
+      "cell": 15
+    },
+    {
+      "id": "container-fishing",
+      "description": "a fishing tackle box with a hook and float",
+      "class": 1,
+      "subclass": 9,
+      "sheet": 6,
+      "cell": 0
+    },
+    {
+      "id": "container-cooking",
+      "description": "a chef supply bag with a wooden spoon",
+      "class": 1,
+      "subclass": 10,
+      "sheet": 6,
+      "cell": 1
+    },
+    {
+      "id": "container-reagent",
+      "description": "a red reagent pouch with tiny colored bottles",
+      "class": 1,
+      "subclass": 11,
+      "sheet": 6,
+      "cell": 2
+    },
+    {
+      "id": "container-quiver",
+      "description": "a leather quiver holding feathered arrows",
+      "class": 11,
+      "subclass": 2,
+      "sheet": 6,
+      "cell": 3
+    },
+    {
+      "id": "container-ammo-pouch",
+      "description": "a square leather ammunition pouch with brass cartridges",
+      "class": 11,
+      "subclass": 3,
+      "sheet": 6,
+      "cell": 4
+    },
+    {
+      "id": "group-standard-bags",
+      "description": "an open travel backpack beside a small drawstring pouch",
+      "group": "standard-bags",
+      "sheet": 6,
+      "cell": 5,
+      "filters": [
+        {
+          "classID": 1,
+          "subClassID": 0
+        },
+        {
+          "classID": 1,
+          "subClassID": 1
+        }
+      ]
+    },
+    {
+      "id": "group-ammo-bags",
+      "description": "a quiver beside a cartridge pouch",
+      "group": "ammo-bags",
+      "sheet": 6,
+      "cell": 6,
+      "filters": [
+        {
+          "classID": 11,
+          "subClassID": 2
+        },
+        {
+          "classID": 11,
+          "subClassID": 3
+        }
+      ]
+    },
+    {
+      "id": "group-reagent-bags",
+      "description": "a wide satchel holding herb leaves, ore and a crystal",
+      "group": "reagent-bags",
+      "sheet": 6,
+      "cell": 7,
+      "filters": [
+        {
+          "classID": 1,
+          "subClassID": 2
+        },
+        {
+          "classID": 1,
+          "subClassID": 3
+        },
+        {
+          "classID": 1,
+          "subClassID": 4
+        },
+        {
+          "classID": 1,
+          "subClassID": 6
+        },
+        {
+          "classID": 1,
+          "subClassID": 7
+        },
+        {
+          "classID": 1,
+          "subClassID": 9
+        },
+        {
+          "classID": 1,
+          "subClassID": 10
+        },
+        {
+          "classID": 1,
+          "subClassID": 11
+        }
+      ]
+    },
+    {
+      "id": "consumable-generic",
+      "description": "a small useful wrapped bundle tied with twine",
+      "class": 0,
+      "subclass": 0,
+      "sheet": 6,
+      "cell": 8
+    },
+    {
+      "id": "consumable-potion",
+      "description": "a round red potion bottle with cork",
+      "class": 0,
+      "subclass": 1,
+      "sheet": 6,
+      "cell": 9
+    },
+    {
+      "id": "consumable-elixir",
+      "description": "a tall green elixir vial with bronze stopper",
+      "class": 0,
+      "subclass": 2,
+      "sheet": 6,
+      "cell": 10
+    },
+    {
+      "id": "consumable-flask",
+      "description": "a broad blue alchemical flask with a long neck",
+      "class": 0,
+      "subclass": 3,
+      "sheet": 6,
+      "cell": 11
+    },
+    {
+      "id": "consumable-scroll",
+      "description": "an open scroll marked with a simple gold rune",
+      "class": 0,
+      "subclass": 4,
+      "sheet": 6,
+      "cell": 12
+    },
+    {
+      "id": "consumable-food-drink",
+      "description": "a wedge of cheese, bread and a small ceramic mug",
+      "class": 0,
+      "subclass": 5,
+      "sheet": 6,
+      "cell": 13
+    },
+    {
+      "id": "consumable-enhancement",
+      "description": "an enchantment parchment with a glowing blue seal",
+      "class": 0,
+      "subclass": 6,
+      "sheet": 6,
+      "cell": 14
+    },
+    {
+      "id": "consumable-bandage",
+      "description": "a rolled ivory bandage with a loose strip",
+      "class": 0,
+      "subclass": 7,
+      "sheet": 6,
+      "cell": 15
+    },
+    {
+      "id": "consumable-other",
+      "description": "a small utility box with a salve tin",
+      "class": 0,
+      "subclass": 8,
+      "sheet": 7,
+      "cell": 0
+    },
+    {
+      "id": "consumable-temporary-enhancement",
+      "description": "a sharpening stone beside a blade and a tiny oil vial",
+      "class": 0,
+      "subclass": 15,
+      "sheet": 7,
+      "cell": 1
+    },
+    {
+      "id": "group-enhancements",
+      "description": "a sword above a parchment with an enchantment sigil",
+      "group": "enhancements",
+      "sheet": 7,
+      "cell": 2,
+      "filters": [
+        {
+          "classID": 0,
+          "subClassID": 6
+        },
+        {
+          "classID": 0,
+          "subClassID": 15
+        }
+      ]
+    },
+    {
+      "id": "trade-general",
+      "description": "a tied bundle of assorted crafting supplies",
+      "class": 7,
+      "subclass": 0,
+      "sheet": 7,
+      "cell": 3
+    },
+    {
+      "id": "trade-parts",
+      "description": "three bronze gears and iron screws",
+      "class": 7,
+      "subclass": 1,
+      "sheet": 7,
+      "cell": 4
+    },
+    {
+      "id": "trade-explosives",
+      "description": "a round iron bomb with a short unlit fuse",
+      "class": 7,
+      "subclass": 2,
+      "sheet": 7,
+      "cell": 5
+    },
+    {
+      "id": "trade-devices",
+      "description": "a brass mechanical gadget with a small lever",
+      "class": 7,
+      "subclass": 3,
+      "sheet": 7,
+      "cell": 6
+    },
+    {
+      "id": "trade-jewelcrafting",
+      "description": "a cut sapphire beside a jeweler tool",
+      "class": 7,
+      "subclass": 4,
+      "sheet": 7,
+      "cell": 7
+    },
+    {
+      "id": "trade-cloth",
+      "description": "three bolts of ivory, sage and blue cloth",
+      "class": 7,
+      "subclass": 5,
+      "sheet": 7,
+      "cell": 8
+    },
+    {
+      "id": "trade-leather",
+      "description": "a stack of cured brown leather hides",
+      "class": 7,
+      "subclass": 6,
+      "sheet": 7,
+      "cell": 9
+    },
+    {
+      "id": "trade-metal-stone",
+      "description": "a copper ingot beside rough iron ore",
+      "class": 7,
+      "subclass": 7,
+      "sheet": 7,
+      "cell": 10
+    },
+    {
+      "id": "trade-cooking",
+      "description": "a cut of meat beside a small fish",
+      "class": 7,
+      "subclass": 8,
+      "sheet": 7,
+      "cell": 11
+    },
+    {
+      "id": "trade-herbs",
+      "description": "a tied bunch of green medicinal herbs",
+      "class": 7,
+      "subclass": 9,
+      "sheet": 7,
+      "cell": 12
+    },
+    {
+      "id": "trade-elemental",
+      "description": "a blue elemental mote swirling around a stone",
+      "class": 7,
+      "subclass": 10,
+      "sheet": 7,
+      "cell": 13
+    },
+    {
+      "id": "trade-other",
+      "description": "a coil of twine beside a pouch of powder",
+      "class": 7,
+      "subclass": 11,
+      "sheet": 7,
+      "cell": 14
+    },
+    {
+      "id": "trade-enchanting",
+      "description": "a pile of pale arcane dust beside a purple shard",
+      "class": 7,
+      "subclass": 12,
+      "sheet": 7,
+      "cell": 15
+    },
+    {
+      "id": "trade-materials",
+      "description": "a spool of thread with dye jars",
+      "class": 7,
+      "subclass": 13,
+      "sheet": 8,
+      "cell": 0
+    },
+    {
+      "id": "trade-armor-enchantment",
+      "description": "a chestplate above a small arcane seal",
+      "class": 7,
+      "subclass": 14,
+      "sheet": 8,
+      "cell": 1
+    },
+    {
+      "id": "trade-weapon-enchantment",
+      "description": "a sword beside a tiny bottle of enchanted oil",
+      "class": 7,
+      "subclass": 15,
+      "sheet": 8,
+      "cell": 2
+    },
+    {
+      "id": "trade-inscription",
+      "description": "a black ink bottle, quill and blank parchment",
+      "class": 7,
+      "subclass": 16,
+      "sheet": 8,
+      "cell": 3
+    },
+    {
+      "id": "recipe-book",
+      "description": "a thick open recipe book with blank pages",
+      "class": 9,
+      "subclass": 0,
+      "sheet": 8,
+      "cell": 4
+    },
+    {
+      "id": "recipe-leatherworking",
+      "description": "a pattern scroll with a leather hide and awl",
+      "class": 9,
+      "subclass": 1,
+      "sheet": 8,
+      "cell": 5
+    },
+    {
+      "id": "recipe-tailoring",
+      "description": "a pattern scroll with needle and thread",
+      "class": 9,
+      "subclass": 2,
+      "sheet": 8,
+      "cell": 6
+    },
+    {
+      "id": "recipe-engineering",
+      "description": "a blueprint scroll with a bronze cog",
+      "class": 9,
+      "subclass": 3,
+      "sheet": 8,
+      "cell": 7
+    },
+    {
+      "id": "recipe-blacksmithing",
+      "description": "a plan scroll with an anvil and hammer",
+      "class": 9,
+      "subclass": 4,
+      "sheet": 8,
+      "cell": 8
+    },
+    {
+      "id": "recipe-cooking",
+      "description": "a recipe card with a wooden spoon and ladle",
+      "class": 9,
+      "subclass": 5,
+      "sheet": 8,
+      "cell": 9
+    },
+    {
+      "id": "recipe-alchemy",
+      "description": "a formula scroll with a small green flask",
+      "class": 9,
+      "subclass": 6,
+      "sheet": 8,
+      "cell": 10
+    },
+    {
+      "id": "recipe-first-aid",
+      "description": "a manual with a rolled bandage",
+      "class": 9,
+      "subclass": 7,
+      "sheet": 8,
+      "cell": 11
+    },
+    {
+      "id": "recipe-enchanting",
+      "description": "a formula scroll with an enchanting rod",
+      "class": 9,
+      "subclass": 8,
+      "sheet": 8,
+      "cell": 12
+    },
+    {
+      "id": "recipe-fishing",
+      "description": "a guide scroll with a fish and hook",
+      "class": 9,
+      "subclass": 9,
+      "sheet": 8,
+      "cell": 13
+    },
+    {
+      "id": "recipe-jewelcrafting",
+      "description": "a design scroll with a ruby and small pliers",
+      "class": 9,
+      "subclass": 10,
+      "sheet": 8,
+      "cell": 14
+    },
+    {
+      "id": "recipe-inscription",
+      "description": "a manuscript with a quill and inkpot",
+      "class": 9,
+      "subclass": 11,
+      "sheet": 8,
+      "cell": 15
+    },
+    {
+      "id": "projectile-arrows",
+      "description": "three arrows with pale fletching",
+      "class": 6,
+      "subclass": 2,
+      "sheet": 9,
+      "cell": 0
+    },
+    {
+      "id": "projectile-bullets",
+      "description": "three brass bullets with silver tips",
+      "class": 6,
+      "subclass": 3,
+      "sheet": 9,
+      "cell": 1
+    },
+    {
+      "id": "misc-junk",
+      "description": "a chipped cup with a broken gear and frayed rope",
+      "class": 15,
+      "subclass": 0,
+      "sheet": 9,
+      "cell": 2
+    },
+    {
+      "id": "misc-reagents",
+      "description": "a small ritual candle and a pinch of powder",
+      "class": 15,
+      "subclass": 1,
+      "sheet": 9,
+      "cell": 3
+    },
+    {
+      "id": "misc-pets",
+      "description": "a tiny brown companion rabbit sitting beside a collar",
+      "class": 15,
+      "subclass": 2,
+      "sheet": 9,
+      "cell": 4
+    },
+    {
+      "id": "misc-holiday",
+      "description": "a wrapped red holiday gift with a gold ribbon",
+      "class": 15,
+      "subclass": 3,
+      "sheet": 9,
+      "cell": 5
+    },
+    {
+      "id": "misc-other",
+      "description": "a small wooden curiosity chest partly open",
+      "class": 15,
+      "subclass": 4,
+      "sheet": 9,
+      "cell": 6
+    },
+    {
+      "id": "misc-mounts",
+      "description": "a brown horse head wearing a simple bridle",
+      "class": 15,
+      "subclass": 5,
+      "sheet": 9,
+      "cell": 7
+    },
+    {
+      "id": "misc-mount-equipment",
+      "description": "a leather saddle with stirrups",
+      "class": 15,
+      "subclass": 6,
+      "sheet": 9,
+      "cell": 8
+    },
+    {
+      "id": "consumable-rune",
+      "description": "a carved rune tablet",
+      "class": 0,
+      "subclass": 9,
+      "sheet": 12,
+      "cell": 0
+    },
+    {
+      "id": "consumable-utility-curio",
+      "description": "a brass utility curio",
+      "class": 0,
+      "subclass": 10,
+      "sheet": 12,
+      "cell": 1
+    },
+    {
+      "id": "consumable-combat-curio",
+      "description": "a war-horn curio",
+      "class": 0,
+      "subclass": 11,
+      "sheet": 12,
+      "cell": 2
+    },
+    {
+      "id": "consumable-relic",
+      "description": "an amber consumable relic",
+      "class": 0,
+      "subclass": 12,
+      "sheet": 12,
+      "cell": 3
+    },
+    {
+      "id": "consumable-draught",
+      "description": "a squat ceramic draught bottle",
+      "class": 0,
+      "subclass": 13,
+      "sheet": 12,
+      "cell": 4
+    },
+    {
+      "id": "consumable-device",
+      "description": "a clockwork consumable device",
+      "class": 0,
+      "subclass": 14,
+      "sheet": 12,
+      "cell": 5
+    }
+  ],
+  "sheets": {
+    "2": {
+      "columns": 4,
+      "rows": 4,
+      "file": "sheet-02.png"
+    },
+    "3": {
+      "columns": 4,
+      "rows": 4,
+      "file": "sheet-03.png"
+    },
+    "4": {
+      "columns": 4,
+      "rows": 4,
+      "file": "sheet-04.png"
+    },
+    "5": {
+      "columns": 4,
+      "rows": 4,
+      "file": "sheet-05.png"
+    },
+    "6": {
+      "columns": 4,
+      "rows": 4,
+      "file": "sheet-06.png"
+    },
+    "7": {
+      "columns": 4,
+      "rows": 4,
+      "file": "sheet-07.png"
+    },
+    "8": {
+      "columns": 4,
+      "rows": 4,
+      "file": "sheet-08.png"
+    },
+    "9": {
+      "columns": 4,
+      "rows": 4,
+      "file": "sheet-09.png"
+    },
+    "10": {
+      "columns": 4,
+      "rows": 2,
+      "file": "sheet-10.png"
+    },
+    "11": {
+      "columns": 4,
+      "rows": 2,
+      "file": "sheet-11.png"
+    },
+    "12": {
+      "columns": 4,
+      "rows": 2,
+      "file": "sheet-12.png"
+    }
+  },
+  "aliases": {
+    "4:0,4:1,4:6": "armor-misc"
+  }
+}

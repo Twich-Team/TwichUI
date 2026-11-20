@@ -19,6 +19,13 @@ same(p.categoryList.data[#p.categoryList.data].name,"Swords","dropdown selection
 same(p.categoryDrop.text:GetText():find("Swords",1,true)~=nil,true)
 same(p.category,"native:1.1.1")
 same(p.categoryTree[1].name,c.AuctionCategories[1].name,"native names retained intact")
+same(p.categoryList.rows[#p.categoryList.data].data.name,"Swords","subcategory row is populated")
+local texture={SetTexture=function(self,file) self.file=file end,SetTexCoord=function(self,...) self.coords={...} end}
+W.UI.Art(texture,"auction:weapon-one-hand-sword",28)
+same(texture.file,c.TwichUI.PATH..[[media\auction\categories\weapon-one-hand-sword]],"28px Browse row uses full subcategory art")
+same(table.concat(texture.coords,","),"0,1,0,1","subcategory artwork is not cropped")
+W.UI.Art(texture,"auction:cloth-head",22)
+same(texture.file,c.TwichUI.PATH..[[media\auction\categories\cloth-head-small]],"small consumers use the 32px artwork")
 local rows={
  [10]={item=10,info={name="Cedar"},unit=100},
  [11]={item=11,info={name="Birch"},unit=200},
