@@ -504,8 +504,17 @@ kept).
   floor, deposit subtraction and per-craft count, single-item absorption, the stale rule, the covers rounding, the
   Ledger window, an unknown house given a rate, the deposit duration, the bait boundary and availability), all
   killed. Two existing entries were re-pointed at the restructured `Market.Cost` loop.
+- Development groups pass: workshop 91, ledger 23, auction-house 33, auction-preview 34, settings 29, core 15,
+  workshop-settings 18 modules (offline, this container).
+- Simulator-tested (cloud profile, `SIMLAB_ASSETS=0`, wow-ui-sim v0.1.37, pinned Forever UI 1.60.1.70532): the full
+  Workshop catalog (49 launches). Twenty-one Opportunities checks were updated to the planning estimate (the
+  vendor-priced Copper Belt Buckle, "Low confidence" on the thin fakes, the walked cost range, the Overview's
+  headline). Against an unmodified `main` run of the same launches, the branch fails **no check that `main` does not**:
+  `main` itself fails 27 checks in every launch (the worth tooltip's suggestion line and the Disenchant catalog) and one
+  more in `advisorempty`; those are not caused or fixed here. The deliberately wrong launch fails only its planted check.
+  Screenshots were taken without game assets and were **not reviewed** (they prove nothing about appearance).
 - **Not tested:** the real client (Forever's cut and deposit, `GetRecipeCooldown`, `UnitFactionGroup("npc")` at a
-  neutral auctioneer, appearance and fit of the new toggles and lines), simulator scenarios and screenshots.
+  neutral auctioneer, appearance and fit of the new toggles and lines).
 
 ### Real-client checks (none done)
 
