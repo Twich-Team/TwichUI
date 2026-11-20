@@ -484,4 +484,28 @@ do
     Same(#c.Lots(), 1); Same(#c.Entries(), 1)
 end
 
+-- R. Size and speed with a long history: bounded stores, and an allocation or a query that stays cheap.
+do
+    local c = Client(); c.Open(); c.Buy(5, 25)
+    local rec = c.Cost()
+    for i = 1, 400 do rec.lots[#rec.lots + 1] = { id = 100 + i, t = T0, k = "i" .. (5000 + i), i = 5000 + i, q = 20, r = 20, c = 1000 + i, s = "vendor" } end
+    for i = 1, 500 do rec.results[#rec.results + 1] = { id = 100 + i, t = T0 - (i % 80) * 86400, src = "vendorSell", i = 5000 + (i % 60), k = "i" .. (5000 + (i % 60)), q = 3, a = 900, c = 600, st = "ok", al = {} } end
+    for i = 1, 200 do rec.crafts[#rec.crafts + 1] = { id = 100 + i, t = T0, r = 7, p = 164, i = 9000, q = 1, c = 10, st = "ok", m = {} } end
+    rec.nextLot, rec.nextResult, rec.nextCraft = 1000, 1000, 1000
+    local start = os.clock()
+    for _ = 1, 2000 do c.K.Pool(rec, "i5200") end
+    local pool = (os.clock() - start) / 2000 * 1e6
+    start = os.clock()
+    for _ = 1, 50 do c.K.Results({ KEY }, 0, 4102444800) end
+    local query = (os.clock() - start) / 50 * 1e3
+    start = os.clock()
+    for _ = 1, 50 do c.K.Professions({ KEY }, 0, 4102444800) end
+    local profs = (os.clock() - start) / 50 * 1e3
+    print(("cost basis: pool lookup over 400 lots %.1f us, 500-result query %.2f ms, profession totals %.2f ms"):format(pool, query, profs))
+    Check(pool < 2000 and query < 50 and profs < 50, "cost basis stays cheap")
+    c.DT = 100 * 86400; c.Buy(5, 25)   -- the day changes: compaction runs once and the stores stay within their bounds
+    Check(#c.Cost().lots <= c.K.MAX_LOTS and #c.Cost().results <= c.K.MAX_RESULTS and #c.Cost().crafts <= c.K.MAX_CRAFTS, "bounded")
+    Check(c.V.Snapshot().candidates == 0, "no candidate is left behind")
+end
+
 print("LEDGER COST OK")

@@ -1,7 +1,7 @@
 # Gold Ledger (Workshop)
 
 What the player's gold did: how much arrived, how much left, and, only where a completed transaction proves it, where it came from.
-Observed movement, **not profit**. No figure on the page is an estimate; an amount is either read from the game or shown as unavailable.
+Observed movement, **not profit**, except in the separate *Realized Results* view, where a profit appears only when both the collected gold and the cost of exactly the units sold were verified. No figure on the page is an estimate; an amount is either read from the game or shown as unavailable.
 
 ## Parts
 
@@ -11,6 +11,7 @@ Observed movement, **not profit**. No figure on the page is an estimate; an amou
 | Evidence: mailbox | `!!!TwichUI/auction/Mail.lua` (`R.MailGold`) | Reports each *matched* mailbox money gain (exact amount) once. Now also listens when only the ledger needs it. |
 | Evidence: purchases | `TwichUI_Workshop/auction/Actions.lua` | Reports a completed Auction House purchase (`AUCTION_HOUSE_PURCHASE_COMPLETED` / `COMMODITY_PURCHASE_SUCCEEDED`) with its reviewed total. Nothing else reports. |
 | Evidence: merchants | `!!!TwichUI/auction/Vendor.lua` (`R.VendorGold`) | Observes native requests and verified outcomes, then targets the corresponding existing journal entry. Works with Workshop unloaded. |
+| Cost basis (V4) | `!!!TwichUI/auction/LedgerCost.lua` (`R.LedgerCost`), `LedgerCostWatch.lua` | Lots, realized results and verified crafts, stored inside `TwichUILedgerDB.cost`. A separate interpretation of already-verified activity; never records or changes money. |
 | Reading side | `TwichUI_Workshop/LedgerQuery.lua` | Pure: totals, daily series, source split, transaction merge, comparison. Cached. |
 | Chart | `TwichUI_Workshop/LedgerChart.lua` | Pure geometry plus the pooled-region frame (`UI.GoldFlowChart`). |
 | Page | `TwichUI_Workshop/ViewLedger.lua` | The registered **Gold Ledger** page (second navigation group). |
@@ -59,6 +60,54 @@ Read-only reference: local `wow-ui-source` **forever**, commit `bebcb6b` (1.60.1
 **Deliberate refusals:** overlapping requests before settlement (including ambiguous external junk-seller bursts), multiple money movements in one candidate, mixed/unrelated spending, unsupported/changed offers or currencies, unknown prices/items, failed or cancelled requests, buyback purchases, cursor/drag sales, ambiguous full buyback lists, partial/unverified repairs, guild-funded repairs. A single bulk purchase request can identify one combined debit and its actual quantity; overlapping API calls are not split into artificial entries. Sequential requests with separately verified outcomes can each be attributed. EllesmereUI's marker/seller integration is unchanged; none of its internals are hooked or called.
 
 Native event ordering and post-hook visibility still need owner testing. If data changes synchronously before it can be captured, an update is missing/late, or a transaction takes more than two seconds, attribution is refused. This affects descriptions only; the existing recorder still keeps every observed gold movement. Synthetic tests and UI fixtures are **not native V2 acceptance**.
+
+## Cost basis and realized results (V4)
+
+**Cash stays the only authority.** `Ledger.lua` (`PLAYER_MONEY` / `GetMoney()`) alone creates cash entries. The cost basis never reads a balance, never creates, edits or reclassifies an entry, and no cash number (cards, Gold Flow, Gold by Source, transaction amounts) depends on it. It runs only when the recorder has *already attached evidence* to an entry (`Lg.OnAttached`, called after the attach) and the observer passed bag facts (`stock`, session-only). A test (`test_ledger_cost.lua`, section I) compares journals and day totals byte for byte with and without the component.
+
+### What becomes a lot (acquisition cost)
+
+| Source | Evidence required | Result |
+| --- | --- | --- |
+| Vendor purchase | the existing V2 verified outcome (exact price, exact item increase) **and** the carried quantity of that exact identity before the purchase equals the identified lots of it | a lot: identity, quantity, exact gold, journal entry id |
+| Auction House purchase | completed TwichUI purchase receipt (exact reviewed total, item, quantity) | a lot **in transit**. It joins the carried stock only when the player takes a **buyer-invoice** mail attachment and the bags then gain exactly that count of that exact identity (`LedgerCostWatch.lua`; one request at a time). The requested quantity is never trusted by itself. |
+| Verified craft | below | a lot whose cost is the allocated cost of the consumed materials, or **unknown** |
+| Gathering, quest rewards, trades, other mail, bank withdrawals, starting inventory | none | **Unknown cost.** Never zero. No lot. |
+
+Identity is `i<itemID>` plus the supported variant fields (enchant, gems, random suffix, bonus ids, in that order, bonus ids sorted); unique id, level and spec are ignored. An unreadable link yields the plain-id key, never a guess. A bonus-id variant is never pooled with the plain item.
+
+### The identified-stock rule (why a sale may or may not get a cost)
+
+A sale is matched to cost only if the carried quantity of that identity equals the quantity of its identified lots (so every carried unit is a known lot unit) and covers the sale. Otherwise (older stock, loot, a trade, units in the bank or mail) the sold units cannot be told apart, the result is **unavailable**, and the pool's lots are forgotten: their units can no longer be separated from the other stock, and a later sale must not inherit a stale cost. Unknown starting stock mixed with a purchase means that purchase is never identified. No FIFO guess is made across unidentified stock.
+
+Inside a set of genuinely identified lots of one identity the allocation is **FIFO** (oldest lot first). Cost is apportioned in whole copper: the cost of the first *u* of a lot's *q* units is `floor(cost * u / q)`, so the pieces always add up to exactly the lot's cost. Known limitation: stock moved out of and back into the bags without any evidence, in amounts that cancel exactly, is not detectable.
+
+### Realized results
+
+* **Vendor resale** (`vendorSell`): collected = the buyback receipt amount the V2 evidence already matched; cost = the allocated cost of the exact units. One result per sale entry (a repeated evidence is ignored).
+* **Auction sale**: kept with collected, gross, fee and returned deposit from the verified seller invoice; **never matched to a lot.** A seller invoice carries an item *name* and count, no item id, no auction id; the posting deposit entries carry an id but nothing links them to the invoice. Names and prices that look alike are not lineage, so these rows read *Cost basis unavailable*. Deposit and fee are therefore not subtracted a second time: collected already includes the returned deposit and excludes the fee.
+* A result is `ok` only with a verified cost; `incomplete` when it drew on units whose cost is unknown (crafts with unverified materials); `unknown` otherwise, with a reason (*no verified purchase*, *mixed with other stock*, ...). Only verified profit enters totals.
+* A result drawn from several origins is merged by origin (at most six); more than that is *incomplete*.
+
+### Crafts
+
+Only the game's own signals count: `TRADE_SKILL_CRAFT_BEGIN(recipeSpellID)`, `TRADE_SKILL_ITEM_CRAFTED_RESULT(data)` and the bags. A craft is recorded only when the recipe is the player's own learned recipe, its schematic is fixed (every material one basic item at a fixed quantity, one output item), exactly one craft is in flight, the results name only that output and the bags gain exactly the reported quantity, and every material left the bags in exactly the schematic quantity (so nothing was returned and no other movement overlapped). Multi-output crafts, returned resources/ingenuity, quality reagents, interrupted or overlapping crafts and any transfer during the craft are **not verified**: the materials' identified lots are forgotten rather than guessed. The queue's *Crafted one* button and `Progress.lua` are **not** evidence and are unchanged (automatic queue counting stays off).
+
+Materials are taken from identified stock with the same rule, so a bar's cost passes into the armor made from it (ore → bars → armor is counted once, at the sale). Unknown material cost makes the craft and its output lot *incomplete*; the output's sale then has no profit. The craft's profession comes from `GetProfessionInfoByRecipeID` (the parent profession when the game gives one).
+
+### The page
+
+The **Recent Transactions** panel has two views (*Transactions*, *Item Results*); the six cards, Gold Flow, Gold by Source and all filters are unchanged. *Item Results* groups the window's sales by item identity: collected, verified cost, realized result (`+` sage / `-` ember), `*` when only some sales are verified, *Unknown* / *Unavailable* otherwise, with the reason and per-sale detail in the hover. **Profit by Profession** uses `LedgerQuery.SetProfessionProvider`: a profession shows a result only from sales whose units all came from verified crafts of that profession with every cost verified (*N sales verified*); crafts with no such sale read *Insufficient verified data*. Vendor resale of bought goods and gathered goods are never attributed. With no craft data the original *not available yet* state remains.
+
+### Stored data and retention
+
+`TwichUILedgerDB.cost = { v = 1, chars = { [key] = { lots, results, crafts, profs, nextLot, nextResult, nextCraft } } }` (field list in `LedgerCost.lua`). It is created the first time something is verified; existing V1-V3 data are not touched or migrated, and `version` stays 1. A newer `cost.v` is left untouched and never read (cash keeps recording). Corrupt parts are dropped one row at a time (`ledger-cost-dropped`); a result claiming `ok` without a cost is demoted to `incomplete`. Per character: at most **400 open lots** (oldest forgotten first), a lot open longer than **180 days** is forgotten, an Auction House lot not delivered within **45 days** is forgotten, **500 results** and **200 crafts** within the **90-day** window of the journal. A forgotten lot's units become unknown cost; nothing is reconstructed. Characters and realms are separate records. Downgrading to a V3 binary ignores the extra field and keeps cash history.
+
+Diagnostics: scopes `ledger.cost`, `ledger.costquery`; gauges `ledger.cost.lots/results/crafts/transit/events`.
+
+### Not verified in the real client
+
+That Forever fires `TRADE_SKILL_CRAFT_BEGIN` / `TRADE_SKILL_ITEM_CRAFTED_RESULT` with the documented payload and in what order against the bag update; that an Auction House purchase arrives as a mail with a *buyer* invoice (`GetInboxInvoiceInfo`) and `TakeInboxItem` is the call used; the real item links' bonus-id layout; commodity purchase delivery split across several attachments (the cost is kept in transit until a single attachment of the right count arrives). If any of these differ, the result is *unavailable*, never a wrong profit.
 
 ## Saved variable
 
@@ -166,6 +215,7 @@ Vendor sources use the same six cards, filters, item icons and hover details. Go
 * V2: `tests/test_ledger_vendor.lua` drives the real recorder, native-request observer and `Restock.Listing` with independent synthetic outcomes. `./tests/run.sh feature ledger --profile cloud` selects focused tests/core dependencies, syntax, smoke and `ledgervendor`/`ledgervendorsmall`; `bash tools/mutate.sh --group ledger` includes the vendor accounting defects. New simulator poses preserve all old Ledger assertions before adding vendor UI fixtures. The 27 existing Workshop tooltip assertion failures were reproduced identically on pre-Ledger `main` (`fda7d00`) during V1 reconciliation; these remain failed evidence, never an exception converted to PASS.
 * V3: `test_ledger_auction.lua` drives the real action controller and shared evidence adapter; core `test_auction_window.lua` checks the legacy posting handoff. `test_ledger_settlement.lua` covers mailbox order, independently delivered invoice/payment facts, double-counting, mixed/ambiguous mail, safe serializer text round trips, old V1/V2 data and future/corrupt metadata. The Ledger group also includes existing AH actions/reads/Owned/Sell/lifecycle and diagnostics regressions. Feature selection runs smoke plus `ledgerauction`/`ledgerauctionsmall`, which preserve all V1/V2 pose checks before adding V3 assertions. Production and CI protections are unchanged; stacked PRs whose base is a feature branch are outside the current main-only automatic workflow filter.
 * V3 checkpoint: **unit-tested**, 43 offline modules and syntax for 104 Lua files passed; **mutation-tested**, 41/41 Ledger mutations killed (13 new auction/settlement defects), none invalid/surviving. Runner regression: 17 cases; simulator workflow regression: 12 cases, passed. An earlier duplicate-take chat timing regression was corrected while preserving its original assertion. **Simulator-tested**, cloud smoke passed; normal/narrow auction poses each passed 533 assertions including all 30 Ledger checks, while retaining the 27 identical baseline tooltip failures. The complete feature profile remains **FAIL**. Screenshots were reviewed for structure only. No native V3 acceptance is claimed; no full/release certification campaign was run.
+* V4: `tests/test_ledger_cost.lua` (lots, resale, partial/fractional, FIFO lots, unknown/mixed stock, variants, deliveries, crafts, subcrafts, persistence, retention, timing), the page and profession cases in `tests/test_workshop_ledger.lua`; 17 added mutations (`--group ledger`: 58/58 killed).
 * Not verified without the real client: `PLAYER_MONEY`/`GetMoney()` timing at login (is the balance valid at `PLAYER_ENTERING_WORLD`?), whether `GetInboxInvoiceInfo` returns the seller invoice before the mail is opened, that the exact commodity quote equals the money that leaves, and `GetTime()` being constant inside a frame (the same-frame rule; the single-candidate rule covers a miss).
 
 ## Owner check in game
@@ -179,3 +229,11 @@ Deferred until the owner is available; all real-game actions below are optional 
 5. Collect a genuine auction payment through normal mailbox use when one is available; do not manufacture a sale to test.
 6. Inspect Workshop → Gold Ledger: exact totals, source/item descriptions and available invoice hover details.
 7. Reload and confirm history/classifications/details persist. If something remains Unclassified, copy the immediate sanitized diagnostic above.
+
+### Owner check for V4 (short)
+
+1. Update the regular installation from this branch; confirm the existing Ledger history, cards and transactions are unchanged.
+2. Pick a vendor item you hold **none** of; buy a few, then sell the same stack back. Open Gold Ledger, switch the lower-left panel to **Item Results**: the item shows its collected gold, verified cost and a result.
+3. Buy the same item while already holding some: the later sale must read *Unavailable* (mixed stock), not a profit.
+4. If you craft a recipe whose materials you bought from a vendor, sell the product to a vendor: the profession panel shows the result; a craft from materials you did not buy shows *Insufficient verified data*.
+5. Reload; the results persist. Native V2/V3 acceptance remains a separate open item.
