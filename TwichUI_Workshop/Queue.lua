@@ -21,13 +21,31 @@ W.Queue = Q
 
 Q.Now = function() return time() end
 
--- "Name - Realm", or nil while the game can't say
+local characterName, characterKey
+
+-- "Name - Realm", or nil while the game can't say. Forever can return an
+-- empty GetRealmName after login. Profiles keeps the canonical identity it
+-- captured at login; UnitFullName's realm can differ from that saved realm.
+-- Reuse that identity (or our last confirmed one), never guess by name alone.
 function Q.CharKey()
     local name = Plain(UnitName and UnitName("player"))
-    local realm = Plain(GetRealmName and GetRealmName())
     if type(name) ~= "string" or name == "" or name == UNKNOWNOBJECT then return nil end
-    if type(realm) ~= "string" or realm == "" then return nil end
-    return name .. " - " .. realm
+    local realm = Plain(GetRealmName and GetRealmName())
+    local key
+    if type(realm) == "string" and realm ~= "" then
+        key = name .. " - " .. realm
+    else
+        local profiles = R.Profiles
+        local canonical = Plain(profiles and profiles.Character and profiles.Character())
+        local prefix = name .. " - "
+        if type(canonical) == "string" and canonical:sub(1, #prefix) == prefix and #canonical > #prefix then
+            key = canonical
+        elseif characterName == name then
+            key = characterKey
+        end
+    end
+    if key then characterName, characterKey = name, key end
+    return key
 end
 
 ---------------------------------------------------------------------------

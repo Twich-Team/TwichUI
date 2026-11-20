@@ -232,4 +232,66 @@ local text = table.concat(blob, " ")
 Check(not text:find("have", 1, true) and not text:find("short", 1, true) and not text:find("cooldown", 1, true) and not text:find("craftable", 1, true),
   "no bag counts, craftability or cooldowns in the saved records")
 
+-- A transiently unavailable character identity must not turn a close into data loss.
+do
+  local s = Session("Rich", {}, nil); s.Flush()
+  local W, c = s.W, s.c
+  c.TwichUI.Profiles.Character = function() return nil end
+  c.GetRealmName = function() return nil end
+  Same(#W.Session.AllRecipes(), 0)
+  s.g.prof = ALCH; s.g.recipes, s.g.schem = Recipes(); s.g.filtered = { 1, 2 }
+  Check(W.Session.Observe())
+  W.Session.FillSome(120)
+  W.Session.Reset()
+  c.GetRealmName = function() return "Realm" end
+  Check(W.Session.Save())
+  Check(s.Saved(171) and #s.Saved(171).r == 2, "failed saves survive closing and are retried")
+  W.Session.Reset()
+  Same(#W.Session.AllRecipes(), 2, "reopening restores saved recipes without a profession")
+
+  -- The first read before the character is available must not latch an empty cache.
+  local reloaded = Session("Rich", c.TwichUIDB, nil); reloaded.Flush()
+  reloaded.c.TwichUI.Profiles.Character = function() return nil end
+  reloaded.c.GetRealmName = function() return nil end
+  Same(#reloaded.W.Session.AllRecipes(), 0)
+  reloaded.c.GetRealmName = function() return "Realm" end
+  Same(#reloaded.W.Session.AllRecipes(), 2, "saved recipes load once character identity becomes available")
+end
+
+-- Real-client regression: GetRealmName is empty, UnitFullName reports a
+-- different display realm, and the saved records use the login realm name.
+do
+  local key = "Rich - CAMWOW US2 Realm 7 PvE"
+  local saved = { workshop = { v = 1, chars = { [key] = { known = {
+    [333] = { name = "Enchanting", at = 1, r = {
+      { 14807, "Greater Magic Wand", 135144, 11288, 1, 1, 1, 4470, 1, 10938, 2 },
+      { 13485, "Enchant Shield - Lesser Spirit", 135913, 0, 1, 1, 1, 10998, 1, 10940, 2 },
+    } },
+  } } } } }
+  local s = Session("Rich", saved, nil)
+  s.c.GetRealmName = function() return "" end
+  s.c.UnitFullName = function() return "Rich", "Rusk" end
+  s.c.TwichUI.Profiles.Character = function() return key end
+  s.Flush()
+  Same(s.W.Queue.CharKey(), key, "use the canonical login identity when the realm API is empty")
+  Same(#s.W.Known.Load(), 1)
+  Same(#s.W.Session.Opportunities().all, 2, "saved crafts are visible before opening any profession")
+  s.W.Session.Reset()
+  Same(#s.W.Session.Opportunities().all, 2, "closing and reopening retains the saved crafts")
+  local codec = s.c.LibStub("LibSerialize")
+  local ok, roundTrip = codec:Deserialize(codec:Serialize(saved))
+  Check(ok, "saved recipes survive a non-executable text round trip")
+  local fresh = Session("Rich", roundTrip, nil)
+  fresh.c.GetRealmName = function() return "" end
+  fresh.c.TwichUI.Profiles.Character = function() return key end
+  fresh.Flush()
+  Same(#fresh.W.Session.Opportunities().all, 2, "a fresh session restores crafts with an empty realm API")
+  s.c.TwichUI.Profiles.Character = function() return nil end
+  Same(s.W.Queue.CharKey(), key, "a confirmed identity survives temporary profile unavailability")
+  s.c.UnitName = function() return "Alt" end
+  Same(s.W.Queue.CharKey(), nil, "another character never inherits the cached identity")
+  s.c.TwichUI.Profiles.Character = function() return "Rich - OtherRealm" end
+  Same(s.W.Queue.CharKey(), nil, "another character's profile identity is refused")
+end
+
 print("PASSED")
