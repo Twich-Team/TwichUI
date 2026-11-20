@@ -101,7 +101,7 @@ function Co.Text(copper, o)
     o = o or {}
     local neg, g, s, c = Co.Split(copper)
     if neg == nil then return "" end
-    local height, level = o.height or 12, o.level or 1
+    local height, level = o.icon or o.height or 12, o.level or 1
     local parts = {}
     if g > 0 then
         if level >= 4 and g >= 1000 then
@@ -143,10 +143,11 @@ end
 ---------------------------------------------------------------------------
 -- On a font string
 ---------------------------------------------------------------------------
--- Sets the text and remembers the exact amount (fs.exact) for the hover. size: the font size the icons are cut for.
+-- Sets the text and remembers the exact amount (fs.exact) for the hover. size: the font size the icons are cut for; icon: a fixed icon
+-- height instead (so a figure whose font was shrunk to fit keeps the same coins as its neighbours).
 function Co.Set(fs, copper, o)
     o = o or {}
-    local text = Co.Text(copper, { signed = o.signed, height = o.size or 12, level = o.level })
+    local text = Co.Text(copper, { signed = o.signed, height = o.size or 12, icon = o.icon, level = o.level })
     fs.exact, fs.compact, fs.level = Plain(copper), (o.level or 1) > 1, o.level or 1
     fs:SetText(text)
     return text
@@ -159,7 +160,7 @@ function Co.Fit(fs, copper, o)
     local role = o.role
     local function Try(s, level)
         if UI.CL and UI.CL.Font and not o.keepFont then UI.CL.Font(fs, s, false, role) end
-        Co.Set(fs, copper, { signed = o.signed, size = s, level = level })
+        Co.Set(fs, copper, { signed = o.signed, size = s, icon = o.icon, level = level })
         local w = o.measure and o.measure(fs) or (fs.GetStringWidth and fs:GetStringWidth()) or 0
         return w <= (o.width or math.huge)
     end

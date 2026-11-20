@@ -21,6 +21,7 @@ local MID_TOP, MID_H, MID_L = -166, 196, 568
 local BOT_TOP, BOT_H = -370, 185
 local ROW_H = 26
 local SRC_ROW_H = 32
+local CARD_ICON = 14   -- every card's coins are cut at one size, whatever font its figure needed to fit
 local DRAW_DELAY = 0.3     -- a burst of money changes is one redraw
 local SEARCH_DELAY = 0.15
 
@@ -186,7 +187,7 @@ local function PaintCards(s)
         end
         if amount ~= nil then
             c.value:SetText("")
-            Co.Fit(c.value, amount, { size = 19, min = 14, width = c.width, signed = signed, role = "serif" })
+            Co.Fit(c.value, amount, { size = 19, min = 14, width = c.width, signed = signed, role = "serif", icon = CARD_ICON })
         else
             c.value.exact = nil
             Fit(c.value, value, c.width, 19, 12, "serif")
@@ -227,19 +228,14 @@ local function BuildFlow()
     end
     -- Expand: the same chart, much larger (an overlay inside the Workshop, not another window)
     p.expand = CreateFrame("Button", nil, p)
-    p.expand:SetSize(22, 22)
-    p.expand:SetPoint("TOPRIGHT", p, "TOPRIGHT", x - 2, -8)
-    p.expand.parts = {}
-    for _, corner in ipairs({ { "TOPLEFT", 1, -1, 1, -1 }, { "TOPRIGHT", -1, -1, -1, -1 }, { "BOTTOMLEFT", 1, 1, 1, 1 }, { "BOTTOMRIGHT", -1, 1, -1, 1 } }) do
-        -- an L-shaped bracket in each corner: two thin bars
-        local a = UI.L.Solid(p.expand, "ARTWORK", K.bronzeText, 0.75)
-        a:SetSize(7, 2); a:SetPoint(corner[1], p.expand, corner[1], corner[2] * 4, corner[3] * 4)
-        local b = UI.L.Solid(p.expand, "ARTWORK", K.bronzeText, 0.75)
-        b:SetSize(2, 7); b:SetPoint(corner[1], p.expand, corner[1], corner[2] * 4, corner[3] * 4)
-        p.expand.parts[#p.expand.parts + 1] = a; p.expand.parts[#p.expand.parts + 1] = b
-    end
-    p.expand:SetScript("OnEnter", function(self) for _, t in ipairs(self.parts) do t:SetAlpha(1) end end)
-    p.expand:SetScript("OnLeave", function(self) for _, t in ipairs(self.parts) do t:SetAlpha(0.75) end end)
+    p.expand:SetSize(26, 26)
+    p.expand:SetPoint("TOPRIGHT", p, "TOPRIGHT", x - 2, -5)
+    p.expand.tex = p.expand:CreateTexture(nil, "ARTWORK")
+    p.expand.tex:SetAllPoints()
+    p.expand.tex:SetTexture("Interface\\AddOns\\TwichUI_Workshop\\media\\chart-expand")   -- a diagonal double arrow in a rounded rim
+    p.expand.tex:SetVertexColor(K.bronzeText[1], K.bronzeText[2], K.bronzeText[3], 0.8)
+    p.expand:SetScript("OnEnter", function(self) self.tex:SetVertexColor(1, 0.86, 0.55, 1) end)
+    p.expand:SetScript("OnLeave", function(self) self.tex:SetVertexColor(K.bronzeText[1], K.bronzeText[2], K.bronzeText[3], 0.8) end)
     p.expand:SetScript("OnClick", function() V.OpenExpanded() end)
     UI.Tip(p.expand, "Expand chart", "Open Gold Flow in a larger view with more room to inspect and zoom. Your date range, character and source filters carry over.")
     local chart = UI.GoldFlowChart(p, MID_L - 16, MID_H - 40)

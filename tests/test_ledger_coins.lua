@@ -83,6 +83,12 @@ do
     size, level = Co.Fit(fs, 16, { size = 13, min = 10, width = 60, measure = Measure })
     Same(level, 1)
 
+    -- a fixed icon height: a shrunk font keeps the same coins as its neighbours
+    local f2 = { text = "" }; function f2:SetText(t) self.text = t end
+    local sz = Co.Fit(f2, 1234567 * 10000 + 5524, { size = 19, min = 14, width = 150, measure = Measure, icon = 14 })
+    Check(f2.text:find(":14:14:2:0", 1, true) and not f2.text:find(":19:19", 1, true) and not f2.text:find(":15:15", 1, true), f2.text)
+    Same(Co.Text(10000, { height = 19, icon = 14 }), "1" .. Icon(GOLD, 14))
+
     -- axis: one denomination
     Same(Co.Axis(0, 10), "0" .. Icon(GOLD, 10)); Same(Co.Axis(30000, 10), "3" .. Icon(GOLD, 10)); Same(Co.Axis(-50000, 10), "-5" .. Icon(GOLD, 10))
     Same(Co.Axis(5000, 10), "50" .. Icon(SILVER, 10)); Same(Co.Axis(42, 10), "42" .. Icon(COPPER, 10)); Same(Co.Axis(2500000, 10), "250" .. Icon(GOLD, 10)); Same(Co.Axis(150000000, 10), "15k" .. Icon(GOLD, 10)); Same(Co.Axis(15000000000, 10), "1.5M" .. Icon(GOLD, 10)); Same(Co.Axis(-20000000000, 10), "-2M" .. Icon(GOLD, 10))
