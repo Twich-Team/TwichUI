@@ -580,4 +580,82 @@ do
     Check(TipText():find("Fee unavailable", 1, true)); Check(not TipText():find("Gross sale:", 1, true))
     V.SetFilter("source", nil)
 end
+
+---------------------------------------------------------------------------
+-- Realized item results and Profit by Profession (cost basis; synthetic records straight into TwichUILedgerDB.cost)
+---------------------------------------------------------------------------
+do
+    do local chunk = assert(loadfile(ROOT .. "auction/LedgerCost.lua")); setfenv(chunk, c); chunk("!!!TwichUI", {}) end
+    local K = R.LedgerCost
+    K.Init()
+    local now = TODAY * DAY + 3600
+    local function Res(t) t.t = t.t or now; t.al = t.al or {}; return t end
+    local costRec = { nextLot = 1, nextResult = 100, nextCraft = 10, lots = {}, crafts = {}, profs = { [197] = "Tailoring", [171] = "Alchemy" },
+        results = {
+            Res({ id = 1, src = "vendorSell", i = 10, k = "i10", q = 5, a = 3000, c = 2500, st = "ok", x = 1 }),
+            Res({ id = 2, src = "vendorSell", i = 10, k = "i10", q = 3, a = 1000, st = "unknown", w = "mixed", x = 2 }),
+            Res({ id = 3, src = "vendorSell", i = 11, k = "i11", q = 2, a = 2800, st = "unknown", w = "nolot", x = 3 }),
+            Res({ id = 4, src = "ahSale", n = "Runecloth", q = 20, a = 99500, g = 100000, fee = 5000, d = 4500, st = "unknown", w = "auctionid", x = 4 }),
+            Res({ id = 5, src = "vendorSell", i = 12, k = "i12", q = 1, a = 4000, c = 2500, st = "ok", pf = 197, x = 5, al = { { l = 1, q = 1, c = 2500, s = "craft", f = 1, p = 197 } } }),
+            Res({ id = 6, src = "vendorSell", i = 12, k = "i12", q = 1, a = 3000, c = 1500, st = "ok", pf = 197, x = 6, al = { { l = 2, q = 1, c = 1500, s = "craft", f = 2, p = 197 } } }),
+            Res({ id = 7, src = "vendorSell", i = 13, k = "i13", q = 1, a = 900, st = "incomplete", w = "unknowncost", x = 7, al = { { l = 3, q = 1, s = "craft", f = 3, p = 171 } } }),
+        } }
+    costRec.crafts = { { id = 1, t = now, r = 5, p = 197, i = 12, q = 1, c = 2500, st = "ok", m = {} }, { id = 3, t = now, r = 6, p = 171, i = 13, q = 1, st = "incomplete", m = {} },
+        { id = 4, t = now, r = 7, p = 333, i = 14, q = 1, c = 100, st = "ok", m = {} } }
+    c.TwichUILedgerDB.cost = { v = 1, chars = { ["Rich - Forever"] = costRec } }
+    c.TwichUILedgerDB.chars["Rich - Forever"] = NewRec("Rich")
+    LQ.ResetCache(); K.Rec("Rich - Forever", false)
+    V.SetFilter("source", nil); V.SetFilter("days", 7); V.SetFilter("search", "")
+
+    local r = LQ.Results({ scope = "current", days = 7 })
+    Check(r, "results are available")
+    local by = {}
+    for _, row in ipairs(r.rows) do by[(row.item and ("i" .. row.item)) or row.name] = row end
+    Same(by.i10.status, "partial"); Same(by.i10.profit, 500, "only the verified sale counts: 3000 - 2500"); Same(by.i10.vsales, 1); Same(by.i10.sales, 2)
+    Same(by.i10.collected, 4000, "collected covers every sale"); Same(by.i10.vcost, 2500)
+    Same(by.i11.status, "unavailable"); Same(by.i11.profit, nil, "no profit without a verified cost"); Same(by.i11.collected, 2800)
+    Same(by.Runecloth.status, "unavailable"); Same(by.Runecloth.gross, 100000); Same(by.Runecloth.fee, 5000); Same(by.Runecloth.deposit, 4500); Same(by.Runecloth.profit, nil)
+    Same(by.i12.status, "verified"); Same(by.i12.profit, 4000 + 3000 - 2500 - 1500); Same(by.i12.qty, 2)
+    Same(by.i13.profit, nil)
+    Same(r.verified, 500 + 3000, "verified profit: 500 on the partial item plus 3000 on the crafted one")
+    Same(r.sales, 7); Same(r.unavailable, 4)
+    local lines = table.concat(LQ.ResultLines(by.i11), "|"); Check(lines:find("Cost basis unavailable", 1, true) and lines:find("No verified purchase", 1, true), lines)
+    Check(table.concat(LQ.ResultLines(by.i12), "|"):find("Realized result: +30s 0c", 1, true))
+    Check(table.concat(LQ.ResultLines(by.Runecloth), "|"):find("auction fee 50s 0c", 1, true))
+
+    -- the page: one panel, two views
+    Same(V.mode, "transactions"); V.tx.modeResults:GetScript("OnClick")(V.tx.modeResults)
+    Same(V.mode, "results"); Same(V.tx.title:GetText(), "Realized Results"); Check(V.rlist.box:IsShown() and not V.list.box:IsShown())
+    Same(#V.rlist.data, 5)
+    local row = V.rlist.rows[1]; Check(row, "pooled rows exist")
+    row:GetScript("OnEnter")(row); Check(#Tip.lines > 0, "hover details")
+    local seen = {}
+    for _, rw in ipairs(V.rlist.rows) do if rw:IsShown() then seen[rw.name:GetText()] = rw end end
+    Check(seen["Item 12 \195\1512"], "a quantity is shown")
+    for name, rw in pairs(seen) do
+        if rw.data.profit == nil then Same(rw.result:GetText(), "Unavailable", name); Check(rw.cost:GetText() == "Unknown", name) end
+    end
+    V.SetFilter("source", "ahSale"); Same(#V.rlist.data, 1); V.SetFilter("source", nil)
+    V.SetFilter("search", "runecloth"); Same(#V.rlist.data, 1); V.SetFilter("search", "")
+    V.tx.modeTx:GetScript("OnClick")(V.tx.modeTx); Same(V.mode, "transactions"); Check(V.list.box:IsShown() and not V.rlist.box:IsShown())
+
+    -- professions: verified results only; partial and insufficient are labelled, never zero or guessed
+    LQ.SetProfessionProvider(LQ.CostProfessions); LQ.ResetCache(); V.Draw()
+    local prof = LQ.Professions({ scope = "current", days = 7 })
+    Check(prof and #prof.rows == 3, "three professions, got " .. tostring(prof and #prof.rows))
+    Same(prof.rows[1].amount, 3000); Check(prof.rows[1].name:find("Tailoring", 1, true) and prof.rows[1].name:find("2 sales verified", 1, true), prof.rows[1].name)
+    Same(prof.rows[1].partial, false)
+    Check(prof.rows[2].amount == nil and prof.rows[2].text == "Insufficient verified data", "no verified sale: insufficient, not zero")
+    Check(V.profShown, "the panel lists the verified profession")
+    Same(V.profRows[1].amount:GetText(), "+30s 0c"); Same(V.profRows[2].amount:GetText(), "Insufficient verified data")
+    -- all-characters scope never mixes in another character's cost record
+    V.SetFilter("scope", "all"); Check(LQ.Results({ scope = "all", days = 7 }).sales == 7); V.SetFilter("scope", "current")
+    -- a window with nothing: the original honest empty state
+    c.NOW = c.NOW + 200 * DAY; LQ.ResetCache(); V.Draw()
+    Check(not V.profShown, "no profession result outside the window"); Same(V.prof.head:GetText(), "Profession profitability isn't available yet.")
+    c.NOW = c.NOW - 200 * DAY; LQ.ResetCache()
+    -- a held or missing cost component shows an honest line
+    c.TwichUILedgerDB.cost = nil; K.Init(); LQ.ResetCache()
+    Same(#(LQ.Results({ scope = "current", days = 7 }).rows), 0)
+end
 print("LEDGER PAGE OK")

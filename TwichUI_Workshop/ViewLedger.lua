@@ -1,7 +1,8 @@
 -- TwichUI Workshop: the Gold Ledger page
 -- What the core's recorder (!!!TwichUI/auction/Ledger.lua) has kept of the gold this character (or all of them) gained and spent: six
--- summary cards, the Gold Flow chart, the split by source, the newest transactions, and a Profit by Profession panel that says plainly
--- it is not available yet. Everything is read through LedgerQuery.lua (pure); nothing is scanned, estimated or saved here. The filters
+-- summary cards, the Gold Flow chart, the split by source, the newest transactions (or, one click away in the same panel, the
+-- Realized Item Results: a sale's verified proceeds against the verified cost of exactly those units), and a Profit by Profession panel
+-- that shows only verified craft-to-sale results and otherwise says plainly that none exist. Everything is read through LedgerQuery.lua (pure); nothing is scanned, estimated or saved here. The filters
 -- (character, source, 7/30/90 days, search) are kept for the session only and apply to every panel at once.
 --
 -- Net Change is the safe centre of the page: gold in minus gold out. It is not profit (materials, repairs and moves between your own
@@ -22,7 +23,7 @@ local DRAW_DELAY = 0.3     -- a burst of money changes is one redraw
 local SEARCH_DELAY = 0.15
 
 local K
-local V = { cards = {}, srcRows = {}, profRows = {} }
+local V = { cards = {}, srcRows = {}, profRows = {}, mode = "transactions" }
 UI.LedgerView = V
 local page
 local filter = { scope = "current", source = nil, days = 7, search = "" }
@@ -309,6 +310,16 @@ local function BuildProfessions()
         row.amount:SetPoint("RIGHT", 0, 0)
         row.amount:SetJustifyH("RIGHT")
         row.name:SetPoint("RIGHT", row.amount, "LEFT", -8, 0)
+        row:EnableMouse(true)
+        row:SetScript("OnEnter", function(self)
+            local d = self.data
+            if not (d and GameTooltip) then return end
+            GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+            GameTooltip:AddLine(tostring(d.name or ""), 1, 0.82, 0)
+            for _, line in ipairs(d.tip or {}) do GameTooltip:AddLine(line, K.text[1], K.text[2], K.text[3], true) end
+            GameTooltip:Show()
+        end)
+        row:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
         row:Hide()
         V.profRows[i] = row
     end
@@ -325,9 +336,15 @@ local function PaintProfessions()
         if r then
             row:Show()
             if r.icon then row.icon:SetTexture(r.icon) end
+            row.data = r
             row.name:SetText(tostring(r.name or "") .. (r.partial and " (partial)" or ""))
-            row.amount:SetText(type(r.amount) == "number" and LQ.Money(r.amount, true) or "")
-            UI.Paint(row.amount, (type(r.amount) == "number" and r.amount < 0) and K.ember or K.sage)
+            if type(r.amount) == "number" then
+                row.amount:SetText(LQ.Money(r.amount, true))
+                UI.Paint(row.amount, r.amount < 0 and K.ember or K.sage)
+            else
+                row.amount:SetText(tostring(r.text or ""))
+                UI.Paint(row.amount, K.textDim)
+            end
         else
             row:Hide()
         end
@@ -411,6 +428,73 @@ local function MakeRow(parent)
     return row
 end
 
+local function ResultTip(self)
+    local d = self.data
+    if not (d and GameTooltip) then return end
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    local shown = false
+    if d.item then shown = pcall(GameTooltip.SetItemByID, GameTooltip, d.item) end
+    if not shown then
+        GameTooltip:ClearLines()
+        GameTooltip:AddLine(d.name, 1, 0.82, 0)
+    end
+    GameTooltip:AddLine(" ")
+    for _, line in ipairs(LQ.ResultLines(d)) do GameTooltip:AddLine(line, K.text[1], K.text[2], K.text[3], true) end
+    GameTooltip:Show()
+end
+
+local function MakeResultRow(parent)
+    local row = CreateFrame("Button", nil, parent)
+    UI.Hover(row, 6)
+    local rule = UI.Rule(row, 0.18)
+    rule:SetPoint("BOTTOMLEFT", 4, 0); rule:SetPoint("BOTTOMRIGHT", -4, 0)
+    row.itemIcon = row:CreateTexture(nil, "ARTWORK")
+    row.itemIcon:SetSize(16, 16)
+    row.itemIcon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    row.itemIcon:SetPoint("LEFT", 8, 0)
+    row.name = UI.Text(row, 12, K.text)
+    row.name:SetPoint("LEFT", 30, 0)
+    row.name:SetWidth(194)
+    row.name:SetWordWrap(false)
+    row.collected = UI.Text(row, 12, K.text)
+    row.collected:SetPoint("LEFT", 232, 0)
+    row.collected:SetWidth(96)
+    row.collected:SetJustifyH("RIGHT")
+    row.cost = UI.Text(row, 12, K.text)
+    row.cost:SetPoint("LEFT", 334, 0)
+    row.cost:SetWidth(96)
+    row.cost:SetJustifyH("RIGHT")
+    row.result = UI.Text(row, 13, K.text, "strong")
+    row.result:SetPoint("RIGHT", -8, 0)
+    row.result:SetWidth(118)
+    row.result:SetJustifyH("RIGHT")
+    row.TipEnter = ResultTip
+    row.TipLeave = function() if GameTooltip then GameTooltip:Hide() end end
+    row.fill = function(self, d)
+        self.data = d
+        if d.item then self.itemIcon:SetTexture(LQ.ItemIcon(d.item) or UI.ICON_BLANK); self.itemIcon:Show() else self.itemIcon:Hide() end
+        self.name:SetText(d.qty > 1 and ("%s \195\151%d"):format(d.name, d.qty) or d.name)
+        self.collected:SetText(LQ.Money(d.collected))
+        if d.vsales > 0 then
+            self.cost:SetText(LQ.Money(d.vcost)); UI.Paint(self.cost, K.text)
+        else
+            self.cost:SetText("Unknown"); UI.Paint(self.cost, K.textDim)
+        end
+        if d.profit then
+            self.result:SetText(LQ.Money(d.profit, true) .. (d.status == "partial" and "*" or ""))
+            UI.Paint(self.result, d.profit < 0 and K.ember or K.sage)
+        else
+            self.result:SetText("Unavailable"); UI.Paint(self.result, K.textDim)
+        end
+    end
+    return row
+end
+
+local function SetMode(mode)
+    V.mode = mode == "results" and "results" or "transactions"
+    V.Draw()
+end
+
 local function BuildTransactions()
     local p = Panel(page, "Recent Transactions", "npc:sealed-scroll")
     p:SetSize(MID_L, BOT_H)
@@ -419,19 +503,42 @@ local function BuildTransactions()
     p.count = UI.Text(p, 11, K.stone)
     p.count:SetPoint("TOPRIGHT", -14, -13)
     p.count:SetJustifyH("RIGHT")
+    -- one panel, two views of the same recorded history: the cash transactions, or what verified sales realized
+    p.modeResults = UI.Segment(p, "Item Results", 92, function() SetMode("results") end)
+    p.modeResults:SetPoint("TOPRIGHT", p, "TOPRIGHT", -116, -6)
+    p.modeTx = UI.Segment(p, "Transactions", 96, function() SetMode("transactions") end)
+    p.modeTx:SetPoint("TOPRIGHT", p.modeResults, "TOPLEFT", -2, 0)
+    UI.Tip(p.modeResults, "Realized item results", "What items you sold actually earned: the gold collected against the verified cost of exactly those units. A profit appears only when both are verified; everything else says why it cannot.")
+    UI.Tip(p.modeTx, "Transactions", "Every recorded gold movement, newest first.")
+    V.txHeads, V.resHeads = {}, {}
     for _, h in ipairs({ { "Time (UTC)", 92, 12 }, { "Source", 112, 128 }, { "Item / Note", 200, 232 } }) do
         local fs = UI.Head(p, h[1], h[2], "LEFT")
         fs:SetPoint("TOPLEFT", p, "TOPLEFT", h[3], -32)
+        V.txHeads[#V.txHeads + 1] = fs
     end
     local amountHead = UI.Head(p, "Amount", 106, "RIGHT")
     amountHead:SetPoint("TOPRIGHT", p, "TOPRIGHT", -30, -32)
+    V.txHeads[#V.txHeads + 1] = amountHead
     local rule = UI.Rule(p, 0.45)
     rule:SetPoint("TOPLEFT", 10, -48); rule:SetPoint("TOPRIGHT", -10, -48)
+    for _, h in ipairs({ { "Item", 200, 30, "LEFT" }, { "Collected", 96, 232, "RIGHT" }, { "Verified cost", 96, 334, "RIGHT" } }) do
+        local fs = UI.Head(p, h[1], h[2], h[4])
+        fs:SetPoint("TOPLEFT", p, "TOPLEFT", h[3] + 6, -32)
+        V.resHeads[#V.resHeads + 1] = fs
+    end
+    local resultHead = UI.Head(p, "Realized result", 118, "RIGHT")
+    resultHead:SetPoint("TOPRIGHT", p, "TOPRIGHT", -30, -32)
+    V.resHeads[#V.resHeads + 1] = resultHead
     local list = UI.List(p, ROW_H, MakeRow, ROW_H * 4, false)
     list.box:SetPoint("TOPLEFT", 6, -50)
     list.box:SetPoint("BOTTOMRIGHT", -6, 6)
     UI.lists.ledger = list
     V.list = list
+    local rlist = UI.List(p, ROW_H, MakeResultRow, ROW_H * 4, false)
+    rlist.box:SetPoint("TOPLEFT", 6, -50)
+    rlist.box:SetPoint("BOTTOMRIGHT", -6, 6)
+    UI.lists.ledgerResults = rlist
+    V.rlist = rlist
 end
 
 local function EmptyText(s)
@@ -449,6 +556,34 @@ local function PaintTransactions(s)
     V.rows = rows
     V.list:SetData(rows, #rows == 0 and EmptyText(s) or nil)
     V.tx.count:SetText(#rows == 0 and "" or (more and ("Newest %d shown"):format(#rows) or ("%d %s"):format(#rows, #rows == 1 and "transaction" or "transactions")))
+end
+
+local function ResultsEmpty(r)
+    if not r then return "Realized results are not available: the cost basis is not loaded." end
+    if filter.search ~= "" or filter.source then return "No sales match these filters." end
+    return "No sales with a verified result in the last " .. filter.days .. " days. Items bought at a vendor, delivered from an Auction House purchase or crafted while the Workshop is on can be matched to their sale; everything else is shown as unavailable, never as a guess."
+end
+
+local function PaintResults()
+    local r = LQ.Results(filter)
+    V.results = r
+    local rows = r and r.rows or {}
+    V.rlist:SetData(rows, #rows == 0 and ResultsEmpty(r) or nil)
+    local text = ""
+    if r and #rows > 0 then
+        text = LQ.Money(r.verified, true) .. " verified"
+    end
+    V.tx.count:SetText(text)
+end
+
+local function ApplyMode()
+    local results = V.mode == "results"
+    V.tx.title:SetText(results and "Realized Results" or "Recent Transactions")
+    V.tx.modeTx:SetOn(not results); V.tx.modeResults:SetOn(results)
+    for _, fs in ipairs(V.txHeads) do fs:SetShown(not results) end
+    for _, fs in ipairs(V.resHeads) do fs:SetShown(results) end
+    V.list.box:SetShown(not results)
+    V.rlist.box:SetShown(results)
 end
 
 ---------------------------------------------------------------------------
@@ -486,7 +621,7 @@ local function BuildFilters()
             V.Draw(true)
         end)
     end)
-    UI.Tip(V.search, "Search transactions", "Narrows the list of transactions below by source, item or note. The totals and the chart count every transaction and do not change.")
+    UI.Tip(V.search, "Search transactions", "Narrows the list below by source, item or note (the item name, in Realized Results). The totals and the chart count every transaction and do not change.")
 end
 
 ---------------------------------------------------------------------------
@@ -508,7 +643,8 @@ function V.Draw(rowsOnly)
     V.status:SetText(Status(s))
     V.chart:Set(s)
     PaintSources(s)
-    PaintTransactions(s)
+    ApplyMode()
+    if V.mode == "results" then PaintResults() else PaintTransactions(s) end
     PaintProfessions()
     if pt then Perf.Stop(pt) end
 end
@@ -522,6 +658,7 @@ function V.SetFilter(key, value)
         if V.search and (V.search:GetText() or "") ~= filter.search then V.search:SetText(filter.search) end
     else return end
     if V.list then V.list:ScrollTop() end
+    if V.rlist then V.rlist:ScrollTop() end
     V.Draw()
 end
 

@@ -537,6 +537,7 @@ function C.Deliver(char, item, key, count, before)
     first.k = key
     first.tq = first.tq - count
     if first.tq == 0 then first.tq = nil end
+    L.Touch()
     return true
 end
 
@@ -579,6 +580,7 @@ function C.Crafted(char, craft)
         C.Disturb(rec, out.key)
         stats.mixed = stats.mixed + 1
     end
+    L.Touch()
     return true, entry
 end
 

@@ -27,7 +27,7 @@ SHOPPING, VENDOR, OPPS = "TwichUI_Workshop/Shopping.lua", "TwichUI_Workshop/Vend
 
 # `--broad` re-runs a SURVIVOR against these older, broader Workshop tests to say whether anything else notices it (the mutation still counts as
 # a survivor of its focused tests; the note only tells you where the gap is). The default run never uses them.
-SUITE = {"targets": ("TwichUI_Workshop/", "!!!TwichUI/WorkshopAuto.lua", "!!!TwichUI/WorkshopLauncher.lua", "!!!TwichUI/auction/Ledger.lua", "!!!TwichUI/auction/LedgerAuction.lua", "!!!TwichUI/auction/Mail.lua", "!!!TwichUI/auction/Vendor.lua", "!!!TwichUI/modules/Restock.lua"), "broad_tests": ("test_workshop_market.lua", "test_workshop_prices.lua", "test_workshop_shopping.lua", "test_workshop_storage.lua", "test_workshop.lua")}
+SUITE = {"targets": ("TwichUI_Workshop/", "!!!TwichUI/WorkshopAuto.lua", "!!!TwichUI/WorkshopLauncher.lua", "!!!TwichUI/auction/Ledger.lua", "!!!TwichUI/auction/LedgerAuction.lua", "!!!TwichUI/auction/LedgerCost.lua", "!!!TwichUI/auction/LedgerCostWatch.lua", "!!!TwichUI/auction/Mail.lua", "!!!TwichUI/auction/Vendor.lua", "!!!TwichUI/modules/Restock.lua"), "broad_tests": ("test_workshop_market.lua", "test_workshop_prices.lua", "test_workshop_shopping.lua", "test_workshop_storage.lua", "test_workshop.lua")}
 
 MUTATIONS = []
 
@@ -1381,3 +1381,41 @@ m("market.junk.tree-empty", "!!!TwichUI/WorkshopLauncher.lua",
 m("market.junk.tree-move-preview", "!!!TwichUI/WorkshopLauncher.lua",
   'if not apply or not valid then table.remove', 'if not valid then table.remove',
   "hovering a drag target changes the saved draft order", ["test_workshop_junk_rules.lua"])
+
+# Cost basis and realized results (docs/workshop/gold-ledger.md): the identified-stock rule, exact apportionment, deliveries and crafts.
+COSTTEST = "test_ledger_cost.lua"
+
+m("ledger.cost.mixed-stock", "!!!TwichUI/auction/LedgerCost.lua", '    if carried ~= pool then\n        C.Disturb(rec, key)\n        stats.mixed', '    if false then\n        C.Disturb(rec, key)\n        stats.mixed',
+  'a sale is matched to cost although the bags hold stock that is not an identified lot', [COSTTEST])
+m("ledger.cost.no-discard", "!!!TwichUI/auction/LedgerCost.lua", '        C.Disturb(rec, key)\n        stats.mixed = stats.mixed + 1\n        return false, carried > pool', '        stats.mixed = stats.mixed + 1\n        return false, carried > pool',
+  'stock that could not be told apart keeps its stale lots and later gets a cost it never had', [COSTTEST])
+m("ledger.cost.consume-once", "!!!TwichUI/auction/LedgerCost.lua", '            lot.r = lot.r - take\n', '            lot.r = lot.r\n',
+  'the same purchased units are matched to several sales', [COSTTEST])
+m("ledger.cost.rounding", "!!!TwichUI/auction/LedgerCost.lua", 'return a * u + math.floor(b * u / q)', 'return a * u + math.ceil(b * u / q)',
+  "apportioned costs no longer add up to the lot's exact copper", [COSTTEST])
+m("ledger.cost.unknown-is-zero", "!!!TwichUI/auction/LedgerCost.lua", '            if lot.c then share = Scaled(lot.c, used + take, lot.q) - Scaled(lot.c, used, lot.q) end', '            share = lot.c and (Scaled(lot.c, used + take, lot.q) - Scaled(lot.c, used, lot.q)) or 0',
+  'an unknown cost becomes zero and invents profit', [COSTTEST])
+m("ledger.cost.variant-key", "!!!TwichUI/auction/LedgerCost.lua", 'if #parts > 0 then return "i" .. item .. ":" .. table.concat(parts, ":") end', 'if false then return "i" .. item end',
+  'a variant with bonus ids or a random suffix is pooled with the plain item', [COSTTEST])
+m("ledger.cost.buy-mixed", "!!!TwichUI/auction/LedgerCost.lua", '    if C.Pool(rec, st.key) ~= st.before then   -- the bags held other stock', '    if false then   -- the bags held other stock',
+  'a purchase mixed with older unidentified stock is trusted as a clean lot', [COSTTEST])
+m("ledger.cost.delivery-mixed", "!!!TwichUI/auction/LedgerCost.lua", '    if C.Pool(rec, key) ~= before then   -- other stock of this identity', '    if false then   -- other stock of this identity',
+  'an Auction House delivery mixed with older stock is trusted as a clean lot', [COSTTEST])
+m("ledger.cost.ah-ambiguous", "!!!TwichUI/auction/LedgerCost.lua", 'if not (first.c and o.c and first.c * o.q == o.c * first.q) then return false, "ambiguous" end', 'if false then return false, "ambiguous" end',
+  'two different-price purchases of one item are assigned to a delivery arbitrarily', [COSTTEST])
+m("ledger.cost.profit-partial", "TwichUI_Workshop/LedgerQuery.lua", 'g.profit = g.vsales > 0 and (g.vcollected - g.vcost) or nil', 'g.profit = g.vsales > 0 and (g.collected - g.vcost) or nil',
+  'a partly verified item reports profit on sales whose cost is unknown', [LEDGERUI])
+m("ledger.watch.invoice", "!!!TwichUI/auction/LedgerCostWatch.lua", 'or invoice ~= "buyer" then return end', 'then return end',
+  'any mail attachment is treated as the delivery of a purchase', [COSTTEST])
+m("ledger.watch.delivery-count", "!!!TwichUI/auction/LedgerCostWatch.lua", 'if gained ~= m.count then', 'if false then',
+  'a delivery is accepted although the bags gained a different number of units', [COSTTEST])
+m("ledger.watch.mail-overlap", "!!!TwichUI/auction/LedgerCostWatch.lua", '    if mail then   -- two requests', '    if false then   -- two requests',
+  'overlapping mail takes are both attributed', [COSTTEST])
+m("ledger.watch.craft-materials", "!!!TwichUI/auction/LedgerCostWatch.lua", 'if (c.before[m.key] or 0) - (now[m.key] or 0) ~= m.qty then exact = false end', 'if false then exact = false end',
+  'a craft is verified although the materials did not leave the bags in the schematic quantity', [COSTTEST])
+m("ledger.watch.craft-output", "!!!TwichUI/auction/LedgerCostWatch.lua", 'local exact = (not c.bad) and gained == total', 'local exact = not c.bad',
+  'a craft is verified although the bags did not gain the reported output', [COSTTEST])
+m("ledger.watch.craft-learned", "!!!TwichUI/auction/LedgerCostWatch.lua", 'Plain(info.learned) ~= true then return nil end', 'false then return nil end',
+  'a recipe the player has not learned is accepted', [COSTTEST])
+m("ledger.watch.craft-overlap", "!!!TwichUI/auction/LedgerCostWatch.lua", '    if candidate then   -- a second craft began', '    if false then   -- a second craft began',
+  'two crafts in flight are both verified', [COSTTEST])

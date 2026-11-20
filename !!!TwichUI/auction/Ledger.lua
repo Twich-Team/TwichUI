@@ -393,6 +393,8 @@ local function Changed()
     end
 end
 function Lg.Revision() return revision end
+-- Something the page shows from another component (cost basis) changed; no cash entry did.
+function Lg.Touch() Changed() end
 
 ---------------------------------------------------------------------------
 -- Evidence: a completed transaction says what a money change was

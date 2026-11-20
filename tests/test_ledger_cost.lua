@@ -368,6 +368,10 @@ do
     local e = Client(); e.Open(); e.Buy(5, 25); Recipe(e, 1000, 50, { { item = 10, qty = 5 } })
     Craft(e, 1000, 1, { consume = { [10] = 3 } }); e.Advance(5)
     Same(#e.Cost().crafts, 0); Same(#e.Lots(), 0, "unverifiable consumption forgets the stock instead of guessing")
+    -- the result event names an output the bags never received
+    local o = Client(); o.Open(); o.Buy(5, 25); Recipe(o, 1000, 50, { { item = 10, qty = 5 } })
+    Craft(o, 1000, 1, { noOutput = true }); o.Advance(5)
+    Same(#o.Cost().crafts, 0, "an output the bags did not gain is not a verified craft")
     -- an unlearned recipe
     local f = Client(); f.Open(); f.Buy(5, 25); Recipe(f, 1000, 50, { { item = 10, qty = 5 } }); f.RECIPES[1000].learned = false
     Craft(f, 1000, 1)
