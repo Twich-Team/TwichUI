@@ -266,3 +266,38 @@ Deferred until the owner is available; all real-game actions below are optional 
 3. Buy the same item while already holding some: the later sale must read *Unavailable* (mixed stock), not a profit.
 4. If you craft a recipe whose materials you bought from a vendor, sell the product to a vendor: the profession panel shows the result; a craft from materials you did not buy shows *Insufficient verified data*.
 5. Reload; the results persist. Native V2/V3 acceptance remains a separate open item.
+
+## V5: Open All and seller payments
+
+**Reported:** after collecting many auction payments with Open All, only a couple of entries were Auction Sale.
+
+**Root cause (reproduced, `tests/test_ledger_openall.lua`; V4 output kept in `tests/fixtures/ledger_openall/v4-baseline.txt`).**
+Blizzard's Open All (classic-era `OpenAllMailMixin`) takes one message at a time, at least 0.15 s apart, waiting while
+`C_Mail.IsCommandPending()`, and restarts at position 1 after the inbox count changes. A seller's mail with nothing else is deleted once
+paid, so every take is `TakeInboxMoney(1)`. When a payment's `PLAYER_MONEY` arrived after the next take, V4 took the second call on
+position 1 for a duplicate of the first, marked both ambiguous, then marked **every** waiting request ambiguous. With money after the
+next take V4 recognised 0 of 12 sales; with jittered latency 2 of 12; with money first, 12 of 12.
+
+**Fix (`auction/Mail.lua`).**
+* In-flight positions are forgotten at each `MAIL_INBOX_UPDATE`; a repeat needs the same position, header and amount with no update
+  between, and it is then a *spare* (never matched, only expires).
+* No ambiguity spreads to other requests. A gain is matched against every set of waiting requests that adds up to it (oldest 12,
+  at most 16 explanations; more and nothing is claimed). The ledger is told only what all explanations agree on: Auction Sale only if
+  every explanation is seller mail; item name and invoice details only if they are identical in all. Otherwise Mail collected. Requests
+  of an explanation that was not taken keep no item/invoice details later, and become plain mail if the explanations differed in kind.
+* Expiry waits while a mail command is pending, a second at a time, never past 15 s.
+* **Unread mail.** Blizzard's mail frame reads `GetInboxText` (its `isInvoice`) before `GetInboxInvoiceInfo`; an unopened message may
+  give no invoice. Without one, the Auction House's own sold-auction mail is still recognised: the client's `AUCTION_SOLD_MAIL_SUBJECT`
+  on a message that cannot be answered (`canReply == false`), not from a GM, not returned, with no attachment. It is an Auction Sale with
+  evidence `mailauction`; fee and deposit are unavailable, never guessed. An invoice of another type is never overruled by a subject.
+  A player's letter titled the same way can be answered, so it stays Mail collected. TwichUI never opens or marks a message read.
+* Mixed batches keep the combined cash entry as Mail collected; several seller invoices in one change stay one Auction Sale entry with
+  each invoice in its settlement.
+
+**Diagnostics.** `/tui diagnostics` → Gold Ledger evidence → `mail:` shows requests, verified invoices, sold-auction mails, combined
+payments and exact journal matches; `mail reasons:` gives fixed codes (`invoice-missing`, `sold-mail`, `plain-mail`, `duplicate`,
+`ambiguous`, `equal-alternatives`, `mixed`, `expired`, `unmatched-gain`, `too-many-ways`, `no-target`, `deferred-full`, `ledger-*`).
+No names, subjects, senders, items or copper values.
+
+**Unverified in the real client:** that Forever's Open All and its server behave like the classic-era source, whether
+`GetInboxInvoiceInfo` answers for an unread message, and that `AUCTION_SOLD_MAIL_SUBJECT` and `canReply` read as modelled.

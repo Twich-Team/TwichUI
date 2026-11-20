@@ -1271,10 +1271,31 @@ m("ledger.evidence.ambiguous", LEDGER, "    elseif count > 1 then\n        stats
   "two identical unexplained changes: the evidence is given to whichever came last instead of to neither", [ATTRIB])
 m("ledger.evidence.repeat", LEDGER, "if ev.corr and seen[ev.corr] then stats.repeated = stats.repeated + 1 return \"repeated\" end", "",
   "one completed transaction reported twice by overlapping hooks is counted twice", [ATTRIB])
-m("ledger.mail.group-amount", MAIL, "Credit(gain, matched)", "Credit(matched[1].amount, matched)",
+m("ledger.mail.group-amount", MAIL, "Credit(gain, matched, ways)", "Credit(matched[1].amount, matched, ways)",
   "two takes reported as one change vouch for only the first one's amount, so neither is attributed", [ATTRIB])
-m("ledger.mail.plain-is-sale", MAIL, 'if req.kind ~= "ahSale" then kind = "mail" end', 'if req.kind == nil then kind = "ahSale" end',
+m("ledger.mail.plain-is-sale", MAIL, 'if req.kind ~= "ahSale" or req.unsureKind then kind = "mail" end', 'if req.kind == nil then kind = "ahSale" end',
   "every mailbox payment is called an auction sale", [ATTRIB])
+# V5: Open All (docs/workshop/gold-ledger.md, "Open All"). The reproduction is tests/test_ledger_openall.lua.
+OPENALL, SETTLE, MAILSUM = "test_ledger_openall.lua", "test_ledger_settlement.lua", "test_mail_gold.lua"
+m("ledger.mail.position-is-message", MAIL, "local spare = inflight ~= nil and not inflight.done and inflight.mark == mark and inflight.amount == money",
+  "local spare = inflight ~= nil and not inflight.done",
+  "a message that moved into an emptied position is taken for a repeat of the first one, so its payment is never counted", [MAILSUM, OPENALL])
+m("ledger.mail.poison-queue", MAIL, "                    if not chosen[req] then req.unsure = true; if not allSale then req.unsureKind = true end end",
+  "                    for _, w in ipairs(queue) do w.unsure, w.unsureKind = true, true end",
+  "one unclear payment in an Open All batch turns every later payment of the batch into plain mail", [OPENALL])
+m("ledger.mail.first-way-only", MAIL, "    for _, set in ipairs(ways) do\n        for _, req in ipairs(set) do\n            if req.kind",
+  "    for _, set in ipairs({ matched }) do\n        for _, req in ipairs(set) do\n            if req.kind",
+  "a payment that a letter of the same amount could equally explain is called an auction sale", [SETTLE, OPENALL])
+m("ledger.mail.guess-invoice", MAIL, 'if kind == "ahSale" and same then', 'if kind == "ahSale" then',
+  "two equal payments for different items get an item name and invoice that may be the other's", [OPENALL])
+m("ledger.mail.soldmail-answerable", MAIL, "if pattern and canReply == false and not isGM", "if pattern and not isGM",
+  "a player's letter titled like the Auction House's sold-auction mail is called an auction sale", [OPENALL])
+m("ledger.mail.pending-forever", MAIL, "if pending and not req.spare and now and req.born and now - req.born < MAX_AGE then",
+  "if pending and not req.spare and now and req.born then",
+  "a mail command the game reports pending forever keeps its request waiting, so it can claim an unrelated later gain", [OPENALL])
+m("ledger.mail.no-pending-wait", MAIL, "    if pending and not req.spare and now and req.born and now - req.born < MAX_AGE then",
+  "    if false then",
+  "a slow server's payment arrives after its request was dropped, so the sale is never recognised", [OPENALL])
 m("ledger.purchase.sign", ACTIONS, "amount=-total", "amount=total",
   "a completed purchase is reported as income, so it is never matched to the gold that left", [ATTRIB])
 m("ledger.query.net", LQUERY, "net = inn - out, n = n, covered = cov", "net = inn + out, n = n, covered = cov",
@@ -1342,8 +1363,8 @@ m("ledger.settlement.fee-sum", LEDGER, 's[key] = s[key] + n', 's[key] = s[key] +
   "commissions disappear when combined invoices are aggregated", [ST])
 m("ledger.settlement.bound", LEDGER, 'Lg.MAX_INVOICES = 8', 'Lg.MAX_INVOICES = 800',
   "a collected batch can persist an unbounded invoice report", [ST])
-m("ledger.settlement.mixed", MAIL, 'if unique then Credit(gain, matched) end', 'if true then Credit(gain, matched) end',
-  "ambiguous equal payments or competing subsets are assigned an invoice", [ST])
+m("ledger.settlement.mixed", MAIL, 'local exact = target ~= nil and #ways <= MAX_WAYS', 'local exact = target ~= nil',
+  "a payment with more explanations than were examined is classified from the few that were (an unexamined one could hold a letter)", [ST, "test_ledger_openall.lua"])
 m("ledger.settlement.target", MAIL, 'entry = matched.entry, char = matched.char', 'entry = nil, char = nil',
   "a payment the recorder refused borrows an older equal-amount movement", [ST])
 m("ledger.settlement.seller", MAIL, 'if kind ~= "seller" then return nil end', 'if kind == "buyer" then return nil end',
