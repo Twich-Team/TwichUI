@@ -186,6 +186,7 @@ local function ValidCat(v)
     if type(v) ~= "string" then return false end
     local c, s = v:match("^(%d+):(%d+)$")
     if c then return Whole(tonumber(c), 0, 99) and Whole(tonumber(s), 0, 999) end
+    if v:match("^forever:%l+$") then return true end   -- a WoW: Forever family (Items.lua FOREVER_FAMILIES)
     return v:match("^%d+$") ~= nil and Whole(tonumber(v), 0, 99)
 end
 MI.ValidCat = ValidCat

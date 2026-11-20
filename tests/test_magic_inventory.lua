@@ -395,4 +395,34 @@ local planned = MI.BuildPlan({ stacks = {}, rules = { copied }, resolve = MI.Res
 Check(#planned.groups == 0, "and moves nothing there")
 c.UnitName = function() return "Rich" end
 
+-- WoW: Forever families: Consumable: Other (0:8) items told apart by the family name in their own name
+c.ITEMS[248684] = { name = "Waylaid Crate: Apprentice Textiles", class = 0, sub = 8, maxStack = 1, quality = 1 }
+c.ITEMS[248685] = { name = "Waylaid Crate: Apprentice Curiosities", class = 0, sub = 8, maxStack = 1, quality = 1 }
+c.ITEMS[264040] = { name = "Craftsman's Writ: Herbalist's Gloves", class = 0, sub = 8, maxStack = 1, quality = 3 }
+c.ITEMS[248206] = { name = "Sealed Craftsman's Writ", class = 0, sub = 8, maxStack = 1, quality = 3 }
+c.ITEMS[9100] = { name = "Some Other Odd Consumable", class = 0, sub = 8, maxStack = 20, quality = 1 }
+c.ITEMS[9101] = { name = "Waylaid Crate: Fake Trade Good", class = 7, sub = 5, maxStack = 20, quality = 1 }
+do
+  Check(MI.ValidCat("forever:crate") and MI.ValidCat("forever:writ") and not MI.ValidCat("forever:") and not MI.ValidCat("Forever:crate"), "Forever family keys are valid categories")
+  local keys = {}
+  for _, cat in ipairs(MI.Categories()) do keys[cat.key] = cat end
+  Check(keys["forever:crate"] and keys["forever:crate"].label == "Waylaid Crates" and keys["forever:crate"].group == "WoW: Forever", "the picker offers Waylaid Crates")
+  Check(keys["forever:writ"] and keys["forever:writ"].label == "Craftsman's Writs", "and Craftsman's Writs")
+  Check(MI.CategoryName("forever:crate") == "Waylaid Crates", "named without the client's help")
+  local function In(key, id) return MI.Match(Rule({ cats = { key } }), (MI.ItemFacts(id))) == "matched" end
+  Check(In("forever:crate", 248684) and In("forever:crate", 248685), "every crate matches")
+  Check(not In("forever:crate", 264040) and not In("forever:crate", 9100) and not In("forever:crate", 9101), "nothing else does, even another class with the name")
+  Check(In("forever:writ", 264040) and In("forever:writ", 248206), "writs, sealed ones too")
+  Check(not In("forever:writ", 248684) and not In("forever:writ", 9100), "and only writs")
+  Check(In("0:8", 248684) and In("0:8", 9100), "the plain Consumable: Other category still holds all of them")
+  local clean = MI.CleanRule(Rule({ id = "r1", cats = { "forever:crate", "forever:nonsense!" } }))
+  Check(clean and #clean.cats == 1 and clean.cats[1] == "forever:crate", "a saved Forever category survives cleaning, junk doesn't")
+  -- the family name follows the client's own name for the reference item
+  c.ITEMS[248684].name = "Caisse égarée: Textiles"
+  c.C_Item.GetItemNameByID = function(id) local i = c.ITEMS[id]; return i and i.name end
+  MI.ClearItemCache()
+  c.ITEMS[9102] = { name = "Caisse égarée: Minerais", class = 0, sub = 8, maxStack = 1, quality = 1 }
+  Check(In("forever:crate", 9102), "the family name is read from the client, so other languages work")
+end
+
 if failures == 0 then print("PASSED test_magic_inventory") else print(failures .. " failures") os.exit(1) end

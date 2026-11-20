@@ -75,8 +75,39 @@ function MI.CategoryOf(itemID)
     return key, MI.CategoryName(key)
 end
 
+---------------------------------------------------------------------------
+-- WoW: Forever families. Waylaid Crates and Craftsman's Writs are new Forever items filed as Consumable: Other
+-- (0:8), the same bucket as every other odd consumable, so a class:subclass category can't pick them out. A family
+-- is that bucket plus the item's name, which begins with the family name ("Waylaid Crate: Apprentice Textiles").
+-- The family name is read from a known member through the client (so it follows the client's language); the English
+-- name is the fallback while that item is still loading. Saved key: "forever:crate" / "forever:writ".
+---------------------------------------------------------------------------
+local FOREVER_FAMILIES = {
+    { key = "forever:crate", label = "Waylaid Crates", ref = 248684, fallback = "Waylaid Crate" },
+    { key = "forever:writ", label = "Craftsman's Writs", ref = 264040, fallback = "Craftsman's Writ" },
+}
+local FOREVER_BY_KEY = {}
+for _, f in ipairs(FOREVER_FAMILIES) do FOREVER_BY_KEY[f.key] = f end
+local FAMILY_CLASS, FAMILY_SUB = 0, 8   -- Consumable: Other
+
+local function FamilyName(f)
+    if f.name then return f.name end
+    local full = C_Item and C_Item.GetItemNameByID and Str(C_Item.GetItemNameByID(f.ref))
+    local head = full and full:match("^(.-):")
+    if head and head ~= "" then f.name = head; return head end   -- remembered once the client has told us
+    return f.fallback
+end
+
+-- Whether facts (MI.ItemFacts) is a member of the Forever family `key`. Pure.
+function MI.InForeverFamily(key, facts)
+    local f = FOREVER_BY_KEY[key]
+    if not (f and facts and facts.classID == FAMILY_CLASS and facts.subclassID == FAMILY_SUB and type(facts.name) == "string") then return false end
+    return facts.name:find(FamilyName(f), 1, true) ~= nil
+end
+
 function MI.CategoryName(key)
     if type(key) ~= "string" then return nil end
+    if FOREVER_BY_KEY[key] then return FOREVER_BY_KEY[key].label end
     local c, s = key:match("^(%d+):(%d+)$")
     if c then
         local name = C_Item and C_Item.GetItemSubClassInfo and Str((C_Item.GetItemSubClassInfo(tonumber(c), tonumber(s))))
@@ -100,6 +131,7 @@ local CLASS_GROUPS = {
     { class = 15 },                 -- Miscellaneous
 }
 local categories
+local FOREVER_COUNT = #FOREVER_FAMILIES
 function MI.Categories()
     if categories then return categories end
     local out = {}
@@ -123,7 +155,10 @@ function MI.Categories()
             end
         end
     end
-    if #out > 0 then categories = out end   -- an empty answer (names not there yet) is asked again next time
+    for _, f in ipairs(FOREVER_FAMILIES) do
+        out[#out + 1] = { key = f.key, label = f.label, group = "WoW: Forever" }
+    end
+    if #out > FOREVER_COUNT then categories = out end   -- an empty answer (names not there yet) is asked again next time
     return out
 end
 
@@ -142,7 +177,7 @@ end
 local function CatMatch(rule, facts)
     if #rule.cats == 0 then return true end
     for _, key in ipairs(rule.cats) do
-        if key == tostring(facts.classID) or key == (facts.classID .. ":" .. facts.subclassID) then return true end
+        if key == tostring(facts.classID) or key == (facts.classID .. ":" .. facts.subclassID) or MI.InForeverFamily(key, facts) then return true end
     end
     return false
 end

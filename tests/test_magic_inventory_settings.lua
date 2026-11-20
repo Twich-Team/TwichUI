@@ -387,4 +387,5 @@ for _ = 1, 5 do P.QueueRefresh(); Flush(); f:Hide(); f:Show(); Flush() end
 Check(P.ControlCount() == n, "redrawing the page makes no new controls: " .. n .. " -> " .. P.ControlCount())
 Check(#c.PICKUPS == 0 and c.CURSOR == nil, "and nothing was picked up")
 
+Check(P.CategoryArtwork("forever:crate"):find("hammer-and-chisel", 1, true) and P.CategoryArtwork("forever:writ"):find("inscribed-stone", 1, true), "Forever families have their own art")
 if failures == 0 then print("PASSED test_magic_inventory_settings") else print(failures .. " failures") os.exit(1) end

@@ -586,10 +586,13 @@ local CATEGORY_ART = {
     ["0:4"] = NPC .. "sealed-scroll-small", ["0:5"] = NPC .. "bread-and-tankard-small", ["0:7"] = NPC .. "cloth-bolts-small",
     ["3"] = Painted("quality-rare"), ["6"] = NPC .. "arrow-and-cartridge-small", ["5"] = NPC .. "reagent-pouch-small",
     ["9"] = NPC .. "sealed-scroll-small", ["15"] = NPC .. "leather-backpack-small",
+    -- WoW: Forever families (MI.InForeverFamily): crates are opened and filled by hand, writs are signed orders
+    ["forever:crate"] = NPC .. "hammer-and-chisel-small", ["forever:writ"] = NPC .. "inscribed-stone-small",
 }
 function P.CategoryArtwork(key)
     if CATEGORY_ART[key] then return CATEGORY_ART[key] end
     local class = key:match("^(%d+)")
+    if not class then return NPC .. "reagent-pouch-small" end   -- a family this build doesn't draw
     if class == "9" then return CATEGORY_ART["9"] end
     -- Other available subclasses are named by this client. Family artwork is optional; unknown or
     -- localized names use a neutral class illustration rather than inventing a category identity.
