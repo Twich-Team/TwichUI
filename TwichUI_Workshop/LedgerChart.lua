@@ -22,8 +22,8 @@ local LQ = W.LedgerQuery
 local C = { MIN_BAR = 2, MIN_SLOT = 11 }
 W.LedgerChart = C
 
-local GREEN = { 0.43, 0.60, 0.41 }
-local RED = { 0.67, 0.33, 0.27 }
+local GREEN = { 0.32, 0.47, 0.31 }
+local RED = { 0.58, 0.27, 0.22 }
 C.GREEN, C.RED = GREEN, RED
 local charts = setmetatable({}, { __mode = "k" })
 if R.Perf and R.Perf.Gauge then
@@ -200,7 +200,7 @@ function UI.GoldFlowChart(parent, w, h, opts)
     charts[c] = true
     c.big = big
     c.show = { inn = true, out = true, net = true }
-    c.pool = { body = {}, cap = {}, wash = {}, tick = {}, marker = {}, guide = {}, xlabel = {} }
+    c.pool = { body = {}, shade = {}, cap = {}, wash = {}, tick = {}, marker = {}, guide = {}, xlabel = {} }
     -- the plotting well: a dark recessed face with the axis labels inside it
     c.well = CreateFrame("Frame", nil, c)
     c.well:SetPoint("TOPLEFT", c, "TOPLEFT", 0, 0)
@@ -542,7 +542,7 @@ function UI.GoldFlowChart(parent, w, h, opts)
         if g.zeroY then Place(c.zero, 0, Round(g.zeroY), pw, 1) else c.zero:Hide() end
         -- days outside coverage, recorded quiet days
         for i, u in ipairs(g.uncovered) do
-            local t = Pooled(c.pool.wash, function() return Solid(K.bronzeLo, 0.10, 0, "BACKGROUND") end, i)
+            local t = Pooled(c.pool.wash, function() return Solid(K.bronzeLo, 0.07, 0, "BACKGROUND") end, i)
             Place(t, Round(u.x) + 1, 0, math.max(1, Round(u.w) - 2), ph)
         end
         HideFrom(c.pool.wash, #g.uncovered + 1)
@@ -551,23 +551,31 @@ function UI.GoldFlowChart(parent, w, h, opts)
             Place(t, Round(tk.x), Round(tk.y + 0.5) - 1, Round(tk.w), 2)
         end
         HideFrom(c.pool.tick, #g.ticks + 1)
-        -- the columns: a vertical tone and a lit end, two regions each
+        -- the columns: a flat sage or rust body, a darker half toward the baseline and a lit end (three regions each; flat tones, no
+        -- gradient, as the Workshop's own meters are drawn)
         for i, b in ipairs(g.bars) do
-            local body = Pooled(c.pool.body, function() return Solid(GREEN, 1, 2) end, i)
-            local cap = Pooled(c.pool.cap, function() return Solid(GREEN, 0.8, 3) end, i)
+            local body = Pooled(c.pool.body, function() return Solid(GREEN, 0.92, 2) end, i)
+            local shade = Pooled(c.pool.shade, function() return Solid({ 0, 0, 0 }, 0.26, 3) end, i)
+            local cap = Pooled(c.pool.cap, function() return Solid(GREEN, 0.85, 4) end, i)
             local x, bw = Round(b.x), math.max(2, Round(b.w))
             local y, bh = Round(b.y), math.max(C.MIN_BAR, Round(b.h))
             Place(body, x, y, bw, bh)
             if body.kind ~= b.kind then
                 body.kind = b.kind
                 local col = b.kind == "in" and GREEN or RED
-                if b.kind == "in" then UI.L.Fade(body, col, 0.98, 0.68) else UI.L.Fade(body, col, 0.68, 0.98) end
-                local light = Lighten(col, 0.38)
-                cap:SetColorTexture(light[1], light[2], light[3], 0.85)
+                body:SetColorTexture(col[1], col[2], col[3], 0.92)
+                local light = Lighten(col, 0.30)
+                cap:SetColorTexture(light[1], light[2], light[3], 0.9)
+            end
+            if bh >= 6 then
+                local half = math.floor(bh * 0.4)
+                Place(shade, x, b.kind == "in" and y or (y + bh - half), bw, half)
+            else
+                shade:Hide()
             end
             if bh >= 4 then Place(cap, x, b.kind == "in" and (y + bh - 1) or y, bw, 1) else cap:Hide() end
         end
-        HideFrom(c.pool.body, #g.bars + 1); HideFrom(c.pool.cap, #g.bars + 1)
+        HideFrom(c.pool.body, #g.bars + 1); HideFrom(c.pool.shade, #g.bars + 1); HideFrom(c.pool.cap, #g.bars + 1)
         -- the net line: round markers, then two strokes anchored to them
         for i, p in ipairs(g.points) do
             local dot = Pooled(c.pool.marker, function()

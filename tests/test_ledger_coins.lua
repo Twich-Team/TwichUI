@@ -85,7 +85,7 @@ do
 
     -- axis: one denomination
     Same(Co.Axis(0, 10), "0" .. Icon(GOLD, 10)); Same(Co.Axis(30000, 10), "3" .. Icon(GOLD, 10)); Same(Co.Axis(-50000, 10), "-5" .. Icon(GOLD, 10))
-    Same(Co.Axis(5000, 10), "50" .. Icon(SILVER, 10)); Same(Co.Axis(42, 10), "42" .. Icon(COPPER, 10)); Same(Co.Axis(2500000, 10), "250" .. Icon(GOLD, 10)); Same(Co.Axis(150000000, 10), "15k" .. Icon(GOLD, 10))
+    Same(Co.Axis(5000, 10), "50" .. Icon(SILVER, 10)); Same(Co.Axis(42, 10), "42" .. Icon(COPPER, 10)); Same(Co.Axis(2500000, 10), "250" .. Icon(GOLD, 10)); Same(Co.Axis(150000000, 10), "15k" .. Icon(GOLD, 10)); Same(Co.Axis(15000000000, 10), "1.5M" .. Icon(GOLD, 10)); Same(Co.Axis(-20000000000, 10), "-2M" .. Icon(GOLD, 10))
 end
 
 -- The client's own helper: its artwork paths are read; everything else about it is ignored.

@@ -2625,8 +2625,8 @@ Lab.Step("pose for the screenshot", function()
                     Quiet(off)
                     if off % 3 ~= 1 then
                         local gain = ((off * 37) % 11 + 1) * 4200 + (off % 4 == 0 and 250000 or 0)
-                        Add(off, gain, off % 2 == 0 and "mail" or nil); Sum(gain)
-                        if off % 5 ~= 0 then local loss = -(((off * 17) % 7 + 1) * 3100); Add(off, loss, off % 3 == 0 and "ahBuy" or nil, off % 3 == 0 and { i = 2447, q = 3 } or nil); Sum(loss) end
+                        Add(off, gain, off % 2 == 0 and "mail" or nil); if off < (view == "ledgerexpand" and 30 or 90) then Sum(gain) end
+                        if off % 5 ~= 0 then local loss = -(((off * 17) % 7 + 1) * 3100); Add(off, loss, off % 3 == 0 and "ahBuy" or nil, off % 3 == 0 and { i = 2447, q = 3 } or nil); if off < (view == "ledgerexpand" and 30 or 90) then Sum(loss) end end
                     end
                 end
             end
@@ -2641,35 +2641,35 @@ Lab.Step("pose for the screenshot", function()
         local V = W.UI.LedgerView
         if view == "ledger90" then V.SetFilter("days", 90) elseif view == "ledgerexpand" then V.SetFilter("days", 30) end
         V.Draw(); Lab.Settle(0.3)
-        Check("display", "chart pose: the page is shown", true, Win().Page("ledger"):IsShown())
+        Check("display", "pose: chart: the page is shown", true, Win().Page("ledger"):IsShown())
         if view ~= "ledgerhover" then
-            Check("state", "chart pose: the cards add up to the journal (gold in / gold out)", expectIn .. " | " .. expectOut,
+            Check("state", "pose: chart: the cards add up to the journal (gold in / gold out)", expectIn .. " | " .. expectOut,
                 V.summary.totals.inn .. " | " .. V.summary.totals.out)
         end
         local chart = V.chart
         if view == "ledgerhover" then
-            Check("state", "chart pose: seven columns, the net line backend is named", "7 | true", #chart.cols .. " | " .. tostring(chart.backend == "native" or chart.backend == "raster"))
+            Check("state", "pose: chart: seven columns, the net line backend is named", "7 | true", #chart.cols .. " | " .. tostring(chart.backend == "native" or chart.backend == "raster"))
             chart:InspectIndex(7); Lab.Settle(0.2)
-            Check("display", "chart pose: the card names today and shows exact amounts", "true", tostring(chart:CardFrame():IsShown() and Txt(chart:CardFrame().rows[1].value) == "+10g 50s"))
+            Check("display", "pose: chart: the card names today and shows exact amounts", "true", tostring(chart:CardFrame():IsShown() and Txt(chart:CardFrame().rows[1].value) == "+10g 50s"))
         elseif view == "ledgersparse" then
             chart:InspectIndex(4); Lab.Settle(0.2)   -- the busy day (today-3 is column 4 of 7)
-            Check("display", "chart pose: sparse week, the busy day's card", "+88g 10s | -14g 35s", Txt(chart:CardFrame().rows[1].value) .. " | " .. Txt(chart:CardFrame().rows[2].value))
-            Check("state", "chart pose: days the ledger did not record are columns of their own, not zeros", 2, #chart.geometry.uncovered)
+            Check("display", "pose: chart: sparse week, the busy day's card", "+88g 10s | -14g 35s", Txt(chart:CardFrame().rows[1].value) .. " | " .. Txt(chart:CardFrame().rows[2].value))
+            Check("state", "pose: chart: days the ledger did not record are columns of their own, not zeros", 2, #chart.geometry.uncovered)
         elseif view == "ledger90" then
             local weekly = chart.cols[1].span == 7
-            Check("state", "chart pose: 90 days become longer columns, every day's copper counted once", "true", tostring(weekly))
+            Check("state", "pose: chart: 90 days become longer columns, every day's copper counted once", "true", tostring(weekly))
             local sum = 0
             for _, col in ipairs(chart.cols) do sum = sum + col.inn end
-            Check("state", "chart pose: the columns add up to the window's gold in", V.summary.totals.inn, sum)
+            Check("state", "pose: chart: the columns add up to the window's gold in", V.summary.totals.inn, sum)
             chart:InspectIndex(5); Lab.Settle(0.2)
         elseif view == "ledgerexpand" then
             V.OpenExpanded(); Lab.Settle(0.4)
-            Check("state", "chart pose: the expanded view is open and shares the data", "true", tostring(V.ExpandedShown() and V.bigChart.model == V.summary))
+            Check("state", "pose: chart: the expanded view is open and shares the data", "true", tostring(V.ExpandedShown() and V.bigChart.model == V.summary))
             local n = #V.bigChart.cols
             V.bigChart:InspectIndex(math.max(1, math.floor(n * 0.4))); Lab.Settle(0.3)
-            Check("state", "chart pose: the expanded card is inside the plot, away from the pointer", "true", tostring(V.bigChart:CardFrame():IsShown()))
+            Check("state", "pose: chart: the expanded card is inside the plot, away from the pointer", "true", tostring(V.bigChart:CardFrame():IsShown()))
         else
-            Check("display", "chart pose: a very large amount shows every digit of gold", "true", tostring(Txt(V.cards.inn.value):find("1,2", 1, true) ~= nil))
+            Check("display", "pose: chart: a very large amount shows every digit of gold", "true", tostring(Txt(V.cards.inn.value):find("1,2", 1, true) ~= nil))
             chart:InspectIndex(1); Lab.Settle(0.2)
         end
     elseif view == "shop" then

@@ -132,6 +132,7 @@ function Co.Axis(copper, height)
     local n = math.abs(copper)
     local text
     if n == 0 then text = Unit("gold", "0", height)
+    elseif n >= 10000000000 then text = Unit("gold", (("%.1fM"):format(n / 10000 / 1000000):gsub("%.0M$", "M")), height)
     elseif n >= 100000000 then text = Unit("gold", ("%dk"):format(math.floor(n / 10000 / 1000 + 0.5)), height)
     elseif n >= 10000 then text = Unit("gold", Group(math.floor(n / 10000 + 0.5)), height)
     elseif n >= 100 then text = Unit("silver", math.floor(n / 100 + 0.5), height)

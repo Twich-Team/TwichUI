@@ -887,4 +887,28 @@ do
     V.SetFilter("days", 7)
     print("gold flow chart (Lua time, stand-in frames):\n  " .. table.concat(line, "\n  "))
 end
+
+-- With the artwork on, the same figures are coin textures; the pure text form and the exact amounts are unchanged.
+do
+    UI.Coins.SetIcons(true)
+    local rec = NewRec("Rich"); rec.tz = 1
+    Add(rec, 0, 1234567 * 10000 + 5524, "mail"); Add(rec, 0, -250050, "repair", { n = "Equipment repairs" }); Add(rec, 0, 7, "mail")
+    Install({ ["Rich - Forever"] = rec }); V.SetFilter("source", nil); V.SetFilter("days", 7); V.SetFilter("scope", "current"); V.Draw()
+    local GOLD, SILVER, COPPER = "|TInterface\\MoneyFrame\\UI-GoldIcon:", "|TInterface\\MoneyFrame\\UI-SilverIcon:", "|TInterface\\MoneyFrame\\UI-CopperIcon:"
+    local inn = V.cards.inn.value
+    -- (the stand-in measures markup as characters, so the card may compact; the exact amount is kept either way)
+    Check(inn:GetText():find(GOLD, 1, true) and inn:GetText():find("^%+1[,%.]"), inn:GetText())
+    Same(inn.exact, 1234567 * 10000 + 5524 + 7, "the exact copper stays on the value")
+    Check(V.cards.out.value:GetText():find("^%-25") and V.cards.out.value:GetText():find(GOLD, 1, true), V.cards.out.value:GetText())
+    Check(V.cards.out.value:GetText():find(SILVER, 1, true) == nil, "-25g 0s 50c has no silver part: " .. V.cards.out.value:GetText())
+    -- rows and the hover use the same artwork; Money (the pure text) does not
+    Check(V.list.rows[1].amount:GetText():find("|T", 1, true), "transaction amounts are coins")
+    V.list.rows[1]:GetScript("OnEnter")(V.list.rows[1]); Check(TipText():find("|T", 1, true) and TipText():find("Gold in:", 1, true) or TipText():find("Gold out:", 1, true), TipText())
+    Check(not LQ.Money(1234567 * 10000 + 5524, true):find("|T", 1, true) and LQ.Money(100) == "1s 0c", "the pure text form is unchanged")
+    Check(V.sourceList.rows[1].amount:GetText():find("|T", 1, true), "source amounts are coins")
+    -- item results and professions too
+    V.tx.modeResults:GetScript("OnClick")(V.tx.modeResults)
+    V.tx.modeTx:GetScript("OnClick")(V.tx.modeTx)
+    UI.Coins.SetIcons(false)
+end
 print("LEDGER PAGE OK")
