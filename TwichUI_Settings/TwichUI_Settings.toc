@@ -71,6 +71,7 @@ pages\Workshop.lua
 pages\Skins.lua
 pages\RestedXP.lua
 pages\TargetArt.lua
+pages\ClassPortrait.lua
 pages\Sharing.lua
 pages\Profiles.lua
 pages\Troubleshooting.lua
