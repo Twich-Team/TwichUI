@@ -12,15 +12,18 @@ local K = R.SettingsKit
 local P = {}
 R.RestockItemsPage = P
 
-local W = 644                  -- the settings window's content width
+local W = 644                  -- the width the page is first built at; it follows the hosted frame's width after that
 local ROW_H, VISIBLE = 56, 5
 local LIST_TOP = -140
 local LIST_H = ROW_H * VISIBLE + 8
+local SUG_TOP = LIST_TOP - LIST_H - 34
+local SUG_H = 28
+-- Widths and columns follow the hosted frame (Relayout); these are the values at the first width.
 local LIST_W = W - 12 - 26     -- inside the well, less the scroll bar
 local NAME_W = 250
 local TARGET_X, CHECK_X, UP_X = 300, 382, 424
-local SUG_TOP = LIST_TOP - LIST_H - 14
-local SUG_W, SUG_H = W / 2, 28
+local SUG_W = W / 2
+local laidOut                  -- the width the controls were last placed for
 local MAX_REQUESTS = 2         -- times the game is asked to load one item's details while this is open
 local QUESTION = "Interface\\Icons\\INV_Misc_QuestionMark"
 
@@ -219,12 +222,16 @@ local function Row(i)
     row.check:SetPoint("LEFT", CHECK_X, 0)
     I.Tip(row.check, "On", "On: restocked when a merchant sells it. Off: kept on the list with its target, and not bought.")
 
+    row.rank = G.Text(row, "small")
+    row.rank:SetPoint("LEFT", UP_X, 0)
+    row.rank:SetWidth(22)
+    row.rank:SetJustifyH("RIGHT")
     row.up = G.ArrowButton(row, "up", function() if row.rule then R.Restock.Move(row.rule.id, -1) end end)
-    row.up:SetPoint("LEFT", UP_X, 0)
-    I.Tip(row.up, "Move up", "Higher in the list is bought first when money or your spending limit can't cover everything.")
+    row.up:SetPoint("LEFT", UP_X + 26, 0)
+    I.Tip(row.up, "Raise purchase priority", "Bought earlier when money or your spending limit can't cover everything.")
     row.down = G.ArrowButton(row, "down", function() if row.rule then R.Restock.Move(row.rule.id, 1) end end)
-    row.down:SetPoint("LEFT", UP_X + 22, 0)
-    I.Tip(row.down, "Move down", "Lower in the list is bought after the items above it.")
+    row.down:SetPoint("LEFT", UP_X + 48, 0)
+    I.Tip(row.down, "Lower purchase priority", "Bought after the items above it; it may wait for another visit when money or your limit runs short.")
 
     row.remove = G.Button(row, "Remove", 76, "secondary", function() if row.rule then Remove(row.rule.id) end end)
     row.remove:SetPoint("RIGHT", -6, 0)
@@ -294,17 +301,69 @@ end
 ---------------------------------------------------------------------------
 -- Drawing
 ---------------------------------------------------------------------------
+local function PlaceRow(row)
+    row:SetWidth(LIST_W)
+    row.name:SetWidth(NAME_W); row.status:SetWidth(NAME_W)
+    row.target:ClearAllPoints(); row.target:SetPoint("LEFT", TARGET_X, 0)
+    row.check:ClearAllPoints(); row.check:SetPoint("LEFT", CHECK_X, 0)
+    row.rank:ClearAllPoints(); row.rank:SetPoint("LEFT", UP_X, 0)
+    row.up:ClearAllPoints(); row.up:SetPoint("LEFT", UP_X + 26, 0)
+    row.down:ClearAllPoints(); row.down:SetPoint("LEFT", UP_X + 48, 0)
+end
+
+-- Places everything that depends on the page's width: the add card, the columns, the list and the suggestion grid.
+local function Relayout()
+    local width = math.max(520, (f:GetWidth() and f:GetWidth() > 1) and f:GetWidth() or W)
+    if width == laidOut then return end
+    laidOut = width
+    LIST_W = width - 12 - 26
+    UP_X = LIST_W - 6 - 76 - 12 - 72
+    CHECK_X = UP_X - 54
+    TARGET_X = CHECK_X - 86
+    NAME_W = TARGET_X - 38 - 12
+    SUG_W = math.floor(width / 2)
+    f.help:SetWidth(width - 8)
+    if f.card and f.card.SetBounds then f.card:SetBounds(0, -38, width, -98) end
+    f.dropSub:SetWidth(width - 62 - 230)
+    f.idLabel:ClearAllPoints(); f.idLabel:SetPoint("TOPLEFT", width - 214, -46)
+    f.idBox:ClearAllPoints(); f.idBox:SetPoint("TOPLEFT", width - 214, -62)
+    f.add:ClearAllPoints(); f.add:SetPoint("TOPLEFT", width - 102, -62)
+    f.note:SetWidth(width - 8)
+    for key, x in pairs({ target = TARGET_X, on = CHECK_X, priority = UP_X }) do
+        f.columns[key]:ClearAllPoints(); f.columns[key]:SetPoint("TOPLEFT", 6 + x, -124)
+    end
+    f.count:ClearAllPoints(); f.count:SetPoint("TOPRIGHT", f, "TOPLEFT", width - 8, -124)
+    f.well:SetSize(width, LIST_H)
+    f.content:SetWidth(LIST_W)
+    f.empty:SetWidth(width - 24)
+    f.priorityHelp:SetWidth(width - 8)
+    f.sugClass:ClearAllPoints(); f.sugClass:SetPoint("TOPRIGHT", f, "TOPLEFT", width - 2, SUG_TOP + 4)
+    f.sugHelp:SetWidth(width - 8)
+    f.sugNone:SetWidth(width - 8)
+    for _, row in ipairs(rows) do PlaceRow(row) end
+    for i, b in ipairs(sugButtons) do
+        b:SetSize(SUG_W - 6, SUG_H - 4)
+        b:ClearAllPoints(); b:SetPoint("TOPLEFT", ((i - 1) % 2) * SUG_W, f.sugGridTop - math.floor((i - 1) / 2) * SUG_H)
+        b.name:SetWidth(SUG_W - 6 - 28 - 96)
+    end
+end
+P.Relayout = function() laidOut = nil; if f and built then Relayout() end end
+
 function P.Refresh()
     if not (f and built and f:IsShown()) then return end
     local RS, G = R.Restock, Wg()
     local pal = G.pal
+    Relayout()
     local list = RS.Rules()
     local wanted = {}
     for _, rule in ipairs(list) do wanted[rule.id] = true end
     local scan = RS.ScanBags(wanted)
     for i, rule in ipairs(list) do
         local row = Row(i)
+        PlaceRow(row)
         row.id, row.rule = rule.id, rule
+        row.rank:SetText(("%d"):format(i))
+        G.Color(row.rank, rule.enabled and pal.textDim or pal.stone)
         local name, icon, state = ItemInfo(rule.id)
         row.icon:SetTexture(icon or QUESTION)
         row.icon:SetDesaturated(not rule.enabled)
@@ -337,6 +396,9 @@ function P.Refresh()
     end
     for i, s in ipairs(suggestions) do
         local b = SugButton(i)
+        b:SetSize(SUG_W - 6, SUG_H - 4)
+        b:ClearAllPoints(); b:SetPoint("TOPLEFT", ((i - 1) % 2) * SUG_W, f.sugGridTop - math.floor((i - 1) / 2) * SUG_H)
+        b.name:SetWidth(SUG_W - 6 - 28 - 96)
         b.id, b.s = s.id, s
         local name, icon = ItemInfo(s.id)
         b.icon:SetTexture(icon or QUESTION)
@@ -349,7 +411,14 @@ function P.Refresh()
         sugButtons[i].id, sugButtons[i].s = nil, nil
         sugButtons[i]:Hide()
     end
+    -- the page is as tall as its suggestions: a longer list asks the window to lay the page out again
+    local h = math.max(540, -f.sugGridTop + math.max(1, math.ceil(#suggestions / 2)) * SUG_H + 12)
+    if h ~= P.height then
+        P.height = h
+        if R.SettingsUI and R.SettingsUI.Refresh then C_Timer.After(0, function() R.SettingsUI.Refresh() end) end
+    end
 end
+function P.Height() return P.height or 540 end
 
 -- Brings an item's row into view and puts the cursor in its target box, with a brief highlight.
 function P.Focus(id)
@@ -397,11 +466,11 @@ local function Build()
     f.help = G.Text(f, "small")
     f.help:SetPoint("TOPLEFT", 4, -2)
     f.help:SetWidth(W - 8)
-    f.help:SetText("Set how many to keep in your bags. Items higher in the list are bought first.")
-    I.Tip(f, "Restock targets", "Keep 20: if you have 7 and a merchant sells it, TwichUI tries to buy 13. Higher items are bought first when money or your spending limit runs short.")
+    f.help:SetText("Each item shows how many to keep in your bags and how many you are short. A merchant that sells it tops you up to that number.")
+    I.Tip(f, "Restock targets", "Keep 20: if you have 7 and a merchant sells it, TwichUI tries to buy 13. Purchase priority decides what is bought first when money or your spending limit runs short.")
 
     -- the add area: a box to drop an item on, or its item ID
-    G.Card(f, 0, -38, W, -98)
+    f.card = G.Card(f, 0, -38, W, -98)
     f.drop = CreateFrame("Button", nil, f, "BackdropTemplate")
     f.drop:SetSize(40, 40)
     f.drop:SetPoint("TOPLEFT", 12, -48)
@@ -463,10 +532,12 @@ local function Build()
         t:SetText(text)
         return t
     end
+    f.columns = {}
     Column("Item", 38)
-    Column("Keep in bags", TARGET_X)
-    Column("On", CHECK_X)
-    Column("Order", UP_X)
+    f.columns.target = Column("Keep in bags", TARGET_X)
+    f.columns.on = Column("On", CHECK_X)
+    f.columns.priority = Column("Purchase priority", UP_X)
+    I.Tip(f.columns.priority, "Purchase priority", "When your money or spending limit can't cover every item, the one numbered 1 is bought first, then 2, and so on. What can't be afforded waits for the next merchant visit.")
     f.count = G.Text(f, "meta")
     f.count:SetPoint("TOPRIGHT", f, "TOPLEFT", W - 8, -124)
     f.count:SetJustifyH("RIGHT")
@@ -481,6 +552,11 @@ local function Build()
     f.empty:SetPoint("TOPLEFT", 12, -14)
     f.empty:SetWidth(W - 24)
     f.empty:SetText("Nothing on your list yet. Drop an item above, type its item ID, or add a class reagent below.")
+    f.priorityHelp = G.Text(f, "small")
+    f.priorityHelp:SetPoint("TOPLEFT", 4, LIST_TOP - LIST_H - 6)
+    f.priorityHelp:SetWidth(W - 8)
+    f.priorityHelp:SetText("Purchase priority: when money or your spending limit can't cover everything, items are bought in this order (1 first). The rest wait for your next visit.")
+    G.Color(f.priorityHelp, pal.stone)
 
     -- class reagents
     f.sugTitle = G.Text(f, "heading")
@@ -519,6 +595,7 @@ function P.Frame()
         if f.drop then R.Interact.HideTip(f.drop) end
     end)
     f:SetScript("OnEvent", OnEvent)
+    f:SetScript("OnSizeChanged", function() if built then QueueRefresh() end end)
     return f
 end
 
@@ -531,7 +608,7 @@ end
 K.Page({
     key = "restockItems", name = "Restock items", parent = "restock", order = 46,
     description = "The items vendor restocking keeps in your bags, how many of each, and suggestions for your class's reagents.",
-    keywords = "restock list item id drop drag target keep reagent reagents suggestions class ammo arrows",
+    keywords = "restock list item id drop drag target keep reagent reagents suggestions class ammo arrows purchase priority order shortfall",
     when = function() return R.Restock ~= nil end,
-    host = function() return P.Frame() end,
+    host = function() return P.Frame() end, hostHeight = function() return P.Height() end,
 })

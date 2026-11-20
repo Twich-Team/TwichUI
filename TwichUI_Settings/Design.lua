@@ -65,7 +65,7 @@ Page("barGlowsSpells", "Choose spells and customize their glow.")
 Page("skins", "Make supported addons feel at home with TwichUI.")
 Page("restedxp", "Choose your guide's behavior and appearance.", { "Window background and border", "Current step", "Header and footer", "Text size", "Spacing", "Scroll bar", "Waypoint arrow", "Timer bars", "Timer bar background and border" })
 Page("targetArt", "Choose dragon artwork for your target frame.", { "Fine-tune each artwork", "Reset" })
-Page("sharing", "Share selected configurations and review incoming changes.")
+Page("sharing", "Share selected configurations and review incoming changes.", { "Sending options", "Inspect saved data" })
 Page("profiles", "Choose the settings this character uses.", { "Delete or reset" })
 Page("troubleshooting", "Check status, then open the tools you need.", { "Temporary tracing" })
 

@@ -373,9 +373,61 @@ local function CharDests(create)
     return Sub(chars, key, create)
 end
 
+-- Writes an already normalized recipient for a mail destination, with no notification: this character's own
+-- (allChars false) or the account-wide one (allChars true, which also removes this character's own so the shared one is
+-- used here). Returns true, or false and a sentence. Callers check the destination first.
+local function PutRecipient(destId, name, allChars)
+    if allChars then
+        local shared = Sub(AccountStore(true), "shared", true)
+        if not shared then return false, "Your settings aren't available right now." end
+        shared[destId] = { recipient = name }
+        local mine = CharDests(false)
+        if mine then mine[destId] = nil end
+        return true
+    end
+    local mine = CharDests(true)
+    if not mine then return false, "Your settings aren't available right now." end
+    mine[destId] = { recipient = name }
+    return true
+end
+
+-- Clears a mail destination's recipient. scope "char" (this character's own only: an account-wide recipient, if there
+-- is one, is used here again), "shared" (the account-wide one only: characters with their own keep theirs) or "both".
+-- Returns true when something was cleared.
+function MI.ClearRecipient(destId, scope)
+    local d = MI.Dest(destId)
+    if not (d and d.kind == "mail") then return false end
+    local cleared = false
+    if scope == "char" or scope == "both" then
+        local mine = CharDests(false)
+        if mine and mine[destId] ~= nil then mine[destId], cleared = nil, true end
+    end
+    if scope == "shared" or scope == "both" then
+        local shared = Sub(AccountStore(false), "shared", false)
+        if shared and shared[destId] ~= nil then shared[destId], cleared = nil, true end
+    end
+    if cleared then MI.Changed() end
+    return cleared
+end
+
+-- Where a mail destination's recipient comes from on this character: "char" (this character's own), "shared" (the
+-- account-wide one) or nil; and whether an account-wide one exists behind this character's own.
+function MI.RecipientSource(destId)
+    local acct = AccountStore(false)
+    local key = MI.CharKey()
+    local chars = Sub(acct, "chars", false)
+    local mine = key and chars and type(chars[key]) == "table" and chars[key][destId]
+    local shared = Sub(acct, "shared", false)
+    local s = shared and shared[destId]
+    local hasShared = type(s) == "table" and type(s.recipient) == "string" and MI.NormalizeRecipient(s.recipient) ~= nil
+    if type(mine) == "table" and type(mine.recipient) == "string" and MI.NormalizeRecipient(mine.recipient) then return "char", hasShared end
+    if hasShared then return "shared", true end
+    return nil, false
+end
+
 -- Sets (or with text nil, clears) this character's recipient for a mail destination. allChars: keep it for every
--- character of this account instead (the player's explicit choice); clearing clears both. Returns true, or false
--- and a sentence.
+-- character of this account instead (the player's explicit choice); clearing with text nil clears both (MI.ClearRecipient
+-- clears one of them). Returns true, or false and a sentence.
 function MI.SetRecipient(destId, text, allChars)
     local d = MI.Dest(destId)
     if not (d and d.kind == "mail") then return false, "That destination isn't there any more." end
@@ -385,17 +437,14 @@ function MI.SetRecipient(destId, text, allChars)
         name, why = MI.NormalizeRecipient(text)
         if not name then return false, why end
     end
-    local mine = CharDests(name ~= nil)
-    local shared = Sub(AccountStore(name ~= nil and allChars), "shared", name ~= nil and allChars)
     if name == nil then
+        local mine = CharDests(false)
+        local shared = Sub(AccountStore(false), "shared", false)
         if mine then mine[destId] = nil end
         if shared then shared[destId] = nil end
-    elseif allChars then
-        shared[destId] = { recipient = name }
-        if mine then mine[destId] = nil end
     else
-        if not mine then return false, "Your settings aren't available right now." end
-        mine[destId] = { recipient = name }
+        local ok, why = PutRecipient(destId, name, allChars)
+        if not ok then return false, why end
     end
     MI.Changed()
     return true, name
@@ -478,11 +527,11 @@ function MI.Problem(rule, guildNow)
     if not MI.NEEDS_DEST[rule.kind] then return nil end
     local d = rule.dest and MI.Dest(rule.dest)
     if not d or d.kind ~= rule.kind then
-        return "no-destination", rule.kind == "mail" and "Choose who to send to." or "Choose a guild bank tab."
+        return "no-destination", rule.kind == "mail" and "Type the recipient character's name." or "Choose a guild bank tab."
     end
     local where = MI.Resolve(d.id)
     if not where then
-        if rule.kind == "mail" then return "no-recipient", ("Choose the recipient for \"%s\" on this character."):format(d.label) end
+        if rule.kind == "mail" then return "no-recipient", ("Choose the recipient for \"%s\" on this character: edit the rule and type the character's name."):format(d.label) end
         return "no-guild-tab", ("Choose the guild bank tab for \"%s\" on this character."):format(d.label)
     end
     if rule.kind == "guild" and guildNow ~= false then
@@ -609,6 +658,202 @@ function MI.SaveRule(rule)
     if at then list[at] = clean else list[#list + 1] = clean end
     if not WriteRules(list) then return nil, "Your settings aren't available right now." end
     return clean.id
+end
+
+---------------------------------------------------------------------------
+-- A mail rule's recipient, typed in the rule builder. The builder keeps it as part of the rule draft:
+--   draft = { text = "Name" | "Name-Realm" | nil (unchanged: whatever the rule's destination is here),
+--             allChars = true (the account-wide recipient, the player's explicit choice; default this character only),
+--             updateShared = true (change the destination the rule shares with other rules, for all of them: the
+--             player's explicit choice, after being shown which rules) }
+-- Nothing is written until MI.SaveRuleDraft, which checks everything first and writes the rule, any new destination
+-- and the recipient as one change. Recipients stay in the account's table (never in the profile's rules), as before.
+---------------------------------------------------------------------------
+
+-- The other rules (in this profile) that send to a destination: { { id, name }, ... }, in priority order.
+function MI.RulesUsing(destId, exceptId)
+    local out = {}
+    if not destId then return out end
+    for _, r in ipairs(MI.Rules()) do
+        if r.dest == destId and r.id ~= exceptId then out[#out + 1] = { id = r.id, name = r.name } end
+    end
+    return out
+end
+
+-- A destination of a kind with a name, or nil (nothing is made).
+function MI.FindDestNamed(kind, label)
+    if type(label) ~= "string" then return nil end
+    for _, d in ipairs(MI.Dests()) do
+        if d.kind == kind and d.label:lower() == label:lower() then return d.id end
+    end
+end
+
+local function Blank(text) return text == nil or (type(text) == "string" and text:match("^%s*$") ~= nil) end
+
+-- What saving a mail rule's draft would do, without writing anything. Returns a plan, or nil and a sentence:
+--   { dest = id or nil (a new destination is made), recipient = "Name" or nil (none on this character),
+--     write = nil | "char" | "shared" (the recipient write, on plan.dest or the new one), create = label of a new
+--     destination, reuse = true when another destination already sends to that name, others = the rules that share
+--     the rule's current destination, ruleOnly = true when the change applies to this rule only }
+function MI.PlanRecipient(rule, draft)
+    draft = type(draft) == "table" and draft or {}
+    local cur = rule and rule.dest and MI.Dest(rule.dest)
+    if cur and cur.kind ~= "mail" then cur = nil end
+    local where = cur and MI.Resolve(cur.id)
+    local others = cur and MI.RulesUsing(cur.id, rule.id) or {}
+    if draft.text == nil then
+        return { dest = cur and cur.id, recipient = where and where.recipient, shared = where and where.shared, others = others }
+    end
+    if Blank(draft.text) then
+        -- an empty box: the rule keeps its destination, and whatever it is here; nothing is cleared from a rule
+        if where then return nil, "Type the recipient character's name, or choose a saved recipient." end
+        return { dest = cur and cur.id, others = others }
+    end
+    local name, why = MI.NormalizeRecipient(draft.text)
+    if not name then return nil, why end
+    local allChars = draft.allChars == true
+    local plan = { recipient = name, shared = allChars, others = others }
+    -- already so: nothing to write
+    if where and where.recipient == name and (not allChars or (where.shared and MI.RecipientSource(cur.id) == "shared")) then
+        plan.dest, plan.shared = cur.id, where.shared
+        return plan
+    end
+    -- the rule's own destination (no other rule sends to it), or the shared one when the player chose to change it for all
+    if cur and (#others == 0 or draft.updateShared == true) then
+        plan.dest, plan.write, plan.ruleOnly = cur.id, allChars and "shared" or "char", #others == 0
+        return plan
+    end
+    -- another destination that already sends to that name here: this rule uses it, nothing else changes
+    for _, d in ipairs(MI.Dests()) do
+        if d.kind == "mail" and (not cur or d.id ~= cur.id) then
+            local w = MI.Resolve(d.id)
+            if w and w.recipient == name and (not allChars or (w.shared and MI.RecipientSource(d.id) == "shared")) then
+                plan.dest, plan.reuse, plan.shared, plan.ruleOnly = d.id, true, w.shared, true
+                return plan
+            end
+        end
+    end
+    -- a new destination for this rule only. Its label is never the recipient's name: labels are in the profile, which can
+    -- be copied, shared or backed up; the recipient stays in the account's table. A template's own label ("Bank alt") or a
+    -- numbered "Mail recipient" is used, and the player may rename it under Recipients (never required).
+    local dests = MI.Dests()
+    if #dests >= MI.MAX_DESTS then
+        return nil, ("You keep %d recipients and guild bank tabs already: choose a saved recipient, or remove one under Recipients."):format(MI.MAX_DESTS)
+    end
+    local label = CleanName(draft.label, MI.MAX_NAME)
+    if label and label:lower() == name:lower() then label = nil end
+    if not label or MI.FindDestNamed("mail", label) then
+        local used = {}
+        for _, d in ipairs(dests) do used[d.label:lower()] = true end
+        local n = 1
+        label = "Mail recipient"
+        while used[label:lower()] do n = n + 1; label = ("Mail recipient %d"):format(n) end
+    end
+    plan.create, plan.write, plan.ruleOnly = label, allChars and "shared" or "char", true
+    return plan
+end
+
+-- What still stops a rule draft from running, counting the recipient typed with it: nil, or a code and a sentence.
+function MI.DraftProblem(rule, draft)
+    local clean = {}
+    for k, v in pairs(rule) do clean[k] = v end
+    clean.id = IdText(clean.id) and clean.id or "rdraft"
+    clean = CleanRule(clean)
+    if not clean then return "invalid", "That rule can't be saved." end
+    if clean.kind ~= "mail" then return MI.Problem(clean, false) end
+    local plan, why = MI.PlanRecipient(clean, draft)
+    if not plan then return "bad-recipient", why end
+    if not MI.HasItems(clean) then return MI.Problem(clean, false) end
+    if not plan.recipient then
+        if plan.dest then return MI.Problem(clean, false) end
+        return "no-destination", "Type the recipient character's name."
+    end
+    return nil
+end
+
+-- Saves a rule draft and, for a mail rule, the recipient typed with it (MI.PlanRecipient), as one change: everything is
+-- checked first, and if any write fails every earlier one is put back. A rule that can't run yet is saved off, as
+-- MI.SaveRule does; a rule is never turned on that the draft didn't turn on. expectId: the saved rule the draft was made
+-- from (nil for a new rule): if it is gone, nothing is saved. Returns the rule id and the plan, or nil and a sentence.
+function MI.SaveRuleDraft(rule, draft, expectId)
+    if type(rule) ~= "table" then return nil, "Nothing to save." end
+    local t = ProfileStore(true)
+    if not t then return nil, "Your settings aren't available right now." end
+    local list = MI.Rules()
+    local at
+    for i, r in ipairs(list) do if r.id == rule.id then at = i end end
+    if expectId and (rule.id ~= expectId or not at) then
+        return nil, "This rule was removed or changed elsewhere while you edited it. Cancel, then edit it again."
+    end
+    if not at and #list >= MI.MAX_RULES then return nil, ("You can keep %d rules; remove one first."):format(MI.MAX_RULES) end
+    local copy = {}
+    for k, v in pairs(rule) do copy[k] = v end
+    local taken = {}
+    for _, r in ipairs(list) do taken[r.id] = true end
+    if not at then copy.id = NewId("r", taken) end
+    local plan
+    if copy.kind == "mail" then
+        local why
+        plan, why = MI.PlanRecipient(copy, draft)
+        if not plan then return nil, why end
+        if plan.write == "char" and not MI.CharKey() then return nil, "Your settings aren't available right now." end
+    else
+        plan = {}
+    end
+    if not CleanRule(copy) then return nil, "That rule can't be saved." end
+    -- everything checked: write, keeping what was there to put it back
+    local acct = AccountStore(plan.write ~= nil)
+    local key = MI.CharKey()
+    local before = { dests = t.dests, rules = t.rules, chars = nil, shared = nil, destId = nil }
+    local function Restore()
+        t.dests, t.rules = before.dests, before.rules
+        if before.destId then
+            local chars = Sub(acct, "chars", false)
+            local mine = key and chars and chars[key]
+            if type(mine) == "table" then rawset(mine, before.destId, before.chars) end
+            local shared = Sub(acct, "shared", false)
+            if shared then rawset(shared, before.destId, before.shared) end
+        end
+    end
+    local ok, result = pcall(function()
+        local destId = plan.dest
+        if plan.create then
+            local dests = MI.Dests()
+            local dtaken = {}
+            for _, d in ipairs(dests) do dtaken[d.id] = true end
+            destId = NewId("d", dtaken)
+            dests[#dests + 1] = { id = destId, kind = "mail", label = plan.create }
+            local out = {}
+            for i, d in ipairs(dests) do out[i] = CleanDest(d) end
+            t.dests = out
+        end
+        if plan.write and destId then
+            local chars = Sub(acct, "chars", false)
+            local mine = key and chars and chars[key]
+            local shared = Sub(acct, "shared", false)
+            before.destId = destId
+            before.chars = type(mine) == "table" and mine[destId] or nil
+            before.shared = shared and shared[destId] or nil
+            local okPut, why = PutRecipient(destId, plan.recipient, plan.write == "shared")
+            if not okPut then error(why or "Your settings aren't available right now.", 0) end
+        end
+        if copy.kind == "mail" then copy.dest = destId end
+        local clean = CleanRule(copy)
+        if not clean then error("That rule can't be saved.", 0) end
+        if clean.enabled and MI.Problem(clean, false) then clean.enabled = false end
+        if at then list[at] = clean else list[#list + 1] = clean end
+        local out = {}
+        for i, r in ipairs(list) do out[i] = CleanRule(r) end
+        t.rules = out
+        plan.dest = destId
+        return clean.id
+    end)
+    if not ok then
+        Restore()
+        return nil, type(result) == "string" and result or "That rule can't be saved."
+    end
+    MI.Changed()
+    return result, plan
 end
 
 -- Turns a rule on or off. Turning on is refused while something it needs is missing (returns false and why).

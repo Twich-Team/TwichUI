@@ -77,6 +77,19 @@ function CL.Sheet(host, skin, opts)
         self.skin = value
         for _, texture in ipairs(self.parts) do texture:SetTexture(CRAFT .. value .. ".tga") end
     end
+    -- A sheet drawn with opts.bounds can be given new bounds (a page that follows its host's width); same corners and cuts.
+    function group:SetBounds(l, t, r, b)
+        local bx = { l, l + corner, r - corner, r }
+        local by = { t, t - corner, b + corner, b }
+        for row = 1, 3 do
+            for col = 1, 3 do
+                local texture = self.parts[(row - 1) * 3 + col]
+                texture:ClearAllPoints()
+                texture:SetPoint("TOPLEFT", host, "TOPLEFT", bx[col], by[row])
+                texture:SetPoint("BOTTOMRIGHT", host, "TOPLEFT", bx[col + 1], by[row + 1])
+            end
+        end
+    end
     function group:SetShown(on) for _, texture in ipairs(self.parts) do texture:SetShown(on and true or false) end end
     function group:SetAlpha(alpha) for _, texture in ipairs(self.parts) do texture:SetAlpha(alpha) end end
     function group:SetTint(r, g, b, alpha)
