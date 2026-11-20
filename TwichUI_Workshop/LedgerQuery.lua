@@ -241,11 +241,12 @@ function LQ.SourceRows(summary)
 end
 
 -- The words for a comparison with the window before. nil when that window was not fully recorded: no percentage is made from partial data.
-function LQ.Compare(summary, field)
+function LQ.Compare(summary, field, fmt)
+    local M = fmt or LQ.Money
     local p = summary and summary.prev
     if not p then return nil end
     local now, before = summary.totals[field], p[field]
-    if field == "net" then return { prior = before, text = "Prior " .. summary.filter.days .. "d: " .. LQ.Money(before, true) } end
+    if field == "net" then return { prior = before, text = "Prior " .. summary.filter.days .. "d: " .. M(before, true) } end
     if before <= 0 then return nil end
     local pct = math.floor((now - before) / before * 100 + 0.5)
     return { prior = before, pct = pct, text = ("%s%d%% vs. prior %dd"):format(pct > 0 and "+" or "", pct, summary.filter.days) }
@@ -289,24 +290,26 @@ function LQ.Note(row)
 end
 
 -- Settlement is descriptive metadata on the collected cash entry; these amounts never enter totals again.
-function LQ.AuctionDetails(row)
+-- fmt(amount, signed) writes an amount (default: the plain text; the page passes the coin artwork).
+function LQ.AuctionDetails(row, fmt)
+    local M = fmt or LQ.Money
     local lines = {}
     if row.auction then lines[#lines + 1] = "Auction ID: " .. row.auction end
     if row.code ~= "ahSale" then return lines end
-    lines[#lines + 1] = "Collected: " .. LQ.Money(row.a)
+    lines[#lines + 1] = "Collected: " .. M(row.a)
     local L = Ledger()
     local s = L and L.Settlement(row.settlement, row.a)
     if not s then lines[#lines + 1] = "Fee unavailable"; return lines end
-    lines[#lines + 1] = "Gross sale: " .. LQ.Money(s.g)
-    lines[#lines + 1] = "Auction fee: " .. LQ.Money(s.f) .. " - verified invoice"
-    lines[#lines + 1] = "Returned deposit: " .. LQ.Money(s.d) .. " (included in collected)"
+    lines[#lines + 1] = "Gross sale: " .. M(s.g)
+    lines[#lines + 1] = "Auction fee: " .. M(s.f) .. " - verified invoice"
+    lines[#lines + 1] = "Returned deposit: " .. M(s.d) .. " (included in collected)"
     if #s.invoices > 1 then
         lines[#lines + 1] = "Seller invoices: " .. #s.invoices
         for i = 1, math.min(3, #s.invoices) do
             local r = s.invoices[i]
             local name = r.n or "Sold item"
             if r.q and r.q > 1 then name = ("%s \195\151%d"):format(name, r.q) end
-            lines[#lines + 1] = name .. ": " .. LQ.Money(r.c)
+            lines[#lines + 1] = name .. ": " .. M(r.c)
         end
     end
     return lines
@@ -449,21 +452,22 @@ function LQ.Results(filter, today)
 end
 
 -- The words of one result row's hover: only verified figures, and the reason for any that are missing.
-function LQ.ResultLines(row)
+function LQ.ResultLines(row, fmt)
+    local M = fmt or LQ.Money
     local lines = {}
     if row.src == "ahSale" then
-        lines[#lines + 1] = "Auction sale: " .. LQ.Money(row.collected) .. " collected"
-        if row.gross > 0 then lines[#lines + 1] = "Gross sale " .. LQ.Money(row.gross) .. ", auction fee " .. LQ.Money(row.fee) .. ", returned deposit " .. LQ.Money(row.deposit) end
+        lines[#lines + 1] = "Auction sale: " .. M(row.collected) .. " collected"
+        if row.gross > 0 then lines[#lines + 1] = "Gross sale " .. M(row.gross) .. ", auction fee " .. M(row.fee) .. ", returned deposit " .. M(row.deposit) end
     else
         lines[#lines + 1] = row.sales == 1 and "1 vendor sale" or (row.sales .. " vendor sales")
     end
     if row.status == "verified" then
-        lines[#lines + 1] = "Verified cost: " .. LQ.Money(row.vcost)
-        lines[#lines + 1] = "Collected: " .. LQ.Money(row.vcollected)
-        lines[#lines + 1] = "Realized result: " .. LQ.Money(row.profit, true)
+        lines[#lines + 1] = "Verified cost: " .. M(row.vcost)
+        lines[#lines + 1] = "Collected: " .. M(row.vcollected)
+        lines[#lines + 1] = "Realized result: " .. M(row.profit, true)
     elseif row.status == "partial" then
         lines[#lines + 1] = ("%d of %d sales have a verified cost"):format(row.vsales, row.sales)
-        lines[#lines + 1] = "Verified: collected " .. LQ.Money(row.vcollected) .. ", cost " .. LQ.Money(row.vcost) .. " = " .. LQ.Money(row.profit, true)
+        lines[#lines + 1] = "Verified: collected " .. M(row.vcollected) .. ", cost " .. M(row.vcost) .. " = " .. M(row.profit, true)
     else
         lines[#lines + 1] = "Cost basis unavailable. Profit unavailable."
     end
@@ -500,6 +504,11 @@ local function CostProfessions(filter)
             row.amount = p.profit
             row.name = ("%s \194\183 %d %s verified"):format(p.name, p.sales, p.sales == 1 and "sale" or "sales")
             row.tip[#row.tip + 1] = ("Verified: collected %s, cost %s"):format(LQ.Money(p.collected), LQ.Money(p.cost))
+            row.tipFn = function(fmt)   -- the same words with the page's own money presentation
+                local lines = { ("Verified: collected %s, cost %s"):format(fmt(p.collected), fmt(p.cost)) }
+                for i = 2, #row.tip do lines[i] = row.tip[i] end
+                return lines
+            end
             if p.partial > 0 then row.tip[#row.tip + 1] = p.partial .. " more " .. (p.partial == 1 and "sale has" or "sales have") .. " a craft with an unknown cost and are not counted." end
         else
             row.text = "Insufficient verified data"

@@ -2518,11 +2518,11 @@ Lab.Step("pose for the screenshot", function()
         Tab("Gold Ledger")
         local V = W.UI.LedgerView
         Check("display", "pose: the Gold Ledger page is shown", true, Win().Page("ledger"):IsShown())
-        Check("display", "pose: net change, gold in and gold out of seven days", "+12g 30s 0c | +15g 50s 0c | -3g 20s 0c",
+        Check("display", "pose: net change, gold in and gold out of seven days", "+12g 30s | +15g 50s | -3g 20s",
             Txt(V.cards.net.value) .. " | " .. Txt(V.cards.inn.value) .. " | " .. Txt(V.cards.out.value))
-        Check("display", "pose: attributed income, spending and the unclassified net", "+13g 0s 0c | -2g 50s 0c | +1g 80s 0c",
+        Check("display", "pose: attributed income, spending and the unclassified net", "+13g | -2g 50s | +1g 80s",
             Txt(V.cards.attrIn.value) .. " | " .. Txt(V.cards.attrOut.value) .. " | " .. Txt(V.cards.unk.value))
-        Check("display", "pose: six transactions, newest first, the first an unclassified +5000", "6 | +50s 0c | Unclassified",
+        Check("display", "pose: six transactions, newest first, the first an unclassified +5000", "6 | +50s | Unclassified",
             #V.rows .. " | " .. Txt(V.list.rows[1].amount) .. " | " .. Txt(V.list.rows[1].src))
         -- of the seven days (today-6 .. today) today-6 and today-4 have no record; today-2 is recorded with nothing moved
         Check("display", "pose: a day outside the recorded days is not a zero (two uncovered columns, one recorded quiet day)", "2 | 1",
@@ -2532,7 +2532,7 @@ Lab.Step("pose for the screenshot", function()
         for _, r in ipairs(W.LedgerQuery.SourceRows(V.summary)) do split = split + r.dir * r.amount end
         Check("state", "pose: the sources add up to Net Change", 123000, split)
         V.SetFilter("days", 30); Lab.Settle(0.2)
-        Check("display", "pose: thirty days add the +50000 mail", "+20g 50s 0c", Txt(V.cards.inn.value))
+        Check("display", "pose: thirty days add the +50000 mail", "+20g 50s", Txt(V.cards.inn.value))
         V.SetFilter("days", 7); Lab.Settle(0.2)
         if view == "ledgervendor" or view == "ledgervendorsmall" or view == "ledgerauction" or view == "ledgerauctionsmall" then
             -- Additive UI fixture only: merchant native callbacks/outcomes are independently exercised offline.
@@ -2554,7 +2554,7 @@ Lab.Step("pose for the screenshot", function()
             local total = 0
             for _, source in ipairs(V.sourceList.data) do total = total + source.dir * source.amount end
             Check("state", "vendor pose: all displayed sources reconcile with net", 110593, total)
-            V.sourceList.scroll:SetVerticalScroll(3 * 26); V.sourceList:Layout()
+            V.sourceList.scroll:SetVerticalScroll(3 * 32); V.sourceList:Layout()
             local found = false
             for _, row in ipairs(V.srcRows) do if row:IsShown() and row.data.code == "vendorSell" then found = true end end
             Check("state", "vendor pose: scrolling exposes the smallest source", true, found)

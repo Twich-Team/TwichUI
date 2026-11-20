@@ -91,6 +91,8 @@ Style.lua
 # Shared interactive market charts for Workshop and Auction House pages
 auction/AdvancedChart.lua
 # The Gold Ledger: what its page reads (pure) and its Gold Flow chart; the recorder is the core's auction/Ledger.lua (docs/workshop/gold-ledger.md)
+# Coin artwork for money in the Ledger (gold, silver and copper icons instead of letters); presentation only
+Coins.lua
 LedgerQuery.lua
 LedgerChart.lua
 # The pages, in the order the page list shows them (each builds once and draws what Session.lua says)

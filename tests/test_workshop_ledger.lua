@@ -77,12 +77,13 @@ c.C_Item = {
 c.InCombatLockdown = function() return false end
 c.IsShiftKeyDown = function() return false end
 
-for _, f in ipairs({ "Data.lua", "BridgeCodec.lua", "BridgeSchema.lua", "BridgeValidate.lua", "Bridge.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "CraftPlanner.lua", "Strategy.lua", "Scan.lua", "Market.lua", "Valuation.lua", "MarketFacts.lua", "Session.lua", "AuctionButton.lua", "Style.lua", "auction/AdvancedChart.lua", "LedgerQuery.lua", "LedgerChart.lua", "ViewOverview.lua", "ViewOpportunities.lua", "ViewCrafting.lua", "ViewShopping.lua", "ViewStrategy.lua", "ViewLedger.lua", "Window.lua" }) do
+for _, f in ipairs({ "Data.lua", "BridgeCodec.lua", "BridgeSchema.lua", "BridgeValidate.lua", "Bridge.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "CraftPlanner.lua", "Strategy.lua", "Scan.lua", "Market.lua", "Valuation.lua", "MarketFacts.lua", "Session.lua", "AuctionButton.lua", "Style.lua", "auction/AdvancedChart.lua", "Coins.lua", "LedgerQuery.lua", "LedgerChart.lua", "ViewOverview.lua", "ViewOpportunities.lua", "ViewCrafting.lua", "ViewShopping.lua", "ViewStrategy.lua", "ViewLedger.lua", "Window.lua" }) do
   local chunk = assert(loadfile(ROOT .. "../TwichUI_Workshop/" .. f)); setfenv(chunk, c); chunk("TwichUI_Workshop", {})
 end
 local W = R.Workshop
 local Win, UI, LQ, LC, V = W.Window, W.UI, W.LedgerQuery, W.LedgerChart, W.UI.LedgerView
 Check(UI.pages.ledger and UI.pages.ledger.nav == "Gold Ledger", "the page registered itself")
+UI.Coins.SetIcons(false)   -- this file checks the page's figures as letters (g s c, zero parts left out); test_ledger_coins.lua checks the artwork
 
 local DAY, TODAY = 86400, 20000
 c.NOW = TODAY * DAY + 12 * 3600
@@ -265,6 +266,7 @@ Install({ ["Rich - Forever"] = rich, ["Ann - Forever"] = ann })
 V.SetFilter("scope", "current"); V.SetFilter("days", 7)
 
 local function Card(k) return V.cards[k].value:GetText() end
+local function Cash(a, signed) return UI.Coins.Text(a, { signed = signed }) end   -- the page's own presentation (letters in this file)
 local function Sum(rows) local n = 0 for _, r in ipairs(rows) do n = n + r.a end return n end
 local function Reconciles(label)
     local s = V.summary
@@ -283,8 +285,8 @@ local function Reconciles(label)
 end
 
 -- 7 days, this character
-Same(Card("net"), "+12g 30s 0c"); Same(Card("inn"), "+15g 50s 0c"); Same(Card("out"), "-3g 20s 0c")
-Same(Card("attrIn"), "+13g 0s 0c"); Same(Card("attrOut"), "-2g 50s 0c"); Same(Card("unk"), "+1g 80s 0c" == "x" and "" or LQ.Money(25000 - 7000, true))
+Same(Card("net"), "+12g 30s"); Same(Card("inn"), "+15g 50s"); Same(Card("out"), "-3g 20s")
+Same(Card("attrIn"), "+13g"); Same(Card("attrOut"), "-2g 50s"); Same(Card("unk"), "+1g 80s" == "x" and "" or Cash(25000 - 7000, true))
 Reconciles("7D")
 Same(V.cards.net.sub:GetText(), "Last 7 days")
 Check(not V.cards.net.cmp:IsShown() and V.cards.net.cmp:GetText() == "", "the window before was not recorded: no comparison line at all")
@@ -333,8 +335,8 @@ do
     local rows = LQ.SourceRows(V.summary)
     Same(#rows, 5)
     Same(rows[1].code, "mail"); Same(rows[1].amount, 100000); Same(rows[2].code, "ahSale"); Same(rows[3].code, "ahBuy"); Same(rows[4].dir, 1)
-    Same(V.srcRows[1].label:GetText(), "Mail collected"); Same(V.srcRows[1].amount:GetText(), "+10g 0s 0c")
-    Same(V.srcRows[3].label:GetText(), "Auction purchases"); Same(V.srcRows[3].amount:GetText(), "-2g 50s 0c")
+    Same(V.srcRows[1].label:GetText(), "Mail collected"); Same(V.srcRows[1].amount:GetText(), "+10g")
+    Same(V.srcRows[3].label:GetText(), "Auction purchases"); Same(V.srcRows[3].amount:GetText(), "-2g 50s")
     Same(V.srcRows[5].label:GetText(), "Unclassified spending")
     local other = {}
     for _, r in ipairs(rows) do if r.code == "other" then other[#other + 1] = r.label end end
@@ -344,10 +346,10 @@ end
 
 -- 30 and 90 days, and the clearly selected range
 V.SetFilter("days", 30)
-Same(Card("inn"), "+20g 50s 0c"); Same(Card("attrIn"), "+18g 0s 0c"); Reconciles("30D"); Same(#V.chart.hits, 30); Same(V.cards.net.sub:GetText(), "Last 30 days")
+Same(Card("inn"), "+20g 50s"); Same(Card("attrIn"), "+18g"); Reconciles("30D"); Same(#V.chart.hits, 30); Same(V.cards.net.sub:GetText(), "Last 30 days")
 Check(V.flow.ranges[30].on == true and V.flow.ranges[7].on == false and V.flow.ranges[90].on == false, "the chosen range is marked")
 V.SetFilter("days", 90)
-Same(Card("inn"), "+20g 60s 0c"); Reconciles("90D"); Same(#V.chart.hits, 90)
+Same(Card("inn"), "+20g 60s"); Reconciles("90D"); Same(#V.chart.hits, 90)
 Check(not V.cards.net.cmp:IsShown(), "90 days have no earlier period inside the retention")
 V.SetFilter("days", 7)
 
@@ -362,16 +364,16 @@ Check(not V.sources.note:GetText():find("own characters", 1, true))
 
 -- source filter: cards, chart, sources and rows follow
 V.SetFilter("source", "mail")
-Same(Card("inn"), "+10g 0s 0c"); Same(Card("out"), "0c"); Same(#V.rows, 1); Reconciles("mail"); Same(#LQ.SourceRows(V.summary), 1)
+Same(Card("inn"), "+10g"); Same(Card("out"), "0c"); Same(#V.rows, 1); Reconciles("mail"); Same(#LQ.SourceRows(V.summary), 1)
 Check(V.srcRows[1]:IsShown() and not V.srcRows[2]:IsShown(), "only sources with recorded money get a row")
-V.SetFilter("source", "ahBuy"); Same(Card("out"), "-2g 50s 0c"); Same(#V.rows, 1); Same(V.rows[1].item, 10); Reconciles("ahBuy")
+V.SetFilter("source", "ahBuy"); Same(Card("out"), "-2g 50s"); Same(#V.rows, 1); Same(V.rows[1].item, 10); Reconciles("ahBuy")
 V.SetFilter("source", "other"); Same(Card("attrIn"), "0c"); Same(#V.rows, 3); Reconciles("other")
 V.SetFilter("source", nil); Same(#V.rows, 6)
 V.SetFilter("source", "bogus"); Check(V.Filter().source == nil, "an unknown source is no filter")
 
 -- search narrows the list only
 V.SetFilter("search", "runecl")
-Same(#V.rows, 1); Same(V.rows[1].text, "Runecloth"); Same(Card("net"), "+12g 30s 0c", "the totals do not change with a text search")
+Same(#V.rows, 1); Same(V.rows[1].text, "Runecloth"); Same(Card("net"), "+12g 30s", "the totals do not change with a text search")
 V.SetFilter("search", "PURCHASE"); Same(#V.rows, 1); Same(V.rows[1].code, "ahBuy")
 V.SetFilter("search", "peace"); Same(#V.rows, 1, "an item name")
 V.SetFilter("search", "zzz"); Same(#V.rows, 0); Check(V.list.empty:GetText() == "No transactions match these filters.")
@@ -393,7 +395,7 @@ do
     Check(V.cards.inn.cmp:GetText():find("vs. prior 7d", 1, true), V.cards.inn.cmp:GetText())
     -- the prior window (days 7 to 13 back) holds the +50,000 of day 10 and the +10,000 added above: 60,000; this one 155,000
     Same(V.cards.inn.cmp:GetText(), ("+%d%% vs. prior 7d"):format(math.floor((155000 - 60000) / 60000 * 100 + 0.5)))
-    Same(V.cards.net.cmp:GetText(), "Prior 7d: +6g 0s 0c")
+    Same(V.cards.net.cmp:GetText(), "Prior 7d: +6g")
     Check(not V.cards.out.cmp:IsShown(), "no percentage from a zero base")
     Reconciles("compared")
 end
@@ -537,7 +539,7 @@ do
     V.Draw(); Reconciles("all vendor sources")
     Same(Card("attrIn"), "+1s 68c"); Same(Card("attrOut"), "-3s 49c")
     Same(#LQ.SourceRows(V.summary), 8); Same(#V.sourceList.data, 8)
-    V.sourceList.scroll:SetVerticalScroll(3 * 26); V.sourceList:Layout()
+    V.sourceList.scroll:SetVerticalScroll(3 * 32); V.sourceList:Layout()
     local lastSeen = false
     for _, sourceRow in ipairs(V.srcRows) do
         if sourceRow:IsShown() and sourceRow.data.code == "other" and sourceRow.data.dir == -1 then lastSeen = true end
@@ -561,14 +563,14 @@ do
     Add(r, 0, 99500, "ahSale", { n = "Runecloth", q = 20, s = { v = 1,
         invoices = { { n = "Runecloth", q = 20, g = 100000, d = 4500, f = 5000, c = 99500 } } } })
     Install({ ["Rich - Forever"] = r }); V.Draw()
-    Same(Card("inn"), "+9g 95s 0c"); Same(Card("out"), "0c"); Same(#V.rows, 1)
+    Same(Card("inn"), "+9g 95s"); Same(Card("out"), "0c"); Same(#V.rows, 1)
     Same(V.list.rows[1].note:GetText(), "Runecloth \195\15120")
     V.list.rows[1]:GetScript("OnEnter")(V.list.rows[1])
-    Check(TipText():find("Collected: 9g 95s 0c", 1, true)); Check(TipText():find("Auction fee: 50s 0c", 1, true))
-    Check(TipText():find("Returned deposit: 45s 0c (included in collected)", 1, true))
+    Check(TipText():find("Collected: 9g 95s", 1, true)); Check(TipText():find("Auction fee: 50s", 1, true))
+    Check(TipText():find("Returned deposit: 45s (included in collected)", 1, true))
     Add(r, 0, -4500, "ahDeposit", { i = 11, q = 20, u = 501, e = "auctiondeposit" })
     Add(r, 0, -1200, "ahCancelFee", { i = 10, q = 1, u = 42, e = "auctioncancel" })
-    LQ.ResetCache(); V.Draw(); Same(Card("out"), "-57s 0c"); Reconciles("auction settlement is not extra cash")
+    LQ.ResetCache(); V.Draw(); Same(Card("out"), "-57s"); Reconciles("auction settlement is not extra cash")
     for _, code in ipairs({ "ahDeposit", "ahCancelFee" }) do
         V.SetFilter("source", code); Same(#V.rows, 1); Reconciles(code)
         Same(V.list.rows[1].src:GetText(), LQ.ROW_LABELS[code])
@@ -647,7 +649,7 @@ do
     Same(prof.rows[1].partial, false)
     Check(prof.rows[2].amount == nil and prof.rows[2].text == "Insufficient verified data", "no verified sale: insufficient, not zero")
     Check(V.profShown, "the panel lists the verified profession")
-    Same(V.profRows[1].amount:GetText(), "+30s 0c"); Same(V.profRows[2].amount:GetText(), "Insufficient verified data")
+    Same(V.profRows[1].amount:GetText(), "+30s"); Same(V.profRows[2].amount:GetText(), "Insufficient verified data")
     -- all-characters scope never mixes in another character's cost record
     V.SetFilter("scope", "all"); Check(LQ.Results({ scope = "all", days = 7 }).sales == 7); V.SetFilter("scope", "current")
     -- a window with nothing: the original honest empty state
