@@ -53,6 +53,7 @@ local list = {
     addonSkins = Sheet("addonSkins"),             -- a paintbrush and a frame corner
     profilesSharing = Sheet("profilesSharing"),   -- two portrait medallions
     -- the second sheet (assets/settings-icons-2-source.png)
+    classPortrait = { file = R.PATH .. [[media\guildloc\class-WARRIOR]], small = R.PATH .. [[media\guildloc\class-WARRIOR-small]], size = 64, pad = 3, source = "guildLocations" },
     targetArt = Sheet("targetArt"),               -- a dragon head in a bronze corner frame
     mapPins = Sheet("mapPins"),                   -- a red map pin with teal ripple rings
     mapToolbar = Sheet("mapToolbar"),             -- a parchment map with a brass compass

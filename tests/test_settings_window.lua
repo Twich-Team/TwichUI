@@ -1347,7 +1347,7 @@ do
   end
   -- besides the sheets, only a feature's own artwork cut by its own tool (Healer Watch: tools/make_healer_watch_art.py; the
   -- Reminders designer's emblem: tools/make_reminder_designer_art.py; Guild Locations: tools/make_guild_locations_art.py; Action bar glows: tools/make_bar_glows_art.py)
-  local OWN = { healerWatch = true, healerWatchDrink = true, reminderDesigner = true, guildLocations = true, barGlows = true, camping = true, magicInventory = true }
+  local OWN = { classPortrait = true, healerWatch = true, healerWatchDrink = true, reminderDesigner = true, guildLocations = true, barGlows = true, camping = true, magicInventory = true }
   local count, own, loot = 0, 0, 0
   for id, e in pairs(Icons.list) do
     if e.source == "lootRolls" then loot = loot + 1 end
@@ -1360,7 +1360,7 @@ do
     assert(w == e.size and h == e.size, id .. "'s file is " .. tostring(w) .. " px, the registry says " .. e.size)
   end
   assert(count == #SHEET and count == 48, "the six original sheets: " .. count)
-  assert(own - loot == 7, "the six feature paintings and the new Home satchel: " .. (own - loot))
+  assert(own - loot == 8, "the feature paintings, Home satchel and reused class badge: " .. (own - loot))
   assert(loot == 14, "Loot Rolls' own icons: " .. loot)
   assert(Icons.Path("home", 20):find("%-small$") and not Icons.Path("home", 40):find("%-small$"), "the 32 px file when drawn small")
   local stub = { SetTexCoord = function() end, SetVertexColor = function() end }
