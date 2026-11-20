@@ -1,7 +1,8 @@
-# Workshop pricing realism: analysis and proposal
+# Completing Opportunities: pricing realism, fees and the remaining gaps
 
 Status: **proposal for owner review. Nothing here is built.** No code, saved data, defaults or tests change
-with this document. Each numbered decision (R1 to R9) needs an owner answer before its phase starts.
+with this document. Each numbered decision (R1 to R13) needs an owner answer before the work package that
+uses it starts. Sections 1 to 4 are the analysis; 5 to 8 the model; 9 the decisions; 10 the work plan.
 
 ## 1. Summary
 
@@ -29,6 +30,10 @@ The design documents already planned most of the fix. A7 says "Shopping and **Op
 `Cost`**". A8 says "**Opportunities profit moves to the suggestion's proceeds**"
 ([market-data-foundation-v2.md](market-data-foundation-v2.md), section 13). Shopping and the planner got the
 A7 change. Opportunities got neither; its tooltip still says the profit uses the lowest listing.
+
+**Opportunities is also incomplete apart from prices** (section 6). The auction house cut is wired but has
+no rate, so every profit is "before fees". Deposits, the product's vendor sell value, vendor-bought
+reagents, listing duration and recipe cooldowns are not modelled at all.
 
 **The proposal in one line:** price materials by walking the listings for the quantity actually needed,
 including vendors. Price products at the competing price, capped by the item's usual value. Subtract fees
@@ -160,15 +165,59 @@ as a suggested posting price. `Sell.Suggest` is unchanged (R1).
 
 ### 5.3 Fees
 
-- **AH cut.** `Prices.CUT` is still empty. The Ledger now records verified seller invoices with gross and
-  fee. Proposal: compute `fee / gross` for each faction from the last 30 days of verified invoices. When at
-  least 3 invoices agree within rounding, the Settings page offers **Confirm house cut (x%)**. Only a
-  confirmed rate is written to a saved setting that `Prices.CutRate` reads. It is never guessed or applied
-  without confirmation (R4).
-- **Deposit.** From the Ledger's posting deposits for this item (median per unit over the last 30 days).
-  The deposit comes back when the item sells, so it isn't subtracted. It is shown as "Deposit about X, lost if
-  it doesn't sell". Once sell-through is known (section 7), the expected loss `deposit × (1 − sold/posted)` may
-  be subtracted, labelled.
+**What is known (research 2026-11-20, from guides and news; Blizzard publishes no Forever formula, and the
+Forever UI source states no cut).** Sources are listed at the end of this section.
+
+| Fee | Rule (Classic-family; Forever reportedly keeps Classic Era rules) | Confidence |
+|---|---|---|
+| Cut | a percentage of the sale price, taken when the item sells: **5% at a faction house, 15% at a neutral house** (one guide names Blackwater as Forever's 15% house) | consistent across sources; not confirmed in the client |
+| Deposit | a percentage of the item's **vendor sell price**, per item, times the items in the listing, scaled by the **listing duration**; neutral houses charge more | the basis agrees across sources; the percentages and durations do not (Warcraft Wiki: 12/24/48 h at 15/30/60%; one Forever guide: 2/8/24 h at 5/20/60%) |
+| Deposit minimum | per listing. 1 silver at launch; a 1-copper hotfix was announced on 10 November, pulled, and reported live after the 17 November maintenance | reports disagree |
+| Deposit refund | returned when the item sells; lost on expiry or cancellation | consistent |
+
+**What the code has.** `Prices.CUT` is an empty table keyed by side, and `Prices.Estimate` already applies a
+rate when one exists (tested with a 5% test input). Deposits are not modelled in any estimate. The core's
+posting window gets the exact deposit from the game (`C_AuctionHouse.CalculateItemDeposit(location,
+duration, qty)` / `CalculateCommodityDeposit(itemID, duration, qty)`), but only at the auction house, with an
+item selected. The Ledger records each deposit's item, quantity and exact amount (`ahDeposit`), **without the
+duration**, and each verified seller invoice's gross, fee, returned deposit and collected amount. The market
+key's side is `UnitFactionGroup("npc")`; what that returns at a neutral auctioneer is not verified.
+
+**The model.**
+
+- **House kind.** Each market is `faction` or `neutral`, from the side read at scan time (once WP0 confirms
+  what a neutral auctioneer returns). Opportunities values sales at the house the player chooses
+  (default: the market being shown).
+- **Cut** `= PR.Cut(sell, rate[houseKind])`, per sale, the existing rounding. The rate comes from, best
+  first: (1) a rate the player confirmed from Ledger invoices (`fee / gross`, at least 3 agreeing invoices for
+  that house kind; R4); (2) if R10 allows it, the documented 5% / 15%, labelled **assumed**; (3) none, and the
+  profit stays "before fees" as now.
+- **Deposit per listing** `= max(MIN_DEPOSIT, rate(duration, houseKind) × vendorSell × itemsInListing)`.
+  The rate and the rounding come from, best first: (1) an exact game quote cached at the auction house for that
+  item, duration and quantity; (2) a rate calibrated from the player's own Ledger deposits (amount ÷ (vendor sell
+  × quantity), per duration, which needs the duration added to the deposit record: WP0); (3) if R10 allows it,
+  the documented Classic rates, labelled **assumed**; (4) unknown.
+- **Deposit is a risk, not a certain cost.** A sale refunds it. Without sale data the estimate shows it
+  without inventing a probability:
+  - "Deposit 7s per listing, lost if it doesn't sell";
+  - **"Covers N failed listings"** = `floor(profit after cut / deposit)`. This says how many expiries the craft
+    survives (0 = one expiry wipes out the profit). Sorting is unchanged.
+  - With an observed sell-through `s` for the player's own item (section 8), the expected deposit lost per
+    sale `= deposit × (1 − s) / s` (relisting until it sells) is subtracted, labelled "expected".
+- **Duration** is a saved Opportunities preference (the client's own duration list, the same labels the
+  posting window uses). Default: the shortest, the cheapest deposit (R11).
+
+Sources: [Wowhead](https://www.wowhead.com/forever/news/auction-house-minimum-deposit-reduced-to-1-copper-in-wow-forever-383917),
+[wow-forever.news](https://wow-forever.news/articles/wow-forever-auction-house-minimum-deposit-delay-november-2026-6b3396c97747),
+[Team Overpowered](https://teamoverpowered.com/forever/news/auction-house-minimum-deposit-1-copper-november-17/),
+[Icy Veins](https://www.icy-veins.com/wow-forever/news/the-auction-house-is-still-unusable-at-low-levels-deposit-cost-change-delayed/),
+[wowfah](https://wowfah.com/guides/wow-forever-auction-house-cut-and-deposit),
+[AHledger](https://ahledger.com/wow-forever/auction-house),
+[instant-carry](https://instant-carry.com/blog/wow-forever-auction-house-fixed-minimum-deposit-reduced-from-1-silver-to-1-copper/),
+[Warcraft Wiki: Auction House](https://warcraft.wiki.gg/wiki/Auction_House),
+[Warcraft Wiki: CalculateCommodityDeposit](https://warcraft.wiki.gg/wiki/API:C_AuctionHouse.CalculateCommodityDeposit),
+[Blizzard Support](https://eu.battle.net/support/en/article/180541). The pages themselves could not be opened
+from the session that wrote this (network policy); the figures are from search summaries of them.
 
 ### 5.4 Confidence and liquidity
 
@@ -195,7 +244,24 @@ profit:
   buy-now signal, with a note to buy before crafting.
 - current < 0 and typical > 0: "Usually profitable: current prices are unusual".
 
-## 6. Changes by consumer
+## 6. Other gaps in Opportunities
+
+| # | Gap | Today | Proposed |
+|---|---|---|---|
+| G1 | AH cut | wired; `Prices.CUT` empty, so every profit is "before fees" | 5.3: confirmed or (R10) assumed rates per house kind |
+| G2 | Deposit | not modelled | 5.3: per listing, by duration and house kind; "Covers N failed listings" |
+| G3 | Product's vendor sell value | not read by Opportunities (Advisor and the worth tooltip read it) | read through `C_Item.GetItemInfo` (loaded with `RequestLoadItemDataByID`, redrawn on `GET_ITEM_INFO_RECEIVED`, as Observe already does); it feeds the deposit, and it is a **sell floor**: when the AH estimate after cut is below the vendor value, the row's outlet is **Vendor** at the vendor value, so a craft that can't sell is valued at what a merchant pays |
+| G4 | Vendor-bought reagents | unpriced (row Unknown) or priced at an AH markup | 5.1 step 1 (Shopping's options) |
+| G5 | Product never listed | row Unknown ("What it makes has no price") | 5.2 fallbacks: Market Value, Historical Value, then the vendor floor (G3) |
+| G6 | Listing duration | no choice | 5.3 preference (R11) |
+| G7 | Recipe cooldowns | not read anywhere (Shopping and Strategy say "cooldowns aren't checked") | read `C_TradeSkillUI.GetRecipeCooldown` (in the Forever source per `Observe.lua`; its behaviour unverified: WP0). Show "Cooldown: ready" / "in 2 d 3 h" on the row; the queue estimate counts no more crafts than the cooldown allows and says so; never saved |
+| G8 | Single scan of material / product | the oldest observation age only | 5.1 step 3 freshness; age per figure in the details |
+| G9 | Neutral house | side unknown; 15% vs 5% matters | WP0 confirms what `UnitFactionGroup("npc")` returns; the house kind is stored with the market |
+| G10 | Disenchant as an outlet (enchanters) | Disenchant estimates exist for bag items only | optional: for a crafted item that can be disenchanted, the bundled estimate appears as a third outlet, labelled estimate, never chosen as best on its own (R12) |
+
+The two price-basis gaps (cheapest listing only; linear queue scaling) are sections 4 and 5.
+
+## 7. Changes by consumer
 
 | Consumer | Change |
 |---|---|
@@ -210,7 +276,7 @@ profit:
 | Companion reference | the fresher local scan wins for snapshot figures (5.1 step 4) |
 | AH Browse, Buy, Sell actions | unchanged (native listings are the truth there) |
 
-## 7. Later: the player's own sales (needs R9)
+## 8. Later: the player's own sales (needs R9)
 
 The Ledger keeps seller invoices by **name** and count, without an item id. It deliberately never infers an
 id from a name for cost lineage. For a planning estimate a narrower match is possible: an invoice name is
@@ -220,57 +286,161 @@ item id). With that match:
 - **Your sales (30 d):** median gross per unit and the number sold. Shown beside the competing price, and
   used as the sell fallback before Market Value.
 - **Sell-through:** sold ÷ posted per item over 30 days. This replaces "not guaranteed" with an observed
-  rate for the player's own items, and feeds the deposit loss in 5.3. If two known items share a name, nothing
+  rate for the player's own items, and feeds the expected deposit loss in 5.3. If two known items share a name, nothing
   is matched.
 
 Scan-to-scan drops in supply are **not** proposed as a demand signal. A listing that disappears may have
 sold, expired or been cancelled, and the foundation document already rules that out.
 
-## 8. Owner decisions
+## 9. Owner decisions
 
 | # | Decision | Recommendation |
 |---|---|---|
 | R1 | Allow a new `estimate` role that combines competition with Market Value (the cap), used only for planning and ranking and never as a posting suggestion | yes |
 | R2 | Skip bait tiers (below half the anchor) in planning costs, and show them as "may be cheaper" | yes; at the AH, Shopping still lets the player buy them |
 | R3 | `STALE_BUY` and the stale-material rule `max(walk unit, Market Value)` | 24 h |
-| R4 | Derive the cut from Ledger invoices, applied only after explicit confirmation | yes, at least 3 agreeing invoices |
+| R4 | Derive the cut from Ledger invoices, applied after explicit confirmation | yes, at least 3 agreeing invoices per house kind |
 | R5 | Undercut amount in estimates | 0 (match), adjustable later |
 | R6 | Absorption threshold | 50% of the items at or below the competing price, or of the 14-day supply median |
 | R7 | A fresher local full scan beats a Companion reference for snapshot figures | yes |
 | R8 | Opportunities details use the planner's best-route cost for the selected recipe | yes; the list stays fast |
 | R9 | Match Ledger invoices to known, posted recipe outputs by name for "Your sales" and sell-through | yes, own posted outputs only, nothing on ambiguity |
+| R10 | Until the client confirms them, use the documented 5% / 15% cut and Classic deposit rates, labelled **assumed**, instead of "before fees" | yes for the cut (sources agree); **no** for deposit rates (sources disagree): show the deposit only from a game quote or the Ledger |
+| R11 | Default listing duration for estimates | the shortest the client offers |
+| R12 | Show Disenchant as a third outlet for crafted items | later, after WP3; never the best outlet on its own |
+| R13 | Add the listing duration to Ledger deposit records (additive optional field, no version change) | yes |
 
-## 9. Phases (each its own PR; `crafting` + `market` groups and their mutation groups)
+## 10. Work plan
 
-1. **Buy side.** Vendor options and the tier walk in Opportunities, `crafts` in the queue estimate, bait-skip
-   (R2), freshness (R3). Touches `Prices.Estimate` (or its replacement), `Session.Opportunities`/`PlanEstimates`,
-   `Opportunities.lua`. Tests: `test_workshop_prices`, `test_workshop_a7`, `test_workshop_crafting_reference`
-   (the reference model must change with the rule), `test_workshop_market_consumption`, the Opportunities
-   simulator scenario; new mutation catalog entries for the bait line, the `crafts` multiplication and the
-   vendor tie.
-2. **Sell side.** The `estimate` role (R1): competing price, cap, fallbacks, undercut (R5). Also Overview,
-   Worth tooltip and Disenchant. Tests: `test_workshop_valuation`, `test_workshop_advisor_market` (to show
-   `Sell.Suggest` is unchanged), `test_workshop_worth`, `test_workshop_disenchant_market`.
-3. **Confidence and typical profit.** 5.4 and 5.5, UI chip, filter, margin sort, wording. Simulator Opportunities
-   poses; screenshot review.
-4. **Fees.** Cut confirmation from the Ledger (R4) and deposit lines. Needs Ledger invoice data from the real
-   client before its rate can be confirmed.
-5. **Consistency.** Planner best-route in details (R8), owned value, reference freshness (R7).
-6. **Own sales and sell-through (R9).**
+Each work package is one PR off `main`, with the `crafting` and `market` feature checks and their mutation
+groups, and a catalog entry for a realistic defect each package makes possible
+([testing-roadmap.md](testing-roadmap.md) sections F and H). Size: S under a day, M a few days, L a week or more.
+Evidence labels follow `docs/engineering-rules.md`; nothing here is claimed until it is run.
 
-**Performance.** Today the list costs one `Prices.Lookup` per item. The new estimate decodes a distribution
-(`Market.Cost`, `Competition`) and reads cached history digests (`Market.Value`, cache of 2,000). Each draw needs
-one memo keyed by (item, qty) and the market generation, so an item shared by many recipes is decoded once.
-Phase 1 must measure a 500-recipe list with `tests/bench_workshop.lua` before and after, and add a
-`workshop.estimate` diagnostics scope and memo gauge (per `docs/dev-rules.md`).
+| WP | Title | Size | Needs | Delivers |
+|---|---|---|---|---|
+| WP0 | Client evidence | S code, owner time | — | the facts below, from the owner's Forever client |
+| WP1 | Buy side | M | R2, R3 | depth-aware, vendor-aware material costs |
+| WP2 | Sell side | M | R1, R5 | competition-based sell price, cap, fallbacks, vendor floor |
+| WP3 | Fee engine | M | R4, R10, R11, R13; WP0 for confirmed numbers | `Fees.lua`, cut and deposit, duration preference |
+| WP4 | Fees in Opportunities | S | WP2, WP3 | net profit, deposit line, "Covers N failed listings" |
+| WP5 | Confidence and typical profit | M | R6 | confidence chip, reasons, "Usually", filter, margin sort |
+| WP6 | Cooldowns | S | WP0 | cooldown read, row line, capped queue estimate |
+| WP7 | Consistency across consumers | M | R7, R8 | planner best route, Disenchant, worth tooltip, Overview, reference freshness |
+| WP8 | Own sales and sell-through | L | R9, WP3 | "Your sales", sell-through, expected deposit loss |
+| WP9 | Disenchant outlet (optional) | S | R12, WP2 | third outlet for crafted items |
 
-## 10. Limits that stay
+Order: WP0 runs alongside WP1 and WP2. WP1 → WP2 → WP3 → WP4 completes Opportunities' money figures; WP5 to
+WP9 follow in any order.
+
+### WP0. Client evidence (Test Lab probes; no behaviour change)
+- A `fees` probe set in `TwichUI_TestLab` (opt-in, at an auction house, out of combat): the side
+  `UnitFactionGroup("npc")` returns at a faction and a neutral auctioneer; whether `CalculateCommodityDeposit`
+  answers for an item id with nothing selected; the client's duration list; `GetRecipeCooldown` on a recipe
+  with and without a cooldown.
+- R13: the posting controller passes the duration into `LedgerAuction.Begin`, stored as an optional field on
+  `ahDeposit` entries (additive; older entries simply lack it). Unit-tested in `test_workshop_ledger`.
+- A Ledger diagnostics line: per house kind, the verified invoices' `fee / gross` and the deposits' amount ÷
+  (vendor sell × quantity) by duration, with no names or ids.
+- **Owner task:** sell 3 or more items at a faction house and 3 at a neutral house, and post a few items with
+  known vendor values at each duration; then read the diagnostics line.
+- Acceptance: each fact recorded in this document as real-client-tested, or as unknown with the reason.
+
+### WP1. Buy side (5.1, G4, G8)
+- A new pure `Estimate.lua` (`.toc` after `MarketFacts.lua`) with `Estimate.Craft(rec, crafts, ctx)`, the
+  successor of `Prices.Estimate`. `Prices.Estimate` stays for its existing tests until WP7 removes its last caller.
+- Materials: Shopping's buy options (vendor and auction, tie to vendor), `Market.Cost` with a new
+  `fromCompeting` option (skip `below` tiers), freshness rule, reference fallback with "depth unknown".
+- `Session.Opportunities` and `Session.PlanEstimates` call it; the queue estimate passes the real `crafts`.
+- A per-draw memo keyed by (item, qty, market generation); a `workshop.estimate` diagnostics scope and memo
+  gauge; `bench_workshop.lua` gains a 500-recipe Opportunities case, measured before and after.
+- Tests: `test_workshop_prices`, `test_workshop_a7`, `test_workshop_crafting_reference` (reference model
+  updated with the new rules), `test_workshop_market_consumption`, Opportunities simulator scenario. Mutations:
+  the bait line (`2p < a` vs `<=`), the `crafts` multiplication, the vendor tie.
+- Acceptance: worked cases A and the queue example in section 4 give the proposed figures; a vendor reagent
+  is priced; `few` stays unknown.
+
+### WP2. Sell side (5.2, G3, G5)
+- `Estimate.Sell(item, out, ctx)` in the new `estimate` role: competing price, the 115% Market Value cap,
+  fallbacks (Market Value, Historical Value, reference), optional undercut, and the **vendor floor** (G3) with
+  outlet `auction` or `vendor`.
+- Vendor sell value read once per item per draw through the existing item-loading path; an unloaded item is
+  "loading", never 0.
+- Tests: new `test_workshop_estimate` (every fallback, cap at exactly 115%, floor tie, loading),
+  `test_workshop_advisor_market` and `test_workshop_auction_sell` unchanged (proof `Sell.Suggest` did not move).
+- Acceptance: worked cases B and C give the proposed figures; a never-listed product with a vendor value is
+  priced as Vendor.
+
+### WP3. Fee engine (5.3, G1, G2, G6, G9)
+- A new pure `Fees.lua`: `Fees.Cut(sell, houseKind)` and `Fees.Deposit(item, itemsPerListing, duration,
+  houseKind)`, each returning a value and its source (`confirmed`, `quote`, `ledger`, `assumed`, `unknown`).
+- Rates saved per account in `TwichUIWorkshopDB` (a new optional `fees` table; no version change): the
+  confirmed cut per house kind, calibrated deposit rates per duration and house kind, and cached game quotes
+  (bounded, e.g. 512 entries, oldest first).
+- Workshop Settings: "Auction house cut" with each house kind's state and a **Confirm** button when the Ledger
+  shows enough agreeing invoices; "Listing duration for estimates".
+- The market's house kind is derived from its side (WP0).
+- Tests: new `test_workshop_fees` (rounding, minimum per listing, each source in order, no rate → unknown,
+  never 0), `test_workshop_settings`, `test_workshop_schema` (the new table round-trips; older databases
+  without it load unchanged). Mutations: the minimum (`max`), the per-listing multiplication, the source order.
+- Acceptance: with no evidence the profit still says "before fees"; with a confirmed or (R10) assumed cut the
+  heading switches to "Estimated profit" and the cut line shows its source.
+
+### WP4. Fees in Opportunities
+- Net = sell − cut. Rows and the queue estimate use it. The details and tooltip show the deposit per listing,
+  its source and "Covers N failed listings"; the queue total shows the total deposit to post everything.
+- The Overview's Top profit uses the net figure.
+- Tests: `test_workshop_window` (the existing "Auction house cut | not deducted" lines change only when a rate
+  exists), crafting reference model; Opportunities simulator poses; screenshot review.
+
+### WP5. Confidence and typical profit (5.4, 5.5)
+- Confidence and reasons per row; the "Usually" figure; the two disagreement flags; the **Hide low
+  confidence** chip; the **Margin** sort; Low-confidence rows after others at equal profit.
+- Tests: `test_workshop_estimate` (each step lowers one level, never a number), window and simulator poses.
+
+### WP6. Cooldowns (G7)
+- `Observe` reads `GetRecipeCooldown` with the other recipe facts (live only, never saved); the row shows the
+  state; `PlanEstimates` caps crafts by what the cooldown allows now and says so.
+- Tests: `test_workshop` (observe fakes), `test_workshop_window`; simulator fake extended with a cooldown.
+- Depends on WP0's verification of the call's return values.
+
+### WP7. Consistency across consumers (section 7, R7, R8)
+- Opportunities details show the planner's best-route cost and profit when ready; the row gains a "cheaper
+  route" marker.
+- Planner and Shopping use bait-skip and freshness through `inp.cost`; owned materials valued with the same
+  unit.
+- Disenchant material values and the worth tooltip's Auction line use the competing price.
+- `Pricing.Price` prefers a newer local full scan over a reference for snapshot figures.
+- Remove `Prices.Estimate` once nothing calls it.
+- Tests: `test_workshop_craftplanner`, `test_workshop_strategy`, `test_workshop_shopping`,
+  `test_workshop_disenchant_market`, `test_workshop_worth`, `test_workshop_market_reference`,
+  `test_workshop_market_consumption(_async)`.
+
+### WP8. Own sales and sell-through (section 8, R9)
+- A read-only Ledger query: for each recipe output the character has posted, its verified sales by name
+  (exact match to the item's loaded name; nothing on ambiguity), median gross per unit, units sold and
+  posted in 30 days.
+- "Your sales" in the details; the sell fallback before Market Value; the expected deposit loss in 5.3.
+- Tests: `test_workshop_ledger`, `test_workshop_estimate`; mutation on the name-ambiguity refusal.
+
+### WP9. Disenchant outlet (optional, G10, R12)
+- For a disenchantable crafted output, the bundled estimate as a third outlet, labelled estimate.
+- Tests: `test_workshop_disenchant`, `test_workshop_estimate`.
+
+### Real-client checks after WP4 (none done)
+1. With a confirmed cut, a sale's mailbox invoice matches the estimate's cut for that sale price.
+2. A posted item's deposit matches the estimate for the chosen duration, at a faction and a neutral house.
+3. Cases like A to C in section 4 on real items read sensibly; Low-confidence rows explain why.
+4. A 500-recipe Opportunities page opens without a visible hitch.
+
+## 11. Limits that stay
 
 - All of this is still **listing** evidence. No sale, rate of sale or demand is known except the player's own
-  (section 7). A competing price is what a seller faces, not a promise of a sale.
+  (section 8). A competing price is what a seller faces, not a promise of a sale.
 - Only six tiers are kept. Buying beyond them stays "at least".
 - Whether part of a stack can be bought in Forever is unknown, so whole-listing ranges remain.
 - Variants are still priced per item id and refused where marked.
+- Fee rules come from guides until WP0 confirms them; an assumed rate is always labelled as one.
 - The 115% cap, the thresholds and the confidence steps are policy (versioned as policy 1). They are not
   measured from real Forever markets. They should be checked against real saved data before being treated as
   tuned.
