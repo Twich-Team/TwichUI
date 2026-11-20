@@ -907,7 +907,7 @@ do
         for size in V.cards[key].value:GetText():gmatch(":(%d+):%d+:2:0") do sizes[size] = true end
     end
     local n = 0; for _ in pairs(sizes) do n = n + 1 end
-    Same(n, 1, "one coin size across the six cards"); Check(sizes["14"], "the smaller size")
+    Same(n, 1, "one coin size across the six cards"); Check(sizes["10"], "the smaller size")
     -- rows and the hover use the same artwork; Money (the pure text) does not
     Check(V.list.rows[1].amount:GetText():find("|T", 1, true), "transaction amounts are coins")
     V.list.rows[1]:GetScript("OnEnter")(V.list.rows[1]); Check(TipText():find("|T", 1, true) and TipText():find("Gold in:", 1, true) or TipText():find("Gold out:", 1, true), TipText())

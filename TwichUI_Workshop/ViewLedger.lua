@@ -21,7 +21,7 @@ local MID_TOP, MID_H, MID_L = -166, 196, 568
 local BOT_TOP, BOT_H = -370, 185
 local ROW_H = 26
 local SRC_ROW_H = 32
-local CARD_ICON = 14   -- every card's coins are cut at one size, whatever font its figure needed to fit
+local CARD_ICON = 10   -- every card's coins are cut at one size, whatever font its figure needed to fit
 local DRAW_DELAY = 0.3     -- a burst of money changes is one redraw
 local SEARCH_DELAY = 0.15
 
