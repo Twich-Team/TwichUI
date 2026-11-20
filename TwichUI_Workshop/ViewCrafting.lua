@@ -444,8 +444,13 @@ local function RenderBar(queue, totals, sum)
     UI.Paint(bar.value, priced and K.text or K.stone)
     UI.Paint(bar.profit, priced and (totals.profitLow > 0 and K.sage or (totals.profitHigh < 0 and K.ember or K.text)) or K.stone)
     bar.profitLabel:SetText(totals.rate and "Profit" or "Profit before fees")
-    local partial = priced and totals.unpriced > 0
-    bar.partial:SetText(partial and ("%d of %d priced"):format(totals.priced, n) or "")
+    -- what qualifies the totals, briefly: unpriced recipes, Low-confidence estimates, more than the market holds, the deposits at risk
+    local notes = {}
+    if priced and totals.unpriced > 0 then notes[#notes + 1] = ("%d of %d priced"):format(totals.priced, n) end
+    if priced and (totals.low or 0) > 0 then notes[#notes + 1] = ("%d low confidence"):format(totals.low) end
+    if priced and (totals.absorb or 0) > 0 then notes[#notes + 1] = "more than the market holds" end
+    if priced and totals.deposit then notes[#notes + 1] = "deposits " .. UI.Money(totals.deposit) end
+    bar.partial:SetText(table.concat(notes, " \194\183 "))
     bar.shop:SetEnabled(n > 0)
 end
 

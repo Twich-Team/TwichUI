@@ -77,7 +77,7 @@ c.C_Item = {
 c.InCombatLockdown = function() return false end
 c.IsShiftKeyDown = function() return false end
 
-for _, f in ipairs({ "Data.lua", "BridgeCodec.lua", "BridgeSchema.lua", "BridgeValidate.lua", "Bridge.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "CraftPlanner.lua", "Strategy.lua", "Scan.lua", "Market.lua", "Valuation.lua", "MarketFacts.lua", "Session.lua", "AuctionButton.lua", "Style.lua", "auction/AdvancedChart.lua", "ViewOverview.lua", "ViewOpportunities.lua", "ViewCrafting.lua", "ViewShopping.lua", "ViewStrategy.lua", "Window.lua" }) do
+for _, f in ipairs({ "Data.lua", "BridgeCodec.lua", "BridgeSchema.lua", "BridgeValidate.lua", "Bridge.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "CraftPlanner.lua", "Strategy.lua", "Scan.lua", "Market.lua", "Valuation.lua", "MarketFacts.lua", "Fees.lua", "Estimate.lua", "Session.lua", "AuctionButton.lua", "Style.lua", "auction/AdvancedChart.lua", "ViewOverview.lua", "ViewOpportunities.lua", "ViewCrafting.lua", "ViewShopping.lua", "ViewStrategy.lua", "Window.lua" }) do
   local chunk = assert(loadfile(ROOT .. "../TwichUI_Workshop/" .. f)); setfenv(chunk, c); chunk("TwichUI_Workshop", {})
 end
 local W = R.Workshop
@@ -278,6 +278,7 @@ do
 
   -- the auction house opens: Scan prices
   c.AuctionHouseFrame:Show()
+  W.Fees.SetMode("off")   -- the "before fees" wording is checked first; the assumed cut (the default) is checked further down
   ah.records = {
     { item = 10, count = 1, buyout = 100 }, { item = 10, count = 4, buyout = 600 },   -- 100 and 150 each
     { item = 11, count = 1, buyout = 50 },
@@ -313,9 +314,9 @@ do
   Same(#L_.data, 2)
   local r1, r2 = L_.rows[1], L_.rows[2]
   Same(r1.name:GetText(), "Healing Potion", "highest estimated profit first")
-  Same(r1.cost.a:GetText(), "200c", "2 x 100: the materials in full")
+  Same(r1.cost.a:GetText(), "250c", "100 + 150: only one is listed at 100, so the second costs 150 (the listings are walked)")
   Same(r1.sell.a:GetText(), "1000c"); Same(r1.sell.b:GetText(), "to 2000c", "makes 1-2: a range, not the maximum")
-  Same(r1.profit.a:GetText(), "800c"); Same(r1.profit.b:GetText(), "to 1800c")
+  Same(r1.profit.a:GetText(), "750c"); Same(r1.profit.b:GetText(), "to 1750c")
   Check(r1.sub:GetText():find("makes 1-2", 1, true) and r1.sub:GetText():find("Alchemy", 1, true), r1.sub:GetText())
   Same(r2.name:GetText(), "Mana Potion")
   Same(r2.cost.a:GetText(), "150c"); Same(r2.sell.a:GetText(), "300c"); Same(r2.profit.a:GetText(), "150c"); Check(not r2.profit.b:IsShown() and not r2.sell.b:IsShown(), "a single amount has no second line")
@@ -329,8 +330,8 @@ do
   tip = {}
   r1:GetScript("OnEnter")(r1)
   local all = table.concat(tip, "\n")
-  Check(all:find("Healing Potion", 1, true) and all:find("Cost to make | 200c", 1, true) and all:find("Sell price | 1000c to 2000c", 1, true), all)
-  Check(all:find("Profit before fees | 800c to 1800c", 1, true) and not all:find("Estimated profit", 1, true), all)
+  Check(all:find("Healing Potion", 1, true) and all:find("Cost to make | 250c", 1, true) and all:find("Sell price | 1000c to 2000c", 1, true), all)
+  Check(all:find("Profit before fees | 750c to 1750c", 1, true) and not all:find("Estimated profit", 1, true), all)
   Check(all:find("just now", 1, true) and all:find("Hold Shift for details", 1, true), all)
   Check(not all:find("Peacebloom", 1, true) and not all:find("sales", 1, true), "no reagent breakdown or long caveats by default")
   Check(#tip <= 6, "a handful of lines: " .. #tip)
@@ -339,9 +340,20 @@ do
   c.IsShiftKeyDown = function() return true end
   Fire("MODIFIER_STATE_CHANGED")
   all = table.concat(tip, "\n")
-  Check(all:find("2 x Peacebloom | 100c each = 200c", 1, true), all)
-  Check(all:find("Profit before fees | 800c to 1800c", 1, true) and all:find("Auction house cut | not deducted", 1, true), all)
+  Check(all:find("2 x Peacebloom | 125c each = 250c", 1, true), all)
+  Check(all:find("Profit before fees | 750c to 1750c", 1, true) and all:find("Auction house cut | not deducted (turned off)", 1, true), all)
   Check(all:find("Alliance auction house on Realm, scanned just now", 1, true) and all:find("not sales", 1, true), all)
+  -- the default: the documented 5% cut of a faction auction house is taken off, labelled assumed (owner decision R10)
+  W.Fees.SetMode("assumed"); Win.Render()
+  Same(Win.Heads().profit.text:GetText() .. " " .. Win.Heads().profit.sub:GetText(), "Profit after the cut")
+  Same(L_.rows[1].profit.a:GetText(), "700c", "1000 - 50 - 250"); Same(L_.rows[1].profit.b:GetText(), "to 1650c", "2000 - 100 - 250")
+  Check(StatusTip():find("Profit is after the auction house's cut. 5%, assumed.", 1, true), StatusTip())
+  tip = {}
+  Fire("MODIFIER_STATE_CHANGED")
+  all = table.concat(tip, "\n")
+  Check(all:find("Auction house cut (5%, assumed) | -50c to -100c", 1, true) and all:find("Estimated profit | 700c to 1650c", 1, true), all)
+  Check(not all:find("Selling 1 against", 1, true), "one item is never 'more than the market holds'")
+  W.Fees.SetMode("off"); Win.Render()
   tip = {}
   c.IsShiftKeyDown = function() return false end
   Fire("MODIFIER_STATE_CHANGED")
@@ -358,9 +370,36 @@ do
   heads.cost:GetScript("OnClick")(heads.cost); Same(L_.rows[1].name:GetText(), "Healing Potion", "the same column again reverses it")
   heads.profit:GetScript("OnClick")(heads.profit)
   Same(S.opp.sort, "profit"); Same(L_.rows[1].name:GetText(), "Healing Potion")
+  -- the two toggles: rank by margin (Healing 750 / 250 against Mana 150 / 150), and hide Low-confidence crafts (both are: thin fake listings)
+  opps.margin:GetScript("OnClick")(opps.margin)
+  Same(S.opp.sort, "margin"); Check(opps.margin.on, "the toggle shows its state"); Same(L_.rows[1].name:GetText(), "Healing Potion")
+  Check(L_.rows[1].sub:GetText():find("Low confidence", 1, true), L_.rows[1].sub:GetText())
+  opps.margin:GetScript("OnClick")(opps.margin)
+  Same(S.opp.sort, "profit"); Same(S.opp.desc, true); Check(not opps.margin.on)
+  opps.hideLow:GetScript("OnClick")(opps.hideLow)
+  Check(S.opp.hideLow and opps.hideLow.on); Same(#L_.data, 0, "every craft here is Low confidence")
+  Same(S.Opportunities().state, "lowonly"); Check(S.Opportunities().empty:find("Hide low confidence", 1, true))
+  opps.hideLow:GetScript("OnClick")(opps.hideLow)
+  Check(not S.opp.hideLow); Same(#L_.data, 2)
+  -- the estimate is kept between draws (every Market service decodes saved tiers per call) and asked again only when its inputs change
+  local kept = S.Opportunities().estimator
+  Check(kept and S.Opportunities().estimator == kept, "the same estimator serves the next draw")
+  Win.Render()   -- (the details work out the shown recipe's usual profit once)
+  local marketAsked = 0
+  for _, k in ipairs({ "price", "cost", "competition", "value", "quality", "supply" }) do
+    local fn = kept.ctx[k]
+    if fn then kept.ctx[k] = function(...) marketAsked = marketAsked + 1 return fn(...) end end
+  end
+  local size = kept:Stats().size
+  Win.Render(); Win.Render()
+  Same(marketAsked, 0, "a redraw asks the market nothing new"); Same(kept:Stats().size, size, "and keeps no more answers")
+  -- (an item whose information is still loading is asked again: its vendor value is not known yet)
+  W.Fees.SetMode("assumed"); Check(S.Opportunities().estimator ~= kept, "a different cut makes a new estimate")
+  W.Fees.SetMode("off"); Win.Render()
 
   -- add to the existing queue (the same queue the Crafting view uses)
   local queued = #Q.Entries()
+  local beforeScan = S.Opportunities().estimator
   -- choose the row, then the details' Add (the list itself only chooses)
   L_.rows[1]:GetScript("OnClick")(L_.rows[1])
   local add1 = opps.detail.add
@@ -391,6 +430,7 @@ do
   }
   opps.scan:GetScript("OnClick")(opps.scan); FireScan("REPLICATE_ITEM_LIST_UPDATE"); Advance(5)
   Same(W.Scan.state, "done")
+  Check(S.Opportunities().estimator ~= beforeScan, "a new scan makes a new estimate, even within the same second")
   Same(L_.rows[1].name:GetText(), "Healing Potion")
   Same(L_.rows[2].name:GetText(), "Mana Potion")
   Same(L_.rows[2].profit.a:GetText(), "Unknown", "unknown, not zero"); Same(L_.rows[2].cost.a:GetText(), "Unknown")
@@ -917,15 +957,16 @@ do
   Same(bar.title:GetText(), "Total (2 recipes)"); Same(bar.sub:GetText(), "3 crafts to make")
   Same(bar.cost:GetText(), "550c"); Same(bar.value:GetText(), "2300c"); Same(bar.profit:GetText(), "1750c")
   Same(bar.profitLabel:GetText(), "Profit before fees", "the totals say before fees too")
-  Same(bar.partial:GetText(), "")
+  Same(bar.partial:GetText(), "2 low confidence \194\183 more than the market holds", "the fake market is thin: 2 Healing Potions against 3 listed")
   Same(cr.detail.name:GetText(), "Healing Potion"); Same(cr.detail.cost:GetText(), "400c"); Same(cr.detail.sell:GetText(), "2000c"); Same(cr.detail.profit:GetText(), "1600c")
   Check(bar.shop.enabled, "the shopping list is reachable")
   -- an unpriced craft is left out of the totals and counted, never taken as free
   c.TwichUIWorkshopDB.markets["Realm|Alliance"].items[11] = nil
+  S.ForgetEstimator()   -- saved prices change only through a scan (which makes a new estimate); this test edits them in place
   Win.Render()
   local _, tot2 = S.PlanEstimates()
   Same(tot2.priced, 1); Same(tot2.unpriced, 1); Same(tot2.cost, 400, "Mana Potion is not in the cost")
-  Same(bar.partial:GetText(), "1 of 2 priced"); Same(bar.cost:GetText(), "400c")
+  Same(bar.partial:GetText(), "1 of 2 priced \194\183 1 low confidence \194\183 more than the market holds"); Same(bar.cost:GetText(), "400c")
   cr.open:GetScript("OnClick")(cr.open)   -- Open recipe stays, and acts on the chosen craft
   Same(g.opened[#g.opened], 1)
   c.TwichUIWorkshopDB.markets["Realm|Alliance"] = nil

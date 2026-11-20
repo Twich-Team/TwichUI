@@ -8,7 +8,7 @@ local function Check(cond, msg) if not cond then error(msg, 2) end end
 local function Same(a, b, msg) if a ~= b then error((msg or "") .. " expected " .. tostring(b) .. ", got " .. tostring(a), 2) end end
 
 local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua",
-  "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua", "Watch.lua", "Bank.lua" }
+  "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Fees.lua", "Estimate.lua", "Session.lua", "Watch.lua", "Bank.lua" }
 
 local ORE, BAR, SWORD, HERB = 10, 20, 90, 11
 
@@ -477,7 +477,7 @@ do
   Same(sr.est.state, "ok", tostring(sr.est.why))
   Same(sr.est.cost, 300, "3 ore at 100 each, however many are stored"); Same(sr.est.cost, pr.est.cost, "the cost is the same with and without stored materials")
   Same(sr.est.profitLow, pr.est.profitLow, "so is the profit"); Same(sr.est.sellLow, pr.est.sellLow)
-  Same(sr.est.profitLow, 700, "1000 - 300")
+  Same(sr.est.profitLow, 650, "1000 - 50 (the assumed 5% cut of an Alliance auction house) - 300")
   local a = stocked.avail(sr.rec)
   Same(a.state, "collect", "3 ore: 1 in the bags and 2 in the bank: collect"); Same(a.bags, 1); Same(a.bank, 2)
   Same(plain.avail(pr.rec).state, "short", "without the bank it is short")

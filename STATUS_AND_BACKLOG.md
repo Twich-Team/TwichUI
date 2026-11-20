@@ -2,6 +2,11 @@
 
 One short entry per feature that has a continuing handoff. Details live in the feature's doc; keep this current instead of adding session notes.
 
+## Workshop Opportunities: pricing realism and fees (2026-11-20, claude/opportunities-completion)
+
+- Opportunities, the Overview and the queue estimate use the planning estimate (`Estimate.lua`, `Fees.lua`): listings walked for the quantity, vendor reagents, the competing sell price capped near Market Value, the vendor floor, the assumed auction house cut (5% / 15%, Settings can turn it off), the deposit from the player's own postings, confidence, the usual profit, cooldowns, two list toggles. Ledger deposits now record their duration.
+- Unit-tested, mutation-tested (16 new mutants killed) and simulator-tested (Workshop catalog: no failure beyond those `main` already has); **not real-client-tested**. Not built: Test Lab fee probes, the cooldown cap on the queue, the player's own sale prices and sell-through, Disenchant as an outlet. Details and the client checklist: [docs/workshop/pricing-realism-proposal.md](docs/workshop/pricing-realism-proposal.md) section 10A.
+
 ## Settings second pass on feature/style (2026-11-11)
 
 - Magic Inventory: focused tasks, readable rule cards with secondary actions, separate destination input rows; selected-category summary and disclosed catalog in the private editor. Existing rule/guild models preserved.

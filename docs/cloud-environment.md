@@ -54,6 +54,16 @@ intact. Installed references and dependencies are read-only; mutable state is
 isolated under ignored `test-output/simlab/`, with a serial simulator lock.
 Do not edit files during a simulator catalog (its repository-status guard is active).
 
+## A fresh cloud container (observed 2026-11-20)
+
+Without the prepared `/workspace/twichui-env`, a container needed: `apt-get install lua5.1 lua-bitop bubblewrap rsync`;
+a blob-less clone of Gethe's `wow-ui-source` (`git clone --filter=blob:none --no-checkout -b forever`) beside the
+repository for `tools/simlab/setup.sh`; and an empty `/mnt/c` directory, because `sim.sh` mounts a tmpfs over it to hide
+any game install and bubblewrap cannot create the mount point on a read-only root. With those, the Workshop catalog ran
+under `SIMLAB_ASSETS=0`. On that container an unmodified `main` already failed 27 Workshop checks in every launch (worth
+tooltip suggestion lines and the Disenchant catalog), plus one in `advisorempty`: compare against a `main` run before
+reading a failure as a regression.
+
 ## Smoke error classification
 
 The default simulator adds a sample party after login. The 3-second party hello

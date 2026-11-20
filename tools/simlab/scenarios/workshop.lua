@@ -554,22 +554,24 @@ Lab.Step("opportunities: rows, ordering, filtering, unknowns", function()
     --   Elixir of Many Wonders cost 30               sell 100 to 300 (1-3)     profit 70 to 270
     --   Weak Troll's Blood    cost 2x5+20 = 30       sell 60                   profit 30
     --   Greater Elixir (long) cost 2x5+20 = 30       sell 25                   profit -5
-    --   Copper Belt Buckle    Coarse Thread has no price                        Unknown
+    --   Copper Belt Buckle    Coarse Thread is sold by the remembered vendor: priced (planning estimate, 2026-11-20)  profit 31s 75c
     --   Enchant Bracer        materials not supported                           Unknown
+    -- (2026-11-20) The planning estimate walks the listings for the quantity, prices vendor materials, and rates confidence: every fake
+    -- market here is thin, so each priced row says "Low confidence". The scan has no market side: no cut is assumed.
     local o = Lists().opps
     Check("display", "default order: highest profit first, unknown last (by name)",
-        "Smelt Bronze | Minor Healing Potion | Elixir of Many Wonders | Weak Troll's Blood Potion | Greater Elixir of Extremely Long Fortitude Name | Copper Belt Buckle | Enchant Bracer - Lesser Choice",
+        "Copper Belt Buckle | Smelt Bronze | Minor Healing Potion | Elixir of Many Wonders | Weak Troll's Blood Potion | Greater Elixir of Extremely Long Fortitude Name | Enchant Bracer - Lesser Choice",
         Names(o))
     Check("display", "Smelt Bronze: cost | sell | profit", "1s | 8s | 7s", OppLine("Smelt Bronze"))
     Check("display", "Minor Healing Potion: cost | sell | profit", "70c | 1s 50c | 80c", OppLine("Minor Healing Potion"))
     Check("display", "Elixir of Many Wonders (makes 1-3): range shown with 'to'", "30c | 1s to 3s | 70c to 2s 70c", OppLine("Elixir of Many Wonders"))
     Check("display", "Weak Troll's Blood Potion: cost | sell | profit", "30c | 60c | 30c", OppLine("Weak Troll's Blood Potion"))
     Check("display", "loss is shown as negative", "30c | 25c | -5c", OppLine("Greater Elixir of Extremely Long Fortitude Name"))
-    Check("display", "missing price: everything unknown, reason under the name",
-        "Unknown for profit; 1 material has no price \194\183 In your queue", (OppLine("Copper Belt Buckle"):find("Unknown | .*Unknown$") and "Unknown for profit" or OppLine("Copper Belt Buckle")) .. "; " .. Txt(Row(o, "Copper Belt Buckle").sub))
+    Check("display", "a material a merchant sells is priced from the vendor (it used to make the craft Unknown)",
+        "18s 25c | 50s | 31s 75c; Blacksmithing \194\183 In your queue \194\183 Low confidence", OppLine("Copper Belt Buckle") .. "; " .. Txt(Row(o, "Copper Belt Buckle").sub))
     Check("display", "unsupported recipe: Unknown with its reason", "Its materials aren't known or can't be counted", Txt(Row(o, "Enchant Bracer - Lesser Choice").sub))
-    Check("display", "output basis under a priced name (quantity and profession)", "Alchemy \194\183 makes 1-3", Txt(Row(o, "Elixir of Many Wonders").sub))
-    Check("display", "output basis for a fixed output", "Blacksmithing \194\183 makes 2", Txt(Row(o, "Smelt Bronze").sub))
+    Check("display", "output basis under a priced name (quantity and profession)", "Alchemy \194\183 makes 1-3 \194\183 Low confidence", Txt(Row(o, "Elixir of Many Wonders").sub))
+    Check("display", "output basis for a fixed output", "Blacksmithing \194\183 makes 2 \194\183 Low confidence", Txt(Row(o, "Smelt Bronze").sub))
     do
         local b = Opps().statusBox
         local tip = Norm(b.twichuiTip.body(b))
@@ -593,13 +595,13 @@ Lab.Step("opportunities: rows, ordering, filtering, unknowns", function()
     Click(Win().Heads().cost, "Cost to make heading (second click)")
     Check("display", "the second click turns the indicator down", "down", Win().Heads().cost.tri.dir)
     Check("click", "second click reverses",
-        "Smelt Bronze | Minor Healing Potion | Elixir of Many Wonders | Greater Elixir of Extremely Long Fortitude Name | Weak Troll's Blood Potion | Copper Belt Buckle | Enchant Bracer - Lesser Choice", Names(o))
+        "Copper Belt Buckle | Smelt Bronze | Minor Healing Potion | Elixir of Many Wonders | Greater Elixir of Extremely Long Fortitude Name | Weak Troll's Blood Potion | Enchant Bracer - Lesser Choice", Names(o))
     Click(Win().Heads().profit, "Estimated profit heading")
-    Check("click", "back to profit: highest first", "Smelt Bronze | Minor Healing Potion | Elixir of Many Wonders", (Names(o):gsub(" | Weak.*", "")))
+    Check("click", "back to profit: highest first", "Copper Belt Buckle | Smelt Bronze | Minor Healing Potion | Elixir of Many Wonders", (Names(o):gsub(" | Weak.*", "")))
 
     -- profession filter
     Click(FindButton(Opps(), "Blacksmithing"), "Blacksmithing filter")
-    Check("click", "Blacksmithing only: priced first, unknown after", "Smelt Bronze | Copper Belt Buckle", Names(o))
+    Check("click", "Blacksmithing only: both priced, highest profit first", "Copper Belt Buckle | Smelt Bronze", Names(o))
     Click(FindButton(Opps(), "Alchemy"), "Alchemy filter")
     Check("click", "Alchemy only (5 recipes, unknown last)",
         "Minor Healing Potion | Elixir of Many Wonders | Weak Troll's Blood Potion | Greater Elixir of Extremely Long Fortitude Name | Enchant Bracer - Lesser Choice", Names(o))
@@ -608,7 +610,7 @@ Lab.Step("opportunities: rows, ordering, filtering, unknowns", function()
 
     -- the filter's logic is kept (Session), though the toolbar no longer carries its switch: it drops the loss and the unknowns
     R.Workshop.Session.ToggleProfitOnly(); R.Workshop.UI.Redraw()
-    Check("direct", "profitable only: losses and unknowns hidden", "Smelt Bronze | Minor Healing Potion | Elixir of Many Wonders | Weak Troll's Blood Potion", Names(o))
+    Check("direct", "profitable only: losses and unknowns hidden", "Copper Belt Buckle | Smelt Bronze | Minor Healing Potion | Elixir of Many Wonders | Weak Troll's Blood Potion", Names(o))
     R.Workshop.Session.ToggleProfitOnly(); R.Workshop.UI.Redraw()
     Check("direct", "profitable only off shows all again", 7, #Rows(o))
 end)
@@ -625,9 +627,10 @@ Lab.Step("opportunities: short tooltip, details with Shift", function()
     local row = Row(Lists().opps, "Minor Healing Potion")
     row:GetScript("OnEnter")(row)
     local short = Norm(table.concat(lines, "\n"))
-    -- hand arithmetic as above: cost 70c, sell 1s 50c, profit before fees 80c; the scan has no market side and is complete
-    Check("display", "short tooltip: name, cost, sell, profit before fees, status, hint",
-        "Minor Healing Potion / Cost to make | 70c / Sell price | 1s 50c / Profit before fees | 80c / just now / Hold Shift for details", (short:gsub("\n", " / ")))
+    -- hand arithmetic as above: cost 70c (up to 5s 90c if whole stacks must be bought), sell 1s 50c, profit before fees 80c; the scan has no
+    -- market side and is complete; Peacebloom's 2 listings make the estimate Low confidence (one status line with the scan's age)
+    Check("display", "short tooltip: name, cost, sell, profit before fees, confidence and status, hint",
+        "Minor Healing Potion / Cost to make | 70c to 5s 90c / Sell price | 1s 50c / Profit before fees | 80c / Confidence: Low (Only 2 listings) \194\183 just now / Hold Shift for details", (short:gsub("\n", " / ")))
     Check("display", "short tooltip: a handful of lines, no reagent list", true, #lines <= 6 and not short:find("Peacebloom", 1, true))
     lines = {}
     shift = true
@@ -640,12 +643,12 @@ Lab.Step("opportunities: short tooltip, details with Shift", function()
     shift = false
     A_Admin.FireEvent("MODIFIER_STATE_CHANGED")
     Check("event", "released: the short tooltip again", true, table.concat(lines, "\n"):find("Hold Shift for details", 1, true) ~= nil)
-    -- an unknown price stays visible without opening the details
+    -- an unknown estimate stays visible without opening the details (Copper Belt Buckle is priced from its vendor since 2026-11-20)
     lines = {}
-    local bad = Row(Lists().opps, "Copper Belt Buckle")
+    local bad = Row(Lists().opps, "Enchant Bracer - Lesser Choice")
     bad:GetScript("OnEnter")(bad)
-    Check("display", "unknown price: the reason is in the short tooltip and no profit is invented", true,
-        table.concat(lines, "\n"):find("1 material has no price", 1, true) ~= nil and not table.concat(lines, "\n"):find("Profit", 1, true))
+    Check("display", "unknown estimate: the reason is in the short tooltip and no profit is invented", true,
+        table.concat(lines, "\n"):find("Its materials aren't known or can't be counted", 1, true) ~= nil and not table.concat(lines, "\n"):find("Profit", 1, true))
     bad:GetScript("OnLeave")(bad)
     tt.AddLine, tt.AddDoubleLine, IsShiftKeyDown = oldLine, oldDouble, oldShift
 end)
@@ -955,7 +958,8 @@ Lab.Step("what's it worth: tooltip designer", function()
 end)
 
 Lab.Step("opportunities: test-input cut, then removed", function()
-    -- TEST INPUT: a made-up 5% cut for the 'unknown' side. The product has no confirmed cut (Prices.CUT is empty).
+    -- TEST INPUT: a made-up 5% cut for the 'unknown' side. The product has no confirmed cut (Prices.CUT is empty); a confirmed rate there comes
+    -- before the assumed one (Fees.Cut).
     -- cut = round(sell x 0.05): 800->40, 150->7.5->8, 100->5, 300->15, 60->3, 25->1.25->1. Profit = sell - cut - cost.
     --   Smelt 660; Minor 72; Elixir 65 to 255; Weak Troll's 27; Greater -6.
     R.Workshop.Prices.CUT.unknown = 0.05
@@ -1230,7 +1234,7 @@ Lab.Step("remembered recipes: closed window, background read, nothing open", fun
     Tab("Opportunities")
     Check("display", "no profession open: both professions come from what was saved", "Alchemy | Blacksmithing", (function()
         local n = {} for _, p in ipairs(W.Session.Professions()) do n[#n + 1] = p.name end return table.concat(n, " | ") end)())
-    Check("display", "Opportunities lists all seven recipes from saved knowledge, priced from the saved scan (the Overview counts 5 priced)", "7 | of 5 priced",
+    Check("display", "Opportunities lists all seven recipes from saved knowledge, priced from the saved scan and the vendor (the Overview counts 6 priced)", "7 | of 6 priced",
         #Rows(Lists().opps) .. " | " .. (function() Tab("Overview") local t = Txt(Win().Overview().cards.opps.side) Tab("Opportunities") return t end)())
     Tab("Crafting")
     Check("display", "Crafting says the list is remembered", true, Txt(Frame().notice):find("Remembered from", 1, true) ~= nil)
@@ -1378,9 +1382,9 @@ Lab.Step("bank and guild bank: planned with, collected not bought, labelled, pro
     local after = OppLine("Minor Healing Potion") .. " / " .. OppLine("Weak Troll's Blood Potion") .. " / " .. OppLine("Smelt Bronze")
     Check("display", "cost, sell price and profit are exactly what they were without the bank", oppBefore, after)
     local o = Lists().opps
-    Check("display", "Minor Healing Potion: 1 Silverleaf is in the bank", "Alchemy \194\183 Collect materials \194\183 In your queue", Txt(Row(o, "Minor Healing Potion").sub))
-    Check("display", "Weak Troll's Blood Potion: all in the bags", "Alchemy \194\183 Ready to craft \194\183 In your queue", Txt(Row(o, "Weak Troll's Blood Potion").sub))
-    Check("display", "Elixir of Many Wonders: nothing held, nothing said", "Alchemy \194\183 makes 1-3", Txt(Row(o, "Elixir of Many Wonders").sub))
+    Check("display", "Minor Healing Potion: 1 Silverleaf is in the bank", "Alchemy \194\183 Collect materials \194\183 In your queue \194\183 Low confidence", Txt(Row(o, "Minor Healing Potion").sub))
+    Check("display", "Weak Troll's Blood Potion: all in the bags", "Alchemy \194\183 Ready to craft \194\183 In your queue \194\183 Low confidence", Txt(Row(o, "Weak Troll's Blood Potion").sub))
+    Check("display", "Elixir of Many Wonders: nothing held, nothing said", "Alchemy \194\183 makes 1-3 \194\183 Low confidence", Txt(Row(o, "Elixir of Many Wonders").sub))
     Tab("Crafting")
 end)
 
@@ -2252,7 +2256,9 @@ Lab.Step("pose for the screenshot", function()
         local ov = Win().Overview()
         Check("display", "pose: the market card says how many items were priced and that the scan was whole", "13 | Scan complete \194\183 just now",
             Txt(ov.cards.market.stat) .. " | " .. Txt(ov.cards.market.facts[1].text))
-        Check("display", "pose: the opportunities card counts what is profitable and names the best", "4 | of 5 priced | Top profit: Smelt Bronze",
+        -- (2026-11-20) the vendor-priced Copper Belt Buckle is the fifth profitable craft; every estimate over these thin fakes is Low confidence,
+        -- so the card names the best of them as such (Opportunities.Best headlines only a craft that isn't Low)
+        Check("display", "pose: the opportunities card counts what is profitable and names the best", "5 | of 6 priced | Top profit, low confidence: Copper Belt Buckle",
             Txt(ov.cards.opps.stat) .. " | " .. Txt(ov.cards.opps.side) .. " | " .. Txt(ov.cards.opps.facts[1].text))
         Check("display", "pose: the activity names the scan and the plan changes of this run", true, Txt(ov.activity[1].text) ~= "" and ov.activity[3]:IsShown())
     elseif view == "history" then

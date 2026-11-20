@@ -80,6 +80,8 @@ function T.Read(data)
         f.market = { label = src.label, side = market.side, at = market.at, complete = market.complete }
         f.marketTable = market
         f.price = MK.Price(id, { market = market, variant = f.variant ~= nil })   -- the one price service; a variant is never given the base item's price
+        -- valued at the competing price, as the Item Advisor does: one listing far below the rest doesn't set the item's worth
+        if W.Estimate and f.price then f.price = W.Estimate.AtCompeting(f.price, id, { market = market, variant = f.variant ~= nil }) end
         f.rate = PR.CutRate(market.side)
     end
     return f

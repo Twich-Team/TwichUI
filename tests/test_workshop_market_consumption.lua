@@ -131,6 +131,19 @@ local legacy=W.Market.Source();assert(legacy.market and not legacy.market.pricin
 c.UnitFactionGroup=function()return 'Alliance' end
 assert(not P.Source().reference and P.Price(2589).source=='local','another faction must not inherit these prices')
 c.UnitFactionGroup=function()return 'Horde' end
+-- (R7) a local full scan newer than the reference's observations is the better picture of the listings now; the reference still gives usual values
+local _,observed=W.BridgeValidate.Time(h.source_observation.observed_at)
+assert(P.Price(2589,{market=P.Source().market}).reference,'a local scan as old as the reference does not replace it')
+local later=W.Prices.NewBatch();later:Add(2589,10,3000,true);later:Add(999,10,7000,true)
+local litems,ln,_,_,ldist=later:Items()
+assert(W.Prices.Commit('Configured Realm|Horde',{realm='Configured Realm',side='Horde',at=observed+30,
+ complete=true,read=2,used=2,n=ln,items=litems,alg=W.Dist.ALG,dist=ldist}))
+local newer=P.Price(2589,{market=P.Source().market})
+assert(newer.source=='local' and newer.fallback=='newer' and newer.price==300 and not newer.reference,'the newer local scan is used')
+assert(P.Cost(2589,2,{market=P.Source().market}).state~='none','and its listings can be walked')
+local refFacts=assert(P.Reference(2589,{market=P.Source().market}))
+assert(refFacts.recent==tonumber(row[4]) and refFacts.source=='market_server','the reference stays available')
+assert(P.Price(2653,{market=P.Source().market}).reference,'an item the local scan lacks keeps the reference')
 c.time=function()return now+P.MAX_AGE+1 end
 assert(not P.Source().reference and P.Price(2589).source=='local','stale server data must fall back')
 print('PASSED Market consumption: exact base identity, lazy loading, estimate arithmetic, shopping, facts, charts, local action isolation and stale/faction fallback')

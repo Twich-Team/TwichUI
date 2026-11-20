@@ -144,6 +144,23 @@ for _,mode in ipairs({"zero","refused","sold","stale","changed","missing","overl
     s.Advance(9)
     if mode=="zero" then Same(#s.Entries(),0) else s.Expect(nil,-1200) end
 end
+-- The posting's listing duration is kept on its deposit entry (an optional field, r = 1 to 3; Workshop's deposit estimates read it).
+for _,mode in ipairs({"postItem","postCommodity"}) do
+    local c,W,s,L,A=Setup();local qty=mode=="postItem" and 1 or 5
+    s.Post(mode,qty);W.AuctionActions.Event("AUCTION_HOUSE_AUCTION_CREATED",501);s.Move(-2);s.Advance(0)
+    s.Expect("ahDeposit",-2,qty,501);Same(s.Entries()[1].r,1,"the duration the post was reviewed with")
+end
+for _,case in ipairs({{3,3},{5,nil},{0,nil},{2.5,nil},{"2",nil}}) do
+    local c,W,s,L,A=Setup()
+    local a=A.Begin("postItem",2,10,3,nil,nil,case[1]);Check(a)
+    s.Move(-2);Check(A.Complete(a,nil,3,3));s.Advance(0);s.Expect("ahDeposit",-2,3)
+    Same(s.Entries()[1].r,case[2],"duration "..tostring(case[1]))
+end
+do
+    local c,W,s,L,A=Setup();local a=A.Begin("cancel",1200,10,1,42,nil,2);Check(a)
+    s.Move(-1200);Check(A.Complete(a,42));s.Advance(0);s.Expect("ahCancelFee",-1200,1,42)
+    Same(s.Entries()[1].r,nil,"a cancellation fee has no listing duration")
+end
 -- The shared adapter also defends core Sell from Bags, whose multisell completion has a separate event owner.
 do
     local c,W,s,L,A=Setup()

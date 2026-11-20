@@ -725,10 +725,10 @@ m("market.value.trend-flat-boundary", VALUATION, "    if 100 * math.abs(b - a) <
   "exactly 5% is called flat", [VAL])
 m("market.value.competing-at-anchor", VALUATION, "        local under = 2 * t.p < d.a", "        local under = t.p < d.a",
   "the competing price is the anchor itself instead of the cheapest price at or above half of it", [VAL])
-m("market.value.cost-unlimited-at-minimum", VALUATION, "        if rem <= t.q then\n            low = base + rem * t.p",
-  "        if true then\n            low = base + rem * t.p", "the whole quantity is costed at the cheapest price, as if it held unlimited items", [VAL], smoke=True)
-m("market.value.cost-tier-off-by-one", VALUATION, "        if rem <= t.q then\n            low = base + rem * t.p",
-  "        if rem < t.q then\n            low = base + rem * t.p", "a quantity that exactly empties a tier walks into the next one", [VAL])
+m("market.value.cost-unlimited-at-minimum", VALUATION, "        elseif rem <= t.q then\n            low = base + rem * t.p",
+  "        elseif true then\n            low = base + rem * t.p", "the whole quantity is costed at the cheapest price, as if it held unlimited items", [VAL], smoke=True)
+m("market.value.cost-tier-off-by-one", VALUATION, "        elseif rem <= t.q then\n            low = base + rem * t.p",
+  "        elseif rem < t.q then\n            low = base + rem * t.p", "a quantity that exactly empties a tier walks into the next one", [VAL])
 m("market.value.cost-whole-listing-omitted", VALUATION, "                whole = rem + largest - 1\n", "                whole = rem\n",
   "the cost ignores that whole listings may have to be bought (no range, a false exact)", [VAL], smoke=True)
 m("market.value.cost-equal-listings-rounding-lost", VALUATION, "whole = largest * floor((rem + largest - 1) / largest)", "whole = rem",
@@ -1477,3 +1477,42 @@ m("ledger.vendor.frame-shown", VENDOR, 'R.Ledger.CharKey() == visit.key and NPC(
   'an automatic seller that starts before the merchant frame is shown silently closes the observer for the visit', [VTEST])
 m("ledger.vendor.bank-argument", VENDOR, 'if unit ~= nil or (BankFrame and BankFrame.IsShown and BankFrame:IsShown()) then', 'if unit ~= nil or bank ~= nil then',
   "the merchant frame's own right-click (which passes a bank argument) is refused as not a plain sale", [VTEST])
+
+# The planning estimate and the fees (docs/workshop/pricing-realism-proposal.md, 2026-11-20): Estimate.lua, Fees.lua and Market.Cost's
+# fromCompeting walk. Fakes only; tests/test_workshop_estimate.lua and the Cost cases in tests/test_workshop_valuation.lua catch them.
+ESTIMATE, FEES, VALUATION = "TwichUI_Workshop/Estimate.lua", "TwichUI_Workshop/Fees.lua", "TwichUI_Workshop/Valuation.lua"
+EST = "test_workshop_estimate.lua"
+m("market.estimate.cap-inclusive", ESTIMATE, "if s.unit > cap then", "if s.unit >= cap then",
+  "exactly 115% of Market Value is counted as over the cap", [EST], smoke=True)
+m("market.estimate.cap-rounds-down", ESTIMATE, "local cap = Ceil(mv.value * E.CAP_PERCENT / 100)", "local cap = floor(mv.value * E.CAP_PERCENT / 100)",
+  "the cap is rounded down, so a 1-copper Market Value caps every sale at 1 copper", [EST])
+m("market.estimate.crafts-not-multiplied", ESTIMATE, "local need = qty and qty * crafts or nil", "local need = qty",
+  "a queue of many crafts buys one craft's materials", [EST], smoke=True)
+m("market.estimate.output-not-multiplied", ESTIMATE, "local outLo, outHi = lo * crafts, hi * crafts", "local outLo, outHi = lo, hi",
+  "a queue of many crafts sells one craft's output", [EST])
+m("market.estimate.vendor-tie-to-auction", ESTIMATE, "if vq and (not auctionOk or vq.cost <= a.low) then", "if vq and (not auctionOk or vq.cost < a.low) then",
+  "a vendor and an auction at the same cost no longer prefer the certain vendor", [EST])
+m("market.estimate.vendor-floor-before-cut", ESTIMATE, "if vs and (not netLo or vs * outLo >= netLo) then", "if vs and (not netLo or vs * outLo >= e.sellLow) then",
+  "the vendor floor is compared with the sale before the cut, so a merchant loses to an auction that leaves less", [EST])
+m("market.estimate.deposit-subtracted", ESTIMATE, "e.covers = W.Fees.Covers(e.profitLow, e.depositTotal)",
+  "e.profitLow = e.profitLow - e.depositTotal e.covers = W.Fees.Covers(e.profitLow, e.depositTotal)",
+  "a refundable deposit is taken off the profit as if it were always lost", [EST])
+m("market.estimate.deposit-per-craft", ESTIMATE, "e.depositTotal = d.amount * crafts", "e.depositTotal = d.amount",
+  "many crafts are posted for one listing's deposit", [EST])
+m("market.estimate.absorb-single", ESTIMATE, "if outLo > 1 then", "if outLo > 0 then",
+  "selling one item into a thin market is called flooding it", [EST])
+m("market.estimate.stale-ignored", ESTIMATE, "if age and age > E.STALE_BUY then", "if false then",
+  "a day-old cheap listing is trusted for the material cost", [EST])
+m("market.fees.covers-rounds-up", FEES, "return math.floor(profit / deposit)", "return math.ceil(profit / deposit)",
+  "a profit is said to cover one more failed listing than it does", [EST])
+m("market.fees.ledger-window", FEES, "if type(e) == \"table\" and type(e.t) == \"number\" and e.t >= from then",
+  "if type(e) == \"table\" and type(e.t) == \"number\" then", "invoices older than the Ledger window confirm a rate", [EST])
+m("market.fees.unknown-house-faction", FEES, "    return nil\nend\n\n---------------------------------------------------------------------------\n-- What the Gold Ledger proves",
+  "    return \"faction\"\nend\n\n---------------------------------------------------------------------------\n-- What the Gold Ledger proves",
+  "an auction house whose kind is unknown is given the faction cut", [EST])
+m("market.fees.deposit-any-duration", FEES, "if #same > 0 then use, known = same, true end", "",
+  "deposits posted for another duration are used when the chosen one was recorded", [EST])
+m("market.cost.bait-boundary", VALUATION, "if skipBelow and 2 * t.p < d.a then", "if skipBelow and 2 * t.p <= d.a then",
+  "a tier at exactly half the anchor (a real competing price) is skipped as bait", ["test_workshop_valuation.lua"])
+m("market.cost.bait-still-available", VALUATION, "r.qty, r.available = n, d.t - skipItems", "r.qty, r.available = n, d.t",
+  "the bait's items are counted as buyable, so too few listed reads as enough", ["test_workshop_valuation.lua"])

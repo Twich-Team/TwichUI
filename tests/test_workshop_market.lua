@@ -11,7 +11,7 @@ local function Check(cond, msg) if not cond then error(msg, 2) end end
 local function Same(a, b, msg) if a ~= b then error((msg or "") .. " expected " .. tostring(b) .. ", got " .. tostring(a), 2) end end
 
 local FILES = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua",
-    "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Session.lua" }
+    "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Fees.lua", "Estimate.lua", "Session.lua" }
 local D = 86400
 
 -- a stable text of any saved data, to prove nothing changed

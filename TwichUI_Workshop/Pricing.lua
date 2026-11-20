@@ -22,7 +22,7 @@ local function localMarket(opt)
     return MK.Source().market
 end
 local function options(opt)
-    return {market=localMarket(opt),now=opt and opt.now,variant=opt and opt.variant,localOnly=true}
+    return {market=localMarket(opt),now=opt and opt.now,variant=opt and opt.variant,localOnly=true,fromCompeting=opt and opt.fromCompeting or nil}
 end
 local function eligible(now)
     if not (W.Active() and B and B.Status().ready and B.Status().summary) then return nil,'unavailable' end
@@ -85,10 +85,21 @@ function P.Source()
     src.label,src.generation,src.reference=label,P.Generation(),true
     return src
 end
+-- A local full scan NEWER than the reference's observations is the better picture of the listings now (owner decision R7): it is used, and
+-- the reference stays available through P.Reference for usual values.
+local function newerLocal(item,opt,at)
+    local m=localMarket(opt)
+    if not (m and m.scope=='full' and type(m.at)=='number' and type(at)=='number' and m.at>at) then return nil end
+    local p=MK.Price(item,options(opt))
+    if p then p.source='local';p.fallback='newer';p.basis=p.basis..' A local scan newer than the Market server reference.' end
+    return p
+end
 function P.Price(item,opt)
     local r,why,h,at=record(item,opt)
     local raw=r and r.current.metrics.recent_copper
     if raw and raw~=J.NULL then
+        local fresher=newerLocal(item,opt,at)
+        if fresher then return fresher end
         return {item=item,price=tonumber(raw),at=at,age=(opt and opt.now or time())-at,
             complete=false,reference=true,source='market_server',generation=h.generation_id,
             notes={'reference'},basis='Market server Recent Price estimate; listing depth and purchase availability are unknown.'}
@@ -98,6 +109,17 @@ function P.Price(item,opt)
     local p,reason=MK.Price(item,options(opt))
     if p then p.source='local';p.fallback=why or 'unavailable';p.basis=p.basis..' Local scan fallback.' end
     return p,reason or why
+end
+-- The reference's figures of an item for planning estimates (no history arrays): { recent, market, historical, min, supply, at, generation }
+-- or nil and why. Values are whole copper or nil (never 0 for a missing figure).
+function P.Reference(item,opt)
+    local r,why,h,at=record(item,opt)
+    if not r then return nil,why end
+    local m=r.current.metrics
+    local function v(k) local x=m[k];if x~=nil and x~=J.NULL then x=tonumber(x);if x and x>=1 then return x end end end
+    local supply=r.current.supply
+    return {recent=v('recent_copper'),market=v('market_value_copper'),historical=v('historical_value_copper'),min=v('minimum_copper'),
+        supply=supply~=nil and supply~=J.NULL and tonumber(supply) or nil,at=at,generation=h and h.generation_id,source='market_server'}
 end
 function P.Cost(item,qty,opt)
     local p=P.Price(item,opt)

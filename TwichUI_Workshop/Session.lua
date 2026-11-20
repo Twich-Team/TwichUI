@@ -598,16 +598,88 @@ local EMPTY = {
     noprices = "None of your recipes could be priced from the last scan. Some materials or products had no listings.",
     noprofit = "No profitable crafts at the scanned prices. Turn off Profitable only to see them all.",
     nofilter = "No recipes match this profession.",
+    lowonly = "Every priced craft here is Low confidence. Turn off Hide low confidence to see them.",
 }
+
+-- What an item sells to a merchant for (C_Item.GetItemInfo's sellPrice), or nil and "loading" while the game loads the item (it is asked for, and
+-- GET_ITEM_INFO_RECEIVED redraws the window). 0 is returned as 0: "no vendor value", never a price.
+local function VendorSell(item)
+    local get = C_Item and C_Item.GetItemInfo or GetItemInfo
+    if type(get) ~= "function" then return nil, "api" end
+    local ok, name, _, _, _, _, _, _, _, _, _, sell = pcall(get, item)
+    if not ok then return nil, "api" end
+    if W.Plain(name) == nil then
+        if C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, item) end
+        return nil, "loading"
+    end
+    return W.Int(W.Plain(sell), 0, PR.MAX_COPPER)
+end
+S.VendorSell = VendorSell
+
+-- The planning estimator (Estimate.lua) over one price source: the same market every price comes from, its local scan for the valuation
+-- services, the vendor records, the cut and the deposit (Fees.lua). nil without a market or without Estimate.lua (then Prices.Estimate is used).
+-- The estimator is KEPT between draws while nothing its answers depend on changes (the window draws often; every Market service decodes an
+-- item's saved tiers per call): the market and its scan, the reference generation, the cut, the vendor records, the Ledger's sales and deposits,
+-- the listing duration and an hour of time (ages and the stale rule: their thresholds are a day and more). Anything else (a scan, a merchant, a sale) makes a new one.
+local lastEstimator, lastKey, lastCut, lastCutWhy
+S.ESTIMATE_MEMO_MAX = 20000   -- answers kept at most; beyond it the next draw starts a new estimator
+function S.Estimator(src)
+    src = src or S.PriceSource()
+    local market = src.market
+    local Es, Fe, LM = W.Estimate, W.Fees, W.Market
+    if not (Es and market) then return nil end
+    local lm = market.pricing and market.localMarket or market
+    local local_ = lm and { market = lm } or nil
+    local cut, cutWhy
+    if Fe then cut, cutWhy = Fe.Cut(market.side) end
+    -- the Gold Ledger counts only through what the fees read from it (verified sales and deposits): any other gold change (loot, repairs)
+    -- moves its revision without changing an estimate
+    local ev = Fe and Fe.Evidence and Fe.Evidence() or nil
+    local fees = ev and (ev.invoices .. ":" .. ev.depositCount .. ":" .. ev.match.faction .. ":" .. ev.match.neutral) or ""
+    local snap = lm and lm.snap
+    local key = table.concat({ tostring(market.key), tostring(market.at), tostring(lm and lm.at), tostring(snap and snap.seq), tostring(SC.ended or 0),
+        tostring(src.generation or ""),
+        tostring(cut and cut.rate), tostring(cut and cut.source), tostring(cutWhy), tostring(V.Count and V.Count() or 0),
+        fees, tostring(Fe and Fe.Duration() or 0), tostring(math.floor(Q.Now() / 3600)),
+        tostring(S.observations) }, "|")
+    if lastEstimator and lastKey == key and lastEstimator.size < S.ESTIMATE_MEMO_MAX then return lastEstimator, lastCut, lastCutWhy end
+    local function Local(fn) return (LM and LM[fn] and local_) and fn or nil end
+    local ctx = {
+        cut = cut, cutWhy = cutWhy,
+        price = function(item) return MK.Price(item, { market = market }) end,
+        cost = MK.Cost and function(item, qty) return MK.Cost(item, qty, { market = market, fromCompeting = true }) end or nil,
+        competition = Local("Competition") and function(item) return LM.Competition(item, nil, local_) end or nil,
+        value = Local("Value") and function(item, kind) return LM.Value(item, kind, local_) end or nil,
+        quality = Local("Quality") and function(item) return LM.Quality(item, local_) end or nil,
+        supply = Local("Supply") and function(item) return LM.Supply(item, local_) end or nil,
+        reference = (market.pricing and W.Pricing and W.Pricing.Reference) and function(item) return W.Pricing.Reference(item, { market = market }) end or nil,
+        vendor = V.Entry,
+        vendorSell = VendorSell,
+        deposit = Fe and function(item, qty) return Fe.Deposit(item, qty) end or nil,
+    }
+    local est = Es.New(ctx)
+    lastEstimator, lastKey, lastCut, lastCutWhy = est, key, cut, cutWhy
+    return est, cut, cutWhy
+end
+function S.EstimatorSize() return lastEstimator and lastEstimator.size or 0 end
+function S.ForgetEstimator() lastEstimator, lastKey = nil, nil end
+if R.Perf and R.Perf.Gauge then
+    R.Perf.Gauge("workshop.estimate", { label = "Workshop: answers kept by the last Opportunities estimate", kind = "cache", group = "workshop", unit = "count", read = S.EstimatorSize })
+end
 
 -- Everything the Opportunities view draws: rows (filtered and sorted), counts, the price source, the cut, and the text for an empty list
 function S.Opportunities()
+    local pt = R.Perf and R.Perf.on and R.Perf.Start("workshop.estimate")
     local src = S.PriceSource()
     local recipes = S.AllRecipes()
     local market = src.market
-    local rate = market and PR.CutRate(market.side) or nil
+    local estimator, cut, cutWhy = S.Estimator(src)
+    local rate
+    if estimator then rate = cut and cut.rate or nil
+    else rate = market and PR.CutRate(market.side) or nil end
     local lookup = function(item) return market and MK.Price(item, { market = market }) or nil end
-    local all = Op.Rows(recipes, lookup, rate)
+    local all = Op.Rows(recipes, lookup, rate, nil, estimator)
+    if pt then R.Perf.Stop(pt) end
     local rows = Op.Select(all, S.opp)
     -- Whether one craft's materials are in the bags or in storage, asked only for the rows the window draws (each answer reads bag counts) and kept
     -- apart from the estimate: stored materials never lower a cost or raise a profit.
@@ -618,7 +690,7 @@ function S.Opportunities()
         return n or nil
     end
     -- all: every row before the page's filter and sort (the Overview reads its best one; nothing is priced twice)
-    local out = { rows = rows, all = all, summary = Op.Summary(all), source = src, rate = rate, lookup = lookup, incomplete = false, stock = view,
+    local out = { rows = rows, all = all, summary = Op.Summary(all), source = src, rate = rate, cut = cut, cutWhy = cutWhy, estimator = estimator, lookup = lookup, incomplete = false, stock = view,
         avail = function(rec) return K.Craft(rec.mats, Have, view) end }
     for _, id in ipairs(order) do
         if not profs[id].complete then out.incomplete = true end
@@ -626,7 +698,7 @@ function S.Opportunities()
     if #recipes == 0 then out.state = "norecipes"
     elseif not market then out.state = "noscan"
     elseif out.summary.priced == 0 then out.state = "noprices"
-    elseif #rows == 0 then out.state = S.opp.profitOnly and "noprofit" or "nofilter"
+    elseif #rows == 0 then out.state = S.opp.profitOnly and "noprofit" or (S.opp.hideLow and #Op.Select(all, { prof = S.opp.prof }) > 0 and "lowonly" or "nofilter")
     else out.state = "ok" end
     if out.state == "noscan" then
         out.empty = src.open and "No prices for this auction house yet. Choose Scan prices."
@@ -645,31 +717,42 @@ function S.FilterProfession(id)
 end
 
 function S.ToggleProfitOnly() S.opp.profitOnly = not S.opp.profitOnly end
+function S.ToggleHideLow() S.opp.hideLow = not S.opp.hideLow end
 
 -- What the queue's crafts are estimated to cost and earn: the Opportunities estimate of each queued recipe (one craft) times its crafts,
 -- by recipe id, and the totals over those that could be priced. Nothing is estimated here: a recipe the estimate can't price is counted
 -- in `unpriced` and left out of the totals, never taken as free. `v` may be a draw's S.Opportunities() so nothing is priced twice.
---   byId[id] = { crafts, cost, sellLow, sellHigh, profitLow, profitHigh } or nil (not priced)
---   totals   { entries, priced, unpriced, crafts, cost, sellLow, sellHigh, profitLow, profitHigh, rate }
+--   byId[id] = { crafts, cost, sellLow, sellHigh, profitLow, profitHigh, confidence, absorb, deposit, cooldown } or nil (not priced)
+--   totals   { entries, priced, unpriced, crafts, cost, sellLow, sellHigh, profitLow, profitHigh, rate, deposit (the deposits known), low (Low
+--            confidence entries), absorb (entries that would sell more than the market holds) }
+-- With the planning estimator (Estimate.lua) a queued recipe of several crafts is estimated for all of them at once.
 function S.PlanEstimates(v)
     local entries = Q.Entries()
     local byId, t = {}, { entries = #entries, priced = 0, unpriced = 0, crafts = 0, cost = 0, sellLow = 0, sellHigh = 0, profitLow = 0, profitHigh = 0 }
     if #entries == 0 then return byId, t end
     v = v or S.Opportunities()
     t.rate = v.rate
-    local rows = {}
-    for _, r in ipairs(v.all) do rows[r.rec.id] = r.est end
+    local rows, recs = {}, {}
+    for _, r in ipairs(v.all) do rows[r.rec.id] = r.est recs[r.rec.id] = r.rec end
     for _, e in ipairs(entries) do
         t.crafts = t.crafts + e.crafts
         local est = rows[e.id]
+        -- the planning estimate of the queued number of crafts: materials walk the listings for the whole quantity and selling that many is
+        -- checked against what is listed (never one craft's figures multiplied)
+        if v.estimator and recs[e.id] and e.crafts > 1 then est = v.estimator:Craft(recs[e.id], e.crafts) end
+        local mult = (v.estimator and recs[e.id]) and 1 or e.crafts
         if est and est.state == "ok" then
-            local x = { reference=est.reference, crafts = e.crafts, cost = est.cost * e.crafts, sellLow = est.sellLow * e.crafts, sellHigh = est.sellHigh * e.crafts,
-                profitLow = est.profitLow * e.crafts, profitHigh = est.profitHigh * e.crafts }
+            local x = { reference=est.reference, crafts = e.crafts, cost = est.cost * mult, sellLow = est.sellLow * mult, sellHigh = est.sellHigh * mult,
+                profitLow = est.profitLow * mult, profitHigh = est.profitHigh * mult, confidence = est.confidence, absorb = est.absorb,
+                deposit = est.depositTotal, cooldown = est.cooldown }
             byId[e.id] = x
             t.reference=t.reference or est.reference
             t.priced = t.priced + 1
             t.cost, t.sellLow, t.sellHigh = t.cost + x.cost, t.sellLow + x.sellLow, t.sellHigh + x.sellHigh
             t.profitLow, t.profitHigh = t.profitLow + x.profitLow, t.profitHigh + x.profitHigh
+            if x.deposit then t.deposit = (t.deposit or 0) + x.deposit end
+            if x.confidence == "low" then t.low = (t.low or 0) + 1 end
+            if x.absorb then t.absorb = (t.absorb or 0) + 1 end
         else
             t.unpriced = t.unpriced + 1
         end

@@ -8,6 +8,8 @@
 -- P2: the details also hold a compact Crafting Strategy (Session.OppStrategy: the multilevel planner for one craft on its own: what buying the
 -- ingredients directly costs, the optimized economic cost, the cash needed now and the savings) and View strategy. It is a separate, labelled
 -- reference: the row's cost, profit and the list's sort are still the one-level estimate above it, and nothing here changes them.
+-- (2026-11-20) The figures are the planning estimate (Estimate.lua: listings walked for the quantity, vendors, the competing sell price capped near
+-- the usual value, the auction house's cut and the deposit at risk) with a confidence; two toggles hide Low-confidence crafts and sort by margin.
 
 local R = TwichUI
 local W = R.Workshop
@@ -158,8 +160,13 @@ local function MakeOppRow(parent)
         if word then detail = detail .. " \194\183 " .. word end
         local queued = S.IsQueued(rec.id)
         if queued then detail = detail .. " \194\183 In your queue" end
+        -- what qualifies the estimate, briefly: a vendor sale, a cooldown, low confidence
+        local warn = false
+        if e.state == "ok" and e.outlet == "vendor" then detail = detail .. " \194\183 Sell to a vendor" end
+        if e.cooldown then detail = detail .. " \194\183 On cooldown" warn = true end
+        if e.state == "ok" and e.confidence == "low" then detail = detail .. " \194\183 Low confidence" warn = true end
         self.sub:SetText(detail)
-        UI.Paint(self.sub, e.state ~= "ok" and K.bronzeText or (word and (r.avail.state == "ready" and K.sage or K.bronzeText))
+        UI.Paint(self.sub, e.state ~= "ok" and K.bronzeText or (warn and K.bronzeText) or (word and (r.avail.state == "ready" and K.sage or K.bronzeText))
             or (queued and K.sage) or K.stone)
         Known(self.cost, e.cost)
         Known(self.sell, e.sellLow, e.sellHigh)
@@ -234,12 +241,28 @@ local function RenderDetail(rows)
     if e.state == "ok" then
         d.profit:SetText(Range(e.profitLow, e.profitHigh, UI.Money))
         UI.Paint(d.profit, ProfitTone(e))
-        d.why:SetText("")
+        -- one line under the boxes: how sure the estimate is and why, the usual profit, the deposit or a cooldown
+        if W.Estimate then W.Estimate.Typical(e) end
+        local parts = {}
+        local cw = Op.ConfidenceText and Op.ConfidenceText(e)
+        if cw then
+            local first = e.reasons and e.reasons[1]
+            parts[1] = cw .. (first and (": " .. first.text:gsub("%.$", "")) or "")
+        end
+        if e.typical then parts[#parts + 1] = "usually " .. (e.typical.profit > 0 and "+" or "") .. UI.Money(e.typical.profit) end
+        if e.covers then parts[#parts + 1] = ("deposit covers %d failed %s"):format(e.covers, e.covers == 1 and "listing" or "listings")
+        elseif e.depositTotal then parts[#parts + 1] = "one failed listing loses the profit" end
+        local cd = Op.CooldownText and Op.CooldownText(e)
+        if cd then parts[#parts + 1] = cd:lower() end
+        d.why:SetText(table.concat(parts, " \194\183 "))
+        UI.Paint(d.why, (e.confidence == "low" or cd or (e.depositTotal and not e.covers)) and K.bronzeText or K.textDim)
     else
         d.profit:SetText("Unknown")
         UI.Paint(d.profit, K.stone)
         d.why:SetText(Op.WhyText(e) or "Not priced")
+        UI.Paint(d.why, K.bronzeText)
     end
+    d.sellLabel:SetText(e.outlet == "vendor" and "Sell to a vendor" or "Sell price")
     d.cost:SetText(e.cost and UI.Money(e.cost) or "Unknown")
     d.sell:SetText(e.sellLow and Range(e.sellLow, e.sellHigh, UI.Money) or "Unknown")
     -- materials of one craft, each with its item tooltip
@@ -286,7 +309,7 @@ local function RenderDetail(rows)
     d.chart:Set(W.AdvancedChart.FromObserved(series), UI.Money,
         "workshop:opportunities:"..tostring(rec.outItem)..":"..tostring(series and series.market))
     d.chartNote:SetText((series and series.external and "Market server · Recent Price · " or "")..ChartNote(series))   -- the days the history really covers; when the listings were scanned is on the Data quality row
-    Opps.PaintStrategy(rec)
+    Opps.PaintStrategy(rec, e)
     -- the button: what it does now (add), what already happened (queued, with a check) or why it can't (the queue is full)
     local queued = S.IsQueued(rec.id)
     local full = not queued and Q.Count() >= W.MAX_QUEUE
@@ -366,6 +389,8 @@ local function Render()
 
     -- filters and the sort
     LayoutChips(S.Professions())
+    opps.hideLow:SetOn(S.opp.hideLow == true)
+    opps.margin:SetOn(S.opp.sort == "margin")
     for key, h in pairs(UI.heads) do
         if key == "profit" then h:SetLabel("Profit", v.rate and "after the cut" or "before fees") end
         h:SetSort(S.opp.sort == key, S.opp.desc)
@@ -416,7 +441,7 @@ end
 
 -- The compact Crafting Strategy: what the multilevel planner says about making this recipe once, on its own. Four labelled figures and what to
 -- do (craft, buy, collect), all from Session.OppStrategy; while it is computed the block says so and shows nothing of another recipe.
-function Opps.PaintStrategy(rec)
+function Opps.PaintStrategy(rec, est)
     local d = page and page.detail
     if not d then return end
     local st = d.strat
@@ -446,6 +471,16 @@ function Opps.PaintStrategy(rec)
     UI.Paint(st.headline, K.text)
     local costTip = words.costTip
     if words.direct then costTip = (costTip and (costTip .. "\n") or "") .. "Buying every material directly: " .. words.direct end
+    -- the profit this route gives (owner decision R8): what the sale leaves after the cut, minus the route's economic cost (its lower bound)
+    local econ = plan.summary and plan.summary.economic
+    if est and est.state == "ok" and est.netLow and econ and econ.low and (plan.summary.missing or 0) == 0 then
+        local p = est.netLow - econ.low
+        costTip = (costTip and (costTip .. "\n") or "") .. ("Profit with this route: %s%s (the list counts buying every material)."):format(
+            econ.high == econ.low and "" or "about ", UI.Money(p))
+        st.routeProfit = p
+    else
+        st.routeProfit = nil
+    end
     Pair(1, words.cost, costTip)
     Pair(2, words.cash, words.cashTip)
     st.save:SetText(words.saveShort or "")
@@ -500,15 +535,15 @@ local function BuildDetail()
     end
     local costBox, sellBox, profitBox
     costBox, d.cost = Box("Cost to make", 1)
-    sellBox, d.sell = Box("Sell price (listing)", 2)
+    sellBox, d.sell, d.sellLabel = Box("Sell price", 2)
     profitBox, d.profit, d.profitLabel = Box("Profit before fees", 3)
     d.why = UI.Text(body, 12, K.bronzeText)
     d.why:SetPoint("TOPLEFT", 14, WHY_Y)
     d.why:SetPoint("RIGHT", -14, 0)
-    -- what the figures assume, in words: the existing minimum-based estimate (A7 keeps it; the selling strategy is A8), not Market Value
-    UI.Tip(costBox, "Cost to make", "One craft's materials at the cheapest listings of your last scan. The list is ranked by this.")
-    UI.Tip(sellBox, "Sell price (listing)", "The lowest listing of what it makes, before fees. Not a promise it will sell.")
-    UI.Tip(profitBox, "Profit", "Sell price minus Cost to make: a one-level estimate.")
+    -- what the figures assume, in words (the planning estimate, docs/workshop/pricing-realism-proposal.md); Shift over the row shows every step
+    UI.Tip(costBox, "Cost to make", "One craft's materials: the cheaper of a known vendor and the listings of your last scan, walked for the quantity needed. Listings far below the rest aren't counted. Buying whole stacks can cost more.")
+    UI.Tip(sellBox, "Sell price", "The lowest competing listing of what it makes, at most 115% of its usual Market Value, or what a merchant pays when that is more. Not a promise it will sell.")
+    UI.Tip(profitBox, "Profit", "Sell price minus the auction house's cut minus Cost to make. A deposit is refunded on a sale, so it isn't subtracted.")
 
     -- the Crafting Strategy block
     local st = CreateFrame("Frame", nil, body)
@@ -675,11 +710,29 @@ local function Build(p)
             return (src and src.open) and "No saved prices for this auction house yet." or "No saved prices for this realm yet."
         end
         local text = ("Prices: %s \194\183 %s"):format(src.label, Op.ScanWords({ at = src.market.at, complete = src.market.complete }) or "")
-        text = text .. "\nCheapest buyout listings per item: a listing is not a sale."
-        if oppView.rate then text = text .. "\nProfit is after the auction house's cut." else text = text .. "\nProfit is before fees: the auction house's cut isn't confirmed." end
+        text = text .. "\nListings, not sales: costs walk the listings for the quantity needed, sell prices follow the lowest competing listing."
+        if oppView.rate then
+            text = text .. "\nProfit is after the auction house's cut." .. (oppView.cut and (" " .. oppView.cut.label:gsub("^%l", string.upper) .. ".") or "")
+        elseif oppView.cutWhy == "off" then
+            text = text .. "\nProfit is before fees: you chose not to deduct the auction house's cut."
+        else
+            text = text .. "\nProfit is before fees: the auction house's cut isn't confirmed."
+        end
         if oppView.incomplete then text = text .. "\nSome recipes may be missing: a profession's window lists only what its filters allow." end
         return text
     end)
+
+    -- two toggles over the list: hide Low-confidence crafts, and rank by profit per copper spent
+    opps.hideLow = UI.Segment(opps, "Hide low confidence", 156, function()
+        S.ToggleHideLow(); UI.lists.opps:ScrollTop(); UI.Redraw()
+    end)
+    opps.hideLow:SetPoint("TOPLEFT", 0, -6)
+    UI.Tip(opps.hideLow, "Hide low confidence", "Hide crafts whose estimate rests on thin, capped or reference data. Unknown estimates stay, with their reason.")
+    opps.margin = UI.Segment(opps, "Best margin first", 138, function()
+        S.SortBy(S.opp.sort == "margin" and "profit" or "margin"); UI.lists.opps:ScrollTop(); UI.Redraw()
+    end)
+    opps.margin:SetPoint("LEFT", opps.hideLow, "RIGHT", 6, 0)
+    UI.Tip(opps.margin, "Best margin first", "Rank by profit for each copper the materials cost, so cheap crafts that pay well come first. Click again to rank by profit.")
 
     -- the list
     local card = CreateFrame("Frame", nil, opps)

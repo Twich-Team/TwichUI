@@ -38,7 +38,7 @@ local function Clone(v) return Reload(Ser(v)) end
 ---------------------------------------------------------------------------
 -- A client with the Workshop loaded: the current files, or the released 1.3 files; a fake auction house; a virtual clock
 ---------------------------------------------------------------------------
-local NOW = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Valuation.lua", "Session.lua" }
+local NOW = { "Data.lua", "Materials.lua", "Queue.lua", "Known.lua", "Observe.lua", "Storage.lua", "Stock.lua", "History.lua", "Dist.lua", "History2.lua", "Prices.lua", "Opportunities.lua", "Vendor.lua", "Shopping.lua", "Scan.lua", "Market.lua", "Valuation.lua", "Fees.lua", "Estimate.lua", "Session.lua" }
 local V13 = { "Data.lua", "Materials.lua", "Queue.lua", "History.lua", "Prices.lua", "Scan.lua", "Market.lua" }
 
 local function Setup(which, db)

@@ -450,7 +450,11 @@ local function Render()
 
     -- best opportunities (the best by estimated profit, over every known recipe, whatever the Opportunities page's filters)
     local of, s = {}, v.summary
-    local best = market and Op.Select(v.all, Op.DEFAULTS)[1] or nil
+    -- the best that isn't Low confidence: one listing on an emptied market can't headline (Opportunities.Best)
+    local best, lowBest
+    if market then
+        if Op.Best then best, lowBest = Op.Best(v.all) else best = Op.Select(v.all, Op.DEFAULTS)[1] end
+    end
     if s.total == 0 then
         SetStat(cards.opps, "\226\128\148", "no recipes read yet", nil)
         of[1] = { "Open one of your professions to add its recipes", "current", "bronzeText" }
@@ -464,6 +468,9 @@ local function Render()
         if best and best.est.state == "ok" and best.est.profitLow > 0 then
             of[1] = { "Top profit: " .. UI.Shorten(best.rec.name, 30), "done", "text" }
             of[2] = { ("%s each, %s"):format(UI.Money(best.est.profitLow), best.est.cutRate and "after the cut" or "before fees"), nil, "sage" }
+        elseif lowBest then
+            of[1] = { "Top profit, low confidence: " .. UI.Shorten(lowBest.rec.name, 22), "current", "bronzeText" }
+            of[2] = { ("%s each; check its listings first"):format(UI.Money(lowBest.est.profitLow)), nil, "bronzeText" }
         else
             of[1] = { "Nothing profitable at these prices", nil, "textDim" }
         end
