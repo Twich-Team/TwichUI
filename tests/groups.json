@@ -1,7 +1,7 @@
 {
   "class-portrait": {
-    "tests": ["test_class_portrait*.lua", "test_class_portrait*.py"],
-    "syntax": ["!!!TwichUI/classportrait/**/*.lua", "TwichUI_Settings/pages/ClassPortrait.lua"],
+    "tests": ["test_class_portrait*.lua", "test_class_portrait*.py", "test_twichui_share.lua"],
+    "syntax": ["!!!TwichUI/classportrait/**/*.lua", "!!!TwichUI/setup/TwichConfig.lua", "TwichUI_Settings/pages/ClassPortrait.lua"],
     "dependencies": ["settings"],
     "simulators": [{"script": "smoke"}, {"script": "settings", "args": ["classPortrait"]}]
   },
