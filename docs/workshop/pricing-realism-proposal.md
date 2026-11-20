@@ -503,7 +503,8 @@ kept).
 - Mutation-tested: 16 new catalog entries (cap edge and rounding, crafts and output multiplication, vendor tie and
   floor, deposit subtraction and per-craft count, single-item absorption, the stale rule, the covers rounding, the
   Ledger window, an unknown house given a rate, the deposit duration, the bait boundary and availability), all
-  killed. Two existing entries were re-pointed at the restructured `Market.Cost` loop.
+  killed. Two existing entries were re-pointed at the restructured `Market.Cost` loop. The whole `market` + `crafting`
+  campaign on the final sources: **454 of 454 killed**, none survived, invalid or timed out.
 - Development groups pass: workshop 91, ledger 23, auction-house 33, auction-preview 34, settings 29, core 15,
   workshop-settings 18 modules (offline, this container).
 - Simulator-tested (cloud profile, `SIMLAB_ASSETS=0`, wow-ui-sim v0.1.37, pinned Forever UI 1.60.1.70532): the full
