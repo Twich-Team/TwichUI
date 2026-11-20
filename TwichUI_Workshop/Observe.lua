@@ -172,6 +172,10 @@ function O.Read()
             end
         end
     end
+    -- a list in which NOTHING is learned is not a reading of the player's profession: after its window closes the game can still answer
+    -- with every recipe "not learned" (2026-11-20 real-client report: reopening the Workshop lost every craft). It changes nothing, and
+    -- its "not learned" answers remove nothing.
+    if #recipes == 0 then return nil, "empty" end
     table.sort(recipes, function(a, b)
         local x, y = a.name:lower(), b.name:lower()
         if x ~= y then return x < y end

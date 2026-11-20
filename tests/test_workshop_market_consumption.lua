@@ -73,6 +73,21 @@ for _,mode in ipairs({'overview','opps','craft','shop','advisor'}) do
  W.Window.Render()
  assert(W.Window.Mode()==mode)
 end
+-- no local scan yet: the footer says the Market server prices the Workshop, never just "No prices yet" (2026-11-20 report)
+local chip=W.Window.Frame().chip
+assert(chip.text:GetText()=='Market server prices',chip.text:GetText())
+-- a summary that can't be used is named on the empty page, so the player knows why a scan is asked for
+do
+ local saved=W.Session.AllRecipes;W.Session.AllRecipes=function()return {rec}end
+ c.UnitFactionGroup=function()return 'Alliance' end
+ local v=W.Session.Opportunities()
+ assert(v.state=='noscan' and v.empty:find("Market server prices aren't used: The Companion market is for another faction",1,true),v.empty)
+ W.Window.Render()
+ local tip=table.concat(chip.tipLines or {},'\n')
+ assert(chip.text:GetText()=='No prices yet' and tip:find('another faction',1,true),tip)
+ c.UnitFactionGroup=function()return 'Horde' end
+ W.Session.AllRecipes=saved
+end
 W.Window.Hide()
 W.Session.AllRecipes=originalRecipes
 -- Independent repeated addition checks the money model on 64 deterministic quantities.

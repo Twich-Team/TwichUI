@@ -1558,3 +1558,5 @@ m("market.cost.bait-still-available", VALUATION, "r.qty, r.available = n, d.t - 
 m("crafting.observe.unconfirmed-own", OBSERVE, "        if v ~= false then\n            return nil, \"not-own\"",
   "        if v == true then\n            return nil, \"not-own\"",
   "an ownership check that answers nothing (or is missing) is taken as the player's own profession", ["test_workshop.lua"])
+m("crafting.observe.unlearned-list-accepted", OBSERVE, "    if #recipes == 0 then return nil, \"empty\" end\n", "",
+  "a list with nothing learned (the game's answer after the profession window closed) erases the remembered crafts", ["test_workshop_memory.lua", "test_workshop.lua"])

@@ -294,8 +294,8 @@ do
   Check(O.Read(), "and it reads again")
   -- C_TradeSkillUI calls that fail are survived
   T.GetRecipeInfo = function() error("boom") end
-  local after = O.Read()
-  Check(after and #after.recipes == 0, "an erroring recipe call leaves no recipes, not an error")
+  local after, why = O.Read()
+  Check(after == nil and why == "empty", "an erroring recipe call is survived: no learned recipe, so no reading (nothing remembered is touched)")
 end
 
 ---------------------------------------------------------------------------

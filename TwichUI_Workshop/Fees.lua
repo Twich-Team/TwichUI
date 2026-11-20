@@ -67,13 +67,14 @@ end
 ---------------------------------------------------------------------------
 -- Which kind of auction house a market is
 ---------------------------------------------------------------------------
--- "faction" for an Alliance or Horde auction house, "neutral" for a neutral one, nil when the side is not known. What
--- UnitFactionGroup("npc") returns at a neutral auctioneer in Forever is NOT verified (WP0); "Neutral" is Blizzard's word elsewhere.
+-- "faction" for an Alliance or Horde auction house, "neutral" for a neutral one, nil when the side is not known. Companion's Market data
+-- names Forever's neutral house "Blackwater" (SummarySchema.lua: faction is Horde, Alliance or Blackwater). What UnitFactionGroup("npc")
+-- returns at a neutral auctioneer is NOT verified (WP0); "Neutral" is Blizzard's word elsewhere.
 function F.HouseKind(side)
     if type(side) ~= "string" then return nil end
     local s = side:lower()
     if s == "alliance" or s == "horde" then return "faction" end
-    if s == "neutral" then return "neutral" end
+    if s == "neutral" or s == "blackwater" then return "neutral" end
     return nil
 end
 

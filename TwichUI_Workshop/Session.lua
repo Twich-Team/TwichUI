@@ -719,6 +719,10 @@ function S.Opportunities()
     elseif out.state == "noscan" then
         out.empty = src.open and "No prices for this auction house yet. Choose Scan prices."
             or "No prices saved yet. Open the auction house and choose Scan prices."
+        -- the Market server summary would price these without a scan: when one is loaded but refused, say why (no Companion data: nothing
+        -- to explain)
+        local why = src.referenceWhy ~= "unavailable" and W.Pricing and W.Pricing.WhyText and W.Pricing.WhyText(src.referenceWhy)
+        if why then out.empty = out.empty .. " Market server prices aren't used: " .. why end
     else
         out.empty = EMPTY[out.state]
     end

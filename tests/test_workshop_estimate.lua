@@ -277,7 +277,7 @@ do
   Same(select(2, F.Cut("Alliance")), "off")
   Check(F.SetMode("assumed")) Same(c.TwichUIDB.workshop.view.cut, nil, "the default is stored as nothing")
   Same(F.SetMode("sometimes"), false)
-  Same(F.HouseKind("Alliance"), "faction") Same(F.HouseKind("horde"), "faction") Same(F.HouseKind("Neutral"), "neutral") Same(F.HouseKind("unknown"), nil) Same(F.HouseKind(nil), nil)
+  Same(F.HouseKind("Alliance"), "faction") Same(F.HouseKind("horde"), "faction") Same(F.HouseKind("Neutral"), "neutral") Same(F.HouseKind("Blackwater"), "neutral", "Companion's name for the neutral house") Same(F.HouseKind("unknown"), nil) Same(F.HouseKind(nil), nil)
   local cut = assert(F.Cut("Horde"))
   Same(cut.rate, 0.05) Same(cut.source, "assumed") Same(cut.label, "5%, assumed")
   Same(F.Cut("Neutral").rate, 0.15) Same(select(2, F.Cut(nil)), "house", "an unknown side is never given a rate")

@@ -39,6 +39,14 @@ local function eligible(now)
     if side~=h.market.faction then return nil,'market_mismatch' end
     return h,nil,at
 end
+-- Why the Market server summary isn't being used, in a sentence (P.Source's referenceWhy)
+P.WHY={
+    unavailable='No Market server summary is loaded (Companion).',
+    unsupported="The loaded Market summary's pricing format isn't supported by this TwichUI.",
+    stale='The Market summary is more than a day old.',
+    market_mismatch="The Companion market is for another faction than this auction house or character.",
+}
+function P.WhyText(why) return why and P.WHY[why] or nil end
 function P.Generation()
     local s=B.Status()
     return table.concat({s.generation or '',s.checked_parts or 0,s.failures or 0,tostring(s.ready)},':')

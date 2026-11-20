@@ -531,6 +531,20 @@ kept).
   The rule is unchanged (it is deliberate and tested). The empty page now says which applies: the last refusal with the check that refused
   and what it returned (e.g. "IsTradeSkillLinked gave nil"), or the load-on-demand explanation with the setting (`Session.NoRecipesText`).
 
+### Second real-client report (2026-11-20) and what changed
+
+- **"It loads my professions while the window and a profession are open, but closing and reopening the window loses every craft."** A real
+  bug, not caused by the pricing work: after the profession window closes the game can still answer with the recipe list, every recipe
+  "not learned". The reader took that as the player unlearning everything, so reopening the Workshop emptied the session's recipes (and,
+  in the offline reproduction, cut the saved profession down to one recipe). A read in which **nothing** is learned is now no reading at
+  all and changes nothing (`Observe.Read`); some recipes reported as not learned still remove those. Unit-tested
+  (`test_workshop_memory.lua`, which fails without the fix), mutation `crafting.observe.unlearned-list-accepted`.
+- **"Does it not use the market data as fallback? Why do I have to scan?"** It does: with a Companion Market summary loaded, observed within
+  a day and for the same faction (Companion calls the neutral house "Blackwater"), Opportunities, Shopping and the planner price from it
+  without a scan; a local scan adds listing depth and replaces it when newer. The footer said "No prices yet" because it described local
+  scans only; it now says **"Market server prices"** when the summary is in use, and when a loaded summary is refused, the footer's
+  tooltip and the empty page say why (`Pricing.WhyText`). `Fees.HouseKind` maps "Blackwater" to the neutral house's 15% cut.
+
 ### Real-client checks (none done)
 
 1. Sell 3 or more items at a faction auction house; Settings "Cut in your sales" should read the same rate, and

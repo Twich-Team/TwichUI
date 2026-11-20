@@ -192,6 +192,14 @@ s2.g.filtered = { 1, 2, 3 }
 s2.Fire("TRADE_SKILL_LIST_UPDATE"); s2.Flush()
 Same(#s2.Saved(171).r, 3, "listed as not learned: gone")
 rec[3].learned = nil
+-- a list where NOTHING is learned (the game's answer after the profession window closed, real-client report 2026-11-20) removes nothing,
+-- neither from what is saved nor from what the session holds
+local was = {}
+for i, r in pairs(rec) do was[i] = r.learned; r.learned = false end
+s2.Fire("TRADE_SKILL_LIST_UPDATE"); s2.Flush()
+Same(#s2.Saved(171).r, 3, "every recipe 'not learned' at once is not a reading: nothing is removed")
+Check(#s2.W.Session.AllRecipes() > 0, "and the session still knows the crafts")
+for i, r in pairs(rec) do r.learned = was[i] end
 
 -- The window being shown does its own reading: the watcher stays out of the way
 local reads = s2.W.Watch.reads

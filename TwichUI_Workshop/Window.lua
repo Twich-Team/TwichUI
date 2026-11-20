@@ -61,6 +61,17 @@ local EVENTS = {
 local TONES = { good = "sage", warn = "bronzeText", bad = "ember", quiet = "textDim" }
 local function PaintStatus()
     local st = MK.Status()
+    -- no local scan: say whether the Market server summary prices the Workshop instead (Pricing.Source), never just "No prices yet"
+    if st.state == "none" and W.Pricing and W.Pricing.Source then
+        local ok, ps = pcall(W.Pricing.Source)
+        if ok and ps and ps.reference then
+            st = { state = "reference", text = "Market server prices", icon = "done", tone = "good",
+                tip = { "No local scan of this auction house: Workshop prices from the Market server summary (Companion).",
+                    "Scan prices at the auction house for the current listings and how many are listed at each price." } }
+        elseif ok and ps and ps.referenceWhy and ps.referenceWhy ~= "unavailable" and W.Pricing.WhyText(ps.referenceWhy) then
+            st.tip[#st.tip + 1] = "Market server prices aren't used: " .. W.Pricing.WhyText(ps.referenceWhy)
+        end
+    end
     f.chip.tipLines = st.tip
     f.chip:Set(st.text, st.icon, K[TONES[st.tone] or "text"])
     f.chip.state = st.state
