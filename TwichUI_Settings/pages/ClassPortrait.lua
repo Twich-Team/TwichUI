@@ -36,10 +36,11 @@ K.Page({
             { "y", "Vertical Offset", "Nudge up or down from the portrait. Your adjustment follows the player frame." } }) do
             K.Slider(Setting(row[1], row[2]), C.LIMITS[row[1]][1], C.LIMITS[row[1]][2], row[3])
         end
-        K.Button("Reset to Automatic", "Reset", function() C.Reset() end,
+        K.Button("Reset to Automatic", "Reset", function() C.Reset(); K.RefreshOverview() end,
             "Restore Automatic Fit, 100% size and zero offsets. Keeps your enabled preference.")
         K.Button("Show Decoration Preview", "Preview", function()
             if D.PreviewActive() then D.PreviewStop() else D.PreviewStart() end
+            K.RefreshOverview()
         end, "Toggle a preview on your visible EllesmereUI player portrait, even while disabled. Ends when settings close or combat begins. A hidden portrait stays hidden.")
     end,
 })
