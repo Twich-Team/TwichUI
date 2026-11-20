@@ -93,11 +93,36 @@ imported rule need its recipient).
 
 ## Rule management (settings page)
 
-The page has four focused tasks: Your rules, Destinations, Guild arrangement and Protected items. Your rules uses one
+The page has four focused tasks: Your rules, Recipients (mail recipients, then guild bank tabs), Guild arrangement and Protected items. Your rules uses one
 compact illustrated row per rule, in priority order: name, enabled switch, matching items, destination, keep/target amount and
 configuration state. Edit opens the goal-based private builder; the context menu exposes Move up/down,
-Duplicate and Delete; the full tooltip still includes target stack size and validation details. Destinations separates
-recipient input, character scope and naming controls into readable rows. No recipient or rule schema changes.
+Duplicate and Delete; the full tooltip still includes target stack size and validation details. A mail rule's row shows
+**To Name**; with no recipient on this character it shows **Add recipient**, which opens the rule with the cursor in its
+recipient field. Recipients lists each mail recipient by name, its scope, its optional label and the rules using it, then
+guild bank tabs under their own heading. No recipient or rule schema changes.
+
+### The mail recipient in the rule builder
+
+Choosing **Mail to...** shows a **Recipient character** field directly under it, in the same card. The player types the
+name (Name, or Name-Realm for another realm) or picks a saved recipient; nothing is written while typing. The draft holds
+`{ text, allChars, updateShared }` beside the rule; `MI.PlanRecipient(rule, draft)` says what saving would do and
+`MI.SaveRuleDraft(rule, draft, expectId)` saves the rule, any new destination and the recipient together after checking
+everything (a failed write puts back the profile's lists and the account entry it touched). Cancel, Back, closing the
+window, a profile change, a refused name or a refused save leave saved data alone. A rule is never turned on unless the
+draft's "Enable when saved" is on.
+
+- **This character by default.** "Use on all my characters" writes the account-wide recipient (`shared`), explicitly.
+  A local change never clears an account-wide one; it overrides it on this character only, as before.
+- **No label is asked for.** A new destination's label is a template's own ("Bank alt") or "Mail recipient N", never the
+  recipient's name (labels are in the profile; recipients stay in `TwichUIDB.magicInventory`).
+- **Shared destinations.** A name another destination already sends to (here) is reused. If the rule's destination is
+  also used by other rules, saving a new name gives this rule a new destination; the others keep theirs. The builder names
+  those rules and offers "Change it for those rules too", the only way an edit changes them.
+- **Clearing.** An emptied field is refused, not saved as a cleared recipient. On Recipients, an empty box or **Clear
+  here** clears this character's own recipient only (`MI.ClearRecipient(id, "char")`); **Stop account-wide** clears the
+  account-wide one after a confirmation naming it. `MI.SetRecipient(id, nil)` still clears both, for existing callers.
+- The review ends with a plain sentence built from the rule ("Mail matching items (Herb) to Name. Keep 20 of each
+  matching item in your bags.") and says saving sends nothing: the mailbox review and Prepare/Send clicks are unchanged.
 
 A row is dragged
 by pressing on it away from its controls: a virtual drag (`MagicInventoryDrag.lua`, a row-sized ghost retains the grab offset, nothing
@@ -268,7 +293,7 @@ manual all-actions with protected items, native fonts and third-party bank ancho
 
 ## Settings (`TwichUI_Settings/pages/MagicInventory.lua`, Everyday > Magic Inventory)
 
-Feature switch, then four focused tasks: **Your rules**, **Destinations**, **Guild arrangement** and **Protected items**.
+Feature switch, then four focused tasks: **Your rules**, **Recipients**, **Guild arrangement** and **Protected items**.
 Each rule is a compact row with its name, matching items, behavior/destination/keep badges and enabled state.
 **Edit** opens the builder; the context menu provides Move up/down, Duplicate and confirmed Delete. Search and state
 filters keep absolute priorities; reordering requires an unfiltered list.
@@ -276,7 +301,8 @@ Drag ordering and the first-match/keep semantics are unchanged. **New rule from 
 Herbs to bank, Metal & Stone to bank, Uncommon BoE equipment to a friend and Custom items. Templates start off and
 name no recipient. **Preview** opens the existing review from your bags without moving anything.
 
-**Destinations** separates the current recipient/tab, entry and character scope from Rename, Clear here and Remove.
+**Recipients** (task key `destinations`) lists mail recipients first, then **Guild bank tabs**, each separating the current
+recipient/tab, entry and character scope from Rename, Clear here, Stop account-wide and Remove.
 **All my characters** is still opt-in; **Use the tab shown now** still requires an open guild bank. **Protected items**
 retains Never transfer, Choose from bags and Add by ID/link. Guild arrangement retains the Current/Design/Preview workflow.
 
@@ -626,8 +652,9 @@ in `DX.OPS` and `docs/diagnostics.md`. Gauges `inventory.frames` (review rows an
 ## In-game checklist (use low-value items and a character you own as the recipient)
 
 1. Fresh: Magic Inventory is off; opening a mailbox, bank or guild bank shows nothing new.
-2. Turn it on, add **Cloth to bank alt**: it saves turned off and says it needs a recipient; it can't be turned on. Set
-   the recipient (try `bad name` first: refused). On another character on the same profile: no recipient there.
+2. Turn it on, add **Cloth to bank alt**: with **Mail to...** selected the Recipient character field is shown; type
+   `bad name` first (refused, nothing saved), then the character's name, and Save: the row shows **To Name**. On another
+   character on the same profile: no recipient there, and the row offers **Add recipient**.
 3. Mailbox with 14 stacks of cloth: the button says 14 stacks (or what is above the keep amount); the review doesn't open
    by itself; nothing in chat. Open the review: exact recipient, 2 mails.
 4. Type a name in the game's Send Mail window: Prepare is refused, your text stays. Clear it.

@@ -156,6 +156,7 @@ local function Build()
     f.title = L.Text(head, "title")
     f.title:SetPoint("TOPLEFT", PAD, -14)
     f.title:SetText("Choose from your bags")
+    if R.CraftLook then R.CraftLook.Window(f, f.shell, { header = HEADER, title = f.title }) end   -- matching the crafted review window
     f.close = F.Close(f, function() Close(false) end)
     f.close:SetPoint("TOPRIGHT", -(CR + 2), -12)
     f.sub = L.Text(f, "small")

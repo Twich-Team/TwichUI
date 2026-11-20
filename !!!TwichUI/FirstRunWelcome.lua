@@ -99,6 +99,7 @@ local function Build()
     -- panel keeps no fade of its own: the root's alpha, which F.Show and F.Handoff drive, is the only one.
     local shell = R.FrameLook.Shell(panel, { below = true })
     panel.shell = shell
+    if R.CraftLook then R.CraftLook.Window(panel, shell) end   -- the crafted settings family (CraftLook.lua)
     -- the panel's textures are on a frame above the shell
     local art = CreateFrame("Frame", nil, panel)
     art:SetAllPoints(panel)

@@ -90,6 +90,9 @@ local function ClassFile() return select(2, UnitClass("player")) end
 local WEIGHTS_HELP = "A number for each stat, relative to the tree's main stat: per point, and for ratings per 1%. Changed numbers are marked in gold; clear a field, or press Reset, to go back to TwichUI's default."
 local PRIORITY_HELP = "Rank the stats your guide lists, most important first. Each counts %d%% as much as the one above it, and stats you leave out count nothing. Weapon damage and armor keep this tree's weights."
 local SOURCE = "Source: TwichUI defaults with your manual changes. Editing affects upgrade estimates, not your equipment."
+-- Shown first: the defaults need nothing, a priority is the usual change, numbers are the advanced one.
+local DEFAULTS_HELP = "Nothing to set up: TwichUI's own rough weights for this tree are used until you change something. To follow a guide, rank its stats under Stat priority. Advanced weights are for guides or simulators that give exact numbers."
+local LIMITS = "Hints are estimates from an item's stats, not a simulation: \"Use:\" and \"Chance on hit:\" effects aren't weighed."
 
 ---------------------------------------------------------------------------
 -- Stat priority: the list as data
@@ -688,21 +691,22 @@ local function LayoutEditor(tree, w)
     R.Icons.Apply(f.headIcon, "gearComparison", 32)
     Put(f.headIcon, f.editor, PAD, y)
     f.title:SetText(("%s %s"):format(tree.name, className))
-    f.title:SetWidth(inner - 32 - 12 - 232)
+    f.title:SetWidth(inner - 32 - 12 - 252)
     Put(f.title, f.editor, PAD + 42, y)
     local using = D.Character()
     using = using and using.basis and using.basis.skillLine
     f.subtitle:SetText(tree.skillLine == using and "The tree your gear is weighed for now" or "Not the tree your gear is weighed for now")
-    f.subtitle:SetWidth(inner - 32 - 12 - 232)
+    f.subtitle:SetWidth(inner - 32 - 12 - 252)
     Put(f.subtitle, f.editor, PAD + 42, y + 20)
     f.modePriority:SetOn(usesPriority)
     f.modeWeights:SetOn(not usesPriority)
-    Put(f.modeWeights, f.editor, w - PAD - 112, y + 4)
-    Put(f.modePriority, f.editor, w - PAD - 112 - 118, y + 4)
+    Put(f.modeWeights, f.editor, w - PAD - 132, y + 4)
+    Put(f.modePriority, f.editor, w - PAD - 132 - 118, y + 4)
     y = y + 46
 
     f.help:SetWidth(inner)
-    f.help:SetText((usesPriority and PRIORITY_HELP:format(math.floor(W.PRIORITY_STEP * 100 + 0.5)) or WEIGHTS_HELP) .. "\n" .. SOURCE)
+    local untouched = not usesPriority and next(P.CustomWeights(classFile, editTree) or {}) == nil
+    f.help:SetText((untouched and (DEFAULTS_HELP .. "\n") or "") .. (usesPriority and PRIORITY_HELP:format(math.floor(W.PRIORITY_STEP * 100 + 0.5)) or WEIGHTS_HELP) .. "\n" .. SOURCE .. " " .. LIMITS)
     Put(f.help, f.editor, PAD, y)
     y = y + (f.help:GetStringHeight() or 28) + 12
 
@@ -828,9 +832,9 @@ local function Build(p)
     f.title = G.Text(e, "heading"); f.title:SetWordWrap(false)
     f.subtitle = G.Text(e, "small"); f.subtitle:SetWordWrap(false)
     f.modePriority = R.FrameLook.Toggle(e, "Stat priority", 112, function() SetMode("priority") end)
-    f.modeWeights = R.FrameLook.Toggle(e, "Stat weights", 112, function() SetMode("weights") end)
-    Tip(f.modePriority, "Stat priority", "Rank the stats your guide lists, like \"Strength > Hit > Critical Strike\". The simplest way to follow a guide.")
-    Tip(f.modeWeights, "Stat weights", "Give each stat a number. More exact, if your guide or simulator gives stat weights.")
+    f.modeWeights = R.FrameLook.Toggle(e, "Advanced weights", 132, function() SetMode("weights") end)
+    Tip(f.modePriority, "Stat priority", "Rank the stats your guide lists, like \"Strength > Hit > Critical Strike\". The usual way to follow a guide.")
+    Tip(f.modeWeights, "Advanced weights", "Give each stat a number. Only needed if your guide or simulator gives exact stat weights; TwichUI's defaults are used for any you leave alone.")
     f.help = G.Text(e, "small"); f.help:SetWordWrap(true); f.help:SetJustifyV("TOP")
 
     -- stat priority

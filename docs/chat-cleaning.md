@@ -63,7 +63,10 @@ Not verified anywhere: Trade's zone channel ID on Forever (2 is used only to pre
 | `custom:<lowercased name>` | a custom channel (`zoneChannelID` 0): it has nothing else, so it is matched by name, ignoring case. A custom channel named "Trade" is not the Trade channel. |
 
 The Channels tab lists the channels the player is in (from `GetChannelInfoFromIdentifier(1..20)`) and the ones chosen
-before; a channel left keeps its choice. The filter itself tracks nothing: each message carries its own key.
+before; a channel left keeps its choice. The filter itself tracks nothing: each message carries its own key. Each row shows the
+channel's name, its Clean switch and a summary of its filters and custom rules; **Filters** opens that one channel's
+filter choices (one at a time, session only; an off channel's filters say why they wait). The page follows the window's
+width. **Restore recommended channels** asks first, naming exactly what it changes.
 
 ## Saved data
 

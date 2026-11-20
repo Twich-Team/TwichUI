@@ -159,6 +159,7 @@ local function MakeShell(parent, strip)
     s:Recess()
     if strip then s:Groove() end
     s:Fit(BAR_H)
+    if R.CraftLook then R.CraftLook.Window(parent, s) end   -- matching the crafted review window (CraftLook.lua)
     return s
 end
 

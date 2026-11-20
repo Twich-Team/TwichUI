@@ -277,6 +277,18 @@ Flush()
 Check(RS.Rules()[1].id == 17031 and RowFor(17031).up.enabled == false and RowFor(17020).down.enabled == false, "moved up; the ends can't go further")
 RowFor(17031).check:Fire("OnClick")
 Check(RS.Rule(17031).enabled == true, "on again")
+Flush()
+-- purchase priority: ordering is named for what it does, numbered, and explained where money runs short
+Check(f.columns.priority.text == "Purchase priority" and f.columns.target.text == "Keep in bags", "the columns lead with keeping, then purchase priority")
+Check(RowFor(17031).rank.text == "1" and RowFor(17020).rank.text == "2", "each row shows its purchase priority")
+Check(f.priorityHelp.text:find("money or your spending limit can't cover everything", 1, true), "and says what it decides")
+-- the page follows the window's width instead of a fixed 644
+local function X(frame) local p = frame.points[1]; return p and p[#p - 1] end
+f:SetWidth(900); P.Relayout(); P.Refresh()
+Check(RowFor(17020).w == 900 - 38 and f.well.w == 900, "a wider window gives the list its width")
+local wideTarget = X(RowFor(17020).target)
+f:SetWidth(644); P.Relayout(); P.Refresh()
+Check(RowFor(17020).w == 644 - 38 and X(RowFor(17020).target) < wideTarget, "and a narrower one gives it back, controls moving with it")
 
 -- dropping: anything but an item is refused and left on the cursor; an item goes back to the bag
 c.CURSOR = { "spell", 133 }

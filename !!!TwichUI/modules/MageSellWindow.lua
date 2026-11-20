@@ -356,6 +356,7 @@ local function Build()
     f.title:SetPoint("LEFT", f, "TOPLEFT", PAD, -(HEADER / 2 + 4))
     f.title:SetTextColor(Color(S.color.text))
     f.title:SetText("Ordinary food and drink")
+    if R.CraftLook then R.CraftLook.Window(f, f.shell, { header = HEADER, title = f.title }) end   -- the crafted settings family (CraftLook.lua)
     f.close = F.Close(f, function() f:Hide() end)
     f.close:SetPoint("TOPRIGHT", -(CR + 2), -12)
 

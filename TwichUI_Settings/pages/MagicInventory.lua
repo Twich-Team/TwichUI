@@ -33,6 +33,11 @@ local itemAdvanced, destAdvanced, limitsAdvanced = false, false, false
 local turnOn = false          -- the editor's "Turn this rule on" choice
 local said, saidTone          -- a sentence under the list or the editor: what just happened, or why it didn't
 local newDestName = {}        -- [kind] = text typed for a new destination
+-- The mail recipient typed with the rule draft (MagicInventory.PlanRecipient): { text, allChars, updateShared }. Part of the
+-- draft: nothing is written until Save, so Cancel, Back, Escape, a profile change or leaving the page leave saved data alone.
+local recipientDraft = {}
+local editingFrom              -- the saved rule id the draft was made from (nil: a new rule), checked again on Save
+local focusRecipient = false   -- put the cursor in the recipient field once (the rule row's "Add recipient")
 
 local function MI() return R.MagicInventory end
 local function Wg() return R.SettingsWidgets end
@@ -193,7 +198,7 @@ function P.DestText(rule)
     local kind = P.KindLabel(rule)
     if not mi.NEEDS_DEST[rule.kind] then return kind end
     local d = rule.dest and mi.Dest(rule.dest)
-    if not d then return kind .. " \226\134\146 (choose one)", "warn" end
+    if not d then return kind .. (rule.kind == "mail" and " \226\134\146 (type the recipient character)" or " \226\134\146 (choose one)"), "warn" end
     local where = mi.Resolve(d.id)
     if not where then
         return ("%s \226\134\146 %s (choose %s on this character)"):format(kind, d.label, rule.kind == "mail" and "the recipient" or "the tab"), "warn"
@@ -232,6 +237,26 @@ function P.Sentence(rule)
         .. (rule.bind == "boe" and rule.kind == "mail" and " Whether an item can be disenchanted isn't checked." or "")
 end
 
+-- A mail rule's review in plain words, from the rule's own selections and the recipient it will use (nil: not chosen yet).
+function P.PlainReview(rule, recipient)
+    if rule.kind ~= "mail" then return P.Sentence(rule) end
+    local text = ("Mail matching items (%s) to %s."):format(P.ItemsText(rule), recipient or "the recipient you type")
+    if (rule.keep or 0) > 0 then
+        text = text .. (" Keep %d of each matching item in your bags. Only whole stacks are sent, so a few more may stay."):format(rule.keep)
+    else
+        text = text .. " Nothing is kept back: every matching stack can be sent."
+    end
+    return text
+end
+
+-- The recipient the rule draft will use, and what saving would do (MagicInventory.PlanRecipient). nil, why when the
+-- typed name can't be used.
+function P.DraftRecipient()
+    if not (editing and editing.kind == "mail") then return nil end
+    return MI().PlanRecipient(editing, recipientDraft)
+end
+function P.RecipientDraft() return recipientDraft end
+
 ---------------------------------------------------------------------------
 -- The list
 ---------------------------------------------------------------------------
@@ -251,21 +276,26 @@ local function StartEdit(rule)
     filterTab, filterQuery = "filters", ""
     itemAdvanced, destAdvanced, limitsAdvanced = false, false, false
     turnOn = rule.enabled == true
+    recipientDraft = {}
+    editingFrom = rule.id
     said = nil
     P.QueueRefresh()
     QueueRelayout()
+end
+
+local function EndEdit()
+    editing, said, recipientDraft, editingFrom, focusRecipient = nil, nil, {}, nil, false
 end
 
 local function NewFromTemplate(key)
     local mi = MI()
     local rule, destLabel = mi.FromTemplate(key)
     if not rule then return end
-    if destLabel then
-        local id, why = mi.DestNamed(rule.kind, destLabel)
-        if not id then Say(why, "warn") return end
-        rule.dest = id
-    end
+    -- a template's suggested place ("Bank alt") is used only when it is already there; nothing is made before Save
+    if destLabel then rule.dest = mi.FindDestNamed(rule.kind, destLabel) end
     StartEdit(rule)
+    -- a recipient typed for it is saved under the template's own label (never the recipient's name)
+    recipientDraft.label = destLabel
 end
 
 local function ItemStrip(prefix, set, x, y, hint, onRemove)
@@ -331,25 +361,43 @@ end
 
 local function DrawDests(y)
     local mi = MI()
+    local dests = mi.Dests()
+    local hasMail, hasGuild = false, false
+    for _, d in ipairs(dests) do if d.kind == "mail" then hasMail = true else hasGuild = true end end
     local t = Text("destHead", "heading")
     Wide(t, PAD, y)
-    t:SetText("Destinations on this character")
+    t:SetText("Mail recipients")
     Tone(t, "head")
     y = y + 18
     local d = Text("destText", "small")
     Wide(d, PAD, y)
-    d:SetText("A rule sends to a named place. Who or which tab that is, is chosen here for this character only, so another character never mails to your choice unless you tick \"All my characters\". TwichUI checks a name's form, not whether the character exists or who plays it.")
+    d:SetText("The characters your mail rules send to. You can also type one directly in a rule, beside \"Mail to...\". A recipient belongs to this character unless you tick \"All my characters\". TwichUI checks a name's form, not whether the character exists or who plays it. Recipients stay out of configuration shares and backups.")
     Tone(d, "dim")
     y = y + H(d) + 8
-    local dests = mi.Dests()
-    if #dests == 0 then
+    if not hasMail then
         local none = Text("destNone", "small")
         Wide(none, PAD, y)
-        none:SetText("None yet: a mail or guild bank rule makes one.")
+        none:SetText("None yet: choose \"Mail to...\" in a rule and type the recipient there.")
         Tone(none, "quiet")
         y = y + 20
     end
-    for i, dest in ipairs(dests) do
+    local guildHeaderDrawn = false
+    -- mail recipients first, then guild bank tabs; each keeps its place in the list for its controls' names
+    local order = {}
+    for i, dd in ipairs(dests) do if dd.kind == "mail" then order[#order + 1] = i end end
+    for i, dd in ipairs(dests) do if dd.kind ~= "mail" then order[#order + 1] = i end end
+    for _, i in ipairs(order) do
+        local dest = dests[i]
+        if dest.kind == "guild" and not guildHeaderDrawn then
+            guildHeaderDrawn = true
+            y = y + 10
+            local gh = Text("destGuildHead", "heading"); Wide(gh, PAD, y); gh:SetText("Guild bank tabs"); Tone(gh, "head")
+            y = y + 18
+            local gt = Text("destGuildText", "small"); Wide(gt, PAD, y)
+            gt:SetText("Which guild bank tab each guild bank rule deposits in, on this character. Only needed for guild bank rules.")
+            Tone(gt, "dim")
+            y = y + H(gt) + 8
+        end
         local key = "dest" .. i
         local name = Text(key .. "name", "body")
         Wide(name, PAD, y + 4, W - PAD * 2 - 20)
@@ -358,8 +406,16 @@ local function DrawDests(y)
         local value = Text(key .. "value", "small")
         Wide(value, PAD, y + 27, W - PAD * 2 - 20)
         if dest.kind == "mail" then
-            value:SetText(where and ("Mail to: |cffffffff" .. where.recipient .. "|r" .. (where.shared and " (all your characters)" or "")) or "No recipient on this character")
-            Tone(value, where and "dim" or "warn")
+            local users = mi.RulesUsing(dest.id)
+            local names = {}
+            for n, u in ipairs(users) do if n <= 3 then names[#names + 1] = u.name end end
+            if #users > 3 then names[#names + 1] = ("%d more"):format(#users - 3) end
+            name:SetText(where and where.recipient or ("No recipient on this character (\"%s\")"):format(dest.label))
+            Tone(name, where and nil or "warn")
+            value:SetText((where and (where.shared and "All your characters (account-wide)" or "This character only") or "Type a name below, or edit a rule that uses it")
+                .. ((where and dest.label:lower() ~= where.recipient:lower()) and (" \194\183 label \"" .. dest.label .. "\"") or "")
+                .. " \194\183 " .. (#users > 0 and ("Used by: " .. table.concat(names, ", ")) or "Not used by a rule"))
+            Tone(value, "dim")
             y = y + 54
             local box = Edit(key .. "box", 140)
             At(box, PAD, y + 1)
@@ -375,11 +431,16 @@ local function DrawDests(y)
             local function Set()
                 local text = pool[key .. "box"]:GetText() or ""
                 local ok, why
-                if text:match("^%s*$") then ok, why = mi.SetRecipient(dest.id, nil)
+                if text:match("^%s*$") then
+                    -- an empty box clears only this character's own recipient: an account-wide one is never cleared from here
+                    mi.ClearRecipient(dest.id, "char")
+                    ok, why = true, nil
                 else ok, why = mi.SetRecipient(dest.id, text, pool[key .. "all"].want) end
                 pool[key .. "box"]:ClearFocus()
                 if ok then
-                    Say(why and ("\"%s\" now mails to %s%s."):format(dest.label, why, pool[key .. "all"].want and " on all your characters" or " on this character") or ("\"%s\" has no recipient now."):format(dest.label))
+                    local after = mi.Resolve(dest.id)
+                    Say(why and ("\"%s\" now mails to %s%s."):format(dest.label, why, pool[key .. "all"].want and " on all your characters" or " on this character")
+                        or (after and ("\"%s\" uses the account-wide recipient %s on this character again."):format(dest.label, after.recipient) or ("\"%s\" has no recipient on this character now."):format(dest.label)))
                 else Say(why, "warn") end
                 pool[key .. "all"].want = nil
             end
@@ -387,7 +448,7 @@ local function DrawDests(y)
             y = y + 28
             Button(key .. "set", "Save recipient", 120, "secondary", Set)
             At(pool[key .. "set"], PAD + 370, y - 28)
-            R.Interact.Tip(pool[key .. "set"], "Save recipient", "Saves exactly this name for this destination. An empty box clears it. Mail always shows the recipient before anything is sent.")
+            R.Interact.Tip(pool[key .. "set"], "Save recipient", "Saves exactly this name for every rule that uses this recipient (listed above). An empty box clears this character's own recipient only. Mail always shows the recipient before anything is sent.")
         else
             y = y + 28
             -- the tab's own icon beside its name (a texture, so it shows wherever a texture does)
@@ -424,11 +485,27 @@ local function DrawDests(y)
         At(rb, PAD, y + 1)
         if not rb:HasFocus() then rb:SetText(dest.label) end
         At(pool[key .. "rename"], PAD + 146, y)
-        Button(key .. "clear", "Clear here", 90, "secondary", where and function()
-            if dest.kind == "mail" then mi.SetRecipient(dest.id, nil) else mi.SetGuildTab(dest.id, nil) end
-            Say(("\"%s\" has nothing chosen on this character now."):format(dest.label))
+        local source, hasShared
+        if dest.kind == "mail" then source, hasShared = mi.RecipientSource(dest.id) end
+        Button(key .. "clear", "Clear here", 90, "secondary", (dest.kind == "mail" and source == "char" or dest.kind ~= "mail" and where) and function()
+            if dest.kind == "mail" then mi.ClearRecipient(dest.id, "char") else mi.SetGuildTab(dest.id, nil) end
+            local after = dest.kind == "mail" and mi.Resolve(dest.id)
+            Say(after and ("\"%s\" uses the account-wide recipient %s on this character again."):format(dest.label, after.recipient)
+                or ("\"%s\" has nothing chosen on this character now."):format(dest.label))
         end or nil)
         At(pool[key .. "clear"], PAD + 232, y)
+        R.Interact.Tip(pool[key .. "clear"], "Clear here", dest.kind == "mail" and "Clears this character's own recipient only. An account-wide recipient is kept, and used here again." or "Clears the tab chosen on this character.")
+        if dest.kind == "mail" and hasShared then
+            Button(key .. "unshare", "Stop account-wide", 150, "secondary", function()
+                local sharedName
+                local acct = TwichUIDB and TwichUIDB.magicInventory
+                local sh = acct and type(acct.shared) == "table" and acct.shared[dest.id]
+                sharedName = type(sh) == "table" and sh.recipient or "the account-wide recipient"
+                R.Interact.Confirm("TWICHUI_MI_UNSHARE", ("Stop mailing %s from all your characters for \"%s\"?\n\nCharacters with their own recipient for it keep theirs. Characters without one will need a recipient before its rules send anything. Rules stay as they are."):format(sharedName, dest.label),
+                    function() mi.ClearRecipient(dest.id, "shared") end, { accept = "Stop" })
+            end)
+            At(pool[key .. "unshare"], PAD + 330, y)
+        end
         if dest.kind == "guild" then
             -- a tab of this character's guild, from what the guild bank showed (now, or when it was last open)
             local dd = Get(key .. "tabs", function() return Wg().Dropdown(f, 200, function(v) pool[key .. "tabs"].onPick(v) end) end)
@@ -486,8 +563,8 @@ function P.RowCells(rule)
     if mi.NEEDS_DEST[rule.kind] then
         local d = rule.dest and mi.Dest(rule.dest)
         local where = d and mi.Resolve(d.id)
-        if not d then to, tone = "Choose one", "warn"
-        elseif not where then to, tone = d.label, "warn"
+        if not d then to, tone = rule.kind == "mail" and "Needs recipient" or "Choose one", "warn"
+        elseif not where then to, tone = rule.kind == "mail" and "Needs recipient" or d.label, "warn"
         elseif rule.kind == "mail" then to = where.recipient
         else to = ("Tab %d"):format(where.tab) end
     end
@@ -754,8 +831,11 @@ local function DrawTable(y, rules)
         local title = Label("name", rule.name, 85, 2, width >= 850 and chipX - 100 or width - 270, "body")
         if R.SettingsMaterial then R.SettingsMaterial.ReminderFont(title, 15, rule.enabled, "serif") end
         title:SetWordWrap(true); title:SetHeight(32)
-        Label("items", P.ItemsText(rule) .. (MI().Problem(rule, false) and " · Needs attention" or ""), 85, 36, width >= 850 and chipX - 100 or width - 270)
-        local action, to, keep = P.RowCells(rule)
+        local problem = MI().Problem(rule, false)
+        local itemsLine = Label("items", P.ItemsText(rule) .. ((problem == "no-recipient" or (problem == "no-destination" and rule.kind == "mail")) and " · No recipient on this character" or (problem and " · Needs attention" or "")), 85, 36, width >= 850 and chipX - 100 or width - 270)
+        local action, to, keep, cellTone = P.RowCells(rule)
+        local mailMissing = rule.kind == "mail" and (problem == "no-recipient" or problem == "no-destination")
+        if mailMissing then Tone(itemsLine, "warn") end
         local chipY = width >= 850 and 21 or 49
         local function Badge(suffix, text, x, w)
             if text == "" then return end
@@ -779,14 +859,29 @@ local function DrawTable(y, rules)
                 icon:SetTexture(R.PATH .. [[media\guides\status-current-small]])
                 icon:SetRotation(rule.flow == "withdraw" and math.pi / 2 or -math.pi / 2)
             end
+            if suffix == "to" and rule.kind == "mail" then
+                if R.SettingsMaterial then R.SettingsMaterial.ReminderFont(label, width >= 850 and 14 or 13, true) end
+                if cellTone == "warn" then Tone(label, "warn") else label:SetTextColor(.96, .91, .80) end
+            end
             if suffix == "action" and rule.enabled then
                 if rule.flow == "balance" or rule.flow == "withdraw" then label:SetTextColor(.72, .83, .86)
                 elseif MI().Deposits(rule) then label:SetTextColor(.80, .84, .62) end
             end
         end
         Badge("action", rule.kind == "keep" and "Keep in bags" or rule.kind == "never" and "Never transfer" or action, chipX, (rule.kind == "keep" or rule.kind == "never") and 146 or 90)
-        Badge("to", to ~= "-" and to or "", chipX + 96, 100)
-        Badge("keep", rule.kind ~= "never" and keep ~= "-" and ("Keep " .. keep) or "", chipX + 202, 100)
+        if mailMissing then
+            -- the fix, from the rule itself: open it with the cursor in the recipient field
+            local fix = Button(key .. "fix", "Add recipient", 124, "secondary", function()
+                local saved = mi.Rule(rule.id)
+                if saved then focusRecipient = true; StartEdit(saved) end
+            end)
+            fix:SetParent(row); fix:ClearAllPoints(); fix:SetPoint("TOPLEFT", row, "TOPLEFT", chipX + 96, -(chipY - (width >= 850 and 2 or 6))); fix:SetHeight(width >= 850 and 30 or 26)
+            fix:SetFrameLevel(row:GetFrameLevel() + 2)
+            R.Interact.Tip(fix, "Add recipient", "This rule has no recipient on this character. Opens the rule with the Recipient character field ready.")
+        else
+            Badge("to", to ~= "-" and (rule.kind == "mail" and ("To " .. to) or to) or "", chipX + 96, rule.kind == "mail" and 124 or 100)
+        end
+        Badge("keep", rule.kind ~= "never" and keep ~= "-" and ("Keep " .. keep) or "", chipX + 226, 100)
         local box = Check(key .. "on", function(v)
             local ok, why = mi.SetRuleEnabled(rule.id, v); if not ok then Say(why, "warn") end
         end, true)
@@ -1180,7 +1275,14 @@ local function DrawDestStep(y)
             y = y + math.max(24, H(a) + 8)
         end
     end
-    if mi.NEEDS_DEST[r.kind] then
+    if r.kind == "mail" then
+        y = y + 6
+        local mt = Text("e2mailNote", "small")
+        Wide(mt, PAD, y)
+        mt:SetText("The recipient is typed beside \"Mail to...\" above. Saved recipients and the account-wide choice are there too; Recipients lists them all.")
+        Tone(mt, "dim")
+        y = y + H(mt) + 8
+    elseif mi.NEEDS_DEST[r.kind] then
         y = y + 6
         t = Text("e2dest", "heading")
         Wide(t, PAD, y)
@@ -1363,6 +1465,138 @@ function P.DrawStackSize(y)
     return y + H(note) + 8
 end
 
+-- The recipient, beside the "Mail to..." choice: typed directly, or one already saved; this character by default,
+-- account-wide only when ticked; a destination shared with other rules is changed for them only when ticked, after
+-- they are named. Returns the y below it.
+local function DrawRecipient(x, y, w)
+    local mi, r = MI(), editing
+    local cur = r.dest and mi.Dest(r.dest)
+    if cur and cur.kind ~= "mail" then cur = nil end
+    local where = cur and mi.Resolve(cur.id)
+    local plan, why = mi.PlanRecipient(r, recipientDraft)
+    local head = Text("recipientLabel", "body"); Wide(head, x, y, w); head:SetText("Recipient character"); Tone(head, "head")
+    y = y + 20
+    local box = Edit("recipientBox", w)
+    box:SetMaxLetters(64); box:SetWidth(w); At(box, x, y)
+    local shown = recipientDraft.text or (where and where.recipient) or ""
+    if not box:HasFocus() and (box:GetText() or "") ~= shown then box:SetText(shown) end
+    box:SetScript("OnTextChanged", function(self)
+        if not editing then return end
+        local text = self:GetText() or ""
+        local base = recipientDraft.text
+        if base == nil then
+            local p0 = MI().PlanRecipient(editing, {})
+            base = p0 and p0.recipient or ""
+        end
+        if text ~= base then recipientDraft.text = text; P.QueueRefresh() end
+    end)
+    box:SetScript("OnEnterPressed", function(self) self:ClearFocus(); P.QueueRefresh() end)
+    box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    R.Interact.Tip(box, "Recipient character", "The character this rule mails to. Type their name, or Name-Realm for a character on another realm. Saving the rule saves it; nothing is sent until you review the mail at a mailbox.")
+    local hint = Text("recipientHint", "small"); hint:SetParent(box); hint:ClearAllPoints(); hint:SetPoint("LEFT", box, "LEFT", 6, 0)
+    hint:SetText("Name, or Name-Realm"); Tone(hint, "quiet"); hint:SetShown(shown == "")
+    if not box.recipientHintHook then
+        box.recipientHintHook = true
+        box:HookScript("OnTextChanged", function(self) if pool.recipientHint then pool.recipientHint:SetShown((self:GetText() or "") == "" and editing ~= nil) end end)
+    end
+    if focusRecipient then focusRecipient = false; if box.SetFocus then box:SetFocus() end end
+    y = y + 28
+    -- what it will be, in words
+    local status = Text("recipientStatus", "small"); Wide(status, x, y, w)
+    local changed = recipientDraft.text ~= nil and plan and plan.recipient and not (where and where.recipient == plan.recipient and not plan.write)
+    local scope = plan and plan.shared and "on all your characters (account-wide)" or "on this character only"
+    if not plan then
+        status:SetText(why or "That name can't be used."); Tone(status, "warn")
+    elseif plan.recipient and not changed then
+        status:SetText(("Sends to %s, %s."):format(plan.recipient, scope)); Tone(status, nil)
+    elseif plan.recipient then
+        local what = plan.reuse and ("Uses your saved recipient %s"):format(plan.recipient)
+            or (plan.create and ("Saves %s as this rule's recipient"):format(plan.recipient))
+            or (#plan.others > 0 and recipientDraft.updateShared and ("Changes the recipient to %s for this rule and %d other %s"):format(plan.recipient, #plan.others, #plan.others == 1 and "rule" or "rules"))
+            or ("Changes this rule's recipient to %s"):format(plan.recipient)
+        local extra = ""
+        if plan.write == "char" and plan.dest and mi.RecipientSource(plan.dest) == "shared" then
+            extra = " Your other characters keep the account-wide recipient."
+        end
+        status:SetText(("%s, %s, when you save.%s"):format(what, scope, extra)); Tone(status, nil)
+    elseif cur then
+        status:SetText(("No recipient on this character yet for \"%s\": type the character's name."):format(cur.label)); Tone(status, "warn")
+    else
+        status:SetText("Type the character's name. Use Name-Realm for a character on another realm."); Tone(status, "dim")
+    end
+    y = y + H(status) + 4
+    local honest = Text("recipientHonest", "small"); Wide(honest, x, y, w)
+    honest:SetText("Only the name's form is checked: TwichUI can't tell whether the character exists or who plays it."); Tone(honest, "quiet")
+    y = y + H(honest) + 8
+    -- a recipient already saved, without visiting another tab
+    local saved = {}
+    for _, d in ipairs(mi.Dests()) do if d.kind == "mail" then saved[#saved + 1] = d end end
+    if #saved > 0 then
+        local dd = Get("recipientSaved", function() return Wg().Dropdown(f, w, function(v) pool.recipientSaved.onPick(v) end) end)
+        dd:SetWidth(w)
+        dd.onPick = function(id)
+            if not editing then return end
+            editing.dest = id
+            recipientDraft = {}
+            if pool.recipientBox then pool.recipientBox:ClearFocus() end
+            P.QueueRefresh()
+        end
+        dd:SetChoices(function()
+            local out = {}
+            for _, d in ipairs(MI().Dests()) do
+                if d.kind == "mail" then
+                    local wd = MI().Resolve(d.id)
+                    local used = #MI().RulesUsing(d.id, editing and editing.id)
+                    local label = wd and (wd.recipient .. (d.label:lower() ~= wd.recipient:lower() and (" (" .. d.label .. ")") or "") .. (wd.shared and " \194\183 all characters" or ""))
+                        or (d.label .. " \194\183 no recipient on this character")
+                    out[#out + 1] = { value = d.id, label = label,
+                        tooltip = used > 0 and ("Also used by %d other %s."):format(used, used == 1 and "rule" or "rules") or "Not used by another rule." }
+                end
+            end
+            return out
+        end)
+        local sel = plan and plan.dest and recipientDraft.text == nil and mi.Dest(plan.dest)
+        dd:SetValue(sel and sel.id or nil, "Or choose a saved recipient...")
+        At(dd, x, y)
+        y = y + 30
+    end
+    -- account-wide, an explicit secondary choice
+    local allOn = recipientDraft.allChars
+    if allOn == nil then allOn = recipientDraft.text == nil and where ~= nil and where.shared == true end
+    local all = Check("recipientAll", function(v)
+        if not editing then return end
+        if recipientDraft.text == nil then
+            local p0 = MI().PlanRecipient(editing, {})
+            recipientDraft.text = p0 and p0.recipient or ""
+        end
+        recipientDraft.allChars = v and true or false
+        P.QueueRefresh()
+    end)
+    all:SetChecked(allOn == true); At(all, x, y + 2)
+    local allText = Text("recipientAllText", "small"); allText:ClearAllPoints(); allText:SetPoint("TOPLEFT", f, "TOPLEFT", x + 44, -(y + 2)); allText:SetWidth(w - 44)
+    allText:SetText("Use on all my characters (account-wide): characters without their own recipient for this rule mail here too.")
+    Tone(allText, "dim")
+    y = y + math.max(26, H(allText) + 6)
+    -- the destination is shared with other rules: name them, and change them only when asked
+    local others = plan and plan.others or (cur and mi.RulesUsing(cur.id, r.id)) or {}
+    if cur and #others > 0 and recipientDraft.text ~= nil and not (where and plan and plan.recipient == where.recipient and not plan.write) then
+        local names = {}
+        for i, o in ipairs(others) do if i <= 3 then names[#names + 1] = "\"" .. o.name .. "\"" end end
+        if #others > 3 then names[#names + 1] = ("%d more"):format(#others - 3) end
+        local note = Text("recipientShared", "small"); Wide(note, x, y, w)
+        note:SetText(("%s also %s %s. Saving changes only this rule unless you tick below."):format(table.concat(names, ", "),
+            #others == 1 and "sends to" or "send to", where and where.recipient or ("\"" .. cur.label .. "\"")))
+        Tone(note, "warn")
+        y = y + H(note) + 4
+        local upd = Check("recipientUpdateShared", function(v) if editing then recipientDraft.updateShared = v and true or false; P.QueueRefresh() end end)
+        upd:SetChecked(recipientDraft.updateShared == true); At(upd, x, y + 2)
+        local updText = Text("recipientUpdateText", "small"); updText:ClearAllPoints(); updText:SetPoint("TOPLEFT", f, "TOPLEFT", x + 44, -(y + 2)); updText:SetWidth(w - 44)
+        updText:SetText(("Change it for those %d %s too"):format(#others, #others == 1 and "rule" or "rules")); Tone(updText, "dim")
+        y = y + math.max(26, H(updText) + 6)
+    end
+    return y
+end
+
 local function DrawEditor(y)
     local r = editing
     local head = Text("eHead", "heading")
@@ -1371,7 +1605,7 @@ local function DrawEditor(y)
     Wide(head, PAD + 94, y, W - 110)
     Button("builderBack", "< Back", 84, "secondary", function()
         R.Interact.Confirm("TWICHUI_MI_DISCARD_DRAFT", "Discard this unsaved rule draft? Your saved rules are unchanged.", function()
-            editing = nil; said = nil; P.QueueRefresh(); QueueRelayout()
+            EndEdit(); P.QueueRefresh(); QueueRelayout()
         end, { accept = "Discard" })
     end)
     At(pool.builderBack, PAD, y - 3)
@@ -1404,8 +1638,13 @@ local function DrawEditor(y)
     local oneItem = firstItem and not next(r.include, firstItem) and not HasItemFilters(r) and MI().ItemFacts(firstItem)
     live:SetText((r.kind == "keep" or MI().Withdraws(r)) and ("Carry up to " .. (r.keep or 0) .. (oneItem and #oneItem.name <= 32 and (" " .. oneItem.name) or " of each matching item")) or P.KindLabel(r)); live:SetHeight(22); live:SetMaxLines(1); live:SetWordWrap(false)
     local detail = Text("summaryDetail", "small"); detail:SetParent(banner); detail:ClearAllPoints(); detail:SetPoint("TOPLEFT", banner, "TOPLEFT", 60, -34); detail:SetWidth(bannerW - 74); detail:SetHeight(25)
-    detail:SetText(P.ItemsText(r) .. " · " .. P.DestText(r):gsub(" \226\134\146 ", ": "))
-    R.Interact.Tip(banner, "Rule summary", P.Sentence(r))
+    local draftPlan = r.kind == "mail" and MI().PlanRecipient(r, recipientDraft) or nil
+    if r.kind == "mail" then
+        detail:SetText(P.ItemsText(r) .. " · " .. (draftPlan and draftPlan.recipient and ("Mail to " .. draftPlan.recipient) or "Mail: recipient not chosen yet"))
+    else
+        detail:SetText(P.ItemsText(r) .. " · " .. P.DestText(r):gsub(" \226\134\146 ", ": "))
+    end
+    R.Interact.Tip(banner, "Rule summary", r.kind == "mail" and P.PlainReview(r, draftPlan and draftPlan.recipient) or P.Sentence(r))
     local cols = wide and 3 or 2
     local col = math.floor((full - (cols - 1) * 12) / cols)
     y = y + (wide and 68 or 106)
@@ -1527,25 +1766,42 @@ local function DrawEditor(y)
     end
     local dy = Panel("destinationPanel", "Where should they go?", mid, top, col, 320)
     -- Presentation order follows the player's destination choices; the stored kind and engine order are unchanged.
-    for i, kind in ipairs({ "bank", "guild", "mail", "keep", "never" }) do
+    -- The mail recipient sits directly under "Mail to...", inside the same card, so it is never a separate step.
+    local cy = dy
+    for _, kind in ipairs({ "bank", "guild", "mail", "keep", "never" }) do
         local b = Get("destinationChoice" .. kind, function() return Wg().Tab(f, "", col - 24, function() end) end)
-        local labels = { bank = "My bank", guild = "Guild bank", mail = "Mail to recipient..." }
+        local labels = { bank = "My bank", guild = "Guild bank", mail = "Mail to..." }
         b.text:SetText(labels[kind] or MI().KIND_LABEL[kind]); b:SetSelected(r.kind == kind)
         b:SetScript("OnClick", function()
             r.kind = kind
             if MI().HAS_FLOW[kind] then r.flow = r.flow or "deposit" end
             if not MI().NEEDS_DEST[kind] then r.dest = nil
             elseif r.dest then local d = MI().Dest(r.dest); if not d or d.kind ~= kind then r.dest = nil end end
+            if kind == "mail" and not r.dest then focusRecipient = true end
             P.QueueRefresh()
         end)
-        b:SetHeight(36); At(b, mid + 12, dy + (i - 1) * 40)
+        b:SetHeight(36); At(b, mid + 12, cy)
         local icons = { bank = "coins", guild = "tabard", mail = "sealed-scroll", keep = "leather-backpack", never = "sword-and-shield" }
         b.twichSelected = r.kind == kind
         Illustrate("destinationArt" .. kind, b, kind == "bank" and R.PATH .. [[media\icons\magicBank-small]] or R.PATH .. "media\\npcs\\" .. icons[kind] .. "-small")
+        cy = cy + 40
+        if kind == "mail" and r.kind == "mail" then
+            local frameTop = cy
+            cy = DrawRecipient(mid + 24, cy + 6, col - 48) + 2
+            local well = Get("recipientWell", function()
+                local frame = CreateFrame("Frame", nil, f)
+                if R.SettingsMaterial then R.SettingsMaterial.PanelFace(frame, "canvas") end
+                return frame
+            end)
+            At(well, mid + 14, frameTop - 2); well:SetSize(col - 28, cy - frameTop + 2); well:SetFrameLevel(f:GetFrameLevel())
+            cy = cy + 6
+        end
     end
-    Button("advancedDestination", "Destination details", col - 24, "secondary", function() destAdvanced = not destAdvanced; P.QueueRefresh() end)
-    At(pool.advancedDestination, mid + 12, top + 284)
-    local bottom = top + 332
+    Button("advancedDestination", r.kind == "guild" and "Guild bank tab..." or "More destination details", col - 24, "secondary", function() destAdvanced = not destAdvanced; P.QueueRefresh() end)
+    At(pool.advancedDestination, mid + 12, cy + 4)
+    local rowH = math.max(320, cy + 40 - top)
+    pool.destinationPanel:SetHeight(rowH); pool.itemsPanel:SetHeight(rowH)
+    local bottom = top + rowH + 12
     local fy = Panel("flowPanel", "How should they move?", left, bottom, col, 244)
     if MI().HAS_FLOW[r.kind] and not r.design then
         for i, flow in ipairs(MI().FLOW_ORDER) do
@@ -1597,23 +1853,35 @@ local function DrawEditor(y)
             r.exclude = set; P.QueueRefresh() end })
     end); At(pool.excludePick, mid + 12, bottom + 148)
     local rx, ry, rw = cols == 3 and (mid + col + 12) or PAD, cols == 3 and top or (bottom + 256), cols == 3 and col or full
-    local reviewY = Panel("reviewPanel", "Rule review", rx, ry, rw, cols == 3 and 576 or 210)
+    local reviewMin = cols == 3 and (rowH + 256) or 260
+    local reviewY = Panel("reviewPanel", "Rule review", rx, ry, rw, cols == 3 and reviewMin or 210)
     local actionLabel, destinationLabel = P.RowCells(r)
     destinationLabel = r.kind == "bank" and "My bank" or r.kind == "keep" and "Bags" or r.kind == "never" and "No transfers" or destinationLabel
+    if r.kind == "mail" then destinationLabel = draftPlan and draftPlan.recipient or "Not chosen yet: type the recipient character" end
     local reviewArt = Get("reviewIdentityArt", function() return pool.reviewPanel:CreateTexture(nil, "ARTWORK") end)
     reviewArt:ClearAllPoints(); reviewArt:SetPoint("TOPLEFT", pool.reviewPanel, "TOPLEFT", 12, -44); reviewArt:SetSize(40, 40); PaintRuleArtwork(reviewArt, r)
     local identity = Text("reviewIdentity", "body"); Wide(identity, rx + 62, reviewY + 8, rw - 74); identity:SetParent(pool.reviewPanel); identity:SetText(r.name or "New rule"); identity:SetHeight(32)
     reviewY = reviewY + 60
     local summaryHeight = 0
-    local fields = { { "Applies to", P.ItemsText(r) }, { "Destination", destinationLabel }, { "Behavior", actionLabel }, { "Keep in bags", r.kind == "never" and "All matching items" or r.keep > 0 and (r.keep .. " of each") or P.KeepText(r) } }
+    local fields = { { "Applies to", P.ItemsText(r) }, { r.kind == "mail" and "Recipient" or "Destination", destinationLabel }, { "Behavior", actionLabel }, { "Keep in bags", r.kind == "never" and "All matching items" or r.keep > 0 and (r.keep .. " of each") or P.KeepText(r) } }
     for i, field in ipairs(fields) do
         local label = Text("reviewLabel" .. i, "small"); label:SetParent(pool.reviewPanel); Wide(label, rx + 12, reviewY + summaryHeight, 88); label:SetText(field[1] .. ":"); Tone(label, "dim")
         local value = Text("reviewValue" .. i, "body"); value:SetParent(pool.reviewPanel); Wide(value, rx + 108, reviewY + summaryHeight, rw - 120); value:SetText(field[2])
+        Tone(value, (r.kind == "mail" and i == 2 and not (draftPlan and draftPlan.recipient)) and "warn" or nil)
         summaryHeight = summaryHeight + math.max(H(label), H(value)) + 12
     end
+    -- the whole rule in plain words, and what saving does
+    local plain = Text("reviewPlain", "body"); plain:SetParent(pool.reviewPanel); Wide(plain, rx + 12, reviewY + summaryHeight + 2, rw - 24)
+    plain:SetText(r.kind == "mail" and P.PlainReview(r, draftPlan and draftPlan.recipient) or P.Sentence(r))
+    summaryHeight = summaryHeight + H(plain) + 10
+    if r.kind == "mail" then
+        local how = Text("reviewHowSent", "small"); how:SetParent(pool.reviewPanel); Wide(how, rx + 12, reviewY + summaryHeight, rw - 24)
+        how:SetText("Saving sets up the rule; it sends nothing. At a mailbox, the Magic Inventory review lists the mail and its recipient, and you press Prepare mail and Send mail yourself. No money is sent and C.O.D. is never used.")
+        Tone(how, "dim")
+        summaryHeight = summaryHeight + H(how) + 10
+    end
     R.Interact.Tip(pool.reviewPanel, "Rule review", P.Sentence(r))
-    local probe = MI().CleanRule((function() local copy = {} for k, v in pairs(r) do copy[k] = v end copy.id = copy.id or "rnew" return copy end)())
-    local code, why = MI().Problem(probe, false)
+    local code, why = MI().DraftProblem(r, r.kind == "mail" and recipientDraft or nil)
     local ready = Text("builderReady", "body"); Wide(ready, rx + 12, reviewY + summaryHeight + 18, rw - 24)
     ready:SetText(code and ("Needs attention: " .. (why or code)) or "Ready to save"); Tone(ready, code and "warn" or nil)
     ready:SetParent(pool.reviewPanel)
@@ -1628,7 +1896,7 @@ local function DrawEditor(y)
     local stateArt = Get("reviewStateArt", function() return statusFace:CreateTexture(nil, "ARTWORK") end)
     stateArt:SetTexture(R.PATH .. (code and [[media\guides\status-current-small]] or [[media\guides\status-done-small]])); stateArt:ClearAllPoints(); stateArt:SetPoint("LEFT", statusFace, "LEFT", 5, 0); stateArt:SetSize(22, 22)
     ready:ClearAllPoints(); ready:SetPoint("LEFT", statusFace, "LEFT", 34, 0); ready:SetWidth(rw - 62); statusFace:SetHeight(H(ready) + 24)
-    local reviewHeight = math.max(cols == 3 and 576 or 260, 104 + summaryHeight + 18 + H(ready) + 104)
+    local reviewHeight = math.max(reviewMin, 104 + summaryHeight + 18 + H(ready) + 104)
     pool.reviewPanel:SetHeight(reviewHeight)
     local safety = Text("reviewSafety", "small"); Wide(safety, rx + 14, ry + reviewHeight - 104, rw - 28); safety:SetParent(pool.reviewPanel)
     safety:SetText("Nothing moves automatically. Transfers still require review and your action.")
@@ -1636,7 +1904,6 @@ local function DrawEditor(y)
     enabled:SetChecked(turnOn and not code); enabled:SetActive(not code)
     At(enabled, rx + 12, ry + reviewHeight - 48)
     local enText = Text("e4onT", "small"); Wide(enText, rx + 52, ry + reviewHeight - 46, rw - 64); enText:SetText("Enable when saved")
-    if code then turnOn = false end
     y = math.max(bottom + 256, ry + reviewHeight + 12)
     if destAdvanced then y = DrawDestStep(y) + 16 end
     if limitsAdvanced then y = DrawKeepStep(y) + 16 end
@@ -1644,7 +1911,7 @@ local function DrawEditor(y)
         Button("builderDelete", "Delete", 84, "danger", function()
             local id = r.id
             R.Interact.Confirm("TWICHUI_MI_RULE_DELETE", "Delete the saved rule and discard this draft? No items move.", function()
-                MI().DeleteRule(id); editing = nil; P.QueueRefresh(); QueueRelayout()
+                MI().DeleteRule(id); EndEdit(); P.QueueRefresh(); QueueRelayout()
             end, { accept = "Delete" })
         end); At(pool.builderDelete, PAD, y); pool.builderDelete:SetHeight(32)
         Button("builderDuplicate", "Duplicate", 120, "secondary", function()
@@ -1657,8 +1924,7 @@ local function DrawEditor(y)
         pool.builderDuplicate.text:ClearAllPoints(); pool.builderDuplicate.text:SetPoint("LEFT", pool.builderDuplicate, "LEFT", 30, 0); pool.builderDuplicate.text:SetPoint("RIGHT", pool.builderDuplicate, "RIGHT", -6, 0)
     end
     Button("eCancel", "Cancel", 90, "secondary", function()
-        editing = nil
-        said = nil
+        EndEdit()
         P.QueueRefresh()
         QueueRelayout()
     end)
@@ -1666,19 +1932,23 @@ local function DrawEditor(y)
     pool.eCancel:SetHeight(32)
     Button("eSave", "Save", 90, "primary", function()
         if pool.builderKeep and pool.builderKeep:HasFocus() then pool.builderKeep:ClearFocus() end
-        local rule = editing
-        rule.enabled = turnOn
-        local id, why = MI().SaveRule(rule)
-        if not id then Say(why, "warn") return end
+        if pool.recipientBox and pool.recipientBox:HasFocus() then pool.recipientBox:ClearFocus() end
+        local rule = {}
+        for k, v in pairs(editing) do rule[k] = v end
+        rule.enabled = turnOn and true or false
+        -- the rule, a new recipient and any new destination are written together, or not at all
+        local id, plan = MI().SaveRuleDraft(rule, rule.kind == "mail" and recipientDraft or nil, editingFrom)
+        if not id then Say(plan, "warn") return end
         local saved = MI().Rule(id)
-        editing = nil
-        if turnOn and saved and not saved.enabled then Say(("Saved \"%s\", turned off: %s"):format(saved.name, select(2, MI().Problem(saved, false)) or ""), "warn")
-        else Say(("Saved \"%s\"%s."):format(saved and saved.name or "", saved and saved.enabled and ", turned on" or ", turned off")) end
+        EndEdit()
+        local to = saved and saved.kind == "mail" and type(plan) == "table" and plan.recipient and (" Mails to %s%s."):format(plan.recipient, plan.shared and " on all your characters" or " from this character") or ""
+        if turnOn and saved and not saved.enabled then Say(("Saved \"%s\", turned off: %s%s"):format(saved.name, select(2, MI().Problem(saved, false)) or "", to), "warn")
+        else Say(("Saved \"%s\"%s.%s"):format(saved and saved.name or "", saved and saved.enabled and ", turned on" or ", turned off", to)) end
         QueueRelayout()
     end)
     At(pool.eSave, full + PAD - 90, y)
     pool.eSave:SetHeight(32)
-    R.Interact.Tip(pool.eSave, "Save", "Saves the rule. It starts moving items only when you open a mailbox, bank or guild bank, review and press the action yourself.")
+    R.Interact.Tip(pool.eSave, "Save", "Saves the rule, and the recipient typed for it. Nothing is sent or moved now: that happens only when you open a mailbox, bank or guild bank, review it and press the action yourself.")
     return y + 34
 end
 
@@ -1701,7 +1971,7 @@ function P.Refresh()
     if editing then
         y = DrawEditor(y)
     else
-        local tasks = { { "rules", "Your rules", 140 }, { "destinations", "Destinations", 140 },
+        local tasks = { { "rules", "Your rules", 140 }, { "destinations", "Recipients", 140 },
             { "guild", "Guild arrangement", 174 }, { "protected", "Protected items", 148 } }
         local x = PAD
         local tabWidth = math.floor((math.max(W, f:GetWidth() or W) - PAD * 2 - 18) / 4)
@@ -1796,7 +2066,7 @@ if R.MagicInventory then R.MagicInventory.OnChange(function() P.QueueRefresh() e
 -- A rule being edited belongs to the profile it came from: a profile change puts the editor away, unsaved.
 if R.Profiles and R.Profiles.OnApply then
     R.Profiles.OnApply("views", "magic-inventory-page", function()
-        editing = nil; selectedRule = nil; itemAdvanced = false
+        EndEdit(); selectedRule = nil; itemAdvanced = false
         if pool.filterEditor then pool.filterEditor:Hide(); pool.filterShade:Hide() end
         if P.GuildProfileChanged then P.GuildProfileChanged() end
         P.QueueRefresh()

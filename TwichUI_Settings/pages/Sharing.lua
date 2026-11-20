@@ -21,6 +21,17 @@ K.Page({
         local function SharingOn() return R:Enabled("setupSharing") end
         Under(Toggle("acceptSetups", "Let friends send me addon configurations",
             "When on, friends can offer you their addon configuration. You're always asked first, unless you chose \"Always accept\" for that friend. Nothing is applied until you click Apply."), sharing, SharingOn)
+        Under(Button("Configuration sharing", "Open", function()
+            if not R:Enabled("setupSharing") then
+                R.Print("turn on Configuration sharing first.")
+                return
+            end
+            K.CloseOptions()
+            R.Window:Show()
+        end, "Opens the sharing window: send your setup, review ones friends sent, create backups and run the party compatibility check (same as typing /tui share)."), sharing, SharingOn)
+
+        -- Secondary (SettingsDesign): how configurations travel, and the version check behind the compatibility check.
+        Header("Sending options", "How a configuration you send travels, and the version check that tells you whether a friend can receive it. The defaults suit most players.")
         local Share = R.Share
         if Share then
             Choice("shareTransport", "Send configurations by",
@@ -38,14 +49,9 @@ K.Page({
         end
         Toggle("groupCheck", "Version and group check",
             "On by default. Both players need it on to see each other. Other players never see these messages, even without TwichUI.\n\nWhen you're in a group, TwichUI trades version numbers with other TwichUI users (a few bytes, group channel only) and tells you when someone's version is newer or too old to share with. Also powers /tui check and Party compatibility check in /tui share, and a once-per-game-build test message that shows in Sending options whether direct messages reached another TwichUI user.")
-        Under(Button("Configuration sharing", "Open", function()
-            if not R:Enabled("setupSharing") then
-                R.Print("turn on Configuration sharing first.")
-                return
-            end
-            K.CloseOptions()
-            R.Window:Show()
-        end, "Opens the sharing window: send your setup, review ones friends sent, create backups and run the party compatibility check (same as typing /tui share)."), sharing, SharingOn)
+
+        -- Secondary: read-only inspection windows.
+        Header("Inspect saved data", "Read-only windows for looking through what is saved. Nothing can be changed, restored or sent from them.")
         Button("Addon data", "Open", function()
             K.CloseOptions()
             if R.StoredDataWindow then R.StoredDataWindow:Show() end

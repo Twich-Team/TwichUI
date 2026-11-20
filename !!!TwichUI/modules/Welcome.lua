@@ -394,6 +394,7 @@ local function Build()
     f.title:SetWidth(WIDTH - PAD - 48)
     f.title:SetPoint("LEFT", f, "TOPLEFT", PAD, -(BAND / 2 + 4))
     f.title:SetText(W.TITLE)
+    if R.CraftLook then R.CraftLook.Window(f, f.shell, { header = BAND, title = f.title, titleSize = 23 }) end   -- the crafted settings family
     f.close = F.Close(f, function() f:Hide() end)
     f.close:SetPoint("TOPRIGHT", -(CR + 2), -(BAND / 2 - 4))
     return true

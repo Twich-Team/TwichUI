@@ -26,6 +26,13 @@
 --   CL.Pill(parent, onToggle, small)    the switch (b:SetChecked, :GetChecked, :SetActive, :SetHot); under 26 units wide a square check
 --   CL.SearchDecoration(box, placeholder)   a search field's magnifier and placeholder
 --   CL.ScrollRail(scroll, active, motion)   paints a template scroll bar (native hit regions kept); motion(scroll, active) adds wheel easing
+--   CL.Window(window, shell, opts)      a standalone window in the crafted family, on the FrameLook shell it already has: the dark and quiet
+--                                       leather interior, the sculpted bronze frame over FrameLook's rails, and its FrameLook buttons and close
+--                                       boxes painted (those made later inside it paint themselves: CL.InWindow). Once per shell; geometry,
+--                                       input, lifecycle and the buttons' scripts stay the window's. opts.title (Spectral, ivory), opts.header
+--                                       (a quiet walnut title band that high), opts.bare (a shell over the player's own background: frame only)
+--   CL.InWindow(frame)                  true when a frame is inside a window CL.Window dressed
+--   CL.DressFrameLook(b, kind)          paints one FrameLook button ("primary" -> the gold confirmation, "danger", else quiet) or close box
 
 local R = TwichUI
 local CL = {}
@@ -76,6 +83,19 @@ function CL.Sheet(host, skin, opts)
         if value == self.skin then return end
         self.skin = value
         for _, texture in ipairs(self.parts) do texture:SetTexture(CRAFT .. value .. ".tga") end
+    end
+    -- A sheet drawn with opts.bounds can be given new bounds (a page that follows its host's width); same corners and cuts.
+    function group:SetBounds(l, t, r, b)
+        local bx = { l, l + corner, r - corner, r }
+        local by = { t, t - corner, b + corner, b }
+        for row = 1, 3 do
+            for col = 1, 3 do
+                local texture = self.parts[(row - 1) * 3 + col]
+                texture:ClearAllPoints()
+                texture:SetPoint("TOPLEFT", host, "TOPLEFT", bx[col], by[row])
+                texture:SetPoint("BOTTOMRIGHT", host, "TOPLEFT", bx[col + 1], by[row + 1])
+            end
+        end
     end
     function group:SetShown(on) for _, texture in ipairs(self.parts) do texture:SetShown(on and true or false) end end
     function group:SetAlpha(alpha) for _, texture in ipairs(self.parts) do texture:SetAlpha(alpha) end end
@@ -512,4 +532,68 @@ function CL.ScrollRail(scroll, active, motion)
     end
     scroll.materialRail = rail
     return rail.Fit
+end
+
+---------------------------------------------------------------------------
+-- Standalone windows in the crafted family (docs/settings-design-system.md): the settings window's outer materials on a window's own
+-- FrameLook shell, without TwichUI_Settings. The first adopter was Magic Inventory's review window (inventory/Window.lua).
+---------------------------------------------------------------------------
+local FRAMELOOK_KIND = { primary = "confirmation", danger = "danger" }
+
+-- One FrameLook button or close box (a close box has no kind: the quiet button sheet, as the settings window's close box).
+function CL.DressFrameLook(b, kind, isClose)
+    if not b or b.twichCraft then return end
+    if isClose or b.twichCloseBox then CL.Control(b, nil) return end
+    CL.Dress(b, FRAMELOOK_KIND[kind or b.twichKind] or "secondary")
+end
+
+-- A frame is inside a crafted window when it or one of its parents was dressed by CL.Window. Walks the parent chain only (bounded by
+-- its depth); never scans other frames.
+function CL.InWindow(frame)
+    local depth = 0
+    while frame and depth < 32 do
+        if frame.twichCraftedWindow then return true end
+        frame = frame.GetParent and frame:GetParent() or nil
+        depth = depth + 1
+    end
+    return false
+end
+
+-- The FrameLook buttons already made under a window (the moment it is dressed; later ones dress themselves). Bounded by the window's
+-- own subtree.
+local function DressTree(frame, depth)
+    if depth > 12 or not frame.GetChildren then return end
+    for _, child in ipairs({ frame:GetChildren() }) do
+        if child.twichLook and not child.twichCraft and not child.twichToggle then CL.DressFrameLook(child, child.twichKind) end
+        DressTree(child, depth + 1)
+    end
+end
+
+function CL.Window(window, shell, opts)
+    opts = opts or {}
+    if not (window and shell) then return nil end
+    if shell.twichCrafted then return shell.twichCrafted end
+    local parts = {}
+    if not opts.bare then
+        local interior = shell.interior or shell
+        if shell.grain then shell.grain:Hide() end
+        parts.dark = CL.Tile(shell, "BACKGROUND", -4, "dark", 1, { .90, .94, .98 })
+        parts.dark:SetAllPoints(interior)
+        parts.quiet = CL.QuietTile(shell, "outer", "BACKGROUND", -3)
+        parts.quiet:SetAllPoints(interior)
+        if opts.header and opts.header > 0 then
+            parts.header = CL.QuietTile(shell, "header", "BACKGROUND", -2)
+            parts.header:ClearAllPoints()
+            parts.header:SetPoint("TOPLEFT", shell, "TOPLEFT", 9, -9)
+            parts.header:SetPoint("TOPRIGHT", shell, "TOPRIGHT", -9, -9)
+            parts.header:SetHeight(math.max(1, opts.header - 9))
+        end
+    end
+    CL.LegacyRails(shell, false)
+    parts.frame = CL.Frame(shell)
+    shell.twichCrafted = parts
+    window.twichCraftedWindow = true
+    if opts.title then CL.Font(opts.title, opts.titleSize or 21, true, "serif") end
+    DressTree(window, 0)
+    return parts
 end

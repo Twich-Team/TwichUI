@@ -29,7 +29,7 @@ local F = R.FrameLook
 P.Style = R.MenuStyle.New("refreshmentsStyle", {
     bgTexture = "solid", bgColor = F.PANEL_BG, bgOpacity = 98,
     borderTexture = F.BORDER, borderColor = F.PANEL_BORDER, borderOpacity = 90, borderSize = 1,
-}, { extraBorders = { { F.BORDER, F.BORDER_LABEL } } })
+}, { extraBorders = { { F.BORDER, F.BORDER_LABEL }, { F.CRAFTED_BORDER, F.CRAFTED_BORDER_LABEL } } })
 
 local NAME = "TwichUIRefreshments"
 local BUTTON_NAME = { water = "TwichUIRefreshmentsWater", food = "TwichUIRefreshmentsFood" }

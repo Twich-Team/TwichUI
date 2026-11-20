@@ -12,15 +12,17 @@ local K = R.SettingsKit
 local P = {}
 R.AmmoItemsPage = P
 
-local W = 644                  -- the settings window's content width
+local W = 644                  -- the width the page is first built at; it follows the hosted frame's width after that
 local ROW_H, VISIBLE = 56, 5
-local HELP_H = 62
+local HELP_H = 46
 local ADD_TOP = -(HELP_H + 4)
-local LIST_TOP = ADD_TOP - 60 - 40
+local ADD_H, MANUAL_H = 64, 40 -- the add card, and the manual entry line it grows by when shown
 local LIST_H = ROW_H * VISIBLE + 8
-local LIST_W = W - 12 - 26     -- inside the well, less the scroll bar
+local LIST_W = W - 12 - 26     -- inside the well, less the scroll bar (follows the width)
 local NAME_W = 330
 local KIND_X = 396
+local manualShown = false      -- the item ID / link entry and "register it as" (this page only; not saved)
+local function ListTop() return ADD_TOP - ADD_H - (manualShown and MANUAL_H or 0) - 40 end
 local MAX_REQUESTS = 2         -- times the game is asked to load one item's details while this is open
 local QUESTION = "Interface\\Icons\\INV_Misc_QuestionMark"
 
@@ -177,6 +179,11 @@ local function Row(i)
     local pal = G.pal
     local row = CreateFrame("Button", nil, f.content)
     row:SetSize(LIST_W, ROW_H)
+    row.place = function(self)
+        self:SetWidth(LIST_W)
+        self.name:SetWidth(NAME_W); self.status:SetWidth(NAME_W)
+        self.kind:ClearAllPoints(); self.kind:SetPoint("LEFT", KIND_X, 0)
+    end
     row:SetPoint("TOPLEFT", 0, -(i - 1) * ROW_H)
 
     row.flash = G.Solid(row, "BACKGROUND", pal.teal, 0.22)
@@ -210,7 +217,7 @@ local function Row(i)
     end)
     row.kind:SetChoices(KindChoices)
     row.kind:SetPoint("LEFT", KIND_X, 0)
-    I.Tip(row.kind, "What it is", "Arrows or bullets. Your choice decides what this item counts as, over the game's own classification. Correct it here if it was registered wrongly.")
+    I.Tip(row.kind, "Classification", "Arrows or bullets. Set automatically when the item is added; change it only to correct it. Your choice decides what this item counts as, over the game's own classification.")
 
     row.remove = G.Button(row, "Remove", 76, "secondary", function() if row.id then Remove(row.id) end end)
     row.remove:SetPoint("RIGHT", -6, 0)
@@ -222,13 +229,64 @@ end
 ---------------------------------------------------------------------------
 -- Drawing
 ---------------------------------------------------------------------------
+local laidOut
+-- Places what depends on the page's width and on whether the manual entry is shown.
+local function Relayout()
+    local width = math.max(520, (f:GetWidth() and f:GetWidth() > 1) and f:GetWidth() or W)
+    local key = width .. (manualShown and "m" or "")
+    if key == laidOut then return end
+    laidOut = key
+    LIST_W = width - 12 - 26
+    KIND_X = LIST_W - 6 - 76 - 16 - 110
+    NAME_W = KIND_X - 38 - 12
+    local listTop = ListTop()
+    f.help:SetWidth(width - 8)
+    local addBottom = ADD_TOP - ADD_H - (manualShown and MANUAL_H or 0)
+    if f.card and f.card.SetBounds then f.card:SetBounds(0, ADD_TOP, width, addBottom) end
+    f.dropSub:SetWidth(width - 62 - 200)
+    f.manual:ClearAllPoints(); f.manual:SetPoint("TOPRIGHT", f, "TOPLEFT", width - 12, ADD_TOP - 18)
+    for _, c in ipairs({ f.idLabel, f.idBox, f.addKindLabel, f.addKind, f.add }) do c:SetShown(manualShown) end
+    local my = ADD_TOP - ADD_H + 4
+    f.idLabel:ClearAllPoints(); f.idLabel:SetPoint("TOPLEFT", 14, my - 4)
+    f.idBox:ClearAllPoints(); f.idBox:SetPoint("TOPLEFT", 120, my)
+    f.addKindLabel:ClearAllPoints(); f.addKindLabel:SetPoint("TOPLEFT", 238, my - 4)
+    f.addKind:ClearAllPoints(); f.addKind:SetPoint("TOPLEFT", 330, my)
+    f.add:ClearAllPoints(); f.add:SetPoint("TOPLEFT", 450, my - 1)
+    f.note:ClearAllPoints(); f.note:SetPoint("TOPLEFT", 4, addBottom - 6)
+    f.note:SetWidth(width - 8)
+    f.columns.item:ClearAllPoints(); f.columns.item:SetPoint("TOPLEFT", 6 + 38, listTop + 16)
+    f.columns.kind:ClearAllPoints(); f.columns.kind:SetPoint("TOPLEFT", 6 + KIND_X + 4, listTop + 16)
+    f.count:ClearAllPoints(); f.count:SetPoint("TOPRIGHT", f, "TOPLEFT", width - 8, listTop + 16)
+    f.well:ClearAllPoints(); f.well:SetPoint("TOPLEFT", 0, listTop)
+    f.well:SetSize(width, LIST_H)
+    f.content:SetWidth(LIST_W)
+    f.empty:SetWidth(width - 24)
+    for _, row in ipairs(rows) do row:place() end
+end
+
+-- Shows or hides the item ID / link entry (secondary to dragging). Returns the new state.
+function P.ShowManual(on)
+    manualShown = on and true or false
+    if f and built then
+        f.manual.text:SetText(manualShown and "Hide item ID entry" or "Type an item ID instead")
+        Relayout()
+        if not manualShown and f.idBox then f.idBox:ClearFocus() end
+        if R.SettingsUI and R.SettingsUI.Refresh then C_Timer.After(0, function() R.SettingsUI.Refresh() end) end
+    end
+    return manualShown
+end
+function P.ManualShown() return manualShown end
+function P.Height() return -ListTop() + LIST_H + 24 end
+
 function P.Refresh()
     if not (f and built and f:IsShown()) then return end
     local AI, G = R.AmmoItems, Wg()
     local pal = G.pal
+    Relayout()
     local list = AI.List()
     for i, entry in ipairs(list) do
         local row = Row(i)
+        row:place()
         row.id = entry.id
         local name, icon, state = ItemInfo(entry.id)
         row.icon:SetTexture(icon or QUESTION)
@@ -295,11 +353,11 @@ local function Build()
     f.help = G.Text(f, "small")
     f.help:SetPoint("TOPLEFT", 4, -2)
     f.help:SetWidth(W - 8)
-    f.help:SetText("Register items the game doesn't recognize as arrows or bullets. This never equips or moves an item.")
+    f.help:SetText("Drag an item the game doesn't recognize as arrows or bullets onto the box. TwichUI classifies it for you; correct it in the list only if needed. This never equips or moves an item.")
     I.Tip(f, "Known ammunition", "The game's own arrows and bullets are already recognized. Registration only classifies an item: it doesn't count it or make it fit your weapon. Ammunition reminders still read your equipment and bags each time.")
 
     -- the add area: a box to drop an item on, or its item ID or link
-    G.Card(f, 0, ADD_TOP, W, ADD_TOP - 60)
+    f.card = G.Card(f, 0, ADD_TOP, W, ADD_TOP - ADD_H)
     f.drop = CreateFrame("Button", nil, f, "BackdropTemplate")
     f.drop:SetSize(40, 40)
     f.drop:SetPoint("TOPLEFT", 12, ADD_TOP - 10)
@@ -329,12 +387,16 @@ local function Build()
     end)
     f.dropLabel = G.Text(f, "body")
     f.dropLabel:SetPoint("TOPLEFT", 62, ADD_TOP - 14)
-    f.dropLabel:SetText("Drop an item from your bags on the box")
+    f.dropLabel:SetText("Drag an item from your bags onto the box")
     f.dropSub = G.Text(f, "meta")
     f.dropSub:SetPoint("TOPLEFT", 62, ADD_TOP - 32)
-    f.dropSub:SetWidth(W - 62 - 330)
-    f.dropSub:SetText("or paste its link or type its item ID")
+    f.dropSub:SetWidth(W - 62 - 200)
+    f.dropSub:SetText("Classified automatically: the game's own type when it has one, otherwise arrows.")
+    f.manual = G.Button(f, "Type an item ID instead", 180, "secondary", function() P.ShowManual(not manualShown) end)
+    I.Tip(f.manual, "Item ID or link", "For an item you can't drag, such as one not in your bags: type its item ID or paste its link, and choose what to register it as.")
 
+    f.idLabel = G.Text(f, "meta")
+    f.idLabel:SetText("Item ID or link")
     f.idBox = G.EditBox(f, 104, 22)
     f.idBox:SetPoint("TOPLEFT", W - 330, ADD_TOP - 30)
     f.idBox:SetMaxLetters(200)
@@ -360,17 +422,18 @@ local function Build()
     -- the list
     local function Column(text, x)
         local t = G.Text(f, "meta")
-        t:SetPoint("TOPLEFT", 6 + x, LIST_TOP + 16)
+        t:SetPoint("TOPLEFT", 6 + x, ListTop() + 16)
         t:SetText(text)
         return t
     end
-    Column("Item", 38)
-    Column("Count as", KIND_X + 4)
+    f.columns = {}
+    f.columns.item = Column("Item", 38)
+    f.columns.kind = Column("Classification", KIND_X + 4)
     f.count = G.Text(f, "meta")
-    f.count:SetPoint("TOPRIGHT", f, "TOPLEFT", W - 8, LIST_TOP + 16)
+    f.count:SetPoint("TOPRIGHT", f, "TOPLEFT", W - 8, ListTop() + 16)
     f.count:SetJustifyH("RIGHT")
     f.well = CreateFrame("Frame", nil, f, "BackdropTemplate")
-    f.well:SetPoint("TOPLEFT", 0, LIST_TOP)
+    f.well:SetPoint("TOPLEFT", 0, ListTop())
     f.well:SetSize(W, LIST_H)
     G.Well(f.well)
     f.scroll, f.content = G.Scroll(f.well, LIST_W)
@@ -398,6 +461,7 @@ function P.Frame()
         if f.drop then R.Interact.HideTip(f.drop) end
     end)
     f:SetScript("OnEvent", OnEvent)
+    f:SetScript("OnSizeChanged", function() if built then QueueRefresh() end end)
     return f
 end
 
@@ -412,5 +476,5 @@ K.Page({
     description = "Ammunition you register yourself, such as an item a server added, as arrows or bullets, for reminders about ammunition.",
     keywords = "ammo ammunition custom known register arrows bullets item id link server hunter quiver list reminder reminders",
     when = function() return R.AmmoItems ~= nil end,
-    host = function() return P.Frame() end, hostHeight = LIST_H + 190,
+    host = function() return P.Frame() end, hostHeight = function() return P.Height() end,
 })
