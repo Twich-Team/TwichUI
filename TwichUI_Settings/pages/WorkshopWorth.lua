@@ -75,10 +75,18 @@ local function Toggle(parent, label, w, onClick)
     return R.ChronicleStyle.Toggle(parent, label, w, onClick, Wg().pal)
 end
 
+local draftLines   -- (set by Draft) the entries of the current draft, so a heading can be named by its words
 local function Label(id)
     local L = WL()
     local t = L and L.BY_ID[id]
-    return t and t.label or tostring(id)
+    if t then return t.label end
+    local kind = L and L.SeparatorOf(id)
+    if kind == "text" then
+        for _, e in ipairs(draftLines or {}) do if e.id == id then return "Heading \"" .. tostring(e.text) .. "\"" end end
+        return "Text heading"
+    end
+    local sp = kind and L.SEPARATOR_BY_KIND[kind]
+    return sp and sp.label or tostring(id)
 end
 
 local function Relayout()
@@ -106,12 +114,15 @@ local resetPending = false
 local query = ""
 local function Copy(v)
     local out = { enabled = v.enabled, lines = {} }
-    for i, e in ipairs(v.lines) do out.lines[i] = { id = e.id, when = e.when } end
+    for i, e in ipairs(v.lines) do out.lines[i] = { id = e.id, when = e.when, text = e.text, color = e.color } end
     return out
 end
 local function Equal(a, b)
     if a.enabled ~= b.enabled or #a.lines ~= #b.lines then return false end
-    for i, e in ipairs(a.lines) do if e.id ~= b.lines[i].id or e.when ~= b.lines[i].when then return false end end
+    for i, e in ipairs(a.lines) do
+        local o = b.lines[i]
+        if e.id ~= o.id or e.when ~= o.when or e.text ~= o.text or e.color ~= o.color then return false end
+    end
     return true
 end
 function D.Draft()
@@ -124,6 +135,7 @@ function D.Draft()
     elseif Equal(draft, base) and not Equal(base, L.Get()) then
         draft, base, undo, redo = L.Get(), L.Get(), {}, {}
     end
+    draftLines = draft.lines
     return Copy(draft)
 end
 function D.Dirty() local v = D.Draft(); return v and not Equal(v, base) or false end
@@ -190,6 +202,38 @@ function D.AddLine(id, at)
     if not out then return false end
     selected = id
     return Commit(out, "Added " .. t.label .. ".")
+end
+
+-- A blank space, divider or text heading ("space", "line", "text"): goes after the selected line, or last.
+function D.AddSeparator(kind, at)
+    local L = WL()
+    if not L or not L.SEPARATOR_BY_KIND[kind] then return false end
+    local list = D.Draft().lines
+    if at == nil and selected then
+        local i = L.IndexOf(list, selected)
+        if i then at = i + 1 end
+    end
+    local out, id = L.AddSeparator(list, kind, at, "always")
+    if not out then
+        Say("That's the most separators a tooltip can have (" .. L.MAX_SEPARATORS .. "). Remove one first.", "warn")
+        D.Refresh()
+        return false
+    end
+    selected = id
+    return Commit(out, "Added " .. L.SEPARATOR_BY_KIND[kind].label:lower() .. ".")
+end
+
+-- The words and/or colour (hex) of the selected text heading. Empty words are refused; the heading keeps what it had.
+function D.SetText(id, text, color)
+    local L = WL()
+    if not L then return false end
+    local out, why = L.SetText(D.Draft().lines, id, text, color)
+    if not out then
+        if why == "empty" then Say("A heading needs some words. Remove it instead if you don't want it.", "warn"); D.Refresh() end
+        return false
+    end
+    if Equal({ enabled = true, lines = out }, { enabled = true, lines = D.Draft().lines }) then return true end
+    return Commit(out, color and "Heading colour changed." or "Heading text changed.")
 end
 
 function D.RemoveLine(id)
@@ -365,6 +409,11 @@ local function MakeRow(i)
     fr.wide:SetJustifyH("LEFT")
     fr.wide:SetPoint("TOPLEFT", 0, -1)
     fr.wide:SetWidth(INNER)
+    fr.rule = fr:CreateTexture(nil, "ARTWORK")   -- a divider line
+    fr.rule:SetTexture(R.WorkshopWorthDesignerDivider or "Interface\\COMMON\\UI-TooltipDivider-Transparent")
+    fr.rule:SetHeight(8)
+    fr.rule:SetPoint("LEFT", 0, 0); fr.rule:SetPoint("RIGHT", 0, 0)
+    fr.rule:Hide()
     fr:RegisterForDrag("LeftButton")
     fr:SetScript("OnEnter", function(self) self.wash:Show() end)
     fr:SetScript("OnLeave", function(self) self.wash:Hide() end)
@@ -385,7 +434,14 @@ local function PaintRow(fr, row)
     fr.left:Hide(); fr.right:Hide(); fr.wide:Hide()
     local h = ROW_H
     fr.wide:SetWidth(INNER)
-    if not row.line then
+    fr.rule:Hide()
+    if row.separator == "space" then
+        fr.wide:SetText("blank space"); Color(fr.wide, C.quiet, 0.35); fr.wide:Show()
+        h = 16
+    elseif row.separator == "line" then
+        fr.rule:Show()
+        h = 16
+    elseif not row.line then
         -- a line with nothing to say for this example: it keeps its place so it can still be moved or removed
         fr.wide:SetWidth(INNER)
         fr.wide:SetText("(" .. Label(row.id) .. ": nothing to show for this example)")
@@ -394,7 +450,12 @@ local function PaintRow(fr, row)
         h = math.max(ROW_H, (fr.wide:GetStringHeight() or 12) + 4)
     else
         local kind, a, b = L.Style(row.line)
-        if kind == "double" then
+        if kind == "custom" then
+            fr.wide:SetText((a:gsub("||", "|")))
+            fr.wide:SetTextColor(b[1], b[2], b[3], 1)
+            fr.wide:Show()
+            h = math.max(ROW_H, (fr.wide:GetStringHeight() or 12) + 4)
+        elseif kind == "double" then
             fr.right:SetText(b)
             Color(fr.right, C.right)
             fr.right:Show()
@@ -426,9 +487,6 @@ local function PaintMock(L, layout)
     if mock.icon then mock.icon:SetTexture((exampleKey == "missing" or exampleKey == "unavailable") and "Interface\\Icons\\INV_Chest_Cloth_17" or "Interface\\Icons\\INV_Misc_Note_01") end
     mock.name:ClearAllPoints(); mock.name:SetPoint("TOPLEFT", PAD_IN + 40, -y - 6)
     y = y + 44   -- the blank line a real tooltip leaves
-    mock.title:SetText(sec.title)
-    mock.title:ClearAllPoints(); mock.title:SetPoint("TOPLEFT", PAD_IN, -y)
-    y = y + ROW_H + 2
     local m = { sec = sec, layout = layout, tops = {}, bottoms = {}, gaps = {} }
     m.gaps[0] = y - 1
     for i, row in ipairs(sec.rows) do
@@ -475,9 +533,51 @@ local function ShowGroup(on)
     f.inviteButton:SetShown(not on)
 end
 
+-- The separators' controls (a text heading's words and colour, and the buttons that add one): need the layout's constants, so made with the list.
+local function BuildExtras(L)
+    local G = Wg()
+    local pal = G.pal
+    local function Add(c) f.group[#f.group + 1] = c return c end
+    -- a text heading's words and colour
+    f.textLabel = Add(G.Text(f, "meta")); f.textLabel:SetText("Heading text")
+    f.textBox = Add(G.EditBox(f, MOCK_W, 28)); f.textBox:SetAutoFocus(false)
+    f.textBox:SetMaxLetters(60)
+    local function CommitText(self)
+        if self.entryId and selected == self.entryId then D.SetText(self.entryId, self:GetText()) end
+    end
+    f.textBox:SetScript("OnEnterPressed", function(self) CommitText(self); self:ClearFocus() end)
+    f.textBox:SetScript("OnEditFocusLost", CommitText)
+    f.textBox:SetScript("OnEscapePressed", function(self) self:SetText(""); self.entryId = nil; self:ClearFocus(); D.Refresh() end)
+    Tip(f.textBox, "Heading text", "The words shown in the tooltip. Press Enter to apply. Leave the default to keep the standard heading.")
+    f.colorLabel = Add(G.Text(f, "meta")); f.colorLabel:SetText("Colour")
+    f.swatches = {}
+    for i, c in ipairs(L.TEXT_COLORS) do
+        local sw = Add(CreateFrame("Button", nil, f))
+        sw:SetSize(24, 24)
+        sw.fill = sw:CreateTexture(nil, "ARTWORK"); sw.fill:SetPoint("TOPLEFT", 3, -3); sw.fill:SetPoint("BOTTOMRIGHT", -3, 3)
+        local rgb = L.Hex(c[2])
+        sw.fill:SetColorTexture(rgb[1], rgb[2], rgb[3], 1)
+        sw.border = sw:CreateTexture(nil, "BACKGROUND"); sw.border:SetAllPoints(); sw.border:SetColorTexture(1, 1, 1, 1); sw.border:Hide()
+        sw:SetScript("OnClick", function() if selected then D.SetText(selected, nil, c[2]) end end)
+        Tip(sw, (c[1]:gsub("^%l", string.upper)), "Use this colour for the heading.")
+        f.swatches[i] = sw
+    end
+
+    -- the player's own separators
+    f.sepHeader = Add(G.Text(f, "section")); f.sepHeader:SetText("Separators"); G.Color(f.sepHeader, pal.bronzeText)
+    f.sepButtons = {}
+    for i, sp in ipairs(L.SEPARATORS) do
+        local b = Add(G.Button(f, "+  " .. sp.label, LIST_W, "secondary", function() D.AddSeparator(sp.kind) end))
+        Tip(b, sp.label, sp.what .. " Added after the selected line, or last.")
+        f.sepButtons[i] = b
+    end
+
+end
+
 -- The list needs the line types, which the Workshop provides: made the first time the Workshop is loaded.
 local function BuildList(L)
     if #listButtons > 0 then return end
+    BuildExtras(L)
     local G = Wg()
     local pal = G.pal
     for i, t in ipairs(L.TYPES) do
@@ -590,7 +690,7 @@ function D.Refresh()
         { "Details & provenance", "advisorwhy", "advisorevidence", "status", "source", "note" },
     }
     local listStart = searchY + 56
-    local listY = listStart
+    local listY, infoEnd = listStart, nil
     for gi, group in ipairs(groups) do
         local heading, any = f.catalogHeaders[gi], false
         for n = 2, #group do
@@ -616,7 +716,17 @@ function D.Refresh()
             end
         end
     end
-    f.noResults:SetShown(listY == listStart); At(f.noResults, 16, listStart)
+    infoEnd = listY
+    -- the player's own separators: always offered (they are not information, so the search leaves them alone)
+    At(f.sepHeader, 16, listY + 4); f.sepHeader:SetWidth(LIST_W)
+    listY = listY + 30
+    for i, sp in ipairs(L.SEPARATORS) do
+        local b = f.sepButtons[i]
+        b:SetEnabled(writable); b:SetWidth(LIST_W)
+        At(b, 16, listY)
+        listY = listY + 34
+    end
+    f.noResults:SetShown(infoEnd == listStart); At(f.noResults, 16, listStart)
 
     -- the mockup
     local sec = PaintMock(L, layout)
@@ -644,7 +754,16 @@ function D.Refresh()
     else
         f.selTitle:SetText("Click a preview line to adjust it."); G.Color(f.selTitle, pal.textDim)
     end
+    local isText = entry ~= nil and L.SeparatorOf(entry.id) == "text"
     for _, c in ipairs({ f.up, f.down, f.remove, f.visLabel, f.always, f.holdShift }) do c:SetShown(entry ~= nil) end
+    f.textLabel:SetShown(isText); f.textBox:SetShown(isText); f.colorLabel:SetShown(isText)
+    for _, sw in ipairs(f.swatches) do sw:SetShown(isText) end
+    if isText then
+        if not f.textBox:HasFocus() and f.textBox:GetText() ~= entry.text then f.textBox:SetText(entry.text) end
+        f.textBox:SetEnabled(writable)
+        f.textBox.entryId = entry.id
+        for i, sw in ipairs(f.swatches) do sw.border:SetShown(L.TEXT_COLORS[i][2] == entry.color); sw:SetEnabled(writable) end
+    end
     local sy = 184 + mockH + 16 + math.max(28, f.caption:GetStringHeight() or 12)
     At(f.selTitle, COL_X, sy)
     for i, c in ipairs({ f.up, f.down, f.remove }) do c:SetWidth(SIDE_W); At(c, COL_X + (i - 1) * (SIDE_W + 6), sy + 28) end
@@ -654,7 +773,10 @@ function D.Refresh()
     At(f.always, COL_X + 44, sy + 60); At(f.holdShift, COL_X + 146, sy + 60)
 
     -- the sentence at the bottom
-    local bottom = math.max(listY + 22, sy + (entry and 112 or 44), 530)
+    At(f.textLabel, COL_X, sy + 104); At(f.textBox, COL_X, sy + 122); f.textBox:SetWidth(MOCK_W)
+    At(f.colorLabel, COL_X, sy + 160)
+    for i, sw in ipairs(f.swatches) do At(sw, COL_X + 44 + (i - 1) * 30, sy + 156) end
+    local bottom = math.max(listY + 22, sy + (isText and 196 or (entry and 112 or 44)), 530)
     At(f.reset, 16, bottom); f.reset:SetWidth(LIST_W)
     At(f.save, COL_X, bottom); At(f.cancel, COL_X + 112, bottom)
     f.confirm:SetShown(resetPending)
@@ -760,8 +882,6 @@ function D.Build()
     mock.name:SetText("Example item")
     mock.name:SetTextColor(0.8, 0.45, 1)
     mock.icon = mock:CreateTexture(nil, "ARTWORK"); mock.icon:SetSize(32, 32); mock.icon:SetPoint("TOPLEFT", 12, -12)
-    mock.title = mock:CreateFontString(nil, "OVERLAY", "GameTooltipText")
-    mock.title:SetTextColor(1, 0.82, 0)
     mock.hint = mock:CreateFontString(nil, "OVERLAY", "GameTooltipText")
     mock.hint:SetTextColor(0.55, 0.55, 0.55)
     mock.empty = mock:CreateFontString(nil, "OVERLAY", "GameTooltipText")

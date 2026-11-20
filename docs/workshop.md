@@ -580,6 +580,8 @@ Disenchant (average)                no data          (only for uncommon-to-epic 
 Hold Shift for details              (only when Shift would show something more)
 ```
 
+The first line is not fixed: it is the default **text heading** (a separator the player can reword, recolour or remove). Separators are the player's own layout entries (ids `space#N`, `line#N`, `text#N`, up to 12): a **blank space**, a **divider line** (the game's tooltip divider art) and a **text heading** (up to 60 characters, one of eight colours; `|` is doubled so typed text can never start a colour or texture code). They are presentation only and never count as content, so a layout of only separators draws nothing and adds no "Hold Shift" hint; on the live tooltip a blank space or divider at either end of the section or next to another is not drawn (the designer still shows every place). The saved table marks layouts written since headings became entries (`headings = true`); an older one without it gets the default heading as its first line when read.
+
 That is the **default layout**; the player can change which lines show, their order and when (Always / Hold Shift): see "The tooltip designer". Hold Shift adds, in order: **Scanned | 3 days ago**, **Prices from | <market>** and one **Estimates, not sales. Deposits and failed listings aren't counted.** line.
 
 - **Vendor:** `C_Item.GetItemInfo` sell price, one item. 0 is "no sell value" (an unavailable action), not an estimate of 0.

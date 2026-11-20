@@ -93,13 +93,15 @@ end
 -- colours and the same style rules as the designer's preview.
 local function Draw(tooltip, lines)
     local C = WL.COLORS
-    for i, line in ipairs(lines) do
+    tooltip:AddLine(" ")   -- the blank line that sets the section apart from the item's own lines
+    for _, line in ipairs(lines) do
         local kind, a, b = WL.Style(line)
-        if i == 1 then
-            tooltip:AddLine(" ")
-            tooltip:AddLine(line[1], C.title[1], C.title[2], C.title[3])
-        elseif kind == "double" then
+        if kind == "double" then
             tooltip:AddDoubleLine(a, b, C.left[1], C.left[2], C.left[3], C.right[1], C.right[2], C.right[3])
+        elseif kind == "custom" then
+            tooltip:AddLine(a, b[1], b[2], b[3], true)
+        elseif kind == "space" or kind == "rule" then
+            tooltip:AddLine(a)
         else
             local c = C[kind]
             tooltip:AddLine(a, c[1], c[2], c[3], true)
