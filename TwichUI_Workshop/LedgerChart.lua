@@ -212,7 +212,7 @@ function UI.GoldFlowChart(parent, w, h, opts)
     local plot = c.plot
     local function Solid(color, alpha, sub, layer)
         local t = UI.L.Solid(plot, layer or "ARTWORK", color, alpha)
-        if t.SetDrawLayer then t:SetDrawLayer(layer or "ARTWORK", sub or 0) end
+        if t.SetDrawLayer then t:SetDrawLayer(layer or "ARTWORK", math.max(-8, math.min(7, sub or 0))) end   -- the client accepts sublevels -8 to 7 only
         return t
     end
     local function Place(t, x, y, tw, th)
@@ -235,7 +235,7 @@ function UI.GoldFlowChart(parent, w, h, opts)
     c.selection = Solid(K.bronzeText, 0.14, 1, "BACKGROUND")
     c.selEdgeA, c.selEdgeB = Solid(K.bronzeText, 0.6, 1, "BACKGROUND"), Solid(K.bronzeText, 0.6, 1, "BACKGROUND")
     c.halo = Solid(K.bronzeLo, 0.2, 7, "OVERLAY"); c.halo:SetTexture(MARKER); c.halo:SetVertexColor(K.bronzeText[1], K.bronzeText[2], K.bronzeText[3], 0.22)
-    c.pick = Solid(K.bronzeText, 1, 8, "OVERLAY"); c.pick:SetTexture(MARKER); c.pick:SetVertexColor(K.bronzeText[1], K.bronzeText[2], K.bronzeText[3], 1)
+    c.pick = Solid(K.bronzeText, 1, 7, "OVERLAY"); c.pick:SetTexture(MARKER); c.pick:SetVertexColor(K.bronzeText[1], K.bronzeText[2], K.bronzeText[3], 1)
     for _, t in ipairs({ c.highlight, c.cross, c.selection, c.selEdgeA, c.selEdgeB, c.halo, c.pick }) do t:Hide() end
     c.strokes = Kit.Strokes(plot, function(color, alpha, sub) return Solid(color, alpha, sub) end)
 

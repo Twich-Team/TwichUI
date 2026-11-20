@@ -37,7 +37,7 @@ local c = MIClient("Rich", {
       fr.UnregisterAllEvents = function(s) s.events = {} end
       fr.SetFrameStrata = function() end
       fr.SetMotionScriptsWhileDisabled = function() end
-      fr.CreateTexture = function(s) local t = MIFake("Texture", s); t.SetColorTexture = function() end t.SetVertexColor = function() end t.SetTexCoord = function() end t.SetTexture = function(x, v) x.texture = v end return t end
+      fr.CreateTexture = function(s) local t = MIFake("Texture", s); t.SetDrawLayer = function(_, layer, sub) if sub ~= nil and (sub < -8 or sub > 7) then error("SetDrawLayer: sublevel must be between -8 and 7!") end end; t.SetColorTexture = function() end t.SetVertexColor = function() end t.SetTexCoord = function() end t.SetTexture = function(x, v) x.texture = v end return t end
       fr.CreateFontString = function(s) local t = MIFake("FontString", s); t.SetFont = function() return true end t.SetJustifyV = function() end t.SetWordWrap = function() end t.SetTextColor = function() end return t end
       Press.Instrument(fr, name)   -- last, so it replaces the no-op EnableMouse above with one that records
       if name then cl[name] = fr end
