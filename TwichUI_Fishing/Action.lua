@@ -236,8 +236,12 @@ local function PreClick(self)
     if pt then R.Perf.Stop(pt) end
 end
 
-local function PostClick()
+-- After the secure handler has acted: the button goes back to doing nothing, so an action armed for one press never
+-- outlives it (if combat began before PLAYER_REGEN_DISABLED reached us, a press in lockdown does nothing rather than repeat
+-- the last step). In combat the attributes can't change and stay as combat set them.
+local function PostClick(self)
     local a = A.last
+    if not F.InCombat() and a and a.kind ~= "none" then Arm(self, { kind = "none" }) end
     if a and a.kind == "none" and a.why and A.WHY[a.why] then F.Say(A.WHY[a.why]) end
     if a and a.kind == "none" and a.why then F.Note("press-" .. a.why) end
 end
@@ -260,6 +264,7 @@ local OPEN_WHY = { empty = "TwichUI: no fishing containers to open.", ["bags-ful
     combat = "TwichUI: not during combat.", off = "TwichUI: container opening is turned off." }
 local function OpenPostClick(self)
     local a = self.last
+    if not F.InCombat() and a and a.kind ~= "none" then Arm(self, { kind = "none" }) end
     if a and a.kind == "none" and OPEN_WHY[a.why] then F.Say(OPEN_WHY[a.why]) end
 end
 

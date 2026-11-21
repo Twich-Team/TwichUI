@@ -77,6 +77,7 @@ local states = {}
 F.Subscribe("STATE", function(_, new) states[#states + 1] = new end)
 Check(A.state == "idle", "idle before the first press")
 Check(W.Key("F") == "item" and W.equipped[16] == POLE and A.last.kind == "equip", "press 1 equips the pole")
+Check(W.frames.TwichUIFishingButton.attrs.type == nil, "after the press the button is inert again: nothing armed outlives a press")
 Check(F.Session.Current() ~= nil and A.state == "ready", "and begins the session")
 Check(W.equipped[17] == nil and W.Find(SHIELD), "the shield went to the bags")
 Check(W.Key("F") == "item" and W.enchant and A.last.kind == "lure", "press 2 applies the lure")
