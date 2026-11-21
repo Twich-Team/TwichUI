@@ -146,7 +146,7 @@ class EntryPointTests(unittest.TestCase):
         self.assertIn("environment: release", workflow)
         self.assertIn("tools/release.py seal", workflow)
         self.assertIn("tools/release.py publish", workflow)
-        self.assertIn("release: ", workflow)
+        self.assertIn("\n  publish:\n", workflow)
         self.assertIn("cancel-in-progress: false", workflow)
 
     def test_context_refuses_pushes_or_other_sha(self):
