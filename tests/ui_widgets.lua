@@ -53,6 +53,7 @@ function UIWidgets(env, opts)
     function r:GetAlpha() return self.alpha end
     function r:GetEffectiveAlpha() return W.Alpha(self) end
     function r:GetParent() return self.parent end
+    function r:SetParent(p) self.parent = p end
     function r:IsForbidden() return false end
     function r:GetLeft() local l = W.Rect(self); return l and l / W.Scale(self) end
     function r:GetBottom() local _, b = W.Rect(self); return b and b / W.Scale(self) end

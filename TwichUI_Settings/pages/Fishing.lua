@@ -381,6 +381,8 @@ K.Page({
         Toggle("FadeBars", "fade.bars", "Action bars", "Action, stance and pet bars, the micro menu and bags, and the experience bar.", true)
         Toggle("FadeUnits", "fade.units", "Unit frames", "Your own, your target's and your focus's frames, your pet's, and party frames.", true)
         Toggle("FadeMinimap", "fade.minimap", "Minimap", "The minimap. The game may still draw its blips.", true)
+        Toggle("FadeMeters", "fade.meters", "Damage meters", "EllesmereUI's damage meters, and Details, Recount and Skada if you use them. Chat always stays visible.", true)
+        Toggle("FadeTwichui", "fade.twichui", "TwichUI camping bar", "The camping bar and its sleeping bag bar, if they are on.", true)
         Toggle("FadePanels", "fade.panels", "Other panels", "The quest tracker, buffs and debuffs, and the durability figure.", false)
         Toggle("FadeNotices", "fade.notices", "Quiet TwichUI's own notices",
             "TwichUI's notification cards, reminders and glows stay away while you fish. Your own Quiet screen switch is not changed.", true)

@@ -109,14 +109,30 @@ local function Dress(f, kind)
     f.glow = kind == "treasure" and 1 or 0.6
     local x = (w[3] + 20) * K      -- clear of the frame's right rim
     f.title:ClearAllPoints()
-    f.title:SetPoint("TOPLEFT", f, "TOPLEFT", x, -12 * K)
     f.title:SetText(kind == "treasure" and "Treasure!" or "Caught!")
     H.Color(f.title, kind == "treasure" and H.GOLD or H.IVORY)
-    f.name:ClearAllPoints()
-    f.name:SetPoint("TOPLEFT", f.title, "BOTTOMLEFT", 0, -2)
     f.textX = x
+    T.Stack(f)
+end
+
+-- The text column, centred between the frame's gold borders (art.inner: the rows where the top border's bevel ends and the
+-- bottom one begins), whatever the lines' heights and whether the value line shows. Called when the text or the value line
+-- changes. The title is the first line; the name and the value hang from it.
+T.GAP_NAME, T.GAP_VALUE = 2, 1
+function T.Stack(f)
+    local art = f.kind == "treasure" and H.ART.treasure or H.ART.toast
+    local top, bottom = art.inner[1] * K, art.inner[2] * K
+    local function H_(fs, default) local h = fs:GetStringHeight(); return (type(h) == "number" and h > 0) and h or default end
+    local block = H_(f.title, 19) + T.GAP_NAME + H_(f.name, 15)
+    if f.value:IsShown() then block = block + T.GAP_VALUE + H_(f.value, 13) end
+    local y = top + math.max(0, ((bottom - top) - block) / 2)
+    f.stackTop = y
+    f.title:ClearAllPoints()
+    f.title:SetPoint("TOPLEFT", f, "TOPLEFT", f.textX or 0, -y)
+    f.name:ClearAllPoints()
+    f.name:SetPoint("TOPLEFT", f.title, "BOTTOMLEFT", 0, -T.GAP_NAME)
     f.value:ClearAllPoints()
-    f.value:SetPoint("TOPLEFT", f.name, "BOTTOMLEFT", 0, -1)
+    f.value:SetPoint("TOPLEFT", f.name, "BOTTOMLEFT", 0, -T.GAP_VALUE)
 end
 
 -- The band's length: the painted length, or longer for a long name (the middle slice stretches, never the frame or the
@@ -155,6 +171,7 @@ local function Words(f)
     local v = e.value
     f.value:SetText(v and ("(Est. " .. v .. ")") or "")
     f.value:SetShown(v ~= nil)
+    T.Stack(f)
     Band(f)
 end
 

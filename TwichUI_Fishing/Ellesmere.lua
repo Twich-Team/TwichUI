@@ -48,6 +48,7 @@ E.MODULES = {
     { addon = "EllesmereUIMinimap", label = "Minimap" },
     { addon = "EllesmereUIRaidFrames", label = "Party and raid frames" },
     { addon = "EllesmereUIResourceBars", label = "Resource bars" },
+    { addon = "EllesmereUIDamageMeters", label = "Damage meters" },
 }
 E.NEVER = { EllesmereUIMicroMenu = true, EllesmereEAB_ExtraActionButton = true, EllesmereEAB_EncounterBar = true }
 
@@ -73,6 +74,25 @@ LIST[#LIST + 1] = { name = "Minimap", group = "minimap", role = "minimap", label
 for _, n in ipairs({ "EllesmereUIPlayerAuraBars_Buffs", "EllesmereUIPlayerAuraBars_Debuffs" }) do
     LIST[#LIST + 1] = { name = n, group = "panels", role = "auras", label = "Player aura bars", module = "EllesmereUIUnitFrames" }
 end
+-- Damage meters: each window is a frame named EllesmereUIDMFrame<n> (EUI_DamageMeters_Window.lua; up to MAX_WINDOWS = 5). Its
+-- owner writes its alpha only to 1 when it shows it (UpdateVisibility), which the cover policy handles like any other write.
+for i = 1, 5 do
+    LIST[#LIST + 1] = { name = "EllesmereUIDMFrame" .. i, group = "meters", role = "meter", label = "Damage meter " .. i,
+        module = "EllesmereUIDamageMeters" }
+end
+-- The frame EllesmereUI parents the minimap to (its layout frame, which also carries the map's border and buttons), when
+-- there is one: fading it fades the border and the pieces around the map with it. Never UIParent or the game's cluster.
+local function MinimapHost()
+    local mm = rawget(_G, "Minimap")
+    if type(mm) ~= "table" or type(mm.GetParent) ~= "function" then return nil end
+    local ok, p = pcall(mm.GetParent, mm)
+    if not ok or type(p) ~= "table" or p == rawget(_G, "UIParent") or p == rawget(_G, "MinimapCluster") then return nil end
+    if type(p.GetAlpha) ~= "function" or type(p.SetAlpha) ~= "function" then return nil end
+    return p
+end
+E.MinimapHost = MinimapHost
+LIST[#LIST + 1] = { name = "EllesmereUI minimap frame", group = "minimap", role = "minimap-host", label = "Minimap frame and border",
+    module = "EllesmereUIMinimap", resolve = MinimapHost, optional = true }
 E.LIST = LIST
 
 local function Loaded(name)
@@ -109,9 +129,9 @@ function E.Targets(groups)
     local out = {}
     if not E.Detected() then return out end
     for _, t in ipairs(LIST) do
-        if groups[t.group] and not E.NEVER[t.name] and IsRegion(rawget(_G, t.name)) then
+        if groups[t.group] and not E.NEVER[t.name] and IsRegion(t.resolve and t.resolve() or rawget(_G, t.name)) then
             -- the game's Minimap is EllesmereUI's only while its minimap module runs; otherwise the game's own list has it
-            if t.role ~= "minimap" or Loaded(t.module) then out[#out + 1] = t end
+            if (t.role ~= "minimap" and t.role ~= "minimap-host") or Loaded(t.module) then out[#out + 1] = t end
         end
     end
     return out
@@ -145,8 +165,8 @@ function E.Models()
 end
 
 function E.Status()
-    local found = { bars = 0, units = 0, minimap = 0, panels = 0 }
-    local all = { bars = true, units = true, minimap = true, panels = true }
+    local found = { bars = 0, units = 0, minimap = 0, panels = 0, meters = 0 }
+    local all = { bars = true, units = true, minimap = true, panels = true, meters = true }
     for _, t in ipairs(E.Targets(all)) do found[t.group] = found[t.group] + 1 end
     local EUI = rawget(_G, "EllesmereUI")
     return {

@@ -51,9 +51,43 @@ Fa.GROUPS = {
         "PossessActionBar", "PossessBarFrame", "MicroButtonAndBagsBar", "MicroMenuContainer", "BagsBar", "MainMenuExpBar",
         "ReputationWatchBar", "MainStatusTrackingBarContainer", "SecondaryStatusTrackingBarContainer", "StatusTrackingBarManager" },
     units = { "PlayerFrame", "TargetFrame", "FocusFrame", "PetFrame", "PartyFrame", "CompactPartyFrame" },
-    minimap = { "MinimapCluster" },
+    -- the cluster, and the pieces that hang around the map (each only if it exists; the cluster's own children already follow it)
+    minimap = { "MinimapCluster", "MinimapBackdrop", "MiniMapTracking", "MiniMapMailFrame", "MiniMapBattlefieldFrame",
+        "MiniMapWorldMapButton", "GameTimeFrame", "MinimapZoneTextButton", "TimeManagerClockButton",
+        "ExpansionLandingPageMinimapButton" },
     panels = { "ObjectiveTrackerFrame", "QuestWatchFrame", "WatchFrame", "BuffFrame", "DebuffFrame", "DurabilityFrame" },
 }
+-- Damage meters other than EllesmereUI's (Details!, Recount, Skada), by the names their own windows carry. Looked for, never
+-- required: a name that isn't there is not an error. Unverified in the real client (read from those addons' public sources).
+Fa.METERS = { "DetailsBaseFrame1", "DetailsBaseFrame2", "DetailsBaseFrame3", "DetailsBaseFrame4", "Recount_MainWindow",
+    "SkadaBarWindowSkada" }
+-- TwichUI's own bars: the camping bar's frame (R.Camping.Frame(), it has no global name) and the sleeping bag bar's.
+Fa.TWICHUI = {
+    { name = "TwichUI camping bar", resolve = function() local C = R.Camping; return C and C.Frame and C.Frame() or nil end },
+    { name = "TwichUICampingRest" },
+}
+-- Chat is never faded (Fishing Mode wants the chat to be read): by name, and by being an ancestor of a chat frame.
+Fa.CHAT = { "^ChatFrame%d", "^GeneralDockManager", "^ChatAlertFrame", "^QuickJoinToastButton", "^EllesmereUIChat", "^ChatConfig",
+    "^FloatingChatFrame", "^ChatMenu" }
+function Fa.IsChatName(name)
+    if type(name) ~= "string" then return false end
+    for _, pat in ipairs(Fa.CHAT) do if name:find(pat) then return true end end
+    return false
+end
+local function AboveChat(frame)
+    local chat = rawget(_G, "ChatFrame1")
+    local p = chat
+    for _ = 1, 12 do
+        if type(p) ~= "table" then return false end
+        if p == frame then return true end
+        if type(p.GetParent) ~= "function" then return false end
+        local ok, up = pcall(p.GetParent, p)
+        if not ok then return false end
+        p = up
+    end
+    return false
+end
+
 -- Never faded, whatever a list says: the game's root, what carries warnings, errors, casts, loot and the player's windows,
 -- and frames an addon asks never to have their alpha changed.
 Fa.NEVER = { UIParent = true, WorldFrame = true, UIErrorsFrame = true, RaidWarningFrame = true, RaidBossEmoteFrame = true,
@@ -216,9 +250,10 @@ end
 ---------------------------------------------------------------------------
 -- What is wanted
 ---------------------------------------------------------------------------
+Fa.SWITCHES = { "bars", "units", "minimap", "panels", "meters", "twichui" }
 local function Groups()
     local g = {}
-    for _, group in ipairs({ "bars", "units", "minimap", "panels" }) do g[group] = S.Get("fade." .. group) and true or false end
+    for _, group in ipairs(Fa.SWITCHES) do g[group] = S.Get("fade." .. group) ~= false and S.Get("fade." .. group) and true or false end
     return g
 end
 
@@ -230,9 +265,19 @@ function Fa.Wanted()
     for _, group in ipairs({ "bars", "units", "minimap", "panels" }) do
         if g[group] then for _, n in ipairs(Fa.GROUPS[group]) do Add({ name = n, group = group, owner = "game" }) end end
     end
+    if g.meters then
+        for _, n in ipairs(Fa.METERS) do Add({ name = n, group = "meters", owner = "addon", optional = true }) end
+    end
+    if g.twichui then
+        for _, t in ipairs(Fa.TWICHUI) do
+            Add({ name = t.name, group = "twichui", owner = "TwichUI", resolve = t.resolve, optional = true,
+                label = t.resolve and "Camping bar" or "Sleeping bag bar" })
+        end
+    end
     if S.Get("fade.ellesmere") ~= false and F.Ellesmere then
         for _, t in ipairs(F.Ellesmere.Targets(g)) do
-            Add({ name = t.name, group = t.group, owner = "EllesmereUI", label = t.label, role = t.role })
+            Add({ name = t.name, group = t.group, owner = "EllesmereUI", label = t.label, role = t.role, resolve = t.resolve,
+                optional = t.optional })
         end
     end
     local extra = S.Get("fade.extra")
@@ -249,8 +294,10 @@ end
 -- Why a name can't be faded, or nil: "missing", "never", "forbidden", "no-alpha".
 function Fa.Why(name, frame)
     if Fa.NEVER[name] or (F.Ellesmere and F.Ellesmere.NEVER[name]) then return "never" end
+    if Fa.IsChatName(name) then return "chat" end
     frame = frame or rawget(_G, name)
     if frame == nil then return "missing" end
+    if AboveChat(frame) then return "chat" end
     if type(frame) ~= "table" or frame == rawget(_G, "UIParent") then return "never" end
     if type(frame.GetAlpha) ~= "function" or type(frame.SetAlpha) ~= "function" then return "no-alpha" end
     if frame.IsForbidden and frame:IsForbidden() then return "forbidden" end
@@ -258,18 +305,20 @@ function Fa.Why(name, frame)
 end
 
 -- Starts handling one frame (t: a Wanted entry or a model). Returns the entry or nil.
+local function Lookup(t) return t.resolve and t.resolve() or rawget(_G, t.name) end
+
 local function Add(t, frame)
-    frame = frame or rawget(_G, t.name)
+    frame = frame or Lookup(t)
     local why = Fa.Why(t.name or "", frame)
     if why then
-        if why ~= "missing" or t.owner ~= "game" then skipped[#skipped + 1] = { name = t.name, why = why, owner = t.owner } end
+        if why ~= "missing" or not (t.owner == "game" or t.optional) then skipped[#skipped + 1] = { name = t.name, why = why, owner = t.owner } end
         return nil
     end
     if byFrame[frame] then return byFrame[frame] end
     local a = F.Num(frame:GetAlpha())
     if not a then skipped[#skipped + 1] = { name = t.name, why = "unreadable", owner = t.owner } return nil end
     local e = { frame = frame, name = t.name, group = t.group, owner = t.owner, label = t.label, role = t.role,
-        kind = t.kind or "frame", from = a, set = a, ownerWrites = 0, window = F.Clock(), burst = 0 }
+        kind = t.kind or "frame", resolve = t.resolve, from = a, set = a, ownerWrites = 0, window = F.Clock(), burst = 0 }
     e.hooked = Hook(frame)
     entries[#entries + 1] = e
     byFrame[frame] = e
@@ -302,7 +351,7 @@ local function Tick()
     end
     -- rebuilt under the same name: the old frame back to its owner's preference, the new one handled
     for _, e in ipairs(entries) do
-        if e.kind == "frame" and not e.done and rawget(_G, e.name) ~= e.frame then
+        if e.kind == "frame" and not e.done and Lookup(e) ~= e.frame then
             if not e.contested then Write(e, e.from) end
             e.done, e.stale = true, true
             byFrame[e.frame] = nil
@@ -311,7 +360,7 @@ local function Tick()
     -- frames that appeared since (or were rebuilt), and EllesmereUI's portraits every fifth pass
     local added = false
     for _, t in ipairs(Fa.Wanted()) do
-        local f = rawget(_G, t.name)
+        local f = Lookup(t)
         if f ~= nil and not byFrame[f] and not Fa.Why(t.name, f) then
             if Add(t, f) then added = true end
         end
@@ -359,7 +408,7 @@ function Fa.Restore(instant, force)
     local result = { restored = 0, owner = 0, contested = 0, stale = 0, forced = force and true or false, at = F.Now() }
     if force then
         for _, e in ipairs(entries) do
-            if not e.stale and (rawget(_G, e.name) == e.frame or e.kind == "model") then
+            if not e.stale and (Lookup(e) == e.frame or e.kind == "model") then
                 e.done, e.contested, e.to = false, false, nil
                 if not Near(e.frame:GetAlpha(), e.from) then Write(e, e.from) end
             end
@@ -413,7 +462,7 @@ function Fa.Status()
         quiet = R.QuietScreen and R.QuietScreen.Holding and R.QuietScreen.Holding(Fa.QUIET_OWNER) or false }
 end
 
-local WHY = { missing = "not there", never = "never touched (safety)", forbidden = "forbidden by the game",
+local WHY = { chat = "chat is never faded", missing = "not there", never = "never touched (safety)", forbidden = "forbidden by the game",
     ["no-alpha"] = "takes no alpha", unreadable = "alpha unreadable" }
 Fa.WHY = WHY
 
@@ -446,7 +495,7 @@ function Fa.Inventory()
     for _, t in ipairs(Fa.Wanted()) do
         local g = inv[t.group] or { game = 0, EllesmereUI = 0, added = 0, missing = 0 }
         inv[t.group] = g
-        if Fa.Why(t.name) then g.missing = g.missing + 1 else g[t.owner] = (g[t.owner] or 0) + 1 end
+        if Fa.Why(t.name, t.resolve and t.resolve() or nil) then g.missing = g.missing + 1 else g[t.owner] = (g[t.owner] or 0) + 1 end
     end
     return inv
 end

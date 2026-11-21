@@ -55,6 +55,11 @@ do
   Check(P.On() and P.State().mode == "immersive" and P.State().reason == "cast", "the first cast brings Fishing Mode on (immersive)")
   Check(F.CastBar.Shown() and F.CatchList.Shown(), "the cast bar and the catch list show")
   Check(P.BrandShown(), "and the TwichUI Fishing emblem, top left")
+  do
+    local _, _, _, x, y = c.TwichUIFishingBrand:GetPoint(1)
+    Check(y <= -48 and y >= -120 and x >= 16, ("the emblem sits below the top status strip, with room (%d, %d)"):format(x, y))
+    Check(P.BRAND.scale == 0.36, "at its usual scale")
+  end
   Check(math.abs(W.camera.zoom - 7) < 0.01, "the camera moved once to Fishing Mode's distance (15 -> 7)")
   local zoomCalls = W.camera.calls
   Settle(W)

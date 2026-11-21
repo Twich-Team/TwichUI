@@ -215,12 +215,15 @@ end
 -- The "TwichUI Fishing" emblem, top left in immersive Fishing Mode, as in the approved mockup (present.brand)
 ---------------------------------------------------------------------------
 local brand
+-- Where the emblem sits: below the top status strip (the data bar and the minimap's header live in the first ~40 units of the
+-- screen) with room to breathe, a little in from the left edge. Scaled from the art's size; one place to change it.
+P.BRAND = { x = 26, y = -60, scale = 0.36 }
 function P.Brand(show)
     if show and not brand then
         local a = H.ART.logo
         local f = CreateFrame("Frame", "TwichUIFishingBrand", UIParent)
-        f:SetSize(a.cw * 0.36, a.ch * 0.36)
-        f:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 22, -16)
+        f:SetSize(a.cw * P.BRAND.scale, a.ch * P.BRAND.scale)
+        f:SetPoint("TOPLEFT", UIParent, "TOPLEFT", P.BRAND.x, P.BRAND.y)
         f:SetFrameStrata("LOW")
         f:EnableMouse(false)
         local tex = f:CreateTexture(nil, "ARTWORK")
@@ -455,7 +458,7 @@ P.HELP = {
     "/tui fish move - drag the cast bar, catch list and notices where you want them (again to lock them)",
     "/tui fish preview - try Fishing Mode for 15 seconds with sample figures: HUD, fading and camera (nothing is cast or used)",
     "/tui fish camera on|off, camera zoom <1-30 yards>, camera offset <-2..2, 0 is off>",
-    "/tui fish fade - what can be faded and what was; fade on|off, fade bars|units|minimap|panels|notices|ellesmere on|off,",
+    "/tui fish fade - what can be faded and what was; fade on|off, fade bars|units|minimap|panels|meters|twichui|notices|ellesmere on|off,",
     "    fade alpha <0-0.6>, fade add|remove <FrameName>",
     "/tui fish list on|off, list rows <3-12>, list sort count|recent|name, list value show|hide; toasts on|off; scale castbar|list|toast <0.6-1.6>",
     "/tui fish brand on|off - the TwichUI Fishing emblem at the top left in immersive Fishing Mode",
@@ -518,7 +521,7 @@ function P.Command(word, rest)
         if sub == "ellesmere" then
             local v = OnOff(val); if v == nil then Say("usage: /tui fish fade ellesmere on|off") return true end
             Set("fade.ellesmere", v, "fading EllesmereUI's frames " .. (v and "on." or "off."))
-        elseif sub == "bars" or sub == "units" or sub == "minimap" or sub == "panels" or sub == "notices" then
+        elseif sub == "bars" or sub == "units" or sub == "minimap" or sub == "panels" or sub == "meters" or sub == "twichui" or sub == "notices" then
             local v = OnOff(val); if v == nil then Say("usage: /tui fish fade %s on|off", sub) return true end
             Set("fade." .. sub, v, "fading " .. sub .. " " .. (v and "on." or "off."))
         elseif sub == "alpha" then Set("fade.alpha", tonumber(val), "faded parts are drawn at " .. tostring(val) .. ".")
@@ -531,7 +534,7 @@ function P.Command(word, rest)
             if sub == "add" then list[#list + 1] = name end
             Set("fade.extra", #list > 0 and list or false, (sub == "add" and "also fading " or "no longer fading ") .. name .. ".")
         else
-            local v = OnOff(sub); if v == nil then Say("usage: /tui fish fade on|off, or fade bars|units|minimap|panels|notices on|off") return true end
+            local v = OnOff(sub); if v == nil then Say("usage: /tui fish fade on|off, or fade bars|units|minimap|panels|meters|twichui|notices on|off") return true end
             Set("fade.enabled", v, "fading the interface " .. (v and "on." or "off."))
         end
     elseif word == "list" then

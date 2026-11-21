@@ -237,7 +237,7 @@ approved mockup), or not tested.
 | `compact` | | | yes | | yes | |
 | `classic` | | | | | | |
 
-The emblem is the texture pack's "TwichUI Fishing" logo, at the top left as in the approved mockup (`/tui fish brand off`).
+The emblem is the texture pack's "TwichUI Fishing" logo, at the top left as in the approved mockup (`/tui fish brand off`). It sits 26 units in and 60 down (`Present.lua`, `P.BRAND`), below the top status strip, at 0.36 of the art's size; the in-game check showed the first placement (22, -16) crowding the strip. The notification's lines are centred between the frame's gold borders (`Hud.lua` `ART.*.inner`, `Toast.lua` `T.Stack`), so "Caught!" no longer touches the top border, and the lines stay balanced with or without a value line.
 
 A part's own switch (`camera on|off`, `fade on|off`, `list on|off`, `toasts on|off`) only ever takes that part away.
 Classic is Stage 1 alone: the key fishes, nothing more is drawn.
@@ -276,11 +276,19 @@ addon at login, as the fishing key does.
 
 ### Fading (`Fade.lua`, `Ellesmere.lua`)
 
-- **Groups:** `fade bars|units|minimap|panels on|off`. Bars, units and the minimap are on, panels off.
+- **Groups:** `fade bars|units|minimap|panels|meters|twichui on|off`. Everything but panels is on.
   - Bars: the game's action, stance, pet and possess bars, the micro menu, the bags bar and the experience and reputation
     bars.
   - Units: the game's player, target, focus, pet and party frames.
-  - Minimap: the minimap cluster.
+  - Minimap: the minimap cluster and the pieces around the map (tracking, mail, battlefield, calendar, clock, zone text, the
+    landing page button); with EllesmereUI, the frame it keeps the map in, which carries its border and buttons.
+  - Meters: EllesmereUI's damage meters (`EllesmereUIDMFrame1`..`5`) and, if present, Details! (`DetailsBaseFrame1`..`4`),
+    Recount and Skada windows. Names a missing addon doesn't have are skipped silently. (Unverified in the real client.)
+  - TwichUI: the camping bar (its frame, through `R.Camping.Frame()`) and the sleeping bag bar. Only their alpha is
+    changed, while Fishing Mode is on, and each returns to its own value; the camping bar's own fade is covered like any
+    owner's write. Absent or switched off: nothing happens.
+  - **Chat is never faded.** Chat frames, tabs, the dock, and any frame that holds a chat frame are refused by `Fade.lua`
+    (even named with `fade add`), and the minimap and meter groups never reach them.
   - Panels: the quest tracker, buffs, debuffs and durability.
 - **Hidden frames:** faded too, so a target frame that appears while you fish appears faded.
 - **Your own frames:** `fade add <FrameName>` fades another addon's frame too, and `fade remove <FrameName>` stops it.
@@ -321,7 +329,8 @@ of EllesmereUI is called, hooked, replaced or saved; only the frames below have 
 |---|---|---|
 | bars | `EABBar_MainBar`, `EABBar_Bar2`..`Bar10`, `EABBar_StanceBar`, `EABBar_PetBar`, `EABPagingFrame`, `EllesmereEAB_XPBar` / `RepBar` / `FavorBar`, the bar caps `EllesmereEAB_MicroBar` / `BagBar` | EllesmereUI writes these bars' alpha itself (mouse-over, Advanced Fade, visibility passes); its writes are covered and kept as preferences. The micro menu and bags themselves are the game's `MicroMenuContainer` and `BagsBar` |
 | units | `EllesmereUIUnitFrames_Hider`: the one parent of every unit frame EllesmereUI spawns, which EllesmereUI never writes; the 3D portrait models under it; `EllesmereUIRaidFrameContainer`; `EllesmereUIResourceBarsFrame` | Fading the parent fades every unit frame with no write EllesmereUI undoes; its pet-battle visibility driver stays its own. 3D models don't inherit a parent's alpha, so each is faded by itself (found by a bounded walk, every fifth upkeep pass) |
-| minimap | `Minimap` (EllesmereUI takes it out of `MinimapCluster`, which it sets to 0) | The engine draws the map's blips regardless of alpha, so they may stay visible |
+| minimap | `Minimap` (EllesmereUI takes it out of `MinimapCluster`, which it sets to 0) and the frame EllesmereUI parents it to | The engine draws the map's blips regardless of alpha, and the game offers no safe call to hide them, so unit and tracking dots drawn by the engine may stay visible; everything else (map, border, buttons, clock, zone text) fades. Only partial, by the engine's rule |
+| meters | `EllesmereUIDMFrame1`..`5` (EllesmereUIDamageMeters) | Its own writes (alpha 1 when it shows a window) are covered like any bar's |
 | panels | `EllesmereUIPlayerAuraBars_Buffs` / `_Debuffs` | Off by default, with the other panels |
 
 Not faded: the extra action button and the encounter bar (gameplay), EllesmereUI's cast bars, and anything not listed: its
@@ -476,7 +485,8 @@ None of these has been done yet. In this order, on WoW: Forever:
        - nothing is cast or equipped;
        - everything comes back and the settings reopen.
 7. [ ] Start fishing with your key: Fishing Mode comes on with the first line.
-8. [ ] With EllesmereUI: its action bars, unit frames (with their 3D portraits) and minimap fade. A mouse-over bar still
+8. [ ] With EllesmereUI: its action bars, unit frames (with their 3D portraits), damage meter and minimap fade; the camping
+       bar fades; chat stays fully visible; the emblem clears the top strip and "Caught!" clears the gold border. A mouse-over bar still
        shows under your pointer. Target something: its frame doesn't flash.
 9. [ ] Hold the reveal key (or `/tui fish reveal`): the interface comes back, as EllesmereUI wants it, then fades on
        release.

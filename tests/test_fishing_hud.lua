@@ -174,6 +174,18 @@ do
   local active, queue = T.Active()
   Check(#active == 1 and active[1].entry.q == 3 and active[1].name:GetText() == "Raw Mithril Head Trout |cffe0bd85\195\1513|r", "two stacks of one item: one notice, x3")
   Check(active[1].title:GetText() == "Caught!" and active[1].icon:GetTexture() == "Interface\\Icons\\item" .. FISH1, "with the item's own icon")
+  do -- the title sits inside the gold borders, the lines centred between them, and the item and text stay inside the frame
+    local f, A = active[1], F.Hud.ART.toast
+    local _, _, _, _, ty = f.title:GetPoint(1)
+    local K = 0.86
+    Check(-ty >= A.inner[1] * K, ("the title starts below the top border (%.1f >= %.1f)"):format(-ty, A.inner[1] * K))
+    local block = 19 + 2 + 15
+    Check(-ty + block <= A.inner[2] * K + 0.01, "and the text block ends above the bottom border")
+    local gapTop, gapBottom = -ty - A.inner[1] * K, A.inner[2] * K - (-ty + block)
+    Check(math.abs(gapTop - gapBottom) < 1, ("centred between the borders (%.1f above, %.1f below)"):format(gapTop, gapBottom))
+    local _, _, _, _, ny = f.name:GetPoint(1)
+    Check(ny == -2 and f.name:GetPoint(1) == "TOPLEFT", "the name hangs from the title")
+  end
   Check(not active[1].value:IsShown(), "no value line without a valuation")
   Cast(W); Catch(W, { { FISH1, 1 } })
   Check(#active == 1 and active[1].entry.q == 4, "the same fish again while its notice is up adds to it")
