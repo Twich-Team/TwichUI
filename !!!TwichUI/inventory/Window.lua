@@ -742,6 +742,7 @@ function W.RowCount() return #rows end
 -- shown only while it is open. Placed just outside the interface's window (above its top right corner) so it covers
 -- none of the game's controls.
 ---------------------------------------------------------------------------
+local F_HEIGHT   -- the button's natural height, restored when it leaves a skinned window
 local HOSTS = { mail = "MailFrame", bank = "BankFrame", guild = "GuildBankFrame" }
 
 local function ButtonText(kind)
@@ -760,10 +761,37 @@ local function SetLabel(b, kind)
     b:SetWidth(math.ceil((b.text:GetStringWidth() or 120) + pad))
 end
 
+-- EllesmereUI's Blizzard skin restyles the mailbox, bank and guild bank windows. With it on, the button sits inside the
+-- window's title strip (left of the close button) instead of floating above the corner, and belongs to the window, so it
+-- shows, hides, scales and stacks with it. Without the skin the placement is unchanged.
+local function IsSkinned(host)
+    if type(host) ~= "table" or not host.IsShown then return false end
+    local loaded = C_AddOns and C_AddOns.IsAddOnLoaded
+    return (loaded and loaded("EllesmereUIBlizzardSkin") and true) or false
+end
+
+local EMBED_HEIGHT, EMBED_INSET_X, EMBED_INSET_Y, CLOSE_ROOM = 22, 6, -5, 26
+
 local function Anchor(b, kind)
     b:ClearAllPoints()
     local host = _G[HOSTS[kind]]
-    if type(host) == "table" and host.IsShown and host:IsShown() then
+    local open = type(host) == "table" and host.IsShown and host:IsShown()
+    if open and IsSkinned(host) then
+        b:SetParent(host)
+        b:SetFrameStrata(host:GetFrameStrata() or "HIGH")
+        b:SetFrameLevel((host:GetFrameLevel() or 0) + 20)
+        b:SetHeight(EMBED_HEIGHT)
+        b:SetPoint("TOPRIGHT", host, "TOPRIGHT", -(EMBED_INSET_X + CLOSE_ROOM), EMBED_INSET_Y)
+        b.embedded = true
+        return
+    end
+    if b.embedded then
+        b.embedded = nil
+        b:SetParent(UIParent)
+        b:SetFrameStrata("HIGH")
+        b:SetHeight(F_HEIGHT or 22)
+    end
+    if open then
         b:SetPoint("BOTTOMRIGHT", host, "TOPRIGHT", 0, 4)
     else
         -- another addon draws this interface (a bag addon's bank, for one): a quiet place at the top of the screen
@@ -779,6 +807,9 @@ local function InterfaceButton(kind)
     b = F.Button(UIParent, "Magic Inventory", 190, "secondary", function() W.Toggle() end)
     b:SetFrameStrata("HIGH")
     b:Hide()
+    F_HEIGHT = b:GetHeight()
+    -- the settings dialog's crafted button (CraftLook), as the review window's own buttons
+    if R.CraftLook and R.CraftLook.Dress then R.CraftLook.Dress(b, "secondary") end
     if R.Icons and R.Icons.Apply then
         -- the feature's own icon (the settings page's), left of the label
         b.icon = b:CreateTexture(nil, "OVERLAY")

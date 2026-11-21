@@ -156,6 +156,20 @@ Check(mailButton.shown and mailButton.points[1][2] == c.MailFrame, "the window a
 c.CloseMail()
 Flush()
 
+-- with EllesmereUI's Blizzard skin on, the button is embedded in the window's title strip and belongs to the window
+c.C_AddOns = { IsAddOnLoaded = function(n) return n == "EllesmereUIBlizzardSkin" end }
+c.OpenMail(); Flush()
+local ep = mailButton.points[1]
+Check(ep and ep[1] == "TOPRIGHT" and ep[2] == c.MailFrame and ep[3] == "TOPRIGHT" and ep[4] < 0 and ep[5] < 0,
+  "skinned mailbox: the button sits inside the title strip, left of the close button")
+Check(mailButton.parent == c.MailFrame, "and belongs to the window")
+c.C_AddOns = nil
+c.CloseMail(); Flush(); c.OpenMail(); Flush()
+local up = mailButton.points[1]
+Check(up and up[1] == "BOTTOMRIGHT" and mailButton.parent == c.UIParent, "skin off: back above the corner on the screen")
+c.CloseMail()
+Flush()
+
 ---------------------------------------------------------------------------
 -- The bank drawn by another addon: the button still has a place; the deposit is the player's
 ---------------------------------------------------------------------------
