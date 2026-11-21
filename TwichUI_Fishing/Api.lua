@@ -153,6 +153,9 @@ function API.Report()
     local q = d.queue
     Add("containers: %d unopened in %d lots (%d locked); mode %s; automatic opening: %s", q.unopened, q.lots, q.locked, q.mode,
         q.autoOpen or "not tried")
+    if F.Present and F.Present.ReportLines then
+        for _, line in ipairs(F.Present.ReportLines()) do lines[#lines + 1] = line end
+    end
     if #d.notes == 0 then Add("no recent errors")
     else
         for _, n in ipairs(d.notes) do Add("  %s %s%s", date("%H:%M:%S", n.at), n.code, n.detail and (": " .. n.detail) or "") end

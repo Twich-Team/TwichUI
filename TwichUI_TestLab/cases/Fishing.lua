@@ -60,6 +60,54 @@ TL.Case{ id = "fishing.client.api", cat = "fishing", class = "readonly", budget 
     t:Check(true, "read")
 end }
 
+-- Stage 2 (Fishing Mode): the camera and gamepad functions it would use, read only. Nothing is zoomed, set or vibrated:
+-- the camera's distance and the shoulder-offset setting are only read, and the gamepad only asked whether it is on.
+TL.Case{ id = "fishing.client.presentation", cat = "fishing", class = "readonly", budget = 2, run = function(t)
+    for _, name in ipairs({ "GetCameraZoom", "CameraZoomIn", "CameraZoomOut", "SetView", "SaveView" }) do
+        t:Fact("fishing.camera." .. name, tostring(type(rawget(_G, name)) == "function"))
+    end
+    local get = rawget(_G, "GetCameraZoom")
+    if type(get) == "function" then
+        local ok, z = pcall(get)
+        t:Fact("fishing.camera.zoomNow", ok and tostring(z) or "error")
+    end
+    if C_CVar and C_CVar.GetCVar then
+        for _, name in ipairs({ "test_cameraOverShoulder", "cameraDistanceMaxZoomFactor", "cameraZoomSpeed" }) do
+            local ok, v = pcall(C_CVar.GetCVar, name)
+            t:Fact("fishing.cvar." .. name, ok and tostring(v) or "unreadable")
+        end
+    end
+    local G = rawget(_G, "C_GamePad")
+    t:Fact("fishing.gamepad.api", tostring(type(G) == "table"))
+    for _, name in ipairs({ "IsEnabled", "GetActiveDeviceID", "SetVibration", "StopVibration" }) do
+        t:Fact("fishing.gamepad." .. name, tostring(Has(G, name)))
+    end
+    if Has(G, "IsEnabled") then
+        local ok, on = pcall(G.IsEnabled)
+        t:Fact("fishing.gamepad.enabled", ok and tostring(on) or "error")
+    end
+    if GetBindingKey then
+        t:Fact("fishing.binding.mode", tostring(GetBindingKey("TWICHUI_FISHING_MODE")))
+        t:Fact("fishing.binding.reveal", tostring(GetBindingKey("TWICHUI_FISHING_REVEAL")))
+    end
+    for _, name in ipairs({ "MainMenuBar", "MultiBarBottomLeft", "PlayerFrame", "MinimapCluster", "ObjectiveTrackerFrame",
+        "MicroMenuContainer", "BagsBar", "EllesmereUIUnitFrames_Player", "EllesmereUIUnitFrames_Target" }) do
+        local f = rawget(_G, name)
+        t:Fact("fishing.frame." .. name, type(f) == "table" and type(f.GetAlpha) == "function"
+            and (tostring(f:IsShown()) .. " " .. tostring(f:GetAlpha())) or "absent")
+    end
+    local F = R.Fishing
+    if F and F.Present then
+        local st = F.Present.State()
+        t:Fact("fishing.mode", (st.on and "on " or "off ") .. st.mode)
+        local cam = F.Camera.Status()
+        t:Fact("fishing.camera.supported", "zoom " .. tostring(cam.supported.zoom) .. ", offset " .. tostring(cam.supported.offset))
+    else
+        t:Note("TwichUI Fishing is not loaded: its Fishing Mode facts are not read.")
+    end
+    t:Check(true, "read")
+end }
+
 -- The decision table (pure: explicit contexts, nothing read from the game). Needs TwichUI Fishing loaded.
 TL.Case{ id = "fishing.decide.table", cat = "fishing", class = "pure", budget = 2, run = function(t)
     local F = R.Fishing

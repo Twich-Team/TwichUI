@@ -12,16 +12,22 @@
 --   L.Load()        loads it if needed: true, or false and a reason code
 --   L.Command(arg)  /tui fish
 --   L.Snapshot()    read only: loaded, attempts, failed, waiting
+--   L.Mode()        the "Fishing Mode" key (Bindings.xml): loads the addon if needed (never in combat), then turns Fishing Mode
+--                   on or off
+--   L.Reveal(state) the "reveal the interface" key, held: "down" shows the faded interface, "up" fades it again
 
 local R = TwichUI
 local L = { attempts = 0 }
 R.FishingLauncher = L
 L.ADDON = "TwichUI_Fishing"
-L.BINDINGS = { "CLICK TwichUIFishingButton:LeftButton", "CLICK TwichUIFishingOpen:LeftButton" }
+L.BINDINGS = { "CLICK TwichUIFishingButton:LeftButton", "CLICK TwichUIFishingOpen:LeftButton", "TWICHUI_FISHING_MODE",
+    "TWICHUI_FISHING_REVEAL" }
 
 _G.BINDING_HEADER_TWICHUI = _G.BINDING_HEADER_TWICHUI or "TwichUI"
 _G["BINDING_NAME_" .. L.BINDINGS[1]] = "Fishing: the next step (equip, lure, open a clam, cast; reel while the line is out)"
 _G["BINDING_NAME_" .. L.BINDINGS[2]] = "Fishing: open the next fishing container"
+_G["BINDING_NAME_" .. L.BINDINGS[3]] = "Fishing Mode: on or off"
+_G["BINDING_NAME_" .. L.BINDINGS[4]] = "Fishing Mode: reveal the interface (hold)"
 
 local WHY = {
     MISSING = "its folder, TwichUI_Fishing, is missing. Reinstall TwichUI to put it back.",
@@ -118,6 +124,26 @@ function L.Command(arg)
         local fine, err = pcall(F.Main.Command, arg)
         if not fine then R.Fault("fishing command", err) end
     end
+end
+
+function L.Mode()
+    local ok, why = L.Load()
+    if not ok then
+        if why == "COMBAT" then L.wanted = true end
+        R.Print("%s", L.Explain(why))
+        return
+    end
+    local P = R.Fishing and R.Fishing.Present
+    if P and P.Command then
+        local fine, err = pcall(P.Command, "mode", "")
+        if not fine then R.Fault("fishing mode key", err) end
+    end
+end
+
+function L.Reveal(state)
+    if not L.Loaded() then return end
+    local P = R.Fishing.Present
+    if P and P.Reveal then pcall(P.Reveal, state ~= "up") end
 end
 
 function L.Snapshot()
