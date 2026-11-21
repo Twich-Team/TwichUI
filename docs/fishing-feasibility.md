@@ -1,4 +1,4 @@
-# TwichUI Fishing: Forever client feasibility (Stage 1)
+# TwichUI Fishing: Forever client feasibility (Stages 1 and 2)
 
 What the WoW: Forever client (`camelot` game type, interface 16001) allows a fishing addon to do, and how TwichUI Fishing
 does each part. Evidence is the Forever UI source (Gethe `wow-ui-source`, branch `forever`, build 1.60.1 (71037), read
@@ -65,3 +65,38 @@ opening is opt-in (`/tui fish containers auto`). It stops for good the first tim
 player-initiated queue is the default. Restoration first tries addon code out of combat. If that fails it stays pending,
 and the fishing key performs it as a secure macro on the player's press, which works in combat for weapons. Records come
 only from loot events. Bag changes are used for reconciliation, never as evidence of a catch.
+
+## Stage 2: Fishing Mode
+
+**Sources.** No reference was available for Stage 2's client facts:
+
+- No local `wow-ui-source` checkout.
+- warcraft.wiki.gg and CurseForge are not reachable from this environment: DNS fails for both, so the camera API pages and
+  Dialogue UI's page could not be read.
+- Other GitHub repositories are outside this environment's scope.
+
+Everything below is therefore **unverified**. Each function is looked up when it is used, and a missing one turns its part
+off. The Test Lab case `fishing.client.presentation` records the facts in the client.
+
+| Need | How | Status |
+|---|---|---|
+| Camera distance | `GetCameraZoom()`; moved with `CameraZoomIn(d)` / `CameraZoomOut(d)` once each way | Unverified: that they exist on Forever, are free from addon code, animate, and work in combat. A move that changes nothing is noted and given up |
+| Shoulder offset | CVar `test_cameraOverShoulder`, opt-in (off by default) | Unverified: that it exists, and whether the client asks to confirm an experimental setting (TwichUI never suppresses that) |
+| Not used | `SetView`/`SaveView`/`ResetView` (they would overwrite the player's saved views), pitch CVars, per-frame camera control, `UIParent:SetAlpha`, `SetUIVisibility` | Avoided on purpose |
+| Fading | `frame:SetAlpha` on named frames that exist and are shown | Unverified: that alpha changes on protected bars are allowed in combat (they are made at `PLAYER_REGEN_DISABLED`, before the lockdown) |
+| Bindings | `Bindings.xml` entries with Lua bodies; the reveal key uses `runOnUp` and `keystate` | Unverified on Forever. TwichUI calls no `SetBinding` |
+| Gamepad | `C_GamePad.IsEnabled`, `GetActiveDeviceID`, `SetVibration("Low", 0.35)`, `StopVibration`; pad key names `PAD1`... | Unverified. Vibration is opt-in and only on a confirmed catch |
+| Cast timing | `UnitChannelInfo("player")` start and end in milliseconds | As Stage 1 read it. Without times, elapsed seconds are shown |
+| Casting state | `UNIT_SPELLCAST_SENT(unit, target, castGUID, spellID)` | Unverified payload on Forever. Without it, the bar goes straight from idle to the line |
+| Item names | `C_Item.GetItemInfo` / `GetItemInfo`; `GET_ITEM_INFO_RECEIVED` | Standard. A placeholder shows until the name arrives |
+| Textures | 32-bit uncompressed TGA with power-of-two sides, as the rest of the repository | The texture pack's PNGs are not used in the game |
+
+**Dialogue UI and EllesmereUI.** Neither addon's code was read here, for the reasons above. The integration therefore relies
+only on what Fishing Mode itself does:
+
+- It never touches UIParent, which Dialogue UI fades.
+- It changes only alpha.
+- It puts a value back only while it is still its own.
+
+EllesmereUI's unit frame names follow `EllesmereUIUnitFrames_<Unit>`. `_Target` is the name used in
+`!!!TwichUI/targetart/Ellesmere.lua`; the others are assumed and skipped when absent.

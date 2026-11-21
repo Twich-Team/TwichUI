@@ -13,7 +13,7 @@ manifest before adding a file. This map is an entry point, not a dependency anal
 | `TwichUI_Layouts` | Canonical packages, composition, adapters and transactional install | Load on demand; core dependency |
 | `TwichUI_LayoutWizard` | Layout choices, review and authoring | Load on demand; core and Layouts dependencies |
 | `TwichUI_Workshop` | Crafting, shopping, prices, Market bridge, Advisor and AH preview | Load on demand; core dependency |
-| `TwichUI_Fishing` | The fishing key (next step, reel override), lures, gear snapshots, catch tracking, container queue, sessions; `TwichUIFishingDB` | Load on demand (`/tui fish` or a bound fishing key); core dependency |
+| `TwichUI_Fishing` | The fishing key (next step, reel override), lures, gear snapshots, catch tracking, container queue, sessions; Fishing Mode (camera, fading, cast bar, catch list, notifications; artwork in `media/`); `TwichUIFishingDB` | Load on demand (`/tui fish` or a bound fishing or Fishing Mode key); core dependency |
 
 `TwichUI_TestLab`, `TwichUI_LoadTest` and `TwichUI_LoadTestClock` are development
 packages excluded from production packaging. External `TwichUI_MarketData` is
@@ -34,7 +34,7 @@ The actual test patterns and recursive dependencies live in [groups.json](../tes
 | Reminders | `reminders/Config.lua` (`RM.SetEnabled`), State/Controller/Display; `TwichUI_Settings/pages/Reminders.lua` calls setters | `reminders`; `tests/test_reminders_settings.lua`; [guide](reminders.md) |
 | Navigation/maps/pins/guild | `nav/`, `map/`, `pins/`, `npcs/`, `guildloc/` and NavData | `navigation`; [guild privacy](guild-locations.md) |
 | Layouts | `TwichUI_Layouts/Engine.lua`, `TwichUI_LayoutWizard/Model.lua` | `layouts`; [architecture](layouts/architecture.md) |
-| Fishing | `FishingLauncher.lua` loads `TwichUI_Fishing/` (`Action.lua` key, `Loot.lua`, `Containers.lua`, `Gear.lua`, `Lure.lua`, `Session.lua`, `Store.lua`, `Api.lua`) | `fishing`; [fishing](fishing.md) |
+| Fishing | `FishingLauncher.lua` loads `TwichUI_Fishing/` (`Action.lua` key, `Loot.lua`, `Containers.lua`, `Gear.lua`, `Lure.lua`, `Session.lua`, `Store.lua`, `Api.lua`; Fishing Mode: `Present.lua`, `Camera.lua`, `Fade.lua`, `CastBar.lua`, `CatchList.lua`, `Toast.lua`, `Hud.lua`; art from `tools/make_fishing_art.py`) | `fishing`; [fishing](fishing.md) |
 | Crafting/shopping | `TwichUI_Workshop/CraftPlanner.lua`, `Shopping.lua`, `Stock.lua`, `Strategy.lua` | `crafting`; [Workshop](workshop.md) |
 | Market schema-3 | `TwichUI_Workshop/Bridge.lua` schedules validation; `BridgeValidate.lua`, `BridgeSchema.lua`, `BridgeCodec.lua` validate before activation | `market`; `tests/test_workshop_bridge_scoped.lua`, `tests/test_workshop_bridge_scoped.py`; [scoped contract/evidence](workshop/market-bridge-scoped-l3.md) |
 | Workshop reference pricing | `TwichUI_Workshop/Pricing.lua` selects validated Companion base-item references; `Session.lua` and `MarketFacts.lua` connect consumers; `Market.lua` remains the native/local observation API | `market` plus `crafting`, `item-advisor`, `workshop-settings`, `auction-preview`; [consumption contract](workshop/automatic-market-summary.md#workshop-price-consumption) |
