@@ -39,6 +39,9 @@ LayoutsLauncher.lua
 WorkshopLauncher.lua
 # The Auction House visit that may update the Workshop's prices: a light detector, one timer chain per visit, loads the Workshop only when due (docs/workshop/market-data-foundation-v2.md, section 8)
 WorkshopAuto.lua
+# TwichUI Fishing (one key for the next fishing step, and a record of your catches) is an addon of its own, loaded by /tui fish or when
+# one of its keys is bound (docs/fishing.md)
+FishingLauncher.lua
 # First-install setup: offers the layout setup on a new installation and coordinates EllesmereUI's own first run (docs/onboarding.md)
 Onboarding.lua
 # The welcome shown while that setup gets ready (presentation only; Onboarding.lua calls it)

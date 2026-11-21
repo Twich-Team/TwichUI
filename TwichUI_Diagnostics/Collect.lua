@@ -139,7 +139,7 @@ local function ReadMemory()
         if v then partitionMemory=partitionMemory+v;partitionCount=partitionCount+1 end
     end end
     Ring.Push(S.memory, { summaryparts = partitionCount>0 and partitionMemory or nil, t = Now(), core = Get(DX.CORE), settings = Get(DX.SETTINGS), diag = Get(DX.ADDON),
-        navdata = Get(DX.NAVDATA), layouts = Get(DX.LAYOUTS), layoutwizard = Get(DX.LAYOUTWIZARD), workshop = Get(DX.WORKSHOP), marketdata = Get(DX.MARKETDATA), heap = collectgarbage and DX.Num(collectgarbage("count")) or nil, cost = cost })
+        navdata = Get(DX.NAVDATA), layouts = Get(DX.LAYOUTS), layoutwizard = Get(DX.LAYOUTWIZARD), workshop = Get(DX.WORKSHOP), fishing = Get(DX.FISHING), marketdata = Get(DX.MARKETDATA), heap = collectgarbage and DX.Num(collectgarbage("count")) or nil, cost = cost })
 end
 
 local function ProfilerCounts()
@@ -299,7 +299,7 @@ end
 ---------------------------------------------------------------------------
 -- Context events and errors (our frame's own, only while recording)
 ---------------------------------------------------------------------------
-local OURS = { [R.ADDON] = true, TwichUI_Settings = true, TwichUI_NavData = true, TwichUI_Diagnostics = true, TwichUI_Layouts = true, TwichUI_LayoutWizard = true, TwichUI_Workshop = true, TwichUI_MarketData = true }
+local OURS = { [R.ADDON] = true, TwichUI_Settings = true, TwichUI_NavData = true, TwichUI_Diagnostics = true, TwichUI_Layouts = true, TwichUI_LayoutWizard = true, TwichUI_Workshop = true, TwichUI_Fishing = true, TwichUI_MarketData = true }
 for _,bank in ipairs({'A','B'}) do for bucket=0,63 do OURS['TwichUI_MarketPart'..bank..('%02d'):format(bucket)]=true end end
 C.OURS = OURS
 

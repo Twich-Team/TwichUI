@@ -1,0 +1,284 @@
+-- TwichUI Fishing: saved data (TwichUIFishingDB, account-wide; this addon's own saved variable)
+--
+--   TwichUIFishingDB = {
+--     schema = 1,                     -- the shape below (separate from the addon version)
+--     config = { ... },               -- preferences (DEFAULTS below); account-wide, not part of TwichUI profiles yet
+--     client = { saved = {...} },     -- interaction-targeting settings changed while a line was out, to put back
+--     capability = { autoOpen = "worked" | "blocked" },  -- what the client was seen to allow
+--     chars = { ["Name - Realm"] = <character record, NewChar below> },
+--   }
+--
+-- Gameplay records (sessions, totals, the container queue, the gear snapshot) are kept apart from configuration, store
+-- item ids rather than item descriptions, and never hold prices: valuation is a later, separate layer.
+-- Rules (docs/persistence.md): defaults fill only missing values and are never shared tables; a damaged field is
+-- repaired on its own, never by resetting the rest; data from a newer schema is held untouched (nothing is written for
+-- the rest of the session); migrations are ordered and repeatable.
+
+local R = TwichUI
+local F = R.Fishing
+local S = {}
+F.Store = S
+
+S.DEFAULTS = {
+    enabled = true,
+    gear = { manage = true, pole = false, outfit = false, restoreOnEnd = true, combatWeapons = true },
+    lure = { auto = true, preferred = false, alternative = false, early = 0, warn = 60 },
+    containers = { mode = "queue", openWithKey = true, minFree = 1 },
+    session = { idleMinutes = 10, keep = F.LIMITS.sessions },
+    action = { guard = 1.0, reel = "INTERACTTARGET" },
+    interact = { adjust = false },
+}
+
+-- What each preference may hold: a checker per leaf. false means "none chosen" for the optional ids and names.
+local function Bool(v) return type(v) == "boolean" end
+local function Id(v) return v == false or (F.Count(v) ~= nil and v > 0) end
+local function Name(v) return v == false or (type(v) == "string" and #v > 0 and #v <= 64) end
+local function Range(lo, hi) return function(v) return type(v) == "number" and v == v and v >= lo and v <= hi end end
+local function OneOf(...)
+    local ok = {}
+    for _, v in ipairs({ ... }) do ok[v] = true end
+    return function(v) return ok[v] == true end
+end
+
+S.CHECK = {
+    enabled = Bool,
+    gear = { manage = Bool, pole = Id, outfit = Name, restoreOnEnd = Bool, combatWeapons = Bool },
+    lure = { auto = Bool, preferred = Id, alternative = Bool, early = Range(0, 600), warn = Range(0, 600) },
+    containers = { mode = OneOf("queue", "auto", "off"), openWithKey = Bool, minFree = Range(0, 10) },
+    session = { idleMinutes = Range(1, 240), keep = Range(10, 500) },
+    action = { guard = Range(0, 5), reel = OneOf("INTERACTTARGET", "INTERACTMOUSEOVER") },
+    interact = { adjust = Bool },
+}
+
+S.held = false        -- the saved data is from a newer schema: read only, nothing written this session
+S.repairs = 0
+
+local function Repair(code)
+    S.repairs = S.repairs + 1
+    F.Note("repaired", code)
+end
+
+-- Fills what is missing and replaces what is damaged, leaf by leaf, from the defaults.
+local function Normalize(into, defaults, check, path)
+    for k, def in pairs(defaults) do
+        local v, c = into[k], check[k]
+        if type(def) == "table" then
+            if type(v) ~= "table" then
+                if v ~= nil then Repair(path .. k) end
+                into[k] = F.Copy(def)
+            else
+                Normalize(v, def, c, path .. k .. ".")
+            end
+        elseif v == nil then
+            into[k] = def
+        elseif not c(v) then
+            Repair(path .. k)
+            into[k] = def
+        end
+    end
+end
+
+local function NewTotals()
+    return { casts = 0, catches = 0, items = 0, failed = 0, interrupted = 0, missed = 0, sessions = 0, seconds = 0, line = 0,
+        first = nil, last = nil, species = {}, zones = {}, containers = {}, contents = {} }
+end
+S.NewTotals = NewTotals
+
+local function NewChar()
+    return { nextSession = 1, nextLot = 1, session = nil, sessions = {}, totals = NewTotals(), queue = {},
+        gear = { state = "none" }, learned = { enchants = {}, containers = {} }, zoneNames = {} }
+end
+
+local function IsMap(t) return type(t) == "table" end
+
+-- A character record: each part checked on its own (docs/fishing.md lists the shape).
+local function NormalizeTotals(t)
+    for _, k in ipairs({ "casts", "catches", "items", "failed", "interrupted", "missed", "sessions", "seconds", "line" }) do
+        if F.Count(t[k]) == nil then
+            if t[k] ~= nil then Repair("totals." .. k) end
+            t[k] = 0
+        end
+    end
+    for _, k in ipairs({ "species", "zones", "containers", "contents" }) do
+        if not IsMap(t[k]) then
+            if t[k] ~= nil then Repair("totals." .. k) end
+            t[k] = {}
+        end
+    end
+    if t.first ~= nil and F.Count(t.first) == nil then t.first = nil; Repair("totals.first") end
+    if t.last ~= nil and F.Count(t.last) == nil then t.last = nil; Repair("totals.last") end
+end
+S.NormalizeTotals = NormalizeTotals
+
+local GEAR_STATES = { none = true, fishing = true, pending = true }
+
+local function NormalizeChar(c)
+    if F.Count(c.nextSession) == nil or c.nextSession < 1 then c.nextSession = 1; Repair("nextSession") end
+    if F.Count(c.nextLot) == nil or c.nextLot < 1 then c.nextLot = 1; Repair("nextLot") end
+    if not IsMap(c.totals) then
+        if c.totals ~= nil then Repair("totals") end
+        c.totals = NewTotals()
+    else
+        NormalizeTotals(c.totals)
+    end
+    if not IsMap(c.sessions) then if c.sessions ~= nil then Repair("sessions") end c.sessions = {} end
+    for i = #c.sessions, 1, -1 do
+        if not IsMap(c.sessions[i]) or F.Count(c.sessions[i].id) == nil then table.remove(c.sessions, i); Repair("sessions.entry") end
+    end
+    if c.session ~= nil and not (IsMap(c.session) and F.Count(c.session.id) and F.Count(c.session.start)) then
+        c.session = nil; Repair("session")
+    end
+    if c.session then NormalizeTotals(c.session) end
+    if not IsMap(c.queue) then if c.queue ~= nil then Repair("queue") end c.queue = {} end
+    for i = #c.queue, 1, -1 do
+        local lot = c.queue[i]
+        if not (IsMap(lot) and F.Count(lot.id) and F.Count(lot.item) and F.Count(lot.n) and lot.n > 0) then
+            table.remove(c.queue, i); Repair("queue.lot")
+        end
+    end
+    if not IsMap(c.gear) or not GEAR_STATES[c.gear.state] then
+        -- a damaged gear record keeps its snapshot if one is there: an original-equipment snapshot is never dropped
+        local snap = IsMap(c.gear) and IsMap(c.gear.snapshot) and c.gear.snapshot or nil
+        c.gear = { state = snap and "pending" or "none", snapshot = snap }
+        Repair("gear")
+    end
+    if c.gear.state ~= "none" and not IsMap(c.gear.snapshot) then c.gear.state = "none"; c.gear.snapshot = nil; Repair("gear.snapshot") end
+    if not IsMap(c.learned) then c.learned = { enchants = {}, containers = {} }; Repair("learned") end
+    if not IsMap(c.learned.enchants) then c.learned.enchants = {} end
+    if not IsMap(c.learned.containers) then c.learned.containers = {} end
+    if not IsMap(c.zoneNames) then c.zoneNames = {} end
+end
+
+---------------------------------------------------------------------------
+-- Migrations: MIGRATIONS[n] turns schema n - 1 into n. Each is deterministic and repeatable (running it on data already
+-- in shape n changes nothing) and works on the table in place only after checking it, so a failure leaves the older
+-- shape intact. Schema 1 is the first; a table with no schema (or 0) is taken as empty-or-unversioned and given shape 1.
+---------------------------------------------------------------------------
+S.MIGRATIONS = {
+    [1] = function(db)
+        if not IsMap(db.chars) then db.chars = {} end
+        if not IsMap(db.config) then db.config = {} end
+        if not IsMap(db.client) then db.client = {} end
+        if not IsMap(db.capability) then db.capability = {} end
+    end,
+}
+
+-- Brings the global into shape. Returns the db (nil while held).
+function S.Load()
+    local db = rawget(_G, "TwichUIFishingDB")
+    if type(db) ~= "table" then
+        db = {}
+        _G.TwichUIFishingDB = db
+    end
+    local schema = db.schema
+    if schema ~= nil and F.Count(schema) == nil then schema = 0; Repair("schema") end
+    schema = schema or 0
+    if schema > F.SCHEMA then
+        S.held = true
+        F.Note("held", "saved by a newer TwichUI Fishing (schema " .. schema .. ")")
+        S.db = db
+        return nil
+    end
+    for n = schema + 1, F.SCHEMA do
+        S.MIGRATIONS[n](db)
+        db.schema = n
+    end
+    db.schema = F.SCHEMA
+    S.MIGRATIONS[1](db)   -- the containers themselves (repeatable)
+    Normalize(db.config, S.DEFAULTS, S.CHECK, "config.")
+    if not IsMap(db.client) then db.client = {} end
+    if not IsMap(db.capability) then db.capability = {} end
+    for key, c in pairs(db.chars) do
+        if type(key) ~= "string" or not IsMap(c) then db.chars[key] = nil; Repair("chars.entry")
+        else NormalizeChar(c) end
+    end
+    S.db = db
+    return db
+end
+
+-- This character's record (made the first time it is wanted). nil while held.
+function S.Char()
+    if S.held or not S.db then return nil end
+    local key = F.CharKey()
+    local c = S.db.chars[key]
+    if not c then
+        c = NewChar()
+        S.db.chars[key] = c
+    end
+    return c
+end
+
+---------------------------------------------------------------------------
+-- Preferences: S.Get("lure.preferred"), S.Set("lure.preferred", 6532). Set checks the value and refuses what does not fit.
+---------------------------------------------------------------------------
+local function Walk(path)
+    local a, b = path:match("^(%w+)%.(%w+)$")
+    if a then return a, b end
+    return path, nil
+end
+
+function S.Get(path)
+    local cfg = S.db and S.db.config
+    local a, b = Walk(path)
+    local d = S.DEFAULTS[a]
+    if b then
+        local group = cfg and cfg[a]
+        local v
+        if type(group) == "table" then v = group[b] end
+        if v == nil then
+            if type(d) == "table" then return d[b] end
+            return nil
+        end
+        return v
+    end
+    local v = cfg and cfg[a]
+    if v == nil then return d end
+    return v
+end
+
+function S.Set(path, value)
+    if S.held then return false, "held" end
+    if not (S.db and S.db.config) then return false, "not-ready" end
+    local a, b = Walk(path)
+    local check = S.CHECK[a]
+    if b then check = type(check) == "table" and check[b] or nil end
+    if type(check) ~= "function" then return false, "unknown" end
+    if not check(value) then return false, "invalid" end
+    if b then S.db.config[a][b] = value else S.db.config[a] = value end
+    F.Emit("CONFIG", path, value)
+    return true
+end
+
+---------------------------------------------------------------------------
+-- Learned facts (bounded): which weapon enchant ids were seen to come from a lure, which items from fishing loot turned
+-- out to be containers.
+---------------------------------------------------------------------------
+local function Bounded(map, key, value)
+    if map[key] ~= nil then map[key] = value return end
+    local n = 0
+    for _ in pairs(map) do n = n + 1 end
+    if n >= F.LIMITS.learned then return end
+    map[key] = value
+end
+
+function S.LearnEnchant(enchantID, lureItem)
+    local c = S.Char()
+    if c and F.Count(enchantID) and enchantID > 0 then Bounded(c.learned.enchants, enchantID, F.Count(lureItem) or true) end
+end
+
+function S.LureEnchant(enchantID)
+    local c = S.Char()
+    return c and enchantID and c.learned.enchants[enchantID] or nil
+end
+
+function S.LearnContainer(itemID)
+    local c = S.Char()
+    if c and F.Count(itemID) then Bounded(c.learned.containers, itemID, true) end
+end
+
+function S.IsKnownContainer(itemID)
+    if not itemID then return false end
+    if F.CONTAINERS[itemID] then return true end
+    local c = S.Char()
+    return c ~= nil and c.learned.containers[itemID] == true
+end

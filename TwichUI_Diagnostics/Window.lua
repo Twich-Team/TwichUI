@@ -730,6 +730,7 @@ local MEMS = {
     { key = "layouts", label = "TwichUI_Layouts" },
     { key = "layoutwizard", label = "TwichUI_LayoutWizard" },
     { key = "workshop", label = "TwichUI_Workshop" },
+    { key = "fishing", label = "TwichUI_Fishing" },
     { key = "marketdata", label = "TwichUI_MarketData" },
     { key = "summaryparts", label = "Market summary parts (aggregate)" },
     { key = "diag", label = "TwichUI Diagnostics" },
