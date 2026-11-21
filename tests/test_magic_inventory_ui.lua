@@ -160,8 +160,8 @@ Flush()
 c.C_AddOns = { IsAddOnLoaded = function(n) return n == "EllesmereUIBlizzardSkin" end }
 c.OpenMail(); Flush()
 local ep = mailButton.points[1]
-Check(ep and ep[1] == "TOPRIGHT" and ep[2] == c.MailFrame and ep[3] == "TOPRIGHT" and ep[4] < 0 and ep[5] < 0,
-  "skinned mailbox: the button sits inside the title strip, left of the close button")
+Check(ep and ep[1] == "TOP" and ep[2] == c.MailFrame and ep[3] == "TOP" and ep[5] < 0,
+  "skinned mailbox: the button is centred under the title, above the list")
 Check(mailButton.parent == c.MailFrame, "and belongs to the window")
 c.C_AddOns = nil
 c.CloseMail(); Flush(); c.OpenMail(); Flush()
@@ -199,8 +199,8 @@ c.EUI_BankFrame = MIFake("Frame"); c.EUI_BankFrame.shown = true
 c.OpenBank()
 Flush()
 local eb = bankButton.points[1]
-Check(bankButton.shown and bankButton.parent == c.EUI_BankFrame and eb[1] == "BOTTOMRIGHT" and eb[2] == c.EUI_BankFrame,
-  "EllesmereUI's bank: the button is on its window")
+Check(bankButton.shown and bankButton.parent == c.EUI_BankFrame and eb[1] == "CENTER" and eb[2] == c.EUI_BankFrame and eb[3] == "TOP" and eb[5] < 0,
+  "EllesmereUI's bank: the button is in its header")
 c.CloseBank()
 Flush()
 c.EUI_BankFrame = nil

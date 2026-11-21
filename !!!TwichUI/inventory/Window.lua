@@ -776,8 +776,8 @@ end
 -- With EllesmereUI the interface windows are restyled (mailbox: its Blizzard skin) or replaced (bank: EllesmereUI Bags draws
 -- its own window, EUI_BankFrame, and leaves Blizzard's hidden). The button then belongs to that window, so it shows, hides,
 -- scales and stacks with it, and is placed against it rather than floating:
---   * mailbox: in the quiet band between the title strip and the list, right aligned with the list;
---   * bank: just above the window's top right corner (its own header is full of its controls).
+--   * mailbox: centred in the quiet band between the title and the list;
+--   * bank: in the header, in the empty stretch between the title and the sort / search controls.
 -- Without EllesmereUI the placement is unchanged.
 local function AddonLoaded(name)
     local loaded = C_AddOns and C_AddOns.IsAddOnLoaded
@@ -786,16 +786,17 @@ end
 
 local function Shown(frame) return type(frame) == "table" and frame.IsShown and frame:IsShown() end
 
--- The window to place against, and how: "band", "above" (both belong to the window) or nil (unchanged placement)
+-- The window to place against, and how: "band", "header" (both belong to the window) or nil (unchanged placement)
 local function HostFor(kind)
     local euiBank = kind == "bank" and _G.EUI_BankFrame
-    if Shown(euiBank) then return euiBank, "above" end
+    if Shown(euiBank) then return euiBank, "header" end
     local host = _G[HOSTS[kind]]
     if kind == "mail" and Shown(host) and AddonLoaded("EllesmereUIBlizzardSkin") then return host, "band" end
     return host, nil
 end
 
-local EMBED_HEIGHT, BAND_INSET, BAND_TOP = 22, 22, -50
+local EMBED_HEIGHT, BAND_TOP = 22, -39
+local BANK_HEADER_X, BANK_HEADER_Y = -62, -18   -- the empty stretch of EllesmereUI's bank header, from the window's top centre
 
 local function Anchor(b, kind)
     b:ClearAllPoints()
@@ -807,10 +808,10 @@ local function Anchor(b, kind)
         b.embedded = true
         if how == "band" then
             b:SetHeight(EMBED_HEIGHT)
-            b:SetPoint("TOPRIGHT", host, "TOPRIGHT", -BAND_INSET, BAND_TOP)
+            b:SetPoint("TOP", host, "TOP", 0, BAND_TOP)
         else
-            if F_HEIGHT then b:SetHeight(F_HEIGHT) end
-            b:SetPoint("BOTTOMRIGHT", host, "TOPRIGHT", 0, 4)
+            b:SetHeight(EMBED_HEIGHT)
+            b:SetPoint("CENTER", host, "TOP", BANK_HEADER_X, BANK_HEADER_Y)
         end
         return
     end
