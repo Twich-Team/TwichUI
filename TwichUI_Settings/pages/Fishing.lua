@@ -8,11 +8,43 @@
 local R = TwichUI
 local K = R.SettingsKit
 
-local function L() return R.FishingLauncher end
-local function Fish()
+-- The core's launcher, and its helpers only where this install's core has them (the core is a folder of its own too).
+local NOPE = {}
+local function L()
+    local l = R.FishingLauncher
+    if type(l) ~= "table" then return nil end
+    return setmetatable(NOPE, { __index = function(_, k)
+        local v = l[k]
+        if type(v) == "function" then return v end
+        if k == "State" then return function() return l.Loaded and l.Loaded() and "loaded" or "unloaded" end end
+        if k == "KeyText" then return function() return nil end end
+        if k == "OpenBindings" then return function() return false, "Esc > Options > Key Bindings > TwichUI" end end
+        if k == "Explain" then return function(why) return "couldn't load TwichUI Fishing (" .. tostring(why) .. ")." end end
+        return v
+    end })
+end
+-- The TwichUI Fishing this page was written for: its settings interface (Present.SETTINGS_API) at least NEED. TwichUI_Fishing
+-- and TwichUI_Settings are separate folders, so one can be older than the other after a partial update: then the page
+-- uses nothing of it and asks for an update instead.
+local NEED = 1
+local function Loaded()
     local f = R.Fishing
     return f and f.ready and f or nil
 end
+local function Compatible(f)
+    local P = f.Present
+    return type(P) == "table" and (tonumber(P.SETTINGS_API) or 0) >= NEED and type(f.Fade) == "table"
+        and type(f.Fade.Inventory) == "function" and type(f.Ellesmere) == "table"
+end
+local function Mismatch()
+    local f = Loaded()
+    return f ~= nil and not Compatible(f)
+end
+local function Fish()
+    local f = Loaded()
+    return f and Compatible(f) and f or nil
+end
+local MISMATCH = "TwichUI Fishing's files are older than TwichUI's settings window. Install the same TwichUI build in every TwichUI folder (TwichUI_Fishing included), then reload."
 local function Ready()
     local f = Fish()
     return f ~= nil and not f.Store.held
@@ -20,6 +52,7 @@ end
 local function Why()
     local l = L()
     local f = Fish()
+    if Mismatch() then return MISMATCH end
     if f and f.Store.held then return "Your fishing records were saved by a newer TwichUI, so these settings can't be saved here." end
     local state, why = l and l.State() or "unloaded", nil
     if state == "failed" then _, why = l.State() return why end
@@ -91,6 +124,7 @@ local function StatusText()
     local l = L()
     local f = Fish()
     if not f then
+        if Mismatch() then return "Needs updating" end
         local state = l and l.State() or "unloaded"
         return state == "failed" and "Couldn't load" or (state == "waiting" and "Waiting for combat to end" or "Not loaded yet")
     end
@@ -106,7 +140,7 @@ end
 
 local function StatusTone()
     local f = Fish()
-    if not f then return "quiet" end
+    if not f then return Mismatch() and "warn" or "quiet" end
     if f.Store.held then return "warn" end
     return f.Store.Get("enabled") and "ok" or "quiet"
 end

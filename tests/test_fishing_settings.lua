@@ -50,6 +50,32 @@ local function Client(o)
   return c, S
 end
 
+-- Everything the window reads from a row when it draws one (Window.lua): an error here is an error on screen.
+local function DrawAll(page, label)
+  local n = 0
+  for _, row in ipairs(page.rows) do
+    local function Call(what, fn, ...)
+      if type(fn) ~= "function" then return end
+      local ok, err = pcall(fn, ...)
+      if not ok then error(label .. ": " .. tostring(row:GetName()) .. " " .. what .. ": " .. tostring(err), 0) end
+    end
+    Call("name", row.GetName, row)
+    Call("tooltip", row.GetTooltip, row)
+    Call("enabled", row.Enabled, row)
+    Call("shown", row.Shown, row)
+    Call("reason", row.DisabledReason, row)
+    Call("button text", row.data.buttonText)
+    Call("value", row.value)
+    Call("detail", row.detail)
+    Call("tone", row.tone)
+    Call("note", row.note)
+    Call("choices", row.choices)
+    if row.setting then Call("setting", row.setting.GetValue, row.setting) end
+    n = n + 1
+  end
+  return n
+end
+
 local function Row(page, name)
   for _, r in ipairs(page.rows) do if r:GetName() == name then return r end end
 end
@@ -191,6 +217,43 @@ do
   local page = S.K.pages.fishing
   page.def.onShow()
   Check(Row(page, "Your Fishing key").value() == "Not bound" and Row(page, "Your Fishing key").tone() == "warn", "no key bound: it says so, and how to bind one")
+end
+
+---------------------------------------------------------------------------
+-- 5. Every row draws in every state: not loaded, loaded, a TwichUI Fishing older than the settings window (a partial
+--    update), and an older core launcher
+---------------------------------------------------------------------------
+do
+  local c, S = Client()
+  local page = S.K.pages.fishing
+  local ok, err = pcall(DrawAll, page, "not loaded")
+  Check(ok, tostring(err))
+  page.def.onShow()
+  ok, err = pcall(DrawAll, page, "loaded")
+  Check(ok, tostring(err))
+  -- an older TwichUI_Fishing: no settings interface version, no preview, no EllesmereUI module
+  local F = c.TwichUI.Fishing
+  F.Present.SETTINGS_API, F.Present.Previewing, F.Present.Preview, F.Ellesmere = nil, nil, nil, nil
+  ok, err = pcall(DrawAll, page, "older TwichUI Fishing")
+  Check(ok, tostring(err))
+  Check(page.def.overview.status() == "Needs updating", "an older TwichUI Fishing: Home says it needs updating")
+  Check(not Row(page, "Presentation"):Enabled() and Row(page, "Presentation"):DisabledReason():find("same TwichUI build", 1, true),
+    "and every control is greyed out with what to do")
+  Row(page, "Fishing Mode").click(); Row(page, "Try Fishing Mode").click(); Row(page, "Put things back").click()
+  Check(true, "its buttons do nothing rather than fail")
+end
+do
+  local c, S = Client()
+  local L = c.TwichUI.FishingLauncher
+  L.KeyText, L.State, L.OpenBindings = nil, nil, nil   -- an older core
+  local page = S.K.pages.fishing
+  local ok, err = pcall(DrawAll, page, "older core")
+  Check(ok, tostring(err))
+  page.def.onShow()
+  ok, err = pcall(DrawAll, page, "older core, loaded")
+  Check(ok, tostring(err))
+  ok, err = pcall(Row(page, "Key bindings").click)
+  Check(ok, "Open Key Bindings with an older core: " .. tostring(err))
 end
 
 if failures > 0 then error(failures .. " check(s) failed") end
