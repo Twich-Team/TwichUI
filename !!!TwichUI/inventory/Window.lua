@@ -754,44 +754,73 @@ local function ButtonText(kind)
     return "Magic Inventory"
 end
 
+-- The label sits right of the icon, left aligned. The crafted button (CraftLook.Control) re-anchors its text on every state
+-- change, so this runs again after each one (see InterfaceButton).
+local function PlaceLabel(b, dy)
+    b.text:ClearAllPoints()
+    b.text:SetJustifyH("LEFT")
+    if b.icon then b.text:SetPoint("LEFT", b.icon, "RIGHT", 6, dy or 0)
+    else b.text:SetPoint("CENTER", 0, dy or 0) end
+end
+
 -- Sets the label and sizes the button to it (the icon, the text and an even margin).
 local function SetLabel(b, kind)
     b.text:SetText(ButtonText(kind))
-    local pad = b.icon and 34 or 24
-    b:SetWidth(math.ceil((b.text:GetStringWidth() or 120) + pad))
+    local pad = b.icon and 40 or 24
+    local w = math.ceil(b.text:GetStringWidth() or 120)
+    b.text:SetWidth(w + 2)
+    b:SetWidth(w + pad)
+    PlaceLabel(b)
 end
 
--- EllesmereUI's Blizzard skin restyles the mailbox, bank and guild bank windows. With it on, the button sits inside the
--- window's title strip (left of the close button) instead of floating above the corner, and belongs to the window, so it
--- shows, hides, scales and stacks with it. Without the skin the placement is unchanged.
-local function IsSkinned(host)
-    if type(host) ~= "table" or not host.IsShown then return false end
+-- With EllesmereUI the interface windows are restyled (mailbox: its Blizzard skin) or replaced (bank: EllesmereUI Bags draws
+-- its own window, EUI_BankFrame, and leaves Blizzard's hidden). The button then belongs to that window, so it shows, hides,
+-- scales and stacks with it, and is placed against it rather than floating:
+--   * mailbox: in the quiet band between the title strip and the list, right aligned with the list;
+--   * bank: just above the window's top right corner (its own header is full of its controls).
+-- Without EllesmereUI the placement is unchanged.
+local function AddonLoaded(name)
     local loaded = C_AddOns and C_AddOns.IsAddOnLoaded
-    return (loaded and loaded("EllesmereUIBlizzardSkin") and true) or false
+    return (loaded and loaded(name)) and true or false
 end
 
-local EMBED_HEIGHT, EMBED_INSET_X, EMBED_INSET_Y, CLOSE_ROOM = 22, 6, -5, 26
+local function Shown(frame) return type(frame) == "table" and frame.IsShown and frame:IsShown() end
+
+-- The window to place against, and how: "band", "above" (both belong to the window) or nil (unchanged placement)
+local function HostFor(kind)
+    local euiBank = kind == "bank" and _G.EUI_BankFrame
+    if Shown(euiBank) then return euiBank, "above" end
+    local host = _G[HOSTS[kind]]
+    if kind == "mail" and Shown(host) and AddonLoaded("EllesmereUIBlizzardSkin") then return host, "band" end
+    return host, nil
+end
+
+local EMBED_HEIGHT, BAND_INSET, BAND_TOP = 22, 22, -50
 
 local function Anchor(b, kind)
     b:ClearAllPoints()
-    local host = _G[HOSTS[kind]]
-    local open = type(host) == "table" and host.IsShown and host:IsShown()
-    if open and IsSkinned(host) then
+    local host, how = HostFor(kind)
+    if how then
         b:SetParent(host)
         b:SetFrameStrata(host:GetFrameStrata() or "HIGH")
         b:SetFrameLevel((host:GetFrameLevel() or 0) + 20)
-        b:SetHeight(EMBED_HEIGHT)
-        b:SetPoint("TOPRIGHT", host, "TOPRIGHT", -(EMBED_INSET_X + CLOSE_ROOM), EMBED_INSET_Y)
         b.embedded = true
+        if how == "band" then
+            b:SetHeight(EMBED_HEIGHT)
+            b:SetPoint("TOPRIGHT", host, "TOPRIGHT", -BAND_INSET, BAND_TOP)
+        else
+            if F_HEIGHT then b:SetHeight(F_HEIGHT) end
+            b:SetPoint("BOTTOMRIGHT", host, "TOPRIGHT", 0, 4)
+        end
         return
     end
     if b.embedded then
         b.embedded = nil
         b:SetParent(UIParent)
         b:SetFrameStrata("HIGH")
-        b:SetHeight(F_HEIGHT or 22)
+        if F_HEIGHT then b:SetHeight(F_HEIGHT) end
     end
-    if open then
+    if Shown(host) then
         b:SetPoint("BOTTOMRIGHT", host, "TOPRIGHT", 0, 4)
     else
         -- another addon draws this interface (a bag addon's bank, for one): a quiet place at the top of the screen
@@ -816,13 +845,12 @@ local function InterfaceButton(kind)
         b.icon:SetSize(18, 18)
         b.icon:SetPoint("LEFT", 8, 0)
         R.Icons.Apply(b.icon, "magicInventory", 18)
-        -- the shared button puts its label back to the centre on every hover and press, so the offset is set again after
-        local function Nudge(y) b.text:SetPoint("CENTER", 13, y) end
-        Nudge(0)
+        b.icon:SetDrawLayer("OVERLAY", 7)
+        -- the crafted button puts its label back on every hover, press and enable change, so it is placed again after
         for _, script in ipairs({ "OnEnter", "OnLeave", "OnMouseUp", "OnEnable", "OnDisable" }) do
-            b:HookScript(script, function() Nudge(0) end)
+            b:HookScript(script, function() PlaceLabel(b) end)
         end
-        b:HookScript("OnMouseDown", function() if b:IsEnabled() then Nudge(-1) end end)
+        b:HookScript("OnMouseDown", function() if b:IsEnabled() then PlaceLabel(b, -1) end end)
     end
     R.Interact.Tip(b, "Magic Inventory", function()
         local n = counts[kind]

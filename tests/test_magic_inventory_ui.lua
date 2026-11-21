@@ -194,6 +194,17 @@ Check(Run.Last() and #Run.Last().results.confirmed == 1, "deposited by the click
 c.CloseBank()
 Flush()
 
+-- EllesmereUI Bags' own bank window: the button belongs to it and sits above its top right corner
+c.EUI_BankFrame = MIFake("Frame"); c.EUI_BankFrame.shown = true
+c.OpenBank()
+Flush()
+local eb = bankButton.points[1]
+Check(bankButton.shown and bankButton.parent == c.EUI_BankFrame and eb[1] == "BOTTOMRIGHT" and eb[2] == c.EUI_BankFrame,
+  "EllesmereUI's bank: the button is on its window")
+c.CloseBank()
+Flush()
+c.EUI_BankFrame = nil
+
 ---------------------------------------------------------------------------
 -- Empty state
 ---------------------------------------------------------------------------
