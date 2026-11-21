@@ -133,6 +133,7 @@ SC.Listen(S.NoteScan)
 -- A profession read this session is never replaced by an older remembered one.
 local function Ensure()
     if loaded then return end
+    if not Q.CharKey() then return end   -- retry when the player's identity is available
     loaded = true
     for _, p in ipairs(KN.Load()) do
         if not profs[p.prof] and #order < MAX_PROFESSIONS then
@@ -157,10 +158,12 @@ function S.Save()
     for id in pairs(dirty) do
         if profs[id] then
             local good, err = KN.Store(profs[id])
-            if not good then ok, why = false, err end
+            if not good then ok, why = false, err
+            else dirty[id] = nil end
+        else
+            dirty[id] = nil
         end
     end
-    dirty = {}
     return ok, why
 end
 
@@ -235,8 +238,18 @@ end
 -- Forgets what is held in memory (the window closed); what changed is kept first, and the saved queue and recipes are untouched
 function S.Reset()
     S.Save()
-    profs, order, current, lastWhy, lastDetail, note = {}, {}, nil, nil, nil, nil
-    loaded, dirty = false, {}
+    -- A failed write is still the only copy. Retain it until a later save can
+    -- succeed, without treating its profession as open after the window closes.
+    local kept, keptOrder = {}, {}
+    for _, id in ipairs(order) do
+        if dirty[id] then
+            kept[id] = profs[id]
+            kept[id].live = nil
+            keptOrder[#keptOrder + 1] = id
+        end
+    end
+    profs, order, current, lastWhy, lastDetail, note = kept, keptOrder, nil, nil, nil, nil
+    loaded = false
     S.filter = ""
     S.opp.prof = nil
     O.ClearCache()

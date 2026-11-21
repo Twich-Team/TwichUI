@@ -62,7 +62,16 @@ class IsolationTests(unittest.TestCase):
         for forbidden in ('secrets.', 'github.token', 'contents: write', 'release.py publish',
                           'pull_request_target:', 'update_training_data.sh', 'tags:', 'overwrite: true'):
             self.assertNotIn(forbidden, workflow)
-        self.assertFalse(json.loads((ROOT / '.github/release-policy.json').read_text())['publication_enabled'])
+        # The one-click publisher is explicitly dispatched and never runs on a PR,
+        # a main push, or a tag push. Publication itself is no longer globally held.
+        policy = json.loads((ROOT / '.github/release-policy.json').read_text())
+        self.assertIs(type(policy.get('publication_enabled')), bool)  # emergency hold remains valid
+        release_workflow = (ROOT / '.github/workflows/one-click-release.yml').read_text()
+        self.assertIn('workflow_dispatch:', release_workflow)
+        self.assertIn("github.ref == 'refs/heads/main'", release_workflow)
+        self.assertIn('environment: release', release_workflow)
+        for forbidden in ('\\n  push:', '\\n  pull_request:', 'pull_request_target:', 'tags:'):
+            self.assertNotIn(forbidden.replace('\\n', '\n'), release_workflow)
 
     def test_conservative_scope(self):
         self.assertEqual(ci_verify.selection(['tools/release.py']), ['development', 'release-tools'])

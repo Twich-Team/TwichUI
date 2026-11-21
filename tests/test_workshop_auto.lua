@@ -447,6 +447,24 @@ do
     Same(t.ah.sent, 1, "monotonic freshness: the scan done this session still counts")
 end
 
+do
+    local t = Setup({ manual = true })
+    t.c.FireEvent("TRADE_SKILL_SHOW")
+    Same(t.Loads(), 1, "opening a profession loads the enabled observer without opening Workshop")
+    t.c.FireEvent("TRADE_SKILL_SHOW")
+    Same(t.Loads(), 1, "later profession events do not reload Workshop")
+    Same(t.ah.sent, 0, "remembering professions never requests auction prices")
+
+    local off = Setup({ manual = true })
+    off.c.TwichUIDB.ui.workshopEnabled = false
+    off.c.FireEvent("TRADE_SKILL_SHOW")
+    Same(off.Loads(), 0, "profession events respect experimental consent")
+    local combat = Setup({ manual = true })
+    combat.c.COMBAT = true
+    combat.c.FireEvent("TRADE_SKILL_SHOW")
+    Same(combat.Loads(), 0, "profession events never load Workshop in combat")
+end
+
 -- packaging
 do
     local function Read(path) local f = assert(io.open(path, "rb")); local s = f:read("*a"); f:close(); return s end

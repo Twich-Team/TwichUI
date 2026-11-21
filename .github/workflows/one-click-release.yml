@@ -1,0 +1,189 @@
+name: Release TwichUI
+
+# This is the ONLY workflow that publishes a one-click release.
+# A merge, push or tag never invokes it.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Base version (for example 2.0.0, without v)
+        required: true
+        type: string
+      channel:
+        description: Release channel
+        required: true
+        type: choice
+        default: stable
+        options: [alpha, beta, stable]
+
+permissions:
+  contents: read
+
+# Share the public-publisher lock with the older manual promotion workflow.
+concurrency:
+  group: public-release-promotion
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Verify and package
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      artifact: ${{ steps.artifact.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Authorize the manual release request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.triggering_actor }}
+          REPO: ${{ github.repository }}
+        run: |
+          permission=$(gh api "repos/$REPO/collaborators/$ACTOR/permission" --jq .permission)
+          case "$permission" in
+            admin|maintain|write) ;;
+            *) echo "::error::Release requires repository write access"; exit 1 ;;
+          esac
+      - name: Install Lua test dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lua5.1 lua-bitop
+      - name: Run all offline regression and package-tool tests
+        run: ./tests/run.sh
+      - name: Resolve exact release version
+        id: version
+        env:
+          BASE_VERSION: ${{ inputs.version }}
+          CHANNEL: ${{ inputs.channel }}
+          SOURCE: ${{ github.sha }}
+        run: |
+          version=$(python3 -I tools/one_click_release.py version \
+            --base "$BASE_VERSION" --channel "$CHANNEL" --source "$SOURCE")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Building TwichUI $version from $SOURCE" >> "$GITHUB_STEP_SUMMARY"
+      - name: Plan and stamp release candidate
+        env:
+          SOURCE: ${{ github.sha }}
+          CHANNEL: ${{ inputs.channel }}
+          VERSION: ${{ steps.version.outputs.version }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          python3 -I tools/release.py candidate --source "$SOURCE" \
+            --channel "$CHANNEL" --version "$VERSION" \
+            --repo-dir "$GITHUB_WORKSPACE" --repo-url "$REPO_URL" \
+            --out "$RUNNER_TEMP/candidate"
+          # Prevent the packager from reading a pre-existing stable tag instead
+          # of the deliberately stamped candidate.
+          git tag --points-at HEAD | while IFS= read -r tag; do
+            git tag -d -- "$tag"
+          done
+      - name: Generate release notes since the last published release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 -I tools/one_click_release.py notes \
+            --meta "$RUNNER_TEMP/candidate/meta.json" --repo "$GITHUB_REPOSITORY"
+      - name: Package the seven production addons (no uploads)
+        uses: BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0 # v2.6.1
+        with:
+          args: -d -n "!!!TwichUI-v${{ steps.version.outputs.version }}-forever"
+          pandoc: false
+      - name: Verify and seal the exact ZIP
+        shell: bash
+        run: |
+          shopt -s nullglob
+          zips=(.release/*.zip)
+          test "${#zips[@]}" -eq 1 || {
+            echo "::error::Expected exactly one release ZIP"; exit 1;
+          }
+          python3 -I tools/release.py seal --meta "$RUNNER_TEMP/candidate/meta.json" \
+            --zip "${zips[0]}" --notes "$RUNNER_TEMP/candidate/notes.md"
+          cp -- "${zips[0]}" "$RUNNER_TEMP/candidate/"
+          python3 -I -c 'import json,sys; m=json.load(open(sys.argv[1])); print("Candidate SHA256: "+m["candidate"]["sha256"])' \
+            "$RUNNER_TEMP/candidate/meta.json" >> "$GITHUB_STEP_SUMMARY"
+      - name: Retain immutable candidate for recovery
+        id: artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: one-click-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/candidate/
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 30
+
+  publish:
+    name: Publish ${{ needs.build.outputs.version }} to GitHub and CurseForge
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: write
+      actions: read
+    # One-time setup: remove required reviewers from this environment so the
+    # user's Run workflow click is the sole approval. Keep the secret scoped
+    # to this environment and limit it to protected branches.
+    environment: release
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Download the exact same tested and sealed candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT: ${{ needs.build.outputs.artifact }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/candidate"
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT" \
+            --jq '.workflow_run.id' | grep -Fx "$GITHUB_RUN_ID"
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "one-click-${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --dir "$RUNNER_TEMP/candidate"
+      - name: Reverify original bytes, source, and publication safety
+        id: identity
+        shell: bash
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          shopt -s nullglob
+          zips=("$RUNNER_TEMP"/candidate/*.zip)
+          test "${#zips[@]}" -eq 1 || { echo "::error::Candidate ZIP missing"; exit 1; }
+          python3 -I tools/release.py seal --meta "$RUNNER_TEMP/candidate/meta.json" \
+            --zip "${zips[0]}" --notes "$RUNNER_TEMP/candidate/notes.md"
+          actual=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' \
+            "$RUNNER_TEMP/candidate/meta.json")
+          test "$actual" = "$VERSION" || { echo "::error::Version mismatch"; exit 1; }
+          echo "zip=${zips[0]}" >> "$GITHUB_OUTPUT"
+      - name: Preflight and create the protected annotated tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+        run: |
+          test -n "$CF_API_KEY" || { echo "::error::Set CF_API_KEY in the release environment"; exit 1; }
+          python3 -I tools/one_click_release.py tag \
+            --meta "$RUNNER_TEMP/candidate/meta.json" \
+            --zip "${{ steps.identity.outputs.zip }}" \
+            --notes "$RUNNER_TEMP/candidate/notes.md" --repo "$GITHUB_REPOSITORY"
+      - name: Publish exact candidate (safe to retry after a known failure)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+        run: |
+          python3 -I tools/release.py publish \
+            --meta "$RUNNER_TEMP/candidate/meta.json" \
+            --zip "${{ steps.identity.outputs.zip }}" \
+            --notes "$RUNNER_TEMP/candidate/notes.md" --repo "$GITHUB_REPOSITORY"
+      - name: Links to the release
+        if: success()
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          echo "### Released TwichUI $VERSION" >> "$GITHUB_STEP_SUMMARY"
+          echo "GitHub: https://github.com/$GITHUB_REPOSITORY/releases/tag/v$VERSION" >> "$GITHUB_STEP_SUMMARY"
+          echo "CurseForge project: https://www.curseforge.com/wow/addons/twichui" >> "$GITHUB_STEP_SUMMARY"

@@ -1,7 +1,8 @@
 -- TwichUI: opening the Workshop
 -- The Workshop (browse your professions' recipes, queue crafts, see the combined materials still needed) is an addon of its
 -- own, TwichUI_Workshop, loaded the first time it is asked for (load on demand), like TwichUI Diagnostics. Nothing of it is loaded,
--- built at login unless the active profile opts in. Only that opt-in schedules a delayed load; it opens no window. docs/workshop.md has the whole.
+-- built at login unless the active profile opts in. Opening a profession also loads the enabled Workshop to remember its recipes,
+-- without showing the Workshop window. docs/workshop.md has the whole.
 --
 --   L.Loaded()      read only: has the addon started this session
 --   L.Load()        loads it if needed: true, or false and a reason code (never in combat)
@@ -67,6 +68,13 @@ function L.Load()
     if R.Workshop.Resume then R.Workshop.Resume() end
     return true
 end
+
+-- A profession opened before the first Workshop visit must also be remembered.
+-- Watch.Start schedules the initial read after the profession data has settled.
+-- Never open a frame, load in combat, or bypass experimental consent here.
+R:On("TRADE_SKILL_SHOW", function()
+    if L.Enabled() and not L.Loaded() then L.Load() end
+end)
 
 local function Ready()
     local ok, why = L.Load()

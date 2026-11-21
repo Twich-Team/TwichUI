@@ -3,7 +3,7 @@
 -- profession, its name and icon, what it makes, the materials one craft needs, how many crafts are wanted and when the
 -- information was last seen in the player's own profession window. It is not a recipe database: only queued recipes are kept.
 --
---   TwichUIDB.workshop = { v = 1, chars = { ["Name - Realm"] = { queue = { entry, ... } } } }   account-wide, never in a profile,
+--   TwichUIDB.workshop = { v = 1, chars = { ["Name - Realm"] = { guid = "Player-...", queue = { entry, ... } } } }   account-wide, never in a profile,
 --       a share or a backup (Restore.OWN_LEFT_OUT, TwichConfig.LOCAL): it names a character's recipes.
 --   entry = { id (recipe), name, crafts, prof, profName, icon, outItem, outMin, outMax, mats = { { item, qty }, ... }, seen (time) }
 --       outItem (the item one craft makes) is absent when not known; it lets the shopping list count what a queued craft will make.
@@ -21,13 +21,55 @@ W.Queue = Q
 
 Q.Now = function() return time() end
 
--- "Name - Realm", or nil while the game can't say
+local characterName, characterKey, characterGUID
+
+local function PlayerGUID(value)
+    value = Plain(value)
+    if type(value) == "string" and #value <= 80 and value:match("^Player%-%d+%-%x+$") then return value end
+end
+local function CurrentGUID() return PlayerGUID(UnitGUID and UnitGUID("player")) end
+local function NamedKey(key, name)
+    local prefix = name .. " - "
+    return type(key) == "string" and #key <= 160 and key:sub(1, #prefix) == prefix and #key > #prefix
+end
+
+-- "Name - Realm", or nil while the game can't say. Forever can return an
+-- empty GetRealmName after login. Profiles keeps the canonical identity it
+-- captured at login; UnitFullName's realm can differ from that saved realm.
+-- Both session identities can be absent after /reload. A GUID saved in the
+-- character slot restores the original key then; never guess by name alone.
 function Q.CharKey()
     local name = Plain(UnitName and UnitName("player"))
-    local realm = Plain(GetRealmName and GetRealmName())
     if type(name) ~= "string" or name == "" or name == UNKNOWNOBJECT then return nil end
-    if type(realm) ~= "string" or realm == "" then return nil end
-    return name .. " - " .. realm
+    local realm = Plain(GetRealmName and GetRealmName())
+    local guid = CurrentGUID()
+    local ws = type(TwichUIDB) == "table" and TwichUIDB.workshop
+    local chars = type(ws) == "table" and ws.chars
+    local key
+    if type(realm) == "string" and realm ~= "" then
+        key = name .. " - " .. realm
+    else
+        local profiles = R.Profiles
+        local canonical = Plain(profiles and profiles.Character and profiles.Character())
+        if NamedKey(canonical, name) then
+            key = canonical
+        elseif characterName == name and (not guid or characterGUID == guid) then
+            key = characterKey
+        end
+    end
+    if not key and guid and type(chars) == "table" then
+        for savedKey, slot in pairs(chars) do
+            if NamedKey(savedKey, name) and type(slot) == "table" and PlayerGUID(slot.guid) == guid then
+                if key then return nil end   -- duplicate bindings are ambiguous
+                key = savedKey
+            end
+        end
+    end
+    local slot = key and type(chars) == "table" and chars[key]
+    local bound = type(slot) == "table" and PlayerGUID(slot.guid)
+    if bound and guid and bound ~= guid then return nil end
+    if key then characterName, characterKey, characterGUID = name, key, guid end
+    return key
 end
 
 ---------------------------------------------------------------------------
@@ -112,6 +154,7 @@ local function Root(create)
 end
 
 local function Slot(create)
+    if create and Q.Held() then return nil end
     local root = Root(create)
     local key = root and Q.CharKey()
     if not key then return nil end
@@ -123,6 +166,10 @@ local function Slot(create)
         if not create then return nil end
         root.chars[key] = {}
     end
+    if create then
+        local guid = CurrentGUID()
+        if guid then root.chars[key].guid = guid end
+    end
     return root.chars[key], root
 end
 
@@ -132,6 +179,32 @@ Q.Slot = Slot   -- (Known.lua keeps its recipes in the same character slot)
 function Q.Held()
     local root = Root(false)
     return root ~= nil and type(root.v) == "number" and root.v > W.SAVED_VERSION
+end
+
+-- One-time recovery for legacy slots when the client supplies no realm even
+-- at login. The player explicitly selects the existing key; reads never bind
+-- by name alone or rewrite saved data. Subsequent reloads use the saved GUID.
+function Q.BindCharacter(key)
+    if Q.Held() then return false, "held" end
+    local name = Plain(UnitName and UnitName("player"))
+    key = Plain(key)
+    if type(name) ~= "string" or name == "" or name == UNKNOWNOBJECT or not NamedKey(key, name) then return false, "bad" end
+    local guid = CurrentGUID()
+    if not guid then return false, "identity" end
+    local root = Root(false)
+    local chars = root and root.chars
+    local slot = type(chars) == "table" and chars[key]
+    if type(slot) ~= "table" then return false, "missing" end
+    local bound = PlayerGUID(slot.guid)
+    if bound and bound ~= guid then return false, "identity" end
+    for otherKey, other in pairs(chars) do
+        if otherKey ~= key and type(other) == "table" and PlayerGUID(other.guid) == guid then return false, "identity" end
+    end
+    root.v = W.SAVED_VERSION
+    slot.guid = guid
+    characterName, characterKey, characterGUID = name, key, guid
+    Q.Unload()
+    return true
 end
 
 function Q.Load()

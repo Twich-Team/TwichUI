@@ -520,7 +520,7 @@ kept).
 ### First real-client report (2026-11-20) and what changed
 
 - **The two toggles overlapped the page title.** The page's own title and subtitle are drawn inside the page's top-left, which the first
-  build took to be free. The toggles now sit in a footer row inside the list card, under the rows (`ViewOpportunities.lua`, `FOOT_H`).
+  build took to be free. Main #88 moved them above the recipe details, under Scan prices (`ViewOpportunities.lua`).
 - **"Open one of your professions" although professions had been opened.** Not caused by the pricing changes: no profession was remembered
   for the character (no profession chips were shown). Two causes are possible and the client report can't tell them apart yet:
   1. Professions are read only while the Workshop addon is loaded. It loads on demand, so a profession opened before it loaded this session
@@ -533,12 +533,12 @@ kept).
 
 ### Second real-client report (2026-11-20) and what changed
 
-- **"It loads my professions while the window and a profession are open, but closing and reopening the window loses every craft."** A real
-  bug, not caused by the pricing work: after the profession window closes the game can still answer with the recipe list, every recipe
-  "not learned". The reader took that as the player unlearning everything, so reopening the Workshop emptied the session's recipes (and,
-  in the offline reproduction, cut the saved profession down to one recipe). A read in which **nothing** is learned is now no reading at
-  all and changes nothing (`Observe.Read`); some recipes reported as not learned still remove those. Unit-tested
-  (`test_workshop_memory.lua`, which fails without the fix), mutation `crafting.observe.unlearned-list-accepted`.
+- **"It loads my professions while the window and a profession are open, but closing and reopening the window loses every craft."** The
+  cause, found and fixed in main #88 (not by this work): Forever can return an empty `GetRealmName()` after login, so the Workshop had no
+  character key and every save of a profession was refused ("unsaved") and nothing could be loaded. #88 takes the identity Profiles
+  captured at login and keeps an unsaved profession until a save succeeds. A guess made here first (a stale list in which nothing is
+  learned) did not fix it; its guard stays as a harmless safety: a read in which **nothing** is learned changes nothing
+  (`Observe.Read`, mutation `crafting.observe.unlearned-list-accepted`).
 - **"Does it not use the market data as fallback? Why do I have to scan?"** It does: with a Companion Market summary loaded, observed within
   a day and for the same faction (Companion calls the neutral house "Blackwater"), Opportunities, Shopping and the planner price from it
   without a scan; a local scan adds listing depth and replaces it when newer. The footer said "No prices yet" because it described local
