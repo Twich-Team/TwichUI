@@ -23,6 +23,30 @@ What differs from the game:
 |---|---|
 | `immersive-bright.png`, `immersive-dark.png`, `immersive-sunset.png` | Immersive: the cast bar mid-line, the catch list on the right (catches, other treasures, totals), and a treasure notice and a catch notice |
 | `compact-*.png` | Compact: the cast bar and notices only |
-| `castbar-*.png` | The cast bar at 2x: label, seconds left from the channel's own times, amber fill, and session figures and prompts |
+| `castbar-*.png` | The cast bar at 2x: label, seconds left from the channel's own times, the warm gold fill, the session figures with the pack's glyphs (bobber, fish mark, feather), and prompts |
+| `compare-mockup.png` | The approved mockup's emblem, catch list, notification and cast bar (left) beside the same pieces of `immersive-sunset` (right) |
 
-Regenerate: `python3 tools/render_fishing_hud.py` (writes to `test-output/fishing-captures`). `SHA256SUMS` lists these files.
+## Against the approved mockup
+
+`compare-mockup.png` puts each HUD piece beside the mockup's.
+
+- **Matches:**
+  - The emblem (the pack's logo).
+  - The catch list's heading, the game icons in the pack's bronze frame with the quantity on the corner, the names, the
+    warm "N caught" lines, the large "×N", the fine rules between the rows and under the headings, and Other Treasures.
+  - The notification: the pack's frame and band, lengthened for long names, with the ivory "Caught!", the gold "×2" and the
+    warm light behind the frame.
+  - The cast bar: the pack's bar, "Fishing…" with its seconds, the warm gold fill in the trough, and the figures under it
+    with the pack's glyphs.
+- **Different on purpose:**
+  - No gold figures. "Estimated Value" says "Not available yet" until Stage 3 connects a valuation, and per-row values
+    come with it.
+  - A line of key prompts under the cast bar (`/tui fish prompts off` hides it).
+  - A faint feathered shade under the list and the bar's lines, which keeps them legible over bright scenery (see
+    `immersive-bright.png`).
+- **Different because of the supplied art:**
+  - The pack's cast bar has the hook painted in, where the mockup draws it beside the label.
+  - The pack's logo has its plaque.
+  - The treasure rows use the same bronze frame as the catches; the mockup shows them bare.
+
+Regenerate: `python3 tools/render_fishing_hud.py --compare <the approved mockup>` (writes to `test-output/fishing-captures`). `SHA256SUMS` lists these files.

@@ -220,15 +220,18 @@ and EllesmereUI's fishing feature installed to check that they coexist.
 
 How fishing looks while you fish with TwichUI. **Nothing in it has been checked in the real client**: every claim is
 unit-tested (`tests/test_fishing_present.lua`, `tests/test_fishing_hud.lua`, `tests/test_fishing_art.py`), reviewed in offline
-captures ([docs/evidence/fishing-stage-2](evidence/fishing-stage-2/README.md)), or not tested.
+captures ([docs/evidence/fishing-stage-2](evidence/fishing-stage-2/README.md), including a piece-by-piece comparison with the
+approved mockup), or not tested.
 
 ### Presentations (`/tui fish mode immersive|compact|classic`)
 
-| | Camera | Interface faded | Cast bar | Catch list | Notifications |
-|---|---|---|---|---|---|
-| `immersive` (default) | yes | yes | yes | yes | yes |
-| `compact` | | | yes | | yes |
-| `classic` | | | | | |
+| | Camera | Interface faded | Cast bar | Catch list | Notifications | Emblem |
+|---|---|---|---|---|---|---|
+| `immersive` (default) | yes | yes | yes | yes | yes | yes |
+| `compact` | | | yes | | yes | |
+| `classic` | | | | | | |
+
+The emblem is the texture pack's "TwichUI Fishing" logo, at the top left as in the approved mockup (`/tui fish brand off`).
 
 A part's own switch (`camera on|off`, `fade on|off`, `list on|off`, `toasts on|off`) only ever takes that part away.
 Classic is Stage 1 alone: the key fishes, nothing more is drawn.
@@ -292,7 +295,8 @@ addon at login, as the fishing key does.
 
 ### Cast bar (`CastBar.lua`)
 
-- **Look:** a compact walnut-and-bronze bar, 360 units wide at the bottom middle (`castbar.x/y/scale`; `/tui fish move`).
+- **Look:** the texture pack's walnut-and-bronze bar, 400 units wide at the bottom middle (`castbar.x/y/scale`;
+  `/tui fish move`), with a warm gold fill in its trough.
 - **States, from events only:**
   - `Ready to cast`.
   - `Casting…`, on `UNIT_SPELLCAST_SENT` with a Fishing spell.
@@ -301,7 +305,8 @@ addon at login, as the fishing key does.
   - The results: `Caught!`, `Nothing on the line`, `Interrupted` and `Couldn't cast`.
 - **No bite signal:** the timer times the line. The game gives no bite signal, and none is shown or guessed.
 - **Under the bar:**
-  - The session's length and catches, and the lure's time left.
+  - The session's length and catches, and the lure's time left, each after its glyph from the texture pack (the bobber, the
+    fish mark, the feather), as in the mockup.
   - The estimated value, only from a connected valuation.
   - A warning when your own gear is still to go back on (and the key that does it), or when the saved data is held.
     Otherwise the prompts: your fishing key, the reveal key and how to leave, with gamepad buttons named when a gamepad is
@@ -309,8 +314,13 @@ addon at login, as the fishing key does.
 
 ### Catch list (`CatchList.lua`)
 
-- **Look:** on the right, drawn straight over the world: the game's item icons in a thin bronze rim, and ivory type with a
-  soft shadow. Under it is a faint, feathered warm shade with no edge, so it reads over snow as well as at night.
+- **Look:** on the right, drawn straight over the world, as in the approved mockup.
+  - "Today's Catch" (or "This Session's Catch" for a session that began on an earlier day) and how long it has lasted.
+  - The game's item icons in the texture pack's bronze icon frame, with the quantity on the icon's corner.
+  - Ivory names, warm "N caught" lines and a large "×N".
+  - The pack's fine bronze rule under the headings and, faintly, between the rows.
+  - Under it, a faint feathered warm shade with no edge, so it reads over snow as well as at night.
+- **Value area:** it keeps its place. With no valuation it says "Not available yet" (`list value hide` leaves it out).
 - **Data:** from `API.Session()` and `API.Provenance("session")` only.
   - Catches: what the line brought up, with `N caught` and `xN`. Sorted by `list sort count|recent|name`. At most
     `list rows` rows (3 to 12, default 6), then `+N more kinds`.
@@ -324,9 +334,11 @@ addon at login, as the fishing key does.
 ### Notifications (`Toast.lua`)
 
 - **Kinds, for each confirmed item (Stage 1's `ITEM`):**
-  - `Caught!` with the item's own icon, name and quantity.
+  - `Caught!` with the item's own icon, name and quantity, and warm light behind the frame.
   - `Treasure!`, a warmer frame with a gold glint, for what came out of a fishing container and for items the game rates
     rare or better. Nothing else is called a treasure.
+- **Art:** the pack's notification frame and band in three slices (frame, band and fading end). The band lengthens for a
+  long name, so the frame and its end are never stretched.
 - **Placement:** left of the middle, clear of the bobber and the cast bar (`toast.x/y/scale`).
 - **Merging:** the same item again while its notice is up adds to it (`x3`). At most three show at once, and up to six
   wait.
@@ -346,7 +358,8 @@ addon at login, as the fishing key does.
 
 ### Settings
 
-- **Saved:** `TwichUIFishingDB.config`, the new groups `present`, `camera`, `fade`, `castbar`, `list` and `toast`
+- **Saved:** `TwichUIFishingDB.config`, the new groups `present` (with `brand`), `camera`, `fade`, `castbar`, `list` (with
+  `value`) and `toast`
   (defaults in `Store.lua`; schema 1, missing values filled, no migration).
 - **Changing them:** `/tui fish help` lists the words, and `/tui fish move` drags the pieces. A change applies at once.
 - **Not yet:** a settings page is Stage 4's.
@@ -397,7 +410,8 @@ None of these has been done.
       `vibrate on`: note whether a catch pulses.
 - [ ] The cast bar's fill matches the line's real time. Check that the line's maximum is the channel's end time.
 - [ ] The catch list, the notices and their art at UI scales 0.8, 1.0 and 1.25, over bright snow or water and at night.
-      Check that the TGAs draw with clean alpha and no fringe, and that the toast wells show the item icon cleanly.
+      Check that the TGAs draw with clean alpha and no fringe, that the toast and icon-frame wells show the item icon
+      cleanly, and that a long name's notice shows no seam where the band is lengthened.
 - [ ] With EllesmereUI: its unit frames fade, its bars do not (add them with `fade add`), and its own fading still works.
       With Dialogue UI: talk to an NPC while fishing, and nothing is left faded or zoomed afterwards.
 - [ ] Run the Test Lab case `fishing.client.presentation` and keep the facts.
