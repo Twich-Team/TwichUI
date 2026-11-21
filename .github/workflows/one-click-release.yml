@@ -82,6 +82,12 @@ jobs:
           git tag --points-at HEAD | while IFS= read -r tag; do
             git tag -d -- "$tag"
           done
+      - name: Generate release notes since the last published release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 -I tools/one_click_release.py notes \
+            --meta "$RUNNER_TEMP/candidate/meta.json" --repo "$GITHUB_REPOSITORY"
       - name: Package the seven production addons (no uploads)
         uses: BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0 # v2.6.1
         with:
