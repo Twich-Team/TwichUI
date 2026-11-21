@@ -725,7 +725,7 @@ local function GlowSection(parent, env)
     function s:Layout(v, y)
         HideAll(self.parts)
         local g = v.glow
-        local h = 10
+        local h = Top()   -- the switch's label is long: it goes under the heading, not beside it
         self.enable:SetChecked(g.enabled)
         Put(self.enable, self, LABEL_X, h)
         self.enable.label:Show()
