@@ -168,7 +168,7 @@ function CB.StatsText()
     local parts = {}
     if CB.preview then
         return H.Glyph("glyph-time", 20) .. " 42m 17s" .. GAP .. H.Glyph("mark", 20) .. " 56 Catches" .. GAP
-            .. H.Glyph("glyph-lure", 20) .. " Lure: 23m"
+            .. H.Glyph("glyph-lure", 20) .. " Lure: 23m" .. GAP .. "|cffa89a84(sample)|r"
     end
     local s = F.Session.Current()
     if s then
@@ -320,10 +320,11 @@ function CB.Shown() return frame ~= nil and frame:IsShown() end
 function CB.Frame() return frame, ui end
 
 -- Move mode: shown with sample figures so it can be placed; the player's drag saves the place.
-function CB.Preview(on)
+-- Move mode (unlock: the bar takes the mouse to be dragged) or the settings page's preview (sample figures, no mouse).
+function CB.Preview(on, unlock)
     CB.preview = on and true or nil
     Build()
-    H.SetUnlocked(frame, on)
+    H.SetUnlocked(frame, on and unlock ~= false)
     if on then
         frame:Show()
         state = "line"

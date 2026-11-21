@@ -169,7 +169,7 @@ local function Layout()
         local f = active[i]
         f:ClearAllPoints()
         f:SetPoint("BOTTOMLEFT", Anchor(), "BOTTOMLEFT", f.slide or 0, y)
-        y = y + f:GetHeight() + 6
+        y = y + (f:GetHeight() or 0) + 6
     end
 end
 
@@ -274,12 +274,12 @@ function T.Active() return active, queue end
 function T.Relayout() if anchor then H.Place(anchor, "toast", "LEFT") end end
 
 -- Move mode: one sample notice to place.
-function T.Preview(on)
+function T.Preview(on, unlock)
     local a = Anchor()
-    H.SetUnlocked(a, on)
+    H.SetUnlocked(a, on and unlock ~= false)
     if on then
         T.Clear()
-        T.Show({ id = 0, q = 2, kind = "catch", name = "A catch", icon = H.QUESTION, at = F.Clock() })
+        T.Show({ id = 0, q = 2, kind = "catch", name = "Sample fish", icon = H.MEDIA .. H.ART.mark.file, at = F.Clock() })
         active[1].phase, active[1].hold = "hold", math.huge
         active[1]:SetAlpha(1)
     else

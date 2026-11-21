@@ -212,12 +212,13 @@ function L.Model()
 end
 
 -- Move mode only: sample rows so the list can be placed (never shown as a record).
+-- Sample rows, plainly marked as samples (the fish mark stands in for an item's icon): never shown as a record.
 function L.PreviewModel()
-    local q = H.QUESTION
+    local q = H.MEDIA .. H.ART.mark.file
     return {
-        catches = { { id = 1, q = 24, c = 24, l = 3, name = "First catch", icon = q }, { id = 2, q = 18, c = 18, l = 2, name = "Second catch", icon = q },
-            { id = 3, q = 12, c = 12, l = 1, name = "Third catch", icon = q } },
-        treasures = { { id = 4, q = 1, name = "A treasure", icon = q, kind = "content" } },
+        catches = { { id = 1, q = 24, c = 24, l = 3, name = "Sample fish", icon = q }, { id = 2, q = 18, c = 18, l = 2, name = "Another sample fish", icon = q },
+            { id = 3, q = 12, c = 12, l = 1, name = "A third sample", icon = q } },
+        treasures = { { id = 4, q = 1, name = "Sample treasure", icon = q, kind = "content" } },
         session = { start = F.Now() - 2537, catches = 56, items = 60, casts = 70 },
     }
 end
@@ -236,7 +237,7 @@ end
 -- Drawing
 ---------------------------------------------------------------------------
 local function Since(s)
-    if L.preview then return "Fishing for 42 minutes" end
+    if L.preview then return "Preview: sample catches, not your records" end
     local sec = F.Session.Elapsed() or 0
     if sec < 60 then return "Fishing for under a minute" end
     if sec < 3600 then local m = math.floor(sec / 60) return ("Fishing for %d minute%s"):format(m, m == 1 and "" or "s") end
@@ -405,10 +406,10 @@ end
 function L.Shown() return frame ~= nil and frame:IsShown() end
 function L.Frame() return frame, ui, rows, small end
 
-function L.Preview(on)
+function L.Preview(on, unlock)
     L.preview = on and true or nil
     Build()
-    H.SetUnlocked(frame, on)
+    H.SetUnlocked(frame, on and unlock ~= false)
     if on then frame:Show() end
     L.Refresh()
 end

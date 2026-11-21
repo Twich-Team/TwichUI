@@ -53,6 +53,7 @@ P.PRESETS = {
 }
 
 local on, revealed, suppressed, reason = false, false, false, nil
+local previewing, previewTimer, previewOpts = false, nil, nil
 local parts = {}
 local listeners = {}
 local provider = nil
@@ -84,7 +85,7 @@ function P.On() return on end
 
 function P.State()
     return { on = on, mode = P.Mode(), parts = F.Copy(parts), revealed = revealed, suppressed = suppressed, reason = reason,
-        unlocked = unlocked }
+        unlocked = unlocked, previewing = previewing }
 end
 
 function P.Subscribe(fn)
@@ -124,7 +125,10 @@ function P.Enter(why)
     if F.InCombat() then return false, "combat" end
     if UnitIsDeadOrGhost and F.Readable(UnitIsDeadOrGhost("player")) == true then return false, "dead" end
     local mode = P.Mode()
-    if mode == "classic" then return false, "classic" end
+    if mode == "classic" then if previewing then P.EndPreview("classic") end return false, "classic" end
+    -- a preview in progress hands its faded interface and camera over (one owner, one record: nothing is put back and
+    -- taken again mid-move); only its sample pieces go
+    if previewing then P.EndPreview("live", true) end
     parts = P.Parts(mode)
     on, revealed, reason = true, false, why
     if why == "player" then suppressed = false end
@@ -168,6 +172,7 @@ P.Leave = Leave
 
 -- The player's own on/off. Off stays off for the rest of the session (the next line doesn't bring it back).
 function P.Toggle()
+    if previewing then P.EndPreview("player") return false end
     if on then
         Leave("player")
         suppressed = true
@@ -179,7 +184,7 @@ function P.Toggle()
 end
 
 function P.Reveal(show)
-    if not on then return false end
+    if not (on or previewing) then return false end
     show = show and true or false
     if show == revealed then return true end
     revealed = show
@@ -191,6 +196,7 @@ end
 -- Everything put back regardless of who changed what since (the player's own recovery), and Fishing Mode off.
 function P.Recover()
     local was = on
+    if previewing then P.EndPreview("recover", true) end
     -- forced first: going off on its own would keep what someone else changed
     local cam = Cam.Restore("recover", { force = true })
     Fa.Restore(true, true)
@@ -254,11 +260,72 @@ function P.ValueItem(itemID, q)
 end
 
 ---------------------------------------------------------------------------
+-- Preview (the settings page's "Preview Fishing Mode", /tui fish preview): the chosen presentation with sample figures,
+-- the interface faded and the camera moved, for P.PREVIEW seconds or until asked to stop. Never casts, equips, uses or
+-- opens anything, and records nothing. Real Fishing Mode and a preview are never on together: a real line during a
+-- preview takes over its faded interface and camera (P.Enter), and everything that turns Fishing Mode off ends a preview.
+---------------------------------------------------------------------------
+P.PREVIEW = 15
+
+-- Returns true, or false and why: "live" (Fishing Mode is on: it is the real thing), "combat", "classic", "off".
+function P.Preview(opts)
+    opts = opts or {}
+    if previewing then return true end
+    if on then return false, "live" end
+    if not (F.ready and S.Get("enabled")) then return false, "off" end
+    if F.InCombat() then return false, "combat" end
+    local mode = P.Mode()
+    if mode == "classic" then return false, "classic" end
+    if unlocked then P.Unlock(false) end
+    previewing, previewOpts = true, opts
+    parts = P.Parts(mode)
+    local fine = true
+    if parts.castbar then fine = Step("preview castbar", function() CB.Preview(true, false) end) and fine end
+    if parts.list then fine = Step("preview list", function() L.Preview(true, false) end) and fine end
+    if parts.toast then fine = Step("preview toast", function() T.Preview(true, false) end) and fine end
+    if parts.brand then fine = Step("preview brand", function() P.Brand(true) end) and fine end
+    if parts.fade then fine = Step("preview fade", function() Fa.Apply() end) and fine end
+    if parts.camera then
+        fine = Step("preview camera", function() Cam.Apply({ zoom = S.Get("camera.zoom"), offset = S.Get("camera.offset") }) end) and fine
+    end
+    if not fine then P.EndPreview("error", false) return false, "error" end
+    if C_Timer and C_Timer.NewTimer then
+        previewTimer = C_Timer.NewTimer(opts.seconds or P.PREVIEW, function() previewTimer = nil; P.EndPreview("timeout") end)
+    end
+    Tell()
+    return true
+end
+
+-- Ends a preview. keepWorld: the faded interface and the camera stay (real Fishing Mode takes them over).
+function P.EndPreview(why, keepWorld)
+    if not previewing then return false end
+    previewing = false
+    if previewTimer then previewTimer:Cancel(); previewTimer = nil end
+    Step("preview castbar off", function() CB.Preview(false); CB.Hide() end)
+    Step("preview list off", function() L.Preview(false); L.Hide() end)
+    Step("preview toasts off", function() T.Preview(false) end)
+    Step("preview brand off", function() P.Brand(false) end)
+    if not keepWorld then
+        local instant = why == "combat" or why == "logout" or why == "dead" or why == "world"
+        Step("preview camera back", function() Cam.Restore("preview", { keepZoom = why == "logout" }) end)
+        Step("preview fade back", function() Fa.Restore(instant) end)
+    end
+    local opts = previewOpts
+    previewOpts = nil
+    Tell()
+    if opts and opts.done then pcall(opts.done, why) end
+    return true
+end
+
+function P.Previewing() return previewing end
+
+---------------------------------------------------------------------------
 -- Moving the pieces (/tui fish move): sample figures, dragging saves the place
 ---------------------------------------------------------------------------
 function P.Unlock(show)
     show = show and true or false
     if F.InCombat() and show then return false end
+    if show and previewing then P.EndPreview("move") end
     unlocked = show
     CB.Preview(show)
     L.Preview(show)
@@ -333,10 +400,11 @@ F.Subscribe("CONFIG", function(_, path)
     if path == "enabled" and not S.Get("enabled") then Leave("off", true) end
 end)
 
-local function OnCombat() Leave("combat", true) end
-local function OnDead() Leave("dead", true) end
-local function OnLogout() Leave("logout", true) end
+local function OnCombat() if previewing then P.EndPreview("combat") end Leave("combat", true) end
+local function OnDead() if previewing then P.EndPreview("dead") end Leave("dead", true) end
+local function OnLogout() if previewing then P.EndPreview("logout") end Leave("logout", true) end
 local function OnWorld(isLogin, isReload)
+    if previewing then P.EndPreview("world") end
     if on then Leave("world", true) end
     -- start-up: a camera left changed by a reload, a disconnect or an error is put back
     if isLogin or isReload then Step("camera recovery", Cam.Recover) end
@@ -381,6 +449,7 @@ P.HELP = {
     "/tui fish mode - Fishing Mode on or off; mode immersive|compact|classic chooses how it looks; mode auto on|off",
     "/tui fish reveal - show the faded interface for a moment (again to fade it); recover - put the camera and interface back",
     "/tui fish move - drag the cast bar, catch list and notices where you want them (again to lock them)",
+    "/tui fish preview - try Fishing Mode for 15 seconds with sample figures: HUD, fading and camera (nothing is cast or used)",
     "/tui fish camera on|off, camera zoom <1-30 yards>, camera offset <-2..2, 0 is off>",
     "/tui fish fade - what can be faded and what was; fade on|off, fade bars|units|minimap|panels|notices|ellesmere on|off,",
     "    fade alpha <0-0.6>, fade add|remove <FrameName>",
@@ -408,6 +477,11 @@ function P.Command(word, rest)
         elseif sub == "on" or sub == "off" then
             if (sub == "on") ~= on then P.Command("mode", "") else Say("Fishing Mode is already %s.", sub) end
         else Say("usage: /tui fish mode [immersive|compact|classic|auto on|off]") end
+    elseif word == "preview" then
+        if previewing then P.EndPreview("player") Say("preview ended.") return true end
+        local ok, why = P.Preview()
+        if ok then Say("previewing Fishing Mode for %d seconds (sample figures; nothing is cast or used). /tui fish preview again to stop.", P.PREVIEW)
+        else Say("%s", ({ live = "Fishing Mode is on: what you see is the real thing." })[why] or WHY[why] or why) end
     elseif word == "reveal" then
         if not on then Say("Fishing Mode is off.") else P.Reveal(not revealed) end
     elseif word == "recover" then

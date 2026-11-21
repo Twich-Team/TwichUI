@@ -33,6 +33,10 @@ corrected here, and why:
                                                    heading and treasures heading, and faintly between its rows (as in the
                                                    mockup). Resampled only. (divider_lower, with three diamonds, read heavier
                                                    than the mockup's rules and is not used.)
+    settings         branding/feature_icon.png     the leaping fish in its bronze frame: Fishing's icon in the TwichUI settings
+                                                   window (Home, the page list, search). Written into the core,
+                                                   !!!TwichUI/media/fishing/settings.tga (64 px) and settings-small.tga (32 px),
+                                                   so it shows while TwichUI_Fishing has not loaded. Fitted with a 3 px margin.
     glyph-lure       icons/lure.png                the feather lure, beside the lure's time under the cast bar
     glyph-time       icons/bobber.png              the bobber, beside the session's length under the cast bar. Each glyph is
                                                    fitted to a 64 px square with its aspect kept, as the mockup's stat row shows
@@ -247,6 +251,17 @@ def logo(src):
     return out, (w, h), {}
 
 
+def icon(src, side, pad):
+    w, h, px, _ = read_png(os.path.join(src, "feature_icon.png"))
+    fill = side - 2 * pad
+    s = fill / float(max(w, h))
+    ow, oh = max(1, int(round(w * s))), max(1, int(round(h * s)))
+    body = resample(px, (0, 0, w, h), ow, oh)
+    out = blank(side, side)
+    paste(out, body, (side - ow) // 2, (side - oh) // 2)
+    return out, (side, side), {}
+
+
 def plain(src, file, ow, oh):
     w, h, px, _ = read_png(os.path.join(src, file))
     return fit(px, (0, 0, w, h), ow, oh) + ({},)
@@ -325,6 +340,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", default=os.path.join(root, "assets", "fishing"))
     ap.add_argument("--out", default=os.path.join(root, "TwichUI_Fishing", "media"))
+    ap.add_argument("--core", default=os.path.join(root, "!!!TwichUI", "media", "fishing"))
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--sheet")
     args = ap.parse_args()
@@ -339,6 +355,11 @@ def main():
     os.makedirs(args.out, exist_ok=True)
     for name, canvas, _, _ in built:
         write_tga(os.path.join(args.out, name + ".tga"), canvas)
+    # the settings icon lives in the core, beside the camping and guild icons
+    os.makedirs(args.core, exist_ok=True)
+    for name, side, pad in (("settings", 64, 3), ("settings-small", 32, 1)):
+        canvas, _, _ = icon(args.src, side, pad)
+        write_tga(os.path.join(args.core, name + ".tga"), canvas)
     if args.sheet:
         contact_sheet(args.sheet, built)
 

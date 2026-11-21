@@ -347,5 +347,44 @@ do
   Check(warn and text:find("press F", 1, true), "the cast bar shows the pending gear and the key that puts it back: " .. text)
 end
 
+---------------------------------------------------------------------------
+-- 11. Preview: sample figures, fading and camera; never an action; ends cleanly; hands over to a real line
+---------------------------------------------------------------------------
+do
+  local c, W, F = Fresh()
+  local P = F.Present
+  local casts, equips = W.calls.casts, W.calls.equip
+  local ended
+  Check(P.Preview({ done = function(why) ended = why end }) == true and P.Previewing() and not P.On(), "a preview starts; Fishing Mode itself stays off")
+  Settle(W)
+  Check(F.CastBar.Shown() and F.CatchList.Shown() and #({ F.Toast.Active() })[1] == 1, "the cast bar, catch list and a notice show")
+  Check(select(2, F.CatchList.Frame()).since:GetText():find("sample", 1, true), "the list says its rows are samples")
+  Check(c.MainMenuBar:GetAlpha() == 0 and math.abs(W.camera.zoom - 7) < 0.01, "the interface fades and the camera moves, as they would")
+  Check(not F.CastBar.Frame():IsMouseEnabled(), "a preview takes no mouse (only move mode does)")
+  Check(W.calls.casts == casts and W.calls.equip == equips and F.Session.Current() == nil, "nothing is cast or equipped and no session begins")
+  W.Advance(P.PREVIEW + 0.5); Settle(W)
+  Check(not P.Previewing() and ended == "timeout", "it ends by itself")
+  Check(c.MainMenuBar:GetAlpha() == 1 and W.camera.zoom == 15 and not F.CastBar.Shown() and #({ F.Toast.Active() })[1] == 0, "and everything is back")
+  -- ended by the player, by combat; refused while Fishing Mode is on and in classic
+  P.Preview(); c.TwichUI.RunCommand("fish preview"); Settle(W)
+  Check(not P.Previewing() and c.MainMenuBar:GetAlpha() == 1, "/tui fish preview again ends it")
+  P.Preview(); W.Fight()
+  Check(not P.Previewing() and c.MainMenuBar:GetAlpha() == 1 and W.camera.zoom == 15, "combat ends it at once")
+  W.Peace()
+  P.Configure("present.mode", "classic")
+  Check(select(2, P.Preview()) == "classic", "classic has nothing to preview")
+  P.Configure("present.mode", "immersive")
+  -- a real line during a preview takes it over: one camera record, one fade, nothing put back and taken again
+  P.Preview(); Settle(W)
+  local zoomCalls = W.camera.calls
+  W.Advance(1.2); W.Key("F")
+  Check(P.On() and not P.Previewing() and W.camera.calls == zoomCalls, "a real line takes the preview over without moving the camera again")
+  Check(c.MainMenuBar:GetAlpha() == 0 and F.CastBar.State() == "line", "the interface stays faded; the cast bar is live")
+  Check(select(2, P.Preview()) == "live", "no preview while Fishing Mode is on")
+  c.TwichUI.RunCommand("fish stop"); Settle(W)
+  Check(c.MainMenuBar:GetAlpha() == 1 and W.camera.zoom == 15 and c.TwichUIFishingDB.client.camera == nil, "and real Fishing Mode puts it all back as usual")
+  Check(#W.faults == 0, "no errors: " .. table.concat(W.faults, " | "))
+end
+
 if failures > 0 then error(failures .. " check(s) failed") end
 print("PASSED test_fishing_present")

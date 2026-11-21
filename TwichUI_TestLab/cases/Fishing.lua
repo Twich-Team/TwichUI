@@ -102,6 +102,16 @@ TL.Case{ id = "fishing.client.presentation", cat = "fishing", class = "readonly"
         t:Fact("fishing.mode", (st.on and "on " or "off ") .. st.mode)
         local cam = F.Camera.Status()
         t:Fact("fishing.camera.supported", "zoom " .. tostring(cam.supported.zoom) .. ", offset " .. tostring(cam.supported.offset))
+        -- EllesmereUI, as Fishing Mode's fading finds it (Ellesmere.lua): version, modules and the frames found by group
+        if F.Ellesmere then
+            local e = F.Ellesmere.Status()
+            t:Fact("fishing.ellesmere.detected", tostring(e.detected) .. (e.version and (" " .. e.version) or "") .. (e.forever and " forever" or ""))
+            local mods = {}
+            for _, m in ipairs(e.modules) do if m.loaded then mods[#mods + 1] = m.addon .. (m.version and ("@" .. m.version) or "") end end
+            t:Fact("fishing.ellesmere.modules", #mods > 0 and table.concat(mods, ",") or "none")
+            t:Fact("fishing.ellesmere.found", ("bars %d, units %d, minimap %d, panels %d"):format(e.found.bars, e.found.units, e.found.minimap, e.found.panels))
+            t:Fact("fishing.ellesmere.models", tostring(#F.Ellesmere.Models()))
+        end
     else
         t:Note("TwichUI Fishing is not loaded: its Fishing Mode facts are not read.")
     end

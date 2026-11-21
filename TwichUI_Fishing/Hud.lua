@@ -273,7 +273,7 @@ function H.Offset(frame, anchor)
 end
 
 function H.Movable(frame, group, anchor)
-    if frame.twichMove then return end
+    if rawget(frame, "twichMove") then return end
     frame.twichMove = { group = group, anchor = anchor }
     frame:SetMovable(true)
     frame:SetClampedToScreen(true)
@@ -298,7 +298,7 @@ function H.Movable(frame, group, anchor)
     label:SetPoint("BOTTOM", frame, "TOP", 0, 2)
     label:SetText("Drag to move")
     label:Hide()
-    frame.twichMove.outline, frame.twichMove.label = outline, label
+    rawget(frame, "twichMove").outline, rawget(frame, "twichMove").label = outline, label
 end
 
 -- Unlocked: the frame takes the mouse and shows where it is. Locked: it never takes the mouse (clicks reach the world).
@@ -306,6 +306,6 @@ function H.SetUnlocked(frame, on)
     on = on and true or false
     frame.twichUnlocked = on
     frame:EnableMouse(on)
-    local m = frame.twichMove
+    local m = rawget(frame, "twichMove")   -- a field of ours (rawget: never mistaken for a method)
     if m then m.outline:SetShown(on); m.label:SetShown(on) end
 end
