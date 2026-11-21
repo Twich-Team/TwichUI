@@ -182,7 +182,7 @@ def main():
         meta = json.loads(Path(args.meta).read_text())
         if args.cmd == "notes":
             text = notes_from_published(meta, rel.GitHub(args.repo), rel.REPO_ROOT)
-            Path(args.meta).write_text(json.dumps(meta, indent=2) + "\\n")
+            Path(args.meta).write_text(json.dumps(meta, indent=2) + "\n")
             (Path(args.meta).parent / "notes.md").write_text(text, encoding="utf-8")
             return 0
         rel.verify_candidate(meta, args.zip, Path(args.notes).read_text(encoding="utf-8"))
