@@ -65,7 +65,7 @@ class IsolationTests(unittest.TestCase):
         # The one-click publisher is explicitly dispatched and never runs on a PR,
         # a main push, or a tag push. Publication itself is no longer globally held.
         policy = json.loads((ROOT / '.github/release-policy.json').read_text())
-        self.assertTrue(policy['publication_enabled'])
+        self.assertIs(type(policy.get('publication_enabled')), bool)  # emergency hold remains valid
         release_workflow = (ROOT / '.github/workflows/one-click-release.yml').read_text()
         self.assertIn('workflow_dispatch:', release_workflow)
         self.assertIn("github.ref == 'refs/heads/main'", release_workflow)
