@@ -3,6 +3,16 @@
 TwichUI targets **WoW: Forever, Lua 5.1**. The core folder is `!!!TwichUI/`;
 single-quote it in shell commands. Start with the task, not a historical milestone.
 
+## Efficient AI development
+
+- Optimize for a responsive, premium, cohesive player experience and maintainable code; reuse existing primitives instead of inventing frameworks.
+- Read only relevant source, contracts, and documentation sections. Avoid broad scans and planning artifacts for routine changes.
+- Run the smallest useful tests while iterating; expand to affected feature/integration coverage at checkpoints and the documented full gate for release or high-risk changes.
+- Add tests for meaningful behavior, safety boundaries, and realistic regressions, not test-count targets. Do not weaken assertions to pass; rerun failures only with changed inputs or a diagnostic hypothesis.
+- Prefer offline verification and existing simulation. Real-client checks are owner-directed, never an automatic completion or release blocker; report native-only uncertainty honestly.
+- Measure plausible performance risks with representative bounded inputs. Do not create testing infrastructure or run long benchmarks unless justified by the change.
+- Review the diff, report verification and limitations concisely, and stop when acceptance criteria are met.
+
 1. Read [shared engineering rules](docs/engineering-rules.md), then only the relevant
    sections of [feature rules](docs/dev-rules.md). These are the shared policy authorities.
 2. Use [architecture and ownership](docs/architecture.md) to locate source, manifests,

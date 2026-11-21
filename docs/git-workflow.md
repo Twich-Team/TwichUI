@@ -2,7 +2,7 @@
 
 Protected **main → short-lived feature/fix branch → reviewed PR → main** is the permanent TwichUI workflow.
 Main is the single development baseline. Candidates use exact verified commits, immutable artifacts
-and protected manual promotion. A development merge does not lift the public-release hold.
+and explicit owner-authorized release workflow dispatch. Pushes, tags and PR merges do not publish. Respect any configured publication hold; only the owner authorizes release.
 
 Final main-to-Workshop synchronization: [PR #41](https://github.com/Twich-Team/TwichUI/pull/41), merged
 at `0f25a23ddd1b0acf8ea269c508417ae8717b3629`. Both histories are preserved. Complete tree

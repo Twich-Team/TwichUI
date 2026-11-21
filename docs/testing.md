@@ -5,6 +5,14 @@ Run from the repository root using native Linux/WSL. Requires Lua 5.1,
 installation and the dependencies in [simulator-lab.md](simulator-lab.md).
 No new Python packages are required.
 
+**Cost-conscious verification:** prefer the smallest existing test or development group
+while editing, then affected feature/integration coverage at the appropriate checkpoint.
+Add tests only for meaningful new behavior, safety boundaries or plausible regressions;
+do not add duplicate scenarios to inflate counts. Cosmetic or documentation-only
+changes normally need syntax, targeted visual, or link checks rather than unrelated
+simulator catalogs or a new harness. Use benchmarks for changed performance-sensitive
+paths, not as an automatic step on every PR. Preserve the independent full release gate.
+
 | Tier | Command | Evidence |
 |---|---|---|
 | Development | `./tests/run.sh development workshop-settings` (alias `fast`) | Direct feature tests and Lua syntax; no simulator |
@@ -29,9 +37,11 @@ for ordinary PRs. Full discovery, every default simulator launch, screenshots,
 replays, deliberate incorrect expectations and compatibility checks remain intact.
 The `release` profile adds `tools/release.py check` against an existing candidate
 archive and its packaging metadata. Missing inputs fail before executing tests.
-It checks, never builds, stamps, publishes or deploys. The existing CI packaging
-pipeline and real-client acceptance remain required. A cloud run never sets
-`automated_release_gate_passed` or `local_milestone_passed` true.
+It checks, never builds, stamps, publishes or deploys. The existing CI packaging pipeline remains required. Real-client checks are
+owner-directed and are **not** mandatory completion, PR, or release gates; record
+any client-only uncertainty and suggested checks without claiming native evidence.
+A cloud run never sets `automated_release_gate_passed` or `local_milestone_passed`
+true.
 
 Do not repeat an unchanged full run merely to refresh evidence. Diagnose failures
 with the smallest reproducing module/scenario, preserve the original report and
@@ -203,11 +213,14 @@ coverage and the pending client gate: [lifecycle proof](workshop/auction-house/l
 
 ## Mutation policy
 
-Campaigns remain separate from routine checks and full regression, matching the
-previous suite. The offline suite always runs the mutation runner's own tests.
-For Workshop money, quantities, rounding, ordering or eligibility changes, keep
-[the verification policy](workshop/testing-roadmap.md#verification-policy-for-future-workshop-tasks-claudemd-points-here):
-run the matching campaign and add a realistic defect model. For example:
+Campaigns remain separate from routine checks and full regression; the offline
+suite still runs the mutation runner's own tests. For substantive changes to
+economic formulas, money/quantity rounding, eligibility or persisted accounting,
+use the relevant existing mutation campaign when it protects a meaningful risk.
+Add a catalog entry only for a distinct plausible defect not already protected;
+do not manufacture new mutations or run campaigns for cosmetic/unrelated edits.
+See [the Workshop verification policy](workshop/testing-roadmap.md#verification-policy-for-future-workshop-tasks-claudemd-points-here).
+Examples of available targeted campaigns:
 
 ```sh
 bash tools/mutate.sh --group market
@@ -345,8 +358,8 @@ Preview any command above by appending `--list`; inspect tests, syntax and selec
 simulators before running it. Development omits dependency expansion; feature and
 integration expand unit/syntax dependencies, but simulator catalogs come only from
 explicitly requested groups. Add consumer groups explicitly for cross-feature work.
-Workshop money/quantity/eligibility changes also retain the mutation requirements
-in [shared rules](engineering-rules.md) and the Workshop verification policy.
+For Workshop economic changes, apply the risk-based mutation guidance in
+[shared rules](engineering-rules.md) and the Workshop verification policy.
 
 `tools/ci_verify.py` separately selects release-tools for its explicit release/docs
 allowlist, and complete offline discovery otherwise. It is not a source-to-group
