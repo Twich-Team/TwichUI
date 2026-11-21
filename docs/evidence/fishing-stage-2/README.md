@@ -26,6 +26,24 @@ What differs from the game:
 | `castbar-*.png` | The cast bar at 2x: label, seconds left from the channel's own times, the warm gold fill, the session figures with the pack's glyphs (bobber, fish mark, feather), and prompts |
 | `compare-mockup.png` | The approved mockup's emblem, catch list, notification and cast bar (left) beside the same pieces of `immersive-sunset` (right) |
 
+## Settings page (simulator-tested, structural)
+
+`settings-*.png` show the real settings window, drawn by the repository's simulator lab. It was run as
+`SIMLAB_ASSETS=0 SIMLAB_EXTRA=TwichUI_Fishing bash tools/simlab/run.sh settings fishing`, with `SIMLAB_SETTINGS_TASK` 2–5
+for each tab: wow-ui-sim v0.1.37, Forever UI 1.60.1.70532, and no game install, so Blizzard art and fonts are absent. Going
+to the page loaded TwichUI_Fishing in the simulator. Each run passed its 21 to 22 handler and state checks: the tabs fit,
+the dropdowns open and close, the page is searchable, and reopening reuses it. The simulator draws every addon font in
+Friz Quadrata, so these are structural captures, not a visual or text-wrapping review.
+
+| File | Shows |
+|---|---|
+| `settings-home.png` | Home: Fishing among the featured features ("Not loaded yet" before a visit), and in the page list under Adventure |
+| `settings-fishing.png` | Fishing: status, the switch, your keys, Open Key Bindings, Start Fishing Mode, your gear, Put things back |
+| `settings-assistance.png` | Fishing assistance |
+| `settings-mode.png` | Fishing Mode: presentation, camera, fading, motion, prompts, the gamepad pulse (with its note), the emblem |
+| `settings-fading.png` | Interface fading: the groups, notices, opacity, Include EllesmereUI and what was detected, what can be faded now |
+| `settings-hud.png` | The HUD: pieces, sizes, rows, order, the value area, Place on screen, Reset positions, Try Fishing Mode |
+
 ## Against the approved mockup
 
 `compare-mockup.png` puts each HUD piece beside the mockup's.

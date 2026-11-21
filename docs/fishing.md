@@ -168,7 +168,8 @@ nothing is recorded or changed for the session, and the key still casts.
 | `reel target\|mouseover` | What the reel override uses |
 | `interact on\|off` | Lets TwichUI set the soft-target settings while a line is out, and put them back after. A value you changed meanwhile is kept |
 
-Preferences live in `TwichUIFishingDB.config`, not in TwichUI profiles, sharing or backups. A settings page is Stage 2+.
+Preferences live in `TwichUIFishingDB.config`, not in TwichUI profiles, sharing or backups. Since Stage 2 they are also on the
+Fishing page of the TwichUI settings window ([below](#settings-the-twichui-settings-window-adventure--fishing)).
 
 ## Diagnostics
 
@@ -187,6 +188,11 @@ Diagnostics has the scopes `fishing.load`, `fishing.decide`, `fishing.loot` and 
 | `test_fishing_loot.lua` | No catch from bags or other loot, multi-item catches, duplicate events, auto-loot with loot-line confirmation, left items, money, delayed loot after the line, duration, history, idle end, retention, zones, API copies |
 | `test_fishing_containers.lua` | Queueing with provenance, key and open-key opening, contents attribution, several containers, learning, full bags, failed and locked opens, partial opens, hand-opened matching, unrelated containers, reconciliation, reload credit, provenance without double counting, automatic mode worked / blocked / off |
 | `test_fishing_store.lua` | New file, unversioned and damaged data repaired field by field, repeatable load, newer schema held, plain saved values, no prices |
+| `test_fishing_present.lua` | Stage 2: Fishing Mode's lifecycle, presentations, camera, fading policy, combat, reload and logout recovery, errors, missing client functions, controller keys, Stage 1 underneath, preview |
+| `test_fishing_hud.lua` | Stage 2: the cast bar, catch list and notifications, missing art and fonts, late item names, moving and scaling |
+| `test_fishing_ellesmere.lua` | Stage 2: EllesmereUI (`tests/ellesmere_mock.lua`, modelled on its source): detection, bars, unit frames through their parent, portraits, minimap, its own writes, mouse-over, combat, frames made or rebuilt, contested frames, turning it off and on, repeated use, errors, absent |
+| `test_fishing_settings.lua` | Stage 2: the settings page: found without loading, loading on visit, greyed states and their reasons, saved values, changes through Fishing's validation, keys and Key Bindings, preview, recovery, combat, missing addon, held data |
+| `test_fishing_art.py` | Stage 2: the heads-up artwork's files, sizes, cut-out wells and rebuild |
 
 The mock simulates secure actions the way `SecureTemplates.lua` reads attributes, and refuses attribute and override changes
 in combat. It cannot prove taint, real event order or timing. Mutation checks (guard removed, double slot counting,
@@ -268,30 +274,59 @@ addon at login, as the fishing key does.
   functions turn the camera off (`camera-unsupported`), and the rest of Fishing Mode works without it.
 - **Held saved data:** while it is held, the record stays in memory only, because nothing is written.
 
-### Fading (`Fade.lua`)
+### Fading (`Fade.lua`, `Ellesmere.lua`)
 
 - **Groups:** `fade bars|units|minimap|panels on|off`. Bars, units and the minimap are on, panels off.
   - Bars: the game's action, stance, pet and possess bars, the micro menu, the bags bar and the experience and reputation
     bars.
-  - Units: the player, target, focus, pet and party frames, and EllesmereUI's unit frames by the names it gives them.
+  - Units: the game's player, target, focus, pet and party frames.
   - Minimap: the minimap cluster.
   - Panels: the quest tracker, buffs, debuffs and durability.
+- **Hidden frames:** faded too, so a target frame that appears while you fish appears faded.
 - **Your own frames:** `fade add <FrameName>` fades another addon's frame too, and `fade remove <FrameName>` stops it.
   `fade alpha` sets how far things fade (0 to 0.6, default 0).
-- **Only alpha:** each frame's own alpha is read and then changed with `SetAlpha`. Nothing is hidden, moved, re-parented,
-  hooked or saved, and nothing in another addon is called. A frame that is hidden, forbidden or missing is skipped.
-- **Never faded:** UIParent, the world, errors, raid warnings, cast bars, loot, popups and the tooltip.
-- **Coming back:** a frame returns to its own alpha only if it is still the alpha Fishing Mode set. Another addon's change
-  is kept and counted (`/tui fish` shows it).
-- **Fades:** 0.4 s, run on one driver frame whose OnUpdate exists only while something moves. There are none with
-  `/tui fish motion off` or the Arrival reduced-motion setting.
-- **TwichUI's own notices** (cards, reminders, glows) are held quiet with the Quiet screen's new hold (`fade notices on|off`).
+- **Never faded:** UIParent, the world, errors, raid warnings, cast bars, loot, popups, the tooltip, Fishing's own pieces,
+  and EllesmereUI's secure micro menu (EllesmereUI warns that changing its alpha breaks its secure buttons).
+- **TwichUI's own notices** (cards, reminders, glows) are held quiet with the Quiet screen's hold (`fade notices on|off`).
   A hold is not your Quiet screen switch: it never turns that switch on or off, the data bar shows and toggles your own
   switch only, and nothing is saved.
-- **EllesmereUI** replaces the game's bars and unit frames with its own. Its unit frames fade by name. Its bars do not,
-  because their names are not known here: add them with `fade add`, or use EllesmereUI's own fading.
 - **Dialogue UI** fades UIParent itself while a conversation is open. Fishing Mode never touches UIParent, so the two never
-  fight, and Fishing Mode's pieces fade with UIParent then.
+  fight.
+
+**Ownership: how Fishing Mode and other addons share a frame.** Fishing Mode owns what a faded frame *shows* while it is on.
+The frame's owner (the game, EllesmereUI, another addon) keeps its *preference*.
+
+- **One hook per frame:** each faded frame gets a post-hook on its own `SetAlpha` (`hooksecurefunc`, installed once, never
+  removed, inert while Fishing Mode is off).
+- **Covered at once:** when the owner writes an alpha, that value becomes its preference, and the faded alpha is put back
+  in the same instant. Nothing flashes, nothing loops, and the owner's own records (EllesmereUI's `_fadeAlpha`) stay as it
+  wrote them.
+- **The pointer wins:** an owner's write while your pointer is on the frame is shown (a mouse-over bar reveals as usual).
+  The frame fades again once the pointer has left.
+- **Never fought:** a frame its owner writes more than 24 times in two seconds is left to it for the rest of the time.
+- **Coming back:** each frame returns to its owner's *latest* preference. An owner that writes during that last fade has
+  the last word. Put things back (`/tui fish recover`) returns every frame regardless.
+- **Upkeep:** once a second while faded, and only then. It picks up frames made since, puts back the old frame of one
+  rebuilt under the same name and fades the new one, and fades hovered frames again.
+- **Only alpha:** nothing is hidden, shown, moved, re-parented or saved, no visibility driver is touched, and no function
+  of another addon is called or replaced.
+- **Fades:** 0.4 s, on one driver frame whose OnUpdate exists only while something moves (none with `/tui fish motion off`
+  or reduced motion).
+
+**EllesmereUI** (`fade ellesmere on|off`, on by default; it acts only when EllesmereUI is loaded). Read from EllesmereUI's
+public source at 9.9.1, whose .toc lists interface 16001 and whose `EllesmereUI_ClientGate.lua` supports WoW: Forever. Nothing
+of EllesmereUI is called, hooked, replaced or saved; only the frames below have their alpha changed, under the policy above.
+
+| Group | EllesmereUI frames | Notes |
+|---|---|---|
+| bars | `EABBar_MainBar`, `EABBar_Bar2`..`Bar10`, `EABBar_StanceBar`, `EABBar_PetBar`, `EABPagingFrame`, `EllesmereEAB_XPBar` / `RepBar` / `FavorBar`, the bar caps `EllesmereEAB_MicroBar` / `BagBar` | EllesmereUI writes these bars' alpha itself (mouse-over, Advanced Fade, visibility passes); its writes are covered and kept as preferences. The micro menu and bags themselves are the game's `MicroMenuContainer` and `BagsBar` |
+| units | `EllesmereUIUnitFrames_Hider`: the one parent of every unit frame EllesmereUI spawns, which EllesmereUI never writes; the 3D portrait models under it; `EllesmereUIRaidFrameContainer`; `EllesmereUIResourceBarsFrame` | Fading the parent fades every unit frame with no write EllesmereUI undoes; its pet-battle visibility driver stays its own. 3D models don't inherit a parent's alpha, so each is faded by itself (found by a bounded walk, every fifth upkeep pass) |
+| minimap | `Minimap` (EllesmereUI takes it out of `MinimapCluster`, which it sets to 0) | The engine draws the map's blips regardless of alpha, so they may stay visible |
+| panels | `EllesmereUIPlayerAuraBars_Buffs` / `_Debuffs` | Off by default, with the other panels |
+
+Not faded: the extra action button and the encounter bar (gameplay), EllesmereUI's cast bars, and anything not listed: its
+other modules' frames can be added by name. `/tui fish fade` lists, for this session, every frame found, faded, written by
+its owner, left to its owner or skipped (and why), and how the interface came back last time.
 
 ### Cast bar (`CastBar.lua`)
 
@@ -356,13 +391,36 @@ addon at login, as the fishing key does.
 - **Vibration:** none on a bite, because no bite signal exists. `/tui fish vibrate on` (default off) gives a short low
   pulse on a confirmed catch, if the client has `C_GamePad.SetVibration`. **Unverified.**
 
-### Settings
+### Settings (the TwichUI settings window: Adventure > Fishing)
 
-- **Saved:** `TwichUIFishingDB.config`, the new groups `present` (with `brand`), `camera`, `fade`, `castbar`, `list` (with
-  `value`) and `toast`
-  (defaults in `Store.lua`; schema 1, missing values filled, no migration).
-- **Changing them:** `/tui fish help` lists the words, and `/tui fish move` drags the pieces. A change applies at once.
-- **Not yet:** a settings page is Stage 4's.
+- **Finding it:** Fishing is in the page list under Adventure, featured on Home with the texture pack's leaping-fish
+  icon, and found by search ("fishing", "lure", "ellesmereui", "fishing mode", "cast bar" and more).
+- **Loading:** describing the page never loads TwichUI Fishing. Going to the page loads it, never in combat (it waits until
+  combat ends). Until then every control is greyed out and says why: loading, combat, a missing or disabled folder, or
+  records held by a newer TwichUI.
+- **Five tabs:**
+  - Fishing: the switch and status, your Fishing key and the Fishing Mode keys. Open Key Bindings opens the game's Key
+    Bindings at TwichUI's header. Also Start / Leave Fishing Mode, your gear (pending restoration shows here), and Put
+    things back, which recovers the camera and interface and puts your own gear back or says how.
+  - Assistance: equipment, preferred pole and lure (from your bags), alternative lures, containers
+    (queued / automatic where allowed / off), opening clams with the key, putting gear back, weapons in combat.
+  - Fishing Mode: presentation, start on cast, camera distance and side offset (each with a note where this client doesn't
+    offer it), fading, smooth transitions, key prompts, the gamepad pulse, the emblem.
+  - Fading: the groups, TwichUI's notices, faded opacity, Include EllesmereUI (with the version and modules detected), what
+    can be faded now, how the interface came back last time, and the frames you added (with Clear the list).
+  - HUD: show each piece, its size, catches shown and their order, the value area, Place on screen, Reset positions, and
+    Try Fishing Mode.
+- **Saving:** every change goes through Fishing's own validation (`Present.Configure` → `Store.Set`), applies at once, and is
+  saved in `TwichUIFishingDB.config`. Preferences stay outside TwichUI profiles and sharing, as in Stage 1. TwichUI never
+  binds a key.
+- **Preview** (Try Fishing Mode, `/tui fish preview`):
+  - What it shows: the chosen presentation with sample figures, plainly marked as samples (the list says "Preview: sample
+    catches, not your records"), for 15 seconds, with the interface faded and the camera moved.
+  - What it never does: cast, equip, use, open or record anything.
+  - How it ends: by itself (the settings page comes back), on Stop the preview, the Fishing Mode key, `/tui fish preview`,
+    combat, death, a loading screen or logout. A real line during a preview takes over its faded interface and camera, so
+    the camera never moves twice.
+- **Commands:** `/tui fish help` lists the words.
 
 ### For Stages 3 and 4 (`R.Fishing.Present`)
 
@@ -376,13 +434,17 @@ addon at login, as the fishing key does.
 
 ### Diagnostics
 
-- **Scopes:** `fishing.castbar` (the cast bar's OnUpdate, after its throttle, only while a line is out) and `fishing.list`
-  (a catch list redraw).
+- **Scopes:** `fishing.castbar` (the cast bar's OnUpdate, after its throttle, only while a line is out), `fishing.list` (a
+  catch list redraw) and `fishing.fade` (the fading upkeep, once a second while faded).
 - **Gauge:** `fishing.toasts`.
-- **Notes:** `present-error`, `camera-unsupported`, `camera-no-effect`, `camera-kept`, `fade-refused`, `art-missing` and
-  `value-error`.
-- **Status:** `/tui fish` adds Fishing Mode's state, what the camera supports and how many frames are faded.
-- **Test Lab:** the case `fishing.client.presentation` reads the camera, gamepad and frame facts in the client (read only).
+- **Notes:** `present-error`, `camera-unsupported`, `camera-no-effect`, `camera-kept`, `fade-refused`, `fade-contested`,
+  `art-missing` and `value-error`.
+- **Status:** `/tui fish` adds Fishing Mode's state, what the camera supports and how many frames are faded. `/tui fish fade`
+  reports EllesmereUI (version, modules) and each frame. The settings page's Fading tab says the same in a few lines.
+- **Diagnostics export:** `API.Diagnostics()` carries `fade` (counts only) and `ellesmere` (detected, version, modules,
+  counts).
+- **Test Lab:** the case `fishing.client.presentation` reads the camera, gamepad, frame and EllesmereUI facts (version,
+  modules, frames found, portrait models) in the client (read only).
 
 ### Performance
 
@@ -391,29 +453,56 @@ addon at login, as the fishing key does.
 - **Pieces:** built the first time they are shown and reused, rows, notices and animations included.
 - **On:** the cast bar's OnUpdate runs only while a line is out (about 30 updates a second). There is a one-second ticker
   each for the cast bar's figures and the list's duration, and the fades' OnUpdate runs only while a fade moves.
-- **Never:** prices asked per frame, or frames scanned. Faded frames are looked up by name once per Fishing Mode.
+- **Fading:** a known list of names, looked up once when Fishing Mode starts and once a second while faded (about 50
+  lookups). There is no scan of the interface. EllesmereUI's portrait models are found by a walk of its unit frames'
+  children, bounded at 400 frames, every fifth second. A post-hook costs one table lookup when the owner writes an alpha,
+  and nothing at all while Fishing Mode is off.
+- **Never:** prices asked per frame, or the whole interface scanned.
 
 ### In-game verification (Stage 2)
 
-None of these has been done.
+None of these has been done yet. In this order, on WoW: Forever:
 
-- [ ] Fish with the fishing key: Fishing Mode comes on at the first line. The camera eases in once, and bars, unit frames
-      and the minimap fade. TwichUI's cards stay away, and the data bar still shows your Quiet screen switch as off.
-- [ ] Scroll the camera while fishing: it is never pulled back. `/tui fish stop`: your distance is kept.
-- [ ] `/tui fish stop` without touching the camera: it returns to where you had it, and every faded frame returns to its
-      own alpha.
-- [ ] `/reload` mid-session and log out mid-session: the camera is back after the reload and at the next login.
-- [ ] `camera offset 1`: note whether the client asks to confirm an experimental setting, and whether it is put back.
-- [ ] Pull a mob: everything is back at once, with no "action blocked". After combat the next line brings Fishing Mode back.
-- [ ] Hold the reveal key: the interface returns, then fades again on release.
-- [ ] Bind the fishing, mode and reveal keys to gamepad buttons: the prompts name them and all three work without a mouse.
-      `vibrate on`: note whether a catch pulses.
-- [ ] The cast bar's fill matches the line's real time. Check that the line's maximum is the channel's end time.
-- [ ] The catch list, the notices and their art at UI scales 0.8, 1.0 and 1.25, over bright snow or water and at night.
-      Check that the TGAs draw with clean alpha and no fringe, that the toast and icon-frame wells show the item icon
-      cleanly, and that a long name's notice shows no seam where the band is lengthened.
-- [ ] With EllesmereUI: its unit frames fade, its bars do not (add them with `fade add`), and its own fading still works.
-      With Dialogue UI: talk to an NPC while fishing, and nothing is left faded or zoomed afterwards.
+1. [ ] Open TwichUI Settings (`/tui options`, or the data bar entry).
+2. [ ] Find Fishing at once: Adventure in the page list, on Home, or by searching "fishing".
+3. [ ] Configure without slash commands: its page loads Fishing (the status reads On). Try each tab and see each change
+       apply.
+4. [ ] Open Key Bindings from the Fishing tab: it should open at TwichUI. Bind "Fishing: the next step", and optionally
+       the two Fishing Mode keys (a gamepad button works too). Back on the page, Your Fishing key shows it.
+5. [ ] Choose Immersive under Fishing Mode.
+6. [ ] HUD > Try Fishing Mode:
+       - the cast bar, sample catches and a notice show for 15 seconds;
+       - the interface fades and the camera moves;
+       - nothing is cast or equipped;
+       - everything comes back and the settings reopen.
+7. [ ] Start fishing with your key: Fishing Mode comes on with the first line.
+8. [ ] With EllesmereUI: its action bars, unit frames (with their 3D portraits) and minimap fade. A mouse-over bar still
+       shows under your pointer. Target something: its frame doesn't flash.
+9. [ ] Hold the reveal key (or `/tui fish reveal`): the interface comes back, as EllesmereUI wants it, then fades on
+       release.
+10. [ ] `/tui fish stop`: every frame returns as EllesmereUI wants it (mouse-over bars hidden again, opacity settings
+        intact), and the camera returns.
+11. [ ] Pull a mob while fishing: everything is back at once, with no "action blocked". EllesmereUI's own combat fading
+        still works.
+12. [ ] `/reload` mid-session: your settings are kept, the camera comes back after the reload, and nothing is left
+        faded. Then log out mid-session and log back in.
+
+**Which EllesmereUI was detected:**
+
+- The Fishing page's Fading tab: the EllesmereUI line gives its version and modules, and "Fishing Mode can fade" gives the
+  frames found.
+- `/tui fish fade`: one line per frame, and what happened to it.
+- Test Lab, category Fishing: the facts `fishing.ellesmere.detected` / `.modules` / `.found` / `.models`.
+
+**Also worth checking:**
+
+- [ ] The catch list, notices and their art at UI scales 0.8, 1.0 and 1.25, over bright and dark scenery.
+- [ ] The cast bar's fill matches the line's real time.
+- [ ] Scroll the camera while fishing: it is never pulled back, and your distance is kept at the end.
+- [ ] `camera offset`: whether the client asks to confirm an experimental setting.
+- [ ] Whether `GetCameraZoom` exists in this client: the Fishing Mode tab says so if it doesn't, and the camera is then
+      left alone.
+- [ ] With Dialogue UI: talk to an NPC while fishing, and nothing is left faded or zoomed afterwards.
 - [ ] Run the Test Lab case `fishing.client.presentation` and keep the facts.
 
 ## Stage boundaries and notes for Stage 3
