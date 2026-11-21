@@ -531,7 +531,8 @@ function T.Event(event,a,b)
         Finish("complete","Auction cancelled. Your items will be returned by mail.")
     elseif event=="AUCTION_HOUSE_AUCTION_CREATED" and (p.kind=="postItem" or p.kind=="postCommodity") and T.state=="waiting" then
         local id=Int(a,1,9007199254740991)
-        if id then p.created=p.created or {};p.created[id]=true end
+        if not id then return end -- creation requires the native non-nil auction identity
+        p.created=p.created or {};p.created[id]=true
         -- Creation has no request token; multiple item postings require their
         -- multisell completion rather than assuming the first ID means all posted.
         if p.kind=="postCommodity" or p.quantity==1 then

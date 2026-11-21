@@ -102,6 +102,17 @@ end
 ---------------------------------------------------------------------------
 do
     local c, W, s, L, C = Setup()
+    s.qty = 20;s.Lot(20, 2000);s.Post("postCommodity", 5);s.qty = 15
+    W.AuctionActions.Event("AUCTION_HOUSE_AUCTION_CREATED", nil)
+    Same(#s.Posts(), 0, "missing native id cannot confirm a commodity posting")
+    Same(C.Pool(s.Rec(), KEY), 20, "missing native id consumes no cost")
+    W.AuctionActions.Event("AUCTION_HOUSE_AUCTION_CREATED", 502)
+    Same(#s.Posts(), 1, "the later valid native confirmation still completes once")
+    Same(s.Posts()[1].a, 502, "the actual native id is retained")
+end
+
+do
+    local c, W, s, L, C = Setup()
     s.qty = 20; s.Lot(20, 2000)
     s.Post("postItem", 1); W.AuctionActions.Event("AUCTION_HOUSE_POST_ERROR")
     Same(#s.Posts(), 0, "a failed posting keeps nothing"); Same(C.Pool(s.Rec(), KEY), 20, "and takes no cost")

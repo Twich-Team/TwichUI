@@ -1563,3 +1563,6 @@ m("ledger.mail.truncated-search", MAIL, "else complete = false end", "else compl
   "an incomplete subset search vouches for omitted payment explanations", ["test_ledger_openall.lua"])
 m("ledger.mail.eligible-window", MAIL, "if req.amount <= gain then", "if true then",
   "large impossible payments hide an equal-valued personal letter outside the subset window", ["test_ledger_openall.lua"])
+
+m("ledger.lineage.created-id", ACTIONS, "if not id then return end -- creation requires the native non-nil auction identity", "-- missing id accepted",
+  "a malformed creation event reserves stock without a native auction id", ["test_ledger_lineage.lua"])

@@ -383,3 +383,20 @@ Unit-tested checkpoint A: development Ledger 25 modules pass (8.55 s); Ledger
 mutation campaign kills all 98 mutations, including three new search defects
 (46.7 s). One cash entry per observed gain and the mailbox summary remain covered.
 This is not confirmation of the owner's actual native event sequence.
+
+Checkpoint B rechecked the installed Forever reference tree at
+`bebcb6bf309cf41b41bd74f8ca651e6a105b2676`: `Blizzard_MailFrame/MailFrame.lua`
+OpenAllMailMixin waits for command completion and restarts on count changes; its
+invoice consumer reads through count/commerce flag, not an auction or item ID.
+`Blizzard_APIDocumentationGenerated/AuctionHouseDocumentation.lua` declares a
+non-nil auction ID on auction-created events and native IDs on owned auctions.
+A missing creation ID previously confirmed a Workshop commodity posting and
+consumed cost units; it is now ignored until a valid confirmation arrives.
+Lineage/action regressions pass; the targeted missing-ID mutation is killed.
+No available third-party Open All source was found in this workspace; no claim is
+made about which button the owner used. Core Sell from Bags still has cash/deposit
+attribution, but no new cost posting observer is installed there: its controller
+would need the same competing-operation provenance guarantees as Workshop before
+cost can safely be reserved. Existing Workshop posting provenance is reused.
+No seller-name/price heuristic can close the native invoice identity gap, so no
+auction realized profit or profession profit is invented in checkpoint C.
