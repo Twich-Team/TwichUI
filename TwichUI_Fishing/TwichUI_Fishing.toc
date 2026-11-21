@@ -36,6 +36,8 @@ Hud.lua
 Camera.lua
 # EllesmereUI's frames, by role, for Fishing Mode's fading (read only)
 Ellesmere.lua
+# Concealing the minimap in Immersive Fishing Mode (a real Hide, restored after)
+Conceal.lua
 # Fading the interface around Fishing Mode, and bringing it back
 Fade.lua
 # The fishing cast bar

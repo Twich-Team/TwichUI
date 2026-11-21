@@ -287,6 +287,20 @@ addon at login, as the fishing key does.
   - TwichUI: the camping bar (its frame, through `R.Camping.Frame()`) and the sleeping bag bar. Only their alpha is
     changed, while Fishing Mode is on, and each returns to its own value; the camping bar's own fade is covered like any
     owner's write. Absent or switched off: nothing happens.
+  - **The minimap is concealed, not just faded** (`Conceal.lua`, switch `fade.minimap`). The engine draws the map's blips
+    (arrow, tracking dots, quest markers) regardless of frame alpha, which EllesmereUI's own source says too, and its own idle
+    states use a real `Hide()` for that reason. So in Immersive Mode the `Minimap` frame is hidden with `Hide()`; everything
+    parented to it (EllesmereUI parents its buttons and border pieces to the map) goes with it and leaves no clickable area.
+    Moving the map off screen was rejected: it needs the anchors saved and put back while EllesmereUI re-anchors the map and
+    owns its saved position, so it would drift or fight it. `Hide()` touches no anchor, no parent and no saved setting. If the
+    map's owner calls `Show()` meanwhile, the map is hidden again at once (one post-hook on `Show`/`Hide`, inert when not
+    concealed) and the owner's wish is remembered; coming back, the map is shown only if its owner wants it (a map hidden by an
+    EllesmereUI visibility rule is never shown by Fishing). Holding the reveal key shows it; release hides it. Compact and
+    Classic never touch it. In combat the map's `Show`/`Hide` are never called if the client protects it: the restoration waits
+    for `PLAYER_REGEN_ENABLED` (so a protected map stays hidden through the first fight after Fishing Mode ends, unless
+    EllesmereUI's own combat visibility driver shows it). Nothing is saved or polled; a reload makes a new, shown map.
+    **Unverified in the real client** (the AzeriteUI changelog describing the off-screen technique could not be read from
+    here); if `Hide()` fails to remove the blips on Forever, move to off-screen placement.
   - **Chat is never faded.** Chat frames, tabs, the dock, and any frame that holds a chat frame are refused by `Fade.lua`
     (even named with `fade add`), and the minimap and meter groups never reach them.
   - Panels: the quest tracker, buffs, debuffs and durability.
@@ -329,7 +343,7 @@ of EllesmereUI is called, hooked, replaced or saved; only the frames below have 
 |---|---|---|
 | bars | `EABBar_MainBar`, `EABBar_Bar2`..`Bar10`, `EABBar_StanceBar`, `EABBar_PetBar`, `EABPagingFrame`, `EllesmereEAB_XPBar` / `RepBar` / `FavorBar`, the bar caps `EllesmereEAB_MicroBar` / `BagBar` | EllesmereUI writes these bars' alpha itself (mouse-over, Advanced Fade, visibility passes); its writes are covered and kept as preferences. The micro menu and bags themselves are the game's `MicroMenuContainer` and `BagsBar` |
 | units | `EllesmereUIUnitFrames_Hider`: the one parent of every unit frame EllesmereUI spawns, which EllesmereUI never writes; the 3D portrait models under it; `EllesmereUIRaidFrameContainer`; `EllesmereUIResourceBarsFrame` | Fading the parent fades every unit frame with no write EllesmereUI undoes; its pet-battle visibility driver stays its own. 3D models don't inherit a parent's alpha, so each is faded by itself (found by a bounded walk, every fifth upkeep pass) |
-| minimap | `Minimap` (EllesmereUI takes it out of `MinimapCluster`, which it sets to 0) and the frame EllesmereUI parents it to | The engine draws the map's blips regardless of alpha, and the game offers no safe call to hide them, so unit and tracking dots drawn by the engine may stay visible; everything else (map, border, buttons, clock, zone text) fades. Only partial, by the engine's rule |
+| minimap | `Minimap` (EllesmereUI takes it out of `MinimapCluster`, which it sets to 0): hidden completely with `Hide()`, see "The minimap is concealed" above; the frame EllesmereUI parents it to and the game's companion pieces are also faded | Blips ignore alpha, so alpha alone is not enough; unverified that `Hide()` removes them on Forever |
 | meters | `EllesmereUIDMFrame1`..`5` (EllesmereUIDamageMeters) | Its own writes (alpha 1 when it shows a window) are covered like any bar's |
 | panels | `EllesmereUIPlayerAuraBars_Buffs` / `_Debuffs` | Off by default, with the other panels |
 

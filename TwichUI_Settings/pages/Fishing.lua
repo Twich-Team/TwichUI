@@ -215,7 +215,7 @@ local function EllesmereDetail()
     local st = E.Status()
     return ("Found: %d bar frame%s, %s, %s. EllesmereUI's own mouse-over and visibility settings keep working: Fishing Mode never changes them, and while it is on a bar under your pointer still shows.")
         :format(st.found.bars, st.found.bars == 1 and "" or "s", st.found.units > 0 and "unit frames" or "no unit frames",
-            st.found.minimap > 0 and "the minimap (its blips may stay)" or "no minimap")
+            st.found.minimap > 0 and "the minimap (hidden completely)" or "no minimap")
 end
 
 local function LastFade()
@@ -380,7 +380,7 @@ K.Page({
         K.Header("Interface fading", "What fades in immersive Fishing Mode. Only how visible a frame is changes, never its settings; each frame returns as its addon wants it, and a frame under your pointer still shows.")
         Toggle("FadeBars", "fade.bars", "Action bars", "Action, stance and pet bars, the micro menu and bags, and the experience bar.", true)
         Toggle("FadeUnits", "fade.units", "Unit frames", "Your own, your target's and your focus's frames, your pet's, and party frames.", true)
-        Toggle("FadeMinimap", "fade.minimap", "Minimap", "The minimap. The game may still draw its blips.", true)
+        Toggle("FadeMinimap", "fade.minimap", "Minimap", "Hides the minimap completely in Immersive Fishing Mode (map, arrow, markers, buttons). It comes back when you reveal the interface or leave.", true)
         Toggle("FadeMeters", "fade.meters", "Damage meters", "EllesmereUI's damage meters, and Details, Recount and Skada if you use them. Chat always stays visible.", true)
         Toggle("FadeTwichui", "fade.twichui", "TwichUI camping bar", "The camping bar and its sleeping bag bar, if they are on.", true)
         Toggle("FadePanels", "fade.panels", "Other panels", "The quest tracker, buffs and debuffs, and the durability figure.", false)

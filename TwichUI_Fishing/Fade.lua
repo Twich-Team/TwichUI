@@ -393,6 +393,7 @@ function Fa.Apply(instant)
     for _, t in ipairs(Fa.Wanted()) do Add(t) end
     AddModels()
     state, revealed = "faded", false
+    if S.Get("fade.minimap") and F.Conceal then F.Conceal.On() end
     if S.Get("fade.notices") and R.QuietScreen and R.QuietScreen.Hold then R.QuietScreen.Hold(Fa.QUIET_OWNER, true) end
     Move(Want, instant)
     StartTicker()
@@ -404,6 +405,7 @@ end
 function Fa.Restore(instant, force)
     if R.QuietScreen and R.QuietScreen.Hold then R.QuietScreen.Hold(Fa.QUIET_OWNER, false) end
     StopTicker()
+    if F.Conceal then F.Conceal.Off(force) end
     if state == "idle" and not force then return 0 end
     local result = { restored = 0, owner = 0, contested = 0, stale = 0, forced = force and true or false, at = F.Now() }
     if force then
@@ -434,6 +436,7 @@ function Fa.Reveal(on)
     on = on and true or false
     if on == revealed then return true end
     revealed = on
+    if F.Conceal then F.Conceal.Reveal(on) end
     if R.QuietScreen and R.QuietScreen.Hold and S.Get("fade.notices") then R.QuietScreen.Hold(Fa.QUIET_OWNER, not on) end
     Move(Want)
     return true
@@ -480,6 +483,12 @@ function Fa.Report()
     end
     for _, s in ipairs(skipped) do
         lines[#lines + 1] = ("%s [%s]: skipped, %s"):format(s.name, s.owner or "?", WHY[s.why] or s.why)
+    end
+    if F.Conceal then
+        local c = F.Conceal.State()
+        if c.concealed then
+            lines[#lines + 1] = "Minimap: hidden completely" .. (c.revealed and " (shown while you reveal)" or "")
+        elseif c.waiting then lines[#lines + 1] = "Minimap: coming back when combat ends" end
     end
     local l = Fa.last
     if l then

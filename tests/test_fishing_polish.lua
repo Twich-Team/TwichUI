@@ -95,5 +95,109 @@ do
   Check(dm:GetAlpha() == 1, "a forced recovery leaves them as they were")
 end
 
+-- 5. The minimap is concealed (a real Hide: alpha can't remove the engine's blips), and put back
+local function Protected(m, W)
+  -- the real minimap is protected in combat: its Show and Hide refuse then
+  local show, hide = m.Show, m.Hide
+  m.IsProtected = function() return true end
+  m.Show = function(self) assert(not W.combat, "Minimap:Show in combat"); show(self) end
+  m.Hide = function(self) assert(not W.combat, "Minimap:Hide in combat"); hide(self) end
+end
+do
+  local c, W, F, EUI = Fresh()
+  local map, child = EUI.map, Make(c, W, nil, EUI.map)
+  Protected(map, W)
+  local x0, y0 = map:GetPoint(1)
+  Toggle(c, W)
+  Check(not map:IsShown() and not W.UI.Visible(child), "immersive: the minimap and everything on it is hidden, not just faded")
+  Check(F.Conceal.State().concealed, "and it says so")
+  -- reveal key
+  c.TwichUI.Fishing.Present.Reveal(true); Settle(W)
+  Check(map:IsShown(), "reveal held: the minimap is back")
+  c.TwichUI.Fishing.Present.Reveal(false); Settle(W)
+  Check(not map:IsShown(), "released: concealed again")
+  -- EllesmereUI shows it again (a layout pass): it is hidden again at once, and wants to be shown after
+  map:Show()
+  Check(not map:IsShown() and F.Conceal.State().ownerWants, "the owner's Show while concealed is covered")
+  Toggle(c, W)
+  Check(map:IsShown() and not F.Conceal.State().concealed, "leaving: the minimap is back")
+  Check(select(1, map:GetPoint(1)) == x0 and #map.points >= 0, "no anchor was touched")
+end
+do
+  -- a map its owner hides stays hidden after; a map its owner hides meanwhile stays hidden
+  local c, W, F, EUI = Fresh()
+  local map = EUI.map
+  map:Hide()
+  Toggle(c, W); Toggle(c, W)
+  Check(not map:IsShown(), "a map hidden by its owner is never shown by Fishing Mode")
+  map:Show()
+  Toggle(c, W)
+  map:Hide()           -- the owner's visibility rule hides it while concealed
+  Toggle(c, W)
+  Check(not map:IsShown(), "the owner's own Hide while concealed is respected on the way back")
+end
+do
+  -- combat: concealing never happens in combat; leaving in combat waits for the end of combat on a protected map
+  local c, W, F, EUI = Fresh()
+  local map = EUI.map
+  Protected(map, W)
+  Toggle(c, W)
+  Check(not map:IsShown(), "concealed")
+  W.combat = true
+  c.FireEvent("PLAYER_REGEN_DISABLED"); Settle(W)
+  Check(not F.Present.On(), "combat ended Fishing Mode")
+  Check(F.Conceal.State().waiting and #W.faults == 0, "the protected map is not touched in combat; the restoration waits: " .. table.concat(W.faults, "|"))
+  W.combat = false
+  c.FireEvent("PLAYER_REGEN_ENABLED"); Settle(W)
+  Check(map:IsShown() and not F.Conceal.State().waiting, "and the map is back when combat ends")
+  W.combat = true
+  Toggle(c, W)
+  Check(map:IsShown() and not F.Conceal.State().concealed, "Fishing Mode can't start in combat: the map is untouched")
+  W.combat = false
+end
+do
+  -- an unprotected map is restored at once even in combat
+  local c, W, F, EUI = Fresh()
+  Toggle(c, W)
+  W.combat = true
+  c.FireEvent("PLAYER_REGEN_DISABLED"); Settle(W)
+  Check(EUI.map:IsShown(), "unprotected map: back at once on combat")
+  W.combat = false
+end
+do
+  -- repeated cycles, recovery, and a reload
+  local c, W, F, EUI = Fresh()
+  local map = EUI.map
+  local hooks = 0
+  for _ = 1, 6 do Toggle(c, W); Check(not map:IsShown(), "cycle: concealed"); Toggle(c, W); Check(map:IsShown(), "cycle: back") end
+  Toggle(c, W)
+  c.TwichUI.RunCommand("fish recover"); Settle(W)
+  Check(map:IsShown() and not F.Conceal.State().concealed, "/tui fish recover brings the map back")
+  Check(F.Conceal.State().refused == 0 and #W.faults == 0, "nothing refused")
+  local c2, W2, F2, EUI2 = Fresh()
+  Check(EUI2.map:IsShown() and not F2.Conceal.State().concealed, "after a reload the map is simply there, and nothing is saved")
+  Check(c2.TwichUIFishingDB.client.minimap == nil, "no record of it is kept")
+end
+do
+  -- the switch, other presentations, absent map
+  local c, W, F, EUI = Fresh()
+  F.Present.Configure("fade.minimap", false)
+  Toggle(c, W)
+  Check(EUI.map:IsShown(), "minimap switch off: the map stays")
+  Toggle(c, W)
+  F.Present.Configure("fade.minimap", true)
+  c.TwichUI.RunCommand("fish mode compact"); Settle(W)
+  c.TwichUI.RunCommand("fish mode"); Settle(W)
+  Check(EUI.map:IsShown(), "compact: the minimap is unchanged")
+  c.TwichUI.RunCommand("fish mode"); Settle(W)
+  c.TwichUI.RunCommand("fish mode classic"); Settle(W)
+  c.TwichUI.RunCommand("fish mode"); Settle(W)
+  Check(EUI.map:IsShown() and #W.faults == 0, "classic: the minimap is unchanged")
+  local c3, W3, F3 = Fresh({ absent = true })
+  Toggle(c3, W3)
+  Check(not F3.Conceal.State().present and not F3.Conceal.State().concealed and #W3.faults == 0, "no minimap at all: nothing happens, no error")
+  Toggle(c3, W3)
+end
+
 if failures > 0 then error(failures .. " check(s) failed") end
 print("PASSED test_fishing_polish")
