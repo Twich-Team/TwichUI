@@ -1,0 +1,564 @@
+{
+  "source": {
+    "commit": "dbc411c89e12d5d27eaca38bfa7149a0dffdeb98",
+    "dirty": true,
+    "working_tree_sha256": "43032b0de420a73756d7b5d69dfe4cc6fae775330dd6705095b920188263263a"
+  },
+  "source_after": {
+    "commit": "dbc411c89e12d5d27eaca38bfa7149a0dffdeb98",
+    "dirty": true,
+    "working_tree_sha256": "43032b0de420a73756d7b5d69dfe4cc6fae775330dd6705095b920188263263a"
+  },
+  "source_unchanged": true,
+  "complete": true,
+  "exit_code": 1,
+  "seconds": 174.49089226999968,
+  "passed": false,
+  "syntax_passed": true,
+  "tests": [
+    {
+      "metrics": null,
+      "test": "test_auction_host.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 1.0774111269993227
+    },
+    {
+      "metrics": null,
+      "test": "test_auction_price.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.005257663000520552
+    },
+    {
+      "metrics": null,
+      "test": "test_auction_window.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.0205985429993234
+    },
+    {
+      "metrics": null,
+      "test": "test_cleanup.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.34388861500065104
+    },
+    {
+      "metrics": null,
+      "test": "test_commands.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.04452652700001636
+    },
+    {
+      "metrics": null,
+      "test": "test_defaults.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.05153636799968808
+    },
+    {
+      "metrics": null,
+      "test": "test_diagnostics.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.2597824960002981
+    },
+    {
+      "metrics": null,
+      "test": "test_frame_look.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.030496071999550622
+    },
+    {
+      "metrics": null,
+      "test": "test_ledger_attribution.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.46676034800020716
+    },
+    {
+      "metrics": null,
+      "test": "test_ledger_auction.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 3.6771349379996536
+    },
+    {
+      "metrics": null,
+      "test": "test_ledger_coins.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.0066864860000350745
+    },
+    {
+      "metrics": null,
+      "test": "test_ledger_cost.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 1.2342881999993551
+    },
+    {
+      "metrics": null,
+      "test": "test_ledger_journal.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.8769243019996793
+    },
+    {
+      "metrics": null,
+      "test": "test_ledger_lineage.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.8981607320001785
+    },
+    {
+      "metrics": null,
+      "test": "test_ledger_openall.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.8840483730000415
+    },
+    {
+      "metrics": null,
+      "test": "test_ledger_quest.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.36870085500049754
+    },
+    {
+      "metrics": null,
+      "test": "test_ledger_settlement.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.8018382149994068
+    },
+    {
+      "metrics": null,
+      "test": "test_ledger_vendor.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 2.461738081000476
+    },
+    {
+      "metrics": null,
+      "test": "test_lifecycle.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.07734284199977992
+    },
+    {
+      "metrics": null,
+      "test": "test_lod_apply.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.04993071299941221
+    },
+    {
+      "metrics": null,
+      "test": "test_mage_sell.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.05971138199947745
+    },
+    {
+      "metrics": null,
+      "test": "test_mage_sell_mark.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.03021221999915724
+    },
+    {
+      "metrics": null,
+      "test": "test_mail_gold.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.033206054999936896
+    },
+    {
+      "metrics": null,
+      "test": "test_media_border.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.03514320999966003
+    },
+    {
+      "metrics": null,
+      "test": "test_menu_style.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.023511460999543488
+    },
+    {
+      "metrics": null,
+      "test": "test_notify.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.02899367100053496
+    },
+    {
+      "metrics": null,
+      "test": "test_notify_look.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.03054298499955621
+    },
+    {
+      "metrics": null,
+      "test": "test_perf_engine.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.1810632850001639
+    },
+    {
+      "metrics": null,
+      "test": "test_persist.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 1.4952998369999477
+    },
+    {
+      "metrics": null,
+      "test": "test_press.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.006563584000105038
+    },
+    {
+      "metrics": null,
+      "test": "test_profiles.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 2.0455459320000955
+    },
+    {
+      "metrics": null,
+      "test": "test_reach.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.03976509800031636
+    },
+    {
+      "metrics": null,
+      "test": "test_restock.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.03632970599937835
+    },
+    {
+      "metrics": null,
+      "test": "test_routing.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.06998708300034195
+    },
+    {
+      "metrics": null,
+      "test": "test_simlab_diagnostics.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.014999079000517668
+    },
+    {
+      "metrics": null,
+      "test": "test_status.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.20346400299968082
+    },
+    {
+      "metrics": null,
+      "test": "test_storage.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.024505999999746564
+    },
+    {
+      "metrics": null,
+      "test": "test_stored_data.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.04616192100002081
+    },
+    {
+      "metrics": null,
+      "test": "test_theme_defaults.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.03889247000006435
+    },
+    {
+      "metrics": null,
+      "test": "test_window_smoke.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.04051070700006676
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_auction_actions.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 2.4319202310007313
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_auction_lifecycle.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.15735330499956035
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_auction_owned_states.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.1642828809999628
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_auction_reads.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.11323614200045995
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_auction_sell.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.18458713800009718
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_auction_sell_planning.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.1135753750004369
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_junk.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.07617588300036005
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_ledger.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.567744298999969
+    }
+  ],
+  "simulators": [
+    {
+      "script": "smoke",
+      "worker": null,
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "artifacts": "/workspace/TwichUI/test-output/simlab/artifacts/smoke-7FDjqvFW",
+      "screenshots": [
+        "settings.png"
+      ],
+      "telemetry": [],
+      "launches": 2,
+      "scenario_checks": 0,
+      "scenarios": [
+        {
+          "scenario": "pages",
+          "structured_assertions": 0,
+          "intentional_negative_control": false,
+          "failed_assertion_markers": 0,
+          "bootstrap_seconds": 4.479,
+          "last_native_timestamp_seconds": 4.479,
+          "metrics": null
+        },
+        {
+          "scenario": "run",
+          "structured_assertions": 0,
+          "intentional_negative_control": false,
+          "failed_assertion_markers": 0,
+          "bootstrap_seconds": 4.617,
+          "last_native_timestamp_seconds": 6.15,
+          "metrics": null
+        }
+      ],
+      "seconds": 28.394049376000112
+    },
+    {
+      "script": "workshop",
+      "only": [
+        "ledgerauction",
+        "ledgerauctionsmall",
+        "ledgerhover",
+        "ledgerexpand"
+      ],
+      "worker": null,
+      "passed": false,
+      "exit_code": 1,
+      "timed_out": false,
+      "artifacts": "/workspace/TwichUI/test-output/simlab/artifacts/workshop-rBIbrxfv",
+      "screenshots": [
+        "ledgerauction.png",
+        "ledgerauctionsmall.png",
+        "ledgerexpand.png",
+        "ledgerhover.png"
+      ],
+      "telemetry": [],
+      "launches": 4,
+      "scenario_checks": 2187,
+      "scenarios": [
+        {
+          "scenario": "ledgerauction",
+          "structured_assertions": 560,
+          "intentional_negative_control": false,
+          "failed_assertion_markers": 40,
+          "bootstrap_seconds": 4.781,
+          "last_native_timestamp_seconds": 30.695,
+          "metrics": null
+        },
+        {
+          "scenario": "ledgerauctionsmall",
+          "structured_assertions": 560,
+          "intentional_negative_control": false,
+          "failed_assertion_markers": 40,
+          "bootstrap_seconds": 4.236,
+          "last_native_timestamp_seconds": 30.218,
+          "metrics": null
+        },
+        {
+          "scenario": "ledgerexpand",
+          "structured_assertions": 534,
+          "intentional_negative_control": false,
+          "failed_assertion_markers": 40,
+          "bootstrap_seconds": 4.349,
+          "last_native_timestamp_seconds": 34.061,
+          "metrics": null
+        },
+        {
+          "scenario": "ledgerhover",
+          "structured_assertions": 533,
+          "intentional_negative_control": false,
+          "failed_assertion_markers": 40,
+          "bootstrap_seconds": 4.429,
+          "last_native_timestamp_seconds": 30.21,
+          "metrics": null
+        }
+      ],
+      "seconds": 134.9402981029998
+    }
+  ],
+  "command": "./tests/run.sh feature ledger --profile cloud --jobs 2",
+  "native_acceptance": false,
+  "mutation": {
+    "selected": 102,
+    "killed": 102,
+    "survived": 0,
+    "invalid": 0,
+    "timeout": 0,
+    "infra": 0,
+    "seconds": 47.9,
+    "command": "bash tools/mutate.sh --group ledger --jobs 2"
+  },
+  "failure": "All four selected Workshop poses failed 40 assertions each; first is Worth tooltip missing Workshop: Not enough data. Main was not rerun for exact baseline equality. No simulator assertions weakened."
+}

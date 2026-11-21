@@ -524,14 +524,16 @@ local function Valid(ev)
     -- Optional, session-only components of one seller payment that has no full invoice breakdown (V5): each sold-auction mail's own
     -- collected amount and item. Never saved on the entry, never cash; observers (the cost basis) may keep them as per-item results.
     local parts
-    if ev.kind == "ahSale" and type(ev.parts) == "table" then
+    if (ev.kind == "ahSale" or ev.kind == "mail") and type(ev.parts) == "table" then
         local sum = 0
         parts = {}
         for i, p in ipairs(ev.parts) do
             local c = type(p) == "table" and Whole(p.c, 1, MAX) or nil
             if not c or i > Lg.MAX_INVOICES or sum > MAX - c then parts = nil break end
             sum = sum + c
-            parts[i] = { c = c, n = Note(p.n), q = Whole(p.q, 1, MAX_QTY) }
+            local sale = ev.kind == "ahSale" or p.sale == true
+            parts[i] = { c = c, sale = sale, n = sale and Note(p.n) or nil, q = sale and Whole(p.q, 1, MAX_QTY) or nil,
+                settlement = sale and Lg.Settlement(p.settlement, c) or nil }
         end
         if parts and (sum ~= amount or #parts < 2) then parts = nil end
     end

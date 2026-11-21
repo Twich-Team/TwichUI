@@ -1566,3 +1566,11 @@ m("ledger.mail.eligible-window", MAIL, "if req.amount <= gain then", "if true th
 
 m("ledger.lineage.created-id", ACTIONS, "if not id then return end -- creation requires the native non-nil auction identity", "-- missing id accepted",
   "a malformed creation event reserves stock without a native auction id", ["test_ledger_lineage.lua"])
+
+m("ledger.mail.mixed-component-kind", "!!!TwichUI/auction/LedgerCost.lua", "if p.sale == true then", "if true then",
+  "a personal payment component is turned into auction revenue", ["test_ledger_openall.lua"])
+m("ledger.mail.mixed-fee", "!!!TwichUI/auction/LedgerCost.lua", "g = inv and inv.g, fee = inv and inv.f, d = inv and inv.d", "g = inv and inv.g, fee = inv and 0, d = inv and inv.d",
+  "verified commission disappears from a mixed seller-payment component", ["test_ledger_openall.lua"])
+
+m("ledger.mail.deferred-burst", MAIL, 'if deferredCount >= MAX_WAITING then Why("deferred-full") return end', 'if deferredCount >= 8 then Why("deferred-full") return end',
+  "a legitimate same-frame inbox burst loses exact payment evidence after eight targets", ["test_ledger_openall.lua"])

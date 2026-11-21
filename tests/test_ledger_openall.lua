@@ -70,6 +70,12 @@ local function Client(opts)
     end
     c.TakeInboxMoney, c.AutoLootMailItem = Take, Take
     c.hooksecurefunc = function(name, fn) local original = c[name]; c[name] = function(...) original(...); fn(...) end end
+    local moneyHandlers = {}
+    local subscribe = c.TwichUI.On
+    c.TwichUI.On = function(self, event, fn)
+        if event == "PLAYER_MONEY" then moneyHandlers[#moneyHandlers + 1] = fn end
+        return subscribe(self, event, fn)
+    end
     local files = { "modules/Restock.lua", "WorkshopLauncher.lua", "auction/Ledger.lua", "auction/Mail.lua" }
     if opts.cost then files[#files + 1] = "auction/LedgerCost.lua" end
     for _, name in ipairs(files) do
@@ -79,7 +85,13 @@ local function Client(opts)
     c.L, c.MG = c.TwichUI.Ledger, c.TwichUI.MailGold
     if opts.cost then c.TwichUI.LedgerCost.Init(); c.TwichUI.LedgerCost.Refresh() end
     function c.Entries() local r = c.TwichUILedgerDB.chars["Rich - Forever"]; return r and r.entries or {} end
-    function c.Open(inbox) c.INBOX = inbox; c.FireEvent("MAIL_SHOW") end
+    function c.Open(inbox)
+        c.INBOX = inbox;c.FireEvent("MAIL_SHOW")
+        if opts.mailFirst then
+            c.TwichUI:Off("PLAYER_MONEY", moneyHandlers[1])
+            subscribe(c.TwichUI, "PLAYER_MONEY", moneyHandlers[1])
+        end
+    end
     function c.Money(n) c.MONEY = c.MONEY + n; c.SENT[#c.SENT + 1] = n; c.FireEvent("PLAYER_MONEY") end
     return c
 end
@@ -287,7 +299,10 @@ do
     Same(#mine, 1, "no named components with an uncertain item"); Same(mine[1].n, nil, "and no guessed item name")
 end
 Run("components mixed", { Sale("Copper Ore", 3000, 150, 20), Personal(777) }, { moneyLag = 0.2, combine = true, invoice = "never", cost = true }, function(c, n)
-    Same(n.mail, 1, "mixed payment stays mail"); Same(#Results(c), 0, "and makes no sale result")
+    Same(n.mail, 1, "mixed payment stays mail"); Same(#Results(c), 1, "verified sale component remains useful")
+    Same(Results(c)[1].a, 2870, "only seller proceeds enter the item result")
+    Same(Results(c)[1].c, nil, "no invented item cost")
+    Same(Results(c)[1].st, "unknown", "no realized profit from a name")
 end)
 
 ---------------------------------------------------------------------------
@@ -434,6 +449,32 @@ do
     Check(report:find("mail reasons:", 1, true) and report:find("invoice-missing=1", 1, true) and report:find("plain-mail=1", 1, true), "mail reasons in the report")
     for _, private in ipairs({ "Linen", "PRIVATE", "AUCTION HOUSE", "Auction successful", "Rich", "9560", "777" }) do
         Check(not report:find(private, 1, true), "nothing personal in the report: " .. private)
+    end
+end
+
+do
+    local c = Run("mixed verified invoice", { Sale("Copper Ore", 3000, 150, 20), Personal(777) }, { combine = true, cost = true })
+    local r = Results(c)[1]
+    Check(r ~= nil, "mixed invoice keeps a component")
+    if r then
+        Same(r.a, 2870, "mixed component collected amount");Same(r.g, 3000, "verified gross")
+        Same(r.fee, 150, "verified commission");Same(r.d, 20, "returned deposit, not extra income")
+        Same(r.st, "unknown", "unproven lineage never realizes profit")
+    end
+    Same(#c.Entries(), 1, "mixed detail creates no additional cash")
+    local again = Client({ cost = true, db = c.TwichUILedgerDB })
+    Same(#Results(again), 1, "mixed component survives ordinary data initialization")
+end
+
+do
+    for _, size in ipairs({20, 50}) do
+        local c = Client({ mailFirst = true });local inbox = Sales(size);c.Open(inbox)
+        for i, m in ipairs(inbox) do c.TakeInboxMoney(i);c.PENDING=nil;c.Money(m.money) end
+        Same(c.MG.Snapshot().deferred, size, "deferred evidence holds one bounded inbox burst")
+        c.RunDue()
+        Same(Count(c).ahSale, size, "instant money-before-recorder burst: every exact target settles")
+        Same(#c.Entries(), size, "instant burst: no duplicate cash")
+        Same(c.MG.Snapshot().deferred, 0, "instant burst: deferred evidence drains")
     end
 end
 

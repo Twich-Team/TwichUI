@@ -690,6 +690,8 @@ do
     local details = table.concat(LQ.AuctionDetails({ code = "ahSale", a = 1000, id = 60, key = "Rich - Forever" }), "|")
     Check(details:find("Fee unavailable", 1, true) and details:find("Sold-auction mails in this payment: 2", 1, true), details)
     Check(details:find("Silk Cloth \195\1512: 7s 0c", 1, true) and not details:find("Unidentified", 1, true), details)
+    local mixed = table.concat(LQ.AuctionDetails({ code = "mail", a = 1200, id = 60, key = "Rich - Forever" }), "|")
+    Check(mixed:find("Unidentified: 2s 0c", 1, true) and mixed:find("Silk Cloth", 1, true), "mixed mail details keep seller components and the remainder")
     details = table.concat(LQ.AuctionDetails({ code = "ahSale", a = 1200, id = 60, key = "Rich - Forever" }), "|")
     Check(details:find("Unidentified: 2s 0c", 1, true), "an unexplained part is named, never spread: " .. details)
     table.remove(costRec.results); table.remove(costRec.results)

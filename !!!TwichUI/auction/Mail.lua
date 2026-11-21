@@ -55,7 +55,7 @@ local known = {}          -- inbox position -> money the mailbox showed at its l
 local knownInvoice = {}   -- inbox position -> { kind, item, qty, settlement, how, mark } seen at that update (only while the ledger records)
 local credits = 0         -- evidence sent to the ledger so far (its correlation ids)
 local moneyKey, moneyEntry -- next journal ID before this visit's next nonzero PLAYER_MONEY
-local deferred, deferredCount = {}, 0 -- at most eight exact targets waiting for recorder event order
+local deferred, deferredCount = {}, 0 -- at most one inbox-sized burst of exact targets waiting for recorder event order
 local stats = { ambiguous = 0, settlement = 0, unavailable = 0, requests = 0, verified = 0, soldMail = 0, combined = 0, exact = 0 }
 -- Why a request or a gain did not become exact evidence: fixed codes, session counts only (diagnostics; nothing personal)
 local why = {}
@@ -274,6 +274,16 @@ local function Credit(amount, matched, ways)
             end
         end
     end
+    -- A uniquely reconciled mixed payment keeps seller components, not another
+    -- cash transaction. Non-sale portions carry only their amount.
+    if kind == "mail" and same and #ways == 1 and #matched > 1 and #matched <= L.MAX_INVOICES then
+        parts = {}
+        for _, req in ipairs(matched) do
+            local sale = req.kind == "ahSale" and not req.unsure and not req.unsureKind
+            parts[#parts + 1] = { c = req.amount, sale = sale, n = sale and req.note or nil,
+                q = sale and req.qty or nil, settlement = sale and req.settlement or nil }
+        end
+    end
     if kind == "ahSale" then
         local field = settlement and "settlement" or "unavailable"
         stats[field] = stats[field] + 1
@@ -293,7 +303,7 @@ local function Credit(amount, matched, ways)
     end
     local rec = L.Record(matched.char)
     if rec and rec.nextId == matched.entry then
-        if deferredCount >= 8 then Why("deferred-full") return end
+        if deferredCount >= MAX_WAITING then Why("deferred-full") return end
         deferred[ev], deferredCount = true, deferredCount + 1
         C_Timer.After(0, function()
             if not deferred[ev] then return end

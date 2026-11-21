@@ -65,3 +65,13 @@ line per visit at most; a duplicate `MAIL_CLOSED` does nothing; a `MAIL_SHOW` wi
 6. Send a letter (postage) and pay a small COD: neither adds to the total.
 7. Turn the setting off (Auction House page): no line; on again: lines return, no reload needed.
 8. Check `/reload` mid-visit: no stray line afterwards, and `TwichUIDB` has no totals (`/tui saved`).
+
+
+V5 follow-up: complete positive batches through the 50-request inbox bound are
+matched directly; partial subset search considers only amounts <= the gain and
+never authorizes attribution when its 12-candidate window is incomplete. The
+recorder-order deferral buffer now covers one inbox burst (50), while eight remains
+the **invoice/component detail** cap. Mixed payments keep one Mail collected entry
+and may expose securely reconciled seller components without counting extra cash
+or inventing cost/profit. Diagnostics reasons include search-limit, detail-limit,
+no-request and deferred-full. See the [V5 verification and limitations](workshop/gold-ledger.md#v5-follow-up-on-current-main-2026-11-21).

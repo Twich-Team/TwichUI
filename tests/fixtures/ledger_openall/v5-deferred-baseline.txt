@@ -1,0 +1,2 @@
+FAIL: instant money-before-recorder burst: every exact target settles: expected 20, got 8
+1 failures

@@ -524,7 +524,11 @@ local function OnAhSale(rec, e, ev)
     elseif type(ev.parts) == "table" and #ev.parts > 1 then
         -- one collected payment of several sold-auction mails: one result per mail (its item and its own collected amount)
         for _, p in ipairs(ev.parts) do
-            AddResult(rec, { t = e.t, src = "ahSale", x = e.id, n = p.n or "Sold item", q = p.q or 1, a = p.c, st = "unknown", w = "auctionid", al = {} })
+            if p.sale == true then
+                local inv = p.settlement
+                AddResult(rec, { t = e.t, src = "ahSale", x = e.id, n = p.n or "Sold item", q = p.q or 1, a = p.c,
+                    g = inv and inv.g, fee = inv and inv.f, d = inv and inv.d, st = "unknown", w = "auctionid", al = {} })
+            end
         end
     elseif e.a > 0 then
         AddResult(rec, { t = e.t, src = "ahSale", x = e.id, n = ev.note, q = ev.qty or 1, a = e.a, st = "unknown", w = "auctionid", al = {} })
@@ -548,7 +552,7 @@ local function Dispatch(key, e, ev)
     if ev.kind == "vendorBuy" then OnBuy(rec, e, ev)
     elseif ev.kind == "vendorSell" then OnSell(rec, e, ev)
     elseif ev.kind == "ahBuy" then OnAhBuy(rec, e, ev)
-    elseif ev.kind == "ahSale" then OnAhSale(rec, e, ev) end
+    elseif ev.kind == "ahSale" or ev.kind == "mail" and ev.parts then OnAhSale(rec, e, ev) end
 end
 
 local function Attached(key, e, ev)

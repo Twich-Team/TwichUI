@@ -393,10 +393,64 @@ non-nil auction ID on auction-created events and native IDs on owned auctions.
 A missing creation ID previously confirmed a Workshop commodity posting and
 consumed cost units; it is now ignored until a valid confirmation arrives.
 Lineage/action regressions pass; the targeted missing-ID mutation is killed.
-No available third-party Open All source was found in this workspace; no claim is
-made about which button the owner used. Core Sell from Bags still has cash/deposit
+No third-party Open All source was installed in the workspace. Read-only follow-up
+inspected [Postal Community Edition OpenAll](https://github.com/paradosi/postal-community-edition/blob/f2a182149146bf4077946629bd9ad745c7ceaacd/Modules/OpenAll.lua)
+(commit `f2a182149146bf4077946629bd9ad745c7ceaacd`): it traverses backwards,
+resets when first-mail days-left changes, waits for inventory/money progress, and
+uses TakeInboxMoney/TakeInboxItem. Its configurable delays differ from Blizzard;
+no assumption is made that the owner used this addon, and no third-party code is
+copied or executed. Core Sell from Bags still has cash/deposit
 attribution, but no new cost posting observer is installed there: its controller
 would need the same competing-operation provenance guarantees as Workshop before
 cost can safely be reserved. Existing Workshop posting provenance is reused.
 No seller-name/price heuristic can close the native invoice identity gap, so no
 auction realized profit or profession profit is invented in checkpoint C.
+
+
+Checkpoint C / D adds securely reconciled seller components to **mixed** mail.
+The parent cash entry stays Mail collected; validated session-only `parts` sum to
+the entire cash amount, mark seller portions explicitly, strip personal-mail
+names and retain each seller's reconciled invoice. The existing cost-basis Item
+Results store only the seller amounts and existing fee/deposit fields; unknown
+portions appear as **Unidentified** in transaction details. Unknown cost remains
+unknown; no lot is consumed, no realized auction/profession profit is created,
+and no fee or returned deposit is added/subtracted again. Components are capped
+at eight; no journal schema, cost component version or SavedVariables name changes.
+Old Unclassified records are not retrospectively reclassified.
+
+A second independent regression reverses collector/recorder event order and
+pays 20 requests before zero-delay callbacks run: the old deferred buffer retains
+only eight exact targets (receipt `v5-deferred-baseline.txt`). That buffer now holds
+one inbox-sized burst (50), below the recorder's 64 recent-entry slots. Both 20
+and 50 events settle once; the queue and component caps stay 50 and eight, and
+the 4-second / command-pending / 15-second deadline policy is unchanged. Snapshot
+caches still have no stable native message ID. A gain before any hook, vanished
+headers/invoices, duplicate-looking messages, overflow, expired/ambiguous evidence
+remain unavailable rather than guessed; `no-request`/`search-limit`/`expired` and
+other sanitized counters explain the refusal.
+
+Performance: only one bounded O(50) pass is added before the existing at-most
+12-candidate subset search; no polling, journal scan, listener, Workshop load or
+background service is added. Deferred memory is O(50), session components O(8),
+and persisted results retain their existing 500-row limit. This is a structural
+bound, not a measured native frame-time or byte-allocation claim.
+
+Final verification: all 48 feature-selected offline modules and syntax pass;
+smoke passes. **The feature profile FAILS** on the four selected Workshop poses,
+each with 40 scenario failures (first: unchanged Worth tooltip lacks the expected
+“Workshop: Not enough data” line). Existing docs already record tooltip-scenario
+failures, but the exact 40-failure set was not rerun on main; do not treat it as a
+proved identical baseline or a passing simulator gate. No assertions were removed
+or weakened, and no unrelated simulator/tooltip fix was attempted. The retained
+verification receipt records this failed verdict. The Ledger mutation campaign
+kills 102/102 applied mutants (47.9 s), including complete-batch, incomplete-search,
+eligible-window, missing posting ID, mixed-component kind/fees and burst deferral.
+No native acceptance, screenshot visual acceptance or full/release certification
+is claimed.
+
+Later owner check: install the ordinary branch build; use Open All on genuine
+seller payments; inspect Auction Sale / mixed Mail collected details and Item
+Results; reload and confirm persistence. Auction cost basis must remain unavailable
+unless an authoritative receipt-to-posting identifier becomes available. If a
+classification is missing, copy `/tui diagnostics` → Gold Ledger evidence; no
+special build, payload log or engineering commands are needed.

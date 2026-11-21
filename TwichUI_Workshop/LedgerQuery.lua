@@ -298,16 +298,21 @@ function LQ.AuctionDetails(row, fmt)
     local M = fmt or LQ.Money
     local lines = {}
     if row.auction then lines[#lines + 1] = "Auction ID: " .. row.auction end
-    if row.code ~= "ahSale" then return lines end
+    if row.code ~= "ahSale" and row.code ~= "mail" then return lines end
+    if row.code == "mail" then
+        local cost = R.LedgerCost
+        local results = cost and cost.ResultsFor and row.key and row.id and cost.ResultsFor(row.key, row.id) or {}
+        if #results == 0 then return lines end
+    end
     lines[#lines + 1] = "Collected: " .. M(row.a)
     local L = Ledger()
     local s = L and L.Settlement(row.settlement, row.a)
     if not s then
-        lines[#lines + 1] = "Fee unavailable"
+        lines[#lines + 1] = row.code == "mail" and "Mixed payment; seller components below" or "Fee unavailable"
         -- V5: the sold-auction mails one combined payment held (each mail's own collected amount), from the cost basis's results
         local C = R.LedgerCost
         local parts = C and C.ResultsFor and row.key and row.id and C.ResultsFor(row.key, row.id) or {}
-        if #parts > 1 then
+        if #parts > 1 or row.code == "mail" and #parts > 0 then
             local sum = 0
             for _, r in ipairs(parts) do sum = sum + (r.a or 0) end
             lines[#lines + 1] = ("Sold-auction mails in this payment: %d"):format(#parts)
@@ -316,6 +321,9 @@ function LQ.AuctionDetails(row, fmt)
                 local name = r.n or "Sold item"
                 if r.q and r.q > 1 then name = ("%s \195\151%d"):format(name, r.q) end
                 lines[#lines + 1] = name .. ": " .. M(r.a)
+                if r.fee ~= nil then lines[#lines + 1] = "Auction fee: " .. M(r.fee) .. " - verified invoice" end
+                if r.d ~= nil then lines[#lines + 1] = "Returned deposit: " .. M(r.d) .. " (included in collected)" end
+                lines[#lines + 1] = "Cost basis unavailable"
             end
             if #parts > 3 then lines[#lines + 1] = ("and %d more"):format(#parts - 3) end
             if sum ~= row.a then lines[#lines + 1] = "Unidentified: " .. M(row.a - sum) end
