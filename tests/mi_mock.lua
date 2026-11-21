@@ -379,6 +379,8 @@ function MIFake(kind, parent)
     GetEffectiveScale = function() return 1 end, GetScale = function() return 1 end,
     GetOwner = function(s) return s.owner end, SetOwner = function(s, o) s.owner = o end,
     GetFont = function() return "Fonts\\FRIZQT__.TTF", 12, "" end, SetFont = function() return true end,
+    SetParent = function(s, p) s.parent = p end, GetParent = function(s) return s.parent end,
+    GetFrameStrata = function(s) return s.strata or "MEDIUM" end,
     GetFrameLevel = function(s) return s.level or 1 end, SetFrameLevel = function(s, v) s.level = v end,
     SetAlpha = function(s, a) s.alpha = a end, GetAlpha = function(s) return s.alpha or 1 end,
     SetTexture = function(s, t) s.texture = t end,
