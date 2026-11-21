@@ -260,6 +260,7 @@ local function Credit(amount, matched, ways)
     if #matched > 1 then stats.combined = stats.combined + 1 end
     local note, qty, settlement, parts
     if kind == "ahSale" and same then
+        if #matched > L.MAX_INVOICES then Why("detail-limit") end
         if #matched == 1 and not matched[1].unsure then note, qty = matched[1].note, matched[1].qty end
         local invoices = {}
         for _, req in ipairs(matched) do if req.settlement and not req.unsure then invoices[#invoices + 1] = req.settlement.invoices[1] end end
@@ -305,11 +306,20 @@ end
 -- Every set of waiting requests (the oldest MAX_SEARCH, in order) whose amounts add up to the gain, oldest set first; at most
 -- MAX_WAYS + 1 are collected (one more means "too many to tell"). Amounts are positive, so a branch past the gain stops.
 local function Ways(gain)
-    local ways, pick, cand = {}, {}, {}
+    local ways, pick, cand, all = {}, {}, {}, {}
+    local total, within, complete = 0, true, true
     for _, req in ipairs(queue) do
-        if not req.spare then cand[#cand + 1] = req end
-        if #cand >= MAX_SEARCH then break end
+        if not req.spare then
+            all[#all + 1] = req
+            -- Positive amounts: the complete batch has exactly one explanation.
+            -- Compare before adding, so no intermediate sum can overflow the gain.
+            if total <= gain - req.amount then total = total + req.amount else within = false end
+            if req.amount <= gain then
+                if #cand < MAX_SEARCH then cand[#cand + 1] = req else complete = false end
+            end
+        end
     end
+    if within and #all > 0 and total == gain then return { all }, true end
     local n = #cand
     local function Walk(i, sum)
         if #ways > MAX_WAYS then return end
@@ -327,7 +337,7 @@ local function Ways(gain)
         Walk(i + 1, sum)
     end
     Walk(1, 0)
-    return ways
+    return ways, complete
 end
 
 local function OnMoney()
@@ -340,7 +350,8 @@ local function OnMoney()
     local target
     if gain ~= 0 and key == moneyKey and moneyEntry and nextId and (nextId == moneyEntry or nextId == moneyEntry + 1) then target = moneyEntry end
     moneyKey, moneyEntry = key, target and target + 1 or nextId
-    if gain <= 0 or #queue == 0 then return end
+    if gain <= 0 then return end
+    if #queue == 0 then if session then Why("no-request") end;return end
     -- A stalled frame must not let an overdue request claim later money before its timer runs.
     local mono = GetTime and Num(GetTime())
     for i = #queue, 1, -1 do
@@ -348,7 +359,15 @@ local function OnMoney()
         if mono and req.expires and mono >= req.expires then if not req.spare then Why("expired") end Finish(req, false) end
     end
     if #queue == 0 then return end
-    local ways = Ways(gain)
+    local ways, complete = Ways(gain)
+    if not complete then
+        Why("search-limit")
+        -- An omitted explanation may have paid any of these requests. None may
+        -- lend item/kind evidence to a later gain after this incomplete search.
+        for _, req in ipairs(queue) do
+            if not req.spare and req.amount <= gain then req.unsure, req.unsureKind = true, true end
+        end
+    end
     if #ways == 0 then Why("unmatched-gain") return end
     local matched = ways[1]   -- the oldest explanation pays the chat total; the requests it holds are answered
     local chosen = {}
@@ -368,7 +387,7 @@ local function OnMoney()
             end
         end
     end
-    local exact = target ~= nil and #ways <= MAX_WAYS
+    local exact = complete and target ~= nil and #ways <= MAX_WAYS
     for _, req in ipairs(matched) do if req.char ~= key then exact = false end end
     matched.entry, matched.char = target, key
     for _, req in ipairs(matched) do Finish(req, true) end

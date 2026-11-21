@@ -1381,7 +1381,7 @@ m("ledger.settlement.fee-sum", LEDGER, 's[key] = s[key] + n', 's[key] = s[key] +
   "commissions disappear when combined invoices are aggregated", [ST])
 m("ledger.settlement.bound", LEDGER, 'Lg.MAX_INVOICES = 8', 'Lg.MAX_INVOICES = 800',
   "a collected batch can persist an unbounded invoice report", [ST])
-m("ledger.settlement.mixed", MAIL, 'local exact = target ~= nil and #ways <= MAX_WAYS', 'local exact = target ~= nil',
+m("ledger.settlement.mixed", MAIL, 'local exact = complete and target ~= nil and #ways <= MAX_WAYS', 'local exact = complete and target ~= nil',
   "a payment with more explanations than were examined is classified from the few that were (an unexamined one could hold a letter)", [ST, "test_ledger_openall.lua"])
 m("ledger.settlement.target", MAIL, 'entry = matched.entry, char = matched.char', 'entry = nil, char = nil',
   "a payment the recorder refused borrows an older equal-amount movement", [ST])
@@ -1555,3 +1555,11 @@ m("market.cost.bait-boundary", VALUATION, "if skipBelow and 2 * t.p < d.a then",
   "a tier at exactly half the anchor (a real competing price) is skipped as bait", ["test_workshop_valuation.lua"])
 m("market.cost.bait-still-available", VALUATION, "r.qty, r.available = n, d.t - skipItems", "r.qty, r.available = n, d.t",
   "the bait's items are counted as buyable, so too few listed reads as enough", ["test_workshop_valuation.lua"])
+
+# V5 follow-up: positive complete batches and honest bounded subset search.
+m("ledger.mail.complete-batch", MAIL, "if within and #all > 0 and total == gain then return { all }, true end", "if false then return { all }, true end",
+  "a uniquely reconciled batch beyond twelve requests cannot be classified", ["test_ledger_openall.lua"])
+m("ledger.mail.truncated-search", MAIL, "else complete = false end", "else complete = true end",
+  "an incomplete subset search vouches for omitted payment explanations", ["test_ledger_openall.lua"])
+m("ledger.mail.eligible-window", MAIL, "if req.amount <= gain then", "if true then",
+  "large impossible payments hide an equal-valued personal letter outside the subset window", ["test_ledger_openall.lua"])

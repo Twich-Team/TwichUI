@@ -360,3 +360,26 @@ seller invoice (or on the sold-auction mail), the provenance above is the half o
   4. Item Results: one row per item sold; any TwichUI postings of it are listed beside it, not as profit.
   5. `/reload`: entries and results are unchanged.
   6. If any payment is not an Auction Sale, open `/tui diagnostics` and copy the **Gold Ledger evidence** section (counters only).
+
+### V5 follow-up on current main (2026-11-21)
+
+Base `725519e` already contains V5 from PR #81 (`700f18d`); the owner request's
+V4 baseline is historical. Reused its posting/cost architecture and preserved the
+original V4 failure receipt. New current-main failure receipt:
+`tests/fixtures/ledger_openall/v5-search-window-baseline.txt`.
+
+Checkpoint A reproduces two further defects: a complete 13-message payment could
+not be found in the 12-request subset window; a personal payment outside that
+window could be ignored and falsely allow Auction Sale attribution. Positive
+amounts make a gain equal to **all** nonduplicate pending requests uniquely
+identifiable, so that case now uses an O(50) complete-batch path. Otherwise only
+amounts no larger than the gain enter the bounded subset search. An incomplete
+search cannot authorize classification, and potentially consumed requests lose
+kind/item authority for later payments. No queue, timer or persisted-detail limits
+are increased. Diagnostics adds `search-limit`, `detail-limit` (classification may
+succeed although the eight-invoice breakdown cannot fit), and `no-request`.
+
+Unit-tested checkpoint A: development Ledger 25 modules pass (8.55 s); Ledger
+mutation campaign kills all 98 mutations, including three new search defects
+(46.7 s). One cash entry per observed gain and the mailbox summary remain covered.
+This is not confirmation of the owner's actual native event sequence.

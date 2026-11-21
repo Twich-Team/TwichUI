@@ -437,5 +437,33 @@ do
     end
 end
 
+-- V5 follow-up: a complete positive batch is unique even beyond the subset-search window.
+do
+    local c = Client({ cost = true });local inbox = Sales(13)
+    c.Open(inbox);local total = 0
+    for i, m in ipairs(inbox) do total = total + m.money;c.TakeInboxMoney(i);c.PENDING = nil end
+    c.Money(total);c.RunDue()
+    Same(#c.Entries(), 1, "13 combined: one cash movement")
+    Same(c.Entries()[1].k, "ahSale", "13 combined: complete seller batch is uniquely identifiable")
+    Same(c.Entries()[1].s, nil, "13 combined: eight-invoice metadata cap is preserved")
+    Same(#Results(c), 1, "13 combined: unavailable breakdown never invents components")
+end
+do
+    local c = Client();local inbox = {Sale("Copper Ore", 100, 0, 0)}
+    for i = 2, 12 do inbox[i] = Sale("Silk Cloth", 1000, 0, 0) end
+    inbox[13] = Personal(100)
+    c.Open(inbox)
+    for i = 1, #inbox do c.TakeInboxMoney(i);c.PENDING = nil end
+    c.Money(100);c.RunDue()
+    Same(c.Entries()[1].k, "mail", "13th request: hidden personal payment must prevent sale attribution")
+end
+do
+    local c = Client();local inbox = Sales(14, true);c.Open(inbox)
+    for i = 1, #inbox do c.TakeInboxMoney(i);c.PENDING = nil end
+    c.Money(inbox[1].money);c.RunDue()
+    Same(c.Entries()[1].k, nil, "incomplete search: no evidence from a truncated candidate set")
+    Check((c.MG.Snapshot().why or {})["search-limit"] == 1, "incomplete search is diagnosed")
+end
+
 if failures > 0 then print(failures .. " failures") os.exit(1) end
 print("PASSED test_ledger_openall")

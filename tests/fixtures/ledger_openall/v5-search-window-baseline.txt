@@ -1,0 +1,6 @@
+FAIL: 13 combined: complete seller batch is uniquely identifiable: expected ahSale, got nil
+FAIL: 13 combined: unavailable breakdown never invents components: expected 1, got 0
+FAIL: 13th request: hidden personal payment must prevent sale attribution: expected mail, got ahSale
+FAIL: incomplete search: no evidence from a truncated candidate set: expected nil, got ahSale
+FAIL: incomplete search is diagnosed
+5 failures
