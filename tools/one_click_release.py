@@ -53,6 +53,48 @@ def planned_version(base, channel, source, cwd):
     return actual
 
 
+
+def notes_from_published(meta, gh, cwd):
+    """Build changelog from actual public releases, not stray unpublished tags.
+
+    In particular, TwichUI currently has v1.3.0 and v2.0.0 tags without
+    corresponding public releases. Those must not erase the V2 change history.
+    """
+    source = meta["commit"]
+    kind = meta["release_kind"]
+    candidates = []
+    for item in gh.releases():
+        if item.get("draft") or not item.get("published_at"):
+            continue
+        tag = item.get("tag_name", "")
+        stable = rel.STABLE_TAG.fullmatch(tag)
+        pre = rel.PRE_TAG.fullmatch(tag)
+        if not stable and not pre:
+            continue
+        if kind == "stable" and not stable:
+            continue
+        if pre and (kind == "stable" or pre.group(4) != kind):
+            continue
+        try:
+            commit = rel.git("rev-parse", tag + "^{commit}", cwd=cwd).strip()
+            if commit == source:
+                continue
+            rel.git("merge-base", "--is-ancestor", commit, source, cwd=cwd)
+        except rel.ReleaseError:
+            continue
+        candidates.append((tag, commit, bool(stable)))
+    same_channel = [(tag, sha) for tag, sha, stable in candidates if not stable]
+    public_stable = [(tag, sha) for tag, sha, stable in candidates if stable]
+    previous = None
+    if kind != "stable" and same_channel:
+        tag = rel.nearest([t for t, _ in same_channel], source, cwd)
+        previous = next((tag, sha) for tag2, sha in same_channel if tag2 == tag)
+    elif public_stable:
+        tag, sha = max(public_stable, key=lambda p: rel.version_of(rel.STABLE_TAG.fullmatch(p[0])))
+        previous = (tag, sha)
+    meta["previous"] = {"tag": previous[0], "commit": previous[1]} if previous else None
+    return rel.notes(meta, f"https://github.com/{gh.repo}", None, cwd)
+
 def check_context(meta):
     """Fail closed outside an explicit dispatch on protected main at this exact SHA."""
     if os.getenv("GITHUB_EVENT_NAME") != "workflow_dispatch" or os.getenv("GITHUB_REF") != "refs/heads/main":
@@ -124,6 +166,9 @@ def main():
     a.add_argument("--base", required=True)
     a.add_argument("--channel", choices=("alpha", "beta", "stable"), required=True)
     a.add_argument("--source", required=True)
+    a = sub.add_parser("notes", help="refresh changelog against published releases")
+    a.add_argument("--meta", required=True)
+    a.add_argument("--repo", required=True)
     a = sub.add_parser("tag", help="preflight and create/reuse an annotated tag")
     a.add_argument("--meta", required=True)
     a.add_argument("--repo", required=True)
@@ -135,6 +180,11 @@ def main():
             print(planned_version(args.base, args.channel, args.source, rel.REPO_ROOT))
             return 0
         meta = json.loads(Path(args.meta).read_text())
+        if args.cmd == "notes":
+            text = notes_from_published(meta, rel.GitHub(args.repo), rel.REPO_ROOT)
+            Path(args.meta).write_text(json.dumps(meta, indent=2) + "\\n")
+            (Path(args.meta).parent / "notes.md").write_text(text, encoding="utf-8")
+            return 0
         rel.verify_candidate(meta, args.zip, Path(args.notes).read_text(encoding="utf-8"))
         gh = rel.GitHub(args.repo)
         pre_publish(meta, gh)
