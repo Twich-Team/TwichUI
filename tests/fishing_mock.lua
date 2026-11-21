@@ -5,6 +5,7 @@
 -- in combat. This proves decisions and bookkeeping only: it does not prove the real client's secure behaviour, taint,
 -- event order or timing.
 dofile(TESTS .. "harness.lua")
+dofile(TESTS .. "ui_widgets.lua")
 
 local function Link(id) return ("|cffffffff|Hitem:%d::::::::60:::::|h[Item %d]|h|r"):format(id, id) end
 FISH_LINK = Link
@@ -35,7 +36,16 @@ function FishingClient(opts)
     loot = nil, map = 1429, zone = "Elwynn Forest", blockInsecure = {},
   }
   c.W = W
-  c.UIParent = {}
+  -- frames, textures and font strings with real layout (tests/ui_widgets.lua): Stage 2's heads-up pieces draw on these
+  W.UI = UIWidgets(c, { missing = opts.missingArt })
+  c.UIParent = W.UI.screen
+  -- hooksecurefunc as the game does it: a post-hook on a table's method (or a global function), never replacing behaviour
+  c.hooksecurefunc = function(t, name, fn)
+    if type(t) == "string" then t, name, fn = c, t, name end
+    local orig = t[name]
+    assert(type(orig) == "function", "hooksecurefunc on a missing method " .. tostring(name))
+    t[name] = function(...) local r = { orig(...) }; fn(...); return unpack(r) end
+  end
   c.Enum = { LootSlotType = { Item = 1, Money = 2 }, WeaponSlot = { MainHand = 0, OffHand = 1 }, ItemClass = { Weapon = 2 },
     ItemWeaponSubclass = { Fishingpole = 20 } }
   c.ERR_ITEM_LOCKED, c.ERR_INV_FULL = "Item is locked.", "Inventory is full."
@@ -80,7 +90,7 @@ function FishingClient(opts)
   local baseCreate = c.CreateFrame
   W.frames = {}
   c.CreateFrame = function(kind, name, parent, template)
-    if kind ~= "Button" then return baseCreate(kind, name, parent, template) end
+    if kind ~= "Button" then return W.UI.Create(kind, name, parent) end
     local fr = { name = name, template = template, attrs = {}, scripts = {} }
     function fr:SetAttribute(k, v) assert(not W.combat, "a secure attribute is never set in combat (" .. tostring(k) .. ")"); self.attrs[k] = v end
     function fr:GetAttribute(k) return self.attrs[k] end
@@ -90,6 +100,25 @@ function FishingClient(opts)
     if name then W.frames[name] = fr; c[name] = fr end
     return fr
   end
+
+  -- item descriptions as the game gives them: W.names[id] = { name, quality, icon }; an id not listed has not arrived yet
+  W.names = opts.names or {}
+  c.C_Item_GetItemInfo = function(id)
+    local e = W.names[id]
+    if not e then return nil end
+    return e[1], "link", e[2] or 1, 1, 1, "Trade Goods", "Fish", 20, "", e[3] or ("Interface\\Icons\\item" .. id)
+  end
+  -- the camera, when a test gives one (W.Camera()): zoom in yards, moved at once, capped at W.camera.max
+  function W.Camera(o)
+    o = o or {}
+    W.camera = { zoom = o.zoom or 15, max = o.max or 28.5, calls = 0 }
+    c.GetCameraZoom = function() return W.camera.zoom end
+    c.CameraZoomIn = function(d) W.camera.calls = W.camera.calls + 1; if not o.frozen then W.camera.zoom = math.max(0, W.camera.zoom - d) end end
+    c.CameraZoomOut = function(d) W.camera.calls = W.camera.calls + 1; if not o.frozen then W.camera.zoom = math.min(W.camera.max, W.camera.zoom + d) end end
+    if o.offset ~= false then W.cvars.test_cameraOverShoulder = o.offset or "0" end
+  end
+  -- runs the heads-up pieces' OnUpdate scripts and animations for sec seconds, on the simulated clock
+  function W.Frames(sec) W.UI.Tick(sec, function(step) W.Advance(step) end) end
 
   -- spells
   c.C_SpellBook = { IsSpellKnown = function(id) return W.known[id] == true end }
@@ -113,6 +142,7 @@ function FishingClient(opts)
       return { { hasEnchant = true, timeLeft = e.ms, charges = 0, enchantID = e.id, enchantType = 0 } }
     end,
     GetItemCount = function(id) return W.Count(id) end,
+    GetItemInfo = function(id) return c.C_Item_GetItemInfo(id) end,
     EquipItemByName = function(item, slot)
       W.calls.equip = W.calls.equip + 1
       if W.combat or W.blockInsecure.equip then c.FireEvent("ADDON_ACTION_BLOCKED", "TwichUI_Fishing", "EquipItemByName()") return end

@@ -1,0 +1,557 @@
+{
+  "version": 1,
+  "atlas": "original_alpha_atlas.png",
+  "format": "RGBA PNG",
+  "assets": [
+    {
+      "id": "branding/fishing_logo",
+      "path": "textures/branding/fishing_logo.png",
+      "width": 488,
+      "height": 196,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "branding/feature_icon",
+      "path": "textures/branding/feature_icon.png",
+      "width": 161,
+      "height": 154,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "branding/navigation_icon",
+      "path": "textures/branding/navigation_icon.png",
+      "width": 133,
+      "height": 148,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "branding/mini_icon",
+      "path": "textures/branding/mini_icon.png",
+      "width": 87,
+      "height": 88,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "icons/hook",
+      "path": "textures/icons/hook.png",
+      "width": 74,
+      "height": 121,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "icons/bobber",
+      "path": "textures/icons/bobber.png",
+      "width": 78,
+      "height": 108,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "icons/lure",
+      "path": "textures/icons/lure.png",
+      "width": 93,
+      "height": 112,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "icons/clam",
+      "path": "textures/icons/clam.png",
+      "width": 135,
+      "height": 106,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "icons/treasure",
+      "path": "textures/icons/treasure.png",
+      "width": 126,
+      "height": 118,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "hud/cast_bar_empty",
+      "path": "textures/hud/cast_bar_empty.png",
+      "width": 513,
+      "height": 85,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "hud/cast_bar_half_reference",
+      "path": "textures/hud/cast_bar_half_reference.png",
+      "width": 499,
+      "height": 86,
+      "transparent": true,
+      "note": "Reference variant"
+    },
+    {
+      "id": "hud/cast_bar_full_reference",
+      "path": "textures/hud/cast_bar_full_reference.png",
+      "width": 485,
+      "height": 85,
+      "transparent": true,
+      "note": "Reference variant"
+    },
+    {
+      "id": "hud/catch_toast_fish_reference",
+      "path": "textures/hud/catch_toast_fish_reference.png",
+      "width": 352,
+      "height": 98,
+      "transparent": true,
+      "note": "Reference variant"
+    },
+    {
+      "id": "hud/catch_toast_pearl_reference",
+      "path": "textures/hud/catch_toast_pearl_reference.png",
+      "width": 330,
+      "height": 94,
+      "transparent": true,
+      "note": "Reference variant"
+    },
+    {
+      "id": "hud/catch_count_reference",
+      "path": "textures/hud/catch_count_reference.png",
+      "width": 264,
+      "height": 80,
+      "transparent": true,
+      "note": "Reference variant"
+    },
+    {
+      "id": "effects/ripple",
+      "path": "textures/effects/ripple.png",
+      "width": 146,
+      "height": 65,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "effects/splash",
+      "path": "textures/effects/splash.png",
+      "width": 127,
+      "height": 64,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "effects/glint",
+      "path": "textures/effects/glint.png",
+      "width": 140,
+      "height": 67,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "panels/journal_frame",
+      "path": "textures/panels/journal_frame.png",
+      "width": 359,
+      "height": 200,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "panels/chestnut_frame",
+      "path": "textures/panels/chestnut_frame.png",
+      "width": 253,
+      "height": 198,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "panels/recessed_frame",
+      "path": "textures/panels/recessed_frame.png",
+      "width": 264,
+      "height": 202,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "panels/navigation_book",
+      "path": "textures/panels/navigation_book.png",
+      "width": 262,
+      "height": 71,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "panels/navigation_settings",
+      "path": "textures/panels/navigation_settings.png",
+      "width": 262,
+      "height": 71,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "panels/navigation_fishing",
+      "path": "textures/panels/navigation_fishing.png",
+      "width": 262,
+      "height": 71,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "panels/row_normal",
+      "path": "textures/panels/row_normal.png",
+      "width": 322,
+      "height": 55,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "panels/row_hover",
+      "path": "textures/panels/row_hover.png",
+      "width": 323,
+      "height": 59,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "panels/row_selected",
+      "path": "textures/panels/row_selected.png",
+      "width": 325,
+      "height": 59,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "controls/tab_normal",
+      "path": "textures/controls/tab_normal.png",
+      "width": 112,
+      "height": 60,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "controls/tab_hover",
+      "path": "textures/controls/tab_hover.png",
+      "width": 108,
+      "height": 60,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "controls/tab_active",
+      "path": "textures/controls/tab_active.png",
+      "width": 119,
+      "height": 61,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "controls/button_gold",
+      "path": "textures/controls/button_gold.png",
+      "width": 162,
+      "height": 60,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "controls/button_dark",
+      "path": "textures/controls/button_dark.png",
+      "width": 160,
+      "height": 58,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "controls/button_compact",
+      "path": "textures/controls/button_compact.png",
+      "width": 96,
+      "height": 58,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "controls/dropdown",
+      "path": "textures/controls/dropdown.png",
+      "width": 69,
+      "height": 57,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "controls/stepper_arrows",
+      "path": "textures/controls/stepper_arrows.png",
+      "width": 69,
+      "height": 57,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "controls/plus",
+      "path": "textures/controls/plus.png",
+      "width": 56,
+      "height": 57,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "controls/minus",
+      "path": "textures/controls/minus.png",
+      "width": 55,
+      "height": 57,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "controls/close",
+      "path": "textures/controls/close.png",
+      "width": 59,
+      "height": 58,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "controls/checkbox_checked",
+      "path": "textures/controls/checkbox_checked.png",
+      "width": 50,
+      "height": 48,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "controls/checkbox_unchecked",
+      "path": "textures/controls/checkbox_unchecked.png",
+      "width": 48,
+      "height": 46,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "controls/toggle_on",
+      "path": "textures/controls/toggle_on.png",
+      "width": 76,
+      "height": 46,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "controls/toggle_off",
+      "path": "textures/controls/toggle_off.png",
+      "width": 70,
+      "height": 44,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "controls/scrollbar",
+      "path": "textures/controls/scrollbar.png",
+      "width": 53,
+      "height": 216,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "collection/fish_blue",
+      "path": "textures/collection/fish_blue.png",
+      "width": 114,
+      "height": 113,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "collection/fish_green",
+      "path": "textures/collection/fish_green.png",
+      "width": 115,
+      "height": 113,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "collection/fish_orange",
+      "path": "textures/collection/fish_orange.png",
+      "width": 114,
+      "height": 113,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "collection/fish_silver",
+      "path": "textures/collection/fish_silver.png",
+      "width": 113,
+      "height": 113,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "collection/fish_brown",
+      "path": "textures/collection/fish_brown.png",
+      "width": 110,
+      "height": 113,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "collection/fish_gold",
+      "path": "textures/collection/fish_gold.png",
+      "width": 111,
+      "height": 113,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "collection/pearl",
+      "path": "textures/collection/pearl.png",
+      "width": 110,
+      "height": 113,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "collection/clam_meat",
+      "path": "textures/collection/clam_meat.png",
+      "width": 115,
+      "height": 113,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "collection/unknown",
+      "path": "textures/collection/unknown.png",
+      "width": 111,
+      "height": 113,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "decoration/ornate_corners",
+      "path": "textures/decoration/ornate_corners.png",
+      "width": 161,
+      "height": 115,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "decoration/ornate_corners_right",
+      "path": "textures/decoration/ornate_corners_right.png",
+      "width": 174,
+      "height": 115,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "decoration/divider_upper",
+      "path": "textures/decoration/divider_upper.png",
+      "width": 243,
+      "height": 29,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "decoration/divider_lower",
+      "path": "textures/decoration/divider_lower.png",
+      "width": 282,
+      "height": 29,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "decoration/reeds",
+      "path": "textures/decoration/reeds.png",
+      "width": 200,
+      "height": 147,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "decoration/rocks",
+      "path": "textures/decoration/rocks.png",
+      "width": 239,
+      "height": 133,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "decoration/lily_pads",
+      "path": "textures/decoration/lily_pads.png",
+      "width": 228,
+      "height": 111,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "decoration/water_reflection",
+      "path": "textures/decoration/water_reflection.png",
+      "width": 267,
+      "height": 136,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "decoration/fish_watermark",
+      "path": "textures/decoration/fish_watermark.png",
+      "width": 184,
+      "height": 143,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "decoration/banner_blue",
+      "path": "textures/decoration/banner_blue.png",
+      "width": 119,
+      "height": 154,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "decoration/banner_green",
+      "path": "textures/decoration/banner_green.png",
+      "width": 117,
+      "height": 153,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "decoration/banner_red",
+      "path": "textures/decoration/banner_red.png",
+      "width": 118,
+      "height": 153,
+      "transparent": true,
+      "note": "Standalone RGBA texture"
+    },
+    {
+      "id": "hud/progress_fill",
+      "path": "textures/hud/progress_fill.png",
+      "width": 512,
+      "height": 24,
+      "transparent": true,
+      "note": "Separate scalable horizontal fill; clip or SetWidth dynamically"
+    }
+  ],
+  "nine_slice": [
+    "nine_slice/panels/journal_frame/top_left.png",
+    "nine_slice/panels/journal_frame/top_center.png",
+    "nine_slice/panels/journal_frame/top_right.png",
+    "nine_slice/panels/journal_frame/middle_left.png",
+    "nine_slice/panels/journal_frame/middle_center.png",
+    "nine_slice/panels/journal_frame/middle_right.png",
+    "nine_slice/panels/journal_frame/bottom_left.png",
+    "nine_slice/panels/journal_frame/bottom_center.png",
+    "nine_slice/panels/journal_frame/bottom_right.png",
+    "nine_slice/panels/chestnut_frame/top_left.png",
+    "nine_slice/panels/chestnut_frame/top_center.png",
+    "nine_slice/panels/chestnut_frame/top_right.png",
+    "nine_slice/panels/chestnut_frame/middle_left.png",
+    "nine_slice/panels/chestnut_frame/middle_center.png",
+    "nine_slice/panels/chestnut_frame/middle_right.png",
+    "nine_slice/panels/chestnut_frame/bottom_left.png",
+    "nine_slice/panels/chestnut_frame/bottom_center.png",
+    "nine_slice/panels/chestnut_frame/bottom_right.png",
+    "nine_slice/panels/recessed_frame/top_left.png",
+    "nine_slice/panels/recessed_frame/top_center.png",
+    "nine_slice/panels/recessed_frame/top_right.png",
+    "nine_slice/panels/recessed_frame/middle_left.png",
+    "nine_slice/panels/recessed_frame/middle_center.png",
+    "nine_slice/panels/recessed_frame/middle_right.png",
+    "nine_slice/panels/recessed_frame/bottom_left.png",
+    "nine_slice/panels/recessed_frame/bottom_center.png",
+    "nine_slice/panels/recessed_frame/bottom_right.png"
+  ],
+  "note": "All textures are actual transparent PNG files; inspect specific baked-content reference variants."
+}

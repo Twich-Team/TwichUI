@@ -1,6 +1,6 @@
 ## Interface: 16001
 ## Title: |cffC9A24ATwich|rUI Fishing
-## Notes: One key that fishes for you to press: equips your pole, applies a lure, casts, reels in and opens the clams you catch, each on your own key press. Keeps a record of your fishing sessions and catches. Loaded when you bind its key or type /tui fish; keep it turned on alongside TwichUI.
+## Notes: One key that fishes for you to press: equips your pole, applies a lure, casts, reels in and opens the clams you catch, each on your own key press. Keeps a record of your fishing sessions and catches, and Fishing Mode shows them: a fishing cast bar, your catches beside the water and a calmer screen. Loaded when you bind its key or type /tui fish; keep it turned on alongside TwichUI.
 ## Author: twichie
 ## Version: 1.0.0
 ## RequiredDeps: !!!TwichUI
@@ -30,3 +30,21 @@ Action.lua
 Api.lua
 # Start-up, events and /tui fish
 Main.lua
+# Stage 2, Fishing Mode: what the heads-up pieces share (artwork in media\, built by tools/make_fishing_art.py)
+Hud.lua
+# The Fishing Mode camera, put back as it was afterwards
+Camera.lua
+# EllesmereUI's frames, by role, for Fishing Mode's fading (read only)
+Ellesmere.lua
+# Concealing the minimap in Immersive Fishing Mode (a real Hide, restored after)
+Conceal.lua
+# Fading the interface around Fishing Mode, and bringing it back
+Fade.lua
+# The fishing cast bar
+CastBar.lua
+# The catch list on the right of the screen
+CatchList.lua
+# Catch notifications
+Toast.lua
+# Fishing Mode itself: presentations, on and off, recovery, and its /tui fish words
+Present.lua

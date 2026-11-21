@@ -12,16 +12,27 @@
 --   L.Load()        loads it if needed: true, or false and a reason code
 --   L.Command(arg)  /tui fish
 --   L.Snapshot()    read only: loaded, attempts, failed, waiting
+--   L.Mode()        the "Fishing Mode" key (Bindings.xml): loads the addon if needed (never in combat), then turns Fishing Mode
+--                   on or off
+--   L.Reveal(state) the "reveal the interface" key, held: "down" shows the faded interface, "up" fades it again
+--   L.KeyText(binding)  the player's key for one of the bindings above, as the game names it (nil when unbound): read
+--                   without loading anything, for the settings page
+--   L.OpenBindings() opens the game's Key Bindings at TwichUI's header (Settings.OpenToCategory with its key-binding
+--                   category, as Forever's own ping settings do): true, or false and the words to find it by hand
+--   L.State()       for the settings page, without loading: "loaded", "waiting" (combat), "failed" (and why) or "unloaded"
 
 local R = TwichUI
 local L = { attempts = 0 }
 R.FishingLauncher = L
 L.ADDON = "TwichUI_Fishing"
-L.BINDINGS = { "CLICK TwichUIFishingButton:LeftButton", "CLICK TwichUIFishingOpen:LeftButton" }
+L.BINDINGS = { "CLICK TwichUIFishingButton:LeftButton", "CLICK TwichUIFishingOpen:LeftButton", "TWICHUI_FISHING_MODE",
+    "TWICHUI_FISHING_REVEAL" }
 
 _G.BINDING_HEADER_TWICHUI = _G.BINDING_HEADER_TWICHUI or "TwichUI"
 _G["BINDING_NAME_" .. L.BINDINGS[1]] = "Fishing: the next step (equip, lure, open a clam, cast; reel while the line is out)"
 _G["BINDING_NAME_" .. L.BINDINGS[2]] = "Fishing: open the next fishing container"
+_G["BINDING_NAME_" .. L.BINDINGS[3]] = "Fishing Mode: on or off"
+_G["BINDING_NAME_" .. L.BINDINGS[4]] = "Fishing Mode: reveal the interface (hold)"
 
 local WHY = {
     MISSING = "its folder, TwichUI_Fishing, is missing. Reinstall TwichUI to put it back.",
@@ -118,6 +129,58 @@ function L.Command(arg)
         local fine, err = pcall(F.Main.Command, arg)
         if not fine then R.Fault("fishing command", err) end
     end
+end
+
+function L.Mode()
+    local ok, why = L.Load()
+    if not ok then
+        if why == "COMBAT" then L.wanted = true end
+        R.Print("%s", L.Explain(why))
+        return
+    end
+    local P = R.Fishing and R.Fishing.Present
+    if P and P.Command then
+        local fine, err = pcall(P.Command, "mode", "")
+        if not fine then R.Fault("fishing mode key", err) end
+    end
+end
+
+function L.Reveal(state)
+    if not L.Loaded() then return end
+    local P = R.Fishing.Present
+    if P and P.Reveal then pcall(P.Reveal, state ~= "up") end
+end
+
+function L.KeyText(binding)
+    if not GetBindingKey then return nil end
+    local key = GetBindingKey(binding or L.BINDINGS[1])
+    if type(key) ~= "string" or key == "" then return nil end
+    if GetBindingText then
+        local ok, text = pcall(GetBindingText, key, "KEY_")
+        if ok and type(text) == "string" and text ~= "" then return text end
+    end
+    return key
+end
+
+L.BINDINGS_HELP = "Esc > Options > Key Bindings > TwichUI"
+function L.OpenBindings()
+    if InCombat() then return false, "not during combat (" .. L.BINDINGS_HELP .. ")" end
+    local S = rawget(_G, "Settings")
+    -- Forever's own settings open their key bindings this way, scrolled to a header (Blizzard_SettingsDefinitions_Frame:
+    -- Keybindings.lua sets the id; PingSystem.lua opens it at BINDING_HEADER_PING_SYSTEM)
+    if type(S) == "table" and type(S.OpenToCategory) == "function" and S.KEYBINDINGS_CATEGORY_ID then
+        if pcall(S.OpenToCategory, S.KEYBINDINGS_CATEGORY_ID, rawget(_G, "BINDING_HEADER_TWICHUI")) then return true end
+    end
+    local frame = rawget(_G, "KeyBindingFrame")
+    if frame and ShowUIPanel and pcall(ShowUIPanel, frame) then return true end
+    return false, L.BINDINGS_HELP
+end
+
+function L.State()
+    if L.Loaded() then return "loaded" end
+    if L.waiting then return "waiting" end
+    if L.failed then return "failed", L.Explain(L.failed) end
+    return "unloaded"
 end
 
 function L.Snapshot()

@@ -1346,8 +1346,9 @@ do
     assert(TgaSide(e.file) == 64 and TgaSide(e.small) == 32, id .. " has its 64 and 32 px files")
   end
   -- besides the sheets, only a feature's own artwork cut by its own tool (Healer Watch: tools/make_healer_watch_art.py; the
-  -- Reminders designer's emblem: tools/make_reminder_designer_art.py; Guild Locations: tools/make_guild_locations_art.py; Action bar glows: tools/make_bar_glows_art.py)
-  local OWN = { classPortrait = true, healerWatch = true, healerWatchDrink = true, reminderDesigner = true, guildLocations = true, barGlows = true, camping = true, magicInventory = true }
+  -- Reminders designer's emblem: tools/make_reminder_designer_art.py; Guild Locations: tools/make_guild_locations_art.py; Action bar glows: tools/make_bar_glows_art.py;
+  -- Fishing: tools/make_fishing_art.py)
+  local OWN = { classPortrait = true, healerWatch = true, healerWatchDrink = true, reminderDesigner = true, guildLocations = true, barGlows = true, camping = true, magicInventory = true, fishing = true }
   local count, own, loot = 0, 0, 0
   for id, e in pairs(Icons.list) do
     if e.source == "lootRolls" then loot = loot + 1 end
@@ -1360,7 +1361,7 @@ do
     assert(w == e.size and h == e.size, id .. "'s file is " .. tostring(w) .. " px, the registry says " .. e.size)
   end
   assert(count == #SHEET and count == 48, "the six original sheets: " .. count)
-  assert(own - loot == 8, "the feature paintings, Home satchel and reused class badge: " .. (own - loot))
+  assert(own - loot == 9, "the feature paintings, Home satchel, reused class badge and Fishing's icon: " .. (own - loot))
   assert(loot == 14, "Loot Rolls' own icons: " .. loot)
   assert(Icons.Path("home", 20):find("%-small$") and not Icons.Path("home", 40):find("%-small$"), "the 32 px file when drawn small")
   local stub = { SetTexCoord = function() end, SetVertexColor = function() end }
@@ -1791,7 +1792,7 @@ do
   assert(c.TwichUIDB.quickAccess == nil, "opening and looking writes nothing")
   assert(Has("EVERYDAY") and Has("ADVENTURE") and Has("TOOLS"), "the fixed groups are as they were")
   local fixed = {}   -- Home and the three groups, in order (a page this build does not have is not in the list)
-  for _, key in ipairs({ "overview", "notifications", "reminders", "healerWatch", "qol", "chronicle", "navigation", "workshop", "magicInventory", "auction" }) do
+  for _, key in ipairs({ "overview", "notifications", "reminders", "healerWatch", "qol", "chronicle", "navigation", "fishing", "workshop", "magicInventory", "auction" }) do
     if K.pages[key] then fixed[#fixed + 1] = key end
   end
   assert(table.concat(keys, ",") == table.concat(fixed, ","), "the fixed list and its order are unchanged: " .. table.concat(keys, ","))

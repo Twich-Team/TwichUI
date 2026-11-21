@@ -1,0 +1,312 @@
+-- TwichUI Fishing: catch notifications (Stage 2)
+-- A short notice for each confirmed catch (Stage 1's ITEM notification: an item that reached the bags from fishing loot or
+-- from a fishing container), left of the middle of the screen so it never covers the bobber or the cast bar. The bronze
+-- icon frame and fading band are the texture pack's, with the sample icons cut out (tools/make_fishing_art.py); the icon,
+-- name and quantity are the item's own.
+--
+--   catch      "Caught!" and the item, for what the line brought up
+--   treasure   "Treasure!", a warmer frame (toast-treasure) and a brighter gold glint behind the icon, for what came out of a fishing
+--              container (clam contents: pearls and the like) and for items the game itself rates rare or better (its item
+--              quality). Nothing else is called a treasure: no rarity or value is guessed.
+-- The same item again while its notice is still up (several stacks from one catch, or a fast second catch) adds to that
+-- notice ("x3") instead of showing another. At most three show at once, newest at the bottom; up to six more wait.
+-- Each comes in with a short slide and fade (only the fade with reduced motion), stays config toast.hold seconds, and fades
+-- out. The value line is shown only when a valuation is connected (Present.Value, Stage 3).
+-- Notice frames are made once (three) and reused; their OnUpdate exists only while one is showing.
+
+local R = TwichUI
+local F = R.Fishing
+local S = F.Store
+local H = F.Hud
+local T = {}
+F.Toast = T
+
+T.VISIBLE = 3
+T.QUEUE = 6
+T.MERGE = 2.5        -- seconds after its last update that a notice still takes the same item
+T.IN, T.OUT = 0.28, 0.6
+local K = 0.86
+
+local anchor
+local pool, active, queue = {}, {}, {}
+local Band
+T.shown, T.merged, T.dropped = 0, 0, 0
+
+local function Text(parent, size, role, color)
+    local fs = parent:CreateFontString(nil, "OVERLAY")
+    H.Font(fs, size, role)
+    H.Color(fs, color or H.IVORY)
+    return fs
+end
+
+local function Anchor()
+    if anchor then return anchor end
+    anchor = CreateFrame("Frame", "TwichUIFishingToasts", UIParent)
+    anchor:SetSize(H.ART.toast.cw * K, H.ART.toast.ch * K)
+    anchor:SetFrameStrata("MEDIUM")
+    anchor:EnableMouse(false)
+    H.Movable(anchor, "toast", "LEFT")
+    H.Place(anchor, "toast", "LEFT")
+    return anchor
+end
+
+local function Make()
+    local f = CreateFrame("Frame", nil, Anchor())
+    f:SetSize(H.ART.toast.cw * K, H.ART.toast.ch * K)
+    f:EnableMouse(false)
+    f:Hide()
+    f.glint = f:CreateTexture(nil, "BACKGROUND", nil, 1)
+    f.glint:SetBlendMode("ADD")
+    H.Texture(f.glint, "glint", { 1, 0.8, 0.4, 0.2 })
+    -- the same flare turned over, under the frame: the warm light the mockup has around the icon
+    f.glint2 = f:CreateTexture(nil, "BACKGROUND", nil, 1)
+    f.glint2:SetBlendMode("ADD")
+    if H.Texture(f.glint2, "glint", { 1, 0.8, 0.4, 0.2 }) then
+        local l, r, t, b = H.Coords("glint")
+        f.glint2:SetTexCoord(l, r, b, t)
+    end
+    f.icon = f:CreateTexture(nil, "ARTWORK", nil, 0)
+    f.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    -- the pack's notification art in three slices: the frame end, the band (stretched to the name) and the fading end
+    f.artL = f:CreateTexture(nil, "ARTWORK", nil, 1)
+    f.artM = f:CreateTexture(nil, "ARTWORK", nil, 1)
+    f.artR = f:CreateTexture(nil, "ARTWORK", nil, 1)
+    f.title = Text(f, 19, "serif")
+    f.name = Text(f, 15, "strong")
+    f.name:SetJustifyH("LEFT")
+    f.name:SetWordWrap(false)
+    f.value = Text(f, 13, "body", H.SOFT)
+    pool[#pool + 1] = f
+    return f
+end
+
+local function Dress(f, kind)
+    local art = kind == "treasure" and H.ART.treasure or H.ART.toast
+    local name = kind == "treasure" and "treasure" or "toast"
+    f:SetSize(art.cw * K, art.ch * K)
+    f.kind = kind
+    for _, t in ipairs({ f.artL, f.artM, f.artR }) do H.Texture(t, name, { 0.14, 0.09, 0.06, 0.85 }) end
+    f.artL:ClearAllPoints(); f.artM:ClearAllPoints(); f.artR:ClearAllPoints()
+    f.artL:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+    -- each slice overlaps the one before it by one unit (over the band's opaque run), so no hairline seam can open
+    f.artM:SetPoint("TOPLEFT", f.artL, "TOPRIGHT", -1, 0)
+    f.artR:SetPoint("TOPLEFT", f.artM, "TOPRIGHT", -1, 0)
+    local w = art.well
+    local side = math.min(w[3] - w[1], w[4] - w[2]) * K
+    local cx, cy = (w[1] + w[3]) / 2 * K, (w[2] + w[4]) / 2 * K
+    f.icon:ClearAllPoints()
+    f.icon:SetPoint("CENTER", f, "TOPLEFT", cx, -cy)
+    f.icon:SetSize(side, side)
+    f.glint:ClearAllPoints()
+    f.glint:SetPoint("BOTTOM", f, "TOPLEFT", cx, -cy + side * 0.05)
+    f.glint:SetSize(side * 1.9, side * 0.9)
+    -- the warm light behind the frame (the mockup's): every notice, brighter for a treasure
+    f.glint:Show()
+    f.glint2:ClearAllPoints()
+    f.glint2:SetPoint("TOP", f, "TOPLEFT", cx, -cy - side * 0.05)
+    f.glint2:SetSize(side * 1.9, side * 0.9)
+    f.glint2:Show()
+    f.glow = kind == "treasure" and 1 or 0.6
+    local x = (w[3] + 20) * K      -- clear of the frame's right rim
+    f.title:ClearAllPoints()
+    f.title:SetText(kind == "treasure" and "Treasure!" or "Caught!")
+    H.Color(f.title, kind == "treasure" and H.GOLD or H.IVORY)
+    f.textX = x
+    T.Stack(f)
+end
+
+-- The text column, centred between the frame's gold borders (art.inner: the rows where the top border's bevel ends and the
+-- bottom one begins), whatever the lines' heights and whether the value line shows. Called when the text or the value line
+-- changes. The title is the first line; the name and the value hang from it.
+T.GAP_NAME, T.GAP_VALUE = 2, 1
+function T.Stack(f)
+    local art = f.kind == "treasure" and H.ART.treasure or H.ART.toast
+    local top, bottom = art.inner[1] * K, art.inner[2] * K
+    local function H_(fs, default) local h = fs:GetStringHeight(); return (type(h) == "number" and h > 0) and h or default end
+    local block = H_(f.title, 19) + T.GAP_NAME + H_(f.name, 15)
+    if f.value:IsShown() then block = block + T.GAP_VALUE + H_(f.value, 13) end
+    local y = top + math.max(0, ((bottom - top) - block) / 2)
+    f.stackTop = y
+    f.title:ClearAllPoints()
+    f.title:SetPoint("TOPLEFT", f, "TOPLEFT", f.textX or 0, -y)
+    f.name:ClearAllPoints()
+    f.name:SetPoint("TOPLEFT", f.title, "BOTTOMLEFT", 0, -T.GAP_NAME)
+    f.value:ClearAllPoints()
+    f.value:SetPoint("TOPLEFT", f.name, "BOTTOMLEFT", 0, -T.GAP_VALUE)
+end
+
+-- The band's length: the painted length, or longer for a long name (the middle slice stretches, never the frame or the
+-- fading end), at most BAND_MAX longer.
+T.BAND_MAX = 220
+Band = function(f)
+    local art = f.kind == "treasure" and H.ART.treasure or H.ART.toast
+    local b = art.band
+    local l, r, t, bt = H.Coords(f.kind == "treasure" and "treasure" or "toast")
+    local function U(px) return l + (r - l) * px / art.cw end
+    local text = math.max(f.name:GetStringWidth() or 0, f.title:GetStringWidth() or 0, f.value:IsShown() and f.value:GetStringWidth() or 0)
+    local need = (f.textX or 0) + text + 34 - b[2] * K          -- the text ends a little into the fading end
+    local extra = math.max(0, math.min(T.BAND_MAX, need))
+    f.artL:SetSize(b[1] * K, art.ch * K)
+    f.artM:SetSize((b[2] - b[1]) * K + extra + 1, art.ch * K)
+    f.artR:SetSize((art.cw - b[2]) * K + 1, art.ch * K)
+    if f.artL.twichArt then
+        f.artL:SetTexCoord(l, U(b[1]), t, bt)
+        f.artM:SetTexCoord(U(b[1]), U(b[2]), t, bt)
+        f.artR:SetTexCoord(U(b[2]), r, t, bt)
+    end
+    f:SetWidth(art.cw * K + extra)
+    f.name:SetWidth(art.cw * K + extra - (f.textX or 0) - 14)
+end
+
+-- The value line's text, asked of a connected valuation when the catch arrives (never while a notice animates).
+local function Value(e)
+    local P = F.Present
+    return P and P.ValueItem and P.ValueItem(e.id, e.q) or nil
+end
+
+local function Words(f)
+    local e = f.entry
+    local name = e.name or ("Item " .. e.id)
+    f.name:SetText(e.q > 1 and (name .. " |cffe0bd85\195\151" .. e.q .. "|r") or name)
+    local v = e.value
+    f.value:SetText(v and ("(Est. " .. v .. ")") or "")
+    f.value:SetShown(v ~= nil)
+    T.Stack(f)
+    Band(f)
+end
+
+local function Motion()
+    if S.Get("present.motion") == false then return false end
+    return not (R.Enabled and R:Enabled("arrivalReducedMotion"))
+end
+
+local function Layout()
+    local y = 0
+    for i = #active, 1, -1 do
+        local f = active[i]
+        f:ClearAllPoints()
+        f:SetPoint("BOTTOMLEFT", Anchor(), "BOTTOMLEFT", f.slide or 0, y)
+        y = y + (f:GetHeight() or 0) + 6
+    end
+end
+
+local Release
+
+local function OnUpdate(f)
+    local now = F.Clock()
+    local t = now - f.phaseAt
+    if f.phase == "in" then
+        local p = math.min(1, t / T.IN)
+        local e = p * p * (3 - 2 * p)
+        f:SetAlpha(e)
+        f.slide = f.moves and (-14 * (1 - e)) or 0
+        f.glint:SetAlpha((0.35 + 0.5 * e) * (f.glow or 1)); f.glint2:SetAlpha(f.glint:GetAlpha() * 0.7)
+        if p >= 1 then f.phase, f.phaseAt = "hold", now end
+        Layout()
+    elseif f.phase == "hold" then
+        f.glint:SetAlpha((0.85 - math.min(0.45, t * 0.25)) * (f.glow or 1)); f.glint2:SetAlpha(f.glint:GetAlpha() * 0.7)
+        if t >= f.hold then f.phase, f.phaseAt = "out", now end
+    elseif f.phase == "out" then
+        local p = math.min(1, t / T.OUT)
+        f:SetAlpha(1 - p)
+        if p >= 1 then Release(f) end
+    end
+end
+
+function Release(f)
+    f:SetScript("OnUpdate", nil)
+    f:Hide()
+    f.entry = nil
+    for i, g in ipairs(active) do if g == f then table.remove(active, i) break end end
+    Layout()
+    if #queue > 0 then T.Show(table.remove(queue, 1)) end
+end
+
+function T.Show(entry)
+    local f
+    for _, g in ipairs(pool) do if not g.entry then f = g break end end
+    f = f or Make()
+    f.entry = entry
+    Dress(f, entry.kind)
+    f.icon:SetTexture(entry.icon or H.QUESTION)
+    Words(f)
+    f.hold = S.Get("toast.hold") or 3.5
+    f.moves = Motion()
+    f.phase, f.phaseAt = "in", F.Clock()
+    f.slide = f.moves and -14 or 0
+    f:SetAlpha(0)
+    active[#active + 1] = f
+    Layout()
+    Anchor():Show()
+    f:Show()
+    f:SetScript("OnUpdate", OnUpdate)
+    T.shown = T.shown + 1
+end
+
+-- A confirmed catch: itemID, quantity, Stage 1's source ("direct" or "content").
+function T.Push(itemID, q, source)
+    itemID, q = F.Count(itemID), F.Count(q)
+    if not (itemID and q and q > 0) then return end
+    local name, icon, quality = H.Item(itemID)
+    local kind = (source == "content" or (quality and quality >= 3)) and "treasure" or "catch"
+    local now = F.Clock()
+    for _, f in ipairs(active) do
+        local e = f.entry
+        if e and e.id == itemID and e.kind == kind and f.phase ~= "out" and now - e.at <= T.MERGE then
+            e.q, e.at = e.q + q, now
+            e.value = Value(e)
+            Words(f)
+            if f.phase == "hold" then f.phaseAt = now end
+            T.merged = T.merged + 1
+            return f
+        end
+    end
+    for _, e in ipairs(queue) do
+        if e.id == itemID and e.kind == kind then e.q = e.q + q; e.value = Value(e); T.merged = T.merged + 1 return e end
+    end
+    local entry = { id = itemID, q = q, kind = kind, name = name, icon = icon, at = now }
+    entry.value = Value(entry)
+    if #active < T.VISIBLE then
+        T.Show(entry)
+    else
+        queue[#queue + 1] = entry
+        while #queue > T.QUEUE do table.remove(queue, 1); T.dropped = T.dropped + 1 end
+    end
+    return entry
+end
+
+-- Everything away at once (Fishing Mode ended, or notifications turned off).
+function T.Clear()
+    queue = {}
+    for i = #active, 1, -1 do
+        local f = active[i]
+        f:SetScript("OnUpdate", nil)
+        f:Hide()
+        f.entry = nil
+        active[i] = nil
+    end
+end
+
+function T.Active() return active, queue end
+function T.Relayout() if anchor then H.Place(anchor, "toast", "LEFT") end end
+
+-- Move mode: one sample notice to place.
+function T.Preview(on, unlock)
+    local a = Anchor()
+    H.SetUnlocked(a, on and unlock ~= false)
+    if on then
+        T.Clear()
+        T.Show({ id = 0, q = 2, kind = "catch", name = "Sample fish", icon = H.MEDIA .. H.ART.mark.file, at = F.Clock() })
+        active[1].phase, active[1].hold = "hold", math.huge
+        active[1]:SetAlpha(1)
+    else
+        T.Clear()
+    end
+end
+
+H.OnItem(function()
+    for _, f in ipairs(active) do
+        local e = f.entry
+        if e and not e.name then e.name, e.icon = H.Item(e.id); f.icon:SetTexture(e.icon or H.QUESTION); Words(f) end
+    end
+end)

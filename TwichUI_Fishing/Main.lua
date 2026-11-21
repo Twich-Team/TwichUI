@@ -180,13 +180,21 @@ function M.Command(arg)
         for _, line in ipairs(API.Report()) do print(R.GREY .. "  " .. line .. "|r") end
         return
     end
-    if word == "help" then for _, line in ipairs(HELP) do print(R.GREY .. "  " .. line .. "|r") end return end
+    if word == "help" then
+        for _, line in ipairs(HELP) do print(R.GREY .. "  " .. line .. "|r") end
+        for _, line in ipairs(F.Present and F.Present.HELP or {}) do print(R.GREY .. "  " .. line .. "|r") end
+        return
+    end
     if word == "on" or word == "off" then
         local ok, why = M.SetEnabled(word == "on")
         if ok then Say("turned %s.", word) else Say("%s", REFUSED[why] or tostring(why)) end
         return
     end
-    if S.held then Say("%s", REFUSED.held) return end
+    -- Fishing Mode's own words work while the records are held (only its preferences can't be saved then)
+    if S.held and not (F.Present and (word == "mode" or word == "reveal" or word == "recover" or word == "move")) then
+        Say("%s", REFUSED.held) return
+    end
+    if S.held then F.Present.Command(word, rest) return end
     if word == "start" then
         if Ses.Current() then Say("a session is already in progress.") else Ses.Start("command"); Say("session started.") end
     elseif word == "stop" then
@@ -249,7 +257,7 @@ function M.Command(arg)
         if v == nil then Say("usage: /tui fish interact on|off") return end
         if Set("interact.adjust", v, v and "interaction targeting is adjusted while a line is out, and put back after."
             or "interaction targeting is left as you set it.") and not v then A.RestoreTargeting() end
-    else
+    elseif not (F.Present and F.Present.Command(word, rest)) then
         Say("unknown option '%s'. Type /tui fish help.", word)
     end
 end

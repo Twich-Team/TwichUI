@@ -1216,7 +1216,7 @@ local function BuildNav()
     end
     local groups = {
         { label = "Everyday", keys = { "notifications", "reminders", "healerWatch", "qol" } },
-        { label = "Adventure", keys = { "chronicle", "navigation" } },
+        { label = "Adventure", keys = { "chronicle", "navigation", "fishing" } },
         { label = "Tools", keys = { "workshop", "magicInventory", "auction" } },
         { label = "Quick access", keys = {}, tip = "Features you visit often or recently." },
         { label = "More features", keys = {} },

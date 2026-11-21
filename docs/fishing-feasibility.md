@@ -1,4 +1,4 @@
-# TwichUI Fishing: Forever client feasibility (Stage 1)
+# TwichUI Fishing: Forever client feasibility (Stages 1 and 2)
 
 What the WoW: Forever client (`camelot` game type, interface 16001) allows a fishing addon to do, and how TwichUI Fishing
 does each part. Evidence is the Forever UI source (Gethe `wow-ui-source`, branch `forever`, build 1.60.1 (71037), read
@@ -65,3 +65,44 @@ opening is opt-in (`/tui fish containers auto`). It stops for good the first tim
 player-initiated queue is the default. Restoration first tries addon code out of combat. If that fails it stays pending,
 and the fishing key performs it as a secure macro on the player's press, which works in combat for weapons. Records come
 only from loot events. Bag changes are used for reconciliation, never as evidence of a catch.
+
+## Stage 2: Fishing Mode
+
+**Sources.**
+
+- **Forever's own UI source**, Gethe `wow-ui-source` at revision `ca8368f` (1.60.1.70532, the revision the repository's
+  simulator pins), read at the Stage 2 refinement.
+- **EllesmereUI's public repository**, EllesmereGaming/EllesmereUI, at 9.9.1 (2026-11-20), read for its frames and alpha
+  handling. Its license reserves all rights, so nothing was copied.
+- **Not reachable:** warcraft.wiki.gg and CurseForge do not resolve from this environment. Dialogue UI's code was not
+  read.
+
+The Test Lab case `fishing.client.presentation` records the facts in the client.
+
+| Need | How | Evidence and status |
+|---|---|---|
+| Camera distance moves | `CameraZoomIn(d)` / `CameraZoomOut(d)` once each way | Both exist: Forever's own camera key bindings call them (`Blizzard_FrameXML/Bindings_Standard.xml`). Whether addon code may call them, and whether they animate, is unverified |
+| Reading the distance | `GetCameraZoom()` | **Not in Forever's UI source at all** (neither used nor documented). Fishing Mode reads it when present; without it the camera is left alone (`camera-unsupported`) and the settings page says so. Unverified |
+| Shoulder offset | CVar `test_cameraOverShoulder`, opt-in | Setting an experimental camera variable raises `EXPERIMENTAL_CVAR_CONFIRMATION_NEEDED`, which shows the game's `EXPERIMENTAL_CVAR_WARNING` popup (`Blizzard_Game/Shared/EventRouting.lua`, `GameDialogDefs.lua`). TwichUI never suppresses it. Whether the variable exists is unverified |
+| Not used | `SetView`/`SaveView`/`ResetView` (they would overwrite your saved views), pitch, per-frame camera control, `UIParent:SetAlpha`, `SetUIVisibility` | Avoided on purpose |
+| Fading | `frame:SetAlpha`, plus a `hooksecurefunc` post-hook on each faded frame's `SetAlpha` | EllesmereUI relies on `SetAlpha` not being protected, in combat on Forever too (its minimap and unit frame code says so). Hooks are standard; the in-game behaviour with EllesmereUI's real frames is unverified |
+| Key Bindings | `Settings.OpenToCategory(Settings.KEYBINDINGS_CATEGORY_ID, BINDING_HEADER_TWICHUI)` | Forever defines the id (`Blizzard_SettingsDefinitions_Frame/Keybindings.lua`) and opens it this way at a header (`PingSystem.lua`) |
+| Bindings | `Bindings.xml` entries with Lua bodies; the reveal key uses `runOnUp` and `keystate` | Unverified on Forever. TwichUI calls no `SetBinding` |
+| Gamepad | `C_GamePad.IsEnabled`, `GetActiveDeviceID`, `SetVibration(vibrationType, intensity)`, `StopVibration` | `SetVibration` takes a type name and an intensity (`GamePadDocumentation.lua`). The type `"Low"` is retail's and unverified here. Opt-in, only on a confirmed catch |
+| Cast timing | `UnitChannelInfo("player")` start and end in milliseconds | As Stage 1 read it |
+| Casting state | `UNIT_SPELLCAST_SENT(unitTarget, target, castGUID, spellID)` | Payload as documented (`UnitDocumentation.lua`) |
+| Textures | 32-bit uncompressed TGA with power-of-two sides, as the rest of the repository | The texture pack's PNGs are not used in the game |
+
+**EllesmereUI (from its source, not a running game).**
+
+- **Unit frames:** every one is parented to `EllesmereUIUnitFrames_Hider`, which has only a secure pet-battle visibility
+  driver. EllesmereUI never writes that frame's alpha; it writes the frames' own alpha and the player's wrapper.
+- **Action bars:** `EABBar_<key>` are parented to UIParent. EllesmereUI writes their alpha only at state edges (mouse-over,
+  Advanced Fade, visibility passes), from its own record `_fadeAlpha`, through an OnUpdate fader.
+- **3D portraits:** they don't inherit alpha, and EllesmereUI mirrors their alpha itself.
+- **Minimap:** EllesmereUI moves `Minimap` out of `MinimapCluster` and sets the cluster's alpha to 0. Blips don't dim.
+- **Never touch:** its secure micro-menu buttons must never have their alpha changed.
+
+Each fact shapes `Ellesmere.lua` and Fade.lua's policy (docs/fishing.md, "Fading"). The names are EllesmereUI's internals,
+not a published interface, so a future version may change them; a missing name is simply not faded, and the settings page
+and `/tui fish fade` say what was found.

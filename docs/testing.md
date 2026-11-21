@@ -59,7 +59,7 @@ Replace `workshop-settings` with one of these nonempty groups:
 | `market` | Prices, distribution, history, valuation, schema and automatic scans |
 | `reminders` | Reminders engines, designer, settings and artwork |
 | `loot-rolls` | Loot Rolls rules, cards, automatic rolling and settings pages; the synthetic-roll simulator catalog is run by hand with `bash tools/simlab/loot.sh` |
-| `fishing` | TwichUI Fishing (load-on-demand `TwichUI_Fishing`) and its core launcher: the fishing key's decisions, reel overrides and combat, lures, gear snapshots and restoration, catch attribution, the container queue, sessions and saved data; no simulator catalog |
+| `fishing` | TwichUI Fishing (load-on-demand `TwichUI_Fishing`) and its core launcher: the fishing key's decisions, reel overrides and combat, lures, gear snapshots and restoration, catch attribution, the container queue, sessions and saved data; Stage 2's Fishing Mode (camera, fading, the Quiet screen hold, cast bar, catch list, notifications, recovery) and its artwork; no simulator catalog (offline captures: `tools/render_fishing_hud.py`) |
 | `navigation` | Navigation, maps, pins, NPCs and guild locations |
 | `settings` | Settings contracts, framework, pages and feature settings |
 | `shared-ui` | Frame styling, notifications, themes, reachability and shared window components |

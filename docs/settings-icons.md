@@ -193,3 +193,8 @@ nothing depends on it.
 `settings-small.tga` (32 px); its registry entry says `source = "camping"`. The source is a banner of four framed tiles (campfire, lute, tent,
 rolled sleeping bag) on one transparent shape, so the campfire tile is cut by its frame's octagon (antialiased by supersampling)
 rather than by shape; the other three tiles are not used. It replaced the borrowed `explore` spyglass on the Camping bar page.
+
+`fishing` (a leaping fish over water in a bronze frame) is TwichUI Fishing's icon, the texture pack's `branding/feature_icon.png`
+(`assets/fishing/feature_icon.png`), fitted by `tools/make_fishing_art.py` into `!!!TwichUI/media/fishing/settings.tga` (64 px) and
+`settings-small.tga` (32 px) in the core, so the Fishing settings page shows it while `TwichUI_Fishing` has not loaded; its registry
+entry says `source = "fishing"`.

@@ -36,8 +36,8 @@
     "simulators": []
   },
   "fishing": {
-    "tests": ["test_fishing_*.lua", "test_testlab.lua", "test_release_tools.py", "test_release_promotion.py"],
-    "syntax": ["TwichUI_Fishing/**/*.lua", "!!!TwichUI/FishingLauncher.lua", "!!!TwichUI/Core.lua", "TwichUI_TestLab/cases/Fishing.lua", "TwichUI_Diagnostics/*.lua"],
+    "tests": ["test_fishing_*.lua", "test_fishing_art.py", "test_quiet_screen.lua", "test_settings_broker.lua", "test_testlab.lua", "test_release_tools.py", "test_release_promotion.py"],
+    "syntax": ["TwichUI_Fishing/**/*.lua", "!!!TwichUI/FishingLauncher.lua", "!!!TwichUI/Core.lua", "!!!TwichUI/QuietScreen.lua", "!!!TwichUI/SettingsBroker.lua", "!!!TwichUI/modules/SettingsBrokerMenu.lua", "TwichUI_TestLab/cases/Fishing.lua", "TwichUI_Diagnostics/*.lua"],
     "dependencies": ["core"],
     "simulators": []
   },
