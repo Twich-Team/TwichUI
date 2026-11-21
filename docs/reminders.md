@@ -3,7 +3,7 @@
 Artwork, an icon or a few words on screen while conditions the player chooses are true, and nothing the rest of the
 time. The first uses are a missing-shield reminder and an ammunition reminder; nothing in the design is about a class.
 Code: `!!!TwichUI/reminders/`; settings: `TwichUI_Settings/pages/Reminders.lua`, `RemindersEditor.lua` and `AmmoItems.lua`
-(the Known ammunition tab); tests: `tests/test_reminders.lua`, `tests/test_reminders_ammunition.lua`,
+(the Known ammunition tab); tests: `tests/test_reminders.lua`, `tests/test_reminders_ammunition.lua`, `tests/test_reminders_glow.lua`,
 `tests/test_reminders_settings.lua`, `tests/test_reminders_enchant_sound.lua`, `tests/test_reminders_wellfed.lua`, `tests/test_ammo_items_settings.lua`; art: `tools/make_reminder_art.py`,
 `tools/make_settings_icons.py` (sheet 4).
 
@@ -187,7 +187,8 @@ on nothing is listened for).
     --                { type = "player", state = "combat", negate = false } },
     display = { mode = "artworkText", art = "shield", text = "Equip your shield", ... },
     place = { preset = "belowCenter" },
-    sound = "TwichUI Notification" } } }   -- optional; absent means none
+    sound = "TwichUI Notification",   -- optional; absent means none
+    glow = { enabled = true, spell = 403, look = "proc", color = "fff2c14e", motion = "moving" } } } }   -- optional; see "Action button glow"
 ```
 
 **Groups need no migration.** A list with no group is read exactly as it always was, and the stored `version` stays 1: the
@@ -413,6 +414,112 @@ sound-effects (`SFX`) channel, **when the reminder appears** (after its delay, i
 `PlaySoundFile` has no volume of its own: it follows the game's sound-effects volume. Nothing is written in chat. A sound
 that is not installed plays nothing and is counted in `/tui diagnostics` (sounds played, held back, not installed, refused).
 
+## Action button glow
+
+A reminder can, while it shows, light every action button that holds a spell the player chose: "Maelstrom Weapon has at
+least 5 stacks" showing the artwork and lighting Lightning Bolt, "Lightning Shield is not on you" lighting Lightning Shield,
+a low-mana reminder lighting a defensive. The spell is any spell; it need not be one the conditions read. Off by default
+and for every existing reminder. It is a Reminders output, separate from Action bar glows (`docs/bar-glows.md`): each has
+its own switch and settings, and neither needs the other on. Code: `reminders/ButtonGlow.lua` (`R.ReminderGlow`), the
+settings section in `TwichUI_Settings/pages/RemindersEditor.lua`; tests: `tests/test_reminders_glow.lua` and the glow
+block of `tests/test_reminders_settings.lua`.
+
+**When it glows.** Exactly while the reminder is on screen: the controller calls `GW.Set(id, true)` where it shows the
+frame and `GW.Set(id, false)` where it hides it, so the glow waits out the delay, stays for the minimum, and goes at once
+when the reminder is turned off, deleted, made invalid, not for this character, when Reminders is switched off
+(`GW.Clear`) or the profile changes (`GW.Prune`, then a redraw from the new profile's views, so a reminder of another
+profile with the same id never inherits a glow). There is no second rule evaluator: an unknown condition hides the
+reminder and so its glow. The Quiet screen holds back the glow with the reminder, and brings it back with it.
+
+**Which buttons.** Every button Action bar glows' finder knows (`glows/Buttons.lua`): Blizzard's eight bars, EllesmereUI's
+ten (by the slot each shows now) and the stance bar. A button matches by the spell's **name**, so every rank counts and so
+does a macro that casts it (`GetMacroSpell`), as in Action bar glows. Its "which bars glow" choice is Action bar glows' own
+and does not apply here. A spell on no button glows nothing: the reminder still shows and sounds, and the editor says so.
+Bars, pages, forms, macros and spells changing (`ACTIONBAR_SLOT_CHANGED`, `ACTIONBAR_PAGE_CHANGED`, `UPDATE_BONUS_ACTIONBAR`,
+`UPDATE_SHAPESHIFT_FORM(S)`, `UPDATE_MACROS`, `SPELLS_CHANGED`, `PLAYER_ENTERING_WORLD`) are listened for **only while a glow
+is wanted**, coalesced 0.05 s; when the listening starts the buttons are read once at once.
+
+**Settings (Reminders > a reminder > Action button glow).** A switch; the spell (ID, a pasted link, or a spell dropped from
+the spellbook: `GetCursorInfo`'s fourth answer); the look (spell alert, marching ants, soft frame, pixel border: Action bar
+glows' looks), the motion (moving, breathing, still) and a color, default a warm gold `fff2c14e`. Size, opacity and speed
+are the drawing's defaults. A sample (the spell's icon on a frame of the settings window, never a real button) glows as the
+buttons will, and a line says how many buttons hold the spell now. **Show on screen** (the reminder's preview) also shows
+the glow on the bars, whatever the rules say, without turning the reminder on; the preview ends in combat as before.
+
+**Shared glow owners** (`glows/Draw.lua`). A button has one overlay frame and one set of animation groups, whoever asks.
+Each feature is an **owner** that requests and releases its own buttons (`D.Request`, `D.Release`, `D.ReleaseOwner`,
+`D.Sync`); no owner clears another's request. Which look shows is deterministic: the owner with the lower rank
+(`reminders` 1, `barGlows` 2, any other after them), then the owner's name. Of several reminders on one button, the first
+in the list gives its look; when it goes, the next one's look replaces it on the same overlay without a gap. A look equal
+to the one showing changes nothing (no animation restart). Action bar glows' calls (`D.Set`, `D.Clear`, `D.ClearAll`,
+`D.Glowing`) are its own owner's, so switching it off leaves the reminders' glows, and Reminders off leaves Action bar
+glows'. A faded bar (Action bar glows) does not fade a button a reminder lights, and fades it again when the reminder goes.
+The settings sample is an owner of its own (`reminderSample`).
+
+**Saved data and sharing.** `glow` is optional (`RM.SetGlow`, `RM.ReadGlow`, `RM.GLOW_DEFAULTS`, `RM.GLOW_CHOICES`); absent
+or not a table means none, an unusable value reads as its default and is left as stored, a glow turned on without a spell
+is valid and glows nothing. Nothing is migrated and `version` stays 1. Duplicate keeps it. `RM.Export` sends it when the
+reminder has one; `RM.Admit` checks every field and refuses the reminder whole when the glow is unreadable (the existing
+policy for the look). The share version stays 1: an older TwichUI rebuilds a received reminder field by field and ignores
+the glow, so it arrives there without one.
+
+**Cost.** Nothing while no reminder with a glow shows. While one does: the bar events above, one coalesced redraw per
+burst (`reminders.glow`, `reminders.glow.event`), Draw.lua's existing overlays and animation groups (no OnUpdate).
+Gauges: `reminders.glowing` and `reminders.glowEvents` (`TwichUI_Diagnostics/Gauges.lua`, from `CT.Snapshot()`).
+
+**It never acts.** No cast, use, pickup, placement, binding, attribute or script on an action button; the overlay is a
+plain frame parented to the button, as Action bar glows' always was.
+
+Evidence: **unit-tested** (`tests/test_reminders_glow.lua`: activation and deactivation; delay and minimum; turned off
+during the minimum; Action bar glows off; Reminders off with Action bar glows on; two reminders and a reminder with Action
+bar glows on one button; switching either feature off; faded bars; slots moved, EllesmereUI paging, a macro edited;
+ranks and a macro; a spell on no button; Quiet screen; preview; settings changed live; a profile with the same id;
+deletion; malformed saved values; export, admit, refusal and an older sender; unknown auras never matching; nothing cast;
+no OnUpdate. Five mutations of the ownership, fading, Quiet and lifecycle code were each caught.) **Not real-client-tested**:
+the looks on real buttons, EllesmereUI's paging events, combat behaviour.
+
+### WoW: Forever in combat: what can drive a glow (investigated 2026-11-21)
+
+Read from the Forever UI source (`Gethe/wow-ui-source`, branch `forever`, `734f065`, 2026-11-20); nothing here was tried in
+a client. Prism and other reference addons were not available to this investigation.
+
+* **A. An ordinary reminder.** Its glow is its visibility, so it glows in combat exactly when its conditions are readable
+  and match. The aura provider (`reminders/Auras.lua`) asks `C_Secrets.ShouldAurasBeSecret()` first and reads nothing while
+  it is true; any secret aura makes the list unknown, and unknown never shows. So **"Maelstrom Weapon at least 5 stacks"
+  glows out of combat, and in combat only while the client still gives auras plainly**; where auras are restricted it
+  neither shows nor glows (unit-tested with secret auras). No secret value is compared, formatted or stored.
+* **B. A secure aura-controlled visual.** `CustomAuraContainerTemplate` (`Blizzard_CustomAuraContainer.xml/.lua`) lets an
+  addon add an aura slot (`AddAuraSlot(slotKey, filterString, options)`) limited by `SetAuraSlotCandidateFilters`
+  (`includeSpellIDs` is permitted for helpful auras on assistable units, so for the player's own Maelstrom Weapon). On the
+  slot's `CustomAuraButton`, `SetApplicationBar(statusBar, { minApplications, maxApplications })` hands a StatusBar to
+  secure code, which sets its range and value from the stack count and calls `statusBar:SetShown(applications >=
+  minApplications)` (`Blizzard_CustomAuraButton.lua`, `ApplyApplicationBar`). The bar gets the secret aspect `BarValue` and the
+  forbidden aspects `RemoveSecretAspects` and `ChangeParent` (`Blizzard_AuraContainerUtil.lua`,
+  `InitializeInboundScriptObject`): it must belong to the aura button and cannot be moved to another parent. With
+  `minApplications = 5` such a bar is a visual that appears at five stacks **without Lua learning the count**.
+* **B cannot drive A.** Lua never learns whether the bar is shown (that is the point), so it cannot start the reminder's
+  frame, its sound, its delay or its minimum, nor the `D.Request` glow. A combat-safe Maelstrom glow would be a separate,
+  secure-visual output that is anchored over the matching action buttons and lights itself; it is not the Reminder
+  lifecycle. The Cooldown Manager (`Blizzard_CooldownViewer`) draws stack counts in Blizzard's own secure frames; its API
+  (`C_CooldownViewer.GetCooldownViewerCooldownInfo`) offers `hasAura` and spell IDs but no count. `C_Secrets.
+  ShouldSpellAuraBeSecret(spellID)` and `C_UnitAuras.GetPlayerAuraBySpellID` (`RequiresNonSecretAura`) may allow reading one
+  aura that is never secret while others are; whether Maelstrom Weapon is such an aura on Forever is unknown.
+
+**Follow-up plan for reliable five-stack glows in combat** (not implemented; each step needs a real client):
+1. In a client, record in and out of combat (open world, dungeon, raid): `C_Secrets.ShouldAurasBeSecret()`,
+   `C_Secrets.ShouldSpellAuraBeSecret(51530)` (and each Maelstrom Weapon ID) and whether `GetPlayerAuraBySpellID` answers
+   plainly. If Maelstrom Weapon is never secret, the smallest change is a per-spell read in the aura source for conditions
+   whose spells are all non-secret, keeping today's unknown answer for everything else; ordinary reminders then work in
+   combat with no new output.
+2. Otherwise, prototype a secure output: one `CustomAuraContainerTemplate` per configured (aura, threshold), created out
+   of combat; an aura slot filtered to the aura's spell IDs; an application bar with `minApplications = threshold` whose
+   fill is the glow art, inside the aura button. Verify in a client that addons may create the container, whether an
+   animation can run on that region (`AddAuraShownAnimation` validates inbound animation groups), and whether the
+   container can be anchored over an action button and re-anchored only out of combat (paging in combat would then leave
+   it on the old button until combat ends; that limit must be accepted or the output not offered).
+3. Offer it as its own choice ("glow in combat from the aura's stacks"), clearly separate from the reminder's display,
+   sound, delay and minimum, which would still follow the readable rule only.
+
 ## Preview, moving, diagnostics
 
 An on-screen preview shows one reminder where it sits, marked "Preview: <name>", whatever its rules say, without a
@@ -468,7 +575,7 @@ switches setup sharing has: sharing on (`setupSharing`) and accepting offers on 
 answered "not now"; a transfer that stops for a minute ends. Switching sharing or receiving off ends everything in progress.
 
 **What is sent** (`RM.Export`): the name, all/any, the conditions and groups (each as its own kind checks it), the display (every
-value), the place, the sound's *name*, and the class limit if there is one. **Never** the characters it is limited to, the id, or
+value), the place, the sound's *name*, the action button glow when it has one, and the class limit if there is one. **Never** the characters it is limited to, the id, or
 whether it is on. A reminder with anything unfinished (a problem the editor lists) is not sent.
 
 **What arrives** (`RM.Admit`): the table is another player's text, so the reminder is rebuilt field by field from checked values and
@@ -502,6 +609,7 @@ A reminder is a few hundred bytes to a few KB; at the game's addon-message rate 
 | Entering the world (login, reload, any loading screen: dungeon doors too) | everything wanted is read and decided at once, then read again 1 s and 3 s later through the usual marking (`State.lua` `SETTLE`), because the game is still settling just after the event and not every change has an event; only what differs re-decides. A newer entry or switching Reminders off makes older looks do nothing |
 | A setting changes | look or place: that frame is drawn again; rules, switch, list or profile: the index is built again |
 | Delay / minimum | one `C_Timer.After` per waiting reminder, with a token: cancelled by anything that changes its course |
+| A reminder with an action button glow shows | the bar, page, form, macro and spell events (`reminders/ButtonGlow.lua`), only while one glows; one 0.05 s coalesced redraw per burst; none at all otherwise |
 
 No `OnUpdate` anywhere; fades and pulses are animation groups the game runs, short and bounded (a pulse is three
 breaths). One frame per reminder id, made the first time it shows and reused when a reminder is deleted and another made;
@@ -548,6 +656,9 @@ their sources (`ST.Source` after State.lua, with `ST.Plain` / `ST.Number` / `ST.
   from "doesn't use charges"). The off hand and the main hand only; no ranged slot. A fishing pole counts as nothing to enchant.
 - Well Fed: only whether the buff is there, not which food gave it (a buff condition, `aura`, can ask how long a chosen
   buff has left). It is unknown, so nothing shows, while the game hides your buffs from addons.
+- Action button glow: one spell per reminder, every bar (Action bar glows' bar choice doesn't apply), its look's size,
+  opacity and speed fixed at the drawing's defaults; in combat only while the reminder's conditions are readable (see "WoW:
+  Forever in combat").
 - Not in this release: Lua, dynamic clones, a volume or channel per sound, sharing your whole list or a profile (one reminder can be
   shared: below), health (always secret to addons),
   swimming (no event), a talent's rank, automation of any kind.
@@ -651,6 +762,20 @@ their sources (`ST.Source` after State.lua, with `ST.Plain` / `ST.Number` / `ST.
     while a question is open on the other side: "answering another offer". Switch receiving off on the other side: "turned off
     receiving". Accept during combat: the reminder is added and the settings question waits until combat ends. Open the sender's
     share question and close it with Esc: nothing is sent. With 24 reminders on the other side: "list is full" at the offer.
+30. **Action button glow.** A Shaman: a reminder "Player is in combat" with the glow on Lightning Bolt (drag it from the
+    spellbook onto the Spell box). The line says how many buttons hold it. Enter combat: the reminder and every Lightning Bolt
+    button glow (Blizzard's bar, EllesmereUI's bar, a macro `/cast Lightning Bolt`, a lower rank); leave combat: both go.
+    Add a delay of 3 and a minimum of 10: the glow waits and stays with the reminder. Move the spell to another button and
+    page an EllesmereUI bar during the glow: it follows. Turn on Quiet screen: it goes; off: back. **Show on screen** with
+    the reminder off: the glow shows on the bars until the preview ends. With Action bar glows on and Lightning Shield
+    missing, a reminder glowing Lightning Shield in pixel border: only the pixel border is drawn, Action bar glows' look
+    returns when the reminder goes; turn Action bar glows off: the reminder's glow stays; turn Reminders off: Action bar
+    glows' stays. With a faded bar, the glowing button stays in full. Each look and motion, on square and round buttons.
+    Check that clicking a glowing button still casts normally in and out of combat, with no taint message.
+31. **Maelstrom Weapon, 5 stacks** ("Buff or debuff on you", Stack count, at least 5, glow on Lightning Bolt): out of combat it
+    shows and glows at five stacks. In combat note whether it still does, or stays hidden (auras restricted: expected and
+    correct), and record `C_Secrets.ShouldAurasBeSecret()` and `C_Secrets.ShouldSpellAuraBeSecret(51530)` for the
+    follow-up in "WoW: Forever in combat".
 
 
 Condition-type art is resolved centrally by `RemindersPlain.ApplyArt`: enchanted blade for weapon enchant, separate
