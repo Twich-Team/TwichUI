@@ -313,8 +313,10 @@ local function Credit(amount, matched, ways)
     else Offer() end
 end
 
--- Every set of waiting requests (the oldest MAX_SEARCH, in order) whose amounts add up to the gain, oldest set first; at most
--- MAX_WAYS + 1 are collected (one more means "too many to tell"). Amounts are positive, so a branch past the gain stops.
+-- A complete positive batch is unique. Otherwise search the oldest MAX_SEARCH
+-- eligible requests, returning whether every eligible request was included.
+-- At most MAX_WAYS + 1 explanations are collected; an incomplete search cannot
+-- authorize ledger evidence. Positive amounts prune branches beyond the gain.
 local function Ways(gain)
     local ways, pick, cand, all = {}, {}, {}, {}
     local total, within, complete = 0, true, true

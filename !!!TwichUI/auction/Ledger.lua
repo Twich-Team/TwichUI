@@ -521,8 +521,10 @@ local function Valid(ev)
         local key, before, after = Plain(ev.stock.key), Whole(ev.stock.before, 0, MAX_QTY), Whole(ev.stock.after, 0, MAX_QTY)
         if type(key) == "string" and #key <= 160 and before and after then stock = { key = key, before = before, after = after } end
     end
-    -- Optional, session-only components of one seller payment that has no full invoice breakdown (V5): each sold-auction mail's own
-    -- collected amount and item. Never saved on the entry, never cash; observers (the cost basis) may keep them as per-item results.
+    -- Optional session-only components (V5): the whole payment must reconcile,
+    -- including non-sale portions of mixed mail. Only explicit seller portions
+    -- carry item/invoice facts. Never saved on the cash entry or recorded as money;
+    -- the existing cost basis may retain supported seller portions as results.
     local parts
     if (ev.kind == "ahSale" or ev.kind == "mail") and type(ev.parts) == "table" then
         local sum = 0

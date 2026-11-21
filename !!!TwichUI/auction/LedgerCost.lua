@@ -522,7 +522,7 @@ local function OnAhSale(rec, e, ev)
                 st = "unknown", w = "auctionid", al = {} })
         end
     elseif type(ev.parts) == "table" and #ev.parts > 1 then
-        -- one collected payment of several sold-auction mails: one result per mail (its item and its own collected amount)
+        -- One reconciled payment: results for seller portions only; other mail remains a cash remainder.
         for _, p in ipairs(ev.parts) do
             if p.sale == true then
                 local inv = p.settlement

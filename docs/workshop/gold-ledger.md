@@ -454,3 +454,12 @@ Results; reload and confirm persistence. Auction cost basis must remain unavaila
 unless an authoritative receipt-to-posting identifier becomes available. If a
 classification is missing, copy `/tui diagnostics` → Gold Ledger evidence; no
 special build, payload log or engineering commands are needed.
+
+
+[Retained final verification](../evidence/ledger-v5-followup/verification.json) and
+[simulator failure summaries](../evidence/ledger-v5-followup/simulator-failures.txt)
+keep the failed feature verdict explicit. Final checkpoint D changes after that
+frozen run are documentation/comments only; executable behavior is unchanged.
+Rollback is an ordinary revert of these follow-up commits: no migration is needed,
+existing cash/history/results remain readable, and restored older code simply
+stops collecting the new mixed-payment detail on future payments.
