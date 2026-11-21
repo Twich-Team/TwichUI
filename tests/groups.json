@@ -36,8 +36,8 @@
     "simulators": []
   },
   "fishing": {
-    "tests": ["test_fishing_*.lua"],
-    "syntax": ["TwichUI_Fishing/**/*.lua", "!!!TwichUI/FishingLauncher.lua", "!!!TwichUI/Core.lua"],
+    "tests": ["test_fishing_*.lua", "test_testlab.lua", "test_release_tools.py"],
+    "syntax": ["TwichUI_Fishing/**/*.lua", "!!!TwichUI/FishingLauncher.lua", "!!!TwichUI/Core.lua", "TwichUI_TestLab/cases/Fishing.lua", "TwichUI_Diagnostics/*.lua"],
     "dependencies": ["core"],
     "simulators": []
   },
