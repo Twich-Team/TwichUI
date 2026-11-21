@@ -1,5 +1,5 @@
 -- TwichUI settings: Reminders, the editor's sections (Reminders.lua draws the list and puts these under it)
--- Show (what appears), When (who it is for and its conditions, as cards inside groups, with the rule in plain words), Placement (where, how big, and
+-- Show (what appears), Action button glow (optionally, the buttons of a spell glow while it shows), When (who it is for and its conditions, as cards inside groups, with the rule in plain words), Placement (where, how big, and
 -- behind "More placement and appearance options" the rest) and Test (what it sees right now, and the same decision for situations you pick). Each
 -- section's widgets are made once, the first time the page is shown, and only placed and filled after that; condition
 -- cards, group boxes and test lines come from pools bounded by RM.MAX_CONDITIONS and RM.MAX_GROUPS. Every change goes through
@@ -645,6 +645,156 @@ local function SoundSection(parent, env)
 end
 
 ---------------------------------------------------------------------------
+-- Action button glow: optionally, while the reminder shows, the action buttons holding a spell you choose glow
+-- (reminders/ButtonGlow.lua draws it with Action bar glows' looks, as an owner of its own). The spell is any spell: it
+-- needn't be one the conditions look at. The sample beside the controls is a frame of this window, never a real button;
+-- "Show on screen" shows the glow on your bars with the reminder's preview. Nothing here turns the reminder on.
+---------------------------------------------------------------------------
+local SAMPLE = 40
+
+local function GlowSection(parent, env)
+    local G = Wg()
+    local s = Section(parent, nil, "Action button glow")
+    local function Set(key, value)
+        local ok, why = RM().SetGlow(env.id(), key, value)
+        if not ok then env.Say(why, "warn") end
+        return ok
+    end
+    s.enable = Checkbox(s, "Glow the action buttons of a spell while it shows", function(on) Set("enabled", on and true or false) end,
+        "While this reminder is on screen, every action button holding the spell you choose glows: any rank, a macro that casts it, Blizzard's bars and EllesmereUI's. It works whether or not Action bar glows is on, and never changes or presses a button.")
+
+    -- the spell: its ID or link typed or pasted, or a spell dropped from the spellbook
+    s.spellLabel = Label(s, "Spell")
+    s.spellBox = G.EditBox(s, 110, 24)
+    s.spellBox:SetMaxLetters(200)
+    local function TakeText(self)
+        local text = self:GetText()
+        local v = env.view()
+        if text == "" or not v then return end
+        local Pl = R.RemindersPlain
+        local ids = Pl and Pl.ParseSpells(text, 1)
+        if not ids then
+            env.Say("That isn't a spell ID. Type the number from the spell's link, paste the link, or drop the spell from your spellbook on the box.", "warn")
+            return
+        end
+        self:ClearFocus()
+        if Set("spell", ids[1]) then env.Say(nil) end
+    end
+    s.spellBox:SetScript("OnEnterPressed", TakeText)
+    -- a spell from the spellbook: GetCursorInfo's fourth answer is its ID (the second is only its slot in the book)
+    local function TakeCursor()
+        if not GetCursorInfo then return false end
+        local what, _, _, id = GetCursorInfo()
+        if what == nil then return false end
+        if issecretvalue and (issecretvalue(what) or issecretvalue(id)) then what, id = nil, nil end
+        if what ~= "spell" then env.Say("Drop a spell from your spellbook here.", "warn") return true end
+        if not RM().ValidSpell(id) then env.Say("The game didn't say which spell that is. Type its spell ID instead.", "warn") return true end
+        if ClearCursor then ClearCursor() end
+        s.spellBox:ClearFocus()
+        if Set("spell", id) then env.Say(nil) end
+        return true
+    end
+    s.spellBox:SetScript("OnReceiveDrag", TakeCursor)
+    s.spellBox:HookScript("OnMouseDown", function() if GetCursorInfo and GetCursorInfo() then TakeCursor() end end)
+    R.Interact.Tip(s.spellBox, "Spell to glow", "Its spell ID or link, or the spell dropped here from your spellbook. Press Enter. Every rank of it counts, and a macro that casts it.")
+    s.spellName = R.SettingsMaterial.ReminderFont(G.Text(s, "body"), 14)
+
+    s.lookLabel = Label(s, "Look")
+    s.look = Dropdown(s, 130, Choices(RM().GLOW_CHOICES.look), function(value) Set("look", value) end, "Look", "The glow's art: the same looks Action bar glows uses.")
+    s.motion = Dropdown(s, 104, Choices(RM().GLOW_CHOICES.motion), function(value) Set("motion", value) end, "Motion", "Whether the glow runs, breathes or stands still.")
+    s.motionLabel = Label(s, "Motion")
+    s.colorLabel = Label(s, "Color")
+    s.colorLabel:SetWidth(42)
+    s.color = G.Swatch(s, function(hex) Set("color", hex) end)
+
+    -- the sample: the spell's icon on a frame of this window, glowing as the buttons will
+    s.sample = CreateFrame("Frame", nil, s)
+    s.sample:SetSize(SAMPLE, SAMPLE)
+    s.sampleIcon = s.sample:CreateTexture(nil, "ARTWORK")
+    s.sampleIcon:SetAllPoints()
+    R.Interact.Tip(s.sample, "Sample", "This glows the way the look is set now. Your action buttons follow the same look while the reminder shows. Show on screen shows it on your bars too.")
+    s.note = Note(s)
+    s.parts = { s.enable, s.enable.label, s.spellLabel, s.spellBox, s.spellName, s.lookLabel, s.look, s.motionLabel, s.motion, s.colorLabel,
+        s.color, s.sample, s.note }
+
+    local function StopSample()
+        if R.ReminderGlow then R.ReminderGlow.Sample(s.sample, nil) end
+    end
+    s:HookScript("OnHide", StopSample)
+
+    function s:Layout(v, y)
+        HideAll(self.parts)
+        local g = v.glow
+        local h = 10
+        self.enable:SetChecked(g.enabled)
+        Put(self.enable, self, LABEL_X, h)
+        self.enable.label:Show()
+        h = h + 30
+        if not g.enabled then
+            StopSample()
+            h = h + Text(self.note, "Off. The reminder shows and sounds as usual; nothing on your bars changes.", "quiet", LABEL_X, h, self) + 12
+            self:SetHeight(h)
+            Put(self, parent, 0, y)
+            return h
+        end
+        local top = h
+        local width = self.editorWidth or self:GetWidth() or W
+        local sampleX = width - PAD - SAMPLE - 4   -- the sample sits at the right of the first rows
+        if not self.spellBox:HasFocus() then self.spellBox:SetText(g.spell and tostring(g.spell) or "") end
+        h = Line(self, self.spellLabel, self.spellBox, h)
+        local C = R.ReminderConditions
+        local name = g.spell and C and C.SpellWords(g.spell) or nil
+        self.spellName:SetText(name or "")
+        self.spellName:SetWidth(math.max(60, sampleX - (CTRL_X + 120) - 8))
+        self.spellName:SetWordWrap(false)
+        Put(self.spellName, self, CTRL_X + 120, top + 5)
+        self.look:SetValue(g.look, LabelOf(RM().GLOW_CHOICES.look, g.look))
+        Put(self.lookLabel, self, LABEL_X, h + 4)
+        Put(self.look, self, CTRL_X, h)
+        self.motion:SetValue(g.motion, LabelOf(RM().GLOW_CHOICES.motion, g.motion))
+        local colorX = CTRL_X + 138 + 104 + 16
+        if colorX + 42 + 40 <= sampleX - 8 then
+            -- wide: look, motion and color on one row
+            Put(self.motion, self, CTRL_X + 138, h)
+            Put(self.colorLabel, self, colorX, h + 4)
+            Put(self.color, self, colorX + 42, h + 2)
+        else
+            -- narrow: motion and color on a row of their own, clear of the sample
+            h = h + ROW
+            Put(self.motionLabel, self, LABEL_X, h + 4)
+            Put(self.motion, self, CTRL_X, h)
+            Put(self.colorLabel, self, CTRL_X + 120, h + 4)
+            Put(self.color, self, CTRL_X + 162, h + 2)
+        end
+        self.color:SetValue(g.color)
+        h = h + ROW
+        Put(self.sample, self, sampleX, top + 4)
+        local icon = g.spell and C_Spell and C_Spell.GetSpellTexture and Plain(C_Spell.GetSpellTexture(g.spell)) or nil
+        self.sampleIcon:SetTexture(icon or 134400)
+        if R.ReminderGlow then R.ReminderGlow.Sample(self.sample, g) end
+
+        local words, tone
+        if not g.spell then
+            words, tone = "Choose the spell whose action buttons glow: type its ID, paste its link or drop it from your spellbook.", "warn"
+        else
+            local n = R.ReminderGlow and R.ReminderGlow.Buttons(g.spell)
+            if n == nil then
+                words, tone = "The game has no name for that spell, so no button can be found for it. Check the number.", "warn"
+            elseif n == 0 then
+                words, tone = ("%s isn't on your action bars right now. The reminder still shows and sounds; the glow appears once the spell is on a bar."):format(name), "quiet"
+            else
+                words, tone = ("%s is on %d action button%s. They glow while this reminder shows."):format(name, n, n == 1 and "" or "s"), "ok"
+            end
+        end
+        h = h + 4 + Text(self.note, words, tone, LABEL_X, h + 4, self) + 12
+        self:SetHeight(h)
+        Put(self, parent, 0, y)
+        return h
+    end
+    return s
+end
+
+---------------------------------------------------------------------------
 -- Test: what it sees right now, and the same decision for situations you pick
 ---------------------------------------------------------------------------
 local function ResultTone(result)
@@ -859,12 +1009,13 @@ function Ed.Build(parent, env)
         PlacementSection(parent, env),
         SoundSection(parent, env),
         TestSection(parent, env),
+        GlowSection(parent, env),   -- the sixth, so the others keep their places; drawn after Sound (Reminders.lua EDIT_ORDER)
     }
     local placement, test = Ed.sections[3], Ed.sections[5]
     placement.diagnostics = test.toggle
     test.toggle:SetParent(placement)
     for _, section in ipairs(Ed.sections) do
-        for _, key in ipairs({ "itemBox", "textBox", "x", "y" }) do
+        for _, key in ipairs({ "itemBox", "textBox", "spellBox", "x", "y" }) do
             if section[key] and R.SettingsMaterial then R.SettingsMaterial.ReminderControl(section[key], "field") end
         end
         for _, key in ipairs({ "move", "play", "toggle" }) do
