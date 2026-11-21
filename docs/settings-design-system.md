@@ -134,7 +134,7 @@ Painted components: `assets/craft-{frame,button,selection}-source.png`, prepared
 
 Home reuses the six settings icon sheets, the healer vessel, sleeping bag and reminder artwork. One new source,
 `assets/settings-satchel-source.png`, supplies `media/icons/magicInventory{,-small}.tga` through
-`tools/make_settings_home_art.py`. It was generated once with the built-in image tool: a walnut/chestnut adventurer's
+`tools/make_settings_home_art.py`. It was replaced with the supplied Magic Inventory artwork: a worn leather satchel holding a sealed letter and a gold bar, bronze clasp with a violet gem, two gold transfer arrows; the interface buttons use the same icon. Earlier brief: a walnut/chestnut adventurer's
 satchel, aged bronze clasp, upper-left light, broad silhouette, genuine transparent background, no text or magic glow.
 No reference image was cut into runtime UI. Sources and documentation stay out of packages via `.pkgmeta`.
 

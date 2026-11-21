@@ -815,7 +815,7 @@ local function InterfaceButton(kind)
         b.icon = b:CreateTexture(nil, "OVERLAY")
         b.icon:SetSize(18, 18)
         b.icon:SetPoint("LEFT", 8, 0)
-        R.Icons.Apply(b.icon, "diagCompare", 18)
+        R.Icons.Apply(b.icon, "magicInventory", 18)
         -- the shared button puts its label back to the centre on every hover and press, so the offset is set again after
         local function Nudge(y) b.text:SetPoint("CENTER", 13, y) end
         Nudge(0)
