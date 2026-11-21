@@ -27,23 +27,28 @@ H.ART = {
     castbar = { file = "castbar", w = 512, h = 128, cw = 512, ch = 85, trough = { 102.8, 40, 460.1, 58 } },
     castfill = { file = "castfill", w = 512, h = 32, cw = 357, ch = 18 },
     castspark = { file = "castspark", w = 32, h = 32, cw = 32, ch = 32 },
-    toast = { file = "toast", w = 512, h = 128, cw = 352, ch = 98, well = { 11, 10, 92, 87 } },
-    treasure = { file = "toast-treasure", w = 512, h = 128, cw = 330, ch = 94, well = { 11, 11, 79, 80 } },
+    toast = { file = "toast", w = 512, h = 128, cw = 352, ch = 98, well = { 11, 10, 93, 86 }, band = { 120, 228 } },
+    treasure = { file = "toast-treasure", w = 512, h = 128, cw = 330, ch = 94, well = { 11, 12, 85, 83 }, band = { 110, 210 } },
     glint = { file = "glint", w = 128, h = 64, cw = 128, ch = 61 },
-    divider = { file = "divider", w = 256, h = 32, cw = 256, ch = 26 },
     mark = { file = "mark", w = 64, h = 64, cw = 63, ch = 64 },
     scrim = { file = "scrim", w = 256, h = 128, cw = 256, ch = 128 },
     rowglow = { file = "rowglow", w = 256, h = 32, cw = 256, ch = 32 },
+    logo = { file = "logo", w = 512, h = 256, cw = 488, ch = 196 },
+    iconframe = { file = "iconframe", w = 64, h = 64, cw = 64, ch = 64, well = { 5.3, 5.4, 60.0, 57.2 } },
+    rule = { file = "rule", w = 256, h = 32, cw = 256, ch = 30 },
+    ["glyph-lure"] = { file = "glyph-lure", w = 64, h = 64, cw = 64, ch = 64 },
+    ["glyph-time"] = { file = "glyph-time", w = 64, h = 64, cw = 64, ch = 64 },
 }
 
 H.IVORY = { 0.94, 0.90, 0.81 }
 H.MUTED = { 0.78, 0.72, 0.62 }
-H.SOFT = { 0.88, 0.83, 0.74 }      -- small text over the world (the prompts): muted, but still readable over snow
+H.SOFT = { 0.88, 0.83, 0.74 }
+H.AMBERTEXT = { 0.88, 0.74, 0.52 }  -- the mockup's warm secondary lines ("24 caught", the quantity on a notice)      -- small text over the world (the prompts): muted, but still readable over snow
 H.BRONZE = { 0.78, 0.58, 0.32 }
 H.GOLD = { 0.96, 0.80, 0.46 }
 H.WARN = { 1.00, 0.72, 0.42 }
 H.QUESTION = [[Interface\Icons\INV_Misc_QuestionMark]]
-H.SHADE = 0.62          -- how dark the shade under the catch list and the cast bar's lines is at its middle
+H.SHADE = 0.6          -- how dark the shade under the catch list and the cast bar's lines is at its middle
 
 -- The painted part of a file, as texture coordinates.
 function H.Coords(name)
@@ -66,6 +71,34 @@ function H.Texture(tex, name, fallback)
     if tex.SetColorTexture then tex:SetColorTexture(c[1], c[2], c[3], c[4] or 1) end
     tex.twichArt = false
     return false
+end
+
+-- An artwork as an inline texture in text (|T...|t), `size` units square: the cast bar's stat glyphs.
+function H.Glyph(name, size)
+    local a = H.ART[name]
+    if not a then return "" end
+    return ("|T%s%s:%d:%d:0:0:%d:%d:0:%d:0:%d|t"):format(H.MEDIA, a.file, size, size, a.w, a.h, a.cw, a.ch)
+end
+
+-- An item icon in the bronze icon frame (iconframe: the notification's frame on its own), `size` units square. Returns the
+-- frame texture and the icon texture; the icon sits in the frame's well, the frame's chamfers cover its corners.
+function H.FramedIcon(parent, size, layer)
+    local a = H.ART.iconframe
+    local frameTex = parent:CreateTexture(nil, layer or "ARTWORK", nil, 2)
+    frameTex:SetSize(size, size)
+    local framed = H.Texture(frameTex, "iconframe", { 0.62, 0.45, 0.24, 0.95 })
+    local icon = parent:CreateTexture(nil, layer or "ARTWORK", nil, 1)
+    local k = size / a.cw
+    local w = a.well
+    if framed then
+        icon:SetPoint("TOPLEFT", frameTex, "TOPLEFT", w[1] * k, -w[2] * k)
+        icon:SetPoint("BOTTOMRIGHT", frameTex, "TOPLEFT", w[3] * k, -w[4] * k)
+    else
+        icon:SetPoint("TOPLEFT", frameTex, "TOPLEFT", 1, -1)
+        icon:SetPoint("BOTTOMRIGHT", frameTex, "BOTTOMRIGHT", -1, 1)
+    end
+    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    return frameTex, icon
 end
 
 ---------------------------------------------------------------------------

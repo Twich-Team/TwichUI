@@ -54,6 +54,7 @@ do
   W.Advance(1.2); W.Key("F")
   Check(P.On() and P.State().mode == "immersive" and P.State().reason == "cast", "the first cast brings Fishing Mode on (immersive)")
   Check(F.CastBar.Shown() and F.CatchList.Shown(), "the cast bar and the catch list show")
+  Check(P.BrandShown(), "and the TwichUI Fishing emblem, top left")
   Check(math.abs(W.camera.zoom - 7) < 0.01, "the camera moved once to Fishing Mode's distance (15 -> 7)")
   local zoomCalls = W.camera.calls
   Settle(W)
@@ -70,6 +71,7 @@ do
   c.TwichUI.RunCommand("fish stop")
   Settle(W)
   Check(not P.On() and not F.CastBar.Shown() and not F.CatchList.Shown(), "the session's end turns Fishing Mode off and hides the pieces")
+  Check(not P.BrandShown(), "the emblem too")
   Check(math.abs(W.camera.zoom - 15) < 0.01, "the camera is back where the player had it")
   Check(c.MainMenuBar:GetAlpha() == 0.6 and c.PlayerFrame:GetAlpha() == 1 and c.MinimapCluster:GetAlpha() == 1, "each frame is back at its own alpha")
   Check(not Q.On() and not Q.Player(), "the hold is let go; the player's switch never moved")
@@ -86,6 +88,7 @@ do
   c.TwichUI.RunCommand("fish mode compact")
   W.Advance(1.2); W.Key("F"); Settle(W)
   Check(P.On() and F.CastBar.Shown() and not F.CatchList.Shown(), "compact: the cast bar, no catch list")
+  Check(not P.BrandShown(), "compact: no emblem")
   Check(W.camera.zoom == 15 and c.MainMenuBar:GetAlpha() == 1 and not c.TwichUI.QuietScreen.On(), "compact: no camera, nothing faded, no quiet")
   P.Configure("present.mode", "immersive"); Settle(W)
   Check(P.On() and F.CatchList.Shown() and math.abs(W.camera.zoom - 7) < 0.01 and c.MainMenuBar:GetAlpha() == 0, "switched to immersive while on: applied at once")

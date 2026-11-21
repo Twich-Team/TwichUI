@@ -5,7 +5,7 @@
 -- name and quantity are the item's own.
 --
 --   catch      "Caught!" and the item, for what the line brought up
---   treasure   "Treasure!", a warmer frame (toast-treasure) and a gold glint behind the icon, for what came out of a fishing
+--   treasure   "Treasure!", a warmer frame (toast-treasure) and a brighter gold glint behind the icon, for what came out of a fishing
 --              container (clam contents: pearls and the like) and for items the game itself rates rare or better (its item
 --              quality). Nothing else is called a treasure: no rarity or value is guessed.
 -- The same item again while its notice is still up (several stacks from one catch, or a fast second catch) adds to that
@@ -25,10 +25,11 @@ T.VISIBLE = 3
 T.QUEUE = 6
 T.MERGE = 2.5        -- seconds after its last update that a notice still takes the same item
 T.IN, T.OUT = 0.28, 0.6
-local K = 0.72
+local K = 0.86
 
 local anchor
 local pool, active, queue = {}, {}, {}
+local Band
 T.shown, T.merged, T.dropped = 0, 0, 0
 
 local function Text(parent, size, role, color)
@@ -57,14 +58,24 @@ local function Make()
     f.glint = f:CreateTexture(nil, "BACKGROUND", nil, 1)
     f.glint:SetBlendMode("ADD")
     H.Texture(f.glint, "glint", { 1, 0.8, 0.4, 0.2 })
+    -- the same flare turned over, under the frame: the warm light the mockup has around the icon
+    f.glint2 = f:CreateTexture(nil, "BACKGROUND", nil, 1)
+    f.glint2:SetBlendMode("ADD")
+    if H.Texture(f.glint2, "glint", { 1, 0.8, 0.4, 0.2 }) then
+        local l, r, t, b = H.Coords("glint")
+        f.glint2:SetTexCoord(l, r, b, t)
+    end
     f.icon = f:CreateTexture(nil, "ARTWORK", nil, 0)
     f.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    f.art = f:CreateTexture(nil, "ARTWORK", nil, 1)
-    f.title = Text(f, 15, "serif", H.GOLD)
-    f.name = Text(f, 13, "strong")
+    -- the pack's notification art in three slices: the frame end, the band (stretched to the name) and the fading end
+    f.artL = f:CreateTexture(nil, "ARTWORK", nil, 1)
+    f.artM = f:CreateTexture(nil, "ARTWORK", nil, 1)
+    f.artR = f:CreateTexture(nil, "ARTWORK", nil, 1)
+    f.title = Text(f, 19, "serif")
+    f.name = Text(f, 15, "strong")
     f.name:SetJustifyH("LEFT")
     f.name:SetWordWrap(false)
-    f.value = Text(f, 12, "body", H.MUTED)
+    f.value = Text(f, 13, "body", H.SOFT)
     pool[#pool + 1] = f
     return f
 end
@@ -73,10 +84,13 @@ local function Dress(f, kind)
     local art = kind == "treasure" and H.ART.treasure or H.ART.toast
     local name = kind == "treasure" and "treasure" or "toast"
     f:SetSize(art.cw * K, art.ch * K)
-    f.art:ClearAllPoints()
-    f.art:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-    f.art:SetSize(art.cw * K, art.ch * K)
-    H.Texture(f.art, name, { 0.14, 0.09, 0.06, 0.85 })
+    f.kind = kind
+    for _, t in ipairs({ f.artL, f.artM, f.artR }) do H.Texture(t, name, { 0.14, 0.09, 0.06, 0.85 }) end
+    f.artL:ClearAllPoints(); f.artM:ClearAllPoints(); f.artR:ClearAllPoints()
+    f.artL:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+    -- each slice overlaps the one before it by one unit (over the band's opaque run), so no hairline seam can open
+    f.artM:SetPoint("TOPLEFT", f.artL, "TOPRIGHT", -1, 0)
+    f.artR:SetPoint("TOPLEFT", f.artM, "TOPRIGHT", -1, 0)
     local w = art.well
     local side = math.min(w[3] - w[1], w[4] - w[2]) * K
     local cx, cy = (w[1] + w[3]) / 2 * K, (w[2] + w[4]) / 2 * K
@@ -86,16 +100,46 @@ local function Dress(f, kind)
     f.glint:ClearAllPoints()
     f.glint:SetPoint("BOTTOM", f, "TOPLEFT", cx, -cy + side * 0.05)
     f.glint:SetSize(side * 1.9, side * 0.9)
-    f.glint:SetShown(kind == "treasure")
+    -- the warm light behind the frame (the mockup's): every notice, brighter for a treasure
+    f.glint:Show()
+    f.glint2:ClearAllPoints()
+    f.glint2:SetPoint("TOP", f, "TOPLEFT", cx, -cy - side * 0.05)
+    f.glint2:SetSize(side * 1.9, side * 0.9)
+    f.glint2:Show()
+    f.glow = kind == "treasure" and 1 or 0.6
     local x = (w[3] + 20) * K      -- clear of the frame's right rim
     f.title:ClearAllPoints()
-    f.title:SetPoint("TOPLEFT", f, "TOPLEFT", x, -14 * K - 2)
+    f.title:SetPoint("TOPLEFT", f, "TOPLEFT", x, -12 * K)
     f.title:SetText(kind == "treasure" and "Treasure!" or "Caught!")
+    H.Color(f.title, kind == "treasure" and H.GOLD or H.IVORY)
     f.name:ClearAllPoints()
     f.name:SetPoint("TOPLEFT", f.title, "BOTTOMLEFT", 0, -2)
-    f.name:SetWidth(art.cw * K - x - 14)
+    f.textX = x
     f.value:ClearAllPoints()
     f.value:SetPoint("TOPLEFT", f.name, "BOTTOMLEFT", 0, -1)
+end
+
+-- The band's length: the painted length, or longer for a long name (the middle slice stretches, never the frame or the
+-- fading end), at most BAND_MAX longer.
+T.BAND_MAX = 220
+Band = function(f)
+    local art = f.kind == "treasure" and H.ART.treasure or H.ART.toast
+    local b = art.band
+    local l, r, t, bt = H.Coords(f.kind == "treasure" and "treasure" or "toast")
+    local function U(px) return l + (r - l) * px / art.cw end
+    local text = math.max(f.name:GetStringWidth() or 0, f.title:GetStringWidth() or 0, f.value:IsShown() and f.value:GetStringWidth() or 0)
+    local need = (f.textX or 0) + text + 34 - b[2] * K          -- the text ends a little into the fading end
+    local extra = math.max(0, math.min(T.BAND_MAX, need))
+    f.artL:SetSize(b[1] * K, art.ch * K)
+    f.artM:SetSize((b[2] - b[1]) * K + extra + 1, art.ch * K)
+    f.artR:SetSize((art.cw - b[2]) * K + 1, art.ch * K)
+    if f.artL.twichArt then
+        f.artL:SetTexCoord(l, U(b[1]), t, bt)
+        f.artM:SetTexCoord(U(b[1]), U(b[2]), t, bt)
+        f.artR:SetTexCoord(U(b[2]), r, t, bt)
+    end
+    f:SetWidth(art.cw * K + extra)
+    f.name:SetWidth(art.cw * K + extra - (f.textX or 0) - 14)
 end
 
 -- The value line's text, asked of a connected valuation when the catch arrives (never while a notice animates).
@@ -107,10 +151,11 @@ end
 local function Words(f)
     local e = f.entry
     local name = e.name or ("Item " .. e.id)
-    f.name:SetText(e.q > 1 and (name .. " \195\151" .. e.q) or name)
+    f.name:SetText(e.q > 1 and (name .. " |cffe0bd85\195\151" .. e.q .. "|r") or name)
     local v = e.value
     f.value:SetText(v and ("(Est. " .. v .. ")") or "")
     f.value:SetShown(v ~= nil)
+    Band(f)
 end
 
 local function Motion()
@@ -138,11 +183,11 @@ local function OnUpdate(f)
         local e = p * p * (3 - 2 * p)
         f:SetAlpha(e)
         f.slide = f.moves and (-14 * (1 - e)) or 0
-        if f.glint:IsShown() then f.glint:SetAlpha(0.35 + 0.5 * e) end
+        f.glint:SetAlpha((0.35 + 0.5 * e) * (f.glow or 1)); f.glint2:SetAlpha(f.glint:GetAlpha() * 0.7)
         if p >= 1 then f.phase, f.phaseAt = "hold", now end
         Layout()
     elseif f.phase == "hold" then
-        if f.glint:IsShown() then f.glint:SetAlpha(0.85 - math.min(0.45, t * 0.25)) end
+        f.glint:SetAlpha((0.85 - math.min(0.45, t * 0.25)) * (f.glow or 1)); f.glint2:SetAlpha(f.glint:GetAlpha() * 0.7)
         if t >= f.hold then f.phase, f.phaseAt = "out", now end
     elseif f.phase == "out" then
         local p = math.min(1, t / T.OUT)

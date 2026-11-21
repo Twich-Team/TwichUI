@@ -27,7 +27,7 @@ local H = F.Hud
 local CB = {}
 F.CastBar = CB
 
-CB.WIDTH = 360
+CB.WIDTH = 400
 CB.RESULT = 1.8
 local K = CB.WIDTH / H.ART.castbar.cw
 local TR = H.ART.castbar.trough
@@ -76,19 +76,19 @@ local function Build()
     H.Texture(u.spark, "castspark", { 1, 0.86, 0.62, 0.25 })
     u.spark:Hide()
     -- labels sit on the walnut above the trough
-    u.label = Text(f, 13, "serif")
+    u.label = Text(f, 17, "serif")
     u.label:SetPoint("BOTTOMLEFT", f, "TOPLEFT", TROUGH_L + 4, -TROUGH_T + 1)
-    u.time = Text(f, 13, "serif")
+    u.time = Text(f, 17, "serif")
     u.time:SetPoint("BOTTOMRIGHT", f, "TOPLEFT", TROUGH_L + FILL_W - 4, -TROUGH_T + 1)
     u.time:SetJustifyH("RIGHT")
-    u.stats = Text(f, 12, "strong")
-    u.stats:SetPoint("TOP", f, "BOTTOM", 0, -3)
-    u.note = Text(f, 11, "body", H.SOFT)
-    u.note:SetPoint("TOP", u.stats, "BOTTOM", 0, -3)
+    u.stats = Text(f, 15, "strong")
+    u.stats:SetPoint("TOP", f, "BOTTOM", 0, -4)
+    u.note = Text(f, 12, "body", H.SOFT)
+    u.note:SetPoint("TOP", u.stats, "BOTTOM", 0, -4)
     -- a faint shade under the two lines, so they read over bright scenery too
     u.shade = f:CreateTexture(nil, "BACKGROUND", nil, -6)
     u.shade:SetPoint("TOPLEFT", f, "BOTTOMLEFT", -30, 14)
-    u.shade:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 30, -44)
+    u.shade:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 30, -52)
     H.Texture(u.shade, "scrim", { 0.06, 0.04, 0.03, 0.3 })
     u.shade:SetAlpha(H.SHADE)
     H.Movable(f, "castbar", "BOTTOM")
@@ -158,25 +158,33 @@ end
 -- The lines under the bar
 ---------------------------------------------------------------------------
 local BULLET = "  |cffc79452\226\128\162|r  "
+local GAP = "            "
 
+-- The figures under the bar, each after its glyph from the texture pack (as in the approved mockup): the bobber for the
+-- session's length, the fish mark for the catches, the coins (the game's own money icon, only with a valuation) for the
+-- value, the feather for the lure.
 function CB.StatsText()
     local P = F.Present
-    if CB.preview then return "42m 17s" .. BULLET .. "56 catches" .. BULLET .. "Lure 23m" end
     local parts = {}
+    if CB.preview then
+        return H.Glyph("glyph-time", 20) .. " 42m 17s" .. GAP .. H.Glyph("mark", 20) .. " 56 Catches" .. GAP
+            .. H.Glyph("glyph-lure", 20) .. " Lure: 23m"
+    end
     local s = F.Session.Current()
     if s then
-        parts[#parts + 1] = H.Duration(F.Session.Elapsed() or 0)
-        parts[#parts + 1] = s.catches == 1 and "1 catch" or (s.catches .. " catches")
+        parts[#parts + 1] = H.Glyph("glyph-time", 20) .. " " .. H.Duration(F.Session.Elapsed() or 0)
+        parts[#parts + 1] = H.Glyph("mark", 20) .. " " .. (s.catches == 1 and "1 Catch" or (s.catches .. " Catches"))
         local value = P and P.Value and P.Value("session")
-        if value and value.text then parts[#parts + 1] = value.text end
+        if value and value.text then parts[#parts + 1] = "|TInterface\\MoneyFrame\\UI-GoldIcon:16:16|t " .. value.text end
     end
     local lure = F.Lure and F.Lure.Status and F.Lure.Status() or nil
     if lure and (lure.state == "active" or lure.state == "expiring") and lure.seconds then
-        parts[#parts + 1] = "Lure " .. (lure.seconds >= 60 and (math.floor(lure.seconds / 60) .. "m") or (math.floor(lure.seconds) .. "s"))
+        parts[#parts + 1] = H.Glyph("glyph-lure", 20) .. " Lure: "
+            .. (lure.seconds >= 60 and (math.floor(lure.seconds / 60) .. "m") or (math.floor(lure.seconds) .. "s"))
     elseif lure and lure.state == "none" then
-        parts[#parts + 1] = "No lure"
+        parts[#parts + 1] = H.Glyph("glyph-lure", 20) .. " No lure"
     end
-    return table.concat(parts, BULLET)
+    return table.concat(parts, GAP)
 end
 
 -- A warning the player can act on (pending gear, held data), or the prompts. Returns text, isWarning.

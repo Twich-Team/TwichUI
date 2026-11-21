@@ -23,8 +23,21 @@ corrected here, and why:
                                                    one-pixel feathered edge) so the caught item's real icon shows through
                                                    from under it. The well's bounds are WELL below.
     glint            effects/glint.png             a gold flare, behind a treasure notification's icon. Resampled only.
-    divider          decoration/divider_lower.png  the thin bronze rule between the catch list's sections. Resampled only.
-    mark             branding/mini_icon.png        the small fish mark beside the prompts. Resampled only.
+    mark             branding/mini_icon.png        the small fish mark, beside the catches under the cast bar. Resampled only.
+    logo             branding/fishing_logo.png     the "TwichUI Fishing" emblem and plaque, top left in immersive Fishing Mode (as
+                                                   in the approved mockup). Kept at its own size on a 512 x 256 canvas.
+    iconframe        hud/catch_toast_fish_reference.png    the notification's bronze octagonal icon frame on its own, for the
+                                                   catch list's item icons: the sample fish cut out of the well (as for toast)
+                                                   and the band cut away outside the frame's outer octagon (OUTER).
+    rule             decoration/divider_upper.png  the fine bronze rule with a small centre ornament: under the catch list's
+                                                   heading and treasures heading, and faintly between its rows (as in the
+                                                   mockup). Resampled only. (divider_lower, with three diamonds, read heavier
+                                                   than the mockup's rules and is not used.)
+    glyph-lure       icons/lure.png                the feather lure, beside the lure's time under the cast bar
+    glyph-time       icons/bobber.png              the bobber, beside the session's length under the cast bar. Each glyph is
+                                                   fitted to a 64 px square with its aspect kept, as the mockup's stat row shows
+                                                   them; the catches use `mark` (the pack's collection fish are framed tiles,
+                                                   not symbols, and are not used).
     scrim            (made here)                   a soft, warm, very dark oval, feathered to nothing on every side, drawn
                                                    faintly under the catch list and the cast bar's lines so ivory text reads
                                                    over bright snow or water as well as at night. No edge anywhere.
@@ -51,14 +64,16 @@ from make_map_tool_icons import read_png, resample  # noqa: E402
 
 # Measured on cast_bar_empty.png (513 x 85): the dark trough's inside, left, top, right, bottom (exclusive), source px.
 TROUGH = (103, 40, 461, 58)
+# The fish toast's frame on its own (iconframe): its outer octagon, left, top, right, bottom (exclusive), chamfer, source px.
+OUTER = (3, 2, 99, 96, 14)
 # The icon well of each toast's frame: left, top, right, bottom (exclusive) and the chamfer of its corners, source px.
 WELL = {
-    "toast": (11, 10, 92, 87, 10),
-    "toast-treasure": (11, 11, 79, 80, 9),
+    "toast": (11, 10, 93, 86, 10),
+    "toast-treasure": (11, 12, 85, 83, 10),
 }
 AMBER = (204, 146, 66)       # the tone the fill is moved towards
-AMBER_MIX = 0.42             # how far (0 none, 1 all the way)
-FILL_GAIN = 0.94             # and a little darker than the pack's
+AMBER_MIX = 0.28             # how far (0 none, 1 all the way): the mockup's warm gold, not the pack's flat yellow
+FILL_GAIN = 0.98             # and a touch darker than the pack's
 
 
 def blank(w, h):
@@ -184,6 +199,54 @@ def toast(src, name, file):
     return canvas, (w, h), {"well": (x0, y0, x1, y1)}
 
 
+def octagon(x, y, box):
+    """Signed distance (pixels, positive inside) from (x, y) to an octagon (left, top, right, bottom, chamfer)."""
+    x0, y0, x1, y1, c = box
+    r2 = math.sqrt(2)
+    return min(x + 0.5 - x0, x1 - x - 0.5, y + 0.5 - y0, y1 - y - 0.5,
+               (x + 0.5 - x0 + y + 0.5 - y0 - c) / r2, (x1 - x - 0.5 + y + 0.5 - y0 - c) / r2,
+               (x + 0.5 - x0 + y1 - y - 0.5 - c) / r2, (x1 - x - 0.5 + y1 - y - 0.5 - c) / r2)
+
+
+def iconframe(src):
+    canvas, _, facts = toast(src, "toast", "catch_toast_fish_reference.png")
+    x0, y0, x1, y1, _c = OUTER
+    w, h = x1 - x0, y1 - y0
+    rows = []
+    for y in range(y0, y1):
+        row = bytearray(canvas[y][x0 * 4:x1 * 4])
+        for x in range(w):
+            keep = max(0.0, min(1.0, octagon(x0 + x, y, OUTER) + 0.5))
+            row[x * 4 + 3] = int(row[x * 4 + 3] * keep)
+        rows.append(row)
+    side = 64
+    body = resample(rows, (0, 0, w, h), side, side)
+    out = blank(side, side)
+    paste(out, body, 0, 0)
+    wx0, wy0, wx1, wy1 = facts["well"]
+    sx, sy = side / float(w), side / float(h)
+    well = (round((wx0 - x0) * sx, 1), round((wy0 - y0) * sy, 1), round((wx1 - x0) * sx, 1), round((wy1 - y0) * sy, 1))
+    return out, (side, side), {"well": well}
+
+
+def glyph(src, file):
+    w, h, px, _ = read_png(os.path.join(src, file))
+    side, fill = 64, 60
+    s = fill / float(max(w, h))
+    ow, oh = max(1, int(round(w * s))), max(1, int(round(h * s)))
+    body = resample(px, (0, 0, w, h), ow, oh)
+    out = blank(side, side)
+    paste(out, body, (side - ow) // 2, (side - oh) // 2)
+    return out, (side, side), {}
+
+
+def logo(src):
+    w, h, px, _ = read_png(os.path.join(src, "fishing_logo.png"))
+    out = blank(pow2(w), pow2(h))
+    paste(out, px, 0, 0)
+    return out, (w, h), {}
+
+
 def plain(src, file, ow, oh):
     w, h, px, _ = read_png(os.path.join(src, file))
     return fit(px, (0, 0, w, h), ow, oh) + ({},)
@@ -225,8 +288,12 @@ def builds(src):
         ("toast", lambda: toast(src, "toast", "catch_toast_fish_reference.png")),
         ("toast-treasure", lambda: toast(src, "toast-treasure", "catch_toast_pearl_reference.png")),
         ("glint", lambda: plain(src, "glint.png", 128, 61)),
-        ("divider", lambda: plain(src, "divider_lower.png", 256, 26)),
         ("mark", lambda: plain(src, "mini_icon.png", 63, 64)),
+        ("logo", lambda: logo(src)),
+        ("iconframe", lambda: iconframe(src)),
+        ("rule", lambda: plain(src, "divider_upper.png", 256, 30)),
+        ("glyph-lure", lambda: glyph(src, "lure.png")),
+        ("glyph-time", lambda: glyph(src, "bobber.png")),
         ("scrim", lambda: scrim(src)),
         ("rowglow", lambda: rowglow(src)),
     ]

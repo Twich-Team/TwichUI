@@ -77,7 +77,8 @@ do
   Check(not ui.fill:IsShown() and (ui.time:GetText() == "3s" or ui.time:GetText() == "2s"), "no channel times: elapsed seconds, no invented progress")
   Catch(W, { { FISH1, 1 } })
   local text = ui.stats:GetText()
-  Check(text:find("2 catches", 1, true) and not text:find("ure", 1, true), "the figures under the bar (no pole: no lure figure): " .. text)
+  Check(text:find("2 Catches", 1, true) and not text:find("ure", 1, true), "the figures under the bar (no pole: no lure figure): " .. text)
+  Check(text:find("glyph-time", 1, true) and text:find("TwichUI_Fishing\\media\\mark", 1, true), "each figure after its glyph from the texture pack")
   Check(not text:find("g", 1, true) or not text:match("%d+g"), "no money is shown without a valuation")
   c.TwichUI.RunCommand("fish stop")
   Check(not CB.Shown() and frame:GetScript("OnUpdate") == nil, "hidden: nothing runs")
@@ -106,7 +107,11 @@ do
   Check(rows[1].icon:GetTexture() == "Interface\\Icons\\item" .. FISH1, "the game's own icon")
   Check(rows[1].glowAnim.plays >= 1, "the row just caught glows")
   Check((rows[1].arrive.plays or 0) + (rows[2].arrive.plays or 0) == 2, "each new row arrived once with a short fade")
-  Check(not ui.value:IsShown() and not ui.valueLabel:IsShown(), "no value and no space for one without a valuation")
+  Check(ui.valueLabel:IsShown() and ui.value:GetText() == "Not available yet", "no valuation: the value area says so plainly, no figure")
+  F.Present.Configure("list.value", "hide")
+  Check(not ui.value:IsShown() and not ui.valueLabel:IsShown(), "and it can be left out")
+  F.Present.Configure("list.value", "show")
+  Check(rows[1].badge:GetText() == "2" and rows[1].rim:GetTexture():find("iconframe", 1, true), "the icon sits in the pack's bronze frame with its quantity on the corner")
   F.Present.Configure("list.sort", "name")
   Check(rows[1].name:GetText() == "Raw Greater Sagefish", "sorted by name when asked")
   F.Present.Configure("list.sort", "recent")
@@ -143,7 +148,7 @@ do
   Check(F.Hud.serial == serial, "(no record changed meanwhile)")
   Check(asked == before, "the valuation is never asked from an animation or timer")
   F.Present.SetValueProvider(function() error("broken valuation") end)
-  Check(not ui.value:IsShown() and F.noteCounts["value-error"] >= 1, "a failing valuation shows nothing and is noted")
+  Check(ui.value:GetText() == "Not available yet" and F.noteCounts["value-error"] >= 1, "a failing valuation shows no figure and is noted")
   F.Present.SetValueProvider(nil)
   -- the session's length ticks once a second, without a redraw
   local builds = Lst.builds
@@ -167,7 +172,7 @@ do
   c.TwichUI.RunCommand("fish mode")
   Cast(W); Catch(W, { { FISH1, 1 }, { FISH1, 2 } })
   local active, queue = T.Active()
-  Check(#active == 1 and active[1].entry.q == 3 and active[1].name:GetText() == "Raw Mithril Head Trout \195\1513", "two stacks of one item: one notice, x3")
+  Check(#active == 1 and active[1].entry.q == 3 and active[1].name:GetText() == "Raw Mithril Head Trout |cffe0bd85\195\1513|r", "two stacks of one item: one notice, x3")
   Check(active[1].title:GetText() == "Caught!" and active[1].icon:GetTexture() == "Interface\\Icons\\item" .. FISH1, "with the item's own icon")
   Check(not active[1].value:IsShown(), "no value line without a valuation")
   Cast(W); Catch(W, { { FISH1, 1 } })
@@ -195,6 +200,18 @@ do
   local kinds = {}
   for _, f in ipairs(active) do kinds[#kinds + 1] = f.entry.kind .. ":" .. f.entry.id end
   Check(table.concat(kinds, ","):find("treasure:" .. PEARL, 1, true), "a pearl from a clam is a treasure: " .. table.concat(kinds, ","))
+  -- a long name lengthens the band (its middle slice), never the frame or the fading end
+  W.Frames(12)
+  Cast(W); Catch(W, { { 9100, 1 } })
+  local short = T.Active()[1]
+  local shortW, frameW, endW, midW = short:GetWidth(), short.artL:GetWidth(), short.artR:GetWidth(), short.artM:GetWidth()
+  W.Frames(12)
+  Cast(W); Catch(W, { { JUNK, 1 } })
+  local long = T.Active()[1]
+  Check(long:GetWidth() > shortW + 50 and long.artM:GetWidth() > midW and long.artL:GetWidth() == frameW
+    and long.artR:GetWidth() == endW, ("a long name: a longer band (%.0f -> %.0f), the same frame and end"):format(shortW, long:GetWidth()))
+  Check(long.artM:GetTexture():find("toast", 1, true) and select(1, long.artM:GetTexCoord()) > 0.2, "cut from the pack's own notification art")
+  W.Frames(12)
   -- turned off
   F.Present.Configure("toast.enabled", false)
   W.Frames(10)
@@ -255,7 +272,7 @@ do
   Check(F.CastBar.Shown() and F.CatchList.Shown() and #({ F.Toast.Active() })[1] == 1, "all three show sample figures to place")
   -- the player drags the bar 100 to the right and 40 up
   frame.scripts.OnDragStart(frame)
-  frame:ClearAllPoints(); frame:SetPoint("BOTTOMLEFT", c.UIParent, "BOTTOMLEFT", 683 - 180 + 100, 190)
+  frame:ClearAllPoints(); frame:SetPoint("BOTTOMLEFT", c.UIParent, "BOTTOMLEFT", 683 - 200 + 100, 190)
   frame.scripts.OnDragStop(frame)
   Check(F.Store.Get("castbar.x") == 100 and F.Store.Get("castbar.y") == 190, "the new place is saved: " .. F.Store.Get("castbar.x") .. "," .. F.Store.Get("castbar.y"))
   c.TwichUI.RunCommand("fish move")
@@ -263,7 +280,7 @@ do
   c.TwichUI.RunCommand("fish scale castbar 1.25")
   c.TwichUI.RunCommand("fish mode")
   local l, b, w = W.UI.Rect(frame)
-  Check(math.abs(w - 360 * 1.25) < 0.5 and math.abs(l + w / 2 - (683 + 125)) < 1, "scaled, and still where it was put")
+  Check(math.abs(w - 400 * 1.25) < 0.5 and math.abs(l + w / 2 - (683 + 125)) < 1, "scaled, and still where it was put")
   c.TwichUI.RunCommand("fish scale castbar 3")
   Check(F.Store.Get("castbar.scale") == 1.25, "a scale out of range is refused")
 end

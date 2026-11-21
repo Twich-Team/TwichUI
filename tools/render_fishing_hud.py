@@ -12,7 +12,7 @@ collection art) because the game's own icons are not available outside it. Treat
 ("screenshot-reviewed", offline), never as real-client evidence.
 
     python3 tools/render_fishing_hud.py [--out test-output/fishing-captures] [--scenes immersive,compact,castbar]
-                                        [--backdrops bright,dark,sunset] [--scale 2]
+                                        [--backdrops bright,dark,sunset] [--scale 2] [--compare mockup.png]
 
 Needs lua5.1 (with the bit library, as tests/run.sh does) and Pillow.
 """
@@ -186,24 +186,42 @@ def draw_texture(canvas, r, scale):
     l, rr, t, b = r.get("coords") or [0, 1, 0, 1]
     box = (int(round(l * src.width)), int(round(t * src.height)), max(int(round(rr * src.width)), int(round(l * src.width)) + 1),
            max(int(round(b * src.height)), int(round(t * src.height)) + 1))
-    img = src.crop(box).resize((max(1, int(round(w))), max(1, int(round(h)))), Image.LANCZOS)
-    blit(canvas, img, x, y, alpha, add=r.get("blend") == "ADD")
+    x0, y0 = math.floor(x), math.floor(y)
+    img = src.crop(box).resize((max(1, int(math.ceil(x + w)) - x0), max(1, int(math.ceil(y + h)) - y0)), Image.LANCZOS)
+    blit(canvas, img, x0, y0, alpha, add=r.get("blend") == "ADD")
 
 
-COLOR = re.compile(r"\|c([0-9a-fA-F]{8})(.*?)(?:\|r|$)")
+TOKEN = re.compile(r"\|c([0-9a-fA-F]{8})|\|r|\|T(.*?)\|t")
 
 
 def segments(text, base):
-    out, pos = [], 0
-    for m in COLOR.finditer(text):
+    """Text and inline textures in order: ("text", s, color) and ("tex", path, size, coords)."""
+    out, pos, color = [], 0, base
+    for m in TOKEN.finditer(text):
         if m.start() > pos:
-            out.append((text[pos:m.start()], base))
-        hx = m.group(1)
-        out.append((m.group(2), (int(hx[2:4], 16), int(hx[4:6], 16), int(hx[6:8], 16))))
+            out.append(("text", text[pos:m.start()], color))
+        tok = m.group(0)
+        if tok.startswith("|c"):
+            hx = m.group(1)
+            color = (int(hx[2:4], 16), int(hx[4:6], 16), int(hx[6:8], 16))
+        elif tok == "|r":
+            color = base
+        else:
+            parts = m.group(2).split(":")
+            size = float(parts[1]) if len(parts) > 1 and parts[1] else 14.0
+            coords = None
+            if len(parts) >= 11:
+                tw, th, l, r, t, b = (float(v) for v in parts[5:11])
+                coords = (l / tw, r / tw, t / th, b / th)
+            out.append(("tex", parts[0], size, coords))
         pos = m.end()
     if pos < len(text):
-        out.append((text[pos:].replace("|r", ""), base))
+        out.append(("text", text[pos:], color))
     return out
+
+
+def seg_width(f, seg, unit):
+    return f.getlength(seg[1]) if seg[0] == "text" else seg[2] * unit
 
 
 def draw_text(canvas, r, scale):
@@ -211,24 +229,22 @@ def draw_text(canvas, r, scale):
     if not text:
         return
     path = game_path(r.get("font")) or os.path.join(ADDONS["!!!TwichUI"], "media", "fonts", "AlegreyaSans-Medium.ttf")
-    px = max(6, int(round(r["size"] * scale * r.get("scale", 1))))
+    unit = scale * r.get("scale", 1)
+    px = max(6, int(round(r["size"] * unit)))
     f = font(path, px)
     c = r.get("color") or [1, 1, 1, 1]
     base = tuple(int(v * 255) for v in c[:3])
     segs = segments(text, base)
-    width = sum(f.getlength(s) for s, _ in segs)
+    width = sum(seg_width(f, sg, unit) for sg in segs)
     x, y, w, h = to_px(r["rect"], scale)
     anchor, justify = r.get("hanchor"), r.get("justify") or "CENTER"
     if r.get("fixedWidth"):
-        if justify == "LEFT":
-            tx = x
-        elif justify == "RIGHT":
+        if justify == "RIGHT":
             tx = x + w - width
+        elif justify == "LEFT" or width > w + 1:
+            tx = x
         else:
             tx = x + (w - width) / 2
-        # a fixed width clips (the game's word-wrap off: an ellipsis-free cut)
-        if width > w + 1:
-            tx = x if justify != "RIGHT" else x + w - width
     elif anchor == "R":
         tx = x + w - width
     elif anchor == "C":
@@ -237,25 +253,39 @@ def draw_text(canvas, r, scale):
         tx = x
     asc, desc = f.getmetrics()
     ty = y + h / 2 - (asc + desc) / 2
+    mid = y + h / 2
     alpha = r["alpha"] * (c[3] if len(c) > 3 else 1)
     lay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-    d = ImageDraw.Draw(lay)
     if r.get("shadow"):
         sx, sy = r["shadow"]
-        cx = tx
-        for s, _ in segs:
-            d.text((cx + sx * scale, ty - sy * scale), s, font=f, fill=(0, 0, 0, int(235 * alpha)))
-            cx += f.getlength(s)
-        lay = lay.filter(ImageFilter.GaussianBlur(scale * 0.45))
         d = ImageDraw.Draw(lay)
+        cx = tx
+        for sg in segs:
+            if sg[0] == "text":
+                d.text((cx + sx * scale, ty - sy * scale), sg[1], font=f, fill=(0, 0, 0, int(235 * alpha)))
+            cx += seg_width(f, sg, unit)
+        lay = lay.filter(ImageFilter.GaussianBlur(scale * 0.45))
+    d = ImageDraw.Draw(lay)
     cx = tx
-    clip = (x, x + w) if r.get("fixedWidth") else None
-    for s, col in segs:
-        d.text((cx, ty), s, font=f, fill=col + (int(255 * alpha),))
-        cx += f.getlength(s)
-    if clip:
+    for sg in segs:
+        if sg[0] == "text":
+            d.text((cx, ty), sg[1], font=f, fill=sg[2] + (int(255 * alpha),))
+        else:
+            src_path = game_path(sg[1])
+            side = int(round(sg[2] * unit))
+            if src_path and side > 0:
+                src = texture(src_path)
+                if sg[3]:
+                    l, rr, t, b = sg[3]
+                    src = src.crop((int(l * src.width), int(t * src.height), int(rr * src.width), int(b * src.height)))
+                img = src.resize((side, side), Image.LANCZOS)
+                if alpha < 1:
+                    img.putalpha(img.getchannel("A").point(lambda v: int(v * alpha)))
+                lay.alpha_composite(img, (int(round(cx)), int(round(mid - side / 2))))
+        cx += seg_width(f, sg, unit)
+    if r.get("fixedWidth"):
         mask = Image.new("L", canvas.size, 0)
-        ImageDraw.Draw(mask).rectangle([clip[0] - 2 * scale, 0, clip[1] + 2 * scale, canvas.height], fill=255)
+        ImageDraw.Draw(mask).rectangle([x - 2 * scale, 0, x + w + 2 * scale, canvas.height], fill=255)
         lay.putalpha(Image.composite(lay.getchannel("A"), Image.new("L", canvas.size, 0), mask))
     canvas.alpha_composite(lay)
 
@@ -270,12 +300,49 @@ def render(data, kind, scale):
     return canvas
 
 
+# The mockup's pieces (its own pixels, 1672 x 941) and the same pieces of a capture (screen units, 1366 x 768).
+PIECES = [
+    ("Emblem", (20, 10, 205, 90), (10, 8, 205, 92)),
+    ("Catch list", (1280, 40, 1672, 410), (995, 60, 1366, 500)),
+    ("Notification", (20, 360, 560, 465), (55, 395, 535, 495)),
+    ("Cast bar", (590, 355, 1130, 475), (470, 545, 896, 662)),
+]
+
+
+def compare(mockup_path, capture_path, out_path):
+    """The approved mockup beside a capture, piece by piece, each pair at the same height."""
+    mock = Image.open(mockup_path).convert("RGB")
+    cap = Image.open(capture_path).convert("RGB")
+    k = cap.width / float(W)
+    rows, width = [], 0
+    for label, mbox, cbox in PIECES:
+        m = mock.crop(mbox)
+        c = cap.crop(tuple(int(v * k) for v in cbox))
+        h = 300 if label == "Catch list" else 150
+        m = m.resize((int(m.width * h / m.height), h), Image.LANCZOS)
+        c = c.resize((int(c.width * h / c.height), h), Image.LANCZOS)
+        rows.append((label, m, c))
+        width = max(width, m.width + c.width + 60)
+    height = sum(m.height + 40 for _, m, _ in rows) + 20
+    sheet = Image.new("RGB", (width, height), (22, 18, 16))
+    d = ImageDraw.Draw(sheet)
+    f = font(os.path.join(ADDONS["!!!TwichUI"], "media", "fonts", "AlegreyaSans-Medium.ttf"), 18)
+    y = 10
+    for label, m, c in rows:
+        d.text((10, y), label + ": approved mockup (left), offline capture (right)", font=f, fill=(226, 210, 180))
+        sheet.paste(m, (10, y + 28))
+        sheet.paste(c, (m.width + 40, y + 28))
+        y += m.height + 40
+    sheet.save(out_path, optimize=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.join(ROOT, "test-output", "fishing-captures"))
     ap.add_argument("--scenes", default="immersive,compact,castbar")
     ap.add_argument("--backdrops", default="bright,dark,sunset")
     ap.add_argument("--scale", type=int, default=2)
+    ap.add_argument("--compare", help="the approved mockup image: also writes compare-mockup.png beside the captures")
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
     for scene in args.scenes.split(","):
@@ -288,6 +355,10 @@ def main():
             path = os.path.join(args.out, "%s-%s.png" % (scene, kind))
             img.convert("RGB").save(path, optimize=True)
             print("  wrote", path)
+    if args.compare:
+        out = os.path.join(args.out, "compare-mockup.png")
+        compare(args.compare, os.path.join(args.out, "immersive-sunset.png"), out)
+        print("wrote", out)
 
 
 if __name__ == "__main__":

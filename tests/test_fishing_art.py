@@ -35,20 +35,31 @@ def pixel(t, x, y):
     return r, g, b, a
 
 
+LINE = re.compile(r'^\s*(?:\["([\w-]+)"\]|(\w+)) = \{ file = "([^"]+)", (.*)\},?\s*$')
+
+
 def art_table():
-    src = HUD.read_text()
+    """H.ART from Hud.lua: name -> { file, w, h, cw, ch, well? } (one entry per line)."""
     out = {}
-    for name, body in re.findall(r"(\w+) = \{ file = \"[^\"]+\", ([^}]*)", src):
-        fields = dict(re.findall(r"(\w+) = ([\d.]+)", body))
-        file = re.search(r"(\w+) = \{ file = \"([^\"]+)\"", src[src.index(name + " = { file"):]).group(2)
-        out[name] = {"file": file, **{k: float(v) for k, v in fields.items()}}
+    for line in HUD.read_text().splitlines():
+        m = LINE.match(line)
+        if not m:
+            continue
+        name, rest = m.group(1) or m.group(2), m.group(4)
+        entry = {"file": m.group(3)}
+        well = re.search(r"well = \{ ([\d., ]+) \}", rest)
+        if well:
+            entry["well"] = [float(v) for v in well.group(1).split(",")]
+            rest = rest[:well.start()]
+        entry.update({k: float(v) for k, v in re.findall(r"(\w+) = ([\d.]+)", rest)})
+        out[name] = entry
     return out
 
 
 class FishingArt(unittest.TestCase):
     def test_files_are_game_textures(self):
         files = sorted(MEDIA.glob("*.tga"))
-        self.assertEqual(len(files), 10)
+        self.assertEqual(len(files), 14)
         for p in files:
             t = read_tga(p)
             with self.subTest(p.name):
@@ -59,7 +70,7 @@ class FishingArt(unittest.TestCase):
 
     def test_sizes_match_hud_lua(self):
         art = art_table()
-        self.assertGreaterEqual(len(art), 10)
+        self.assertGreaterEqual(len(art), 14)
         for name, a in art.items():
             t = read_tga(MEDIA / (a["file"] + ".tga"))
             with self.subTest(name):
@@ -73,17 +84,27 @@ class FishingArt(unittest.TestCase):
 
     def test_sample_icons_cut_out(self):
         art = art_table()
-        for name in ("toast", "treasure"):
+        for name in ("toast", "treasure", "iconframe"):
             a = art[name]
             t = read_tga(MEDIA / (a["file"] + ".tga"))
-            hud = HUD.read_text()
-            well = [int(v) for v in re.search(name + r" = \{[^}]*well = \{ ([\d, ]+) \}", hud).group(1).split(",")]
+            well = [int(v) for v in a["well"]]
             cx, cy = (well[0] + well[2]) // 2, (well[1] + well[3]) // 2
             with self.subTest(name):
                 for dx in range(-20, 21, 5):
                     for dy in range(-20, 21, 5):
                         self.assertEqual(pixel(t, cx + dx, cy + dy)[3], 0, "the well is transparent: no baked sample icon")
                 self.assertGreater(pixel(t, well[0] - 4, cy)[3], 200, "the bronze frame around it is kept")
+
+    def test_icon_frame_is_hollow_and_alone(self):
+        t = read_tga(MEDIA / "iconframe.tga")
+        self.assertEqual(pixel(t, 32, 32)[3], 0, "the well is empty: the item's own icon shows")
+        self.assertGreater(pixel(t, 2, 32)[3], 200, "the bronze rim is kept")
+        self.assertEqual(pixel(t, 63, 0)[3], 0, "no band outside the frame's chamfered corner")
+
+    def test_logo_is_the_pack_logo(self):
+        t = read_tga(MEDIA / "logo.tga")
+        self.assertEqual((t["w"], t["h"]), (512, 256))
+        self.assertGreater(pixel(t, 240, 98)[3], 200)
 
     def test_fill_has_rounded_ends(self):
         t = read_tga(MEDIA / "castfill.tga")

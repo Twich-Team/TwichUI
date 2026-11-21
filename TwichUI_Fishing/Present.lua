@@ -2,7 +2,8 @@
 -- How fishing looks while the player fishes with TwichUI. Three presentations (config present.mode):
 --
 --   immersive   the signature one: the cinematic camera (Camera.lua), the interface faded around the player (Fade.lua),
---               the cast bar (CastBar.lua), the catch list on the right (CatchList.lua) and catch notifications (Toast.lua)
+--               the cast bar (CastBar.lua), the catch list on the right (CatchList.lua), catch notifications (Toast.lua) and
+--               the TwichUI Fishing emblem at the top left (P.Brand)
 --   compact     the cast bar with its session figures, and catch notifications: no camera, nothing faded
 --   classic     Stage 1's fishing key and records with nothing more on screen
 -- Each part also has its own switch (camera.enabled, fade.enabled, list.enabled, toast.enabled), which only ever takes a
@@ -46,7 +47,7 @@ P.MODE_BINDING = "TWICHUI_FISHING_MODE"
 P.REVEAL_BINDING = "TWICHUI_FISHING_REVEAL"
 P.MODES = { immersive = true, compact = true, classic = true }
 P.PRESETS = {
-    immersive = { camera = true, fade = true, castbar = true, list = true, toast = true },
+    immersive = { camera = true, fade = true, castbar = true, list = true, toast = true, brand = true },
     compact = { castbar = true, toast = true },
     classic = {},
 }
@@ -75,6 +76,7 @@ function P.Parts(mode)
     out.castbar = preset.castbar or false
     out.list = preset.list and S.Get("list.enabled") ~= false or false
     out.toast = preset.toast and S.Get("toast.enabled") ~= false or false
+    out.brand = preset.brand and S.Get("present.brand") ~= false or false
     return out
 end
 
@@ -130,6 +132,7 @@ function P.Enter(why)
     local fine = true
     if parts.castbar then fine = Step("castbar", CB.Show) and fine end
     if parts.list then fine = Step("list", L.Show) and fine end
+    if parts.brand then fine = Step("brand", function() P.Brand(true) end) and fine end
     if parts.fade then fine = Step("fade", function() Fa.Apply() end) and fine end
     if parts.camera then
         fine = Step("camera", function()
@@ -157,6 +160,7 @@ function Leave(why, instant)
     Step("castbar off", CB.Hide)
     Step("list off", L.Hide)
     Step("toasts off", T.Clear)
+    Step("brand off", function() P.Brand(false) end)
     Tell()
     return true
 end
@@ -196,6 +200,27 @@ function P.Recover()
     if unlocked then P.Unlock(false) end
     return { was = was, camera = cam }
 end
+
+---------------------------------------------------------------------------
+-- The "TwichUI Fishing" emblem, top left in immersive Fishing Mode, as in the approved mockup (present.brand)
+---------------------------------------------------------------------------
+local brand
+function P.Brand(show)
+    if show and not brand then
+        local a = H.ART.logo
+        local f = CreateFrame("Frame", "TwichUIFishingBrand", UIParent)
+        f:SetSize(a.cw * 0.36, a.ch * 0.36)
+        f:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 22, -16)
+        f:SetFrameStrata("LOW")
+        f:EnableMouse(false)
+        local tex = f:CreateTexture(nil, "ARTWORK")
+        tex:SetAllPoints()
+        if not H.Texture(tex, "logo") then tex:Hide() end
+        brand = f
+    end
+    if brand then brand:SetShown(show and true or false) end
+end
+function P.BrandShown() return brand ~= nil and brand:IsShown() end
 
 ---------------------------------------------------------------------------
 -- Values (Stage 3 connects a valuation; nothing is priced here)
@@ -262,11 +287,13 @@ function P.Apply(path)
     local group = path:match("^(%w+)%.")
     if group == "castbar" then CB.Relayout()
     elseif group == "list" then L.Relayout(); L.Refresh()
+    elseif path == "present.prompts" then CB.RefreshLines()
     elseif group == "toast" then T.Relayout(); if path == "toast.enabled" and not S.Get(path) then T.Clear() end
     end
     if not on then return end
     -- a change to what the presentation shows takes effect by coming on again; a fade or camera figure, by redoing that part
-    if path == "present.mode" or path == "camera.enabled" or path == "fade.enabled" or path == "list.enabled" or path == "toast.enabled" then
+    if path == "present.mode" or path == "camera.enabled" or path == "fade.enabled" or path == "list.enabled" or path == "toast.enabled"
+        or path == "present.brand" then
         Leave("settings")
         if P.Mode() ~= "classic" then P.Enter("settings") end
     elseif path:match("^fade%.") and parts.fade then
@@ -356,7 +383,8 @@ P.HELP = {
     "/tui fish move - drag the cast bar, catch list and notices where you want them (again to lock them)",
     "/tui fish camera on|off, camera zoom <1-30 yards>, camera offset <-2..2, 0 is off>",
     "/tui fish fade on|off, fade bars|units|minimap|panels|notices on|off, fade alpha <0-0.6>, fade add|remove <FrameName>",
-    "/tui fish list on|off, list rows <3-12>, list sort count|recent|name; toasts on|off; scale castbar|list|toast <0.6-1.6>",
+    "/tui fish list on|off, list rows <3-12>, list sort count|recent|name, list value show|hide; toasts on|off; scale castbar|list|toast <0.6-1.6>",
+    "/tui fish brand on|off - the TwichUI Fishing emblem at the top left in immersive Fishing Mode",
     "/tui fish motion on|off, prompts on|off, vibrate on|off (gamepad, on a confirmed catch; unverified)",
     "Keys: Key Bindings > TwichUI > \"Fishing Mode\" and \"Fishing: reveal the interface (hold)\".",
 }
@@ -413,6 +441,9 @@ function P.Command(word, rest)
         end
     elseif word == "list" then
         if sub == "rows" then Set("list.rows", tonumber(val), "the catch list shows up to " .. tostring(val) .. " rows.")
+        elseif sub == "value" then
+            local v = val:lower()
+            Set("list.value", v, v == "hide" and "no value area on the catch list." or "the catch list keeps its value area.")
         elseif sub == "sort" then
             local v = val:lower(); Set("list.sort", v, "the catch list is sorted by " .. v .. ".")
         else
@@ -426,7 +457,7 @@ function P.Command(word, rest)
         local group = ({ castbar = "castbar", bar = "castbar", list = "list", toast = "toast", toasts = "toast" })[sub]
         if not group then Say("usage: /tui fish scale castbar|list|toast <0.6-1.6>") return true end
         Set(group .. ".scale", tonumber(val), group .. " scale " .. tostring(val) .. ".")
-    elseif word == "motion" or word == "prompts" or word == "vibrate" then
+    elseif word == "motion" or word == "prompts" or word == "vibrate" or word == "brand" then
         local v = OnOff(sub); if v == nil then Say("usage: /tui fish %s on|off", word) return true end
         Set("present." .. word, v, word .. " " .. (v and "on." or "off."))
     else

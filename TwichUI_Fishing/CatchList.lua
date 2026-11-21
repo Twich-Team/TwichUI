@@ -22,9 +22,9 @@ local H = F.Hud
 local L = {}
 F.CatchList = L
 
-L.WIDTH = 290
-L.ROW_H = 38
-L.SMALL_H = 22
+L.WIDTH = 320
+L.ROW_H = 48
+L.SMALL_H = 28
 L.MAX = 12          -- rows made at most (list.rows is 3..12)
 L.TREASURES = 5     -- treasure rows at most
 
@@ -40,17 +40,6 @@ local function Text(parent, size, role, color, layer)
     H.Font(fs, size, role)
     H.Color(fs, color or H.IVORY)
     return fs
-end
-
-local function Rim(parent, size)
-    local rim = parent:CreateTexture(nil, "ARTWORK", nil, 0)
-    rim:SetSize(size + 2, size + 2)
-    rim:SetColorTexture(H.BRONZE[1] * 0.85, H.BRONZE[2] * 0.85, H.BRONZE[3] * 0.85, 0.95)
-    local icon = parent:CreateTexture(nil, "ARTWORK", nil, 1)
-    icon:SetSize(size, size)
-    icon:SetPoint("CENTER", rim, "CENTER")
-    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    return rim, icon
 end
 
 local function Glow(row)
@@ -81,18 +70,29 @@ end
 local function MakeRow(i)
     local row = CreateFrame("Frame", nil, frame)
     row:SetSize(L.WIDTH, L.ROW_H)
-    row.rim, row.icon = Rim(row, 30)
+    row.rim, row.icon = H.FramedIcon(row, 38)
     row.rim:SetPoint("LEFT", row, "LEFT", 0, 0)
-    row.name = Text(row, 14, "strong")
-    row.name:SetPoint("TOPLEFT", row.rim, "TOPRIGHT", 9, -1)
-    row.name:SetPoint("RIGHT", row, "RIGHT", -58, 0)
+    -- the quantity on the icon's corner, as on an item button
+    row.badge = Text(row, 12, "strong", H.IVORY, "OVERLAY")
+    row.badge:SetPoint("BOTTOMRIGHT", row.rim, "BOTTOMRIGHT", -4, 4)
+    row.badge:SetJustifyH("RIGHT")
+    row.name = Text(row, 17, "strong")
+    row.name:SetPoint("TOPLEFT", row.rim, "TOPRIGHT", 10, -2)
+    row.name:SetPoint("RIGHT", row, "RIGHT", -62, 0)
     row.name:SetJustifyH("LEFT")
     row.name:SetWordWrap(false)
-    row.sub = Text(row, 12, "body", H.MUTED)
-    row.sub:SetPoint("BOTTOMLEFT", row.rim, "BOTTOMRIGHT", 9, 1)
-    row.count = Text(row, 20, "serif")
+    row.sub = Text(row, 14, "body", H.AMBERTEXT)
+    row.sub:SetPoint("BOTTOMLEFT", row.rim, "BOTTOMRIGHT", 10, 3)
+    row.count = Text(row, 23, "serif")
     row.count:SetPoint("RIGHT", row, "RIGHT", 0, 0)
     row.count:SetJustifyH("RIGHT")
+    -- the fine bronze rule under the row (the texture pack's rule, faint)
+    row.rule = row:CreateTexture(nil, "BACKGROUND", nil, 1)
+    row.rule:SetPoint("TOPLEFT", row, "BOTTOMLEFT", 0, 6)
+    row.rule:SetPoint("TOPRIGHT", row, "BOTTOMRIGHT", 0, 6)
+    row.rule:SetHeight(12)
+    H.Texture(row.rule, "rule", { 0.6, 0.45, 0.26, 0.4 })
+    row.rule:SetAlpha(0.5)
     Glow(row)
     Arrive(row)
     row:Hide()
@@ -103,10 +103,10 @@ end
 local function MakeSmall(i)
     local row = CreateFrame("Frame", nil, frame)
     row:SetSize(L.WIDTH, L.SMALL_H)
-    row.rim, row.icon = Rim(row, 18)
-    row.rim:SetPoint("LEFT", row, "LEFT", 6, 0)
-    row.name = Text(row, 13, "body")
-    row.name:SetPoint("LEFT", row.rim, "RIGHT", 9, 0)
+    row.rim, row.icon = H.FramedIcon(row, 24)
+    row.rim:SetPoint("LEFT", row, "LEFT", 8, 0)
+    row.name = Text(row, 15, "body")
+    row.name:SetPoint("LEFT", row.rim, "RIGHT", 12, 0)
     row.name:SetPoint("RIGHT", row, "RIGHT", 0, 0)
     row.name:SetJustifyH("LEFT")
     row.name:SetWordWrap(false)
@@ -131,27 +131,28 @@ local function Build()
     u.scrim:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 110, -60)
     H.Texture(u.scrim, "scrim", { 0.06, 0.04, 0.03, 0.35 })
     u.scrim:SetAlpha(H.SHADE)
-    u.title = Text(f, 20, "serif")
+    u.title = Text(f, 23, "serif")
     u.title:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-    u.title:SetText("This Session")
-    u.since = Text(f, 12, "body", H.MUTED)
+    u.title:SetText("Today's Catch")
+    u.since = Text(f, 14, "body", H.SOFT)
     u.since:SetPoint("TOPLEFT", u.title, "BOTTOMLEFT", 0, -3)
-    u.valueLabel = Text(f, 11, "body", H.MUTED)
-    u.valueLabel:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, -1)
+    u.valueLabel = Text(f, 13, "body", H.SOFT)
+    u.valueLabel:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, -2)
     u.valueLabel:SetText("Estimated Value")
-    u.value = Text(f, 20, "serif", H.GOLD)
+    u.value = Text(f, 23, "serif", H.GOLD)
     u.value:SetPoint("TOPRIGHT", u.valueLabel, "BOTTOMRIGHT", 0, -2)
+    -- the fine bronze rule with its small centre ornament (the pack's divider_upper), as under the mockup's heading
     u.rule = f:CreateTexture(nil, "ARTWORK")
-    u.rule:SetSize(L.WIDTH, L.WIDTH * 26 / 256)
-    H.Texture(u.rule, "divider", { 0.7, 0.52, 0.3, 0.5 })
+    u.rule:SetSize(L.WIDTH, L.WIDTH * 30 / 256)
+    H.Texture(u.rule, "rule", { 0.7, 0.52, 0.3, 0.5 })
     u.more = Text(f, 12, "body", H.MUTED)
-    u.treasures = Text(f, 16, "serif")
+    u.treasures = Text(f, 18, "serif")
     u.treasures:SetText("Other Treasures")
     u.rule2 = f:CreateTexture(nil, "ARTWORK")
-    u.rule2:SetSize(L.WIDTH, L.WIDTH * 26 / 256)
-    H.Texture(u.rule2, "divider", { 0.7, 0.52, 0.3, 0.5 })
-    u.totals = Text(f, 12, "strong", H.MUTED)
-    u.empty = Text(f, 13, "body", H.MUTED)
+    u.rule2:SetSize(L.WIDTH, L.WIDTH * 30 / 256)
+    H.Texture(u.rule2, "rule", { 0.7, 0.52, 0.3, 0.5 })
+    u.totals = Text(f, 13, "strong", H.SOFT)
+    u.empty = Text(f, 14, "body", H.SOFT)
     u.empty:SetText("Nothing caught yet this session.")
     H.Movable(f, "list", "RIGHT")
     -- kept only once every part exists: a build that fails part-way leaves nothing half-made in use
@@ -270,9 +271,16 @@ function L.Refresh()
     ui.more:Hide(); ui.treasures:Hide(); ui.rule2:Hide(); ui.empty:Hide()
     local P = F.Present
     local value = not L.preview and P and P.Value and P.Value("session") or nil
-    ui.valueLabel:SetShown(value ~= nil and value.text ~= nil)
-    ui.value:SetShown(value ~= nil and value.text ~= nil)
-    if value and value.text then ui.value:SetText(value.text) end
+    -- the value area keeps its place: a connected valuation's figure, or plainly "not available" (list.value "hide" drops it)
+    local has = value ~= nil and value.text ~= nil
+    local showArea = has or S.Get("list.value") ~= "hide"
+    ui.valueLabel:SetShown(showArea)
+    ui.value:SetShown(showArea)
+    if has then
+        ui.value:SetText(value.text); H.Font(ui.value, 23, "serif"); H.Color(ui.value, H.GOLD)
+    else
+        ui.value:SetText("Not available yet"); H.Font(ui.value, 13, "body"); H.Color(ui.value, H.MUTED)
+    end
     if not m then
         ui.since:SetText("No session in progress")
         ui.rule:ClearAllPoints(); ui.rule:SetPoint("TOPLEFT", ui.since, "BOTTOMLEFT", 0, -4)
@@ -282,9 +290,12 @@ function L.Refresh()
         return
     end
     ui.since:SetText(Since(m.session))
+    -- "Today's Catch" (the mockup's words) when the session began today, else what it is
+    local today = not m.session.start or (date and date("%Y%m%d", m.session.start) == date("%Y%m%d", F.Now()))
+    ui.title:SetText(today and "Today's Catch" or "This Session's Catch")
     ui.rule:ClearAllPoints()
     ui.rule:SetPoint("TOPLEFT", ui.since, "BOTTOMLEFT", 0, -4)
-    local y = -(20 + 3 + 14 + 4 + ui.rule:GetHeight() + 2)
+    local y = -(23 + 3 + 16 + 4 + ui.rule:GetHeight() + 2)
     local limit = math.floor(S.Get("list.rows") or 6)
     local shown = math.min(#m.catches, limit, L.MAX)
     for i = 1, shown do
@@ -298,6 +309,8 @@ function L.Refresh()
         local per = value and value.items and value.items[e.id]
         if per then row.sub:SetText(row.sub:GetText() .. " \226\128\148 " .. per) end
         row.count:SetText("\195\151" .. e.q)
+        row.badge:SetText(e.q > 1 and e.q or "")
+        row.rule:SetShown(i < shown)
         row:Show()
         Flash(row, e.id, not seen[e.id] and not L.preview)
         seen[e.id] = true
@@ -315,7 +328,7 @@ function L.Refresh()
     if #m.treasures > 0 then
         y = y - 8
         ui.treasures:ClearAllPoints(); ui.treasures:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, y); ui.treasures:Show()
-        y = y - 20
+        y = y - 22
         ui.rule2:ClearAllPoints(); ui.rule2:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, y); ui.rule2:Show()
         y = y - ui.rule2:GetHeight()
         for i = 1, math.min(#m.treasures, L.TREASURES) do
@@ -324,7 +337,7 @@ function L.Refresh()
             row:ClearAllPoints()
             row:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, y)
             row.icon:SetTexture(e.icon or H.QUESTION)
-            local text = Label(e) .. "  |cffd8ccb4\195\151" .. e.q .. "|r"
+            local text = Label(e) .. "  |cffe0bd85\195\151" .. e.q .. "|r"
             if e.kind == "container" and (e.unopened or 0) > 0 then text = text .. "  |cffa89a84(" .. e.unopened .. " unopened)|r" end
             local per = value and value.items and value.items[e.id]
             if per then text = text .. "  |cffa89a84\226\128\148 " .. per .. "|r" end
