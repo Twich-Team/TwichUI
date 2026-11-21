@@ -39,6 +39,13 @@ function FishingClient(opts)
   -- frames, textures and font strings with real layout (tests/ui_widgets.lua): Stage 2's heads-up pieces draw on these
   W.UI = UIWidgets(c, { missing = opts.missingArt })
   c.UIParent = W.UI.screen
+  -- hooksecurefunc as the game does it: a post-hook on a table's method (or a global function), never replacing behaviour
+  c.hooksecurefunc = function(t, name, fn)
+    if type(t) == "string" then t, name, fn = c, t, name end
+    local orig = t[name]
+    assert(type(orig) == "function", "hooksecurefunc on a missing method " .. tostring(name))
+    t[name] = function(...) local r = { orig(...) }; fn(...); return unpack(r) end
+  end
   c.Enum = { LootSlotType = { Item = 1, Money = 2 }, WeaponSlot = { MainHand = 0, OffHand = 1 }, ItemClass = { Weapon = 2 },
     ItemWeaponSubclass = { Fishingpole = 20 } }
   c.ERR_ITEM_LOCKED, c.ERR_INV_FULL = "Item is locked.", "Inventory is full."

@@ -114,6 +114,7 @@ function API.Diagnostics()
         session = s and { id = s.id, elapsed = Ses.Elapsed(), casts = s.casts, catches = s.catches, items = s.items,
             failed = s.failed, interrupted = s.interrupted, missed = s.missed } or nil,
         stored = c and #c.sessions or 0, notes = notes, noteCounts = F.Copy(F.noteCounts), listeners = F.SubscriberCount(),
+        fade = F.Fade and F.Fade.Status() or nil, ellesmere = F.Ellesmere and F.Ellesmere.Status() or nil,
     }
 end
 

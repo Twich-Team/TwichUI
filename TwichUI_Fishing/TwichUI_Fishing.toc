@@ -34,6 +34,8 @@ Main.lua
 Hud.lua
 # The Fishing Mode camera, put back as it was afterwards
 Camera.lua
+# EllesmereUI's frames, by role, for Fishing Mode's fading (read only)
+Ellesmere.lua
 # Fading the interface around Fishing Mode, and bringing it back
 Fade.lua
 # The fishing cast bar

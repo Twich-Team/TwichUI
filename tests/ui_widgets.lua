@@ -14,7 +14,7 @@
 
 function UIWidgets(env, opts)
   opts = opts or {}
-  local W = { regions = {}, frames = {}, serial = 0, missing = opts.missing or {} }
+  local W = { regions = {}, frames = {}, serial = 0, missing = opts.missing or {}, mouse = {} }
   local STRATA = { BACKGROUND = 1, LOW = 2, MEDIUM = 3, HIGH = 4, DIALOG = 5, FULLSCREEN = 6, FULLSCREEN_DIALOG = 7, TOOLTIP = 8 }
   local LAYER = { BACKGROUND = 1, BORDER = 2, ARTWORK = 3, OVERLAY = 4, HIGHLIGHT = 5 }
 
@@ -176,6 +176,13 @@ function UIWidgets(env, opts)
     function fr:UnregisterEvent(e) self.events[e] = nil end
     function fr:UnregisterAllEvents() self.events = {} end
     function fr:IsProtected() return false end
+    function fr:GetObjectType() return self.kind end
+    function fr:IsMouseOver() return W.mouse[self] == true end
+    function fr:GetChildren()
+      local out = {}
+      for _, c in ipairs(W.frames) do if c.parent == self then out[#out + 1] = c end end
+      return unpack(out)
+    end
     function fr:CreateTexture(_, layer, _, sub) return Texture(self, layer, sub) end
     function fr:CreateFontString(_, layer) return FontString(self, layer) end
     function fr:CreateAnimationGroup() return Animations(self) end

@@ -31,8 +31,9 @@ S.DEFAULTS = {
     -- Stage 2: Fishing Mode (Present.lua and the heads-up files; docs/fishing.md, "Fishing Mode")
     present = { mode = "immersive", auto = true, vibrate = false, motion = true, prompts = true, brand = true },
     camera = { enabled = true, zoom = 7, offset = 0 },
-    fade = { enabled = true, bars = true, units = true, minimap = true, panels = false, notices = true, alpha = 0, extra = false },
-    castbar = { scale = 1, x = 0, y = 150 },
+    fade = { enabled = true, bars = true, units = true, minimap = true, panels = false, notices = true, alpha = 0, extra = false,
+        ellesmere = true },
+    castbar = { enabled = true, scale = 1, x = 0, y = 150 },
     list = { enabled = true, scale = 1, x = -36, y = 100, sort = "count", rows = 6, value = "show" },
     toast = { enabled = true, scale = 1, x = 70, y = -60, hold = 3.5 },
 }
@@ -69,8 +70,8 @@ S.CHECK = {
         brand = Bool },
     camera = { enabled = Bool, zoom = Range(1, 30), offset = Range(-2, 2) },
     fade = { enabled = Bool, bars = Bool, units = Bool, minimap = Bool, panels = Bool, notices = Bool, alpha = Range(0, 0.6),
-        extra = Names },
-    castbar = { scale = Range(0.6, 1.6), x = Range(-2000, 2000), y = Range(-2000, 2000) },
+        extra = Names, ellesmere = Bool },
+    castbar = { enabled = Bool, scale = Range(0.6, 1.6), x = Range(-2000, 2000), y = Range(-2000, 2000) },
     list = { enabled = Bool, scale = Range(0.6, 1.6), x = Range(-2000, 2000), y = Range(-2000, 2000),
         sort = OneOf("count", "recent", "name"), rows = Range(3, 12), value = OneOf("show", "hide") },
     toast = { enabled = Bool, scale = Range(0.6, 1.6), x = Range(-2000, 2000), y = Range(-2000, 2000), hold = Range(1, 10) },

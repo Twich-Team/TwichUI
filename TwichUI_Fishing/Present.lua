@@ -73,7 +73,7 @@ function P.Parts(mode)
     local out = {}
     out.camera = preset.camera and S.Get("camera.enabled") ~= false or false
     out.fade = preset.fade and S.Get("fade.enabled") ~= false or false
-    out.castbar = preset.castbar or false
+    out.castbar = preset.castbar and S.Get("castbar.enabled") ~= false or false
     out.list = preset.list and S.Get("list.enabled") ~= false or false
     out.toast = preset.toast and S.Get("toast.enabled") ~= false or false
     out.brand = preset.brand and S.Get("present.brand") ~= false or false
@@ -293,7 +293,7 @@ function P.Apply(path)
     if not on then return end
     -- a change to what the presentation shows takes effect by coming on again; a fade or camera figure, by redoing that part
     if path == "present.mode" or path == "camera.enabled" or path == "fade.enabled" or path == "list.enabled" or path == "toast.enabled"
-        or path == "present.brand" then
+        or path == "present.brand" or path == "castbar.enabled" then
         Leave("settings")
         if P.Mode() ~= "classic" then P.Enter("settings") end
     elseif path:match("^fade%.") and parts.fade then
@@ -382,7 +382,8 @@ P.HELP = {
     "/tui fish reveal - show the faded interface for a moment (again to fade it); recover - put the camera and interface back",
     "/tui fish move - drag the cast bar, catch list and notices where you want them (again to lock them)",
     "/tui fish camera on|off, camera zoom <1-30 yards>, camera offset <-2..2, 0 is off>",
-    "/tui fish fade on|off, fade bars|units|minimap|panels|notices on|off, fade alpha <0-0.6>, fade add|remove <FrameName>",
+    "/tui fish fade - what can be faded and what was; fade on|off, fade bars|units|minimap|panels|notices|ellesmere on|off,",
+    "    fade alpha <0-0.6>, fade add|remove <FrameName>",
     "/tui fish list on|off, list rows <3-12>, list sort count|recent|name, list value show|hide; toasts on|off; scale castbar|list|toast <0.6-1.6>",
     "/tui fish brand on|off - the TwichUI Fishing emblem at the top left in immersive Fishing Mode",
     "/tui fish motion on|off, prompts on|off, vibrate on|off (gamepad, on a confirmed catch; unverified)",
@@ -422,8 +423,24 @@ function P.Command(word, rest)
             local v = OnOff(sub); if v == nil then Say("usage: /tui fish camera on|off, zoom <yards>, offset <n>") return true end
             Set("camera.enabled", v, "Fishing Mode's camera " .. (v and "on." or "off."))
         end
+    elseif word == "fade" and (sub == "" or sub == "status") then
+        -- what Fishing Mode can fade, what it did and why it skipped anything (the player's own command; local chat)
+        local E = F.Ellesmere and F.Ellesmere.Status()
+        if E and E.detected then
+            local mods = {}
+            for _, m in ipairs(E.modules) do if m.loaded then mods[#mods + 1] = m.label end end
+            Say("EllesmereUI %s%s detected: %s.", E.version or "?", E.forever and " (Forever)" or "", #mods > 0 and table.concat(mods, ", ") or "no modules")
+        else
+            Say("EllesmereUI not detected: the game's own frames are faded.")
+        end
+        local lines = Fa.Report()
+        if #lines == 0 then Say("nothing faded yet this session (/tui fish preview tries it).") end
+        for _, line in ipairs(lines) do print(R.GREY .. "  " .. line .. "|r") end
     elseif word == "fade" then
-        if sub == "bars" or sub == "units" or sub == "minimap" or sub == "panels" or sub == "notices" then
+        if sub == "ellesmere" then
+            local v = OnOff(val); if v == nil then Say("usage: /tui fish fade ellesmere on|off") return true end
+            Set("fade.ellesmere", v, "fading EllesmereUI's frames " .. (v and "on." or "off."))
+        elseif sub == "bars" or sub == "units" or sub == "minimap" or sub == "panels" or sub == "notices" then
             local v = OnOff(val); if v == nil then Say("usage: /tui fish fade %s on|off", sub) return true end
             Set("fade." .. sub, v, "fading " .. sub .. " " .. (v and "on." or "off."))
         elseif sub == "alpha" then Set("fade.alpha", tonumber(val), "faded parts are drawn at " .. tostring(val) .. ".")

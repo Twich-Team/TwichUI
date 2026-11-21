@@ -8,7 +8,7 @@ local failures = 0
 local function Check(cond, msg) if not cond then failures = failures + 1; print("FAIL: " .. msg) end end
 local KEY = "CLICK TwichUIFishingButton:LeftButton"
 local GAME_FRAMES = { "MainMenuBar", "MultiBarBottomLeft", "PlayerFrame", "TargetFrame", "MinimapCluster", "ObjectiveTrackerFrame",
-  "UIErrorsFrame", "EllesmereUIUnitFrames_Player" }
+  "UIErrorsFrame" }
 
 -- A client with the fishing key bound, a camera (unless o.camera == false) and some of the game's frames.
 local function Fresh(o)
@@ -59,9 +59,8 @@ do
   local zoomCalls = W.camera.calls
   Settle(W)
   Check(c.MainMenuBar:GetAlpha() == 0 and c.PlayerFrame:GetAlpha() == 0 and c.MinimapCluster:GetAlpha() == 0, "bars, unit frames and the minimap fade")
-  Check(c.EllesmereUIUnitFrames_Player:GetAlpha() == 0, "EllesmereUI's unit frame (by its own name) fades too")
   Check(c.ObjectiveTrackerFrame:GetAlpha() == 1, "panels stay (off by default)")
-  Check(c.TargetFrame:GetAlpha() == 1, "a hidden frame is left alone")
+  Check(c.TargetFrame:GetAlpha() == 0, "a hidden frame fades too, so it appears faded if it is shown while fishing")
   Check(c.UIErrorsFrame:GetAlpha() == 1 and c.UIParent:GetAlpha() == 1, "errors and UIParent itself are never faded")
   Check(Q.On() and not Q.Player(), "TwichUI's notices are held quiet, and the player's own Quiet screen switch stays off")
   W.Interact(); W.Advance(0.1)
@@ -73,7 +72,8 @@ do
   Check(not P.On() and not F.CastBar.Shown() and not F.CatchList.Shown(), "the session's end turns Fishing Mode off and hides the pieces")
   Check(not P.BrandShown(), "the emblem too")
   Check(math.abs(W.camera.zoom - 15) < 0.01, "the camera is back where the player had it")
-  Check(c.MainMenuBar:GetAlpha() == 0.6 and c.PlayerFrame:GetAlpha() == 1 and c.MinimapCluster:GetAlpha() == 1, "each frame is back at its own alpha")
+  Check(c.MainMenuBar:GetAlpha() == 0.6 and c.PlayerFrame:GetAlpha() == 1 and c.MinimapCluster:GetAlpha() == 1
+    and c.TargetFrame:GetAlpha() == 1, "each frame is back at its own alpha")
   Check(not Q.On() and not Q.Player(), "the hold is let go; the player's switch never moved")
   Check(c.TwichUIFishingDB.client.camera == nil, "nothing left to recover")
   Check(#W.faults == 0, "no errors: " .. table.concat(W.faults, " | "))
@@ -155,14 +155,15 @@ do
   W.Advance(1.2); W.Key("F"); Settle(W)
   Check(bar:GetAlpha() == 0, "a frame the player named fades too")
   c.MultiBarBottomLeft:SetAlpha(0.3)     -- another addon changes it while fishing
+  Check(c.MultiBarBottomLeft:GetAlpha() == 0, "another addon's change is covered at once: the bar stays faded, no flash")
   P.Reveal(true); Settle(W)
-  Check(c.MainMenuBar:GetAlpha() == 1 and c.MultiBarBottomLeft:GetAlpha() == 0.3, "reveal: the interface is back; the other addon's alpha is left")
+  Check(c.MainMenuBar:GetAlpha() == 1 and c.MultiBarBottomLeft:GetAlpha() == 0.3, "reveal: each frame at its owner's latest preference")
   Check(not c.TwichUI.QuietScreen.On(), "and TwichUI's notices may show while revealed")
   P.Reveal(false); Settle(W)
-  Check(c.MainMenuBar:GetAlpha() == 0 and c.MultiBarBottomLeft:GetAlpha() == 0.3, "let go: faded again, the other addon's frame still theirs")
+  Check(c.MainMenuBar:GetAlpha() == 0 and c.MultiBarBottomLeft:GetAlpha() == 0, "let go: faded again, the other addon's frame too")
   c.TwichUI.RunCommand("fish stop"); Settle(W)
-  Check(c.MultiBarBottomLeft:GetAlpha() == 0.3 and bar:GetAlpha() == 1, "at the end their value stays; ours comes back")
-  Check(F.Fade.Status().kept == 1, "and it is counted as left to its owner")
+  Check(c.MultiBarBottomLeft:GetAlpha() == 0.3 and bar:GetAlpha() == 1, "at the end their latest value is back; ours too")
+  Check(F.Fade.last and F.Fade.last.owner == 1 and F.Fade.last.restored >= 3, "and it is counted as changed by its owner meanwhile")
   -- the moving fade has its own OnUpdate only while something moves
   Check(not F.Fade.Moving(), "nothing runs once the fades are done")
 end
