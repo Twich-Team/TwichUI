@@ -28,7 +28,7 @@ of items to include or never include), what happens to them (Send by mail, your 
 Never transfer), and how many of each to keep in the bags. A bank or guild bank rule also says which way: **Deposit extras**
 (above the keep amount), **Withdraw to top up** (take whole stacks out until the bags hold the keep amount, never more) or
 **Balance both ways** ("Withdrawing", below). With the feature on, opening a mailbox, the bank or
-a guild bank shows a small **Magic Inventory · N stacks** button just above that window's top right corner, wearing the settings dialog's crafted button look (with EllesmereUI's Blizzard skin on it is instead embedded in the window's title strip, left of the close button, and belongs to the window; the guild bank has its
+a guild bank shows a small **Magic Inventory · N stacks** button just above that window's top right corner, wearing the settings dialog's crafted button look (with EllesmereUI it belongs to the window: centred under the mailbox's title, or in the header of EllesmereUI Bags' own bank window (`EUI_BankFrame`); the guild bank has its
 own panel instead: "The guild bank at the bank window"). Clicking it opens the review. Nothing moves until the player presses an action in the review:
 
 - **Mail:** "Prepare mail 1 of 2 to Bankalt" attaches up to 12 stacks in the game's Send Mail window (where the player
