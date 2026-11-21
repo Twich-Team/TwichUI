@@ -20,6 +20,11 @@
 	<Binding name="CLICK TwichUICampingEat:LeftButton" category="BINDING_HEADER_TWICHUI"/>
 	<!-- Invite nearby players (qol/NearbyInvite.lua names it): each press invites the friendly players close to you
 	     to your group. No key is bound until you choose one. -->
+	<!-- TwichUI Fishing (FishingLauncher.lua names them; TwichUI_Fishing/Action.lua makes the buttons when it loads, which a
+	     bound key makes happen at login). Each press is one step: equip the pole, apply a lure, open a clam or cast; while the
+	     line is out the same key reels in. No key is bound until you choose one. -->
+	<Binding name="CLICK TwichUIFishingButton:LeftButton" category="BINDING_HEADER_TWICHUI"/>
+	<Binding name="CLICK TwichUIFishingOpen:LeftButton" category="BINDING_HEADER_TWICHUI"/>
 	<Binding name="TWICHUI_INVITE_NEARBY" category="BINDING_HEADER_TWICHUI">
 		TwichUI.QoLNearbyInvite.Invite()
 	</Binding>

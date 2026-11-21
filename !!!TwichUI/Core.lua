@@ -521,6 +521,9 @@ COMMANDS = {
     { name = "workshop", usage = "workshop", desc = "the Workshop: your professions' recipes, a craft queue and the materials still needed (listed on the Workshop page and the TwichUI menu; loads only when opened)", hidden = true, fn = function(arg)
         if R.WorkshopLauncher then R.WorkshopLauncher.Command(arg) else Unavailable("The Workshop") end
     end },
+    { name = "fish", usage = "fish [help]", desc = "TwichUI Fishing: status, sessions and options for the fishing key (loads it when first used)", fn = function(arg)
+        if R.FishingLauncher then R.FishingLauncher.Command(arg) else Unavailable("TwichUI Fishing") end
+    end },
     { name = "hidden", usage = "hidden", desc = "welcome messages hidden at login", fn = function()
         if R.Quiet then R.Quiet:ShowHidden() else Unavailable("Quiet login") end
     end },
@@ -547,6 +550,7 @@ COMMANDS = {
     { name = "settings", alias = "options", hidden = true },
     { name = "config", alias = "options", hidden = true },
     { name = "journal", alias = "chronicle", hidden = true },
+    { name = "fishing", alias = "fish", hidden = true },
     { name = "notes", alias = "chronicle", hidden = true },
     { name = "?", alias = "help", hidden = true },
 }
