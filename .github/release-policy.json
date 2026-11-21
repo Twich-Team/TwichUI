@@ -1,6 +1,6 @@
 {
-  "publication_enabled": false,
-  "reason": "v1.3 consolidation: owner real-client acceptance and explicit publication authorization are pending.",
+  "publication_enabled": true,
+  "reason": "Public release requires an explicit maintainer Run workflow dispatch on protected main; no pushes, tags, or PR merges publish. The one-click workflow verifies and seals the ZIP before publishing.",
   "environment_admin_bypass_disabled": false,
   "environment_configuration_evidence": ""
 }
