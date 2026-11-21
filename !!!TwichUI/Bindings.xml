@@ -23,6 +23,14 @@
 	     line is out the same key reels in. No key is bound until you choose one. -->
 	<Binding name="CLICK TwichUIFishingButton:LeftButton" category="BINDING_HEADER_TWICHUI"/>
 	<Binding name="CLICK TwichUIFishingOpen:LeftButton" category="BINDING_HEADER_TWICHUI"/>
+	<!-- Fishing Mode (TwichUI_Fishing/Present.lua): on or off, and the faded interface shown while the key is held. Neither
+	     casts, reels or acts in the game; they only change what is on screen and the camera. -->
+	<Binding name="TWICHUI_FISHING_MODE" category="BINDING_HEADER_TWICHUI">
+		TwichUI.FishingLauncher.Mode()
+	</Binding>
+	<Binding name="TWICHUI_FISHING_REVEAL" category="BINDING_HEADER_TWICHUI" runOnUp="true">
+		TwichUI.FishingLauncher.Reveal(keystate)
+	</Binding>
 	<!-- Invite nearby players (qol/NearbyInvite.lua names it): each press invites the friendly players close to you
 	     to your group. No key is bound until you choose one. -->
 	<Binding name="TWICHUI_INVITE_NEARBY" category="BINDING_HEADER_TWICHUI">

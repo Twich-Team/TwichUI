@@ -3,7 +3,8 @@
 --   TwichUIFishingDB = {
 --     schema = 1,                     -- the shape below (separate from the addon version)
 --     config = { ... },               -- preferences (DEFAULTS below); account-wide, not part of TwichUI profiles yet
---     client = { saved = {...} },     -- interaction-targeting settings changed while a line was out, to put back
+--     client = { saved = {...},       -- interaction-targeting settings changed while a line was out, to put back
+--                camera = {...} },    -- Stage 2: the camera values Fishing Mode changed, to put back (Camera.lua)
 --     capability = { autoOpen = "worked" | "blocked" },  -- what the client was seen to allow
 --     chars = { ["Name - Realm"] = <character record, NewChar below> },
 --   }
@@ -27,6 +28,13 @@ S.DEFAULTS = {
     session = { idleMinutes = 10, keep = F.LIMITS.sessions },
     action = { guard = 1.0, reel = "INTERACTTARGET" },
     interact = { adjust = false },
+    -- Stage 2: Fishing Mode (Present.lua and the heads-up files; docs/fishing.md, "Fishing Mode")
+    present = { mode = "immersive", auto = true, vibrate = false, motion = true, prompts = true },
+    camera = { enabled = true, zoom = 7, offset = 0 },
+    fade = { enabled = true, bars = true, units = true, minimap = true, panels = false, notices = true, alpha = 0, extra = false },
+    castbar = { scale = 1, x = 0, y = 150 },
+    list = { enabled = true, scale = 1, x = -36, y = 40, sort = "count", rows = 6 },
+    toast = { enabled = true, scale = 1, x = 70, y = -60, hold = 3.5 },
 }
 
 -- What each preference may hold: a checker per leaf. false means "none chosen" for the optional ids and names.
@@ -34,6 +42,15 @@ local function Bool(v) return type(v) == "boolean" end
 local function Id(v) return v == false or (F.Count(v) ~= nil and v > 0) end
 local function Name(v) return v == false or (type(v) == "string" and #v > 0 and #v <= 64) end
 local function Range(lo, hi) return function(v) return type(v) == "number" and v == v and v >= lo and v <= hi end end
+-- A short list of frame names (false for none): another addon's frames the player chose to fade too.
+local function Names(v)
+    if v == false then return true end
+    if type(v) ~= "table" or #v > 20 then return false end
+    for k, name in pairs(v) do
+        if type(k) ~= "number" or type(name) ~= "string" or not name:match("^[%w_]+$") or #name > 64 then return false end
+    end
+    return true
+end
 local function OneOf(...)
     local ok = {}
     for _, v in ipairs({ ... }) do ok[v] = true end
@@ -48,6 +65,14 @@ S.CHECK = {
     session = { idleMinutes = Range(1, 240), keep = Range(10, 500) },
     action = { guard = Range(0, 5), reel = OneOf("INTERACTTARGET", "INTERACTMOUSEOVER") },
     interact = { adjust = Bool },
+    present = { mode = OneOf("immersive", "compact", "classic"), auto = Bool, vibrate = Bool, motion = Bool, prompts = Bool },
+    camera = { enabled = Bool, zoom = Range(1, 30), offset = Range(-2, 2) },
+    fade = { enabled = Bool, bars = Bool, units = Bool, minimap = Bool, panels = Bool, notices = Bool, alpha = Range(0, 0.6),
+        extra = Names },
+    castbar = { scale = Range(0.6, 1.6), x = Range(-2000, 2000), y = Range(-2000, 2000) },
+    list = { enabled = Bool, scale = Range(0.6, 1.6), x = Range(-2000, 2000), y = Range(-2000, 2000),
+        sort = OneOf("count", "recent", "name"), rows = Range(3, 12) },
+    toast = { enabled = Bool, scale = Range(0.6, 1.6), x = Range(-2000, 2000), y = Range(-2000, 2000), hold = Range(1, 10) },
 }
 
 S.held = false        -- the saved data is from a newer schema: read only, nothing written this session
@@ -187,6 +212,7 @@ function S.Load()
     S.MIGRATIONS[1](db)   -- the containers themselves (repeatable)
     Normalize(db.config, S.DEFAULTS, S.CHECK, "config.")
     if not IsMap(db.client) then db.client = {} end
+    if db.client.camera ~= nil and not IsMap(db.client.camera) then db.client.camera = nil; Repair("client.camera") end
     if not IsMap(db.capability) then db.capability = {} end
     for key, c in pairs(db.chars) do
         if type(key) ~= "string" or not IsMap(c) then db.chars[key] = nil; Repair("chars.entry")
@@ -244,8 +270,23 @@ function S.Set(path, value)
     if b then check = type(check) == "table" and check[b] or nil end
     if type(check) ~= "function" then return false, "unknown" end
     if not check(value) then return false, "invalid" end
+    if type(value) == "table" then value = F.Copy(value) end
     if b then S.db.config[a][b] = value else S.db.config[a] = value end
     F.Emit("CONFIG", path, value)
+    return true
+end
+
+-- Runtime recovery records kept in db.client (plain values only): Stage 2 keeps the camera values it changed there, so a
+-- reload, a disconnect or an error can put them back (Camera.lua). Nothing is written while the data is held.
+function S.ClientRecord(key)
+    local rec = S.db and not S.held and type(S.db.client) == "table" and S.db.client[key] or nil
+    return type(rec) == "table" and rec or nil
+end
+
+function S.SetClientRecord(key, value)
+    if S.held or not (S.db and type(S.db.client) == "table") then return false end
+    if value ~= nil and type(value) ~= "table" then return false end
+    S.db.client[key] = value
     return true
 end
 

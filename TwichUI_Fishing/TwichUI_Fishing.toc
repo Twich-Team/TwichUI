@@ -30,3 +30,17 @@ Action.lua
 Api.lua
 # Start-up, events and /tui fish
 Main.lua
+# Stage 2, Fishing Mode: what the heads-up pieces share (artwork in media\, built by tools/make_fishing_art.py)
+Hud.lua
+# The Fishing Mode camera, put back as it was afterwards
+Camera.lua
+# Fading the interface around Fishing Mode, and bringing it back
+Fade.lua
+# The fishing cast bar
+CastBar.lua
+# The catch list on the right of the screen
+CatchList.lua
+# Catch notifications
+Toast.lua
+# Fishing Mode itself: presentations, on and off, recovery, and its /tui fish words
+Present.lua
