@@ -9,9 +9,11 @@
 -- Blizzard_ActionBar/Shared/ActionButtonSpellAlerts.xml, ActionButtonComponentTemplate.xml), the soft square frame of a
 -- stealable buff (Interface\TargetingFrame\UI-TargetingFrame-Stealable) and plain lines.
 --
---   D.Set(button, style)   shows the glow a style describes (Config.lua's fields); the same style again does nothing
---   D.Clear(button)        hides it
---   D.ClearAll()           hides every glow (the frames are kept)
+-- Shared by Action bar glows and Reminders (each an "owner", see "Owners" below): one overlay per button whoever asks.
+--   D.Request / D.Release / D.ReleaseOwner / D.Sync   an owner's glows (the look of the first-ranked owner shows)
+--   D.Set(button, style)   Action bar glows' own request; the same style again does nothing
+--   D.Clear(button)        lets go of it (another owner's glow on that button stays)
+--   D.ClearAll()           lets go of every Action bar glows request (the frames are kept)
 --   D.Fade(button, alpha)  a faded bar's button; D.Unfade(button) puts its alpha back; D.UnfadeAll()
 
 local R = TwichUI
@@ -191,37 +193,166 @@ local function Apply(o, button, s)
     end
 end
 
-function D.Set(button, style)
-    if not (button and style) then return end
-    local o = Overlay(button)
-    local key = StyleKey(style)
-    if o.key ~= key or not o:IsShown() then
-        o.key = key
-        Apply(o, button, style)
-        o:Show()
-    end
-    if not glowing[button] then
-        glowing[button] = true
-        D.shown = D.shown + 1
-    end
+---------------------------------------------------------------------------
+-- Owners: more than one feature may want a button to glow (Action bar glows, Reminders, a settings sample). Each owner
+-- asks and lets go on its own; the button keeps one overlay and shows the look of the owner that ranks first. No
+-- owner ever clears another's request, so turning one feature off leaves the other's glows as they are.
+--
+--   D.Request(owner, button, style)  this owner wants the button to glow in this look (asking again only updates it)
+--   D.Release(owner, button)         this owner no longer wants it
+--   D.ReleaseOwner(owner)            every button this owner asked for
+--   D.Sync(owner, desired)           desired = { [button] = style }: exactly these for this owner (one notice)
+--   D.Owned(owner)                   { [button] = style } of this owner (read only)
+--   D.HasOther(owner, button)        whether an owner other than this one wants the button
+--   D.WinnerOf(button)               the owner whose look the button shows, or nil
+--   D.OnRequests(fn)                 fn(owner) after the set of buttons an owner asks for changed (not a look alone)
+--
+-- Which look shows (deterministic, whatever the order the requests came in): the owner with the lowest rank (RANK;
+-- an unknown owner after the known ones), then the owner's name. A Reminder is something the player made for that one
+-- spell, so it ranks before Action bar glows' catalogue. A look that is the same as the one showing changes nothing:
+-- the animation is not restarted.
+--
+-- The older single-owner calls are Action bar glows' own and keep their meaning for it:
+--   D.Set(button, style) = D.Request("barGlows", ...), D.Clear(button), D.ClearAll(), D.IsGlowing(button), D.Glowing()
+---------------------------------------------------------------------------
+D.OWNER = "barGlows"
+local RANK = { reminders = 1, barGlows = 2 }
+local requests = {}      -- [button] = { [owner] = style }
+local owned = {}         -- [owner] = { [button] = style }
+local requestListeners = {}
+
+local function Before(a, b)
+    local ra, rb = RANK[a] or 100, RANK[b] or 100
+    if ra ~= rb then return ra < rb end
+    return a < b
 end
 
-function D.Clear(button)
+local function Winner(button)
+    local list = requests[button]
+    if not list then return nil end
+    local best
+    for owner in pairs(list) do
+        if not best or Before(owner, best) then best = owner end
+    end
+    return best, best and list[best]
+end
+
+-- Shows the winning look on the button's one overlay, or hides it when nobody wants it.
+local function Paint(button)
+    local owner, style = Winner(button)
+    if owner then
+        local o = Overlay(button)
+        local key = StyleKey(style)
+        if o.key ~= key or not o:IsShown() then
+            o.key = key
+            Apply(o, button, style)
+            o:Show()
+        end
+        o.owner = owner
+        if not glowing[button] then
+            glowing[button] = true
+            D.shown = D.shown + 1
+        end
+        return
+    end
     local o = overlays[button]
     if not o or not glowing[button] then return end
     glowing[button] = nil
     D.shown = D.shown - 1
     HideParts(o)
     o:Hide()
-    o.key = nil
+    o.key, o.owner = nil, nil
 end
 
-function D.ClearAll()
-    for button in pairs(glowing) do D.Clear(button) end
+local function Notify(owner)
+    for _, fn in ipairs(requestListeners) do
+        local ok, err = pcall(fn, owner)
+        if not ok and R.Fault then R.Fault("glow owners", err) end
+    end
 end
 
-function D.IsGlowing(button) return glowing[button] == true end
-function D.Glowing() return glowing end
+-- Returns whether the set of buttons this owner wants changed.
+local function Put(owner, button, style)
+    if not (owner and button and style) then return false end
+    local mine = owned[owner]
+    if not mine then mine = {}; owned[owner] = mine end
+    local list = requests[button]
+    if not list then list = {}; requests[button] = list end
+    local added = mine[button] == nil
+    mine[button], list[owner] = style, style
+    Paint(button)
+    return added
+end
+
+local function Drop(owner, button)
+    local mine = owned[owner]
+    if not (mine and button and mine[button]) then return false end
+    mine[button] = nil
+    local list = requests[button]
+    if list then
+        list[owner] = nil
+        if next(list) == nil then requests[button] = nil end
+    end
+    Paint(button)
+    return true
+end
+
+function D.Request(owner, button, style)
+    if Put(owner, button, style) then Notify(owner) end
+end
+
+function D.Release(owner, button)
+    if Drop(owner, button) then Notify(owner) end
+end
+
+function D.ReleaseOwner(owner)
+    local mine = owned[owner]
+    if not (mine and next(mine)) then return end
+    local list = {}
+    for button in pairs(mine) do list[#list + 1] = button end
+    for _, button in ipairs(list) do Drop(owner, button) end
+    Notify(owner)
+end
+
+function D.Sync(owner, desired)
+    local changed = false
+    local mine = owned[owner]
+    if mine then
+        local gone = {}
+        for button in pairs(mine) do
+            if not desired[button] then gone[#gone + 1] = button end
+        end
+        for _, button in ipairs(gone) do changed = Drop(owner, button) or changed end
+    end
+    for button, style in pairs(desired) do changed = Put(owner, button, style) or changed end
+    if changed then Notify(owner) end
+end
+
+local NONE = {}
+function D.Owned(owner) return owned[owner] or NONE end
+function D.HasOther(owner, button)
+    local list = requests[button]
+    if not list then return false end
+    for other in pairs(list) do if other ~= owner then return true end end
+    return false
+end
+function D.WinnerOf(button) return (Winner(button)) end
+function D.IsShown(button) return glowing[button] == true end
+
+function D.OnRequests(fn)
+    for _, existing in ipairs(requestListeners) do if existing == fn then return end end
+    requestListeners[#requestListeners + 1] = fn
+end
+
+-- Action bar glows' own calls (and its settings sample): the "barGlows" owner.
+function D.Set(button, style) D.Request(D.OWNER, button, style) end
+function D.Clear(button) D.Release(D.OWNER, button) end
+function D.ClearAll() D.ReleaseOwner(D.OWNER) end
+function D.IsGlowing(button, owner)
+    local list = requests[button]
+    return list ~= nil and list[owner or D.OWNER] ~= nil
+end
+function D.Glowing(owner) return D.Owned(owner or D.OWNER) end
 
 ---------------------------------------------------------------------------
 -- Faded bars: a button's alpha while it does not glow. The alpha it had is kept and put back.

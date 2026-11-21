@@ -119,7 +119,7 @@ local function Settle() for _ = 1, 6 do FlushTimers() end end
 
 for _, f in ipairs({ "modules/Borders.lua", "modules/MenuStyle.lua", "modules/Media.lua", "Icons.lua",
   "reminders/AmmoItems.lua", "reminders/ArtData.lua", "reminders/Config.lua", "reminders/Gallery.lua", "reminders/Conditions.lua", "reminders/Ammunition.lua", "reminders/Evaluate.lua", "reminders/State.lua",
-  "reminders/Display.lua", "reminders/Controller.lua", "setup/TwichConfig.lua" }) do
+  "reminders/Display.lua", "reminders/ButtonGlow.lua", "reminders/Controller.lua", "setup/TwichConfig.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.TwichUIDB = { modules = {} }

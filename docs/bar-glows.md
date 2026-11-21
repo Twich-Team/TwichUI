@@ -24,7 +24,7 @@ Nothing here has been seen in the game. "Verified" means read from the Forever U
 | `Logic.lua` | What is due, from an observation and the choices (pure) |
 | `State.lua` | Reads the game into that observation; a secret or missing answer is unknown |
 | `Buttons.lua` | Finds Blizzard's and EllesmereUI's buttons and what each holds |
-| `Draw.lua` | The glows (AnimationGroups only), faded bars |
+| `Draw.lua` | The glows (AnimationGroups only), faded bars; the glow owners it shares with Reminders |
 | `Notice.lua` | The message cards, in the zone arrival card's look |
 | `Controller.lua` | Events, coalescing, timing (glow time, repeat), messages and sounds, on/off |
 
@@ -73,6 +73,16 @@ top; a repeat moves its own card back to the top rather than adding one.
 General settings: `noticeIcon` (show the icon, on), `noticeFade` (fade out, on) and `noticeSeconds` (2-30, 5). With
 fading off a card stays until its reminder is no longer due. Either way a card fades at once when its reminder is done.
 "Sample message" shows a made-up card above the settings window for a few seconds.
+
+## Shared with Reminders
+
+A reminder can light the buttons of a spell while it shows (`docs/reminders.md`, "Action button glow"). `Draw.lua` keeps one
+overlay per button for both and tracks who wants each button (owners): Action bar glows is the `barGlows` owner and its
+`D.Set` / `D.Clear` / `D.ClearAll` / `D.Glowing` are its own, so it never clears a reminder's glow and switching it off
+leaves them. On a button both want, the reminder's look shows (rank `reminders` 1, `barGlows` 2) and this feature's comes
+back when the reminder goes. A faded bar does not fade a button a reminder lights. `Buttons.lua`'s map is shared:
+whichever feature reads the buttons first, the other uses the result (this controller notices a newer `BT.generation` and
+re-checks old ranks). Neither feature needs the other switched on.
 
 ## What the client provides
 

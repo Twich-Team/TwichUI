@@ -170,7 +170,7 @@ for _, f in ipairs({ "modules/Borders.lua", "modules/MenuStyle.lua", "modules/Me
   "gear/Weights.lua", "gear/Prefs.lua", "gear/Data.lua",
   "reminders/AmmoItems.lua", "reminders/ArtData.lua", "reminders/Config.lua", "reminders/Gallery.lua", "reminders/Conditions.lua", "reminders/Ammunition.lua", "reminders/Evaluate.lua", "reminders/State.lua",
   "reminders/Auras.lua", "reminders/Supplies.lua", "reminders/Character.lua", "reminders/Context.lua",
-  "reminders/Display.lua", "reminders/Controller.lua", "setup/TwichConfig.lua", "../TwichUI_Settings/pages/RemindersPlain.lua" }) do
+  "reminders/Display.lua", "reminders/ButtonGlow.lua", "reminders/Controller.lua", "setup/TwichConfig.lua", "../TwichUI_Settings/pages/RemindersPlain.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.TwichUIDB = { modules = {} }

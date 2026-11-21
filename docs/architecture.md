@@ -30,7 +30,7 @@ The actual test patterns and recursive dependencies live in [groups.json](../tes
 | Core, profiles, saved data | `Core.lua`, `Persist.lua`, `Profiles.lua`, `Switches.lua`, `setup/` | `core`; [persistence](persistence.md), [profiles](profiles.md); global changes require full gate |
 | Shared styling/notifications | `chronicle/Style.lua`, `Look.lua`, `FrameLook.lua`, `CraftLook.lua`, `modules/Notify.lua` | `shared-ui` plus affected consumers; [feature rules](dev-rules.md) |
 | Settings | `TwichUI_Settings/Kit.lua`, `pages/`, `Window.lua`; behavior owned by feature APIs | `settings`; [recipes](recipes/add-feature-setting.md) |
-| Reminders | `reminders/Config.lua` (`RM.SetEnabled`), State/Controller/Display; `TwichUI_Settings/pages/Reminders.lua` calls setters | `reminders`; `tests/test_reminders_settings.lua`; [guide](reminders.md) |
+| Reminders | `reminders/Config.lua` (`RM.SetEnabled`), State/Controller/Display, ButtonGlow (draws through `glows/Draw.lua`'s shared owners); `TwichUI_Settings/pages/Reminders.lua` calls setters | `reminders` (also runs the Action bar glows tests); `tests/test_reminders_settings.lua`, `tests/test_reminders_glow.lua`; [guide](reminders.md) |
 | Navigation/maps/pins/guild | `nav/`, `map/`, `pins/`, `npcs/`, `guildloc/` and NavData | `navigation`; [guild privacy](guild-locations.md) |
 | Layouts | `TwichUI_Layouts/Engine.lua`, `TwichUI_LayoutWizard/Model.lua` | `layouts`; [architecture](layouts/architecture.md) |
 | Crafting/shopping | `TwichUI_Workshop/CraftPlanner.lua`, `Shopping.lua`, `Stock.lua`, `Strategy.lua` | `crafting`; [Workshop](workshop.md) |

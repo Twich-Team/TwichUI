@@ -141,7 +141,7 @@ f.shown = false
 f:Show()
 Flush()
 local parts = P.Parts()
-Check(parts.sections and #parts.sections == 5, "the five sections are built (the preview is beside the window)")
+Check(parts.sections and #parts.sections == 6, "the six sections are built (the preview is beside the window)")
 Check(f.empty.shown and f.empty.text:find("No reminders yet"), "an empty list says how to start")
 Check(f.newButton and f.newButton.shown, "one way to start: New reminder, which opens the templates")
 Check(f.events.PLAYER_EQUIPMENT_CHANGED and f.events.GET_ITEM_INFO_RECEIVED, "while shown it hears what Test reads")
@@ -1161,6 +1161,34 @@ do
     Check(texture.texture ~= nil, "every supported palette entry retains artwork: " .. entry.key)
   end
   Check(Pl.ArtFile({type="player",state="mounted"},22):find("horse%-head%-small.tga"), "Mounted reuses original painted horse art")
+end
+
+
+---------------------------------------------------------------------------
+-- The action button glow section: off by default, a spell by ID or link, the looks, a note that never blocks the reminder
+---------------------------------------------------------------------------
+do
+  local glow = parts.sections[6]
+  local gid = P.Selected() or RM.List()[1].id
+  P.Select(gid); P.Refresh(); Flush()
+  local v = RM.Get(gid)
+  Check(glow.shown and glow.enable.shown and not v.glow.enabled, "the glow section is drawn, off by default")
+  Check(not glow.spellBox.shown and glow.note.text:find("^Off"), "off: no spell field, a quiet line")
+  Check(RM.SetGlow(gid, "enabled", true), "turn the glow on")
+  P.Refresh(); Flush()
+  Check(glow.spellBox.shown and glow.look.shown and glow.motion.shown and glow.color.shown and glow.sample.shown, "on: spell, look, motion, color and the sample")
+  Check(glow.note.text:find("Choose the spell") ~= nil and RM.Get(gid).valid == v.valid, "no spell yet: it says so, and the reminder's validity is unchanged")
+  glow.spellBox:SetText("not a spell"); glow.spellBox:Fire("OnEnterPressed"); Flush()
+  Check(RM.Get(gid).glow.spell == nil, "a typed word is refused")
+  glow.spellBox:SetText("|cff71d5ff|Hspell:403:0|h[Lightning Bolt]|h|r"); glow.spellBox:Fire("OnEnterPressed"); Flush()
+  Check(RM.Get(gid).glow.spell == 403, "a pasted spell link sets the spell")
+  P.Refresh(); Flush()
+  Check(glow.spellBox.text == "403" and glow.spellName.text ~= "", "the box shows the ID, the name beside it")
+  Check(glow.note.text ~= "" and not glow.note.text:find("Choose the spell"), "a line about where the spell is: " .. tostring(glow.note.text))
+  Check(glow.h > 0 and glow.sample.points[1] ~= nil, "laid out with the sample placed")
+  RM.SetGlow(gid, "enabled", false)
+  P.Refresh(); Flush()
+  Check(not glow.spellBox.shown and RM.Get(gid).glow.spell == 403, "off again: the spell is kept for next time")
 end
 
 if failures == 0 then print("PASSED") else print(failures .. " FAILED") end
