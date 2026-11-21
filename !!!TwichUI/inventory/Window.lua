@@ -795,7 +795,7 @@ local function HostFor(kind)
     return host, nil
 end
 
-local EMBED_HEIGHT, BAND_TOP = 22, -39
+local EMBED_HEIGHT, BAND_TOP = 22, -22
 local BANK_HEADER_X, BANK_HEADER_Y = -62, -18   -- the empty stretch of EllesmereUI's bank header, from the window's top centre
 
 local function Anchor(b, kind)
