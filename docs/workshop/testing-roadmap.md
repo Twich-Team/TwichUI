@@ -40,7 +40,7 @@ This plan covers how TwichUI Workshop's correctness, regressions, performance an
 
 ## B. Risk-based coverage matrix
 
-Priority: **P1** means wrong money figures or lost data are plausible, **P2** means wrong advice or a broken flow, **P3** means low impact or already strong. RC means real-client testing is required.
+Priority: **P1** means wrong money figures or lost data are plausible, **P2** means wrong advice or a broken flow, **P3** means low impact or already strong. RC marks client-only behavior worth checking at the owner's discretion, not an automated completion or release gate.
 
 | Subsystem | Existing evidence | Most important missing tests | Method | Pri | RC |
 |---|---|---|---|---|---|
@@ -321,18 +321,29 @@ Each milestone is one request. **Tests** lists the evidence the milestone must p
 
 ### Verification policy for future Workshop tasks (CLAUDE.md points here)
 
-| Change | Required evidence | Not required |
-|---|---|---|
-| Pure algorithm | deterministic cases with hand arithmetic + a property test over seeds; `bash tools/mutate.sh --group market` or `--group crafting` (add a catalog entry for a realistic new defect model; section H, M4) | simulator |
-| Money, cost or profit | the above + agreement with an independent reference model | simulator |
-| Saved data | bounds/held/corrupt cases + a text round trip; a migration that is ordered, repeatable and idempotent; a real-client `/reload` check listed | — |
-| UI | handler tests + `Press`-style reachability + `workshop.sh` (or its relevant group after M8) + a screenshot reviewed by a person; hover and pointer listed for the real client or run as a guided Lab case | benchmarks |
-| Performance | before and after with the same fixture, interleaved, with the noise rule; real-client numbers only from the Lab or Diagnostics | — |
-| Client API use | source evidence from `wow-ui-source` (forever) + a Lab probe or a listed real-client check; "unknown" stated otherwise | — |
-| Transactions | the state machine incl. refusal, confirmation and interruption paths; a static check that no action fires without a click; real-client checks listed and never automated | — |
-| Trivial (text, comments, constants with tests) | focused test + `luac5.1 -p` | simulator, full bench |
+Choose evidence in proportion to the **changed behavior and its risk**, not to test
+counts or the number of modules in the repository. Reuse the existing runner,
+reference models, simulator and mutation catalog; do not build new infrastructure
+or add repetitive test scenarios by default. Real-client verification is
+owner-directed and optional for completion and release; always disclose what
+offline evidence cannot establish.
 
-Use [the verification tiers](../testing.md): fast feature checks during implementation, feature verification before checkpoint commits, and `./tests/run.sh full` before major milestone completion (earlier for shared/high-risk changes). The offline/CI suite remains `./tests/run.sh`. Keep the mutation requirements above; focused evidence never proves full regression coverage. Do not rerun an unchanged failing command.
+| Change | Appropriate offline evidence | Not required by default |
+|---|---|---|
+| Pure algorithm | Relevant deterministic cases; independent hand arithmetic or property checks where ranges/edge cases make them useful | Simulator, new mutation entry for an unchanged risk |
+| Money, cost or profit | Price/quantity/unknown-state boundaries and reference-model agreement for the changed formula; matching existing mutation campaign when economic risk warrants it | New mutants merely to increase counts |
+| Saved data | Held/corrupt/boundary cases, text round trip and idempotent migration checks when relevant; describe optional `/reload` verification | Mandatory player run |
+| UI | Focused handler/reachability tests; a relevant simulator pose or reviewed image when appearance/interaction is materially affected | Every simulator catalog or screenshots for trivial text edits |
+| Performance | Representative same-fixture before/after measurements, worst uninterrupted work and memory when relevant; separate CPU from wait/frame time | Long benchmarks for unaffected paths |
+| Client API use | Read Forever source, model relevant inputs/failure paths offline, state assumptions and optional client checks | Unverified claims about native timing/behavior |
+| Transactions | Deterministic refusal, explicit confirmation, interruption and no-action-without-click tests | Automated live gameplay actions or mandatory native gate |
+| Trivial text, comments and docs | Applicable syntax, reference or link checks; focused behavior check only if behavior changes | Full simulation, new mutation catalog entry |
+
+Follow [verification tiers](../testing.md): focused checks during implementation,
+affected feature/integration tests for checkpoints, and the established full offline
+gate for release candidates and documented high-risk shared changes. Never weaken
+existing checks or hide a regression. If a test fails, investigate the smallest
+reproducer rather than rerunning unchanged suites.
 
 ---
 
