@@ -99,6 +99,34 @@ do
   N.ClearPreviews()
 end
 
+-- 2b. A feature's hold (TwichUI Fishing's Fishing Mode): quiet without the player's switch, which it never moves; the data
+--     bar shows and toggles the player's switch only; holds from two owners each let go on their own.
+do
+  local heard = {}
+  Q.OnChange(function(on) heard[#heard + 1] = on end)
+  local before = #heard
+  Q.Hold("fishing", true); Q.Hold("fishing", true)
+  assert(Q.On() and not Q.Player() and Q.Holding("fishing"), "a hold makes the screen quiet, not the player's switch")
+  assert(#heard == before + 1 and heard[#heard] == true, "listeners hear it once")
+  local N = R.Notify
+  assert(N.Snapshot ~= nil, "Notify reads the quiet as before")
+  Q.Hold("other", true); Q.Hold("fishing", false)
+  assert(Q.On() and not Q.Holding("fishing"), "another owner's hold keeps it quiet")
+  Q.Hold("other", false)
+  assert(not Q.On() and not Q.Player(), "every hold let go: not quiet, the player's switch never moved")
+  Q.Set(true); Q.Hold("fishing", true); Q.Hold("fishing", false)
+  assert(Q.On() and Q.Player(), "the player's own switch stays on through a hold coming and going")
+  Q.Hold("fishing", true)
+  local n = #heard
+  Q.Set(false)
+  assert(Q.On() and not Q.Player() and #heard == n + 1, "the player turning theirs off while held is told (the menu shows it), the screen stays quiet")
+  assert(Q.Toggle() == true and Q.Player(), "Toggle is the player's switch")
+  Q.Set(false); Q.Hold("fishing", false)
+  assert(not Q.On() and Q.Snapshot().holds == 0 and Q.Snapshot().player == false, "the snapshot counts holds")
+  Q.Hold(nil, true); Q.Hold("", true)
+  assert(not Q.On(), "a hold needs an owner")
+end
+
 -- 3. Load order: the switch loads before the files that read it at load, and the data bar menu after it.
 do
   local f = assert(io.open(ROOT .. "!!!TwichUI.toc", "rb")); local toc = f:read("*a"); f:close()

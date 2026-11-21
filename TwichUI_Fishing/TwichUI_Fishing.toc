@@ -1,6 +1,6 @@
 ## Interface: 16001
 ## Title: |cffC9A24ATwich|rUI Fishing
-## Notes: One key that fishes for you to press: equips your pole, applies a lure, casts, reels in and opens the clams you catch, each on your own key press. Keeps a record of your fishing sessions and catches. Loaded when you bind its key or type /tui fish; keep it turned on alongside TwichUI.
+## Notes: One key that fishes for you to press: equips your pole, applies a lure, casts, reels in and opens the clams you catch, each on your own key press. Keeps a record of your fishing sessions and catches, and Fishing Mode shows them: a fishing cast bar, your catches beside the water and a calmer screen. Loaded when you bind its key or type /tui fish; keep it turned on alongside TwichUI.
 ## Author: twichie
 ## Version: 1.0.0
 ## RequiredDeps: !!!TwichUI

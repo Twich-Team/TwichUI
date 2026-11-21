@@ -84,10 +84,10 @@ local function Dress(f, kind)
     f.icon:SetPoint("CENTER", f, "TOPLEFT", cx, -cy)
     f.icon:SetSize(side, side)
     f.glint:ClearAllPoints()
-    f.glint:SetPoint("CENTER", f, "TOPLEFT", cx, -cy - side * 0.1)
-    f.glint:SetSize(side * 2.6, side * 1.24)
+    f.glint:SetPoint("BOTTOM", f, "TOPLEFT", cx, -cy + side * 0.05)
+    f.glint:SetSize(side * 1.9, side * 0.9)
     f.glint:SetShown(kind == "treasure")
-    local x = (w[3] + 10) * K
+    local x = (w[3] + 20) * K      -- clear of the frame's right rim
     f.title:ClearAllPoints()
     f.title:SetPoint("TOPLEFT", f, "TOPLEFT", x, -14 * K - 2)
     f.title:SetText(kind == "treasure" and "Treasure!" or "Caught!")

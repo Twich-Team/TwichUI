@@ -83,8 +83,14 @@ local function Build()
     u.time:SetJustifyH("RIGHT")
     u.stats = Text(f, 12, "strong")
     u.stats:SetPoint("TOP", f, "BOTTOM", 0, -3)
-    u.note = Text(f, 11, "body", H.MUTED)
+    u.note = Text(f, 11, "body", H.SOFT)
     u.note:SetPoint("TOP", u.stats, "BOTTOM", 0, -3)
+    -- a faint shade under the two lines, so they read over bright scenery too
+    u.shade = f:CreateTexture(nil, "BACKGROUND", nil, -6)
+    u.shade:SetPoint("TOPLEFT", f, "BOTTOMLEFT", -30, 14)
+    u.shade:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 30, -44)
+    H.Texture(u.shade, "scrim", { 0.06, 0.04, 0.03, 0.3 })
+    u.shade:SetAlpha(H.SHADE)
     H.Movable(f, "castbar", "BOTTOM")
     H.Place(f, "castbar", "BOTTOM")
     -- kept only once every part exists: a build that fails part-way leaves nothing half-made in use
@@ -204,7 +210,7 @@ function CB.RefreshLines()
     ui.stats:SetText(CB.StatsText())
     local text, warn = CB.NoteText()
     ui.note:SetText(text)
-    H.Color(ui.note, warn and H.WARN or H.MUTED)
+    H.Color(ui.note, warn and H.WARN or H.SOFT)
 end
 
 ---------------------------------------------------------------------------

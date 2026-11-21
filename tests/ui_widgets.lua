@@ -247,8 +247,10 @@ function UIWidgets(env, opts)
     resolving[r] = nil
     local sw, sh = (w or 0) * s, (h or 0) * s
     local left, bottom, width, height
-    if L and R then left, width = L, R - L elseif L then left, width = L, sw elseif R then left, width = R - sw, sw
-    elseif CX then left, width = CX - sw / 2, sw end
+    -- which edge placed it across (a capture lays text out from that edge: its own width there is only estimated)
+    if L and R then left, width, r.hanchor = L, R - L, "LR" elseif L then left, width, r.hanchor = L, sw, "L"
+    elseif R then left, width, r.hanchor = R - sw, sw, "R"
+    elseif CX then left, width, r.hanchor = CX - sw / 2, sw, "C" end
     if T and B then bottom, height = B, T - B elseif B then bottom, height = B, sh elseif T then bottom, height = T - sh, sh
     elseif CY then bottom, height = CY - sh / 2, sh end
     if not (left and bottom) then return nil end
@@ -269,7 +271,8 @@ function UIWidgets(env, opts)
             item.file, item.color, item.coords, item.blend, item.vertex = r.file, r.color, r.coords, r.blend, r.vertex
           else
             item.text, item.font, item.size, item.color, item.justify, item.shadow = r.text, r.font, r.size, r.textColor, r.justifyH, r.shadowOffset
-            item.fixedWidth = r.w ~= nil
+            item.fixedWidth = r.w ~= nil or r.hanchor == "LR"
+            item.hanchor = r.hanchor
           end
           out[#out + 1] = item
         end

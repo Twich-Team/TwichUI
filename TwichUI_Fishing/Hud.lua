@@ -32,16 +32,18 @@ H.ART = {
     glint = { file = "glint", w = 128, h = 64, cw = 128, ch = 61 },
     divider = { file = "divider", w = 256, h = 32, cw = 256, ch = 26 },
     mark = { file = "mark", w = 64, h = 64, cw = 63, ch = 64 },
-    scrim = { file = "scrim", w = 128, h = 256, cw = 128, ch = 256 },
+    scrim = { file = "scrim", w = 256, h = 128, cw = 256, ch = 128 },
     rowglow = { file = "rowglow", w = 256, h = 32, cw = 256, ch = 32 },
 }
 
 H.IVORY = { 0.94, 0.90, 0.81 }
 H.MUTED = { 0.78, 0.72, 0.62 }
+H.SOFT = { 0.88, 0.83, 0.74 }      -- small text over the world (the prompts): muted, but still readable over snow
 H.BRONZE = { 0.78, 0.58, 0.32 }
 H.GOLD = { 0.96, 0.80, 0.46 }
 H.WARN = { 1.00, 0.72, 0.42 }
 H.QUESTION = [[Interface\Icons\INV_Misc_QuestionMark]]
+H.SHADE = 0.62          -- how dark the shade under the catch list and the cast bar's lines is at its middle
 
 -- The painted part of a file, as texture coordinates.
 function H.Coords(name)

@@ -25,9 +25,9 @@ corrected here, and why:
     glint            effects/glint.png             a gold flare, behind a treasure notification's icon. Resampled only.
     divider          decoration/divider_lower.png  the thin bronze rule between the catch list's sections. Resampled only.
     mark             branding/mini_icon.png        the small fish mark beside the prompts. Resampled only.
-    scrim            (made here)                   a soft, warm, very dark shade that fades to nothing towards the screen's
-                                                   middle and at its top and bottom, under the catch list, so ivory text
-                                                   reads over bright snow or water as well as at night. No hard edge.
+    scrim            (made here)                   a soft, warm, very dark oval, feathered to nothing on every side, drawn
+                                                   faintly under the catch list and the cast bar's lines so ivory text reads
+                                                   over bright snow or water as well as at night. No edge anywhere.
     rowglow          (made here)                   a soft amber band, brightest in the middle, for a row that just changed.
 
 Not used, deliberately: hud/catch_count_reference.png (baked "x3" text), hud/cast_bar_*_reference.png (references of the
@@ -190,13 +190,19 @@ def plain(src, file, ow, oh):
 
 
 def scrim(_src):
-    w, h = 128, 256
+    """A soft, warm, very dark oval: full in its middle, feathered to nothing on every side (no edge anywhere)."""
+    w, h = 256, 128
     canvas = blank(w, h)
+    ix, iy = 0.30, 0.30          # the solid middle reaches this far in from each side (as a share of the size)
     for y in range(h):
-        v = smooth((y + 0.5) / (h * 0.22)) * smooth((h - y - 0.5) / (h * 0.22))
+        v = (y + 0.5) / h
+        dy = max(0.0, abs(v - 0.5) - (0.5 - iy)) / iy
         for x in range(w):
-            u = smooth((x + 0.5) / w) ** 1.3
-            canvas[y][x * 4:x * 4 + 4] = bytes((16, 11, 8, int(255 * u * v)))
+            u = (x + 0.5) / w
+            dx = max(0.0, abs(u - 0.5) - (0.5 - ix)) / ix
+            d = min(1.0, math.hypot(dx, dy))
+            a = (1 - smooth(d)) ** 1.2
+            canvas[y][x * 4:x * 4 + 4] = bytes((16, 11, 8, int(255 * a)))
     return canvas, (w, h), {}
 
 

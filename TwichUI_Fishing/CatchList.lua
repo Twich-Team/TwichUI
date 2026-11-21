@@ -1,7 +1,7 @@
 -- TwichUI Fishing: the catch list on the right of the screen (Stage 2)
 -- What this session has caught, drawn straight over the world: no panel. The game's own item icons in a thin bronze rim,
--- ivory type with a soft shadow, a bronze rule between sections, and under it all a soft warm shade (media scrim) that
--- fades to nothing towards the middle of the screen, so the text reads over bright water and snow as well as at night.
+-- ivory type with a soft shadow, a bronze rule between sections, and under it all a faint warm shade (media scrim, a
+-- feathered oval with no edge), so the text reads over bright water and snow as well as at night.
 --
 -- From Stage 1's read-only interface only (API.Session and API.Provenance("session")), redrawn on its notifications:
 --   header     "This Session" and how long it has lasted (a one-second ticker while shown)
@@ -125,11 +125,12 @@ local function Build()
     f:EnableMouse(false)
     f:Hide()
     u = {}
-    -- the shade: wider than the list, reaching the screen's edge, fading out towards the middle
+    -- the shade: a feathered oval larger than the list, darkest under the text, no edge anywhere
     u.scrim = f:CreateTexture(nil, "BACKGROUND", nil, -6)
-    u.scrim:SetPoint("TOPLEFT", f, "TOPLEFT", -70, 34)
-    u.scrim:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 60, -30)
+    u.scrim:SetPoint("TOPLEFT", f, "TOPLEFT", -110, 70)
+    u.scrim:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 110, -60)
     H.Texture(u.scrim, "scrim", { 0.06, 0.04, 0.03, 0.35 })
+    u.scrim:SetAlpha(H.SHADE)
     u.title = Text(f, 20, "serif")
     u.title:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
     u.title:SetText("This Session")
@@ -222,7 +223,8 @@ end
 
 local function Label(e)
     local name = e.name or ("Item " .. e.id)
-    if e.quality and e.quality >= 2 and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[e.quality] then
+    -- the game's own quality color for rare and better only: common and uncommon stay ivory, as the rest of the list
+    if e.quality and e.quality >= 3 and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[e.quality] then
         local c = ITEM_QUALITY_COLORS[e.quality]
         if c.hex then return c.hex .. name .. "|r" end
     end
