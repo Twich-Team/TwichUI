@@ -67,6 +67,7 @@ Replace `workshop-settings` with one of these nonempty groups:
 | `auction-house` | Standalone Auction House preview, existing auction safeguards and Workshop dependencies |
 | `crafting` | Crafting, shopping, stock, planner, strategy and compact views |
 | `market` | Prices, distribution, history, valuation, schema and automatic scans |
+| `market-performance` | Five small Opportunities/summary/cache invariants; supplements affected feature coverage, no simulator |
 | `reminders` | Reminders engines, designer, settings and artwork |
 | `loot-rolls` | Loot Rolls rules, cards, automatic rolling and settings pages; the synthetic-roll simulator catalog is run by hand with `bash tools/simlab/loot.sh` |
 | `navigation` | Navigation, maps, pins, NPCs and guild locations |
@@ -396,3 +397,15 @@ Diagnostics preset have their own passing focused checks and simulator evidence.
 `auction-house` and `auction-preview` now also select `test_perf_engine.lua` and
 the two changed Diagnostics source files. No full/release certification or native
 client acceptance is inferred from this campaign.
+
+## V2 Market / Opportunities performance audit
+
+The [V2 audit](performance/v2-market-opportunities-audit.md) records production-reader
+partition churn, real Session/Opportunities mock redraw workloads, memory models,
+source revisions and the four-tier regression proposal. Its small
+`test_workshop_market_performance.lua` is selected by existing Market/Workshop globs.
+A narrow invariant check is `./tests/run.sh development market-performance` (five
+modules, no simulator); it supplements the normal affected Market/crafting groups.
+Large workloads remain opt-in: `python3 tools/measure_market_opportunities.py --suite all --reps 3 --report test-output/opportunities.json`.
+See [baseline commands and limitations](evidence/v2-market-opportunities/README.md).
+No benchmark campaign is added to ordinary test discovery or CI selection.
