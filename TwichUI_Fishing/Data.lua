@@ -1,7 +1,7 @@
 -- TwichUI Fishing: names, seed data and small helpers
 -- No frames and no game state here. This file creates R.Fishing (F); every other file of the addon adds to it.
 --
--- Evidence (docs/fishing.md, "What the Forever client gives"): the item class and subclass of a fishing pole come from the
+-- Evidence (docs/fishing-feasibility.md): the item class and subclass of a fishing pole come from the
 -- client's Enum (ItemClass.Weapon, ItemWeaponSubclass.Fishingpole = 20, Blizzard_APIDocumentationGenerated/
 -- ItemConstantsDocumentation.lua). The spell ids, lure items and clam items below are NOT in the client's files: they are
 -- seed data from the classic-era game and the repository's earlier Easy Fishing work. They only help recognise things;
@@ -61,7 +61,7 @@ F.CONTAINERS = {
 }
 
 ---------------------------------------------------------------------------
--- Limits (docs/fishing.md, "Retention")
+-- Limits (docs/fishing.md, "Saved data")
 ---------------------------------------------------------------------------
 F.LIMITS = {
     sessions = 100,     -- completed session summaries kept per character (config may set 10..500)

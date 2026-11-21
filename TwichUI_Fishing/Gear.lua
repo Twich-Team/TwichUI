@@ -326,7 +326,7 @@ function G.Restore(reason)
         if e and not (e.kept or e.leave) and (G.Worn(slot) or 0) ~= e.id then
             if e.id == 0 then
                 -- the slot was empty and the outfit filled it: taking an item off into the bags is not done by addon code here;
-                -- it is left on and reported (docs/fishing.md, "Limits")
+                -- it is left on and reported (docs/fishing-feasibility.md, "Unsupported or restricted")
                 e.leave = true
                 F.Note("restore-left-on", "slot " .. slot .. " was empty before fishing")
             elseif not Have(e) then
