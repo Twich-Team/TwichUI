@@ -453,9 +453,10 @@ function A.OnCatch()
     if l then l.caught = true end
 end
 
-function A.OnLootState(open)
+function A.OnLootState(open, kind)
     looting = open
-    if not open then lastEnd = math.max(lastEnd, F.Clock()) end
+    -- the guard follows a fishing window only (auto-loot can close it just after the line ends); other loot never delays
+    if not open and kind == "fishing" then lastEnd = math.max(lastEnd, F.Clock()) end
     A.Refresh()
 end
 

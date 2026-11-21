@@ -21,7 +21,10 @@ local ticker
 
 local function Bags()
     C.Classify()
-    if not Lo.Waiting() and not C.Pending() then C.Reconcile() end
+    if not Lo.Open() and not Lo.Waiting() and not C.Pending() then
+        C.Reconcile()
+        C.RememberCounts()
+    end
 end
 
 local function OnUnitInventory(unit) if unit == "player" then L.OnEnchantChanged() end end

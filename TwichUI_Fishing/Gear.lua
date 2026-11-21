@@ -319,7 +319,9 @@ function G.Restore(reason)
         return "unsupported"
     end
     local slots, missing = {}, 0
+    g.state = "pending"   -- until the changes are seen (a change can be reported while the items are being equipped)
     for _, slot in ipairs(RestoreOrder()) do
+        if not g.snapshot then break end
         local e = g.snapshot.slots[slot]
         if e and not (e.kept or e.leave) and (G.Worn(slot) or 0) ~= e.id then
             if e.id == 0 then
@@ -339,7 +341,7 @@ function G.Restore(reason)
         end
     end
     if missing > 0 then F.Note("restore-missing", missing .. " item(s) no longer in your bags") end
-    g.state = "pending"   -- until the changes are seen
+    if not g.snapshot or Settle() == 0 then return "done" end
     Expect("restore", slots)
     F.Emit("GEAR", "restoring", reason)
     return "pending"

@@ -132,7 +132,7 @@ function Lo.OnClosed()
     local capture = cur
     capture.closed = true
     if capture.kind == "maybe" then capture.kind = "unrelated" end
-    if F.Action and F.Action.OnLootState then F.Action.OnLootState(false) end
+    if F.Action and F.Action.OnLootState then F.Action.OnLootState(false, capture.kind) end
     if capture.kind == "unrelated" then capture.done = true return end
     local waiting = false
     for _, e in pairs(capture.slots) do if not e.taken then waiting = true end end

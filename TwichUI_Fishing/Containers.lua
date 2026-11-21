@@ -185,15 +185,27 @@ function C.LootOpened(fromItem)
         end
         return { lot = p.lot, item = p.item, via = p.via, count = p.count }
     end
-    if fromItem == false then return nil end
+    if fromItem ~= true then return nil end   -- only LOOT_OPENED says a window came from an item
     local queue = Queue()
     if not queue or #queue == 0 then return nil end
+    -- the counts from the last settled bags before this window (the client may take the container out of the bags as the
+    -- window opens or only as it closes; the remembered counts work either way), else the bags now
     local counts, any = {}, false
     for _, lot in ipairs(queue) do
-        if counts[lot.item] == nil then counts[lot.item] = G.BagCount(lot.item); any = true end
+        if counts[lot.item] == nil then counts[lot.item] = C.counts[lot.item] or G.BagCount(lot.item); any = true end
     end
     if not any then return nil end
     return { manual = counts }
+end
+
+-- The bags settled with no loot window in progress: remember how many of each queued item they hold.
+C.counts = {}
+function C.RememberCounts()
+    local counts = {}
+    for _, lot in ipairs(Queue() or {}) do
+        if counts[lot.item] == nil then counts[lot.item] = G.BagCount(lot.item) end
+    end
+    C.counts = counts
 end
 
 local function TakeFromLot(lot)

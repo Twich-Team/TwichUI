@@ -42,7 +42,7 @@ function FishingClient(opts)
   c.LOOT_ITEM_SELF, c.LOOT_ITEM_SELF_MULTIPLE = "You receive loot: %s.", "You receive loot: %sx%d."
   c.LOOT_ITEM_PUSHED_SELF, c.LOOT_ITEM_PUSHED_SELF_MULTIPLE = "You receive item: %s.", "You receive item: %sx%d."
   c.GetTime = function() return W.clock end
-  c.time = function(t) if type(t) == "table" then return os.time(t) end return W.epoch end
+  c.time = function(t) if type(t) == "table" then return os.time(t) end return math.floor(W.epoch) end
   c.InCombatLockdown = function() return W.combat end
   c.issecretvalue = function() return false end
   c.UIErrorsFrame = { AddMessage = function(_, text) W.errors[#W.errors + 1] = text end }

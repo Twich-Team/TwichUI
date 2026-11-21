@@ -232,7 +232,7 @@ function Ses.End(reason, at)
     local c = S.Char()
     local s = c and c.session
     if not s then return nil end
-    local stop = F.Count(at) or F.Now()
+    local stop = F.Num(at) and math.floor(at) or F.Now()
     if stop < s.start then stop = s.start end
     s.stop, s.ended = stop, reason
     s.seconds = stop - s.start

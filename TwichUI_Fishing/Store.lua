@@ -222,8 +222,13 @@ function S.Get(path)
     local a, b = Walk(path)
     local d = S.DEFAULTS[a]
     if b then
-        local v = cfg and type(cfg[a]) == "table" and cfg[a][b]
-        if v == nil then return d and d[b] end
+        local group = cfg and cfg[a]
+        local v
+        if type(group) == "table" then v = group[b] end
+        if v == nil then
+            if type(d) == "table" then return d[b] end
+            return nil
+        end
         return v
     end
     local v = cfg and cfg[a]
