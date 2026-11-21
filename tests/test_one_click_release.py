@@ -62,6 +62,22 @@ class TemporaryGit(unittest.TestCase):
             one.planned_version("2.0.0", "stable", new, self.root)
         self.assertEqual(one.planned_version("2.0.1", "stable", new, self.root), "2.0.1")
 
+    def test_notes_ignore_unpublished_stable_tags(self):
+        # The historical v1.3.0 tag exists but was not actually published.
+        self.git("tag", "-a", "v1.2.2", "-m", "published", "HEAD~1")
+        github = mock.Mock()
+        github.repo = "Twich-Team/TwichUI"
+        github.releases.return_value = [
+            {"tag_name": "v1.2.2", "draft": False, "published_at": "2026-11-09T17:48:39Z"},
+            {"tag_name": "v1.3.0", "draft": True, "published_at": None},
+        ]
+        meta = {"commit": self.head, "release_kind": "stable", "channel": "release",
+                "version": "2.0.1", "previous": {"tag": "v1.3.0", "commit": self.head}}
+        notes = one.notes_from_published(meta, github, self.root)
+        self.assertEqual(meta["previous"]["tag"], "v1.2.2")
+        self.assertIn("Changes since v1.2.2", notes)
+        self.assertNotIn("Changes since v1.3.0", notes)
+
     def test_same_source_tag_may_pass_version_planning_but_not_lightweight_tag_check(self):
         self.git("tag", "v2.0.0")
         self.assertEqual(one.planned_version("2.0.0", "stable", self.head, self.root), "2.0.0")
