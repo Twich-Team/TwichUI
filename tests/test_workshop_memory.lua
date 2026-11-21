@@ -232,4 +232,149 @@ local text = table.concat(blob, " ")
 Check(not text:find("have", 1, true) and not text:find("short", 1, true) and not text:find("cooldown", 1, true) and not text:find("craftable", 1, true),
   "no bag counts, craftability or cooldowns in the saved records")
 
+-- A transiently unavailable character identity must not turn a close into data loss.
+do
+  local s = Session("Rich", {}, nil); s.Flush()
+  local W, c = s.W, s.c
+  c.TwichUI.Profiles.Character = function() return nil end
+  c.GetRealmName = function() return nil end
+  Same(#W.Session.AllRecipes(), 0)
+  s.g.prof = ALCH; s.g.recipes, s.g.schem = Recipes(); s.g.filtered = { 1, 2 }
+  Check(W.Session.Observe())
+  W.Session.FillSome(120)
+  W.Session.Reset()
+  c.GetRealmName = function() return "Realm" end
+  Check(W.Session.Save())
+  Check(s.Saved(171) and #s.Saved(171).r == 2, "failed saves survive closing and are retried")
+  W.Session.Reset()
+  Same(#W.Session.AllRecipes(), 2, "reopening restores saved recipes without a profession")
+
+  -- The first read before the character is available must not latch an empty cache.
+  local reloaded = Session("Rich", c.TwichUIDB, nil); reloaded.Flush()
+  reloaded.c.TwichUI.Profiles.Character = function() return nil end
+  reloaded.c.GetRealmName = function() return nil end
+  Same(#reloaded.W.Session.AllRecipes(), 0)
+  reloaded.c.GetRealmName = function() return "Realm" end
+  Same(#reloaded.W.Session.AllRecipes(), 2, "saved recipes load once character identity becomes available")
+end
+
+-- Real-client regression: GetRealmName is empty, UnitFullName reports a
+-- different display realm, and the saved records use the login realm name.
+do
+  local key = "Rich - CAMWOW US2 Realm 7 PvE"
+  local saved = { workshop = { v = 1, chars = { [key] = { known = {
+    [333] = { name = "Enchanting", at = 1, r = {
+      { 14807, "Greater Magic Wand", 135144, 11288, 1, 1, 1, 4470, 1, 10938, 2 },
+      { 13485, "Enchant Shield - Lesser Spirit", 135913, 0, 1, 1, 1, 10998, 1, 10940, 2 },
+    } },
+  } } } } }
+  local s = Session("Rich", saved, nil)
+  s.c.GetRealmName = function() return "" end
+  s.c.UnitFullName = function() return "Rich", "Rusk" end
+  s.c.TwichUI.Profiles.Character = function() return key end
+  s.Flush()
+  Same(s.W.Queue.CharKey(), key, "use the canonical login identity when the realm API is empty")
+  Same(#s.W.Known.Load(), 1)
+  Same(#s.W.Session.Opportunities().all, 2, "saved crafts are visible before opening any profession")
+  s.W.Session.Reset()
+  Same(#s.W.Session.Opportunities().all, 2, "closing and reopening retains the saved crafts")
+  local codec = s.c.LibStub("LibSerialize")
+  local ok, roundTrip = codec:Deserialize(codec:Serialize(saved))
+  Check(ok, "saved recipes survive a non-executable text round trip")
+  local fresh = Session("Rich", roundTrip, nil)
+  fresh.c.GetRealmName = function() return "" end
+  fresh.c.TwichUI.Profiles.Character = function() return key end
+  fresh.Flush()
+  Same(#fresh.W.Session.Opportunities().all, 2, "a fresh session restores crafts with an empty realm API")
+  s.c.TwichUI.Profiles.Character = function() return nil end
+  Same(s.W.Queue.CharKey(), key, "a confirmed identity survives temporary profile unavailability")
+  s.c.UnitName = function() return "Alt" end
+  Same(s.W.Queue.CharKey(), nil, "another character never inherits the cached identity")
+  s.c.TwichUI.Profiles.Character = function() return "Rich - OtherRealm" end
+  Same(s.W.Queue.CharKey(), nil, "another character's profile identity is refused")
+end
+
+-- A cold reload must work even when neither realm API nor Profiles has an identity.
+do
+  local guid = "Player-42-0000ABCD"
+  local s = Session("Rich", {}, nil); s.Flush()
+  s.c.UnitGUID = function() return guid end
+  s.g.prof = ALCH; s.g.recipes, s.g.schem = Recipes(); s.g.filtered = { 1, 2 }
+  Check(s.W.Session.Observe()); s.W.Session.FillSome(120)
+  Check(s.W.Session.Add(s.W.Session.Browse()[1]))
+  Same(s.c.TwichUIDB.workshop.chars["Rich - Realm"].guid, guid, "a successful observation saves the stable character identity")
+  local codec = s.c.LibStub("LibSerialize")
+  local ok, db = codec:Deserialize(codec:Serialize(s.c.TwichUIDB)); Check(ok)
+  local fresh = Session("Rich", db, nil)
+  fresh.c.GetRealmName = function() return "" end
+  fresh.c.TwichUI.Profiles.Character = function() return nil end
+  fresh.c.UnitGUID = function() return guid end
+  fresh.Flush()
+  Same(fresh.W.Queue.CharKey(), "Rich - Realm", "GUID restores the saved key with no session cache or profile identity")
+  Same(#fresh.W.Session.Opportunities().all, 2, "crafts survive a serialized cold reload")
+  Same(#fresh.W.Queue.Entries(), 1, "the same GUID restores the saved queue")
+
+  local function Cold(data, id)
+    local client = Session("Rich", data, nil)
+    client.c.GetRealmName = function() return "" end
+    client.c.TwichUI.Profiles.Character = function() return nil end
+    client.c.UnitGUID = function() return id end
+    client.Flush()
+    return client
+  end
+  local before = codec:Serialize(db)
+  local other = Cold(db, "Player-42-00000002")
+  Same(other.W.Queue.CharKey(), nil, "a same-name character with another GUID cannot read this slot")
+  Same(#other.W.Session.AllRecipes(), 0)
+  Same(#other.W.Queue.Entries(), 0, "another GUID cannot read the queue either")
+  other.c.GetRealmName = function() return "Realm" end
+  Same(other.W.Queue.CharKey(), nil, "even a reused name/realm cannot override a different GUID binding")
+  Check(not other.W.Queue.BindCharacter("Rich - Realm"), "explicit binding refuses another character's slot")
+  Same(codec:Serialize(db), before, "failed lookups and bindings never rewrite the saved records")
+
+  -- An older slot has no GUID: explicitly bind the confirmed existing key once.
+  local _, legacy = codec:Deserialize(before)
+  legacy.workshop.chars["Rich - Realm"].guid = nil
+  local recovery = Cold(legacy, guid)
+  Same(recovery.W.Queue.CharKey(), nil, "never guess a legacy slot from a matching name alone")
+  Check(not recovery.W.Queue.BindCharacter("Alt - Realm"), "cannot bind another player's named slot")
+  Check(not recovery.W.Queue.BindCharacter("Rich - Missing"), "cannot create a missing legacy slot")
+  Check(not recovery.W.Queue.BindCharacter({}), "corrupt keys are refused")
+  Check(not recovery.W.Queue.BindCharacter("Rich - " .. ("x"):rep(161)), "oversized keys are refused")
+  Check(recovery.W.Queue.BindCharacter("Rich - Realm"))
+  Check(recovery.W.Queue.BindCharacter("Rich - Realm"), "binding is idempotent")
+  Same(#recovery.W.Session.AllRecipes(), 2, "the legacy recipes are visible after binding")
+  local _, recovered = codec:Deserialize(codec:Serialize(legacy))
+  local afterReload = Cold(recovered, guid)
+  Same(#afterReload.W.Session.AllRecipes(), 2, "the explicit legacy association survives a cold reload")
+
+  recovered.workshop.chars["Rich - Duplicate"] = { guid = guid }
+  local ambiguous = Cold(recovered, guid)
+  Same(ambiguous.W.Queue.CharKey(), nil, "duplicate GUID associations cannot select an arbitrary slot")
+  Check(not ambiguous.W.Queue.BindCharacter("Rich - Realm"), "binding cannot create duplicate associations")
+  recovered.workshop.chars["Rich - Duplicate"] = nil
+  recovered.workshop.v = 2
+  local held = Cold(recovered, guid)
+  local heldBefore = codec:Serialize(recovered)
+  local bound, why = held.W.Queue.BindCharacter("Rich - Realm")
+  Check(not bound and why == "held", "newer-schema records remain read-only")
+  Same(held.W.Queue.Slot(true), nil, "direct slot creation also respects held data")
+  Same(codec:Serialize(recovered), heldBefore)
+
+  local missing = Cold(legacy, "Player-42-" .. ("A"):rep(81))
+  Same(missing.W.Queue.CharKey(), nil, "oversized GUIDs cannot restore records")
+  Check(not missing.W.Queue.BindCharacter("Rich - Realm"))
+  local unavailable = Cold(legacy, nil)
+  Same(unavailable.W.Queue.CharKey(), nil, "no GUID and no realm means no identity")
+  Check(not unavailable.W.Queue.BindCharacter("Rich - Realm"))
+  local secret = Cold(legacy, guid)
+  secret.c.issecretvalue = function(v) return v == guid end
+  Same(secret.W.Queue.CharKey(), nil, "a secret GUID cannot be used to locate saved data")
+  Check(not secret.W.Queue.BindCharacter("Rich - Realm"))
+  legacy.workshop.chars["Rich - Realm"].guid = {}
+  local corrupt = Cold(legacy, guid)
+  Same(corrupt.W.Queue.CharKey(), nil, "a corrupt GUID is not an identity")
+  Check(corrupt.W.Queue.BindCharacter("Rich - Realm"), "explicit recovery repairs only the corrupt binding")
+end
+
 print("PASSED")
