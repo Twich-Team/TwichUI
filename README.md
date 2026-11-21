@@ -11,6 +11,9 @@ In addition, several features exist to dive deep into your addon settings and co
 
 The addon is intended to work alongside EllesmereUI.
 
+For proposed improvements and future ideas (not release commitments), see the
+[product roadmap and idea bank](docs/product-roadmap.md).
+
 ## Features
 
 

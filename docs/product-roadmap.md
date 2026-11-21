@@ -1,0 +1,162 @@
+# TwichUI — Product Roadmap & Idea Bank
+
+**Planning snapshot:** November 21, 2026. **Status:** Living planning register, not a commitment to implement everything. 57 original notes preserved below (5 polish, 23 Workshop, 29 feature ideas), plus audit-derived recommendations. Statuses are based on a source/PR review and can change as branches merge; they are not a full in-game verification.
+
+## Product North Star
+
+**Premium, cohesive, responsive, dependable WoW: Forever experience.** TwichUI should feel like a crafted game interface, not a pile of utilities. For developers and AI agents, favor clear subsystem ownership, safe data contracts, small reversible changes, proportional offline tests and concise reviewable PRs. Keep real-game verification **owner-directed** and **nonblocking** for release decisions.
+
+**Source of truth:** This document tracks proposed priorities and owner-selected work, not the implementation status of every file. Consult `STATUS_AND_BACKLOG.md` and the relevant feature docs for technical handoffs, and actual source/PRs for current code. Recheck dated implementation labels when planning a task; no item independently authorizes code changes.
+
+## Rules for using this roadmap
+
+1. **Ideas are not promises or authorization.** An item enters active work only after the owner selects it. Preserve experiments and open questions as such.
+2. **Status is not checkbox state.** An original note may already be partially or fully implemented; verify before creating another implementation.
+3. **Fix quality before expanding surface area.** Prioritize measured slow paths, player-facing defects, economic correctness, then related workflow simplification.
+4. **Test proportionately.** Focused unit/regression tests during development; affected subsystem integration at milestones; full offline certification at release. Native acceptance is optional and at the owner's discretion, with unverified client behavior clearly labeled.
+5. **Stop at the acceptance criteria.** Avoid unrelated refactors, new test frameworks, large evidence dumps, blanket benchmark campaigns and speculative performance work.
+6. **A single owner-selected work item at a time** should become a short, actionable PR scope, not a megaproject.
+
+### Proposed disposition labels
+
+- **Active:** already selected and being worked on.
+- **Fix candidate:** observed UI/behavior defect, validate and repair.
+- **Refinement / UX candidate:** existing capability that should be polished before expanded.
+- **Candidate:** attractive option; needs impact/effort decision.
+- **Discovery:** needs design questions or technical feasibility before scheduling.
+- **In progress:** existing active branch/PR, not a new blank-slate feature.
+- **Implemented — verify/close:** code exists; visually or behaviorally check if useful, then archive the note.
+
+## Proposed six-stage roadmap
+
+| Stage | Focus | Entry / exit criteria | Representative items |
+|---|---|---|---|
+| **1. Stabilization & performance** | Make the core and Workshop predictably responsive, with sensible offline tests | Measured before/after results; no unacceptable synchronous work; existing correctness preserved | A01, A02, A03, A07, P03, W19 |
+| **2. Correctness & trust** | Reliable prices, data provenance, Ledger and recovery | No invented economic facts; known conditional bugs covered; old data preserved | A04, A05, A06, saved-data recovery |
+| **3. Premium polish quick wins** | Clearer screens, alignment, better empty/loading states and shared materials | Visible improvements with low regression risk, targeted review | P01, P04, P05, W04, W05, W21, W22, F12/F29 |
+| **4. Workshop workflow refinements** | Move smoothly from Opportunity → Craft/Buy → Shop → Sell → Ledger | First verify existing planner; add only missing connections and meaningful usability improvements | W01–W03, W06–W13, W16, W20 |
+| **5. Gameplay QoL & integrations** | Contextual, quiet, player-controlled extras, including finishing existing branches | Opt-in/privacy/compatibility understood, scoped feature by feature | P02, W14, W23, F02, F04, F07–F09, F11, F13, F16, F18, F22–F23, F27 |
+| **6. Longer-term discovery** | Large systems or undefined ideas | Short feasibility/spec decisions before scheduling implementation | F01, F03, F05–F06, F10, F14, F20–F21, F24–F26, F28, W03, W15 |
+
+These stages indicate *priority buckets*, not a serial schedule. Engineering standards, targeted testing, visual cohesion and performance are cross-cutting. A small Stage 3 fix can happen before an expensive Stage 1 investigation is complete if the owner chooses.
+
+## Audit-derived work register
+
+| ID | Finding / initiative | Proposed position | Status and acceptance guidance |
+|---|---|---|---|
+| **A01** | Opportunities list/estimate/render responsiveness | **Active / Stage 1** | Owner already tackling it. Profile first paint, cached repaint, worst uninterrupted callback and dependency invalidation; use a few representative small/large inputs. Don't change price math as a shortcut. |
+| **A02** | Market data payload validation, load/sync and partition behavior | Stage 1 | Measure actual file load/compile, validation, asynchronous scheduling, price read, memory and wall-clock. Keep integrity and atomic fallback; do not assume 64 data add-ons alone cause the issue. |
+| **A03** | Proportional offline tests and affordable performance regression detection | Stage 1 / ongoing | PR #95 agent-policy guidance merged. Improve existing runner/source selection only where current friction is measured; no new framework; preserve release tier. |
+| **A04** | Neutral/Blackwater auction house fee classification | Stage 2 | Source-confirmed potential rate omission; normalize supported market identity, test vendor/auction fee examples. |
+| **A05** | Market source status and refusal messaging | Stage 2–3 | Closed, unmerged PR #87 holds relevant UX design; review against current main. Clear external vs local source, timestamp, scope, rejected reasons. |
+| **A06** | Ledger Open All sale attribution | Stage 2 | PR #81 merged and regression-tested offline; optionally compare against a natural in-game mailbox session. Do not claim exact profit for unmatchable auction sales. |
+| **A07** | Startup, SavedVariables and first-use performance attribution | Stage 1 | Existing Diagnostics starts after file/SV loading; keep cold login, reload and first-open timings distinct. Optimize only proven contributors. |
+| **A08** | Cohesive settings/window interactions and EllesmereUI consistency | Stage 3 / ongoing | Establish a lightweight visual QA checklist, including keyboard/gamepad relevance, hover, scale, alignment, scroll, progress, errors and recovery. |
+| **A09** | Testing evidence/repository hygiene and AI agent navigation | Ongoing | Keep a concise agent entrypoint and architecture map; migrate historical generated artifacts only if worth the effort. No blanket refactors or automated agent teams. |
+| **A10** | Native performance monitor improvements | Later if justified | Prefer existing Perf/Diagnostics and bounded opt-in copies of reports; do not add background instrumentation without a demonstrated data gap. |
+| **A11** | Release packaging/CI safeguards | Ongoing | Existing one-click owner-authorized release workflow and offline checks; optional native testing under owner control, with honest evidence labels. |
+
+## Priority shortlist for discussion (not accepted commitments)
+
+**Now:** A01 Opportunities responsiveness (already underway). **Next possible investigation:** A02 Market load/validation and A07 startup attribution, especially if A01 does not explain the observed stall. **Small correctness fixes:** A04 and A05. **Premium quick wins:** P01, P04, P05, W04, W05, W21, W22. **Verify existing before rebuilding:** W09 multilevel crafting, W17/W18 tooltip builder, F15 auto flight, F17 Attune broker, F04 Fishing stage 2.
+
+**Watch for overlap:** W01 and W19 both touch auction pricing/Market confidence but are not identical; W07 builds on Gold Ledger; F12 and F29 describe one Waylaid-crate area. Keep these as linked notes until scoped.
+
+**Reasonable release cadence:** small PRs with focused tests, periodic integration checks for shared changes, full offline certification at explicit release preparation. No native game-play gate unless the owner elects to use one.
+
+## Complete original note inventory
+
+Each note is preserved in wording below. The proposed status and effort are planning estimates, not verified implementation outcomes. **S / M / L** mean small / medium / large relative effort; **?** needs definition. Stage **—** means already implemented/verify, not part of the prospective build roadmap.
+
+### Polish Critiques — all 5 notes
+
+| ID | Original note | Stage | Proposed disposition | Effort | Rationale / next question |
+|---|---|:---:|---|:---:|---|
+| P01 | The Magic inventory progress bar hides the text on top of it | 3 | Fix candidate | S | Visual overlap; regression pose for different text lengths |
+| P02 | After a party ping, and after clicking on a ping from on map menu and navigating to map, replay the ping sound and animation | 5 | Refinement candidate | S/M | Keep replay event-driven; avoid notification spam |
+| P03 | The way tests are ran individually needs to be changed | 1 | Engineering candidate | S/M | Confirm friction; improve existing runner/group selection, not a new framework |
+| P04 | Toggles on target markers and world markers overlap | 3 | Fix candidate | S | Check scale, compact width, font and input hit targets |
+| P05 | Restock from this merchant dialog not styled | 3 | Visual review / refinement | S/M | RestockPrompt already supports frame styles; judge cohesion against approved design |
+
+### Workshop — all 23 notes
+
+| ID | Original note | Stage | Proposed disposition | Effort | Rationale / next question |
+|---|---|:---:|---|:---:|---|
+| W01 | Added smarts to the auction sale tab where it analyzes the type of item and the amount listed to pick the correct price. For example, if there are 25 savory deets listed at one silver, but then 600 listed at two silver, it would prefer the two silver price over the one silver. as it is an increasing gold and is still highly likely to sell | 4 | Refinement of existing pricing | M/L | PR #85 already excludes bait tiers in estimates; assess sell tab distinct volume/depth tradeoffs with deterministic examples; no guaranteed sale probability |
+| W02 | Flight master as currency source in ledger | 4 | Candidate | S/M | Attribute verified taxi expenses without double-counting or inventing sources |
+| W03 | Dungeon run totals | 6 | Discovery | M | Define gold / loot / expenses / duration / run grouping before scope |
+| W04 | Need button in the new auction house frame to scan it, as well as a progress bar, probably down at the bottom where the market date is | 3 | UX candidate | S/M | Explicit local AH scan control separate from Market server reload; show progress and safe disabled states |
+| W05 | The market data should just show the date time of the loaded data and the tool tip is massive with just a bunch of hash codes in it | 3 | UX candidate | S | Make compact status and date; technical hashes only under expandable diagnostics |
+| W06 | Would be nice to customize the auction sold messages in chat to show the icon, the amount they were sold for, and a optional sound | 4 | Candidate | M | Opt-in quiet concise messages; source only from verified auction-sale evidence |
+| W07 | Needs tracking and charts to determine if I’m actually making any progress | 4 | Refine existing Gold Ledger | M | Existing charts measure gold flow; define progress metrics without confusing cash flow and realized profit |
+| W08 | PFB: Near vendor price, adjustable offset via gold or percentage. | 4 | Candidate | S/M | Post From Bags vendor threshold with absolute or percent setting; preserve explicit posting and warning |
+| W09 | Crafting queue needs to calculate cost of self crafting sub materials and offer a way for me to choose one or another, as well as track those materials if that is what I choose | 4 | Verify/refine existing planner | M | Multilevel craft/buy planner and source choice already exist; test full end-to-end UX and material tracking |
+| W10 | Crafting queue should offer to purchase the required items from a vendor when opened | 4 | Candidate with safety gate | M | Review purchase quantities and caps; require explicit user action and normal game restrictions |
+| W11 | Crafting queue should allow me to shut click at AH to link | 4 | Clarify interaction / candidate | S | Likely shift-click; confirm desired link destination and current AH capabilities |
+| W12 | Crafting queue probably should have a custom search function | 4 | Candidate | S/M | Search/filter current queue without losing position/selected row |
+| W13 | Queue should remove X number of items as they are crafted | 4 | Candidate with correctness risk | M | Track verified craft output and partial quantities; avoid false decrements from event timing |
+| W14 | Auto track gathering | 5 | Candidate | M | Clarify what is tracked, when the quest/objective updates and opt-in policy |
+| W15 | Recipe Finder | 6 | Discovery | M/L | Define search by product, material, profession, alt and unknown recipe data |
+| W16 | Item advisor shows items equipped | 4 | Candidate | S/M | Expand known-item sources safely; distinguish equipped from bags and avoid duplicate identities |
+| W17 | Tool tip builders should include custom separators | — | Implemented — verify/close | S | PR #84 merged; review appearance if desired, do not rebuild |
+| W18 | Tool tip builders should include the ability to remove or change the text that is displayed for what it’s worth | — | Implemented — verify/close | S | PR #84 includes editable/removable default heading |
+| W19 | The opportunities page should use a better algorithm for the cost to make, as it’s currently just using the least expensive items in the marketplace and for example right now during launch, items sell so fast that those are not accurate values almost immediately | 1 | Partially addressed — investigate | M | PR #85 walks listing depth, filters bait and estimates confidence; current launch-market freshness and load responsiveness still need measurement |
+| W20 | Any craft queue list, I should be able to click on the number to manually set a number, as well as have a right click context menu to do things like remove the entry or open the recipe in my professions book | 4 | UX candidate | S/M | Q.SetCrafts/Q.Remove exist; add convenient control/context actions |
+| W21 | In the shopping tab of the workshop frame, it shows the items I need, and on the right side it does actually show show what recipe it’s needed for, but it’s just a small text at the bottom. I think that should be a section of the bottom where it actually shows the item icon and name of what it’s for | 3 | UX candidate | S/M | Promote ingredient-to-output explanation to a useful dedicated section |
+| W22 | In the shopping tab of the workshop frame, at the bottom, there are various numbers based off of the items sources, like vendor, auction, craft, and collect. The artwork for them is not vertically aligned with the text for each one | 3 | Visual fix candidate | S | Check different font sizes/scales |
+| W23 | A favorite items tab on the auction house frame that allows you to quickly purchase your favorite items in your predefined amounts | 5 | Candidate | M | Favorite watchlist and requested quantities; never auto-buy without explicit confirmation |
+
+### Feature Ideas — all 29 notes
+
+| ID | Original note | Stage | Proposed disposition | Effort | Rationale / next question |
+|---|---|:---:|---|:---:|---|
+| F01 | Full gamepad support | 6 | Large concept / discovery | L | Start with navigation/action equivalence and protected input constraints |
+| F02 | Health overlay for execute range | 5 | Candidate | S/M | Class/spell thresholds, optional minimal overlay; verify accessible health values |
+| F03 | Custom waypoint ui | 6 | Concept / discovery | L | Build on current navigation/WaypointUI rather than replacing blindly |
+| F04 | Fishing module | 5 | In progress | M | Stage 1 merged PR #92; Stage 2 open PR #94; integrate/polish existing branch |
+| F05 | What dungeons or zones are good for me | 6 | Concept / discovery | M | Define guidance inputs: level, quests, interests and group role |
+| F06 | Dungeon tools | 6 | Broad concept | L | Decompose into discrete user journeys rather than generic large module |
+| F07 | Quest log cleanup | 5 | Candidate | M | Specify reversible display/organization scope before touching quest records |
+| F08 | Quest item cleanup | 5 | Candidate with safeguards | M | Avoid deleting or vendoring anything automatically without explicit review |
+| F09 | Loot received cards | 5 | Candidate | M | Distinct from existing Loot Rolls cards; support receipts not just roll choice |
+| F10 | Arrival time of board and zeps | 6 | Feasibility first | M/L | Verify accessible timetable/observation data; no invented ETA |
+| F11 | Automatically sort bank and bags after running a magic inventory rule | 5 | Candidate with safety gate | M | Respect automation protections, inventory state and click authorization |
+| F12 | Do not see waylay crates in the magic inventory. There should also be a way to mark them as junk | 3 | Bug/integration candidate | S/M | Combine with F29 for evaluation; check why crates not visible and safe junk marking |
+| F13 | Leave me alone mode should also silence whispers and group invite sounds, suppress whisper messages | 5 | Candidate with privacy UX | M | Expand existing QuietScreen only as explicit opt-in; avoid irrecoverable communication hiding |
+| F14 | Cooldown timeline bar | 6 | Large concept / discovery | L | Avoid rebuilding EllesmereUI; assess spell/accessibility and layout model |
+| F15 | Navigation should have an option to automatically take the appropriate flight path | — | Implemented — verify/close | S | nav/Flight.lua already implements opt-in acknowledged autoFlight |
+| F16 | As healer, hover over healer watch to say things like drinking.. oom. Smart. | 5 | Candidate | S/M | Short, truthful contextual communication based on observed state |
+| F17 | Data broker for Attune | — | Implemented — verify/close | S | PR #73 merged and art PR #74 merged |
+| F18 | Show a marker where party member died while they are dead. | 5 | Candidate | M | Existing PartyDeath notification does not establish location marker; privacy/data and lifetime constraints |
+| F19 | Remove last name from chat | 5 | Research/refinement | S/M | Clarify whether realm suffix vs actual displayed surname; avoid mangling names |
+| F20 | Reminder Behaviors | 6 | Clarify / extend existing reminders | M | Define behavior examples and distinguish from outputs such as action glow |
+| F21 | Talent builder | 6 | Large concept / feasibility | L | Avoid unrestricted talent/spell automation; specify planner UX and game API |
+| F22 | Enhanced dispel indicators | 5 | Candidate / API feasibility | M | Healer usability, overlap with other addon visuals, combat-safe signals |
+| F23 | Prayer of Mending tracker | 5 | Candidate / API feasibility | S/M | Spell-specific observation; confirm Forever mechanics and secure UI limits |
+| F24 | TUI Does it Die? | 6 | Concept — clarify | ? | Keep idea name; define intended inputs/outputs before estimate |
+| F25 | Naowh: Smart Reminders | 6 | Research concept | M/L | Capture inspirational behaviors; implement distinct value, not clone |
+| F26 | Noawh: Group Inspect | 6 | Research concept | M/L | Capture desired group inspection experience, limitations and privacy |
+| F27 | Party wipe effect | 5 | Candidate | S/M | Could reuse PartyDeath visual effects; require restrained opt-in presentation |
+| F28 | Clicked/Macro Kit | 6 | Research concept | M/L | Clarify feature boundaries and protected macro creation/action restrictions |
+| F29 | Magic inventory: Waylaid crates | 3 | Merged idea with F12 — retain as cross-reference | S/M | Same concern as F12; do not create duplicate project |
+
+## Status cross-checks and references
+
+- [PR #95](https://github.com/Twich-Team/TwichUI/pull/95): shared agent efficiency/testing policy **merged**; runner improvements remain distinct possible work.
+- [PR #85](https://github.com/Twich-Team/TwichUI/pull/85): Opportunities cost realism **merged**; not proof that current price freshness or load time is satisfactory.
+- [PR #84](https://github.com/Twich-Team/TwichUI/pull/84): custom tooltip separators and removable/editable default heading **merged**.
+- [PR #73](https://github.com/Twich-Team/TwichUI/pull/73): Attune broker **merged**; [PR #74](https://github.com/Twich-Team/TwichUI/pull/74) supplies artwork.
+- [PR #92](https://github.com/Twich-Team/TwichUI/pull/92): Fishing Stage 1 **merged**; [PR #94](https://github.com/Twich-Team/TwichUI/pull/94) Stage 2 **open** at audit time.
+- [PR #81](https://github.com/Twich-Team/TwichUI/pull/81): auction Open All attribution **merged**, simulation-tested, real-client confirmation not claimed.
+- [PR #87](https://github.com/Twich-Team/TwichUI/pull/87): clearer Market source/empty state **closed without merge**; assess applicable design intent, not an active PR.
+- `!!!TwichUI/nav/Flight.lua`: opt-in autoFlight already implemented; `TwichUI_Workshop/Strategy.lua`: multilevel craft/buy planner; `!!!TwichUI/modules/RestockPrompt.lua`: some frame-style support exists despite visual critique; `!!!TwichUI/modules/PartyDeath.lua`: existing death notification, not evidence of a death-location map marker.
+
+## Decision log (initial)
+
+- **Owner-selected active item:** Opportunities loading investigation/fix. Await its result before changing adjacent Market architecture.
+- **Owner policy:** prioritize premium, cohesive UX; reliable responsiveness; AI-agent-friendly repository; comprehensive but proportionate offline tests; owner retains sole release readiness decision.
+- **Not authorized:** no automatic backlog execution, feature builds, issue creation, PRs or repository edits from this roadmap draft.
+
+## How to refine next
+
+Choose a few items by **player pain**, **how often experienced**, **implementation risk**, and **expected value**. For each selected item, write a short acceptance statement and designate required existing tests. Move out-of-date fulfilled notes to **verified/archive** rather than deleting their history. Ideas requiring substantial design stay in **discovery** until the player experience is articulated. Update statuses only with a merged code/reference or the owner's own acceptance, not assumptions.
