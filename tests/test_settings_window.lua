@@ -83,6 +83,7 @@ local function Fake(kind, parent, template)
     GetFrameStrata = function(s) return s.strata or "MEDIUM" end,
     SetFrameStrata = function(s, value) s.strata = value end,
     IsOwned = function() return false end,
+    GetParent = function(s) return s.parent end,
     GetOwner = function(s) return s.owner end,
     SetOwner = function(s, o) s.owner = o end,
     GetFont = function() return "Fonts\\FRIZQT__.TTF", 12, "" end,
@@ -1277,11 +1278,10 @@ end
 ---------------------------------------------------------------------------
 -- 8. Feature cards (Quality of life), sample previews, Home's ways in, icons
 --   * the icon registry's files are there, at the sizes it says, and a missing or refused file falls back;
---   * Quality of life is five cards, each with its switch in the head and its other settings as rules;
---   * a card's rules start folded (the combat-resurrection choice never is); opening anything saves nothing;
---   * the rules line follows the settings at once; a greyed-out rule says which switch to turn on;
---   * search finds a folded rule, describes it with its card's sentence, opens the card and marks the row once;
---   * previews play once, call no game action, write nothing, and stop on leaving, closing or reduced motion;
+--   * Quality of life has 13 features in four groups, preserving all 22 settings and their prerequisites;
+--   * one detail opens at a time, with combat resurrection always visible and disclosure writing nothing;
+--   * search and direct navigation reveal hidden controls and retain highlight, focus and disabled explanations;
+--   * samples are deliberate, play once, call no game action, write nothing, and stop on lifecycle changes;
 --   * Home's changed-settings list compares with the defaults and goes to the control; nothing is made twice.
 ---------------------------------------------------------------------------
 do
@@ -1382,18 +1382,66 @@ do
   end
 
   -- 8b. Quality of life's cards
+  -- Every persisted control remains a uniquely registered, searchable Settings row.
+  local qolIds = {
+    "qolSummons", "qolSummonsFrom", "qolSummonsWait", "qolResurrect", "qolResurrectCombat",
+    "qolReleasePvP", "qolReleaseWait", "qolDuels", "qolDuelsFrom", "qolDuelsToDeath",
+    "qolInvites", "qolInvitesFrom", "qolDeclineInvites", "qolDeclineInvitesFrom", "qolQuickKeybind",
+    "qolGroupFinderZones", "qolHideErrors", "qolHideErrorsKeep", "qolHideErrorSpeech",
+    "qolLootSparkles", "qolHerbSparkles", "qolOreSparkles",
+  }
+  for _, id in ipairs(qolIds) do
+    local row = assert(K.rowsById[id], id .. " remains registered")
+    assert(row.page == "qol" and row.setting == K.variables["TWICHUI_" .. id], id .. " retains its setting identity")
+    local found
+    for _, result in ipairs(Search.Run(row:GetName())) do
+      if result.entry.row == row then found = true; break end
+    end
+    assert(found, id .. " remains searchable by its label")
+  end
+  local resettable = {}
+  for _, setting in ipairs(K.Resettable("qol")) do resettable[setting.id] = true end
+  assert(#K.Resettable("qol") == 22, "page reset owns exactly 22 unique settings")
+  for _, id in ipairs(qolIds) do assert(resettable[id], id .. " remains in page reset") end
+  local defaults = { qolSummonsFrom="known", qolSummonsWait=3, qolReleaseWait=2, qolDuelsFrom="known",
+    qolInvitesFrom="friendsGuild", qolDeclineInvitesFrom="friendsGuild", qolHideErrorsKeep=true }
+  for _, id in ipairs(qolIds) do
+    local expected = defaults[id]
+    if expected == nil then expected = false end
+    assert(K.variables["TWICHUI_" .. id]:GetDefaultValue() == expected, id .. " retains its default")
+  end
+  local prerequisites = {
+    qolSummonsFrom="qolSummons", qolSummonsWait="qolSummons", qolResurrectCombat="qolResurrect",
+    qolReleaseWait="qolReleasePvP", qolDuelsFrom="qolDuels", qolDuelsToDeath="qolDuels",
+    qolInvitesFrom="qolInvites", qolDeclineInvitesFrom="qolDeclineInvites", qolHideErrorsKeep="qolHideErrors",
+  }
+  for id, parent in pairs(prerequisites) do
+    local row = K.rowsById[id]
+    assert(row.parent == K.rowsById[parent] and not row:Enabled() and row:DisabledReason(), id .. " retains its disabled prerequisite")
+  end
+  assert(not K.rowsById.qolHideErrorSpeech.parent and K.rowsById.qolHideErrorSpeech:Enabled(), "error speech remains independent")
+  -- The seven advisory overlaps follow Leatrix's actual option values, without changing settings.
+  local leatrix = { qolSummons="AutoAcceptSummon", qolResurrect="AutoAcceptRes", qolReleasePvP="AutoReleasePvP",
+    qolDuels="NoDuelRequests", qolInvites="AcceptPartyFriends", qolDeclineInvites="NoPartyInvites", qolHideErrors="HideErrorMessages" }
+  local originalLoaded, originalDB = c.C_AddOns.IsAddOnLoaded, c.LeaPlusDB
+  c.C_AddOns.IsAddOnLoaded = function(name) if name == "Leatrix_Plus" then return true end return originalLoaded(name) end
+  c.LeaPlusDB = {}
+  for id, option in pairs(leatrix) do
+    c.LeaPlusDB[option] = "On"
+    assert(R.QoL.LeatrixOverlap(id) and K.rowsById[id]:GetTooltip():find("Leatrix Plus", 1, true), id .. " reports its Leatrix overlap")
+    c.LeaPlusDB[option] = "Off"
+    assert(not R.QoL.LeatrixOverlap(id), id .. " clears its advisory when absent")
+  end
+  c.C_AddOns.IsAddOnLoaded, c.LeaPlusDB = originalLoaded, originalDB
   local cards = {}
   for _, row in ipairs(K.pages.qol.rows) do if row.card then cards[#cards + 1] = row end end
-  assert(#cards == 12, "twelve cards on Quality of life: " .. #cards)
-  for _, card in ipairs(cards) do assert(Icons.Get(card.card.icon), card:GetName() .. " has an icon") end
+  assert(#cards == 13, "thirteen independent features on Quality of life: " .. #cards)
   for _, card in ipairs(cards) do
-    assert(card.primary and card.primary.kind == "checkbox" and card.primary.switch, card:GetName() .. " has its switch")
-    assert(card.card.what ~= "" and card.card.consequence, card:GetName() .. " says what it does and what to know")
+    assert(Icons.Get(card.card.icon) and card.primary and card.primary.switch, card:GetName() .. " retains artwork and its switch")
   end
-  assert(K.rowsById.qolSummonsWait.ruleOf == cards[1] and K.rowsById.qolDuelsToDeath.ruleOf == cards[4], "rules belong to their cards")
-  assert(cards[2].card.inline and K.rowsById.qolResurrectCombat.ruleOf == cards[2], "the combat-resurrection rule is inline")
-  assert(K.rowsById.qolHerbSparkles.primaryOf == cards[11] and K.rowsById.qolOreSparkles.primaryOf == cards[12],
-    "each gathering category has its own heading switch, including ore-only configurations")
+  assert(K.rowsById.qolResurrectCombat.ruleOf == cards[2], "combat resurrection remains the existing dependent control")
+  assert(K.rowsById.qolHideErrorSpeech.primaryOf and K.rowsById.qolHideErrorSpeech.primaryOf ~= K.rowsById.qolHideErrors.primaryOf,
+    "speech is a separate independently operable feature")
 
   local calls = {}
   local function Spy(name) return function() calls[#calls + 1] = name end end
@@ -1405,107 +1453,178 @@ do
 
   R:OpenSettings("qol")
   local view = UI.View("qol")
-  local summons, resurrect, duels = view.sectionsById[cards[1].id], view.sectionsById[cards[2].id], view.sectionsById[cards[4].id]
-  assert(summons.isCard and summons.primaryView and summons.rulesButton, "the summons card is drawn with its switch and rules button")
-  assert(view.open[summons.id], "section 1 opened Quality of life at the summon's wait, which unfolded its card for the session")
-  view.open[summons.id] = nil
+  local q = assert(view.qol, "QoL-specific presentation exists")
+  local summons, resurrect, duels = q.sections.qolSummons, q.sections.qolResurrect, q.sections.qolDuels
+  assert(#q.groups == 4, "four static group headings")
+  for i, title in ipairs({ "Offers & invitations", "Interface", "Messages", "Sparkles" }) do
+    assert(q.groups[i]:GetText() == title, "group order: " .. title)
+  end
+  local sectionCount = 0
+  for _, sec in pairs(q.sections) do
+    sectionCount = sectionCount + 1
+    assert(sec.primaryView and sec.detailsButton, "each feature has one switch and disclosure")
+  end
+  assert(sectionCount == 13, "all 13 independent feature rows are drawn")
+  local loaded0, db0 = c.C_AddOns.IsAddOnLoaded, c.LeaPlusDB
+  c.C_AddOns.IsAddOnLoaded = function(name) if name == "Leatrix_Plus" then return true end return loaded0(name) end
+  c.LeaPlusDB = {}
+  for id, option in pairs(leatrix) do
+    c.LeaPlusDB[option] = "On"; UI.Refresh()
+    assert(q.sections[id].note:IsShown() and q.sections[id].note:GetText():find("Leatrix Plus", 1, true), id .. " displays its advisory")
+    c.LeaPlusDB[option] = "Off"
+  end
+  c.C_AddOns.IsAddOnLoaded, c.LeaPlusDB = loaded0, db0; UI.Refresh()
+  local purpose, height = summons.qolPurpose, summons.overviewHeight
+  summons.qolPurpose = string.rep("A long translated feature purpose with readable words. ", 8)
   UI.Refresh()
-  assert(Visible(win, "Accept summons") and Visible(win, "Off"), "title and an explicit Off")
-  assert(not Visible(win, "Wait before accepting a summon"), "the summon's rules start folded")
-  assert(Visible(win, "Also accept combat resurrections") and not resurrect.rulesButton, "the combat-resurrection choice is always in view")
-  assert(Visible(win, "In combat: waits for you", true), "and its state is in the rules line")
-  assert(Visible(win, "Friends, guild and group members", true) and Visible(win, "waits 3 seconds", true), "the summon's rules line")
-  assert(Visible(win, "You arrive wherever the summoner stands", true), "what to know is shown, not only in a tooltip")
-  assert(Visible(win, "Saved in the profile", true), "the page says which profile its changes are saved in")
-
-  -- opening rules or details saves nothing
+  assert(summons.overviewHeight > height, "long purpose grows the row instead of overlapping the next feature")
+  summons.qolPurpose = purpose; UI.Refresh()
+  assert(Visible(win, "Also accept combat resurrections") and Visible(win, "Combat resurrection can return you", true), "combat policy and warning remain visible")
+  assert(Visible(win, "Silence error speech"), "independent speech switch is visible")
+  if q.open then Click(view.sectionsById[q.open].detailsButton) end
   local before = Saved()
-  Click(summons.rulesButton)
-  assert(Visible(win, "Wait before accepting a summon") and Visible(win, "Hide rules"), "Adjust rules shows them and says how to fold them")
+  assert(not q.open and not Visible(win, "Wait before accepting a summon"), "the overview starts without detail")
   Click(summons.detailsButton)
-  assert(Visible(win, "When does it apply?", true), "More about this answers in the card")
-  assert(Saved() == before, "opening rules and details changes nothing saved")
-  Click(summons.rulesButton); Click(summons.detailsButton)
-  assert(not Visible(win, "Wait before accepting a summon"), "and they fold again")
-
-  -- the rules line follows the setting at once; a greyed-out rule says which switch to turn on
-  K.variables.TWICHUI_qolSummonsFrom:SetValue("group")
-  assert(Visible(win, "Group members only", true), "the rules line follows the setting")
-  K.variables.TWICHUI_qolSummonsFrom:SetValue("known")
-  Click(duels.rulesButton)
-  assert(Visible(win, "Turn on \"Decline duel requests\" to choose exceptions."), "a greyed-out rule says what to turn on")
-  local frames = made
+  assert(q.open == summons.id and Visible(win, "Wait before accepting a summon"), "details reveal the existing controls")
+  local v = view.rows.qolSummonsFrom
+  local measure = v.label.GetStringWidth
+  v.label.GetStringWidth = function() return 2000 end
+  UI.Refresh(); assert(v.stacked, "a long control label stacks above its control")
+  v.label.GetStringWidth = measure; UI.Refresh()
+  assert(not v.stacked, "normal labels return to the ordinary row layout")
+  local measureValue = v.control.text.GetStringWidth
+  v.control.text.GetStringWidth = function() return 2000 end
+  UI.Refresh(); assert(v.stacked and v.control:GetWidth() >= 236 and v.control:GetWidth() <= view.w, "a long choice stacks without overflowing the feature")
+  v.control.text.GetStringWidth = measureValue; UI.Refresh()
+  local reveal, revealFrame = UI.RevealFrame
+  UI.RevealFrame = function(frame) revealFrame = frame; return reveal(frame) end
+  Click(summons.helpButton)
+  assert(revealFrame == summons.helpText, "opening help reveals the help instead of jumping to the first control")
+  Click(summons.helpButton)
+  Click(summons.sampleButton)
+  assert(revealFrame == summons.preview.frame, "opening a sample reveals the sample instead of the first control")
+  Click(summons.sampleButton)
+  UI.RevealFrame = reveal
+  local focused = view.rows.qolSummonsWait.frame
+  c.GetCurrentKeyBoardFocus = function() return focused end
+  focused:SetFocus()
+  Click(summons.detailsButton)
+  assert(not focused:HasFocus() and summons.detailsButton:HasFocus(), "closing detail moves hidden child focus to its disclosure")
+  c.GetCurrentKeyBoardFocus = nil; summons.detailsButton:ClearFocus()
+  Click(summons.detailsButton)
+  Click(duels.detailsButton)
+  assert(q.open == duels.id and not summons.open and duels.open, "opening another detail closes the first")
+  assert(Visible(win, "Turn on \"Decline duel requests\" to choose exceptions."), "the prerequisite explanation remains visible")
+  assert(Saved() == before, "browsing and opening details write nothing")
   Click(duels.primaryView.control)
-  assert(R:Enabled("qolDuels") and duels.state.text == "On" and duels.saved.text == "Saved", "the card's switch turns it on and says so")
-  assert(not Visible(win, "Turn on \"Decline duel requests\" to choose exceptions."), "its rules are usable at once")
+  assert(R:Enabled("qolDuels") and K.rowsById.qolDuelsFrom:Enabled(), "parent switch enables dependent controls")
+  K.variables.TWICHUI_qolDuelsFrom:SetValue("friends")
   Click(duels.primaryView.control)
-  assert(not R:Enabled("qolDuels") and duels.state.text == "Off", "and off again")
-  assert(made == frames, "a switch redraws without making frames")
-  Click(duels.rulesButton)
+  assert(not R:Enabled("qolDuels") and not K.rowsById.qolDuelsFrom:Enabled(), "turning off disables dependent controls")
+  assert(K.variables.TWICHUI_qolDuelsFrom:GetValue() == "friends", "disabling the parent preserves the child's value")
+  K.variables.TWICHUI_qolDuelsFrom:SetValue("known")
+  Click(duels.detailsButton)
 
-  -- 8c. Search: a folded rule is found, described by its card, opened and marked once
-  before = Saved()   -- (the changes just made were deliberate; from here on nothing may change)
-  UI.Navigate("overview")
+  -- Every dependent control is reachable through the real navigation/reveal path.
+  before = Saved()
+  for id in pairs(prerequisites) do
+    UI.Navigate("overview")
+    UI.Navigate("qol", id)
+    assert(UI.Selected() == "qol" and view.rows[id].frame:IsVisible() and view.rows[id].highlighted,
+      id .. " can be directly navigated to and highlighted")
+  end
   Search.Reset()
   local hit
   for _, r in ipairs(Search.Run("summon delay")) do if r.entry.row and r.entry.row.id == "qolSummonsWait" then hit = r end end
-  assert(hit and hit.entry.desc == cards[1].card.what, "the summon's wait is found by a synonym and described by its card")
-  for _, r in ipairs(Search.Run("accept summons")) do
-    assert(not (r.entry.kind == "section" and r.entry.label == "Accept summons"), "a card and its switch are one result")
-  end
-  assert(not view.open[summons.id], "the card is folded before")
+  assert(hit, "global search finds the summon delay")
   UI.Go(hit)
-  assert(UI.Selected() == "qol" and view.open[summons.id] and Visible(win, "Wait before accepting a summon"), "choosing it opens the card")
-  assert(view.rows.qolSummonsWait.highlighted, "and marks the row")
+  assert(q.open == summons.id and view.rows.qolSummonsWait.frame:IsVisible() and view.rows.qolSummonsWait.highlighted,
+    "global search reveals and marks the hidden child")
   FlushTimers()
-  assert(Saved() == before, "searching and opening changed nothing")
-  view.open[summons.id] = false
+  assert(Saved() == before, "search and navigation do not write settings")
 
-  -- 8d. Previews: play once, call nothing, write nothing; stop on leaving, closing and reduced motion
-  R:OpenSettings("qol")
-  local played = 0
+  -- Nine samples are opened deliberately; switching details stops each outgoing host.
+  local sampleCount, played = 0, 0
+  local endings = { qolSummons="Summon accepted.", qolDuels="Duel declined.",
+    qolInvites="You joined Garrick's group.", qolDeclineInvites="Invitation declined." }
   for _, card in ipairs(cards) do
-    local s = view.sectionsById[card.id]
-    -- The native world sparkle cannot be previewed in a settings frame. Existing sample previews stay intact.
-    assert(s.preview or card.primary.switch == "qolLootSparkles" or card.primary.switch == "qolHerbSparkles"
-      or card.primary.switch == "qolOreSparkles", card:GetName() .. " has a preview")
-    if s.play then
-      Click(s.play)
-      assert(s.preview:IsPlaying() and P.Playing() == 1, card:GetName() .. " plays")
-      for _ = 1, 80 do
-        local step = s.preview.frame:GetScript("OnUpdate")
-        if not step then break end
-        step(s.preview.frame, 0.1)
-      end
-      assert(not s.preview:IsPlaying() and s.preview.done, card:GetName() .. " plays once and stops")
-      played = played + 1
-    elseif s.preview then
-      assert(s.preview.def.static, card:GetName() .. "'s preview is a still picture")
+    local sec = view.sectionsById[card.id]
+    if sec.sampleButton then
+      if q.open ~= sec.id then Click(sec.detailsButton) end
+      Click(sec.sampleButton)
+      assert(sec.preview and sec.sampleOpen and sec.preview.frame:IsShown(), card:GetName() .. " sample opens on request")
+      sampleCount = sampleCount + 1
+      if sec.play then
+        Click(sec.play); assert(sec.preview:IsPlaying(), card:GetName() .. " sample plays")
+        for _ = 1, 80 do
+          local step = sec.preview.frame:GetScript("OnUpdate")
+          if not step then break end
+          step(sec.preview.frame, 0.1)
+        end
+        assert(not sec.preview:IsPlaying() and sec.preview.done, card:GetName() .. " plays once and stops")
+        local ending = endings[card.primary.switch]
+        if ending then assert(Visible(win, ending), card:GetName() .. " shows its outcome") end
+        played = played + 1
+      else assert(sec.preview.def.static, card:GetName() .. " has a static sample") end
+      Click(sec.detailsButton)
+      assert(P.Playing() == 0 and not sec.sampleOpen and not sec.preview.frame:IsShown(), "collapse stops its sample")
     end
   end
-  assert(played == 6 and P.Playing() == 0, "six samples played")
-  assert(Visible(win, "Summon accepted.") and Visible(win, "Duel declined.") and Visible(win, "You joined Garrick's group.") and Visible(win, "Invitation declined."), "each ends on what happened")
-  assert(#calls == 0, "no game action was called: " .. table.concat(calls, ", "))
-  assert(Saved() == before, "and nothing was saved")
-  summons.preview:Play()
-  UI.Navigate("gear")
-  assert(P.Playing() == 0 and not summons.preview.frame:GetScript("OnUpdate"), "leaving the page stops a sample")
-  R:OpenSettings("qol")
-  summons.preview:Play()
-  UI.Close()
-  assert(P.Playing() == 0, "closing the window stops it")
-  for _ = 1, 10 do R:OpenSettings("qol"); summons.preview:Play(); UI.Navigate("gear"); UI.Navigate("qol") end
-  assert(P.Playing() == 0, "quick back and forth leaves nothing playing")
+  assert(sampleCount == 9 and played == 6, "all nine samples remain available, six playable")
+  R.SettingsQoL.Resize(summons, 704)
+  assert(summons.preview.frame:GetWidth() == 648 and summons.preview.stage:GetWidth() == 648 and summons.preview.caption:GetWidth() == 644,
+    "wider layout resizes the existing sample host and caption")
+  R.SettingsQoL.Resize(summons, 644)
+  assert(summons.preview.frame:GetWidth() == 588 and summons.preview.stage:GetWidth() == 588 and summons.preview.caption:GetWidth() == 584,
+    "returning to minimum width keeps the sample inside the detail")
+  assert(#calls == 0 and Saved() == before, "sample and detail browsing invoke no game action and save nothing")
+  Click(summons.detailsButton); Click(summons.sampleButton); Click(summons.play)
+  Click(duels.detailsButton)
+  assert(P.Playing() == 0 and not summons.sampleOpen and q.open == duels.id, "switching feature stops the outgoing sample")
+  Click(duels.detailsButton)
   c.TwichUIDB.ui.reduceSettingsMotion = true
-  summons.preview:Play()
-  assert(P.Playing() == 0 and summons.preview.done and Visible(win, "Summon accepted."), "reduced motion: the end at once")
-  assert(summons.preview.caption.text:find("Reduce window motion", 1, true), "and the words say so")
+  Click(summons.detailsButton); Click(summons.sampleButton); Click(summons.play)
+  assert(P.Playing() == 0 and summons.preview.done and Visible(win, "Summon accepted."), "reduced motion shows the completed sample immediately")
+  assert(summons.preview.caption.text:find("Reduce window motion", 1, true), "reduced-motion caption explains it")
   c.TwichUIDB.ui.reduceSettingsMotion = false
-  K.variables.TWICHUI_qolSummonsWait:SetValue(10)
-  summons.preview:Reset()
-  assert(summons.preview.caption.text:find("10 seconds", 1, true) and summons.preview.caption.text:find("faster", 1, true),
-    "a long wait is said in full, and that it is shown faster")
+  K.variables.TWICHUI_qolSummonsWait:SetValue(10); summons.preview:Reset()
+  assert(summons.preview.caption.text:find("10 seconds", 1, true) and summons.preview.caption.text:find("faster", 1, true), "long wait caption preserves actual timing")
   K.variables.TWICHUI_qolSummonsWait:SetValue(3)
+  Click(summons.sampleButton); Click(summons.detailsButton)
+  Click(summons.detailsButton); Click(summons.sampleButton); Click(summons.play)
+  UI.Navigate("gear")
+  assert(P.Playing() == 0 and not summons.preview.frame:GetScript("OnUpdate"), "page hide stops transient sample work")
+  R:OpenSettings("qol")
+  assert(not summons.sampleOpen, "return does not reopen or autoplay a sample")
+  for _ = 1, 10 do
+    Click(summons.sampleButton); Click(summons.play); UI.Navigate("gear"); UI.Navigate("qol")
+    assert(P.Playing() == 0 and not summons.sampleOpen, "navigation stops each sample")
+  end
+  Click(summons.sampleButton); Click(summons.play); UI.Close()
+  assert(P.Playing() == 0, "closing Settings stops the sample")
+  R:OpenSettings("qol")
+  local frames = made
+  for _ = 1, 3 do Click(summons.detailsButton); Click(summons.detailsButton) end
+  assert(made == frames, "repeated disclosure reuses frames")
+  -- Page reset preserves the selected detail while stopping a running sample.
+  if q.open ~= summons.id then Click(summons.detailsButton) end
+  Click(summons.sampleButton); Click(summons.play)
+  K.variables.TWICHUI_qolSummonsWait:SetValue(5)
+  asked = nil
+  local qolReset = assert(FindButton(win, "Reset this page"))
+  Click(qolReset); assert(asked and asked.dlg, "QoL page reset asks before changing settings")
+  asked.dlg.OnAccept()
+  assert(q.open == summons.id and P.Playing() == 0 and not summons.sampleOpen, "page reset keeps detail but stops its sample")
+  assert(K.variables.TWICHUI_qolSummonsWait:GetValue() == 3, "page reset restores the existing option default")
+  -- Duplicating the active profile does not apply new tables, but still invalidates detail and sample.
+  Click(summons.sampleButton); Click(summons.play)
+  local oldProfile = R.Profiles.Current()
+  assert(R.Profiles.Duplicate("QoL test profile"))
+  assert(not q.open and P.Playing() == 0 and not summons.sampleOpen, "profile identity change clears transient detail and sample")
+  Click(summons.detailsButton); Click(summons.sampleButton); Click(summons.play)
+  assert(R.Profiles.Switch(oldProfile))
+  assert(not q.open and P.Playing() == 0 and not summons.sampleOpen, "profile apply clears detail and sample")
+  R:OpenSettings("qol")
 
   -- 8e. Home: the ways in, the features, and settings that differ from their defaults
   R:OpenSettings("overview")
@@ -1527,12 +1646,11 @@ do
   assert(UI.Selected() == "qol" and Visible(win, "Wait before accepting a summon"), "choosing it opens its card at the control")
   K.variables.TWICHUI_qolSummonsWait:SetValue(3)
   assert(#K.Changed() == wasChanged, "back at its default, it is no longer listed")
-  view.open[summons.id] = false
 
   -- nothing is made twice by coming back
   frames = made
   for _ = 1, 3 do
-    R:OpenSettings("qol"); Click(summons.rulesButton); Click(summons.rulesButton)
+    R:OpenSettings("qol"); Click(summons.detailsButton); Click(summons.detailsButton)
     R:OpenSettings("overview"); Click(home.views.explore); Click(home.views.appearance)
     UI.Close()
   end
