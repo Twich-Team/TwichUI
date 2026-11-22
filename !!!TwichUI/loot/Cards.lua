@@ -484,7 +484,7 @@ function C.DisplayToggle(card, mode, victory)
     end
     card.toggle:ClearAllPoints()
     card.toggle:SetPoint("TOPRIGHT", card, "TOPRIGHT", x, y)
-    card.toggle.art:SetShown(not victory or compact)
+    card.toggle.art:SetShown(not victory)
     if card.toggle.up then
         for _, t in ipairs(card.toggle.up) do t:SetShown(compact) end
         for _, t in ipairs(card.toggle.down) do t:SetShown(not compact) end
