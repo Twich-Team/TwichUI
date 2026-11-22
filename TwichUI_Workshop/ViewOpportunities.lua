@@ -49,6 +49,10 @@ local function MakeCell(row, right, strong)
     c.b:SetWidth(COL_W)
     c.b:SetJustifyH("RIGHT")
     function c.Set(low, high, color)
+        color=color or K.text
+        if c.low==low and c.high==high and c.r==color[1]and c.g==color[2]and c.blue==color[3]and c.alpha==(color[4]or 1)then return end
+        c.low,c.high,c.r,c.g,c.blue,c.alpha=low,high,color[1],color[2],color[3],color[4]or 1
+        if R.Perf and R.Perf.on then R.Perf.Count('workshop.opportunities.cellUpdates')end
         c.a:ClearAllPoints()
         c.b:ClearAllPoints()
         if high then
@@ -67,9 +71,13 @@ local function MakeCell(row, right, strong)
     return c
 end
 
-local function Known(cell, low, high)   -- a known amount, or "Unknown" in the dim colour
-    if low == nil then cell.Set("Unknown", nil, K.stone)
-    else cell.Set(UI.Money(low), high ~= nil and high ~= low and UI.Money(high) or nil) end
+local function Known(cell,low,high,color)
+    if cell.rawLow~=low or cell.rawHigh~=high or cell.money~=UI.Money then
+        cell.rawLow,cell.rawHigh,cell.money=low,high,UI.Money
+        cell.lowText=low~=nil and UI.Money(low)or 'Unknown'
+        cell.highText=low~=nil and high~=nil and high~=low and UI.Money(high)or nil
+    end
+    cell.Set(cell.lowText,cell.highText,low~=nil and color or K.stone)
 end
 
 local function Source()
@@ -155,7 +163,7 @@ local function MakeOppRow(parent)
             detail = detail .. " \194\183 makes " .. makes
         end
         -- whether one craft's materials are in the bags or in storage (asked only for the rows drawn; never part of the estimate)
-        r.avail = r.avail or (oppView and oppView.avail and oppView.avail(rec)) or nil
+        r.avail = (oppView and oppView.avail and oppView.avail(rec)) or nil
         local word = e.state == "ok" and Op.AvailWord(r.avail) or nil
         if word then detail = detail .. " \194\183 " .. word end
         local queued = S.IsQueued(rec.id)
@@ -168,13 +176,10 @@ local function MakeOppRow(parent)
         self.sub:SetText(detail)
         UI.Paint(self.sub, e.state ~= "ok" and K.bronzeText or (warn and K.bronzeText) or (word and (r.avail.state == "ready" and K.sage or K.bronzeText))
             or (queued and K.sage) or K.stone)
+        if R.Perf and R.Perf.on then R.Perf.Count('workshop.opportunities.rowPaints')end
         Known(self.cost, e.cost)
         Known(self.sell, e.sellLow, e.sellHigh)
-        if e.state == "ok" then
-            self.profit.Set(UI.Money(e.profitLow), e.profitHigh ~= e.profitLow and UI.Money(e.profitHigh) or nil, ProfitTone(e))
-        else
-            self.profit.Set("Unknown", nil, K.stone)
-        end
+        Known(self.profit,e.state=='ok'and e.profitLow or nil,e.state=='ok'and e.profitHigh or nil,ProfitTone(e))
         self:SetSelected(rec.id == selected)
     end
     return row
@@ -214,11 +219,12 @@ function Opps.AddSelected()
     return ok
 end
 
-local function RenderDetail(rows)
+local function RenderDetail(rows,positions)
     local d = page.detail
     local r
-    for _, x in ipairs(rows) do if x.rec.id == selected then r = x end end
-    if not r and rows[1] then r = rows[1]; selected = r.rec.id end
+    if positions and selected then r=rows[positions[selected]or 0]
+    else for _,x in ipairs(rows)do if x.rec.id==selected then r=x end end end
+    if not r and rows[1] and not(selected and oppView and oppView.calculating)then r=rows[1];selected=r.rec.id end
     local shown = r ~= nil
     d.head:SetShown(shown)
     d.scroll:SetShown(shown);d.body:SetShown(shown)
@@ -226,11 +232,19 @@ local function RenderDetail(rows)
     d.empty:SetShown(not shown)
     if not shown then
         d.chart:Clear()
-        selected = nil
+        d.paintEstimate,d.paintRecipe,d.historyRevision=nil,nil,nil
+        if not(oppView and oppView.calculating)then selected=nil end
         d.empty:SetText(oppView and oppView.empty or "Choose a recipe to see its details.")
         return
     end
     local e, rec = r.est, r.rec
+    local factsBucket=math.floor(Q.Now()/(F and F.BUCKET or 300))
+    local economyChanged=d.paintEstimate~=e or d.paintRecipe~=rec or d.itemInfoRevision~=UI.itemInfoRevision or d.factsBucket~=factsBucket
+    local historyRevision=W.Pricing.ChartRevision and W.Pricing.ChartRevision()or 0
+    if economyChanged then
+    if R.Perf and R.Perf.on then R.Perf.Count('workshop.opportunities.detailUpdates')end
+    d.paintEstimate,d.paintRecipe,d.itemInfoRevision=e,rec,UI.itemInfoRevision
+    d.factsBucket=factsBucket
     local _, icon
     if rec.outItem then _, icon = O.ItemFacts(rec.outItem) end
     d.icon:SetTexture(icon or rec.icon or UI.ICON_BLANK)
@@ -305,10 +319,16 @@ local function RenderDetail(rows)
         end
     end
     -- the facts sit beside the materials and the history has the whole width under both (a fixed place: the strategy block never takes its room)
+    d.paintFacts=f
+    end
+    if economyChanged or d.historyRevision~=historyRevision then
+    d.historyRevision=historyRevision
+    local f=d.paintFacts
     local series = f and F.Chart(f) or nil
     d.chart:Set(W.AdvancedChart.FromObserved(series), UI.Money,
         "workshop:opportunities:"..tostring(rec.outItem)..":"..tostring(series and series.market))
     d.chartNote:SetText((series and series.external and "Market server · Recent Price · " or "")..ChartNote(series))   -- the days the history really covers; when the listings were scanned is on the Data quality row
+    end
     Opps.PaintStrategy(rec, e)
     -- the button: what it does now (add), what already happened (queued, with a check) or why it can't (the queue is full)
     local queued = S.IsQueued(rec.id)
@@ -367,6 +387,20 @@ local function LayoutChips(list)
     end
 end
 
+local function PrioritizeVisible()
+    local list=UI.lists.opps;if not list then return end
+    local ids={};local top=math.floor((list.scroll:GetVerticalScroll()or 0)/list.rowH)+1
+    local height=list.scroll:GetHeight()or 0;if height<=list.rowH then height=list.minH end
+    for i=top,math.min(#list.data,top+math.ceil(height/list.rowH))do ids[#ids+1]=list.data[i].rec.id end
+    if selected then ids[#ids+1]=selected end
+    S.PrioritizeOpportunities(ids)
+end
+local function ViewportChanged()
+    local list=UI.lists.opps
+    if list and not list.updating then list.reanchor=true end
+    PrioritizeVisible()
+end
+
 local function Render()
     if R.Perf and R.Perf.on then W.Pricing.BeginView() end
     local v = S.Opportunities()
@@ -374,6 +408,7 @@ local function Render()
 
     -- the latest scan attempt, in one short line beside the button (the full source and age are in its tooltip and the footer)
     local msg, tone = SC.Message()
+    if v.calculating then msg=("Calculating prices: %d/%d settled · Ranking provisional"):format(v.progress and v.progress.settled or 0,v.summary.total);tone='warn'end
     opps.status:SetText(msg or "")
     UI.Paint(opps.status, tone == "good" and K.sage or (tone == "warn" and K.bronzeText or K.textDim))
     local busy = SC.Busy()
@@ -400,8 +435,17 @@ local function Render()
     end
 
     -- the list and the chosen row
-    RenderDetail(v.rows)
-    UI.lists.opps:SetData(v.rows, v.empty)
+    RenderDetail(v.rows,v.positions)
+    local list=UI.lists.opps
+    if list.criteria~=v.criteria then list.criteria=v.criteria;list.reanchor=false end
+    local first=math.floor((list.scroll:GetVerticalScroll()or 0)/list.rowH)+1
+    local anchor=list.data[first]and list.data[first].rec.id
+    list.updating=true;list:SetData(v.rows,v.empty);list.updating=false
+    if list.reanchor and anchor and v.positions and v.positions[anchor]and list.lastRows~=v.rows then list.scroll:SetVerticalScroll((v.positions[anchor]-1)*list.rowH)end
+    if not v.calculating then list.reanchor=true end
+    list.lastRows=v.rows
+    list.onViewport=ViewportChanged
+    PrioritizeVisible()
     if R.Perf and R.Perf.on and v.source.reference then W.Pricing.ObserveView(v.all,UI.lists.opps)end
 end
 
@@ -447,7 +491,9 @@ function Opps.PaintStrategy(rec, est)
     local d = page and page.detail
     if not d then return end
     local st = d.strat
-    local state, plan, why = S.OppStrategy(rec)
+    local state,plan,why
+    if est and est.why=='calculating'then state='planning'
+    else state,plan,why=S.OppStrategy(rec)end
     local function Pair(i, text, tip)
         local p = st.pairs[i]
         p.v:SetText(text or "Unknown")

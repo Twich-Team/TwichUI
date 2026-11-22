@@ -19,6 +19,24 @@ local Perf = R.Perf
 -- "!!!TwichUI/", the settings window "TwichUI_Settings/"), where: the function, so a report can name what to read.
 -- every = how often it is expected to run, so a report can tell "runs often" from "runs on demand".
 DX.OPS = {
+    ["workshop.opportunities.catalogBuilds"]={module="workshop",label="Recipe catalog builds",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="Engine.Request",every="new context or catalog only"},
+    ["workshop.opportunities.errors"]={module="workshop",label="Calculation job failures",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.cancelled"]={module="workshop",label="Obsolete calculation jobs cancelled",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.detailUpdates"]={module="workshop",label="Changed selected recipe details",kind="count",file="TwichUI_Workshop/ViewOpportunities.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.cellUpdates"]={module="workshop",label="Changed money cells",kind="count",file="TwichUI_Workshop/ViewOpportunities.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.rowPaints"]={module="workshop",label="Visible row presentations",kind="count",file="TwichUI_Workshop/ViewOpportunities.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.fullInvalidations"]={module="workshop",label="Complete context invalidations",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.partialPublications"]={module="workshop",label="Provisional list publications",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.fullPublications"]={module="workshop",label="Final ranked list publications",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.sorts"]={module="workshop",label="Completed ranking passes",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.batches"]={module="workshop",label="Calculation work slices",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.reused"]={module="workshop",label="Completed estimates reused during catalog reconciliation",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.cacheHits"]={module="workshop",label="Compatible catalog reads",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.invalidations"]={module="workshop",label="Dependent recipes invalidated",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.calculated"]={module="workshop",label="Recipe preparation passes",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.crafts"]={module="workshop",label="Actual recipe calculations",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunityBatch"]={module="workshop",label="Incremental opportunity work slice",kind="work",file="TwichUI_Workshop/OpportunityEngine.lua",where="Engine.Step",every="requested work only; total/worst synchronous CPU"},
+    ["workshop.opportunityQuestion"]={module="workshop",label="Indivisible estimator service question",kind="work",file="TwichUI_Workshop/Estimate.lua",where="Est.Ask",every="memo misses; no scope spans a coroutine yield"},
     ["workshop.pricing.completed"]={module="workshop",label="Terminal cold requests measured",kind="count",file="TwichUI_Workshop/Pricing.lua",where="opt-in diagnostics",every="bounded capture aggregate"},
     ["workshop.pricing.cancelled"]={module="workshop",label="Pending price requests cancelled",kind="count",file="TwichUI_Workshop/Pricing.lua",where="opt-in diagnostics",every="bounded capture aggregate"},
     ["workshop.pricing.initialVisibleRows"]={module="workshop",label="Initially visible opportunity cohort size",kind="count",file="TwichUI_Workshop/Pricing.lua",where="opt-in diagnostics",every="bounded capture aggregate"},
@@ -450,5 +468,15 @@ for _,spec in ipairs({{"pending","PendingCount"},{"references","CacheSize"}})do
     local method=spec[2]
     Perf.Gauge("workshop.cold."..spec[1],{label="Market "..spec[1],kind="cache",group="workshop",builtin=true,unit="count",read=function()
         local p=R.Workshop and R.Workshop.Pricing;return p and p[method]()or 0
+    end})
+end
+
+-- Passive even before the Workshop loads. Never starts an engine or reads prices.
+for _,spec in ipairs({{"known","Known recipes"},{"pending","Queued recipes"},{"waiting","Recipes awaiting prices"},
+    {"settled","Settled recipe estimates"},{"retained","Recipe results retained"}})do
+    local key,label=spec[1],spec[2]
+    Perf.Gauge('workshop.opportunities.'..key,{label=label,kind='cache',group='workshop',builtin=true,unit='count',read=function()
+        local w=R.Workshop;local session=w and w.Session
+        return session and session.OpportunityStatus and session.OpportunityStatus()[key]or 0
     end})
 end

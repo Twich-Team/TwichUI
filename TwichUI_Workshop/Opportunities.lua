@@ -70,35 +70,34 @@ function Op.Summary(rows)
 end
 
 -- opts: { sort = "profit"|"cost"|"sell", desc, prof (a profession id to keep, nil for all), profitOnly }
-function Op.Select(rows, opts)
-    opts = opts or Op.DEFAULTS
-    local value = VALUE[opts.sort] or VALUE.profit
-    local out = {}
-    for _, r in ipairs(rows) do
-        local keep = opts.prof == nil or r.rec.prof == opts.prof
-        if keep and opts.profitOnly then keep = r.est.state == "ok" and r.est.profitLow > 0 end
-        if keep and opts.hideLow then keep = not (r.est.state == "ok" and r.est.confidence == "low") end
-        if keep then out[#out + 1] = r end
-    end
-    local desc = opts.desc ~= false
-    table.sort(out, function(a, b)
-        local ka, kb = a.est.state == "ok", b.est.state == "ok"
-        if ka ~= kb then return ka end
+function Op.Keep(r,opts)
+    opts=opts or Op.DEFAULTS
+    if opts.prof~=nil and r.rec.prof~=opts.prof then return false end
+    local e=r.est
+    return (not opts.profitOnly or e.state=='ok'and e.profitLow>0)
+        and(not opts.hideLow or not(e.state=='ok'and e.confidence=='low'))
+end
+function Op.Comparator(opts)
+    opts=opts or Op.DEFAULTS
+    local value=VALUE[opts.sort]or VALUE.profit;local desc=opts.desc~=false
+    return function(a,b)
+        local ea,eb=a.est,b.est
+        local ka,kb=ea.state=='ok',eb.state=='ok'
+        if ka~=kb then return ka end
         if ka then
-            local va, vb = value(a.est), value(b.est)
-            if va ~= vb then
-                if desc then return va > vb end
-                return va < vb
-            end
-            -- equal figures: the surer estimate first
-            local ca, cb = CONFIDENCE[a.est.confidence] or 0, CONFIDENCE[b.est.confidence] or 0
-            if ca ~= cb then return ca > cb end
+            local va,vb=value(ea),value(eb)
+            if va~=vb then if desc then return va>vb else return va<vb end end
+            local ca,cb=CONFIDENCE[ea.confidence]or 0,CONFIDENCE[eb.confidence]or 0
+            if ca~=cb then return ca>cb end
         end
-        local na, nb = a.rec.name:lower(), b.rec.name:lower()
-        if na ~= nb then return na < nb end
-        return a.rec.id < b.rec.id
-    end)
-    return out
+        local na,nb=a.rec.name:lower(),b.rec.name:lower()
+        if na~=nb then return na<nb end
+        return a.rec.id<b.rec.id
+    end
+end
+function Op.Select(rows,opts)
+    local out={};for _,r in ipairs(rows)do if Op.Keep(r,opts)then out[#out+1]=r end end
+    table.sort(out,Op.Comparator(opts));return out
 end
 
 -- Clicking a column: the sorted column flips direction, another column starts in its natural direction
@@ -110,6 +109,7 @@ end
 
 -- Why an estimate is unknown, in a few words
 local WHY = {
+    calculating = "Calculating prices...",
     nomats = "Its materials aren't known or can't be counted",
     noitem = "It doesn't make an item",
     noamount = "How much it makes isn't known",

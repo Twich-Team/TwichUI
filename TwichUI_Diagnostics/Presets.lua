@@ -27,8 +27,10 @@ DX.PRESETS = {
         filter={"workshop."},gauges={"workshop"},
         gaugeIds={"workshop.cold.pending","workshop.cold.references","workshop.currentRawBytes","workshop.historyRawBytes",
             "workshop.currentDecodedRows","workshop.historyDecodedRows","workshop.cold.parked",
-            "workshop.cold.loadedParts","workshop.cold.checkedParts","workshop.cold.historyParts"},
-        what="Open Opportunities after starting. Records cold-price waits, visible-row settlement, current/history work and bounded reader/cache counts.",
+            "workshop.cold.loadedParts","workshop.cold.checkedParts","workshop.cold.historyParts",
+            "workshop.opportunities.known","workshop.opportunities.pending","workshop.opportunities.waiting",
+            "workshop.opportunities.settled","workshop.opportunities.retained"},
+        what="Open Opportunities after starting. Records cold-price waits, visible-row settlement, current/history work, incremental calculation slices and bounded reader/result counts.",
         cost="Opt-in: filtered operations and passive counts every second; the client's memory update every ten seconds can add a small hitch.",
     },
     {

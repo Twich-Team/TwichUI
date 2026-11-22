@@ -1561,7 +1561,7 @@ m("market.pending.guard", "TwichUI_Workshop/Pricing.lua", "if reserved and not c
   "redraws repeat reader and hash work for an already reserved identity", ["test_workshop_market_pending.lua"])
 m("market.pending.completion", "TwichUI_Workshop/Pricing.lua", "if reserved and not completion then", "if reserved then",
   "the pending guard also blocks the only completion writer", ["test_workshop_market_pending.lua"])
-m("market.pending.revision", "TwichUI_Workshop/Pricing.lua", "if changed then revision=revision+1;P.Notify() end", "if changed then P.Notify() end",
+m("market.pending.revision", "TwichUI_Workshop/Pricing.lua", "        revision=revision+1", "        -- completion revision removed",
   "completion after checked_parts stabilizes retains memoized fallback answers", ["test_workshop_market_pending.lua"])
 m("market.pending.elapsed-budget", "TwichUI_Workshop/Summary.lua", "or clock()-start>=budget", "",
   "a completion slice respects only record count instead of elapsed CPU", ["test_workshop_market_pending.lua"])
@@ -1577,3 +1577,31 @@ m("market.current.priority", "TwichUI_Workshop/Summary.lua",
   "if bucket<64 and active.header.contract_version==3 and job and job.kind=='part' and job.bucket>=64 then",
   "if false then",
   "a cold current request waits behind an already-running unrelated chart", ["test_workshop_market_current.lua"])
+
+# PR3: retained results must remain both incremental and generation-safe.
+OPPORTUNITY_TEST = ['test_workshop_opportunity_engine.lua']
+m('market.opportunity.memo-version', 'TwichUI_Workshop/Estimate.lua',
+  'self.itemVersions[item]=self.itemVersions[item]+1', 'self.itemVersions[item]=self.itemVersions[item]+0',
+  'a settled item keeps stale shared cost/price answers', OPPORTUNITY_TEST)
+m('market.opportunity.dependencies', 'TwichUI_Workshop/OpportunityEngine.lua',
+  'for _,row in ipairs(self.dependencies[item]or {})do', 'for _,row in ipairs(self.all)do',
+  'one material invalidates every recipe', OPPORTUNITY_TEST)
+m('market.opportunity.snapshot', 'TwichUI_Workshop/OpportunityEngine.lua',
+  'same(previous.inputs,rec)', 'same(previous.rec,rec)',
+  'mutable recipe inputs reuse their old estimate', OPPORTUNITY_TEST)
+m('market.opportunity.elapsed-budget', 'TwichUI_Workshop/OpportunityEngine.lua',
+  'clock()-at>=E.BUDGET_MS', 'false',
+  'a large craft monopolizes its callback despite the elapsed budget', OPPORTUNITY_TEST)
+m('market.opportunity.warm-context', 'TwichUI_Workshop/OpportunityEngine.lua',
+  'local reset=not self.args or self.key~=args.key', 'local reset=true',
+  'an ordinary unchanged read discards all completed estimates', OPPORTUNITY_TEST)
+m('market.opportunity.source-guard', 'TwichUI_Workshop/OpportunityEngine.lua',
+  'if self.args.valid and not self.args.valid()then', 'if false then',
+  'a suspended job publishes after its source became obsolete', OPPORTUNITY_TEST)
+m('market.opportunity.timer-token', 'TwichUI_Workshop/OpportunityEngine.lua',
+  'C_Timer.After(0,function()\n        if token~=self.token then return end',
+  'C_Timer.After(0,function()\n        if false then return end',
+  'a cancelled callback advances the newer worker', OPPORTUNITY_TEST)
+m('market.opportunity.demand-lease', 'TwichUI_Workshop/Pricing.lua',
+  'while waits and waits.preparing and not failure do', 'while false do',
+  'a decoder handoff advances before complete bucket demand is reserved', ['test_workshop_opportunity_ui.lua'])
