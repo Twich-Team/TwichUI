@@ -26,6 +26,7 @@ local c = MIClient("Rich", {
       fr.SetFontObject = function() end
       fr.SetMaxLetters = function() end
       fr.SetAutoFocus = function() end
+      fr.HighlightText = function() end
       fr.SetTextInsets = function() end
       fr.SetJustifyV = function() end
       fr.SetWordWrap = function() end
@@ -143,6 +144,29 @@ Same(detail.name:GetText(), "Healing Potion", "the first queued craft's details 
 Same(detail.prof:GetText(), "Alchemy", "with its profession")
 Check(qrow.line:GetText() == "1 craft - makes 1-2", qrow.line:GetText())
 Check(not qrow.stale:IsShown(), "known materials: no update line")
+do
+  local edit = qrow.countEdit
+  local function begin() qrow.countButton:GetScript("OnClick")(qrow.countButton) end
+  local function enter(value)
+    begin(); edit:SetText(value); edit:GetScript("OnEnterPressed")(edit)
+  end
+  begin()
+  Same(edit:GetText(), "1", "editor starts with the queued count")
+  edit:SetText("20"); edit:GetScript("OnEnterPressed")(edit)
+  Same(Q.Find(1).crafts, 20); Same(qrow.count:GetText(), "20")
+  Same(Win.Craft().bar.sub:GetText(), "20 crafts to make", "queue total follows the saved count")
+  Same(Win.Lists().mats.rows[1].need:GetText(), "40", "materials follow the saved count")
+  Q.Unload(); Q.Load(); Same(Q.Find(1).crafts, 20, "quantity persisted")
+  for _, value in ipairs({ "", "0", "1000", "2.5", "-1", "1e2", "abc" }) do
+    enter(value); Same(Q.Find(1).crafts, 20, "invalid entry leaves the queue unchanged: " .. value)
+  end
+  begin(); edit:SetText("7"); edit:GetScript("OnEscapePressed")(edit)
+  Same(Q.Find(1).crafts, 20, "Escape cancels")
+  begin(); edit:SetText("7"); edit:ClearFocus()
+  Same(Q.Find(1).crafts, 20, "losing focus cancels")
+  enter(tostring(W.MAX_CRAFTS)); Same(Q.Find(1).crafts, W.MAX_CRAFTS)
+  enter("1"); Same(Q.Find(1).crafts, 1, "both bounds are accepted")
+end
 qrow.more:GetScript("OnClick")(qrow.more); qrow.more:GetScript("OnClick")(qrow.more)
 Same(Q.Entries()[1].crafts, 3)
 Check(qrow.line:GetText() == "3 crafts - makes 1-2 each, 3-6 in all", qrow.line:GetText())
