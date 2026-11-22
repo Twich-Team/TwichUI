@@ -3,6 +3,9 @@
 import argparse
 import hashlib
 import json
+import os
+import platform
+import time
 from pathlib import Path
 import statistics
 import subprocess
@@ -38,13 +41,42 @@ print(math.floor(compile*1e6+.5)..' '..math.floor(init*1e6+.5)..' '..math.floor(
             result[label]={'samples':samples,'metrics':{k:{'median':statistics.median(x[k] for x in samples),'worst':max(x[k] for x in samples)} for k in samples[0]}}
     return result
 
+def summary_publication(artifact_root, reps):
+    """Opt-in existing native publication harness; all payloads must be synthetic."""
+    folder=artifact_root.resolve()
+    root_file=folder/'TwichUI_MarketData/Data.lua'
+    if not root_file.is_file():raise ValueError('native-generated Market root required')
+    samples=[]
+    env=dict(os.environ,WORKSHOP_SUMMARY_ARTIFACT=str(root_file),WORKSHOP_SUMMARY_PARTS=str(folder))
+    for rep in range(reps+1):
+        at=time.perf_counter()
+        result=subprocess.run(['lua5.1','-e','REPO="./"; dofile("tests/bench_workshop_summary.lua")'],
+            cwd=ROOT,env=env,text=True,capture_output=True,timeout=600,check=True)
+        row=json.loads(result.stdout)
+        assert row['synthetic'] and not row['real_game']
+        row['subprocess_wall_seconds']=time.perf_counter()-at
+        if rep:samples.append(row)
+    return dict(source=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
+        harness_sha256=hashlib.sha256((ROOT/'tests/bench_workshop_summary.lua').read_bytes()).hexdigest(),
+        root_sha256=hashlib.sha256(root_file.read_bytes()).hexdigest(),host=platform.platform(),
+        clock='Lua os.clock CPU; Python perf_counter subprocess elapsed; no timer model',
+        limitations='One discarded warm-up; fresh Lua processes. Peak sampled after Q.Step; lower bound, not exact high-water mark. GC enabled.',
+        runs=samples,metrics={k:dict(median=statistics.median(s[k] for s in samples),minimum=min(s[k] for s in samples),maximum=max(s[k] for s in samples))
+            for k,v in samples[0].items()if isinstance(v,(int,float))and not isinstance(v,bool)})
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--market-root',type=Path)
     p.add_argument('--startup-only',action='store_true',help='compare unloaded reader modules against the pinned development base')
     p.add_argument('--report',type=Path,required=True)
     p.add_argument('--case',type=int,help='one variant count from the documented cases, for targeted diagnosis')
+    p.add_argument('--summary-root',type=Path,help='opt-in native-generated synthetic summary publication; bypasses scoped generation')
+    p.add_argument('--reps',type=int,default=3,choices=range(1,11))
     a=p.parse_args()
+    if a.summary_root:
+        report=summary_publication(a.summary_root,a.reps)
+        a.report.parent.mkdir(parents=True,exist_ok=True);a.report.write_text(json.dumps(report,indent=2)+'\n')
+        print('Native summary CPU ms',report['metrics']['enumeration_and_validation_ms']['median']);return
     if a.startup_only:
         report=startup()
         a.report.parent.mkdir(parents=True,exist_ok=True);a.report.write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2));return

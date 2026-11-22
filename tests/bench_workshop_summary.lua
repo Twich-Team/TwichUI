@@ -22,6 +22,7 @@ start=clock();B.Begin(TwichUIMarketData)
 while Q.Pending()do Q.Step(3)end
 assert(B.Status().ready);local h=B.Manifest();assert(h.synthetic,'only synthetic benchmark input permitted')
 local headerMs=clock()-start;collectgarbage('collect');local headerHeap=collectgarbage('count')-before
+local currentStart=clock()
 local count=0
 local co=coroutine.create(function()assert(B.EachItem(function()count=count+1 end,function()coroutine.yield()end))end)
 start=clock();local resumes=0
@@ -37,7 +38,9 @@ while not variants and Q.Pending() do Q.Step(3);variants=B.Variants(item) end
 local key=variants and variants[1]
 assert(key and B.Value(item,key,'recent').value==120)
 local lookupStart=clock();for i=1,1000 do assert(B.Value(item,key,'recent').value==120)end;local lookups=clock()-lookupStart
-local beforeHistory=Q.Status();collectgarbage('collect')
+local beforeHistory=Q.Status();local currentCPU=clock()-currentStart
+local currentLoad,currentPeak=loadMs,peak-before
+collectgarbage('collect')
 local currentHeap=collectgarbage('count')-before
 local historyStart=clock()
 if h.contract_version==3 then
@@ -56,5 +59,6 @@ print(J.Encode(setmetatable({synthetic=true,real_game=false,records=h.record_cou
  lookup_1000_us=math.floor(lookups*1000),retained_kib=math.floor(heap),raw_bytes=s.bytes,decoded_rows=s.cache_entries,
  history_loads=historyLoads,current_bytes=s.current_bytes or 0,history_bytes=s.history_bytes or 0,
  current_queries_retained_kib=math.floor(currentHeap),sampled_peak_kib=math.floor(peak-before),
+ current_queries_cpu_ms=math.floor(currentCPU),current_queries_load_ms=math.floor(currentLoad),current_sampled_peak_kib=math.floor(currentPeak),
  explicit_history_ms=math.floor(historyMs),raw_bytes_before_history=beforeHistory.bytes,
  history_bytes_before_history=beforeHistory.history_bytes or 0,generation=h.generation_id},J.OBJECT)))
