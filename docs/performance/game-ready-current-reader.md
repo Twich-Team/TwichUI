@@ -7,6 +7,15 @@ attestation; [#47](https://github.com/Twich-Team/TwichUI-Market/pull/47) indepen
 prepares and publishes it. No merge, deployment or release is part of these drafts.
 Chart-loading draft #117 remains separate; chart rendering and Pricing.Chart are unchanged.
 
+Final integration readiness: the feature branch now includes main
+`1a3d9eb072797f85bc7e98f4c2f456513a9b7b6c` by a non-conflicting merge, preserving
+the investigation #127 ancestry. PR #131 targets main to exercise required `verify`;
+its diff includes the investigation until that parent is separately approved/merged.
+No main merge or chart #117 integration occurred. The combined tree passes the
+14-file Market performance group (10.429 s, zero failures). Required full verification
+and native acceptance remain separate gates; older CI at the pre-reconciliation head
+does not certify this combined source.
+
 ## Runtime and trust
 
 The additive installed capability prefers 16 physical current partitions, allows 32 by
