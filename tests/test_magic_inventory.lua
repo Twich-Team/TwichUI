@@ -100,6 +100,25 @@ do
   Reset()
 end
 
+do
+  local key = MI.WRITS_CATEGORY
+  local rule = MI.Rule(Save({ name = "Writs to bank", cats = { key } }))
+  Check(rule and rule.enabled and rule.cats[1] == key, "the writ family persists as one enabled category")
+  for _, id in ipairs({ 248206, 262887, 262888, 262889, 262890, 264011, 264056, 264116, 264160 }) do
+    Check(MI.Match(rule, { id = id, name = "Localized name" }) == "matched", "Forever writ matches by ID " .. id)
+  end
+  for _, id in ipairs({ 22568, 248549, 262886, 262891, 264010, 264161 }) do
+    Check(MI.Match(rule, { id = id, classID = 0, subclassID = 8 }) == nil, "unrelated item is excluded " .. id)
+  end
+  c.ITEMS[262888] = { name = "Sealed Journeyman's Writ", class = 0, sub = 8, maxStack = 1, quality = 3 }
+  c.ITEMS[264011] = { name = "Craftsman's Writ: Ogre Strength", class = 0, sub = 8, maxStack = 1, quality = 2 }
+  c.Bags({ [0] = { size = 16, slots = { { 262888, 1 }, { 264011, 1, quest = true }, { 1179, 1 } } } })
+  local plan = MI.CurrentPlan(nil)
+  Check(Entry(plan, 262888) and not Entry(plan, 1179), "planning finds the carried writ envelope only")
+  Check(not Entry(plan, 264011) and Find(plan.skipped, 264011, "reason", "quest"), "quest protections still apply to writs")
+  Reset()
+end
+
 -- a rule with nothing chosen matches nothing, and can't be turned on
 local empty = Save({ name = "Empty", enabled = true })
 Check(MI.Rule(empty).enabled == false, "a rule with no items is saved turned off")

@@ -29,6 +29,11 @@ The category uses the [Forever crate IDs](https://eternadex.com/en/versorgungsgu
 [sealed crate IDs](https://forevercraft.ru/database/items/misc/junk/3/). Other rule filters, exclusions and
 destination protections still apply.
 
+Choose **Categories → All Craftsman's Writs** for the Forever trade-faction crafting orders and sealed writ envelopes.
+This category also works with empty bags and follows the same filters and protections.
+[Named writ catalog](https://aidvir.github.io/wow-forever-favor/writs.html) ·
+[Sealed writ records](https://daybreakforever.com/discoveries/items)
+
 The player makes rules: which items (categories as the game files them, quality, equipment or not, binding, and lists
 of items to include or never include), what happens to them (Send by mail, your bank, a guild bank tab, Keep in bags,
 Never transfer), and how many of each to keep in the bags. A bank or guild bank rule also says which way: **Deposit extras**

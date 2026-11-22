@@ -183,9 +183,10 @@ local function CleanSet(t, max, valid)
 end
 
 MI.WAYLAID_CATEGORY = "waylaid-crates"
+MI.WRITS_CATEGORY = "craftsmans-writs"
 
 local function ValidCat(v)
-    if v == MI.WAYLAID_CATEGORY then return true end
+    if v == MI.WAYLAID_CATEGORY or v == MI.WRITS_CATEGORY then return true end
     if type(v) ~= "string" then return false end
     local c, s = v:match("^(%d+):(%d+)$")
     if c then return Whole(tonumber(c), 0, 99) and Whole(tonumber(s), 0, 999) end
