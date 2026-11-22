@@ -15,7 +15,11 @@
 3. **Fix quality before expanding surface area.** Prioritize measured slow paths, player-facing defects, economic correctness, then related workflow simplification.
 4. **Test proportionately.** Focused unit/regression tests during development; affected subsystem integration at milestones; full offline certification at release. Native acceptance is optional and at the owner's discretion, with unverified client behavior clearly labeled.
 5. **Stop at the acceptance criteria.** Avoid unrelated refactors, new test frameworks, large evidence dumps, blanket benchmark campaigns and speculative performance work.
-6. **A single owner-selected work item at a time** should become a short, actionable PR scope, not a megaproject.
+6. **One scoped item per implementation PR.** Ordinary work requires the owner to select an item. For an explicitly authorized autonomous batch, an agent may select up to the owner's stated limit from the separate [Autonomous-Ready task register](autonomous-ready-tasks.md). Ready status alone never grants permission to implement or merge anything.
+
+### Autonomous batch task selection
+
+[Autonomous-Ready tasks](autonomous-ready-tasks.md) contain actionable mini-specifications, initial priorities, source entry points, acceptance criteria, proportional verification and file-overlap constraints. They are *eligible for an owner-authorized batch*, not already assigned. The source inventory below remains complete and unchanged; proposals needing product decisions stay in discovery. Before implementation, check current `main`, open PRs and actual behavior; skip a task if superseded or conflicting.
 
 ### Proposed disposition labels
 
@@ -45,7 +49,7 @@ These stages indicate *priority buckets*, not a serial schedule. Engineering sta
 | ID | Finding / initiative | Proposed position | Status and acceptance guidance |
 |---|---|---|---|
 | **A01** | Opportunities list/estimate/render responsiveness | **Active / Stage 1** | Owner already tackling it. Profile first paint, cached repaint, worst uninterrupted callback and dependency invalidation; use a few representative small/large inputs. Don't change price math as a shortcut. |
-| **A02** | Market data payload validation, load/sync and partition behavior | Stage 1 | Measure actual file load/compile, validation, asynchronous scheduling, price read, memory and wall-clock. Keep integrity and atomic fallback; do not assume 64 data add-ons alone cause the issue. |
+| **A02** | Market data payload validation, load/sync and partition behavior | **Active with A01 / Stage 1** | PRs #97, #99, #100 and #102 cover joint Opportunities/Market performance investigation and remediation; do not start parallel implementations. Confirm merged status before marking finished. Preserve integrity and atomic fallback. |
 | **A03** | Proportional offline tests and affordable performance regression detection | Stage 1 / ongoing | PR #95 agent-policy guidance merged. Improve existing runner/source selection only where current friction is measured; no new framework; preserve release tier. |
 | **A04** | Neutral/Blackwater auction house fee classification | Stage 2 | Source-confirmed potential rate omission; normalize supported market identity, test vendor/auction fee examples. |
 | **A05** | Market source status and refusal messaging | Stage 2–3 | Closed, unmerged PR #87 holds relevant UX design; review against current main. Clear external vs local source, timestamp, scope, rejected reasons. |
@@ -58,7 +62,7 @@ These stages indicate *priority buckets*, not a serial schedule. Engineering sta
 
 ## Priority shortlist for discussion (not accepted commitments)
 
-**Now:** A01 Opportunities responsiveness (already underway). **Next possible investigation:** A02 Market load/validation and A07 startup attribution, especially if A01 does not explain the observed stall. **Small correctness fixes:** A04 and A05. **Premium quick wins:** P01, P04, P05, W04, W05, W21, W22. **Verify existing before rebuilding:** W09 multilevel crafting, W17/W18 tooltip builder, F15 auto flight, F17 Attune broker, F04 Fishing stage 2.
+**Now:** A01 Opportunities and A02 Market performance are already being addressed together through the current active PR stack; do not select either for an unrelated autonomous batch. **Later, only if measurements justify it:** A07 startup attribution. **Small correctness fixes:** A04 and A05. **Premium quick wins:** P01, P04, P05, W04, W05, W21, W22. **Verify existing before rebuilding:** W09 multilevel crafting, W17/W18 tooltip builder, F15 auto flight, F17 Attune broker, F04 Fishing follow-up.
 
 **Watch for overlap:** W01 and W19 both touch auction pricing/Market confidence but are not identical; W07 builds on Gold Ledger; F12 and F29 describe one Waylaid-crate area. Keep these as linked notes until scoped.
 
@@ -113,7 +117,7 @@ Each note is preserved in wording below. The proposed status and effort are plan
 | F01 | Full gamepad support | 6 | Large concept / discovery | L | Start with navigation/action equivalence and protected input constraints |
 | F02 | Health overlay for execute range | 5 | Candidate | S/M | Class/spell thresholds, optional minimal overlay; verify accessible health values |
 | F03 | Custom waypoint ui | 6 | Concept / discovery | L | Build on current navigation/WaypointUI rather than replacing blindly |
-| F04 | Fishing module | 5 | In progress | M | Stage 1 merged PR #92; Stage 2 open PR #94; integrate/polish existing branch |
+| F04 | Fishing module | 5 | Partially implemented — future stages need scope | M | Stage 1 PR #92 and Stage 2 PR #94 merged; do not recreate; later stages need owner selection |
 | F05 | What dungeons or zones are good for me | 6 | Concept / discovery | M | Define guidance inputs: level, quests, interests and group role |
 | F06 | Dungeon tools | 6 | Broad concept | L | Decompose into discrete user journeys rather than generic large module |
 | F07 | Quest log cleanup | 5 | Candidate | M | Specify reversible display/organization scope before touching quest records |
@@ -146,16 +150,16 @@ Each note is preserved in wording below. The proposed status and effort are plan
 - [PR #85](https://github.com/Twich-Team/TwichUI/pull/85): Opportunities cost realism **merged**; not proof that current price freshness or load time is satisfactory.
 - [PR #84](https://github.com/Twich-Team/TwichUI/pull/84): custom tooltip separators and removable/editable default heading **merged**.
 - [PR #73](https://github.com/Twich-Team/TwichUI/pull/73): Attune broker **merged**; [PR #74](https://github.com/Twich-Team/TwichUI/pull/74) supplies artwork.
-- [PR #92](https://github.com/Twich-Team/TwichUI/pull/92): Fishing Stage 1 **merged**; [PR #94](https://github.com/Twich-Team/TwichUI/pull/94) Stage 2 **open** at audit time.
+- [PR #92](https://github.com/Twich-Team/TwichUI/pull/92): Fishing Stage 1 **merged**; [PR #94](https://github.com/Twich-Team/TwichUI/pull/94) Stage 2 **merged**. Further stages remain uncommitted.
 - [PR #81](https://github.com/Twich-Team/TwichUI/pull/81): auction Open All attribution **merged**, simulation-tested, real-client confirmation not claimed.
 - [PR #87](https://github.com/Twich-Team/TwichUI/pull/87): clearer Market source/empty state **closed without merge**; assess applicable design intent, not an active PR.
 - `!!!TwichUI/nav/Flight.lua`: opt-in autoFlight already implemented; `TwichUI_Workshop/Strategy.lua`: multilevel craft/buy planner; `!!!TwichUI/modules/RestockPrompt.lua`: some frame-style support exists despite visual critique; `!!!TwichUI/modules/PartyDeath.lua`: existing death notification, not evidence of a death-location map marker.
 
 ## Decision log (initial)
 
-- **Owner-selected active item:** Opportunities loading investigation/fix. Await its result before changing adjacent Market architecture.
+- **Owner-selected active campaign:** Opportunities and Market performance together (A01/A02, W19), with PRs #97/#99/#100/#102 open at this planning review. Await merge/results before selecting overlapping Market or Workshop pricing tasks.
 - **Owner policy:** prioritize premium, cohesive UX; reliable responsiveness; AI-agent-friendly repository; comprehensive but proportionate offline tests; owner retains sole release readiness decision.
-- **Not authorized:** no automatic backlog execution, feature builds, issue creation, PRs or repository edits from this roadmap draft.
+- **Not authorized by the roadmap alone:** no automatic backlog execution, feature builds, issue creation, PRs or repository edits. A separate owner-issued batch instruction may expressly authorize a bounded number of Autonomous-Ready items; Ready is eligibility only.
 
 ## How to refine next
 
