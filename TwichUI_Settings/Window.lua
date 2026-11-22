@@ -2022,7 +2022,7 @@ function escape:IsShown()
     return Wg.MenuShown() or UI.IsShown()
 end
 function escape:Hide()
-    local catalog, designer, picker = R.RemindersCatalog, R.RemindersDesigner, R.RemindersImagePicker
+    local catalog, designer, picker = R.RemindersCatalog, R.RemindersDesigner, R.SettingsArtworkPicker
     if Wg.MenuShown() then
         Wg.CloseMenu()
     elseif R.WorkshopJunkSettings and R.WorkshopJunkSettings.Shown() then
@@ -2030,7 +2030,7 @@ function escape:Hide()
     elseif R.MagicInventoryPage and R.MagicInventoryPage.CloseItemFilters and R.MagicInventoryPage.CloseItemFilters() then
         -- The focused editor closes without saving or closing its parent rule draft.
     elseif picker and picker.Shown() then
-        picker.Cancel()   -- the candidate is discarded; nothing was written
+        picker.Close()   -- the candidate is discarded; nothing was written
     elseif catalog and catalog.Shown() then
         catalog.Hide()
     elseif designer and designer.Shown() then

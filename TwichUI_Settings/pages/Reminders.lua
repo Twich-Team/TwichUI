@@ -506,9 +506,9 @@ function P.Refresh()
     local PV = R.RemindersPreview
     if PV then
         local catalog = R.RemindersCatalog
-        if picker and picker.Shown() then
+        if R.SettingsArtworkPicker and R.SettingsArtworkPicker.Shown() then
             PV.Hide()
-            PV.Place(picker.Frame())
+            if picker and picker.Shown() then PV.Place(picker.Frame()) end
         elseif catalog and catalog.Shown() then
             PV.Hide()
             PV.Place(catalog.Frame())

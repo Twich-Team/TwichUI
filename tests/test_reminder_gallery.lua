@@ -10,7 +10,7 @@ local function Check(cond, msg) if not cond then failures = failures + 1; print(
 
 c.CreateFrame = function() return setmetatable({}, { __index = function() return function() end end }) end
 c.UIParent = c.CreateFrame()
-for _, f in ipairs({ "Icons.lua", "reminders/AmmoItems.lua", "reminders/ArtData.lua", "reminders/Config.lua", "reminders/Gallery.lua", "setup/TwichConfig.lua" }) do
+for _, f in ipairs({ "Icons.lua", "reminders/AmmoItems.lua", "reminders/ArtData.lua", "artwork/Catalog.lua", "reminders/Config.lua", "reminders/Gallery.lua", "setup/TwichConfig.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.TwichUIDB = { modules = {} }
@@ -87,7 +87,7 @@ for _, cat in ipairs(DATA.categories) do Check(perCategory[cat] > 0, "category "
 local entries = G.Entries()
 local cats = G.Categories()
 Check(cats[1] == "All" and #cats == 7, "All and the six categories")
-Check(#entries == #DATA.gallery + 12, "the library, the four artworks that were here first and the eight icons: " .. #entries)
+Check(#entries == #DATA.gallery + 32, "the original79 and20 approved additions: " .. #entries)
 local ids = {}
 for _, e in ipairs(entries) do
   Check(not ids[e.id], "catalog id " .. e.id .. " is unique")
@@ -119,6 +119,131 @@ Check(#G.Search("rage") > 0 and #G.Search("poison") >= 3, "search by keyword")
 Check(#G.Search("  ") == #entries, "blank is nothing typed")
 Check(table.concat(Names(G.Search("potion")), ",") == table.concat(Names(G.Search("potion")), ","), "stable order")
 Check(#G.Search("a b c d e f g h i j k") <= #entries, "very long queries are bounded")
+
+---------------------------------------------------------------------------
+-- Shared core: bounded references, isolated reads and source-specific rendering.
+---------------------------------------------------------------------------
+do
+  local A = R.Artwork
+  local ref = { kind = "icon", id = "mage", note = "discard me" }
+  local checked = A.Check(ref)
+  Check(checked and checked ~= ref and checked.id == "mage" and checked.note == nil, "reference identity is copied without scalar metadata")
+  for _, valid in ipairs({ {kind="art", id=string.rep("a",40)}, {kind="icon", id=string.rep("A",64)},
+      {kind="item", id=1}, {kind="item", id=2147483647}, {kind="automatic"} }) do
+    Check(A.Check(valid) ~= nil, "reference bounds accept " .. valid.kind)
+  end
+  for _, invalid in ipairs({ {}, {kind="art",id=""}, {kind="art",id=string.rep("a",41)}, {kind="art",id="Upper"},
+      {kind="icon",id=string.rep("a",65)}, {kind="icon",id="media/path"}, {kind="art",id="bad|link"},
+      {kind="item",id=0}, {kind="item",id=-1}, {kind="item",id=1.5}, {kind="item",id=2147483648},
+      {kind="item",id=math.huge}, {kind="item",id=0/0}, {kind="automatic",id="shield"},
+      {kind="other",id="shield"}, {kind="art",id="shield",nested={}}, setmetatable({kind="art",id="shield"},{}) }) do
+    local out, why = A.Check(invalid)
+    Check(out == nil and why == "invalid_ref", "malformed reference is refused")
+  end
+  local unknown = {kind="art",id="future-art"}
+  Check(A.Check(unknown) and not A.Get(unknown) and not A.Get({kind="item",id=6948}), "valid identity does not invent catalog entries")
+  local owned = A.Get({kind="art",id="shield"})
+  owned.name, owned.ref.id, owned.related[1] = "changed", "changed", "changed"
+  local names = A.Categories(); names[1] = "changed"
+  Check(A.Get({kind="art",id="shield"}).name ~= "changed" and A.Get({kind="art",id="shield"}).ref.id == "shield"
+      and A.Get({kind="art",id="shield"}).related[1] ~= "changed" and A.Categories()[1] == "All", "catalog reads share no mutable data with callers")
+  local found = A.Search(""); found[1].ref.id = "changed"; found[1] = nil
+  Check(A.Entries()[1].ref.id ~= "changed" and #A.Entries() == #entries, "search snapshots cannot corrupt later reads")
+  Check(#A.Search("", "unknown") == 0 and #A.Search(false) == #entries, "unknown category and nonstring query are safe")
+  local expected = {}
+  for _, cat in ipairs(DATA.categories) do
+    for _, e in ipairs(DATA.legacy) do if e[4] == cat then expected[#expected+1] = e[1] == "art" and e[2] or "icon-" .. e[2] end end
+    for _, e in ipairs(DATA.gallery) do if e[3] == cat then expected[#expected+1] = e[1] end end
+  end
+  local baseline, actual = {}, {}
+  for _, id in ipairs(expected) do baseline[id] = true end
+  local categoryAdded = {}
+  for _, entry in ipairs(A.Entries()) do
+    if baseline[entry.id] then
+      actual[#actual+1] = entry.id
+      Check(not categoryAdded[entry.category], "baseline entries precede additions in " .. entry.category)
+    else categoryAdded[entry.category] = true end
+  end
+  Check(#expected == 79 and table.concat(actual, ",") == table.concat(expected, ","), "all79 baseline entries retain order and IDs")
+  local tex = {}
+  function tex:SetTexture(file) self.file = file; return file ~= self.refuse end
+  function tex:SetTexCoord(...) self.coords = {...} end
+  function tex:SetSize(w,h) self.w,self.h = w,h end
+  function tex:SetVertexColor(...) self.tint = {...} end
+  function tex:SetAlpha(a) self.alpha = a end
+  local ok, reason = A.Draw(tex, {kind="art",id="shield"},64)
+  Check(ok and reason == "ready" and tex.file == R.PATH .. "media\\reminders\\shield-small" and tex.coords[1] == 1/64
+      and tex.coords[2] == 45/64 and tex.w == 64 * (180/254) and tex.h == 64 and tex.alpha == 1, "legacy art preserves small threshold, crop and aspect")
+  A.Draw(tex, {kind="art",id="shield"},65)
+  Check(tex.file == R.PATH .. "media\\reminders\\shield", "legacy art above64 uses the large file")
+  A.Draw(tex, {kind="icon",id="mage"},26)
+  Check(tex.file == R.Icons.Path("mage",26) and tex.w == 26 and tex.h == 26, "icons use registry rendering")
+  tex.refuse = R.Icons.Path("mage",26)
+  ok, reason = A.Draw(tex, {kind="icon",id="mage"},26)
+  Check(not ok and reason == "unavailable" and tex.file == nil, "refused icons cannot claim emblem fallback is custom art")
+  tex.refuse = RM.ArtTexture("shield",64)
+  ok, reason = A.Draw(tex, {kind="art",id="shield"},64)
+  Check(not ok and reason == "unavailable" and tex.file == nil, "a refused art file is unavailable")
+  tex.refuse = nil
+  for _, case in ipairs({ {unknown,32,"unavailable"}, {{kind="icon",id="home"},32,"unavailable"},
+      {{kind="automatic"},32,"automatic"}, {{kind="art",id="shield"},0,"invalid_size"},
+      {{kind="art",id="shield"},math.huge,"invalid_size"}, {{kind="item",id=0},32,"invalid_ref"} }) do
+    ok, reason = A.Draw(tex,case[1],case[2])
+    Check(not ok and reason == case[3] and tex.file == nil, "failed drawing clears: " .. case[3])
+  end
+  local newArt = { ["art-herbs"]="icons/magic-herbs", ["art-leather"]="icons/magic-leather", ["art-parts"]="icons/magic-parts",
+      ["art-elemental"]="icons/magic-elemental", ["art-shipping-crate"]="icons/magic-waylaid-crate", ["art-cloth"]="npcs/cloth-bolts",
+      ["art-tabard"]="npcs/tabard", ["art-paw"]="npcs/paw", ["art-dice"]="loot/dice", ["art-crown"]="loot/crown" }
+  local targetFiles, added = {}, 0
+  for _, entry in ipairs(A.Entries()) do
+    if not baseline[entry.id] then
+      added = added+1
+      local small, full
+      if entry.kind == "art" then
+        local relative = newArt[entry.target]
+        Check(relative ~= nil, "only approved standalone art is added: " .. entry.target)
+        small, full = RM.ArtTexture(entry.target,26), RM.ArtTexture(entry.target,27)
+        Check(small == R.PATH .. "media\\" .. relative:gsub("/","\\") .. "-small"
+            and full == R.PATH .. "media\\" .. relative:gsub("/","\\"), "new art uses approved paths and26 threshold")
+        local _,l,r,t,b,aspect = RM.ArtTexture(entry.target,26)
+        Check(l == 0 and r == 1 and t == 0 and b == 1 and aspect == 1, "new art does not acquire generated gallery crop")
+      else
+        Check(RM.ValidIcon(entry.target), "approved icon is accepted by Reminder validation")
+        small, full = R.Icons.Path(entry.target,26), R.Icons.Path(entry.target,27)
+      end
+      Check(not targetFiles[full], "additions have no duplicate file target")
+      targetFiles[full] = true
+      for _, file in ipairs({small,full}) do
+        local relative = file:sub(#R.PATH+1):gsub("\\","/")
+        local header = TGA(ROOT .. relative .. ".tga")
+        Check(header and header.w == (file == small and 32 or 64) and header.w == header.h, "existing32/64 file resolves: " .. relative)
+      end
+      Check(A.Get(entry.ref) and #A.Search(entry.name,entry.category) > 0 and entry.keywords:match("^[a-z ]+$"), "added metadata is searchable: " .. entry.name)
+    end
+  end
+  Check(added == 20 and #entries == 99, "exactly20 approved additions")
+  for _, id in ipairs({"art-ore","art-explosives","art-enchanting-materials","art-unbound-chain","art-gavel","art-wing"}) do
+    Check(not A.Get({kind="art",id=id}) and not RM.Art(id), "conditional art remains deferred: " .. id)
+  end
+  for _, id in ipairs({"explore","quickKeybind","lootRolls","home"}) do
+    Check(not A.Get({kind="icon",id=id}) and not RM.ValidIcon(id), "conditional/alias/uncurated icons remain excluded: " .. id)
+  end
+  -- Added choices use the same existing reminder schema and atomic Gallery setter.
+  local _, addedReminder = RM.Create("custom")
+  Check(G.Choose(addedReminder,G.ForArt("art-herbs")) and RM.Get(addedReminder).display.art == "art-herbs", "new art saves with existing display.art")
+  Check(G.Choose(addedReminder,G.ForIcon("auctionHouse")) and RM.Get(addedReminder).display.icon == "auctionHouse", "new icon saves exact registry key")
+  local beforeItem = c.C_Item
+  c.C_Item = {GetItemIconByID=function(id) if id == 6948 then return 123 end end}
+  ok, reason = A.Draw(tex,{kind="item",id=6948},32)
+  Check(ok and reason == "ready" and tex.file == 123 and tex.coords[1] == 0.08 and tex.coords[2] == 0.92, "items preserve square inset")
+  ok, reason = A.Draw(tex,{kind="item",id=9999},32)
+  Check(not ok and reason == "loading" and tex.file == nil and A.Check({kind="item",id=9999}), "pending item keeps selectable identity")
+  c.C_Item = beforeItem
+  local isolated = { TwichUI = {PATH=R.PATH, Icons=R.Icons, ReminderArtData=DATA} }
+  setmetatable(isolated,{__index=_G})
+  local chunk = assert(loadfile(ROOT .. "artwork/Catalog.lua")); setfenv(chunk,isolated); chunk()
+  Check(isolated.TwichUI.Reminders == nil and #isolated.TwichUI.Artwork.Entries() == 99, "core works without Reminders or Settings")
+end
 
 ---------------------------------------------------------------------------
 -- The three modes are a view of the five stored ones; nothing saved changes
