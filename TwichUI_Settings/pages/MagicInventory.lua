@@ -588,7 +588,7 @@ local CATEGORY_ART = {
     ["9"] = NPC .. "sealed-scroll-small", ["15"] = NPC .. "leather-backpack-small",
 }
 function P.CategoryArtwork(key)
-    if key == MI().WAYLAID_CATEGORY then return [[media\loot\chest-small]] end
+    if key == MI().WAYLAID_CATEGORY then return Painted("waylaid-crate") end
     if CATEGORY_ART[key] then return CATEGORY_ART[key] end
     local class = key:match("^(%d+)")
     if class == "9" then return CATEGORY_ART["9"] end
