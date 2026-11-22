@@ -3,6 +3,19 @@
 The pictures a reminder can show come from one catalog. This file explains where they came from, how they are built, what each one is called, how
 the picker finds them, and how to add more. The picker itself is described in [reminders.md](reminders.md) (Appearance and the image picker).
 
+## Proposed shared reuse (UX02)
+
+Autonomous Batch 5 audits this picker as the approved visual/interaction reference.
+The [shared-picker design](design/shared-artwork-picker.md) separates catalog,
+reference drawing and staged selection from Reminder display setters without
+changing existing IDs, crops, modes or saved selections. The
+[additional-art inventory](design/shared-artwork-inventory.md) proposes 28 existing
+bundled candidates (20 first-slice recommendations; eight requiring closer small-size
+review); the [rule specifications](design/shared-artwork-rule-integrations.md)
+keep automatic art and rule behavior intact. These are proposals awaiting owner
+review, not new catalog entries or implemented APIs. No assets were regenerated
+and the existing generator/manifest remain authoritative for this library.
+
 ## Sources
 
 Two painted sheets, kept whole and never changed, in `docs/reminders-revision/`:
