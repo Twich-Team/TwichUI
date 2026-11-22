@@ -164,6 +164,7 @@ local function QueueTip(row)
         GameTooltip:AddLine("Its materials aren't known: open " .. (e.profName or "its profession") .. " to update.", 1, 0.82, 0.3, true)
     end
     GameTooltip:AddLine("Click to choose it.", 0.55, 0.55, 0.55)
+    GameTooltip:AddLine("Right-click: Open recipe or Remove from queue.", 0.8, 0.8, 0.8, true)
     local a = W.AuctionUI
     if a and a.Context and a.Context() == "auctioneer" then
         GameTooltip:AddLine("Shift-click: search its output in TwichUI Auction House.", 0.8, 0.8, 0.8, true)
@@ -190,6 +191,27 @@ local function MakeQueueRow(parent)
         UI.Redraw()
         return true
     end
+    local function OpenQueueMenu()
+        local id = row.id
+        if not (id and W.Queue.Find(id)) then return end
+        if not (MenuUtil and MenuUtil.CreateContextMenu) then
+            R.Print("Queue menu unavailable. Use Open recipe and Remove in the craft details.")
+            return
+        end
+        row.countEdit:ClearFocus()
+        MenuUtil.CreateContextMenu(row, function(_, root)
+            local function Current()
+                return W.Active() and row:IsVisible() and row.id == id and W.Queue.Find(id)
+            end
+            root:CreateButton("Open recipe", function()
+                if Current() then S.OpenRecipe(id); UI.Redraw() end
+            end)
+            local remove = root:CreateButton("Remove from queue", function()
+                if Current() then S.Remove(id); UI.Redraw() end
+            end)
+            remove:SetEnabled(not W.Queue.Held())
+        end)
+    end
     row.iconBtn:SetScript("OnEnter", function(self)
         local item = row.entry and row.entry.outItem
         if not GameTooltip then return end
@@ -200,7 +222,9 @@ local function MakeQueueRow(parent)
         end
     end)
     row.iconBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
-    row.iconBtn:SetScript("OnClick", function()
+    row.iconBtn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    row.iconBtn:SetScript("OnClick", function(_, button)
+        if button == "RightButton" then OpenQueueMenu(); return end
         if SearchOutput() then return end
         local item = row.entry and row.entry.outItem
         if item and IsModifiedClick and IsModifiedClick("CHATLINK") and ChatEdit_InsertLink then
@@ -234,7 +258,9 @@ local function MakeQueueRow(parent)
         row.count:Show()
         row.countButton:Show()
     end
-    row.countButton:SetScript("OnClick", function()
+    row.countButton:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    row.countButton:SetScript("OnClick", function(_, button)
+        if button == "RightButton" then OpenQueueMenu(); return end
         if not row.entry then return end
         row.editId = row.id
         row.countEdit:SetText(tostring(row.entry.crafts))
@@ -269,7 +295,9 @@ local function MakeQueueRow(parent)
     row.stale:SetPoint("TOPLEFT", row.line, "BOTTOMLEFT", 0, -2)
     row.stale:SetPoint("RIGHT", row, "RIGHT", -8, 0)
     row.stale:SetText("Open profession to update.")
-    row:SetScript("OnClick", function(self)
+    row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    row:SetScript("OnClick", function(self, button)
+        if button == "RightButton" then OpenQueueMenu(); return end
         if SearchOutput() then return end
         if self.id then selected = self.id; UI.Redraw() end
     end)

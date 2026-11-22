@@ -1665,4 +1665,63 @@ do
   f:Hide()
 end
 
+-- Queue context actions use the existing native menu and capture the intended row.
+do
+  for _, e in ipairs({ unpack(Q.Entries()) }) do Q.Remove(e.id) end
+  local rec = { id=8001, name="Synthetic menu craft", prof=171, profName="Alchemy", icon=1,
+    outItem=501, outMin=1, outMax=1, mats={{item=10,qty=2}} }
+  Check(Q.Add(rec, 3))
+  Win.Show(); Win.SetMode("craft")
+  Win.Craft().segQueue:GetScript("OnClick")(Win.Craft().segQueue)
+  local row = Win.Lists().queue.rows[1]
+  local originalMenu, opened = c.MenuUtil
+  c.MenuUtil = { CreateContextMenu=function(owner, build)
+    opened = { owner=owner, entries={} }
+    function opened:CreateButton(text, action)
+      local entry={text=text,action=action,enabled=true}
+      function entry:SetEnabled(on) self.enabled=on end
+      self.entries[#self.entries+1]=entry
+      return entry
+    end
+    build(owner, opened)
+  end }
+  row:GetScript("OnClick")(row,"RightButton")
+  Same(opened.owner,row)
+  Same(#opened.entries,2)
+  Same(opened.entries[1].text,"Open recipe")
+  Same(opened.entries[2].text,"Remove from queue")
+  Same(Q.Find(8001).crafts,3,"opening menu preserves quantity")
+  local before=#g.opened
+  opened.entries[1].action()
+  Same(#g.opened,before+1); Same(g.opened[#g.opened],8001,"menu opens intended recipe")
+  local openRecipe=c.C_TradeSkillUI.OpenRecipe
+  c.C_TradeSkillUI.OpenRecipe=function() error("Synthetic unavailable profession") end
+  opened.entries[1].action()
+  Check(S.Note():find("Open Alchemy first",1,true),"unavailable profession retains existing guidance")
+  c.C_TradeSkillUI.OpenRecipe=openRecipe
+  row.countButton:GetScript("OnClick")(row.countButton,"RightButton")
+  Check(not row.countEdit:IsShown(),"right-click quantity opens menu rather than editor")
+  row.iconBtn:GetScript("OnClick")(row.iconBtn,"RightButton")
+  Same(opened.owner,row,"output icon opens the same queue menu")
+  local held=Q.Held;Q.Held=function() return true end
+  row:GetScript("OnClick")(row,"RightButton")
+  Check(not opened.entries[2].enabled,"read-only queue disables removal")
+  Q.Held=held
+  row:GetScript("OnClick")(row,"RightButton")
+  local staleRemove=opened.entries[2].action
+  row.id=8002
+  staleRemove()
+  Check(Q.Find(8001),"recycled row cannot apply a stale menu action")
+  row.id=8001;row:Hide();staleRemove()
+  Check(Q.Find(8001),"hidden owner cannot apply a stale menu action")
+  Win.Render()
+  row:GetScript("OnClick")(row,"RightButton")
+  opened.entries[2].action()
+  Check(not Q.Find(8001),"menu removal goes through Session.Remove")
+  Q.Unload();Q.Load()
+  Check(not Q.Find(8001),"menu removal persists")
+  c.MenuUtil=originalMenu
+  Win.Hide()
+end
+
 print("PASSED")
