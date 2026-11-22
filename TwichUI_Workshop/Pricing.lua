@@ -155,7 +155,7 @@ function P.BaseKey(item)
     item=W.Int(item,1,W.MAX_ID)
     if item then observed('baseKeys');return J.SHA('{"id":'..string.format('%.0f',item)..'}') end
 end
-local function record(item,opt,completion,defer)
+local function record(item,opt,completion,defer,answer)
     local asked=R.Perf and R.Perf.on and elapsedClock()
     if opt and opt.variant then return nil,'variant' end
     local status=B and B.Status()
@@ -180,7 +180,8 @@ local function record(item,opt,completion,defer)
     local mine=epoch
     local key=reserved or P.BaseKey(item)
     local r,reason
-    if defer or waits and waits.preparing then reason='loading'
+    if answer then r=answer
+    elseif defer or waits and waits.preparing then reason='loading'
     else observed('readerCalls');r,reason=B.Record(item,key,CURRENT_ONLY)end
     -- Do not keep daily arrays or mutable decoder rows in the price cache.
     if r then r={current=J.Copy(r.current),variant_key=r.variant_key} end
@@ -218,9 +219,9 @@ local function preparedBucket(ids,work,owner)
                 if n<8 then owners[owner]=true else waits.shared=waits.shared or {};waits.shared[item]=true end
             else waits.shared=waits.shared or {};waits.shared[item]=true end
             observed('readerCalls')
-            local _,why=B.Record(item,key,{current=true,owner=owner})
+            local ready,why=B.Record(item,key,{current=true,owner=owner})
             if mine~=epoch then return end
-            if why~='loading'then P.ItemReady(item,key,why)end
+            if why~='loading'then P.ItemReady(item,key,why,ready)end
         end
         if work then work()end
         if mine~=epoch then return end
@@ -233,13 +234,18 @@ local function forget(wait,item)
     if wait.timings then wait.timings[item]=nil end
 end
 -- A prepared tuple releases only its own reservation and dependency notification.
-function P.ItemReady(item,key,failure)
+function P.ItemReady(item,key,failure,answer)
     local bucket=item%64;local waits=pending[bucket]
     if not waits or waits[item]~=key then return end
     if failure then
         waits[item]=nil;pendingCount=pendingCount-1
         if failure~='combat'then cache[item]={record=false,why=failure};count=count+1 end
-    else record(item,nil,true)end
+    else
+        record(item,nil,true,false,answer)
+        -- Source eligibility can expire while a proof is suspended. As in the
+        -- legacy handoff, no terminal service response may strand a reservation.
+        if pending[bucket]==waits and waits[item]then waits[item]=nil;pendingCount=pendingCount-1 end
+    end
     forget(waits,item)
     local live=false;for _,id in ipairs(waits.ids)do if waits[id]then live=true;break end end
     if not live then pending[bucket]=nil end

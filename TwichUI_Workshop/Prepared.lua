@@ -9,8 +9,8 @@ local widths={8,64,1,10,10,10,14,1,1,10,2,2,2}
 local maxima={2147483647,0,4,99999999999,99999999999,99999999999,9007199254740991,0,1,99999999999,14,60,60}
 local nullable={[4]=true,[5]=true,[6]=true,[7]=true,[10]=true}
 local money={[4]=true,[5]=true,[6]=true,[10]=true}
-local offsets={};local offset=0
-for i,n in ipairs(widths)do offsets[i]=offset;offset=offset+n end
+local offsets,nulls={},{};local offset=0
+for i,n in ipairs(widths)do offsets[i]=offset;nulls[i]=string.rep('z',n);offset=offset+n end
 local EMPTY_ROWS=J.SHA('[]');local EMPTY_ROOT=J.SHA('empty\0')
 local function need(ok)if not ok then error('invalid prepared current data',0)end end
 local function digest(v)return type(v)=='string'and #v==64 and not v:find('[^0-9a-f]')end
@@ -29,20 +29,39 @@ local function key(part,pos)
     need(pos>=1 and pos<=part.n)
     local at=(pos-1)*M.WIDTH
     local item=hex(part.data:sub(at+1,at+8));local variant=part.data:sub(at+9,at+72)
-    need(W.Int(item,1,2147483647)and digest(variant));return item,variant
+    -- Pivots are navigation hints only. Returned tuples and both missing-result
+    -- neighbors authenticate separately; scanning unrelated variant bytes here
+    -- would repeat work on every binary-search step.
+    need(W.Int(item,1,2147483647));return item,variant
 end
 local function row(part,pos)
     need(pos>=1 and pos<=part.n);local out=J.Array();local at=(pos-1)*M.WIDTH
     for i,width in ipairs(widths)do
         local word=part.data:sub(at+offsets[i]+1,at+offsets[i]+width)
         if i==2 then need(digest(word));out[i]=word
-        elseif word==string.rep('z',width)then need(nullable[i]);out[i]=N
+        elseif word==nulls[i]then need(nullable[i]);out[i]=N
         else
             local value=hex(word);need(W.Int(value,0,maxima[i]))
             out[i]=money[i] and ('%.0f'):format(value)or value
         end
     end
     return out
+end
+-- Streaming canonical bytes need no decoded tuple or generic JSON encoder.
+-- Every byte is still hashed against the authoritative canonical-current digest;
+-- actual returned tuples receive the usual semantic checks/proofs.
+local function canonicalRow(part,pos)
+    local fields={};local at=(pos-1)*M.WIDTH
+    for i,width in ipairs(widths)do
+        local word=part.data:sub(at+offsets[i]+1,at+offsets[i]+width)
+        if i==2 then need(digest(word));fields[i]='"'..word..'"'
+        elseif word==nulls[i]then need(nullable[i]);fields[i]='null'
+        else
+            local value=hex(word);need(W.Int(value,0,maxima[i]))
+            local text=('%.0f'):format(value);fields[i]=money[i]and '"'..text..'"'or text
+        end
+    end
+    return '['..table.concat(fields,',')..']'
 end
 local function valid(r,bucket,count)
     need(W.Int(r[1],1,2147483647)and r[1]%count==bucket and digest(r[2]))
@@ -278,10 +297,13 @@ function M.Release(ctx,lease)
     if ctx.planOwner==lease then ctx.bulk=nil;ctx.dense={};ctx.priority={};ctx.planOwner=nil end
 end
 local function full(ctx,part)
+    if part.full then return end
+    ctx.stats.hashes=ctx.stats.hashes+1
     local hash=J.Hash(tick);hash:Update('[')
-    for i=1,part.n do if i>1 then hash:Update(',')end;hash:Update(J.Encode(row(part,i),tick));tick()end
+    for i=1,part.n do if i>1 then hash:Update(',')end;hash:Update(canonicalRow(part,i));tick()end
     hash:Update(']');need(hash:Finish()==ctx.descriptors[part.bucket].sha256)
     for _ in pairs(part.bits)do ctx.stats.flag_words=ctx.stats.flag_words-1 end
+    ctx.stats.verified=ctx.stats.verified+part.n-part.verified;part.verified=part.n
     part.full=true;part.bits={};ctx.stats.full=ctx.stats.full+1
 end
 function M.Pending(ctx)return ctx.pendingCount>0 or ctx.bulk~=nil end
@@ -309,6 +331,11 @@ function M.Work(ctx,completed,notify)
             ctx.bulk=nil
             if task.kind=='record'then completed(task.item,task.variant,'combat')end
             remove(ctx,task);ctx.running=nil
+            if task.kind=='full'or task.kind=='range'then notify()end
+        elseif task.kind=='record'and ctx.parts[task.bucket]and ctx.parts[task.bucket].full then
+            -- A dense hash has already authenticated every position. Completion
+            -- performs the only lookup; don't allocate a redundant proof coroutine.
+            remove(ctx,task);ctx.running=nil;completed(task.item,task.variant)
         else
             if not task.co then task.co=coroutine.create(function()
                 local part=load(ctx,task.bucket)

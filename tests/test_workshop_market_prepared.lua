@@ -1,8 +1,8 @@
 -- Shared producer vectors; actual production queue, proof reader and Pricing.
-local function client(layout)
+local function client(layout,fixtureName)
     local c=dofile(TESTS..'auction_mock.lua');local W=c.TwichUI.Workshop
     local J,B,Q,P=W.BridgeCodec,W.Bridge,W.Summary,W.Pricing
-    local f=assert(io.open(TESTS..'fixtures/workshop_prepared_v1/synthetic.json'));local fixture=J.Parse(f:read('*a'));f:close()
+    local f=assert(io.open(TESTS..'fixtures/workshop_prepared_v1/'..(fixtureName or 'synthetic.json')));local fixture=J.Parse(f:read('*a'));f:close()
     local s={c=c,W=W,J=J,B=B,Q=Q,P=P,fixture=fixture,events={},loads={},layout=layout or 16}
     c.C_Timer.After=function(_,fn)s.events[#s.events+1]=fn end
     c.GetTimePreciseSec=function()return s.wall or 0 end
@@ -95,10 +95,11 @@ s=client();P,B,Q=s.P,s.B,s.Q
 P.Price(2589);s.combat=true;s.drain();assert(P.PendingCount()==0 and #s.loads==0 and not P.Settled(2589))
 s.combat=false;P.Price(2589);s.drain();assert(P.Price(2589).price==120)
 -- Corrupt payloads never release a price; same-generation globals cannot replace captured strings.
-for _,kind in ipairs({'price','proof','truncated','identity'})do
+for _,kind in ipairs({'price','proof','truncated','identity','variant'})do
     s=client();P,B,Q=s.P,s.B,s.Q
     local payload=s.payloads['13']
     if kind=='price'then payload[1]=payload[1]:sub(1,208)..'00000003e7'..payload[1]:sub(219)
+    elseif kind=='variant'then payload[1]=payload[1]:sub(1,143)..string.rep('c',64)..payload[1]:sub(208)
     elseif kind=='identity'then payload[1]=payload[1]:sub(1,135)..'ffffffff'..payload[1]:sub(144)
     elseif kind=='proof'then payload[2]=string.rep('0',#payload[2])
     else payload[1]=payload[1]:sub(2)end
@@ -111,4 +112,46 @@ assert(B.Value(2589,P.BaseKey(2589)).value==120,'mutable global changed a captur
 local generation=B.Status().generation
 s.begin('B',function(root)local a=s.J.Parse(root.prepared);a.record_width=134;local body=s.J.Copy(a);body.attestation_id=nil;a.attestation_id=s.J.SHA(s.J.Encode(body));root.prepared=s.J.Encode(a)end)
 assert(B.Status().generation==generation and P.Price(2589).price==120)
+-- Eligibility can change after queuing without a generation change.
+s=client();P,B=s.P,s.B;P.Price(2589);s.c.time=function()return 9999999999 end;s.drain()
+assert(P.PendingCount()==0 and P.Ready(2589),'expired eligibility stranded an independently verified price')
+-- Cooperative proof callbacks honor the same modeled work budget as legacy handoff.
+s=client();P,B,Q=s.P,s.B,s.Q;local cpu=0;s.c.GetTimePreciseSec=function()return cpu end
+local old=B.Record;B.Record=function(...)cpu=cpu+.001;return old(...)end
+P.Price(2589);P.Price(123);P.Price(9001);s.drain()
+assert(Q.Status().largest_slice_ms<=3.000001 and P.PendingCount()==0)
+-- Direct reader requests also have a fixed queue capacity, including variants.
+s=client();local M=s.W.Prepared;local ctx=M.Begin(s.root.prepared,s.J.Parse(s.root.manifest),'A')
+local max=M.MAX_PENDING;M.MAX_PENDING=2
+M.Record(ctx,2589,s.P.BaseKey(2589));M.Record(ctx,2589,string.rep('0',64))
+local _,limit=M.Record(ctx,2589,string.rep('f',64));assert(limit=='lookup_limit'and M.Status(ctx).pending==2)
+M.Cancel(ctx);assert(M.Status(ctx).pending==0);M.MAX_PENDING=max
+
+-- A resident/full physical partition must not read the same new price twice.
+s=client();P,B=s.P,s.B;B.EachItem(function()end,function()s.tick()end)
+local calls=0;local read=B.Record;B.Record=function(...)calls=calls+1;return read(...)end
+P.PrepareBucket({2589},nil,{});s.drain();assert(P.Price(2589).price==120 and calls==1,'warm preparation duplicated an authenticated record read')
+
+-- Producer-generated upper integer/money boundary: selective proof and bulk hash
+-- must reconstruct the exact same canonical 13-tuple on Lua 5.1.
+for _,layout in ipairs({16,32})do
+    s=client(layout,'boundaries.json');P,B=s.P,s.B
+    P.Price(2147483647);s.drain();assert(P.Price(2147483647).price==99999999999)
+    assert(B.Record(2147483647,P.BaseKey(2147483647),{current=true}).current.supply==9007199254740991)
+    assert(B.EachItem(function(id)assert(id==2147483647)end,function()s.tick()end))
+    assert(B.Status().prepared.full==1 and B.Status().prepared.verified==1)
+end
+
+-- A pending history job is parked, never restarted, for an independent price.
+s=client();P,B,Q=s.P,s.B,s.Q;Q.RESUMES=1
+B.History(2589,P.BaseKey(2589));s.tick();P.Price(2589)
+assert(Q.Status().parked_history);local ready=false
+for _=1,2000 do s.tick();if P.Settled(2589)then ready=true;break end end
+assert(ready and Q.Status().history_checked_parts==0);s.drain()
+local historyLoads=0;for _,name in ipairs(s.loads)do if name:find('History',1,true)then historyLoads=historyLoads+1 end end
+assert(historyLoads==1 and B.History(2589,P.BaseKey(2589)))
+-- EachItem cannot silently resume cancelled enumeration in the same generation.
+s=client();local enumerated=false
+local ok,why=s.B.EachItem(function()enumerated=true end,function()s.Q.Cancel()end)
+assert(not ok and why=='cancelled'and not enumerated);s.drain()
 print('PASSED prepared 16/32 vectors, exact/missing proofs, public APIs, partial prices, leases, combat, cancellation, generations and corruption')
