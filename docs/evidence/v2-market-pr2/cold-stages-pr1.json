@@ -1,0 +1,210 @@
+{
+  "baseline": "cef81e0393ed1827fc7c7a3d5b2943b1b7145f60",
+  "instrumentation": "production modules; phase wrappers and resume/yield clocks exclude suspended time; source-line attribution for current/history; observer CPU reported separately; not WoW time",
+  "samples": {
+    "2": [
+      {
+        "callbacks": 96.0,
+        "cpu_ms": 173.849,
+        "current_record_with_history_copy_ms": 0.019,
+        "final_gc_ms": 5.275,
+        "history_days": 2.0,
+        "raw_bytes": 77141.0,
+        "real_client": false,
+        "records": 512.0,
+        "retained_delta_kib": 407.853516,
+        "sampled_peak_delta_kib": 2394.21875,
+        "scheduler_and_observer_ms": 28.399,
+        "stage_net_heap_kib": {
+          "canonical_encode": 698.640625,
+          "integrity_hash": 74.772461,
+          "json_decode": 755.773438
+        },
+        "stage_yields": {
+          "canonical_encode": 12801.0,
+          "history_validation": 1536.0,
+          "integrity_hash": 8442.0,
+          "json_decode": 182.0
+        },
+        "stages_ms": {
+          "canonical_encode": 15.853,
+          "current_validation": 10.241,
+          "history_validation": 3.746,
+          "integrity_hash": 107.264,
+          "json_decode": 13.748
+        },
+        "synthetic": true,
+        "worst_callback_ms": 2.074
+      },
+      {
+        "callbacks": 95.0,
+        "cpu_ms": 169.71,
+        "current_record_with_history_copy_ms": 0.036,
+        "final_gc_ms": 6.782,
+        "history_days": 2.0,
+        "raw_bytes": 77141.0,
+        "real_client": false,
+        "records": 512.0,
+        "retained_delta_kib": 407.853516,
+        "sampled_peak_delta_kib": 2393.992188,
+        "scheduler_and_observer_ms": 27.121,
+        "stage_net_heap_kib": {
+          "canonical_encode": 698.640625,
+          "integrity_hash": 74.545898,
+          "json_decode": 755.773438
+        },
+        "stage_yields": {
+          "canonical_encode": 12801.0,
+          "history_validation": 1536.0,
+          "integrity_hash": 8442.0,
+          "json_decode": 182.0
+        },
+        "stages_ms": {
+          "canonical_encode": 14.908,
+          "current_validation": 11.638,
+          "history_validation": 3.737,
+          "integrity_hash": 105.677,
+          "json_decode": 13.567
+        },
+        "synthetic": true,
+        "worst_callback_ms": 2.065
+      },
+      {
+        "callbacks": 96.0,
+        "cpu_ms": 214.544,
+        "current_record_with_history_copy_ms": 0.019,
+        "final_gc_ms": 4.322,
+        "history_days": 2.0,
+        "raw_bytes": 77141.0,
+        "real_client": false,
+        "records": 512.0,
+        "retained_delta_kib": 407.853516,
+        "sampled_peak_delta_kib": 2394.21875,
+        "scheduler_and_observer_ms": 44.128,
+        "stage_net_heap_kib": {
+          "canonical_encode": 698.640625,
+          "integrity_hash": 74.772461,
+          "json_decode": 755.773438
+        },
+        "stage_yields": {
+          "canonical_encode": 12801.0,
+          "history_validation": 1536.0,
+          "integrity_hash": 8442.0,
+          "json_decode": 182.0
+        },
+        "stages_ms": {
+          "canonical_encode": 16.567,
+          "current_validation": 8.999,
+          "history_validation": 3.691,
+          "integrity_hash": 131.545,
+          "json_decode": 14.155
+        },
+        "synthetic": true,
+        "worst_callback_ms": 19.091
+      }
+    ],
+    "60": [
+      {
+        "callbacks": 899.0,
+        "cpu_ms": 1543.342,
+        "current_record_with_history_copy_ms": 0.088,
+        "final_gc_ms": 10.39,
+        "history_days": 60.0,
+        "raw_bytes": 582997.0,
+        "real_client": false,
+        "records": 512.0,
+        "retained_delta_kib": 4552.932617,
+        "sampled_peak_delta_kib": 22417.358398,
+        "scheduler_and_observer_ms": 303.922,
+        "stage_net_heap_kib": {
+          "canonical_encode": 10341.874023,
+          "integrity_hash": 528.568359,
+          "json_decode": 4781.713867
+        },
+        "stage_yields": {
+          "canonical_encode": 161281.0,
+          "history_validation": 31232.0,
+          "integrity_hash": 63770.0,
+          "json_decode": 2050.0
+        },
+        "stages_ms": {
+          "canonical_encode": 178.806,
+          "current_validation": 16.48,
+          "history_validation": 115.356,
+          "integrity_hash": 785.175,
+          "json_decode": 154.265
+        },
+        "synthetic": true,
+        "worst_callback_ms": 7.431
+      },
+      {
+        "callbacks": 918.0,
+        "cpu_ms": 1584.813,
+        "current_record_with_history_copy_ms": 0.112,
+        "final_gc_ms": 12.256,
+        "history_days": 60.0,
+        "raw_bytes": 582997.0,
+        "real_client": false,
+        "records": 512.0,
+        "retained_delta_kib": 4552.932617,
+        "sampled_peak_delta_kib": 22424.639648,
+        "scheduler_and_observer_ms": 309.052,
+        "stage_net_heap_kib": {
+          "canonical_encode": 10341.647461,
+          "integrity_hash": 529.927734,
+          "json_decode": 4782.90918
+        },
+        "stage_yields": {
+          "canonical_encode": 161281.0,
+          "history_validation": 31232.0,
+          "integrity_hash": 63770.0,
+          "json_decode": 2050.0
+        },
+        "stages_ms": {
+          "canonical_encode": 180.038,
+          "current_validation": 18.812,
+          "history_validation": 128.041,
+          "integrity_hash": 794.486,
+          "json_decode": 166.95
+        },
+        "synthetic": true,
+        "worst_callback_ms": 10.432
+      },
+      {
+        "callbacks": 910.0,
+        "cpu_ms": 1549.447,
+        "current_record_with_history_copy_ms": 0.102,
+        "final_gc_ms": 11.342,
+        "history_days": 60.0,
+        "raw_bytes": 582997.0,
+        "real_client": false,
+        "records": 512.0,
+        "retained_delta_kib": 4552.932617,
+        "sampled_peak_delta_kib": 22421.702148,
+        "scheduler_and_observer_ms": 300.02,
+        "stage_net_heap_kib": {
+          "canonical_encode": 10341.647461,
+          "integrity_hash": 532.193359,
+          "json_decode": 4780.338867
+        },
+        "stage_yields": {
+          "canonical_encode": 161281.0,
+          "history_validation": 31232.0,
+          "integrity_hash": 63770.0,
+          "json_decode": 2050.0
+        },
+        "stages_ms": {
+          "canonical_encode": 170.086,
+          "current_validation": 16.977,
+          "history_validation": 105.301,
+          "integrity_hash": 814.672,
+          "json_decode": 154.032
+        },
+        "synthetic": true,
+        "worst_callback_ms": 6.461
+      }
+    ]
+  },
+  "harness_sha256": "a571711624c6ee3b95690c7ebd4cf7c93994a246b16243b26887f7564f4ffa00",
+  "fixture_builder_sha256": "7b9b7a451fcaf1772bddec15993cf6162fa884fd28c340eb2004f2aa9b775cdc"
+}
