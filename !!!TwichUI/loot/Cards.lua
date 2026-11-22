@@ -477,7 +477,13 @@ end
 
 function C.DisplayToggle(card, mode, victory)
     local compact = mode == "collapsed"
-    card.toggle:ClearAllPoints(); card.toggle:SetPoint("TOPRIGHT", card, "TOPRIGHT", victory and -18 or compact and -12 or -36, victory and (compact and -22 or -15) or -12)
+    local x, y = compact and -12 or -36, -12
+    if victory then
+        -- The expanded victory frame has larger corner artwork than the compact frame.
+        x, y = compact and -18 or -32, compact and -22 or -21
+    end
+    card.toggle:ClearAllPoints()
+    card.toggle:SetPoint("TOPRIGHT", card, "TOPRIGHT", x, y)
     if card.toggle.up then
         for _, t in ipairs(card.toggle.up) do t:SetShown(compact) end
         for _, t in ipairs(card.toggle.down) do t:SetShown(not compact) end
