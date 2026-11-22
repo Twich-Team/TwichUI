@@ -37,7 +37,7 @@ button or reference screenshot. Ordinary UI text is always native text, never em
 | Main settings shell | `Material.CalibrateSettings(window, true)`; `FrameLook.Shell` retains geometry and input |
 | Companion shell | `Material.WorkspaceFrame(frame)`; feature owns its lifecycle |
 | Standalone window | `R.CraftLook.Window(window, window.shell, { header, title })` on the window's existing FrameLook shell: dark and quiet leather interior, sculpted frame, painted buttons (later FrameLook buttons inside paint themselves; toggles keep their own state). Core only: never loads this addon |
-| Player-set surface | `FrameLook.CRAFTED_BORDER` offered as one more border id beside `FrameLook.BORDER`; `FrameLook.Frame` draws the sculpted frame only, never an interior over the player's background. Defaults unchanged |
+| Player-set surface | `FrameLook.CRAFTED_BORDER` offered as one more border id beside `FrameLook.BORDER`; `FrameLook.Frame` draws the sculpted frame only, never an interior over the player's background. The restock dialog uses it as its default |
 | Card / inset | `Material.PanelFace(frame, "card" / "editor" / "canvas" / "espresso")` |
 | Shared panel / well | `SettingsWidgets.Panel(frame)` / `.Well(frame)`; returns textures callers may hide |
 | Buttons | `SettingsWidgets.Button(parent, label, width, kind, callback)` |
