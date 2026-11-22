@@ -1,0 +1,12 @@
+{
+  "source": {
+    "commit": "9617b5ca9971fd2e3e7f2f332e7c3997537ae311",
+    "dirty": true,
+    "working_tree_sha256": "cb847c824e97d60de782af3b4c257d23c80cef0e252236b374ef37ff88ab8548"
+  },
+  "complete": true,
+  "passed": true,
+  "modules": 58,
+  "failed": [],
+  "classification": "affected feature and recursive Settings/core dependencies; native-only acceptance not established"
+}

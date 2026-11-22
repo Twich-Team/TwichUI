@@ -24,7 +24,7 @@ class VictoryAssets(unittest.TestCase):
         for path in ART.glob('*.ogg'):
             self.assertTrue(path.read_bytes().startswith(b'OggS'))
         self.assertEqual(len(list(ART.glob('*.ogg'))), 2)
-        self.assertEqual(len(list(ART.glob('*.tga'))), 13)
+        self.assertEqual(len(list(ART.glob('*.tga'))), 16)
 
 
 if __name__ == '__main__':

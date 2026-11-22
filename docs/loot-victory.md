@@ -70,49 +70,86 @@ after the first custom card. There is no global acquisition-toast suppression.
 
 ## Artwork and animation
 
-Runtime assets live in `!!!TwichUI/media/loot/victory/`: the exact supplied
-32-bit, uncompressed, straight-alpha, power-of-two TGAs for the base frame,
-Need/Greed emblems, four rarity halos, rim glint/sheen, three spark/dust sprites,
-and upgrade badge; plus both supplied OGG sounds. TGA and OGG match established
-addon/client format usage. Header/alpha/size checks validate the exports; actual
-Forever decoding/playback remains untested. The base uses UV `0,1,0,444/512`.
-A fixed 460×200 canvas scales uniformly to the existing 384-pixel loot-card width,
-then follows the player's card scale. Decorative corners keep their proportions.
-Item icon/border, labels, quality, method/value and upgrade text are native regions.
-The neutral footer says “Loot roll won”; inventory acquisition is never asserted.
-Item hover reuses Cards.ItemTip; modified item clicks use HandleModifiedItemClick.
+Runtime assets live in `!!!TwichUI/media/loot/victory/`: 16 exact supplied
+32-bit, uncompressed, straight-alpha, power-of-two TGAs (frame, emblems, both
+laurels, four rarity halos, bright/small sparks, two dust sprites, rim glint,
+sheen and badge), plus both supplied OGG sounds. Header/alpha/size tests validate
+the exports; no alpha repair or substitute artwork was needed. The original PNGs,
+manifest and approved reference remain in `assets/loot-victory/`, excluded from
+shipping. Optional coin sprites, large master, original animated preview and WAV
+masters are not shipped. The original asset specification is retained as supplied;
+this refinement's timing/layout supersedes its illustrative coordinates.
 
-`assets/loot-victory/` keeps the supplied manifest, README/specification, PNG source
-exports and approved static reference. This folder is excluded by `.pkgmeta`.
-Optional laurels/coin sprites and spark_bright are intentionally unused: the
-approved five-particle sequence needs no extra ornament. The large master, animated
-preview and WAV masters remain in the supplied archive and are not shipped.
+The reference canvas is now 460×224, displayed at the existing 384-pixel card
+width and then at the player's scale. Fifteen texture slices preserve the painted
+corners, header rail, recessed item area and footer separator. Only the leather
+strips at source y80–108 and y350–364 gain height (10 and 14 reference pixels).
+The visible source remains y0–444 of the 1024×512 frame. Title, item details and
+footer occupy separate frame layers, above the base artwork. The title has a
+204×30 centered box at y24, a restrained dark shadow, and a separate 32×32 emblem
+at x88/y23. Cropped laurels flank the header. No emblem/rail can enter the title's
+reserved region. The item lines have explicit widths/heights and one-line
+truncation; the 33-pixel upgrade badge has its own space in the taller footer.
+Both real notifications and preview say “Loot roll won”; no inventory claim or
+“Sample victory” label appears on the card. Hover uses Cards.ItemTip and modified
+clicks use HandleModifiedItemClick.
+
+### Why the first presentation was weak
+
+The supplied art files were correct. The old y13 title anchor intersected the top
+rail, and a fixed x134 emblem anchor did not reserve space for title width. The
+entire card was shrunk uniformly without adding room to its cramped footer. The
+supplied decorative laurels and principal star sprite were omitted.
+
+The old glint/ribbon canvases were flattened to 4/3 reference pixels; their painted
+alpha bands occupy only 23/64 and 47/128 of those heights, leaving roughly one
+physical pixel after card scaling. The small star's high-alpha core occupied only
+16/64 of a 10-pixel canvas (about 2 display pixels), further reduced by the particle
+fade envelope and 0.45 intensity. Those choices made a running animation difficult
+to perceive. Source alpha is valid; these were composition, sampling and opacity
+problems, not evidence that Forever failed to execute OnUpdate.
+
+The refinement crops transparent padding, preserving painted aspect ratios. The
+bright star's 34×38 high-alpha core is drawn inside a 106×116 cropped image on a
+34×37 canvas: about 9×10 display pixels at 100% card scale. The ribbon's painted
+band is 11 pixels high, inside a real 392×12 clipping frame over the top metal
+rail. A luminous core and a short supplied ribbon tail use ADD blending. The
+frame and static artwork keep straight-alpha BLEND. `SetClipsChildren` is present
+in Forever's SimpleFrame API and used by its Objective Tracker/Map Canvas; actual
+client clipping/blending still requires owner validation.
 
 | Time | Behavior |
 |---|---|
-| 0–0.20 s | Freeze result, disable controls, remove progress, crossfade old content into the fixed artwork at the same stack slot |
-| 0.15–0.45 s | Runtime title and appropriate emblem fade in, settling by two reference pixels without overshoot |
-| 0.35–0.80 s | One smoothstep trim sweep; both supplied highlights stay physically within the top rail and outside text |
-| 0.45–1.20 s | Five authored spark/dust positions; each drifts upward 8–12 reference pixels and slightly outward; no randomness |
-| 0.48 s | One supplied Need/Greed chime on SFX, subject to sound switches and a shared 0.8-second cooldown |
-| 1.20–3.70 s | Static; no OnUpdate script; one cancellable timer awaits fade |
-| 3.70–4.00 s | Smooth whole-card fade and recycle |
+| 0–0.20 s | Freeze the confirmed result, hide old text/controls, remove progress, crossfade shell materials at the same stack slot |
+| 0–0.45 s | Reveal the complete header group with ease-out opacity and five reference pixels of upward travel; no scale/bounce |
+| 0.30–1.05 s | One visible smoothstep gold sweep with bright core and short tail, clipped above the title |
+| 0.30 s | One optional Need/Greed chime on SFX; shared 0.8-second cooldown |
+| 0.55–1.45 s | Six (Subtle) or eight (Full) deterministic sprites stagger outward/upward from emblem/rail/icon locations, away from text |
+| 1.10–1.75 s | One bright finishing reflection on the emblem, gently contracting and disappearing |
+| 1.75 s onward | Fully opaque static card; no OnUpdate; hold for the configured interval |
+| After hold | Smooth 0.30-second whole-card fade and recycle |
 
-Short/Normal/Long durations are 3.5/4/5 seconds. Off intensity shows an immediate
-static card for the chosen duration, without reveal/fade/particles; its sound,
-if enabled, accompanies the immediate reveal. Switching intensity off during a
-reveal immediately stops decorative updates. Subtle/Full share the same five
-sprites; Full raises opacity modestly, with small Epic/Legendary intensity gains.
-Missing qualities have a neutral border/text fallback and no halo. Missing roll
-values omit the number. Missing metadata uses available roll/link information and
-a question-mark icon until a subsequent notification; it never invents facts.
+Short/Normal/Long now mean a **completed-card hold** of 3.5/4/5 seconds, after the
+1.75-second celebration. Normal animated total is 6.05 seconds. Off intensity
+shows the static card for the configured hold and removes it without decorative
+motion; optional sound accompanies its immediate reveal. Turning intensity Off
+stops active decorative work immediately. Full adds one star and one supporting
+spark to Subtle's two principal stars, two sparks and two dust motes. Small quality
+intensity gains never exceed alpha 1. All effects disappear at rest. Missing
+qualities use neutral text/border and no halo; missing roll values omit the number.
 
-Sound failures are isolated with pcall; Sound_EnableAllSound and Sound_EnableSFX
-are respected in addition to the independent victorySound setting. Nothing loops.
-The animator derives curves from client elapsed time, so frame rate cannot change
-travel distances. Frame/texture allocations occur only when warming the pool.
-Hidden/recycled frames cancel their timer and update script. Diagnostics registers
-`loot.victory.event`/`loot.victory.tick` and queue/pool/listener gauges.
+Preview roll and Preview item quality are page-local choices, not saved loot data.
+Replay always restarts the exact production V.Draw/Animate/Paint path with a fresh
+entry. Sample name/type/icon, quality label, name/border color and halo agree with
+one quality value. The developer-only `LootVictory.PreviewAt(seconds)` helper
+pauses **only a synthetic preview** using that same painter. It cancels timers and
+updates, never seeks a real result, and stays silent while seeking. Replay resumes
+normal animation from zero; no additional player command/framework was introduced.
+
+Sound failures stay isolated with pcall; both global sound switches and the existing
+victorySound toggle are respected. Nothing loops. Frames/textures are pooled; only
+active reveal/fade work runs per frame. Rest uses one cancellable timer. Diagnostics
+keeps the existing victory event/tick scopes and queue/pool/listener gauges.
 
 ## Verification
 
@@ -128,7 +165,7 @@ These are synthetic clients, not native reload/combat/input tests.
 Simulator scenarios are available through:
 
 ```sh
-bash tools/simlab/run.sh loot victoryResolve victoryReveal victorySheen victoryParticles victoryStatic victoryFade victoryDone victoryOff victoryGreed victoryScaled victorySettings cards
+bash tools/simlab/run.sh loot victoryPose000 victoryPose030 victoryPose060 victoryPose090 victoryPose130 victoryPose175 victoryStatic victoryFade victoryDone victoryOff victoryGreed victoryScaled victorySettings
 ```
 
 They fire the native event over fake item/roll APIs while running real addon code.
@@ -136,9 +173,16 @@ The supplied card/emblems/effects render in captures. Simulator fonts fall back 
 a game font, game item icons are unavailable in this cloud lab, and snapshots can
 include extra settling time. Screenshot review checks proportions, trim bounds,
 spacing and lifecycle, not native font metrics, exact animation rhythm or sound.
-Selected captures and results are recorded in [evidence](evidence/loot-victory/README.md).
+Original evidence is retained in [initial evidence](evidence/loot-victory/README.md).
+The refinement comparison, 50 ms frame capture and visibility measurements are in
+[refinement evidence](evidence/loot-victory-refinement/README.md).
 
 ## Owner-directed in-game checks
+
+Update the addon from this branch and reload to rebuild the pooled frames. Open
+Loot Rolls, choose each roll/quality combination, and use Replay before testing
+actual dungeon loot. The preview card should have no sample label, no title/rail
+collision and no emblem/title overlap.
 
 1. With Loot Rolls enabled, win real Need and Greed rolls; verify exactly one
    winning alert, correct icon/name/type/quality/method/value and no false win
@@ -148,7 +192,8 @@ Selected captures and results are recorded in [evidence](evidence/loot-victory/R
    original card disappears. Check timeout and no reappearing old result.
 3. Compare the supplied static/GIF previews at 75%, 100%, and larger UI scales:
    font baselines, long/localized names, emblem alignment, alpha edges, icon
-   border/halo, top-rail sheen, five subtle particles and the 1.2-second rest.
+   border/halo, visible top-rail sweep, six/eight visible particles, finishing glint
+   and the fully static 1.75-second rest. The title/emblem must stay inside the leather banner.
 4. Hear each OGG once at the reveal, then test sound off, global SFX/all sound off,
    rapid wins, and intensity Off/Subtle/Full. Check Normal/Short/Long durations.
 5. Hover item tooltips and modified item links. Test during combat with taint/error
@@ -156,6 +201,6 @@ Selected captures and results are recorded in [evidence](evidence/loot-victory/R
 6. Disable victory notifications and the whole module during a queued burst;
    pending results should return to native. Trigger achievements, quests, normal
    loot acquisition, currencies and upgrades; all unrelated alerts should remain.
-7. Use the settings preview repeatedly (cycles Need/Greed and four qualities),
+7. Use the sample roll/quality selectors and Replay repeatedly (all eight combinations),
    change profiles and reload, and verify settings persistence and cleanup.
    Check with other loot/alert addons and the actual installed Forever build.

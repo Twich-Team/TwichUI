@@ -33,6 +33,8 @@ Methods = {
   CreateTexture = function(s) local t = Fake("texture"); t.parent = s; return t end,
   CreateFontString = function(s) local t = Fake("font"); t.parent = s; return t end,
   SetTexture = function(s, v) s.texture = v end,
+  SetTexCoord = function(s, ...) s.uv = { ... } end, SetBlendMode = function(s, mode) s.blend = mode end,
+  SetClipsChildren = function(s, value) s.clips = value end,
   SetText = function(s, v) s.text = v end, GetText = function(s) return s.text end,
   GetStringWidth = function(s) return 40 end,
   SetTextColor = function(s, r, g, b) s.color = { r, g, b } end,
@@ -1259,21 +1261,22 @@ do
   local e = V.Entries()[1]
   Check(e and e.key == roll.key and C.Card(roll.key) == same, "confirmed Need reuses the existing card at its stack slot")
   local f = same.victory
+  Check(not same.body.shown and not same.timer.shown, "old item text and roll controls cannot ghost through the new banner")
   Check(f and f.entry.value == 87 and f.emblem.texture:find("emblem_need.tga", 1, true), "Need value and approved emblem")
   Check(not C.Shows(roll) and not C.Has(roll.rollID), "victory cannot authorize another automatic choice or park live controls")
   Check(f.footer.text == "Loot roll won", "result never asserts inventory acquisition")
   Fire("LOOT_ITEM_ROLL_WON", "item:100", 1, 1, 87, false)
   Check(V.Count() == 1, "duplicate native winner event creates no second card")
-  Step(0.25); Check(f.phase == "reveal" and f.title.alpha > 0 and f.title.alpha < 1, "resolution advances into a restrained title reveal")
+  Step(0.25); Check(f.phase == "reveal" and f.header.alpha > 0 and f.header.alpha < 1, "resolution advances into a restrained title reveal")
   Step(0.3); Check(#sounds == 1 and sounds[1][2] == "SFX", "one reveal sound on SFX")
-  Step(0.75)
+  Step(1.25)
   Check(f.phase == "static" and not f.scripts.OnUpdate and f.timer, "decorative updates stop at the static hold")
   Check(f.glint.alpha == 0 and f.particles[1].alpha == 0, "effects end without loops")
   Step(0.8); Win("item:100", 1, 87)
   Check(V.Count() == 1 and #sounds == 1, "duplicate after the replay window still matches the completed roll")
   local started = e.started
   C.Refresh(); Check(e.started == started, "redraw never restarts the animation or sound")
-  Step(3)
+  Step(3.6)
   Check(V.Count() == 0 and not f.shown and not f.timer and not f.scripts.OnUpdate, "timeout recycles all animation work")
   Check(not C.Card(roll.key), "old resolved roll does not reappear after its victory")
   Ro.Remove(roll)
@@ -1297,14 +1300,14 @@ do
   e = V.Entries()[1]; f = e and e.card and e.card.victory
   Check(e and e.name == "Loot" and not e.value and f.method.text == "Greed roll", "late Greed win tolerates missing metadata and roll value")
   Check(f.emblem.texture:find("emblem_greed.tga", 1, true), "Greed uses its supplied emblem")
-  Step(4.1)
+  Step(6.2)
 
   LR.Set("victoryIntensity", "off"); LR.Set("victorySound", false)
   local soundCount = #sounds
   for q = 0, 6 do
     Check(V.Preview(q % 2 == 0 and "need" or "greed", q), "preview works without real rolls")
     local pc = V.PreviewCard(); local pf = pc.victory
-    Check(pf.title.alpha == 1 and not pf.scripts.OnUpdate, "animation off is static and readable")
+    Check(pf.header.alpha == 1 and not pf.scripts.OnUpdate, "animation off is static and readable")
     Check(q < 2 or q > 5 or pf.halo.texture:find("halo_", 1, true), "rarity art selected safely")
     Step(4.1)
     Check(not pf.shown and not pf.timer and not pf.scripts.OnUpdate, "preview playback cleans up")
@@ -1318,10 +1321,75 @@ do
   Check(#sounds == soundCount, "global sound switch is respected")
   V.PreviewStop(); c.GetCVarBool = function() return true end
   c.PlaySoundFile = function() error("missing sound") end
-  V.Preview("greed", 5); Step(1.3)
+  V.Preview("greed", 5); Step(1.8)
   Check(V.PreviewCard().victory.phase == "static", "unsupported audio cannot interrupt the renderer")
   V.PreviewStop()
   c.PlaySoundFile = function(path, channel) sounds[#sounds + 1] = { path, channel } end
+
+  -- Visual contracts use the production painter, not a second animation model.
+  LR.Set("victoryIntensity", "subtle")
+  local soundBeforeSeek = #sounds
+  Check(V.Preview("need", 2), "refinement preview starts")
+  local pc = V.PreviewCard(); local pf = pc.victory
+  Check(#pf.base.pieces == 15 and pf.base.pieces[1].h < 37 and pc.h > 180,
+    "header/footer gain room without stretching the painted corners")
+  Check(pf.title.points[1][5] == -24 and pf.title.h == 30 and pf.title.w == 204 and pf.emblem.points[1][2] + pf.emblem.w < 128,
+    "title has a reserved banner box, rail clearance and an independent emblem region")
+  Check(pf.rail.clips and pf.rail.h == 12 and pf.sheen.h == 11 and pf.sheen.blend == "ADD",
+    "supplied flourish retains painted height and is actually clipped to the rail")
+  Check(pf.footer.text == "Loot roll won" and pf.badge.h == 33 and pf.upgrade.h == 22,
+    "preview and real results share a deliberate footer without sample labels")
+  for _, t in ipairs({ 0, 0.30, 0.60, 0.90, 1.30, 1.75, 3, 5.85, 6.05 }) do
+    Check(V.PreviewAt(t), "production preview pose " .. t)
+    if t == 0 then
+      Check(pf.header.alpha == 0 and pf.finish.alpha == 0, "reveal starts cleanly with no residual finishing glint")
+    elseif t == 0.30 then
+      Check(pf.header.alpha > 0.7 and pf.header.alpha < 1, "banner is visibly revealing at 0.30 s")
+    elseif t == 0.60 then
+      local x = pf.glint.points[1][4]
+      Check(pf.sheen.alpha >= 0.8 and pf.glint.alpha >= 0.95 and x > 70 and x < 210,
+        "bright painted sweep crosses the left/central rail at 0.60 s")
+    elseif t == 0.90 then
+      local visible = 0
+      for _, particle in ipairs(pf.particles) do if particle.alpha > 0 then visible = visible + 1 end end
+      local star = pf.particles[1]
+      local core = 34 / 128 / (star.uv[2] - star.uv[1]) * star.w * 384 / 460
+      Check(visible == 6 and star.alpha > 0.7 and core >= 8 and core <= 12,
+        "Subtle has six visible sprites and a principal painted core of 8–12 display pixels")
+      Check(pf.glint.points[1][4] > 300, "gold flourish travels across the full rail")
+    elseif t == 1.30 then
+      Check(pf.finish.alpha > 0.9 and pf.particles[1].alpha < 0.4,
+        "burst fades as the final emblem glint reaches full visibility")
+    elseif t == 1.75 or t == 3 then
+      local clear = pf.finish.alpha == 0 and pf.glint.alpha == 0 and pf.header.alpha == 1
+      for _, particle in ipairs(pf.particles) do clear = clear and particle.alpha == 0 end
+      Check(clear and pf.alpha == 1, "complete static card after decorative motion")
+    elseif t == 5.85 then
+      Check(pf.phase == "fade" and pf.alpha > 0 and pf.alpha < 1, "exit follows a full configured hold")
+    elseif t == 6.05 then
+      Check(pf.alpha == 0, "exit reaches zero without translucent remnants")
+    end
+  end
+  Check(#sounds == soundBeforeSeek and not pf.scripts.OnUpdate, "paused pose capture is silent and idle")
+  Check(V.Preview("need", 2), "click after a paused exit restarts production animation")
+  Check(pf.alpha == 1 and pf.header.alpha == 0 and pf.finish.alpha == 0 and pf.scripts.OnUpdate,
+    "replay resets alpha, motion, clocks and updater")
+  Step(0.35)
+  Check(#sounds == soundBeforeSeek + 1, "sound starts with the banner/flourish at 0.30 s")
+  V.PreviewStop()
+  LR.Set("victoryIntensity", "full")
+  V.Preview("greed", 5); V.PreviewAt(0.90)
+  local visible = 0
+  for _, particle in ipairs(pf.particles) do if particle.alpha > 0 then visible = visible + 1 end end
+  Check(visible == 8 and pf.entry.quality == 5 and pf.name.text == "Dawnfire Mantle" and pf.sub.text:find("Legendary", 1, true),
+    "Full has eight sprites and one consistent sample item/quality/color source")
+  Check(pf.entry.sampleLines[1] == "Shoulder · Legendary" and pf.entry.sellPrice == nil,
+    "preview tooltip metadata follows the selected sample instead of the old shoulder placeholder")
+  V.PreviewStop()
+  LR.Set("victoryIntensity", "off"); V.Preview("need", 2)
+  V.PreviewAt(3.85); Check(pf.alpha == 1, "Off pose capture matches production's full static hold")
+  V.PreviewAt(4); Check(pf.alpha == 0, "Off pose capture exits immediately without inventing a fade")
+  V.PreviewStop()
 
   -- Serialize excess wins while bounding active frames; each gets its full hold.
   LR.Set("maxCards", 1); LR.Set("victoryIntensity", "off")

@@ -27,11 +27,21 @@ assert(c.TwichUIDB.ui.lootRolls.victoryIntensity == "off")
 local saved = c.TwichUIDB.ui.lootRolls
 local reloaded = SettingsClient({ beforeInit = LoadLoot, beforeDescribe = function(client) client.TwichUIDB.ui = { lootRolls = saved } end })
 assert(not reloaded.TwichUI.LootRolls.Get("victory") and reloaded.TwichUI.LootRolls.Get("victoryDuration") == "long", "new client reads saved values")
+local choice = assert(K.variables.TWICHUI_lootRollsVictoryPreviewChoice)
+local quality = assert(K.variables.TWICHUI_lootRollsVictoryPreviewQuality)
+choice.set("greed"); quality.set(5)
+assert(choice.get() == "greed" and quality.get() == 5, "sample selectors work while module is disabled")
+local displayed
+R.LootVictory.Preview = function(kind, q) displayed = { kind, q }; return true end
 local previewRow
 for _, row in ipairs(page.rows) do
     if row:GetName() == "Preview victory card" then previewRow = row end
 end
 assert(previewRow, "preview is described/searchable with the page")
+previewRow.click(); previewRow.click()
+assert(displayed[1] == "greed" and displayed[2] == 5, "each click replays the selected combination")
+assert(c.TwichUIDB.ui.lootRolls.victoryPreviewChoice == nil and c.TwichUIDB.ui.lootRolls.victoryPreviewQuality == nil,
+    "sample selectors never save fake loot state")
 LR.ResetSettings()
 assert(LR.Get("victory") and LR.Get("victoryIntensity") == "subtle" and LR.Get("victoryDuration") == "normal")
 assert(not LR.Valid("victoryIntensity", "loud") and not LR.Valid("victoryDuration", 999))

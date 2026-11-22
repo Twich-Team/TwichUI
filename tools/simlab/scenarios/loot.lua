@@ -328,15 +328,27 @@ if view == "victorySettings" then
         Lab.Settle(0.5)
         local card = R.LootVictory.PreviewCard()
         Check("interact", "settings preview shows a Need victory", "need", card and card.view and card.view.choice)
+        Lab.Reveal("lootRolls", "lootRollsVictoryPreviewChoice")
+        Lab.Settle(0.2)
+        local picked = Lab.PickChoice(Lab.Row("lootRolls", "lootRollsVictoryPreviewChoice"), "greed")
+        Check("interact", "preview roll selector chooses Greed", true, picked)
+        Lab.Reveal("lootRolls", "lootRollsVictoryPreviewQuality")
+        Lab.Settle(0.2)
+        local qualityPicked = Lab.PickChoice(Lab.Row("lootRolls", "lootRollsVictoryPreviewQuality"), 5)
+        Check("interact", "preview quality selector chooses Legendary", true, qualityPicked)
+        Lab.Reveal("lootRolls", button.id)
+        Lab.Settle(0.2)
         Lab.Row("lootRolls", button.id).control:Click()
-        Lab.Settle(1.3)
+        Lab.Settle(1.8)
+        Check("display", "preview quality matches the selected sample", 5, card.view.quality)
+        Check("display", "sample tooltip has the selected quality", "Shoulder · Legendary", card.view.sampleLines[1])
         Check("interact", "next preview shows a Greed victory", "greed", card.view.choice)
         Check("state", "preview creates no real result or roll", 0, #rolled + R.LootVictory.Count())
         Check("state", "preview reaches static rest", nil, card.victory:GetScript("OnUpdate"))
     end)
 end
 
-if view:find("^victory") and view ~= "victorySettings" then
+if view:find("^victory") and view ~= "victorySettings" and not view:find("^victoryPose") then
     Lab.Step("approved victory artwork", function()
         local V = R.LootVictory
         LR.Set("maxCards", 4)
@@ -355,7 +367,7 @@ if view:find("^victory") and view ~= "victorySettings" then
         Check("state", "confirmed event accepted", 1, V.Count())
         Check("construct", "existing card reused", old, entry and entry.card)
         local seconds = ({ victoryResolve = 0.1, victoryReveal = 0.3, victorySheen = 0.6, victoryParticles = 0.95,
-            victoryStatic = 1.3, victoryOff = 1.3, victoryFade = 3.85, victoryDone = 4.2 })[view] or 1.3
+            victoryStatic = 1.85, victoryOff = 1.85, victoryFade = entry.total - 0.15, victoryDone = entry.total + 0.15 })[view] or 1.85
         Lab.Settle(seconds)
         if view == "victoryDone" then
             Check("state", "victory completed", 0, V.Count())
@@ -367,6 +379,28 @@ if view:find("^victory") and view ~= "victorySettings" then
                 Check("state", "no per-frame work at rest", nil, old.victory:GetScript("OnUpdate"))
             end
         end
+    end)
+end
+
+-- Paused poses use the production painter on the exact reusable preview card.
+-- The lifecycle scenarios above separately drive the real OnUpdate/timer path.
+if view:find("^victoryPose") then
+    Lab.Step("production animation pose", function()
+        local V = R.LootVictory
+        LR.Set("x", 0); LR.Set("y", 180)
+        LR.Set("victorySound", false)
+        LR.Set("victoryIntensity", view:find("Full") and "full" or "subtle")
+        if view:find("Scaled") then LR.Set("scale", 75) end
+        local seconds = tonumber(view:match("(%d+)$")) / 100
+        Check("construct", "production preview starts", true, V.Preview(view:find("Greed") and "greed" or "need", view:find("Legendary") and 5 or 2))
+        Check("interact", "preview can seek a synthetic pose", true, V.PreviewAt(seconds))
+        local f = V.PreviewCard().victory
+        Check("state", "paused capture has no updater", nil, f:GetScript("OnUpdate"))
+        Check("display", "no preview label on the card", "Loot roll won", f.footer:GetText())
+        if seconds >= V.MOTION_END and seconds < f.entry.total - 0.30 then
+            Check("display", "finished header is fully opaque", 1, f.header:GetAlpha())
+        end
+        Lab.Settle(0.1)
     end)
 end
 
