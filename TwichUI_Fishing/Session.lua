@@ -60,7 +60,11 @@ local function SpeciesZone(rec, zone, id, q, now)
     local e = zt[id]
     if not e then
         if (rec.spn or 0) >= F.LIMITS.zoneSpecies then
+            -- full: the species' quantity (already in rec.species) is kept as overflow, one number per species, so what has no
+            -- zone detail is counted instead of silently reading as "earlier" or as complete
             if next(zt) == nil then rec.spz[zone] = nil end
+            if type(rec.spo) ~= "table" then rec.spo = {} end
+            rec.spo[id] = (rec.spo[id] or 0) + q
             F.Note("zone-species-full", "a new species-in-a-zone entry was not recorded")
             return
         end
@@ -71,12 +75,24 @@ local function SpeciesZone(rec, zone, id, q, now)
     e.q, e.c, e.l = e.q + q, e.c + 1, now
 end
 
+-- The container's entry for a zone, or nil when the record's container-by-zone entries are full (the event is then counted in
+-- rec.ctl, "events with no zone detail"; the container totals themselves are never affected).
 local function ContainerZone(rec, zone, id)
     if type(rec.ctz) ~= "table" then rec.ctz = {} end
     local zt = rec.ctz[zone]
     if not zt then zt = {}; rec.ctz[zone] = zt end
     local e = zt[id]
-    if not e then e = { caught = 0, opened = 0, failed = 0, got = {} }; zt[id] = e end
+    if not e then
+        if (rec.ctn or 0) >= F.LIMITS.zoneContainers then
+            if next(zt) == nil then rec.ctz[zone] = nil end
+            rec.ctl = (rec.ctl or 0) + 1
+            F.Note("zone-container-full", "a container-in-a-zone entry was not recorded")
+            return nil
+        end
+        e = { caught = 0, opened = 0, failed = 0, got = {} }
+        zt[id] = e
+        rec.ctn = (rec.ctn or 0) + 1
+    end
     if type(e.got) ~= "table" then e.got = {} end
     return e
 end
@@ -239,7 +255,7 @@ function Ses.ContainerCaught(sid, itemID, q, zone)
     for _, rec in ipairs(Records(sid)) do
         local e = ContainerEntry(rec, itemID)
         e.caught = e.caught + q
-        if zone then local z = ContainerZone(rec, zone, itemID); z.caught = z.caught + q end
+        if zone then local z = ContainerZone(rec, zone, itemID); if z then z.caught = z.caught + q end end
     end
 end
 
@@ -248,7 +264,7 @@ function Ses.ContainerOpened(sid, itemID, zone)
     for _, rec in ipairs(Records(sid)) do
         local e = ContainerEntry(rec, itemID)
         e.opened = e.opened + 1
-        if zone then local z = ContainerZone(rec, zone, itemID); z.opened = z.opened + 1 end
+        if zone then local z = ContainerZone(rec, zone, itemID); if z then z.opened = z.opened + 1 end end
     end
 end
 
@@ -257,7 +273,7 @@ function Ses.ContainerFailed(sid, itemID, zone)
     for _, rec in ipairs(Records(sid)) do
         local e = ContainerEntry(rec, itemID)
         e.failed = e.failed + 1
-        if zone then local z = ContainerZone(rec, zone, itemID); z.failed = z.failed + 1 end
+        if zone then local z = ContainerZone(rec, zone, itemID); if z then z.failed = z.failed + 1 end end
     end
 end
 
@@ -272,7 +288,7 @@ function Ses.Content(sid, containerID, itemID, q, zone)
         e.got[itemID] = (e.got[itemID] or 0) + q
         if zone then
             local z = ContainerZone(rec, zone, containerID)
-            z.got[itemID] = (z.got[itemID] or 0) + q
+            if z then z.got[itemID] = (z.got[itemID] or 0) + q end
         end
     end
     F.Emit("ITEM", itemID, q, "content", sid, containerID)

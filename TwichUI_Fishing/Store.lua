@@ -157,13 +157,22 @@ local function NormalizeTotals(t)
             if next(zt) == nil then t.spz[zone] = nil end
         end
     end
-    t.spn = n       -- how many species-in-a-zone entries there are (bounded for the totals by LIMITS.zoneSpecies)
+    t.spn = n       -- how many species-in-a-zone entries there are (bounded by LIMITS.zoneSpecies)
+    -- what overflowed that bound: spo[itemID] = quantity caught with no zone entry (one number per species); ctl = container
+    -- events with no zone entry. Damaged values are dropped, the rest kept.
+    if t.spo ~= nil and not IsMap(t.spo) then t.spo = nil; Repair("spo") end
+    for item, q in pairs(t.spo or {}) do if F.Count(item) == nil or F.Count(q) == nil then t.spo[item] = nil end end
+    if t.ctl ~= nil and F.Count(t.ctl) == nil then t.ctl = nil; Repair("ctl") end
+    -- a record already at the bound with no overflow count was filled before overflow was counted: what it dropped is unknown
+    if n >= F.LIMITS.zoneSpecies and t.spo == nil then t.spx = true elseif t.spx ~= nil and t.spx ~= true then t.spx = nil end
+    local cn = 0
     for zone, zt in pairs(t.ctz) do
         if F.Count(zone) == nil or not IsMap(zt) then t.ctz[zone] = nil; Repair("ctz.zone")
         else
             for item, e in pairs(zt) do
                 if F.Count(item) == nil or not IsMap(e) then zt[item] = nil; Repair("ctz.entry")
                 else
+                    cn = cn + 1
                     for _, k in ipairs({ "caught", "opened" }) do if F.Count(e[k]) == nil then e[k] = 0 end end
                     if not IsMap(e.got) then e.got = {} end
                     for got, q in pairs(e.got) do if F.Count(got) == nil or F.Count(q) == nil then e.got[got] = nil end end
@@ -171,6 +180,7 @@ local function NormalizeTotals(t)
             end
         end
     end
+    t.ctn = cn
     if t.first ~= nil and F.Count(t.first) == nil then t.first = nil; Repair("totals.first") end
     if t.last ~= nil and F.Count(t.last) == nil then t.last = nil; Repair("totals.last") end
 end

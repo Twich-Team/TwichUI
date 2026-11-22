@@ -214,6 +214,7 @@ Diagnostics has the scopes `fishing.load`, `fishing.decide`, `fishing.loot` and 
 | `test_fishing_loot.lua` | No catch from bags or other loot, multi-item catches, duplicate events, auto-loot with loot-line confirmation, left items, money, delayed loot after the line, duration, history, idle end, retention, zones, API copies |
 | `test_fishing_containers.lua` | Queueing with provenance, key and open-key opening, contents attribution, several containers, learning, full bags, failed and locked opens, partial opens, hand-opened matching, unrelated containers, reconciliation, reload credit, provenance without double counting, automatic mode worked / blocked / off |
 | `test_fishing_zones.lua` | Where fish were caught: one species in one and several zones, several species in one zone, sessions spanning zones, the zone read at the window (items taken after the player moved, loot confirmed later by the loot line), duplicate events, auto-loot, an unreadable zone (0), containers caught in one zone and opened elsewhere / later / after the session ended / after a reload, an older lot with no zone, schema 1 to 2 migration (nothing lost, nothing invented, repeatable), damaged location records, bounded growth |
+| `test_fishing_location_limits.lua` | Approaching and exceeding the location bounds (species and containers), exact totals, overflow counted and shown by the Journal, sessions bounded too, reload, damaged overflow fields, a file already full before overflow was counted, migration from schema 1 then filling, very large quantities, and recording immediate with the Journal open (one redraw per burst) |
 | `test_fishing_journal_zones.lua` | The Journal's place lists and the Collections to Locations navigation, old and new records together, multi-zone sessions, empty and interrupted sessions, the summary card, the window's remembered position (drag, reopen, reload, size, Reset, off-screen recovery), extension points, and a large history (measurements printed) |
 | `test_fishing_store.lua` | New file, unversioned and damaged data repaired field by field, repeatable load, newer schema held, plain saved values, no prices |
 | `test_fishing_present.lua` | Stage 2: Fishing Mode's lifecycle, presentations, camera, fading policy, combat, reload and logout recovery, errors, missing client functions, controller keys, Stage 1 underneath, preview |
@@ -609,12 +610,37 @@ across and the title bar (90 units) always stay on the screen, so a smaller scre
 or leaves the window out of reach, and a bigger screen later restores it. **Reset Journal position** (Fishing settings) puts it
 back in the middle. The window is not a protected frame: it opens and moves in combat. The summary card opens in the middle.
 
-**Cost.** Nothing runs while no Journal window is open. A catch costs 0.6 ms with the Journal closed (it touches one aggregate,
-not a log). With it open the page redraws once per burst of events (0.3 s debounce), and the finished sessions (the costly copies)
-are taken again only when a session starts or ends or a container is opened. Measured over 500 sessions and 3,600
-species-in-zone entries in the simulated client (Lua 5.1 on this machine; the game will differ): open 144 ms, five pages 28 ms,
-rebuilding the Locations and Collections answers 31 ms, three navigations 7 ms, recording a catch 0.7 ms (closed) and 32 ms
-(Locations open, once per catch).
+**Cost.** Nothing runs while no Journal window is open. A catch touches one aggregate (not a log): 0.4 to 0.5 ms with or without
+a Journal open (the redraw is on a 0.3 s timer, once per burst of events, and never part of recording). Two changes keep the
+window cheap over a large history: `API.Totals()` no longer copies the location tables (they have their own calls, so it is
+unchanged for older callers), and the Journal asks the interface for digests (`SessionDigest`, `ZoneDigest`, `ItemZones`,
+`ZoneSpecies`) instead of copying records: a kind's places are worked out only when it is chosen, and finished sessions are
+digested again only when a session starts or ends or a container changes. The displayed results are identical. Measured with
+`tests/bench_fishing_journal.lua` (500 sessions, 60 zones, 90 kinds, 3,600 species-in-zone entries; simulated client, Lua 5.1 on
+this machine, so only the ratio carries over to the game):
+
+| | before | after |
+|---|---|---|
+| Open the Journal (Overview) | 151 ms | 26 ms |
+| Sessions / Locations / Treasures page, first time | 13 / 25 / 12 ms | 2 / 2 / 0 ms |
+| All five pages again | 41 ms | 4 ms |
+| Rebuild Locations + Collection after a catch | 88 ms | 2 ms |
+| Locations / Overview redraw after a catch | 58 / 65 ms | 2 / 3 ms |
+| Three navigations | 15 ms | 5 ms |
+| Record a catch, Journal closed / open | 0.35 / 0.37 ms | 0.47 / 0.47 ms |
+| The debounced redraw that follows a catch | 30 ms | 6 ms |
+
+**When the location records are full.** Per record (the lifetime totals and each session) a species-in-a-zone entry is made for
+each new pair until `LIMITS.zoneSpecies` (4000); a container-in-a-zone entry until `LIMITS.zoneContainers` (800). Beyond that
+nothing is lost from the totals and nothing reads as complete: a species caught in a new pair has its quantity added to
+`spo[itemID]` (one number per species, so growth is bounded by the number of kinds), and a container event with no entry adds 1 to
+`ctl`. A pair that already has an entry keeps counting exactly. The Journal then shows, for a kind, *confirmed zones*, *zone not
+readable*, **Beyond the storage limit** (the overflow) and *Earlier catches* (the remainder), which always add up to the kind's
+quantity; Locations says a zone's missing breakdown is "past the storage limit" when the list is full. A file that was already
+at the bound when it loaded, with no overflow count (written before overflow was counted), is flagged (`spx`): its unplaced fish
+are shown as "before locations were recorded, or past the limit". `API.ZoneLimits()` reports `entries`, `max`, `full`,
+`overflowTotal`, `unknownOverflow`, `containerEntries`, `containerMax` and `containersLost`. The new fields are optional and
+normalised at load (a damaged one is dropped alone), so they need no schema bump.
 
 **Artwork.** 15 new textures (`j-*`, `glyph-hook|clam|treasure`; `tools/make_fishing_art.py`) from the pack's `journal_frame`,
 `recessed_frame`, `chestnut_frame`, rows, nav and compact buttons, close button, unknown tile and fish watermark. The window frame

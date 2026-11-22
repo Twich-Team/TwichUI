@@ -69,7 +69,9 @@ F.LIMITS = {
     recent = 20,        -- recent catches kept on the session in progress (dropped when it ends)
     notes = 20,         -- recent errors and refusals kept for diagnostics (runtime only, never saved)
     learned = 200,      -- learned lure enchants and container items, per kind
-    zoneSpecies = 4000, -- species-in-a-zone aggregates kept for the lifetime totals, per character (a new pair beyond it is not recorded)
+    zoneSpecies = 4000, -- species-in-a-zone aggregates kept per record (lifetime totals, each session). A new pair beyond it is not given an entry:
+                        -- its quantity is added to `spo[itemID]` (one number per species) so the Journal can say how much has no zone detail
+    zoneContainers = 800, -- container-in-a-zone aggregates per record; an event beyond it adds one to `ctl` (events not recorded by zone)
 }
 
 ---------------------------------------------------------------------------

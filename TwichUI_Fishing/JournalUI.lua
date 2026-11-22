@@ -614,7 +614,8 @@ local function ZoneRowsFor(e)
     -- a species' places: confirmed zones, then where the zone couldn't be read, then what was caught before locations were recorded
     local items = {}
     for _, w in ipairs(e.where) do items[#items + 1] = { kind = w.unknown and "unknown" or "zone", zone = w.zone, name = w.name, q = w.q, c = w.c, first = w.first, last = w.last } end
-    if e.earlier > 0 then items[#items + 1] = { kind = "earlier", q = e.earlier } end
+    if e.overflow > 0 then items[#items + 1] = { kind = "limit", q = e.overflow } end
+    if e.earlier > 0 then items[#items + 1] = { kind = "earlier", q = e.earlier, maybe = e.earlierMayBeFull } end
     return items
 end
 
@@ -718,9 +719,12 @@ local function BuildCollections(page)
             elseif w.kind == "unknown" then
                 b.name:SetText("Zone not readable"); H.Color(b.name, H.MUTED)
                 b.sub:SetText(Plural(w.c, "catch", "catches") .. " where the game gave no zone")
+            elseif w.kind == "limit" then
+                b.name:SetText("Beyond the storage limit"); H.Color(b.name, H.MUTED)
+                b.sub:SetText("caught after the list of places was full")
             else
                 b.name:SetText("Earlier catches"); H.Color(b.name, H.MUTED)
-                b.sub:SetText("caught before locations were recorded")
+                b.sub:SetText(w.maybe and "before locations were recorded, or past the limit" or "caught before locations were recorded")
             end
             b.q:SetText("×" .. Num(w.q))
         end,
@@ -781,9 +785,10 @@ local function BuildCollections(page)
         D.l2:SetText(("First %s · latest %s"):format(Day(picked.first) or "not recorded", Day(picked.last) or "not recorded"))
         local places = ZoneRowsFor(picked)
         local confirmed = #picked.where - (picked.unknown > 0 and 1 or 0)
+        local unplaced = picked.earlier + picked.overflow
         if picked.located > 0 then
             D.l3:SetText(("Confirmed in %s (%s fish)%s"):format(Plural(confirmed, "zone"), Num(picked.located),
-                picked.earlier > 0 and ("; " .. Num(picked.earlier) .. " caught before locations were recorded") or ""))
+                unplaced > 0 and ("; " .. Num(unplaced) .. " not placed" .. (picked.overflow > 0 and " (some past the storage limit)" or "")) or ""))
         elseif picked.unknown > 0 then
             D.l3:SetText("The zone couldn't be read for these catches.")
         else
@@ -794,7 +799,7 @@ local function BuildCollections(page)
         if state.focusZone then
             for i, w in ipairs(places) do if w.kind == "zone" and w.zone == state.focusZone then P.where:ShowIndex(i) break end end
         end
-        local none = #places == 0 or (picked.located == 0 and picked.unknown == 0)
+        local none = #places == 0 or (picked.located == 0 and picked.unknown == 0 and picked.overflow == 0)
         D.none:SetShown(none)
         D.none:SetText(none and (c.since and ("Where this fish was caught wasn't recorded before %s. New catches will be placed here."):format(Day(c.since) or "locations were tracked")
             or "No locations recorded yet. New catches will be placed here.") or "")
@@ -934,9 +939,10 @@ local function BuildLocations(page)
         if r.id == 0 then
             D.cover:SetText("Catches where the game gave no zone. Totals are exact; the fish listed are those recorded here.")
         elseif cov.earlier > 0 and cov.located > 0 then
-            D.cover:SetText(("The fish below are %s of the %s items caught here: the rest were caught before locations were recorded."):format(Num(cov.located), Num(cov.items)))
+            D.cover:SetText(("The fish below are %s of the %s items caught here: the rest %s."):format(Num(cov.located), Num(cov.items),
+                cov.capped and "were caught before locations were recorded or after the list of places was full" or "were caught before locations were recorded"))
         elseif cov.earlier > 0 then
-            D.cover:SetText("The totals above are exact. Which fish were caught here wasn't recorded before locations were tracked.")
+            D.cover:SetText("The totals above are exact. Which fish were caught here " .. (cov.capped and "wasn't kept (before locations were tracked, or past the storage limit)." or "wasn't recorded before locations were tracked."))
         else
             D.cover:SetText("Every fish caught here has been placed.")
         end

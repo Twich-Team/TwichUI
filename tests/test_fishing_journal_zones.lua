@@ -94,7 +94,7 @@ do
   Check(words:find("wasn't recorded before", 1, true), "with the reason, not an empty box")
   At(W, SV, "Stranglethorn Vale"); Catch(W, { { FISH1, 5 } })
   words = Words(W)
-  Check(words:find("Confirmed in 1 zone (5 fish)", 1, true) and words:find("20 caught before locations were recorded", 1, true),
+  Check(words:find("Confirmed in 1 zone (5 fish)", 1, true) and words:find("20 not placed", 1, true) and words:find("caught before locations were recorded", 1, true),
     "after new catches: 5 placed, the 20 older ones separate")
   local e = J.Collection().species[1]
   Check(e.q == 25 and e.located == 5 and e.earlier == 20, "25 caught: 5 placed, 20 earlier")
@@ -348,8 +348,8 @@ do
   local per2 = (os.clock() - t2) / 400
   Check(perClosed < per2 * 3 + 0.002, ("the same cost as with no history (%.2f ms vs %.2f ms)"):format(perClosed * 1000, per2 * 1000))
   -- finished sessions are copied once, not again for every catch (a direct catch cannot change a finished session)
-  local copies, realSessions = 0, F.API.Sessions
-  F.API.Sessions = function(...) copies = copies + 1; return realSessions(...) end
+  local copies, realSessions = 0, F.API.SessionDigest
+  F.API.SessionDigest = function(...) copies = copies + 1; return realSessions(...) end
   J.Sessions(); J.Locations()
   local before = copies
   Catch(W, { { itemIds[1], 1 } })
@@ -358,7 +358,7 @@ do
   F.Emit("SESSION_END", 1, "command")
   J.Sessions()
   Check(copies == before + 1, "but a session ending does")
-  F.API.Sessions = realSessions
+  F.API.SessionDigest = realSessions
   Check(F.Store.Char().totals.spn <= 3601, "400 more catches of one fish in one zone added at most one entry (a pair is one entry)")
   Check(#W.faults == 0, "no errors: " .. table.concat(W.faults, "|"))
 end

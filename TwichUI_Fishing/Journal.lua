@@ -126,14 +126,14 @@ local function Row(s, current)
         id = s.id, current = current or false, start = s.start, stop = s.stop, last = s.last, seconds = seconds,
         zone = zone, zoneName = J.ZoneLabel(zone), zoneCount = zoneCount, startZone = s.zone or 0,
         casts = s.casts or 0, catches = s.catches or 0, items = s.items or 0,
-        rate = J.Rate(s.catches, s.casts), kinds = CountSpecies(s.species), ended = s.ended,
+        rate = J.Rate(s.catches, s.casts), kinds = s.kinds or CountSpecies(s.species), ended = s.ended,
         failed = s.failed or 0, interrupted = s.interrupted or 0, missed = s.missed or 0, extra = {},
     }
 end
 
 -- The kept sessions as copies, newest first, taken once per change of the records (read only here).
 local function RawSessions()
-    return Cached("raw", function() return API().Sessions(nil) or {} end, "history")
+    return Cached("raw", function() return API().SessionDigest() or {} end, "history")
 end
 
 local function SessionRows()
@@ -304,37 +304,48 @@ function J.Summary(id)
 end
 
 ---------------------------------------------------------------------------
--- Where species were caught (lifetime): one pass over the zone records, cached until the records change
+-- Where species were caught (lifetime). Nothing here copies the location records: the interface answers per zone (ZoneDigest) or
+-- per kind (ItemZones, ZoneSpecies), and a kind's places are worked out only when something asks for them (the chosen kind, a
+-- favourite), so a page costs what it shows however large the records are.
 ---------------------------------------------------------------------------
-local function ZoneIndex()
-    return Cached("zoneindex", function()
-        local z = API().Zones("lifetime")
-        local byItem, byZone, since = {}, {}, z and z.since or nil
-        if z then
-            for zone, zt in pairs(z.species) do
-                local list = {}
-                for item, e in pairs(zt) do
-                    local row = { zone = zone, name = J.ZoneLabel(zone), id = item, q = e.q or 0, c = e.c or 0, first = e.f, last = e.l,
-                        unknown = zone == 0, extra = {} }
-                    list[#list + 1] = row
-                    local l = byItem[item]
-                    if not l then l = {}; byItem[item] = l end
-                    l[#l + 1] = row
-                end
-                table.sort(list, function(a, b) if a.q ~= b.q then return a.q > b.q end return a.id < b.id end)
-                byZone[zone] = list
-            end
-            for _, l in pairs(byItem) do
-                table.sort(l, function(a, b)
-                    if a.unknown ~= b.unknown then return b.unknown end       -- confirmed zones first, unknown last
-                    if a.q ~= b.q then return a.q > b.q end
-                    return a.zone < b.zone
-                end)
-            end
+local function Digest()
+    return Cached("digest", function() return API().ZoneDigest() or { zones = {}, limits = nil } end)
+end
+
+local function ByQuantity(a, b) if a.q ~= b.q then return a.q > b.q end return a.id < b.id end
+
+-- One kind's places: confirmed zones by quantity, the unreadable zone last; what it adds up to, and what has no zone entry
+-- because the record was full (overflow) -- counted, so a full record never reads as complete or as "earlier".
+local function Places(id)
+    return Cached("item" .. id, function()
+        local r = API().ItemZones(id) or { zones = {}, overflow = 0 }
+        local where, located, unknown = {}, 0, 0
+        for _, z in ipairs(r.zones) do
+            where[#where + 1] = { zone = z.zone, name = J.ZoneLabel(z.zone), id = id, q = z.q or 0, c = z.c or 0, first = z.f, last = z.l,
+                unknown = z.zone == 0, extra = {} }
+            if z.zone == 0 then unknown = unknown + (z.q or 0) else located = located + (z.q or 0) end
         end
-        return { byItem = byItem, byZone = byZone, since = since }
+        table.sort(where, function(a, b)
+            if a.unknown ~= b.unknown then return b.unknown end
+            if a.q ~= b.q then return a.q > b.q end
+            return a.zone < b.zone
+        end)
+        return { where = where, located = located, unknown = unknown, overflow = r.overflow or 0 }
     end)
 end
+
+local LAZY = { where = true, located = true, unknown = true, overflow = true, earlier = true }
+local entry_meta = { __index = function(e, k)
+    if not LAZY[k] then return nil end
+    local p = Places(e.id)
+    local lim = Digest().limits
+    rawset(e, "where", p.where); rawset(e, "located", p.located); rawset(e, "unknown", p.unknown); rawset(e, "overflow", p.overflow)
+    -- the rest: caught before locations were recorded, or (when the record was already full before overflow was counted)
+    -- possibly beyond the limit: never placed either way
+    rawset(e, "earlier", math.max(0, e.q - p.located - p.unknown - p.overflow))
+    rawset(e, "earlierMayBeFull", lim and lim.unknownOverflow or false)
+    return rawget(e, k)
+end }
 
 ---------------------------------------------------------------------------
 -- Collections (species caught directly; containers are on the Treasures page)
@@ -344,19 +355,13 @@ function J.Collection()
         local t = API().Totals()
         local out = { species = {}, retention = J.Retention(), total = 0 }
         if not t then return out end
-        local idx = ZoneIndex()
-        out.since = idx.since
+        local dg = Digest()
+        out.limits = dg.limits
+        out.since = dg.limits and dg.limits.since or nil
         local containers = ContainerSet()
         local list = {}
         for _, e in ipairs(SpeciesList(t.species)) do
-            if not containers[e.id] then
-                local where = idx.byItem[e.id] or {}
-                local located, unknown = 0, 0
-                for _, w in ipairs(where) do if w.unknown then unknown = unknown + w.q else located = located + w.q end end
-                e.where, e.located, e.unknown = where, located, unknown
-                e.earlier = math.max(0, e.q - located - unknown)      -- caught before locations were recorded: never placed
-                list[#list + 1] = e
-            end
+            if not containers[e.id] then list[#list + 1] = setmetatable(e, entry_meta) end
         end
         out.species, out.total = list, #list
         return out
@@ -371,32 +376,37 @@ function J.Locations()
         local t = API().Totals()
         local out = { rows = {}, total = 0, retention = J.Retention() }
         if not t then return out end
-        local idx = ZoneIndex()
-        out.since = idx.since
+        local dg = Digest()
+        out.limits = dg.limits
+        out.since = dg.limits and dg.limits.since or nil
         out.rows = ZoneRows(t.zones)
-        -- sessions that fished there, among those still kept (a session can span zones: each is counted in every zone it fished)
+        -- sessions that fished there, among those still kept (a session spanning zones counts in each)
         local fished = FishedIn()
         for _, r in ipairs(out.rows) do
             r.sessions = fished[r.id] or 0
-            local list = idx.byZone[r.id] or {}
-            local located = 0
-            for _, e in ipairs(list) do located = located + e.q end
-            r.kinds, r.top = #list, list[1] and list[1].id or nil
-            r.located, r.earlier = located, math.max(0, r.items - located)
+            local d = dg.zones[r.id]
+            r.kinds, r.top, r.located = d and d.kinds or 0, d and d.top or nil, d and d.located or 0
+            r.earlier = math.max(0, r.items - r.located)
         end
         out.total = #out.rows
         return out
     end)
 end
 
--- One zone in detail: its figures (exact lifetime totals), the species confirmed caught there, how much of its catch has that
--- breakdown, and the kept sessions that fished there, newest first (with their own casts and catches there).
+-- One zone in detail: its figures (exact lifetime totals), the species confirmed caught there, how much of its items that breakdown
+-- covers (the rest was caught before locations were recorded or after the record was full), and the kept sessions that fished
+-- there, newest first (with their own casts and catches there).
 function J.Location(id)
     local data = J.Locations()
     local row
     for _, r in ipairs(data.rows) do if r.id == id then row = r break end end
     if not row then return nil end
-    local list = ZoneIndex().byZone[id] or {}
+    local list = Cached("zone" .. id, function()
+        local out = {}
+        for _, e in ipairs(API().ZoneSpecies(id) or {}) do out[#out + 1] = { id = e.id, q = e.q, c = e.c, first = e.f, last = e.l, extra = {} } end
+        table.sort(out, ByQuantity)
+        return out
+    end)
     local sessions = {}
     for _, s in ipairs(RawSessions()) do
         local z = s.zones and s.zones[id]
@@ -406,7 +416,9 @@ function J.Location(id)
             if #sessions >= J.SESSIONS_PER_ZONE then break end
         end
     end
-    return { row = row, species = list, coverage = { located = row.located, earlier = row.earlier, items = row.items },
+    local lim = data.limits
+    return { row = row, species = list, coverage = { located = row.located, earlier = row.earlier, items = row.items,
+        capped = lim and lim.full or false, mayBeCapped = lim and lim.unknownOverflow or false },
         sessions = sessions, since = data.since }
 end
 

@@ -57,10 +57,88 @@ function API.SessionByID(id)
     return copy
 end
 
+-- The lifetime totals (copy). The location tables (spz, ctz) are left out: they are large and have their own calls (Zones,
+-- ZoneDigest, ItemZones, ZoneSpecies); everything that was in the totals before schema 2 is unchanged.
+local LOCATION = { spz = true, ctz = true }
+local function CopyRecord(rec)
+    local out = {}
+    for k, v in pairs(rec) do if not LOCATION[k] then out[k] = F.Copy(v) end end
+    return out
+end
 function API.Totals()
     local c = S.Char()
-    return c and F.Copy(c.totals) or nil
+    return c and CopyRecord(c.totals) or nil
 end
+
+-- Finished sessions without their species and location tables, newest first (the Journal's lists: a list needs a session's
+-- figures, its zones and how many kinds it caught, not the fish themselves; API.SessionByID has the whole record).
+function API.SessionDigest()
+    local c = S.Char()
+    local out = {}
+    if not c then return out end
+    for i = #c.sessions, 1, -1 do
+        local s, kinds = c.sessions[i], 0
+        for _ in pairs(s.species or {}) do kinds = kinds + 1 end
+        out[#out + 1] = { id = s.id, start = s.start, stop = s.stop, last = s.last, seconds = s.seconds, ended = s.ended, reason = s.reason,
+            zone = s.zone, casts = s.casts, catches = s.catches, items = s.items, failed = s.failed, interrupted = s.interrupted,
+            missed = s.missed, line = s.line, kinds = kinds, zones = F.Copy(s.zones or {}) }
+    end
+    return out
+end
+
+-- Where fish were caught, lifetime, without copying it (Stage 3A refinement). The calls the Journal pages use:
+--   ZoneDigest()      { zones = { [mapID] = { kinds, located, top } }, limits }: per zone, how many kinds, how many fish placed there,
+--                     and the most caught kind's id
+--   ItemZones(item)   { zones = { { zone, q, c, f, l } ... }, overflow }: where one kind was caught, and how much of it has no zone
+--                     entry because the record was full
+--   ZoneSpecies(zone) { { id, q, c, f, l } ... }: the kinds caught in one zone
+--   ZoneLimits()      { entries, max, full, overflow = { [item] = q } and overflowTotal, unknownOverflow, containerEntries,
+--                     containerMax, containersLost, since }: how full the location records are and what they could not keep
+function API.ZoneLimits()
+    local c = S.Char()
+    if not c then return nil end
+    local t = c.totals
+    local total = 0
+    for _, q in pairs(t.spo or {}) do total = total + q end
+    return { entries = t.spn or 0, max = F.LIMITS.zoneSpecies, full = (t.spn or 0) >= F.LIMITS.zoneSpecies,
+        overflowTotal = total, unknownOverflow = t.spx == true, containerEntries = t.ctn or 0, containerMax = F.LIMITS.zoneContainers,
+        containersLost = t.ctl or 0, since = c.locSince }
+end
+
+function API.ZoneDigest()
+    local c = S.Char()
+    if not c then return nil end
+    local zones = {}
+    for zone, zt in pairs(c.totals.spz or {}) do
+        local kinds, located, top, topQ = 0, 0, nil, -1
+        for item, e in pairs(zt) do
+            kinds, located = kinds + 1, located + (e.q or 0)
+            if (e.q or 0) > topQ or ((e.q or 0) == topQ and top and item < top) then top, topQ = item, e.q or 0 end
+        end
+        zones[zone] = { kinds = kinds, located = located, top = top }
+    end
+    return { zones = zones, limits = API.ZoneLimits() }
+end
+
+function API.ItemZones(item)
+    local c = S.Char()
+    if not c then return nil end
+    local out = {}
+    for zone, zt in pairs(c.totals.spz or {}) do
+        local e = zt[item]
+        if e then out[#out + 1] = { zone = zone, q = e.q, c = e.c, f = e.f, l = e.l } end
+    end
+    return { zones = out, overflow = (c.totals.spo or {})[item] or 0 }
+end
+
+function API.ZoneSpecies(zone)
+    local c = S.Char()
+    if not c then return nil end
+    local out = {}
+    for item, e in pairs((c.totals.spz or {})[zone] or {}) do out[#out + 1] = { id = item, q = e.q, c = e.c, f = e.f, l = e.l } end
+    return out
+end
+
 
 -- Stage 3A (the Journal): what Provenance leaves out, per container: how many were caught, opened, failed and are waiting,
 -- and what each is confirmed to have held. scope as Provenance. { [containerID] = { caught, opened, failed, unopened,
@@ -102,7 +180,8 @@ function API.Zones(scope)
     elseif scope == "session" then rec = c.session
     else local sid = F.Count(scope); rec = sid and Ses.Find(sid) end
     if not rec then return nil end
-    return { species = F.Copy(rec.spz or {}), containers = F.Copy(rec.ctz or {}), since = c.locSince, scope = scope or "lifetime" }
+    return { species = F.Copy(rec.spz or {}), containers = F.Copy(rec.ctz or {}), since = c.locSince, scope = scope or "lifetime",
+        overflow = F.Copy(rec.spo or {}), containersLost = rec.ctl or 0, unknownOverflow = rec.spx == true }
 end
 
 -- How much history exists: sessions kept now and the most that are kept (config session.keep). Lifetime totals are not
