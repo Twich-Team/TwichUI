@@ -1132,7 +1132,7 @@ m("crafting.consumption.certainty", "TwichUI_Workshop/CraftPlanner.lua", "and no
 m("market.consumption.worth-certainty", "TwichUI_Workshop/Worth.lua", "if a.reference then return quiet(\"reference\",\"Market reference estimate; check current listings before selling\") end", "", "a Market reference becomes a proven vendor/auction comparison", ["test_workshop_market_consumption.lua"])
 
 m("market.consumption.pending-refresh", "TwichUI_Workshop/Pricing.lua", "if reason=='loading' then", "if false then", "different partitions never resolve into a complete feature snapshot", ["test_workshop_market_consumption_async.lua"])
-m("market.consumption.cache-decoder-coupling", "TwichUI_Workshop/Pricing.lua", "local current=dataStamp()", "local current=P.Generation()", "decoder progress repeatedly discards completed prices", ["test_workshop_market_consumption_async.lua"])
+m("market.consumption.cache-decoder-coupling", "TwichUI_Workshop/Pricing.lua", "local current=dataStamp(status)", "local current=P.Generation()", "decoder progress repeatedly discards completed prices", ["test_workshop_market_consumption_async.lua"])
 
 m("market.consumption.capacity-loop", "TwichUI_Workshop/Pricing.lua", "if not reserved and count+pendingCount>=P.MAX_CACHE then", "if false then", "cache overflow repeatedly restarts decoding instead of falling back", ["test_workshop_market_consumption_async.lua"])
 
@@ -1555,3 +1555,16 @@ m("market.cost.bait-boundary", VALUATION, "if skipBelow and 2 * t.p < d.a then",
   "a tier at exactly half the anchor (a real competing price) is skipped as bait", ["test_workshop_valuation.lua"])
 m("market.cost.bait-still-available", VALUATION, "r.qty, r.available = n, d.t - skipItems", "r.qty, r.available = n, d.t",
   "the bait's items are counted as buyable, so too few listed reads as enough", ["test_workshop_valuation.lua"])
+
+# Market PR1: pending ownership, completion writer, revision and elapsed work.
+m("market.pending.guard", "TwichUI_Workshop/Pricing.lua", "if reserved and not completion then", "if false then",
+  "redraws repeat reader and hash work for an already reserved identity", ["test_workshop_market_pending.lua"])
+m("market.pending.completion", "TwichUI_Workshop/Pricing.lua", "if reserved and not completion then", "if reserved then",
+  "the pending guard also blocks the only completion writer", ["test_workshop_market_pending.lua"])
+m("market.pending.revision", "TwichUI_Workshop/Pricing.lua", "if changed then revision=revision+1;P.Notify() end", "if changed then P.Notify() end",
+  "completion after checked_parts stabilizes retains memoized fallback answers", ["test_workshop_market_pending.lua"])
+m("market.pending.elapsed-budget", "TwichUI_Workshop/Summary.lua", "or clock()-start>=budget", "",
+  "a completion slice respects only record count instead of elapsed CPU", ["test_workshop_market_pending.lua"])
+
+m("market.pending.rejected-retry", "TwichUI_Workshop/Pricing.lua", "if failure then pending[bucket]=nil end", "-- rejected reservations remain in the live bucket",
+  "a post-combat retry joins the rejected drain and loses its completion", ["test_workshop_market_pending.lua"])

@@ -1,0 +1,12 @@
+{
+  "TwichUI_Workshop/Pricing.lua": "b8cd132beda2b3df5eb103d76df3da001c68a41c9b9efe370894ddbe7ae2b19c",
+  "TwichUI_Workshop/Summary.lua": "c5fd4b62163745046e1d868e9c7a366b133fde318afd9aebca54124809047b12",
+  "TwichUI_Workshop/Session.lua": "a6338d1dc93a3879b80f1e989bd6d9da884fde109641aa9f6b5a500978d0f85d",
+  "TwichUI_Diagnostics/Gauges.lua": "1bc36cd9eeed64c0731a75bd2c896b275ad8a543a4ecfaa80f1746766abc6c3f",
+  "tests/test_workshop_market_pending.lua": "39f35f79543f345a2c97ddfe91f2fcdabad82a4ce340ac4f2b5a7cd57a3b66b7",
+  "tests/test_workshop_market_performance.lua": "45e6d6bbe0f269fa6a64a9645360aaa9ea8ea5d2fddbae154a904600d5643305",
+  "tests/bench_market_opportunities.lua": "d3f90b67696adf9ce785bff6d9df95d0b7ce9750573221720975241c47efa180",
+  "tests/groups.json": "7cd93d18578f94978cfd982c346dca3c85717308ea934d99c8bc054f19658f61",
+  "tools/mutations/workshop.py": "82997bc3db92f0bba40094e64ae57e426e24b86041e4386ec59d367deb033c82",
+  "tests/fixtures/workshop_summary_v2/synthetic.json": "f266725c40b7dec92b9058242bdec335216c9aacfac0560660112136ab544495"
+}

@@ -67,6 +67,7 @@ Replace `workshop-settings` with one of these nonempty groups:
 | `auction-house` | Standalone Auction House preview, existing auction safeguards and Workshop dependencies |
 | `crafting` | Crafting, shopping, stock, planner, strategy and compact views |
 | `market` | Prices, distribution, history, valuation, schema and automatic scans |
+| `market-performance` | Six fast deterministic pricing/partition/estimator modules; no large benchmarks or simulators in development selection |
 | `reminders` | Reminders engines, designer, settings and artwork |
 | `loot-rolls` | Loot Rolls rules, cards, automatic rolling and settings pages; the synthetic-roll simulator catalog is run by hand with `bash tools/simlab/loot.sh` |
 | `navigation` | Navigation, maps, pins, NPCs and guild locations |
@@ -396,3 +397,11 @@ Diagnostics preset have their own passing focused checks and simulator evidence.
 `auction-house` and `auction-preview` now also select `test_perf_engine.lua` and
 the two changed Diagnostics source files. No full/release certification or native
 client acceptance is inferred from this campaign.
+
+### Market pending-pricing performance
+
+`./tests/run.sh development market-performance` selects six small production-reader,
+pricing, estimator and integrity modules without a simulator. It supplements the
+normal affected Market/crafting/consumer groups. Dedicated audit benchmarks remain
+opt-in (`tools/measure_market_opportunities.py`), never default test discovery.
+[PR1 implementation and comparable measurement procedure](performance/v2-market-pending-pricing-pr1.md).

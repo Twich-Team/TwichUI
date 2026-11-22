@@ -19,6 +19,16 @@ local Perf = R.Perf
 -- "!!!TwichUI/", the settings window "TwichUI_Settings/"), where: the function, so a report can name what to read.
 -- every = how often it is expected to run, so a report can tell "runs often" from "runs on demand".
 DX.OPS = {
+    ["workshop.pricing.uniquePending"] = {module="workshop",label="New pending identities",kind="count",file="TwichUI_Workshop/Pricing.lua",where="request/completion",every="opt-in aggregate"},
+    ["workshop.pricing.deduplicated"] = {module="workshop",label="Pending queries coalesced",kind="count",file="TwichUI_Workshop/Pricing.lua",where="request/completion",every="opt-in aggregate"},
+    ["workshop.pricing.readerCalls"] = {module="workshop",label="Actual price reader calls",kind="count",file="TwichUI_Workshop/Pricing.lua",where="request/completion",every="opt-in aggregate"},
+    ["workshop.pricing.baseKeys"] = {module="workshop",label="Base identity hashes",kind="count",file="TwichUI_Workshop/Pricing.lua",where="request/completion",every="opt-in aggregate"},
+    ["workshop.pricing.settled"] = {module="workshop",label="Pending identities processed",kind="count",file="TwichUI_Workshop/Pricing.lua",where="request/completion",every="opt-in aggregate"},
+    ["workshop.pricing.notifications"] = {module="workshop",label="Pricing completion refreshes",kind="count",file="TwichUI_Workshop/Pricing.lua",where="request/completion",every="opt-in aggregate"},
+    ["workshop.pricing.fullLists"] = {module="workshop",label="Full Opportunities calculations",kind="count",file="TwichUI_Workshop/Session.lua",where="request/completion",every="opt-in aggregate"},
+    ["workshop.pricingComplete"] = {module="workshop",label="Budgeted price completion slice",kind="work",file="TwichUI_Workshop/Summary.lua",where="Q.Step handoff",every="pending compact transfers; total/worst CPU"},
+    ["workshop.summary.decodeStarts"] = {module="workshop",label="Partition decode starts",kind="count",file="TwichUI_Workshop/Summary.lua",where="loadPart",every="opt-in aggregate"},
+    ["workshop.summary.decodeRepeats"] = {module="workshop",label="Previously validated partition decodes",kind="count",file="TwichUI_Workshop/Summary.lua",where="loadPart",every="opt-in aggregate"},
     ["bugsack.broker.update"] = { module = "bugsack", label = "BugSack broker: current-session count", kind = "hook", file = "modules/BugSackBroker.lua", where = "OnUpdate (hook BugSack.UpdateDisplay)", every = "when BugSack updates its display" },
     ["gathering.evaluate"] = { module = "qol", label = "Gathering target and interaction settings", kind = "evaluate", file = "!!!TwichUI/qol/GatheringSparkles.lua", where = "G.Poll", every = "interaction/nameplate events and every 0.2 seconds while enabled" },
     ["qol.groupFinderZones.row"] = { module = "qol", label = "Group Finder zones: a listing row drawn", kind = "hook", file = "!!!TwichUI/qol/GroupFinderZones.lua", where = "Z.Draw (hook LFGBrowseSearchEntry_Update)", every = "each Group Finder row the game draws or updates, only after the switch was first turned on" },
