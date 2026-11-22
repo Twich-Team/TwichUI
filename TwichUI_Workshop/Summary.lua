@@ -99,7 +99,8 @@ end
 local schedule,startNext
 local function handoff(bucket,why,notify)
     if not (W.Pricing and W.Pricing.Decoded and W.Pricing.Rejected) then return end
-    job={kind='handoff',bucket=bucket,notify=notify,co=coroutine.create(function()
+    if not why and not W.Pricing.NeedsHandoff(bucket) then return end
+    job={kind='handoff',bucket=bucket,notify=notify,failure=why,co=coroutine.create(function()
         if why then W.Pricing.Rejected(bucket,why,coroutine.yield)
         else W.Pricing.Decoded(bucket,coroutine.yield) end
     end)}
@@ -212,7 +213,7 @@ local function request(bucket)
         active.failed[bucket]=nil;if lastError=='combat' then lastError=nil end
     end
     if active.failed[bucket] then return nil,active.failed[bucket] end
-    if not queued[bucket] and not(job and job.bucket==bucket) then
+    if not queued[bucket] and not(job and job.bucket==bucket and not job.failure) then
         if InCombatLockdown and InCombatLockdown() then return nil,'combat' end
         queue[#queue+1]=bucket;queued[bucket]=true;startNext();schedule()
     end

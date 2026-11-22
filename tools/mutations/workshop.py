@@ -1565,3 +1565,6 @@ m("market.pending.revision", "TwichUI_Workshop/Pricing.lua", "if changed then re
   "completion after checked_parts stabilizes retains memoized fallback answers", ["test_workshop_market_pending.lua"])
 m("market.pending.elapsed-budget", "TwichUI_Workshop/Summary.lua", "or clock()-start>=budget", "",
   "a completion slice respects only record count instead of elapsed CPU", ["test_workshop_market_pending.lua"])
+
+m("market.pending.rejected-retry", "TwichUI_Workshop/Pricing.lua", "if failure then pending[bucket]=nil end", "-- rejected reservations remain in the live bucket",
+  "a post-combat retry joins the rejected drain and loses its completion", ["test_workshop_market_pending.lua"])

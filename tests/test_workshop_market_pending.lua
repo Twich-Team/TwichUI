@@ -114,6 +114,31 @@ local _,why=request(s,66);assert(why=='combat')
 s.combat=false;request(s,66);s.drain();assert(request(s,66).price==120)
 s.now=s.now+86401;local _,why=request(s,64);assert(why=='stale','stale cache bypassed admission')
 
+-- Retry while a yielding combat-rejection drain still owns its old batch.
+s=client();request(s,64)
+for n=0,39 do request(s,65+64*n) end
+s.combat=true
+for _=1,20 do if s.Q.Status().error=='combat' then break end;s.tick() end
+assert(s.Q.Status().error=='combat')
+s.tick() -- rejection has yielded with old reservations still outstanding
+s.combat=false;local _,retry=request(s,65);assert(retry=='loading')
+s.drain()
+assert(s.P.CacheSize()==2,'combat retry was not committed by its completion writer')
+local calls=metric(s,'readerCalls')
+local _,why=request(s,65)
+assert(metric(s,'readerCalls')==calls,'a foreground read had to rescue a lost retry')
+assert(why=='not_observed' and s.P.PendingCount()==0,'retry was lost in the rejected handoff batch')
+
+-- Real page lifecycle: hiding/switching does not cancel shared price work;
+-- disabling Workshop uses its existing Suspend -> Bridge.Cancel boundary.
+s=client()
+for n=1,40 do request(s,64*n) end
+s.tick();assert(s.P.PendingCount()>0)
+s.W.Window.SetMode('opps');s.W.Window.Show();s.W.Window.SetMode('craft');s.W.Window.Hide()
+s.drain();assert(s.P.PendingCount()==0)
+request(s,66);assert(s.P.PendingCount()>0)
+s.W.Suspend();s.drain();assert(s.P.PendingCount()==0 and not s.Q.Pending())
+
 -- Completion revision changes even when checked_parts is already stable. A
 -- fallback question memoized before arrival must not survive that completion.
 s=client()

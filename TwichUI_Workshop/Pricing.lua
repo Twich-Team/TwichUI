@@ -218,19 +218,22 @@ function P.Chart(f)
 end
 -- Summary owns the short-lived decoder handoff. The completion writer alone
 -- bypasses the pending guard; every record yields back to its elapsed-time budget.
--- Snapshot at most MAX_CACHE identities, not decoded rows or history arrays.
+-- Queue at most MAX_CACHE identities, not decoded rows or history arrays.
 local function finishBucket(bucket,work,failure)
     local waits=pending[bucket]
     local mine=epoch
     local changed=false
+    -- A failed batch is finite. New post-combat reservations belong to a new
+    -- bucket queue behind this handoff, never to the rejected cursor.
+    if failure then pending[bucket]=nil end
     if waits then
         while waits.cursor<=#waits.ids do
             local item=waits.ids[waits.cursor];waits.cursor=waits.cursor+1
             if mine~=epoch or not W.Active() then return end
-            if pending[bucket]==waits and waits[item] then
+            if (failure or pending[bucket]==waits) and waits[item] then
                 if failure then
                     waits[item]=nil;pendingCount=pendingCount-1
-                    if failure~='combat' then cache[item]={record=false,why=failure};count=count+1 end
+                    if failure~='combat' and not cache[item] then cache[item]={record=false,why=failure};count=count+1 end
                 else
                     local _,why=record(item,nil,true)
                     -- Admission may become stale/unavailable during handoff. It is
@@ -246,6 +249,7 @@ local function finishBucket(bucket,work,failure)
     if changed then revision=revision+1;P.Notify() end
     if chartPending==bucket then chartPending=nil;P.Notify(0) end
 end
+function P.NeedsHandoff(bucket) return pending[bucket]~=nil or chartPending==bucket end
 function P.Decoded(bucket,work) return finishBucket(bucket,work) end
 function P.Rejected(bucket,why,work) return finishBucket(bucket,work,why) end
 function P.PendingCount() return pendingCount end
