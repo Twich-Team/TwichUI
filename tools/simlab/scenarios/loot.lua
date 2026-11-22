@@ -311,6 +311,65 @@ if view == "preview" then
     end)
 end
 
+if view == "victorySettings" then
+    Lab.Step("victory preview from settings", function()
+        TwichUIDB.modules.lootRolls = false; LR.Refresh()
+        local ok = Lab.Open("lootRolls")
+        Check("init", "loot settings opens while disabled", true, ok)
+        local button
+        for _, row in ipairs(R.SettingsKit.pages.lootRolls.rows) do
+            if row:GetName() == "Preview victory card" then button = row end
+        end
+        Check("construct", "victory preview row exists", true, button ~= nil)
+        if not button then return end
+        Lab.Reveal("lootRolls", button.id)
+        Lab.Settle(0.3)
+        Lab.Row("lootRolls", button.id).control:Click()
+        Lab.Settle(0.5)
+        local card = R.LootVictory.PreviewCard()
+        Check("interact", "settings preview shows a Need victory", "need", card and card.view and card.view.choice)
+        Lab.Row("lootRolls", button.id).control:Click()
+        Lab.Settle(1.3)
+        Check("interact", "next preview shows a Greed victory", "greed", card.view.choice)
+        Check("state", "preview creates no real result or roll", 0, #rolled + R.LootVictory.Count())
+        Check("state", "preview reaches static rest", nil, card.victory:GetScript("OnUpdate"))
+    end)
+end
+
+if view:find("^victory") and view ~= "victorySettings" then
+    Lab.Step("approved victory artwork", function()
+        local V = R.LootVictory
+        LR.Set("maxCards", 4)
+        LR.Set("victoryIntensity", view == "victoryOff" and "off" or "subtle")
+        LR.Set("victorySound", false)
+        local link = view == "victoryGreed" and "item:20004" or "item:20001"
+        if view == "victoryScaled" then LR.Set("scale", 75) end
+        local choice = view == "victoryGreed" and "greed" or "need"
+        local id = Start(link, 30)
+        local roll = Ro.Find(id)
+        Ro.Submit(roll, choice, "player")
+        local old = C.Card(roll.key)
+        Check("init", "native win relay available", true, V.Listening())
+        A_Admin.FireEvent("LOOT_ITEM_ROLL_WON", link, 1, choice == "greed" and 2 or 1, 87, false)
+        local entry = V.Entries()[1]
+        Check("state", "confirmed event accepted", 1, V.Count())
+        Check("construct", "existing card reused", old, entry and entry.card)
+        local seconds = ({ victoryResolve = 0.1, victoryReveal = 0.3, victorySheen = 0.6, victoryParticles = 0.95,
+            victoryStatic = 1.3, victoryOff = 1.3, victoryFade = 3.85, victoryDone = 4.2 })[view] or 1.3
+        Lab.Settle(seconds)
+        if view == "victoryDone" then
+            Check("state", "victory completed", 0, V.Count())
+            Check("state", "no decorative updater remains", nil, old.victory:GetScript("OnUpdate"))
+        else
+            Check("display", "title is dynamic", "YOU WON!", old.victory.title:GetText())
+            Check("display", "neutral acquisition status", "Loot roll won", old.victory.footer:GetText())
+            if view == "victoryStatic" or view == "victoryOff" then
+                Check("state", "no per-frame work at rest", nil, old.victory:GetScript("OnUpdate"))
+            end
+        end
+    end)
+end
+
 -- Screenshot fixture only: move Blizzard's PTR feedback button beside the addon.
 if PTR_IssueReporter then
     PTR_IssueReporter:ClearAllPoints()

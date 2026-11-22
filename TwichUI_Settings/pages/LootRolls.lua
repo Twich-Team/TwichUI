@@ -63,7 +63,7 @@ end
 K.Page({
     key = "lootRolls", icon = "lootRolls", name = "Loot Rolls", tab = "Loot cards", order = 26, group = "everyday",
     description = "Loot cards and simple automatic rolling rules.",
-    keywords = "loot roll rolls need greed pass group loot card cards window item upgrade vendor timer countdown automatic auto rule rules place position scale",
+    keywords = "loot roll rolls need greed pass group loot card cards window item upgrade vendor timer countdown automatic auto rule rules place position scale victory celebration sound won",
     overview = {
         label = "Loot Rolls", tip = "A card for each group-loot roll, and optional rules that choose Need, Greed or Pass after a countdown you can stop.",
         when = function() return R.LootRolls ~= nil end,
@@ -164,6 +164,21 @@ K.Page({
             "How long a card takes to fade out. 0 takes it away at once."), main, Fades)
         if fadeIn and fadeIn.options then fadeIn.options.step = 50 end
         if fadeOut and fadeOut.options then fadeOut.options.step = 50 end
+
+        K.Card({ title = "Victory Celebration", icon = "lootRolls", switch = false,
+            what = "A quiet celebration when you win a Need or Greed roll.",
+            consequence = "Replaces the matching winning notification when the client supports it. Other rewards keep their own alerts.",
+        })
+        Check("victory", "Custom victory notification", "Show the supplied leather and bronze victory card on a confirmed win. Off keeps the game's winning notification.")
+        Pick("victoryIntensity", "Animation intensity", "Off shows a static result. Subtle uses a single trim glint and five quiet particles; Full makes the same accents richer.")
+        Check("victorySound", "Victory sound", "One quiet chime on SFX, respecting global sound settings. Rapid wins share a sound cooldown.")
+        Pick("victoryDuration", "Notification duration", "Short: 3.5 seconds. Normal: 4 seconds. Long: 5 seconds.")
+        local previewStep = 0
+        K.Button("Preview victory card", "Preview victory", function()
+            previewStep = previewStep + 1
+            local ok, why = R.LootVictory.Preview(previewStep % 2 == 0 and "greed" or "need", 2 + (previewStep - 1) % 4)
+            if not ok then R.Print("%s", why) end
+        end, "Shows a sample victory, even while loot cards are off. Repeated previews alternate Need/Greed and cycle Uncommon through Legendary. Nothing is rolled.")
 
         -- The countdown bar
         K.Card({

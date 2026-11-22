@@ -40,6 +40,8 @@ LR.DEFAULTS = {
     barTexture = "eui:sheer", barHeight = 14, barShine = false, barShift = true,
     barColorHigh = "ff91ad78", barColorMid = "ffd0aa60", barColorLow = "ffd18450", barColorExpired = "ffba5d55", barColorRule = "ff91ad78",
     barTrack = "ff211a16",
+    -- confirmed loot-win celebration (independent from rule evaluation)
+    victory = true, victoryIntensity = "subtle", victorySound = false, victoryDuration = "normal",
     -- automation (everything starts off)
     auto = false, autoNeed = false, autoUpgrade = false, paused = false, autoDelay = 3,
     -- where the stack sits: its top centre as an offset from the screen's centre, in screen units
@@ -53,6 +55,8 @@ LR.LIMITS = {
 }
 
 LR.CHOICES = {
+    victoryIntensity = { { "off", "Off" }, { "subtle", "Subtle" }, { "full", "Full" } },
+    victoryDuration = { { "short", "Short" }, { "normal", "Normal" }, { "long", "Long" } },
     growth = {
         { "down", "Downwards", "The first roll is at the top and the stack grows down from there." },
         { "up", "Upwards", "The first roll is at the bottom and the stack grows up from there." },

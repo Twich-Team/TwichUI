@@ -624,6 +624,11 @@ C.PillTips = {
 
 -- Fits the card's height, lays out and fills it. Returns the height.
 function C.Draw(card, view)
+    if R.LootVictory and view.victory then return R.LootVictory.Draw(card, view) end
+    if R.LootVictory then R.LootVictory.ClearCard(card) end
+    card.body:EnableMouse(true); card.iconHit:EnableMouse(true); card.close:Enable()
+    for _, button in pairs(card.buttons) do button:Enable() end
+    card:SetWidth(W_CARD)
     local body = card.body
     local qc, qname = Quality(view)
     card.live = view.state == "pending" or view.state == "scheduled"
@@ -852,13 +857,14 @@ local function Fail(err)
     R.Life.Note("loot-cards-failed")
     R.Fault("loot rolls", err)
     if R.LootBlizzard then R.LootBlizzard.Disable() end
+    if R.LootVictory then R.LootVictory.Disable(true) end
     if stack then stack:Hide() end
     if R.LootAuto then R.LootAuto.Refresh() end
 end
 
 function C.Ready() return built == true and not failed end
 function C.Failed() return failed == true end
-function C.Shows(roll) return roll ~= nil and shown[roll.key] ~= nil and shown[roll.key]:IsShown() end
+function C.Shows(roll) return roll ~= nil and not roll.victoryOwned and shown[roll.key] ~= nil and shown[roll.key]:IsShown() end
 function C.Has(rollID)
     for key, card in pairs(shown) do
         if card.rollID == rollID and card:IsShown() then return true end
@@ -918,12 +924,17 @@ end
 local function Wanted()
     local live, done = {}, {}
     for _, r in ipairs(Ro.Rolls()) do
-        if not r.dismissed then
+        if not r.dismissed and not r.victoryOwned then
             if Ro.IsLive(r) then live[#live + 1] = r else done[#done + 1] = r end
         end
     end
     local out, max = {}, LR.Get("maxCards")
+    -- A started celebration keeps its slot until it finishes. New wins queue
+    -- behind live controls, before ordinary finished results.
+    local victories = R.LootVictory and R.LootVictory.Entries() or {}
+    for _, r in ipairs(victories) do if r.started and #out < max then out[#out + 1] = r end end
     for _, r in ipairs(live) do if #out < max then out[#out + 1] = r end end
+    for _, r in ipairs(victories) do if not r.started and #out < max then out[#out + 1] = r end end
     for i = #done, 1, -1 do if #out < max then out[#out + 1] = done[i] end end
     table.sort(out, function(a, b) return a.key < b.key end)
     return out
@@ -973,7 +984,7 @@ local function Layout()
         end
         used[roll.key] = true
         card.rollID = roll.rollID
-        local h = C.Draw(card, C.View(roll))
+        local h = C.Draw(card, roll.victory and roll or C.View(roll))
         card:ClearAllPoints()
         if growth == "up" then card:SetPoint("BOTTOMLEFT", stack, "TOPLEFT", 0, y) else card:SetPoint("TOPLEFT", stack, "TOPLEFT", 0, -y) end
         card.baseY = y
@@ -983,8 +994,10 @@ local function Layout()
     for key, card in pairs(shown) do
         if not used[key] then
             shown[key] = nil
+            local won = card.view and card.view.victory
+            if won and R.LootVictory then R.LootVictory.Suspend(card); card.view = nil end
             card.rollKey, card.rollID = nil, nil
-            if Fade("fadeOut") > 0 and card:IsShown() and not C.Placing() then
+            if not won and Fade("fadeOut") > 0 and card:IsShown() and not C.Placing() then
                 card.leaving, card.leave = true, 0   -- a fade (Tick), then it is free again
                 leaving[#leaving + 1] = card
             else
@@ -1119,6 +1132,7 @@ local mover, placeDone
 function C.Placing() return mover ~= nil and mover:IsShown() end
 
 function C.PlaceStart(onDone)
+    if R.LootVictory and R.LootVictory.Count() > 0 then return false, "A victory is showing right now." end
     if C.Placing() then return false, "Already placing." end
     C.PreviewStop(true)
     if InCombatLockdown and InCombatLockdown() then return false, "Not in combat." end
@@ -1271,6 +1285,7 @@ end
 
 -- rule = { name, action, delay } shows a rule's countdown first (its action is what it would roll); nothing = a roll waiting for you.
 function C.PreviewStart(rule)
+    if R.LootVictory and R.LootVictory.Count() > 0 then return false, "A victory is showing right now." end
     if C.Placing() then return false, "Finish placing the cards first." end
     for _, r in ipairs(Ro.Rolls()) do
         if Ro.IsLive(r) then return false, "A roll is open right now." end
@@ -1328,6 +1343,7 @@ function C.Enable()
 end
 
 function C.Disable()
+    if R.LootVictory then R.LootVictory.Disable(true) end
     if mover and mover:IsShown() then C.PlaceFinish(false) end
     C.PreviewStop(true)
     if stack then stack:Hide(); stack:SetScript("OnUpdate", nil) end

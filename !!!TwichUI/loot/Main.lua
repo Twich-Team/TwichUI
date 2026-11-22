@@ -20,7 +20,9 @@ function LR.Refresh()
     if on then
         C.Enable()
         Ro.Enable()
+        R.LootVictory.Sync()
     else
+        R.LootVictory.Disable(true)
         Ro.Disable()
         C.Disable()
         A.Stopped()
@@ -35,6 +37,8 @@ function LR.Snapshot()
     for _, r in ipairs(rolls) do if Ro.IsLive(r) then live = live + 1 end end
     return {
         on = on, listening = Ro.Listening(), events = Ro.EventCount(), records = #rolls, live = live, cards = C.CardCount(),
+        victories = R.LootVictory.Count(), victoryPool = R.LootVictory.PoolSize(),
+        victoryEvents = R.LootVictory.Listening() and 1 or 0,
         pool = C.PoolSize(), failed = C.Failed(), parked = B.ParkedCount(), scheduled = A.Scheduled(),
         auto = LR.AutoOn(), paused = LR.Paused(), rules = LR.Count(),
     }

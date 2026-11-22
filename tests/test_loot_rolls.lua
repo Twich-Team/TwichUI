@@ -170,7 +170,7 @@ end
 c.TwichUIDB = { modules = {} }
 local JUDGED = {}
 for _, f in ipairs({ "loot/Rules.lua", "loot/Config.lua", "loot/Roll.lua", "loot/Auto.lua",
-  "loot/Blizzard.lua", "loot/Cards.lua", "loot/Main.lua" }) do
+  "loot/Blizzard.lua", "loot/Cards.lua", "loot/Victory.lua", "loot/Main.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
@@ -1211,6 +1211,177 @@ do
   C.PreviewStop(true)
   c.GameTooltip = real
   rolled = {}
+end
+
+---------------------------------------------------------------------------
+-- Victory: actual relay event over synthetic client frames; no win inference.
+---------------------------------------------------------------------------
+do
+  local V = R.LootVictory
+  active = {}
+  -- Clean the model/automation left by the preceding regression scenarios.
+  c.TwichUIDB.modules.lootRolls = false; LR.Refresh()
+  LR.Set("auto", false); LR.Set("maxCards", 4); LR.Set("afterResult", 8)
+  local native, sounds = {}, {}
+  c.AlertFrame = c.CreateFrame("Frame", "AlertFrame", c.UIParent)
+  function c.AlertFrame:IsProtected() return false end
+  c.AlertFrame:RegisterEvent("LOOT_ITEM_ROLL_WON")
+  c.AlertFrame:RegisterEvent("SHOW_LOOT_TOAST")
+  c.AlertFrame:RegisterEvent("ACHIEVEMENT_EARNED")
+  c.AlertFrame:SetScript("OnEvent", function(_, event, ...) native[#native + 1] = { event, ... } end)
+  c.PlaySoundFile = function(path, channel) sounds[#sounds + 1] = { path, channel } end
+  c.GetCVarBool = function() return true end
+  c.TwichUIDB.modules.lootRolls = true; LR.Refresh()
+  LR.Set("victory", true); LR.Set("victoryIntensity", "subtle"); LR.Set("victorySound", true)
+  Check(V.Listening() and not c.AlertFrame:IsEventRegistered("LOOT_ITEM_ROLL_WON"), "victory owns only the native winning event")
+  Check(c.AlertFrame:IsEventRegistered("SHOW_LOOT_TOAST") and c.AlertFrame:IsEventRegistered("ACHIEVEMENT_EARNED"), "unrelated native alerts stay registered")
+  local function Step(seconds)
+    for _ = 1, math.ceil(seconds / 0.05) do
+      Advance(0.05)
+      for _, f in ipairs(FRAMES) do
+        if f.shown and f.scripts.OnUpdate then f.scripts.OnUpdate(f, 0.05) end
+      end
+    end
+  end
+  local function Win(link, kind, value) Fire("LOOT_ITEM_ROLL_WON", link, 1, kind, value, false) end
+  local function NewRoll(link, choice)
+    local id = 700 + #rolled + #Ro.Rolls()
+    rolls[id] = { link = link, ends = NOW + 30, canNeed = true, canGreed = true }
+    active[id] = true; Fire("START_LOOT_ROLL", id, 30000, 9000 + id)
+    local roll = Ro.Find(id)
+    if choice then Check(Ro.Submit(roll, choice, "player"), "submit test choice") end
+    return roll
+  end
+  local roll = NewRoll("item:100", "need")
+  local same = C.Card(roll.key)
+  Check(V.Count() == 0, "selecting Need never starts a victory")
+  Win("item:100", 1, 87)
+  local e = V.Entries()[1]
+  Check(e and e.key == roll.key and C.Card(roll.key) == same, "confirmed Need reuses the existing card at its stack slot")
+  local f = same.victory
+  Check(f and f.entry.value == 87 and f.emblem.texture:find("emblem_need.tga", 1, true), "Need value and approved emblem")
+  Check(not C.Shows(roll) and not C.Has(roll.rollID), "victory cannot authorize another automatic choice or park live controls")
+  Check(f.footer.text == "Loot roll won", "result never asserts inventory acquisition")
+  Fire("LOOT_ITEM_ROLL_WON", "item:100", 1, 1, 87, false)
+  Check(V.Count() == 1, "duplicate native winner event creates no second card")
+  Step(0.25); Check(f.phase == "reveal" and f.title.alpha > 0 and f.title.alpha < 1, "resolution advances into a restrained title reveal")
+  Step(0.3); Check(#sounds == 1 and sounds[1][2] == "SFX", "one reveal sound on SFX")
+  Step(0.75)
+  Check(f.phase == "static" and not f.scripts.OnUpdate and f.timer, "decorative updates stop at the static hold")
+  Check(f.glint.alpha == 0 and f.particles[1].alpha == 0, "effects end without loops")
+  Step(0.8); Win("item:100", 1, 87)
+  Check(V.Count() == 1 and #sounds == 1, "duplicate after the replay window still matches the completed roll")
+  local started = e.started
+  C.Refresh(); Check(e.started == started, "redraw never restarts the animation or sound")
+  Step(3)
+  Check(V.Count() == 0 and not f.shown and not f.timer and not f.scripts.OnUpdate, "timeout recycles all animation work")
+  Check(not C.Card(roll.key), "old resolved roll does not reappear after its victory")
+  Ro.Remove(roll)
+
+  -- Losses and Pass remain ordinary results; history by itself does not race the native event.
+  for _, choice in ipairs({ "need", "greed", "pass" }) do
+    local r = NewRoll("item:101", choice)
+    r.result = { rolls = {}, winner = { name = "Other", self = false, choice = "need", roll = 99 } }
+    Ro.Resolve(r, "history"); Ro.Tell("updated", r)
+    Check(V.Count() == 0, choice .. " loss/pass has no celebration")
+    Ro.Remove(r)
+  end
+  local n = #native
+  Win("item:101", 3, 42)
+  Check(#native == n + 1 and V.Count() == 0, "unsupported roll type falls back to the saved native handler")
+  Fire("ACHIEVEMENT_EARNED", 42); Fire("SHOW_LOOT_TOAST", "item", "item:101", 1)
+  Check(#native == n + 3, "achievement and acquisition alerts pass untouched")
+
+  -- No record and missing metadata: confirmed late result still has its own bounded entry.
+  Win("item:999", 2, nil)
+  e = V.Entries()[1]; f = e and e.card and e.card.victory
+  Check(e and e.name == "Loot" and not e.value and f.method.text == "Greed roll", "late Greed win tolerates missing metadata and roll value")
+  Check(f.emblem.texture:find("emblem_greed.tga", 1, true), "Greed uses its supplied emblem")
+  Step(4.1)
+
+  LR.Set("victoryIntensity", "off"); LR.Set("victorySound", false)
+  local soundCount = #sounds
+  for q = 0, 6 do
+    Check(V.Preview(q % 2 == 0 and "need" or "greed", q), "preview works without real rolls")
+    local pc = V.PreviewCard(); local pf = pc.victory
+    Check(pf.title.alpha == 1 and not pf.scripts.OnUpdate, "animation off is static and readable")
+    Check(q < 2 or q > 5 or pf.halo.texture:find("halo_", 1, true), "rarity art selected safely")
+    Step(4.1)
+    Check(not pf.shown and not pf.timer and not pf.scripts.OnUpdate, "preview playback cleans up")
+  end
+  Check(#sounds == soundCount, "sound off stays silent through repeated previews")
+  Check(V.PoolSize() <= C.PoolSize() + 1, "artwork frames are pooled, including one preview")
+  LR.Set("victoryIntensity", "subtle")
+  LR.Set("victorySound", true)
+  c.GetCVarBool = function() return false end
+  V.Preview("need", 4); Step(0.6)
+  Check(#sounds == soundCount, "global sound switch is respected")
+  V.PreviewStop(); c.GetCVarBool = function() return true end
+  c.PlaySoundFile = function() error("missing sound") end
+  V.Preview("greed", 5); Step(1.3)
+  Check(V.PreviewCard().victory.phase == "static", "unsupported audio cannot interrupt the renderer")
+  V.PreviewStop()
+  c.PlaySoundFile = function(path, channel) sounds[#sounds + 1] = { path, channel } end
+
+  -- Serialize excess wins while bounding active frames; each gets its full hold.
+  LR.Set("maxCards", 1); LR.Set("victoryIntensity", "off")
+  local before = V.PoolSize()
+  for i = 1, 7 do Win("item:" .. (800 + i), i % 2 + 1, 40 + i) end
+  Check(V.Count() == 7 and C.CardCount() == 1, "rapid wins queue without overlapping")
+  for i = 1, 7 do Step(4.1) end
+  Check(V.Count() == 0 and V.PoolSize() <= before + 1, "queued wins drain with a bounded pool (one retiring slot)")
+  -- Overflow is delivered natively, never silently dropped.
+  n = #native
+  for i = 1, V.MAX_QUEUE + 1 do Win("item:" .. (900 + i), 1, 50) end
+  Check(V.Count() == V.MAX_QUEUE and #native == n + 1, "bounded queue overflow keeps native result")
+  LR.Set("victory", false)
+  Check(not V.Listening() and V.Count() == 0 and c.AlertFrame:IsEventRegistered("LOOT_ITEM_ROLL_WON"), "disable restores native registration and clears queue")
+  Check(#native == n + 1 + V.MAX_QUEUE, "disable replays every unfinished accepted result to native")
+  n = #native; Win("item:100", 1, 99)
+  Check(#native == n + 1 and V.Count() == 0, "disabled feature leaves original behavior")
+  LR.Set("victory", true)
+  Check(V.Listening(), "re-enable takes ownership once")
+  c.InCombatLockdown = function() return true end
+  Win("item:102", 2, 66); Step(4.1)
+  Check(V.Count() == 0, "unprotected synthetic card completes in combat without protected actions")
+  c.InCombatLockdown = function() return false end
+  LR.Set("victory", false)
+  function c.AlertFrame:IsProtected() return true end
+  LR.Set("victory", true)
+  Check(not V.Listening(), "protected native host is never modified")
+  function c.AlertFrame:IsProtected() return false end
+  c.AlertFrame:UnregisterEvent("LOOT_ITEM_ROLL_WON")
+  V.Sync(); Check(not V.Listening(), "another replacement's event ownership is respected")
+  c.AlertFrame:RegisterEvent("LOOT_ITEM_ROLL_WON"); V.Sync()
+  Check(V.Listening(), "supported native path can resume")
+  LR.Set("victoryIntensity", "subtle")
+  LR.Set("maxCards", 2)
+  Win("item:7101", 1, 77); Win("item:7102", 2, 88)
+  Step(0.5)
+  Check(not C.PlaceStart() and not C.PreviewStart(), "placement and sample rolls cannot cover a real celebration")
+  LR.Set("victoryIntensity", "off")
+  for _, result in ipairs(V.Entries()) do Check(not result.card.victory.scripts.OnUpdate, "turning animation off stops active updates immediately") end
+  LR.Set("maxCards", 1)
+  Step(8.5)
+  Check(V.Count() == 0, "reducing max cards suspends and resumes queued animation safely")
+  local a, b = NewRoll("item:108", "need"), NewRoll("item:108", "need")
+  n = #native; Win("item:108", 1, 99)
+  Check(#native == n + 1 and V.Count() == 0, "ambiguous identical drops keep native results instead of guessing")
+  Ro.Remove(a); Ro.Remove(b)
+  n = #native
+  local draw, fault, caught = V.Draw, R.Fault, nil
+  R.Fault = function(_, err) caught = err end
+  V.Draw = function() error("synthetic drawing failure") end
+  Win("item:7199", 1, 70)
+  Check(C.Failed() and not V.Listening() and #native == n + 1 and V.Count() == 0,
+    "drawing failure delivers current result once and restores native registration")
+  Check(caught and caught:find("synthetic drawing failure", 1, true), "render failure is reported")
+  V.Draw, R.Fault = draw, fault
+  c.TwichUIDB.modules.lootRolls = false; LR.Refresh(); active = {}
+  c.TwichUIDB.modules.lootRolls = true; LR.Refresh()
+  LR.Set("victoryIntensity", "off")
+  Check(LR.Get("victory") and LR.Get("victoryIntensity") == "off" and c.TwichUIDB.ui.lootRolls.victoryIntensity == "off", "settings use existing persisted profile values")
+  LR.Set("victoryIntensity", "subtle"); LR.Set("maxCards", 4)
 end
 
 ---------------------------------------------------------------------------

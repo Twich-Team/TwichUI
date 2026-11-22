@@ -191,3 +191,9 @@ window, as it does for the other pages.
 * Rolls beyond the player's card limit keep the game's own frame (no card, so no automation for them).
 * Disenchant and transmog rolls are not offered.
 * Results depend entirely on `C_LootHistory` behaving in Forever as its API says.
+
+## Custom winning result
+
+The confirmed-win presentation, selective native event relay, supplied assets,
+verification limits and in-game checklist are in [Loot Victory](loot-victory.md).
+The existing roll observation/rule/choice lifecycle is preserved.

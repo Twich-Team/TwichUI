@@ -274,7 +274,7 @@ end
 ---------------------------------------------------------------------------
 -- Whether a choice can be sent now, and if not, why (words for a tooltip).
 function Ro.CanChoose(roll, choice)
-    if not roll or not IsLive(roll) then return false, "This roll is over." end
+    if not roll or roll.victoryOwned or not IsLive(roll) then return false, "This roll is over." end
     if roll.state == "submitted" then return false, "You have already chosen." end
     if choice == "need" then
         if not roll.canNeed then
