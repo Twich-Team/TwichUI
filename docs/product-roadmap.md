@@ -81,7 +81,9 @@ These stages indicate *priority buckets*, not a serial schedule. Engineering sta
 
 **Watch for overlap:** W01 and W19 both touch auction pricing/Market confidence but are not identical; W07 builds on Gold Ledger; F12 and F29 describe one Waylaid-crate area. Keep these as linked notes until scoped.
 
-**Settings discovery to design before coding:** UX01 Quality of life page simplification; not approved for autonomous implementation.\n\n**Reasonable release cadence:** small PRs with focused tests, periodic integration checks for shared changes, full offline certification at explicit release preparation. No native game-play gate unless the owner elects to use one.
+**Settings discovery to design before coding:** UX01 Quality of life page simplification; not approved for autonomous implementation.
+
+**Reasonable release cadence:** small PRs with focused tests, periodic integration checks for shared changes, full offline certification at explicit release preparation. No native game-play gate unless the owner elects to use one.
 
 ## Complete original note inventory
 
