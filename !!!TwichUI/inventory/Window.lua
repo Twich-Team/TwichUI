@@ -431,6 +431,11 @@ local function DrawBank(cur)
         if not done then W.Say(err, "warn") end
     end
     R.Interact.Tip(f.bankGo, "Run bank transfers", why or "Carries out this review: deposits first, then withdrawals. Stop ends the batch; completed transfers stay done.")
+    local autoSort = MI.BankAutoSort()
+    f.bankAutoSort:SetOn(autoSort)
+    f.bankAutoSort.text:SetText(autoSort and "Auto-sort: On" or "Auto-sort: Off")
+    f.bankAutoSort:SetShown(not choosingRule)
+    f.bankAutoSort:SetEnabled(not cur and MI.Enabled())
     f.stop:SetShown(cur ~= nil)
     f.again:SetEnabled(not cur); f.manage:SetEnabled(not cur)
     local prog = Run.BankProgress()
@@ -471,7 +476,7 @@ local function Draw()
         if not plan then manual = nil; plan = MI.CurrentPlan(context, leftOut) end
     end
     if context == "bank" then DrawBank(cur); return end
-    f.bankSummary:Hide(); f.bankGo:Hide(); f.bankProgress:Hide(); f.sub:Show()
+    f.bankSummary:Hide(); f.bankGo:Hide(); f.bankAutoSort:Hide(); f.bankProgress:Hide(); f.sub:Show()
     f.again:SetEnabled(not cur); f.manage:SetEnabled(true)
     f.box:ClearAllPoints(); f.box:SetPoint("TOPLEFT", PAD, -(HEADER + 30)); f.box:SetPoint("BOTTOMRIGHT", -PAD, FOOT)
     f.sub:SetText(context and CONTEXT_TITLE[context] or "Preview: what your rules would move, from your bags as they are now. Nothing moves from here.")
@@ -681,6 +686,14 @@ local function Build()
     f.bankGo = F.Button(f, "Run rules", 132, "primary", function(self) if self.onClick then self.onClick() end end)
     f.bankGo:SetPoint("BOTTOMLEFT", PAD, 16); f.bankGo:Hide()
     if C then C.Dress(f.bankGo, "confirmation") end
+    f.bankAutoSort = F.Toggle(f, "Auto-sort: On", 132, function()
+        MI.SetBankAutoSort(not MI.BankAutoSort())
+        W.Refresh()
+    end)
+    f.bankAutoSort:SetPoint("LEFT", f.bankGo, "RIGHT", 8, 0)
+    f.bankAutoSort:Hide()
+    R.Interact.Tip(f.bankAutoSort, "Auto-sort bags and bank",
+        "Sorts your bags and character bank after a bank transfer finishes. This choice is saved across reloads.")
     f.bankSummary = CreateFrame("Frame", nil, f)
     f.bankSummary:SetPoint("TOPLEFT", PAD, -(HEADER + 10)); f.bankSummary:SetSize(WIDTH - PAD * 2, 56)
     for i, dir in ipairs({ "deposit", "withdraw", "balance" }) do

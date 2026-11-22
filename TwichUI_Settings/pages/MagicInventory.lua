@@ -19,7 +19,7 @@ local PAD = 6
 local QUESTION = "Interface\\Icons\\INV_Misc_QuestionMark"
 local AMBER = { 0.93, 0.72, 0.38 }
 
-local f, built
+local f, built, editorFooter
 local height = 400
 local queued, relayoutQueued = false, false
 local task, actionsFor = "rules", nil
@@ -65,9 +65,9 @@ local function Text(key, kind)
     end)
 end
 
-local function Button(key, label, w, kind, onClick)
+local function Button(key, label, w, kind, onClick, parent)
     local b = Get(key, function()
-        local made = Wg().Button(f, label, w, kind, function(self) if self.onClick then self.onClick() end end)
+        local made = Wg().Button(parent or f, label, w, kind, function(self) if self.onClick then self.onClick() end end)
         return made
     end)
     b.text:SetText(label)
@@ -1909,30 +1909,27 @@ local function DrawEditor(y)
     y = math.max(bottom + 256, ry + reviewHeight + 12)
     if destAdvanced then y = DrawDestStep(y) + 16 end
     if limitsAdvanced then y = DrawKeepStep(y) + 16 end
-    if r.id then
-        Button("builderDelete", "Delete", 84, "danger", function()
-            local id = r.id
-            R.Interact.Confirm("TWICHUI_MI_RULE_DELETE", "Delete the saved rule and discard this draft? No items move.", function()
-                MI().DeleteRule(id); EndEdit(); P.QueueRefresh(); QueueRelayout()
-            end, { accept = "Delete" })
-        end); At(pool.builderDelete, PAD, y); pool.builderDelete:SetHeight(32)
-        Button("builderDuplicate", "Duplicate", 120, "secondary", function()
-            local copy = MI().CleanRule(r); copy.id = nil; copy.name = (copy.name .. " copy"):sub(1, MI().MAX_NAME); copy.enabled = false; StartEdit(copy)
-        end); At(pool.builderDuplicate, PAD + 92, y); pool.builderDuplicate:SetHeight(32)
-        local copyArt = Get("builderDuplicateArt", function()
-            local frame = CreateFrame("Frame", nil, pool.builderDuplicate); frame.tex = frame:CreateTexture(nil, "ARTWORK"); frame.tex:SetAllPoints(); return frame
-        end)
-        copyArt:SetFrameLevel(pool.builderDuplicate:GetFrameLevel() + 4); copyArt:ClearAllPoints(); copyArt:SetPoint("LEFT", pool.builderDuplicate, "LEFT", 6, 0); copyArt:SetSize(20, 20); copyArt.tex:SetTexture(R.PATH .. [[media\npcs\sealed-scroll-small]])
-        pool.builderDuplicate.text:ClearAllPoints(); pool.builderDuplicate.text:SetPoint("LEFT", pool.builderDuplicate, "LEFT", 30, 0); pool.builderDuplicate.text:SetPoint("RIGHT", pool.builderDuplicate, "RIGHT", -6, 0)
-    end
-    Button("eCancel", "Cancel", 90, "secondary", function()
+    local delete = Button("builderDelete", "Delete", 84, "danger", r.id and function()
+        local id = r.id
+        R.Interact.Confirm("TWICHUI_MI_RULE_DELETE", "Delete the saved rule and discard this draft? No items move.", function()
+            MI().DeleteRule(id); EndEdit(); P.QueueRefresh(); QueueRelayout()
+        end, { accept = "Delete" })
+    end, editorFooter)
+    local duplicate = Button("builderDuplicate", "Duplicate", 120, "secondary", r.id and function()
+        local copy = MI().CleanRule(r); copy.id = nil; copy.name = (copy.name .. " copy"):sub(1, MI().MAX_NAME); copy.enabled = false; StartEdit(copy)
+    end, editorFooter)
+    local copyArt = Get("builderDuplicateArt", function()
+        local frame = CreateFrame("Frame", nil, duplicate); frame.tex = frame:CreateTexture(nil, "ARTWORK"); frame.tex:SetAllPoints(); return frame
+    end)
+    copyArt:SetFrameLevel(duplicate:GetFrameLevel() + 4); copyArt:ClearAllPoints(); copyArt:SetPoint("LEFT", duplicate, "LEFT", 6, 0); copyArt:SetSize(20, 20); copyArt.tex:SetTexture(R.PATH .. [[media\npcs\sealed-scroll-small]])
+    copyArt:SetAlpha(r.id and 1 or .45)
+    duplicate.text:ClearAllPoints(); duplicate.text:SetPoint("LEFT", duplicate, "LEFT", 30, 0); duplicate.text:SetPoint("RIGHT", duplicate, "RIGHT", -6, 0)
+    local cancel = Button("eCancel", "Cancel", 90, "secondary", function()
         EndEdit()
         P.QueueRefresh()
         QueueRelayout()
-    end)
-    At(pool.eCancel, full + PAD - 190, y)
-    pool.eCancel:SetHeight(32)
-    Button("eSave", "Save", 90, "primary", function()
+    end, editorFooter)
+    local save = Button("eSave", "Save", 90, "primary", function()
         if pool.builderKeep and pool.builderKeep:HasFocus() then pool.builderKeep:ClearFocus() end
         if pool.recipientBox and pool.recipientBox:HasFocus() then pool.recipientBox:ClearFocus() end
         local rule = {}
@@ -1940,26 +1937,40 @@ local function DrawEditor(y)
         rule.enabled = turnOn and true or false
         -- the rule, a new recipient and any new destination are written together, or not at all
         local id, plan = MI().SaveRuleDraft(rule, rule.kind == "mail" and recipientDraft or nil, editingFrom)
-        if not id then Say(plan, "warn") return end
+        if not id then
+            Say(plan, "warn")
+            C_Timer.After(0, function()
+                local ui = R.SettingsUI
+                if editing and ui and ui.RevealFrame then ui.RevealFrame(pool.said) end
+            end)
+            return
+        end
         local saved = MI().Rule(id)
         EndEdit()
         local to = saved and saved.kind == "mail" and type(plan) == "table" and plan.recipient and (" Mails to %s%s."):format(plan.recipient, plan.shared and " on all your characters" or " from this character") or ""
         if turnOn and saved and not saved.enabled then Say(("Saved \"%s\", turned off: %s%s"):format(saved.name, select(2, MI().Problem(saved, false)) or "", to), "warn")
         else Say(("Saved \"%s\"%s.%s"):format(saved and saved.name or "", saved and saved.enabled and ", turned on" or ", turned off", to)) end
         QueueRelayout()
-    end)
-    At(pool.eSave, full + PAD - 90, y)
-    pool.eSave:SetHeight(32)
-    R.Interact.Tip(pool.eSave, "Save", "Saves the rule, and the recipient typed for it. Nothing is sent or moved now: that happens only when you open a mailbox, bank or guild bank, review it and press the action yourself.")
-    return y + 34
+    end, editorFooter)
+    for _, button in ipairs({ delete, duplicate, cancel, save }) do
+        button:ClearAllPoints()
+        button:SetHeight(32)
+        button:SetEnabled(not itemAdvanced and button.onClick ~= nil)
+    end
+    delete:SetPoint("LEFT", editorFooter, "LEFT", 8, 0)
+    duplicate:SetPoint("LEFT", delete, "RIGHT", 8, 0)
+    save:SetPoint("RIGHT", editorFooter, "RIGHT", -8, 0)
+    cancel:SetPoint("RIGHT", save, "LEFT", -8, 0)
+    R.Interact.Tip(save, "Save", "Saves the rule, and the recipient typed for it. Nothing is sent or moved now: that happens only when you open a mailbox, bank or guild bank, review it and press the action yourself.")
+    return y
 end
 
 function P.Refresh()
-    if not (f and f:IsShown() and built) then return end
-    local view = R.SettingsUI and R.SettingsUI.View and R.SettingsUI.View("magicInventory")
-    if view and view.reset then
-        view.reset.button:SetEnabled(editing == nil)
-        view.reset.text:SetText(editing and "Save or cancel the rule draft before resetting this page." or "Reset this page's settings. The confirmation lists what changes; saved inventory rules are retained.")
+    if not (f and f:IsVisible() and built) then return end
+    local showFooter = editing ~= nil
+    if editorFooter:IsShown() ~= showFooter then
+        editorFooter:SetShown(showFooter)
+        QueueRelayout()
     end
     for k in pairs(touched) do touched[k] = nil end
     local y = 4
@@ -2019,6 +2030,12 @@ function P.Frame()
     if f then return f end
     f = CreateFrame("Frame")
     f:SetWidth(W)
+    editorFooter = CreateFrame("Frame", nil, f, "BackdropTemplate")
+    editorFooter:SetHeight(48)
+    editorFooter:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT")
+    editorFooter:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT")
+    Wg().Panel(editorFooter)
+    editorFooter:Hide()
     f:Hide()
     f:SetScript("OnShow", function(self)
         if not built then
@@ -2030,6 +2047,7 @@ function P.Frame()
     end)
     f:SetScript("OnSizeChanged", function() if built then P.QueueRefresh() end end)
     f:SetScript("OnHide", function(self)
+        editorFooter:Hide()
         itemAdvanced = false
         if pool.filterEditor then pool.filterEditor:Hide(); pool.filterShade:Hide() end
         if P.GuildHidden then P.GuildHidden() end
@@ -2085,7 +2103,7 @@ local function Count()
 end
 
 K.Page({
-    key = "magicInventory", icon = "magicInventory", name = "Magic Inventory", order = 47, group = "everyday", compact = true,
+    key = "magicInventory", icon = "magicInventory", name = "Magic Inventory", order = 47, group = "everyday", compact = true, hidePageReset = true,
     description = "Rules that pick out items to mail to a character you name, or deposit in your bank or a guild bank tab. Nothing moves until you review it and press the action yourself.",
     keywords = "magic inventory mail mailbox send bank deposit guild bank tab bank alt alt cloth herbs ore materials mats disenchant boe bind on equip greens transfer move route rules keep never transfer recipient",
     when = function() return R.MagicInventory ~= nil and R.MagicInventory.Run ~= nil end,
@@ -2119,5 +2137,6 @@ K.Page({
         K.Toggle("magicInventory", "Use Magic Inventory",
             "On: the Magic Inventory button appears at a mailbox, bank or guild bank, and its review lists what your rules would move. Nothing moves until you press an action there. Off: no button and nothing is listened for. Your rules are kept either way.")
     end,
+    hostFooter = function() return editorFooter end,
     host = function() return P.Frame() end, hostAfter = "Magic Inventory", hostHeight = function() return P.Height() end,
 })
