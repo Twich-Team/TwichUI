@@ -20,7 +20,7 @@
 -- character didn't choose: until one is set there, the rule says it needs one and stays off.
 --
 -- Rule: { id, name, enabled, kind = "mail" | "bank" | "guild" | "keep" | "never", dest = destId (mail, guild),
---         cats = { "7:5", "7", ... } (an item class, or class:subclass, as the game files it),
+--         cats = { "7:5", "7", ... } (game classes/subclasses and supported custom categories),
 --         qualities = { [0..5] = true } (none: any), equip = "any" | "equipment" | "other",
 --         bind = "any" | "boe" | "nobind", include = { [itemID] = true }, exclude = { [itemID] = true },
 --         keep = 0..9999 (how many of EACH matching item stays in the bags; 0: none; for a rule that withdraws, the
@@ -182,7 +182,10 @@ local function CleanSet(t, max, valid)
     return out
 end
 
+MI.WAYLAID_CATEGORY = "waylaid-crates"
+
 local function ValidCat(v)
+    if v == MI.WAYLAID_CATEGORY then return true end
     if type(v) ~= "string" then return false end
     local c, s = v:match("^(%d+):(%d+)$")
     if c then return Whole(tonumber(c), 0, 99) and Whole(tonumber(s), 0, 999) end

@@ -1,6 +1,6 @@
 -- TwichUI: Magic Inventory, reading items
 -- What an item is (the game's class, subclass, quality, binding and equip slot), the categories a rule can choose
--- (the game's own names), whether a rule matches an item, and the carried bags as a list of stacks with what each
+-- (game and custom groups), whether a rule matches an item, and the carried bags as a list of stacks with what each
 -- stack is (bound, locked, a quest item, conjured, in an equipment set). Reads only: nothing here moves, picks up or
 -- uses anything. What an item is doesn't change in a session, so it is remembered by item ID (bounded); what a stack
 -- is (bound, locked) is read each time.
@@ -64,7 +64,7 @@ function MI.ItemFacts(id)
 end
 
 ---------------------------------------------------------------------------
--- Categories: "class" or "class:subclass", under the game's own names
+-- Categories: game classes/subclasses and Magic Inventory groups
 ---------------------------------------------------------------------------
 function MI.CategoryOf(itemID)
     if not (C_Item and C_Item.GetItemInfoInstant) then return nil end
@@ -75,7 +75,10 @@ function MI.CategoryOf(itemID)
     return key, MI.CategoryName(key)
 end
 
+local WAYLAID_LABEL = "All Waylaid crates"
+
 function MI.CategoryName(key)
+    if key == MI.WAYLAID_CATEGORY then return WAYLAID_LABEL end
     if type(key) ~= "string" then return nil end
     local c, s = key:match("^(%d+):(%d+)$")
     if c then
@@ -123,7 +126,12 @@ function MI.Categories()
             end
         end
     end
-    if #out > 0 then categories = out end   -- an empty answer (names not there yet) is asked again next time
+    -- Retry game names if they are unavailable even though the custom group is always offered.
+    if #out > 0 then categories = out end
+    out[#out + 1] = {
+        key = MI.WAYLAID_CATEGORY, label = WAYLAID_LABEL, group = "Magic Inventory",
+        help = "Matches unidentified, identified and sealed Waylaid crates. Other filters and transfer protections still apply.",
+    }
     return out
 end
 
@@ -139,10 +147,24 @@ end
 -- or nil. An excluded item is never matched, whatever else is true; the hard protections and the Never transfer
 -- list are applied by the plan, before any rule (Plan.lua).
 ---------------------------------------------------------------------------
+-- Forever 1.60.1 item data. The two identified-crate ranges exclude 248700 and 248701.
+-- https://eternadex.com/en/versorgungsgueter/ and https://forevercraft.ru/database/items/misc/junk/3/
+local function IsWaylaidCrate(id)
+    return id == 248549                           -- unidentified
+        or (id >= 248682 and id <= 248699)        -- herbs, ore, textiles and curiosities
+        or (id >= 248702 and id <= 248713)        -- fabrics, ingots and parts
+        or (id >= 248765 and id <= 248779)        -- sealed turn-ins, all ranks and qualities
+end
+
 local function CatMatch(rule, facts)
     if #rule.cats == 0 then return true end
+    local class, subclass = facts.classID, facts.subclassID
     for _, key in ipairs(rule.cats) do
-        if key == tostring(facts.classID) or key == (facts.classID .. ":" .. facts.subclassID) then return true end
+        if key == MI.WAYLAID_CATEGORY then
+            if IsWaylaidCrate(facts.id) then return true end
+        elseif class and (key == tostring(class) or (subclass and key == (class .. ":" .. subclass))) then
+            return true
+        end
     end
     return false
 end

@@ -23,6 +23,12 @@ is involved. Layout, evidence, reusable scenario commands and client limits are 
 
 ## What it does
 
+In the rule builder, choose **Categories → All Waylaid crates** to match the Forever crate family in one rule,
+including unidentified crates, identified variants and sealed turn-ins. You can choose it with empty bags.
+The category uses the [Forever crate IDs](https://eternadex.com/en/versorgungsgueter/) and
+[sealed crate IDs](https://forevercraft.ru/database/items/misc/junk/3/). Other rule filters, exclusions and
+destination protections still apply.
+
 The player makes rules: which items (categories as the game files them, quality, equipment or not, binding, and lists
 of items to include or never include), what happens to them (Send by mail, your bank, a guild bank tab, Keep in bags,
 Never transfer), and how many of each to keep in the bags. A bank or guild bank rule also says which way: **Deposit extras**
