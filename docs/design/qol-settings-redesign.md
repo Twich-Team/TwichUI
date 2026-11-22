@@ -1,15 +1,15 @@
 # UX01 — Quality of life design review
 
-**Owner-authorized Batch 8: design and discovery only.** Based on `main` at
-`f21db0aa1c0a04bad532b30d70c39a001fc7a6d9`, after PR #128. No live interface,
-setting, default, runtime handler or SavedVariables schema changes in this PR.
+**Approved Option A; Batch 9 implementation in review.** The following design artifacts record Batch 8 discovery, based on `main` at
+`f21db0aa1c0a04bad532b30d70c39a001fc7a6d9`, after PR #128. Batch 8 changed no live interface; Batch 9 implements the approved Settings-only layout.
+Existing settings, defaults, runtime handlers and SavedVariables schema remain unchanged.
 UX02 #129 and the active Market, Ledger and action-glow branches are untouched.
 
 **Recommend A: compact categorized rows with one inline detail open at a time.**
 It retains the existing page scroll and gives controls the full content width.
 B is a credible alternative when switching among many feature details, but its
 second navigation rail and narrower detail area add complexity for this page.
-Owner approval of the visual direction is the boundary before implementation.
+The owner approved Option A and the listed structural decisions for Batch 9.
 
 - [Complete existing-control inventory](qol-settings-control-inventory.md): all
   22 persisted controls, defaults/identifiers/options, runtime caveats, seven
@@ -140,7 +140,7 @@ when their row is scrolled into view. Off rows still allow opening detail.
 | Interface | Group Finder zones → `qolGroupFinderZones`, leader zone from last search | Same-zone mark, leader-only/freshness/narrow-list omission/privacy, `qol.groupFinderZones` |
 | Messages | Hide error messages → `qolHideErrors`, hides text **and sound** | `qolHideErrorsKeep`, important-error list, untouched yellow/chat/addon notices, Leatrix note, `qol.hideErrors` |
 | Messages | Silence error speech → independent `qolHideErrorSpeech`, leaves text | Audio CVar restoration and manual-change ownership; explanation when text/sound already hidden; no invented separate sample |
-| Sparkles | Quest item sparkles → `qolLootSparkles`, current returned status | Game-selected ground objects, scope, restore/deferred combat behavior; no sample |
+| Sparkles | Quest item sparkles → `qolLootSparkles`, source restoration/restart caveat | Game-selected ground objects, scope, restore/deferred combat behavior; no sample |
 | Sparkles | Herbalism sparkles → `qolHerbSparkles`, current gathering status | One Interact Key target, combat/proximity/API/addon pauses and restoration; no sample |
 | Sparkles | Mining sparkles → `qolOreSparkles`, current gathering status | Same shared gathering constraints; independent switch; no sample |
 
@@ -203,9 +203,10 @@ Show automation consequences before the immediate switch: arrival destination,
 low-health/fight risk, battleground/Shift scope and join/decline consequences.
 When Leatrix overlaps, show **Also on in Leatrix Plus** beside that feature's
 status, with its existing complete message in help/detail; it is advisory, not
-an enforced conflict. Keep the seven exact source mappings, including the lethal
-duel option inside detail. Dynamic quest/gathering status stays visible in its
-own overview row, with full returned reasons wrapping when needed. Do not invent
+an enforced conflict. Keep the seven exact source mappings. The separate lethal-
+duel option stays in detail; it does not gain an invented Leatrix mapping. Gathering status stays visible in each owning overview row, with full returned
+reasons wrapping when needed. Quest sparkles has no Status API: retain its source
+restoration/restart caveat rather than inventing a new status or runtime API. Do not invent
 an automatic fix, clear configured switches or unload another addon.
 
 Long explanations/Q&A live behind **More about this** in the same detail and in
@@ -250,7 +251,7 @@ or install a new hook on every open. External broker changes refresh row states.
 
 ### 7. Focused implementation sequence and acceptance
 
-After owner approval only:
+Owner-authorized implementation sequence:
 
 1. Add QoL-local feature/row associations and compact rendering; retain descriptors,
    all keys/defaults and existing search reveal contracts. Split speech's visual
@@ -282,24 +283,95 @@ espresso/walnut/chestnut surfaces, fine bronze relief and subdued gold selection
 no orange wash, new modal or ornamental fill. Native rendering remains separate
 from structural simulator evidence.
 
-## Approval decisions
+## Decisions approved for Batch 9
 
-1. Choose A (recommended) or B; approve the four groups and the separate speech
-   row. A includes one-open-detail, deliberate samples/help and visible combat
-   policy; B adds selection/pane navigation and narrower control layout.
-2. Approve the concise but always-visible safety/compatibility/status treatment
-   and the session/profile restoration behavior above.
-3. Approve correcting the existing **11**-switch overview counter to **13** in the
-   later implementation. This PR only documents the discrepancy.
+The owner approved A, the four groups, 13 independent rows and the separate speech
+row; directly accessible primary switches; one open inline detail; always-visible
+combat policy; deliberate help/samples; global search without local duplication;
+and correcting the overview count from 11 to 13. B remains an unimplemented design
+alternative. No additional roadmap task is selected by this approval.
 
-The visual direction is awaiting owner approval because Batch 8 explicitly
-excludes implementation until that review. No additional implementation task is
-automatically selected or marked Ready by this document.
-
-## Evidence for this design PR
+## Batch 8 design evidence (historical)
 
 Source inspection, documentation/link/anchor checks and visual inspection of all
 five PNG wireframes only. No addon code, tests, generated runtime artwork or
 SavedVariables were modified. No addon test suite or simulator run is claimed;
 the existing lab is absent, and a documentation-only PR does not need a full
 verification campaign. The ordinary client UI remains unchanged.
+
+## Batch 9 implementation and verification
+
+Batch 9 starts from `ce6363f`, after the owner-authorized conflict resolution and
+merge of design PR #130. `QoLCards.lua` supplies the QoL-only renderer; Window
+selects it only for `page.key == "qol"`. Other pages keep `SettingsCards`.
+The renderer reuses registered setting objects/row views, ordinary controls,
+materials and preview hosts. The speech setting gains its own card descriptor;
+no preference, default, core handler or schema is added or changed. The overview
+now counts both independent error switches, with 13 as its denominator.
+
+All 13 rows are built on first opening this page. Sample hosts are created only
+when requested, then reused. One detail is open; the combat-resurrection child
+stays outside its inset. Full help, warnings and configured summaries remain in
+the owning detail/tooltips. Long labels/values reflow locally without changing
+other pages' row layouts. Search uses the existing row reveal/highlight path.
+Detail switching, hiding, Page Reset and profile identity changes stop previews;
+profile changes clear detail state, while ordinary return never auto-plays.
+
+The new code stays in the load-on-demand Settings addon; core operation and the
+normal-play load set are unchanged. There is no new background updater, polling,
+artwork, schema or UI framework. Existing `settings.page.build` and
+`settings.layout` scopes cover build/layout; the remaining actions are rare,
+bounded user interactions. No new diagnostic scope or performance improvement
+claim is warranted. Native pointer/keyboard focus and visual fidelity remain
+unverified, including the guarded disclosure-focus fallback on clients that do
+not expose focus methods for ordinary buttons.
+
+Verification on combined executable source at `80c3227`:
+
+- `./tests/run.sh feature settings --profile cloud`: **56 offline modules passed,
+  zero failed**; syntax passed for 183 selected Lua files and runner checks.
+  Source fingerprint stayed unchanged. **Overall FAIL** because smoke and
+  settings simulator launches cannot start: the existing lab is absent.
+- `tests/test_qol.lua` and `tests/test_qol_errors.lua` passed directly; their core
+  executable inputs are unchanged by this batch. Existing gathering, quest
+  sparkle and Group Finder tests also pass in the Settings selection.
+- Focused Window/default tests pass: all 22 controls/IDs/defaults/reset membership,
+  nine prerequisites, seven Leatrix mappings, four groups/13 rows, reveal and
+  highlighting, independent speech, retained child values, no preference writes
+  while browsing, nine samples/six playable, one-detail/sample lifecycle,
+  profile duplicate/switch, Reset, focus cleanup, repeated frame reuse, long
+  labels/values, help/sample reveal and sample-host resizing.
+- The options contract passes for 748 settings and 1178 descriptor rows. Its
+  fixture diff contains only the new speech heading, its owning section and the
+  following QoL row-number shifts. Setting identities/defaults, tooltip checksums,
+  writes and default/reset snapshots are unchanged. The first feature run's
+  stale fixture mismatch and missing-lab failures are retained locally; the
+  documented fixture update resolved the mismatch before final verification.
+- Structural stand-in frame tests do not establish native font/layout/input
+  acceptance. No simulator pose, real-client reload or pixel-level appearance
+  check is claimed. The approved wireframes remain design references only.
+
+Player verification (unchecked native checks):
+
+- [ ] Offers & invitations: inspect all six rows, audience/wait choices, lethal
+  duel option, Leatrix notes and the always-visible combat-resurrection policy.
+- [ ] Interface: inspect Quick Keybind and Group Finder zones; native combat
+  restrictions retain their existing behavior.
+- [ ] Messages: independently operate error hiding and speech; inspect the
+  important-errors exception and the 13-switch overview count.
+- [ ] Sparkles: inspect all three independent choices, gathering status/reasons
+  and quest restoration/restart help.
+- [ ] Toggle directly from the overview; expand/collapse without changing saved
+  preferences; confirm only one detail stays open.
+- [ ] Search/directly navigate to folded secondary controls and confirm reveal,
+  scroll and highlight, including standalone speech and combat resurrection.
+- [ ] Open all nine samples, play the six animated samples, and switch/collapse/
+  hide/close while playing; confirm cleanup and no autoplay on return.
+- [ ] Confirm Page Reset still asks, resets all 22 controls and stops preview work.
+- [ ] Reload and switch/copy/duplicate/reset profiles; confirm saved values,
+  refreshed overview and no stale detail or sample.
+- [ ] Check 936 × 660, 936 × 480, a wider window, larger text/scale and long
+  labels. Check wrapping, native dropdowns, keyboard/focus, Escape, scroll
+  anchoring and absence of clipping, overlap or horizontal scrolling.
+
+No Batch 9 merge, deployment or release is authorized or performed.
