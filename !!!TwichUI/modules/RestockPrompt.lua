@@ -13,11 +13,10 @@
 -- list of frames Esc closes (never RegisterGameMenuEscHandler: see docs about the Esc handler taint).
 --
 -- Its background and border are the player's to set (P.Style, a MenuStyle look saved in TwichUIDB.ui.restockPromptStyle;
--- Vendor restocking settings > Question window appearance). The default is the framed look (FrameLook.lua: its frame over
--- an espresso page); the TwichUI rim it had before ("ledger", drawn by Look.Shell) is still a choice, and one the player
--- saved is drawn as it always was. Any other border replaces either, and the window grows by the difference so the border
--- never covers the rows or the buttons. Only the look changes: what is asked and the rows are the same, and Purchase and
--- Cancel are the framed look's buttons. P.TogglePreview shows the real window with made-up items.
+-- Vendor restocking settings > Question window appearance). The default is the crafted frame over an espresso page.
+-- The previous frame, the TwichUI rim ("ledger"), and any saved border or background still draw through MenuStyle.
+-- The window grows to keep the rows and buttons clear of thicker borders. The walnut header and total, recessed
+-- item list, and painted buttons use CraftLook. P.TogglePreview shows the real window with made-up items.
 
 
 local R = TwichUI
@@ -31,7 +30,6 @@ local MAX_ROWS = 8
 local ICON = 30
 local RIGHT_W = 124
 local QUESTION = [[Interface\Icons\INV_Misc_QuestionMark]]
-local WARN = "|cffe0877b"
 
 local RIM = 4          -- how far the default rim (and the title band inside it) sits in from the frame's edge
 
@@ -40,15 +38,19 @@ local reach, ox = RIM, 0   -- where the title band starts, and how far the conte
 local previewPlaced = false
 local rows = {}
 
--- The player's background and border. The defaults are what the window had before it was a setting.
+-- MenuStyle retains the player's background and border. Only unsaved keys use these defaults.
 P.LEDGER = "ledger"
-local F = R.FrameLook
+local F, C = R.FrameLook, R.CraftLook
 P.FRAMED = F.BORDER
 if R.MenuStyle and R.MenuStyle.New then
     P.Style = R.MenuStyle.New("restockPromptStyle", {
         bgTexture = "solid", bgColor = F.PANEL_BG, bgOpacity = 98,
-        borderTexture = P.FRAMED, borderColor = F.PANEL_BORDER, borderOpacity = 90, borderSize = 1,
-    }, { extraBorders = { { P.FRAMED, F.BORDER_LABEL }, { F.CRAFTED_BORDER, F.CRAFTED_BORDER_LABEL }, { P.LEDGER, "TwichUI rim" } }, sources = true })
+        borderTexture = F.CRAFTED_BORDER, borderColor = F.PANEL_BORDER, borderOpacity = 90, borderSize = 1,
+    }, { extraBorders = {
+        { F.CRAFTED_BORDER, F.CRAFTED_BORDER_LABEL .. " (default)" },
+        { P.FRAMED, "TwichUI frame" },
+        { P.LEDGER, "TwichUI rim" },
+    }, sources = true })
 end
 
 local function Plain(v)
@@ -88,6 +90,11 @@ end
 ---------------------------------------------------------------------------
 -- Building
 ---------------------------------------------------------------------------
+local FONT_SIZE = { title = 17, heading = 14, body = 13, small = 11, meta = 12 }
+local function Text(parent, role)
+    return C.Font(R.Look.Text(parent, role), FONT_SIZE[role], false, role == "heading" and "strong" or nil)
+end
+
 local function Row(i)
     if rows[i] then return rows[i] end
     local L = R.Look
@@ -111,25 +118,27 @@ local function Row(i)
     row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
     local leftW = W - PAD * 2 - 2 - 8 - ICON - 2 - 10 - RIGHT_W - 8
-    row.name = L.Text(row, "body")
+    row.name = Text(row, "body")
     row.name:SetPoint("TOPLEFT", row.iconFrame, "TOPRIGHT", 10, -1)
     row.name:SetWidth(leftW)
     row.name:SetWordWrap(false)
-    row.meta = L.Text(row, "meta")
+    row.meta = Text(row, "meta")
     row.meta:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -3)
     row.meta:SetWidth(leftW)
     row.meta:SetWordWrap(false)
-    row.warn = L.Text(row, "small")
+    row.warn = Text(row, "small")
     row.warn:SetPoint("TOPLEFT", row.meta, "BOTTOMLEFT", 0, -3)
     row.warn:SetWidth(W - PAD * 2 - 2 - 8 - ICON - 2 - 10 - 12)
-    row.warn:SetWordWrap(false)
+    row.warn:SetWordWrap(true)
+    row.warn:SetMaxLines(2)
+    row.warn:SetJustifyV("TOP")
     L.Color(row.warn, pal.danger.text)
 
-    row.cost = L.Text(row, "body")
+    row.cost = Text(row, "body")
     row.cost:SetPoint("TOPRIGHT", -10, -9)
     row.cost:SetWidth(RIGHT_W)
     row.cost:SetJustifyH("RIGHT")
-    row.each = L.Text(row, "meta")
+    row.each = Text(row, "meta")
     row.each:SetPoint("TOPRIGHT", row.cost, "BOTTOMRIGHT", 0, -3)
     row.each:SetWidth(RIGHT_W)
     row.each:SetJustifyH("RIGHT")
@@ -176,43 +185,49 @@ local function Build()
     f:Hide()
     tinsert(UISpecialFrames, NAME)   -- Esc closes it (as a Cancel)
     L.Shell(f, HEADER)
-    -- the default rim's outermost dark line was the backdrop's edge; the look replaces the backdrop, so the line is
+    local header = C.QuietTile(f, "header", "BACKGROUND", 2)
+    header:ClearAllPoints()
+    header:SetAllPoints(f.twichBand)
+    -- the legacy rim's outermost dark line was the backdrop's edge; the look replaces the backdrop, so the line is
     -- drawn here and shown with the rim
     local ink = { pal.ink, 1 }
     f.edgeInk = L.Shade(f, ink, ink, ink, ink, 0)
-    f.title = L.Text(f, "title")
+    f.title = Text(f, "title")
     f.title:SetText("Restock from this merchant?")
     f.close = F.Close(f, function() f:Hide() end)
 
-    f.lead = L.Text(f, "small")
+    f.lead = Text(f, "small")
     f.lead:SetWidth(W - PAD * 2)
     L.Color(f.lead, pal.danger.text)
 
-    f.list = CreateFrame("Frame", nil, f, "BackdropTemplate")
+    f.list = CreateFrame("Frame", nil, f)
     f.list:SetWidth(W - PAD * 2)
-    L.Well(f.list)
-    f.more = L.Text(f.list, "meta")
+    C.PanelFace(f.list, "canvas")
+    f.more = Text(f.list, "meta")
     f.more:SetWidth(W - PAD * 2 - 24)
 
-    f.footer = CreateFrame("Frame", nil, f, "BackdropTemplate")
+    f.footer = CreateFrame("Frame", nil, f)
     f.footer:SetWidth(W - PAD * 2)
-    L.Panel(f.footer)
-    f.totalLabel = L.Text(f.footer, "heading")
+    C.PanelFace(f.footer, "walnut")
+    f.totalLabel = Text(f.footer, "heading")
     f.totalLabel:SetText("Total")
-    f.total = L.Text(f.footer, "body")
+    f.total = Text(f.footer, "body")
     f.total:SetJustifyH("RIGHT")
-    f.have = L.Text(f.footer, "meta")
+    f.have = Text(f.footer, "meta")
     f.have:SetWidth(W - PAD * 2 - 24)
     f.have:SetJustifyH("LEFT")
 
-    f.notes = L.Text(f, "small")
+    f.notes = Text(f, "small")
     f.notes:SetWidth(W - PAD * 2)
 
-    f.promise = L.Text(f, "meta")
+    f.promise = Text(f, "meta")
     f.promise:SetWidth(W - PAD * 2 - 260)
     f.promise:SetText("Nothing is bought unless you press Purchase.")
     f.purchase = F.Button(f, "Purchase", 124, "primary", function() Settle(true) end)
     f.cancel = F.Button(f, "Cancel", 100, "secondary", function() Settle(false) end)
+    C.DressFrameLook(f.close)
+    C.DressFrameLook(f.purchase)
+    C.DressFrameLook(f.cancel)
 
     -- Esc, the close box and anything else that hides it without Purchase is a Cancel
     f:SetScript("OnHide", function()
@@ -259,8 +274,11 @@ local function Layout(plan, lead)
         row.each:SetText(item.stack > 1 and (Money(item.price) .. " per " .. item.stack) or (Money(item.price) .. " each"))
         local short = (item.short or 0) > 0
         row.warn:SetShown(short)
-        if short then row.warn:SetText(("%d short: %s"):format(item.short, Reason(item.why))) end
-        local h = short and ROW_H_SHORT or ROW_H
+        local h = ROW_H
+        if short then
+            row.warn:SetText(("%d short: %s"):format(item.short, Reason(item.why)))
+            h = math.max(ROW_H_SHORT, ROW_H + (row.warn:GetStringHeight() or 0) + 4)
+        end
         row:SetHeight(h)
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", f.list, "TOPLEFT", 1, -inner)
@@ -323,14 +341,14 @@ local function Layout(plan, lead)
 end
 
 -- Draws the player's background and border and works out where the content sits. Changes only the frame's own
--- pieces (its backdrop, the rim and grain textures, the title band's place, and the default frame's, made once the first time it is wanted).
+-- pieces (its backdrop, the rim and grain textures, the title band's place, and the chosen frame's, built on first use).
 local function Restyle()
     local L = R.Look
     reach, ox = RIM, 0
     local style = P.Style
     if not (f and style) then return end
     local edge, drawn = style.Apply(f)
-    local framed = F.Frame(f, style)             -- the default frame, after Apply: never over a border the player chose
+    local framed = F.Frame(f, style)             -- draw the selected frame after Apply
     local ledger = drawn == "custom" and framed == 0
     if drawn == "eui" and R.Borders.Inside then edge = math.min(edge, R.Borders.Inside(style.Get("borderTexture"), edge)) end
     L.ShellParts(f, ledger, ledger and style.Get("bgTexture") == "solid")
@@ -358,7 +376,7 @@ if P.Style then P.Style.Subscribe(Redraw) end
 
 local function Present(plan, lead, onAccept, onCancel, preview)
     local RS = R.Restock
-    if not (RS and R.Look and R.ChronicleStyle and R.Look.Shell and type(plan) == "table" and type(plan.items) == "table") then return false end
+    if not (RS and C and R.Look and R.ChronicleStyle and R.Look.Shell and type(plan) == "table" and type(plan.items) == "table") then return false end
     if not built then
         local ok, err = pcall(Build)
         if not ok then
