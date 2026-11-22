@@ -625,6 +625,7 @@ Lab.Step("pose", function()
         Ed.placementOpen, Ed.moreOpen = true, true
         P.Refresh(); UI.Refresh(); Lab.Settle(.1)
         UI.RevealFrame(Ed.sections[3].font)
+        Lab.EmulateNativeScrollRect(Ed.sections[3].font)
         Ed.sections[3].font:OpenMenu()
         Lab.Settle(.1)
         local menu, font = TwichUISettingsMenu, Ed.sections[3].font

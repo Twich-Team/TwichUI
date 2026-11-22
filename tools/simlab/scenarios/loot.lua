@@ -355,6 +355,33 @@ if view == "sweepLab" then
     end)
 end
 
+if view == "dropdown" or view == "dropdownScaled" then
+    Lab.Step("scrolled Loot Rolls dropdown", function()
+        Check("init", "Loot Rolls settings opens", true, Lab.Open("lootRolls"))
+        local UI, Wg = R.SettingsUI, R.SettingsWidgets
+        if view == "dropdownScaled" then UI.Frame():SetScale(0.75) end
+        Lab.Reveal("lootRolls", "lootRollsVictoryIntensity"); Lab.Settle(0.2)
+        local control = Lab.Row("lootRolls", "lootRollsVictoryIntensity").control
+        local parent, scrolled = control:GetParent(), false
+        while parent do
+            if parent:IsObjectType("ScrollFrame") and parent:GetVerticalScroll() > 0 then scrolled = true end
+            parent = parent:GetParent()
+        end
+        Check("state", "test owner is on a scrolled page", true, scrolled)
+        Lab.EmulateNativeScrollRect(control)
+        control:OpenMenu(); Lab.Settle(0.1)
+        local menu = TwichUISettingsMenu
+        Check("interact", "menu opens for the clicked dropdown", control, menu.owner)
+        local delta = math.abs(menu:GetTop() * menu:GetEffectiveScale() - control:GetBottom() * control:GetEffectiveScale())
+        Check("geometry", "menu touches the visible control", true, delta < 4)
+        for _, row in ipairs(menu.rows) do if row.choice and row.choice.value == "full" then row:Click(); break end end
+        Check("state", "selection still uses the loot setting", "full", LR.Get("victoryIntensity"))
+        Check("interact", "selection dismisses popup", false, Wg.MenuShown())
+        control:OpenMenu(); Lab.Settle(0.1)
+        Check("state", "reopened menu retains its owner", control, menu.owner)
+    end)
+end
+
 if view == "victorySettings" then
     Lab.Step("victory preview from settings", function()
         TwichUIDB.modules.lootRolls = false; LR.Refresh()
