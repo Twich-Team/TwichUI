@@ -87,49 +87,24 @@ function RM.ParseItem(value)
 end
 
 ---------------------------------------------------------------------------
--- Artwork: the pictures a reminder can show, made by tools/make_reminder_art.py from assets/. Adding one: its line in
--- that tool's ART table, run it, then its line here (the numbers are what the tool prints) and a label.
+-- Artwork resolution is shared. Generated gallery provenance stays in ArtData.lua;
+-- existing-file catalog additions and legacy crops live in artwork/Catalog.lua.
 ---------------------------------------------------------------------------
-local ART_PATH = R.PATH .. [[media\reminders\]]
-RM.ART = {
-    shield = { label = "Shield", size = 256, width = 182, height = 256, smallSize = 64, smallWidth = 46, smallHeight = 64 },
-    ammo = { label = "Arrows", size = 256, width = 217, height = 256, smallSize = 64, smallWidth = 54, smallHeight = 64 },
-    wellfed = { label = "Plate and cutlery", size = 256, width = 256, height = 186, smallSize = 64, smallWidth = 64, smallHeight = 47 },
-    enchant = { label = "Weapon oil", size = 256, width = 129, height = 256, smallSize = 64, smallWidth = 33, smallHeight = 64 },
-}
-RM.ART_ORDER = { "shield", "ammo", "wellfed", "enchant" }   -- the four that were here first (RM.CHOICES.art); the picker's catalog is Gallery.lua's
-
--- The artwork library (ArtData.lua, made by tools/make_reminder_gallery.py): square pictures in media\reminders\gallery\, each at one
--- large and one small size, the whole canvas used (the picture is centred in it with a clear margin). They are artwork like the four
--- above, found by the same RM.Art / RM.ArtTexture, so a reminder keeps one of them as display.art and nothing else knows the difference.
-local GALLERY_PATH = R.PATH .. [[media\reminders\gallery\]]
-local DATA = R.ReminderArtData
-if DATA then
-    for _, e in ipairs(DATA.gallery) do
-        RM.ART[e[1]] = { label = e[2], dir = GALLERY_PATH, size = DATA.large, width = DATA.large, height = DATA.large,
-            smallSize = DATA.small, smallWidth = DATA.small, smallHeight = DATA.small }
-    end
-end
-
-function RM.Art(id) return type(id) == "string" and RM.ART[id] or nil end
-
--- The file and texcoords for artwork drawn `drawn` units on its longer side, and its width / height ratio.
-function RM.ArtTexture(id, drawn)
-    local a = RM.Art(id)
-    if not a then return nil end
-    local small = drawn and drawn <= RM.SMALL_AT
-    local side, w, h = a.size, a.width, a.height
-    local file = (a.dir or ART_PATH) .. id
-    if small then side, w, h, file = a.smallSize, a.smallWidth, a.smallHeight, file .. "-small" end
-    -- the used part less its 1 px clear margin on each side
-    return file, 1 / side, (w - 1) / side, 1 / side, (h - 1) / side, (a.width - 2) / (a.height - 2)
-end
+-- Core metadata is available independently of the Reminders feature or Settings addon.
+RM.ART = R.Artwork.ART
+RM.ART_ORDER = { "shield", "ammo", "wellfed", "enchant" }
+function RM.Art(id) return R.Artwork.Art(id) end
+function RM.ArtTexture(id, drawn) return R.Artwork.ArtTexture(id, drawn) end
 
 -- TwichUI's own icons a reminder can show (R.Icons ids), for an icon that doesn't come from an item.
 RM.ICONS = {
     { "reminderShow", "Framed shield" }, { "reminders", "Bell" }, { "reminderTest", "Checklist" },
     { "hazardAlerts", "Warning shield" }, { "ammunition", "Quiver" }, { "foodAndDrink", "Bread and cup" },
     { "gearComparison", "Breastplate" }, { "mage", "Arcane staff" },
+    -- Approved shared-catalog additions only; never accept the whole icon registry.
+    { "auctionHouse", "Merchant scales" }, { "vendors", "Market stall" }, { "appearance", "Palette and brush" },
+    { "navigation", "Compass" }, { "mapPins", "Map pin" }, { "markers", "Pennant" }, { "summons", "Portal" },
+    { "resurrection", "Resurrection" }, { "lootGreed", "Coins" }, { "lootQuality", "Green gem" },
 }
 local ICON_SET = {}
 for _, i in ipairs(RM.ICONS) do ICON_SET[i[1]] = true end

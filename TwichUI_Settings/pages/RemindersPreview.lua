@@ -5,73 +5,13 @@ local PV = {}
 R.RemindersPreview = PV
 local WIDTH, PAD, BOX_H = 318, 16, 360
 local PANEL_H, BOX_Y = 666, 66
-local f, hooks, shifted
+local f, hooks
 local enabled = true -- session preference; never written to the reminder or profile
 local function Wg() return R.SettingsWidgets end
 local function D() return R.ReminderDisplay end
 
--- Dock beside settings in physical coordinates. If the pair fits but neither current side has room, temporarily
--- move settings (no saved placement write). Otherwise show an accessible centred overlay with a Back/close action.
-function PV.RestoreAnchor()
-    if not shifted then return end
-    local a, p = shifted.anchor, shifted.point
-    local point, relative, relativePoint, x, y = a:GetPoint(1)
-    if point == "TOPLEFT" and relative == UIParent and relativePoint == "TOPLEFT"
-        and math.abs(x - shifted.x) < 0.1 and math.abs(y - shifted.y) < 0.1 then
-        a:ClearAllPoints()
-        a:SetPoint(unpack(p, 1, 5))
-    end
-    shifted = nil
-end
-function PV.Place(frame, context)
-    frame:ClearAllPoints()
-    if shifted and shifted.owner ~= frame then PV.RestoreAnchor() end
-    local a = R.SettingsAnchor and R.SettingsAnchor()
-    local us = UIParent:GetEffectiveScale() or 1
-    local sw, sh = UIParent:GetWidth(), UIParent:GetHeight()
-    local scale = a and a:GetEffectiveScale() / us or 1
-    if frame.companionHeight then
-        frame:SetHeight(math.max(300, math.min(frame.companionHeight, (sh - 24) / scale)))
-    end
-    scale = math.min(scale, (sw - 24) / frame:GetWidth(), (sh - 24) / frame:GetHeight())
-    frame:SetScale(scale)
-    frame.placement = "overlay"
-    if a then
-        local left, right, top = a:GetLeft(), a:GetRight(), a:GetTop()
-        local as = a:GetEffectiveScale() / us
-        if type(left) == "number" and type(right) == "number" and type(top) == "number" then
-            local fw = (frame:GetWidth() + 8) * scale
-            local function DockRight(anchor, anchorRight, placement, offset)
-                local shift = math.max(0, anchorRight + fw - (sw - 12))
-                if left * as - shift < 12 then return false end
-                if shift > 0 then
-                    if not shifted then shifted = { anchor = a, owner = frame, point = { a:GetPoint(1) } } end
-                    shifted.x, shifted.y = left * as - shift, -(sh - top * as)
-                    a:ClearAllPoints(); a:SetPoint("TOPLEFT", UIParent, "TOPLEFT", shifted.x, shifted.y)
-                end
-                frame:SetPoint("TOPLEFT", anchor, "TOPRIGHT", 8, offset or 0)
-                frame.placement = placement
-                return true
-            end
-            if right * as + fw <= sw - 12 then
-                frame:SetPoint("TOPLEFT", a, "TOPRIGHT", 8, 0); frame.placement = "right"; return
-            elseif left * as - fw >= 12 then
-                frame:SetPoint("TOPRIGHT", a, "TOPLEFT", -8, 0); frame.placement = "left"; return
-            end
-            if DockRight(a, right * as, "right") then return end
-            local contextRight = context and context:GetRight()
-            local contextTop = context and context:GetTop()
-            if contextRight and contextTop then
-                local contextScale = context:GetEffectiveScale() / us
-                local offset = (top * as - contextTop * contextScale) / scale
-                if DockRight(context, contextRight * contextScale, "context", offset) then return end
-            end
-        end
-    end
-    if shifted then PV.RestoreAnchor() end
-    if frame.minimized then frame:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -12, -12)
-    else frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0) end
-end
+function PV.RestoreAnchor() return R.SettingsMaterial.RestoreCompanionAnchor() end
+function PV.Place(frame, context) return R.SettingsMaterial.PlaceCompanion(frame, context) end
 
 local function Build()
     local G, M = Wg(), R.SettingsMaterial

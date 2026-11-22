@@ -1,14 +1,20 @@
 # UX02 — shared artwork picker design and foundation
 
-**Proposed design for owner review; no extraction or rule schema change is implemented.**
-Baseline: `main` at `c7f8741` (2026-11-22). This document closes the authorized
-Batch 5 discovery work. It does not authorize the next implementation batch.
+**Shared foundation merged in PR #128; rule consumers implemented for review in owner-authorized Batch 7.**
+Design baseline: `main` at `c7f8741`; implementation baseline: `b541c5b` after
+PR #126 merged (2026-11-22). The original design remains the contract below.
+Batch 6 implements the shared catalog/chooser, thin Reminder adapter and the 20
+approved existing-art mappings. It does not implement per-rule icons or change
+any rule/display schema.
 The Reminders picker is the approved visual/interaction reference, not a redesign
 candidate. See the [artwork inventory](shared-artwork-inventory.md),
 [consumer specifications](shared-artwork-rule-integrations.md), and
 [existing artwork pipeline](../reminders-art.md).
 
 ## Audit: reuse the chooser, keep each feature's meaning
+
+This table records the pre-extraction audit at `b541c5b`; the implementation
+locations and compatibility boundary follow it.
 
 | Existing source | Reusable part | Reminders-specific part to retain in an adapter |
 | --- | --- | --- |
@@ -18,9 +24,10 @@ candidate. See the [artwork inventory](shared-artwork-inventory.md),
 | [`RemindersPreview.lua`](../../TwichUI_Settings/pages/RemindersPreview.lua) | `Place`/`RestoreAnchor`: current docking, scale/height fitting and conditional restoration of an anchor shifted by the companion | Reminder live-preview rendering, display state and callbacks |
 | [`Reminders.lua`](../../TwichUI_Settings/pages/Reminders.lua), [`Window.lua`](../../TwichUI_Settings/Window.lua) | Existing page-hide/settings-close and special-frame Esc routing patterns | Reminder selection identity, live-preview restoration and designer refusal |
 
-The current catalog is **79 entries**: 67 generated art records + four earlier
-artworks + eight registered icons. The “80 entries” sentence in `reminders.md`
-is stale; source and the manifest establish the count. Catalog identity and saved
+The preserved baseline is **79 entries**: 67 generated art records + four earlier
+artworks + eight registered icons. Batch 6 adds ten standalone artworks and ten
+registered icons, making **99 entries**. Generated ArtData/manifest remain the
+unchanged 79-entry baseline; the 20 reused-file mappings live in Catalog.lua. Catalog identity and saved
 target are different for an icon: UI key `icon-mage` maps to saved icon `mage`.
 Never save the UI key as a registry ID or rename the `shield`/`ammo`/`wellfed`/
 `enchant` and `reminder-*` art IDs.
@@ -35,24 +42,24 @@ current constants are 512×668, 96-unit tiles and 78-unit thumbnail bounds; pros
 claiming all thumbnails are 64 units is not an instruction to resize them.
 Do not normalize legacy crops or regenerate artwork during extraction.
 
-## Smallest proposed architecture
+## Implemented foundation architecture
 
-1. **Core `R.Artwork`**, proposed `!!!TwichUI/artwork/Catalog.lua`: lift only
+1. **Core `R.Artwork`**, `!!!TwichUI/artwork/Catalog.lua`: lift only
    catalog/search, ref checks and texture resolution/drawing. Read the existing
    generated `R.ReminderArtData` unchanged; keep the current generator and manifest
    as provenance. Move immutable legacy crop/size metadata here, leaving
    `RM.Art`, `RM.ArtTexture` and Gallery catalog wrappers compatible. Reuse
    `R.Icons.Get/Apply` for registered icons, not copied file/crop/tint tables.
    No frame, events, persistence, feature loading or consumer registry here.
-2. **Settings-only `R.SettingsArtworkPicker`**, proposed
-   `TwichUI_Settings/ArtworkPicker.lua`: adapt the existing frame in place;
+2. **Settings-only `R.SettingsArtworkPicker`**,
+   `TwichUI_Settings/ArtworkPicker.lua`: the existing frame adapted in place;
    replace reminder storage calls with one caller acceptance callback. Keep one
    lazily built frame and the existing bounded, reused tile pool. This is one
    chooser, not one per consumer. Move the small item-input/details helpers out
    of their Reminder editor dependency while preserving their behavior. Reuse
-   SettingsWidgets/Material and the existing companion placement math. If needed,
-   lift only `Place`/`RestoreAnchor` into two Material helpers and delegate the
-   existing Preview wrappers to them; do not build a new window/overlay manager.
+   SettingsWidgets/Material and the existing companion placement math.
+   `SettingsMaterial.PlaceCompanion`/`RestoreCompanionAnchor` contain the existing
+   placement math and the Preview wrappers delegate to them; do not build a new window/overlay manager.
 3. **Thin Reminders adapter** in the existing `RemindersImagePicker.lua`: retain
    its public entry points for the page and tests. Translate between shared refs
    and existing Gallery candidates, then call `G.Choose` on Apply. Keep display
@@ -70,9 +77,10 @@ shared service when called, not capture a not-yet-loaded singleton at file load.
 No new addon, provider/plugin registry, filesystem scanner or generic editor
 framework is proposed. Load-order edits require manifest/opt-in checks later.
 
-## Exact proposed reusable contract
+## Reusable interface contract
 
-The following names and semantics are the reviewable contract, **not existing APIs**.
+The following APIs implement the reviewed foundation contract. The optional rule
+field and downgrade limitations are documented in the [consumer specification](shared-artwork-rule-integrations.md).
 Consumers own their validation, data format, undo behavior and persistence.
 
 ### References and core operations
@@ -122,6 +130,8 @@ local ok, tokenOrReason = R.SettingsArtworkPicker.Open(ownerFrame, {
         name = "Need (automatic)",
         Draw = function(texture, size) ... end, -- caller's existing automatic painter
     },
+    -- Optional fallback = {name=..., Draw=...} paints unavailable refs even
+    -- without an automatic-selection control (used by the Reminder adapter).
     OnApply = function(ref) ... end,  -- return true, or false, playerFacingReason
     OnClosed = function(reason) ... end,
 })
@@ -144,6 +154,10 @@ uses exactly the same checked path as the Apply button; wrong/no owner returns
 rejection `false, "refused"` with its message shown in the picker. `State(owner)`
 returns `{key, candidate, source, category, query}` with copied candidate data;
 `source` is `"art"` or `"game"`. It is read-only inspection, never a save value.
+For compatibility/Settings system callbacks, omitted owners on State/Apply inspect
+or apply the active session; callers should pass their owner to avoid another
+session. State also supplies owner/token for adapter identity checks. Close may
+receive an internal reason; it defaults to cancelled.
 `Frame()` never builds a frame. The Reminder adapter preserves `Open`, `Cancel`,
 `Apply`, `Shown`, `Frame`, `ReminderId` and `Candidate` behavior/legacy candidate
 shape using owner-scoped state; it must not report a Loot/Inventory session as
@@ -197,8 +211,8 @@ Reminder validation; do not rewrite them through a stricter new cleaner on Open
 or Cancel. If a legacy value cannot be represented, open with no candidate and
 the existing unavailable description; no implicit reset or save.
 
-First prove parity against the existing 79-entry baseline. After owner approval,
-add only approved inventory rows to the **same** catalog (not a second picker).
+Parity tests preserve the existing 79-entry baseline. The 20 owner-approved
+inventory rows were added to the **same** catalog (not a second picker).
 Registered icons need inclusion in Reminders' curated allowed icon set before
 Reminder Apply can accept them; do not whitelist the entire registry. New art
 records must also resolve through the compatible `RM.Art`/`ArtTexture` wrappers.
@@ -207,38 +221,48 @@ hand-maintained mappings for already bundled assets stay separate from generated
 ArtData output and never claim to be generated gallery crops. Preserve baseline
 relative order; add approved rows at the end of their existing category.
 
-## Implementation sequence and focused verification
+## Verification and remaining sequence
 
-1. **Review this contract and curated list.** Decide the proposed `rule.artwork`
-   shape/compatibility policy and automatic control placement. No runtime/schema
-   work is Ready before that review; [mini-specs](../autonomous-ready-tasks.md#ux02-specified-follow-ups-awaiting-owner-review)
-   make the boundaries reviewable.
-2. **Shared extraction with Reminders parity**, then approved catalog mappings,
-   in separate logical commits. Keep consumer rules untouched. Test Gallery
-   search/order/refs/legacy rendering and reminder atomic Apply/Cancel using
-   `tests/test_reminder_gallery.lua` and `tests/test_reminders_settings.lua`.
-   Add cases for owner replacement, same-owner toggle, source switching,
-   unavailable/current/pending refs, failure/reentrant acceptance, every close
-   reason, profile generations and no callback leaks/frame growth. Verify TOCs,
-   Reminders disabled and Settings load-on-demand. Validate approved file paths
-   and duplicate targets without rebuilding unrelated art.
-3. **Loot Rules consumer**, following its immediate-save model; then **Magic
-   Inventory consumer**, following its private draft/Save model. Keep separate
-   commits/PR slices so either can be deferred. Their exact surfaces, sanitizer,
-   duplication, profile/backup and behavior-invariance checks are in the
-   [consumer specification](shared-artwork-rule-integrations.md).
-4. **Useful visual checkpoint only:** selected existing Reminders picker poses
-   (`picker`, `pickerSearch`, `pickerGameApply`, `pickerNarrow`, `pickerRender`)
-   plus the affected rule-editor poses after those exist. Compare to the current
-   picker reference at normal/narrow/scaled sizes and 20/24/32/48px icon uses;
-   retain action labels and mask cleanup. Simulator evidence is structural,
-   not native appearance/input acceptance. No full simulator/release suite is
-   warranted for this design-only batch.
+Batch 6 implements foundation extraction and the 20 approved mappings in separate
+logical commits, leaving Loot Rules/Magic Inventory untouched. The shared frame
+has the same geometry, categories, sources, thumbnail treatment and Apply/Cancel;
+Reminder callers omit the staged automatic control and keep their original copy.
+Unknown valid art/icon refs are retained, visibly draw the caller's fallback,
+and cannot be newly applied until replaced. The adapter uses default Reminder
+art for that preview without changing the saved selection or invalid-reminder
+runtime behavior.
 
-Current work is **source-inspected/documentation-verified**, with a bounded
-offline artwork shortlist review; it implements none of the proposed APIs.
-Verification here is local links/paths/IDs, count/provenance consistency and
-`git diff --check`. No addon behavior, simulator or real-client claims. No new
-runtime diagnostics are added. Future bounded static searches/tile reuse need
-no background instrumentation; use existing Settings scopes and measure a
-specific gap if one appears, rather than create broad monitoring infrastructure.
+The focused `feature reminders --profile cloud` checkpoint selects 67 offline
+modules: **67 passed**, with Lua syntax passing. Coverage includes the existing
+Gallery and Reminder/settings suites plus `tests/test_artwork_picker.lua` using
+both the real Reminder adapter/catalog and isolated caller acceptance checks.
+It covers item/legacy/new/unknown refs, one atomic save, text-only promotion,
+source/search reset, Apply/refusal/error, owner replacement, profile apply and
+duplicate, raw hide/Settings close, stale callbacks and bounded frame/hook reuse.
+Metadata listeners exist only while the picker is shown and refresh only the
+selected item's result. Core catalog operation has no Settings/Reminder feature
+state dependency. A first development attempt exposed a missing standard PASS
+marker in the new test (the test itself exited successfully); that marker was
+fixed before the passing feature checkpoint. Failed evidence was retained.
+
+The checkpoint's overall status is **FAIL only because the simulator installation
+is absent** (`/workspace/wow-ui-sim-lab`). No simulator or native appearance/input
+claim is made. Once available, useful existing poses are `picker`, `pickerSearch`,
+`pickerGameApply`, `pickerNarrow`, `pickerEquipment`, `pickerCharacter` and
+`pickerRender`; keep their current assertions/negative controls. Native review
+still needs fonts, item drag/drop, Esc/hover, scale/docking and 20–48px filtering.
+No asset rebuild, rule schema change, full simulator/release certification or
+unrelated mutation campaign was performed.
+
+Next, take the [Loot Rules then Magic Inventory specifications](shared-artwork-rule-integrations.md)
+as separately authorized consumer slices after their field/version/compatibility
+policy and editor placement are reviewed. Their immediate-save versus private
+draft/Save semantics, mask cleanup, independent duplication, profile/backup,
+sharing exclusions and behavior-invariance tests remain required. This batch
+provides the foundation, not those consumers.
+
+Existing generation/provenance remain in [reminders-art.md](../reminders-art.md).
+The catalog is static/lazy and the tile pool is bounded by its 99 entries; no
+polling or new background scan. No new Diagnostics scope is warranted for this
+small static catalog and explicit chooser; use existing Settings measurement if
+a real performance gap appears. No default or runtime rule behavior was changed.

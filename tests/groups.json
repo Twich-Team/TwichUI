@@ -24,13 +24,13 @@
     "simulators": [{"script": "interact"}]
   },
   "settings": {
-    "tests": ["test_settings_*.lua", "test_*_settings.lua", "test_remaining_settings.lua", "test_magic_inventory_recipient.lua", "test_specialized_settings.lua", "test_qol_loot_sparkles.lua", "test_qol_gathering_sparkles.lua", "test_qol_group_finder_zones.lua"],
+    "tests": ["test_settings_*.lua", "test_*_settings.lua", "test_remaining_settings.lua", "test_magic_inventory_recipient.lua", "test_specialized_settings.lua", "test_qol_loot_sparkles.lua", "test_qol_gathering_sparkles.lua", "test_qol_group_finder_zones.lua", "test_artwork_picker.lua"],
     "syntax": ["TwichUI_Settings/**/*.lua", "!!!TwichUI/qol/LootSparkles.lua", "!!!TwichUI/qol/GatheringSparkles*.lua", "!!!TwichUI/qol/GroupFinderZones.lua"],
     "dependencies": ["shared-ui", "core"],
     "simulators": [{"script": "smoke"}, {"script": "settings"}]
   },
   "loot-rolls": {
-    "tests": ["test_loot_rolls.lua", "test_loot_victory_assets.py", "test_loot_rolls_settings.lua", "test_perf_engine.lua"],
+    "tests": ["test_loot_rolls.lua", "test_loot_rule_artwork.lua", "test_loot_victory_assets.py", "test_loot_rolls_settings.lua", "test_perf_engine.lua"],
     "syntax": ["!!!TwichUI/loot/**/*.lua", "TwichUI_Settings/pages/Loot*.lua", "TwichUI_Settings/Companion.lua", "TwichUI_Diagnostics/Gauges.lua", "tools/simlab/scenarios/loot.lua"],
     "dependencies": ["settings", "core"],
     "simulators": []
@@ -68,8 +68,8 @@
     ]
   },
   "reminders": {
-    "tests": ["test_reminders*.lua", "test_reminder_gallery.lua", "test_reminder_gallery.py"],
-    "syntax": ["!!!TwichUI/reminders/**/*.lua", "TwichUI_Settings/pages/Remind*.lua"],
+    "tests": ["test_reminders*.lua", "test_reminder_gallery.lua", "test_reminder_gallery.py", "test_artwork_picker.lua"],
+    "syntax": ["!!!TwichUI/artwork/**/*.lua", "!!!TwichUI/reminders/**/*.lua", "TwichUI_Settings/pages/Remind*.lua", "TwichUI_Settings/ArtworkPicker.lua", "TwichUI_Settings/Material.lua", "TwichUI_Settings/Window.lua"],
     "dependencies": ["settings"],
     "simulators": [{"script": "reminders"}]
   },

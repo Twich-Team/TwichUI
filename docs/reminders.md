@@ -307,7 +307,9 @@ Adoption on other Settings pages can be incremental; standalone windows need a l
 helpers currently load with Settings. Wider rollout and real-client visual acceptance remain pending.
 
 
-### Appearance and the image picker (`pages/RemindersEditor.lua`, `pages/RemindersImagePicker.lua`, `reminders/Gallery.lua`)
+### Appearance and the image picker (`ArtworkPicker.lua`, Reminder editor/adapter, shared catalog)
+
+The shared Settings chooser is described in [the UX02 contract](design/shared-artwork-picker.md). Reminders keeps its display schema and `Gallery.Choose` persistence through the thin `RemindersImagePicker` adapter. No Loot Rules or Magic Inventory overrides are implemented. Valid unavailable selections remain saved, while the chooser shows default artwork with an unavailable message; Cancel never resets them.
 
 The player sees three display modes and one place to choose a picture; the five stored modes and the fields they use do not change.
 
@@ -330,9 +332,8 @@ The player sees three display modes and one place to choose a picture; the five 
 - **Compatibility.** Artwork is stored as `display.art` (an unknown id from a newer version is kept and reported "Artwork unavailable"), a TwichUI icon
   as `iconSource = "bundled"`, `icon = <id>`, an item as `iconSource = "item"`, `item = <id>`: what the old editor wrote.
 
-Cost and diagnostics: the catalog is static (80 entries, built once from `ArtData.lua`), the picker's frames are built the first time it opens and are
-bounded by the catalog (one tile per picture, reused), and a texture loads only while its tile is shown. It registers no event, timer or `OnUpdate`, so it
-has no TwichUI Diagnostics scope or gauge: there is nothing recurring to measure.
+Cost and diagnostics: the catalog is static (99 entries: 79 preserved plus 20 approved existing-file additions, built once by `R.Artwork`), the picker's frames are built the first time it opens and are
+bounded by the catalog (one tile per picture, reused), and a texture loads only while its tile is shown. While open, it listens for metadata for the selected item only; hide removes those listeners. There is no timer or `OnUpdate`. The small static catalog and explicit chooser need no new Diagnostics scope or gauge.
 
 Evidence: **unit-tested** (`tests/test_reminder_gallery.lua`, `tests/test_reminder_gallery.py`, `tests/test_reminders_settings.lua`);
 **simulator-tested** (`bash tools/simlab/reminders.sh appearance appearanceImage appearanceText appearanceLegacy picker pickerSearch pickerGame pickerGameApply pickerNarrow pickerEquipment pickerCharacter pickerRender`; `pickerRender` chooses every catalogued picture and checks the real renderer's live preview draws it:
