@@ -610,9 +610,10 @@ local function BuildBar()
         art:SetPoint("LEFT", bar, "LEFT", x, 0)
         UI.Art(art, kind.art, 26)
         local n = UI.Text(bar, 20, K[kind.tone], "strong")
-        n:SetPoint("TOPLEFT", art, "TOPRIGHT", 8, 6)
+        -- Share the artwork's centerline so font metrics do not lift the counters.
+        n:SetPoint("LEFT", art, "RIGHT", 8, 0)
         local l = UI.Text(bar, 12, K.textDim)
-        l:SetPoint("TOPLEFT", n, "TOPRIGHT", 5, -5)
+        l:SetPoint("LEFT", n, "RIGHT", 5, 0)
         l:SetText(kind.word)
         shop.counts[k] = { n = n, label = l }
     end
