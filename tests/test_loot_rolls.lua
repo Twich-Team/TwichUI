@@ -98,7 +98,6 @@ c.LOOT_ROLL_INELIGIBLE_REASON1 = "This item is not for your class."
 c.INVTYPE_HEAD = "Head"
 c.INVTYPE_2HWEAPON = "Two-Hand"
 c.GetItemClassInfo = function(id) return ({ [2] = "Weapon", [4] = "Armor", [9] = "Recipe", [7] = "Trade Goods" })[id] end
-c.GetItemSubClassInfo = function(class, sub) if class == 9 then return ({ [6] = "Alchemy", [8] = "Enchanting" })[sub] end end
 local ITEMS = {
   ["item:100"] = { id = 100, name = "Green Helm", quality = 2, class = 4, sub = 1, loc = "INVTYPE_HEAD", bind = 2, price = 1234, icon = 1001, type = "Armor", subType = "Plate" },
   ["item:101"] = { id = 101, name = "Epic Greatsword", quality = 4, class = 2, sub = 8, loc = "INVTYPE_2HWEAPON", bind = 1, price = 20612, icon = 1002, type = "Weapon", subType = "Two-Handed Swords" },
@@ -122,6 +121,7 @@ c.GetLootRollItemLink = function(id) local r = rolls[id]; if r then return r.lin
 c.GetLootRollTimeLeft = function(id) local r = rolls[id]; if r then return math.max(0, (r.ends - NOW) * 1000) end end
 c.GetActiveLootRollIDs = function() local out = {} for id in pairs(active) do out[#out + 1] = id end table.sort(out) return out end
 c.C_Item = {
+  GetItemSubClassInfo = function(class, sub) if class == 9 then return ({ [6] = "Alchemy", [8] = "Enchanting" })[sub] end end,
   GetItemInfoInstant = function(link) local it = ITEMS[link]; if it then return it.id, it.type, it.subType, it.loc, it.icon, it.class, it.sub end end,
   GetItemInfo = function(link)
     local it = ITEMS[link]
@@ -139,7 +139,7 @@ c.C_TooltipInfo = { GetLootRollItem = function(id)
   return { lines = lines }
 end }
 c.C_SkillInfo = { GetNumSkillLines = function() return 2 end, GetSkillLineInfo = function(i)
-  return ({ { isHeader = true, skillName = "Professions" }, { isHeader = false, skillName = "Alchemy", rank = 150 } })[i]
+  return ({ { isHeader = true, name = "Professions" }, { isHeader = false, name = "Alchemy", rank = 150 } })[i]
 end }
 local WORLD = { instance = "none", raid = false }
 c.IsInInstance = function() return WORLD.instance ~= "none", WORLD.instance end
@@ -686,6 +686,30 @@ do
   Fresh(); LR.Set("auto", true); Rule("professionRecipes")
   id = StartRoll("item:105"); roll = Ro.Find(id)
   Check(roll.obs.recipe.profession == false and roll.state == "pending", "another profession's recipe is not mine")
+  EndRoll(id)
+
+  -- The reported All-of rule on Forever's namespaced item API and skill-line fields.
+  Fresh(); LR.Set("auto", true); LR.Set("autoNeed", true)
+  local recipeNeed = Rule("professionRecipes")
+  LR.SetAction(recipeNeed, "need")
+  local _, quality = LR.AddCondition(recipeNeed, "quality")
+  LR.SetCondition(recipeNeed, quality, { op = "atMost", value = 3 })
+  local _, known = LR.AddCondition(recipeNeed, "recipe")
+  LR.SetCondition(recipeNeed, known, { mode = "known", negate = true })
+  Rule("recipes")
+  id = StartRoll("item:102"); roll = Ro.Find(id)
+  Check(roll.auto and roll.auto.action == "need", "an unlearned recipe for my profession matches the Need rule")
+  Advance(4)
+  Check(#rolled == 1 and rolled[1].kind == 1, "the recipe rule submits Need through the usual countdown")
+  EndRoll(id)
+  id = StartRoll("item:103"); roll = Ro.Find(id)
+  Check(roll.auto and roll.auto.action == "pass", "a known recipe still reaches the lower Pass rule")
+  EndRoll(id)
+  id = StartRoll("item:105"); roll = Ro.Find(id)
+  Check(roll.state == "pending" and not roll.auto, "an unlearned recipe for another profession stays manual")
+  EndRoll(id)
+  id = StartRoll("item:102", { noTooltip = true }); roll = Ro.Find(id)
+  Check(roll.state == "pending" and not roll.auto, "a missing tooltip cannot satisfy not already known")
   EndRoll(id)
 
   -- Need is a separate opt-in

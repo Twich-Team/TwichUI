@@ -85,7 +85,7 @@ game's `INVTYPE_*` and its own words), profession recipe (for one of my professi
 item, armor type (cloth / leather / mail / plate / shield, from the item's class and sub-class), can I equip it, binding (when picked up / when equipped), potential upgrade (informational; only counts when upgrade-based rules are allowed), where
 you are (outside raids, in raids, in dungeons, outside dungeons).
 
-Recipe facts: the profession comes from `GetItemSubClassInfo(9, subclass)` compared with the player's skill lines (both the game's own words);
+Recipe facts: the profession comes from `C_Item.GetItemSubClassInfo(9, subclass)` compared with the localized `name` fields returned by `C_SkillInfo.GetSkillLineInfo`;
 "already known" is the tooltip line equal to the game's `ITEM_SPELL_KNOWN`; "can learn" additionally needs the item to have no red
 requirement line (`GearData.RedLines`). Without the tooltip those facts are unknown, not guessed.
 

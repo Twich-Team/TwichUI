@@ -118,7 +118,7 @@ end
 ---------------------------------------------------------------------------
 local professionNames, professionAt = nil, -100
 
--- The names of the player's professions (the game's own words, as GetItemSubClassInfo says them for recipes), read at most every 20 seconds.
+-- Cache the localized skill names used to match C_Item recipe subclasses.
 local function Professions()
     local t = Now()
     if professionNames and t - professionAt < 20 then return professionNames end
@@ -129,7 +129,7 @@ local function Professions()
             for i = 1, n do
                 local info = SI.GetSkillLineInfo(i)
                 if type(info) == "table" and Plain(info.isHeader) ~= true then
-                    local name = Plain(info.skillName)
+                    local name = Plain(info.name)
                     if type(name) == "string" and name ~= "" then names[name] = true end
                 end
             end
@@ -167,9 +167,11 @@ local function RecipeFacts(roll, obs, lines)
     local facts = { isRecipe = true }
     local names = Professions()
     local sub = obs.subClassID
-    if names and type(sub) == "number" and GetItemSubClassInfo then
-        local ok, name = Call(GetItemSubClassInfo, 9, sub)
-        if ok and type(name) == "string" and name ~= "" then facts.profession = names[name] == true end
+    local subclassName = C_Item and C_Item.GetItemSubClassInfo or GetItemSubClassInfo
+    if names and type(sub) == "number" then
+        local ok, name = Call(subclassName, 9, sub)
+        name = ok and Plain(name)
+        if type(name) == "string" and name ~= "" then facts.profession = names[name] == true end
     end
     if lines then
         facts.known = HasKnownLine(lines)

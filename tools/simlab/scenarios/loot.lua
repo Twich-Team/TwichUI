@@ -47,8 +47,10 @@ C_TooltipInfo = C_TooltipInfo or {}
 C_TooltipInfo.GetLootRollItem = function(id) local r = rolls[id]; if r then return { lines = { { leftText = ITEMS[r.link].name } } } end end
 C_SkillInfo = C_SkillInfo or {}
 C_SkillInfo.GetNumSkillLines = function() return 2 end
-C_SkillInfo.GetSkillLineInfo = function(i) return ({ { isHeader = true, skillName = "Professions" }, { isHeader = false, skillName = "Alchemy", rank = 150 } })[i] end
-GetItemSubClassInfo = function(class, sub) if class == 9 then return "Alchemy" end end
+C_SkillInfo.GetSkillLineInfo = function(i) return ({ { isHeader = true, name = "Professions" }, { isHeader = false, name = "Alchemy", rank = 150 } })[i] end
+C_Item.GetItemSubClassInfo = function(class, sub)
+    if class == 9 and sub == 6 then return "Alchemy" end
+end
 R.GearHints = R.GearHints or {}
 R.GearHints.Judge = function(link) return judged[link] end
 R.GearHints.Noteworthy = function(j) return j and j.up == true end
