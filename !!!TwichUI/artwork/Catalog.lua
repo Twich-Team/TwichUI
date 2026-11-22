@@ -31,6 +31,32 @@ function A.Check(ref)
     return { kind = kind, id = id }
 end
 
+-- Approved UX02 first slice: hand-maintained mappings to existing bundled files.
+-- Provenance: docs/design/shared-artwork-inventory.md; generated ArtData stays unchanged.
+-- kind, stable target, name, category, description, keywords, optional art path under media/.
+local ADDITIONS = {
+    { "art", "art-herbs", "Herbs", "Supplies", "A bundle of herbs: plants and alchemy reagents.", "herb plant reagent alchemy materials", [[icons\magic-herbs]] },
+    { "art", "art-leather", "Leather", "Supplies", "Rolled leather: hides and crafting materials.", "leather hide skin material leatherworking", [[icons\magic-leather]] },
+    { "art", "art-parts", "Engineering parts", "Supplies", "A cog and components: engineering supplies.", "engineering parts cog components crafting supplies", [[icons\magic-parts]] },
+    { "art", "art-elemental", "Elemental material", "Supplies", "A blue elemental spiral: magical materials.", "elemental essence material reagent blue spiral", [[icons\magic-elemental]] },
+    { "art", "art-shipping-crate", "Shipping crate", "Supplies", "A wooden crate: cargo and stored supplies.", "crate cargo container supplies shipping waylaid", [[icons\magic-waylaid-crate]] },
+    { "art", "art-cloth", "Cloth bolts", "Supplies", "Folded bolts of cloth: tailoring materials.", "cloth bolts fabric tailoring material", [[npcs\cloth-bolts]] },
+    { "art", "art-tabard", "Tabard", "Equipment", "A tabard: guild colors and equipment.", "tabard guild shirt equipment colors", [[npcs\tabard]] },
+    { "art", "art-paw", "Paw", "Adventure", "An animal paw: pets and companions.", "pet companion animal paw beast", [[npcs\paw]] },
+    { "icon", "auctionHouse", "Merchant scales", "General", "Merchant scales: auctions and trade.", "auction trade sell balance merchant scales commerce" },
+    { "icon", "vendors", "Market stall", "General", "A market stall: vendors and trading.", "vendor market stall trade merchant shop" },
+    { "icon", "appearance", "Palette and brush", "General", "A painter's palette and brush: customization and craft.", "palette brush paint appearance customization crafting" },
+    { "icon", "navigation", "Compass", "Adventure", "A compass: navigation and travel.", "compass navigation direction travel journey" },
+    { "icon", "mapPins", "Map pin", "Adventure", "A map pin with a ripple: a chosen location.", "map pin marker location destination ripple" },
+    { "icon", "markers", "Pennant", "Adventure", "A pennant: a place or a rally point.", "pennant flag marker rally location banner" },
+    { "icon", "summons", "Portal", "Adventure", "A portal: travel and summoning.", "portal summon summoning travel magic" },
+    { "icon", "resurrection", "Resurrection", "Character", "A winged ankh: resurrection and recovery.", "resurrection revive ankh wings recovery life" },
+    { "art", "art-dice", "Dice", "General", "A pair of dice: chance and random rolls.", "dice random chance roll luck", [[loot\dice]] },
+    { "art", "art-crown", "Crown", "General", "A crown: leadership and victory.", "crown king queen winner leadership victory", [[loot\crown]] },
+    { "icon", "lootGreed", "Coins", "Supplies", "A stack of coins: money and trade.", "coins money gold silver currency greed trade" },
+    { "icon", "lootQuality", "Green gem", "Supplies", "A green gem: a crystal or a precious material.", "green gem crystal jewel material quality" },
+}
+
 local ART_PATH = R.PATH .. [[media\reminders\]]
 A.ART = {
     shield = { label = "Shield", size = 256, width = 182, height = 256, smallSize = 64, smallWidth = 46, smallHeight = 64 },
@@ -44,6 +70,15 @@ if DATA then
     for _, e in ipairs(DATA.gallery) do
         A.ART[e[1]] = { label = e[2], dir = GALLERY_PATH, size = DATA.large, width = DATA.large, height = DATA.large,
             smallSize = DATA.small, smallWidth = DATA.small, smallHeight = DATA.small }
+    end
+end
+
+-- New standalone art uses its whole existing canvas and the 26-unit small threshold.
+for _, e in ipairs(ADDITIONS) do
+    if e[1] == "art" then
+        local file = R.PATH .. [[media\]] .. e[7]
+        A.ART[e[2]] = { label = e[3], file = file, small = file .. "-small", smallAt = 26,
+            size = 64, width = 64, height = 64, smallSize = 32, smallWidth = 32, smallHeight = 32 }
     end
 end
 
@@ -86,6 +121,11 @@ local function Build()
         end
         for _, e in ipairs(data.gallery) do
             if e[3] == c and A.Art(e[1]) then Add("art", e[1], e[2], c, e[4], e[5], e[6]) end
+        end
+        -- Additive choices follow all shipped entries in their existing category.
+        for _, e in ipairs(ADDITIONS) do
+            local usable = e[1] == "art" and A.Art(e[2]) or (e[1] == "icon" and R.Icons and R.Icons.Get(e[2]))
+            if e[4] == c and usable then Add(e[1], e[2], e[3], c, e[5], e[6]) end
         end
     end
 end

@@ -87,7 +87,7 @@ for _, cat in ipairs(DATA.categories) do Check(perCategory[cat] > 0, "category "
 local entries = G.Entries()
 local cats = G.Categories()
 Check(cats[1] == "All" and #cats == 7, "All and the six categories")
-Check(#entries == #DATA.gallery + 12, "the library, the four artworks that were here first and the eight icons: " .. #entries)
+Check(#entries == #DATA.gallery + 32, "the original79 and20 approved additions: " .. #entries)
 local ids = {}
 for _, e in ipairs(entries) do
   Check(not ids[e.id], "catalog id " .. e.id .. " is unique")
@@ -155,7 +155,16 @@ do
     for _, e in ipairs(DATA.legacy) do if e[4] == cat then expected[#expected+1] = e[1] == "art" and e[2] or "icon-" .. e[2] end end
     for _, e in ipairs(DATA.gallery) do if e[3] == cat then expected[#expected+1] = e[1] end end
   end
-  Check(table.concat(Names(A.Entries()), ",") == table.concat(expected, ","), "all79 baseline entries retain order and IDs")
+  local baseline, actual = {}, {}
+  for _, id in ipairs(expected) do baseline[id] = true end
+  local categoryAdded = {}
+  for _, entry in ipairs(A.Entries()) do
+    if baseline[entry.id] then
+      actual[#actual+1] = entry.id
+      Check(not categoryAdded[entry.category], "baseline entries precede additions in " .. entry.category)
+    else categoryAdded[entry.category] = true end
+  end
+  Check(#expected == 79 and table.concat(actual, ",") == table.concat(expected, ","), "all79 baseline entries retain order and IDs")
   local tex = {}
   function tex:SetTexture(file) self.file = file; return file ~= self.refuse end
   function tex:SetTexCoord(...) self.coords = {...} end
@@ -182,6 +191,47 @@ do
     ok, reason = A.Draw(tex,case[1],case[2])
     Check(not ok and reason == case[3] and tex.file == nil, "failed drawing clears: " .. case[3])
   end
+  local newArt = { ["art-herbs"]="icons/magic-herbs", ["art-leather"]="icons/magic-leather", ["art-parts"]="icons/magic-parts",
+      ["art-elemental"]="icons/magic-elemental", ["art-shipping-crate"]="icons/magic-waylaid-crate", ["art-cloth"]="npcs/cloth-bolts",
+      ["art-tabard"]="npcs/tabard", ["art-paw"]="npcs/paw", ["art-dice"]="loot/dice", ["art-crown"]="loot/crown" }
+  local targetFiles, added = {}, 0
+  for _, entry in ipairs(A.Entries()) do
+    if not baseline[entry.id] then
+      added = added+1
+      local small, full
+      if entry.kind == "art" then
+        local relative = newArt[entry.target]
+        Check(relative ~= nil, "only approved standalone art is added: " .. entry.target)
+        small, full = RM.ArtTexture(entry.target,26), RM.ArtTexture(entry.target,27)
+        Check(small == R.PATH .. "media\\" .. relative:gsub("/","\\") .. "-small"
+            and full == R.PATH .. "media\\" .. relative:gsub("/","\\"), "new art uses approved paths and26 threshold")
+        local _,l,r,t,b,aspect = RM.ArtTexture(entry.target,26)
+        Check(l == 0 and r == 1 and t == 0 and b == 1 and aspect == 1, "new art does not acquire generated gallery crop")
+      else
+        Check(RM.ValidIcon(entry.target), "approved icon is accepted by Reminder validation")
+        small, full = R.Icons.Path(entry.target,26), R.Icons.Path(entry.target,27)
+      end
+      Check(not targetFiles[full], "additions have no duplicate file target")
+      targetFiles[full] = true
+      for _, file in ipairs({small,full}) do
+        local relative = file:sub(#R.PATH+1):gsub("\\","/")
+        local header = TGA(ROOT .. relative .. ".tga")
+        Check(header and header.w == (file == small and 32 or 64) and header.w == header.h, "existing32/64 file resolves: " .. relative)
+      end
+      Check(A.Get(entry.ref) and #A.Search(entry.name,entry.category) > 0 and entry.keywords:match("^[a-z ]+$"), "added metadata is searchable: " .. entry.name)
+    end
+  end
+  Check(added == 20 and #entries == 99, "exactly20 approved additions")
+  for _, id in ipairs({"art-ore","art-explosives","art-enchanting-materials","art-unbound-chain","art-gavel","art-wing"}) do
+    Check(not A.Get({kind="art",id=id}) and not RM.Art(id), "conditional art remains deferred: " .. id)
+  end
+  for _, id in ipairs({"explore","quickKeybind","lootRolls","home"}) do
+    Check(not A.Get({kind="icon",id=id}) and not RM.ValidIcon(id), "conditional/alias/uncurated icons remain excluded: " .. id)
+  end
+  -- Added choices use the same existing reminder schema and atomic Gallery setter.
+  local _, addedReminder = RM.Create("custom")
+  Check(G.Choose(addedReminder,G.ForArt("art-herbs")) and RM.Get(addedReminder).display.art == "art-herbs", "new art saves with existing display.art")
+  Check(G.Choose(addedReminder,G.ForIcon("auctionHouse")) and RM.Get(addedReminder).display.icon == "auctionHouse", "new icon saves exact registry key")
   local beforeItem = c.C_Item
   c.C_Item = {GetItemIconByID=function(id) if id == 6948 then return 123 end end}
   ok, reason = A.Draw(tex,{kind="item",id=6948},32)
@@ -192,7 +242,7 @@ do
   local isolated = { TwichUI = {PATH=R.PATH, Icons=R.Icons, ReminderArtData=DATA} }
   setmetatable(isolated,{__index=_G})
   local chunk = assert(loadfile(ROOT .. "artwork/Catalog.lua")); setfenv(chunk,isolated); chunk()
-  Check(isolated.TwichUI.Reminders == nil and #isolated.TwichUI.Artwork.Entries() == 79, "core works without Reminders or Settings")
+  Check(isolated.TwichUI.Reminders == nil and #isolated.TwichUI.Artwork.Entries() == 99, "core works without Reminders or Settings")
 end
 
 ---------------------------------------------------------------------------

@@ -101,6 +101,10 @@ RM.ICONS = {
     { "reminderShow", "Framed shield" }, { "reminders", "Bell" }, { "reminderTest", "Checklist" },
     { "hazardAlerts", "Warning shield" }, { "ammunition", "Quiver" }, { "foodAndDrink", "Bread and cup" },
     { "gearComparison", "Breastplate" }, { "mage", "Arcane staff" },
+    -- Approved shared-catalog additions only; never accept the whole icon registry.
+    { "auctionHouse", "Merchant scales" }, { "vendors", "Market stall" }, { "appearance", "Palette and brush" },
+    { "navigation", "Compass" }, { "mapPins", "Map pin" }, { "markers", "Pennant" }, { "summons", "Portal" },
+    { "resurrection", "Resurrection" }, { "lootGreed", "Coins" }, { "lootQuality", "Green gem" },
 }
 local ICON_SET = {}
 for _, i in ipairs(RM.ICONS) do ICON_SET[i[1]] = true end
