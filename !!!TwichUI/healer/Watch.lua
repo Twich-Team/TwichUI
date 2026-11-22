@@ -1,7 +1,7 @@
 -- TwichUI: Healer Watch, reading the game
 -- Works out who to watch, reads that one player's mana, life and auras and what they say in the chat channels you
--- chose, and hands the result to Logic.lua and Display.lua. It informs only: it never casts, targets, sends a message
--- or an addon message, and never decides whether anyone is ready.
+-- chose, and hands the result to Logic.lua and Display.lua. Monitoring never casts, targets or sends messages.
+-- Explicit player-selected self-status communication is separate; it never decides whether anyone is ready.
 --
 -- Game APIs and events (each documented in the Forever UI source, Blizzard_APIDocumentationGenerated):
 --   group: IsInGroup, IsInRaid, GetNumGroupMembers, GetNumSubgroupMembers, UnitGUID, UnitName, UnitIsUnit,
@@ -459,14 +459,17 @@ function OnEvent(event, ...)
         worldSeen = true
         W.Refresh()
     elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" then
+        if R.HealerCommunication then R.HealerCommunication.Close() end
         RosterSoon()
     elseif event == "PLAYER_REGEN_DISABLED" then
         inCombat = true
+        if R.HealerCommunication then R.HealerCommunication.Close() end
         if preview.active then W.PreviewStop() end   -- a preview or a move never carries into a fight
         if Watching() then AuraSoon() end           -- auras are usually kept from addons in combat
         Update()
     elseif event == "PLAYER_REGEN_ENABLED" then
         inCombat = false
+        D.ConfigureCommunication()
         if Watching() then ReadAll() end
         Update()
     elseif event == "ADDON_RESTRICTION_STATE_CHANGED" then

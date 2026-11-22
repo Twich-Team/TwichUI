@@ -365,6 +365,7 @@ healer\Drinks.lua
 healer\Particles.lua
 healer\Display.lua
 healer\Picker.lua
+healer\Communication.lua
 healer\Watch.lua
 
 # Return the Favor: a short list of the players who just buffed you; click one to buff them back (off until turned on).

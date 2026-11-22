@@ -27,7 +27,7 @@ local GAP = 4               -- between the panel and the menu
 
 local menu, title
 local rows = {}
-local owner, pickFn
+local owner, pickFn, kind, onClose, closeReason
 local listening = false
 
 local function Pal() return SM.Palette() end
@@ -63,7 +63,7 @@ local function Row(i)
     b.name:SetPoint("RIGHT", b.note, "LEFT", -8, 0)
     b:SetScript("OnClick", function(self)
         local fn, value = pickFn, self.value
-        P.Close()
+        P.Close("selected")
         if fn then fn(value) end
     end)
     rows[i] = b
@@ -108,7 +108,12 @@ local function Build()
     title = SM.Text(menu, SM.FONTS.title, 13, "GameFontNormal")
     title:SetText("Watch which healer?")
     title:SetTextColor(K.text[1], K.text[2], K.text[3])
-    menu:SetScript("OnHide", function() Listen(false) end)
+    menu:SetScript("OnHide", function()
+        Listen(false)
+        local callback, reason = onClose, closeReason or "closed"
+        owner, pickFn, kind, onClose, closeReason = nil, nil, nil, nil, nil
+        if callback then callback(reason) end
+    end)
     MenuStyle.Subscribe(function() if menu:IsShown() and P.last then P.Layout() end end)
     if UISpecialFrames then tinsert(UISpecialFrames, "TwichUIHealerPicker") end   -- Esc (never the game menu's handler list)
 end
@@ -172,14 +177,18 @@ end
 
 function P.IsOpen() return menu ~= nil and menu:IsShown() end
 
-function P.Close()
-    if menu and menu:IsShown() then menu:Hide() end
+function P.Kind() return P.IsOpen() and kind or nil end
+function P.Close(reason)
+    if menu and menu:IsShown() then closeReason = reason; menu:Hide() end
 end
 
-function P.Open(anchor, list, chosen, onPick)
+function P.Open(anchor, list, chosen, onPick, options)
     if P.IsOpen() and owner == anchor then P.Close() return true end
     Build()
+    if P.IsOpen() then P.Close() end
     owner, pickFn = anchor, onPick
+    kind, onClose = options and options.kind, options and options.onClose
+    title:SetText(options and options.title or "Watch which healer?")
     P.last = { list = list, chosen = chosen }
     P.Layout()
     Place()
