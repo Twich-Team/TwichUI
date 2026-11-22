@@ -1,7 +1,7 @@
 -- Archive-free, research-only external evidence. No saved data or native identity mapping.
 local R,W=TwichUI,TwichUI.Workshop
 local J,S=W.BridgeCodec,W.BridgeValidate
-local Q={PART_BYTES=1048576,TOTAL_BYTES=67108864,SLICE_MS=3,RESUMES=512}
+local Q={PART_BYTES=1048576,TOTAL_BYTES=67108864,SLICE_MS=3,RESUMES=512,HANDOFF_RESUMES=16}
 W.Summary=Q
 local N=J.NULL
 local active,job,rejected,selected=nil,nil,nil,false
@@ -9,11 +9,11 @@ local previous,previousCache
 local cached,queue,queued=nil,{},{}
 local stats={validation_ms=0,largest_slice_ms=0,slices=0,failures=0,load_ms=0,largest_load_ms=0,lookup_calls=0}
 local lastError
-local notificationPending=false
 local function changed()
-    if notificationPending or not W.Pricing or not C_Timer or not C_Timer.After then return end
-    notificationPending=true
-    C_Timer.After(0.1,function() notificationPending=false;if W.Active() then W.Pricing.Changed() end end)
+    if W.Pricing and W.Pricing.Notify then W.Pricing.Notify() end
+end
+local function cancelPending()
+    if W.Pricing and W.Pricing.CancelPending then W.Pricing.CancelPending() end
 end
 local function clock() return GetTimePreciseSec and GetTimePreciseSec()*1000 or debugprofilestop and debugprofilestop() or 0 end
 local function measured(id,fn,...) if R.Perf and R.Perf.Call then return R.Perf.Call(id,fn,...) end;return fn(...) end
@@ -97,12 +97,20 @@ local function rows(raw,p,h)
     return out
 end
 local schedule,startNext
+local function handoff(bucket,why,notify)
+    if not (W.Pricing and W.Pricing.Decoded and W.Pricing.Rejected) then return end
+    job={kind='handoff',bucket=bucket,notify=notify,co=coroutine.create(function()
+        if why then W.Pricing.Rejected(bucket,why,coroutine.yield)
+        else W.Pricing.Decoded(bucket,coroutine.yield) end
+    end)}
+end
 function Q.Selected() return selected end
 function Q.Deactivate() selected=false;Q.Cancel();active,cached,previous,previousCache=nil,nil,nil,nil;queue,queued={},{} end
 function Q.Begin(raw,expected,suppressPendingSelection)
     if active and active.raw==raw and active.manifest==raw.manifest and active.bank==raw.bank and active.receiptText==raw.receipt then selected=true;return true end
     if rejected==raw then return false,'invalid' end
     if job and job.raw==raw then schedule();return false,'loading' end
+    cancelPending()
     rejected=nil;lastError=nil;stats.unsupported=nil;stats.reload_required=nil
     job={kind='header',raw=raw,co=coroutine.create(function()return header(raw,expected)end)}
     if not active and not suppressPendingSelection then selected=true end
@@ -127,6 +135,10 @@ local function loadPart(p)
         active.loaded_parts=active.loaded_parts+1;active.loaded_bytes=active.loaded_bytes+#raw
         need(active.loaded_bytes<=Q.TOTAL_BYTES)
     end
+    if R.Perf and R.Perf.on then
+        R.Perf.Count('workshop.summary.decodeStarts')
+        if active.checked[p.bucket] then R.Perf.Count('workshop.summary.decodeRepeats') end
+    end
     job={kind='part',bucket=p.bucket,raw=raw,co=coroutine.create(function()return rows(raw,p,active.header)end)}
     return true
 end
@@ -134,7 +146,7 @@ startNext=function()
     if job or not active or #queue==0 then return end
     local bucket=table.remove(queue,1);queued[bucket]=nil
     local ok,why=loadPart(active.parts[bucket])
-    if not ok then active.failed[bucket]=why;lastError=why end
+    if not ok then active.failed[bucket]=why;lastError=why;handoff(bucket,why,true);if not job then changed() end end
     if job then schedule() end
 end
 function Q.Step(ms)
@@ -143,11 +155,11 @@ function Q.Step(ms)
         if not current then startNext();return active~=nil,lastError end
         local start,n=clock(),0
         local budget=math.max(0.5,(W.Int(ms,1,20) or Q.SLICE_MS)-1)
-        local limit=(GetTimePreciseSec or debugprofilestop) and Q.RESUMES or 32
+        local limit=current.kind=='handoff' and Q.HANDOFF_RESUMES or (GetTimePreciseSec or debugprofilestop) and Q.RESUMES or 32
         repeat
             local ok,value=coroutine.resume(current.co);n=n+1
             if not ok then
-                stats.failures=stats.failures+1;changed();lastError='invalid';stats.unsupported=value=='summary newer_addon'
+                stats.failures=stats.failures+1;cancelPending();changed();lastError='invalid';stats.unsupported=value=='summary newer_addon'
                 if current.kind=='header' then rejected=current.raw else
                     active.failed[current.bucket]='invalid';stats.reload_required=true
                     if previous then rejected=active.raw;active,cached=previous,previousCache;previous,previousCache=nil,nil;queue,queued={},{} end
@@ -155,24 +167,31 @@ function Q.Step(ms)
                 job=nil;break
             end
             if coroutine.status(current.co)=='dead' then
-                if current.kind=='header' or not active.checked[current.bucket] then changed() end
-                if current.kind=='header' then previous,previousCache=active,cached;active=value;cached=nil;queue,queued={},{};selected=true
+                if current.kind=='handoff' then job=nil;if current.notify then changed() end;break end
+                local notify=current.kind=='header' or not active.checked[current.bucket]
+                if current.kind=='header' then previous,previousCache=active,cached;active=value;cached=nil;queue,queued={},{};selected=true;cancelPending()
                 else
                     if not active.checked[current.bucket] then active.checked_count=active.checked_count+1 end
                     active.checked[current.bucket]=true;active.failed[current.bucket]=nil
                     cached={bucket=current.bucket,rows=value}
                 end
                 job=nil
-                if current.kind=="part" and W.Pricing then W.Pricing.Decoded(current.bucket) end
+                if current.kind=="part" then handoff(current.bucket,nil,notify) end
+                if notify and not job then changed() end
                 break
             end
         until n>=limit or clock()-start>=budget
         local elapsed=math.max(0,clock()-start)
-        stats.validation_ms=stats.validation_ms+elapsed;stats.largest_slice_ms=math.max(stats.largest_slice_ms,elapsed);stats.slices=stats.slices+1
+        if current.kind=='handoff' then
+            stats.completion_ms=(stats.completion_ms or 0)+elapsed
+            stats.largest_completion_ms=math.max(stats.largest_completion_ms or 0,elapsed)
+        else
+            stats.validation_ms=stats.validation_ms+elapsed;stats.largest_slice_ms=math.max(stats.largest_slice_ms,elapsed);stats.slices=stats.slices+1
+        end
         if not job then startNext() end
         return active~=nil,job and 'loading' or lastError
     end
-    return measured('workshop.summaryValidate',run)
+    return measured(job and job.kind=='handoff' and 'workshop.pricingComplete' or 'workshop.summaryValidate',run)
 end
 schedule=function()
     local current=job;if not current or current.scheduled or not(C_Timer and C_Timer.After) then return end
@@ -182,7 +201,7 @@ schedule=function()
         current.scheduled=false;Q.Step();if job then schedule() end
     end)
 end
-function Q.Cancel() job=nil;queue,queued={},{} end
+function Q.Cancel() cancelPending();job=nil;queue,queued={},{} end
 function Q.Pending() return job~=nil end
 function Q.Load(raw) return Q.Begin(raw) end
 local function request(bucket)

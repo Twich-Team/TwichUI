@@ -396,3 +396,11 @@ Diagnostics preset have their own passing focused checks and simulator evidence.
 `auction-house` and `auction-preview` now also select `test_perf_engine.lua` and
 the two changed Diagnostics source files. No full/release certification or native
 client acceptance is inferred from this campaign.
+
+### Market pending-pricing performance
+
+`./tests/run.sh development market-performance` selects six small production-reader,
+pricing, estimator and integrity modules without a simulator. It supplements the
+normal affected Market/crafting/consumer groups. Dedicated audit benchmarks remain
+opt-in (`tools/measure_market_opportunities.py`), never default test discovery.
+[PR1 implementation and comparable measurement procedure](performance/v2-market-pending-pricing-pr1.md).

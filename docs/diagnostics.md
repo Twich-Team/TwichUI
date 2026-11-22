@@ -508,3 +508,15 @@ cleanup gauges. The panel's frame time is an FPS-derived estimate; Diagnostics
 captures actual sampled frame times. No permanent panel ticker or auto-query exists.
 
 `workshop.summaryHistory` measures the negotiated history reader’s selected-item daily projection (at most 60 dated observations). It allocates no retained cache. Existing raw-byte/partition/decoded/checked gauges cover both supported summary contracts; contract 2 is negotiated only with a matching installed Companion consumer declaration.
+
+### Market PR1 completion capture
+
+`workshop.pricingComplete` scopes Summary's elapsed-budget handoff (total/worst
+slice), independently of `workshop.summaryValidate` and `.summaryLoad`.
+Opt-in aggregate counters `workshop.pricing.uniquePending`, `.deduplicated`,
+`.readerCalls`, `.baseKeys`, `.settled`, `.notifications`, `.fullLists` and
+`workshop.summary.decodeStarts` / `.decodeRepeats` contain no item-level data.
+Gauge `workshop.pricingPending` complements the existing compact reference cache,
+raw partition and decoder gauges. These reset/count through the existing bounded
+capture infrastructure; reading gauges never starts work. See the
+[PR1 capture definitions and limitations](performance/v2-market-pending-pricing-pr1.md#diagnostics-and-native-check).

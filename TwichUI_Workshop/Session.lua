@@ -683,6 +683,7 @@ end
 -- Everything the Opportunities view draws: rows (filtered and sorted), counts, the price source, the cut, and the text for an empty list
 function S.Opportunities()
     local pt = R.Perf and R.Perf.on and R.Perf.Start("workshop.estimate")
+    if R.Perf and R.Perf.on then R.Perf.Count("workshop.pricing.fullLists") end
     local src = S.PriceSource()
     local recipes = S.AllRecipes()
     local market = src.market
