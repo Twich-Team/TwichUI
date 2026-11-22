@@ -83,8 +83,8 @@ name fitting preserves whole UTF-8 characters and the complete item tooltip.
 ### Runtime assets and alpha
 
 `!!!TwichUI/media/loot/victory/` retains eleven original TGAs: frame, Need/Greed
-emblems, two laurels, four rarity halos, rim highlight and badge. Both original
-OGGs remain unchanged. Five superseded original effects (bright/small sparks,
+emblems, two laurels, four rarity halos, rim highlight and badge. The supplied
+cue ships as `loot_won.ogg`, a 48 kHz stereo Vorbis export. Five superseded original effects (bright/small sparks,
 two dust sprites and sheen ribbon) no longer ship. Their authoring originals and
 historical evidence remain outside the addon.
 
