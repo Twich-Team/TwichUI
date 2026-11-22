@@ -533,6 +533,9 @@ function W.Refresh()
         return
     end
     running = true
+    -- A first combat build may have been disabled before its regen event.
+    -- Re-enabling out of combat must finish the owned hover setup as well.
+    D.ConfigureCommunication()
     inCombat = InCombatLockdown() == true or (UnitAffectingCombat ~= nil and Plain(UnitAffectingCombat("player")) == true)
     scopeActive = ScopeActive()
     Resolve()

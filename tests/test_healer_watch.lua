@@ -348,6 +348,11 @@ end
 -- 4. Watching: the one with the Healer role, in a dungeon
 ---------------------------------------------------------------------------
 do
+  -- A panel first built in combat must recover when re-enabled after combat,
+  -- even if it was disabled before PLAYER_REGEN_ENABLED could be observed.
+  G.combat = true; On()
+  Check(not Panel().communicationHover:IsShown(), "first combat build defers protected hover configuration")
+  Off(); G.combat = false
   On()
   local s = Wt.Snapshot()
   Check(s.running and s.scopeActive and s.unit == "party2" and s.source == "auto" and s.name == "Elyndra", "watches the Healer role in a dungeon")

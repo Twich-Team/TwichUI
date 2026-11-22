@@ -13,7 +13,8 @@ local function Plain(v) return not (issecretvalue and issecretvalue(v)) end
 local function GroupFlag(category, raid)
     local fn = raid and IsInRaid or IsInGroup
     if type(fn) ~= "function" then return nil end
-    local ok, value = pcall(fn, category)
+    local ok, value
+    if raid then ok, value = pcall(fn) else ok, value = pcall(fn, category) end
     if not ok or not Plain(value) or type(value) ~= "boolean" then return nil end
     return value
 end
