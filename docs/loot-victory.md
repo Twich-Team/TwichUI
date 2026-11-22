@@ -128,7 +128,7 @@ These are synthetic clients, not native reload/combat/input tests.
 Simulator scenarios are available through:
 
 ```sh
-bash tools/simlab/run.sh loot victoryResolve victoryReveal victorySheen victoryParticles victoryStatic victoryFade victoryDone victoryOff victoryGreed victoryScaled cards
+bash tools/simlab/run.sh loot victoryResolve victoryReveal victorySheen victoryParticles victoryStatic victoryFade victoryDone victoryOff victoryGreed victoryScaled victorySettings cards
 ```
 
 They fire the native event over fake item/roll APIs while running real addon code.

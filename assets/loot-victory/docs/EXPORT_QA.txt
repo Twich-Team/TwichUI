@@ -1,2 +1,2 @@
-PASS: 19 PNG/TGA RGBA texture pairs, power-of-two dimensions, pixel-identical PNG/TGA exports, nonempty alpha. 2 original OGG+WAV sound pairs. 
+PASS: 19 PNG/TGA RGBA texture pairs, power-of-two dimensions, pixel-identical PNG/TGA exports, nonempty alpha. 2 original OGG+WAV sound pairs.
 Client runtime validation: NOT PERFORMED.
