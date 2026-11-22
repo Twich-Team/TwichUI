@@ -323,12 +323,13 @@ local function RenderDetail(rows,positions)
     -- the facts sit beside the materials and the history has the whole width under both (a fixed place: the strategy block never takes its room)
     d.paintFacts=f
     end
-    if economyChanged or d.historyRevision~=historyRevision then
+    if economyChanged or d.historyRevision~=historyRevision or d.chart.needsRefresh then
     d.historyRevision=historyRevision
     local f=d.paintFacts
-    local series = f and F.Chart(f) or nil
+    local series,why
+    if f then series,why=F.Chart(f) end
     d.chart:Set(W.AdvancedChart.FromObserved(series), UI.Money,
-        "workshop:opportunities:"..tostring(rec.outItem)..":"..tostring(series and series.market))
+        "workshop:opportunities:"..tostring(rec.outItem)..":"..tostring(f and f.key),why)
     d.chartNote:SetText((series and series.external and "Market server · Recent Price · " or "")..ChartNote(series))   -- the days the history really covers; when the listings were scanned is on the Data quality row
     end
     Opps.PaintStrategy(rec, e)

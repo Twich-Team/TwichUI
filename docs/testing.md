@@ -67,7 +67,7 @@ Replace `workshop-settings` with one of these nonempty groups:
 | `auction-house` | Standalone Auction House preview, existing auction safeguards and Workshop dependencies |
 | `crafting` | Crafting, shopping, stock, planner, strategy and compact views |
 | `market` | Prices, distribution, history, valuation, schema and automatic scans |
-| `market-performance` | Twelve fast deterministic pricing/partition/estimator/incremental-engine/diagnostics/reference/catalog modules; no large benchmarks or simulators in development selection |
+| `market-performance` | Thirteen fast deterministic pricing/partition/history-state/estimator/incremental-engine/diagnostics/reference/catalog modules; no large benchmarks or simulators in development selection |
 | `reminders` | Reminders engines, designer, settings and artwork |
 | `loot-rolls` | Loot Rolls rules, cards, automatic rolling and settings pages; the synthetic-roll simulator catalog is run by hand with `bash tools/simlab/loot.sh` |
 | `navigation` | Navigation, maps, pins, NPCs and guild locations |

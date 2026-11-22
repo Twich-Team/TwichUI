@@ -9,6 +9,7 @@ setmetatable(P,{__index=MK})
 local cache,count,stamp={},0,nil
 local header,headerGeneration,headerAt
 local chartCache,chartPending
+local chartRevision=0
 local pending,pendingCount={},0
 local revision,epoch=0,0
 local notification,notificationDelay
@@ -104,7 +105,7 @@ function P.CancelPending()
     pending,pendingCount={},0
     epoch=epoch+1
     notificationToken=notificationToken+1;notification=false
-    chartPending=nil
+    chartPending=nil;chartRevision=chartRevision+1
 end
 local function dataStamp(status)
     status=status or B.Status()
@@ -149,7 +150,6 @@ end
 function P.ContextGeneration()
     local s=B.Status();return dataStamp(s)..':'..tostring(s.ready)
 end
-local chartRevision=0
 function P.ChartRevision()return chartRevision end
 function P.BaseKey(item)
     item=W.Int(item,1,W.MAX_ID)
@@ -346,14 +346,23 @@ function P.Facts(item,opt)
     return f
 end
 function P.Chart(f)
-    local key=f.generation..':'..f.referenceItem
+    -- Only the selected chart needs a completion notification. A cached result
+    -- must still belong to the active generation and exact item/variant.
+    chartPending=nil
+    local status=B.Status()
+    if not status.ready then return nil,'unavailable' end
+    if status.generation~=f.generation then return nil,'generation_changed' end
+    local key=dataStamp(status)..':'..f.referenceItem..':'..f.referenceVariant
     if chartCache and chartCache.key==key then return chartCache.series end
     local h,why=B.History(f.referenceItem,f.referenceVariant,'recent',{days=60})
     if not h then
-        if why=='loading' then chartPending=f.referenceItem%64+(B.Status().contract_version==3 and 64 or 0) end
+        if why=='loading' then chartPending=f.referenceItem%64+(status.contract_version==3 and 64 or 0) end
         if f.localMarket then
             local localFacts=W.Facts.Of(f.referenceItem,{market=f.localMarket,localOnly=true})
-            return W.Facts.Chart(localFacts)
+            -- Local observations remain usable, but cannot turn a pending or
+            -- failed server request into a definitive empty-history response.
+            local series=W.Facts.Chart(localFacts)
+            return series,why
         end
         return nil,why
     end

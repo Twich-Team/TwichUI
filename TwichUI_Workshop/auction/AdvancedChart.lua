@@ -16,12 +16,12 @@ local function Day(d) return date('!%Y-%m-%d',math.floor(d*86400)) end
 -- prices, synthesizing observations, or modifying the cached facts.
 function C.FromObserved(series)
     if not series then return nil end
-    local out={points={},groups={},gaps={},metric='min',today=series.today,basis=series.basis}
+    local out={points={},groups={},gaps=series.gaps or {},metric=series.external and 'recent' or 'min',today=series.today,basis=series.basis}
     local from,to
     local function Span(a,b) from=math.min(from or a,a);to=math.max(to or b,b) end
     for _,p in ipairs(series.points or {}) do
         out.points[#out.points+1]={day=p.day,price=p.price,kind='day',
-            provenance='Saved local scan history',at=Day(p.day)..' UTC · minimum listing observation'}
+            provenance=p.provenance or 'Saved local scan history',at=p.at or Day(p.day)..' UTC · minimum listing observation'}
         Span(p.day,p.day)
     end
     for _,g in ipairs(series.groups or {}) do
@@ -141,6 +141,12 @@ function UI.AdvancedMarketChart(parent,w,h)
     local function Text(size,color) return UI.Text(c,size,color or UI.K.textDim) end
     c.msg=Text(12);c.msg:SetPoint('CENTER');c.msg:SetWidth(w-120);c.msg:SetJustifyH('CENTER')
     c.note=Text(11);c.note:SetPoint('TOP',c.msg,'BOTTOM',0,-5)
+    c.statusText=Text(11,UI.K.bronzeText)
+    c.spinner=CreateFrame('Frame',nil,c,'SpinnerTemplate');c.spinner:SetSize(18,18);c.spinner:EnableMouse(false)
+    for _,texture in ipairs({c.spinner.Ring,c.spinner.Sparks}) do
+        texture:SetVertexColor(UI.K.bronzeText[1],UI.K.bronzeText[2],UI.K.bronzeText[3],.7)
+    end
+    c.spinner:Hide();c.statusText:Hide()
     c.start=Text(10);c.start:SetPoint('TOPLEFT',c.plot,'BOTTOMLEFT',0,-8)
     c.finish=Text(10);c.finish:SetPoint('TOPRIGHT',c.plot,'BOTTOMRIGHT',0,-8)
     c.hint=Text(10);c.hint:SetPoint('BOTTOMLEFT',8,4);c.hint:SetText('Drag to zoom · Right-click to reset')
@@ -168,11 +174,44 @@ function UI.AdvancedMarketChart(parent,w,h)
     end
     function c:Clear()
         self:ClearHover();self.series=nil;self.data=nil;self.drawData=nil;self.window=nil;self.context=nil;self.anchors={}
+        self.spinner:Hide();self.statusText:Hide();self.msg:SetText('');self.note:SetText('');self.hint:Hide()
+        self.presentationState=nil;self.historyReason=nil;self.needsRefresh=true
         for i=1,4 do self.guides[i]:Hide();self.labels[i]:SetText('') end
         self.start:SetText('');self.finish:SetText('')
         for _,p in ipairs(self.pool) do p:Hide() end
         for _,p in ipairs(self.linePool) do p:Hide() end
         for _,p in ipairs(self.nativePool) do p:Hide() end
+    end
+    -- State-only changes preserve plot geometry, zoom and active inspection.
+    -- SpinnerTemplate owns its animation and stops it on hide; no Lua polling.
+    function c:Present(why)
+        self.historyReason=why;self.needsRefresh=false
+        local loading=why=='loading'
+        local empty=why==nil or why=='nodata' or why=='not_observed'
+        self.presentationState=loading and 'loading' or self.series and 'available' or empty and 'empty' or 'unavailable'
+        self.statusText:Hide();self.hint:SetShown(self.series~=nil)
+        if loading or self.series and why and not empty then
+            self.statusText:ClearAllPoints();self.spinner:ClearAllPoints()
+            if self.series then
+                self.statusText:SetPoint('TOPRIGHT',-12,-10)
+                self.statusText:SetText(loading and 'Server history loading… · Showing local history' or 'Server history unavailable · Showing local history')
+                self.spinner:SetPoint('RIGHT',self.statusText,'LEFT',-6,0)
+            else
+                self.msg:SetText('');self.note:SetText('')
+                self.statusText:SetPoint('CENTER',0,-10);self.statusText:SetText('Loading price history…')
+                self.spinner:SetPoint('BOTTOM',self.statusText,'TOP',0,7)
+            end
+            self.statusText:Show()
+        elseif not self.series then
+            local messages={nomarket='Choose a Market or record an Auction House scan to view price history.',
+                variant='Price history is not supported for this item variant.',
+                summary_only='This Market data does not include price history.',
+                combat='Price history is paused during combat.',
+                generation_changed='Market data changed. Price history is unavailable for the previous selection.'}
+            self.msg:SetText(empty and 'No price history yet for this selection.' or messages[why] or 'Price history is unavailable. Market data could not be loaded.')
+            self.note:SetText('')
+        end
+        self.spinner:SetShown(loading and self:IsShown())
     end
     function c:Inspect(day)
         local d=self.data;if not d then return end
@@ -305,8 +344,9 @@ function UI.AdvancedMarketChart(parent,w,h)
         self.msg:SetText(#d.points==0 and #d.groups==0 and 'No supported observations in this interval.' or '')
         if replaced then self.note:SetText('') end;self.state=#d.points==1 and 'single' or #d.points==0 and 'empty' or 'series';self.shown=#d.points
     end
-    function c:Set(series,format,context)
+    function c:Set(series,format,context,why)
         if self.data and self.context==context and C.Same(self.series,series) then
+            self:Present(why)
             self.series=series;self.format=format or UI.Money;self:Render();return
         end
         if not (self.data and self.context==context) then self:ClearHover();self.window=nil end
@@ -314,8 +354,9 @@ function UI.AdvancedMarketChart(parent,w,h)
         local pt=R.Perf.on and R.Perf.Start('auction.chartPrepare')
         self.data=C.Prepare(series,self.window and self.window[1],self.window and self.window[2]);self.data.metric=series and series.metric
         if pt then R.Perf.Stop(pt) end
-        if not series then self:Clear();self.msg:SetText('No supported history for this selection.');self.note:SetText('');return end
+        if not series then self:Clear();self.context=context;self:Present(why);return end
         R.Perf.Call('auction.chartDraw',self.Render,self)
+        self:Present(why)
         self:Resume()
     end
     function c:Select(from,to)

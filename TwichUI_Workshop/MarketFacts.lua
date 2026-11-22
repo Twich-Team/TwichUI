@@ -295,8 +295,7 @@ end
 -- the Recent Price is never mixed with it. Exact days are dots; week, fortnight and legacy buckets are groups (never drawn as days); the
 -- 48-hour observations only stand in for a day that has no daily point yet (the day's last observation). Nothing is interpolated.
 -- Returns series or nil and a reason; memoised on the facts while the item's saved strings are the same ones (a scan replaces the facts).
-function F.Chart(f)
-    if f.reference and W.Pricing then return W.Pricing.Chart(f) end
+local function LocalChart(f)
     if f.nomarket or f.variant or not f.key then return nil, f.variant and "variant" or "nomarket" end
     local m = ResolveMarket({ market = f.key })
     if not m then return nil, "nomarket" end
@@ -329,4 +328,11 @@ function F.Chart(f)
     if #points == 0 and #groups == 0 then return Done(nil, "nodata") end
     return Done({ item = f.item, points = points, groups = groups, today = h.today, market = h.market, label = h.label, basis = h.basis,
         recordedFrom = h.recordedFrom, v2from = h.v2from })
+end
+function F.Chart(f)
+    if f.reference and W.Pricing then return W.Pricing.Chart(f) end
+    local series,why=LocalChart(f)
+    -- Current prices can finish before history is requested. Preserve their
+    -- pending state too; the existing pricing notification supplies fresh facts.
+    return series,f.referenceWhy=='loading' and 'loading' or why
 end

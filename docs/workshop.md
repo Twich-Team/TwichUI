@@ -109,6 +109,16 @@ The follow-up pull request records focused unit, mutation, simulator and package
 verification after the initial in-game iteration. Native appearance and pointer
 behavior still require Forever acceptance. Older chart descriptions above are historical.
 
+Opportunities preserves the history request's loading reason through the facts and
+detail views. Pending history shows a small native bronze spinner and “Loading
+price history…” in the existing chart area. Usable local history stays interactive
+with a quieter server-loading indication. Completed empty history and terminal
+failures have separate explanations. Completion uses the existing pricing
+notification; hiding clears the spinner, and reopening refreshes from the existing
+chart cache. Item/variant and active-generation checks prevent stale cache reuse.
+`test_workshop_market_history_loading.lua` covers these transitions in the fast
+`market-performance` group. Validation scheduling and Market formats are unchanged.
+
 **Market figures (A7).** The Opportunities details show Lowest listing, Competing price, Recent price, Market value (14d), Historical value (60d), Supply and Data quality (`MarketFacts.lua`, over the Market services), with the existing chart below; the tooltip has a Market value line (Always) and four Hold Shift lines; Shopping prices the auction option for the quantity still missing with `Market.Cost` (exact, a range, "at least", or not enough listed). Profit used the lowest listing until 2026-11-20; it now uses the planning estimate (above). See "A7 as built".
 
 **On the auction house window** (`AuctionButton.lua`): the same **Scan prices** button sits under the window's lower right corner, with the same progress bar and message beside it while a scan runs and the last message

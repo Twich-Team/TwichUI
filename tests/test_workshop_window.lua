@@ -38,6 +38,7 @@ local c = MIClient("Rich", {
       fr.SetFrameStrata = function() end
       fr.SetMotionScriptsWhileDisabled = function() end
       fr.CreateTexture = function(s) local t = MIFake("Texture", s); t.SetColorTexture = function() end t.SetVertexColor = function() end t.SetTexCoord = function() end t.SetTexture = function(x, v) x.texture = v end return t end
+      if template=='SpinnerTemplate' then fr.Ring=fr:CreateTexture();fr.Sparks=fr:CreateTexture() end
       fr.CreateFontString = function(s) local t = MIFake("FontString", s); t.SetFont = function() return true end t.SetJustifyV = function() end t.SetWordWrap = function() end t.SetTextColor = function() end return t end
       Press.Instrument(fr, name)   -- last, so it replaces the no-op EnableMouse above with one that records
       if name then cl[name] = fr end
@@ -923,7 +924,7 @@ do
   Check(chart.msg:GetText()=="","supported aggregate bands do not claim no history")
   c.TwichUIWorkshopDB.markets["Realm|Alliance"].hist[501] = nil
   Win.Render()
-  Same(chart.data,nil);Check(chart.msg:GetText():find("No supported history",1,true),chart.msg:GetText())
+  Same(chart.data,nil);Check(chart.msg:GetText():find("No price history yet",1,true),chart.msg:GetText())
   Same(chart.labels[1]:GetText(),"","no stale axis values")
   c.TwichUIWorkshopDB.markets["Realm|Alliance"].hist[501] = "garbage"
   Win.Render()
