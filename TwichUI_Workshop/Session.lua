@@ -852,17 +852,22 @@ function S.PlanEstimates(v)
     return byId, t
 end
 
--- The names of the queued recipes that use an item as a material, for "needed for ..." lines (the queue's own materials; one level, no search)
+-- Queued consumers of a material (one level, no catalog search). The second return
+-- supplies recorded output identities for presentation; existing name-list callers keep their contract.
 function S.NeededFor(item)
-    local out = {}
+    local out, records = {}, {}
     for _, e in ipairs(Q.Entries()) do
         if e.mats then
             for _, m in ipairs(e.mats) do
-                if m.item == item then out[#out + 1] = e.name break end
+                if m.item == item then
+                    out[#out + 1] = e.name
+                    records[#records + 1] = { name = e.name, item = e.outItem }
+                    break
+                end
             end
         end
     end
-    return out
+    return out, records
 end
 
 ---------------------------------------------------------------------------

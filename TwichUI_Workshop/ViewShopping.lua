@@ -255,6 +255,37 @@ end
 
 -- The chosen material's details
 ---------------------------------------------------------------------------
+-- These rows reuse the item frame treatment without guessing an output from a recipe icon.
+local function MakeConsumerRow(parent)
+    local row = CreateFrame("Frame", nil, parent)
+    row.iconBtn = CreateFrame("Button", nil, row)
+    row.iconBtn:SetSize(28, 28)
+    row.iconBtn:SetPoint("LEFT", 2, 0)
+    row.iconFrame = UI.ItemIcon(row.iconBtn, 28)
+    row.iconFrame:SetAllPoints()
+    UI.ItemTip(row.iconBtn, function() return row.item end)
+    row.name = UI.Text(row, 13, K.text, "strong")
+    row.name:SetPoint("LEFT", 36, 0)
+    row.name:SetPoint("RIGHT", -2, 0)
+    row.name:SetWordWrap(true)
+    row.name:SetMaxLines(2)
+    row.name:SetHeight(30)
+    UI.TipFn(row, nil, function() return row.fullName end)
+    row.fill = function(self, record)
+        self.item = record.item
+        local name, icon
+        if record.item then name, icon = O.ItemFacts(record.item) end
+        self.iconFrame.tex:SetTexture(icon or UI.ICON_BLANK)
+        self.iconBtn:SetShown(icon ~= nil)
+        self.name:ClearAllPoints()
+        self.name:SetPoint("LEFT", icon and 36 or 2, 0)
+        self.name:SetPoint("RIGHT", -2, 0)
+        self.name:SetText(name or record.name or "Unknown recipe")
+        self.fullName = name or record.name or "Unknown recipe"
+    end
+    return row
+end
+
 local function RenderDetail(plan, ctx)
     local d = page.detail
     local r
@@ -266,6 +297,7 @@ local function RenderDetail(plan, ctx)
         chosen = nil
         d.empty:SetText("Choose a material to see where to get it, what is owned and what it may cost.")
         d.data = nil
+        d.consumers:SetData({})
         return
     end
     d.data = r
@@ -319,8 +351,8 @@ local function RenderDetail(plan, ctx)
     d.useSuggestion:SetShown(isBuyMake and r.picked == true and r.suggested ~= nil and r.source ~= r.suggested)
     d.sourceHead:SetText(isBuyMake and "Source" or "Where")
     d.explainBox:ClearAllPoints()
-    d.explainBox:SetPoint("TOPLEFT", 14, isBuyMake and -252 or -208)
-    d.explainBox:SetPoint("TOPRIGHT", -14, isBuyMake and -252 or -208)
+    d.explainBox:SetPoint("TOPLEFT", 14, isBuyMake and -238 or -208)
+    d.explainBox:SetPoint("TOPRIGHT", -14, isBuyMake and -238 or -208)
     d.explain:SetText(ShopDetail(r))
     -- the price evidence
     if r.kind == "collect" then
@@ -349,8 +381,12 @@ local function RenderDetail(plan, ctx)
         d.costNote:SetText(r.cash and table.concat(tag, ", ") or why)
     end
     -- what the queue needs it for
-    local used = S.NeededFor(r.item)
-    d.usedFor:SetText(#used > 0 and ("Needed for: " .. table.concat(used, ", ")) or (r.forNames and ("Needed to make: " .. table.concat(r.forNames, ", ")) or ""))
+    local _, consumers = S.NeededFor(r.item)
+    if #consumers == 0 then
+        for _, name in ipairs(r.forNames or {}) do consumers[#consumers + 1] = { name = name } end
+    end
+    if d.consumerItem ~= r.item then d.consumers:ScrollTop(); d.consumerItem = r.item end
+    d.consumers:SetData(consumers, "No queued recipe reference available.")
     -- the one action that fits the row
     if r.kind == "make" then
         d.act.text:SetText(r.multilevel and "Add optimized plan" or "Add to crafting plan")
@@ -506,7 +542,7 @@ local function BuildDetail()
     end
     -- the source: the choices, which one Workshop suggests, and which one is the player's own. A small caption under a choice says so
     -- ("Suggested", "Your choice") in words, and "Use suggestion" returns to the suggestion when another source was chosen.
-    d.sourceHead = Section(d.head, "Source", -180)
+    d.sourceHead = Section(d.head, "Source", -170)
     d.choose, d.tags = {}, {}
     local bw = math.floor((DETAIL_W - 28 - 8) / 3)
     for i, k in ipairs(Sh.ORDER) do
@@ -517,7 +553,7 @@ local function BuildDetail()
                 UI.Redraw()
             end
         end)
-        b:SetPoint("TOPLEFT", 14 + (i - 1) * (bw + 4), -204)
+        b:SetPoint("TOPLEFT", 14 + (i - 1) * (bw + 4), -194)
         UI.TipFn(b, ({ vendor = "Buy from vendor", auction = "Buy at Auction House", make = "Craft from reagents" })[k], function()
             local r = d.data
             if not r then return nil end
@@ -537,37 +573,35 @@ local function BuildDetail()
     d.useSuggestion = UI.Button(d.head, "Use suggestion", 112, "secondary", function()
         if d.data then S.PickSource(d.data.item, nil); UI.Redraw() end
     end, 20)
-    d.useSuggestion:SetPoint("TOPRIGHT", -14, -175)
+    d.useSuggestion:SetPoint("TOPRIGHT", -14, -165)
     UI.Tip(d.useSuggestion, "Use suggestion", "Go back to the lowest known cost.")
     d.useSuggestion:Hide()
     d.explainBox = CreateFrame("Frame", nil, d.head)
-    d.explainBox:SetPoint("TOPLEFT", 14, -252)
-    d.explainBox:SetPoint("TOPRIGHT", -14, -252)
-    d.explainBox:SetHeight(40)
+    d.explainBox:SetPoint("TOPLEFT", 14, -238)
+    d.explainBox:SetPoint("TOPRIGHT", -14, -238)
+    d.explainBox:SetHeight(32)
     d.explainBox:EnableMouse(true)
     d.explainBox:SetScript("OnEnter", function(self) ShowShopBasis(self, d.data) end)
     d.explainBox:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
     d.explain = UI.Text(d.explainBox, 12, K.textDim)
     d.explain:SetPoint("TOPLEFT", 0, 0)
     d.explain:SetWidth(DETAIL_W - 28)
-    d.explain:SetHeight(40)
+    d.explain:SetHeight(32)
     d.explain:SetWordWrap(true)
     -- the price
     d.costLabel = UI.Text(d.head, 12, K.stone)
-    d.costLabel:SetPoint("TOPLEFT", 14, -300)
+    d.costLabel:SetPoint("TOPLEFT", 14, -278)
     d.cost = UI.Text(d.head, 17, K.text, "strong")
-    d.cost:SetPoint("TOPRIGHT", -14, -296)
+    d.cost:SetPoint("TOPRIGHT", -14, -274)
     d.cost:SetJustifyH("RIGHT")
     d.costNote = UI.Text(d.head, 11, K.stone)
-    d.costNote:SetPoint("TOPRIGHT", -14, -317)
+    d.costNote:SetPoint("TOPRIGHT", -14, -295)
     d.costNote:SetJustifyH("RIGHT")
     d.costNote:SetWidth(DETAIL_W - 28)
-    d.usedFor = UI.Text(d.head, 12, K.textDim)
-    d.usedFor:SetPoint("TOPLEFT", 14, -334)
-    d.usedFor:SetPoint("RIGHT", -14, 0)
-    d.usedFor:SetWordWrap(true)
-    d.usedFor:SetJustifyV("TOP")
-    d.usedFor:SetHeight(28)
+    d.neededHead = Section(d.head, "Needed for", -318)
+    d.consumers = UI.List(d.head, 34, MakeConsumerRow, 34, "editor")
+    d.consumers.box:SetPoint("TOPLEFT", 10, -340)
+    d.consumers.box:SetPoint("BOTTOMRIGHT", -10, 52)
     d.act = UI.ArtButton(d, "Show vendor", "npc:coins", DETAIL_W - 28, "primary", function()
         local x = d.data
         if not x then return end

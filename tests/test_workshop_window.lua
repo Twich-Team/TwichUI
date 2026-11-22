@@ -1001,13 +1001,49 @@ do
   Same(d.qty[1].l:GetText(), "Needed in total"); Same(d.qty[1].v:GetText(), "5")
   Same(d.qty[2].l:GetText(), "In your bags"); Same(d.qty[2].v:GetText(), "0")
   Same(d.qty[3].l:GetText(), "To get"); Same(d.qty[3].v:GetText(), "5")
-  Check(d.usedFor:GetText():find("Needed for: Healing Potion, Mana Potion", 1, true), d.usedFor:GetText())
+  local consumerNames, consumerRecords = S.NeededFor(10)
+  Same(#consumerNames, 2, "legacy name-list contract")
+  Same(consumerRecords[1].item, 501, "relationship carries recorded output identity")
+  Same(d.neededHead:GetText(), "Needed for")
+  Same(#d.consumers.data, 2, "both queued consumers")
+  Same(d.consumers.rows[1].name:GetText(), "Healing Potion")
+  Same(d.consumers.rows[2].name:GetText(), "Mana Potion")
+  Same(d.consumers.rows[1].iconFrame.tex.texture, 5501, "verified output item icon")
+  local originalNeededFor = S.NeededFor
+  S.NeededFor = function() return {}, {
+    { name = string.rep("Long recipe name ", 8), item = 501 },
+    { name = "Output not recorded" },
+    {},
+  } end
+  local instant = c.C_Item.GetItemInfoInstant
+  c.C_Item.GetItemInfoInstant = function() return nil end
+  Win.Render()
+  Same(d.consumers.rows[1].name:GetText(), string.rep("Long recipe name ", 8), "missing item name retains complete recipe text")
+  Check(not d.consumers.rows[1].iconBtn:IsShown(), "unknown icon is text-only")
+  Same(d.consumers.rows[2].name:GetText(), "Output not recorded")
+  d.consumers.scroll:SetVerticalScroll(34)
+  d.consumers:Layout()
+  Same(d.consumers.rows[2].name:GetText(), "Unknown recipe", "missing identity has no guessed icon/name")
+  S.NeededFor = function() return {}, {} end
+  Win.Render()
+  Same(d.consumers.empty:GetText(), "No queued recipe reference available.")
+  Check(not d.consumers.rows[1]:IsShown(), "stale consumers hidden")
+  S.NeededFor, c.C_Item.GetItemInfoInstant = originalNeededFor, instant
+  Win.Render()
   Same(d.cost:GetText(), "500c", "5 at 100 each"); Check(d.costNote:GetText():find("Auction house", 1, true), d.costNote:GetText())
   Same(row10.kind:GetText(), "Auction"); Check(not d.act:IsShown(), "Auction has no action here: nothing is bought for you")
   Same(d.kindWord:GetText(), "Buy at Auction House", "the details say the acquisition in full")
   Check(d.choose.auction.on and d.choose.auction.enabled and not d.choose.vendor.enabled, "only the possible sources can be chosen")
   Check(shop.counts.auction.n:GetText() == "2" and shop.counts.vendor.n:GetText() == "0" and shop.counts.make.n:GetText() == "0" and shop.counts.collect.n:GetText() == "0", "the plan counts")
   Check(shop.total:GetText():find("Estimated spending: 550c", 1, true), shop.total:GetText())
+  -- Choosing a different material drops the prior material's consumers and scroll.
+  for _, row in ipairs(SL.rows) do
+    if row:IsShown() and row.item == 11 then row:GetScript("OnClick")(row); break end
+  end
+  Same(#d.consumers.data, 1)
+  Same(d.consumers.rows[1].name:GetText(), "Mana Potion")
+  Same(d.consumers.scroll:GetVerticalScroll(), 0)
+  row10:GetScript("OnClick")(row10)
   -- only collect rows
   g.bags = { [10] = 0, [11] = 0 }
   W.Storage.StoreBank({ ids = { 6 }, tabs = { [6] = { [10] = 5, [11] = 1 } }, incomplete = 0 }, Q.Now() - 600)
@@ -1018,10 +1054,14 @@ do
   local cd = shop.detail
   Check(not cd.choose.vendor:IsShown() and not cd.act:IsShown(), "collect: no source choice, no action")
   Same(cd.cost:GetText(), "Already owned")
+  Same(#cd.consumers.data, 2, "collect-only still shows both consumers")
   g.bags = { [10] = 4, [11] = 1 }
   W.Storage.Reset = nil
   c.TwichUIDB.workshop.storage = nil
   for _, e in ipairs({ unpack(Q.Entries()) }) do Q.Remove(e.id) end
+  Win.Render()
+  Check(d.empty:IsShown() and not d.head:IsShown(), "empty plan hides consumer section")
+  Same(#d.consumers.data, 0, "empty plan clears consumers")
   Win.SetMode("overview")
   f:Hide()
 end
