@@ -81,7 +81,6 @@ end
 ---------------------------------------------------------------------------
 -- Time
 ---------------------------------------------------------------------------
--- Seconds left to choose: the game's own clock when it answers, else the one this record started with. nil when there is no deadline.
 -- Presentation belongs to this unique roll key, never to an item ID or card slot.
 function Ro.DisplayMode(roll)
     return roll.manualDisplay or roll.displayMode or "expanded"
@@ -101,6 +100,7 @@ function Ro.SetDisplay(roll, mode)
     return true
 end
 
+-- Seconds left to choose: the game's clock when available, else this record's deadline.
 function Ro.Remaining(roll)
     if not (roll and (roll.state == "pending" or roll.state == "scheduled")) then return 0 end
     local ms

@@ -1,0 +1,91 @@
+{
+  "implementation_commit": "cb1a206",
+  "source_sha256": {
+    "!!!TwichUI/loot/Cards.lua": "7e2a839ee8d2dec39d4b5f333f41534350c0dc07922b087853d051fcb0a74d92",
+    "!!!TwichUI/loot/Rules.lua": "b4b64ae0ebe9cdd386a2386a24c1d75e96d8ea326ad7b5b70066a09a6f58164c",
+    "!!!TwichUI/loot/Config.lua": "1d9cd8d0b6de532ee067361df3798f9d2032b88de2232bed66cfb69631a43b30",
+    "!!!TwichUI/loot/Roll.lua": "a17f4921d837640546bc76ecbcca99df141a78702ca14af0c0ede0e2632d5cf4",
+    "!!!TwichUI/loot/Victory.lua": "c6abf6206ce88527bb76ab48a2007f406e6ac9313580e3442fa38956dc0afc67",
+    "tools/simlab/scenarios/loot.lua": "1ff2a16fb438d14a08d2eba6a03998171fa82a5283e92a38edf1d0bc18524aa5"
+  },
+  "capture_runs": [
+    "loot-hqloKz64",
+    "loot-qE9MOYNe",
+    "loot-KYXj5NKE"
+  ],
+  "full_animation_baseline_commit": "2d110b9",
+  "full_pose_crop": [
+    560,
+    214,
+    1040,
+    486
+  ],
+  "full_pose_ignored_toggle_in_crop": [
+    404,
+    64,
+    424,
+    84
+  ],
+  "full_pose_changed_pixels_outside_toggle": {
+    "040": 0,
+    "070": 0,
+    "100": 0,
+    "185": 0
+  },
+  "native_client_verified": false,
+  "screenshot_crops": {
+    "expanded-active.png": {
+      "source": "test-output/simlab/artifacts/loot-hqloKz64/manual.png",
+      "crop": [
+        708,
+        200,
+        1132,
+        390
+      ]
+    },
+    "collapsed-active.png": {
+      "source": "test-output/simlab/artifacts/loot-hqloKz64/miniActive.png",
+      "crop": [
+        708,
+        200,
+        1132,
+        306
+      ]
+    },
+    "expanded-victory.png": {
+      "source": "test-output/simlab/artifacts/loot-hqloKz64/victoryStatic.png",
+      "crop": [
+        708,
+        196,
+        1132,
+        426
+      ]
+    },
+    "collapsed-victory.png": {
+      "source": "test-output/simlab/artifacts/loot-KYXj5NKE/victoryPoseMiniEpicOff185.png",
+      "crop": [
+        588,
+        246,
+        1012,
+        365
+      ]
+    },
+    "mixed-stack.png": {
+      "source": "test-output/simlab/artifacts/loot-hqloKz64/compactMixed.png",
+      "crop": [
+        708,
+        200,
+        1132,
+        720
+      ]
+    }
+  },
+  "final_feature_verification": {
+    "report": "test-output/verification/feature-loot-rolls-w23z8bh0/report.json",
+    "passed": true,
+    "modules": 58,
+    "syntax_files": 134,
+    "source_unchanged": true,
+    "report_sha256": "b2927d2b952c51e8fb0fe05de7201c3061e3d758418b5fe0c3029b9f9f0d2726"
+  }
+}

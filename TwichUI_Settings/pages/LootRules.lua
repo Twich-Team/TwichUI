@@ -686,8 +686,8 @@ end
 
 K.Page({
     key = "lootRules", name = "Loot rules", nav = "Loot rules", parent = "lootRolls", order = 27,
-    description = "Rules that choose Need, Greed or Pass for you, with a countdown you can stop.",
-    keywords = "loot rule rules automatic auto roll need greed pass recipe quality green uncommon equipment equippable wear armor type cloth leather mail plate profession known duplicate item upgrade condition countdown pause stop",
+    description = "Independent rules for roll choices and Expanded or Collapsed card display.",
+    keywords = "loot rule rules automatic auto roll need greed pass recipe quality green uncommon equipment equippable wear armor type cloth leather mail plate profession known duplicate item upgrade condition countdown pause stop display expanded collapsed mini compact",
     when = function() return R.LootRolls ~= nil and R.LootCards ~= nil end,
     build = function()
         local lr = R.LootRolls

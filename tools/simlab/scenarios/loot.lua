@@ -228,9 +228,10 @@ if view == "rules" or view == "cards" or view == "narrow" or view == "builder" o
 end
 
 
-if view == "compactRule" then
+if view == "compactRule" or view == "compactRuleNarrow" then
     Lab.Step("display-only rule builder", function()
-        TwichUIDB.ui.settingsWindow = { point = "CENTER", relativePoint = "CENTER", x = -140, y = 0, w = 1080, h = 900 }
+        local narrow = view == "compactRuleNarrow"
+        TwichUIDB.ui.settingsWindow = { point = "CENTER", relativePoint = "CENTER", x = narrow and 0 or -140, y = 0, w = narrow and 940 or 1080, h = narrow and 740 or 900 }
         local opened = Lab.Open("lootRules")
         Check("init", "rule builder opened", true, opened)
         local _, id = LR.Create("blank"); LR.SetName(id, "Reduce loot clutter"); LR.SetEnabled(id, true)
@@ -246,7 +247,11 @@ if view == "compactRule" then
         Check("state", "preview retains manual choice", true, pc and pc.view.state == "pending" and pc.compact)
         Check("state", "preview never sends a roll", 0, #rolled)
         C.PreviewStop(true)
+        if narrow then R.SettingsCompanion.Toggle(R.SettingsUI.View("lootRules")) end
         R.SettingsUI.RevealFrame(f.displays.collapsed); Lab.Settle(0.3)
+        for _, key in ipairs({ "none", "need", "greed", "pass" }) do
+            Check("display", "rule choice has readable width: " .. key, true, f.actions[key]:GetWidth() >= 80)
+        end
     end)
 end
 

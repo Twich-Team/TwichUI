@@ -1,5 +1,9 @@
 # Loot Victory
 
+For Expanded/Collapsed layouts, per-instance overrides and late-event presentation
+retention, see [compact loot cards](loot-roll-compact.md). The Expanded celebration
+and native notification ownership below remain in place.
+
 Loot Rolls now replaces a confirmed Need/Greed winning notification with the supplied
 leather/bronze victory artwork. The Loot Rolls module remains off by default;
 within it, Custom victory notification is on, intensity is Subtle, sound is off until the player opts in,
