@@ -81,6 +81,7 @@ pages\Troubleshooting.lua
 Search.lua
 Widgets.lua
 Material.lua
+ArtworkPicker.lua
 Craft.lua
 Design.lua
 Companion.lua
