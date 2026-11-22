@@ -218,7 +218,14 @@ if view == "rules" or view == "cards" or view == "narrow" or view == "builder" o
             Check("interact", "and on again", true, LR.Rule(target.id).enabled)
             if view == "builder" then
                 parts.frame.matchAny:Click()
+                local _, index = LR.AddCondition(target.id, "family")
                 Lab.Settle(0.3)
+                local family = parts.conds[index]
+                Check("display", "the item family condition is visible", "Item family", family.label:GetText())
+                Check("state", "the crate family is selected initially", "waylaid-crates", LR.Rule(target.id).conditions[index].value)
+                family.value.onPick("craftsmans-writs")
+                Lab.Settle(0.3)
+                Check("interact", "the dropdown selects the writ family", "craftsmans-writs", LR.Rule(target.id).conditions[index].value)
             end
             local comp = R.SettingsCompanion
             Check("construct", "the live preview is showing", true, comp.Active() ~= nil and comp.Frame():IsShown())
