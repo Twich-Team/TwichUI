@@ -293,13 +293,24 @@ function Engine:EnsureWorker()
         end
     end)
 end
+function Engine:RecordBatch(at,pt)
+    local elapsed=math.max(0,clock()-at)
+    self.stats.worstBatch=math.max(self.stats.worstBatch or 0,elapsed);self:Metric('batches')
+    if pt then R.Perf.Stop(pt)end
+end
 function Engine:Step()
     if self.stepping or not self.co or self.paused then return end
-    if self.args.valid and not self.args.valid()then self:Cancel(true);self.paused=false;self:Notify();return end
-    self.stepping=true;local at,n=clock(),0
+    local at=clock();local perf=R.Perf
+    local pt=perf and perf.on and perf.Start('workshop.opportunityBatch')
+    local valid=true
+    if self.args.valid then
+        if perf and perf.on then valid=perf.Call('workshop.opportunitySource',self.args.valid)
+        else valid=self.args.valid()end
+    end
+    if not valid then self:Cancel(true);self.paused=false;self:Notify();self:RecordBatch(at,pt);return end
+    self.stepping=true;local n=0
     local est=self.args.estimator
     if est then est.worker=self.co;est.work=function()self:Work()end end
-    local pt=R.Perf and R.Perf.on and R.Perf.Start('workshop.opportunityBatch')
     local limit=(GetTimePreciseSec or debugprofilestop)and E.MAX_STEPS or 32
     repeat
         local ok,why=coroutine.resume(self.co);n=n+1
@@ -310,9 +321,7 @@ function Engine:Step()
         end
         if coroutine.status(self.co)=='dead'then self.co=nil;break end
     until n>=limit or clock()-at>=E.BUDGET_MS
-    local elapsed=math.max(0,clock()-at)
-    self.stats.worstBatch=math.max(self.stats.worstBatch or 0,elapsed);self:Metric('batches')
-    if pt then R.Perf.Stop(pt)end
+    self:RecordBatch(at,pt)
     if not self.co and est then est.work=nil;est.worker=nil end
     self.stepping=false
     if self.obsolete then self.obsolete=false;self:Cancel(true);self.paused=false;self:Notify()end
@@ -322,7 +331,9 @@ function Engine:Schedule()
     self.scheduled=true;local token=self.token
     C_Timer.After(0,function()
         if token~=self.token then return end
+        local pt=R.Perf and R.Perf.on and R.Perf.Start('workshop.opportunityCallback')
         self.scheduled=false;self:Step();self:Schedule()
+        if pt then R.Perf.Stop(pt)end
     end)
 end
 function Engine:Request(args)

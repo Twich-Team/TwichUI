@@ -1602,7 +1602,7 @@ m('market.opportunity.warm-context', 'TwichUI_Workshop/OpportunityEngine.lua',
   'local reset=not self.args or self.key~=args.key', 'local reset=true',
   'an ordinary unchanged read discards all completed estimates', OPPORTUNITY_TEST)
 m('market.opportunity.source-guard', 'TwichUI_Workshop/OpportunityEngine.lua',
-  'if self.args.valid and not self.args.valid()then', 'if false then',
+  'if not valid then self:Cancel(true)', 'if false then self:Cancel(true)',
   'a suspended job publishes after its source became obsolete', OPPORTUNITY_TEST)
 m('market.opportunity.timer-token', 'TwichUI_Workshop/OpportunityEngine.lua',
   'C_Timer.After(0,function()\n        if token~=self.token then return end',

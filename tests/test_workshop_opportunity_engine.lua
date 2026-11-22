@@ -105,10 +105,10 @@ reference();ctx.now=nil
 args.key='generation-c';args.estimator=E.New(ctx);engine:Request(args);engine:Cancel(true);drain()
 assert(#engine.all==0 and #engine.rows==0 and not engine.co)
 -- A single expensive recipe is subdivided; no scope spans a yield.
-local depth=0;local perf=c.TwichUI.Perf
-perf.on=true;perf.Start=function()depth=depth+1;return depth end
+local depth=0;local perf=c.TwichUI.Perf;local scopes={}
+perf.on=true;perf.Start=function(id)if id then scopes[id]=true end;depth=depth+1;return depth end
 perf.Stop=function()depth=depth-1;assert(depth>=0)end
-perf.Call=function(_,fn,...)perf.Start();local a,b=fn(...);perf.Stop();return a,b end
+perf.Call=function(id,fn,...)perf.Start(id);local a,b=fn(...);perf.Stop();return a,b end
 local oldCost=ctx.cost;ctx.cost=function(...)ms=ms+1;return oldCost(...)end
 local big={id=900,name='Many materials',outItem=400,outMin=1,outMax=1,mats={}}
 for i=1,16 do big.mats[i]={item=i,qty=1}end
@@ -137,6 +137,13 @@ engine:Cancel(true)
 local bounded=E.New(ctx);bounded.size=20000;bounded.memo.sentinel={true};bounded.itemVersions[42]=9
 engine:Request({key='memo-capacity',recipes={big},estimator=bounded,now=NOW});drain()
 assert(not bounded.memo.sentinel and bounded.size<20000,'question memo was not bounded between recipes')
+engine:Cancel(true)
+local slowSource=true
+engine:Request({key='source-budget',recipes={big},estimator=E.New(ctx),now=NOW,valid=function()
+    if slowSource then slowSource=false;ms=ms+6 end;return true end})
+assert(engine.stats.worstBatch>=6 and #engine.all==0,'source validation escaped the elapsed batch budget')
+drain();assert(depth==0 and engine.completed==1)
+assert(scopes['workshop.opportunityCallback']and scopes['workshop.opportunitySource'],'whole callback/source costs were hidden')
 engine:Cancel(true)
 local excess={};for i=1,W.OpportunityEngine.MAX_RECIPES+1 do excess[i]=big end
 engine:Request({key='too-large',recipes=excess,now=NOW});assert(engine.error=='recipe_limit'and #engine.all==0 and not engine.co)
