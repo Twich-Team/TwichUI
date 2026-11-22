@@ -56,8 +56,7 @@ function P.ObserveView(all,list)
     local d=capture();if not (d and d.viewStart and #all>0)then return end
     -- Catalog construction can expose rows before the first list publication.
     -- Do not permanently capture an empty viewport in that interval.
-    if not d.visible and #list.data==0 then return end
-    if not d.visible then
+    if not d.visible and #list.data>0 then
         d.visible={};d.visibleCount=0
         local scroll=list.scroll:GetVerticalScroll() or 0
         local height=list.scroll:GetHeight() or 0;if height<=list.rowH then height=list.minH end
@@ -73,7 +72,7 @@ function P.ObserveView(all,list)
     for _,row in ipairs(all)do
         local waits=recipePending(row.rec)or row.est.why=='calculating'
         if waits then waiting=waiting+1 end
-        if d.visible[row.rec.id]then
+        if d.visible and d.visible[row.rec.id]then
             seen=seen+1
             if waits then visibleWaiting=visibleWaiting+1
             elseif row.est.state=='ok' then visiblePriced=visiblePriced+1 end
@@ -82,10 +81,11 @@ function P.ObserveView(all,list)
     local elapsed=math.max(0,elapsedClock()-d.viewStart)
     if visiblePriced>0 and not d.firstVisible then d.firstVisible=true;R.Perf.Observe('workshop.firstVisiblePrice',elapsed)end
     if visiblePriced>=10 and not d.tenVisible then d.tenVisible=true;R.Perf.Observe('workshop.tenVisiblePrices',elapsed)end
-    if seen==d.visibleCount and seen>0 and visibleWaiting==0 and not d.visibleDone then
+    if d.visible and seen==d.visibleCount and seen>0 and visibleWaiting==0 and not d.visibleDone then
         d.visibleDone=true;R.Perf.Observe('workshop.visibleSettled',elapsed)
     end
-    if waiting==0 and not d.allDone then d.allDone=true;R.Perf.Observe('workshop.opportunitiesSettled',elapsed)end
+    local state=W.Session and W.Session.OpportunityStatus and W.Session.OpportunityStatus()
+    if waiting==0 and not(state and state.refreshing)and not d.allDone then d.allDone=true;R.Perf.Observe('workshop.opportunitiesSettled',elapsed)end
 end
 function P.Notify(delay)
     delay=delay or 0.1

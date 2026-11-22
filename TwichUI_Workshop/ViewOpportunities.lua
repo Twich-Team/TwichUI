@@ -115,6 +115,7 @@ local function ProfitTone(e)
 end
 
 local function MakeOppRow(parent)
+    local pt=R.Perf and R.Perf.on and R.Perf.Start('workshop.opportunityRow')
     local row = CreateFrame("Button", nil, parent)
     UI.Hover(row)
     local rule = UI.Rule(row, 0.2)
@@ -182,6 +183,7 @@ local function MakeOppRow(parent)
         Known(self.profit,e.state=='ok'and e.profitLow or nil,e.state=='ok'and e.profitHigh or nil,ProfitTone(e))
         self:SetSelected(rec.id == selected)
     end
+    if pt then R.Perf.Stop(pt)end
     return row
 end
 

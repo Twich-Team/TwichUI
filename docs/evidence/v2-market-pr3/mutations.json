@@ -1,43 +1,14 @@
 {
-  "summary": {
-    "format": 1,
-    "elapsed_seconds": 12.8,
-    "counts": {
-      "killed": 16,
-      "survived": 0,
-      "invalid": 0,
-      "timeout": 0,
-      "infra": 0
-    },
-    "exit": 0,
-    "baseline": [
-      {
-        "test": "test_workshop_market_current.lua",
-        "status": "pass",
-        "seconds": 0.39,
-        "output": ""
-      },
-      {
-        "test": "test_workshop_market_pending.lua",
-        "status": "pass",
-        "seconds": 2.79,
-        "output": ""
-      },
-      {
-        "test": "test_workshop_opportunity_engine.lua",
-        "status": "pass",
-        "seconds": 0.38,
-        "output": ""
-      },
-      {
-        "test": "test_workshop_opportunity_ui.lua",
-        "status": "pass",
-        "seconds": 1.94,
-        "output": ""
-      }
-    ],
-    "changed_files": []
+  "format": 1,
+  "elapsed_seconds": 10.4,
+  "counts": {
+    "killed": 16,
+    "survived": 0,
+    "invalid": 0,
+    "timeout": 0,
+    "infra": 0
   },
+  "exit": 0,
   "results": [
     {
       "id": "market.pending.guard",

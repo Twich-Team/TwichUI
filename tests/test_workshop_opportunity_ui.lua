@@ -39,7 +39,11 @@ for _,r in ipairs(list.data)do assert(r.est.state=='ok'and r.est.profitLow>0)end
 S.ToggleProfitOnly();W.Window.Render();drain();assert(#list.data==128 and detail.rec)
 -- Scroll/resize retains the pool, promotes viewport work and never starts a permanent worker.
 list.scroll:SetVerticalScroll(52*30)
+local oldTop=list.rows[1].name:GetText()
 local scroll=list.scroll:GetScript('OnVerticalScroll');if scroll then scroll(list.scroll)end
+local hooks=list.scroll.hooks.OnVerticalScroll;assert(hooks and #hooks>0,'scroll did not dispatch its production hooks')
+for _,fn in ipairs(hooks)do fn(list.scroll,52*30)end
+assert(list.rows[1].name:GetText()~=oldTop,'viewport did not actually move')
 W.Window.Render();drain();assert(#list.rows==frames and not S.OpportunityStatus().running)
 -- Cancel an actual bucket reservation lease: no shared pending identities remain stuck.
 local owner={};local co=coroutine.create(function()W.Pricing.PrepareBucket({320,384,448},coroutine.yield,owner)end)

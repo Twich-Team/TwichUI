@@ -19,6 +19,7 @@ local Perf = R.Perf
 -- "!!!TwichUI/", the settings window "TwichUI_Settings/"), where: the function, so a report can name what to read.
 -- every = how often it is expected to run, so a report can tell "runs often" from "runs on demand".
 DX.OPS = {
+    ["workshop.opportunityRow"]={module="workshop",label="First-use opportunity row construction",kind="work",file="TwichUI_Workshop/ViewOpportunities.lua",where="MakeOppRow",every="bounded viewport pool growth only"},
     ["workshop.opportunities.catalogBuilds"]={module="workshop",label="Recipe catalog builds",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="Engine.Request",every="new context or catalog only"},
     ["workshop.opportunities.errors"]={module="workshop",label="Calculation job failures",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
     ["workshop.opportunities.cancelled"]={module="workshop",label="Obsolete calculation jobs cancelled",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},

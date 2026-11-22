@@ -556,6 +556,7 @@ Default-off instrumentation adds no background timers or forced collection.
 
 | Scope / counter | Production owner | Meaning |
 | --- | --- | --- |
+| `workshop.opportunityRow` | `ViewOpportunities.lua`, `MakeOppRow` | First-use viewport pool construction; total/worst per row. No permanent polling. |
 | `workshop.opportunityBatch` | `OpportunityEngine.lua`, `Engine.Step` | Synchronous CPU per cooperative slice; total/worst. Scope stops before every scheduled continuation. |
 | `workshop.opportunityQuestion` | `Estimate.lua`, `Est.Ask` | Indivisible service-question CPU on memo misses; never includes a coroutine suspension. |
 | `workshop.opportunities.*` | `OpportunityEngine.lua`; presentation counters in `ViewOpportunities.lua` | Actual `crafts`, preparation passes (`calculated`), dependency `invalidations`, `catalogBuilds`, `batches`, `sorts`, `fullInvalidations`, `fullPublications`/`partialPublications`, `cancelled`/`errors`; actual `rowPaints`, `cellUpdates`, `detailUpdates`. `cacheHits` counts compatible catalog reads; `reused` counts estimates preserved during catalog reconciliation. |

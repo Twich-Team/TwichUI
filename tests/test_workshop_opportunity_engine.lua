@@ -120,6 +120,10 @@ engine:Request(args);drain();assert(engine.error=='calculation_failed'and engine
 engine:Request(args);assert(#events==0 and engine.stats.errors==1,'failed work retried indefinitely')
 assert(faults==1);c.TwichUI.Fault=oldFault
 engine:Cancel(true)
+local bounded=E.New(ctx);bounded.size=20000;bounded.memo.sentinel={true};bounded.itemVersions[42]=9
+engine:Request({key='memo-capacity',recipes={big},estimator=bounded,now=NOW});drain()
+assert(not bounded.memo.sentinel and bounded.size<20000,'question memo was not bounded between recipes')
+engine:Cancel(true)
 local excess={};for i=1,W.OpportunityEngine.MAX_RECIPES+1 do excess[i]=big end
 engine:Request({key='too-large',recipes=excess,now=NOW});assert(engine.error=='recipe_limit'and #engine.all==0 and not engine.co)
 print('PASSED incremental/full equivalence, shared memo, targeted prices, ranking, mutable recipes, pending, cancellation and capacity')

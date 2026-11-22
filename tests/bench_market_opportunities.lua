@@ -4,6 +4,8 @@ require('bit')
 REPO=REPO or './';ROOT=ROOT or './!!!TwichUI/';TESTS=TESTS or './tests/'
 local mode,pattern,count=arg[1] or 'reader',arg[2] or 'single',tonumber(arg[3]) or 32
 local scenario=arg[8]or 'none'
+-- Optional bounded diagnostic only; never a runtime GC policy.
+local gcDiagnostic=arg[9];assert(not gcDiagnostic or gcDiagnostic=='normal'or gcDiagnostic=='nogc')
 local contract,requestedRows=tonumber(arg[5])or 2,tonumber(arg[6])or 32
 assert(contract==2 or contract==3)
 local c=dofile(TESTS..'auction_mock.lua')
@@ -20,6 +22,17 @@ local events,now,serial={},0,0
 local callbacks,worstCallback,callbackCPU=0,0,0
 local checkSettlement,activeInteraction
 local callbackTimes,worstOrigin={},""
+local worstBefore,worstAfter,worstPoolBefore,worstPoolAfter,gcDropMax=0,0,0,0,0
+local questionMax,questionKind=0,""
+local function pool()local list=W.UI.lists.opps;return list and #list.rows or 0 end
+local scrollCalls,scrollCPU,scrollMax=0,0,0
+local function scrollTo(list,pixels)
+ list.scroll:SetVerticalScroll(pixels)
+ local at=clock();local fn=list.scroll:GetScript("OnVerticalScroll")
+ if fn then fn(list.scroll,pixels);scrollCalls=scrollCalls+1 end
+ for _,hook in ipairs(list.scroll.hooks.OnVerticalScroll or {})do hook(list.scroll,pixels);scrollCalls=scrollCalls+1 end
+ local dt=clock()-at;scrollCPU=scrollCPU+dt;scrollMax=math.max(scrollMax,dt)
+end
 c.C_Timer.After=function(delay,fn)
  serial=serial+1;events[#events+1]={due=now+math.max(1/60,delay),fn=fn,id=serial}
 end
@@ -33,9 +46,14 @@ local function event()
  local e=table.remove(events,1);now=e.due
  local previous
  if profiling then previous={};for k,v in pairs(phases)do previous[k]=v end end
+ local beforeHeap=gcDiagnostic and heap();local beforePool=gcDiagnostic and pool()
  local at=clock();e.fn();local dt=clock()-at
+ local afterHeap=gcDiagnostic and heap()
+ if gcDiagnostic and afterHeap<beforeHeap then gcDropMax=math.max(gcDropMax,dt)end
  callbackTimes[#callbackTimes+1]=dt
- if dt>worstCallback then local info=debug.getinfo(e.fn,"S");worstOrigin=info.short_src..":"..info.linedefined
+ if dt>worstCallback then
+  if gcDiagnostic then worstBefore,worstAfter,worstPoolBefore,worstPoolAfter=beforeHeap,afterHeap,beforePool,pool()end
+  local info=debug.getinfo(e.fn,"S");worstOrigin=info.short_src..":"..info.linedefined
   if profiling then phases._worst={};for k,v in pairs(phases)do if type(v)=='number'then phases._worst[k]=v-(previous[k]or 0)end end end
  end
  callbacks=callbacks+1;callbackCPU=callbackCPU+dt;worstCallback=math.max(worstCallback,dt);sample()
@@ -145,6 +163,13 @@ end
 local oldNew=W.Estimate.New
 W.Estimate.New=function(...)
  estimatorInstances=estimatorInstances+1;local est=oldNew(...);local craft=est.Craft
+ if gcDiagnostic then
+  for kind,fn in pairs(est.ctx)do if type(fn)=='function'then
+   local name,call=kind,fn
+   est.ctx[name]=function(...)local at=clock();local a,b,d=call(...);local dt=clock()-at
+    if dt>questionMax then questionMax,questionKind=dt,name end;return a,b,d end
+  end end
+ end
  est.Craft=function(self,...)crafts=crafts+1;local at=profiling and not W.OpportunityEngine and clock();local result=craft(self,...);if at then phases.craft=(phases.craft or 0)+clock()-at end;return result end
  return est
 end
@@ -164,6 +189,7 @@ P.BaseKey=function(item,...)
  requestedAt[item]=requestedAt[item]or now
  local at=clock();local key=baseKey(item,...);baseKeyMS=baseKeyMS+clock()-at;baseKeyCalls=baseKeyCalls+1;return key
 end
+if gcDiagnostic=='nogc'then collectgarbage('stop')end
 local start=clock();local startVirtual=now;local out=J.Object()
 if mode=='reader' then
  local first=clock();assert(not B.Record(64,keys[64]));while Q.Pending()do event()end
@@ -248,8 +274,7 @@ else
   activeInteraction=function()
    local list=W.UI.lists.opps
    if callbacks%10==0 and #list.data>0 then
-    list.scroll:SetVerticalScroll(((callbacks*17)%#list.data)*list.rowH)
-    local fn=list.scroll:GetScript('OnVerticalScroll');if fn then fn(list.scroll)end
+    scrollTo(list,((callbacks*17)%#list.data)*list.rowH)
     out.active_scrolls=(out.active_scrolls or 0)+1
    end
   end
@@ -285,8 +310,7 @@ else
    assert(pattern=='ui','scroll workload requires actual UI')
    local list=W.UI.lists.opps
    for i=1,100 do
-    list.scroll:SetVerticalScroll(((i*17)%count)*list.rowH)
-    local fn=list.scroll:GetScript('OnVerticalScroll');if fn then fn(list.scroll)end
+    scrollTo(list,((i*17)%count)*list.rowH)
    end
   elseif scenario=='generation'then
    for pass=1,3 do
@@ -301,8 +325,7 @@ else
     if W.Session.ItemsChanged then W.Session.ItemsChanged(changed)else W.Session.ForgetEstimator()end
     for i=1,5 do W.Session.opp.sort=({'profit','cost','sell','margin'})[1+(pass+i)%4];W.UI.Redraw()end
     if pattern=='ui'then
-     local list=W.UI.lists.opps;list.scroll:SetVerticalScroll(((pass*37)%count)*list.rowH)
-     local fn=list.scroll:GetScript('OnVerticalScroll');if fn then fn(list.scroll)end
+     local list=W.UI.lists.opps;scrollTo(list,((pass*37)%count)*list.rowH)
      if pass%4==0 then W.Window.Hide();W.Window.Show()end
     end
     while #events>0 do event()end
@@ -334,6 +357,13 @@ out.loads=loads;out.decodes=decodes;out.repeated_decodes=repeats;out.record_call
 out.full_calculations=synchronousLists+(W.Session.OpportunityStatus and W.Session.OpportunityStatus().catalogBuilds or 0)
 out.compile_ms=compileMS;out.execute_ms=executeMS;out.validation_ms=Q.Status().validation_ms-validationStart;out.lookup_calls=Q.Status().lookup_calls
 out.callbacks=callbacks;out.callback_cpu_ms=callbackCPU;out.worst_callback_ms=worstCallback
+out.scroll_handler_calls=scrollCalls;out.scroll_cpu_ms=scrollCPU;out.scroll_max_cpu_ms=scrollMax
+if scenario=='scroll'then assert(scrollCalls>=100,'scroll benchmark did not dispatch production hooks')end
+if gcDiagnostic then
+ out.diagnostic_gc_mode=gcDiagnostic;out.worst_heap_before_kib=worstBefore;out.worst_heap_after_kib=worstAfter
+ out.worst_pool_before=worstPoolBefore;out.worst_pool_after=worstPoolAfter;out.max_heap_drop_callback_ms=gcDropMax
+ out.max_question_ms=questionMax;out.max_question_kind=questionKind
+end
 out.worst_callback_source=worstOrigin;table.sort(callbackTimes)
 out.callback_p95_ms=callbackTimes[math.max(1,math.ceil(#callbackTimes*.95))]or 0
 out.callback_p99_ms=callbackTimes[math.max(1,math.ceil(#callbackTimes*.99))]or 0

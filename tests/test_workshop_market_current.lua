@@ -89,6 +89,7 @@ local rows={};for i=1,12 do rows[i]={rec={id=i,outItem=2589,mats={}},est={state=
 local list={scroll={GetVerticalScroll=function()return 0 end,GetHeight=function()return 240 end},rowH=20,minH=240,data={}}
 P.ObserveView(rows,list)
 assert(not observed['workshop.visibleSettled'],'empty publication captured a viewport')
+assert(observed['workshop.opportunitiesSettled'],'empty filter hid all-known settlement')
 list.data=rows
 P.ObserveView(rows,list)
 assert(observed['workshop.tenVisiblePrices'] and observed['workshop.visibleSettled'] and observed['workshop.opportunitiesSettled'])
@@ -97,6 +98,11 @@ rows[1].est={state='unknown',why='calculating'};P.ObserveView(rows,list)
 assert(not observed['workshop.visibleSettled']and not observed['workshop.opportunitiesSettled'],'calculation pending was reported complete')
 rows[1].est={state='unknown',why='not_observed'};P.ObserveView(rows,list)
 assert(observed['workshop.visibleSettled']and observed['workshop.opportunitiesSettled'],'terminal missing row never settled')
+c.TwichUI.Perf.captureID=4;observed={};P.BeginView();list.data={}
+local status=W.Session.OpportunityStatus;W.Session.OpportunityStatus=function()return {refreshing=true}end
+P.ObserveView(rows,list);assert(not observed['workshop.opportunitiesSettled'],'partial catalog settled before its worker finished')
+W.Session.OpportunityStatus=status;P.ObserveView(rows,list)
+assert(observed['workshop.opportunitiesSettled']and not observed['workshop.visibleSettled'])
 -- First generation with missing current payload refuses it and leaves no retry.
 Q.Deactivate();c.TwichUIMarketParts={};c.TwichUIMarketHistoryParts={}
 c.C_AddOns.LoadAddOn=function()return false end

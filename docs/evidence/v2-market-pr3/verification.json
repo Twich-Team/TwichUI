@@ -1,73 +1,75 @@
 {
   "fast": {
     "source": {
-      "commit": "333fd07e9da99472f0243f6313bcb1dab782bc6e",
+      "commit": "6754427a2af5362ee91d9097b93240f4eeaac1bb",
       "dirty": true,
-      "working_tree_sha256": "0973eeb18a9421feeb7b9cb33412a6522e8cda394e13f5c89697dee67ed5485c"
+      "working_tree_sha256": "1cff9d296730b4ca814721f0d70119d21c6e16f0297fe168fe126b171034a04d"
     },
     "source_after": {
-      "commit": "333fd07e9da99472f0243f6313bcb1dab782bc6e",
+      "commit": "6754427a2af5362ee91d9097b93240f4eeaac1bb",
       "dirty": true,
-      "working_tree_sha256": "0973eeb18a9421feeb7b9cb33412a6522e8cda394e13f5c89697dee67ed5485c"
+      "working_tree_sha256": "1cff9d296730b4ca814721f0d70119d21c6e16f0297fe168fe126b171034a04d"
     },
     "source_unchanged": true,
-    "seconds": 4.256852687998617,
+    "seconds": 4.350709889000427,
     "complete": true,
     "exit_code": 0,
     "passed": true,
     "syntax_passed": true,
     "tests": [
       {
-        "name": null,
+        "name": "test_perf_engine.lua",
         "passed": true,
-        "seconds": 0.27824970800065785
+        "seconds": 0.25
       },
       {
-        "name": null,
+        "name": "test_workshop_estimate.lua",
         "passed": true,
-        "seconds": 0.03903976100264117
+        "seconds": 0.033
       },
       {
-        "name": null,
+        "name": "test_workshop_market_consumption.lua",
         "passed": true,
-        "seconds": 0.3124539039999945
+        "seconds": 0.263
       },
       {
-        "name": null,
+        "name": "test_workshop_market_consumption_async.lua",
         "passed": true,
-        "seconds": 0.11991179199685575
+        "seconds": 0.12
       },
       {
-        "name": null,
+        "name": "test_workshop_market_current.lua",
         "passed": true,
-        "seconds": 0.30638779099899693
+        "seconds": 0.331
       },
       {
-        "name": null,
+        "name": "test_workshop_market_pending.lua",
         "passed": true,
-        "seconds": 2.283892747000209
+        "seconds": 2.418
       },
       {
-        "name": null,
+        "name": "test_workshop_market_performance.lua",
         "passed": true,
-        "seconds": 1.5505834409996169
+        "seconds": 1.547
       },
       {
-        "name": null,
+        "name": "test_workshop_opportunity_engine.lua",
         "passed": true,
-        "seconds": 0.28862530599872116
+        "seconds": 0.286
       },
       {
-        "name": null,
+        "name": "test_workshop_opportunity_ui.lua",
         "passed": true,
-        "seconds": 1.6597738990021753
+        "seconds": 1.8
       },
       {
-        "name": null,
+        "name": "test_workshop_summary.lua",
         "passed": true,
-        "seconds": 0.25773145999846747
+        "seconds": 0.225
       }
     ],
+    "test_count": 10,
+    "tests_passed": 10,
     "simulators": []
   },
   "integration": {
@@ -89,384 +91,384 @@
     "syntax_passed": true,
     "tests": [
       {
-        "name": null,
+        "name": "test_auction_host.lua",
         "passed": true,
-        "seconds": 1.0341806110009202
+        "seconds": 1.034
       },
       {
-        "name": null,
+        "name": "test_auction_price.lua",
         "passed": true,
-        "seconds": 0.004724424001324223
+        "seconds": 0.005
       },
       {
-        "name": null,
+        "name": "test_auction_window.lua",
         "passed": true,
-        "seconds": 0.019768932997976663
+        "seconds": 0.02
       },
       {
-        "name": null,
+        "name": "test_cleanup.lua",
         "passed": true,
-        "seconds": 0.346534543998132
+        "seconds": 0.347
       },
       {
-        "name": null,
+        "name": "test_commands.lua",
         "passed": true,
-        "seconds": 0.037865685000724625
+        "seconds": 0.038
       },
       {
-        "name": null,
+        "name": "test_defaults.lua",
         "passed": true,
-        "seconds": 0.051340337999135954
+        "seconds": 0.051
       },
       {
-        "name": null,
+        "name": "test_frame_look.lua",
         "passed": true,
-        "seconds": 0.03547764000177267
+        "seconds": 0.035
       },
       {
-        "name": null,
+        "name": "test_lifecycle.lua",
         "passed": true,
-        "seconds": 0.07911730600244482
+        "seconds": 0.079
       },
       {
-        "name": null,
+        "name": "test_lod_apply.lua",
         "passed": true,
-        "seconds": 0.050509239998064004
+        "seconds": 0.051
       },
       {
-        "name": null,
+        "name": "test_media_border.lua",
         "passed": true,
-        "seconds": 0.03706280099868309
+        "seconds": 0.037
       },
       {
-        "name": null,
+        "name": "test_menu_style.lua",
         "passed": true,
-        "seconds": 0.023503180000261636
+        "seconds": 0.024
       },
       {
-        "name": null,
+        "name": "test_notify.lua",
         "passed": true,
-        "seconds": 0.03001774199947249
+        "seconds": 0.03
       },
       {
-        "name": null,
+        "name": "test_notify_look.lua",
         "passed": true,
-        "seconds": 0.030519165000441717
+        "seconds": 0.031
       },
       {
-        "name": null,
+        "name": "test_perf_engine.lua",
         "passed": true,
-        "seconds": 0.2506725059974997
+        "seconds": 0.251
       },
       {
-        "name": null,
+        "name": "test_persist.lua",
         "passed": true,
-        "seconds": 1.8407027569992351
+        "seconds": 1.841
       },
       {
-        "name": null,
+        "name": "test_press.lua",
         "passed": true,
-        "seconds": 0.006520619997900212
+        "seconds": 0.007
       },
       {
-        "name": null,
+        "name": "test_pricing_conformance.py",
         "passed": true,
-        "seconds": 0.07433908099847031
+        "seconds": 0.074
       },
       {
-        "name": null,
+        "name": "test_profiles.lua",
         "passed": true,
-        "seconds": 2.270461546999286
+        "seconds": 2.27
       },
       {
-        "name": null,
+        "name": "test_reach.lua",
         "passed": true,
-        "seconds": 0.04236589599895524
+        "seconds": 0.042
       },
       {
-        "name": null,
+        "name": "test_routing.lua",
         "passed": true,
-        "seconds": 0.07518309399893042
+        "seconds": 0.075
       },
       {
-        "name": null,
+        "name": "test_simlab_diagnostics.lua",
         "passed": true,
-        "seconds": 0.014697306000016397
+        "seconds": 0.015
       },
       {
-        "name": null,
+        "name": "test_status.lua",
         "passed": true,
-        "seconds": 0.2429696219987818
+        "seconds": 0.243
       },
       {
-        "name": null,
+        "name": "test_storage.lua",
         "passed": true,
-        "seconds": 0.02851470300083747
+        "seconds": 0.029
       },
       {
-        "name": null,
+        "name": "test_stored_data.lua",
         "passed": true,
-        "seconds": 0.05260037500192993
+        "seconds": 0.053
       },
       {
-        "name": null,
+        "name": "test_theme_defaults.lua",
         "passed": true,
-        "seconds": 0.04419851800048491
+        "seconds": 0.044
       },
       {
-        "name": null,
+        "name": "test_window_smoke.lua",
         "passed": true,
-        "seconds": 0.04433129800236202
+        "seconds": 0.044
       },
       {
-        "name": null,
+        "name": "test_workshop.lua",
         "passed": true,
-        "seconds": 0.4850952500019048
+        "seconds": 0.485
       },
       {
-        "name": null,
+        "name": "test_workshop_a7.lua",
         "passed": true,
-        "seconds": 0.06828412100003334
+        "seconds": 0.068
       },
       {
-        "name": null,
+        "name": "test_workshop_auction_market.lua",
         "passed": true,
-        "seconds": 0.6175853160020779
+        "seconds": 0.618
       },
       {
-        "name": null,
+        "name": "test_workshop_auction_market_chart.lua",
         "passed": true,
-        "seconds": 3.9037760860010167
+        "seconds": 3.904
       },
       {
-        "name": null,
+        "name": "test_workshop_auction_market_chart_interaction.lua",
         "passed": true,
-        "seconds": 0.081721952999942
+        "seconds": 0.082
       },
       {
-        "name": null,
+        "name": "test_workshop_auction_market_history.lua",
         "passed": true,
-        "seconds": 0.20131557899730979
+        "seconds": 0.201
       },
       {
-        "name": null,
+        "name": "test_workshop_auction_market_scoped.lua",
         "passed": true,
-        "seconds": 0.4425882110008388
+        "seconds": 0.443
       },
       {
-        "name": null,
+        "name": "test_workshop_auction_market_search.lua",
         "passed": true,
-        "seconds": 0.16823156000100425
+        "seconds": 0.168
       },
       {
-        "name": null,
+        "name": "test_workshop_auction_market_server.lua",
         "passed": true,
-        "seconds": 0.33959092399891233
+        "seconds": 0.34
       },
       {
-        "name": null,
+        "name": "test_workshop_auction_market_summary.lua",
         "passed": true,
-        "seconds": 0.19423815800109878
+        "seconds": 0.194
       },
       {
-        "name": null,
+        "name": "test_workshop_auction_market_ui.lua",
         "passed": true,
-        "seconds": 3.7607244449973223
+        "seconds": 3.761
       },
       {
-        "name": null,
+        "name": "test_workshop_auto.lua",
         "passed": true,
-        "seconds": 0.7846129849967838
+        "seconds": 0.785
       },
       {
-        "name": null,
+        "name": "test_workshop_bridge.lua",
         "passed": true,
-        "seconds": 0.07283067100070184
+        "seconds": 0.073
       },
       {
-        "name": null,
+        "name": "test_workshop_bridge.py",
         "passed": true,
-        "seconds": 0.5404098350009008
+        "seconds": 0.54
       },
       {
-        "name": null,
+        "name": "test_workshop_bridge_compatibility.py",
         "passed": true,
-        "seconds": 1.2515293040014512
+        "seconds": 1.252
       },
       {
-        "name": null,
+        "name": "test_workshop_bridge_freshness.lua",
         "passed": true,
-        "seconds": 0.0594783729975461
+        "seconds": 0.059
       },
       {
-        "name": null,
+        "name": "test_workshop_bridge_performance.lua",
         "passed": true,
-        "seconds": 5.004389285997604
+        "seconds": 5.004
       },
       {
-        "name": null,
+        "name": "test_workshop_bridge_scoped.lua",
         "passed": true,
-        "seconds": 0.47134937300143065
+        "seconds": 0.471
       },
       {
-        "name": null,
+        "name": "test_workshop_bridge_scoped.py",
         "passed": true,
-        "seconds": 2.4444513720009127
+        "seconds": 2.444
       },
       {
-        "name": null,
+        "name": "test_workshop_compact.lua",
         "passed": true,
-        "seconds": 0.1310123229995952
+        "seconds": 0.131
       },
       {
-        "name": null,
+        "name": "test_workshop_crafting_reference.lua",
         "passed": true,
-        "seconds": 1.0221710619989608
+        "seconds": 1.022
       },
       {
-        "name": null,
+        "name": "test_workshop_craftplanner.lua",
         "passed": true,
-        "seconds": 9.754683721002948
+        "seconds": 9.755
       },
       {
-        "name": null,
+        "name": "test_workshop_disenchant.lua",
         "passed": true,
-        "seconds": 0.09237685300104204
+        "seconds": 0.092
       },
       {
-        "name": null,
+        "name": "test_workshop_disenchant_market.lua",
         "passed": true,
-        "seconds": 0.15007421299742418
+        "seconds": 0.15
       },
       {
-        "name": null,
+        "name": "test_workshop_dist.lua",
         "passed": true,
-        "seconds": 1.4564669100000174
+        "seconds": 1.456
       },
       {
-        "name": null,
+        "name": "test_workshop_estimate.lua",
         "passed": true,
-        "seconds": 0.03512497500196332
+        "seconds": 0.035
       },
       {
-        "name": null,
+        "name": "test_workshop_history2.lua",
         "passed": true,
-        "seconds": 43.434141103
+        "seconds": 43.434
       },
       {
-        "name": null,
+        "name": "test_workshop_market.lua",
         "passed": true,
-        "seconds": 1.0710001479965285
+        "seconds": 1.071
       },
       {
-        "name": null,
+        "name": "test_workshop_market_consumption.lua",
         "passed": true,
-        "seconds": 0.25233490699974936
+        "seconds": 0.252
       },
       {
-        "name": null,
+        "name": "test_workshop_market_consumption_async.lua",
         "passed": true,
-        "seconds": 0.11807023600340472
+        "seconds": 0.118
       },
       {
-        "name": null,
+        "name": "test_workshop_market_current.lua",
         "passed": true,
-        "seconds": 0.36796877600136213
+        "seconds": 0.368
       },
       {
-        "name": null,
+        "name": "test_workshop_market_pending.lua",
         "passed": true,
-        "seconds": 2.340507314002025
+        "seconds": 2.341
       },
       {
-        "name": null,
+        "name": "test_workshop_market_performance.lua",
         "passed": true,
-        "seconds": 1.5642324500004179
+        "seconds": 1.564
       },
       {
-        "name": null,
+        "name": "test_workshop_market_reference.lua",
         "passed": true,
-        "seconds": 17.11696407099953
+        "seconds": 17.117
       },
       {
-        "name": null,
+        "name": "test_workshop_market_scale.lua",
         "passed": true,
-        "seconds": 28.825965007999912
+        "seconds": 28.826
       },
       {
-        "name": null,
+        "name": "test_workshop_memory.lua",
         "passed": true,
-        "seconds": 0.8038057410012698
+        "seconds": 0.804
       },
       {
-        "name": null,
+        "name": "test_workshop_opportunity_engine.lua",
         "passed": true,
-        "seconds": 0.28964176799854613
+        "seconds": 0.29
       },
       {
-        "name": null,
+        "name": "test_workshop_opportunity_ui.lua",
         "passed": true,
-        "seconds": 1.739800055998785
+        "seconds": 1.74
       },
       {
-        "name": null,
+        "name": "test_workshop_prices.lua",
         "passed": true,
-        "seconds": 0.741844112999388
+        "seconds": 0.742
       },
       {
-        "name": null,
+        "name": "test_workshop_pricing_v1.lua",
         "passed": true,
-        "seconds": 0.004692459002399119
+        "seconds": 0.005
       },
       {
-        "name": null,
+        "name": "test_workshop_schema.lua",
         "passed": true,
-        "seconds": 1.4344108600016625
+        "seconds": 1.434
       },
       {
-        "name": null,
+        "name": "test_workshop_scoped_bridge_l1.py",
         "passed": true,
-        "seconds": 1.3530046769992623
+        "seconds": 1.353
       },
       {
-        "name": null,
+        "name": "test_workshop_shopping.lua",
         "passed": true,
-        "seconds": 0.806046483998216
+        "seconds": 0.806
       },
       {
-        "name": null,
+        "name": "test_workshop_storage.lua",
         "passed": true,
-        "seconds": 1.444843477998802
+        "seconds": 1.445
       },
       {
-        "name": null,
+        "name": "test_workshop_strategy.lua",
         "passed": true,
-        "seconds": 0.543166185998416
+        "seconds": 0.543
       },
       {
-        "name": null,
+        "name": "test_workshop_strategy_ui.lua",
         "passed": true,
-        "seconds": 0.11729974700210732
+        "seconds": 0.117
       },
       {
-        "name": null,
+        "name": "test_workshop_summary.lua",
         "passed": true,
-        "seconds": 0.22234782200030168
+        "seconds": 0.222
       },
       {
-        "name": null,
+        "name": "test_workshop_valuation.lua",
         "passed": true,
-        "seconds": 14.201731839999411
+        "seconds": 14.202
       },
       {
-        "name": null,
+        "name": "test_workshop_vendor_places.lua",
         "passed": true,
-        "seconds": 0.03308402800030308
+        "seconds": 0.033
       },
       {
-        "name": null,
+        "name": "test_workshop_worth.lua",
         "passed": true,
-        "seconds": 0.3807648319998407
+        "seconds": 0.381
       }
     ],
     "simulators": [
@@ -480,7 +482,9 @@
         "passed": true,
         "seconds": 133.9217400799971
       }
-    ]
+    ],
+    "test_count": 76,
+    "tests_passed": 76
   },
   "classification": "All 76 integration modules and Auction preview pass. Workshop strict suite remains FAIL; final settlement-aware scenario comparison is recorded separately. Final fast group covers the later diagnostic-only empty-viewport correction."
 }

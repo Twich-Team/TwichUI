@@ -429,7 +429,7 @@ comparison/update policy and observed failures are in the
 ### Incremental Opportunities (PR3)
 
 The existing `market-performance` development group adds deterministic engine and
-actual Window/UI lifecycle tests. Its ten modules passed in 4.257 s on the audit
+actual Window/UI lifecycle tests. Its ten modules passed in 4.351 s on the audit
 host. Crafting integration selects these tests too. The existing PR workflow uses
 the same development command; no large benchmark or simulator entered routine CI.
 

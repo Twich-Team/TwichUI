@@ -34,7 +34,7 @@ recorded with the benchmark evidence below.
 
 ## Context, memory and lifecycle contract
 
-The result store owns one transient catalog, capped at 10,000 recipes, plus item-to-recipe edges, one version per relevant item, immutable economic-input snapshots and one queued node per recipe. It stores no Market records/history and adds no SavedVariables. Estimate retains its existing question memo, capped at 20,000 answers by clearing in place; Pricing retains its existing 8,192-entry bound. Reconciliation may temporarily retain the previous catalog while a replacement is built. Queues and progressive sorting have linear temporary storage; neither is a permanent background task.
+The result store owns one transient catalog, capped at 10,000 recipes, plus item-to-recipe edges, one version per relevant item, immutable economic-input snapshots and one queued node per recipe. It stores no Market records/history and adds no SavedVariables. Estimate retains its existing question memo, cleared at 20,000 answers before the next recipe (a bounded single-craft overshoot is possible); Pricing retains its existing 8,192-entry bound. Reconciliation may temporarily retain the previous catalog while a replacement is built. Queues and progressive sorting have linear temporary storage; neither is a permanent background task.
 
 Partial completion increments the existing public pricing revision but does not replace the estimator context. Batch completion supplies affected item IDs; row getters suppress stale estimates immediately, even before budgeted invalidation reaches their dependency edge. Pending/combat answers are never memoized. Terminal missing records settle and remain unknown. Completed estimates remain valid even if the reader evicts their decoded partition. Per-bucket preparation uses the existing pricing cache/reservations; a lease prevents decoder handoff before demand registration finishes. Cancellation drops only that unfinished lease, leaving shared decoder work and other consumers intact.
 
@@ -77,3 +77,13 @@ No assertions were suppressed and the 45-second scenario limit is unchanged
 The initial nil-module failure and the first settlement helper's excess idle
 waits were corrected and verified; historical failing run evidence remains in the
 local verification artifacts. [Compact verification](../evidence/v2-market-pr3/verification.json).
+
+
+The delivery follow-up keeps economic/runtime calculation code identical to
+`6754427`; it adds capture-only first-row construction timing and preserves
+all-known settlement when a filter has no visible rows. The final fast group
+passed in 4.351 s and all 16 mutations were killed in 10.4 s. The scroll fixture
+now dispatches both the stand-in's main script and HookScript listeners; its
+initial offset-only timing is superseded, not treated as actual scrolling.
+Optional Lua argument nine (`normal` / `nogc`) exposes isolated callback heap,
+pool and indivisible-question diagnostics. Never disable GC in addon runtime.
