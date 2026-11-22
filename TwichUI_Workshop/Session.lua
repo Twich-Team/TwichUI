@@ -27,6 +27,8 @@ local current          -- the professionID being browsed
 local lastWhy          -- why the last read gave nothing, or nil
 local note             -- the last thing an action said, until the next action
 local lastShop         -- the last finished multilevel shopping package (shown, marked as updating, while a newer plan is computed)
+local recipesCache,recipesObservation,recipesCharacter,indexCache,indexRecipes
+local opportunityEngine
 
 ---------------------------------------------------------------------------
 -- How costs are shown: the one Workshop choice of presentation (Strategy.CostText reads Strategy.detailed)
@@ -236,6 +238,8 @@ end
 
 -- Forgets what is held in memory (the window closed); what changed is kept first, and the saved queue and recipes are untouched
 function S.Reset()
+    if W.suspended then S.ForgetEstimator()
+    elseif opportunityEngine then opportunityEngine:Cancel(opportunityEngine.error~=nil)end
     S.Save()
     -- A failed write is still the only copy. Retain it until a later save can
     -- succeed, without treating its profession as open after the window closes.
@@ -434,6 +438,8 @@ end
 -- The known recipes by id, and by the item they make (each list by recipe id). Built from this session's lists, nothing is asked of the game.
 local function Index()
     Ensure()
+    local recipes=S.AllRecipes()
+    if indexCache and indexRecipes==recipes then return indexCache[1],indexCache[2]end
     local byId, byOut = {}, {}
     for _, id in ipairs(order) do
         Each(profs[id], function(rec)
@@ -446,6 +452,7 @@ local function Index()
         end)
     end
     for _, list in pairs(byOut) do table.sort(list, function(a, b) return a.id < b.id end) end
+    indexCache,indexRecipes={byId,byOut},recipes
     return byId, byOut
 end
 
@@ -535,10 +542,13 @@ end
 -- Every recipe known (read this session or remembered), all professions
 function S.AllRecipes()
     Ensure()
+    local character=Q.CharKey()
+    if recipesCache and recipesObservation==S.observations and recipesCharacter==character then return recipesCache end
     local out = {}
     for _, id in ipairs(order) do
         Each(profs[id], function(rec) out[#out + 1] = rec end)
     end
+    recipesCache,recipesObservation,recipesCharacter=out,S.observations,character
     return out
 end
 
@@ -565,7 +575,7 @@ function S.FillSome(n)
             end)
         end
     end
-    if did then Sg.Bump() end
+    if did then recipesCache=nil;Sg.Bump() end
     if did and left == 0 then S.Save() end
     return left
 end
@@ -635,6 +645,27 @@ S.VendorSell = VendorSell
 -- item's saved tiers per call): the market and its scan, the reference generation, the cut, the vendor records, the Ledger's sales and deposits,
 -- the listing duration and an hour of time (ages and the stale rule: their thresholds are a day and more). Anything else (a scan, a merchant, a sale) makes a new one.
 local lastEstimator, lastKey, lastCut, lastCutWhy
+local feeEvidence,feeRevision
+-- Counts alone miss replacement postings with a different amount/duration.
+-- Compare only economic evidence when Fees rebuilds its existing cached view;
+-- unrelated Ledger activity must not discard completed recipe estimates.
+local function FeeRevision(ev)
+    if ev==feeEvidence then return feeRevision or 0 end
+    local old=feeEvidence
+    local equal=old and ev and old.invoices==ev.invoices and old.depositCount==ev.depositCount
+        and old.match.faction==ev.match.faction and old.match.neutral==ev.match.neutral
+    if equal then
+        for item,list in pairs(ev.deposits or {})do
+            local before=old.deposits and old.deposits[item]
+            if not before or #before~=#list then equal=false;break end
+            for i,d in ipairs(list)do if d.per~=before[i].per or d.r~=before[i].r then equal=false;break end end
+            if not equal then break end
+        end
+        if equal then for item in pairs(old.deposits or {})do if not(ev.deposits and ev.deposits[item])then equal=false;break end end end
+    end
+    if not equal then feeRevision=(feeRevision or 0)+1 end
+    feeEvidence=ev;return feeRevision or 0
+end
 S.ESTIMATE_MEMO_MAX = 20000   -- answers kept at most; beyond it the next draw starts a new estimator
 function S.Estimator(src)
     src = src or S.PriceSource()
@@ -648,14 +679,18 @@ function S.Estimator(src)
     -- the Gold Ledger counts only through what the fees read from it (verified sales and deposits): any other gold change (loot, repairs)
     -- moves its revision without changing an estimate
     local ev = Fe and Fe.Evidence and Fe.Evidence() or nil
-    local fees = ev and (ev.invoices .. ":" .. ev.depositCount .. ":" .. ev.match.faction .. ":" .. ev.match.neutral) or ""
+    local fees = FeeRevision(ev)
     local snap = lm and lm.snap
     local key = table.concat({ tostring(market.key), tostring(market.at), tostring(lm and lm.at), tostring(snap and snap.seq), tostring(SC.ended or 0),
-        tostring(src.generation or ""),
-        tostring(cut and cut.rate), tostring(cut and cut.source), tostring(cutWhy), tostring(V.Count and V.Count() or 0),
+        tostring(market.pricing and MK.ContextGeneration and MK.ContextGeneration()or src.generation or ""),
+        tostring(cut and cut.rate), tostring(cut and cut.source), tostring(cutWhy), tostring(not W.OpportunityEngine and V.Count and V.Count() or 0),
         fees, tostring(Fe and Fe.Duration() or 0), tostring(math.floor(Q.Now() / 3600)),
-        tostring(S.observations) }, "|")
-    if lastEstimator and lastKey == key and lastEstimator.size < S.ESTIMATE_MEMO_MAX then return lastEstimator, lastCut, lastCutWhy end
+        tostring(Q.CharKey()),tostring(lm and lm.at and Q.Now()-lm.at>Es.STALE_BUY),
+        tostring(lm and lm.at and Q.Now()-lm.at>(W.Valuation and W.Valuation.FAIR_AGE or 259200)) }, "|")
+    if lastEstimator and lastKey == key then
+        if lastEstimator.size>=S.ESTIMATE_MEMO_MAX then lastEstimator:ClearMemo()end
+        return lastEstimator, lastCut, lastCutWhy
+    end
     local function Local(fn) return (LM and LM[fn] and local_) and fn or nil end
     local ctx = {
         cut = cut, cutWhy = cutWhy,
@@ -675,7 +710,21 @@ function S.Estimator(src)
     return est, cut, cutWhy
 end
 function S.EstimatorSize() return lastEstimator and lastEstimator.size or 0 end
-function S.ForgetEstimator() lastEstimator, lastKey = nil, nil end
+function S.ForgetEstimator()
+    lastEstimator,lastKey=nil,nil
+    if opportunityEngine then opportunityEngine:Cancel(true)end
+end
+function S.ItemsChanged(items)
+    if lastEstimator and(not opportunityEngine or not opportunityEngine.args or opportunityEngine.args.estimator~=lastEstimator)then
+        for item in pairs(items or {})do lastEstimator:InvalidateItem(item)end
+    end
+    if opportunityEngine then opportunityEngine:ItemsChanged(items)end
+end
+function S.OpportunityStatus()return opportunityEngine and opportunityEngine:Status()or {}end
+function S.OpportunityItemRevision(item)return opportunityEngine and opportunityEngine.versions[item]or 0 end
+function S.PrioritizeOpportunities(ids)if opportunityEngine then opportunityEngine:Prioritize(ids)end end
+function S.PauseOpportunities()if opportunityEngine then opportunityEngine:Cancel(false)end end
+function S.RetryOpportunities()if opportunityEngine then opportunityEngine:RetryWaiting()end end
 if R.Perf and R.Perf.Gauge then
     R.Perf.Gauge("workshop.estimate", { label = "Workshop: answers kept by the last Opportunities estimate", kind = "cache", group = "workshop", unit = "count", read = S.EstimatorSize })
 end
@@ -683,7 +732,6 @@ end
 -- Everything the Opportunities view draws: rows (filtered and sorted), counts, the price source, the cut, and the text for an empty list
 function S.Opportunities()
     local pt = R.Perf and R.Perf.on and R.Perf.Start("workshop.estimate")
-    if R.Perf and R.Perf.on then R.Perf.Count("workshop.pricing.fullLists") end
     local src = S.PriceSource()
     local recipes = S.AllRecipes()
     local market = src.market
@@ -692,9 +740,35 @@ function S.Opportunities()
     if estimator then rate = cut and cut.rate or nil
     else rate = market and PR.CutRate(market.side) or nil end
     local lookup = function(item) return market and MK.Price(item, { market = market }) or nil end
-    local all = Op.Rows(recipes, lookup, rate, nil, estimator)
+    local all,rows,summary,calculating,positions,viewRevision,progress,criteria
+    if W.OpportunityEngine then
+        if not opportunityEngine then opportunityEngine=W.OpportunityEngine.New(function()if W.Active()and W.UI and W.UI.Redraw then W.UI.Redraw()end end)end
+        local key=estimator and lastKey or 'none:'..tostring(src.label)
+        local sourceVersion=market and market.pricing and MK.ContextGeneration()
+        local lm=market and(market.pricing and market.localMarket or market)
+        local localAt,seq,ended=lm and lm.at,lm and lm.snap and lm.snap.seq,SC.ended
+        opportunityEngine:Request({recipes=recipes,key=key,estimator=estimator,lookup=lookup,rate=rate,filter=S.opp,now=Q.Now(),
+            prefetch=market and market.pricing and MK.PrepareBucket and function(ids,work)MK.PrepareBucket(ids,work,opportunityEngine)end,
+            release=MK.ReleasePreparation and function()MK.ReleasePreparation(opportunityEngine)end,
+            ready=market and market.pricing and MK.Ready,settled=MK.Settled,
+            valid=function()
+                return (not sourceVersion or sourceVersion==MK.ContextGeneration())and SC.ended==ended
+                    and(not lm or lm.at==localAt and(lm.snap and lm.snap.seq)==seq)
+            end,
+            current=function()
+                local source=S.PriceSource()
+                if not estimator then return source.market==nil end
+                S.Estimator(source);return lastKey==key
+            end})
+        all,rows,summary=opportunityEngine.all,opportunityEngine.rows,opportunityEngine.summary
+        if next(opportunityEngine.incoming)then summary={total=summary.total,priced=0,profitable=0,refreshing=true}end
+        progress=opportunityEngine:Status();calculating=progress.refreshing;positions=opportunityEngine.positions;viewRevision=opportunityEngine.viewRevision
+        criteria=opportunityEngine.filterKey
+    else
+        if R.Perf and R.Perf.on then R.Perf.Count('workshop.pricing.fullLists')end
+        all=Op.Rows(recipes,lookup,rate,nil,estimator);rows=Op.Select(all,S.opp);summary=Op.Summary(all)
+    end
     if pt then R.Perf.Stop(pt) end
-    local rows = Op.Select(all, S.opp)
     -- Whether one craft's materials are in the bags or in storage, asked only for the rows the window draws (each answer reads bag counts) and kept
     -- apart from the estimate: stored materials never lower a cost or raise a profit.
     local view, counts = S.Stock(), {}
@@ -704,13 +778,16 @@ function S.Opportunities()
         return n or nil
     end
     -- all: every row before the page's filter and sort (the Overview reads its best one; nothing is priced twice)
-    local out = { rows = rows, all = all, summary = Op.Summary(all), source = src, rate = rate, cut = cut, cutWhy = cutWhy, estimator = estimator, lookup = lookup, incomplete = false, stock = view,
+    local out = { rows = rows, all = all, summary = summary, source = src, rate = rate, cut = cut, cutWhy = cutWhy, estimator = estimator, lookup = lookup, incomplete = false, stock = view,
+        calculating=calculating,positions=positions,viewRevision=viewRevision,progress=progress,criteria=criteria,
         avail = function(rec) return K.Craft(rec.mats, Have, view) end }
     for _, id in ipairs(order) do
         if not profs[id].complete then out.incomplete = true end
     end
-    if #recipes == 0 then out.state = "norecipes"
+    if opportunityEngine and opportunityEngine.error then out.state='calculation_failed'
+    elseif #recipes == 0 then out.state = "norecipes"
     elseif not market then out.state = "noscan"
+    elseif calculating then out.state='calculating'
     elseif out.summary.priced == 0 then out.state = "noprices"
     elseif #rows == 0 then out.state = S.opp.profitOnly and "noprofit" or (S.opp.hideLow and #Op.Select(all, { prof = S.opp.prof }) > 0 and "lowonly" or "nofilter")
     else out.state = "ok" end
@@ -718,7 +795,8 @@ function S.Opportunities()
         out.empty = src.open and "No prices for this auction house yet. Choose Scan prices."
             or "No prices saved yet. Open the auction house and choose Scan prices."
     else
-        out.empty = EMPTY[out.state]
+        out.empty = out.state=='calculation_failed'and 'These calculations could not be completed. Change the source or reopen Workshop to retry.'or
+            out.state=='calculating'and 'Calculating prices... Ranking is provisional.'or EMPTY[out.state]
     end
     return out
 end
@@ -891,7 +969,7 @@ function S.PlanKey(scope, entries, view, src, extra, nopicks)
     -- what the remembered bank and guild bank can supply right now (a tab turning uncertain, or read again, changes it without a new time)
     local stock = table.concat({ tostring(g.tabs), tostring(g.unread), tostring(g.uncertain), tostring(g.limitedTabs), b.counted and "B" or "b", tostring(b.tabs) }, ".")
     return table.concat({ Sg.epoch, scope, S.Objective(), extra or "", table.concat(q, ","), table.concat(bags, ","), nopicks and "" or PicksSig(), g.enabled and "G" or "g", tostring(g.at or 0),
-        tostring(b.at or 0), stock, mk and (tostring(src.label) .. "@" .. tostring(mk.at) .. ":" .. tostring(src.generation or "")) or "none", tostring(SC.ended or 0), V.Count(), S.observations }, "|")
+        tostring(b.at or 0), stock, mk and (tostring(src.label) .. "@" .. tostring(mk.at) .. ":" .. tostring(src.generation or "")) or "none", tostring(SC.ended or 0), V.Count(), V.Revision and V.Revision()or 0, S.observations }, "|")
 end
 
 -- the planner's input for a list of queue-shaped entries: Shopping's functions over the same price, vendor, stock and recipe services

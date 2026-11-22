@@ -1,0 +1,681 @@
+{
+  "source": "8b5865b20cec7d7f39af78de947b712a9c7c67e1",
+  "harness_sha256": "002205195d05a7a1b124362427a17782a8b1ad93b83542e663ca4ede7cdad3eb",
+  "index_harness_sha256": "1973827e13a6165a6f06f83dcb9d9468513de1fcaabeea61167b9b83a7378f18",
+  "host": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "python": "3.12.14",
+  "clock": "Lua os.clock CPU; Python perf_counter subprocess elapsed",
+  "limitations": "Synthetic 60Hz minimum timer delay; not the WoW scheduler. Peak heap sampled at callbacks/lookups, not exact peak. Includes harness observer overhead.",
+  "contract": 3,
+  "rows_per_bucket": 32,
+  "scenario": "scroll",
+  "samples": [
+    {
+      "case": [
+        "opportunities",
+        "ui",
+        1000,
+        60
+      ],
+      "runs": [
+        {
+          "active_scrolls": 50.0,
+          "base_key_calls": 1064.0,
+          "base_key_cpu_ms": 107.826,
+          "callback_cpu_ms": 5679.826,
+          "callback_p95_ms": 82.911,
+          "callback_p99_ms": 140.436,
+          "callbacks": 506.0,
+          "compile_ms": 1.854,
+          "contract_version": 3.0,
+          "count": 1000.0,
+          "cpu_ms": 6279.682,
+          "crafts": 59000.0,
+          "current_raw_loaded_bytes": 236660.0,
+          "decoded_partitions": 1.0,
+          "decodes": 65.0,
+          "estimator_instances": 54.0,
+          "execute_ms": 0.046,
+          "explicit_gc_ms": 67.131,
+          "first_cpu_ms": 489.268,
+          "first_model_seconds": 0.2,
+          "first_reference_model_seconds": 0.083333,
+          "fixture_current_bytes": 236660.0,
+          "fixture_history_bytes": 2329716.0,
+          "full_calculations": 59.0,
+          "heap_drops": 17.0,
+          "history_days": 60.0,
+          "history_loads": 1.0,
+          "history_raw_loaded_bytes": 36401.0,
+          "initial_request_cpu_ms": 369.294,
+          "loads": 65.0,
+          "lookup_calls": 2182.0,
+          "memo_asked": 7300.0,
+          "memo_hits": 44708.0,
+          "mode": "opportunities",
+          "model_seconds": 7.55,
+          "opportunities_settlement_cpu_ms": 5948.97,
+          "opportunities_settlement_model_seconds": 6.666667,
+          "oracle_ms": 2534.427,
+          "oracle_passed": true,
+          "oracle_reader_calls": 0.0,
+          "pattern": "ui",
+          "price_cache_entries": 1064.0,
+          "price_calls": 121313.0,
+          "priced": 960.0,
+          "pricing_settlement_cpu_ms": 5863.235,
+          "pricing_settlement_model_seconds": 6.566667,
+          "raw_fixture_bytes": 236660.0,
+          "raw_loaded_bytes": 296539.0,
+          "real_client": false,
+          "record_calls": 2128.0,
+          "record_wait_max_model_seconds": 6.566667,
+          "record_wait_p50_model_seconds": 3.35,
+          "record_wait_p95_model_seconds": 6.25,
+          "repeated_decodes": 0.0,
+          "result_sha256": "3450b02d325097551aad9792941aa4e3b2adaf550621c63e31fe272cca7051b1",
+          "retained_delta_kib": 46931.020508,
+          "rows_per_partition": 32.0,
+          "sampled_peak_delta_kib": 123211.879883,
+          "scenario": "scroll",
+          "scenario_cpu_ms": 146.646,
+          "scenario_crafts": 1000.0,
+          "scenario_full_lists": 1.0,
+          "scenario_model_seconds": 0.0,
+          "scenario_record_calls": 0.0,
+          "scenario_sorts": -1.0,
+          "scenario_views": 1.0,
+          "scroll_cpu_ms": 45.541,
+          "scroll_handler_calls": 150.0,
+          "scroll_max_cpu_ms": 0.889,
+          "semantic_fixture_sha256": "35b8fc1e792db990b467c7f9d88136863db935228419cee290306f488815449a",
+          "synchronous_full_lists": 59.0,
+          "synthetic": true,
+          "ten_model_seconds": 0.2,
+          "ten_references_model_seconds": 0.083333,
+          "timer_model": "minimum one 60Hz frame per After; CPU reported separately",
+          "unpriced": 40.0,
+          "validation_ms": 552.949,
+          "view_requests": 59.0,
+          "visible_cohort_size": 8.0,
+          "visible_settlement_cpu_ms": 5951.757,
+          "visible_settlement_model_seconds": 6.666667,
+          "warm_crafts": 1000.0,
+          "warm_estimator_reused": true,
+          "warm_ms": 40.803,
+          "warm_record_calls": 0.0,
+          "worst_callback_ms": 153.871,
+          "worst_callback_source": "./TwichUI_Workshop/Pricing.lua:93",
+          "subprocess_wall_seconds": 13.957836960998975
+        },
+        {
+          "active_scrolls": 49.0,
+          "base_key_calls": 1064.0,
+          "base_key_cpu_ms": 110.079,
+          "callback_cpu_ms": 4997.859,
+          "callback_p95_ms": 73.358,
+          "callback_p99_ms": 133.755,
+          "callbacks": 493.0,
+          "compile_ms": 1.643,
+          "contract_version": 3.0,
+          "count": 1000.0,
+          "cpu_ms": 5528.858,
+          "crafts": 55000.0,
+          "current_raw_loaded_bytes": 236660.0,
+          "decoded_partitions": 1.0,
+          "decodes": 65.0,
+          "estimator_instances": 50.0,
+          "execute_ms": 0.043,
+          "explicit_gc_ms": 116.226,
+          "first_cpu_ms": 509.898,
+          "first_model_seconds": 0.2,
+          "first_reference_model_seconds": 0.083333,
+          "fixture_current_bytes": 236660.0,
+          "fixture_history_bytes": 2329716.0,
+          "full_calculations": 55.0,
+          "heap_drops": 15.0,
+          "history_days": 60.0,
+          "history_loads": 1.0,
+          "history_raw_loaded_bytes": 36401.0,
+          "initial_request_cpu_ms": 389.033,
+          "loads": 65.0,
+          "lookup_calls": 2178.0,
+          "memo_asked": 7300.0,
+          "memo_hits": 44708.0,
+          "mode": "opportunities",
+          "model_seconds": 7.4,
+          "opportunities_settlement_cpu_ms": 5303.408,
+          "opportunities_settlement_model_seconds": 6.5,
+          "oracle_ms": 2518.497,
+          "oracle_passed": true,
+          "oracle_reader_calls": 0.0,
+          "pattern": "ui",
+          "price_cache_entries": 1064.0,
+          "price_calls": 111498.0,
+          "priced": 960.0,
+          "pricing_settlement_cpu_ms": 5221.34,
+          "pricing_settlement_model_seconds": 6.4,
+          "raw_fixture_bytes": 236660.0,
+          "raw_loaded_bytes": 296539.0,
+          "real_client": false,
+          "record_calls": 2128.0,
+          "record_wait_max_model_seconds": 6.4,
+          "record_wait_p50_model_seconds": 3.183333,
+          "record_wait_p95_model_seconds": 6.083333,
+          "repeated_decodes": 0.0,
+          "result_sha256": "3450b02d325097551aad9792941aa4e3b2adaf550621c63e31fe272cca7051b1",
+          "retained_delta_kib": 46938.132812,
+          "rows_per_partition": 32.0,
+          "sampled_peak_delta_kib": 122280.339844,
+          "scenario": "scroll",
+          "scenario_cpu_ms": 61.247,
+          "scenario_crafts": 1000.0,
+          "scenario_full_lists": 1.0,
+          "scenario_model_seconds": 0.0,
+          "scenario_record_calls": 0.0,
+          "scenario_sorts": -1.0,
+          "scenario_views": 1.0,
+          "scroll_cpu_ms": 32.919,
+          "scroll_handler_calls": 149.0,
+          "scroll_max_cpu_ms": 0.892,
+          "semantic_fixture_sha256": "35b8fc1e792db990b467c7f9d88136863db935228419cee290306f488815449a",
+          "synchronous_full_lists": 55.0,
+          "synthetic": true,
+          "ten_model_seconds": 0.2,
+          "ten_references_model_seconds": 0.083333,
+          "timer_model": "minimum one 60Hz frame per After; CPU reported separately",
+          "unpriced": 40.0,
+          "validation_ms": 521.954,
+          "view_requests": 55.0,
+          "visible_cohort_size": 8.0,
+          "visible_settlement_cpu_ms": 5305.46,
+          "visible_settlement_model_seconds": 6.5,
+          "warm_crafts": 1000.0,
+          "warm_estimator_reused": true,
+          "warm_ms": 47.675,
+          "warm_record_calls": 0.0,
+          "worst_callback_ms": 162.883,
+          "worst_callback_source": "./TwichUI_Workshop/Pricing.lua:93",
+          "subprocess_wall_seconds": 13.276196380000329
+        },
+        {
+          "active_scrolls": 49.0,
+          "base_key_calls": 1064.0,
+          "base_key_cpu_ms": 108.564,
+          "callback_cpu_ms": 4993.231,
+          "callback_p95_ms": 75.262,
+          "callback_p99_ms": 135.738,
+          "callbacks": 492.0,
+          "compile_ms": 1.655,
+          "contract_version": 3.0,
+          "count": 1000.0,
+          "cpu_ms": 5515.527,
+          "crafts": 55000.0,
+          "current_raw_loaded_bytes": 236660.0,
+          "decoded_partitions": 1.0,
+          "decodes": 65.0,
+          "estimator_instances": 50.0,
+          "execute_ms": 0.039,
+          "explicit_gc_ms": 109.625,
+          "first_cpu_ms": 484.022,
+          "first_model_seconds": 0.2,
+          "first_reference_model_seconds": 0.083333,
+          "fixture_current_bytes": 236660.0,
+          "fixture_history_bytes": 2329716.0,
+          "full_calculations": 55.0,
+          "heap_drops": 15.0,
+          "history_days": 60.0,
+          "history_loads": 1.0,
+          "history_raw_loaded_bytes": 36401.0,
+          "initial_request_cpu_ms": 370.326,
+          "loads": 65.0,
+          "lookup_calls": 2178.0,
+          "memo_asked": 7300.0,
+          "memo_hits": 44708.0,
+          "mode": "opportunities",
+          "model_seconds": 7.383333,
+          "opportunities_settlement_cpu_ms": 5283.284,
+          "opportunities_settlement_model_seconds": 6.5,
+          "oracle_ms": 2504.867,
+          "oracle_passed": true,
+          "oracle_reader_calls": 0.0,
+          "pattern": "ui",
+          "price_cache_entries": 1064.0,
+          "price_calls": 111498.0,
+          "priced": 960.0,
+          "pricing_settlement_cpu_ms": 5208.549,
+          "pricing_settlement_model_seconds": 6.4,
+          "raw_fixture_bytes": 236660.0,
+          "raw_loaded_bytes": 296539.0,
+          "real_client": false,
+          "record_calls": 2128.0,
+          "record_wait_max_model_seconds": 6.4,
+          "record_wait_p50_model_seconds": 3.183333,
+          "record_wait_p95_model_seconds": 6.083333,
+          "repeated_decodes": 0.0,
+          "result_sha256": "3450b02d325097551aad9792941aa4e3b2adaf550621c63e31fe272cca7051b1",
+          "retained_delta_kib": 46938.132812,
+          "rows_per_partition": 32.0,
+          "sampled_peak_delta_kib": 122407.496094,
+          "scenario": "scroll",
+          "scenario_cpu_ms": 60.777,
+          "scenario_crafts": 1000.0,
+          "scenario_full_lists": 1.0,
+          "scenario_model_seconds": 0.0,
+          "scenario_record_calls": 0.0,
+          "scenario_sorts": -1.0,
+          "scenario_views": 1.0,
+          "scroll_cpu_ms": 35.548,
+          "scroll_handler_calls": 149.0,
+          "scroll_max_cpu_ms": 0.779,
+          "semantic_fixture_sha256": "35b8fc1e792db990b467c7f9d88136863db935228419cee290306f488815449a",
+          "synchronous_full_lists": 55.0,
+          "synthetic": true,
+          "ten_model_seconds": 0.2,
+          "ten_references_model_seconds": 0.083333,
+          "timer_model": "minimum one 60Hz frame per After; CPU reported separately",
+          "unpriced": 40.0,
+          "validation_ms": 514.131,
+          "view_requests": 55.0,
+          "visible_cohort_size": 8.0,
+          "visible_settlement_cpu_ms": 5285.308,
+          "visible_settlement_model_seconds": 6.5,
+          "warm_crafts": 1000.0,
+          "warm_estimator_reused": true,
+          "warm_ms": 53.642,
+          "warm_record_calls": 0.0,
+          "worst_callback_ms": 159.486,
+          "worst_callback_source": "./TwichUI_Workshop/Pricing.lua:93",
+          "subprocess_wall_seconds": 13.240272560000449
+        }
+      ],
+      "metrics": {
+        "active_scrolls": {
+          "median": 49.0,
+          "minimum": 49.0,
+          "maximum": 50.0
+        },
+        "base_key_calls": {
+          "median": 1064.0,
+          "minimum": 1064.0,
+          "maximum": 1064.0
+        },
+        "base_key_cpu_ms": {
+          "median": 108.564,
+          "minimum": 107.826,
+          "maximum": 110.079
+        },
+        "callback_cpu_ms": {
+          "median": 4997.859,
+          "minimum": 4993.231,
+          "maximum": 5679.826
+        },
+        "callback_p95_ms": {
+          "median": 75.262,
+          "minimum": 73.358,
+          "maximum": 82.911
+        },
+        "callback_p99_ms": {
+          "median": 135.738,
+          "minimum": 133.755,
+          "maximum": 140.436
+        },
+        "callbacks": {
+          "median": 493.0,
+          "minimum": 492.0,
+          "maximum": 506.0
+        },
+        "compile_ms": {
+          "median": 1.655,
+          "minimum": 1.643,
+          "maximum": 1.854
+        },
+        "contract_version": {
+          "median": 3.0,
+          "minimum": 3.0,
+          "maximum": 3.0
+        },
+        "count": {
+          "median": 1000.0,
+          "minimum": 1000.0,
+          "maximum": 1000.0
+        },
+        "cpu_ms": {
+          "median": 5528.858,
+          "minimum": 5515.527,
+          "maximum": 6279.682
+        },
+        "crafts": {
+          "median": 55000.0,
+          "minimum": 55000.0,
+          "maximum": 59000.0
+        },
+        "current_raw_loaded_bytes": {
+          "median": 236660.0,
+          "minimum": 236660.0,
+          "maximum": 236660.0
+        },
+        "decoded_partitions": {
+          "median": 1.0,
+          "minimum": 1.0,
+          "maximum": 1.0
+        },
+        "decodes": {
+          "median": 65.0,
+          "minimum": 65.0,
+          "maximum": 65.0
+        },
+        "estimator_instances": {
+          "median": 50.0,
+          "minimum": 50.0,
+          "maximum": 54.0
+        },
+        "execute_ms": {
+          "median": 0.043,
+          "minimum": 0.039,
+          "maximum": 0.046
+        },
+        "explicit_gc_ms": {
+          "median": 109.625,
+          "minimum": 67.131,
+          "maximum": 116.226
+        },
+        "first_cpu_ms": {
+          "median": 489.268,
+          "minimum": 484.022,
+          "maximum": 509.898
+        },
+        "first_model_seconds": {
+          "median": 0.2,
+          "minimum": 0.2,
+          "maximum": 0.2
+        },
+        "first_reference_model_seconds": {
+          "median": 0.083333,
+          "minimum": 0.083333,
+          "maximum": 0.083333
+        },
+        "fixture_current_bytes": {
+          "median": 236660.0,
+          "minimum": 236660.0,
+          "maximum": 236660.0
+        },
+        "fixture_history_bytes": {
+          "median": 2329716.0,
+          "minimum": 2329716.0,
+          "maximum": 2329716.0
+        },
+        "full_calculations": {
+          "median": 55.0,
+          "minimum": 55.0,
+          "maximum": 59.0
+        },
+        "heap_drops": {
+          "median": 15.0,
+          "minimum": 15.0,
+          "maximum": 17.0
+        },
+        "history_days": {
+          "median": 60.0,
+          "minimum": 60.0,
+          "maximum": 60.0
+        },
+        "history_loads": {
+          "median": 1.0,
+          "minimum": 1.0,
+          "maximum": 1.0
+        },
+        "history_raw_loaded_bytes": {
+          "median": 36401.0,
+          "minimum": 36401.0,
+          "maximum": 36401.0
+        },
+        "initial_request_cpu_ms": {
+          "median": 370.326,
+          "minimum": 369.294,
+          "maximum": 389.033
+        },
+        "loads": {
+          "median": 65.0,
+          "minimum": 65.0,
+          "maximum": 65.0
+        },
+        "lookup_calls": {
+          "median": 2178.0,
+          "minimum": 2178.0,
+          "maximum": 2182.0
+        },
+        "memo_asked": {
+          "median": 7300.0,
+          "minimum": 7300.0,
+          "maximum": 7300.0
+        },
+        "memo_hits": {
+          "median": 44708.0,
+          "minimum": 44708.0,
+          "maximum": 44708.0
+        },
+        "model_seconds": {
+          "median": 7.4,
+          "minimum": 7.383333,
+          "maximum": 7.55
+        },
+        "opportunities_settlement_cpu_ms": {
+          "median": 5303.408,
+          "minimum": 5283.284,
+          "maximum": 5948.97
+        },
+        "opportunities_settlement_model_seconds": {
+          "median": 6.5,
+          "minimum": 6.5,
+          "maximum": 6.666667
+        },
+        "oracle_ms": {
+          "median": 2518.497,
+          "minimum": 2504.867,
+          "maximum": 2534.427
+        },
+        "oracle_reader_calls": {
+          "median": 0.0,
+          "minimum": 0.0,
+          "maximum": 0.0
+        },
+        "price_cache_entries": {
+          "median": 1064.0,
+          "minimum": 1064.0,
+          "maximum": 1064.0
+        },
+        "price_calls": {
+          "median": 111498.0,
+          "minimum": 111498.0,
+          "maximum": 121313.0
+        },
+        "priced": {
+          "median": 960.0,
+          "minimum": 960.0,
+          "maximum": 960.0
+        },
+        "pricing_settlement_cpu_ms": {
+          "median": 5221.34,
+          "minimum": 5208.549,
+          "maximum": 5863.235
+        },
+        "pricing_settlement_model_seconds": {
+          "median": 6.4,
+          "minimum": 6.4,
+          "maximum": 6.566667
+        },
+        "raw_fixture_bytes": {
+          "median": 236660.0,
+          "minimum": 236660.0,
+          "maximum": 236660.0
+        },
+        "raw_loaded_bytes": {
+          "median": 296539.0,
+          "minimum": 296539.0,
+          "maximum": 296539.0
+        },
+        "record_calls": {
+          "median": 2128.0,
+          "minimum": 2128.0,
+          "maximum": 2128.0
+        },
+        "record_wait_max_model_seconds": {
+          "median": 6.4,
+          "minimum": 6.4,
+          "maximum": 6.566667
+        },
+        "record_wait_p50_model_seconds": {
+          "median": 3.183333,
+          "minimum": 3.183333,
+          "maximum": 3.35
+        },
+        "record_wait_p95_model_seconds": {
+          "median": 6.083333,
+          "minimum": 6.083333,
+          "maximum": 6.25
+        },
+        "repeated_decodes": {
+          "median": 0.0,
+          "minimum": 0.0,
+          "maximum": 0.0
+        },
+        "retained_delta_kib": {
+          "median": 46938.132812,
+          "minimum": 46931.020508,
+          "maximum": 46938.132812
+        },
+        "rows_per_partition": {
+          "median": 32.0,
+          "minimum": 32.0,
+          "maximum": 32.0
+        },
+        "sampled_peak_delta_kib": {
+          "median": 122407.496094,
+          "minimum": 122280.339844,
+          "maximum": 123211.879883
+        },
+        "scenario_cpu_ms": {
+          "median": 61.247,
+          "minimum": 60.777,
+          "maximum": 146.646
+        },
+        "scenario_crafts": {
+          "median": 1000.0,
+          "minimum": 1000.0,
+          "maximum": 1000.0
+        },
+        "scenario_full_lists": {
+          "median": 1.0,
+          "minimum": 1.0,
+          "maximum": 1.0
+        },
+        "scenario_model_seconds": {
+          "median": 0.0,
+          "minimum": 0.0,
+          "maximum": 0.0
+        },
+        "scenario_record_calls": {
+          "median": 0.0,
+          "minimum": 0.0,
+          "maximum": 0.0
+        },
+        "scenario_sorts": {
+          "median": -1.0,
+          "minimum": -1.0,
+          "maximum": -1.0
+        },
+        "scenario_views": {
+          "median": 1.0,
+          "minimum": 1.0,
+          "maximum": 1.0
+        },
+        "scroll_cpu_ms": {
+          "median": 35.548,
+          "minimum": 32.919,
+          "maximum": 45.541
+        },
+        "scroll_handler_calls": {
+          "median": 149.0,
+          "minimum": 149.0,
+          "maximum": 150.0
+        },
+        "scroll_max_cpu_ms": {
+          "median": 0.889,
+          "minimum": 0.779,
+          "maximum": 0.892
+        },
+        "synchronous_full_lists": {
+          "median": 55.0,
+          "minimum": 55.0,
+          "maximum": 59.0
+        },
+        "ten_model_seconds": {
+          "median": 0.2,
+          "minimum": 0.2,
+          "maximum": 0.2
+        },
+        "ten_references_model_seconds": {
+          "median": 0.083333,
+          "minimum": 0.083333,
+          "maximum": 0.083333
+        },
+        "unpriced": {
+          "median": 40.0,
+          "minimum": 40.0,
+          "maximum": 40.0
+        },
+        "validation_ms": {
+          "median": 521.954,
+          "minimum": 514.131,
+          "maximum": 552.949
+        },
+        "view_requests": {
+          "median": 55.0,
+          "minimum": 55.0,
+          "maximum": 59.0
+        },
+        "visible_cohort_size": {
+          "median": 8.0,
+          "minimum": 8.0,
+          "maximum": 8.0
+        },
+        "visible_settlement_cpu_ms": {
+          "median": 5305.46,
+          "minimum": 5285.308,
+          "maximum": 5951.757
+        },
+        "visible_settlement_model_seconds": {
+          "median": 6.5,
+          "minimum": 6.5,
+          "maximum": 6.666667
+        },
+        "warm_crafts": {
+          "median": 1000.0,
+          "minimum": 1000.0,
+          "maximum": 1000.0
+        },
+        "warm_ms": {
+          "median": 47.675,
+          "minimum": 40.803,
+          "maximum": 53.642
+        },
+        "warm_record_calls": {
+          "median": 0.0,
+          "minimum": 0.0,
+          "maximum": 0.0
+        },
+        "worst_callback_ms": {
+          "median": 159.486,
+          "minimum": 153.871,
+          "maximum": 162.883
+        },
+        "subprocess_wall_seconds": {
+          "median": 13.276196380000329,
+          "minimum": 13.240272560000449,
+          "maximum": 13.957836960998975
+        }
+      }
+    }
+  ]
+}

@@ -776,10 +776,10 @@ do
   assert(wr.DiagnosticsLauncher.Load());local kit=wr.DiagnosticsKit
   local preset
   for _,p in ipairs(kit.PRESETS)do if p.key=="workshop"then preset=p end end
-  assert(preset and #preset.gaugeIds==10)
+  assert(preset and #preset.gaugeIds==15)
   for i=1,50 do wr.Perf.Gauge("unrelated."..i,{read=function()return 1 end})end
   local selected=kit.GaugeList(preset.gauges,preset.gaugeIds)
-  assert(#selected==10 and selected[1].id=="workshop.cold.pending" and selected[1].read()==0,"cold diagnostics lost passive gauges before Workshop loaded")
+  assert(#selected==15 and selected[1].id=="workshop.cold.pending" and selected[1].read()==0,"cold diagnostics lost passive gauges before Workshop loaded")
   assert(kit.Start("general"))
   local capture=wr.Perf.captureID
   for _,ms in ipairs({100,8000,60000})do wr.Perf.Observe("workshop.priceWait",ms)end

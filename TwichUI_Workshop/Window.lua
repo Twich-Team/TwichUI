@@ -111,6 +111,7 @@ end
 function Win.SetMode(m)
     if not UI.pages[m] then return end
     mode = m
+    if m~='opps'and m~='overview'and m~='craft'then S.PauseOpportunities()end
     if not f then return end
     for key, page in pairs(pages) do page:SetShown(key == m) end
     PaintNav()
@@ -363,6 +364,8 @@ local function Build()
             local row = UI.hoverRow
             if row and row:IsShown() then row:ShowTip() end   -- Shift pressed or released while over a row: the other tooltip
         elseif kind then
+            if event=='PLAYER_REGEN_ENABLED'then S.RetryOpportunities()end
+            if event=='GET_ITEM_INFO_RECEIVED'and type(a)=='number'then S.ItemsChanged({[a]=true});UI.itemInfoRevision=(UI.itemInfoRevision or 0)+1 end
             if event=="GET_ITEM_INFO_RECEIVED" and mode=="advisor" and UI.Advisor then UI.Advisor.ItemReady(a,b) end
             if event == "BAG_UPDATE_DELAYED" then W.Strategy.Bump(); dirtyBags = true end   -- what is owned changed: plans are worked out again
             Schedule(kind)
