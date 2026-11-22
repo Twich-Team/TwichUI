@@ -27,6 +27,7 @@ function UIWidgets(env, opts)
       if type(rel) == "string" then rel = env[rel] end
       if type(relPoint) ~= "string" then relPoint, x, y = point, relPoint, x end
       for i, p in ipairs(self.points) do if p[1] == point then table.remove(self.points, i) break end end
+      assert(type(x or 0) == "number" and type(y or 0) == "number", "SetPoint offsets must be numbers: " .. tostring(point) .. " " .. tostring(x) .. " " .. tostring(y))
       table.insert(self.points, { point, rel, relPoint, x or 0, y or 0 })
     end
     function r:ClearAllPoints() self.points = {} end

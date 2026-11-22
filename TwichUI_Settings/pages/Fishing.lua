@@ -416,6 +416,13 @@ K.Page({
         Toggle("List", "list.enabled", "Show this session's catches", "Your catches on the right of the screen (immersive only).", true)
         Toggle("Toasts", "toast.enabled", "Show catch notifications", "A short notice for each catch, left of the middle of the screen.", true)
         Toggle("JournalSummary", "journal.summary", "Show a summary when a session ends", "A Session Summary card with the catches of a session you stopped or left idle (never during combat). Open the whole Journal from the Fishing tab.", true)
+        Percent("JournalScale", "journal.scale", "Journal size", "How large the Fishing Journal window and the session summary are. Drag the Journal by its title to move it; its place is remembered.", 1, 60, 140)
+        Gate(K.Button("Journal position", "Reset Journal position", function()
+            local f = Fish()
+            if not (f and f.JournalUI) then return end
+            f.JournalUI.ResetPosition()
+            R.Print("fishing: the Journal is back in the middle of the screen.")
+        end, "Puts the Fishing Journal back in the middle of the screen, at the same size. Use it if you moved the window somewhere awkward."))
         Percent("CastScale", "castbar.scale", "Cast bar size (%)", "The cast bar's size.", 1, 60, 160)
         Percent("ListScale", "list.scale", "Catch list size (%)", "The catch list's size.", 1, 60, 160)
         Percent("ToastScale", "toast.scale", "Notification size (%)", "The notices' size.", 1, 60, 160)

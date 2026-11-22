@@ -14,7 +14,7 @@ local FISH = {
   { 13754, "Raw Glossy Mightfish", "fish_blue", 298 }, { 13756, "Raw Summer Bass", "fish_green", 250 },
   { 13758, "Raw Redgill", "fish_brown", 214 }, { 13759, "Raw Nightfin Snapper", "fish_silver", 176 },
   { 13760, "Raw Sunscale Salmon", "fish_orange", 133 }, { 13889, "Raw Whitescale Salmon", "fish_silver", 97 },
-  { 8365, "Raw Mithril Head Trout", "fish_blue", 0 },
+  { 8365, "Raw Mithril Head Trout", "fish_blue", 0 }, { 24001, "Giant Mottled Spotted Sagefish of the Southern Reaches", "fish_green", 61 },
 }
 local NAMES = {
   [PEARL] = { "Golden Pearl", 2, "Interface\\Icons\\pearl" }, [CLAMMEAT] = { "Tangy Clam Meat", 1, "Interface\\Icons\\clam_meat" },
@@ -49,6 +49,21 @@ if page ~= "empty" then
     containers = { [CLAM] = { caught = 41, opened = 36, failed = 2, got = { [PEARL] = 3, [CLAMMEAT] = 52 } },
       [BIGCLAM] = { caught = 9, opened = 7, failed = 0, got = { [PEARL] = 5, [CLAMMEAT] = 11 } } },
     contents = { [PEARL] = 8, [CLAMMEAT] = 63 } }
+  -- where fish were caught since location recording began (the rest of each species is "earlier")
+  local SVz, DMz, HLz, FRz, ZGz = 1434, 15, 26, 1444, 1946
+  local function Z(q, c, d1, d2) return { q = q, c = c, f = 1799000000 + d1 * 86400, l = 1800800000 - d2 * 86400 } end
+  ch.totals.spz = {
+    [SVz] = { [6291] = Z(410, 360, 1, 2), [6303] = Z(220, 190, 3, 4), [6299] = Z(140, 120, 6, 1), [6358] = Z(95, 80, 2, 9), [24001] = Z(30, 26, 12, 3) },
+    [DMz] = { [6291] = Z(300, 260, 4, 1), [6303] = Z(210, 180, 8, 2), [6361] = Z(150, 130, 10, 5) },
+    [HLz] = { [6291] = Z(180, 160, 9, 3), [6362] = Z(120, 100, 11, 6), [6359] = Z(97, 80, 15, 8), [6303] = Z(60, 50, 20, 7) },
+    [FRz] = { [6291] = Z(40, 36, 30, 10), [6361] = Z(70, 60, 22, 4) },
+    [ZGz] = { [6299] = Z(55, 50, 14, 2) },
+    [0] = { [6291] = Z(12, 12, 5, 20) },
+  }
+  ch.totals.ctz = { [SVz] = { [CLAM] = { caught = 22, opened = 20, failed = 1, got = { [PEARL] = 2, [CLAMMEAT] = 30 } } },
+    [DMz] = { [CLAM] = { caught = 12, opened = 11, failed = 1, got = { [PEARL] = 1, [CLAMMEAT] = 20 } }, [BIGCLAM] = { caught = 9, opened = 7, failed = 0, got = { [PEARL] = 5, [CLAMMEAT] = 11 } } } }
+  ch.locSince = 1799000000
+
   local zones = { 1434, 15, 26, 1444, 1946 }
   local sessions = {}
   for i = 1, 24 do
@@ -65,6 +80,18 @@ if page ~= "empty" then
       containers = i % 5 == 0 and { [CLAM] = { caught = 2, opened = 2, failed = 0, got = { [PEARL] = 1, [CLAMMEAT] = 3 } } } or {},
       contents = i % 5 == 0 and { [PEARL] = 1, [CLAMMEAT] = 3 } or {}, first = 1, last = 2 }
   end
+  -- the newest session fished three zones; the one before it two
+  local last = sessions[#sessions]
+  last.zones = { [1434] = { casts = 31, catches = 26, items = 29, line = 700 }, [15] = { casts = 24, catches = 21, items = 22, line = 520 }, [26] = { casts = 18, catches = 14, items = 15, line = 380 } }
+  last.casts, last.catches, last.items = 73, 61, 66
+  last.spz = { [1434] = { [6291] = { q = 14, c = 12, f = 1, l = 2 }, [6303] = { q = 9, c = 8, f = 1, l = 2 }, [6299] = { q = 6, c = 6, f = 1, l = 2 } },
+    [15] = { [6291] = { q = 11, c = 9, f = 1, l = 2 }, [6361] = { q = 8, c = 7, f = 1, l = 2 } }, [26] = { [6362] = { q = 9, c = 8, f = 1, l = 2 }, [6359] = { q = 6, c = 6, f = 1, l = 2 } } }
+  last.species = { [6291] = { q = 25, c = 21, f = 1, l = 2 }, [6303] = { q = 9, c = 8, f = 1, l = 2 }, [6299] = { q = 6, c = 6, f = 1, l = 2 },
+    [6361] = { q = 8, c = 7, f = 1, l = 2 }, [6362] = { q = 9, c = 8, f = 1, l = 2 }, [6359] = { q = 6, c = 6, f = 1, l = 2 }, [24001] = { q = 3, c = 3, f = 1, l = 2 } }
+  last.zone = 1434
+  last.ctz = { [1434] = { [CLAM] = { caught = 2, opened = 2, failed = 0, got = { [PEARL] = 1, [CLAMMEAT] = 3 } } } }
+  last.containers = { [CLAM] = { caught = 2, opened = 2, failed = 0, got = { [PEARL] = 1, [CLAMMEAT] = 3 } } }
+  last.contents = { [PEARL] = 1, [CLAMMEAT] = 3 }
   ch.sessions = sessions
   ch.nextSession = 189
   ch.queue = { { id = 1, item = CLAM, n = 5, sid = 187, t = 1800800000 }, { id = 2, item = BIGCLAM, n = 2, sid = 188, t = 1800850000 } }
@@ -77,7 +104,7 @@ elseif page == "empty" then
   UI.Open("overview")
 else
   UI.Open(page)
-  if arg[3] and arg[3] ~= "" then UI.Select(page, tonumber(arg[3])) end
+  if arg[3] and arg[3] ~= "" then UI.Select(page, tonumber(arg[3]), arg[4] and arg[4] ~= "" and tonumber(arg[4]) or nil) end
 end
 W.Advance(0.1)
 
