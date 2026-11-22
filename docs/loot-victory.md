@@ -80,19 +80,39 @@ shipping. Optional coin sprites, large master, original animated preview and WAV
 masters are not shipped. The original asset specification is retained as supplied;
 this refinement's timing/layout supersedes its illustrative coordinates.
 
-The reference canvas is now 460×224, displayed at the existing 384-pixel card
+The reference canvas is 460×218, displayed at the existing 384-pixel card
 width and then at the player's scale. Fifteen texture slices preserve the painted
 corners, header rail, recessed item area and footer separator. Only the leather
-strips at source y80–108 and y350–364 gain height (10 and 14 reference pixels).
-The visible source remains y0–444 of the 1024×512 frame. Title, item details and
-footer occupy separate frame layers, above the base artwork. The title has a
-204×30 centered box at y24, a restrained dark shadow, and a separate 32×32 emblem
-at x88/y23. Cropped laurels flank the header. No emblem/rail can enter the title's
-reserved region. The item lines have explicit widths/heights and one-line
-truncation; the 33-pixel upgrade badge has its own space in the taller footer.
-Both real notifications and preview say “Loot roll won”; no inventory claim or
-“Sample victory” label appears on the card. Hover uses Cards.ItemTip and modified
-clicks use HandleModifiedItemClick.
+strips at source y80–108 and y350–364 gain height (10 and 8 reference pixels).
+The visible source remains y0–444 of the 1024×512 frame. Header, item details and
+effects occupy separate frame layers above the base artwork.
+
+The centered title at y24 measures the active font (112–204 pixels wide). Cropped,
+matched laurels bracket that measured box with eight-pixel gaps and a shared
+vertical center. A smaller 24×24 Need/Greed medallion at x230/y64 connects the
+heading to the bronze separator; two dim supplied rim highlights flank it.
+The icon and supplied rarity ring center on the three item lines at y119.
+A bronze outer rim and muted quality-colored inner edge avoid a neon frame.
+Name, type/quality and roll result have explicit single-line bounds; secondary
+text shares one size and parchment color. Overlong names receive an explicit
+measured ellipsis without splitting UTF-8 characters. The tooltip retains the
+complete name. Fitting happens only on draw, never during animation.
+
+The footer is six reference pixels shorter than the previous revision and contains
+only a centered, padded Potential Upgrade badge when the existing state/settings
+permit it. There is no redundant result label or invented inventory confirmation.
+Hover uses Cards.ItemTip and modified clicks use HandleModifiedItemClick.
+
+All supplied files remain unchanged. Laurel UVs remove asymmetric transparent
+padding before positioning. The badge's transparent vertical padding is cropped
+so its painted edge and larger 14-pixel label fit the quieter footer. All four
+halos share a 12..244 UV crop on their 256-pixel canvases and a 96-pixel draw size:
+the ring's painted peak then sits just outside the 52-pixel item icon, rather than
+being hidden underneath it. Static halo alpha is 0.42 with straight-alpha BLEND;
+only one finishing rise adds at most 0.16. Frame, badge, emblems, laurels and halo
+use BLEND. The supplied moving glints, ribbon and sparks use ADD on higher layers.
+No asset re-export, generic substitute, continuous pulse or additional particle
+pool was introduced.
 
 ### Why the first presentation was weak
 
@@ -124,8 +144,8 @@ client clipping/blending still requires owner validation.
 | 0–0.45 s | Reveal the complete header group with ease-out opacity and five reference pixels of upward travel; no scale/bounce |
 | 0.30–1.05 s | One visible smoothstep gold sweep with bright core and short tail, clipped above the title |
 | 0.30 s | One optional Need/Greed chime on SFX; shared 0.8-second cooldown |
-| 0.55–1.45 s | Six (Subtle) or eight (Full) deterministic sprites stagger outward/upward from emblem/rail/icon locations, away from text |
-| 1.10–1.75 s | One bright finishing reflection on the emblem, gently contracting and disappearing |
+| 0.55–1.45 s | Supporting sparks/dust follow the laurels and icon with short eased travel |
+| 1.15–1.70 s | Two (Subtle) or three (Full) pooled reflections at the icon/medallion; one delayed rarity-glow rise at 1.24–1.70 s; all fade together |
 | 1.75 s onward | Fully opaque static card; no OnUpdate; hold for the configured interval |
 | After hold | Smooth 0.30-second whole-card fade and recycle |
 
@@ -141,7 +161,10 @@ qualities use neutral text/border and no halo; missing roll values omit the numb
 Preview roll and Preview item quality are page-local choices, not saved loot data.
 Replay always restarts the exact production V.Draw/Animate/Paint path with a fresh
 entry. Sample name/type/icon, quality label, name/border color and halo agree with
-one quality value. The developer-only `LootVictory.PreviewAt(seconds)` helper
+one quality value. An optional third synthetic fixture argument
+`{ name = "...", upgrade = false }` exercises long names and absent upgrade state
+without changing saved data or actual item state. Names are bounded and reject
+control/color markup. The developer-only `LootVictory.PreviewAt(seconds)` helper
 pauses **only a synthetic preview** using that same painter. It cancels timers and
 updates, never seeks a real result, and stays silent while seeking. Replay resumes
 normal animation from zero; no additional player command/framework was introduced.
@@ -175,7 +198,9 @@ include extra settling time. Screenshot review checks proportions, trim bounds,
 spacing and lifecycle, not native font metrics, exact animation rhythm or sound.
 Original evidence is retained in [initial evidence](evidence/loot-victory/README.md).
 The refinement comparison, 50 ms frame capture and visibility measurements are in
-[refinement evidence](evidence/loot-victory-refinement/README.md).
+[refinement evidence](evidence/loot-victory-refinement/README.md). The latest header,
+footer, long-name and finishing-accent comparison is in
+[final polish evidence](evidence/loot-victory-polish/README.md).
 
 ## Owner-directed in-game checks
 
@@ -193,7 +218,7 @@ collision and no emblem/title overlap.
 3. Compare the supplied static/GIF previews at 75%, 100%, and larger UI scales:
    font baselines, long/localized names, emblem alignment, alpha edges, icon
    border/halo, visible top-rail sweep, six/eight visible particles, finishing glint
-   and the fully static 1.75-second rest. The title/emblem must stay inside the leather banner.
+   and the fully static 1.75-second rest. The title must stay clear of the rail; the medallion should sit deliberately on its lower divider.
 4. Hear each OGG once at the reveal, then test sound off, global SFX/all sound off,
    rapid wins, and intensity Off/Subtle/Full. Check Normal/Short/Long durations.
 5. Hover item tooltips and modified item links. Test during combat with taint/error

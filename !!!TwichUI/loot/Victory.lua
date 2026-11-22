@@ -12,7 +12,7 @@ local relay, owner, original
 local preview, inFlight
 local lastSound = -100
 V.MAX_QUEUE = 32
-V.HEIGHT, V.MOTION_END, V.SOUND_AT = 224, 1.75, 0.30
+V.HEIGHT, V.MOTION_END, V.SOUND_AT = 218, 1.75, 0.30
 
 local function Plain(v) if not (issecretvalue and issecretvalue(v)) then return v end end
 local function Smooth(v) v = math.max(0, math.min(1, v)); return v * v * (3 - 2 * v) end
@@ -69,19 +69,25 @@ local UV = {
     laurel_right = { 41 / 128, 91 / 128, 13 / 128, 89 / 128 },
     sheen_ribbon = { 0, 1, 40 / 128, 89 / 128 },
     rim_glint = { 0, 1, 20 / 64, 45 / 64 },
+    badge_backing = { 0, 1, 8 / 64, 58 / 64 },
+    halo_uncommon = { 12 / 256, 244 / 256, 12 / 256, 244 / 256 },
+    halo_rare = { 12 / 256, 244 / 256, 12 / 256, 244 / 256 },
+    halo_epic = { 12 / 256, 244 / 256, 12 / 256, 244 / 256 },
+    halo_legendary = { 12 / 256, 244 / 256, 12 / 256, 244 / 256 },
 }
--- x, y (down from top), travel x/y, canvas w/h, supplied sprite, stagger.
--- First six: Subtle. Full adds a third principal star and supporting spark.
--- Text stays in x128..332 in the header and x120..420 in the item area.
+-- Existing eight pooled sprites: six in Subtle, eight in Full. Principal stars
+-- now share the 1.15–1.70 s finishing cue; supporting sparks retain the burst.
+-- x/y, short drift x/y, canvas w/h, supplied sprite, stagger. A side anchor
+-- follows the measured title/laurel group instead of floating near the corners.
 local PARTICLES = {
-    { 94, 37, -18, -10, 34, 37, "spark_bright", 0 },
-    { 366, 37, 18, -10, 30, 33, "spark_bright", 0.09 },
-    { 112, 51, -8, -13, 18, 19, "spark_small", 0.05 },
-    { 350, 51, 20, -13, 16, 17, "spark_small", 0.12 },
-    { 42, 124, -14, -20, 14, 14, "dust_soft", 0.08 },
-    { 91, 126, 8, -22, 12, 12, "dust_micro", 0.18 },
-    { 48, 87, -14, -13, 30, 33, "spark_bright", 0.16 },
-    { 97, 91, 12, -16, 16, 17, "spark_small", 0.20 },
+    { 48, 96, -3, -3, 32, 35, "spark_bright", 0, finish = true },
+    { 240, 64, 0, 0, 28, 30, "spark_bright", 0.04, finish = true },
+    { 0, 49, -8, -10, 18, 19, "spark_small", 0.05, side = -1 },
+    { 0, 49, 8, -10, 16, 17, "spark_small", 0.12, side = 1 },
+    { 42, 133, -12, -16, 14, 14, "dust_soft", 0.08 },
+    { 91, 137, 8, -18, 12, 12, "dust_micro", 0.18 },
+    { 98, 142, 3, -3, 30, 33, "spark_bright", 0.08, finish = true },
+    { 96, 102, 10, -12, 16, 17, "spark_small", 0.20 },
 }
 local function Clamp(v) return math.max(0, math.min(1, v)) end
 local function EaseOut(v) v = 1 - Clamp(v); return 1 - v * v * v end
@@ -117,17 +123,19 @@ function V.Paint(f, t, silent)
     f.sweepStar:SetAlpha(envelope * (rich and 0.8 or 0.65))
     local qualityGain = entry.quality == 5 and 1.10 or entry.quality == 4 and 1.05 or 1
     for i, data in ipairs(PARTICLES) do
-        local age = (t - 0.55 - data[8]) / (0.90 - data[8])
-        local p = Clamp(age)
+        local start, duration = data.finish and 1.15 or 0.55, data.finish and 0.55 or 0.90
+        local p = Clamp((t - start - data[8]) / (duration - data[8]))
         local strength = Smooth(p / 0.16) * (1 - Smooth((p - 0.28) / 0.72))
+        local x0 = data.side and 230 + data.side * (f.title:GetWidth() / 2 + 18) or data[1]
         local texture = f.particles[i]
-        At(texture, f.effects, data[1] + data[3] * EaseOut(p), data[2] + data[4] * EaseOut(p))
-        texture:SetAlpha(motion and (rich or i <= 6) and math.min(1, strength * qualityGain) or 0)
+        At(texture, f.effects, x0 + data[3] * EaseOut(p), data[2] + data[4] * EaseOut(p))
+        texture:SetAlpha(motion and (rich or i <= 6) and math.min(1, strength * qualityGain * (data.finish and 0.92 or 1)) or 0)
     end
-    local finish = Clamp((t - 1.10) / 0.65)
-    local punctuation = motion and Smooth(finish / 0.16) * (1 - Smooth((finish - 0.30) / 0.70)) or 0
-    f.finish:SetSize(34 * (1 - finish * 0.30), 37 * (1 - finish * 0.30))
-    f.finish:SetAlpha(punctuation)
+    -- A delayed, single rarity rise follows the first finishing reflections.
+    -- The supplied ring peaks just outside the icon rather than behind it.
+    local glow = Clamp((t - 1.24) / 0.46)
+    local rise = motion and Smooth(glow / 0.20) * (1 - Smooth((glow - 0.30) / 0.70)) or 0
+    f.halo:SetAlpha(f.haloRest + (f.hasHalo and 0.16 * rise or 0))
     if not silent and t >= V.SOUND_AT then Sound(entry) end
     f.phase = t < 0.45 and "reveal" or t < 0.55 and "flourish" or t < 1.10 and "burst" or t < V.MOTION_END and "finish" or "static"
 end
@@ -168,6 +176,17 @@ local function Texture(parent, name, w, h, layer, blend)
     if UV[name] then t:SetTexCoord(unpack(UV[name])) end
     return t
 end
+-- Fit once when drawing, retaining the unabridged name in the item tooltip.
+-- Remove complete UTF-8 characters; never split a localized item's final glyph.
+local function ItemName(label, name)
+    label:SetText(name)
+    local last = #name
+    while last > 0 and label:GetStringWidth() > label:GetWidth() do
+        last = last - 1
+        while last > 0 and name:byte(last + 1) >= 128 and name:byte(last + 1) < 192 do last = last - 1 end
+        label:SetText(name:sub(1, last) .. "...")
+    end
+end
 local function Font(parent, size, serif)
     local f = parent:CreateFontString(nil, "OVERLAY")
     f:SetFont(STANDARD_TEXT_FONT, size, "")
@@ -178,13 +197,13 @@ local function Font(parent, size, serif)
     return f
 end
 -- Preserve all four painted corners and both horizontal separators. Only the
--- leather strips inside the header/footer gain height, by 10/14 reference pixels.
+-- leather strips inside the header/footer gain height, by 10/8 reference pixels.
 local function FrameArtwork(parent)
     local base = CreateFrame("Frame", nil, parent)
     base:SetAllPoints(); base:SetFrameLevel(parent:GetFrameLevel())
     local xs, ys = { 0, 80, 944, 1024 }, { 0, 80, 108, 350, 364, 444 }
     local dx = { 0, 80 * 460 / 1024, 944 * 460 / 1024, 460 }
-    local dy = { 0, 80 * 200 / 444, 108 * 200 / 444 + 10, 350 * 200 / 444 + 10, 364 * 200 / 444 + 24, V.HEIGHT }
+    local dy = { 0, 80 * 200 / 444, 108 * 200 / 444 + 10, 350 * 200 / 444 + 10, 364 * 200 / 444 + 18, V.HEIGHT }
     base.pieces = {}
     for row = 1, 5 do
         for column = 1, 3 do
@@ -203,27 +222,40 @@ local function Build(card)
     f:SetSize(460, V.HEIGHT); f:SetScale(384 / 460); f:SetPoint("TOPLEFT")
     f:SetFrameLevel(card.body:GetFrameLevel() + 4)
     f.base = FrameArtwork(f)
-    f.header = CreateFrame("Frame", nil, f); f.header:SetSize(460, 64)
+    f.header = CreateFrame("Frame", nil, f); f.header:SetSize(460, 80)
     f.header:SetFrameLevel(f:GetFrameLevel() + 2)
     f.title = Font(f.header, 24, true); f.title:SetText("YOU WON!")
-    f.title:SetSize(204, 30); f.title:SetPoint("TOP", f.header, "TOP", 0, -24)
+    -- Measure real client font metrics so the laurels bracket the words closely
+    -- and symmetrically. The title stays centered at x230 at every font fallback.
+    f.title:SetSize(math.min(204, math.max(112, f.title:GetStringWidth() + 4)), 30)
+    f.title:SetPoint("TOP", f.header, "TOP", 0, -24)
     f.title:SetJustifyH("CENTER"); f.title:SetTextColor(0.93, 0.79, 0.50)
-    f.emblem = Texture(f.header, "emblem_need", 32, 32); f.emblem:SetPoint("TOPLEFT", 88, -23)
     f.laurels = { Texture(f.header, "laurel_left", 19, 31), Texture(f.header, "laurel_right", 20, 31) }
-    f.laurels[1]:SetPoint("TOPLEFT", 52, -23); f.laurels[2]:SetPoint("TOPRIGHT", -52, -23)
+    f.laurels[1]:SetPoint("RIGHT", f.title, "LEFT", -8, 0)
+    f.laurels[2]:SetPoint("LEFT", f.title, "RIGHT", 8, 0)
+    f.dividers = { Texture(f.header, "rim_glint", 52, 5, "BORDER"), Texture(f.header, "rim_glint", 52, 5, "BORDER") }
+    At(f.dividers[1], f.header, 186, 59); At(f.dividers[2], f.header, 274, 59)
+    f.dividers[1]:SetAlpha(0.22); f.dividers[2]:SetAlpha(0.22)
+    f.emblem = Texture(f.header, "emblem_need", 24, 24); At(f.emblem, f.header, 230, 64)
     f.content = CreateFrame("Frame", nil, f); f.content:SetAllPoints(); f.content:SetFrameLevel(f:GetFrameLevel() + 2)
-    f.halo = Texture(f.content, "halo_uncommon", 80, 80, "BACKGROUND"); At(f.halo, f, 72, 108)
-    f.icon = f.content:CreateTexture(nil, "ARTWORK"); f.icon:SetSize(52, 52); f.icon:SetPoint("TOPLEFT", 46, -82)
+    f.halo = Texture(f.content, "halo_uncommon", 96, 96, "BACKGROUND"); At(f.halo, f, 72, 119)
+    f.icon = f.content:CreateTexture(nil, "ARTWORK"); f.icon:SetSize(52, 52); f.icon:SetPoint("TOPLEFT", 46, -93)
     f.edges = {}
-    for i, pos in ipairs({ { 45, -81, 54, 1 }, { 45, -134, 54, 1 }, { 45, -81, 1, 54 }, { 98, -81, 1, 54 } }) do
+    for i, pos in ipairs({ { 45, -92, 54, 1 }, { 45, -145, 54, 1 }, { 45, -92, 1, 54 }, { 98, -92, 1, 54 } }) do
         local e = f.content:CreateTexture(nil, "OVERLAY"); e:SetPoint("TOPLEFT", pos[1], pos[2]); e:SetSize(pos[3], pos[4]); f.edges[i] = e
     end
-    f.name = Font(f.content, 19, true); f.name:SetPoint("TOPLEFT", 120, -80); f.name:SetSize(300, 25)
-    f.sub = Font(f.content, 14, true); f.sub:SetPoint("TOPLEFT", 120, -109); f.sub:SetSize(300, 20)
-    f.method = Font(f.content, 15, true); f.method:SetPoint("TOPLEFT", 120, -133); f.method:SetSize(300, 22)
-    f.footer = Font(f.content, 14, true); f.footer:SetPoint("TOPLEFT", 43, -176); f.footer:SetSize(210, 24)
-    f.badge = Texture(f.content, "badge_backing", 132, 33); At(f.badge, f, 350, 188)
-    f.upgrade = Font(f.content, 12); f.upgrade:SetPoint("CENTER", f.badge, "CENTER"); f.upgrade:SetSize(124, 22)
+    f.outerEdges = {}
+    for i, pos in ipairs({ { 44, -91, 56, 1 }, { 44, -146, 56, 1 }, { 44, -91, 1, 56 }, { 99, -91, 1, 56 } }) do
+        local edge = f.content:CreateTexture(nil, "BORDER")
+        edge:SetPoint("TOPLEFT", pos[1], pos[2]); edge:SetSize(pos[3], pos[4])
+        edge:SetColorTexture(0.53, 0.40, 0.24, 1); f.outerEdges[i] = edge
+    end
+    f.name = Font(f.content, 19, true); f.name:SetPoint("TOPLEFT", 120, -84); f.name:SetSize(300, 24)
+    f.sub = Font(f.content, 14, true); f.sub:SetPoint("TOPLEFT", 120, -112); f.sub:SetSize(300, 18)
+    f.method = Font(f.content, 14, true); f.method:SetPoint("TOPLEFT", 120, -134); f.method:SetSize(300, 20)
+    f.sub:SetTextColor(0.82, 0.77, 0.66); f.method:SetTextColor(0.82, 0.77, 0.66)
+    f.badge = Texture(f.content, "badge_backing", 148, 29); At(f.badge, f, 230, 184)
+    f.upgrade = Font(f.content, 14); f.upgrade:SetPoint("CENTER", f.badge, "CENTER"); f.upgrade:SetSize(140, 22)
     f.upgrade:SetJustifyH("CENTER"); f.upgrade:SetText("Potential Upgrade")
     f.hit = CreateFrame("Button", nil, f.content); f.hit:SetPoint("TOPLEFT", 43, -76); f.hit:SetSize(380, 82)
     f.hit:RegisterForClicks("LeftButtonUp")
@@ -243,7 +275,7 @@ local function Build(card)
     f.effects:EnableMouse(false)
     f.particles = {}
     for i, data in ipairs(PARTICLES) do f.particles[i] = Texture(f.effects, data[7], data[5], data[6], "OVERLAY", "ADD") end
-    f.finish = Texture(f.effects, "spark_bright", 34, 37, "OVERLAY", "ADD"); At(f.finish, f.effects, 108, 37)
+    f.finish = f.particles[1] -- existing finishing cue, now shared by two/three pooled glints
     f:SetScript("OnHide", function() Cancel(f) end)
     f.built = true
     return f
@@ -280,16 +312,19 @@ function V.Draw(card, entry)
     if not entry.transition then card.shell:Hide() end
     local qc = R.LootRules.QUALITY_COLOR[entry.quality] or R.LootRules.QUALITY_COLOR[1]
     local qname = R.LootRules.QualityName(entry.quality)
-    f.name:SetText(entry.name or "Loot"); f.name:SetTextColor(qc[1], qc[2], qc[3])
+    ItemName(f.name, entry.name or "Loot"); f.name:SetTextColor(qc[1], qc[2], qc[3])
     f.sub:SetText((entry.typeText and entry.typeText .. " · " or "") .. qname)
     f.method:SetText((entry.choice == "need" and "Need roll" or "Greed roll") .. (entry.value and (": " .. entry.value) or ""))
-    f.footer:SetText("Loot roll won")
     f.badge:SetShown(entry.upgrade == true and LR.Get("showUpgrade")); f.upgrade:SetShown(entry.upgrade == true and LR.Get("showUpgrade"))
     f.icon:SetTexture(entry.icon or [[Interface\Icons\INV_Misc_QuestionMark]])
-    for _, e in ipairs(f.edges) do e:SetColorTexture(qc[1], qc[2], qc[3], 1) end
+    for _, edge in ipairs(f.edges) do
+        edge:SetColorTexture(qc[1] * 0.45 + 0.58 * 0.55, qc[2] * 0.45 + 0.43 * 0.55, qc[3] * 0.45 + 0.24 * 0.55, 1)
+    end
     local halos = { [2] = "uncommon", [3] = "rare", [4] = "epic", [5] = "legendary" }
     f.halo:SetTexture(halos[entry.quality] and ART .. "halo_" .. halos[entry.quality] .. ".tga" or nil)
-    f.halo:SetAlpha(entry.intensity == "full" and 0.5 or 0.35)
+    f.halo:SetTexCoord(unpack(UV.halo_uncommon)) -- same painted bounds in all four supplied rings
+    f.hasHalo = halos[entry.quality] ~= nil
+    f.haloRest = f.hasHalo and 0.42 or 0
     f.emblem:SetTexture(ART .. "emblem_" .. entry.choice .. ".tga")
     f:SetAlpha(1); f:Show()
     entry.started = GetTime()
@@ -430,7 +465,7 @@ end
 function V.PreviewStop()
     if preview and preview.entry then Finish(preview.entry); preview.entry = nil; preview:Hide() end
 end
-function V.Preview(choice, quality)
+function V.Preview(choice, quality, sample)
     if C.Placing() or C.CardCount() > 0 then return false, "A loot card is showing right now." end
     C.PreviewStop(true); V.PreviewStop()
     if not preview then
@@ -455,6 +490,11 @@ function V.Preview(choice, quality)
     }
     local item = samples[e.quality] or samples[2]
     e.name, e.typeText, e.icon = item[1], item[2], item[3]
+    -- Optional synthetic fixtures for long-name/upgrade preview checks only.
+    if type(sample) == "table" then
+        if type(sample.name) == "string" and #sample.name <= 256 and not sample.name:find("[%c|]") then e.name = sample.name end
+        if type(sample.upgrade) == "boolean" then e.upgrade = sample.upgrade end
+    end
     e.sampleLines = { e.typeText .. " · " .. R.LootRules.QualityName(e.quality), "Example item for the victory preview." }
     e.sellPrice, e.upgradeLines = nil, nil
     e.motion, e.state = e.intensity ~= "off", "resolved"

@@ -374,7 +374,7 @@ if view:find("^victory") and view ~= "victorySettings" and not view:find("^victo
             Check("state", "no decorative updater remains", nil, old.victory:GetScript("OnUpdate"))
         else
             Check("display", "title is dynamic", "YOU WON!", old.victory.title:GetText())
-            Check("display", "neutral acquisition status", "Loot roll won", old.victory.footer:GetText())
+            Check("display", "redundant footer text is absent", nil, old.victory.footer)
             if view == "victoryStatic" or view == "victoryOff" then
                 Check("state", "no per-frame work at rest", nil, old.victory:GetScript("OnUpdate"))
             end
@@ -389,14 +389,19 @@ if view:find("^victoryPose") then
         local V = R.LootVictory
         LR.Set("x", 0); LR.Set("y", 180)
         LR.Set("victorySound", false)
-        LR.Set("victoryIntensity", view:find("Full") and "full" or "subtle")
+        LR.Set("victoryIntensity", view:find("Off") and "off" or view:find("Full") and "full" or "subtle")
         if view:find("Scaled") then LR.Set("scale", 75) end
         local seconds = tonumber(view:match("(%d+)$")) / 100
-        Check("construct", "production preview starts", true, V.Preview(view:find("Greed") and "greed" or "need", view:find("Legendary") and 5 or 2))
+        local quality = view:find("Legendary") and 5 or view:find("Epic") and 4 or view:find("Rare") and 3 or 2
+        local sample = { upgrade = not view:find("NoUpgrade") }
+        if view:find("Long") then sample.name = "Stormrend Titanblade of the Unbroken Oath of the Eternal Watchers" end
+        Check("construct", "production preview starts", true, V.Preview(view:find("Greed") and "greed" or "need", quality, sample))
         Check("interact", "preview can seek a synthetic pose", true, V.PreviewAt(seconds))
         local f = V.PreviewCard().victory
         Check("state", "paused capture has no updater", nil, f:GetScript("OnUpdate"))
-        Check("display", "no preview label on the card", "Loot roll won", f.footer:GetText())
+        Check("display", "no redundant footer label on the card", nil, f.footer)
+        Check("display", "upgrade indicator matches fixture", sample.upgrade, f.badge:IsShown())
+        Check("display", "sample has requested quality", quality, f.entry.quality)
         if seconds >= V.MOTION_END and seconds < f.entry.total - 0.30 then
             Check("display", "finished header is fully opaque", 1, f.header:GetAlpha())
         end
