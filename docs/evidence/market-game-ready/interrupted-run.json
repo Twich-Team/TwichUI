@@ -1,0 +1,10 @@
+{
+  "accepted": false,
+  "product_failure": false,
+  "raw_report_sha256": "8ed1452f35c85f600954686621c1c60c4699046aec294d468574ff8ab5d5f15c",
+  "error": "KeyError: engine_partialReuses",
+  "cause": "Sparse zero-valued engine counters were absent in some samples; receipt aggregation incorrectly indexed every sample.",
+  "resolution_commit": "79b62a970e2ec5d3b740383b0a180e67265c0ea6",
+  "regression_test": "test_sparse_operation_counts_do_not_invent_timings",
+  "replacement_campaign": "pinned-matrix"
+}
