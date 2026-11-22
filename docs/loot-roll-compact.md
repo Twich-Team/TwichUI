@@ -41,14 +41,15 @@ with manual choices. They are never described as automatic rolls.
 ## Presentation and lifecycle
 
 The established width is 384 UI pixels, multiplied by the player's existing card
-scale. Mini active cards are 72 pixels high; Mini victories are about 67
+scale. Mini active cards are 82 pixels high; Mini victories are about 67
 (80 reference pixels at the renderer's existing 384/460 scale). Expanded cards
 retain their layout, with room reserved for the new toggle.
 
 Mini active cards reuse the same item tooltip, quality color, choice handlers,
 availability restrictions and confirmation path. Manual Need/Greed/Pass targets
-remain 62×26 pixels with artwork and labels. Scheduled rolls retain Roll now and
-Stop auto roll. The thin bar and right-hand number use `Roll.Remaining`; the auto
+are 70×20 pixels with artwork and labels. Scheduled rolls retain Roll now and
+Stop auto roll. The 356×7 gold track spans the bottom row, and the number sits to the right of the actions.
+Both use `Roll.Remaining`. The auto
 countdown in the secondary line uses the existing scheduled fire time. Neither
 creates a second authoritative clock. Long names fit at UTF-8 character boundaries;
 the original name remains available in the item tooltip.
@@ -96,7 +97,7 @@ No recurring work was added while cards are idle.
 
 ## Verification
 
-See [captures and verification](evidence/loot-roll-compact/README.md). Offline and
+See the [latest comparison](evidence/loot-roll-compact/approved-mockup/comparison.png) and [earlier captures and verification](evidence/loot-roll-compact/README.md). Offline and
 simulator checks cover independent priorities/unknowns, no-ops, legacy/save-load
 behavior, manual actions/restrictions, countdowns, toggles, mixed stacks, late and
 ambiguous events, qualities, upgrade visibility, long names, intensities and

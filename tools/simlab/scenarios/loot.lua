@@ -382,7 +382,7 @@ if view == "sweepLab" then
     end)
 end
 
-if view == "miniActive" or view == "miniAuto" or view == "compactMixed" or view:find("^miniLong") then
+if view == "miniActive" or view == "miniAuto" or view == "compactMixed" or view:find("^miniLong") or view == "miniMockup" or view == "miniStack" then
     Lab.Step("compact rule-driven cards", function()
         LR.Set("maxCards", 4); LR.Set("victorySound", false)
         if view:find("80") then LR.Set("scale", 80) elseif view:find("120") then LR.Set("scale", 120) end
@@ -392,10 +392,12 @@ if view == "miniActive" or view == "miniAuto" or view == "compactMixed" or view:
         end
         local ok, rule = LR.Create("blank")
         Check("init", "display rule created", true, ok)
-        LR.SetCondition(rule, 1, { value = 4 }); LR.SetDisplay(rule, "collapsed")
+        local link = view == "miniMockup" and "item:20004" or "item:20001"
+        if view == "miniMockup" then judged[link] = { up = true } end
+        LR.SetCondition(rule, 1, { value = ITEMS[link].quality }); LR.SetDisplay(rule, "collapsed")
         if view == "miniAuto" then LR.SetAction(rule, "greed"); LR.Set("auto", true); LR.SetDelay(rule, 10) end
         LR.SetEnabled(rule, true)
-        local id = Start("item:20001", 30); local roll = Ro.Find(id); local card = C.Card(roll.key)
+        local id = Start(link, 30); local roll = Ro.Find(id); local card = C.Card(roll.key)
         Check("display", "rule chooses Mini", "collapsed", card.view.displayMode)
         Check("geometry", "Mini uses real compact height", C.MINI_HEIGHT, card:GetHeight())
         Check("state", "display never rolls immediately", 0, #rolled)
@@ -427,12 +429,35 @@ if view == "miniActive" or view == "miniAuto" or view == "compactMixed" or view:
             for _, entry in ipairs(R.LootVictory.Entries()) do heights[entry.displayMode] = entry.card:GetHeight() end
             Check("geometry", "Mini victory saves actual space", true, heights.collapsed < 70 and heights.expanded > 180)
         end
+        if view == "miniMockup" then
+            Lab.Settle(21.5)
+            Check("display", "approved item name and rarity fit", true,
+                card.name:GetText() == ITEMS[link].name and card.miniQuality.text:GetText() == "Uncommon")
+            Check("display", "upgrade is present", true, card.miniUpgrade:IsShown())
+        elseif view == "miniStack" then
+            ITEMS["item:20005"].quality = 5
+            for _, item in ipairs({ "item:20003", "item:20004", "item:20005" }) do
+                local other = Ro.Find(Start(item, 30))
+                Ro.SetDisplay(other, "collapsed")
+                Check("geometry", "different rarity uses the same Mini rows", true, Frame(other):GetHeight() == C.MINI_HEIGHT)
+            end
+            Check("geometry", "four Mini cards coexist", 4, C.CardCount())
+        end
         if view:find("^miniLong") then
             Lab.Settle(25)
             Check("state", "countdown remains authoritative", true, Ro.Remaining(roll) < 6 and Ro.Remaining(roll) > 0)
-            Check("geometry", "item name has room before the upgrade badge", true, card.name:GetWidth() >= 250 and card.pillTop:IsShown())
+            Check("geometry", "item name has room before the upgrade badge", true, card.name:GetWidth() >= 210 and card.miniUpgrade:IsShown())
         end
         Lab.Settle(0.2)
+        Check("geometry", "track spans the bottom interior", true,
+            card.timer:GetWidth() >= card:GetWidth() * 0.90
+                and card.timer:GetTop() < card.time:GetBottom() and card.timer:GetBottom() > card:GetBottom())
+        if view ~= "miniAuto" then
+            local need, greed, pass = card.buttons.need, card.buttons.greed, card.buttons.pass
+            Check("geometry", "equal action pills clear the countdown", true,
+                need:GetWidth() == greed:GetWidth() and greed:GetWidth() == pass:GetWidth()
+                    and pass:GetRight() < card.time:GetLeft())
+        end
     end)
 end
 

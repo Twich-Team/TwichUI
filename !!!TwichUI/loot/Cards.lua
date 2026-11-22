@@ -27,10 +27,15 @@ local MEDIA = R.PATH .. [[media\loot\]]
 local WHITE = [[Interface\Buttons\WHITE8x8]]
 local FONT_TITLE = R.PATH .. [[media\fonts\Cinzel-SemiBold.ttf]]
 local W_CARD = 384
-C.MINI_HEIGHT = 72
+C.MINI_HEIGHT = 82
 local PAD = 16
-local MINI = { itemX = 50, nameRight = 310, actionY = 35, actionHeight = 26, timerX = 261, timerY = 55 }
-local MINI_TIMER_WIDTH = W_CARD - PAD - MINI.timerX
+-- The approved Mini has three rows: item identity, actions, and the full-width track.
+local MINI = {
+    itemX = 54, iconSize = 30, utilityRight = W_CARD - 39,
+    actionY = 43, actionHeight = 20, actionWidth = 70, actionGap = 10,
+    timerY = 66, timerHeight = 7, timerInset = 14,
+}
+local MINI_TIMER_WIDTH = W_CARD - 2 * MINI.timerInset
 local ROW_H = 16
 
 local COL = {
@@ -205,8 +210,12 @@ local function Button(parent, icon, label)
         self.icon:SetSize(self.compact and 16 or 26, self.compact and 16 or 26)
         self.icon:ClearAllPoints(); self.text:ClearAllPoints()
         if self.compact then
-            self.icon:SetPoint("LEFT", self, "LEFT", 6, press)
-            self.text:SetWidth(self:GetWidth() - 26); self.text:SetJustifyH("LEFT")
+            self.text:SetWidth(0)
+            local labelWidth = math.min(self.text:GetStringWidth(), self:GetWidth() - 26)
+            local inset = (self:GetWidth() - (16 + 4 + labelWidth)) / 2
+            self.icon:SetPoint("LEFT", self, "LEFT", inset, press)
+            self.text:SetWidth(labelWidth)
+            self.text:SetJustifyH("LEFT")
             self.text:SetPoint("LEFT", self.icon, "RIGHT", 4, press)
         else
             self.text:SetWidth(0); self.text:SetJustifyH("LEFT")
@@ -219,7 +228,16 @@ local function Button(parent, icon, label)
         local st = self.state
         local on, hot, press, off = st == "selected", self.hot and st ~= "disabled", self.press and st ~= "disabled", st == "disabled" or st == "unavailable"
         local skin = off and "button-off" or (on and "primary") or (press and "button-down") or (hot and "button-hot") or "button"
-        self.art:SetSkin(self.compact and skin == "button" and "chip" or skin)
+        if self.compact then
+            if not self.miniArt then self.miniArt = Sheet(self, "chip", { layer = "ARTWORK", sub = 4, corner = 9 }) end
+            self.art:SetShown(false)
+            self.miniArt:SetShown(true)
+            self.miniArt:SetSkin(off and "chip-off" or press and "chip-down" or (hot or on) and "chip-hot" or "chip")
+        else
+            if self.miniArt then self.miniArt:SetShown(false) end
+            self.art:SetShown(true)
+            self.art:SetSkin(skin)
+        end
         self.icon:SetDesaturated(off)
         self.icon:SetAlpha(off and 0.5 or 1)
         local c = off and COL.quiet or COL.ivory
@@ -541,13 +559,15 @@ end
 -- Colors, texture, height and position of the countdown for the time left.
 local function Timer(card, remaining, duration, x, width, y, expired)
     local t = card.timer
-    t:SetHeight(card.compact and 6 or LR.Get("barHeight"))
+    t:SetHeight(card.compact and MINI.timerHeight or LR.Get("barHeight"))
     Place(t, card, x, y, width)
     local frac = duration and duration > 0 and math.max(0, math.min(1, (remaining or 0) / duration)) or 0
     local fill = t.fill
     local file, textured = BarFile()
-    fill:SetWidth(math.max(0.001, (width - 2) * frac))
+    local inset = card.compact and 3 or 1
+    fill:SetWidth(math.max(0.001, (width - 2 * inset) * frac))
     local r, g, b = C.BarColor(frac, card.view and card.view.state == "scheduled", expired)
+    if card.compact then r, g, b = 0.87, 0.55, 0.22 end
     if card.compact and not textured then
         -- Solid fill remains visible even when the client does not supply WHITE8x8.
         t.file = nil; fill:SetColorTexture(r, g, b, 1); fill:SetVertexColor(1, 1, 1, 1)
@@ -559,8 +579,12 @@ local function Timer(card, remaining, duration, x, width, y, expired)
     local tr, tg, tb = Rgb(LR.Get("barTrack"))
     if card.compact then tr, tg, tb = 0.06, 0.045, 0.035 end
     t.track:SetColorTexture(tr, tg, tb, 1)
-    t.hi:SetColorTexture(1, 1, 1, 0.22)
-    t.hi:SetShown(frac > 0 and LR.Get("barShine"))
+    if card.compact then
+        t.hi:SetColorTexture(1, 0.83, 0.49, 0.48)
+    else
+        t.hi:SetColorTexture(1, 1, 1, 0.22)
+    end
+    t.hi:SetShown(frac > 0 and (card.compact or LR.Get("barShine")))
 end
 
 -- The countdown's bar and number (what changes every step; Draw places them, this only refreshes them).
@@ -569,9 +593,7 @@ function C.PaintTimer(card, view)
     local inner = W_CARD - PAD * 2
     local scheduled = view.state == "scheduled" and view.auto
     if card.compact then
-        Timer(card, view.remaining, view.duration, MINI.timerX, MINI_TIMER_WIDTH, MINI.timerY)
-        card.time:ClearAllPoints(); card.time:SetPoint("TOPLEFT", body, "TOPLEFT", MINI.timerX, -37)
-        card.time:SetSize(MINI_TIMER_WIDTH, 16); card.time:SetJustifyH("CENTER"); TextSize(card.time, 12)
+        Timer(card, view.remaining, view.duration, MINI.timerInset, MINI_TIMER_WIDTH, MINI.timerY)
         card.time:SetText(Seconds(view.remaining)); card.time:Show()
         if scheduled then card.sub:SetText("Auto " .. (ChoiceLabel[view.auto.action] or "") .. " · " .. Seconds(view.auto.remaining)) end
         return
@@ -713,46 +735,127 @@ C.PillTips = {
     end,
 }
 
-local function CompactLayout(card, view)
+local function MiniDecor(card)
     local body = card.body
-    card.iconFrame:ClearAllPoints(); card.iconFrame:SetPoint("TOPLEFT", 12, -10); card.iconFrame:SetSize(30, 30)
-    card.iconHit:ClearAllPoints(); card.iconHit:SetPoint("TOPLEFT", card.iconFrame, "TOPLEFT", 0, 0)
+    local quality = CreateFrame("Frame", nil, body)
+    quality:SetHeight(13)
+    quality:SetPoint("TOPLEFT", MINI.itemX, -25)
+    quality.art = Sheet(quality, "chip", { layer = "BACKGROUND", corner = 6 })
+    quality.text = Font(quality, 10, "body")
+    quality.text:SetPoint("CENTER")
+    card.miniQuality = quality
+
+    local upgrade = CreateFrame("Frame", nil, body)
+    upgrade:SetSize(68, 26)
+    upgrade:SetPoint("TOPRIGHT", body, "TOPRIGHT", MINI.utilityRight - W_CARD, -9)
+    local emblem = CreateFrame("Frame", nil, upgrade)
+    emblem:SetSize(22, 22)
+    emblem:SetPoint("LEFT")
+    emblem.art = Sheet(emblem, "chip", { layer = "BACKGROUND", corner = 9 })
+    local icon = emblem:CreateTexture(nil, "ARTWORK")
+    icon:SetSize(16, 16)
+    icon:SetPoint("CENTER")
+    icon:SetTexture(MEDIA .. "upgrade")
+    local label = Font(upgrade, 10, "body")
+    label:SetPoint("TOPLEFT", upgrade, "TOPLEFT", 26, -1)
+    label:SetText("Potential")
+    local label2 = Font(upgrade, 10, "body")
+    label2:SetPoint("BOTTOMLEFT", upgrade, "BOTTOMLEFT", 26, 1)
+    label2:SetText("Upgrade")
+    Hover(upgrade, C.PillTips.upgrade)
+    card.miniUpgrade = upgrade
+
+    if R.CraftLook and R.CraftLook.Sheet then
+        card.timer.miniTrack = Sheet(card.timer, "chip", { layer = "BACKGROUND", sub = 2, corner = 3 })
+    end
+end
+
+local function TimerLayout(card)
+    local timer, compact = card.timer, card.compact
+    if timer.compact == compact then return end
+    timer.compact = compact
+    if timer.miniTrack then
+        timer.miniTrack:SetShown(compact)
+        timer.track:SetShown(not compact)
+        for _, side in ipairs({ "top", "bottom", "left", "right" }) do
+            timer.rim[side]:SetShown(not compact)
+        end
+    end
+    local x = compact and 3 or 1
+    local y = compact and 2 or 1
+    timer.fill:ClearAllPoints()
+    timer.fill:SetPoint("TOPLEFT", x, -y)
+    timer.fill:SetPoint("BOTTOMLEFT", x, y)
+    timer.hi:SetHeight(compact and 1 or 3)
+end
+
+local function CompactLayout(card, view)
+    if not card.miniQuality then MiniDecor(card) end
+    local body = card.body
+    local quality, upgrade = card.miniQuality, card.miniUpgrade
+    local qc, qualityName = Quality(view)
+    local showUpgrade = view.upgrade and LR.Get("showUpgrade")
+    local nameRight = MINI.utilityRight - (showUpgrade and upgrade:GetWidth() + 8 or 0)
     local showNote = view.needsConfirm or view.autoNote or view.state == "scheduled"
-    local nameRight = view.upgrade and LR.Get("showUpgrade") and MINI.nameRight or 341
-    card.iconHit:SetPoint("BOTTOMRIGHT", body, "TOPLEFT", nameRight, -34)
+
+    card.iconFrame:ClearAllPoints()
+    card.iconFrame:SetPoint("TOPLEFT", MINI.timerInset, -8)
+    card.iconFrame:SetSize(MINI.iconSize, MINI.iconSize)
+    card.iconHit:ClearAllPoints()
+    card.iconHit:SetPoint("TOPLEFT", card.iconFrame, "TOPLEFT", 0, 0)
+    card.iconHit:SetPoint("BOTTOMRIGHT", body, "TOPLEFT", nameRight, -38)
     card.name:ClearAllPoints()
-    card.name:SetPoint("TOPLEFT", MINI.itemX, showNote and -5 or -11)
+    card.name:SetPoint("TOPLEFT", MINI.itemX, -7)
     card.name:SetSize(nameRight - MINI.itemX, 18)
-    TextSize(card.name, 15)
     C.FitItemName(card.name, view.name or "Loot")
-    card.sub:ClearAllPoints(); card.sub:SetPoint("TOPLEFT", MINI.itemX, -21); card.sub:SetSize(250, 13); TextSize(card.sub, 11)
-    card.sub:SetText(view.needsConfirm and "Confirm in game" or "Manual choice")
+
+    quality.text:SetText(qualityName)
+    quality.text:SetTextColor(qc[1], qc[2], qc[3])
+    quality:SetWidth(quality.text:GetStringWidth() + 12)
+    quality:Show()
+    upgrade:SetShown(showUpgrade and true or false)
+
+    Hide(card.line3, card.line3Icon, card.line3Hit, card.note, card.pillTop, card.pillBottom, card.banner, card.divider, card.close)
     card.sub:SetShown(showNote and true or false)
-    Hide(card.line3, card.line3Icon, card.line3Hit, card.note, card.pillBottom, card.banner, card.divider, card.close)
     if showNote then
-        card.line3Hit:ClearAllPoints(); card.line3Hit:SetPoint("TOPLEFT", body, "TOPLEFT", MINI.itemX, -21)
-        card.line3Hit:SetSize(250, 13); card.line3Hit:Show()
+        local noteX = MINI.itemX + quality:GetWidth() + 7
+        local noteWidth = math.max(0, nameRight - noteX)
+        card.sub:ClearAllPoints()
+        card.sub:SetPoint("TOPLEFT", noteX, -25)
+        card.sub:SetSize(noteWidth, 13)
+        TextSize(card.sub, 10)
+        card.sub:SetText(view.needsConfirm and "Confirm in game" or "Manual choice")
+        card.line3Hit:ClearAllPoints()
+        card.line3Hit:SetPoint("TOPLEFT", body, "TOPLEFT", noteX, -25)
+        card.line3Hit:SetSize(noteWidth, 13)
+        card.line3Hit:Show()
     end
     for _, row in ipairs(card.rows) do row.frame:Hide() end
-    card.pillTop:Hide()
-    if view.upgrade and LR.Get("showUpgrade") then
-        card.pillTop:Set("", "upgrade", "gold"); card.pillTop.tip = C.PillTips.upgrade
-        card.pillTop:SetWidth(22); card.pillTop:ClearAllPoints(); card.pillTop:SetPoint("TOPLEFT", 318, -12); card.pillTop:Show()
-    end
+    TimerLayout(card)
     if card.live then
+        card.time:ClearAllPoints()
+        card.time:SetPoint("TOPRIGHT", body, "TOPRIGHT", -24, -MINI.actionY)
+        card.time:SetSize(62, MINI.actionHeight)
+        card.time:SetJustifyH("RIGHT")
+        TextSize(card.time, 13)
         C.PaintTimer(card, view)
+
         local scheduled = view.state == "scheduled" and view.auto
         local keys = scheduled and { "now", "stop" } or { "need", "greed", "pass" }
+        local width = scheduled and 110 or MINI.actionWidth
         for i, key in ipairs(keys) do
-            local b = card.buttons[key]; b.compact = true; b:SetHeight(MINI.actionHeight)
-            local width = scheduled and 97 or 62
-            b:SetWidth(width); Place(b, card, MINI.itemX + (i - 1) * (width + 5), MINI.actionY)
-            b:Paint()
+            local button = card.buttons[key]
+            button.compact = true
+            button:SetHeight(MINI.actionHeight)
+            Place(button, card, 22 + (i - 1) * (width + MINI.actionGap), MINI.actionY, width)
+            button:Paint()
         end
     else
         Hide(card.timer, card.time)
-        Place(card.status, card, MINI.itemX, MINI.actionY, 234); card.status:SetHeight(28)
-        card.status.icon:SetSize(16, 16); TextSize(card.status.text, 11)
+        Place(card.status, card, 22, MINI.actionY, 240)
+        card.status:SetHeight(28)
+        card.status.icon:SetSize(16, 16)
+        TextSize(card.status.text, 11)
     end
     card:SetHeight(C.MINI_HEIGHT)
     return C.MINI_HEIGHT
@@ -766,6 +869,10 @@ function C.Draw(card, view)
     for _, button in pairs(card.buttons) do button:Enable() end
     card:SetWidth(W_CARD)
     card.compact = view.displayMode == "collapsed"
+    if not card.compact then
+        Hide(card.miniQuality, card.miniUpgrade)
+        TimerLayout(card)
+    end
     C.DisplayToggle(card, view.displayMode, false)
     card.iconFrame:ClearAllPoints(); card.iconFrame:SetPoint("TOPLEFT", PAD, -16); card.iconFrame:SetSize(46, 46)
     card.iconHit:ClearAllPoints(); card.iconHit:SetPoint("TOPLEFT", card.iconFrame, "TOPLEFT", 0, 0)
@@ -874,7 +981,7 @@ function C.Draw(card, view)
             Note(view.autoNote, "warn")
         end
         card.timerY = y
-        C.PaintTimer(card, view)
+        if not card.compact then C.PaintTimer(card, view) end
         y = y + LR.Get("barHeight") + 12
         local b = card.buttons
         local scheduled = view.state == "scheduled" and view.auto

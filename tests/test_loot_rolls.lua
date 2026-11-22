@@ -1267,12 +1267,12 @@ do
   LR.Delete(copy)
   local id = StartRoll("item:100"); local roll = Ro.Find(id); local card = C.Card(roll.key)
   local deadline = roll.deadline
-  Check(card.compact and card.h == 72 and roll.state == "pending" and roll.choice == nil and not roll.auto,
+  Check(card.compact and card.h == 82 and roll.state == "pending" and roll.choice == nil and not roll.auto,
     "display-only rule collapses with automation off, without making a choice")
   for _, key in ipairs({ "need", "greed", "pass" }) do
-    Check(card.buttons[key].shown and card.buttons[key].w == 62 and card.buttons[key].h == 26, "Mini keeps safe labeled choice targets")
+    Check(card.buttons[key].shown and card.buttons[key].w == 70 and card.buttons[key].h == 20, "Mini keeps safe labeled choice targets")
   end
-  Check(card.timer.h == 6 and card.time.shown and not card.line3.shown and not card.close.shown,
+  Check(card.timer.h == 7 and card.timer.w >= 350 and card.time.shown and not card.line3.shown and not card.close.shown,
     "Mini uses a thin authoritative countdown and omits full details")
   local fullWidth = card.timer.fill.w
   Advance(2); C.Tick(0.05)
@@ -1306,10 +1306,12 @@ do
     Check(#rolled == n + 1 and rr.choice == key and rr.state == "submitted", "compact " .. key .. " uses the existing submission path")
     EndRoll(rid); Ro.Remove(rr)
   end
-  local restricted = StartRoll("item:100", { canNeed = false, reasonNeed = 1 }); local rr = Ro.Find(restricted)
+  local restricted = StartRoll("item:100", { canNeed = false, canGreed = false, reasonNeed = 1 }); local rr = Ro.Find(restricted)
   Ro.SetDisplay(rr, "collapsed"); local cc = C.Card(rr.key); before = #rolled
   cc.buttons.need.scripts.OnClick(cc.buttons.need)
-  Check(#rolled == before and rr.choice == nil and cc.buttons.need.state == "unavailable", "Mini cannot bypass a restricted Need")
+  cc.buttons.greed.scripts.OnClick(cc.buttons.greed)
+  Check(#rolled == before and rr.choice == nil and cc.buttons.need.state == "unavailable" and cc.buttons.greed.state == "unavailable",
+    "Mini cannot bypass restricted Need or Greed")
   local remaining = Ro.Remaining(rr)
   Advance(0.5); C.Tick(0.05)
   Check(C.View(rr).remaining < remaining and cc.time.text == string.format("%ds", math.ceil(Ro.Remaining(rr))),
