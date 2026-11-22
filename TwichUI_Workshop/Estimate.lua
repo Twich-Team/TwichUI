@@ -44,20 +44,35 @@ local Est = {}
 Est.__index = Est
 
 function E.New(ctx)
-    return setmetatable({ ctx = ctx or {}, memo = {}, asked = 0, hits = 0, size = 0 }, Est)
+    return setmetatable({ ctx = ctx or {}, memo = {}, itemVersions = {}, asked = 0, hits = 0, size = 0 }, Est)
+end
+
+function Est:Work()
+    if self.worker and self.worker==coroutine.running() and self.work then self.work()end
+end
+function Est:ClearMemo()self.memo={};self.itemVersions={};self.size=0 end
+function Est:InvalidateItem(item)
+    if self.itemVersions[item]~=nil then self.itemVersions[item]=self.itemVersions[item]+1 end
 end
 
 function Est:Ask(kind, item, extra)
     local fn = self.ctx[kind]
-    if type(fn) ~= "function" then return nil end
+    if type(fn) ~= "function" then self:Work();return nil end
     local key = kind .. ":" .. tostring(item) .. ":" .. tostring(extra or "")
+    local version=self.itemVersions[item]or 0
     local hit = self.memo[key]
-    if hit ~= nil then self.hits = self.hits + 1 return hit[1], hit[2] end
+    if hit ~= nil and hit[3]==version then self.hits = self.hits + 1;self:Work();return hit[1], hit[2] end
     self.asked = self.asked + 1
-    local ok, a, b = pcall(fn, item, extra)
+    local ok, a, b
+    if R.Perf and R.Perf.on then ok,a,b=pcall(R.Perf.Call,'workshop.opportunityQuestion',fn,item,extra)
+    else ok,a,b=pcall(fn,item,extra)end
     if not ok then a, b = nil, "error" end
     -- an answer still loading (an item's information, a Market partition) is asked again next time
-    if b ~= "loading" then self.memo[key] = { a, b } self.size = self.size + 1 end
+    if b ~= "loading" and b~='combat' then
+        if self.memo[key]==nil then self.size=self.size+1 end
+        self.memo[key] = { a, b, version };if item~=nil then self.itemVersions[item]=version end
+    end
+    self:Work()
     return a, b
 end
 

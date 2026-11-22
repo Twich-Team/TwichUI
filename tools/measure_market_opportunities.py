@@ -17,15 +17,24 @@ def main():
     p.add_argument('--reps', type=int, default=3)
     p.add_argument('--suite', choices=['reader', 'opportunities', 'memory', 'index', 'all'], default='all')
     p.add_argument('--days', type=int, choices=[2, 60], default=2)
+    p.add_argument('--contract', type=int, choices=[2, 3], default=2, help='PR1 coupled or negotiated split projection')
+    p.add_argument('--rows', type=int, default=32, help='records per bucket; opt-in scale, 1..768')
     p.add_argument('--case', action='append', help='exact mode/pattern/count selector; repeatable')
+    p.add_argument('--scenario',choices=['none','single','burst','reopen','filters','scroll','generation','stress'],default='none')
+    p.add_argument('--stress',action='store_true',help='add opt-in 5000-recipe cases; never ordinary development')
+    p.add_argument('--stress-cycles',type=int,default=20,help='1..100 repeated changes, only with --scenario stress')
     a = p.parse_args()
     if not 1 <= a.reps <= 10:
         p.error('--reps must be 1..10')
+    if not 1 <= a.rows <= 768:
+        p.error('--rows must be 1..768')
+    if not 1 <= a.stress_cycles <= 100 or a.stress_cycles != 20 and a.scenario != 'stress':
+        p.error('--stress-cycles must be 1..100 and requires --scenario stress')
     cases = []
     if a.suite in ('reader', 'all'):
-        cases += [('reader', pattern, 32) for pattern in ('single', 'alternating', 'single-distinct', 'alternating-distinct', 'batched')]
+        cases += [('reader', pattern, a.rows) for pattern in ('single', 'alternating', 'single-distinct', 'alternating-distinct', 'batched')]
     if a.suite in ('opportunities', 'all'):
-        cases += [('opportunities', path, n) for n in (20, 100, 500, 1000) for path in ('session', 'ui')]
+        cases += [('opportunities', path, n) for n in ((20, 100, 500, 1000, 5000) if a.stress else (20,100,500,1000)) for path in ('session', 'ui')]
     if a.suite in ('memory', 'all'):
         cases += [('memory', str(n), 32) for n in (1, 2, 4, 8, 16, 64)]
     if a.suite == 'index':
@@ -40,14 +49,17 @@ def main():
                   index_harness_sha256=hashlib.sha256((ROOT/'tests/bench_market_index_memory.lua').read_bytes()).hexdigest(),
                   host=platform.platform(), python=platform.python_version(), clock='Lua os.clock CPU; Python perf_counter subprocess elapsed',
                   limitations='Synthetic 60Hz minimum timer delay; not the WoW scheduler. Peak heap sampled at callbacks/lookups, not exact peak. Includes harness observer overhead.',
-                  samples=[])
+                  contract=a.contract, rows_per_bucket=a.rows, scenario=a.scenario, samples=[])
+    report['stress_cycles'] = a.stress_cycles if a.scenario == 'stress' else None
     # One discarded warm-up per case; each sample is a fresh Lua process.
     for mode, pattern, count in cases:
         samples = []
         for rep in range(a.reps+1):
             start = time.perf_counter()
             command = (['lua5.1', 'tests/bench_market_index_memory.lua', str(count)] if mode == 'index' else
-                       ['lua5.1', 'tests/bench_market_opportunities.lua', mode, pattern, str(count), str(a.days)])
+                       ['lua5.1', 'tests/bench_market_opportunities.lua', mode, pattern, str(count), str(a.days), str(a.contract), str(a.rows), "normal", a.scenario])
+            if mode != 'index' and a.stress_cycles != 20:
+                command += ['off', str(a.stress_cycles)]
             result = subprocess.run(command,
                                     cwd=ROOT, text=True, capture_output=True, timeout=600, check=True)
             row = json.loads(result.stdout)

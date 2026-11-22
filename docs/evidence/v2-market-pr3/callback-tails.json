@@ -1,0 +1,138 @@
+[
+  {
+    "report": "final-pr3-c2-d2.json",
+    "source": "5ca9734deb385e1a21e364a186aa2bf44e50393b",
+    "harness_sha256": "bc48b30ecee889713de5bb2b2e117ff9096f0546d5558864b97c02a0b00208ab",
+    "case": [
+      "opportunities",
+      "session",
+      500,
+      2
+    ],
+    "sample": 2,
+    "callback_ms": 19.46,
+    "origin": "./TwichUI_Workshop/OpportunityEngine.lua:323",
+    "worker_worst_ms": 3.103,
+    "p95_ms": 2.067,
+    "p99_ms": 2.125
+  },
+  {
+    "report": "final-pr3-c2-d2.json",
+    "source": "5ca9734deb385e1a21e364a186aa2bf44e50393b",
+    "harness_sha256": "bc48b30ecee889713de5bb2b2e117ff9096f0546d5558864b97c02a0b00208ab",
+    "case": [
+      "opportunities",
+      "ui",
+      1000,
+      2
+    ],
+    "sample": 1,
+    "callback_ms": 13.85,
+    "origin": "./TwichUI_Workshop/Pricing.lua:96",
+    "worker_worst_ms": 2.262,
+    "p95_ms": 2.066,
+    "p99_ms": 2.145
+  },
+  {
+    "report": "final-pr3-c2-d60.json",
+    "source": "5ca9734deb385e1a21e364a186aa2bf44e50393b",
+    "harness_sha256": "bc48b30ecee889713de5bb2b2e117ff9096f0546d5558864b97c02a0b00208ab",
+    "case": [
+      "opportunities",
+      "ui",
+      1000,
+      60
+    ],
+    "sample": 2,
+    "callback_ms": 15.07,
+    "origin": "./TwichUI_Workshop/OpportunityEngine.lua:102",
+    "worker_worst_ms": 2.241,
+    "p95_ms": 2.054,
+    "p99_ms": 2.105
+  },
+  {
+    "report": "final-pr3-c3-d60.json",
+    "source": "5ca9734deb385e1a21e364a186aa2bf44e50393b",
+    "harness_sha256": "bc48b30ecee889713de5bb2b2e117ff9096f0546d5558864b97c02a0b00208ab",
+    "case": [
+      "opportunities",
+      "ui",
+      1000,
+      60
+    ],
+    "sample": 1,
+    "callback_ms": 10.323,
+    "origin": "./TwichUI_Workshop/Pricing.lua:96",
+    "worker_worst_ms": 2.202,
+    "p95_ms": 2.087,
+    "p99_ms": 2.153
+  },
+  {
+    "report": "final-pr3-generation.json",
+    "source": "5ca9734deb385e1a21e364a186aa2bf44e50393b",
+    "harness_sha256": "bc48b30ecee889713de5bb2b2e117ff9096f0546d5558864b97c02a0b00208ab",
+    "case": [
+      "opportunities",
+      "ui",
+      1000,
+      60
+    ],
+    "sample": 1,
+    "callback_ms": 11.97,
+    "origin": "./TwichUI_Workshop/Summary.lua:278",
+    "worker_worst_ms": 2.896,
+    "p95_ms": 2.156,
+    "p99_ms": 2.915
+  },
+  {
+    "report": "final-pr3-generation.json",
+    "source": "5ca9734deb385e1a21e364a186aa2bf44e50393b",
+    "harness_sha256": "bc48b30ecee889713de5bb2b2e117ff9096f0546d5558864b97c02a0b00208ab",
+    "case": [
+      "opportunities",
+      "ui",
+      1000,
+      60
+    ],
+    "sample": 3,
+    "callback_ms": 17.526,
+    "origin": "./TwichUI_Workshop/Pricing.lua:96",
+    "worker_worst_ms": 2.679,
+    "p95_ms": 2.099,
+    "p99_ms": 2.253
+  },
+  {
+    "report": "final-pr3-scroll-hooks.json",
+    "source": "5ca9734deb385e1a21e364a186aa2bf44e50393b",
+    "harness_sha256": "002205195d05a7a1b124362427a17782a8b1ad93b83542e663ca4ede7cdad3eb",
+    "case": [
+      "opportunities",
+      "ui",
+      1000,
+      60
+    ],
+    "sample": 1,
+    "callback_ms": 12.306,
+    "origin": "./TwichUI_Workshop/Pricing.lua:96",
+    "worker_worst_ms": 2.821,
+    "p95_ms": 2.075,
+    "p99_ms": 2.115
+  },
+  {
+    "report": "final-pr3-stress.json",
+    "source": "5ca9734deb385e1a21e364a186aa2bf44e50393b",
+    "harness_sha256": "002205195d05a7a1b124362427a17782a8b1ad93b83542e663ca4ede7cdad3eb",
+    "case": [
+      "opportunities",
+      "ui",
+      5000,
+      60
+    ],
+    "sample": 1,
+    "callback_ms": 18.658,
+    "origin": "./TwichUI_Workshop/OpportunityEngine.lua:102",
+    "worker_worst_ms": 6.345,
+    "p95_ms": 2.174,
+    "p99_ms": 2.478
+  }
+]

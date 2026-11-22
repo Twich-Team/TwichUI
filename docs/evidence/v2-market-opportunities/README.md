@@ -78,3 +78,5 @@ allocation, retained live tables and content checks. Reproduce with
 This adds three measured samples plus one discarded warm-up, without changing the
 frozen reader/Opportunities harness. Final focused checks were repeated after the
 new isolated script, additive syntax selection and driver dispatch were added.
+
+Historical baseline retained during main integration. The original measurement inputs and JSON are unchanged. Current benchmark/test implementations come from #99/#100/#102; this audit contributes only documentation/evidence. See the PR3 report for final implementation measurements and simulator limitations.

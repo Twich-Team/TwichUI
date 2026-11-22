@@ -1,0 +1,160 @@
+{
+  "package": "TwichUI Compact Alternate Class Mounts",
+  "version": "0.9-review",
+  "status": "artwork candidate set; alignment and in-game visual fit unverified",
+  "classes": {
+    "WARRIOR": {
+      "file": "Warrior.png",
+      "canvas": [
+        1536,
+        1536
+      ],
+      "original_dimensions": [
+        1312,
+        1199
+      ],
+      "paste_offset": [
+        112,
+        168
+      ],
+      "origin": "new compact concept",
+      "sha256": "1eb88a71efbc9016a67736fe41f7f1315edd4270282315f100d68af2165154bc"
+    },
+    "PALADIN": {
+      "file": "Paladin.png",
+      "canvas": [
+        1536,
+        1536
+      ],
+      "original_dimensions": [
+        1254,
+        1254
+      ],
+      "paste_offset": [
+        141,
+        141
+      ],
+      "origin": "new compact concept",
+      "sha256": "c393fd579d313df9661df097de1975379396b443a25e1fc28b52f7ca9d4ab3bf"
+    },
+    "HUNTER": {
+      "file": "Hunter.png",
+      "canvas": [
+        1536,
+        1536
+      ],
+      "original_dimensions": [
+        1254,
+        1254
+      ],
+      "paste_offset": [
+        141,
+        141
+      ],
+      "origin": "new compact concept",
+      "sha256": "ce71be27d95f6845be33bf008541c4b6d3ee8181b8b83c613fa9d34845bf6a7f"
+    },
+    "ROGUE": {
+      "file": "Rogue.png",
+      "canvas": [
+        1536,
+        1536
+      ],
+      "original_dimensions": [
+        1254,
+        1254
+      ],
+      "paste_offset": [
+        141,
+        141
+      ],
+      "origin": "new compact concept",
+      "sha256": "57fe62ee563c069939507ddb8770bee777f382853ebe36203fb25fbe3e43dfa1"
+    },
+    "PRIEST": {
+      "file": "Priest.png",
+      "canvas": [
+        1536,
+        1536
+      ],
+      "original_dimensions": [
+        1263,
+        1245
+      ],
+      "paste_offset": [
+        136,
+        145
+      ],
+      "origin": "new compact concept",
+      "sha256": "67307fe408522ada0364c1eceaa5203285529d5e6ee6403b628465c96e5b38b5"
+    },
+    "SHAMAN": {
+      "file": "Shaman.png",
+      "canvas": [
+        1536,
+        1536
+      ],
+      "original_dimensions": [
+        1388,
+        1133
+      ],
+      "paste_offset": [
+        74,
+        201
+      ],
+      "origin": "new compact concept",
+      "sha256": "bcd44208efce8796d1b3fee2c86dac08f74b93c4dffb7bf9a63fa6e9099c68ae"
+    },
+    "MAGE": {
+      "file": "Mage.png",
+      "canvas": [
+        1536,
+        1536
+      ],
+      "original_dimensions": [
+        1254,
+        1254
+      ],
+      "paste_offset": [
+        141,
+        141
+      ],
+      "origin": "prior rugged artwork, retained pending compact redraw",
+      "sha256": "286b882a2ec69df2d6f059ab33922200cbf4a43918cd056aa6b4d95249622a5c"
+    },
+    "WARLOCK": {
+      "file": "Warlock.png",
+      "canvas": [
+        1536,
+        1536
+      ],
+      "original_dimensions": [
+        1254,
+        1254
+      ],
+      "paste_offset": [
+        141,
+        141
+      ],
+      "origin": "prior rugged artwork, retained pending compact redraw",
+      "sha256": "76701d839f48a846b6497d5a6deaad914c2fcad8ca5486df3c51311b67e09885"
+    },
+    "DRUID": {
+      "file": "Druid.png",
+      "canvas": [
+        1536,
+        1536
+      ],
+      "original_dimensions": [
+        1254,
+        1254
+      ],
+      "paste_offset": [
+        141,
+        141
+      ],
+      "origin": "prior rugged artwork, retained pending compact redraw",
+      "sha256": "3415fb0c9827aa696722b64ce75fd9e952110f490c61ddbb0c1e90700f318089"
+    }
+  }
+}

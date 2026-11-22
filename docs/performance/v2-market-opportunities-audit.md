@@ -1,5 +1,7 @@
 # V2 Market → Opportunities performance audit #1
 
+**Historical baseline:** this audit preserves the original source revisions and measurements. Remediation follows in [PR1](v2-market-pending-pricing-pr1.md), [PR2](v2-market-cold-pricing-pr2.md) and [PR3](v2-opportunities-incremental-pr3.md). The owner later authorized verified main integration. Audit PR #97 is reconciled as documentation only: the evolved benchmark/runner/test files from the remediation lineage are retained verbatim, rather than replaced by these original audit versions. No production deployment or release is authorized here.
+
 Audit date: 2026-11-21. **Audit/proposal only; no addon runtime, Market service, published format, installation or SavedVariables changes.** Evidence is offline Lua 5.1 production-code execution over fabricated data, plus repository inspection. No real-client performance acceptance is claimed.
 
 ## Executive summary

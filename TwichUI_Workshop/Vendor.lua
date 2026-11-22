@@ -21,6 +21,8 @@ local PR = W.Prices
 local Int = W.Int
 local V = {}
 W.Vendor = V
+local revision=0
+function V.Revision()return revision end
 
 V.SAVED_VERSION = 1
 V.MAX_ITEMS = 400
@@ -100,13 +102,14 @@ function V.Observe(listings, wanted, npc, now)
     if next(best) == nil then return 0 end
     local v = Store(true)
     if not v then return false, "unsaved" end
-    local kept = 0
+    local kept,changed = 0,{}
     for id, rec in pairs(best) do
         local old = Clean(v.items[id])
         -- another merchant's cheaper price stays; the same merchant (or one not known) is newer news
         if old and old.npc ~= nil and rec.npc ~= nil and old.npc ~= rec.npc and Cheaper(old, rec) then
             -- keep old
         else
+            if not old or old.p~=rec.p or old.s~=rec.s or old.a~=rec.a or old.at~=rec.at or old.npc~=rec.npc then changed[id]=true end
             v.items[id] = { p = rec.p, s = rec.s, a = rec.a, at = rec.at, npc = rec.npc }
             kept = kept + 1
         end
@@ -124,7 +127,12 @@ function V.Observe(listings, wanted, npc, now)
         end
         if oldest == nil then break end
         v.items[oldest] = nil
+        changed[oldest]=true
         n = n - 1
+    end
+    if next(changed)then
+        revision=revision+1
+        if W.Session and W.Session.ItemsChanged then W.Session.ItemsChanged(changed)end
     end
     return kept
 end

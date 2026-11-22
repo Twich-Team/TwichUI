@@ -1,0 +1,601 @@
+{
+  "fast": {
+    "source": {
+      "commit": "5ca9734deb385e1a21e364a186aa2bf44e50393b",
+      "dirty": true,
+      "working_tree_sha256": "95c0ddbc57c8571544a864990523772c78dbe54f1d6a086a0cadafb6b8d4d2db"
+    },
+    "source_after": {
+      "commit": "5ca9734deb385e1a21e364a186aa2bf44e50393b",
+      "dirty": true,
+      "working_tree_sha256": "95c0ddbc57c8571544a864990523772c78dbe54f1d6a086a0cadafb6b8d4d2db"
+    },
+    "source_unchanged": true,
+    "seconds": 4.42635289700047,
+    "complete": true,
+    "exit_code": 0,
+    "passed": true,
+    "syntax_passed": true,
+    "tests": [
+      {
+        "metrics": null,
+        "test": "test_perf_engine.lua",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "python_cases": null,
+        "seconds": 0.2745665580005152
+      },
+      {
+        "metrics": null,
+        "test": "test_workshop_estimate.lua",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "python_cases": null,
+        "seconds": 0.03483535499981372
+      },
+      {
+        "metrics": null,
+        "test": "test_workshop_market_consumption.lua",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "python_cases": null,
+        "seconds": 0.30456087600032333
+      },
+      {
+        "metrics": null,
+        "test": "test_workshop_market_consumption_async.lua",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "python_cases": null,
+        "seconds": 0.11942826800077455
+      },
+      {
+        "metrics": null,
+        "test": "test_workshop_market_current.lua",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "python_cases": null,
+        "seconds": 0.35376388100121403
+      },
+      {
+        "metrics": null,
+        "test": "test_workshop_market_pending.lua",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "python_cases": null,
+        "seconds": 2.4455929920004564
+      },
+      {
+        "metrics": null,
+        "test": "test_workshop_market_performance.lua",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "python_cases": null,
+        "seconds": 1.5304015860019717
+      },
+      {
+        "metrics": null,
+        "test": "test_workshop_opportunity_engine.lua",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "python_cases": null,
+        "seconds": 0.3060201890002645
+      },
+      {
+        "metrics": null,
+        "test": "test_workshop_opportunity_ui.lua",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "python_cases": null,
+        "seconds": 1.8011943330020586
+      },
+      {
+        "metrics": null,
+        "test": "test_workshop_summary.lua",
+        "passed": true,
+        "exit_code": 0,
+        "timed_out": false,
+        "python_cases": null,
+        "seconds": 0.22632208800132503
+      }
+    ],
+    "simulators": []
+  },
+  "integration": {
+    "source": {
+      "commit": "c8bd8855388249a7411dd03125362ca5f2f1b83f",
+      "dirty": true,
+      "working_tree_sha256": "73d50997e2b92fe22f3c2760fdcd682f0942390095fe901b0c6b530a8ec9fbbf"
+    },
+    "source_after": {
+      "commit": "c8bd8855388249a7411dd03125362ca5f2f1b83f",
+      "dirty": true,
+      "working_tree_sha256": "73d50997e2b92fe22f3c2760fdcd682f0942390095fe901b0c6b530a8ec9fbbf"
+    },
+    "source_unchanged": true,
+    "seconds": 435.87926606900146,
+    "complete": true,
+    "exit_code": 1,
+    "passed": false,
+    "syntax_passed": true,
+    "test_count": 76,
+    "tests_passed": 76,
+    "tests": [
+      {
+        "name": "test_auction_host.lua",
+        "passed": true,
+        "seconds": 0.98
+      },
+      {
+        "name": "test_auction_price.lua",
+        "passed": true,
+        "seconds": 0.005
+      },
+      {
+        "name": "test_auction_window.lua",
+        "passed": true,
+        "seconds": 0.023
+      },
+      {
+        "name": "test_cleanup.lua",
+        "passed": true,
+        "seconds": 0.308
+      },
+      {
+        "name": "test_commands.lua",
+        "passed": true,
+        "seconds": 0.037
+      },
+      {
+        "name": "test_defaults.lua",
+        "passed": true,
+        "seconds": 0.05
+      },
+      {
+        "name": "test_frame_look.lua",
+        "passed": true,
+        "seconds": 0.042
+      },
+      {
+        "name": "test_lifecycle.lua",
+        "passed": true,
+        "seconds": 0.088
+      },
+      {
+        "name": "test_lod_apply.lua",
+        "passed": true,
+        "seconds": 0.05
+      },
+      {
+        "name": "test_media_border.lua",
+        "passed": true,
+        "seconds": 0.035
+      },
+      {
+        "name": "test_menu_style.lua",
+        "passed": true,
+        "seconds": 0.023
+      },
+      {
+        "name": "test_notify.lua",
+        "passed": true,
+        "seconds": 0.028
+      },
+      {
+        "name": "test_notify_look.lua",
+        "passed": true,
+        "seconds": 0.03
+      },
+      {
+        "name": "test_perf_engine.lua",
+        "passed": true,
+        "seconds": 0.242
+      },
+      {
+        "name": "test_persist.lua",
+        "passed": true,
+        "seconds": 1.736
+      },
+      {
+        "name": "test_press.lua",
+        "passed": true,
+        "seconds": 0.006
+      },
+      {
+        "name": "test_pricing_conformance.py",
+        "passed": true,
+        "seconds": 0.074
+      },
+      {
+        "name": "test_profiles.lua",
+        "passed": true,
+        "seconds": 2.419
+      },
+      {
+        "name": "test_reach.lua",
+        "passed": true,
+        "seconds": 0.059
+      },
+      {
+        "name": "test_routing.lua",
+        "passed": true,
+        "seconds": 0.07
+      },
+      {
+        "name": "test_simlab_diagnostics.lua",
+        "passed": true,
+        "seconds": 0.014
+      },
+      {
+        "name": "test_status.lua",
+        "passed": true,
+        "seconds": 0.202
+      },
+      {
+        "name": "test_storage.lua",
+        "passed": true,
+        "seconds": 0.025
+      },
+      {
+        "name": "test_stored_data.lua",
+        "passed": true,
+        "seconds": 0.047
+      },
+      {
+        "name": "test_theme_defaults.lua",
+        "passed": true,
+        "seconds": 0.038
+      },
+      {
+        "name": "test_window_smoke.lua",
+        "passed": true,
+        "seconds": 0.041
+      },
+      {
+        "name": "test_workshop.lua",
+        "passed": true,
+        "seconds": 0.479
+      },
+      {
+        "name": "test_workshop_a7.lua",
+        "passed": true,
+        "seconds": 0.055
+      },
+      {
+        "name": "test_workshop_auction_market.lua",
+        "passed": true,
+        "seconds": 0.618
+      },
+      {
+        "name": "test_workshop_auction_market_chart.lua",
+        "passed": true,
+        "seconds": 4.151
+      },
+      {
+        "name": "test_workshop_auction_market_chart_interaction.lua",
+        "passed": true,
+        "seconds": 0.084
+      },
+      {
+        "name": "test_workshop_auction_market_history.lua",
+        "passed": true,
+        "seconds": 0.212
+      },
+      {
+        "name": "test_workshop_auction_market_scoped.lua",
+        "passed": true,
+        "seconds": 0.476
+      },
+      {
+        "name": "test_workshop_auction_market_search.lua",
+        "passed": true,
+        "seconds": 0.169
+      },
+      {
+        "name": "test_workshop_auction_market_server.lua",
+        "passed": true,
+        "seconds": 0.329
+      },
+      {
+        "name": "test_workshop_auction_market_summary.lua",
+        "passed": true,
+        "seconds": 0.207
+      },
+      {
+        "name": "test_workshop_auction_market_ui.lua",
+        "passed": true,
+        "seconds": 3.75
+      },
+      {
+        "name": "test_workshop_auto.lua",
+        "passed": true,
+        "seconds": 0.846
+      },
+      {
+        "name": "test_workshop_bridge.lua",
+        "passed": true,
+        "seconds": 0.076
+      },
+      {
+        "name": "test_workshop_bridge.py",
+        "passed": true,
+        "seconds": 0.531
+      },
+      {
+        "name": "test_workshop_bridge_compatibility.py",
+        "passed": true,
+        "seconds": 1.205
+      },
+      {
+        "name": "test_workshop_bridge_freshness.lua",
+        "passed": true,
+        "seconds": 0.053
+      },
+      {
+        "name": "test_workshop_bridge_performance.lua",
+        "passed": true,
+        "seconds": 5.011
+      },
+      {
+        "name": "test_workshop_bridge_scoped.lua",
+        "passed": true,
+        "seconds": 0.47
+      },
+      {
+        "name": "test_workshop_bridge_scoped.py",
+        "passed": true,
+        "seconds": 2.421
+      },
+      {
+        "name": "test_workshop_compact.lua",
+        "passed": true,
+        "seconds": 0.111
+      },
+      {
+        "name": "test_workshop_crafting_reference.lua",
+        "passed": true,
+        "seconds": 0.97
+      },
+      {
+        "name": "test_workshop_craftplanner.lua",
+        "passed": true,
+        "seconds": 9.645
+      },
+      {
+        "name": "test_workshop_disenchant.lua",
+        "passed": true,
+        "seconds": 0.074
+      },
+      {
+        "name": "test_workshop_disenchant_market.lua",
+        "passed": true,
+        "seconds": 0.186
+      },
+      {
+        "name": "test_workshop_dist.lua",
+        "passed": true,
+        "seconds": 1.429
+      },
+      {
+        "name": "test_workshop_estimate.lua",
+        "passed": true,
+        "seconds": 0.033
+      },
+      {
+        "name": "test_workshop_history2.lua",
+        "passed": true,
+        "seconds": 42.684
+      },
+      {
+        "name": "test_workshop_market.lua",
+        "passed": true,
+        "seconds": 1.053
+      },
+      {
+        "name": "test_workshop_market_consumption.lua",
+        "passed": true,
+        "seconds": 0.248
+      },
+      {
+        "name": "test_workshop_market_consumption_async.lua",
+        "passed": true,
+        "seconds": 0.118
+      },
+      {
+        "name": "test_workshop_market_current.lua",
+        "passed": true,
+        "seconds": 0.312
+      },
+      {
+        "name": "test_workshop_market_pending.lua",
+        "passed": true,
+        "seconds": 2.279
+      },
+      {
+        "name": "test_workshop_market_performance.lua",
+        "passed": true,
+        "seconds": 1.565
+      },
+      {
+        "name": "test_workshop_market_reference.lua",
+        "passed": true,
+        "seconds": 16.986
+      },
+      {
+        "name": "test_workshop_market_scale.lua",
+        "passed": true,
+        "seconds": 28.397
+      },
+      {
+        "name": "test_workshop_memory.lua",
+        "passed": true,
+        "seconds": 0.823
+      },
+      {
+        "name": "test_workshop_opportunity_engine.lua",
+        "passed": true,
+        "seconds": 0.272
+      },
+      {
+        "name": "test_workshop_opportunity_ui.lua",
+        "passed": true,
+        "seconds": 1.769
+      },
+      {
+        "name": "test_workshop_prices.lua",
+        "passed": true,
+        "seconds": 0.673
+      },
+      {
+        "name": "test_workshop_pricing_v1.lua",
+        "passed": true,
+        "seconds": 0.004
+      },
+      {
+        "name": "test_workshop_schema.lua",
+        "passed": true,
+        "seconds": 1.405
+      },
+      {
+        "name": "test_workshop_scoped_bridge_l1.py",
+        "passed": true,
+        "seconds": 1.341
+      },
+      {
+        "name": "test_workshop_shopping.lua",
+        "passed": true,
+        "seconds": 0.659
+      },
+      {
+        "name": "test_workshop_storage.lua",
+        "passed": true,
+        "seconds": 1.478
+      },
+      {
+        "name": "test_workshop_strategy.lua",
+        "passed": true,
+        "seconds": 0.544
+      },
+      {
+        "name": "test_workshop_strategy_ui.lua",
+        "passed": true,
+        "seconds": 0.102
+      },
+      {
+        "name": "test_workshop_summary.lua",
+        "passed": true,
+        "seconds": 0.222
+      },
+      {
+        "name": "test_workshop_valuation.lua",
+        "passed": true,
+        "seconds": 14.22
+      },
+      {
+        "name": "test_workshop_vendor_places.lua",
+        "passed": true,
+        "seconds": 0.036
+      },
+      {
+        "name": "test_workshop_worth.lua",
+        "passed": true,
+        "seconds": 0.352
+      }
+    ],
+    "simulators": [
+      {
+        "script": "workshop",
+        "passed": false,
+        "seconds": 223.9555591339995
+      },
+      {
+        "script": "auctionpreview",
+        "passed": true,
+        "seconds": 129.3629442149977
+      }
+    ]
+  },
+  "classification": "All 76 integration modules and Auction preview pass. Workshop strict suite remains FAIL; final settlement-aware scenario comparison is recorded separately. Final fast group covers the later diagnostic-only empty-viewport correction.",
+  "pre_accounting_fast": {
+    "source": {
+      "commit": "c8bd8855388249a7411dd03125362ca5f2f1b83f",
+      "dirty": true,
+      "working_tree_sha256": "b77266129624ea81b6c2d1f276cbbb0b9a744bd14b2529b5b8b1b06c4d042d63"
+    },
+    "source_after": {
+      "commit": "c8bd8855388249a7411dd03125362ca5f2f1b83f",
+      "dirty": true,
+      "working_tree_sha256": "b77266129624ea81b6c2d1f276cbbb0b9a744bd14b2529b5b8b1b06c4d042d63"
+    },
+    "source_unchanged": true,
+    "seconds": 4.292699099001766,
+    "complete": true,
+    "exit_code": 0,
+    "passed": true,
+    "syntax_passed": true,
+    "test_count": 10,
+    "tests_passed": 10,
+    "tests": [
+      {
+        "name": "test_perf_engine.lua",
+        "passed": true,
+        "seconds": 0.26
+      },
+      {
+        "name": "test_workshop_estimate.lua",
+        "passed": true,
+        "seconds": 0.034
+      },
+      {
+        "name": "test_workshop_market_consumption.lua",
+        "passed": true,
+        "seconds": 0.297
+      },
+      {
+        "name": "test_workshop_market_consumption_async.lua",
+        "passed": true,
+        "seconds": 0.143
+      },
+      {
+        "name": "test_workshop_market_current.lua",
+        "passed": true,
+        "seconds": 0.312
+      },
+      {
+        "name": "test_workshop_market_pending.lua",
+        "passed": true,
+        "seconds": 2.325
+      },
+      {
+        "name": "test_workshop_market_performance.lua",
+        "passed": true,
+        "seconds": 1.601
+      },
+      {
+        "name": "test_workshop_opportunity_engine.lua",
+        "passed": true,
+        "seconds": 0.276
+      },
+      {
+        "name": "test_workshop_opportunity_ui.lua",
+        "passed": true,
+        "seconds": 1.683
+      },
+      {
+        "name": "test_workshop_summary.lua",
+        "passed": true,
+        "seconds": 0.229
+      }
+    ],
+    "simulators": []
+  }
+}

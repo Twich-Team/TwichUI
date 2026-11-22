@@ -1,0 +1,40 @@
+--- a/tests/bench_market_opportunities.lua
++++ b/tests/bench_market_opportunities.lua
+@@ -20,6 +20,7 @@
+ local callbacks,worstCallback,callbackCPU=0,0,0
+ local checkSettlement,activeInteraction
+ local callbackTimes,worstOrigin={},""
++local worstBefore,worstAfter,gcDropMax=0,0,0
+ c.C_Timer.After=function(delay,fn)
+  serial=serial+1;events[#events+1]={due=now+math.max(1/60,delay),fn=fn,id=serial}
+ end
+@@ -33,9 +34,10 @@
+  local e=table.remove(events,1);now=e.due
+  local previous
+  if profiling then previous={};for k,v in pairs(phases)do previous[k]=v end end
+- local at=clock();e.fn();local dt=clock()-at
++ local beforeHeap=heap();local at=clock();e.fn();local dt=clock()-at;local afterHeap=heap()
++ if afterHeap<beforeHeap then gcDropMax=math.max(gcDropMax,dt)end
+  callbackTimes[#callbackTimes+1]=dt
+- if dt>worstCallback then local info=debug.getinfo(e.fn,"S");worstOrigin=info.short_src..":"..info.linedefined
++ if dt>worstCallback then worstBefore,worstAfter=beforeHeap,afterHeap;local info=debug.getinfo(e.fn,"S");worstOrigin=info.short_src..":"..info.linedefined
+   if profiling then phases._worst={};for k,v in pairs(phases)do if type(v)=='number'then phases._worst[k]=v-(previous[k]or 0)end end end
+  end
+  callbacks=callbacks+1;callbackCPU=callbackCPU+dt;worstCallback=math.max(worstCallback,dt);sample()
+@@ -164,6 +166,7 @@
+  requestedAt[item]=requestedAt[item]or now
+  local at=clock();local key=baseKey(item,...);baseKeyMS=baseKeyMS+clock()-at;baseKeyCalls=baseKeyCalls+1;return key
+ end
++if arg[9]=='nogc'then collectgarbage('stop')end
+ local start=clock();local startVirtual=now;local out=J.Object()
+ if mode=='reader' then
+  local first=clock();assert(not B.Record(64,keys[64]));while Q.Pending()do event()end
+@@ -334,7 +337,7 @@
+ out.full_calculations=synchronousLists+(W.Session.OpportunityStatus and W.Session.OpportunityStatus().catalogBuilds or 0)
+ out.compile_ms=compileMS;out.execute_ms=executeMS;out.validation_ms=Q.Status().validation_ms-validationStart;out.lookup_calls=Q.Status().lookup_calls
+ out.callbacks=callbacks;out.callback_cpu_ms=callbackCPU;out.worst_callback_ms=worstCallback
+-out.worst_callback_source=worstOrigin;table.sort(callbackTimes)
++out.diagnostic_gc_mode=arg[9]or 'normal';out.worst_heap_before_kib=worstBefore;out.worst_heap_after_kib=worstAfter;out.max_heap_drop_callback_ms=gcDropMax;out.worst_callback_source=worstOrigin;table.sort(callbackTimes)
+ out.callback_p95_ms=callbackTimes[math.max(1,math.ceil(#callbackTimes*.95))]or 0
+ out.callback_p99_ms=callbackTimes[math.max(1,math.ceil(#callbackTimes*.99))]or 0
+ if W.Session.OpportunityStatus then for k,v in pairs(W.Session.OpportunityStatus())do if type(v)=='number'then out['engine_'..k]=v end end end

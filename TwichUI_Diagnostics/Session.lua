@@ -111,7 +111,7 @@ local function NewSession(preset, opts)
         maxGroup = 0, lastGroup = nil,
     }
     for i = 1, #C.OVER do s.over[i] = 0 end
-    s.gaugeDefs = DX.GaugeList(sub and sub.gauges or preset.gauges)
+    s.gaugeDefs = DX.GaugeList(sub and sub.gauges or preset.gauges,preset.gaugeIds)
     s.legacyOn = DX.ScriptProfileInEffect() and type(GetAddOnCPUUsage) == "function"
     s.env = DX.Environment()
     s.caps = DX.Capabilities()
@@ -203,7 +203,7 @@ Finish = function()
         frames = { count = s.frameCount, ms = s.frameMs, hist = Hist.Export(fh), over = Copy(s.over), thresholds = Copy(C.OVER),
             p50 = FramePct(0.5), p95 = FramePct(0.95), p99 = FramePct(0.99), max = maxFrame,
             spikes = s.spikes, spikeCount = s.spikeCount, gaps = s.gaps, gapsDropped = s.gapsDropped },
-        ops = res.ops, events = res.events, callbacks = res.callbacks, counters = res.counters, measured = res.measured,
+        ops = res.ops, events = res.events, callbacks = res.callbacks, counters = res.counters, observations = res.observations, measured = res.measured,
         dropped = res.dropped, anomalies = res.anomalies,
         memory = Ring.List(s.memory), memoryDropped = s.memory.dropped,
         gauges = { defs = gaugeDefs, samples = Ring.List(s.gauges), dropped = s.gauges.dropped, cycles = s.cycles },
@@ -214,7 +214,8 @@ Finish = function()
         overhead = s.overhead, scopeCalls = scopeCalls,
         truncated = { timeline = s.full or false, spikes = s.spikeCount > #s.spikes, gaps = s.gapsDropped > 0,
             markers = s.markers.dropped > 0, errors = s.errorsDropped > 0, memory = s.memory.dropped > 0, gauges = s.gauges.dropped > 0,
-            ops = res.dropped.ops > 0, events = res.dropped.events > 0, callbacks = res.dropped.callbacks > 0 },
+            ops = res.dropped.ops > 0, events = res.dropped.events > 0, callbacks = res.dropped.callbacks > 0,
+            observations = res.dropped.observations > 0 },
     }
     if rec.overhead.perScopeMs then rec.overhead.estimatedScopeMs = rec.overhead.perScopeMs * scopeCalls end
     -- a start-up capture began before TwichUI's switches were read: say which were on once it had loaded
