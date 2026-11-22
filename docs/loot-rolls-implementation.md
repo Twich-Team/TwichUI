@@ -9,6 +9,9 @@ Nothing in this feature has been **real-client-tested**. Every statement below a
 
 ## What it is
 
+Expanded/Collapsed presentations and independent roll/display actions are now
+implemented; see [compact cards and precise precedence](loot-roll-compact.md).
+
 Two parts, both off until the player turns them on.
 
 1. **Loot cards** (`loot/Cards.lua`, switch `modules.lootRolls`): a card for each group-loot roll in the settings window's look (`R.CraftLook`:
@@ -16,9 +19,9 @@ Two parts, both off until the player turns them on.
    fallback when the core's look is missing) with painted Need, Greed and Pass icons, the item, its quality, an optional vendor price shown as
    gold, silver and copper with the game's coin pictures, a "Potential upgrade" mark from the
    existing upgrade judge, a countdown, and, when the game gives it, the other players' rolls and the winner.
-2. **Loot rules** (`loot/Rules.lua`, `loot/Config.lua`, `loot/Auto.lua`): "when an item matches these conditions, choose Need, Greed or
-   Pass", with a visible countdown on the card that the player can stop, roll early, or override by choosing. Automation has its own master
-   switch, a separate permission for Need, and a separate permission for rules that ask about upgrades.
+2. **Loot rules** (`loot/Rules.lua`, `loot/Config.lua`, `loot/Auto.lua`): independently choose Need/Greed/Pass and/or Expanded/Collapsed
+   display. Display-only rules leave the choice manual. Automatic choices use a visible countdown that the player can stop, roll early, or
+   override by choosing. Automation has its own master switch and separate permissions for Need and upgrade-based choices.
 
 ## Files
 
@@ -70,18 +73,19 @@ frame), never passes.
 
 ## Rule model
 
-A rule: `{ id, name, enabled, action = need | greed | pass, match = all | any, delay (1..15 s), result (show it afterward), conditions }`.
-Rules are read top to bottom: the **first enabled, complete rule that is not a definite "no" decides**. A rule that cannot be answered
-("unknown": the fact is missing or the client does not say) **stops the search**: nothing decides and the roll stays manual (a rule above
-might have matched, so a rule below must not speak for it). Actions of two rules are never combined. A rule with no condition, or with an
-invalid one, is incomplete: skipped and explained in the editor. Negating an unknown condition leaves it unknown.
+A rule: `{ id, name, enabled, action = none | need | greed | pass, display = none | expanded | collapsed, match = all | any, delay (1..15 s), result (show it afterward), conditions }`.
+Roll and display use **independent top-to-bottom searches**. Each skips No change for its own channel. The first enabled, complete rule
+that is not a definite "no" decides that channel: a match chooses its explicit action; an unknown stops that search without guessing.
+A roll-channel unknown leaves the roll manual; a display-channel unknown uses Expanded unless manually overridden. Neither blocks the
+other channel. A rule with no conditions, invalid conditions, or both actions set to No change is incomplete, skipped and explained in
+the editor. Negating an unknown condition leaves it unknown. Missing display in old saved rules means No change without migration.
 
 Conditions: item quality (is / at least / at most), item type (equipment, weapon, armor, recipe, consumable, ...), equipment slot (by the
 game's `INVTYPE_*` and its own words), profession recipe (for one of my professions / one I can learn / one I already know / any), specific
 item, armor type (cloth / leather / mail / plate / shield, from the item's class and sub-class), can I equip it, binding (when picked up / when equipped), potential upgrade (informational; only counts when upgrade-based rules are allowed), where
 you are (outside raids, in raids, in dungeons, outside dungeons).
 
-Recipe facts: the profession comes from `GetItemSubClassInfo(9, subclass)` compared with the player's skill lines (both the game's own words);
+Recipe facts: the profession comes from `C_Item.GetItemSubClassInfo(9, subclass)` compared with the localized `name` fields returned by `C_SkillInfo.GetSkillLineInfo`;
 "already known" is the tooltip line equal to the game's `ITEM_SPELL_KNOWN`; "can learn" additionally needs the item to have no red
 requirement line (`GearData.RedLines`). Without the tooltip those facts are unknown, not guessed.
 
@@ -191,3 +195,9 @@ window, as it does for the other pages.
 * Rolls beyond the player's card limit keep the game's own frame (no card, so no automation for them).
 * Disenchant and transmog rolls are not offered.
 * Results depend entirely on `C_LootHistory` behaving in Forever as its API says.
+
+## Custom winning result
+
+The confirmed-win presentation, selective native event relay, supplied assets,
+verification limits and in-game checklist are in [Loot Victory](loot-victory.md).
+The existing roll observation/rule/choice lifecycle is preserved.

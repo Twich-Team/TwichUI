@@ -1,0 +1,238 @@
+{
+  "before_commit": "f89068040ee1dd0711a5a6a2d4294e15d44b45e5",
+  "before_sha256": "81da3e503a792ffe8e008782d1d725856cf142ad206a8fc8c1b11f10ba6b790a",
+  "source_sha256": {
+    "!!!TwichUI/loot/Victory.lua": "28049364b6e672da2d487dfc17af83f758ce2f5877617cef113a766891ec5667",
+    "TwichUI_Settings/pages/LootRolls.lua": "e5d97a88b9d35ba52e72cb277b3c1a009bc6dc1c5ce921c77f6a5245e68e5a7b",
+    "tools/simlab/scenarios/loot.lua": "ece3f81d49f9a8a87a6ccd0e2077fe0d967400fc887af160654fa2bd5f40419f",
+    "tests/test_loot_rolls.lua": "6b1eddfbeef3eced2ae7f9f8d01cb2f81dada145c05efde3934a0be75a9b401e",
+    "tests/test_loot_victory_assets.py": "98db8546ce416607fc689bc404995f23aaeba859cd064df798282bd198bc2148",
+    "assets/loot-victory-fx/manifest.json": "917bb3314283242f50c99d806e4fc1be658195bc0de86a2b1fcaa497c01d8d69"
+  },
+  "crop": [
+    596,
+    258,
+    1004,
+    470
+  ],
+  "gif_times_seconds": [
+    0.0,
+    0.1,
+    0.2,
+    0.3,
+    0.4,
+    0.5,
+    0.6,
+    0.7,
+    0.8,
+    0.9,
+    1.0,
+    1.1,
+    1.2,
+    1.3,
+    1.4,
+    1.5,
+    1.6,
+    1.7,
+    3.75,
+    5.85,
+    6.05
+  ],
+  "provenance": "Exact unretouched simulator crops at 100% card scale (75% variant labeled); no generated/interpolated frames. Game icons unavailable and addon fonts fall back. Not native visual acceptance.",
+  "verification": {
+    "focused_modules_passed": 4,
+    "feature_modules_passed": 58,
+    "lua_syntax_files": 191,
+    "profile": "cloud",
+    "source_unchanged": true,
+    "static_hold_pixels_identical": false,
+    "static_hold_changed_pixels": 5,
+    "static_hold_max_channel_difference": 2,
+    "static_hold_difference_bbox": [
+      181,
+      88,
+      183,
+      99
+    ],
+    "outside_item_name_changed_pixels": 0,
+    "exit_matches_empty_start": true
+  },
+  "simulator": [
+    {
+      "view": "victoryDone",
+      "checks": 6,
+      "sha256": "c2cca9edcb74f59baac98d21506b169a531d3adae7cf75efd2d2cf89f7035884"
+    },
+    {
+      "view": "victoryPose030",
+      "checks": 8,
+      "sha256": "0bfdd20520c8d3f6c51ca68f13ecf2a300055196f533d37b6698af8f81c07dee"
+    },
+    {
+      "view": "victoryPose060",
+      "checks": 8,
+      "sha256": "24e39c48b3d9d37058d37cc7dec74e7f7acfca7e2a57ce71967788167ab710ca"
+    },
+    {
+      "view": "victoryPose090",
+      "checks": 8,
+      "sha256": "488697135fae69bd4d7b270a9bbd8b7631b133c43a08115be127975ebd4034e6"
+    },
+    {
+      "view": "victoryPose120",
+      "checks": 8,
+      "sha256": "00fc93201942c9d7c4fd295e2d6edb7690de8986db6a827e9a023297dc79d2c9"
+    },
+    {
+      "view": "victoryPose170",
+      "checks": 10,
+      "sha256": "aa3448cc70cbe75f884ff47fc7889eb4e5a24dc1e6355205585d1540ddc260e6"
+    },
+    {
+      "view": "victoryPoseEpic170",
+      "checks": 10,
+      "sha256": "5a348e9ee873985da98a29d492ec4b3687a6a6e0c8d5d558f48f5441d4ba4b50"
+    },
+    {
+      "view": "victoryPoseFull000",
+      "checks": 8,
+      "sha256": "8cce6c6e1a24f10b5508d988a5118234004a98e0c53131ce4b39412be7107602"
+    },
+    {
+      "view": "victoryPoseFull010",
+      "checks": 8,
+      "sha256": "1541db757a4e1d7aa3c61f7029768886a99be898a4129b3fed83feefe7baef18"
+    },
+    {
+      "view": "victoryPoseFull020",
+      "checks": 8,
+      "sha256": "7d5424a992df2cb6dd8c839fb307cf7e611415144794fdc4651a4fe37cafe024"
+    },
+    {
+      "view": "victoryPoseFull030",
+      "checks": 8,
+      "sha256": "64e3dfbb4090d0d57d395f19e198dfc99434b597b16f3e9b24611a0e2fcc8084"
+    },
+    {
+      "view": "victoryPoseFull040",
+      "checks": 8,
+      "sha256": "3423a045c5dacb796c19181c06638c33d0abd1f27812a5c3d00e64babd47523c"
+    },
+    {
+      "view": "victoryPoseFull050",
+      "checks": 8,
+      "sha256": "6da4d7a91313560dcf0441f7b3baba25842014aec3861c11a261097a63b75c4c"
+    },
+    {
+      "view": "victoryPoseFull060",
+      "checks": 8,
+      "sha256": "07d8b38bf4afc1f3b7c0022f45148f6646722510e65fa8c399f311691b68e581"
+    },
+    {
+      "view": "victoryPoseFull070",
+      "checks": 8,
+      "sha256": "c48e64374a552423813bc2baa269cfbd896b76b16c4237d2089abbbdd71546e9"
+    },
+    {
+      "view": "victoryPoseFull080",
+      "checks": 8,
+      "sha256": "998450c82bd3a4685313f1c8346b81a13d7ab2d90fdfaff81cacdde42fa1daa9"
+    },
+    {
+      "view": "victoryPoseFull090",
+      "checks": 8,
+      "sha256": "b4ec4f0ac1ade0b1eddaa66c74af9ecab36f9306b3aa8c42be90f2a6ec01ff9b"
+    },
+    {
+      "view": "victoryPoseFull100",
+      "checks": 8,
+      "sha256": "4b162d7d0934792ed90b3e04326864302046d32af037d16c38d1b94401ce7ca7"
+    },
+    {
+      "view": "victoryPoseFull110",
+      "checks": 8,
+      "sha256": "4e275a445bff7a7429b5d8b23c41a62335c048d679d8cbb22bfa7ca1a9980a2b"
+    },
+    {
+      "view": "victoryPoseFull120",
+      "checks": 8,
+      "sha256": "c110753a45706aa990cf5facc9509d2403e2653b55b57f92513aa4a12374cf48"
+    },
+    {
+      "view": "victoryPoseFull130",
+      "checks": 8,
+      "sha256": "e8ce79aaa205ba96988568b5d7bfd845be1233ca84364b198f6a4dab8a2e53ff"
+    },
+    {
+      "view": "victoryPoseFull140",
+      "checks": 8,
+      "sha256": "bc1754762c388188df14e2a697d9851f27127de0696f752a73618d06aee6db31"
+    },
+    {
+      "view": "victoryPoseFull150",
+      "checks": 8,
+      "sha256": "a5b208fbe45fe2888742da688c215fcd92687239cede7020c7c58a94a8e1ce4e"
+    },
+    {
+      "view": "victoryPoseFull160",
+      "checks": 8,
+      "sha256": "3931c80746ef5c6aa40a17b033e4ad98beb3940106350bd323157d740004ed48"
+    },
+    {
+      "view": "victoryPoseFull170",
+      "checks": 10,
+      "sha256": "b7141cd1cc5b7ab32931e80d967e59b39196b8f814b85e6f377be0898d9804de"
+    },
+    {
+      "view": "victoryPoseFull375",
+      "checks": 10,
+      "sha256": "8be1cbcaf36c53f4ef948a8ed9a6188d266dc9f315def8cbd3c08b734f2441c4"
+    },
+    {
+      "view": "victoryPoseFull585",
+      "checks": 9,
+      "sha256": "ad37864dc944cb48a366f231ecdb5fd17f20c0524556d925fea5cbaf127f7978"
+    },
+    {
+      "view": "victoryPoseFull605",
+      "checks": 9,
+      "sha256": "8bdfc19633eac95852f3aa67df505ccd981278128c23cdc5a9ce5fc20df22182"
+    },
+    {
+      "view": "victoryPoseGreedLegendary170",
+      "checks": 10,
+      "sha256": "f3248e3d0615382edf78f5f511229f60a08ea660273c3ac56cafd13519c1109d"
+    },
+    {
+      "view": "victoryPoseOff170",
+      "checks": 11,
+      "sha256": "bac78bb7e1ad0c2bf392c26bcbe48fd587e18c69a55850c85eee91104a738b87"
+    },
+    {
+      "view": "victoryPoseScaled060",
+      "checks": 8,
+      "sha256": "6bd20799c86d7b166cb352746f12858575e163c2b61481733f53cacca43e117a"
+    },
+    {
+      "view": "victoryReplay",
+      "checks": 17,
+      "sha256": "cfea9fa168a87658d86d1ff3eae5fb4329a971c14e19db4eea5eacd54a76b724"
+    },
+    {
+      "view": "victorySettings",
+      "checks": 11,
+      "sha256": "8529565669ef5891089ab7383fba4315fe675efbada70d4399241f2c0744df1a"
+    },
+    {
+      "view": "victoryStatic",
+      "checks": 7,
+      "sha256": "9a1f810c16d9377bd4eb1f5c2d1007ec45e7dafa156498304f33a57d0ebe0bd7"
+    }
+  ],
+  "retained_sha256": {
+    "variants.png": "4d5f6692d70f2c5e591142964bcb4ba6364ec3740c8a5de0588fc7d15c696dc8",
+    "lighting-stages.png": "b9a1a20c522b29fae316cc219a092903b6beb27ce2145a4ee9704b8a5c5e35b4",
+    "victory-lighting.gif": "31ec4c601b417e02ac867f584a20bf7014767e747af5c6bd0f08a1f20606bc95",
+    "before-after.png": "bdb9d161664a1fe78677921c1dac504e333164277520119358828d861d94e4a5"
+  }
+}

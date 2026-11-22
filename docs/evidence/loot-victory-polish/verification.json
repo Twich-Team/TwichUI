@@ -1,0 +1,217 @@
+{
+  "before_commit": "df6548430a44bb729a41a89155a62cc4db5ed0a2",
+  "before_capture_sha256": "8954c6f90f27f8895783085d8fa2b79c638ff7ffe50330bdbb4eadac3a84b99b",
+  "source_sha256": {
+    "!!!TwichUI/loot/Victory.lua": "248ca14cc62fca51750d2b69ad695b09d1e54ca4a3ed42f0deed6395f29c0a8e",
+    "tests/test_loot_rolls.lua": "36eb837d4834a9ed4df08277d8840f28db2eb207be939c6157dead3fd470aed6",
+    "tools/simlab/scenarios/loot.lua": "4386c386112d619fbe41c594693fd3a82f582675ef073356fcd865d68ef459ab"
+  },
+  "crop": [
+    596,
+    258,
+    1004,
+    470
+  ],
+  "motion_times_seconds": [
+    0.0,
+    0.15,
+    0.3,
+    0.45,
+    0.6,
+    0.75,
+    0.9,
+    1.05,
+    1.15,
+    1.25,
+    1.35,
+    1.45,
+    1.55,
+    1.65,
+    1.75,
+    3.75,
+    5.85,
+    6.05
+  ],
+  "provenance": "Exact unretouched simulator crops at 100% card scale, no rescaling/generated/interpolated frames. Fonts fall back and game icons are unavailable. Not native-client verification.",
+  "feature_checks": {
+    "modules_passed": 58,
+    "lua_syntax_files": 191,
+    "source_unchanged": true,
+    "profile": "cloud"
+  },
+  "simulator_checks": [
+    {
+      "view": "victoryDone",
+      "checks": 6,
+      "png_sha256": "d254129eab681f8ca98253495eed3422056d962da86e00d52b4321104126b509"
+    },
+    {
+      "view": "victoryPose000",
+      "checks": 7,
+      "png_sha256": "d666b97f3b40e329a4b925f4d6618e5d4e3edbdc0a49278ef3323a127fdd4f80"
+    },
+    {
+      "view": "victoryPose015",
+      "checks": 7,
+      "png_sha256": "0f58386e98bb60204d34817592ec80e890306069b42336116f8b91c730ad1b13"
+    },
+    {
+      "view": "victoryPose030",
+      "checks": 7,
+      "png_sha256": "564790fc6cc13d211f31cb2d7dfe682fbac5a3766cf42725d92e0efd1a6312a7"
+    },
+    {
+      "view": "victoryPose045",
+      "checks": 7,
+      "png_sha256": "1a43be66d406fb37c19ffddd81a14bed3090c913a4d0c2f55fb0ae13cdf38b4d"
+    },
+    {
+      "view": "victoryPose060",
+      "checks": 7,
+      "png_sha256": "121369191e4dadde3003210265d30927c78e7722c79c87a3e54c695f7b711517"
+    },
+    {
+      "view": "victoryPose075",
+      "checks": 7,
+      "png_sha256": "9bf6d01c0d6646e24c121f2a76471177a00fe9790606b0d8a8df1857576ba800"
+    },
+    {
+      "view": "victoryPose090",
+      "checks": 7,
+      "png_sha256": "b3e7eef2a011cbc5fd998363e091e4b03f5259757038f8a84d8277a51c3f11a0"
+    },
+    {
+      "view": "victoryPose105",
+      "checks": 7,
+      "png_sha256": "8f92422654ba6cc63451d0053d39ed5bca4aa16c285d1480bb5f5b487a778481"
+    },
+    {
+      "view": "victoryPose115",
+      "checks": 7,
+      "png_sha256": "2df80293a02242ddcf6c2d48af45b240c0f39ee8f3e06b86df03c063ea558956"
+    },
+    {
+      "view": "victoryPose125",
+      "checks": 7,
+      "png_sha256": "5763782239db42c42f20bf7b7a7e8be1068db5ab9f57de269a55ff531c732872"
+    },
+    {
+      "view": "victoryPose135",
+      "checks": 7,
+      "png_sha256": "03f56cef3fecdbde10816785ef457f04343ac5b060cd5f7617a46870717e7626"
+    },
+    {
+      "view": "victoryPose145",
+      "checks": 7,
+      "png_sha256": "dd025119a716c1d349a456e4f93a4d91a6ca7fdeb47594ee9cb0db1e21f6172d"
+    },
+    {
+      "view": "victoryPose155",
+      "checks": 7,
+      "png_sha256": "b1e18d8b79ae87b38203771c4328336a4ab4030fbf47f63fb6a53ebc247b5ee4"
+    },
+    {
+      "view": "victoryPose165",
+      "checks": 7,
+      "png_sha256": "12629e505b52642ec5605f092a7e086125f087a56f1dc6580566d40e15c824ac"
+    },
+    {
+      "view": "victoryPose175",
+      "checks": 8,
+      "png_sha256": "3bed23f5f2383455e21c585745b69f219da52c75ad8e03c2c59e60f2815f7be5"
+    },
+    {
+      "view": "victoryPose375",
+      "checks": 8,
+      "png_sha256": "dbc7b0970b1f739e936434683fd064d1e1e2f5810c04679d58c43dd4ddc3156f"
+    },
+    {
+      "view": "victoryPose585",
+      "checks": 7,
+      "png_sha256": "58173897602818c451e73473f40d100f8ff90e622b669ea04148add6e4498a4d"
+    },
+    {
+      "view": "victoryPose605",
+      "checks": 7,
+      "png_sha256": "b8d2c38a89fd8762f11910a25b2a22956056b3f0b7f1d07b29dbe74ae2648b05"
+    },
+    {
+      "view": "victoryPoseEpic175",
+      "checks": 8,
+      "png_sha256": "81da3e503a792ffe8e008782d1d725856cf142ad206a8fc8c1b11f10ba6b790a"
+    },
+    {
+      "view": "victoryPoseFullLegendary135",
+      "checks": 7,
+      "png_sha256": "e4cbea1ffea4bb281d55282ee0c118f07c0e6af9cf2f14435e8b42ec150b70ca"
+    },
+    {
+      "view": "victoryPoseGreed175",
+      "checks": 8,
+      "png_sha256": "a2cf171f223b47da9877f94229ede7f1eb1b8bd092c8267321dc0b147da68eaf"
+    },
+    {
+      "view": "victoryPoseGreedEpic175",
+      "checks": 8,
+      "png_sha256": "79ee7d9a85d2e0d0e9b14c0679ac3cf0b096054f5d4b44f7e20b3457f9429abd"
+    },
+    {
+      "view": "victoryPoseGreedLegendary175",
+      "checks": 8,
+      "png_sha256": "90225a93332520bf9f88fdf286617f566a3ed8718b9e99cf3634f39266aa67bc"
+    },
+    {
+      "view": "victoryPoseGreedRare175",
+      "checks": 8,
+      "png_sha256": "5d768de3518f180dc5b898d4141bc0e752a5ad188961b211b9218fd460180419"
+    },
+    {
+      "view": "victoryPoseLegendary175",
+      "checks": 8,
+      "png_sha256": "42c1a015eaa21c937e7437f1e07478f759949d94c37bc3a6c42b9acad0f8105c"
+    },
+    {
+      "view": "victoryPoseNoUpgradeRare175",
+      "checks": 8,
+      "png_sha256": "c537b3e4854034a40959a09667a129c466fc5c19cf22b11770c41a8ea446a87d"
+    },
+    {
+      "view": "victoryPoseOff175",
+      "checks": 8,
+      "png_sha256": "2186b6b97d4ee723606cd49fc639ba47064ec5f0a629cae98462993844de2a1e"
+    },
+    {
+      "view": "victoryPoseRare175",
+      "checks": 8,
+      "png_sha256": "0c0b0b4020eef52f66d8eb9b7d89eddbfc11908a442678060a5c95d608a636aa"
+    },
+    {
+      "view": "victoryPoseScaled175",
+      "checks": 8,
+      "png_sha256": "bbf3fc6788a9efaa96713efb9bdae362f9b93d63ef9da92bc091003e3b54ef29"
+    },
+    {
+      "view": "victorySettings",
+      "checks": 11,
+      "png_sha256": "325a81d2f71d8f7c1e979fba7f63ce0c8975fe289d13da7bfc18b6c35e50c212"
+    },
+    {
+      "view": "victoryStatic",
+      "checks": 7,
+      "png_sha256": "09bdbd62ff85e4d55a872581255d73d05b1c19848485f226af869bba45bd03a4"
+    }
+  ],
+  "retained_sha256": {
+    "rarity-matrix.png": "4d2e56a3bb245c71640e73fdde418ba4bf88df11ca9205a51c4d222c7600c1cd",
+    "edge-cases.png": "c99c8f036c89bfa429db3f51e2d5de93210b38d4ee9cd0605694e234a19cd136",
+    "motion-stages.png": "e2d0bdee5be24ed00e83bcb596042bf3aec217f3f235cf43ed13cb606c20b781",
+    "victory-motion.gif": "67ed2cb42efd665a1dcb49c39e73855f0f52d31e7af379a0a208b152d1951296",
+    "before-after.png": "354a45febe4428e83f924a3379998e738cad5f671e39835453b5bf17fe41a5df"
+  },
+  "additional_capture": {
+    "view": "victoryPoseLongEpic175",
+    "checks": 8,
+    "png_sha256": "77e36e2e42f74ff7d751b5d5187ff29418c00a27b02d94114d1eb3cd1c34ff52"
+  },
+  "asset_audit": "All 16 runtime TGAs and both OGGs byte-match the original supplied ZIP."
+}

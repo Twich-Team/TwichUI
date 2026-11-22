@@ -1,0 +1,20 @@
+{
+  "implementation_commit": "f9028a7",
+  "runtime": "wow-ui-sim v0.1.37 Forever 1.60.1.70532, software renderer, game assets disabled",
+  "scope": "synthetic handler/state and structural captures; no native client verification",
+  "source_sha256": {
+    "!!!TwichUI/loot/Victory.lua": "3afd0e2c8ba0096a5f749ff1a186f4c604240c49a35cba51aa98d70cc8788a2c",
+    "!!!TwichUI/loot/Cards.lua": "8b64406a9e51338b8bb09c2347540f01adc7a5a0984a6fa2b7379dcb762484de",
+    "!!!TwichUI/loot/Config.lua": "a0bb10f716c322a2b383b2501d321cf9bed757d4b82af490f59d483a06e6130e",
+    "!!!TwichUI/loot/Main.lua": "bc323a8322c48a32589f5eb86938631a4c8789b9977049834bf8484e7c286c14",
+    "!!!TwichUI/loot/Roll.lua": "5cf39900e330d3f20c11ec1bb73560a51add2ed4a5205f2ed64f47085fbfd6ee",
+    "tools/simlab/scenarios/loot.lua": "13f1a23795404e153267dd11338536adaf9b2a92774bcc969b04d2fd868fd1f5"
+  },
+  "captures": {
+    "victoryDone.png": "fd4285ca99f516e7a474d1e639a75ccdc28ca29498d360da9e6cc8f1f91068eb",
+    "victoryScaled.png": "940a7782745e1e7ffd6ea1f90f503d5ab20150d0ef83a74f5c3d72b412ca7423",
+    "victoryStatic.png": "6320be44041aae4dd930c5c3bcf487e8217d71e91d334146bfee8cbbb2d47bc6",
+    "victoryGreed.png": "55ec37156de6fdbc948ac3b08c82b7fa63edb180233280c3e4fbc50b4f380f20",
+    "victorySettings.png": "265f98f6fada01c7b312b8d7ad4a2cb91c820ba71d005dbf85464d47d8b5acb7"
+  }
+}

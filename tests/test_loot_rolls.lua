@@ -33,8 +33,11 @@ Methods = {
   CreateTexture = function(s) local t = Fake("texture"); t.parent = s; return t end,
   CreateFontString = function(s) local t = Fake("font"); t.parent = s; return t end,
   SetTexture = function(s, v) s.texture = v end,
+  SetTexCoord = function(s, ...) s.uv = { ... } end, SetBlendMode = function(s, mode) s.blend = mode end,
+  SetClipsChildren = function(s, value) s.clips = value end,
   SetText = function(s, v) s.text = v end, GetText = function(s) return s.text end,
   GetStringWidth = function(s) return 40 end,
+  SetWordWrap = function(s, v) s.wordWrap = v end, SetMaxLines = function(s, v) s.maxLines = v end,
   SetTextColor = function(s, r, g, b) s.color = { r, g, b } end,
   SetAlpha = function(s, a) s.alpha = a end, GetAlpha = function(s) return s.alpha end,
   EnableMouse = function(s, v) s.mouse = v and true or false end, IsMouseEnabled = function(s) return s.mouse end,
@@ -43,7 +46,8 @@ Methods = {
   ClearAllPoints = function(s) s.points = {} end, SetPoint = function(s, ...) s.points[#s.points + 1] = { ... } end,
   SetScale = function(s, v) s.scale = v end, GetScale = function(s) return s.scale or 1 end,
   SetFont = function(s) return true end, SetDesaturated = function(s, v) s.desat = v end,
-  GetParent = function(s) return s.parent end, GetFrameLevel = function() return 1 end,
+  GetParent = function(s) return s.parent end, GetFrameLevel = function(s) return s.frameLevel or 1 end,
+  SetFrameLevel = function(s, value) s.frameLevel = value end,
 }
 local FRAMES = {}
 c.CreateFrame = function(kind, name, parent) local f = Fake(kind); f.name, f.parent = name, parent; if name then c[name] = f end FRAMES[#FRAMES + 1] = f return f end
@@ -94,7 +98,6 @@ c.LOOT_ROLL_INELIGIBLE_REASON1 = "This item is not for your class."
 c.INVTYPE_HEAD = "Head"
 c.INVTYPE_2HWEAPON = "Two-Hand"
 c.GetItemClassInfo = function(id) return ({ [2] = "Weapon", [4] = "Armor", [9] = "Recipe", [7] = "Trade Goods" })[id] end
-c.GetItemSubClassInfo = function(class, sub) if class == 9 then return ({ [6] = "Alchemy", [8] = "Enchanting" })[sub] end end
 local ITEMS = {
   ["item:100"] = { id = 100, name = "Green Helm", quality = 2, class = 4, sub = 1, loc = "INVTYPE_HEAD", bind = 2, price = 1234, icon = 1001, type = "Armor", subType = "Plate" },
   ["item:101"] = { id = 101, name = "Epic Greatsword", quality = 4, class = 2, sub = 8, loc = "INVTYPE_2HWEAPON", bind = 1, price = 20612, icon = 1002, type = "Weapon", subType = "Two-Handed Swords" },
@@ -118,6 +121,7 @@ c.GetLootRollItemLink = function(id) local r = rolls[id]; if r then return r.lin
 c.GetLootRollTimeLeft = function(id) local r = rolls[id]; if r then return math.max(0, (r.ends - NOW) * 1000) end end
 c.GetActiveLootRollIDs = function() local out = {} for id in pairs(active) do out[#out + 1] = id end table.sort(out) return out end
 c.C_Item = {
+  GetItemSubClassInfo = function(class, sub) if class == 9 then return ({ [6] = "Alchemy", [8] = "Enchanting" })[sub] end end,
   GetItemInfoInstant = function(link) local it = ITEMS[link]; if it then return it.id, it.type, it.subType, it.loc, it.icon, it.class, it.sub end end,
   GetItemInfo = function(link)
     local it = ITEMS[link]
@@ -135,7 +139,7 @@ c.C_TooltipInfo = { GetLootRollItem = function(id)
   return { lines = lines }
 end }
 c.C_SkillInfo = { GetNumSkillLines = function() return 2 end, GetSkillLineInfo = function(i)
-  return ({ { isHeader = true, skillName = "Professions" }, { isHeader = false, skillName = "Alchemy", rank = 150 } })[i]
+  return ({ { isHeader = true, name = "Professions" }, { isHeader = false, name = "Alchemy", rank = 150 } })[i]
 end }
 local WORLD = { instance = "none", raid = false }
 c.IsInInstance = function() return WORLD.instance ~= "none", WORLD.instance end
@@ -170,7 +174,7 @@ end
 c.TwichUIDB = { modules = {} }
 local JUDGED = {}
 for _, f in ipairs({ "loot/Rules.lua", "loot/Config.lua", "loot/Roll.lua", "loot/Auto.lua",
-  "loot/Blizzard.lua", "loot/Cards.lua", "loot/Main.lua" }) do
+  "loot/Blizzard.lua", "loot/Cards.lua", "loot/Victory.lua", "loot/Main.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
@@ -292,6 +296,40 @@ do
   Check(Ru.Summary(Rule({ conditions = { q, { type = "class", value = "equipment" } }, delay = 3 })):find("Greed") ~= nil, "a summary names the action")
   Check(Ru.Summary(Rule({ conditions = { q }, delay = 3 })):find("after 3 seconds") ~= nil, "a summary names the delay")
   Check(Ru.Summary(Rule({ conditions = {} })):find("once you add") ~= nil, "an empty rule says it needs a condition")
+end
+
+-- Independent rule channels: No change never blocks the other outcome.
+do
+  local q = { type = "quality", op = "is", value = 4 }
+  local function Rule(id, action, display, conditions)
+    return { id = id, enabled = true, action = action, display = display, conditions = conditions or { q } }
+  end
+  for _, pair in ipairs({ { "need", "collapsed" }, { "greed", "expanded" }, { "pass", "collapsed" },
+    { "none", "collapsed" }, { "none", "expanded" }, { "need", "none" } }) do
+    local rule = Rule("lr1", pair[1], pair[2])
+    Check(not Ru.Incomplete(rule), "valid independent action combination: " .. pair[1] .. "/" .. pair[2])
+    Check(Ru.Decide({ rule }, { quality = 4 }).status == (pair[1] == "none" and "none" or "match"), "roll channel skips No change")
+    Check(Ru.DecideDisplay({ rule }, { quality = 4 }).status == (pair[2] == "none" and "none" or "match"), "display channel skips No change")
+  end
+  local need, mini, full = Rule("lr1", "need"), Rule("lr2", "none", "collapsed"), Rule("lr3", "none", "expanded")
+  local rules = { need, mini, full }
+  Check(Ru.Decide(rules, { quality = 4 }).rule == need and Ru.DecideDisplay(rules, { quality = 4 }).rule == mini,
+    "a high-priority Need and lower display-only match both win their own channels")
+  rules = { mini, need, full }
+  Check(Ru.Decide(rules, { quality = 4 }).rule == need and Ru.DecideDisplay(rules, { quality = 4 }).rule == mini,
+    "a high-priority display-only match cannot suppress lower Need")
+  Check(Ru.DecideDisplay({ full, mini }, { quality = 4 }).rule == full, "explicit Expanded overrides general Collapse by order")
+  Check(Ru.DecideDisplay({ Rule("lr4", "none", "collapsed", { { type = "upgrade", value = true } }), full }, { quality = 4 }).status == "unknown",
+    "unknown display conditions block only display precedence rather than guessing")
+  Check(Ru.Decide({ Rule("lr4", "none", "collapsed", { { type = "upgrade", value = true } }), need }, { quality = 4 }).rule == need,
+    "unknown display-only conditions never block a legitimate roll decision")
+  Check(Ru.Decide({ Rule("lr4", "greed", nil, { { type = "upgrade", value = true } }), need }, { quality = 4 }).status == "unknown",
+    "existing roll unknown/conflict behavior stays conservative")
+  Check(Ru.Incomplete(Rule("lr4", "none", "none")) ~= nil and Ru.Incomplete(Rule("lr4", "need", "bogus")) ~= nil,
+    "no-op and invalid presentation actions are flagged")
+  Check(Ru.Summary(mini):find("Collapse", 1, true) and not Ru.Summary(mini):find("Automatically", 1, true),
+    "display-only summaries never describe an automatic roll")
+  Check(Ru.ActionSummary(Rule("lr4", "greed", "collapsed")) == "Greed · Collapsed", "combined action summary is unambiguous")
 end
 
 ---------------------------------------------------------------------------
@@ -650,6 +688,30 @@ do
   Check(roll.obs.recipe.profession == false and roll.state == "pending", "another profession's recipe is not mine")
   EndRoll(id)
 
+  -- The reported All-of rule on Forever's namespaced item API and skill-line fields.
+  Fresh(); LR.Set("auto", true); LR.Set("autoNeed", true)
+  local recipeNeed = Rule("professionRecipes")
+  LR.SetAction(recipeNeed, "need")
+  local _, quality = LR.AddCondition(recipeNeed, "quality")
+  LR.SetCondition(recipeNeed, quality, { op = "atMost", value = 3 })
+  local _, known = LR.AddCondition(recipeNeed, "recipe")
+  LR.SetCondition(recipeNeed, known, { mode = "known", negate = true })
+  Rule("recipes")
+  id = StartRoll("item:102"); roll = Ro.Find(id)
+  Check(roll.auto and roll.auto.action == "need", "an unlearned recipe for my profession matches the Need rule")
+  Advance(4)
+  Check(#rolled == 1 and rolled[1].kind == 1, "the recipe rule submits Need through the usual countdown")
+  EndRoll(id)
+  id = StartRoll("item:103"); roll = Ro.Find(id)
+  Check(roll.auto and roll.auto.action == "pass", "a known recipe still reaches the lower Pass rule")
+  EndRoll(id)
+  id = StartRoll("item:105"); roll = Ro.Find(id)
+  Check(roll.state == "pending" and not roll.auto, "an unlearned recipe for another profession stays manual")
+  EndRoll(id)
+  id = StartRoll("item:102", { noTooltip = true }); roll = Ro.Find(id)
+  Check(roll.state == "pending" and not roll.auto, "a missing tooltip cannot satisfy not already known")
+  EndRoll(id)
+
   -- Need is a separate opt-in
   Fresh(); LR.Set("auto", true)
   local needRule = Rule("blank"); LR.SetAction(needRule, "need")
@@ -668,7 +730,7 @@ do
 
   -- an upgrade rule needs its own permission
   Fresh(); LR.Set("auto", true)
-  local up = Rule("blank")
+  local up = Rule("blank"); LR.SetAction(up, "greed")
   LR.RemoveCondition(up, 1); LR.AddCondition(up, "upgrade")
   JUDGED["item:100"] = { up = true }
   id = StartRoll("item:100"); roll = Ro.Find(id)
@@ -696,7 +758,7 @@ do
   local noTip = StartRoll("item:107", { noTooltip = true })
   Check(Ro.Find(noTip).obs.equippable == nil, "without a tooltip it is unknown, not yes")
   EndRoll(noTip)
-  local cloth = Rule("blank")
+  local cloth = Rule("blank"); LR.SetAction(cloth, "greed")
   LR.RemoveCondition(cloth, 1); LR.AddCondition(cloth, "armor"); LR.SetCondition(cloth, 1, { value = 1 })
   id = StartRoll("item:106"); roll = Ro.Find(id)
   Check(roll.state == "scheduled", "a cloth rule takes a cloth robe")
@@ -1211,6 +1273,516 @@ do
   C.PreviewStop(true)
   c.GameTooltip = real
   rolled = {}
+end
+
+-- Mini active cards use the same choices and timers; overrides belong to keys.
+do
+  for _, roll in ipairs({ unpack(Ro.Rolls()) }) do Ro.Remove(roll) end
+  for _, rule in ipairs(LR.List()) do LR.Delete(rule.id) end
+  LR.Set("auto", false); LR.Set("animate", false); LR.Set("maxCards", 4)
+  local ok, display = LR.Create("blank")
+  Check(ok and LR.Rule(display).action == "none" and LR.Rule(display).display == "none" and LR.Rule(display).incomplete,
+    "new blank rule offers independent No change outcomes and flags no-op")
+  LR.SetDisplay(display, "collapsed"); LR.SetEnabled(display, true)
+  Check(not LR.Rule(display).incomplete and c.TwichUIDB.ui.lootRolls.rules[1].display == "collapsed",
+    "display-only action saves and reads independently of roll actions")
+  local _, copy = LR.Duplicate(display)
+  Check(LR.Rule(copy).display == "collapsed" and LR.Rule(copy).action == "none", "copy/reload view preserves both action fields")
+  LR.Delete(copy)
+  local id = StartRoll("item:100"); local roll = Ro.Find(id); local card = C.Card(roll.key)
+  local deadline = roll.deadline
+  Check(card.compact and card.h == 82 and roll.state == "pending" and roll.choice == nil and not roll.auto,
+    "display-only rule collapses with automation off, without making a choice")
+  for _, key in ipairs({ "need", "greed", "pass" }) do
+    Check(card.buttons[key].shown and card.buttons[key].w == 70 and card.buttons[key].h == 20, "Mini keeps safe labeled choice targets")
+  end
+  Check(card.timer.h == 7 and card.timer.w >= 350 and card.time.shown and not card.line3.shown and not card.close.shown,
+    "Mini uses a thin authoritative countdown and omits full details")
+  local fullWidth = card.timer.fill.w
+  Advance(2); C.Tick(0.05)
+  Check(card.timer.fill.w < fullWidth and card.name.w >= 250, "Mini timer visibly shrinks while the item has a wide name region")
+  local before = #rolled
+  card.toggle.scripts.OnClick(card.toggle)
+  Check(not card.compact and card.h > 120 and Ro.Find(id) == roll and roll.manualDisplay == "expanded",
+    "manual expansion reuses the same roll and card")
+  card.toggle.scripts.OnClick(card.toggle)
+  Check(card.compact and roll.deadline == deadline and #rolled == before and roll.choice == nil,
+    "collapse changes no deadline, event, choice or rule")
+  Check(LR.Rule(display).display == "collapsed", "manual override never writes saved rules")
+  local id2 = StartRoll("item:101"); local other = Ro.Find(id2); local fullCard = C.Card(other.key)
+  Check(not fullCard.compact and fullCard.baseY == card.h + LR.Get("spacing"), "mixed stack uses actual Mini height")
+  Ro.SetDisplay(roll, "expanded")
+  Check(fullCard.baseY == card.h + LR.Get("spacing"), "instant expansion reflows following cards without duplicate slots")
+  Ro.SetDisplay(roll, "collapsed")
+  local _, auto = LR.Create("greenGear"); LR.SetEnabled(auto, true); LR.Set("auto", true)
+  Check(roll.state == "scheduled" and roll.auto.action == "greed", "lower roll rule acts independently of higher display-only match")
+  local fireAt = roll.auto.fireAt
+  LR.SetDisplay(display, "expanded"); Ro.SetDisplay(roll, "collapsed")
+  Check(roll.auto.fireAt == fireAt and card.compact, "display edits and manual overrides do not restart automatic countdown")
+  Check(card.buttons.now.shown and card.buttons.stop.shown, "Mini preserves auto countdown controls")
+  card.buttons.stop.scripts.OnClick(card.buttons.stop)
+  Check(roll.state == "pending" and card.buttons.need.shown, "Stop restores the normal manual controls in Mini")
+  LR.Set("auto", false)
+  for _, key in ipairs({ "need", "greed", "pass" }) do
+    local rid = StartRoll("item:106"); local rr = Ro.Find(rid); Ro.SetDisplay(rr, "collapsed")
+    local cc = C.Card(rr.key); local n = #rolled
+    cc.buttons[key].scripts.OnClick(cc.buttons[key])
+    Check(#rolled == n + 1 and rr.choice == key and rr.state == "submitted", "compact " .. key .. " uses the existing submission path")
+    EndRoll(rid); Ro.Remove(rr)
+  end
+  local restricted = StartRoll("item:100", { canNeed = false, canGreed = false, reasonNeed = 1 }); local rr = Ro.Find(restricted)
+  Ro.SetDisplay(rr, "collapsed"); local cc = C.Card(rr.key); before = #rolled
+  cc.buttons.need.scripts.OnClick(cc.buttons.need)
+  cc.buttons.greed.scripts.OnClick(cc.buttons.greed)
+  Check(#rolled == before and rr.choice == nil and cc.buttons.need.state == "unavailable" and cc.buttons.greed.state == "unavailable",
+    "Mini cannot bypass restricted Need or Greed")
+  local remaining = Ro.Remaining(rr)
+  Advance(0.5); C.Tick(0.05)
+  Check(C.View(rr).remaining < remaining and cc.time.text == string.format("%ds", math.ceil(Ro.Remaining(rr))),
+    "Mini reads the authoritative time after elapsed ticks")
+  for _, r in ipairs({ unpack(Ro.Rolls()) }) do EndRoll(r.rollID); Ro.Remove(r) end
+  for _, rule in ipairs(LR.List()) do LR.Delete(rule.id) end
+  LR.Set("animate", true); LR.Set("auto", false)
+end
+
+---------------------------------------------------------------------------
+-- Victory: actual relay event over synthetic client frames; no win inference.
+---------------------------------------------------------------------------
+do
+  local V = R.LootVictory
+  active = {}
+  -- Clean the model/automation left by the preceding regression scenarios.
+  c.TwichUIDB.modules.lootRolls = false; LR.Refresh()
+  LR.Set("auto", false); LR.Set("maxCards", 4); LR.Set("afterResult", 8)
+  local native, sounds = {}, {}
+  c.AlertFrame = c.CreateFrame("Frame", "AlertFrame", c.UIParent)
+  function c.AlertFrame:IsProtected() return false end
+  c.AlertFrame:RegisterEvent("LOOT_ITEM_ROLL_WON")
+  c.AlertFrame:RegisterEvent("SHOW_LOOT_TOAST")
+  c.AlertFrame:RegisterEvent("ACHIEVEMENT_EARNED")
+  c.AlertFrame:SetScript("OnEvent", function(_, event, ...) native[#native + 1] = { event, ... } end)
+  c.PlaySoundFile = function(path, channel) sounds[#sounds + 1] = { path, channel } end
+  c.GetCVarBool = function() return true end
+  c.TwichUIDB.modules.lootRolls = true; LR.Refresh()
+  LR.Set("victory", true); LR.Set("victoryIntensity", "subtle"); LR.Set("victorySound", true)
+  Check(V.Listening() and not c.AlertFrame:IsEventRegistered("LOOT_ITEM_ROLL_WON"), "victory owns only the native winning event")
+  Check(c.AlertFrame:IsEventRegistered("SHOW_LOOT_TOAST") and c.AlertFrame:IsEventRegistered("ACHIEVEMENT_EARNED"), "unrelated native alerts stay registered")
+  local function Step(seconds)
+    for _ = 1, math.ceil(seconds / 0.05) do
+      Advance(0.05)
+      for _, f in ipairs(FRAMES) do
+        if f.shown and f.scripts.OnUpdate then f.scripts.OnUpdate(f, 0.05) end
+      end
+    end
+  end
+  local function Win(link, kind, value) Fire("LOOT_ITEM_ROLL_WON", link, 1, kind, value, false) end
+  local function NewRoll(link, choice)
+    local id = 700 + #rolled + #Ro.Rolls()
+    rolls[id] = { link = link, ends = NOW + 30, canNeed = true, canGreed = true }
+    active[id] = true; Fire("START_LOOT_ROLL", id, 30000, 9000 + id)
+    local roll = Ro.Find(id)
+    if choice then Check(Ro.Submit(roll, choice, "player"), "submit test choice") end
+    return roll
+  end
+  local roll = NewRoll("item:100", "need")
+  local same = C.Card(roll.key)
+  Check(V.Count() == 0, "selecting Need never starts a victory")
+  Win("item:100", 1, 87)
+  local e = V.Entries()[1]
+  Check(e and e.key == roll.key and C.Card(roll.key) == same, "confirmed Need reuses the existing card at its stack slot")
+  local f = same.victory
+  Check(not same.body.shown and not same.timer.shown, "old item text and roll controls cannot ghost through the new banner")
+  Check(f and f.entry.value == 87 and f.emblem.texture:find("emblem_need.tga", 1, true), "Need value and approved emblem")
+  Check(not C.Shows(roll) and not C.Has(roll.rollID), "victory cannot authorize another automatic choice or park live controls")
+  Check(f.footer == nil, "victory has no redundant footer message or inventory claim")
+  Fire("LOOT_ITEM_ROLL_WON", "item:100", 1, 1, 87, false)
+  Check(V.Count() == 1, "duplicate native winner event creates no second card")
+  Step(0.25); Check(f.phase == "burst" and f.header.alpha > 0 and f.header.alpha < 1, "resolution advances into a restrained title reveal")
+  Step(0.3); Check(#sounds == 1 and sounds[1][2] == "SFX" and sounds[1][1]:find("loot_won.ogg", 1, true), "one reveal sound on SFX")
+  Step(1.35)
+  Check(f.phase == "static" and not f.scripts.OnUpdate and f.timer, "decorative updates stop at the static hold")
+  Check(f.sweepCore.alpha == 0 and f.arrivalGlint.alpha == 0 and f.particles[1].alpha == 0, "effects end without loops")
+  Step(0.8); Win("item:100", 1, 87)
+  Check(V.Count() == 1 and #sounds == 1, "duplicate after the replay window still matches the completed roll")
+  local started = e.started
+  C.Refresh(); Check(e.started == started, "redraw never restarts the animation or sound")
+  Step(3.6)
+  Check(V.Count() == 0 and not f.shown and not f.timer and not f.scripts.OnUpdate, "timeout recycles all animation work")
+  Check(not C.Card(roll.key), "old resolved roll does not reappear after its victory")
+  Ro.Remove(roll)
+
+  -- Losses and Pass remain ordinary results; history by itself does not race the native event.
+  for _, choice in ipairs({ "need", "greed", "pass" }) do
+    local r = NewRoll("item:101", choice)
+    r.result = { rolls = {}, winner = { name = "Other", self = false, choice = "need", roll = 99 } }
+    Ro.Resolve(r, "history"); Ro.Tell("updated", r)
+    Check(V.Count() == 0, choice .. " loss/pass has no celebration")
+    Ro.Remove(r)
+  end
+  local n = #native
+  Win("item:101", 3, 42)
+  Check(#native == n + 1 and V.Count() == 0, "unsupported roll type falls back to the saved native handler")
+  Fire("ACHIEVEMENT_EARNED", 42); Fire("SHOW_LOOT_TOAST", "item", "item:101", 1)
+  Check(#native == n + 3, "achievement and acquisition alerts pass untouched")
+
+  -- No record and missing metadata: confirmed late result still has its own bounded entry.
+  Win("item:999", 2, nil)
+  e = V.Entries()[1]; f = e and e.card and e.card.victory
+  Check(e and e.name == "Loot" and not e.value and f.method.text == "Greed roll", "late Greed win tolerates missing metadata and roll value")
+  Check(f.emblem.texture:find("emblem_greed.tga", 1, true), "Greed uses its supplied emblem")
+  Step(6.2)
+
+  LR.Set("victoryIntensity", "off"); LR.Set("victorySound", false)
+  local soundCount = #sounds
+  for q = 0, 6 do
+    Check(V.Preview(q % 2 == 0 and "need" or "greed", q), "preview works without real rolls")
+    local pc = V.PreviewCard(); local pf = pc.victory
+    Check(pf.header.alpha == 1 and not pf.scripts.OnUpdate, "animation off is static and readable")
+    Check(q < 2 or q > 5 or pf.halo.texture:find("halo_", 1, true), "rarity art selected safely")
+    Step(4.1)
+    Check(not pf.shown and not pf.timer and not pf.scripts.OnUpdate, "preview playback cleans up")
+  end
+  Check(#sounds == soundCount, "sound off stays silent through repeated previews")
+  Check(V.PoolSize() <= C.PoolSize() + 1, "artwork frames are pooled, including one preview")
+  LR.Set("victoryIntensity", "subtle")
+  LR.Set("victorySound", true)
+  c.GetCVarBool = function() return false end
+  V.Preview("need", 4); Step(0.6)
+  Check(#sounds == soundCount, "global sound switch is respected")
+  V.PreviewStop(); c.GetCVarBool = function() return true end
+  c.PlaySoundFile = function() error("missing sound") end
+  V.Preview("greed", 5); Step(1.9)
+  Check(V.PreviewCard().victory.phase == "static", "unsupported audio cannot interrupt the renderer")
+  V.PreviewStop()
+  c.PlaySoundFile = function(path, channel) sounds[#sounds + 1] = { path, channel } end
+
+  -- Production preview checks: layered lighting, one shared timeline, and resets.
+  local fxNames = { "headerHaze", "iconHaze", "headerBloom", "emblemBurst", "iconBloom", "sweepHaze", "sweepCore", "sweepTail", "radiance", "arrivalGlint" }
+  local function FXClear(pf, ambient)
+    for _, name in ipairs(fxNames) do
+      if (ambient or (name ~= "headerHaze" and name ~= "iconHaze")) and pf[name].alpha ~= 0 then return false end
+    end
+    for _, glint in ipairs(pf.trimGlints) do if glint.alpha ~= 0 then return false end end
+    for _, particle in ipairs(pf.particles) do if particle.alpha ~= 0 then return false end end
+    return true
+  end
+  LR.Set("victoryIntensity", "subtle")
+  local soundBeforeSeek = #sounds
+  Check(V.Preview("need", 2), "lighting preview starts")
+  local pc = V.PreviewCard(); local pf = pc.victory
+  Check(#pf.base.pieces == 15 and pf.h == 218 and pf.title.points[1][5] == -24 and pf.emblem.points[1][5] == -64,
+    "lighting integration preserves approved frame and heading geometry")
+  Check(pf.icon.points[1][3] == -93 and pf.name.points[1][3] == -84 and pf.method.points[1][3] == -134
+    and pf.badge.h == 29 and pf.badge.points[1][4] == 230 and pf.footer == nil,
+    "item and conditional footer composition remain unchanged")
+  Check(pf.laurels[1].points[1][2] == pf.title and pf.laurels[2].points[1][2] == pf.title,
+    "laurels still follow the centered measured title")
+  Check(pf.atmosphere.frameLevel < pf.header.frameLevel and pf.atmosphere.frameLevel < pf.content.frameLevel
+    and pf.railCanvas.frameLevel < pf.header.frameLevel and pf.rail.clips == false
+    and pf.effects.frameLevel < pf.header.frameLevel and pf.effects.frameLevel < pf.content.frameLevel and not pf.effects.mouse,
+    "feathered effects escape without scissoring, intercepting input or covering text")
+  for _, name in ipairs(fxNames) do
+    Check(pf[name].texture:find("victory\\fx\\fx_", 1, true) and pf[name].blend == "ADD" and pf[name].uv,
+      "supplemental texture uses individual runtime file, additive blend and measured UV: " .. name)
+  end
+  for _, t in ipairs({ 0, 0.15, 0.40, 0.70, 1.00, 1.45, 1.85, 3.75, 5.95, 6.15 }) do
+    Check(V.PreviewAt(t), "production celebration pose " .. t)
+    if t == 0 then
+      Check(pf.header.alpha == 0 and FXClear(pf, true), "time zero is intentionally transparent with all lighting reset")
+    elseif t == 0.15 then
+      Check(pf.headerHaze.alpha > 0.20 and pf.headerBloom.alpha == 0, "ignition precedes the title bloom")
+    elseif t == 0.40 then
+      Check(pf.headerBloom.alpha > 0.35 and pf.headerBloom.alpha < 0.40 and pf.radiance.alpha == 0,
+        "Subtle keeps a quiet heading without the Full radiant burst")
+    elseif t == 0.70 then
+      local x = pf.sweepCore.points[1][4]
+      Check(pf.sweepCore.alpha == 0.75 and pf.sweepHaze.alpha == 0.28 and math.abs(x - 230) < 0.0001
+        and pf.sweepTail.points[1][4] == x - 48, "one bright center, soft base and short tail travel together")
+    elseif t == 1.00 then
+      Check(pf.iconBloom.alpha == 0.35 and pf.arrivalGlint.alpha > 0.40 and pf.sweepCore.alpha == 0
+        and pf.halo.alpha > pf.haloRest, "item arrival shifts attention to the icon with its actual rarity accent")
+      local visible = 0
+      for _, particle in ipairs(pf.particles) do if particle.alpha > 0 then visible = visible + 1 end end
+      Check(visible == 4, "Subtle has four controlled sparks/motes")
+    elseif t == 1.45 then
+      Check(pf.headerBloom.alpha == 0 and pf.radiance.alpha == 0 and pf.iconBloom.alpha > 0 and pf.iconBloom.alpha < 0.10,
+        "afterglow decays smoothly rather than disappearing abruptly")
+    elseif t == 1.85 or t == 3.75 then
+      Check(FXClear(pf, false) and pf.headerHaze.alpha == 0.12 and pf.iconHaze.alpha == 0.09
+        and pf.halo.alpha == pf.haloRest and pf.alpha == 1, "completed state retains only restrained static atmosphere")
+    elseif t == 5.95 then
+      Check(pf.phase == "fade" and pf.alpha > 0 and pf.alpha < 1, "configured hold ends with the existing fade")
+    elseif t == 6.15 then
+      Check(pf.alpha == 0, "Normal completes after the 1.85-second reveal and configured hold")
+    end
+  end
+  Check(#sounds == soundBeforeSeek and not pf.scripts.OnUpdate, "paused captures remain silent and idle")
+  Check(V.Preview("need", 2) and FXClear(pf, true) and pf.scripts.OnUpdate, "replay resets all layers at zero")
+  Step(0.35)
+  Check(#sounds == soundBeforeSeek + 1, "one sound at 0.30 seconds accompanies the radiant burst")
+  Step(1.51)
+  Check(not pf.scripts.OnUpdate and pf.timer and pf.phase == "static" and math.abs(pf.entry.total - 6.15) < 0.0001,
+    "clock-driven motion stops after afterglow; idle hold has no updater")
+  V.PreviewStop()
+  LR.Set("victoryIntensity", "full")
+  V.Preview("greed", 5); V.PreviewAt(0.40)
+  Check(pf.headerBloom.alpha > 0.98 and pf.emblemBurst.alpha > 0.78 and pf.radiance.alpha > 0.93,
+    "Full has a distinct synchronized white-gold climax")
+  Check(pf.particles[5].alpha == 1 and pf.particles[6].alpha == 1 and pf.particles[7].alpha == 1,
+    "three prominent stars peak with the radiant burst")
+  Check(pf.particles[5].points[1][5] > 0 or pf.particles[6].points[1][5] > 0,
+    "Full stars extend above the frame without clipping")
+  V.PreviewAt(0.55)
+  local visible = 0
+  for _, particle in ipairs(pf.particles) do if particle.alpha > 0 then visible = visible + 1 end end
+  Check(visible == 8 and #pf.particles == 12, "eight particles overlap the burst within a bounded twelve-slot pool")
+  Check(pf.entry.sampleLines[1] == "Shoulder · Legendary" and pf.entry.sellPrice == nil,
+    "sample metadata stays consistent with its selected item")
+  V.PreviewAt(1.00)
+  Check(pf.iconBloom.alpha == 0.85 and pf.halo.alpha == pf.haloRest + 0.22, "Full arrival reinforces the real rarity ring")
+  V.PreviewStop()
+  LR.Set("victoryIntensity", "off"); V.Preview("need", 2)
+  Check(FXClear(pf, true) and pf.atmosphere.alpha == 0 and not pf.scripts.OnUpdate,
+    "Off hides every supplemental FX texture with no animation updater")
+  V.PreviewAt(3.85); Check(pf.alpha == 1 and FXClear(pf, true), "Off keeps the original clean card and static hold")
+  V.PreviewAt(4); Check(pf.alpha == 0, "Off exits without a decorative fade")
+  V.PreviewStop()
+
+  -- All variants replay the same pooled renderer, including quick interruptions.
+  local longName = "Stormrend Titanblade of the Unbroken Oath of the Eternal Watchers"
+  local poolBefore = V.PoolSize()
+  pf.name.GetStringWidth = function(self) return #self.text * 8 end
+  for _, intensity in ipairs({ "off", "subtle", "full" }) do
+    LR.Set("victoryIntensity", intensity)
+    for _, choice in ipairs({ "need", "greed" }) do
+      for quality = 2, 5 do
+        local upgrade = quality % 2 == 0
+        Check(V.Preview(choice, quality, { name = longName, upgrade = upgrade }) and FXClear(pf, true),
+          "consecutive preview resets every layer before playback")
+        Check(pf.name.text ~= longName and pf.name.text:sub(-3) == "..." and #pf.name.text * 8 <= pf.name.w
+          and not pf.name.wordWrap and pf.name.maxLines == 1, "long names remain bounded with an ellipsis")
+        pf.hit.scripts.OnEnter(pf.hit)
+        Check(c.GameTooltip.text == longName, "hover preserves the complete item name")
+        Check(pf.badge.shown == upgrade and pf.upgrade.shown == upgrade, "upgrade visibility follows sample state on reuse")
+        Check(pf.emblem.texture:find("emblem_" .. choice, 1, true) and pf.entry.quality == quality,
+          "both roll types and all rarities retain their artwork")
+        Step(0.95)
+        if intensity == "off" then Check(FXClear(pf, true), "Off stays free of supplemental effects")
+        else Check(not FXClear(pf, true), "active preview has visible lighting") end
+      end
+    end
+  end
+  Check(V.PoolSize() == poolBefore and V.Count() == 0, "quick previews reuse one pool without real results")
+  V.Preview("greed", 5, { name = string.rep("é", 50) })
+  Check(pf.name.text:sub(-5) == "é...", "localized truncation preserves whole UTF-8 characters")
+  pf.name.GetStringWidth = nil
+  LR.Set("showUpgrade", false); V.Preview("greed", 5, { upgrade = true })
+  Check(not pf.badge.shown and not pf.upgrade.shown, "global upgrade setting still hides the indicator")
+  LR.Set("showUpgrade", true); V.Preview("need", 2)
+  Check(pf.badge.shown and pf.name.text ~= longName, "fresh previews restore sample state")
+  V.PreviewStop()
+
+  -- Serialize excess wins while bounding active frames; each gets its full hold.
+  LR.Set("maxCards", 1); LR.Set("victoryIntensity", "off")
+  local before = V.PoolSize()
+  for i = 1, 7 do Win("item:" .. (800 + i), i % 2 + 1, 40 + i) end
+  Check(V.Count() == 7 and C.CardCount() == 1, "rapid wins queue without overlapping")
+  for i = 1, 7 do Step(4.1) end
+  Check(V.Count() == 0 and V.PoolSize() <= before + 1, "queued wins drain with a bounded pool (one retiring slot)")
+  -- Overflow is delivered natively, never silently dropped.
+  n = #native
+  for i = 1, V.MAX_QUEUE + 1 do Win("item:" .. (900 + i), 1, 50) end
+  Check(V.Count() == V.MAX_QUEUE and #native == n + 1, "bounded queue overflow keeps native result")
+  LR.Set("victory", false)
+  Check(not V.Listening() and V.Count() == 0 and c.AlertFrame:IsEventRegistered("LOOT_ITEM_ROLL_WON"), "disable restores native registration and clears queue")
+  Check(#native == n + 1 + V.MAX_QUEUE, "disable replays every unfinished accepted result to native")
+  n = #native; Win("item:100", 1, 99)
+  Check(#native == n + 1 and V.Count() == 0, "disabled feature leaves original behavior")
+  LR.Set("victory", true)
+  Check(V.Listening(), "re-enable takes ownership once")
+  c.InCombatLockdown = function() return true end
+  Win("item:102", 2, 66); Step(4.1)
+  Check(V.Count() == 0, "unprotected synthetic card completes in combat without protected actions")
+  c.InCombatLockdown = function() return false end
+  LR.Set("victory", false)
+  function c.AlertFrame:IsProtected() return true end
+  LR.Set("victory", true)
+  Check(not V.Listening(), "protected native host is never modified")
+  function c.AlertFrame:IsProtected() return false end
+  c.AlertFrame:UnregisterEvent("LOOT_ITEM_ROLL_WON")
+  V.Sync(); Check(not V.Listening(), "another replacement's event ownership is respected")
+  c.AlertFrame:RegisterEvent("LOOT_ITEM_ROLL_WON"); V.Sync()
+  Check(V.Listening(), "supported native path can resume")
+  LR.Set("victoryIntensity", "subtle")
+  LR.Set("maxCards", 2)
+  Win("item:7101", 1, 77); Win("item:7102", 2, 88)
+  Step(0.5)
+  Check(not C.PlaceStart() and not C.PreviewStart(), "placement and sample rolls cannot cover a real celebration")
+  LR.Set("victoryIntensity", "off")
+  for _, result in ipairs(V.Entries()) do Check(not result.card.victory.scripts.OnUpdate and FXClear(result.card.victory, true), "turning animation off immediately clears lighting and updates") end
+  LR.Set("maxCards", 1)
+  Step(8.5)
+  Check(V.Count() == 0, "reducing max cards suspends and resumes queued animation safely")
+  local a, b = NewRoll("item:108", "need"), NewRoll("item:108", "need")
+  n = #native; Win("item:108", 1, 99)
+  Check(#native == n + 1 and V.Count() == 0, "ambiguous identical drops keep native results instead of guessing")
+  Ro.Remove(a); Ro.Remove(b)
+  n = #native
+  local draw, fault, caught = V.Draw, R.Fault, nil
+  R.Fault = function(_, err) caught = err end
+  V.Draw = function() error("synthetic drawing failure") end
+  Win("item:7199", 1, 70)
+  Check(C.Failed() and not V.Listening() and #native == n + 1 and V.Count() == 0,
+    "drawing failure delivers current result once and restores native registration")
+  Check(caught and caught:find("synthetic drawing failure", 1, true), "render failure is reported")
+  V.Draw, R.Fault = draw, fault
+  c.TwichUIDB.modules.lootRolls = false; LR.Refresh(); active = {}
+  c.TwichUIDB.modules.lootRolls = true; LR.Refresh()
+  LR.Set("victoryIntensity", "off")
+  Check(LR.Get("victory") and LR.Get("victoryIntensity") == "off" and c.TwichUIDB.ui.lootRolls.victoryIntensity == "off", "settings use existing persisted profile values")
+  LR.Set("victoryIntensity", "subtle"); LR.Set("maxCards", 4)
+end
+
+---------------------------------------------------------------------------
+-- Compact victories: per-instance attribution, toggles and pooled FX lifecycle.
+---------------------------------------------------------------------------
+do
+  local V = R.LootVictory
+  local native = 0
+  local function Reset()
+    V.Disable(false)
+    for _, r in ipairs({ unpack(Ro.Rolls()) }) do EndRoll(r.rollID); Ro.Remove(r) end
+    for _, rule in ipairs(LR.List()) do LR.Delete(rule.id) end
+    c.AlertFrame:SetScript("OnEvent", function() native = native + 1 end)
+    LR.Set("auto", false); LR.Set("animate", false); LR.Set("maxCards", 4)
+    LR.Set("victoryIntensity", "full"); LR.Set("victorySound", false)
+    V.Sync()
+  end
+  local function Step(seconds)
+    for _ = 1, math.ceil(seconds / 0.05) do
+      Advance(0.05)
+      for _, f in ipairs(FRAMES) do if f.shown and f.scripts.OnUpdate then f.scripts.OnUpdate(f, 0.05) end end
+    end
+  end
+  local function Win(link, value) Fire("LOOT_ITEM_ROLL_WON", link, 1, 1, value or 87, false) end
+  Reset()
+  local _, rule = LR.Create("blank"); LR.SetDisplay(rule, "collapsed"); LR.SetEnabled(rule, true)
+  local id = StartRoll("item:100"); local roll = Ro.Find(id); local card = C.Card(roll.key)
+  Check(card.compact and roll.choice == nil, "display-only rule leaves a compact manual roll")
+  Ro.SetDisplay(roll, "expanded"); Win("item:100")
+  local e = V.Entries()[1]; local f = e.card.victory
+  Check(e.displayMode == "expanded" and e.manualDisplay == "expanded" and e.card == card and not f.compact,
+    "manual expanded override carries to the same roll's confirmed victory")
+  Step(0.55)
+  local started, total, sounded = e.started, e.total, e.sounded
+  card.toggle.scripts.OnClick(card.toggle)
+  Check(f.compact and math.abs(card.h - 80 * 384 / 460) < 0.001 and e.displayMode == "collapsed",
+    "victory toggle immediately reflows the existing card to Mini")
+  Check(e.started == started and e.total == total and e.sounded == sounded and f.scripts.OnUpdate and V.Count() == 1,
+    "mid-reveal toggle preserves timeline, sound state, result and instance")
+  Step(1.4)
+  local timer = f.timer
+  card.toggle.scripts.OnClick(card.toggle)
+  Check(not f.compact and f.timer == timer and not f.scripts.OnUpdate and e.started == started,
+    "static toggle keeps its original dismissal timer and no idle updater")
+  Step(4.4)
+  Check(V.Count() == 0 and not f.shown and not f.timer and not f.scripts.OnUpdate and (not Ro.ByKey(roll.key) or roll.manualDisplay == nil),
+    "finished victory clears the temporary override and all animation work")
+
+  Reset(); LR.Set("victoryIntensity", "off")
+  local a = Ro.Find(StartRoll("item:100")); Ro.SetDisplay(a, "collapsed")
+  local b = Ro.Find(StartRoll("item:101")); Ro.SetDisplay(b, "expanded")
+  EndRoll(a.rollID); Ro.Remove(a)
+  Check(V.RetainedDisplays() == 1, "departed roll retains one bounded presentation snapshot")
+  Win("item:101", 92); Win("item:100", 81)
+  local modes = {}
+  for _, entry in ipairs(V.Entries()) do modes[entry.link] = entry.displayMode end
+  Check(V.Count() == 2 and modes["item:100"] == "collapsed" and modes["item:101"] == "expanded",
+    "late compact and simultaneous expanded victories cannot exchange presentation")
+  Check(V.RetainedDisplays() == 0, "accepted late winner consumes its matching presentation")
+  local first, second = V.Entries()[1].card, V.Entries()[2].card
+  if first.baseY > second.baseY then first, second = second, first end
+  Check(second.baseY == first.baseY + first.h + LR.Get("spacing"), "mixed victory stack uses actual heights")
+  Step(4.2)
+  Check(V.Count() == 0, "both static victories expire without lingering animation")
+
+  Reset()
+  a = Ro.Find(StartRoll("item:100")); Ro.SetDisplay(a, "collapsed")
+  EndRoll(a.rollID); Ro.Remove(a)
+  b = Ro.Find(StartRoll("item:100")); Ro.SetDisplay(b, "expanded")
+  local n = native; Win("item:100")
+  Check(native == n + 1 and V.Count() == 0, "identical live and departed drops fall back natively rather than borrow a preference")
+  Reset(); LR.Set("victoryIntensity", "off")
+  a = Ro.Find(StartRoll("item:100")); Ro.SetDisplay(a, "collapsed")
+  EndRoll(a.rollID); Ro.Remove(a); Advance(V.DISPLAY_RETENTION + 1)
+  Win("item:100")
+  Check(V.Entries()[1].displayMode == "expanded" and V.RetainedDisplays() == 0,
+    "expired correlation safely falls back to Expanded without rule reevaluation")
+  Reset(); LR.Set("victoryIntensity", "off"); Win("item:998")
+  Check(V.Entries()[1].displayMode == "expanded", "missing roll state defaults to Expanded")
+
+  Reset()
+  for _, intensity in ipairs({ "off", "subtle", "full" }) do
+    LR.Set("victoryIntensity", intensity)
+    for q = 2, 5 do
+      Check(V.Preview(q % 2 == 0 and "need" or "greed", q, { display = "collapsed", upgrade = q % 2 == 0,
+        name = "A very long legendary item name with enough words to require careful fitting" }), "Mini preview starts repeatedly")
+      local pc = V.PreviewCard(); local pf = pc.victory
+      V.PreviewAt(0.7)
+      Check(pf.compact and pf.miniBase.shown and not pf.base.shown and pc.h < 70 and pf.upgradeIcon.shown == (q % 2 == 0),
+        "purpose-built Mini frame, quality and conditional upgrade survive pooling")
+      Check(pf.sweepCore.blend == "ADD" and not pf.rail.clips and pf.halo.texture:find("halo_", 1, true),
+        "compact effects reuse rarity art, proper blend and unclipped painted sweep")
+      if intensity == "off" then Check(pf.sweepCore.alpha == 0, "Off remains static in Mini")
+      else Check(pf.sweepCore.alpha > 0 and pf.headerHaze.alpha > 0, "compact reveal remains visible") end
+      V.SetDisplay(pf.entry, "expanded")
+      Check(not pf.compact and pf.paintTime == 0.7, "paused preview toggle retains its selected animation pose")
+      V.SetDisplay(pf.entry, "collapsed"); V.PreviewAt(1.0)
+      if intensity ~= "off" then Check(pf.iconBloom.alpha > 0, "compact item arrival has a visible bloom") end
+      V.PreviewAt(1.85)
+      Check(not pf.scripts.OnUpdate and pf.particles[1].alpha == 0 and pf.sweepCore.alpha == 0,
+        "Mini settles with no decorative motion")
+      V.PreviewStop()
+      Check(not pf.shown and not pf.timer and not pf.scripts.OnUpdate, "Mini interruption cleans up all owned work")
+    end
+  end
+  Reset()
+  local calls = {}
+  c.GetCVarBool = function() return true end
+  c.PlaySoundFile = function(path, channel) calls[#calls + 1] = { path = path, channel = channel, at = NOW } end
+  LR.Set("victorySound", true)
+  local full = Ro.Find(StartRoll("item:100"))
+  local mini = Ro.Find(StartRoll("item:101"))
+  Ro.SetDisplay(mini, "collapsed")
+  Win(full.link); Win(mini.link); Win(mini.link)
+  Step(0.20)
+  Check(#calls == 0, "sound waits for the golden reveal")
+  Step(0.20)
+  Check(#calls == 1 and calls[1].channel == "SFX" and calls[1].path:find("loot_won.ogg", 1, true),
+    "the first win plays the supplied cue at reveal")
+  V.SetDisplay(V.Entries()[2], "expanded")
+  Step(1.55)
+  Check(#calls == 2 and calls[2].path == calls[1].path and calls[2].at - calls[1].at >= 1.54,
+    "rapid Expanded and Mini wins each play once with room for the full tail")
+  Reset()
+  LR.Set("victorySound", true)
+  for _, display in ipairs({"expanded", "collapsed"}) do
+    V.Preview("greed", 3, { display = display })
+    Step(0.35); Step(1.55)
+  end
+  Check(#calls == 4 and calls[4].path == calls[1].path, "both Preview activations play the same cue")
+  Step(1.60)
+  V.Preview("need", 2); Step(0.40)
+  V.Preview("need", 2); Step(0.40)
+  LR.Set("victorySound", false)
+  Step(2)
+  Check(#calls == 5, "turning Victory Sound off discards a queued preview")
+  V.Preview("need", 2); Step(0.35)
+  Check(#calls == 5, "muted preview stays silent")
+
+  V.Disable(false)
+  Check(V.RetainedDisplays() == 0, "disable releases retained presentation snapshots")
+  LR.Set("animate", true); V.Sync()
 end
 
 ---------------------------------------------------------------------------

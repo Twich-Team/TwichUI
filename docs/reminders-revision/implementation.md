@@ -170,6 +170,12 @@ This pass retains quiet leather, frames, hinge, selected-row sources, condition 
 | Builder sample, P1 | Illustrated ivory parchment | Original parchment under isolated renderer; presentation ink only. No saved appearance changes. | Reference/before/after crop opened at runtime size; dark/warm alpha composites reviewed. Different content and retained icon/text layout are deliberate. |
 | Disclosure glyphs, P2 | Readable arrows | Shared opt-in `Material.Disclosure` uses a texture chevron instead of the missing down-glyph visible in early captures. | Final expanded diagnostics/Advanced screenshot opened. |
 
+**Native popup correction:** the earlier scroll-transform compensation in
+`Widgets.VisibleRect` matched the simulator's layout-space getters, not native
+WoW's already-scrolled extents. The shared popup now uses native extents directly,
+with scale conversion only. The specific simulator popup checks explicitly emulate
+that API boundary; the old nested-scroll adjustment is no longer production behavior.
+
 ### Files and reusable components
 
 Changed this pass: core `reminders/Display.lua`; Settings `Window.lua`, `Widgets.lua`, `Material.lua`, `Cards.lua`, TOC;

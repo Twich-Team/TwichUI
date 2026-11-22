@@ -386,6 +386,7 @@ loot\Roll.lua
 loot\Auto.lua
 loot\Blizzard.lua
 loot\Cards.lua
+loot\Victory.lua
 loot\Main.lua
 
 # Action bar glows: your action bar buttons glow when a buff of yours is missing (on you, or on group members out of
