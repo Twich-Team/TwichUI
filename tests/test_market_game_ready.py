@@ -53,6 +53,16 @@ def fixture(root,representation,count=16,delta=0,epoch=0,state=None):
 
 @unittest.skipUnless(shutil.which('lua5.1'),'Lua 5.1 required')
 class GameReady(unittest.TestCase):
+    def test_owner_approved_production_layout_and_unchanged_history_capability(self):
+        capability=json.loads((ROOT/'TwichUI_Workshop/MarketDelivery.json').read_text())
+        self.assertEqual(capability['prepared_current_version'],1)
+        self.assertEqual(capability['prepared_current_partitions'],32)
+        self.assertEqual(capability['prepared_current_part_bytes'],4194304)
+        self.assertEqual(capability['prepared_current_total_bytes'],33554432)
+        self.assertEqual(capability['summary_current_contract'],3)
+        self.assertEqual(capability['summary_history_contract'],2)
+        self.assertEqual(capability['summary_history_total_bytes'],67108864)
+
     def test_sparse_operation_counts_do_not_invent_timings(self):
         result=numeric_metrics([{'engine_partialReuses':1,'cpu_ms':2,'optional_ms':1},{'cpu_ms':4}])
         self.assertEqual(result['engine_partialReuses'],dict(median=.5,minimum=0,maximum=1))

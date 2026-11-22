@@ -18,9 +18,12 @@ does not certify this combined source.
 
 ## Runtime and trust
 
-The additive installed capability prefers 16 physical current partitions, allows 32 by
-changing `prepared_current_partitions` for controlled testing, and retains the original
-64 historical partitions. Older Companions ignore the capability and deliver their supported
+The owner approved **32 physical current partitions and all 64 historical partitions**
+as the production configuration on 22 November 2026. The shipped installed capability
+now requests 32; the reader still supports 16 for compatibility and controlled rollback.
+The owner waived personal in-game comparison. **Actual WoW performance remains unverified**;
+offline/Windows results and target budgets are not native game acceptance claims.
+Older Companions ignore the additive capability and deliver their supported
 legacy format. New Companions require the actual Prepared.lua and TOC entry, not just JSON.
 An absent/refused prepared capability uses fully validated legacy data; it does not obtain
 the prepared performance benefit. Fresh two-bank prepared installations have 161 addon
