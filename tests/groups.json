@@ -30,7 +30,7 @@
     "simulators": [{"script": "smoke"}, {"script": "settings"}]
   },
   "loot-rolls": {
-    "tests": ["test_loot_rolls.lua", "test_loot_victory_assets.py", "test_loot_rolls_settings.lua", "test_perf_engine.lua"],
+    "tests": ["test_loot_rolls.lua", "test_loot_rule_artwork.lua", "test_loot_victory_assets.py", "test_loot_rolls_settings.lua", "test_perf_engine.lua"],
     "syntax": ["!!!TwichUI/loot/**/*.lua", "TwichUI_Settings/pages/Loot*.lua", "TwichUI_Settings/Companion.lua", "TwichUI_Diagnostics/Gauges.lua", "tools/simlab/scenarios/loot.lua"],
     "dependencies": ["settings", "core"],
     "simulators": []

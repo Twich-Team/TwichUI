@@ -1,6 +1,6 @@
 # UX02 — shared artwork picker design and foundation
 
-**Shared foundation implemented for review in owner-authorized Batch 6; rule consumers remain deferred.**
+**Shared foundation merged in PR #128; rule consumers implemented for review in owner-authorized Batch 7.**
 Design baseline: `main` at `c7f8741`; implementation baseline: `b541c5b` after
 PR #126 merged (2026-11-22). The original design remains the contract below.
 Batch 6 implements the shared catalog/chooser, thin Reminder adapter and the 20
@@ -79,8 +79,8 @@ framework is proposed. Load-order edits require manifest/opt-in checks later.
 
 ## Reusable interface contract
 
-The following APIs implement the reviewed foundation contract. The future rule
-field remains a proposal, not an implemented persistence format.
+The following APIs implement the reviewed foundation contract. The optional rule
+field and downgrade limitations are documented in the [consumer specification](shared-artwork-rule-integrations.md).
 Consumers own their validation, data format, undo behavior and persistence.
 
 ### References and core operations
