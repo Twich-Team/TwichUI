@@ -18,33 +18,78 @@ local QUESTION = [[Interface\Icons\INV_Misc_QuestionMark]]
 local f
 local cells = {}
 local items = {}            -- what is carried: { id, count, icon, name, link }
+local pending = {}          -- [itemID] = carried entry waiting for an item name
 local chosen = {}           -- [itemID] = true while the window is open
 local onDone
 
 local function Look() return R.Look end
+
+local function Text(value)
+    value = MI.Plain(value)
+    if type(value) == "string" and value ~= "" then return value end
+end
+
+local function Icon(value)
+    value = MI.Plain(value)
+    if type(value) == "number" and value > 0 then return value end
+end
+
+-- Picker labels only need display metadata. ItemFacts requires the extra
+-- quality and binding facts that the transfer planner uses for safety.
+local function ItemName(id)
+    return C_Item and C_Item.GetItemNameByID and Text(C_Item.GetItemNameByID(id))
+end
+
+local function ItemIcon(id)
+    return C_Item and C_Item.GetItemIconByID and Icon(C_Item.GetItemIconByID(id))
+end
+
+local function DisplayName(e) return e.name or ("Item " .. e.id) end
+
+local function ByName(a, b)
+    if a.name ~= b.name then return (a.name or "") < (b.name or "") end
+    return a.id < b.id
+end
 
 -- What the bags hold, one entry per item ID (read only).
 local function Gather()
     local byId, list = {}, {}
     for bag = 0, MI.LastBag() do
         for slot = 1, C_Container.GetContainerNumSlots(bag) or 0 do
-            local info = C_Container.GetContainerItemInfo(bag, slot)
+            local info = MI.Plain(C_Container.GetContainerItemInfo(bag, slot))
             local id = info and MI.Plain(info.itemID)
-            if type(id) == "number" then
+            if MI.ValidID(id) then
                 local e = byId[id]
                 if not e then
-                    local facts = MI.ItemFacts(id)
-                    e = { id = id, count = 0, icon = MI.Plain(info.iconFileID) or (facts and facts.icon), name = (facts and facts.name) or MI.Plain(info.itemName) or "",
-                        link = MI.Plain(info.hyperlink), bag = bag, slot = slot }
+                    e = { id = id, count = 0, icon = Icon(info.iconFileID) or ItemIcon(id),
+                        name = Text(info.itemName) or ItemName(id) }
                     byId[id] = e
                     list[#list + 1] = e
                 end
+                e.link = e.link or Text(info.hyperlink)
+                e.name = e.name or Text(info.itemName) or (e.link and Text(e.link:match("|h%[(.-)%]|h")))
+                e.icon = e.icon or Icon(info.iconFileID)
                 e.count = e.count + (MI.Plain(info.stackCount) or 0)
             end
         end
     end
-    table.sort(list, function(a, b) if a.name ~= b.name then return a.name < b.name end return a.id < b.id end)
+    table.sort(list, ByName)
     return list
+end
+
+local function ItemLoaded(self, _, id, success)
+    id = MI.Plain(id)
+    local e = MI.ValidID(id) and pending[id]
+    if not e then return end
+    pending[id] = nil
+    if not next(pending) then self:UnregisterEvent("ITEM_DATA_LOAD_RESULT") end
+    if MI.Plain(success) ~= true then return end
+    e.name = ItemName(id)
+    e.icon = e.icon or ItemIcon(id)
+    table.sort(items, ByName)
+    local owner = GameTooltip:GetOwner()
+    if owner and owner:GetParent() == self.content then GameTooltip:Hide() end
+    P.Draw()
 end
 
 local function Cell(i)
@@ -75,6 +120,7 @@ local function Cell(i)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         if self.item.link and GameTooltip.SetHyperlink then GameTooltip:SetHyperlink(self.item.link)
         elseif GameTooltip.SetItemByID then GameTooltip:SetItemByID(self.item.id) end
+        if not self.item.name then GameTooltip:AddLine(DisplayName(self.item)) end
         GameTooltip:AddLine(chosen[self.item.id] and "Chosen: click to leave it out." or "Click to choose this kind of item.", 0.58, 0.78, 0.76)
         GameTooltip:Show()
     end)
@@ -88,7 +134,7 @@ function P.Draw()
     local query = (f.search:GetText() or ""):lower()
     local shown, n = {}, 0
     for _, e in ipairs(items) do
-        if query == "" or (e.name or ""):lower():find(query, 1, true) then shown[#shown + 1] = e end
+        if query == "" or DisplayName(e):lower():find(query, 1, true) then shown[#shown + 1] = e end
     end
     for i, e in ipairs(shown) do
         local c = Cell(i)
@@ -199,8 +245,11 @@ local function Build()
     f.done:SetPoint("BOTTOMRIGHT", -PAD, 18)
     f.cancel = F.Button(f, "Cancel", 90, "secondary", function() Close(false) end)
     f.cancel:SetPoint("RIGHT", f.done, "LEFT", -8, 0)
+    f:SetScript("OnEvent", ItemLoaded)
     f:HookScript("OnHide", function()   -- hooked: the shell's fade is a hook of the same script
         -- Cancel, Esc and the close box: nothing changes
+        f:UnregisterEvent("ITEM_DATA_LOAD_RESULT")
+        pending = {}
         onDone = nil
         chosen = {}
         f.search:SetText("")
@@ -220,6 +269,13 @@ function P.Open(opts)
     onDone = opts.onDone
     f.sub:SetText((opts.purpose or "Click the items you want.") .. "\nThis chooses the kind of item, not a stack: nothing in your bags moves.")
     items = Gather()
+    if C_Item and C_Item.GetItemNameByID and C_Item.RequestLoadItemDataByID then
+        for _, e in ipairs(items) do if not e.name then pending[e.id] = e end end
+        if next(pending) then
+            f:RegisterEvent("ITEM_DATA_LOAD_RESULT")
+            for id in pairs(pending) do C_Item.RequestLoadItemDataByID(id) end
+        end
+    end
     f:Show()
     f:Raise()
     P.Draw()
