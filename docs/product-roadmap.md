@@ -44,6 +44,21 @@
 
 These stages indicate *priority buckets*, not a serial schedule. Engineering standards, targeted testing, visual cohesion and performance are cross-cutting. A small Stage 3 fix can happen before an expensive Stage 1 investigation is complete if the owner chooses.
 
+## Product UX discovery — quality-of-life settings
+
+### UX01 — Make the Quality of life page easier to scan
+
+- **Status:** **Discovery / design review**, not Autonomous-Ready. **Proposed stage:** 3 (premium UX and visual cohesion). **Impact:** High for usability. **Effort:** Medium (depends on approved interaction design).
+- **Owner observation (screenshot, November 22, 2026):** The Quality of life settings page has become a long scroll of large feature cards. The interface is intimidating, finding a specific convenience takes too much scrolling, and the explanations are far too wordy.
+- **Current reference:** `TwichUI_Settings/pages/QoL.lua` builds a sequence of `K.Card` sections (accept summons/resurrections, battleground release, duel handling, group invites, Quick Keybind, Group Finder zones, error handling, quest/herb/ore sparkles). The screenshot shows full example previews, explanatory paragraphs, “Rules”/“Good to know” text and further actions competing for space inside the first two cards. Source reports eleven main QoL switches; do not silently drop secondary or conditional settings.
+- **Desired player experience:** An approachable, compact, easy-to-scan index of conveniences, with short plain-English names, recognisable icons, at-a-glance on/off status, and low-friction navigation. Keep common actions easy to reach and put long descriptions, warnings, samples and advanced conditions behind deliberate detail/expand actions. Allow a player to find one feature quickly without reading every previous card.
+- **Design exploration (not an approved layout):** Compare a compact categorized card/list view with a two-pane list + selected-feature details, or another equally cohesive design. Consider a persistent local search or category chips *only if they improve discovery without duplicating Settings' global search*. A feature detail can retain existing preview, rule options and contextual guidance, without displaying them all for every feature simultaneously.
+- **Visual direction:** Preserve the approved restrained espresso/walnut leather, aged-bronze borders, readable ivory typography and illustrated accents. Avoid giant cards, dense dashboard chrome, flat modern styling, extra modal layers and ornamental artwork that reduces scanability.
+- **Functional constraints:** Preserve all existing controls, saved defaults, Leatrix compatibility warnings, sample previews, conditional configuration, tooltip/help access, combat/lifecycle behavior and disabled/prerequisite states. Retain keyboard and different UI-scale accessibility. Do not change feature semantics or create a new general Settings framework.
+- **Acceptance to agree before implementation:** A player can locate any QoL feature from the overview without scrolling past several expanded explanations; most feature rows can be scanned by title + one-line purpose + current state; details reveal complete controls on demand; no controls become unreachable; visual consistency is verified in normal and narrow window widths.
+- **Next action:** Produce one or two visual mockups from the supplied in-game screenshot and the approved TwichUI Settings look, compare interaction models, and get owner approval. *Only then* create a small implementation-ready specification and select relevant `settings` tests/simulator poses.
+- **Scope boundary:** Do **not** implement this as part of unrelated autonomous polish batches. The UX model needs owner input; do not assume the preferred layout.
+
 ## Audit-derived work register
 
 | ID | Finding / initiative | Proposed position | Status and acceptance guidance |
@@ -55,7 +70,7 @@ These stages indicate *priority buckets*, not a serial schedule. Engineering sta
 | **A05** | Market source status and refusal messaging | Stage 2–3 | Closed, unmerged PR #87 holds relevant UX design; review against current main. Clear external vs local source, timestamp, scope, rejected reasons. |
 | **A06** | Ledger Open All sale attribution | Stage 2 | PR #81 merged and regression-tested offline; optionally compare against a natural in-game mailbox session. Do not claim exact profit for unmatchable auction sales. |
 | **A07** | Startup, SavedVariables and first-use performance attribution | Stage 1 | Existing Diagnostics starts after file/SV loading; keep cold login, reload and first-open timings distinct. Optimize only proven contributors. |
-| **A08** | Cohesive settings/window interactions and EllesmereUI consistency | Stage 3 / ongoing | Establish a lightweight visual QA checklist, including keyboard/gamepad relevance, hover, scale, alignment, scroll, progress, errors and recovery. |
+| **A08** | Cohesive settings/window interactions and EllesmereUI consistency | Stage 3 / ongoing | Establish a lightweight visual QA checklist, including keyboard/gamepad relevance, hover, scale, alignment, scroll, progress, errors and recovery. See **UX01** for the specific Quality of life page redesign discovery. |
 | **A09** | Testing evidence/repository hygiene and AI agent navigation | Ongoing | Keep a concise agent entrypoint and architecture map; migrate historical generated artifacts only if worth the effort. No blanket refactors or automated agent teams. |
 | **A10** | Native performance monitor improvements | Later if justified | Prefer existing Perf/Diagnostics and bounded opt-in copies of reports; do not add background instrumentation without a demonstrated data gap. |
 | **A11** | Release packaging/CI safeguards | Ongoing | Existing one-click owner-authorized release workflow and offline checks; optional native testing under owner control, with honest evidence labels. |
@@ -66,7 +81,7 @@ These stages indicate *priority buckets*, not a serial schedule. Engineering sta
 
 **Watch for overlap:** W01 and W19 both touch auction pricing/Market confidence but are not identical; W07 builds on Gold Ledger; F12 and F29 describe one Waylaid-crate area. Keep these as linked notes until scoped.
 
-**Reasonable release cadence:** small PRs with focused tests, periodic integration checks for shared changes, full offline certification at explicit release preparation. No native game-play gate unless the owner elects to use one.
+**Settings discovery to design before coding:** UX01 Quality of life page simplification; not approved for autonomous implementation.\n\n**Reasonable release cadence:** small PRs with focused tests, periodic integration checks for shared changes, full offline certification at explicit release preparation. No native game-play gate unless the owner elects to use one.
 
 ## Complete original note inventory
 
