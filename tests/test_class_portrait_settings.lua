@@ -6,6 +6,7 @@ local C,D = R.ClassPortrait,R.ClassPortraitDisplay
 local page = assert(K.pages.classPortrait)
 assert(page.def.overview and page.def.icon == 'classPortrait')
 assert(S.variables.TWICHUI_classPortraitabove and S.variables.TWICHUI_classPortraitstrata, 'layer controls registered')
+assert(S.variables.TWICHUI_classPortraitartwork, 'artwork dropdown registered')
 local reset,preview
 for _,row in ipairs(page.rows) do
     if row:GetName() == 'Reset to Automatic' then reset = row end
