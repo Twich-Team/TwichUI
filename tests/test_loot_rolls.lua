@@ -1269,9 +1269,9 @@ do
   Check(f.footer == nil, "victory has no redundant footer message or inventory claim")
   Fire("LOOT_ITEM_ROLL_WON", "item:100", 1, 1, 87, false)
   Check(V.Count() == 1, "duplicate native winner event creates no second card")
-  Step(0.25); Check(f.phase == "reveal" and f.header.alpha > 0 and f.header.alpha < 1, "resolution advances into a restrained title reveal")
+  Step(0.25); Check(f.phase == "burst" and f.header.alpha > 0 and f.header.alpha < 1, "resolution advances into a restrained title reveal")
   Step(0.3); Check(#sounds == 1 and sounds[1][2] == "SFX", "one reveal sound on SFX")
-  Step(1.25)
+  Step(1.35)
   Check(f.phase == "static" and not f.scripts.OnUpdate and f.timer, "decorative updates stop at the static hold")
   Check(f.sweepCore.alpha == 0 and f.arrivalGlint.alpha == 0 and f.particles[1].alpha == 0, "effects end without loops")
   Step(0.8); Win("item:100", 1, 87)
@@ -1323,17 +1323,18 @@ do
   Check(#sounds == soundCount, "global sound switch is respected")
   V.PreviewStop(); c.GetCVarBool = function() return true end
   c.PlaySoundFile = function() error("missing sound") end
-  V.Preview("greed", 5); Step(1.8)
+  V.Preview("greed", 5); Step(1.9)
   Check(V.PreviewCard().victory.phase == "static", "unsupported audio cannot interrupt the renderer")
   V.PreviewStop()
   c.PlaySoundFile = function(path, channel) sounds[#sounds + 1] = { path, channel } end
 
   -- Production preview checks: layered lighting, one shared timeline, and resets.
-  local fxNames = { "headerHaze", "iconHaze", "headerBloom", "emblemBurst", "iconBloom", "sweepHaze", "sweepCore", "arrivalGlint" }
+  local fxNames = { "headerHaze", "iconHaze", "headerBloom", "emblemBurst", "iconBloom", "sweepHaze", "sweepCore", "sweepTail", "radiance", "arrivalGlint" }
   local function FXClear(pf, ambient)
     for _, name in ipairs(fxNames) do
       if (ambient or (name ~= "headerHaze" and name ~= "iconHaze")) and pf[name].alpha ~= 0 then return false end
     end
+    for _, glint in ipairs(pf.trimGlints) do if glint.alpha ~= 0 then return false end end
     for _, particle in ipairs(pf.particles) do if particle.alpha ~= 0 then return false end end
     return true
   end
@@ -1349,61 +1350,68 @@ do
   Check(pf.laurels[1].points[1][2] == pf.title and pf.laurels[2].points[1][2] == pf.title,
     "laurels still follow the centered measured title")
   Check(pf.atmosphere.frameLevel < pf.header.frameLevel and pf.atmosphere.frameLevel < pf.content.frameLevel
-    and pf.railCanvas.frameLevel < pf.header.frameLevel and pf.rail.clips and pf.rail.h == 46,
-    "broad light and clipped sweep stay behind title and item artwork")
+    and pf.railCanvas.frameLevel < pf.header.frameLevel and pf.rail.clips == false
+    and pf.effects.frameLevel < pf.header.frameLevel and pf.effects.frameLevel < pf.content.frameLevel and not pf.effects.mouse,
+    "feathered effects escape without scissoring, intercepting input or covering text")
   for _, name in ipairs(fxNames) do
     Check(pf[name].texture:find("victory\\fx\\fx_", 1, true) and pf[name].blend == "ADD" and pf[name].uv,
       "supplemental texture uses individual runtime file, additive blend and measured UV: " .. name)
   end
-  for _, t in ipairs({ 0, 0.30, 0.60, 0.90, 1.20, 1.50, 1.65, 1.70, 3.75, 5.85, 6.05 }) do
-    Check(V.PreviewAt(t), "production lighting pose " .. t)
+  for _, t in ipairs({ 0, 0.15, 0.40, 0.70, 1.00, 1.45, 1.85, 3.75, 5.95, 6.15 }) do
+    Check(V.PreviewAt(t), "production celebration pose " .. t)
     if t == 0 then
-      Check(pf.header.alpha == 0 and FXClear(pf, true), "preview starts with no residual lighting")
-    elseif t == 0.30 then
-      Check(pf.headerBloom.alpha >= 0.60 and pf.headerHaze.alpha >= 0.34 and pf.iconHaze.alpha >= 0.29
-        and pf.emblemBurst.alpha == 0, "Subtle awakens atmosphere and a visible title bloom without the Full burst")
-    elseif t == 0.60 then
+      Check(pf.header.alpha == 0 and FXClear(pf, true), "time zero is intentionally transparent with all lighting reset")
+    elseif t == 0.15 then
+      Check(pf.headerHaze.alpha > 0.20 and pf.headerBloom.alpha == 0, "ignition precedes the title bloom")
+    elseif t == 0.40 then
+      Check(pf.headerBloom.alpha > 0.35 and pf.headerBloom.alpha < 0.40 and pf.radiance.alpha == 0,
+        "Subtle keeps a quiet heading without the Full radiant burst")
+    elseif t == 0.70 then
       local x = pf.sweepCore.points[1][4]
-      Check(pf.sweepCore.alpha >= 0.85 and pf.sweepHaze.alpha >= 0.30 and x > 60 and x < 160
-        and pf.sweepHaze.points[1][4] == x - 10, "one synchronized bright core/haze sweep crosses the header")
-    elseif t == 0.90 then
+      Check(pf.sweepCore.alpha == 0.75 and pf.sweepHaze.alpha == 0.28 and math.abs(x - 230) < 0.0001
+        and pf.sweepTail.points[1][4] == x - 48, "one bright center, soft base and short tail travel together")
+    elseif t == 1.00 then
+      Check(pf.iconBloom.alpha == 0.35 and pf.arrivalGlint.alpha > 0.40 and pf.sweepCore.alpha == 0
+        and pf.halo.alpha > pf.haloRest, "item arrival shifts attention to the icon with its actual rarity accent")
       local visible = 0
       for _, particle in ipairs(pf.particles) do if particle.alpha > 0 then visible = visible + 1 end end
-      Check(visible == 3 and pf.particles[1].w == 22 and pf.sweepCore.points[1][4] > 300,
-        "Subtle has three visible, deliberately sized sparks on fixed paths")
-      Check(pf.headerBloom.alpha == 0 and pf.halo.alpha == pf.haloRest, "title flash ends and rarity is not independently pulsing")
-    elseif t == 1.20 then
-      Check(pf.iconBloom.alpha > 0.30 and pf.arrivalGlint.alpha > 0.70 and pf.sweepCore.alpha == 0,
-        "item arrival is a distinct visible accent after the header sweep")
-    elseif t == 1.50 or t == 1.65 or t == 1.70 or t == 3.75 then
-      Check(FXClear(pf, false), "all strong light and sparks disappear before static rest")
-      if t >= 1.65 then Check(pf.headerHaze.alpha == 0.16 and pf.iconHaze.alpha == 0.12 and pf.alpha == 1,
-        "static state retains only a little warm atmosphere") end
-    elseif t == 5.85 then
-      Check(pf.phase == "fade" and pf.alpha > 0 and pf.alpha < 1, "existing completed-card hold and exit are preserved")
-    elseif t == 6.05 then
-      Check(pf.alpha == 0, "existing normal lifetime ends cleanly")
+      Check(visible == 4, "Subtle has four controlled sparks/motes")
+    elseif t == 1.45 then
+      Check(pf.headerBloom.alpha == 0 and pf.radiance.alpha == 0 and pf.iconBloom.alpha > 0 and pf.iconBloom.alpha < 0.10,
+        "afterglow decays smoothly rather than disappearing abruptly")
+    elseif t == 1.85 or t == 3.75 then
+      Check(FXClear(pf, false) and pf.headerHaze.alpha == 0.12 and pf.iconHaze.alpha == 0.09
+        and pf.halo.alpha == pf.haloRest and pf.alpha == 1, "completed state retains only restrained static atmosphere")
+    elseif t == 5.95 then
+      Check(pf.phase == "fade" and pf.alpha > 0 and pf.alpha < 1, "configured hold ends with the existing fade")
+    elseif t == 6.15 then
+      Check(pf.alpha == 0, "Normal completes after the 1.85-second reveal and configured hold")
     end
   end
-  Check(#sounds == soundBeforeSeek and not pf.scripts.OnUpdate, "paused captures are silent and idle")
-  Check(V.Preview("need", 2) and FXClear(pf, true) and pf.scripts.OnUpdate, "replay resets every FX layer at zero")
+  Check(#sounds == soundBeforeSeek and not pf.scripts.OnUpdate, "paused captures remain silent and idle")
+  Check(V.Preview("need", 2) and FXClear(pf, true) and pf.scripts.OnUpdate, "replay resets all layers at zero")
   Step(0.35)
-  Check(#sounds == soundBeforeSeek + 1, "sound behavior remains at the original reveal cue")
-  Step(1.31)
-  Check(not pf.scripts.OnUpdate and pf.timer and pf.phase == "static" and pf.entry.total == 6.05,
-    "clock-driven effects stop at 1.65 seconds without shortening the existing hold schedule")
+  Check(#sounds == soundBeforeSeek + 1, "one sound at 0.30 seconds accompanies the radiant burst")
+  Step(1.51)
+  Check(not pf.scripts.OnUpdate and pf.timer and pf.phase == "static" and math.abs(pf.entry.total - 6.15) < 0.0001,
+    "clock-driven motion stops after afterglow; idle hold has no updater")
   V.PreviewStop()
   LR.Set("victoryIntensity", "full")
-  V.Preview("greed", 5); V.PreviewAt(0.34)
-  Check(pf.headerBloom.alpha > 0.65 and pf.emblemBurst.alpha == 0.55, "Full enables the richer title and emblem blooms")
-  V.PreviewAt(0.95)
+  V.Preview("greed", 5); V.PreviewAt(0.40)
+  Check(pf.headerBloom.alpha > 0.98 and pf.emblemBurst.alpha > 0.78 and pf.radiance.alpha > 0.93,
+    "Full has a distinct synchronized white-gold climax")
+  Check(pf.particles[5].alpha == 1 and pf.particles[6].alpha == 1 and pf.particles[7].alpha == 1,
+    "three prominent stars peak with the radiant burst")
+  Check(pf.particles[5].points[1][5] > 0 or pf.particles[6].points[1][5] > 0,
+    "Full stars extend above the frame without clipping")
+  V.PreviewAt(0.55)
   local visible = 0
   for _, particle in ipairs(pf.particles) do if particle.alpha > 0 then visible = visible + 1 end end
-  Check(visible == 6 and #pf.particles == 6, "Full uses at most six controlled particles")
+  Check(visible == 8 and #pf.particles == 12, "eight particles overlap the burst within a bounded twelve-slot pool")
   Check(pf.entry.sampleLines[1] == "Shoulder · Legendary" and pf.entry.sellPrice == nil,
-    "sample tooltip metadata remains consistent with its selected item")
-  V.PreviewAt(1.10)
-  Check(pf.iconBloom.alpha == 0.62, "Full item arrival receives a clear one-shot peak")
+    "sample metadata stays consistent with its selected item")
+  V.PreviewAt(1.00)
+  Check(pf.iconBloom.alpha == 0.85 and pf.halo.alpha == pf.haloRest + 0.22, "Full arrival reinforces the real rarity ring")
   V.PreviewStop()
   LR.Set("victoryIntensity", "off"); V.Preview("need", 2)
   Check(FXClear(pf, true) and pf.atmosphere.alpha == 0 and not pf.scripts.OnUpdate,

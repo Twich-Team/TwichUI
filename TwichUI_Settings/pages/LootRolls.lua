@@ -170,9 +170,9 @@ K.Page({
             consequence = "Replaces the matching winning notification when the client supports it. Other rewards keep their own alerts.",
         })
         Check("victory", "Custom victory notification", "Show the supplied leather and bronze victory card on a confirmed win. Off keeps the game's winning notification.")
-        Pick("victoryIntensity", "Animation intensity", "Off shows the clean static card without lighting effects. Subtle adds warm atmosphere, a bright gold sweep, three sparks and a soft item-arrival glint. Full adds richer blooms and up to six particles. Both settle without continuous motion.")
+        Pick("victoryIntensity", "Animation intensity", "Off shows the clean static card without lighting effects. Subtle adds soft illumination, one clear sweep and four sparks. Full adds a radiant gold burst, twelve choreographed particles, and a brighter magical item arrival, with light briefly extending above the frame. Both settle without continuous motion.")
         Check("victorySound", "Victory sound", "One quiet chime on SFX, respecting global sound settings. Rapid wins share a sound cooldown.")
-        Pick("victoryDuration", "Hold finished victory card", "After the 1.75-second celebration: Short holds 3.5 seconds, Normal 4 seconds, Long 5 seconds, then fades out. Off animation shows a static card for that duration.")
+        Pick("victoryDuration", "Hold finished victory card", "After the 1.85-second celebration: Short holds 3.5 seconds, Normal 4 seconds, Long 5 seconds, then fades out. Off animation shows a static card for that duration.")
         -- Sample choices belong to this settings page, never to a saved loot result.
         local previewChoice, previewQuality = "need", 2
         local choiceSetting = K.Proxy("lootRollsVictoryPreviewChoice", STRING, "Preview roll", "need",

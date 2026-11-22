@@ -13,8 +13,8 @@ local relay, owner, original
 local preview, inFlight
 local lastSound = -100
 V.MAX_QUEUE = 32
--- Lighting settles at 1.65 s; retain the existing 1.75 s hold/exit schedule.
-V.HEIGHT, V.MOTION_END, V.HOLD_AT, V.SOUND_AT = 218, 1.65, 1.75, 0.30
+-- Complete the choreographed afterglow before starting the configured hold.
+V.HEIGHT, V.MOTION_END, V.HOLD_AT, V.SOUND_AT = 218, 1.85, 1.85, 0.30
 
 local function Plain(v) if not (issecretvalue and issecretvalue(v)) then return v end end
 local function Smooth(v) v = math.max(0, math.min(1, v)); return v * v * (3 - 2 * v) end
@@ -63,6 +63,8 @@ end
 -- Painted bounds are measured from the supplied straight-alpha PNG/TGA exports.
 -- Cropping only transparent padding preserves the sprite's proportions and core.
 local UV = {
+    fx_sweep_trail = { 0.058594, 0.939453, 0.25, 0.75 },
+    fx_emblem_final_star = { 0.058594, 0.9375, 0.203125, 0.792969 },
     fx_header_haze = { 0.05957, 0.939453, 0.132812, 0.863281 },
     fx_header_bloom = { 0.05957, 0.939453, 0.160156, 0.839844 },
     fx_glint_small = { 0.058594, 0.9375, 0.230469, 0.765625 },
@@ -84,16 +86,22 @@ local UV = {
     halo_epic = { 12 / 256, 244 / 256, 12 / 256, 244 / 256 },
     halo_legendary = { 12 / 256, 244 / 256, 12 / 256, 244 / 256 },
 }
--- Six reusable sprites, first three in Subtle. Start positions follow the
--- icon corners and measured laurels; all paths stay outside item-name bounds.
--- x/y, travel x/y, w/h, supplied texture, start/end time, peak alpha, laurel side.
+-- Twelve pooled sprites: first four in Subtle, all twelve in Full. Paths
+-- originate on the icon, laurels and bronze corners; text always draws above FX.
+-- x/y, travel x/y, w/h, texture, start/peak/end, alpha, optional laurel side/arc.
 local PARTICLES = {
-    { 98, 95, 7, -17, 22, 22, "fx_particle_star_4point", 0.55, 1.10, 1 },
-    { 48, 94, -14, -17, 20, 20, "fx_particle_star_4point", 0.63, 1.18, 0.95 },
-    { 0, 52, -13, -17, 22, 22, "fx_particle_twinkle", 0.72, 1.28, 0.90, -1 },
-    { 0, 50, 14, -16, 20, 20, "fx_particle_twinkle", 0.79, 1.35, 0.85, 1 },
-    { 43, 137, -11, -18, 12, 12, "fx_particle_mote_medium", 0.68, 1.25, 0.65 },
-    { 94, 146, 11, -19, 10, 10, "fx_particle_mote_medium", 0.86, 1.35, 0.65 },
+    { 48, 95, -12, -25, 24, 24, "fx_particle_star_4point", 0.78, 0.92, 1.45, 0.95 },
+    { 0, 14, -6, -4, 32, 19, "fx_glint_small", 0.48, 0.60, 1.03, 0.90, -1 },
+    { 96, 143, 10, -25, 24, 24, "fx_particle_twinkle", 0.90, 1.05, 1.65, 0.90 },
+    { 40, 127, -12, -19, 12, 12, "fx_particle_mote_medium", 0.98, 1.15, 1.75, 0.70 },
+    { 24, 17, -18, -30, 46, 31, "fx_emblem_final_star", 0.24, 0.40, 0.85, 1 },
+    { 436, 16, 24, -42, 46, 31, "fx_emblem_final_star", 0.25, 0.40, 0.90, 1 },
+    { 230, 69, 0, -2, 44, 30, "fx_emblem_final_star", 0.25, 0.40, 0.78, 1 },
+    { 112, 19, -20, -39, 28, 28, "fx_particle_star_4point", 0.27, 0.45, 1.00, 0.95, nil, -9 },
+    { 348, 21, 22, -43, 28, 28, "fx_particle_twinkle", 0.31, 0.48, 1.05, 0.95, nil, -7 },
+    { 178, 10, -20, -34, 12, 12, "fx_particle_mote_medium", 0.40, 0.59, 1.25, 0.75 },
+    { 95, 152, 14, -18, 10, 10, "fx_particle_mote_medium", 1.05, 1.20, 1.82, 0.75 },
+    { 282, 12, 22, -35, 12, 12, "fx_particle_mote_medium", 0.37, 0.56, 1.20, 0.75 },
 }
 local function Clamp(v) return math.max(0, math.min(1, v)) end
 local function EaseOut(v) v = 1 - Clamp(v); return 1 - v * v * v end
@@ -119,36 +127,48 @@ function V.Paint(f, t, silent)
         if resolve >= 1 then card.body:Hide(); card.shell:Hide() end
     end
     local rich = entry.intensity == "full"
-    -- Atmosphere and blooms share a layer below all title/item artwork. The
-    -- existing rarity ring remains separate, untinted and at its resting alpha.
-    local settle = Smooth((t - 0.70) / 0.95)
-    local awaken = Smooth(t / 0.25)
+    local awaken = Smooth(t / 0.20)
+    local settle = Smooth((t - 0.65) / 1.20)
+    local expand = 0.88 + 0.12 * EaseOut(t / 0.20)
     f.atmosphere:SetAlpha(motion and 1 or 0)
-    f.headerHaze:SetAlpha(motion and awaken * ((rich and 0.42 or 0.35) * (1 - settle) + (rich and 0.18 or 0.16) * settle) or 0)
-    f.iconHaze:SetAlpha(motion and awaken * ((rich and 0.36 or 0.30) * (1 - settle) + (rich and 0.15 or 0.12) * settle) or 0)
-    f.headerBloom:SetAlpha(motion and (rich and 0.75 or 0.62) * Pulse(t, 0.20, 0.30, 0.53) or 0)
-    f.emblemBurst:SetAlpha(motion and rich and 0.55 * Pulse(t, 0.24, 0.34, 0.56) or 0)
-    f.iconBloom:SetAlpha(motion and (rich and 0.62 or 0.42) * Pulse(t, 0.90, 1.10, 1.50) or 0)
-    -- One synchronized haze/core pair replaces the old four-layer rail sweep.
-    -- The clipping frame confines their breadth to the header, below the text.
-    local sweep = (t - 0.38) / 0.67
-    local envelope = motion and Smooth(sweep / 0.13) * (1 - Smooth((sweep - 0.80) / 0.20)) or 0
-    local x = -10 + Smooth(sweep) * 412
-    At(f.sweepHaze, f.railCanvas, x - 10, 16)
-    At(f.sweepCore, f.railCanvas, x, 13)
-    f.sweepHaze:SetAlpha(envelope * (rich and 0.45 or 0.35))
-    f.sweepCore:SetAlpha(envelope * (rich and 1 or 0.90))
+    f.headerHaze:SetSize((312 + (rich and 38 * (1 - settle) or 0)) * expand, (65 + (rich and 23 * (1 - settle) or 0)) * expand)
+    At(f.headerHaze, f, 230, 41 - (rich and 12 * (1 - settle) or 0))
+    f.headerHaze:SetAlpha(motion and awaken * ((rich and 0.65 or 0.28) * (1 - settle) + (rich and 0.18 or 0.12) * settle) or 0)
+    f.iconHaze:SetAlpha(motion and awaken * ((rich and 0.48 or 0.23) * (1 - settle) + (rich and 0.14 or 0.09) * settle) or 0)
+    f.headerBloom:SetSize(rich and 265 or 214, rich and 51 or 41)
+    f.headerBloom:SetAlpha(motion and (rich and 1 or 0.38) * Pulse(t, 0.20, 0.38, 0.66) or 0)
+    f.emblemBurst:SetAlpha(motion and rich and 0.80 * Pulse(t, 0.08, 0.38, 0.70) or 0)
+    -- A larger copy of the supplied radial artwork opens above the trim in Full.
+    f.radiance:SetSize(150 * expand, 98 * expand)
+    f.radiance:SetAlpha(motion and rich and 0.95 * Pulse(t, 0.18, 0.38, 0.70) or 0)
+    f.iconBloom:SetAlpha(motion and (rich and 0.85 or 0.35) * Pulse(t, 0.75, 1.00, 1.65) or 0)
+    -- No rectangular scissor: the full transparent fringe stays intact. Both
+    -- endpoints keep the bright center on bronze; only feathered light escapes.
+    local sweep = (t - 0.45) / 0.50
+    local envelope = motion and Smooth(sweep / 0.12) * (1 - Smooth((sweep - 0.82) / 0.18)) or 0
+    local x = 55 + Smooth(sweep) * 350
+    At(f.sweepHaze, f.railCanvas, x - 16, 16)
+    At(f.sweepCore, f.railCanvas, x, 15)
+    At(f.sweepTail, f.railCanvas, x - 48, 17)
+    f.sweepHaze:SetAlpha(envelope * (rich and 0.60 or 0.28))
+    f.sweepCore:SetAlpha(envelope * (rich and 1 or 0.75))
+    f.sweepTail:SetAlpha(envelope * (rich and 0.65 or 0.20))
+    f.trimGlints[1]:SetAlpha(motion and rich and Pulse(t, 0.45, 0.55, 0.72) or 0)
+    f.trimGlints[2]:SetAlpha(motion and rich and Pulse(t, 0.72, 0.85, 1.04) or 0)
     for i, data in ipairs(PARTICLES) do
-        local p = Clamp((t - data[8]) / (data[9] - data[8]))
-        local x0 = data[11] and 230 + data[11] * (f.title:GetWidth() / 2 + 31) or data[1]
+        local p = Clamp((t - data[8]) / (data[10] - data[8]))
+        local x0 = data[12] and 230 + data[12] * (f.title:GetWidth() / 2 + 31) or data[1]
+        local y = data[2] + data[4] * EaseOut(p) + (data[13] or 0) * 4 * p * (1 - p)
         local texture = f.particles[i]
-        At(texture, f.effects, x0 + data[3] * EaseOut(p), data[2] + data[4] * EaseOut(p))
-        texture:SetAlpha(motion and (rich or i <= 3) and data[10] * (rich and 1 or 0.90) * Pulse(t, data[8], data[8] + 0.11, data[9]) or 0)
+        At(texture, f.effects, x0 + data[3] * EaseOut(p), y)
+        texture:SetAlpha(motion and (rich or i <= 4) and data[11] * (rich and 1 or 0.85) * Pulse(t, data[8], data[9], data[10]) or 0)
     end
-    f.arrivalGlint:SetAlpha(motion and (rich and 1 or 0.90) * Pulse(t, 0.98, 1.12, 1.50) or 0)
-    f.halo:SetAlpha(f.haloRest)
+    f.arrivalGlint:SetSize(rich and 40 or 28, rich and 24 or 17)
+    f.arrivalGlint:SetAlpha(motion and (rich and 1 or 0.80) * Pulse(t, 0.90, 1.08, 1.60) or 0)
+    local rarity = motion and Pulse(t, 0.75, 1.00, 1.65) or 0
+    f.halo:SetAlpha(f.haloRest + (f.hasHalo and (rich and 0.22 or 0.06) * rarity or 0))
     if not silent and t >= V.SOUND_AT then Sound(entry) end
-    f.phase = not motion and "static" or t < 0.45 and "reveal" or t < 0.55 and "flourish" or t < 0.90 and "burst" or t < V.MOTION_END and "finish" or "static"
+    f.phase = not motion and "static" or t < 0.20 and "reveal" or t < 0.60 and "burst" or t < 0.95 and "sweep" or t < 1.40 and "arrival" or t < V.MOTION_END and "afterglow" or "static"
 end
 
 local function Fail(err)
@@ -237,11 +257,12 @@ local function Build(card)
     f.atmosphere:SetFrameLevel(f:GetFrameLevel() + 1); f.atmosphere:EnableMouse(false)
     f.headerHaze = Texture(f.atmosphere, "fx_header_haze", 312, 65, "BACKGROUND", "ADD"); At(f.headerHaze, f, 230, 41)
     f.iconHaze = Texture(f.atmosphere, "fx_icon_gold_haze", 96, 100, "BACKGROUND", "ADD"); At(f.iconHaze, f, 72, 116)
-    f.headerBloom = Texture(f.atmosphere, "fx_header_bloom", 214, 41, "ARTWORK", "ADD"); At(f.headerBloom, f, 230, 51)
+    f.headerBloom = Texture(f.atmosphere, "fx_header_bloom", 214, 41, "ARTWORK", "ADD"); At(f.headerBloom, f, 230, 55)
     f.emblemBurst = Texture(f.atmosphere, "fx_emblem_burst", 58, 38, "ARTWORK", "ADD"); At(f.emblemBurst, f, 230, 64)
     f.iconBloom = Texture(f.atmosphere, "fx_icon_bloom", 92, 96, "ARTWORK", "ADD"); At(f.iconBloom, f, 72, 116)
+    f.radiance = Texture(f.atmosphere, "fx_emblem_burst", 150, 98, "ARTWORK", "ADD"); At(f.radiance, f, 230, 24)
     f.header = CreateFrame("Frame", nil, f); f.header:SetSize(460, 80)
-    f.header:SetFrameLevel(f:GetFrameLevel() + 2)
+    f.header:SetFrameLevel(f:GetFrameLevel() + 6)
     f.title = Font(f.header, 24, true); f.title:SetText("YOU WON!")
     -- Measure real client font metrics so the laurels bracket the words closely
     -- and symmetrically. The title stays centered at x230 at every font fallback.
@@ -255,7 +276,7 @@ local function Build(card)
     At(f.dividers[1], f.header, 186, 59); At(f.dividers[2], f.header, 274, 59)
     f.dividers[1]:SetAlpha(0.22); f.dividers[2]:SetAlpha(0.22)
     f.emblem = Texture(f.header, "emblem_need", 24, 24); At(f.emblem, f.header, 230, 64)
-    f.content = CreateFrame("Frame", nil, f); f.content:SetAllPoints(); f.content:SetFrameLevel(f:GetFrameLevel() + 2)
+    f.content = CreateFrame("Frame", nil, f); f.content:SetAllPoints(); f.content:SetFrameLevel(f:GetFrameLevel() + 6)
     f.halo = Texture(f.content, "halo_uncommon", 96, 96, "BACKGROUND"); At(f.halo, f, 72, 119)
     f.icon = f.content:CreateTexture(nil, "ARTWORK"); f.icon:SetSize(52, 52); f.icon:SetPoint("TOPLEFT", 46, -93)
     f.edges = {}
@@ -282,13 +303,16 @@ local function Build(card)
     f.hit:SetScript("OnClick", function()
         if f.entry and not f.entry.preview and f.entry.link and HandleModifiedItemClick then HandleModifiedItemClick(f.entry.link) end
     end)
-    f.rail = CreateFrame("Frame", nil, f); f.rail:SetPoint("TOPLEFT", 34, -12); f.rail:SetSize(392, 46)
-    f.rail:SetFrameLevel(f:GetFrameLevel() + 1); f.rail:SetClipsChildren(true); f.rail:EnableMouse(false)
-    f.railCanvas = CreateFrame("Frame", nil, f.rail); f.railCanvas:SetAllPoints(); f.railCanvas:SetFrameLevel(f:GetFrameLevel() + 1)
-    f.sweepHaze = Texture(f.railCanvas, "fx_sweep_haze", 88, 32, "ARTWORK", "ADD")
-    f.sweepCore = Texture(f.railCanvas, "fx_sweep_core", 76, 24, "OVERLAY", "ADD")
+    f.rail = CreateFrame("Frame", nil, f); f.rail:SetAllPoints()
+    f.rail:SetFrameLevel(f:GetFrameLevel() + 3); f.rail:SetClipsChildren(false); f.rail:EnableMouse(false)
+    f.railCanvas = CreateFrame("Frame", nil, f.rail); f.railCanvas:SetAllPoints(); f.railCanvas:SetFrameLevel(f:GetFrameLevel() + 3)
+    f.sweepHaze = Texture(f.railCanvas, "fx_sweep_haze", 115, 36, "ARTWORK", "ADD")
+    f.sweepCore = Texture(f.railCanvas, "fx_sweep_core", 92, 26, "OVERLAY", "ADD")
+    f.sweepTail = Texture(f.railCanvas, "fx_sweep_trail", 110, 31, "BACKGROUND", "ADD")
     f.effects = CreateFrame("Frame", nil, f); f.effects:SetAllPoints(); f.effects:SetFrameLevel(f:GetFrameLevel() + 4)
     f.effects:EnableMouse(false)
+    f.trimGlints = { Texture(f.effects, "fx_glint_small", 32, 19, "OVERLAY", "ADD"), Texture(f.effects, "fx_glint_small", 32, 19, "OVERLAY", "ADD") }
+    At(f.trimGlints[1], f, 108, 14); At(f.trimGlints[2], f, 350, 14)
     f.particles = {}
     for i, data in ipairs(PARTICLES) do f.particles[i] = Texture(f.effects, data[7], data[5], data[6], "OVERLAY", "ADD") end
     f.arrivalGlint = Texture(f.effects, "fx_glint_small", 30, 18, "OVERLAY", "ADD"); At(f.arrivalGlint, f, 97, 96)

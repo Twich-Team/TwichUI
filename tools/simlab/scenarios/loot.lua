@@ -311,6 +311,50 @@ if view == "preview" then
     end)
 end
 
+-- Isolated sweep diagnostic: real runtime TGA/UV/blend at gameplay scale.
+-- Four backgrounds and full/half alpha; old scissor versus a feathered endpoint.
+if view == "sweepLab" then
+    Lab.Step("isolated sweep transparency", function()
+        local V = R.LootVictory
+        Check("construct", "production preview loads textures", true, V.Preview("need", 4))
+        V.PreviewAt(0.70)
+        local f = V.PreviewCard().victory
+        local board = CreateFrame("Frame", nil, UIParent); board:SetSize(840, 650)
+        board:SetPoint("CENTER"); board:SetFrameStrata("TOOLTIP"); board:EnableMouse(false)
+        local labels = { "Black", "Dark leather", "Mid-gray", "Checkerboard" }
+        for column = 1, 4 do
+            local panel = CreateFrame("Frame", nil, board); panel:SetSize(200, 650); panel:SetPoint("TOPLEFT", (column - 1) * 210, 0)
+            local bg = panel:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints()
+            bg:SetColorTexture(column == 3 and 0.35 or 0, column == 3 and 0.35 or 0, column == 3 and 0.35 or 0, 1)
+            if column == 2 then
+                bg:SetTexture(R.PATH .. [[media\loot\victory\loot_won_frame.tga]]); bg:SetTexCoord(0.12, 0.88, 0.25, 0.65)
+            elseif column == 4 then
+                for y = 0, 32 do for x = 0, 9 do
+                    local tile = panel:CreateTexture(nil, "BACKGROUND"); tile:SetSize(20, 20); tile:SetPoint("TOPLEFT", x * 20, -y * 20)
+                    local c = (x + y) % 2 == 0 and 0.24 or 0.48; tile:SetColorTexture(c, c, c, 1)
+                end end
+            end
+            local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal"); title:SetPoint("TOP", 0, -12); title:SetText(labels[column])
+            for row = 1, 4 do
+                local host = CreateFrame("Frame", nil, panel); host:SetSize(142, 46 * 384 / 460)
+                host:SetPoint("TOPLEFT", 14, -75 - (row - 1) * 145); host:SetClipsChildren(row == 3)
+                local text = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"); text:SetPoint("TOPLEFT", 8, -45 - (row - 1) * 145)
+                text:SetText(({ "1.00 / free edges", "0.50 / free edges", "Old scissor / at exit", "Free edges / same exit" })[row])
+                for _, name in ipairs({ "sweepTail", "sweepHaze", "sweepCore" }) do
+                    local source = f[name]; local t = host:CreateTexture(nil, "ARTWORK")
+                    t:SetTexture(source:GetTexture()); t:SetTexCoord(source:GetTexCoord()); t:SetBlendMode(source:GetBlendMode())
+                    t:SetSize(source:GetWidth() * 384 / 460, source:GetHeight() * 384 / 460)
+                    t:SetPoint("CENTER", host, "TOPLEFT", (row >= 3 and 130 or 80) - (name == "sweepTail" and 48 * 384 / 460 or name == "sweepHaze" and 16 * 384 / 460 or 0), -13 * 384 / 460)
+                    t:SetAlpha((row == 2 and 0.5 or 1) * (name == "sweepTail" and 0.65 or name == "sweepHaze" and 0.60 or 1))
+                end
+            end
+        end
+        V.PreviewStop()
+        Check("display", "four diagnostic backgrounds constructed", true, board:IsShown())
+        Check("state", "diagnostic leaves real wins untouched", 0, V.Count())
+    end)
+end
+
 if view == "victorySettings" then
     Lab.Step("victory preview from settings", function()
         TwichUIDB.modules.lootRolls = false; LR.Refresh()
@@ -339,7 +383,7 @@ if view == "victorySettings" then
         Lab.Reveal("lootRolls", button.id)
         Lab.Settle(0.2)
         Lab.Row("lootRolls", button.id).control:Click()
-        Lab.Settle(1.8)
+        Lab.Settle(R.LootVictory.MOTION_END + 0.05)
         Check("display", "preview quality matches the selected sample", 5, card.view.quality)
         Check("display", "sample tooltip has the selected quality", "Shoulder · Legendary", card.view.sampleLines[1])
         Check("interact", "next preview shows a Greed victory", "greed", card.view.choice)
@@ -395,7 +439,7 @@ if view == "victoryReplay" then
         Check("state", "replay resets bloom", 0, card.victory.iconBloom:GetAlpha())
         Check("state", "replay resets glint", 0, card.victory.arrivalGlint:GetAlpha())
         for _, particle in ipairs(card.victory.particles) do Check("state", "replay resets particle", 0, particle:GetAlpha()) end
-        Lab.Settle(1.70)
+        Lab.Settle(1.90)
         Check("state", "no decorative updater at rest", nil, card.victory:GetScript("OnUpdate"))
         Check("state", "no new pool on replay", before, V.PoolSize())
         Check("state", "no real win created", 0, V.Count())
@@ -428,13 +472,13 @@ if view:find("^victoryPose") then
         Check("display", "lighting is below title", true, f.atmosphere:GetFrameLevel() < f.header:GetFrameLevel()
             and f.railCanvas:GetFrameLevel() < f.header:GetFrameLevel())
         if view:find("Off") then
-            local clear = f.atmosphere:GetAlpha() == 0 and f.sweepCore:GetAlpha() == 0 and f.arrivalGlint:GetAlpha() == 0
+            local clear = f.atmosphere:GetAlpha() == 0 and f.sweepCore:GetAlpha() == 0 and f.sweepTail:GetAlpha() == 0 and f.arrivalGlint:GetAlpha() == 0
             for _, particle in ipairs(f.particles) do clear = clear and particle:GetAlpha() == 0 end
             Check("display", "Off has no supplemental effects", true, clear)
         end
         if seconds >= V.MOTION_END then
-            local clear = f.headerBloom:GetAlpha() == 0 and f.emblemBurst:GetAlpha() == 0 and f.iconBloom:GetAlpha() == 0
-                and f.sweepCore:GetAlpha() == 0 and f.arrivalGlint:GetAlpha() == 0
+            local clear = f.headerBloom:GetAlpha() == 0 and f.emblemBurst:GetAlpha() == 0 and f.radiance:GetAlpha() == 0 and f.iconBloom:GetAlpha() == 0
+                and f.sweepCore:GetAlpha() == 0 and f.sweepTail:GetAlpha() == 0 and f.arrivalGlint:GetAlpha() == 0
             for _, particle in ipairs(f.particles) do clear = clear and particle:GetAlpha() == 0 end
             Check("state", "rest has no strong light or particles", true, clear)
         end
