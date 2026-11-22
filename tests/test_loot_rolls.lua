@@ -173,7 +173,7 @@ end
 -- things TwichUI's other features provide, as they would answer
 c.TwichUIDB = { modules = {} }
 local JUDGED = {}
-for _, f in ipairs({ "loot/Rules.lua", "loot/Config.lua", "loot/Roll.lua", "loot/Auto.lua",
+for _, f in ipairs({ "ForeverItemFamilies.lua", "loot/Rules.lua", "loot/Config.lua", "loot/Roll.lua", "loot/Auto.lua",
   "loot/Blizzard.lua", "loot/Cards.lua", "loot/Victory.lua", "loot/Main.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
@@ -241,6 +241,25 @@ do
   Check(Ru.EvalCondition({ type = "equip", value = "INVTYPE_HEAD" }, green) == true, "a head slot matches")
   Check(Ru.EvalCondition({ type = "equip", value = "INVTYPE_CHEST" }, { equipLoc = "INVTYPE_ROBE" }) == true, "a robe is a chest piece")
   Check(Ru.EvalCondition({ type = "item", id = 100 }, green) == true and Ru.EvalCondition({ type = "item", id = 101 }, green) == false, "a specific item matches by id")
+  local crate = Ru.NewCondition("family")
+  local writ = { type = "family", value = "craftsmans-writs" }
+  for _, id in ipairs({ 248549, 248682, 248713, 248779 }) do
+    Check(Ru.EvalCondition(crate, { itemID = id }) == true and Ru.EvalCondition(writ, { itemID = id }) == false,
+      "crate forms belong only to the crate rule")
+  end
+  for _, id in ipairs({ 248206, 262887, 262890, 264011, 264160 }) do
+    Check(Ru.EvalCondition(writ, { itemID = id }) == true and Ru.EvalCondition(crate, { itemID = id }) == false,
+      "writ forms belong only to the writ rule")
+  end
+  Check(Ru.EvalCondition(crate, { itemID = 248700, name = "Waylaid Crate" }) == false,
+    "a name or adjacent item ID cannot match the crate family")
+  Check(Ru.EvalCondition(writ, green) == false and Ru.EvalCondition(writ, {}) == nil,
+    "unrelated items miss and missing identity remains unknown")
+  Check(Ru.EvalCondition({ type = "family", value = writ.value, negate = true }, { itemID = 0 }) == nil,
+    "negation cannot make an invalid identity match")
+  Check(Ru.CheckCondition({ type = "family", value = "unknown" }) ~= nil, "unknown families are incomplete")
+  Check(Ru.Summary(Rule({ conditions = { crate } })):find("when the item is a Waylaid crate", 1, true),
+    "the family condition reads naturally in a rule summary")
   Check(Ru.EvalCondition({ type = "bind", value = "equip" }, green) == true, "binds when equipped")
   Check(Ru.EvalCondition({ type = "context", value = "outsideRaid" }, green) == true, "outside a raid")
   Check(Ru.EvalCondition({ type = "context", value = "inRaid" }, { context = { instanceType = "raid" } }) == true, "in a raid")
@@ -625,6 +644,23 @@ do
   Check(#rolled == 1 and rolled[1].kind == 2 and roll.state == "submitted" and roll.source == "auto", "at the end one Greed is sent, as an automatic choice")
   Advance(5)
   Check(#rolled == 1, "and never again")
+  EndRoll(id)
+
+  -- A family condition uses the same countdown and eligibility guards as other rules.
+  Fresh(); LR.Set("auto", true)
+  ITEMS["item:248682"] = { id = 248682, name = "Waylaid Crate: Apprentice Herbs", quality = 1, class = 0,
+    sub = 8, loc = "", bind = 0, price = 0, icon = 1005, type = "Consumable" }
+  local _, crateRule = LR.Create("blank")
+  LR.RemoveCondition(crateRule, 1); LR.AddCondition(crateRule, "family")
+  LR.SetAction(crateRule, "greed"); LR.SetEnabled(crateRule, true)
+  id = StartRoll("item:248682", { canGreed = false }); roll = Ro.Find(id)
+  Advance(4)
+  Check(roll.state == "pending" and #rolled == 0, "a matching crate cannot override roll eligibility")
+  EndRoll(id)
+  id = StartRoll("item:248682"); roll = Ro.Find(id)
+  Check(roll.state == "scheduled" and roll.auto.action == "greed", "a family rule schedules a matching crate")
+  Advance(4)
+  Check(#rolled == 1 and rolled[1].kind == 2, "the eligible crate uses the normal countdown")
   EndRoll(id)
 
   -- the player stops it

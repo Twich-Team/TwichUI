@@ -86,7 +86,7 @@ function SettingsClient(opts)
   c.IsInInstance = function() return false, "none" end
   c.IsResting = function() return false end
 
-  local FILES = { "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", "gear/Data.lua",
+  local FILES = { "ForeverItemFamilies.lua", "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", "gear/Data.lua",
     "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/Media.lua",
     "modules/FriendLogin.lua", "modules/Borders.lua", "modules/FoodDrink.lua", "modules/FoodDrinkUnlock.lua", "camping/Data.lua", "camping/State.lua", "camping/Bar.lua", "camping/Rest.lua", "camping/Unlock.lua",
     "modules/TrainingData.lua", "modules/Training.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua", "modules/MageConjure.lua",

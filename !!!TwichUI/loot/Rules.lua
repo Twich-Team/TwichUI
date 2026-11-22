@@ -20,6 +20,7 @@
 --   context = { instanceType ("none", "party", "raid", ...), inRaidGroup }
 
 local R = TwichUI
+local Families = R.ForeverItemFamilies
 local Ru = {}
 R.LootRules = Ru
 
@@ -100,6 +101,14 @@ Ru.CONTEXT_CHOICES = {
     { "outsideRaid", "Only outside raids" }, { "inRaid", "Only in raids" },
     { "inDungeon", "Only in dungeons" }, { "outsideDungeon", "Only outside dungeons" },
 }
+Ru.FAMILY_CHOICES = { { "waylaid-crates", "Waylaid crate" }, { "craftsmans-writs", "Craftsman's Writ" } }
+local FAMILY_MATCH = {
+    ["waylaid-crates"] = Families.IsWaylaidCrate,
+    ["craftsmans-writs"] = Families.IsCraftsmansWrit,
+}
+local FAMILY_LABEL = {}
+for _, choice in ipairs(Ru.FAMILY_CHOICES) do FAMILY_LABEL[choice[1]] = choice[2] end
+
 Ru.BIND_CHOICES = { { "pickup", "Binds when picked up" }, { "equip", "Binds when equipped" } }
 Ru.QUALITY_OPS = { { "is", "is" }, { "atLeast", "is at least" }, { "atMost", "is at most" } }
 
@@ -115,7 +124,7 @@ end
 ---------------------------------------------------------------------------
 local T = {}
 Ru.TYPES = T
-Ru.ORDER = { "quality", "class", "armor", "equippable", "equip", "recipe", "item", "bind", "upgrade", "context" }
+Ru.ORDER = { "quality", "class", "armor", "equippable", "equip", "recipe", "item", "family", "bind", "upgrade", "context" }
 
 T.quality = {
     label = "Item quality", icon = "lootQuality",
@@ -239,6 +248,18 @@ T.item = {
         if type(name) == "string" and name ~= "" then return "is " .. name end
         return "is item #" .. tostring(c.id)
     end,
+}
+
+T.family = {
+    label = "Item family", icon = "lootItem",
+    new = function() return { type = "family", value = "waylaid-crates" } end,
+    check = function(c) if not FAMILY_MATCH[c.value] then return "Choose an item family." end end,
+    eval = function(c, obs)
+        local id = obs.itemID
+        if not Whole(id) or id <= 0 then return nil end
+        return FAMILY_MATCH[c.value](id)
+    end,
+    phrase = function(c) return "is a " .. FAMILY_LABEL[c.value] end,
 }
 
 T.bind = {

@@ -1,5 +1,9 @@
 # Loot Rolls: implementation tracker
 
+In **Loot Roll Rules → Add condition → Item family**, choose **Waylaid crate** or **Craftsman's Writ**.
+The choices use the same Forever item IDs as Magic Inventory, including the sealed forms. An unknown item ID
+keeps the condition unresolved. The existing auto-roll settings and eligibility checks still apply.
+
 Branch `feature/loot-rolls`. This is the working record of the feature: what exists, what the client is known (and not known) to do,
 how it is tested, and what has to be checked in the real Forever client before anything here is called working. Evidence labels as in
 `CLAUDE.md`: **unit-tested**, **simulator-tested**, **screenshot-reviewed**, **real-client-tested**, **not tested**.
