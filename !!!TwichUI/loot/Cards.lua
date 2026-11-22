@@ -27,6 +27,7 @@ local MEDIA = R.PATH .. [[media\loot\]]
 local WHITE = [[Interface\Buttons\WHITE8x8]]
 local FONT_TITLE = R.PATH .. [[media\fonts\Cinzel-SemiBold.ttf]]
 local W_CARD = 384
+C.MINI_HEIGHT = 64
 local PAD = 16
 local ROW_H = 16
 
@@ -125,6 +126,22 @@ local function Font(parent, size, kind, color)
     return fs
 end
 
+local function TextSize(fs, size)
+    local file, _, flags = fs:GetFont()
+    if file then fs:SetFont(file, size, flags or "") end
+end
+
+-- Fit only on redraw; tooltips retain the complete item name.
+function C.FitItemName(label, name)
+    label:SetText(name)
+    local last = #name
+    while last > 0 and label:GetStringWidth() > label:GetWidth() do
+        last = last - 1
+        while last > 0 and name:byte(last + 1) >= 128 and name:byte(last + 1) < 192 do last = last - 1 end
+        label:SetText(name:sub(1, last) .. "...")
+    end
+end
+
 -- a 1 unit outline of four textures on a frame (alpha-aware: edges are drawn inside the frame)
 local function Outline(frame, layer, sub)
     local o = {}
@@ -181,10 +198,20 @@ local function Button(parent, icon, label)
     b.label = label
     b.state = "normal"
     function b:Layout()
-        local w = self.text:GetStringWidth() or 40
-        local total = 26 + 8 + w
-        self.icon:ClearAllPoints(); self.icon:SetPoint("LEFT", self, "LEFT", math.max(8, (self:GetWidth() - total) / 2), 0)
-        self.text:ClearAllPoints(); self.text:SetPoint("LEFT", self.icon, "RIGHT", 8, 0)
+        local press = self.press and -1 or 0
+        TextSize(self.text, self.compact and 11 or 14)
+        self.icon:SetSize(self.compact and 16 or 26, self.compact and 16 or 26)
+        self.icon:ClearAllPoints(); self.text:ClearAllPoints()
+        if self.compact then
+            self.icon:SetPoint("CENTER", self, "CENTER", 0, 6 + press)
+            self.text:SetWidth(self:GetWidth() - 4); self.text:SetJustifyH("CENTER")
+            self.text:SetPoint("BOTTOM", self, "BOTTOM", 0, 3 + press)
+        else
+            self.text:SetWidth(0); self.text:SetJustifyH("LEFT")
+            local total = 26 + 8 + (self.text:GetStringWidth() or 40)
+            self.icon:SetPoint("LEFT", self, "LEFT", math.max(8, (self:GetWidth() - total) / 2), 0)
+            self.text:SetPoint("LEFT", self.icon, "RIGHT", 8, press)
+        end
     end
     function b:Paint()
         local st = self.state
@@ -195,8 +222,7 @@ local function Button(parent, icon, label)
         self.icon:SetAlpha(off and 0.5 or 1)
         local c = off and COL.quiet or COL.ivory
         self.text:SetTextColor(c[1], c[2], c[3])
-        self.text:ClearAllPoints()
-        self.text:SetPoint("LEFT", self.icon, "RIGHT", 8, press and -1 or 0)
+        self:Layout()
     end
     function b:SetVisual(state) if self.state ~= state then self.state = state; self:Paint() end end
     b:SetScript("OnEnter", function(self) self.hot = true; self:Paint(); if self.onTip then self:onTip() end end)
@@ -393,6 +419,25 @@ function C.NewCard(parent, opts)
     card.banner.text = Font(card.banner, 14, "body")
     card.banner.text:SetJustifyH("CENTER")
 
+    card.toggle = CreateFrame("Button", nil, card)
+    card.toggle:SetSize(20, 20); card.toggle:SetFrameLevel(card:GetFrameLevel() + 20)
+    card.toggle.art = Sheet(card.toggle, "button", { layer = "ARTWORK", corner = 6 })
+    if R.Look and R.Look.Chevron then
+        card.toggle.up = R.Look.Chevron(card.toggle, card.toggle, "CENTER", 0, 0, false, COL.gold)
+        card.toggle.down = R.Look.Chevron(card.toggle, card.toggle, "CENTER", 0, 0, true, COL.gold)
+    else
+        card.toggle.text = Font(card.toggle, 13, "body"); card.toggle.text:SetPoint("CENTER")
+    end
+    card.toggle:SetScript("OnEnter", function(self)
+        self.art:SetSkin("button-hot")
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(card.view and card.view.displayMode == "collapsed" and "Expand card" or "Collapse card")
+        GameTooltip:AddLine("Only changes this roll's presentation. Your roll choice and timer stay the same.", 0.82, 0.77, 0.66, true)
+        GameTooltip:Show()
+    end)
+    card.toggle:SetScript("OnLeave", function(self) self.art:SetSkin("button"); GameTooltip:Hide() end)
+    card.toggle:SetScript("OnClick", function() C.ToggleDisplay(card) end)
+
     -- entrance
     card.enter = 1
     return card
@@ -406,6 +451,29 @@ ResultRow = function(parent)
     row.choice = Font(row.frame, 12, "body", COL.dim); row.choice:SetPoint("LEFT", row.name, "RIGHT", 2, 0); row.choice:SetWidth(46)
     row.roll = Font(row.frame, 12, "body", COL.gold); row.roll:SetPoint("RIGHT", 0, 0); row.roll:SetWidth(22); row.roll:SetJustifyH("RIGHT")
     return row
+end
+
+function C.DisplayToggle(card, mode, victory)
+    local compact = mode == "collapsed"
+    card.toggle:ClearAllPoints(); card.toggle:SetPoint("TOPRIGHT", card, "TOPRIGHT", (compact or victory) and -8 or -30, -8)
+    if card.toggle.up then
+        for _, t in ipairs(card.toggle.up) do t:SetShown(compact) end
+        for _, t in ipairs(card.toggle.down) do t:SetShown(not compact) end
+    elseif card.toggle.text then card.toggle.text:SetText(compact and "+" or "-") end
+    card.toggle:Enable(); card.toggle:Show()
+end
+
+function C.ToggleDisplay(card)
+    local v = card.view
+    if not v then return end
+    local mode = v.displayMode == "collapsed" and "expanded" or "collapsed"
+    if v.victory then return R.LootVictory.SetDisplay(v, mode) end
+    if v.preview then
+        if card.onDisplay then return card.onDisplay(card, mode) end
+        v.displayMode = mode; C.Draw(card, v); return
+    end
+    local roll = Ro.ByKey(card.rollKey)
+    if roll then return Ro.SetDisplay(roll, mode) end
 end
 
 ---------------------------------------------------------------------------
@@ -469,7 +537,7 @@ end
 -- Colors, texture, height and position of the countdown for the time left.
 local function Timer(card, remaining, duration, x, width, y, expired)
     local t = card.timer
-    t:SetHeight(LR.Get("barHeight"))
+    t:SetHeight(card.compact and 4 or LR.Get("barHeight"))
     Place(t, card, x, y, width)
     local frac = duration and duration > 0 and math.max(0, math.min(1, (remaining or 0) / duration)) or 0
     local fill = t.fill
@@ -490,6 +558,15 @@ function C.PaintTimer(card, view)
     local body, y = card.body, card.timerY
     local inner = W_CARD - PAD * 2
     local scheduled = view.state == "scheduled" and view.auto
+    if card.compact then
+        Timer(card, view.remaining, view.duration, 10, W_CARD - 20, 56)
+        card.time:ClearAllPoints(); card.time:SetPoint("TOPRIGHT", body, "TOPRIGHT", -8, -31)
+        card.time:SetSize(28, 16); card.time:SetJustifyH("RIGHT"); TextSize(card.time, 11)
+        card.time:SetText(Seconds(view.remaining)); card.time:Show()
+        if scheduled then card.sub:SetText("Auto " .. (ChoiceLabel[view.auto.action] or "") .. " · " .. Seconds(view.auto.remaining)) end
+        return
+    end
+    TextSize(card.time, 13)
     local numberW = scheduled and 176 or 48
     local remaining = scheduled and view.auto.remaining or view.remaining
     local duration = scheduled and (view.auto.delay or 3) or view.duration
@@ -567,7 +644,11 @@ end
 
 -- The line under the name: the rule that is counting down, or what a vendor pays.
 function C.LineTip(owner, view)
-    if view.state == "scheduled" and view.auto then
+    if view.displayMode == "collapsed" and view.needsConfirm then
+        Lines(owner, "Confirm in game", { "Confirm in the game's window to roll " .. (view.confirmWord or "this") .. "." })
+    elseif view.displayMode == "collapsed" and view.autoNote and view.state == "pending" then
+        Lines(owner, "Manual choice", { view.autoNote })
+    elseif view.state == "scheduled" and view.auto then
         Lines(owner, "Rule: " .. (view.auto.name or ""), {
             ("This rule matched the item and will choose %s after %s second%s."):format(ChoiceLabel[view.auto.action] or "a choice",
                 tostring(view.auto.delay or 3), (view.auto.delay or 3) == 1 and "" or "s"),
@@ -622,6 +703,45 @@ C.PillTips = {
     end,
 }
 
+local function CompactLayout(card, view)
+    local body = card.body
+    card.iconFrame:ClearAllPoints(); card.iconFrame:SetPoint("TOPLEFT", 10, -10); card.iconFrame:SetSize(38, 38)
+    card.iconHit:ClearAllPoints(); card.iconHit:SetPoint("TOPLEFT", card.iconFrame, "TOPLEFT", 0, 0)
+    card.iconHit:SetPoint("BOTTOMRIGHT", body, "TOPLEFT", 198, -50)
+    card.name:ClearAllPoints(); card.name:SetPoint("TOPLEFT", 58, -9); card.name:SetSize(136, 18); TextSize(card.name, 14)
+    C.FitItemName(card.name, view.name or "Loot")
+    card.sub:ClearAllPoints(); card.sub:SetPoint("TOPLEFT", 58, -31); card.sub:SetSize(136, 16); TextSize(card.sub, 11)
+    card.sub:SetText(view.needsConfirm and "Confirm in game" or view.autoNote and "Manual choice" or Ru.QualityName(view.quality))
+    Hide(card.line3, card.line3Icon, card.line3Hit, card.note, card.pillBottom, card.banner, card.divider, card.close)
+    if view.needsConfirm or view.autoNote or view.state == "scheduled" then
+        card.line3Hit:ClearAllPoints(); card.line3Hit:SetPoint("TOPLEFT", body, "TOPLEFT", 58, -29)
+        card.line3Hit:SetSize(116, 20); card.line3Hit:Show()
+    end
+    for _, row in ipairs(card.rows) do row.frame:Hide() end
+    card.pillTop:Hide()
+    if view.upgrade and LR.Get("showUpgrade") then
+        card.pillTop:Set("", "upgrade", "gold"); card.pillTop.tip = C.PillTips.upgrade
+        card.pillTop:SetWidth(22); card.pillTop:ClearAllPoints(); card.pillTop:SetPoint("TOPLEFT", 176, -29); card.pillTop:Show()
+    end
+    if card.live then
+        C.PaintTimer(card, view)
+        local scheduled = view.state == "scheduled" and view.auto
+        local keys = scheduled and { "now", "stop" } or { "need", "greed", "pass" }
+        for i, key in ipairs(keys) do
+            local b = card.buttons[key]; b.compact = true; b:SetHeight(34)
+            local width = scheduled and 71 or 46
+            b:SetWidth(width); Place(b, card, 202 + (i - 1) * (width + 4), 12)
+            b:Layout()
+        end
+    else
+        Hide(card.timer, card.time)
+        Place(card.status, card, 204, 18, 146); card.status:SetHeight(28)
+        card.status.icon:SetSize(16, 16); TextSize(card.status.text, 11)
+    end
+    card:SetHeight(C.MINI_HEIGHT)
+    return C.MINI_HEIGHT
+end
+
 -- Fits the card's height, lays out and fills it. Returns the height.
 function C.Draw(card, view)
     if R.LootVictory and view.victory then return R.LootVictory.Draw(card, view) end
@@ -629,6 +749,15 @@ function C.Draw(card, view)
     card.body:EnableMouse(true); card.iconHit:EnableMouse(true); card.close:Enable()
     for _, button in pairs(card.buttons) do button:Enable() end
     card:SetWidth(W_CARD)
+    card.compact = view.displayMode == "collapsed"
+    C.DisplayToggle(card, view.displayMode, false)
+    card.iconFrame:ClearAllPoints(); card.iconFrame:SetPoint("TOPLEFT", PAD, -16); card.iconFrame:SetSize(46, 46)
+    card.iconHit:ClearAllPoints(); card.iconHit:SetPoint("TOPLEFT", card.iconFrame, "TOPLEFT", 0, 0)
+    card.iconHit:SetPoint("BOTTOMRIGHT", card.body, "TOPRIGHT", -40, -62)
+    card.name:ClearAllPoints(); card.name:SetPoint("TOPLEFT", 70, -15); card.name:SetSize(W_CARD - 70 - 60, 20); TextSize(card.name, 15)
+    card.sub:ClearAllPoints(); card.sub:SetPoint("TOPLEFT", 70, -35); card.sub:SetHeight(16); TextSize(card.sub, 12); card.sub:Show()
+    card.line3:Show(); card.status:SetHeight(34); card.status.icon:SetSize(24, 24); TextSize(card.status.text, 12)
+    for _, button in pairs(card.buttons) do button.compact = false; button:SetHeight(34) end
     local body = card.body
     local qc, qname = Quality(view)
     card.live = view.state == "pending" or view.state == "scheduled"
@@ -640,7 +769,7 @@ function C.Draw(card, view)
     card.icon:SetTexture(view.icon or [[Interface\Icons\INV_Misc_QuestionMark]])
     card.iconRim:Color(qc)
     card.count:SetText((view.count or 1) > 1 and tostring(view.count) or "")
-    card.name:SetText(view.name or "Loot")
+    C.FitItemName(card.name, view.name or "Loot")
     card.name:SetTextColor(qc[1], qc[2], qc[3])
     local sub = view.typeText and view.typeText ~= "" and (view.typeText .. "  ·  ") or ""
     card.sub:SetText(sub .. Hex(qc) .. qname .. "|r")
@@ -664,7 +793,7 @@ function C.Draw(card, view)
     if line3 then
         card.line3Hit:ClearAllPoints()
         card.line3Hit:SetPoint("TOPLEFT", body, "TOPLEFT", 70, -51)
-        card.line3Hit:Show()
+        card.line3Hit:SetSize(210, 16); card.line3Hit:Show()
     else
         card.line3Hit:Hide()
     end
@@ -813,6 +942,7 @@ function C.Draw(card, view)
     end
     local h = y + 14
     card:SetHeight(h)
+    if card.compact then return CompactLayout(card, view) end
     return h
 end
 
@@ -832,6 +962,7 @@ end
 
 function C.View(roll)
     local v = {
+        displayMode = Ro.DisplayMode(roll), manualDisplay = roll.manualDisplay,
         state = roll.state, rollID = roll.rollID, name = roll.name, icon = roll.icon, quality = roll.quality, count = roll.count,
         typeText = C.TypeText(roll),
         sellPrice = roll.sellPrice, upgrade = roll.upgrade == true or nil, canNeed = roll.canNeed, canGreed = roll.canGreed,
@@ -1105,7 +1236,8 @@ function C.SampleView(kind, rule)
             { "A sample, made up for the preview.", 0.62, 0.60, 0.56, true },
         },
     }
-    if kind == "auto" then
+    v.displayMode = rule and rule.display == "collapsed" and "collapsed" or "expanded"
+    if kind == "auto" and (not rule or rule.action ~= "none") then
         v.state = "scheduled"
         v.auto = { name = rule and rule.name or "Greed on green gear", action = rule and rule.action or "greed", delay = rule and rule.delay or 3, remaining = 2.8 }
     elseif kind == "sent" then
@@ -1234,6 +1366,7 @@ local function PreviewView()
         if pv.stopped then v.autoNote = "Automatic rolling stopped. The choice is yours." end
     end
     v.duration = PREVIEW_SECONDS
+    v.displayMode = pv.manualDisplay or (pv.rule and pv.rule.display) or "expanded"
     return v
 end
 
@@ -1298,6 +1431,7 @@ function C.PreviewStart(rule)
         pv.card = C.NewCard(frame, { preview = true })
         pv.card:SetPoint("TOPLEFT")
         pv.card.onChoice = PreviewChoose
+        pv.card.onDisplay = function(_, mode) pv.manualDisplay = mode; PreviewDraw() end
         pv.card.onDismiss = function() C.PreviewStop() end
         frame:SetScript("OnUpdate", function(self, dt) if pv then local ok = pcall(PreviewStep, dt) if not ok then C.PreviewStop(true) end end end)
         frame:RegisterEvent("START_LOOT_ROLL")   -- a real roll takes the preview's place, even while the cards are switched off
@@ -1309,13 +1443,13 @@ function C.PreviewStart(rule)
     local x, y = LR.Place()
     pv.frame:ClearAllPoints()
     pv.frame:SetPoint(LR.Get("growth") == "up" and "BOTTOM" or "TOP", UIParent, "CENTER", x / scale, y / scale)
-    pv.rule = rule
+    pv.rule, pv.manualDisplay = rule, nil
     pv.elapsed, pv.stopped, pv.choice = 0, false, nil
     pv.enter = Fade("fadeIn") > 0 and 0 or 1
     pv.closing = nil
     pv.frame:SetAlpha(pv.enter < 1 and 0 or 1)
-    pv.phase, pv.t = rule and "auto" or "waiting", 0
-    if rule then pv.rule = { name = rule.name, action = rule.action, delay = tonumber(rule.delay) or 3 } end
+    pv.phase, pv.t = rule and rule.action ~= "none" and "auto" or "waiting", 0
+    if rule then pv.rule = { name = rule.name, action = rule.action, display = rule.display, delay = tonumber(rule.delay) or 3 } end
     PreviewDraw()
     pv.frame:Show()
     return true

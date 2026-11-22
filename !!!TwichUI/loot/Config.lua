@@ -219,7 +219,7 @@ local function View(rule, index)
         id = rule.id, index = index,
         name = ValidName(rule.name) and rule.name or "Loot rule",
         enabled = rule.enabled == true,
-        action = rule.action,
+        action = rule.action, display = rule.display or "none",
         match = rule.match == "any" and "any" or "all",
         delay = ValidDelay(rule.delay) and rule.delay or LR.Get("autoDelay"),
         result = rule.result ~= false,
@@ -280,7 +280,7 @@ end
 
 -- Starting points offered by "New rule". Each starts switched off: turn it on once it says what you mean.
 LR.TEMPLATES = {
-    { key = "blank", label = "Start from nothing", name = "New rule", action = "greed", conditions = { { type = "quality", op = "is", value = 2 } } },
+    { key = "blank", label = "Start from nothing", name = "New rule", action = "none", conditions = { { type = "quality", op = "is", value = 2 } } },
     { key = "greenGear", label = "Greed on green gear", name = "Greed on green gear", action = "greed",
         conditions = { { type = "quality", op = "is", value = 2 }, { type = "class", value = "equipment" } } },
     { key = "recipes", label = "Pass on recipes I already know", name = "Pass known recipes", action = "pass",
@@ -298,7 +298,7 @@ function LR.Create(kind)
     if not template then return false, "No such starting point." end
     local t = Saved(true)
     local rule = {
-        id = NextId(t), name = template.name, enabled = false, action = template.action, match = "all",
+        id = NextId(t), name = template.name, enabled = false, action = template.action, display = "none", match = "all",
         delay = LR.Get("autoDelay"), result = true, conditions = {},
     }
     for i, c in ipairs(template.conditions) do
@@ -372,8 +372,13 @@ function LR.SetEnabled(id, on)
 end
 
 function LR.SetAction(id, action)
-    if action ~= "need" and action ~= "greed" and action ~= "pass" then return false end
+    if not Ru.ACTION_LABEL[action] then return false end
     return Edit(id, function(r) if r.action == action then return nil end r.action = action return true end)
+end
+
+function LR.SetDisplay(id, display)
+    if not Ru.DISPLAY_LABEL[display] then return false end
+    return Edit(id, function(r) if (r.display or "none") == display then return nil end r.display = display return true end)
 end
 
 function LR.SetMatch(id, mode)

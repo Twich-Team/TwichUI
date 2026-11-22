@@ -82,6 +82,25 @@ end
 -- Time
 ---------------------------------------------------------------------------
 -- Seconds left to choose: the game's own clock when it answers, else the one this record started with. nil when there is no deadline.
+-- Presentation belongs to this unique roll key, never to an item ID or card slot.
+function Ro.DisplayMode(roll)
+    return roll.manualDisplay or roll.displayMode or "expanded"
+end
+function Ro.RefreshDisplay(roll, notify)
+    local decision = R.LootRules.DecideDisplay(LR.Active(), roll.obs or {})
+    local mode = decision.status == "match" and decision.rule.display or "expanded"
+    local ruleId = decision.status == "match" and decision.rule.id or nil
+    if roll.displayMode == mode and roll.displayRuleId == ruleId then return end
+    roll.displayMode, roll.displayRuleId = mode, ruleId
+    if notify then Tell("updated", roll) end
+end
+function Ro.SetDisplay(roll, mode)
+    if not roll or Ro.ByKey(roll.key) ~= roll or (mode ~= "collapsed" and mode ~= "expanded") then return false end
+    roll.manualDisplay = mode
+    Tell("updated", roll)
+    return true
+end
+
 function Ro.Remaining(roll)
     if not (roll and (roll.state == "pending" or roll.state == "scheduled")) then return 0 end
     local ms
@@ -266,6 +285,7 @@ function Ro.Observe(roll)
     roll.upgrade = obs.upgrade
     obs.context = ContextFacts()
     obs.ready = roll.itemKnown == true
+    Ro.RefreshDisplay(roll)
     return obs.ready
 end
 
@@ -644,3 +664,11 @@ end
 
 function Ro.Listening() return frame ~= nil and active end
 function Ro.EventCount() local n = 0 if active then n = #EVENTS end return n end
+
+-- Display-only rules work with automation off/paused and never touch a countdown.
+LR.Subscribe(function(what)
+    if what ~= "rules" and what ~= "profile" then return end
+    for _, roll in ipairs({ unpack(rolls) }) do
+        if IsLive(roll) then Ro.RefreshDisplay(roll, true) end
+    end
+end)

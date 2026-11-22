@@ -298,6 +298,40 @@ do
   Check(Ru.Summary(Rule({ conditions = {} })):find("once you add") ~= nil, "an empty rule says it needs a condition")
 end
 
+-- Independent rule channels: No change never blocks the other outcome.
+do
+  local q = { type = "quality", op = "is", value = 4 }
+  local function Rule(id, action, display, conditions)
+    return { id = id, enabled = true, action = action, display = display, conditions = conditions or { q } }
+  end
+  for _, pair in ipairs({ { "need", "collapsed" }, { "greed", "expanded" }, { "pass", "collapsed" },
+    { "none", "collapsed" }, { "none", "expanded" }, { "need", "none" } }) do
+    local rule = Rule("lr1", pair[1], pair[2])
+    Check(not Ru.Incomplete(rule), "valid independent action combination: " .. pair[1] .. "/" .. pair[2])
+    Check(Ru.Decide({ rule }, { quality = 4 }).status == (pair[1] == "none" and "none" or "match"), "roll channel skips No change")
+    Check(Ru.DecideDisplay({ rule }, { quality = 4 }).status == (pair[2] == "none" and "none" or "match"), "display channel skips No change")
+  end
+  local need, mini, full = Rule("lr1", "need"), Rule("lr2", "none", "collapsed"), Rule("lr3", "none", "expanded")
+  local rules = { need, mini, full }
+  Check(Ru.Decide(rules, { quality = 4 }).rule == need and Ru.DecideDisplay(rules, { quality = 4 }).rule == mini,
+    "a high-priority Need and lower display-only match both win their own channels")
+  rules = { mini, need, full }
+  Check(Ru.Decide(rules, { quality = 4 }).rule == need and Ru.DecideDisplay(rules, { quality = 4 }).rule == mini,
+    "a high-priority display-only match cannot suppress lower Need")
+  Check(Ru.DecideDisplay({ full, mini }, { quality = 4 }).rule == full, "explicit Expanded overrides general Collapse by order")
+  Check(Ru.DecideDisplay({ Rule("lr4", "none", "collapsed", { { type = "upgrade", value = true } }), full }, { quality = 4 }).status == "unknown",
+    "unknown display conditions block only display precedence rather than guessing")
+  Check(Ru.Decide({ Rule("lr4", "none", "collapsed", { { type = "upgrade", value = true } }), need }, { quality = 4 }).rule == need,
+    "unknown display-only conditions never block a legitimate roll decision")
+  Check(Ru.Decide({ Rule("lr4", "greed", nil, { { type = "upgrade", value = true } }), need }, { quality = 4 }).status == "unknown",
+    "existing roll unknown/conflict behavior stays conservative")
+  Check(Ru.Incomplete(Rule("lr4", "none", "none")) ~= nil and Ru.Incomplete(Rule("lr4", "need", "bogus")) ~= nil,
+    "no-op and invalid presentation actions are flagged")
+  Check(Ru.Summary(mini):find("Collapse", 1, true) and not Ru.Summary(mini):find("Automatically", 1, true),
+    "display-only summaries never describe an automatic roll")
+  Check(Ru.ActionSummary(Rule("lr4", "greed", "collapsed")) == "Greed · Collapsed", "combined action summary is unambiguous")
+end
+
 ---------------------------------------------------------------------------
 -- 2. Config
 ---------------------------------------------------------------------------
@@ -672,7 +706,7 @@ do
 
   -- an upgrade rule needs its own permission
   Fresh(); LR.Set("auto", true)
-  local up = Rule("blank")
+  local up = Rule("blank"); LR.SetAction(up, "greed")
   LR.RemoveCondition(up, 1); LR.AddCondition(up, "upgrade")
   JUDGED["item:100"] = { up = true }
   id = StartRoll("item:100"); roll = Ro.Find(id)
@@ -700,7 +734,7 @@ do
   local noTip = StartRoll("item:107", { noTooltip = true })
   Check(Ro.Find(noTip).obs.equippable == nil, "without a tooltip it is unknown, not yes")
   EndRoll(noTip)
-  local cloth = Rule("blank")
+  local cloth = Rule("blank"); LR.SetAction(cloth, "greed")
   LR.RemoveCondition(cloth, 1); LR.AddCondition(cloth, "armor"); LR.SetCondition(cloth, 1, { value = 1 })
   id = StartRoll("item:106"); roll = Ro.Find(id)
   Check(roll.state == "scheduled", "a cloth rule takes a cloth robe")
@@ -1217,6 +1251,71 @@ do
   rolled = {}
 end
 
+-- Mini active cards use the same choices and timers; overrides belong to keys.
+do
+  for _, roll in ipairs({ unpack(Ro.Rolls()) }) do Ro.Remove(roll) end
+  for _, rule in ipairs(LR.List()) do LR.Delete(rule.id) end
+  LR.Set("auto", false); LR.Set("animate", false); LR.Set("maxCards", 4)
+  local ok, display = LR.Create("blank")
+  Check(ok and LR.Rule(display).action == "none" and LR.Rule(display).display == "none" and LR.Rule(display).incomplete,
+    "new blank rule offers independent No change outcomes and flags no-op")
+  LR.SetDisplay(display, "collapsed"); LR.SetEnabled(display, true)
+  Check(not LR.Rule(display).incomplete and c.TwichUIDB.ui.lootRolls.rules[1].display == "collapsed",
+    "display-only action saves and reads independently of roll actions")
+  local _, copy = LR.Duplicate(display)
+  Check(LR.Rule(copy).display == "collapsed" and LR.Rule(copy).action == "none", "copy/reload view preserves both action fields")
+  LR.Delete(copy)
+  local id = StartRoll("item:100"); local roll = Ro.Find(id); local card = C.Card(roll.key)
+  local deadline = roll.deadline
+  Check(card.compact and card.h == 64 and roll.state == "pending" and roll.choice == nil and not roll.auto,
+    "display-only rule collapses with automation off, without making a choice")
+  for _, key in ipairs({ "need", "greed", "pass" }) do
+    Check(card.buttons[key].shown and card.buttons[key].w == 46 and card.buttons[key].h == 34, "Mini keeps safe labeled choice targets")
+  end
+  Check(card.timer.h == 4 and card.time.shown and not card.line3.shown and not card.close.shown,
+    "Mini uses a thin authoritative countdown and omits full details")
+  local before = #rolled
+  card.toggle.scripts.OnClick(card.toggle)
+  Check(not card.compact and card.h > 120 and Ro.Find(id) == roll and roll.manualDisplay == "expanded",
+    "manual expansion reuses the same roll and card")
+  card.toggle.scripts.OnClick(card.toggle)
+  Check(card.compact and roll.deadline == deadline and #rolled == before and roll.choice == nil,
+    "collapse changes no deadline, event, choice or rule")
+  Check(LR.Rule(display).display == "collapsed", "manual override never writes saved rules")
+  local id2 = StartRoll("item:101"); local other = Ro.Find(id2); local fullCard = C.Card(other.key)
+  Check(not fullCard.compact and fullCard.baseY == card.h + LR.Get("spacing"), "mixed stack uses actual Mini height")
+  Ro.SetDisplay(roll, "expanded")
+  Check(fullCard.baseY == card.h + LR.Get("spacing"), "instant expansion reflows following cards without duplicate slots")
+  Ro.SetDisplay(roll, "collapsed")
+  local _, auto = LR.Create("greenGear"); LR.SetEnabled(auto, true); LR.Set("auto", true)
+  Check(roll.state == "scheduled" and roll.auto.action == "greed", "lower roll rule acts independently of higher display-only match")
+  local fireAt = roll.auto.fireAt
+  LR.SetDisplay(display, "expanded"); Ro.SetDisplay(roll, "collapsed")
+  Check(roll.auto.fireAt == fireAt and card.compact, "display edits and manual overrides do not restart automatic countdown")
+  Check(card.buttons.now.shown and card.buttons.stop.shown, "Mini preserves auto countdown controls")
+  card.buttons.stop.scripts.OnClick(card.buttons.stop)
+  Check(roll.state == "pending" and card.buttons.need.shown, "Stop restores the normal manual controls in Mini")
+  LR.Set("auto", false)
+  for _, key in ipairs({ "need", "greed", "pass" }) do
+    local rid = StartRoll("item:106"); local rr = Ro.Find(rid); Ro.SetDisplay(rr, "collapsed")
+    local cc = C.Card(rr.key); local n = #rolled
+    cc.buttons[key].scripts.OnClick(cc.buttons[key])
+    Check(#rolled == n + 1 and rr.choice == key and rr.state == "submitted", "compact " .. key .. " uses the existing submission path")
+    EndRoll(rid); Ro.Remove(rr)
+  end
+  local restricted = StartRoll("item:100", { canNeed = false, reasonNeed = 1 }); local rr = Ro.Find(restricted)
+  Ro.SetDisplay(rr, "collapsed"); local cc = C.Card(rr.key); before = #rolled
+  cc.buttons.need.scripts.OnClick(cc.buttons.need)
+  Check(#rolled == before and rr.choice == nil and cc.buttons.need.state == "unavailable", "Mini cannot bypass a restricted Need")
+  local remaining = Ro.Remaining(rr)
+  Advance(0.5); C.Tick(0.05)
+  Check(C.View(rr).remaining < remaining and cc.time.text == string.format("%ds", math.ceil(Ro.Remaining(rr))),
+    "Mini reads the authoritative time after elapsed ticks")
+  for _, r in ipairs({ unpack(Ro.Rolls()) }) do EndRoll(r.rollID); Ro.Remove(r) end
+  for _, rule in ipairs(LR.List()) do LR.Delete(rule.id) end
+  LR.Set("animate", true); LR.Set("auto", false)
+end
+
 ---------------------------------------------------------------------------
 -- Victory: actual relay event over synthetic client frames; no win inference.
 ---------------------------------------------------------------------------
@@ -1513,6 +1612,114 @@ do
   LR.Set("victoryIntensity", "off")
   Check(LR.Get("victory") and LR.Get("victoryIntensity") == "off" and c.TwichUIDB.ui.lootRolls.victoryIntensity == "off", "settings use existing persisted profile values")
   LR.Set("victoryIntensity", "subtle"); LR.Set("maxCards", 4)
+end
+
+---------------------------------------------------------------------------
+-- Compact victories: per-instance attribution, toggles and pooled FX lifecycle.
+---------------------------------------------------------------------------
+do
+  local V = R.LootVictory
+  local native = 0
+  local function Reset()
+    V.Disable(false)
+    for _, r in ipairs({ unpack(Ro.Rolls()) }) do EndRoll(r.rollID); Ro.Remove(r) end
+    for _, rule in ipairs(LR.List()) do LR.Delete(rule.id) end
+    c.AlertFrame:SetScript("OnEvent", function() native = native + 1 end)
+    LR.Set("auto", false); LR.Set("animate", false); LR.Set("maxCards", 4)
+    LR.Set("victoryIntensity", "full"); LR.Set("victorySound", false)
+    V.Sync()
+  end
+  local function Step(seconds)
+    for _ = 1, math.ceil(seconds / 0.05) do
+      Advance(0.05)
+      for _, f in ipairs(FRAMES) do if f.shown and f.scripts.OnUpdate then f.scripts.OnUpdate(f, 0.05) end end
+    end
+  end
+  local function Win(link, value) Fire("LOOT_ITEM_ROLL_WON", link, 1, 1, value or 87, false) end
+  Reset()
+  local _, rule = LR.Create("blank"); LR.SetDisplay(rule, "collapsed"); LR.SetEnabled(rule, true)
+  local id = StartRoll("item:100"); local roll = Ro.Find(id); local card = C.Card(roll.key)
+  Check(card.compact and roll.choice == nil, "display-only rule leaves a compact manual roll")
+  Ro.SetDisplay(roll, "expanded"); Win("item:100")
+  local e = V.Entries()[1]; local f = e.card.victory
+  Check(e.displayMode == "expanded" and e.manualDisplay == "expanded" and e.card == card and not f.compact,
+    "manual expanded override carries to the same roll's confirmed victory")
+  Step(0.55)
+  local started, total, sounded = e.started, e.total, e.sounded
+  card.toggle.scripts.OnClick(card.toggle)
+  Check(f.compact and math.abs(card.h - 80 * 384 / 460) < 0.001 and e.displayMode == "collapsed",
+    "victory toggle immediately reflows the existing card to Mini")
+  Check(e.started == started and e.total == total and e.sounded == sounded and f.scripts.OnUpdate and V.Count() == 1,
+    "mid-reveal toggle preserves timeline, sound state, result and instance")
+  Step(1.4)
+  local timer = f.timer
+  card.toggle.scripts.OnClick(card.toggle)
+  Check(not f.compact and f.timer == timer and not f.scripts.OnUpdate and e.started == started,
+    "static toggle keeps its original dismissal timer and no idle updater")
+  Step(4.4)
+  Check(V.Count() == 0 and not f.shown and not f.timer and not f.scripts.OnUpdate and (not Ro.ByKey(roll.key) or roll.manualDisplay == nil),
+    "finished victory clears the temporary override and all animation work")
+
+  Reset(); LR.Set("victoryIntensity", "off")
+  local a = Ro.Find(StartRoll("item:100")); Ro.SetDisplay(a, "collapsed")
+  local b = Ro.Find(StartRoll("item:101")); Ro.SetDisplay(b, "expanded")
+  EndRoll(a.rollID); Ro.Remove(a)
+  Check(V.RetainedDisplays() == 1, "departed roll retains one bounded presentation snapshot")
+  Win("item:101", 92); Win("item:100", 81)
+  local modes = {}
+  for _, entry in ipairs(V.Entries()) do modes[entry.link] = entry.displayMode end
+  Check(V.Count() == 2 and modes["item:100"] == "collapsed" and modes["item:101"] == "expanded",
+    "late compact and simultaneous expanded victories cannot exchange presentation")
+  Check(V.RetainedDisplays() == 0, "accepted late winner consumes its matching presentation")
+  local first, second = V.Entries()[1].card, V.Entries()[2].card
+  if first.baseY > second.baseY then first, second = second, first end
+  Check(second.baseY == first.baseY + first.h + LR.Get("spacing"), "mixed victory stack uses actual heights")
+  Step(4.2)
+  Check(V.Count() == 0, "both static victories expire without lingering animation")
+
+  Reset()
+  a = Ro.Find(StartRoll("item:100")); Ro.SetDisplay(a, "collapsed")
+  EndRoll(a.rollID); Ro.Remove(a)
+  b = Ro.Find(StartRoll("item:100")); Ro.SetDisplay(b, "expanded")
+  local n = native; Win("item:100")
+  Check(native == n + 1 and V.Count() == 0, "identical live and departed drops fall back natively rather than borrow a preference")
+  Reset(); LR.Set("victoryIntensity", "off")
+  a = Ro.Find(StartRoll("item:100")); Ro.SetDisplay(a, "collapsed")
+  EndRoll(a.rollID); Ro.Remove(a); Advance(V.DISPLAY_RETENTION + 1)
+  Win("item:100")
+  Check(V.Entries()[1].displayMode == "expanded" and V.RetainedDisplays() == 0,
+    "expired correlation safely falls back to Expanded without rule reevaluation")
+  Reset(); LR.Set("victoryIntensity", "off"); Win("item:998")
+  Check(V.Entries()[1].displayMode == "expanded", "missing roll state defaults to Expanded")
+
+  Reset()
+  for _, intensity in ipairs({ "off", "subtle", "full" }) do
+    LR.Set("victoryIntensity", intensity)
+    for q = 2, 5 do
+      Check(V.Preview(q % 2 == 0 and "need" or "greed", q, { display = "collapsed", upgrade = q % 2 == 0,
+        name = "A very long legendary item name with enough words to require careful fitting" }), "Mini preview starts repeatedly")
+      local pc = V.PreviewCard(); local pf = pc.victory
+      V.PreviewAt(0.7)
+      Check(pf.compact and pf.miniBase.shown and not pf.base.shown and pc.h < 70 and pf.upgradeIcon.shown == (q % 2 == 0),
+        "purpose-built Mini frame, quality and conditional upgrade survive pooling")
+      Check(pf.sweepCore.blend == "ADD" and not pf.rail.clips and pf.halo.texture:find("halo_", 1, true),
+        "compact effects reuse rarity art, proper blend and unclipped painted sweep")
+      if intensity == "off" then Check(pf.sweepCore.alpha == 0, "Off remains static in Mini")
+      else Check(pf.sweepCore.alpha > 0 and pf.headerHaze.alpha > 0, "compact reveal remains visible") end
+      V.SetDisplay(pf.entry, "expanded")
+      Check(not pf.compact and pf.paintTime == 0.7, "paused preview toggle retains its selected animation pose")
+      V.SetDisplay(pf.entry, "collapsed"); V.PreviewAt(1.0)
+      if intensity ~= "off" then Check(pf.iconBloom.alpha > 0, "compact item arrival has a visible bloom") end
+      V.PreviewAt(1.85)
+      Check(not pf.scripts.OnUpdate and pf.particles[1].alpha == 0 and pf.sweepCore.alpha == 0,
+        "Mini settles with no decorative motion")
+      V.PreviewStop()
+      Check(not pf.shown and not pf.timer and not pf.scripts.OnUpdate, "Mini interruption cleans up all owned work")
+    end
+  end
+  V.Disable(false)
+  Check(V.RetainedDisplays() == 0, "disable releases retained presentation snapshots")
+  LR.Set("animate", true); V.Sync()
 end
 
 ---------------------------------------------------------------------------

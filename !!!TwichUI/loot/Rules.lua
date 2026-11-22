@@ -1,7 +1,7 @@
 -- TwichUI: Loot Rolls, the rule engine
 -- Pure: no frame, no event, no saved data, no game call except for words (item class and slot names come from the
 -- game's own strings so nothing is guessed from a translation). A rule says "when an item matches these conditions,
--- roll Need, Greed or Pass". This file knows what a condition is, whether a rule is complete, and what a rule says about one
+-- optionally roll Need, Greed or Pass and/or change card display". This file knows what a condition is, whether a rule is complete, and what a rule says about one
 -- item. loot/Config.lua keeps the rules, loot/Roll.lua observes the roll and builds the item's facts, loot/Auto.lua acts.
 --
 -- Three answers, never two. A condition about an item answers "match", "no" or "unknown" (the fact is not there yet, or this client
@@ -10,7 +10,7 @@
 --
 -- Priority: the rules are read from the top. The first enabled, complete rule that is not a definite "no" decides:
 -- "match" is a decision; "unknown" stops the search with no decision (a rule above may have matched, so a rule below must not speak
--- for it). Nothing combines the actions of two rules. A rule with nothing in it, or a condition that is not valid, is incomplete:
+-- for it). Roll and display decisions use this order independently; No change is skipped per channel. A rule with nothing in it, or a condition that is not valid, is incomplete:
 -- it is skipped, and the editor says why.
 --
 -- The facts (an "observation") are a plain table; a missing field is unknown:
@@ -25,7 +25,8 @@ R.LootRules = Ru
 
 Ru.MATCH, Ru.NO, Ru.UNKNOWN = "match", "no", "unknown"
 Ru.ACTIONS = { "need", "greed", "pass" }
-Ru.ACTION_LABEL = { need = "Need", greed = "Greed", pass = "Pass" }
+Ru.ACTION_LABEL = { need = "Need", greed = "Greed", pass = "Pass", none = "No change" }
+Ru.DISPLAY_LABEL = { none = "No change", expanded = "Expanded", collapsed = "Collapsed (Mini)" }
 Ru.MAX_CONDITIONS = 8
 Ru.MAX_NAME = 40
 
@@ -316,7 +317,9 @@ end
 -- nil when the rule can run, else why not (words for the editor).
 function Ru.Incomplete(rule)
     if type(rule) ~= "table" then return "Not a rule." end
-    if rule.action ~= "need" and rule.action ~= "greed" and rule.action ~= "pass" then return "Choose Need, Greed or Pass." end
+    if not Ru.ACTION_LABEL[rule.action] then return "Choose a roll action (or No change)." end
+    if not Ru.DISPLAY_LABEL[rule.display or "none"] then return "Choose a valid card display." end
+    if rule.action == "none" and (rule.display == nil or rule.display == "none") then return "Choose a roll or card display action; both are No change." end
     local list = rule.conditions
     if type(list) ~= "table" or #list == 0 then return "Add at least one condition: a rule with none would match every item." end
     if #list > Ru.MAX_CONDITIONS then return "Too many conditions." end
@@ -350,7 +353,7 @@ end
 function Ru.Decide(rules, obs, opts)
     if type(rules) ~= "table" then return { status = "none" } end
     for i, rule in ipairs(rules) do
-        if type(rule) == "table" and rule.enabled ~= false and not Ru.Incomplete(rule) then
+        if type(rule) == "table" and rule.enabled ~= false and rule.action ~= "none" and not Ru.Incomplete(rule) then
             local v = Ru.EvalRule(rule, obs, opts)
             if v == Ru.MATCH then return { status = "match", rule = rule, index = i } end
             if v == Ru.UNKNOWN then return { status = "unknown", rule = rule, index = i } end
@@ -359,11 +362,32 @@ function Ru.Decide(rules, obs, opts)
     return { status = "none" }
 end
 
+-- Display has its own ordered decision. Unknown blocks only this channel;
+-- rules with no explicit display never participate, even when their roll wins.
+function Ru.DecideDisplay(rules, obs)
+    if type(rules) ~= "table" then return { status = "none" } end
+    for i, rule in ipairs(rules) do
+        if type(rule) == "table" and rule.enabled ~= false and (rule.display == "expanded" or rule.display == "collapsed")
+            and not Ru.Incomplete(rule) then
+            local v = Ru.EvalRule(rule, obs, { allowUpgrade = true })
+            if v ~= Ru.NO then return { status = v, rule = rule, index = i } end
+        end
+    end
+    return { status = "none" }
+end
+
+function Ru.ActionSummary(rule)
+    local action = rule.action ~= "none" and Ru.ACTION_LABEL[rule.action] or nil
+    local display = rule.display == "collapsed" and "Collapsed" or rule.display == "expanded" and "Expanded" or nil
+    if action and display then return action .. " · " .. display end
+    return action or (display and (rule.display == "collapsed" and "Collapse card" or "Expand card")) or "No action"
+end
+
 -- A sentence for a rule: "Automatically choose Greed when the item is Uncommon and is equipment, after 3 seconds."
 function Ru.Summary(rule)
     if type(rule) ~= "table" then return "" end
     local action = Ru.ACTION_LABEL[rule.action]
-    if not action then return "Choose Need, Greed or Pass to finish this rule." end
+    if not action then return "Choose a roll action or card display to finish this rule." end
     local parts = {}
     for _, c in ipairs(rule.conditions or {}) do
         local t = T[c.type]
@@ -381,5 +405,9 @@ function Ru.Summary(rule)
     if lead == "context" then subject = "when " .. table.concat(parts, joiner) else subject = "when the item " .. table.concat(parts, joiner) end
     local delay = tonumber(rule.delay) or 0
     local after = delay > 0 and (", after %s second%s"):format(delay % 1 == 0 and tostring(math.floor(delay)) or ("%.1f"):format(delay), delay == 1 and "" or "s") or ""
-    return ("Automatically choose %s %s%s."):format(action, subject, after)
+    local display = rule.display == "collapsed" and "collapse the card" or rule.display == "expanded" and "expand the card" or nil
+    if rule.action == "none" then
+        return display and (display:gsub("^%l", string.upper) .. " " .. subject .. ".") or "Choose a roll or card display action."
+    end
+    return ("Automatically choose %s %s%s%s."):format(action, subject, after, display and ("; " .. display) or "")
 end

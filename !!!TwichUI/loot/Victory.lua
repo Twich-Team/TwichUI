@@ -7,12 +7,14 @@ R.LootVictory = V
 local ART = R.PATH .. [[media\loot\victory\]]
 local FX = ART .. [[fx\]]
 local EVENT = "LOOT_ITEM_ROLL_WON"
-local entries, recent = {}, {}
+local entries, recent, departed = {}, {}, {}
 local sequence, pool = 0, 0
 local relay, owner, original
 local preview, inFlight
 local lastSound = -100
 V.MAX_QUEUE = 32
+V.MINI_HEIGHT = 80  -- reference pixels: 66.8 UI pixels at the established card width
+V.DISPLAY_RETENTION = 60
 -- Complete the choreographed afterglow before starting the configured hold.
 V.HEIGHT, V.MOTION_END, V.HOLD_AT, V.SOUND_AT = 218, 1.85, 1.85, 0.30
 
@@ -29,12 +31,15 @@ local function Enabled() return LR.IsOn() and LR.Get("victory") and C.Ready() en
 local function Total() return ({ short = 3.5, normal = 4, long = 5 })[LR.Get("victoryDuration")] or 4 end
 function V.Entries() return entries end
 function V.Count() return #entries end
+function V.RetainedDisplays() return #departed end
 function V.PoolSize() return pool end
 function V.Listening() return owner ~= nil end
 
 local function Finish(entry)
     if entry.finished then return end
     entry.finished = true
+    local source = not entry.preview and Ro.ByKey(entry.key)
+    if source and source.victoryOwned then source.manualDisplay = nil end
     if entry.card then
         local f = entry.card.victory
         Cancel(f); f:Hide(); f.entry = nil
@@ -103,6 +108,16 @@ local PARTICLES = {
     { 95, 152, 14, -18, 10, 10, "fx_particle_mote_medium", 1.05, 1.20, 1.82, 0.75 },
     { 282, 12, 22, -35, 12, 12, "fx_particle_mote_medium", 0.37, 0.56, 1.20, 0.75 },
 }
+-- Same particle envelopes, deliberately authored Mini paths/sizes. Bright cores
+-- stay legible; this is not a uniform shrink of the full celebration.
+local MINI_PARTICLES = {
+    { 112, 22, -12, -20, 24, 24 }, { 16, 10, -5, -5, 28, 17 },
+    { 156, 61, 0, -17, 22, 22 }, { 104, 44, -12, -17, 11, 11 },
+    { 12, 12, -12, -24, 36, 24 }, { 442, 12, 16, -24, 36, 24 },
+    { 174, 56, 0, -2, 34, 23 }, { 90, 10, -17, -25, 26, 26 },
+    { 330, 10, 20, -26, 26, 26 }, { 42, 8, -14, -20, 12, 12 },
+    { 156, 62, 10, -16, 10, 10 }, { 278, 9, 16, -24, 12, 12 },
+}
 local function Clamp(v) return math.max(0, math.min(1, v)) end
 local function EaseOut(v) v = 1 - Clamp(v); return 1 - v * v * v end
 local function At(region, parent, x, y)
@@ -114,13 +129,14 @@ local function Pulse(t, first, peak, last)
     return 1 - Smooth((t - peak) / (last - peak))
 end
 function V.Paint(f, t, silent)
+    f.paintTime = t
     local entry = f.entry
     local motion = entry.motion
     local reveal = motion and EaseOut(t / 0.45) or 1
     f.header:SetAlpha(reveal)
     f.header:ClearAllPoints(); f.header:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -5 * (1 - reveal))
     local resolve = motion and Smooth(t / 0.20) or 1
-    f.base:SetAlpha(resolve); f.content:SetAlpha(resolve)
+    f.base:SetAlpha(resolve); f.miniBase:SetAlpha(resolve); f.content:SetAlpha(resolve)
     if entry.transition then
         local card = entry.card
         card.body:SetAlpha(1 - resolve); card.shell:SetAlpha(1 - resolve)
@@ -147,9 +163,10 @@ function V.Paint(f, t, silent)
     local sweep = (t - 0.45) / 0.50
     local envelope = motion and Smooth(sweep / 0.12) * (1 - Smooth((sweep - 0.82) / 0.18)) or 0
     local x = 55 + Smooth(sweep) * 350
-    At(f.sweepHaze, f.railCanvas, x - 16, 16)
-    At(f.sweepCore, f.railCanvas, x, 15)
-    At(f.sweepTail, f.railCanvas, x - 48, 17)
+    if f.compact then x = 25 + Smooth(sweep) * 395 end
+    At(f.sweepHaze, f.railCanvas, x - 16, f.compact and 10 or 16)
+    At(f.sweepCore, f.railCanvas, x, f.compact and 10 or 15)
+    At(f.sweepTail, f.railCanvas, x - 48, f.compact and 11 or 17)
     f.sweepHaze:SetAlpha(envelope * (rich and 0.60 or 0.28))
     f.sweepCore:SetAlpha(envelope * (rich and 1 or 0.75))
     f.sweepTail:SetAlpha(envelope * (rich and 0.65 or 0.20))
@@ -157,16 +174,23 @@ function V.Paint(f, t, silent)
     f.trimGlints[2]:SetAlpha(motion and rich and Pulse(t, 0.72, 0.85, 1.04) or 0)
     for i, data in ipairs(PARTICLES) do
         local p = Clamp((t - data[8]) / (data[10] - data[8]))
-        local x0 = data[12] and 230 + data[12] * (f.title:GetWidth() / 2 + 31) or data[1]
-        local y = data[2] + data[4] * EaseOut(p) + (data[13] or 0) * 4 * p * (1 - p)
+        local pos = f.compact and MINI_PARTICLES[i] or data
+        local x0 = not f.compact and data[12] and 230 + data[12] * (f.title:GetWidth() / 2 + 31) or pos[1]
+        local y = pos[2] + pos[4] * EaseOut(p) + (data[13] or 0) * 4 * p * (1 - p)
         local texture = f.particles[i]
-        At(texture, f.effects, x0 + data[3] * EaseOut(p), y)
+        At(texture, f.effects, x0 + pos[3] * EaseOut(p), y)
         texture:SetAlpha(motion and (rich or i <= 4) and data[11] * (rich and 1 or 0.85) * Pulse(t, data[8], data[9], data[10]) or 0)
     end
     f.arrivalGlint:SetSize(rich and 40 or 28, rich and 24 or 17)
     f.arrivalGlint:SetAlpha(motion and (rich and 1 or 0.80) * Pulse(t, 0.90, 1.08, 1.60) or 0)
     local rarity = motion and Pulse(t, 0.75, 1.00, 1.65) or 0
     f.halo:SetAlpha(f.haloRest + (f.hasHalo and (rich and 0.22 or 0.06) * rarity or 0))
+    if f.compact then
+        f.headerHaze:SetSize(124 * expand, 58 * expand); At(f.headerHaze, f, 55, 30)
+        f.headerBloom:SetSize(120, 36); At(f.headerBloom, f, 55, 35)
+        f.radiance:SetSize(100 * expand, 68 * expand)
+        f.arrivalGlint:SetSize(rich and 32 or 26, rich and 19 or 16)
+    end
     if not silent and t >= V.SOUND_AT then Sound(entry) end
     f.phase = not motion and "static" or t < 0.20 and "reveal" or t < 0.60 and "burst" or t < 0.95 and "sweep" or t < 1.40 and "arrival" or t < V.MOTION_END and "afterglow" or "static"
 end
@@ -207,17 +231,7 @@ local function Texture(parent, name, w, h, layer, blend)
     if UV[name] then t:SetTexCoord(unpack(UV[name])) end
     return t
 end
--- Fit once when drawing, retaining the unabridged name in the item tooltip.
--- Remove complete UTF-8 characters; never split a localized item's final glyph.
-local function ItemName(label, name)
-    label:SetText(name)
-    local last = #name
-    while last > 0 and label:GetStringWidth() > label:GetWidth() do
-        last = last - 1
-        while last > 0 and name:byte(last + 1) >= 128 and name:byte(last + 1) < 192 do last = last - 1 end
-        label:SetText(name:sub(1, last) .. "...")
-    end
-end
+local ItemName = C.FitItemName
 local function Font(parent, size, serif)
     local f = parent:CreateFontString(nil, "OVERLAY")
     f:SetFont(STANDARD_TEXT_FONT, size, "")
@@ -246,6 +260,78 @@ local function FrameArtwork(parent)
     end
     return base
 end
+local function MiniArtwork(parent)
+    local base = CreateFrame("Frame", nil, parent); base:SetSize(460, V.MINI_HEIGHT); base:SetPoint("TOPLEFT")
+    base:SetFrameLevel(parent:GetFrameLevel())
+    local xs, dx = { 0, 80, 944, 1024 }, { 0, 24, 436, 460 }
+    local rows = { { 0, 80, 0, 24 }, { 130, 330, 24, 56 }, { 364, 444, 56, 80 } }
+    for _, row in ipairs(rows) do for col = 1, 3 do
+        local t = Texture(base, "loot_won_frame", dx[col + 1] - dx[col], row[4] - row[3], "BACKGROUND")
+        t:SetPoint("TOPLEFT", base, "TOPLEFT", dx[col], -row[3])
+        t:SetTexCoord(xs[col] / 1024, xs[col + 1] / 1024, row[1] / 512, row[2] / 512)
+    end end
+    return base
+end
+local function SizeFont(label, size)
+    local file, _, flags = label:GetFont()
+    if file then label:SetFont(file, size, flags or "") end
+end
+local function Layout(f, compact)
+    if f.compact == compact then return false end
+    f.compact = compact
+    f:SetHeight(compact and V.MINI_HEIGHT or V.HEIGHT)
+    f.base:SetShown(not compact); f.miniBase:SetShown(compact)
+    f.title:SetShown(not compact); f.miniTitle:SetShown(compact)
+    for i, laurel in ipairs(f.laurels) do
+        laurel:ClearAllPoints()
+        if compact then laurel:SetSize(14, 23); At(laurel, f.header, i == 1 and 17 or 94, 38)
+        else
+            laurel:SetSize(i == 1 and 19 or 20, 31)
+            laurel:SetPoint(i == 1 and "RIGHT" or "LEFT", f.title, i == 1 and "LEFT" or "RIGHT", i == 1 and -8 or 8, 0)
+        end
+    end
+    for _, divider in ipairs(f.dividers) do divider:SetShown(not compact) end
+    f.emblem:SetSize(compact and 16 or 24, compact and 16 or 24); At(f.emblem, f.header, compact and 174 or 230, compact and 55 or 64)
+    f.icon:ClearAllPoints(); f.icon:SetSize(compact and 44 or 52, compact and 44 or 52)
+    f.icon:SetPoint("TOPLEFT", compact and 112 or 46, compact and -19 or -93)
+    f.halo:SetSize(compact and 80 or 96, compact and 80 or 96); At(f.halo, f, compact and 134 or 72, compact and 41 or 119)
+    local ex, ey, ew = compact and 111 or 45, compact and 18 or 92, compact and 46 or 54
+    for i, edge in ipairs(f.edges) do
+        edge:ClearAllPoints(); edge:SetPoint("TOPLEFT", ex + (i == 4 and ew - 1 or 0), -(ey + (i == 2 and ew - 1 or 0)))
+        edge:SetSize(i <= 2 and ew or 1, i <= 2 and 1 or ew)
+    end
+    ex, ey, ew = ex - 1, ey - 1, ew + 2
+    for i, edge in ipairs(f.outerEdges) do
+        edge:ClearAllPoints(); edge:SetPoint("TOPLEFT", ex + (i == 4 and ew - 1 or 0), -(ey + (i == 2 and ew - 1 or 0)))
+        edge:SetSize(i <= 2 and ew or 1, i <= 2 and 1 or ew)
+    end
+    f.name:ClearAllPoints(); f.name:SetPoint("TOPLEFT", compact and 170 or 120, compact and -18 or -84)
+    f.name:SetSize(compact and 222 or 300, 24); SizeFont(f.name, compact and 17 or 19)
+    f.sub:SetShown(not compact)
+    f.method:ClearAllPoints(); f.method:SetPoint("TOPLEFT", compact and 188 or 120, compact and -46 or -134)
+    f.method:SetSize(compact and 200 or 300, compact and 18 or 20); SizeFont(f.method, compact and 13 or 14)
+    f.hit:ClearAllPoints(); f.hit:SetPoint("TOPLEFT", compact and 108 or 43, compact and -13 or -76)
+    f.hit:SetSize(compact and 284 or 380, compact and 56 or 82)
+    f.iconHaze:SetSize(compact and 78 or 96, compact and 82 or 100)
+    At(f.iconHaze, f, compact and 134 or 72, compact and 41 or 116)
+    f.iconBloom:SetSize(compact and 74 or 92, compact and 78 or 96)
+    At(f.iconBloom, f, compact and 134 or 72, compact and 41 or 116)
+    f.emblemBurst:SetSize(compact and 40 or 58, compact and 26 or 38)
+    At(f.emblemBurst, f, compact and 174 or 230, compact and 55 or 64)
+    At(f.headerBloom, f, compact and 55 or 230, compact and 35 or 55)
+    At(f.radiance, f, compact and 55 or 230, compact and 12 or 24)
+    At(f.arrivalGlint, f, compact and 152 or 97, compact and 20 or 96)
+    f.sweepHaze:SetSize(compact and 96 or 115, compact and 28 or 36)
+    f.sweepCore:SetSize(compact and 82 or 92, compact and 22 or 26)
+    f.sweepTail:SetSize(compact and 96 or 110, compact and 27 or 31)
+    At(f.trimGlints[1], f, compact and 26 or 108, compact and 10 or 14)
+    At(f.trimGlints[2], f, compact and 426 or 350, compact and 10 or 14)
+    for i, texture in ipairs(f.particles) do
+        local pos = compact and MINI_PARTICLES[i] or PARTICLES[i]; texture:SetSize(pos[5], pos[6])
+    end
+    return true
+end
+
 local function Build(card)
     pool = pool + 1
     local f = CreateFrame("Frame", nil, card)
@@ -253,6 +339,7 @@ local function Build(card)
     f:SetSize(460, V.HEIGHT); f:SetScale(384 / 460); f:SetPoint("TOPLEFT")
     f:SetFrameLevel(card.body:GetFrameLevel() + 4)
     f.base = FrameArtwork(f)
+    f.miniBase = MiniArtwork(f)
     f.atmosphere = CreateFrame("Frame", nil, f); f.atmosphere:SetAllPoints()
     f.atmosphere:SetFrameLevel(f:GetFrameLevel() + 1); f.atmosphere:EnableMouse(false)
     f.headerHaze = Texture(f.atmosphere, "fx_header_haze", 312, 65, "BACKGROUND", "ADD"); At(f.headerHaze, f, 230, 41)
@@ -269,6 +356,8 @@ local function Build(card)
     f.title:SetSize(math.min(204, math.max(112, f.title:GetStringWidth() + 4)), 30)
     f.title:SetPoint("TOP", f.header, "TOP", 0, -24)
     f.title:SetJustifyH("CENTER"); f.title:SetTextColor(0.93, 0.79, 0.50)
+    f.miniTitle = Font(f.header, 17, true); f.miniTitle:SetText("YOU\nWON!"); f.miniTitle:SetMaxLines(2)
+    f.miniTitle:SetSize(62, 42); At(f.miniTitle, f.header, 55, 37); f.miniTitle:SetJustifyH("CENTER")
     f.laurels = { Texture(f.header, "laurel_left", 19, 31), Texture(f.header, "laurel_right", 20, 31) }
     f.laurels[1]:SetPoint("RIGHT", f.title, "LEFT", -8, 0)
     f.laurels[2]:SetPoint("LEFT", f.title, "RIGHT", 8, 0)
@@ -296,6 +385,12 @@ local function Build(card)
     f.badge = Texture(f.content, "badge_backing", 148, 29); At(f.badge, f, 230, 184)
     f.upgrade = Font(f.content, 14); f.upgrade:SetPoint("CENTER", f.badge, "CENTER"); f.upgrade:SetSize(140, 22)
     f.upgrade:SetJustifyH("CENTER"); f.upgrade:SetText("Potential Upgrade")
+    f.upgradeIcon = f.content:CreateTexture(nil, "OVERLAY"); f.upgradeIcon:SetSize(18, 18)
+    f.upgradeIcon:SetTexture(R.PATH .. [[media\loot\upgrade]]); At(f.upgradeIcon, f, 410, 55)
+    f.upgradeHit = CreateFrame("Frame", nil, f.content); f.upgradeHit:SetSize(24, 24); At(f.upgradeHit, f, 410, 55)
+    f.upgradeHit:EnableMouse(true)
+    f.upgradeHit:SetScript("OnEnter", function(self) if f.entry then C.PillTips.upgrade(self, f.entry.card, f.entry) end end)
+    f.upgradeHit:SetScript("OnLeave", function() GameTooltip:Hide() end)
     f.hit = CreateFrame("Button", nil, f.content); f.hit:SetPoint("TOPLEFT", 43, -76); f.hit:SetSize(380, 82)
     f.hit:RegisterForClicks("LeftButtonUp")
     f.hit:SetScript("OnEnter", function(self) if f.entry then C.ItemTip(self, f.entry) end end)
@@ -335,12 +430,25 @@ end
 function V.Draw(card, entry)
     local f = card.victory or Build(card)
     if not f.built then error("Loot victory artwork failed to construct; reload after repairing assets") end
-    if f.entry == entry then return V.HEIGHT * 384 / 460 end
+    local changed = Layout(f, entry.displayMode == "collapsed")
+    local h = (f.compact and V.MINI_HEIGHT or V.HEIGHT) * 384 / 460
+    card:SetHeight(h); C.DisplayToggle(card, entry.displayMode, true)
+    if f.entry == entry then
+        if changed then
+            ItemName(f.name, entry.name or "Loot")
+            local upgrade = entry.upgrade == true and LR.Get("showUpgrade")
+            f.badge:SetShown(upgrade and not f.compact); f.upgrade:SetShown(upgrade and not f.compact)
+            f.upgradeIcon:SetShown(upgrade and f.compact); f.upgradeHit:SetShown(upgrade and f.compact)
+            V.Paint(f, f.seeking and f.paintTime or math.min(GetTime() - entry.started, V.MOTION_END), true)
+        end
+        return h
+    end
     V.ClearCard(card)
     entry.transition = card.view ~= nil and not card.view.victory and not entry.preview
     entry.card, f.entry = card, entry
+    f.seeking = nil
     card.live, card.enter, card.view = false, 1, entry
-    card:SetAlpha(1); card:SetHeight(V.HEIGHT * 384 / 460)
+    card:SetAlpha(1); card:SetHeight(h)
     card.rollID = nil -- victory cards never authorize automatic actions or park live native roll controls
     card.timer:Hide(); card.time:Hide()
     for _, b in pairs(card.buttons) do b:Disable() end
@@ -355,7 +463,9 @@ function V.Draw(card, entry)
     ItemName(f.name, entry.name or "Loot"); f.name:SetTextColor(qc[1], qc[2], qc[3])
     f.sub:SetText((entry.typeText and entry.typeText .. " · " or "") .. qname)
     f.method:SetText((entry.choice == "need" and "Need roll" or "Greed roll") .. (entry.value and (": " .. entry.value) or ""))
-    f.badge:SetShown(entry.upgrade == true and LR.Get("showUpgrade")); f.upgrade:SetShown(entry.upgrade == true and LR.Get("showUpgrade"))
+    local upgrade = entry.upgrade == true and LR.Get("showUpgrade")
+    f.badge:SetShown(upgrade and not f.compact); f.upgrade:SetShown(upgrade and not f.compact)
+    f.upgradeIcon:SetShown(upgrade and f.compact); f.upgradeHit:SetShown(upgrade and f.compact)
     f.icon:SetTexture(entry.icon or [[Interface\Icons\INV_Misc_QuestionMark]])
     for _, edge in ipairs(f.edges) do
         edge:SetColorTexture(qc[1] * 0.45 + 0.58 * 0.55, qc[2] * 0.45 + 0.43 * 0.55, qc[3] * 0.45 + 0.24 * 0.55, 1)
@@ -372,8 +482,31 @@ function V.Draw(card, entry)
         V.Paint(f, V.MOTION_END)
         f.timer = C_Timer.NewTimer(entry.total, Safe(function() f.timer = nil; Finish(entry) end))
     end
-    return V.HEIGHT * 384 / 460
+    return h
 end
+
+function V.SetDisplay(entry, mode)
+    if not entry or not entry.card or (mode ~= "expanded" and mode ~= "collapsed") then return false end
+    entry.displayMode, entry.manualDisplay = mode, mode
+    if entry.preview then
+        local h = V.Draw(entry.card, entry); preview:SetHeight(h)
+    else
+        local roll = Ro.ByKey(entry.key)
+        if roll and roll.victoryOwned then return Ro.SetDisplay(roll, mode) end
+        C.Refresh()
+    end
+    return true
+end
+
+local function PruneDeparted()
+    for i = #departed, 1, -1 do if departed[i].expires <= GetTime() then table.remove(departed, i) end end
+end
+Ro.Subscribe(function(kind, roll)
+    if kind ~= "removed" or not owner or roll.victoryOwned or type(roll.link) ~= "string" then return end
+    PruneDeparted()
+    departed[#departed + 1] = { view = C.View(roll), key = roll.key, expires = GetTime() + V.DISPLAY_RETENTION }
+    if #departed > V.MAX_QUEUE then table.remove(departed, 1) end
+end)
 
 -- Freeze only a unique matching roll. The win event is authoritative even after
 -- the roll record expired. No guess based on selection, player name, or item ID.
@@ -387,8 +520,16 @@ local function Snapshot(link, quantity, kind, value)
             if not w or (w.self and (not w.roll or not value or w.roll == value)) then match, count = r, count + 1 end
         end
     end
-    if count > 1 then return nil end -- cannot distinguish identical concurrent drops: native fallback
-    local entry = match and C.View(match) or { link = link, state = "resolved" }
+    local cached
+    PruneDeparted()
+    for _, item in ipairs(departed) do
+        local v, w = item.view, item.view.result and item.view.result.winner
+        if v.link == link and v.choice ~= "pass" and (not w or (w.self and (not w.roll or not value or w.roll == value))) then
+            count, cached = count + 1, item
+        end
+    end
+    if count > 1 then return nil end -- ambiguous live/departed instances keep native fallback
+    local entry = match and C.View(match) or cached and cached.view or { link = link, state = "resolved", displayMode = "expanded" }
     entry.victory, entry.choice, entry.rollID = true, kind == 1 and "need" or "greed", nil
     entry.value = LR.Whole(value) and value >= 1 and value <= 100 and value or nil
     quantity = Plain(quantity)
@@ -402,11 +543,11 @@ local function Snapshot(link, quantity, kind, value)
         if ok then entry.icon = Plain(icon) end
     end
     entry.name = entry.name or link:match("%[([^%]]+)%]") or "Loot"
-    entry.key = match and match.key or (1000000000 + sequence)
+    entry.key = match and match.key or cached and cached.key or (1000000000 + sequence)
     entry.total, entry.intensity = Total(), LR.Get("victoryIntensity")
     entry.motion = entry.intensity ~= "off"
     entry.total = entry.total + (entry.motion and V.HOLD_AT + 0.30 or 0)
-    return entry, match
+    return entry, match, cached
 end
 
 function V.Accept(...)
@@ -431,7 +572,7 @@ function V.Accept(...)
     end
     if #entries >= V.MAX_QUEUE then return false end
     sequence = sequence + 1
-    local entry, match = Snapshot(link, quantity, kind, value)
+    local entry, match, cached = Snapshot(link, quantity, kind, value)
     if not entry then return false end
     entry.args = args
     inFlight = entry
@@ -449,11 +590,13 @@ function V.Accept(...)
     end
     recent[#recent + 1] = { id = fingerprint, at = GetTime(), matched = match ~= nil }
     if #recent > 64 then table.remove(recent, 1) end
+    if cached then for i, item in ipairs(departed) do if item == cached then table.remove(departed, i) break end end end
     inFlight = nil
     return true
 end
 
 function V.Disable(replay)
+    departed = {}
     if not owner and #entries == 0 and not (preview and preview.entry) then return end
     if relay then relay:UnregisterAllEvents() end
     V.PreviewStop()
@@ -530,6 +673,7 @@ function V.Preview(choice, quality, sample)
     }
     local item = samples[e.quality] or samples[2]
     e.name, e.typeText, e.icon = item[1], item[2], item[3]
+    e.displayMode = type(sample) == "table" and sample.display == "collapsed" and "collapsed" or "expanded"
     -- Optional synthetic fixtures for long-name/upgrade preview checks only.
     if type(sample) == "table" then
         if type(sample.name) == "string" and #sample.name <= 256 and not sample.name:find("[%c|]") then e.name = sample.name end
@@ -542,6 +686,7 @@ function V.Preview(choice, quality, sample)
     preview.entry = e
     preview:Show()
     local ok, err = pcall(V.Draw, preview.card, e)
+    if ok then preview:SetHeight(err) end
     if not ok then
         V.PreviewStop(); R.Fault("loot victory preview", err)
         return false, "The victory artwork could not be loaded."
@@ -553,6 +698,7 @@ end
 function V.PreviewAt(seconds)
     if not (preview and preview.entry and LR.Finite(seconds) and seconds >= 0) then return false end
     local e, f = preview.entry, preview.card.victory
+    f.seeking = true
     Cancel(f)
     V.Paint(f, math.min(seconds, V.MOTION_END), true)
     if e.motion then

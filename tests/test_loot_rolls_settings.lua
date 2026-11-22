@@ -24,9 +24,19 @@ K.variables.TWICHUI_lootRollsVictorySound.set(false)
 K.variables.TWICHUI_lootRollsVictoryDuration.set("long")
 assert(not LR.Get("victory") and not LR.Get("victorySound") and LR.Get("victoryDuration") == "long")
 assert(c.TwichUIDB.ui.lootRolls.victoryIntensity == "off")
+local _, compactRule = LR.Create("blank")
+LR.SetDisplay(compactRule, "collapsed"); LR.SetEnabled(compactRule, true)
+local _, legacyRule = LR.Create("greenGear")
+LR.SetEnabled(legacyRule, true)
+for _, rule in ipairs(c.TwichUIDB.ui.lootRolls.rules) do if rule.id == legacyRule then rule.display = nil end end
 local saved = c.TwichUIDB.ui.lootRolls
 local reloaded = SettingsClient({ beforeInit = LoadLoot, beforeDescribe = function(client) client.TwichUIDB.ui = { lootRolls = saved } end })
 assert(not reloaded.TwichUI.LootRolls.Get("victory") and reloaded.TwichUI.LootRolls.Get("victoryDuration") == "long", "new client reads saved values")
+local restored = reloaded.TwichUI.LootRolls
+assert(restored.Rule(compactRule).action == "none" and restored.Rule(compactRule).display == "collapsed"
+    and not restored.Rule(compactRule).incomplete, "display-only rule survives a fresh client load")
+assert(restored.Rule(legacyRule).action == "greed" and restored.Rule(legacyRule).display == "none", "legacy rules retain Greed with no display change")
+for _, rule in ipairs(saved.rules) do if rule.id == legacyRule then assert(rule.display == nil, "reading old rules does not silently migrate them") end end
 local choice = assert(K.variables.TWICHUI_lootRollsVictoryPreviewChoice)
 local quality = assert(K.variables.TWICHUI_lootRollsVictoryPreviewQuality)
 choice.set("greed"); quality.set(5)

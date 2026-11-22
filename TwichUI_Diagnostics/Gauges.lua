@@ -326,6 +326,7 @@ local G = {
     { "camping.rest.ticks", "Camping bar: sleeping bag bar clock ticks so far (module count)", "work", "core", Field("CampingRest", "ticks") },
     { "camping.looks", "Camping bar: looks so far (module count)", "work", "core", Field("Camping", "looks") },
     { "loot.victories", "Loot victories: queued and showing", "state", "core", Field("LootRolls", "victories") },
+    { "loot.retainedDisplays", "Loot rolls: recent presentation snapshots", "cache", "core", Field("LootRolls", "retainedDisplays") },
     { "loot.victoryPool", "Loot victories: artwork frames made", "pool", "core", Field("LootRolls", "victoryPool") },
     { "loot.victoryEvents", "Loot victories: native win event relay", "listeners", "core", Field("LootRolls", "victoryEvents") },
     { "loot.events", "Loot Rolls: events registered", "listeners", "core", Field("LootRolls", "events") },

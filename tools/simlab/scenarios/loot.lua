@@ -228,6 +228,28 @@ if view == "rules" or view == "cards" or view == "narrow" or view == "builder" o
 end
 
 
+if view == "compactRule" then
+    Lab.Step("display-only rule builder", function()
+        TwichUIDB.ui.settingsWindow = { point = "CENTER", relativePoint = "CENTER", x = -140, y = 0, w = 1080, h = 900 }
+        local opened = Lab.Open("lootRules")
+        Check("init", "rule builder opened", true, opened)
+        local _, id = LR.Create("blank"); LR.SetName(id, "Reduce loot clutter"); LR.SetEnabled(id, true)
+        local P = R.LootRulesPage; P.Select(id); Lab.Settle(0.4)
+        local f = P.Parts().frame
+        f.actions.none:Click(); f.displays.collapsed:Click(); Lab.Settle(0.4)
+        Check("interact", "Roll remains No change", "none", LR.Rule(id).action)
+        Check("interact", "Card display is Collapsed", "collapsed", LR.Rule(id).display)
+        Check("state", "display-only rule is complete", nil, LR.Rule(id).incomplete)
+        Check("display", "summary describes presentation", true, (f.barText:GetText() or ""):find("Collapse") ~= nil)
+        f.previewRule:Click(); Lab.Settle(0.3)
+        local pc = C.PreviewCard()
+        Check("state", "preview retains manual choice", true, pc and pc.view.state == "pending" and pc.compact)
+        Check("state", "preview never sends a roll", 0, #rolled)
+        C.PreviewStop(true)
+        R.SettingsUI.RevealFrame(f.displays.collapsed); Lab.Settle(0.3)
+    end)
+end
+
 if view == "place" then
     Lab.Step("placement", function()
         local x0, y0 = LR.Place()
@@ -352,6 +374,50 @@ if view == "sweepLab" then
         V.PreviewStop()
         Check("display", "four diagnostic backgrounds constructed", true, board:IsShown())
         Check("state", "diagnostic leaves real wins untouched", 0, V.Count())
+    end)
+end
+
+if view == "miniActive" or view == "miniAuto" or view == "compactMixed" then
+    Lab.Step("compact rule-driven cards", function()
+        LR.Set("maxCards", 4); LR.Set("victorySound", false)
+        local ok, rule = LR.Create("blank")
+        Check("init", "display rule created", true, ok)
+        LR.SetCondition(rule, 1, { value = 4 }); LR.SetDisplay(rule, "collapsed")
+        if view == "miniAuto" then LR.SetAction(rule, "greed"); LR.Set("auto", true); LR.SetDelay(rule, 10) end
+        LR.SetEnabled(rule, true)
+        local id = Start("item:20001", 30); local roll = Ro.Find(id); local card = C.Card(roll.key)
+        Check("display", "rule chooses Mini", "collapsed", card.view.displayMode)
+        Check("geometry", "Mini uses real compact height", C.MINI_HEIGHT, card:GetHeight())
+        Check("state", "display never rolls immediately", 0, #rolled)
+        Check("state", "roll timer is retained", true, card.timer:IsShown() and card.time:IsShown())
+        local deadline, choice = roll.deadline, roll.choice
+        if view ~= "miniAuto" then
+            for _, key in ipairs({ "need", "greed", "pass" }) do Check("display", "manual choice remains visible: " .. key, true, card.buttons[key]:IsShown()) end
+            card.toggle:Click()
+            Check("geometry", "manual expand restores full height", true, card:GetHeight() > 120)
+            card.toggle:Click()
+            Check("state", "manual collapse is per instance", "collapsed", roll.manualDisplay)
+            Check("state", "toggle preserves deadline", deadline, roll.deadline)
+            Check("state", "toggle preserves roll choice", choice, roll.choice)
+        else Check("state", "Mini auto uses the existing countdown", "scheduled", roll.state) end
+        if view == "compactMixed" then
+            Start("item:20003", 30)
+            ITEMS["item:20006"] = { id = 20006, name = "Arcanist's Wristguards", quality = 4, class = 4, sub = 1,
+                loc = "INVTYPE_WRIST", bind = 1, icon = "Interface\\Icons\\INV_Bracer_07", type = "Armor", subType = "Cloth" }
+            local miniWin = Start("item:20006", 30)
+            Ro.Submit(Ro.Find(miniWin), "need", "player")
+            A_Admin.FireEvent("LOOT_ITEM_ROLL_WON", "item:20006", 1, 1, 87, false)
+            local fullWin = Start("item:20004", 30)
+            Ro.Submit(Ro.Find(fullWin), "greed", "player")
+            A_Admin.FireEvent("LOOT_ITEM_ROLL_WON", "item:20004", 1, 2, 76, false)
+            Lab.Settle(1.9)
+            Check("state", "both victories coexist", 2, R.LootVictory.Count())
+            Check("state", "mixed stack keeps four slots", 4, C.CardCount())
+            local heights, previous = {}, 0
+            for _, entry in ipairs(R.LootVictory.Entries()) do heights[entry.displayMode] = entry.card:GetHeight() end
+            Check("geometry", "Mini victory saves actual space", true, heights.collapsed < 70 and heights.expanded > 180)
+        end
+        Lab.Settle(0.2)
     end)
 end
 
@@ -488,13 +554,14 @@ if view:find("^victoryPose") then
         local seconds = tonumber(view:match("(%d+)$")) / 100
         local quality = view:find("Legendary") and 5 or view:find("Epic") and 4 or view:find("Rare") and 3 or 2
         local sample = { upgrade = not view:find("NoUpgrade") }
+        if view:find("Mini") then sample.display = "collapsed" end
         if view:find("Long") then sample.name = "Stormrend Titanblade of the Unbroken Oath of the Eternal Watchers" end
         Check("construct", "production preview starts", true, V.Preview(view:find("Greed") and "greed" or "need", quality, sample))
         Check("interact", "preview can seek a synthetic pose", true, V.PreviewAt(seconds))
         local f = V.PreviewCard().victory
         Check("state", "paused capture has no updater", nil, f:GetScript("OnUpdate"))
         Check("display", "no redundant footer label on the card", nil, f.footer)
-        Check("display", "upgrade indicator matches fixture", sample.upgrade, f.badge:IsShown())
+        Check("display", "upgrade indicator matches fixture", sample.upgrade, f.compact and f.upgradeIcon:IsShown() or f.badge:IsShown())
         Check("display", "sample has requested quality", quality, f.entry.quality)
         Check("display", "lighting is below title", true, f.atmosphere:GetFrameLevel() < f.header:GetFrameLevel()
             and f.railCanvas:GetFrameLevel() < f.header:GetFrameLevel())

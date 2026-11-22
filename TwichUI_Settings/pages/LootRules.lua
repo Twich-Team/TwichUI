@@ -30,7 +30,7 @@ local function LR() return R.LootRolls end
 local function Ru() return R.LootRules end
 
 local ACTION_ICON = { need = "lootNeed", greed = "lootGreed", pass = "lootPass" }
-local ACTION_WORD = { need = "Need", greed = "Greed", pass = "Pass" }
+local ACTION_WORD = { none = "No change", need = "Need", greed = "Greed", pass = "Pass" }
 
 local function Tone(fs, tone)
     local G = Wg()
@@ -221,8 +221,8 @@ local function LayoutList(list)
         R.Icons.Apply(row.icon, ACTION_ICON[v.action] or "lootRolls", 30)
         local state
         if v.incomplete then state = "Needs attention"
-        elseif v.enabled then state = "On  ·  " .. ACTION_WORD[v.action]
-        else state = "Off  ·  " .. ACTION_WORD[v.action] end
+        elseif v.enabled then state = "On  ·  " .. Ru().ActionSummary(v)
+        else state = "Off  ·  " .. Ru().ActionSummary(v) end
         row.state:SetText(state)
         Tone(row.state, v.incomplete and "warn" or (v.enabled and "ok" or "quiet"))
         local isSel = v.id == selected
@@ -374,26 +374,35 @@ local function LayoutEditor(v, w)
     y = y + 40
 
     -- then roll
-    f.thenTitle:SetText("Then roll")
+    f.thenTitle:SetText("Roll")
     Put(f.thenTitle, f.editor, PAD, y)
     y = y + 22
-    local aw = (w - PAD * 2 - 2 * 8) / 3
-    for i, key in ipairs({ "need", "greed", "pass" }) do
+    local aw = (w - PAD * 2 - 3 * 8) / 4
+    for i, key in ipairs({ "none", "need", "greed", "pass" }) do
         local b = f.actions[key]
         b:SetWidth(aw)
+        if b.text then b.text:SetWidth(aw - (key == "none" and 8 or 30)) end
         b:SetOn(v.action == key)
         Put(b, f.editor, PAD + (i - 1) * (aw + 8), y)
     end
     y = y + 40
-    local gate = nil
+    f.displayTitle:SetText("Card display"); Put(f.displayTitle, f.editor, PAD, y); y = y + 22
+    local dw = (w - PAD * 2 - 16) / 3
+    for i, key in ipairs({ "none", "expanded", "collapsed" }) do
+        local b = f.displays[key]; b:SetWidth(dw); b:SetOn(v.display == key)
+        Put(b, f.editor, PAD + (i - 1) * (dw + 8), y)
+    end
+    y = y + 40
+    local gate = v.action == "none" and "Display only; other roll rules still apply." or nil
     if v.action == "need" and not LR().Get("autoNeed") then gate = "Need is only chosen automatically once you allow it, in the switches above." end
-    if v.usesUpgrade and not LR().Get("autoUpgrade") then gate = "A rule that asks about upgrades acts only once you allow that, in the switches above." end
+    if v.action ~= "none" and v.usesUpgrade and not LR().Get("autoUpgrade") then gate = "A rule that asks about upgrades acts only once you allow that, in the switches above." end
     if gate then
-        f.gate:SetWidth(w - PAD * 2); f.gate:SetText(gate); Tone(f.gate, "warn"); Put(f.gate, f.editor, PAD, y)
+        f.gate:SetWidth(w - PAD * 2); f.gate:SetText(gate); Tone(f.gate, v.action == "none" and "quiet" or "warn"); Put(f.gate, f.editor, PAD, y)
         y = y + math.max(14, f.gate:GetStringHeight() or 14) + 6
     else f.gate:Hide() end
 
-    -- auto roll
+    -- Countdown/result controls belong only to the roll action.
+    if v.action ~= "none" then
     f.autoTitle:SetText("Auto roll")
     Put(f.autoTitle, f.editor, PAD, y)
     y = y + 22
@@ -413,6 +422,10 @@ local function LayoutEditor(v, w)
     f.resultBox:SetChecked(v.result)
     Put(f.resultBox, f.editor, w - PAD - 32, y + 4)   -- the switch is 32 wide: its right edge sits on the padding
     y = y + 34
+
+    else
+        for _, part in ipairs({ f.autoTitle, f.delayIcon, f.delayLabel, f.delay, f.resultIcon, f.resultLabel, f.resultBox }) do part:Hide() end
+    end
 
     -- the sentence
     f.bar:SetWidth(w - PAD * 2)
@@ -586,7 +599,7 @@ local function Build()
     end))
     f.thenTitle = Part(G.Text(e, "heading"))
     f.actions = {}
-    for _, key in ipairs({ "need", "greed", "pass" }) do
+    for _, key in ipairs({ "none", "need", "greed", "pass" }) do
         local b = Part(R.FrameLook.Toggle(e, ACTION_WORD[key], 120, function()
             if selected then LR().SetAction(selected, key); P.QueueRefresh() end
         end))
@@ -596,12 +609,25 @@ local function Build()
             b.text:ClearAllPoints(); b.text:SetPoint("CENTER", b, "CENTER", 14, 0); b.text:SetWidth(80); b.text:SetJustifyH("CENTER"); b.text:SetWordWrap(false)   -- beside the icon, not under it
         end
         b.icon = b:CreateTexture(nil, "OVERLAY"); b.icon:SetSize(22, 22); b.icon:SetPoint("LEFT", 14, 0)
-        R.Icons.Apply(b.icon, ACTION_ICON[key], 22)
+        if key == "none" then
+            b.icon:Hide(); b.text:ClearAllPoints(); b.text:SetPoint("CENTER", b, "CENTER", 0, 0)
+        else R.Icons.Apply(b.icon, ACTION_ICON[key], 22) end
         f.actions[key] = b
     end
+    R.Interact.Tip(f.actions.none, "No change to rolling", "This rule makes no roll decision. Other matching roll rules can still choose.")
     R.Interact.Tip(f.actions.need, "Need", "Chooses Need. Only done automatically once you allow Need above, and never when the game doesn't offer it.")
     R.Interact.Tip(f.actions.greed, "Greed", "Chooses Greed.")
     R.Interact.Tip(f.actions.pass, "Pass", "Chooses Pass.")
+    f.displayTitle = Part(G.Text(e, "heading")); f.displays = {}
+    for _, key in ipairs({ "none", "expanded", "collapsed" }) do
+        local b = Part(R.FrameLook.Toggle(e, Ru().DISPLAY_LABEL[key], 120, function()
+            if selected then LR().SetDisplay(selected, key); P.QueueRefresh() end
+        end))
+        b:SetHeight(32); f.displays[key] = b
+    end
+    R.Interact.Tip(f.displays.none, "No change to display", "Skip this rule for presentation; the next applicable display rule can decide.")
+    R.Interact.Tip(f.displays.expanded, "Expanded", "Use the full card for this roll and its victory notification. Does not choose a roll.")
+    R.Interact.Tip(f.displays.collapsed, "Collapsed (Mini)", "Use a compact card with normal roll controls. A manual toggle overrides it for this roll only.")
     f.gate = Part(G.Text(e, "small")); f.gate:SetWordWrap(true)
     f.autoTitle = Part(G.Text(e, "heading"))
     f.delayIcon = Part(e:CreateTexture(nil, "ARTWORK")); f.delayIcon:SetSize(24, 24)
@@ -622,11 +648,11 @@ local function Build()
         local v = selected and LR().Rule(selected)
         if not v then return end
         if v.incomplete then P.Say("Finish the rule first: " .. v.incomplete, "warn") P.QueueRefresh() return end
-        local ok, why = R.LootCards.PreviewStart({ name = v.name, action = v.action, delay = v.delay })
+        local ok, why = R.LootCards.PreviewStart({ name = v.name, action = v.action, display = v.display, delay = v.delay })
         if not ok then P.Say(why or "Can't preview now.", "warn") else P.Say(nil) end
         P.QueueRefresh()
     end))
-    R.Interact.Tip(f.previewRule, "Preview this rule", "Shows a made-up roll with this rule's countdown on a card, where your cards appear. Roll now, Stop and your own choice all work, and nothing is rolled: no item, no group and no game call is involved.")
+    R.Interact.Tip(f.previewRule, "Preview this rule", "Shows a made-up roll with this rule's independent roll and display actions. Display-only rules leave the sample choice manual. Nothing is actually rolled.")
     f.say = Part(G.Text(e, "small")); f.say:SetWordWrap(true)
     built = true
     f:SetScript("OnSizeChanged", function() P.QueueRefresh() end)

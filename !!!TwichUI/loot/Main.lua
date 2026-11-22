@@ -38,6 +38,7 @@ function LR.Snapshot()
     return {
         on = on, listening = Ro.Listening(), events = Ro.EventCount(), records = #rolls, live = live, cards = C.CardCount(),
         victories = R.LootVictory.Count(), victoryPool = R.LootVictory.PoolSize(),
+        retainedDisplays = R.LootVictory.RetainedDisplays(),
         victoryEvents = R.LootVictory.Listening() and 1 or 0,
         pool = C.PoolSize(), failed = C.Failed(), parked = B.ParkedCount(), scheduled = A.Scheduled(),
         auto = LR.AutoOn(), paused = LR.Paused(), rules = LR.Count(),
