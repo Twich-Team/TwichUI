@@ -74,6 +74,16 @@ function Lab.BankReview(pose)
     Lab.Check("construct", "withdraw quantity summary", "15 items", f.bankSummary.withdraw.value:GetText())
     Lab.Check("construct", "batch action visible", true, f.bankGo:IsShown() and f.bankGo:IsEnabled())
     Lab.Check("state", "review moves nothing", 0, attempts)
+    local autoSort = f.bankAutoSort
+    Lab.Check("construct", "auto-sort switch fits between bank actions", true,
+        autoSort.label:GetLeft() > f.bankGo:GetRight() and autoSort:GetRight() < f.again:GetLeft())
+    if pose == "ready" then
+        Lab.Check("state", "auto-sort switch starts on", true, autoSort:GetChecked())
+        autoSort:Click(); Lab.Settle(.1)
+        Lab.Check("interact", "auto-sort switch turns off", false, MI.BankAutoSort())
+        autoSort:Click(); Lab.Settle(.1)
+        Lab.Check("interact", "auto-sort switch turns back on", true, autoSort:GetChecked() and MI.BankAutoSort())
+    end
     local function Find(frame, text)
         if not frame:IsShown() then return end
         if type(frame.text) == "table" and frame.text.GetText and frame.text:GetText() == text then return frame end
