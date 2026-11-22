@@ -1568,3 +1568,12 @@ m("market.pending.elapsed-budget", "TwichUI_Workshop/Summary.lua", "or clock()-s
 
 m("market.pending.rejected-retry", "TwichUI_Workshop/Pricing.lua", "if failure then pending[bucket]=nil end", "-- rejected reservations remain in the live bucket",
   "a post-combat retry joins the rejected drain and loses its completion", ["test_workshop_market_pending.lua"])
+
+m("market.current.path", "TwichUI_Workshop/Pricing.lua", "local CURRENT_ONLY={current=true}", "local CURRENT_ONLY={current=false}",
+  "cold pricing requests rich history instead of the verified current projection", ["test_workshop_market_current.lua"])
+m("market.current.binding", "TwichUI_Workshop/Summary.lua", "need(paired and hash:Finish()==paired.sha256)", "need(paired~=nil)",
+  "individually rehashed rich data mixes with unrelated current prices", ["test_workshop_market_current.lua"])
+m("market.current.priority", "TwichUI_Workshop/Summary.lua",
+  "if bucket<64 and active.header.contract_version==3 and job and job.kind=='part' and job.bucket>=64 then",
+  "if false then",
+  "a cold current request waits behind an already-running unrelated chart", ["test_workshop_market_current.lua"])

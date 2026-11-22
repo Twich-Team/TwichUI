@@ -146,10 +146,12 @@ end
 -- core never times anything itself. Ids are stable "area.operation" names; Describe and Gauge only
 -- note a description or a reader (a function returning a number) for the diagnostics window.
 ---------------------------------------------------------------------------
-local Perf = { on = false, ops = {}, gauges = {} }
+local Perf = { on = false, captureID = 0, ops = {}, gauges = {} }
 R.Perf = Perf
 local function Nothing() end
 Perf.Start, Perf.Stop, Perf.Count, Perf.Fault, Perf.Received, Perf.Callback = Nothing, Nothing, Nothing, Nothing, Nothing, Nothing
+-- Elapsed waits/milestones are distributions, never synchronous CPU scopes.
+Perf.Observe = Nothing
 function Perf.Finish(_, ...) return ... end
 function Perf.Call(id, fn, ...)
     if not Perf.on then return fn(...) end

@@ -368,6 +368,7 @@ local function LayoutChips(list)
 end
 
 local function Render()
+    if R.Perf and R.Perf.on then W.Pricing.BeginView() end
     local v = S.Opportunities()
     oppView = v
 
@@ -401,6 +402,7 @@ local function Render()
     -- the list and the chosen row
     RenderDetail(v.rows)
     UI.lists.opps:SetData(v.rows, v.empty)
+    if R.Perf and R.Perf.on and v.source.reference then W.Pricing.ObserveView(v.all,UI.lists.opps)end
 end
 
 ---------------------------------------------------------------------------

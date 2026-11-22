@@ -36,6 +36,7 @@ DX.Instrument = I
 
 I.MAX_OPS, I.MAX_EVENTS, I.MAX_CALLBACKS, I.MAX_COUNTERS, I.MAX_DEPTH = 96, 128, 256, 64, 48
 I.EXEMPLARS = 5
+I.MAX_OBSERVATIONS = 24
 I.MAX_PARENTS = 6
 I.WINDOW = 10            -- seconds: the window an operation's busiest rate is counted in
 I.STACK_EVERY = 1        -- seconds between call paths in a focused trace
@@ -50,7 +51,8 @@ local events, eventCount = {}, 0      -- [event] = { received, op }
 local callbacks, callbackCount = setmetatable({}, { __mode = "k" }), 0   -- [fn] = stats (weak: never keeps a function alive)
 local cbList = {}                     -- the stats objects in order seen (plain tables; no function in them)
 local counters, counterCount = {}, 0
-local dropped = { ops = 0, events = 0, callbacks = 0, counters = 0, depth = 0 }
+local observations, observationCount, captureSerial = {}, 0, 0
+local dropped = { ops = 0, events = 0, callbacks = 0, counters = 0, observations = 0, depth = 0 }
 local anomalies = { aborted = 0, stale = 0, clockBack = 0, crossedFrame = 0 }
 local lastStackAt = -math.huge
 
@@ -279,6 +281,19 @@ function I.Count(id, n)
     counters[id] = c + (type(n) == "number" and n or 1)
 end
 
+function I.Observe(id, ms)
+    if not active or type(id)~="string" or type(ms)~="number" or ms~=ms or ms<0 or ms>3600000 or not Allowed(id) then return end
+    local o=observations[id]
+    if not o then
+        if observationCount>=I.MAX_OBSERVATIONS then dropped.observations=dropped.observations+1;return end
+        o={count=0,total=0,min=math.huge,max=0,hist=Hist.New()}
+        observations[id]=o;observationCount=observationCount+1
+    end
+    o.count=o.count+1;o.total=o.total+ms;o.min=math.min(o.min,ms);o.max=math.max(o.max,ms)
+    -- Reuse the bounded histogram at a 1000x scale: waits may last minutes.
+    Hist.Add(o.hist,ms/1000)
+end
+
 -- Perf.Call in a focused trace that measures allocation: the client's MeasureCall around the call. Its results are
 -- handed back exactly as the call returned them.
 local measured = {}   -- [id] = { calls, allocated, deallocated }
@@ -329,6 +344,7 @@ local function Reset()
     ops, opCount, events, eventCount = {}, 0, {}, 0
     callbacks, callbackCount, cbList = setmetatable({}, { __mode = "k" }), 0, {}
     counters, counterCount, measured = {}, 0, {}
+    observations, observationCount = {}, 0
     for k in pairs(dropped) do dropped[k] = 0 end
     for k in pairs(anomalies) do anomalies[k] = 0 end
     depth, serial, lastStackAt = 0, 0, -math.huge
@@ -346,10 +362,11 @@ function I.Begin(options)
     active = true
     if not core then
         core = { Start = Perf.Start, Stop = Perf.Stop, Count = Perf.Count, Callback = Perf.Callback,
-            Received = Perf.Received, Finish = Perf.Finish, Call = Perf.Call }
+            Received = Perf.Received, Finish = Perf.Finish, Call = Perf.Call, Observe = Perf.Observe }
     end
     Perf.Start, Perf.Stop, Perf.Count, Perf.Callback, Perf.Received = I.Start, I.Stop, I.Count, I.Callback, I.Received
     Perf.Finish, Perf.Call = Finish, Call
+    Perf.Observe=I.Observe;captureSerial=captureSerial+1;Perf.captureID=captureSerial
     Perf.on = true
     return true
 end
@@ -364,6 +381,7 @@ function I.End()
     if core then
         Perf.Start, Perf.Stop, Perf.Count, Perf.Callback, Perf.Received = core.Start, core.Stop, core.Count, core.Callback, core.Received
         Perf.Finish, Perf.Call = core.Finish, core.Call
+        Perf.Observe=core.Observe
     end
 end
 
@@ -408,7 +426,7 @@ local function OpRow(op)
 end
 
 function I.Results()
-    local out = { ops = {}, events = {}, callbacks = {}, counters = {}, measured = {}, dropped = {}, anomalies = {} }
+    local out = { ops = {}, events = {}, callbacks = {}, counters = {}, observations = {}, measured = {}, dropped = {}, anomalies = {} }
     for _, op in pairs(ops) do
         if op.calls > 0 or op.aborted > 0 then out.ops[#out.ops + 1] = OpRow(op) end
     end
@@ -426,6 +444,13 @@ function I.Results()
     table.sort(out.callbacks, function(a, b) if a.total ~= b.total then return a.total > b.total end return a.label < b.label end)
     for id, n in pairs(counters) do out.counters[#out.counters + 1] = { id = id, count = n } end
     table.sort(out.counters, function(a, b) return a.id < b.id end)
+    for id,o in pairs(observations) do
+        local function pct(p)return math.min(o.max,Hist.Percentile(o.hist,p)*1000)end
+        local hist=Hist.Export(o.hist);for _,b in ipairs(hist.buckets)do b[1]=b[1]*1000 end
+        out.observations[#out.observations+1]={id=id,unit="ms",kind="elapsed_wait",count=o.count,total=o.total,
+            min=o.min,max=o.max,mean=o.total/o.count,p50=pct(.5),p95=pct(.95),p99=pct(.99),hist=hist}
+    end
+    table.sort(out.observations,function(a,b)return a.id<b.id end)
     for id, m in pairs(measured) do out.measured[#out.measured + 1] = { id = id, calls = m.calls, allocatedBytes = m.allocated, deallocatedBytes = m.deallocated } end
     for k, v in pairs(dropped) do out.dropped[k] = v end
     for k, v in pairs(anomalies) do out.anomalies[k] = v end

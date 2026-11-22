@@ -3,6 +3,7 @@
 local R,W=TwichUI,TwichUI.Workshop
 local MK,PR,B,J=W.Market,W.Prices,W.Bridge,W.BridgeCodec
 local P={MAX_CACHE=8192,MAX_AGE=86400}
+local CURRENT_ONLY={current=true}
 W.Pricing=P
 setmetatable(P,{__index=MK})
 local cache,count,stamp={},0,nil
@@ -14,6 +15,74 @@ local notification,notificationDelay
 local notificationToken=0
 local function observed(id)
     if R.Perf and R.Perf.on then R.Perf.Count('workshop.pricing.'..id) end
+end
+local diagnostic
+local function elapsedClock()return (GetTimePreciseSec and GetTimePreciseSec() or GetTime and GetTime() or 0)*1000 end
+local function capture()
+    if not (R.Perf and R.Perf.on and R.Perf.Observe) then return end
+    if not diagnostic or diagnostic.capture~=R.Perf.captureID then
+        diagnostic={capture=R.Perf.captureID,priced=0}
+    end
+    return diagnostic
+end
+local function started(at)
+    local d=capture();if not d then return end
+    local now=at or elapsedClock();d.priceStart=d.priceStart or now
+    return {at=now,capture=d.capture}
+end
+local function completed(timing,r)
+    local d=capture();if not (d and timing and timing.capture==d.capture) then return end
+    local now=elapsedClock()
+    R.Perf.Observe('workshop.priceSettlementWait',math.max(0,now-timing.at));observed('completed')
+    local recent=r and r.current.metrics.recent_copper
+    if recent and recent~=J.NULL then
+        R.Perf.Observe('workshop.priceWait',math.max(0,now-timing.at));d.priced=d.priced+1
+        if d.priced==1 then R.Perf.Observe('workshop.firstColdPrice',now-d.priceStart) end
+        if d.priced==10 then R.Perf.Observe('workshop.tenColdPrices',now-d.priceStart) end
+    end
+end
+function P.BeginView()
+    local d=capture();if d and not d.viewStart then d.viewStart=elapsedClock() end
+end
+local function itemPending(item)
+    return type(item)=='number' and pending[item%64] and pending[item%64][item]~=nil
+end
+local function recipePending(rec)
+    if itemPending(rec.outItem) then return true end
+    for _,mat in ipairs(rec.mats or {})do if itemPending(mat.item)then return true end end
+    return false
+end
+function P.ObserveView(all,list)
+    local d=capture();if not (d and d.viewStart and #all>0)then return end
+    if not d.visible then
+        d.visible={};d.visibleCount=0
+        local scroll=list.scroll:GetVerticalScroll() or 0
+        local height=list.scroll:GetHeight() or 0;if height<=list.rowH then height=list.minH end
+        local first=math.floor(scroll/list.rowH)+1
+        local last=math.min(#list.data,math.ceil((scroll+height)/list.rowH))
+        for i=first,math.min(last,first+127)do
+            d.visible[list.data[i].rec.id]=true;d.visibleCount=d.visibleCount+1
+        end
+        R.Perf.Count('workshop.pricing.initialVisibleRows',d.visibleCount)
+        if last-first+1>128 then observed('visibleTruncated')end
+    end
+    local waiting,visibleWaiting,visiblePriced,seen=0,0,0,0
+    for _,row in ipairs(all)do
+        local waits=recipePending(row.rec)
+        if waits then waiting=waiting+1 end
+        if d.visible[row.rec.id]then
+            seen=seen+1
+            if waits then visibleWaiting=visibleWaiting+1
+            elseif row.est.state=='ok' then visiblePriced=visiblePriced+1 end
+        end
+    end
+    local elapsed=math.max(0,elapsedClock()-d.viewStart)
+    if visiblePriced>0 and not d.firstVisible then d.firstVisible=true;R.Perf.Observe('workshop.firstVisiblePrice',elapsed)end
+    if visiblePriced>=10 and not d.tenVisible then d.tenVisible=true;R.Perf.Observe('workshop.tenVisiblePrices',elapsed)end
+    if seen==d.visibleCount and seen>0 and visibleWaiting==0 and not d.visibleDone then
+        d.visibleDone=true;R.Perf.Observe('workshop.visibleSettled',elapsed)
+    end
+    if waiting==0 and not d.allDone then d.allDone=true;R.Perf.Observe('workshop.opportunitiesSettled',elapsed)end
 end
 function P.Notify(delay)
     delay=delay or 0.1
@@ -28,6 +97,7 @@ function P.Notify(delay)
     end)
 end
 function P.CancelPending()
+    if pendingCount>0 and R.Perf and R.Perf.on then R.Perf.Count('workshop.pricing.cancelled',pendingCount)end
     pending,pendingCount={},0
     epoch=epoch+1
     notificationToken=notificationToken+1;notification=false
@@ -76,6 +146,7 @@ function P.BaseKey(item)
     if item then observed('baseKeys');return J.SHA('{"id":'..string.format('%.0f',item)..'}') end
 end
 local function record(item,opt,completion)
+    local asked=R.Perf and R.Perf.on and elapsedClock()
     if opt and opt.variant then return nil,'variant' end
     local status=B and B.Status()
     local h,why,at=eligible(opt and opt.now,status)
@@ -89,18 +160,26 @@ local function record(item,opt,completion)
     local reserved=pending[bucket] and pending[bucket][item]
     if reserved and not completion then observed('deduplicated');return nil,'loading',h,at end
     if not reserved and count+pendingCount>=P.MAX_CACHE then return nil,'lookup_limit',h,at end
+    local waits=pending[bucket]
+    local timing=reserved and waits.timings and waits.timings[item] or not reserved and started(asked)
+    local mine=epoch
     local key=reserved or P.BaseKey(item)
     observed('readerCalls')
-    local r,reason=B.Record(item,key)
+    local r,reason=B.Record(item,key,CURRENT_ONLY)
     -- Do not keep daily arrays or mutable decoder rows in the price cache.
     if r then r={current=J.Copy(r.current),variant_key=r.variant_key} end
     if reason=='loading' then
         local waits=pending[bucket]
         if not waits then waits={ids={},cursor=1};pending[bucket]=waits end
-        if not waits[item] and pendingCount<P.MAX_CACHE then waits[item]=key;waits.ids[#waits.ids+1]=item;pendingCount=pendingCount+1;observed('uniquePending') end
+        if not waits[item] and pendingCount<P.MAX_CACHE then
+            waits[item]=key;waits.ids[#waits.ids+1]=item;pendingCount=pendingCount+1;observed('uniquePending')
+            if timing then waits.timings=waits.timings or {};waits.timings[item]=timing end
+        end
     elseif reason~='combat' then
         if pending[bucket] and pending[bucket][item] then pending[bucket][item]=nil;pendingCount=pendingCount-1 end
         cache[item]={record=r or false,why=reason};count=count+1
+        if mine==epoch then completed(timing,r)end
+        if waits and waits.timings then waits.timings[item]=nil end
     end
     return r,reason,h,at
 end
@@ -204,7 +283,7 @@ function P.Chart(f)
     if chartCache and chartCache.key==key then return chartCache.series end
     local h,why=B.History(f.referenceItem,f.referenceVariant,'recent',{days=60})
     if not h then
-        if why=='loading' then chartPending=f.referenceItem%64 end
+        if why=='loading' then chartPending=f.referenceItem%64+(B.Status().contract_version==3 and 64 or 0) end
         if f.localMarket then
             local localFacts=W.Facts.Of(f.referenceItem,{market=f.localMarket,localOnly=true})
             return W.Facts.Chart(localFacts)
@@ -234,12 +313,14 @@ local function finishBucket(bucket,work,failure)
                 if failure then
                     waits[item]=nil;pendingCount=pendingCount-1
                     if failure~='combat' and not cache[item] then cache[item]={record=false,why=failure};count=count+1 end
+                    if failure~='combat' then completed(waits.timings and waits.timings[item])end
                 else
                     local _,why=record(item,nil,true)
                     -- Admission may become stale/unavailable during handoff. It is
                     -- not a permanent miss and must not leave a reservation behind.
                     if pending[bucket]==waits and waits[item] then waits[item]=nil;pendingCount=pendingCount-1 end
                 end
+                if waits.timings then waits.timings[item]=nil end
                 changed=true;observed('settled')
             end
             if work then work() end

@@ -43,3 +43,32 @@ Contract 3 retains 64 modulo-item buckets for each projection. Current rows reta
 Current and history have separate load-on-demand addon folders within each A/B bank, so pricing does not load raw historical strings. Native delivery validates and writes/readbacks both sets before its one root commit. A failed download or publication leaves the last complete root active; matching verified inactive parts can resume. No source observations, archives or SavedVariables are deleted. Schema/capability negotiation preserves contracts 1 and 2; older companions can continue delivering contract 2 to the new addon. Older addons never negotiate 3.
 
 Producer, Companion and addon are separate review milestones. Safe rollout after review: producer support first (default remains 1), then compatible Companion, then addon capability activation. Roll back the generation using the compatible Companion before downgrading to software that cannot read contract 3. No rollout, merge, signed build, publication or service operation is part of this task.
+
+
+## Consumer implementation milestone
+
+Pricing passes an internal current-only option through Bridge.Record. Summary.Value
+and Availability use the same verified projection. Default Record and History
+continue to return rich history. Sorted exact item/variant records use binary
+search; no additional index or decoded-partition cache is introduced. Contract 2
+still validates all coupled history, but current-only callers avoid copying its
+daily arrays. Pricing policy, estimator semantics and PR1 deduplication remain.
+
+Current work has priority over optional rich work. At most one historical
+coroutine can pause between slices and resume afterward without decoding again.
+Cancellation, generation replacement and rejection clear queued/paused work.
+The existing effective 2 ms slice, 512 resume limit and 16-resume handoff remain.
+Individual operations can exceed that budget; this is not a hard frame-time
+ceiling. Raw strings already loaded by WoW cannot be unloaded by cache eviction.
+The one completed partition cache, one paused job and current active job bound
+decoder retention; memory measurements must include transition allocations.
+
+Missing/corrupt contract-3 payloads reject the paired generation and restore the
+last admitted generation, where available. A first bad generation stays
+unavailable. Combat postpones loads without treating them as corrupt. Both
+projections are independently fully checksum/canonical/schema validated before
+use, and rich validation additionally verifies its current prefix digest.
+
+Diagnostics add bounded elapsed distributions using the existing engine,
+separate from CPU scopes. The Workshop preset remains opt-in. No game payload,
+character identity or unbounded per-item timeline is recorded.

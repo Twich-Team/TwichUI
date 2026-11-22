@@ -23,7 +23,7 @@ return function(c,days,counts,variants)
         local rows=J.Array()
         for n=1,(counts[b] or 0) do
             local r=J.Copy(row);r[1]=variants and 64+b or n*64+b
-            r[2]=variants and J.SHA('variant:'..n) or P.BaseKey(r[1])
+            r[2]=variants and n>1 and J.SHA('variant:'..n) or P.BaseKey(r[1])
             r[4]=tostring(120+n);r[5]=r[4];rows[#rows+1]=r
         end
         table.sort(rows,function(a,b)return a[1]<b[1] or a[1]==b[1] and a[2]<b[2] end)
@@ -37,5 +37,24 @@ return function(c,days,counts,variants)
     local body=J.Copy(h);body.generation_id=nil;h.generation_id=J.SHA(J.Encode(body))
     local root={summary_version=1,bank='A',manifest=J.Encode(h),receipt=J.Encode(setmetatable({
         schema_version=1,generation_id=h.generation_id,desktop_build='cold-path-fixture',completed_at=h.generated_at},J.OBJECT))}
-    return {header=h,parts=parts,keys=keys,root=root,days=days}
+    local fixture={header=h,parts=parts,keys=keys,root=root,days=days}
+    function fixture.Seal()
+        local body=J.Copy(h);body.generation_id=nil;h.generation_id=J.SHA(J.Encode(body))
+        root.manifest=J.Encode(h)
+        local receipt=J.Parse(root.receipt);receipt.generation_id=h.generation_id;root.receipt=J.Encode(receipt)
+    end
+    function fixture.Split()
+        h.schema_version=3;h.contract_version=3;table.remove(h.columns)
+        h.history_partitioning=J.Copy(h.partitioning);h.history_partitions=J.Copy(h.partitions)
+        h.partitioning.max_total_bytes=33554432;h.partitions=J.Array()
+        fixture.history_parts=fixture.parts;fixture.parts={}
+        for _,p in ipairs(h.history_partitions)do
+            local rich=J.ParseSummary(fixture.history_parts[p.bucket],nil,1048576);local current=J.Array()
+            for _,r in ipairs(rich)do local row=J.Array();for i=1,13 do row[i]=r[i]end;current[#current+1]=row end
+            local raw=J.Encode(current);fixture.parts[p.bucket]=raw
+            h.partitions[#h.partitions+1]=setmetatable({bucket=p.bucket,bytes=#raw,record_count=p.record_count,sha256=J.SHA(raw)},J.OBJECT)
+        end
+        fixture.Seal()
+    end
+    return fixture
 end

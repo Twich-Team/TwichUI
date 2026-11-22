@@ -11,6 +11,7 @@ c.C_Timer.After=function()end -- explicit production Q.Step driving below
 c.TwichUIMarketParts={A00=f.parts[0]}
 B.Begin(f.root);while Q.Pending()do Q.Step()end;assert(B.Status().ready)
 collectgarbage('collect');local base=collectgarbage('count')
+local stopped=arg[4]=='gc-stopped';if stopped then collectgarbage('stop')end
 local cpu,yields,net={}, {}, {};local stage,last='current_validation',nil
 local dailyLines={}
 do
@@ -68,12 +69,13 @@ local elapsed=clock()-begin
 local at=clock();local r=assert(B.Record(k.item,k.variant));local lookup=clock()-at
 assert(tonumber(r.current.metrics.recent_copper)>=121)
 local peak=collectgarbage('count');local gc=clock();collectgarbage('collect');gc=clock()-gc
+if stopped then collectgarbage('restart')end
 local stageCPU=0;for _,v in pairs(cpu)do stageCPU=stageCPU+v end
 local out={synthetic=true,real_client=false,history_days=days,records=count,raw_bytes=#f.parts[0],
     cpu_ms=elapsed,stages_ms=cpu,stage_yields=yields,stage_net_heap_kib=net,
     scheduler_and_observer_ms=elapsed-stageCPU,callbacks=callbacks,worst_callback_ms=worst,
     current_record_with_history_copy_ms=lookup,retained_delta_kib=collectgarbage('count')-base,
-    sampled_peak_delta_kib=peak-base,final_gc_ms=gc}
+    sampled_peak_delta_kib=peak-base,final_gc_ms=gc,gc_stopped=stopped}
 -- Contract encoding is integer-only; benchmark clocks are fractional numbers.
 local function encode(v)
     if type(v)=='number' then return ('%.6f'):format(v) end

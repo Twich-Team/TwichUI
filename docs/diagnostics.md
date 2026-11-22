@@ -520,3 +520,33 @@ Gauge `workshop.pricingPending` complements the existing compact reference cache
 raw partition and decoder gauges. These reset/count through the existing bounded
 capture infrastructure; reading gauges never starts work. See the
 [PR1 capture definitions and limitations](performance/v2-market-pending-pricing-pr1.md#diagnostics-and-native-check).
+
+
+## Cold Market pricing (PR2)
+
+The opt-in `workshop` preset selects bounded Workshop gauges even when recording
+starts before its load-on-demand addon. General remains the default preset.
+Run `/tui perf start workshop 3`, mark `/tui perf mark opportunities-open`, then
+open Workshop → Opportunities; stop with `/tui perf stop`. Export Quick summary
+and JSON from Diagnostics after combat. See the [PR2 acceptance procedure](performance/v2-market-cold-pricing-pr2.md).
+
+`aggregates.elapsedWaits` is wall elapsed milliseconds, separate from instrumented
+CPU. It contains count/min/max/mean and approximate p50/p95/p99 (existing
+histogram precision, about 19%). No CPU scope spans a coroutine yield. At most 24
+elapsed identifiers are retained; samples above one hour or non-finite samples
+are refused. Captures reset observations and invalidate earlier request timers.
+There is no per-item export. Raw references measure first/ten usable cold
+responses and request wait distributions; terminal settlement includes missing
+prices. Opportunities measures a fixed initial visible cohort (at most 128
+internal recipe IDs), then all known rows; missing prices settle without being
+counted as priced rows. Fewer than ten priced visible rows produces no ten-row
+sample. Filtering, scrolling or changing page mid-capture makes cohort results
+unsuitable for before/after comparison.
+
+Partition queue wait and current/history validation wall time include scheduled
+waiting; validation CPU scopes and worst callback remain separate. Ten passive
+gauges cover raw bytes, completed decoded rows, parked history work, price cache
+and pending counts. A paused historical coroutine can retain temporary parsed
+rows beyond the single completed partition cache; the gauge is not a heap size.
+Whole-UI heap and sampled addon memory remain the available client measures.
+Default-off instrumentation adds no background timers or forced collection.
