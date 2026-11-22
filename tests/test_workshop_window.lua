@@ -1029,10 +1029,74 @@ do
   Same(#consumerNames, 2, "legacy name-list contract")
   Same(consumerRecords[1].item, 501, "relationship carries recorded output identity")
   Same(d.neededHead:GetText(), "Needed for")
+  -- The real pane is 409px tall after shell/page/footer insets. MIFake does
+  -- not resolve anchors: assert the reserved viewport itself, not just row data.
+  Check(d.consumers.box:GetHeight() - 8 >= 2 * d.consumers.rowH,
+    "Needed for must expose two complete rows, including scroll-frame insets")
+  Check(d.neededSection:GetHeight() >= d.consumers.box:GetHeight() + 24,
+    "consumer section includes its heading and viewport")
+  Same(d.scroll.parent, d.head)
+  Same(d.body.parent, d.scroll, "upper evidence scrolls independently of consumers")
+  Same(d.scroll.child, d.body)
+  Same(d.scroll.points[2][2], d.neededSection, "upper evidence stops above the reserved section")
+  Same(d.scroll.points[2][3], "TOPRIGHT")
   Same(#d.consumers.data, 2, "both queued consumers")
   Same(d.consumers.rows[1].name:GetText(), "Healing Potion")
   Same(d.consumers.rows[2].name:GetText(), "Mana Potion")
   Same(d.consumers.rows[1].iconFrame.tex.texture, 5501, "verified output item icon")
+  Same(consumerRecords[1].recipe, 1, "recorded recipe spell identity survives adaptation")
+  Same(consumerRecords[1].icon, Q.Find(1).icon, "recorded recipe icon survives adaptation")
+  local consumer = d.consumers.rows[1]
+  local info, qualityColor = c.C_Item.GetItemInfo, c.C_Item.GetItemQualityColor
+  local itemTip, spellTip = c.GameTooltip.SetItemByID, c.GameTooltip.SetSpellByID
+  local modified, insertLink = c.IsModifiedClick, c.ChatEdit_InsertLink
+  local setColor = consumer.name.SetTextColor
+  consumer.name.SetTextColor = function(self, r, g, b) self.consumerColor = { r, g, b } end
+  c.C_Item.GetItemInfo = function(id)
+    local name, link = info(id)
+    return name, link, id == 501 and 3 or nil
+  end
+  c.C_Item.GetItemQualityColor = function(q) Same(q, 3); return 0, 0.44, 0.87 end
+  local hoveredItem, hoveredSpell, linked
+  c.GameTooltip.SetItemByID = function(_, id) hoveredItem = id end
+  c.GameTooltip.SetSpellByID = function(_, id) hoveredSpell = id end
+  Win.Render()
+  Same(consumer.name.consumerColor[2], 0.44, "item name uses native quality color")
+  consumer:GetScript("OnEnter")(consumer)
+  Same(hoveredItem, 501, "name region shows native item tooltip")
+  hoveredItem = nil
+  consumer.iconBtn:GetScript("OnEnter")(consumer.iconBtn)
+  Same(hoveredItem, 501, "icon shows the same item tooltip")
+  consumer.iconBtn:GetScript("OnLeave")(consumer.iconBtn)
+  Check(not c.GameTooltip:IsShown(), "leaving the icon hides the tooltip")
+  c.GameTooltip.SetItemByID = function() error("Synthetic unavailable item tooltip") end
+  consumer:GetScript("OnEnter")(consumer)
+  Check(not c.GameTooltip:IsShown(), "failed item tooltip never reveals stale contents")
+  c.GameTooltip.SetItemByID = function(_, id) hoveredItem = id end
+  c.IsModifiedClick = function() return true end
+  c.ChatEdit_InsertLink = function(link) linked = link end
+  consumer:GetScript("OnClick")(consumer, "LeftButton")
+  local _, expectedLink = info(501)
+  Same(linked, expectedLink, "Shift-click links the output item")
+  -- Synthetic enchant fixture: recorded recipe spell/icon, with no output item.
+  local consumersBefore = S.NeededFor
+  S.NeededFor = function() return {}, { { name = "Synthetic enchant", recipe = 9001, icon = 9002 } } end
+  hoveredItem = nil
+  Win.Render()
+  Check(consumer.iconBtn:IsShown(), "non-item recipe retains its recorded icon")
+  Same(consumer.iconFrame.tex.texture, 9002)
+  consumer:GetScript("OnEnter")(consumer)
+  Same(hoveredSpell, 9001, "enchant name shows its spell tooltip")
+  Same(hoveredItem, nil, "recipe identity is never sent to item tooltip API")
+  Same(consumer.name.consumerColor[1], W.UI.K.text[1], "no item quality is invented for an enchant")
+  consumer.iconBtn:GetScript("OnEnter")(consumer.iconBtn)
+  Same(hoveredSpell, 9001, "enchant icon shares its spell tooltip")
+  S.NeededFor = consumersBefore
+  c.C_Item.GetItemInfo, c.C_Item.GetItemQualityColor = info, qualityColor
+  c.GameTooltip.SetItemByID, c.GameTooltip.SetSpellByID = itemTip, spellTip
+  c.IsModifiedClick, c.ChatEdit_InsertLink = modified, insertLink
+  consumer.name.SetTextColor = setColor
+  Win.Render()
   local originalNeededFor = S.NeededFor
   S.NeededFor = function() return {}, {
     { name = string.rep("Long recipe name ", 8), item = 501 },
@@ -1060,6 +1124,30 @@ do
   Check(d.choose.auction.on and d.choose.auction.enabled and not d.choose.vendor.enabled, "only the possible sources can be chosen")
   Check(shop.counts.auction.n:GetText() == "2" and shop.counts.vendor.n:GetText() == "0" and shop.counts.make.n:GetText() == "0" and shop.counts.collect.n:GetText() == "0", "the plan counts")
   Check(shop.total:GetText():find("Estimated spending: 550c", 1, true), shop.total:GetText())
+  local shoppingPlan = S.ShoppingPlan
+  S.ShoppingPlan = function()
+    local plan, ctx, engine = shoppingPlan()
+    local copy, context = {}, {}
+    for k, v in pairs(plan) do copy[k] = v end
+    for k, v in pairs(ctx) do context[k] = v end
+    copy.rows = {}
+    for i, r in ipairs(plan.rows) do
+      copy.rows[i] = {}
+      for k, v in pairs(r) do copy.rows[i][k] = v end
+      copy.rows[i].source = "vendor"
+    end
+    context.sellers = { [10] = {} }
+    return copy, context, engine
+  end
+  Win.Render()
+  Check(d.act:IsShown(), "vendor action occupies the footer")
+  Same(d.neededSection.points[1][3], 52, "section clears the visible action")
+  Check(d.consumers.box:GetHeight() - 8 >= 2 * d.consumers.rowH,
+    "action cannot squeeze the consumer viewport")
+  S.ShoppingPlan = shoppingPlan
+  Win.Render()
+  Same(d.neededSection.points[1][3], 12, "hidden action returns space to upper evidence")
+  d.scroll:SetVerticalScroll(50)
   -- Choosing a different material drops the prior material's consumers and scroll.
   for _, row in ipairs(SL.rows) do
     if row:IsShown() and row.item == 11 then row:GetScript("OnClick")(row); break end
@@ -1067,6 +1155,7 @@ do
   Same(#d.consumers.data, 1)
   Same(d.consumers.rows[1].name:GetText(), "Mana Potion")
   Same(d.consumers.scroll:GetVerticalScroll(), 0)
+  Same(d.scroll:GetVerticalScroll(), 0, "new selection starts upper evidence at the top")
   row10:GetScript("OnClick")(row10)
   -- only collect rows
   g.bags = { [10] = 0, [11] = 0 }
