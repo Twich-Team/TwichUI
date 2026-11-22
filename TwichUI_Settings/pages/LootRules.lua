@@ -32,6 +32,50 @@ local function Ru() return R.LootRules end
 local ACTION_ICON = { need = "lootNeed", greed = "lootGreed", pass = "lootPass" }
 local ACTION_WORD = { none = "No change", need = "Need", greed = "Greed", pass = "Pass" }
 
+local binding
+local function RawRule(id)
+    for _, rule in ipairs(LR().Active()) do if rule.id == id then return rule end end
+end
+local function ClosePicker()
+    if binding and R.SettingsArtworkPicker then R.SettingsArtworkPicker.Close(binding.owner) end
+    binding = nil
+end
+local function Current(b)
+    local raw = RawRule(b.id)
+    return binding == b and P.Active() and selected == b.id and raw == b.raw and raw.action == b.action
+end
+local function Automatic(tex, size, action)
+    tex:SetSize(size, size)
+    R.Icons.Apply(tex, ACTION_ICON[action] or "lootRolls", size)
+end
+local function Paint(tex, size, rule)
+    if rule.artwork and R.Artwork.Draw(tex, rule.artwork, size) then return false end
+    Automatic(tex, size, rule.action)
+    return rule.artwork ~= nil
+end
+function P.ChooseArtwork()
+    local picker, rule = R.SettingsArtworkPicker, selected and LR().Rule(selected)
+    local raw = rule and RawRule(rule.id)
+    if not (picker and rule and raw and P.Active()) then return false end
+    if binding then ClosePicker(); return false end
+    local b = { owner = f, id = rule.id, raw = raw, action = raw.action }
+    binding = b
+    local ok = picker.Open(f, {
+        key = b, selection = rule.artwork,
+        subtitle = "Choose an icon for this loot rule.",
+        IsCurrent = function() return Current(b) end,
+        automatic = { label = "Use automatic icon", name = (ACTION_WORD[rule.action] or "No change") .. " (automatic)",
+            Draw = function(tex, size) Automatic(tex, size, b.action) end },
+        OnApply = function(ref)
+            if not Current(b) then return false, "That rule has changed." end
+            return LR().SetArtwork(b.id, ref)
+        end,
+        OnClosed = function() if binding == b then binding = nil end; P.QueueRefresh() end,
+    })
+    if not ok and binding == b then binding = nil end
+    return ok
+end
+
 local function Tone(fs, tone)
     local G = Wg()
     local pal = G.pal
@@ -72,6 +116,7 @@ function P.QueueRefresh()
 end
 
 function P.Select(id)
+    if selected ~= id then ClosePicker() end
     selected = id
     P.Say(nil)
     P.QueueRefresh()
@@ -183,7 +228,7 @@ local function Row(i)
             end)
         else G.CloseMenu(); P.Select(row.id) end
     end)
-    R.Interact.Tip(row, "Loot rule", function() return (row.name:GetText() or "") .. "\n" .. (row.summary or "") end)
+    R.Interact.Tip(row, "Loot rule", function() return (row.name:GetText() or "") .. "\n" .. (row.summary or "") .. (row.artUnavailable and "\nSelected icon unavailable — showing automatic" or "") end)
     rows[i] = row
     return row
 end
@@ -195,7 +240,7 @@ function P.Delete(id)
     R.Interact.Confirm("TWICHUI_LOOTRULE_DELETE", text, function()
         local ok = LR().Delete(id)
         if ok then
-            if selected == id then selected = nil end
+            if selected == id then ClosePicker(); selected = nil end
             P.Say(("Deleted \"%s\"."):format(v.name), "ok")
         end
     end, { accept = DELETE or "Delete", valid = function()
@@ -220,9 +265,9 @@ local function LayoutList(list)
         row.id = v.id
         row.summary = v.summary
         row.name:SetText(v.name)
-        R.Icons.Apply(row.icon, ACTION_ICON[v.action] or "lootRolls", 30)
+        row.artUnavailable = Paint(row.icon, 30, v)
         local state
-        if v.incomplete then state = "Needs attention"
+        if v.incomplete then state = (ACTION_WORD[v.action] or "Choose action") .. " · Needs attention"
         elseif v.enabled then state = "On  ·  " .. Ru().ActionSummary(v)
         else state = "Off  ·  " .. Ru().ActionSummary(v) end
         row.state:SetText(state)
@@ -336,7 +381,7 @@ local function LayoutEditor(v, w)
     local G = Wg()
     local Rules = Ru()
     local y = 12
-    R.Icons.Apply(f.headIcon, ACTION_ICON[v.action] or "lootRolls", 36)
+    local unavailable = Paint(f.headIcon, 36, v)
     Put(f.headIcon, f.editor, PAD, y)
     f.nameBox:SetWidth(w - PAD * 2 - 44 - 104)
     Put(f.nameBox, f.editor, PAD + 44, y)
@@ -350,6 +395,13 @@ local function LayoutEditor(v, w)
     f.summary:SetText(v.summary or "")
     Put(f.summary, f.editor, PAD + 44, y + 28)
     y = y + 28 + math.max(26, f.summary:GetStringHeight() or 26) + 8
+    Put(f.chooseIcon, f.editor, PAD, y)
+    y = y + 34
+    if unavailable then
+        f.artStatus:SetWidth(w - PAD * 2); f.artStatus:SetText("Selected icon unavailable — showing automatic")
+        Tone(f.artStatus, "warn"); Put(f.artStatus, f.editor, PAD, y)
+        y = y + math.max(16, f.artStatus:GetStringHeight() or 16) + 5
+    else f.artStatus:Hide() end
     local bw = (w - PAD * 2 - 3 * 6) / 4
     for i, b in ipairs(f.tools) do
         b:SetWidth(bw)
@@ -549,6 +601,9 @@ local function Build()
     f.noRule = G.Text(e, "small"); f.noRule:SetWordWrap(true)
     f.noRule:SetText("Choose a rule on the left, or make a new one.")
     f.headIcon = Part(e:CreateTexture(nil, "ARTWORK")); f.headIcon:SetSize(36, 36)
+    f.chooseIcon = Part(G.Button(e, "Choose icon...", 140, "secondary", function() P.ChooseArtwork() end))
+    R.Interact.Tip(f.chooseIcon, "Choose icon", "Choose a picture for this rule. The roll action stays the same.")
+    f.artStatus = Part(G.Text(e, "small")); f.artStatus:SetWordWrap(true)
     f.nameBox = Part(G.EditBox(e, 200, 24))
     f.nameBox:SetMaxLetters(R.LootRules.MAX_NAME)
     local function CommitName(box)
@@ -603,7 +658,11 @@ local function Build()
     f.actions = {}
     for _, key in ipairs({ "none", "need", "greed", "pass" }) do
         local b = Part(R.FrameLook.Toggle(e, ACTION_WORD[key], 120, function()
-            if selected then LR().SetAction(selected, key); P.QueueRefresh() end
+            if selected then
+                local v = LR().Rule(selected)
+                if v and v.action ~= key then ClosePicker() end
+                LR().SetAction(selected, key); P.QueueRefresh()
+            end
         end))
         b:SetHeight(32)
         if b.text then
@@ -658,7 +717,20 @@ local function Build()
     f.say = Part(G.Text(e, "small")); f.say:SetWordWrap(true)
     built = true
     f:SetScript("OnSizeChanged", function() P.QueueRefresh() end)
-    f:SetScript("OnHide", function()
+    f:SetScript("OnShow", function(self)
+        self:RegisterEvent("GET_ITEM_INFO_RECEIVED"); self:RegisterEvent("ITEM_DATA_LOAD_RESULT")
+    end)
+    f:SetScript("OnEvent", function(_, _, id)
+        if id == nil or (issecretvalue and issecretvalue(id)) then return end
+        for _, rule in ipairs(LR().List()) do
+            if rule.artwork and rule.artwork.kind == "item" and rule.artwork.id == id then
+                P.QueueRefresh(); return
+            end
+        end
+    end)
+    f:SetScript("OnHide", function(self)
+        ClosePicker()
+        self:UnregisterEvent("GET_ITEM_INFO_RECEIVED"); self:UnregisterEvent("ITEM_DATA_LOAD_RESULT")
         epoch = epoch + 1
         queued = false
         local G2 = Wg()
@@ -674,8 +746,14 @@ end
 -- What has been built, read only (for the tests and the simulator).
 function P.Parts() return { frame = f, rows = rows, conds = conds } end
 
-if R.OnSettingsClosed then R.OnSettingsClosed(function() epoch = epoch + 1; queued = false end) end
-if R.LootRolls then R.LootRolls.Subscribe(function(what) if what == "rules" or what == "profile" then P.QueueRefresh() end end) end
+if R.OnSettingsClosed then R.OnSettingsClosed(function() ClosePicker(); epoch = epoch + 1; queued = false end) end
+if R.LootRolls then R.LootRolls.Subscribe(function(what)
+    if what == "rules" or what == "profile" then
+        if binding and not Current(binding) then ClosePicker() end
+        P.QueueRefresh()
+    end
+end) end
+if R.Profiles and R.Profiles.OnChange then R.Profiles.OnChange(function() ClosePicker() end) end
 
 local function Count()
     local n, on = 0, 0
