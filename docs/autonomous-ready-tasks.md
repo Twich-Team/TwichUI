@@ -140,6 +140,7 @@ The original note was clarified. **Do not implement a Craft Queue search.** The 
 | **W05 / A05 / W04** Market/AH status controls | Current A01/A02 performance work touches Market/Workshop plumbing | Re-evaluate against merged performance result first; no parallel work now |
 | **A04** neutral auction fee | Pricing correctness is important but current Market/Opportunities stack is active | Recheck after A01/A02 merges; separate small economic fix with targeted tests |
 | **F04 / F09 / reminder glow** | Fishing Stage 2 already merged; Loot victory PR #101 and Reminder glow PR #91 are active | Verify PR state and select only separately approved follow-ups |
+| **UX02** shared Reminders artwork picker and per-rule icons | Existing Reminders image picker is tightly coupled to Reminders' storage; Loot Rules/Magic Inventory currently derive default art and have no independent icon override field. Owner wants a shared curated picker; no implementation is yet authorized | Design shared catalog/chooser interface, audit bundled symbolic assets, and confirm whether overrides apply to rule list/editor only or runtime visuals. Then write separate small specs for shared extraction, Loot Rules, and Magic Inventory; preserve all default icons and rules |
 | **All larger product concepts** | Scope and interactions are not yet defined | Keep original ideas in roadmap; discuss one product slice at a time |
 
 ## Owner decisions — November 21, 2026
