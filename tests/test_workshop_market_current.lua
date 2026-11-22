@@ -86,9 +86,17 @@ assert(P.Price(2589).price==120 and B.Status().reload_required)
 -- New-capture waits never import timings from earlier captures.
 c.TwichUI.Perf.captureID=2;P.BeginView()
 local rows={};for i=1,12 do rows[i]={rec={id=i,outItem=2589,mats={}},est={state='ok'}}end
-local list={scroll={GetVerticalScroll=function()return 0 end,GetHeight=function()return 240 end},rowH=20,minH=240,data=rows}
+local list={scroll={GetVerticalScroll=function()return 0 end,GetHeight=function()return 240 end},rowH=20,minH=240,data={}}
+P.ObserveView(rows,list)
+assert(not observed['workshop.visibleSettled'],'empty publication captured a viewport')
+list.data=rows
 P.ObserveView(rows,list)
 assert(observed['workshop.tenVisiblePrices'] and observed['workshop.visibleSettled'] and observed['workshop.opportunitiesSettled'])
+c.TwichUI.Perf.captureID=3;observed={};P.BeginView()
+rows[1].est={state='unknown',why='calculating'};P.ObserveView(rows,list)
+assert(not observed['workshop.visibleSettled']and not observed['workshop.opportunitiesSettled'],'calculation pending was reported complete')
+rows[1].est={state='unknown',why='not_observed'};P.ObserveView(rows,list)
+assert(observed['workshop.visibleSettled']and observed['workshop.opportunitiesSettled'],'terminal missing row never settled')
 -- First generation with missing current payload refuses it and leaves no retry.
 Q.Deactivate();c.TwichUIMarketParts={};c.TwichUIMarketHistoryParts={}
 c.C_AddOns.LoadAddOn=function()return false end

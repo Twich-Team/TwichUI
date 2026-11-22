@@ -54,6 +54,9 @@ local function recipePending(rec)
 end
 function P.ObserveView(all,list)
     local d=capture();if not (d and d.viewStart and #all>0)then return end
+    -- Catalog construction can expose rows before the first list publication.
+    -- Do not permanently capture an empty viewport in that interval.
+    if not d.visible and #list.data==0 then return end
     if not d.visible then
         d.visible={};d.visibleCount=0
         local scroll=list.scroll:GetVerticalScroll() or 0

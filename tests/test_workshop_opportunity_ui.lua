@@ -58,6 +58,22 @@ W.Window.Show();drain();assert(S.OpportunityStatus().crafts==before,'reopen reca
 before=S.OpportunityStatus().crafts
 W.Vendor.Observe({{id=65,price=5,stack=1,avail=-1}},{[65]=true},nil,c.time());drain()
 assert(S.OpportunityStatus().crafts==before+2,'vendor update discarded unrelated recipes')
+local rev=W.Vendor.Revision();before=S.OpportunityStatus().crafts
+W.Vendor.Observe({{id=65,price=7,stack=1,avail=-1}},{[65]=true},nil,c.time());drain()
+assert(W.Vendor.Revision()==rev+1 and S.OpportunityStatus().crafts==before+2,'same-count vendor replacement retained old prices')
+-- Equal record counts do not imply equal deposit evidence; unrelated Ledger
+-- changes that reproduce the same economic evidence preserve the context.
+local originalEvidence=W.Fees.Evidence
+local function evidence(per)return {invoices=0,depositCount=1,match={faction=0,neutral=0},deposits={[129]={{per=per,r=1}}}}end
+local ev=evidence(5);W.Fees.Evidence=function()return ev end
+W.Window.Render();drain();local est=S.Opportunities().estimator
+assert(S.Opportunities().all[1].est.depositTotal==5)
+before=S.OpportunityStatus().crafts;ev=evidence(5);W.Window.Render();drain()
+assert(S.Opportunities().estimator==est and S.OpportunityStatus().crafts==before,'unrelated Ledger revision discarded estimates')
+ev=evidence(9);W.Window.Render();drain()
+assert(S.Opportunities().estimator~=est and S.Opportunities().all[1].est.depositTotal==9,'replacement fee evidence retained old deposit')
+W.Fees.SetMode('off');W.Window.Render();drain();assert(S.Opportunities().all[1].est.cutWhy=='off')
+W.Fees.SetMode('assumed');W.Fees.Evidence=originalEvidence;W.Window.Render();drain()
 -- Admission/freshness and faction switches cannot keep old reference profits.
 local now=c.time();c.time=function()return now+W.Pricing.MAX_AGE+1 end
 W.Window.Render();drain();assert(S.Opportunities().summary.priced==0,'expired source retained profits')

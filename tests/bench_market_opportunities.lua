@@ -18,7 +18,7 @@ local function probe(t,k,name)
 end
 local events,now,serial={},0,0
 local callbacks,worstCallback,callbackCPU=0,0,0
-local checkSettlement
+local checkSettlement,activeInteraction
 local callbackTimes,worstOrigin={},""
 c.C_Timer.After=function(delay,fn)
  serial=serial+1;events[#events+1]={due=now+math.max(1/60,delay),fn=fn,id=serial}
@@ -40,6 +40,7 @@ local function event()
  end
  callbacks=callbacks+1;callbackCPU=callbackCPU+dt;worstCallback=math.max(worstCallback,dt);sample()
  if checkSettlement then checkSettlement()end
+ if activeInteraction then activeInteraction()end
  assert(callbacks<1000000,'unbounded timer work')
 end
 local f=assert(io.open(TESTS..'fixtures/workshop_summary_v2/synthetic.json'));local fixture=J.Parse(f:read('*a'));f:close()
@@ -118,6 +119,7 @@ local originalRows=W.Opps.Rows
 W.Opps.Rows=function(...)synchronousLists=synchronousLists+1;return originalRows(...)end
 local requestedAt={}
 local waiting,finished,waits={}, {}, {}
+local terminalItems={}
 local referenceFirst,referenceTen,referenceCount=nil,nil,0
 local record=B.Record;B.Record=function(item,key,...)
  records=records+1;local id=tostring(item)..':'..tostring(key)
@@ -125,6 +127,7 @@ local record=B.Record;B.Record=function(item,key,...)
  local r,why=record(item,key,...)
  if why=='loading'then waiting[id]=began
  elseif why~='combat' and not finished[id]then
+  terminalItems[item]=true
   finished[id]=true;waits[#waits+1]=now-began;waiting[id]=nil
   if r and r.current.metrics.recent_copper~=J.NULL then
    referenceCount=referenceCount+1
@@ -188,7 +191,7 @@ elseif mode=='memory' then
  out.modeled_index_partitions=#indexes
 else
  local recipes={}
- for i=1,count do recipes[i]={id=i,name='Synthetic craft '..i,prof=171,filled=true,outItem=128+i%1000,outMin=1,outMax=1,
+ for i=1,count do recipes[i]={id=i,name='Synthetic craft '..i,prof=171,filled=true,outItem=128+i%math.max(1000,count),outMin=1,outMax=1,
   mats={{item=64+i%64,qty=1+i%4},{item=64+(i*7)%64,qty=2+i%3}}} end
  W.Session.AllRecipes=function()return recipes end
  probe(W.Session,"AllRecipes","catalog");probe(W.Session,"Estimator","estimator")
@@ -196,7 +199,7 @@ else
  probe(W.UI.pages and W.UI.pages.opps,"Render","view");probe(W.Facts,"Chart","chart")
  probe(W.Session,"OppStrategy","strategy");probe(W.Strategy,"Bump","strategyBump")
  probe(W.Junk,"Request","junk");probe(W.WorthTip,"Refresh","tooltip");probe(W.AuctionUI,"Schedule","auction")
- local visibleCohort,last,visibleCatalog,visibleById
+ local visibleCohort,last,visibleCatalog,visibleById,lastPricingRevision
  local needed={};for _,rec in ipairs(recipes)do needed[rec.outItem]=true;for _,mat in ipairs(rec.mats)do needed[mat.item]=true end end
  local target=0;for _ in pairs(needed)do target=target+1 end
  checkSettlement=function()
@@ -211,10 +214,12 @@ else
     if visibleCatalog~=last.all then
      visibleCatalog=last.all;visibleById={};for _,row in ipairs(last.all)do visibleById[row.rec.id]=row end
     end
-    local ready=true
+    local ready=lastPricingRevision==P.Generation()
     for _,id in ipairs(visibleCohort)do
      local row=visibleById[id];local why=row and row.est.why
      if not row or why=='calculating'or why=='loading'or why=='combat'then ready=false;break end
+     if not terminalItems[row.rec.outItem]then ready=false;break end
+     for _,mat in ipairs(row.rec.mats)do if not terminalItems[mat.item]then ready=false;break end end
     end
     if ready then out.visible_settlement_model_seconds=now-startVirtual;out.visible_settlement_cpu_ms=clock()-start end
    end
@@ -233,13 +238,24 @@ else
   if not out.opportunities_settlement_model_seconds and P.PendingCount()==0 and P.CacheSize()>=target and not v.calculating then
    out.opportunities_settlement_model_seconds=now-startVirtual;out.opportunities_settlement_cpu_ms=clock()-start
   end
-  last=v;sample();return v
+  last=v;lastPricingRevision=P.Generation();sample();return v
  end
  local initial=clock()
  if pattern=='ui' then W.Window.SetMode('opps');W.Window.Show();W.Window.Render()
  else W.UI.Redraw=function()W.Session.Opportunities()end;W.UI.Redraw() end
  out.initial_request_cpu_ms=clock()-initial
+ if scenario=='scroll'and pattern=='ui'then
+  activeInteraction=function()
+   local list=W.UI.lists.opps
+   if callbacks%10==0 and #list.data>0 then
+    list.scroll:SetVerticalScroll(((callbacks*17)%#list.data)*list.rowH)
+    local fn=list.scroll:GetScript('OnVerticalScroll');if fn then fn(list.scroll)end
+    out.active_scrolls=(out.active_scrolls or 0)+1
+   end
+  end
+ end
  checkSettlement();while #events>0 do event()end
+ activeInteraction=nil
  assert(out.pricing_settlement_model_seconds,"price identities did not settle")
  if scenario~='none'then
   local beforeCrafts,beforeViews,beforeRows=crafts,draws,synchronousLists
@@ -273,14 +289,22 @@ else
     local fn=list.scroll:GetScript('OnVerticalScroll');if fn then fn(list.scroll)end
    end
   elseif scenario=='generation'then
-   h.source_watermark='9999';local body=J.Copy(h);body.generation_id=nil;h.generation_id=J.SHA(J.Encode(body))
-   input={summary_version=1,bank='A',manifest=J.Encode(h),receipt=J.Encode(setmetatable({schema_version=1,generation_id=h.generation_id,desktop_build='isolated-audit',completed_at=h.generated_at},J.OBJECT))}
-   B.Begin(input);W.UI.Redraw()
+   for pass=1,3 do
+    h.source_watermark=tostring(9999+pass);local body=J.Copy(h);body.generation_id=nil;h.generation_id=J.SHA(J.Encode(body))
+    input={summary_version=1,bank='A',manifest=J.Encode(h),receipt=J.Encode(setmetatable({schema_version=1,generation_id=h.generation_id,desktop_build='isolated-audit',completed_at=h.generated_at},J.OBJECT))}
+    B.Begin(input);W.UI.Redraw();while #events>0 do event()end
+   end
+   out.scenario_generations=3
   elseif scenario=='stress'then
    for pass=1,20 do
     local changed={};for item=64,127 do changed[item]=true;overlays[item]=pass end
     if W.Session.ItemsChanged then W.Session.ItemsChanged(changed)else W.Session.ForgetEstimator()end
     for i=1,5 do W.Session.opp.sort=({'profit','cost','sell','margin'})[1+(pass+i)%4];W.UI.Redraw()end
+    if pattern=='ui'then
+     local list=W.UI.lists.opps;list.scroll:SetVerticalScroll(((pass*37)%count)*list.rowH)
+     local fn=list.scroll:GetScript('OnVerticalScroll');if fn then fn(list.scroll)end
+     if pass%4==0 then W.Window.Hide();W.Window.Show()end
+    end
     while #events>0 do event()end
     if pass==1 or pass==10 or pass==20 then
      local gc=clock();collectgarbage('collect')

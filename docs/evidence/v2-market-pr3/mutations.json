@@ -1,0 +1,155 @@
+{
+  "summary": {
+    "format": 1,
+    "elapsed_seconds": 12.8,
+    "counts": {
+      "killed": 16,
+      "survived": 0,
+      "invalid": 0,
+      "timeout": 0,
+      "infra": 0
+    },
+    "exit": 0,
+    "baseline": [
+      {
+        "test": "test_workshop_market_current.lua",
+        "status": "pass",
+        "seconds": 0.39,
+        "output": ""
+      },
+      {
+        "test": "test_workshop_market_pending.lua",
+        "status": "pass",
+        "seconds": 2.79,
+        "output": ""
+      },
+      {
+        "test": "test_workshop_opportunity_engine.lua",
+        "status": "pass",
+        "seconds": 0.38,
+        "output": ""
+      },
+      {
+        "test": "test_workshop_opportunity_ui.lua",
+        "status": "pass",
+        "seconds": 1.94,
+        "output": ""
+      }
+    ],
+    "changed_files": []
+  },
+  "results": [
+    {
+      "id": "market.pending.guard",
+      "status": "killed",
+      "kind": "assertion",
+      "killed_by": "test_workshop_market_pending.lua",
+      "expected": true
+    },
+    {
+      "id": "market.pending.completion",
+      "status": "killed",
+      "kind": "assertion",
+      "killed_by": "test_workshop_market_pending.lua",
+      "expected": true
+    },
+    {
+      "id": "market.pending.revision",
+      "status": "killed",
+      "kind": "assertion",
+      "killed_by": "test_workshop_market_pending.lua",
+      "expected": true
+    },
+    {
+      "id": "market.pending.elapsed-budget",
+      "status": "killed",
+      "kind": "assertion",
+      "killed_by": "test_workshop_market_pending.lua",
+      "expected": true
+    },
+    {
+      "id": "market.pending.rejected-retry",
+      "status": "killed",
+      "kind": "assertion",
+      "killed_by": "test_workshop_market_pending.lua",
+      "expected": true
+    },
+    {
+      "id": "market.current.path",
+      "status": "killed",
+      "kind": "runtime-error",
+      "killed_by": "test_workshop_market_current.lua",
+      "expected": true
+    },
+    {
+      "id": "market.current.binding",
+      "status": "killed",
+      "kind": "assertion",
+      "killed_by": "test_workshop_market_current.lua",
+      "expected": true
+    },
+    {
+      "id": "market.current.priority",
+      "status": "killed",
+      "kind": "assertion",
+      "killed_by": "test_workshop_market_current.lua",
+      "expected": true
+    },
+    {
+      "id": "market.opportunity.memo-version",
+      "status": "killed",
+      "kind": "assertion",
+      "killed_by": "test_workshop_opportunity_engine.lua",
+      "expected": true
+    },
+    {
+      "id": "market.opportunity.dependencies",
+      "status": "killed",
+      "kind": "assertion",
+      "killed_by": "test_workshop_opportunity_engine.lua",
+      "expected": true
+    },
+    {
+      "id": "market.opportunity.snapshot",
+      "status": "killed",
+      "kind": "assertion",
+      "killed_by": "test_workshop_opportunity_engine.lua",
+      "expected": true
+    },
+    {
+      "id": "market.opportunity.elapsed-budget",
+      "status": "killed",
+      "kind": "assertion",
+      "killed_by": "test_workshop_opportunity_engine.lua",
+      "expected": true
+    },
+    {
+      "id": "market.opportunity.warm-context",
+      "status": "killed",
+      "kind": "assertion",
+      "killed_by": "test_workshop_opportunity_engine.lua",
+      "expected": true
+    },
+    {
+      "id": "market.opportunity.source-guard",
+      "status": "killed",
+      "kind": "assertion",
+      "killed_by": "test_workshop_opportunity_engine.lua",
+      "expected": true
+    },
+    {
+      "id": "market.opportunity.timer-token",
+      "status": "killed",
+      "kind": "assertion",
+      "killed_by": "test_workshop_opportunity_engine.lua",
+      "expected": true
+    },
+    {
+      "id": "market.opportunity.demand-lease",
+      "status": "killed",
+      "kind": "assertion",
+      "killed_by": "test_workshop_opportunity_ui.lua",
+      "expected": true
+    }
+  ]
+}

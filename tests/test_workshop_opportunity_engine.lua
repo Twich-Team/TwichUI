@@ -81,6 +81,12 @@ assert(engine.stats.crafts==warm,'reopening discarded compatible completed resul
 prices[13]=nil;engine:ItemsChanged({[13]=true});drain();reference()
 assert(engine.summary.priced==96,'missing material invented a price')
 assert(engine:Status().retained==128 and not engine:Status().running and publications<100,'unbounded state/refresh loop')
+-- A redraw across a cooldown second touches only recipes with timed inputs.
+recipes[1].cd={left=10,at=NOW};args.catalogRevision=1
+engine:Request(args);drain();local before=engine.stats.crafts
+ctx.now=NOW+2;args.now=NOW+2;engine:Request(args);drain()
+assert(engine.stats.crafts==before+1 and engine.byId[1].est.cooldown.left==8,'cooldown time reused a stale result or invalidated unrelated rows')
+reference();ctx.now=nil
 -- Stop during a build and replace it before any stale scheduled resume.
 args.key='generation-c';args.estimator=E.New(ctx);engine:Request(args);engine:Cancel(true);drain()
 assert(#engine.all==0 and #engine.rows==0 and not engine.co)

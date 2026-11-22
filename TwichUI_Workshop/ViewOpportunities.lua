@@ -240,7 +240,7 @@ local function RenderDetail(rows,positions)
     local e, rec = r.est, r.rec
     local factsBucket=math.floor(Q.Now()/(F and F.BUCKET or 300))
     local economyChanged=d.paintEstimate~=e or d.paintRecipe~=rec or d.itemInfoRevision~=UI.itemInfoRevision or d.factsBucket~=factsBucket
-    local historyRevision=W.Pricing.ChartRevision and W.Pricing.ChartRevision()or 0
+    local historyRevision=W.Pricing and W.Pricing.ChartRevision and W.Pricing.ChartRevision()or 0
     if economyChanged then
     if R.Perf and R.Perf.on then R.Perf.Count('workshop.opportunities.detailUpdates')end
     d.paintEstimate,d.paintRecipe,d.itemInfoRevision=e,rec,UI.itemInfoRevision

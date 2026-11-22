@@ -67,7 +67,7 @@ Replace `workshop-settings` with one of these nonempty groups:
 | `auction-house` | Standalone Auction House preview, existing auction safeguards and Workshop dependencies |
 | `crafting` | Crafting, shopping, stock, planner, strategy and compact views |
 | `market` | Prices, distribution, history, valuation, schema and automatic scans |
-| `market-performance` | Eight fast deterministic pricing/partition/estimator/diagnostics modules; no large benchmarks or simulators in development selection |
+| `market-performance` | Ten fast deterministic pricing/partition/estimator/incremental-engine/diagnostics modules; no large benchmarks or simulators in development selection |
 | `reminders` | Reminders engines, designer, settings and artwork |
 | `loot-rolls` | Loot Rolls rules, cards, automatic rolling and settings pages; the synthetic-roll simulator catalog is run by hand with `bash tools/simlab/loot.sh` |
 | `navigation` | Navigation, maps, pins, NPCs and guild locations |
@@ -400,7 +400,7 @@ client acceptance is inferred from this campaign.
 
 ### Market pending-pricing performance
 
-`./tests/run.sh development market-performance` selects eight small production-reader,
+`./tests/run.sh development market-performance` selects ten small production-reader,
 pricing, estimator and integrity modules without a simulator. It supplements the
 normal affected Market/crafting/consumer groups. Dedicated audit benchmarks remain
 opt-in (`tools/measure_market_opportunities.py`), never default test discovery.
@@ -424,3 +424,25 @@ The 30,000-variant/60-day uneven stress fixture is for on-demand or release
 validation, never ordinary development. Exact frozen commands, JSON baselines,
 comparison/update policy and observed failures are in the
 [PR2 evidence and native acceptance report](performance/v2-market-cold-pricing-pr2.md).
+
+
+### Incremental Opportunities (PR3)
+
+The existing `market-performance` development group adds deterministic engine and
+actual Window/UI lifecycle tests. Its ten modules passed in 4.257 s on the audit
+host. Crafting integration selects these tests too. The existing PR workflow uses
+the same development command; no large benchmark or simulator entered routine CI.
+
+Use `./tests/run.sh development market-performance --jobs 2` for relevant commits;
+use `./tests/run.sh integration market --with-group crafting --with-group market-performance --profile cloud --jobs 2`
+at cross-subsystem checkpoints. Preview either with `--list`. The cloud profile
+reports native-client and simulator limitations explicitly.
+
+Opt-in `tools/measure_market_opportunities.py --suite opportunities` retains the
+20/100/500/1000 matrix. `--contract 2|3`, `--days 2|60`, repeatable `--case`, and
+`--scenario single|burst|reopen|filters|scroll|generation|stress` select comparable
+workloads; the driver discards one warm-up and defaults to three fresh samples.
+`--stress --rows 96 --case opportunities/ui/5000 --scenario stress` adds the large
+20-cycle workload, never routine discovery. See the [PR3 report](performance/v2-opportunities-incremental-pr3.md)
+for exact before/after commands, operation gates, baseline update policy,
+recomputation oracle, memory evidence and retained simulator failures.

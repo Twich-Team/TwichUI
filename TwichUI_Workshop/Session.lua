@@ -645,6 +645,27 @@ S.VendorSell = VendorSell
 -- item's saved tiers per call): the market and its scan, the reference generation, the cut, the vendor records, the Ledger's sales and deposits,
 -- the listing duration and an hour of time (ages and the stale rule: their thresholds are a day and more). Anything else (a scan, a merchant, a sale) makes a new one.
 local lastEstimator, lastKey, lastCut, lastCutWhy
+local feeEvidence,feeRevision
+-- Counts alone miss replacement postings with a different amount/duration.
+-- Compare only economic evidence when Fees rebuilds its existing cached view;
+-- unrelated Ledger activity must not discard completed recipe estimates.
+local function FeeRevision(ev)
+    if ev==feeEvidence then return feeRevision or 0 end
+    local old=feeEvidence
+    local equal=old and ev and old.invoices==ev.invoices and old.depositCount==ev.depositCount
+        and old.match.faction==ev.match.faction and old.match.neutral==ev.match.neutral
+    if equal then
+        for item,list in pairs(ev.deposits or {})do
+            local before=old.deposits and old.deposits[item]
+            if not before or #before~=#list then equal=false;break end
+            for i,d in ipairs(list)do if d.per~=before[i].per or d.r~=before[i].r then equal=false;break end end
+            if not equal then break end
+        end
+        if equal then for item in pairs(old.deposits or {})do if not(ev.deposits and ev.deposits[item])then equal=false;break end end end
+    end
+    if not equal then feeRevision=(feeRevision or 0)+1 end
+    feeEvidence=ev;return feeRevision or 0
+end
 S.ESTIMATE_MEMO_MAX = 20000   -- answers kept at most; beyond it the next draw starts a new estimator
 function S.Estimator(src)
     src = src or S.PriceSource()
@@ -658,7 +679,7 @@ function S.Estimator(src)
     -- the Gold Ledger counts only through what the fees read from it (verified sales and deposits): any other gold change (loot, repairs)
     -- moves its revision without changing an estimate
     local ev = Fe and Fe.Evidence and Fe.Evidence() or nil
-    local fees = ev and (ev.invoices .. ":" .. ev.depositCount .. ":" .. ev.match.faction .. ":" .. ev.match.neutral) or ""
+    local fees = FeeRevision(ev)
     local snap = lm and lm.snap
     local key = table.concat({ tostring(market.key), tostring(market.at), tostring(lm and lm.at), tostring(snap and snap.seq), tostring(SC.ended or 0),
         tostring(market.pricing and MK.ContextGeneration and MK.ContextGeneration()or src.generation or ""),

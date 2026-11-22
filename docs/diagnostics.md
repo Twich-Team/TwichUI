@@ -550,3 +550,27 @@ and pending counts. A paused historical coroutine can retain temporary parsed
 rows beyond the single completed partition cache; the gauge is not a heap size.
 The prior generation can also retain its existing rollback cache. Whole-UI heap and sampled addon memory remain the available client measures.
 Default-off instrumentation adds no background timers or forced collection.
+
+
+## Incremental Opportunities (PR3)
+
+| Scope / counter | Production owner | Meaning |
+| --- | --- | --- |
+| `workshop.opportunityBatch` | `OpportunityEngine.lua`, `Engine.Step` | Synchronous CPU per cooperative slice; total/worst. Scope stops before every scheduled continuation. |
+| `workshop.opportunityQuestion` | `Estimate.lua`, `Est.Ask` | Indivisible service-question CPU on memo misses; never includes a coroutine suspension. |
+| `workshop.opportunities.*` | `OpportunityEngine.lua`; presentation counters in `ViewOpportunities.lua` | Actual `crafts`, preparation passes (`calculated`), dependency `invalidations`, `catalogBuilds`, `batches`, `sorts`, `fullInvalidations`, `fullPublications`/`partialPublications`, `cancelled`/`errors`; actual `rowPaints`, `cellUpdates`, `detailUpdates`. `cacheHits` counts compatible catalog reads; `reused` counts estimates preserved during catalog reconciliation. |
+
+The opt-in Workshop preset now selects **15** gauges: its original ten plus
+`workshop.opportunities.known`, `.pending`, `.waiting`, `.settled`, `.retained`.
+They read bounded transient counts and never start work. General remains the
+default preset and the 40-gauge capacity is unchanged. No item IDs or imported
+payloads are exported. Catalog state exists for the feature; R.Perf timing/counter
+collection remains capture-only; the engine keeps fixed-size aggregate/status fields.
+
+The initial visible cohort is captured after the first nonempty list publication;
+rows still calculating prevent premature visible/all settlement. Terminal missing
+prices settle honestly. Use `/tui perf start workshop 3` (three minutes), then
+`/tui perf mark opportunities-open`, open Opportunities and leave the initial
+viewport unchanged until settled. Stop with `/tui perf stop`; export Quick summary
+and JSON in Diagnostics. Use separate captures for scrolling/filtering, source
+changes and warm reopening. [Exact native procedure and interpretation](performance/v2-opportunities-incremental-pr3.md#native-forever-check).
