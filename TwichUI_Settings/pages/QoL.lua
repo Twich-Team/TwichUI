@@ -19,7 +19,8 @@ K.Page({
                 + (R:Enabled("qolInvites") and 1 or 0) + (R:Enabled("qolDeclineInvites") and 1 or 0) + (R:Enabled("qolQuickKeybind") and 1 or 0)
                 + (R:Enabled("qolLootSparkles") and 1 or 0) + (R:Enabled("qolGroupFinderZones") and 1 or 0)
                 + (R:Enabled("qolHerbSparkles") and 1 or 0) + (R:Enabled("qolOreSparkles") and 1 or 0)
-            local total = 11
+                + (R:Enabled("qolHideErrors") and 1 or 0) + (R:Enabled("qolHideErrorSpeech") and 1 or 0)
+            local total = 13
             return K.OnOff(on > 0, ("%d of %d on"):format(on, total), "Off")
         end,
     },
@@ -256,6 +257,11 @@ K.Page({
         Under(QolToggle("qolHideErrorsKeep", "Still show important errors",
             "Keeps showing a full bag, a full quest log, being dead and raid-only actions while the others are hidden, since loot is lost when you miss those. Off: every error is hidden."),
             hideErrors, function() return R:Enabled("qolHideErrors") end, "Turn on \"Hide error messages\" to choose this.")
+        K.Card({
+            title = "Silence error speech", icon = "qualityOfLife",
+            what = "Silences spoken errors while leaving the text visible.",
+            consequence = "Uses the game's Enable Error Speech setting, and restores it when turned off if you haven't changed it yourself. Error hiding already removes the voice with hidden messages.",
+        })
         QolToggle("qolHideErrorSpeech", "Silence error speech",
             "Silences the spoken part of error messages (\"I can't do that yet\") and leaves the text. It turns off the game's own Enable Error Speech setting (Settings > Audio) and puts it back as it was when you turn this off; if you change that setting yourself meanwhile, your choice stands. Not needed while \"Hide error messages\" is on, which hides the voice with the text.")
 

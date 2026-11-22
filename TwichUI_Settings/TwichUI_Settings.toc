@@ -89,6 +89,7 @@ Previews.lua
 previews\QoL.lua
 previews\ReturnTheFavor.lua
 Cards.lua
+QoLCards.lua
 Home.lua
 QuickAccess.lua
 Window.lua
