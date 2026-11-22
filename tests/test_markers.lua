@@ -608,6 +608,21 @@ Check(ed.built and ed:IsShown(), "the target markers tab shows its order")
 Check(K.pages.markersTarget.parent == "markers" and K.pages.markersWorld.parent == "markers", "both are tabs of Markers")
 local function Order() return table.concat(M.Order("target"), ",") end
 local tiles = ed.tiles
+local function CheckTileControls(editor)
+  for _, tile in ipairs(editor.tiles) do
+    -- All three hit targets share the bottom row. Check their actual sizes,
+    -- not the theme's nominal checkbox size (the premium theme uses pills).
+    local left = tile.left.points[1][2]
+    local right = tile.w + tile.right.points[1][2]
+    local center = tile.w / 2
+    for _, scale in ipairs({ .8, 1, 1.25 }) do
+      Check((left + tile.left.w) * scale < (center - tile.box.w / 2) * scale
+        and (center + tile.box.w / 2) * scale < (right - tile.right.w) * scale,
+        editor.kind .. " marker checkbox and arrow hit targets stay separate at scale " .. scale)
+    end
+  end
+end
+CheckTileControls(ed)
 Check(tiles[1].name.text == "Skull" and tiles[1].number.text == "1" and tiles[1].icon.texture:find("_8$"), "each marker shows its icon, name and number")
 local skipped
 for i, t in ipairs(tiles) do if t.id == 3 then skipped = t end end
@@ -727,6 +742,7 @@ Check(#game.calls == 0, "the editor, its preview, drags and buttons never mark, 
 M.ResetOrder("world")
 UI.Open("markersWorld")
 local wed = R.MarkersPage.Frame("world")
+CheckTileControls(wed)
 Check(wed.built and wed.tiles[3].name.text == "Square" and wed.tiles[3].icon.texture:find("_6$"), "the world tab has its own markers (world marker 1 is the Square)")
 M.Move("world", 1, 2)
 Check(table.concat(M.Order("target"), ",") == "8,7,6,5,4,3,2,1", "and its own order")
