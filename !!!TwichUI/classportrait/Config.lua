@@ -2,13 +2,13 @@
 local R = TwichUI
 local C = {}
 R.ClassPortrait = C
-C.DEFAULTS = { enabled = false, automatic = true, size = 100, x = 0, y = 0, above = false, strata = "inherit" }
+C.DEFAULTS = { enabled = false, automatic = true, size = 100, x = 0, y = 0, above = false, strata = "inherit", artwork = "original" }
 C.LIMITS = { size = { 50, 150 }, x = { -100, 100 }, y = { -100, 100 } }
-C.CHOICES = { strata = {
+C.CHOICES = { artwork = { { "original", "Original" }, { "slim", "Slim" } }, strata = {
     { "inherit", "Follow unit frame" }, { "LOW", "Low" }, { "MEDIUM", "Medium" },
     { "HIGH", "High" }, { "DIALOG", "Dialog" },
 } }
-C.ENUM = { strata = { inherit = true, LOW = true, MEDIUM = true, HIGH = true, DIALOG = true } }
+C.ENUM = { artwork = { original = true, slim = true }, strata = { inherit = true, LOW = true, MEDIUM = true, HIGH = true, DIALOG = true } }
 local listeners = {}
 function C.Subscribe(fn) listeners[#listeners + 1] = fn end
 function C.Notify()
@@ -54,8 +54,17 @@ end
 -- Texture and portrait share their parent's units and scale. Fit both axes by
 -- containment (the entire portrait fits inside the opening), preserving aspect.
 -- The opening's centre stays on the portrait's centre when size is adjusted.
+function C.Art(token, get)
+    get = get or C.Get
+    if get("artwork") == "slim" then return C.SLIM_ART and C.SLIM_ART[token] end
+    return C.ART[token]
+end
+function C.TexturePath(token)
+    if not C.Art(token) then return end
+    return R.PATH .. "media\\classportrait\\" .. (C.Get("artwork") == "slim" and "slim\\" or "") .. token
+end
 function C.Placement(token, width, height, get)
-    local a = C.ART[token]
+    local a = C.Art(token, get)
     if not a or width <= 0 or height <= 0 then return end
     get = get or C.Get
     local factor = get("automatic") and math.max(width / a.w, height / a.h) or 52 / math.min(a.w, a.h)
