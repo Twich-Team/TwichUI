@@ -89,7 +89,7 @@ function D.Refresh()
     elseif not (R.Life and R.Life.loggedIn) then status = "waiting"
     else
         local f, p = D.Find()
-        if not C.ART[class] then status = "class"
+        if not C.Art(class) then status = "class"
         elseif not f then status = "missing"
         elseif Combat() then status = "combat" -- every layout write deferred
         else
@@ -116,7 +116,7 @@ function D.Refresh()
             end
             if not size then status = "missing"
             else
-                local path = R.PATH .. "media\\classportrait\\" .. class
+                local path = C.TexturePath(class)
                 local loaded = true
                 if D.texturePath ~= path then
                     loaded = texture:SetTexture(path)

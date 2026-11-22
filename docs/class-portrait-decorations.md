@@ -160,3 +160,31 @@ Layering acceptance: toggle Draw above unit frame, compare Follow unit frame and
 High strata, check text/bar overlap and click-through, change layers in combat,
 and confirm profile switches/reloads retain them. Real-client layering remains
 an acceptance check.
+
+## Alternate Slim artwork
+
+Artwork style selects Original (the default for existing and new profiles) or
+Slim. The choice participates in profile persistence, page reset and configuration
+sharing. Reset to Automatic keeps the chosen artwork; fit size and offsets remain
+shared adjustments relative to the selected artwork's opening. Preview uses the
+selected set. Combat defers a set change until it is safe to redraw.
+
+The supplied alternate ZIP's eleven original files are preserved unchanged under
+`assets/class-portrait-slim-source/` and excluded from packaging. Its handoff and
+manifest are reference material, not runtime instructions. As supplied, Mage,
+Warlock and Druid retain earlier designs; Settings discloses this. No redraw was
+invented or required to implement the requested selector.
+
+Nine 1536x1536 RGBA sources are converted to 512x512 TGAs with the same alpha-aware
+filter as the original set; the original textures and opening metadata stay intact.
+Slim metadata is measured independently at interior point (700,750). Paladin and
+Rogue have open right edges: their right edge is measured on surviving upper-right
+border segments (rows 600 and 540 respectively), rather than the transparent canvas
+boundary. Uniform containment and centring preserve aspect ratio for each class.
+All eighteen textures live beneath media/classportrait, with the new set in slim/.
+
+In-game acceptance: switch Original/Slim on each class, inspect all opening edges,
+check preview and combat-deferred switching, move/resize the player frame, and
+reload/switch profiles to verify the choice persists. The art package itself labels
+its alignment as unverified. Automated geometry and simulator tests do not prove
+actual EllesmereUI visual fit.

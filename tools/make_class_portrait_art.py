@@ -16,16 +16,21 @@ from make_map_tool_icons import read_png, resample
 ROOT = Path(__file__).resolve().parents[1]
 SIZE = 512
 
-def measure(pixels):
+def measure(pixels, seed=(560, 620), right_probe=None):
     def alpha(x, y): return pixels[y][x*4+3]
-    x, y = 560, 620  # visually verified inside all nine openings
+    x, y = seed  # visually verified inside each set's openings
     assert alpha(x, y) <= 8
     left = right = x
     top = bottom = y
-    while alpha(left-1, y) <= 8: left -= 1
-    while alpha(right+1, y) <= 8: right += 1
+    while left > 0 and alpha(left-1, y) <= 8: left -= 1
+    while right < len(pixels[0]) // 4 - 1 and alpha(right+1, y) <= 8: right += 1
     while alpha(x, top-1) <= 8: top -= 1
     while alpha(x, bottom+1) <= 8: bottom += 1
+    if right_probe is not None:
+        # Open right edges: measure the surviving upper-right border rather
+        # than mistaking the transparent canvas edge for the opening boundary.
+        right = x
+        while alpha(right+1, right_probe) <= 8: right += 1
     return [left, top, right+1, bottom+1]
 
 def main():
@@ -49,6 +54,26 @@ def main():
                     texture.write(bytes((b, g, r, a)))
         l, t, r, b = box
         rows.append('    %s = { canvas = 1254, x = %.1f, y = %.1f, w = %d, h = %d },' %
+                    (token, (l+r)/2, (t+b)/2, r-l, b-t))
+    rows.append('}')
+    rows.append('TwichUI.ClassPortrait.SLIM_ART = {')
+    slim_out = out / 'slim'
+    slim_out.mkdir(parents=True, exist_ok=True)
+    for p in sorted((ROOT / 'assets/class-portrait-slim-source').glob('*.png')):
+        token = p.stem.upper()
+        width, height, pixels, alpha = read_png(p)
+        assert alpha and (width, height) == (1536, 1536)
+        box = measure(pixels, (700, 750), {'PALADIN': 600, 'ROGUE': 540}.get(token))
+        metadata['slim/' + token] = box
+        rows_rgba = resample(pixels, (0, 0, width, height), SIZE, SIZE)
+        with (slim_out / (token + '.tga')).open('wb') as texture:
+            texture.write(struct.pack('<BBBHHBHHHHBB', 0, 0, 2, 0, 0, 0, 0, 0, SIZE, SIZE, 32, 8))
+            for row in reversed(rows_rgba):
+                for x in range(SIZE):
+                    r, g, b, a = row[x*4:x*4+4]
+                    texture.write(bytes((b, g, r, a)))
+        l, t, r, b = box
+        rows.append('    %s = { canvas = 1536, x = %.1f, y = %.1f, w = %d, h = %d },' %
                     (token, (l+r)/2, (t+b)/2, r-l, b-t))
     rows.append('}\n')
     (ROOT / '!!!TwichUI/classportrait/Art.lua').write_text('\n'.join(rows))
