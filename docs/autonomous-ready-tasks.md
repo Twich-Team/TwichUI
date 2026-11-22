@@ -104,6 +104,8 @@ Each Ready task is a **mini-specification**, not a guarantee the issue still exi
 
 ### F12 — Show carried Waylaid crates in Magic Inventory item/rule picker (F29)
 
+**In review** · [Draft PR #110](https://github.com/Twich-Team/TwichUI/pull/110)
+
 - **Owner decision:** The primary issue is missing Waylaid crates in the item/rule picker. **Junk marking is separate and not approved by this task.**
 - **Where to start:** `!!!TwichUI/inventory/Picker.lua` (`Gather`, `P.Draw`), `Items.lua` (bag facts/late metadata), `TwichUI_Settings/pages/MagicInventory.lua` (picker launch and editor integration).
 - **Acceptance:** A Waylaid crate actually present in a bag can be seen, searched, selected and retained in the rule/item picker without affecting ordinary item visibility. Handle pending item names and unknown icon/name safely; a bag-only picker need not enumerate crates not carried by the player.
