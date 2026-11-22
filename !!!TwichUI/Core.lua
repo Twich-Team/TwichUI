@@ -71,6 +71,7 @@ local DEFAULT_MODULES = {
     chatClean = false,       -- Chat cleaning: hide unwanted messages in the public channels you choose (opt-in, explicit true only)
     classBars = false,       -- Class resource bars: your class's resources as bars (opt-in; nothing else's bars are hidden or moved)
     targetArt = false,       -- Target dragon artwork: a dragon on EllesmereUI's target frame by the target's classification (opt-in; needs EllesmereUI's target frame; decoration only)
+    executeRange = false,    -- Personal health threshold on verified EllesmereUI target and enemy nameplate health bars (visual only)
     hazardAlerts = false,    -- Hazard alerts: the game plays a sound when an aura you list lands on you, grows or fades (opt-in; no combat log is read, nothing is automated)
     reminders = true,        -- Reminders: artwork, an icon or text when conditions you set are true (none exist until you make one, and each starts turned off; reminders/)
     barGlows = true,         -- Action bar glows: your bar buttons glow for a missing buff, weapon buff, seal or tracking, a low reagent or item, a ready cooldown, a proc or an old rank (each spell can be turned off; reads only, never casts; glows/)
