@@ -1,5 +1,6 @@
 """Exercise selection, coverage guards, process failures, timeout and isolation."""
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -76,6 +77,38 @@ class Selection(unittest.TestCase):
             runner.plan(REPO, 'fast', 'workshoop')
         with self.assertRaises(ValueError):
             runner.expand(REPO, ['tests/no_such_test_*.lua'])
+
+
+class Recommendation(unittest.TestCase):
+    def advise(self, *paths):
+        with (mock.patch('sys.stdout', new_callable=io.StringIO) as output,
+              mock.patch.object(runner, 'plan', side_effect=AssertionError('planned a test run')),
+              mock.patch.object(runner, 'Processes', side_effect=AssertionError('started a test run'))):
+            self.assertEqual(runner.main(['--recommend', *paths]), 0)
+        return output.getvalue()
+
+    def test_feature_source_matches_syntax_glob(self):
+        output = self.advise('!!!TwichUI/reminders/Config.lua')
+        self.assertIn('reminders (syntax glob): ./tests/run.sh development reminders --list', output)
+        self.assertNotIn('Unmapped', output)
+
+    def test_multiple_paths_include_shared_source_and_test_membership(self):
+        output = self.advise('!!!TwichUI/FrameLook.lua', 'tests/test_test_runner.py')
+        self.assertIn('shared-ui (syntax glob)', output)
+        self.assertIn('Inspect consumers', output)
+        self.assertIn('test-tools (test glob)', output)
+
+    def test_unknown_path_gets_explicit_escalation(self):
+        output = self.advise('docs/testing.md')
+        self.assertIn('Unmapped. Inspect callers, manifests and test inventory.', output)
+        self.assertIn('./tests/run.sh --list', output)
+        self.assertIn('./tests/run.sh full --list', output)
+
+    def test_help_advertises_advice_without_execution(self):
+        result = subprocess.run([str(REPO / 'tests/run.sh'), '--help'], check=True,
+                                capture_output=True, text=True)
+        self.assertIn('--recommend PATH [PATH ...]', result.stdout)
+        self.assertIn('run nothing', result.stdout)
 
 
 class Execution(unittest.TestCase):
