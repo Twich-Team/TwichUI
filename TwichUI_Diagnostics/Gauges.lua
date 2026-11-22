@@ -492,3 +492,12 @@ for _,spec in ipairs({{"known","Known recipes"},{"pending","Queued recipes"},{"w
         return session and session.OpportunityStatus and session.OpportunityStatus()[key]or 0
     end})
 end
+
+-- Prepared counters must exist before the lazy Workshop addon loads so a cold
+-- capture selects them. Reading only inspects existing state, never starts work.
+for _,key in ipairs({'loads','bytes','hashes','verified','full','flag_words','cache_hits','pending','cancelled'})do
+    Perf.Gauge('workshop.prepared.'..key,{label='Prepared current '..key,kind='cache',group='workshop',builtin=true,unit=key=='bytes'and 'bytes'or 'count',read=function()
+        local q=R.Workshop and R.Workshop.Summary;local status=q and q.Status()
+        return status and status.prepared and status.prepared[key]or 0
+    end})
+end

@@ -564,10 +564,10 @@ Default-off instrumentation adds no background timers or forced collection.
 | `workshop.opportunityQuestion` | `Estimate.lua`, `Est.Ask` | Indivisible service-question CPU on memo misses; never includes a coroutine suspension. |
 | `workshop.opportunities.*` | `OpportunityEngine.lua`; presentation counters in `ViewOpportunities.lua` | Actual `crafts`, preparation passes (`calculated`), dependency `invalidations`, `catalogBuilds`, `batches`, `sorts`, `fullInvalidations`, `fullPublications`/`partialPublications`, `partialReuses` (stable provisional membership), `cancelled`/`errors`; actual `rowPaints`, `cellUpdates`, `detailUpdates`. `cacheHits` counts compatible catalog reads; `reused` counts estimates preserved during catalog reconciliation. |
 
-The opt-in Workshop preset now selects **15** gauges: its original ten plus
+The opt-in Workshop preset now selects **24** gauges: its original ten plus
 `workshop.opportunities.known`, `.pending`, `.waiting`, `.settled`, `.retained`.
 They read bounded transient counts and never start work. General remains the
-default preset and the 40-gauge capacity is unchanged. No item IDs or imported
+default preset and the 40-gauge capacity is unchanged. Nine prepared-current passive proxies are included before Workshop loads. No item IDs or imported
 payloads are exported. Catalog state exists for the feature; R.Perf timing/counter
 collection remains capture-only; the engine keeps fixed-size aggregate/status fields.
 

@@ -101,3 +101,9 @@ remaining price request. The calculation context now includes the existing cance
 epoch; item completions do not change it. Header activation also drops work requested
 from the previous prepared context during admission. Completed ordinary reopen paths
 still reuse their caches, while cancelled work cannot masquerade as a compatible job.
+
+The opt-in Workshop preset includes all nine prepared counters via passive proxies
+before Workshop loads (24 selected gauges; the existing40-gauge capacity is unchanged).
+A regression test verifies initial zero reads and live reader values without loading
+the addon. This final diagnostics-only selection change does not alter the measured
+reader/pricing/engine code or the dedicated benchmark.

@@ -776,10 +776,14 @@ do
   assert(wr.DiagnosticsLauncher.Load());local kit=wr.DiagnosticsKit
   local preset
   for _,p in ipairs(kit.PRESETS)do if p.key=="workshop"then preset=p end end
-  assert(preset and #preset.gaugeIds==15)
+  assert(preset and #preset.gaugeIds==24)
   for i=1,50 do wr.Perf.Gauge("unrelated."..i,{read=function()return 1 end})end
   local selected=kit.GaugeList(preset.gauges,preset.gaugeIds)
-  assert(#selected==15 and selected[1].id=="workshop.cold.pending" and selected[1].read()==0,"cold diagnostics lost passive gauges before Workshop loaded")
+  assert(#selected==24 and selected[1].id=="workshop.cold.pending" and selected[1].read()==0,"cold diagnostics lost passive gauges before Workshop loaded")
+  assert(selected[16].id=="workshop.prepared.loads"and selected[16].read()==0 and not wr.Workshop,"cold prepared gauges loaded Workshop")
+  wr.Workshop={Summary={Status=function()return {prepared={loads=2,bytes=1024,hashes=7,pending=1}}end}}
+  assert(selected[16].read()==2 and selected[17].read()==1024 and selected[18].read()==7,"prepared proxies did not follow newly loaded reader state")
+  wr.Workshop=nil
   assert(kit.Start("general"))
   local capture=wr.Perf.captureID
   for _,ms in ipairs({100,8000,60000})do wr.Perf.Observe("workshop.priceWait",ms)end
