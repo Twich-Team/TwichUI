@@ -34,6 +34,8 @@ This category also works with empty bags and follows the same filters and protec
 [Named writ catalog](https://aidvir.github.io/wow-forever-favor/writs.html) ·
 [Sealed writ records](https://daybreakforever.com/discoveries/items)
 
+You can save up to 64 rules per profile. The rule editor keeps Delete, Duplicate, Cancel and Save visible while you scroll.
+
 The player makes rules: which items (categories as the game files them, quality, equipment or not, binding, and lists
 of items to include or never include), what happens to them (Send by mail, your bank, a guild bank tab, Keep in bags,
 Never transfer), and how many of each to keep in the bags. A bank or guild bank rule also says which way: **Deposit extras**
@@ -47,6 +49,8 @@ own panel instead: "The guild bank at the bank window"). Clicking it opens the r
 - **Bank:** **Run rules** carries out the entire review with one click: deposits first, then withdrawals. A progress
   bar counts only moves confirmed by the game; **Stop** ends the batch. **Rule actions** offers a temporary **Deposit all**
   or **Withdraw all** review for one bank rule, followed by its primary action. Nothing moves when selecting an action.
+  **Auto-sort** defaults to on and uses the game's sort for your bags and character bank after a completed
+  transfer with confirmed moves. The account-wide switch remembers Off across reloads. Stopping the run skips sorting.
 - **Guild bank:** the panel at the bank window (Deposit, Organize bank, Arrangement..., and Withdraw with a withdrawing rule), below.
 
 Off by default (`modules.magicInventory`, only an explicit `true` is on). Opening an interface never opens the review,

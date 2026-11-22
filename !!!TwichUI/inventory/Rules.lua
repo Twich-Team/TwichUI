@@ -41,7 +41,7 @@ local R = TwichUI
 local MI = {}
 R.MagicInventory = MI
 
-MI.MAX_RULES = 40
+MI.MAX_RULES = 64
 MI.MAX_DESTS = 12
 MI.MAX_IDS = 100        -- items in a rule's "Also include" or "Never include" list
 MI.MAX_NEVER = 200
@@ -138,6 +138,16 @@ local function AccountStore(create)
     if type(TwichUIDB) ~= "table" then return nil end
     if create and type(TwichUIDB.magicInventory) ~= "table" then TwichUIDB.magicInventory = {} end
     return type(TwichUIDB.magicInventory) == "table" and TwichUIDB.magicInventory or nil
+end
+
+function MI.BankAutoSort()
+    local account = AccountStore()
+    return not account or account.bankAutoSort ~= false
+end
+
+function MI.SetBankAutoSort(on)
+    local account = AccountStore(true)
+    if account then account.bankAutoSort = on == true end
 end
 
 local function Sub(t, key, create)
