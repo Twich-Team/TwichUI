@@ -27,5 +27,8 @@ destructive cleanup. Keep changes within the task and label verification honestl
 [Current status](STATUS_AND_BACKLOG.md) is context, not authorization for more work.
 [Product roadmap and idea bank](docs/product-roadmap.md) is optional planning context
 for prioritization only; read it when needed, never treat its ideas as assigned work.
+For an **explicitly owner-authorized autonomous batch only**, use
+[Autonomous-Ready tasks](docs/autonomous-ready-tasks.md); Ready is eligibility,
+not standing permission to implement or merge.
 
 Development follows [protected main and short-lived PR branches](docs/git-workflow.md). Workshop and release/v1.3 are preserved historical branches, not new work targets.
