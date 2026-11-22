@@ -67,7 +67,7 @@ Replace `workshop-settings` with one of these nonempty groups:
 | `auction-house` | Standalone Auction House preview, existing auction safeguards and Workshop dependencies |
 | `crafting` | Crafting, shopping, stock, planner, strategy and compact views |
 | `market` | Prices, distribution, history, valuation, schema and automatic scans |
-| `market-performance` | Ten fast deterministic pricing/partition/estimator/incremental-engine/diagnostics modules; no large benchmarks or simulators in development selection |
+| `market-performance` | Twelve fast deterministic pricing/partition/estimator/incremental-engine/diagnostics/reference/catalog modules; no large benchmarks or simulators in development selection |
 | `reminders` | Reminders engines, designer, settings and artwork |
 | `loot-rolls` | Loot Rolls rules, cards, automatic rolling and settings pages; the synthetic-roll simulator catalog is run by hand with `bash tools/simlab/loot.sh` |
 | `navigation` | Navigation, maps, pins, NPCs and guild locations |
@@ -400,7 +400,7 @@ client acceptance is inferred from this campaign.
 
 ### Market pending-pricing performance
 
-`./tests/run.sh development market-performance` selects ten small production-reader,
+`./tests/run.sh development market-performance` selects twelve small production-reader,
 pricing, estimator and integrity modules without a simulator. It supplements the
 normal affected Market/crafting/consumer groups. Dedicated audit benchmarks remain
 opt-in (`tools/measure_market_opportunities.py`), never default test discovery.
@@ -429,8 +429,8 @@ comparison/update policy and observed failures are in the
 ### Incremental Opportunities (PR3)
 
 The existing `market-performance` development group adds deterministic engine and
-actual Window/UI lifecycle tests. Its ten modules passed in 4.426 s on the audit
-host. Crafting integration selects these tests too. The existing PR workflow uses
+actual Window/UI lifecycle tests. Its twelve modules passed in 8.012 s on the audit
+host. Crafting integration selects the engine/UI tests too. The fast group also includes the existing independent crafting reference and mutation-harness tests, including complete catalog pattern/syntax validation; it does not run the complete mutation campaign. The existing PR workflow uses
 the same development command; no large benchmark or simulator entered routine CI.
 
 Use `./tests/run.sh development market-performance --jobs 2` for relevant commits;

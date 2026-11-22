@@ -1,8 +1,8 @@
 {
   "format": 1,
-  "elapsed_seconds": 11.0,
+  "elapsed_seconds": 14.3,
   "counts": {
-    "killed": 18,
+    "killed": 24,
     "survived": 0,
     "invalid": 0,
     "timeout": 0,
@@ -10,6 +10,48 @@
   },
   "exit": 0,
   "results": [
+    {
+      "id": "crafting.opps.zero-profit-counted",
+      "status": "killed",
+      "kind": "assertion",
+      "killed_by": "test_workshop_crafting_reference.lua",
+      "expected": true
+    },
+    {
+      "id": "crafting.opps.zero-profit-kept",
+      "status": "killed",
+      "kind": "assertion",
+      "killed_by": "test_workshop_crafting_reference.lua",
+      "expected": true
+    },
+    {
+      "id": "crafting.opps.unknown-before-known",
+      "status": "killed",
+      "kind": "assertion",
+      "killed_by": "test_workshop_crafting_reference.lua",
+      "expected": true
+    },
+    {
+      "id": "crafting.opps.direction-reversed",
+      "status": "killed",
+      "kind": "assertion",
+      "killed_by": "test_workshop_crafting_reference.lua",
+      "expected": true
+    },
+    {
+      "id": "crafting.opps.tie-name-reversed",
+      "status": "killed",
+      "kind": "assertion",
+      "killed_by": "test_workshop_crafting_reference.lua",
+      "expected": true
+    },
+    {
+      "id": "crafting.opps.tie-id-reversed",
+      "status": "killed",
+      "kind": "assertion",
+      "killed_by": "test_workshop_crafting_reference.lua",
+      "expected": true
+    },
     {
       "id": "market.pending.guard",
       "status": "killed",

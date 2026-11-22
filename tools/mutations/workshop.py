@@ -502,15 +502,15 @@ m("crafting.vendor.stock-checked-before-rounding", VENDOR, "if rec.a >= 0 and it
 # --- Opportunities ----------------------------------------------------------------------------------------------------
 m("crafting.opps.zero-profit-counted", OPPS, "if r.est.profitLow > 0 then s.profitable = s.profitable + 1 end", "if r.est.profitLow >= 0 then s.profitable = s.profitable + 1 end",
   "a craft that exactly breaks even is counted as profitable (survived the first M3 probe)", [CRF], smoke=True)
-m("crafting.opps.zero-profit-kept", OPPS, "if keep and opts.profitOnly then keep = r.est.state == \"ok\" and r.est.profitLow > 0 end", "if keep and opts.profitOnly then keep = r.est.state == \"ok\" and r.est.profitLow >= 0 end",
+m("crafting.opps.zero-profit-kept", OPPS, "e.state=='ok'and e.profitLow>0", "e.state=='ok'and e.profitLow>=0",
   "the 'profitable only' filter keeps a craft that breaks even", [CRF])
-m("crafting.opps.unknown-before-known", OPPS, "if ka ~= kb then return ka end", "if ka ~= kb then return kb end",
+m("crafting.opps.unknown-before-known", OPPS, "if ka~=kb then return ka end", "if ka~=kb then return kb end",
   "rows with an unknown estimate are listed before priced ones", [CRF])
-m("crafting.opps.direction-reversed", OPPS, "if desc then return va > vb end", "if desc then return va < vb end",
+m("crafting.opps.direction-reversed", OPPS, "if desc then return va>vb", "if desc then return va<vb",
   "the descending sort is ascending", [CRF])
-m("crafting.opps.tie-name-reversed", OPPS, "if na ~= nb then return na < nb end", "if na ~= nb then return na > nb end",
+m("crafting.opps.tie-name-reversed", OPPS, "if na~=nb then return na<nb end", "if na~=nb then return na>nb end",
   "equal values are ordered by name backwards", [CRF])
-m("crafting.opps.tie-id-reversed", OPPS, "return a.rec.id < b.rec.id", "return a.rec.id > b.rec.id",
+m("crafting.opps.tie-id-reversed", OPPS, "return a.rec.id<b.rec.id", "return a.rec.id>b.rec.id",
   "equal values and names are ordered by recipe id backwards", [CRF])
 
 

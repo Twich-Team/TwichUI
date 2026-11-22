@@ -134,7 +134,9 @@ Heap deltas start after fixture/header setup. They include harness observers and
 
 ## Verification and regression tiers
 
-Final focused development: **10/10 modules**, **4.426 s**. Targeted mutations: **18/18 killed**, **11.0 s**. A repeated affected integration run passes **76/76 offline modules** and all six selected Auction preview scenarios. The overall strict integration verdict remains **FAIL**: each normal Workshop pose retains the exact 40 pre-existing tooltip assertions, and the intentional wrong pose has 41. Voice/UTF-8 simulator boundaries remain explicit. No assertion was suppressed and the 45-second scenario limit was not raised. [Exact comparison](../evidence/v2-market-pr3/simulator-comparison.json), [verification](../evidence/v2-market-pr3/verification.json), [mutations](../evidence/v2-market-pr3/mutations.json).
+Final focused development: **12/12 modules**, **8.012 s**. Targeted mutations: **24/24 killed**, **14.3 s**. A repeated affected integration run passes **76/76 offline modules** and all six selected Auction preview scenarios. The overall strict integration verdict remains **FAIL**: each normal Workshop pose retains the exact 40 pre-existing tooltip assertions, and the intentional wrong pose has 41. Voice/UTF-8 simulator boundaries remain explicit. No assertion was suppressed and the 45-second scenario limit was not raised. [Exact comparison](../evidence/v2-market-pr3/simulator-comparison.json), [verification](../evidence/v2-market-pr3/verification.json), [mutations](../evidence/v2-market-pr3/mutations.json).
+
+Required full CI at combined head `b677c9d` found a genuine catalog-drift failure: 317 modules passed and `test_mutate.py` failed because five pre-existing filter/sort transforms still targeted the old inline implementation. The five patterns now target the shared `Keep`/`Comparator` logic with the same defects and original reference-model assertions. All **574/574** catalog entries match and parse; the expanded 24-mutation campaign kills every selected defect. The fast group now includes the existing independent crafting reference and mutation-harness tests so this issue is caught before the complete gate. No assertion was removed. [Failed CI and correction](../evidence/v2-market-pr3/ci-catalog-failure.json). This correction changes test tooling/selection, not the measured runtime.
 
 Deterministic tests cover full-recomputation field/order/summary equivalence, shared material/quantity reuse, targeted dependencies, metadata-only provisional reuse and dynamic price-filter membership, mutable recipes, partial completion/missing prices, context/generation/fallback/fees/vendor/cooldown changes, cancellation, stale timer/source suppression, combat retry, corruption/last-good rollback, error/no-retry and memory capacity. Real UI tests cover selection/details, pooled rows, actual scroll hooks and shared-consumer lease release. No runtime economic formula changed.
 
@@ -142,7 +144,7 @@ Deterministic tests cover full-recomputation field/order/summary equivalence, sh
 
 | Tier | Command / selection | Budget and cadence |
 | --- | --- | --- |
-| Development | `./tests/run.sh development market-performance --jobs 2` | Under 30 s target, 60 s review ceiling; relevant commits and PRs. Ten deterministic modules, no simulator or benchmark. Existing PR workflow selects it. |
+| Development | `./tests/run.sh development market-performance --jobs 2` | Under 30 s target, 60 s review ceiling; relevant commits and PRs. Twelve deterministic modules, no simulator or benchmark. Existing PR workflow selects it. |
 | Benchmarks | `python tools/measure_market_opportunities.py ...` | Opt-in for performance-sensitive PRs; one warm-up then three fresh processes per case. Never ordinary test discovery. |
 | Integration | `./tests/run.sh integration market --with-group crafting --with-group market-performance --profile cloud --jobs 2` | Cross-subsystem checkpoints; actual reader, fallback/corruption/rollback/generation, crafting/AH consumers and selected UI simulator launches. Does not certify a native client or release. |
 | Stress | Existing driver `--stress --case opportunities/ui/5000 --rows 96 --scenario stress` | Scheduled/release preparation or explicit performance work; not every commit. One warm-up and at least three measured samples when establishing a timing baseline; a one-sample bounded diagnostic is labeled separately. |
@@ -180,7 +182,8 @@ lua5.1 tests/bench_market_opportunities.lua opportunities ui 1000 60 3 32 profil
 lua5.1 tests/bench_market_opportunities.lua opportunities ui 1000 60 3 32 profile burst nogc
 ./tests/run.sh development market-performance --profile cloud --jobs 2
 ./tests/run.sh integration market --with-group crafting --with-group market-performance --profile cloud --jobs 2
-bash tools/mutate.sh --group market.opportunity --group market.pending --group market.current --jobs 2
+bash tools/mutate.sh --all --check
+bash tools/mutate.sh --group crafting.opps --group market.opportunity --group market.pending --group market.current --jobs 2
 ```
 
 `nogc` is an isolated CLI diagnostic only. Benchmark wall-process time includes fixture/oracle/VM setup and is not the addon CPU metric. Routine checks do not select these workloads, the full simulator or mutation campaigns. Intentional baseline updates need a reviewed rationale, exact source/harness/fixture identity, fresh comparable samples and unchanged operation/correctness gates; never raise elapsed budgets or silently replace failing evidence.
