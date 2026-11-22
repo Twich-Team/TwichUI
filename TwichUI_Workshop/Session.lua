@@ -1045,6 +1045,17 @@ function S.QueueStrategy()
     return state, plan, why
 end
 
+-- Only the recipe selected by the displayed make row is actionable. Do not infer a
+-- recipe from other candidates for the same output item.
+function S.MaterialRecipe(row)
+    if type(row) ~= "table" or row.kind ~= "make" or type(row.make) ~= "table" then return nil end
+    local rec = row.make.rec
+    local id = type(rec) == "table" and rec.id
+    if type(id) ~= "number" or id <= 0 or id > W.MAX_ID or id ~= math.floor(id) then return nil end
+    if row.multilevel and (not row.line or not row.line.make or row.line.make.recipe ~= id) then return nil end
+    return id
+end
+
 -- The shopping list from the multilevel plan. Returns plan (Shopping.Plan's shape: rows, totals, unknownBags, and engine), ctx (as S.Shopping's
 -- plus engine and stale) and the state: "ready", "planning" (plan is the last finished one, marked ctx.stale, or an empty list), or "basic" (the
 -- planner failed: Shopping's own one-level plan is shown, and says so). A basic plan is never presented as the multilevel one.

@@ -192,6 +192,49 @@ do
 end
 
 
+-- A Craft material opens the recipe selected in the displayed plan, without crafting.
+do
+  local make = { kind = "make", item = 20, qty = 4, source = "make",
+    make = { rec = { id = 500, name = "Bar" }, crafts = 4, made = 4, surplus = 0, state = "ok", reagents = {} }, options = {} }
+  make.options.make = make.make
+  Same(S.MaterialRecipe(make), 500)
+  Same(S.MaterialRecipe({ kind = "make", make = {} }), nil, "missing recipe is not guessed")
+  Same(S.MaterialRecipe({ kind = "buy", make = make.make }), nil, "an alternative is not the selected source")
+  local multi = { kind = "make", multilevel = true, make = make.make, line = { make = { recipe = 501 } } }
+  Same(S.MaterialRecipe(multi), nil, "a mismatched multilevel step is not guessed")
+  multi.line.make.recipe = 500
+  Same(S.MaterialRecipe(multi), 500)
+  local rows = W.Compact.TravelRows({ rows = { make } }, {})
+  Same(rows[1].recipe, 500)
+  local realPlan = S.ShoppingPlan
+  local plan, ctx, engine = realPlan()
+  local copy = {}; for k, v in pairs(plan) do copy[k] = v end
+  copy.rows = { make }
+  S.ShoppingPlan = function() return copy, ctx, engine end
+  Win.Show(); Win.SetMode("shop"); Win.Render()
+  local detail = Win.Shop().detail
+  Check(detail.openRecipe:IsShown(), "Shopping offers the chosen recipe")
+  local before, queued = #g.opened, Q.Count()
+  local count = Q.Find(500).crafts
+  detail.openRecipe:GetScript("OnClick")(detail.openRecipe)
+  Same(g.opened[before + 1], 500, "Shopping opens the selected recipe")
+  W.Compact.Show("travel"); W.Compact.Render()
+  local row = Win.Lists().compact.rows[1]
+  Check(row.map:IsShown() and row.map.text:GetText() == "Open", "Travel offers Open")
+  row.map:GetScript("OnClick")(row.map)
+  Same(g.opened[before + 2], 500, "Travel opens the same recipe")
+  local savedOpen = c.C_TradeSkillUI.OpenRecipe
+  c.C_TradeSkillUI.OpenRecipe = nil
+  row.map:GetScript("OnClick")(row.map)
+  Check(S.Note():find("wouldn't open", 1, true), "unavailable API explains the failure")
+  c.C_TradeSkillUI.OpenRecipe = savedOpen
+  Same(#g.opened, before + 2, "unavailable API does not open a recipe")
+  Same(Q.Count(), queued, "opening does not change the queue")
+  Same(Q.Find(500).crafts, count, "opening does not credit a craft")
+  S.ShoppingPlan = realPlan
+  W.Compact.ShowFull()
+end
+
 -- live Shopping (P2.1): a material that arrives in the bags leaves the list after one settled redraw; a source choice is kept ------------------------
 do
   local Cm = W.Compact

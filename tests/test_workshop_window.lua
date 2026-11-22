@@ -545,7 +545,8 @@ do
   Same(sd.name:GetText(), "Peacebloom")
   Check(sd.explain:GetText():find("Craft 2 x Peacebloom Bundle", 1, true), sd.explain:GetText())
   Check(sd.explain:GetText():find("Making this looks cheaper than buying at the auction house", 1, true), sd.explain:GetText())
-  Same(sd.act.text:GetText(), "Add optimized plan")   -- P2: the multilevel plan adds its crafts through a confirmation; Check(sd.act:IsShown())
+  Same(sd.act.text:GetText(), "Add to plan", "split footer retains the existing plan action")
+  Check(sd.act:IsShown() and sd.openRecipe:IsShown(), "plan action and recipe navigation are both available")
   -- the suggestion and the player's own choice are told apart, in words: Make is suggested (the lowest cost), nothing is overridden yet
   Same(sd.tags.make:GetText(), "Suggested"); Same(sd.tags.auction:GetText(), ""); Same(sd.tags.vendor:GetText(), "")
   Check(not sd.useSuggestion:IsShown(), "no override: no Use suggestion")
