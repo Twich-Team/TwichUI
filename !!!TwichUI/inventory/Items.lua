@@ -1,6 +1,6 @@
 -- TwichUI: Magic Inventory, reading items
 -- What an item is (the game's class, subclass, quality, binding and equip slot), the categories a rule can choose
--- (the game's own names), whether a rule matches an item, and the carried bags as a list of stacks with what each
+-- (game and custom groups), whether a rule matches an item, and the carried bags as a list of stacks with what each
 -- stack is (bound, locked, a quest item, conjured, in an equipment set). Reads only: nothing here moves, picks up or
 -- uses anything. What an item is doesn't change in a session, so it is remembered by item ID (bounded); what a stack
 -- is (bound, locked) is read each time.
@@ -64,7 +64,7 @@ function MI.ItemFacts(id)
 end
 
 ---------------------------------------------------------------------------
--- Categories: "class" or "class:subclass", under the game's own names
+-- Categories: game classes/subclasses and Magic Inventory groups
 ---------------------------------------------------------------------------
 function MI.CategoryOf(itemID)
     if not (C_Item and C_Item.GetItemInfoInstant) then return nil end
@@ -75,8 +75,23 @@ function MI.CategoryOf(itemID)
     return key, MI.CategoryName(key)
 end
 
+local CUSTOM_CATEGORIES = {
+    {
+        key = MI.WAYLAID_CATEGORY, label = "All Waylaid crates", group = "Magic Inventory",
+        help = "Matches unidentified, identified and sealed Waylaid crates. Other filters and transfer protections still apply.",
+    },
+    {
+        key = MI.WRITS_CATEGORY, label = "All Craftsman's Writs", group = "Magic Inventory",
+        search = "crafting writs",
+        help = "Matches sealed writ envelopes and named crafting orders. Other filters and transfer protections still apply.",
+    },
+}
+
 function MI.CategoryName(key)
     if type(key) ~= "string" then return nil end
+    for _, category in ipairs(CUSTOM_CATEGORIES) do
+        if category.key == key then return category.label end
+    end
     local c, s = key:match("^(%d+):(%d+)$")
     if c then
         local name = C_Item and C_Item.GetItemSubClassInfo and Str((C_Item.GetItemSubClassInfo(tonumber(c), tonumber(s))))
@@ -123,7 +138,9 @@ function MI.Categories()
             end
         end
     end
-    if #out > 0 then categories = out end   -- an empty answer (names not there yet) is asked again next time
+    -- Retry game names if unavailable. Custom groups are always offered.
+    if #out > 0 then categories = out end
+    for _, category in ipairs(CUSTOM_CATEGORIES) do out[#out + 1] = category end
     return out
 end
 
@@ -139,10 +156,34 @@ end
 -- or nil. An excluded item is never matched, whatever else is true; the hard protections and the Never transfer
 -- list are applied by the plan, before any rule (Plan.lua).
 ---------------------------------------------------------------------------
+-- Forever 1.60.1 item data. The two identified-crate ranges exclude 248700 and 248701.
+-- https://eternadex.com/en/versorgungsgueter/ and https://forevercraft.ru/database/items/misc/junk/3/
+local function IsWaylaidCrate(id)
+    return id == 248549                           -- unidentified
+        or (id >= 248682 and id <= 248699)        -- herbs, ore, textiles and curiosities
+        or (id >= 248702 and id <= 248713)        -- fabrics, ingots and parts
+        or (id >= 248765 and id <= 248779)        -- sealed turn-ins, all ranks and qualities
+end
+
+-- Forever writs from the live client catalog, including the generic and ranked sealed envelopes.
+-- https://aidvir.github.io/wow-forever-favor/writs.html and https://daybreakforever.com/discoveries/items
+local function IsCraftsmansWrit(id)
+    return id == 248206
+        or (id >= 262887 and id <= 262890)
+        or (id >= 264011 and id <= 264160)
+end
+
 local function CatMatch(rule, facts)
     if #rule.cats == 0 then return true end
+    local class, subclass = facts.classID, facts.subclassID
     for _, key in ipairs(rule.cats) do
-        if key == tostring(facts.classID) or key == (facts.classID .. ":" .. facts.subclassID) then return true end
+        if key == MI.WAYLAID_CATEGORY then
+            if IsWaylaidCrate(facts.id) then return true end
+        elseif key == MI.WRITS_CATEGORY then
+            if IsCraftsmansWrit(facts.id) then return true end
+        elseif class and (key == tostring(class) or (subclass and key == (class .. ":" .. subclass))) then
+            return true
+        end
     end
     return false
 end

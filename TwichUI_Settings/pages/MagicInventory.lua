@@ -588,6 +588,8 @@ local CATEGORY_ART = {
     ["9"] = NPC .. "sealed-scroll-small", ["15"] = NPC .. "leather-backpack-small",
 }
 function P.CategoryArtwork(key)
+    if key == MI().WAYLAID_CATEGORY then return Painted("waylaid-crate") end
+    if key == MI().WRITS_CATEGORY then return NPC .. "sealed-scroll-small" end
     if CATEGORY_ART[key] then return CATEGORY_ART[key] end
     local class = key:match("^(%d+)")
     if class == "9" then return CATEGORY_ART["9"] end
@@ -1167,7 +1169,7 @@ local function DrawItemFilters()
         local chosen, count = {}, 0
         for _, key in ipairs(r.cats) do chosen[key] = true end
         for i, cat in ipairs(mi.Categories()) do
-            if filterQuery == "" or (cat.label .. " " .. cat.group):lower():find(filterQuery, 1, true) then
+            if filterQuery == "" or (cat.label .. " " .. cat.group .. " " .. (cat.search or "")):lower():find(filterQuery, 1, true) then
                 local caption = cat.label .. (cat.group ~= cat.label and ("\n|cff8a857c" .. cat.group .. "|r") or "")
                 Choice("e1cat" .. i, caption, chosen[cat.key] == true, count % 2 * math.floor((contentWidth + 6) / 2), y + math.floor(count / 2) * 44, math.floor((contentWidth - 6) / 2), function()
                     if chosen[cat.key] then
@@ -1176,7 +1178,7 @@ local function DrawItemFilters()
                     else Say("Category limit reached; remove a category first.", "warn") end
                     P.QueueRefresh()
                 end, P.CategoryArtwork(cat.key))
-                Help(pool["e1cat" .. i], cat.label, cat.group .. " · category " .. cat.key)
+                Help(pool["e1cat" .. i], cat.label, cat.help or (cat.group .. " · category " .. cat.key))
                 count = count + 1
             end
         end

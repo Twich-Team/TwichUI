@@ -332,6 +332,35 @@ Check(not P.Editing().include[2589] and P.Control("summaryArt").appliedMask == n
 Check(#MI.Rules() == savedCount, "draft changes do not allocate a rule")
 Click("eCancel"); Check(#MI.Rules() == savedCount, "cancel discards the private changes")
 
+-- Choose whole item families without opening the carried-item picker.
+for _, choice in ipairs({
+  { MI.WAYLAID_CATEGORY, "waylaid", "All Waylaid crates" },
+  { MI.WRITS_CATEGORY, "crafting writs", "All Craftsman's Writs" },
+}) do
+  local key, query, label = unpack(choice)
+  P.NewFromTemplate("custom"); Flush()
+  Click("quickCategory1")
+  categorySearch:SetText(query); categorySearch.scripts.OnTextChanged(categorySearch); Flush()
+  local tile
+  for i, cat in ipairs(MI.Categories()) do
+    if cat.key == key then tile = "e1cat" .. i end
+  end
+  Check(tile and Has(f, label), "category search finds " .. label)
+  if tile then
+    Click(tile)
+    Check(P.Control(tile .. "mark").shown and P.Editing().cats[1] == key, "category tile selects " .. label)
+    Click("filterDone"); Click("destinationChoicebank"); Click("eSave")
+    local saved = MI.Rules()[#MI.Rules()]
+    Check(saved and saved.cats[1] == key and not next(saved.include), "Save rule stores " .. label .. " without individual items")
+    Click("rule" .. #MI.Rules() .. "edit"); Click("quickCategory1")
+    Check(P.Control(tile .. "mark").shown, "reopened rule keeps " .. label .. " selected")
+    Click("filterDone"); Click("eCancel")
+    if saved and saved.cats[1] == key then MI.DeleteRule(saved.id); Flush() end
+  else
+    Click("filterDone"); Click("eCancel")
+  end
+end
+
 -- Legacy-shaped rules round-trip unchanged; all filter actions belong to the same parent transaction.
 local function Signature(value)
   if type(value) ~= "table" then return type(value) .. ":" .. tostring(value) end

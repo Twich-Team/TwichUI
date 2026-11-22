@@ -25,6 +25,7 @@ subjects and shared prompt are the generation text.
 - `explosives-source.png`: one round dark iron engineering bomb with a short unlit rope fuse and aged-bronze cap; absolutely no spark or fire.
 - `parts-source.png`: one small aged-bronze cogwheel leaning against two short steel bolts; recognizable engineering spare parts.
 - `unbound-source.png`: a short open bronze chain with one clearly separated broken link, arranged in a compact diagonal silhouette; free and unbound equipment, no lock.
+- `waylaid-crate-source.png`: a closed walnut shipping crate with a diagonal wooden brace and iron nails.
 
 ## Runtime preparation
 
@@ -32,7 +33,7 @@ Run `python3 tools/make_magic_reagents_art.py` from the repository root. The est
 transparent padding, resamples to fit a 6-pixel outer margin, bleeds RGB beneath alpha and emits
 `!!!TwichUI/media/icons/magic-<name>{,-small}.tga` at 64 and 32 pixels, 32-bit RGBA.
 The 32-pixel assets are displayed at 18–26 units in native controls; the larger variants serve rule identities.
-All 14 sources and 28 runtime textures were checked for transparent alpha and expected dimensions.
+Each source has a transparent background and two runtime sizes.
 Sources stay outside production packages via the existing `assets` exclusion.
 
 Existing cloth, food, potion, scroll, shield, pack, tabard and reagent-pouch illustrations complement this set.

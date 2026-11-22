@@ -61,6 +61,64 @@ Check(not Entry(plan, 2592), "Never include: an excluded item never matches the 
 Check(not Entry(plan, 2447), "Never include wins over Also include in the same rule")
 Check(Entry(plan, 2589) ~= nil, "the rest of the category still matches")
 
+do
+  Reset()
+  c.Bags({})
+  local key = MI.WAYLAID_CATEGORY
+  local id = Save({ name = "Waylaid crates to bank", cats = { key } })
+  local rule = MI.Rule(id)
+  Check(rule and rule.enabled and rule.cats[1] == key and not next(rule.include),
+    "a category-only crate rule persists and can be enabled with empty bags")
+  local crateIDs = {
+    248549,
+    248682, 248683, 248684, 248685, 248686, 248687, 248688, 248689, 248690,
+    248691, 248692, 248693, 248694, 248695, 248696, 248697, 248698, 248699,
+    248702, 248703, 248704, 248705, 248706, 248707, 248708, 248709, 248710, 248711, 248712, 248713,
+    248765, 248766, 248767, 248768, 248769, 248770, 248771, 248772, 248773, 248774,
+    248775, 248776, 248777, 248778, 248779,
+  }
+  for _, item in ipairs(crateIDs) do
+    Check(MI.Match(rule, { id = item, name = "Localized name" }) == "matched", "Forever crate matches by ID " .. item)
+  end
+  for _, item in ipairs({ 1179, 248700, 248701, 248714, 248764, 248780 }) do
+    Check(MI.Match(rule, { id = item, classID = 0, subclassID = 8 }) == nil, "unrelated item is excluded " .. item)
+  end
+
+  c.ITEMS[248549] = { name = "Waylaid Crate", class = 15, sub = 0, maxStack = 20, quality = 2 }
+  c.ITEMS[248682] = { name = "Waylaid Crate: Apprentice Herbs", class = 0, sub = 8, maxStack = 5, quality = 1 }
+  c.ITEMS[248765] = { name = "Sealed Apprentice Crate", class = 15, sub = 0, maxStack = 5, quality = 1, bind = 1 }
+  c.Bags({ [0] = { size = 16, slots = { { 248549, 1 }, { 248682, 2 }, { 248765, 1, quest = true, bound = true }, { 1179, 1 } } } })
+  local plan = MI.CurrentPlan(nil)
+  Check(Entry(plan, 248549) and Entry(plan, 248682) and not Entry(plan, 1179), "a saved category picks up newly carried crates only")
+  Check(not Entry(plan, 248765) and Find(plan.skipped, 248765, "reason", "quest"), "category cannot override a quest item")
+  rule.qualities[2], rule.exclude[248549] = true, true
+  Check(MI.Match(rule, MI.ItemFacts(248682)) == nil, "quality still filters the crate category")
+  Check(MI.Match(rule, MI.ItemFacts(248549)) == "excluded", "rule exclusions still override the crate category")
+  MI.SetNever(248549, true)
+  plan = MI.CurrentPlan(nil)
+  Check(not Entry(plan, 248549) and Find(plan.skipped, 248549, "reason", "never"), "Never transfer still protects a matching crate")
+  Reset()
+end
+
+do
+  local key = MI.WRITS_CATEGORY
+  local rule = MI.Rule(Save({ name = "Writs to bank", cats = { key } }))
+  Check(rule and rule.enabled and rule.cats[1] == key, "the writ family persists as one enabled category")
+  for _, id in ipairs({ 248206, 262887, 262888, 262889, 262890, 264011, 264056, 264116, 264160 }) do
+    Check(MI.Match(rule, { id = id, name = "Localized name" }) == "matched", "Forever writ matches by ID " .. id)
+  end
+  for _, id in ipairs({ 22568, 248549, 262886, 262891, 264010, 264161 }) do
+    Check(MI.Match(rule, { id = id, classID = 0, subclassID = 8 }) == nil, "unrelated item is excluded " .. id)
+  end
+  c.ITEMS[262888] = { name = "Sealed Journeyman's Writ", class = 0, sub = 8, maxStack = 1, quality = 3 }
+  c.ITEMS[264011] = { name = "Craftsman's Writ: Ogre Strength", class = 0, sub = 8, maxStack = 1, quality = 2 }
+  c.Bags({ [0] = { size = 16, slots = { { 262888, 1 }, { 264011, 1, quest = true }, { 1179, 1 } } } })
+  local plan = MI.CurrentPlan(nil)
+  Check(Entry(plan, 262888) and not Entry(plan, 1179), "planning finds the carried writ envelope only")
+  Check(not Entry(plan, 264011) and Find(plan.skipped, 264011, "reason", "quest"), "quest protections still apply to writs")
+  Reset()
+end
+
 -- a rule with nothing chosen matches nothing, and can't be turned on
 local empty = Save({ name = "Empty", enabled = true })
 Check(MI.Rule(empty).enabled == false, "a rule with no items is saved turned off")
