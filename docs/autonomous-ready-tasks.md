@@ -143,14 +143,12 @@ The original note was clarified. **Do not implement a Craft Queue search.** The 
 | **UX02** shared Reminders artwork picker and per-rule icons | Batch 6 shared foundation and 20 approved existing-art additions are implemented for review; custom rule fields/builders remain unimplemented | Review [contract](design/shared-artwork-picker.md), [curated inventory](design/shared-artwork-inventory.md) and [consumer specs](design/shared-artwork-rule-integrations.md). Scope is settings rule list/editor identity only. Follow-ups below remain awaiting review, not Ready |
 | **All larger product concepts** | Scope and interactions are not yet defined | Keep original ideas in roadmap; discuss one product slice at a time |
 
-### UX02 specified follow-ups awaiting owner review
+### UX02 authorized consumer integrations
 
-**Status:** UX02-A/B foundation work is implemented for review in owner-authorized
-Batch 6. UX02-C/D remain Specified — awaiting owner review and separate execution
-authorization; neither is Ready. No rule schema/editor work is included in Batch 6.
-The [shared contract](design/shared-artwork-picker.md) and approved 20-candidate
-slice are implemented; the remaining rule-reference compatibility/version policy
-and consumer editor placement still need review. No future task is auto-selected.
+**Status:** UX02-A/B merged in PR #128. Owner-authorized Batch 7 implements
+UX02-C/D for review using the existing shared contract and optional `rule.artwork`
+references. See the [compatibility decision](design/shared-artwork-rule-integrations.md#batch-7-compatibility-decision),
+including downgrade limits. No future task is auto-selected.
 
 **UX02-A — Extract the approved chooser with Reminders parity (implemented for review).**
 - Scope: shared core catalog/reference drawing + one Settings-only chooser;
@@ -179,9 +177,9 @@ and consumer editor placement still need review. No future task is auto-selected
   existing Gallery rendering/search tests and useful picker capture. Dependencies:
   owner approval of rows/IDs and UX02-A's reviewed reference/resolution boundary.
 
-**UX02-C — Loot Rules identification artwork.**
+**UX02-C — Loot Rules identification artwork (implemented for review).**
 - Scope: Choose icon in the settings editor; custom identity only in list/header.
-  Proposed `rule.artwork` remains subject to schema/version-policy review.
+  Optional `rule.artwork` uses bounded shared references; absence means automatic.
 - Acceptance: preserve automatic Need/Greed/Pass defaults and explicit action words
   even for incomplete rules; picker Apply uses the existing immediate-save model;
   automatic reset/cancel differ correctly; checked fresh references survive
@@ -191,7 +189,7 @@ and consumer editor placement still need review. No future task is auto-selected
   unknown-ref tests; prove different artwork gives identical loot decisions.
   Dependencies: approved schema/compatibility and UX02-A; UX02-B only for new art.
 
-**UX02-D — Magic Inventory rule identification artwork.**
+**UX02-D — Magic Inventory rule identification artwork (implemented for review).**
 - Scope: rules list and builder summary/Rule review identity, not runtime transfer
   review or drag ghosts. Preserve existing item/category automatic precedence.
 - Acceptance: picker Apply changes only private draft; existing Save/Cancel,
