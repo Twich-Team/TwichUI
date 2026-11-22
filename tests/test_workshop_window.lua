@@ -1005,6 +1005,17 @@ do
   Same(#consumerNames, 2, "legacy name-list contract")
   Same(consumerRecords[1].item, 501, "relationship carries recorded output identity")
   Same(d.neededHead:GetText(), "Needed for")
+  -- The real pane is 409px tall after shell/page/footer insets. MIFake does
+  -- not resolve anchors: assert the reserved viewport itself, not just row data.
+  Check(d.consumers.box:GetHeight() - 8 >= 2 * d.consumers.rowH,
+    "Needed for must expose two complete rows, including scroll-frame insets")
+  Check(d.neededSection:GetHeight() >= d.consumers.box:GetHeight() + 24,
+    "consumer section includes its heading and viewport")
+  Same(d.scroll.parent, d.head)
+  Same(d.body.parent, d.scroll, "upper evidence scrolls independently of consumers")
+  Same(d.scroll.child, d.body)
+  Same(d.scroll.points[2][2], d.neededSection, "upper evidence stops above the reserved section")
+  Same(d.scroll.points[2][3], "TOPRIGHT")
   Same(#d.consumers.data, 2, "both queued consumers")
   Same(d.consumers.rows[1].name:GetText(), "Healing Potion")
   Same(d.consumers.rows[2].name:GetText(), "Mana Potion")
@@ -1036,6 +1047,30 @@ do
   Check(d.choose.auction.on and d.choose.auction.enabled and not d.choose.vendor.enabled, "only the possible sources can be chosen")
   Check(shop.counts.auction.n:GetText() == "2" and shop.counts.vendor.n:GetText() == "0" and shop.counts.make.n:GetText() == "0" and shop.counts.collect.n:GetText() == "0", "the plan counts")
   Check(shop.total:GetText():find("Estimated spending: 550c", 1, true), shop.total:GetText())
+  local shoppingPlan = S.ShoppingPlan
+  S.ShoppingPlan = function()
+    local plan, ctx, engine = shoppingPlan()
+    local copy, context = {}, {}
+    for k, v in pairs(plan) do copy[k] = v end
+    for k, v in pairs(ctx) do context[k] = v end
+    copy.rows = {}
+    for i, r in ipairs(plan.rows) do
+      copy.rows[i] = {}
+      for k, v in pairs(r) do copy.rows[i][k] = v end
+      copy.rows[i].source = "vendor"
+    end
+    context.sellers = { [10] = {} }
+    return copy, context, engine
+  end
+  Win.Render()
+  Check(d.act:IsShown(), "vendor action occupies the footer")
+  Same(d.neededSection.points[1][3], 52, "section clears the visible action")
+  Check(d.consumers.box:GetHeight() - 8 >= 2 * d.consumers.rowH,
+    "action cannot squeeze the consumer viewport")
+  S.ShoppingPlan = shoppingPlan
+  Win.Render()
+  Same(d.neededSection.points[1][3], 12, "hidden action returns space to upper evidence")
+  d.scroll:SetVerticalScroll(50)
   -- Choosing a different material drops the prior material's consumers and scroll.
   for _, row in ipairs(SL.rows) do
     if row:IsShown() and row.item == 11 then row:GetScript("OnClick")(row); break end
@@ -1043,6 +1078,7 @@ do
   Same(#d.consumers.data, 1)
   Same(d.consumers.rows[1].name:GetText(), "Mana Potion")
   Same(d.consumers.scroll:GetVerticalScroll(), 0)
+  Same(d.scroll:GetVerticalScroll(), 0, "new selection starts upper evidence at the top")
   row10:GetScript("OnClick")(row10)
   -- only collect rows
   g.bags = { [10] = 0, [11] = 0 }
