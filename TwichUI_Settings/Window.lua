@@ -1072,15 +1072,17 @@ function UI.cardEnv.Change(view, sec, change)
         end
     end
     local offset = anchor.top - now
+    local wasOpen, helpOpen, sampleOpen = sec.open, sec.helpOpen, sec.sampleOpen
     Wg.CloseMenu()
     change()
     Layout(view)
     ScrollTo(anchor.top - offset)
-    if sec.open then
+    if sec.open and not wasOpen then
         local first
         for _, row in ipairs(sec.rows) do if row.row.id ~= "qolResurrectCombat" then first = row.frame; break end end
         UI.RevealFrame(first or sec.helpButton)
-    end
+    elseif sec.helpOpen and not helpOpen then UI.RevealFrame(sec.helpText)
+    elseif sec.sampleOpen and not sampleOpen and sec.preview then UI.RevealFrame(sec.preview.frame) end
 end
 
 -- Marks a row once: a gold band for a few seconds that then fades (at once where motion is reduced). A newer mark

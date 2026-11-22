@@ -151,9 +151,13 @@ function Q.Primary(sec, row, env)
     return v
 end
 function Q.Resize(sec, width)
-    local headWidth = width - 28 - 82
+    local disclosureWidth = math.max(68, sec.detailsButton.text:GetStringWidth() + 24)
+    sec.detailsButton:SetWidth(disclosureWidth)
+    local headWidth = width - 28 - disclosureWidth - 14
     sec.head:SetWidth(headWidth)
-    local textWidth = headWidth - 44 - 100
+    local toggleWidth = math.max(100, (sec.state and sec.state:GetStringWidth() or 0) +
+        (sec.primaryView and sec.primaryView.control:GetWidth() or 42) + 24)
+    local textWidth = math.max(80, headWidth - 44 - toggleWidth)
     sec.title:SetWidth(textWidth); sec.desc:SetWidth(textWidth); sec.note:SetWidth(headWidth - 44)
     sec.summary:SetWidth(width - 56); sec.consequence:SetWidth(width - 56); sec.helpText:SetWidth(width - 56)
     if sec.groupLabel then sec.groupLabel:SetWidth(width - 8) end
@@ -177,6 +181,50 @@ local function PutText(fs, sec, y, value)
     fs:ClearAllPoints(); fs:SetPoint("TOPLEFT", sec.card, "TOPLEFT", 28, -y)
     return y + fs:GetStringHeight() + 10
 end
+-- Reflow only these existing row views when a label/value outgrows the normal
+-- column. Ordinary settings pages and their shared row renderer are untouched.
+local function PlaceRows(sec, rows, inner, env)
+    local width = sec.card:GetWidth() - 20
+    for _, v in ipairs(rows) do
+        v.Resize(width)
+        if v.row.kind == "dropdown" then
+            v.qolControlWidth = v.qolControlWidth or v.control:GetWidth()
+            v.qolControlHeight = v.qolControlHeight or v.control:GetHeight()
+            v.control:SetSize(v.qolControlWidth, v.qolControlHeight)
+            v.control.text:SetWordWrap(false)
+            v.control.text:SetWidth(v.qolControlWidth - 36)
+        end
+    end
+    env.PlaceRows(sec, rows, inner)
+    for _, v in ipairs(rows) do
+        if v.y then
+            local dropdown = v.row.kind == "dropdown"
+            local valueWidth = dropdown and v.control.text:GetStringWidth() or 0
+            local stacked = v.label:GetStringWidth() > v.label:GetWidth()
+                or (dropdown and valueWidth + 36 > v.control:GetWidth())
+            if stacked then
+                local left = v.row.parent and 24 or 6
+                local available = width - left - 12
+                v.label:SetWidth(available); v.reason:SetWidth(available)
+                local controlTop = v.label:GetStringHeight() + 12
+                if v.reason:IsShown() and v.reason:GetText() ~= "" then controlTop = controlTop + v.reason:GetStringHeight() + 3 end
+                if dropdown then
+                    v.control:SetWidth(math.max(236, math.min(available, valueWidth + 36)))
+                    v.control.text:SetWidth(v.control:GetWidth() - 36); v.control.text:SetWordWrap(true)
+                    v.control:SetHeight(math.max(28, v.control.text:GetStringHeight() + 12))
+                end
+                v.control:ClearAllPoints(); v.control:SetPoint("TOPLEFT", v.frame, "TOPLEFT", left, -controlTop)
+                v.frame:SetHeight(controlTop + v.control:GetHeight() + 8)
+            end
+            v.stacked = stacked
+            v.frame:ClearAllPoints(); v.frame:SetPoint("TOPLEFT", sec.card, "TOPLEFT", 10, -inner)
+            v.y = sec.top + inner
+            inner = inner + v.frame:GetHeight()
+        end
+    end
+    return inner
+end
+
 function Q.Layout(view, sec, inner, env)
     local def = sec.header.card
     local opened = view.qol.open == sec.id
@@ -186,7 +234,8 @@ function Q.Layout(view, sec, inner, env)
     sec.title:SetText(sec.header:GetName()); sec.title:ClearAllPoints(); sec.title:SetPoint("TOPLEFT", sec.head, "TOPLEFT", 44, 0)
     sec.desc:SetText(sec.qolPurpose); sec.desc:ClearAllPoints(); sec.desc:SetPoint("TOPLEFT", sec.title, "BOTTOMLEFT", 0, -3)
     sec.primaryView.Refresh()
-    local h = math.max(44, sec.title:GetStringHeight() + 3 + sec.desc:GetStringHeight())
+    Q.Resize(sec, view.w)
+    local h = math.max(44, 31 + sec.saved:GetStringHeight(), sec.title:GetStringHeight() + 3 + sec.desc:GetStringHeight())
     local note, tone = env.Note(sec.header.primary)
     if R.QoL.LEATRIX[sec.qolKey] and R.QoL.LeatrixOverlap(sec.qolKey) then note = "Also on in Leatrix Plus" end
     if sec.qolKey == "qolHideErrorSpeech" and R:Enabled("qolHideErrors") then note = "Error hiding already removes the voice with its messages." end
@@ -203,7 +252,7 @@ function Q.Layout(view, sec, inner, env)
     -- This existing child control never disappears behind the detail disclosure.
     for _, v in ipairs(sec.rows) do
         if v.row.id == "qolResurrectCombat" then
-            inner = env.PlaceRows(sec, {v}, inner)
+            inner = PlaceRows(sec, {v}, inner, env)
             sec.combatWarning = sec.combatWarning or W.Text(sec.card, "small")
             sec.combatWarning:SetWidth(view.w - 56)
             inner = PutText(sec.combatWarning, sec, inner, "In combat: " .. (R:Enabled("qolResurrectCombat") and "accepted too" or "waits for you") .. ". Combat resurrection can return you to a fight with low health.")
@@ -223,15 +272,22 @@ function Q.Layout(view, sec, inner, env)
     inner = PutText(sec.summary, sec, inner, Text(def.summary))
     local children = {}
     for _, v in ipairs(sec.rows) do if v.row.id ~= "qolResurrectCombat" then children[#children + 1] = v end end
-    inner = env.PlaceRows(sec, children, inner)
+    inner = PlaceRows(sec, children, inner, env)
     inner = inner + 10
     sec.helpButton:ClearAllPoints(); sec.helpButton:SetPoint("TOPLEFT", sec.card, "TOPLEFT", 28, -inner)
     sec.helpButton.text:SetText(sec.helpOpen and "Less about this" or "More about this")
+    sec.helpButton:SetWidth(math.max(144, sec.helpButton.text:GetStringWidth() + 28))
+    local actionHeight = 30
     if sec.sampleButton then
-        sec.sampleButton:ClearAllPoints(); sec.sampleButton:SetPoint("TOPLEFT", sec.helpButton, "TOPRIGHT", 12, 0)
         sec.sampleButton.text:SetText(sec.sampleOpen and "Hide sample" or "Show sample")
+        sec.sampleButton:SetWidth(math.max(128, sec.sampleButton.text:GetStringWidth() + 28))
+        sec.sampleButton:ClearAllPoints()
+        if sec.helpButton:GetWidth() + 12 + sec.sampleButton:GetWidth() > view.w - 56 then
+            sec.sampleButton:SetPoint("TOPLEFT", sec.helpButton, "BOTTOMLEFT", 0, -8)
+            actionHeight = actionHeight + 38
+        else sec.sampleButton:SetPoint("TOPLEFT", sec.helpButton, "TOPRIGHT", 12, 0) end
     end
-    inner = inner + 40
+    inner = inner + actionHeight + 10
     sec.helpText:SetShown(sec.helpOpen == true)
     if sec.helpOpen then inner = PutText(sec.helpText, sec, inner, Help(def)) end
     if sec.preview then
