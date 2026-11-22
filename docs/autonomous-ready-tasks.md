@@ -140,19 +140,19 @@ The original note was clarified. **Do not implement a Craft Queue search.** The 
 | **W05 / A05 / W04** Market/AH status controls | Current A01/A02 performance work touches Market/Workshop plumbing | Re-evaluate against merged performance result first; no parallel work now |
 | **A04** neutral auction fee | Pricing correctness is important but current Market/Opportunities stack is active | Recheck after A01/A02 merges; separate small economic fix with targeted tests |
 | **F04 / F09 / reminder glow** | Fishing Stage 2 already merged; Loot victory PR #101 and Reminder glow PR #91 are active | Verify PR state and select only separately approved follow-ups |
-| **UX02** shared Reminders artwork picker and per-rule icons | Batch 5 design/foundation is proposed; shared extraction, catalog additions and rule fields/builders remain unimplemented | Review [contract](design/shared-artwork-picker.md), [curated inventory](design/shared-artwork-inventory.md) and [consumer specs](design/shared-artwork-rule-integrations.md). Scope is settings rule list/editor identity only. Follow-ups below remain awaiting review, not Ready |
+| **UX02** shared Reminders artwork picker and per-rule icons | Batch 6 shared foundation and 20 approved existing-art additions are implemented for review; custom rule fields/builders remain unimplemented | Review [contract](design/shared-artwork-picker.md), [curated inventory](design/shared-artwork-inventory.md) and [consumer specs](design/shared-artwork-rule-integrations.md). Scope is settings rule list/editor identity only. Follow-ups below remain awaiting review, not Ready |
 | **All larger product concepts** | Scope and interactions are not yet defined | Keep original ideas in roadmap; discuss one product slice at a time |
 
 ### UX02 specified follow-ups awaiting owner review
 
-**Status for all four: Specified — awaiting owner review; not Ready and not
-implementation authorization.** Batch 5 closes discovery/documentation only.
-Approve the [exact shared contract](design/shared-artwork-picker.md), curated
-subset and future rule-reference policy before promoting an implementation item.
-The later batch must explicitly select its scope; these specs do not add a task
-to the Ready queue automatically.
+**Status:** UX02-A/B foundation work is implemented for review in owner-authorized
+Batch 6. UX02-C/D remain Specified — awaiting owner review and separate execution
+authorization; neither is Ready. No rule schema/editor work is included in Batch 6.
+The [shared contract](design/shared-artwork-picker.md) and approved 20-candidate
+slice are implemented; the remaining rule-reference compatibility/version policy
+and consumer editor placement still need review. No future task is auto-selected.
 
-**UX02-A — Extract the approved chooser with Reminders parity.**
+**UX02-A — Extract the approved chooser with Reminders parity (implemented for review).**
 - Scope: shared core catalog/reference drawing + one Settings-only chooser;
   thin Reminder adapter continues `Gallery.Choose`/`SetDisplayMany`. Preserve
   all existing 79 entries, IDs, crops, categories, search, source tabs, thumbnails,
@@ -168,7 +168,7 @@ to the Ready queue automatically.
   if available. Dependencies: owner-reviewed contract; coordinate any overlapping
   Reminders work at execution time. Keep glow behavior outside scope.
 
-**UX02-B — Add only owner-approved existing catalog artwork.**
+**UX02-B — Add only owner-approved existing catalog artwork (20 implemented for review).**
 - Scope: additive metadata for the approved subset of the [28 candidates](design/shared-artwork-inventory.md);
   20 are recommended first, eight are conditional. No new art or unrelated rebuild.
 - Acceptance: verified paths and variants, stable noncolliding IDs, curated categories

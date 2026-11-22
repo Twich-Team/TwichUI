@@ -4,12 +4,13 @@ local R = TwichUI
 local A = {}
 R.Artwork = A
 
-local function Finite(v) return type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge end
+local function Finite(v) return not (issecretvalue and issecretvalue(v)) and type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge end
 
 -- Copy only bounded scalar identity. Unknown well-formed IDs are deliberately retained.
 function A.Check(ref)
-    if type(ref) ~= "table" or getmetatable(ref) ~= nil then return nil, "invalid_ref" end
+    if (issecretvalue and issecretvalue(ref)) or type(ref) ~= "table" or getmetatable(ref) ~= nil then return nil, "invalid_ref" end
     for k, v in pairs(ref) do
+        if issecretvalue and (issecretvalue(k) or issecretvalue(v)) then return nil, "invalid_ref" end
         local kt, vt = type(k), type(v)
         if (kt ~= "string" and kt ~= "number") or (vt ~= "string" and vt ~= "number" and vt ~= "boolean") then
             return nil, "invalid_ref"

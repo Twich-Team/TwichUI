@@ -3,18 +3,20 @@
 The pictures a reminder can show come from one catalog. This file explains where they came from, how they are built, what each one is called, how
 the picker finds them, and how to add more. The picker itself is described in [reminders.md](reminders.md) (Appearance and the image picker).
 
-## Proposed shared reuse (UX02)
+## Shared reuse (UX02)
 
-Autonomous Batch 5 audits this picker as the approved visual/interaction reference.
-The [shared-picker design](design/shared-artwork-picker.md) separates catalog,
-reference drawing and staged selection from Reminder display setters without
-changing existing IDs, crops, modes or saved selections. The
-[additional-art inventory](design/shared-artwork-inventory.md) proposes 28 existing
-bundled candidates (20 first-slice recommendations; eight requiring closer small-size
-review); the [rule specifications](design/shared-artwork-rule-integrations.md)
-keep automatic art and rule behavior intact. These are proposals awaiting owner
-review, not new catalog entries or implemented APIs. No assets were regenerated
-and the existing generator/manifest remain authoritative for this library.
+Owner-authorized Batch 6 reuses this approved picker through one shared Settings
+component. [`artwork/Catalog.lua`](../!!!TwichUI/artwork/Catalog.lua) owns shared
+catalog/search/reference drawing; [`ArtworkPicker.lua`](../TwichUI_Settings/ArtworkPicker.lua)
+owns the chooser; the existing Reminder picker file is a thin adapter retaining
+Gallery.Choose and atomic Reminder setters. See the [contract and verification](design/shared-artwork-picker.md).
+
+All 79 baseline entries retain their IDs, crops and relative order. The
+[approved first slice](design/shared-artwork-inventory.md) adds 20 existing-file
+mappings (ten art, ten registered icons) at category tails, for **99 total**.
+The eight conditional choices remain excluded. These additive mappings are
+hand-maintained in Catalog.lua; generated ArtData/manifest and all texture files
+remain unchanged. Future rule consumers are still specified only, not implemented.
 
 ## Sources
 
@@ -96,11 +98,13 @@ under their own names and are stored exactly as before (`iconSource = "bundled"`
 3. Run `python3 tools/make_reminder_gallery.py --contact-sheet docs/reminders-art/contact-sheet.png` and look at the contact sheet (edges on the light surface, 24 px).
 4. Run `./tests/run.sh`. Commit the sheet, the tool, `assets/reminder-gallery/`, `media/reminders/gallery/`, `ArtData.lua` and the contact sheet.
 
-Nothing else needs to know: the catalog, the picker, search and the renderer read `ArtData.lua`.
+The shared catalog and compatible Reminder renderer read this generated data.
+Reuse of other already-bundled approved art is recorded separately in
+`artwork/Catalog.lua`, not generated into `ArtData.lua` or its manifest.
 
 ## Quality notes
 
-**Catalog count:** 79 entries: 67 library pictures, the 4 earlier artworks and the 8 TwichUI icons. The final audit (every picture on `qa-sheet.png`) found no crop, alpha, halo, mapping or duplicate defect; the margin was reduced from 12 % to 7 % (the picture fills 86 % of its canvas) after the first picker looked sparse.
+**Catalog count:** 99 entries: the unchanged 79-entry baseline (67 library pictures, four earlier artworks and eight TwichUI icons) plus 20 approved existing-file choices. The original generated-gallery audit (every picture on `qa-sheet.png`) found no crop, alpha, halo, mapping or duplicate defect; the margin was reduced from 12 % to 7 % (the picture fills 86 % of its canvas) after the first picker looked sparse.
 
 * Both sheets were inspected at full size and every crop was checked on a dark and a light surface; no halo, brown remnant, partial neighbour or hard cutout was found.
 * Pictures with soft, see-through effects (the fading sigil of *Missing buff*, the arcane glows) keep their effect only within a few pixels of solid paint, so their

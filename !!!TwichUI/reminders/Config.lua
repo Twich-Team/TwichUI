@@ -87,8 +87,8 @@ function RM.ParseItem(value)
 end
 
 ---------------------------------------------------------------------------
--- Artwork: the pictures a reminder can show, made by tools/make_reminder_art.py from assets/. Adding one: its line in
--- that tool's ART table, run it, then its line here (the numbers are what the tool prints) and a label.
+-- Artwork resolution is shared. Generated gallery provenance stays in ArtData.lua;
+-- existing-file catalog additions and legacy crops live in artwork/Catalog.lua.
 ---------------------------------------------------------------------------
 -- Core metadata is available independently of the Reminders feature or Settings addon.
 RM.ART = R.Artwork.ART

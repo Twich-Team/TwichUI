@@ -1,3 +1,5 @@
+-- Shared Settings artwork chooser, preserving the approved Reminders frame.
+-- Open stages copied refs; only OnApply accepts a change. No feature store is read here.
 local R = TwichUI
 local IP = {}
 R.SettingsArtworkPicker = IP
@@ -24,10 +26,10 @@ local function Ref(entry) return entry and (entry.ref or entry) end
 
 function IP.Shown() return f ~= nil and f:IsShown() end
 function IP.Frame() return f end
-function IP.State()
-    if not session then return nil end
+function IP.State(owner)
+    if not session or (owner and session.owner ~= owner) then return nil end
     local c = session.candidate
-    return { owner = session.owner, key = session.key, token = session.token, candidate = c and { kind = c.kind, id = c.id }, source = session.source, category = session.category }
+    return { owner = session.owner, key = session.key, token = session.token, candidate = c and { kind = c.kind, id = c.id }, source = session.source, category = session.category, query = f and f.search:GetText() or "" }
 end
 function IP.Candidate() local s = IP.State(); return s and s.candidate end
 function IP.Source() return session and session.source end
@@ -272,30 +274,53 @@ end
 -- Choosing and closing
 ---------------------------------------------------------------------------
 -- Away, writing nothing. The page draws its preview again (the companion place is the picker's until then).
-local closingReason
+local closingReason, notifying
+local function FinishClose(reason)
+    local old = session
+    session, closingReason, requested = nil, nil, {}
+    if f then
+        f.search:ClearFocus(); f.itemBox:ClearFocus()
+        f:UnregisterEvent("GET_ITEM_INFO_RECEIVED"); f:UnregisterEvent("ITEM_DATA_LOAD_RESULT")
+    end
+    if not old then return end
+    R.SettingsMaterial.RestoreCompanionAnchor()
+    if old.opts.OnClosed then
+        notifying = true
+        local ok, err = pcall(old.opts.OnClosed, reason)
+        notifying = nil
+        if not ok and R.Fault then R.Fault("settings artwork picker close", err) end
+    end
+end
+local function Current(current)
+    if not current.owner:IsVisible() then return false end
+    local ok, valid = pcall(current.opts.IsCurrent)
+    if not ok and R.Fault then R.Fault("settings artwork picker owner", valid) end
+    return ok and valid == true
+end
 function IP.Close(owner, reason)
     if not session or (owner and session.owner ~= owner) then return false end
     closingReason = reason or "cancelled"
-    if IP.Shown() then f:Hide() end
+    if IP.Shown() then f:Hide() else FinishClose(closingReason) end
     return true
 end
 function IP.Cancel() return IP.Close(nil, "cancelled") end
-function IP.Apply()
-    if not (IP.Shown() and session and session.candidate) or session.applying then return false end
+function IP.Apply(owner)
+    if not (IP.Shown() and session and session.candidate) or (owner and owner ~= session.owner) then return false, "not_open" end
+    if session.applying then return false, "refused" end
     local current = session
-    if not current.owner:IsVisible() or not current.opts.IsCurrent() then IP.Close(current.owner, "invalidated"); return false end
+    if not Current(current) then IP.Close(current.owner, "invalidated"); return false, "stale_owner" end
     local candidate = G().Check(current.candidate)
-    if not candidate then IP.Say("Please choose a picture.", "warn"); return false end
+    if not candidate then IP.Say("Please choose a picture.", "warn"); return false, "invalid_ref" end
     if candidate.kind ~= "item" and candidate.kind ~= "automatic" then
         local ready = G().Get(candidate) and G().Draw(f.details.thumb, candidate, 64)
-        if not ready then IP.Refresh(); IP.Say("Artwork unavailable.", "warn"); return false end
+        if not ready then IP.Refresh(); IP.Say("Artwork unavailable.", "warn"); return false, "invalid_ref" end
     end
     current.applying = true
     local called, accepted, why = pcall(current.opts.OnApply, candidate)
     current.applying = false
-    if session ~= current then return called and accepted == true end
     if not called and R.Fault then R.Fault("settings artwork picker", accepted) end
-    if not called or accepted ~= true then IP.Say(called and (why or "Could not apply this picture.") or "Could not apply this picture.", "warn"); return false end
+    if session ~= current then return called and accepted == true end
+    if not called or accepted ~= true then IP.Say(called and (why or "Could not apply this picture.") or "Could not apply this picture.", "warn"); return false, "refused" end
     IP.Close(current.owner, "applied")
     return true
 end
@@ -312,17 +337,16 @@ local function Build()
     f:Hide()
     M.Companion(f)
     M.HeaderBand(f, 72)
-    f:RegisterEvent("GET_ITEM_INFO_RECEIVED")
-    f:RegisterEvent("ITEM_DATA_LOAD_RESULT")
-    f:SetScript("OnEvent", function() if session and session.candidate and session.candidate.kind == "item" then IP.Refresh() end end)
-    f:SetScript("OnHide", function()
-        f.search:ClearFocus()
-        f.itemBox:ClearFocus()
-        local old, reason = session, closingReason or "cancelled"
-        session, closingReason, requested = nil, nil, {}
-        R.SettingsMaterial.RestoreCompanionAnchor()
-        if old and old.opts.OnClosed then pcall(old.opts.OnClosed, reason) end
+    f:SetScript("OnShow", function(self)
+        self:RegisterEvent("GET_ITEM_INFO_RECEIVED"); self:RegisterEvent("ITEM_DATA_LOAD_RESULT")
     end)
+    f:SetScript("OnEvent", function(_, _, id)
+        id = Plain(id)
+        if session and session.candidate and session.candidate.kind == "item" and id == session.candidate.id then
+            if Current(session) then IP.Refresh() else IP.Close(session.owner, "invalidated") end
+        end
+    end)
+    f:SetScript("OnHide", function() FinishClose(closingReason or "cancelled") end)
 
     f.title = M.ReminderFont(W.Text(f, "heading"), 23, true)
     f.title:SetPoint("TOPLEFT", PAD, -14)
@@ -342,7 +366,7 @@ local function Build()
     f.tabGame = M.Segment(f, "Game icons", tabW, function() IP.SetSource("game") end)
     f.tabGame:SetHeight(34)
     f.tabGame:SetPoint("TOPLEFT", PAD + tabW + GAP, -78)
-    R.Interact.Tip(f.tabArt, "TwichUI artwork", "Pictures TwichUI has made for reminders, by kind.")
+    R.Interact.Tip(f.tabArt, "TwichUI artwork", "Bundled TwichUI pictures, by kind.")
     R.Interact.Tip(f.tabGame, "Game icons", "The icon of any item, by its ID or link. The item doesn't need to be carried or equipped.")
 
     ---------------- artwork pane
@@ -465,7 +489,7 @@ local function Build()
     f.apply:SetHeight(38)
     M.ReminderFont(f.apply.text, 14)
     f.apply:SetPoint("RIGHT", f.cancel, "LEFT", -GAP, 0)
-    R.Interact.Tip(f.apply, "Apply", "Use this picture for the reminder. Nothing changes until you do.")
+    R.Interact.Tip(f.apply, "Apply", "Use this picture. Nothing changes until you do.")
     f.automatic = W.Button(f, "Use automatic icon", 160, "secondary", function()
         if session and session.opts.automatic then session.candidate = { kind = "automatic" }; IP.Refresh() end
     end)
@@ -478,16 +502,21 @@ end
 
 local hooked = setmetatable({}, { __mode = "k" })
 function IP.Open(owner, opts)
-    if not owner or type(owner.IsVisible) ~= "function" or type(owner.HookScript) ~= "function" then return false, "invalid_owner" end
+    if notifying then return false, "invalid_options" end
+    local ownerType = type(owner)
+    if (issecretvalue and issecretvalue(owner)) or (ownerType ~= "table" and ownerType ~= "userdata") then return false, "invalid_owner" end
+    local readable, visible, hook = pcall(function() return owner.IsVisible, owner.HookScript end)
+    if not readable or type(visible) ~= "function" or type(hook) ~= "function" then return false, "invalid_owner" end
     if type(opts) ~= "table" or opts.key == nil or type(opts.IsCurrent) ~= "function" or type(opts.OnApply) ~= "function"
         or (opts.OnClosed ~= nil and type(opts.OnClosed) ~= "function") then return false, "invalid_options" end
     if opts.fallback ~= nil and (type(opts.fallback) ~= "table" or type(opts.fallback.name) ~= "string" or type(opts.fallback.Draw) ~= "function") then return false, "invalid_options" end
     if opts.automatic ~= nil and (type(opts.automatic) ~= "table" or type(opts.automatic.label) ~= "string"
         or type(opts.automatic.name) ~= "string" or type(opts.automatic.Draw) ~= "function") then return false, "invalid_options" end
-    local start = opts.selection and G().Check(opts.selection)
-    if opts.selection and not start then return false, "invalid_ref" end
+    local hasSelection = opts.selection ~= nil
+    local start = hasSelection and G().Check(opts.selection) or nil
+    if hasSelection and not start then return false, "invalid_ref" end
     if start and start.kind == "automatic" and not opts.automatic then return false, "invalid_ref" end
-    if not owner:IsVisible() or not opts.IsCurrent() then return false, "stale_owner" end
+    if not Current({owner=owner,opts=opts}) then return false, "stale_owner" end
     if session and session.owner == owner and session.key == opts.key then IP.Close(owner); return false, "toggled" end
     if session then IP.Close(nil, "replaced") end
     if not f then Build() end
@@ -519,4 +548,10 @@ end
 if R.OnSettingsClosed then R.OnSettingsClosed(function() IP.Close(nil, "settings_closed") end) end
 if R.Profiles and R.Profiles.OnApply then
     R.Profiles.OnApply("views", "settings-artwork-picker", function() IP.Close(nil, "invalidated") end)
+end
+
+-- Duplication can switch the live profile without running apply phases. No old
+-- candidate may cross that identity change, even when the live tables are reused.
+if R.Profiles and R.Profiles.OnChange then
+    R.Profiles.OnChange(function() IP.Close(nil, "invalidated") end)
 end

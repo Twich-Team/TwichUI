@@ -1,14 +1,14 @@
 # UX02: existing artwork candidates
 
-Discovery inventory for the proposed shared picker, not an implemented catalog or an approval to add entries. The current Reminders catalog has 79 entries: 67 generated pictures, four earlier artworks, and eight registered icons. `reminders/ArtData.lua` and `reminders/Gallery.lua` define those entries and their distinct saved targets. Preserve their existing IDs and mappings; none of the rows below is already a catalog entry. Subject overlap is noted where relevant. This selection is intentionally bounded, not an import list.
+Original Batch 5 discovery inventory, retained as provenance. **Batch 6 implements the 20 approved first-slice entries; the eight named conditional entries remain excluded.** The preserved Reminders baseline has 79 entries: 67 generated pictures, four earlier artworks, and eight registered icons. `reminders/ArtData.lua` and `reminders/Gallery.lua` define those entries and their distinct saved targets. Preserve their existing IDs and mappings; none of the rows below was in the baseline. The shared catalog now has 99 entries after the first slice. Subject overlap is noted where relevant. This selection is intentionally bounded, not an import list.
 
-The **28 candidates** below have proposed names and categories. Proposed references for registered icons use their existing `R.Icons` keys; unregistered artwork uses provisional `art-...` IDs. These new IDs are not approved or persisted. A shared reference could use `{kind="icon", id=<existing key>}` or `{kind="art", id=<stable art ID>}`; preserve existing Reminders values and resolve unregistered artwork explicitly before exposing it. A catalog key such as `icon-<key>` is UI-only, not the saved icon ID. Do not infer that every registry entry is suitable or that a path is itself a saved identity.
+The **28 candidates** below have proposed names and categories. Proposed references for registered icons use their existing `R.Icons` keys; unregistered artwork uses provisional `art-...` IDs. The ten first-slice art IDs and ten first-slice icon references are now implemented; conditional IDs remain proposals, not registered choices. A shared reference could use `{kind="icon", id=<existing key>}` or `{kind="art", id=<stable art ID>}`; preserve existing Reminders values and resolve unregistered artwork explicitly before exposing it. A catalog key such as `icon-<key>` is UI-only, not the saved icon ID. Do not infer that every registry entry is suitable or that a path is itself a saved identity.
 
 ## Candidates
 
 Paths in the table are exact repository runtime files. For each pair, the first path is the 64 × 64 file and the second is its 32 × 32 small variant. In game they are addressed under `R.PATH` as `media\...`, normally without `.tga`. These files already exist. The 32 px file is the existing small variant, not a newly generated asset. Existing `R.Icons.Path` switches to the small variant at 26 UI units; other sources do not automatically acquire that behavior in a future shared picker.
 
-| Proposed reference | Name | Category | Runtime files (`!!!TwichUI/media/`) | Existing registry key / rationale |
+| Reference (conditional rows excluded) | Name | Category | Runtime files (`!!!TwichUI/media/`) | Existing registry key / rationale |
 |---|---|---|---|---|
 | `art:art-herbs` | Herbs | Supplies | `icons/magic-herbs.tga`, `icons/magic-herbs-small.tga` | Unregistered; clear material family. |
 | `art:art-ore` | Ore and metal | Supplies | `icons/magic-ore.tga`, `icons/magic-ore-small.tga` | Unregistered; dark at 24 px. |
@@ -39,19 +39,18 @@ Paths in the table are exact repository runtime files. For each pair, the first 
 | `icon:lootGreed` | Coins | Supplies | `loot/greed.tga`, `loot/greed-small.tga` | `lootGreed` and `lootRolls` resolve to the same file; one entry only. |
 | `icon:lootQuality` | Green gem | Supplies | `loot/gem.tga`, `loot/gem-small.tga` | `lootQuality`; distinct color and shape from existing red/blue crystals. |
 
-## Suggested first slice
+## Approved first slice (Batch 6)
 
-Recommend **20 first-slice candidates**, with **eight conditional candidates** held
+Batch 6 adds the **20 approved first-slice entries**, with **eight conditional candidates** held
 for closer 20–32 px/light-surface review: Ore and metal, Explosives, Enchanting
-materials, Broken chain, Gavel, Wing, Spyglass, and Key and keycap. These are
-priorities for owner review, not approved catalog entries. Keep their proposed
-IDs reserved only if approved; do not import all 28 by default.
+materials, Broken chain, Gavel, Wing, Spyglass, and Key and keycap. The eight conditional choices are not registered or imported. Any later inclusion
+requires separate approval; do not import all 28 by default.
 
-At implementation, include short lower-case search keywords alongside these
+The implemented catalog includes short lower-case search keywords alongside these
 names/categories (for example Herbs: `herb plant reagent alchemy`, Shipping
 crate: `crate cargo container supplies`, Merchant scales: `auction trade sell
-balance`, and Paw: `pet companion animal`). Review synonyms in the same content
-commit; a new metadata-only row must follow the existing plain-text search rules.
+balance`, and Paw: `pet companion animal`). Mappings and synonyms are in `!!!TwichUI/artwork/Catalog.lua`; new metadata-only
+rows follow the existing plain-text search rules.
 
 ## Provenance and review
 
@@ -63,4 +62,4 @@ commit; a new metadata-only row must follow the existing plain-text search rules
 
 The existing 79 remain the baseline: skip copies or close subject alternatives such as the extra bell, food, bedroll, backpack, horse, hourglass, horn, staff, shield, potion and scroll variants unless a later review finds a compelling distinction. Skip duplicate registry aliases (`lootType`/`lootSlot`, `lootGreed`/`lootRolls`), UI-specific editor/diagnostics glyphs and feature logos without a useful rule identity. Quality-tier illustrations are attractive but their intended meaning depends on labels and color; choose whether quality semantics merit a cohesive group before adding any. Status checks, crosses and prohibition marks can imply application state rather than user-selected identity; assess them separately. Borders, panel faces, backgrounds, bars, textures, large illustrations and loot victory effects are not standalone symbolic picker art.
 
-Open decisions: approve the shortlist and categories; confirm provisional art IDs and the proposed per-source resolution contract in [the picker design](shared-artwork-picker.md); preserve existing Reminders values and labels; review the weakest 20–32 px candidates on light and dark surfaces and in the actual consumers. This document makes no claim of real-client testing, and no schema, catalog, asset or picker behavior has changed.
+Remaining review: native small-size/light/dark appearance and any future inclusion of the eight deferred candidates. First-slice IDs and per-source resolution are implemented under [the shared contract](shared-artwork-picker.md). No real-client appearance claim is made; no schema, rule builder or asset files changed.
