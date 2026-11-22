@@ -177,6 +177,12 @@ do
   Check(mode.data.buttonText() == "Leave Fishing Mode", "the button now leaves it")
   Row(page, "Put things back").click()
   Check(not F.Present.On(), "Put things back leaves Fishing Mode and puts everything back")
+  local journal = Row(page, "Fishing Journal")
+  Check(journal and journal.data.buttonText == "Open Fishing Journal", "the page has an Open Fishing Journal button")
+  journal.click()
+  Check(F.JournalUI.Frame() ~= nil and F.JournalUI.Page() == "overview" and c.closed >= 2, "it builds and opens the Journal and closes the settings window")
+  F.JournalUI.Close()
+  Check(Row(page, "Show a summary when a session ends") ~= nil, "and a switch for the session summary")
   F.Store.Set("castbar.x", 120)
   local reset
   reset = Row(page, "Starting places")

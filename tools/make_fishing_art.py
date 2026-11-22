@@ -42,14 +42,18 @@ corrected here, and why:
                                                    fitted to a 64 px square with its aspect kept, as the mockup's stat row shows
                                                    them; the catches use `mark` (the pack's collection fish are framed tiles,
                                                    not symbols, and are not used).
+    j-*, glyph-hook|clam|treasure   (Stage 3A, the Journal; JOURNAL_FILES below) the pack's journal, recessed and chestnut
+                                                   frames, rows, nav and compact buttons, close button, unknown tile and fish
+                                                   watermark, and three more glyphs, each resampled onto a power-of-two canvas.
     scrim            (made here)                   a soft, warm, very dark oval, feathered to nothing on every side, drawn
                                                    faintly under the catch list and the cast bar's lines so ivory text reads
                                                    over bright snow or water as well as at night. No edge anywhere.
     rowglow          (made here)                   a soft amber band, brightest in the middle, for a row that just changed.
 
 Not used, deliberately: hud/catch_count_reference.png (baked "x3" text), hud/cast_bar_*_reference.png (references of the
-fill), collection/* (illustrative fish, not real items: the game's own item icons are used), panels/*, controls/*,
-nine_slice/* and decoration/* other than the rule (Journal and settings surfaces belong to later stages), effects/ripple and
+fill), collection/* other than the "unknown" tile (illustrative fish, not real items: the game's own item icons are used),
+nine_slice/* (the Journal cuts the whole frames with texture coordinates instead) and decoration/* other than the rule and the fish
+watermark, effects/ripple and
 effects/splash (saturated blue water effects that would read as a bite signal, which the game does not give).
 
     python3 tools/make_fishing_art.py [--src assets/fishing] [--out TwichUI_Fishing/media] [--check] [--sheet out.png]

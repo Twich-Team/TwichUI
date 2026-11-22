@@ -279,6 +279,7 @@ function UIWidgets(env, opts)
             item.file, item.color, item.coords, item.blend, item.vertex = r.file, r.color, r.coords, r.blend, r.vertex
           else
             item.text, item.font, item.size, item.color, item.justify, item.shadow = r.text, r.font, r.size, r.textColor, r.justifyH, r.shadowOffset
+            item.wrap, item.justifyV = r.wrap, r.justifyV
             item.fixedWidth = r.w ~= nil or r.hanchor == "LR"
             item.hanchor = r.hanchor
           end

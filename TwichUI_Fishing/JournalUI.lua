@@ -26,6 +26,7 @@ U.PAGES = { "overview", "sessions", "collections", "locations", "treasures" }
 U.LABEL = { overview = "Overview", sessions = "Sessions", collections = "Collections", locations = "Locations", treasures = "Treasures" }
 U.GLYPH = { overview = "mark", sessions = "glyph-time", collections = "glyph-hook", locations = "glyph-lure", treasures = "glyph-treasure" }
 U.GRID_COLS, U.GRID_ROWS = 7, 3
+U.FRAME_CUT = 54     -- the frame's corner ornaments reach about 52 painted pixels along each edge
 
 local win, pages, nav, current = nil, {}, {}, "overview"
 local state = { session = nil, species = nil, container = nil, sort = "count", gridPage = 1 }
@@ -90,6 +91,7 @@ local function Heading(parent, text, x, y, width)
     rule:SetSize(width or 200, 10)
     H.Texture(rule, "rule", { 0.62, 0.45, 0.24, 0.4 })
     rule:SetAlpha(0.8)
+    fs.rule = rule
     return fs
 end
 
@@ -244,8 +246,8 @@ local function Icon(parent, size)
     f:SetSize(size, size)
     f.frame, f.icon = H.FramedIcon(f, size, "ARTWORK")
     f.frame:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-    f.qty = Text(f, math.max(11, math.floor(size * 0.28)), "strong", H.IVORY, "RIGHT")
-    f.qty:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -3, 3)
+    f.qty = Text(f, math.max(10, math.floor(size * 0.2)), "strong", H.IVORY, "RIGHT")
+    f.qty:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -4, 4)
     f.qty:SetDrawLayer("OVERLAY", 7)
     function f:Set(id, qty)
         local _, tex = H.Item(id)
@@ -305,30 +307,33 @@ local function BuildOverview(page)
     P.scope = Text(page, 12, "body", H.MUTED, "RIGHT")
     Place(P.scope, "TOPRIGHT", page, "TOPRIGHT", 0, -4)
     P.strip = Strip(page, -32, W, 84)
-    Heading(page, "Favorite Catches", 0, -128, W)
+    P.h1 = Heading(page, "Favorite Catches", 0, -124, W)
     P.fav = {}
     local cw = W / J.TOP
     for i = 1, J.TOP do
         local b = CreateFrame("Button", nil, page)
-        b:SetSize(cw - 6, 52)
-        Place(b, "TOPLEFT", page, "TOPLEFT", (i - 1) * cw, -158)
-        b.icon = Icon(b, 44)
+        b:SetSize(cw - 8, 54)
+        Place(b, "TOPLEFT", page, "TOPLEFT", (i - 1) * cw, -152)
+        b.icon = Icon(b, 46)
         b.icon:SetPoint("LEFT", b, "LEFT", 0, 0)
         b.name = Text(b, 13, "strong", H.IVORY)
-        b.name:SetPoint("TOPLEFT", b, "LEFT", 52, 12)
-        b.name:SetWidth(cw - 64)
+        b.name:SetWordWrap(true)
+        b.name:SetHeight(32)
+        b.name:SetJustifyV("TOP")
+        b.name:SetPoint("TOPLEFT", b, "TOPLEFT", 54, -2)
+        b.name:SetWidth(cw - 68)
         b.count = Text(b, 12, "body", H.AMBERTEXT)
-        b.count:SetPoint("TOPLEFT", b.name, "BOTTOMLEFT", 0, -3)
-        b.count:SetWidth(cw - 64)
+        b.count:SetPoint("BOTTOMLEFT", b, "BOTTOMLEFT", 54, 2)
+        b.count:SetWidth(cw - 68)
         b:SetScript("OnClick", function(self) if self.id then U.Select("collections", self.id) end end)
         Tip(b, true)
         P.fav[i] = b
     end
-    Heading(page, "Recent Sessions", 0, -230, W)
+    P.h2 = Heading(page, "Recent Sessions", 0, -214, W)
     P.viewAll = Button(page, "View all", 76, 22, function() U.Show("sessions") end)
-    Place(P.viewAll, "TOPRIGHT", page, "TOPRIGHT", 0, -228)
+    Place(P.viewAll, "TOPRIGHT", page, "TOPRIGHT", 0, -212)
     P.rows = List(page, {
-        rows = J.RECENT, h = 50, width = W, art = "j-row",
+        rows = J.RECENT, h = 52, width = W, art = "j-row",
         make = function(b)
             b.zone = Text(b, 14, "strong", H.IVORY)
             b.zone:SetPoint("TOPLEFT", b, "TOPLEFT", 14, -8)
@@ -347,7 +352,7 @@ local function BuildOverview(page)
         end,
         click = function(r) U.Select("sessions", r.id) end,
     })
-    Place(P.rows.frame, "TOPLEFT", page, "TOPLEFT", 0, -260)
+    Place(P.rows.frame, "TOPLEFT", page, "TOPLEFT", 0, -240)
     P.note = Note(page, 0, W)
     P.empty = Empty(page, "Nothing fished yet", "Cast a line with your Fishing key. Your catches, sessions and places will gather here.")
     function P.Refresh()
@@ -364,7 +369,7 @@ local function BuildOverview(page)
             P.empty:Show()
         end
         local blank = P.empty:IsShown()
-        for _, w in ipairs({ P.strip, P.viewAll, P.rows.frame, P.note }) do if w.SetShown then w:SetShown(not blank) end end
+        for _, w in ipairs({ P.strip, P.viewAll, P.rows.frame, P.note, P.h1, P.h1.rule, P.h2, P.h2.rule, P.scope }) do w:SetShown(not blank) end
         for _, b in ipairs(P.fav) do b:SetShown(not blank) end
         if blank then return end
         local L = o.lifetime
@@ -385,7 +390,7 @@ local function BuildOverview(page)
                 b.icon:Set(e.id, nil)
                 b.itemID = e.id
                 b.name:SetText(ItemName(e.id))
-                b.count:SetText(("×%s · %s"):format(Num(e.q), Plural(e.c, "catch", "catches")))
+                b.count:SetText(("×%s caught"):format(Num(e.q)))
             end
         end
         P.rows:SetItems(o.recent)
@@ -407,17 +412,17 @@ local function BuildSessions(page)
     Place(P.count, "TOPLEFT", page, "TOPLEFT", 0, -6)
     P.count:SetWidth(232)
     P.list = List(page, {
-        rows = 8, h = 46, width = 236,
+        rows = 7, h = 50, width = 236,
         selected = function(r) return r.id == state.session end,
         make = function(b)
             b.zone = Text(b, 13, "strong", H.IVORY)
-            b.zone:SetPoint("TOPLEFT", b, "TOPLEFT", 12, -7)
+            b.zone:SetPoint("TOPLEFT", b, "TOPLEFT", 12, -8)
             b.zone:SetWidth(150)
             b.sub = Text(b, 11, "body", H.MUTED)
             b.sub:SetPoint("TOPLEFT", b.zone, "BOTTOMLEFT", 0, -2)
             b.sub:SetWidth(170)
             b.catch = Text(b, 13, "strong", H.AMBERTEXT, "RIGHT")
-            b.catch:SetPoint("TOPRIGHT", b, "TOPRIGHT", -14, -7)
+            b.catch:SetPoint("TOPRIGHT", b, "TOPRIGHT", -14, -8)
             b.catch:SetWidth(60)
             b.live = Text(b, 10, "strong", H.GOLD, "RIGHT")
             b.live:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -14, 7)
@@ -563,8 +568,7 @@ local function BuildCollections(page)
         b.sel = b:CreateTexture(nil, "OVERLAY")
         b.sel:SetPoint("TOPLEFT", b, "TOPLEFT", -2, 2)
         b.sel:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 2, -2)
-        H.Texture(b.sel, "rowglow", { 0.9, 0.7, 0.3, 0.35 })
-        b.sel:SetBlendMode("ADD")
+        b.sel:SetColorTexture(0.96, 0.72, 0.30, 0.42)      -- the chosen kind: a warm plate behind its frame
         b.unknown = b:CreateTexture(nil, "ARTWORK", nil, 3)
         b.unknown:SetPoint("TOPLEFT", b, "TOPLEFT", 3, -3)
         b.unknown:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -3, 3)
@@ -581,14 +585,14 @@ local function BuildCollections(page)
     Place(P.pageText, "TOPLEFT", page, "TOPLEFT", W / 2 - 50, -34 - U.GRID_ROWS * cell + 3)
     P.pageText:SetWidth(100)
     local D = CreateFrame("Frame", nil, page)
-    D:SetSize(W, 104)
+    D:SetSize(W, 118)
     Place(D, "BOTTOMLEFT", page, "BOTTOMLEFT", 0, 0)
     D.bg = H.Slice(D, "j-chest", 24, "BACKGROUND")
     D.bg:SetVertexColor(1, 1, 1, 0.95)
     D.icon = Icon(D, 64)
     D.icon:SetPoint("LEFT", D, "LEFT", 22, 0)
     D.name = Text(D, 17, "serif", H.IVORY)
-    D.name:SetPoint("TOPLEFT", D, "TOPLEFT", 100, -18)
+    D.name:SetPoint("TOPLEFT", D, "TOPLEFT", 100, -16)
     D.name:SetWidth(W - 120)
     D.l1 = Text(D, 13, "body", H.SOFT)
     D.l1:SetPoint("TOPLEFT", D.name, "BOTTOMLEFT", 0, -5)
@@ -597,8 +601,11 @@ local function BuildCollections(page)
     D.l2:SetPoint("TOPLEFT", D.l1, "BOTTOMLEFT", 0, -3)
     D.l2:SetWidth(W - 120)
     D.l3 = Text(D, 12, "body", H.MUTED)
+    D.l3:SetWordWrap(true)
+    D.l3:SetHeight(30)
+    D.l3:SetJustifyV("TOP")
     D.l3:SetPoint("TOPLEFT", D.l2, "BOTTOMLEFT", 0, -3)
-    D.l3:SetWidth(W - 120)
+    D.l3:SetWidth(W - 130)
     P.D = D
     P.empty = Empty(page, "No catches yet", "Fish you catch are listed here with the game's own icons, how many, and when you first and last caught them.")
     function P.Refresh()
@@ -639,6 +646,7 @@ local function BuildCollections(page)
         P.pageText:SetText(("Page %d of %d"):format(state.gridPage, pagesN))
         P.prev:SetShown(state.gridPage > 1)
         P.next:SetShown(state.gridPage < pagesN)
+        P.pageText:SetShown(pagesN > 1)
         if not picked then for _, e in ipairs(list) do if e.id == state.species then picked = e break end end end
         if picked then
             D.icon:Set(picked.id)
@@ -678,10 +686,10 @@ local function BuildLocations(page)
         P.head[i] = fs
     end
     P.list = List(page, {
-        rows = 8, h = 42, width = W,
+        rows = 7, h = 48, width = W,
         make = function(b)
             b.zone = Text(b, 14, "strong", H.IVORY)
-            b.zone:SetPoint("TOPLEFT", b, "TOPLEFT", 14, -6)
+            b.zone:SetPoint("TOPLEFT", b, "TOPLEFT", 14, -8)
             b.zone:SetWidth(200)
             b.sub = Text(b, 11, "body", H.MUTED)
             b.sub:SetPoint("TOPLEFT", b.zone, "BOTTOMLEFT", 0, -1)
@@ -728,9 +736,9 @@ local function BuildTreasures(page)
     P.title = Text(page, 19, "serif", H.IVORY)
     Place(P.title, "TOPLEFT", page, "TOPLEFT", 0, 0)
     P.title:SetText("Treasures")
-    P.strip = Strip(page, -32, W, 76)
+    P.strip = Strip(page, -32, W, 84)
     P.list = List(page, {
-        rows = 5, h = 52, width = 256,
+        rows = 4, h = 52, width = 256,
         selected = function(r) return r.id == state.container end,
         make = function(b)
             b.icon = Icon(b, 36)
@@ -751,11 +759,11 @@ local function BuildTreasures(page)
         end,
         click = function(r) state.container = r.id; P.Refresh() end,
     })
-    Place(P.list.frame, "TOPLEFT", page, "TOPLEFT", 0, -148)
-    Heading(page, "Containers", 0, -120, 256)
+    Place(P.list.frame, "TOPLEFT", page, "TOPLEFT", 0, -156)
+    Heading(page, "Containers", 0, -128, 256)
     local D = CreateFrame("Frame", nil, page)
     D:SetSize(W - 274, 280)
-    Place(D, "TOPLEFT", page, "TOPLEFT", 274, -120)
+    Place(D, "TOPLEFT", page, "TOPLEFT", 274, -128)
     P.D = D
     D.head = Heading(D, "Confirmed contents", 0, 0, W - 274)
     D.sub = Text(D, 12, "body", H.MUTED)
@@ -763,7 +771,7 @@ local function BuildTreasures(page)
     Place(D.sub, "TOPLEFT", D, "TOPLEFT", 0, -28)
     D.sub:SetWidth(W - 274)
     P.contents = List(D, {
-        rows = 6, h = 34, width = W - 274,
+        rows = 5, h = 34, width = W - 274,
         make = function(b)
             b.icon = Icon(b, 26)
             b.icon:SetPoint("LEFT", b, "LEFT", 8, 0)
@@ -779,7 +787,7 @@ local function BuildTreasures(page)
     })
     Place(P.contents.frame, "TOPLEFT", D, "TOPLEFT", 0, -56)
     P.note = Note(page, 0, W)
-    P.note:SetText("Only what was seen coming out of a container is listed. Containers opened without the Journal watching, or caught before it, show only their counts.")
+    P.note:SetText("Only what was seen coming out of a container is listed; earlier openings show only their counts.")
     P.empty = Empty(page, "No treasures yet", "Clams and other containers you catch are counted here, with what they held once opened.")
     function P.Refresh()
         local d = J.Treasures()
@@ -828,7 +836,7 @@ local function Build()
     f:SetMovable(true)
     f:EnableMouse(true)
     f:Hide()
-    f.bg = H.Slice(f, "j-frame", 24, "BACKGROUND")
+    f.bg = H.Slice(f, "j-frame", U.FRAME_CUT, "BACKGROUND")
     f.icon = f:CreateTexture(nil, "ARTWORK")
     f.icon:SetSize(30, 30)
     f.icon:SetPoint("TOPLEFT", f, "TOPLEFT", 34, -24)
@@ -991,7 +999,7 @@ local function BuildSummary()
     f:SetMovable(true)
     f:EnableMouse(true)
     f:Hide()
-    f.bg = H.Slice(f, "j-frame", 24, "BACKGROUND")
+    f.bg = H.Slice(f, "j-frame", U.FRAME_CUT, "BACKGROUND")
     f.icon = f:CreateTexture(nil, "ARTWORK")
     f.icon:SetSize(28, 28)
     f.icon:SetPoint("TOPLEFT", f, "TOPLEFT", 34, -24)
@@ -1028,7 +1036,7 @@ local function BuildSummary()
     f.head:SetPoint("TOPLEFT", f, "TOPLEFT", 38, -124)
     f.head.bg = H.Slice(f.head, "j-row", 8, "BACKGROUND")
     f.head.item = Text(f.head, 12, "strong", H.GOLD)
-    f.head.item:SetPoint("LEFT", f.head, "LEFT", 12, 0)
+    f.head.item:SetPoint("LEFT", f.head, "LEFT", 20, 0)
     f.head.item:SetText("Item")
     f.head.qty = Text(f.head, 12, "strong", H.GOLD, "RIGHT")
     f.head.qty:SetPoint("RIGHT", f.head, "RIGHT", -22, 0)

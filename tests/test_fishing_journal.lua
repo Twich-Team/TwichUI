@@ -280,7 +280,7 @@ do
   UI.Show("sessions")
   local list
   for _, fr in ipairs(W.UI.frames) do
-    if fr.kind == "Frame" and fr.scripts.OnMouseWheel and fr:GetHeight() == 8 * 46 then list = fr end
+    if fr.kind == "Frame" and fr.scripts.OnMouseWheel and fr:GetHeight() == 7 * 50 then list = fr end
   end
   Check(list ~= nil, "the session list takes the mouse wheel")
   for _ = 1, 700 do list.scripts.OnMouseWheel(list, -1) end

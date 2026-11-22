@@ -37,7 +37,7 @@ local J = {}
 F.Journal = J
 
 J.serial = 0
-J.TOP = 4            -- favourites shown on the Overview
+J.TOP = 3            -- favourites shown on the Overview
 J.RECENT = 3         -- recent sessions on the Overview
 J.ZONES_PER_SPECIES = 4
 
