@@ -1,0 +1,512 @@
+{
+  "name": "TwichUI Loot Victory",
+  "version": "1.0.0",
+  "style": "hand-painted walnut leather, aged bronze, warm gold; one-shot motion",
+  "recommended_frame_size_ui_px": [
+    460,
+    200
+  ],
+  "textures": {
+    "loot_won_frame": {
+      "png": "textures/png/loot_won_frame.png",
+      "tga": "textures/tga/loot_won_frame.tga",
+      "canvas": [
+        1024,
+        512
+      ],
+      "visible_rect_px": [
+        0,
+        0,
+        1024,
+        444
+      ],
+      "alpha_min_max": [
+        0,
+        255
+      ],
+      "purpose": "Blank chestnut leather/bronze victory card; no baked labels. Display via SetTexCoord(0,1,0,444/512) or 9-slice.",
+      "suggested_display_ui_px": [
+        460,
+        200
+      ]
+    },
+    "emblem_need": {
+      "png": "textures/png/emblem_need.png",
+      "tga": "textures/tga/emblem_need.tga",
+      "canvas": [
+        128,
+        128
+      ],
+      "visible_rect_px": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "alpha_min_max": [
+        0,
+        255
+      ],
+      "purpose": "Need-roll bronze medallion. Reveal gently near title or right edge.",
+      "suggested_display_ui_px": [
+        29,
+        29
+      ]
+    },
+    "emblem_greed": {
+      "png": "textures/png/emblem_greed.png",
+      "tga": "textures/tga/emblem_greed.tga",
+      "canvas": [
+        128,
+        128
+      ],
+      "visible_rect_px": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "alpha_min_max": [
+        0,
+        255
+      ],
+      "purpose": "Greed-roll bronze coin medallion. Reveal gently near title or right edge.",
+      "suggested_display_ui_px": [
+        29,
+        29
+      ]
+    },
+    "laurel_left": {
+      "png": "textures/png/laurel_left.png",
+      "tga": "textures/tga/laurel_left.tga",
+      "canvas": [
+        128,
+        128
+      ],
+      "visible_rect_px": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "alpha_min_max": [
+        0,
+        255
+      ],
+      "purpose": "Optional static left title accent, not a looping animation.",
+      "suggested_display_ui_px": [
+        22,
+        31
+      ]
+    },
+    "laurel_right": {
+      "png": "textures/png/laurel_right.png",
+      "tga": "textures/tga/laurel_right.tga",
+      "canvas": [
+        128,
+        128
+      ],
+      "visible_rect_px": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "alpha_min_max": [
+        0,
+        255
+      ],
+      "purpose": "Optional static right title accent.",
+      "suggested_display_ui_px": [
+        22,
+        31
+      ]
+    },
+    "coin_face": {
+      "png": "textures/png/coin_face.png",
+      "tga": "textures/tga/coin_face.tga",
+      "canvas": [
+        128,
+        128
+      ],
+      "visible_rect_px": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "alpha_min_max": [
+        0,
+        255
+      ],
+      "purpose": "Optional Greed-specific decorative coin. Use max 2 per win.",
+      "suggested_display_ui_px": [
+        14,
+        14
+      ]
+    },
+    "coin_edge": {
+      "png": "textures/png/coin_edge.png",
+      "tga": "textures/tga/coin_edge.tga",
+      "canvas": [
+        128,
+        128
+      ],
+      "visible_rect_px": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "alpha_min_max": [
+        0,
+        255
+      ],
+      "purpose": "Optional Greed-specific decorative coin. Use max 2 per win.",
+      "suggested_display_ui_px": [
+        14,
+        14
+      ]
+    },
+    "coin_tilt": {
+      "png": "textures/png/coin_tilt.png",
+      "tga": "textures/tga/coin_tilt.tga",
+      "canvas": [
+        128,
+        128
+      ],
+      "visible_rect_px": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "alpha_min_max": [
+        0,
+        255
+      ],
+      "purpose": "Optional Greed-specific decorative coin. Use max 2 per win.",
+      "suggested_display_ui_px": [
+        14,
+        14
+      ]
+    },
+    "spark_bright": {
+      "png": "textures/png/spark_bright.png",
+      "tga": "textures/tga/spark_bright.tga",
+      "canvas": [
+        128,
+        128
+      ],
+      "visible_rect_px": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "alpha_min_max": [
+        0,
+        218
+      ],
+      "purpose": "Primary glint. Single 0.35s scale/alpha animation; never loop.",
+      "suggested_display_ui_px": [
+        18,
+        18
+      ]
+    },
+    "spark_small": {
+      "png": "textures/png/spark_small.png",
+      "tga": "textures/tga/spark_small.tga",
+      "canvas": [
+        64,
+        64
+      ],
+      "visible_rect_px": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "alpha_min_max": [
+        0,
+        218
+      ],
+      "purpose": "Secondary point sparkle, 0.28s alpha rise/fade.",
+      "suggested_display_ui_px": [
+        8,
+        8
+      ]
+    },
+    "dust_soft": {
+      "png": "textures/png/dust_soft.png",
+      "tga": "textures/tga/dust_soft.tga",
+      "canvas": [
+        64,
+        64
+      ],
+      "visible_rect_px": [
+        0,
+        0,
+        64,
+        64
+      ],
+      "alpha_min_max": [
+        0,
+        139
+      ],
+      "purpose": "Very faint amber mote. Max 3 on screen.",
+      "suggested_display_ui_px": [
+        8,
+        8
+      ]
+    },
+    "dust_micro": {
+      "png": "textures/png/dust_micro.png",
+      "tga": "textures/tga/dust_micro.tga",
+      "canvas": [
+        32,
+        32
+      ],
+      "visible_rect_px": [
+        0,
+        0,
+        32,
+        32
+      ],
+      "alpha_min_max": [
+        0,
+        97
+      ],
+      "purpose": "Tiny dust accent. Max 3 on screen.",
+      "suggested_display_ui_px": [
+        5,
+        5
+      ]
+    },
+    "halo_uncommon": {
+      "png": "textures/png/halo_uncommon.png",
+      "tga": "textures/tga/halo_uncommon.tga",
+      "canvas": [
+        256,
+        256
+      ],
+      "visible_rect_px": [
+        0,
+        0,
+        256,
+        256
+      ],
+      "alpha_min_max": [
+        0,
+        71
+      ],
+      "purpose": "Gentle uncommon quality under-icon halo. It stays stationary, only its alpha changes.",
+      "suggested_display_ui_px": [
+        73,
+        73
+      ]
+    },
+    "halo_rare": {
+      "png": "textures/png/halo_rare.png",
+      "tga": "textures/tga/halo_rare.tga",
+      "canvas": [
+        256,
+        256
+      ],
+      "visible_rect_px": [
+        0,
+        0,
+        256,
+        256
+      ],
+      "alpha_min_max": [
+        0,
+        71
+      ],
+      "purpose": "Gentle rare quality under-icon halo. It stays stationary, only its alpha changes.",
+      "suggested_display_ui_px": [
+        73,
+        73
+      ]
+    },
+    "halo_epic": {
+      "png": "textures/png/halo_epic.png",
+      "tga": "textures/tga/halo_epic.tga",
+      "canvas": [
+        256,
+        256
+      ],
+      "visible_rect_px": [
+        0,
+        0,
+        256,
+        256
+      ],
+      "alpha_min_max": [
+        0,
+        71
+      ],
+      "purpose": "Gentle epic quality under-icon halo. It stays stationary, only its alpha changes.",
+      "suggested_display_ui_px": [
+        73,
+        73
+      ]
+    },
+    "halo_legendary": {
+      "png": "textures/png/halo_legendary.png",
+      "tga": "textures/tga/halo_legendary.tga",
+      "canvas": [
+        256,
+        256
+      ],
+      "visible_rect_px": [
+        0,
+        0,
+        256,
+        256
+      ],
+      "alpha_min_max": [
+        0,
+        71
+      ],
+      "purpose": "Gentle legendary quality under-icon halo. It stays stationary, only its alpha changes.",
+      "suggested_display_ui_px": [
+        73,
+        73
+      ]
+    },
+    "sheen_ribbon": {
+      "png": "textures/png/sheen_ribbon.png",
+      "tga": "textures/tga/sheen_ribbon.tga",
+      "canvas": [
+        512,
+        128
+      ],
+      "visible_rect_px": [
+        0,
+        0,
+        512,
+        128
+      ],
+      "alpha_min_max": [
+        0,
+        206
+      ],
+      "purpose": "Once-only trim sweep overlay. Move left-to-right and CLIP to border/header; do not overlay text.",
+      "suggested_display_ui_px": [
+        116,
+        23
+      ]
+    },
+    "rim_glint": {
+      "png": "textures/png/rim_glint.png",
+      "tga": "textures/tga/rim_glint.tga",
+      "canvas": [
+        256,
+        64
+      ],
+      "visible_rect_px": [
+        0,
+        0,
+        256,
+        64
+      ],
+      "alpha_min_max": [
+        0,
+        206
+      ],
+      "purpose": "Thin highlight to travel along top trim only, 0.4s.",
+      "suggested_display_ui_px": [
+        64,
+        11
+      ]
+    },
+    "badge_backing": {
+      "png": "textures/png/badge_backing.png",
+      "tga": "textures/tga/badge_backing.tga",
+      "canvas": [
+        256,
+        64
+      ],
+      "visible_rect_px": [
+        0,
+        0,
+        256,
+        64
+      ],
+      "alpha_min_max": [
+        0,
+        231
+      ],
+      "purpose": "Optional blank upgrade/status badge, text must be rendered at runtime.",
+      "suggested_display_ui_px": [
+        122,
+        31
+      ]
+    }
+  },
+  "animations": {
+    "timeline_seconds": {
+      "0.00-0.20": "On confirmed win, fade roll controls out; lock them; preserve card position.",
+      "0.15-0.45": "Fade title and need/greed emblem in from alpha 0 to 1 with 2px upward displacement; no bouncing.",
+      "0.35-0.80": "Move sheen_ribbon left to right, but clip to top metal trim only; 1 pass.",
+      "0.45-1.20": "Exactly 5 fixed particles use spark_small/dust_soft; move up 8-12 UI px; fade linearly or smoothstep.",
+      "1.20-3.70": "Rest state; no looping particles or shimmer.",
+      "3.70-4.00": "Fade entire result card to 0, release UI resources."
+    },
+    "max_particles": 5,
+    "frame_rate_independent": true,
+    "trigger": "Confirmed self-winning roll event only; do not assume inventory received.",
+    "title": "Runtime text: YOU WON!",
+    "sound_time_s": 0.48,
+    "no_animation_option": "Instantly display static result frame for approximately 3 seconds."
+  },
+  "audio": {
+    "victory": {
+      "ogg": "audio/loot_win_victory.ogg",
+      "wav_reference": "audio/loot_win_victory.wav",
+      "recommended_channel": "SFX",
+      "note": "Original gentle one-shot; in-game playback and perceived loudness not yet verified."
+    },
+    "greed": {
+      "ogg": "audio/loot_win_greed.ogg",
+      "wav_reference": "audio/loot_win_greed.wav",
+      "recommended_channel": "SFX",
+      "note": "Original gentle one-shot; in-game playback and perceived loudness not yet verified."
+    }
+  },
+  "caveat": "Asset files have been inspected for dimensions and transparency, but not tested in the WoW Forever client.",
+  "quality_colors": {
+    "uncommon": "#62BD38",
+    "rare": "#509DE6",
+    "epic": "#A45CDA",
+    "legendary": "#E5A14B"
+  },
+  "frame": {
+    "source_pixels": [
+      1903,
+      826
+    ],
+    "runtime_texture": [
+      1024,
+      512
+    ],
+    "visible_pixels": [
+      1024,
+      444
+    ],
+    "set_tex_coord": [
+      0,
+      1,
+      0,
+      0.867188
+    ],
+    "suggested_9slice_source_insets": [
+      66,
+      66,
+      62,
+      62
+    ],
+    "notes": "Use a fixed 460x200 card first; optional 9-slice only if future resizing requires it."
+  }
+}
