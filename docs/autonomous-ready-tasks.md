@@ -140,8 +140,70 @@ The original note was clarified. **Do not implement a Craft Queue search.** The 
 | **W05 / A05 / W04** Market/AH status controls | Current A01/A02 performance work touches Market/Workshop plumbing | Re-evaluate against merged performance result first; no parallel work now |
 | **A04** neutral auction fee | Pricing correctness is important but current Market/Opportunities stack is active | Recheck after A01/A02 merges; separate small economic fix with targeted tests |
 | **F04 / F09 / reminder glow** | Fishing Stage 2 already merged; Loot victory PR #101 and Reminder glow PR #91 are active | Verify PR state and select only separately approved follow-ups |
-| **UX02** shared Reminders artwork picker and per-rule icons | Existing Reminders image picker is tightly coupled to Reminders' storage; Loot Rules/Magic Inventory currently derive default art and have no independent icon override field. Owner wants a shared curated picker; no implementation is yet authorized | Design shared catalog/chooser interface, audit bundled symbolic assets, and confirm whether overrides apply to rule list/editor only or runtime visuals. Then write separate small specs for shared extraction, Loot Rules, and Magic Inventory; preserve all default icons and rules |
+| **UX02** shared Reminders artwork picker and per-rule icons | Batch 5 design/foundation is proposed; shared extraction, catalog additions and rule fields/builders remain unimplemented | Review [contract](design/shared-artwork-picker.md), [curated inventory](design/shared-artwork-inventory.md) and [consumer specs](design/shared-artwork-rule-integrations.md). Scope is settings rule list/editor identity only. Follow-ups below remain awaiting review, not Ready |
 | **All larger product concepts** | Scope and interactions are not yet defined | Keep original ideas in roadmap; discuss one product slice at a time |
+
+### UX02 specified follow-ups awaiting owner review
+
+**Status for all four: Specified — awaiting owner review; not Ready and not
+implementation authorization.** Batch 5 closes discovery/documentation only.
+Approve the [exact shared contract](design/shared-artwork-picker.md), curated
+subset and future rule-reference policy before promoting an implementation item.
+The later batch must explicitly select its scope; these specs do not add a task
+to the Ready queue automatically.
+
+**UX02-A — Extract the approved chooser with Reminders parity.**
+- Scope: shared core catalog/reference drawing + one Settings-only chooser;
+  thin Reminder adapter continues `Gallery.Choose`/`SetDisplayMany`. Preserve
+  all existing 79 entries, IDs, crops, categories, search, source tabs, thumbnails,
+  preview, Apply/Cancel, Esc/close, companion placement and display modes.
+- Acceptance: caller-owned acceptance/persistence; isolated copied candidate and
+  owner/profile generation checks; automatic staging supported for callers that
+  opt in; cancel/replacement/pagehide/profile/settings-close writes nothing;
+  exact-once cleanup and no stale callbacks/pool growth. Reminders works as before,
+  including Settings load-on-demand and Reminders disabled. No rule schema/editor
+  changes. No new generic UI/provider framework.
+- Verification: existing Gallery/Reminders settings and relevant load-order tests,
+  targeted session/atomicity regressions and selected picker normal/narrow poses
+  if available. Dependencies: owner-reviewed contract; coordinate any overlapping
+  Reminders work at execution time. Keep glow behavior outside scope.
+
+**UX02-B — Add only owner-approved existing catalog artwork.**
+- Scope: additive metadata for the approved subset of the [28 candidates](design/shared-artwork-inventory.md);
+  20 are recommended first, eight are conditional. No new art or unrelated rebuild.
+- Acceptance: verified paths and variants, stable noncolliding IDs, curated categories
+  and search synonyms, no duplicate alias targets; baseline order/IDs unchanged.
+  Register new art resolution and Reminder icon allowlist mappings consistently;
+  never turn the whole texture directory/registry into catalog entries.
+- Verification: bounded file/ID/metadata checks and small-size/light/dark review;
+  existing Gallery rendering/search tests and useful picker capture. Dependencies:
+  owner approval of rows/IDs and UX02-A's reviewed reference/resolution boundary.
+
+**UX02-C — Loot Rules identification artwork.**
+- Scope: Choose icon in the settings editor; custom identity only in list/header.
+  Proposed `rule.artwork` remains subject to schema/version-policy review.
+- Acceptance: preserve automatic Need/Greed/Pass defaults and explicit action words
+  even for incomplete rules; picker Apply uses the existing immediate-save model;
+  automatic reset/cancel differ correctly; checked fresh references survive
+  supported mutation/duplication/profile/backup paths. Unknown valid IDs fall back
+  visibly without rewrite; no rule matching/roll action or transport changes.
+- Verification: focused loot config/settings, duplication/profile, malformed and
+  unknown-ref tests; prove different artwork gives identical loot decisions.
+  Dependencies: approved schema/compatibility and UX02-A; UX02-B only for new art.
+
+**UX02-D — Magic Inventory rule identification artwork.**
+- Scope: rules list and builder summary/Rule review identity, not runtime transfer
+  review or drag ghosts. Preserve existing item/category automatic precedence.
+- Acceptance: picker Apply changes only private draft; existing Save/Cancel,
+  failed Save and pagehide-retains-draft/profile-apply-discards-draft semantics
+  remain; duplication makes independent references; cleaner retains approved
+  field/valid unknown IDs; fallback/mask cleanup is visible and nonmutating.
+  Matching, destinations, recipients, priorities and transfers are unchanged.
+- Verification: focused rules/settings/recipient/profile tests, independent draft
+  and saved duplication, fallback/mask and behavior-invariance checks; useful
+  narrow/scaled builder pose when implemented. Dependencies: approved field/version
+  policy and UX02-A; UX02-B only for new art. Run sequentially with overlapping
+  Inventory editor work, and preserve existing settings-sharing exclusions.
 
 ## Owner decisions — November 21, 2026
 
