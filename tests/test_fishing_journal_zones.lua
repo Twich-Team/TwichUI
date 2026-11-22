@@ -139,6 +139,39 @@ do
 end
 
 ---------------------------------------------------------------------------
+-- 3b. Sessions with nothing in them, interrupted ones, and sessions whose records are gone
+---------------------------------------------------------------------------
+do
+  local c, W, F, UI, J = Fresh()
+  local ch = F.Store.Char()
+  ch.zoneNames[SV] = "Stranglethorn Vale"
+  ch.totals.sessions = 5
+  ch.nextSession = 6
+  ch.sessions = { { id = 4, start = 1800000000, stop = 1800000300, seconds = 300, ended = "idle", reason = "cast", zone = SV, casts = 3, catches = 0, items = 0,
+    failed = 0, interrupted = 1, missed = 2, line = 40, species = {}, zones = { [SV] = { casts = 3, catches = 0, items = 0, line = 40 } }, containers = {}, contents = {}, sessions = 0 } }
+  F.Emit("SESSION_END", 4, "idle")
+  UI.Open("sessions")
+  local words = Words(W)
+  Check(words:find("No catch", 1, true), "an empty session is marked in the list")
+  Check(words:find("ended when you went idle", 1, true), "an idle end is said")
+  Check(words:find("Nothing was caught in this session", 1, true), "and the detail says nothing was caught")
+  Check(words:find("4 earlier sessions are only in the totals", 1, true) or words:find("earlier sessions", 1, true), "sessions older than the kept ones are explained")
+  Check(not words:find("Fished in", 1, true) or words:find("Stranglethorn Vale (0 catches)", 1, true), "an empty session shows no invented catches")
+  UI.Select("sessions", 99)
+  Check(UI.State.session == 4, "a session whose record is gone falls back to one that is kept")
+  -- the session in progress is listed first, in progress, and counts as it goes
+  At(W, SV, "Stranglethorn Vale"); Catch(W, { { FISH1, 2 } })
+  W.Advance(1)
+  words = Words(W)
+  Check(words:find("In progress", 1, true), "the session in progress is marked")
+  local rows = J.Sessions().rows
+  Check(rows[1].current and rows[1].catches == 1 and not rows[2].current, "and listed first, with its catches so far")
+  Check(UI.Clock(), "its length is kept moving while the window is open")
+  UI.Close()
+  Check(not UI.Clock(), "and nothing runs once the window is closed")
+end
+
+---------------------------------------------------------------------------
 -- 4. The window remembers where it was put
 ---------------------------------------------------------------------------
 do
@@ -314,6 +347,18 @@ do
   for _ = 1, 400 do Catch(W2, { { itemIds[1], 1 } }) end
   local per2 = (os.clock() - t2) / 400
   Check(perClosed < per2 * 3 + 0.002, ("the same cost as with no history (%.2f ms vs %.2f ms)"):format(perClosed * 1000, per2 * 1000))
+  -- finished sessions are copied once, not again for every catch (a direct catch cannot change a finished session)
+  local copies, realSessions = 0, F.API.Sessions
+  F.API.Sessions = function(...) copies = copies + 1; return realSessions(...) end
+  J.Sessions(); J.Locations()
+  local before = copies
+  Catch(W, { { itemIds[1], 1 } })
+  J.Sessions(); J.Locations(); J.Location(zoneIds[7])
+  Check(copies == before, "a direct catch does not copy the finished sessions again")
+  F.Emit("SESSION_END", 1, "command")
+  J.Sessions()
+  Check(copies == before + 1, "but a session ending does")
+  F.API.Sessions = realSessions
   Check(F.Store.Char().totals.spn <= 3601, "400 more catches of one fish in one zone added at most one entry (a pair is one entry)")
   Check(#W.faults == 0, "no errors: " .. table.concat(W.faults, "|"))
 end
