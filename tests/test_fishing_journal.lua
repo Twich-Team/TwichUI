@@ -63,7 +63,12 @@ local BASE = {
     zones = { [10] = { casts = 60, catches = 50, items = 54, line = 2500 }, [20] = { casts = 30, catches = 22, items = 24, line = 1100 },
       [0] = { casts = 10, catches = 10, items = 12, line = 400 } },
     containers = { [CLAM] = { caught = 8, opened = 6, failed = 1, got = { [PEARL] = 1, [CLAMMEAT] = 6 } } },
-    contents = { [PEARL] = 1, [CLAMMEAT] = 6 } },
+    contents = { [PEARL] = 1, [CLAMMEAT] = 6 },
+    -- where fish were caught since location recording began: FISH1 37 of its 40 (25 + 10 confirmed, 2 in an unreadable zone,
+    -- 3 earlier), the sagefish and the catfish none (all earlier)
+    spz = { [10] = { [FISH1] = { q = 25, c = 22, f = 1799500000, l = 1800050000 } }, [20] = { [FISH1] = { q = 10, c = 9, f = 1799600000, l = 1800010000 } },
+      [0] = { [FISH1] = { q = 2, c = 2, f = 1799700000, l = 1799900000 } } },
+    ctz = { [10] = { [CLAM] = { caught = 5, opened = 4, failed = 0, got = { [PEARL] = 1, [CLAMMEAT] = 4 } } } } },
 }
 
 ---------------------------------------------------------------------------
@@ -101,9 +106,18 @@ do
   local col = J.Collection()
   Check(col.total == 3 and col.species[1].id == FISH1 and col.species[1].c == 36, "collection: species with times caught")
   Check(col.species[1].first == 1799000000 and col.species[1].last == 1800050000, "first and last catch as recorded")
-  local seen = col.species[1].zones
-  Check(#seen == 2 and seen[1] == "Dustwallow Marsh" or seen[1] == "Stranglethorn Vale", "zones from the sessions still kept")
-  Check(col.species[3].zones[1] == nil or #col.species[3].zones == 0, "a species no kept session has: no invented zone")
+  local w = col.species[1].where
+  Check(#w == 3 and w[1].zone == 10 and w[1].q == 25 and w[2].zone == 20 and w[2].q == 10 and w[3].unknown and w[3].q == 2,
+    "the trout: its confirmed zones by quantity, then the unreadable zone last")
+  Check(w[1].name == "Stranglethorn Vale" and w[1].c == 22 and w[1].first == 1799500000 and w[1].last == 1800050000, "with name, catches, first and latest there")
+  Check(col.species[1].located == 35 and col.species[1].unknown == 2 and col.species[1].earlier == 3, "35 placed, 2 unreadable, 3 earlier (40 in all)")
+  Check(#col.species[2].where == 0 and col.species[2].earlier == 30 and col.species[2].located == 0, "a species caught only before location recording has no zones, and all of it is 'earlier'")
+  Check(col.since == nil or type(col.since) == "number", "and when recording began is available")
+  local loc10 = J.Location(10)
+  Check(loc10.row.kinds == 1 and loc10.row.top == FISH1 and loc10.species[1].q == 25, "a zone: the kinds caught there, most first")
+  Check(loc10.coverage.located == 25 and loc10.coverage.earlier == 54 - 25 and loc10.coverage.items == 54, "and how much of its items that breakdown covers (the rest is earlier)")
+  Check(#loc10.sessions == 1 and loc10.sessions[1].id == 1, "and the kept sessions that fished there")
+  Check(J.Location(999) == nil, "an unknown zone has no detail")
   -- sorting
   local list = J.Collection().species
   J.Sort(list, "name", function(id) return NAMES[id][1] end)
@@ -212,7 +226,7 @@ do
   UI.State.gridPage = 3; UI.Refresh()
   Check(UI.State.gridPage == 3, "page three (50 kinds + the hint tile over 21 a page)")
   UI.State.gridPage = 9; UI.Refresh()
-  Check(UI.State.gridPage == 3, "never past the last page")
+  Check(UI.State.gridPage == 4, "never past the last page (51 tiles over 14 a page)")
   UI.State.gridPage = 1; UI.State.species = nil; UI.Refresh()
   Check(UI.State.species == 2001, "the most caught kind is chosen first")
   -- sort button cycles
@@ -314,7 +328,7 @@ do
   local ok, d = pcall(function() return UI.Frame() end)
   local text = Words(W)
   Check(text:find("not recorded", 1, true), "the page says 'not recorded' rather than inventing a date")
-  Check(text:find("only kept for your recent sessions", 1, true), "and where it was caught is only kept for recent sessions")
+  Check(text:find("Caught before locations were recorded", 1, true) and text:find("wasn't recorded before", 1, true), "and says its location was never recorded, rather than guessing one")
   Check(J.Retention().older == 2, "two sessions begun, none kept: older 2")
   UI.Show("sessions")
   Check(#W.faults == 0, "no errors: " .. table.concat(W.faults, "|"))
@@ -333,7 +347,7 @@ do
   Check(UI.SummaryShown(), "ending a session with a catch offers its summary")
   local sum = UI.SummaryFrame()
   local text = Words(W)
-  Check(text:find("1 total catch", 1, true) and text:find("catch rate", 1, true), "the summary's footer: total catches and catch rate")
+  Check(text:find("Catch rate", 1, true) and text:find("Most caught", 1, true) and text:find("Open Fishing Journal", 1, true), "the summary: catch rate, the most caught fish, and the way into the Journal")
   local d = J.Summary(F.API.Sessions(1)[1].id)
   Check(d and d.headline.catches == 1 and #d.species == 1, "its model: headline and species")
   Check(#W.faults == 0, "no errors: " .. table.concat(W.faults, "|"))

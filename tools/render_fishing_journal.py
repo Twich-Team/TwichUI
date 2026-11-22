@@ -24,10 +24,14 @@ import render_fishing_hud as hud  # noqa: E402
 
 ROOT = hud.ROOT
 PAGES = ["overview", "sessions", "collections", "locations", "treasures", "summary", "empty"]
+# A capture is a page, optionally with something chosen: (file name, page, what to select, a zone to point out)
+SCENES = [("overview", "overview", "", ""), ("sessions", "sessions", "", ""), ("collections", "collections", "6303", "1434"),
+          ("locations", "locations", "1434", ""), ("treasures", "treasures", "", ""), ("summary", "summary", "", ""), ("empty", "empty", "", ""),
+          ("collections-longname", "collections", "24001", ""), ("locations-unknown", "locations", "0", "")]
 
 
-def capture(page, path, select=""):
-    cmd = ["lua5.1", "-e", 'require("bit"); ROOT="../!!!TwichUI/"; REPO="../"; TESTS="./"', "journal_capture.lua", path, page, select]
+def capture(page, path, select="", zone=""):
+    cmd = ["lua5.1", "-e", 'require("bit"); ROOT="../!!!TwichUI/"; REPO="../"; TESTS="./"', "journal_capture.lua", path, page, select, zone]
     res = subprocess.run(cmd, cwd=os.path.join(ROOT, "tests"), capture_output=True, text=True)
     if res.returncode != 0:
         sys.stderr.write(res.stdout + res.stderr)
@@ -39,20 +43,23 @@ def capture(page, path, select=""):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.join(ROOT, "test-output", "journal-captures"))
-    ap.add_argument("--pages", default=",".join(PAGES))
+    ap.add_argument("--pages", default=",".join(n for n, _, _, _ in SCENES))
     ap.add_argument("--scale", type=int, default=2)
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
-    for page in args.pages.split(","):
-        data = capture(page, os.path.join(args.out, page + ".json"))
+    want = args.pages.split(",")
+    for name, page, select, zone in SCENES:
+        if name not in want and page not in want:
+            continue
+        data = capture(page, os.path.join(args.out, name + ".json"), select, zone)
         img = hud.render(data, "dark", args.scale).convert("RGB")
         s = args.scale
         # the window (780 x 540 at the screen's middle, the summary 420 x 500 above it) with a margin
-        box = (230, 100, 1136, 668) if page != "summary" else (440, 40, 926, 640)
+        box = (230, 100, 1136, 668) if page != "summary" else (430, 20, 936, 660)
         img = img.crop((box[0] * s, box[1] * s, box[2] * s, box[3] * s))
-        path = os.path.join(args.out, "journal-%s.png" % page)
+        path = os.path.join(args.out, "journal-%s.png" % name)
         img.save(path, optimize=True)
-        print("%s: %d regions, wrote %s" % (page, len(data["regions"]), path))
+        print("%s: %d regions, wrote %s" % (name, len(data["regions"]), path))
 
 
 if __name__ == "__main__":

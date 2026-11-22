@@ -18,6 +18,12 @@
 --   containers[itemID] = { caught, opened, failed, got = { [itemID] = quantity } }  (containers caught directly)
 --   contents[itemID]   = quantity taken out of fishing containers (never counted in items or species)
 --   zones[mapID]       = { casts, catches, items, line }; the zone's name is kept once per character in zoneNames
+--   spz[mapID][itemID] = { q, c, f, l }  where each species was caught (direct fishing loot only): the zone is read when
+--                        the fishing loot window opens (Loot.lua passes it down), not when an item reaches the bags, so a
+--                        catch is attributed to where the line was, a session may span zones, and a zone that could not be
+--                        read is mapID 0, never a guess
+--   ctz[mapID][containerID] = { caught, opened, failed?, got = { [itemID] = q } }  containers by the zone they were CAUGHT in;
+--                        what one held stays with that zone however far away or late it is opened
 
 local R = TwichUI
 local F = R.Fishing
@@ -44,6 +50,51 @@ function Ses.Zone()
     local c = S.Char()
     if c and type(name) == "string" and name ~= "" and c.zoneNames[id] == nil then c.zoneNames[id] = name:sub(1, 64) end
     return id
+end
+
+-- A species caught in a zone, on one record: bounded (LIMITS.zoneSpecies new pairs per record), constant work.
+local function SpeciesZone(rec, zone, id, q, now)
+    if type(rec.spz) ~= "table" then rec.spz = {} end      -- a session kept from before schema 2 has none, and is left alone otherwise
+    local zt = rec.spz[zone]
+    if not zt then zt = {}; rec.spz[zone] = zt end
+    local e = zt[id]
+    if not e then
+        if (rec.spn or 0) >= F.LIMITS.zoneSpecies then
+            -- full: the species' quantity (already in rec.species) is kept as overflow, one number per species, so what has no
+            -- zone detail is counted instead of silently reading as "earlier" or as complete
+            if next(zt) == nil then rec.spz[zone] = nil end
+            if type(rec.spo) ~= "table" then rec.spo = {} end
+            rec.spo[id] = (rec.spo[id] or 0) + q
+            F.Note("zone-species-full", "a new species-in-a-zone entry was not recorded")
+            return
+        end
+        e = { q = 0, c = 0, f = now }
+        zt[id] = e
+        rec.spn = (rec.spn or 0) + 1
+    end
+    e.q, e.c, e.l = e.q + q, e.c + 1, now
+end
+
+-- The container's entry for a zone, or nil when the record's container-by-zone entries are full (the event is then counted in
+-- rec.ctl, "events with no zone detail"; the container totals themselves are never affected).
+local function ContainerZone(rec, zone, id)
+    if type(rec.ctz) ~= "table" then rec.ctz = {} end
+    local zt = rec.ctz[zone]
+    if not zt then zt = {}; rec.ctz[zone] = zt end
+    local e = zt[id]
+    if not e then
+        if (rec.ctn or 0) >= F.LIMITS.zoneContainers then
+            if next(zt) == nil then rec.ctz[zone] = nil end
+            rec.ctl = (rec.ctl or 0) + 1
+            F.Note("zone-container-full", "a container-in-a-zone entry was not recorded")
+            return nil
+        end
+        e = { caught = 0, opened = 0, failed = 0, got = {} }
+        zt[id] = e
+        rec.ctn = (rec.ctn or 0) + 1
+    end
+    if type(e.got) ~= "table" then e.got = {} end
+    return e
 end
 
 local function Zone(t, id)
@@ -125,13 +176,14 @@ function Ses.Line(seconds)
     Add("line", seconds, Ses.Zone())
 end
 
--- A successful fishing interaction. Returns the session id the catch belongs to.
-function Ses.Catch()
+-- A successful fishing interaction, at `zone` (the map the line was in when the loot window opened; the current one when not
+-- given). Returns the session id the catch belongs to.
+function Ses.Catch(zone)
     local s = Ses.Ensure("catch")
     if not s then return nil end
     local now = F.Now()
     Ses.Touch()
-    Add("catches", 1, Ses.Zone())
+    Add("catches", 1, F.Count(zone) or Ses.Zone())
     local _, t = Both()
     for _, rec in ipairs({ s, t }) do
         rec.first = rec.first or now
@@ -173,14 +225,16 @@ local function ContainerEntry(rec, id)
     return e
 end
 
--- An item taken from a fishing loot window (direct catch).
-function Ses.Item(sid, itemID, q)
+-- An item taken from a fishing loot window (direct catch), caught at `zone` (0: could not be read; nil: the current zone, which
+-- only a caller with no capture has to rely on).
+function Ses.Item(sid, itemID, q, zone)
     itemID, q = F.Count(itemID), F.Count(q)
     if not (itemID and q and q > 0) then return end
     local now = F.Now()
-    local zone = Ses.Zone()
+    zone = F.Count(zone) or Ses.Zone()
     for _, rec in ipairs(Records(sid)) do
         Species(rec, itemID, q, now)
+        SpeciesZone(rec, zone, itemID, q, now)
         rec.items = rec.items + q
         local z = Zone(rec, zone)
         z.items = z.items + q
@@ -194,35 +248,48 @@ function Ses.Item(sid, itemID, q)
 end
 
 -- A container caught directly (it is also an Item); opened/failed: one opening of it; got: what one held.
-function Ses.ContainerCaught(sid, itemID, q)
+-- `zone` on these four is where the container was CAUGHT (the lot's zone); nil means that is not known (a lot from before schema
+-- 2), and then only the zone-less records are updated.
+function Ses.ContainerCaught(sid, itemID, q, zone)
+    zone = F.Count(zone)
     for _, rec in ipairs(Records(sid)) do
         local e = ContainerEntry(rec, itemID)
         e.caught = e.caught + q
+        if zone then local z = ContainerZone(rec, zone, itemID); if z then z.caught = z.caught + q end end
     end
 end
 
-function Ses.ContainerOpened(sid, itemID)
+function Ses.ContainerOpened(sid, itemID, zone)
+    zone = F.Count(zone)
     for _, rec in ipairs(Records(sid)) do
         local e = ContainerEntry(rec, itemID)
         e.opened = e.opened + 1
+        if zone then local z = ContainerZone(rec, zone, itemID); if z then z.opened = z.opened + 1 end end
     end
 end
 
-function Ses.ContainerFailed(sid, itemID)
+function Ses.ContainerFailed(sid, itemID, zone)
+    zone = F.Count(zone)
     for _, rec in ipairs(Records(sid)) do
         local e = ContainerEntry(rec, itemID)
         e.failed = e.failed + 1
+        if zone then local z = ContainerZone(rec, zone, itemID); if z then z.failed = z.failed + 1 end end
     end
 end
 
 -- An item taken out of a fishing container caught in session sid.
-function Ses.Content(sid, containerID, itemID, q)
+function Ses.Content(sid, containerID, itemID, q, zone)
     itemID, q = F.Count(itemID), F.Count(q)
     if not (itemID and q and q > 0 and containerID) then return end
+    zone = F.Count(zone)
     for _, rec in ipairs(Records(sid)) do
         rec.contents[itemID] = (rec.contents[itemID] or 0) + q
         local e = ContainerEntry(rec, containerID)
         e.got[itemID] = (e.got[itemID] or 0) + q
+        if zone then
+            local z = ContainerZone(rec, zone, containerID)
+            if z then z.got[itemID] = (z.got[itemID] or 0) + q end
+        end
     end
     F.Emit("ITEM", itemID, q, "content", sid, containerID)
 end

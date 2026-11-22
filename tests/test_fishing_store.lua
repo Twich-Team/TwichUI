@@ -15,7 +15,7 @@ local KEY = "Rich - Forever"
 do
   local c, W, F = Load(nil)
   local db = c.TwichUIFishingDB
-  Check(db.schema == 1 and type(db.chars) == "table" and type(db.config) == "table", "a new file gets schema 1")
+  Check(db.schema == F.SCHEMA and type(db.chars) == "table" and type(db.config) == "table", "a new file gets the current schema")
   Check(F.Store.Get("containers.mode") == "queue" and F.Store.Get("lure.auto") == true and F.Store.Get("gear.pole") == false, "defaults")
   Check(F.Store.Get("enabled") == true, "on once loaded (loading is the player's choice)")
   F.Store.Set("lure.warn", 90)
@@ -42,7 +42,7 @@ do
   }
   local c, W, F = Load(db)
   local ch = c.TwichUIFishingDB.chars[KEY]
-  Check(c.TwichUIFishingDB.schema == 1, "an unversioned file is given schema 1")
+  Check(c.TwichUIFishingDB.schema == F.SCHEMA, "an unversioned file is given the current schema")
   Check(F.Store.Get("lure.auto") == true and F.Store.Get("lure.preferred") == 6530, "a damaged value is replaced; the good one beside it is kept")
   Check(F.Store.Get("containers.mode") == "queue" and F.Store.Get("session.idleMinutes") == 25, "a damaged group is rebuilt; other groups untouched")
   Check(ch.totals.casts == 5 and ch.totals.catches == 0 and ch.totals.species[6291].q == 4 and type(ch.totals.zones) == "table", "totals repaired field by field")

@@ -142,7 +142,7 @@ call the item openable (`hasLoot`), which is then learned. It joins the queue as
 
 ## Saved data
 
-`TwichUIFishingDB` (account-wide; `schema = 1`; see `docs/persistence.md`):
+`TwichUIFishingDB` (account-wide; `schema = 2`; see `docs/persistence.md`):
 
 - `config` holds preferences (the defaults are in `Store.lua` `S.DEFAULTS`; each leaf has a checker in `S.CHECK`).
 - `client.saved` holds the targeting values to put back. `capability.autoOpen` records `"worked"` or `"blocked"`.
@@ -153,10 +153,32 @@ call the item openable (`hasLoot`), which is then learned. It joins the queue as
 - A session summary or the totals hold `casts, catches, items, failed, interrupted, missed, line, seconds, first, last`, plus
   `species[id] = { q, c, f, l }`, `containers[id] = { caught, opened, failed, got[id] = q }`, `contents[id] = q` and
   `zones[mapID] = { casts, catches, items, line }`. A summary also has `id, start, last, stop, ended, zone, reason`.
+- **Where things were caught (schema 2).** Each summary and the totals also hold `spz[mapID][itemID] = { q, c, f, l }`
+  (quantity, times caught, first and last catch there, direct catches only), `ctz[mapID][containerID] = { caught, opened, failed,
+  got[itemID] = q }` (containers by the zone they were *caught* in) and `spn` (how many `spz` entries: capped at 4000 for the
+  lifetime totals, so the file stays small however much is fished; an entry is per species per zone, never per catch). Map 0 is
+  a catch whose zone the game did not give. The character also has `locSince` (when recording began) and each queued lot has
+  `zone` (where it was caught; nil on a lot saved before schema 2).
 
 Items are stored by id only, and no prices are stored. Lifetime totals are never trimmed; only summaries are. Migrations
-(`S.MIGRATIONS`) are ordered and repeatable. An unversioned table becomes schema 1. A newer schema is held untouched:
+(`S.MIGRATIONS`) are ordered and repeatable. An unversioned table becomes schema 1, then 2. A newer schema is held untouched:
 nothing is recorded or changed for the session, and the key still casts.
+
+**Schema 2 migration.** It changes nothing that exists: every lifetime total, session, zone total, container record, queued lot,
+gear snapshot and setting is kept as it was. It adds the empty location records (when each record is next normalised) and
+stamps `locSince`. It invents nothing: a species caught before schema 2 has a quantity and the zones fished in, but nothing says it
+was caught *there*, so it gets no species-by-zone entry. The Journal separates, for each species, what has a confirmed zone, what
+was caught where the zone could not be read (map 0) and the rest ("earlier"), which is the difference between the species'
+quantity and the placed quantity. A queued container from before schema 2 stays without a zone, and what it held is
+recorded as before but never attributed to the zone it happens to be opened in. A damaged location entry is dropped on its
+own at load; the rest is kept. An older TwichUI_Fishing reading a schema 2 file holds it untouched (the newer-schema rule).
+
+**How the zone is attributed.** The zone is read once, when the fishing loot window opens (`IsFishingLoot()`, `Loot.lua`
+`Begin`), and carried on that capture: every item of the window is attributed to it however late its slot is cleared or its loot
+line confirms it, so a catch is where the line was, not where the player is when the item reaches the bags. A zone the game does
+not give is map 0, never a guess. A container goes into the queue with that zone; its lot is saved, so a reload keeps it; opening
+it (by the key, automatically or by hand, in any zone, in any later session) credits what it held to the zone it was caught in. A
+lot has one zone: clams from another zone make another lot. Duplicate loot events are ignored (one window is one capture).
 
 ## Settings (Stage 1: `/tui fish help`)
 
@@ -191,6 +213,9 @@ Diagnostics has the scopes `fishing.load`, `fishing.decide`, `fishing.loot` and 
 | `test_fishing_gear_lure.lua` | Lure choice, preference and alternative, application and learning, expiry during a line, early renewal, unknown enchants; snapshot and restore, full bags, interrupted swap, blocked restoration then key-press macro, missing items, the player's own changes, outfits, reload / disconnect / combat recovery |
 | `test_fishing_loot.lua` | No catch from bags or other loot, multi-item catches, duplicate events, auto-loot with loot-line confirmation, left items, money, delayed loot after the line, duration, history, idle end, retention, zones, API copies |
 | `test_fishing_containers.lua` | Queueing with provenance, key and open-key opening, contents attribution, several containers, learning, full bags, failed and locked opens, partial opens, hand-opened matching, unrelated containers, reconciliation, reload credit, provenance without double counting, automatic mode worked / blocked / off |
+| `test_fishing_zones.lua` | Where fish were caught: one species in one and several zones, several species in one zone, sessions spanning zones, the zone read at the window (items taken after the player moved, loot confirmed later by the loot line), duplicate events, auto-loot, an unreadable zone (0), containers caught in one zone and opened elsewhere / later / after the session ended / after a reload, an older lot with no zone, schema 1 to 2 migration (nothing lost, nothing invented, repeatable), damaged location records, bounded growth |
+| `test_fishing_location_limits.lua` | Approaching and exceeding the location bounds (species and containers), exact totals, overflow counted and shown by the Journal, sessions bounded too, reload, damaged overflow fields, a file already full before overflow was counted, migration from schema 1 then filling, very large quantities, and recording immediate with the Journal open (one redraw per burst) |
+| `test_fishing_journal_zones.lua` | The Journal's place lists and the Collections to Locations navigation, old and new records together, multi-zone sessions, empty and interrupted sessions, the summary card, the window's remembered position (drag, reopen, reload, size, Reset, off-screen recovery), extension points, and a large history (measurements printed) |
 | `test_fishing_store.lua` | New file, unversioned and damaged data repaired field by field, repeatable load, newer schema held, plain saved values, no prices |
 | `test_fishing_present.lua` | Stage 2: Fishing Mode's lifecycle, presentations, camera, fading policy, combat, reload and logout recovery, errors, missing client functions, controller keys, Stage 1 underneath, preview |
 | `test_fishing_hud.lua` | Stage 2: the cast bar, catch list and notifications, missing art and fonts, late item names, moving and scaling |
@@ -544,13 +569,14 @@ API, or shows money, and a test greps its files for that.
 | Page | Shows | From |
 |---|---|---|
 | Overview | fish caught, casts, time fishing, catch rate; the three favourite catches; the three newest sessions; what history is kept | `API.Totals`, `API.Session`, `API.Sessions` |
-| Sessions | every kept session (the one in progress first), newest first, with a detail: zone, start, length and how it ended; casts, catches, items, catch rate, line time, missed lines; its catches by species; containers opened | `API.Sessions`, `API.SessionByID`, `API.Treasures(id)` |
-| Collections | every kind of fish caught, with its icon, quantity, times caught, first and latest catch; sort by most caught, latest, first caught or name; 21 to a page | `API.Totals().species` (containers excluded) |
-| Locations | each zone: casts, catches, catch rate, time on the line, recent sessions begun there; zone 0 is "Unknown zone" | `API.Totals().zones`, `API.ZoneName` |
+| Sessions | every kept session (the one in progress first, its length moving), newest first, named for the zone it fished most with "+N" when it spanned more; the detail: start to end and length, how it ended, a breakdown of the zones it fished with each one's catches, casts, catches, items (kept distinct from catches), catch rate, line time, missed lines, its catches by species, containers opened (their contents are said not to be catches), and where a session's records have no locations | `API.Sessions`, `API.SessionByID`, `API.Treasures(id)` |
+| Collections | every kind of fish caught, with its icon, quantity, times caught, first and latest catch; sort by most caught, latest, first caught or name; 14 to a page. The chosen kind lists **where it was caught**: each confirmed zone with its quantity, catches, first and latest there (a scrolling list), then "Zone not readable" and "Earlier catches" (before locations were recorded) kept apart. A zone row opens that zone in Locations | `API.Totals().species`, `API.Zones` (containers excluded) |
+| Locations | each zone: casts, catches, catch rate, time on the line (exact lifetime totals), kinds confirmed there, the kept sessions that fished there; the chosen zone lists its fish with quantities (a fish opens in Collections, pointing back at the zone), says how much of its items that breakdown covers, and lists recent sessions (each opens in Sessions). Zone 0 is "Unknown zone" | `API.Totals().zones`, `API.Zones`, `API.ZoneName` |
 | Treasures | containers caught, opened, waiting and failed; what each is confirmed to have held; items found | `API.Treasures("lifetime")` (the queue and the per-container `got`) |
 
 **Session summary.** When a session you stopped (`/tui fish stop`) or left idle ends with something caught, a **Session Summary**
-card shows its zone, length, catches by species and its catch rate, with **Open Journal**. It waits out combat, is off with
+card shows its place (or places: "first +N" and a list), length, catches, kinds of fish, catch rate, the fish by quantity with the
+most caught marked, the treasures that came out of its containers, and **Open Fishing Journal**. It waits out combat, is off with
 `/tui fish journal summary off` (or the settings switch), and is never shown for a session with no catch.
 
 **How it is built.** `Journal.lua` answers each page as plain tables from `R.Fishing.API` only (no saved variable is read or
@@ -564,10 +590,10 @@ contents), `API.SessionByID(id)` and `API.Retention()`.
 
 - **Per-session records are kept for the newest `session.keep` sessions only** (default 100, 10 to 500). Older sessions exist
   only inside the lifetime totals; the Journal says how many ("N earlier sessions are only in the totals").
-- **Which fish came from which zone is not recorded.** Zone figures (casts, catches, items, line time) are exact; for a
-  species the Collections detail lists the zones of the *kept* sessions it was caught in, labelled "in your recent sessions".
-  A session's own zone is where it began; a session that moved between zones still counts each cast in the zone it happened
-  in (the Locations totals), but shows one zone.
+- **Catches from before schema 2 have no species-by-zone record.** Their zone totals (casts, catches, items, line time) are exact,
+  and the species' lifetime quantities are exact, but nothing says which species came from which zone, so the Journal shows
+  them as "Earlier catches" and never places them. Catches from schema 2 on are placed by the zone read at the loot window.
+  A session from before schema 2 has no breakdown of its fish by zone and says so.
 - **There is no catalogue of fish**, so no "N of M discovered": only what has been caught is listed, and one "?" tile ends the
   list as a reminder that more exist.
 - **First and latest catch dates** come from the records' own `first` and `last` and are "not recorded" when absent.
@@ -576,6 +602,45 @@ contents), `API.SessionByID(id)` and `API.Retention()`.
 - **Containers opened before the Journal's records, or without their contents being seen, show counts only.** Contents are
   listed only when seen coming out of a container.
 - Item names arrive from the game a moment after an item is first seen; until then a row says "Item <id>" and fills in by itself.
+
+**The window's place.** Drag it by its title bar: where it is dropped is saved (`journal.x` / `journal.y`, the window centre's
+offset from the screen's, in UIParent units, whatever its scale) and used the next time, after a reload too; `journal.scale`
+(Fishing settings: Journal size, 60 to 140%) keeps its centre. The saved offset is only clamped for display: at least 140 units
+across and the title bar (90 units) always stay on the screen, so a smaller screen or a larger window never loses the player's place
+or leaves the window out of reach, and a bigger screen later restores it. **Reset Journal position** (Fishing settings) puts it
+back in the middle. The window is not a protected frame: it opens and moves in combat. The summary card opens in the middle.
+
+**Cost.** Nothing runs while no Journal window is open. A catch touches one aggregate (not a log): 0.4 to 0.5 ms with or without
+a Journal open (the redraw is on a 0.3 s timer, once per burst of events, and never part of recording). Two changes keep the
+window cheap over a large history: `API.Totals()` no longer copies the location tables (they have their own calls, so it is
+unchanged for older callers), and the Journal asks the interface for digests (`SessionDigest`, `ZoneDigest`, `ItemZones`,
+`ZoneSpecies`) instead of copying records: a kind's places are worked out only when it is chosen, and finished sessions are
+digested again only when a session starts or ends or a container changes. The displayed results are identical. Measured with
+`tests/bench_fishing_journal.lua` (500 sessions, 60 zones, 90 kinds, 3,600 species-in-zone entries; simulated client, Lua 5.1 on
+this machine, so only the ratio carries over to the game):
+
+| | before | after |
+|---|---|---|
+| Open the Journal (Overview) | 151 ms | 26 ms |
+| Sessions / Locations / Treasures page, first time | 13 / 25 / 12 ms | 2 / 2 / 0 ms |
+| All five pages again | 41 ms | 4 ms |
+| Rebuild Locations + Collection after a catch | 88 ms | 2 ms |
+| Locations / Overview redraw after a catch | 58 / 65 ms | 2 / 3 ms |
+| Three navigations | 15 ms | 5 ms |
+| Record a catch, Journal closed / open | 0.35 / 0.37 ms | 0.47 / 0.47 ms |
+| The debounced redraw that follows a catch | 30 ms | 6 ms |
+
+**When the location records are full.** Per record (the lifetime totals and each session) a species-in-a-zone entry is made for
+each new pair until `LIMITS.zoneSpecies` (4000); a container-in-a-zone entry until `LIMITS.zoneContainers` (800). Beyond that
+nothing is lost from the totals and nothing reads as complete: a species caught in a new pair has its quantity added to
+`spo[itemID]` (one number per species, so growth is bounded by the number of kinds), and a container event with no entry adds 1 to
+`ctl`. A pair that already has an entry keeps counting exactly. The Journal then shows, for a kind, *confirmed zones*, *zone not
+readable*, **Beyond the storage limit** (the overflow) and *Earlier catches* (the remainder), which always add up to the kind's
+quantity; Locations says a zone's missing breakdown is "past the storage limit" when the list is full. A file that was already
+at the bound when it loaded, with no overflow count (written before overflow was counted), is flagged (`spx`): its unplaced fish
+are shown as "before locations were recorded, or past the limit". `API.ZoneLimits()` reports `entries`, `max`, `full`,
+`overflowTotal`, `unknownOverflow`, `containerEntries`, `containerMax` and `containersLost`. The new fields are optional and
+normalised at load (a damaged one is dropped alone), so they need no schema bump.
 
 **Artwork.** 15 new textures (`j-*`, `glyph-hook|clam|treasure`; `tools/make_fishing_art.py`) from the pack's `journal_frame`,
 `recessed_frame`, `chestnut_frame`, rows, nav and compact buttons, close button, unknown tile and fish watermark. The window frame

@@ -243,8 +243,14 @@ def draw_wrapped(canvas, r, f, text, base, x, y, w, h, scale):
             cur = wd
     if cur:
         lines.append(cur)
-    asc, desc = f.getmetrics()
-    lh = asc + desc
+    lh = int(round(f.size * 1.2))            # the game's line height for a font string is about 1.2 x its size
+    most = max(1, int(h / lh + 0.2))          # a box only as tall as N lines shows N (the game's SetMaxLines / its height)
+    if len(lines) > most:
+        lines = lines[:most]
+        last = lines[-1]
+        while last and f.getlength(last + "...") > w:
+            last = last[:-1]
+        lines[-1] = last.rstrip() + "..."
     top = y if r.get("justifyV") == "TOP" or r.get("justifyV") is None else y + (h - lh * len(lines)) / 2
     alpha = r["alpha"]
     lay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
