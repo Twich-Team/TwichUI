@@ -27,8 +27,10 @@ local MEDIA = R.PATH .. [[media\loot\]]
 local WHITE = [[Interface\Buttons\WHITE8x8]]
 local FONT_TITLE = R.PATH .. [[media\fonts\Cinzel-SemiBold.ttf]]
 local W_CARD = 384
-C.MINI_HEIGHT = 90
+C.MINI_HEIGHT = 72
 local PAD = 16
+local MINI = { itemX = 50, nameRight = 310, actionY = 35, actionHeight = 26, timerX = 261, timerY = 55 }
+local MINI_TIMER_WIDTH = W_CARD - PAD - MINI.timerX
 local ROW_H = 16
 
 local COL = {
@@ -203,9 +205,9 @@ local function Button(parent, icon, label)
         self.icon:SetSize(self.compact and 16 or 26, self.compact and 16 or 26)
         self.icon:ClearAllPoints(); self.text:ClearAllPoints()
         if self.compact then
-            self.icon:SetPoint("CENTER", self, "CENTER", 0, 6 + press)
-            self.text:SetWidth(self:GetWidth() - 4); self.text:SetJustifyH("CENTER")
-            self.text:SetPoint("BOTTOM", self, "BOTTOM", 0, 3 + press)
+            self.icon:SetPoint("LEFT", self, "LEFT", 6, press)
+            self.text:SetWidth(self:GetWidth() - 26); self.text:SetJustifyH("LEFT")
+            self.text:SetPoint("LEFT", self.icon, "RIGHT", 4, press)
         else
             self.text:SetWidth(0); self.text:SetJustifyH("LEFT")
             local total = 26 + 8 + (self.text:GetStringWidth() or 40)
@@ -217,7 +219,7 @@ local function Button(parent, icon, label)
         local st = self.state
         local on, hot, press, off = st == "selected", self.hot and st ~= "disabled", self.press and st ~= "disabled", st == "disabled" or st == "unavailable"
         local skin = off and "button-off" or (on and "primary") or (press and "button-down") or (hot and "button-hot") or "button"
-        self.art:SetSkin(skin)
+        self.art:SetSkin(self.compact and skin == "button" and "chip" or skin)
         self.icon:SetDesaturated(off)
         self.icon:SetAlpha(off and 0.5 or 1)
         local c = off and COL.quiet or COL.ivory
@@ -567,9 +569,9 @@ function C.PaintTimer(card, view)
     local inner = W_CARD - PAD * 2
     local scheduled = view.state == "scheduled" and view.auto
     if card.compact then
-        Timer(card, view.remaining, view.duration, 16, W_CARD - 32, 78)
-        card.time:ClearAllPoints(); card.time:SetPoint("TOPRIGHT", body, "TOPRIGHT", -16, -49)
-        card.time:SetSize(40, 16); card.time:SetJustifyH("RIGHT"); TextSize(card.time, 11)
+        Timer(card, view.remaining, view.duration, MINI.timerX, MINI_TIMER_WIDTH, MINI.timerY)
+        card.time:ClearAllPoints(); card.time:SetPoint("TOPLEFT", body, "TOPLEFT", MINI.timerX, -37)
+        card.time:SetSize(MINI_TIMER_WIDTH, 16); card.time:SetJustifyH("CENTER"); TextSize(card.time, 12)
         card.time:SetText(Seconds(view.remaining)); card.time:Show()
         if scheduled then card.sub:SetText("Auto " .. (ChoiceLabel[view.auto.action] or "") .. " · " .. Seconds(view.auto.remaining)) end
         return
@@ -713,17 +715,23 @@ C.PillTips = {
 
 local function CompactLayout(card, view)
     local body = card.body
-    card.iconFrame:ClearAllPoints(); card.iconFrame:SetPoint("TOPLEFT", 12, -8); card.iconFrame:SetSize(32, 32)
+    card.iconFrame:ClearAllPoints(); card.iconFrame:SetPoint("TOPLEFT", 12, -10); card.iconFrame:SetSize(30, 30)
     card.iconHit:ClearAllPoints(); card.iconHit:SetPoint("TOPLEFT", card.iconFrame, "TOPLEFT", 0, 0)
-    card.iconHit:SetPoint("BOTTOMRIGHT", body, "TOPLEFT", 314, -40)
-    card.name:ClearAllPoints(); card.name:SetPoint("TOPLEFT", 52, -7); card.name:SetSize(258, 18); TextSize(card.name, 14)
+    local showNote = view.needsConfirm or view.autoNote or view.state == "scheduled"
+    local nameRight = view.upgrade and LR.Get("showUpgrade") and MINI.nameRight or 341
+    card.iconHit:SetPoint("BOTTOMRIGHT", body, "TOPLEFT", nameRight, -34)
+    card.name:ClearAllPoints()
+    card.name:SetPoint("TOPLEFT", MINI.itemX, showNote and -5 or -11)
+    card.name:SetSize(nameRight - MINI.itemX, 18)
+    TextSize(card.name, 15)
     C.FitItemName(card.name, view.name or "Loot")
-    card.sub:ClearAllPoints(); card.sub:SetPoint("TOPLEFT", 52, -25); card.sub:SetSize(250, 16); TextSize(card.sub, 11)
-    card.sub:SetText(view.needsConfirm and "Confirm in game" or view.autoNote and "Manual choice" or Ru.QualityName(view.quality))
+    card.sub:ClearAllPoints(); card.sub:SetPoint("TOPLEFT", MINI.itemX, -21); card.sub:SetSize(250, 13); TextSize(card.sub, 11)
+    card.sub:SetText(view.needsConfirm and "Confirm in game" or "Manual choice")
+    card.sub:SetShown(showNote and true or false)
     Hide(card.line3, card.line3Icon, card.line3Hit, card.note, card.pillBottom, card.banner, card.divider, card.close)
-    if view.needsConfirm or view.autoNote or view.state == "scheduled" then
-        card.line3Hit:ClearAllPoints(); card.line3Hit:SetPoint("TOPLEFT", body, "TOPLEFT", 52, -23)
-        card.line3Hit:SetSize(250, 18); card.line3Hit:Show()
+    if showNote then
+        card.line3Hit:ClearAllPoints(); card.line3Hit:SetPoint("TOPLEFT", body, "TOPLEFT", MINI.itemX, -21)
+        card.line3Hit:SetSize(250, 13); card.line3Hit:Show()
     end
     for _, row in ipairs(card.rows) do row.frame:Hide() end
     card.pillTop:Hide()
@@ -736,14 +744,14 @@ local function CompactLayout(card, view)
         local scheduled = view.state == "scheduled" and view.auto
         local keys = scheduled and { "now", "stop" } or { "need", "greed", "pass" }
         for i, key in ipairs(keys) do
-            local b = card.buttons[key]; b.compact = true; b:SetHeight(34)
-            local width = scheduled and 100 or 68
-            b:SetWidth(width); Place(b, card, 52 + (i - 1) * (width + 6), 42)
-            b:Layout()
+            local b = card.buttons[key]; b.compact = true; b:SetHeight(MINI.actionHeight)
+            local width = scheduled and 97 or 62
+            b:SetWidth(width); Place(b, card, MINI.itemX + (i - 1) * (width + 5), MINI.actionY)
+            b:Paint()
         end
     else
         Hide(card.timer, card.time)
-        Place(card.status, card, 52, 42, 234); card.status:SetHeight(28)
+        Place(card.status, card, MINI.itemX, MINI.actionY, 234); card.status:SetHeight(28)
         card.status.icon:SetSize(16, 16); TextSize(card.status.text, 11)
     end
     card:SetHeight(C.MINI_HEIGHT)
@@ -765,7 +773,13 @@ function C.Draw(card, view)
     card.name:ClearAllPoints(); card.name:SetPoint("TOPLEFT", 70, -15); card.name:SetSize(W_CARD - 70 - 60, 20); TextSize(card.name, 15)
     card.sub:ClearAllPoints(); card.sub:SetPoint("TOPLEFT", 70, -35); card.sub:SetHeight(16); TextSize(card.sub, 12); card.sub:Show()
     card.line3:Show(); card.status:SetHeight(34); card.status.icon:SetSize(24, 24); TextSize(card.status.text, 12)
-    for _, button in pairs(card.buttons) do button.compact = false; button:SetHeight(34) end
+    for _, button in pairs(card.buttons) do
+        if button.compact then
+            button.compact = false
+            button:SetHeight(34)
+            button:Paint()
+        end
+    end
     local body = card.body
     local qc, qname = Quality(view)
     card.live = view.state == "pending" or view.state == "scheduled"

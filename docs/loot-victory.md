@@ -173,8 +173,9 @@ Normal animated lifetime is now 6.15 seconds (0.10 seconds longer). No idle upda
 Header haze peaks at 0.28/0.65 and icon haze at 0.23/0.48 (Subtle/Full). The supplied
 header haze grows from 88% to 100% size during ignition; the card never scales. The radial
 copy opens above the header only in Full. The body is never flooded with light.
-The existing optional chime at 0.30 seconds coincides with the rising burst, once
-per entry, with the same cooldown and sound switches. No audio assets changed.
+The supplied stereo victory cue starts at 0.30 seconds with the rising burst.
+Rapid reveals queue their cues 1.55 seconds apart so the 1.48-second tail can
+finish. Victory Sound and the game SFX settings govern playback.
 
 Full uses three prominent supplied final-star glints, medium star/twinkle sparks
 and smaller motes, with intentionally staggered attack/decay. Some paths arc gently;
@@ -257,7 +258,7 @@ collision and no emblem/title overlap.
    font baselines, long/localized names, emblem alignment, alpha edges, icon
    border/halo, visible top-rail sweep, four/twelve visible particles, item-arrival glint
    and the softly lit static rest after 1.85 seconds. The title must stay clear of the rail; the medallion should sit deliberately on its lower divider.
-4. Hear each OGG once at the reveal, then test sound off, global SFX/all sound off,
+4. Hear the Ogg cue once at the reveal, then test sound off, global SFX/all sound off,
    rapid wins, and intensity Off/Subtle/Full. Check Normal/Short/Long durations.
 5. Hover item tooltips and modified item links. Test during combat with taint/error
    reporting enabled; no protected-action errors should appear.

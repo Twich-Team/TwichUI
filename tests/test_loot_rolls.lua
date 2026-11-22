@@ -1267,10 +1267,10 @@ do
   LR.Delete(copy)
   local id = StartRoll("item:100"); local roll = Ro.Find(id); local card = C.Card(roll.key)
   local deadline = roll.deadline
-  Check(card.compact and card.h == 90 and roll.state == "pending" and roll.choice == nil and not roll.auto,
+  Check(card.compact and card.h == 72 and roll.state == "pending" and roll.choice == nil and not roll.auto,
     "display-only rule collapses with automation off, without making a choice")
   for _, key in ipairs({ "need", "greed", "pass" }) do
-    Check(card.buttons[key].shown and card.buttons[key].w == 68 and card.buttons[key].h == 34, "Mini keeps safe labeled choice targets")
+    Check(card.buttons[key].shown and card.buttons[key].w == 62 and card.buttons[key].h == 26, "Mini keeps safe labeled choice targets")
   end
   Check(card.timer.h == 6 and card.time.shown and not card.line3.shown and not card.close.shown,
     "Mini uses a thin authoritative countdown and omits full details")
@@ -1372,7 +1372,7 @@ do
   Fire("LOOT_ITEM_ROLL_WON", "item:100", 1, 1, 87, false)
   Check(V.Count() == 1, "duplicate native winner event creates no second card")
   Step(0.25); Check(f.phase == "burst" and f.header.alpha > 0 and f.header.alpha < 1, "resolution advances into a restrained title reveal")
-  Step(0.3); Check(#sounds == 1 and sounds[1][2] == "SFX", "one reveal sound on SFX")
+  Step(0.3); Check(#sounds == 1 and sounds[1][2] == "SFX" and sounds[1][1]:find("loot_won.ogg", 1, true), "one reveal sound on SFX")
   Step(1.35)
   Check(f.phase == "static" and not f.scripts.OnUpdate and f.timer, "decorative updates stop at the static hold")
   Check(f.sweepCore.alpha == 0 and f.arrivalGlint.alpha == 0 and f.particles[1].alpha == 0, "effects end without loops")
@@ -1720,6 +1720,40 @@ do
       Check(not pf.shown and not pf.timer and not pf.scripts.OnUpdate, "Mini interruption cleans up all owned work")
     end
   end
+  Reset()
+  local calls = {}
+  c.GetCVarBool = function() return true end
+  c.PlaySoundFile = function(path, channel) calls[#calls + 1] = { path = path, channel = channel, at = NOW } end
+  LR.Set("victorySound", true)
+  local full = Ro.Find(StartRoll("item:100"))
+  local mini = Ro.Find(StartRoll("item:101"))
+  Ro.SetDisplay(mini, "collapsed")
+  Win(full.link); Win(mini.link); Win(mini.link)
+  Step(0.20)
+  Check(#calls == 0, "sound waits for the golden reveal")
+  Step(0.20)
+  Check(#calls == 1 and calls[1].channel == "SFX" and calls[1].path:find("loot_won.ogg", 1, true),
+    "the first win plays the supplied cue at reveal")
+  V.SetDisplay(V.Entries()[2], "expanded")
+  Step(1.55)
+  Check(#calls == 2 and calls[2].path == calls[1].path and calls[2].at - calls[1].at >= 1.54,
+    "rapid Expanded and Mini wins each play once with room for the full tail")
+  Reset()
+  LR.Set("victorySound", true)
+  for _, display in ipairs({"expanded", "collapsed"}) do
+    V.Preview("greed", 3, { display = display })
+    Step(0.35); Step(1.55)
+  end
+  Check(#calls == 4 and calls[4].path == calls[1].path, "both Preview activations play the same cue")
+  Step(1.60)
+  V.Preview("need", 2); Step(0.40)
+  V.Preview("need", 2); Step(0.40)
+  LR.Set("victorySound", false)
+  Step(2)
+  Check(#calls == 5, "turning Victory Sound off discards a queued preview")
+  V.Preview("need", 2); Step(0.35)
+  Check(#calls == 5, "muted preview stays silent")
+
   V.Disable(false)
   Check(V.RetainedDisplays() == 0, "disable releases retained presentation snapshots")
   LR.Set("animate", true); V.Sync()

@@ -11,7 +11,9 @@ local entries, recent, departed = {}, {}, {}
 local sequence, pool = 0, 0
 local relay, owner, original
 local preview, inFlight
-local lastSound = -100
+local SOUND_FILE = ART .. "loot_won.ogg"
+local SOUND_SPACING = 1.55 -- 1.48-second stereo cue, plus a short gap
+local lastSound, pendingSounds, soundTimer = -math.huge, 0, nil
 V.MAX_QUEUE = 32
 V.MINI_HEIGHT = 80  -- reference pixels: 66.8 UI pixels at the established card width
 V.DISPLAY_RETENTION = 60
@@ -52,17 +54,34 @@ local function Finish(entry)
     else C.Refresh() end
 end
 
--- The reveal sound accompanies the banner/flourish, once per entry.
+local function SoundEnabled()
+    return LR.Get("victorySound") and type(PlaySoundFile) == "function"
+        and (not GetCVarBool or (GetCVarBool("Sound_EnableAllSound") and GetCVarBool("Sound_EnableSFX")))
+end
+
+local function PlayNextSound()
+    soundTimer = nil
+    if not SoundEnabled() then pendingSounds = 0 end
+    if pendingSounds == 0 then return end
+    local now = GetTime()
+    local wait = lastSound + SOUND_SPACING - now
+    if wait > 0 then
+        soundTimer = C_Timer.NewTimer(wait, PlayNextSound)
+        return
+    end
+    pendingSounds = pendingSounds - 1
+    lastSound = now
+    pcall(PlaySoundFile, SOUND_FILE, "SFX")
+    if pendingSounds > 0 then soundTimer = C_Timer.NewTimer(SOUND_SPACING, PlayNextSound) end
+end
+
+-- One request per accepted reveal. A closely spaced win waits for the previous tail.
 local function Sound(entry)
     if entry.sounded then return end
     entry.sounded = true
-    local now = GetTime()
-    if not LR.Get("victorySound") or now - lastSound < 0.8 then return end
-    if GetCVarBool and (not GetCVarBool("Sound_EnableAllSound") or not GetCVarBool("Sound_EnableSFX")) then return end
-    if type(PlaySoundFile) == "function" then
-        lastSound = now
-        pcall(PlaySoundFile, ART .. (entry.choice == "greed" and "loot_win_greed.ogg" or "loot_win_victory.ogg"), "SFX")
-    end
+    if not SoundEnabled() then return end
+    pendingSounds = pendingSounds + 1
+    if not soundTimer then PlayNextSound() end
 end
 
 -- Painted bounds are measured from the supplied straight-alpha PNG/TGA exports.
@@ -284,18 +303,19 @@ local function Layout(f, compact)
     f.title:SetShown(not compact); f.miniTitle:SetShown(compact)
     for i, laurel in ipairs(f.laurels) do
         laurel:ClearAllPoints()
-        if compact then laurel:SetSize(14, 23); At(laurel, f.header, i == 1 and 17 or 94, 38)
+        laurel:SetShown(not compact or i == 1)
+        if compact then laurel:SetSize(13, 22); At(laurel, f.header, 20, 38)
         else
             laurel:SetSize(i == 1 and 19 or 20, 31)
             laurel:SetPoint(i == 1 and "RIGHT" or "LEFT", f.title, i == 1 and "LEFT" or "RIGHT", i == 1 and -8 or 8, 0)
         end
     end
     for _, divider in ipairs(f.dividers) do divider:SetShown(not compact) end
-    f.emblem:SetSize(compact and 16 or 24, compact and 16 or 24); At(f.emblem, f.header, compact and 174 or 230, compact and 55 or 64)
+    f.emblem:SetSize(compact and 16 or 24, compact and 16 or 24); At(f.emblem, f.header, compact and 150 or 230, compact and 55 or 64)
     f.icon:ClearAllPoints(); f.icon:SetSize(compact and 44 or 52, compact and 44 or 52)
-    f.icon:SetPoint("TOPLEFT", compact and 112 or 46, compact and -19 or -93)
-    f.halo:SetSize(compact and 80 or 96, compact and 80 or 96); At(f.halo, f, compact and 134 or 72, compact and 41 or 119)
-    local ex, ey, ew = compact and 111 or 45, compact and 18 or 92, compact and 46 or 54
+    f.icon:SetPoint("TOPLEFT", compact and 88 or 46, compact and -19 or -93)
+    f.halo:SetSize(compact and 80 or 96, compact and 80 or 96); At(f.halo, f, compact and 110 or 72, compact and 41 or 119)
+    local ex, ey, ew = compact and 87 or 45, compact and 18 or 92, compact and 46 or 54
     for i, edge in ipairs(f.edges) do
         edge:ClearAllPoints(); edge:SetPoint("TOPLEFT", ex + (i == 4 and ew - 1 or 0), -(ey + (i == 2 and ew - 1 or 0)))
         edge:SetSize(i <= 2 and ew or 1, i <= 2 and 1 or ew)
@@ -305,22 +325,22 @@ local function Layout(f, compact)
         edge:ClearAllPoints(); edge:SetPoint("TOPLEFT", ex + (i == 4 and ew - 1 or 0), -(ey + (i == 2 and ew - 1 or 0)))
         edge:SetSize(i <= 2 and ew or 1, i <= 2 and 1 or ew)
     end
-    f.name:ClearAllPoints(); f.name:SetPoint("TOPLEFT", compact and 170 or 120, compact and -18 or -84)
-    f.name:SetSize(compact and 235 or 300, 24); SizeFont(f.name, compact and 17 or 19)
+    f.name:ClearAllPoints(); f.name:SetPoint("TOPLEFT", compact and 145 or 120, compact and -18 or -84)
+    f.name:SetSize(compact and 260 or 300, 24); SizeFont(f.name, compact and 17 or 19)
     f.sub:SetShown(not compact)
-    f.method:ClearAllPoints(); f.method:SetPoint("TOPLEFT", compact and 188 or 120, compact and -46 or -134)
-    f.method:SetSize(compact and 150 or 300, compact and 18 or 20); SizeFont(f.method, compact and 13 or 14)
-    f.hit:ClearAllPoints(); f.hit:SetPoint("TOPLEFT", compact and 108 or 43, compact and -13 or -76)
-    f.hit:SetSize(compact and 297 or 380, compact and 56 or 82)
+    f.method:ClearAllPoints(); f.method:SetPoint("TOPLEFT", compact and 163 or 120, compact and -46 or -134)
+    f.method:SetSize(compact and 114 or 300, compact and 18 or 20); SizeFont(f.method, compact and 13 or 14)
+    f.hit:ClearAllPoints(); f.hit:SetPoint("TOPLEFT", compact and 84 or 43, compact and -13 or -76)
+    f.hit:SetSize(compact and 321 or 380, compact and 56 or 82)
     f.iconHaze:SetSize(compact and 78 or 96, compact and 82 or 100)
-    At(f.iconHaze, f, compact and 134 or 72, compact and 41 or 116)
+    At(f.iconHaze, f, compact and 110 or 72, compact and 41 or 116)
     f.iconBloom:SetSize(compact and 74 or 92, compact and 78 or 96)
-    At(f.iconBloom, f, compact and 134 or 72, compact and 41 or 116)
+    At(f.iconBloom, f, compact and 110 or 72, compact and 41 or 116)
     f.emblemBurst:SetSize(compact and 40 or 58, compact and 26 or 38)
-    At(f.emblemBurst, f, compact and 174 or 230, compact and 55 or 64)
+    At(f.emblemBurst, f, compact and 150 or 230, compact and 55 or 64)
     At(f.headerBloom, f, compact and 55 or 230, compact and 35 or 55)
     At(f.radiance, f, compact and 55 or 230, compact and 12 or 24)
-    At(f.arrivalGlint, f, compact and 152 or 97, compact and 20 or 96)
+    At(f.arrivalGlint, f, compact and 128 or 97, compact and 20 or 96)
     f.sweepHaze:SetSize(compact and 96 or 115, compact and 28 or 36)
     f.sweepCore:SetSize(compact and 82 or 92, compact and 22 or 26)
     f.sweepTail:SetSize(compact and 96 or 110, compact and 27 or 31)
@@ -357,7 +377,7 @@ local function Build(card)
     f.title:SetPoint("TOP", f.header, "TOP", 0, -24)
     f.title:SetJustifyH("CENTER"); f.title:SetTextColor(0.93, 0.79, 0.50)
     f.miniTitle = Font(f.header, 13, true); f.miniTitle:SetText("WON!"); f.miniTitle:SetMaxLines(1)
-    f.miniTitle:SetSize(72, 24); At(f.miniTitle, f.header, 55, 37); f.miniTitle:SetJustifyH("CENTER")
+    f.miniTitle:SetSize(54, 24); At(f.miniTitle, f.header, 52, 38); f.miniTitle:SetJustifyH("CENTER")
     f.laurels = { Texture(f.header, "laurel_left", 19, 31), Texture(f.header, "laurel_right", 20, 31) }
     f.laurels[1]:SetPoint("RIGHT", f.title, "LEFT", -8, 0)
     f.laurels[2]:SetPoint("LEFT", f.title, "RIGHT", 8, 0)
@@ -385,10 +405,9 @@ local function Build(card)
     f.badge = Texture(f.content, "badge_backing", 148, 29); At(f.badge, f, 230, 184)
     f.upgrade = Font(f.content, 14); f.upgrade:SetPoint("CENTER", f.badge, "CENTER"); f.upgrade:SetSize(140, 22)
     f.upgrade:SetJustifyH("CENTER"); f.upgrade:SetText("Potential Upgrade")
-    f.miniUpgradeBadge = Texture(f.content, "badge_backing", 32, 22); At(f.miniUpgradeBadge, f, 365, 54)
-    f.upgradeIcon = f.content:CreateTexture(nil, "OVERLAY"); f.upgradeIcon:SetSize(18, 18)
-    f.upgradeIcon:SetTexture(R.PATH .. [[media\loot\upgrade]]); At(f.upgradeIcon, f, 365, 54)
-    f.upgradeHit = CreateFrame("Frame", nil, f.content); f.upgradeHit:SetSize(24, 24); At(f.upgradeHit, f, 365, 54)
+    f.upgradeIcon = f.content:CreateTexture(nil, "OVERLAY"); f.upgradeIcon:SetSize(14, 14)
+    f.upgradeIcon:SetTexture(R.PATH .. [[media\loot\upgrade]]); At(f.upgradeIcon, f, 288, 55)
+    f.upgradeHit = CreateFrame("Frame", nil, f.content); f.upgradeHit:SetSize(24, 24); At(f.upgradeHit, f, 288, 55)
     f.upgradeHit:SetFrameLevel(f.content:GetFrameLevel() + 2); f.upgradeHit:EnableMouse(true)
     f.upgradeHit:SetScript("OnEnter", function(self) if f.entry then C.PillTips.upgrade(self, f.entry.card, f.entry) end end)
     f.upgradeHit:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -439,7 +458,7 @@ function V.Draw(card, entry)
             ItemName(f.name, entry.name or "Loot")
             local upgrade = entry.upgrade == true and LR.Get("showUpgrade")
             f.badge:SetShown(upgrade and not f.compact); f.upgrade:SetShown(upgrade and not f.compact)
-            f.miniUpgradeBadge:SetShown(upgrade and f.compact); f.upgradeIcon:SetShown(upgrade and f.compact); f.upgradeHit:SetShown(upgrade and f.compact)
+            f.upgradeIcon:SetShown(upgrade and f.compact); f.upgradeHit:SetShown(upgrade and f.compact)
             V.Paint(f, f.seeking and f.paintTime or math.min(GetTime() - entry.started, V.MOTION_END), true)
         end
         return h
@@ -466,7 +485,7 @@ function V.Draw(card, entry)
     f.method:SetText((entry.choice == "need" and "Need roll" or "Greed roll") .. (entry.value and (": " .. entry.value) or ""))
     local upgrade = entry.upgrade == true and LR.Get("showUpgrade")
     f.badge:SetShown(upgrade and not f.compact); f.upgrade:SetShown(upgrade and not f.compact)
-    f.miniUpgradeBadge:SetShown(upgrade and f.compact); f.upgradeIcon:SetShown(upgrade and f.compact); f.upgradeHit:SetShown(upgrade and f.compact)
+    f.upgradeIcon:SetShown(upgrade and f.compact); f.upgradeHit:SetShown(upgrade and f.compact)
     f.icon:SetTexture(entry.icon or [[Interface\Icons\INV_Misc_QuestionMark]])
     for _, edge in ipairs(f.edges) do
         edge:SetColorTexture(qc[1] * 0.45 + 0.58 * 0.55, qc[2] * 0.45 + 0.43 * 0.55, qc[3] * 0.45 + 0.24 * 0.55, 1)
@@ -597,6 +616,8 @@ function V.Accept(...)
 end
 
 function V.Disable(replay)
+    pendingSounds = 0
+    if soundTimer then soundTimer:Cancel(); soundTimer = nil end
     departed = {}
     if not owner and #entries == 0 and not (preview and preview.entry) then return end
     if relay then relay:UnregisterAllEvents() end
@@ -611,6 +632,10 @@ function V.Disable(replay)
     C.Refresh()
 end
 function V.Sync()
+    if not LR.Get("victorySound") then
+        pendingSounds = 0
+        if soundTimer then soundTimer:Cancel(); soundTimer = nil end
+    end
     if not Enabled() then if owner then V.Disable(true) end return end
     for _, e in ipairs(entries) do
         if e.motion and LR.Get("victoryIntensity") == "off" then

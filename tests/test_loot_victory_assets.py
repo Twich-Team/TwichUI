@@ -24,7 +24,7 @@ class VictoryAssets(unittest.TestCase):
                 self.assertEqual([min(alpha), max(alpha)], manifest['textures'][path.stem]['alpha_min_max'])
         for path in ART.glob('*.ogg'):
             self.assertTrue(path.read_bytes().startswith(b'OggS'))
-        self.assertEqual(len(list(ART.glob('*.ogg'))), 2)
+        self.assertIn(b'vorbis', (ART / 'loot_won.ogg').read_bytes()[:100])
         self.assertEqual(len(list(ART.glob('*.tga'))), 11)  # five superseded effects no longer ship
 
     def test_supplemental_runtime_subset(self):
