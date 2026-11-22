@@ -5,7 +5,9 @@
 --   R.Fishing.API.State()            "idle" | "ready" | "line" | "looting"
 --   R.Fishing.API.Session()          the session in progress (copy) or nil, with elapsed seconds
 --   R.Fishing.API.Sessions(n)        up to n completed session summaries, newest first (copies)
+--   R.Fishing.API.SessionByID(id)    one session (kept or in progress) as a copy, or nil
 --   R.Fishing.API.Totals()           lifetime totals (copy)
+--   R.Fishing.API.Treasures(scope)   containers with what each held, per container (Stage 3A); Retention(): sessions kept
 --   R.Fishing.API.Provenance(scope)  for valuation: scope "session" | "lifetime" | a session id ->
 --                                    { direct = { [itemID] = q } (fish and other catches, containers excluded),
 --                                      containers = { [itemID] = { caught, opened, unopened } },
@@ -43,9 +45,55 @@ function API.Sessions(n)
     return out
 end
 
+-- One kept session (copy) by its id, or nil once it is no longer kept; the session in progress is answered too.
+function API.SessionByID(id)
+    id = F.Count(id)
+    local s = id and Ses.Find(id)
+    if not s then return nil end
+    local copy = F.Copy(s)
+    local cur = Ses.Current()
+    if cur and cur.id == id then copy.elapsed = Ses.Elapsed() end
+    return copy
+end
+
 function API.Totals()
     local c = S.Char()
     return c and F.Copy(c.totals) or nil
+end
+
+-- Stage 3A (the Journal): what Provenance leaves out, per container: how many were caught, opened, failed and are waiting,
+-- and what each is confirmed to have held. scope as Provenance. { [containerID] = { caught, opened, failed, unopened,
+-- got = { [itemID] = quantity } } }, plus `contents` (everything taken out, by item) and `scope`.
+function API.Treasures(scope)
+    local c = S.Char()
+    if not c then return nil end
+    local rec, sid
+    if scope == "lifetime" or scope == nil then rec = c.totals
+    elseif scope == "session" then rec = c.session; sid = rec and rec.id
+    else sid = F.Count(scope); rec = sid and Ses.Find(sid) end
+    if not rec then return nil end
+    local unopened = {}
+    for _, lot in ipairs(c.queue) do
+        if scope == "lifetime" or scope == nil or lot.sid == sid then unopened[lot.item] = (unopened[lot.item] or 0) + lot.n end
+    end
+    local out = { containers = {}, contents = F.Copy(rec.contents), scope = scope or "lifetime" }
+    for id, e in pairs(rec.containers) do
+        out.containers[id] = { caught = e.caught or 0, opened = e.opened or 0, failed = e.failed or 0, unopened = unopened[id] or 0,
+            got = F.Copy(type(e.got) == "table" and e.got or {}) }
+    end
+    -- lots still waiting whose container is not in this record (older than the history kept) are still listed
+    for id, n in pairs(unopened) do
+        if not out.containers[id] then out.containers[id] = { caught = 0, opened = 0, failed = 0, unopened = n, got = {} } end
+    end
+    return out
+end
+
+-- How much history exists: sessions kept now and the most that are kept (config session.keep). Lifetime totals are not
+-- limited by it; per-session records older than this are gone.
+function API.Retention()
+    local c = S.Char()
+    return { kept = c and #c.sessions or 0, limit = math.floor(S.Get("session.keep") or F.LIMITS.sessions),
+        held = S.held and true or false, available = c ~= nil }
 end
 
 function API.ZoneName(mapID)

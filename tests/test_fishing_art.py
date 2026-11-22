@@ -59,7 +59,7 @@ def art_table():
 class FishingArt(unittest.TestCase):
     def test_files_are_game_textures(self):
         files = sorted(MEDIA.glob("*.tga"))
-        self.assertEqual(len(files), 14)
+        self.assertEqual(len(files), 29)
         for p in files:
             t = read_tga(p)
             with self.subTest(p.name):

@@ -90,7 +90,7 @@ function FishingClient(opts)
   local baseCreate = c.CreateFrame
   W.frames = {}
   c.CreateFrame = function(kind, name, parent, template)
-    if kind ~= "Button" then return W.UI.Create(kind, name, parent) end
+    if kind ~= "Button" or not template then return W.UI.Create(kind, name, parent) end
     local fr = { name = name, template = template, attrs = {}, scripts = {} }
     function fr:SetAttribute(k, v) assert(not W.combat, "a secure attribute is never set in combat (" .. tostring(k) .. ")"); self.attrs[k] = v end
     function fr:GetAttribute(k) return self.attrs[k] end

@@ -295,8 +295,30 @@ def rowglow(_src):
     return canvas, (w, h), {}
 
 
+# Stage 3A, the Fishing Journal. Each is the pack's own painting, resampled onto a power-of-two canvas and otherwise untouched
+# (the pack's frames are nine-slice sources: the Journal cuts them with texture coordinates, a 24 px corner on the frames and a
+# 10-12 px cap on the rows and buttons; Hud.lua ART lists the painted sizes).
+JOURNAL_FILES = (
+    ("j-frame", "journal_frame.png"), ("j-recess", "recessed_frame.png"), ("j-chest", "chestnut_frame.png"),
+    ("j-row", "row_normal.png"), ("j-row-hover", "row_hover.png"), ("j-row-on", "row_selected.png"),
+    ("j-nav-on", "button_gold.png"), ("j-nav", "button_dark.png"), ("j-btn", "button_compact.png"),
+    ("j-close", "close.png"), ("j-unknown", "collection_unknown.png"), ("j-mark", "fish_watermark.png"),
+)
+JOURNAL_GLYPHS = (("glyph-hook", "hook.png"), ("glyph-clam", "clam.png"), ("glyph-treasure", "treasure.png"))
+
+
+def JOURNAL(src):
+    out = []
+    for name, file in JOURNAL_FILES:
+        w, h, px, _ = read_png(os.path.join(src, file))
+        out.append((name, (lambda w=w, h=h, px=px: fit(px, (0, 0, w, h), w, h) + ({},))))
+    for name, file in JOURNAL_GLYPHS:
+        out.append((name, (lambda file=file: glyph(src, file))))
+    return out
+
+
 def builds(src):
-    return [
+    return JOURNAL(src) + [
         ("castbar", lambda: castbar(src)),
         ("castfill", lambda: castfill(src)),
         ("castspark", lambda: castspark(src)),
