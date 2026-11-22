@@ -330,9 +330,20 @@ an end-to-end approved immutable-artifact rehearsal and the full candidate/clien
 
 ## Source-to-test guidance
 
-Use [architecture](architecture.md) for ownership, then inspect `tests/groups.json`
-and the selected plan. These are manual starting points; there is no automatic
-source dependency analysis. Syntax globs describe checked files, not all consumers.
+Ask the runner for advisory group matches before choosing a plan. Pass one or more
+repo-relative file paths from the diff. The command reads existing syntax and test
+globs in `tests/groups.json` and prints preview commands without running tests.
+
+```bash
+./tests/run.sh --recommend 'TwichUI_Settings/pages/Reminders.lua'
+./tests/run.sh --recommend '!!!TwichUI/FrameLook.lua' tests/test_test_runner.py
+./tests/run.sh --recommend docs/testing.md
+```
+
+A syntax match identifies files checked by a group. Use [architecture](architecture.md)
+to review ownership and actual consumers, especially for shared files and overlapping
+globs. Removed files and paths outside the globs are reported as unmapped. Use the
+guidance below to choose the checkpoint profile and review the selected plan.
 
 - Reminders config or its settings page: `feature reminders`.
 - Market bridge/schema/receipt changes: `feature market`; inspect the pinned
@@ -363,9 +374,7 @@ For Workshop economic changes, apply the risk-based mutation guidance in
 
 `tools/ci_verify.py` separately selects release-tools for its explicit release/docs
 allowlist, and complete offline discovery otherwise. It is not a source-to-group
-analyzer. This guidance changes neither CI selection nor test coverage. Automatic
-ownership inference and its unmapped/shared-file negative cases are deferred to a
-separately reviewed implementation.
+analyzer. Advisory matches have no effect on CI selection or test coverage.
 
 ## Evidence retention
 
