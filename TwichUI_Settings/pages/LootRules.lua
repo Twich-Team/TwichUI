@@ -753,7 +753,7 @@ function P.Parts() return { frame = f, rows = rows, conds = conds } end
 
 if R.OnSettingsClosed then R.OnSettingsClosed(function() ClosePicker(); epoch = epoch + 1; queued = false end) end
 if R.LootRolls then R.LootRolls.Subscribe(function(what)
-    if what == "rules" or what == "profile" then
+    if what == "rules" or what == "profile" or what == "artwork" then
         if binding and not Current(binding) then ClosePicker() end
         P.QueueRefresh()
     end

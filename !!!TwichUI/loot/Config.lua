@@ -102,7 +102,7 @@ local rev = 0
 function LR.Subscribe(fn) subscribers[#subscribers + 1] = fn end
 function LR.Rev() return rev end
 
--- Something the cards are drawn or decided from changed: told once. what: "place", "settings", "rules" or "profile".
+-- A change is told once: place, settings, rules, profile, or settings-only artwork.
 function LR.Invalidate(what)
     rev = rev + 1
     for _, fn in ipairs(subscribers) do
@@ -355,12 +355,12 @@ function LR.Move(id, delta)
     return true
 end
 
-local function Edit(id, fn)
+local function Edit(id, fn, reason)
     local rule = Find(id)
     if not rule then return false, "That rule is gone." end
     local changed = fn(rule)
     if changed == false then return false end
-    if changed then LR.Invalidate("rules") end
+    if changed then LR.Invalidate(reason or "rules") end
     return true
 end
 
@@ -381,7 +381,7 @@ function LR.SetArtwork(id, value)
         end
         r.artwork = art
         return true
-    end)
+    end, "artwork")
 end
 
 function LR.SetName(id, name)

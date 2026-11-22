@@ -104,12 +104,16 @@ local LR, P, picker = R.LootRolls, R.LootRulesPage, R.SettingsArtworkPicker
 R.SettingsUI.IsPageActive = function(key) return key == "lootRules" end
 local _, id = LR.Create("greenGear")
 local frame = P.Frame(); frame:Show(); P.Select(id); P.Refresh()
+local runtimeRefreshes, realRefresh = 0, R.LootAuto.Refresh
+R.LootAuto.Refresh = function() runtimeRefreshes = runtimeRefreshes + 1 end
 local refs = { {kind="art",id="shield"}, {kind="icon",id="auctionHouse"}, {kind="item",id=6948}, {kind="art",id="unavailable-art"} }
 for _, ref in ipairs(refs) do
     assert(LR.SetArtwork(id, ref)); local v = LR.Rule(id); assert(v.artwork.kind == ref.kind and v.artwork.id == ref.id)
     ref.id = "mutated"; assert(LR.Rule(id).artwork.id ~= "mutated")
     v.artwork.id = "changed"; assert(LR.Rule(id).artwork.id ~= "changed")
 end
+assert(runtimeRefreshes == 0, "identity edits do not reevaluate or reschedule loot rolls")
+R.LootAuto.Refresh = realRefresh
 local before = LR.Rule(id).artwork.id
 assert(not LR.SetArtwork(id, {kind="item",id=0/0})); assert(not LR.SetArtwork(id, {kind="art",id="bad/path"})); assert(LR.Rule(id).artwork.id == before)
 local _, copy = LR.Duplicate(id); assert(LR.Rule(copy).artwork.id == before)
