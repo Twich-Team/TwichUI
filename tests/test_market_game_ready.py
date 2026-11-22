@@ -91,7 +91,7 @@ class GameReady(unittest.TestCase):
 
     def test_unavailable_is_not_observed_absence_or_zero_price(self):
         for state in range(5):
-            for rep,count in [('json',64),('packed-proof',16)]:
+            for rep,count in [('json',64),('packed-proof',16),('fixed-proof',16)]:
                 with self.subTest(state=state,rep=rep),tempfile.TemporaryDirectory()as d:
                     config,key=fixture(Path(d),rep,count,state=state)
                     body="local B=W.Bridge;B.Record(2589,key,{current=true});drain();local r=assert(B.Record(2589,key,{current=true}));assert(r.current.state==h.states["+str(state+1)+"]);"
@@ -125,11 +125,12 @@ class GameReady(unittest.TestCase):
                 self.assertIn('rejected',r.stderr)
 
     def test_packed_files_reuse_unchanged_content_across_generations(self):
-        with tempfile.TemporaryDirectory()as d:
-            a=Path(d)/'a';b=Path(d)/'b';a.mkdir();b.mkdir()
-            fixture(a,'packed-proof');fixture(b,'packed-proof',epoch=1)
-            self.assertNotEqual(json.loads((a/'fixture.json').read_text())['manifest']['generation_id'],json.loads((b/'fixture.json').read_text())['manifest']['generation_id'])
-            for p in a.glob('packed-*/*.lua'):self.assertEqual(p.read_bytes(),(b/p.relative_to(a)).read_bytes())
+        for rep in ('packed-proof','fixed-proof'):
+            with self.subTest(rep=rep),tempfile.TemporaryDirectory()as d:
+                a=Path(d)/'a';b=Path(d)/'b';a.mkdir();b.mkdir()
+                fixture(a,rep);fixture(b,rep,epoch=1)
+                self.assertNotEqual(json.loads((a/'fixture.json').read_text())['manifest']['generation_id'],json.loads((b/'fixture.json').read_text())['manifest']['generation_id'])
+                for p in a.glob(rep+'-*/*.lua'):self.assertEqual(p.read_bytes(),(b/p.relative_to(a)).read_bytes())
 
     def test_fixed_records_reject_price_tampering_false_misses_and_truncation(self):
         for damage in ['price','false-missing','removed']:
@@ -145,11 +146,12 @@ class GameReady(unittest.TestCase):
                 self.assertNotEqual(r.returncode,0);self.assertIn('rejected',r.stderr)
 
     def test_replaced_generation_cannot_publish_queued_old_data(self):
-        with tempfile.TemporaryDirectory()as d:
-            a=Path(d)/'a';b=Path(d)/'b';a.mkdir();b.mkdir()
-            config,key=fixture(a,'proof');new,_=fixture(b,'proof',delta=100)
-            body="local B=W.Bridge;B.Record(2589,key,{current=true});arg[12]="+json.dumps(str(new))+";h,input=X.setup(c);B.Begin(input);drain();local r,why=B.Record(2589,key,{current=true});assert(not r and why=='loading');drain();r=assert(B.Record(2589,key,{current=true}));assert(r.current.metrics.recent_copper=='220');"
-            p=self.lua(config,body,key);self.assertEqual(p.returncode,0,p.stderr)
+        for rep in ('proof','fixed-proof','fixed-hybrid'):
+            with self.subTest(rep=rep),tempfile.TemporaryDirectory()as d:
+                a=Path(d)/'a';b=Path(d)/'b';a.mkdir();b.mkdir()
+                config,key=fixture(a,rep);new,_=fixture(b,rep,delta=100)
+                body="local B=W.Bridge;B.Record(2589,key,{current=true});arg[12]="+json.dumps(str(new))+";h,input=X.setup(c);B.Begin(input);drain();local r,why=B.Record(2589,key,{current=true});assert(not r and why=='loading');drain();r=assert(B.Record(2589,key,{current=true}));assert(r.current.metrics.recent_copper=='220');"
+                p=self.lua(config,body,key);self.assertEqual(p.returncode,0,p.stderr)
 
 
 if __name__=='__main__':unittest.main()
