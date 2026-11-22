@@ -10,6 +10,11 @@ local W=c.TwichUI.Workshop;local Q,J,B,P=W.Summary,W.BridgeCodec,W.Bridge,W.Pric
 c.GetTimePreciseSec=os.clock
 local function clock()return os.clock()*1000 end
 local function heap()return collectgarbage('count') end
+local profiling=arg[7]=='profile';local phases={}
+local function probe(t,k,name)
+ if not profiling or not t or not t[k] then return end
+ local fn=t[k];t[k]=function(...)local at=clock();local a,b,d=fn(...);phases[name]=(phases[name]or 0)+clock()-at;return a,b,d end
+end
 local events,now,serial={},0,0
 local callbacks,worstCallback,callbackCPU=0,0,0
 local checkSettlement
@@ -118,7 +123,7 @@ local price=P.Price;P.Price=function(...)prices=prices+1;return price(...)end
 local oldNew=W.Estimate.New
 W.Estimate.New=function(...)
  estimatorInstances=estimatorInstances+1;local est=oldNew(...);local craft=est.Craft
- est.Craft=function(self,...)crafts=crafts+1;return craft(self,...)end
+ est.Craft=function(self,...)crafts=crafts+1;local at=profiling and clock();local result=craft(self,...);if at then phases.craft=(phases.craft or 0)+clock()-at end;return result end
  return est
 end
 B.Begin(input);while Q.Pending()do event()end
@@ -162,6 +167,9 @@ else
  for i=1,count do recipes[i]={id=i,name='Synthetic craft '..i,prof=171,filled=true,outItem=128+i%1000,outMin=1,outMax=1,
   mats={{item=64+i%64,qty=1+i%4},{item=64+(i*7)%64,qty=2+i%3}}} end
  W.Session.AllRecipes=function()return recipes end
+ probe(W.Session,"AllRecipes","catalog");probe(W.Session,"Estimator","estimator")
+ probe(W.Opps,"Rows","rows");probe(W.Opps,"Select","sort");probe(W.Opps,"Summary","summary")
+ probe(W.UI.pages and W.UI.pages.opps,"Render","view");probe(W.Facts,"Chart","chart")
  local needed={};for _,rec in ipairs(recipes)do needed[rec.outItem]=true;for _,mat in ipairs(rec.mats)do needed[mat.item]=true end end
  local target=0;for _ in pairs(needed)do target=target+1 end
  checkSettlement=function()
@@ -209,6 +217,7 @@ out.record_wait_p50_model_seconds=waits[math.max(1,math.ceil(#waits*.5))]or -1
 out.record_wait_p95_model_seconds=waits[math.max(1,math.ceil(#waits*.95))]or -1
 out.record_wait_max_model_seconds=waits[#waits]or -1
 out.current_raw_loaded_bytes=Q.Status().current_bytes or 0;out.history_raw_loaded_bytes=Q.Status().history_bytes or 0
+for k,v in pairs(phases)do out["profile_"..k.."_ms"]=v end
 local fields={}
 for k,v in pairs(out)do
  local value=type(v)=='number' and string.format('%.6f',v) or J.Encode(v)
