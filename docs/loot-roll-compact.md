@@ -41,13 +41,13 @@ with manual choices. They are never described as automatic rolls.
 ## Presentation and lifecycle
 
 The established width is 384 UI pixels, multiplied by the player's existing card
-scale. Mini active cards are 64 pixels high; Mini victories are about 67
+scale. Mini active cards are 90 pixels high; Mini victories are about 67
 (80 reference pixels at the renderer's existing 384/460 scale). Expanded cards
 retain their layout, with room reserved for the new toggle.
 
 Mini active cards reuse the same item tooltip, quality color, choice handlers,
 availability restrictions and confirmation path. Manual Need/Greed/Pass targets
-remain 46×34 pixels with artwork and labels. Scheduled rolls retain Roll now and
+remain 68×34 pixels with artwork and labels. Scheduled rolls retain Roll now and
 Stop auto roll. The thin bar and right-hand number use `Roll.Remaining`; the auto
 countdown in the secondary line uses the existing scheduled fire time. Neither
 creates a second authoritative clock. Long names fit at UTF-8 character boundaries;

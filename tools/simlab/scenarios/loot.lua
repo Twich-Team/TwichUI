@@ -382,9 +382,14 @@ if view == "sweepLab" then
     end)
 end
 
-if view == "miniActive" or view == "miniAuto" or view == "compactMixed" then
+if view == "miniActive" or view == "miniAuto" or view == "compactMixed" or view:find("^miniLong") then
     Lab.Step("compact rule-driven cards", function()
         LR.Set("maxCards", 4); LR.Set("victorySound", false)
+        if view:find("80") then LR.Set("scale", 80) elseif view:find("120") then LR.Set("scale", 120) end
+        if view:find("^miniLong") then
+            ITEMS["item:20001"].name = "Stormrend Titanblade of the Unbroken Oath of the Eternal Watchers"
+            judged["item:20001"] = { up = true }
+        end
         local ok, rule = LR.Create("blank")
         Check("init", "display rule created", true, ok)
         LR.SetCondition(rule, 1, { value = 4 }); LR.SetDisplay(rule, "collapsed")
@@ -421,6 +426,11 @@ if view == "miniActive" or view == "miniAuto" or view == "compactMixed" then
             local heights, previous = {}, 0
             for _, entry in ipairs(R.LootVictory.Entries()) do heights[entry.displayMode] = entry.card:GetHeight() end
             Check("geometry", "Mini victory saves actual space", true, heights.collapsed < 70 and heights.expanded > 180)
+        end
+        if view:find("^miniLong") then
+            Lab.Settle(25)
+            Check("state", "countdown remains authoritative", true, Ro.Remaining(roll) < 6 and Ro.Remaining(roll) > 0)
+            Check("geometry", "item name has room before the upgrade badge", true, card.name:GetWidth() >= 250 and card.pillTop:IsShown())
         end
         Lab.Settle(0.2)
     end)
@@ -555,7 +565,7 @@ if view:find("^victoryPose") then
         LR.Set("x", 0); LR.Set("y", 180)
         LR.Set("victorySound", false)
         LR.Set("victoryIntensity", view:find("Off") and "off" or view:find("Full") and "full" or "subtle")
-        if view:find("Scaled") then LR.Set("scale", 75) end
+        if view:find("Scaled") then LR.Set("scale", 75) elseif view:find("Scale80") then LR.Set("scale", 80) elseif view:find("Scale120") then LR.Set("scale", 120) end
         local seconds = tonumber(view:match("(%d+)$")) / 100
         local quality = view:find("Legendary") and 5 or view:find("Epic") and 4 or view:find("Rare") and 3 or 2
         local sample = { upgrade = not view:find("NoUpgrade") }

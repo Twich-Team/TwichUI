@@ -27,7 +27,7 @@ local MEDIA = R.PATH .. [[media\loot\]]
 local WHITE = [[Interface\Buttons\WHITE8x8]]
 local FONT_TITLE = R.PATH .. [[media\fonts\Cinzel-SemiBold.ttf]]
 local W_CARD = 384
-C.MINI_HEIGHT = 64
+C.MINI_HEIGHT = 90
 local PAD = 16
 local ROW_H = 16
 
@@ -423,8 +423,8 @@ function C.NewCard(parent, opts)
     card.toggle:SetSize(20, 20); card.toggle:SetFrameLevel(card:GetFrameLevel() + 20)
     card.toggle.art = Sheet(card.toggle, "button", { layer = "ARTWORK", corner = 6 })
     if R.Look and R.Look.Chevron then
-        card.toggle.up = R.Look.Chevron(card.toggle, card.toggle, "CENTER", 0, 0, false, COL.gold)
-        card.toggle.down = R.Look.Chevron(card.toggle, card.toggle, "CENTER", 0, 0, true, COL.gold)
+        card.toggle.up = R.Look.Chevron(card.toggle, card.toggle, "CENTER", 0, 0, false, COL.dim)
+        card.toggle.down = R.Look.Chevron(card.toggle, card.toggle, "CENTER", 0, 0, true, COL.dim)
     else
         card.toggle.text = Font(card.toggle, 13, "body"); card.toggle.text:SetPoint("CENTER")
     end
@@ -545,11 +545,17 @@ local function Timer(card, remaining, duration, x, width, y, expired)
     local fill = t.fill
     local file, textured = BarFile()
     fill:SetWidth(math.max(0.001, (width - 2) * frac))
-    if t.file ~= file then t.file = file; fill:SetTexture(file) end
-    if textured then fill:SetTexCoord(0, math.max(0.001, frac), 0, 1) else fill:SetTexCoord(0, 1, 0, 1) end
     local r, g, b = C.BarColor(frac, card.view and card.view.state == "scheduled", expired)
-    fill:SetVertexColor(r, g, b, 1)
+    if card.compact and not textured then
+        -- Solid fill remains visible even when the client does not supply WHITE8x8.
+        t.file = nil; fill:SetColorTexture(r, g, b, 1); fill:SetVertexColor(1, 1, 1, 1)
+    else
+        if t.file ~= file then t.file = file; fill:SetTexture(file) end
+        fill:SetVertexColor(r, g, b, 1)
+    end
+    if textured then fill:SetTexCoord(0, math.max(0.001, frac), 0, 1) else fill:SetTexCoord(0, 1, 0, 1) end
     local tr, tg, tb = Rgb(LR.Get("barTrack"))
+    if card.compact then tr, tg, tb = 0.06, 0.045, 0.035 end
     t.track:SetColorTexture(tr, tg, tb, 1)
     t.hi:SetColorTexture(1, 1, 1, 0.22)
     t.hi:SetShown(frac > 0 and LR.Get("barShine"))
@@ -561,9 +567,9 @@ function C.PaintTimer(card, view)
     local inner = W_CARD - PAD * 2
     local scheduled = view.state == "scheduled" and view.auto
     if card.compact then
-        Timer(card, view.remaining, view.duration, 12, W_CARD - 24, 54)
-        card.time:ClearAllPoints(); card.time:SetPoint("TOPRIGHT", body, "TOPRIGHT", -8, -31)
-        card.time:SetSize(28, 16); card.time:SetJustifyH("RIGHT"); TextSize(card.time, 11)
+        Timer(card, view.remaining, view.duration, 16, W_CARD - 32, 78)
+        card.time:ClearAllPoints(); card.time:SetPoint("TOPRIGHT", body, "TOPRIGHT", -16, -49)
+        card.time:SetSize(40, 16); card.time:SetJustifyH("RIGHT"); TextSize(card.time, 11)
         card.time:SetText(Seconds(view.remaining)); card.time:Show()
         if scheduled then card.sub:SetText("Auto " .. (ChoiceLabel[view.auto.action] or "") .. " · " .. Seconds(view.auto.remaining)) end
         return
@@ -707,23 +713,23 @@ C.PillTips = {
 
 local function CompactLayout(card, view)
     local body = card.body
-    card.iconFrame:ClearAllPoints(); card.iconFrame:SetPoint("TOPLEFT", 10, -10); card.iconFrame:SetSize(38, 38)
+    card.iconFrame:ClearAllPoints(); card.iconFrame:SetPoint("TOPLEFT", 12, -8); card.iconFrame:SetSize(32, 32)
     card.iconHit:ClearAllPoints(); card.iconHit:SetPoint("TOPLEFT", card.iconFrame, "TOPLEFT", 0, 0)
-    card.iconHit:SetPoint("BOTTOMRIGHT", body, "TOPLEFT", 198, -50)
-    card.name:ClearAllPoints(); card.name:SetPoint("TOPLEFT", 58, -9); card.name:SetSize(144, 18); TextSize(card.name, 14)
+    card.iconHit:SetPoint("BOTTOMRIGHT", body, "TOPLEFT", 314, -40)
+    card.name:ClearAllPoints(); card.name:SetPoint("TOPLEFT", 52, -7); card.name:SetSize(258, 18); TextSize(card.name, 14)
     C.FitItemName(card.name, view.name or "Loot")
-    card.sub:ClearAllPoints(); card.sub:SetPoint("TOPLEFT", 58, -31); card.sub:SetSize(136, 16); TextSize(card.sub, 11)
+    card.sub:ClearAllPoints(); card.sub:SetPoint("TOPLEFT", 52, -25); card.sub:SetSize(250, 16); TextSize(card.sub, 11)
     card.sub:SetText(view.needsConfirm and "Confirm in game" or view.autoNote and "Manual choice" or Ru.QualityName(view.quality))
     Hide(card.line3, card.line3Icon, card.line3Hit, card.note, card.pillBottom, card.banner, card.divider, card.close)
     if view.needsConfirm or view.autoNote or view.state == "scheduled" then
-        card.line3Hit:ClearAllPoints(); card.line3Hit:SetPoint("TOPLEFT", body, "TOPLEFT", 58, -29)
-        card.line3Hit:SetSize(116, 20); card.line3Hit:Show()
+        card.line3Hit:ClearAllPoints(); card.line3Hit:SetPoint("TOPLEFT", body, "TOPLEFT", 52, -23)
+        card.line3Hit:SetSize(250, 18); card.line3Hit:Show()
     end
     for _, row in ipairs(card.rows) do row.frame:Hide() end
     card.pillTop:Hide()
     if view.upgrade and LR.Get("showUpgrade") then
         card.pillTop:Set("", "upgrade", "gold"); card.pillTop.tip = C.PillTips.upgrade
-        card.pillTop:SetWidth(22); card.pillTop:ClearAllPoints(); card.pillTop:SetPoint("TOPLEFT", 176, -29); card.pillTop:Show()
+        card.pillTop:SetWidth(22); card.pillTop:ClearAllPoints(); card.pillTop:SetPoint("TOPLEFT", 318, -12); card.pillTop:Show()
     end
     if card.live then
         C.PaintTimer(card, view)
@@ -731,13 +737,13 @@ local function CompactLayout(card, view)
         local keys = scheduled and { "now", "stop" } or { "need", "greed", "pass" }
         for i, key in ipairs(keys) do
             local b = card.buttons[key]; b.compact = true; b:SetHeight(34)
-            local width = scheduled and 71 or 44
-            b:SetWidth(width); Place(b, card, 208 + (i - 1) * (width + 3), 12)
+            local width = scheduled and 100 or 68
+            b:SetWidth(width); Place(b, card, 52 + (i - 1) * (width + 6), 42)
             b:Layout()
         end
     else
         Hide(card.timer, card.time)
-        Place(card.status, card, 204, 18, 146); card.status:SetHeight(28)
+        Place(card.status, card, 52, 42, 234); card.status:SetHeight(28)
         card.status.icon:SetSize(16, 16); TextSize(card.status.text, 11)
     end
     card:SetHeight(C.MINI_HEIGHT)

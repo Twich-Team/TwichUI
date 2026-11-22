@@ -1267,13 +1267,16 @@ do
   LR.Delete(copy)
   local id = StartRoll("item:100"); local roll = Ro.Find(id); local card = C.Card(roll.key)
   local deadline = roll.deadline
-  Check(card.compact and card.h == 64 and roll.state == "pending" and roll.choice == nil and not roll.auto,
+  Check(card.compact and card.h == 90 and roll.state == "pending" and roll.choice == nil and not roll.auto,
     "display-only rule collapses with automation off, without making a choice")
   for _, key in ipairs({ "need", "greed", "pass" }) do
-    Check(card.buttons[key].shown and card.buttons[key].w == 44 and card.buttons[key].h == 34, "Mini keeps safe labeled choice targets")
+    Check(card.buttons[key].shown and card.buttons[key].w == 68 and card.buttons[key].h == 34, "Mini keeps safe labeled choice targets")
   end
   Check(card.timer.h == 6 and card.time.shown and not card.line3.shown and not card.close.shown,
     "Mini uses a thin authoritative countdown and omits full details")
+  local fullWidth = card.timer.fill.w
+  Advance(2); C.Tick(0.05)
+  Check(card.timer.fill.w < fullWidth and card.name.w >= 250, "Mini timer visibly shrinks while the item has a wide name region")
   local before = #rolled
   card.toggle.scripts.OnClick(card.toggle)
   Check(not card.compact and card.h > 120 and Ro.Find(id) == roll and roll.manualDisplay == "expanded",
