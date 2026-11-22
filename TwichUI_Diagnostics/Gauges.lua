@@ -19,6 +19,26 @@ local Perf = R.Perf
 -- "!!!TwichUI/", the settings window "TwichUI_Settings/"), where: the function, so a report can name what to read.
 -- every = how often it is expected to run, so a report can tell "runs often" from "runs on demand".
 DX.OPS = {
+    ["workshop.pricing.completed"]={module="workshop",label="Terminal cold requests measured",kind="count",file="TwichUI_Workshop/Pricing.lua",where="opt-in diagnostics",every="bounded capture aggregate"},
+    ["workshop.pricing.cancelled"]={module="workshop",label="Pending price requests cancelled",kind="count",file="TwichUI_Workshop/Pricing.lua",where="opt-in diagnostics",every="bounded capture aggregate"},
+    ["workshop.pricing.initialVisibleRows"]={module="workshop",label="Initially visible opportunity cohort size",kind="count",file="TwichUI_Workshop/Pricing.lua",where="opt-in diagnostics",every="bounded capture aggregate"},
+    ["workshop.pricing.visibleTruncated"]={module="workshop",label="Visible cohort capped at 128 rows",kind="count",file="TwichUI_Workshop/Pricing.lua",where="opt-in diagnostics",every="bounded capture aggregate"},
+    ["workshop.summary.historyPreemptions"]={module="workshop",label="History validation paused for current prices",kind="count",file="TwichUI_Workshop/Summary.lua",where="opt-in diagnostics",every="bounded capture aggregate"},
+    ["workshop.historyValidate"]={module="workshop",label="Historical partition validation slice",kind="work",file="TwichUI_Workshop/Summary.lua",where="Q.Step",every="explicit historical reads only"},
+    ["workshop.historyLoad"]={module="workshop",label="Historical partition addon load",kind="work",file="TwichUI_Workshop/Summary.lua",where="loadPart",every="explicit historical reads only"},
+    ["workshop.summary.currentDecodes"]={module="workshop",label="Current partition decode starts",kind="count",file="TwichUI_Workshop/Summary.lua",where="loadPart",every="opt-in aggregate"},
+    ["workshop.summary.historyDecodes"]={module="workshop",label="History partition decode starts",kind="count",file="TwichUI_Workshop/Summary.lua",where="loadPart",every="opt-in aggregate"},
+    ["workshop.priceWait"]={module="workshop",label="Usable Market reference wait",kind="wait",file="TwichUI_Workshop/Pricing.lua",where="record completion",every="uncached requests admitted in this capture"},
+    ["workshop.priceSettlementWait"]={module="workshop",label="Market terminal price response wait",kind="wait",file="TwichUI_Workshop/Pricing.lua",where="record completion",every="includes terminal missing"},
+    ["workshop.firstColdPrice"]={module="workshop",label="First cold Market reference",kind="wait",file="TwichUI_Workshop/Pricing.lua",where="completed",every="once per capture"},
+    ["workshop.tenColdPrices"]={module="workshop",label="First ten cold Market references",kind="wait",file="TwichUI_Workshop/Pricing.lua",where="completed",every="once per capture"},
+    ["workshop.firstVisiblePrice"]={module="workshop",label="First initially visible opportunity priced",kind="wait",file="TwichUI_Workshop/Pricing.lua",where="ObserveView",every="once per capture"},
+    ["workshop.tenVisiblePrices"]={module="workshop",label="Ten initially visible opportunities priced",kind="wait",file="TwichUI_Workshop/Pricing.lua",where="ObserveView",every="once per capture if cohort has ten priced rows"},
+    ["workshop.visibleSettled"]={module="workshop",label="Initially visible opportunities settled",kind="wait",file="TwichUI_Workshop/Pricing.lua",where="ObserveView",every="once per capture; includes missing"},
+    ["workshop.opportunitiesSettled"]={module="workshop",label="All known opportunities settled",kind="wait",file="TwichUI_Workshop/Pricing.lua",where="ObserveView",every="once per capture; includes missing"},
+    ["workshop.partitionQueueWait"]={module="workshop",label="Partition queue wait",kind="wait",file="TwichUI_Workshop/Summary.lua",where="startNext",every="queued in this capture"},
+    ["workshop.currentValidationWait"]={module="workshop",label="Current partition validation wall time",kind="wait",file="TwichUI_Workshop/Summary.lua",where="Q.Step completion",every="started in this capture"},
+    ["workshop.historyValidationWait"]={module="workshop",label="History partition validation wall time",kind="wait",file="TwichUI_Workshop/Summary.lua",where="Q.Step completion",every="started in this capture"},
     ["workshop.pricing.uniquePending"] = {module="workshop",label="New pending identities",kind="count",file="TwichUI_Workshop/Pricing.lua",where="request/completion",every="opt-in aggregate"},
     ["workshop.pricing.deduplicated"] = {module="workshop",label="Pending queries coalesced",kind="count",file="TwichUI_Workshop/Pricing.lua",where="request/completion",every="opt-in aggregate"},
     ["workshop.pricing.readerCalls"] = {module="workshop",label="Actual price reader calls",kind="count",file="TwichUI_Workshop/Pricing.lua",where="request/completion",every="opt-in aggregate"},
@@ -386,8 +406,19 @@ for _,field in ipairs({"pending","listeners","timers"}) do
 end
 
 -- The gauges a capture reads (groups nil: all), in registration order.
-function DX.GaugeList(groups)
+function DX.GaugeList(groups,ids)
     local out = {}
+    -- A narrow preset can select passive proxies even before its addon loads,
+    -- without competing with unrelated gauges for the unchanged first-40 cap.
+    if ids then
+        for _,id in ipairs(ids)do
+            for _,g in ipairs(Perf.gauges)do
+                if g.id==id and type(g.read)=="function"then out[#out+1]=g;break end
+            end
+            if #out>=40 then break end
+        end
+        return out
+    end
     for _, g in ipairs(Perf.gauges) do
         local wanted = not groups
         if groups then
@@ -397,4 +428,27 @@ function DX.GaugeList(groups)
         if #out >= 40 then break end
     end
     return out
+end
+
+for _,spec in ipairs({
+    {"workshop.currentRawBytes","Current raw bytes","current_bytes","bytes"},
+    {"workshop.historyRawBytes","Historical raw bytes","history_bytes","bytes"},
+    {"workshop.currentDecodedRows","Decoded current rows","decoded_current_rows","count"},
+    {"workshop.historyDecodedRows","Decoded historical rows","decoded_history_rows","count"},
+    {"workshop.cold.parked","Paused historical decoder","parked_history","count"},
+    {"workshop.cold.loadedParts","Loaded current parts","loaded_parts","count"},
+    {"workshop.cold.checkedParts","Validated current parts","checked_parts","count"},
+    {"workshop.cold.historyParts","Loaded historical parts","history_loaded_parts","count"},
+})do
+    local field=spec[3]
+    Perf.Gauge(spec[1],{label=spec[2],kind="cache",group="workshop",builtin=true,unit=spec[4],read=function()
+        local q=R.Workshop and R.Workshop.Summary;local value=q and q.Status()[field]
+        return type(value)=="number" and value or value and 1 or 0
+    end})
+end
+for _,spec in ipairs({{"pending","PendingCount"},{"references","CacheSize"}})do
+    local method=spec[2]
+    Perf.Gauge("workshop.cold."..spec[1],{label="Market "..spec[1],kind="cache",group="workshop",builtin=true,unit="count",read=function()
+        local p=R.Workshop and R.Workshop.Pricing;return p and p[method]()or 0
+    end})
 end

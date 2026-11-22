@@ -1,0 +1,181 @@
+{
+  "producer": {
+    "commit": "b02a190f22fd403a35c0856dfb3c598cd0720bc7",
+    "backend": "https://github.com/Twich-Team/TwichUI-Market/actions/runs/44970968429",
+    "windows": "https://github.com/Twich-Team/TwichUI-Market/actions/runs/44970968428",
+    "website": "https://github.com/Twich-Team/TwichUI-Market/actions/runs/44970968405"
+  },
+  "companion": {
+    "commit": "0ed2edaa5d5fd03eb22501522f6e6dda4a619fa0",
+    "runs": [
+      {
+        "id": 44975496335,
+        "name": "Windows companion",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 293,
+        "jobs_url": "https://api.github.com/repos/Twich-Team/TwichUI-Market/actions/runs/44975496335/jobs",
+        "logs_url": "https://api.github.com/repos/Twich-Team/TwichUI-Market/actions/runs/44975496335/logs",
+        "workflow_id": 417870542
+      },
+      {
+        "id": 44975496290,
+        "name": "Backend",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 301,
+        "jobs_url": "https://api.github.com/repos/Twich-Team/TwichUI-Market/actions/runs/44975496290/jobs",
+        "logs_url": "https://api.github.com/repos/Twich-Team/TwichUI-Market/actions/runs/44975496290/logs",
+        "workflow_id": 417841759
+      },
+      {
+        "id": 44975496307,
+        "name": "Private website",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 289,
+        "jobs_url": "https://api.github.com/repos/Twich-Team/TwichUI-Market/actions/runs/44975496307/jobs",
+        "logs_url": "https://api.github.com/repos/Twich-Team/TwichUI-Market/actions/runs/44975496307/logs",
+        "workflow_id": 417881467
+      },
+      {
+        "id": 44975496301,
+        "name": "Companion sync performance",
+        "status": "completed",
+        "conclusion": "failure",
+        "run_number": 13,
+        "jobs_url": "https://api.github.com/repos/Twich-Team/TwichUI-Market/actions/runs/44975496301/jobs",
+        "logs_url": "https://api.github.com/repos/Twich-Team/TwichUI-Market/actions/runs/44975496301/logs",
+        "workflow_id": 423178384
+      }
+    ],
+    "paired_addon_commit": "c70566f3a83cfe9da49402b57aa4e614e3c13140",
+    "windows_job": 137064394116,
+    "lua_consumer_job": 137066078749,
+    "excerpts": [
+      [
+        "2026-11-22T02:21:06.2551214Z test result: ok. 72 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 1.92s\r",
+        "2026-11-22T02:21:14.1436338Z test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.88s\r",
+        "2026-11-22T02:21:14.4570204Z test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s\r",
+        "2026-11-22T02:21:15.4022651Z test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.93s\r",
+        "2026-11-22T02:21:15.5139465Z test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s\r",
+        "2026-11-22T02:21:15.5245549Z test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\r",
+        "2026-11-22T02:21:15.5535978Z test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s\r",
+        "2026-11-22T02:21:15.5643813Z test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\r",
+        "2026-11-22T02:21:15.6403842Z test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s\r",
+        "2026-11-22T02:21:15.7698889Z test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s\r",
+        "2026-11-22T02:21:16.0809963Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\r",
+        "2026-11-22T02:21:30.2759267Z test result: ok. 1 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s\r",
+        "2026-11-22T02:25:27.7872437Z {\"synthetic\": true, \"variants\": 45125, \"native_calls\": 49, \"http_requests\": 113, \"seconds\": 26.861300700000015, \"production_lua_market_passed\": false, \"mode\": \"actual Windows publication\"}\r",
+        "2026-11-22T02:25:33.4086133Z {\"synthetic\": true, \"variants\": 129, \"native_calls\": 4, \"http_requests\": 132, \"seconds\": 2.164049200000022, \"production_lua_market_passed\": false, \"mode\": \"actual Windows publication\"}\r"
+      ],
+      [
+        "2026-11-22T02:26:44.8643001Z {\"all_parts_compile_execute_ms\":0,\"current_bytes\":14632,\"current_queries_retained_kib\":145,\"declared_parts\":64,\"decoded_rows\":2,\"enumerated_items\":128,\"enumeration_and_validation_ms\":27,\"explicit_history_ms\":1,\"generation\":\"c3a109cb3f69663692edaee9a204fbc4f9c8466198fc81ade2d10176e406fed1\",\"header_retained_kib\":106,\"header_validation_ms\":26,\"history_bytes\":307,\"history_bytes_before_history\":0,\"history_loads\":1,\"largest_part_load_us\":22,\"largest_validation_callback_us\":2010,\"loaded_parts\":65,\"lookup_1000_us\":4329,\"raw_bytes\":32195,\"raw_bytes_before_history\":31888,\"real_game\":false,\"records\":129,\"retained_kib\":146,\"root_compile_us\":70,\"root_execute_us\":0,\"sampled_peak_kib\":864,\"synthetic\":true}"
+      ]
+    ]
+  },
+  "addon_fast": {
+    "commit": "5f2179df854954f85c57c43498ea06d9c05d17ea",
+    "run": "https://github.com/Twich-Team/TwichUI/actions/runs/44975871902",
+    "conclusion": "success"
+  },
+  "failed_automatic_sync_baseline": {
+    "run": "https://github.com/Twich-Team/TwichUI-Market/actions/runs/44973651752",
+    "failure": {
+      "synthetic": true,
+      "production": false,
+      "physical_game": false,
+      "label": "baseline",
+      "repeat": 0,
+      "mode": "auto",
+      "exit_code": 1,
+      "server_thread_alive": true,
+      "sql_queries": 7906,
+      "in_flight": [],
+      "request_count": 597,
+      "last_requests": [
+        {
+          "operation": "activity",
+          "status": 204,
+          "body_bytes": 0,
+          "server_ms": 5.653000000165775,
+          "server_process_cpu_ms": 15.625,
+          "retry_after": null
+        },
+        {
+          "operation": "prices",
+          "status": 200,
+          "body_bytes": 360,
+          "server_ms": 8.500099999992017,
+          "server_process_cpu_ms": 0,
+          "retry_after": null
+        },
+        {
+          "operation": "provenance",
+          "status": 200,
+          "body_bytes": 383,
+          "server_ms": 4.942099999880156,
+          "server_process_cpu_ms": 15.625,
+          "retry_after": null
+        },
+        {
+          "operation": "workshop_summary",
+          "status": 202,
+          "body_bytes": 21,
+          "server_ms": 108.47130000001926,
+          "server_process_cpu_ms": 109.375,
+          "retry_after": "5"
+        }
+      ]
+    },
+    "interpretation": "Failure is in frozen baseline before candidate; unresolved Windows transport cause. No retry or assertions weakened.",
+    "latest_run": "https://github.com/Twich-Team/TwichUI-Market/actions/runs/44975496301",
+    "latest_failure": {
+      "synthetic": true,
+      "production": false,
+      "physical_game": false,
+      "label": "baseline",
+      "repeat": 0,
+      "mode": "auto",
+      "exit_code": 1,
+      "server_thread_alive": true,
+      "sql_queries": 8764,
+      "in_flight": [],
+      "request_count": 652,
+      "last_requests": [
+        {
+          "operation": "activity",
+          "status": 204,
+          "body_bytes": 0,
+          "server_ms": 6.73289999986082,
+          "server_process_cpu_ms": 0,
+          "retry_after": null
+        },
+        {
+          "operation": "prices",
+          "status": 200,
+          "body_bytes": 360,
+          "server_ms": 10.489700000107405,
+          "server_process_cpu_ms": 15.625,
+          "retry_after": null
+        },
+        {
+          "operation": "provenance",
+          "status": 200,
+          "body_bytes": 383,
+          "server_ms": 6.738199999972494,
+          "server_process_cpu_ms": 0,
+          "retry_after": null
+        },
+        {
+          "operation": "workshop_summary",
+          "status": 202,
+          "body_bytes": 21,
+          "server_ms": 131.19460000007166,
+          "server_process_cpu_ms": 125,
+          "retry_after": "5"
+        }
+      ]
+    }
+  }
+}

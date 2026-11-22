@@ -3,6 +3,8 @@
 require('bit')
 REPO=REPO or './';ROOT=ROOT or './!!!TwichUI/';TESTS=TESTS or './tests/'
 local mode,pattern,count=arg[1] or 'reader',arg[2] or 'single',tonumber(arg[3]) or 32
+local contract,requestedRows=tonumber(arg[5])or 2,tonumber(arg[6])or 32
+assert(contract==2 or contract==3)
 local c=dofile(TESTS..'auction_mock.lua')
 local W=c.TwichUI.Workshop;local Q,J,B,P=W.Summary,W.BridgeCodec,W.Bridge,W.Pricing
 c.GetTimePreciseSec=os.clock
@@ -10,6 +12,7 @@ local function clock()return os.clock()*1000 end
 local function heap()return collectgarbage('count') end
 local events,now,serial={},0,0
 local callbacks,worstCallback,callbackCPU=0,0,0
+local checkSettlement
 c.C_Timer.After=function(delay,fn)
  serial=serial+1;events[#events+1]={due=now+math.max(1/60,delay),fn=fn,id=serial}
 end
@@ -22,6 +25,7 @@ local function event()
  table.sort(events,function(a,b)return a.due<b.due or a.due==b.due and a.id<b.id end)
  local e=table.remove(events,1);now=e.due
  local at=clock();e.fn();local dt=clock()-at;callbacks=callbacks+1;callbackCPU=callbackCPU+dt;worstCallback=math.max(worstCallback,dt);sample()
+ if checkSettlement then checkSettlement()end
  assert(callbacks<1000000,'unbounded timer work')
 end
 local f=assert(io.open(TESTS..'fixtures/workshop_summary_v2/synthetic.json'));local fixture=J.Parse(f:read('*a'));f:close()
@@ -43,7 +47,7 @@ c.UnitFactionGroup=function()return 'Horde' end
 c.GetRealmName=function()return 'Audit synthetic realm' end
 c.C_Item.GetItemInfo=function(id)return 'Synthetic '..id,'item:'..id,1,1,1,'Trade Goods','',1,'',134572,0 end
 h.partitions=J.Array();local rawParts,keys={},{}
-local rowsPerPart= mode=='reader' and count or 32
+local rowsPerPart= mode=='reader' and count or requestedRows
 if mode=='memory' then rowsPerPart=count end
 for bucket=0,63 do
  local rows=J.Array()
@@ -55,15 +59,35 @@ for bucket=0,63 do
  local raw=J.Encode(rows);rawParts[bucket]=raw
  h.partitions[#h.partitions+1]=setmetatable({bucket=bucket,bytes=#raw,record_count=#rows,sha256=J.SHA(raw)},J.OBJECT)
 end
+-- Contract 3 derives only the existing current columns; rich bytes are unchanged.
+local richParts,richDescriptors=rawParts,h.partitions
+local semantic={};for _,p in ipairs(richDescriptors)do semantic[#semantic+1]=p.bucket..':'..p.sha256 end
+local semanticSHA=J.SHA(table.concat(semantic,';'))
+local fixtureCurrentBytes,fixtureHistoryBytes=0,0
+local currentParts,currentDescriptors={},J.Array()
+for _,p in ipairs(richDescriptors)do
+ local rich=J.ParseSummary(richParts[p.bucket],nil,1048576);local current=J.Array()
+ for _,r in ipairs(rich)do local row=J.Array();for i=1,13 do row[i]=r[i]end;current[#current+1]=row end
+ local raw=J.Encode(current);currentParts[p.bucket]=raw
+ currentDescriptors[#currentDescriptors+1]=setmetatable({bucket=p.bucket,bytes=#raw,record_count=p.record_count,sha256=J.SHA(raw)},J.OBJECT)
+ fixtureCurrentBytes=fixtureCurrentBytes+#raw;fixtureHistoryBytes=fixtureHistoryBytes+#richParts[p.bucket]
+end
+if contract==3 then
+ h.schema_version=3;h.contract_version=3;table.remove(h.columns)
+ h.history_partitioning=J.Copy(h.partitioning);h.history_partitions=richDescriptors
+ h.partitioning.max_total_bytes=33554432;h.partitions=currentDescriptors;rawParts=currentParts
+end
 h.record_count=rowsPerPart*64;h.coverage.source_records=h.record_count;h.coverage.delivered_records=h.record_count
 local body=J.Copy(h);body.generation_id=nil;h.generation_id=J.SHA(J.Encode(body))
 local input={summary_version=1,bank='A',manifest=J.Encode(h),receipt=J.Encode(setmetatable({schema_version=1,generation_id=h.generation_id,desktop_build='isolated-audit',completed_at=h.generated_at},J.OBJECT))}
-local loads,compileMS,executeMS,decodes,repeats,seen=0,0,0,0,0,{}
-c.TwichUIMarketParts={}
+local loads,historyLoads,compileMS,executeMS,decodes,repeats,seen=0,0,0,0,0,0,{}
+c.TwichUIMarketParts={};c.TwichUIMarketHistoryParts={}
 c.C_AddOns.LoadAddOn=function(name)
  local b=assert(tonumber(name:match('A(%d%d)$')));loads=loads+1
+ local historical=name:find('History',1,true)~=nil;if historical then historyLoads=historyLoads+1 end
  -- Compile a trusted synthetic addon assignment, never imported/untrusted Lua.
- local source='TwichUIMarketParts['..string.format('%q','A'..('%02d'):format(b))..']='..string.format('%q',rawParts[b])
+ local global=historical and 'TwichUIMarketHistoryParts' or 'TwichUIMarketParts'
+ local source=global..'['..string.format('%q','A'..('%02d'):format(b))..']='..string.format('%q',(historical and richParts or rawParts)[b])
  local at=clock();local fn=assert(loadstring(source));setfenv(fn,c);compileMS=compileMS+clock()-at
  at=clock();fn();executeMS=executeMS+clock()-at;return true
 end
@@ -73,7 +97,23 @@ J.ParseSummary=function(raw,...)
  return parse(raw,...)
 end
 local records,prices,crafts,draws,estimatorInstances=0,0,0,0,0
-local record=B.Record;B.Record=function(...)records=records+1;return record(...)end
+local waiting,finished,waits={}, {}, {}
+local referenceFirst,referenceTen,referenceCount=nil,nil,0
+local record=B.Record;B.Record=function(item,key,...)
+ records=records+1;local id=tostring(item)..':'..tostring(key)
+ local began=waiting[id] or now
+ local r,why=record(item,key,...)
+ if why=='loading'then waiting[id]=began
+ elseif why~='combat' and not finished[id]then
+  finished[id]=true;waits[#waits+1]=now-began;waiting[id]=nil
+  if r and r.current.metrics.recent_copper~=J.NULL then
+   referenceCount=referenceCount+1
+   referenceFirst=referenceFirst or now
+   if referenceCount==10 then referenceTen=now end
+  end
+ end
+ return r,why
+end
 local price=P.Price;P.Price=function(...)prices=prices+1;return price(...)end
 local oldNew=W.Estimate.New
 W.Estimate.New=function(...)
@@ -122,6 +162,13 @@ else
  for i=1,count do recipes[i]={id=i,name='Synthetic craft '..i,prof=171,filled=true,outItem=128+i%1000,outMin=1,outMax=1,
   mats={{item=64+i%64,qty=1+i%4},{item=64+(i*7)%64,qty=2+i%3}}} end
  W.Session.AllRecipes=function()return recipes end
+ local needed={};for _,rec in ipairs(recipes)do needed[rec.outItem]=true;for _,mat in ipairs(rec.mats)do needed[mat.item]=true end end
+ local target=0;for _ in pairs(needed)do target=target+1 end
+ checkSettlement=function()
+  if not out.pricing_settlement_model_seconds and P.PendingCount()==0 and P.CacheSize()>=target then
+   out.pricing_settlement_model_seconds=now-startVirtual;out.pricing_settlement_cpu_ms=clock()-start
+  end
+ end
  local first,ten,last=nil,nil,nil
  local opportunities=W.Session.Opportunities
  W.Session.Opportunities=function(...)
@@ -133,7 +180,8 @@ else
  end
  if pattern=='ui' then W.Window.SetMode('opps');W.Window.Show();W.Window.Render()
  else W.UI.Redraw=function()W.Session.Opportunities()end;W.UI.Redraw() end
- while #events>0 do event()end
+ checkSettlement();while #events>0 do event()end
+ assert(out.pricing_settlement_model_seconds,"price identities did not settle")
  out.priced=last.summary.priced;out.unpriced=count-out.priced
  out.first_model_seconds=first or -1;out.ten_model_seconds=ten or -1
  local warmStart=clock();local beforeRecords,beforeCrafts=records,crafts
@@ -152,6 +200,15 @@ out.raw_loaded_bytes=Q.Status().bytes;out.price_cache_entries=P.CacheSize();out.
 out.history_days=days;out.mode=mode;out.pattern=pattern;out.count=count;out.rows_per_partition=rowsPerPart;out.raw_fixture_bytes=0
 for _,raw in pairs(rawParts)do out.raw_fixture_bytes=out.raw_fixture_bytes+#raw end
 out.synthetic=true;out.real_client=false;out.timer_model='minimum one 60Hz frame per After; CPU reported separately'
+table.sort(waits)
+out.contract_version=contract;out.semantic_fixture_sha256=semanticSHA
+out.fixture_current_bytes=fixtureCurrentBytes;out.fixture_history_bytes=fixtureHistoryBytes;out.history_loads=historyLoads
+out.first_reference_model_seconds=referenceFirst and referenceFirst-startVirtual or -1
+out.ten_references_model_seconds=referenceTen and referenceTen-startVirtual or -1
+out.record_wait_p50_model_seconds=waits[math.max(1,math.ceil(#waits*.5))]or -1
+out.record_wait_p95_model_seconds=waits[math.max(1,math.ceil(#waits*.95))]or -1
+out.record_wait_max_model_seconds=waits[#waits]or -1
+out.current_raw_loaded_bytes=Q.Status().current_bytes or 0;out.history_raw_loaded_bytes=Q.Status().history_bytes or 0
 local fields={}
 for k,v in pairs(out)do
  local value=type(v)=='number' and string.format('%.6f',v) or J.Encode(v)

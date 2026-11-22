@@ -54,8 +54,8 @@
     "simulators": [{"script": "workshop", "only": ["craft", "shop", "strategy", "shopcollect", "wrong"]}]
   },
   "market-performance": {
-    "tests": ["test_workshop_market_performance.lua", "test_workshop_market_pending.lua", "test_workshop_market_consumption.lua", "test_workshop_market_consumption_async.lua", "test_workshop_summary.lua", "test_workshop_estimate.lua"],
-    "syntax": ["tests/bench_market_opportunities.lua", "tests/bench_market_index_memory.lua", "TwichUI_Workshop/Summary.lua", "TwichUI_Workshop/Pricing.lua", "TwichUI_Workshop/Session.lua", "TwichUI_Diagnostics/Gauges.lua"],
+    "tests": ["test_workshop_market_performance.lua", "test_workshop_market_pending.lua", "test_workshop_market_consumption.lua", "test_workshop_market_consumption_async.lua", "test_workshop_summary.lua", "test_workshop_estimate.lua", "test_workshop_market_current.lua", "test_perf_engine.lua"],
+    "syntax": ["tests/bench_market_opportunities.lua", "tests/bench_market_index_memory.lua", "TwichUI_Workshop/Summary.lua", "TwichUI_Workshop/Pricing.lua", "TwichUI_Workshop/Session.lua", "TwichUI_Diagnostics/Gauges.lua", "tests/market_cold_fixture.lua", "tests/bench_market_cold_stages.lua", "tests/bench_workshop_summary.lua", "TwichUI_Workshop/SummarySchema.lua", "TwichUI_Workshop/ViewOpportunities.lua", "!!!TwichUI/Core.lua", "TwichUI_Diagnostics/Instrument.lua", "TwichUI_Diagnostics/Session.lua", "TwichUI_Diagnostics/Export.lua", "TwichUI_Diagnostics/Presets.lua", "TwichUI_Workshop/Bridge.lua"],
     "dependencies": [], "simulators": []
   },
   "market": {

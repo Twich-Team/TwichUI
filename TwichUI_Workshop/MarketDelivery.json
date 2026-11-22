@@ -16,5 +16,8 @@
   "summary_total_bytes": 8388608,
   "summary_history_contract": 2,
   "summary_history_partition_bytes": 1048576,
-  "summary_history_total_bytes": 67108864
+  "summary_history_total_bytes": 67108864,
+  "summary_current_contract": 3,
+  "summary_current_partition_bytes": 1048576,
+  "summary_current_total_bytes": 33554432
 }

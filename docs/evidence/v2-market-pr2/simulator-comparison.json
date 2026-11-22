@@ -1,0 +1,50 @@
+{
+  "baseline": "docs/evidence/v2-market-pr1/simulator-baseline-comparison.json",
+  "current": {
+    "craft": {
+      "count": 40,
+      "matches_baseline40": true,
+      "baseline40_present": true,
+      "additional": []
+    },
+    "opps": {
+      "count": 40,
+      "matches_baseline40": true,
+      "baseline40_present": true,
+      "additional": []
+    },
+    "shop": {
+      "count": 40,
+      "matches_baseline40": true,
+      "baseline40_present": true,
+      "additional": []
+    },
+    "history": {
+      "count": 40,
+      "matches_baseline40": true,
+      "baseline40_present": true,
+      "additional": []
+    },
+    "shopcollect": {
+      "count": 40,
+      "matches_baseline40": true,
+      "baseline40_present": true,
+      "additional": []
+    },
+    "strategy": {
+      "count": 40,
+      "matches_baseline40": true,
+      "baseline40_present": true,
+      "additional": []
+    },
+    "wrong": {
+      "count": 41,
+      "matches_baseline40": false,
+      "baseline40_present": true,
+      "additional": [
+        "SIMLAB check FAIL [display] Peacebloom shared by two recipes: need/in bags/still needed | expected=7/4/3 (deliberately wrong) | actual=7/4/3"
+      ]
+    }
+  },
+  "classification": "Workshop strict suite remains FAIL; voice and UTF-8 simulator boundaries retained; auctionpreview passed"
+}
