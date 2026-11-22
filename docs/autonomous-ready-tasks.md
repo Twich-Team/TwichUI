@@ -96,6 +96,8 @@ Each Ready task is a **mini-specification**, not a guarantee the issue still exi
 
 ### P05 — Premium styling of existing restock dialog
 
+**In review** · [Draft PR #111](https://github.com/Twich-Team/TwichUI/pull/111)
+
 - **Owner decision:** Keep the dialog's existing layout and workflow. Apply TwichUI's premium espresso/walnut leather, subtle bronze, ivory text, legible controls and restrained depth.
 - **Where to start:** `!!!TwichUI/modules/RestockPrompt.lua`, `docs/settings-design-system.md`, existing `R.CraftLook`/`R.FrameLook`. The dialog already has a configurable `MenuStyle`; respect saved choices.
 - **Acceptance:** Default look matches approved Settings/Workshop craftsmanship; items, quantities, prices, Purchase/Cancel and disclosures retain their arrangement, reachability, visibility, contrast and text fit at scaled sizes. User-selected look, Esc/Cancel and purchase/spending protections still work.
