@@ -116,10 +116,14 @@ local _, copy = LR.Duplicate(id); assert(LR.Rule(copy).artwork.id == before)
 local original, duplicate
 for _, r in ipairs(LR.Active()) do if r.id == id then original = r elseif r.id == copy then duplicate = r end end
 assert(original.artwork ~= duplicate.artwork); duplicate.artwork.id = "changed"; assert(original.artwork.id == before)
-local beforeDecision = R.LootRules.Decide({ original }, {quality=2, class=4}, {}).status
+original.enabled = true
+local observation = { quality=2, classID=4, equipLoc="INVTYPE_CHEST" }
+local beforeDecision = R.LootRules.Decide({ original }, observation, {})
+assert(beforeDecision.status == "match" and beforeDecision.rule.action == "greed")
 assert(LR.SetArtwork(id, {kind="icon",id="auctionHouse"})); P.Select(id); P.Refresh()
-assert(R.LootRules.Decide({ original }, {quality=2, class=4}, {}).status == beforeDecision)
-assert(P.ChooseArtwork()); picker.TakeItem("6948"); assert(LR.Rule(id).artwork.kind == "icon"); picker.Close(frame); assert(LR.Rule(id).artwork.kind == "icon")
+local afterDecision = R.LootRules.Decide({ original }, observation, {})
+assert(afterDecision.status == beforeDecision.status and afterDecision.rule.action == beforeDecision.rule.action)
+assert(P.ChooseArtwork()); R.SettingsCompanion.Update({ page = { key = "lootRules" } }); assert(not R.SettingsCompanion.Active(), "sample stays hidden while picker owns companion"); picker.TakeItem("6948"); assert(LR.Rule(id).artwork.kind == "icon"); picker.Close(frame); assert(LR.Rule(id).artwork.kind == "icon")
 assert(P.ChooseArtwork()); picker.TakeItem("6948"); assert(picker.Apply(frame)); assert(LR.Rule(id).artwork.kind == "item" and LR.Rule(id).artwork.id == 6948)
 assert(P.ChooseArtwork()); picker.Frame().automatic.scripts.OnClick(picker.Frame().automatic); picker.Close(frame); assert(LR.Rule(id).artwork.kind == "item")
 assert(P.ChooseArtwork()); picker.Frame().automatic.scripts.OnClick(picker.Frame().automatic); assert(picker.Apply(frame)); assert(LR.Rule(id).artwork == nil)
@@ -136,4 +140,18 @@ assert(R.Profiles.Duplicate("Loot copy")); assert(not picker.Shown()); assert(LR
 assert(not staleApply({kind="item", id=6948})); assert(LR.Rule(id).artwork.id == "unavailable-art")
 assert(P.ChooseArtwork()); P.Select(copy); assert(not picker.Shown())
 P.Select(id); assert(P.ChooseArtwork()); LR.Delete(id); assert(not picker.Shown())
+-- Replacing one feature's session cannot leave its adapter reporting ownership.
+local reminderPage, reminderPicker = R.RemindersPage, R.RemindersImagePicker
+R.SettingsUI.IsPageActive = function(key) return key == "reminders" end
+local reminderOwner = reminderPage.Frame(); reminderOwner:Show()
+assert(reminderPage.Create("shield")); reminderPage.Refresh()
+local reminderID = reminderPage.Selected()
+assert(reminderPicker.Open(reminderID))
+local sharedFrame = picker.Frame()
+R.SettingsUI.IsPageActive = function(key) return key == "lootRules" end
+P.Select(copy); P.Refresh(); assert(P.ChooseArtwork())
+assert(picker.Frame() == sharedFrame and not reminderPicker.Shown() and not reminderPicker.Apply(),
+    "replacement retains one chooser and rejects abandoned Reminder Apply")
+assert(not picker.Apply(reminderOwner), "wrong owner cannot apply the Loot session")
+picker.Close(frame)
 print("PASSED")

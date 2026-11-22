@@ -60,6 +60,7 @@ function P.ChooseArtwork()
     if binding then ClosePicker(); return false end
     local b = { owner = f, id = rule.id, raw = raw, action = raw.action }
     binding = b
+    if R.SettingsCompanion then R.SettingsCompanion.Hide() end
     local ok = picker.Open(f, {
         key = b, selection = rule.artwork,
         subtitle = "Choose an icon for this loot rule.",
@@ -70,7 +71,11 @@ function P.ChooseArtwork()
             if not Current(b) then return false, "That rule has changed." end
             return LR().SetArtwork(b.id, ref)
         end,
-        OnClosed = function() if binding == b then binding = nil end; P.QueueRefresh() end,
+        OnClosed = function()
+            if binding == b then binding = nil end
+            P.QueueRefresh()
+            if P.Active() and R.SettingsUI.Refresh then R.SettingsUI.Refresh() end
+        end,
     })
     if not ok and binding == b then binding = nil end
     return ok
