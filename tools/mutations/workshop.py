@@ -1580,6 +1580,12 @@ m("market.current.priority", "TwichUI_Workshop/Summary.lua",
 
 # PR3: retained results must remain both incremental and generation-safe.
 OPPORTUNITY_TEST = ['test_workshop_opportunity_engine.lua']
+m('market.opportunity.provisional-reuse', 'TwichUI_Workshop/OpportunityEngine.lua',
+  'if partial and not self.filter.profitOnly and not self.filter.hideLow', 'if false',
+  'a burst reconstructs unchanged provisional membership for every batch', OPPORTUNITY_TEST)
+m('market.opportunity.dynamic-membership', 'TwichUI_Workshop/OpportunityEngine.lua',
+  'if partial and not self.filter.profitOnly and not self.filter.hideLow', 'if partial',
+  'price-dependent filtering omits newly completed profitable rows', OPPORTUNITY_TEST)
 m('market.opportunity.memo-version', 'TwichUI_Workshop/Estimate.lua',
   'self.itemVersions[item]=self.itemVersions[item]+1', 'self.itemVersions[item]=self.itemVersions[item]+0',
   'a settled item keeps stale shared cost/price answers', OPPORTUNITY_TEST)

@@ -429,7 +429,7 @@ comparison/update policy and observed failures are in the
 ### Incremental Opportunities (PR3)
 
 The existing `market-performance` development group adds deterministic engine and
-actual Window/UI lifecycle tests. Its ten modules passed in 4.351 s on the audit
+actual Window/UI lifecycle tests. Its ten modules passed in 4.293 s on the audit
 host. Crafting integration selects these tests too. The existing PR workflow uses
 the same development command; no large benchmark or simulator entered routine CI.
 
@@ -446,3 +446,5 @@ workloads; the driver discards one warm-up and defaults to three fresh samples.
 20-cycle workload, never routine discovery. See the [PR3 report](performance/v2-opportunities-incremental-pr3.md)
 for exact before/after commands, operation gates, baseline update policy,
 recomputation oracle, memory evidence and retained simulator failures.
+
+Extended memory diagnostics may use `--scenario stress --stress-cycles 60`; cycles default to 20 and remain opt-in. Snapshot fields include memo, price, row and pending counts alongside retained heap.

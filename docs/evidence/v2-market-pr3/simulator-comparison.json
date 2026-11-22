@@ -6,42 +6,42 @@
       "baseline40_present": true,
       "additional": [],
       "missing": [],
-      "stderr_sha256": "10db1ae4787bc38277fd36b89f276f2c043c5a8ac7fde8f8a52eb055057ff8b0"
+      "stderr_sha256": "bb8dd7e1e371f64f19847f1cb19660a54f35992475a317be0b58ca55c52f5378"
     },
     "opps": {
       "count": 40,
       "baseline40_present": true,
       "additional": [],
       "missing": [],
-      "stderr_sha256": "03c9f2ccaba752796bf037d75a40bbbc19fcfd7385aac700fe9e8f28ae9e9596"
+      "stderr_sha256": "5cac7e849f18433e04759b7017532b4f22130a9c55419605613bff1eab139e2f"
     },
     "shop": {
       "count": 40,
       "baseline40_present": true,
       "additional": [],
       "missing": [],
-      "stderr_sha256": "3295a2f0c8cdf8695fbd5b1a4df4426756dcd2c94241672b71fd418af31c0b89"
+      "stderr_sha256": "269001a87800b9ca357c5906d7597f55797ca7085af3f3123676b4588b8ba633"
     },
     "history": {
       "count": 40,
       "baseline40_present": true,
       "additional": [],
       "missing": [],
-      "stderr_sha256": "6855837327d3998ce12c69bd42debaef55eb5b50115715aa88cd695452c1794c"
+      "stderr_sha256": "06a3db4ca9f75d972a42fbc9a013c85ee8c11cca86885be436437a0a25ed9a08"
     },
     "shopcollect": {
       "count": 40,
       "baseline40_present": true,
       "additional": [],
       "missing": [],
-      "stderr_sha256": "246d7930d2fcc3b55b1335f687807b69b07891792b127d610c6e1a0eaf1348ba"
+      "stderr_sha256": "c6f31a3067d6c68fce88cc7bcb5e46433f4dbadd86999fad1c850bf0ff3a40aa"
     },
     "strategy": {
       "count": 40,
       "baseline40_present": true,
       "additional": [],
       "missing": [],
-      "stderr_sha256": "5cc3609a80633c0c9ab165b7ddc70c47827ca7974384b07d9baa33c2925f3ebc"
+      "stderr_sha256": "c80c7335daa3f43cb5212bfae51cda100f58cf331cb782dc61a76421a1b45236"
     },
     "wrong": {
       "count": 41,
@@ -50,7 +50,7 @@
         "SIMLAB check FAIL [display] Peacebloom shared by two recipes: need/in bags/still needed | expected=7/4/3 (deliberately wrong) | actual=7/4/3"
       ],
       "missing": [],
-      "stderr_sha256": "827467df9fb7927f4cf459e07e9c17eb7a6ddd745f3055b3af0cca568c2da442"
+      "stderr_sha256": "97d05be7419f96b991c52e3246ee26465053957610fb49f8fb3b7e9cd6b773a1"
     }
   }
 }

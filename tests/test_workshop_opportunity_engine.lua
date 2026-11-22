@@ -72,6 +72,20 @@ engine:Request(args);drain();assert(engine.stats.crafts==calls+1,'recipe change 
 -- Pending price questions wait for an event; there is no polling timer chain.
 loading[11]=true;engine:ItemsChanged({[11]=true});drain()
 assert(engine.waiting==32 and #events==0 and not engine.co,'pending answers busy-looped')
+local stableRows=engine.rows;local reused=engine.stats.partialReuses or 0
+engine.presentDirty=true;engine:Request(args);drain()
+assert(engine.rows==stableRows and engine.stats.partialReuses>reused,'unchanged provisional membership was rebuilt')
+args.filter={sort='profit',desc=true,profitOnly=true};engine:Request(args);drain()
+for _,row in ipairs(engine.rows)do assert(row.est.state=='ok'and row.est.profitLow>0,'price-dependent membership reused pending rows')end
+loading[12]=true;engine:ItemsChanged({[12]=true});drain();local oldCount=#engine.rows
+loading[11]=nil;engine:ItemsChanged({[11]=true});drain()
+local partial=Op.Select(engine.all,args.filter)
+assert(engine.waiting==32 and #partial>oldCount and #engine.rows==#partial,'partial profitable membership missed newly completed rows')
+local members={};for _,row in ipairs(partial)do members[row.rec.id]=true end
+for _,row in ipairs(engine.rows)do assert(members[row.rec.id],'partial membership differs');members[row.rec.id]=nil end
+assert(not next(members),'partial membership omitted a completed row')
+loading[12]=nil;engine:ItemsChanged({[12]=true});drain()
+args.filter={sort='profit',desc=true};engine:Request(args);drain()
 loading[11]=nil;engine:ItemsChanged({[11]=true});drain();reference()
 -- Old callbacks and partially evaluated recipes cannot publish into a new context.
 prices[12]=777;engine:ItemsChanged({[12]=true});tick()

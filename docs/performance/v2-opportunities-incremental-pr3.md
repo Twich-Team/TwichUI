@@ -87,3 +87,15 @@ now dispatches both the stand-in's main script and HookScript listeners; its
 initial offset-only timing is superseded, not treated as actual scrolling.
 Optional Lua argument nine (`normal` / `nogc`) exposes isolated callback heap,
 pool and indivisible-question diagnostics. Never disable GC in addon runtime.
+
+
+The large-workload follow-up reuses provisional membership/position arrays while
+the catalog and metadata-only filters stay unchanged. Existing row objects expose
+new estimates without a full copy per 128 recipes; price/confidence filters still
+rebuild membership. This removes quadratic presentation work for the default view
+without adding a price cache. The fast group passes in 4.293 s; 18/18 targeted
+mutations are killed. The repeated 76-module integration run passes all offline
+modules and Auction preview, retaining exactly the known Workshop 40/41 failures.
+New candidate measurements supersede the earlier PR3 checkpoint comparisons.
+The longer memory probe records bounded memo/cache/row counts, rather than
+assuming a rising heap is a leak or a plateau.

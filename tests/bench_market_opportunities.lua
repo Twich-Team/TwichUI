@@ -5,7 +5,9 @@ REPO=REPO or './';ROOT=ROOT or './!!!TwichUI/';TESTS=TESTS or './tests/'
 local mode,pattern,count=arg[1] or 'reader',arg[2] or 'single',tonumber(arg[3]) or 32
 local scenario=arg[8]or 'none'
 -- Optional bounded diagnostic only; never a runtime GC policy.
-local gcDiagnostic=arg[9];assert(not gcDiagnostic or gcDiagnostic=='normal'or gcDiagnostic=='nogc')
+local gcDiagnostic=arg[9];if gcDiagnostic=='off'then gcDiagnostic=nil end
+assert(not gcDiagnostic or gcDiagnostic=='normal'or gcDiagnostic=='nogc')
+local stressCycles=tonumber(arg[10])or 20;assert(stressCycles>=1 and stressCycles<=100 and stressCycles%1==0)
 local contract,requestedRows=tonumber(arg[5])or 2,tonumber(arg[6])or 32
 assert(contract==2 or contract==3)
 local c=dofile(TESTS..'auction_mock.lua')
@@ -320,7 +322,8 @@ else
    end
    out.scenario_generations=3
   elseif scenario=='stress'then
-   for pass=1,20 do
+   out.scenario_cycles=stressCycles
+   for pass=1,stressCycles do
     local changed={};for item=64,127 do changed[item]=true;overlays[item]=pass end
     if W.Session.ItemsChanged then W.Session.ItemsChanged(changed)else W.Session.ForgetEstimator()end
     for i=1,5 do W.Session.opp.sort=({'profit','cost','sell','margin'})[1+(pass+i)%4];W.UI.Redraw()end
@@ -329,10 +332,14 @@ else
      if pass%4==0 then W.Window.Hide();W.Window.Show()end
     end
     while #events>0 do event()end
-    if pass==1 or pass==10 or pass==20 then
+    if pass==1 or pass%10==0 or pass==stressCycles then
      local gc=clock();collectgarbage('collect')
      out.scenario_gc_ms=(out.scenario_gc_ms or 0)+clock()-gc
      out['scenario_retained_pass_'..pass..'_kib']=heap()-base
+     out['scenario_memo_pass_'..pass]=W.Session.EstimatorSize()
+     out['scenario_prices_pass_'..pass]=P.CacheSize()
+     out['scenario_pending_pass_'..pass]=P.PendingCount()
+     out['scenario_rows_pass_'..pass]=W.Session.OpportunityStatus and W.Session.OpportunityStatus().retained or count
     end
    end
   else error('unknown scenario')end

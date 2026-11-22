@@ -116,6 +116,7 @@ function Engine:Cancel(clear)
         self.head,self.tail=nil,nil;self.pending,self.waiting,self.completed=0,0,0;self.summary={total=0,priced=0,profitable=0}
         self.timed={};self.timeDirty=false;self.presentDirty=false;self.groups=nil;self.groupOrder=nil
         self.provisional=nil;self.positions=nil;self.old=nil;self.buildRecipes=nil;self.visible=nil
+        self.presentedCatalog,self.presentedFilter=nil,nil
         self.failedKey,self.failedRecipes,self.failedRevision=nil,nil,nil
     end
 end
@@ -224,6 +225,14 @@ function Engine:Present()
     if self.args.current and not self.args.current()then self.obsolete=true;return end
     local serial,filterKey=self.serial,self.filterKey
     local partial=self.pending>0 or self.waiting>0 or self.building
+    -- These filters depend only on recipe metadata. Stable row objects already
+    -- expose new estimates; rebuilding their membership on every 128 results
+    -- makes large bursts quadratic. Price/confidence filters must be rebuilt.
+    if partial and not self.filter.profitOnly and not self.filter.hideLow
+        and self.presentedCatalog==self.all and self.presentedFilter==filterKey then
+        self.final=false;self.presentDirty=false;self.viewRevision=(self.viewRevision or 0)+1
+        self:Metric('partialReuses');self:Metric('partialPublications');self:Notify();return
+    end
     local ordered,rows,positions={},{},{}
     for _,row in ipairs(self.provisional or self.all)do
         ordered[#ordered+1]=row
@@ -252,6 +261,7 @@ function Engine:Present()
     end
     for i,row in ipairs(rows)do positions[row.rec.id]=i;self:Work();if serial~=self.serial or filterKey~=self.filterKey then return end end
     self.rows,self.positions=rows,positions;self.final=not partial;self.presentDirty=false
+    self.presentedCatalog,self.presentedFilter=self.all,filterKey
     self.viewRevision=(self.viewRevision or 0)+1;self:Metric(partial and 'partialPublications'or 'fullPublications');self:Notify()
 end
 function Engine:EnsureWorker()
@@ -327,6 +337,7 @@ function Engine:Request(args)
         self:Cancel(false);self.paused=false
         if reset then self.context=self.context+1;self.versions={};self.incoming={};self:Metric('fullInvalidations')end
         self.all={};self.rows={};self.byId={};self.dependencies={};self.head,self.tail=nil,nil;self.timed={}
+        self.presentedCatalog,self.presentedFilter=nil,nil
         self.summary={total=#args.recipes,priced=0,profitable=0};self.pending,self.waiting,self.completed=0,0,0
         self.recipes=args.recipes;self.buildRecipes=args.recipes;self.old=old;self.building=true;self.final=false
         self.rankValid=false

@@ -2,7 +2,7 @@
   "format": 1,
   "elapsed_seconds": 10.4,
   "counts": {
-    "killed": 16,
+    "killed": 18,
     "survived": 0,
     "invalid": 0,
     "timeout": 0,
@@ -64,6 +64,20 @@
       "status": "killed",
       "kind": "assertion",
       "killed_by": "test_workshop_market_current.lua",
+      "expected": true
+    },
+    {
+      "id": "market.opportunity.provisional-reuse",
+      "status": "killed",
+      "kind": "assertion",
+      "killed_by": "test_workshop_opportunity_engine.lua",
+      "expected": true
+    },
+    {
+      "id": "market.opportunity.dynamic-membership",
+      "status": "killed",
+      "kind": "assertion",
+      "killed_by": "test_workshop_opportunity_engine.lua",
       "expected": true
     },
     {
