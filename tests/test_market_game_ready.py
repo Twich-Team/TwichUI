@@ -17,6 +17,7 @@ spec=importlib.util.spec_from_file_location('game_ready',ROOT/'tools/experiments
 G=importlib.util.module_from_spec(spec);spec.loader.exec_module(G)
 sys.path.insert(0,str(ROOT/'tools/experiments'))
 from market_fixed_records import encode_rows
+from measure_game_ready import numeric_metrics
 
 
 def fixture(root,representation,count=16,delta=0,epoch=0,state=None):
@@ -52,6 +53,12 @@ def fixture(root,representation,count=16,delta=0,epoch=0,state=None):
 
 @unittest.skipUnless(shutil.which('lua5.1'),'Lua 5.1 required')
 class GameReady(unittest.TestCase):
+    def test_sparse_operation_counts_do_not_invent_timings(self):
+        result=numeric_metrics([{'engine_partialReuses':1,'cpu_ms':2,'optional_ms':1},{'cpu_ms':4}])
+        self.assertEqual(result['engine_partialReuses'],dict(median=.5,minimum=0,maximum=1))
+        self.assertEqual(result['cpu_ms']['median'],3)
+        self.assertNotIn('optional_ms',result)
+
     def lua(self,config,body,key):
         init="require('bit');ROOT='../!!!TwichUI/';REPO='../';TESTS='./';local c=dofile(TESTS..'auction_mock.lua');local W=c.TwichUI.Workshop;local pending={};c.C_Timer.After=function(_,fn)pending[#pending+1]=fn end;c.GetTimePreciseSec=os.clock;arg={};arg[12]="+json.dumps(str(config))+";local X=dofile(TESTS..'bench_market_game_ready.lua');local h,input=X.setup(c);W.Bridge.Begin(input);local key="+json.dumps(key)+";local function tick()local batch=pending;pending={};for _,fn in ipairs(batch)do fn()end end;local function drain()for i=1,1000 do if #pending==0 then return end;tick()end;error('retry loop')end;"
         p=subprocess.run(['lua5.1','-e',init+'drain();'+body],cwd=ROOT/'tests',text=True,capture_output=True,timeout=15)

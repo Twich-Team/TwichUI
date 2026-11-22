@@ -20,6 +20,17 @@ def identity():
     return {p:hashlib.sha256((ROOT/p).read_bytes()).hexdigest()for p in FILES}
 
 
+def numeric_metrics(samples):
+    # Engine operation counters are sparse (absent means zero). Timing fields
+    # are optional observations, so never invent a zero-duration observation.
+    counters={k for s in samples for k in s if k.startswith('engine_') and k!='engine_worstBatch'}
+    for s in samples:
+        for k in counters:s.setdefault(k,0)
+    common=set.intersection(*(set(s)for s in samples))
+    return {k:dict(median=statistics.median(s[k]for s in samples),minimum=min(s[k]for s in samples),maximum=max(s[k]for s in samples))
+        for k in sorted(common)if all(type(s[k])in(int,float)for s in samples)}
+
+
 def run(fixture, output, recipes, counts, representations, reps, history, native_cohort=False, scenario='none',history_item=1001):
     meta=json.loads((fixture/'fixture.json').read_text())
     start_identity=identity()
@@ -59,8 +70,7 @@ def run(fixture, output, recipes, counts, representations, reps, history, native
                         assert row['warm_crafts']==0 and row['warm_record_calls']==0 and row['warm_estimator_reused']
                         if repeat:samples.append(row)
                     else:
-                        case.update(status='measured',samples=samples,metrics={k:dict(median=statistics.median(s[k]for s in samples),minimum=min(s[k]for s in samples),maximum=max(s[k]for s in samples))
-                            for k,v in samples[0].items()if type(v)in(int,float)})
+                        case.update(status='measured',samples=samples,metrics=numeric_metrics(samples))
                     report['cases'].append(case);save()
                     print(n,count,representation,case['status'],round(case.get('metrics',{}).get('cpu_ms',{}).get('median',0),2),flush=True)
     report['source_unchanged']=start_identity==identity();assert report['source_unchanged']
