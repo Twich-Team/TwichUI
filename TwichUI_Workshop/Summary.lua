@@ -42,9 +42,10 @@ end
 local function digest(v) return type(v)=='string' and #v==64 and not v:find('[^0-9a-f]') end
 local function tick() coroutine.yield() end
 local function header(raw,expected)
-    if type(raw)=='table' and W.Int(raw.summary_version,2,2147483647) then error('summary newer_addon',0) end
-    closed(raw,{summary_version=true,manifest=true,bank=true,receipt=true})
-    need(raw.summary_version==1 and (raw.bank=='A' or raw.bank=='B') and type(raw.manifest)=='string' and #raw.manifest<=65536)
+    if type(raw)=='table' and W.Int(raw.summary_version,3,2147483647) then error('summary newer_addon',0) end
+    local prepared=type(raw)=='table'and raw.summary_version==2
+    closed(raw,prepared and {summary_version=true,manifest=true,bank=true,receipt=true,prepared=true}or {summary_version=true,manifest=true,bank=true,receipt=true})
+    need((raw.summary_version==1 or prepared) and (raw.bank=='A' or raw.bank=='B') and type(raw.manifest)=='string' and #raw.manifest<=65536)
     local h=J.Parse(raw.manifest,tick)
     if type(h)=='table' and (W.Int(h.schema_version,4,2147483647) or W.Int(h.contract_version,4,2147483647)) then error('summary newer_addon',0) end
     S.Schema(h.contract_version==3 and W.SummaryCurrentSchema or h.contract_version==2 and W.SummaryHistorySchema or W.SummarySchema,h,tick)
@@ -86,7 +87,9 @@ local function header(raw,expected)
     closed(receipt,{schema_version=true,generation_id=true,desktop_build=true,completed_at=true})
     need(receipt.schema_version==1 and receipt.generation_id==h.generation_id and type(receipt.desktop_build)=='string'
         and #receipt.desktop_build>=1 and #receipt.desktop_build<=80 and S.Time(receipt.completed_at) and S.Time(receipt.completed_at)>=S.Time(h.generated_at))
-    return {header=h,raw=raw,bank=raw.bank,manifest=raw.manifest,receiptText=raw.receipt,receipt=receipt,parts=parts,checked={},failed={},loaded={},total_bytes=total,loaded_bytes=0,loaded_parts=0,checked_count=0,
+    local preparedContext
+    if prepared then need(W.Prepared~=nil);preparedContext=W.Prepared.Begin(raw.prepared,h,raw.bank,tick)end
+    return {prepared=preparedContext,preparedText=raw.prepared,summary_version=raw.summary_version,header=h,raw=raw,bank=raw.bank,manifest=raw.manifest,receiptText=raw.receipt,receipt=receipt,parts=parts,checked={},failed={},loaded={},total_bytes=total,loaded_bytes=0,loaded_parts=0,checked_count=0,
         current_bytes=0,history_bytes=0,history_loaded_parts=0,history_checked_count=0}
 end
 local function money(v) return v==N or S.Money(v,true) and #v<=11 and (#v<11 or v<='99999999999') end
@@ -148,10 +151,11 @@ end
 function Q.Selected() return selected end
 function Q.Deactivate() selected=false;Q.Cancel();active,cached,previous,previousCache=nil,nil,nil,nil;queue,queued={},{} end
 function Q.Begin(raw,expected,suppressPendingSelection)
-    if active and active.raw==raw and active.manifest==raw.manifest and active.bank==raw.bank and active.receiptText==raw.receipt then selected=true;return true end
+    if active and active.raw==raw and active.manifest==raw.manifest and active.bank==raw.bank and active.receiptText==raw.receipt and active.preparedText==raw.prepared and active.summary_version==raw.summary_version then selected=true;return true end
     if rejected==raw then return false,'invalid' end
     if job and job.raw==raw then schedule();return false,'loading' end
     cancelPending()
+    if active and active.prepared then W.Prepared.Cancel(active.prepared)end
     if parkedHistory then queued[parkedHistory.bucket]=nil;parkedHistory=nil end
     rejected=nil;lastError=nil;stats.unsupported=nil;stats.reload_required=nil
     job={kind='header',raw=raw,co=coroutine.create(function()return header(raw,expected)end)}
@@ -196,7 +200,17 @@ local function loadPart(p,bucket)
     return true
 end
 startNext=function()
-    if job or not active or #queue==0 and not parkedHistory then return end
+    if job or not active then return end
+    if active.prepared and W.Prepared.Pending(active.prepared)then
+        local ctx=active.prepared
+        job={kind='prepared',co=coroutine.create(function()
+            W.Prepared.Work(ctx,function(item,key,why)
+                if active and active.prepared==ctx and W.Pricing and W.Pricing.ItemReady then W.Pricing.ItemReady(item,key,why)end
+            end,changed)
+        end)}
+        schedule();return
+    end
+    if #queue==0 and not parkedHistory then return end
     local position=1
     if active.header.contract_version==3 then
         position=nil
@@ -232,12 +246,14 @@ function Q.Step(ms)
                 if current.kind=='part'then validationFinished(current)end
                 stats.failures=stats.failures+1;cancelPending();changed();lastError='invalid';stats.unsupported=value=='summary newer_addon'
                 if current.kind=='header' then rejected=current.raw else
-                    active.failed[current.bucket]='invalid';stats.reload_required=true
+                    if active.prepared then W.Prepared.Cancel(active.prepared)end
+                    if current.bucket then active.failed[current.bucket]='invalid'end;stats.reload_required=true
                     if not rejectSplit() and previous then rejected=active.raw;active,cached=previous,previousCache;previous,previousCache=nil,nil;queue,queued,queuedAt={},{},{};parkedHistory=nil end
                 end
                 job=nil;break
             end
             if coroutine.status(current.co)=='dead' then
+                if current.kind=='prepared'then job=nil;break end
                 if current.kind=='handoff' then job=nil;if current.notify then changed() end;break end
                 if current.kind=='part'then validationFinished(current)end
                 local notify=current.kind=='header' or not active.checked[current.bucket]
@@ -267,6 +283,7 @@ function Q.Step(ms)
         return active~=nil,job and 'loading' or lastError
     end
     local id=job and job.kind=='handoff' and 'workshop.pricingComplete' or
+        job and job.kind=='prepared'and 'workshop.preparedVerify' or
         job and job.bucket and job.bucket>=64 and 'workshop.historyValidate' or 'workshop.summaryValidate'
     return measured(id,run)
 end
@@ -280,7 +297,7 @@ schedule=function()
         current.scheduled=false;Q.Step();if job then schedule() end
     end)
 end
-function Q.Cancel() cancelPending();job=nil;parkedHistory=nil;queue,queued,queuedAt={},{},{} end
+function Q.Cancel() if active and active.prepared then W.Prepared.Cancel(active.prepared)end;cancelPending();job=nil;parkedHistory=nil;queue,queued,queuedAt={},{},{} end
 function Q.Pending() return job~=nil or parkedHistory~=nil end
 function Q.Load(raw) return Q.Begin(raw) end
 local function request(bucket)
@@ -309,6 +326,27 @@ local function request(bucket)
     if active.failed[bucket] then return nil,active.failed[bucket] end
     return nil,'loading'
 end
+local function preparedRequested()
+    if not(active and active.prepared and W.Prepared.Pending(active.prepared))then return end
+    if job and job.kind=='part'and job.bucket>=64 then
+        parkedHistory=job;job=nil;queued[parkedHistory.bucket]=true
+        parkedHistory.scheduleSerial=(parkedHistory.scheduleSerial or 0)+1;parkedHistory.scheduled=false
+        if R.Perf and R.Perf.on then R.Perf.Count('workshop.summary.historyPreemptions')end
+    end
+    startNext();schedule()
+end
+local function preparedFailure(why)
+    if why~='invalid'then return end
+    stats.failures=stats.failures+1;stats.reload_required=true;lastError='invalid'
+    W.Prepared.Cancel(active.prepared);cancelPending();job=nil;rejectSplit();changed()
+end
+function Q.PreparedActive()return active and active.prepared~=nil or false end
+function Q.PreparePlan(dependencies,visible,work,owner)
+    if active and active.prepared then W.Prepared.Plan(active.prepared,dependencies,visible,work,owner)end
+end
+function Q.Prioritize(items)if active and active.prepared then W.Prepared.Prioritize(active.prepared,items);preparedRequested()end end
+function Q.ReleasePreparation(owner)if active and active.prepared then W.Prepared.Release(active.prepared,owner)end end
+function Q.Shared(item,key)if active and active.prepared then W.Prepared.Shared(active.prepared,item,key)end end
 function Q.Status()
     local out={};for k,v in pairs(stats) do out[k]=v end
     out.state=active and 'ready' or job and 'loading' or lastError and 'invalid' or 'absent'
@@ -327,6 +365,13 @@ function Q.Status()
     out.history_loaded_parts=active and active.history_loaded_parts or 0;out.history_checked_parts=active and active.history_checked_count or 0
     out.decoded_current_rows=cached and cached.bucket<64 and #cached.rows or 0
     out.decoded_history_rows=cached and cached.bucket>=64 and #cached.rows or 0
+    if active and active.prepared then
+        out.prepared=W.Prepared.Status(active.prepared);out.prepared_version=1
+        out.parts=active.prepared.count;out.loaded_parts=out.prepared.loads;out.checked_parts=out.prepared.full
+        out.current_bytes=out.prepared.bytes;out.bytes=out.bytes+out.current_bytes+#active.preparedText
+        out.decoded_current_rows=0
+    end
+    if previous and previous.prepared then out.bytes=out.bytes+previous.prepared.stats.bytes+#previous.preparedText end
     out.parked_history=parkedHistory~=nil
     return out
 end
@@ -340,6 +385,7 @@ end
 function Q.Variants(item,limit)
     item=W.Int(item,1,2147483647);limit=W.Int(limit or 20,1,100)
     if not item or not limit then return nil,'identity' end
+    if active and active.prepared then local out,why=W.Prepared.Variants(active.prepared,item,limit);preparedRequested();preparedFailure(why);return out,why end
     local part,why=request(item%64);if not part then return nil,why end
     local out,count={},0
     for _,r in ipairs(part) do if r[1]==item then count=count+1;if #out<limit then out[#out+1]=r[2] end end end
@@ -347,6 +393,25 @@ function Q.Variants(item,limit)
 end
 function Q.EachItem(add,work,capped)
     if not active then return false,'unavailable' end
+    if active.prepared then
+        local generation=active;local ctx=active.prepared;local epoch=ctx.epoch
+        for bucket=0,ctx.count-1 do
+            local ok,why=W.Prepared.EnsurePart(ctx,bucket);preparedRequested()
+            while not ok and why=='loading'and work do
+                work();if active~=generation or ctx.epoch~=epoch then return false,'cancelled'end
+                ok,why=W.Prepared.EnsurePart(ctx,bucket);preparedRequested()
+            end
+            if not ok then return false,why end
+            local previous
+            for i=1,ctx.descriptors[bucket].record_count do
+                local item=W.Prepared.ItemAt(ctx,bucket,i)
+                if item~=previous then add(item);previous=item end
+                if work then work();if active~=generation or ctx.epoch~=epoch then return false,'cancelled'end end
+                if capped and capped()then return true end
+            end
+        end
+        return true
+    end
     for _,p in ipairs(active.header.partitions) do
         local part,why=request(p.bucket)
         while not part and why=='loading' and work do work();part,why=request(p.bucket) end
@@ -359,22 +424,30 @@ function Q.EachItem(add,work,capped)
     end
     return true
 end
+local function project(item,variant,r,current)
+    return {item_id=item,variant_key=variant,summary=true,daily=not current and r[14] and J.Copy(r[14]) or nil,current={state=active.header.states[r[3]+1],supply=r[7],complete=true,
+                arithmetic_status=r[3]==4 and 'unsupported' or 'supported',observation_ref=0,
+                metrics={recent_copper=r[4],market_value_copper=r[5],minimum_copper=r[6],historical_value_copper=r[10]},
+                coverage={priced_days_14=r[11],priced_days_60=r[12],observed_days_60=r[13]}}}
+end
 function Q.Record(item,variant,opt)
     local function run()
         stats.lookup_calls=stats.lookup_calls+1
         item=W.Int(item,1,2147483647)
         if not item or not digest(variant) then return nil,'variant_required' end
         local current=opt and opt.current
+        if active and active.prepared and current then
+            local r,why=W.Prepared.Record(active.prepared,item,variant,opt);preparedRequested();preparedFailure(why)
+            if r then return project(item,variant,r,true)end
+            return nil,why
+        end
         local bucket=item%64+(active and active.header.contract_version==3 and not current and 64 or 0)
         local part,why=request(bucket);if not part then return nil,why end
         local low,high=1,#part
         while low<=high do
             local middle=math.floor((low+high)/2);local r=part[middle]
             if r[1]==item and r[2]==variant then
-            return {item_id=item,variant_key=variant,summary=true,daily=not current and r[14] and J.Copy(r[14]) or nil,current={state=active.header.states[r[3]+1],supply=r[7],complete=true,
-                arithmetic_status=r[3]==4 and 'unsupported' or 'supported',observation_ref=0,
-                metrics={recent_copper=r[4],market_value_copper=r[5],minimum_copper=r[6],historical_value_copper=r[10]},
-                coverage={priced_days_14=r[11],priced_days_60=r[12],observed_days_60=r[13]}}}
+            return project(item,variant,r,current)
             elseif r[1]<item or r[1]==item and r[2]<variant then low=middle+1 else high=middle-1 end
         end
         return nil,'not_observed'
@@ -430,13 +503,19 @@ function Q.Freshness(now)
     return {state=state,text='Market summary '..state,tone=state=='ready' and 'good' or 'warn',generation=h.generation_id,age=age,observed_at=h.source_observation.observed_at,
         tip={'Loaded generation: '..h.generation_id,'Market server · '..h.market.region:upper()..' · '..h.market.player_ruleset..' · '..h.market.faction..' · house '..h.market.house_id,
             'Observed: '..h.source_observation.observed_at..' UTC'..(h.synthetic and ' · synthetic fixture' or ''),
-            h.record_count..' current observed exact variants declared; partitions validate on demand ('..active.checked_count..'/'..#h.partitions..').',
+            active.prepared and h.record_count..' exact current variants; requested records authenticate on demand across '..active.prepared.count..' prepared partitions.'or
+                h.record_count..' current observed exact variants declared; partitions validate on demand ('..active.checked_count..'/'..#h.partitions..').',
             h.contract_version==3 and 'Actual Market daily closings are available on demand; missing observations remain gaps.' or
                 h.contract_version==2 and 'Actual Market daily closings are loaded; missing observations remain gaps.' or 'Historical references only; detailed charts are not delivered.',
             'Native item-link equivalence is unavailable. Local scans remain independent.',
             'Publication in Companion does not prove game consumption. Files are read on login or a player-approved reload.'}}
 end
 if R.Perf and R.Perf.Gauge then
+    for _,key in ipairs({'loads','bytes','hashes','verified','full','flag_words','cache_hits','pending','cancelled'})do
+        R.Perf.Gauge('workshop.prepared.'..key,{label='Prepared current '..key,kind='cache',group='workshop',unit=key=='bytes'and 'bytes'or 'count',read=function()
+            return active and active.prepared and W.Prepared.Status(active.prepared)[key]or 0
+        end})
+    end
     for _,g in ipairs({{'summaryBytes','Retained summary raw bytes','bytes','bytes'},{'summaryParts','Loaded summary partitions','loaded_parts','count'},
         {'summaryDecoded','Decoded summary rows (one partition)','cache_entries','count'},{'summaryChecked','Validated summary partitions','checked_parts','count'}}) do
         local key=g[3]

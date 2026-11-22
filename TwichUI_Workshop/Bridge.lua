@@ -377,6 +377,9 @@ if W.Summary then
             return legacy(...)
         end
     end
+    for _,name in ipairs({'PreparedActive','PreparePlan','Prioritize','ReleasePreparation','Shared'})do
+        B[name]=function(...)if Q.Selected()then return Q[name](...)end end
+    end
     local status=B.Status
     function B.Status()
         local out=status()

@@ -578,3 +578,11 @@ prices settle honestly. Use `/tui perf start workshop 3` (three minutes), then
 viewport unchanged until settled. Stop with `/tui perf stop`; export Quick summary
 and JSON in Diagnostics. Use separate captures for scrolling/filtering, source
 changes and warm reopening. [Exact native procedure and interpretation](performance/v2-opportunities-incremental-pr3.md#native-forever-check).
+
+Prepared-current capability adds `workshop.preparedLoad` (synchronous physical addon load) and
+`workshop.preparedVerify` (cooperative requested proofs/dense verification). The latter shares
+Summary's existing slice budget with history. Read-only `workshop.prepared.*` gauges expose
+loads, retained bytes, hashes, authenticated leaves, full partitions, flag words, hits,
+pending tasks and cancellations. Partition memory includes both banks of legacy current,
+prepared current (up to 32 per bank), and the unchanged 64 historical partitions.
+No item identities or payloads enter the report.

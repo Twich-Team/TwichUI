@@ -168,7 +168,12 @@ local function record(item,opt,completion,defer)
     if entry then return entry.record or nil,entry.why,h,at end
     local bucket=item%64
     local reserved=pending[bucket] and pending[bucket][item]
-    if reserved and not completion then observed('deduplicated');return nil,'loading',h,at end
+    if reserved and not completion then
+        if not defer and B.PreparedActive and B.PreparedActive()then
+            local waits=pending[bucket];waits.shared=waits.shared or {};waits.shared[item]=true;B.Shared(item,reserved)
+        end
+        observed('deduplicated');return nil,'loading',h,at
+    end
     if not reserved and count+pendingCount>=P.MAX_CACHE then return nil,'lookup_limit',h,at end
     local waits=pending[bucket]
     local timing=reserved and waits.timings and waits.timings[item] or not reserved and started(asked)
@@ -185,6 +190,7 @@ local function record(item,opt,completion,defer)
         if not waits[item] and pendingCount<P.MAX_CACHE then
             waits[item]=key;waits.ids[#waits.ids+1]=item;pendingCount=pendingCount+1;observed('uniquePending')
             waits.members=waits.members or {};waits.members[item]=true
+            if not defer and B.PreparedActive and B.PreparedActive()then waits.shared=waits.shared or {};waits.shared[item]=true end
             if timing then waits.timings=waits.timings or {};waits.timings[item]=timing end
         end
     elseif reason~='combat' then
@@ -195,9 +201,56 @@ local function record(item,opt,completion,defer)
     end
     return r,reason,h,at
 end
+function P.PendingKey(item)return pending[item%64]and pending[item%64][item]end
+function P.PreparePlan(dependencies,visible,work,owner)
+    if B.PreparePlan then B.PreparePlan(dependencies,visible,work,owner)end
+end
+function P.Prioritize(items)if B.Prioritize then B.Prioritize(items)end end
+local function preparedBucket(ids,work,owner)
+    local mine=epoch
+    for _,item in ipairs(ids)do
+        record(item,nil,false,true)
+        local waits=pending[item%64];local key=waits and waits[item]
+        if key then
+            waits.owners=waits.owners or {};local owners=waits.owners[item]or {};waits.owners[item]=owners
+            if owner then
+                local n=0;for _ in pairs(owners)do n=n+1 end
+                if n<8 then owners[owner]=true else waits.shared=waits.shared or {};waits.shared[item]=true end
+            else waits.shared=waits.shared or {};waits.shared[item]=true end
+            observed('readerCalls')
+            local _,why=B.Record(item,key,{current=true,owner=owner})
+            if mine~=epoch then return end
+            if why~='loading'then P.ItemReady(item,key,why)end
+        end
+        if work then work()end
+        if mine~=epoch then return end
+    end
+end
+local function forget(wait,item)
+    if wait.members then wait.members[item]=nil end
+    if wait.owners then wait.owners[item]=nil end
+    if wait.shared then wait.shared[item]=nil end
+    if wait.timings then wait.timings[item]=nil end
+end
+-- A prepared tuple releases only its own reservation and dependency notification.
+function P.ItemReady(item,key,failure)
+    local bucket=item%64;local waits=pending[bucket]
+    if not waits or waits[item]~=key then return end
+    if failure then
+        waits[item]=nil;pendingCount=pendingCount-1
+        if failure~='combat'then cache[item]={record=false,why=failure};count=count+1 end
+    else record(item,nil,true)end
+    forget(waits,item)
+    local live=false;for _,id in ipairs(waits.ids)do if waits[id]then live=true;break end end
+    if not live then pending[bucket]=nil end
+    revision=revision+1;observed('settled')
+    if W.Session and W.Session.ItemsChanged then W.Session.ItemsChanged({[item]=true})end
+    P.Notify()
+end
 -- Reserve one bucket's complete demand before allowing its decoder handoff.
 -- A cancelled Opportunities job releases the lease; shared price work continues.
 function P.PrepareBucket(ids,work,owner)
+    if B.PreparedActive and B.PreparedActive()then return preparedBucket(ids,work,owner)end
     local first=ids[1];if not first then return end
     -- Establish the generation stamp before attaching a preparation lease.
     record(first,nil,false,true)
@@ -233,6 +286,22 @@ function P.PrepareBucket(ids,work,owner)
     end
 end
 function P.ReleasePreparation(owner)
+    if B.PreparedActive and B.PreparedActive()then
+        B.ReleasePreparation(owner)
+        for bucket,waits in pairs(pending)do
+            local live=false
+            for _,item in ipairs(waits.ids)do
+                local owners=waits.owners and waits.owners[item]
+                if owners then owners[owner]=nil end
+                if waits[item]and not(waits.shared and waits.shared[item])and not(owners and next(owners))then
+                    waits[item]=nil;pendingCount=pendingCount-1;forget(waits,item)
+                end
+                if waits[item]then live=true end
+            end
+            if not live then pending[bucket]=nil end
+        end
+        return
+    end
     local released=false
     for bucket,waits in pairs(pending)do
         if waits.preparing==owner then
