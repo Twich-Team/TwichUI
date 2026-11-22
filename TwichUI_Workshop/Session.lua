@@ -418,6 +418,23 @@ function S.OpenRecipe(id)
     return false
 end
 
+-- Search only within an already open, live TwichUI AH. Opening a queue shortcut
+-- never creates an auction visit or authorizes a transaction.
+function S.SearchQueuedOutput(id)
+    local e, a = Q.Find(id), W.AuctionUI
+    if not (e and e.outItem) then
+        note = "This queued recipe has no known output item to search for."
+        return false
+    end
+    if not (a and a.IsShown() and a.Live() and a.OpenBrowse) then
+        note = "Open TwichUI Auction House at an auctioneer to search this output."
+        return false
+    end
+    local ok = a.OpenBrowse(e.outItem, nil, { live = true })
+    note = ok and "Searching for " .. e.name .. "'s output." or "The Auction House couldn't search this output. Try again when it is available."
+    return ok
+end
+
 -- One line per queued recipe for the window
 function S.QueueRows()
     local rows = {}

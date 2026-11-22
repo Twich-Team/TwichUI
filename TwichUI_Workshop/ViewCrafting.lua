@@ -164,6 +164,10 @@ local function QueueTip(row)
         GameTooltip:AddLine("Its materials aren't known: open " .. (e.profName or "its profession") .. " to update.", 1, 0.82, 0.3, true)
     end
     GameTooltip:AddLine("Click to choose it.", 0.55, 0.55, 0.55)
+    local a = W.AuctionUI
+    if a and a.Context and a.Context() == "auctioneer" then
+        GameTooltip:AddLine("Shift-click: search its output in TwichUI Auction House.", 0.8, 0.8, 0.8, true)
+    end
     GameTooltip:Show()
 end
 
@@ -179,6 +183,13 @@ local function MakeQueueRow(parent)
     row.iconFrame = UI.ItemIcon(row.iconBtn, 42)
     row.iconFrame:SetAllPoints()
     row.icon = row.iconFrame.tex
+    local function SearchOutput()
+        local a = W.AuctionUI
+        if not (IsShiftKeyDown and IsShiftKeyDown() and a and a.Context and a.Context() == "auctioneer") then return false end
+        S.SearchQueuedOutput(row.id)
+        UI.Redraw()
+        return true
+    end
     row.iconBtn:SetScript("OnEnter", function(self)
         local item = row.entry and row.entry.outItem
         if not GameTooltip then return end
@@ -190,6 +201,7 @@ local function MakeQueueRow(parent)
     end)
     row.iconBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
     row.iconBtn:SetScript("OnClick", function()
+        if SearchOutput() then return end
         local item = row.entry and row.entry.outItem
         if item and IsModifiedClick and IsModifiedClick("CHATLINK") and ChatEdit_InsertLink then
             local ok, _, link = pcall(C_Item.GetItemInfo, item)
@@ -258,6 +270,7 @@ local function MakeQueueRow(parent)
     row.stale:SetPoint("RIGHT", row, "RIGHT", -8, 0)
     row.stale:SetText("Open profession to update.")
     row:SetScript("OnClick", function(self)
+        if SearchOutput() then return end
         if self.id then selected = self.id; UI.Redraw() end
     end)
     row.TipEnter = QueueTip
