@@ -338,7 +338,7 @@ Turn on Display Lua Errors. Test alone, then with EllesmereUI.
 
 
 Batch 10 verifies this existing opt-in flight feature and corrects two consent/
-lifecycle gaps. `ui.flightAck` is excluded from profile snapshots and imports;
+lifecycle gaps. `ui.flightAck` is excluded from profile snapshots and copies;
 profile switch/copy/reset cannot grant it, and existing local acknowledgement
 survives profile changes. Older profile copies containing that field are ignored
 by the profile reader; no schema migration or new authorization path is added.

@@ -1,4 +1,10 @@
 {
+  "execute-range": {
+    "tests": ["test_execute_range*.lua", "test_twichui_share.lua"],
+    "syntax": ["!!!TwichUI/execute/**/*.lua", "TwichUI_Settings/pages/ExecuteRange.lua"],
+    "dependencies": ["settings"],
+    "simulators": [{"script": "smoke"}, {"script": "settings"}]
+  },
   "class-portrait": {
     "tests": ["test_class_portrait*.lua", "test_class_portrait*.py", "test_twichui_share.lua"],
     "syntax": ["!!!TwichUI/classportrait/**/*.lua", "!!!TwichUI/setup/TwichConfig.lua", "TwichUI_Settings/pages/ClassPortrait.lua"],
