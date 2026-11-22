@@ -1,6 +1,6 @@
 # UX02 rule artwork integrations — consumer specification
 
-**Status: consumer specifications awaiting owner review and separate authorization.** This Batch 5 document specifies future consumers; it adds no rule schema or builder behavior. Batch 6 implements the shared foundation and 20 approved catalog choices, not these consumers. UX02-C/D remain outside the Ready queue. Source baseline: `c7f8741` on `docs/ux02-shared-artwork-picker`.
+**Status: owner-authorized Batch 7 implementation in review.** PR #128 merged the Batch 6 foundation; Batch 7 starts at `f21db0a`. The source-grounded audit below records the pre-integration behavior. The implementation uses the existing shared picker and catalog, with optional artwork owned by each feature. No further roadmap work is authorized.
 
 The owner's scope is **rule identification in the settings list/editor only**. A custom image must never alter rule conditions, priority, activation, destinations, matching, transfers or loot actions. Runtime loot cards, countdowns, transfer review windows, guild arrangement tools and drag ghosts retain their current visuals. See the [shared picker contract](shared-artwork-picker.md), [UX02](../product-roadmap.md#ux02--reuse-the-reminders-image-picker-across-twichui-rule-builders) and [existing artwork workflow](../reminders-art.md).
 
@@ -27,15 +27,15 @@ Magic Inventory's `PaintRuleArtwork` (`:626` onward) also manages portrait masks
 
 ## Proposed representation and ownership contract
 
-Subject to owner review, each rule may have `artwork = Ref`; **absence (`nil`) means automatic**. No per-rule migration is implied: existing rules already omit it. These are bounded values, never texture paths, game links, frames, callbacks or arbitrary metadata:
+Batch 7 uses optional `artwork = Ref` on each rule; **absence (`nil`) means automatic**. No per-rule migration is implied: existing rules already omit it. These are bounded values, never texture paths, game links, frames, callbacks or arbitrary metadata:
 
-| Ref | Structural validation proposal |
+| Ref | Structural validation |
 | --- | --- |
 | `{ kind = "art", id = "shield" }` | String ID, 1–40 bytes, ASCII lower-case letters/digits/hyphens (`^[a-z0-9-]+$`). Existing stable artwork IDs stay unchanged. |
 | `{ kind = "icon", id = "magicInventory" }` | Case-sensitive `R.Icons` key; string 1–64 bytes, ASCII letters/digits/underscore/hyphen (`^[A-Za-z0-9_-]+$`). Preserve camelCase; do not lower-case keys. Actual examples are in `Icons.lua:38` onward. |
 | `{ kind = "item", id = 6948 }` | Finite integer 1–2147483647, matching `RM.ValidItem` (`reminders/Config.lua:73`), without a Workshop dependency. |
 
-Only `kind` and `id` are copied into fresh references. Reject malformed types, unknown kinds, oversized strings, raw paths, links, nonfinite/fractional numbers and nested payloads. Distinguish **structurally valid but unresolved** art/icon/item IDs from malformed references: retain the former through read/write/duplicate/profile/backup paths and resolve to automatic art until usable. Do not require current catalog membership during persistence sanitation. Final field name and invalid-input reporting remain review decisions.
+Only `kind` and `id` are copied into fresh references. Reject malformed types, unknown kinds, oversized strings, raw paths, links, nonfinite/fractional numbers and nested payloads. Distinguish **structurally valid but unresolved** art/icon/item IDs from malformed references: retain the former through read/write/duplicate/profile/backup paths and resolve to automatic art until usable. Do not require current catalog membership during persistence sanitation. The field is `artwork`; malformed saved overrides are omitted from clean views, while explicit invalid artwork writes are rejected.
 
 The shared picker's UI-only `{ kind = "automatic" }` is never serialized; Apply maps it to removing the override. A consumer resolver must not write during rendering or read-time fallback. Consumer setters and `CleanRule` own validated copies; no shared mutable reference table may connect the saved rule, picker, editor or duplicate.
 
@@ -85,4 +85,77 @@ There is no evidence here that an arbitrary old client, import route or cleanup 
 
 Focused future cases should cover: every ref type and boundary; malformed values; valid unknown IDs retained while fallback is visible; automatic restore Apply versus Cancel; Loot immediate persistence; MI picker Apply then rule Cancel/Save/failed Save; MI hide/reopen retaining draft; profile apply cancelling picker and draft; stale callbacks after selection/delete/profile replacement; independent override tables in both duplication routes and profile copies; read/write/enable/move/delete/backup round trips; existing friend-share exclusions; mask transitions; action words with incomplete Loot rules; unchanged loot decisions and inventory plans for identical behavioral fields with different artwork. Preview/runtime/drag visuals remain unchanged. Use the relevant settings simulator only when useful for layout/lifecycle evidence; it cannot certify real-client appearance or reload persistence.
 
-Owner review is required for the proposed `rule.artwork` field, the kind/ID grammar and compatibility/version policy, the exact chooser placement and unavailable-status presentation, and the final shared picker contract. Confirm the agreed curated catalog and item/game-icon availability before extraction. This specification closes consumer discovery; it does not authorize either builder implementation. The shared foundation is implemented separately in Batch 6.
+The owner authorized consumer implementation in Batch 7. The optional reference uses the existing shared grammar and catalog; the eight conditional artwork candidates remain deferred. Native appearance still needs player verification.
+
+## Batch 7 compatibility decision
+
+Use the smallest additive representation: optional `rule.artwork = {kind, id}`;
+absence means automatic. Keep existing root and feature versions. No migration is
+needed for existing rules, and the field has no role in evaluation or movement.
+The shared `Artwork.Check` owns structural bounds, while each consumer maps the
+picker's UI-only automatic candidate to absence and copies every accepted value.
+Unknown but well-formed IDs survive feature reads, mutations and duplicates;
+rendering falls back without writing the saved reference.
+
+**Downgrade limitation:** older TwichUI versions use automatic artwork. Older
+Magic Inventory cleaners can remove the unsupported field when writing rules;
+older Loot views hide it and older duplication does not promise independent
+copies. Do not edit custom artwork using an older version or expect a later
+upgrade to recover choices it discarded. Keep an own-settings backup made with
+the current version if those choices matter. This is cosmetic data loss, not a
+change to actions, matching or transfer safeguards; no version bump or broad
+migration would make older feature sanitizers understand the field.
+
+Profiles and own-settings backups already deep-copy the relevant `ui` subtrees.
+Keep those paths and friend/setup rule-sharing exclusions unchanged. Test the
+recognized references through feature cleaners as well as profile/reload/backup
+copies; retaining raw backup bytes alone does not establish compatibility.
+
+The shared catalog remains core data/code only. The chooser and both editor
+controls stay in the load-on-demand Settings addon; one lazily created chooser
+serves Reminders, Loot Rules and Magic Inventory. No new asset, catalog, updater
+or diagnostic scope is needed for these bounded, player-initiated identity edits.
+No performance improvement is claimed.
+
+## Batch 7 verification and player checklist
+
+- `./tests/run.sh integration loot-rolls --with-group settings --with-group reminders --profile cloud`:
+  **71 offline modules passed, zero failed**, syntax passed (222 selected Lua files
+  plus runner checks). Final source fingerprint stayed unchanged. Overall result
+  remains **FAIL**: smoke, settings and reminders simulator launches could not
+  start because the existing simulator installation is absent. The earlier run
+  has the same missing-lab failures and is retained locally.
+- `tests/test_magic_inventory.lua` passed directly on combined source. The MI
+  implementation worktree also passed all 16 existing `test_magic_inventory*.lua`
+  modules. Changed core Inventory Lua syntax passed separately.
+- Real shared-picker handler tests cover both consumers' Apply/Cancel/automatic
+  semantics, unknown/malformed references, independent duplicates, profile
+  invalidation, item-mask transitions and missing-art status. Cross-consumer
+  Reminder-to-Loot replacement retains one chooser and rejects the old owner.
+  Profile tests cover both rule references through independent profiles, own
+  backup snapshots, switching and SavedVariables-style reload. Loot icon edits
+  notify Settings without reevaluating automatic rolls. Existing loot and MI
+  regression modules retain roll/transfer protections; plan/match parity is
+  checked with differing visual references.
+- No native/client appearance, real reload, long-label/font-size or simulator
+  pose verification is claimed. Check chooser placement and sample restoration
+  on a native client; no native verification is required to review this draft.
+
+Player verification (still required for native evidence):
+
+- [ ] Select bundled artwork, a registered icon and an item icon for a Loot Rule;
+      confirm list/header identity and explicit Need/Greed/Pass action labels.
+- [ ] Stage Use automatic icon, Cancel, then repeat and Apply; confirm only Apply
+      restores the derived Need/Greed/Pass icon.
+- [ ] Choose Magic Inventory artwork; confirm picker Apply edits the draft only,
+      rule Save persists it, and rule Cancel discards it.
+- [ ] Duplicate saved rules and an unsaved MI draft; change the copy's artwork
+      and confirm the original is independent.
+- [ ] Reload and switch/copy/duplicate profiles; confirm saved selections return
+      and no abandoned picker or old draft can write into the new profile.
+- [ ] With a synthetic valid unavailable reference, confirm visible automatic
+      fallback and retained saved identity until an explicit replacement/reset.
+- [ ] Switch editors/pages with a staged choice, close/reopen Settings and verify
+      cancellation, sample placement and unchanged Reminders picker behavior.
+- [ ] Confirm rule actions, matching, priority, destinations, rolling and inventory
+      movement remain unchanged when only artwork differs.

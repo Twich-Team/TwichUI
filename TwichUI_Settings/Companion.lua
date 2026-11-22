@@ -161,6 +161,8 @@ function C.Update(view)
     local key, UI = view.page.key, R.SettingsUI
     local family = families[key]
     if not (family and UI and UI.IsPageActive(key)) then return end
+    -- The artwork chooser owns this companion position until its session closes.
+    if R.SettingsArtworkPicker and R.SettingsArtworkPicker.Shown() then C.Hide(); return end
     if view.sampleButton then view.sampleButton.text:SetText(muted[family] and "Show sample" or "Hide sample") end
     if muted[family] then C.Hide(); return end
     local pt = R.Perf.on and R.Perf.Start("settings.companion")

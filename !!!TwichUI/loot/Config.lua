@@ -102,7 +102,7 @@ local rev = 0
 function LR.Subscribe(fn) subscribers[#subscribers + 1] = fn end
 function LR.Rev() return rev end
 
--- Something the cards are drawn or decided from changed: told once. what: "place", "settings", "rules" or "profile".
+-- A change is told once: place, settings, rules, profile, or settings-only artwork.
 function LR.Invalidate(what)
     rev = rev + 1
     for _, fn in ipairs(subscribers) do
@@ -223,8 +223,10 @@ local function View(rule, index)
         match = rule.match == "any" and "any" or "all",
         delay = ValidDelay(rule.delay) and rule.delay or LR.Get("autoDelay"),
         result = rule.result ~= false,
+        artwork = rule.artwork and R.Artwork and R.Artwork.Check(rule.artwork) or nil,
         conditions = {},
     }
+    if v.artwork and v.artwork.kind == "automatic" then v.artwork = nil end
     for i, c in ipairs(type(rule.conditions) == "table" and rule.conditions or {}) do
         if type(c) == "table" then
             local copy = {}
@@ -318,8 +320,10 @@ function LR.Duplicate(id)
     local t = Saved(true)
     local copy = { id = NextId(t), enabled = false, conditions = {} }
     for k, v in pairs(rule) do
-        if k ~= "id" and k ~= "enabled" and k ~= "conditions" then copy[k] = v end
+        if k ~= "id" and k ~= "enabled" and k ~= "conditions" and k ~= "artwork" then copy[k] = v end
     end
+    local art = rule.artwork and R.Artwork and R.Artwork.Check(rule.artwork)
+    if art and art.kind ~= "automatic" then copy.artwork = art end
     local name = ValidName(rule.name) and rule.name or "Loot rule"
     copy.name = (name .. " (copy)"):sub(1, Ru.MAX_NAME)
     for i, c in ipairs(type(rule.conditions) == "table" and rule.conditions or {}) do
@@ -351,13 +355,33 @@ function LR.Move(id, delta)
     return true
 end
 
-local function Edit(id, fn)
+local function Edit(id, fn, reason)
     local rule = Find(id)
     if not rule then return false, "That rule is gone." end
     local changed = fn(rule)
     if changed == false then return false end
-    if changed then LR.Invalidate("rules") end
+    if changed then LR.Invalidate(reason or "rules") end
     return true
+end
+
+-- The picker-only automatic choice is represented by absence in saved rules.
+function LR.SetArtwork(id, value)
+    local art
+    if value ~= nil then
+        art = R.Artwork and R.Artwork.Check(value)
+        if not art then return false, "That icon isn't valid." end
+        if art.kind == "automatic" then art = nil end
+    end
+    return Edit(id, function(r)
+        local old = r.artwork
+        if old == nil and art == nil then return nil end
+        if type(old) == "table" and art and old.kind == art.kind and old.id == art.id then
+            -- Store a canonical copy even when the visible reference is unchanged.
+            r.artwork = art; return true
+        end
+        r.artwork = art
+        return true
+    end, "artwork")
 end
 
 function LR.SetName(id, name)
