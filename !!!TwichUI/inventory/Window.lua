@@ -703,8 +703,11 @@ local function Build()
     L.Surface(f.bankProgress, L.pal.well, 1, L.pal.bronzeLo, .9)
     f.bankProgress.fill = f.bankProgress:CreateTexture(nil, "ARTWORK")
     f.bankProgress.fill:SetPoint("TOPLEFT", 2, -2); f.bankProgress.fill:SetPoint("BOTTOMLEFT", 2, 2)
-    f.bankProgress.fill:SetColorTexture(L.pal.tealHi[1], L.pal.tealHi[2], L.pal.tealHi[3], .9)
-    f.bankProgress.text = L.Text(f.bankProgress, "small"); f.bankProgress.text:SetPoint("CENTER", 0, 0)
+    -- Keep ivory progress text legible over both the well and the filled run.
+    f.bankProgress.fill:SetColorTexture(L.pal.tealLo[1], L.pal.tealLo[2], L.pal.tealLo[3], .9)
+    f.bankProgress.text = L.Text(f.bankProgress, "small", "OVERLAY")
+    L.Color(f.bankProgress.text, L.pal.text)
+    f.bankProgress.text:SetPoint("CENTER", 0, 0)
     f.bankProgress:Hide()
 
     -- hooked, not set: the shell's fade and the fit to the screen are hooks of the same scripts
