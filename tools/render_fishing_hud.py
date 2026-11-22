@@ -188,6 +188,13 @@ def draw_texture(canvas, r, scale):
            max(int(round(b * src.height)), int(round(t * src.height)) + 1))
     x0, y0 = math.floor(x), math.floor(y)
     img = src.crop(box).resize((max(1, int(math.ceil(x + w)) - x0), max(1, int(math.ceil(y + h)) - y0)), Image.LANCZOS)
+    vx = r.get("vertex")
+    if vx and any(abs(v - 1) > 0.004 for v in vx[:3]):       # a vertex tint (the Journal's rows, hover states)
+        rch, gch, bch, ach = img.split()
+        img = Image.merge("RGBA", (rch.point(lambda v: int(v * vx[0])), gch.point(lambda v: int(v * vx[1])),
+                                   bch.point(lambda v: int(v * vx[2])), ach))
+    if vx and len(vx) > 3:
+        alpha = alpha * vx[3]
     blit(canvas, img, x0, y0, alpha, add=r.get("blend") == "ADD")
 
 
@@ -224,6 +231,34 @@ def seg_width(f, seg, unit):
     return f.getlength(seg[1]) if seg[0] == "text" else seg[2] * unit
 
 
+def draw_wrapped(canvas, r, f, text, base, x, y, w, h, scale):
+    """Word-wrapped plain text (a font string with SetWordWrap(true) and a width), from the top (or the middle) of its box."""
+    words, lines, cur = text.split(), [], ""
+    for wd in words:
+        t = (cur + " " + wd).strip()
+        if f.getlength(t) <= w or not cur:
+            cur = t
+        else:
+            lines.append(cur)
+            cur = wd
+    if cur:
+        lines.append(cur)
+    asc, desc = f.getmetrics()
+    lh = asc + desc
+    top = y if r.get("justifyV") == "TOP" or r.get("justifyV") is None else y + (h - lh * len(lines)) / 2
+    alpha = r["alpha"]
+    lay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(lay)
+    sx, sy = r.get("shadow") or (1, -1)
+    for i, line in enumerate(lines):
+        tw = f.getlength(line)
+        tx = x + (w - tw) if r.get("justify") == "RIGHT" else (x + (w - tw) / 2 if r.get("justify") == "CENTER" else x)
+        ty = top + i * lh
+        d.text((tx + sx * scale, ty - sy * scale), line, font=f, fill=(0, 0, 0, int(200 * alpha)))
+        d.text((tx, ty), line, font=f, fill=base + (int(255 * alpha),))
+    canvas.alpha_composite(lay)
+
+
 def draw_text(canvas, r, scale):
     text = r.get("text") or ""
     if not text:
@@ -234,9 +269,12 @@ def draw_text(canvas, r, scale):
     f = font(path, px)
     c = r.get("color") or [1, 1, 1, 1]
     base = tuple(int(v * 255) for v in c[:3])
+    x, y, w, h = to_px(r["rect"], scale)
+    if r.get("wrap") and r.get("fixedWidth") and "|" not in text and f.getlength(text) > w + 1:
+        draw_wrapped(canvas, r, f, text, base, x, y, w, h, scale)
+        return
     segs = segments(text, base)
     width = sum(seg_width(f, sg, unit) for sg in segs)
-    x, y, w, h = to_px(r["rect"], scale)
     anchor, justify = r.get("hanchor"), r.get("justify") or "CENTER"
     if r.get("fixedWidth"):
         if justify == "RIGHT":

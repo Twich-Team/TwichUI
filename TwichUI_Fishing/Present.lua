@@ -362,6 +362,8 @@ function P.Apply(path)
     if group == "castbar" then CB.Relayout()
     elseif group == "list" then L.Relayout(); L.Refresh()
     elseif path == "present.prompts" then CB.RefreshLines()
+    elseif group == "journal" then
+        if F.JournalUI and path == "journal.scale" then F.JournalUI.Rescale() end
     elseif group == "toast" then T.Relayout(); if path == "toast.enabled" and not S.Get(path) then T.Clear() end
     end
     if not on then return end
@@ -461,6 +463,7 @@ P.HELP = {
     "/tui fish fade - what can be faded and what was; fade on|off, fade bars|units|minimap|panels|meters|twichui|notices|ellesmere on|off,",
     "    fade alpha <0-0.6>, fade add|remove <FrameName>",
     "/tui fish list on|off, list rows <3-12>, list sort count|recent|name, list value show|hide; toasts on|off; scale castbar|list|toast <0.6-1.6>",
+    "/tui fish journal [overview|sessions|collections|locations|treasures] - the Fishing Journal; journal summary on|off",
     "/tui fish brand on|off - the TwichUI Fishing emblem at the top left in immersive Fishing Mode",
     "/tui fish motion on|off, prompts on|off, vibrate on|off (gamepad, on a confirmed catch; unverified)",
     "Keys: Key Bindings > TwichUI > \"Fishing Mode\" and \"Fishing: reveal the interface (hold)\".",
@@ -536,6 +539,19 @@ function P.Command(word, rest)
         else
             local v = OnOff(sub); if v == nil then Say("usage: /tui fish fade on|off, or fade bars|units|minimap|panels|meters|twichui|notices on|off") return true end
             Set("fade.enabled", v, "fading the interface " .. (v and "on." or "off."))
+        end
+    elseif word == "journal" then
+        local UI = F.JournalUI
+        if sub == "summary" then
+            local v = OnOff(val)
+            if v == nil then Say("usage: /tui fish journal summary on|off") return true end
+            Set("journal.summary", v, v and "a summary is offered when a session you ended has catches." or "no session summary.")
+        elseif sub ~= "" and not (UI and UI.LABEL[sub]) then
+            Say("pages: overview, sessions, collections, locations, treasures; journal summary on|off.")
+        elseif not UI then
+            Say("the journal isn't available.")
+        else
+            UI.Toggle(sub ~= "" and sub or nil)
         end
     elseif word == "list" then
         if sub == "rows" then Set("list.rows", tonumber(val), "the catch list shows up to " .. tostring(val) .. " rows.")

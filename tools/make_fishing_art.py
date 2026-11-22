@@ -42,14 +42,18 @@ corrected here, and why:
                                                    fitted to a 64 px square with its aspect kept, as the mockup's stat row shows
                                                    them; the catches use `mark` (the pack's collection fish are framed tiles,
                                                    not symbols, and are not used).
+    j-*, glyph-hook|clam|treasure   (Stage 3A, the Journal; JOURNAL_FILES below) the pack's journal, recessed and chestnut
+                                                   frames, rows, nav and compact buttons, close button, unknown tile and fish
+                                                   watermark, and three more glyphs, each resampled onto a power-of-two canvas.
     scrim            (made here)                   a soft, warm, very dark oval, feathered to nothing on every side, drawn
                                                    faintly under the catch list and the cast bar's lines so ivory text reads
                                                    over bright snow or water as well as at night. No edge anywhere.
     rowglow          (made here)                   a soft amber band, brightest in the middle, for a row that just changed.
 
 Not used, deliberately: hud/catch_count_reference.png (baked "x3" text), hud/cast_bar_*_reference.png (references of the
-fill), collection/* (illustrative fish, not real items: the game's own item icons are used), panels/*, controls/*,
-nine_slice/* and decoration/* other than the rule (Journal and settings surfaces belong to later stages), effects/ripple and
+fill), collection/* other than the "unknown" tile (illustrative fish, not real items: the game's own item icons are used),
+nine_slice/* (the Journal cuts the whole frames with texture coordinates instead) and decoration/* other than the rule and the fish
+watermark, effects/ripple and
 effects/splash (saturated blue water effects that would read as a bite signal, which the game does not give).
 
     python3 tools/make_fishing_art.py [--src assets/fishing] [--out TwichUI_Fishing/media] [--check] [--sheet out.png]
@@ -295,8 +299,30 @@ def rowglow(_src):
     return canvas, (w, h), {}
 
 
+# Stage 3A, the Fishing Journal. Each is the pack's own painting, resampled onto a power-of-two canvas and otherwise untouched
+# (the pack's frames are nine-slice sources: the Journal cuts them with texture coordinates, a 24 px corner on the frames and a
+# 10-12 px cap on the rows and buttons; Hud.lua ART lists the painted sizes).
+JOURNAL_FILES = (
+    ("j-frame", "journal_frame.png"), ("j-recess", "recessed_frame.png"), ("j-chest", "chestnut_frame.png"),
+    ("j-row", "row_normal.png"), ("j-row-hover", "row_hover.png"), ("j-row-on", "row_selected.png"),
+    ("j-nav-on", "button_gold.png"), ("j-nav", "button_dark.png"), ("j-btn", "button_compact.png"),
+    ("j-close", "close.png"), ("j-unknown", "collection_unknown.png"), ("j-mark", "fish_watermark.png"),
+)
+JOURNAL_GLYPHS = (("glyph-hook", "hook.png"), ("glyph-clam", "clam.png"), ("glyph-treasure", "treasure.png"))
+
+
+def JOURNAL(src):
+    out = []
+    for name, file in JOURNAL_FILES:
+        w, h, px, _ = read_png(os.path.join(src, file))
+        out.append((name, (lambda w=w, h=h, px=px: fit(px, (0, 0, w, h), w, h) + ({},))))
+    for name, file in JOURNAL_GLYPHS:
+        out.append((name, (lambda file=file: glyph(src, file))))
+    return out
+
+
 def builds(src):
-    return [
+    return JOURNAL(src) + [
         ("castbar", lambda: castbar(src)),
         ("castfill", lambda: castfill(src)),
         ("castspark", lambda: castspark(src)),

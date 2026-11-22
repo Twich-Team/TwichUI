@@ -36,6 +36,8 @@ S.DEFAULTS = {
     castbar = { enabled = true, scale = 1, x = 0, y = 150 },
     list = { enabled = true, scale = 1, x = -36, y = 100, sort = "count", rows = 6, value = "show" },
     toast = { enabled = true, scale = 1, x = 70, y = -60, hold = 3.5 },
+    -- Stage 3A: the Fishing Journal (Journal.lua, JournalUI.lua)
+    journal = { summary = true, scale = 1, x = 0, y = 0 },
 }
 
 -- What each preference may hold: a checker per leaf. false means "none chosen" for the optional ids and names.
@@ -75,6 +77,7 @@ S.CHECK = {
     list = { enabled = Bool, scale = Range(0.6, 1.6), x = Range(-2000, 2000), y = Range(-2000, 2000),
         sort = OneOf("count", "recent", "name"), rows = Range(3, 12), value = OneOf("show", "hide") },
     toast = { enabled = Bool, scale = Range(0.6, 1.6), x = Range(-2000, 2000), y = Range(-2000, 2000), hold = Range(1, 10) },
+    journal = { summary = Bool, scale = Range(0.6, 1.4), x = Range(-2000, 2000), y = Range(-2000, 2000) },
 }
 
 S.held = false        -- the saved data is from a newer schema: read only, nothing written this session

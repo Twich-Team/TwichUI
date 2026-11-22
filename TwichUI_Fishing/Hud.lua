@@ -38,6 +38,22 @@ H.ART = {
     rule = { file = "rule", w = 256, h = 32, cw = 256, ch = 30 },
     ["glyph-lure"] = { file = "glyph-lure", w = 64, h = 64, cw = 64, ch = 64 },
     ["glyph-time"] = { file = "glyph-time", w = 64, h = 64, cw = 64, ch = 64 },
+    -- Stage 3A, the Journal (the pack's frames, rows and buttons; cut by H.Slice)
+    ["j-frame"] = { file = "j-frame", w = 512, h = 256, cw = 359, ch = 200 },
+    ["j-recess"] = { file = "j-recess", w = 512, h = 256, cw = 264, ch = 202 },
+    ["j-chest"] = { file = "j-chest", w = 256, h = 256, cw = 253, ch = 198 },
+    ["j-row"] = { file = "j-row", w = 512, h = 64, cw = 322, ch = 55 },
+    ["j-row-hover"] = { file = "j-row-hover", w = 512, h = 64, cw = 323, ch = 59 },
+    ["j-row-on"] = { file = "j-row-on", w = 512, h = 64, cw = 325, ch = 59 },
+    ["j-nav-on"] = { file = "j-nav-on", w = 256, h = 64, cw = 162, ch = 60 },
+    ["j-nav"] = { file = "j-nav", w = 256, h = 64, cw = 160, ch = 58 },
+    ["j-btn"] = { file = "j-btn", w = 128, h = 64, cw = 96, ch = 58 },
+    ["j-close"] = { file = "j-close", w = 64, h = 64, cw = 59, ch = 58 },
+    ["j-unknown"] = { file = "j-unknown", w = 128, h = 128, cw = 111, ch = 113 },
+    ["j-mark"] = { file = "j-mark", w = 256, h = 256, cw = 184, ch = 143 },
+    ["glyph-hook"] = { file = "glyph-hook", w = 64, h = 64, cw = 64, ch = 64 },
+    ["glyph-clam"] = { file = "glyph-clam", w = 64, h = 64, cw = 64, ch = 64 },
+    ["glyph-treasure"] = { file = "glyph-treasure", w = 64, h = 64, cw = 64, ch = 64 },
 }
 
 H.IVORY = { 0.94, 0.90, 0.81 }
@@ -71,6 +87,61 @@ function H.Texture(tex, name, fallback)
     if tex.SetColorTexture then tex:SetColorTexture(c[1], c[2], c[3], c[4] or 1) end
     tex.twichArt = false
     return false
+end
+
+-- A painted frame cut into nine with texture coordinates (a corner of `m` painted pixels, edges and middle stretched), as the
+-- Journal's windows, rows and buttons are. The pieces are anchored to `parent`, so the frame follows its size with no
+-- arithmetic. Returns { textures = {...}, SetArt(name), SetColor(r,g,b,a), SetShown(bool) }; a missing file draws a color.
+function H.Slice(parent, name, m, layer, sub)
+    local obj = { textures = {}, m = m }
+    local keys = { "TL", "T", "TR", "L", "C", "R", "BL", "B", "BR" }
+    for _, k in ipairs(keys) do
+        local t = parent:CreateTexture(nil, layer or "BACKGROUND", nil, sub or 0)
+        obj.textures[k] = t
+    end
+    local T = obj.textures
+    local function Place()
+        local a = H.ART[obj.art]
+        local k = obj.k or 1
+        local mm = m * k
+        T.TL:ClearAllPoints(); T.TL:SetPoint("TOPLEFT", parent, "TOPLEFT"); T.TL:SetSize(mm, mm)
+        T.TR:ClearAllPoints(); T.TR:SetPoint("TOPRIGHT", parent, "TOPRIGHT"); T.TR:SetSize(mm, mm)
+        T.BL:ClearAllPoints(); T.BL:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT"); T.BL:SetSize(mm, mm)
+        T.BR:ClearAllPoints(); T.BR:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT"); T.BR:SetSize(mm, mm)
+        T.T:ClearAllPoints(); T.T:SetPoint("TOPLEFT", T.TL, "TOPRIGHT"); T.T:SetPoint("BOTTOMRIGHT", T.TR, "BOTTOMLEFT")
+        T.B:ClearAllPoints(); T.B:SetPoint("TOPLEFT", T.BL, "TOPRIGHT"); T.B:SetPoint("BOTTOMRIGHT", T.BR, "BOTTOMLEFT")
+        T.L:ClearAllPoints(); T.L:SetPoint("TOPLEFT", T.TL, "BOTTOMLEFT"); T.L:SetPoint("BOTTOMRIGHT", T.BL, "TOPRIGHT")
+        T.R:ClearAllPoints(); T.R:SetPoint("TOPLEFT", T.TR, "BOTTOMLEFT"); T.R:SetPoint("BOTTOMRIGHT", T.BR, "TOPRIGHT")
+        T.C:ClearAllPoints(); T.C:SetPoint("TOPLEFT", T.TL, "BOTTOMRIGHT"); T.C:SetPoint("BOTTOMRIGHT", T.BR, "TOPLEFT")
+        return a
+    end
+    function obj:SetArt(art, fallback)
+        self.art = art
+        local a = Place()
+        local ok = a ~= nil
+        local u1, v1 = 0, 0
+        local u2, v2 = a and a.cw / a.w or 1, a and a.ch / a.h or 1
+        local du, dv = a and m / a.w or 0, a and m / a.h or 0
+        local us = { u1, u1 + du, u2 - du, u2 }
+        local vs = { v1, v1 + dv, v2 - dv, v2 }
+        local grid = { TL = { 1, 1 }, T = { 2, 1 }, TR = { 3, 1 }, L = { 1, 2 }, C = { 2, 2 }, R = { 3, 2 }, BL = { 1, 3 }, B = { 2, 3 }, BR = { 3, 3 } }
+        for key, t in pairs(self.textures) do
+            local g = grid[key]
+            if ok and t.SetTexture and t:SetTexture(H.MEDIA .. a.file) ~= false then
+                t:SetTexCoord(us[g[1]], us[g[1] + 1], vs[g[2]], vs[g[2] + 1])
+                t.twichArt = art
+            else
+                local c = fallback or { 0.16, 0.10, 0.06, 0.95 }
+                if t.SetColorTexture then t:SetColorTexture(c[1], c[2], c[3], c[4] or 1) end
+                t.twichArt = false
+            end
+        end
+        return ok
+    end
+    function obj:SetShown(on) for _, t in pairs(self.textures) do t:SetShown(on and true or false) end end
+    function obj:SetVertexColor(r, g, b, a) for _, t in pairs(self.textures) do if t.SetVertexColor then t:SetVertexColor(r, g, b, a or 1) end end end
+    obj:SetArt(name)
+    return obj
 end
 
 -- An artwork as an inline texture in text (|T...|t), `size` units square: the cast bar's stat glyphs.

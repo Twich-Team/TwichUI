@@ -33,6 +33,7 @@ moves `TwichUI_Fishing` beside the core, and `tools/release.py` expects it in th
 | `Loot.lua` | Loot windows: catches, items taken, dedupe, auto-loot confirmation, container windows |
 | `Action.lua` | The secure buttons, the decision (`A.Decide`, pure), reel overrides, the recast guard, combat, interaction targeting |
 | `Api.lua` | Read-only interface for later stages; diagnostics and `/tui fish status` |
+| `Journal.lua`, `JournalUI.lua` | Stage 3A: the Journal's data (from `R.Fishing.API` only) and its window and session summary |
 | `Main.lua` | Start-up, event wiring (core bus `R:On`), `/tui fish` commands, gauges |
 
 ## Public interface (for Stages 2 to 5)
@@ -50,6 +51,9 @@ Everything returns a copy. Nothing builds frames or loads anything. `R.Fishing.A
 - `Gear()` returns `{ state = none|fishing|pending, poleWorn, outstanding, kept, missing, leftOn, since, kind }`.
 - `Queue()` returns `{ { item, n, sid, t, locked } }`, oldest first. `Next()` returns `{ kind, why }` for the next press.
   `ZoneName(mapID)` returns the remembered zone name. `Diagnostics()` and `Report()` return the status as a table and as lines.
+- Stage 3A adds `SessionByID(id)` (one kept session, or the one in progress), `Treasures(scope)` (`{ containers = { [id] = {
+  caught, opened, failed, unopened, got = { [item] = q } } }, contents }`, scope as `Provenance`) and `Retention()`
+  (`{ kept, limit, held, available }`).
 
 `R.Fishing.Subscribe(event, fn)` delivers `fn(event, ...)` for these events: `STATE(new, old)`,
 `SESSION_START(id, reason)`, `SESSION_END(id, reason)`, `CAST(guid)`, `CAST_FAILED(kind)`, `CATCH(sid, slots)`,
@@ -528,6 +532,67 @@ None of these has been done yet. In this order, on WoW: Forever:
       left alone.
 - [ ] With Dialogue UI: talk to an NPC while fishing, and nothing is left faded or zoomed afterwards.
 - [ ] Run the Test Lab case `fishing.client.presentation` and keep the facts.
+
+## The Fishing Journal (Stage 3A)
+
+A premium, non-economic look at what the fishing records hold: `/tui fish journal [overview|sessions|collections|locations|treasures]`,
+or **Open Fishing Journal** on the Fishing page of the TwichUI settings window (Adventure > Fishing). It is a window in the pack's
+walnut-and-bronze frames (journal, recessed and chestnut panels, rows and buttons, cut with `H.Slice`), the game's own item
+icons and names, and the Spectral and Alegreya fonts. Nothing in it prices anything: it never loads Workshop, calls a pricing
+API, or shows money, and a test greps its files for that.
+
+| Page | Shows | From |
+|---|---|---|
+| Overview | fish caught, casts, time fishing, catch rate; the three favourite catches; the three newest sessions; what history is kept | `API.Totals`, `API.Session`, `API.Sessions` |
+| Sessions | every kept session (the one in progress first), newest first, with a detail: zone, start, length and how it ended; casts, catches, items, catch rate, line time, missed lines; its catches by species; containers opened | `API.Sessions`, `API.SessionByID`, `API.Treasures(id)` |
+| Collections | every kind of fish caught, with its icon, quantity, times caught, first and latest catch; sort by most caught, latest, first caught or name; 21 to a page | `API.Totals().species` (containers excluded) |
+| Locations | each zone: casts, catches, catch rate, time on the line, recent sessions begun there; zone 0 is "Unknown zone" | `API.Totals().zones`, `API.ZoneName` |
+| Treasures | containers caught, opened, waiting and failed; what each is confirmed to have held; items found | `API.Treasures("lifetime")` (the queue and the per-container `got`) |
+
+**Session summary.** When a session you stopped (`/tui fish stop`) or left idle ends with something caught, a **Session Summary**
+card shows its zone, length, catches by species and its catch rate, with **Open Journal**. It waits out combat, is off with
+`/tui fish journal summary off` (or the settings switch), and is never shown for a session with no catch.
+
+**How it is built.** `Journal.lua` answers each page as plain tables from `R.Fishing.API` only (no saved variable is read or
+written by the Journal's files), cached until the records change; `JournalUI.lua` draws them with a fixed pool of rows per
+list (the cost of a page does not grow with the history), wheel scrolling and paged grids. Each row and stat has an `extra`
+list that is simply not drawn yet, `U.SUMMARY_COLUMNS` is the summary's column list, and `J.Overview().extra` adds stat cells,
+so Stage 3B adds figures without moving a layout. New in the interface: `API.Treasures(scope)` (per-container counts and
+contents), `API.SessionByID(id)` and `API.Retention()`.
+
+**What the records cannot tell (shown honestly, never invented).**
+
+- **Per-session records are kept for the newest `session.keep` sessions only** (default 100, 10 to 500). Older sessions exist
+  only inside the lifetime totals; the Journal says how many ("N earlier sessions are only in the totals").
+- **Which fish came from which zone is not recorded.** Zone figures (casts, catches, items, line time) are exact; for a
+  species the Collections detail lists the zones of the *kept* sessions it was caught in, labelled "in your recent sessions".
+  A session's own zone is where it began; a session that moved between zones still counts each cast in the zone it happened
+  in (the Locations totals), but shows one zone.
+- **There is no catalogue of fish**, so no "N of M discovered": only what has been caught is listed, and one "?" tile ends the
+  list as a reminder that more exist.
+- **First and latest catch dates** come from the records' own `first` and `last` and are "not recorded" when absent.
+- **Catch rate** is catches (fishing loot windows) over casts. **Time fishing** is the sessions' lengths including the one in
+  progress; **time on the line** is the seconds a line was out. Neither is a per-hour or a value figure.
+- **Containers opened before the Journal's records, or without their contents being seen, show counts only.** Contents are
+  listed only when seen coming out of a container.
+- Item names arrive from the game a moment after an item is first seen; until then a row says "Item <id>" and fills in by itself.
+
+**Artwork.** 15 new textures (`j-*`, `glyph-hook|clam|treasure`; `tools/make_fishing_art.py`) from the pack's `journal_frame`,
+`recessed_frame`, `chestnut_frame`, rows, nav and compact buttons, close button, unknown tile and fish watermark. The window frame
+is cut with a 54 px corner (its ornaments reach about 52 px; the pack's 24 px margin would smear them along the edges). The pack's
+item art is illustrative and is not used: icons are the game's.
+
+**Captures.** `python3 tools/render_fishing_journal.py` runs `tests/journal_capture.lua` (the real Journal over seeded records in
+the simulated client) and draws `docs/evidence/fishing-stage-3a/journal-*.png` with the real textures and fonts. They are
+screenshot-reviewed offline layout captures, not game screenshots: the world is painted, the icons are the pack's illustrative
+stand-ins, and text metrics differ in the client.
+
+**Tests.** `tests/test_fishing_journal.lua`: the model (overview, sessions, detail, collection, zones from kept sessions,
+locations and rates, treasure provenance, the cache), navigation and selection, the Collections grid, sorting and paging, empty
+states, 500 sessions of 40 species (bounded time, no new frames), records held by a newer version, missing dates and zones, the
+summary (offered, off, no catch, waits for combat), and the boundaries (no Workshop, no price, no direct store access).
+
+**Not in 3A:** any value, price or gold per hour (Stage 3B), charts, pool maps, a Journal key binding.
 
 ## Stage boundaries and notes for Stage 3
 

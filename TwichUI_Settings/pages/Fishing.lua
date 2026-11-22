@@ -303,6 +303,11 @@ K.Page({
             K.RefreshOverview()
         end, "Starts or leaves Fishing Mode now. It also starts by itself with your first cast, if you allow that below.")
         Gate(mode)
+        Gate(K.Button("Fishing Journal", "Open Fishing Journal", function()
+            local f = Fish()
+            if not (f and f.JournalUI) then R.Print("fishing: the journal isn't available; reload so TwichUI Fishing and TwichUI match.") return end
+            if f.JournalUI.Open() then K.CloseOptions() end
+        end, "Your catches, sessions, places and treasures, with the game's own icons. Also /tui fish journal."))
         K.Status("Your gear", GearText, function()
             local f = Fish()
             if f and f.Gear.State() == "pending" then
@@ -410,6 +415,7 @@ K.Page({
         Toggle("CastBar", "castbar.enabled", "Show the cast bar", "The fishing timer near the bottom of the screen, with your session's figures.", true)
         Toggle("List", "list.enabled", "Show this session's catches", "Your catches on the right of the screen (immersive only).", true)
         Toggle("Toasts", "toast.enabled", "Show catch notifications", "A short notice for each catch, left of the middle of the screen.", true)
+        Toggle("JournalSummary", "journal.summary", "Show a summary when a session ends", "A Session Summary card with the catches of a session you stopped or left idle (never during combat). Open the whole Journal from the Fishing tab.", true)
         Percent("CastScale", "castbar.scale", "Cast bar size (%)", "The cast bar's size.", 1, 60, 160)
         Percent("ListScale", "list.scale", "Catch list size (%)", "The catch list's size.", 1, 60, 160)
         Percent("ToastScale", "toast.scale", "Notification size (%)", "The notices' size.", 1, 60, 160)
