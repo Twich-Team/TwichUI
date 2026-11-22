@@ -1020,6 +1020,59 @@ do
   Same(d.consumers.rows[1].name:GetText(), "Healing Potion")
   Same(d.consumers.rows[2].name:GetText(), "Mana Potion")
   Same(d.consumers.rows[1].iconFrame.tex.texture, 5501, "verified output item icon")
+  Same(consumerRecords[1].recipe, 1, "recorded recipe spell identity survives adaptation")
+  Same(consumerRecords[1].icon, Q.Find(1).icon, "recorded recipe icon survives adaptation")
+  local consumer = d.consumers.rows[1]
+  local info, qualityColor = c.C_Item.GetItemInfo, c.C_Item.GetItemQualityColor
+  local itemTip, spellTip = c.GameTooltip.SetItemByID, c.GameTooltip.SetSpellByID
+  local modified, insertLink = c.IsModifiedClick, c.ChatEdit_InsertLink
+  local setColor = consumer.name.SetTextColor
+  consumer.name.SetTextColor = function(self, r, g, b) self.consumerColor = { r, g, b } end
+  c.C_Item.GetItemInfo = function(id)
+    local name, link = info(id)
+    return name, link, id == 501 and 3 or nil
+  end
+  c.C_Item.GetItemQualityColor = function(q) Same(q, 3); return 0, 0.44, 0.87 end
+  local hoveredItem, hoveredSpell, linked
+  c.GameTooltip.SetItemByID = function(_, id) hoveredItem = id end
+  c.GameTooltip.SetSpellByID = function(_, id) hoveredSpell = id end
+  Win.Render()
+  Same(consumer.name.consumerColor[2], 0.44, "item name uses native quality color")
+  consumer:GetScript("OnEnter")(consumer)
+  Same(hoveredItem, 501, "name region shows native item tooltip")
+  hoveredItem = nil
+  consumer.iconBtn:GetScript("OnEnter")(consumer.iconBtn)
+  Same(hoveredItem, 501, "icon shows the same item tooltip")
+  consumer.iconBtn:GetScript("OnLeave")(consumer.iconBtn)
+  Check(not c.GameTooltip:IsShown(), "leaving the icon hides the tooltip")
+  c.GameTooltip.SetItemByID = function() error("Synthetic unavailable item tooltip") end
+  consumer:GetScript("OnEnter")(consumer)
+  Check(not c.GameTooltip:IsShown(), "failed item tooltip never reveals stale contents")
+  c.GameTooltip.SetItemByID = function(_, id) hoveredItem = id end
+  c.IsModifiedClick = function() return true end
+  c.ChatEdit_InsertLink = function(link) linked = link end
+  consumer:GetScript("OnClick")(consumer, "LeftButton")
+  local _, expectedLink = info(501)
+  Same(linked, expectedLink, "Shift-click links the output item")
+  -- Synthetic enchant fixture: recorded recipe spell/icon, with no output item.
+  local consumersBefore = S.NeededFor
+  S.NeededFor = function() return {}, { { name = "Synthetic enchant", recipe = 9001, icon = 9002 } } end
+  hoveredItem = nil
+  Win.Render()
+  Check(consumer.iconBtn:IsShown(), "non-item recipe retains its recorded icon")
+  Same(consumer.iconFrame.tex.texture, 9002)
+  consumer:GetScript("OnEnter")(consumer)
+  Same(hoveredSpell, 9001, "enchant name shows its spell tooltip")
+  Same(hoveredItem, nil, "recipe identity is never sent to item tooltip API")
+  Same(consumer.name.consumerColor[1], W.UI.K.text[1], "no item quality is invented for an enchant")
+  consumer.iconBtn:GetScript("OnEnter")(consumer.iconBtn)
+  Same(hoveredSpell, 9001, "enchant icon shares its spell tooltip")
+  S.NeededFor = consumersBefore
+  c.C_Item.GetItemInfo, c.C_Item.GetItemQualityColor = info, qualityColor
+  c.GameTooltip.SetItemByID, c.GameTooltip.SetSpellByID = itemTip, spellTip
+  c.IsModifiedClick, c.ChatEdit_InsertLink = modified, insertLink
+  consumer.name.SetTextColor = setColor
+  Win.Render()
   local originalNeededFor = S.NeededFor
   S.NeededFor = function() return {}, {
     { name = string.rep("Long recipe name ", 8), item = 501 },

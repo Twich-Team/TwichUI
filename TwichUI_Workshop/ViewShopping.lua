@@ -255,26 +255,55 @@ end
 
 -- The chosen material's details
 ---------------------------------------------------------------------------
--- These rows reuse the item frame treatment without guessing an output from a recipe icon.
+-- Item outputs use item links; recipes without one retain their recorded spell identity.
 local function MakeConsumerRow(parent)
-    local row = CreateFrame("Frame", nil, parent)
+    local row = CreateFrame("Button", nil, parent)
     row.iconBtn = CreateFrame("Button", nil, row)
     row.iconBtn:SetSize(28, 28)
     row.iconBtn:SetPoint("LEFT", 2, 0)
     row.iconFrame = UI.ItemIcon(row.iconBtn, 28)
     row.iconFrame:SetAllPoints()
-    UI.ItemTip(row.iconBtn, function() return row.item end)
+    UI.ItemTip(row, function() return row.item end)
+    row:SetScript("OnEnter", function(self)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        if self.item then
+            if not pcall(GameTooltip.SetItemByID, GameTooltip, self.item) then GameTooltip:Hide(); return end
+            if UI.Advisor then GameTooltip:AddLine("Right-click: Item Advisor", 0.65, 0.58, 0.45) end
+        elseif self.recipe and GameTooltip.SetSpellByID then
+            local ok = pcall(GameTooltip.SetSpellByID, GameTooltip, self.recipe)
+            if not ok then GameTooltip:SetText(self.fullName) end
+        else GameTooltip:SetText(self.fullName) end
+        GameTooltip:Show()
+    end)
+    row:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    -- The icon and name share the same native tooltip and modified-click behavior.
+    for _, event in ipairs({ "OnEnter", "OnLeave", "OnClick" }) do
+        row.iconBtn:SetScript(event, function(_, ...) row:GetScript(event)(row, ...) end)
+    end
+    row.iconBtn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     row.name = UI.Text(row, 13, K.text, "strong")
     row.name:SetPoint("LEFT", 36, 0)
     row.name:SetPoint("RIGHT", -2, 0)
     row.name:SetWordWrap(true)
     row.name:SetMaxLines(2)
     row.name:SetHeight(30)
-    UI.TipFn(row, nil, function() return row.fullName end)
     row.fill = function(self, record)
-        self.item = record.item
-        local name, icon
-        if record.item then name, icon = O.ItemFacts(record.item) end
+        self.item, self.recipe = record.item, record.recipe
+        local name, icon, quality
+        if record.item then name, icon, quality = O.ItemFacts(record.item)
+        else icon = record.icon end
+        -- Pooled rows must lose the previous item's quality when metadata is absent.
+        UI.Paint(self.name, K.text)
+        if quality then
+            local r, g, b
+            if C_Item and C_Item.GetItemQualityColor then r, g, b = C_Item.GetItemQualityColor(quality) end
+            if W.Finite(r) and W.Finite(g) and W.Finite(b) then self.name:SetTextColor(r, g, b)
+            else
+                local color = ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
+                if color then self.name:SetTextColor(color.r, color.g, color.b) end
+            end
+        end
         self.iconFrame.tex:SetTexture(icon or UI.ICON_BLANK)
         self.iconBtn:SetShown(icon ~= nil)
         self.name:ClearAllPoints()

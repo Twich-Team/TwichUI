@@ -861,7 +861,7 @@ function S.NeededFor(item)
             for _, m in ipairs(e.mats) do
                 if m.item == item then
                     out[#out + 1] = e.name
-                    records[#records + 1] = { name = e.name, item = e.outItem }
+                    records[#records + 1] = { name = e.name, item = e.outItem, recipe = e.id, icon = e.icon }
                     break
                 end
             end
