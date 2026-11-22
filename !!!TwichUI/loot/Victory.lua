@@ -5,6 +5,7 @@ local LR, Ro, C = R.LootRolls, R.LootRoll, R.LootCards
 local V = {}
 R.LootVictory = V
 local ART = R.PATH .. [[media\loot\victory\]]
+local FX = ART .. [[fx\]]
 local EVENT = "LOOT_ITEM_ROLL_WON"
 local entries, recent = {}, {}
 local sequence, pool = 0, 0
@@ -12,7 +13,8 @@ local relay, owner, original
 local preview, inFlight
 local lastSound = -100
 V.MAX_QUEUE = 32
-V.HEIGHT, V.MOTION_END, V.SOUND_AT = 218, 1.75, 0.30
+-- Lighting settles at 1.65 s; retain the existing 1.75 s hold/exit schedule.
+V.HEIGHT, V.MOTION_END, V.HOLD_AT, V.SOUND_AT = 218, 1.65, 1.75, 0.30
 
 local function Plain(v) if not (issecretvalue and issecretvalue(v)) then return v end end
 local function Smooth(v) v = math.max(0, math.min(1, v)); return v * v * (3 - 2 * v) end
@@ -61,13 +63,20 @@ end
 -- Painted bounds are measured from the supplied straight-alpha PNG/TGA exports.
 -- Cropping only transparent padding preserves the sprite's proportions and core.
 local UV = {
-    spark_bright = { 11 / 128, 117 / 128, 6 / 128, 122 / 128 },
-    spark_small = { 6 / 64, 58 / 64, 4 / 64, 60 / 64 },
-    dust_soft = { 12 / 64, 52 / 64, 12 / 64, 52 / 64 },
-    dust_micro = { 8 / 32, 24 / 32, 8 / 32, 24 / 32 },
+    fx_header_haze = { 0.05957, 0.939453, 0.132812, 0.863281 },
+    fx_header_bloom = { 0.05957, 0.939453, 0.160156, 0.839844 },
+    fx_glint_small = { 0.058594, 0.9375, 0.230469, 0.765625 },
+    fx_icon_gold_haze = { 0.078125, 0.917969, 0.058594, 0.9375 },
+    fx_icon_bloom = { 0.078125, 0.921875, 0.058594, 0.9375 },
+    fx_sweep_haze = { 0.05957, 0.939453, 0.117188, 0.878906 },
+    fx_sweep_core = { 0.05957, 0.939453, 0.195312, 0.800781 },
+    fx_emblem_burst = { 0.058594, 0.939453, 0.210938, 0.787109 },
+    fx_particle_star_4point = { 0.054688, 0.9375, 0.054688, 0.9375 },
+    fx_particle_twinkle = { 0.054688, 0.9375, 0.054688, 0.9375 },
+    -- Generic manifest bounds retain empty mote padding; measured alpha bounds plus 2 px.
+    fx_particle_mote_medium = { 43 / 128, 99 / 128, 32 / 128, 89 / 128 },
     laurel_left = { 30 / 128, 77 / 128, 14 / 128, 91 / 128 },
     laurel_right = { 41 / 128, 91 / 128, 13 / 128, 89 / 128 },
-    sheen_ribbon = { 0, 1, 40 / 128, 89 / 128 },
     rim_glint = { 0, 1, 20 / 64, 45 / 64 },
     badge_backing = { 0, 1, 8 / 64, 58 / 64 },
     halo_uncommon = { 12 / 256, 244 / 256, 12 / 256, 244 / 256 },
@@ -75,24 +84,26 @@ local UV = {
     halo_epic = { 12 / 256, 244 / 256, 12 / 256, 244 / 256 },
     halo_legendary = { 12 / 256, 244 / 256, 12 / 256, 244 / 256 },
 }
--- Existing eight pooled sprites: six in Subtle, eight in Full. Principal stars
--- now share the 1.15–1.70 s finishing cue; supporting sparks retain the burst.
--- x/y, short drift x/y, canvas w/h, supplied sprite, stagger. A side anchor
--- follows the measured title/laurel group instead of floating near the corners.
+-- Six reusable sprites, first three in Subtle. Start positions follow the
+-- icon corners and measured laurels; all paths stay outside item-name bounds.
+-- x/y, travel x/y, w/h, supplied texture, start/end time, peak alpha, laurel side.
 local PARTICLES = {
-    { 48, 96, -3, -3, 32, 35, "spark_bright", 0, finish = true },
-    { 240, 64, 0, 0, 28, 30, "spark_bright", 0.04, finish = true },
-    { 0, 49, -8, -10, 18, 19, "spark_small", 0.05, side = -1 },
-    { 0, 49, 8, -10, 16, 17, "spark_small", 0.12, side = 1 },
-    { 42, 133, -12, -16, 14, 14, "dust_soft", 0.08 },
-    { 91, 137, 8, -18, 12, 12, "dust_micro", 0.18 },
-    { 98, 142, 3, -3, 30, 33, "spark_bright", 0.08, finish = true },
-    { 96, 102, 10, -12, 16, 17, "spark_small", 0.20 },
+    { 98, 95, 7, -17, 22, 22, "fx_particle_star_4point", 0.55, 1.10, 1 },
+    { 48, 94, -14, -17, 20, 20, "fx_particle_star_4point", 0.63, 1.18, 0.95 },
+    { 0, 52, -13, -17, 22, 22, "fx_particle_twinkle", 0.72, 1.28, 0.90, -1 },
+    { 0, 50, 14, -16, 20, 20, "fx_particle_twinkle", 0.79, 1.35, 0.85, 1 },
+    { 43, 137, -11, -18, 12, 12, "fx_particle_mote_medium", 0.68, 1.25, 0.65 },
+    { 94, 146, 11, -19, 10, 10, "fx_particle_mote_medium", 0.86, 1.35, 0.65 },
 }
 local function Clamp(v) return math.max(0, math.min(1, v)) end
 local function EaseOut(v) v = 1 - Clamp(v); return 1 - v * v * v end
 local function At(region, parent, x, y)
     region:ClearAllPoints(); region:SetPoint("CENTER", parent, "TOPLEFT", x, -y)
+end
+local function Pulse(t, first, peak, last)
+    if t <= first or t >= last then return 0 end
+    if t < peak then return Smooth((t - first) / (peak - first)) end
+    return 1 - Smooth((t - peak) / (last - peak))
 end
 function V.Paint(f, t, silent)
     local entry = f.entry
@@ -107,37 +118,37 @@ function V.Paint(f, t, silent)
         card.body:SetAlpha(1 - resolve); card.shell:SetAlpha(1 - resolve)
         if resolve >= 1 then card.body:Hide(); card.shell:Hide() end
     end
-    -- Natural painted aspect ratios inside a true clipping frame. The white/gold
-    -- core and short trailing ribbon travel over the metal rail, above all text.
-    local sweep = (t - 0.30) / 0.75
-    local envelope = motion and Smooth(sweep / 0.12) * (1 - Smooth((sweep - 0.82) / 0.18)) or 0
     local rich = entry.intensity == "full"
-    local x = -58 + Smooth(sweep) * 508
-    At(f.sheen, f.railCanvas, x - 22, 6)
-    At(f.trail, f.railCanvas, x - 48, 6)
-    At(f.glint, f.railCanvas, x, 6)
-    At(f.sweepStar, f.railCanvas, x, 6)
-    f.sheen:SetAlpha(envelope * (rich and 1 or 0.85))
-    f.trail:SetAlpha(envelope * (rich and 0.50 or 0.38))
-    f.glint:SetAlpha(envelope)
-    f.sweepStar:SetAlpha(envelope * (rich and 0.8 or 0.65))
-    local qualityGain = entry.quality == 5 and 1.10 or entry.quality == 4 and 1.05 or 1
+    -- Atmosphere and blooms share a layer below all title/item artwork. The
+    -- existing rarity ring remains separate, untinted and at its resting alpha.
+    local settle = Smooth((t - 0.70) / 0.95)
+    local awaken = Smooth(t / 0.25)
+    f.atmosphere:SetAlpha(motion and 1 or 0)
+    f.headerHaze:SetAlpha(motion and awaken * ((rich and 0.42 or 0.35) * (1 - settle) + (rich and 0.18 or 0.16) * settle) or 0)
+    f.iconHaze:SetAlpha(motion and awaken * ((rich and 0.36 or 0.30) * (1 - settle) + (rich and 0.15 or 0.12) * settle) or 0)
+    f.headerBloom:SetAlpha(motion and (rich and 0.75 or 0.62) * Pulse(t, 0.20, 0.30, 0.53) or 0)
+    f.emblemBurst:SetAlpha(motion and rich and 0.55 * Pulse(t, 0.24, 0.34, 0.56) or 0)
+    f.iconBloom:SetAlpha(motion and (rich and 0.62 or 0.42) * Pulse(t, 0.90, 1.10, 1.50) or 0)
+    -- One synchronized haze/core pair replaces the old four-layer rail sweep.
+    -- The clipping frame confines their breadth to the header, below the text.
+    local sweep = (t - 0.38) / 0.67
+    local envelope = motion and Smooth(sweep / 0.13) * (1 - Smooth((sweep - 0.80) / 0.20)) or 0
+    local x = -10 + Smooth(sweep) * 412
+    At(f.sweepHaze, f.railCanvas, x - 10, 16)
+    At(f.sweepCore, f.railCanvas, x, 13)
+    f.sweepHaze:SetAlpha(envelope * (rich and 0.45 or 0.35))
+    f.sweepCore:SetAlpha(envelope * (rich and 1 or 0.90))
     for i, data in ipairs(PARTICLES) do
-        local start, duration = data.finish and 1.15 or 0.55, data.finish and 0.55 or 0.90
-        local p = Clamp((t - start - data[8]) / (duration - data[8]))
-        local strength = Smooth(p / 0.16) * (1 - Smooth((p - 0.28) / 0.72))
-        local x0 = data.side and 230 + data.side * (f.title:GetWidth() / 2 + 18) or data[1]
+        local p = Clamp((t - data[8]) / (data[9] - data[8]))
+        local x0 = data[11] and 230 + data[11] * (f.title:GetWidth() / 2 + 31) or data[1]
         local texture = f.particles[i]
         At(texture, f.effects, x0 + data[3] * EaseOut(p), data[2] + data[4] * EaseOut(p))
-        texture:SetAlpha(motion and (rich or i <= 6) and math.min(1, strength * qualityGain * (data.finish and 0.92 or 1)) or 0)
+        texture:SetAlpha(motion and (rich or i <= 3) and data[10] * (rich and 1 or 0.90) * Pulse(t, data[8], data[8] + 0.11, data[9]) or 0)
     end
-    -- A delayed, single rarity rise follows the first finishing reflections.
-    -- The supplied ring peaks just outside the icon rather than behind it.
-    local glow = Clamp((t - 1.24) / 0.46)
-    local rise = motion and Smooth(glow / 0.20) * (1 - Smooth((glow - 0.30) / 0.70)) or 0
-    f.halo:SetAlpha(f.haloRest + (f.hasHalo and 0.16 * rise or 0))
+    f.arrivalGlint:SetAlpha(motion and (rich and 1 or 0.90) * Pulse(t, 0.98, 1.12, 1.50) or 0)
+    f.halo:SetAlpha(f.haloRest)
     if not silent and t >= V.SOUND_AT then Sound(entry) end
-    f.phase = t < 0.45 and "reveal" or t < 0.55 and "flourish" or t < 1.10 and "burst" or t < V.MOTION_END and "finish" or "static"
+    f.phase = not motion and "static" or t < 0.45 and "reveal" or t < 0.55 and "flourish" or t < 0.90 and "burst" or t < V.MOTION_END and "finish" or "static"
 end
 
 local function Fail(err)
@@ -171,7 +182,7 @@ end
 
 local function Texture(parent, name, w, h, layer, blend)
     local t = parent:CreateTexture(nil, layer or "ARTWORK")
-    if t:SetTexture(ART .. name .. ".tga") == false then error("Missing loot victory texture: " .. name) end
+    if t:SetTexture((name:find("^fx_") and FX or ART) .. name .. ".tga") == false then error("Missing loot victory texture: " .. name) end
     t:SetSize(w, h); t:SetBlendMode(blend or "BLEND")
     if UV[name] then t:SetTexCoord(unpack(UV[name])) end
     return t
@@ -222,6 +233,13 @@ local function Build(card)
     f:SetSize(460, V.HEIGHT); f:SetScale(384 / 460); f:SetPoint("TOPLEFT")
     f:SetFrameLevel(card.body:GetFrameLevel() + 4)
     f.base = FrameArtwork(f)
+    f.atmosphere = CreateFrame("Frame", nil, f); f.atmosphere:SetAllPoints()
+    f.atmosphere:SetFrameLevel(f:GetFrameLevel() + 1); f.atmosphere:EnableMouse(false)
+    f.headerHaze = Texture(f.atmosphere, "fx_header_haze", 312, 65, "BACKGROUND", "ADD"); At(f.headerHaze, f, 230, 41)
+    f.iconHaze = Texture(f.atmosphere, "fx_icon_gold_haze", 96, 100, "BACKGROUND", "ADD"); At(f.iconHaze, f, 72, 116)
+    f.headerBloom = Texture(f.atmosphere, "fx_header_bloom", 214, 41, "ARTWORK", "ADD"); At(f.headerBloom, f, 230, 51)
+    f.emblemBurst = Texture(f.atmosphere, "fx_emblem_burst", 58, 38, "ARTWORK", "ADD"); At(f.emblemBurst, f, 230, 64)
+    f.iconBloom = Texture(f.atmosphere, "fx_icon_bloom", 92, 96, "ARTWORK", "ADD"); At(f.iconBloom, f, 72, 116)
     f.header = CreateFrame("Frame", nil, f); f.header:SetSize(460, 80)
     f.header:SetFrameLevel(f:GetFrameLevel() + 2)
     f.title = Font(f.header, 24, true); f.title:SetText("YOU WON!")
@@ -264,18 +282,16 @@ local function Build(card)
     f.hit:SetScript("OnClick", function()
         if f.entry and not f.entry.preview and f.entry.link and HandleModifiedItemClick then HandleModifiedItemClick(f.entry.link) end
     end)
-    f.rail = CreateFrame("Frame", nil, f); f.rail:SetPoint("TOPLEFT", 34, -12); f.rail:SetSize(392, 12)
-    f.rail:SetFrameLevel(f:GetFrameLevel() + 4); f.rail:SetClipsChildren(true)
-    f.railCanvas = CreateFrame("Frame", nil, f.rail); f.railCanvas:SetAllPoints()
-    f.sheen = Texture(f.railCanvas, "sheen_ribbon", 116, 11, "OVERLAY", "ADD")
-    f.trail = Texture(f.railCanvas, "sheen_ribbon", 92, 9, "ARTWORK", "ADD")
-    f.glint = Texture(f.railCanvas, "rim_glint", 64, 6, "OVERLAY", "ADD")
-    f.sweepStar = Texture(f.railCanvas, "spark_bright", 34, 37, "OVERLAY", "ADD")
+    f.rail = CreateFrame("Frame", nil, f); f.rail:SetPoint("TOPLEFT", 34, -12); f.rail:SetSize(392, 46)
+    f.rail:SetFrameLevel(f:GetFrameLevel() + 1); f.rail:SetClipsChildren(true); f.rail:EnableMouse(false)
+    f.railCanvas = CreateFrame("Frame", nil, f.rail); f.railCanvas:SetAllPoints(); f.railCanvas:SetFrameLevel(f:GetFrameLevel() + 1)
+    f.sweepHaze = Texture(f.railCanvas, "fx_sweep_haze", 88, 32, "ARTWORK", "ADD")
+    f.sweepCore = Texture(f.railCanvas, "fx_sweep_core", 76, 24, "OVERLAY", "ADD")
     f.effects = CreateFrame("Frame", nil, f); f.effects:SetAllPoints(); f.effects:SetFrameLevel(f:GetFrameLevel() + 4)
     f.effects:EnableMouse(false)
     f.particles = {}
     for i, data in ipairs(PARTICLES) do f.particles[i] = Texture(f.effects, data[7], data[5], data[6], "OVERLAY", "ADD") end
-    f.finish = f.particles[1] -- existing finishing cue, now shared by two/three pooled glints
+    f.arrivalGlint = Texture(f.effects, "fx_glint_small", 30, 18, "OVERLAY", "ADD"); At(f.arrivalGlint, f, 97, 96)
     f:SetScript("OnHide", function() Cancel(f) end)
     f.built = true
     return f
@@ -365,7 +381,7 @@ local function Snapshot(link, quantity, kind, value)
     entry.key = match and match.key or (1000000000 + sequence)
     entry.total, entry.intensity = Total(), LR.Get("victoryIntensity")
     entry.motion = entry.intensity ~= "off"
-    entry.total = entry.total + (entry.motion and V.MOTION_END + 0.30 or 0)
+    entry.total = entry.total + (entry.motion and V.HOLD_AT + 0.30 or 0)
     return entry, match
 end
 
@@ -498,7 +514,7 @@ function V.Preview(choice, quality, sample)
     e.sampleLines = { e.typeText .. " · " .. R.LootRules.QualityName(e.quality), "Example item for the victory preview." }
     e.sellPrice, e.upgradeLines = nil, nil
     e.motion, e.state = e.intensity ~= "off", "resolved"
-    e.total = e.total + (e.motion and V.MOTION_END + 0.30 or 0)
+    e.total = e.total + (e.motion and V.HOLD_AT + 0.30 or 0)
     preview.entry = e
     preview:Show()
     local ok, err = pcall(V.Draw, preview.card, e)

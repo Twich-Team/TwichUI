@@ -166,11 +166,11 @@ K.Page({
         if fadeOut and fadeOut.options then fadeOut.options.step = 50 end
 
         K.Card({ title = "Victory Celebration", icon = "lootRolls", switch = false,
-            what = "A quiet celebration when you win a Need or Greed roll.",
+            what = "A brief celebration when you win a Need or Greed roll.",
             consequence = "Replaces the matching winning notification when the client supports it. Other rewards keep their own alerts.",
         })
         Check("victory", "Custom victory notification", "Show the supplied leather and bronze victory card on a confirmed win. Off keeps the game's winning notification.")
-        Pick("victoryIntensity", "Animation intensity", "Off shows a static result. Subtle reveals the plaque, sweeps a gold highlight, and sends six painted sparks outward. Full adds two accents. Both finish with one final glint.")
+        Pick("victoryIntensity", "Animation intensity", "Off shows the clean static card without lighting effects. Subtle adds warm atmosphere, a bright gold sweep, three sparks and a soft item-arrival glint. Full adds richer blooms and up to six particles. Both settle without continuous motion.")
         Check("victorySound", "Victory sound", "One quiet chime on SFX, respecting global sound settings. Rapid wins share a sound cooldown.")
         Pick("victoryDuration", "Hold finished victory card", "After the 1.75-second celebration: Short holds 3.5 seconds, Normal 4 seconds, Long 5 seconds, then fades out. Off animation shows a static card for that duration.")
         -- Sample choices belong to this settings page, never to a saved loot result.

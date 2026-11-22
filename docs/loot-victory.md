@@ -70,109 +70,106 @@ after the first custom card. There is no global acquisition-toast suppression.
 
 ## Artwork and animation
 
-Runtime assets live in `!!!TwichUI/media/loot/victory/`: 16 exact supplied
-32-bit, uncompressed, straight-alpha, power-of-two TGAs (frame, emblems, both
-laurels, four rarity halos, bright/small sparks, two dust sprites, rim glint,
-sheen and badge), plus both supplied OGG sounds. Header/alpha/size tests validate
-the exports; no alpha repair or substitute artwork was needed. The original PNGs,
-manifest and approved reference remain in `assets/loot-victory/`, excluded from
-shipping. Optional coin sprites, large master, original animated preview and WAV
-masters are not shipped. The original asset specification is retained as supplied;
-this refinement's timing/layout supersedes its illustrative coordinates.
+The approved 460×218 reference canvas still displays at 384 pixels wide before
+the player's scale. Title/laurels/medallion, item/text geometry, quality colors,
+roll information and conditional upgrade badge retain their approved positions.
+The 15-slice leather/bronze backdrop keeps its painted corner scale. Single-line
+name fitting preserves whole UTF-8 characters and the complete item tooltip.
 
-The reference canvas is 460×218, displayed at the existing 384-pixel card
-width and then at the player's scale. Fifteen texture slices preserve the painted
-corners, header rail, recessed item area and footer separator. Only the leather
-strips at source y80–108 and y350–364 gain height (10 and 8 reference pixels).
-The visible source remains y0–444 of the 1024×512 frame. Header, item details and
-effects occupy separate frame layers above the base artwork.
+### Runtime assets and alpha
 
-The centered title at y24 measures the active font (112–204 pixels wide). Cropped,
-matched laurels bracket that measured box with eight-pixel gaps and a shared
-vertical center. A smaller 24×24 Need/Greed medallion at x230/y64 connects the
-heading to the bronze separator; two dim supplied rim highlights flank it.
-The icon and supplied rarity ring center on the three item lines at y119.
-A bronze outer rim and muted quality-colored inner edge avoid a neon frame.
-Name, type/quality and roll result have explicit single-line bounds; secondary
-text shares one size and parchment color. Overlong names receive an explicit
-measured ellipsis without splitting UTF-8 characters. The tooltip retains the
-complete name. Fitting happens only on draw, never during animation.
+`!!!TwichUI/media/loot/victory/` retains eleven original TGAs: frame, Need/Greed
+emblems, two laurels, four rarity halos, rim highlight and badge. Both original
+OGGs remain unchanged. Five superseded original effects (bright/small sparks,
+two dust sprites and sheen ribbon) no longer ship. Their authoring originals and
+historical evidence remain outside the addon.
 
-The footer is six reference pixels shorter than the previous revision and contains
-only a centered, padded Potential Upgrade badge when the existing state/settings
-permit it. There is no redundant result label or invented inventory confirmation.
-Hover uses Cards.ItemTip and modified clicks use HandleModifiedItemClick.
+`!!!TwichUI/media/loot/victory/fx/` contains exactly eleven byte-identical TGAs
+from **TwichUI Victory FX Supplement v1**:
 
-All supplied files remain unchanged. Laurel UVs remove asymmetric transparent
-padding before positioning. The badge's transparent vertical padding is cropped
-so its painted edge and larger 14-pixel label fit the quieter footer. All four
-halos share a 12..244 UV crop on their 256-pixel canvases and a 96-pixel draw size:
-the ring's painted peak then sits just outside the 52-pixel item icon, rather than
-being hidden underneath it. Static halo alpha is 0.42 with straight-alpha BLEND;
-only one finishing rise adds at most 0.16. Frame, badge, emblems, laurels and halo
-use BLEND. The supplied moving glints, ribbon and sparks use ADD on higher layers.
-No asset re-export, generic substitute, continuous pulse or additional particle
-pool was introduced.
-
-### Why the first presentation was weak
-
-The supplied art files were correct. The old y13 title anchor intersected the top
-rail, and a fixed x134 emblem anchor did not reserve space for title width. The
-entire card was shrunk uniformly without adding room to its cramped footer. The
-supplied decorative laurels and principal star sprite were omitted.
-
-The old glint/ribbon canvases were flattened to 4/3 reference pixels; their painted
-alpha bands occupy only 23/64 and 47/128 of those heights, leaving roughly one
-physical pixel after card scaling. The small star's high-alpha core occupied only
-16/64 of a 10-pixel canvas (about 2 display pixels), further reduced by the particle
-fade envelope and 0.45 intensity. Those choices made a running animation difficult
-to perceive. Source alpha is valid; these were composition, sampling and opacity
-problems, not evidence that Forever failed to execute OnUpdate.
-
-The refinement crops transparent padding, preserving painted aspect ratios. The
-bright star's 34×38 high-alpha core is drawn inside a 106×116 cropped image on a
-34×37 canvas: about 9×10 display pixels at 100% card scale. The ribbon's painted
-band is 11 pixels high, inside a real 392×12 clipping frame over the top metal
-rail. A luminous core and a short supplied ribbon tail use ADD blending. The
-frame and static artwork keep straight-alpha BLEND. `SetClipsChildren` is present
-in Forever's SimpleFrame API and used by its Objective Tracker/Map Canvas; actual
-client clipping/blending still requires owner validation.
-
-| Time | Behavior |
+| Use | Individual runtime files |
 |---|---|
-| 0–0.20 s | Freeze the confirmed result, hide old text/controls, remove progress, crossfade shell materials at the same stack slot |
-| 0–0.45 s | Reveal the complete header group with ease-out opacity and five reference pixels of upward travel; no scale/bounce |
-| 0.30–1.05 s | One visible smoothstep gold sweep with bright core and short tail, clipped above the title |
-| 0.30 s | One optional Need/Greed chime on SFX; shared 0.8-second cooldown |
-| 0.55–1.45 s | Supporting sparks/dust follow the laurels and icon with short eased travel |
-| 1.15–1.70 s | Two (Subtle) or three (Full) pooled reflections at the icon/medallion; one delayed rarity-glow rise at 1.24–1.70 s; all fade together |
-| 1.75 s onward | Fully opaque static card; no OnUpdate; hold for the configured interval |
-| After hold | Smooth 0.30-second whole-card fade and recycle |
+| Atmosphere | `fx_header_haze.tga`, `fx_icon_gold_haze.tga` |
+| Brief blooms | `fx_header_bloom.tga`, `fx_emblem_burst.tga`, `fx_icon_bloom.tga` |
+| Synchronized sweep | `fx_sweep_haze.tga`, `fx_sweep_core.tga` |
+| Item-arrival punctuation | `fx_glint_small.tga` |
+| Six reusable particle slots | `fx_particle_star_4point.tga`, `fx_particle_twinkle.tga`, `fx_particle_mote_medium.tga` |
 
-Short/Normal/Long now mean a **completed-card hold** of 3.5/4/5 seconds, after the
-1.75-second celebration. Normal animated total is 6.05 seconds. Off intensity
-shows the static card for the configured hold and removes it without decorative
-motion; optional sound accompanies its immediate reveal. Turning intensity Off
-stops active decorative work immediately. Full adds one star and one supporting
-spark to Subtle's two principal stars, two sparks and two dust motes. Small quality
-intensity gains never exceed alpha 1. All effects disappear at rest. Missing
-qualities use neutral text/border and no halo; missing roll values omit the number.
+The optional violet ring and other alternatives are not loaded or shipped.
+Original supplement manifest/docs, selected editable PNGs and reference previews
+live in `assets/loot-victory-fx/`. That directory is excluded by `.pkgmeta`, as are
+all `assets` and `docs`. Full source atlases stay in the supplied archive; no atlas
+is rendered. These are 32-bit uncompressed straight-alpha power-of-two TGAs.
+Checksums, dimensions, alpha bits and transparent outer borders are unit-tested.
 
-Preview roll and Preview item quality are page-local choices, not saved loot data.
-Replay always restarts the exact production V.Draw/Animate/Paint path with a fresh
-entry. Sample name/type/icon, quality label, name/border color and halo agree with
-one quality value. An optional third synthetic fixture argument
-`{ name = "...", upgrade = false }` exercises long names and absent upgrade state
-without changing saved data or actual item state. Names are bounded and reject
-control/color markup. The developer-only `LootVictory.PreviewAt(seconds)` helper
-pauses **only a synthetic preview** using that same painter. It cancels timers and
-updates, never seeks a real result, and stays silent while seeking. Replay resumes
-normal animation from zero; no additional player command/framework was introduced.
+Manifest content UVs remove invisible canvas padding. The medium mote's generic
+113×113 content rectangle still encloses a roughly 52×53 painted sprite, so its
+UVs use measured alpha bounds plus two transparent pixels (x43..99, y32..89 on
+128×128). This preserves its feathered edge and makes a 10–12 reference-pixel mote
+visible without stretching a large empty rectangle. Artwork pixels are unchanged.
+Other sprites use the provided content UVs. The existing cropped rarity halos
+remain at static alpha 0.42, with no second independent pulse.
 
-Sound failures stay isolated with pcall; both global sound switches and the existing
-victorySound toggle are respected. Nothing loops. Frames/textures are pooled; only
-active reveal/fade work runs per frame. Rest uses one cancellable timer. Diagnostics
-keeps the existing victory event/tick scopes and queue/pool/listener gauges.
+### Layers and blending
+
+All supplemental light uses supported `ADD` blending, without vertex tinting.
+Original static artwork and quality halos retain straight-alpha `BLEND`.
+Layer order relative to the existing victory frame is:
+
+1. Base sliced leather/bronze artwork at the frame's own level.
+2. Atmosphere and blooms at level +1. Haze uses BACKGROUND, blooms ARTWORK.
+   The two-texture sweep uses a 392×46 clipping frame at +1; its canvas explicitly
+   stays at +1 too. Its core uses OVERLAY within that lower frame.
+3. Title, laurels, emblem, item icon, rarity border and text at level +2. Neither
+   ambient light nor the sweep draws over item pixels or title text.
+4. Six deterministic particles and one arrival glint at level +4, on paths outside
+   the item-name rectangle. Normal item interactions/tooltips retain their owners.
+
+New frames inherit the existing card strata and cannot intercept mouse input.
+No new client API, animation group or global particle manager is introduced.
+Forever source documents `SetClipsChildren` and uses additive textures. Native
+TGA sampling, blend appearance and real font clearance still need client review.
+
+### One shared timeline
+
+All poses use the existing `V.Paint`, update loop and cancellable hold/fade timers.
+`V.MOTION_END = 1.65` stops active lighting work; `V.HOLD_AT = 1.75` preserves the
+previous completed-card hold and dismissal schedule. There is no idle OnUpdate.
+
+| Seconds | Effect | Peak alpha, Subtle / Full |
+|---|---|---|
+| 0.00–0.25 | Header and icon atmosphere awaken | Header 0.35 / 0.42; icon 0.30 / 0.36 |
+| 0.00–0.45 | Existing header reveal and result-material transition | Existing easing and five-pixel header travel |
+| 0.20–0.53 | Brief title bloom, peak at 0.30 | 0.62 / 0.75 |
+| 0.24–0.56 | Burst behind Need/Greed medallion | Off / 0.55 |
+| 0.30 | Existing optional chime on SFX | Same sound and shared 0.8-second cooldown |
+| 0.38–1.05 | One eased left-to-right haze/core sweep | Haze 0.35 / 0.45; core 0.90 / 1.00 |
+| 0.55–1.35 | Three / six controlled star, twinkle and mote paths | Stars up to 0.90 / 1.00; Full motes 0.65 |
+| 0.90–1.50 | Icon arrival bloom, peak at 1.10 | 0.42 / 0.62 |
+| 0.98–1.50 | Small glint near icon frame, peak at 1.12 | 0.90 / 1.00 |
+| 0.70–1.65 | Atmosphere gently settles | Rest: header 0.16 / 0.18; icon 0.12 / 0.15 |
+| 1.65 onward | No particles, blooms, sweep or updater; only residual haze | Fully readable static card |
+| Existing hold/exit | Configured 3.5/4/5-second hold budget after 1.75, then 0.30-second fade | Normal animated lifetime stays 6.05 seconds |
+
+Off hides **all supplemental textures** and runs no animation update, preserving
+the original clean card, rarity halo and configured static hold. Existing explicit
+preferences and the Subtle default remain unchanged. Turning Off during a real
+win cancels the update and clears all lighting immediately.
+
+The two sweep textures replace the old four-layer sweep. Three (Subtle) or six
+(Full) particle slots replace the old eight, with fixed eased paths around the
+icon corners and measured laurels. The existing icon border is not recolored or
+pulsed by the light. No continuous emitter, scaling, spinning or whole-card flash.
+Frames/textures are constructed once per pooled card. Paint allocates no particle
+objects; hide, interruption, disable and replay keep the existing cleanup owners.
+
+Preview roll/quality selectors remain page-local and cover all eight combinations.
+Replay uses the production Draw/Animate/Paint path and resets every light, particle,
+position, alpha, timer and sound state. The existing developer-only
+`LootVictory.PreviewAt(seconds)` silently freezes only a synthetic preview using
+that same painter. An optional third preview fixture argument supports long names
+and missing upgrades without saving or creating a real result. Sound behavior,
+confirmed-win attribution and selective Blizzard notification handling are intact.
 
 ## Verification
 
@@ -188,7 +185,7 @@ These are synthetic clients, not native reload/combat/input tests.
 Simulator scenarios are available through:
 
 ```sh
-bash tools/simlab/run.sh loot victoryPose000 victoryPose030 victoryPose060 victoryPose090 victoryPose130 victoryPose175 victoryStatic victoryFade victoryDone victoryOff victoryGreed victoryScaled victorySettings
+bash tools/simlab/run.sh loot victoryPose030 victoryPose060 victoryPose090 victoryPose120 victoryPose170 victoryPoseFull030 victoryPoseFull060 victoryPoseFull090 victoryPoseFull120 victoryPoseFull170 victoryPoseOff170 victoryReplay victoryStatic victoryDone victorySettings
 ```
 
 They fire the native event over fake item/roll APIs while running real addon code.
@@ -200,7 +197,9 @@ Original evidence is retained in [initial evidence](evidence/loot-victory/README
 The refinement comparison, 50 ms frame capture and visibility measurements are in
 [refinement evidence](evidence/loot-victory-refinement/README.md). The latest header,
 footer, long-name and finishing-accent comparison is in
-[final polish evidence](evidence/loot-victory-polish/README.md).
+[final polish evidence](evidence/loot-victory-polish/README.md). The latest
+supplemental lighting captures, timing and identity are in
+[lighting evidence](evidence/loot-victory-lighting/README.md).
 
 ## Owner-directed in-game checks
 
@@ -217,8 +216,8 @@ collision and no emblem/title overlap.
    original card disappears. Check timeout and no reappearing old result.
 3. Compare the supplied static/GIF previews at 75%, 100%, and larger UI scales:
    font baselines, long/localized names, emblem alignment, alpha edges, icon
-   border/halo, visible top-rail sweep, six/eight visible particles, finishing glint
-   and the fully static 1.75-second rest. The title must stay clear of the rail; the medallion should sit deliberately on its lower divider.
+   border/halo, visible top-rail sweep, three/six visible particles, item-arrival glint
+   and the softly lit static rest after 1.65 seconds. The title must stay clear of the rail; the medallion should sit deliberately on its lower divider.
 4. Hear each OGG once at the reveal, then test sound off, global SFX/all sound off,
    rapid wins, and intensity Off/Subtle/Full. Check Normal/Short/Long durations.
 5. Hover item tooltips and modified item links. Test during combat with taint/error

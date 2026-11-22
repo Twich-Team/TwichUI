@@ -348,7 +348,7 @@ if view == "victorySettings" then
     end)
 end
 
-if view:find("^victory") and view ~= "victorySettings" and not view:find("^victoryPose") then
+if view:find("^victory") and view ~= "victorySettings" and view ~= "victoryReplay" and not view:find("^victoryPose") then
     Lab.Step("approved victory artwork", function()
         local V = R.LootVictory
         LR.Set("maxCards", 4)
@@ -382,6 +382,29 @@ if view:find("^victory") and view ~= "victorySettings" and not view:find("^victo
     end)
 end
 
+-- Quick replay/interruption drives actual clocks and the one existing pool.
+if view == "victoryReplay" then
+    Lab.Step("rapid lighting previews", function()
+        local V = R.LootVictory
+        LR.Set("victorySound", false); LR.Set("victoryIntensity", "full")
+        Check("construct", "initial rich preview starts", true, V.Preview("need", 4))
+        Lab.Settle(0.95)
+        local card, before = V.PreviewCard(), V.PoolSize()
+        Check("display", "active preview has warm light", true, card.victory.headerHaze:GetAlpha() > 0)
+        Check("interact", "Greed replay interrupts cleanly", true, V.Preview("greed", 5))
+        Check("state", "replay resets bloom", 0, card.victory.iconBloom:GetAlpha())
+        Check("state", "replay resets glint", 0, card.victory.arrivalGlint:GetAlpha())
+        for _, particle in ipairs(card.victory.particles) do Check("state", "replay resets particle", 0, particle:GetAlpha()) end
+        Lab.Settle(1.70)
+        Check("state", "no decorative updater at rest", nil, card.victory:GetScript("OnUpdate"))
+        Check("state", "no new pool on replay", before, V.PoolSize())
+        Check("state", "no real win created", 0, V.Count())
+        V.PreviewStop()
+        Check("state", "stopped preview is hidden", false, card.victory:IsShown())
+        Check("state", "stopped preview cancels timer", nil, card.victory.timer)
+    end)
+end
+
 -- Paused poses use the production painter on the exact reusable preview card.
 -- The lifecycle scenarios above separately drive the real OnUpdate/timer path.
 if view:find("^victoryPose") then
@@ -402,6 +425,19 @@ if view:find("^victoryPose") then
         Check("display", "no redundant footer label on the card", nil, f.footer)
         Check("display", "upgrade indicator matches fixture", sample.upgrade, f.badge:IsShown())
         Check("display", "sample has requested quality", quality, f.entry.quality)
+        Check("display", "lighting is below title", true, f.atmosphere:GetFrameLevel() < f.header:GetFrameLevel()
+            and f.railCanvas:GetFrameLevel() < f.header:GetFrameLevel())
+        if view:find("Off") then
+            local clear = f.atmosphere:GetAlpha() == 0 and f.sweepCore:GetAlpha() == 0 and f.arrivalGlint:GetAlpha() == 0
+            for _, particle in ipairs(f.particles) do clear = clear and particle:GetAlpha() == 0 end
+            Check("display", "Off has no supplemental effects", true, clear)
+        end
+        if seconds >= V.MOTION_END then
+            local clear = f.headerBloom:GetAlpha() == 0 and f.emblemBurst:GetAlpha() == 0 and f.iconBloom:GetAlpha() == 0
+                and f.sweepCore:GetAlpha() == 0 and f.arrivalGlint:GetAlpha() == 0
+            for _, particle in ipairs(f.particles) do clear = clear and particle:GetAlpha() == 0 end
+            Check("state", "rest has no strong light or particles", true, clear)
+        end
         if seconds >= V.MOTION_END and seconds < f.entry.total - 0.30 then
             Check("display", "finished header is fully opaque", 1, f.header:GetAlpha())
         end

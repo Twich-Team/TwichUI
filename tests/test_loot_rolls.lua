@@ -46,7 +46,8 @@ Methods = {
   ClearAllPoints = function(s) s.points = {} end, SetPoint = function(s, ...) s.points[#s.points + 1] = { ... } end,
   SetScale = function(s, v) s.scale = v end, GetScale = function(s) return s.scale or 1 end,
   SetFont = function(s) return true end, SetDesaturated = function(s, v) s.desat = v end,
-  GetParent = function(s) return s.parent end, GetFrameLevel = function() return 1 end,
+  GetParent = function(s) return s.parent end, GetFrameLevel = function(s) return s.frameLevel or 1 end,
+  SetFrameLevel = function(s, value) s.frameLevel = value end,
 }
 local FRAMES = {}
 c.CreateFrame = function(kind, name, parent) local f = Fake(kind); f.name, f.parent = name, parent; if name then c[name] = f end FRAMES[#FRAMES + 1] = f return f end
@@ -1272,7 +1273,7 @@ do
   Step(0.3); Check(#sounds == 1 and sounds[1][2] == "SFX", "one reveal sound on SFX")
   Step(1.25)
   Check(f.phase == "static" and not f.scripts.OnUpdate and f.timer, "decorative updates stop at the static hold")
-  Check(f.glint.alpha == 0 and f.particles[1].alpha == 0, "effects end without loops")
+  Check(f.sweepCore.alpha == 0 and f.arrivalGlint.alpha == 0 and f.particles[1].alpha == 0, "effects end without loops")
   Step(0.8); Win("item:100", 1, 87)
   Check(V.Count() == 1 and #sounds == 1, "duplicate after the replay window still matches the completed roll")
   local started = e.started
@@ -1327,84 +1328,91 @@ do
   V.PreviewStop()
   c.PlaySoundFile = function(path, channel) sounds[#sounds + 1] = { path, channel } end
 
-  -- Visual contracts use the production painter, not a second animation model.
+  -- Production preview checks: layered lighting, one shared timeline, and resets.
+  local fxNames = { "headerHaze", "iconHaze", "headerBloom", "emblemBurst", "iconBloom", "sweepHaze", "sweepCore", "arrivalGlint" }
+  local function FXClear(pf, ambient)
+    for _, name in ipairs(fxNames) do
+      if (ambient or (name ~= "headerHaze" and name ~= "iconHaze")) and pf[name].alpha ~= 0 then return false end
+    end
+    for _, particle in ipairs(pf.particles) do if particle.alpha ~= 0 then return false end end
+    return true
+  end
   LR.Set("victoryIntensity", "subtle")
   local soundBeforeSeek = #sounds
-  Check(V.Preview("need", 2), "refinement preview starts")
+  Check(V.Preview("need", 2), "lighting preview starts")
   local pc = V.PreviewCard(); local pf = pc.victory
-  Check(#pf.base.pieces == 15 and pf.base.pieces[1].h < 37 and pc.h > 180,
-    "header/footer gain room without stretching the painted corners")
-  Check(pf.title.points[1][5] == -24 and pf.title.h == 30 and pf.title.w >= 112 and pf.title.w <= 204 and pf.emblem.points[1][4] == 230 and pf.emblem.points[1][5] == -64,
-    "title remains centered with a reserved box and a central divider medallion")
-  Check(pf.rail.clips and pf.rail.h == 12 and pf.sheen.h == 11 and pf.sheen.blend == "ADD",
-    "supplied flourish retains painted height and is actually clipped to the rail")
-  Check(pf.footer == nil and pf.badge.h == 29 and pf.upgrade.h == 22 and pf.badge.points[1][4] == 230,
-    "shorter footer holds only a centered, padded upgrade indicator")
-  Check(pf.laurels[1].points[1][2] == pf.title and pf.laurels[1].points[1][4] == -8
-    and pf.laurels[2].points[1][2] == pf.title and pf.laurels[2].points[1][4] == 8,
-    "matched laurels bracket the measured title instead of floating at the frame edges")
-  Check(pf.icon.points[1][3] == -93 and pf.halo.points[1][5] == -119
-    and pf.name.points[1][3] == -84 and pf.method.points[1][3] == -134,
-    "icon and supplied rarity ring align with the three-line text block")
-  Check(pf.name.w == 300 and pf.name.h == 24 and pf.outerEdges[1].w == 56,
-    "long names retain a bounded single line and the icon gains a quiet bronze outer edge")
-  for _, t in ipairs({ 0, 0.30, 0.60, 0.90, 1.30, 1.60, 1.75, 3, 5.85, 6.05 }) do
-    Check(V.PreviewAt(t), "production preview pose " .. t)
+  Check(#pf.base.pieces == 15 and pf.h == 218 and pf.title.points[1][5] == -24 and pf.emblem.points[1][5] == -64,
+    "lighting integration preserves approved frame and heading geometry")
+  Check(pf.icon.points[1][3] == -93 and pf.name.points[1][3] == -84 and pf.method.points[1][3] == -134
+    and pf.badge.h == 29 and pf.badge.points[1][4] == 230 and pf.footer == nil,
+    "item and conditional footer composition remain unchanged")
+  Check(pf.laurels[1].points[1][2] == pf.title and pf.laurels[2].points[1][2] == pf.title,
+    "laurels still follow the centered measured title")
+  Check(pf.atmosphere.frameLevel < pf.header.frameLevel and pf.atmosphere.frameLevel < pf.content.frameLevel
+    and pf.railCanvas.frameLevel < pf.header.frameLevel and pf.rail.clips and pf.rail.h == 46,
+    "broad light and clipped sweep stay behind title and item artwork")
+  for _, name in ipairs(fxNames) do
+    Check(pf[name].texture:find("victory\\fx\\fx_", 1, true) and pf[name].blend == "ADD" and pf[name].uv,
+      "supplemental texture uses individual runtime file, additive blend and measured UV: " .. name)
+  end
+  for _, t in ipairs({ 0, 0.30, 0.60, 0.90, 1.20, 1.50, 1.65, 1.70, 3.75, 5.85, 6.05 }) do
+    Check(V.PreviewAt(t), "production lighting pose " .. t)
     if t == 0 then
-      Check(pf.header.alpha == 0 and pf.finish.alpha == 0, "reveal starts cleanly with no residual finishing glint")
+      Check(pf.header.alpha == 0 and FXClear(pf, true), "preview starts with no residual lighting")
     elseif t == 0.30 then
-      Check(pf.header.alpha > 0.7 and pf.header.alpha < 1, "banner is visibly revealing at 0.30 s")
+      Check(pf.headerBloom.alpha >= 0.60 and pf.headerHaze.alpha >= 0.34 and pf.iconHaze.alpha >= 0.29
+        and pf.emblemBurst.alpha == 0, "Subtle awakens atmosphere and a visible title bloom without the Full burst")
     elseif t == 0.60 then
-      local x = pf.glint.points[1][4]
-      Check(pf.sheen.alpha >= 0.8 and pf.glint.alpha >= 0.95 and x > 70 and x < 210,
-        "bright painted sweep crosses the left/central rail at 0.60 s")
+      local x = pf.sweepCore.points[1][4]
+      Check(pf.sweepCore.alpha >= 0.85 and pf.sweepHaze.alpha >= 0.30 and x > 60 and x < 160
+        and pf.sweepHaze.points[1][4] == x - 10, "one synchronized bright core/haze sweep crosses the header")
     elseif t == 0.90 then
       local visible = 0
       for _, particle in ipairs(pf.particles) do if particle.alpha > 0 then visible = visible + 1 end end
-      local star = pf.particles[1]
-      local core = 34 / 128 / (star.uv[2] - star.uv[1]) * star.w * 384 / 460
-      Check(visible == 4 and star.alpha == 0 and core >= 8 and core <= 12 and pf.halo.alpha == pf.haloRest,
-        "supporting burst leads into the finishing stars; static rarity has no continuous pulse")
-      Check(pf.glint.points[1][4] > 300, "gold flourish travels across the full rail")
-    elseif t == 1.30 then
-      Check(pf.particles[1].alpha > 0.8 and pf.particles[2].alpha > 0.8 and pf.particles[7].alpha == 0
-        and pf.halo.alpha > pf.haloRest and pf.halo.alpha <= pf.haloRest + 0.16,
-        "two Subtle finishing reflections lead one restrained rarity rise")
-    elseif t == 1.60 then
-      Check(pf.particles[1].alpha < 0.25 and pf.particles[2].alpha < 0.25 and pf.halo.alpha < pf.haloRest + 0.08,
-        "the shared finishing cue fades gently within its 0.55-second window")
-    elseif t == 1.75 or t == 3 then
-      local clear = pf.finish.alpha == 0 and pf.glint.alpha == 0 and pf.header.alpha == 1 and pf.halo.alpha == pf.haloRest
-      for _, particle in ipairs(pf.particles) do clear = clear and particle.alpha == 0 end
-      Check(clear and pf.alpha == 1, "complete static card after decorative motion")
+      Check(visible == 3 and pf.particles[1].w == 22 and pf.sweepCore.points[1][4] > 300,
+        "Subtle has three visible, deliberately sized sparks on fixed paths")
+      Check(pf.headerBloom.alpha == 0 and pf.halo.alpha == pf.haloRest, "title flash ends and rarity is not independently pulsing")
+    elseif t == 1.20 then
+      Check(pf.iconBloom.alpha > 0.30 and pf.arrivalGlint.alpha > 0.70 and pf.sweepCore.alpha == 0,
+        "item arrival is a distinct visible accent after the header sweep")
+    elseif t == 1.50 or t == 1.65 or t == 1.70 or t == 3.75 then
+      Check(FXClear(pf, false), "all strong light and sparks disappear before static rest")
+      if t >= 1.65 then Check(pf.headerHaze.alpha == 0.16 and pf.iconHaze.alpha == 0.12 and pf.alpha == 1,
+        "static state retains only a little warm atmosphere") end
     elseif t == 5.85 then
-      Check(pf.phase == "fade" and pf.alpha > 0 and pf.alpha < 1, "exit follows a full configured hold")
+      Check(pf.phase == "fade" and pf.alpha > 0 and pf.alpha < 1, "existing completed-card hold and exit are preserved")
     elseif t == 6.05 then
-      Check(pf.alpha == 0, "exit reaches zero without translucent remnants")
+      Check(pf.alpha == 0, "existing normal lifetime ends cleanly")
     end
   end
-  Check(#sounds == soundBeforeSeek and not pf.scripts.OnUpdate, "paused pose capture is silent and idle")
-  Check(V.Preview("need", 2), "click after a paused exit restarts production animation")
-  Check(pf.alpha == 1 and pf.header.alpha == 0 and pf.finish.alpha == 0 and pf.scripts.OnUpdate,
-    "replay resets alpha, motion, clocks and updater")
+  Check(#sounds == soundBeforeSeek and not pf.scripts.OnUpdate, "paused captures are silent and idle")
+  Check(V.Preview("need", 2) and FXClear(pf, true) and pf.scripts.OnUpdate, "replay resets every FX layer at zero")
   Step(0.35)
-  Check(#sounds == soundBeforeSeek + 1, "sound starts with the banner/flourish at 0.30 s")
+  Check(#sounds == soundBeforeSeek + 1, "sound behavior remains at the original reveal cue")
+  Step(1.31)
+  Check(not pf.scripts.OnUpdate and pf.timer and pf.phase == "static" and pf.entry.total == 6.05,
+    "clock-driven effects stop at 1.65 seconds without shortening the existing hold schedule")
   V.PreviewStop()
   LR.Set("victoryIntensity", "full")
-  V.Preview("greed", 5); V.PreviewAt(1.30)
+  V.Preview("greed", 5); V.PreviewAt(0.34)
+  Check(pf.headerBloom.alpha > 0.65 and pf.emblemBurst.alpha == 0.55, "Full enables the richer title and emblem blooms")
+  V.PreviewAt(0.95)
   local visible = 0
   for _, particle in ipairs(pf.particles) do if particle.alpha > 0 then visible = visible + 1 end end
-  Check(visible == 8 and pf.entry.quality == 5 and pf.name.text == "Dawnfire Mantle" and pf.sub.text:find("Legendary", 1, true),
-    "Full adds a third coordinated finishing reflection, with consistent sample quality")
+  Check(visible == 6 and #pf.particles == 6, "Full uses at most six controlled particles")
   Check(pf.entry.sampleLines[1] == "Shoulder · Legendary" and pf.entry.sellPrice == nil,
-    "preview tooltip metadata follows the selected sample instead of the old shoulder placeholder")
+    "sample tooltip metadata remains consistent with its selected item")
+  V.PreviewAt(1.10)
+  Check(pf.iconBloom.alpha == 0.62, "Full item arrival receives a clear one-shot peak")
   V.PreviewStop()
   LR.Set("victoryIntensity", "off"); V.Preview("need", 2)
-  V.PreviewAt(3.85); Check(pf.alpha == 1, "Off pose capture matches production's full static hold")
-  V.PreviewAt(4); Check(pf.alpha == 0, "Off pose capture exits immediately without inventing a fade")
+  Check(FXClear(pf, true) and pf.atmosphere.alpha == 0 and not pf.scripts.OnUpdate,
+    "Off hides every supplemental FX texture with no animation updater")
+  V.PreviewAt(3.85); Check(pf.alpha == 1 and FXClear(pf, true), "Off keeps the original clean card and static hold")
+  V.PreviewAt(4); Check(pf.alpha == 0, "Off exits without a decorative fade")
   V.PreviewStop()
 
-  -- Sequential previews reuse the same renderer across every requested variant.
+  -- All variants replay the same pooled renderer, including quick interruptions.
   local longName = "Stormrend Titanblade of the Unbroken Oath of the Eternal Watchers"
   local poolBefore = V.PoolSize()
   pf.name.GetStringWidth = function(self) return #self.text * 8 end
@@ -1413,29 +1421,29 @@ do
     for _, choice in ipairs({ "need", "greed" }) do
       for quality = 2, 5 do
         local upgrade = quality % 2 == 0
-        Check(V.Preview(choice, quality, { name = longName, upgrade = upgrade }), "sequential preview starts")
+        Check(V.Preview(choice, quality, { name = longName, upgrade = upgrade }) and FXClear(pf, true),
+          "consecutive preview resets every layer before playback")
         Check(pf.name.text ~= longName and pf.name.text:sub(-3) == "..." and #pf.name.text * 8 <= pf.name.w
-          and not pf.name.wordWrap and pf.name.maxLines == 1,
-          "long names stay single-line without losing the full item name")
+          and not pf.name.wordWrap and pf.name.maxLines == 1, "long names remain bounded with an ellipsis")
         pf.hit.scripts.OnEnter(pf.hit)
-        Check(c.GameTooltip.text == longName, "hover preserves the complete long item name")
+        Check(c.GameTooltip.text == longName, "hover preserves the complete item name")
         Check(pf.badge.shown == upgrade and pf.upgrade.shown == upgrade, "upgrade visibility follows sample state on reuse")
         Check(pf.emblem.texture:find("emblem_" .. choice, 1, true) and pf.entry.quality == quality,
-          "reused artwork follows Need/Greed and all four rarities")
-        Step(1.8)
-        Check(not pf.scripts.OnUpdate and pf.halo.alpha == pf.haloRest, "every intensity settles without residual motion")
+          "both roll types and all rarities retain their artwork")
+        Step(0.95)
+        if intensity == "off" then Check(FXClear(pf, true), "Off stays free of supplemental effects")
+        else Check(not FXClear(pf, true), "active preview has visible lighting") end
       end
     end
   end
-  Check(V.PoolSize() == poolBefore and V.Count() == 0, "sequential previews allocate no new artwork or real results")
+  Check(V.PoolSize() == poolBefore and V.Count() == 0, "quick previews reuse one pool without real results")
   V.Preview("greed", 5, { name = string.rep("é", 50) })
   Check(pf.name.text:sub(-5) == "é...", "localized truncation preserves whole UTF-8 characters")
   pf.name.GetStringWidth = nil
-  LR.Set("showUpgrade", false)
-  V.Preview("greed", 5, { upgrade = true })
+  LR.Set("showUpgrade", false); V.Preview("greed", 5, { upgrade = true })
   Check(not pf.badge.shown and not pf.upgrade.shown, "global upgrade setting still hides the indicator")
   LR.Set("showUpgrade", true); V.Preview("need", 2)
-  Check(pf.badge.shown and pf.name.text ~= longName, "fresh previews restore default name and upgrade state")
+  Check(pf.badge.shown and pf.name.text ~= longName, "fresh previews restore sample state")
   V.PreviewStop()
 
   -- Serialize excess wins while bounding active frames; each gets its full hold.
@@ -1475,7 +1483,7 @@ do
   Step(0.5)
   Check(not C.PlaceStart() and not C.PreviewStart(), "placement and sample rolls cannot cover a real celebration")
   LR.Set("victoryIntensity", "off")
-  for _, result in ipairs(V.Entries()) do Check(not result.card.victory.scripts.OnUpdate, "turning animation off stops active updates immediately") end
+  for _, result in ipairs(V.Entries()) do Check(not result.card.victory.scripts.OnUpdate and FXClear(result.card.victory, true), "turning animation off immediately clears lighting and updates") end
   LR.Set("maxCards", 1)
   Step(8.5)
   Check(V.Count() == 0, "reducing max cards suspends and resumes queued animation safely")
