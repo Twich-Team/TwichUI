@@ -333,3 +333,18 @@ Turn on Display Lua Errors. Test alone, then with EllesmereUI.
     may be a little off before the first route), change Frame size and Arrow size and look at them again. With Lock off,
     the frame can't be dragged in the game while this is on; turn it off and it can. Reset position puts both at the top
     of the screen again. Disable EllesmereUI: they sit at the saved places and the tooltip says why.
+
+## Batch 10 automatic-flight verification
+
+
+Batch 10 verifies this existing opt-in flight feature and corrects two consent/
+lifecycle gaps. `ui.flightAck` is excluded from profile snapshots and imports;
+profile switch/copy/reset cannot grant it, and existing local acknowledgement
+survives profile changes. Older profile copies containing that field are ignored
+by the profile reader; no schema migration or new authorization path is added.
+A delayed attempt is cancelled when automatic flight is turned off (even if
+highlighting remains on), or when a profile is applied/duplicated. Turning it
+back on does not revive the abandoned callback: close and reopen the flight map
+for a fresh attempt. Highlighting may resume on that fresh opening after a
+profile replacement. Selected destination, distance, offered-node, combat,
+refusal and retry guards and the native action call are unchanged.
