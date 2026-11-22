@@ -1,0 +1,251 @@
+{
+  "source": "abe03ce00ca2b2659f7327ca68b99c2041d861c4",
+  "harness_sha256": "3b8eef5588baead562580c75f44b445c7a57f148b5304e68d453b4f480408c4c",
+  "root_sha256": "20f09e37ebb6e78da23e295eb334fbdb2730f0224aef9258b48cf3a9d55d2690",
+  "host": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "clock": "Lua os.clock CPU; Python perf_counter subprocess elapsed; no timer model",
+  "limitations": "One discarded warm-up; fresh Lua processes. Peak sampled after Q.Step; lower bound, not exact high-water mark. GC enabled.",
+  "runs": [
+    {
+      "all_parts_compile_execute_ms": 27,
+      "current_bytes": 3510064,
+      "current_queries_cpu_ms": 6408,
+      "current_queries_load_ms": 21,
+      "current_queries_retained_kib": 3962,
+      "current_sampled_peak_kib": 8297,
+      "declared_parts": 64,
+      "decoded_rows": 768,
+      "enumerated_items": 29233,
+      "enumeration_and_validation_ms": 6249,
+      "explicit_history_ms": 2075,
+      "generation": "d999197852a82dc89e4fc01c937f7c55326f7ee4ddb4737ea6ffe5cf83209d13",
+      "header_retained_kib": 161,
+      "header_validation_ms": 41,
+      "history_bytes": 921601,
+      "history_bytes_before_history": 0,
+      "history_loads": 1,
+      "largest_part_load_us": 6175,
+      "largest_validation_callback_us": 12538,
+      "loaded_parts": 65,
+      "lookup_1000_us": 4763,
+      "raw_bytes": 4455341,
+      "raw_bytes_before_history": 3533740,
+      "real_game": false,
+      "records": 30000,
+      "retained_kib": 11652,
+      "root_compile_us": 131,
+      "root_execute_us": 0,
+      "sampled_peak_kib": 25543,
+      "synthetic": true,
+      "subprocess_wall_seconds": 8.565317096999934
+    },
+    {
+      "all_parts_compile_execute_ms": 28,
+      "current_bytes": 3510064,
+      "current_queries_cpu_ms": 6365,
+      "current_queries_load_ms": 22,
+      "current_queries_retained_kib": 3962,
+      "current_sampled_peak_kib": 8297,
+      "declared_parts": 64,
+      "decoded_rows": 768,
+      "enumerated_items": 29233,
+      "enumeration_and_validation_ms": 6204,
+      "explicit_history_ms": 2075,
+      "generation": "d999197852a82dc89e4fc01c937f7c55326f7ee4ddb4737ea6ffe5cf83209d13",
+      "header_retained_kib": 161,
+      "header_validation_ms": 43,
+      "history_bytes": 921601,
+      "history_bytes_before_history": 0,
+      "history_loads": 1,
+      "largest_part_load_us": 6107,
+      "largest_validation_callback_us": 16462,
+      "loaded_parts": 65,
+      "lookup_1000_us": 4708,
+      "raw_bytes": 4455341,
+      "raw_bytes_before_history": 3533740,
+      "real_game": false,
+      "records": 30000,
+      "retained_kib": 11652,
+      "root_compile_us": 189,
+      "root_execute_us": 1,
+      "sampled_peak_kib": 25547,
+      "synthetic": true,
+      "subprocess_wall_seconds": 8.533553737001057
+    },
+    {
+      "all_parts_compile_execute_ms": 26,
+      "current_bytes": 3510064,
+      "current_queries_cpu_ms": 6362,
+      "current_queries_load_ms": 21,
+      "current_queries_retained_kib": 3973,
+      "current_sampled_peak_kib": 8887,
+      "declared_parts": 64,
+      "decoded_rows": 768,
+      "enumerated_items": 29233,
+      "enumeration_and_validation_ms": 6196,
+      "explicit_history_ms": 2007,
+      "generation": "d999197852a82dc89e4fc01c937f7c55326f7ee4ddb4737ea6ffe5cf83209d13",
+      "header_retained_kib": 161,
+      "header_validation_ms": 44,
+      "history_bytes": 921601,
+      "history_bytes_before_history": 0,
+      "history_loads": 1,
+      "largest_part_load_us": 5430,
+      "largest_validation_callback_us": 16369,
+      "loaded_parts": 65,
+      "lookup_1000_us": 5827,
+      "raw_bytes": 4455341,
+      "raw_bytes_before_history": 3533740,
+      "real_game": false,
+      "records": 30000,
+      "retained_kib": 11652,
+      "root_compile_us": 647,
+      "root_execute_us": 0,
+      "sampled_peak_kib": 25504,
+      "synthetic": true,
+      "subprocess_wall_seconds": 8.454993535999165
+    }
+  ],
+  "metrics": {
+    "all_parts_compile_execute_ms": {
+      "median": 27,
+      "minimum": 26,
+      "maximum": 28
+    },
+    "current_bytes": {
+      "median": 3510064,
+      "minimum": 3510064,
+      "maximum": 3510064
+    },
+    "current_queries_cpu_ms": {
+      "median": 6365,
+      "minimum": 6362,
+      "maximum": 6408
+    },
+    "current_queries_load_ms": {
+      "median": 21,
+      "minimum": 21,
+      "maximum": 22
+    },
+    "current_queries_retained_kib": {
+      "median": 3962,
+      "minimum": 3962,
+      "maximum": 3973
+    },
+    "current_sampled_peak_kib": {
+      "median": 8297,
+      "minimum": 8297,
+      "maximum": 8887
+    },
+    "declared_parts": {
+      "median": 64,
+      "minimum": 64,
+      "maximum": 64
+    },
+    "decoded_rows": {
+      "median": 768,
+      "minimum": 768,
+      "maximum": 768
+    },
+    "enumerated_items": {
+      "median": 29233,
+      "minimum": 29233,
+      "maximum": 29233
+    },
+    "enumeration_and_validation_ms": {
+      "median": 6204,
+      "minimum": 6196,
+      "maximum": 6249
+    },
+    "explicit_history_ms": {
+      "median": 2075,
+      "minimum": 2007,
+      "maximum": 2075
+    },
+    "header_retained_kib": {
+      "median": 161,
+      "minimum": 161,
+      "maximum": 161
+    },
+    "header_validation_ms": {
+      "median": 43,
+      "minimum": 41,
+      "maximum": 44
+    },
+    "history_bytes": {
+      "median": 921601,
+      "minimum": 921601,
+      "maximum": 921601
+    },
+    "history_bytes_before_history": {
+      "median": 0,
+      "minimum": 0,
+      "maximum": 0
+    },
+    "history_loads": {
+      "median": 1,
+      "minimum": 1,
+      "maximum": 1
+    },
+    "largest_part_load_us": {
+      "median": 6107,
+      "minimum": 5430,
+      "maximum": 6175
+    },
+    "largest_validation_callback_us": {
+      "median": 16369,
+      "minimum": 12538,
+      "maximum": 16462
+    },
+    "loaded_parts": {
+      "median": 65,
+      "minimum": 65,
+      "maximum": 65
+    },
+    "lookup_1000_us": {
+      "median": 4763,
+      "minimum": 4708,
+      "maximum": 5827
+    },
+    "raw_bytes": {
+      "median": 4455341,
+      "minimum": 4455341,
+      "maximum": 4455341
+    },
+    "raw_bytes_before_history": {
+      "median": 3533740,
+      "minimum": 3533740,
+      "maximum": 3533740
+    },
+    "records": {
+      "median": 30000,
+      "minimum": 30000,
+      "maximum": 30000
+    },
+    "retained_kib": {
+      "median": 11652,
+      "minimum": 11652,
+      "maximum": 11652
+    },
+    "root_compile_us": {
+      "median": 189,
+      "minimum": 131,
+      "maximum": 647
+    },
+    "root_execute_us": {
+      "median": 0,
+      "minimum": 0,
+      "maximum": 1
+    },
+    "sampled_peak_kib": {
+      "median": 25543,
+      "minimum": 25504,
+      "maximum": 25547
+    },
+    "subprocess_wall_seconds": {
+      "median": 8.533553737001057,
+      "minimum": 8.454993535999165,
+      "maximum": 8.565317096999934
+    }
+  }
+}

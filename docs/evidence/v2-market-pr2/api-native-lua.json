@@ -5,7 +5,31 @@
   "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
   "mode": "Linux native staging; not installed Windows acceptance",
   "variants": 129,
-  "total_seconds": 6.755737507999584,
+  "native_calls": [
+    {
+      "elapsed_ms": 80.66721,
+      "ready": false,
+      "retry_after": 5
+    },
+    {
+      "elapsed_ms": 22.338373,
+      "ready": false,
+      "retry_after": 5
+    },
+    {
+      "download_bytes": 51700,
+      "elapsed_ms": 6251.620337,
+      "ready": true,
+      "requests": 129
+    },
+    {
+      "download_bytes": 0,
+      "elapsed_ms": 34.174155999999996,
+      "ready": true,
+      "requests": 1
+    }
+  ],
+  "total_seconds": 6.6618864230003965,
   "mandatory_archive": false,
   "no_change_http_304": true,
   "no_change_game_mtime_preserved": null,
@@ -25,7 +49,7 @@
     "desktop/core/examples/workshop_smoke.rs": "fce803354ad0e914326de8aab8e0900291aa216cbe96a1790529e100125953a6"
   },
   "game_consumption": "pending actual Forever",
-  "paired_addon_commit": "4da50dd2dfcfe2f12a6a626e017d3abfd0670466",
+  "paired_addon_commit": "c70566f3a83cfe9da49402b57aa4e614e3c13140",
   "addon_source_sha256": {
     "TwichUI_Workshop/Summary.lua": "1168efa03ac1fa8be44d80eb7c3150bfa0424aec18ff6e31c500ea7634543f79",
     "TwichUI_Workshop/SummarySchema.lua": "0caef462952e78ccb39d22b8bda14497b8d97731f679c0b331b6748d710c9931",
@@ -35,32 +59,35 @@
     "tests/test_workshop_auction_market_summary.lua": "8be37d6368e2e7ceb9d7f2c00df7d4abd53ffc782d0faf8026c2d7231fdd718e"
   },
   "negotiated_contract": 3,
-  "paired_addon_dirty": true,
-  "native_calls": [
-    {
-      "elapsed_ms": 93.69005399999999,
-      "ready": false,
-      "retry_after": 5
-    },
-    {
-      "elapsed_ms": 22.352001,
-      "ready": false,
-      "retry_after": 5
-    },
-    {
-      "download_bytes": 51700,
-      "elapsed_ms": 6326.665737,
-      "publication": "/tmp/twichui-summary-e2e-p42wbk5h/native/publication",
-      "ready": true,
-      "requests": 129
-    },
-    {
-      "download_bytes": 0,
-      "elapsed_ms": 38.153563,
-      "publication": "/tmp/twichui-summary-e2e-p42wbk5h/native/publication",
-      "ready": true,
-      "requests": 1
-    }
-  ],
-  "http_request_count": 132
+  "paired_addon_dirty": false,
+  "http_request_count": 132,
+  "lua_result": {
+    "all_parts_compile_execute_ms": 3,
+    "current_bytes": 14632,
+    "current_queries_retained_kib": 145,
+    "declared_parts": 64,
+    "decoded_rows": 2,
+    "enumerated_items": 128,
+    "enumeration_and_validation_ms": 43,
+    "explicit_history_ms": 1,
+    "generation": "17b429f1ad80cafa5336dc0d0c0c12c3c0291ae497a8dd5b6178d238861acb91",
+    "header_retained_kib": 106,
+    "header_validation_ms": 29,
+    "history_bytes": 307,
+    "history_bytes_before_history": 0,
+    "history_loads": 1,
+    "largest_part_load_us": 2875,
+    "largest_validation_callback_us": 4385,
+    "loaded_parts": 65,
+    "lookup_1000_us": 5359,
+    "raw_bytes": 32195,
+    "raw_bytes_before_history": 31888,
+    "real_game": false,
+    "records": 129,
+    "retained_kib": 148,
+    "root_compile_us": 114,
+    "root_execute_us": 1,
+    "sampled_peak_kib": 858,
+    "synthetic": true
+  }
 }

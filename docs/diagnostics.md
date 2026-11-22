@@ -548,5 +548,5 @@ waiting; validation CPU scopes and worst callback remain separate. Ten passive
 gauges cover raw bytes, completed decoded rows, parked history work, price cache
 and pending counts. A paused historical coroutine can retain temporary parsed
 rows beyond the single completed partition cache; the gauge is not a heap size.
-Whole-UI heap and sampled addon memory remain the available client measures.
+The prior generation can also retain its existing rollback cache. Whole-UI heap and sampled addon memory remain the available client measures.
 Default-off instrumentation adds no background timers or forced collection.

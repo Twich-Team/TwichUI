@@ -400,8 +400,27 @@ client acceptance is inferred from this campaign.
 
 ### Market pending-pricing performance
 
-`./tests/run.sh development market-performance` selects six small production-reader,
+`./tests/run.sh development market-performance` selects eight small production-reader,
 pricing, estimator and integrity modules without a simulator. It supplements the
 normal affected Market/crafting/consumer groups. Dedicated audit benchmarks remain
 opt-in (`tools/measure_market_opportunities.py`), never default test discovery.
 [PR1 implementation and comparable measurement procedure](performance/v2-market-pending-pricing-pr1.md).
+
+
+### Market cold pricing PR2
+
+The existing `market-performance` group now includes contract-3 current/history
+laziness, integrity, rollback, priority and elapsed-diagnostics checks. A small
+PR workflow runs that same development selection on relevant paths even when a
+PR is stacked below main. It does not run the simulator, mutation campaigns or
+large fixtures. Local measurement: eight modules in 2.8 s; target under 30 s.
+
+The existing dedicated driver accepts `--contract 2|3` and `--rows` for comparable
+Opportunities workloads. `tools/measure_scoped_reader.py --summary-root PATH
+--report FILE` runs the existing native-publication summary harness, with one
+discarded warm-up and three fresh samples. Both are opt-in. Paired Windows
+publication/Lua and protocol tests run in the Market integration workflow.
+The 30,000-variant/60-day uneven stress fixture is for on-demand or release
+validation, never ordinary development. Exact frozen commands, JSON baselines,
+comparison/update policy and observed failures are in the
+[PR2 evidence and native acceptance report](performance/v2-market-cold-pricing-pr2.md).
