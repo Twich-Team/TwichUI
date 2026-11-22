@@ -336,8 +336,8 @@ function C.NewCard(parent, opts)
     card.line3Icon:SetSize(14, 14)
 
     card.close = CreateFrame("Button", nil, body)
-    card.close:SetSize(18, 18)
-    card.close:SetPoint("TOPRIGHT", -10, -10)
+    card.close:SetSize(20, 20)
+    card.close:SetPoint("TOPRIGHT", -12, -12)
     card.close.art = Sheet(card.close, "button", { layer = "ARTWORK", sub = 4, corner = 6 })
     card.close.art:SetSkin("button")
     card.close.text = Font(card.close, 12, "body"); card.close.text:SetPoint("CENTER", 0, 0); card.close.text:SetText("x")
@@ -436,6 +436,8 @@ function C.NewCard(parent, opts)
         GameTooltip:Show()
     end)
     card.toggle:SetScript("OnLeave", function(self) self.art:SetSkin("button"); GameTooltip:Hide() end)
+    card.toggle:SetScript("OnMouseDown", function(self) self.art:SetSkin("button-down") end)
+    card.toggle:SetScript("OnMouseUp", function(self) self.art:SetSkin(self:IsMouseOver() and "button-hot" or "button") end)
     card.toggle:SetScript("OnClick", function() C.ToggleDisplay(card) end)
 
     -- entrance
@@ -455,7 +457,7 @@ end
 
 function C.DisplayToggle(card, mode, victory)
     local compact = mode == "collapsed"
-    card.toggle:ClearAllPoints(); card.toggle:SetPoint("TOPRIGHT", card, "TOPRIGHT", (compact or victory) and -8 or -30, -8)
+    card.toggle:ClearAllPoints(); card.toggle:SetPoint("TOPRIGHT", card, "TOPRIGHT", victory and -18 or compact and -12 or -36, victory and (compact and -22 or -15) or -12)
     if card.toggle.up then
         for _, t in ipairs(card.toggle.up) do t:SetShown(compact) end
         for _, t in ipairs(card.toggle.down) do t:SetShown(not compact) end
@@ -537,7 +539,7 @@ end
 -- Colors, texture, height and position of the countdown for the time left.
 local function Timer(card, remaining, duration, x, width, y, expired)
     local t = card.timer
-    t:SetHeight(card.compact and 4 or LR.Get("barHeight"))
+    t:SetHeight(card.compact and 6 or LR.Get("barHeight"))
     Place(t, card, x, y, width)
     local frac = duration and duration > 0 and math.max(0, math.min(1, (remaining or 0) / duration)) or 0
     local fill = t.fill
@@ -559,7 +561,7 @@ function C.PaintTimer(card, view)
     local inner = W_CARD - PAD * 2
     local scheduled = view.state == "scheduled" and view.auto
     if card.compact then
-        Timer(card, view.remaining, view.duration, 10, W_CARD - 20, 56)
+        Timer(card, view.remaining, view.duration, 12, W_CARD - 24, 54)
         card.time:ClearAllPoints(); card.time:SetPoint("TOPRIGHT", body, "TOPRIGHT", -8, -31)
         card.time:SetSize(28, 16); card.time:SetJustifyH("RIGHT"); TextSize(card.time, 11)
         card.time:SetText(Seconds(view.remaining)); card.time:Show()
@@ -708,7 +710,7 @@ local function CompactLayout(card, view)
     card.iconFrame:ClearAllPoints(); card.iconFrame:SetPoint("TOPLEFT", 10, -10); card.iconFrame:SetSize(38, 38)
     card.iconHit:ClearAllPoints(); card.iconHit:SetPoint("TOPLEFT", card.iconFrame, "TOPLEFT", 0, 0)
     card.iconHit:SetPoint("BOTTOMRIGHT", body, "TOPLEFT", 198, -50)
-    card.name:ClearAllPoints(); card.name:SetPoint("TOPLEFT", 58, -9); card.name:SetSize(136, 18); TextSize(card.name, 14)
+    card.name:ClearAllPoints(); card.name:SetPoint("TOPLEFT", 58, -9); card.name:SetSize(144, 18); TextSize(card.name, 14)
     C.FitItemName(card.name, view.name or "Loot")
     card.sub:ClearAllPoints(); card.sub:SetPoint("TOPLEFT", 58, -31); card.sub:SetSize(136, 16); TextSize(card.sub, 11)
     card.sub:SetText(view.needsConfirm and "Confirm in game" or view.autoNote and "Manual choice" or Ru.QualityName(view.quality))
@@ -729,8 +731,8 @@ local function CompactLayout(card, view)
         local keys = scheduled and { "now", "stop" } or { "need", "greed", "pass" }
         for i, key in ipairs(keys) do
             local b = card.buttons[key]; b.compact = true; b:SetHeight(34)
-            local width = scheduled and 71 or 46
-            b:SetWidth(width); Place(b, card, 202 + (i - 1) * (width + 4), 12)
+            local width = scheduled and 71 or 44
+            b:SetWidth(width); Place(b, card, 208 + (i - 1) * (width + 3), 12)
             b:Layout()
         end
     else

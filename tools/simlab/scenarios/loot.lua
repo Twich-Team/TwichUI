@@ -509,7 +509,7 @@ if view:find("^victory") and view ~= "victorySettings" and view ~= "victoryRepla
         Check("state", "confirmed event accepted", 1, V.Count())
         Check("construct", "existing card reused", old, entry and entry.card)
         local seconds = ({ victoryResolve = 0.1, victoryReveal = 0.3, victorySheen = 0.6, victoryParticles = 0.95,
-            victoryStatic = 1.85, victoryOff = 1.85, victoryFade = entry.total - 0.15, victoryDone = entry.total + 0.15 })[view] or 1.85
+            victoryStatic = 1.95, victoryOff = 1.95, victoryFade = entry.total - 0.15, victoryDone = entry.total + 0.15 })[view] or 1.85
         Lab.Settle(seconds)
         if view == "victoryDone" then
             Check("state", "victory completed", 0, V.Count())

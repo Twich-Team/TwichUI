@@ -1270,9 +1270,9 @@ do
   Check(card.compact and card.h == 64 and roll.state == "pending" and roll.choice == nil and not roll.auto,
     "display-only rule collapses with automation off, without making a choice")
   for _, key in ipairs({ "need", "greed", "pass" }) do
-    Check(card.buttons[key].shown and card.buttons[key].w == 46 and card.buttons[key].h == 34, "Mini keeps safe labeled choice targets")
+    Check(card.buttons[key].shown and card.buttons[key].w == 44 and card.buttons[key].h == 34, "Mini keeps safe labeled choice targets")
   end
-  Check(card.timer.h == 4 and card.time.shown and not card.line3.shown and not card.close.shown,
+  Check(card.timer.h == 6 and card.time.shown and not card.line3.shown and not card.close.shown,
     "Mini uses a thin authoritative countdown and omits full details")
   local before = #rolled
   card.toggle.scripts.OnClick(card.toggle)
