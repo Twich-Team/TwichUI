@@ -112,6 +112,8 @@ Each Ready task is a **mini-specification**, not a guarantee the issue still exi
 
 ### P03 — Make choosing targeted tests straightforward
 
+**In review** · [Draft PR #109](https://github.com/Twich-Team/TwichUI/pull/109)
+
 - **Owner decision:** Difficulty is **selecting the appropriate tests**, not running tests or increasing their number.
 - **Where to start:** `docs/testing.md`, `tests/groups.json`, `tools/test_runner.py` (`plan`, `--list`), `tests/run.sh`. Reuse existing group globs and documented boundaries.
 - **Desired result:** An opt-in, read-only, **no-test-execution recommendation** for one or more changed repo-relative paths, listing likely focused group(s), preview commands and why they apply. CLI syntax may follow existing runner conventions. If a small, deterministic CLI addition proves too complex, make a concrete command-selection guide instead.
