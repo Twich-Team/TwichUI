@@ -1,0 +1,83 @@
+{
+  "complete": true,
+  "source": {
+    "commit": "725519e6be87f3e3b9c75d8f7ad271572cb60a1f",
+    "dirty": true,
+    "working_tree_sha256": "5c4365a50a66555267e7a544ec145a7a66f7359a9b7d48eac7a12a4f2a6404fa"
+  },
+  "source_after": {
+    "commit": "725519e6be87f3e3b9c75d8f7ad271572cb60a1f",
+    "dirty": true,
+    "working_tree_sha256": "5c4365a50a66555267e7a544ec145a7a66f7359a9b7d48eac7a12a4f2a6404fa"
+  },
+  "source_unchanged": true,
+  "exit_code": 0,
+  "seconds": 2.1307415290000336,
+  "syntax_passed": true,
+  "tests": [
+    {
+      "metrics": null,
+      "test": "test_workshop_estimate.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.03330270800006474
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_market_consumption.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.1885506290000194
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_market_consumption_async.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.13065041799995925
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_market_performance.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 1.4764746040000318
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_summary.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.2253025320001143
+    }
+  ],
+  "passed": true,
+  "simulators": [],
+  "automated_release_gate_passed": false,
+  "local_milestone_passed": false,
+  "command": "./tests/run.sh development market-performance --jobs 1",
+  "runner_self_tests": {
+    "command": "python3 tests/test_test_runner.py",
+    "cases": 17,
+    "seconds": 4.989,
+    "passed": true,
+    "note": "Printed FAILs are intentional negative controls in disposable test repositories; final unittest verdict OK."
+  },
+  "other_checks": [
+    "luac5.1 -p tests/bench_market_index_memory.lua tests/bench_market_opportunities.lua tests/test_workshop_market_performance.lua",
+    "python3 -m py_compile tools/measure_market_opportunities.py",
+    "git diff --check",
+    "local Markdown links and 87 sample/harness identities checked"
+  ],
+  "limitations": "No full/feature simulator, native Windows or real-client certification. Final documentation-only evidence summary added after frozen checks; executable files unchanged."
+}
