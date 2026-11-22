@@ -1,48 +1,144 @@
-# Incremental Opportunities PR3
+# TwichUI V2: incremental Opportunities performance (PR3)
 
-Stacked on unmerged PR2 #100 at `8b5865b20cec7d7f39af78de947b712a9c7c67e1`; PR1 #99 and Market #43/#44 remain dependencies. Market is read-only in this stage. No merge, deployment, release, contract or pricing-policy change.
+PR3 replaces repeated complete economic calculations with retained recipe estimates, item dependency invalidation and cooperative work slices. It preserves pricing policy, Market contracts and shared consumers. The implementation is in [PR #102](https://github.com/Twich-Team/TwichUI/pull/102), following #99/#100; Market #43/#44 provide the separately negotiated compact current-price path. The owner subsequently authorized verified source integration into main. No deployment, release, signing, production data change or Contract-3 activation is part of this session.
 
-## Focused baseline and design
+## Results
 
-One instrumented 1,000-recipe / 60-day / contract-3 UI workload uses the existing production harness and synthetic data. Actual CPU 5,562 ms; Craft accounts for 4,520 ms, Rows 4,578 ms inclusive of Craft, sorting 231 ms, chart reads 1.6 ms. These overlapping scopes must not be added together. 54 full lists / 54,000 Craft entries, 50 estimator instances; a compatible warm redraw still calls Craft 1,000 times and costs 36.8 ms. Worst scheduled callback 171.9 ms. Header admission and fixture construction are outside workload CPU. One diagnostic sample, not a statistical performance baseline; probes add overhead. [Raw phase sample](../evidence/v2-market-pr3/profile-pr2.json).
+For the final 1,000-recipe/60-day/contract-3 UI cohort, workload CPU falls **5,349.83 → 1,009.57 ms (81.1% less)**. Craft calls fall from **54,000 to 1,000**; a compatible warm read performs zero Craft/reader work. These are offline Lua 5.1 measurements, not Forever frame timings. Callback tails and first-use construction remain explicit below.
 
-The partial pricing revision is part of Session.Estimator's context key. Every completion discards shared question memoization, builds all recipe result tables, sorts and refills visible rows. The existing virtualized list already pools frames; it does not need a replacement. Selected charts are not the primary CPU cost in this fixture.
+| 1,000 recipes / contract 3 / 60 days | PR2 | Final PR3 |
+| --- | --- | --- |
+| Workload CPU (ms) | 5,349.83 | 1,009.57 |
+| Craft calls | 54,000.00 | 1,000.00 |
+| Full passes / catalog builds | 54.00 | 1.00 |
+| Production reader calls | 2,128.00 | 1,128.00 |
+| Warm Session CPU (ms) | 36.38 | 0.08 |
+| Warm Craft calls | 1,000.00 | 0.00 |
+| Scheduled callback p95 (ms) | 72.51 | 2.09 |
+| Scheduled callback p99 (ms) | 125.46 | 2.15 |
+| Worst callback per run, median (ms) | 166.04 | 8.35 |
+| Initial request CPU (ms) | 389.73 | 37.34 |
+| Session view requests | 54.00 | 97.00 |
+| Retained heap (MiB) | 45.60 | 38.71 |
+| Sampled peak heap (MiB) | 110.69 | 59.24 |
 
-Use one Workshop-specific recipe-result store with item→recipe dependencies. Keep the existing estimator memo, invalidate its affected item answers, and gate calculation until price questions have terminal answers. One tokenized coroutine worker handles invalidation, recipe computation, filtering and cooperative merge sorting under elapsed and operation budgets. Yield between material/questions as well as recipes; record indivisible service calls separately. Prices, formulas, quality and fee rules stay in Estimate/Market.
+“Full passes / catalog builds” is 54 synchronous full economic passes versus one incremental catalog build; PR3 performs zero synchronous `Op.Rows` calls in this path. Total CPU includes initial UI construction, queued work/optional chart draining and one compatible warm Session read; fixture construction, initial manifest admission and the full-recomputation oracle are outside workload CPU/heap timing. View requests can increase because price notifications and prepared-result notifications are independently coalesced. This is not a claim of fewer redraws: each draw reuses economic work, pooled cells and selected details.
 
-A changed context invalidates all results; changed prices invalidate dependent recipes only. Result validity must be checked against item/context versions before publication, including while a worker is suspended. Partial results retain stable provisional order, visibly labeled as refreshing; final ordering uses the existing comparator. Filter/sort changes reuse estimates. Visible rows can advance pending work without implying they are the best-profit recipes. Keep one bounded catalog, no historical payload cache, and no background worker when idle.
+The final timing-accounting revision `8a36c29` was rechecked with the same headline fixture/helper and unchanged economic-result hash: median **1,044.23 ms** (941.74–1,080.54), **80.5% below PR2**, 1,000 Craft calls, 1,128 reader calls and zero warm Craft/reader work. Callback p95/p99 medians are 2.077/2.132 ms; the worst callback across those three runs is 14.064 ms, while the largest inclusive worker batch is 2.885 ms. Initial request remains 31.931–60.922 ms. The large matrix below records `5ca9734`; this separately labeled [final-accounting recheck](../evidence/v2-market-pr3/accounting-headline.json) avoids presenting earlier timing semantics as final code.
 
-Context boundaries include actual source/generation, local scan sequence, fee evidence/duration, vendor changes, recipe catalog changes, freshness thresholds and cooldown time. Hiding cancels obsolete workers but retains compatible completed estimates; suspension clears transient engine state. Source changes cannot publish old profits.
+## Cause and implementation
 
-## Verified implementation checkpoint
+One diagnostic PR2 profile (production `8b5865b`, profiling helper `6e1a89f`) measured 5,562 ms total, 4,520 ms in Craft, 4,578 ms in Rows inclusive of Craft, 231 ms sorting and 1.6 ms chart access. It recorded 54,000 Craft entries, 54 complete lists and 50 estimators. Overlapping timings must not be summed. [Raw profile](../evidence/v2-market-pr3/profile-pr2.json).
 
-The production TOC now loads `OpportunityEngine.lua` after Estimate. Completed recipe estimates survive compatible redraws; item versions invalidate dependent rows and estimator questions. Cold demand is reserved by partition before its shared decoder handoff, preventing progressive calculation from reintroducing partition churn. Cancellation releases only the unfinished demand lease, leaving shared decoding available to other consumers.
+`Session.Estimator` included partial pricing revision in its context key. Partition completions therefore discarded shared question memoization and caused `Op.Rows`/sort/render over the whole catalog. Existing virtualized rows were already pooled. The remaining primary bottleneck was repeated economic calculation and allocation, rather than creating thousands of UI frames.
 
-The worker targets 2 ms with an independent 1,024-resume cap (32 without a CPU clock), yielding after estimator service questions/materials, dependency updates and merge-sort steps. An indivisible service call can exceed the target: diagnostics record those calls separately. No CPU scope spans a yield. Provisional order is labeled, final order uses the existing comparator; pooled rows, money formatting and selected details are reused.
+| Owner | Final behavior |
+| --- | --- |
+| `OpportunityEngine.lua`, `Request/Build/Calculate/Present` | One result/catalog, immutable economic-input snapshots, item→recipe edges, tokenized coroutine, FIFO/viewport priority, final cooperative merge sort. |
+| `Estimate.lua`, `Ask/InvalidateItem/ClearMemo/Work` | Existing memo, per-item answer versions; loading/combat answers never cached; yields after synchronous questions/materials, outside Lua 5.1 `pcall`. No formula change. |
+| `Pricing.lua`, `ContextGeneration/PrepareBucket/finishBucket` | Public generation/revision semantics preserved; context excludes partial completion. Complete bucket demand is reserved before decoder handoff; cancellation releases only that unfinished lease. Shared decoding continues. |
+| `Session.lua`, `Estimator/ItemsChanged/Opportunities/PlanKey` | Compatible catalog/index reuse, targeted dependency invalidation, correct fee/vendor/source keys, fail-closed obsolete work. |
+| `ViewOpportunities.lua` / `Style.lua` / `Window.lua` | Existing row pool retained; unchanged money/detail/chart work skipped; viewport priority and anchoring; page cancellation and combat resume. First-use row construction has an opt-in scope. |
 
-The ten-module development group passed in 4.423 seconds (cloud profile; 33 Lua syntax files). The targeted mutation campaign killed all 16 applied defects in 12.8 seconds, including elapsed budget, dependency fanout, mutable recipe snapshots, source/token guards and the preparation lease. The earlier invalid revision mutation was updated to match the refactored completion writer and rerun successfully; no assertions were weakened. Integration, comparable multi-sample benchmarks and native verification are reported below when complete.
+The worker targets **2 ms elapsed processing** with a **1,024-resume cap** (32 without a usable CPU clock). It yields inside expensive recipes, between questions/materials, dependency updates and sorting. One indivisible service/VM operation may overrun; ordinary engine slices and aggregate callback tails are different measurements. There is one scheduled worker and one coalesced presentation callback, with no idle/pending polling chain. Old token/source callbacks cannot publish into a new context.
+
+Profiling the 5,000-recipe workload exposed another avoidable cost: copying/filtering all rows every 128 results. Final PR3 reuses provisional membership/positions while the catalog and metadata-only filters stay unchanged. Price/profit/confidence-dependent membership still rebuilds correctly. No extra price cache or generic reactive framework was introduced.
+
+| Input change | Invalidation |
+| --- | --- |
+| Partial price / terminal missing / item metadata / vendor price | Only dependent recipes; invalidate their shared item questions. |
+| Generation, failure/readiness, account/faction/source, local scan sequence/completion | New complete context; old profits suppressed immediately. |
+| Cut, duration or economic fee evidence | New context; equal-count changed postings are detected, unrelated Ledger activity with identical fee evidence preserves results. |
+| Recipe observation | Reconcile copied input values; preserve estimates of unchanged recipes. |
+| Time | Existing hourly window plus exact local stale/fair-age boundaries; cooldown rows refresh on requested seconds. No permanent ticker. |
+| Sort/filter | Reuse estimates; recompute only presentation/ranking as needed. |
+| Hide/page switch | Cancel owned callbacks; preserve compatible completed results. Suspension clears engine transients. |
+
+Partial ordering is explicitly **provisional**. Previously ranked/catalog order stays stable while visible work is prioritized; completed global ranking uses the original profit/cost/sell/margin comparator and filters. Selected details, queue validation, missing-price explanations and chart/history semantics are preserved. A worker error fails closed once for that context; explicit reopen/new context can recover. Catalogs over 10,000 recipes refuse rather than running an unbounded job.
+
+## Comparable matrix
+
+All CPU values below are milliseconds: PR2 → final PR3, actual Session path, three fresh measured processes after one discarded warm-up per case.
+
+| Recipes | Contract 2 / 2 days | Contract 2 / 60 days | Contract 3 / 2 days | Contract 3 / 60 days |
+| --- | --- | --- | --- | --- |
+| 20 | 373.34 → 315.69 | 2,663.16 → 2,564.72 | 258.20 → 231.28 | 273.17 → 237.73 |
+| 100 | 1,171.75 → 660.52 | 5,593.41 → 4,976.46 | 741.47 → 470.07 | 771.62 → 486.61 |
+| 500 | 3,193.71 → 777.42 | 7,876.38 → 5,119.91 | 1,868.97 → 602.39 | 1,877.92 → 615.44 |
+| 1000 | 6,197.36 → 947.10 | 10,716.25 → 5,351.37 | 4,973.24 → 748.86 | 4,903.30 → 765.35 |
+
+Contract 2 still validates coupled historical payloads. PR3 reduces repeated calculation but cannot remove that legacy data cost. The server's additive Contract 3, compatible Companion and installed addon declaration are all needed for independent current-price loading. Existing installations are not silently upgraded by a main merge.
+
+## Progressive timing and lifecycle
+
+The timer model advances by at least one synthetic 60 Hz frame per `After`; it does **not** advance virtual time by callback CPU or reproduce the WoW scheduler. The following modeled seconds are not predictions of native latency.
+
+| Modeled seconds | PR2 | Final PR3 |
+| --- | --- | --- |
+| First priced known recipe | 0.20 | 0.35 |
+| First ten priced known recipes | 0.20 | 1.25 |
+| Fixed initial visible cohort settled | 6.52 | 1.57 |
+| All known opportunity results settled | 6.52 | 6.80 |
+
+First-ten and final modeled settlement need not improve merely because CPU falls. Report them separately: eager synchronous recalculation can appear earlier on a virtual clock which excludes its expensive CPU. The initial visible cohort may contain different recipes because PR3 honestly uses provisional order and prioritizes that viewport. Neither metric is a native frame/response guarantee.
+
+| Lifecycle input | CPU ms PR2 → PR3 | PR2 Craft | PR3 Craft | PR3 sorts |
+| --- | --- | --- | --- | --- |
+| single | 119.77 → 24.42 | 2000 | 31 | 1 |
+| burst | 118.87 → 93.37 | 2000 | 1000 | 1 |
+| reopen | 649.09 → 98.21 | 12000 | 0 | 0 |
+| filters | 5,143.46 → 27.66 | 105000 | 0 | 0 |
+| generation | 14,744.39 → 3,191.87 | 139000 | 3000 | 3 |
+| scroll (real hooks) | 61.25 → 18.31 | 1000 | 0 | 0 |
+
+The single item has exactly 31 dependent recipes. The burst affects all 1,000. Reopen means five cycles. Filters means 100 queued criterion changes before timer dispatch (latest-work coalescing, not a human click-rate claim). Generation means three complete replacements. Corrected scroll dispatches the stand-in's real main script **and HookScript callbacks**, during cold work and after settlement; the initial offset-only timing is superseded and not used. Full estimates, summaries and final order match fresh recomputation in every retained pair.
+
+## Frame-time outliers and limits
+
+All run distributions, maxima and origins remain in the evidence; medians are not maximum guarantees. Initial window construction is outside scheduled-callback percentiles and remains a separate first-open cost. Diagnostic probes identify first-use viewport growth from zero to eight pooled rows (about 3 MiB in Lua stand-in frames). Actual native UI objects differ.
+
+An earlier checkpoint recorded a 35.404 ms worker callback (35.311 ms batch) during a burst. Six controlled probes did not reproduce that spike; stopping automatic GC did not eliminate a 10.846 ms UI redraw. Thus GC is **not established as its cause**. The original observation is retained in [intermediate evidence](../evidence/v2-market-pr3/intermediate-checkpoint.json), with the reproducible [diagnostic patch/results](../evidence/v2-market-pr3/gc-initial.json). Final probes record per-question maximums, pool/heap transitions and inclusive view/strategy/chart phases. Never disable or tune global GC in runtime to hide a result. Remaining native tails require the existing opt-in capture, especially `workshop.opportunityBatch`, `.opportunityQuestion`, `.opportunityRow` and `.render`.
+
+Final calculation-source samples also contain 19.460 ms (worker callback), 15.070 ms (publication), 17.526 ms (pricing notification), 12.306 ms (scroll/pricing), and 18.658 ms (stress publication) tails. The 19.460 ms callback had only 3.103 ms inside the former worker scope: source validation and callback overhead were excluded. The final accounting correction (`8a36c29`) starts the elapsed budget before validation and adds whole-callback/source scopes; it changes scheduling accounting, not economic policy. Its focused tests include a 6 ms source guard and ensure scopes never span callbacks. [Tail inventory](../evidence/v2-market-pr3/callback-tails.json). These are unresolved frame-time limits, not hidden behind percentile averages.
+
+## Extended workload and memory
+
+The paired 5,000-recipe/96-record-per-bucket/60-day/contract-3 stress workload has 6,144 synthetic Market records, shared materials, terminal missing variants, 20 material-price bursts, 100 criterion toggles, five reopens and 20 actual scroll-hook dispatches. It uses one discarded warm-up and **one measured process per revision**: a bounded stress diagnostic, not a statistical timing baseline. Explicit offline collections at checkpoints are included in its CPU and separately counted; runtime does not force collection.
+
+| Stress observation | PR2 | Final PR3 |
+| --- | --- | --- |
+| Total CPU (ms) | 97,017.62 | 19,481.85 |
+| Changed-work CPU (ms) | 61,378.54 | 15,883.51 |
+| Total Craft calls | 905,000.00 | 105,000.00 |
+| Changed-work Craft calls | 560,000.00 | 100,000.00 |
+| Worst callback (ms) | 831.04 | 18.66 |
+| Callback p99 (ms) | 520.34 | 2.48 |
+| Retained heap (MiB) | 153.49 | 79.78 |
+| Sampled peak heap (MiB) | 403.68 | 205.91 |
+
+A separate single-process 60-cycle probe records cache counts alongside retained heap; it is not used for a timing-improvement claim.
+
+| Cycle | Retained MiB | Memo answers | Price entries | Rows retained | Pending prices |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 73.98 | 4975 | 5064 | 5000 | 0 |
+| 10 | 77.37 | 11423 | 5064 | 5000 | 0 |
+| 20 | 79.90 | 16281 | 5064 | 5000 | 0 |
+| 30 | 79.48 | 14713 | 5064 | 5000 | 0 |
+| 40 | 81.86 | 17702 | 5064 | 5000 | 0 |
+| 50 | 83.00 | 19895 | 5064 | 5000 | 0 |
+| 60 | 82.85 | 19060 | 5064 | 5000 | 0 |
+
+The memo warms toward its existing 20,000-answer cap, drops at cycles 30/60, and row/price/pending counts remain bounded. This finite probe does not prove absence of a native leak or a perfectly flat heap.
+
+Heap deltas start after fixture/header setup. They include harness observers and Lua UI stand-ins, exclude preconstructed fixture storage, and sample peaks only at callbacks/lookups. Raw strings can be interned with the fixture. They are not WoW per-addon memory or an exact allocation peak. The result store owns one catalog (≤10,000 rows) plus dependency edges/snapshots; Pricing retains its existing 8,192-entry bound. Estimate clears questions at 20,000 before the next recipe, with bounded single-craft overshoot. Temporary reconciliation/sorting and a parked history decoder can retain additional state. No all-64 decoded cache, imported-history cache or new SavedVariables was added.
+
+## Verification and regression tiers
+
+Final focused development: **10/10 modules**, **4.426 s**. Targeted mutations: **18/18 killed**, **11.0 s**. A repeated affected integration run passes **76/76 offline modules** and all six selected Auction preview scenarios. The overall strict integration verdict remains **FAIL**: each normal Workshop pose retains the exact 40 pre-existing tooltip assertions, and the intentional wrong pose has 41. Voice/UTF-8 simulator boundaries remain explicit. No assertion was suppressed and the 45-second scenario limit was not raised. [Exact comparison](../evidence/v2-market-pr3/simulator-comparison.json), [verification](../evidence/v2-market-pr3/verification.json), [mutations](../evidence/v2-market-pr3/mutations.json).
+
+Deterministic tests cover full-recomputation field/order/summary equivalence, shared material/quantity reuse, targeted dependencies, metadata-only provisional reuse and dynamic price-filter membership, mutable recipes, partial completion/missing prices, context/generation/fallback/fees/vendor/cooldown changes, cancellation, stale timer/source suppression, combat retry, corruption/last-good rollback, error/no-retry and memory capacity. Real UI tests cover selection/details, pooled rows, actual scroll hooks and shared-consumer lease release. No runtime economic formula changed.
 
 
-Integration follow-up corrected an optional Pricing-module chart read and fee
-replacement invalidation (counts can stay equal while deposit amounts change).
-Explicit cooldown, same-count vendor/fee, and empty-viewport diagnostic tests now
-pass. The latest ten-module fast run took 4.257 s. All 76 affected integration
-modules passed; Auction preview's six selected simulator scenarios passed. The
-Workshop scenario now waits for real asynchronous settlement without changing its
-assertions or raising its 45-second resource limit. Its final comparison is
-recorded with the benchmark evidence below.
-
-## Context, memory and lifecycle contract
-
-The result store owns one transient catalog, capped at 10,000 recipes, plus item-to-recipe edges, one version per relevant item, immutable economic-input snapshots and one queued node per recipe. It stores no Market records/history and adds no SavedVariables. Estimate retains its existing question memo, cleared at 20,000 answers before the next recipe (a bounded single-craft overshoot is possible); Pricing retains its existing 8,192-entry bound. Reconciliation may temporarily retain the previous catalog while a replacement is built. Queues and progressive sorting have linear temporary storage; neither is a permanent background task.
-
-Partial completion increments the existing public pricing revision but does not replace the estimator context. Batch completion supplies affected item IDs; row getters suppress stale estimates immediately, even before budgeted invalidation reaches their dependency edge. Pending/combat answers are never memoized. Terminal missing records settle and remain unknown. Completed estimates remain valid even if the reader evicts their decoded partition. Per-bucket preparation uses the existing pricing cache/reservations; a lease prevents decoder handoff before demand registration finishes. Cancellation drops only that unfinished lease, leaving shared decoder work and other consumers intact.
-
-Full contexts include source/generation/failure/readiness, local scan time and sequence, scan completion, character/faction identity, cut/source, fee evidence and duration, hourly freshness plus exact local stale/fair-age thresholds. Vendor/item metadata changes invalidate affected items; recipe reconciliation compares copied economic inputs rather than mutable table identity. Cooldowns refresh on a requested time change, without a permanent ticker. New economic fee evidence invalidates conservatively; unrelated Ledger changes with identical fee evidence preserve estimates. Page switching cancels work, compatible reopening reuses completed results, suspension releases transient state, and token guards reject stale callbacks. Worker failures fail closed once for that context and recover on an explicit reopen/new context.
-
-Visible-first scheduling promotes existing queued rows and not-yet-requested visible buckets. It does not abort/reorder another consumer's shared decoder. Partial order stays provisional; final ordering uses the original profit/cost/sell/margin comparator and filter semantics. Scroll anchoring preserves the first visible ID across incremental ranking updates, while explicit criteria changes may intentionally reorder the page. Selection/details and queue actions retain their existing validation.
-
-## Layered regression policy
 
 | Tier | Command / selection | Budget and cadence |
 | --- | --- | --- |
@@ -55,6 +151,40 @@ Keep deterministic correctness/operation invariants as merge gates: unchanged re
 
 Store source revision, harness SHA, semantic fixture SHA, host/Lua versions, individual samples, medians and ranges under `docs/evidence/`. Compare only matching fixtures and harnesses on the same host; investigate outliers and callbacks over 10 ms, including origin and indivisible service-call scopes. Do not silently overwrite a baseline or raise budgets: intentional changes require reviewed rationale, fresh comparable samples and unchanged correctness checks. Keep failing evidence and link it in the PR. Select Market/pricing/engine tests for reader changes, crafting plus Market dependencies for Estimate/Session/Vendor changes, and selected Workshop/AH consumer UI coverage for shared list/Window/diagnostic changes. Full/release and large historical/mutation campaigns remain separate.
 
+
+## Reproduction and provenance
+
+PR2 production: `8b5865b20cec7d7f39af78de947b712a9c7c67e1`. Calculation matrix production: `5ca9734` (full SHA in each candidate report). Main 20/100/500/1000 and five lifecycle comparisons use identical helper files from `6754427`; headline/corrected-scroll/paired-20-cycle stress use helpers from `c8bd885`; extended memory/final diagnostics use helpers from `5ca9734`. Only those two isolated helper files are replaced in detached measurement worktrees; baseline production remains unchanged. The main/harness source and semantic fixture/result hashes are retained per report. An earlier c8bd885 checkpoint is retained as intermediate, not presented as the final implementation.
+
+Host: Linux 6.18.57 x86_64, AMD EPYC 9V74, five visible vCPUs, Lua 5.1.5/bitop, Python 3.12.14. No CPU pinning; no other heavy local verification campaign overlapped measurements. Synthetic Market/recipe data only, no production database/network. Each statistical case has one discarded warm-up, three fresh processes, medians/min/max and individual samples. The oracle runs after workload CPU/heap collection, comparing every economic field except private estimator links and lazy typical-profit decoration; deterministic engine tests cover full estimate fields. The same fixture/harness SHA and economic result SHA must match before/after. Do not compare different helper revisions as though identical.
+
+Create detached worktrees at the two production revisions. Copy the listed helper revision's `tests/bench_market_opportunities.lua` and `tools/measure_market_opportunities.py` into **both** before running the same commands from each root:
+
+```sh
+# Statistical matrix: repeat for contract 2/3 and days 2/60.
+python tools/measure_market_opportunities.py --suite opportunities --contract 3 --days 60 --reps 3 \
+  --case opportunities/session/20 --case opportunities/session/100 --case opportunities/session/500 \
+  --case opportunities/session/1000 --case opportunities/ui/1000 --report report.json
+# Repeat separately for single, burst, reopen, filters, generation (6754427 helpers).
+python tools/measure_market_opportunities.py --suite opportunities --contract 3 --days 60 --reps 3 \
+  --scenario single --case opportunities/ui/1000 --report single.json
+# Corrected real scroll (c8bd885 helpers).
+python tools/measure_market_opportunities.py --suite opportunities --contract 3 --days 60 --reps 3 \
+  --scenario scroll --case opportunities/ui/1000 --report scroll.json
+# Paired bounded stress (c8bd885 helpers); one sample explicitly labeled.
+python tools/measure_market_opportunities.py --suite opportunities --contract 3 --days 60 --reps 1 \
+  --stress --rows 96 --scenario stress --case opportunities/ui/5000 --report stress.json
+# Extended single-process memory and optional controlled diagnostics (5ca9734 helpers).
+lua5.1 tests/bench_market_opportunities.lua opportunities ui 5000 60 3 96 normal stress off 60
+lua5.1 tests/bench_market_opportunities.lua opportunities ui 1000 60 3 32 profile burst normal
+lua5.1 tests/bench_market_opportunities.lua opportunities ui 1000 60 3 32 profile burst nogc
+./tests/run.sh development market-performance --profile cloud --jobs 2
+./tests/run.sh integration market --with-group crafting --with-group market-performance --profile cloud --jobs 2
+bash tools/mutate.sh --group market.opportunity --group market.pending --group market.current --jobs 2
+```
+
+`nogc` is an isolated CLI diagnostic only. Benchmark wall-process time includes fixture/oracle/VM setup and is not the addon CPU metric. Routine checks do not select these workloads, the full simulator or mutation campaigns. Intentional baseline updates need a reviewed rationale, exact source/harness/fixture identity, fresh comparable samples and unchanged operation/correctness gates; never raise elapsed budgets or silently replace failing evidence.
+
 ## Native Forever check
 
 On a review build with the intended PR1/PR2 dependencies, use synthetic/test-safe data or the owner's existing companion delivery. No synchronization or publication is performed by PR3. Record client build, recipe count, contract, observation age and diagnostic clock/profile mode; keep those conditions constant when comparing revisions. Do not enable script profiling automatically.
@@ -64,38 +194,17 @@ On a review build with the intended PR1/PR2 dependencies, use synthetic/test-saf
 3. In a separate capture, change sort/profession/confidence filters, scroll during a cold calculation, change pages while it is busy, reopen, and inspect a selected recipe/add-to-queue confirmation. Perform no purchase/post/sell action. Test a new local scan or companion generation only through the normal owner-controlled process.
 4. `/tui perf stop`; open Diagnostics and export Quick summary plus JSON through the existing UI. Reports contain bounded aggregate timings/counters, no item identifiers or Market payloads.
 
-Read `workshop.opportunityBatch` total/worst CPU and `workshop.opportunityQuestion` indivisible service calls alongside `workshop.render`, Summary validation/load/completion CPU and elapsed wait distributions. The existing first/ten priced opportunities, fixed initial visible cohort, all-row settlement, partition load/repeat counters, pricing cache/pending gauges and five new recipe-state gauges distinguish calculation from queue waiting. `cacheHits` counts compatible catalog reads; `reused` counts recipe estimates preserved during catalog reconciliation; neither is a universal per-price hit rate. Final/provisional publication counters count prepared list publications; row/detail counters show actual visible presentation work.
+Read `workshop.opportunityCallback` whole-callback CPU, `workshop.opportunitySource` validation and `workshop.opportunityBatch` total/worst CPU and `workshop.opportunityQuestion` indivisible service calls alongside `workshop.render`, Summary validation/load/completion CPU and elapsed wait distributions. The existing first/ten priced opportunities, fixed initial visible cohort, all-row settlement, partition load/repeat counters, pricing cache/pending gauges and five new recipe-state gauges distinguish calculation from queue waiting. `cacheHits` counts compatible catalog reads; `reused` counts recipe estimates preserved during catalog reconciliation; neither is a universal per-price hit rate. Final/provisional publication counters count prepared list publications; row/detail counters show actual visible presentation work.
 
 Native goals: unchanged draws do zero economic work; isolated updates match dependency fanout; ordinary engine slices target 2–3 ms; investigate every callback over 10 ms. The elapsed budget can overrun by one synchronous service call, timer queues and GC affect client frame times, and first-open UI construction is separate from scheduled callbacks. Verify actual frame-time p95/p99, gameplay responsiveness, first/visible/all completion, memory after repeated lifecycle operations, and correctness of the final ranking. Offline virtual seconds are not predicted Forever latency.
 
 
-Final verification: all 76 integration modules passed; six Auction preview
-scenarios passed. The final Workshop rerun retains exactly the baseline 40 failed
-tooltip assertions in each normal pose, and 41 in the intentional wrong pose.
-No assertions were suppressed and the 45-second scenario limit is unchanged
-(40.6 simulated seconds). [Exact failure comparison](../evidence/v2-market-pr3/simulator-comparison.json).
-The initial nil-module failure and the first settlement helper's excess idle
-waits were corrected and verified; historical failing run evidence remains in the
-local verification artifacts. [Compact verification](../evidence/v2-market-pr3/verification.json).
+## Integration and remaining work
 
+The user authorized verified main integration after PR3 completion: addon #99 → #100 → #102, preserving the historical audit #97 without overwriting evolved infrastructure; Market #43 → #44. Ledger #98 is excluded. Current main's concurrent class-portrait/roadmap changes must be preserved. Final main source and coordinated Windows publication/production-Lua checks are reported in the integration handoff. No merge itself deploys the server or publishes a client/addon release.
 
-The delivery follow-up keeps economic/runtime calculation code identical to
-`6754427`; it adds capture-only first-row construction timing and preserves
-all-known settlement when a filter has no visible rows. The final fast group
-passed in 4.351 s and all 16 mutations were killed in 10.4 s. The scroll fixture
-now dispatches both the stand-in's main script and HookScript listeners; its
-initial offset-only timing is superseded, not treated as actual scrolling.
-Optional Lua argument nine (`normal` / `nogc`) exposes isolated callback heap,
-pool and indivisible-question diagnostics. Never disable GC in addon runtime.
+Rollback of PR3 requires reverting its source changes, with no SavedVariables migration; shared pricing/contracts remain independently versioned. A rollback before Contract-3 support must first select a complete compatible generation using the compatible Companion, never splice bank files.
 
+Native Forever CPU/frame/GC tails, real load-on-demand disk compilation, physical-PC NTFS/UAC/tray behavior and actual production contract negotiation remain unverified here. The source still advertises Companion beta.10, already released; a future separately authorized release must use a distinct approved version and exact Windows artifact/signature/owner gates, not republish different bytes as beta.10. The future deployment prompt must preserve the actual production Compose chain, collector/history/retention/backups, existing signing identity and prior releases.
 
-The large-workload follow-up reuses provisional membership/position arrays while
-the catalog and metadata-only filters stay unchanged. Existing row objects expose
-new estimates without a full copy per 128 recipes; price/confidence filters still
-rebuild membership. This removes quadratic presentation work for the default view
-without adding a price cache. The fast group passes in 4.293 s; 18/18 targeted
-mutations are killed. The repeated 76-module integration run passes all offline
-modules and Auction preview, retaining exactly the known Workshop 40/41 failures.
-New candidate measurements supersede the earlier PR3 checkpoint comparisons.
-The longer memory probe records bounded memo/cache/row counts, rather than
-assuming a rising heap is a leak or a plateau.
+No PR4 implementation is started. Native evidence should decide whether remaining work is first-use pool/window construction, common notification coalescing, indivisible services or VM/GC tails. The default-view quadratic presentation copy has already been removed in PR3; there is no evidence justifying another permanent price/history cache or a new Market format at this stage.
