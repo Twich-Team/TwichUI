@@ -11,7 +11,7 @@ local R = TwichUI
 local F = { ready = false }
 R.Fishing = F
 F.ADDON = "TwichUI_Fishing"
-F.SCHEMA = 1               -- TwichUIFishingDB.schema this version writes (Store.lua)
+F.SCHEMA = 2               -- TwichUIFishingDB.schema this version writes (Store.lua; 2 adds species-by-zone records)
 
 local E = rawget(_G, "Enum")
 
@@ -69,6 +69,7 @@ F.LIMITS = {
     recent = 20,        -- recent catches kept on the session in progress (dropped when it ends)
     notes = 20,         -- recent errors and refusals kept for diagnostics (runtime only, never saved)
     learned = 200,      -- learned lure enchants and container items, per kind
+    zoneSpecies = 4000, -- species-in-a-zone aggregates kept for the lifetime totals, per character (a new pair beyond it is not recorded)
 }
 
 ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 -- TwichUI Fishing: saved data (TwichUIFishingDB, account-wide; this addon's own saved variable)
 --
 --   TwichUIFishingDB = {
---     schema = 1,                     -- the shape below (separate from the addon version)
+--     schema = 2,                     -- the shape below (separate from the addon version)
 --     config = { ... },               -- preferences (DEFAULTS below); account-wide, not part of TwichUI profiles yet
 --     client = { saved = {...},       -- interaction-targeting settings changed while a line was out, to put back
 --                camera = {...} },    -- Stage 2: the camera values Fishing Mode changed, to put back (Camera.lua)
@@ -110,13 +110,19 @@ end
 
 local function NewTotals()
     return { casts = 0, catches = 0, items = 0, failed = 0, interrupted = 0, missed = 0, sessions = 0, seconds = 0, line = 0,
-        first = nil, last = nil, species = {}, zones = {}, containers = {}, contents = {} }
+        first = nil, last = nil, species = {}, zones = {}, containers = {}, contents = {},
+        -- schema 2: where things were caught. spz[mapID][itemID] = { q, c, f, l } (quantity, times caught, first, last) for
+        -- direct catches; ctz[mapID][containerID] = { caught, opened, got = { [itemID] = q } } for containers by the zone they
+        -- were CAUGHT in. mapID 0 is a catch whose zone could not be read. Catches recorded before schema 2 are in species
+        -- (and zones) but not in these: the difference is history with no location, never guessed (Journal.lua).
+        spz = {}, ctz = {} }
 end
 S.NewTotals = NewTotals
 
 local function NewChar()
     return { nextSession = 1, nextLot = 1, session = nil, sessions = {}, totals = NewTotals(), queue = {},
-        gear = { state = "none" }, learned = { enchants = {}, containers = {} }, zoneNames = {} }
+        gear = { state = "none" }, learned = { enchants = {}, containers = {} }, zoneNames = {},
+        locSince = F.Now() }     -- when this character began recording where fish are caught (schema 2)
 end
 
 local function IsMap(t) return type(t) == "table" end
@@ -129,10 +135,40 @@ local function NormalizeTotals(t)
             t[k] = 0
         end
     end
-    for _, k in ipairs({ "species", "zones", "containers", "contents" }) do
+    for _, k in ipairs({ "species", "zones", "containers", "contents", "spz", "ctz" }) do
         if not IsMap(t[k]) then
             if t[k] ~= nil then Repair("totals." .. k) end
             t[k] = {}
+        end
+    end
+    -- the location records, each entry checked on its own (a damaged one is dropped, the rest kept)
+    local n = 0
+    for zone, zt in pairs(t.spz) do
+        if F.Count(zone) == nil or not IsMap(zt) then t.spz[zone] = nil; Repair("spz.zone")
+        else
+            for item, e in pairs(zt) do
+                if F.Count(item) == nil or not IsMap(e) or F.Count(e.q) == nil or F.Count(e.c) == nil then zt[item] = nil; Repair("spz.entry")
+                else
+                    if e.f ~= nil and F.Count(e.f) == nil then e.f = nil end
+                    if e.l ~= nil and F.Count(e.l) == nil then e.l = nil end
+                    n = n + 1
+                end
+            end
+            if next(zt) == nil then t.spz[zone] = nil end
+        end
+    end
+    t.spn = n       -- how many species-in-a-zone entries there are (bounded for the totals by LIMITS.zoneSpecies)
+    for zone, zt in pairs(t.ctz) do
+        if F.Count(zone) == nil or not IsMap(zt) then t.ctz[zone] = nil; Repair("ctz.zone")
+        else
+            for item, e in pairs(zt) do
+                if F.Count(item) == nil or not IsMap(e) then zt[item] = nil; Repair("ctz.entry")
+                else
+                    for _, k in ipairs({ "caught", "opened" }) do if F.Count(e[k]) == nil then e[k] = 0 end end
+                    if not IsMap(e.got) then e.got = {} end
+                    for got, q in pairs(e.got) do if F.Count(got) == nil or F.Count(q) == nil then e.got[got] = nil end end
+                end
+            end
         end
     end
     if t.first ~= nil and F.Count(t.first) == nil then t.first = nil; Repair("totals.first") end
@@ -177,6 +213,11 @@ local function NormalizeChar(c)
     if not IsMap(c.learned.enchants) then c.learned.enchants = {} end
     if not IsMap(c.learned.containers) then c.learned.containers = {} end
     if not IsMap(c.zoneNames) then c.zoneNames = {} end
+    if c.locSince ~= nil and F.Count(c.locSince) == nil then c.locSince = nil; Repair("locSince") end
+    -- queued containers: where each was caught (nil: not known, which is how older lots read)
+    for _, lot in ipairs(c.queue) do
+        if lot.zone ~= nil and F.Count(lot.zone) == nil then lot.zone = nil; Repair("queue.zone") end
+    end
 end
 
 ---------------------------------------------------------------------------
@@ -190,6 +231,15 @@ S.MIGRATIONS = {
         if not IsMap(db.config) then db.config = {} end
         if not IsMap(db.client) then db.client = {} end
         if not IsMap(db.capability) then db.capability = {} end
+    end,
+    -- Schema 2: where fish were caught. Nothing existing is changed or removed; each character gets the empty location
+    -- records (the load-time normalising adds them to the totals and every session) and the moment recording began.
+    -- What was caught before that stays exactly as it was, with no location: it is never guessed from the zones fished in.
+    [2] = function(db)
+        if not IsMap(db.chars) then return end
+        for _, c in pairs(db.chars) do
+            if IsMap(c) and c.locSince == nil then c.locSince = F.Now() end
+        end
     end,
 }
 

@@ -7,7 +7,8 @@
 --
 --   One window = one capture. LOOT_READY and LOOT_OPENED both start it; whichever comes second, and any repeat, only adds
 --   what it knows (isFromItem). The slots are read when it starts, before auto-loot empties them.
---   Fishing loot (IsFishingLoot() true): one catch, counted at once. Each item is counted when its slot is cleared (it
+--   Fishing loot (IsFishingLoot() true): one catch, counted at once, and its zone read at that moment (capture.zone, map id 0
+--   when the client gives none): every item of the window, however late it is taken, is attributed to it. Each item is counted when its slot is cleared (it
 --   reached the bags), so items left behind (full bags) are not counted, and an item is counted once however often the
 --   event comes. A slot still not cleared when the window closes waits two seconds for the client's own
 --   "You receive loot" line (CHAT_MSG_LOOT, LOOT_ITEM_SELF / _MULTIPLE) to confirm it; otherwise it was left.
@@ -52,8 +53,8 @@ end
 -- Records one taken item for the capture it came from.
 local function Take(capture, item, q)
     if capture.kind == "fishing" then
-        Ses.Item(capture.sid, item, q)
-        C.Caught(capture.sid, item, q)
+        Ses.Item(capture.sid, item, q, capture.zone)
+        C.Caught(capture.sid, item, q, capture.zone)
     elseif capture.kind == "container" or capture.kind == "maybe" then
         capture.taken[#capture.taken + 1] = { item = item, q = q }
     end
@@ -85,7 +86,10 @@ local function Begin(fromItem)
     if F.Readable(IsFishingLoot and IsFishingLoot()) == true then
         cur.kind = "fishing"
         Lo.lastFishing = cur.at
-        cur.sid = Ses.Catch()
+        -- where the line was, read now, at the confirmed fishing loot window: items reach the bags later (and a container
+        -- is opened later still), but they were caught here
+        cur.zone = Ses.Zone()
+        cur.sid = Ses.Catch(cur.zone)
         if F.Action and F.Action.OnCatch then F.Action.OnCatch() end
         local items = 0
         for _ in pairs(cur.slots) do items = items + 1 end

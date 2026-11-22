@@ -285,6 +285,7 @@ function FishingClient(opts)
       end
     end
     Fire("LOOT_CLOSED")
+    if o.afterClose then o.afterClose() end
     if o.chat then
       for _, e in ipairs(list) do
         if e.taken then c.FireEvent("CHAT_MSG_LOOT", e.q > 1 and c.LOOT_ITEM_SELF_MULTIPLE:format(Link(e.id), e.q) or c.LOOT_ITEM_SELF:format(Link(e.id)), "") end

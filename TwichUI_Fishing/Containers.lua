@@ -4,8 +4,9 @@
 -- is a known clam (Data.lua) or when the bags call it openable (C_Container.GetContainerItemInfo(...).hasLoot); the latter
 -- is learned for next time. Containers that did not come from fishing are never queued, opened or counted.
 --
--- The queue (TwichUIFishingDB.chars[...].queue) holds lots: { id, item, n, sid, t }: n containers of one item caught in
--- session sid. Nothing about their contents is assumed before one is opened.
+-- The queue (TwichUIFishingDB.chars[...].queue) holds lots: { id, item, n, sid, t, zone }: n containers of one item caught in
+-- session sid, in map zone (0: could not be read; nil: caught before schema 2 recorded it). The zone is the CATCH's, kept while
+-- the lot is queued (it is saved, so a reload keeps it) and used when the container is opened, wherever and whenever that is. Nothing about their contents is assumed before one is opened.
 --
 -- Opening (config containers.mode):
 --   "queue" (default): only by the player's press, of the fishing key between casts (config containers.openWithKey) or of
@@ -49,36 +50,36 @@ local function Lot(id)
     return nil
 end
 
-local function Enqueue(sid, item, q)
+local function Enqueue(sid, item, q, zone)
     local c = S.Char()
     if not c then return end
     local queue = c.queue
-    -- the same session's lot of that item grows instead of adding another
+    -- the same session's lot of that item, from the same zone, grows instead of adding another (a lot has one zone)
     local last = queue[#queue]
-    if last and last.item == item and last.sid == sid and not last.locked then
+    if last and last.item == item and last.sid == sid and last.zone == zone and not last.locked then
         last.n = last.n + q
     else
         if #queue >= F.LIMITS.queue then
             table.remove(queue, 1)
             F.Note("queue-full", "the oldest queued container was forgotten")
         end
-        queue[#queue + 1] = { id = c.nextLot, item = item, n = q, sid = sid, t = F.Now() }
+        queue[#queue + 1] = { id = c.nextLot, item = item, n = q, sid = sid, t = F.Now(), zone = zone }
         c.nextLot = c.nextLot + 1
     end
-    Ses.ContainerCaught(sid, item, q)
+    Ses.ContainerCaught(sid, item, q, zone)
     F.Emit("CONTAINER", "caught", item, q, sid)
     F.Emit("QUEUE")
 end
 
 -- Loot.lua: an item taken from a fishing loot window.
-function C.Caught(sid, item, q)
+function C.Caught(sid, item, q, zone)
     if S.IsKnownContainer(item) then
-        Enqueue(sid, item, q)
+        Enqueue(sid, item, q, zone)
         return true
     end
     local list = candidates[item]
     if not list then list = {}; candidates[item] = list end
-    list[#list + 1] = { sid = sid, q = q }
+    list[#list + 1] = { sid = sid, q = q, zone = zone }
     candidatesAt = F.Clock()
     return false
 end
@@ -92,7 +93,7 @@ function C.Classify()
     for item, list in pairs(candidates) do
         if open[item] then
             S.LearnContainer(item)
-            for _, x in ipairs(list) do Enqueue(x.sid, item, x.q) end
+            for _, x in ipairs(list) do Enqueue(x.sid, item, x.q, x.zone) end
             candidates[item] = nil
         elseif now - candidatesAt > 5 or G.BagCount(item) > 0 then
             candidates[item] = nil   -- in the bags and not openable (or never arrived): not a container
@@ -145,7 +146,7 @@ function C.CheckOpen()
     local lot = Lot(p.lot)
     if lot then
         lot.fails = (lot.fails or 0) + 1
-        Ses.ContainerFailed(lot.sid, lot.item)
+        Ses.ContainerFailed(lot.sid, lot.item, lot.zone)
     end
     F.Note("open-failed", "no loot window opened")
     F.Emit("CONTAINER", "failed", p.item)
@@ -211,7 +212,7 @@ end
 local function TakeFromLot(lot)
     lot.n = lot.n - 1
     lot.partial = nil
-    Ses.ContainerOpened(lot.sid, lot.item)
+    Ses.ContainerOpened(lot.sid, lot.item, lot.zone)
     if lot.n <= 0 then
         local queue = Queue()
         for i, l in ipairs(queue) do if l == lot then table.remove(queue, i) break end end
@@ -241,7 +242,7 @@ function C.Settle(attr, taken)
         end
     end
     if lot then
-        for _, x in ipairs(taken) do Ses.Content(lot.sid, lot.item, x.item, x.q) end
+        for _, x in ipairs(taken) do Ses.Content(lot.sid, lot.item, x.item, x.q, lot.zone) end
         F.Emit("CONTAINER", "opened", lot.item, lot.sid)
     end
     F.Emit("QUEUE")

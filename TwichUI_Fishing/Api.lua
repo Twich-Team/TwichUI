@@ -7,6 +7,7 @@
 --   R.Fishing.API.Sessions(n)        up to n completed session summaries, newest first (copies)
 --   R.Fishing.API.SessionByID(id)    one session (kept or in progress) as a copy, or nil
 --   R.Fishing.API.Totals()           lifetime totals (copy)
+--   R.Fishing.API.Zones(scope)       species and containers by the zone they were caught in (Stage 3A refinement)
 --   R.Fishing.API.Treasures(scope)   containers with what each held, per container (Stage 3A); Retention(): sessions kept
 --   R.Fishing.API.Provenance(scope)  for valuation: scope "session" | "lifetime" | a session id ->
 --                                    { direct = { [itemID] = q } (fish and other catches, containers excluded),
@@ -86,6 +87,22 @@ function API.Treasures(scope)
         if not out.containers[id] then out.containers[id] = { caught = 0, opened = 0, failed = 0, unopened = n, got = {} } end
     end
     return out
+end
+
+-- Where things were caught (schema 2): { species = { [mapID] = { [itemID] = { q, c, f, l } } }, containers = { [mapID] = {
+-- [containerID] = { caught, opened, failed, got = { [itemID] = q } } } }, since = when this character began recording
+-- locations, scope }. mapID 0 is a catch whose zone could not be read. Catches from before `since` are in Totals()/Session
+-- records (species, zones) but not here: the Journal shows that difference as history without a location. scope as
+-- Provenance. Provenance, Treasures and the other calls are unchanged.
+function API.Zones(scope)
+    local c = S.Char()
+    if not c then return nil end
+    local rec
+    if scope == "lifetime" or scope == nil then rec = c.totals
+    elseif scope == "session" then rec = c.session
+    else local sid = F.Count(scope); rec = sid and Ses.Find(sid) end
+    if not rec then return nil end
+    return { species = F.Copy(rec.spz or {}), containers = F.Copy(rec.ctz or {}), since = c.locSince, scope = scope or "lifetime" }
 end
 
 -- How much history exists: sessions kept now and the most that are kept (config session.keep). Lifetime totals are not
