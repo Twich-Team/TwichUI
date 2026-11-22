@@ -208,6 +208,39 @@ local function MakeQueueRow(parent)
     row.count:SetWidth(30)
     row.count:SetJustifyH("CENTER")
     row.count:SetPoint("RIGHT", row.more, "LEFT", -1, 0)
+    row.countButton = CreateFrame("Button", nil, row)
+    row.countButton:SetAllPoints(row.count)
+    UI.Tip(row.countButton, "Set crafts", "Click to enter an exact quantity. Press Enter to save or Escape to cancel.")
+    row.countEdit = UI.L.EditBox(row, 38, 24)
+    UI.CL.Dress(row.countEdit, "field")
+    row.countEdit:SetPoint("CENTER", row.count, "CENTER")
+    row.countEdit:Hide()
+    local function StopEdit()
+        row.editId = nil
+        row.countEdit:Hide()
+        row.countEdit:ClearFocus()
+        row.count:Show()
+        row.countButton:Show()
+    end
+    row.countButton:SetScript("OnClick", function()
+        if not row.entry then return end
+        row.editId = row.id
+        row.countEdit:SetText(tostring(row.entry.crafts))
+        row.count:Hide(); row.countButton:Hide()
+        row.countEdit:Show(); row.countEdit:SetFocus(); row.countEdit:HighlightText()
+    end)
+    row.countEdit:SetScript("OnEnterPressed", function(self)
+        local text, id = self:GetText(), row.editId
+        local n = text:match("^%d+$") and tonumber(text)
+        StopEdit()
+        if id and id == row.id and n and n >= 1 and n <= W.MAX_CRAFTS then
+            S.SetCrafts(id, n)
+            UI.Redraw()
+        end
+    end)
+    row.countEdit:SetScript("OnEscapePressed", StopEdit)
+    row.countEdit:SetScript("OnEditFocusLost", StopEdit)
+    row:HookScript("OnHide", StopEdit)
     row.less = UI.Glyph(row, "-", function()
         if row.id then S.Change(row.id, IsShiftKeyDown and IsShiftKeyDown() and -5 or -1); UI.Redraw() end
     end, 24)
@@ -231,6 +264,7 @@ local function MakeQueueRow(parent)
     row.TipLeave = function() if GameTooltip then GameTooltip:Hide() end end
     row.fill = function(self, r)
         local e = r.entry
+        if self.editId and self.editId ~= e.id then StopEdit() end
         self.id, self.entry, self.qrow = e.id, e, r
         self.icon:SetTexture(e.icon or UI.ICON_BLANK)
         self.name:SetText(e.name)
@@ -244,6 +278,7 @@ local function MakeQueueRow(parent)
     row:Follow(row.iconBtn)   -- last: after the pieces' own tooltips are set
     row:Follow(row.more)
     row:Follow(row.less)
+    row:Follow(row.countButton)
     return row
 end
 
