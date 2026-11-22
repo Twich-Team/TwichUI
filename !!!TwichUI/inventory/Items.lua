@@ -14,6 +14,7 @@
 local R = TwichUI
 local MI = R.MagicInventory
 local Plain = MI.Plain
+local Families = R.ForeverItemFamilies
 
 local MAX_CACHE = 512
 
@@ -156,31 +157,14 @@ end
 -- or nil. An excluded item is never matched, whatever else is true; the hard protections and the Never transfer
 -- list are applied by the plan, before any rule (Plan.lua).
 ---------------------------------------------------------------------------
--- Forever 1.60.1 item data. The two identified-crate ranges exclude 248700 and 248701.
--- https://eternadex.com/en/versorgungsgueter/ and https://forevercraft.ru/database/items/misc/junk/3/
-local function IsWaylaidCrate(id)
-    return id == 248549                           -- unidentified
-        or (id >= 248682 and id <= 248699)        -- herbs, ore, textiles and curiosities
-        or (id >= 248702 and id <= 248713)        -- fabrics, ingots and parts
-        or (id >= 248765 and id <= 248779)        -- sealed turn-ins, all ranks and qualities
-end
-
--- Forever writs from the live client catalog, including the generic and ranked sealed envelopes.
--- https://aidvir.github.io/wow-forever-favor/writs.html and https://daybreakforever.com/discoveries/items
-local function IsCraftsmansWrit(id)
-    return id == 248206
-        or (id >= 262887 and id <= 262890)
-        or (id >= 264011 and id <= 264160)
-end
-
 local function CatMatch(rule, facts)
     if #rule.cats == 0 then return true end
     local class, subclass = facts.classID, facts.subclassID
     for _, key in ipairs(rule.cats) do
         if key == MI.WAYLAID_CATEGORY then
-            if IsWaylaidCrate(facts.id) then return true end
+            if Families.IsWaylaidCrate(facts.id) then return true end
         elseif key == MI.WRITS_CATEGORY then
-            if IsCraftsmansWrit(facts.id) then return true end
+            if Families.IsCraftsmansWrit(facts.id) then return true end
         elseif class and (key == tostring(class) or (subclass and key == (class .. ":" .. subclass))) then
             return true
         end

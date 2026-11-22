@@ -480,6 +480,7 @@ local function ApplyWidth(view)
         view.notice.body:SetWidth(w - NOTICE_PAD * 2 - NOTICE_EDGE)
     end
     if view.hosted then view.hosted:SetWidth(w) end
+    if view.hostFooter then view.hostFooter:SetWidth(w) end
     for _, sec in ipairs(view.sections) do
         sec.card:SetWidth(w)
         if sec.title then sec.title:SetWidth(w - SECTION_PAD * 2 - 90) end
@@ -608,6 +609,13 @@ local function BuildView(page)
             hosted:ClearAllPoints()
             hosted:SetSize(CONTENT_W, HostHeight(page))
             view.hosted = hosted
+            if page.def.hostFooter then
+                view.hostFooter = page.def.hostFooter()
+                view.hostFooter:SetParent(pageArea)
+                view.hostFooter:ClearAllPoints()
+                view.hostFooter:SetPoint("BOTTOMLEFT", pageArea, "BOTTOMLEFT", WELL_L, WELL_T)
+                view.hostFooter:SetWidth(CONTENT_W)
+            end
         else
             R.Fault("settings page " .. page.key, hosted)
             view.failed = view.failed or Wg.Text(frame, "small")
@@ -730,8 +738,7 @@ local function BuildView(page)
     end
 
     -- Reset this page: every setting on it back to its default, after saying exactly what that covers
-    local resettable = K.Resettable(page.key)
-    if #resettable > 0 then
+    if not page.def.hidePageReset and #K.Resettable(page.key) > 0 then
         view.reset = CreateFrame("Frame", nil, frame)
         view.reset:SetSize(CONTENT_W, RESET_H)
         local rule = Wg.Solid(view.reset, "BORDER", pal.bronzeLo, 0.45)   -- neutral: Reset is not the page's headline
@@ -849,12 +856,13 @@ function Layout(view)
     if view.chrome then
         view.chrome:SetHeight(y)
         view.headerHeight = y + SHIFT_Y
-        if state.page == page.key and not state.searching then
-            scroll:ClearAllPoints()
-            scroll:SetPoint("TOPLEFT", pageArea, "TOPLEFT", 1, -view.headerHeight - 1)
-            scroll:SetPoint("BOTTOMRIGHT", pageArea, "BOTTOMRIGHT", -1, WELL_T)
-        end
         y, frame = 0, body
+    end
+    if (view.chrome or view.hostFooter) and state.page == page.key and not state.searching then
+        local reserved = view.hostFooter and view.hostFooter:IsShown() and (view.hostFooter:GetHeight() + 8) or 0
+        scroll:ClearAllPoints()
+        scroll:SetPoint("TOPLEFT", pageArea, "TOPLEFT", 1, -(view.headerHeight or 0) - 1)
+        scroll:SetPoint("BOTTOMRIGHT", pageArea, "BOTTOMRIGHT", -1, WELL_T + reserved)
     end
     if view.notice then
         view.notice:ClearAllPoints()
@@ -993,7 +1001,7 @@ function Layout(view)
     -- exactly what is drawn, so the scroll range (and its bar) is there only when something is out of view
     frame:SetHeight(y + PAGE_BOTTOM)
     content:SetHeight(y + PAGE_BOTTOM + SHIFT_Y)
-    if view.chrome then
+    if view.chrome or view.hostFooter then
         -- An accordion can shrink the content while its old bottom is still in view.
         -- Keep the scoped body inside its new bounds instead of retaining blank scroll space.
         local most = math.max(0, content:GetHeight() - scroll:GetHeight())

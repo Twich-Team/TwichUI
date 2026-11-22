@@ -96,6 +96,8 @@ local function Choices(kind, cond)
         for _, c in ipairs(Rules.EQUIP_CHOICES) do out[#out + 1] = { value = c[1], label = Rules.EquipName(c[1]) } end
     elseif kind == "recipe" then
         for _, c in ipairs(Rules.RECIPE_CHOICES) do out[#out + 1] = { value = c[1], label = c[2] } end
+    elseif kind == "family" then
+        for _, c in ipairs(Rules.FAMILY_CHOICES) do out[#out + 1] = { value = c[1], label = c[2] } end
     elseif kind == "bind" then
         for _, c in ipairs(Rules.BIND_CHOICES) do out[#out + 1] = { value = c[1], label = c[2] } end
     elseif kind == "context" then

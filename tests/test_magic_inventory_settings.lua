@@ -75,6 +75,12 @@ P.Control("newRule").onPick("cloth")
 R.SettingsWidgets.CloseMenu()
 Flush()
 Check(P.Editing() ~= nil and Has(f, "^New rule$"), "the editor opens")
+local editorFooter = P.Control("eSave"):GetParent()
+Check(editorFooter:IsShown() and P.Control("builderDelete"):GetParent() == editorFooter
+  and P.Control("builderDuplicate"):GetParent() == editorFooter and P.Control("eCancel"):GetParent() == editorFooter,
+  "all rule actions share the editor footer")
+Check(not P.Control("builderDelete").enabled and not P.Control("builderDuplicate").enabled,
+  "new rule keeps Delete and Duplicate visible but disabled")
 Check(Has(f, "^What items%?$") and Has(f, "^Rule review$"), "cohesive builder sections")
 local builderHeight = P.Height()
 Click("moreItemFilters")
@@ -105,7 +111,7 @@ Check(Has(f, "Needs attention"), "and says it can't be turned on yet")
 TIP = {}; P.Control("reviewPanel").scripts.OnEnter(P.Control("reviewPanel"))
 Check(table.concat(TIP, " "):find("Whether a player can receive these", 1, true), "review help is honest about recipients")
 Click("eSave")
-Check(P.Editing() == nil, "saved")
+Check(P.Editing() == nil and not editorFooter:IsShown(), "saving returns to the list and hides the footer")
 local rule = MI.Rules()[1]
 Check(rule and rule.name == "Cloth to bank alt" and rule.enabled == false and rule.keep == 20 and rule.dest == nil and #MI.Dests() == 0, "saved turned off, keeping 20 of each, with no empty destination made")
 Check(Has(f, "Cloth to bank alt") and Has(f, "^Cloth") and Has(f, "Keep 20"), "a rule card says what it matches and what it keeps")

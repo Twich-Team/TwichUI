@@ -448,6 +448,17 @@ Lab.Step("disclosures and navigation", function()
                 page.QueueRefresh(); Lab.Settle(.2)
             end
             local draft, mi = page.Editing(), R.MagicInventory
+            local actions = UI.View(key).hostFooter
+            Lab.Check("construct", "rule actions are outside the scrolling form", false, actions:GetParent() == view.frame)
+            Lab.Check("construct", "the page reset is absent", nil, view.reset)
+            local footerBottom = actions:GetBottom()
+            local beforeScroll = scroll:GetVerticalScroll()
+            scroll:SetVerticalScroll(scroll:GetVerticalScrollRange()); Lab.Settle(.1)
+            Lab.Check("state", "the rule form scrolls", true, scroll:GetVerticalScroll() > 0)
+            Lab.Check("state", "rule footer stays in place", footerBottom, actions:GetBottom())
+            Lab.Check("construct", "the form stops above the footer", true, scroll:GetBottom() >= actions:GetTop())
+            Lab.Check("state", "Save stays visible while scrolling", true, page.Control("eSave"):IsVisible())
+            scroll:SetVerticalScroll(beforeScroll); Lab.Settle(.1)
             local saved = RuleDigest(mi.Rules())
             local kind, flow, dest, keep = draft.kind, draft.flow, draft.dest, draft.keep
             for _, choice in ipairs(mi.KIND_ORDER) do
@@ -538,6 +549,7 @@ Lab.Step("disclosures and navigation", function()
             page.OpenItemFilters("filters"); Lab.Settle(.1)
             page.Control("filterSaveRule"):Click(); Lab.Settle(.2)
             Lab.Check("interact", "filter Save delegates to rule Save", nil, page.Editing())
+            Lab.Check("state", "the rule footer hides on the list", false, actions:IsShown())
             local savedRule = oldId and mi.Rule(oldId) or mi.Rules()[#mi.Rules()]
             local index
             for i, rule in ipairs(mi.Rules()) do if rule.id == savedRule.id then index = i end end

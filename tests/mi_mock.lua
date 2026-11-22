@@ -321,7 +321,9 @@ function MIClient(name, opts)
 
   if opts.beforeFiles then opts.beforeFiles(c) end
   local files = opts.files or { "inventory/Rules.lua", "inventory/Items.lua", "inventory/Plan.lua", "inventory/Design.lua", "inventory/GuildBank.lua", "inventory/GuildPlan.lua", "inventory/Run.lua", "inventory/GuildRun.lua", "inventory/GuildPrep.lua" }
-  for _, f in ipairs(files) do
+  local toLoad = { "ForeverItemFamilies.lua" }
+  for _, f in ipairs(files) do toLoad[#toLoad + 1] = f end
+  for _, f in ipairs(toLoad) do
     local chunk = assert(loadfile(ROOT .. f))
     setfenv(chunk, c)
     chunk("!!!TwichUI", {})

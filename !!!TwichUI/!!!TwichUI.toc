@@ -380,6 +380,7 @@ buffback\Unlock.lua
 # Rules.lua is the rule engine (pure), Config.lua what is stored, Roll.lua watches the game's rolls and is the only place a choice is sent
 # from, Auto.lua turns a rule's decision into a visible countdown, Blizzard.lua lets the game's frames step aside, Cards.lua draws, Main.lua
 # is the switch. The settings are in TwichUI_Settings. Artwork: media\loot (tools/make_loot_roll_art.py).
+ForeverItemFamilies.lua
 loot\Rules.lua
 loot\Config.lua
 loot\Roll.lua
