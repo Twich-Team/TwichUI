@@ -154,4 +154,23 @@ assert(historyLoads==1 and B.History(2589,P.BaseKey(2589)))
 s=client();local enumerated=false
 local ok,why=s.B.EachItem(function()enumerated=true end,function()s.Q.Cancel()end)
 assert(not ok and why=='cancelled'and not enumerated);s.drain()
+
+-- Replacing/cancelling pending work in the SAME immutable source generation
+-- must invalidate idle waiting rows; partial item completions must not.
+for _,replacement in ipairs({true,false})do
+    s=client();local W=s.W;W.OpportunityEngine.MAX_STEPS=1;s.Q.RESUMES=1
+    local recipes={{id=1,name='Synthetic',prof=171,filled=true,outItem=2589,outMin=1,outMax=1,mats={{item=2589,qty=1}}}}
+    W.Session.AllRecipes=function()return recipes end
+    W.UI.Redraw=function()W.Session.Opportunities()end
+    W.Session.Opportunities()
+    for _=1,100 do s.tick();if W.Session.OpportunityStatus().waiting>0 then break end end
+    assert(W.Session.OpportunityStatus().waiting==1 and s.P.PendingCount()==1)
+    local context=s.P.ContextGeneration();local source=s.B.Status().generation
+    if replacement then local root=s.J.Copy(s.root);root.bank='B';s.B.Begin(root)
+    else s.P.CancelPending();s.P.Notify()end
+    assert(s.P.ContextGeneration()~=context and s.B.Status().generation==source)
+    s.drain();local view=W.Session.Opportunities()
+    assert(not view.calculating and view.summary.priced==1 and s.P.PendingCount()==0,'same-generation cancellation stranded Opportunities')
+    local stable=s.P.ContextGeneration();s.P.Notify();s.drain();assert(s.P.ContextGeneration()==stable)
+end
 print('PASSED prepared 16/32 vectors, exact/missing proofs, public APIs, partial prices, leases, combat, cancellation, generations and corruption')

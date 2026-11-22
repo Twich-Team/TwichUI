@@ -257,7 +257,9 @@ function Q.Step(ms)
                 if current.kind=='handoff' then job=nil;if current.notify then changed() end;break end
                 if current.kind=='part'then validationFinished(current)end
                 local notify=current.kind=='header' or not active.checked[current.bucket]
-                if current.kind=='header' then previous,previousCache=active,cached;active=value;cached=nil;queue,queued,queuedAt={},{},{};selected=true;cancelPending()
+                if current.kind=='header' then
+                    if active and active.prepared then W.Prepared.Cancel(active.prepared)end
+                    previous,previousCache=active,cached;active=value;cached=nil;queue,queued,queuedAt={},{},{};selected=true;cancelPending()
                 else
                     if not active.checked[current.bucket] then
                         if current.bucket>=64 then active.history_checked_count=active.history_checked_count+1

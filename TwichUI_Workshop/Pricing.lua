@@ -144,10 +144,11 @@ function P.Generation()
     local s=B.Status()
     return table.concat({s.generation or '',s.failures or 0,tostring(s.ready),epoch,revision},':')
 end
--- Partial completions retain the calculation context; Session invalidates only
--- their item dependencies. Public Generation still includes PR1's revision.
+-- Partial completions leave epoch unchanged and invalidate only dependencies.
+-- Cancellation replaces the context even if the source generation is unchanged;
+-- otherwise an idle engine can retain waiting rows after their requests vanished.
 function P.ContextGeneration()
-    local s=B.Status();return dataStamp(s)..':'..tostring(s.ready)
+    local s=B.Status();return dataStamp(s)..':'..tostring(s.ready)..':'..epoch
 end
 local chartRevision=0
 function P.ChartRevision()return chartRevision end

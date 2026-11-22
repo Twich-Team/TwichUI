@@ -94,3 +94,10 @@ functions from fabricated tuples; it contains no live observations. Whole-part h
 all authenticated leaves and release their sparse flag words. Repeated final campaign
 results, exact source identities and native-only limits remain in the coordinated Stage D
 report; a targeted passing run alone is not the final acceptance evidence.
+
+A lifecycle regression test also replaces/cancels a pending reader while keeping the
+immutable source generation unchanged. That reproduced an idle waiting row with no
+remaining price request. The calculation context now includes the existing cancellation
+epoch; item completions do not change it. Header activation also drops work requested
+from the previous prepared context during admission. Completed ordinary reopen paths
+still reuse their caches, while cancelled work cannot masquerade as a compatible job.
