@@ -326,6 +326,7 @@ local function RenderDetail(plan, ctx)
         chosen = nil
         d.empty:SetText("Choose a material to see where to get it, what is owned and what it may cost.")
         d.data = nil
+        d.act:Hide(); d.openRecipe:Hide()
         d.consumers:SetData({})
         return
     end
@@ -420,7 +421,7 @@ local function RenderDetail(plan, ctx)
     d.consumers:SetData(consumers, "No queued recipe reference available.")
     -- the one action that fits the row
     if r.kind == "make" then
-        d.act.text:SetText(r.multilevel and "Add optimized plan" or "Add to crafting plan")
+        d.act.text:SetText(S.MaterialRecipe(r) and "Add to plan" or (r.multilevel and "Add optimized plan" or "Add to crafting plan"))
         d.act:Show()
     elseif r.kind ~= "collect" and r.source == "vendor" and ctx and ctx.sellers[r.item] then
         d.act.text:SetText("Show vendor")
@@ -428,6 +429,10 @@ local function RenderDetail(plan, ctx)
     else
         d.act:Hide()
     end
+    d.openRecipe:SetShown(S.MaterialRecipe(r) ~= nil)
+    d.act:ClearAllPoints()
+    d.act:SetPoint("BOTTOMLEFT", 14, 12)
+    d.act:SetPoint("BOTTOMRIGHT", d.openRecipe:IsShown() and -(DETAIL_W / 2 + 2) or -14, 12)
     -- Keep both consumer rows visible; unused action space belongs to the upper details.
     local bottom = d.act:IsShown() and 52 or 12
     d.neededSection:ClearAllPoints()
@@ -672,6 +677,13 @@ local function BuildDetail()
         if x and x.kind == "make" then return "Add optimized plan\nReview the crafts before adding them." end
         return "Show vendor\nShow the nearest known seller on the map and set a waypoint on it."
     end)
+    d.openRecipe = UI.Button(d, "Open recipe", DETAIL_W - 28, "secondary", function()
+        local id = S.MaterialRecipe(d.data)
+        if id then S.OpenRecipe(id); UI.Redraw() end
+    end, 34)
+    d.openRecipe:SetPoint("BOTTOMLEFT", DETAIL_W / 2 + 2, 12)
+    d.openRecipe:SetPoint("BOTTOMRIGHT", -14, 12)
+    UI.Tip(d.openRecipe, "Open recipe", "Open the profession recipe selected by this plan.")
     d.empty = UI.Text(d, 13, K.textDim)
     d.empty:SetPoint("TOPLEFT", 14, -16)
     d.empty:SetPoint("RIGHT", -14, 0)

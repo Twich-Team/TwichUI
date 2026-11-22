@@ -46,7 +46,7 @@ function C.TravelRows(plan, ctx)
     for _, r in ipairs(plan.rows or {}) do
         local word, k, full = UI.ShopKind(r)
         out[#out + 1] = { item = r.item, qty = r.qty, word = word, kind = k, full = full,
-            vendor = k == "vendor" and ctx and ctx.sellers and ctx.sellers[r.item] ~= nil or false }
+            vendor = k == "vendor" and ctx and ctx.sellers and ctx.sellers[r.item] ~= nil or false, recipe = S.MaterialRecipe(r) }
     end
     return out
 end
@@ -85,17 +85,19 @@ local function MakeRow(parent)
     row.iconFrame = UI.ItemIcon(row, 22)
     row.iconFrame:SetPoint("LEFT", 6, 0)
     row.icon = row.iconFrame.tex
-    -- the row's one action: Map (Travel: a known seller on the world map) or Done (Craft: one craft counted, Session.MarkCrafted)
+    -- The row action is Map or Open (Travel: the seller or selected recipe), or Done (Craft: one manual credit).
     row.map = UI.Button(row, "Map", 48, "secondary", function(self)
         local d = row.data
         if not d then return end
         if d.done then S.MarkCrafted(d.done); C.Note(S.Note()); C.Render()
+        elseif d.recipe then S.OpenRecipe(d.recipe); C.Note(S.Note())
         elseif d.item then S.ShowVendor(d.item); C.Note(S.Note()) end
     end, 20)
     row.map:SetPoint("RIGHT", -4, 0)
     UI.TipFn(row.map, nil, function()
         local d = row.data
         if d and d.done then return "Crafted one\nCount one craft of this recipe as done." end
+        if d and d.recipe then return "Open recipe\nOpen the profession recipe selected by this plan." end
         return "Show vendor\nShow a known seller on the map and set a waypoint on it."
     end)
     row.word = UI.Text(row, 11, K.textDim)
@@ -120,9 +122,9 @@ local function MakeRow(parent)
         self.word:SetText(d.word or "")
         self.word:SetWidth(math.min(90, math.ceil((self.word:GetStringWidth() or 0) + 4)))   -- the name gets every unit the word does not need
         UI.Paint(self.word, K[TONES[d.tone] or "textDim"])
-        local act = d.vendor == true or d.done ~= nil
+        local act = d.vendor == true or d.done ~= nil or d.recipe ~= nil
         self.map:SetShown(act)
-        if act then self.map.text:SetText(d.done and "Done" or "Map") end
+        if act then self.map.text:SetText(d.done and "Done" or (d.recipe and "Open" or "Map")) end
         self.word:ClearAllPoints()
         if act then self.word:SetPoint("RIGHT", self.map, "LEFT", -6, 0) else self.word:SetPoint("RIGHT", -8, 0) end
     end
@@ -140,7 +142,7 @@ local function RenderTravel()
     local data, n = {}, { vendor = 0, auction = 0, make = 0, collect = 0, none = 0 }
     for _, r in ipairs(rows) do
         n[r.kind] = (n[r.kind] or 0) + 1
-        data[#data + 1] = { item = r.item, title = r.qty .. " \195\151 " .. Name(r.item), word = r.word, tone = r.kind, vendor = r.vendor,
+        data[#data + 1] = { item = r.item, title = r.qty .. " \195\151 " .. Name(r.item), word = r.word, tone = r.kind, vendor = r.vendor, recipe = r.recipe,
             lines = { { r.full } } }
     end
     local sum = ctx.summary
