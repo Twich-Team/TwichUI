@@ -15,7 +15,7 @@ dofile(TESTS .. "mi_mock.lua")
 local failures = 0
 local function Check(cond, msg) if not cond then failures = failures + 1; print("FAIL: " .. msg) end end
 
-local c = MIClient("Rich", { files = { "inventory/Rules.lua", "inventory/Items.lua", "inventory/Plan.lua" } })
+local c = MIClient("Rich", { files = { "Icons.lua", "reminders/ArtData.lua", "artwork/Catalog.lua", "inventory/Rules.lua", "inventory/Items.lua", "inventory/Plan.lua" } })
 local MI = c.TwichUI.MagicInventory
 Check(MI ~= nil, "Magic Inventory is loaded")
 Check(c.TwichUIDB.modules.magicInventory == false, "off by default (explicit true only)")
@@ -452,5 +452,47 @@ Check(MI.Resolve(copied.dest) == nil and MI.Problem(copied, false) == "no-recipi
 local planned = MI.BuildPlan({ stacks = {}, rules = { copied }, resolve = MI.Resolve, problem = function(x) return MI.Problem(x, false) end })
 Check(#planned.groups == 0, "and moves nothing there")
 c.UnitName = function() return "Rich" end
+
+-- Optional artwork is copied by the canonical cleaner and ignored by matching/planning.
+do
+  Reset()
+  local source = { kind = "art", id = "art-herbs", note = "not persisted" }
+  local id = Save({ name = "Art identity", cats = { "7:5" }, artwork = source })
+  local saved = MI.Rule(id)
+  Check(saved.artwork.id == "art-herbs" and saved.artwork.note == nil and saved.artwork ~= source, "saved artwork is a canonical independent ref")
+  source.id = "shield"; saved.artwork.id = "ammo"
+  Check(MI.Rule(id).artwork.id == "art-herbs", "caller and clean-view refs cannot mutate saved art")
+  local original = MI.Rule(id)
+  local unknown = { kind = "icon", id = "futureIcon" }
+  original.artwork = unknown
+  Check(MI.SaveRuleDraft(original, nil, id) == id and MI.Rule(id).artwork.id == "futureIcon", "unknown valid references survive draft Save")
+  local duplicate = MI.DuplicateRule(id)
+  Check(duplicate and not MI.Rule(duplicate).enabled and MI.Rule(duplicate).artwork.id == "futureIcon", "disabled duplicates preserve artwork")
+  local raw = c.TwichUIDB.ui.magicInventory.rules
+  Check(raw[1].artwork ~= raw[2].artwork, "duplicated saved refs are independent")
+  Check(MI.MoveRule(id, 1) and MI.Rule(id).artwork.id == "futureIcon", "moving rules retains unresolved references")
+  Check(MI.SetRuleEnabled(id, false) and MI.Rule(id).artwork.id == "futureIcon", "enabling/disabling preserves artwork")
+  Check(MI.DeleteRule(duplicate) and MI.Rule(id).artwork.id == "futureIcon", "whole-list deletion preserves another rule's artwork")
+  Check(MI.ReplaceRules(MI.Rules()) and MI.Rule(id).artwork.id == "futureIcon", "arrangement list replacement preserves artwork")
+  for _, ref in ipairs({ {kind="item",id=2147483647}, {kind="art",id="future-art"}, {kind="icon",id="mage"} }) do
+    original = MI.Rule(id); original.artwork = ref
+    Check(MI.SaveRule(original) == id and MI.Rule(id).artwork.id == ref.id, "all bounded reference kinds survive Save")
+  end
+  local before = MI.Generation()
+  original = MI.Rule(id); original.artwork = {kind="item",id=0}
+  Check(not MI.SaveRule(original) and not MI.SaveRuleDraft(original,nil,id) and not MI.ReplaceRules({original})
+      and MI.Generation() == before and MI.Rule(id).artwork.id == "mage", "malformed artwork is rejected atomically by every explicit save path")
+  for _, rule in ipairs(c.TwichUIDB.ui.magicInventory.rules) do if rule.id == id then rule.artwork = {kind="art",id="bad/path"} end end
+  Check(MI.Rule(id).artwork == nil and c.TwichUIDB.ui.magicInventory.rules[1].artwork ~= nil, "reading malformed saved artwork drops only its view and writes nothing")
+  original = MI.Rule(id); original.artwork = {kind="automatic"}
+  Check(MI.SaveRule(original) == id and MI.Rule(id).artwork == nil and c.TwichUIDB.ui.magicInventory.rules[1].artwork == nil, "automatic is canonically absent")
+  c.Bags({ [0] = {size=16,slots={ [1]={2589,20},[2]={2447,10} }} })
+  Check(MI.SetRuleEnabled(id, true), "rule is enabled for plan comparison")
+  local plain = MI.CurrentPlan(nil)
+  original = MI.Rule(id); original.artwork = {kind="item",id=6948}; MI.SaveRule(original)
+  local pictured = MI.CurrentPlan(nil)
+  Check(Entry(plain,2589) and Entry(pictured,2589) and not Entry(plain,2447) and not Entry(pictured,2447)
+      and #plain.groups == #pictured.groups and #plain.skipped == #pictured.skipped, "an unrelated visual item changes no matching or plan membership")
+end
 
 if failures == 0 then print("PASSED test_magic_inventory") else print(failures .. " failures") os.exit(1) end

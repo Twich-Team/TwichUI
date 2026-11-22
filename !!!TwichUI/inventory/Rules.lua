@@ -19,7 +19,8 @@
 -- So a rule copied to another character (or another profile, or a backup restored) never sends to a recipient that
 -- character didn't choose: until one is set there, the rule says it needs one and stays off.
 --
--- Rule: { id, name, enabled, kind = "mail" | "bank" | "guild" | "keep" | "never", dest = destId (mail, guild),
+-- Rule: { id, name, enabled, artwork = optional shared kind/id reference (settings identity only),
+--         kind = "mail" | "bank" | "guild" | "keep" | "never", dest = destId (mail, guild),
 --         cats = { "7:5", "7", ... } (game classes/subclasses and supported custom categories),
 --         qualities = { [0..5] = true } (none: any), equip = "any" | "equipment" | "other",
 --         bind = "any" | "boe" | "nobind", include = { [itemID] = true }, exclude = { [itemID] = true },
@@ -204,6 +205,16 @@ local function ValidCat(v)
 end
 MI.ValidCat = ValidCat
 
+-- Optional rule identity only. Automatic is represented by absence; unresolved but
+-- structurally valid refs survive cleaning, copying and whole-list writes.
+local function CleanArtwork(ref)
+    if ref == nil then return nil, true end
+    local checked = R.Artwork and R.Artwork.Check(ref)
+    if not checked then return nil, false end
+    return checked.kind ~= "automatic" and checked or nil, true
+end
+local ARTWORK_ERROR = "Choose a valid rule icon, or use the automatic icon."
+
 local function CleanRule(r)
     if type(r) ~= "table" or not IdText(r.id) then return nil end
     local kind = MI.KIND_LABEL[r.kind] and r.kind or nil
@@ -221,6 +232,7 @@ local function CleanRule(r)
         stack = kind == "guild" and Whole(r.stack, 0, MI.MAX_STACK) and r.stack or 0,
         cats = {},
     }
+    out.artwork = CleanArtwork(r.artwork)
     if MI.NEEDS_DEST[kind] and IdText(r.dest) then out.dest = r.dest end
     if MI.HAS_FLOW[kind] then out.flow = MI.FLOW_LABEL[r.flow] and r.flow or "deposit" end
     if kind == "guild" and r.design == true then
@@ -640,6 +652,9 @@ function MI.ReplaceRules(list)
     for _, r in ipairs(list) do if type(r) == "table" and r.id then taken[r.id] = true end end
     local out = {}
     for i, r in ipairs(list) do
+        if type(r) ~= "table" then return false, "A rule can't be saved." end
+        local _, validArt = CleanArtwork(r.artwork)
+        if not validArt then return false, ARTWORK_ERROR end
         local copy = {}
         for k, v in pairs(r) do copy[k] = v end
         if not copy.id then copy.id = NewId("r", taken); taken[copy.id] = true end
@@ -654,6 +669,8 @@ end
 -- Returns the id, or nil and a sentence.
 function MI.SaveRule(rule)
     if type(rule) ~= "table" then return nil, "Nothing to save." end
+    local _, validArt = CleanArtwork(rule.artwork)
+    if not validArt then return nil, ARTWORK_ERROR end
     local list = MI.Rules()
     local taken, at = {}, nil
     for i, r in ipairs(list) do
@@ -791,6 +808,8 @@ end
 -- from (nil for a new rule): if it is gone, nothing is saved. Returns the rule id and the plan, or nil and a sentence.
 function MI.SaveRuleDraft(rule, draft, expectId)
     if type(rule) ~= "table" then return nil, "Nothing to save." end
+    local _, validArt = CleanArtwork(rule.artwork)
+    if not validArt then return nil, ARTWORK_ERROR end
     local t = ProfileStore(true)
     if not t then return nil, "Your settings aren't available right now." end
     local list = MI.Rules()

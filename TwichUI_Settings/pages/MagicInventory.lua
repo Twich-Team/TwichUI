@@ -41,6 +41,11 @@ local focusRecipient = false   -- put the cursor in the recipient field once (th
 
 local function MI() return R.MagicInventory end
 local function Wg() return R.SettingsWidgets end
+local editGeneration = 0
+local function CloseArtworkPicker()
+    local picker = R.SettingsArtworkPicker
+    if f and picker then picker.Close(f, "invalidated") end
+end
 
 ---------------------------------------------------------------------------
 -- Controls kept by name
@@ -67,7 +72,12 @@ end
 
 local function Button(key, label, w, kind, onClick, parent)
     local b = Get(key, function()
-        local made = Wg().Button(parent or f, label, w, kind, function(self) if self.onClick then self.onClick() end end)
+        local made = Wg().Button(parent or f, label, w, kind, function(self)
+            if self.onClick then
+                if key ~= "chooseRuleIcon" then CloseArtworkPicker() end
+                self.onClick()
+            end
+        end)
         return made
     end)
     b.text:SetText(label)
@@ -79,7 +89,10 @@ end
 
 local function Check(key, onToggle, art)
     local c = Get(key, function()
-        local toggle = function(v) local self = pool[key]; if self.onToggle then self.onToggle(v) end end
+        local toggle = function(v)
+            local self = pool[key]
+            if self.onToggle then CloseArtworkPicker(); self.onToggle(v) end
+        end
         if art and R.SettingsMaterial then return R.SettingsMaterial.Pill(f, toggle) end
         return Wg().Checkbox(f, toggle)
     end)
@@ -103,7 +116,7 @@ local function Icon(key)
         b.tex = b:CreateTexture(nil, "ARTWORK")
         b.tex:SetPoint("TOPLEFT", 2, -2)
         b.tex:SetPoint("BOTTOMRIGHT", -2, 2)
-        b:SetScript("OnClick", function(self) if self.onClick then self.onClick() end end)
+        b:SetScript("OnClick", function(self) if self.onClick then CloseArtworkPicker(); self.onClick() end end)
         b:SetScript("OnEnter", function(self)
             if not self.itemID then return end
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -270,6 +283,7 @@ local function TemplateChoices()
 end
 
 local function StartEdit(rule)
+    CloseArtworkPicker(); editGeneration = editGeneration + 1
     task = "rules"
     editing = rule
     selectedRule = rule.id
@@ -284,6 +298,7 @@ local function StartEdit(rule)
 end
 
 local function EndEdit()
+    CloseArtworkPicker(); editGeneration = editGeneration + 1
     editing, said, recipientDraft, editingFrom, focusRecipient = nil, nil, {}, nil, false
 end
 
@@ -623,10 +638,7 @@ end
 
 -- Native item art has an opaque square tile. Keep the recognizable item in a portrait silhouette;
 -- the transparent TwichUI illustrations retain their own shape. Item-picker wells keep the full icon.
-local function PaintRuleArtwork(texture, rule)
-    local path = RuleArtwork(rule)
-    texture:SetTexture(path)
-    local native = type(path) == "number" or (type(path) == "string" and path:sub(1, #R.PATH) ~= R.PATH)
+local function RuleItemMask(texture, native)
     if native and not texture.itemMask then
         local mask = texture:GetParent():CreateMaskTexture(nil, "ARTWORK")
         if mask then
@@ -641,12 +653,70 @@ local function PaintRuleArtwork(texture, rule)
     end
 end
 
+local function PaintRuleArtwork(texture, rule)
+    local path = RuleArtwork(rule)
+    texture:SetVertexColor(1, 1, 1, 1); texture:SetAlpha(1)
+    texture:SetTexCoord(0, 1, 0, 1)
+    texture:SetTexture(path)
+    RuleItemMask(texture, type(path) == "number" or (type(path) == "string" and path:sub(1, #R.PATH) ~= R.PATH))
+end
+
+-- Only settings rule identities use overrides; drag ghosts retain automatic artwork.
+local function PaintRuleIdentity(texture, rule, size)
+    if rule.artwork and R.Artwork and R.Artwork.Draw(texture, rule.artwork, size) then
+        RuleItemMask(texture, rule.artwork.kind == "item")
+        return false
+    end
+    texture:SetSize(size, size)
+    PaintRuleArtwork(texture, rule)
+    return rule.artwork ~= nil
+end
+
+local function ArtworkContext(rule)
+    local ids = {}
+    for id in pairs(rule.include or {}) do ids[#ids + 1] = id end
+    table.sort(ids)
+    return table.concat({ rule.kind or "", rule.equip or "", table.concat(rule.cats or {}, ","), table.concat(ids, ",") }, ":")
+end
+
+local function ChooseRuleIcon()
+    local picker, draft = R.SettingsArtworkPicker, editing
+    if not (picker and R.Artwork and draft and f and f:IsVisible()) then return end
+    if MI().Picker and MI().Picker.IsShown() then MI().Picker.Cancel() end
+    P.CloseItemFilters()
+    local generation, context = editGeneration, ArtworkContext(draft)
+    local profiles = R.Profiles
+    local profile = profiles and profiles.Generation and profiles.Generation()
+    local function Current()
+        return editing == draft and generation == editGeneration and context == ArtworkContext(draft)
+            and (not profiles or not profiles.Generation or profiles.Generation() == profile)
+            and (not editingFrom or MI().Rule(editingFrom) ~= nil)
+    end
+    picker.Open(f, {
+        key = draft, selection = draft.artwork, IsCurrent = Current,
+        subtitle = "Choose an icon to identify this inventory rule.",
+        automatic = { label = "Use automatic icon", name = "Automatic rule icon", Draw = function(texture, size)
+            texture:SetSize(size, size); PaintRuleArtwork(texture, draft)
+        end },
+        OnApply = function(ref)
+            if not Current() then return false, "This rule draft changed. Reopen the icon picker." end
+            local checked = R.Artwork.Check(ref)
+            if not checked then return false, "Choose a valid rule icon." end
+            draft.artwork = checked.kind ~= "automatic" and checked or nil
+            P.QueueRefresh()
+            return true
+        end,
+        OnClosed = function() P.QueueRefresh() end,
+    })
+end
+
 local function RowTip(self)
     local rule = self.rule
     if not rule then return end
     local mi = MI()
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     GameTooltip:SetText(("%d.  %s"):format(self.index or 0, rule.name))
+    if self.artworkUnavailable then GameTooltip:AddLine("Selected icon unavailable — showing automatic.", 0.93, 0.72, 0.38, true) end
     GameTooltip:AddLine("Items: " .. P.ItemsText(rule), 0.9, 0.9, 0.9, true)
     GameTooltip:AddLine("Destination: " .. (P.DestText(rule)), 0.9, 0.9, 0.9, true)
     GameTooltip:AddLine("Keep: " .. P.KeepText(rule), 0.9, 0.9, 0.9, true)
@@ -828,7 +898,7 @@ local function DrawTable(y, rules)
         Label("priority", tostring(priority), 22, 26, 24)
         local art = Get(key .. "art", function() return row:CreateTexture(nil, "ARTWORK") end)
         art:SetParent(row); art:ClearAllPoints(); art:SetPoint("LEFT", row, "LEFT", 45, 0); art:SetSize(36, 36)
-        PaintRuleArtwork(art, rule)
+        row.artworkUnavailable = PaintRuleIdentity(art, rule, 36)
         local chipX = width >= 850 and math.floor(width * .44) or 85
         local title = Label("name", rule.name, 85, 2, width >= 850 and chipX - 100 or width - 270, "body")
         if R.SettingsMaterial then R.SettingsMaterial.ReminderFont(title, 15, rule.enabled, "serif") end
@@ -1000,6 +1070,7 @@ end
 -- Save rule / Cancel rule delegate to the builder's canonical actions; there is no second persisted draft.
 function P.OpenItemFilters(tab)
     if not editing then return end
+    CloseArtworkPicker()
     itemAdvanced = true
     if tab then filterTab = tab end
     if pool.filterScroll then pool.filterScroll:SetVerticalScroll(0) end
@@ -1634,7 +1705,7 @@ local function DrawEditor(y)
     end)
     At(banner, bannerX, bannerY); banner:SetSize(bannerW, 64); banner:SetFrameLevel(f:GetFrameLevel() + 1)
     local art = Get("summaryArt", function() return banner:CreateTexture(nil, "ARTWORK") end)
-    art:ClearAllPoints(); art:SetPoint("LEFT", banner, "LEFT", 10, 0); art:SetSize(40, 40); PaintRuleArtwork(art, r)
+    art:ClearAllPoints(); art:SetPoint("LEFT", banner, "LEFT", 10, 0); art:SetSize(40, 40); local artUnavailable = PaintRuleIdentity(art, r, 40)
     local live = Text("builderSummary", "heading"); live:SetParent(banner); live:ClearAllPoints(); live:SetPoint("TOPLEFT", banner, "TOPLEFT", 60, -9); live:SetWidth(bannerW - 74)
     local firstItem = next(r.include)
     local oneItem = firstItem and not next(r.include, firstItem) and not HasItemFilters(r) and MI().ItemFacts(firstItem)
@@ -1647,9 +1718,16 @@ local function DrawEditor(y)
         detail:SetText(P.ItemsText(r) .. " · " .. P.DestText(r):gsub(" \226\134\146 ", ": "))
     end
     R.Interact.Tip(banner, "Rule summary", r.kind == "mail" and P.PlainReview(r, draftPlan and draftPlan.recipient) or P.Sentence(r))
+    local choose = Button("chooseRuleIcon", "Choose icon...", 128, "secondary", ChooseRuleIcon)
+    At(choose, PAD, y + (wide and 64 or 102)); choose:SetHeight(28)
+    R.Interact.Tip(choose, "Rule icon", "Only identifies this rule in its list and builder. Apply changes this draft; Save keeps it. Matching items, transfers and rule priority are unchanged.")
+    local iconStatus = Text("ruleIconStatus", "small")
+    Wide(iconStatus, PAD + 140, y + (wide and 69 or 107), full - 140)
+    iconStatus:SetText(artUnavailable and "Selected icon unavailable — showing automatic." or r.artwork and "Custom icon · Identification only" or "Automatic icon · Follows this rule")
+    Tone(iconStatus, artUnavailable and "warn" or "dim")
     local cols = wide and 3 or 2
     local col = math.floor((full - (cols - 1) * 12) / cols)
-    y = y + (wide and 68 or 106)
+    y = y + math.max(wide and 104 or 142, (wide and 69 or 107) + H(iconStatus) + 12)
     local top = y
     local function Panel(key, title, x, py, w, h)
         local panel = Get(key, function()
@@ -1775,6 +1853,7 @@ local function DrawEditor(y)
         local labels = { bank = "My bank", guild = "Guild bank", mail = "Mail to..." }
         b.text:SetText(labels[kind] or MI().KIND_LABEL[kind]); b:SetSelected(r.kind == kind)
         b:SetScript("OnClick", function()
+            CloseArtworkPicker()
             r.kind = kind
             if MI().HAS_FLOW[kind] then r.flow = r.flow or "deposit" end
             if not MI().NEEDS_DEST[kind] then r.dest = nil
@@ -1861,7 +1940,7 @@ local function DrawEditor(y)
     destinationLabel = r.kind == "bank" and "My bank" or r.kind == "keep" and "Bags" or r.kind == "never" and "No transfers" or destinationLabel
     if r.kind == "mail" then destinationLabel = draftPlan and draftPlan.recipient or "Not chosen yet: type the recipient character" end
     local reviewArt = Get("reviewIdentityArt", function() return pool.reviewPanel:CreateTexture(nil, "ARTWORK") end)
-    reviewArt:ClearAllPoints(); reviewArt:SetPoint("TOPLEFT", pool.reviewPanel, "TOPLEFT", 12, -44); reviewArt:SetSize(40, 40); PaintRuleArtwork(reviewArt, r)
+    reviewArt:ClearAllPoints(); reviewArt:SetPoint("TOPLEFT", pool.reviewPanel, "TOPLEFT", 12, -44); reviewArt:SetSize(40, 40); PaintRuleIdentity(reviewArt, r, 40)
     local identity = Text("reviewIdentity", "body"); Wide(identity, rx + 62, reviewY + 8, rw - 74); identity:SetParent(pool.reviewPanel); identity:SetText(r.name or "New rule"); identity:SetHeight(32)
     reviewY = reviewY + 60
     local summaryHeight = 0
@@ -1930,6 +2009,7 @@ local function DrawEditor(y)
         QueueRelayout()
     end, editorFooter)
     local save = Button("eSave", "Save", 90, "primary", function()
+        CloseArtworkPicker()
         if pool.builderKeep and pool.builderKeep:HasFocus() then pool.builderKeep:ClearFocus() end
         if pool.recipientBox and pool.recipientBox:HasFocus() then pool.recipientBox:ClearFocus() end
         local rule = {}
@@ -2047,6 +2127,7 @@ function P.Frame()
     end)
     f:SetScript("OnSizeChanged", function() if built then P.QueueRefresh() end end)
     f:SetScript("OnHide", function(self)
+        CloseArtworkPicker()
         editorFooter:Hide()
         itemAdvanced = false
         if pool.filterEditor then pool.filterEditor:Hide(); pool.filterShade:Hide() end
@@ -2082,15 +2163,23 @@ P.NewFromTemplate = NewFromTemplate   -- the New rule list's choice, by template
 function P.Control(key) return pool[key] end
 
 -- A change made anywhere (here, the review, a profile change) redraws the page if it is shown. Registered once.
-if R.MagicInventory then R.MagicInventory.OnChange(function() P.QueueRefresh() end) end
+if R.MagicInventory then R.MagicInventory.OnChange(function()
+    if editing and editingFrom and not MI().Rule(editingFrom) then CloseArtworkPicker() end
+    P.QueueRefresh()
+end) end
 -- A rule being edited belongs to the profile it came from: a profile change puts the editor away, unsaved.
+local function ProfileChanged()
+    EndEdit(); selectedRule = nil; itemAdvanced = false
+    if pool.filterEditor then pool.filterEditor:Hide(); pool.filterShade:Hide() end
+    if P.GuildProfileChanged then P.GuildProfileChanged() end
+    P.QueueRefresh()
+end
 if R.Profiles and R.Profiles.OnApply then
-    R.Profiles.OnApply("views", "magic-inventory-page", function()
-        EndEdit(); selectedRule = nil; itemAdvanced = false
-        if pool.filterEditor then pool.filterEditor:Hide(); pool.filterShade:Hide() end
-        if P.GuildProfileChanged then P.GuildProfileChanged() end
-        P.QueueRefresh()
-    end)
+    R.Profiles.OnApply("views", "magic-inventory-page", ProfileChanged)
+end
+-- Profile duplication changes identity without running apply phases.
+if R.Profiles and R.Profiles.OnChange then
+    R.Profiles.OnChange(function(kind) if kind == "duplicate" then ProfileChanged() end end)
 end
 
 local function Count()
