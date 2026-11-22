@@ -69,7 +69,7 @@
   },
   "reminders": {
     "tests": ["test_reminders*.lua", "test_reminder_gallery.lua", "test_reminder_gallery.py"],
-    "syntax": ["!!!TwichUI/reminders/**/*.lua", "TwichUI_Settings/pages/Remind*.lua"],
+    "syntax": ["!!!TwichUI/artwork/**/*.lua", "!!!TwichUI/reminders/**/*.lua", "TwichUI_Settings/pages/Remind*.lua"],
     "dependencies": ["settings"],
     "simulators": [{"script": "reminders"}]
   },

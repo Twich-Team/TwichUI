@@ -338,6 +338,7 @@ hazard\Alerts.lua
 # the three display modes) by tools/make_reminder_gallery.py.
 reminders\AmmoItems.lua
 reminders\ArtData.lua
+artwork\Catalog.lua
 reminders\Config.lua
 reminders\Gallery.lua
 reminders\Conditions.lua
