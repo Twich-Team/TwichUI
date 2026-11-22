@@ -11,7 +11,7 @@
 5. Protect saved data, existing user preferences, combat restrictions, security and native game action boundaries. A failed reproduction warrants a concise investigation, not speculative redesign. Do not merge, push to `main`, publish or release.
 6. Task statuses change only on evidence. **Ready** = can be selected if authorized; **Active** = someone is already implementing; **In review** = draft PR exists; **Done** = merged and verified to the stated extent; **Blocked** = missing product decision or dependency.
 
-**Task isolation:** W21/W22 both edit `TwichUI_Workshop/ViewShopping.lua`; W11/W12/W20 edit `TwichUI_Workshop/ViewCrafting.lua`. Run each conflict group sequentially. P01 and F12 may both touch Magic Inventory and should not overlap if they share files. P05 must not expand into a global style refactor. Do not select Workshop pricing, Market validation, AH status or Opportunities tasks while the A01/A02 stack (#97/#99/#100/#102) is active. W11 additionally waits for that stack to integrate. Ready means eligible, not authorized.
+**Task isolation:** W21/W22 both edit `TwichUI_Workshop/ViewShopping.lua`; W11/W20 edit `TwichUI_Workshop/ViewCrafting.lua`. Run each conflict group sequentially. P01 and F12 may both touch Magic Inventory and should not overlap if they share files. P05 must not expand into a global style refactor. Do not select Workshop pricing, Market validation, AH status or Opportunities tasks while the A01/A02 stack (#97/#99/#100/#102) is active. W11 additionally waits for that stack to integrate. Ready means eligible, not authorized.
 
 ## Ready queue
 
@@ -26,10 +26,9 @@ Each Ready task is a **mini-specification**, not a guarantee the issue still exi
 | 5 | **F12** (F29) | Missing carried Waylaid crates in item/rule picker | Medium / S–M | `!!!TwichUI/inventory/Picker.lua`, `Items.lua` | Inventory |
 | 6 | **W21** | Shopping “Needed for” detail | Medium / S–M | `TwichUI_Workshop/ViewShopping.lua` | After W22 |
 | 7 | **P03** (A03) | Advisory targeted-test selection usability | Medium / S–M | `docs/testing.md`, existing runner | Test tooling |
-| 8 | **W12** | Craft Queue filter | Low / S–M | `TwichUI_Workshop/ViewCrafting.lua` | Crafting |
-| 9 | **W20** | Direct quantity entry/context menu | Medium / M | `TwichUI_Workshop/ViewCrafting.lua` | After W12 |
-| 10 | **W16** | Dedicated Equipped filter in Item Advisor | Medium / M | `AdvisorData.lua`, `ViewAdvisor.lua` | Advisor |
-| 11 | **W11** | Shift-click queued item to search TwichUI AH | Medium / S–M | Crafting queue + AH Browse | After A01/A02 integration; with W12/W20 sequential |
+| 8 | **W20** | Click queued count to enter exact quantity; keep +/- | Low / S–M | `TwichUI_Workshop/ViewCrafting.lua` | Crafting / W11 sequential |
+| 9 | **W16** | Fix existing In bags view to exclude equipped-only items | Medium / S–M | `AdvisorData.lua`, `ViewAdvisor.lua`, `Observe.lua` | Advisor |
+| 10 | **W11** | Shift-click queued item to search TwichUI AH | Medium / S–M | Crafting queue + AH Browse | After A01/A02 integration; with W20 sequential |
 
 ### P01 — Magic Inventory **bank transfer** progress text
 
@@ -67,32 +66,25 @@ Each Ready task is a **mini-specification**, not a guarantee the issue still exi
 - **Verification:** Focused Shopping and Workshop-window tests; relevant simulator pose with multiple output consumers if already supported.
 - **Boundaries:** Presentation and bounded data adaptation only; do not modify planner economics or invent recipe relationships. **Do not parallelize with W22.**
 
-### W12 — Craft Queue search
+### W12 — Withdrawn: Craft Queue search
 
-- **Problem:** The Crafting page offers recipe search but no search when viewing the player's current queue.
-- **Desired result:** A small search input on the **Craft queue** tab filtering queued entries by known recipe name (case-insensitive), without changing saved queue membership or craft counts. Recipe browsing retains its own current search.
-- **Where to start:** `TwichUI_Workshop/ViewCrafting.lua` (`BuildLeft`, `ShowLeft`, `Render`); existing `S.QueueRows` and `UI.Search`.
-- **Acceptance:** Empty query shows the complete queue, unmatched query explains that the list is filtered (not empty), switching tabs retains sensible focus/selection, and clearing search restores rows and scroll behavior; queue changes still affect the complete queue; no new SavedVariables.
-- **Verification:** Focused crafting/window tests and existing UI search/filter scenarios if applicable.
-- **Boundaries:** Read-only UI filter; no global recipe lookup or new search engine. **Do not parallelize with W20.**
+The original note was clarified. **Do not implement a Craft Queue search.** The owner wants direct entry of an exact quantity; see W20. Retain this entry only to prevent agents reviving the mistaken requirement.
 
-### W20 — Craft Queue direct quantity and context menu
+### W20 — Direct Craft Queue quantity entry
 
-- **Problem:** Queued craft count can only be adjusted with +/- controls; Remove/Open recipe exist in the details panel but not beside the relevant row.
-- **Desired result:** Clicking the displayed count opens a compact numeric editor. Right-clicking a queue row opens a standard TwichUI context menu offering **Open recipe** and **Remove from queue** (reuse existing actions). No action fires merely from opening the menu.
-- **Where to start:** `TwichUI_Workshop/ViewCrafting.lua` (`MakeQueueRow`, detail actions); `Session.SetCrafts`, `Session.OpenRecipe`, `Session.Remove`, `Queue.SetCrafts` and existing popover/menu patterns.
-- **Acceptance:** Accept whole numbers from 1 through existing `W.MAX_CRAFTS`, reject invalid/out-of-range input without altering data, support Esc/cancel, preserve select/hover behavior, keep +/- and existing detail buttons working, and do not perform any protected gameplay action without its existing owner-controlled path. Menu dismisses on outside click/close.
-- **Verification:** Focused queue/unit/window tests; one targeted menu/input UI simulation when supported.
-- **Boundaries:** No automatic craft completion or alternate persistence. **Do not parallelize with W12.**
+- **Owner intent:** Clicking a queue item's displayed quantity lets the player type an exact count (e.g., 20) and press Enter instead of clicking + twenty times. **Keep the existing + and - controls.**
+- **Source:** `TwichUI_Workshop/ViewCrafting.lua` (`MakeQueueRow`, count and +/-), `Session.SetCrafts`, `Queue.SetCrafts`. Reuse existing input components.
+- **Acceptance:** The editor starts with the current count; accepts integers 1 through `W.MAX_CRAFTS`; Enter saves, Escape cancels; invalid/blank/out-of-range input cannot alter the queue. Saved quantity, row, queue totals and material requirements refresh correctly. +/- and selection still work.
+- **Verification:** Focused crafting tests for 1→20, bounds, invalid values, save/cancel, persistence and +/-; a targeted UI simulation if useful.
+- **Bounds:** No queue search, auto-crafting, automatic completion work or persistence rewrite. The original optional right-click menu (Remove/Open recipe) is separate follow-up work, not a condition for this task. Do not parallelize with W11.
 
-### W16 — Dedicated Equipped filter in Item Advisor
+### W16 — Correct existing Item Advisor "In bags" filter
 
-- **Problem:** Advisor discovers items from bags, tracked identities, known recipes and local Market, but not the character's currently equipped gear.
-- **Desired result:** Add a dedicated **Equipped** item-source filter alongside Bags, Tracked and All known items, listing current equipment only. Equipped identities can still appear in All known items with an Equipped indicator, but never count toward sellable bag stock or trigger posting/vendoring suggestions.
-- **Where to start:** `TwichUI_Workshop/AdvisorData.lua` (`D.Catalog`, source flags), `ViewAdvisor.lua` (row metadata/search/filter/presentation). Use only reliable equipped-slot and item-link APIs supported by Forever. Reuse existing item identity and variant guards.
-- **Acceptance:** Equipped filter selects only equipped identities, switching back restores existing source views, and simultaneous equipped+bag identities are not duplicated or miscounted. Late/missing metadata stays unknown; equipment changes update at a bounded rate; no change to transaction eligibility.
-- **Verification:** Focused Advisor/catalog tests with synthetic equipment slots, lifecycle changes and safety cases; no real-game item manipulation.
-- **Boundaries:** Read-only discovery and UI attribution, no automatic gear actions and no broad Advisor redesign. If identifying equipped variants safely is not supported, document the limit and stop rather than guessing.
+- **Owner intent:** **In bags** currently shows items the player is wearing. This is a bug, **not a request for an Equipped filter**.
+- **Source:** `TwichUI_Workshop/AdvisorData.lua` (`D.Catalog`, bag-source flag and filter, displayed quantities), `ViewAdvisor.lua`, `Observe.lua` (`O.BagCount`). Source already marks actual bag-slot discoveries, but its count uses `C_Item.GetItemCount`; investigate whether that can include equipped-only items.
+- **Acceptance:** Equipped-only gear does not appear in **In bags**; a matching item physically in bags still appears with the correct bag-only count, including when another copy is equipped. Preserve Tracked / All known items, selections, advice and transaction safeguards. Handle missing item metadata gracefully.
+- **Verification:** Focused Advisor tests with equipped-only, bag-only, both, multiple bag stacks and unknown item data. Prove the old false-positive case.
+- **Bounds:** Do not add an Equipped tab/filter or change Market pricing and unrelated inventory systems.
 
 ### P05 — Premium styling of existing restock dialog
 
@@ -148,6 +140,7 @@ Each Ready task is a **mini-specification**, not a guarantee the issue still exi
 | **W05 / A05 / W04** Market/AH status controls | Current A01/A02 performance work touches Market/Workshop plumbing | Re-evaluate against merged performance result first; no parallel work now |
 | **A04** neutral auction fee | Pricing correctness is important but current Market/Opportunities stack is active | Recheck after A01/A02 merges; separate small economic fix with targeted tests |
 | **F04 / F09 / reminder glow** | Fishing Stage 2 already merged; Loot victory PR #101 and Reminder glow PR #91 are active | Verify PR state and select only separately approved follow-ups |
+| **UX02** shared Reminders artwork picker and per-rule icons | Existing Reminders image picker is tightly coupled to Reminders' storage; Loot Rules/Magic Inventory currently derive default art and have no independent icon override field. Owner wants a shared curated picker; no implementation is yet authorized | Design shared catalog/chooser interface, audit bundled symbolic assets, and confirm whether overrides apply to rule list/editor only or runtime visuals. Then write separate small specs for shared extraction, Loot Rules, and Magic Inventory; preserve all default icons and rules |
 | **All larger product concepts** | Scope and interactions are not yet defined | Keep original ideas in roadmap; discuss one product slice at a time |
 
 ## Owner decisions — November 21, 2026
@@ -159,13 +152,13 @@ Each Ready task is a **mini-specification**, not a guarantee the issue still exi
 - **W11:** Shift-click queues search the resulting item in TwichUI AH.
 - **F12/F29:** crate visibility in the item/rule picker first; junk support separate.
 - **W13:** auto-decrement verified crafts **on by default once event correctness is established**; current automatic counting remains disabled pending client evidence.
-- **W16:** dedicated Equipped filter.
+- **W16 (superseded):** fix the existing In bags filter; no new Equipped filter.
 
 ## Candidate first autonomous batch
 
 **P01 + P04 + W22**. Three independently owned presentation defects; P01 is specifically the bank transfer progress bar. None requires changes to pricing/Market, persisted behavior, protected actions or a major design decision. If owner authorization is granted, two agents can implement distinct tasks at once and a coordinator can review/submit one draft PR per item. The batch ends after those three or fewer if one is blocked/obsolete.
 
-**Do not automatically select the next items after this batch.** Future owner-authorized batches may select P05, F12, P03, W21, W12/W20 (sequentially), or W16. W11 must await A01/A02 integration. The idea bank is not an execution queue.
+**Do not automatically select the next items after this batch.** Future owner-authorized batches may select W20 direct quantity entry, W16 In bags filtering, W21, or other eligible work; W12 search is withdrawn. W11 must await A01/A02 integration. The idea bank is not an execution queue.
 
 ## Maintenance
 
