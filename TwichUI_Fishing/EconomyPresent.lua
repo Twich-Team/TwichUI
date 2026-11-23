@@ -10,13 +10,14 @@ local function Provider(kind, id, q)
     if kind ~= "session" then return nil end
     local v = E.Scope("session")
     if not v or (not v.total and not v.market) then return nil end
-    local items = {}
-    for _, group in ipairs({ v.direct, v.contents, v.provisional }) do
+    local function Values(group)
+        local items = {}
         for item, row in pairs(group) do if row.total ~= nil then items[item] = E.Text(row.total) end end
+        return items
     end
     local text = v.total and E.Text(v.total) .. (v.complete and "" or " *") or "Prices pending / unavailable"
     local rate = S.Get("economy.perHour") and v.perHour and (E.Text(v.perHour) .. "/h") or nil
-    return { text = text, items = items, perHourText = rate }
+    return { text = text, items = Values(v.direct), contents = Values(v.contents), provisional = Values(v.provisional), perHourText = rate }
 end
 F.Present.SetValueProvider(Provider)
 F.Subscribe("ECONOMY", function()

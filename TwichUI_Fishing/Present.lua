@@ -26,7 +26,7 @@
 --   P.State()                   { on, mode, parts = { camera, fade, castbar, list, toast }, revealed, suppressed, reason }
 --   P.Enter(reason) / P.Leave(reason, instant) / P.Toggle() / P.Reveal(on) / P.Recover()
 --   P.Configure(path, value)    Store.Set, then applied at once (positions, scales, parts, mode)
---   P.SetValueProvider(fn)      Stage 3: fn(kind, ...) -> for kind "session": { text, items = { [itemID] = text } };
+--   P.SetValueProvider(fn)      Stage 3: fn(kind, ...) -> for kind "session": { text, items = { [itemID] = text }, contents?, provisional?, perHourText? };
 --                               for kind "item", itemID, q: text. Asked only when the pieces redraw on an event, never per
 --                               frame. With none, no value is shown anywhere.
 --   P.Subscribe(fn)             fn(state) after Fishing Mode came on or went off

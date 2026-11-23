@@ -112,3 +112,20 @@ print("PASSED economy persistence, vendor and delayed pricing")
 
 local unknown = E.Calculate({ direct = { [PEARL] = 1 }, containers = { [CLAM] = { caught = 10, opened = 2, unopened = 0 } } })
 assert(not unknown.complete and unknown.missing == 8, "historical containers without queue/content evidence remain incomplete")
+-- A fish can be both a direct catch and container contents in the same session.
+local c3, W3 = FishingClient()
+W3.bound.F, W3.bound.G = "CLICK TwichUIFishingButton:LeftButton", "CLICK TwichUIFishingOpen:LeftButton"
+c3.FireEvent("UPDATE_BINDINGS"); W3.Advance(1)
+local F3 = c3.TwichUI.Fishing
+dofile(TESTS .. "fishing_economy_fixture.lua"); FishingEconomyFixture(c3)
+W3.Wear(16, POLE)
+W3.StartLine(); W3.Loot({ { FISH1, 5 }, { CLAM, 1 } }, { fishing = true }); W3.StopLine(); W3.Settle()
+W3.contents[CLAM] = { { FISH1, 3 } }
+W3.Key("G"); W3.Advance(3)
+F3.Economy.Scope("session"); W3.Advance(1)
+local values = F3.Present.Value("session")
+local unit = F3.Economy.Item(FISH1).unit
+assert(values.items[FISH1] == F3.Economy.Text(unit * 5), "direct catch row must value its own quantity")
+assert(values.contents[FISH1] == F3.Economy.Text(unit * 3), "container contents row must value its own quantity")
+assert(F3.Economy.Scope("session").total == unit * 8, "display separation preserves the economic total")
+print("PASSED shared-item provenance display")

@@ -347,7 +347,10 @@ function L.Refresh()
             row.icon:SetTexture(e.icon or H.QUESTION)
             local text = Label(e) .. "  |cffe0bd85\195\151" .. e.q .. "|r"
             if e.kind == "container" and (e.unopened or 0) > 0 then text = text .. "  |cffa89a84(" .. e.unopened .. " unopened)|r" end
-            local per = value and value.items and value.items[e.id]
+            local group = value and (e.kind == "container" and value.provisional or value.contents)
+            local per = group and group[e.id]
+            -- Older optional providers supplied a single map; retain their interface.
+            if not group then per = value and value.items and value.items[e.id] end
             if per then text = text .. "  |cffa89a84\226\128\148 " .. per .. "|r" end
             row.name:SetText(text)
             row:Show()
