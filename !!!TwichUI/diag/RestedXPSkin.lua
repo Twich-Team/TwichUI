@@ -15,6 +15,7 @@ local WHY = {
     unsupported = "this RestedXP does not have what the skin needs",
     conflict = "another RestedXP skin is drawing",
     ["theme-not-selected"] = "RestedXP is using another theme",
+    ["preview-off"] = "RestedXP's Preview Changes is off; the look is drawn after a reload",
     ["v2-window"] = "RestedXP's v2 guide window is on; only the theme's colours and font reach it",
     active = "active",
 }

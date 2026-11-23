@@ -3,7 +3,22 @@
 The settings are a page of their own, **RestedXP** (listed under Other addons, after Addon skins; the Addon skins page keeps a short pointer to it). The page also holds the map waypoint switch, **Mark RestedXP's destination**.
 
 An optional look for the RestedXP Guides window (`modules/RestedXPSkin.lua`, `diag/RestedXPSkin.lua`).
-Written against RestedXP Guides v4.11.22 (Interface 16001 listed). Off by default.
+Written against RestedXP Guides v4.11.22 and brought up to v4.11.39 (Interface 16001 listed). Off by default.
+
+**v4.11.39 changes the skin depends on** (read from source, 2026-11-23; v4.11.22 is no longer supported and reads as
+"This RestedXP isn't supported"):
+
+* `addon.RenderFrame` is gone. Its job is `addon:UpdateTheme(skipMenu, skipGuideReload)` (GuideWindow.lua), which
+  redraws the window, arrow, item and target windows and reloads the current guide at the same step. The skin
+  hooks it and calls it (`UpdateTheme(true)`, as RestedXP's own Choose Theme does through `ReloadTheme`).
+* The arrow's `UpdateVisuals` is `UpdateSubTheme` (map.lua); the skin hooks whichever the arrow has.
+* The item and target trays are AceGUI mini frames (`activeItemWindow`, `targeting.activeTargetWindow`) drawn with
+  RestedXP's own border textures, not backdrop tables, so the finish does not draw on them. They take the theme's
+  `background`, `borderColor` (new in the skin's theme: the skin's border colour) and `textColor` from RestedXP.
+* `RXP.v2:IsGuideWindowEnabled` is gone; the v2 window is `RXP.v2:IsEnabled()`.
+* **Preview Changes** (`enableThemeLiveReload`, RestedXP > Look and Feel): off, RestedXP picks a theme again only
+  at the next load. The skin reports "Reload to apply the look" (`preview-off`) rather than "another theme".
+* The v1 window's frames (header, footer, step list rows, step cards, scroll bar) are as before.
 
 ## How it works
 
@@ -19,12 +34,11 @@ Written against RestedXP Guides v4.11.22 (Interface 16001 listed). Off by defaul
   remembers the previous name (`ui.restedxpSkinState.previousTheme`, the only thing kept). Choosing
   another theme in RestedXP, or another RestedXP profile, steps the skin aside; choosing TwichUI again
   brings it back. Turning the skin off restores the remembered theme and runs RestedXP's own
-  `RenderFrame`, then removes TwichUI's overlays and puts back only text colours and fonts that still
+  `UpdateTheme`, then removes TwichUI's overlays and puts back only text colours and fonts that still
   carry what this skin applied. No per-frame snapshots exist, so a recycled frame cannot be restored to
   a stale state.
-* **Hooks** (installed once, gated on the skin being active): `addon.RenderFrame`,
-  `RXPFrame.CurrentStepFrame.UpdateText`, `addon.UpdateGuideFontSize`, the `UpdateVisuals` of the item
-  and target trays once they exist, and the footer menu button's OnEnter/OnLeave (its tooltip). Each does
+* **Hooks** (installed once, gated on the skin being active): `addon.UpdateTheme`,
+  `RXPFrame.CurrentStepFrame.UpdateText`, `addon.UpdateGuideFontSize`, the arrow's `UpdateSubTheme`, and the footer menu button's OnEnter/OnLeave (its tooltip). Each does
   comparisons first and draws only what differs. No `OnUpdate`, no ticker, no polling: RestedXP loading
   later is caught by `ADDON_LOADED`. A layout change that has to wait for RestedXP's own layout to finish
   uses one zero-delay call.
@@ -43,7 +57,7 @@ Written against RestedXP Guides v4.11.22 (Interface 16001 listed). Off by defaul
 | Step and objective text, list rows, header/footer text | text colour (only RestedXP base colours), font face, outline |
 | Step list rows and their hover | theme colours (`bottomFrameBG`, `bottomFrameHighlight`) |
 | Scroll bar | RestedXP's own slider, restyled slim in place (see Layout); or tinted as it was |
-| Item tray and target tray (frame and title tab) | same finish, when RestedXP shows a backdrop on them |
+| Item tray and target tray (frame and title tab) | not drawn on in v4.11.39 (they have no backdrop table); colours come from the theme. Kept for a version that shows a backdrop on them |
 | v2 guide window (beta), map arrow and pins | theme colours/font only; not drawn on |
 | Right-click menus, tooltips, RestedXP options, tracker, talents, importer | not touched |
 
@@ -107,7 +121,7 @@ one runs it draws over the bottom of the list.
 `addon.arrowFrame` (`RXPG_ARROW`, `map.lua`): a 32 x 32 frame (times RestedXP's Arrow Scale) with one texture
 RestedXP rotates from its own `OnUpdate` (`DrawArrow`) and a string for the step and the distance. This skin
 adds no `OnUpdate`, and changes neither the rotation nor the text. RestedXP sets the picture in the arrow's
-`UpdateVisuals` (every theme refresh and `SetupArrow`), the size in `SetSize` (login, its Arrow Scale option,
+`UpdateSubTheme` (every theme refresh; `UpdateVisuals` in v4.11.22), the size in `SetSize` (login, its Arrow Scale option,
 a profile change) and the string's font in `SetFont` (login, its Arrow Text Size option), so those three are
 hooked once and what RestedXP just set is scaled:
 
@@ -167,7 +181,7 @@ Anchors and sizes RestedXP sets once (header title, badge, header height, scroll
 sizes, thumb coordinates) are captured once, before the first change, and put back from that. Row text, gap
 and number anchors are RestedXP's constants (it sets the text and gap again on every guide load, the number's
 only when it makes the row) and are put back by value. Everything else is put back by RestedXP's own refresh
-(`RenderFrame`), plus `UpdateScrollBar` for the scroll bar art.
+(`UpdateTheme`), plus `UpdateScrollBar` for the scroll bar art.
 
 ## The current-step panel
 
