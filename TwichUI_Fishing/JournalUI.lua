@@ -91,7 +91,7 @@ local function Tip(frame, id)
                 local row = F.Economy.Item(self.itemID, self.itemQuantity or 1)
                 if row then
                     GameTooltip:AddLine("Fishing estimate each: " .. F.Economy.Text(row.unit), 0.88, 0.74, 0.52)
-                    if self.itemQuantity then GameTooltip:AddLine("Estimated caught quantity: " .. F.Economy.Text(row.total), 0.88, 0.74, 0.52) end
+                    if self.itemQuantity then GameTooltip:AddLine("Estimated quantity value: " .. F.Economy.Text(row.total), 0.88, 0.74, 0.52) end
                     if F.Store.Get("economy.vendor") then GameTooltip:AddLine("Vendor each: " .. F.Economy.Text(row.vendorUnit), 0.78, 0.72, 0.62) end
                     GameTooltip:AddLine(row.label or row.why or "Pricing unavailable", 0.78, 0.72, 0.62)
                     if row.age then GameTooltip:AddLine(("Observation age: %ds%s"):format(row.age, row.stale and " (stale)" or ""), 0.78, 0.72, 0.62) end
