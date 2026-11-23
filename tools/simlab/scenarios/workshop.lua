@@ -45,12 +45,21 @@ local ITEMS = {   -- name; every one gets the same stand-in icon
     [2770] = "Copper Ore", [2771] = "Tin Ore", [4400] = "Heavy Stock",
 }
 local ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
+-- Match the real item-info API's numeric-ID and held-item-link forms. The
+-- Advisor reads metadata from an observed slot's link to preserve identity.
+local function SyntheticItemID(value)
+    if type(value) == "number" then return value end
+    if type(value) == "string" then return tonumber(value:match("|Hitem:(%d+):") or value:match("^item:(%d+):")) end
+end
 C_Item.GetItemInfoInstant = function(id)
+    id = SyntheticItemID(id)
     if ITEMS[id] then return id, "", "", "", ICON, 7, 0 end
 end
 C_Item.GetItemInfo = function(id)
+    local input = id
+    id = SyntheticItemID(id)
     local n = ITEMS[id]
-    if n then return n, "|cffffffff|Hitem:" .. id .. "::::::::80:70:::::::::|h[" .. n .. "]|h|r", 1, 1, 1, "", "", 20, "", ICON, 1, 7, 0, 0 end
+    if n then return n, type(input) == "string" and input or ("|cffffffff|Hitem:" .. id .. "::::::::80:70:::::::::|h[" .. n .. "]|h|r"), 1, 1, 1, "", "", 20, "", ICON, 1, 7, 0, 0 end
 end
 C_Item.RequestLoadItemDataByID = function() end
 
@@ -731,6 +740,9 @@ Lab.Step("what's it worth: item tooltip lines", function()
     local requestsBefore = ah.requested
     Check("direct", "no cut confirmed, the auction is dearer: the fee is named and no winner is claimed",
         "What's it worth? / Vendor | 60c / Auction (before fees) | 1s 50c / Hold Shift for details", Hover(118))
+    local heldBronze = assert(WT.Read({ guid = "Item-2841-0", id = 2841 }))
+    Check("state", "active plan still reserves held Bronze despite suppressed sale-only wording", "craft",
+        R.Workshop.AdvisorData.Tooltip(heldBronze).action)
     Check("direct", "active plan demand overrides a tempting vendor comparison",
         "What's it worth? / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details", Hover(2841))
     Check("direct", "repeating the update gives the same lines, not more",
@@ -907,7 +919,7 @@ Lab.Step("what's it worth: tooltip designer", function()
     D.AddLine("outcomes"); Apply()
     Check("state", "outcomes added", true, Layout():find("outcomes", 1, true) ~= nil)
     Check("display", "the mockup holds its place and says there is nothing to show", true, Mock():find("(Disenchant yields: nothing to show for this example)", 1, true) ~= nil)
-    Check("direct", "the live tooltip shows no outcomes line", false, Live(true):find("Disenchant gives", 1, true) ~= nil)
+    Check("direct", "the live tooltip shows no outcomes line", false, Live(true):find("Disenchant yields", 1, true) ~= nil)
     w.SetShift(false)
     Click(f.remove, "Remove outcomes")
 
@@ -2181,14 +2193,14 @@ Lab.Step("pose for the screenshot", function()
             local info=C_Item.GetItemInfo
             C_Item.GetItemInfo=function(id)
                 local n,l,q,lev,req,kind,sub,stack,equip,icon,sell,class,subclass,bind=info(id)
-                return n,l,id==2447 and 3 or q,lev,req,kind,sub,stack,equip,icon,sell,class,subclass,bind
+                return n,l,SyntheticItemID(id)==2447 and 3 or q,lev,req,kind,sub,stack,equip,icon,sell,class,subclass,bind
             end
         end
         if view=="advisorcategory" or view=="advisorfiltered" then
             local info=C_Item.GetItemInfo
             C_Item.GetItemInfo=function(id)
                 local n,l,q,lev,req,kind,sub,stack,equip,icon,sell,class,subclass,bind=info(id)
-                return n,l,q,lev,req,id==3371 and "Reagent" or "Trade Goods",sub,stack,equip,icon,sell,class,subclass,bind
+                return n,l,q,lev,req,SyntheticItemID(id)==3371 and "Reagent" or "Trade Goods",sub,stack,equip,icon,sell,class,subclass,bind
             end
         end
         if view=="advisortentative" and m then
