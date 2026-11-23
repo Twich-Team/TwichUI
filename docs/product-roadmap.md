@@ -4,7 +4,7 @@
 
 ## Owner-authorized Batch 12 — November 23, 2026
 
-One consolidated draft PR; no merge/release authorization. [Combined verification](workshop/batch12-verification.md). Original notes below
+**In review:** [Batch 12 draft PR #146](https://github.com/Twich-Team/TwichUI/pull/146). No merge/release authorization. [Combined verification](workshop/batch12-verification.md). Original notes below
 are retained; these outcomes supersede earlier candidate labels for this batch.
 
 | ID | Status for review | Outcome and remaining limit |

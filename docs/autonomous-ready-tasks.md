@@ -251,6 +251,8 @@ of scope. No unassigned roadmap item is made Ready or automatically selected.
 
 ## Owner-authorized Batch 12 outcomes
 
+**In review:** [Consolidated draft PR #146](https://github.com/Twich-Team/TwichUI/pull/146).
+
 Owner selected exactly W27/W10/F13/F18/W13 for one consolidated draft PR, with
 up to two isolated workers. No next batch, merge, deployment or release selected.
 See [the Batch 12 roadmap status](product-roadmap.md#owner-authorized-batch-12--november-23-2026).
