@@ -17,20 +17,13 @@ jobs:
     # This owner-authorized release checkpoint does not add a full simulator
     # campaign to ordinary Workshop PRs. Future certifications use dispatch.
     if: github.event_name == 'workflow_dispatch' || github.head_ref == 'feature/market-containers-13'
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - name: Require the existing simulator sandbox without changing host security
-        run: |
-          test "$(id -u)" -ne 0
-          unshare --user --map-current-user true
-          if [ -r /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
-            cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns
-          fi
       - name: Prepare user-owned offline Lua and sandbox dependencies
         shell: bash
         run: |
@@ -54,6 +47,29 @@ jobs:
           PY
           echo "$deps/bin" >> "$GITHUB_PATH"
           echo "LD_LIBRARY_PATH=$deps/root/usr/lib/x86_64-linux-gnu" >> "$GITHUB_ENV"
+      - name: Authorize only the pinned-job Bubblewrap executable on this disposable VM
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(id -u)" -ne 0
+          sandbox="$RUNNER_TEMP/market-simulator-deps/root/usr/bin/bwrap"
+          test -x "$sandbox"
+          policy="$RUNNER_TEMP/twichui-market-simulator-bwrap.apparmor"
+          cat > "$policy" <<POLICY
+          abi <abi/4.0>,
+          include <tunables/global>
+          profile twichui-market-simulator-bwrap "$sandbox" flags=(unconfined) {
+            userns,
+          }
+          POLICY
+          # Owner-authorized executable-specific policy in this disposable VM.
+          # Keep the global namespace restriction enabled; never change sysctls.
+          sudo -n /usr/sbin/apparmor_parser -r "$policy"
+          sudo -n install -d -m 0755 /mnt/c
+          cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          getconf GNU_LIBC_VERSION
+          sha256sum "$sandbox"
+          "$sandbox" --version
       - name: Prepare the pinned, unmodified simulator and UI reference
         shell: bash
         run: |
@@ -69,18 +85,15 @@ jobs:
       - name: Run unchanged full discovery, simulator catalogs and negative controls
         shell: bash
         run: |
-          # Provision the existing fixed sandbox path only in this disposable
-          # runner's private mount namespace; never use root or alter security.
-          unshare --user --map-current-user --mount --keep-caps sh -ec '
-            test "$(id -u)" -ne 0
-            mount -t tmpfs -o size=1m,mode=0755 tmpfs /mnt
-            mkdir /mnt/c
-            # Drop setup capabilities before the unchanged Bubblewrap launcher.
-            exec setpriv --inh-caps=-all --ambient-caps=-all -- "$@"
-          ' sh bash -ec '
-            bash tools/simlab/sim.sh --help
-            exec bash tests/run.sh full --profile cloud --jobs 2 --sim-jobs 1 --measure
-          '
+          set -euo pipefail
+          bash tools/simlab/sim.sh --help
+          bash tests/run.sh full --profile cloud --jobs 2 --sim-jobs 1 --measure
+      - name: Remove the job-specific policy from this disposable VM
+        if: always()
+        shell: bash
+        run: |
+          policy="$RUNNER_TEMP/twichui-market-simulator-bwrap.apparmor"
+          if [ -f "$policy" ]; then sudo -n /usr/sbin/apparmor_parser -R "$policy"; fi
       - name: Preserve passing and failed evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
