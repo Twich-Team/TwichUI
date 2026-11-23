@@ -1,5 +1,6 @@
 """Collector/transport/API-bridge contracts. Fixtures are NOT game artwork."""
 import contextlib
+import copy
 import hashlib
 import io
 import json
@@ -455,6 +456,44 @@ class ClientContracts(unittest.TestCase):
         self.assertAlmostEqual(strengths[0], 0)
         self.assertAlmostEqual(strengths[1], target * .5)
         self.assertAlmostEqual(strengths[2], target)
+        render.validate_export(state)
+
+    @unittest.skipUnless(shutil.which("lua5.1"), "existing Lua environment not activated")
+    def test_polish_catalog_has_fixed_cameras_and_retains_requested_and_actual_geometry(self):
+        data, _ = fixture_input()
+        template = next(m for m in data["maps"] if m["id"] == 1434)
+        # Additional owned API-fixture records belong only to this catalog test;
+        # default/feedback fixtures and their accepted camera lists stay intact.
+        for mid in (1433, 1431, 1418):
+            row = copy.deepcopy(template); row.update(id=mid, art=mid + 20000)
+            data["maps"].append(row)
+        state, _ = lab.production_export(data, "polish-v1")
+        self.assertEqual(state["provenance"]["scenarioSet"], "polish-v1")
+        self.assertTrue(state["provenance"]["synthetic"])
+        self.assertFalse(state["provenance"]["nativeApiCaptured"])
+        booty = next(s for s in data["scenarios"] if s["id"] == "booty-bay-12")
+        expected = {"eastern-overview": (1415, .42, .58), "kalimdor-overview": (1414, .55, .55),
+                    "central-eastern": (1433, .1, .05), "southern-boundary": (1431, .95, .4),
+                    "badlands-boundary": (1418, .08, .75), "elwynn-westfall-duskwood": (1429, .15, .85),
+                    "stranglethorn": (1434, .5, .5), "booty-bay": (booty["mapId"], booty["x"], booty["y"]),
+                    "tirisfal": (1420, .62, .70), "undercity": (1458, .5, .5)}
+        self.assertEqual({s["id"] for s in state["scenes"]},
+                         {f"{name}-{zoom}" for name in expected for zoom in (4, 8, 12, 24)})
+        self.assertEqual(len(state["scenes"]), 40)
+        maps = {row["id"]: row for row in data["maps"]}
+        for scene in state["scenes"]:
+            name, zoom = scene["id"].rsplit("-", 1); mid, x, y = expected[name]
+            camera = scene["metadata"]["cameraPreset"]
+            self.assertEqual((camera["mapId"], camera["x"], camera["y"], camera["requestedZoom"]), (mid, x, y, int(zoom)))
+            self.assertEqual(camera["catalog"], "polish-v1"); self.assertFalse(camera["nativeReferenceMatched"])
+            bounds = maps[mid]["world"]
+            self.assertAlmostEqual(camera["requestedWorldCenter"]["u"], bounds[0] + x * (bounds[1] - bounds[0]))
+            self.assertAlmostEqual(camera["requestedWorldCenter"]["v"], bounds[2] + y * (bounds[3] - bounds[2]))
+            actual = scene["metadata"]["view"]["center"]
+            self.assertAlmostEqual(camera["actualWorldCenter"]["u"], actual["u"])
+            self.assertAlmostEqual(camera["actualWorldCenter"]["v"], actual["v"])
+            self.assertAlmostEqual(camera["actualZoom"], scene["metadata"]["view"]["zoom"])
+        self.assertEqual(lab.parser().parse_args(["--scenario-set", "polish-v1"]).scenario_set, "polish-v1")
         render.validate_export(state)
 
 
