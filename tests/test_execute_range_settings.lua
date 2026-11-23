@@ -4,11 +4,11 @@ local c,S = SettingsClient()
 local R,K = c.TwichUI,S.K
 local C = R.ExecuteRange
 local page = assert(K.pages.executeRange)
-assert(page.def.icon == 'diagOperations' and R.Icons.Get(page.def.icon))
+assert(page.def.icon == 'executeRange' and R.Icons.Get(page.def.icon))
 assert(not R:Enabled('executeRange') and C.Get('threshold') == 20 and C.Get('target') and C.Get('nameplates'))
 assert(C.Get('appearance') == 'both' and c.TwichUIDB.ui.executeRange == nil,'no eager persisted defaults')
 local main = assert(K.rowsById.executeRange)
-for _,id in ipairs({'executeRangeThreshold','executeRangeTarget','executeRangeNameplates','executeRangeAppearance'}) do
+for _,id in ipairs({'executeRangeThreshold','executeRangeTarget','executeRangeNameplates','executeRangeAppearance','executeRangeColor','executeRangeOpacity','executeRangeTexture'}) do
     local row = assert(K.rowsById[id],id)
     assert(row.parent == main and not row:Enabled() and row:DisabledReason(),'off prerequisite is explained')
     assert(S.variables['TWICHUI_' .. id], 'unique persisted control registered')
@@ -40,17 +40,20 @@ R.ExecuteRangeDisplay.Status = originalStatus
 local found
 for _,result in ipairs(R.SettingsSearch.Run('health threshold')) do if result.entry.page == 'executeRange' then found = true end end
 assert(found,'global search discovers threshold page')
+C.Set('color','80336699'); C.Set('opacity',60); C.Set('texture','Soft grain');
 C.Set('threshold',35); C.Set('target',false); C.Set('nameplates',false); C.Set('appearance','marker')
 local group = assert(R.TwichConfig.Group('executeRange'))
 assert(group.complete,'sharing group has all defaults and validators')
 local shared = assert(R.TwichConfig.Build({all=true})).groups.executeRange
+assert(shared.executeRange.color == '80336699' and shared.executeRange.opacity == 60 and shared.executeRange.texture == 'Soft grain')
 assert(shared.modules.executeRange == true and shared.executeRange.threshold == 35
     and shared.executeRange.target == false and shared.executeRange.nameplates == false and shared.executeRange.appearance == 'marker')
 local original = R.Profiles.Current()
 assert(R.Profiles.Duplicate('Execute copy'))
-C.Set('threshold',25); assert(C.Get('threshold') == 25)
-assert(R.Profiles.Switch(original)); assert(C.Get('threshold') == 35,'profile settings copied independently')
+C.Set('threshold',25); C.Set('color','ffffffff'); assert(C.Get('threshold') == 25)
+assert(R.Profiles.Switch(original)); assert(C.Get('threshold') == 35 and C.Get('color') == '80336699' and C.Get('opacity') == 60 and C.Get('texture') == 'Soft grain','profile settings copied independently')
 S.ClickReset(reset)
 assert(C.Get('threshold') == 20 and C.Get('target') and C.Get('nameplates') and C.Get('appearance') == 'both')
+assert(C.Get('color') == C.DEFAULTS.color and C.Get('opacity') == 25 and C.Get('texture') == 'solid')
 assert(R:Enabled('executeRange'),'section reset preserves main switch')
 print('PASSED')
