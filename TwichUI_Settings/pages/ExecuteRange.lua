@@ -1,6 +1,7 @@
 local R, K = TwichUI, TwichUI.SettingsKit
 local C, D = R.ExecuteRange, R.ExecuteRangeDisplay
 local function On() return R:Enabled("executeRange") end
+local function Available() return C ~= nil and D ~= nil end
 -- Inline, non-animated sample using the live decoration renderer. Never joins
 -- provider discovery or changes health/settings; hidden pages do no preview work.
 local preview
@@ -43,17 +44,19 @@ local function Preview()
     preview:SetScript("OnSizeChanged", RefreshPreview)
     return preview
 end
-C.Subscribe(RefreshPreview)
-if R.MenuStyle and R.MenuStyle.StatusBars then R.MenuStyle.StatusBars.Subscribe(RefreshPreview) end
-R.Profiles.OnApply("layout", "executeRangePreview", RefreshPreview)
-R.Profiles.OnChange(RefreshPreview)
+if Available() then
+    C.Subscribe(RefreshPreview)
+    if R.MenuStyle and R.MenuStyle.StatusBars then R.MenuStyle.StatusBars.Subscribe(RefreshPreview) end
+    R.Profiles.OnApply("layout", "executeRangePreview", RefreshPreview)
+    R.Profiles.OnChange(RefreshPreview)
+end
 K.Page({
     key = "executeRange", name = "Execute Range", icon = "executeRange", order = 96, group = "addons",
     description = "Mark a health percentage you choose on EllesmereUI's target frame and enemy nameplates.",
     keywords = "execute range health percentage threshold marker active highlight target frame enemy nameplate ellesmereui",
     overview = { label = "Execute Range", tip = "Your own health threshold, independent of class or talents.",
         status = function() return K.OnOff(On()) end },
-    when = function() return C ~= nil and D ~= nil end,
+    when = Available,
     host = Preview, hostAfter = "Appearance preview", hostHeight = 178,
     build = function()
         K.Header("Execute Range", "Choose your own threshold. Keep a threshold marker or active edge, shade the execute zone, or highlight only the remaining active health. Requires EllesmereUI's own target frame or enemy nameplates; other providers receive no overlay.")
