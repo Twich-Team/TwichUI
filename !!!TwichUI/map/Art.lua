@@ -22,6 +22,7 @@ R.MapArt = MA
 
 local TEX = R.PATH .. [[media\textures\]]
 local THIN, WIDE, ROUND = TEX .. "map-feather-thin", TEX .. "map-feather-wide", TEX .. "map-feather-round"
+local RIGHT_SOFT = TEX .. "map-feather-right-soft" -- owned mathematical shape; no game artwork
 local CONT_FADE = { 1.4, 2.4 }     -- zoom (1: the whole world fits) where continents come in over the world
 local ZONE_FADE = { 2.6, 4.5 }     -- ... and the zones' pieces over the continents
 local CITY_FADE = { 0.2, 0.4 }     -- city plan takes over before enlarged zone banners cover its streets
@@ -176,7 +177,7 @@ local function Pieces(id)
             out[#out + 1] = { w = p.w, h = p.h, x = p.x, y = p.y, files = p.files, explored = false, key = key }
         end
     end
-    return out
+    return out, okArt and art or nil
 end
 
 local function Mode()
@@ -187,6 +188,22 @@ end
 -- How a zone's textures look for the unexplored-areas choice and what has been explored.
 local function Dress(z)
     local mode = Mode()
+    -- Only soften a reviewed edge with regional painting beneath it. Hidden
+    -- unexplored neighbors can remove that backing, so retain the native thin
+    -- feather in hide mode. Reuse the same mask object and texture geometry.
+    local file = z.edgePreferred or THIN
+    local reason = z.edgeSourceReason or "native-edge"
+    if mode == "hide" and file ~= THIN then file, reason = THIN, "unexplored-hidden" end
+    if z.edgeUnavailable then file, reason = THIN, "owned-mask-unavailable" end
+    if z.edgeFile ~= file then
+        if z.edgeMask:SetTexture(file, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE") == false and file ~= THIN then
+            z.edgeUnavailable = true
+            file, reason = THIN, "owned-mask-unavailable"
+            z.edgeMask:SetTexture(THIN, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        end
+        z.edgeFile = file
+    end
+    z.edgeFeather, z.edgeFeatherReason = file == RIGHT_SOFT and "right-soft" or "thin", reason
     for _, e in ipairs(z.tex) do
         local unexplored = not e.piece.explored
         local show = not (unexplored and mode == "hide")
@@ -196,12 +213,28 @@ local function Dress(z)
     end
 end
 
+local function ZoneFeather(z, p, pieces, artID)
+    if z.id ~= 1433 then return THIN, "native-edge" end
+    local ok, version, build = pcall(GetBuildInfo)
+    if not ok or version ~= "1.60.1" or tostring(build) ~= "71037" then return THIN, "unreviewed-client" end
+    if artID ~= 2121 or p.art.w ~= 1002 or p.art.h ~= 668 or p.art.tw ~= 256 or p.art.th ~= 256 then
+        return THIN, "unreviewed-art"
+    end
+    for _, piece in ipairs(pieces) do
+        if piece.files and piece.files[1] == 7939758 then return RIGHT_SOFT, "reviewed-source" end
+    end
+    return THIN, "unreviewed-carrier"
+end
+
 local function BuildZone(z)
     local p = Place(z.id)
     if not p then return end
     local mask = Mask(frames.zone, p, THIN)
+    local pieces, artID = Pieces(z.id)
+    z.edgeMask, z.edgeFile = mask, THIN
+    z.edgePreferred, z.edgeSourceReason = ZoneFeather(z, p, pieces, artID)
     z.tex = {}
-    for _, piece in ipairs(Pieces(z.id)) do
+    for _, piece in ipairs(pieces) do
         local sub = piece.explored and 1 or 0
         for _, tex in ipairs(Tiles(frames.zone, p, piece.files, piece.x, piece.y, piece.w, piece.h, sub, true, mask, true)) do
             z.tex[#z.tex + 1] = { tex = tex, piece = piece }
@@ -562,6 +595,7 @@ function MA.Diagnostic()
             end
             out.zoneLayers[#out.zoneLayers + 1] = { mapId = z.id, loaded = z.loaded, built = z.built,
                 alpha = frames.zone:GetAlpha(), level = frames.zone:GetFrameLevel(),
+                edgeFeather = z.edgeFeather or "thin", edgeFeatherReason = z.edgeFeatherReason or "native-edge",
                 exploredTextures = explored, unexploredTextures = unexplored,
                 dimmedTextures = Mode() == "dim" and unexplored or 0,
                 hiddenTextures = Mode() == "hide" and unexplored or 0 }
