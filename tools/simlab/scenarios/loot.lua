@@ -47,8 +47,10 @@ C_TooltipInfo = C_TooltipInfo or {}
 C_TooltipInfo.GetLootRollItem = function(id) local r = rolls[id]; if r then return { lines = { { leftText = ITEMS[r.link].name } } } end end
 C_SkillInfo = C_SkillInfo or {}
 C_SkillInfo.GetNumSkillLines = function() return 2 end
-C_SkillInfo.GetSkillLineInfo = function(i) return ({ { isHeader = true, skillName = "Professions" }, { isHeader = false, skillName = "Alchemy", rank = 150 } })[i] end
-GetItemSubClassInfo = function(class, sub) if class == 9 then return "Alchemy" end end
+C_SkillInfo.GetSkillLineInfo = function(i) return ({ { isHeader = true, name = "Professions" }, { isHeader = false, name = "Alchemy", rank = 150 } })[i] end
+C_Item.GetItemSubClassInfo = function(class, sub)
+    if class == 9 and sub == 6 then return "Alchemy" end
+end
 R.GearHints = R.GearHints or {}
 R.GearHints.Judge = function(link) return judged[link] end
 R.GearHints.Noteworthy = function(j) return j and j.up == true end
@@ -216,7 +218,14 @@ if view == "rules" or view == "cards" or view == "narrow" or view == "builder" o
             Check("interact", "and on again", true, LR.Rule(target.id).enabled)
             if view == "builder" then
                 parts.frame.matchAny:Click()
+                local _, index = LR.AddCondition(target.id, "family")
                 Lab.Settle(0.3)
+                local family = parts.conds[index]
+                Check("display", "the item family condition is visible", "Item family", family.label:GetText())
+                Check("state", "the crate family is selected initially", "waylaid-crates", LR.Rule(target.id).conditions[index].value)
+                family.value.onPick("craftsmans-writs")
+                Lab.Settle(0.3)
+                Check("interact", "the dropdown selects the writ family", "craftsmans-writs", LR.Rule(target.id).conditions[index].value)
             end
             local comp = R.SettingsCompanion
             Check("construct", "the live preview is showing", true, comp.Active() ~= nil and comp.Frame():IsShown())
@@ -227,6 +236,33 @@ if view == "rules" or view == "cards" or view == "narrow" or view == "builder" o
     end)
 end
 
+
+if view == "compactRule" or view == "compactRuleNarrow" then
+    Lab.Step("display-only rule builder", function()
+        local narrow = view == "compactRuleNarrow"
+        TwichUIDB.ui.settingsWindow = { point = "CENTER", relativePoint = "CENTER", x = narrow and 0 or -140, y = 0, w = narrow and 940 or 1080, h = narrow and 740 or 900 }
+        local opened = Lab.Open("lootRules")
+        Check("init", "rule builder opened", true, opened)
+        local _, id = LR.Create("blank"); LR.SetName(id, "Reduce loot clutter"); LR.SetEnabled(id, true)
+        local P = R.LootRulesPage; P.Select(id); Lab.Settle(0.4)
+        local f = P.Parts().frame
+        f.actions.none:Click(); f.displays.collapsed:Click(); Lab.Settle(0.4)
+        Check("interact", "Roll remains No change", "none", LR.Rule(id).action)
+        Check("interact", "Card display is Collapsed", "collapsed", LR.Rule(id).display)
+        Check("state", "display-only rule is complete", nil, LR.Rule(id).incomplete)
+        Check("display", "summary describes presentation", true, (f.barText:GetText() or ""):find("Collapse") ~= nil)
+        f.previewRule:Click(); Lab.Settle(0.3)
+        local pc = C.PreviewCard()
+        Check("state", "preview retains manual choice", true, pc and pc.view.state == "pending" and pc.compact)
+        Check("state", "preview never sends a roll", 0, #rolled)
+        C.PreviewStop(true)
+        if narrow then R.SettingsCompanion.Toggle(R.SettingsUI.View("lootRules")) end
+        R.SettingsUI.RevealFrame(f.displays.collapsed); Lab.Settle(0.3)
+        for _, key in ipairs({ "none", "need", "greed", "pass" }) do
+            Check("display", "rule choice has readable width: " .. key, true, f.actions[key]:GetWidth() >= 80)
+        end
+    end)
+end
 
 if view == "place" then
     Lab.Step("placement", function()
@@ -308,6 +344,291 @@ if view == "preview" then
         Check("display", "named after the rule", true, (card.line3:GetText() or ""):find("Greed on green gear", 1, true) ~= nil)
         Check("state", "and still nothing was rolled", 0, #rolled)
         Lab.Settle(0.2)
+    end)
+end
+
+-- Isolated sweep diagnostic: real runtime TGA/UV/blend at gameplay scale.
+-- Four backgrounds and full/half alpha; old scissor versus a feathered endpoint.
+if view == "sweepLab" then
+    Lab.Step("isolated sweep transparency", function()
+        local V = R.LootVictory
+        Check("construct", "production preview loads textures", true, V.Preview("need", 4))
+        V.PreviewAt(0.70)
+        local f = V.PreviewCard().victory
+        local board = CreateFrame("Frame", nil, UIParent); board:SetSize(840, 650)
+        board:SetPoint("CENTER"); board:SetFrameStrata("TOOLTIP"); board:EnableMouse(false)
+        local labels = { "Black", "Dark leather", "Mid-gray", "Checkerboard" }
+        for column = 1, 4 do
+            local panel = CreateFrame("Frame", nil, board); panel:SetSize(200, 650); panel:SetPoint("TOPLEFT", (column - 1) * 210, 0)
+            local bg = panel:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints()
+            bg:SetColorTexture(column == 3 and 0.35 or 0, column == 3 and 0.35 or 0, column == 3 and 0.35 or 0, 1)
+            if column == 2 then
+                bg:SetTexture(R.PATH .. [[media\loot\victory\loot_won_frame.tga]]); bg:SetTexCoord(0.12, 0.88, 0.25, 0.65)
+            elseif column == 4 then
+                for y = 0, 32 do for x = 0, 9 do
+                    local tile = panel:CreateTexture(nil, "BACKGROUND"); tile:SetSize(20, 20); tile:SetPoint("TOPLEFT", x * 20, -y * 20)
+                    local c = (x + y) % 2 == 0 and 0.24 or 0.48; tile:SetColorTexture(c, c, c, 1)
+                end end
+            end
+            local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal"); title:SetPoint("TOP", 0, -12); title:SetText(labels[column])
+            for row = 1, 4 do
+                local host = CreateFrame("Frame", nil, panel); host:SetSize(142, 46 * 384 / 460)
+                host:SetPoint("TOPLEFT", 14, -75 - (row - 1) * 145); host:SetClipsChildren(row == 3)
+                local text = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"); text:SetPoint("TOPLEFT", 8, -45 - (row - 1) * 145)
+                text:SetText(({ "1.00 / free edges", "0.50 / free edges", "Old scissor / at exit", "Free edges / same exit" })[row])
+                for _, name in ipairs({ "sweepTail", "sweepHaze", "sweepCore" }) do
+                    local source = f[name]; local t = host:CreateTexture(nil, "ARTWORK")
+                    t:SetTexture(source:GetTexture()); t:SetTexCoord(source:GetTexCoord()); t:SetBlendMode(source:GetBlendMode())
+                    t:SetSize(source:GetWidth() * 384 / 460, source:GetHeight() * 384 / 460)
+                    t:SetPoint("CENTER", host, "TOPLEFT", (row >= 3 and 130 or 80) - (name == "sweepTail" and 48 * 384 / 460 or name == "sweepHaze" and 16 * 384 / 460 or 0), -13 * 384 / 460)
+                    t:SetAlpha((row == 2 and 0.5 or 1) * (name == "sweepTail" and 0.65 or name == "sweepHaze" and 0.60 or 1))
+                end
+            end
+        end
+        V.PreviewStop()
+        Check("display", "four diagnostic backgrounds constructed", true, board:IsShown())
+        Check("state", "diagnostic leaves real wins untouched", 0, V.Count())
+    end)
+end
+
+if view == "miniActive" or view == "miniAuto" or view == "compactMixed" or view:find("^miniLong") or view == "miniMockup" or view == "miniStack" then
+    Lab.Step("compact rule-driven cards", function()
+        LR.Set("maxCards", 4); LR.Set("victorySound", false)
+        if view:find("80") then LR.Set("scale", 80) elseif view:find("120") then LR.Set("scale", 120) end
+        if view:find("^miniLong") then
+            ITEMS["item:20001"].name = "Stormrend Titanblade of the Unbroken Oath of the Eternal Watchers"
+            judged["item:20001"] = { up = true }
+        end
+        local ok, rule = LR.Create("blank")
+        Check("init", "display rule created", true, ok)
+        local link = view == "miniMockup" and "item:20004" or "item:20001"
+        if view == "miniMockup" then judged[link] = { up = true } end
+        LR.SetCondition(rule, 1, { value = ITEMS[link].quality }); LR.SetDisplay(rule, "collapsed")
+        if view == "miniAuto" then LR.SetAction(rule, "greed"); LR.Set("auto", true); LR.SetDelay(rule, 10) end
+        LR.SetEnabled(rule, true)
+        local id = Start(link, 30); local roll = Ro.Find(id); local card = C.Card(roll.key)
+        Check("display", "rule chooses Mini", "collapsed", card.view.displayMode)
+        Check("geometry", "Mini uses real compact height", C.MINI_HEIGHT, card:GetHeight())
+        Check("state", "display never rolls immediately", 0, #rolled)
+        Check("state", "roll timer is retained", true, card.timer:IsShown() and card.time:IsShown())
+        local deadline, choice = roll.deadline, roll.choice
+        if view ~= "miniAuto" then
+            for _, key in ipairs({ "need", "greed", "pass" }) do Check("display", "manual choice remains visible: " .. key, true, card.buttons[key]:IsShown()) end
+            card.toggle:Click()
+            Check("geometry", "manual expand restores full height", true, card:GetHeight() > 120)
+            card.toggle:Click()
+            Check("state", "manual collapse is per instance", "collapsed", roll.manualDisplay)
+            Check("state", "toggle preserves deadline", deadline, roll.deadline)
+            Check("state", "toggle preserves roll choice", choice, roll.choice)
+        else Check("state", "Mini auto uses the existing countdown", "scheduled", roll.state) end
+        if view == "compactMixed" then
+            Start("item:20003", 30)
+            ITEMS["item:20006"] = { id = 20006, name = "Arcanist's Wristguards", quality = 4, class = 4, sub = 1,
+                loc = "INVTYPE_WRIST", bind = 1, icon = "Interface\\Icons\\INV_Bracer_07", type = "Armor", subType = "Cloth" }
+            local miniWin = Start("item:20006", 30)
+            Ro.Submit(Ro.Find(miniWin), "need", "player")
+            A_Admin.FireEvent("LOOT_ITEM_ROLL_WON", "item:20006", 1, 1, 87, false)
+            local fullWin = Start("item:20004", 30)
+            Ro.Submit(Ro.Find(fullWin), "greed", "player")
+            A_Admin.FireEvent("LOOT_ITEM_ROLL_WON", "item:20004", 1, 2, 76, false)
+            Lab.Settle(1.9)
+            Check("state", "both victories coexist", 2, R.LootVictory.Count())
+            Check("state", "mixed stack keeps four slots", 4, C.CardCount())
+            local heights, previous = {}, 0
+            for _, entry in ipairs(R.LootVictory.Entries()) do heights[entry.displayMode] = entry.card:GetHeight() end
+            Check("geometry", "Mini victory saves actual space", true, heights.collapsed < 70 and heights.expanded > 180)
+        end
+        if view == "miniMockup" then
+            Lab.Settle(21.5)
+            Check("display", "approved item name and rarity fit", true,
+                card.name:GetText() == ITEMS[link].name and card.miniQuality.text:GetText() == "Uncommon")
+            Check("display", "upgrade is present", true, card.miniUpgrade:IsShown())
+        elseif view == "miniStack" then
+            ITEMS["item:20005"].quality = 5
+            for _, item in ipairs({ "item:20003", "item:20004", "item:20005" }) do
+                local other = Ro.Find(Start(item, 30))
+                Ro.SetDisplay(other, "collapsed")
+                Check("geometry", "different rarity uses the same Mini rows", true, Frame(other):GetHeight() == C.MINI_HEIGHT)
+            end
+            Check("geometry", "four Mini cards coexist", 4, C.CardCount())
+        end
+        if view:find("^miniLong") then
+            Lab.Settle(25)
+            Check("state", "countdown remains authoritative", true, Ro.Remaining(roll) < 6 and Ro.Remaining(roll) > 0)
+            Check("geometry", "item name has room before the upgrade badge", true, card.name:GetWidth() >= 210 and card.miniUpgrade:IsShown())
+        end
+        Lab.Settle(0.2)
+        Check("geometry", "track spans the bottom interior", true,
+            card.timer:GetWidth() >= card:GetWidth() * 0.90
+                and card.timer:GetTop() < card.time:GetBottom() and card.timer:GetBottom() > card:GetBottom())
+        if view ~= "miniAuto" then
+            local need, greed, pass = card.buttons.need, card.buttons.greed, card.buttons.pass
+            Check("geometry", "equal action pills clear the countdown", true,
+                need:GetWidth() == greed:GetWidth() and greed:GetWidth() == pass:GetWidth()
+                    and pass:GetRight() < card.time:GetLeft())
+        end
+    end)
+end
+
+if view == "dropdown" or view == "dropdownScaled" then
+    Lab.Step("scrolled Loot Rolls dropdown", function()
+        Check("init", "Loot Rolls settings opens", true, Lab.Open("lootRolls"))
+        local UI, Wg = R.SettingsUI, R.SettingsWidgets
+        if view == "dropdownScaled" then UI.Frame():SetScale(0.75) end
+        Lab.Reveal("lootRolls", "lootRollsVictoryIntensity"); Lab.Settle(0.2)
+        local control = Lab.Row("lootRolls", "lootRollsVictoryIntensity").control
+        local parent, scrolled = control:GetParent(), false
+        while parent do
+            if parent:IsObjectType("ScrollFrame") and parent:GetVerticalScroll() > 0 then scrolled = true end
+            parent = parent:GetParent()
+        end
+        Check("state", "test owner is on a scrolled page", true, scrolled)
+        Lab.EmulateNativeScrollRect(control)
+        control:OpenMenu(); Lab.Settle(0.1)
+        local menu = TwichUISettingsMenu
+        Check("interact", "menu opens for the clicked dropdown", control, menu.owner)
+        local delta = math.abs(menu:GetTop() * menu:GetEffectiveScale() - control:GetBottom() * control:GetEffectiveScale())
+        Check("geometry", "menu touches the visible control", true, delta < 4)
+        for _, row in ipairs(menu.rows) do if row.choice and row.choice.value == "full" then row:Click(); break end end
+        Check("state", "selection still uses the loot setting", "full", LR.Get("victoryIntensity"))
+        Check("interact", "selection dismisses popup", false, Wg.MenuShown())
+        control:OpenMenu(); Lab.Settle(0.1)
+        Check("state", "reopened menu retains its owner", control, menu.owner)
+    end)
+end
+
+if view == "victorySettings" then
+    Lab.Step("victory preview from settings", function()
+        TwichUIDB.modules.lootRolls = false; LR.Refresh()
+        local ok = Lab.Open("lootRolls")
+        Check("init", "loot settings opens while disabled", true, ok)
+        local button
+        for _, row in ipairs(R.SettingsKit.pages.lootRolls.rows) do
+            if row:GetName() == "Preview victory card" then button = row end
+        end
+        Check("construct", "victory preview row exists", true, button ~= nil)
+        if not button then return end
+        Lab.Reveal("lootRolls", button.id)
+        Lab.Settle(0.3)
+        Lab.Row("lootRolls", button.id).control:Click()
+        Lab.Settle(0.5)
+        local card = R.LootVictory.PreviewCard()
+        Check("interact", "settings preview shows a Need victory", "need", card and card.view and card.view.choice)
+        Lab.Reveal("lootRolls", "lootRollsVictoryPreviewChoice")
+        Lab.Settle(0.2)
+        local picked = Lab.PickChoice(Lab.Row("lootRolls", "lootRollsVictoryPreviewChoice"), "greed")
+        Check("interact", "preview roll selector chooses Greed", true, picked)
+        Lab.Reveal("lootRolls", "lootRollsVictoryPreviewQuality")
+        Lab.Settle(0.2)
+        local qualityPicked = Lab.PickChoice(Lab.Row("lootRolls", "lootRollsVictoryPreviewQuality"), 5)
+        Check("interact", "preview quality selector chooses Legendary", true, qualityPicked)
+        Lab.Reveal("lootRolls", button.id)
+        Lab.Settle(0.2)
+        Lab.Row("lootRolls", button.id).control:Click()
+        Lab.Settle(R.LootVictory.MOTION_END + 0.05)
+        Check("display", "preview quality matches the selected sample", 5, card.view.quality)
+        Check("display", "sample tooltip has the selected quality", "Shoulder · Legendary", card.view.sampleLines[1])
+        Check("interact", "next preview shows a Greed victory", "greed", card.view.choice)
+        Check("state", "preview creates no real result or roll", 0, #rolled + R.LootVictory.Count())
+        Check("state", "preview reaches static rest", nil, card.victory:GetScript("OnUpdate"))
+    end)
+end
+
+if view:find("^victory") and view ~= "victorySettings" and view ~= "victoryReplay" and not view:find("^victoryPose") then
+    Lab.Step("approved victory artwork", function()
+        local V = R.LootVictory
+        LR.Set("maxCards", 4)
+        LR.Set("victoryIntensity", view == "victoryOff" and "off" or "subtle")
+        LR.Set("victorySound", false)
+        local link = view == "victoryGreed" and "item:20004" or "item:20001"
+        if view == "victoryScaled" then LR.Set("scale", 75) end
+        local choice = view == "victoryGreed" and "greed" or "need"
+        local id = Start(link, 30)
+        local roll = Ro.Find(id)
+        Ro.Submit(roll, choice, "player")
+        local old = C.Card(roll.key)
+        Check("init", "native win relay available", true, V.Listening())
+        A_Admin.FireEvent("LOOT_ITEM_ROLL_WON", link, 1, choice == "greed" and 2 or 1, 87, false)
+        local entry = V.Entries()[1]
+        Check("state", "confirmed event accepted", 1, V.Count())
+        Check("construct", "existing card reused", old, entry and entry.card)
+        local seconds = ({ victoryResolve = 0.1, victoryReveal = 0.3, victorySheen = 0.6, victoryParticles = 0.95,
+            victoryStatic = 1.95, victoryOff = 1.95, victoryFade = entry.total - 0.15, victoryDone = entry.total + 0.15 })[view] or 1.85
+        Lab.Settle(seconds)
+        if view == "victoryDone" then
+            Check("state", "victory completed", 0, V.Count())
+            Check("state", "no decorative updater remains", nil, old.victory:GetScript("OnUpdate"))
+        else
+            Check("display", "title is dynamic", "YOU WON!", old.victory.title:GetText())
+            Check("display", "redundant footer text is absent", nil, old.victory.footer)
+            if view == "victoryStatic" or view == "victoryOff" then
+                Check("state", "no per-frame work at rest", nil, old.victory:GetScript("OnUpdate"))
+            end
+        end
+    end)
+end
+
+-- Quick replay/interruption drives actual clocks and the one existing pool.
+if view == "victoryReplay" then
+    Lab.Step("rapid lighting previews", function()
+        local V = R.LootVictory
+        LR.Set("victorySound", false); LR.Set("victoryIntensity", "full")
+        Check("construct", "initial rich preview starts", true, V.Preview("need", 4))
+        Lab.Settle(0.95)
+        local card, before = V.PreviewCard(), V.PoolSize()
+        Check("display", "active preview has warm light", true, card.victory.headerHaze:GetAlpha() > 0)
+        Check("interact", "Greed replay interrupts cleanly", true, V.Preview("greed", 5))
+        Check("state", "replay resets bloom", 0, card.victory.iconBloom:GetAlpha())
+        Check("state", "replay resets glint", 0, card.victory.arrivalGlint:GetAlpha())
+        for _, particle in ipairs(card.victory.particles) do Check("state", "replay resets particle", 0, particle:GetAlpha()) end
+        Lab.Settle(1.90)
+        Check("state", "no decorative updater at rest", nil, card.victory:GetScript("OnUpdate"))
+        Check("state", "no new pool on replay", before, V.PoolSize())
+        Check("state", "no real win created", 0, V.Count())
+        V.PreviewStop()
+        Check("state", "stopped preview is hidden", false, card.victory:IsShown())
+        Check("state", "stopped preview cancels timer", nil, card.victory.timer)
+    end)
+end
+
+-- Paused poses use the production painter on the exact reusable preview card.
+-- The lifecycle scenarios above separately drive the real OnUpdate/timer path.
+if view:find("^victoryPose") then
+    Lab.Step("production animation pose", function()
+        local V = R.LootVictory
+        LR.Set("x", 0); LR.Set("y", 180)
+        LR.Set("victorySound", false)
+        LR.Set("victoryIntensity", view:find("Off") and "off" or view:find("Full") and "full" or "subtle")
+        if view:find("Scaled") then LR.Set("scale", 75) elseif view:find("Scale80") then LR.Set("scale", 80) elseif view:find("Scale120") then LR.Set("scale", 120) end
+        local seconds = tonumber(view:match("(%d+)$")) / 100
+        local quality = view:find("Legendary") and 5 or view:find("Epic") and 4 or view:find("Rare") and 3 or 2
+        local sample = { upgrade = not view:find("NoUpgrade") }
+        if view:find("Mini") then sample.display = "collapsed" end
+        if view:find("Long") then sample.name = "Stormrend Titanblade of the Unbroken Oath of the Eternal Watchers" end
+        Check("construct", "production preview starts", true, V.Preview(view:find("Greed") and "greed" or "need", quality, sample))
+        Check("interact", "preview can seek a synthetic pose", true, V.PreviewAt(seconds))
+        local f = V.PreviewCard().victory
+        Check("state", "paused capture has no updater", nil, f:GetScript("OnUpdate"))
+        Check("display", "no redundant footer label on the card", nil, f.footer)
+        Check("display", "upgrade indicator matches fixture", sample.upgrade, f.compact and f.upgradeIcon:IsShown() or f.badge:IsShown())
+        Check("display", "sample has requested quality", quality, f.entry.quality)
+        Check("display", "lighting is below title", true, f.atmosphere:GetFrameLevel() < f.header:GetFrameLevel()
+            and f.railCanvas:GetFrameLevel() < f.header:GetFrameLevel())
+        if view:find("Off") then
+            local clear = f.atmosphere:GetAlpha() == 0 and f.sweepCore:GetAlpha() == 0 and f.sweepTail:GetAlpha() == 0 and f.arrivalGlint:GetAlpha() == 0
+            for _, particle in ipairs(f.particles) do clear = clear and particle:GetAlpha() == 0 end
+            Check("display", "Off has no supplemental effects", true, clear)
+        end
+        if seconds >= V.MOTION_END then
+            local clear = f.headerBloom:GetAlpha() == 0 and f.emblemBurst:GetAlpha() == 0 and f.radiance:GetAlpha() == 0 and f.iconBloom:GetAlpha() == 0
+                and f.sweepCore:GetAlpha() == 0 and f.sweepTail:GetAlpha() == 0 and f.arrivalGlint:GetAlpha() == 0
+            for _, particle in ipairs(f.particles) do clear = clear and particle:GetAlpha() == 0 end
+            Check("state", "rest has no strong light or particles", true, clear)
+        end
+        if seconds >= V.MOTION_END and seconds < f.entry.total - 0.30 then
+            Check("display", "finished header is fully opaque", 1, f.header:GetAlpha())
+        end
+        Lab.Settle(0.1)
     end)
 end
 

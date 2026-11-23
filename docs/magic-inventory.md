@@ -23,12 +23,25 @@ is involved. Layout, evidence, reusable scenario commands and client limits are 
 
 ## What it does
 
+In the rule builder, choose **Categories → All Waylaid crates** to match the Forever crate family in one rule,
+including unidentified crates, identified variants and sealed turn-ins. You can choose it with empty bags.
+The category uses the [Forever crate IDs](https://eternadex.com/en/versorgungsgueter/) and
+[sealed crate IDs](https://forevercraft.ru/database/items/misc/junk/3/). Other rule filters, exclusions and
+destination protections still apply.
+
+Choose **Categories → All Craftsman's Writs** for the Forever trade-faction crafting orders and sealed writ envelopes.
+This category also works with empty bags and follows the same filters and protections.
+[Named writ catalog](https://aidvir.github.io/wow-forever-favor/writs.html) ·
+[Sealed writ records](https://daybreakforever.com/discoveries/items)
+
+You can save up to 64 rules per profile. The rule editor keeps Delete, Duplicate, Cancel and Save visible while you scroll.
+
 The player makes rules: which items (categories as the game files them, quality, equipment or not, binding, and lists
 of items to include or never include), what happens to them (Send by mail, your bank, a guild bank tab, Keep in bags,
 Never transfer), and how many of each to keep in the bags. A bank or guild bank rule also says which way: **Deposit extras**
 (above the keep amount), **Withdraw to top up** (take whole stacks out until the bags hold the keep amount, never more) or
 **Balance both ways** ("Withdrawing", below). With the feature on, opening a mailbox, the bank or
-a guild bank shows a small **Magic Inventory · N stacks** button just above that window's top right corner, wearing the settings dialog's crafted button look (with EllesmereUI's Blizzard skin on it is instead embedded in the window's title strip, left of the close button, and belongs to the window; the guild bank has its
+a guild bank shows a small **Magic Inventory · N stacks** button just above that window's top right corner, wearing the settings dialog's crafted button look (with EllesmereUI it belongs to the window: centred under the mailbox's title, or in the header of EllesmereUI Bags' own bank window (`EUI_BankFrame`); the guild bank has its
 own panel instead: "The guild bank at the bank window"). Clicking it opens the review. Nothing moves until the player presses an action in the review:
 
 - **Mail:** "Prepare mail 1 of 2 to Bankalt" attaches up to 12 stacks in the game's Send Mail window (where the player
@@ -36,6 +49,8 @@ own panel instead: "The guild bank at the bank window"). Clicking it opens the r
 - **Bank:** **Run rules** carries out the entire review with one click: deposits first, then withdrawals. A progress
   bar counts only moves confirmed by the game; **Stop** ends the batch. **Rule actions** offers a temporary **Deposit all**
   or **Withdraw all** review for one bank rule, followed by its primary action. Nothing moves when selecting an action.
+  **Auto-sort** defaults to on and uses the game's sort for your bags and character bank after a completed
+  transfer with confirmed moves. The account-wide switch remembers Off across reloads. Stopping the run skips sorting.
 - **Guild bank:** the panel at the bank window (Deposit, Organize bank, Arrangement..., and Withdraw with a withdrawing rule), below.
 
 Off by default (`modules.magicInventory`, only an explicit `true` is on). Opening an interface never opens the review,

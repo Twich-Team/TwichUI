@@ -19,8 +19,9 @@
 -- So a rule copied to another character (or another profile, or a backup restored) never sends to a recipient that
 -- character didn't choose: until one is set there, the rule says it needs one and stays off.
 --
--- Rule: { id, name, enabled, kind = "mail" | "bank" | "guild" | "keep" | "never", dest = destId (mail, guild),
---         cats = { "7:5", "7", ... } (an item class, or class:subclass, as the game files it),
+-- Rule: { id, name, enabled, artwork = optional shared kind/id reference (settings identity only),
+--         kind = "mail" | "bank" | "guild" | "keep" | "never", dest = destId (mail, guild),
+--         cats = { "7:5", "7", ... } (game classes/subclasses and supported custom categories),
 --         qualities = { [0..5] = true } (none: any), equip = "any" | "equipment" | "other",
 --         bind = "any" | "boe" | "nobind", include = { [itemID] = true }, exclude = { [itemID] = true },
 --         keep = 0..9999 (how many of EACH matching item stays in the bags; 0: none; for a rule that withdraws, the
@@ -41,7 +42,7 @@ local R = TwichUI
 local MI = {}
 R.MagicInventory = MI
 
-MI.MAX_RULES = 40
+MI.MAX_RULES = 64
 MI.MAX_DESTS = 12
 MI.MAX_IDS = 100        -- items in a rule's "Also include" or "Never include" list
 MI.MAX_NEVER = 200
@@ -140,6 +141,16 @@ local function AccountStore(create)
     return type(TwichUIDB.magicInventory) == "table" and TwichUIDB.magicInventory or nil
 end
 
+function MI.BankAutoSort()
+    local account = AccountStore()
+    return not account or account.bankAutoSort ~= false
+end
+
+function MI.SetBankAutoSort(on)
+    local account = AccountStore(true)
+    if account then account.bankAutoSort = on == true end
+end
+
 local function Sub(t, key, create)
     if not t then return nil end
     if create and type(t[key]) ~= "table" then t[key] = {} end
@@ -182,13 +193,27 @@ local function CleanSet(t, max, valid)
     return out
 end
 
+MI.WAYLAID_CATEGORY = "waylaid-crates"
+MI.WRITS_CATEGORY = "craftsmans-writs"
+
 local function ValidCat(v)
+    if v == MI.WAYLAID_CATEGORY or v == MI.WRITS_CATEGORY then return true end
     if type(v) ~= "string" then return false end
     local c, s = v:match("^(%d+):(%d+)$")
     if c then return Whole(tonumber(c), 0, 99) and Whole(tonumber(s), 0, 999) end
     return v:match("^%d+$") ~= nil and Whole(tonumber(v), 0, 99)
 end
 MI.ValidCat = ValidCat
+
+-- Optional rule identity only. Automatic is represented by absence; unresolved but
+-- structurally valid refs survive cleaning, copying and whole-list writes.
+local function CleanArtwork(ref)
+    if ref == nil then return nil, true end
+    local checked = R.Artwork and R.Artwork.Check(ref)
+    if not checked then return nil, false end
+    return checked.kind ~= "automatic" and checked or nil, true
+end
+local ARTWORK_ERROR = "Choose a valid rule icon, or use the automatic icon."
 
 local function CleanRule(r)
     if type(r) ~= "table" or not IdText(r.id) then return nil end
@@ -207,6 +232,7 @@ local function CleanRule(r)
         stack = kind == "guild" and Whole(r.stack, 0, MI.MAX_STACK) and r.stack or 0,
         cats = {},
     }
+    out.artwork = CleanArtwork(r.artwork)
     if MI.NEEDS_DEST[kind] and IdText(r.dest) then out.dest = r.dest end
     if MI.HAS_FLOW[kind] then out.flow = MI.FLOW_LABEL[r.flow] and r.flow or "deposit" end
     if kind == "guild" and r.design == true then
@@ -626,6 +652,9 @@ function MI.ReplaceRules(list)
     for _, r in ipairs(list) do if type(r) == "table" and r.id then taken[r.id] = true end end
     local out = {}
     for i, r in ipairs(list) do
+        if type(r) ~= "table" then return false, "A rule can't be saved." end
+        local _, validArt = CleanArtwork(r.artwork)
+        if not validArt then return false, ARTWORK_ERROR end
         local copy = {}
         for k, v in pairs(r) do copy[k] = v end
         if not copy.id then copy.id = NewId("r", taken); taken[copy.id] = true end
@@ -640,6 +669,8 @@ end
 -- Returns the id, or nil and a sentence.
 function MI.SaveRule(rule)
     if type(rule) ~= "table" then return nil, "Nothing to save." end
+    local _, validArt = CleanArtwork(rule.artwork)
+    if not validArt then return nil, ARTWORK_ERROR end
     local list = MI.Rules()
     local taken, at = {}, nil
     for i, r in ipairs(list) do
@@ -777,6 +808,8 @@ end
 -- from (nil for a new rule): if it is gone, nothing is saved. Returns the rule id and the plan, or nil and a sentence.
 function MI.SaveRuleDraft(rule, draft, expectId)
     if type(rule) ~= "table" then return nil, "Nothing to save." end
+    local _, validArt = CleanArtwork(rule.artwork)
+    if not validArt then return nil, ARTWORK_ERROR end
     local t = ProfileStore(true)
     if not t then return nil, "Your settings aren't available right now." end
     local list = MI.Rules()

@@ -114,6 +114,12 @@ local function Pump()
 end
 c.C_Item.GetItemInfo = function(id) return g.names[id], nil, 1, nil, nil, "Trade Goods", "Herb",20,"",5000+id,10,7,0,0 end
 g.bags[10],g.bags[11]=5,0
+-- Equipped copies in the native aggregate must not appear in the bag filter.
+g.equipped={ [10]=1, [11]=1 }
+c.C_Item.GetItemCount=function(id) return (g.bags[id] or 0)+(g.equipped[id] or 0) end
+c.C_Container={GetContainerNumSlots=function(bag) return bag==0 and (g.bags[10] or 0)>0 and 1 or 0 end,
+  GetContainerItemInfo=function() return {itemID=10,stackCount=g.bags[10],isBound=false} end}
+
 W.Session.AllRecipes=function() return { {id=1,name="Potion",outItem=11,mats={{item=10,qty=1}}} } end
 W.Window.Show()
 Check(W.Window.Frame().tabAdvisor,"first-class sidebar control")
@@ -123,8 +129,17 @@ Same(W.Window.Mode(),"advisor"); Same(p.result.item,10); Same(p.result.action,"v
 Check(p.detail.empty:IsShown()==false,"detail shown")
 Same(#p.list.data,1,"first use shows carried items"); Same(p.source.text:GetText(),"In bags")
 Same(W.AdvisorData.Source(),"bags")
+Same(p.list.data[1].count,5,"bag count excludes the equipped copy")
+Check(p.detail.type:GetText():find("5 in bags",1,true),"detail displays bag-only count")
 p.source:GetScript("OnClick")(p.source)
 Same(#p.list.data,1,"opening source menu does not refresh results")
+-- Bag updates discard prior discovery flags even while the native total stays positive.
+g.bags[10]=0
+W.Window.Frame():GetScript("OnEvent")(W.Window.Frame(),"BAG_UPDATE_DELAYED"); Pump()
+Same(#p.list.data,0,"equipped-only copies do not retain a stale bag row")
+g.bags[10]=5
+W.Window.Frame():GetScript("OnEvent")(W.Window.Frame(),"BAG_UPDATE_DELAYED"); Pump()
+Same(#p.list.data,1,"bag copy reappears after bag update")
 Check(opened.entries[1].selected(),"current source marked")
 opened:Close(); Same(W.AdvisorData.Source(),"bags","dismissal preserves preference")
 Choose(p.source,"All known items"); Pump()

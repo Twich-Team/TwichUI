@@ -81,7 +81,26 @@ end
 ---------------------------------------------------------------------------
 -- Time
 ---------------------------------------------------------------------------
--- Seconds left to choose: the game's own clock when it answers, else the one this record started with. nil when there is no deadline.
+-- Presentation belongs to this unique roll key, never to an item ID or card slot.
+function Ro.DisplayMode(roll)
+    return roll.manualDisplay or roll.displayMode or "expanded"
+end
+function Ro.RefreshDisplay(roll, notify)
+    local decision = R.LootRules.DecideDisplay(LR.Active(), roll.obs or {})
+    local mode = decision.status == "match" and decision.rule.display or "expanded"
+    local ruleId = decision.status == "match" and decision.rule.id or nil
+    if roll.displayMode == mode and roll.displayRuleId == ruleId then return end
+    roll.displayMode, roll.displayRuleId = mode, ruleId
+    if notify then Tell("updated", roll) end
+end
+function Ro.SetDisplay(roll, mode)
+    if not roll or Ro.ByKey(roll.key) ~= roll or (mode ~= "collapsed" and mode ~= "expanded") then return false end
+    roll.manualDisplay = mode
+    Tell("updated", roll)
+    return true
+end
+
+-- Seconds left to choose: the game's clock when available, else this record's deadline.
 function Ro.Remaining(roll)
     if not (roll and (roll.state == "pending" or roll.state == "scheduled")) then return 0 end
     local ms
@@ -99,7 +118,7 @@ end
 ---------------------------------------------------------------------------
 local professionNames, professionAt = nil, -100
 
--- The names of the player's professions (the game's own words, as GetItemSubClassInfo says them for recipes), read at most every 20 seconds.
+-- Cache the localized skill names used to match C_Item recipe subclasses.
 local function Professions()
     local t = Now()
     if professionNames and t - professionAt < 20 then return professionNames end
@@ -110,7 +129,7 @@ local function Professions()
             for i = 1, n do
                 local info = SI.GetSkillLineInfo(i)
                 if type(info) == "table" and Plain(info.isHeader) ~= true then
-                    local name = Plain(info.skillName)
+                    local name = Plain(info.name)
                     if type(name) == "string" and name ~= "" then names[name] = true end
                 end
             end
@@ -148,9 +167,11 @@ local function RecipeFacts(roll, obs, lines)
     local facts = { isRecipe = true }
     local names = Professions()
     local sub = obs.subClassID
-    if names and type(sub) == "number" and GetItemSubClassInfo then
-        local ok, name = Call(GetItemSubClassInfo, 9, sub)
-        if ok and type(name) == "string" and name ~= "" then facts.profession = names[name] == true end
+    local subclassName = C_Item and C_Item.GetItemSubClassInfo or GetItemSubClassInfo
+    if names and type(sub) == "number" then
+        local ok, name = Call(subclassName, 9, sub)
+        name = ok and Plain(name)
+        if type(name) == "string" and name ~= "" then facts.profession = names[name] == true end
     end
     if lines then
         facts.known = HasKnownLine(lines)
@@ -266,6 +287,7 @@ function Ro.Observe(roll)
     roll.upgrade = obs.upgrade
     obs.context = ContextFacts()
     obs.ready = roll.itemKnown == true
+    Ro.RefreshDisplay(roll)
     return obs.ready
 end
 
@@ -274,7 +296,7 @@ end
 ---------------------------------------------------------------------------
 -- Whether a choice can be sent now, and if not, why (words for a tooltip).
 function Ro.CanChoose(roll, choice)
-    if not roll or not IsLive(roll) then return false, "This roll is over." end
+    if not roll or roll.victoryOwned or not IsLive(roll) then return false, "This roll is over." end
     if roll.state == "submitted" then return false, "You have already chosen." end
     if choice == "need" then
         if not roll.canNeed then
@@ -644,3 +666,11 @@ end
 
 function Ro.Listening() return frame ~= nil and active end
 function Ro.EventCount() local n = 0 if active then n = #EVENTS end return n end
+
+-- Display-only rules work with automation off/paused and never touch a countdown.
+LR.Subscribe(function(what)
+    if what ~= "rules" and what ~= "profile" then return end
+    for _, roll in ipairs({ unpack(rolls) }) do
+        if IsLive(roll) then Ro.RefreshDisplay(roll, true) end
+    end
+end)

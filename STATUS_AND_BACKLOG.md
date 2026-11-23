@@ -2,6 +2,10 @@
 
 One short entry per feature that has a continuing handoff. Details live in the feature's doc; keep this current instead of adding session notes.
 
+For audit priorities, uncommitted ideas and product planning, see the
+[product roadmap and idea bank](docs/product-roadmap.md). This file records technical
+handoffs, not automatic authorization to implement roadmap candidates.
+
 ## Workshop Opportunities: pricing realism and fees (2026-11-20, claude/opportunities-completion)
 
 - Opportunities, the Overview and the queue estimate use the planning estimate (`Estimate.lua`, `Fees.lua`): listings walked for the quantity, vendor reagents, the competing sell price capped near Market Value, the vendor floor, the assumed auction house cut (5% / 15%, Settings can turn it off), the deposit from the player's own postings, confidence, the usual profit, cooldowns, two list toggles. Ledger deposits now record their duration.

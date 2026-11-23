@@ -1,6 +1,6 @@
 -- TwichUI: Magic Inventory, reading items
 -- What an item is (the game's class, subclass, quality, binding and equip slot), the categories a rule can choose
--- (the game's own names), whether a rule matches an item, and the carried bags as a list of stacks with what each
+-- (game and custom groups), whether a rule matches an item, and the carried bags as a list of stacks with what each
 -- stack is (bound, locked, a quest item, conjured, in an equipment set). Reads only: nothing here moves, picks up or
 -- uses anything. What an item is doesn't change in a session, so it is remembered by item ID (bounded); what a stack
 -- is (bound, locked) is read each time.
@@ -14,6 +14,7 @@
 local R = TwichUI
 local MI = R.MagicInventory
 local Plain = MI.Plain
+local Families = R.ForeverItemFamilies
 
 local MAX_CACHE = 512
 
@@ -64,7 +65,7 @@ function MI.ItemFacts(id)
 end
 
 ---------------------------------------------------------------------------
--- Categories: "class" or "class:subclass", under the game's own names
+-- Categories: game classes/subclasses and Magic Inventory groups
 ---------------------------------------------------------------------------
 function MI.CategoryOf(itemID)
     if not (C_Item and C_Item.GetItemInfoInstant) then return nil end
@@ -75,8 +76,23 @@ function MI.CategoryOf(itemID)
     return key, MI.CategoryName(key)
 end
 
+local CUSTOM_CATEGORIES = {
+    {
+        key = MI.WAYLAID_CATEGORY, label = "All Waylaid crates", group = "Magic Inventory",
+        help = "Matches unidentified, identified and sealed Waylaid crates. Other filters and transfer protections still apply.",
+    },
+    {
+        key = MI.WRITS_CATEGORY, label = "All Craftsman's Writs", group = "Magic Inventory",
+        search = "crafting writs",
+        help = "Matches sealed writ envelopes and named crafting orders. Other filters and transfer protections still apply.",
+    },
+}
+
 function MI.CategoryName(key)
     if type(key) ~= "string" then return nil end
+    for _, category in ipairs(CUSTOM_CATEGORIES) do
+        if category.key == key then return category.label end
+    end
     local c, s = key:match("^(%d+):(%d+)$")
     if c then
         local name = C_Item and C_Item.GetItemSubClassInfo and Str((C_Item.GetItemSubClassInfo(tonumber(c), tonumber(s))))
@@ -123,7 +139,9 @@ function MI.Categories()
             end
         end
     end
-    if #out > 0 then categories = out end   -- an empty answer (names not there yet) is asked again next time
+    -- Retry game names if unavailable. Custom groups are always offered.
+    if #out > 0 then categories = out end
+    for _, category in ipairs(CUSTOM_CATEGORIES) do out[#out + 1] = category end
     return out
 end
 
@@ -141,8 +159,15 @@ end
 ---------------------------------------------------------------------------
 local function CatMatch(rule, facts)
     if #rule.cats == 0 then return true end
+    local class, subclass = facts.classID, facts.subclassID
     for _, key in ipairs(rule.cats) do
-        if key == tostring(facts.classID) or key == (facts.classID .. ":" .. facts.subclassID) then return true end
+        if key == MI.WAYLAID_CATEGORY then
+            if Families.IsWaylaidCrate(facts.id) then return true end
+        elseif key == MI.WRITS_CATEGORY then
+            if Families.IsCraftsmansWrit(facts.id) then return true end
+        elseif class and (key == tostring(class) or (subclass and key == (class .. ":" .. subclass))) then
+            return true
+        end
     end
     return false
 end

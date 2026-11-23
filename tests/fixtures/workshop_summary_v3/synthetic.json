@@ -1,0 +1,117 @@
+{
+  "manifest": {
+    "issuer_id": "00000000-0000-4000-8000-000000000001",
+    "market": {
+      "game": "wow-forever",
+      "region": "us",
+      "player_ruleset": "Normal",
+      "house_id": 114,
+      "source_kind": "auctions",
+      "server_market_id": 2,
+      "transport_ruleset_id": 1,
+      "mapping_verified": true,
+      "mapping_evidence_sha256": "1a08a7dcf84de26a209cc8a83c428fe08db128ee41e8bfeaec09240816f902bc",
+      "realm_scope": "ruleset_house",
+      "faction": "Horde"
+    },
+    "pricing_algorithm": "twichui-pricing-v1",
+    "history_basis": "canonical_complete_scope_close",
+    "source_kind": "market_server_asking_summary",
+    "source_watermark": "902",
+    "source_observation": {
+      "observation_id": "902",
+      "observed_at": "2026-11-15T12:00:00Z",
+      "scope_complete": true
+    },
+    "generated_at": "2026-11-15T12:00:00Z",
+    "synthetic": true,
+    "observations": [
+      {
+        "observation_id": "100",
+        "observed_at": "2026-11-13T12:00:00Z",
+        "scope_complete": true,
+        "synthetic": true
+      },
+      {
+        "observation_id": "902",
+        "observed_at": "2026-11-15T12:00:00Z",
+        "scope_complete": true,
+        "synthetic": true
+      }
+    ],
+    "format": "twichui-workshop-summary",
+    "schema_version": 3,
+    "contract_version": 3,
+    "columns": [
+      "item_id",
+      "variant_key",
+      "state",
+      "recent_copper",
+      "market_value_copper",
+      "minimum_copper",
+      "supply",
+      "age_seconds",
+      "confidence",
+      "historical_value_copper",
+      "priced_days_14",
+      "priced_days_60",
+      "observed_days_60"
+    ],
+    "states": [
+      "priced",
+      "supply_only",
+      "absent",
+      "unknown",
+      "unsupported"
+    ],
+    "confidence_states": [
+      "limited",
+      "unavailable"
+    ],
+    "confidence_ceiling": "limited",
+    "can_satisfy_local_competition": false,
+    "identity_basis": "exact_upstream_hashes; native_link_mapping_unavailable",
+    "record_count": 1,
+    "partitioning": {
+      "algorithm": "item_id_modulo",
+      "buckets": 64,
+      "max_partition_bytes": 1048576,
+      "max_total_bytes": 33554432
+    },
+    "partitions": [
+      {
+        "bucket": 29,
+        "bytes": 113,
+        "record_count": 1,
+        "sha256": "8a398cfc81e5e2ea47c2e195152201968d7be25577b83150a18fa26cf179a5ec"
+      }
+    ],
+    "coverage": {
+      "scope": "current_observed_exact_variants",
+      "complete": true,
+      "source_records": 1,
+      "delivered_records": 1,
+      "missing": "unavailable",
+      "detailed_history": "daily_closings_60_days"
+    },
+    "history_partitioning": {
+      "algorithm": "item_id_modulo",
+      "buckets": 64,
+      "max_partition_bytes": 1048576,
+      "max_total_bytes": 67108864
+    },
+    "history_partitions": [
+      {
+        "bucket": 29,
+        "bytes": 151,
+        "record_count": 1,
+        "sha256": "e6f325587145c26998ab4cf6f6092fc1b8a01eb5b85c10b097eb39b211778291"
+      }
+    ],
+    "generation_id": "ee711406d1fc0db4b279dc0de6fbf1b4ffec77c0c62e2589aaff0de2dd19baef"
+  },
+  "parts": {
+    "29": "[[2589,\"684434823a7f7a1797ecda68d5bb5abef5ea13a18aefa5a26cccff8e1b813d51\",0,\"120\",\"100\",\"120\",10,0,0,null,2,2,2]]",
+    "93": "[[2589,\"684434823a7f7a1797ecda68d5bb5abef5ea13a18aefa5a26cccff8e1b813d51\",0,\"120\",\"100\",\"120\",10,0,0,null,2,2,2,[[0,\"100\",\"90\",5],[0,\"120\",\"120\",10]]]]"
+  }
+}

@@ -67,6 +67,8 @@ MarketFacts.lua
 Fees.lua
 # The planning estimate of a craft: depth-aware, vendor-aware materials, a competition-based sell price, fees, confidence (pure)
 Estimate.lua
+# One transient, dependency-aware, cooperatively calculated Opportunities catalog
+OpportunityEngine.lua
 # A8: competition-based selling suggestions and deterministic item advice
 Sell.lua
 DisenchantData.lua

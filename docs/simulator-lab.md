@@ -534,6 +534,16 @@ a change to the simulator's `font.rs` (resolve `Interface\\AddOns\\<addon>\\…`
 an alias), built from source with a Rust toolchain and the project's dependencies (a substantial download and build), or asking
 upstream. Both wait for approval; the original binary stays as it is.
 
+## Scrolled popup coordinates
+
+The simulator applies scroll transforms when drawing but leaves region extent
+queries in unscrolled layout space. Native WoW extent queries already include
+scrolling. Do not add ancestor scroll offsets in production popup placement:
+that counts the offset twice and detaches menus on long settings pages.
+`Lab.EmulateNativeScrollRect` snapshots the native API contract for the specific
+revealed owner in Loot Rolls/Reminder popup tests. Those checks are explicitly
+boundary emulation; native pointer placement and rendering remain client-only.
+
 ## How it is isolated
 
 `sim.sh` runs everything under `bwrap`. The filesystem is read-only apart from the lab's own home, cache, data and

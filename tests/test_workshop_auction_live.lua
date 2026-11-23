@@ -84,4 +84,40 @@ do
  local d=W.AuctionActions.Review();Check(d.desired==1 and d.quantity==1 and d.excess==0 and d.total==699,"individual acquisition reviews one item, not the available stock")
  Check(W.Queue.Count()==1 and g.bags[10]==0,"review does not invent acquired stock")
 end
+do
+ local c,W,s,Press=Setup();local A,S,Q=W.AuctionUI,W.Session,W.Queue
+ assert(Q.Add({id=9001,name="Synthetic queued output",icon=1,outItem=90,outMin=1,outMax=1,mats={{item=10,qty=2}}},3))
+ W.Window.Show();W.Window.SetMode("craft")
+ local craft=W.Window.Craft();craft.segQueue:GetScript("OnClick")(craft.segQueue)
+ local row=W.Window.Lists().queue.rows[1]
+ Check(W.Window.IsShown() and A.IsShown() and not W.suspended,"queue and integrated AH coexist without a lifecycle change")
+ Check(A.Frame().brand:GetParent():GetScript("OnDragStart")~=nil,"existing draggable AH can expose the Workshop beneath it")
+ local linked=0;c.ChatEdit_InsertLink=function() linked=linked+1 end
+ c.IsModifiedClick=function() return true end;c.IsShiftKeyDown=function() return true end
+ row.iconBtn:GetScript("OnClick")(row.iconBtn,"LeftButton")
+ Check(s.Count("SendSearchQuery")==1,"output shortcut sends one search")
+ local request=s.calls[#s.calls]
+ Check(request.name=="SendSearchQuery" and request.args[1].itemID==90,"search targets output, never reagent 10")
+ Check(linked==0 and Q.Find(9001).crafts==3,"AH shortcut neither links nor changes queue")
+ Check(s.Count("PlaceBid")==0 and s.Count("StartCommoditiesPurchase")==0 and s.Count("PostItem")==0,"search initiates no purchase or posting")
+ s.throttle=false
+ row:GetScript("OnClick")(row,"LeftButton")
+ Check(s.Count("SendSearchQuery")==1 and S.Note():find("couldn't search",1,true),"refused search has guidance and no retry")
+ s.throttle=true
+ Q.Find(9001).outItem=nil
+ row:GetScript("OnClick")(row,"LeftButton")
+ Check(s.Count("SendSearchQuery")==1 and S.Note():find("no known output",1,true),"missing output never searches materials")
+ Q.Find(9001).outItem=90
+ s.debug=false
+ Check(not S.SearchQueuedOutput(9001) and s.Count("SendSearchQuery")==1,"unavailable live context refuses search")
+ A.Hide();Check(A.Show())
+ local info=c.C_Item.GetItemInfo
+ c.C_Item.GetItemInfo=function(id) return "Output", "item:"..id end
+ row.iconBtn:GetScript("OnClick")(row.iconBtn,"LeftButton")
+ Check(linked==1 and s.Count("SendSearchQuery")==1,"standalone preview preserves existing chat-link behavior")
+ A.Hide();row.iconBtn:GetScript("OnClick")(row.iconBtn,"LeftButton")
+ Check(linked==2 and s.Count("SendSearchQuery")==1,"closed AH preserves existing chat-link behavior")
+ c.C_Item.GetItemInfo=info
+ Check(not S.SearchQueuedOutput(9001),"direct call cannot create an AH visit")
+end
 print("PASSED: integrated live search "..count.." checks")

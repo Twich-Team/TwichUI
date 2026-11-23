@@ -480,11 +480,12 @@ local function ApplyWidth(view)
         view.notice.body:SetWidth(w - NOTICE_PAD * 2 - NOTICE_EDGE)
     end
     if view.hosted then view.hosted:SetWidth(w) end
+    if view.hostFooter then view.hostFooter:SetWidth(w) end
     for _, sec in ipairs(view.sections) do
         sec.card:SetWidth(w)
         if sec.title then sec.title:SetWidth(w - SECTION_PAD * 2 - 90) end
         if sec.desc and not sec.isCard then sec.desc:SetWidth(w - SECTION_PAD * 2) end
-        if sec.isCard then Cards.Resize(sec, w, UI.cardEnv) end
+        if sec.isCard then view.cardRenderer.Resize(sec, w, UI.cardEnv) end
         for _, v in ipairs(sec.rows) do v.Resize(w - SECTION_PAD * 2 + 8) end
     end
     if view.hero then view.hero:Resize(w) end
@@ -538,7 +539,8 @@ UI.cardEnv = {
 }
 
 local function BuildView(page)
-    local view = { page = page, sections = {}, rows = {}, w = CONTENT_W }
+    local view = { page = page, sections = {}, rows = {}, w = CONTENT_W,
+        cardRenderer = page.key == "qol" and R.SettingsQoL or Cards }
     local frame = CreateFrame("Frame", nil, content)
     frame:SetPoint("TOPLEFT", SHIFT_X, -SHIFT_Y)
     frame:SetWidth(CONTENT_W)
@@ -608,6 +610,13 @@ local function BuildView(page)
             hosted:ClearAllPoints()
             hosted:SetSize(CONTENT_W, HostHeight(page))
             view.hosted = hosted
+            if page.def.hostFooter then
+                view.hostFooter = page.def.hostFooter()
+                view.hostFooter:SetParent(pageArea)
+                view.hostFooter:ClearAllPoints()
+                view.hostFooter:SetPoint("BOTTOMLEFT", pageArea, "BOTTOMLEFT", WELL_L, WELL_T)
+                view.hostFooter:SetWidth(CONTENT_W)
+            end
         else
             R.Fault("settings page " .. page.key, hosted)
             view.failed = view.failed or Wg.Text(frame, "small")
@@ -641,7 +650,7 @@ local function BuildView(page)
                 sec.badge:SetText(header.badge)
             end
             if header.card and Cards then
-                Cards.Build(view, sec, CONTENT_W, UI.cardEnv)
+                view.cardRenderer.Build(view, sec, CONTENT_W, UI.cardEnv)
                 view.hasCards = true
                 M.Card(sec.card, sec.panelLines)   -- a feature card is of one family with the Reminders list and name panels
             elseif header.sectionIcon or header.accent then
@@ -687,17 +696,20 @@ local function BuildView(page)
             local sec = Section(row.section)
             local v
             if row.primaryOf and sec.isCard then
-                v = Cards.Primary(sec, row, UI.cardEnv)   -- a card's switch is drawn in its head
+                v = view.cardRenderer.Primary(sec, row, UI.cardEnv)   -- a card's switch is drawn in its head
                 sec.primaryView = v
             else
                 v = MakeRow(sec.card, row, CONTENT_W - SECTION_PAD * 2 + 8)
                 v.rule = sec.isCard and row.ruleOf ~= nil
+                if view.qol and row.id ~= "qolResurrectCombat" then v.frame:SetParent(sec.detail) end
                 sec.rows[#sec.rows + 1] = v
             end
             v.section = sec
             view.rows[row.id] = v
         end
     end
+
+    if view.qol then frame:HookScript("OnHide", function() view.cardRenderer.Hide(view) end) end
 
     -- Home's three ways in (Home.lua), above its sections
     if page.def.hero and Home then
@@ -730,8 +742,7 @@ local function BuildView(page)
     end
 
     -- Reset this page: every setting on it back to its default, after saying exactly what that covers
-    local resettable = K.Resettable(page.key)
-    if #resettable > 0 then
+    if not page.def.hidePageReset and #K.Resettable(page.key) > 0 then
         view.reset = CreateFrame("Frame", nil, frame)
         view.reset:SetSize(CONTENT_W, RESET_H)
         local rule = Wg.Solid(view.reset, "BORDER", pal.bronzeLo, 0.45)   -- neutral: Reset is not the page's headline
@@ -753,6 +764,7 @@ local function BuildView(page)
             I.Confirm("TWICHUI_SETTINGS_RESET_PAGE", K.ResetPageText(page, plan),
                 function()
                     state.suspend = state.suspend + 1
+                    if view.qol then view.cardRenderer.PageReset(view) end
                     local ok, err = pcall(K.ResetPage, page.key)
                     state.suspend = state.suspend - 1
                     if not ok then R.Fault("reset page " .. page.key, err) end
@@ -849,12 +861,13 @@ function Layout(view)
     if view.chrome then
         view.chrome:SetHeight(y)
         view.headerHeight = y + SHIFT_Y
-        if state.page == page.key and not state.searching then
-            scroll:ClearAllPoints()
-            scroll:SetPoint("TOPLEFT", pageArea, "TOPLEFT", 1, -view.headerHeight - 1)
-            scroll:SetPoint("BOTTOMRIGHT", pageArea, "BOTTOMRIGHT", -1, WELL_T)
-        end
         y, frame = 0, body
+    end
+    if (view.chrome or view.hostFooter) and state.page == page.key and not state.searching then
+        local reserved = view.hostFooter and view.hostFooter:IsShown() and (view.hostFooter:GetHeight() + 8) or 0
+        scroll:ClearAllPoints()
+        scroll:SetPoint("TOPLEFT", pageArea, "TOPLEFT", 1, -(view.headerHeight or 0) - 1)
+        scroll:SetPoint("BOTTOMRIGHT", pageArea, "BOTTOMRIGHT", -1, WELL_T + reserved)
     end
     if view.notice then
         view.notice:ClearAllPoints()
@@ -881,6 +894,7 @@ function Layout(view)
     end
     if view.hosted and not after then PlaceHost(0) end
     local placed = false
+    local sectionGap = view.qol and view.cardRenderer.gap or GAP
     for _, sec in ipairs(view.sections) do
         local active = not view.tasks or Design.TaskFor(page, sec.header and sec.header:GetName()) == view.task
         if not active then
@@ -889,13 +903,14 @@ function Layout(view)
         else
         local card, inner = sec.card, SECTION_PAD
         local visible = 0
+        if view.qol then y = view.cardRenderer.BeforeSection(view, sec, y) end
         sec.top = y
         local homeHelp = page.key == "overview" and sec.header and sec.header:GetName() == "Help"
         local inHeader = sec.isCard and sec.header.card.inPageHeader and sec.primaryView
         if inHeader then
             Cards.PlaceInHeader(view, sec, UI.cardEnv)
         elseif sec.isCard then
-            inner = Cards.Layout(view, sec, inner, UI.cardEnv)
+            inner = view.cardRenderer.Layout(view, sec, inner, UI.cardEnv)
             visible = 1
         elseif sec.header and sec.titled then
             sec.title:SetText(homeHelp and "Need a hand?" or sec.header:GetName() or "")
@@ -971,7 +986,7 @@ function Layout(view)
             card:ClearAllPoints()
             card:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -y)
             card:SetHeight(inner)
-            y = y + inner + GAP
+            y = y + inner + sectionGap
             placed = true
         end
         if after and sec.header and sec.header:GetName() == after then
@@ -984,7 +999,7 @@ function Layout(view)
         PlaceHost(GAP)
         placed = true
     end
-    if placed then y = y - GAP end   -- the gap belongs between two things, not after the last
+    if placed then y = y - sectionGap end   -- the gap belongs between two things, not after the last
     if view.reset then
         view.reset:ClearAllPoints()
         view.reset:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -(y + 18))
@@ -993,7 +1008,7 @@ function Layout(view)
     -- exactly what is drawn, so the scroll range (and its bar) is there only when something is out of view
     frame:SetHeight(y + PAGE_BOTTOM)
     content:SetHeight(y + PAGE_BOTTOM + SHIFT_Y)
-    if view.chrome then
+    if view.chrome or view.hostFooter then
         -- An accordion can shrink the content while its old bottom is still in view.
         -- Keep the scoped body inside its new bounds instead of retaining blank scroll space.
         local most = math.max(0, content:GetHeight() - scroll:GetHeight())
@@ -1044,6 +1059,30 @@ function UI.RevealFrame(frame)
     local h, visible, now = frame:GetHeight() * scale, scroll:GetHeight(), scroll:GetVerticalScroll()
     if h > visible or y < now then ScrollTo(y - 12) elseif y + h > now + visible then ScrollTo(y + h - visible + 12) end
     return true
+end
+
+-- QoL disclosures reuse this page's existing single scroll and row reveal path.
+function UI.cardEnv.Change(view, sec, change)
+    if state.page ~= "qol" or state.searching then return end
+    local now = scroll:GetVerticalScroll()
+    local anchor = sec
+    if sec.top + (sec.overviewHeight or 0) < now then
+        for _, candidate in ipairs(view.sections) do
+            if candidate.top + (candidate.overviewHeight or 0) >= now then anchor = candidate; break end
+        end
+    end
+    local offset = anchor.top - now
+    local wasOpen, helpOpen, sampleOpen = sec.open, sec.helpOpen, sec.sampleOpen
+    Wg.CloseMenu()
+    change()
+    Layout(view)
+    ScrollTo(anchor.top - offset)
+    if sec.open and not wasOpen then
+        local first
+        for _, row in ipairs(sec.rows) do if row.row.id ~= "qolResurrectCombat" then first = row.frame; break end end
+        UI.RevealFrame(first or sec.helpButton)
+    elseif sec.helpOpen and not helpOpen then UI.RevealFrame(sec.helpText)
+    elseif sec.sampleOpen and not sampleOpen and sec.preview then UI.RevealFrame(sec.preview.frame) end
 end
 
 -- Marks a row once: a gold band for a few seconds that then fades (at once where motion is reduced). A newer mark
@@ -1125,7 +1164,8 @@ function UI.Navigate(key, rowId)
     local row = rowId and K.rowsById[rowId]
     if row and row.page ~= page.key then row = nil end
     -- a card's rule asked for by search or a link: its card opens first, so the row can be shown and marked
-    if row and row.ruleOf and Cards then Cards.Reveal(view, view.sectionsById[row.ruleOf.id], row) end
+    if row and view.qol then view.cardRenderer.Reveal(view, nil, row)
+    elseif row and row.ruleOf and Cards then Cards.Reveal(view, view.sectionsById[row.ruleOf.id], row) end
     if row then
         local target = view.rows[row.id]
         local section = target and target.section or view.sectionsById[SectionId(page, row.kind == "header" and row or row.section)]
@@ -2014,7 +2054,7 @@ function escape:IsShown()
     return Wg.MenuShown() or UI.IsShown()
 end
 function escape:Hide()
-    local catalog, designer, picker = R.RemindersCatalog, R.RemindersDesigner, R.RemindersImagePicker
+    local catalog, designer, picker = R.RemindersCatalog, R.RemindersDesigner, R.SettingsArtworkPicker
     if Wg.MenuShown() then
         Wg.CloseMenu()
     elseif R.WorkshopJunkSettings and R.WorkshopJunkSettings.Shown() then
@@ -2022,7 +2062,7 @@ function escape:Hide()
     elseif R.MagicInventoryPage and R.MagicInventoryPage.CloseItemFilters and R.MagicInventoryPage.CloseItemFilters() then
         -- The focused editor closes without saving or closing its parent rule draft.
     elseif picker and picker.Shown() then
-        picker.Cancel()   -- the candidate is discarded; nothing was written
+        picker.Close()   -- the candidate is discarded; nothing was written
     elseif catalog and catalog.Shown() then
         catalog.Hide()
     elseif designer and designer.Shown() then

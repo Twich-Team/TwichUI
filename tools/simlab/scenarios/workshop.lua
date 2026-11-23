@@ -205,10 +205,22 @@ local function FindButton(root, text, depth)
         if hit then return hit end
     end
 end
+-- PR3 rankings are asynchronous. Wait for the real worker and its coalesced
+-- presentation, with a bounded timeout; retain every economic/UI assertion.
+local function SettleOpportunities()
+    if not(R.Workshop.OpportunityEngine and Win().Mode()=='opps')then return end
+    if not R.Workshop.Session.OpportunityStatus().refreshing then return end
+    for _=1,50 do
+        if not R.Workshop.Session.OpportunityStatus().refreshing then Lab.Settle(.2);return end
+        Lab.Settle(.1)
+    end
+    error('Opportunities did not settle within the scenario timeout')
+end
 local function Click(btn, what)
     if not btn then error("missing control: " .. tostring(what)) end
     if btn.IsEnabled and not btn:IsEnabled() then error("control is disabled: " .. tostring(what)) end
     btn:Click()
+    SettleOpportunities()
 end
 -- (P2.1) Opportunities' Add opens the optimized confirmation; accept it (Add to plan), or the deliberate "Add recipe only" when no optimized plan
 -- can be made for the recipe. Returns which one was pressed.
@@ -609,9 +621,9 @@ Lab.Step("opportunities: rows, ordering, filtering, unknowns", function()
     Check("click", "All again shows every recipe", 7, #Rows(o))
 
     -- the filter's logic is kept (Session), though the toolbar no longer carries its switch: it drops the loss and the unknowns
-    R.Workshop.Session.ToggleProfitOnly(); R.Workshop.UI.Redraw()
+    R.Workshop.Session.ToggleProfitOnly(); R.Workshop.UI.Redraw(); SettleOpportunities()
     Check("direct", "profitable only: losses and unknowns hidden", "Copper Belt Buckle | Smelt Bronze | Minor Healing Potion | Elixir of Many Wonders | Weak Troll's Blood Potion", Names(o))
-    R.Workshop.Session.ToggleProfitOnly(); R.Workshop.UI.Redraw()
+    R.Workshop.Session.ToggleProfitOnly(); R.Workshop.UI.Redraw(); SettleOpportunities()
     Check("direct", "profitable only off shows all again", 7, #Rows(o))
 end)
 

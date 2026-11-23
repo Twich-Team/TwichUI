@@ -24,7 +24,7 @@ separate from addon loading: closing a window does not unload its Lua code.
 
 Core paths below begin inside `!!!TwichUI/`; companion paths are explicit.
 Use the named group with [test-selection guidance](testing.md#source-to-test-guidance).
-The actual test patterns and recursive dependencies live in [groups.json](../tests/groups.json).
+The actual test patterns and recursive dependencies live in [groups.json](../tests/groups.json). This is a navigation aid, not automatic source-to-test inference: preview the existing selection, inspect actual consumers, and broaden only when a shared boundary warrants it.
 
 | Area | Source/config entry | Group and existing detail |
 |---|---|---|
@@ -36,6 +36,7 @@ The actual test patterns and recursive dependencies live in [groups.json](../tes
 | Layouts | `TwichUI_Layouts/Engine.lua`, `TwichUI_LayoutWizard/Model.lua` | `layouts`; [architecture](layouts/architecture.md) |
 | Fishing | `FishingLauncher.lua` loads `TwichUI_Fishing/` (`Action.lua` key, `Loot.lua`, `Containers.lua`, `Gear.lua`, `Lure.lua`, `Session.lua`, `Store.lua`, `Api.lua`; Fishing Mode: `Present.lua`, `Camera.lua`, `Fade.lua`, `CastBar.lua`, `CatchList.lua`, `Toast.lua`, `Hud.lua`; art from `tools/make_fishing_art.py`) | `fishing`; [fishing](fishing.md) |
 | Crafting/shopping | `TwichUI_Workshop/CraftPlanner.lua`, `Shopping.lua`, `Stock.lua`, `Strategy.lua` | `crafting`; [Workshop](workshop.md) |
+| Opportunities loading and presentation | `TwichUI_Workshop/Session.lua` (`S.Opportunities`, estimator cache), `Opportunities.lua` (rows/sort), `ViewOpportunities.lua` (render), `Window.lua` (refresh scheduling) | `crafting` for estimates, `market` for pricing changes, `workshop-settings` for view/interaction; select affected groups rather than all three by default |
 | Market schema-3 | `TwichUI_Workshop/Bridge.lua` schedules validation; `BridgeValidate.lua`, `BridgeSchema.lua`, `BridgeCodec.lua` validate before activation | `market`; `tests/test_workshop_bridge_scoped.lua`, `tests/test_workshop_bridge_scoped.py`; [scoped contract/evidence](workshop/market-bridge-scoped-l3.md) |
 | Workshop reference pricing | `TwichUI_Workshop/Pricing.lua` selects validated Companion base-item references; `Session.lua` and `MarketFacts.lua` connect consumers; `Market.lua` remains the native/local observation API | `market` plus `crafting`, `item-advisor`, `workshop-settings`, `auction-preview`; [consumption contract](workshop/automatic-market-summary.md#workshop-price-consumption) |
 | Workshop planning estimate | `TwichUI_Workshop/Estimate.lua` (pure: craft cost, sell price, confidence) and `Fees.lua` (the cut and the deposit, from the Gold Ledger); `Session.Estimator` builds its context for Opportunities, the Overview and the queue estimate | `crafting` plus `market`; `tests/test_workshop_estimate.lua`; [pricing realism](workshop/pricing-realism-proposal.md) |

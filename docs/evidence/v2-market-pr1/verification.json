@@ -1,0 +1,1431 @@
+{
+  "implementation_commit": "01ccc197683be1751a37a9c210bd1eed870aaafe",
+  "runner_reports": [
+    {
+      "name": "fast performance",
+      "report_sha256": "215fa872458d2c9fc9437c99b5810f51def3bd06287c8a25e9e2023261e1fd06",
+      "source": {
+        "commit": "b359a8e059aa5db6b50f85a547c355df5dcedeb6",
+        "dirty": true,
+        "working_tree_sha256": "8171d1511439617a377ad79b88dc6c71c2c0fd87746d0d7b4aa0c842d9571608"
+      },
+      "source_unchanged": true,
+      "complete": true,
+      "passed": true,
+      "seconds": 4.106588287000704,
+      "syntax_passed": true,
+      "selection": {
+        "tier": "fast",
+        "group": "market-performance",
+        "groups": [
+          "market-performance"
+        ],
+        "tests": [
+          "test_workshop_estimate.lua",
+          "test_workshop_market_consumption.lua",
+          "test_workshop_market_consumption_async.lua",
+          "test_workshop_market_pending.lua",
+          "test_workshop_market_performance.lua",
+          "test_workshop_summary.lua"
+        ],
+        "syntax": [
+          "TwichUI_Diagnostics/Gauges.lua",
+          "TwichUI_Workshop/Pricing.lua",
+          "TwichUI_Workshop/Session.lua",
+          "TwichUI_Workshop/Summary.lua",
+          "tests/bench_market_index_memory.lua",
+          "tests/bench_market_opportunities.lua"
+        ],
+        "simulators": [],
+        "verification_profile": "development",
+        "selection_reason": "direct feature tests and syntax; no simulator",
+        "omitted_catalogs": [
+          "lab-guard",
+          "smoke",
+          "interact",
+          "diagnose",
+          "auctionproof",
+          "auctionpreview",
+          "workshop",
+          "testlab",
+          "settings",
+          "reminders"
+        ],
+        "coverage_classification": {
+          "offline": [
+            "unit tests",
+            "contracts, migrations, performance, packaging and mutation harnesses as selected by module"
+          ],
+          "simulators": {},
+          "not_established": [
+            "real-client acceptance",
+            "pixel baseline regression (structural screenshots only)",
+            "production mutation campaigns (separate policy)",
+            "real-client packaged-install acceptance"
+          ]
+        },
+        "profile": "local"
+      },
+      "tests": [
+        {
+          "metrics": null,
+          "test": "test_workshop_estimate.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.04044303499995294
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_market_consumption.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.21795295100037038
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_market_consumption_async.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.12417250999988028
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_market_pending.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 2.2480862459997297
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_market_performance.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 1.1520019829995363
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_summary.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.2444886029998088
+        }
+      ],
+      "simulators": []
+    },
+    {
+      "name": "Market feature",
+      "report_sha256": "a0a051361c8a184c33421a9255b8e4802df2f05dd590f48f896596f2e688fe2c",
+      "source": {
+        "commit": "b359a8e059aa5db6b50f85a547c355df5dcedeb6",
+        "dirty": true,
+        "working_tree_sha256": "8171d1511439617a377ad79b88dc6c71c2c0fd87746d0d7b4aa0c842d9571608"
+      },
+      "source_unchanged": true,
+      "complete": true,
+      "passed": false,
+      "seconds": 79.66761132200008,
+      "syntax_passed": true,
+      "selection": {
+        "tier": "feature",
+        "group": "market",
+        "groups": [
+          "core",
+          "market",
+          "shared-ui"
+        ],
+        "tests": [
+          "test_auction_host.lua",
+          "test_auction_price.lua",
+          "test_auction_window.lua",
+          "test_cleanup.lua",
+          "test_commands.lua",
+          "test_defaults.lua",
+          "test_frame_look.lua",
+          "test_lifecycle.lua",
+          "test_lod_apply.lua",
+          "test_media_border.lua",
+          "test_menu_style.lua",
+          "test_notify.lua",
+          "test_notify_look.lua",
+          "test_persist.lua",
+          "test_press.lua",
+          "test_pricing_conformance.py",
+          "test_profiles.lua",
+          "test_reach.lua",
+          "test_routing.lua",
+          "test_simlab_diagnostics.lua",
+          "test_status.lua",
+          "test_storage.lua",
+          "test_stored_data.lua",
+          "test_theme_defaults.lua",
+          "test_window_smoke.lua",
+          "test_workshop.lua",
+          "test_workshop_a7.lua",
+          "test_workshop_auction_market.lua",
+          "test_workshop_auction_market_chart.lua",
+          "test_workshop_auction_market_chart_interaction.lua",
+          "test_workshop_auction_market_history.lua",
+          "test_workshop_auction_market_scoped.lua",
+          "test_workshop_auction_market_search.lua",
+          "test_workshop_auction_market_server.lua",
+          "test_workshop_auction_market_summary.lua",
+          "test_workshop_auction_market_ui.lua",
+          "test_workshop_auto.lua",
+          "test_workshop_bridge.lua",
+          "test_workshop_bridge.py",
+          "test_workshop_bridge_compatibility.py",
+          "test_workshop_bridge_freshness.lua",
+          "test_workshop_bridge_performance.lua",
+          "test_workshop_bridge_scoped.lua",
+          "test_workshop_bridge_scoped.py",
+          "test_workshop_disenchant.lua",
+          "test_workshop_disenchant_market.lua",
+          "test_workshop_dist.lua",
+          "test_workshop_estimate.lua",
+          "test_workshop_history2.lua",
+          "test_workshop_market.lua",
+          "test_workshop_market_consumption.lua",
+          "test_workshop_market_consumption_async.lua",
+          "test_workshop_market_pending.lua",
+          "test_workshop_market_performance.lua",
+          "test_workshop_market_reference.lua",
+          "test_workshop_market_scale.lua",
+          "test_workshop_prices.lua",
+          "test_workshop_pricing_v1.lua",
+          "test_workshop_schema.lua",
+          "test_workshop_scoped_bridge_l1.py",
+          "test_workshop_summary.lua",
+          "test_workshop_valuation.lua",
+          "test_workshop_worth.lua"
+        ],
+        "syntax": [
+          "!!!TwichUI/Core.lua",
+          "!!!TwichUI/CraftLook.lua",
+          "!!!TwichUI/DiagnosticsLauncher.lua",
+          "!!!TwichUI/FirstRunWelcome.lua",
+          "!!!TwichUI/FrameLook.lua",
+          "!!!TwichUI/Icons.lua",
+          "!!!TwichUI/LayoutsLauncher.lua",
+          "!!!TwichUI/Look.lua",
+          "!!!TwichUI/Onboarding.lua",
+          "!!!TwichUI/Persist.lua",
+          "!!!TwichUI/Profiles.lua",
+          "!!!TwichUI/QuietScreen.lua",
+          "!!!TwichUI/SettingsBroker.lua",
+          "!!!TwichUI/SettingsLauncher.lua",
+          "!!!TwichUI/Switches.lua",
+          "!!!TwichUI/WorkshopAuto.lua",
+          "!!!TwichUI/WorkshopLauncher.lua",
+          "!!!TwichUI/auction/Build.lua",
+          "!!!TwichUI/auction/Host.lua",
+          "!!!TwichUI/auction/Ledger.lua",
+          "!!!TwichUI/auction/LedgerAuction.lua",
+          "!!!TwichUI/auction/LedgerCost.lua",
+          "!!!TwichUI/auction/LedgerCostWatch.lua",
+          "!!!TwichUI/auction/LedgerQuest.lua",
+          "!!!TwichUI/auction/Mail.lua",
+          "!!!TwichUI/auction/Price.lua",
+          "!!!TwichUI/auction/Scan.lua",
+          "!!!TwichUI/auction/Vendor.lua",
+          "!!!TwichUI/auction/Window.lua",
+          "!!!TwichUI/setup/Cleanup.lua",
+          "!!!TwichUI/setup/CommTest.lua",
+          "!!!TwichUI/setup/Ellesmere.lua",
+          "!!!TwichUI/setup/Explorer.lua",
+          "!!!TwichUI/setup/ExplorerWindow.lua",
+          "!!!TwichUI/setup/Group.lua",
+          "!!!TwichUI/setup/PackFile.lua",
+          "!!!TwichUI/setup/Portable.lua",
+          "!!!TwichUI/setup/Restore.lua",
+          "!!!TwichUI/setup/Setups.lua",
+          "!!!TwichUI/setup/Share.lua",
+          "!!!TwichUI/setup/StoredData.lua",
+          "!!!TwichUI/setup/StoredDataWindow.lua",
+          "!!!TwichUI/setup/TwichConfig.lua",
+          "!!!TwichUI/setup/Window.lua",
+          "TwichUI_Settings/Cards.lua",
+          "TwichUI_Settings/Companion.lua",
+          "TwichUI_Settings/Craft.lua",
+          "TwichUI_Settings/Design.lua",
+          "TwichUI_Settings/Home.lua",
+          "TwichUI_Settings/Kit.lua",
+          "TwichUI_Settings/Material.lua",
+          "TwichUI_Settings/Previews.lua",
+          "TwichUI_Settings/QuickAccess.lua",
+          "TwichUI_Settings/Search.lua",
+          "TwichUI_Settings/Widgets.lua",
+          "TwichUI_Settings/Window.lua",
+          "TwichUI_Workshop/Advisor.lua",
+          "TwichUI_Workshop/AdvisorData.lua",
+          "TwichUI_Workshop/AuctionButton.lua",
+          "TwichUI_Workshop/Auto.lua",
+          "TwichUI_Workshop/Bank.lua",
+          "TwichUI_Workshop/Bridge.lua",
+          "TwichUI_Workshop/BridgeCodec.lua",
+          "TwichUI_Workshop/BridgeSchema.lua",
+          "TwichUI_Workshop/BridgeValidate.lua",
+          "TwichUI_Workshop/ChartKit.lua",
+          "TwichUI_Workshop/Coins.lua",
+          "TwichUI_Workshop/Compact.lua",
+          "TwichUI_Workshop/CraftPlanner.lua",
+          "TwichUI_Workshop/Data.lua",
+          "TwichUI_Workshop/Disenchant.lua",
+          "TwichUI_Workshop/DisenchantData.lua",
+          "TwichUI_Workshop/DisenchantExclusions.lua",
+          "TwichUI_Workshop/Dist.lua",
+          "TwichUI_Workshop/Estimate.lua",
+          "TwichUI_Workshop/Fees.lua",
+          "TwichUI_Workshop/History.lua",
+          "TwichUI_Workshop/History2.lua",
+          "TwichUI_Workshop/Junk.lua",
+          "TwichUI_Workshop/Known.lua",
+          "TwichUI_Workshop/LedgerChart.lua",
+          "TwichUI_Workshop/LedgerQuery.lua",
+          "TwichUI_Workshop/Market.lua",
+          "TwichUI_Workshop/MarketFacts.lua",
+          "TwichUI_Workshop/Materials.lua",
+          "TwichUI_Workshop/Notice.lua",
+          "TwichUI_Workshop/Observe.lua",
+          "TwichUI_Workshop/Opportunities.lua",
+          "TwichUI_Workshop/Prices.lua",
+          "TwichUI_Workshop/Pricing.lua",
+          "TwichUI_Workshop/PricingV1.lua",
+          "TwichUI_Workshop/Progress.lua",
+          "TwichUI_Workshop/Queue.lua",
+          "TwichUI_Workshop/Scan.lua",
+          "TwichUI_Workshop/Sell.lua",
+          "TwichUI_Workshop/ServerMarket.lua",
+          "TwichUI_Workshop/Session.lua",
+          "TwichUI_Workshop/Shopping.lua",
+          "TwichUI_Workshop/Stock.lua",
+          "TwichUI_Workshop/Storage.lua",
+          "TwichUI_Workshop/Strategy.lua",
+          "TwichUI_Workshop/Style.lua",
+          "TwichUI_Workshop/Summary.lua",
+          "TwichUI_Workshop/SummarySchema.lua",
+          "TwichUI_Workshop/Valuation.lua",
+          "TwichUI_Workshop/Vendor.lua",
+          "TwichUI_Workshop/ViewAdvisor.lua",
+          "TwichUI_Workshop/ViewCrafting.lua",
+          "TwichUI_Workshop/ViewLedger.lua",
+          "TwichUI_Workshop/ViewOpportunities.lua",
+          "TwichUI_Workshop/ViewOverview.lua",
+          "TwichUI_Workshop/ViewShopping.lua",
+          "TwichUI_Workshop/ViewStrategy.lua",
+          "TwichUI_Workshop/Watch.lua",
+          "TwichUI_Workshop/Window.lua",
+          "TwichUI_Workshop/Worth.lua",
+          "TwichUI_Workshop/WorthLayout.lua",
+          "TwichUI_Workshop/WorthTip.lua",
+          "TwichUI_Workshop/auction/Actions.lua",
+          "TwichUI_Workshop/auction/AdvancedChart.lua",
+          "TwichUI_Workshop/auction/BrowseData.lua",
+          "TwichUI_Workshop/auction/Categories.lua",
+          "TwichUI_Workshop/auction/Components.lua",
+          "TwichUI_Workshop/auction/Debug.lua",
+          "TwichUI_Workshop/auction/MarketData.lua",
+          "TwichUI_Workshop/auction/ReadRequests.lua",
+          "TwichUI_Workshop/auction/SellData.lua",
+          "TwichUI_Workshop/auction/ShoppingData.lua",
+          "TwichUI_Workshop/auction/ViewBrowse.lua",
+          "TwichUI_Workshop/auction/ViewMarket.lua",
+          "TwichUI_Workshop/auction/ViewOwned.lua",
+          "TwichUI_Workshop/auction/ViewSell.lua",
+          "TwichUI_Workshop/auction/ViewShopping.lua",
+          "TwichUI_Workshop/auction/Window.lua"
+        ],
+        "simulators": [
+          {
+            "script": "workshop",
+            "only": [
+              "craft",
+              "opps",
+              "history",
+              "wrong"
+            ]
+          },
+          {
+            "script": "auctionpreview",
+            "only": [
+              "companionvalid",
+              "companionnewer",
+              "companionolder",
+              "summaryvalid",
+              "summarycorrupt",
+              "summaryfuture"
+            ]
+          }
+        ],
+        "verification_profile": "feature",
+        "selection_reason": "affected groups and recursive shared dependencies; explicit scoped simulator selections",
+        "omitted_catalogs": [
+          "lab-guard",
+          "smoke",
+          "interact",
+          "diagnose",
+          "auctionproof",
+          "testlab",
+          "settings",
+          "reminders"
+        ],
+        "coverage_classification": {
+          "offline": [
+            "unit tests",
+            "contracts, migrations, performance, packaging and mutation harnesses as selected by module"
+          ],
+          "simulators": {
+            "workshop": [
+              "feature interaction",
+              "replay/determinism",
+              "negative controls",
+              "visual structural checks"
+            ],
+            "auctionpreview": [
+              "feature interaction",
+              "replay/determinism",
+              "negative controls",
+              "visual structural checks"
+            ]
+          },
+          "not_established": [
+            "real-client acceptance",
+            "pixel baseline regression (structural screenshots only)",
+            "production mutation campaigns (separate policy)",
+            "real-client packaged-install acceptance"
+          ]
+        },
+        "profile": "local"
+      },
+      "tests": [
+        {
+          "metrics": null,
+          "test": "test_auction_host.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 1.073377788000471
+        },
+        {
+          "metrics": null,
+          "test": "test_auction_price.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.004764723999869602
+        },
+        {
+          "metrics": null,
+          "test": "test_auction_window.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.04170248999980686
+        },
+        {
+          "metrics": null,
+          "test": "test_cleanup.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.3467010140002458
+        },
+        {
+          "metrics": null,
+          "test": "test_commands.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.05170247400019434
+        },
+        {
+          "metrics": null,
+          "test": "test_defaults.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.06283706400063238
+        },
+        {
+          "metrics": null,
+          "test": "test_frame_look.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.029833257000063895
+        },
+        {
+          "metrics": null,
+          "test": "test_lifecycle.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.08710429200073122
+        },
+        {
+          "metrics": null,
+          "test": "test_lod_apply.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.049531906000083836
+        },
+        {
+          "metrics": null,
+          "test": "test_media_border.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.03616396200050076
+        },
+        {
+          "metrics": null,
+          "test": "test_menu_style.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.02368308099994465
+        },
+        {
+          "metrics": null,
+          "test": "test_notify.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.028891803000078653
+        },
+        {
+          "metrics": null,
+          "test": "test_notify_look.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.030482441000458493
+        },
+        {
+          "metrics": null,
+          "test": "test_persist.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 1.9181120200000805
+        },
+        {
+          "metrics": null,
+          "test": "test_press.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.00691447299959691
+        },
+        {
+          "metrics": null,
+          "test": "test_pricing_conformance.py",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": 1,
+          "seconds": 0.10780792199966527
+        },
+        {
+          "metrics": null,
+          "test": "test_profiles.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 2.603303328000038
+        },
+        {
+          "metrics": null,
+          "test": "test_reach.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.046669421999467886
+        },
+        {
+          "metrics": null,
+          "test": "test_routing.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.07062843499988958
+        },
+        {
+          "metrics": null,
+          "test": "test_simlab_diagnostics.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.017221127999619057
+        },
+        {
+          "metrics": null,
+          "test": "test_status.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.2171676630005095
+        },
+        {
+          "metrics": null,
+          "test": "test_storage.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.024450474999866856
+        },
+        {
+          "metrics": null,
+          "test": "test_stored_data.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.04972120900038135
+        },
+        {
+          "metrics": null,
+          "test": "test_theme_defaults.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.03763723900010518
+        },
+        {
+          "metrics": null,
+          "test": "test_window_smoke.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.041591959000470524
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.497612346999631
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_a7.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.0774531159995604
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_auction_market.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.6667891639999652
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_auction_market_chart.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 4.182917155000723
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_auction_market_chart_interaction.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.07846361199972307
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_auction_market_history.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.19481376800013095
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_auction_market_scoped.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.44549562700012757
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_auction_market_search.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.1685568359998797
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_auction_market_server.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.3323961279993455
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_auction_market_summary.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.20652824399985548
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_auction_market_ui.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 3.794444738000493
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_auto.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.8440542050002477
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_bridge.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.08191861399973277
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_bridge.py",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": 6,
+          "seconds": 0.5593069409997042
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_bridge_compatibility.py",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": 17,
+          "seconds": 1.2549814779995359
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_bridge_freshness.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.05645090599955438
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_bridge_performance.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 4.920447501000126
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_bridge_scoped.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.4752292800003488
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_bridge_scoped.py",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": 6,
+          "seconds": 2.446774332000132
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_disenchant.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.07912071499958984
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_disenchant_market.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.15054989500004012
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_dist.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 1.5112017539995577
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_estimate.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.03543529799935641
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_history2.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 44.6502957419998
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_market.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 1.0245530110005348
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_market_consumption.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.18245116399975814
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_market_consumption_async.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.11705013099981443
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_market_pending.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 2.2295723649995125
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_market_performance.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 1.1582806360001996
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_market_reference.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 17.42005577100008
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_market_scale.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 29.10954558100002
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_prices.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.8119547189999139
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_pricing_v1.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.004611457999999402
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_schema.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 1.6111062950003543
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_scoped_bridge_l1.py",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": 4,
+          "seconds": 1.3436428210006852
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_summary.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.24391380099950766
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_valuation.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 14.537266199999976
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_worth.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.36541577800016967
+        }
+      ],
+      "simulators": [
+        {
+          "script": "workshop",
+          "only": [
+            "craft",
+            "opps",
+            "history",
+            "wrong"
+          ],
+          "worker": null,
+          "passed": false,
+          "exit_code": 2,
+          "timed_out": false,
+          "telemetry": [],
+          "launches": 4,
+          "scenario_checks": 0,
+          "scenarios": [
+            {
+              "scenario": "craft",
+              "structured_assertions": 0,
+              "intentional_negative_control": false,
+              "failed_assertion_markers": 0,
+              "bootstrap_seconds": null,
+              "last_native_timestamp_seconds": null,
+              "metrics": null
+            },
+            {
+              "scenario": "history",
+              "structured_assertions": 0,
+              "intentional_negative_control": false,
+              "failed_assertion_markers": 0,
+              "bootstrap_seconds": null,
+              "last_native_timestamp_seconds": null,
+              "metrics": null
+            },
+            {
+              "scenario": "opps",
+              "structured_assertions": 0,
+              "intentional_negative_control": false,
+              "failed_assertion_markers": 0,
+              "bootstrap_seconds": null,
+              "last_native_timestamp_seconds": null,
+              "metrics": null
+            },
+            {
+              "scenario": "wrong",
+              "structured_assertions": 0,
+              "intentional_negative_control": true,
+              "failed_assertion_markers": 0,
+              "bootstrap_seconds": null,
+              "last_native_timestamp_seconds": null,
+              "metrics": null
+            }
+          ],
+          "seconds": 0.8015420009996888
+        },
+        {
+          "script": "auctionpreview",
+          "only": [
+            "companionvalid",
+            "companionnewer",
+            "companionolder",
+            "summaryvalid",
+            "summarycorrupt",
+            "summaryfuture"
+          ],
+          "worker": null,
+          "passed": false,
+          "exit_code": 2,
+          "timed_out": false,
+          "telemetry": [],
+          "launches": 6,
+          "scenario_checks": 0,
+          "scenarios": [
+            {
+              "scenario": "companionnewer",
+              "structured_assertions": 0,
+              "intentional_negative_control": false,
+              "failed_assertion_markers": 0,
+              "bootstrap_seconds": null,
+              "last_native_timestamp_seconds": null,
+              "metrics": null
+            },
+            {
+              "scenario": "companionolder",
+              "structured_assertions": 0,
+              "intentional_negative_control": false,
+              "failed_assertion_markers": 0,
+              "bootstrap_seconds": null,
+              "last_native_timestamp_seconds": null,
+              "metrics": null
+            },
+            {
+              "scenario": "companionvalid",
+              "structured_assertions": 0,
+              "intentional_negative_control": false,
+              "failed_assertion_markers": 0,
+              "bootstrap_seconds": null,
+              "last_native_timestamp_seconds": null,
+              "metrics": null
+            },
+            {
+              "scenario": "summarycorrupt",
+              "structured_assertions": 0,
+              "intentional_negative_control": false,
+              "failed_assertion_markers": 0,
+              "bootstrap_seconds": null,
+              "last_native_timestamp_seconds": null,
+              "metrics": null
+            },
+            {
+              "scenario": "summaryfuture",
+              "structured_assertions": 0,
+              "intentional_negative_control": false,
+              "failed_assertion_markers": 0,
+              "bootstrap_seconds": null,
+              "last_native_timestamp_seconds": null,
+              "metrics": null
+            },
+            {
+              "scenario": "summaryvalid",
+              "structured_assertions": 0,
+              "intentional_negative_control": false,
+              "failed_assertion_markers": 0,
+              "bootstrap_seconds": null,
+              "last_native_timestamp_seconds": null,
+              "metrics": null
+            }
+          ],
+          "seconds": 0.8084502080000675
+        }
+      ]
+    },
+    {
+      "name": "crafting",
+      "report_sha256": "2ba52fa43bb2872336489c5dc52d79cef8df8740bcee2d6926d70416c67a2275",
+      "source": {
+        "commit": "b359a8e059aa5db6b50f85a547c355df5dcedeb6",
+        "dirty": true,
+        "working_tree_sha256": "8171d1511439617a377ad79b88dc6c71c2c0fd87746d0d7b4aa0c842d9571608"
+      },
+      "source_unchanged": true,
+      "complete": true,
+      "passed": true,
+      "seconds": 10.515678533999562,
+      "syntax_passed": true,
+      "selection": {
+        "tier": "fast",
+        "group": "crafting",
+        "groups": [
+          "crafting"
+        ],
+        "tests": [
+          "test_workshop.lua",
+          "test_workshop_compact.lua",
+          "test_workshop_crafting_reference.lua",
+          "test_workshop_craftplanner.lua",
+          "test_workshop_estimate.lua",
+          "test_workshop_memory.lua",
+          "test_workshop_shopping.lua",
+          "test_workshop_storage.lua",
+          "test_workshop_strategy.lua",
+          "test_workshop_strategy_ui.lua",
+          "test_workshop_vendor_places.lua"
+        ],
+        "syntax": [
+          "TwichUI_Workshop/Advisor.lua",
+          "TwichUI_Workshop/AdvisorData.lua",
+          "TwichUI_Workshop/AuctionButton.lua",
+          "TwichUI_Workshop/Auto.lua",
+          "TwichUI_Workshop/Bank.lua",
+          "TwichUI_Workshop/Bridge.lua",
+          "TwichUI_Workshop/BridgeCodec.lua",
+          "TwichUI_Workshop/BridgeSchema.lua",
+          "TwichUI_Workshop/BridgeValidate.lua",
+          "TwichUI_Workshop/ChartKit.lua",
+          "TwichUI_Workshop/Coins.lua",
+          "TwichUI_Workshop/Compact.lua",
+          "TwichUI_Workshop/CraftPlanner.lua",
+          "TwichUI_Workshop/Data.lua",
+          "TwichUI_Workshop/Disenchant.lua",
+          "TwichUI_Workshop/DisenchantData.lua",
+          "TwichUI_Workshop/DisenchantExclusions.lua",
+          "TwichUI_Workshop/Dist.lua",
+          "TwichUI_Workshop/Estimate.lua",
+          "TwichUI_Workshop/Fees.lua",
+          "TwichUI_Workshop/History.lua",
+          "TwichUI_Workshop/History2.lua",
+          "TwichUI_Workshop/Junk.lua",
+          "TwichUI_Workshop/Known.lua",
+          "TwichUI_Workshop/LedgerChart.lua",
+          "TwichUI_Workshop/LedgerQuery.lua",
+          "TwichUI_Workshop/Market.lua",
+          "TwichUI_Workshop/MarketFacts.lua",
+          "TwichUI_Workshop/Materials.lua",
+          "TwichUI_Workshop/Notice.lua",
+          "TwichUI_Workshop/Observe.lua",
+          "TwichUI_Workshop/Opportunities.lua",
+          "TwichUI_Workshop/Prices.lua",
+          "TwichUI_Workshop/Pricing.lua",
+          "TwichUI_Workshop/PricingV1.lua",
+          "TwichUI_Workshop/Progress.lua",
+          "TwichUI_Workshop/Queue.lua",
+          "TwichUI_Workshop/Scan.lua",
+          "TwichUI_Workshop/Sell.lua",
+          "TwichUI_Workshop/ServerMarket.lua",
+          "TwichUI_Workshop/Session.lua",
+          "TwichUI_Workshop/Shopping.lua",
+          "TwichUI_Workshop/Stock.lua",
+          "TwichUI_Workshop/Storage.lua",
+          "TwichUI_Workshop/Strategy.lua",
+          "TwichUI_Workshop/Style.lua",
+          "TwichUI_Workshop/Summary.lua",
+          "TwichUI_Workshop/SummarySchema.lua",
+          "TwichUI_Workshop/Valuation.lua",
+          "TwichUI_Workshop/Vendor.lua",
+          "TwichUI_Workshop/ViewAdvisor.lua",
+          "TwichUI_Workshop/ViewCrafting.lua",
+          "TwichUI_Workshop/ViewLedger.lua",
+          "TwichUI_Workshop/ViewOpportunities.lua",
+          "TwichUI_Workshop/ViewOverview.lua",
+          "TwichUI_Workshop/ViewShopping.lua",
+          "TwichUI_Workshop/ViewStrategy.lua",
+          "TwichUI_Workshop/Watch.lua",
+          "TwichUI_Workshop/Window.lua",
+          "TwichUI_Workshop/Worth.lua",
+          "TwichUI_Workshop/WorthLayout.lua",
+          "TwichUI_Workshop/WorthTip.lua",
+          "TwichUI_Workshop/auction/Actions.lua",
+          "TwichUI_Workshop/auction/AdvancedChart.lua",
+          "TwichUI_Workshop/auction/BrowseData.lua",
+          "TwichUI_Workshop/auction/Categories.lua",
+          "TwichUI_Workshop/auction/Components.lua",
+          "TwichUI_Workshop/auction/Debug.lua",
+          "TwichUI_Workshop/auction/MarketData.lua",
+          "TwichUI_Workshop/auction/ReadRequests.lua",
+          "TwichUI_Workshop/auction/SellData.lua",
+          "TwichUI_Workshop/auction/ShoppingData.lua",
+          "TwichUI_Workshop/auction/ViewBrowse.lua",
+          "TwichUI_Workshop/auction/ViewMarket.lua",
+          "TwichUI_Workshop/auction/ViewOwned.lua",
+          "TwichUI_Workshop/auction/ViewSell.lua",
+          "TwichUI_Workshop/auction/ViewShopping.lua",
+          "TwichUI_Workshop/auction/Window.lua"
+        ],
+        "simulators": [],
+        "verification_profile": "development",
+        "selection_reason": "direct feature tests and syntax; no simulator",
+        "omitted_catalogs": [
+          "lab-guard",
+          "smoke",
+          "interact",
+          "diagnose",
+          "auctionproof",
+          "auctionpreview",
+          "workshop",
+          "testlab",
+          "settings",
+          "reminders"
+        ],
+        "coverage_classification": {
+          "offline": [
+            "unit tests",
+            "contracts, migrations, performance, packaging and mutation harnesses as selected by module"
+          ],
+          "simulators": {},
+          "not_established": [
+            "real-client acceptance",
+            "pixel baseline regression (structural screenshots only)",
+            "production mutation campaigns (separate policy)",
+            "real-client packaged-install acceptance"
+          ]
+        },
+        "profile": "local"
+      },
+      "tests": [
+        {
+          "metrics": null,
+          "test": "test_workshop.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.5737182430002576
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_compact.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.16450427400013723
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_crafting_reference.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 1.0208222179999211
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_craftplanner.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 9.827424803999747
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_estimate.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.03411993200006691
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_memory.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.8683609890003936
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_shopping.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.8778841550001744
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_storage.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 1.5325064689995997
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_strategy.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.5622687400000359
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_strategy_ui.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.10546362799959752
+        },
+        {
+          "metrics": null,
+          "test": "test_workshop_vendor_places.lua",
+          "passed": true,
+          "exit_code": 0,
+          "timed_out": false,
+          "python_cases": null,
+          "seconds": 0.03236182000000554
+        }
+      ],
+      "simulators": []
+    }
+  ],
+  "direct_checks": [
+    {
+      "test": "test_perf_engine.lua",
+      "passed": true
+    },
+    {
+      "test": "test_diagnostics.lua",
+      "passed": true
+    },
+    {
+      "test": "test_test_runner.py",
+      "passed": true,
+      "cases": 17,
+      "seconds": 5.374
+    }
+  ],
+  "mutations": {
+    "groups": [
+      "market.consumption",
+      "market.pending"
+    ],
+    "selected": 12,
+    "killed": 12,
+    "survived": 0,
+    "invalid": 0,
+    "timeouts": 0,
+    "infrastructure_failures": 0,
+    "seconds": 7.3
+  },
+  "simulator_followup": {
+    "profile": "cloud, no game assets; direct selected runners",
+    "workshop": {
+      "selected": [
+        "craft",
+        "opps",
+        "history",
+        "wrong"
+      ],
+      "passed": false,
+      "native_exit_codes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "reason": "40 tooltip assertion failures per ordinary launch; Opportunities baseline has identical 40 failure lines. Wrong control also intentionally fails. Classified voice-settings and addon-message limitations retained."
+    },
+    "auctionpreview": {
+      "selected": [
+        "companionvalid",
+        "companionnewer",
+        "companionolder",
+        "summaryvalid",
+        "summarycorrupt",
+        "summaryfuture"
+      ],
+      "passed": true,
+      "native_exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "limitations": [
+    "Local Market feature command fails simulator admission: no game assets; offline 63 modules all pass.",
+    "Cloud Workshop verdict remains FAIL; no full feature/local/release certification.",
+    "No real-client or screenshot visual acceptance."
+  ]
+}

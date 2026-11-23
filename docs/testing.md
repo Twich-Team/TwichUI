@@ -5,6 +5,14 @@ Run from the repository root using native Linux/WSL. Requires Lua 5.1,
 installation and the dependencies in [simulator-lab.md](simulator-lab.md).
 No new Python packages are required.
 
+**Cost-conscious verification:** prefer the smallest existing test or development group
+while editing, then affected feature/integration coverage at the appropriate checkpoint.
+Add tests only for meaningful new behavior, safety boundaries or plausible regressions;
+do not add duplicate scenarios to inflate counts. Cosmetic or documentation-only
+changes normally need syntax, targeted visual, or link checks rather than unrelated
+simulator catalogs or a new harness. Use benchmarks for changed performance-sensitive
+paths, not as an automatic step on every PR. Preserve the independent full release gate.
+
 | Tier | Command | Evidence |
 |---|---|---|
 | Development | `./tests/run.sh development workshop-settings` (alias `fast`) | Direct feature tests and Lua syntax; no simulator |
@@ -29,9 +37,11 @@ for ordinary PRs. Full discovery, every default simulator launch, screenshots,
 replays, deliberate incorrect expectations and compatibility checks remain intact.
 The `release` profile adds `tools/release.py check` against an existing candidate
 archive and its packaging metadata. Missing inputs fail before executing tests.
-It checks, never builds, stamps, publishes or deploys. The existing CI packaging
-pipeline and real-client acceptance remain required. A cloud run never sets
-`automated_release_gate_passed` or `local_milestone_passed` true.
+It checks, never builds, stamps, publishes or deploys. The existing CI packaging pipeline remains required. Real-client checks are
+owner-directed and are **not** mandatory completion, PR, or release gates; record
+any client-only uncertainty and suggested checks without claiming native evidence.
+A cloud run never sets `automated_release_gate_passed` or `local_milestone_passed`
+true.
 
 Do not repeat an unchanged full run merely to refresh evidence. Diagnose failures
 with the smallest reproducing module/scenario, preserve the original report and
@@ -57,9 +67,12 @@ Replace `workshop-settings` with one of these nonempty groups:
 | `auction-house` | Standalone Auction House preview, existing auction safeguards and Workshop dependencies |
 | `crafting` | Crafting, shopping, stock, planner, strategy and compact views |
 | `market` | Prices, distribution, history, valuation, schema and automatic scans |
+| `market-performance` | Twelve fast deterministic pricing/partition/estimator/incremental-engine/diagnostics/reference/catalog modules; no large benchmarks or simulators in development selection |
 | `reminders` | Reminders engines, designer, settings and artwork |
 | `loot-rolls` | Loot Rolls rules, cards, automatic rolling and settings pages; the synthetic-roll simulator catalog is run by hand with `bash tools/simlab/loot.sh` |
 | `fishing` | TwichUI Fishing (load-on-demand `TwichUI_Fishing`) and its core launcher: the fishing key's decisions, reel overrides and combat, lures, gear snapshots and restoration, catch attribution, the container queue, sessions and saved data; Stage 2's Fishing Mode (camera, fading, the Quiet screen hold, cast bar, catch list, notifications, recovery) and its artwork; no simulator catalog (offline captures: `tools/render_fishing_hud.py`) |
+| `healer-watch` | Healer monitoring/alerts, guarded hover communication and Settings |
+| `execute-range` | Execute threshold configuration, verified EllesmereUI adapters, overlay lifecycle and settings/sharing |
 | `navigation` | Navigation, maps, pins, NPCs and guild locations |
 | `settings` | Settings contracts, framework, pages and feature settings |
 | `shared-ui` | Frame styling, notifications, themes, reachability and shared window components |
@@ -204,11 +217,14 @@ coverage and the pending client gate: [lifecycle proof](workshop/auction-house/l
 
 ## Mutation policy
 
-Campaigns remain separate from routine checks and full regression, matching the
-previous suite. The offline suite always runs the mutation runner's own tests.
-For Workshop money, quantities, rounding, ordering or eligibility changes, keep
-[the verification policy](workshop/testing-roadmap.md#verification-policy-for-future-workshop-tasks-claudemd-points-here):
-run the matching campaign and add a realistic defect model. For example:
+Campaigns remain separate from routine checks and full regression; the offline
+suite still runs the mutation runner's own tests. For substantive changes to
+economic formulas, money/quantity rounding, eligibility or persisted accounting,
+use the relevant existing mutation campaign when it protects a meaningful risk.
+Add a catalog entry only for a distinct plausible defect not already protected;
+do not manufacture new mutations or run campaigns for cosmetic/unrelated edits.
+See [the Workshop verification policy](workshop/testing-roadmap.md#verification-policy-for-future-workshop-tasks-claudemd-points-here).
+Examples of available targeted campaigns:
 
 ```sh
 bash tools/mutate.sh --group market
@@ -318,9 +334,20 @@ an end-to-end approved immutable-artifact rehearsal and the full candidate/clien
 
 ## Source-to-test guidance
 
-Use [architecture](architecture.md) for ownership, then inspect `tests/groups.json`
-and the selected plan. These are manual starting points; there is no automatic
-source dependency analysis. Syntax globs describe checked files, not all consumers.
+Ask the runner for advisory group matches before choosing a plan. Pass one or more
+repo-relative file paths from the diff. The command reads existing syntax and test
+globs in `tests/groups.json` and prints preview commands without running tests.
+
+```bash
+./tests/run.sh --recommend 'TwichUI_Settings/pages/Reminders.lua'
+./tests/run.sh --recommend '!!!TwichUI/FrameLook.lua' tests/test_test_runner.py
+./tests/run.sh --recommend docs/testing.md
+```
+
+A syntax match identifies files checked by a group. Use [architecture](architecture.md)
+to review ownership and actual consumers, especially for shared files and overlapping
+globs. Removed files and paths outside the globs are reported as unmapped. Use the
+guidance below to choose the checkpoint profile and review the selected plan.
 
 - Reminders config or its settings page: `feature reminders`.
 - Market bridge/schema/receipt changes: `feature market`; inspect the pinned
@@ -346,14 +373,12 @@ Preview any command above by appending `--list`; inspect tests, syntax and selec
 simulators before running it. Development omits dependency expansion; feature and
 integration expand unit/syntax dependencies, but simulator catalogs come only from
 explicitly requested groups. Add consumer groups explicitly for cross-feature work.
-Workshop money/quantity/eligibility changes also retain the mutation requirements
-in [shared rules](engineering-rules.md) and the Workshop verification policy.
+For Workshop economic changes, apply the risk-based mutation guidance in
+[shared rules](engineering-rules.md) and the Workshop verification policy.
 
 `tools/ci_verify.py` separately selects release-tools for its explicit release/docs
 allowlist, and complete offline discovery otherwise. It is not a source-to-group
-analyzer. This guidance changes neither CI selection nor test coverage. Automatic
-ownership inference and its unmapped/shared-file negative cases are deferred to a
-separately reviewed implementation.
+analyzer. Advisory matches have no effect on CI selection or test coverage.
 
 ## Evidence retention
 
@@ -384,3 +409,54 @@ Diagnostics preset have their own passing focused checks and simulator evidence.
 `auction-house` and `auction-preview` now also select `test_perf_engine.lua` and
 the two changed Diagnostics source files. No full/release certification or native
 client acceptance is inferred from this campaign.
+
+### Market pending-pricing performance
+
+`./tests/run.sh development market-performance` selects twelve small production-reader,
+pricing, estimator and integrity modules without a simulator. It supplements the
+normal affected Market/crafting/consumer groups. Dedicated audit benchmarks remain
+opt-in (`tools/measure_market_opportunities.py`), never default test discovery.
+[PR1 implementation and comparable measurement procedure](performance/v2-market-pending-pricing-pr1.md).
+
+
+### Market cold pricing PR2
+
+The existing `market-performance` group now includes contract-3 current/history
+laziness, integrity, rollback, priority and elapsed-diagnostics checks. A small
+PR workflow runs that same development selection on relevant paths even when a
+PR is stacked below main. It does not run the simulator, mutation campaigns or
+large fixtures. Local measurement: eight modules in 2.8 s; target under 30 s.
+
+The existing dedicated driver accepts `--contract 2|3` and `--rows` for comparable
+Opportunities workloads. `tools/measure_scoped_reader.py --summary-root PATH
+--report FILE` runs the existing native-publication summary harness, with one
+discarded warm-up and three fresh samples. Both are opt-in. Paired Windows
+publication/Lua and protocol tests run in the Market integration workflow.
+The 30,000-variant/60-day uneven stress fixture is for on-demand or release
+validation, never ordinary development. Exact frozen commands, JSON baselines,
+comparison/update policy and observed failures are in the
+[PR2 evidence and native acceptance report](performance/v2-market-cold-pricing-pr2.md).
+
+
+### Incremental Opportunities (PR3)
+
+The existing `market-performance` development group adds deterministic engine and
+actual Window/UI lifecycle tests. Its twelve modules passed in 8.012 s on the audit
+host. Crafting integration selects the engine/UI tests too. The fast group also includes the existing independent crafting reference and mutation-harness tests, including complete catalog pattern/syntax validation; it does not run the complete mutation campaign. The existing PR workflow uses
+the same development command; no large benchmark or simulator entered routine CI.
+
+Use `./tests/run.sh development market-performance --jobs 2` for relevant commits;
+use `./tests/run.sh integration market --with-group crafting --with-group market-performance --profile cloud --jobs 2`
+at cross-subsystem checkpoints. Preview either with `--list`. The cloud profile
+reports native-client and simulator limitations explicitly.
+
+Opt-in `tools/measure_market_opportunities.py --suite opportunities` retains the
+20/100/500/1000 matrix. `--contract 2|3`, `--days 2|60`, repeatable `--case`, and
+`--scenario single|burst|reopen|filters|scroll|generation|stress` select comparable
+workloads; the driver discards one warm-up and defaults to three fresh samples.
+`--stress --rows 96 --case opportunities/ui/5000 --scenario stress` adds the large
+20-cycle workload, never routine discovery. See the [PR3 report](performance/v2-opportunities-incremental-pr3.md)
+for exact before/after commands, operation gates, baseline update policy,
+recomputation oracle, memory evidence and retained simulator failures.
+
+Extended memory diagnostics may use `--scenario stress --stress-cycles 60`; cycles default to 20 and remain opt-in. Snapshot fields include memo, price, row and pending counts alongside retained heap.

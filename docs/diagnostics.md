@@ -141,6 +141,7 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `qol.groupFinderZones.row` | `qol/GroupFinderZones.lua` `Z.Draw`, hooked on the game's `LFGBrowseSearchEntry_Update` (installed the first time the switch is on; does nothing while it is off). `qol.groupFinderZones.labels` gauges the font strings made, one per row the game showed. | hook |
 | `gathering.evaluate`, `gathering.refresh`, `gathering.animate` | `qol/GatheringSparkles.lua` and `qol/GatheringSparklesDisplay.lua`: one target checked at most every 0.2 seconds plus events, lifecycle changes, and animation only while visible. `gathering.frames`, `.shown`, `.timers`, `.listeners`, `.units` and `.cvars` gauge the bounded retained state. | evaluate, work, update |
 | `buffback.aura`, `buffback.event` (`Perf.Wrap`) | `buffback/Watch.lua`'s two private event frames (your own UNIT_AURA and UNIT_SPELLCAST_SUCCEEDED; zone, resting, combat, target, group and spell changes), only while it is on | event |
+| `loot.victory.event`, `loot.victory.tick` (`Perf.Wrap`) | `loot/Victory.lua`: confirmed win relay and one-shot reveal/fade; bounded queue/pool/listener gauges and `loot.retainedDisplays` (recent presentation snapshots, at most 32, lazily expired after 60 s) in Loot Rolls snapshot | event, update |
 | `loot.event` (`Perf.Wrap`) | `loot/Roll.lua`'s private event frame (group-loot roll events, the roll history, item information), only while Loot Rolls is on | event |
 | `loot.layout`, `loot.tick` (`Perf.Wrap`) | `loot/Cards.lua` `Layout` (a roll started, changed or ended, or a setting changed) and the stack's `OnUpdate` (the countdown bars: about 20 a second, only while a card is counting down or entering) | layout, update |
 | `settings.describe`, `settings.window.build` (`Perf.Call`) | `TwichUI_Settings/Window.lua` `UI.Open` | init |
@@ -511,3 +512,72 @@ cleanup gauges. The panel's frame time is an FPS-derived estimate; Diagnostics
 captures actual sampled frame times. No permanent panel ticker or auto-query exists.
 
 `workshop.summaryHistory` measures the negotiated history reader’s selected-item daily projection (at most 60 dated observations). It allocates no retained cache. Existing raw-byte/partition/decoded/checked gauges cover both supported summary contracts; contract 2 is negotiated only with a matching installed Companion consumer declaration.
+
+### Market PR1 completion capture
+
+`workshop.pricingComplete` scopes Summary's elapsed-budget handoff (total/worst
+slice), independently of `workshop.summaryValidate` and `.summaryLoad`.
+Opt-in aggregate counters `workshop.pricing.uniquePending`, `.deduplicated`,
+`.readerCalls`, `.baseKeys`, `.settled`, `.notifications`, `.fullLists` and
+`workshop.summary.decodeStarts` / `.decodeRepeats` contain no item-level data.
+Gauge `workshop.pricingPending` complements the existing compact reference cache,
+raw partition and decoder gauges. These reset/count through the existing bounded
+capture infrastructure; reading gauges never starts work. See the
+[PR1 capture definitions and limitations](performance/v2-market-pending-pricing-pr1.md#diagnostics-and-native-check).
+
+
+## Cold Market pricing (PR2)
+
+The opt-in `workshop` preset selects bounded Workshop gauges even when recording
+starts before its load-on-demand addon. General remains the default preset.
+Run `/tui perf start workshop 3`, mark `/tui perf mark opportunities-open`, then
+open Workshop → Opportunities; stop with `/tui perf stop`. Export Quick summary
+and JSON from Diagnostics after combat. See the [PR2 acceptance procedure](performance/v2-market-cold-pricing-pr2.md).
+
+`aggregates.elapsedWaits` is wall elapsed milliseconds, separate from instrumented
+CPU. It contains count/min/max/mean and approximate p50/p95/p99 (existing
+histogram precision, about 19%). No CPU scope spans a coroutine yield. At most 24
+elapsed identifiers are retained; samples above one hour or non-finite samples
+are refused. Captures reset observations and invalidate earlier request timers.
+There is no per-item export. Raw references measure first/ten usable cold
+responses and request wait distributions; terminal settlement includes missing
+prices. Opportunities measures a fixed initial visible cohort (at most 128
+internal recipe IDs), then all known rows; missing prices settle without being
+counted as priced rows. Fewer than ten priced visible rows produces no ten-row
+sample. Filtering, scrolling or changing page mid-capture makes cohort results
+unsuitable for before/after comparison.
+
+Partition queue wait and current/history validation wall time include scheduled
+waiting; validation CPU scopes and worst callback remain separate. Ten passive
+gauges cover raw bytes, completed decoded rows, parked history work, price cache
+and pending counts. A paused historical coroutine can retain temporary parsed
+rows beyond the single completed partition cache; the gauge is not a heap size.
+The prior generation can also retain its existing rollback cache. Whole-UI heap and sampled addon memory remain the available client measures.
+Default-off instrumentation adds no background timers or forced collection.
+
+
+## Incremental Opportunities (PR3)
+
+| Scope / counter | Production owner | Meaning |
+| --- | --- | --- |
+| `workshop.opportunityRow` | `ViewOpportunities.lua`, `MakeOppRow` | First-use viewport pool construction; total/worst per row. No permanent polling. |
+| `workshop.opportunityCallback` | `OpportunityEngine.lua`, scheduled continuation | Whole live worker callback, including validation, cleanup and rescheduling. |
+| `workshop.opportunitySource` | `OpportunityEngine.lua`, source guard | Synchronous source/context validation; included in batch budget. |
+| `workshop.opportunityBatch` | `OpportunityEngine.lua`, `Engine.Step` | Synchronous CPU per cooperative slice; total/worst. Scope stops before every scheduled continuation. |
+| `workshop.opportunityQuestion` | `Estimate.lua`, `Est.Ask` | Indivisible service-question CPU on memo misses; never includes a coroutine suspension. |
+| `workshop.opportunities.*` | `OpportunityEngine.lua`; presentation counters in `ViewOpportunities.lua` | Actual `crafts`, preparation passes (`calculated`), dependency `invalidations`, `catalogBuilds`, `batches`, `sorts`, `fullInvalidations`, `fullPublications`/`partialPublications`, `partialReuses` (stable provisional membership), `cancelled`/`errors`; actual `rowPaints`, `cellUpdates`, `detailUpdates`. `cacheHits` counts compatible catalog reads; `reused` counts estimates preserved during catalog reconciliation. |
+
+The opt-in Workshop preset now selects **15** gauges: its original ten plus
+`workshop.opportunities.known`, `.pending`, `.waiting`, `.settled`, `.retained`.
+They read bounded transient counts and never start work. General remains the
+default preset and the 40-gauge capacity is unchanged. No item IDs or imported
+payloads are exported. Catalog state exists for the feature; R.Perf timing/counter
+collection remains capture-only; the engine keeps fixed-size aggregate/status fields.
+
+The initial visible cohort is captured after the first nonempty list publication;
+rows still calculating prevent premature visible/all settlement. Terminal missing
+prices settle honestly. Use `/tui perf start workshop 3` (three minutes), then
+`/tui perf mark opportunities-open`, open Opportunities and leave the initial
+viewport unchanged until settled. Stop with `/tui perf stop`; export Quick summary
+and JSON in Diagnostics. Use separate captures for scrolling/filtering, source
+changes and warm reopening. [Exact native procedure and interpretation](performance/v2-opportunities-incremental-pr3.md#native-forever-check).

@@ -8,6 +8,12 @@ local function Fresh()
   c.Bags({ [0] = { size = 4, slots = { [1] = { 2447, 55 }, [2] = { 2589, 1 } } },
     [6] = { size = 8, slots = { [1] = { 2447, 20 }, [2] = { 2589, 20 }, [3] = { 2770, 20 } } } })
   local MI = c.TwichUI.MagicInventory
+  c.SORTS = {}
+  c.C_Container.SortBank = function(bankType)
+    Check(not MI.Run.Busy() and not c.CURSOR, "bank sort runs after the transfer releases the cursor")
+    c.SORTS[#c.SORTS + 1] = "bank:" .. bankType
+  end
+  c.C_Container.SortBags = function() c.SORTS[#c.SORTS + 1] = "bags" end
   local herbs = MI.SaveRule({ name = "Herbs", enabled = true, kind = "bank", flow = "balance", keep = 20, include = { [2447] = true } })
   local cloth = MI.SaveRule({ name = "Cloth", enabled = true, kind = "bank", flow = "balance", keep = 10, include = { [2589] = true } })
   c.OpenBank()
@@ -20,7 +26,8 @@ end
 do
   local c, MI, Run = Fresh()
   local p = MI.CurrentPlan("bank")
-  Check(p.stacks == 2 and #c.PICKUPS == 0, "opening and planning never move items")
+  Check(p.stacks == 2 and #c.PICKUPS == 0 and #c.SORTS == 0, "opening and planning never move or sort items")
+  Check(MI.BankAutoSort() and not c.TwichUIDB.magicInventory, "the default is on without writing saved data")
   local snapshots = {}
   Run.OnUpdate(function() local prog = Run.BankProgress(); if prog then snapshots[#snapshots + 1] = prog.confirmed end end)
   Check(Run.Bank(p), "start one bank batch")
@@ -28,13 +35,29 @@ do
   Check(Run.BankProgress().total == 2 and Run.BankProgress().confirmed == 0, "attempted first move is not progress")
   c.Settle()
   Check(Run.Current() and Run.Current().state == "withdrawing" and Run.BankProgress().confirmed == 1, "continues to withdrawal without another click")
+  Check(#c.SORTS == 0, "neither inventory sorts while a move is pending")
   c.Settle()
   local last, prog = Run.Last(), Run.BankProgress()
   Check(last.stopReason == "done" and #last.results.confirmed == 2, "both directions confirmed in one result")
+  Check(table.concat(c.SORTS, ",") == "bank:" .. c.Enum.BankType.Character .. ",bags",
+    "a completed bank batch sorts the character bank and bags once")
   Check(not prog.active and prog.confirmed == 2 and prog.total == 2, "finished progress retained")
   Check(Run.CarriedCount(2447) == 20 and Run.CarriedCount(2589) == 10, "both bag targets reached")
   Check(p.groups[1].steps[1].withdraw == nil and p.groups[1].steps[1].lockTries == nil, "reviewed steps not mutated")
   Check(not Run.Bank(MI.CurrentPlan(nil)), "settings preview cannot execute the bank batch")
+end
+-- An explicit Off survives the next load of the feature and suppresses both native sorts.
+do
+  local c, MI, Run = Fresh()
+  MI.SetBankAutoSort(false)
+  Check(Run.Bank(MI.CurrentPlan("bank")), "start an opted-out batch")
+  Settle(c, Run)
+  Check(Run.Last().stopReason == "done" and #c.SORTS == 0, "Off leaves sorting to the player")
+  local reloaded = MIClient("Rich", { db = c.TwichUIDB })
+  local preference = reloaded.TwichUI.MagicInventory
+  Check(preference.BankAutoSort() == false, "Off survives reloading the saved preference")
+  preference.SetBankAutoSort(true)
+  Check(preference.BankAutoSort(), "the player can reenable sorting")
 end
 -- Full bags can be freed by an earlier deposit in the same reviewed batch.
 do
@@ -108,7 +131,7 @@ for _, stop in ipairs({ "stop", "close", "combat", "rules", "refused", "uncertai
   elseif stop == "rules" then MI.SetRuleEnabled(herbs, false); c.Settle()
   elseif stop == "refused" then c.PENDING_MOVES = {}; RunLongTimers(10)
   elseif stop == "uncertain" then c.PENDING_MOVES = {}; c.BAGS[0].slots[1] = nil; RunLongTimers(10) end
-  Check(not Run.Current(), stop .. " ends the batch")
+  Check(not Run.Current() and #c.SORTS == 0, stop .. " ends the batch without sorting")
   Check(Run.CarriedCount(2589) == 1, stop .. " prevents following withdrawal")
   Check(Run.BankProgress().confirmed < Run.BankProgress().total, stop .. " never shows full confirmed progress")
 end

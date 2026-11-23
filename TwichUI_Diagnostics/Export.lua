@@ -33,6 +33,7 @@ EX.KINDS = {
 EX.UNITS = {
     duration = "ms", time = "seconds since the capture started", memory = "KB", frameInterval = "ms", fps = "frames per second",
     profiler = "ms of CPU time per client tick (client counter)", rates = "per minute of capture unless named",
+    elapsedWaits = "ms from admitted request/start to observed completion; elapsed wall time, not CPU",
 }
 EX.PROVENANCE = {
     ["client-counter"] = "a number the client keeps (C_AddOnProfiler, GetAddOnMemoryUsage, GetFramerate)",
@@ -114,7 +115,7 @@ function EX.Report(rec, opts)
         capabilities = rec.caps, environment = rec.env,
         context = { markers = Markers(rec, opts), markersDropped = rec.markersDropped, maxGroupSize = rec.maxGroup },
         aggregates = { measuredWorkMs = F.MeasuredWork(rec), operations = ops, events = rec.events, callbacks = rec.callbacks,
-            counters = rec.counters, allocation = rec.measured, dropped = rec.dropped, anomalies = rec.anomalies },
+            counters = rec.counters, elapsedWaits = rec.observations, allocation = rec.measured, dropped = rec.dropped, anomalies = rec.anomalies },
         frames = { count = rec.frames.count, totalMs = rec.frames.ms, p50Ms = rec.frames.p50, p95Ms = rec.frames.p95, p99Ms = rec.frames.p99,
             maxMs = rec.frames.max, percentiles = "approximate: log-spaced buckets, each about 19% wide",
             overThreshold = (function()
@@ -319,6 +320,13 @@ function EX.Summary(rec, opts)
         A("| %s | %d | %s | %s | %s | %s | %s | %s |", op.id, op.calls, DX.Ms(op.total), DX.Ms(op.self), DX.Ms(op.mean), DX.Ms(op.p95), DX.Ms(op.max), KB(op.allocSelfKB or 0))
     end
     local mapped = {}
+    if rec.observations and #rec.observations>0 then
+        A("")
+        A("## Elapsed waits and milestones (ms; not CPU; percentiles approximate)")
+        A("| observation | count | median | p95 | max |")
+        A("|---|---|---|---|---|")
+        for _,o in ipairs(rec.observations)do A("| %s | %d | %s | %s | %s |",o.id,o.count,DX.Ms(o.p50),DX.Ms(o.p95),DX.Ms(o.max))end
+    end
     for i, op in ipairs(rec.ops or {}) do
         if i > 15 then break end
         local d = DX.Op(op.id)

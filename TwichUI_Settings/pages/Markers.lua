@@ -185,6 +185,9 @@ local function NewTile(ed, i)
     t.state:SetWidth(TILE_W - 6)
     t.state:SetJustifyH("CENTER")
     t.box = G.Checkbox(t, function(on) if t.id then M.SetOn(kind, t.id, on) end end)
+    -- This dense tile shares its bottom row with two 18px arrows. Use the
+    -- existing square treatment so the premium pill cannot cover their hit targets.
+    t.box:SetSize(18, 18)
     t.box:SetPoint("BOTTOM", 0, 7)
     t.left = SideArrow(t, "left", function() if t.pos > 1 then M.Move(kind, t.pos, t.pos - 1) end end)
     t.left:SetPoint("BOTTOMLEFT", 6, 7)

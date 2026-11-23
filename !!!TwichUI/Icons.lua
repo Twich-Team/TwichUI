@@ -54,6 +54,7 @@ local list = {
     profilesSharing = Sheet("profilesSharing"),   -- two portrait medallions
     -- the second sheet (assets/settings-icons-2-source.png)
     classPortrait = { file = R.PATH .. [[media\guildloc\class-WARRIOR]], small = R.PATH .. [[media\guildloc\class-WARRIOR-small]], size = 64, pad = 3, source = "guildLocations" },
+    executeRange = { file = ICONS .. "executeRange", small = ICONS .. "executeRange-small", size = 64, pad = 3, source = "executeRange" }, -- assets/execute-range-source.png
     targetArt = Sheet("targetArt"),               -- a dragon head in a bronze corner frame
     mapPins = Sheet("mapPins"),                   -- a red map pin with teal ripple rings
     mapToolbar = Sheet("mapToolbar"),             -- a parchment map with a brass compass

@@ -7,7 +7,7 @@ dofile(TESTS .. "harness.lua")
 --   * putting it away for the code's own reasons (merchant closed, rule edited, combat) answers nothing;
 --   * a stale Purchase says nothing was bought; asking again reuses the same frame and rows;
 --   * where it can't be drawn, the game's dialog is used with the same words;
---   * its background and border are the player's (RestockPrompt.Style): the default is the TwichUI rim, any other
+--   * its background and border are the player's (RestockPrompt.Style): the default is the crafted frame, any other
 --     border replaces it and the window grows so the content keeps clear of it, a change redraws an open window,
 --     Reset puts it back, and only the look moves (rows, texts, buttons and answers are the same);
 --   * the settings page's preview shows the real window with made-up items: it buys nothing, never replaces a real
@@ -39,6 +39,7 @@ local function Fake(kind, parent)
     SetShown = function(s, v) if v then s:Show() else s:Hide() end end,
     IsShown = function(s) return s.shown end,
     IsVisible = function(s) local p = s while p do if not p.shown then return false end p = p.parent end return true end,
+    SetWordWrap = function(s, v) s.wrap = v end, SetMaxLines = function(s, n) s.maxLines = n end,
     SetText = function(s, t) s.text = t == nil and "" or tostring(t) end,
     GetText = function(s) return s.text end,
     GetStringHeight = function() return 12 end, GetStringWidth = function(s) return #s.text * 6 end,
@@ -135,7 +136,7 @@ end }
 c.BOUGHT = {}
 c.BuyMerchantItem = function(index, n) table.insert(c.BOUGHT, { index = index, n = n }) end
 
-for _, file in ipairs({ "chronicle/Style.lua", "Look.lua", "FrameLook.lua", "modules/Interact.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/Restock.lua", "modules/RestockPrompt.lua" }) do
+for _, file in ipairs({ "chronicle/Style.lua", "Look.lua", "FrameLook.lua", "CraftLook.lua", "modules/Interact.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/Restock.lua", "modules/RestockPrompt.lua" }) do
   local chunk = assert(loadfile(ROOT .. file)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.TwichUIDB = { modules = {} }
@@ -315,11 +316,11 @@ end
 do
   local Style = PR.Style
   local FL = R.FrameLook
-  Check(Style and Style.DEFAULTS.borderTexture == PR.FRAMED and PR.FRAMED == FL.BORDER and Style.DEFAULTS.bgTexture == "solid", "the default is the framed look's frame over a solid page")
+  Check(Style and Style.DEFAULTS.borderTexture == FL.CRAFTED_BORDER and Style.DEFAULTS.bgTexture == "solid", "the default is the crafted frame over a solid page")
   Check(Style.DEFAULTS.bgColor == FL.PANEL_BG and Style.DEFAULTS.borderColor == FL.PANEL_BORDER, "...in its espresso and bronze")
   local offered = {}
   for _, ch in ipairs(Style.BorderChoices()) do offered[ch[1]] = ch[2] end
-  Check(offered[PR.FRAMED] == FL.BORDER_LABEL and offered[PR.LEDGER], "the frame and the older rim are both in the border list")
+  Check(offered[FL.CRAFTED_BORDER] == FL.CRAFTED_BORDER_LABEL .. " (default)" and offered[PR.FRAMED] and offered[PR.LEDGER], "the crafted default and both older borders are in the list")
   Rules({ { id = 17020, target = 20, enabled = true }, { id = 4000, target = 10, enabled = true } })
   c.MERCHANT = { { id = 17020, price = 500 }, { id = 4000, price = 20000, avail = 3 } }
   Bags({ [1] = { 17020, 7 } })
@@ -332,18 +333,20 @@ do
   Reset(); Open()
   local shell = f.twichShell
   do   -- the default: the shared frame (reach 13) and the player's page; the rim, its grain and its dark edge are put away
-    Check(f.twichFrame and f.twichFrame.shown and not f.twichFrame.interior, "the default draws the shared frame, with no interior of its own")
+    Check(f.twichCraftFrame and f.twichCraftFrame.shown and not f.twichCraftFrame.interior, "the default draws the shared frame, with no interior of its own")
     Check(shell and Hidden(shell.rim) and Hidden(shell.tone), "the rim and the grain are put away")
     local ink = {}
     for _, line in pairs(f.edgeInk) do ink[#ink + 1] = line end
     Check(Hidden(ink), "and the rim's dark edge line")
     Check(f.w == 460 + 2 * 9 and f.twichBand.points[1][4] == 13 and f.twichBand.points[1][5] == -13, "the window grows by the frame's reach: " .. f.w)
-    Check(f.purchase.twichLook and f.cancel.twichLook and f.close.twichLook, "Purchase, Cancel and the close box are the framed look's buttons")
+    Check(f.purchase.twichCraft.skin == "primary" and f.cancel.twichCraft.skin == "button" and f.close.twichCraft.skin == "button", "Purchase has the confirmation treatment and Cancel and close use the quiet buttons")
     -- a player's own border puts the frame away; their background is theirs either way
-    Check(Style.Set("borderTexture", "solid") and not f.twichFrame.shown and f.w == 460, "another border puts the frame away")
-    Check(Style.Set("bgColor", "ff123456") and backdrops[#backdrops].bgFile and not f.twichFrame.shown, "a background color of their own is drawn by the look, not hidden")
+    Check(Style.Set("borderTexture", "solid") and not f.twichCraftFrame.shown and f.w == 460, "another border puts the frame away")
+    Check(Style.Set("bgColor", "ff123456") and backdrops[#backdrops].bgFile and not f.twichCraftFrame.shown, "a background color of their own is drawn by the look, not hidden")
+    Check(Style.Set("borderTexture", PR.FRAMED) and f.twichFrame.shown and not f.twichCraftFrame.shown and f.w == 478,
+      "the previous default can still be saved and shows its original frame")
     Style.Reset()
-    Check(f.twichFrame.shown and f.w == 478, "reset: the frame again")
+    Check(f.twichCraftFrame.shown and not f.twichFrame.shown and f.w == 478, "reset restores the crafted frame")
     -- a saved rim (the old default, chosen) is still the rim
     Check(Style.Set("borderTexture", PR.LEDGER) and not f.twichFrame.shown, "the older rim is a choice, and it puts the frame away")
   end
@@ -401,7 +404,7 @@ do
   local before = c.TwichUIDB.ui.restock
   Style.Reset()
   Check(c.TwichUIDB.ui.restockPromptStyle == nil and c.TwichUIDB.ui.restock == before, "Reset forgets the look and leaves the restock list alone")
-  Check(f.w == 478 and Hidden(shell.rim) and Hidden(shell.tone) and f.twichFrame.shown and f.twichBand.points[1][4] == 13, "an open window is back to its default look (the frame)")
+  Check(f.w == 478 and Hidden(shell.rim) and Hidden(shell.tone) and f.twichCraftFrame.shown and f.twichBand.points[1][4] == 13, "an open window is back to its default look (the frame)")
   f.cancel:Fire("OnClick")
   Close()
 
@@ -424,8 +427,19 @@ do
   c.MERCHANT = { { id = 17020, price = 500 } }
   Bags({})
   Reset()
+  local name = c.ITEMS[17020].name
+  local longName = "Arcane Powder for an Exceptionally Long Expedition into the Eastern Kingdoms"
+  c.ITEMS[17020].name = longName
   PR.TogglePreview()
+  c.ITEMS[17020].name = name
   Check(PR.IsShown() and PR.IsPreview() and #Rows(f) == 3, "the preview shows the window with three made-up items")
+  local row = Rows(f)[1]
+  local nameRight = row.iconFrame.points[1][2] + row.iconFrame.w + row.name.points[1][4] + row.name.w
+  Check(row.name.text == longName and nameRight <= row.w + row.cost.points[1][2] - row.cost.w + 2,
+    "the long name stays in its column beside the price column")
+  local warning = Rows(f)[3].warn
+  Check(warning.shown and warning.wrap and warning.maxLines == 2 and warning.text:find("target", 1, true),
+    "the short-row disclosure can wrap within its reserved space")
   Check(f.lead.shown and f.lead.text:find("sample", 1, true) and f.lead.text:find("buys nothing", 1, true), "and says it is a sample: " .. tostring(f.lead.text))
   Check(f.points[1][2] == anchor and f.points[1][3] == "TOPRIGHT", "beside the settings window")
   Check(#c.POPUPS == 0 and not RS.Asking(), "it is not a question: no dialog, nothing pending")

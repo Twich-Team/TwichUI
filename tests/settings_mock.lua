@@ -86,20 +86,21 @@ function SettingsClient(opts)
   c.IsInInstance = function() return false, "none" end
   c.IsResting = function() return false end
 
-  local FILES = { "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", "gear/Data.lua",
+  local FILES = { "ForeverItemFamilies.lua", "gear/Weights.lua", "gear/Evaluate.lua", "gear/Prefs.lua", "gear/Data.lua",
     "gear/Hints.lua", "gear/Tooltip.lua", "gear/Bags.lua", "gear/Window.lua", "modules/Notify.lua", "modules/Arrival.lua", "modules/Media.lua",
     "modules/FriendLogin.lua", "modules/Borders.lua", "modules/FoodDrink.lua", "modules/FoodDrinkUnlock.lua", "camping/Data.lua", "camping/State.lua", "camping/Bar.lua", "camping/Rest.lua", "camping/Unlock.lua",
     "modules/TrainingData.lua", "modules/Training.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/MageTravel.lua", "modules/MageConjure.lua",
     "chronicle/Style.lua", "Look.lua", "FrameLook.lua", "CraftLook.lua", "Icons.lua", "chronicle/Appearance.lua", "modules/NotifyLook.lua", "modules/Refreshments.lua", "modules/RefreshmentsPanel.lua", "modules/RefreshmentsShares.lua",
     "modules/RefreshmentsTrade.lua", "modules/RefreshmentsBroker.lua", "modules/EllesmereJunk.lua", "modules/MageSell.lua", "modules/MageSellWindow.lua", "modules/Restock.lua", "modules/RestockPrompt.lua", "inventory/Rules.lua", "inventory/Items.lua", "inventory/Plan.lua", "inventory/Design.lua", "inventory/GuildBank.lua", "inventory/GuildPlan.lua", "inventory/Run.lua", "inventory/Window.lua", "inventory/Picker.lua", "modules/ChatCleanMatch.lua", "modules/ChatClean.lua",
     "classbars/Anim.lua", "classbars/Resources.lua", "classbars/Config.lua", "classbars/Bar.lua", "classbars/Effects.lua", "classbars/Controller.lua",
-    "reminders/AmmoItems.lua", "reminders/ArtData.lua", "reminders/Config.lua", "reminders/Gallery.lua", "reminders/Conditions.lua", "reminders/Ammunition.lua", "reminders/Evaluate.lua", "reminders/State.lua", "reminders/Display.lua", "reminders/Controller.lua",
+    "reminders/AmmoItems.lua", "reminders/ArtData.lua", "artwork/Catalog.lua", "reminders/Config.lua", "reminders/Gallery.lua", "reminders/Conditions.lua", "reminders/Ammunition.lua", "reminders/Evaluate.lua", "reminders/State.lua", "reminders/Display.lua", "reminders/Controller.lua",
     "healer/Config.lua", "healer/Logic.lua", "healer/Drinks.lua", "healer/Particles.lua", "healer/Display.lua", "healer/Watch.lua",
     "buffback/Config.lua", "buffback/Spells.lua", "buffback/Watch.lua", "buffback/List.lua", "buffback/Unlock.lua",
     "glows/Catalog.lua", "glows/Config.lua", "glows/Logic.lua", "glows/Buttons.lua", "glows/State.lua", "glows/Draw.lua", "glows/Notice.lua", "glows/Controller.lua",
     "hazard/Config.lua", "hazard/Rules.lua", "hazard/Alerts.lua",
     "targetart/Config.lua", "targetart/Ellesmere.lua", "targetart/Display.lua",
     "classportrait/Config.lua", "classportrait/Art.lua", "classportrait/Display.lua",
+    "execute/Config.lua", "execute/Ellesmere.lua", "execute/Display.lua",
     "modules/RestedXPSkin.lua", "modules/RestedXPTimers.lua", "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua",
     "qol/Duels.lua", "qol/QuickKeybind.lua", "qol/LootSparkles.lua", "qol/GroupFinderZones.lua", "qol/GatheringSparkles.lua", "qol/GatheringSparklesDisplay.lua", "qol/GuideWaypoint.lua", "markers/Markers.lua", "markers/Keys.lua", "markers/Bar.lua",
     "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Map.lua", "pins/Minimap.lua", "pins/Editor.lua", "pins/Window.lua",

@@ -341,6 +341,7 @@ hazard\Alerts.lua
 # the three display modes) by tools/make_reminder_gallery.py.
 reminders\AmmoItems.lua
 reminders\ArtData.lua
+artwork\Catalog.lua
 reminders\Config.lua
 reminders\Gallery.lua
 reminders\Conditions.lua
@@ -367,6 +368,7 @@ healer\Drinks.lua
 healer\Particles.lua
 healer\Display.lua
 healer\Picker.lua
+healer\Communication.lua
 healer\Watch.lua
 
 # Return the Favor: a short list of the players who just buffed you; click one to buff them back (off until turned on).
@@ -383,12 +385,14 @@ buffback\Unlock.lua
 # Rules.lua is the rule engine (pure), Config.lua what is stored, Roll.lua watches the game's rolls and is the only place a choice is sent
 # from, Auto.lua turns a rule's decision into a visible countdown, Blizzard.lua lets the game's frames step aside, Cards.lua draws, Main.lua
 # is the switch. The settings are in TwichUI_Settings. Artwork: media\loot (tools/make_loot_roll_art.py).
+ForeverItemFamilies.lua
 loot\Rules.lua
 loot\Config.lua
 loot\Roll.lua
 loot\Auto.lua
 loot\Blizzard.lua
 loot\Cards.lua
+loot\Victory.lua
 loot\Main.lua
 
 # Action bar glows: your action bar buttons glow when a buff of yours is missing (on you, or on group members out of
@@ -417,6 +421,12 @@ targetart\Display.lua
 classportrait\Config.lua
 classportrait\Art.lua
 classportrait\Display.lua
+
+# Execute Range: a personal threshold marker and optional active edge on verified EllesmereUI health bars.
+# Texture-only display; restricted health hides the active edge. No gameplay actions or provider settings writes.
+execute\Config.lua
+execute\Ellesmere.lua
+execute\Display.lua
 
 # Sell from Bags: Auction House posting tab (uses the Chronicle palette)
 auction\Price.lua

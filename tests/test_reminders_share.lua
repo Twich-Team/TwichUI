@@ -43,7 +43,7 @@ local function NewClient(name, extra)
   for k, v in pairs(extra or {}) do c[k] = v end
   c.LOADED["!!!TwichUI"] = true; c.FireEvent("ADDON_LOADED", "!!!TwichUI")
   c.FireEvent("PLAYER_LOGIN")
-  for _, f in ipairs({ "reminders/AmmoItems.lua", "reminders/ArtData.lua", "reminders/Config.lua", "reminders/Gallery.lua",
+  for _, f in ipairs({ "reminders/AmmoItems.lua", "reminders/ArtData.lua", "artwork/Catalog.lua", "reminders/Config.lua", "reminders/Gallery.lua",
     "reminders/Conditions.lua", "reminders/Ammunition.lua", "reminders/Share.lua", "reminders/ShareUI.lua" }) do
     local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
   end

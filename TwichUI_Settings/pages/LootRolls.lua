@@ -63,7 +63,7 @@ end
 K.Page({
     key = "lootRolls", icon = "lootRolls", name = "Loot Rolls", tab = "Loot cards", order = 26, group = "everyday",
     description = "Loot cards and simple automatic rolling rules.",
-    keywords = "loot roll rolls need greed pass group loot card cards window item upgrade vendor timer countdown automatic auto rule rules place position scale",
+    keywords = "loot roll rolls need greed pass group loot card cards window item upgrade vendor timer countdown automatic auto rule rules place position scale victory celebration sound won",
     overview = {
         label = "Loot Rolls", tip = "A card for each group-loot roll, and optional rules that choose Need, Greed or Pass after a countdown you can stop.",
         when = function() return R.LootRolls ~= nil end,
@@ -164,6 +164,31 @@ K.Page({
             "How long a card takes to fade out. 0 takes it away at once."), main, Fades)
         if fadeIn and fadeIn.options then fadeIn.options.step = 50 end
         if fadeOut and fadeOut.options then fadeOut.options.step = 50 end
+
+        K.Card({ title = "Victory Celebration", icon = "lootRolls", switch = false,
+            what = "A brief celebration when you win a Need or Greed roll.",
+            consequence = "Replaces the matching winning notification when the client supports it. Other rewards keep their own alerts.",
+        })
+        Check("victory", "Custom victory notification", "Show the supplied leather and bronze victory card on a confirmed win. Off keeps the game's winning notification.")
+        Pick("victoryIntensity", "Animation intensity", "Off shows the clean static card without lighting effects. Subtle adds soft illumination, one clear sweep and four sparks. Full adds a radiant gold burst, twelve choreographed particles, and a brighter magical item arrival, with light briefly extending above the frame. Both settle without continuous motion.")
+        Check("victorySound", "Victory sound", "One quiet chime on SFX, respecting global sound settings. Rapid wins share a sound cooldown.")
+        Pick("victoryDuration", "Hold finished victory card", "After the 1.85-second celebration: Short holds 3.5 seconds, Normal 4 seconds, Long 5 seconds, then fades out. Off animation shows a static card for that duration.")
+        -- Sample choices belong to this settings page, never to a saved loot result.
+        local previewChoice, previewQuality = "need", 2
+        local choiceSetting = K.Proxy("lootRollsVictoryPreviewChoice", STRING, "Preview roll", "need",
+            function() return previewChoice end, function(v) if v == "need" or v == "greed" then previewChoice = v end end)
+        local qualitySetting = K.Proxy("lootRollsVictoryPreviewQuality", NUMBER, "Preview item quality", 2,
+            function() return previewQuality end, function(v) if v == 2 or v == 3 or v == 4 or v == 5 then previewQuality = v end end)
+        resettable[#resettable + 1] = { setting = choiceSetting, default = "need" }
+        resettable[#resettable + 1] = { setting = qualitySetting, default = 2 }
+        K.Dropdown(choiceSetting, function() return { { "need", "Need" }, { "greed", "Greed" } } end,
+            "Choose the roll shown by Preview victory. Only the sample changes.")
+        K.Dropdown(qualitySetting, function() return { { 2, "Uncommon" }, { 3, "Rare" }, { 4, "Epic" }, { 5, "Legendary" } } end,
+            "Choose a sample item and its matching quality color and effects.")
+        K.Button("Preview victory card", "Replay victory", function()
+            local ok, why = R.LootVictory.Preview(previewChoice, previewQuality)
+            if not ok then R.Print("%s", why) end
+        end, "Restarts the complete celebration with your selected roll and item quality, even while loot cards are off. Uses your animation and sound settings. Nothing is rolled.")
 
         -- The countdown bar
         K.Card({

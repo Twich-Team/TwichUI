@@ -431,6 +431,11 @@ local function DrawBank(cur)
         if not done then W.Say(err, "warn") end
     end
     R.Interact.Tip(f.bankGo, "Run bank transfers", why or "Carries out this review: deposits first, then withdrawals. Stop ends the batch; completed transfers stay done.")
+    local canSetSort = not cur and MI.Enabled()
+    f.bankAutoSort:SetChecked(MI.BankAutoSort())
+    f.bankAutoSort:SetActive(canSetSort)
+    f.bankAutoSort:SetShown(not choosingRule)
+    L.Color(f.bankAutoSort.label, canSetSort and L.pal.text or L.pal.textDim)
     f.stop:SetShown(cur ~= nil)
     f.again:SetEnabled(not cur); f.manage:SetEnabled(not cur)
     local prog = Run.BankProgress()
@@ -471,7 +476,7 @@ local function Draw()
         if not plan then manual = nil; plan = MI.CurrentPlan(context, leftOut) end
     end
     if context == "bank" then DrawBank(cur); return end
-    f.bankSummary:Hide(); f.bankGo:Hide(); f.bankProgress:Hide(); f.sub:Show()
+    f.bankSummary:Hide(); f.bankGo:Hide(); f.bankAutoSort:Hide(); f.bankProgress:Hide(); f.sub:Show()
     f.again:SetEnabled(not cur); f.manage:SetEnabled(true)
     f.box:ClearAllPoints(); f.box:SetPoint("TOPLEFT", PAD, -(HEADER + 30)); f.box:SetPoint("BOTTOMRIGHT", -PAD, FOOT)
     f.sub:SetText(context and CONTEXT_TITLE[context] or "Preview: what your rules would move, from your bags as they are now. Nothing moves from here.")
@@ -681,6 +686,22 @@ local function Build()
     f.bankGo = F.Button(f, "Run rules", 132, "primary", function(self) if self.onClick then self.onClick() end end)
     f.bankGo:SetPoint("BOTTOMLEFT", PAD, 16); f.bankGo:Hide()
     if C then C.Dress(f.bankGo, "confirmation") end
+    local switch = C and C.Pill or L.Checkbox
+    f.bankAutoSort = switch(f, function(on)
+        MI.SetBankAutoSort(on)
+        W.Refresh()
+    end)
+    f.bankAutoSort:SetPoint("LEFT", f.bankGo, "RIGHT", 78, 0)
+    f.bankAutoSort.label = L.Text(f.bankAutoSort, "small")
+    f.bankAutoSort.label:SetPoint("RIGHT", f.bankAutoSort, "LEFT", -8, 0)
+    f.bankAutoSort.label:SetWidth(62)
+    f.bankAutoSort.label:SetJustifyH("RIGHT")
+    f.bankAutoSort.label:SetWordWrap(false)
+    f.bankAutoSort.label:SetText("Auto-sort")
+    if C then C.Font(f.bankAutoSort.label, 13) end
+    f.bankAutoSort:Hide()
+    R.Interact.Tip(f.bankAutoSort, "Auto-sort bags and bank",
+        "Sorts your bags and character bank after a bank transfer finishes. This choice is saved across reloads.")
     f.bankSummary = CreateFrame("Frame", nil, f)
     f.bankSummary:SetPoint("TOPLEFT", PAD, -(HEADER + 10)); f.bankSummary:SetSize(WIDTH - PAD * 2, 56)
     for i, dir in ipairs({ "deposit", "withdraw", "balance" }) do
@@ -703,8 +724,11 @@ local function Build()
     L.Surface(f.bankProgress, L.pal.well, 1, L.pal.bronzeLo, .9)
     f.bankProgress.fill = f.bankProgress:CreateTexture(nil, "ARTWORK")
     f.bankProgress.fill:SetPoint("TOPLEFT", 2, -2); f.bankProgress.fill:SetPoint("BOTTOMLEFT", 2, 2)
-    f.bankProgress.fill:SetColorTexture(L.pal.tealHi[1], L.pal.tealHi[2], L.pal.tealHi[3], .9)
-    f.bankProgress.text = L.Text(f.bankProgress, "small"); f.bankProgress.text:SetPoint("CENTER", 0, 0)
+    -- Keep ivory progress text legible over both the well and the filled run.
+    f.bankProgress.fill:SetColorTexture(L.pal.tealLo[1], L.pal.tealLo[2], L.pal.tealLo[3], .9)
+    f.bankProgress.text = L.Text(f.bankProgress, "small", "OVERLAY")
+    L.Color(f.bankProgress.text, L.pal.text)
+    f.bankProgress.text:SetPoint("CENTER", 0, 0)
     f.bankProgress:Hide()
 
     -- hooked, not set: the shell's fade and the fit to the screen are hooks of the same scripts
@@ -754,44 +778,74 @@ local function ButtonText(kind)
     return "Magic Inventory"
 end
 
+-- The label sits right of the icon, left aligned. The crafted button (CraftLook.Control) re-anchors its text on every state
+-- change, so this runs again after each one (see InterfaceButton).
+local function PlaceLabel(b, dy)
+    b.text:ClearAllPoints()
+    b.text:SetJustifyH("LEFT")
+    if b.icon then b.text:SetPoint("LEFT", b.icon, "RIGHT", 6, dy or 0)
+    else b.text:SetPoint("CENTER", 0, dy or 0) end
+end
+
 -- Sets the label and sizes the button to it (the icon, the text and an even margin).
 local function SetLabel(b, kind)
     b.text:SetText(ButtonText(kind))
-    local pad = b.icon and 34 or 24
-    b:SetWidth(math.ceil((b.text:GetStringWidth() or 120) + pad))
+    local pad = b.icon and 40 or 24
+    local w = math.ceil(b.text:GetStringWidth() or 120)
+    b.text:SetWidth(w + 2)
+    b:SetWidth(w + pad)
+    PlaceLabel(b)
 end
 
--- EllesmereUI's Blizzard skin restyles the mailbox, bank and guild bank windows. With it on, the button sits inside the
--- window's title strip (left of the close button) instead of floating above the corner, and belongs to the window, so it
--- shows, hides, scales and stacks with it. Without the skin the placement is unchanged.
-local function IsSkinned(host)
-    if type(host) ~= "table" or not host.IsShown then return false end
+-- With EllesmereUI the interface windows are restyled (mailbox: its Blizzard skin) or replaced (bank: EllesmereUI Bags draws
+-- its own window, EUI_BankFrame, and leaves Blizzard's hidden). The button then belongs to that window, so it shows, hides,
+-- scales and stacks with it, and is placed against it rather than floating:
+--   * mailbox: centred in the quiet band between the title and the list;
+--   * bank: in the header, in the empty stretch between the title and the sort / search controls.
+-- Without EllesmereUI the placement is unchanged.
+local function AddonLoaded(name)
     local loaded = C_AddOns and C_AddOns.IsAddOnLoaded
-    return (loaded and loaded("EllesmereUIBlizzardSkin") and true) or false
+    return (loaded and loaded(name)) and true or false
 end
 
-local EMBED_HEIGHT, EMBED_INSET_X, EMBED_INSET_Y, CLOSE_ROOM = 22, 6, -5, 26
+local function Shown(frame) return type(frame) == "table" and frame.IsShown and frame:IsShown() end
+
+-- The window to place against, and how: "band", "header" (both belong to the window) or nil (unchanged placement)
+local function HostFor(kind)
+    local euiBank = kind == "bank" and _G.EUI_BankFrame
+    if Shown(euiBank) then return euiBank, "header" end
+    local host = _G[HOSTS[kind]]
+    if kind == "mail" and Shown(host) and AddonLoaded("EllesmereUIBlizzardSkin") then return host, "band" end
+    return host, nil
+end
+
+local EMBED_HEIGHT, BAND_TOP = 22, -22
+local BANK_HEADER_X, BANK_HEADER_Y = -62, -18   -- the empty stretch of EllesmereUI's bank header, from the window's top centre
 
 local function Anchor(b, kind)
     b:ClearAllPoints()
-    local host = _G[HOSTS[kind]]
-    local open = type(host) == "table" and host.IsShown and host:IsShown()
-    if open and IsSkinned(host) then
+    local host, how = HostFor(kind)
+    if how then
         b:SetParent(host)
         b:SetFrameStrata(host:GetFrameStrata() or "HIGH")
         b:SetFrameLevel((host:GetFrameLevel() or 0) + 20)
-        b:SetHeight(EMBED_HEIGHT)
-        b:SetPoint("TOPRIGHT", host, "TOPRIGHT", -(EMBED_INSET_X + CLOSE_ROOM), EMBED_INSET_Y)
         b.embedded = true
+        if how == "band" then
+            b:SetHeight(EMBED_HEIGHT)
+            b:SetPoint("TOP", host, "TOP", 0, BAND_TOP)
+        else
+            b:SetHeight(EMBED_HEIGHT)
+            b:SetPoint("CENTER", host, "TOP", BANK_HEADER_X, BANK_HEADER_Y)
+        end
         return
     end
     if b.embedded then
         b.embedded = nil
         b:SetParent(UIParent)
         b:SetFrameStrata("HIGH")
-        b:SetHeight(F_HEIGHT or 22)
+        if F_HEIGHT then b:SetHeight(F_HEIGHT) end
     end
-    if open then
+    if Shown(host) then
         b:SetPoint("BOTTOMRIGHT", host, "TOPRIGHT", 0, 4)
     else
         -- another addon draws this interface (a bag addon's bank, for one): a quiet place at the top of the screen
@@ -816,13 +870,12 @@ local function InterfaceButton(kind)
         b.icon:SetSize(18, 18)
         b.icon:SetPoint("LEFT", 8, 0)
         R.Icons.Apply(b.icon, "magicInventory", 18)
-        -- the shared button puts its label back to the centre on every hover and press, so the offset is set again after
-        local function Nudge(y) b.text:SetPoint("CENTER", 13, y) end
-        Nudge(0)
+        b.icon:SetDrawLayer("OVERLAY", 7)
+        -- the crafted button puts its label back on every hover, press and enable change, so it is placed again after
         for _, script in ipairs({ "OnEnter", "OnLeave", "OnMouseUp", "OnEnable", "OnDisable" }) do
-            b:HookScript(script, function() Nudge(0) end)
+            b:HookScript(script, function() PlaceLabel(b) end)
         end
-        b:HookScript("OnMouseDown", function() if b:IsEnabled() then Nudge(-1) end end)
+        b:HookScript("OnMouseDown", function() if b:IsEnabled() then PlaceLabel(b, -1) end end)
     end
     R.Interact.Tip(b, "Magic Inventory", function()
         local n = counts[kind]

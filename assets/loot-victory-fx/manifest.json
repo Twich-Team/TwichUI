@@ -1,0 +1,1100 @@
+{
+  "schema_version": 1,
+  "kit": "TwichUI Loot Victory \u2014 Supplemental Gold Lighting FX",
+  "version": "1.0.0",
+  "scope": "Only new FX artwork. Existing card layout, loot logic, original kit, and client-owned item icon are unchanged.",
+  "coordinate_basis": {
+    "card_width": 428,
+    "card_height": 201,
+    "scale": "UI pixels, relative to current provided in-game screenshot; adapt to actual frame scale"
+  },
+  "files": [
+    {
+      "id": "fx_header_haze",
+      "group": "header",
+      "recommended": true,
+      "purpose": "Wide, low-strength warm haze beneath title artwork",
+      "runtime_tga": "runtime/tga/fx_header_haze.tga",
+      "editable_png": "source/png/fx_header_haze.png",
+      "source_atlas": "source/atlases/golden_fantasy_ui_fx_atlas.png",
+      "source_crop_xyxy": [
+        50,
+        12,
+        1380,
+        288
+      ],
+      "size_px": [
+        1024,
+        256
+      ],
+      "content_bbox_xywh": [
+        61,
+        34,
+        901,
+        187
+      ],
+      "uv_content_rect": [
+        0.05957,
+        0.939453,
+        0.132812,
+        0.863281
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "7596b5619bca81aeba13e20daace651ebf32484a5162b376004ec633aeb21786",
+      "tga_sha256": "1e795b9d8ea00aa2daae1e7805c7f72c2f57196a7c045fb9790658f82b7b89f8"
+    },
+    {
+      "id": "fx_header_bloom",
+      "group": "header",
+      "recommended": true,
+      "purpose": "White-gold focal light behind victory heading; one-shot peak",
+      "runtime_tga": "runtime/tga/fx_header_bloom.tga",
+      "editable_png": "source/png/fx_header_bloom.png",
+      "source_atlas": "source/atlases/golden_fantasy_ui_fx_atlas.png",
+      "source_crop_xyxy": [
+        115,
+        268,
+        1325,
+        501
+      ],
+      "size_px": [
+        1024,
+        256
+      ],
+      "content_bbox_xywh": [
+        61,
+        41,
+        901,
+        174
+      ],
+      "uv_content_rect": [
+        0.05957,
+        0.939453,
+        0.160156,
+        0.839844
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "f1fa1f4fe3f9fc0a966fb29f19f7886fb536562960b4805a26613bd29c7dbd8b",
+      "tga_sha256": "8fed04cc000d3a9a93a09a46ad22eb9322562b5904c78bffd48979cfcf054e0a"
+    },
+    {
+      "id": "fx_header_settled",
+      "group": "header",
+      "recommended": false,
+      "purpose": "Quiet warm underlight for static card; optional at low alpha",
+      "runtime_tga": "runtime/tga/fx_header_settled.tga",
+      "editable_png": "source/png/fx_header_settled.png",
+      "source_atlas": "source/atlases/golden_fantasy_ui_fx_atlas.png",
+      "source_crop_xyxy": [
+        100,
+        621,
+        1340,
+        785
+      ],
+      "size_px": [
+        1024,
+        256
+      ],
+      "content_bbox_xywh": [
+        61,
+        68,
+        901,
+        119
+      ],
+      "uv_content_rect": [
+        0.05957,
+        0.939453,
+        0.265625,
+        0.730469
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "8cb4c11b4f7adbe9cdc5ea678fe6d51423e6d093cf6d38730d8319ec52433fae",
+      "tga_sha256": "6c54cbb83860247e56c093db8401e1d53b744445c2e41b8e1cb320a7745f3fb1"
+    },
+    {
+      "id": "fx_trim_underlight",
+      "group": "header",
+      "recommended": false,
+      "purpose": "Faint warm edge accent, never full-card flood",
+      "runtime_tga": "runtime/tga/fx_trim_underlight.tga",
+      "editable_png": "source/png/fx_trim_underlight.png",
+      "source_atlas": "source/atlases/golden_fantasy_ui_fx_atlas.png",
+      "source_crop_xyxy": [
+        100,
+        925,
+        1320,
+        1070
+      ],
+      "size_px": [
+        1024,
+        128
+      ],
+      "content_bbox_xywh": [
+        61,
+        10,
+        901,
+        107
+      ],
+      "uv_content_rect": [
+        0.05957,
+        0.939453,
+        0.078125,
+        0.914062
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "705fb845fd96e30a2a12b65dda5a57cac57aa1df2d0f40bf98efb8f2662cb444",
+      "tga_sha256": "6056112d7a071a836ddf1c82151faf82b2f6311b2c767a13c209a75a3b775eb8"
+    },
+    {
+      "id": "fx_glint_small",
+      "group": "particle",
+      "recommended": true,
+      "purpose": "Reusable crisp 4-point gold glint",
+      "runtime_tga": "runtime/tga/fx_glint_small.tga",
+      "editable_png": "source/png/fx_glint_small.png",
+      "source_atlas": "source/atlases/golden_fantasy_ui_fx_atlas.png",
+      "source_crop_xyxy": [
+        150,
+        747,
+        470,
+        941
+      ],
+      "size_px": [
+        256,
+        256
+      ],
+      "content_bbox_xywh": [
+        15,
+        59,
+        225,
+        137
+      ],
+      "uv_content_rect": [
+        0.058594,
+        0.9375,
+        0.230469,
+        0.765625
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "2314421a793400f300574e13d88eeb48ab236d8a69443db2540194d6e85ca122",
+      "tga_sha256": "ad1d26b14373659b89aff41b604da9d4d48323bee1ca282ba659296152320362"
+    },
+    {
+      "id": "fx_icon_gold_haze",
+      "group": "icon",
+      "recommended": true,
+      "purpose": "Warm atmosphere behind item icon; broad and low opacity",
+      "runtime_tga": "runtime/tga/fx_icon_gold_haze.tga",
+      "editable_png": "source/png/fx_icon_gold_haze.png",
+      "source_atlas": "source/atlases/fantasy_gold_violet_ui_fx_atlas.png",
+      "source_crop_xyxy": [
+        32,
+        20,
+        500,
+        510
+      ],
+      "size_px": [
+        256,
+        256
+      ],
+      "content_bbox_xywh": [
+        20,
+        15,
+        215,
+        225
+      ],
+      "uv_content_rect": [
+        0.078125,
+        0.917969,
+        0.058594,
+        0.9375
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "09238bbf2bbeac971a611514edd4a62b871003f13a3cb37959d837c1f5f012f7",
+      "tga_sha256": "7cd37222ec198586b240fc059c9d80cb78a187a9a5013beb4f8e947a15ac7ba1"
+    },
+    {
+      "id": "fx_icon_bloom",
+      "group": "icon",
+      "recommended": true,
+      "purpose": "Short white-gold icon arrival bloom",
+      "runtime_tga": "runtime/tga/fx_icon_bloom.tga",
+      "editable_png": "source/png/fx_icon_bloom.png",
+      "source_atlas": "source/atlases/fantasy_gold_violet_ui_fx_atlas.png",
+      "source_crop_xyxy": [
+        485,
+        12,
+        962,
+        510
+      ],
+      "size_px": [
+        256,
+        256
+      ],
+      "content_bbox_xywh": [
+        20,
+        15,
+        216,
+        225
+      ],
+      "uv_content_rect": [
+        0.078125,
+        0.921875,
+        0.058594,
+        0.9375
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "44d8258b9feb40450ec1a13085e56e69c8592deba48dbf64023002d75c015770",
+      "tga_sha256": "51de3222ee09fb6dee50b76c417d43c410eb5a4599bf31473d3fa76641304f1d"
+    },
+    {
+      "id": "fx_icon_epic_ring",
+      "group": "icon",
+      "recommended": false,
+      "purpose": "Optional purple-gold ring; epic only and reduced alpha",
+      "runtime_tga": "runtime/tga/fx_icon_epic_ring.tga",
+      "editable_png": "source/png/fx_icon_epic_ring.png",
+      "source_atlas": "source/atlases/fantasy_gold_violet_ui_fx_atlas.png",
+      "source_crop_xyxy": [
+        951,
+        9,
+        1440,
+        526
+      ],
+      "size_px": [
+        256,
+        256
+      ],
+      "content_bbox_xywh": [
+        21,
+        15,
+        213,
+        225
+      ],
+      "uv_content_rect": [
+        0.082031,
+        0.914062,
+        0.058594,
+        0.9375
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "fb4e330295e17ea5203f609c3a945d2c497336539e99517a672099a969824ec9",
+      "tga_sha256": "2e8f03f998efd72dd943d4b2d7931105a0fde398427dbc0e510f364e2a70dd6f"
+    },
+    {
+      "id": "fx_icon_gold_ring",
+      "group": "icon",
+      "recommended": false,
+      "purpose": "Gold icon aura for neutral/other qualities",
+      "runtime_tga": "runtime/tga/fx_icon_gold_ring.tga",
+      "editable_png": "source/png/fx_icon_gold_ring.png",
+      "source_atlas": "source/atlases/fantasy_gold_violet_ui_fx_atlas.png",
+      "source_crop_xyxy": [
+        28,
+        536,
+        510,
+        1080
+      ],
+      "size_px": [
+        256,
+        256
+      ],
+      "content_bbox_xywh": [
+        28,
+        15,
+        200,
+        225
+      ],
+      "uv_content_rect": [
+        0.109375,
+        0.890625,
+        0.058594,
+        0.9375
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "e7452d28ae742cc9a098576394598b00b5d6323612ade4f05a06cdd88aaf5f53",
+      "tga_sha256": "2b116259aa16c87bd1403f391e9455e783b3f4843965dea25242d5c24a426d4e"
+    },
+    {
+      "id": "fx_icon_final_glint",
+      "group": "icon",
+      "recommended": false,
+      "purpose": "Sharp finishing glint on icon edge",
+      "runtime_tga": "runtime/tga/fx_icon_final_glint.tga",
+      "editable_png": "source/png/fx_icon_final_glint.png",
+      "source_atlas": "source/atlases/fantasy_gold_violet_ui_fx_atlas.png",
+      "source_crop_xyxy": [
+        476,
+        534,
+        951,
+        1030
+      ],
+      "size_px": [
+        256,
+        256
+      ],
+      "content_bbox_xywh": [
+        20,
+        15,
+        216,
+        225
+      ],
+      "uv_content_rect": [
+        0.078125,
+        0.921875,
+        0.058594,
+        0.9375
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "72caefa590a6124128f67d1f99ca5f926a7074ac1d5e012aab0b4f87c08188b9",
+      "tga_sha256": "7d8a0b5feb157327d6b5d907095065665f5eb2ba1a2109dda3cb68779d1a867f"
+    },
+    {
+      "id": "fx_sweep_haze",
+      "group": "sweep",
+      "recommended": true,
+      "purpose": "Broad atmospheric sweep layer travelling with bright core",
+      "runtime_tga": "runtime/tga/fx_sweep_haze.tga",
+      "editable_png": "source/png/fx_sweep_haze.png",
+      "source_atlas": "source/atlases/golden_victory_fx_atlas.png",
+      "source_crop_xyxy": [
+        32,
+        40,
+        1430,
+        342
+      ],
+      "size_px": [
+        1024,
+        256
+      ],
+      "content_bbox_xywh": [
+        61,
+        30,
+        901,
+        195
+      ],
+      "uv_content_rect": [
+        0.05957,
+        0.939453,
+        0.117188,
+        0.878906
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "e7a230b26828a27a9bed085dc8abbbea1985c26fff430ca2ed8d0cdb77d56f74",
+      "tga_sha256": "37bc227cf6484ee8d318850190c51cf1476527262b09446837f7cf1cba3e582a"
+    },
+    {
+      "id": "fx_sweep_core",
+      "group": "sweep",
+      "recommended": true,
+      "purpose": "Tight luminous gold-white streak across bronze trim",
+      "runtime_tga": "runtime/tga/fx_sweep_core.tga",
+      "editable_png": "source/png/fx_sweep_core.png",
+      "source_atlas": "source/atlases/golden_victory_fx_atlas.png",
+      "source_crop_xyxy": [
+        80,
+        302,
+        1390,
+        528
+      ],
+      "size_px": [
+        1024,
+        256
+      ],
+      "content_bbox_xywh": [
+        61,
+        50,
+        901,
+        155
+      ],
+      "uv_content_rect": [
+        0.05957,
+        0.939453,
+        0.195312,
+        0.800781
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "08ecd224c2f198731b44e5d644aa1b30ee34a416c03fad90603359f82526ab7c",
+      "tga_sha256": "d13a8ed08072bdaa4c85f30829c3ae2f89a37e4e1098ebf3603636ede01c5cff"
+    },
+    {
+      "id": "fx_sweep_trail",
+      "group": "sweep",
+      "recommended": false,
+      "purpose": "Optional short comet-like glimmer following primary sweep",
+      "runtime_tga": "runtime/tga/fx_sweep_trail.tga",
+      "editable_png": "source/png/fx_sweep_trail.png",
+      "source_atlas": "source/atlases/golden_victory_fx_atlas.png",
+      "source_crop_xyxy": [
+        220,
+        501,
+        900,
+        694
+      ],
+      "size_px": [
+        512,
+        256
+      ],
+      "content_bbox_xywh": [
+        30,
+        64,
+        451,
+        128
+      ],
+      "uv_content_rect": [
+        0.058594,
+        0.939453,
+        0.25,
+        0.75
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "a692630b399a6a5a779bef0cbc5399028b2fb41b3d4b3d0b79b82b67f22c332c",
+      "tga_sha256": "8e94e43b834080123c4bcea14e538b04f63355eb73c9266e1eaffb1e0594c7d9"
+    },
+    {
+      "id": "fx_trim_crescent",
+      "group": "sweep",
+      "recommended": false,
+      "purpose": "Optional quiet gold curvature along existing border",
+      "runtime_tga": "runtime/tga/fx_trim_crescent.tga",
+      "editable_png": "source/png/fx_trim_crescent.png",
+      "source_atlas": "source/atlases/golden_victory_fx_atlas.png",
+      "source_crop_xyxy": [
+        142,
+        635,
+        1310,
+        826
+      ],
+      "size_px": [
+        1024,
+        256
+      ],
+      "content_bbox_xywh": [
+        61,
+        54,
+        901,
+        147
+      ],
+      "uv_content_rect": [
+        0.05957,
+        0.939453,
+        0.210938,
+        0.785156
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "f4a572dd57a29322eb28fb87d97fbd49f1c1aa093e577cb5091bb391c5540e60",
+      "tga_sha256": "6e901252ad15ce19e7f51b00fcc0e8e30346bc1fc746aadc033d81689f3e2d5b"
+    },
+    {
+      "id": "fx_emblem_burst",
+      "group": "emblem",
+      "recommended": true,
+      "purpose": "Brief radial bloom behind Need/Greed emblem; NOT behind item text",
+      "runtime_tga": "runtime/tga/fx_emblem_burst.tga",
+      "editable_png": "source/png/fx_emblem_burst.png",
+      "source_atlas": "source/atlases/golden_fantasy_victory_fx_atlas.png",
+      "source_crop_xyxy": [
+        24,
+        15,
+        645,
+        422
+      ],
+      "size_px": [
+        512,
+        512
+      ],
+      "content_bbox_xywh": [
+        30,
+        108,
+        451,
+        295
+      ],
+      "uv_content_rect": [
+        0.058594,
+        0.939453,
+        0.210938,
+        0.787109
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "d7937135ec4f1bd249b4ec614f4a9e817508da9ca0996bafd89ca48b4039e119",
+      "tga_sha256": "498f715e7e6a91012dd3f2717cb065f67657f3d14e8d00aa30701511259ecf9c"
+    },
+    {
+      "id": "fx_emblem_crown",
+      "group": "emblem",
+      "recommended": false,
+      "purpose": "Optional concentrated header crest accent",
+      "runtime_tga": "runtime/tga/fx_emblem_crown.tga",
+      "editable_png": "source/png/fx_emblem_crown.png",
+      "source_atlas": "source/atlases/golden_fantasy_victory_fx_atlas.png",
+      "source_crop_xyxy": [
+        645,
+        5,
+        1430,
+        418
+      ],
+      "size_px": [
+        512,
+        256
+      ],
+      "content_bbox_xywh": [
+        42,
+        15,
+        428,
+        225
+      ],
+      "uv_content_rect": [
+        0.082031,
+        0.917969,
+        0.058594,
+        0.9375
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "87c36b740e0f0a6ce8cff3046ab4eb2d09433c6c598acd0c797a4ab54d967e5e",
+      "tga_sha256": "59b9c0521f4bd87b72f60e0e10eebce77a1f5c008f4c7487d754533421a2bcaa"
+    },
+    {
+      "id": "fx_emblem_backlight",
+      "group": "emblem",
+      "recommended": false,
+      "purpose": "Soft focal haze behind emblem, toned down after reveal",
+      "runtime_tga": "runtime/tga/fx_emblem_backlight.tga",
+      "editable_png": "source/png/fx_emblem_backlight.png",
+      "source_atlas": "source/atlases/golden_fantasy_victory_fx_atlas.png",
+      "source_crop_xyxy": [
+        617,
+        427,
+        1420,
+        732
+      ],
+      "size_px": [
+        512,
+        256
+      ],
+      "content_bbox_xywh": [
+        30,
+        42,
+        451,
+        171
+      ],
+      "uv_content_rect": [
+        0.058594,
+        0.939453,
+        0.164062,
+        0.832031
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "952ee639623d32a9eb71397a4552ac62cb5bf8b111dc811e19d91aac532164a9",
+      "tga_sha256": "235085a46cfe6489cdc992cb6178c54203b0d9825c62c3eda84afa0d6409d264"
+    },
+    {
+      "id": "fx_emblem_final_star",
+      "group": "emblem",
+      "recommended": false,
+      "purpose": "Final one-shot star accent",
+      "runtime_tga": "runtime/tga/fx_emblem_final_star.tga",
+      "editable_png": "source/png/fx_emblem_final_star.png",
+      "source_atlas": "source/atlases/golden_fantasy_victory_fx_atlas.png",
+      "source_crop_xyxy": [
+        60,
+        714,
+        603,
+        1078
+      ],
+      "size_px": [
+        256,
+        256
+      ],
+      "content_bbox_xywh": [
+        15,
+        52,
+        225,
+        151
+      ],
+      "uv_content_rect": [
+        0.058594,
+        0.9375,
+        0.203125,
+        0.792969
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "1abd8f5a7dabe032eded845fee5dfcf5158b334ca4123383a61451ebe38194a8",
+      "tga_sha256": "2fcd95195f8fe5fcd9d2fa04afde6562e6745efc1c546bc18c86bb132c2990e2"
+    },
+    {
+      "id": "fx_atmosphere_mist",
+      "group": "emblem",
+      "recommended": false,
+      "purpose": "Small optional drifting gold atmosphere layer",
+      "runtime_tga": "runtime/tga/fx_atmosphere_mist.tga",
+      "editable_png": "source/png/fx_atmosphere_mist.png",
+      "source_atlas": "source/atlases/golden_fantasy_victory_fx_atlas.png",
+      "source_crop_xyxy": [
+        611,
+        717,
+        1418,
+        1078
+      ],
+      "size_px": [
+        512,
+        256
+      ],
+      "content_bbox_xywh": [
+        30,
+        27,
+        451,
+        202
+      ],
+      "uv_content_rect": [
+        0.058594,
+        0.939453,
+        0.105469,
+        0.894531
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "bdb503e142522c8c9ca509cc09147483480948928b2147c1d6168e60f2c9cbd4",
+      "tga_sha256": "605b9a5050e0e7c9d3ffeabb060f0683913283768ecbdc8ea8da006df5cd5c0d"
+    },
+    {
+      "id": "fx_particle_star_4point",
+      "group": "particle",
+      "recommended": true,
+      "purpose": "Particle sprite 1 \u2014 selected burst use, short fade and fixed path",
+      "runtime_tga": "runtime/tga/fx_particle_star_4point.tga",
+      "editable_png": "source/png/fx_particle_star_4point.png",
+      "source_atlas": "source/atlases/golden_loot_victory_sparkle_atlas.png",
+      "source_crop_xyxy": [
+        0,
+        0,
+        362,
+        362
+      ],
+      "size_px": [
+        128,
+        128
+      ],
+      "content_bbox_xywh": [
+        7,
+        7,
+        113,
+        113
+      ],
+      "uv_content_rect": [
+        0.054688,
+        0.9375,
+        0.054688,
+        0.9375
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "3d9ebb2f72562bb44344635a729327114210b1240807e8e7471bd0dd63cec506",
+      "tga_sha256": "42eee385f217cec31090a33fef25f541359425222b354f4748dd4174c2194c02"
+    },
+    {
+      "id": "fx_particle_star_6point",
+      "group": "particle",
+      "recommended": false,
+      "purpose": "Particle sprite 2 \u2014 selected burst use, short fade and fixed path",
+      "runtime_tga": "runtime/tga/fx_particle_star_6point.tga",
+      "editable_png": "source/png/fx_particle_star_6point.png",
+      "source_atlas": "source/atlases/golden_loot_victory_sparkle_atlas.png",
+      "source_crop_xyxy": [
+        362,
+        0,
+        724,
+        362
+      ],
+      "size_px": [
+        128,
+        128
+      ],
+      "content_bbox_xywh": [
+        7,
+        7,
+        113,
+        113
+      ],
+      "uv_content_rect": [
+        0.054688,
+        0.9375,
+        0.054688,
+        0.9375
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "e8c0369227fa655010fffd26ddec174f9fa14306e454cba3df733c2086abeb5f",
+      "tga_sha256": "4125c816ced9e9e3c986e8dffa67edd00e7a2a2bf43564850a69beee3daf165f"
+    },
+    {
+      "id": "fx_particle_diamond",
+      "group": "particle",
+      "recommended": false,
+      "purpose": "Particle sprite 3 \u2014 selected burst use, short fade and fixed path",
+      "runtime_tga": "runtime/tga/fx_particle_diamond.tga",
+      "editable_png": "source/png/fx_particle_diamond.png",
+      "source_atlas": "source/atlases/golden_loot_victory_sparkle_atlas.png",
+      "source_crop_xyxy": [
+        724,
+        0,
+        1086,
+        362
+      ],
+      "size_px": [
+        128,
+        128
+      ],
+      "content_bbox_xywh": [
+        7,
+        7,
+        113,
+        113
+      ],
+      "uv_content_rect": [
+        0.054688,
+        0.9375,
+        0.054688,
+        0.9375
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "516fb822e935648b90bfa9e55df657dcd52dfb5fcc45ce80a7c0ffdac02188ab",
+      "tga_sha256": "b041160c9c32682306af82edac3161aef53a4669e596b79f6fdd2993a3d01d21"
+    },
+    {
+      "id": "fx_particle_comet",
+      "group": "particle",
+      "recommended": false,
+      "purpose": "Particle sprite 4 \u2014 selected burst use, short fade and fixed path",
+      "runtime_tga": "runtime/tga/fx_particle_comet.tga",
+      "editable_png": "source/png/fx_particle_comet.png",
+      "source_atlas": "source/atlases/golden_loot_victory_sparkle_atlas.png",
+      "source_crop_xyxy": [
+        1086,
+        0,
+        1448,
+        362
+      ],
+      "size_px": [
+        128,
+        128
+      ],
+      "content_bbox_xywh": [
+        7,
+        7,
+        113,
+        113
+      ],
+      "uv_content_rect": [
+        0.054688,
+        0.9375,
+        0.054688,
+        0.9375
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "0e009e8bd8239cea212a5b9f79f5ea05168d4d19c4bbe0942607b9b169c12a9b",
+      "tga_sha256": "8a28dae7f3d5fbf07d2e8acfdee011ec0c41c5265e379529d094206ea9c57803"
+    },
+    {
+      "id": "fx_particle_arc",
+      "group": "particle",
+      "recommended": false,
+      "purpose": "Particle sprite 5 \u2014 selected burst use, short fade and fixed path",
+      "runtime_tga": "runtime/tga/fx_particle_arc.tga",
+      "editable_png": "source/png/fx_particle_arc.png",
+      "source_atlas": "source/atlases/golden_loot_victory_sparkle_atlas.png",
+      "source_crop_xyxy": [
+        0,
+        362,
+        362,
+        724
+      ],
+      "size_px": [
+        128,
+        128
+      ],
+      "content_bbox_xywh": [
+        7,
+        7,
+        113,
+        113
+      ],
+      "uv_content_rect": [
+        0.054688,
+        0.9375,
+        0.054688,
+        0.9375
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "a8a92ee78cc7df29de32e59945ff011659a9fbe31c1fe8a2e29ff6464231f940",
+      "tga_sha256": "5ab3e843ce9f2ae162939b970cd80cf54f8bdf7f67056e08e588795edd620ee3"
+    },
+    {
+      "id": "fx_particle_split",
+      "group": "particle",
+      "recommended": false,
+      "purpose": "Particle sprite 6 \u2014 selected burst use, short fade and fixed path",
+      "runtime_tga": "runtime/tga/fx_particle_split.tga",
+      "editable_png": "source/png/fx_particle_split.png",
+      "source_atlas": "source/atlases/golden_loot_victory_sparkle_atlas.png",
+      "source_crop_xyxy": [
+        362,
+        362,
+        724,
+        724
+      ],
+      "size_px": [
+        128,
+        128
+      ],
+      "content_bbox_xywh": [
+        7,
+        7,
+        113,
+        113
+      ],
+      "uv_content_rect": [
+        0.054688,
+        0.9375,
+        0.054688,
+        0.9375
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "aa72bb1ebcf3f60d3aa7e9891bb6762d8df7d5c903fd39f6d86aa4a496334309",
+      "tga_sha256": "366642adff5247b6400ed390b010054fb0b209aa572467cf384eb629b7bee3ac"
+    },
+    {
+      "id": "fx_particle_streak",
+      "group": "particle",
+      "recommended": false,
+      "purpose": "Particle sprite 7 \u2014 selected burst use, short fade and fixed path",
+      "runtime_tga": "runtime/tga/fx_particle_streak.tga",
+      "editable_png": "source/png/fx_particle_streak.png",
+      "source_atlas": "source/atlases/golden_loot_victory_sparkle_atlas.png",
+      "source_crop_xyxy": [
+        724,
+        362,
+        1086,
+        724
+      ],
+      "size_px": [
+        128,
+        128
+      ],
+      "content_bbox_xywh": [
+        7,
+        7,
+        113,
+        113
+      ],
+      "uv_content_rect": [
+        0.054688,
+        0.9375,
+        0.054688,
+        0.9375
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "0bd8714bdb02323ebcc835a9d0bec75336565a3691dfe8ff3d51f72b1f7268f8",
+      "tga_sha256": "0a5295e6b991edf71035faa66044ef9c0bf07fdc35965d2b289b1ad368f071ec"
+    },
+    {
+      "id": "fx_particle_twinkle",
+      "group": "particle",
+      "recommended": true,
+      "purpose": "Particle sprite 8 \u2014 selected burst use, short fade and fixed path",
+      "runtime_tga": "runtime/tga/fx_particle_twinkle.tga",
+      "editable_png": "source/png/fx_particle_twinkle.png",
+      "source_atlas": "source/atlases/golden_loot_victory_sparkle_atlas.png",
+      "source_crop_xyxy": [
+        1086,
+        362,
+        1448,
+        724
+      ],
+      "size_px": [
+        128,
+        128
+      ],
+      "content_bbox_xywh": [
+        7,
+        7,
+        113,
+        113
+      ],
+      "uv_content_rect": [
+        0.054688,
+        0.9375,
+        0.054688,
+        0.9375
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "5566f90c408986d3fdf78773d57226287e3b0b768effadc91a6ce8efa6fd6ec4",
+      "tga_sha256": "c5e57ecac459fe52f8ed50dc5a704bbed2d23994c407cf0e3ab83e97f3834020"
+    },
+    {
+      "id": "fx_particle_mote_large",
+      "group": "particle",
+      "recommended": false,
+      "purpose": "Particle sprite 9 \u2014 selected burst use, short fade and fixed path",
+      "runtime_tga": "runtime/tga/fx_particle_mote_large.tga",
+      "editable_png": "source/png/fx_particle_mote_large.png",
+      "source_atlas": "source/atlases/golden_loot_victory_sparkle_atlas.png",
+      "source_crop_xyxy": [
+        0,
+        724,
+        362,
+        1086
+      ],
+      "size_px": [
+        128,
+        128
+      ],
+      "content_bbox_xywh": [
+        7,
+        7,
+        113,
+        113
+      ],
+      "uv_content_rect": [
+        0.054688,
+        0.9375,
+        0.054688,
+        0.9375
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "20169a2361f5dfbf89e9050c91b65845f987f87c1bfa4ce344f4c1ba43f4f6ae",
+      "tga_sha256": "773b03c40add11457cf79eb612280490184b7f0c402ac266471930e584e0c6bd"
+    },
+    {
+      "id": "fx_particle_mote_medium",
+      "group": "particle",
+      "recommended": true,
+      "purpose": "Particle sprite 10 \u2014 selected burst use, short fade and fixed path",
+      "runtime_tga": "runtime/tga/fx_particle_mote_medium.tga",
+      "editable_png": "source/png/fx_particle_mote_medium.png",
+      "source_atlas": "source/atlases/golden_loot_victory_sparkle_atlas.png",
+      "source_crop_xyxy": [
+        362,
+        724,
+        724,
+        1086
+      ],
+      "size_px": [
+        128,
+        128
+      ],
+      "content_bbox_xywh": [
+        7,
+        7,
+        113,
+        113
+      ],
+      "uv_content_rect": [
+        0.054688,
+        0.9375,
+        0.054688,
+        0.9375
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "842d7d742acbec2fa144159a489b77283a739cf454fbabe667255f9a9ccdfdb5",
+      "tga_sha256": "afa6d0e2628fda9c9d029ddea009c116e7c02ab21bf5ca7c329a56282471fe1d"
+    },
+    {
+      "id": "fx_particle_mote_small",
+      "group": "particle",
+      "recommended": false,
+      "purpose": "Particle sprite 11 \u2014 selected burst use, short fade and fixed path",
+      "runtime_tga": "runtime/tga/fx_particle_mote_small.tga",
+      "editable_png": "source/png/fx_particle_mote_small.png",
+      "source_atlas": "source/atlases/golden_loot_victory_sparkle_atlas.png",
+      "source_crop_xyxy": [
+        724,
+        724,
+        1086,
+        1086
+      ],
+      "size_px": [
+        128,
+        128
+      ],
+      "content_bbox_xywh": [
+        7,
+        7,
+        113,
+        113
+      ],
+      "uv_content_rect": [
+        0.054688,
+        0.9375,
+        0.054688,
+        0.9375
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "c67358e579e1dbd5129b2cfa8a7177d79451dba7cb6322bd4525ee41b445f6f5",
+      "tga_sha256": "d717a208fee391805db33d83d62f6c6bf04f51aa99f295f76fc413263a329164"
+    },
+    {
+      "id": "fx_particle_swirl",
+      "group": "particle",
+      "recommended": false,
+      "purpose": "Particle sprite 12 \u2014 selected burst use, short fade and fixed path",
+      "runtime_tga": "runtime/tga/fx_particle_swirl.tga",
+      "editable_png": "source/png/fx_particle_swirl.png",
+      "source_atlas": "source/atlases/golden_loot_victory_sparkle_atlas.png",
+      "source_crop_xyxy": [
+        1086,
+        724,
+        1448,
+        1086
+      ],
+      "size_px": [
+        128,
+        128
+      ],
+      "content_bbox_xywh": [
+        7,
+        7,
+        113,
+        113
+      ],
+      "uv_content_rect": [
+        0.054688,
+        0.9375,
+        0.054688,
+        0.9375
+      ],
+      "blend_mode": "ADD",
+      "alpha": "straight RGBA, zero alpha outside crop; source low-alpha specks cleaned",
+      "png_sha256": "874d69ad11ebcef57985c3df504b91514d86f544a7c595509666a074c6a12b0c",
+      "tga_sha256": "799b711598db478546042dfe56c9417f4883982a0a071d3c5115d328fe5f9aef"
+    }
+  ],
+  "blend_guidance": "BLEND ADD suggested for self-illuminating FX. Test actual Forever client; if glows appear washed out, reduce alpha before changing artwork. No continuous animations.",
+  "critical": "Each PNG/TGA contains exactly one overlay on transparent power-of-two canvas. Use manifest content_bbox and uv_content_rect if size/placement calculations require trimming transparent padding. Never display atlas sheet directly. All placements are suggested, not verified client measurements."
+}

@@ -10,3 +10,14 @@ TwichUI.ClassPortrait.ART = {
     WARLOCK = { canvas = 1254, x = 564.0, y = 625.0, w = 398, h = 396 },
     WARRIOR = { canvas = 1254, x = 565.0, y = 625.0, w = 396, h = 394 },
 }
+TwichUI.ClassPortrait.SLIM_ART = {
+    DRUID = { canvas = 1536, x = 706.5, y = 766.5, w = 397, h = 397 },
+    HUNTER = { canvas = 1536, x = 766.0, y = 769.5, w = 470, h = 467 },
+    MAGE = { canvas = 1536, x = 705.5, y = 766.0, w = 399, h = 396 },
+    PALADIN = { canvas = 1536, x = 657.0, y = 755.0, w = 414, h = 392 },
+    PRIEST = { canvas = 1536, x = 599.0, y = 776.0, w = 362, h = 370 },
+    ROGUE = { canvas = 1536, x = 702.0, y = 751.5, w = 514, h = 525 },
+    SHAMAN = { canvas = 1536, x = 636.5, y = 791.0, w = 433, h = 436 },
+    WARLOCK = { canvas = 1536, x = 705.0, y = 766.0, w = 398, h = 396 },
+    WARRIOR = { canvas = 1536, x = 675.0, y = 771.0, w = 402, h = 404 },
+}

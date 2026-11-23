@@ -770,6 +770,40 @@ do
   end
 end
 
+-- Wait distributions are bounded elapsed measurements, never counted as CPU.
+do
+  local wc=boot("ElapsedWaits");local wr=wc.TwichUI
+  assert(wr.DiagnosticsLauncher.Load());local kit=wr.DiagnosticsKit
+  local preset
+  for _,p in ipairs(kit.PRESETS)do if p.key=="workshop"then preset=p end end
+  assert(preset and #preset.gaugeIds==15)
+  for i=1,50 do wr.Perf.Gauge("unrelated."..i,{read=function()return 1 end})end
+  local selected=kit.GaugeList(preset.gauges,preset.gaugeIds)
+  assert(#selected==15 and selected[1].id=="workshop.cold.pending" and selected[1].read()==0,"cold diagnostics lost passive gauges before Workshop loaded")
+  assert(kit.Start("general"))
+  local capture=wr.Perf.captureID
+  for _,ms in ipairs({100,8000,60000})do wr.Perf.Observe("workshop.priceWait",ms)end
+  wr.Perf.Observe("bad",0/0);wr.Perf.Observe("bad",-1);wr.Perf.Observe("bad",math.huge)
+  local current=kit.Instrument.Results()
+  assert(#current.ops==0 and kit.Instrument.TakeFrame()==0,"waits inflated synchronous CPU")
+  assert(current.observations[1].count==3 and current.observations[1].max==60000)
+  assert(current.observations[1].p95==60000,"wait histogram saturated at the CPU histogram's range")
+  assert(current.observations[1].p50>=8000 and current.observations[1].p50<=9600)
+  kit.Stop("manual");FlushTimers()
+  local rec=kit.Sessions()[#kit.Sessions()]
+  local exported=kit.Export.Report(rec)
+  assert(exported.aggregates.elapsedWaits[1].count==3)
+  assert(Has(kit.Export.Summary(rec),"Elapsed waits and milestones"))
+  assert(DecodeJson(kit.Export.Json(rec)).aggregates.elapsedWaits[1].unit=="ms")
+  assert(kit.Start("general") and wr.Perf.captureID~=capture)
+  assert(#kit.Instrument.Results().observations==0,"new capture retained waits")
+  for i=1,kit.Instrument.MAX_OBSERVATIONS+1 do wr.Perf.Observe("workshop.wait."..i,i)end
+  assert(#kit.Instrument.Results().observations==kit.Instrument.MAX_OBSERVATIONS)
+  assert(kit.Instrument.Results().dropped.observations==1)
+  kit.Stop("manual");FlushTimers()
+  wr.Perf.Observe("late",100);assert(#kit.Instrument.Results().observations==kit.Instrument.MAX_OBSERVATIONS)
+end
+
 assert(#c.HANDLED == 0, "no error reached the game's handler: " .. tostring(c.HANDLED[1]))
 assert(#armed.HANDLED == 0, "none in the start-up capture either: " .. tostring(armed.HANDLED[1]))
 print("PERF ENGINE TEST PASSED")

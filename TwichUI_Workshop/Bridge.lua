@@ -390,7 +390,7 @@ if W.Summary then
     function B.Compatibility()
         if not Q.Selected() then return compatibility() end
         local s=Q.Status();return {compatible=s.ready,desktop_build=s.desktop_build or 'unknown',summary=true,
-            transport_version=1,contract_version=s.contract_version,schema_version=s.schema,receipt_schema_version=1,minimum_reader_version=s.minimum_reader_version,reader_contract_version=2}
+            transport_version=1,contract_version=s.contract_version,schema_version=s.schema,receipt_schema_version=1,minimum_reader_version=s.minimum_reader_version,reader_contract_version=s.reader_contract_version}
     end
     function B.CompatibilityText(diagnostics)
         if not Q.Selected() then return text(diagnostics) end
