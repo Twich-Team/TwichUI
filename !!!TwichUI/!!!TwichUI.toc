@@ -219,8 +219,9 @@ modules\RestedXPTimers.lua
 modules\RestedXPBrokerMenu.lua
 modules\RestedXPBroker.lua
 
-# The TwichUI data bar entry's menu (SettingsBroker.lua): open settings, Leave me alone, Guild Locations; drawn like the
+# The TwichUI data bar entry's menu (SettingsBroker.lua): open settings, Leave me alone, Narrate quests (only with the Spoken addon), Guild Locations; drawn like the
 # menus above (modules\SpellMenu.lua and modules\MenuStyle.lua)
+modules\SpokenReading.lua
 modules\SettingsBrokerMenu.lua
 
 # Party pins: named map pins of your own, and ones shared with party members who have TwichUI (on by default,
