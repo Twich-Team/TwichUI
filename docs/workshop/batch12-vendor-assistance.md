@@ -54,6 +54,9 @@ batch deliberately implements no transaction sequencing.
 
 ## Evidence and owner checks
 
+[Structural merchant capture and reproduction](../evidence/batch12-merchant/README.md);
+[combined verification and limitations](batch12-verification.md).
+
 Unit-tested: synthetic live listing reads, bundles/partial stock, sold-out,
 non-gold/missing/secret data, planning/unknown counts, caps/truncation, identity
 change, combat/consent/held-queue rejection, dismissal and pending callback cleanup.

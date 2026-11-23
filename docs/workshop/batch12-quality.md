@@ -73,3 +73,6 @@ complete regression coverage. [Representative capture and limits](../evidence/ba
 The simulator roots were prepared before the final Ledger suffix refinement;
 the final Ledger unit test passes, and combined frozen-source verification is
 required for final-branch evidence.
+
+Final combined-branch evidence, including the wrapper cache exception and passing
+Crafting/negative-control rerun: [Batch 12 verification](batch12-verification.md).
