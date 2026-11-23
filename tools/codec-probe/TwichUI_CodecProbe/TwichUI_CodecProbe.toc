@@ -1,0 +1,9 @@
+## Interface: 16001
+## Title: TwichUI Codec Probe (DEV ONLY)
+## Notes: Temporary opt-in Forever codec evidence. Remove after testing. Never release with TwichUI.
+## Version: dev
+## OptionalDeps: !!!TwichUI
+Build.lua
+Vectors.lua
+Engine.lua
+Probe.lua

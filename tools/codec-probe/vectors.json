@@ -1,0 +1,77 @@
+{
+  "synthetic": true,
+  "private_market_data": false,
+  "max_output_bytes": 524288,
+  "generator": "Python stdlib zlib level6; raw RFC1951 and zlib RFC1950",
+  "zlib_runtime": "1.3.2",
+  "fixtures": [
+    {
+      "name": "small",
+      "expected_bytes": 4600,
+      "sha256": "bbbd75b96414b21685dcca56fd94e2edba60c00a9846cc105c90e78242ce074f",
+      "encodings": {
+        "raw": {
+          "input_bytes": 69,
+          "base64_bytes": 92,
+          "sha256": "24acba0ae69dc0937a781405205dd1862650c74512eb34f96bccfe8ccd1485b9"
+        },
+        "zlib": {
+          "input_bytes": 75,
+          "base64_bytes": 100,
+          "sha256": "b6b148b65442394fbf4d2a448ca116ab313938f511fa756247eb8a59eee9b6e3"
+        }
+      }
+    },
+    {
+      "name": "current",
+      "expected_bytes": 200263,
+      "sha256": "517a6553702e17b3fb153b783bfe1eb352078d191bfdd41732a73a6f6d942366",
+      "encodings": {
+        "raw": {
+          "input_bytes": 100233,
+          "base64_bytes": 133644,
+          "sha256": "50e274466b51f7bd481dee033f7c51943fbc47e93c4a4d4db185899958ec34ef"
+        },
+        "zlib": {
+          "input_bytes": 100239,
+          "base64_bytes": 133652,
+          "sha256": "08b420da42b4eed98d201a2c75869e6b82fbfdd158d256cb428f54aff6d0f4ae"
+        }
+      }
+    },
+    {
+      "name": "history336",
+      "expected_bytes": 336400,
+      "sha256": "4791ce279cc2b84f8d72a45a1580ebc3f769bae8bce820ce9fc16a06e8979199",
+      "encodings": {
+        "raw": {
+          "input_bytes": 124372,
+          "base64_bytes": 165832,
+          "sha256": "ad0ee94d840fdfad5a562798a0758aac2a68961b7d0e0a083bba05a8a0d12650"
+        },
+        "zlib": {
+          "input_bytes": 124378,
+          "base64_bytes": 165840,
+          "sha256": "f58a9e60bf0b6d2e67a834f4b4863bcb892e566e58e8c87af2e4a7a0f2c5431d"
+        }
+      }
+    },
+    {
+      "name": "history512",
+      "expected_bytes": 524288,
+      "sha256": "c5f7fee1e4a9e54b4a47e33586c62599804867c54b6832cfe34c7ef7c090c3fa",
+      "encodings": {
+        "raw": {
+          "input_bytes": 193922,
+          "base64_bytes": 258564,
+          "sha256": "b3367f15ff98b54448ea8d9ed057fb32c48a87d6444ef21279b0a7b455e23ae5"
+        },
+        "zlib": {
+          "input_bytes": 193928,
+          "base64_bytes": 258572,
+          "sha256": "86ab41db1ccfb48b3d0a8b978662f5d89f547464c3d2a00e90725957f68389bf"
+        }
+      }
+    }
+  ]
+}
