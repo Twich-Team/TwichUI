@@ -114,6 +114,34 @@ local CASC/DB2 readers, numeric map data and the Windows launcher. Use the lates
 source kit after tool/schema/numeric-data changes; update the existing cache
 with it. Do not reuse an old kit's numeric data to claim a newer renderer's view.
 
+## Collect artwork for a new feedback scenario
+
+Collector 2.1 adds an optional exact asset request. A real-client lab gallery
+now writes `asset-request.json` containing production-Lua-selected numeric IDs,
+inactive native zone bases, exact client build/product and numeric-data hashes.
+Synthetic galleries cannot authorize extraction. The request is data only;
+neither Lua nor manual texture identification is needed on the gaming PC.
+
+Codex can include that request in the existing source kit:
+
+```sh
+python3 tools/maplab/collect.py --make-kit test-output/TwichUI-map-feedback-kit.zip --asset-request test-output/map-feedback/asset-request.json
+```
+
+After extracting that kit, use this PowerShell command with your actual path:
+
+```powershell
+py -3 tools/maplab/collect.py --wow "D:\Games\World of Warcraft\_forever_" --output "test-output\maplab-feedback-input" --asset-request maplab-asset-request.json
+```
+
+Share every printed ZIP part. The same request can reuse verified source assets
+in a directory cache. A different installed build/product or changed numeric data
+is rejected before texture reads; regenerate the request from the updated lab
+input instead of editing it. Changes to the requested set can mark files removed
+**from the new bundle**, which does not prove the client deleted those assets.
+Omit `--asset-request` for the normal update workflow above. There is no second
+extractor or automatic upload.
+
 ## Inspect in Codex/the offline lab
 
 The receiving environment additionally needs the repository's existing Lua/Pillow

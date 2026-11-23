@@ -1,5 +1,7 @@
 """Pixel and contract checks for the offline compositor, independent of WoW assets."""
 import hashlib
+import contextlib
+import io
 import json
 import math
 from pathlib import Path
@@ -60,6 +62,15 @@ class Compositor(unittest.TestCase):
         tinted = self.texture("red", tint=[.5, 1, 1])
         image, _ = self.draw([tinted])
         self.assertEqual(image.getpixel((8, 8)), (128, 0, 0, 255))
+
+    def test_offscreen_assets_are_not_decoded_or_reported_as_visible_missing_pixels(self):
+        outside = self.texture("absent", bounds=[2, 2, 3, 3])
+        _, report = self.draw([self.texture("red"), outside])
+        self.assertEqual(report["missingAssets"], [])
+        self.assertEqual(report["visibleTextures"], 1)
+        corner = self.texture("absent", bounds=[1.01, .4, 1.11, .6], rotation=math.pi / 4)
+        _, report = self.draw([self.texture("red"), corner])
+        self.assertEqual(report["missingAssets"], ["absent"], "rotated corners remain visible candidates")
 
     def test_crop_and_transparent_out_of_range_not_stretch(self):
         split = Image.new("RGBA", (16, 16), (0, 0, 255, 255))
@@ -190,6 +201,22 @@ class Compositor(unittest.TestCase):
 
 
 class Contracts(unittest.TestCase):
+    def test_focused_gallery_selection_rejects_unknown_scene(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scene = {"id": "first", "width": 16, "height": 16, "view": {"u0": 0, "v0": 0, "u1": 1, "v1": 1},
+                     "textures": [{"color": [1, .5, 0, 1], "bounds": [0, 0, 1, 1]}]}
+            state = {"schema": 1, "provenance": {"synthetic": True}, "scenes": [scene, dict(scene, id="second")]}
+            path = root / "input.json"; path.write_text(json.dumps(state))
+            args = maprun.parser().parse_args(["--state", str(path), "--scene", "second", "--output", str(root / "gallery")])
+            with contextlib.redirect_stdout(io.StringIO()): self.assertEqual(maprun.run(args), 0)
+            report = json.loads((root / "gallery/report.json").read_text())
+            self.assertEqual([s["id"] for s in report["scenes"]], ["second"])
+            self.assertFalse((root / "gallery/first.png").exists())
+            self.assertIsNone(maprun.artwork_request(state), "synthetic state cannot authorize native extraction")
+            args.scene = ["missing"]
+            with self.assertRaisesRegex(render.LabError, "Unknown scene"): maprun.run(args)
+
     def report(self):
         return {"schema": 1, "kind": "twichui-map-diagnostics", "id": "MAP1-test", "events": [],
                 "current": {"view": {"viewRect": [0, 0, 1, 1], "viewportWidth": 64, "viewportHeight": 64,
@@ -207,6 +234,21 @@ class Contracts(unittest.TestCase):
         self.assertIn("parent-layer fades are unknown", " ".join(state["provenance"]["limitations"]))
         data["synthetic"] = True
         self.assertTrue(diagnostics.import_report(data)[1]["provenance"]["synthetic"])
+        render.validate_export(state)
+
+    def test_painted_cave_snapshot_replays_captured_geometry_without_inventing_base(self):
+        data = self.report()
+        data["current"]["terrain"]["textures"] = []
+        data["current"]["cave"] = {"textures": [{"fileId": 651675, "bounds": [.2, .3, .4, .5],
+            "alpha": .8, "shown": True, "texCoord": [0, .9, 0, .7], "level": 12}]}
+        request, state = diagnostics.import_report(data)
+        tile = state["scenes"][0]["textures"][0]
+        self.assertEqual(tile["fileId"], 651675)
+        self.assertEqual(tile["bounds"], (.2, .3, .4, .5))
+        self.assertEqual(tile["texCoord"], [0, .9, 0, .7])
+        self.assertEqual(tile["level"], 12)
+        self.assertFalse(request["replay"]["nativeClientConfirmed"])
+        self.assertTrue(state["provenance"]["partial"])
         render.validate_export(state)
 
     def test_withheld_geometry_and_wrong_schema_refused(self):

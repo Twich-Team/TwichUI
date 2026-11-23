@@ -51,7 +51,7 @@ def blp_fixture(side=4, noisy=False):
 
 def fixture_tables():
     ids = [(947, 0, 1), (1415, 947, 2), (1414, 947, 2), (1434, 1415, 3),
-           (1458, 1415, 3), (1429, 1415, 3), (1436, 1415, 3)]
+           (1458, 1415, 3), (1429, 1415, 3), (1436, 1415, 3), (1411, 1414, 3), (1420, 1415, 3)]
     tables = {name: Table() for name in cd.TABLES}
     tables["UiMap"] = Table((ui, [0, 0, parent, 0, 0, kind]) for ui, parent, kind in ids)
     assigns = []
@@ -67,6 +67,8 @@ def fixture_tables():
     assignment(1458, 0, (1000, -100, 0, 2000, 1400, 0))
     assignment(1429, 0, (-10000, -1500, 0, -8000, 1500, 0), (.25, .25), (.75, .75))
     assignment(1436, 0, (-12000, 2000, 0, -8000, 8000, 0))
+    assignment(1411, 1, (-2000, -6000, 0, 3000, -4000, 0))
+    assignment(1420, 0, (0, -2000, 0, 4000, 2000, 0))
     tables["UiMapAssignment"] = Table(assigns)
     tables["UiMapArt"] = Table((100 + i, [0, 0, 1]) for i in range(len(ids)))
     tables["UiMapXMapArt"] = Table([(i + 1, [0, 100 + i]) for i in range(len(ids))],
@@ -345,6 +347,29 @@ class ClientContracts(unittest.TestCase):
         self.assertNotIn(5001, [t.get("fileId") for s in state["scenes"] for t in s["textures"]])
         self.assertTrue(any(s["id"] == "undercity-48" for s in state["scenes"]))
         self.assertIn("CLIENT-TABLE PRODUCTION", " ".join(evidence["stdoutTail"]))
+
+    @unittest.skipUnless(shutil.which("lua5.1"), "existing Lua environment not activated")
+    def test_feedback_cameras_use_production_caves_and_bound_geometry(self):
+        data, _ = fixture_input()
+        elwynn = next(m for m in data["maps"] if m["id"] == 1429)
+        data["reveal"][str(elwynn["art"])] = [[100, 100, 0, 0, [123]]]
+        state, _ = lab.production_export(data, "feedback-v1")
+        self.assertEqual(len(state["scenes"]), 62)
+        self.assertEqual(state["provenance"]["scenarioSet"], "feedback-v1")
+        self.assertTrue(state["provenance"]["synthetic"], "fixture input stays explicitly synthetic")
+        self.assertEqual(len(state["provenance"]["rendererSources"]["Caves.lua"]), 64)
+        scenes = {s["id"]: s for s in state["scenes"]}
+        self.assertEqual(scenes["jasperlode-124"]["metadata"]["cave"]["surfaced"], "cave:40")
+        self.assertEqual(scenes["skull-rock-124"]["metadata"]["cave"]["surfaced"], "cave:5")
+        self.assertTrue(any(s["metadata"]["baseCandidates"] for s in state["scenes"]))
+        self.assertEqual(scenes["jasperlode-edge-2"]["metadata"]["sequence"], "jasperlode-viewport-exit")
+        strengths = [scenes[f"jasperlode-entry-{i}"]["metadata"]["cave"]["strength"] for i in (1, 2, 3)]
+        target = scenes["jasperlode-entry-3"]["metadata"]["cave"]["targetStrength"]
+        self.assertGreater(target, 0)
+        self.assertAlmostEqual(strengths[0], 0)
+        self.assertAlmostEqual(strengths[1], target * .5)
+        self.assertAlmostEqual(strengths[2], target)
+        render.validate_export(state)
 
 
 if __name__ == "__main__":

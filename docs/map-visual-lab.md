@@ -1,5 +1,14 @@
 # Map Visual Test Lab
 
+The first native feedback refinement is documented in
+[cave, marker and composition results](seamless-map-client-feedback.md).
+Use `--scenario-set feedback-v1` with a client bundle for its 62 deterministic
+cameras, and repeat `--scene <id>` for focused renders. Real-input galleries
+write exact-build `asset-request.json` files for the existing collector.
+The compositor clips rotated texture bounds before decoding; offscreen missing
+files do not count as missing visible pixels. Partial input bundles still remain
+partial even if a selected viewport is complete.
+
 The lab executes production Lua map selection in the existing simulator fixture, then composites the exported draw state with Pillow. Python does **not** select map layers, invent city placement, or reimplement the renderer's geographic calculations. PNGs, layer overlays, machine-readable findings, image differences and an HTML gallery are written to ignored `test-output/`.
 
 ## Current evidence and asset blocker

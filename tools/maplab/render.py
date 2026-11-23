@@ -199,13 +199,7 @@ def _uv(value):
     return uv
 
 
-def _sample(image, bounds, view, size, rotation=0, uv=None, box=None, filtering="linear"):
-    """Affine inverse sampling with transparent CLAMPTOBLACKADDITIVE semantics.
-
-    Positive radians turn counter-clockwise on screen, matching the pinned
-    OpenMap offline picture compositor. This convention still needs a native
-    Texture:SetRotation comparison; it is not native visual certification.
-    """
+def _sampling_geometry(bounds, view, size, rotation):
     w, h = size
     l, t, r, b = view
     x0, y0 = (bounds[0] - l) / (r - l) * w, (bounds[1] - t) / (b - t) * h
@@ -215,11 +209,22 @@ def _sample(image, bounds, view, size, rotation=0, uv=None, box=None, filtering=
     corners = [(cx + dx * rw * cosine + dy * rh * sine,
                 cy - dx * rw * sine + dy * rh * cosine)
                for dx, dy in ((-.5, -.5), (.5, -.5), (.5, .5), (-.5, .5))]
-    if box is None:
-        box = (max(0, math.floor(min(x for x, y in corners))),
-               max(0, math.floor(min(y for x, y in corners))),
-               min(w, math.ceil(max(x for x, y in corners))),
-               min(h, math.ceil(max(y for x, y in corners))))
+    box = (max(0, math.floor(min(x for x, y in corners))),
+           max(0, math.floor(min(y for x, y in corners))),
+           min(w, math.ceil(max(x for x, y in corners))),
+           min(h, math.ceil(max(y for x, y in corners))))
+    return rw, rh, cx, cy, cosine, sine, corners, box
+
+
+def _sample(image, bounds, view, size, rotation=0, uv=None, box=None, filtering="linear", geometry=None):
+    """Affine inverse sampling with transparent CLAMPTOBLACKADDITIVE semantics.
+
+    Positive radians turn counter-clockwise on screen, matching the pinned
+    OpenMap offline picture compositor. This convention still needs a native
+    Texture:SetRotation comparison; it is not native visual certification.
+    """
+    rw, rh, cx, cy, cosine, sine, corners, natural_box = geometry or _sampling_geometry(bounds, view, size, rotation)
+    if box is None: box = natural_box
     if box[2] <= box[0] or box[3] <= box[1]:
         return None, box
     u0, u1, v0, v1 = _uv(uv)
@@ -298,6 +303,11 @@ def composite_scene(scene, assets, debug=False):
         if not texture.get("shown", True) or texture.get("alpha", 1) <= 0:
             continue
         bounds = texture_rect(texture)
+        rotation = finite(texture.get("rotation", 0), "rotation")
+        geometry = _sampling_geometry(bounds, view, size, rotation)
+        visible_box = geometry[-1]
+        if visible_box[2] <= visible_box[0] or visible_box[3] <= visible_box[1]:
+            continue  # cull before decoding or counting missing pixels outside the viewport
         key = texture.get("fileId", texture.get("asset"))
         if "color" in texture:
             c = texture["color"]
@@ -309,8 +319,8 @@ def composite_scene(scene, assets, debug=False):
             source = assets.get(key)
             if source is None:
                 missing.add(str(key)); source = placeholder(key)
-        tile, box = _sample(source, bounds, view, size, finite(texture.get("rotation", 0), "rotation"),
-                            texture.get("texCoord"), filtering=texture.get("filtering", texture.get("filter", "linear")))
+        tile, box = _sample(source, bounds, view, size, rotation,
+                            texture.get("texCoord"), filtering=texture.get("filtering", texture.get("filter", "linear")), geometry=geometry)
         if tile is None:
             continue
         visible += 1

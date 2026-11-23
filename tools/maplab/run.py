@@ -31,10 +31,10 @@ from clientinput import unpack, write_tables
 REPO = Path(__file__).resolve().parents[2]
 
 
-def production_export(client=None):
+def production_export(client=None, scenario_set="default"):
     with tempfile.TemporaryDirectory(prefix="twichui-maplab-") as folder:
         destination = Path(folder) / "render-state.json"
-        env = dict(os.environ, TWICHUI_MAPLAB_EXPORT=str(destination))
+        env = dict(os.environ, TWICHUI_MAPLAB_EXPORT=str(destination), TWICHUI_MAPLAB_SCENARIO_SET=scenario_set)
         if client:
             for name in ("!!!TwichUI/map/Data.lua", "!!!TwichUI/map/LocalData.lua"):
                 if client.get("numericSources", {}).get(name) != hashlib.sha256((REPO / name).read_bytes()).hexdigest():
@@ -58,13 +58,51 @@ def production_export(client=None):
         if not destination.is_file():
             raise LabError("production Lua export did not create render-state.json; the maplab export hook must be loaded")
         state = load_json(destination)
+        state["provenance"]["rendererSources"] = {
+            name: hashlib.sha256((REPO / "!!!TwichUI/map" / name).read_bytes()).hexdigest()
+            for name in ("Art.lua", "Caves.lua", "Detail.lua", "Pictures.lua", "View.lua", "World.lua", "ViewMath.lua", "Prefs.lua")}
         if client:
             state["provenance"].update(tables=client["tables"], bundleSha256=client.get("bundleSha256", []),
+                                       numericSources=client["numericSources"], product=client.get("product"),
                                        limitations=client.get("limitations", []), bundleIdentity=client.get("bundleIdentity", {}),
                                        bundleValidation=client.get("bundleValidation", {}))
         return state, {"seconds": round(time.perf_counter() - started, 6),
                                         "source": "tests/test_map_explore.lua production map fixture",
                                         "stdoutTail": process.stdout.splitlines()[-3:]}
+
+
+def artwork_request(state):
+    """Exact numeric handoff from the reviewed Lua export, never guessed IDs."""
+    source = state.get("provenance", {})
+    if source.get("synthetic") is not False or not source.get("product") or not source.get("numericSources"):
+        return None
+    from collect import numeric_sources
+    if source["numericSources"] != numeric_sources():
+        raise LabError("Cannot request artwork from render state with different production numeric data")
+    ids = set()
+    for scene in state["scenes"]:
+        rows = list(scene["textures"])
+        metadata = scene.get("metadata", {})
+        if not isinstance(metadata, dict): raise LabError("Artwork request metadata must be an object")
+        candidates = metadata.get("baseCandidates", [])
+        if not isinstance(candidates, list) or len(candidates) > 64:
+            raise LabError("Artwork request base candidates exceed bounds")
+        for candidate in candidates:
+            if not isinstance(candidate, dict) or not isinstance(candidate.get("textures"), list) or len(candidate["textures"]) > 256:
+                raise LabError("Invalid artwork request base candidate")
+            rows.extend(candidate["textures"])
+        for row in rows:
+            if not isinstance(row, dict): raise LabError("Invalid artwork request texture record")
+            value = row.get("fileId")
+            if value is not None:
+                if isinstance(value, bool) or not isinstance(value, int) or not 0 < value <= 0xffffffff:
+                    raise LabError("Artwork request requires numeric production file IDs")
+                ids.add(value)
+    if not 1 <= len(ids) <= 2048:
+        raise LabError("Artwork request exceeds the collector's 2048-texture budget; select fewer scenes")
+    return dict(schema=1, kind="twichui-maplab-asset-request", clientBuild=source["clientBuild"],
+                product=source["product"], numericSources=source["numericSources"], fileIds=sorted(ids),
+                provenance="Production Lua selected textures and inactive native zone bases; exact-build offline feedback input, not native replay")
 
 
 def transition_checks(scenes):
@@ -175,8 +213,15 @@ def run_inner(args):
     elif args.state:
         state = load_json(args.state)
     else:
-        state, lua = production_export(args.client_data)
+        state, lua = production_export(args.client_data, getattr(args, "scenario_set", "default"))
     validate_export(state)
+    selected = getattr(args, "scene", None)
+    if selected:
+        known = {scene["id"] for scene in state["scenes"]}
+        if set(selected) - known:
+            raise LabError("Unknown scene IDs: " + ", ".join(sorted(set(selected) - known)))
+        state["scenes"] = [scene for scene in state["scenes"] if scene["id"] in selected]
+    requested_artwork = artwork_request(state)
     output.mkdir(parents=True, exist_ok=True)
     if request:
         (output / "diagnostic-scenario.json").write_text(json.dumps(request, indent=2, sort_keys=True), encoding="utf-8")
@@ -250,6 +295,10 @@ def run_inner(args):
             "sha256": hashlib.sha256((output / "native-reference.png").read_bytes()).hexdigest(),
             "reportId": request.get("reportId") if request else False}
     (output / "render-state.json").write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
+    if requested_artwork:
+        (output / "asset-request.json").write_text(json.dumps(requested_artwork, indent=2, sort_keys=True), encoding="utf-8")
+        report["assetRequest"] = {"file": "asset-request.json", "count": len(requested_artwork["fileIds"]),
+                                  "clientBuild": requested_artwork["clientBuild"], "requiresExactBuild": True}
     (output / "report.json").write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
     gallery(output, report, state["scenes"])
     print(f'{len(state["scenes"])} scenarios, {len(assets.missing)} missing assets, {report["seconds"]:.3f}s; status: {report["status"]}; real artwork verified: {report["realArtworkVerified"]}')
@@ -262,6 +311,8 @@ def run_inner(args):
 def parser():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--all", action="store_true", help="export the complete bounded production-Lua scenario catalog")
+    p.add_argument("--scenario-set", choices=("default", "feedback-v1"), default="default", help="versioned production-Lua camera catalog; feedback-v1 requires a client bundle")
+    p.add_argument("--scene", action="append", help="render only this exact exported scene ID; repeat for a focused comparison")
     p.add_argument("--client-bundle", action="append", type=Path, help="private collect.py ZIP part; repeat for all parts")
     p.add_argument("--state", type=Path, help="existing production render-state JSON")
     p.add_argument("--assets", type=Path, help="local SHA-256 asset manifest")

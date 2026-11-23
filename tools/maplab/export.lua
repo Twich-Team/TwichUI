@@ -36,16 +36,36 @@ return function(t, path)
         end
         return alpha, level
     end
-    local function Snapshot(id, label)
-        t.Tick(); t.Tick()
+    local function Snapshot(id, label, includeBaseCandidates, advance)
+        if advance ~= false then t.Tick(); t.Tick() end
         local u0, v0, u1, v1 = MV.ViewRect()
         local scene = { id = id, label = label, width = t.VIEW.w, height = t.VIEW.h,
             view = { u0 = u0, v0 = v0, u1 = u1, v1 = v1 }, textures = {},
             metadata = { syntheticGeography = not t.CLIENT or t.CLIENT.synthetic, nativeMap = MV.MapID(), view = MV.Diagnostic(true),
-                terrain = R.MapDetail.Diagnostic(true), interiors = R.MapPictures.Diagnostic(true), cave = R.MapCaves.Snapshot(),
+                art = MA.Diagnostic(), terrain = R.MapDetail.Diagnostic(true), interiors = R.MapPictures.Diagnostic(true), cave = R.MapCaves.Snapshot(),
                 limitation = t.CLIENT and "Client-table rectangle API adapter; native area shapes, phases and conditions unavailable."
                     or "Synthetic native API fixture; texture IDs such as 900000 are synthetic, not client artwork identifiers." } }
         local W, H = MW.Size()
+        -- Inactive native base candidates for the private underpaint study.
+        -- Lua's actual visible-zone selection and production world/art APIs
+        -- supply geometry. They are never added to the rendered texture list.
+        scene.metadata.baseCandidates = {}
+        for _, z in ipairs(includeBaseCandidates == false and {} or scene.metadata.art.zoneLayers) do
+            local a = MW.Art(z.mapId)
+            local l, r, top, bottom = MW.Rect(z.mapId)
+            local files = c.C_Map.GetMapArtLayerTextures(z.mapId, 1)
+            local candidate = { mapId = z.mapId, alpha = z.alpha, textures = {} }
+            local cols = math.ceil(a.w / a.tw)
+            for i, file in ipairs(files) do
+                local col, row = (i - 1) % cols, math.floor((i - 1) / cols)
+                local pw, ph = math.min(a.tw, a.w - col * a.tw), math.min(a.th, a.h - row * a.th)
+                candidate.textures[#candidate.textures + 1] = { fileId = file,
+                    u0 = l + col * a.tw / a.w * (r - l), v0 = top + row * a.th / a.h * (bottom - top),
+                    u1 = l + (col * a.tw + pw) / a.w * (r - l), v1 = top + (row * a.th + ph) / a.h * (bottom - top),
+                    texCoord = { 0, pw / a.tw, 0, ph / a.th } }
+            end
+            scene.metadata.baseCandidates[#scene.metadata.baseCandidates + 1] = candidate
+        end
         assert(math.abs(scene.width / scene.height - (u1 - u0) * W / ((v1 - v0) * H)) < 1e-6,
             "exported pixels preserve the production viewport aspect")
         for _, obj in ipairs(t.OBJECTS) do
@@ -80,24 +100,31 @@ return function(t, path)
             return a.order < b.order
         end)
         scenes[#scenes + 1] = scene
+        return scene
     end
     local function At(id, label, u, v, z)
-        MV.GlideTo(u, v, z); Snapshot(id, label)
+        MV.GlideTo(u, v, z); t.Run(0.2); Snapshot(id, label)
     end
     if t.CLIENT then
         MXP.Set("unexplored", "show")
-        for _, s in ipairs(t.CLIENT.scenes) do
-            local u, v = MW.ToWorld(s.map, s.x, s.y)
-            assert(u and v, "client scenario has production world placement")
-            MV.GlideTo(u, v, s.zoom); t.Run(0.8)
-            Snapshot(s.id, s.label)
+        if os.getenv("TWICHUI_MAPLAB_SCENARIO_SET") == "feedback-v1" then
+            assert(loadfile(REPO .. "tools/maplab/feedback.lua"))()(t, Snapshot)
+        else
+            for _, s in ipairs(t.CLIENT.scenes) do
+                local u, v = MW.ToWorld(s.map, s.x, s.y)
+                assert(u and v, "client scenario has production world placement")
+                MV.GlideTo(u, v, s.zoom); t.Run(0.8)
+                Snapshot(s.id, s.label)
+            end
         end
         local result = { schema = 1, provenance = { source = "Production Lua with local Forever table-derived API adapter",
             synthetic = t.CLIENT.synthetic, clientBuild = t.CLIENT.build, nativeApiCaptured = false,
+            scenarioSet = os.getenv("TWICHUI_MAPLAB_SCENARIO_SET") or "default",
             limitation = "Actual local client input when supplied; rectangle-based context lookup, not native phase/zone shapes." }, scenes = scenes }
         local f = assert(io.open(path, "w")); f:write(R.DiagnosticsKit.Json.Encode(result, 17)); f:close()
         return
     end
+    assert(os.getenv("TWICHUI_MAPLAB_SCENARIO_SET") ~= "feedback-v1", "feedback-v1 needs actual client table input")
     At("world", "Synthetic world overview", 0.5, 0.5, 1)
     local u, v = t.WorldOf(1429, 0.5, 0.5)
     for _, z in ipairs({ 12, 20, 24, 28, 32, 36, 40, 48 }) do

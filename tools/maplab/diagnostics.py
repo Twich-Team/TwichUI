@@ -64,8 +64,16 @@ def import_report(data):
                          "alpha": finite(row.get("effectiveAlpha", row.get("alpha", 1)), "interior alpha"), "shown": row.get("shown", True),
                          "rotation": finite(row.get("angleRadians", 0), "interior angle"),
                          "texCoord": [0, row.get("cropU1", 1), row.get("cropV0", 0), 1], "level": row.get("level", 8)})
+    for row in current.get("cave", {}).get("textures", [])[:12]:
+        if not row.get("bounds"):
+            continue
+        unknown_parent_alpha |= "effectiveAlpha" not in row
+        textures.append({"fileId": row.get("fileId"), "bounds": rect(row["bounds"]),
+                         "alpha": finite(row.get("effectiveAlpha", row.get("alpha", 1)), "cave alpha"),
+                         "shown": row.get("shown", True), "texCoord": row.get("texCoord", [0, 1, 0, 1]),
+                         "level": row.get("level", 9)})
     if not textures:
-        raise LabError("diagnostic captured no selected terrain/interior texture rectangles; there is no image state to reconstruct")
+        raise LabError("diagnostic captured no selected terrain/interior/cave texture rectangles; there is no image state to reconstruct")
     center = view.get("center", {})
     request = {"schema": 1, "kind": "twichui-maplab-scenario-request", "reportId": str(data.get("id", "unavailable"))[:100],
                "mapId": view.get("nativeMap"), "center": {k: center[k] for k in ("u", "v", "zoom") if k in center},

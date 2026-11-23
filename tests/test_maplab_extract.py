@@ -52,13 +52,21 @@ class Extract(unittest.TestCase):
         self.ids = [123, 124]
         self.original_game = {p.relative_to(self.wow): p.read_bytes() for p in self.wow.rglob("*") if p.is_file()}
     def tearDown(self): self.temp.cleanup()
-    def run_collect(self, storage, destination=None):
+    def run_collect(self, storage, destination=None, asset_request=None):
         with patch.object(collect, "read_tables", return_value=({}, {"fixture": {"sha256": "0" * 64}})), \
              patch.object(collect, "model", return_value=({947: {"id": 947}}, {}, lambda *a: (0, 0))), \
              patch.object(collect, "minimap", return_value={"0": [], "1": []}), \
              patch.object(collect, "scenarios", return_value=[]), \
              patch.object(collect, "candidate_ids", side_effect=lambda *a: self.ids), contextlib.redirect_stdout(io.StringIO()):
-            return collect.collect(self.wow, destination or self.output, storage_factory=lambda *a, **k: storage)
+            return collect.collect(self.wow, destination or self.output, storage_factory=lambda *a, **k: storage,
+                                   asset_request=asset_request)
+    def request(self, **changes):
+        data = dict(schema=1, kind="twichui-maplab-asset-request", clientBuild="1.60.1.71037", product="wowf",
+                    numericSources=collect.numeric_sources(), fileIds=[125, 126],
+                    provenance="Owned test fixture standing in for production-Lua selected texture IDs")
+        data.update(changes)
+        path = self.root / "maplab-asset-request.json"; path.write_bytes(bundle.json_bytes(data))
+        return path, data
     def version(self, pointer="current.json"):
         record = json.loads((self.output / pointer).read_text())
         folder = self.output / record["version"]
@@ -76,11 +84,78 @@ class Extract(unittest.TestCase):
         self.assertEqual(bundle.validate_manifest(manifest, folder / "assets", client)["status"], "success")
         self.assertEqual(manifest["assets"]["123"]["header"]["format"], "BGRA")
         self.assertEqual(manifest["clientMetadataSha256"], bundle.digest(bundle.json_bytes(client)))
+        self.assertNotIn("assetRequest", client); self.assertNotIn("assetRequest", manifest["settings"])
         self.assertTrue(storage.closed); self.assertEqual(storage.reads, self.ids)
         self.assertEqual(self.original_game, {p.relative_to(self.wow): p.read_bytes() for p in self.wow.rglob("*") if p.is_file()})
         with zipfile.ZipFile(outputs[0]) as archive:
             self.assertEqual(set(archive.namelist()), {"client.json", "assets/manifest.json", "assets/123.blp", "assets/124.blp"})
             self.assertIsNone(archive.testzip())
+
+    def test_exact_asset_request_overrides_default_ids_and_records_provenance(self):
+        path, request = self.request()
+        storage = Storage({125: blp(3), 126: blp(4)})
+        self.run_collect(storage, asset_request=path)
+        folder, manifest, _ = self.version()
+        client = json.loads((folder / "client.json").read_text())
+        self.assertEqual(storage.reads, [125, 126])
+        self.assertEqual(manifest["candidateTextureIds"], [125, 126])
+        self.assertEqual(client["candidateTextureIds"], [125, 126])
+        identity = client["assetRequest"]
+        self.assertEqual(identity["sha256"], bundle.digest(bundle.json_bytes(request)))
+        self.assertEqual(identity["count"], 2)
+        self.assertEqual(identity["provenance"], request["provenance"])
+        self.assertEqual(manifest["settings"]["assetRequest"], identity)
+        self.assertEqual(bundle.validate_manifest(manifest, folder / "assets", client)["status"], "success")
+
+    def test_asset_request_rejects_old_build_product_and_numeric_data_before_texture_reads(self):
+        self.run_collect(Storage({123: blp(), 124: blp(2)}))
+        prior = (self.output / "current.json").read_bytes()
+        for changes in ({"clientBuild": "1.60.1.70000"}, {"product": "wow_classic_beta"},
+                        {"numericSources": {name: "0" * 64 for name in collect.NUMERIC_SOURCES}}):
+            with self.subTest(changes=changes):
+                path, _ = self.request(**changes); storage = Storage({125: blp(), 126: blp(2)})
+                with self.assertRaisesRegex(collect.ClientInputError, "differs|hashes differ"):
+                    self.run_collect(storage, asset_request=path)
+                self.assertEqual(storage.reads, []); self.assertTrue(storage.closed)
+                self.assertEqual(prior, (self.output / "current.json").read_bytes())
+
+    def test_asset_request_rejects_malformed_unbounded_paths_and_duplicate_fields(self):
+        cases = [dict(schema=True), dict(schema=99), dict(kind="not-an-art-request"), dict(fileIds=[]),
+                 dict(fileIds=[126, 125]), dict(fileIds=[125, 125]), dict(fileIds=[True]), dict(fileIds=[1.5]),
+                 dict(fileIds=[0]), dict(fileIds=[2**32]), dict(fileIds=list(range(1, 2050))),
+                 dict(fileIds=[r"C:\\game\\texture.blp"]), dict(path="../outside"), dict(provenance={}),
+                 dict(clientBuild="unknown"), dict(product="../game")]
+        for changes in cases:
+            with self.subTest(changes=str(changes)[:100]):
+                path, _ = self.request(**changes)
+                with self.assertRaises(collect.ClientInputError): collect.read_asset_request(path)
+        path, _ = self.request()
+        path.write_text('{"schema":1,"schema":1}')
+        with self.assertRaisesRegex(collect.ClientInputError, "Duplicate"): collect.read_asset_request(path)
+        for raw in (b"{", b"[]", b"\xff", b"[" * 2000):
+            path.write_bytes(raw)
+            with self.assertRaises(collect.ClientInputError): collect.read_asset_request(path)
+        path.write_bytes(b" " * (128 * 1024 + 1))
+        with self.assertRaisesRegex(collect.ClientInputError, "128 KiB"): collect.read_asset_request(path)
+
+    def test_asset_request_source_kit_embeds_only_validated_data_and_runs_without_site_packages(self):
+        path, request = self.request()
+        kit = collect.make_kit(self.root / "request-kit.zip", path)
+        with zipfile.ZipFile(kit) as archive:
+            self.assertEqual(json.loads(archive.read("maplab-asset-request.json")), request)
+            self.assertFalse(any(name.endswith((".blp", ".png", ".tga")) for name in archive.namelist()))
+            archive.extractall(self.root / "request-kit")  # Test-generated code/data kit only.
+        unpacked = self.root / "request-kit"
+        process = subprocess.run([sys.executable, "-S", str(unpacked / "tools/maplab/collect.py"),
+                                  "--make-kit", str(self.root / "second-kit.zip"),
+                                  "--asset-request", str(unpacked / "maplab-asset-request.json")],
+                                 capture_output=True, text=True, timeout=10)
+        self.assertEqual(process.returncode, 0, process.stderr)
+        with zipfile.ZipFile(self.root / "second-kit.zip") as archive:
+            self.assertEqual(json.loads(archive.read("maplab-asset-request.json")), request)
+        bad, _ = self.request(schema=99)
+        with self.assertRaises(collect.ClientInputError): collect.make_kit(self.root / "bad-kit.zip", bad)
+        self.assertFalse((self.root / "bad-kit.zip").exists(), "invalid request cannot leave a misleading kit")
 
     def test_unchanged_run_reuses_only_verified_current_source_and_same_version(self):
         first = self.run_collect(Storage({123: blp(), 124: blp(2)}))
