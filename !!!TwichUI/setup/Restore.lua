@@ -45,6 +45,7 @@ RS.OWN_KEYS = { "modules", "ui", "gear", "shareTransport", "profiles", "profileK
 RS.OWN_SETUP = { "selection", "recommend", "trusted", "twichui" }   -- the parts of TwichUIDB.setup that are choices
 RS.OWN_LEFT_OUT = {
     workshopJunkIgnore = "Account-wide Never mark item protections stay in place across backup restores and are never exported",
+    workshopJunkOwned = "Automatic junk ownership is live provenance for EllesmereUI assignments, never restored or exported as settings",
     lootSparklesWas = "the native loot sparkle CVar before TwichUI changed it; a recovery record, not a setting",
     gatheringSparklesCVars = "the interaction CVars owned by gathering sparkles; a recovery record outside profiles and backups",
     pins = "map pins and the party session: what you placed, not settings. A restore never removes a pin.",

@@ -110,8 +110,8 @@
     "simulators": []
   },
   "item-advisor": {
-    "tests": ["test_workshop_advisor*.lua", "test_workshop_disenchant*.lua"],
-    "syntax": ["TwichUI_Workshop/**/*.lua"],
+    "tests": ["test_workshop_advisor*.lua", "test_workshop_disenchant*.lua", "test_workshop_junk*.lua"],
+    "syntax": ["TwichUI_Workshop/**/*.lua", "!!!TwichUI/modules/EllesmereJunk.lua"],
     "dependencies": ["market", "crafting"],
     "simulators": [{"script": "workshop", "only": ["advisor", "advisorsmall", "advisorempty", "advisorscaled", "advisorsource", "advisorcategory", "advisorscroll", "advisortentative", "advisorbags", "advisorfiltered", "craft", "wrong"]}]
   },

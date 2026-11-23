@@ -12,6 +12,7 @@ local chartCache,chartPending
 local pending,pendingCount={},0
 local revision,epoch=0,0
 local notification,notificationDelay
+local notificationFull=false
 local notificationToken=0
 local function observed(id)
     if R.Perf and R.Perf.on then R.Perf.Count('workshop.pricing.'..id) end
@@ -87,8 +88,9 @@ function P.ObserveView(all,list)
     local state=W.Session and W.Session.OpportunityStatus and W.Session.OpportunityStatus()
     if waiting==0 and not(state and state.refreshing)and not d.allDone then d.allDone=true;R.Perf.Observe('workshop.opportunitiesSettled',elapsed)end
 end
-function P.Notify(delay)
+function P.Notify(delay,partial)
     delay=delay or 0.1
+    notificationFull=notificationFull or not partial
     if notification and (delay>0 or notificationDelay==0) then return end
     notificationToken=notificationToken+1
     local mine=notificationToken
@@ -96,7 +98,8 @@ function P.Notify(delay)
     C_Timer.After(delay,function()
         if mine~=notificationToken then return end
         notification=false
-        if W.Active() then observed('notifications');P.Changed() end
+        local full=notificationFull;notificationFull=false
+        if W.Active() then observed('notifications');P.Changed(not full) end
     end)
 end
 function P.CancelPending()
@@ -104,6 +107,7 @@ function P.CancelPending()
     pending,pendingCount={},0
     epoch=epoch+1
     notificationToken=notificationToken+1;notification=false
+    notificationFull=false
     chartPending=nil
 end
 local function dataStamp(status)
@@ -123,7 +127,7 @@ end
 local function eligible(now,status)
     if not (W.Active() and B) then return nil,'unavailable' end
     status=status or B.Status()
-    if not (status.ready and status.summary) then return nil,'unavailable' end
+    if not (status.ready and status.summary) then return nil,status.loading and 'loading' or 'unavailable' end
     local generation=status.generation
     if headerGeneration~=generation then
         header,headerGeneration,headerAt=B.Manifest(),generation,nil
@@ -252,7 +256,8 @@ function P.ItemReady(item,key,failure,answer)
     if not live then pending[bucket]=nil end
     revision=revision+1;observed('settled')
     if W.Session and W.Session.ItemsChanged then W.Session.ItemsChanged({[item]=true})end
-    P.Notify()
+    if W.Junk and W.Junk.ItemsChanged then W.Junk.ItemsChanged({[item]=true})end
+    P.Notify(nil,true)
 end
 -- Reserve one bucket's complete demand before allowing its decoder handoff.
 -- A cancelled Opportunities job releases the lease; shared price work continues.
@@ -479,7 +484,8 @@ local function finishBucket(bucket,work,failure)
     if changed then
         revision=revision+1
         if W.Session and W.Session.ItemsChanged then W.Session.ItemsChanged(items)end
-        P.Notify()
+        if W.Junk and W.Junk.ItemsChanged then W.Junk.ItemsChanged(items)end
+        P.Notify(nil,true)
     end
     if chartPending==bucket then chartPending=nil;chartRevision=chartRevision+1;P.Notify(0) end
 end
@@ -488,13 +494,13 @@ function P.Decoded(bucket,work) return finishBucket(bucket,work) end
 function P.Rejected(bucket,why,work) return finishBucket(bucket,work,why) end
 function P.PendingCount() return pendingCount end
 function P.CacheSize() return count end
-function P.Changed()
+function P.Changed(partial)
     if W.Facts then W.Facts.CacheClear() end
-    if W.Strategy then W.Strategy.Bump() end
+    if W.Strategy then W.Strategy.Bump(partial) end
     if W.UI and W.UI.Redraw then W.UI.Redraw() end
     if W.AuctionUI and W.AuctionUI.Schedule then W.AuctionUI.Schedule() end
     if W.WorthTip and W.WorthTip.Refresh then W.WorthTip.Refresh() end
-    if W.Junk then W.Junk.Request() end
+    if W.Junk and not partial then W.Junk.Request() end
 end
 if R.Perf and R.Perf.Gauge then
     R.Perf.Gauge('workshop.pricingPending',{label='Pending Market price identities',kind='cache',group='workshop',unit='count',read=P.PendingCount})

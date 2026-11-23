@@ -70,8 +70,7 @@ earlier step.
 Templates (poor gear, uncommon-or-lower non-upgrades, materials, common recipes,
 and custom) start disabled for review. Existing type switches become equivalent
 rules without resetting preferences. Rule edits persist a bounded version-2
-extension (version-1 flat rules read safely without writes, converted on Save); malformed or newer rules refuse marking and edits. Existing marks are
-never undone. Older versions refuse this extension rather than guessing at new
+extension (version-1 flat rules read safely without writes, converted on Save); malformed or newer rules refuse marking and edits. Only automatically owned marks are reconciled; player marks are retained. Older versions refuse this extension rather than guessing at new
 trees. The standalone settings page loads without Workshop. Its explicit Load
 Item Advisor action enables/loads the experimental dependency without opening a
 Workshop window or initiating a scan. Enabled junk marking then loads that
@@ -92,8 +91,8 @@ saves its item ID in the account-wide ignore list (up to 512 IDs), covering
 all copies across profiles, and cancels any pending marking scan. Search,
 pagination and an Ignored items view allow review/removal, including items no longer carried.
 The picker works without loading Workshop or market data. Its bag/item listeners
-exist only while it is visible. Existing EllesmereUI marks are retained: **remove
-any mistaken mark with EllesmereUI's junk coin before visiting a merchant**.
+exist only while it is visible. Marks predating ownership tracking cannot safely be
+distinguished from manual marks; remove those with EllesmereUI's junk coin when needed.
 
 Sell's recommendation, bag tooltips and junk marking use the same held-item
 Advisor path and selected Workshop pricing source. Sell's live/local competition
@@ -101,21 +100,60 @@ still supplies posting-price guidance, but cannot replace the recommendation's
 evidence. The held link and actual item level are used for variant/disenchant
 checks. Listing prices remain observations, not guaranteed sale proceeds.
 
-The shared `R.EllesmereJunk` adapter performs marking through EllesmereUI Bags.
-Custom categories are preserved. A mark covers that item ID across the account,
-including future copies; disabling Workshop or the switch does not undo it.
-EllesmereUI's own junk coin removes marks; Workshop does not re-mark an ID it
-marked earlier in this session. EllesmereUI handles selling according to its own
-settings. Workshop calls no sell, destroy, use, purchase or auction action.
+The shared `R.EllesmereJunk` adapter records only marks Workshop actually applies in
+an account-wide bounded `workshopJunkOwned` map. Player assignment/unassignment
+hooks relinquish ownership, including an explicit assignment to the same Junk
+category. Manual junk, Keep/custom categories and manual unmarking remain under
+player control. A final rule failure clears only an owned mark through EllesmereUI's
+`UnassignItem`; another independently matching rule keeps the mark. Pending evidence
+retains the assignment while withholding sale eligibility, avoiding mark/unmark
+flicker. Reloaded owned marks also await revalidation; disabling Workshop retains
+the assignment but withholds its automatic sale eligibility. Player-owned marks
+continue to follow EllesmereUI's settings. Workshop initiates no selling actions.
 
-Inventory, item-info, character, price and strategy changes schedule bounded work,
-coalesced for 0.5 seconds. Combat/loading pauses marking; settings/profile changes
-invalidate pending work. Session identities cap at 2048, after which new marks
-wait for reload. `workshop.junk` and its listener/identity gauges expose the work.
-Unit tests use the real Advisor and EllesmereJunk adapter over synthetic bags;
-Forever acceptance still needs enabling the switch, receiving Vendor/Auction/DE
-items, manually unmarking one, changing profiles and reloading with EllesmereUI
-Bags present/absent. No simulator or real-client acceptance is claimed here.
+Inventory, item-info, character and strategy changes schedule bounded work,
+coalesced for 0.5 seconds. Price completions reevaluate only held IDs depending on
+that item or disenchant material; all copies and their held links are rechecked.
+Market addon loading does not trigger a second global junk scan; relevant
+EllesmereUI lifecycle events still restore the marker guard.
+Moves invalidate cached locations through the existing bag events. Identical copies
+share one canonical valuation within a scan. Prepared requests retain their existing
+deduplication, current-only reads and cooperative scheduling; history is not required.
+Combat/loading pauses marking; settings/profile changes invalidate pending work.
+Session identities and persistent ownership cap at 2048. Ownership is live provenance,
+so settings backups neither export nor restore it. `workshop.junk` and its
+listener/identity gauges expose the work.
+
+### Automatic Workshop Vendor condition: root cause and finality
+
+The original path was already `Junk.Advise -> AdvisorData.Tooltip -> Advisor.Decide`;
+it did not duplicate the economic comparison or bypass prepared prices.
+`Session.lua` binds its `MK` alias to `W.Pricing` (loaded earlier by the TOC), so
+`Session.PriceSource()` already supplies the reference-aware market facade. Local
+competition and Market reference selection remain unchanged by this correction.
+
+`Advisor.Decide` could recognize a loading reference and then select its
+known-vendor fallback (or select a local observation before reaching that check).
+Disenchant could likewise consume a provisional local material quote. The canonical
+result now exposes `pricingState`, `pending` and bounded price dependencies. Relevant
+loading evidence produces unknown advice, never Vendor or another final sale action;
+unrelated junk rules can still match. Bound/variant items do not wait for an irrelevant
+base auction quote. Terminal missing, stale or invalid Market evidence retains the
+same canonical fallback; no unavailable price becomes zero. Completion and generation
+changes invalidate the supporting automatic decision.
+
+The adapter guards EllesmereUI's `IsJunk` for owned marks only; selling sees false
+until the current bag/rule/source snapshot is ready. It uses the original reader for
+internal marking checks, retains ownership if assignment notifications fail after
+the category changed, observes manual calls with `hooksecurefunc`, and clears only
+through `UnassignItem`. These boundaries were checked against public
+[EllesmereUI source](https://github.com/EllesmereGaming/EllesmereUI/blob/main/EllesmereUIBags/EllesmereUIBags_Categories.lua)
+(`AssignItem`, `UnassignItem`, `IsJunk`, `ToggleJunk`); they are internal APIs, so an
+unsupported version refuses new owned marks. Real-client timing, third-party addon
+compatibility and native reload behavior remain owner-directed checks. EllesmereUI
+reads `IsJunk` when gathering a sale sweep, then checks slot identity and locking
+before each sale (`EUI_Bags_Select.lua`). This guard controls sweep eligibility;
+it does not alter execution of an already gathered native sale queue.
 
 Initial marker verification (before these guardrails): 79 Workshop modules, 13 Workshop/settings modules, 15 core
 modules, the existing Mage junk-marking test and Lua syntax checks pass. All 309

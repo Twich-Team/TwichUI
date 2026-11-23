@@ -374,7 +374,7 @@ end
 function B.Delete()
     local name = S().Name() or "this rule"
     local current = S().Index()
-    R.Interact.Confirm("TWICHUI_DELETE_JUNK_RULE", ("Delete the rule \"%s\"? Items it marked stay marked; unmark them in EllesmereUI."):format(name), function()
+    R.Interact.Confirm("TWICHUI_DELETE_JUNK_RULE", ("Delete the rule \"%s\"? Workshop removes its own marks from carried items unless another rule matches. Player marks stay unchanged."):format(name), function()
         if S().Index() ~= current then return end
         local ok, why = S().Delete()
         if not ok then Say(why, "warn"); B.Refresh(); return end
@@ -792,7 +792,7 @@ function B.Build()
     rule.delete = Button(rule, "Delete", 80, "danger", function() B.Delete() end)
     rule.delete:SetHeight(32)
     rule.delete:SetPoint("TOPRIGHT", -116, -12)
-    m.ContextTip(rule.delete, "Delete rule", "Deletes this rule after asking. Items it already marked stay marked; unmark them in EllesmereUI.")
+    m.ContextTip(rule.delete, "Delete rule", "Deletes this rule after asking. Workshop removes its own marks from carried items unless another rule matches. Player marks stay unchanged.")
     rule.more:SetHeight(32)
     rule.more:SetPoint("TOPRIGHT", -14, -12)
     rule.more:SetValue(nil, "Rule")

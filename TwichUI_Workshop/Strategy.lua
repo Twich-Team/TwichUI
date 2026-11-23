@@ -346,8 +346,8 @@ end
 
 -- Something a plan depends on changed: every running job is cancelled and every kept result is forgotten (the keys carry the epoch, so none
 -- could match again). The page is told once, so it asks for the plan again.
-function St.Bump()
-    if W.Junk then W.Junk.Request() end
+function St.Bump(pricingOnly)
+    if W.Junk and not pricingOnly then W.Junk.Request() end
     St.epoch = St.epoch + 1
     Notify()
     local dropped = false
