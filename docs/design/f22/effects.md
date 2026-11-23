@@ -26,8 +26,13 @@ runtime state, condition interpreter or placement transaction is needed.
 
 ## Pipeline and ownership
 
-Proposed boundaries: Observer → plain normalized facts → rule evaluator → one
-winning design per binding → renderer. Adapter owns binding identity and cached
+Proposed readable-data lane: Observer → plain normalized facts → rule evaluator
+→ one winning design per binding → renderer. Restricted-data lane: validated
+configuration → native condition/container → native visual regions. Do not
+observe a secret-driven slot’s visibility or hook OnShow/OnHide to arbitrate
+Lua rules or launch particles. In that lane use fixed disjoint type placements
+and native-supported conditional animation only after phase-1 proof; unsupported
+layer types remain unavailable. A Lua ticker must not read secret presence. Adapter owns binding identity and cached
 geometry, renderer owns only its own mouse-disabled unprotected children/regions.
 A binding includes provider identity, frame category, owner, actual bar, current
 unit and monotonically increasing generation. Queue work with the generation;
@@ -75,8 +80,9 @@ Motes. Each has bounded duration, delay and intensity; no scripts, arbitrary key
 expressions, event graphs, recursive emitters or user-defined shader programs.
 Entrance 120 ms; optional 1.6-second breath; exit 150 ms only while binding still
 valid. Removal, reuse, hide, disable and restriction loss cancel immediately;
-no decorative exit may suggest an aura remains after reassignment. Same winner
-on aura refresh does not restart entrance. A different winner replaces effects
+no decorative exit may suggest an aura remains after reassignment. For readable data, same winner
+on aura refresh does not restart entrance. Native-only animation refresh semantics
+must be proven separately; do not synthesize a Lua activation signal. A different winner replaces effects
 without stacking timelines. Preview has play/pause/replay/scrub with a simulated
 clock, never fake events sent into live frames.
 
@@ -95,8 +101,10 @@ are at most retained sprites, not a growing history. No production assets in F22
   cost before Save; the UI shows both budgets. Max 1,024 retained regions.
 - At most four particles per binding and 64 active particles globally; at most
   eight animated bindings globally. Remaining matches show their static fallback.
-  Rank by rule priority, player then target then party then raid and stable slot;
+  For readable facts, rank by rule priority, player then target then party then raid and stable slot;
   retain allocation until winner/visibility changes to avoid animation flicker.
+  For secret-driven native effects allocate budget by configured visible frame
+  slots out of combat, independent of aura presence; no secret-presence ranking.
 - One shared ticker only while active motion exists, sampled at ≤30 Hz; advance
   using absolute elapsed time so low FPS does not stretch effects. No ticker for
   static displays. No per-frame timer chains, table construction, closures or
