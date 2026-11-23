@@ -1,12 +1,12 @@
 # Execute Range (F02)
 
-Implemented as an opt-in, visual-only indicator for the two source-verified EllesmereUI integration targets. The source evidence gate passes for EllesmereUI Unit Frames' target health bar and EllesmereUI Nameplates' enemy health bars. This is **source-verified and unit-tested**, not simulator-tested, screenshot-reviewed or real-client-tested. Native combat/taint behavior and appearance have not been certified by offline fixtures.
+Implemented as an opt-in, visual-only indicator for the two source-verified EllesmereUI integration targets. The source evidence gate passes for EllesmereUI Unit Frames' target health bar and EllesmereUI Nameplates' enemy health bars. This is **source-verified and unit-tested**, not simulator-tested or real-client-tested. The offline renderer capture below has been visually reviewed; it is not native-client evidence. Native combat/taint behavior and appearance have not been certified by offline fixtures.
 
 ## Player behavior
 
 Execute Range has its own Settings page, searchable by execute, health, threshold, percentage, target, nameplate and EllesmereUI. The main switch defaults off. When enabled, both supported locations default on independently. Any whole percentage **1–100** can be selected with the existing slider or typed number box; the default is **20%**. No class, talent or spell determines the threshold.
 
-Appearance choices are Threshold marker, Active range edge, and Marker and active edge (default). The marker is a one-bar-unit gold dividing line at the threshold. The active edge is a restrained one-bar-unit warm outline inside the bar, visible for readable health greater than zero and at or below the threshold. There is no animation, new artwork or gameplay action. Both modes can be enabled on target and nameplates together.
+Appearance choices are Threshold marker, Active range edge, and Marker and active edge (default). The marker is a one-bar-unit gold dividing line at the threshold. The active edge is a restrained one-bar-unit warm outline inside the bar, visible for readable health greater than zero and at or below the threshold. There is no animation or gameplay action. These three saved appearance IDs and their original colors/opacity remain unchanged. Both modes can be enabled on target and nameplates together.
 
 The marker needs geometry, not health. **The active edge is hidden when health is secret, unavailable, invalid or zero; no combat threshold crossing is claimed for those values.** Active-only mode can therefore show nothing while health is restricted. The Settings page always explains this and recommends Marker or Both for a persistent threshold indication. There is no inferred percentage, status-bar-value arithmetic, secret serialization or attempt to defeat client restrictions.
 
@@ -36,13 +36,13 @@ Forever API identity is the actual [`forever` source commit `734f065329cff499283
 
 ## Implementation and lifecycle
 
-- [Config](../../!!!TwichUI/execute/Config.lua) owns validated profile fields `ui.executeRange.threshold`, `target`, `nameplates`, `appearance`. `modules.executeRange` is the default-off switch. Defaults are read without eagerly writing a table. Invalid stored fields read as defaults without rewriting unrelated settings; setters reject invalid input. No schema migration or database version changes.
+- [Config](../../!!!TwichUI/execute/Config.lua) owns validated profile fields `ui.executeRange.threshold`, `target`, `nameplates`, `appearance`, `color`, `opacity`, `texture`. `modules.executeRange` is the default-off switch. Defaults are read without eagerly writing a table. Invalid stored fields read as defaults without rewriting unrelated settings; setters reject invalid input. No schema migration or database version changes.
 - [Ellesmere adapter](../../!!!TwichUI/execute/Ellesmere.lua) reads only the verified fields above. A bounded six-parent ancestry check permits the known clipping wrapper and rejects unrelated bars. Plain finite positive dimensions and a recognised horizontal/vertical orientation are required.
-- [Display](../../!!!TwichUI/execute/Display.lua) creates five original texture regions per observed bar: one marker and four inner edges. Parent coordinates preserve position, scale and dimensions. Size/show/hide handlers and post-observed orientation/reverse setters follow configuration changes without writing provider layout. Health events repaint only the associated record.
+- [Display](../../!!!TwichUI/execute/Display.lua) creates six original texture regions per observed bar: one marker, four inner edges and one lower-sublayer fill. Only one fill mode can draw at a time. Parent coordinates preserve position, scale and dimensions. Size/show/hide handlers and post-observed orientation/reverse setters follow configuration changes without writing provider layout. Health events repaint only the associated record.
 - EUI can register its native events after TwichUI. A coalesced `C_Timer.After(0)` hands discovery to the next event turn, after EUI's verified synchronous add/login/promotion handlers finish. This is a bounded event-order handoff, with no guessed time interval, repeated retries or polling. Both handler orders are covered by fixtures. Current registry entries are also discovered on enable, addon load, world entry, target change and combat exit.
-- Removed/hidden bars immediately clear their own regions. All later paints revalidate the current owner and binding. Pool reuse retains one region set per bar and clears old token mappings. At most **128 bars / 640 regions** are retained, including retired provider bars; further incompatible churn fails closed until reload. Registry discovery visits at most 128 entries, with no global frame scan. Native frames cannot be destroyed; disabled observations remain inert.
-- Disable unregisters all eleven dynamic game events, hides regions and invalidates the sole queued discovery callback. Profile apply and profile identity change (including Duplicate) invalidate queued work and token associations, then read the current profile. No callback retains a former profile's settings. The core runs without Settings opening; Settings is load-on-demand, uses existing row primitives and creates no feature sample/timer loop.
-- [Settings page](../../TwichUI_Settings/pages/ExecuteRange.lua) exposes all four preferences under the main switch, with existing disabled-prerequisite explanations, global search and section reset. Reset restores 20%, both locations and Both appearance while preserving the feature switch. Profile switching/duplication and existing SavedVariables reload preserve the plain settings. The [TwichConfig group](../../!!!TwichUI/setup/TwichConfig.lua) explicitly includes the switch and all four preferences for selected sharing, own backups and restore; provider settings and frame references never enter persistence.
+- Removed/hidden bars immediately clear their own regions. All later paints revalidate the current owner and binding. Pool reuse retains one region set per bar and clears old token mappings. At most **128 bars / 768 regions** are retained, including retired provider bars; further incompatible churn fails closed until reload. Registry discovery visits at most 128 entries, with no global frame scan. Native frames cannot be destroyed; disabled observations remain inert.
+- Disable unregisters all eleven dynamic game events, hides regions and invalidates the sole queued discovery callback. Profile apply and profile identity change (including Duplicate) invalidate queued work and token associations, then read the current profile. No callback retains a former profile's settings. The core runs without Settings opening; Settings is load-on-demand, uses existing row primitives and creates its static inline sample only when its page is first shown, reusing it on later visits without any preview timer.
+- [Settings page](../../TwichUI_Settings/pages/ExecuteRange.lua) exposes all seven preferences under the main switch, with existing disabled-prerequisite explanations, global search and section reset. Reset restores 20%, both locations and Both appearance while preserving the feature switch. Profile switching/duplication and existing SavedVariables reload preserve the plain settings. The [TwichConfig group](../../!!!TwichUI/setup/TwichConfig.lua) explicitly includes the switch and all seven preferences for selected sharing, own backups and restore; provider settings and frame references never enter persistence.
 - One diagnostics gauge reports retained observed bars; no timing scope is added to the O(1) health repaint. Lifecycle/discovery is event-driven and hard-bounded. No global UI framework or recurring OnUpdate is introduced.
 
 ## Verification
@@ -60,3 +60,80 @@ Offline stand-ins deliberately do not execute EUI's proprietary code and cannot 
 - [ ] In combat, exercise existing indicators and newly appearing enemy plates. Enabling or changing protected target geometry must defer/hide until combat ends, without blocked actions or taint. Check target switching and a friendly/enemy transition.
 - [ ] Repeatedly show, hide, remove and recycle plates, including the provider's token-swap case; no former occupant's edge may remain. Change EUI layouts and its own hash line/native execute options; TwichUI must follow valid geometry without altering any EUI setting or decoration.
 - [ ] Disable, switch profiles and remove/disable each provider; queued discovery must not resurrect an overlay. Normal targeting, clicks, casts and nameplate interaction remain unchanged.
+
+## Visual customization refinement
+
+The original `marker`, `active` and `both` values still mean exactly the original
+marker/edge treatment. New styles are Execute zone (`zone`), Active health
+highlight (`highlight`), Marker and execute zone (`markerZone`), and Marker, zone
+and active edge (`markerZoneEdge`). There is no overlapping zone plus health fill.
+The default remains `both`; no migration or eager default write is required.
+
+The zone covers **0% through the configured threshold** even above range. A 25%
+zone on a 200-unit bar is exactly 50 units wide, starting at the fill origin (right
+for reverse horizontal, bottom for normal vertical, top for reverse vertical).
+Active health uses the **current readable health fraction**, only when positive
+and at/below the threshold, and disappears on recovery. Secret/unavailable/dead
+health never produces a guessed filled region. The provider's own fill is neither
+recolored nor assigned a texture/value. Existing clipping ancestors and scale are
+inherited; every placement stays within the verified bar's local rectangle.
+
+Fill color uses the existing Settings swatch (ARGB, default `ffcc7847`). Its alpha
+multiplies the separate 0–100% opacity (default 25%). The existing MenuStyle
+StatusBars catalog supplies EllesmereUI/registered bar textures, including shaded
+or patterned choices where installed. No new texture system or animated gradient
+is added. IDs are bounded names, never arbitrary file paths; missing texture IDs
+remain saved and render flat. Core rendering works without opening Settings.
+
+**Safe protected-layout fallback:** the existing prohibition on protected layout
+writes in combat is preserved. If an active-health fill needs a new size while
+its bar is protected, it hides and uses the original active edge instead. The edge
+also disappears on recovery. The exact filled highlight returns at the next safe
+layout opportunity, normally combat exit. An unchanged prepared zone/marker can
+remain visible. New attachments, changed thresholds/sizes/directions retain the
+existing combat deferral. No native safety claim is made from offline tests.
+
+The inline Settings preview shares the actual decoration code with live bars. It
+shows higher, exact-threshold and below-threshold samples and immediately follows
+appearance changes. At 100% all samples correctly qualify. It neither enables the
+feature nor changes unit health, installs provider hooks or runs a timer. Leaving
+the page/closing Settings hides it; reopening reuses the same sample textures.
+
+[Before/after renderer capture](../images/execute-range-preview.png) ([vector source](../images/execute-range-preview.svg)) shows the
+three original styles and four new styles at 25%, above and below range. It is an
+offline capture of the real decoration geometry/color output on source-shaped
+stand-ins, **not a native EllesmereUI screenshot**; the bars behind the decoration
+are labeled sample surfaces. It does not certify installed texture appearance,
+font/absorb overlap, pointer behavior, taint or native combat.
+
+Verification: `development execute-range` passes all three selected modules.
+`feature execute-range --profile cloud` passes 58 offline modules and syntax;
+one stale ordinary-page fixture failed because Execute Range now has a hosted
+preview. That expectation was corrected with an explicit reachability assertion,
+and `test_settings_defaults.lua` then passed (59 selected offline modules in
+aggregate). Both selected simulator launches failed preflight because the lab is
+absent; no simulator/full/native PASS is claimed. The Settings contract was
+reviewed: only this page changed, with three added settings (756 total) and five
+added descriptor rows (1192 total). Preview reuse/no-write behavior is exercised
+by `test_settings_window.lua`; existing marker/edge, new styles, geometry,
+colors/alpha/textures, missing media, protected fallback, health recovery,
+recycling and cleanup are covered by focused tests. Profiles/sharing/reset include
+all new preferences. After the final health-independent marker/zone guard and media-preview refresh, the three Execute Range modules and the Settings window lifecycle module were rerun and passed.
+
+Additional native checks, for **both EllesmereUI target frames and enemy plates**:
+
+- [ ] Compare Marker / Active Edge / Both with the prior version, including
+  threshold crossing, text and absorb visibility.
+- [ ] At 1%, 25%, 35% and 100%, inspect zone width/origin and active filled health
+  above, exactly at and below range, then heal above range.
+- [ ] Try all combined styles, custom color/alpha, 0/25/100% opacity, and available
+  flat/shaded/patterned textures. Cancel the color picker and verify restoration.
+- [ ] Resize compact/tall target layouts, vary plate width/scale and supported
+  fill directions; confirm clipping and alignment.
+- [ ] Exercise readable/secret health, protected combat edge fallback and return
+  to exact fill outside combat; check blocked-action warnings/taint.
+- [ ] Recycle/hide/remove plates, switch targets/profiles and disable; no former
+  occupant's fill may remain. Reload and confirm new and legacy preferences.
+- [ ] Reopen preview, navigate away, close Settings, reset the section and remove
+  a selected media provider; samples stop when hidden, missing media draws flat,
+  and default reset preserves the main switch.
