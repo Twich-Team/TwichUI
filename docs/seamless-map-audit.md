@@ -1,6 +1,7 @@
 # Seamless map audit and verification
 
-V2 follow-up: [Map Diagnostics](map-diagnostics.md) and
+V2 follow-up: [results and verification](seamless-map-v2-results.md),
+[Map Diagnostics](map-diagnostics.md) and
 [Map Visual Test Lab / hybrid pipeline evaluation](map-visual-lab.md). These
 extend this audit; the original 322-pass/1-failure baseline below is preserved.
 
