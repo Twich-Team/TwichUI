@@ -1,7 +1,7 @@
 -- Companion-owned raw-Deflate transport only. No work or codec calls at TOC load.
 -- Authentication remains in Prepared/Summary; decoded bytes are never executed.
 local R,W=TwichUI,TwichUI.Workshop
-local C={BLOCK_BYTES=524288,ENCODED_BYTES=700000,YIELD='market-container-block'}
+local C={BLOCK_BYTES=524288,ENCODED_BYTES=700000,CURRENT_CONTAINERS=8,YIELD='market-container-block'}
 W.Containers=C
 local function need(ok)if not ok then error('invalid Market container',0)end end
 local function clock()return GetTimePreciseSec and GetTimePreciseSec()*1000 or debugprofilestop and debugprofilestop()or 0 end
@@ -51,7 +51,8 @@ function C.Read(ctx,kind,bucket,p)
     local globals=_G[global];local blob=type(globals)=='table'and globals[id]
     if not blob then
         need(not(InCombatLockdown and InCombatLockdown())and C_AddOns and C_AddOns.LoadAddOn)
-        local name='TwichUI_Market'..kind..'Container'..ctx.bank..('%02d'):format(math.floor(bucket/16))
+        local width=kind=='Current'and 32/C.CURRENT_CONTAINERS or 16
+        local name='TwichUI_Market'..kind..'Container'..ctx.bank..('%02d'):format(math.floor(bucket/width))
         local at=clock();local ok,loaded=pcall(measured,'workshop.containerLoad',C_AddOns.LoadAddOn,name);local dt=math.max(0,clock()-at)
         ctx.stats.load_ms=ctx.stats.load_ms+dt;ctx.stats.worst_load_ms=math.max(ctx.stats.worst_load_ms,dt)
         need(ok and loaded);ctx.stats.container_loads=ctx.stats.container_loads+1

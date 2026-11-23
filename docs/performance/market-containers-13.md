@@ -1,7 +1,7 @@
-# Thirteen-addon Market transport
+# Compressed Market transport — final current-container refinement
 
-Owner-authorized implementation, held for coordinated review. No merge,
-deployment, signing or publication is authorized. Chart PR117 and temporary
+The owner authorizes coordinated merge and deployment after correctness,
+performance, CI and production collection health gates pass. Chart PR117 and temporary
 codec-probe PR135 are separate and are not included.
 
 The owner reports actual Forever 1.60.1/build71037 codec results: 26 passed,
@@ -11,8 +11,9 @@ probe step2.842ms, sixteen separately scheduled history calls12.511ms combined.
 These are owner-reported bounded-fixture results, not full transport acceptance
 or a proven native allocation limit. The complete raw report was not supplied.
 
-The layout is one shared root plus two current and four history containers in
-each of A/B: **13 physical Market addons**. Current partitioning remains32;
+The layout is one shared root plus eight current and four history containers in
+each of A/B: **25 physical Market addons**. Current bucket 0–31 maps to
+`floor(bucket / 4)`; history bucket 0–63 retains `floor(bucket / 16)`. Current partitioning remains32;
 history partitioning remains64. No pricing, variant, estimation or authentication
 formula changes. The server's source generation and prepared attestation remain
 unchanged. Summary transport version3 identifies compressed packaging; versions1
@@ -47,7 +48,7 @@ requires a full game restart for addon discovery. Ordinary subsequent bank
 updates preserve the existing delivery/reload behavior.
 
 Verification commands, comparable performance results and exact coordinated
-source identities are recorded in the Market companion report. Full 13-TOC
+source identities are recorded in the Market companion report. Full 25-TOC
 loading, native GC/frame stalls, combat and in-game lifecycle acceptance remain
 unverified until an owner-directed game run; the codec probe alone proves none
 of those properties.
@@ -61,7 +62,31 @@ ZIP/source from PR135 are deliberately absent from this branch.
 
 Opt-in diagnostics reuse the existing `/tui perf` capture and export. Container
 load, Base64 and raw-inflate calls have separate registered scopes; the existing
-Market addon-memory aggregate includes the12 containers. No new sampling timer
+Market addon-memory aggregate includes all24 containers. No new sampling timer
 is introduced. Native verification can use `/tui perf start workshop 3`,
 `/tui perf mark opportunities-open`, open Opportunities/select history, then
 `/tui perf stop` and copy the export from `/tui perf`.
+
+
+## Final layout selection and verification boundary
+
+The original 13-folder implementation is retained in the Market repository's
+versioned evidence. Matched 13/17/25 comparisons preserve the same logical
+streams, source identities, compression and authentication. At 35,116 exact
+records (the current production generation's count), 13 repeatedly exceeds
+16 ms in offline physical loads. The selected 25-folder implementation keeps
+current containers smaller; the complete repeated results and all outliers
+are recorded in `TwichUI-Market/docs/performance-packaging-final.md`. These
+are offline host CPU measurements, never game frame measurements.
+
+Installed capability `current_containers: 8` must match the native publisher;
+a different compressed physical layout cannot activate. Existing legacy readers,
+prepared attestation, A/B cancellation and lazy single-partition history remain.
+No native codec probe or chart UX change is included. First migration requires
+WoW fully closed, installing the compatible addon, Companion synchronization
+and a full restart; never remove the retained recovery directory.
+
+The complete cloud simulator catalog is attempted in a separate read-only CI
+job using the pinned unmodified simulator. Failure to obtain its existing
+namespace sandbox is a verification blocker, not permission to bypass it.
+No real-client frame/GC acceptance is claimed.

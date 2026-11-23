@@ -27,10 +27,11 @@ local function client()
     function s.drain()for _=1,20000 do if #s.events==0 then assert(not Q.Pending());return end;s.tick()end;error('unbounded compressed work')end
     c.C_AddOns.LoadAddOn=function(name)
         s.loads[#s.loads+1]=name
-        local kind,bank,group=name:match('^TwichUI_Market(%a+)Container([AB])(%d%d)$');assert(kind and tonumber(group)<(kind=='Current'and 2 or 4));group=tonumber(group)
+        local kind,bank,group=name:match('^TwichUI_Market(%a+)Container([AB])(%d%d)$');assert(kind and tonumber(group)<(kind=='Current'and 8 or 4));group=tonumber(group)
         local global=kind=='Current'and 'TwichUIMarketCompressedCurrent'or 'TwichUIMarketCompressedHistory'
         c[global]=c[global]or {}
-        for bucket=group*16,group*16+15 do
+        local width=kind=='Current'and 4 or 16
+        for bucket=group*width,group*width+width-1 do
             local p=s.a.partitions[bucket+1]
             if kind=='Current'then
                 local values=v.layouts['32'].payloads[tostring(bucket)]
@@ -62,7 +63,13 @@ assert(#s.loads==1 and s.inflates==2 and s.B.Status().history_loaded_parts==0)
 local count=s.inflates
 for _=1,20 do assert(s.P.Price(2589).price==120)end
 assert(s.inflates==count,'warm price inflated again')
-s.P.Price(123);s.drain();assert(#s.loads==1,'same physical container loaded twice')
+s.P.Price(123);s.drain();assert(#s.loads==2 and s.loads[1]=='TwichUI_MarketCurrentContainerA07'
+    and s.loads[2]=='TwichUI_MarketCurrentContainerA06','current logical/physical mapping')
+count=s.inflates;s.P.Price(123);s.drain();assert(#s.loads==2 and s.inflates==count,'warm current container loaded twice')
+-- A different logical partition in the already loaded physical A07 container.
+s.B.Record(2590,s.P.BaseKey(2590),{current=true});s.drain()
+local _,sameGroupMissing=s.B.Record(2590,s.P.BaseKey(2590),{current=true})
+assert(sameGroupMissing=='not_observed' and #s.loads==2,'same physical container loaded twice')
 assert(not s.B.History(2589,s.P.BaseKey(2589)));s.drain()
 local history=assert(s.B.History(2589,s.P.BaseKey(2589)));assert(history.points[#history.points].v==120)
 count=s.inflates;assert(s.B.History(2589,s.P.BaseKey(2589)));assert(s.inflates==count)

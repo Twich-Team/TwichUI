@@ -1,0 +1,70 @@
+name: Market full simulator verification
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'TwichUI_Workshop/**'
+      - 'tests/test_workshop_market_containers.lua'
+      - '.github/workflows/market-simulator.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-cloud:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Require the existing simulator sandbox without changing host security
+        run: |
+          unshare -Ur true
+          mkdir -p /mnt/c
+      - name: Prepare user-owned offline Lua and sandbox dependencies
+        shell: bash
+        run: |
+          deps="$RUNNER_TEMP/market-simulator-deps"
+          mkdir -p "$deps/downloads" "$deps/root" "$deps/bin"
+          cd "$deps/downloads"
+          apt-get download lua5.1 lua-bitop liblua5.1-0 bubblewrap rsync
+          for deb in ./*.deb; do dpkg-deb -x "$deb" "$deps/root"; done
+          ln -s "$deps/root/usr/bin/bwrap" "$deps/bin/bwrap"
+          ln -s "$deps/root/usr/bin/rsync" "$deps/bin/rsync"
+          python3 - "$deps" <<'PY'
+          import pathlib, shlex, sys
+          d=pathlib.Path(sys.argv[1]); root=d/'root'
+          module=next(root.glob('usr/lib/*/lua/5.1/bit.so'))
+          for name in ('lua5.1','lua'):
+              script=d/'bin'/name
+              script.write_text('#!/bin/sh\nexec '+shlex.quote(str(root/'usr/bin/lua5.1'))+
+                  ' -e '+shlex.quote('package.cpath='+repr(str(module.parent/'?.so'))+'..";"..package.cpath')+' "$@"\n')
+              script.chmod(0o755)
+          PY
+          echo "$deps/bin" >> "$GITHUB_PATH"
+          echo "LD_LIBRARY_PATH=$deps/root/usr/lib/x86_64-linux-gnu" >> "$GITHUB_ENV"
+      - name: Prepare the pinned, unmodified simulator and UI reference
+        shell: bash
+        run: |
+          reference="$RUNNER_TEMP/market-simulator-ui"
+          git init "$reference"
+          git -C "$reference" remote add origin https://github.com/Gethe/wow-ui-source.git
+          git -C "$reference" fetch --depth 1 origin ca8368f2f2380cbe696854f7f2646387c278a61b
+          export SIMLAB_UI_SOURCE="$reference"
+          export WOWSIM_LAB="$RUNNER_TEMP/market-simulator-install"
+          bash tools/simlab/setup.sh
+          echo "SIMLAB_INSTALL=$WOWSIM_LAB" >> "$GITHUB_ENV"
+      - name: Run unchanged full discovery, simulator catalogs and negative controls
+        run: bash tests/run.sh full --profile cloud --jobs 2 --sim-jobs 1 --measure
+      - name: Preserve passing and failed evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: market-full-cloud-${{ github.sha }}-${{ github.run_attempt }}
+          path: test-output/
+          if-no-files-found: warn
+          retention-days: 14

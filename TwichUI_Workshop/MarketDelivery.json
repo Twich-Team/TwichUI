@@ -27,6 +27,6 @@
   "container_packaging_version": 1,
   "container_codec": "raw-deflate-base64",
   "container_block_bytes": 524288,
-  "current_containers": 2,
+  "current_containers": 8,
   "history_containers": 4
 }
