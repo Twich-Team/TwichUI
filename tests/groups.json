@@ -74,7 +74,7 @@
     "simulators": [{"script": "reminders"}]
   },
   "navigation": {
-    "tests": ["test_nav*.lua", "test_map*.lua", "test_maplab.py", "test_diagnostics.lua", "test_perf_engine.lua", "test_way.lua", "test_arrival.lua", "test_explorer.lua", "test_guide_waypoint.lua", "test_party_pins*.lua", "test_pins*.lua", "test_npcs*.lua", "test_npc*.lua", "test_guild_locations*.lua", "test_markers*.lua", "test_marker_bar.lua"],
+    "tests": ["test_nav*.lua", "test_map*.lua", "test_maplab*.py", "test_diagnostics.lua", "test_perf_engine.lua", "test_way.lua", "test_arrival.lua", "test_explorer.lua", "test_guide_waypoint.lua", "test_party_pins*.lua", "test_pins*.lua", "test_npcs*.lua", "test_npc*.lua", "test_guild_locations*.lua", "test_markers*.lua", "test_marker_bar.lua"],
     "syntax": ["TwichUI_Diagnostics/**/*.lua", "!!!TwichUI/DiagnosticsLauncher.lua", "!!!TwichUI/nav/**/*.lua", "!!!TwichUI/map/**/*.lua", "!!!TwichUI/pins/**/*.lua", "!!!TwichUI/npcs/**/*.lua", "!!!TwichUI/guildloc/**/*.lua", "TwichUI_NavData/**/*.lua"],
     "dependencies": ["settings", "core"],
     "simulators": [{"script": "smoke"}]

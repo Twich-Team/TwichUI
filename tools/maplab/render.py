@@ -140,6 +140,11 @@ class Assets:
                           "width": picture.width, "height": picture.height}
         return picture
 
+    def release_sources(self):
+        """Retain provenance, release decoded input pixels between scenarios."""
+        self.loaded.clear()
+        self.decoded_pixels = 0
+
 
 def placeholder(key):
     image = Image.new("RGBA", (128, 128), (83, 43, 90, 255))

@@ -139,6 +139,10 @@ class Compositor(unittest.TestCase):
             with self.assertRaisesRegex(render.LabError, "cumulative decoded"):
                 assets.get("blue")
             self.assertEqual(assets.decoded_pixels, 256)
+            assets.release_sources()
+            assets.get("blue")
+            self.assertEqual(assets.decoded_pixels, 256)
+            self.assertEqual(set(assets.used), {"red", "blue"}, "scenario release retains report provenance")
         finally:
             render.MAX_DECODED_PIXELS = previous
 

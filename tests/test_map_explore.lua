@@ -146,6 +146,11 @@ local MAPS = {
   [1413] = { name = "The Barrens", parent = 1414, mapType = 3, cont = 1, xN = 0, yW = 0, W = 3000, H = 2000, art = 2181 },
   [2521] = { name = "Zephras Isle", parent = 947, mapType = 3, cont = 2991, xN = 0, yW = 0, W = 3000, H = 2000, art = 2031, offWorld = true },
 }
+local CLIENT
+if MAPLAB_CLIENT_TABLES then
+  CLIENT = assert(loadfile(REPO .. "tools/maplab/client.lua"))()(MAPLAB_CLIENT_TABLES)
+  MAPS = CLIENT.maps
+end
 local function Cont(id) local m = MAPS[id]; return m.mapType == 2 and id or Cont(m.parent) end
 local function YardsToMap(id, wx, wy) local m = MAPS[id]; return (m.yW - wy) / m.W, (m.xN - wx) / m.H end
 local function MapToYards(id, x, y) local m = MAPS[id]; return m.xN - y * m.H, m.yW - x * m.W end
@@ -166,7 +171,10 @@ local function Wy(id, x, y) return select(2, WorldOf(id, x, y)) end
 local function OnMap(id, u, v) local l, r, t, b = WorldRect(id); return (u - l) / (r - l), (v - t) / (b - t) end
 c.CreateVector2D = function(x, y) return { x = x, y = y, GetXY = function(s) return s.x, s.y end } end
 local function Info(id) local m = MAPS[id]; return m and { mapID = id, name = m.name, parentMapID = m.parent, mapType = m.mapType } or nil end
-local function ArtFiles(id) local t = {} for i = 1, 12 do t[i] = MAPS[id].art * 100 + i end return t end
+local function ArtFiles(id)
+  if CLIENT then return MAPS[id].files end
+  local t = {}; for i = 1, 12 do t[i] = MAPS[id].art * 100 + i end; return t
+end
 local EXPLORED = {}   -- [mapID] = { list of explored pieces }
 c.C_Map = {
   GetMapInfo = Info,
@@ -185,6 +193,19 @@ c.C_Map = {
     return WorldRect(child)
   end,
   GetMapInfoAtPosition = function(id, x, y)
+    if CLIENT then
+      -- Table-derived rectangle adapter, not the native area/phase lookup.
+      local u, v = WorldOf(id, x, y)
+      local best, area = id, math.huge
+      for kid, k in pairs(MAPS) do
+        if k.parent == id then
+          local l, r, t, b = WorldRect(kid)
+          local a = (r - l) * (b - t)
+          if u >= l and u <= r and v >= t and v <= b and (a < area or a == area and kid < best) then best, area = kid, a end
+        end
+      end
+      return Info(best)
+    end
     if id == 947 then
       for kid, k in pairs(MAPS) do
         if k.mapType == 2 then
@@ -210,7 +231,11 @@ c.C_Map = {
     table.sort(out, function(a, b) return a.mapID < b.mapID end)
     return out
   end,
-  GetMapArtLayers = function(id) return MAPS[id] and { { layerWidth = 1002, layerHeight = 668, tileWidth = 256, tileHeight = 256 } } end,
+  GetMapArtLayers = function(id)
+    if not MAPS[id] then return nil end
+    local a = CLIENT and MAPS[id].layer or { 1002, 668, 256, 256 }
+    return { { layerWidth = a[1], layerHeight = a[2], tileWidth = a[3], tileHeight = a[4] } }
+  end,
   GetMapArtLayerTextures = function(id) return MAPS[id] and ArtFiles(id) end,
   GetMapArtID = function(id) return MAPS[id] and MAPS[id].art end,
   SetUserWaypoint = function() return true end,
@@ -222,6 +247,7 @@ c.UiMapPoint = { CreateFromCoordinates = function(map, x, y) return { map = map,
 -- The world map and its scroll container
 ---------------------------------------------------------------------------
 local CW, CH = 1002, 668
+if CLIENT then CW, CH = CLIENT.maps[947].layer[1], CLIENT.maps[947].layer[2] end
 local VIEW = { left = 100, top = 800, w = 1000, h = 666 }
 c.MapCanvasDataProviderMixin = { OnAdded = function(self, map) self.owningMap = map end, OnRemoved = function() end,
   OnShow = function() end, OnHide = function() end, OnMapChanged = function() end, RemoveAllData = function() end,
@@ -340,6 +366,7 @@ rawset(WMF, "SetMapID", function(s, id)
   if s.mapID == id then return end
   s.mapID = id
   SC.mapID = id
+  if CLIENT then CW, CH = MAPS[id].layer[1], MAPS[id].layer[2] end
   SC:CreateZoomLevels()
   Providers("OnCanvasSizeChanged")
   SC:ResetZoom()
@@ -349,6 +376,7 @@ c.WorldMapFrame = WMF
 c.GetCursorPosition = function() return SC.cursor.x, SC.cursor.y end
 local function openMap(id)
   WMF.mapID = id or WMF.mapID
+  if CLIENT then CW, CH = MAPS[WMF.mapID].layer[1], MAPS[WMF.mapID].layer[2] end
   SC.mapID = WMF.mapID
   SC:CreateZoomLevels()
   SC:ResetZoom()
@@ -415,7 +443,7 @@ local DATA = {
   },
   travel = { { "boat", 1, 2 }, { "boat", 2, 1 }, { "boat", 1, 3 }, { "boat", 3, 1 }, { "zeppelin", 2, 4 }, { "zeppelin", 4, 2 } },
 }
-EXPLORED[1429] = { { textureWidth = 200, textureHeight = 150, offsetX = 100, offsetY = 100, fileDataIDs = { 5001 } } }
+if not CLIENT then EXPLORED[1429] = { { textureWidth = 200, textureHeight = 150, offsetX = 100, offsetY = 100, fileDataIDs = { 5001 } } } end
 
 ---------------------------------------------------------------------------
 -- Load
@@ -435,11 +463,16 @@ local VM, MXP, MW, MV, MA, MD, MC, MCV, MPL, DV = R.MapViewMath, R.MapExplorePre
   R.MapDetail, R.MapControls, R.MapCaves, R.MapPlaces, R.MapDungeonView
 local PN, PM, T = R.Pins, R.PinsMap, R.MapTools
 assert(R.MapExploreData and R.MapExploreData.reveal and R.MapExploreData.minimap, "the real data loads")
-R.MapExploreData = DATA
-R.MapExploreLocalData = {
+if CLIENT then
+  R.MapExploreData.minimap, R.MapExploreData.reveal, R.MapExploreData.build = CLIENT.minimap, CLIENT.reveal, CLIENT.build
+  local chunk = assert(loadfile(ROOT .. "map/LocalData.lua")); setfenv(chunk, c); chunk()
+else
+  R.MapExploreData = DATA
+  R.MapExploreLocalData = {
   caves = { { 0, -1700, -2700, -1500, -2400, { 91001, -1600, -2550, 128, 0.7, 1, 0 } } },
   cities = { [1455] = { 0, 1000, -1500, 2000, 0, { 92001, 1500, -750, 256, 0.3, 1, 0 } } },
 }
+end
 local opened = {}
 R.PinsEditor = { OpenNew = function(map, x, y, party, name) opened[#opened + 1] = { map = map, x = x, y = y, party = party, name = name } end,
   Close = function() end, IsOpen = function() return false end }
@@ -469,6 +502,22 @@ local function zoomTo(u, v, zoom)
     wheel(z < zoom and 1 or -1)
   end
   Tick()
+end
+
+local function Fixture()
+  return { c = c, R = R, VM = VM, MV = MV, MW = MW, MA = MA, MD = MD, MCV = MCV, MXP = MXP,
+    SC = SC, WMF = WMF, VIEW = VIEW, FRAMES = FRAMES, OBJECTS = OBJECTS, CLIENT = CLIENT,
+    nativeBase = nativeBase, nativeExploration = nativeExploration, nativeQuest = nativeQuest,
+    Tick = Tick, Run = Run, Running = Running, settle = settle, tidy = tidy,
+    pointAt = pointAt, wheel = wheel, press = press, release = release, WorldOf = WorldOf, Obj = Obj,
+    Providers = Providers, openMap = openMap, closeMap = closeMap, MAPS = MAPS,
+    SetCombat = function(value) COMBAT = value end }
+end
+if CLIENT then
+  assert(MAPLAB_EXPORT_FILE, "client input requires maplab export output")
+  assert(loadfile(REPO .. "tools/maplab/export.lua"))()(Fixture(), MAPLAB_EXPORT_FILE)
+  print("CLIENT-TABLE PRODUCTION MAP EXPORT PASSED (not native API capture)")
+  return
 end
 
 ---------------------------------------------------------------------------
@@ -1054,12 +1103,7 @@ do
 end
 
 local cases = assert(loadfile(TESTS .. "map_seamless_cases.lua"))()
-local fixture = { c = c, R = R, VM = VM, MV = MV, MW = MW, MA = MA, MD = MD, MCV = MCV, MXP = MXP,
-  SC = SC, WMF = WMF, VIEW = VIEW, FRAMES = FRAMES, OBJECTS = OBJECTS, nativeBase = nativeBase, nativeExploration = nativeExploration,
-  nativeQuest = nativeQuest, Tick = Tick, Run = Run, Running = Running, settle = settle, tidy = tidy,
-  pointAt = pointAt, wheel = wheel, press = press, release = release, WorldOf = WorldOf, Obj = Obj,
-  Providers = Providers, openMap = openMap, closeMap = closeMap, MAPS = MAPS,
-  SetCombat = function(value) COMBAT = value end }
+local fixture = Fixture()
 cases(fixture)
 if MAP_DIAGNOSTICS_TEST then assert(loadfile(TESTS .. "map_diagnostics_cases.lua"))()(fixture) end
 if MAPLAB_EXPORT_FILE then assert(loadfile(REPO .. "tools/maplab/export.lua"))()(fixture, MAPLAB_EXPORT_FILE) end

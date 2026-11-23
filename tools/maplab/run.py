@@ -26,15 +26,24 @@ from PIL import Image, ImageDraw
 from assets import extract, probe
 from diagnostics import import_report, join_pieces
 from render import Assets, LabError, compare_images, composite_scene, load_json, rect, texture_rect, validate_export
+from clientinput import unpack, write_tables
 
 REPO = Path(__file__).resolve().parents[2]
 
 
-def production_export():
+def production_export(client=None):
     with tempfile.TemporaryDirectory(prefix="twichui-maplab-") as folder:
         destination = Path(folder) / "render-state.json"
         env = dict(os.environ, TWICHUI_MAPLAB_EXPORT=str(destination))
+        if client:
+            for name in ("!!!TwichUI/map/Data.lua", "!!!TwichUI/map/LocalData.lua"):
+                if client.get("numericSources", {}).get(name) != hashlib.sha256((REPO / name).read_bytes()).hexdigest():
+                    raise LabError("Collector numeric map data differs from this checkout; use the matching PR revision")
+            inputs = Path(folder) / "client.tsv"
+            write_tables(client, inputs)
+            env["TWICHUI_MAPLAB_CLIENT"] = str(inputs)
         code = ('require("bit"); ROOT="../!!!TwichUI/"; REPO="../"; TESTS="./"; '
+                'MAPLAB_CLIENT_TABLES=os.getenv("TWICHUI_MAPLAB_CLIENT"); '
                 'MAPLAB_EXPORT_FILE=os.getenv("TWICHUI_MAPLAB_EXPORT"); dofile("test_map_explore.lua")')
         started = time.perf_counter()
         try:
@@ -48,7 +57,11 @@ def production_export():
             raise LabError("production Lua export failed:\n" + (process.stdout + process.stderr)[-6000:])
         if not destination.is_file():
             raise LabError("production Lua export did not create render-state.json; the maplab export hook must be loaded")
-        return load_json(destination), {"seconds": round(time.perf_counter() - started, 6),
+        state = load_json(destination)
+        if client:
+            state["provenance"].update(tables=client["tables"], bundleSha256=client.get("bundleSha256", []),
+                                       limitations=client.get("limitations", []))
+        return state, {"seconds": round(time.perf_counter() - started, 6),
                                         "source": "tests/test_map_explore.lua production map fixture",
                                         "stdoutTail": process.stdout.splitlines()[-3:]}
 
@@ -122,6 +135,16 @@ article{{padding:14px;background:#2e2720;border:1px solid #594033}}img{{max-widt
 
 
 def run(args):
+    with tempfile.TemporaryDirectory(prefix="twichui-maplab-input-") as temporary:
+        args.client_data = None
+        if args.client_bundle:
+            if args.state or args.diagnostic or args.diagnostic_piece or args.assets or args.wow:
+                raise LabError("Client bundles are self-contained; do not combine with another state/asset source")
+            args.client_data, args.assets = unpack(args.client_bundle, Path(temporary))
+        return run_inner(args)
+
+
+def run_inner(args):
     output = args.output.resolve()
     protected = [REPO / name for name in ("!!!TwichUI", "TwichUI_Diagnostics", "TwichUI_Settings", "TwichUI_NavData")]
     if any(output == path.resolve() or output.is_relative_to(path.resolve()) for path in protected):
@@ -146,7 +169,7 @@ def run(args):
     elif args.state:
         state = load_json(args.state)
     else:
-        state, lua = production_export()
+        state, lua = production_export(args.client_data)
     validate_export(state)
     output.mkdir(parents=True, exist_ok=True)
     if request:
@@ -184,6 +207,7 @@ def run(args):
                     difference.save(output / f'{scene["id"]}-difference.png')
         report["scenes"].append(entry)
         report["findings"].extend(entry["findings"])
+        assets.release_sources()
     report["assetsUsed"] = assets.used
     report["missingAssets"] = sorted(assets.missing)
     report["realArtworkVerified"] = not assets.missing and any(v["kind"] == "local-client-artwork" for v in assets.used.values())
@@ -214,6 +238,7 @@ def run(args):
 def parser():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--all", action="store_true", help="export the complete bounded production-Lua scenario catalog")
+    p.add_argument("--client-bundle", action="append", type=Path, help="private collect.py ZIP part; repeat for all parts")
     p.add_argument("--state", type=Path, help="existing production render-state JSON")
     p.add_argument("--assets", type=Path, help="local SHA-256 asset manifest")
     p.add_argument("--wow", type=Path, help="read-only local Forever game installation; extract referenced artwork")

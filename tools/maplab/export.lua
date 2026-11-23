@@ -9,7 +9,9 @@ return function(t, path)
     end
     local scenes = {}
     local drawRank = { BACKGROUND = 0, BORDER = 1, ARTWORK = 2, OVERLAY = 3, HIGHLIGHT = 4 }
-    t.tidy(); t.closeMap(); t.openMap(1429); MXP.Set("smooth", false)
+    t.tidy(); t.closeMap()
+    if t.CLIENT then R:SetEnabled("mapExplore", true) end
+    t.openMap(1429); MXP.Set("smooth", false)
     local function Bounds(obj)
         if obj.allPoints == MA.Root() then return 0, 0, 1, 1 end
         local p = obj.point
@@ -39,9 +41,10 @@ return function(t, path)
         local u0, v0, u1, v1 = MV.ViewRect()
         local scene = { id = id, label = label, width = t.VIEW.w, height = t.VIEW.h,
             view = { u0 = u0, v0 = v0, u1 = u1, v1 = v1 }, textures = {},
-            metadata = { syntheticGeography = true, nativeMap = MV.MapID(), view = MV.Diagnostic(true),
+            metadata = { syntheticGeography = not t.CLIENT or t.CLIENT.synthetic, nativeMap = MV.MapID(), view = MV.Diagnostic(true),
                 terrain = R.MapDetail.Diagnostic(true), interiors = R.MapPictures.Diagnostic(true), cave = R.MapCaves.Snapshot(),
-                limitation = "Synthetic native API fixture; texture IDs such as 900000 are synthetic, not client artwork identifiers." } }
+                limitation = t.CLIENT and "Client-table rectangle API adapter; native area shapes, phases and conditions unavailable."
+                    or "Synthetic native API fixture; texture IDs such as 900000 are synthetic, not client artwork identifiers." } }
         local W, H = MW.Size()
         assert(math.abs(scene.width / scene.height - (u1 - u0) * W / ((v1 - v0) * H)) < 1e-6,
             "exported pixels preserve the production viewport aspect")
@@ -80,6 +83,20 @@ return function(t, path)
     end
     local function At(id, label, u, v, z)
         MV.GlideTo(u, v, z); Snapshot(id, label)
+    end
+    if t.CLIENT then
+        MXP.Set("unexplored", "show")
+        for _, s in ipairs(t.CLIENT.scenes) do
+            local u, v = MW.ToWorld(s.map, s.x, s.y)
+            assert(u and v, "client scenario has production world placement")
+            MV.GlideTo(u, v, s.zoom); t.Run(0.8)
+            Snapshot(s.id, s.label)
+        end
+        local result = { schema = 1, provenance = { source = "Production Lua with local Forever table-derived API adapter",
+            synthetic = t.CLIENT.synthetic, clientBuild = t.CLIENT.build, nativeApiCaptured = false,
+            limitation = "Actual local client input when supplied; rectangle-based context lookup, not native phase/zone shapes." }, scenes = scenes }
+        local f = assert(io.open(path, "w")); f:write(R.DiagnosticsKit.Json.Encode(result, 17)); f:close()
+        return
     end
     At("world", "Synthetic world overview", 0.5, 0.5, 1)
     local u, v = t.WorldOf(1429, 0.5, 0.5)

@@ -6,7 +6,7 @@ The lab executes production Lua map selection in the existing simulator fixture,
 
 This workspace has no Forever game installation, `.build.info`, local CASC archives, native map BLP artwork or compatible game executable. `/workspace/twichui-env/READINESS.md` specifies `SIMLAB_ASSETS=0`. The other simulator workspace contains runtime/cache/fixture files, not client artwork. No native screenshots or client measurements were available.
 
-Consequently the real-map-artwork proof of concept is **blocked by missing local client assets and verified native map-API fixtures**. The working gallery uses conspicuous missing-art checkerboards and actual TwichUI-owned feather masks. These masks verify alpha compositing, but do not constitute real terrain artwork. Current fixture map rectangles and most texture IDs are synthetic: names such as Booty Bay or Undercity cannot establish geographic fidelity. The tool rejects CASC extraction against synthetic fixture IDs, which could otherwise accidentally resolve to unrelated valid client files.
+Consequently the real-map-artwork proof of concept is **still blocked by missing client input**. A [one-time gaming-PC collector](maplab-real-artwork.md) now supplies private artwork plus schema-checked client-table geometry to production Lua; native API capture is no longer a prerequisite for that offline path. The adapter remains an approximation of native zone/phase lookup. The existing no-assets gallery uses conspicuous checkerboards and actual TwichUI-owned feather masks, which do not constitute terrain artwork. Its original catalog's rectangles and most IDs remain synthetic; the tool rejects extraction against those IDs.
 
 The compositor is implemented and pixel-tested for real local textures; its extraction path reuses `tools/navbake/casc.py`, whose existing code reads local CASC only. Pillow's installed BLP decoder is available. End-to-end extraction of Blizzard map artwork remains unverified until assets are supplied locally. Nothing is downloaded, uploaded or redistributed.
 
@@ -57,12 +57,18 @@ The partial image uses **production-captured terrain/interior texture rectangles
 
 ### First actual-artwork proof when local assets exist
 
+Prefer the [source-only collector kit and `--client-bundle` workflow](maplab-real-artwork.md)
+when the gaming PC is separate from this workspace. It supplies base paintings,
+selected-region candidates and table-derived API inputs in one collection,
+without in-game reports or copying the full installation. The diagnostic path
+below remains useful for reproducing a particular captured detail view.
+
 1. Select a real Forever install containing `.build.info`, `Data/config` and `Data/data`. Probe without extracting:
    `python3 tools/maplab/run.py --probe-assets --wow /local/Forever`.
 2. Capture a real Detailed Map Diagnostics report at Booty Bay, Undercity and a zone border with precise geometry. Never extract synthetic fixture IDs.
 3. Run `python3 tools/maplab/run.py --diagnostic report.json --wow /local/Forever --output test-output/maplab-real --strict`.
 4. The read-only CASC extractor writes only referenced local textures to `test-output/maplab-real/local-assets/`, with source/output SHA-256, file-data ID, client build, product and provenance in `manifest.json`. Missing, unavailable or encrypted files remain explicit failures. It uses the existing `wow_classic_beta` product default; a different installed product requires deliberate reader configuration rather than guessing.
-5. Inspect actual output and compare an owner-provided native screenshot of the same view. Resolve sampling, mask, crop and rotation differences before treating it as faithful. This first proof will be selected-detail-only until complete painted-art/mask capture or a verified native API fixture exists.
+5. Inspect actual output and compare an owner-provided native screenshot of the same view. Resolve sampling, mask, crop and rotation differences before treating it as faithful. This diagnostic path is selected-detail-only; the collector path also supplies base paintings and client-table geometry.
 
 An existing local cache may be passed as `--assets path/to/manifest.json`. Schema 1 requires an `assets` object keyed by file ID or symbolic asset key. Each record requires `file` relative to the manifest directory, exact `sha256` and nonempty `provenance`; local-client-artwork also requires a matching numeric `fileId` and should record clientBuild/sourceSha256. Paths cannot escape the cache. Addon-owned `!!!TwichUI/media/textures/map-*.tga` masks resolve directly under the repository without copying assets.
 
