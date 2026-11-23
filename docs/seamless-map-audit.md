@@ -107,12 +107,14 @@ and the stricter TwichUI micro-map verification are not replaced by the importer
 
 - `tests/test_map_explore.lua` plus `map_seamless_cases.lua`: production modules
   against a synthetic native-style scroll container; native painting ownership,
-  cyclic/missing context fallback, rapid fractional/batched wheel input,
+  missing context fallback, rapid fractional/batched wheel input,
   pending inward/outward limit crossing, 40 reversible animation cycles,
   center/edge/corner anchors, 0.65/1.25/2 UI cursor scales, interrupted drags,
   host switches, zero-sized opening/resizing, stale deferred map prevention,
   malformed preferences/motion, combat motion/disable deferral, cave blending,
   texture readiness/fade/deadline/release, and dense tall-viewport tile budgets.
+  Lowering the live maximum also rebases and limits a pending animation; unrelated
+  visual preference changes do not clamp a deeper in-flight view.
 - Seed **73471**, **4,000 mixed operations**: approximately **1.7 s CPU** in this
   environment (includes synthetic frames/providers, not native GPU time). The
   warmed course creates **zero additional terrain textures**, at most **24 active**;
@@ -244,3 +246,41 @@ feeding the zoom calculations, repaired here. Tall/wide layouts are tested;
 changing the native quest-log/window proportions without actual visual evidence
 would risk the explicitly preserved integration. Its real-client usable space
 and feather clipping still belong to the native checklist.
+
+### Recorded verification checkpoints
+
+- Baseline `1a3d9eb`; audit checkpoint `a34816a`; implementation checkpoint
+  `a81b9b8c0aad5d20d5c7da0ec2ecd845d7a9f1e2`, all pushed to
+  `feat/seamless-map-overhaul`. Draft [PR #138](https://github.com/Twich-Team/TwichUI/pull/138).
+- **Unit-tested:** `./tests/run.sh development navigation --jobs 2`:
+  **38 passed, 0 failed**, 14.786 s. Targeted map integration/local-data tests,
+  diagnostics/performance-engine tests and importer deterministic rebuild plus
+  untrusted-source rejection also passed.
+- **Unit-/simulator-tested at `a81b9b8`:**
+  `./tests/run.sh feature navigation --profile cloud --jobs 2`:
+  **93 passed, 0 failed**, syntax passed, **1 simulator smoke suite passed**,
+  87.749 s total. Smoke uses synthetic/no-assets cloud fixtures. Other simulator
+  catalogs and native acceptance are not claimed.
+- **Complete offline regression at `a81b9b8`:** `./tests/run.sh`:
+  **322 passed, 1 failed**, 657.806 s. The failure is
+  `test_welcome_back.lua:84: two days back is a date`. Exporting that test,
+  its harness and every loaded dependency from untouched baseline `1a3d9eb`
+  into a disposable fixture reproduces the same assertion. No map source is
+  loaded by that test. It is an existing unrelated failure; assertions were not
+  weakened and Welcome Back was not modified. The complete offline gate is
+  therefore **FAIL**, not a full PASS or release certification.
+- Final review found that a live maximum change could leave an older pending
+  destination above the new limit. The subsequent focused fix and regression
+  pass the map integration course; the final feature checkpoint is recorded
+  below when complete. The expensive unrelated offline suite is not repeated
+  for this local animation-limit change.
+- Main advanced to `2835d714` during work (separate Execute Range/healer batch).
+  The newer main diff was reviewed for overlap; GitHub reports the draft PR is
+  mergeable with no conflict. No main merge, force-push, deployment or release
+  was performed. The exact baseline above remains the branch's test identity.
+
+Full logs/reports remain in ignored `test-output/verification/`, and the exported
+Welcome Back reproduction in `test-output/map-baseline/`. These are local test
+evidence, not packaged addon files. The simulated geometry preview was inspected;
+actual WoW appearance, live pointer input, secure combat behavior, other-addon
+delivery and real asset availability remain **not tested**.

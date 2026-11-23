@@ -36,6 +36,12 @@ return function(t)
   MV.ZoomBy(-1, 10, 0); t.Run(0.3)
   _, _, z = MV.View(); near(z, pending / 1.25, "outward scroll never snaps to the new context limit")
   MV.MaxZoomAt = originalMax
+  MXP.Set("smooth", false); MV.GlideTo(u, v, 10); MXP.Set("smooth", true)
+  MV.ZoomBy(5, 0, 0); t.Tick(0.01)
+  MXP.Set("maxZoom", 16); t.Run(0.3)
+  local _, _, limited = MV.View()
+  near(limited, 16, "live maximum preference also limits the pending destination")
+  MXP.Set("maxZoom", 48)
 
   -- Reversing a pending wheel sequence at the same cursor is reversible away from boundaries.
   MXP.Set("smooth", false); MV.GlideTo(u, v, 20); MXP.Set("smooth", true)

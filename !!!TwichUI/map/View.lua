@@ -798,11 +798,23 @@ function MV.Refresh()
     elseif not want and installed then Uninstall() end
 end
 
-MXP.Subscribe(function()
+MXP.Subscribe(function(key)
     if not Ready() then return end
     local u, v, zoom = MV.View()
     local most = math.max(MV.MaxZoomAt(u, v), 1)
-    if zoom > most * 1.001 then
+    local limitsChanged = key == "maxZoom" or key == "caves" or key == "detail"
+        or key == "behavior" or key == "places" or key == "all"
+    if limitsChanged and anim then
+        local a = anim
+        local targetMost = MV.MaxZoomAt(a.mode == "anchor" and a.au or a.u1, a.mode == "anchor" and a.av or a.v1)
+        if a.z1 > targetMost then
+            -- A new preference applies to the pending destination too. Rebase at the
+            -- rendered frame so changing a limit cannot jump backward in the old curve.
+            a.z0, a.z1, a.t = zoom, math.max(1, targetMost), 0
+            if a.mode == "glide" then a.u0, a.v0 = u, v end
+        end
+    end
+    if limitsChanged and zoom > most * 1.001 then
         StopAnim()
         ShowWorld(u, v, most)
     end
