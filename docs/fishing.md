@@ -701,6 +701,8 @@ Session and location attribution remain those of the catch, including late openi
 
 ### Verification and owner acceptance
 
+Use the [step-by-step owner acceptance procedure](fishing-acceptance.md) for the candidate client run and a pasteable result record.
+
 Economic tests: `./tests/run.sh development fishing`. Mutation checks: `bash tools/mutate.sh --catalog tools/mutations/fishing.py --all`. Synthetic CPU benchmark: from `tests`, run `lua5.1 -e 'require("bit"); ROOT="../!!!TwichUI/"; REPO="../"; TESTS="./"' fishing_economy_benchmark.lua`; `FISHING_BENCH_ECONOMY_OFF=1` gives the same Journal fixture without economic display. The fixture contains 100,000 O(1) reference entries, 1,000 distinct item quantities and 500 sessions. This measures Fishing's integration, not real compressed Market decode latency; the existing Workshop large-market tests cover that pipeline separately. Offline Journal/HUD captures can enable synthetic reference values with `FISHING_ECONOMY_CAPTURE=1`.
 
 No real-client verification is claimed. Run the Fishing Test Lab category for a compact capability report, including optional pricing availability, pending/cached item counts and vendor API availability. In the owner’s client:
