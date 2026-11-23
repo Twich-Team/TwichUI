@@ -42,8 +42,9 @@ end
 local function digest(v) return type(v)=='string' and #v==64 and not v:find('[^0-9a-f]') end
 local function tick() coroutine.yield() end
 local function header(raw,expected)
-    if type(raw)=='table' and W.Int(raw.summary_version,3,2147483647) then error('summary newer_addon',0) end
-    local prepared=type(raw)=='table'and raw.summary_version==2
+    if type(raw)=='table' and W.Int(raw.summary_version,4,2147483647) then error('summary newer_addon',0) end
+    local packed=type(raw)=='table'and raw.summary_version==3
+    local prepared=type(raw)=='table'and(raw.summary_version==2 or packed)
     closed(raw,prepared and {summary_version=true,manifest=true,bank=true,receipt=true,prepared=true}or {summary_version=true,manifest=true,bank=true,receipt=true})
     need((raw.summary_version==1 or prepared) and (raw.bank=='A' or raw.bank=='B') and type(raw.manifest)=='string' and #raw.manifest<=65536)
     local h=J.Parse(raw.manifest,tick)
@@ -89,7 +90,9 @@ local function header(raw,expected)
         and #receipt.desktop_build>=1 and #receipt.desktop_build<=80 and S.Time(receipt.completed_at) and S.Time(receipt.completed_at)>=S.Time(h.generated_at))
     local preparedContext
     if prepared then need(W.Prepared~=nil);preparedContext=W.Prepared.Begin(raw.prepared,h,raw.bank,tick)end
-    return {prepared=preparedContext,preparedText=raw.prepared,summary_version=raw.summary_version,header=h,raw=raw,bank=raw.bank,manifest=raw.manifest,receiptText=raw.receipt,receipt=receipt,parts=parts,checked={},failed={},loaded={},total_bytes=total,loaded_bytes=0,loaded_parts=0,checked_count=0,
+    local containers
+    if packed then containers=W.Containers.New(h.generation_id,raw.bank,preparedContext.count);preparedContext.containers=containers end
+    return {containers=containers,prepared=preparedContext,preparedText=raw.prepared,summary_version=raw.summary_version,header=h,raw=raw,bank=raw.bank,manifest=raw.manifest,receiptText=raw.receipt,receipt=receipt,parts=parts,checked={},failed={},loaded={},total_bytes=total,loaded_bytes=0,loaded_parts=0,checked_count=0,
         current_bytes=0,history_bytes=0,history_loaded_parts=0,history_checked_count=0}
 end
 local function money(v) return v==N or S.Money(v,true) and #v<=11 and (#v<11 or v<='99999999999') end
@@ -164,6 +167,25 @@ function Q.Begin(raw,expected,suppressPendingSelection)
 end
 local function loadPart(p,bucket)
     if InCombatLockdown and InCombatLockdown() then return false,'combat' end
+    if active.containers then
+        need(bucket>=64)
+        local generation=active
+        if R.Perf and R.Perf.on then
+            R.Perf.Count('workshop.summary.decodeStarts');R.Perf.Count('workshop.summary.historyDecodes')
+            if active.checked[bucket]then R.Perf.Count('workshop.summary.decodeRepeats')end
+        end
+        job={kind='part',bucket=bucket,co=coroutine.create(function()
+            local raw=W.Containers.Read(generation.containers,'History',p.bucket,p)
+            if not generation.loaded[bucket]then
+                generation.loaded[bucket]=true;generation.loaded_bytes=generation.loaded_bytes+#raw
+                generation.history_loaded_parts=generation.history_loaded_parts+1;generation.history_bytes=generation.history_bytes+#raw
+                need(generation.history_bytes<=generation.header.history_partitioning.max_total_bytes)
+            end
+            return rows(raw,p,generation.header,true)
+        end)}
+        if observing()then job.started=clock();job.capture=R.Perf.captureID end
+        return true
+    end
     local key=active.bank..('%02d'):format(p.bucket)
     local historical=bucket>=64
     local globals
@@ -252,6 +274,7 @@ function Q.Step(ms)
                 end
                 job=nil;break
             end
+            if W.Containers and value==W.Containers.YIELD then break end
             if coroutine.status(current.co)=='dead' then
                 if current.kind=='prepared'then job=nil;break end
                 if current.kind=='handoff' then job=nil;if current.notify then changed() end;break end
@@ -374,6 +397,9 @@ function Q.Status()
         out.decoded_current_rows=0
     end
     if previous and previous.prepared then out.bytes=out.bytes+previous.prepared.stats.bytes+#previous.preparedText end
+    if active and active.containers then
+        out.containers={};for k,v in pairs(active.containers.stats)do out.containers[k]=v end
+    end
     out.parked_history=parkedHistory~=nil
     return out
 end

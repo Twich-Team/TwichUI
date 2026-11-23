@@ -125,6 +125,13 @@ local function load(ctx,bucket)
     local part=ctx.parts[bucket];if part then return part end
     need(not(InCombatLockdown and InCombatLockdown()))
     local p=ctx.descriptors[bucket];local id=ctx.bank..('%02d'):format(bucket)
+    if ctx.containers then
+        local data,proofs=W.Containers.Read(ctx.containers,'Current',bucket,p)
+        local size=1;while size<math.max(1,p.record_count)do size=size*2 end
+        part={data=data,proofs=proofs,n=p.record_count,size=size,bits={},verified=0,bucket=bucket}
+        ctx.parts[bucket]=part;ctx.stats.loads=ctx.stats.loads+1;ctx.stats.bytes=ctx.stats.bytes+#data+#proofs
+        need(ctx.stats.bytes<=M.MAX_TOTAL);return part
+    end
     local globals=TwichUIMarketCurrentParts;local blob=type(globals)=='table'and globals[id]
     if not blob then
         need(C_AddOns and C_AddOns.LoadAddOn)
@@ -345,6 +352,7 @@ function M.Work(ctx,completed,notify)
                 else error('invalid prepared task',0)end
             end)end
             local ok,why=coroutine.resume(task.co);if not ok then error(why,0)end
+            if W.Containers and why==W.Containers.YIELD then coroutine.yield(why)end
             if coroutine.status(task.co)=='dead'then
                 if task.kind=='bulk'then ctx.bulk=nil
                 else remove(ctx,task);ctx.running=nil
