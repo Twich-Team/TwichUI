@@ -68,6 +68,7 @@ function MP.Create(parent)
 end
 
 function MP.Clear(set)
+    set.eligible = 0
     for i, tex in pairs(set.used) do
         MP.Forget(tex)
         tex:Hide()
@@ -81,7 +82,7 @@ end
 function MP.Set(set, record)
     if set.record == record then return end
     MP.Clear(set)
-    set.record, set.geometry = record, {}
+    set.record, set.geometry, set.rejected = record, {}, {}
     if not record then return end
     local pictures = record[6]
     if type(pictures) ~= "table" or #pictures % 7 ~= 0 then return end
@@ -103,37 +104,56 @@ end
 
 local function Update(set, u0, v0, u1, v1, alpha)
     local W, H = MW.Size()
-    -- Release first, so a pan never transiently doubles the pool.
+    local wanted = set.wanted or {}
+    set.wanted = wanted
+    for i in pairs(wanted) do wanted[i] = nil end
+    local eligible = 0
+    if alpha > 0.005 then
+        for i, g in ipairs(set.geometry) do
+            if not set.rejected[g[1]] and g[11] >= u0 and g[9] <= u1 and g[12] >= v0 and g[10] <= v1 then
+                eligible = eligible + 1
+                if eligible <= MAX_PICTURES then wanted[i] = true end
+            end
+        end
+    end
+    set.eligible = eligible
+    if eligible > MAX_PICTURES and R.MapTrace then R.MapTrace("interior-budget", eligible, MAX_PICTURES) end
+    -- Release every unselected picture before acquiring: a visible old picture
+    -- can fall outside the budget when panning into a more crowded rectangle.
     for i, tex in pairs(set.used) do
-        local g = set.geometry[i]
-        if alpha <= 0.005 or g[11] < u0 or g[9] > u1 or g[12] < v0 or g[10] > v1 then
+        if not wanted[i] then
             MP.Forget(tex)
             tex:Hide(); tex:SetTexture(nil); tex:ClearAllPoints()
             set.used[i] = nil
             set.free[#set.free + 1] = tex
         end
     end
-    if alpha <= 0.005 then return end
-    local active = 0
     for i, g in ipairs(set.geometry) do
-        if g[11] >= u0 and g[9] <= u1 and g[12] >= v0 and g[10] <= v1 and active < MAX_PICTURES then
-            active = active + 1
+        if wanted[i] then
             local tex = set.used[i]
             if not tex then
                 tex = table.remove(set.free)
                 if not tex then tex = set.parent:CreateTexture(nil, "ARTWORK"); set.made = set.made + 1 end
-                tex:SetTexture(g[1], "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE", "TRILINEAR")
                 MP.BindIdentity(tex, g[1])
-                tex:SetTexCoord(0, g[7], g[8], 1)
-                tex:SetRotation(g[6])
-                tex:SetDrawLayer("ARTWORK", math.min(7, math.floor((i - 1) * 16 / #set.geometry) - 8))
-                tex:SetVertexColor(1, 0.95, 0.86)
-                tex:SetPoint("TOPLEFT", R.MapArt.Root(), "TOPLEFT", g[2] * W, -g[3] * H)
-                tex:SetSize((g[4] - g[2]) * W, (g[5] - g[3]) * H)
-                set.used[i] = tex
+                local accepted = tex:SetTexture(g[1], "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE", "TRILINEAR")
                 set.binds = set.binds + 1
+                if accepted == false then
+                    set.rejected[g[1]] = true
+                    Failed(tex, "rejected")
+                    tex:Hide(); tex:SetTexture(nil); tex:ClearAllPoints()
+                    set.free[#set.free + 1] = tex
+                    tex = nil
+                else
+                    tex:SetTexCoord(0, g[7], g[8], 1)
+                    tex:SetRotation(g[6])
+                    tex:SetDrawLayer("ARTWORK", math.min(7, math.floor((i - 1) * 16 / #set.geometry) - 8))
+                    tex:SetVertexColor(1, 0.95, 0.86)
+                    tex:SetPoint("TOPLEFT", R.MapArt.Root(), "TOPLEFT", g[2] * W, -g[3] * H)
+                    tex:SetSize((g[4] - g[2]) * W, (g[5] - g[3]) * H)
+                    set.used[i] = tex
+                end
             end
-            MP.Show(tex, alpha)
+            if tex then MP.Show(tex, alpha) end
         end
     end
 end
@@ -141,7 +161,7 @@ MP.Update = R.Perf and R.Perf.Wrap("map.interior.update", Update) or Update
 
 function MP.Snapshot(set)
     if not set then
-        local total = { active = 0, pooled = 0, made = 0, binds = 0, pending = 0 }
+        local total = { active = 0, pooled = 0, made = 0, binds = 0, pending = 0, eligible = 0, omitted = 0 }
         for live in pairs(sets) do
             local s = MP.Snapshot(live)
             for k, v in pairs(s) do total[k] = total[k] + v end
@@ -151,11 +171,13 @@ function MP.Snapshot(set)
     end
     local n = 0
     for _ in pairs(set.used) do n = n + 1 end
-    return { active = n, pooled = #set.free, made = set.made, binds = set.binds }
+    return { active = n, pooled = #set.free, made = set.made, binds = set.binds,
+        eligible = set.eligible or 0, omitted = math.max(0, (set.eligible or 0) - MAX_PICTURES) }
 end
 
 function MP.Diagnostic(coordinates)
     local out = MP.Snapshot()
+    out.limitPerSet = MAX_PICTURES
     out.pendingTextures, out.failures, out.pictures = {}, {}, {}
     for tex, e in pairs(pending) do out.pendingTextures[#out.pendingTextures + 1] = {
         fileId = identities[tex] or false, ageSeconds = e.age, desiredAlpha = e.alpha, fading = e.fade ~= nil } end
@@ -167,6 +189,8 @@ function MP.Diagnostic(coordinates)
             local g = set.geometry[i]
             out.pictures[#out.pictures + 1] = { fileId = g[1], alpha = tex:GetAlpha(), shown = tex:IsShown(),
                 angleRadians = g[6], cropU1 = g[7], cropV0 = g[8], bounds = coordinates and { g[2], g[3], g[4], g[5] } or false }
+            out.pictures[#out.pictures].level = set.parent:GetFrameLevel()
+            out.pictures[#out.pictures].alphaSource = "texture-local; parent layer alpha also applies"
         end
     end
     table.sort(out.pictures, function(a, b) return a.fileId < b.fileId end)

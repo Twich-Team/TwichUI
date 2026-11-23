@@ -49,6 +49,7 @@ local function Obj()
     if k == "GetFrameLevel" then return function(s) return s.level or 5 end end
     if k == "SetTexture" then return function(s, v) s.tex = v; s.binds = (s.binds or 0) + 1 end end
     if k == "SetRotation" then return function(s, v) s.rotation = v end end
+    if k == "SetDrawLayer" then return function(s, layer, sub) s.drawLayer, s.subLayer = layer, sub or 0 end end
     if k == "SetTexCoord" then return function(s, ...) s.coord = { ... } end end
     if k == "SetVertexColor" then return function(s, r, g, b) s.color = { r, g, b } end end
     if k == "AddMaskTexture" then return function(s, m) s.masks[#s.masks + 1] = m end end
@@ -58,7 +59,7 @@ local function Obj()
     if k == "SetFont" then return function() return true end end
     if k == "GetFont" then return function() return "Fonts\\FRIZQT__.TTF", 10, "" end end
     if k == "CreateTexture" or k == "CreateFontString" or k == "CreateLine" or k == "CreateMaskTexture" then
-      return function(s) local x = Obj(); x.parent = s; x.kind = k; return x end
+      return function(s, _, layer, _, sub) local x = Obj(); x.parent = s; x.kind = k; x.drawLayer, x.subLayer = layer, sub or 0; return x end
     end
     if type(k) == "string" and k:match("^%u") then return function() end end
     return nil
@@ -832,6 +833,11 @@ do
   local d = MCV.Get("cave:102")
   for _ = 1, 80 do pointAt((d.u0 + d.u1) / 2, (d.v0 + d.v1) / 2) wheel(1) end
   Tick()
+  assert(MCV.Tile(1).tex == 20001, "wheel reaches first-floor artwork")
+  -- Cursor anchoring leaves the view near the entry boundary; center the cave
+  -- to test its fully surfaced floor controls independently of the edge fade.
+  MV.GlideTo((d.u0 + d.u1) / 2, (d.v0 + d.v1) / 2, MV.MaxZoomAt((d.u0 + d.u1) / 2, (d.v0 + d.v1) / 2))
+  Tick()
   assert(MCV.Surfaced() and MCV.Tile(1).tex == 20001, "the first floor")
   MCV.SetFloor(2)
   assert(MCV.Tile(1).tex == 30001, "the second")
@@ -841,6 +847,17 @@ do
   Tick()
   assert(not MCV.Surfaced(), "caves off: none")
   MXP.Set("caves", true)
+  -- Keep zoom constant while the center crosses a cave edge: fade before
+  -- selection ends, rather than dropping a fully opaque map in one update.
+  local width, height = (g.u1 - g.u0) / 4, (g.v1 - g.v0) / 4
+  local previous = 1
+  for i = 0, 20 do
+    local u = g.u1 - (g.u1 - g.u0) * (0.16 - i * 0.01)
+    local _, alpha = MCV.StrengthAt(u - width / 2, cv - height / 2, u + width / 2, cv + height / 2)
+    assert(alpha >= 0 and alpha <= previous + 1e-8 and previous - alpha < 0.11, "continuous cave boundary fade")
+    previous = alpha
+  end
+  assert(previous == 0, "cave fully faded outside bounds")
   print("9 caves ok")
 end
 
@@ -1043,4 +1060,5 @@ local fixture = { c = c, R = R, VM = VM, MV = MV, MW = MW, MA = MA, MD = MD, MCV
   SetCombat = function(value) COMBAT = value end }
 cases(fixture)
 if MAP_DIAGNOSTICS_TEST then assert(loadfile(TESTS .. "map_diagnostics_cases.lua"))()(fixture) end
+if MAPLAB_EXPORT_FILE then assert(loadfile(REPO .. "tools/maplab/export.lua"))()(fixture, MAPLAB_EXPORT_FILE) end
 print("MAP EXPLORE PASSED")

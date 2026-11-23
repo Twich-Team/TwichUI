@@ -227,6 +227,7 @@ function MD.Diagnostic(coordinates)
             out.textures[#out.textures + 1] = { fileId = p.fileId, continent = p.continent,
                 column = p.column, row = p.row, bounds = coordinates and p.bounds or false,
                 shown = tex:IsShown(), alpha = tex:GetAlpha() }
+            out.textures[#out.textures].level = layer and layer:GetFrameLevel() or false
         end
     end
     for file in pairs(failed) do out.failedIds[#out.failedIds + 1] = file end; table.sort(out.failedIds)

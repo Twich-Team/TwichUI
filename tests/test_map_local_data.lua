@@ -11,7 +11,7 @@ local function object(parent)
   function o:SetSize(w, h) self.w, self.h = w, h end
   function o:SetPoint(...) self.point = { ... } end
   function o:ClearAllPoints() self.point = nil end
-  function o:SetTexture(file) self.file = file end
+  function o:SetTexture(file) self.file = file; if file == 989999 then return false end end
   function o:SetAlpha(a) self.alpha = a end
   function o:SetRotation(a) self.rotation = a end
   function o:SetFrameLevel(n) self.level = n end
@@ -94,5 +94,32 @@ end
 for _, c in ipairs(D.caves) do check(c) end
 for _, c in pairs(D.cities) do check(c) end
 assert(recordCount == 250 and pictureCount == 1906, "all reviewed numeric references, minus three edited-art references: " .. recordCount .. "/" .. pictureCount)
+-- Expanding a future record past the cap must release now-deprioritized visible
+-- pictures too, not only offscreen pictures. This pan used to retain 300 textures.
+local crowded = { 0, 0, 0, 20000, 20000, {} }
+for i = 1, 300 do
+  local at = i <= 150 and 1000 or 10000
+  local p = crowded[6]
+  for _, v in ipairs({ 980000 + i, at, at, 128, 0, 1, 0 }) do p[#p + 1] = v end
+end
+R.MapPictures.Set(set, crowded)
+local g = set.geometry[151]
+R.MapPictures.Update(set, g[9], g[10], g[11], g[12], 0.7)
+R.MapPictures.Update(set, 0, 0, 1, 1, 0.7)
+assert(R.MapPictures.Snapshot(set).made <= 256 and R.MapPictures.Snapshot(set).active <= 256,
+  "panning from later pictures into a fully visible oversized record never exceeds pool cap")
+R.MapPictures.Clear(set)
+-- A native rejected file must be reported once and left out of visible coverage;
+-- repeated view updates must not retry it or consume additional textures.
+local rejected = { 0, 0, 0, 20000, 20000, { 989999, 1000, 1000, 128, 0, 1, 0 } }
+R.MapPictures.Set(set, rejected)
+R.MapPictures.Update(set, 0, 0, 1, 1, 1)
+local binds = R.MapPictures.Snapshot(set).binds
+R.MapPictures.Update(set, 0, 0, 1, 1, 1)
+assert(R.MapPictures.Snapshot(set).active == 0 and R.MapPictures.Snapshot(set).binds == binds,
+  "rejected file is not shown or repeatedly rebound")
+local failures = R.MapPictures.Diagnostic().failures
+assert(failures[#failures].fileId == 989999 and failures[#failures].reason == "rejected", "rejection evidence retained")
+R.MapPictures.Clear(set)
 print(("MAP LOCAL DATA PASSED: %d areas, %d pictures, peak reused pool %d, numeric data retained %.1f KiB")
   :format(recordCount, pictureCount, maxMade, dataKiB))

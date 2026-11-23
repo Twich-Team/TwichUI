@@ -13,6 +13,9 @@ return function(t)
   DX.Instrument = { Live = function() return { { id = "map.view.notify", calls = 4, total = 2, max = 0.8 } } end }
   Load("TwichUI_Diagnostics/MapCapture.lua")
   local M, J = DX.MapCapture, DX.Json
+  local precise = 0.1234567890123456
+  assert(tonumber(J.Encode(precise, 17)) == precise and J.Encode(precise) == J.Encode(precise, 0/0),
+    "optional replay precision preserves coordinates without changing compact exports")
   local requests, deadline = 0, nil
   c.C_Timer.NewTimer = function(seconds, fn)
     requests = requests + 1; deadline = fn
@@ -36,6 +39,7 @@ return function(t)
   M.Mark()
   M.Event("anchor-error", 8, 25)
   M.Event("texture-failure", 123456, "load-timeout")
+  M.Event("interior-budget", 300, 256)
   for i = 1, 4 do M.Event("host-change", i % 2 == 0 and 1429 or 1436, 30) end
   for i = 1, 900 do M.Event("wheel", 1, 20, 25, 48) end
   t.closeMap(); t.openMap(1436)
@@ -45,6 +49,7 @@ return function(t)
   assert(data.current.view.center and #data.events <= 256 and data.truncation.eventsDropped > 0, "bounded history and optional geometry")
   local flags = {}; for _, f in ipairs(data.findings) do flags[f.code] = f end
   assert(flags["cursor-anchor-displaced"].confidence == "observed" and flags["context-oscillation"].confidence == "heuristic", "findings distinguish evidence from suspicion")
+  assert(flags["interior-budget-exhausted"].evidence.requested == 300, "interior cap evidence retained")
   assert(#data.incidents > 0 and #data.incidents[1].before > 0 and #data.incidents[1].after > 0, "anomaly context survives event ring eviction")
   local prev = -1
   for _, e in ipairs(data.events) do assert(e.atSeconds >= prev, "monotonic event timestamps"); prev = e.atSeconds end

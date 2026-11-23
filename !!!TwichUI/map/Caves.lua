@@ -15,6 +15,7 @@ R.MapCaves = MCV
 
 local ART_W, ART_H, TILE = 1002, 668, 256
 local SURFACE = { 0.18, 0.45 }   -- share of the view's width a cave's map takes as it surfaces
+local EDGE = 0.15               -- fade through the outer 15% before center-based selection ends
 local BAR_FROM = 0.6             -- how far surfaced before its bar shows
 local VEIL = 0.65
 local FILL = 0.9
@@ -101,8 +102,15 @@ function MCV.Current() return current, current and (floorOf[current.id] or 1) or
 -- Computed from this view, independent of listener registration order.
 function MCV.StrengthAt(u0, v0, u1, v1)
     if not MXP.Get("caves") or (R.MapDungeonView and R.MapDungeonView.IsOpen()) then return nil, 0 end
-    local g = At((u0 + u1) / 2, (v0 + v1) / 2)
-    return g, g and VM.Fade((g.u1 - g.u0) / (u1 - u0), SURFACE[1], SURFACE[2]) or 0
+    local u, v = (u0 + u1) / 2, (v0 + v1) / 2
+    local g = At(u, v)
+    if not g then return nil, 0 end
+    local w, h = g.u1 - g.u0, g.v1 - g.v0
+    if w <= 0 or h <= 0 or u1 <= u0 then return nil, 0 end
+    -- A center crossing used to remove fully opaque artwork in one update.
+    -- Normalize to the selected cave, so painted maps and WMO areas scale alike.
+    local edge = math.min((u - g.u0) / w, (g.u1 - u) / w, (v - g.v0) / h, (g.v1 - v) / h)
+    return g, VM.Fade(w / (u1 - u0), SURFACE[1], SURFACE[2]) * VM.Fade(edge, 0, EDGE)
 end
 
 local function Layer()

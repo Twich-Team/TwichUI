@@ -12,6 +12,7 @@ local KEYS = {
     ["animation-end"] = { "mode", "zoom" }, ["animation-stop"] = { "mode", "pendingZoom" },
     ["host-change"] = { "mapId", "zoom" }, viewport = { "width", "height" },
     ["texture-failure"] = { "fileId", "reason" }, ["detail-budget"] = { "requested", "budget" },
+    ["interior-budget"] = { "requested", "budget" },
     ["boundary-clamp"] = { "zoom" }, ["anchor-error"] = { "errorPixels", "zoom" },
     ["motion-rejected"] = { "reason" }, ["render-state"] = { "state" },
     ["map-error"] = {},
@@ -110,7 +111,7 @@ function MC.Event(kind, ...)
     local now = Relative()
     live.totals[kind] = (live.totals[kind] or 0) + 1
     -- Keep frequent identical budget/rejection states from crowding out navigation history.
-    if (kind == "detail-budget" or kind == "motion-rejected") and repeated[kind]
+    if (kind == "detail-budget" or kind == "interior-budget" or kind == "motion-rejected") and repeated[kind]
         and now - repeated[kind] < 1 then live.coalesced = live.coalesced + 1 return end
     repeated[kind] = now
     local e = { atSeconds = now, kind = kind, sequence = (live.sequence or 0) + 1 }
@@ -128,6 +129,8 @@ function MC.Event(kind, ...)
         Finding("texture-load-failure", "medium", "observed", { fileId = e.fileId or false, reason = e.reason or "unavailable" })
     elseif kind == "detail-budget" then
         Finding("terrain-budget-fallback", "low", "observed", { requested = e.requested, budget = e.budget })
+    elseif kind == "interior-budget" then
+        Finding("interior-budget-exhausted", "medium", "observed", { requested = e.requested, budget = e.budget })
     elseif kind == "map-error" then
         Finding("map-handler-error", "high", "observed", { source = "TwichUI map handler; raw error text excluded for privacy" })
     elseif kind == "wheel" and DX.Num(e.notches) and DX.Num(e.fromZoom) and DX.Num(e.pendingZoom)
@@ -272,18 +275,18 @@ end
 function MC.Report(kind, rec)
     local out, why = MC.Structured(rec)
     if not out then return nil, why end
-    local encoded = J.Encode(out)
+    local encoded = J.Encode(out, 17)
     while #encoded > MC.MAX_BYTES and #out.snapshots > 0 do
         table.remove(out.snapshots, 1); out.truncation.snapshotsDropped = out.truncation.snapshotsDropped + 1
-        out.truncation.reportBytesLimited = true; encoded = J.Encode(out)
+        out.truncation.reportBytesLimited = true; encoded = J.Encode(out, 17)
     end
     while #encoded > MC.MAX_BYTES and #out.events > 0 do
         table.remove(out.events, 1); out.truncation.eventsDropped = out.truncation.eventsDropped + 1
-        out.truncation.reportBytesLimited = true; encoded = J.Encode(out)
+        out.truncation.reportBytesLimited = true; encoded = J.Encode(out, 17)
     end
     while #encoded > MC.MAX_BYTES and #out.incidents > 0 do
         table.remove(out.incidents, 1); out.truncation.incidentsDropped = out.truncation.incidentsDropped + 1
-        out.truncation.reportBytesLimited = true; encoded = J.Encode(out)
+        out.truncation.reportBytesLimited = true; encoded = J.Encode(out, 17)
     end
     if kind == "detailed" then return encoded, out end
     local lines = { "TWICHUI MAP AI REPORT | schema 1 | " .. out.id,
