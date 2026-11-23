@@ -51,3 +51,10 @@ source identities are recorded in the Market companion report. Full 13-TOC
 loading, native GC/frame stalls, combat and in-game lifecycle acceptance remain
 unverified until an owner-directed game run; the codec probe alone proves none
 of those properties.
+
+The implementation is in draft PR136, based on prepared-reader PR131. The
+required main-target verification must test their combined ancestry before any
+coordinated merge is considered. The first focused development run passed15
+modules in11.272s; full verification and final comparable results are recorded
+with the exact paired Market source in its final report. The temporary codec
+ZIP/source from PR135 are deliberately absent from this branch.
