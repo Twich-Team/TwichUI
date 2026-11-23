@@ -43,3 +43,9 @@ The 1200 × 760 wireframes are representative design proportions, not client cap
 The Advanced drawing selects an **icon** layer, with a square selection rectangle, corner handle and center anchor; its X/Y/size fields refer to that same icon. The layer list's up/down, Duplicate and Delete buttons are directly visible, and the marked palette drop target also has an Add layer button as its keyboard alternative. Layer order runs top to bottom in rendering order; the final layer is drawn above earlier layers. Properties include color, texture, opacity, placement, size and animation where applicable; unsupported properties are disabled with a reason. The preview condition selector independently chooses friendly cleanse or hostile purge and eligibility yes/no/unknown.
 
 An illustrative pulse timeline starts at rest at **0 ms**, rises to full emphasis at **120 ms**, returns to rest at **800 ms**, and leaves a **150 ms** rest interval before repeating at 950 ms. Play/Pause freezes synthetic playback; Restart returns to 0 ms. These values illustrate the diagram, not established effect defaults or API behavior. A still preview displays the rest state and preserves saved animation settings.
+
+Simple configuration exposes rule scope (Friendly cleanse or Hostile purge)
+separately from Magic / Curse / Poison / Disease selection. The preview condition
+controls only simulated state; it never changes rule scope. Personal eligibility
+is offered only if the source-proven capability contract supports it; otherwise
+show Unknown / unavailable, not a checkbox that silently broadens the rule.
