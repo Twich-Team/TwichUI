@@ -1179,6 +1179,10 @@ m("market.advisor.pending-reference", "TwichUI_Workshop/Advisor.lua",
   'elseif ctx.pendingPlan then Unknown', 'elseif false then Unknown',
   "a Market recommendation bypasses unresolved crafting reservations", ["test_workshop_advisor_market.lua"])
 
+m("market.advisor.price-finality", "TwichUI_Workshop/Advisor.lua",
+  'if r.pending then', 'if false then',
+  "pending Market evidence becomes a sale recommendation", ["test_workshop_advisor_market.lua", "test_workshop_junk_pricing.lua"])
+
 # Bundled disenchant references: admission, yields, prices, context and display.
 m("market.disenchant.reference-token", "TwichUI_Workshop/Disenchant.lua",
   'snapshot.reference==REFERENCE', 'snapshot.reference~=nil',
@@ -1392,7 +1396,7 @@ m("market.junk.vendor-only", "TwichUI_Workshop/Junk.lua",
   'advice.action=="vendor"', 'advice.action=="auction"',
   "auction advice is marked as vendor junk", ["test_workshop_junk.lua"])
 m("market.junk.all-copies", "TwichUI_Workshop/Junk.lua",
-  'if not vendor then candidates[id].ok=false end', 'if false then candidates[id].ok=false end',
+  'if verdict~="match" then c.ok=false end', 'if false then c.ok=false end',
   "one eligible copy permits marking a locked or protected copy", ["test_workshop_junk.lua"])
 m("market.junk.stale-slice", "TwichUI_Workshop/Junk.lua",
   'if mine~=generation or not Ready() then return end', 'if not Ready() then return end',
