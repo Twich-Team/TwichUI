@@ -1863,7 +1863,7 @@ local function Define()
     g = Group("executeRange", "Execute Range", { page = "executeRange",
         note = "A personal health threshold on compatible EllesmereUI target and enemy nameplate health bars. Active highlighting is hidden when health is restricted; the marker remains available." })
     Switches(g, { "executeRange" })
-    Table(g, { "ui", "executeRange" }, R.ExecuteRange, { "threshold", "target", "nameplates", "appearance" }, R.ExecuteRange and R.ExecuteRange.ENUM)
+    Table(g, { "ui", "executeRange" }, R.ExecuteRange, { "threshold", "target", "nameplates", "appearance", "color", "opacity", "texture" }, R.ExecuteRange and R.ExecuteRange.ENUM)
 
     g = Group("classPortrait", "Class Portrait Decorations", { page = "classPortrait",
         note = "Class artwork around the EllesmereUI player portrait, with automatic fit and relative size and position adjustments. Needs a compatible EllesmereUI player portrait on the receiving side." })
