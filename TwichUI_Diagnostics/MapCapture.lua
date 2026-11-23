@@ -205,8 +205,9 @@ function MC.Stop(reason)
     if timer then if timer.Cancel then pcall(timer.Cancel, timer) end; timer = nil end
     live.durationSeconds, live.stopReason = Relative(), reason or "manual"
     live.final = MC.Snapshot(live.coordinates)
+    local perfCaptureId = live.perfCaptureId
     last, live = live, nil
-    if ownsPerf and DX.Recording and DX.Recording() then DX.Stop("manual") end
+    if ownsPerf and R.Perf.captureID == perfCaptureId and DX.Recording and DX.Recording() then DX.Stop("manual") end
     ownsPerf = false
     DX.Changed("map-stop")
     return true
@@ -238,7 +239,7 @@ function MC.Mark()
     Ring.Push(live.events, { kind = "issue-mark", atSeconds = Relative(), sequence = (live.sequence or 0) + 1 })
     live.sequence = (live.sequence or 0) + 1
     Track("issue-mark")
-    if DX.Mark and ownsPerf then DX.Mark("map issue marked") end
+    if DX.Mark and ownsPerf and R.Perf.captureID == live.perfCaptureId then DX.Mark("map issue marked") end
     DX.Changed("map-mark")
     return true
 end

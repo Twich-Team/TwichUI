@@ -3,18 +3,21 @@
 local R, DX = TwichUI, TwichUI.DiagnosticsKit
 local MC = DX.MapCapture
 local W = {}; DX.MapWindow = W
-local win, status, note, coordinates, edit, page, built, part, frameClock
+local win, status, note, coordinates, edit, scroll, page, built, part, frameClock
 part = 1
 local function Options() return { coordinates = coordinates:GetChecked() == true, description = note:GetText() } end
 function W.Select()
-    if edit then edit:SetFocus(); edit:HighlightText() end
+    if edit then edit:SetFocus(); edit:SetCursorPosition(0); edit:HighlightText() end
 end
 function W.ShowPart()
     if not built then return end
     part = math.max(1, math.min(#built.pieces, part))
     edit:SetText(built.pieces[part].text)
+    local _, fontHeight = edit:GetFont()
+    edit:SetHeight(math.max(196, (edit:GetNumLines() or 1) * ((fontHeight or 12) + 2) + 12))
     page:SetText(("Part %d of %d · %d bytes · Ctrl+C to copy"):format(part, #built.pieces, #built.text))
     W.Select()
+    scroll:SetVerticalScroll(0)
 end
 function W.Prepare(kind)
     if not MC.Current() then MC.Capture(Options()) end
@@ -81,10 +84,13 @@ local function Build()
     local box = CreateFrame("Frame", nil, area, "BackdropTemplate")
     box:SetPoint("TOPLEFT", 0, -254); box:SetSize(700, 210); L.Well(box, 0.9)
     local sc = CreateFrame("ScrollFrame", nil, box, "UIPanelScrollFrameTemplate")
+    scroll = sc
     sc:SetPoint("TOPLEFT", 7, -7); sc:SetPoint("BOTTOMRIGHT", -26, 7); L.ScrollBar(sc)
     edit = CreateFrame("EditBox", nil, sc)
+    edit:SetPoint("TOPLEFT"); edit:SetHeight(196)
     edit:SetMultiLine(true); edit:SetAutoFocus(false); edit:SetMaxLetters(0)
     edit:SetFontObject("GameFontHighlightSmall"); edit:SetWidth(650); edit:SetTextInsets(3, 3, 3, 3)
+    edit:SetJustifyH("LEFT"); edit:SetJustifyV("TOP")
     edit:SetScript("OnEscapePressed", edit.ClearFocus)
     edit:SetScript("OnEditFocusGained", function(e) e:HighlightText() end)
     edit:SetScript("OnTextChanged", function(e, user)

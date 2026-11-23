@@ -76,7 +76,11 @@ return function(t)
   assert(not M.Start() and not M.Recording() and not R.MapTrace, "missing timer leaves no recording or hooks")
   c.C_Timer.NewTimer = timerApi
   assert(M.Start({ seconds = 9999 }) and M.Status().limitSeconds == 180, "duration limit bounded")
+  local stoppedBeforeReplacement = perfStops
+  R.Perf.captureID = R.Perf.captureID + 1
   M.Stop()
+  assert(perfStops == stoppedBeforeReplacement, "stopping map recording preserves a replacement performance session")
+  DX.Stop()
   -- Plain UI uses real palette primitives, not a second designer.
   Load("!!!TwichUI/Look.lua"); Load("TwichUI_Diagnostics/MapWindow.lua")
   DX.OpenMap()

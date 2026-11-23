@@ -55,6 +55,8 @@ UTF-8-safe chunking reuse `TwichUI_Diagnostics/Json.lua`. Chunks carry the repor
 identity, part count, byte count and Adler-32 checksums. Strip each first header
 line and concatenate the remaining bodies in order to recover JSON exactly;
 the existing `Json.Join` validates this operation in tests.
+Detailed JSON uses 17 significant digits for reproducible geometry; compact
+summaries retain six. This does not increase the 96 KiB report limit.
 
 | Field | Meaning |
 |---|---|
@@ -128,3 +130,18 @@ schema/JSON validity, deterministic output, privacy, unavailable APIs, bounded
 histories, incident context, chunk reconstruction, start/stop/timeout, map
 close/reopen, combat, injected anchor/load anomalies and UI reselection.
 Actual Ctrl+C and native secure behavior remain owner-directed checks.
+
+Optional native-style widget scenario:
+
+```sh
+source /workspace/twichui-env/activate.sh
+bash tools/simlab/run.sh mapdiag
+```
+
+This stages the existing diagnostics addon in the isolated simulator and checks
+17 capture/record/mark/prepare/chunk/reopen and report geometry checks, then writes a structural
+PNG. Image inspection caught and corrected the report field's anchoring,
+height, alignment and initial cursor position. The simulator substitutes fonts
+and has no client artwork; it does not exercise a physical keyboard or clipboard.
+For partial offline reconstruction from a detailed capture, see
+[Map Visual Test Lab](map-visual-lab.md#import-an-in-game-diagnostic).

@@ -1,5 +1,9 @@
 # Seamless map audit and verification
 
+V2 follow-up: [Map Diagnostics](map-diagnostics.md) and
+[Map Visual Test Lab / hybrid pipeline evaluation](map-visual-lab.md). These
+extend this audit; the original 322-pass/1-failure baseline below is preserved.
+
 Baseline: `main` / `1a3d9eb`. Open PRs #91, #98, #117, #127, #131,
 #133–#136 were reviewed for overlap; none changes the seamless map. No other
 branch is integrated. Reference: OpenMap

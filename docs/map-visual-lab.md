@@ -119,6 +119,44 @@ Source alpha is **not** a territory, coastline, land, ocean or city-cut classifi
 
 A future production experiment should gate every atlas/mask by client build, map identity, coordinate rectangle, resolution, locale where applicable, pixel/source hashes and provenance. Reject stale/missing assets and use the existing runtime path. Keep LOD crossfades continuous and explicit texture/decoded-pixel budgets; validate atlas gutters and edge UVs in the lab and client. Add no release assets until source rights and the chosen client formats are verified. Offline PNG support alone does not prove that Forever accepts a proposed shipped texture format. The pinned OpenMap reference (`6c2299f6e1f9bdce1bbd92145f84a05b0c6c05a7`) informs extraction, masks, atlas/LOD and cave rotation study; its processed Blizzard art is not copied or executed.
 
+### Concrete reference differences and production experiment order
+
+The same pinned `tools/map-preview/minimaplod.py` groups tiles into 256-pixel
+pieces at 64 and 16 pixels per original tile. Counting its numeric Forever
+tile coordinates independently gives 60+76 fine pieces and 6+10 coarse pieces:
+**152 atlas pieces**, approximately **38 MiB of uncompressed RGBA pixel data**
+before gutters/masks/format overhead. This is a storage estimate, not a measured
+addon download size or simultaneous resident GPU cost. Native tiles already
+exist in the client and add no bundled artwork bytes today. The two prototypes
+demonstrate downsampling and edge gutters, but do not generate those geographic
+atlases without lawful client inputs.
+
+Prioritize experiments as follows:
+
+1. Intermediate LOD: solve the current tile-budget fade back to painting. Keep
+   one coarse and one fine level beneath native detail, with weights summing to
+   the intended detail mix and explicit combined texture limits. This is the
+   strongest likely fidelity/runtime benefit, pending real-art validation.
+2. Territory/core/land masks: pinned `map-grade/grade.py` composites explored
+   pieces, measures a land-border band, and derives palette multipliers plus
+   soft band/core/territory masks. `map-preview/render.py` widens those using
+   continent art. TwichUI's rectangular feathers cannot infer that geography;
+   our prototype preserves source alpha but does not claim semantic masks.
+3. City cutouts: `map-preview/banners.py` uses reviewed, city-specific art
+   outlines and banner cuts. Generic rectangular cropping is insufficient,
+   particularly for Undercity/Ironforge surface versus interior. Validate those
+   layer contracts first; do not import the reference's edited pixels.
+4. Ocean/coast: `map-preview/sea.py` samples Blizzard continent parchment and
+   coastal strokes, tiles/crossfades them, and uses coastal/land exclusion masks.
+   These derivatives have the same rights gate as terrain, and the current
+   workspace cannot judge their colors, seams or coast alignment.
+
+These scripts were inspected as source, not executed or imported into TwichUI.
+No newer OpenMap revision was substituted. A locally generated private cache
+is the practical next validation step; shipping a cache is a separate rights
+and compatibility decision. The recommendation remains conditional rather
+than a claim of proven OpenMap-level quality or a production architecture change.
+
 ## Optional native reference workflow
 
 When the owner has a compatible client and graphical session, manually reproduce a fixed view, capture a report and take a normal screenshot. Associate it with the offline gallery using `--native-screenshot /local/screenshot.png`. This copies only decoded pixels (no EXIF), hashes them and labels them owner-provided. Screenshots can themselves contain private UI, so review before sharing. The tool does not launch or control gameplay, read client memory, inject code, bypass anti-cheat, capture an unavailable client or claim native reproduction.
