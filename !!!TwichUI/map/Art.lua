@@ -430,6 +430,7 @@ function MA.City(id) return cities[id] end
 
 function MA.Diagnostic()
     local out = MA.Snapshot()
+    out.unexploredMode, out.unexploredDimMultiplier = Mode(), DIM
     out.layers, out.cityLayers, out.zoneLayers = {}, {}, {}
     for _, key in ipairs({ "world", "cont", "zone" }) do
         local f = frames and frames[key]
@@ -442,8 +443,17 @@ function MA.Diagnostic()
     end
     table.sort(out.cityLayers, function(a, b) return a.mapId < b.mapId end)
     for _, z in ipairs(zoneList) do
-        if z.shown then out.zoneLayers[#out.zoneLayers + 1] = { mapId = z.id, loaded = z.loaded, built = z.built,
-            alpha = frames.zone:GetAlpha(), level = frames.zone:GetFrameLevel() } end
+        if z.shown then
+            local explored, unexplored = 0, 0
+            for _, e in ipairs(z.tex or {}) do
+                if e.piece.explored then explored = explored + 1 else unexplored = unexplored + 1 end
+            end
+            out.zoneLayers[#out.zoneLayers + 1] = { mapId = z.id, loaded = z.loaded, built = z.built,
+                alpha = frames.zone:GetAlpha(), level = frames.zone:GetFrameLevel(),
+                exploredTextures = explored, unexploredTextures = unexplored,
+                dimmedTextures = Mode() == "dim" and unexplored or 0,
+                hiddenTextures = Mode() == "hide" and unexplored or 0 }
+        end
     end
     table.sort(out.zoneLayers, function(a, b) return a.mapId < b.mapId end)
     out.zoneLayersOmitted = math.max(0, #out.zoneLayers - 32)
@@ -458,6 +468,7 @@ R.MapExplorePrefs.Subscribe(function(key)
 end)
 
 -- follows the view: which zones are in it and how far in (once a frame at most, after it moved)
+MA.SetView = R.Perf and R.Perf.Wrap("map.art.update", MA.SetView) or MA.SetView
 R.MapView.Subscribe(function(event)
     local MV = R.MapView
     if (event == "view" or event == "attach") and MV.Ready() then

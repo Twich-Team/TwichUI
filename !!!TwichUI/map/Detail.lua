@@ -123,7 +123,20 @@ local function Update()
         a = a + (maximum - a) * deep * (1 - cover)
     end
     local caveStrength = 0
-    if R.MapCaves then local _, s = R.MapCaves.StrengthAt(u0, v0, u1, v1); caveStrength = s end
+    if R.MapCaves then
+        local g, s = R.MapCaves.StrengthAt(u0, v0, u1, v1)
+        -- A partly visible local chart draws above terrain. It must not fade
+        -- outdoor detail across the rest of the viewport. Release covered
+        -- terrain only when the chart actually contains the entire view.
+        local shown, floor, opacity = R.MapCaves.Current()
+        local chart = shown and shown.floors[floor]
+        -- A group's union is not a floor's coverage, and sparse WMO rooms do
+        -- not cover their entire bounding rectangle. Keep terrain in those gaps.
+        if shown == g and opacity >= 1 and chart and not chart.pictures
+            and chart.u0 <= u0 and chart.v0 <= v0 and chart.u1 >= u1 and chart.v1 >= v1 then
+            caveStrength = s
+        end
+    end
     a = a * (1 - caveStrength)
     if a <= 0.005 then Clear() return end
     local mu, mv = (u1 - u0) * MARGIN, (v1 - v0) * MARGIN
@@ -206,6 +219,7 @@ local function Update()
     alpha = a
     showing = next(used) ~= nil
 end
+Update = R.Perf and R.Perf.Wrap("map.detail.update", Update) or Update
 MD.Update = Update
 
 MV.Subscribe(function(event)

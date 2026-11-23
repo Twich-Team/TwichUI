@@ -10,11 +10,13 @@ local sets = setmetatable({}, { __mode = "k" })
 local pending, loader, loadTick = {}, nil, nil
 local identities = setmetatable({}, { __mode = "k" })
 local failures = {}
+local failureGeneration = 0
 function MP.BindIdentity(tex, file) identities[tex] = file end
 local function Failed(tex, reason)
     local file = identities[tex]
     if #failures >= 32 then table.remove(failures, 1) end
     failures[#failures + 1] = { fileId = file or false, reason = reason }
+    failureGeneration = failureGeneration + 1
     if R.MapTrace then R.MapTrace("texture-failure", file, reason) end
 end
 
@@ -69,6 +71,7 @@ end
 
 function MP.Clear(set)
     set.eligible = 0
+    set.selectionInvalid, set.alpha = true, nil
     for i, tex in pairs(set.used) do
         MP.Forget(tex)
         tex:Hide()
@@ -103,12 +106,27 @@ function MP.Set(set, record)
 end
 
 local function Update(set, u0, v0, u1, v1, alpha)
-    local W, H = MW.Size()
+    local visible = alpha > 0.005
+    local reselect = set.selectionInvalid or set.u0 ~= u0 or set.v0 ~= v0 or set.u1 ~= u1 or set.v1 ~= v1
+        or set.visible ~= visible
+    -- A fixed interior need not repeat hundreds of alpha/visibility writes when
+    -- a different map layer changes. Async fades run in LoadStep independently.
+    -- Timeout failures invalidate this fast path so the previous retry behavior
+    -- is preserved even if the view itself has not moved.
+    local alphaChanged = set.alpha ~= alpha or set.failureGeneration ~= failureGeneration
+    if not reselect and not alphaChanged then return end
+    set.alpha, set.failureGeneration = alpha, failureGeneration
+    if not reselect then
+        for _, tex in pairs(set.used) do MP.Show(tex, alpha) end
+        return
+    end
+    set.u0, set.v0, set.u1, set.v1, set.visible = u0, v0, u1, v1, visible
+    set.selectionInvalid = nil
     local wanted = set.wanted or {}
     set.wanted = wanted
     for i in pairs(wanted) do wanted[i] = nil end
     local eligible = 0
-    if alpha > 0.005 then
+    if visible then
         for i, g in ipairs(set.geometry) do
             if not set.rejected[g[1]] and g[11] >= u0 and g[9] <= u1 and g[12] >= v0 and g[10] <= v1 then
                 eligible = eligible + 1
@@ -128,9 +146,12 @@ local function Update(set, u0, v0, u1, v1, alpha)
             set.free[#set.free + 1] = tex
         end
     end
+    if eligible == 0 then return end
+    local W, H = MW.Size()
     for i, g in ipairs(set.geometry) do
         if wanted[i] then
             local tex = set.used[i]
+            local acquired = not tex
             if not tex then
                 tex = table.remove(set.free)
                 if not tex then tex = set.parent:CreateTexture(nil, "ARTWORK"); set.made = set.made + 1 end
@@ -139,6 +160,7 @@ local function Update(set, u0, v0, u1, v1, alpha)
                 set.binds = set.binds + 1
                 if accepted == false then
                     set.rejected[g[1]] = true
+                    set.selectionInvalid = true
                     Failed(tex, "rejected")
                     tex:Hide(); tex:SetTexture(nil); tex:ClearAllPoints()
                     set.free[#set.free + 1] = tex
@@ -153,7 +175,7 @@ local function Update(set, u0, v0, u1, v1, alpha)
                     set.used[i] = tex
                 end
             end
-            if tex then MP.Show(tex, alpha) end
+            if tex and (acquired or alphaChanged) then MP.Show(tex, alpha) end
         end
     end
 end

@@ -10,6 +10,29 @@ return function(t)
     assert(VM.Finite(SC.st.scale) and SC.st.scale > 0, "positive canvas scale")
     return u, v, z
   end
+  -- Internal native host changes must not publish a temporary reset camera or
+  -- clear/rebind an interior that remains visible in the same world viewport.
+  do
+    t.tidy(); t.closeMap(); t.openMap(1415); MXP.Set("smooth", false)
+    local u, v = MW.ToWorld(1455, .5, .5)
+    MV.GlideTo(u, v, 48); t.Tick()
+    local city = MA.City(1455)
+    local before = R.MapPictures.Snapshot(city.pictures)
+    assert(before.active > 0, "interior visible before host handoff")
+    local original, observed = t.WMF.SetMapID, 0
+    t.WMF.SetMapID = function(self, id)
+      original(self, id)
+      observed = observed + 1
+      local x, y, z = MV.View()
+      near(x, u, "native callback sees stable world x")
+      near(y, v, "native callback sees stable world y")
+      near(z, 48, "native callback sees stable zoom")
+      assert(R.MapPictures.Snapshot(city.pictures).active == before.active, "no transient interior clear")
+    end
+    t.settle(); t.WMF.SetMapID = original
+    local after = R.MapPictures.Snapshot(city.pictures)
+    assert(observed == 1 and MV.MapID() == 1455 and after.binds == before.binds, "host handoff reuses interior bindings")
+  end
   t.tidy(); t.closeMap(); t.openMap(1429)
   MXP.Set("smooth", false)
   local u, v = t.WorldOf(1429, 0.5, 0.5)
@@ -133,7 +156,7 @@ return function(t)
   local cave = MCV.Get("wmo:1")
   assert(cave and cave.floors[1].pictures, "WMO cave registered")
   MV.GlideTo((cave.u0 + cave.u1) / 2, (cave.v0 + cave.v1) / 2, MV.MaxZoomAt((cave.u0 + cave.u1) / 2, (cave.v0 + cave.v1) / 2))
-  t.Tick()
+  t.Run(0.2)
   assert(MCV.Surfaced(), "WMO interior surfaces")
   -- Check the production picture renderer's texture bindings directly as well.
   local set = R.MapPictures.Create(t.Obj())

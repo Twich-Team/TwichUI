@@ -11,6 +11,8 @@ local KEYS = {
     ["animation-start"] = { "mode", "fromZoom", "pendingZoom" },
     ["animation-end"] = { "mode", "zoom" }, ["animation-stop"] = { "mode", "pendingZoom" },
     ["host-change"] = { "mapId", "zoom" }, viewport = { "width", "height" },
+    ["npc-markers"] = { "eligible", "fading", "positioned", "hostMap", "contextMap" },
+    ["cave-transition"] = { "phase", "id", "strength", "targetStrength" },
     ["texture-failure"] = { "fileId", "reason" }, ["detail-budget"] = { "requested", "budget" },
     ["interior-budget"] = { "requested", "budget" },
     ["boundary-clamp"] = { "zoom" }, ["anchor-error"] = { "errorPixels", "zoom" },
@@ -79,7 +81,7 @@ function MC.Snapshot(coordinates)
     if R.Enabled then local ok, v = pcall(R.Enabled, R, "mapExplore"); enabled = ok and v == true end
     return { enabled = enabled, view = Read("MapView", "Diagnostic", coordinates),
         artwork = Read("MapArt", "Diagnostic"), terrain = Read("MapDetail", "Diagnostic", coordinates),
-        interiors = Read("MapPictures", "Diagnostic", coordinates), cave = Read("MapCaves", "Snapshot"),
+        interiors = Read("MapPictures", "Diagnostic", coordinates), cave = Read("MapCaves", "Snapshot", coordinates),
         dungeon = Read("MapDungeonView", "Snapshot"), markers = {
             personal = Read("PinsMap", "Snapshot"), places = Read("MapPlaces", "Snapshot"),
             guild = Read("GuildLoc", "Snapshot"), npcs = Read("NpcMap", "Snapshot"),
@@ -181,13 +183,14 @@ function MC.Status()
         id = rec and rec.id or false, events = rec and rec.events.n or 0, limitSeconds = rec and rec.limitSeconds or 0 }
 end
 local function Performance()
-    local out = { source = "existing R.Perf / DiagnosticsKit.Instrument; milliseconds", available = false }
+    local out = { source = "existing R.Perf / DiagnosticsKit.Instrument; milliseconds", available = false,
+        allocationQualification = "allocKB sums positive inclusive Lua heap deltas across calls; nested scopes overlap. It is not unique allocation or retained memory." }
     local I = DX.Instrument
     if I and I.Live and live.perfCaptureId and R.Perf.captureID == live.perfCaptureId then
         local list = I.Live()
         out.operations = {}
         for _, op in ipairs(list) do
-            if op.id:match("^map%.") and not op.id:match("^map%.support%.") and #out.operations < 24 then
+            if (op.id:match("^map%.") and not op.id:match("^map%.support%.") or op.id:match("^npcs%.map%.")) and #out.operations < 24 then
                 out.operations[#out.operations + 1] = Copy(op, 1)
                 if op.max and op.max > 16 then Finding("map-update-cost", "medium", "observed",
                     { scope = op.id, maximumMilliseconds = op.max, qualification = "Instrumented CPU, not GPU or whole-frame attribution." }) end
@@ -303,7 +306,10 @@ function MC.Report(kind, rec)
         alpha = out.current.terrain.alpha, failedIds = out.current.terrain.failedIds },
         interiors = { active = out.current.interiors.active, pending = out.current.interiors.pending, failures = out.current.interiors.failures },
         layers = out.current.artwork.layers, zones = out.current.artwork.zoneLayers,
-        cities = out.current.artwork.cityLayers, cave = out.current.cave })
+        cities = out.current.artwork.cityLayers, cave = out.current.cave,
+        unexploredMode = out.current.artwork.unexploredMode,
+        unexploredDimMultiplier = out.current.artwork.unexploredDimMultiplier,
+        npcMarkers = out.current.markers.npcs })
     lines[#lines + 1] = "Performance: " .. J.Encode(out.performance)
     lines[#lines + 1] = "Truncation: " .. J.Encode(out.truncation) .. "; quick timeline omits " .. math.max(0, #out.events - 24) .. " older events."
     lines[#lines + 1] = "Evidence-supported causes: use observed findings above; heuristic findings require confirmation. No speculative diagnosis is asserted."

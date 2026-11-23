@@ -891,7 +891,7 @@ do
   assert(not MCV.Surfaced(), "zone level: not yet")
   -- zooming onto it: it surfaces, at its place; the deepest zoom reaches as far as its map needs
   for _ = 1, 80 do pointAt(cu, cv) wheel(1) end
-  Tick()
+  Run(0.2)  -- complete the intentional cave entry fade after this same-frame wheel burst
   local _, _, z = view()
   assert(z > MXP.Get("maxZoom") and MCV.Surfaced(), "surfaced, past the usual deepest zoom: " .. z)
   local t1, t12 = MCV.Tile(1), MCV.Tile(12)
@@ -914,7 +914,7 @@ do
   -- a cave of two floors: its first, then the other from the bar
   local d = MCV.Get("cave:102")
   for _ = 1, 80 do pointAt((d.u0 + d.u1) / 2, (d.v0 + d.v1) / 2) wheel(1) end
-  Tick()
+  Run(0.2)
   assert(MCV.Tile(1).tex == 20001, "wheel reaches first-floor artwork")
   -- Cursor anchoring leaves the view near the entry boundary; center the cave
   -- to test its fully surfaced floor controls independently of the edge fade.
@@ -925,21 +925,30 @@ do
   assert(MCV.Tile(1).tex == 30001, "the second")
   local fl = d.floors[2]
   assert(near(MCV.Tile(1).point[4], fl.u0 * 1002, 1e-6), "over its own rectangle")
+  -- The selected floor, rather than its multi-floor union, decides whether it
+  -- covers terrain. A genuinely uncovered corner must retain outdoor context.
+  MCV.SetFloor(1)
+  local floor = d.floors[1]
+  MV.GlideTo(d.u0 + (floor.u0 - d.u0) / 2, (d.v0 + d.v1) / 2, MV.MaxZoomAt((d.u0 + d.u1) / 2, (d.v0 + d.v1) / 2))
+  Run(0.2)
+  assert(MCV.Surfaced() and MD.Showing(), "uncovered selected-floor corner keeps terrain")
   MXP.Set("caves", false)
   Tick()
   assert(not MCV.Surfaced(), "caves off: none")
   MXP.Set("caves", true)
-  -- Keep zoom constant while the center crosses a cave edge: fade before
-  -- selection ends, rather than dropping a fully opaque map in one update.
+  -- Keep zoom constant while the center crosses a cave edge. A chart remains
+  -- readable while partly in view and fades only as its last visible area exits.
   local width, height = (g.u1 - g.u0) / 4, (g.v1 - g.v0) / 4
+  MCV.Sink()  -- isolate this chart from the previous two-floor cave's retained selection
+  MV.GlideTo(cu, cv, MV.MaxZoomAt(cu, cv)); Tick()
   local previous = 1
-  for i = 0, 20 do
-    local u = g.u1 - (g.u1 - g.u0) * (0.16 - i * 0.01)
+  for i = 0, 80 do
+    local u = g.u1 - (g.u1 - g.u0) * (0.16 - i * 0.005)
     local _, alpha = MCV.StrengthAt(u - width / 2, cv - height / 2, u + width / 2, cv + height / 2)
     assert(alpha >= 0 and alpha <= previous + 1e-8 and previous - alpha < 0.11, "continuous cave boundary fade")
     previous = alpha
   end
-  assert(previous == 0, "cave fully faded outside bounds")
+  assert(previous == 0, "cave fully faded once outside the viewport")
   print("9 caves ok")
 end
 
@@ -993,7 +1002,7 @@ do
   local cu, cv = MCV.Get("cave:101").u0, MCV.Get("cave:101").v0
   zoomTo(cu, cv, 12)
   Fire(markers()["cave:101"], "OnClick", "LeftButton")
-  Tick()
+  Run(0.2)
   assert(MCV.Surfaced(), "looked inside")
   -- names: from 7 times, never overlapping; categories
   closeMap(); openMap(1436)
@@ -1061,7 +1070,7 @@ do
   closeMap(); openMap(1436)
   local g = MCV.Get("cave:101")
   for _ = 1, 80 do pointAt((g.u0 + g.u1) / 2, (g.v0 + g.v1) / 2) wheel(1) end
-  Tick()
+  Run(0.2)
   assert(MCV.Surfaced(), "deep in a cave")
   R:SetEnabled("mapExplore", false)
   Tick()

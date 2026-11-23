@@ -1,5 +1,13 @@
 # Map Diagnostics
 
+The first native-feedback refinement adds aggregate NPC eligibility/fade events,
+unexplored dimming provenance, painting/detail/cave child scopes and explicit
+inclusive-allocation qualification. With precise geometry enabled, detailed
+reports retain up to twelve actual painted cave tile placements/UVs, importable
+by the lab as partial views. See
+[native feedback results](seamless-map-client-feedback.md); legacy reports remain
+supported and no player position is queried.
+
 Open **`/tui mapdiag`**. The dedicated window uses TwichUI's existing framed
 leather/walnut/bronze palette. The diagnostics addon loads on first use; it does
 not add a second world map or alter `/tui diagnostics` or `/tui perf`.

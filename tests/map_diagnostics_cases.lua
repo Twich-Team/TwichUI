@@ -10,7 +10,8 @@ return function(t)
   DX.Start = function() perfStarts = perfStarts + 1; owned = true; R.Perf.on = true; R.Perf.captureID = R.Perf.captureID + 1; return true end
   DX.Stop = function() perfStops = perfStops + 1; owned = false; R.Perf.on = false end
   DX.Recording = function() return owned end
-  DX.Instrument = { Live = function() return { { id = "map.view.notify", calls = 4, total = 2, max = 0.8 } } end }
+  DX.Instrument = { Live = function() return { { id = "map.view.notify", calls = 4, total = 2, max = 0.8 },
+    { id = "npcs.map.fade", calls = 2, total = .2, max = .1 } } end }
   Load("TwichUI_Diagnostics/MapCapture.lua")
   local M, J = DX.MapCapture, DX.Json
   local precise = 0.1234567890123456
@@ -30,6 +31,8 @@ return function(t)
   assert(report.redaction.playerPosition == "never queried" and not json:find("Rich Hale", 1, true), "no player identifiers")
   assert(report.current.view.nativeMap ~= nil and report.current.view.viewportWidth ~= nil, "unavailable values explicit")
   assert(type(report.current.artwork.zoneLayers) == "table", "selected production zone identities are exported")
+  assert(report.current.artwork.unexploredMode and report.current.artwork.unexploredDimMultiplier == .55,
+    "brightness provenance distinguishes unexplored dimming from frame alpha")
   assert(#quick < 12288 and #json <= M.MAX_BYTES, "bounded report size")
   assert(not R.MapTrace and not M.Recording() and requests == 0, "snapshot requires no background work")
   local startClock = CLOCK
@@ -38,6 +41,7 @@ return function(t)
   t.openMap(1429); R.MapExplorePrefs.Set("smooth", true)
   t.pointAt(t.WorldOf(1429, 0.5, 0.5)); t.wheel(2); t.Run(0.3)
   M.Mark()
+  M.Event("npc-markers", 5, 2, 5, 1415, 1429)
   M.Event("anchor-error", 8, 25)
   M.Event("texture-failure", 123456, "load-timeout")
   M.Event("interior-budget", 300, 256)
@@ -47,6 +51,10 @@ return function(t)
   assert(M.Stop("manual") and not R.MapTrace and not M.Recording(), "stop releases event taps")
   assert(perfStarts == 1 and perfStops == 1, "existing performance engine ownership is balanced")
   local detailed, data = M.Report("detailed")
+  local npcScope = false
+  for _, op in ipairs(data.performance.operations) do if op.id == "npcs.map.fade" then npcScope = true end end
+  assert(npcScope and data.performance.allocationQualification:find("retained", 1, true),
+    "NPC update costs and inclusive allocation limitations accompany map timing")
   assert(data.current.view.center and #data.events <= 256 and data.truncation.eventsDropped > 0, "bounded history and optional geometry")
   local flags = {}; for _, f in ipairs(data.findings) do flags[f.code] = f end
   assert(flags["cursor-anchor-displaced"].confidence == "observed" and flags["context-oscillation"].confidence == "heuristic", "findings distinguish evidence from suspicion")

@@ -41,6 +41,7 @@ local provider
 local installed, hooked = false, false
 local active = false             -- the map underneath is part of the world, and the stitched painting is on it
 local switching = false
+local switchView                -- authoritative world camera while native SetMapID rebuilds its canvas
 local savedWheel, origExtents
 local anim, driver
 local follower, stillFor = nil, 0
@@ -124,6 +125,7 @@ end
 
 -- The view: its middle (world) and zoom.
 function MV.View()
+    if switchView then return switchView.u, switchView.v, switchView.zoom end
     if not LayoutReady() then
         return lastView and lastView.u or 0.5, lastView and lastView.v or 0.5, lastView and lastView.zoom or 1
     end
@@ -493,16 +495,22 @@ end
 
 local function Switch(target)
     local u, v, zoom = MV.View()
+    switchView = { u = u, v = v, zoom = zoom }
     switching = true
     local ok, err = pcall(map.SetMapID, map, target)
-    switching = false
     if not ok then
+        switching, switchView = false, nil
         if R.Fault then R.Fault("map switch", err) end
         return false
     end
-    stats.switches = stats.switches + 1
-    if R.MapTrace then R.MapTrace("host-change", target, zoom) end
+    -- SetMapID synchronously notifies providers before the new canvas has our
+    -- world camera. Keep their geometry stable, then publish one restored view.
+    switching = false
     if active then ShowWorld(u, v, zoom) end
+    switchView = nil
+    stats.switches = stats.switches + 1
+    Emit("attach")
+    if R.MapTrace then R.MapTrace("host-change", target, zoom) end
     return true
 end
 
@@ -596,7 +604,7 @@ local function Attach()
             sc:CreateZoomLevels()
         end
     end
-    Emit("attach")
+    if not (switching and active) then Emit("attach") end
 end
 
 local function RecordView()
@@ -854,7 +862,7 @@ end)
 -- Read only, for /tui diagnostics and the tests.
 function MV.Snapshot()
     local out = { installed = installed, active = active, hooked = hooked, blocker = MV.Blocker(), back = #back,
-        animating = anim ~= nil, following = MV.Following(), frames = 0 }
+        animating = anim ~= nil, following = MV.Following(), switching = switching, frames = 0 }
     for _ in pairs(frames) do out.frames = out.frames + 1 end
     for k, v in pairs(stats) do out[k] = v end
     if Ready() then
