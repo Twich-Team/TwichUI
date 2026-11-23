@@ -5,6 +5,7 @@ local F = R.Fishing
 local E = { MAX_ITEMS = 4096, BATCH = 8 }
 F.Economy = E
 local cache, queue, queued, cursor, size = {}, {}, {}, 1, 0
+local scopes, scopeCount = {}, 0
 local stamp, context, running, token = nil, nil, false, 0
 local floor = math.floor
 local function Copper(n)
@@ -19,6 +20,7 @@ local function Changed()
     F.Emit("ECONOMY")
 end
 function E.Invalidate()
+    scopes, scopeCount = {}, 0
     token = token + 1
     cache, queue, queued, cursor, size, running, stamp, context = {}, {}, {}, 1, 0, false, nil, nil
     Changed()
@@ -72,7 +74,7 @@ local function Work(mine)
     end
     running = false
     if cursor <= #queue then Schedule() else queue, cursor = {}, 1 end
-    if changed then Changed() end
+    if changed then scopes, scopeCount = {}, 0; Changed() end
 end
 Schedule = function()
     if running or not (C_Timer and C_Timer.After) then return end
@@ -135,12 +137,22 @@ function E.Calculate(provenance, seconds, casts)
     return out
 end
 function E.Scope(scope)
-    local s
-    if scope == "session" then s = F.API.Session()
-    elseif scope == "lifetime" or scope == nil then s = F.API.Totals()
-    else s = F.API.SessionByID(scope) end
-    return s and E.Calculate(F.API.Provenance(scope), s.elapsed or s.seconds, s.casts) or nil
+    local cx = Context()
+    local key = scope or "lifetime"
+    local old = scopes[key]
+    local identity = cx and cx.key or "unavailable"
+    if old and old.identity == identity and old.token == token then return old.value end
+    local meta = F.API.Metrics(scope)
+    local result = meta and E.Calculate(F.API.Provenance(scope), meta.seconds, meta.casts) or nil
+    if scopeCount >= 64 then scopes, scopeCount = {}, 0 end
+    if not scopes[key] then scopeCount = scopeCount + 1 end
+    scopes[key] = { identity = identity, token = token, value = result }
+    return result
 end
+for _, event in ipairs({ "ITEM", "CONTAINER", "QUEUE", "CAST", "CATCH", "SESSION_START", "SESSION_END" }) do
+    F.Subscribe(event, function() scopes, scopeCount = {}, 0 end)
+end
+
 function E.Text(value)
     if value == nil then return "Price unavailable" end
     local w = R.Workshop
@@ -157,9 +169,25 @@ local function Hook()
     if hooked or not (w and w.Pricing and hooksecurefunc) then return end
     hooked = true
     hooksecurefunc(w.Pricing, "Changed", E.Invalidate)
+    if w.Scan and w.Scan.Listen then
+        local ended = w.Scan.ended
+        w.Scan.Listen(function()
+            if ended ~= w.Scan.ended then ended = w.Scan.ended; E.Invalidate() end
+        end)
+    end
 end
 R:On("ADDON_LOADED", Hook)
 R:On("GET_ITEM_INFO_RECEIVED", E.Invalidate)
 Hook()
 
 F.Subscribe("CONFIG", function(_, path) if type(path) == "string" and path:match("^economy%.") then E.Invalidate() end end)
+
+function E.Status()
+    local cx = Context()
+    return { available = cx ~= nil, source = cx and cx.label, at = cx and cx.at,
+        cached = size, pending = #queue - cursor + 1, generation = stamp }
+end
+function E.CacheSize() return size end
+if R.Perf and R.Perf.Gauge then
+    R.Perf.Gauge("fishing.prices", { label = "Fishing item valuations", kind = "cache", group = "fishing", unit = "count", read = E.CacheSize })
+end

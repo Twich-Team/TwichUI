@@ -199,6 +199,18 @@ end
 
 -- The separation valuation needs so that nothing is counted twice: a container is either unopened (valued as itself, if
 -- at all) or opened (valued by what it held); a direct catch that is a container is never in `direct`.
+-- Small metadata view for estimates: never copy species/location history to read a duration.
+function API.Metrics(scope)
+    local c = S.Char()
+    if not c then return nil end
+    local rec
+    if scope == "lifetime" or scope == nil then rec = c.totals
+    elseif scope == "session" then rec = c.session
+    else rec = Ses.Find(F.Count(scope)) end
+    if not rec then return nil end
+    return { seconds = rec == c.session and Ses.Elapsed() or rec.seconds, casts = rec.casts }
+end
+
 function API.Provenance(scope)
     local c = S.Char()
     if not c then return nil end

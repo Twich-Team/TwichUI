@@ -4,13 +4,13 @@ W.bound.F = "CLICK TwichUIFishingButton:LeftButton"
 c.FireEvent("UPDATE_BINDINGS"); W.Advance(1)
 local F = c.TwichUI.Fishing
 local E = assert(F.Economy)
-local generation, calls, enabled = 1, 0, true
+local generation, calls, enabled, realm = 1, 0, true, "Fixture"
 local prices = { [FISH1] = 123, [CLAM] = 500, [CLAMMEAT] = 20, [PEARL] = 10000 }
 c.TwichUI.Workshop = {
   Active = function() return enabled end,
   Pricing = {
     Generation = function() return tostring(generation) end,
-    Source = function() return { reference = true, label = "Fixture Alliance", market = { key = "fixture", at = 1800000000, realm = "Fixture", side = "Alliance" } } end,
+    Source = function() return { reference = true, label = "Fixture Alliance", market = { key = "fixture", at = 1800000000, realm = realm, side = "Alliance" } } end,
     Reference = function(id) calls = calls + 1; return prices[id] and { market = prices[id], recent = prices[id] + 1, at = 1800000000 } or nil, "missing" end,
     Changed = function() end,
   },
@@ -70,3 +70,17 @@ local partial = { direct = {}, contents = { [PEARL] = 1 }, containers = { [CLAM]
 local pv = E.Calculate(partial)
 assert(pv.total == 10500, "partially opened shell excluded while untouched shell remains provisional")
 print("PASSED late container economy")
+
+local warm = E.Item(PEARL); assert(warm.total == 10000)
+realm = "DifferentRealm"
+assert(E.Item(PEARL).total == nil, "market identity change invalidates prices even at the same generation")
+W.Advance(1)
+c.FireEvent("ADDON_LOADED", "TwichUI_Workshop")
+local serial = F.Hud.serial
+c.TwichUI.Workshop.Pricing.Changed()
+assert(F.Hud.serial > serial, "new pricing data invalidates displayed values without another fish")
+F.JournalUI.Open("overview"); W.Advance(1)
+for _, page in ipairs({ "sessions", "collections", "locations", "treasures" }) do F.JournalUI.Show(page); W.Advance(1) end
+F.JournalUI.Summary(sid)
+assert(#W.errors == 0, "economic pages and summary construct without client errors")
+print("PASSED economy presentation")

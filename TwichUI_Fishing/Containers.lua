@@ -227,7 +227,7 @@ function C.Settle(attr, taken)
     if attr.lot then
         lot = Lot(attr.lot)
         if lot then
-            if G.BagCount(lot.item) < (attr.count or 0) then TakeFromLot(lot) else lot.partial = true end
+            if G.BagCount(lot.item) < (attr.count or 0) then TakeFromLot(lot) elseif #taken > 0 then lot.partial = true end
         end
     elseif attr.manual then
         local match, n = nil, 0

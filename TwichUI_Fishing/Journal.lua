@@ -441,3 +441,6 @@ function J.Treasures()
         return out
     end)
 end
+
+-- Economic updates invalidate derived presentation answers without recopying history.
+F.Subscribe("ECONOMY", function() J.serial = J.serial + 1 end)

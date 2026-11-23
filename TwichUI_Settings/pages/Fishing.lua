@@ -350,6 +350,21 @@ K.Page({
             "Between casts, a press of the Fishing key opens the oldest queued clam first.", true)
 
         -------------------------------------------------------------------------------------------------------------
+        K.Header("Estimated values", "Current listing estimates, not income. Workshop stays optional and is never loaded by a catch. Missing prices remain unavailable; * marks a known subtotal.")
+        Toggle("Economy", "economy.enabled", "Display estimated values", "Show current-market estimates in Fishing Mode and the Journal.", true)
+        Choice("Valuation", "economy.method", "Valuation method", "Workshop listing methodologies. All items use one selected reference market or one local auction house; missing reference prices are not mixed with local prices.", "market",
+            { { "market", "Market Value (14 days)" }, { "recent", "Recent Price" }, { "historical", "Historical Value (60 days)" }, { "min", "Lowest listing" } })
+        Toggle("VendorValue", "economy.vendor", "Display vendor values", "Vendor sell value is shown separately from auction estimates when the item data is available.", false)
+        Toggle("GoldHour", "economy.perHour", "Display estimated gold per hour", "Known estimated value divided by fishing duration, not realized earnings.", true)
+        Toggle("Provisional", "economy.provisional", "Value unopened containers provisionally", "Untouched queued containers only. Opened and partially opened shells are excluded; confirmed contents replace their estimates.", true)
+        K.Status("Pricing source", function()
+            local w = R.Workshop
+            if not (w and w.Pricing and w.Active and w.Active()) then return "Workshop unavailable or not loaded" end
+            local source = w.Pricing.Source()
+            local m = source.market
+            return (source.label or "No market observations") .. (m and m.at and (" · " .. Duration(math.max(0, time() - m.at)) .. " old") or "")
+        end, function() return "Load Workshop separately to make pricing available. References follow the Companion-selected market; local observations are used only when no eligible reference market exists. Stale or missing reference data is explained by Workshop. Lure purchase costs were not recorded, so net income cannot be reconstructed." end)
+
         K.Header("Fishing Mode", "How fishing looks: an immersive view with a calmer screen, a compact cast bar, or nothing extra.")
         Choice("Mode", "present.mode", "Presentation",
             "Immersive: the camera comes closer, the interface fades, and the cast bar, your catches and notices show. Compact: the cast bar and notices only. Classic: the Fishing key alone.",
@@ -428,10 +443,10 @@ K.Page({
         Percent("ToastScale", "toast.scale", "Notification size (%)", "The notices' size.", 1, 60, 160)
         Number("Rows", "list.rows", "Catches shown", "At most this many kinds of catch; then \"+N more\".", 6, 3, 12)
         Choice("Sort", "list.sort", "Order catches by", "Most caught first, the latest first, or by name.", "count",
-            { { "count", "Most caught" }, { "recent", "Latest" }, { "name", "Name" } })
+            { { "count", "Most caught" }, { "recent", "Latest" }, { "name", "Name" }, { "value", "Highest estimated value" } })
         -- list.value is stored as "show" / "hide"
-        Gate(K.ProxyToggle("fishingValueArea", "Keep a place for estimated value",
-            "Shows \"Estimated Value: not available yet\" until a valuation is connected in a later update. Off: no value area.", true,
+        Gate(K.ProxyToggle("fishingValueArea", "Show the catch-list value area",
+            "Shows estimated value when Workshop pricing is available. Off: no value area.", true,
             function() return Get("list.value", "show") ~= "hide" end, function(v) Set("list.value", v and "show" or "hide") end))
         Gate(K.Button("Place on screen", function()
             local f = Fish(); return f and f.Present.Unlocked() and "Lock in place" or "Move on screen"

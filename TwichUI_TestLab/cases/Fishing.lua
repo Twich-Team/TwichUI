@@ -132,3 +132,18 @@ TL.Case{ id = "fishing.decide.table", cat = "fishing", class = "pure", budget = 
     t:Same(D({ enabled = true, spell = 1, gear = equip, lure = lure }).kind, "equip", "the pole before the lure")
     t:Same(D({ enabled = true, spell = 1, lure = lure }).kind, "lure", "the lure before the cast")
 end }
+
+TL.Case{ id = "fishing.economy.status", cat = "fishing", class = "readonly", budget = 3, run = function(t)
+    local f = R.Fishing
+    t:Fact("fishing.economy.loaded", tostring(f and f.Economy ~= nil or false))
+    local w = R.Workshop
+    t:Fact("fishing.economy.workshopActive", tostring(w and w.Active and w.Active() or false))
+    t:Fact("fishing.economy.vendorAPI", tostring(Has(C_Item, "GetItemInfo")))
+    if f and f.Economy then
+        local status = f.Economy.Status()
+        t:Fact("fishing.economy.available", tostring(status.available))
+        t:Fact("fishing.economy.cached", tostring(status.cached))
+        t:Fact("fishing.economy.pending", tostring(status.pending))
+    end
+    t:Fact("fishing.economy.nativeAcceptance", "not inferred: verify actual item prices, partial clams and reload attribution in game")
+end }

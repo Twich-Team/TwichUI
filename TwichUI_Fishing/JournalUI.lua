@@ -16,6 +16,19 @@
 local R = TwichUI
 local F = R.Fishing
 local S = F.Store
+local function Economy(scope)
+    if not F.Economy or F.Store.Get("economy.enabled") == false then return "" end
+    local v = F.Economy.Scope(scope)
+    local text = F.Economy.Description(v)
+    if v and F.Store.Get("economy.perHour") and v.perHour then text = text .. " · " .. F.Economy.Text(v.perHour) .. "/h" end
+    if v and F.Store.Get("economy.vendor") then text = text .. " · vendor " .. F.Economy.Text(v.vendor) end
+    return text
+end
+local function ItemValue(id, q)
+    if not F.Economy or F.Store.Get("economy.enabled") == false then return "" end
+    local e = F.Economy.Item(id, q)
+    return e and (F.Economy.Text(e.unit) .. " each · " .. F.Economy.Text(e.total) .. " estimated") or ""
+end
 local H = F.Hud
 local J = F.Journal
 local U = {}
@@ -412,7 +425,7 @@ local function BuildOverview(page)
         end
         P.rows:SetItems(o.recent)
         P.rows.frame:SetShown(#o.recent > 0)
-        P.note:SetText(RetentionNote(o.retention))
+        P.note:SetText(RetentionNote(o.retention) .. "\n" .. Economy("lifetime"))
     end
     return P
 end
@@ -472,7 +485,8 @@ local function BuildSessions(page)
         end,
         fill = function(b, r)
             b.zone:SetText(Where(r.zoneName, r.zoneCount))
-            b.sub:SetText(("%s · %s"):format(Clock(r.start) or "", H.Duration(r.seconds)))
+            local v = F.Store.Get("economy.enabled") and F.Economy.Scope(r.id)
+            b.sub:SetText(("%s · %s"):format(Clock(r.start) or "", v and v.total and F.Economy.Text(v.total) or H.Duration(r.seconds)))
             b.catch:SetText(Num(r.catches))
             b.live:SetText(r.current and "In progress" or (r.catches == 0 and "No catch" or ""))
         end,
@@ -600,7 +614,7 @@ local function BuildSessions(page)
                 or ("Where %s of its %s fish were caught wasn't recorded."):format(Num(d.coverage.earlier), Num(d.coverage.direct))
             line = line and (line .. " " .. t) or t
         end
-        D.treasure:SetText(line or "")
+        D.treasure:SetText((line or "") .. "\n" .. Economy(state.session))
         P.species.frame:SetShown(#d.species > 0)
         D.h2:SetShown(#d.species > 0); D.h2.rule:SetShown(#d.species > 0)
     end
@@ -781,7 +795,7 @@ local function BuildCollections(page)
         if not picked then return end
         D.icon:Set(picked.id)
         D.name:SetText(ItemName(picked.id))
-        D.l1:SetText(("Caught: %s in %s"):format(Num(picked.q), Plural(picked.c, "catch", "catches")))
+        D.l1:SetText(("Caught: %s · %s"):format(Num(picked.q), ItemValue(picked.id, picked.q)))
         D.l2:SetText(("First %s · latest %s"):format(Day(picked.first) or "not recorded", Day(picked.last) or "not recorded"))
         local places = ZoneRowsFor(picked)
         local confirmed = #picked.where - (picked.unknown > 0 and 1 or 0)
@@ -954,7 +968,10 @@ local function BuildLocations(page)
         P.sessions.frame:SetShown(#loc.sessions > 0)
         D.sessionsNone:SetShown(#loc.sessions == 0)
         D.sessionsNone:SetText(#loc.sessions == 0 and "No kept session fished here." or "")
-        P.note:SetText("Zone figures are exact lifetime totals. Click a fish to see all of its places, a session to open it.")
+        local direct = {}
+        for _, e in ipairs(loc.species) do direct[e.id] = e.q end
+        local valuation = F.Economy and F.Store.Get("economy.enabled") and F.Economy.Calculate({ direct = direct })
+        P.note:SetText(valuation and ("Confirmed catches only: " .. F.Economy.Description(valuation)) or "Zone figures are exact lifetime totals.")
     end
     return P
 end
@@ -1019,7 +1036,7 @@ local function BuildTreasures(page)
     })
     Place(P.contents.frame, "TOPLEFT", D, "TOPLEFT", 0, -56)
     P.note = Note(page, 0, W)
-    P.note:SetText("Only what was seen coming out of a container is listed; earlier openings show only their counts.")
+    P.note:SetText("Confirmed contents and provisional unopened containers are valued separately. " .. Economy("lifetime"))
     P.empty = Empty(page, "No treasures yet", "Clams and other containers you catch are counted here, with what they held once opened.")
     function P.Refresh()
         local d = J.Treasures()
@@ -1040,6 +1057,15 @@ local function BuildTreasures(page)
         if not picked then picked = d.rows[1]; state.container = picked.id end
         P.list:SetItems(d.rows, true)
         P.contents:SetItems(picked.got)
+        if F.Store.Get("economy.enabled") then
+            local v = F.Economy.Scope("lifetime")
+            local shell = v and v.provisional[picked.id]
+            local contents = {}
+            for _, e in ipairs(picked.got) do contents[e.id] = e.q end
+            local actual = F.Economy.Calculate({ contents = contents })
+            P.note:SetText("Confirmed contents: " .. F.Economy.Description(actual) ..
+                " · Unopened (provisional): " .. F.Economy.Text(shell and shell.total))
+        end
         P.contents.frame:SetShown(#picked.got > 0)
         if #picked.got > 0 then
             D.sub:SetText(("From %s of %s that you opened."):format(Num(picked.opened), ItemName(picked.id)))
@@ -1310,6 +1336,7 @@ end
 for _, e in ipairs({ "ITEM", "CONTAINER", "QUEUE", "CATCH", "CAST", "SESSION_START", "SESSION_END" }) do
     F.Subscribe(e, Changed)
 end
+F.Subscribe("ECONOMY", Changed)
 
 ---------------------------------------------------------------------------
 -- The session-completion summary: a smaller window in the same frames, shown when a session you ended has catches
@@ -1442,7 +1469,7 @@ function U.RefreshSummary()
     sum.zone:SetText(Where(first, #h.zones))
     sum.when:SetText(Span(d.row.start, d.row.stop))
     sum.time:SetText(H.Duration(h.seconds))
-    sum.places:SetText(#h.zones > 1 and ("Fished in " .. table.concat(h.zones, ", ")) or "")
+    sum.places:SetText(Economy(d.row.id))
     sum.strip:SetCells({
         { glyph = "mark", value = Num(h.catches), label = h.catches == 1 and "Catch" or "Catches" },
         { glyph = "glyph-hook", value = Num(h.kinds), label = h.kinds == 1 and "Kind of fish" or "Kinds of fish" },

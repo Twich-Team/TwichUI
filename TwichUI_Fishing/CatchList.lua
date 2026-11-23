@@ -164,6 +164,11 @@ end
 -- The data, from Stage 1's read-only interface
 ---------------------------------------------------------------------------
 local function SortKey(mode)
+    if mode == "value" then return function(a, b)
+        local av, bv = a.estimated, b.estimated
+        if av ~= bv then return (av or -1) > (bv or -1) end
+        return a.id < b.id
+    end end
     if mode == "recent" then return function(a, b) if a.l ~= b.l then return a.l > b.l end return a.id < b.id end end
     if mode == "name" then
         return function(a, b)
@@ -190,7 +195,8 @@ function L.Model()
     for id, q in pairs(prov.direct) do
         local e = s.species[id] or {}
         local name, icon, quality = H.Item(id)
-        catches[#catches + 1] = { id = id, q = q, c = e.c or q, l = e.l or 0, name = name, icon = icon, quality = quality }
+        catches[#catches + 1] = { id = id, q = q, c = e.c or q, l = e.l or 0, name = name, icon = icon, quality = quality,
+            estimated = S.Get("list.sort") == "value" and F.Economy.Item(id, q).total or nil }
     end
     table.sort(catches, SortKey(S.Get("list.sort")))
     local treasures = {}
@@ -274,7 +280,7 @@ function L.Refresh()
     local value = not L.preview and P and P.Value and P.Value("session") or nil
     -- the value area keeps its place: a connected valuation's figure, or plainly "not available" (list.value "hide" drops it)
     local has = value ~= nil and value.text ~= nil
-    local showArea = has or S.Get("list.value") ~= "hide"
+    local showArea = S.Get("list.value") ~= "hide" and S.Get("economy.enabled") ~= false
     ui.valueLabel:SetShown(showArea)
     ui.value:SetShown(showArea)
     if has then

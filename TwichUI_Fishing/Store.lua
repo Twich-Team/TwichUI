@@ -77,7 +77,7 @@ S.CHECK = {
         extra = Names, ellesmere = Bool },
     castbar = { enabled = Bool, scale = Range(0.6, 1.6), x = Range(-2000, 2000), y = Range(-2000, 2000) },
     list = { enabled = Bool, scale = Range(0.6, 1.6), x = Range(-2000, 2000), y = Range(-2000, 2000),
-        sort = OneOf("count", "recent", "name"), rows = Range(3, 12), value = OneOf("show", "hide") },
+        sort = OneOf("count", "recent", "name", "value"), rows = Range(3, 12), value = OneOf("show", "hide") },
     toast = { enabled = Bool, scale = Range(0.6, 1.6), x = Range(-2000, 2000), y = Range(-2000, 2000), hold = Range(1, 10) },
     journal = { summary = Bool, scale = Range(0.6, 1.4), x = Range(-2000, 2000), y = Range(-2000, 2000) },
 }
