@@ -211,9 +211,11 @@ end
 
 local function TakeFromLot(lot)
     lot.n = lot.n - 1
-    lot.partial = nil
+    -- Bag moves can leave several partly looted shells in one lot. Keep its
+    -- conservative marker until the whole lot is exhausted.
     Ses.ContainerOpened(lot.sid, lot.item, lot.zone)
     if lot.n <= 0 then
+        lot.partial = nil
         local queue = Queue()
         for i, l in ipairs(queue) do if l == lot then table.remove(queue, i) break end end
     end

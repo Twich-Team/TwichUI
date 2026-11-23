@@ -4,7 +4,7 @@ Implementation checkpoints on `feature/fishing-completion`, PR [#140](https://gi
 
 ## Unit and mutation evidence
 
-The final Fishing development selection passed 21 modules with zero failures (including release/package safeguards). Economic cases cover copper arithmetic, quantities/rates, unknown prices, source identity and generation changes, cached presentation refresh, delayed prices, vendor values without Workshop, session/lifetime provenance, late container processing, partial lots, saved-variable round trips and overflow. All five mutation defects were detected: opened-shell double-counting, unknown-as-zero, generation reuse, market mixing and shared-item provenance display. A red/green regression verifies that five directly caught fish and three of the same fish from a container show their respective values, while the total values all eight.
+The final Fishing development selection passed 22 modules with zero failures (including release/package safeguards). Economic cases cover copper arithmetic, quantities/rates, unknown prices, source identity and generation changes, cached presentation refresh, delayed prices, vendor values without Workshop, session/lifetime provenance, late container processing, partial lots, saved-variable round trips and overflow. All six mutation defects were detected: opened-shell double-counting, unknown-as-zero, generation reuse, market mixing shared-item provenance display and premature partial-lot marker clearing. A red/green regression verifies that five directly caught fish and three of the same fish from a container show their respective values, while the total values all eight.
 
 ### RSS evidence fixture correction
 
@@ -61,3 +61,9 @@ Commit `ad17f63` corrects the scenario only. Exact money, unavailable-state, lay
 Final frozen results, CI and integration commit identities are recorded in PR #140. The latest verified main changes (RestedXP #141 and spoken-reading #142) were merged history-preservingly before final verification, so the combined Core/Settings runtime is tested. No experimental Market branch was incorporated.
 
 Use the [owner acceptance procedure](fishing-acceptance.md) for native interactions and a pasteable Test Lab result. No real-client verification is claimed. Lure purchase costs/net income remain unavailable without historical cost evidence; ambiguous partially processed lots stay incomplete. Merge the completion PR only after automated verification passes; the final mainline PR must remain open for owner acceptance while critical native interactions are unverified. Neither merge nor validation authorizes publication.
+
+## Partial-lot acceptance regression
+
+The first corrected frozen run at `f7af5ca` passed all 341 modules. Acceptance review then demonstrated one genuine valuation defect: partially loot two clams in the same queued lot, move the first behind the second, and finish only the second. Clearing the lot marker at that point restored a 500-copper provisional shell value beside its already-recorded pearl: 20,520 copper instead of the confirmed subtotal of 20,020.
+
+The minimal correction retains uncertainty while the lot survives and clears it only at exhaustion. No new tracking, ledger, opening action or pricing algorithm is added. `test_fishing_partial_lots.lua` exercises real mock key/loot/bag-move bookkeeping, verifies the corrected subtotal, final exhaustion and unsuccessful opens; a sixth mutation reinstating premature clearing is detected. Final source is frozen again for the complete 342-module run before completion-branch integration.

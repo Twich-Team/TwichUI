@@ -13,3 +13,9 @@ MUTATIONS.append(dict(id="fishing.economy.shared-item-display", file="TwichUI_Fi
     find="items = Values(v.direct)", replace="items = Values(v.contents)",
     why="a directly caught fish and the same fish in container contents display the wrong quantity value",
     tests=("test_fishing_economy.lua",), smoke=True, expect="killed"))
+
+MUTATIONS.append(dict(id="fishing.economy.partial-lot-marker", file="TwichUI_Fishing/Containers.lua",
+    find="    Ses.ContainerOpened(lot.sid, lot.item, lot.zone)",
+    replace="    lot.partial = nil\n    Ses.ContainerOpened(lot.sid, lot.item, lot.zone)",
+    why="finishing one shell clears uncertainty for other partially looted shells in the same lot",
+    tests=("test_fishing_partial_lots.lua",), smoke=True, expect="killed"))
