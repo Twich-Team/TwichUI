@@ -225,6 +225,47 @@ bagrow.unbound=nil; bagrow.bound=9
 Same(D.Decide(100,false,bagrow).action,"vendor")
 bagrow.variant=true; bagrow.unbound=3
 Same(D.Decide(100,false,bagrow).action,"vendor")
+-- The Advisor's combined filters and recommendations use the same observed
+-- bag identities, even when native aggregate counts describe different copies.
+do
+  local savedSlots,savedInfo=bagSlots,c.C_Item.GetItemInfo
+  local savedRecipes,savedStrategy=session.AllRecipes,session.QueueStrategy
+  bagSlots={
+    {itemID=100,stackCount=20,isBound=false},
+    {itemID=102,stackCount=4,isBound=false},
+    {itemID=3371,stackCount=10,isBound=false},
+  }
+  c.C_Item.GetItemInfo=function(id)
+    if id==3371 then return "Empty Vial",nil,1,1,1,"Reagent","",20,"",134400,1,7,0,0 end
+    return savedInfo(id)
+  end
+  session.AllRecipes=function() return {} end
+  session.QueueStrategy=function() return "ready",{items={}} end
+  Healthy()
+  local carried=D.Catalog()
+  repeat local _,err=carried:Step(); Check(not err,err) until carried.done
+  local bags,filtered={},{}
+  for _,row in ipairs(carried.rows) do
+    if D.Matches(row,"","bags",false) then bags[#bags+1]=row.item end
+    if D.Matches(row,"vial","bags",true,"Reagent") then filtered[#filtered+1]=row.item end
+  end
+  Same(table.concat(bags,","),"100,102,3371","exact carried identities, including pending metadata")
+  Same(#filtered,1,"search, source, auctionability and category combine")
+  Same(filtered[1],3371,"combined filters retain the carried reagent")
+  Same(D.Context(100,true,carried.byID[100]).qty,20,"advice retains the observed stack count")
+  Same(D.Decide(100,true,carried.byID[100]).action,"auction","carried identities support auction advice")
+  Healthy({complete=false})
+  local tentative=D.Decide(100,true,carried.byID[100])
+  Same(tentative.action,"auction"); Same(tentative.level,"tentative")
+  Same(tentative.suggestion.price,nil); Same(tentative.proceeds,nil)
+  -- The empty-market pose still has a known vendor offer for its carried item.
+  local noMarket=A.Decide(100,{qty=20,sell=1,bindType=0,facts={nomarket=true}})
+  Same(noMarket.action,"vendor","absence of a market retains the known vendor option")
+  Same(noMarket.qty,20); Same(noMarket.vendor.value,1); Same(noMarket.level,"tentative")
+  Same(noMarket.suggestion.price,nil); Same(noMarket.proceeds,nil)
+  bagSlots,c.C_Item.GetItemInfo=savedSlots,savedInfo
+  session.AllRecipes,session.QueueStrategy=savedRecipes,savedStrategy
+end
 local m = Healthy(); for id = 1000, 20999 do m.items[id] = m.items[100] end
 local big = D.Catalog(); local count, maxms, t = 0,0,os.clock()
 repeat local t0=os.clock(); local _,err=big:Step(); Check(not err,err); maxms=math.max(maxms,(os.clock()-t0)*1000); count=count+1 until big.done

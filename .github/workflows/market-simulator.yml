@@ -1,4 +1,4 @@
-name: Market full simulator verification
+name: Market simulator verification
 
 on:
   pull_request:
@@ -6,6 +6,10 @@ on:
     paths:
       - 'TwichUI_Workshop/**'
       - 'tests/test_workshop_market_containers.lua'
+      - 'tools/simlab/scenarios/workshop.lua'
+      - 'tools/simlab/scenarios/reminders.lua'
+      - 'tests/test_workshop_advisor.lua'
+      - 'tests/test_reminder_gallery.lua'
       - '.github/workflows/market-simulator.yml'
   workflow_dispatch:
 
@@ -19,6 +23,9 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.head_ref == 'feature/market-containers-13'
     runs-on: ubuntu-24.04
     timeout-minutes: 150
+    env:
+      # Advance to full only after focused regression receipts pass.
+      REGRESSION_PHASE: focused
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -88,7 +95,19 @@ jobs:
           bash tools/simlab/setup.sh
           echo "WOWSIM_INSTALL=$WOWSIM_LAB" >> "$GITHUB_ENV"
           echo "WOWSIM_LAB=$WOWSIM_LAB" >> "$GITHUB_ENV"
+      - name: Verify focused offline contracts, catalogs and original wrong control
+        if: env.REGRESSION_PHASE == 'focused'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tests/run.sh development reminders --jobs 2 --measure
+          bash tests/run.sh development workshop-settings --jobs 2 --measure
+          bash tests/run.sh development item-advisor --jobs 2 --measure
+          bash tests/run.sh development market-performance --jobs 2 --measure
+          SIMLAB_ASSETS=0 bash tools/simlab/run.sh reminders
+          SIMLAB_ASSETS=0 SIMLAB_ONLY="craft design advisor advisorsmall advisorempty advisorscaled advisorsource advisorcategory advisorscroll advisortentative advisorbags advisorfiltered wrong" bash tools/simlab/run.sh workshop
       - name: Run unchanged full discovery, simulator catalogs and negative controls
+        if: env.REGRESSION_PHASE == 'full'
         shell: bash
         run: |
           set -euo pipefail

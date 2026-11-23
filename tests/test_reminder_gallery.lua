@@ -191,6 +191,7 @@ do
     ok, reason = A.Draw(tex,case[1],case[2])
     Check(not ok and reason == case[3] and tex.file == nil, "failed drawing clears: " .. case[3])
   end
+  -- Independent approved mappings, from docs/design/shared-artwork-inventory.md. Logical IDs are not filenames.
   local newArt = { ["art-herbs"]="icons/magic-herbs", ["art-leather"]="icons/magic-leather", ["art-parts"]="icons/magic-parts",
       ["art-elemental"]="icons/magic-elemental", ["art-shipping-crate"]="icons/magic-waylaid-crate", ["art-cloth"]="npcs/cloth-bolts",
       ["art-tabard"]="npcs/tabard", ["art-paw"]="npcs/paw", ["art-dice"]="loot/dice", ["art-crown"]="loot/crown" }
@@ -202,6 +203,8 @@ do
       if entry.kind == "art" then
         local relative = newArt[entry.target]
         Check(relative ~= nil, "only approved standalone art is added: " .. entry.target)
+        Check(RM.Art(entry.target) and entry.ref.kind == "art" and entry.ref.id == entry.target,
+            "approved art has its exact registered reference: " .. entry.target)
         small, full = RM.ArtTexture(entry.target,26), RM.ArtTexture(entry.target,27)
         Check(small == R.PATH .. "media\\" .. relative:gsub("/","\\") .. "-small"
             and full == R.PATH .. "media\\" .. relative:gsub("/","\\"), "new art uses approved paths and26 threshold")
@@ -216,8 +219,16 @@ do
       for _, file in ipairs({small,full}) do
         local relative = file:sub(#R.PATH+1):gsub("\\","/")
         local header = TGA(ROOT .. relative .. ".tga")
-        Check(header and header.w == (file == small and 32 or 64) and header.w == header.h, "existing32/64 file resolves: " .. relative)
+        Check(header and header.type == 2 and header.bpp == 32 and header.desc == 8
+            and header.w == (file == small and 32 or 64) and header.w == header.h
+            and header.size == 18 + header.w * header.h * 4, "existing32/64 RGBA file resolves: " .. relative)
+        ok, reason = A.Draw(tex,entry.ref,file == small and 26 or 27)
+        Check(ok and reason == "ready" and tex.file == file, "approved reference draws its exact file: " .. relative)
       end
+      tex.refuse = full
+      ok, reason = A.Draw(tex,entry.ref,27)
+      Check(not ok and reason == "unavailable" and tex.file == nil, "refused approved file cannot claim success: " .. entry.target)
+      tex.refuse = nil
       Check(A.Get(entry.ref) and #A.Search(entry.name,entry.category) > 0 and entry.keywords:match("^[a-z ]+$"), "added metadata is searchable: " .. entry.name)
     end
   end
