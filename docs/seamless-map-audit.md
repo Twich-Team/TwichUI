@@ -5,6 +5,12 @@ V2 follow-up: [results and verification](seamless-map-v2-results.md),
 [Map Visual Test Lab / hybrid pipeline evaluation](map-visual-lab.md). These
 extend this audit; the original 322-pass/1-failure baseline below is preserved.
 
+Actual client artwork is now available privately: see the
+[first real-art inspection/fix/rerender results](maplab-real-art-results.md).
+The maintained update procedure lives alongside the
+[extractor](../tools/maplab/README.md). Original statements below about unavailable
+art describe the initial audit checkpoint, not the current private input cache.
+
 Current asset blockers remain precise: Fargodeep needs current-client WMO group
 geometry, minimap file references and their verified continent transform; no
 local CASC/DB2 data supplies these here. The three omitted edited pictures are

@@ -19,7 +19,9 @@ sys.path.insert(0, str(REPO / "tools/maplab"))
 import clientdata as cd
 import clientinput as ci
 import collect
+import bundle
 import run as lab
+import render
 
 
 class Table:
@@ -33,6 +35,18 @@ class Table:
 
 def bits(v):
     return struct.unpack("<I", struct.pack("<f", v))[0]
+
+
+def blp_fixture(side=4, noisy=False):
+    """Owned paletted pixels with 8-bit alpha; never game artwork."""
+    pixels = side * side
+    payload = os.urandom(pixels * 2) if noisy else b"\x00" * pixels + b"\xff" * pixels
+    header = bytearray(148)
+    struct.pack_into("<4sI4BII", header, 0, b"BLP2", 1, 1, 8, 0, 0, side, side)
+    palette = b"\x20\x40\x80\xff" * 256
+    struct.pack_into("<I", header, 20, len(header) + len(palette))
+    struct.pack_into("<I", header, 84, len(payload))
+    return bytes(header) + palette + payload
 
 
 def fixture_tables():
@@ -77,6 +91,32 @@ def fixture_input():
         tables={name: dict(fileId=fid, layout=f"{layout:08X}", tableHash=f"{table_hash:08X}")
                 for name, (fid, layout, table_hash) in cd.TABLES.items()})
     return data, point
+
+
+def fixture_bundle(missing=False):
+    """Complete schema-2 transport with explicit synthetic pixel provenance."""
+    data, _ = fixture_input()
+    data.update(product="wowf", candidateTextureIds=[123, 124] if missing else [123])
+    raw = blp_fixture()
+    sha = bundle.digest(raw)
+    manifest = dict(schema=2, kind="twichui-maplab-artwork-bundle",
+        tool=dict(name=bundle.TOOL_NAME, version=bundle.TOOL_VERSION, schema=bundle.SCHEMA),
+        clientBuild=data["clientBuild"], product=data["product"], locale=dict(bundle.LOCALE),
+        settings={"fixture": True}, candidateTextureIds=data["candidateTextureIds"],
+        clientMetadataSha256=bundle.digest(bundle.json_bytes(data)),
+        assets={"123": dict(file="123.blp", fileId=123, sha256=sha, sourceSha256=sha,
+            sourceCKey="a" * 32, header=bundle.texture_header(raw), kind="local-client-artwork",
+            clientBuild=data["clientBuild"], provenance="owned synthetic transport fixture, not game artwork")},
+        missing=[dict(fileId=124, reason="owned fixture deliberately absent")] if missing else [],
+        unsupported=[], validation={"status": "success"})  # Deliberately untrusted declared status.
+    return data, manifest, raw
+
+
+def write_bundle(path, data, manifest, raw):
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("client.json", bundle.json_bytes(data))
+        archive.writestr("assets/manifest.json", bundle.json_bytes(manifest))
+        archive.writestr("assets/123.blp", raw)
 
 
 class ClientContracts(unittest.TestCase):
@@ -131,7 +171,7 @@ class ClientContracts(unittest.TestCase):
         class Storage:
             version = "1.60.1.70938"
             def __init__(self, *args, **kwargs): self.reads = []; self.closed = False
-            def read(self, key): self.reads.append(key); return b"BLP2owned transport fixture, not game artwork"
+            def read(self, key): self.reads.append(key); return blp_fixture()
             def close(self): self.closed = True
         storage = Storage()
         with tempfile.TemporaryDirectory() as tmp:
@@ -152,6 +192,105 @@ class ClientContracts(unittest.TestCase):
             self.assertEqual(imported["product"], "wow_forever")
             self.assertTrue((decoded / "assets/123.blp").is_file())
             self.assertEqual(set(json.loads(manifest.read_text())["assets"]), {"123"})
+            self.assertEqual(imported["bundleValidation"]["status"], "success")
+            self.assertFalse(imported["bundleValidation"]["legacy"])
+
+    def test_schema2_bundle_import_and_pixel_decode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); data, manifest, raw = fixture_bundle()
+            write_bundle(root / "input.zip", data, manifest, raw)
+            imported, cached = ci.unpack([root / "input.zip"], root / "input")
+            self.assertEqual(imported["bundleIdentity"]["tool"], manifest["tool"])
+            self.assertEqual(imported["bundleValidation"]["counts"]["assets"], 1)
+            assets = render.Assets(cached)
+            self.assertEqual(assets.validation["status"], "success")
+            self.assertEqual(assets.get("123").getpixel((0, 0)), (128, 64, 32, 255))
+
+    def test_bundle_integrity_schema_build_and_metadata_mismatches(self):
+        cases = {
+            "schema": lambda d, m: m.update(schema=99),
+            "tool-schema": lambda d, m: m["tool"].update(schema=99),
+            "build": lambda d, m: m.update(clientBuild="1.60.1.99999"),
+            "metadata": lambda d, m: d.update(product="different-installed-product"),
+            "metadata-hash": lambda d, m: d.update(limitations=["changed after extraction"]),
+            "digest": lambda d, m: m["assets"]["123"].update(sha256="0" * 64),
+            "dimensions": lambda d, m: m["assets"]["123"]["header"].update(width=8),
+            "candidate-coverage": lambda d, m: m.update(candidateTextureIds=[123, 124]),
+            "windows-path": lambda d, m: m["assets"]["123"].update(file=r"C:\\game\\123.blp"),
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name, mutate in cases.items():
+                with self.subTest(name=name):
+                    data, manifest, raw = fixture_bundle(); mutate(data, manifest)
+                    write_bundle(root / "input.zip", data, manifest, raw)
+                    with self.assertRaisesRegex(ci.LabError, "validation failed"):
+                        ci.unpack([root / "input.zip"], root / name)
+
+    def test_invalid_legacy_texture_header_is_not_accepted_by_matching_hash(self):
+        data, _ = fixture_input(); raw = b"BLP2not a valid texture"
+        manifest = dict(schema=1, clientBuild=data["clientBuild"], assets={"123": dict(
+            file="123.blp", clientBuild=data["clientBuild"], sha256=bundle.digest(raw))})
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); write_bundle(root / "bad.zip", data, manifest, raw)
+            with self.assertRaisesRegex(ci.LabError, "validation failed"):
+                ci.unpack([root / "bad.zip"], root / "out")
+
+    def test_partial_bundle_remains_partial_even_when_selected_scene_is_complete(self):
+        data, manifest, raw = fixture_bundle(missing=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); write_bundle(root / "partial.zip", data, manifest, raw)
+            imported, cached = ci.unpack([root / "partial.zip"], root / "input")
+            self.assertEqual(imported["bundleValidation"]["status"], "partial")
+            scene = dict(id="fixture", width=16, height=16, view=dict(u0=0, v0=0, u1=1, v1=1),
+                textures=[dict(fileId=123, u0=0, v0=0, u1=1, v1=1)])
+            state = dict(schema=1, provenance=dict(synthetic=True, clientBuild=data["clientBuild"]), scenes=[scene])
+            (root / "state.json").write_text(json.dumps(state))
+            args = lab.parser().parse_args(["--state", str(root / "state.json"), "--assets", str(cached),
+                                           "--output", str(root / "gallery"), "--strict"])
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(lab.run(args), 1)
+            report = json.loads((root / "gallery/report.json").read_text())
+            self.assertEqual(report["status"], "partial")
+            self.assertEqual(report["missingAssets"], [])
+            self.assertFalse(report["realArtworkVerified"])
+            self.assertIn("incomplete-artwork-bundle", [f["code"] for f in report["findings"]])
+            self.assertIn("partial", (root / "gallery/index.html").read_text())
+
+    def test_windows_zip_paths_symlinks_and_duplicate_json_are_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); path = root / "bad.zip"
+            for member in (r"assets\123.blp", r"C:\game\client.json", "//server/share/client.json"):
+                with self.subTest(member=member):
+                    with zipfile.ZipFile(path, "w") as archive: archive.writestr(member, b"fixture")
+                    with self.assertRaisesRegex(ci.LabError, "Unexpected"):
+                        ci.unpack([path], root / "out")
+            link = zipfile.ZipInfo("assets/123.blp"); link.create_system = 3
+            link.external_attr = (0o120777 << 16)
+            with zipfile.ZipFile(path, "w") as archive: archive.writestr(link, "/private/input")
+            with self.assertRaisesRegex(ci.LabError, "symbolic links"):
+                ci.unpack([path], root / "out")
+            duplicate = root / "duplicate.json"; duplicate.write_text('{"schema":1,"schema":2}')
+            with self.assertRaisesRegex(ci.LabError, "duplicate JSON"):
+                render.load_json(duplicate)
+
+    def test_gallery_rejects_every_addon_package_and_cross_build_artwork(self):
+        addons = [path for path in REPO.iterdir() if path.is_dir() and any(path.glob("*.toc"))]
+        self.assertGreaterEqual(len(addons), 7)
+        for addon in addons:
+            with self.subTest(addon=addon.name), self.assertRaisesRegex(ci.LabError, "addon package"):
+                lab.run(lab.parser().parse_args(["--probe-assets", "--output", str(addon / "private-artwork")]))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); data, manifest, raw = fixture_bundle()
+            write_bundle(root / "input.zip", data, manifest, raw)
+            _, cached = ci.unpack([root / "input.zip"], root / "input")
+            state = dict(schema=1, provenance=dict(clientBuild="1.60.1.99999"),
+                scenes=[dict(id="fixture", width=16, height=16,
+                             view=dict(u0=0, v0=0, u1=1, v1=1), textures=[])])
+            (root / "state.json").write_text(json.dumps(state))
+            with self.assertRaisesRegex(ci.LabError, "client builds differ"):
+                lab.run(lab.parser().parse_args(["--state", str(root / "state.json"), "--assets", str(cached),
+                                                "--output", str(root / "gallery")]))
 
     def test_zip_path_escape_and_data_injection_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -169,7 +308,7 @@ class ClientContracts(unittest.TestCase):
             data, _ = fixture_input(); (source / "client.json").write_text(json.dumps(data))
             records = {}
             for file_id in (123, 124, 125):
-                raw = b"BLP2" + os.urandom(10000)
+                raw = blp_fixture(64, noisy=True)
                 (source / f"assets/{file_id}.blp").write_bytes(raw)
                 records[str(file_id)] = dict(file=f"{file_id}.blp", clientBuild=data["clientBuild"],
                     sha256=hashlib.sha256(raw).hexdigest())
@@ -180,6 +319,9 @@ class ClientContracts(unittest.TestCase):
             self.assertTrue(all(path.stat().st_size < 24 * 1024 for path in paths))
             decoded, manifest = ci.unpack(paths, root / "decoded")
             self.assertEqual(len(json.loads(manifest.read_text())["assets"]), 3)
+            self.assertTrue(decoded["bundleValidation"]["legacy"])
+            self.assertEqual(decoded["bundleValidation"]["status"], "success")
+            self.assertIn("Legacy schema 1", decoded["bundleValidation"]["warnings"][0])
             with self.assertRaisesRegex(ci.LabError, "Missing"):
                 ci.unpack(paths[1:], root / "incomplete")
 

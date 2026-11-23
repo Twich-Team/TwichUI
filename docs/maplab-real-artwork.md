@@ -1,71 +1,122 @@
-# One-time real-artwork input for Map Lab
+# Reusable real-artwork collection for Map Lab
 
-The cloud workspace has no mounted game installation or private artwork cache.
-The environment was searched again: `/workspace` (including attachments/shared
-downloads), `/mnt`, `/media`, `/opt` and accessible home/temp locations have no
-Forever `.build.info`, CASC game archives, map BLPs or client executable. The
-simulator's `.idx` files are Mesa shader caches, not CASC archives.
+Map Lab now has a permanent **collect → validate → update → render → inspect**
+workflow. The initial private Forever 1.60.1.71037 input supplied 1,812 of 1,812
+candidate textures. Production Lua rendered twelve before and twelve after
+views with zero missing textures; direct image inspection led to a supported
+runtime visual correction. See [the real-art results](maplab-real-art-results.md)
+for images/evidence, changes and native-client limitations. Those private assets
+and generated screenshots stay outside Git and release packages.
 
-The smallest remaining owner action is to run the read-only collector on the
-gaming PC and return its ZIP output. No in-game capture, gameplay, login, full
-installation copy, SavedVariables or account files are required.
+The reusable collector replaces the earlier one-shot handoff. It does not need
+an in-game report, game launch, login, Lua, Pillow or third-party Python packages
+on the gaming PC. **Python 3.10+ standard library is sufficient.**
 
-## Gaming PC: one collection
+## Player/developer workflow
 
-The prepared source-only kit is
-`test-output/TwichUI-maplab-collector-v2.zip` (about 76 KB). It contains only TwichUI
-source, existing numeric map data and license notices, with no game artwork.
-It can be regenerated from this PR:
-
-```sh
-python3 tools/maplab/collect.py --make-kit test-output/TwichUI-maplab-collector-v2.zip
-```
-
-1. Download and extract the v2 kit into a fresh folder on the gaming PC. Python **3.10+** is the only
-   prerequisite; no Pillow, Lua, pip package or paid tool is needed there.
-2. Double-click **Collect-Map-Art.cmd**. Choose **`_forever_`** or the installation
-   root containing `.build.info` and `Data`. The collector checks the selected
-   folder and its two nearest parents for the archive root.
-3. Attach **TwichUI-map-art.zip**, or **all numbered TwichUI-map-art-XX.zip parts**,
-   from the extracted kit folder to the existing private Codex conversation.
-   Each ZIP part is below 24 MiB. Do not upload the full installation or WTF.
-
-Equivalent command from a checkout of this branch (substitute the actual root):
+From a current checkout or extracted source kit:
 
 ```powershell
-py -3 tools/maplab/collect.py --wow "D:\Games\World of Warcraft" --output TwichUI-map-art.zip
+py -3 tools/maplab/collect.py --wow "D:\Games\World of Warcraft" --output "test-output\maplab-client-input"
 ```
 
-Omit `--wow` to use the folder picker. If Python is absent, install it from the
-official python.org installer; the collector does not download dependencies.
-The collector selects an installed product from **`.build.info`**, using Forever
-product/version metadata and active-build information. The folder name is only a
-hint; it never invents a product ID. If several products remain ambiguous, the
-error lists valid names for an explicit `--product` override. This fixes the old
-kit's `product 'wow_classic_beta' not in .build.info` error. Keep any later error
-message if the reader refuses a schema or input.
-Windows folder-picker/command-file operation has not been exercised on a native
-Windows host here; explicit-path collection is covered with isolated fixtures.
+WSL/Linux equivalent:
 
-The script opens installed archives read-only through `tools/navbake/casc.py`.
-It never writes to the client, reads WTF/accounts, uses a CDN, decrypts files,
-starts the game, injects code, reads process memory or uploads anything. Missing
-local/encrypted textures remain listed in the output rather than substituted.
-Existing output ZIPs are not overwritten. Keep extracted game artwork private;
-no redistribution rights are inferred.
+```sh
+python3 tools/maplab/collect.py --wow "/mnt/d/Games/World of Warcraft" --output test-output/maplab-client-input
+```
 
-## What is collected
+Use the actual installed root or `_forever_` folder. The tool checks two nearby
+parents and reads the installed product/active build from `.build.info`.
+An ambiguous installation lists valid `--product` choices. Do not manufacture
+a product ID from a folder name. Windows users can also double-click
+`Collect-Map-Art.cmd`, which passes optional command-line arguments through and
+falls back from the Python launcher to `python` when appropriate. Omitting
+`--wow` opens a folder picker; explicit paths work without a graphical session.
+Native Windows launcher/picker behavior still requires owner acceptance.
 
-Eight existing Forever map tables provide parent relationships, actual artwork
-file IDs, dimensions and coordinate transforms. Each table's layout and table
-hash must match reviewed WoWDBDefs definitions pinned at
-[`3a7954cf`](https://github.com/wowdev/WoWDBDefs/tree/3a7954cfb8ee4f1132c83cd1859753294ee8964b).
-Those definitions explicitly cover Forever 1.60.1.70450/70532/70938. Unknown
-layouts fail before column interpretation. Per-section relationships and copied
+Run the **same command and destination** after a client update. The collector
+rereads current tables and minimap indexes, verifies source identities and
+retained payloads, and reports added, changed, removed, reused and freshly read
+assets. It prints the exact private ZIP paths to share; all numbered parts are
+required. Nothing uploads automatically. Existing explicit `.zip` output remains
+supported for one-shot transfers and refuses existing output names.
+
+The recommended output directory contains:
+
+| Path | Meaning |
+| --- | --- |
+| `versions/<build>-<digest>/` | Immutable validated input, raw artwork, manifest and transfer ZIPs |
+| `current.json` | Latest successful version; retained across a partial or failed update |
+| `latest.json` | Latest published result, including an explicitly partial version |
+| `latest-update.json` | Concise build/asset/cache diff |
+
+A source texture is reused only when its current CASC CKey matches the saved
+CKey, product and reader locale selection are compatible, and the cached file's
+SHA-256/header validation succeeds. **Unknown/missing source identity forces a
+fresh archive read.** Build changes do not imply unchanged bytes; file IDs alone
+never authorize reuse. Removed candidates are excluded from the new version.
+Corrupt caches are ignored; repair creates a separate immutable version rather
+than overwriting the old one. Valid ZIP CRC alone is insufficient: cached ZIP
+member sets and exact metadata/asset SHA-256 must match the validated version.
+
+New artifacts are staged privately and validated before atomic directory
+publication. Pointer JSON is written completely before replacement. An
+interruption/failure preserves the previous successful pointer and artifacts;
+a partial version can be inspected through `latest.json` without promotion to
+`current.json`. ZIP files use exclusive same-filesystem hard-link publication,
+so unsupported/network filesystems fail without replacing prior outputs. Local
+NTFS/ext4 directories are the intended storage; native Windows remains untested
+here. Old versions remain available for comparisons and can be removed manually
+when no longer needed. No automatic cache cleanup deletes a baseline.
+
+The default cache is under existing ignored/excluded `test-output/`. Other
+explicit destinations must also remain private and outside addon packages and
+the game installation. The script reads local CASC only: no game writes,
+WTF/account/SavedVariables reads, CDN/network access, decryption, credentials,
+injection, process-memory access, gameplay automation or automatic uploads.
+
+## Versioned manifest and validation scope
+
+`client.json` stays at input schema 1, preserving the existing production-Lua
+adapter. New `assets/manifest.json` uses **schema 2**, kind
+`twichui-maplab-artwork-bundle`, and records:
+
+- Actual client build/product, collector tool name/version and protocol schema.
+- Truthful locale provenance: selected `enUS-compatible-root-blocks`, native
+  `clientLocale: "unknown"`. The reader does not implement selectable locales
+  or observe the native client's chosen language.
+- SHA-256 binding of the canonical complete client metadata; source table/numeric
+  data hashes remain in that bound metadata.
+- Sorted candidate IDs and exact available/missing accounting.
+- Each file-data ID, raw/source SHA-256, CASC CKey where available, declared
+  BLP/DDS header dimensions/format, build and provenance.
+- Extraction settings/limits, missing/encrypted/unsupported inputs and a
+  recomputed `success`, `partial` or `failure` validation result.
+
+Header validation bounds each texture and its declared mip data; impossible
+short DXT/palette/BGRA or DDS payloads fail. Unknown containers/unsupported DDS
+DX10 layouts fail instead of being guessed. This verifies raw header structure,
+hash identity and accounting, **not successful pixel decoding or native visual
+acceptance**. The receiving lab separately decodes actual pixels and verifies
+selected layers. Unknown future table layouts require a reviewed tool update;
+users should not edit schema constants to force collection.
+
+Schema-1 private inputs remain importable. Their hashes, build consistency,
+candidate accounting where present and every raw texture header are checked,
+while missing newer CKey/header/settings/locale provenance is explicitly labeled
+legacy. A complete legacy raster set is not silently upgraded to schema-2
+provenance. Shared `tools/maplab/bundle.py` defines validation for collector and
+importer. Partial input must never be described as complete real-art coverage.
+
+Eight map tables are read with reviewed layout and table hashes pinned to
+[WoWDBDefs `3a7954cf`](https://github.com/wowdev/WoWDBDefs/tree/3a7954cfb8ee4f1132c83cd1859753294ee8964b).
+Definitions explicitly cover the earlier verified Forever builds; the supplied
+71037 tables have the same reviewed hashes. Per-section relationships and copied
 rows retain their original foreign keys.
 
 | Table | File ID | Layout hash |
-|---|---:|---|
+| --- | ---: | --- |
 | UiMap | 1957206 | DB51D55F |
 | UiMapAssignment | 1957219 | C9CC8DFB |
 | UiMapArt | 1957202 | 3AE7D144 |
@@ -75,95 +126,64 @@ rows retain their original foreign keys.
 | WorldMapOverlay | 1134579 | 9A196494 |
 | WorldMapOverlayTile | 1957212 | 2C843422 |
 
-The collector also reads the two continent WDT minimap indexes. It transfers
-normalized technical metadata, source hashes, and a conservative texture
-candidate set around three locations, bounded to 2,048 textures / 128 MiB raw
-artwork. World/continent base paintings, nearby zone paintings and unconditional
-overlays, terrain tiles, and existing nearby cave/city references are included.
-The entire game and raw DB2 tables are not copied.
+The collector also reads continent WDT minimap indexes and existing pinned
+city/cave numeric references. It extracts a conservative candidate superset,
+bounded to 2,048 textures / 128 MiB raw artwork, with individual textures at
+most 16 MiB / 16,777,216 declared pixels. ZIP parts remain below 24 MiB. The
+entire game and raw DB2 tables are not transferred.
 
-The twelve initial views cover zoom 12/24/36/48 at:
+Current deterministic views cover zoom 12/24/36/48 at Booty Bay's production dock
+70 locator (`-14277.7,582.9`, Data.lua build 70450), Undercity's actual map-1458
+rectangle center, and an Elwynn/Westfall rectangle-overlap region. These are
+reproducible presets, not captured player cameras or native zone boundaries.
+**Python does candidate collection; production Lua selects and places layers.**
 
-- Booty Bay: production dock 70, world yards `(-14277.7,582.9)` on continent 0,
-  from existing `Data.lua` build 1.60.1.70450.
-- Undercity: the actual map-1458 rectangle's center.
-- Elwynn/Westfall: the midpoint of their map-rectangle overlap/boundary region.
-  This is a reproducible view preset, not a claim to know the native zone shape.
+## Render and inspect updates
 
-Each retained BLP/DDS payload has its source/output SHA-256, file-data ID and
-client build in the private manifest. The source numeric data hashes must match
-the receiving checkout, preventing an apparently faithful view built with a
-different set of interior records.
-
-## Codex: consume the returned input
-
-Use the existing cloud Lua/Python environment, then run:
+In the existing receiving Lua/Pillow environment:
 
 ```sh
-source /workspace/twichui-env/activate.sh
-python3 tools/maplab/run.py --client-bundle /path/to/TwichUI-map-art.zip \
-  --output test-output/maplab-real --strict
+python3 tools/maplab/run.py --client-bundle /private/TwichUI-map-art-01.zip --client-bundle /private/TwichUI-map-art-02.zip --output test-output/maplab-real --strict
 ```
 
-For multiple parts, repeat `--client-bundle` for each ZIP. All parts are required;
-build mismatch, missing members, hash mismatch, unsafe paths and oversized input
-are refused. Input is unpacked to a temporary directory. Decoded sources are
-released between scenes, preserving the existing 32-million-pixel retention
-limit within a scene. No release packaging or runtime texture budget changes.
+Repeat `--client-bundle` for every numbered part. The importer rejects unsafe
+paths, incompatible metadata, missing members and integrity failures. Preserve a
+baseline, inspect actual PNGs with a vision tool, correlate visual defects with
+production Lua and exported state, then rerender the same bundle with
+`--baseline test-output/maplab-real`. Report the inspected artifacts and measured
+changes. Pixel differences quantify change; they do not establish artistic
+quality. No source or generated Blizzard/OpenMap-edited artwork is redistributed.
 
-The collector does **candidate extraction**, not map rendering. Validated numeric
-metadata passes through a data-only TSV bridge into the existing native-style
-fixture. Actual `World.lua`, `View.lua`, `Art.lua`, `Detail.lua`, `Pictures.lua` and
-`Caves.lua` then select/place/fade the layers; existing `export.lua` and the
-compositor produce the gallery. Collected input is never evaluated as Lua.
+Native area shapes, phases/conditional artwork, exploration state, exact GPU
+sampling and client performance remain outside table-derived reproduction.
+Pinned city/WMO geometry still requires native alignment acceptance. This
+workflow refreshes **lab inputs/previews**; it does not regenerate production
+Data.lua/LocalData.lua, run `tools/mapdata/build.py`, silently install/deploy an
+addon, or enable a preprocessed runtime architecture. The full map-data builder
+has separate retail/client identity-verification requirements.
 
-This uses **client-table-derived API geometry**, not native API capture. It
-preserves UiMin/UiMax partial-art assignments; conflicting affine assignments
-are rejected instead of choosing an arbitrary area/floor. Native zone shapes,
-conditional/phase artwork, exploration state and native GPU sampling remain
-unavailable. Existing pinned WMO/city placement data is still subject to native
-alignment acceptance. These limitations accompany generated state/provenance.
+## Source kit and focused verification
 
-## Required inspection loop after input arrives
+Build a reusable source-only kit from the current checkout:
 
-1. Require real decoded map artwork, a labeled table-derived adapter, recorded
-   file/build hashes and explicit missing-asset results. `--strict` must not be
-   described as passing if required textures are absent.
-2. Inspect Booty Bay, Undercity and border PNGs directly with a vision tool.
-   Examine resolution, seams, alpha, coast and interior layering against source
-   state. Compare OpenMap only where suitable lawful reference pixels exist.
-3. Preserve the initial gallery, fix a source-supported defect, rerender using
-   the same input bundle and `--baseline test-output/maplab-real`, then inspect
-   differences and affected production tests.
-4. Separate an offline correction from native-client reproduction/acceptance.
-   Do not infer artistic quality from checksums, placeholders or unit fixtures.
+```sh
+python3 tools/maplab/collect.py --make-kit test-output/TwichUI-maplab-collector.zip
+python3 -B tests/test_maplab_extract.py
+```
 
-**Current status:** the source kit, bounded transport and production-Lua input
-bridge are implemented and contract-tested. The kit runs with Python site
-packages disabled. Eight collector/bridge tests and the existing eighteen
-compositor tests pass. No actual client archives were available to exercise
-end-to-end extraction, and **no real-artwork screenshot/inspection/fix loop has
-occurred yet**. That objective remains pending the returned private input.
-No new runtime visual correction or production preprocessing switch is claimed.
+The kit includes `bundle.py`, the maintained README/collector/Windows launcher,
+existing CASC/DB2 readers, numeric data and license notices. It includes no
+extracted art or screenshots and runs with Python site packages disabled. Use a
+current kit after schema/tool/numeric-data updates; old numeric data must not
+silently stand in for a changed renderer.
 
-Verified commands for this input milestone:
-
-- `python3 -B tests/test_maplab_client.py`: **8 passed**, including schema/
-  assignment rejection, section/copy relations, read-only collection, multipart
-  integrity, path/data rejection, source-kit stdlib-only execution and production
-  Lua export using explicitly synthetic unit input.
-- `python3 -B tests/test_maplab.py`: **18 passed**.
-- `./tests/run.sh feature navigation --profile cloud --jobs 2`: **98 passed,
-  zero failures**, syntax and simulator smoke; 86.309 seconds.
-- The existing map diagnostics / 4,000-operation course passes; no new warmed
-  terrain textures, peak 24 active. Edited fixture/export Lua also passes syntax.
-
-The previous full-suite **324 passed / 1 known Welcome Back failure** evidence is
-preserved; this offline-input milestone does not rerun that unrelated full gate.
-The original 75,401-byte beta-default kit is superseded by v2. The corrected
-76,195-byte kit has SHA-256
-`cc5b08e34187178a222fc81ff0ce83c4d919dc667d0d84fa3e9b069464b99b7e`.
-Product/subfolder regression checks expand collector coverage to **10 passing
-tests**. `./tests/run.sh fast navigation --profile cloud --jobs 2` passes
-**43 checks**, zero failures, 25.866 seconds. Product metadata lookup now also
-prefers the active build when older rows for the same installed product remain.
+Focused reusable-extractor validation: **16 tests passed**, covering clean and
+repeat extraction, changed build/content, missing identity forcing reads,
+added/removed IDs, corrupt cached payloads, corrupt or valid-CRC stale ZIPs,
+partial/missing/unsupported results, interruptions, path/no-overwrite protections,
+metadata binding, format/payload limits and stdlib-only source-kit execution.
+Read-only validation of all **1,812 actual legacy payloads** succeeded with zero
+missing/unsupported records (106,728,632 raw bytes, approximately 0.83 seconds on
+the cloud CPU). This is raw header/hash validation, not gaming-PC extraction
+performance. See the real-art results document for the completed image-based
+iteration and subsequent integration/regression evidence.

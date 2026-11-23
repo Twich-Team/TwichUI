@@ -60,7 +60,8 @@ def production_export(client=None):
         state = load_json(destination)
         if client:
             state["provenance"].update(tables=client["tables"], bundleSha256=client.get("bundleSha256", []),
-                                       limitations=client.get("limitations", []))
+                                       limitations=client.get("limitations", []), bundleIdentity=client.get("bundleIdentity", {}),
+                                       bundleValidation=client.get("bundleValidation", {}))
         return state, {"seconds": round(time.perf_counter() - started, 6),
                                         "source": "tests/test_map_explore.lua production map fixture",
                                         "stdoutTail": process.stdout.splitlines()[-3:]}
@@ -121,6 +122,11 @@ def gallery(output, report, scenes):
         cards.append(f'<article><h2>{html.escape(label)}</h2><a href="{key}.png"><img loading="lazy" src="{key}.png" alt="{html.escape(label, quote=True)}"></a>'
                      f'<p><a href="{key}-layers.png">Layer debug overlay</a> {comparison}</p><details><summary>State / assertions</summary><pre>{text}</pre></details></article>')
     warning = html.escape(report["visualEvidence"])
+    dataset = report.get("bundleValidation")
+    validation = ("<p>Input bundle validation: <strong>" + html.escape(dataset["status"]) +
+                  "</strong>" + (" · legacy schema; missing newer provenance remains explicit" if dataset.get("legacy") else "") +
+                  "</p><details><summary>Bundle validation evidence</summary><pre>" +
+                  html.escape(json.dumps(dataset, sort_keys=True, indent=2)) + "</pre></details>" if dataset else "")
     native = ('<p><a href="native-reference.png">Owner-provided native reference screenshot</a> — associated with the report; not captured by this tool.</p>'
               if report.get("nativeReference") else "")
     content = f'''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -130,7 +136,7 @@ body{{background:#211d19;color:#e8dfd0;font:16px system-ui;margin:24px}}h1,h2{{c
 article{{padding:14px;background:#2e2720;border:1px solid #594033}}img{{max-width:100%;height:auto}}a{{color:#d6bd89}}pre{{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}}
 </style><h1>TwichUI Map Visual Test Lab</h1><p class="warning">{warning}</p>
 <p>Production Lua selects layers and placements. This page composites their state. Missing assets remain explicit checkerboards. Pixel differences measure change, not artistic quality or native-client fidelity.</p>
-<p><a href="report.json">Machine-readable findings and provenance</a> · <a href="render-state.json">Production render state</a></p>{native}<main>{''.join(cards)}</main></html>'''
+<p><a href="report.json">Machine-readable findings and provenance</a> · <a href="render-state.json">Production render state</a></p>{validation}{native}<main>{''.join(cards)}</main></html>'''
     (output / "index.html").write_text(content, encoding="utf-8")
 
 
@@ -146,7 +152,7 @@ def run(args):
 
 def run_inner(args):
     output = args.output.resolve()
-    protected = [REPO / name for name in ("!!!TwichUI", "TwichUI_Diagnostics", "TwichUI_Settings", "TwichUI_NavData")]
+    protected = [path for path in REPO.iterdir() if path.is_dir() and any(path.glob("*.toc"))]
     if any(output == path.resolve() or output.is_relative_to(path.resolve()) for path in protected):
         raise LabError("gallery output cannot be inside an addon package")
     if args.probe_assets:
@@ -184,14 +190,24 @@ def run_inner(args):
         manifest.write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
     assets = Assets(manifest, REPO / "!!!TwichUI")
     provenance = state.get("provenance", {})
+    bundle_validation = (args.client_data or {}).get("bundleValidation") or assets.validation
+    if assets.manifest and provenance.get("clientBuild") and assets.manifest.get("clientBuild"):
+        if provenance["clientBuild"] != assets.manifest["clientBuild"]:
+            raise LabError("Render-state and artwork client builds differ")
     report = {"schema": 1, "kind": "twichui-maplab-result", "sourceProvenance": provenance, "luaExport": lua,
               "nativeClientConfirmed": False, "scenes": [], "findings": transition_checks(state["scenes"])}
+    if bundle_validation:
+        report["bundleValidation"] = bundle_validation
+        if bundle_validation["status"] != "success":
+            report["findings"].append({"code": "incomplete-artwork-bundle", "severity": "error",
+                                       "status": bundle_validation["status"], "counts": bundle_validation["counts"]})
     for scene in state["scenes"]:
         picture, entry = composite_scene(scene, assets)
         debug, _ = composite_scene(scene, assets, debug=True)
         partial = bool(provenance.get("partial")) or bool(scene.get("metadata", {}).get("partial"))
         synthetic = provenance.get("synthetic", True) or scene.get("synthetic", False)
         warning = ("PLACEHOLDERS: map artwork unavailable" if entry["missingAssets"] else
+                   "PARTIAL INPUT BUNDLE / SELECTED ARTWORK ONLY" if bundle_validation and bundle_validation["status"] != "success" else
                    "ACTUAL TEXTURES / SYNTHETIC GEOGRAPHY" if synthetic else
                    "PARTIAL OFFLINE SNAPSHOT / NOT NATIVE REPLAY" if partial else
                    "OFFLINE ARTWORK PREVIEW / NOT NATIVE VALIDATION")
@@ -210,10 +226,16 @@ def run_inner(args):
         assets.release_sources()
     report["assetsUsed"] = assets.used
     report["missingAssets"] = sorted(assets.missing)
-    report["realArtworkVerified"] = not assets.missing and any(v["kind"] == "local-client-artwork" for v in assets.used.values())
+    report["realArtworkVerified"] = (not assets.missing and not (bundle_validation and bundle_validation["status"] != "success")
+                                      and any(v["kind"] == "local-client-artwork" for v in assets.used.values()))
     report["syntheticGeography"] = provenance.get("synthetic", True)
     report["visualEvidence"] = ("Actual map artwork is unavailable: this gallery validates production-selected geometry, compositing and TwichUI-owned masks using explicit placeholders. It does not establish geographic or in-game visual quality."
-                                if assets.missing else "Local textures were hash-checked and composited offline. Synthetic or partial geometry remains labelled. Native-client visual acceptance is outstanding.")
+                                if assets.missing else "Selected textures were composited, but the input artwork bundle is incomplete. No complete dataset is claimed."
+                                if bundle_validation and bundle_validation["status"] != "success" else
+                                "Local textures were hash-checked and composited offline. Synthetic or partial geometry remains labelled. Native-client visual acceptance is outstanding.")
+    if bundle_validation and bundle_validation.get("legacy"):
+        report["visualEvidence"] += " Legacy schema 1: current hashes/headers were checked; unrecorded tool, locale and source-identity provenance remain unknown."
+    report["status"] = "partial" if any(f.get("severity") == "error" for f in report["findings"]) else "success"
     report["seconds"] = round(time.perf_counter() - started, 6)
     report["renderStateSha256"] = hashlib.sha256(json.dumps(state, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     if args.native_screenshot:
@@ -230,7 +252,9 @@ def run_inner(args):
     (output / "render-state.json").write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
     (output / "report.json").write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
     gallery(output, report, state["scenes"])
-    print(f'{len(state["scenes"])} scenarios, {len(assets.missing)} missing assets, {report["seconds"]:.3f}s; real artwork verified: {report["realArtworkVerified"]}')
+    print(f'{len(state["scenes"])} scenarios, {len(assets.missing)} missing assets, {report["seconds"]:.3f}s; status: {report["status"]}; real artwork verified: {report["realArtworkVerified"]}')
+    if bundle_validation:
+        print(f'Input bundle: {bundle_validation["status"]}; legacy schema: {bundle_validation.get("legacy", False)}')
     print(f'Gallery: {output / "index.html"}')
     return 1 if args.strict and any(f.get("severity") == "error" for f in report["findings"]) else 0
 

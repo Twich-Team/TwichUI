@@ -63,6 +63,10 @@ release inputs:
 - `test-output/maplab-real-before/index.html`: twelve initial actual-art views.
 - `test-output/maplab-real-after/index.html`: twelve production rerenders,
   layer overlays, opaque difference images and structured state/metrics.
+- `test-output/maplab-real-after/real-art-before-after.png`: inspected Booty Bay
+  48 / Undercity 24 comparison sheet, before on the left and after on the right.
+- `test-output/maplab-real-validated/index.html`: final maintained-importer run;
+  all twelve images are pixel-identical to the accepted after gallery.
 - `test-output/maplab-real-city-safeguard/index.html`: Stormwind guard view.
 - `test-output/maplab-real-experiments/`: explicitly labeled opacity experiments.
 
@@ -117,5 +121,29 @@ rendering architecture is unchanged.
 Focused production checks pass: map diagnostics and 4,000-operation regression
 course, all local numeric data, Lua syntax and the settings contract. The four
 contract fixture changes are only the intentional detail default and tooltip.
-Final integration-gate results are recorded with the extraction milestone.
-The prior full-suite Welcome Back baseline failure remains unrelated and untouched.
+Final extraction/integration verification:
+
+```sh
+source /workspace/twichui-env/activate.sh
+python3 -B tests/test_maplab_extract.py  # 16 passed
+python3 -B tests/test_maplab_client.py   # 16 passed; Lua activated
+python3 -B tests/test_maplab.py          # 18 passed
+./tests/run.sh feature navigation --profile cloud --jobs 2
+```
+
+The feature gate passed **99 test modules, zero failures**, syntax (307 Lua
+files plus runner scripts) and simulator smoke in **108.774 s**; source
+fingerprints remained unchanged. This cloud profile does not satisfy native or
+local milestone/release acceptance. The final `--client-bundle ... --strict`
+run passed twelve scenes with zero missing assets in **91.085 s** (Lua export
+0.495 s), concurrently with the gate. It fully header/hash-validated all 1,812
+legacy payloads (106,728,632 bytes), retained explicit legacy limitations, and
+produced zero pixel differences from the accepted after gallery. New schema-2
+collection/import/update/recovery uses owned fixture tests; a complete native
+gaming-PC run of the new incremental collector remains untested.
+
+The prior full suite on `70bd271` remains **324 passed / 1 failed** (668.519 s).
+Its Welcome Back date assertion at `tests/test_welcome_back.lua:84` is unrelated
+and untouched. Original 322-pass/1-failure baseline and untouched reproduction
+evidence remain preserved. The full suite was not repeated after these focused
+map/tooling changes; the affected gate above was rerun.

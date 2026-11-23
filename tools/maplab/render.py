@@ -11,6 +11,7 @@ import json
 import math
 from pathlib import Path
 import re
+import struct
 from typing import Any
 
 from PIL import Image, ImageChops, ImageDraw
@@ -33,7 +34,17 @@ def load_json(path: Path) -> Any:
         raise LabError("JSON input exceeds 8 MiB")
     def reject(value):
         raise LabError(f"non-finite JSON number: {value}")
-    return json.loads(path.read_text(encoding="utf-8"), parse_constant=reject)
+    def object_fields(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise LabError("duplicate JSON object field")
+            result[key] = value
+        return result
+    try:
+        return json.loads(path.read_text(encoding="utf-8"), parse_constant=reject, object_pairs_hook=object_fields)
+    except UnicodeError as error:
+        raise LabError("JSON input is not valid UTF-8") from error
 
 
 def finite(value, label):
@@ -66,11 +77,22 @@ class Assets:
         self.used = {}
         self.missing = set()
         self.decoded_pixels = 0
+        self.validation = None
+        self.manifest = None
         self.own_root = own_root.resolve() if own_root else None
         if manifest:
             data = load_json(manifest)
-            if data.get("schema") != 1 or not isinstance(data.get("assets"), dict):
-                raise LabError("asset manifest requires schema 1 and an assets object")
+            if not isinstance(data, dict) or type(data.get("schema")) is not int or data.get("schema") not in (1, 2) or not isinstance(data.get("assets"), dict):
+                raise LabError("asset manifest requires supported schema 1/2 and an assets object")
+            collector_cache = (data.get("clientBuild") and data["assets"] and all(
+                isinstance(key, str) and key.isdecimal() and isinstance(record, dict)
+                and record.get("file") == key + ".blp" for key, record in data["assets"].items()))
+            if data["schema"] == 2 or collector_cache:
+                from bundle import validate_manifest
+                self.validation = validate_manifest(data, self.root)
+                if self.validation["status"] == "failure":
+                    raise LabError("Asset bundle validation failed: " + "; ".join(self.validation["errors"][:6]))
+            self.manifest = data
             self.records = data["assets"]
 
     def _own(self, key):
@@ -127,13 +149,20 @@ class Assets:
         else:
             self.missing.add(key)
             return None
-        with Image.open(path) as raw:
-            if raw.width * raw.height > 16_777_216:
-                raise LabError(f"asset {key} exceeds decode size limit")
-            pixels = raw.width * raw.height
-            if self.decoded_pixels + pixels > MAX_DECODED_PIXELS:
-                raise LabError("cumulative decoded source pixel budget exceeded; split the gallery or use smaller sources")
-            picture = raw.convert("RGBA")
+        try:
+            with Image.open(path) as raw:
+                if raw.width * raw.height > 16_777_216:
+                    raise LabError(f"asset {key} exceeds decode size limit")
+                if record and self.manifest and self.manifest["schema"] == 2:
+                    header = record["header"]
+                    if (raw.width, raw.height) != (header["width"], header["height"]):
+                        raise LabError(f"asset {key} decoded dimensions differ from declared source")
+                pixels = raw.width * raw.height
+                if self.decoded_pixels + pixels > MAX_DECODED_PIXELS:
+                    raise LabError("cumulative decoded source pixel budget exceeded; split the gallery or use smaller sources")
+                picture = raw.convert("RGBA")
+        except (OSError, ValueError, RuntimeError, struct.error, Image.DecompressionBombError) as error:
+            raise LabError(f"asset {key} could not be decoded: {error}") from error
         self.decoded_pixels += pixels
         self.loaded[key] = picture
         self.used[key] = {"sha256": digest, "provenance": provenance[:512], "kind": kind,

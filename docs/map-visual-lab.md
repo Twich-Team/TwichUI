@@ -4,11 +4,27 @@ The lab executes production Lua map selection in the existing simulator fixture,
 
 ## Current evidence and asset blocker
 
-This workspace has no Forever game installation, `.build.info`, local CASC archives, native map BLP artwork or compatible game executable. `/workspace/twichui-env/READINESS.md` specifies `SIMLAB_ASSETS=0`. The other simulator workspace contains runtime/cache/fixture files, not client artwork. No native screenshots or client measurements were available.
+This workspace still has no running Forever client or mounted game installation.
+However, the owner supplied private **1.60.1.71037 / wowf** collector input with
+52 map records and **1,812 actual textures**, all present and hash-verified.
+The lab has now rendered and directly inspected real artwork, including a
+production fix/rerender cycle. [Real-art results and limitations](maplab-real-art-results.md)
+record the before/after evidence. Native screenshots and client measurements
+remain unavailable; `SIMLAB_ASSETS=0` still describes the separate UI simulator.
 
-Consequently the real-map-artwork proof of concept is **still blocked by missing client input**. A [one-time gaming-PC collector](maplab-real-artwork.md) now supplies private artwork plus schema-checked client-table geometry to production Lua; native API capture is no longer a prerequisite for that offline path. The adapter remains an approximation of native zone/phase lookup. The existing no-assets gallery uses conspicuous checkerboards and actual TwichUI-owned feather masks, which do not constitute terrain artwork. Its original catalog's rectangles and most IDs remain synthetic; the tool rejects extraction against those IDs.
+The real-artwork input blocker is resolved for the supplied regions. The
+[maintained collector/update workflow](../tools/maplab/README.md) supplies private
+artwork plus schema-checked client-table geometry to production Lua. The adapter
+approximates native zone/phase lookup; real pixels do not certify those native
+semantics. The original no-assets catalog remains explicitly synthetic and
+cannot authorize extraction against its fake IDs.
 
-The compositor is implemented and pixel-tested for real local textures; its extraction path reuses `tools/navbake/casc.py`, whose existing code reads local CASC only. Pillow's installed BLP decoder is available. End-to-end extraction of Blizzard map artwork remains unverified until assets are supplied locally. Nothing is downloaded, uploaded or redistributed.
+The source collector successfully produced the supplied three-part input on
+the owner's gaming PC; the cloud lab validated and decoded its BLP artwork.
+Local extraction reuses `tools/navbake/casc.py`. Artwork remains private and
+ignored, with no automatic transfer or release packaging. The newer incremental
+collector additionally has fixture-tested update/recovery behavior; native
+Windows GUI acceptance and future schema compatibility remain distinct checks.
 
 ## Run and inspect
 
@@ -92,7 +108,7 @@ All rectangles and rotation use exported world coordinates/radians; widths/heigh
 
 ## Build-time hybrid evaluation
 
-Recommendation: preserve the production runtime architecture now. A **conditional hybrid** is the best next experiment once lawful real artwork and verified map placement are available: keep Lua coordinates/layer selection, native dynamic overlays/markers and current safe fallback; optionally add immutable, client-build-specific intermediate LOD assets and reviewed masks generated offline. Do not ship or activate the prototype assets.
+Recommendation: preserve the production runtime architecture now. A **conditional hybrid** is the best next experiment: keep Lua coordinates/layer selection, native dynamic overlays/markers and current safe fallback; optionally add immutable, client-build-specific intermediate LOD assets and reviewed masks generated offline. The supplied private artwork now supports real-art rendering and a first downsampling proof; native placement/format acceptance and redistribution rights remain gates. Do not ship or activate the prototype assets.
 
 | Approach | Expected benefit | Storage/runtime cost | Compatibility and rights gate |
 | --- | --- | --- | --- |
@@ -120,6 +136,15 @@ The pipeline produces Lanczos LODs, source-alpha/feathered-alpha masks and exact
 | LOD 64 with 1-pixel gutter (66×66) | 7,690 | 17,424 | 0.00219 |
 
 LOD64 has 16 times fewer pixels, LOD16 256 times fewer. Keeping both adds 8,301 PNG bytes (46.6%) to this synthetic source, while its one-pixel gutter adds 6.35% pixels. These numbers validate prototype storage arithmetic and processing; they predict neither real-terrain compression/visual quality nor client GPU memory. Alpha mask output really carries alpha rather than opaque grayscale, and gutter edge values are pixel-tested.
+
+After the first actual-art inspect/fix/retest loop, the same helper processed
+private Forever tile 204423 (512×512): native PNG 168,477 bytes; LOD64 6,421;
+LOD16 628; guttered LOD64 (66×66) 6,489. The two LODs add 7,049 PNG bytes
+(approximately 4.2% of this native PNG), with 64× and 1,024× fewer RGBA pixels
+than the source. This validates actual BLP decoding and offline downsampling,
+not geographic atlas quality, native GPU cost or shipped-format compatibility.
+Its source alpha is uniformly 255, so its feathered source-alpha output cannot
+provide a semantic coastline or city cut. See [the real-art evidence](maplab-real-art-results.md).
 
 Source alpha is **not** a territory, coastline, land, ocean or city-cut classifier. A generic RGB threshold cannot establish the correct geographic meaning of parchment/ocean or underground boundaries. Reviewed native artwork plus territory/city geometry and client placement fixtures are required. City cuts also need correct floor/layer and surface/interior transition contracts. Ocean/background synthesis may use reviewed numeric masks/geometry, but no such authoritative source is available here. Thus semantic-mask quality is explicitly unverified.
 
@@ -154,12 +179,14 @@ Prioritize experiments as follows:
    layer contracts first; do not import the reference's edited pixels.
 4. Ocean/coast: `map-preview/sea.py` samples Blizzard continent parchment and
    coastal strokes, tiles/crossfades them, and uses coastal/land exclusion masks.
-   These derivatives have the same rights gate as terrain, and the current
-   workspace cannot judge their colors, seams or coast alignment.
+   These derivatives have the same rights gate as terrain. Actual native coastal
+   tiles were inspected, but these reference ocean derivatives were neither
+   generated nor visually validated here.
 
 These scripts were inspected as source, not executed or imported into TwichUI.
-No newer OpenMap revision was substituted. A locally generated private cache
-is the practical next validation step; shipping a cache is a separate rights
+No newer OpenMap revision was substituted. The supplied private cache now
+supports the first real-art rendering loop; a bounded geographic intermediate
+atlas remains the next experiment. Shipping a cache is a separate rights
 and compatibility decision. The recommendation remains conditional rather
 than a claim of proven OpenMap-level quality or a production architecture change.
 

@@ -1,28 +1,33 @@
 #!/usr/bin/env python3
-"""One-time, Python-standard-library-only map input collection on the gaming PC.
+"""Collect/update a private map-art cache using only Python's standard library.
 
-py -3 tools/maplab/collect.py --wow "C:\\Games\\World of Warcraft" --output map-art.zip
+py -3 tools/maplab/collect.py --wow "C:\\Games\\World of Warcraft" --output maplab-input
 
-Reads local Forever CASC only; never opens WTF/account files, modifies the client,
-contacts a CDN, decrypts files, or installs dependencies. No Pillow/Lua needed.
+A directory preserves immutable validated versions and reuses current-source
+assets. An explicit .zip destination keeps the earlier one-shot transfer mode.
+No game writes, network, accounts, gameplay control, Pillow or Lua is involved.
 """
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
+import re
 import shutil
 import sys
 import tempfile
+import uuid
 import zipfile
 
 from clientdata import ClientInputError, REPO, candidate_ids, minimap, model, read_tables, scenarios
 import casc
 import db2
+from bundle import (BundleError, LOCALE, MAX_ASSETS, MAX_BYTES, MAX_TEXTURE_BYTES, SCHEMA,
+                    TOOL_NAME, TOOL_VERSION, digest, json_bytes, texture_header, validate_manifest)
 
 PART_BYTES = 24 * 1024 * 1024
-MAX_BYTES = 128 * 1024 * 1024
 
 
 def installation(selected, requested_product=None):
@@ -56,78 +61,152 @@ def installation(selected, requested_product=None):
 
 
 def make_kit(output):
-    """Small source-only handoff, no game install or extracted artwork included."""
-    names = ["tools/maplab/collect.py", "tools/maplab/clientdata.py", "tools/maplab/Collect-Map-Art.cmd",
-             "tools/navbake/casc.py", "tools/navbake/db2.py", "tools/navbake/wowfiles.py",
-             "!!!TwichUI/map/Data.lua", "!!!TwichUI/map/LocalData.lua", "!!!TwichUI/LICENSES/OpenMap.txt", "LICENSE"]
+    """Small reusable source-only handoff; never includes private artwork."""
+    names = ["tools/maplab/collect.py", "tools/maplab/clientdata.py", "tools/maplab/bundle.py",
+             "tools/maplab/README.md", "tools/maplab/Collect-Map-Art.cmd", "tools/navbake/casc.py",
+             "tools/navbake/db2.py", "tools/navbake/wowfiles.py", "!!!TwichUI/map/Data.lua",
+             "!!!TwichUI/map/LocalData.lua", "!!!TwichUI/LICENSES/OpenMap.txt", "LICENSE"]
     output = output.resolve(); output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(output, "x", compression=zipfile.ZIP_DEFLATED) as archive:
-        for name in names:
-            archive.write(REPO / name, name)
+        for name in names: archive.write(REPO / name, name)
         archive.write(REPO / "tools/maplab/Collect-Map-Art.cmd", "Collect-Map-Art.cmd")
-        archive.writestr("READ-ME.txt", """TwichUI private map-art collector
-
-1. Extract this source kit on the gaming PC. Python 3.10+ is required; no
-   Pillow, Lua, third-party packages, client modifications or login is needed.
-2. Double-click Collect-Map-Art.cmd and choose _forever_ or the installation ROOT.
-   The collector checks nearby parents for .build.info and Data. Or run:
-   py -3 tools/maplab/collect.py --wow "D:\\Games\\World of Warcraft"
-3. Return only TwichUI-map-art.zip (or every numbered TwichUI-map-art-XX.zip)
-   from this extracted kit folder to the existing private Codex conversation.
-
-The collector reads local Forever CASC only. It never opens account/WTF files,
-writes to the installation, contacts a CDN, decrypts files, or uploads anything.
-ZIP parts stay below 24 MiB. Output includes only map metadata and referenced
-texture candidates around Booty Bay, Undercity and an Elwynn/Westfall border.
-If Python is absent, install it from python.org; no automatic download occurs.
-The installed product is selected from .build.info, not a hardcoded beta name.
-If several products remain ambiguous, the error lists valid --product choices.
-Unknown schemas or conflicting map assignments stop instead of guessing.
-These private game-art ZIPs must not be committed or published. The source kit
-itself contains no extracted game artwork. Client extraction remains unverified
-until run on an actual installation. Keep any error message if collection fails.
-""")
+        archive.write(REPO / "tools/maplab/README.md", "READ-ME.md")
     return output
 
 
 def pack(folder, destination):
-    """Independent ZIP parts, each below the chat's 32 MiB input limit."""
+    """Publish complete independent ZIP parts without overwriting prior inputs.
+
+    ZIPs are prepared privately first. Exclusive hard-link publication avoids
+    exposing a half-written final ZIP or replacing an existing output. Directory
+    mode additionally publishes the entire immutable version by atomic rename.
+    """
     members = [folder / "client.json", folder / "assets/manifest.json", *sorted((folder / "assets").glob("*.blp"))]
-    files, archive, current = [], None, None
-    try:
-        for source in members:
-            size = source.stat().st_size
-            if archive is None or archive.fp.tell() + size + (len(archive.filelist) + 1) * 128 + 8192 >= PART_BYTES:
-                if archive:
-                    archive.close()
-                current = folder / f"part-{len(files) + 1:02}.zip"
-                archive = zipfile.ZipFile(current, "w", compression=zipfile.ZIP_DEFLATED)
-                files.append(current)
-            archive.write(source, source.relative_to(folder).as_posix())
-        archive.close(); archive = None
-        targets = [destination if len(files) == 1 else destination.with_name(f"{destination.stem}-{i:02}.zip")
-                   for i in range(1, len(files) + 1)]
-        if any(p.exists() for p in targets):
-            raise ClientInputError("Output already exists; choose a different output name")
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        for source, target in zip(files, targets):
-            if source.stat().st_size >= PART_BYTES:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".maplab-pack-", dir=destination.parent) as temporary:
+        files, archive = [], None
+        try:
+            for source in members:
+                size = source.stat().st_size
+                if archive is None or archive.fp.tell() + size + (len(archive.filelist) + 1) * 128 + 8192 >= PART_BYTES:
+                    if archive: archive.close()
+                    part = Path(temporary) / f"part-{len(files) + 1:02}.zip"
+                    archive = zipfile.ZipFile(part, "w", compression=zipfile.ZIP_DEFLATED)
+                    files.append(part)
+                archive.write(source, source.relative_to(folder).as_posix())
+            archive.close(); archive = None
+            targets = [destination if len(files) == 1 else destination.with_name(f"{destination.stem}-{i:02}.zip")
+                       for i in range(1, len(files) + 1)]
+            if any(target.exists() for target in targets):
+                raise ClientInputError("Output already exists; reuse a directory output for updates or choose another ZIP name")
+            if any(source.stat().st_size >= PART_BYTES for source in files):
                 raise ClientInputError("An output ZIP exceeded the transfer budget")
-            with source.open("rb") as src, target.open("xb") as dst:
-                shutil.copyfileobj(src, dst)
-        return targets
+            published = []
+            try:
+                for source, target in zip(files, targets):
+                    os.link(source, target)
+                    published.append(target)
+            except BaseException:
+                for target in published: target.unlink(missing_ok=True)
+                raise
+            return targets
+        finally:
+            if archive: archive.close()
+
+
+def atomic_json(path, value):
+    """A pointer is visible only once its full JSON has been written."""
+    descriptor, temporary = tempfile.mkstemp(prefix=".maplab-pointer-", dir=path.parent)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(json_bytes(value)); stream.flush(); os.fsync(stream.fileno())
+        os.replace(temporary, path)
     finally:
-        if archive:
-            archive.close()
+        Path(temporary).unlink(missing_ok=True)
+
+
+def previous_version(output):
+    """Treat prior outputs as untrusted; corruption disables reuse, never fresh reads."""
+    pointer = output / "current.json"
+    if not pointer.is_file(): return None, None, None
+    try:
+        if pointer.stat().st_size > 65536: raise BundleError("oversized current pointer")
+        data = json.loads(pointer.read_text(encoding="utf-8"))
+        relative = data.get("version")
+        if not isinstance(relative, str) or not re.fullmatch(r"versions/[A-Za-z0-9_.-]+", relative):
+            raise BundleError("unsafe current version path")
+        version = (output / relative).resolve()
+        if not version.is_relative_to(output.resolve()) or version.is_symlink(): raise BundleError("unsafe current cache path")
+        manifest_file, client_file = version / "assets/manifest.json", version / "client.json"
+        if manifest_file.stat().st_size > 8 * 1024 * 1024 or client_file.stat().st_size > 8 * 1024 * 1024:
+            raise BundleError("oversized cache metadata")
+        manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+        client = json.loads(client_file.read_text(encoding="utf-8"))
+        validation = validate_manifest(manifest, version / "assets", client)
+        if validation["status"] != "success" or manifest.get("schema") != SCHEMA:
+            raise BundleError("current cached version failed validation")
+        if data.get("manifestSha256") != digest(json_bytes(manifest)):
+            raise BundleError("current manifest digest differs")
+        return version, manifest, None
+    except (OSError, ValueError, TypeError, AttributeError) as error:
+        return None, None, "Prior cache ignored: " + str(error)[:160]
+
+
+def source_key(storage, file_id):
+    keys = getattr(storage, "_fdid", None)
+    key = keys.get(file_id) if isinstance(keys, dict) else None
+    return key.hex() if isinstance(key, bytes) and len(key) == 16 else False
+
+
+def validate_transport(paths, manifest, client):
+    """CRC alone cannot detect a valid but stale/empty replacement ZIP."""
+    expected = {"client.json": digest(json_bytes(client)), "assets/manifest.json": digest(json_bytes(manifest))}
+    expected.update({"assets/" + record["file"]: record["sha256"] for record in manifest["assets"].values()})
+    seen, total = set(), 0
+    if not 1 <= len(paths) <= 64: raise BundleError("transport part count outside bounds")
+    for path in paths:
+        if path.is_symlink() or path.stat().st_size >= PART_BYTES: raise BundleError("invalid transport ZIP")
+        with zipfile.ZipFile(path) as archive:
+            for member in archive.infolist():
+                if member.filename not in expected or member.filename in seen or member.file_size > MAX_TEXTURE_BYTES:
+                    raise BundleError("transport members differ from the immutable version")
+                seen.add(member.filename); total += member.file_size
+                if total > MAX_BYTES + 16 * 1024 * 1024: raise BundleError("transport exceeds input budget")
+                if digest(archive.read(member)) != expected[member.filename]:
+                    raise BundleError("transport content digest differs from the immutable version")
+    if seen != set(expected): raise BundleError("transport is missing expected members")
+
+
+def build_diff(previous, manifest, reused, fresh_reads):
+    old, new = (previous or {}).get("assets", {}), manifest["assets"]
+    old_ids, new_ids = set(old), set(new)
+    changed = sorted(int(key) for key in old_ids & new_ids if old[key].get("sha256") != new[key]["sha256"])
+    return {"previousBuild": previous.get("clientBuild") if previous else False,
+            "currentBuild": manifest["clientBuild"], "added": sorted(map(int, new_ids - old_ids)),
+            "changed": changed, "removed": sorted(map(int, old_ids - new_ids)),
+            "unchanged": len(old_ids & new_ids) - len(changed), "reused": reused,
+            "freshReads": fresh_reads, "missing": len(manifest["missing"])}
 
 
 def collect(wow, output, product=None, storage_factory=casc.Storage):
     wow, product = installation(wow, product)
     output = output.resolve()
-    if output == wow or output.is_relative_to(wow):
-        raise ClientInputError("Output must be outside the game installation")
-    if output.suffix.lower() != ".zip":
-        raise ClientInputError("Output must end in .zip")
+    if output == wow or output.is_relative_to(wow): raise ClientInputError("Output must be outside the game installation")
+    try:
+        relative = output.relative_to(REPO.resolve())
+    except ValueError:
+        relative = None
+    if relative and relative.parts and (relative.parts[0] == "!!!TwichUI" or relative.parts[0].startswith("TwichUI_")):
+        raise ClientInputError("Private artwork output cannot be inside an addon package")
+    zipped = output.suffix.lower() == ".zip"
+    if output.exists() and not (output.is_file() if zipped else output.is_dir()):
+        raise ClientInputError("Output type differs from requested ZIP/directory")
+    if zipped and output.exists(): raise ClientInputError("Output ZIP already exists; use a reusable directory or another name")
+    previous_path = previous = cache_warning = None
+    if not zipped:
+        output.mkdir(parents=True, exist_ok=True)
+        previous_path, previous, cache_warning = previous_version(output)
+        if cache_warning: print(cache_warning, flush=True)
     print(f"Selected installed product: {product}", flush=True)
     storage = storage_factory(str(wow), product=product)
     try:
@@ -136,67 +215,128 @@ def collect(wow, output, product=None, storage_factory=casc.Storage):
         data = dict(schema=1, kind="twichui-maplab-client-input", synthetic=False,
             clientBuild=storage.version, product=product, maps=sorted(maps.values(), key=lambda m: m["id"]),
             minimap=minimap(storage), reveal=reveal, scenarios=scenarios(maps, world_point), tables=sources,
-            numericSources={name: hashlib.sha256((REPO / name).read_bytes()).hexdigest()
+            numericSources={name: digest((REPO / name).read_bytes())
                             for name in ("!!!TwichUI/map/Data.lua", "!!!TwichUI/map/LocalData.lua")},
             provenance="Local Forever CASC; table-derived API adapter, not native API capture",
             limitations=["Rectangle lookup cannot reproduce native zone shapes, phases or conditional artwork.",
                 "Booty Bay locator is production dock 70, Data.lua build 1.60.1.70450; camera is a deterministic preset.",
                 "City/WMO picture geometry remains the production pinned numeric data (1.60.1.70245), pending native alignment acceptance.",
-                "Private local artwork bundle; no redistribution rights inferred."])
-        ids = candidate_ids(data, world_point)
-        if len(ids) > 2048:
-            raise ClientInputError("Candidate input exceeds 2048 textures; narrow the collector before extracting")
+                LOCALE["limitation"], "Private local artwork bundle; no redistribution rights inferred."])
+        ids = sorted(set(candidate_ids(data, world_point)))
+        if not ids or len(ids) > MAX_ASSETS or any(isinstance(v, bool) or not isinstance(v, int) or not 0 < v <= 0xffffffff for v in ids):
+            raise ClientInputError("Candidate input must contain 1..2048 valid texture IDs")
+        data["candidateTextureIds"] = ids
         print(f"Forever {storage.version}: {len(maps)} map records, {len(ids)} candidate textures", flush=True)
-        with tempfile.TemporaryDirectory(prefix="twichui-map-art-") as temporary:
-            folder = Path(temporary); assets = folder / "assets"; assets.mkdir()
-            records, missing, total = {}, [], 0
+        # Directory-local staging makes version publication atomic on the same filesystem.
+        stage_parent = output if not zipped else output.parent
+        stage_parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=".maplab-stage-", dir=stage_parent) as temporary:
+            folder = Path(temporary) / "version"; assets = folder / "assets"; assets.mkdir(parents=True)
+            records, missing, unsupported, total, reused, fresh_reads = {}, [], [], 0, 0, 0
+            prior_records = previous.get("assets", {}) if previous and previous.get("product") == product and previous.get("locale") == LOCALE else {}
             for n, file_id in enumerate(ids, 1):
+                key, ckey = str(file_id), source_key(storage, file_id)
                 try:
-                    raw = storage.read(file_id)
+                    old = prior_records.get(key)
+                    raw = None
+                    if ckey and old and old.get("sourceCKey") == ckey:
+                        # Recheck bytes at point of reuse as well as initial cache validation.
+                        cached = previous_path / "assets" / old["file"]
+                        candidate = cached.read_bytes()
+                        if digest(candidate) == old["sha256"]:
+                            raw = candidate; reused += 1
                     if raw is None:
-                        missing.append(dict(fileId=file_id, reason="not stored locally")); continue
-                    if len(raw) > 16 * 1024 * 1024 or raw[:4] not in (b"BLP1", b"BLP2", b"DDS "):
-                        missing.append(dict(fileId=file_id, reason="unsupported texture header or size")); continue
+                        fresh_reads += 1
+                        raw = storage.read(file_id)
+                    if raw is None:
+                        missing.append(dict(fileId=file_id, reason="not stored locally or encrypted")); continue
+                    try: header = texture_header(raw)
+                    except BundleError as error:
+                        issue = dict(fileId=file_id, reason=str(error)[:160]); missing.append(issue); unsupported.append(issue); continue
                     total += len(raw)
-                    if total > MAX_BYTES:
-                        raise ClientInputError("Artwork input exceeded 128 MiB; no entire-game copy attempted")
+                    if total > MAX_BYTES: raise ClientInputError("Artwork input exceeded 128 MiB; no entire-game copy attempted")
                     (assets / f"{file_id}.blp").write_bytes(raw)
-                    digest = hashlib.sha256(raw).hexdigest()
-                    records[str(file_id)] = dict(file=f"{file_id}.blp", fileId=file_id, sha256=digest,
-                        sourceSha256=digest, kind="local-client-artwork", clientBuild=storage.version,
-                        provenance=f"Local Forever CASC; {product}; build {storage.version}; file-data ID {file_id}")
+                    sha = digest(raw)
+                    records[key] = dict(file=f"{file_id}.blp", fileId=file_id, sha256=sha, sourceSha256=sha,
+                        sourceCKey=ckey, header=header, kind="local-client-artwork", clientBuild=storage.version,
+                        provenance=f"Local Forever CASC; {product}; build {storage.version}; file-data ID {file_id}; {LOCALE['selected']}")
                 except casc.CascError as error:
                     missing.append(dict(fileId=file_id, reason=str(error)[:160]))
-                if n % 100 == 0:
-                    print(f"Read {n}/{len(ids)} candidates", flush=True)
-            data["candidateTextureIds"] = ids
-            (folder / "client.json").write_text(json.dumps(data, sort_keys=True, separators=(",", ":")), encoding="utf-8")
-            manifest = dict(schema=1, assets=records, missing=missing, clientBuild=storage.version, product=product,
-                            redistribution="Private local debugging input only; do not commit or publish")
-            (assets / "manifest.json").write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
-            outputs = pack(folder, output)
-            print(f"Prepared {len(records)} textures ({total / 1048576:.1f} MiB), {len(missing)} unavailable", flush=True)
-            for target in outputs:
-                print(f"PRIVATE INPUT: {target} ({target.stat().st_size / 1048576:.1f} MiB)")
-            print("Upload only these ZIP files to this chat. No game installation, WTF, SavedVariables or account files are needed.")
+                if n % 100 == 0: print(f"Read/reused {n}/{len(ids)} candidates", flush=True)
+            (folder / "client.json").write_bytes(json_bytes(data))
+            manifest = dict(schema=SCHEMA, kind="twichui-maplab-artwork-bundle", tool=dict(name=TOOL_NAME, version=TOOL_VERSION, schema=SCHEMA),
+                assets=records, missing=missing, unsupported=unsupported, candidateTextureIds=ids,
+                clientMetadataSha256=digest(json_bytes(data)),
+                clientBuild=storage.version, product=product, locale=dict(LOCALE),
+                settings=dict(maxTextures=MAX_ASSETS, maxRawBytes=MAX_BYTES, maxTextureBytes=MAX_TEXTURE_BYTES,
+                              transferPartBytes=PART_BYTES, scenarioCatalog="booty-bay-undercity-zone-border-v1", nativeApiCaptured=False),
+                redistribution="Private local debugging input only; do not commit or publish")
+            validation = validate_manifest(manifest, assets, data)
+            manifest["validation"] = validation
+            if validation["status"] == "failure":
+                raise ClientInputError("New artwork bundle failed validation; prior current version preserved: " + "; ".join(validation["errors"][:3]))
+            (assets / "manifest.json").write_bytes(json_bytes(manifest))
+            update = build_diff(previous, manifest, reused, fresh_reads)
+            update.update(status=validation["status"], cacheWarning=cache_warning or False)
+            if zipped:
+                outputs = pack(folder, output)
+            else:
+                identity = digest(json_bytes(manifest))
+                build_label = re.sub(r"[^A-Za-z0-9_.-]", "_", str(storage.version))[:80]
+                version_name = f"{build_label}-{identity[:16]}"
+                versions = output / "versions"; versions.mkdir(exist_ok=True)
+                if versions.is_symlink(): raise ClientInputError("Versions directory must not be a symlink")
+                destination = versions / version_name
+                valid_existing = False
+                if destination.exists():
+                    try:
+                        if destination.is_symlink(): raise BundleError("version path is a symlink")
+                        existing = destination / "assets/manifest.json"
+                        if existing.is_symlink() or existing.stat().st_size > 8 * 1024 * 1024 or existing.read_bytes() != json_bytes(manifest):
+                            raise BundleError("immutable version metadata differs")
+                        if (destination / "client.json").read_bytes() != json_bytes(data): raise BundleError("immutable client metadata differs")
+                        checked = validate_manifest(manifest, destination / "assets", data)
+                        if checked["status"] != validation["status"]: raise BundleError("immutable asset validation failed")
+                        outputs = sorted(destination.glob("TwichUI-map-art*.zip"))
+                        if not outputs: raise BundleError("transport ZIPs are absent")
+                        validate_transport(outputs, manifest, data)
+                        valid_existing = True
+                    except (OSError, ValueError, zipfile.BadZipFile):
+                        # Do not overwrite even a damaged old version. A fresh validated
+                        # copy gets its own immutable directory and pointer.
+                        version_name += "-repair-" + uuid.uuid4().hex[:8]
+                        destination = versions / version_name
+                if not valid_existing:
+                    staged_outputs = pack(folder, folder / "TwichUI-map-art.zip")
+                    os.rename(folder, destination)
+                    outputs = [destination / path.name for path in staged_outputs]
+                pointer = dict(schema=1, version="versions/" + version_name, clientBuild=storage.version,
+                               manifestSha256=identity, status=validation["status"],
+                               bundles=[path.relative_to(output).as_posix() for path in outputs])
+                atomic_json(output / "latest.json", pointer)
+                if validation["status"] == "success": atomic_json(output / "current.json", pointer)
+                else: print("PARTIAL: previous successful current.json retained; latest.json points to the inspectable partial version.")
+                atomic_json(output / "latest-update.json", update)
+            print(f"Prepared {len(records)} textures ({total / 1048576:.1f} MiB), {len(missing)} unavailable; validation={validation['status']}")
+            print(f"Update: build {update['previousBuild']} -> {update['currentBuild']}; reused {reused}, fresh {update['freshReads']}, added {len(update['added'])}, changed {len(update['changed'])}, removed {len(update['removed'])}")
+            for target in outputs: print(f"PRIVATE INPUT: {target} ({target.stat().st_size / 1048576:.1f} MiB)")
+            print("Return only these ZIP files through the existing private channel. No automatic upload occurs.")
             return outputs
     finally:
         storage.close()
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--wow", type=Path, help="_forever_ or installation root; omitted opens a folder picker")
-    parser.add_argument("--output", type=Path, default=Path("TwichUI-map-art.zip"))
+    parser.add_argument("--output", type=Path, default=REPO / "test-output/maplab-client-input", help="reusable output directory (recommended), or a new explicit .zip")
     parser.add_argument("--product", help="override automatic selection with an installed .build.info product")
-    parser.add_argument("--make-kit", type=Path, help="make a source-only gaming-PC handoff ZIP; no game access")
+    parser.add_argument("--make-kit", type=Path, help="make a reusable source-only gaming-PC handoff ZIP")
     args = parser.parse_args()
     try:
         if args.make_kit:
-            if args.wow:
-                raise ClientInputError("Source-kit creation does not use a game installation")
-            print(make_kit(args.make_kit))
-            raise SystemExit(0)
+            if args.wow: raise ClientInputError("Source-kit creation does not use a game installation")
+            print(make_kit(args.make_kit)); return 0
         if args.wow is None:
             try:
                 import tkinter
@@ -206,11 +346,13 @@ if __name__ == "__main__":
                 window.destroy()
             except Exception as error:
                 raise ClientInputError("Folder picker unavailable; run again with --wow followed by the installation path") from error
-            if not chosen:
-                print("Cancelled; no artwork collected.")
-                raise SystemExit(0)
+            if not chosen: print("Cancelled; no artwork collected."); return 0
             args.wow = Path(chosen)
         collect(args.wow, args.output, args.product)
+        return 0
     except (OSError, ValueError, casc.CascError, db2.DB2Error) as error:
-        print(f"maplab collector: {error}", file=sys.stderr)
-        raise SystemExit(2)
+        print(f"maplab collector: {error}", file=sys.stderr); return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
