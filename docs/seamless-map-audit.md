@@ -272,7 +272,7 @@ and feather clipping still belong to the native checklist.
 - Final review found that a live maximum change could leave an older pending
   destination above the new limit. The subsequent focused fix and regression
   pass the map integration course; the final feature checkpoint is recorded
-  below when complete. The expensive unrelated offline suite is not repeated
+  below. The expensive unrelated offline suite is not repeated
   for this local animation-limit change.
 - Main advanced to `2835d714` during work (separate Execute Range/healer batch).
   The newer main diff was reviewed for overlap; GitHub reports the draft PR is
@@ -284,3 +284,11 @@ Welcome Back reproduction in `test-output/map-baseline/`. These are local test
 evidence, not packaged addon files. The simulated geometry preview was inspected;
 actual WoW appearance, live pointer input, secure combat behavior, other-addon
 delivery and real asset availability remain **not tested**.
+
+**Final executable checkpoint:** `9d24fa3`, pushed. The final
+`./tests/run.sh feature navigation --profile cloud --jobs 2` passes
+**93 tests, syntax and simulator smoke**, with **0 failures**, in **97.177 s**
+(smoke 53.560 s). The runner records a complete result and unchanged source
+during execution. This includes the pending preference-limit regression and
+the entire 4,000-operation course. Subsequent delivery edits are documentation
+only. The complete offline gate's baseline failure above remains disclosed.
