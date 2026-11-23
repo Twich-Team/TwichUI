@@ -1,4 +1,16 @@
 {
+  "healer-watch": {
+    "tests": ["test_healer_watch.lua", "test_healer_watch_settings.lua", "test_healer_communication.lua"],
+    "syntax": ["!!!TwichUI/healer/**/*.lua", "TwichUI_Settings/pages/HealerWatch.lua"],
+    "dependencies": ["settings"],
+    "simulators": [{"script": "smoke"}, {"script": "settings"}]
+  },
+  "execute-range": {
+    "tests": ["test_execute_range*.lua", "test_twichui_share.lua"],
+    "syntax": ["!!!TwichUI/execute/**/*.lua", "TwichUI_Settings/pages/ExecuteRange.lua"],
+    "dependencies": ["settings"],
+    "simulators": [{"script": "smoke"}, {"script": "settings"}]
+  },
   "class-portrait": {
     "tests": ["test_class_portrait*.lua", "test_class_portrait*.py", "test_twichui_share.lua"],
     "syntax": ["!!!TwichUI/classportrait/**/*.lua", "!!!TwichUI/setup/TwichConfig.lua", "TwichUI_Settings/pages/ClassPortrait.lua"],

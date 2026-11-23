@@ -270,6 +270,7 @@ Define("barGlows", { apply = Refresh("BarGlowController") })
 
 -- Target dragon artwork on EllesmereUI's target frame
 Define("targetArt", { apply = Refresh("TargetArtDisplay") })
+Define("executeRange", { apply = Refresh("ExecuteRangeDisplay") })
 
 -- Hazard alerts: aura sounds the game plays; off removes every one TwichUI registered
 Define("hazardAlerts", { apply = Refresh("HazardAlerts") })

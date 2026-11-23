@@ -434,6 +434,30 @@ assert(dm.TwichUI.Profiles.Current() == "Rich only")
 dm.TwichUI.Profiles.Switch("Odd")
 assert(dm.TwichUIDB.modules.arrival == true and dm.TwichUI.Arrival and dm.TwichUIDB.ui.arrivalHold == "short", "a removed value takes its default when used")
 
+-- Flight authorization belongs to this account, never to a profile snapshot.
+do
+  local cl = Boot("FlightConsent")
+  local pf, consentDB = cl.TwichUI.Profiles, cl.TwichUIDB
+  local original = pf.Current()
+  consentDB.ui.flightAck = true
+  assert(pf.Duplicate("Flight copy"))
+  assert(consentDB.ui.flightAck == true and consentDB.profiles[original].ui.flightAck == nil,
+    "profile duplication keeps local flight consent without storing it in a profile")
+  -- An old profile may already contain this field. Reading it cannot grant consent.
+  consentDB.ui.flightAck = nil
+  consentDB.profiles[original].ui.flightAck = true
+  assert(pf.Switch(original))
+  assert(consentDB.ui.flightAck == nil, "switching to an old acknowledged profile cannot authorize this account")
+  consentDB.profiles["Flight copy"].ui.flightAck = true
+  assert(pf.CopyFrom("Flight copy"))
+  assert(consentDB.ui.flightAck == nil, "profile copy cannot import automatic-flight authorization")
+  consentDB.ui.flightAck = true
+  assert(pf.Reset())
+  assert(consentDB.ui.flightAck == true, "resetting profile settings preserves existing account consent")
+  local reloaded = Boot("FlightConsent", Logout(cl))
+  assert(reloaded.TwichUIDB.ui.flightAck == true, "local account consent survives reload")
+end
+
 -- Rule artwork travels with profile settings and own backups, independently of
 -- catalog availability. Exercise the real profile/reload path, not just raw copy.
 do

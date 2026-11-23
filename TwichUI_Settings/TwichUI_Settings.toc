@@ -72,6 +72,7 @@ pages\Skins.lua
 pages\RestedXP.lua
 pages\TargetArt.lua
 pages\ClassPortrait.lua
+pages\ExecuteRange.lua
 pages\Sharing.lua
 pages\Profiles.lua
 pages\Troubleshooting.lua

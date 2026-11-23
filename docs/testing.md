@@ -70,6 +70,8 @@ Replace `workshop-settings` with one of these nonempty groups:
 | `market-performance` | Twelve fast deterministic pricing/partition/estimator/incremental-engine/diagnostics/reference/catalog modules; no large benchmarks or simulators in development selection |
 | `reminders` | Reminders engines, designer, settings and artwork |
 | `loot-rolls` | Loot Rolls rules, cards, automatic rolling and settings pages; the synthetic-roll simulator catalog is run by hand with `bash tools/simlab/loot.sh` |
+| `healer-watch` | Healer monitoring/alerts, guarded hover communication and Settings |
+| `execute-range` | Execute threshold configuration, verified EllesmereUI adapters, overlay lifecycle and settings/sharing |
 | `navigation` | Navigation, maps, pins, NPCs and guild locations |
 | `settings` | Settings contracts, framework, pages and feature settings |
 | `shared-ui` | Frame styling, notifications, themes, reachability and shared window components |

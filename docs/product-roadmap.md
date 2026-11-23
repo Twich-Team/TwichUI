@@ -136,7 +136,7 @@ Each note is preserved in wording below. The proposed status and effort are plan
 | ID | Original note | Stage | Proposed disposition | Effort | Rationale / next question |
 |---|---|:---:|---|:---:|---|
 | P01 | The Magic inventory progress bar hides the text on top of it | 3 | **Autonomous-Ready** | S | Specifically bank transfer progress text; preserve confirmed-only progress and banking actions |
-| P02 | After a party ping, and after clicking on a ping from on map menu and navigating to map, replay the ping sound and animation | — | **Implemented in source — verify first** | S | Ping/PingMap already contain arrival sound and replay after map navigation; reproduce any remaining issue before coding |
+| P02 | Party ping receipt and replay | — | **Verified Existing — Batch 10** | S | Existing sound/animation/navigation/mute/rate/cancellation tests pass; no replay rewrite. [Native-only checks](map-pings.md#batch-10--p02-verified-existing) |
 | P03 | The way tests are ran individually needs to be changed | 1 | **Autonomous-Ready** | S/M | Owner wants easier selection of the correct targeted tests; use advisory no-run recommendations and safe unknown-path fallback |
 | P04 | Toggles on target markers and world markers overlap | 3 | Fix candidate | S | Check scale, compact width, font and input hit targets |
 | P05 | Restock from this merchant dialog not styled | 3 | **Autonomous-Ready** | S/M | Preserve layout and saved appearance; apply premium leather/bronze styling only |
@@ -174,7 +174,7 @@ Each note is preserved in wording below. The proposed status and effort are plan
 | ID | Original note | Stage | Proposed disposition | Effort | Rationale / next question |
 |---|---|:---:|---|:---:|---|
 | F01 | Full gamepad support | 6 | Large concept / discovery | L | Start with navigation/action equivalence and protected input constraints |
-| F02 | Health overlay for execute range | 5 | Candidate | S/M | Class/spell thresholds, optional minimal overlay; verify accessible health values |
+| F02 | Configurable Execute Range indicator | 5 | Implemented for review — Batch 10 | S/M | Personal 1–100% threshold; source-verified EllesmereUI target/nameplate bars, marker/active/both. Secret health hides active edge; protected layout defers. [Evidence and native checks](design/execute-range.md) |
 | F03 | Custom waypoint ui | 6 | Concept / discovery | L | Build on current navigation/WaypointUI rather than replacing blindly |
 | F04 | Fishing module | 5 | Partially implemented — future stages need scope | M | Stage 1 PR #92 and Stage 2 PR #94 merged; do not recreate; later stages need owner selection |
 | F05 | What dungeons or zones are good for me | 6 | Concept / discovery | M | Define guidance inputs: level, quests, interests and group role |
@@ -187,8 +187,8 @@ Each note is preserved in wording below. The proposed status and effort are plan
 | F12 | Do not see waylay crates in the magic inventory. There should also be a way to mark them as junk | 3 | **Autonomous-Ready: picker only** | S/M | Make carried crates selectable in item/rule picker; junk support requires separate decision; retain item safety guards |
 | F13 | Leave me alone mode should also silence whispers and group invite sounds, suppress whisper messages | 5 | Candidate with privacy UX | M | Expand existing QuietScreen only as explicit opt-in; avoid irrecoverable communication hiding |
 | F14 | Cooldown timeline bar | 6 | Large concept / discovery | L | Avoid rebuilding EllesmereUI; assess spell/accessibility and layout model |
-| F15 | Navigation should have an option to automatically take the appropriate flight path | — | Implemented — verify/close | S | nav/Flight.lua already implements opt-in acknowledged autoFlight |
-| F16 | As healer, hover over healer watch to say things like drinking.. oom. Smart. | 5 | Candidate | S/M | Short, truthful contextual communication based on observed state |
+| F15 | Navigation automatic flight | — | Verified existing + safety corrections — Batch 10 | S | Existing opt-in journey flight retained; fixed account-consent profile copying and stale delayed attempts. [Verification](navigation.md#batch-10-automatic-flight-verification) |
+| F16 | Healer Watch contextual communication | 5 | Implemented for review — Batch 10 | S/M | Motion-only hover preserves click-through; explicit guarded clicks select self-status messages, never inferred statements about another healer. [Evidence and checks](healer-watch-communication-discovery.md) |
 | F17 | Data broker for Attune | — | Implemented — verify/close | S | PR #73 merged and art PR #74 merged |
 | F18 | Show a marker where party member died while they are dead. | 5 | Candidate | M | Existing PartyDeath notification does not establish location marker; privacy/data and lifetime constraints |
 | F19 | Remove last name from chat | 5 | Research/refinement | S/M | Clarify whether realm suffix vs actual displayed surname; avoid mangling names |
