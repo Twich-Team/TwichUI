@@ -24,3 +24,14 @@ Rendering budgets, interfaces and UX behavior are proposals. Native combat
 behavior, actual installed provider version, accessibility and performance remain
 unverified until the owner-directed checks in each phase. No static inspection
 or styled preview establishes native acceptance.
+
+## Batch verification
+
+Documentation-only checks: SVG XML parsing, repository-relative Markdown link
+resolution and `git diff --check`. The three SVGs were rasterized with Inkscape
+and visually reviewed as conceptual wireframes; generated review PNGs remain
+outside the repository. An initial Chromium render did not complete and an
+ImageMagick attempt lacked its SVG delegate; Inkscape supplied the review renders.
+No addon test suite, simulator, benchmark or native-client test was run: there
+are no runtime edits. All proposed measurements and native checks remain future
+work. No production artwork is created or copied.
