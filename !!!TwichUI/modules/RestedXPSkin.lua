@@ -8,8 +8,8 @@
 --   * The skin is active only while RestedXP's theme is TwichUI's. Turning it on selects that theme and
 --     remembers the one it replaced; turning it off puts that one back and runs RestedXP's own refresh.
 --     Picking another theme in RestedXP simply steps the skin aside.
---   * Nothing runs by itself: no polling, no OnUpdate. RestedXP's own refreshes (RenderFrame,
---     CurrentStepFrame.UpdateText, UpdateGuideFontSize, a frame's UpdateVisuals) are hooked once, each
+--   * Nothing runs by itself: no polling, no OnUpdate. RestedXP's own refreshes (UpdateTheme,
+--     CurrentStepFrame.UpdateText, UpdateGuideFontSize, the arrow's UpdateSubTheme) are hooked once, each
 --     hook doing a few comparisons and changing only what differs. Settings changes are coalesced into
 --     one timer. Nothing is applied in combat; the latest request waits for it to end.
 --   * Nothing about guide content, progress, step completion, positions or sizes is changed. Only
@@ -295,16 +295,27 @@ local function FindRestedXP()
 end
 
 -- Whether what this skin needs from RestedXP is there. Each name is one the source of RestedXP
--- v4.11.22 defines (GuideWindow.lua, Themes.lua); a different version may not have them.
+-- v4.11.39 defines (GuideWindow.lua, Themes.lua); a different version may not have them. (v4.11.22 had
+-- RenderFrame where this version has UpdateTheme: its theme refresh moved, so that one is not supported.)
 local function Usable(addon)
-    return type(addon) == "table" and type(addon.RenderFrame) == "function" and type(addon.RegisterTheme) == "function"
+    return type(addon) == "table" and type(addon.UpdateTheme) == "function" and type(addon.RegisterTheme) == "function"
         and type(addon.themes) == "table" and type(addon.settings) == "table" and type(addon.settings.profile) == "table"
         and type(_G.RXPFrame) == "table"
 end
 
+-- RestedXP's v2 interface (beta) draws its own guide window; the one this skin finishes is not shown then.
 local function V2Window()
     local v2 = RXP and RXP.v2
-    return v2 and type(v2.IsGuideWindowEnabled) == "function" and v2:IsGuideWindowEnabled() and true or false
+    if type(v2) ~= "table" then return false end
+    if type(v2.IsGuideWindowEnabled) == "function" then return v2:IsGuideWindowEnabled() and true or false end
+    return type(v2.IsEnabled) == "function" and v2:IsEnabled() and true or false
+end
+
+-- RestedXP's "Preview Changes" option. Off, it picks a theme again only at the next load, so a theme chosen
+-- now is not drawn until then.
+local function PreviewOff()
+    local profile = RXP and RXP.settings and RXP.settings.profile
+    return type(profile) == "table" and profile.enableThemeLiveReload == false
 end
 
 -- Another RestedXP skin that is drawing right now. Only the two this was written against can be
@@ -440,7 +451,8 @@ local function BuildTheme()
     local edges = ART .. "rxp-borders"
     return {
         name = THEME, displayName = "TwichUI", author = "TwichUI", applicable = true,
-        background = { 0, 0, 0, 1 }, bottomFrameBG = { 0, 0, 0, 1 }, bottomFrameHighlight = { 0, 0, 0, 0.5 },
+        background = { 0, 0, 0, 1 }, borderColor = { 0, 0, 0, 1 }, bottomFrameBG = { 0, 0, 0, 1 },
+        bottomFrameHighlight = { 0, 0, 0, 0.5 },
         mapPins = { 1, 1, 1, 1 }, tooltip = "|cffc9a24a", textColor = { 1, 1, 1 },
         texturePath = ART, headerTexture = "rxp-banner", font = DefaultFont(),
         bgTextures = { edge = WHITE, bottom = WHITE },
@@ -457,6 +469,8 @@ local function FillTheme()
     local er, eg, eb = Look.ParseColor(Look.Get("borderColor"))
     local tr, tg, tb = Look.ParseColor(Text.Get("bodyColor"))
     changed = Set(theme.background, br, bg, bb, Look.Get("bgOpacity") / 100) or changed
+    -- the border colour RestedXP's item and target windows are drawn with (it reads this before its highlight)
+    changed = Set(theme.borderColor, er, eg, eb, 1) or changed
     changed = Set(theme.bottomFrameBG, Lighter(br), Lighter(bg), Lighter(bb), 1) or changed
     -- a row under the pointer: the row colour lifted a quarter of the way to the border colour (RestedXP
     -- paints the highlight as a plain fill, so the border colour itself would be a bright slab)
@@ -505,16 +519,22 @@ local function Unpublish()
     if v2 and type(v2.themes) == "table" then v2.themes[THEME] = nil end
 end
 
--- RestedXP's own refresh for a theme change: what its Choose Theme option runs (RenderFrame, and the v2
--- window's pieces when that is on). It reloads the guide window's text but not the guide or its progress.
+-- RestedXP's own refresh for a theme change: what its Choose Theme option runs. UpdateTheme draws the
+-- window, arrow and trays again and loads the current guide again at the same step (progress is kept);
+-- ReloadTheme adds the v2 window's pieces when that is on. Its v2 theme copies are made again first: the
+-- item and target windows read their font from those.
 local function RefreshRestedXP()
     if not Usable(RXP) then return end
     stats.refreshes = stats.refreshes + 1
     local v2 = V2Window()
-    if v2 and RXP.v2 and type(RXP.v2.ConvertThemes) == "function" then pcall(RXP.v2.ConvertThemes, RXP.v2) end
-    local ok, err = pcall(RXP.RenderFrame, true)
+    if RXP.v2 and type(RXP.v2.ConvertThemes) == "function" then pcall(RXP.v2.ConvertThemes, RXP.v2) end
+    local ok, err
+    if v2 and type(RXP.ReloadTheme) == "function" then
+        ok, err = pcall(RXP.ReloadTheme, RXP)
+    else
+        ok, err = pcall(RXP.UpdateTheme, RXP, true)
+    end
     if not ok then R.Fault("RestedXP skin refresh", err) end
-    if v2 and type(RXP.ReloadTheme) == "function" then pcall(RXP.ReloadTheme, RXP) end
 end
 
 ---------------------------------------------------------------------------
@@ -1949,7 +1969,7 @@ end
 -- The waypoint arrow (RestedXP's RXPG_ARROW): a 32 x 32 frame (times its Arrow Scale) whose one texture
 -- RestedXP rotates every frame from its own OnUpdate, with a string below it for the step and distance.
 -- Nothing here touches the rotation or the text: the picture, its colour and opacity, its size and the
--- string's size and visibility. RestedXP sets the picture in the arrow's UpdateVisuals (every theme
+-- string's size and visibility. RestedXP sets the picture in the arrow's UpdateSubTheme (every theme
 -- refresh), the size in SetSize (login, its option, a profile change) and the string's font in SetFont,
 -- so those three are hooked, once, and what it just set is scaled; no polling.
 ---------------------------------------------------------------------------
@@ -1966,6 +1986,13 @@ local Arrow = {
 function Arrow.Frame()
     local arrow = RXP and RXP.arrowFrame
     if type(arrow) == "table" and arrow.texture and arrow.text then return arrow end
+end
+
+-- The arrow's own method for drawing its picture, font and text colour from the theme: UpdateSubTheme in
+-- v4.11.39 (UpdateVisuals in v4.11.22).
+function Arrow.Drawer(arrow)
+    if type(arrow.UpdateSubTheme) == "function" then return "UpdateSubTheme" end
+    if type(arrow.UpdateVisuals) == "function" then return "UpdateVisuals" end
 end
 
 -- The file for a saved shape: TwichUI's bronze plate, a RestedXP theme's own arrow (the theme's name), one of
@@ -2064,7 +2091,8 @@ function Arrow.Apply()
         touched = true
     elseif Arrow.file ~= nil then
         Arrow.file, Arrow.path = nil, nil   -- back to RestedXP's own picture, which it sets itself
-        if type(arrow.UpdateVisuals) == "function" then pcall(arrow.UpdateVisuals, arrow) end
+        local draw = Arrow.Drawer(arrow)
+        if draw then pcall(arrow[draw], arrow) end
     end
     TintAlpha(texture, want.arR, want.arG, want.arB, want.arrowOpacity)
     local size = Arrow.RxpSize() * want.arrowSize
@@ -2085,7 +2113,8 @@ function Arrow.Restore()
     Arrow.busy = true
     if Arrow.file ~= nil then
         Arrow.file, Arrow.path = nil, nil
-        if type(arrow.UpdateVisuals) == "function" then pcall(arrow.UpdateVisuals, arrow) end
+        local draw = Arrow.Drawer(arrow)
+        if draw then pcall(arrow[draw], arrow) end
     end
     TintAlpha(arrow.texture, 1, 1, 1, 1)
     SetShownByUs(arrow.text, true)
@@ -2406,7 +2435,7 @@ local function InstallHooks()
     if not Usable(RXP) then return false end
     if not hooks.render then
         hooks.render = true
-        hooksecurefunc(RXP, "RenderFrame", Perf.Wrap("rxp.skin.render", OnRender))
+        hooksecurefunc(RXP, "UpdateTheme", Perf.Wrap("rxp.skin.render", OnRender))
     end
     local window = _G.RXPFrame
     if not hooks.scale and type(window.SetScale) == "function" then
@@ -2419,9 +2448,9 @@ local function InstallHooks()
         hooksecurefunc(csf, "UpdateText", Perf.Wrap("rxp.skin.stepText", OnStepText))
     end
     local arrow = Arrow.Frame()
-    if not hooks.arrow and arrow and type(arrow.UpdateVisuals) == "function" then
+    if not hooks.arrow and arrow and Arrow.Drawer(arrow) then
         hooks.arrow = true
-        hooksecurefunc(arrow, "UpdateVisuals", Perf.Wrap("rxp.skin.arrow", Arrow.OnVisuals))
+        hooksecurefunc(arrow, Arrow.Drawer(arrow), Perf.Wrap("rxp.skin.arrow", Arrow.OnVisuals))
         hooksecurefunc(arrow, "SetSize", Perf.Wrap("rxp.skin.arrow", Arrow.OnSize))
         hooksecurefunc(arrow.text, "SetFont", Perf.Wrap("rxp.skin.arrow", Arrow.OnFont))
     end
@@ -2610,12 +2639,13 @@ end)
 -- What it is doing, for the settings page and the troubleshooting report. Words and counts only.
 ---------------------------------------------------------------------------
 -- Status: a code, and the facts behind it. Codes: off, restedxp-missing, restedxp-disabled, waiting,
--- unsupported, conflict, theme-not-selected, v2-window, active.
+-- unsupported, conflict, theme-not-selected, preview-off, v2-window, active.
 function Skin.Status()
     local state = R.Setups and R.Setups.AddonState and R.Setups.AddonState(ADDON) or (AddonLoaded(ADDON) and "ready" or "unknown")
     local s = {
         switchOn = R:Enabled(SWITCH) and true or false, enabled = enabled, addon = state,
         loaded = AddonLoaded(ADDON), integrated = enabled and Usable(RXP) or false,
+        previewOff = enabled and Usable(RXP) and PreviewOff() or false,
         conflict = enabled and FindConflict() or nil, v2 = enabled and Usable(RXP) and V2Window() or false,
         selected = enabled and theme ~= nil and RXP ~= nil and RXP.activeTheme == theme or false,
         published = theme ~= nil and RXP ~= nil and type(RXP.themes) == "table" and RXP.themes[THEME] == theme or false,
@@ -2627,7 +2657,8 @@ function Skin.Status()
     elseif state == "disabled" then code = "restedxp-disabled"
     elseif not s.integrated then code = (s.loaded and loggedIn) and "unsupported" or "waiting"
     elseif s.conflict then code = "conflict"
-    elseif not s.selected then code = "theme-not-selected"
+    elseif not s.selected then
+        code = (s.previewOff and RXP.settings.profile.activeTheme == THEME) and "preview-off" or "theme-not-selected"
     elseif s.v2 then code = "v2-window"
     else code = "active" end
     s.code = code
