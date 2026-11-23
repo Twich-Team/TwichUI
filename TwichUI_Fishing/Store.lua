@@ -22,6 +22,7 @@ F.Store = S
 
 S.DEFAULTS = {
     enabled = true,
+    economy = { enabled = true, method = "market", vendor = false, perHour = true, provisional = true },
     gear = { manage = true, pole = false, outfit = false, restoreOnEnd = true, combatWeapons = true },
     lure = { auto = true, preferred = false, alternative = false, early = 0, warn = 60 },
     containers = { mode = "queue", openWithKey = true, minFree = 1 },
@@ -62,6 +63,7 @@ end
 
 S.CHECK = {
     enabled = Bool,
+    economy = { enabled = Bool, method = OneOf("market", "recent", "historical", "min"), vendor = Bool, perHour = Bool, provisional = Bool },
     gear = { manage = Bool, pole = Id, outfit = Name, restoreOnEnd = Bool, combatWeapons = Bool },
     lure = { auto = Bool, preferred = Id, alternative = Bool, early = Range(0, 600), warn = Range(0, 600) },
     containers = { mode = OneOf("queue", "auto", "off"), openWithKey = Bool, minFree = Range(0, 10) },

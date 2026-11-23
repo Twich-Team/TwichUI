@@ -211,12 +211,15 @@ function API.Provenance(scope)
     for id, e in pairs(rec.species) do
         if not rec.containers[id] then out.direct[id] = e.q end
     end
-    local unopened = {}
+    local unopened, partial = {}, {}
     for _, lot in ipairs(c.queue) do
-        if scope == "lifetime" or scope == nil or lot.sid == sid then unopened[lot.item] = (unopened[lot.item] or 0) + lot.n end
+        if scope == "lifetime" or scope == nil or lot.sid == sid then
+            unopened[lot.item] = (unopened[lot.item] or 0) + lot.n
+            if lot.partial then partial[lot.item] = (partial[lot.item] or 0) + 1 end
+        end
     end
     for id, e in pairs(rec.containers) do
-        out.containers[id] = { caught = e.caught, opened = e.opened, unopened = unopened[id] or 0 }
+        out.containers[id] = { caught = e.caught, opened = e.opened, unopened = unopened[id] or 0, partial = partial[id] or 0 }
     end
     return out
 end
