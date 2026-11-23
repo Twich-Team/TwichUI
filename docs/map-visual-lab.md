@@ -204,3 +204,6 @@ than a claim of proven OpenMap-level quality or a production architecture change
 When the owner has a compatible client and graphical session, manually reproduce a fixed view, capture a report and take a normal screenshot. Associate it with the offline gallery using `--native-screenshot /local/screenshot.png`. This copies only decoded pixels (no EXIF), hashes them and labels them owner-provided. Screenshots can themselves contain private UI, so review before sharing. The tool does not launch or control gameplay, read client memory, inject code, bypass anti-cheat, capture an unavailable client or claim native reproduction.
 
 AI assistants should inspect the gallery images, then use production texture IDs/geometry and the diagnostic timeline to find the responsible Lua module. Read report limitations first. If artwork is missing, resolve that input or continue with geometry/transition assertions; do not infer texture quality from checkerboards. Record the inspected image paths and before/after evidence. Native acceptance remains required for actual terrain appearance, city/cave alignment, quest/marker integrations, UI-scale behavior and client performance.
+
+Source-aware composition experiments, current artwork gaps and the corrected
+collector handoff are documented in [seamless map composition](seamless-map-composition.md).
