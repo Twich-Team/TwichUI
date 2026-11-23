@@ -26,7 +26,7 @@ end
 -- The TwichUI Fishing this page was written for: its settings interface (Present.SETTINGS_API) at least NEED. TwichUI_Fishing
 -- and TwichUI_Settings are separate folders, so one can be older than the other after a partial update: then the page
 -- uses nothing of it and asks for an update instead.
-local NEED = 1
+local NEED = 2
 local function Loaded()
     local f = R.Fishing
     return f and f.ready and f or nil

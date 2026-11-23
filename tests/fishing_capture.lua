@@ -33,6 +33,7 @@ W.bound["SHIFT-F"] = "TWICHUI_FISHING_MODE"
 W.bound.R = "TWICHUI_FISHING_REVEAL"
 c.FireEvent("UPDATE_BINDINGS"); W.Advance(1)
 local F = c.TwichUI.Fishing
+if os.getenv("FISHING_ECONOMY_CAPTURE") == "1" then dofile(TESTS .. "fishing_economy_fixture.lua"); FishingEconomyFixture(c) end
 if scene == "compact" then F.Store.Set("present.mode", "compact") end
 W.Give(POLE); W.Give(LURE50, 1)
 W.Advance(1.2); W.Key("F"); W.Advance(1.2); W.Key("F")   -- the key equips the pole, then puts the lure on

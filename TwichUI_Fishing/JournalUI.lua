@@ -2,8 +2,8 @@
 -- Draws what Journal.lua answers, in the pack's walnut-and-bronze frames (journal_frame, recessed_frame, rows and buttons cut
 -- with H.Slice), with the game's own item icons and names. A page draws and nothing more: it asks Journal.lua for its answer
 -- (cached until the records change), keeps a fixed pool of rows however long a list is, and scrolls them with the wheel.
--- Nothing here reads or writes a saved variable, loads Workshop, or shows a price; every row and stat carries an `extra`
--- list that is simply not drawn yet, so Stage 3B can add figures without moving a layout (see Cell and Rows below).
+-- This view never loads Workshop or performs market decoding. Optional economics reads the deferred valuation cache
+-- and uses the existing stat strip, detail lines and summary without changing navigation or window geometry.
 --
 --   U.Open(page)    open the Journal (page: "overview" | "sessions" | "collections" | "locations" | "treasures")
 --   U.Close(), U.Toggle(page), U.Shown(), U.Page()
@@ -19,15 +19,15 @@ local S = F.Store
 local function Economy(scope)
     if not F.Economy or F.Store.Get("economy.enabled") == false then return "" end
     local v = F.Economy.Scope(scope)
-    local text = F.Economy.Description(v)
+    local text = "Est. " .. (v and v.total and F.Economy.Text(v.total) or "unavailable") .. (v and not v.complete and " *" or "")
     if v and F.Store.Get("economy.perHour") and v.perHour then text = text .. " · " .. F.Economy.Text(v.perHour) .. "/h" end
-    if v and F.Store.Get("economy.vendor") then text = text .. " · vendor " .. F.Economy.Text(v.vendor) end
+    if v and F.Store.Get("economy.vendor") then text = text .. " · vendor " .. F.Economy.Text(v.vendor) .. (v.vendorMissing > 0 and " known subtotal" or "") end
     return text
 end
 local function ItemValue(id, q)
     if not F.Economy or F.Store.Get("economy.enabled") == false then return "" end
     local e = F.Economy.Item(id, q)
-    return e and (F.Economy.Text(e.unit) .. " each · " .. F.Economy.Text(e.total) .. " estimated") or ""
+    return e and ("Est. each " .. F.Economy.Text(e.unit) .. " · total " .. F.Economy.Text(e.total)) or ""
 end
 local H = F.Hud
 local J = F.Journal
@@ -87,6 +87,16 @@ local function Tip(frame, id)
         if id and GameTooltip and GameTooltip.SetOwner and self.itemID then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             if GameTooltip.SetItemByID then GameTooltip:SetItemByID(self.itemID) end
+            if F.Economy and F.Store.Get("economy.enabled") and GameTooltip.AddLine then
+                local row = F.Economy.Item(self.itemID, self.itemQuantity or 1)
+                if row then
+                    GameTooltip:AddLine("Fishing estimate each: " .. F.Economy.Text(row.unit), 0.88, 0.74, 0.52)
+                    if self.itemQuantity then GameTooltip:AddLine("Estimated caught quantity: " .. F.Economy.Text(row.total), 0.88, 0.74, 0.52) end
+                    if F.Store.Get("economy.vendor") then GameTooltip:AddLine("Vendor each: " .. F.Economy.Text(row.vendorUnit), 0.78, 0.72, 0.62) end
+                    GameTooltip:AddLine(row.label or row.why or "Pricing unavailable", 0.78, 0.72, 0.62)
+                    if row.age then GameTooltip:AddLine(("Observation age: %ds%s"):format(row.age, row.stale and " (stale)" or ""), 0.78, 0.72, 0.62) end
+                end
+            end
             GameTooltip:Show()
         end
     end)
@@ -418,14 +428,14 @@ local function BuildOverview(page)
             b:SetShown(e ~= nil)
             if e then
                 b.icon:Set(e.id, nil)
-                b.itemID = e.id
+                b.itemID = e.id; b.itemQuantity = e.q
                 b.name:SetText(ItemName(e.id))
                 b.count:SetText(("×%s caught"):format(Num(e.q)))
             end
         end
         P.rows:SetItems(o.recent)
         P.rows.frame:SetShown(#o.recent > 0)
-        P.note:SetText(RetentionNote(o.retention) .. "\n" .. Economy("lifetime"))
+        P.note:SetText(RetentionNote(o.retention))
     end
     return P
 end
@@ -543,7 +553,7 @@ local function BuildSessions(page)
         end,
         fill = function(b, e)
             b.icon:Set(e.id)
-            b.itemID = e.id
+            b.itemID = e.id; b.itemQuantity = e.q
             b.name:SetText(ItemName(e.id))
             b.q:SetText("×" .. Num(e.q))
         end,
@@ -605,7 +615,7 @@ local function BuildSessions(page)
         if r.catches == 0 and r.items == 0 then
             line = r.current and "Nothing caught yet." or "Nothing was caught in this session."
         elseif opened > 0 then
-            line = ("Opened %s and took %s from them (not counted as catches)."):format(Plural(opened, "container"), Plural(took, "item"))
+            line = ("%s from %s (not counted as catches)."):format(Plural(took, "item"), Plural(opened, "container"))
         elseif #d.treasures > 0 then
             line = "Containers caught: none opened this session."
         end
@@ -614,7 +624,9 @@ local function BuildSessions(page)
                 or ("Where %s of its %s fish were caught wasn't recorded."):format(Num(d.coverage.earlier), Num(d.coverage.direct))
             line = line and (line .. " " .. t) or t
         end
-        D.treasure:SetText((line or "") .. "\n" .. Economy(state.session))
+        local estimate = Economy(state.session)
+        H.Font(D.treasure, estimate ~= "" and 11 or 12, "body")
+        D.treasure:SetText(estimate ~= "" and (estimate .. "\n" .. (line or "")) or (line or ""))
         P.species.frame:SetShown(#d.species > 0)
         D.h2:SetShown(#d.species > 0); D.h2.rule:SetShown(#d.species > 0)
     end
@@ -781,7 +793,7 @@ local function BuildCollections(page)
             b.sel:SetShown(e ~= nil and e.id == state.species)
             if e then
                 b.icon:Set(e.id, e.q)
-                b.itemID = e.id
+                b.itemID = e.id; b.itemQuantity = e.q
                 if e.id == state.species then picked = e end
             else
                 b.itemID = nil
@@ -795,7 +807,7 @@ local function BuildCollections(page)
         if not picked then return end
         D.icon:Set(picked.id)
         D.name:SetText(ItemName(picked.id))
-        D.l1:SetText(("Caught: %s · %s"):format(Num(picked.q), ItemValue(picked.id, picked.q)))
+        D.l1:SetText(ItemValue(picked.id, picked.q) ~= "" and ItemValue(picked.id, picked.q) or ("Caught: " .. Num(picked.q)))
         D.l2:SetText(("First %s · latest %s"):format(Day(picked.first) or "not recorded", Day(picked.last) or "not recorded"))
         local places = ZoneRowsFor(picked)
         local confirmed = #picked.where - (picked.unknown > 0 and 1 or 0)
@@ -900,7 +912,7 @@ local function BuildLocations(page)
             b.q:SetWidth(72)
             Tip(b, true)
         end,
-        fill = function(b, e) b.icon:Set(e.id); b.itemID = e.id; b.name:SetText(ItemName(e.id)); b.q:SetText("×" .. Num(e.q)) end,
+        fill = function(b, e) b.icon:Set(e.id); b.itemID = e.id; b.itemQuantity = e.q; b.name:SetText(ItemName(e.id)); b.q:SetText("×" .. Num(e.q)) end,
         click = function(e) U.Select("collections", e.id, state.zone) end,
     })
     Place(P.species.frame, "TOPLEFT", D, "TOPLEFT", 0, -162)
@@ -1032,7 +1044,7 @@ local function BuildTreasures(page)
             b.q:SetWidth(50)
             Tip(b, true)
         end,
-        fill = function(b, e) b.icon:Set(e.id); b.itemID = e.id; b.name:SetText(ItemName(e.id)); b.q:SetText("×" .. Num(e.q)) end,
+        fill = function(b, e) b.icon:Set(e.id); b.itemID = e.id; b.itemQuantity = e.q; b.name:SetText(ItemName(e.id)); b.q:SetText("×" .. Num(e.q)) end,
     })
     Place(P.contents.frame, "TOPLEFT", D, "TOPLEFT", 0, -56)
     P.note = Note(page, 0, W)
@@ -1427,7 +1439,7 @@ local function BuildSummary()
             Tip(b, true)
         end,
         fill = function(b, e, i)
-            b.icon:Set(e.id); b.itemID = e.id; b.name:SetText(ItemName(e.id)); b.q:SetText(Num(e.q))
+            b.icon:Set(e.id); b.itemID = e.id; b.itemQuantity = e.q; b.name:SetText(ItemName(e.id)); b.q:SetText(Num(e.q))
             b.tag:SetText(i == 1 and "Most caught" or "")
         end,
     })

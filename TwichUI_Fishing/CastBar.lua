@@ -175,7 +175,7 @@ function CB.StatsText()
         parts[#parts + 1] = H.Glyph("glyph-time", 20) .. " " .. H.Duration(F.Session.Elapsed() or 0)
         parts[#parts + 1] = H.Glyph("mark", 20) .. " " .. (s.catches == 1 and "1 Catch" or (s.catches .. " Catches"))
         local value = P and P.Value and P.Value("session")
-        if value and value.text then parts[#parts + 1] = "|TInterface\\MoneyFrame\\UI-GoldIcon:16:16|t " .. value.text end
+        if value and value.text then parts[#parts + 1] = "|TInterface\\MoneyFrame\\UI-GoldIcon:16:16|t " .. value.text .. (value.perHourText and (" · " .. value.perHourText) or "") end
     end
     local lure = F.Lure and F.Lure.Status and F.Lure.Status() or nil
     if lure and (lure.state == "active" or lure.state == "expiring") and lure.seconds then

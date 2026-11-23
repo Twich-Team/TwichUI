@@ -176,7 +176,7 @@ Each note is preserved in wording below. The proposed status and effort are plan
 | F01 | Full gamepad support | 6 | Large concept / discovery | L | Start with navigation/action equivalence and protected input constraints |
 | F02 | Configurable Execute Range indicator | 5 | Implemented for review — Batch 10 | S/M | Personal 1–100% threshold; source-verified EllesmereUI target/nameplate bars, marker/active/both. Secret health hides active edge; protected layout defers. [Evidence and native checks](design/execute-range.md) |
 | F03 | Custom waypoint ui | 6 | Concept / discovery | L | Build on current navigation/WaypointUI rather than replacing blindly |
-| F04 | Fishing module | 5 | Partially implemented — future stages need scope | M | Stage 1 PR #92 and Stage 2 PR #94 merged; do not recreate; later stages need owner selection |
+| F04 | Fishing module | 5 | Completion implemented; verification/integration in PR #140 | M | Existing engine, HUD and Journal preserved; optional Workshop estimates, container reconciliation, Journal/HUD economics and settings implemented. Final CI and native acceptance recorded in PR #140 and docs/fishing.md. |
 | F05 | What dungeons or zones are good for me | 6 | Concept / discovery | M | Define guidance inputs: level, quests, interests and group role |
 | F06 | Dungeon tools | 6 | Broad concept | L | Decompose into discrete user journeys rather than generic large module |
 | F07 | Quest log cleanup | 5 | Candidate | M | Specify reversible display/organization scope before touching quest records |

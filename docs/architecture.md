@@ -80,3 +80,5 @@ existing generator only within authorized scope. Never regenerate unrelated art.
 `test-output/` contains historical evidence as well as ignored new run output;
 do not treat it as source or delete it for navigation. See shared rules for
 read-only external references and licensing constraints.
+
+Fishing current-market estimates are owned by `TwichUI_Fishing/Economy.lua` (provenance accounting, optional Workshop reference/local source, deferred cache) and `EconomyPresent.lua` (existing HUD provider). They persist no prices or financial transactions. `API.Metrics` reads duration/casts without copying history; `API.Provenance` supplies partial-container evidence. See [Fishing estimates](fishing.md#current-market-estimates-completion-pr-140).

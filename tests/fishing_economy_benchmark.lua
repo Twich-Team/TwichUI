@@ -3,17 +3,18 @@ dofile(TESTS .. "fishing_mock.lua")
 local c, W = FishingClient()
 W.bound.F = "CLICK TwichUIFishingButton:LeftButton"; c.FireEvent("UPDATE_BINDINGS"); W.Advance(1)
 local F = c.TwichUI.Fishing
-local generation, reads, longest = 1, 0, 0
+local generation, reads, longest, longestTimer = 1, 0, 0, 0
+local totalStart = os.clock()
 local market = {}
 for i = 1, 100000 do market[i] = i * 13 end
 c.TwichUI.Workshop = { Active = function() return true end,
  Pricing = { Generation = function() return tostring(generation) end,
  Source = function() return { reference = true, label = "Synthetic market", market = { key = "realm|Alliance", realm = "Realm", side = "Alliance", at = 1800000000 } } end,
- Reference = function(id) reads = reads + 1; return { market = market[id], at = 1800000000 } end, Changed = function() end }, Market = {} }
+ Reference = function(id) reads = reads + 1; return { market = market[id], at = 1800000000 } end, Changed = function() end }, Market = { Value = function() return nil, "nomarket" end } }
 c.FireEvent("ADDON_LOADED", "TwichUI_Workshop")
 local after = c.C_Timer.After
 c.C_Timer.After = function(delay, fn) return after(delay, function()
- local started = os.clock(); fn(); longest = math.max(longest, (os.clock() - started) * 1000)
+ local started = os.clock(); fn(); longestTimer = math.max(longestTimer, (os.clock() - started) * 1000)
 end) end
 local function Measure(name, fn, n)
  local started = os.clock()
@@ -50,9 +51,12 @@ Measure("Journal open 500 sessions", function() F.JournalUI.Open("overview") end
 W.Advance(2)
 Measure("Journal five pages", function() for _, page in ipairs(F.JournalUI.PAGES) do F.JournalUI.Show(page) end end)
 Measure("Journal typical redraw", function() F.JournalUI.Refresh() end, 20)
+F.JournalUI.Show("overview")
+W.Advance(2)
 Measure("market update while Journal open", function() generation = generation + 1; c.TwichUI.Workshop.Pricing.Changed() end)
 W.Advance(10)
 c.TwichUI.Workshop = nil; F.Economy.Invalidate()
 Measure("Workshop unavailable 1000 items", function() assert(F.Economy.Calculate(prov).total == nil) end)
 print(string.format("BENCH largest measured uninterrupted callback/operation: %.3f ms; reference reads %d; market entries 100000", longest, reads))
+print(string.format("BENCH total CPU %.3f ms; largest deferred callback %.3f ms", (os.clock() - totalStart) * 1000, longestTimer))
 assert(#W.errors == 0)

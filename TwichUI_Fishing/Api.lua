@@ -208,7 +208,9 @@ function API.Metrics(scope)
     elseif scope == "session" then rec = c.session
     else rec = Ses.Find(F.Count(scope)) end
     if not rec then return nil end
-    return { seconds = rec == c.session and Ses.Elapsed() or rec.seconds, casts = rec.casts }
+    local seconds = rec == c.session and Ses.Elapsed() or rec.seconds
+    if rec == c.totals and c.session then seconds = (seconds or 0) + Ses.Elapsed() end
+    return { seconds = seconds, casts = rec.casts }
 end
 
 function API.Provenance(scope)
@@ -227,7 +229,9 @@ function API.Provenance(scope)
     for _, lot in ipairs(c.queue) do
         if scope == "lifetime" or scope == nil or lot.sid == sid then
             unopened[lot.item] = (unopened[lot.item] or 0) + lot.n
-            if lot.partial then partial[lot.item] = (partial[lot.item] or 0) + 1 end
+            -- A lot does not identify individual shells after bag moves/reloads. Withhold its provisional
+            -- value conservatively once any contents were taken; never assume only one shell was touched.
+            if lot.partial then partial[lot.item] = (partial[lot.item] or 0) + lot.n end
         end
     end
     for id, e in pairs(rec.containers) do

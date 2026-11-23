@@ -581,3 +581,5 @@ prices settle honestly. Use `/tui perf start workshop 3` (three minutes), then
 viewport unchanged until settled. Stop with `/tui perf stop`; export Quick summary
 and JSON in Diagnostics. Use separate captures for scrolling/filtering, source
 changes and warm reopening. [Exact native procedure and interpretation](performance/v2-opportunities-incremental-pr3.md#native-forever-check).
+
+Fishing estimates: `fishing.economy` measures deferred batches in `TwichUI_Fishing/Economy.lua:Work` (at most eight pending items); `fishing.prices` reports the bounded item valuation cache. The scope excludes catch and animation work.

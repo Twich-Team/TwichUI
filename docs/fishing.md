@@ -560,7 +560,7 @@ None of these has been done yet. In this order, on WoW: Forever:
 
 ## The Fishing Journal (Stage 3A)
 
-A premium, non-economic look at what the fishing records hold: `/tui fish journal [overview|sessions|collections|locations|treasures]`,
+The Stage 3A Journal foundation (with current-market estimates added by completion PR #140) shows what the fishing records hold: `/tui fish journal [overview|sessions|collections|locations|treasures]`,
 or **Open Fishing Journal** on the Fishing page of the TwichUI settings window (Adventure > Fishing). It is a window in the pack's
 walnut-and-bronze frames (journal, recessed and chestnut panels, rows and buttons, cut with `H.Slice`), the game's own item
 icons and names, and the Spectral and Alegreya fonts. Nothing in it prices anything: it never loads Workshop, calls a pricing
@@ -682,3 +682,32 @@ should respect the following:
 - Show a `pending` restoration and a `held` store clearly. Settings belong in the TwichUI settings window and call
   `Store.Set`. Moving preferences into profiles needs a migration.
 - Workshop valuation (Stage 3) must use `API.Provenance` so that a container and its contents are never both valued.
+
+## Current-market estimates (completion PR #140)
+
+Fishing's optional `Economy.lua` values direct catches, confirmed container contents and, when enabled, untouched queued containers. It uses Workshop's selected reference market and `Pricing.Reference` metrics (Market Value by default; Recent, Historical and Lowest listing are alternatives). When no eligible reference market exists, it uses `Market.Value` against one selected local market. An individual missing reference price is never silently filled from a different local source. Prices are listing estimates, not income, auction proceeds or guaranteed purchase availability.
+
+Fishing never loads Workshop. Unloaded, absent, suspended or disabled Workshop leaves fishing, looting and the Journal usable. Prices remain unavailable until Workshop is loaded separately and has suitable observations. Cold requests queue deferred batches of at most eight items; catch handlers and animations do not decode Market data. The shared Workshop reference cache remains authoritative. Fishing keeps at most 4,096 item answers and 64 calculated scope answers, all in memory. Market identity, method and pricing generation invalidate answers; `Pricing.Changed`, finished local scans, item metadata and economic settings refresh visible surfaces without a new catch. The `fishing.economy` diagnostic scope measures deferred work; `fishing.prices` reports cache size.
+
+All quantities and money use whole copper. Session and lifetime totals, value/cast and value/hour are current-market estimates. A missing item price remains missing; priced items form a labeled known subtotal. Vendor sell values come from the client's item metadata and are displayed separately when enabled. Historical lure purchase prices and reliably attributed expenses were not recorded, so expenses and net income are explicitly unavailable rather than inferred from today's prices. Nothing is added to the Gold Ledger or saved as an economic ledger.
+
+The existing HUD provider supplies per-item values, total estimated value and optional value/hour. Values are added to catch notifications only if already cached; notifications never wait. The catch list optionally sorts by estimated value. Journal Overview, visible session rows and selected session detail, selected Collections fish, hover breakdowns for catch quantities, confirmed Locations fish, Treasures detail and the completion summary display estimates in existing text areas. Location estimates cover only recorded species quantities: historical, unknown and overflow attribution is preserved, not reconstructed. The Settings page controls estimates, method, vendor values, value/hour and provisional containers, and reports the available source and age.
+
+### Container accounting
+
+`API.Provenance(scope)` separates direct catches, contents and containers. Its container rows now also expose `partial`, the queued quantity whose lot has partial-processing evidence. Provisional quantity is `max(0, unopened - partial)`. Opened shells contribute nothing. A partly processed lot contributes confirmed contents only and stays incomplete: the old queue does not identify individual shells reliably across bag moves, so the whole ambiguous lot is withheld rather than risk double-counting. Untouched lots remain provisional. Three caught clams, two opened, six meats and one pearl therefore contribute the six meats, the pearl and exactly one unopened clam.
+
+Session and location attribution remain those of the catch, including late openings elsewhere and saved queues restored after reload. Failed attempts with no items taken do not mark an untouched shell partially processed. Repeated queries do not attribute anything: all attribution still belongs to the existing loot/container engine. Old records without queue or contents evidence cannot reconstruct lost container value.
+
+### Verification and owner acceptance
+
+Economic tests: `./tests/run.sh development fishing`. Mutation checks: `bash tools/mutate.sh --catalog tools/mutations/fishing.py --all`. Synthetic CPU benchmark: from `tests`, run `lua5.1 -e 'require("bit"); ROOT="../!!!TwichUI/"; REPO="../"; TESTS="./"' fishing_economy_benchmark.lua`; `FISHING_BENCH_ECONOMY_OFF=1` gives the same Journal fixture without economic display. The fixture contains 100,000 O(1) reference entries, 1,000 distinct item quantities and 500 sessions. This measures Fishing's integration, not real compressed Market decode latency; the existing Workshop large-market tests cover that pipeline separately. Offline Journal/HUD captures can enable synthetic reference values with `FISHING_ECONOMY_CAPTURE=1`.
+
+No real-client verification is claimed. Run the Fishing Test Lab category for a compact capability report, including optional pricing availability, pending/cached item counts and vendor API availability. In the owner’s client:
+
+- Cast and reel with the fishing key; apply a lure and confirm equipment restoration.
+- Open multiple clams, partially loot one, finish it after ending the session and reloading in another zone. Verify contents stay with the original session/location and shells are not counted twice.
+- Load Workshop separately, check one known fish and pearl against its selected Market Value, then update Market data while the Journal stays open. Verify missing prices and disabled Workshop remain responsive.
+- Check controller reveal, camera recovery, chat visibility, EllesmereUI fading, minimap concealment in combat and restoration afterward. Automatic opening retains its existing guarded opt-in fallback; no protected gameplay is automated by valuation.
+
+Publication remains owner-directed through the release workflow; merging a development PR does not publish an addon version.

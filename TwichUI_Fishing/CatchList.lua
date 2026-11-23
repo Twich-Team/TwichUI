@@ -284,7 +284,7 @@ function L.Refresh()
     ui.valueLabel:SetShown(showArea)
     ui.value:SetShown(showArea)
     if has then
-        ui.value:SetText(value.text); H.Font(ui.value, 23, "serif"); H.Color(ui.value, H.GOLD)
+        ui.value:SetText(value.text); H.Font(ui.value, 16, "serif"); H.Color(ui.value, H.GOLD)
     else
         ui.value:SetText("Not available yet"); H.Font(ui.value, 13, "body"); H.Color(ui.value, H.MUTED)
     end
@@ -296,7 +296,8 @@ function L.Refresh()
         if pt then R.Perf.Stop(pt) end
         return
     end
-    ui.since:SetText(Since(m.session))
+    ui.rate = value and value.perHourText
+    ui.since:SetText(Since(m.session) .. (ui.rate and (" · " .. ui.rate) or ""))
     -- "Today's Catch" (the mockup's words) when the session began today, else what it is
     local today = not m.session.start or (date and date("%Y%m%d", m.session.start) == date("%Y%m%d", F.Now()))
     ui.title:SetText(today and "Today's Catch" or "This Session's Catch")
@@ -372,7 +373,7 @@ function L.Refresh()
 end
 
 local function Tick()
-    if frame and frame:IsShown() and ui then ui.since:SetText(Since()) end
+    if frame and frame:IsShown() and ui then ui.since:SetText(Since() .. (ui.rate and (" · " .. ui.rate) or "")) end
 end
 
 ---------------------------------------------------------------------------

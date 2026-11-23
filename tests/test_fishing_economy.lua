@@ -28,7 +28,7 @@ assert(v.direct[FISH1].total == 246 and v.contents[PEARL].total == 10000)
 local before = calls
 E.Calculate(p, 1800, 5)
 assert(calls == before, "warm valuation reuses cache")
-p.contents[PEARL] = 2; p.containers[CLAM].unopened = 0
+p.contents[PEARL] = 2; p.containers[CLAM].unopened = 0; p.containers[CLAM].opened = 3
 v = E.Calculate(p, 1800, 5)
 assert(v.total == 20366, "later partial processing replaces provisional shell with actual contents")
 p.contents[JUNK] = 1
@@ -68,7 +68,7 @@ local again = E.Scope(sid)
 assert(again.total == actual.total, "repeat query cannot attribute contents twice")
 local partial = { direct = {}, contents = { [PEARL] = 1 }, containers = { [CLAM] = { unopened = 2, partial = 1 } } }
 local pv = E.Calculate(partial)
-assert(pv.total == 10500, "partially opened shell excluded while untouched shell remains provisional")
+assert(pv.total == 10500 and not pv.complete, "partially opened shell excluded while untouched shell remains provisional")
 print("PASSED late container economy")
 
 local warm = E.Item(PEARL); assert(warm.total == 10000)
@@ -84,3 +84,31 @@ for _, page in ipairs({ "sessions", "collections", "locations", "treasures" }) d
 F.JournalUI.Summary(sid)
 assert(#W.errors == 0, "economic pages and summary construct without client errors")
 print("PASSED economy presentation")
+-- Saved queues retain partial-processing evidence; no prices enter SavedVariables.
+F.Containers.Queue()[1].partial = true
+local saved = FishRoundTrip(c.TwichUIFishingDB)
+local c2, W2 = FishingClient({ db = saved })
+W2.bound.F = "CLICK TwichUIFishingButton:LeftButton"; c2.FireEvent("UPDATE_BINDINGS"); W2.Advance(1)
+local F2 = c2.TwichUI.Fishing
+assert(F2.API.Provenance(sid).containers[CLAM].partial == 2, "reload conservatively withholds the ambiguous partial lot")
+assert(F2.Store.Get("economy.provisional") == true and F2.Store.Get("economy.method") == "market", "economic settings migrate without resetting records")
+assert(not saved.prices and not saved.ledger, "estimates do not create saved financial records")
+c2.C_Item.GetItemInfo = function() return "Item", nil, nil, nil, nil, nil, nil, nil, nil, nil, 42 end
+local vendor = F2.Economy.Item(FISH1, 3)
+assert(vendor.total == nil and vendor.vendor == 126, "vendor values remain available without Workshop")
+c2.TwichUI.Workshop = c.TwichUI.Workshop
+local ref = c2.TwichUI.Workshop.Pricing.Reference
+local loading = true
+c2.TwichUI.Workshop.Pricing.Reference = function(id)
+ if loading then return nil, "loading" end
+ return ref(id)
+end
+F2.Economy.Item(FISH1); W2.Advance(1)
+assert(F2.Economy.Item(FISH1).pending, "delayed market data remains pending without blocking")
+loading = false; F2.Economy.Invalidate(); F2.Economy.Item(FISH1); W2.Advance(1)
+assert(F2.Economy.Item(FISH1).total == 200, "delayed prices become available after invalidation")
+assert(F2.Economy.Item(FISH1, 9007199254740991).total == nil, "unsafe copper multiplication remains missing")
+print("PASSED economy persistence, vendor and delayed pricing")
+
+local unknown = E.Calculate({ direct = { [PEARL] = 1 }, containers = { [CLAM] = { caught = 10, opened = 2, unopened = 0 } } })
+assert(not unknown.complete and unknown.missing == 8, "historical containers without queue/content evidence remain incomplete")

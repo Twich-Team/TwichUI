@@ -15,8 +15,8 @@ local function Provider(kind, id, q)
         for item, row in pairs(group) do if row.total ~= nil then items[item] = E.Text(row.total) end end
     end
     local text = v.total and E.Text(v.total) .. (v.complete and "" or " *") or "Prices pending / unavailable"
-    if S.Get("economy.perHour") and v.perHour then text = text .. " · " .. E.Text(v.perHour) .. "/h" end
-    return { text = text, items = items }
+    local rate = S.Get("economy.perHour") and v.perHour and (E.Text(v.perHour) .. "/h") or nil
+    return { text = text, items = items, perHourText = rate }
 end
 F.Present.SetValueProvider(Provider)
 F.Subscribe("ECONOMY", function()
