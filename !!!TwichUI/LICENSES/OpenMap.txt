@@ -32,4 +32,3 @@ OpenMap/Media/Textures/NOTICE.md), nor the hand-edited copies of its map art and
 border in art/edits/: that art belongs to Blizzard Entertainment,
 and is included only so the addon looks like the game's own map. Bundled
 libraries keep their own licences (OpenMap/LICENSES).
-
