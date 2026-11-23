@@ -22,8 +22,10 @@ c.debugprofilestop = function() return os.clock() * 1000 end
 -- Frames: every method exists; scripts and hooks are kept so a test can fire them
 ---------------------------------------------------------------------------
 local FRAMES = {}
+local OBJECTS = {}
 local function Obj()
   local o = { shown = true, scripts = {}, hooks = {}, masks = {} }
+  OBJECTS[#OBJECTS + 1] = o
   return setmetatable(o, { __index = function(t, k)
     if k == "Show" then return function(s) s.shown = true end end
     if k == "Hide" then return function(s) s.shown = false end end
@@ -33,7 +35,8 @@ local function Obj()
     if k == "GetScript" then return function(s, n) return s.scripts[n] end end
     if k == "HookScript" then return function(s, n, fn) s.hooks[n] = s.hooks[n] or {}; table.insert(s.hooks[n], fn) end end
     if k == "SetPoint" then return function(s, ...) s.point = { ... } end end
-    if k == "ClearAllPoints" then return function(s) s.point = nil end end
+    if k == "ClearAllPoints" then return function(s) s.point, s.allPoints = nil, nil end end
+    if k == "SetAllPoints" then return function(s, parent) s.allPoints = parent or s.parent end end
     if k == "SetSize" then return function(s, w, h) s.width, s.height = w, h end end
     if k == "SetWidth" then return function(s, v) s.width = v end end
     if k == "SetHeight" then return function(s, v) s.height = v end end
@@ -45,7 +48,10 @@ local function Obj()
     if k == "GetAlpha" then return function(s) return s.alpha or 1 end end
     if k == "SetFrameLevel" then return function(s, v) s.level = v end end
     if k == "GetFrameLevel" then return function(s) return s.level or 5 end end
-    if k == "SetTexture" then return function(s, v) s.tex = v end end
+    if k == "SetTexture" then return function(s, v) s.tex = v; s.binds = (s.binds or 0) + 1 end end
+    if k == "SetColorTexture" then return function(s, ...) s.fill = { ... }; s.tex = nil end end
+    if k == "SetRotation" then return function(s, v) s.rotation = v end end
+    if k == "SetDrawLayer" then return function(s, layer, sub) s.drawLayer, s.subLayer = layer, sub or 0 end end
     if k == "SetTexCoord" then return function(s, ...) s.coord = { ... } end end
     if k == "SetVertexColor" then return function(s, r, g, b) s.color = { r, g, b } end end
     if k == "AddMaskTexture" then return function(s, m) s.masks[#s.masks + 1] = m end end
@@ -55,7 +61,7 @@ local function Obj()
     if k == "SetFont" then return function() return true end end
     if k == "GetFont" then return function() return "Fonts\\FRIZQT__.TTF", 10, "" end end
     if k == "CreateTexture" or k == "CreateFontString" or k == "CreateLine" or k == "CreateMaskTexture" then
-      return function(s) local x = Obj(); x.parent = s; x.kind = k; return x end
+      return function(s, _, layer, _, sub) local x = Obj(); x.parent = s; x.kind = k; x.drawLayer, x.subLayer = layer, sub or 0; return x end
     end
     if type(k) == "string" and k:match("^%u") then return function() end end
     return nil
@@ -140,6 +146,15 @@ local MAPS = {
   [1413] = { name = "The Barrens", parent = 1414, mapType = 3, cont = 1, xN = 0, yW = 0, W = 3000, H = 2000, art = 2181 },
   [2521] = { name = "Zephras Isle", parent = 947, mapType = 3, cont = 2991, xN = 0, yW = 0, W = 3000, H = 2000, art = 2031, offWorld = true },
 }
+local CLIENT
+if MAPLAB_CLIENT_TABLES then
+  CLIENT = assert(loadfile(REPO .. "tools/maplab/client.lua"))()(MAPLAB_CLIENT_TABLES)
+  MAPS = CLIENT.maps
+  -- Build identity comes from the validated local client input, not the
+  -- unrelated harness client's default. Date/interface are not captured there.
+  local version, build = CLIENT.build:match("^(%d+%.%d+%.%d+)%.(%d+)$")
+  if version then c.GetBuildInfo = function() return version, build end end
+end
 local function Cont(id) local m = MAPS[id]; return m.mapType == 2 and id or Cont(m.parent) end
 local function YardsToMap(id, wx, wy) local m = MAPS[id]; return (m.yW - wy) / m.W, (m.xN - wx) / m.H end
 local function MapToYards(id, x, y) local m = MAPS[id]; return m.xN - y * m.H, m.yW - x * m.W end
@@ -160,7 +175,10 @@ local function Wy(id, x, y) return select(2, WorldOf(id, x, y)) end
 local function OnMap(id, u, v) local l, r, t, b = WorldRect(id); return (u - l) / (r - l), (v - t) / (b - t) end
 c.CreateVector2D = function(x, y) return { x = x, y = y, GetXY = function(s) return s.x, s.y end } end
 local function Info(id) local m = MAPS[id]; return m and { mapID = id, name = m.name, parentMapID = m.parent, mapType = m.mapType } or nil end
-local function ArtFiles(id) local t = {} for i = 1, 12 do t[i] = MAPS[id].art * 100 + i end return t end
+local function ArtFiles(id)
+  if CLIENT then return MAPS[id].files end
+  local t = {}; for i = 1, 12 do t[i] = MAPS[id].art * 100 + i end; return t
+end
 local EXPLORED = {}   -- [mapID] = { list of explored pieces }
 c.C_Map = {
   GetMapInfo = Info,
@@ -179,6 +197,19 @@ c.C_Map = {
     return WorldRect(child)
   end,
   GetMapInfoAtPosition = function(id, x, y)
+    if CLIENT then
+      -- Table-derived rectangle adapter, not the native area/phase lookup.
+      local u, v = WorldOf(id, x, y)
+      local best, area = id, math.huge
+      for kid, k in pairs(MAPS) do
+        if k.parent == id then
+          local l, r, t, b = WorldRect(kid)
+          local a = (r - l) * (b - t)
+          if u >= l and u <= r and v >= t and v <= b and (a < area or a == area and kid < best) then best, area = kid, a end
+        end
+      end
+      return Info(best)
+    end
     if id == 947 then
       for kid, k in pairs(MAPS) do
         if k.mapType == 2 then
@@ -204,7 +235,11 @@ c.C_Map = {
     table.sort(out, function(a, b) return a.mapID < b.mapID end)
     return out
   end,
-  GetMapArtLayers = function(id) return MAPS[id] and { { layerWidth = 1002, layerHeight = 668, tileWidth = 256, tileHeight = 256 } } end,
+  GetMapArtLayers = function(id)
+    if not MAPS[id] then return nil end
+    local a = CLIENT and MAPS[id].layer or { 1002, 668, 256, 256 }
+    return { { layerWidth = a[1], layerHeight = a[2], tileWidth = a[3], tileHeight = a[4] } }
+  end,
   GetMapArtLayerTextures = function(id) return MAPS[id] and ArtFiles(id) end,
   GetMapArtID = function(id) return MAPS[id] and MAPS[id].art end,
   SetUserWaypoint = function() return true end,
@@ -216,6 +251,7 @@ c.UiMapPoint = { CreateFromCoordinates = function(map, x, y) return { map = map,
 -- The world map and its scroll container
 ---------------------------------------------------------------------------
 local CW, CH = 1002, 668
+if CLIENT then CW, CH = CLIENT.maps[947].layer[1], CLIENT.maps[947].layer[2] end
 local VIEW = { left = 100, top = 800, w = 1000, h = 666 }
 c.MapCanvasDataProviderMixin = { OnAdded = function(self, map) self.owningMap = map end, OnRemoved = function() end,
   OnShow = function() end, OnHide = function() end, OnMapChanged = function() end, RemoveAllData = function() end,
@@ -231,6 +267,18 @@ SC.st = { scale = 1, cx = 0.5, cy = 0.5 }
 SC.cursor = { x = 0, y = 0 }
 SC.calls = { instant = 0, clicks = 0, pans = 0 }
 WMF.ScrollContainer = SC
+local nativeBase, nativeExploration, nativeQuest = Obj(), Obj(), Obj()
+WMF.detailLayerPool = {}
+-- Use the same object-only iterator contract as the native frame pool.
+WMF.detailLayerPool.EnumerateActive = function()
+  local done = false
+  return function() if not done then done = true return nativeBase end end
+end
+rawset(WMF, "EnumeratePinsByTemplate", function(_, template)
+  assert(template == "MapExplorationPinTemplate", "only replacement artwork is enumerated")
+  local done = false
+  return function() if not done then done = true return nativeExploration end end
+end)
 WMF.NavBar = Obj()
 WMF.mapID, WMF.providers, WMF.clicks = 1429, {}, {}
 WMF.shown = false
@@ -322,6 +370,7 @@ rawset(WMF, "SetMapID", function(s, id)
   if s.mapID == id then return end
   s.mapID = id
   SC.mapID = id
+  if CLIENT then CW, CH = MAPS[id].layer[1], MAPS[id].layer[2] end
   SC:CreateZoomLevels()
   Providers("OnCanvasSizeChanged")
   SC:ResetZoom()
@@ -331,6 +380,7 @@ c.WorldMapFrame = WMF
 c.GetCursorPosition = function() return SC.cursor.x, SC.cursor.y end
 local function openMap(id)
   WMF.mapID = id or WMF.mapID
+  if CLIENT then CW, CH = MAPS[WMF.mapID].layer[1], MAPS[WMF.mapID].layer[2] end
   SC.mapID = WMF.mapID
   SC:CreateZoomLevels()
   SC:ResetZoom()
@@ -397,7 +447,7 @@ local DATA = {
   },
   travel = { { "boat", 1, 2 }, { "boat", 2, 1 }, { "boat", 1, 3 }, { "boat", 3, 1 }, { "zeppelin", 2, 4 }, { "zeppelin", 4, 2 } },
 }
-EXPLORED[1429] = { { textureWidth = 200, textureHeight = 150, offsetX = 100, offsetY = 100, fileDataIDs = { 5001 } } }
+if not CLIENT then EXPLORED[1429] = { { textureWidth = 200, textureHeight = 150, offsetX = 100, offsetY = 100, fileDataIDs = { 5001 } } } end
 
 ---------------------------------------------------------------------------
 -- Load
@@ -405,7 +455,7 @@ EXPLORED[1429] = { { textureWidth = 200, textureHeight = 150, offsetX = 100, off
 for _, f in ipairs({ "chronicle/Style.lua", "FrameLook.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/Media.lua",
   "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Map.lua", "pins/Ping.lua", "pins/Pulse.lua", "pins/PingMap.lua", "pins/MapTools.lua",
   "nav/Prefs.lua", "nav/Data.lua", "nav/Route.lua", "nav/Journey.lua", "nav/Nav.lua", "nav/Paint.lua", "nav/MapTrail.lua",
-  "map/Prefs.lua", "map/Data.lua", "map/ViewMath.lua", "map/World.lua", "map/View.lua", "map/Art.lua", "map/Detail.lua",
+  "map/Prefs.lua", "map/Data.lua", "map/ViewMath.lua", "map/World.lua", "map/Pictures.lua", "map/View.lua", "map/Art.lua", "map/Detail.lua",
   "map/Controls.lua", "map/Caves.lua", "map/Places.lua", "map/DungeonView.lua", "diag/Diagnostics.lua", "diag/Map.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
@@ -417,7 +467,16 @@ local VM, MXP, MW, MV, MA, MD, MC, MCV, MPL, DV = R.MapViewMath, R.MapExplorePre
   R.MapDetail, R.MapControls, R.MapCaves, R.MapPlaces, R.MapDungeonView
 local PN, PM, T = R.Pins, R.PinsMap, R.MapTools
 assert(R.MapExploreData and R.MapExploreData.reveal and R.MapExploreData.minimap, "the real data loads")
-R.MapExploreData = DATA
+if CLIENT then
+  R.MapExploreData.minimap, R.MapExploreData.reveal, R.MapExploreData.build = CLIENT.minimap, CLIENT.reveal, CLIENT.build
+  local chunk = assert(loadfile(ROOT .. "map/LocalData.lua")); setfenv(chunk, c); chunk()
+else
+  R.MapExploreData = DATA
+  R.MapExploreLocalData = {
+  caves = { { 0, -1700, -2700, -1500, -2400, { 91001, -1600, -2550, 128, 0.7, 1, 0 } } },
+  cities = { [1455] = { 0, 1000, -1500, 2000, 0, { 92001, 1500, -750, 256, 0.3, 1, 0 } } },
+}
+end
 local opened = {}
 R.PinsEditor = { OpenNew = function(map, x, y, party, name) opened[#opened + 1] = { map = map, x = x, y = y, party = party, name = name } end,
   Close = function() end, IsOpen = function() return false end }
@@ -447,6 +506,22 @@ local function zoomTo(u, v, zoom)
     wheel(z < zoom and 1 or -1)
   end
   Tick()
+end
+
+local function Fixture()
+  return { c = c, R = R, VM = VM, MV = MV, MW = MW, MA = MA, MD = MD, MCV = MCV, MXP = MXP,
+    SC = SC, WMF = WMF, VIEW = VIEW, FRAMES = FRAMES, OBJECTS = OBJECTS, CLIENT = CLIENT,
+    nativeBase = nativeBase, nativeExploration = nativeExploration, nativeQuest = nativeQuest,
+    Tick = Tick, Run = Run, Running = Running, settle = settle, tidy = tidy,
+    pointAt = pointAt, wheel = wheel, press = press, release = release, WorldOf = WorldOf, Obj = Obj,
+    Providers = Providers, openMap = openMap, closeMap = closeMap, MAPS = MAPS,
+    SetCombat = function(value) COMBAT = value end }
+end
+if CLIENT then
+  assert(MAPLAB_EXPORT_FILE, "client input requires maplab export output")
+  assert(loadfile(REPO .. "tools/maplab/export.lua"))()(Fixture(), MAPLAB_EXPORT_FILE)
+  print("CLIENT-TABLE PRODUCTION MAP EXPORT PASSED (not native API capture)")
+  return
 end
 
 ---------------------------------------------------------------------------
@@ -509,6 +584,7 @@ do
   assert(SC.blizzardWheel == 1 and not MV.Installed() and not MA.Built(), "off: the game's own map, nothing of ours")
   R:SetEnabled("mapExplore", true)
   assert(MV.Installed() and MV.Active() and MA.Built(), "on: the stitched map comes up on the open map")
+  assert(not nativeBase.shown and not nativeExploration.shown and nativeQuest.shown, "native painting hidden, quest pins retained")
   assert(SC.CalculateScrollExtentsAtScale ~= origExtents and SC.mouseWheelZoomMode == c.MAP_CANVAS_MOUSE_WHEEL_ZOOM_BEHAVIOR_NONE, "its limits and wheel")
   assert(SC.baseScale == 0, "panning allowed at every zoom")
   local _, _, z = view()
@@ -516,6 +592,7 @@ do
   R:SetEnabled("mapExplore", false)
   assert(SC.CalculateScrollExtentsAtScale == origExtents and SC.mouseWheelZoomMode == 2 and SC.baseScale == Fit(), "off: all put back")
   assert(not MA.Root().shown, "the painting hidden")
+  assert(nativeBase.shown and nativeExploration.shown and nativeQuest.shown, "native painting restored on disable")
   c.LOADED.OpenMap = true
   R:SetEnabled("mapExplore", true)
   assert(not MV.Installed() and MV.Blocker() == "OpenMap", "stays off while OpenMap is loaded")
@@ -737,6 +814,33 @@ do
   -- the continents' painting with a wide soft edge; cities with a round one
   local city = MA.City(1455)
   assert(city and #city.tex == 12 and city.tex[1].masks[1].tex:find("round"), "a city's own map, round-feathered")
+  assert(not city.loaded and MA.Snapshot().cityTexturesBound == 0, "offscreen city plans bind no native art")
+  for _, tex in ipairs(city.tex) do assert(tex.tex == nil and tex.twFile, "city geometry retains lazy source identity") end
+  local cu, cv = WorldOf(1455, 0.5, 0.5)
+  MV.GlideTo(cu, cv, MV.FitZoom(1455) * 0.4); Tick()
+  assert(near(city.frame.alpha, 1), "city plan leads before the surrounding zone banner is magnified")
+  assert(city.loaded and MA.Snapshot().cityTexturesBound == 12, "visible city binds its complete plan")
+  local cityBinds = city.tex[1].binds
+  for _ = 1, 5 do MA.SetView(city.l, city.t, city.r, city.b, MV.FitZoom(1455) * .4, MV.FitZoom) end
+  assert(city.tex[1].binds == cityBinds, "unchanged city selection never rebinds its files")
+  MA.SetShown(false)
+  assert(not city.loaded and MA.Snapshot().cityTexturesBound == 0, "map close releases city bindings")
+  for _, tex in ipairs(city.tex) do assert(tex.tex == nil, "closed city holds no native texture files") end
+  MA.SetShown(true)
+  MA.SetView(city.l, city.t, city.r, city.b, MV.FitZoom(1455) * .4, MV.FitZoom)
+  assert(city.loaded and #city.tex == 12 and city.tex[1].tex == city.tex[1].twFile, "reopen reuses city geometry and source IDs")
+  local inside = city.interior
+  city.interior = nil -- exercise the surface-city guard with the shared city geometry
+  local previous = 1
+  for i = 0, 20 do
+    local u = city.r - (city.r - city.l) * (0.16 - i * 0.01)
+    local cover = MA.SurfaceCityCover(u, cv, 48)
+    assert(cover >= 0 and cover <= previous + 1e-8 and previous - cover < 0.11, "surface-city exit blends continuously")
+    previous = cover
+  end
+  assert(previous == 0 and MA.SurfaceCityCover(cu, cv, 48) == 1, "surface city keeps its central painted blend")
+  city.interior = inside
+  MA.SetLevels()
   print("7 painting ok")
 end
 
@@ -767,6 +871,22 @@ do
     end
   end
   assert(checked == snap.tiles, "every tile shown checked")
+  local u, v = WorldOf(1429, 0.5, 0.5)
+  local strength = MXP.Get("detailStrength")
+  MXP.Set("detailStrength", 100)
+  local previous = 0.7
+  for zoom = 36, 48 do
+    MV.GlideTo(u, v, zoom); Tick()
+    local a = MD.Snapshot().alpha
+    assert(a >= previous - 1e-8 and a - previous < 0.04 and a <= 1, "deep terrain takeover is continuous and bounded")
+    previous = a
+  end
+  assert(near(previous, 1), "complete close terrain occludes magnified painting labels")
+  for _, cap in ipairs({ 50, 70 }) do
+    MXP.Set("detailStrength", cap); MV.GlideTo(u, v, 48); Tick()
+    assert(near(MD.Snapshot().alpha, cap / 100), "explicit saved strength remains the maximum")
+  end
+  MXP.Set("detailStrength", strength)
   MXP.Set("detail", false)
   Tick()
   assert(not MD.Showing(), "off: cleared")
@@ -787,7 +907,7 @@ do
   assert(not MCV.Surfaced(), "zone level: not yet")
   -- zooming onto it: it surfaces, at its place; the deepest zoom reaches as far as its map needs
   for _ = 1, 80 do pointAt(cu, cv) wheel(1) end
-  Tick()
+  Run(0.2)  -- complete the intentional cave entry fade after this same-frame wheel burst
   local _, _, z = view()
   assert(z > MXP.Get("maxZoom") and MCV.Surfaced(), "surfaced, past the usual deepest zoom: " .. z)
   local t1, t12 = MCV.Tile(1), MCV.Tile(12)
@@ -810,16 +930,41 @@ do
   -- a cave of two floors: its first, then the other from the bar
   local d = MCV.Get("cave:102")
   for _ = 1, 80 do pointAt((d.u0 + d.u1) / 2, (d.v0 + d.v1) / 2) wheel(1) end
+  Run(0.2)
+  assert(MCV.Tile(1).tex == 20001, "wheel reaches first-floor artwork")
+  -- Cursor anchoring leaves the view near the entry boundary; center the cave
+  -- to test its fully surfaced floor controls independently of the edge fade.
+  MV.GlideTo((d.u0 + d.u1) / 2, (d.v0 + d.v1) / 2, MV.MaxZoomAt((d.u0 + d.u1) / 2, (d.v0 + d.v1) / 2))
   Tick()
   assert(MCV.Surfaced() and MCV.Tile(1).tex == 20001, "the first floor")
   MCV.SetFloor(2)
   assert(MCV.Tile(1).tex == 30001, "the second")
   local fl = d.floors[2]
   assert(near(MCV.Tile(1).point[4], fl.u0 * 1002, 1e-6), "over its own rectangle")
+  -- The selected floor, rather than its multi-floor union, decides whether it
+  -- covers terrain. A genuinely uncovered corner must retain outdoor context.
+  MCV.SetFloor(1)
+  local floor = d.floors[1]
+  MV.GlideTo(d.u0 + (floor.u0 - d.u0) / 2, (d.v0 + d.v1) / 2, MV.MaxZoomAt((d.u0 + d.u1) / 2, (d.v0 + d.v1) / 2))
+  Run(0.2)
+  assert(MCV.Surfaced() and MD.Showing(), "uncovered selected-floor corner keeps terrain")
   MXP.Set("caves", false)
   Tick()
   assert(not MCV.Surfaced(), "caves off: none")
   MXP.Set("caves", true)
+  -- Keep zoom constant while the center crosses a cave edge. A chart remains
+  -- readable while partly in view and fades only as its last visible area exits.
+  local width, height = (g.u1 - g.u0) / 4, (g.v1 - g.v0) / 4
+  MCV.Sink()  -- isolate this chart from the previous two-floor cave's retained selection
+  MV.GlideTo(cu, cv, MV.MaxZoomAt(cu, cv)); Tick()
+  local previous = 1
+  for i = 0, 80 do
+    local u = g.u1 - (g.u1 - g.u0) * (0.16 - i * 0.005)
+    local _, alpha = MCV.StrengthAt(u - width / 2, cv - height / 2, u + width / 2, cv + height / 2)
+    assert(alpha >= 0 and alpha <= previous + 1e-8 and previous - alpha < 0.11, "continuous cave boundary fade")
+    previous = alpha
+  end
+  assert(previous == 0, "cave fully faded once outside the viewport")
   print("9 caves ok")
 end
 
@@ -873,7 +1018,7 @@ do
   local cu, cv = MCV.Get("cave:101").u0, MCV.Get("cave:101").v0
   zoomTo(cu, cv, 12)
   Fire(markers()["cave:101"], "OnClick", "LeftButton")
-  Tick()
+  Run(0.2)
   assert(MCV.Surfaced(), "looked inside")
   -- names: from 7 times, never overlapping; categories
   closeMap(); openMap(1436)
@@ -941,7 +1086,7 @@ do
   closeMap(); openMap(1436)
   local g = MCV.Get("cave:101")
   for _ = 1, 80 do pointAt((g.u0 + g.u1) / 2, (g.v0 + g.v1) / 2) wheel(1) end
-  Tick()
+  Run(0.2)
   assert(MCV.Surfaced(), "deep in a cave")
   R:SetEnabled("mapExplore", false)
   Tick()
@@ -1013,4 +1158,9 @@ do
   print("15 report ok")
 end
 
+local cases = assert(loadfile(TESTS .. "map_seamless_cases.lua"))()
+local fixture = Fixture()
+cases(fixture)
+if MAP_DIAGNOSTICS_TEST then assert(loadfile(TESTS .. "map_diagnostics_cases.lua"))()(fixture) end
+if MAPLAB_EXPORT_FILE then assert(loadfile(REPO .. "tools/maplab/export.lua"))()(fixture, MAPLAB_EXPORT_FILE) end
 print("MAP EXPLORE PASSED")

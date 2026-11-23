@@ -7,6 +7,8 @@ checked in Forever's API documentation (`../wow-ui-source`, branch `forever`, 1.
 and the behaviour was tested offline (Lua 5.1, stand-in frames). See "In-game checks still to do".
 
 The older `/tui diagnostics` (troubleshooting report, temporary tracing, `diag/`) is unchanged and separate.
+For map-specific snapshots, bounded event recording and one-click report preparation,
+use **`/tui mapdiag`**: [player workflow and AI schema](map-diagnostics.md).
 
 ## Packaging and loading
 
@@ -124,6 +126,7 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `npcs.search` | `npcs/Search.lua` `SR.Run` (not for an empty query) | search |
 | `npcs.knowledge.rebuild` | `npcs/Knowledge.lua` `Build` | rebuild |
 | `npcs.map.layout` | `npcs/Map.lua` `NMAP.Layout` | layout |
+| `npcs.map.fade` | `npcs/Map.lua` `FadeTick`; only during a 0.18-second marker entry | update |
 | `guildloc.tick` (`Perf.Call`, after the throttle and the early exits) | `guildloc/Comm.lua` `TickWork` | update |
 | `guildloc.receive` (`Perf.Call`, after the off test) | `guildloc/Comm.lua` `Receive` | bulk |
 | `guildloc.roster` (`Perf.Call`) | `guildloc/Roster.lua` `Rebuild` | rebuild |
@@ -180,6 +183,10 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `layouts.plan`, `layouts.apply`, `layouts.verify`, `layouts.restore` (`Perf.Call`) | `TwichUI_Layouts/Engine.lua` `LY.Plan` (with an update's comparison), `LY.Apply`, `LY.Verify`, `LY.VerifyRestore` and `LY.VerifyUndo` (with the baseline commit), `LY.Restore` and `LY.Undo` (on request; `layouts.verify` also once after the reload that finishes an install, restore or undo) | rebuild, bulk, evaluate, bulk |
 | `classbars.anim`, `pins.ping.tick`, `npcs.map.pulse` (`Perf.Call`) | `classbars/Anim.lua`, `pins/PingMap.lua`, `npcs/Map.lua` | update |
 | `map.view.step`, `map.view.follow`, `map.view.notify` (`Perf.Wrap`) | `map/View.lua` OnUpdate scripts | update |
+| `map.art.update`, `map.detail.update`, `map.cave.update` (`Perf.Wrap`) | Production painting/city, terrain and cave view updates; distinguish these children from inclusive notification cost | layout |
+| `map.cave.fade` (`Perf.Wrap`) | `map/Caves.lua` `FadeStep`; 0.15-second entry only, no idle updater | update |
+| `map.interior.update`, `map.texture.load` (`Perf.Wrap`) | `map/Pictures.lua` visible WMO pictures and bounded texture-readiness fade | layout / update |
+| `map.support.snapshot`, `map.support.export` (`Perf.Wrap`) | `TwichUI_Diagnostics/MapCapture.lua`; support-tool overhead, excluded from map renderer cost findings | support |
 | `partyDeath.event`, `reminders.event`, `healer.event`, `healer.unitEvent`, `targetart.event`, `refreshments.cast` (`Perf.Wrap`) | the private event frames' OnEvent in `reminders/State.lua`, `healer/Watch.lua`, `modules/PartyDeath.lua`, `targetart/Display.lua`, `modules/Refreshments.lua` | event |
 | `rxp.skin.*`, `rxp.timers.*`, `rxp.waypoint.sync` (`Perf.Wrap`; `rxp.skin.currentTick` after its throttle) | the `hooksecurefunc` callbacks on RestedXP's functions and the hover button's OnUpdate in `modules/RestedXPSkin.lua`, `modules/RestedXPTimers.lua`, `qol/GuideWaypoint.lua` | hook, update |
 

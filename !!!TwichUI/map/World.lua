@@ -15,16 +15,21 @@ MW.WORLD = WORLD
 local T_WORLD, T_CONTINENT, T_ZONE = 1, 2, 3
 
 local rects, arts, kinds = {}, {}, {}
+-- Forever cities are continent children, not children of the surrounding zone.
+local CITY_ZONE = { [1453] = 1429, [1454] = 1411, [1455] = 1426,
+    [1456] = 1412, [1457] = 1438, [1458] = 1420 }
+function MW.IsCity(id) return CITY_ZONE[id] ~= nil end
+function MW.CityZone(id) return CITY_ZONE[id] end
 
 local function Readable(v)
     local NV = R.Nav
     if NV and NV.Readable then return NV.Readable(v) end
-    return type(v) == "number" and v == v and v
+    return VM.Finite(v) and v or nil
 end
 
 -- A map's rectangle on the world (normalized): left, right, top, bottom, or nil where the game doesn't place it there.
 function MW.Rect(id)
-    if type(id) ~= "number" then return nil end
+    if not VM.Finite(id) or id < 1 or id % 1 ~= 0 then return nil end
     local r = rects[id]
     if r == nil then
         if id == WORLD then
@@ -42,18 +47,22 @@ end
 
 -- A map's art: width, height (its canvas units) and the layer's tile size.
 function MW.Art(id)
+    if not VM.Finite(id) or id < 1 or id % 1 ~= 0 then return nil end
     local a = arts[id]
     if a == nil then
         local ok, layers = pcall(C_Map.GetMapArtLayers, id)
         local layer = ok and type(layers) == "table" and layers[1]
-        a = layer and layer.layerWidth and layer.layerWidth > 0 and { w = layer.layerWidth, h = layer.layerHeight,
-            tw = layer.tileWidth or 256, th = layer.tileHeight or 256 } or false
+        local w, h = layer and Readable(layer.layerWidth), layer and Readable(layer.layerHeight)
+        local tw, th = layer and Readable(layer.tileWidth or 256), layer and Readable(layer.tileHeight or 256)
+        a = w and h and tw and th and w > 0 and h > 0 and tw > 0 and th > 0
+            and { w = w, h = h, tw = tw, th = th } or false
         arts[id] = a
     end
     return a or nil
 end
 
 function MW.Kind(id)
+    if not VM.Finite(id) or id < 1 or id % 1 ~= 0 then return nil end
     local k = kinds[id]
     if k == nil then
         local ok, info = pcall(C_Map.GetMapInfo, id)
@@ -94,14 +103,24 @@ end
 -- (GetMapInfoAtPosition: the game's own zone shapes, not rectangles).
 function MW.ChainAt(u, v)
     local chain = { WORLD }
+    if not (VM.Finite(u) and VM.Finite(v)) then return chain end
+    local seen = { [WORLD] = true }
     local id, x, y = WORLD, u, v
     for _ = 1, 4 do
         local ok, info = pcall(C_Map.GetMapInfoAtPosition, id, x, y)
         if not (ok and type(info) == "table") or info.mapID == id then break end
-        if not MW.Stitchable(info.mapID) then break end
+        if seen[info.mapID] or not MW.Stitchable(info.mapID) then break end
         local cx, cy = MW.FromWorld(info.mapID, u, v)
         if not cx then break end
+        local zone = CITY_ZONE[info.mapID]
+        if zone and MW.Stitchable(zone) and not seen[zone] then
+            chain[#chain + 1] = zone
+            seen[zone] = true
+            -- City's parchment reaches far beyond its streets. Its surrounding zone owns those edges.
+            if math.min(cx, 1 - cx, cy, 1 - cy) < 0.2 then break end
+        end
         id, x, y = info.mapID, cx, cy
+        seen[id] = true
         chain[#chain + 1] = id
     end
     return chain

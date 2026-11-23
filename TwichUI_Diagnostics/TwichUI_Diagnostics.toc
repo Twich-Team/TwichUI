@@ -24,6 +24,8 @@ Findings.lua
 Compare.lua
 Json.lua
 Export.lua
+MapCapture.lua
 # The workspace: charts, then the window (last: it tells TwichUI the addon is ready)
 Charts.lua
 Window.lua
+MapWindow.lua
