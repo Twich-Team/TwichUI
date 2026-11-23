@@ -1,6 +1,7 @@
 -- Source-qualified native publication benchmark. Not game/client performance.
 require('bit')
 local artifact=assert(os.getenv('WORKSHOP_SUMMARY_ARTIFACT'),'native-generated root required')
+local expected=tonumber(os.getenv('WORKSHOP_SUMMARY_EXPECTED_RECENT')) or 120
 local parts=assert(os.getenv('WORKSHOP_SUMMARY_PARTS'),'native-generated parts required')
 TwichUI={Workshop={}};GetTimePreciseSec=os.clock
 for _,name in ipairs({'Data','BridgeCodec','BridgeSchema','BridgeValidate','SummarySchema','Summary','Bridge'}) do dofile(REPO..'TwichUI_Workshop/'..name..'.lua') end
@@ -36,8 +37,8 @@ local item=tonumber(os.getenv('WORKSHOP_SUMMARY_EXPECTED_ITEM')) or 10000
 local variants=B.Variants(item)
 while not variants and Q.Pending() do Q.Step(3);variants=B.Variants(item) end
 local key=variants and variants[1]
-assert(key and B.Value(item,key,'recent').value==120)
-local lookupStart=clock();for i=1,1000 do assert(B.Value(item,key,'recent').value==120)end;local lookups=clock()-lookupStart
+assert(key and B.Value(item,key,'recent').value==expected)
+local lookupStart=clock();for i=1,1000 do assert(B.Value(item,key,'recent').value==expected)end;local lookups=clock()-lookupStart
 local beforeHistory=Q.Status();local currentCPU=clock()-currentStart
 local currentLoad,currentPeak=loadMs,peak-before
 collectgarbage('collect')

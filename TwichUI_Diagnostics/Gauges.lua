@@ -46,6 +46,8 @@ DX.OPS = {
     ["workshop.pricing.initialVisibleRows"]={module="workshop",label="Initially visible opportunity cohort size",kind="count",file="TwichUI_Workshop/Pricing.lua",where="opt-in diagnostics",every="bounded capture aggregate"},
     ["workshop.pricing.visibleTruncated"]={module="workshop",label="Visible cohort capped at 128 rows",kind="count",file="TwichUI_Workshop/Pricing.lua",where="opt-in diagnostics",every="bounded capture aggregate"},
     ["workshop.summary.historyPreemptions"]={module="workshop",label="History validation paused for current prices",kind="count",file="TwichUI_Workshop/Summary.lua",where="opt-in diagnostics",every="bounded capture aggregate"},
+    ["workshop.preparedLoad"]={module="workshop",label="Prepared current addon load",kind="init",file="TwichUI_Workshop/Prepared.lua",where="load",every="once per requested physical partition"},
+    ["workshop.preparedVerify"]={module="workshop",label="Prepared record/proof work slice",kind="work",file="TwichUI_Workshop/Summary.lua",where="Q.Step",every="requested work; shares history budget"},
     ["workshop.historyValidate"]={module="workshop",label="Historical partition validation slice",kind="work",file="TwichUI_Workshop/Summary.lua",where="Q.Step",every="explicit historical reads only"},
     ["workshop.historyLoad"]={module="workshop",label="Historical partition addon load",kind="work",file="TwichUI_Workshop/Summary.lua",where="loadPart",every="explicit historical reads only"},
     ["workshop.summary.currentDecodes"]={module="workshop",label="Current partition decode starts",kind="count",file="TwichUI_Workshop/Summary.lua",where="loadPart",every="opt-in aggregate"},
@@ -488,5 +490,14 @@ for _,spec in ipairs({{"known","Known recipes"},{"pending","Queued recipes"},{"w
     Perf.Gauge('workshop.opportunities.'..key,{label=label,kind='cache',group='workshop',builtin=true,unit='count',read=function()
         local w=R.Workshop;local session=w and w.Session
         return session and session.OpportunityStatus and session.OpportunityStatus()[key]or 0
+    end})
+end
+
+-- Prepared counters must exist before the lazy Workshop addon loads so a cold
+-- capture selects them. Reading only inspects existing state, never starts work.
+for _,key in ipairs({'loads','bytes','hashes','verified','full','flag_words','cache_hits','pending','cancelled'})do
+    Perf.Gauge('workshop.prepared.'..key,{label='Prepared current '..key,kind='cache',group='workshop',builtin=true,unit=key=='bytes'and 'bytes'or 'count',read=function()
+        local q=R.Workshop and R.Workshop.Summary;local status=q and q.Status()
+        return status and status.prepared and status.prepared[key]or 0
     end})
 end

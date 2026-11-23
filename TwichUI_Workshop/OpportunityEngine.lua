@@ -51,6 +51,16 @@ function Engine:Remove(row)
 end
 function Engine:Prioritize(ids)
     self.visible=ids
+    if self.args and self.args.prioritize then
+        local items,seen={},{}
+        for i=1,math.min(#ids,128)do
+            local row=self.byId[ids[i]]
+            if row then for _,item in ipairs(row.dependencies)do
+                if not seen[item]and #items<512 then seen[item]=true;items[#items+1]=item end
+            end end
+        end
+        self.args.prioritize(items)
+    end
     for i=math.min(#ids,128),1,-1 do local row=self.byId[ids[i]];if row and row.queued then self:Add(row,true)end end
 end
 function Engine:RetryWaiting()
@@ -161,6 +171,17 @@ function Engine:Build(recipes,old)
         self.preparing=true
         local prepared={};local position=1
         local defaults={};for i=1,math.min(12,#self.all)do defaults[i]=self.all[i].rec.id end
+        local initial=self.visible and #self.visible>0 and self.visible or defaults
+        if self.args.plan then
+            local items,seen={},{}
+            for i=1,math.min(#initial,128)do
+                local row=self.byId[initial[i]]
+                if row then for _,item in ipairs(row.dependencies)do
+                    if not seen[item]and #items<512 then seen[item]=true;items[#items+1]=item end
+                end end
+            end
+            self.args.plan(self.dependencies,items,function()self:Work()end)
+        end
         while true do
             local bucket
             local visible=self.visible and #self.visible>0 and self.visible or defaults

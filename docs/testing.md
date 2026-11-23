@@ -67,7 +67,7 @@ Replace `workshop-settings` with one of these nonempty groups:
 | `auction-house` | Standalone Auction House preview, existing auction safeguards and Workshop dependencies |
 | `crafting` | Crafting, shopping, stock, planner, strategy and compact views |
 | `market` | Prices, distribution, history, valuation, schema and automatic scans |
-| `market-performance` | Twelve fast deterministic pricing/partition/estimator/incremental-engine/diagnostics/reference/catalog modules; no large benchmarks or simulators in development selection |
+| `market-performance` | Thirteen fast deterministic pricing/partition/estimator/incremental-engine/diagnostics/reference/catalog/experiment modules; no large benchmarks or simulators in development selection |
 | `reminders` | Reminders engines, designer, settings and artwork |
 | `loot-rolls` | Loot Rolls rules, cards, automatic rolling and settings pages; the synthetic-roll simulator catalog is run by hand with `bash tools/simlab/loot.sh` |
 | `healer-watch` | Healer monitoring/alerts, guarded hover communication and Settings |
@@ -411,7 +411,7 @@ client acceptance is inferred from this campaign.
 
 ### Market pending-pricing performance
 
-`./tests/run.sh development market-performance` selects twelve small production-reader,
+`./tests/run.sh development market-performance` selects thirteen small production-reader,
 pricing, estimator and integrity modules without a simulator. It supplements the
 normal affected Market/crafting/consumer groups. Dedicated audit benchmarks remain
 opt-in (`tools/measure_market_opportunities.py`), never default test discovery.
@@ -459,3 +459,19 @@ for exact before/after commands, operation gates, baseline update policy,
 recomputation oracle, memory evidence and retained simulator failures.
 
 Extended memory diagnostics may use `--scenario stress --stress-cycles 60`; cycles default to 20 and remain opt-in. Snapshot fields include memo, price, row and pending counts alongside retained heap.
+
+
+### Game-ready Market data experiments
+
+The thirteenth `market-performance` module is a small deterministic guard for
+**test-only** encoders/providers: source grammar, numeric bounds, exact variants,
+unknown/absence, content integrity, warm reuse, cancellation and replacement.
+It does not install a format or run the large fixture generator. The normal PR
+workflow keeps using the same development selection.
+
+The opt-in generator and measurement driver are
+`tools/experiments/market_game_ready.py` and
+`tools/experiments/measure_game_ready.py`. Reproduction commands, pinned sources,
+raw sample ranges, rejected layouts and interpretation limits are in the
+[game-ready investigation](performance/market-game-ready-data-investigation.md).
+Run these campaigns explicitly; they are not a new development/release gate.
