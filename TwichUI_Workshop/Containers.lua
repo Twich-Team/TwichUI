@@ -10,6 +10,10 @@ local function closed(t,fields)
     for k in pairs(t)do need(fields[k]);n=n+1 end
     local count=0;for k in pairs(fields)do need(t[k]~=nil);count=count+1 end;need(n==count)
 end
+local function measured(id,fn,...)
+    if R.Perf and R.Perf.Call then return R.Perf.Call(id,fn,...)end
+    return fn(...)
+end
 local function pause()coroutine.yield(C.YIELD)end
 local function stream(blocks,bytes,stats)
     need(type(blocks)=='table'and getmetatable(blocks)==nil)
@@ -26,10 +30,10 @@ local function stream(blocks,bytes,stats)
             and type(C_EncodingUtil.DecompressString)=='function'
             and Enum and Enum.CompressionMethod and Enum.CompressionMethod.Deflate~=nil)
         need(not(InCombatLockdown and InCombatLockdown()))
-        local at=clock();local ok,raw=pcall(C_EncodingUtil.DecodeBase64,block.payload)
+        local at=clock();local ok,raw=pcall(measured,'workshop.containerBase64',C_EncodingUtil.DecodeBase64,block.payload)
         local dt=math.max(0,clock()-at);stats.base64_ms=stats.base64_ms+dt
         need(ok and type(raw)=='string'and #raw>0 and #raw<=C.ENCODED_BYTES*3/4)
-        at=clock();local good,value=pcall(C_EncodingUtil.DecompressString,raw,Enum.CompressionMethod.Deflate)
+        at=clock();local good,value=pcall(measured,'workshop.containerInflate',C_EncodingUtil.DecompressString,raw,Enum.CompressionMethod.Deflate)
         dt=math.max(0,clock()-at);stats.inflate_ms=stats.inflate_ms+dt;stats.worst_inflate_ms=math.max(stats.worst_inflate_ms,dt)
         stats.inflates=stats.inflates+1
         need(good and type(value)=='string'and #value==size)
@@ -48,7 +52,7 @@ function C.Read(ctx,kind,bucket,p)
     if not blob then
         need(not(InCombatLockdown and InCombatLockdown())and C_AddOns and C_AddOns.LoadAddOn)
         local name='TwichUI_Market'..kind..'Container'..ctx.bank..('%02d'):format(math.floor(bucket/16))
-        local at=clock();local ok,loaded=pcall(C_AddOns.LoadAddOn,name);local dt=math.max(0,clock()-at)
+        local at=clock();local ok,loaded=pcall(measured,'workshop.containerLoad',C_AddOns.LoadAddOn,name);local dt=math.max(0,clock()-at)
         ctx.stats.load_ms=ctx.stats.load_ms+dt;ctx.stats.worst_load_ms=math.max(ctx.stats.worst_load_ms,dt)
         need(ok and loaded);ctx.stats.container_loads=ctx.stats.container_loads+1
         globals=_G[global];blob=type(globals)=='table'and globals[id]

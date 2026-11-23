@@ -170,6 +170,10 @@ local function loadPart(p,bucket)
     if active.containers then
         need(bucket>=64)
         local generation=active
+        if R.Perf and R.Perf.on then
+            R.Perf.Count('workshop.summary.decodeStarts');R.Perf.Count('workshop.summary.historyDecodes')
+            if active.checked[bucket]then R.Perf.Count('workshop.summary.decodeRepeats')end
+        end
         job={kind='part',bucket=bucket,co=coroutine.create(function()
             local raw=W.Containers.Read(generation.containers,'History',p.bucket,p)
             if not generation.loaded[bucket]then

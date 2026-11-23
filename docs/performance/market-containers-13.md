@@ -58,3 +58,10 @@ coordinated merge is considered. The first focused development run passed15
 modules in11.272s; full verification and final comparable results are recorded
 with the exact paired Market source in its final report. The temporary codec
 ZIP/source from PR135 are deliberately absent from this branch.
+
+Opt-in diagnostics reuse the existing `/tui perf` capture and export. Container
+load, Base64 and raw-inflate calls have separate registered scopes; the existing
+Market addon-memory aggregate includes the12 containers. No new sampling timer
+is introduced. Native verification can use `/tui perf start workshop 3`,
+`/tui perf mark opportunities-open`, open Opportunities/select history, then
+`/tui perf stop` and copy the export from `/tui perf`.
