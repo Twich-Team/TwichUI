@@ -129,7 +129,7 @@ The original note was clarified. **Do not implement a Craft Queue search.** The 
 
 | Source | Why not ready | Owner decision needed |
 |---|---|---|
-| **P02** party ping replay | `pins/Ping.lua` already plays the receipt sound and `pins/PingMap.lua` already draws received pings and replays sound/animation from the recent list after changing maps; `docs/map-pings.md` documents this | **Verify/close, not new implementation.** Reproduce the owner-reported failure before reopening; preserve mute, anti-spam and reduced-motion behavior |
+| **P02** party ping replay | `pins/Ping.lua` and `pins/PingMap.lua` retain receipt/replay sound and visuals, including map navigation | **Verified Existing in Batch 10**, offline/source evidence; no reproduced defect or rewrite. Native delivery/audio/rendering remain unchecked: [evidence](map-pings.md#batch-10--p02-verified-existing) |
 | **F12/F29** junk treatment | The owner clarified that missing picker visibility is the current request; junk marking was another idea | Defer junk-marking behavior and any protected-item exception to a separate owner decision |
 | **W24** multi-craft aggregate timer | **Presentation preference resolved:** owner wants both a movable TwichUI total-progress bar and a native cast-bar enhancement option. Native integration and reliable completed-craft evidence remain unverified | Technical discovery first: confirm Forever permits safe, non-protected native cast-bar presentation; offer separate-bar fallback when unavailable. No automatic crafting or unreliable queue credit; not Autonomous-Ready |
 | **W25** Add to queue from Blizzard profession frame | Requires native frame placement/selection semantics and load-on-demand behavior | Decide one craft vs currently selected quantity and verify Forever UI attachment safely |
@@ -223,3 +223,27 @@ including downgrade limits. No future task is auto-selected.
 ## Maintenance
 
 After the owner chooses a batch, record its authorization *in the batch prompt or corresponding GitHub issue*, not as a standing instruction in this file. When a PR is opened, move the associated task to **In review**, link the PR and avoid duplicate selection. When merged, mark **Done** with the merged commit and keep its original note in [the roadmap](product-roadmap.md). Revise assumptions and checks only when concrete evidence changes them; do not spin up a task-orchestration service or rewrite the idea bank.
+
+## Owner-authorized Batch 10 outcomes
+
+Baseline `1a3d9eb`, after UX01 #132 merged. This batch selects no further work.
+
+- **F02 — Implemented for review:** personal 1–100% Execute Range, default off,
+  independent EllesmereUI target/nameplate placement, marker/active/both styles.
+  Both integration paths have pinned actual provider/Forever source evidence;
+  restricted health hides active highlighting and protected layout defers.
+  [Evidence and acceptance checklist](design/execute-range.md).
+- **F16 — Implemented for review:** live Healer Watch motion-only hover opens
+  four self-status choices. Only an explicit click can attempt a guarded group
+  message; no watched-player inference, polling, queue or delivery claim.
+  [Source evidence and native acceptance](healer-watch-communication-discovery.md).
+- **P02 — Verified Existing:** existing replay behavior and safeguards pass;
+  no defect reproduced or source rewrite. [Evidence](map-pings.md#batch-10--p02-verified-existing).
+- **F15 — Existing feature verified, two safety corrections implemented:**
+  account consent is excluded from profiles, and disabled/profile-invalidated
+  openings cannot later attempt a flight. No protected-action call changed.
+  [Evidence](navigation.md#batch-10-automatic-flight-verification).
+
+Native client acceptance is separate from offline coverage. F27, W13, W25,
+Market/Opportunities/Ledger, Reminders glows and unrelated systems remain out
+of scope. No unassigned roadmap item is made Ready or automatically selected.

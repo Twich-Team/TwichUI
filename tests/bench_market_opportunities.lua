@@ -131,6 +131,12 @@ J.ParseSummary=function(raw,...)
  decodes=decodes+1;if seen[raw] then repeats=repeats+1 end;seen[raw]=true
  return parse(raw,...)
 end
+-- Explicit investigation-only hook. Normal benchmarks/CI keep the production
+-- reader. A hook may install an isolated reader and file-backed fixture.
+local experiment=arg[11] and dofile(arg[11])
+if experiment then
+ h,input,rawParts,richParts,semanticSHA=experiment.setup(c)
+end
 local records,prices,crafts,draws,estimatorInstances=0,0,0,0,0
 local finalView,auditRecipes
 local overlays={}
@@ -222,6 +228,7 @@ else
  for i=1,count do recipes[i]={id=i,name='Synthetic craft '..i,prof=171,filled=true,outItem=128+i%math.max(1000,count),outMin=1,outMax=1,
   mats={{item=64+i%64,qty=1+i%4},{item=64+(i*7)%64,qty=2+i%3}}} end
  W.Session.AllRecipes=function()return recipes end
+ if experiment then recipes=experiment.recipes(count) end
  probe(W.Session,"AllRecipes","catalog");probe(W.Session,"Estimator","estimator")
  probe(W.Opps,"Rows","rows");probe(W.Opps,"Select","sort");probe(W.Opps,"Summary","summary")
  probe(W.UI.pages and W.UI.pages.opps,"Render","view");probe(W.Facts,"Chart","chart")
@@ -266,6 +273,7 @@ else
   if not out.opportunities_settlement_model_seconds and P.PendingCount()==0 and P.CacheSize()>=target and not v.calculating then
    out.opportunities_settlement_model_seconds=now-startVirtual;out.opportunities_settlement_cpu_ms=clock()-start
   end
+  if experiment then experiment.observe(v,now-startVirtual,clock()-start,out) end
   last=v;lastPricingRevision=P.Generation();sample();return v
  end
  local initial=clock()
@@ -412,15 +420,23 @@ if finalView then
  local beforeRecords=records;local at=clock()
  local fresh=W.Estimate.New(finalView.estimator.ctx)
  local full=W.Opps.Rows(auditRecipes,finalView.lookup,finalView.rate,nil,fresh)
- assert(snapshot(full)==snapshot(finalView.all),'incremental economic results differ from full recomputation')
+ local resultSnapshot=snapshot(full)
+ assert(resultSnapshot==snapshot(finalView.all),'incremental economic results differ from full recomputation')
  local sorted=W.Opps.Select(full,W.Session.opp)
  assert(#sorted==#finalView.rows,'filtered row count differs')
  for i,row in ipairs(sorted)do assert(row.rec.id==finalView.rows[i].rec.id,'final ranking differs')end
  local summary=W.Opps.Summary(full)
  assert(summary.priced==finalView.summary.priced and summary.profitable==finalView.summary.profitable and summary.total==finalView.summary.total,'summary differs')
- out.result_sha256=J.SHA(snapshot(full));out.oracle_passed=true
+ -- Optional native digest outside the timed workload. Preserve byte-for-byte
+ -- full-field equality above; do not spend the stress campaign hashing its
+ -- large verification receipt in the production Lua crypto implementation.
+ local oraclePath=os.getenv('BENCH_ORACLE_SNAPSHOT')
+ if oraclePath then local file=assert(io.open(oraclePath,'wb'));file:write(resultSnapshot);file:close()
+ else out.result_sha256=J.SHA(resultSnapshot) end
+ out.oracle_passed=true
  out.oracle_ms=clock()-at;out.oracle_reader_calls=records-beforeRecords
 end
+if experiment then experiment.finish(out,event) end
 local fields={}
 for k,v in pairs(out)do
  local value=type(v)=='number' and string.format('%.6f',v) or J.Encode(v)

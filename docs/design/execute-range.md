@@ -1,0 +1,139 @@
+# Execute Range (F02)
+
+Implemented as an opt-in, visual-only indicator for the two source-verified EllesmereUI integration targets. The source evidence gate passes for EllesmereUI Unit Frames' target health bar and EllesmereUI Nameplates' enemy health bars. This is **source-verified and unit-tested**, not simulator-tested or real-client-tested. The offline renderer capture below has been visually reviewed; it is not native-client evidence. Native combat/taint behavior and appearance have not been certified by offline fixtures.
+
+## Player behavior
+
+Execute Range has its own Settings page, searchable by execute, health, threshold, percentage, target, nameplate and EllesmereUI. The main switch defaults off. When enabled, both supported locations default on independently. Any whole percentage **1–100** can be selected with the existing slider or typed number box; the default is **20%**. No class, talent or spell determines the threshold.
+
+Appearance choices are Threshold marker, Active range edge, and Marker and active edge (default). The marker is a one-bar-unit gold dividing line at the threshold. The active edge is a restrained one-bar-unit warm outline inside the bar, visible for readable health greater than zero and at or below the threshold. There is no animation or gameplay action. These three saved appearance IDs and their original colors/opacity remain unchanged. Both modes can be enabled on target and nameplates together.
+
+The marker needs geometry, not health. **The active edge is hidden when health is secret, unavailable, invalid or zero; no combat threshold crossing is claimed for those values.** Active-only mode can therefore show nothing while health is restricted. The Settings page always explains this and recommends Marker or Both for a persistent threshold indication. There is no inferred percentage, status-bar-value arithmetic, secret serialization or attempt to defeat client restrictions.
+
+New attachment or geometry changes on protected bars wait until combat ends. An already attached indicator follows its unchanged bar's position and scale through native parent inheritance; a changed protected size, fill direction or threshold hides that indicator until safe layout is possible. Unprotected verified nameplate bars can attach and resize during combat. Enabling in combat may therefore wait for the protected target bar. The Settings explanation covers this even when no attachment exists yet.
+
+Unsupported or incompatible providers draw nothing. There is no Blizzard fallback. Missing EllesmereUI, its Blizzard/None target-source choices, an unknown bar type/orientation, a forbidden frame, a broken getter, unreadable geometry or an unrecognised hierarchy cannot redirect the overlay to another frame.
+
+## Source identity and evidence
+
+Local `reference_addons` and `wow-ui-source` reference roots were unavailable. A bounded search of the available workspace/home/mount/opt reference locations did not establish an installed addon. Investigation continued against the actual upstream repositories, rather than treating the existing TwichUI target-art adapter as proof of both providers.
+
+EllesmereUI source identity is **9.9.1**, commit [`8abfcbf6afa4129369cdc9fb5e03e96d1fdd94e5`](https://github.com/EllesmereGaming/EllesmereUI/tree/8abfcbf6afa4129369cdc9fb5e03e96d1fdd94e5). Both the [Unit Frames TOC](https://github.com/EllesmereGaming/EllesmereUI/blob/8abfcbf6afa4129369cdc9fb5e03e96d1fdd94e5/EllesmereUIUnitFrames/EllesmereUIUnitFrames.toc#L1) and [Nameplates TOC](https://github.com/EllesmereGaming/EllesmereUI/blob/8abfcbf6afa4129369cdc9fb5e03e96d1fdd94e5/EllesmereUINameplates/EllesmereUINameplates.toc#L1) declare Interface 16001 and version 9.9.1. Its [client gate](https://github.com/EllesmereGaming/EllesmereUI/blob/8abfcbf6afa4129369cdc9fb5e03e96d1fdd94e5/EllesmereUI_ClientGate.lua#L25) explicitly recognises Forever's 16000–19999 interface range as the supported Camelot engine. Its [custom license](https://github.com/EllesmereGaming/EllesmereUI/blob/8abfcbf6afa4129369cdc9fb5e03e96d1fdd94e5/license.txt) reserves rights: the adapter is original code, with no provider implementation copied into TwichUI.
+
+Forever API identity is the actual [`forever` source commit `734f065329cff4992835b01a84f210a297db91b6`](https://github.com/Gethe/wow-ui-source/commit/734f065329cff4992835b01a84f210a297db91b6), **1.60.1 (71037)**, dated 2026-11-20. This establishes matching source evidence, not an installed-client observation.
+
+| Boundary | Actual inspected source and implication |
+| --- | --- |
+| Target discovery | [Init:995](https://github.com/EllesmereGaming/EllesmereUI/blob/8abfcbf6afa4129369cdc9fb5e03e96d1fdd94e5/EllesmereUIUnitFrames/EUI_UnitFrames_Init.lua#L995) creates `EllesmereUIUnitFrames_Target` through the engine. [Engine:953](https://github.com/EllesmereGaming/EllesmereUI/blob/8abfcbf6afa4129369cdc9fb5e03e96d1fdd94e5/EllesmereUIUnitFrames/EUI_UnitFrames_Engine.lua#L953) establishes a secure unit button and the sanctioned `unit` attribute. TwichUI checks that attribute equals `target`; it never writes `.unit` or secure attributes. |
+| Actual target health bar | [Builders:419](https://github.com/EllesmereGaming/EllesmereUI/blob/8abfcbf6afa4129369cdc9fb5e03e96d1fdd94e5/EllesmereUIUnitFrames/EUI_UnitFrames_Builders.lua#L419) assigns `frame.Health`; [Layout:882](https://github.com/EllesmereGaming/EllesmereUI/blob/8abfcbf6afa4129369cdc9fb5e03e96d1fdd94e5/EllesmereUIUnitFrames/EUI_UnitFrames_Layout.lua#L882) constructs the StatusBar from live settings. [Layout:534](https://github.com/EllesmereGaming/EllesmereUI/blob/8abfcbf6afa4129369cdc9fb5e03e96d1fdd94e5/EllesmereUIUnitFrames/EUI_UnitFrames_Layout.lua#L534) can move it under `_barClip`. The adapter accepts only a StatusBar whose bounded ancestry reaches the verified target button, rather than requiring direct parent equality or using the whole button's bounds. |
+| Fill axis and direction | [Layout:874](https://github.com/EllesmereGaming/EllesmereUI/blob/8abfcbf6afa4129369cdc9fb5e03e96d1fdd94e5/EllesmereUIUnitFrames/EUI_UnitFrames_Layout.lua#L874) explicitly describes horizontal left/right and vertical bottom/top fill, with reverse operating within that axis; [Layout:919](https://github.com/EllesmereGaming/EllesmereUI/blob/8abfcbf6afa4129369cdc9fb5e03e96d1fdd94e5/EllesmereUIUnitFrames/EUI_UnitFrames_Layout.lua#L919) applies both settings. Forever [StatusBar API:53](https://github.com/Gethe/wow-ui-source/blob/734f065329cff4992835b01a84f210a297db91b6/Interface/AddOns/Blizzard_APIDocumentationGenerated/SimpleStatusBarAPIDocumentation.lua#L53) and [79](https://github.com/Gethe/wow-ui-source/blob/734f065329cff4992835b01a84f210a297db91b6/Interface/AddOns/Blizzard_APIDocumentationGenerated/SimpleStatusBarAPIDocumentation.lua#L79) expose the actual orientation and reverse state. |
+| Nameplate registry and bar | [Nameplates:40](https://github.com/EllesmereGaming/EllesmereUI/blob/8abfcbf6afa4129369cdc9fb5e03e96d1fdd94e5/EllesmereUINameplates/EllesmereUINameplates.lua#L40) exports `EllesmereNameplates_NS`, with `plates[unit]`; [PlatePool:33](https://github.com/EllesmereGaming/EllesmereUI/blob/8abfcbf6afa4129369cdc9fb5e03e96d1fdd94e5/EllesmereUINameplates/EUI_Nameplates_PlatePool.lua#L33) constructs the actual `plate.health` StatusBar with live width, height and offset. This is an inspected interface, not a promised public stability API. |
+| Creation and removal | [Events:371](https://github.com/EllesmereGaming/EllesmereUI/blob/8abfcbf6afa4129369cdc9fb5e03e96d1fdd94e5/EllesmereUINameplates/EUI_Nameplates_Events.lua#L371) synchronously resolves the native base, acquires an enemy plate, populates the registry and calls SetUnit. [Plate:968](https://github.com/EllesmereGaming/EllesmereUI/blob/8abfcbf6afa4129369cdc9fb5e03e96d1fdd94e5/EllesmereUINameplates/EUI_Nameplates_Plate.lua#L968) binds `unit` and `nameplate`; [Events:432](https://github.com/EllesmereGaming/EllesmereUI/blob/8abfcbf6afa4129369cdc9fb5e03e96d1fdd94e5/EllesmereUINameplates/EUI_Nameplates_Events.lua#L432) removes/releases it, even if the native base is already unavailable. TwichUI validates registry key, plate token, current native base and base token together, and keeps its own token association for immediate removal cleanup. |
+| Promotion and token swaps | [Events:93](https://github.com/EllesmereGaming/EllesmereUI/blob/8abfcbf6afa4129369cdc9fb5e03e96d1fdd94e5/EllesmereUINameplates/EUI_Nameplates_Events.lua#L93) can promote pending/friendly units after flags, name or faction changes. [Health:44](https://github.com/EllesmereGaming/EllesmereUI/blob/8abfcbf6afa4129369cdc9fb5e03e96d1fdd94e5/EllesmereUINameplates/EUI_Nameplates_Health.lua#L44) handles a base-token swap without add/remove. A single gated secure post-observer of each observed plate's `UpdateHealthValues` hides an obsolete occupant on that same provider update; mismatched registry/base tokens stay hidden until a fully verified binding returns. |
+| Text, absorbs and decoration | [Builders:530](https://github.com/EllesmereGaming/EllesmereUI/blob/8abfcbf6afa4129369cdc9fb5e03e96d1fdd94e5/EllesmereUIUnitFrames/EUI_UnitFrames_Builders.lua#L530) puts target text above Health. Nameplate [PlatePool:166](https://github.com/EllesmereGaming/EllesmereUI/blob/8abfcbf6afa4129369cdc9fb5e03e96d1fdd94e5/EllesmereUINameplates/EUI_Nameplates_PlatePool.lua#L166) places health text on its own higher tier; [Styles:1216](https://github.com/EllesmereGaming/EllesmereUI/blob/8abfcbf6afa4129369cdc9fb5e03e96d1fdd94e5/EllesmereUINameplates/EUI_Nameplates_Styles.lua#L1216) puts absorb children above Health. TwichUI regions stay at Health's OVERLAY sublevel 1, below those children and EUI's hash line/border. It never reuses or changes the provider's hash-line or native class-derived execute-glow settings. Native appearance with all optional styles still needs review. |
+| Secret health | Forever [Unit API:1472](https://github.com/Gethe/wow-ui-source/blob/734f065329cff4992835b01a84f210a297db91b6/Interface/AddOns/Blizzard_APIDocumentationGenerated/UnitDocumentation.lua#L1472), [1506](https://github.com/Gethe/wow-ui-source/blob/734f065329cff4992835b01a84f210a297db91b6/Interface/AddOns/Blizzard_APIDocumentationGenerated/UnitDocumentation.lua#L1506) and [1526](https://github.com/Gethe/wow-ui-source/blob/734f065329cff4992835b01a84f210a297db91b6/Interface/AddOns/Blizzard_APIDocumentationGenerated/UnitDocumentation.lua#L1526) mark health/max/percent as potentially secret. Every health value is checked with `issecretvalue` before comparison or math. A color-curve display could be investigated separately; this version chooses the explicit hide-on-unknown policy, rather than promising secret-health crossings. |
+| Attachment/security | Forever [CreateTexture:131](https://github.com/Gethe/wow-ui-source/blob/734f065329cff4992835b01a84f210a297db91b6/Interface/AddOns/Blizzard_APIDocumentationGenerated/SimpleFrameAPIDocumentation.lua#L131) exposes region creation. [Resizing API:22](https://github.com/Gethe/wow-ui-source/blob/734f065329cff4992835b01a84f210a297db91b6/Interface/AddOns/Blizzard_APIDocumentationGenerated/SimpleScriptRegionResizingAPIDocumentation.lua#L22), [135](https://github.com/Gethe/wow-ui-source/blob/734f065329cff4992835b01a84f210a297db91b6/Interface/AddOns/Blizzard_APIDocumentationGenerated/SimpleScriptRegionResizingAPIDocumentation.lua#L135) and [163](https://github.com/Gethe/wow-ui-source/blob/734f065329cff4992835b01a84f210a297db91b6/Interface/AddOns/Blizzard_APIDocumentationGenerated/SimpleScriptRegionResizingAPIDocumentation.lua#L163) identify protected layout operations: texture-only does not automatically mean unrestricted layout. Creation/layout is therefore deferred for protected bars in combat. [Region alpha:123](https://github.com/Gethe/wow-ui-source/blob/734f065329cff4992835b01a84f210a297db91b6/Interface/AddOns/Blizzard_APIDocumentationGenerated/SimpleRegionAPIDocumentation.lua#L123) is the non-layout visibility operation used on TwichUI's own regions. No protected provider frame is replaced, reparented, resized, hidden or assigned attributes. |
+
+## Implementation and lifecycle
+
+- [Config](../../!!!TwichUI/execute/Config.lua) owns validated profile fields `ui.executeRange.threshold`, `target`, `nameplates`, `appearance`, `color`, `opacity`, `texture`. `modules.executeRange` is the default-off switch. Defaults are read without eagerly writing a table. Invalid stored fields read as defaults without rewriting unrelated settings; setters reject invalid input. No schema migration or database version changes.
+- [Ellesmere adapter](../../!!!TwichUI/execute/Ellesmere.lua) reads only the verified fields above. A bounded six-parent ancestry check permits the known clipping wrapper and rejects unrelated bars. Plain finite positive dimensions and a recognised horizontal/vertical orientation are required.
+- [Display](../../!!!TwichUI/execute/Display.lua) creates six original texture regions per observed bar: one marker, four inner edges and one lower-sublayer fill. Only one fill mode can draw at a time. Parent coordinates preserve position, scale and dimensions. Size/show/hide handlers and post-observed orientation/reverse setters follow configuration changes without writing provider layout. Health events repaint only the associated record.
+- EUI can register its native events after TwichUI. A coalesced `C_Timer.After(0)` hands discovery to the next event turn, after EUI's verified synchronous add/login/promotion handlers finish. This is a bounded event-order handoff, with no guessed time interval, repeated retries or polling. Both handler orders are covered by fixtures. Current registry entries are also discovered on enable, addon load, world entry, target change and combat exit.
+- Removed/hidden bars immediately clear their own regions. All later paints revalidate the current owner and binding. Pool reuse retains one region set per bar and clears old token mappings. At most **128 bars / 768 regions** are retained, including retired provider bars; further incompatible churn fails closed until reload. Registry discovery visits at most 128 entries, with no global frame scan. Native frames cannot be destroyed; disabled observations remain inert.
+- Disable unregisters all eleven dynamic game events, hides regions and invalidates the sole queued discovery callback. Profile apply and profile identity change (including Duplicate) invalidate queued work and token associations, then read the current profile. No callback retains a former profile's settings. The core runs without Settings opening; Settings is load-on-demand, uses existing row primitives and creates its static inline sample only when its page is first shown, reusing it on later visits without any preview timer.
+- [Settings page](../../TwichUI_Settings/pages/ExecuteRange.lua) exposes all seven preferences under the main switch, with existing disabled-prerequisite explanations, global search and section reset. Reset restores 20%, both locations and Both appearance while preserving the feature switch. Profile switching/duplication and existing SavedVariables reload preserve the plain settings. The [TwichConfig group](../../!!!TwichUI/setup/TwichConfig.lua) explicitly includes the switch and all seven preferences for selected sharing, own backups and restore; provider settings and frame references never enter persistence.
+- One diagnostics gauge reports retained observed bars; no timing scope is added to the O(1) health repaint. Lifecycle/discovery is event-driven and hard-bounded. No global UI framework or recurring OnUpdate is introduced.
+
+## Verification
+
+**Unit-tested:** `test_execute_range.lua` exercises both event registration orders; first above-threshold plate attachment; threshold crossings with plain values; secret health without comparison/arithmetic; independent locations and appearance; nested target health; reverse/vertical/resize geometry; protected attachment/layout deferral; late friendly/enemy promotion; source-shaped pool reuse and silent token swap; removal after provider registry deletion; hidden/incompatible/forbidden/erroring providers; generation cancellation on disable/profile changes; arbitrary whole thresholds and resource caps.
+
+**Unit-tested:** `test_execute_range_settings.lua` uses the real SettingsClient registry and callbacks for registration/search, every control and its disabled prerequisite, range/default validation, appearance choices, reset scope, independent profile copies and complete TwichConfig group export. Existing `test_twichui_share.lua` and `test_defaults.lua` also pass. Edited Lua files are syntax-checked with Lua 5.1. The coordinator records combined-branch coverage separately. A simulator installation is unavailable; no simulator claim is made.
+
+Offline stand-ins deliberately do not execute EUI's proprietary code and cannot prove live frame security, event delivery, actual pixels, font/absorb overlap or taint. The following owner-directed native checks remain unchecked:
+
+- [ ] Record Forever build/interface and installed EllesmereUI Unit Frames/Nameplates versions; confirm both health-bar fields match this source pin. On a different provider layout, verify safe hiding rather than assuming compatibility.
+- [ ] Enable on target only, nameplates only and both; try 1%, 20%, 25%, 35% and 100%, then reload and switch/duplicate profiles. Reset preferences and verify the main switch is retained.
+- [ ] Inspect compact and taller target layouts, short and wide nameplates, non-default scale, horizontal/reverse and vertical/reverse target fills. Marker position must match the actual health bar in every supported orientation.
+- [ ] Cross the threshold in both directions with readable health; confirm exact-threshold inclusion, no dead-unit active edge, and no text or absorb obstruction. Where health is secret, verify active edge stays hidden, marker stays useful and Settings explains the limitation.
+- [ ] In combat, exercise existing indicators and newly appearing enemy plates. Enabling or changing protected target geometry must defer/hide until combat ends, without blocked actions or taint. Check target switching and a friendly/enemy transition.
+- [ ] Repeatedly show, hide, remove and recycle plates, including the provider's token-swap case; no former occupant's edge may remain. Change EUI layouts and its own hash line/native execute options; TwichUI must follow valid geometry without altering any EUI setting or decoration.
+- [ ] Disable, switch profiles and remove/disable each provider; queued discovery must not resurrect an overlay. Normal targeting, clicks, casts and nameplate interaction remain unchanged.
+
+## Visual customization refinement
+
+The original `marker`, `active` and `both` values still mean exactly the original
+marker/edge treatment. New styles are Execute zone (`zone`), Active health
+highlight (`highlight`), Marker and execute zone (`markerZone`), and Marker, zone
+and active edge (`markerZoneEdge`). There is no overlapping zone plus health fill.
+The default remains `both`; no migration or eager default write is required.
+
+The zone covers **0% through the configured threshold** even above range. A 25%
+zone on a 200-unit bar is exactly 50 units wide, starting at the fill origin (right
+for reverse horizontal, bottom for normal vertical, top for reverse vertical).
+Active health uses the **current readable health fraction**, only when positive
+and at/below the threshold, and disappears on recovery. Secret/unavailable/dead
+health never produces a guessed filled region. The provider's own fill is neither
+recolored nor assigned a texture/value. Existing clipping ancestors and scale are
+inherited; every placement stays within the verified bar's local rectangle.
+
+Fill color uses the existing Settings swatch (ARGB, default `ffcc7847`). Its alpha
+multiplies the separate 0–100% opacity (default 25%). The existing MenuStyle
+StatusBars catalog supplies EllesmereUI/registered bar textures, including shaded
+or patterned choices where installed. No new texture system or animated gradient
+is added. IDs are bounded names, never arbitrary file paths; missing texture IDs
+remain saved and render flat. Core rendering works without opening Settings.
+
+**Safe protected-layout fallback:** the existing prohibition on protected layout
+writes in combat is preserved. If an active-health fill needs a new size while
+its bar is protected, it hides and uses the original active edge instead. The edge
+also disappears on recovery. The exact filled highlight returns at the next safe
+layout opportunity, normally combat exit. An unchanged prepared zone/marker can
+remain visible. New attachments, changed thresholds/sizes/directions retain the
+existing combat deferral. No native safety claim is made from offline tests.
+
+The inline Settings preview shares the actual decoration code with live bars. It
+shows higher, exact-threshold and below-threshold samples and immediately follows
+appearance changes. At 100% all samples correctly qualify. It neither enables the
+feature nor changes unit health, installs provider hooks or runs a timer. Leaving
+the page/closing Settings hides it; reopening reuses the same sample textures.
+
+[Before/after renderer capture](../images/execute-range-preview.png) ([vector source](../images/execute-range-preview.svg)) shows the
+three original styles and four new styles at 25%, above and below range. It is an
+offline capture of the real decoration geometry/color output on source-shaped
+stand-ins, **not a native EllesmereUI screenshot**; the bars behind the decoration
+are labeled sample surfaces. It does not certify installed texture appearance,
+font/absorb overlap, pointer behavior, taint or native combat.
+
+Verification: `development execute-range` passes all three selected modules.
+`feature execute-range --profile cloud` passes 58 offline modules and syntax;
+one stale ordinary-page fixture failed because Execute Range now has a hosted
+preview. That expectation was corrected with an explicit reachability assertion,
+and `test_settings_defaults.lua` then passed (59 selected offline modules in
+aggregate). Both selected simulator launches failed preflight because the lab is
+absent; no simulator/full/native PASS is claimed. The Settings contract was
+reviewed: only this page changed, with three added settings (756 total) and five
+added descriptor rows (1192 total). Preview reuse/no-write behavior is exercised
+by `test_settings_window.lua`; existing marker/edge, new styles, geometry,
+colors/alpha/textures, missing media, protected fallback, health recovery,
+recycling and cleanup are covered by focused tests. Profiles/sharing/reset include
+all new preferences. After the final health-independent marker/zone guard and media-preview refresh, the three Execute Range modules and the Settings window lifecycle module were rerun and passed.
+
+Additional native checks, for **both EllesmereUI target frames and enemy plates**:
+
+- [ ] Compare Marker / Active Edge / Both with the prior version, including
+  threshold crossing, text and absorb visibility.
+- [ ] At 1%, 25%, 35% and 100%, inspect zone width/origin and active filled health
+  above, exactly at and below range, then heal above range.
+- [ ] Try all combined styles, custom color/alpha, 0/25/100% opacity, and available
+  flat/shaded/patterned textures. Cancel the color picker and verify restoration.
+- [ ] Resize compact/tall target layouts, vary plate width/scale and supported
+  fill directions; confirm clipping and alignment.
+- [ ] Exercise readable/secret health, protected combat edge fallback and return
+  to exact fill outside combat; check blocked-action warnings/taint.
+- [ ] Recycle/hide/remove plates, switch targets/profiles and disable; no former
+  occupant's fill may remain. Reload and confirm new and legacy preferences.
+- [ ] Reopen preview, navigate away, close Settings, reset the section and remove
+  a selected media provider; samples stop when hidden, missing media draws flat,
+  and default reset preserves the main switch.

@@ -1,0 +1,344 @@
+{
+  "metrics_enabled": false,
+  "simulator_workers": 1,
+  "simulator_resource_budget": null,
+  "complete": true,
+  "package": null,
+  "automated_release_gate_passed": false,
+  "source": {
+    "commit": "8617f137d45987ace0a20a9dbf3f8ff7ae7c21d4",
+    "dirty": true,
+    "working_tree_sha256": "32893b19cb13e7e597df9834636f6e2d8efa2db20c80d9a17963c88e25ab64b1"
+  },
+  "source_after": {
+    "commit": "8617f137d45987ace0a20a9dbf3f8ff7ae7c21d4",
+    "dirty": true,
+    "working_tree_sha256": "32893b19cb13e7e597df9834636f6e2d8efa2db20c80d9a17963c88e25ab64b1"
+  },
+  "source_unchanged": true,
+  "exit_code": 0,
+  "slowest_tests": [
+    {
+      "metrics": null,
+      "test": "test_mutate.py",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": 29,
+      "seconds": 6.365996987995459
+    },
+    {
+      "metrics": null,
+      "test": "test_market_game_ready.py",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": 10,
+      "seconds": 3.565059555010521
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_market_pending.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 2.3562836179917213
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_opportunity_ui.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 1.7356160619965522
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_market_performance.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 1.6022278369928245
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_crafting_reference.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 1.051958822994493
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_market_current.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.3039148530078819
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_opportunity_engine.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.27923982399806846
+    },
+    {
+      "metrics": null,
+      "test": "test_perf_engine.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.23283394599275198
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_summary.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.22197691298788413
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_market_consumption.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.21745371300494298
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_market_consumption_async.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.11664175499754492
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_estimate.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.03557039699808229
+    }
+  ],
+  "slowest_scenarios": [],
+  "selection": {
+    "tier": "fast",
+    "group": "market-performance",
+    "groups": [
+      "market-performance"
+    ],
+    "tests": [
+      "test_market_game_ready.py",
+      "test_mutate.py",
+      "test_perf_engine.lua",
+      "test_workshop_crafting_reference.lua",
+      "test_workshop_estimate.lua",
+      "test_workshop_market_consumption.lua",
+      "test_workshop_market_consumption_async.lua",
+      "test_workshop_market_current.lua",
+      "test_workshop_market_pending.lua",
+      "test_workshop_market_performance.lua",
+      "test_workshop_opportunity_engine.lua",
+      "test_workshop_opportunity_ui.lua",
+      "test_workshop_summary.lua"
+    ],
+    "syntax": [
+      "!!!TwichUI/Core.lua",
+      "TwichUI_Diagnostics/Export.lua",
+      "TwichUI_Diagnostics/Gauges.lua",
+      "TwichUI_Diagnostics/Instrument.lua",
+      "TwichUI_Diagnostics/Presets.lua",
+      "TwichUI_Diagnostics/Session.lua",
+      "TwichUI_Workshop/Bridge.lua",
+      "TwichUI_Workshop/Estimate.lua",
+      "TwichUI_Workshop/Opportunities.lua",
+      "TwichUI_Workshop/OpportunityEngine.lua",
+      "TwichUI_Workshop/Pricing.lua",
+      "TwichUI_Workshop/Session.lua",
+      "TwichUI_Workshop/Style.lua",
+      "TwichUI_Workshop/Summary.lua",
+      "TwichUI_Workshop/SummarySchema.lua",
+      "TwichUI_Workshop/Vendor.lua",
+      "TwichUI_Workshop/ViewOpportunities.lua",
+      "TwichUI_Workshop/Window.lua",
+      "tests/bench_market_cold_stages.lua",
+      "tests/bench_market_game_ready.lua",
+      "tests/bench_market_index_memory.lua",
+      "tests/bench_market_opportunities.lua",
+      "tests/bench_workshop_summary.lua",
+      "tests/market_cold_fixture.lua"
+    ],
+    "simulators": [],
+    "verification_profile": "development",
+    "selection_reason": "direct feature tests and syntax; no simulator",
+    "omitted_catalogs": [
+      "lab-guard",
+      "smoke",
+      "interact",
+      "diagnose",
+      "auctionproof",
+      "auctionpreview",
+      "workshop",
+      "testlab",
+      "settings",
+      "reminders"
+    ],
+    "coverage_classification": {
+      "offline": [
+        "unit tests",
+        "contracts, migrations, performance, packaging and mutation harnesses as selected by module"
+      ],
+      "simulators": {},
+      "not_established": [
+        "real-client acceptance",
+        "pixel baseline regression (structural screenshots only)",
+        "production mutation campaigns (separate policy)",
+        "real-client packaged-install acceptance"
+      ]
+    },
+    "profile": "local"
+  },
+  "jobs": 2,
+  "layout_workers": 1,
+  "seconds": 9.828898656996898,
+  "local_milestone_passed": false,
+  "unsupported_coverage": [],
+  "syntax_passed": true,
+  "tests": [
+    {
+      "metrics": null,
+      "test": "test_market_game_ready.py",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": 10,
+      "seconds": 3.565059555010521
+    },
+    {
+      "metrics": null,
+      "test": "test_mutate.py",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": 29,
+      "seconds": 6.365996987995459
+    },
+    {
+      "metrics": null,
+      "test": "test_perf_engine.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.23283394599275198
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_crafting_reference.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 1.051958822994493
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_estimate.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.03557039699808229
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_market_consumption.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.21745371300494298
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_market_consumption_async.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.11664175499754492
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_market_current.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.3039148530078819
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_market_pending.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 2.3562836179917213
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_market_performance.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 1.6022278369928245
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_opportunity_engine.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.27923982399806846
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_opportunity_ui.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 1.7356160619965522
+    },
+    {
+      "metrics": null,
+      "test": "test_workshop_summary.lua",
+      "passed": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "python_cases": null,
+      "seconds": 0.22197691298788413
+    }
+  ],
+  "simulators": [],
+  "passed": true
+}

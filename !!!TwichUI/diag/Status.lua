@@ -301,6 +301,9 @@ S.GROUPS = {
                     if code == "theme-not-selected" then
                         return Result("available", code, "RestedXP is using another theme; choose TwichUI's in RestedXP's theme list.", extra)
                     end
+                    if code == "preview-off" then
+                        return Result("available", code, "RestedXP's Preview Changes is off; the TwichUI theme is drawn after a reload.", extra)
+                    end
                     if code == "v2-window" then
                         return Result("available", code, "RestedXP's v2 guide window is on; only the theme's colors and font reach it.", extra)
                     end

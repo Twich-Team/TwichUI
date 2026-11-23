@@ -7,6 +7,7 @@ on:
       - '!!!TwichUI/Core.lua'
       - 'tests/**'
       - 'tools/test_runner.py'
+      - 'tools/experiments/**'
       - '.github/workflows/market-performance.yml'
   workflow_dispatch:
 permissions:

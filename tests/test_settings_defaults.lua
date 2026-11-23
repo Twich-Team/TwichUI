@@ -49,7 +49,8 @@ for key, default in pairs(defaults) do
   n = n + 1
   assert(default == R.DEFAULT_MODULES[key], key .. " default matches a new install")
 end
-assert(n == 87, "every module has a toggle: " .. n)
+assert(n == 88, "every module has a toggle: " .. n)
+assert(defaults.executeRange == false, "execute range is opt-in")
 assert(defaults.barGlows == true, "action bar glows are on by default (each spell can be turned off)")
 assert(defaults.hazardAlerts == false, "hazard alerts are opt-in")
 assert(defaults.reminders == true, "reminders are on (none exist until made, and each starts turned off)")
@@ -249,6 +250,8 @@ assert(type(attune:GetTooltip()) == "string" and attune:GetTooltip():find("Statu
 c.TwichUIDB.modules.attuneSkin = false
 attune.setting.changed()
 assert(attune:GetTooltip():find("after reload"), "toggle change shows it needs a reload")
+
+assert(K.pages.executeRange.def.host and K.rowsById.executeRangeThreshold, "Execute Range remains reachable with its inline preview")
 
 -- The overview links to one page per feature, in this order; every setting
 -- is on exactly one page (registration above refuses a repeat).

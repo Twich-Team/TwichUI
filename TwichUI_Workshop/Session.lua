@@ -766,6 +766,8 @@ function S.Opportunities()
         local localAt,seq,ended=lm and lm.at,lm and lm.snap and lm.snap.seq,SC.ended
         opportunityEngine:Request({recipes=recipes,key=key,estimator=estimator,lookup=lookup,rate=rate,filter=S.opp,now=Q.Now(),
             prefetch=market and market.pricing and MK.PrepareBucket and function(ids,work)MK.PrepareBucket(ids,work,opportunityEngine)end,
+            plan=market and market.pricing and MK.PreparePlan and function(dependencies,visible,work)MK.PreparePlan(dependencies,visible,work,opportunityEngine)end,
+            prioritize=market and market.pricing and MK.Prioritize,
             release=MK.ReleasePreparation and function()MK.ReleasePreparation(opportunityEngine)end,
             ready=market and market.pricing and MK.Ready,settled=MK.Settled,
             valid=function()

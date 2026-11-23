@@ -22,7 +22,10 @@ local function Fake(kind)
   end })
 end
 Methods = {
-  Show = function(s) s.shown = true end, Hide = function(s) s.shown = false end,
+  Show = function(s) s.shown = true end, Hide = function(s)
+    local was = s.shown; s.shown = false
+    if was and s.scripts.OnHide then s.scripts.OnHide(s) end
+  end,
   IsShown = function(s) return s.shown end, SetShown = function(s, v) s.shown = v and true or false end,
   SetScript = function(s, n, fn) s.scripts[n] = fn end, GetScript = function(s, n) return s.scripts[n] end,
   RegisterEvent = function(s, e) s.events[e] = true end,
@@ -42,6 +45,8 @@ Methods = {
   SetAlpha = function(s, a) s.alpha = a end, GetAlpha = function(s) return s.alpha end,
   SetScale = function(s, v) s.scale = v end, GetScale = function(s) return s.scale end,
   EnableMouse = function(s, v) s.mouse = v and true or false end,
+  SetMouseClickEnabled = function(s, v) s.mouseClick = v end,
+  SetMouseMotionEnabled = function(s, v) s.mouseMotion = v end,
   SetFont = function(s, path, size, flags) s.font = { path, size, flags }; s.fontSize = size; return true end,
   SetValue = function(s, v) s.value = v end, SetStatusBarColor = function(s, r, g, b) s.barColor = { r, g, b } end,
   SetDesaturated = function(s, v) s.desaturated = v end,
@@ -176,7 +181,7 @@ local function Say(event, text, guid, name)
 end
 
 for _, f in ipairs({ "modules/Borders.lua", "modules/MenuStyle.lua", "modules/Media.lua", "Icons.lua", "modules/SpellMenu.lua",
-  "healer/Config.lua", "healer/Logic.lua", "healer/Drinks.lua", "healer/Particles.lua", "healer/Display.lua", "healer/Picker.lua", "healer/Watch.lua", "setup/TwichConfig.lua" }) do
+  "healer/Config.lua", "healer/Logic.lua", "healer/Drinks.lua", "healer/Particles.lua", "healer/Display.lua", "healer/Picker.lua", "healer/Communication.lua", "healer/Watch.lua", "setup/TwichConfig.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
 c.TwichUIDB = { modules = {} }
@@ -343,6 +348,11 @@ end
 -- 4. Watching: the one with the Healer role, in a dungeon
 ---------------------------------------------------------------------------
 do
+  -- A panel first built in combat must recover when re-enabled after combat,
+  -- even if it was disabled before PLAYER_REGEN_ENABLED could be observed.
+  G.combat = true; On()
+  Check(not Panel().communicationHover:IsShown(), "first combat build defers protected hover configuration")
+  Off(); G.combat = false
   On()
   local s = Wt.Snapshot()
   Check(s.running and s.scopeActive and s.unit == "party2" and s.source == "auto" and s.name == "Elyndra", "watches the Healer role in a dungeon")
@@ -350,6 +360,35 @@ do
   Check(reg and unit == "party2", "unit events for the watched unit alone")
   for _, k in ipairs(powerAsked) do Check(k == 0, "always asks for mana, never the current power type") end
   Check(Shown() and Value() == "75%" and Panel().name.text == "Elyndra", "shown with the measured mana")
+  Check(Panel().mouse == false and Panel().communicationHover.mouseClick == false and Panel().communicationHover.mouseMotion == true and Panel().communicationHover:IsShown(),
+    "live hover observes motion without enabling panel clicks")
+  local hoverCalls = 0
+  local oldHover = D.onCommunication
+  D.onCommunication = function() hoverCalls = hoverCalls + 1 end
+  Panel().communicationHover.scripts.OnEnter(Panel().communicationHover)
+  Check(hoverCalls == 1 and #acted == 0, "hover exposes the action without chat or gameplay actions")
+  D.onCommunication = oldHover
+  c.LE_PARTY_CATEGORY_HOME, c.LE_PARTY_CATEGORY_INSTANCE = 1, 2
+  local oldGroup = c.IsInGroup
+  c.IsInGroup = function(category) if category == 2 then return false end return G.group end
+  local sent = {}
+  c.C_ChatInfo.SendChatMessage = function(text, channel) sent[#sent + 1] = {text, channel} end
+  Panel().communicationHover.scripts.OnEnter(Panel().communicationHover)
+  Check(R.HealerPicker.IsOpen() and R.HealerPicker.Kind() == "communication" and #sent == 0, "hover opens the actual menu but never sends")
+  local menu, action
+  for _, candidate in ipairs(frames) do if candidate.name == "TwichUIHealerPicker" then menu = candidate end end
+  for _, candidate in ipairs(frames) do if candidate.parent == menu and candidate.value == "drinking" then action = candidate end end
+  Check(action ~= nil, "the real menu has an explicit drinking choice")
+  if action then action.scripts.OnClick(action) end
+  Check(#sent == 1 and sent[1][1] == "Drinking." and sent[1][2] == "PARTY", "only the chosen self message is sent to party")
+  NOW = NOW + 4
+  Panel().communicationHover.scripts.OnEnter(Panel().communicationHover)
+  Check(R.HealerPicker.IsOpen(), "hover can open a fresh menu")
+  Fire("GROUP_ROSTER_UPDATE")
+  Check(not R.HealerPicker.IsOpen(), "group changes immediately invalidate the menu")
+  if action then action.scripts.OnClick(action) end
+  Check(#sent == 1, "a stale row click after group change sends nothing")
+  c.IsInGroup, c.C_ChatInfo.SendChatMessage = oldGroup, nil
   Check(Panel().mouse == false, "the panel takes no clicks")
   Check(not Registered("CHAT_MSG_SAY") and not Registered("CHAT_MSG_WHISPER") and Registered("CHAT_MSG_PARTY") and Registered("CHAT_MSG_INSTANCE_CHAT"),
     "chat: party and instance by default; say and whispers off")
@@ -594,7 +633,7 @@ do
   Check(Shown(), "quiet test: the live panel is up")
   R.QuietScreen.Set(true); Settle()
   Check(not Shown() and Wt.Snapshot().reason == "quiet" and HL.REASONS.quiet, "quiet: the panel goes, with its own reason")
-  Check(Wt.PreviewStart(false) and Shown() and Panel().mark.shown, "quiet: a preview still shows (the player asked)")
+  Check(Wt.PreviewStart(false) and Shown() and not Panel().communicationHover:IsShown() and Panel().mark.shown, "quiet: a preview still shows (the player asked)")
   Wt.PreviewStop(); Settle()
   Check(not Shown(), "quiet: and the live panel stays away after it")
   R.QuietScreen.Set(false); Settle()

@@ -17,6 +17,8 @@ BridgeCodec.lua
 BridgeSchema.lua
 BridgeValidate.lua
 SummarySchema.lua
+Containers.lua
+Prepared.lua
 Summary.lua
 Bridge.lua
 ServerMarket.lua
