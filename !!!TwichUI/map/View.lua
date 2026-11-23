@@ -262,6 +262,7 @@ end
 -- Moving
 ---------------------------------------------------------------------------
 local function StopAnim()
+    if anim and R.MapTrace then R.MapTrace("animation-stop", anim.mode, anim.z1) end
     anim = nil
     if driver then driver:SetScript("OnUpdate", nil) end
 end
@@ -285,8 +286,25 @@ local function Step(_, elapsed)
     if not a or not Ready() or InCombat() or MV.MapID() ~= a.map then StopAnim() return end
     a.t = a.t + math.min(elapsed or 0, 0.1)
     local done = a.t >= a.dur
-    ShowWorld(Frame(a, done and 1 or VM.Ease(a.t / a.dur)))
+    local wantU, wantV, wantZ = Frame(a, done and 1 or VM.Ease(a.t / a.dur))
+    ShowWorld(wantU, wantV, wantZ)
+    if R.MapTrace and a.mode == "anchor" then
+        local u, v, z = MV.View()
+        local clamped = math.abs(u - wantU) > 1e-8 or math.abs(v - wantV) > 1e-8
+        if clamped and not a.reportedClamp then
+            a.reportedClamp = true
+            R.MapTrace("boundary-clamp", z)
+        elseif not clamped then
+            local pu, pv = PerPx(z)
+            local errorPx = math.max(math.abs((a.au - u) / pu - a.sx), math.abs((a.av - v) / pv - a.sy))
+            if errorPx > 1 and not a.reportedAnchor then
+                a.reportedAnchor = true
+                R.MapTrace("anchor-error", errorPx, z)
+            end
+        end
+    end
     if done then
+        if R.MapTrace then R.MapTrace("animation-end", a.mode, a.z1) end
         StopAnim()
         if a.done then a.done() end
     end
@@ -294,6 +312,7 @@ end
 
 local function Start(a)
     a.map = MV.MapID()
+    if R.MapTrace then R.MapTrace("animation-start", a.mode, a.z0, a.z1) end
     if not MXP.Get("smooth") or not a.dur or a.dur <= 0 then
         StopAnim()
         ShowWorld(Frame(a, 1))
@@ -310,7 +329,10 @@ function MV.Animating() return anim ~= nil end
 
 -- Zoom by wheel notches about a screen point (sx, sy: from the view's middle; the pointer's by default).
 function MV.ZoomBy(notches, sx, sy)
-    if not Ready() or InCombat() or not VM.Finite(notches) or notches == 0 then return false end
+    if not Ready() or InCombat() or not VM.Finite(notches) or notches == 0 then
+        if R.MapTrace then R.MapTrace("motion-rejected", InCombat() and "combat" or "unready-or-invalid") end
+        return false
+    end
     local u, v, zoom = MV.View()
     if not sx then sx, sy = CursorOffset() end
     if not (VM.Finite(sx) and VM.Finite(sy)) then return false end
@@ -320,6 +342,7 @@ function MV.ZoomBy(notches, sx, sy)
     local most = MV.MaxZoomAt(au, av)
     most = math.max(most, from)   -- leaving a deeper context never reverses inward zoom or accelerates outward zoom
     local target = VM.Clamp(from * (1 + MXP.Get("wheelStep") / 100) ^ notches, 1, math.max(most, 1))
+    if R.MapTrace then R.MapTrace("wheel", notches, from, target, most) end
     if math.abs(target - zoom) < 1e-9 and not anim then return false end
     stats.wheel = stats.wheel + 1
     Start({ mode = "anchor", au = au, av = av, sx = sx, sy = sy, z0 = zoom, z1 = target, dur = WHEEL_SECONDS })
@@ -478,6 +501,7 @@ local function Switch(target)
         return false
     end
     stats.switches = stats.switches + 1
+    if R.MapTrace then R.MapTrace("host-change", target, zoom) end
     if active then ShowWorld(u, v, zoom) end
     return true
 end
@@ -726,6 +750,7 @@ local function Build()
         Dirty()
     end
     function provider:OnCanvasSizeChanged()
+        if R.MapTrace then R.MapTrace("viewport", MV.ViewSize()) end
         if lastView and Shown() and lastView.map == MV.MapID() and not switching then
             StopAnim()
             resizeRestore = lastView
@@ -836,5 +861,33 @@ function MV.Snapshot()
         local u, v, zoom = MV.View()
         out.zoom, out.max, out.map = zoom, MV.MaxZoomAt(u, v), MV.MapID()
     end
+    return out
+end
+
+-- Explicit support capture, not called in ordinary rendering. No player position is read.
+function MV.Diagnostic(coordinates)
+    local out = MV.Snapshot()
+    out.enabled, out.shown, out.ready, out.nativeMap = MV.Wanted(), Shown(), Ready(), MV.MapID()
+    out.minimumZoom, out.combat, out.deferred = 1, InCombat() and true or false, follower ~= nil and follower:IsShown()
+    out.pendingZoom = anim and anim.z1 or false
+    out.zoom, out.max = out.zoom or "unavailable", out.max or "unavailable"
+    out.nativeMap = out.nativeMap or "unavailable"
+    out.viewportWidth, out.viewportHeight, out.uiScale = "unavailable", "unavailable", "unavailable"
+    out.center = { available = false, reason = coordinates and "map not ready" or "withheld" }
+    out.animationMode = anim and anim.mode or "none"
+    if sc then
+        out.viewportWidth, out.viewportHeight = MV.ViewSize()
+        local ok, scale = pcall(sc.GetEffectiveScale, sc)
+        out.uiScale = ok and VM.Finite(scale) and scale or "unavailable"
+        if Ready() and coordinates then
+            local u, v, z = MV.View()
+            out.center = { u = u, v = v, zoom = z, source = "native canvas converted by MapWorld" }
+            local x, y = MW.FromWorld(MV.MapID(), u, v)
+            out.hostPosition = { x = x, y = y }
+            out.viewRect = { MV.ViewRect() }
+            if anim and anim.mode == "anchor" then out.anchor = { u = anim.au, v = anim.av, offsetX = anim.sx, offsetY = anim.sy } end
+        end
+    end
+    out.coordinates = coordinates and "view and cursor only; player position never queried" or "withheld"
     return out
 end

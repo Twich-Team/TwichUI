@@ -412,6 +412,23 @@ end
 function MA.Zone(id) return zones[id] end
 function MA.City(id) return cities[id] end
 
+function MA.Diagnostic()
+    local out = MA.Snapshot()
+    out.layers, out.cityLayers = {}, {}
+    for _, key in ipairs({ "world", "cont", "zone" }) do
+        local f = frames and frames[key]
+        out.layers[#out.layers + 1] = { kind = key, shown = f and f:IsShown() or false,
+            alpha = f and f:GetAlpha() or 0, level = f and f:GetFrameLevel() or false }
+    end
+    for _, c in ipairs(cityList) do
+        if c.frame:IsShown() then out.cityLayers[#out.cityLayers + 1] = { mapId = c.id, alpha = c.frame:GetAlpha(),
+            level = c.frame:GetFrameLevel(), interior = c.pictures ~= nil } end
+    end
+    table.sort(out.cityLayers, function(a, b) return a.mapId < b.mapId end)
+    out.masks = { zone = "thin feather", continent = "wide feather", city = "round feather", territory = false }
+    return out
+end
+
 -- the unexplored-areas choice changed (or its scope was reset): every built zone dressed again
 R.MapExplorePrefs.Subscribe(function(key)
     if key == "unexplored" or key == "behavior" or key == "all" then MA.RefreshExplored() end

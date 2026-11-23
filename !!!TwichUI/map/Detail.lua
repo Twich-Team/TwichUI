@@ -26,6 +26,7 @@ local wanted = {}
 local showing, alpha = false, 0
 local stats = { decoded = 0, updates = 0, tooMany = 0, made = 0, binds = 0, failed = 0 }
 local failed = {}
+local placements = {}
 
 local function Tiles(cont)
     local t = decoded[cont]
@@ -68,6 +69,7 @@ function MD.Showing() return showing end
 local function Release(key)
     local tex = used[key]
     used[key] = nil
+    placements[key] = nil
     if R.MapPictures then R.MapPictures.Forget(tex) end
     tex:Hide()
     tex:SetTexture(nil)
@@ -144,6 +146,7 @@ local function Update()
     -- counting actual data rather than empty ocean grid cells. Never drop an opaque layer at the cap.
     a = a * (1 - VM.Fade(count, MAX_TILES * 0.7, MAX_TILES))
     if count > MAX_TILES or a <= 0.005 then
+        if R.MapTrace and count > MAX_TILES then R.MapTrace("detail-budget", count, MAX_TILES) end
         if count > MAX_TILES then stats.tooMany = stats.tooMany + 1 end
         Clear()
         return
@@ -166,10 +169,12 @@ local function Update()
                     stats.made = stats.made + 1
                 end
                 local loaded = tex:SetTexture(w.fd, nil, nil, "LINEAR")
+                if R.MapPictures then R.MapPictures.BindIdentity(tex, w.fd) end
                 stats.binds = stats.binds + 1
                 if loaded == false then
                     failed[w.fd] = true
                     stats.failed = stats.failed + 1
+                    if R.MapTrace then R.MapTrace("texture-failure", w.fd, "rejected") end
                     tex:Hide(); tex:SetTexture(nil)
                     free[#free + 1] = tex
                     tex = nil
@@ -180,6 +185,8 @@ local function Update()
                     tex:SetPoint("TOPLEFT", R.MapArt.Root(), "TOPLEFT", ua * W, -va * H)
                     tex:SetSize((ub - ua) * W, (vb - va) * H)
                     used[key] = tex
+                    placements[key] = { fileId = w.fd, continent = w.c.cont, column = w.col, row = w.row,
+                        bounds = { ua, va, ub, vb } }
                 end
             end
         end
@@ -207,4 +214,24 @@ function MD.Snapshot()
     for _, v in pairs(decoded) do if v then conts = conts + 1 end end
     return { showing = showing, alpha = alpha, tiles = n, pooled = #free, made = stats.made, continents = conts,
         updates = stats.updates, tooMany = stats.tooMany, binds = stats.binds, failed = stats.failed, requested = stats.requested or 0 }
+end
+
+function MD.Diagnostic(coordinates)
+    local out = MD.Snapshot()
+    out.budget, out.strength, out.fadeFrom, out.fadeTo, out.level = MAX_TILES, MXP.Get("detailStrength"), FADE[1], FADE[2], LEVEL
+    out.textures, out.failedIds = {}, {}
+    local keys = {}; for key in pairs(used) do keys[#keys + 1] = key end; table.sort(keys)
+    for _, key in ipairs(keys) do
+        local p, tex = placements[key], used[key]
+        if p and #out.textures < 32 then
+            out.textures[#out.textures + 1] = { fileId = p.fileId, continent = p.continent,
+                column = p.column, row = p.row, bounds = coordinates and p.bounds or false,
+                shown = tex:IsShown(), alpha = tex:GetAlpha() }
+        end
+    end
+    for file in pairs(failed) do out.failedIds[#out.failedIds + 1] = file end; table.sort(out.failedIds)
+    out.failedIdsOmitted = math.max(0, #out.failedIds - 32)
+    while #out.failedIds > 32 do table.remove(out.failedIds) end
+    out.texturesOmitted = math.max(0, #keys - #out.textures)
+    return out
 end

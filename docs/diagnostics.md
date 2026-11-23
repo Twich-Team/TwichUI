@@ -7,6 +7,8 @@ checked in Forever's API documentation (`../wow-ui-source`, branch `forever`, 1.
 and the behaviour was tested offline (Lua 5.1, stand-in frames). See "In-game checks still to do".
 
 The older `/tui diagnostics` (troubleshooting report, temporary tracing, `diag/`) is unchanged and separate.
+For map-specific snapshots, bounded event recording and one-click report preparation,
+use **`/tui mapdiag`**: [player workflow and AI schema](map-diagnostics.md).
 
 ## Packaging and loading
 
@@ -181,6 +183,7 @@ uses an item, sends anything or makes up events. Each states its cost before you
 | `classbars.anim`, `pins.ping.tick`, `npcs.map.pulse` (`Perf.Call`) | `classbars/Anim.lua`, `pins/PingMap.lua`, `npcs/Map.lua` | update |
 | `map.view.step`, `map.view.follow`, `map.view.notify` (`Perf.Wrap`) | `map/View.lua` OnUpdate scripts | update |
 | `map.interior.update`, `map.texture.load` (`Perf.Wrap`) | `map/Pictures.lua` visible WMO pictures and bounded texture-readiness fade | layout / update |
+| `map.support.snapshot`, `map.support.export` (`Perf.Wrap`) | `TwichUI_Diagnostics/MapCapture.lua`; support-tool overhead, excluded from map renderer cost findings | support |
 | `partyDeath.event`, `reminders.event`, `healer.event`, `healer.unitEvent`, `targetart.event`, `refreshments.cast` (`Perf.Wrap`) | the private event frames' OnEvent in `reminders/State.lua`, `healer/Watch.lua`, `modules/PartyDeath.lua`, `targetart/Display.lua`, `modules/Refreshments.lua` | event |
 | `rxp.skin.*`, `rxp.timers.*`, `rxp.waypoint.sync` (`Perf.Wrap`; `rxp.skin.currentTick` after its throttle) | the `hooksecurefunc` callbacks on RestedXP's functions and the hover button's OnUpdate in `modules/RestedXPSkin.lua`, `modules/RestedXPTimers.lua`, `qol/GuideWaypoint.lua` | hook, update |
 

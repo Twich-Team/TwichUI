@@ -1035,10 +1035,12 @@ do
 end
 
 local cases = assert(loadfile(TESTS .. "map_seamless_cases.lua"))()
-cases({ c = c, R = R, VM = VM, MV = MV, MW = MW, MA = MA, MD = MD, MCV = MCV, MXP = MXP,
+local fixture = { c = c, R = R, VM = VM, MV = MV, MW = MW, MA = MA, MD = MD, MCV = MCV, MXP = MXP,
   SC = SC, WMF = WMF, VIEW = VIEW, FRAMES = FRAMES, OBJECTS = OBJECTS, nativeBase = nativeBase, nativeExploration = nativeExploration,
   nativeQuest = nativeQuest, Tick = Tick, Run = Run, Running = Running, settle = settle, tidy = tidy,
   pointAt = pointAt, wheel = wheel, press = press, release = release, WorldOf = WorldOf, Obj = Obj,
   Providers = Providers, openMap = openMap, closeMap = closeMap, MAPS = MAPS,
-  SetCombat = function(value) COMBAT = value end })
+  SetCombat = function(value) COMBAT = value end }
+cases(fixture)
+if MAP_DIAGNOSTICS_TEST then assert(loadfile(TESTS .. "map_diagnostics_cases.lua"))()(fixture) end
 print("MAP EXPLORE PASSED")

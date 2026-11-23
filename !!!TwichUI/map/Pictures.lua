@@ -8,6 +8,15 @@ R.MapPictures = MP
 local MAX_PICTURES = 256
 local sets = setmetatable({}, { __mode = "k" })
 local pending, loader, loadTick = {}, nil, nil
+local identities = setmetatable({}, { __mode = "k" })
+local failures = {}
+function MP.BindIdentity(tex, file) identities[tex] = file end
+local function Failed(tex, reason)
+    local file = identities[tex]
+    if #failures >= 32 then table.remove(failures, 1) end
+    failures[#failures + 1] = { fileId = file or false, reason = reason }
+    if R.MapTrace then R.MapTrace("texture-failure", file, reason) end
+end
 
 function MP.Forget(tex)
     pending[tex] = nil
@@ -26,6 +35,7 @@ local function LoadStep(_, elapsed)
             -- Failed/absent assets cannot keep an updater alive indefinitely. Painted art stays visible.
             tex:Hide()
             pending[tex] = nil
+            Failed(tex, "load-timeout")
         end
     end
     if not next(pending) then loader:SetScript("OnUpdate", nil) end
@@ -113,6 +123,7 @@ local function Update(set, u0, v0, u1, v1, alpha)
                 tex = table.remove(set.free)
                 if not tex then tex = set.parent:CreateTexture(nil, "ARTWORK"); set.made = set.made + 1 end
                 tex:SetTexture(g[1], "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE", "TRILINEAR")
+                MP.BindIdentity(tex, g[1])
                 tex:SetTexCoord(0, g[7], g[8], 1)
                 tex:SetRotation(g[6])
                 tex:SetDrawLayer("ARTWORK", math.min(7, math.floor((i - 1) * 16 / #set.geometry) - 8))
@@ -141,4 +152,25 @@ function MP.Snapshot(set)
     local n = 0
     for _ in pairs(set.used) do n = n + 1 end
     return { active = n, pooled = #set.free, made = set.made, binds = set.binds }
+end
+
+function MP.Diagnostic(coordinates)
+    local out = MP.Snapshot()
+    out.pendingTextures, out.failures, out.pictures = {}, {}, {}
+    for tex, e in pairs(pending) do out.pendingTextures[#out.pendingTextures + 1] = {
+        fileId = identities[tex] or false, ageSeconds = e.age, desiredAlpha = e.alpha, fading = e.fade ~= nil } end
+    table.sort(out.pendingTextures, function(a, b) return (a.fileId or 0) < (b.fileId or 0) end)
+    while #out.pendingTextures > 32 do table.remove(out.pendingTextures) end
+    for _, entry in ipairs(failures) do out.failures[#out.failures + 1] = { fileId = entry.fileId, reason = entry.reason } end
+    for set in pairs(sets) do
+        for i, tex in pairs(set.used) do
+            local g = set.geometry[i]
+            out.pictures[#out.pictures + 1] = { fileId = g[1], alpha = tex:GetAlpha(), shown = tex:IsShown(),
+                angleRadians = g[6], cropU1 = g[7], cropV0 = g[8], bounds = coordinates and { g[2], g[3], g[4], g[5] } or false }
+        end
+    end
+    table.sort(out.pictures, function(a, b) return a.fileId < b.fileId end)
+    out.picturesOmitted = math.max(0, #out.pictures - 48)
+    while #out.pictures > 48 do table.remove(out.pictures) end
+    return out
 end

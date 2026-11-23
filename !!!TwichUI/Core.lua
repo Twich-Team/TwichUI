@@ -177,6 +177,7 @@ end
 -- An error caught in one of our own handlers: noted for the troubleshooting report (if loaded), then
 -- handed to the game's error handler exactly as before. Nothing is hidden or replaced.
 local function Fault(source, err)
+    if R.MapTrace and type(source) == "string" and source:match("^map ") then R.MapTrace("map-error") end
     if R.Diag then R.Diag.Error(source, err) end
     if Perf.on then Perf.Fault(source, err) end
     geterrorhandler()(err)
@@ -507,6 +508,9 @@ COMMANDS = {
     end },
     { name = "perf", usage = "perf [start [preset]|stop|cancel|mark [note]|status|arm]", desc = "TwichUI Diagnostics: record and inspect TwichUI's performance, and export a report (loads only when used; listed on the Troubleshooting page)", hidden = true, fn = function(arg)
         if R.DiagnosticsLauncher then R.DiagnosticsLauncher.Command(arg) else Unavailable("TwichUI Diagnostics") end
+    end },
+    { name = "mapdiag", usage = "mapdiag", desc = "capture a map issue and copy an AI-readable report", fn = function()
+        if R.DiagnosticsLauncher then R.DiagnosticsLauncher.OpenMap() else Unavailable("Map Diagnostics") end
     end },
     { name = "layout", usage = "layout", desc = "the interface layout setup: review, apply with a way back, check, restore (listed on the Home page and Troubleshooting; loads only when used; /tui layout help lists the developer commands)", hidden = true, fn = function(arg)
         if R.LayoutsLauncher then R.LayoutsLauncher.Command(arg) else Unavailable("Layout setup") end

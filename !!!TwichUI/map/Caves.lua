@@ -140,6 +140,7 @@ local function Draw(g, n)
         local tex = tiles[i]
         if R.MapPictures then R.MapPictures.Forget(tex) end
         tex:SetTexture(fl.tiles[i])
+        if R.MapPictures then R.MapPictures.BindIdentity(tex, fl.tiles[i]) end
         tex:SetTexCoord(0, pw / TILE, 0, ph / TILE)
         tex:ClearAllPoints()
         tex:SetPoint("TOPLEFT", root, "TOPLEFT", fl.u0 * W + px0 * ux, -(fl.v0 * H + py0 * vy))
