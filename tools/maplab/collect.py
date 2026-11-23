@@ -25,6 +25,36 @@ PART_BYTES = 24 * 1024 * 1024
 MAX_BYTES = 128 * 1024 * 1024
 
 
+def installation(selected, requested_product=None):
+    """Accept a client subfolder; select only a product actually listed locally."""
+    selected = selected.resolve()
+    root = next((path for path in (selected, *list(selected.parents)[:2])
+                 if (path / ".build.info").is_file() and (path / "Data/data").is_dir()), None)
+    if root is None:
+        raise ClientInputError("No .build.info and Data/data found in the selected folder or its two nearest parents")
+    rows = [row for row in casc.builds(root) if row.get("Product")]
+    products = sorted({row["Product"] for row in rows})
+    if requested_product:
+        if requested_product not in products:
+            raise ClientInputError("Requested product is not installed. Available products: " + ", ".join(products))
+        return root, requested_product
+    # Folder spelling is a hint only: a matching product must exist in metadata.
+    hint = selected.name.strip("_").lower()
+    hinted = {p for p in products if p.lower().removeprefix("wow_") == hint}
+    named = {p for p in products if "forever" in p.lower()}
+    versioned = {row["Product"] for row in rows if row.get("Version", "").startswith("1.60.")}
+    active = {row["Product"] for row in rows if row.get("Active") == "1"}
+    choices = set(products)
+    for candidates in (hinted, named, versioned, active):
+        narrower = choices & candidates
+        if narrower:
+            choices = narrower
+        if len(choices) == 1:
+            return root, next(iter(choices))
+    raise ClientInputError(("Multiple products found: " + ", ".join(sorted(choices)) if choices else "No products found in .build.info") +
+                           ". Run again with --product followed by the desired listed product")
+
+
 def make_kit(output):
     """Small source-only handoff, no game install or extracted artwork included."""
     names = ["tools/maplab/collect.py", "tools/maplab/clientdata.py", "tools/maplab/Collect-Map-Art.cmd",
@@ -39,8 +69,8 @@ def make_kit(output):
 
 1. Extract this source kit on the gaming PC. Python 3.10+ is required; no
    Pillow, Lua, third-party packages, client modifications or login is needed.
-2. Double-click Collect-Map-Art.cmd and choose the installation ROOT containing
-   .build.info and Data, not _classic_ or Interface. Or run:
+2. Double-click Collect-Map-Art.cmd and choose _forever_ or the installation ROOT.
+   The collector checks nearby parents for .build.info and Data. Or run:
    py -3 tools/maplab/collect.py --wow "D:\\Games\\World of Warcraft"
 3. Return only TwichUI-map-art.zip (or every numbered TwichUI-map-art-XX.zip)
    from this extracted kit folder to the existing private Codex conversation.
@@ -50,7 +80,8 @@ writes to the installation, contacts a CDN, decrypts files, or uploads anything.
 ZIP parts stay below 24 MiB. Output includes only map metadata and referenced
 texture candidates around Booty Bay, Undercity and an Elwynn/Westfall border.
 If Python is absent, install it from python.org; no automatic download occurs.
-If the product differs, pass --product explicitly (default wow_classic_beta).
+The installed product is selected from .build.info, not a hardcoded beta name.
+If several products remain ambiguous, the error lists valid --product choices.
 Unknown schemas or conflicting map assignments stop instead of guessing.
 These private game-art ZIPs must not be committed or published. The source kit
 itself contains no extracted game artwork. Client extraction remains unverified
@@ -90,14 +121,14 @@ def pack(folder, destination):
             archive.close()
 
 
-def collect(wow, output, product="wow_classic_beta", storage_factory=casc.Storage):
-    wow, output = wow.resolve(), output.resolve()
+def collect(wow, output, product=None, storage_factory=casc.Storage):
+    wow, product = installation(wow, product)
+    output = output.resolve()
     if output == wow or output.is_relative_to(wow):
         raise ClientInputError("Output must be outside the game installation")
     if output.suffix.lower() != ".zip":
         raise ClientInputError("Output must end in .zip")
-    if not (wow / ".build.info").is_file() or not (wow / "Data/data").is_dir():
-        raise ClientInputError("Select the installation root containing .build.info and Data/data, not _classic_ or Interface")
+    print(f"Selected installed product: {product}", flush=True)
     storage = storage_factory(str(wow), product=product)
     try:
         tables, sources = read_tables(storage)
@@ -155,9 +186,9 @@ def collect(wow, output, product="wow_classic_beta", storage_factory=casc.Storag
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--wow", type=Path, help="installation root; omitted opens a folder picker")
+    parser.add_argument("--wow", type=Path, help="_forever_ or installation root; omitted opens a folder picker")
     parser.add_argument("--output", type=Path, default=Path("TwichUI-map-art.zip"))
-    parser.add_argument("--product", default="wow_classic_beta")
+    parser.add_argument("--product", help="override automatic selection with an installed .build.info product")
     parser.add_argument("--make-kit", type=Path, help="make a source-only gaming-PC handoff ZIP; no game access")
     args = parser.parse_args()
     try:
@@ -171,7 +202,7 @@ if __name__ == "__main__":
                 import tkinter
                 from tkinter import filedialog
                 window = tkinter.Tk(); window.withdraw()
-                chosen = filedialog.askdirectory(title="Select WoW root containing .build.info and Data (read-only)")
+                chosen = filedialog.askdirectory(title="Select _forever_ or the WoW installation root (read-only)")
                 window.destroy()
             except Exception as error:
                 raise ClientInputError("Folder picker unavailable; run again with --wow followed by the installation path") from error

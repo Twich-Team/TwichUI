@@ -13,18 +13,19 @@ installation copy, SavedVariables or account files are required.
 ## Gaming PC: one collection
 
 The prepared source-only kit is
-`test-output/TwichUI-maplab-collector.zip` (about 75 KB). It contains only TwichUI
+`test-output/TwichUI-maplab-collector-v2.zip` (about 76 KB). It contains only TwichUI
 source, existing numeric map data and license notices, with no game artwork.
 It can be regenerated from this PR:
 
 ```sh
-python3 tools/maplab/collect.py --make-kit test-output/TwichUI-maplab-collector.zip
+python3 tools/maplab/collect.py --make-kit test-output/TwichUI-maplab-collector-v2.zip
 ```
 
-1. Download and extract that kit on the gaming PC. Python **3.10+** is the only
+1. Download and extract the v2 kit into a fresh folder on the gaming PC. Python **3.10+** is the only
    prerequisite; no Pillow, Lua, pip package or paid tool is needed there.
-2. Double-click **Collect-Map-Art.cmd**. Choose the installation **root** containing
-   `.build.info` and `Data`, rather than `_classic_` or `Interface`.
+2. Double-click **Collect-Map-Art.cmd**. Choose **`_forever_`** or the installation
+   root containing `.build.info` and `Data`. The collector checks the selected
+   folder and its two nearest parents for the archive root.
 3. Attach **TwichUI-map-art.zip**, or **all numbered TwichUI-map-art-XX.zip parts**,
    from the extracted kit folder to the existing private Codex conversation.
    Each ZIP part is below 24 MiB. Do not upload the full installation or WTF.
@@ -37,9 +38,12 @@ py -3 tools/maplab/collect.py --wow "D:\Games\World of Warcraft" --output TwichU
 
 Omit `--wow` to use the folder picker. If Python is absent, install it from the
 official python.org installer; the collector does not download dependencies.
-The default CASC product is `wow_classic_beta`, matching existing Forever tools.
-A different product must be supplied explicitly with `--product`; it is not
-guessed. Keep a collection error message if the reader refuses a schema or input.
+The collector selects an installed product from **`.build.info`**, using Forever
+product/version metadata and active-build information. The folder name is only a
+hint; it never invents a product ID. If several products remain ambiguous, the
+error lists valid names for an explicit `--product` override. This fixes the old
+kit's `product 'wow_classic_beta' not in .build.info` error. Keep any later error
+message if the reader refuses a schema or input.
 Windows folder-picker/command-file operation has not been exercised on a native
 Windows host here; explicit-path collection is covered with isolated fixtures.
 
@@ -156,5 +160,10 @@ Verified commands for this input milestone:
 
 The previous full-suite **324 passed / 1 known Welcome Back failure** evidence is
 preserved; this offline-input milestone does not rerun that unrelated full gate.
-The prepared 75,401-byte source kit has SHA-256
-`b5f488d9282f695cbdfe28653d37bbfda4b1923b705b2e63877dfbe01f18007c`.
+The original 75,401-byte beta-default kit is superseded by v2. The corrected
+76,195-byte kit has SHA-256
+`cc5b08e34187178a222fc81ff0ce83c4d919dc667d0d84fa3e9b069464b99b7e`.
+Product/subfolder regression checks expand collector coverage to **10 passing
+tests**. `./tests/run.sh fast navigation --profile cloud --jobs 2` passes
+**43 checks**, zero failures, 25.866 seconds. Product metadata lookup now also
+prefers the active build when older rows for the same installed product remain.

@@ -80,6 +80,30 @@ def fixture_input():
 
 
 class ClientContracts(unittest.TestCase):
+    def test_forever_subfolder_and_active_installed_product(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); (root / "Data/data").mkdir(parents=True); (root / "_forever_").mkdir()
+            (root / ".build.info").write_text(
+                "Active!DEC:1|Product!STRING:0|Version!STRING:0\n"
+                "0|wow_forever|1.60.1.70532\n1|wow_forever|1.60.1.70938\n1|wow|12.1.5.70938\n", encoding="utf-8-sig")
+            found, product = collect.installation(root / "_forever_")
+            self.assertEqual((found, product), (root.resolve(), "wow_forever"))
+            self.assertEqual(collect.casc._build_info(found, product)["Version"], "1.60.1.70938")
+            # Folder spelling never manufactures a product absent from metadata.
+            (root / ".build.info").write_text("Product!STRING:0|Version!STRING:0\nactual_installed_id|1.60.1.70938\n")
+            self.assertEqual(collect.installation(root / "_forever_")[1], "actual_installed_id")
+
+    def test_product_ambiguity_and_explicit_override(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); (root / "Data/data").mkdir(parents=True)
+            (root / ".build.info").write_text("Product!STRING:0|Version!STRING:0|Active!DEC:1\n"
+                                             "wow|12.1.5.70938|1\nwow_classic|1.15.7.70938|1\n")
+            with self.assertRaisesRegex(cd.ClientInputError, "Multiple products found: wow, wow_classic"):
+                collect.installation(root)
+            with self.assertRaisesRegex(cd.ClientInputError, "Available products: wow, wow_classic"):
+                collect.installation(root, "wow_forever")
+            self.assertEqual(collect.installation(root, "wow_classic")[1], "wow_classic")
+
     def test_partial_ui_region_extrapolates_complete_art(self):
         maps, _, _ = cd.model(fixture_tables())
         self.assertEqual((maps[1429]["xN"], maps[1429]["yW"], maps[1429]["W"], maps[1429]["H"]),
@@ -112,7 +136,7 @@ class ClientContracts(unittest.TestCase):
         storage = Storage()
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); wow = root / "game"; (wow / "Data/data").mkdir(parents=True)
-            (wow / ".build.info").write_text("untouched install marker")
+            (wow / ".build.info").write_text("Product!STRING:0|Version!STRING:0\nwow_forever|1.60.1.70938\n")
             before = {p.relative_to(wow): p.read_bytes() for p in wow.rglob("*") if p.is_file()}
             with patch.object(collect, "read_tables", return_value=({}, data["tables"])), \
                  patch.object(collect, "model", return_value=({m["id"]: m for m in data["maps"]}, {}, lambda *a: (0, 0))), \
@@ -125,6 +149,7 @@ class ClientContracts(unittest.TestCase):
             decoded = root / "input"; decoded.mkdir()
             imported, manifest = ci.unpack(paths, decoded)
             self.assertEqual(imported["clientBuild"], storage.version)
+            self.assertEqual(imported["product"], "wow_forever")
             self.assertTrue((decoded / "assets/123.blp").is_file())
             self.assertEqual(set(json.loads(manifest.read_text())["assets"]), {"123"})
 
