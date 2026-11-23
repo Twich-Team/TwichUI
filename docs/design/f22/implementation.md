@@ -192,6 +192,15 @@ explicit unknown state. Native condition handles must not be converted into Lua
 booleans by inspecting restricted values. Compile only the supported subset;
 report unsupported rules, never quietly broaden their conditions.
 
+Recommended initial native contract: one enabled native rule per displayed binding.
+Within it, selected type slots may coexist with fixed documented type order
+(Magic, Curse, Disease, Poison); this is visual precedence, not a claim that only
+one aura exists or one slot runs. Each rule references one named design; category
+assignments must not overlap another native rule. Reject overlaps with an inline
+resolution action. Readable-only mode may offer the deterministic arbitration
+described in detection.md; it must not run as a hidden fallback for restricted
+rules. Broader native composition needs a separate owner decision after proof.
+
 ## Owner decisions before future runtime work
 
 1. Approve capability-limited launch: source-proven type/eligibility indicators
