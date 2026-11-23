@@ -174,7 +174,7 @@ end
 ---------------------------------------------------------------------------
 local LOOKS = {
   { name = "refreshmentsStyle", look = R.RefreshmentsPanel.Style, border = F.BORDER, opacity = 98, borderOpacity = 90, bg = "ff261d15" },
-  { name = "restockPromptStyle", look = R.RestockPrompt.Style, border = F.BORDER, opacity = 98, borderOpacity = 90, bg = "ff232221" },
+  { name = "restockPromptStyle", look = R.RestockPrompt.Style, border = F.CRAFTED_BORDER, opacity = 98, borderOpacity = 90, bg = "ff232221" },
   { name = "pinsLook", look = R.PinsLook.Look, border = F.BORDER, opacity = 98, borderOpacity = 90, bg = "ff261d15" },
   { name = "pinsEditorLook", look = R.PinsLook.EditorLook, border = F.BORDER, opacity = 98, borderOpacity = 90, bg = "ff261d15" },
   { name = "navigationLook", look = R.NavPrefs.Look, border = "solid", opacity = 92, borderOpacity = 80, bg = "ff1e1b18" },
@@ -239,7 +239,10 @@ for _, e in ipairs(LOOKS) do
   end
 end
 local RP = R.RestockPrompt
-Check(RP.Style.IsCustomBorder(RP.LEDGER) and RP.Style.IsCustomBorder(RP.FRAMED), "Restock offers its older rim as well as the frame")
+Check(RP.Style.IsCustomBorder(F.CRAFTED_BORDER) and RP.Style.IsCustomBorder(RP.LEDGER) and RP.Style.IsCustomBorder(RP.FRAMED),
+  "Restock offers the crafted frame as well as both legacy borders")
+Ui().restockPromptStyle = { borderTexture = RP.FRAMED }
+Check(RP.Style.Get("borderTexture") == RP.FRAMED, "a saved previous default still reads as the original frame")
 Ui().restockPromptStyle = { borderTexture = RP.LEDGER }
 Check(RP.Style.Get("borderTexture") == RP.LEDGER and RP.FRAMED ~= RP.LEDGER, "a saved rim is still the rim")
 Ui().restockPromptStyle = nil

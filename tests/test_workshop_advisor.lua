@@ -179,17 +179,46 @@ local D, session = W.AdvisorData, W.Session
 session.AllRecipes = function() return { { id = 7, outItem = 101, mats = { { item = 100, qty = 2 } } } } end
 session.QueueStrategy = function() return "ready", { items = { { item = 100, need = 5, owned = { bags = 5 } } } } end
 c.C_Item = { GetItemInfo = function(id) return "Material " .. id, nil, 1, nil, nil, "Trade Goods", "Cloth", 200, "", 134400, 10, 7, 1, 0 end }
-W.Observe.BagCount = function(id) return id == 100 and 9 or 0 end
+W.Observe.BagCount = function(id) return id == 100 and 10 or id == 101 and 1 or 0 end
+-- Native aggregate includes an equipped copy of 100 and equipped-only 101.
+local bagSlots = {
+  { itemID=100, stackCount=4, isBound=false },
+  { itemID=100, stackCount=5, isBound=false },
+  { itemID=102, stackCount=2, isBound=false }, -- bag-only, metadata pending
+}
+c.C_Container = {
+  GetContainerNumSlots=function(bag) return bag==0 and #bagSlots or 0 end,
+  GetContainerItemInfo=function(_,slot) return bagSlots[slot] end,
+}
+local infoReader=c.C_Item.GetItemInfo
+c.C_Item.GetItemInfo=function(id) if id~=102 then return infoReader(id) end end
 Check(D.Track(100)); Check(D.Tracked()[100]); Check(D.Select(100)); Same(D.Selected(),100)
 local job = D.Catalog(); local steps = 0
 while not job.done do local _, err = job:Step(); Check(not err, err); steps=steps+1 end
 Check(job.byID[100] and job.byID[101], "market and known recipe identities")
 Check(D.Matches(job.byID[100], "material", "bags", true), "bag and auctionable filters")
 Check(not D.Matches(job.byID[101], "", "bags", false), "bags only")
+Same(job.byID[100].count,9,"multiple stacks exclude equipped copy")
+Same(D.Context(100,false,job.byID[100]).qty,9,"advice uses the bag-only quantity")
+Same(job.byID[101].count,0,"equipped-only recipe identity has zero bag copies")
+Check(D.Matches(job.byID[101], "", "all", false),"all-known keeps equipped identity")
+Check(D.Track(101)); Check(D.Matches(job.byID[101], "", "tracked", false),"tracked keeps equipped identity"); Check(D.Track(101))
+Same(D.Selected(),100,"filtering preserves selection")
+Check(D.Matches(job.byID[102], "", "bags", false),"bag-only identity with pending metadata remains visible")
+Same(job.byID[102].count,2); Same(job.byID[102].info.name,"Item 102")
 Same(D.Decide(100,true,job.byID[100]).action, "craft", "actual planner demand is authoritative")
 Same(D.Context(100,true,job.byID[100]).crafting.reserved,5)
+-- A readable identity with an unreadable stack count is still a bag discovery;
+-- never substitute the native aggregate or invent zero as its quantity.
+bagSlots[3].stackCount=nil
+local unknown=D.Catalog()
+repeat local _,err=unknown:Step(); Check(not err,err) until unknown.done
+Check(D.Matches(unknown.byID[102],"","bags",false))
+Same(unknown.byID[102].count,nil,"unreadable bag count remains unknown")
+Same(D.Context(102,false,unknown.byID[102]).qty,nil,"advice preserves unknown bag quantity")
+bagSlots[3].stackCount=2
 -- Exact bag-copy binding overrides a generic BoE type; all-bound copies cannot auction.
-local bagrow={info={sell=10,bindType=2,quality=1,classID=7},uses={},slots=true,unbound=3}
+local bagrow={info={sell=10,bindType=2,quality=1,classID=7},uses={},slots=true,count=9,unbound=3}
 Same(D.Context(100,false,bagrow).qty,3)
 local bagAdvice=D.Decide(100,false,bagrow); Same(bagAdvice.action,"auction", table.concat(bagAdvice.reasons," ") .. table.concat(bagAdvice.missing," "))
 bagrow.unbound=nil; bagrow.bound=9
@@ -199,8 +228,8 @@ Same(D.Decide(100,false,bagrow).action,"vendor")
 local m = Healthy(); for id = 1000, 20999 do m.items[id] = m.items[100] end
 local big = D.Catalog(); local count, maxms, t = 0,0,os.clock()
 repeat local t0=os.clock(); local _,err=big:Step(); Check(not err,err); maxms=math.max(maxms,(os.clock()-t0)*1000); count=count+1 until big.done
-Same(#big.rows,20002); Check(count >= 250, "discovery cooperatively sliced")
-print(("advisor catalog 20002: %.4fs, %d slices, max %.3fms"):format(os.clock()-t,count,maxms))
+Same(#big.rows,20003); Check(count >= 250, "discovery cooperatively sliced")
+print(("advisor catalog 20003: %.4fs, %d slices, max %.3fms"):format(os.clock()-t,count,maxms))
 Check(D.Track(100)); Same(D.Tracked()[100],nil,"toggle tracking")
 -- Cooperative final ordering: independent numeric oracle, exact row identity and
 -- native-run bounds at partial/final run boundaries and non-power-of-two tails.

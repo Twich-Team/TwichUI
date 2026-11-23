@@ -502,15 +502,15 @@ m("crafting.vendor.stock-checked-before-rounding", VENDOR, "if rec.a >= 0 and it
 # --- Opportunities ----------------------------------------------------------------------------------------------------
 m("crafting.opps.zero-profit-counted", OPPS, "if r.est.profitLow > 0 then s.profitable = s.profitable + 1 end", "if r.est.profitLow >= 0 then s.profitable = s.profitable + 1 end",
   "a craft that exactly breaks even is counted as profitable (survived the first M3 probe)", [CRF], smoke=True)
-m("crafting.opps.zero-profit-kept", OPPS, "if keep and opts.profitOnly then keep = r.est.state == \"ok\" and r.est.profitLow > 0 end", "if keep and opts.profitOnly then keep = r.est.state == \"ok\" and r.est.profitLow >= 0 end",
+m("crafting.opps.zero-profit-kept", OPPS, "e.state=='ok'and e.profitLow>0", "e.state=='ok'and e.profitLow>=0",
   "the 'profitable only' filter keeps a craft that breaks even", [CRF])
-m("crafting.opps.unknown-before-known", OPPS, "if ka ~= kb then return ka end", "if ka ~= kb then return kb end",
+m("crafting.opps.unknown-before-known", OPPS, "if ka~=kb then return ka end", "if ka~=kb then return kb end",
   "rows with an unknown estimate are listed before priced ones", [CRF])
-m("crafting.opps.direction-reversed", OPPS, "if desc then return va > vb end", "if desc then return va < vb end",
+m("crafting.opps.direction-reversed", OPPS, "if desc then return va>vb", "if desc then return va<vb",
   "the descending sort is ascending", [CRF])
-m("crafting.opps.tie-name-reversed", OPPS, "if na ~= nb then return na < nb end", "if na ~= nb then return na > nb end",
+m("crafting.opps.tie-name-reversed", OPPS, "if na~=nb then return na<nb end", "if na~=nb then return na>nb end",
   "equal values are ordered by name backwards", [CRF])
-m("crafting.opps.tie-id-reversed", OPPS, "return a.rec.id < b.rec.id", "return a.rec.id > b.rec.id",
+m("crafting.opps.tie-id-reversed", OPPS, "return a.rec.id<b.rec.id", "return a.rec.id>b.rec.id",
   "equal values and names are ordered by recipe id backwards", [CRF])
 
 
@@ -1132,7 +1132,7 @@ m("crafting.consumption.certainty", "TwichUI_Workshop/CraftPlanner.lua", "and no
 m("market.consumption.worth-certainty", "TwichUI_Workshop/Worth.lua", "if a.reference then return quiet(\"reference\",\"Market reference estimate; check current listings before selling\") end", "", "a Market reference becomes a proven vendor/auction comparison", ["test_workshop_market_consumption.lua"])
 
 m("market.consumption.pending-refresh", "TwichUI_Workshop/Pricing.lua", "if reason=='loading' then", "if false then", "different partitions never resolve into a complete feature snapshot", ["test_workshop_market_consumption_async.lua"])
-m("market.consumption.cache-decoder-coupling", "TwichUI_Workshop/Pricing.lua", "local current=dataStamp()", "local current=P.Generation()", "decoder progress repeatedly discards completed prices", ["test_workshop_market_consumption_async.lua"])
+m("market.consumption.cache-decoder-coupling", "TwichUI_Workshop/Pricing.lua", "local current=dataStamp(status)", "local current=P.Generation()", "decoder progress repeatedly discards completed prices", ["test_workshop_market_consumption_async.lua"])
 
 m("market.consumption.capacity-loop", "TwichUI_Workshop/Pricing.lua", "if not reserved and count+pendingCount>=P.MAX_CACHE then", "if false then", "cache overflow repeatedly restarts decoding instead of falling back", ["test_workshop_market_consumption_async.lua"])
 
@@ -1555,3 +1555,59 @@ m("market.cost.bait-boundary", VALUATION, "if skipBelow and 2 * t.p < d.a then",
   "a tier at exactly half the anchor (a real competing price) is skipped as bait", ["test_workshop_valuation.lua"])
 m("market.cost.bait-still-available", VALUATION, "r.qty, r.available = n, d.t - skipItems", "r.qty, r.available = n, d.t",
   "the bait's items are counted as buyable, so too few listed reads as enough", ["test_workshop_valuation.lua"])
+
+# Market PR1: pending ownership, completion writer, revision and elapsed work.
+m("market.pending.guard", "TwichUI_Workshop/Pricing.lua", "if reserved and not completion then", "if false then",
+  "redraws repeat reader and hash work for an already reserved identity", ["test_workshop_market_pending.lua"])
+m("market.pending.completion", "TwichUI_Workshop/Pricing.lua", "if reserved and not completion then", "if reserved then",
+  "the pending guard also blocks the only completion writer", ["test_workshop_market_pending.lua"])
+m("market.pending.revision", "TwichUI_Workshop/Pricing.lua", "        revision=revision+1", "        -- completion revision removed",
+  "completion after checked_parts stabilizes retains memoized fallback answers", ["test_workshop_market_pending.lua"])
+m("market.pending.elapsed-budget", "TwichUI_Workshop/Summary.lua", "or clock()-start>=budget", "",
+  "a completion slice respects only record count instead of elapsed CPU", ["test_workshop_market_pending.lua"])
+
+m("market.pending.rejected-retry", "TwichUI_Workshop/Pricing.lua", "if failure then pending[bucket]=nil end", "-- rejected reservations remain in the live bucket",
+  "a post-combat retry joins the rejected drain and loses its completion", ["test_workshop_market_pending.lua"])
+
+m("market.current.path", "TwichUI_Workshop/Pricing.lua", "local CURRENT_ONLY={current=true}", "local CURRENT_ONLY={current=false}",
+  "cold pricing requests rich history instead of the verified current projection", ["test_workshop_market_current.lua"])
+m("market.current.binding", "TwichUI_Workshop/Summary.lua", "need(paired and hash:Finish()==paired.sha256)", "need(paired~=nil)",
+  "individually rehashed rich data mixes with unrelated current prices", ["test_workshop_market_current.lua"])
+m("market.current.priority", "TwichUI_Workshop/Summary.lua",
+  "if bucket<64 and active.header.contract_version==3 and job and job.kind=='part' and job.bucket>=64 then",
+  "if false then",
+  "a cold current request waits behind an already-running unrelated chart", ["test_workshop_market_current.lua"])
+
+# PR3: retained results must remain both incremental and generation-safe.
+OPPORTUNITY_TEST = ['test_workshop_opportunity_engine.lua']
+m('market.opportunity.provisional-reuse', 'TwichUI_Workshop/OpportunityEngine.lua',
+  'if partial and not self.filter.profitOnly and not self.filter.hideLow', 'if false',
+  'a burst reconstructs unchanged provisional membership for every batch', OPPORTUNITY_TEST)
+m('market.opportunity.dynamic-membership', 'TwichUI_Workshop/OpportunityEngine.lua',
+  'if partial and not self.filter.profitOnly and not self.filter.hideLow', 'if partial',
+  'price-dependent filtering omits newly completed profitable rows', OPPORTUNITY_TEST)
+m('market.opportunity.memo-version', 'TwichUI_Workshop/Estimate.lua',
+  'self.itemVersions[item]=self.itemVersions[item]+1', 'self.itemVersions[item]=self.itemVersions[item]+0',
+  'a settled item keeps stale shared cost/price answers', OPPORTUNITY_TEST)
+m('market.opportunity.dependencies', 'TwichUI_Workshop/OpportunityEngine.lua',
+  'for _,row in ipairs(self.dependencies[item]or {})do', 'for _,row in ipairs(self.all)do',
+  'one material invalidates every recipe', OPPORTUNITY_TEST)
+m('market.opportunity.snapshot', 'TwichUI_Workshop/OpportunityEngine.lua',
+  'same(previous.inputs,rec)', 'same(previous.rec,rec)',
+  'mutable recipe inputs reuse their old estimate', OPPORTUNITY_TEST)
+m('market.opportunity.elapsed-budget', 'TwichUI_Workshop/OpportunityEngine.lua',
+  'clock()-at>=E.BUDGET_MS', 'false',
+  'a large craft monopolizes its callback despite the elapsed budget', OPPORTUNITY_TEST)
+m('market.opportunity.warm-context', 'TwichUI_Workshop/OpportunityEngine.lua',
+  'local reset=not self.args or self.key~=args.key', 'local reset=true',
+  'an ordinary unchanged read discards all completed estimates', OPPORTUNITY_TEST)
+m('market.opportunity.source-guard', 'TwichUI_Workshop/OpportunityEngine.lua',
+  'if not valid then self:Cancel(true)', 'if false then self:Cancel(true)',
+  'a suspended job publishes after its source became obsolete', OPPORTUNITY_TEST)
+m('market.opportunity.timer-token', 'TwichUI_Workshop/OpportunityEngine.lua',
+  'C_Timer.After(0,function()\n        if token~=self.token then return end',
+  'C_Timer.After(0,function()\n        if false then return end',
+  'a cancelled callback advances the newer worker', OPPORTUNITY_TEST)
+m('market.opportunity.demand-lease', 'TwichUI_Workshop/Pricing.lua',
+  'while waits and waits.preparing and not failure do', 'while false do',
+  'a decoder handoff advances before complete bucket demand is reserved', ['test_workshop_opportunity_ui.lua'])

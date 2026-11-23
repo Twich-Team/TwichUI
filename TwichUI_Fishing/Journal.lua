@@ -219,7 +219,14 @@ function J.Overview()
         favorites = favorites, recent = recent,
         current = cur and Row(cur, true) or nil,
         retention = J.Retention(),
-        extra = {},     -- Stage 3B: { label, text, glyph } cells the stat strip draws after its own
+        extra = (function()
+            if not F.Economy or F.Store.Get("economy.enabled") == false then return {} end
+            local v = F.Economy.Scope("lifetime")
+            if not v or not v.market then return {} end
+            local rows = { { glyph = "mark", value = F.Economy.Text(v.total), label = v.complete and "Estimated value" or "Known subtotal *" } }
+            if F.Store.Get("economy.perHour") and v.perHour then rows[#rows + 1] = { glyph = "glyph-time", value = F.Economy.Text(v.perHour), label = "Estimated / hour" } end
+            return rows
+        end)(),
     }
 end
 
@@ -441,3 +448,6 @@ function J.Treasures()
         return out
     end)
 end
+
+-- Economic updates invalidate derived presentation answers without recopying history.
+F.Subscribe("ECONOMY", function() J.serial = J.serial + 1 end)

@@ -71,6 +71,7 @@ local DEFAULT_MODULES = {
     chatClean = false,       -- Chat cleaning: hide unwanted messages in the public channels you choose (opt-in, explicit true only)
     classBars = false,       -- Class resource bars: your class's resources as bars (opt-in; nothing else's bars are hidden or moved)
     targetArt = false,       -- Target dragon artwork: a dragon on EllesmereUI's target frame by the target's classification (opt-in; needs EllesmereUI's target frame; decoration only)
+    executeRange = false,    -- Personal health threshold on verified EllesmereUI target and enemy nameplate health bars (visual only)
     hazardAlerts = false,    -- Hazard alerts: the game plays a sound when an aura you list lands on you, grows or fades (opt-in; no combat log is read, nothing is automated)
     reminders = true,        -- Reminders: artwork, an icon or text when conditions you set are true (none exist until you make one, and each starts turned off; reminders/)
     barGlows = true,         -- Action bar glows: your bar buttons glow for a missing buff, weapon buff, seal or tracking, a low reagent or item, a ready cooldown, a proc or an old rank (each spell can be turned off; reads only, never casts; glows/)
@@ -146,10 +147,12 @@ end
 -- core never times anything itself. Ids are stable "area.operation" names; Describe and Gauge only
 -- note a description or a reader (a function returning a number) for the diagnostics window.
 ---------------------------------------------------------------------------
-local Perf = { on = false, ops = {}, gauges = {} }
+local Perf = { on = false, captureID = 0, ops = {}, gauges = {} }
 R.Perf = Perf
 local function Nothing() end
 Perf.Start, Perf.Stop, Perf.Count, Perf.Fault, Perf.Received, Perf.Callback = Nothing, Nothing, Nothing, Nothing, Nothing, Nothing
+-- Elapsed waits/milestones are distributions, never synchronous CPU scopes.
+Perf.Observe = Nothing
 function Perf.Finish(_, ...) return ... end
 function Perf.Call(id, fn, ...)
     if not Perf.on then return fn(...) end

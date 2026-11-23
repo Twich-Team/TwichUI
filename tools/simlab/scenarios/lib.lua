@@ -197,6 +197,27 @@ end
 
 function Lab.RowShown(v) return v.frame:IsShown() end
 
+-- Explicit native API boundary for popup tests: this simulator renders scroll
+-- transforms but leaves GetLeft/Right/Bottom/Top in unscrolled layout space.
+-- Snapshot one revealed owner in native coordinate semantics; never production.
+function Lab.EmulateNativeScrollRect(owner)
+    local rect = { owner:GetLeft(), owner:GetRight(), owner:GetBottom(), owner:GetTop() }
+    local parent, scale = owner:GetParent(), owner:GetEffectiveScale()
+    while parent do
+        if parent:IsObjectType("ScrollFrame") then
+            local ratio = parent:GetEffectiveScale() / scale
+            local dx, dy = parent:GetHorizontalScroll() * ratio, parent:GetVerticalScroll() * ratio
+            rect[1], rect[2], rect[3], rect[4] = rect[1] - dx, rect[2] - dx, rect[3] + dy, rect[4] + dy
+        end
+        parent = parent:GetParent()
+    end
+    for i, name in ipairs({ "GetLeft", "GetRight", "GetBottom", "GetTop" }) do
+        local value = rect[i]
+        owner[name] = function() return value end
+    end
+    Lab.Say("boundary", "EMULATED native scrolled extents for popup owner")
+end
+
 -- A checkbox row: click the checkbox itself.
 function Lab.ClickCheckbox(v) v.control:Click() end
 

@@ -125,7 +125,7 @@ end
 ---------------------------------------------------------------------------
 -- Notifications for later stages and diagnostics: F.Subscribe(event, fn) -> fn(event, ...). Listeners must not change what
 -- they are given. A failing listener is reported and never stops the others. Events (docs/fishing.md, "Public interface"):
--- STATE, SESSION_START, SESSION_END, CAST, CAST_FAILED, CATCH, ITEM, CONTAINER, LURE, GEAR, QUEUE, NOTICE.
+-- STATE, SESSION_START, SESSION_END, CAST, CAST_FAILED, CATCH, ITEM, CONTAINER, LURE, GEAR, QUEUE, NOTICE, ECONOMY (cached estimates changed).
 ---------------------------------------------------------------------------
 local subscribers = {}
 

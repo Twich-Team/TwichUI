@@ -288,7 +288,7 @@ local function MakeRestedXP(c, opts)
     for _, f in ipairs({ frame.BottomFrame, frame.GuideName, frame.Footer }) do f:ClearBackdrop(); f:SetBackdrop(edge) end
   end
   RXP.enabledFrames.RXPFrame = frame
-  function RXP.RenderFrame()
+  function RXP:UpdateTheme()
     local name = RXP.settings.profile.activeTheme
     RXP.activeTheme = RXP.themes[name] or RXP.themes["RXP Blue"]
     RXP.colors, RXP.font = RXP.activeTheme, RXP.activeTheme.font
@@ -460,7 +460,7 @@ do
   local c, R, S, RXP, lib = World()
   local T = S.Timers
   assert(S.Status().code == "active")
-  assert(c.hookCount == 3 + 1 + 2, "RenderFrame, UpdateText, UpdateGuideFontSize, the window's SetScale, then StartTimer and ShowTimers: " .. c.hookCount)
+  assert(c.hookCount == 3 + 1 + 2, "UpdateTheme, UpdateText, UpdateGuideFontSize, the window's SetScale, then StartTimer and ShowTimers: " .. c.hookCount)
   local bar = RXP.StartTimer(45, "Waiting for the ceremony")
   local sb = bar.candyBarBar
   -- fill: flat texture, a gradient from the dark to the light end, the opacity carried by its colours
@@ -665,7 +665,7 @@ do
   local bar = RXP.StartTimer(40, "Boat")
   assert(bar.candyBarLabel.font[3] == "OUTLINE")
   RXP.settings.profile.activeTheme = "RXP Gold"
-  RXP.RenderFrame()
+  RXP:UpdateTheme()
   FlushTimers()
   assert(S.Status().code == "theme-not-selected" and T.Status().code == "skin-off")
   assert(bar.candyBarLabel.font[3] == "" and bar.candyBarBackdrop.backdropInfo == nil and bar.running)
@@ -674,11 +674,11 @@ do
   assert(near(other.candyBarBar.sbColor[1], 1) and other.candyBarBar.sbColor[1] == 1, "RestedXP's gold pins")
   -- back to ours
   RXP.settings.profile.activeTheme = "TwichUI"
-  RXP.RenderFrame(); FlushTimers()
+  RXP:UpdateTheme(); FlushTimers()
   assert(bar.candyBarLabel.font[3] == "OUTLINE" and other.candyBarLabel.font[3] == "OUTLINE", "both drawn again")
   -- the v2 window
   RXP.V2 = true
-  RXP.RenderFrame(); FlushTimers()
+  RXP:UpdateTheme(); FlushTimers()
   assert(bar.candyBarLabel.font[3] == "" and T.Status().code == "skin-off", "the v2 window's bars are RestedXP's own")
 end
 

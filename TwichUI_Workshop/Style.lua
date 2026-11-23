@@ -417,8 +417,12 @@ function UI.List(parent, rowH, make, minH, surface)
         for i = count + 1, #rows do rows[i]:Hide() end
         if self.fit then self.fit(#data * rowH) end
     end
-    sf:HookScript("OnVerticalScroll", function() list:Layout() end)
-    sf:HookScript("OnSizeChanged", function() list:Layout() end)
+    local function Viewport()
+        list:Layout()
+        if list.onViewport then list.onViewport()end
+    end
+    sf:HookScript("OnVerticalScroll", Viewport)
+    sf:HookScript("OnSizeChanged", Viewport)
     function list:SetData(d, emptyText)
         self.data = d
         self.empty:SetText(emptyText or "")

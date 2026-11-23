@@ -160,8 +160,8 @@ Flush()
 c.C_AddOns = { IsAddOnLoaded = function(n) return n == "EllesmereUIBlizzardSkin" end }
 c.OpenMail(); Flush()
 local ep = mailButton.points[1]
-Check(ep and ep[1] == "TOPRIGHT" and ep[2] == c.MailFrame and ep[3] == "TOPRIGHT" and ep[4] < 0 and ep[5] < 0,
-  "skinned mailbox: the button sits inside the title strip, left of the close button")
+Check(ep and ep[1] == "TOP" and ep[2] == c.MailFrame and ep[3] == "TOP" and ep[5] < 0,
+  "skinned mailbox: the button is centred under the title, above the list")
 Check(mailButton.parent == c.MailFrame, "and belongs to the window")
 c.C_AddOns = nil
 c.CloseMail(); Flush(); c.OpenMail(); Flush()
@@ -193,6 +193,17 @@ Flush()
 Check(Run.Last() and #Run.Last().results.confirmed == 1, "deposited by the click")
 c.CloseBank()
 Flush()
+
+-- EllesmereUI Bags' own bank window: the button belongs to it and sits above its top right corner
+c.EUI_BankFrame = MIFake("Frame"); c.EUI_BankFrame.shown = true
+c.OpenBank()
+Flush()
+local eb = bankButton.points[1]
+Check(bankButton.shown and bankButton.parent == c.EUI_BankFrame and eb[1] == "CENTER" and eb[2] == c.EUI_BankFrame and eb[3] == "TOP" and eb[5] < 0,
+  "EllesmereUI's bank: the button is in its header")
+c.CloseBank()
+Flush()
+c.EUI_BankFrame = nil
 
 ---------------------------------------------------------------------------
 -- Empty state
@@ -255,5 +266,83 @@ for _ = 1, 4 do
 end
 Check(Weight(pw) == pBefore, "reopening the picker adds no frame, texture or hook")
 Check(Weight(ww) == wBefore, "reopening and redrawing the review adds no frame, texture or hook")
+
+-- Forever 1.60.1 crate identity: https://eternadex.com/en/item/248682/
+local crate = 248682
+c.ITEMS[crate] = { name = "Waylaid Crate: Apprentice Herbs", class = 0, maxStack = 5 }
+c.UNLOADED[crate] = true
+c.Bags({ [0] = { slots = { { crate, 1 }, { 2589, 5 } } } })
+local function FindWidget(frame, match)
+  if frame:IsShown() then
+    if match(frame) then return frame end
+    for _, child in ipairs(frame.children) do
+      local found = FindWidget(child, match)
+      if found then return found end
+    end
+  end
+end
+local function Cell(id)
+  return FindWidget(pw, function(widget) return widget.item and widget.item.id == id end)
+end
+local function Search(query)
+  local box = assert(FindWidget(pw, function(widget) return widget.kind == "EditBox" end))
+  box:SetText(query)
+  box:Fire("OnTextChanged")
+end
+
+local ruleID
+Pick.Open({ onDone = function(set)
+  ruleID = MI.SaveRule({ name = "Crate selection", kind = "bank", include = set })
+end })
+Search("WAYLAID")
+local crateCell = Cell(crate)
+Check(crateCell and not Cell(2589), "a carried crate whose hyperlink has a name can be searched before full facts load")
+if crateCell then Click(crateCell) end
+Pick.Done()
+local rule = ruleID and MI.Rule(ruleID)
+Check(rule and rule.include[crate] and not rule.include[2589], "Done retains the chosen crate's ID in the saved rule")
+
+-- A carried slot with only an identity is still selectable and can become searchable in place.
+local containerInfo = c.C_Container.GetContainerItemInfo
+c.C_Container.GetContainerItemInfo = function(bag, slot)
+  local info = containerInfo(bag, slot)
+  if info and info.itemID == crate then info.hyperlink, info.iconFileID = nil, nil end
+  return info
+end
+c.C_Item.GetItemNameByID = function(id)
+  local item = c.ITEMS[id]
+  if item and not c.UNLOADED[id] then return item.name end
+end
+c.C_Item.GetItemIconByID = function(id)
+  if id == crate and not c.UNLOADED[id] then return 1000 + id end
+end
+local selected = rule and rule.include or { [crate] = true }
+c.REQUESTED[crate] = nil
+Pick.Open({ selected = selected, onDone = function(set) got = set end })
+crateCell = Cell(crate)
+Check(crateCell and crateCell.icon.texture == [[Interface\Icons\INV_Misc_QuestionMark]], "missing crate metadata uses a safe icon placeholder")
+Check(crateCell and crateCell.check:IsShown() and Cell(2589), "saved crate stays selected beside ordinary carried items")
+Check(c.REQUESTED[crate] == 1 and pw.events.ITEM_DATA_LOAD_RESULT, "the picker requests missing metadata once while open")
+Search("linen")
+Check(Cell(2589) and not Cell(crate), "ordinary items remain searchable")
+if Cell(2589) then Cell(2589):Fire("OnEnter") end
+Search("apprentice")
+Check(not Cell(crate), "an unknown name does not match a name search")
+c.UNLOADED[crate] = nil
+pw:Fire("OnEvent", "ITEM_DATA_LOAD_RESULT", crate, true)
+crateCell = Cell(crate)
+Check(crateCell and crateCell.check:IsShown() and crateCell.icon.texture == 1000 + crate,
+  "loaded metadata refreshes the current search and preserves selection")
+Check(not c.GameTooltip:IsShown(), "metadata refresh hides the tooltip before reusing its cell")
+Pick.Done()
+Check(got and got[crate] and not got[2589], "reopening and completing the picker retains the selection")
+Check(not next(pw.events), "the closed picker releases item load listeners")
+
+c.Bags({})
+Pick.Open({ selected = selected, onDone = function(set) got = set end })
+Check(not Cell(crate) and Has(pw, "Your bags are empty"), "un-carried crates are not added to an empty picker")
+Pick.Done()
+Check(got[crate], "a saved selection survives an empty bag")
+Check(#c.PICKUPS == 0 and c.CURSOR == nil, "selecting a crate does not touch any bag item")
 
 if failures == 0 then print("PASSED test_magic_inventory_ui") else print(failures .. " failures") os.exit(1) end

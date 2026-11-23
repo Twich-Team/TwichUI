@@ -164,6 +164,40 @@ def plan(repo, tier, group, additional=()):
                 syntax=sorted(syntax), simulators=sims)
 
 
+def recommend(repo, paths):
+    """Use group membership as a starting point for reviewing changed files."""
+    changed = {}
+    for raw in paths:
+        path = Path(raw)
+        if path.is_absolute() or '..' in path.parts or not path.parts:
+            raise ValueError(f'expected a repo-relative file path: {raw!r}')
+        changed[path.as_posix()] = []
+
+    groups = json.loads((repo / 'tests/groups.json').read_text())
+    for name, spec in sorted(groups.items()):
+        for key, root, reason in (('syntax', repo, 'syntax glob'),
+                                  ('tests', repo / 'tests', 'test glob')):
+            matched = {match.relative_to(repo).as_posix()
+                       for pattern in spec[key] for match in root.glob(pattern) if match.is_file()}
+            for path in changed.keys() & matched:
+                changed[path].append((name, reason))
+
+    print('Advisory matches from tests/groups.json. Review actual consumers and assertions.')
+    for path, matches in changed.items():
+        print(f'{path!r}:')
+        if not matches:
+            print('  Unmapped. Inspect callers, manifests and test inventory.')
+            print('  If scope remains unknown, preview complete offline discovery with ./tests/run.sh --list.')
+        for name, reason in matches:
+            print(f'  {name} ({reason}): ./tests/run.sh development {name} --list')
+        if len(matches) > 1 or any(name in ('core', 'shared-ui') for name, _ in matches):
+            print('  Possible shared scope or overlapping globs. Inspect consumers before choosing groups.')
+    print('Checkpoint preview: ./tests/run.sh feature GROUP --list')
+    print('Cross-feature preview: ./tests/run.sh integration GROUP --with-group OTHER --list')
+    print('If shared/global risk cannot be excluded, review the full gate with ./tests/run.sh full --list.')
+    return 0
+
+
 def child_env(tmp):
     env = {k: v for k, v in os.environ.items() if k not in CLEAR_ENV}
     env.update(TMPDIR=str(tmp), PYTHONDONTWRITEBYTECODE='1')
@@ -309,12 +343,21 @@ def main(argv=None):
                         help='cloud uses no game assets; all selections/assertions remain, visual/client gates stay local')
     parser.add_argument('--jobs', type=int, choices=range(1, 5), default=2, metavar='1..4')
     parser.add_argument('--list', action='store_true', help='show exact tests, syntax files and simulator selections; run nothing')
+    parser.add_argument('--recommend', nargs='+', metavar='PATH',
+                        help='suggest group previews for changed repo-relative files; run nothing')
     parser.add_argument('--sim-jobs', type=int, choices=(1, 2), default=1, help='opt-in isolated catalog workers; default serial')
     parser.add_argument('--measure', action='store_true', help='opt-in per-command CPU/RSS telemetry (Linux /proc)')
     parser.add_argument('--release-meta', type=Path, help='existing packaging metadata for release archive validation')
     parser.add_argument('--release-zip', type=Path, help='existing candidate archive; checked, never published')
     parser.add_argument('--timeout', type=float, default=300, help='per offline test in seconds (default 300)')
     args = parser.parse_args(argv)
+    if args.recommend:
+        if args.group or args.with_group or args.tier != 'unit':
+            parser.error('--recommend chooses groups from paths; omit the tier and group arguments')
+        try:
+            return recommend(REPO, args.recommend)
+        except ValueError as exc:
+            parser.error(str(exc))
     if args.timeout <= 0 or (args.tier in ('full', 'release') and args.group):
         parser.error('timeout must be positive; full does not accept a feature group')
     try:

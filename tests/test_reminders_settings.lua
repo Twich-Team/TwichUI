@@ -1090,20 +1090,52 @@ do
   Ed.placementOpen, Ed.moreOpen = false, false; P.Refresh(); Flush()
 end
 
--- UIParent popups need scroll transforms once, in the owner's scale.
+-- Native GetLeft/Right/Bottom/Top already reflect both nested scroll frames.
+-- Root menus must not add their offsets a second time (the Loot Rolls regression).
 do
+  local Wg = R.SettingsWidgets
   local outer = Fake("ScrollFrame", c.UIParent)
+  local inner = Fake("ScrollFrame", outer)
   outer.IsObjectType = function(_, kind) return kind == "ScrollFrame" end
-  outer.GetHorizontalScroll = function() return 3 end
-  outer:SetVerticalScroll(80)
-  local inner = Fake("Frame", outer)
-  local owner = Fake("Button", inner)
-  owner.GetParent = function() return inner end; inner.GetParent = function() return outer end
-  outer.GetParent = function() return nil end
-  owner.GetLeft, owner.GetRight = function() return 100 end, function() return 200 end
-  owner.GetBottom, owner.GetTop = function() return 50 end, function() return 70 end
-  local l, r, b, t = R.SettingsWidgets.VisibleRect(owner)
-  Check(l == 97 and r == 197 and b == 130 and t == 150, "popup rectangle includes scrolling in both axes")
+  inner.IsObjectType = outer.IsObjectType
+  outer:SetVerticalScroll(80); inner:SetVerticalScroll(140)
+  outer.GetHorizontalScroll = function() return 7 end; inner.GetHorizontalScroll = function() return 4 end
+  inner.GetParent = function() return outer end; outer.GetParent = function() return c.UIParent end
+  local selected
+  local owner = Wg.Dropdown(inner, 160, function(value) selected = value end)
+  owner.GetParent = function() return inner end
+  owner:SetChoices({ { value = "need", label = "Need" }, { value = "greed", label = "Greed" } })
+  owner:SetValue("need", "Need")
+  owner.GetLeft, owner.GetRight = function() return 100 end, function() return 260 end
+  local originalUIScale = c.UIParent.GetEffectiveScale
+  local menu = c.TwichUISettingsMenu
+  local originalMenuScale = menu.GetEffectiveScale
+  menu.GetEffectiveScale = function(self) return (self.scale or 1) * c.UIParent:GetEffectiveScale() end
+  for _, uiScale in ipairs({ 0.8, 1 }) do
+    c.UIParent.GetEffectiveScale = function() return uiScale end
+    for _, scale in ipairs({ 0.7, 1, 1.25 }) do
+      owner.GetEffectiveScale = function() return scale end
+      owner.GetBottom, owner.GetTop = function() return 200 end, function() return 224 end
+      local l, r, b, t = Wg.VisibleRect(owner)
+      Check(l == 100 and r == 260 and b == 200 and t == 224, "native scrolled rectangle is not translated again")
+      owner.menuAlignRight = nil; owner:OpenMenu()
+      local point = menu.points[1]
+      Check(point[1] == "TOPLEFT" and point[2] == c.UIParent and math.abs(point[4] - 100) < .001
+        and math.abs(point[5] - 198) < .001, "menu touches its scrolled owner across UI/window scales")
+      Check(math.abs(menu.scale - scale / uiScale) < .001, "popup preserves the control's effective scale")
+      menu.rows[2]:Fire("OnClick")
+      Check(selected == "greed" and not menu.shown, "positioning preserves selection and dismissal")
+      owner.menuAlignRight = true
+      owner.GetBottom, owner.GetTop = function() return 20 end, function() return 44 end
+      owner:OpenMenu(); point = menu.points[1]
+      Check(point[1] == "BOTTOMRIGHT" and math.abs(point[4] - 260) < .001 and math.abs(point[5] - 46) < .001,
+        "near-bottom menu flips above its owner and retains right alignment")
+      Wg.CloseMenu()
+    end
+  end
+  owner.GetBottom = function() return nil end
+  Check(Wg.VisibleRect(owner) == nil, "unavailable native geometry retains the relative-anchor fallback")
+  c.UIParent.GetEffectiveScale, menu.GetEffectiveScale = originalUIScale, originalMenuScale
 end
 
 -- Structured summaries retain Any grouping, negated leaves and every supported nested condition.

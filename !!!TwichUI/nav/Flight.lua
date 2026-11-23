@@ -219,6 +219,9 @@ end
 
 local registered, watchingRefusal = false, false
 local function Sync()
+    -- Turning automatic flight off abandons this opening even if highlighting
+    -- stays on, or the preference is turned back on before its delay expires.
+    if open and not AutoOn() then token = token + 1 end
     local want = NV.Enabled() and (NP.Get("highlightFlight") == true or NP.Get("autoFlight") == true)
     if want and not registered then
         registered = true
@@ -244,6 +247,10 @@ local function Sync()
 end
 
 NV.Subscribe(function(event) if event == "prefs" then Sync() end end)
+-- Account acknowledgement survives profiles; a pending automatic action does
+-- not. Require a fresh flight-map opening after profile replacement/duplication.
+R.Profiles.OnApply("views", "navigation-flight", OnClosed)
+R.Profiles.OnChange(function(kind) if kind == "duplicate" then OnClosed() end end)
 R:OnInit(Sync)
 
 -- Read only, for /tui diagnostics: counts, never a place or a name.

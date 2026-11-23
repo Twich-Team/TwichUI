@@ -199,6 +199,20 @@ end
 
 -- The separation valuation needs so that nothing is counted twice: a container is either unopened (valued as itself, if
 -- at all) or opened (valued by what it held); a direct catch that is a container is never in `direct`.
+-- Small metadata view for estimates: never copy species/location history to read a duration.
+function API.Metrics(scope)
+    local c = S.Char()
+    if not c then return nil end
+    local rec
+    if scope == "lifetime" or scope == nil then rec = c.totals
+    elseif scope == "session" then rec = c.session
+    else rec = Ses.Find(F.Count(scope)) end
+    if not rec then return nil end
+    local seconds = rec == c.session and Ses.Elapsed() or rec.seconds
+    if rec == c.totals and c.session then seconds = (seconds or 0) + Ses.Elapsed() end
+    return { seconds = seconds, casts = rec.casts }
+end
+
 function API.Provenance(scope)
     local c = S.Char()
     if not c then return nil end
@@ -211,12 +225,17 @@ function API.Provenance(scope)
     for id, e in pairs(rec.species) do
         if not rec.containers[id] then out.direct[id] = e.q end
     end
-    local unopened = {}
+    local unopened, partial = {}, {}
     for _, lot in ipairs(c.queue) do
-        if scope == "lifetime" or scope == nil or lot.sid == sid then unopened[lot.item] = (unopened[lot.item] or 0) + lot.n end
+        if scope == "lifetime" or scope == nil or lot.sid == sid then
+            unopened[lot.item] = (unopened[lot.item] or 0) + lot.n
+            -- A lot does not identify individual shells after bag moves/reloads. Withhold its provisional
+            -- value conservatively once any contents were taken; never assume only one shell was touched.
+            if lot.partial then partial[lot.item] = (partial[lot.item] or 0) + lot.n end
+        end
     end
     for id, e in pairs(rec.containers) do
-        out.containers[id] = { caught = e.caught, opened = e.opened, unopened = unopened[id] or 0 }
+        out.containers[id] = { caught = e.caught, opened = e.opened, unopened = unopened[id] or 0, partial = partial[id] or 0 }
     end
     return out
 end

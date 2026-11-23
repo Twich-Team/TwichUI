@@ -222,6 +222,18 @@ local function CursorFree()
     return true
 end
 
+-- The player's bank action includes native cleanup when enabled. Call it only
+-- after all move confirmations have finished and the transfer has released its listeners.
+local function SortBankAndBags()
+    local bankType = Enum and Enum.BankType and Enum.BankType.Character
+    if run or not MI.BankAutoSort() or not MI.Enabled() or InCombat() or not Run.IsOpen("bank") or not CursorFree()
+        or not (bankType and C_Container and C_Container.SortBank and C_Container.SortBags) then return end
+    local bankOK, bankError = pcall(C_Container.SortBank, bankType)
+    local bagsOK, bagsError = pcall(C_Container.SortBags)
+    if not bankOK then R.Fault("magic inventory bank sort", bankError) end
+    if not bagsOK then R.Fault("magic inventory bag sort", bagsError) end
+end
+
 local function CursorItem()
     if not GetCursorInfo then return nil end
     local kind, id = GetCursorInfo()
@@ -822,7 +834,11 @@ DepositNext = function(r)
         if not ready then Finish(r, code) return end
     end
     local step = r.steps[r.index]
-    if not step then Finish(r, "done") return end
+    if not step then
+        Finish(r, "done")
+        if r.kind == "bank" and #r.results.confirmed > 0 then SortBankAndBags() end
+        return
+    end
     local withdraw = step.withdraw == true or r.dir == "withdraw"
     r.state = withdraw and "withdrawing" or "depositing"
     local s, problem

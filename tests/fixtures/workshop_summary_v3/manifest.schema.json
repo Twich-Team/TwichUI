@@ -1,0 +1,422 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "format": {
+      "const": "twichui-workshop-summary"
+    },
+    "schema_version": {
+      "const": 3
+    },
+    "contract_version": {
+      "const": 3
+    },
+    "issuer_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "market": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "game": {
+          "const": "wow-forever"
+        },
+        "region": {
+          "enum": [
+            "us",
+            "eu",
+            "kr",
+            "tw"
+          ]
+        },
+        "player_ruleset": {
+          "enum": [
+            "Normal",
+            "PvP",
+            "Roleplay",
+            "Roleplay PvP"
+          ]
+        },
+        "house_id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "source_kind": {
+          "enum": [
+            "auctions",
+            "commodities"
+          ]
+        },
+        "server_market_id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "transport_ruleset_id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "mapping_verified": {
+          "const": true
+        },
+        "mapping_evidence_sha256": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "realm_scope": {
+          "const": "ruleset_house"
+        },
+        "faction": {
+          "enum": [
+            "Horde",
+            "Alliance",
+            "Blackwater"
+          ]
+        }
+      },
+      "required": [
+        "game",
+        "region",
+        "player_ruleset",
+        "house_id",
+        "source_kind",
+        "server_market_id",
+        "transport_ruleset_id",
+        "mapping_verified",
+        "mapping_evidence_sha256",
+        "realm_scope",
+        "faction"
+      ]
+    },
+    "pricing_algorithm": {
+      "const": "twichui-pricing-v1"
+    },
+    "history_basis": {
+      "const": "canonical_complete_scope_close"
+    },
+    "source_kind": {
+      "const": "market_server_asking_summary"
+    },
+    "source_watermark": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 19,
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "source_observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "observation_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 19,
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40,
+          "pattern": "Z$"
+        },
+        "scope_complete": {
+          "const": true
+        }
+      },
+      "required": [
+        "observation_id",
+        "observed_at",
+        "scope_complete"
+      ]
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "maxLength": 40,
+      "pattern": "Z$"
+    },
+    "synthetic": {
+      "type": "boolean"
+    },
+    "columns": {
+      "const": [
+        "item_id",
+        "variant_key",
+        "state",
+        "recent_copper",
+        "market_value_copper",
+        "minimum_copper",
+        "supply",
+        "age_seconds",
+        "confidence",
+        "historical_value_copper",
+        "priced_days_14",
+        "priced_days_60",
+        "observed_days_60"
+      ]
+    },
+    "states": {
+      "const": [
+        "priced",
+        "supply_only",
+        "absent",
+        "unknown",
+        "unsupported"
+      ]
+    },
+    "confidence_states": {
+      "const": [
+        "limited",
+        "unavailable"
+      ]
+    },
+    "confidence_ceiling": {
+      "const": "limited"
+    },
+    "can_satisfy_local_competition": {
+      "const": false
+    },
+    "identity_basis": {
+      "const": "exact_upstream_hashes; native_link_mapping_unavailable"
+    },
+    "record_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 150000
+    },
+    "partitioning": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "const": "item_id_modulo"
+        },
+        "buckets": {
+          "const": 64
+        },
+        "max_partition_bytes": {
+          "const": 1048576
+        },
+        "max_total_bytes": {
+          "const": 33554432
+        }
+      },
+      "required": [
+        "algorithm",
+        "buckets",
+        "max_partition_bytes",
+        "max_total_bytes"
+      ]
+    },
+    "partitions": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "bucket": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 63
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 1048576
+          },
+          "record_count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 150000
+          },
+          "sha256": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64,
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "bucket",
+          "bytes",
+          "record_count",
+          "sha256"
+        ]
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scope": {
+          "const": "current_observed_exact_variants"
+        },
+        "complete": {
+          "const": true
+        },
+        "source_records": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 150000
+        },
+        "delivered_records": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 150000
+        },
+        "missing": {
+          "const": "unavailable"
+        },
+        "detailed_history": {
+          "const": "daily_closings_60_days"
+        }
+      },
+      "required": [
+        "scope",
+        "complete",
+        "source_records",
+        "delivered_records",
+        "missing",
+        "detailed_history"
+      ]
+    },
+    "generation_id": {
+      "type": "string",
+      "minLength": 64,
+      "maxLength": 64,
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "observations": {
+      "type": "array",
+      "maxItems": 60,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "observation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 19,
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time",
+            "maxLength": 40,
+            "pattern": "Z$"
+          },
+          "scope_complete": {
+            "const": true
+          },
+          "synthetic": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "observation_id",
+          "observed_at",
+          "scope_complete",
+          "synthetic"
+        ]
+      },
+      "minItems": 1
+    },
+    "history_partitioning": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "const": "item_id_modulo"
+        },
+        "buckets": {
+          "const": 64
+        },
+        "max_partition_bytes": {
+          "const": 1048576
+        },
+        "max_total_bytes": {
+          "const": 67108864
+        }
+      },
+      "required": [
+        "algorithm",
+        "buckets",
+        "max_partition_bytes",
+        "max_total_bytes"
+      ]
+    },
+    "history_partitions": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "bucket": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 63
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 1048576
+          },
+          "record_count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 150000
+          },
+          "sha256": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64,
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "bucket",
+          "bytes",
+          "record_count",
+          "sha256"
+        ]
+      }
+    }
+  },
+  "required": [
+    "format",
+    "schema_version",
+    "contract_version",
+    "issuer_id",
+    "market",
+    "pricing_algorithm",
+    "history_basis",
+    "source_kind",
+    "source_watermark",
+    "source_observation",
+    "generated_at",
+    "synthetic",
+    "columns",
+    "states",
+    "confidence_states",
+    "confidence_ceiling",
+    "can_satisfy_local_competition",
+    "identity_basis",
+    "record_count",
+    "partitioning",
+    "partitions",
+    "coverage",
+    "generation_id",
+    "observations",
+    "history_partitioning",
+    "history_partitions"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.twich.gg/workshop-summary/v3/manifest"
+}

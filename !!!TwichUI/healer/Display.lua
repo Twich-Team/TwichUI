@@ -599,7 +599,14 @@ local function Build()
     h:SetScript("OnMouseUp", function(_, button)
         if button == "RightButton" and D.onPositionEnd then D.onPositionEnd() end
     end)
+    local hover = CreateFrame("Frame", nil, f)
+    hover:SetAllPoints(f)
+    hover:Hide()
+    hover:SetScript("OnEnter", function(self) if D.CommunicationLive() and D.onCommunication then D.onCommunication(self) end end)
+    hover:SetScript("OnLeave", function(self) if GameTooltip and GameTooltip:GetOwner() == self then GameTooltip:Hide() end end)
+    f.communicationHover = hover
     frame, handle = f, h
+    D.ConfigureCommunication()
     stats.built = true
 end
 
@@ -614,6 +621,23 @@ end
 -- a flash is never left over after switching to particles, nor particles in the old color after a new one is chosen.
 local function EffectSig(cfg)
     return table.concat({ cfg.effectChat, cfg.effectCritical, cfg.effectDrinking, cfg.particleColor, cfg.particleIntensity }, "\31")
+end
+
+-- Motion-only leaves gameplay clicks untouched. The documented setters are protected;
+-- configure once out of combat and leave them alone during combat.
+local communicationReady, communicationLive = false, false
+function D.ConfigureCommunication()
+    if not frame or communicationReady or type(InCombatLockdown) ~= "function" then return end
+    local ok, combat = pcall(InCombatLockdown)
+    if not ok or (issecretvalue and issecretvalue(combat)) or combat ~= false then return end
+    local h = frame.communicationHover
+    if not h or type(h.SetMouseClickEnabled) ~= "function" or type(h.SetMouseMotionEnabled) ~= "function" then return end
+    local configured = pcall(function() h:SetMouseClickEnabled(false); h:SetMouseMotionEnabled(true) end)
+    communicationReady = configured
+    if configured and communicationLive then h:Show() end
+end
+function D.CommunicationLive()
+    return communicationReady and communicationLive and shownMode == "live" and frame and frame:IsShown() and not frame.leaving
 end
 
 function D.Render(v, cfg, mode)
@@ -640,7 +664,9 @@ function D.Render(v, cfg, mode)
     handle:EnableMouse(mode == "position")
     local clickable = mode == "live" and v.problem ~= nil
     f.pick:EnableMouse(clickable)
-    if not clickable and R.HealerPicker then R.HealerPicker.Close() end   -- the menu is for the "Choose a healer" panel only
+    communicationLive = mode == "live" and not clickable
+    if not communicationLive and R.HealerCommunication then R.HealerCommunication.Close() end
+    if not clickable and R.HealerPicker and R.HealerPicker.Kind() ~= "communication" then R.HealerPicker.Close() end   -- the menu is for the "Choose a healer" panel only
 
     local was = f:IsShown() and not f.leaving
     f.leaving = false
@@ -655,10 +681,14 @@ function D.Render(v, cfg, mode)
         end
     end
     shownMode = mode
+    f.communicationHover:SetShown(communicationLive and communicationReady)
 end
 
 function D.Hide(immediate, cfg)
     shownMode = nil
+    communicationLive = false
+    if frame and frame.communicationHover then frame.communicationHover:Hide() end
+    if R.HealerCommunication then R.HealerCommunication.Close() end
     if not frame or not frame:IsShown() then return end
     frame.mark:Hide()
     handle:Hide()

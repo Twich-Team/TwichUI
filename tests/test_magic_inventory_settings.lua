@@ -26,7 +26,9 @@ local c = MIClient("Rich", {
     cl.CreateFrame = function(kind, name, parent) local fr = MIFake(kind, parent); if name then cl[name] = fr end return fr end
     cl.UIParent = MIFake("Frame"); cl.UIParent.w, cl.UIParent.h = 1920, 1080
     cl.GameTooltip = MIFake("GameTooltip")
-    for _, file in ipairs({ "chronicle/Style.lua", "Look.lua", "FrameLook.lua" }) do
+    cl.C_Item.GetItemIconByID = function(id) if cl.ITEMS[id] then return 1000 + id end end
+    cl.C_Item.GetItemNameByID = function(id) if cl.ITEMS[id] then return cl.ITEMS[id].name end end
+    for _, file in ipairs({ "chronicle/Style.lua", "Look.lua", "FrameLook.lua", "CraftLook.lua", "Icons.lua", "reminders/ArtData.lua", "artwork/Catalog.lua" }) do
       local chunk = assert(loadfile(ROOT .. file)); setfenv(chunk, cl); chunk("!!!TwichUI", {})
     end
   end,
@@ -34,7 +36,7 @@ local c = MIClient("Rich", {
 })
 c.StaticPopupDialogs = {}
 c.StaticPopup_Show = function(name, text) c.POPUP = { name = name, text = text }; return {} end
-for _, file in ipairs({ "../TwichUI_Settings/Kit.lua", "../TwichUI_Settings/Widgets.lua", "../TwichUI_Settings/pages/MagicInventory.lua", "../TwichUI_Settings/pages/MagicInventoryDrag.lua", "../TwichUI_Settings/pages/MagicInventoryGuild.lua" }) do
+for _, file in ipairs({ "../TwichUI_Settings/Kit.lua", "../TwichUI_Settings/Widgets.lua", "../TwichUI_Settings/Material.lua", "../TwichUI_Settings/Craft.lua", "../TwichUI_Settings/ArtworkPicker.lua", "../TwichUI_Settings/pages/MagicInventory.lua", "../TwichUI_Settings/pages/MagicInventoryDrag.lua", "../TwichUI_Settings/pages/MagicInventoryGuild.lua" }) do
   local chunk = assert(loadfile(ROOT .. file)); setfenv(chunk, c); chunk("TwichUI_Settings", {})
 end
 TIP = {}
@@ -75,6 +77,12 @@ P.Control("newRule").onPick("cloth")
 R.SettingsWidgets.CloseMenu()
 Flush()
 Check(P.Editing() ~= nil and Has(f, "^New rule$"), "the editor opens")
+local editorFooter = P.Control("eSave"):GetParent()
+Check(editorFooter:IsShown() and P.Control("builderDelete"):GetParent() == editorFooter
+  and P.Control("builderDuplicate"):GetParent() == editorFooter and P.Control("eCancel"):GetParent() == editorFooter,
+  "all rule actions share the editor footer")
+Check(not P.Control("builderDelete").enabled and not P.Control("builderDuplicate").enabled,
+  "new rule keeps Delete and Duplicate visible but disabled")
 Check(Has(f, "^What items%?$") and Has(f, "^Rule review$"), "cohesive builder sections")
 local builderHeight = P.Height()
 Click("moreItemFilters")
@@ -105,7 +113,7 @@ Check(Has(f, "Needs attention"), "and says it can't be turned on yet")
 TIP = {}; P.Control("reviewPanel").scripts.OnEnter(P.Control("reviewPanel"))
 Check(table.concat(TIP, " "):find("Whether a player can receive these", 1, true), "review help is honest about recipients")
 Click("eSave")
-Check(P.Editing() == nil, "saved")
+Check(P.Editing() == nil and not editorFooter:IsShown(), "saving returns to the list and hides the footer")
 local rule = MI.Rules()[1]
 Check(rule and rule.name == "Cloth to bank alt" and rule.enabled == false and rule.keep == 20 and rule.dest == nil and #MI.Dests() == 0, "saved turned off, keeping 20 of each, with no empty destination made")
 Check(Has(f, "Cloth to bank alt") and Has(f, "^Cloth") and Has(f, "Keep 20"), "a rule card says what it matches and what it keeps")
@@ -332,6 +340,35 @@ Check(not P.Editing().include[2589] and P.Control("summaryArt").appliedMask == n
 Check(#MI.Rules() == savedCount, "draft changes do not allocate a rule")
 Click("eCancel"); Check(#MI.Rules() == savedCount, "cancel discards the private changes")
 
+-- Choose whole item families without opening the carried-item picker.
+for _, choice in ipairs({
+  { MI.WAYLAID_CATEGORY, "waylaid", "All Waylaid crates" },
+  { MI.WRITS_CATEGORY, "crafting writs", "All Craftsman's Writs" },
+}) do
+  local key, query, label = unpack(choice)
+  P.NewFromTemplate("custom"); Flush()
+  Click("quickCategory1")
+  categorySearch:SetText(query); categorySearch.scripts.OnTextChanged(categorySearch); Flush()
+  local tile
+  for i, cat in ipairs(MI.Categories()) do
+    if cat.key == key then tile = "e1cat" .. i end
+  end
+  Check(tile and Has(f, label), "category search finds " .. label)
+  if tile then
+    Click(tile)
+    Check(P.Control(tile .. "mark").shown and P.Editing().cats[1] == key, "category tile selects " .. label)
+    Click("filterDone"); Click("destinationChoicebank"); Click("eSave")
+    local saved = MI.Rules()[#MI.Rules()]
+    Check(saved and saved.cats[1] == key and not next(saved.include), "Save rule stores " .. label .. " without individual items")
+    Click("rule" .. #MI.Rules() .. "edit"); Click("quickCategory1")
+    Check(P.Control(tile .. "mark").shown, "reopened rule keeps " .. label .. " selected")
+    Click("filterDone"); Click("eCancel")
+    if saved and saved.cats[1] == key then MI.DeleteRule(saved.id); Flush() end
+  else
+    Click("filterDone"); Click("eCancel")
+  end
+end
+
 -- Legacy-shaped rules round-trip unchanged; all filter actions belong to the same parent transaction.
 local function Signature(value)
   if type(value) ~= "table" then return type(value) .. ":" .. tostring(value) end
@@ -377,6 +414,84 @@ Check(P.Editing() == nil and #MI.Rules() == savedCount, "discard changes no save
 Click("rule1edit"); Click("builderDuplicate")
 Check(P.Editing() and not P.Editing().id and #MI.Rules() == savedCount, "builder duplicate is an independent unsaved draft")
 Click("eCancel")
+
+-- Real shared artwork picker: Apply changes only the private rule draft.
+do
+  local picker = R.SettingsArtworkPicker
+  local id = MI.SaveRule({name="Icon identity",kind="bank",cats={"7:5"},include={[2589]=true},enabled=false})
+  Flush()
+  local function EditRule()
+    local _, index = MI.Rule(id)
+    Click("rule" .. index .. "edit")
+  end
+  local function Pick(key)
+    for _, tile in ipairs(picker.Frame().tiles) do
+      if tile.shown and tile.entry and tile.entry.key == key then tile:Fire("OnClick"); return end
+    end
+    Check(false, "picker choice is visible: " .. key)
+  end
+  local function Open()
+    Click("chooseRuleIcon")
+    Check(picker.Shown() and picker.State(f) and picker.State(f).key == P.Editing(), "chooser is bound to this private draft")
+  end
+  EditRule()
+  Check(P.Control("summaryArt").appliedMask ~= nil, "automatic included-item identity has a portrait mask")
+  Open(); Pick("art-herbs")
+  Check(not P.Editing().artwork and not MI.Rule(id).artwork, "browsing changes neither draft nor saved rule")
+  Check(picker.Apply(f), "picker accepts selected art"); Flush()
+  Check(P.Editing().artwork.id == "art-herbs" and not MI.Rule(id).artwork, "picker Apply changes only the draft")
+  Check(P.Control("summaryArt").texture == R.PATH .. [[media\icons\magic-herbs]] and not P.Control("summaryArt").appliedMask
+      and P.Control("reviewIdentityArt").texture == P.Control("summaryArt").texture, "both builder identities use art and remove the item mask")
+  Check(P.Editing().include[2589] and P.Editing().cats[1] == "7:5" and P.Editing().kind == "bank", "artwork never edits matching or behavior")
+  Click("eCancel"); Check(not MI.Rule(id).artwork, "rule Cancel discards applied artwork")
+  EditRule(); Open(); Pick("art-herbs"); picker.Apply(f); Flush(); Click("eSave")
+  local _, index = MI.Rule(id)
+  Check(MI.Rule(id).artwork.id == "art-herbs" and P.Control("rule" .. index .. "art").texture == R.PATH .. [[media\icons\magic-herbs]], "rule Save persists the selected list identity")
+  EditRule(); Open(); picker.SetSource("game"); picker.TakeItem("6948"); Check(picker.Apply(f), "visual item reference applies"); Flush()
+  Check(P.Editing().artwork.id == 6948 and P.Editing().include[2589] and not P.Editing().include[6948]
+      and P.Control("summaryArt").appliedMask ~= nil, "item art gets a portrait mask without becoming a matched item")
+  f:Hide(); f:Show(); Flush()
+  Check(P.Editing().artwork.id == 6948 and MI.Rule(id).artwork.id == "art-herbs", "hide/reopen retains applied unsaved artwork")
+  Open(); picker.Frame().automatic:Fire("OnClick")
+  Check(P.Editing().artwork.id == 6948 and picker.State(f).candidate.kind == "automatic", "automatic restore is staged")
+  picker.Close(f); Flush()
+  Check(P.Editing().artwork.id == 6948, "cancelling automatic restore retains the draft choice")
+  Open(); picker.Frame().automatic:Fire("OnClick"); picker.Apply(f); Flush()
+  Check(not P.Editing().artwork and P.Control("summaryArt").appliedMask ~= nil, "applying automatic restores the included item's default")
+  Click("eSave"); Check(not MI.Rule(id).artwork, "saved automatic is absent")
+  EditRule(); Open(); Pick("art-herbs"); picker.Apply(f); Flush()
+  local sourceDraft = P.Editing()
+  Click("builderDuplicate")
+  Check(P.Editing() and not P.Editing().id and P.Editing().artwork.id == "art-herbs" and not MI.Rule(id).artwork,
+      "builder Duplicate carries independent applied art into an unsaved disabled copy")
+  P.Editing().artwork.id = "ammo"
+  Check(sourceDraft.artwork.id == "art-herbs", "builder copies share no artwork table with their source draft")
+  Click("eCancel"); Check(not MI.Rule(id).artwork, "copy edits cannot touch the saved original")
+  -- Valid unavailable references stay saved and visibly fall back; changing rules closes candidates.
+  local saved = MI.Rule(id); saved.artwork={kind="icon",id="futureIcon"}; MI.SaveRule(saved); Flush()
+  EditRule()
+  Check(P.Control("ruleIconStatus").text:find("unavailable",1,true) and P.Control("summaryArt").appliedMask ~= nil, "unavailable art visibly falls back to automatic")
+  Open(); Check(picker.State(f).candidate.id == "futureIcon" and not picker.Frame().apply.enabled, "unavailable choice remains selected without becoming applicable")
+  picker.Close(f); Flush()
+  Open(); Pick("art-herbs"); Click("destinationChoicekeep")
+  Check(not picker.Shown() and not P.Editing().artwork.id:find("herbs",1,true), "a behavior change cancels the candidate before changing the rule")
+  Open(); Pick("art-herbs"); Click("quickCategory1")
+  Check(not picker.Shown(), "opening item criteria cancels the icon session")
+  Click("filterDone")
+  Open(); Pick("art-herbs"); f:Hide(); f:Show(); Flush()
+  Check(not picker.Shown() and P.Editing().artwork.id == "futureIcon", "page hide cancels only the picker candidate")
+  -- A direct draft replacement or external deletion cannot receive a late Apply.
+  Open(); Pick("art-herbs"); P.Editing().cats={"7:9"}
+  Check(not picker.Apply(f) and not picker.Shown() and P.Editing().artwork.id == "futureIcon", "changed automatic context invalidates late Apply")
+  Open(); Pick("art-herbs"); MI.DeleteRule(id); Flush()
+  Check(not picker.Apply(f) and not picker.Shown(), "a removed saved rule cannot accept a late icon")
+  Click("eSave"); Check(P.Editing() and P.Editing().artwork.id == "futureIcon", "failed rule Save retains the artwork draft")
+  Click("eCancel")
+  P.NewFromTemplate("custom"); Flush(); Open(); Pick("art-herbs"); picker.Apply(f); Flush(); Open()
+  Check(R.Profiles.Duplicate("Icon test copy"), "profile duplication succeeds")
+  Flush()
+  Check(not P.Editing() and not picker.Shown(), "profile duplication discards the old rule draft and picker")
+end
 
 -- the guild bank arrangement editor has its own test (test_magic_inventory_editor.lua)
 P.SetTask("guild"); Flush()

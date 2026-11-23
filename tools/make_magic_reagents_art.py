@@ -30,5 +30,5 @@ if __name__ == "__main__":
     build("magic-reagents-source.png", "magicReagents")
     build("magic-bank-source.png", "magicBank")
     for name in ("quality-poor", "quality-common", "quality-uncommon", "quality-rare", "quality-epic",
-                 "herbs", "leather", "ore", "enchanting", "elemental", "elixir", "explosives", "parts", "unbound"):
+                 "herbs", "leather", "ore", "enchanting", "elemental", "elixir", "explosives", "parts", "unbound", "waylaid-crate"):
         build("magic-inventory/" + name + "-source.png", "magic-" + name)

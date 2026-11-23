@@ -27,6 +27,7 @@ c.UnitName = function() return "Thurin" end
 W.bound.F = "CLICK TwichUIFishingButton:LeftButton"
 c.FireEvent("UPDATE_BINDINGS"); W.Advance(1)
 local F = c.TwichUI.Fishing
+if os.getenv("FISHING_ECONOMY_CAPTURE") == "1" then dofile(TESTS .. "fishing_economy_fixture.lua"); FishingEconomyFixture(c) end
 local UI = F.JournalUI
 
 local ch = F.Store.Char()
@@ -106,7 +107,7 @@ else
   UI.Open(page)
   if arg[3] and arg[3] ~= "" then UI.Select(page, tonumber(arg[3]), arg[4] and arg[4] ~= "" and tonumber(arg[4]) or nil) end
 end
-W.Advance(0.1)
+W.Advance(2)
 
 local function J(v)
   local t = type(v)

@@ -40,6 +40,8 @@ LR.DEFAULTS = {
     barTexture = "eui:sheer", barHeight = 14, barShine = false, barShift = true,
     barColorHigh = "ff91ad78", barColorMid = "ffd0aa60", barColorLow = "ffd18450", barColorExpired = "ffba5d55", barColorRule = "ff91ad78",
     barTrack = "ff211a16",
+    -- confirmed loot-win celebration (independent from rule evaluation)
+    victory = true, victoryIntensity = "subtle", victorySound = false, victoryDuration = "normal",
     -- automation (everything starts off)
     auto = false, autoNeed = false, autoUpgrade = false, paused = false, autoDelay = 3,
     -- where the stack sits: its top centre as an offset from the screen's centre, in screen units
@@ -53,6 +55,8 @@ LR.LIMITS = {
 }
 
 LR.CHOICES = {
+    victoryIntensity = { { "off", "Off" }, { "subtle", "Subtle" }, { "full", "Full" } },
+    victoryDuration = { { "short", "Short" }, { "normal", "Normal" }, { "long", "Long" } },
     growth = {
         { "down", "Downwards", "The first roll is at the top and the stack grows down from there." },
         { "up", "Upwards", "The first roll is at the bottom and the stack grows up from there." },
@@ -98,7 +102,7 @@ local rev = 0
 function LR.Subscribe(fn) subscribers[#subscribers + 1] = fn end
 function LR.Rev() return rev end
 
--- Something the cards are drawn or decided from changed: told once. what: "place", "settings", "rules" or "profile".
+-- A change is told once: place, settings, rules, profile, or settings-only artwork.
 function LR.Invalidate(what)
     rev = rev + 1
     for _, fn in ipairs(subscribers) do
@@ -215,12 +219,14 @@ local function View(rule, index)
         id = rule.id, index = index,
         name = ValidName(rule.name) and rule.name or "Loot rule",
         enabled = rule.enabled == true,
-        action = rule.action,
+        action = rule.action, display = rule.display or "none",
         match = rule.match == "any" and "any" or "all",
         delay = ValidDelay(rule.delay) and rule.delay or LR.Get("autoDelay"),
         result = rule.result ~= false,
+        artwork = rule.artwork and R.Artwork and R.Artwork.Check(rule.artwork) or nil,
         conditions = {},
     }
+    if v.artwork and v.artwork.kind == "automatic" then v.artwork = nil end
     for i, c in ipairs(type(rule.conditions) == "table" and rule.conditions or {}) do
         if type(c) == "table" then
             local copy = {}
@@ -276,7 +282,7 @@ end
 
 -- Starting points offered by "New rule". Each starts switched off: turn it on once it says what you mean.
 LR.TEMPLATES = {
-    { key = "blank", label = "Start from nothing", name = "New rule", action = "greed", conditions = { { type = "quality", op = "is", value = 2 } } },
+    { key = "blank", label = "Start from nothing", name = "New rule", action = "none", conditions = { { type = "quality", op = "is", value = 2 } } },
     { key = "greenGear", label = "Greed on green gear", name = "Greed on green gear", action = "greed",
         conditions = { { type = "quality", op = "is", value = 2 }, { type = "class", value = "equipment" } } },
     { key = "recipes", label = "Pass on recipes I already know", name = "Pass known recipes", action = "pass",
@@ -294,7 +300,7 @@ function LR.Create(kind)
     if not template then return false, "No such starting point." end
     local t = Saved(true)
     local rule = {
-        id = NextId(t), name = template.name, enabled = false, action = template.action, match = "all",
+        id = NextId(t), name = template.name, enabled = false, action = template.action, display = "none", match = "all",
         delay = LR.Get("autoDelay"), result = true, conditions = {},
     }
     for i, c in ipairs(template.conditions) do
@@ -314,8 +320,10 @@ function LR.Duplicate(id)
     local t = Saved(true)
     local copy = { id = NextId(t), enabled = false, conditions = {} }
     for k, v in pairs(rule) do
-        if k ~= "id" and k ~= "enabled" and k ~= "conditions" then copy[k] = v end
+        if k ~= "id" and k ~= "enabled" and k ~= "conditions" and k ~= "artwork" then copy[k] = v end
     end
+    local art = rule.artwork and R.Artwork and R.Artwork.Check(rule.artwork)
+    if art and art.kind ~= "automatic" then copy.artwork = art end
     local name = ValidName(rule.name) and rule.name or "Loot rule"
     copy.name = (name .. " (copy)"):sub(1, Ru.MAX_NAME)
     for i, c in ipairs(type(rule.conditions) == "table" and rule.conditions or {}) do
@@ -347,13 +355,33 @@ function LR.Move(id, delta)
     return true
 end
 
-local function Edit(id, fn)
+local function Edit(id, fn, reason)
     local rule = Find(id)
     if not rule then return false, "That rule is gone." end
     local changed = fn(rule)
     if changed == false then return false end
-    if changed then LR.Invalidate("rules") end
+    if changed then LR.Invalidate(reason or "rules") end
     return true
+end
+
+-- The picker-only automatic choice is represented by absence in saved rules.
+function LR.SetArtwork(id, value)
+    local art
+    if value ~= nil then
+        art = R.Artwork and R.Artwork.Check(value)
+        if not art then return false, "That icon isn't valid." end
+        if art.kind == "automatic" then art = nil end
+    end
+    return Edit(id, function(r)
+        local old = r.artwork
+        if old == nil and art == nil then return nil end
+        if type(old) == "table" and art and old.kind == art.kind and old.id == art.id then
+            -- Store a canonical copy even when the visible reference is unchanged.
+            r.artwork = art; return true
+        end
+        r.artwork = art
+        return true
+    end, "artwork")
 end
 
 function LR.SetName(id, name)
@@ -368,8 +396,13 @@ function LR.SetEnabled(id, on)
 end
 
 function LR.SetAction(id, action)
-    if action ~= "need" and action ~= "greed" and action ~= "pass" then return false end
+    if not Ru.ACTION_LABEL[action] then return false end
     return Edit(id, function(r) if r.action == action then return nil end r.action = action return true end)
+end
+
+function LR.SetDisplay(id, display)
+    if not Ru.DISPLAY_LABEL[display] then return false end
+    return Edit(id, function(r) if (r.display or "none") == display then return nil end r.display = display return true end)
 end
 
 function LR.SetMatch(id, mode)

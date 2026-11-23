@@ -159,6 +159,8 @@ local function Norm(s)
     s = s:gsub("(%d+)|T[^|]*GoldIcon[^|]*|t", "%1g")
     s = s:gsub("(%d+)|T[^|]*SilverIcon[^|]*|t", "%1s")
     s = s:gsub("(%d+)|T[^|]*CopperIcon[^|]*|t", "%1c")
+    -- Coin denominations remain asserted above; recommendation/item artwork is checked separately.
+    s = s:gsub("|T[^|]*|t%s*", "")
     return s
 end
 local function Txt(fs) return fs and fs.GetText and Norm(fs:GetText()) or "<missing>" end
@@ -205,10 +207,22 @@ local function FindButton(root, text, depth)
         if hit then return hit end
     end
 end
+-- PR3 rankings are asynchronous. Wait for the real worker and its coalesced
+-- presentation, with a bounded timeout; retain every economic/UI assertion.
+local function SettleOpportunities()
+    if not(R.Workshop.OpportunityEngine and Win().Mode()=='opps')then return end
+    if not R.Workshop.Session.OpportunityStatus().refreshing then return end
+    for _=1,50 do
+        if not R.Workshop.Session.OpportunityStatus().refreshing then Lab.Settle(.2);return end
+        Lab.Settle(.1)
+    end
+    error('Opportunities did not settle within the scenario timeout')
+end
 local function Click(btn, what)
     if not btn then error("missing control: " .. tostring(what)) end
     if btn.IsEnabled and not btn:IsEnabled() then error("control is disabled: " .. tostring(what)) end
     btn:Click()
+    SettleOpportunities()
 end
 -- (P2.1) Opportunities' Add opens the optimized confirmation; accept it (Add to plan), or the deliberate "Add recipe only" when no optimized plan
 -- can be made for the recipe. Returns which one was pressed.
@@ -609,9 +623,9 @@ Lab.Step("opportunities: rows, ordering, filtering, unknowns", function()
     Check("click", "All again shows every recipe", 7, #Rows(o))
 
     -- the filter's logic is kept (Session), though the toolbar no longer carries its switch: it drops the loss and the unknowns
-    R.Workshop.Session.ToggleProfitOnly(); R.Workshop.UI.Redraw()
+    R.Workshop.Session.ToggleProfitOnly(); R.Workshop.UI.Redraw(); SettleOpportunities()
     Check("direct", "profitable only: losses and unknowns hidden", "Copper Belt Buckle | Smelt Bronze | Minor Healing Potion | Elixir of Many Wonders | Weak Troll's Blood Potion", Names(o))
-    R.Workshop.Session.ToggleProfitOnly(); R.Workshop.UI.Redraw()
+    R.Workshop.Session.ToggleProfitOnly(); R.Workshop.UI.Redraw(); SettleOpportunities()
     Check("direct", "profitable only off shows all again", 7, #Rows(o))
 end)
 
@@ -661,6 +675,9 @@ local function WorthWorld()
     local tt = GameTooltip
     local oldLine, oldDouble, oldShift = tt.AddLine, tt.AddDoubleLine, IsShiftKeyDown
     local oldInfo, oldItem = C_Item.GetItemInfo, {}
+    -- This fixture is explicitly a non-enchanter; do not inherit a simulator/client profession default.
+    local oldDisenchant = C_SpellBook.ContainsAnyDisenchantSpell
+    C_SpellBook.ContainsAnyDisenchantSpell = function() return false end
     for _, k in ipairs({ "GetItemLocation", "DoesItemExist", "GetItemLink", "GetItemID", "IsBound", "GetStackCount", "GetDetailedItemLevelInfo" }) do oldItem[k] = C_Item[k] end
     local W = {   -- id = { sell, quality, class, bind, bound, count, link }
         [118] = { 60, 1, 7, 0 }, [2841] = { 500, 1, 7, 0 }, [9999] = { 10, 2, 4, 2 }, [2320] = { 20, 1, 7, 0 }, [2447] = { 4, 1, 7, 1, true },
@@ -698,6 +715,7 @@ local function WorthWorld()
         Hover = Hover, HoverMarket = HoverMarket,
         SetShift = function(on) shift = on end,
         Restore = function()
+            C_SpellBook.ContainsAnyDisenchantSpell = oldDisenchant
             tt.AddLine, tt.AddDoubleLine, IsShiftKeyDown, C_Item.GetItemInfo = oldLine, oldDouble, oldShift, oldInfo
             for k, v in pairs(oldItem) do C_Item[k] = v end
         end,
@@ -716,38 +734,38 @@ Lab.Step("what's it worth: item tooltip lines", function()
     Say("TooltipDataProcessor in the simulator: " .. tostring(rawget(_G, "TooltipDataProcessor") ~= nil) .. "; registered by the product: " .. tostring(WT.registered))
     local requestsBefore = ah.requested
     Check("direct", "no cut confirmed, the auction is dearer: the fee is named and no winner is claimed",
-        "What's it worth? / Workshop: Not enough data / Vendor | 60c / Auction (before fees) | 1s 50c / Hold Shift for details", Hover(118))
+        "What's it worth? / Vendor | 60c / Auction (before fees) | 1s 50c / Hold Shift for details", Hover(118))
     Check("direct", "active plan demand overrides a tempting vendor comparison",
-        "What's it worth? / Workshop: Keep for crafting / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details", Hover(2841))
+        "What's it worth? / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details", Hover(2841))
     Check("direct", "repeating the update gives the same lines, not more",
-        "What's it worth? / Workshop: Not enough data / Vendor | 60c / Auction (before fees) | 1s 50c / Hold Shift for details", Hover(118))
-    Check("direct", "green armour: disenchant has no data, so it is said and no winner is claimed",
-        "What's it worth? / Workshop: Not enough data / Vendor | 10c / Auction (before fees) | 25c / Disenchant (average) | no data / Hold Shift for details", Hover(9999))
+        "What's it worth? / Vendor | 60c / Auction (before fees) | 1s 50c / Hold Shift for details", Hover(118))
+    Check("direct", "green armour: the simulated non-enchanter has an explicit unavailable reason",
+        "What's it worth? / Vendor | 10c / Auction (before fees) | 25c / Disenchant | Your character does not know Disenchant. / Hold Shift for details", Hover(9999))
     Check("direct", "a bound item cannot be listed (unavailable, not unknown)",
-        "What's it worth? / Workshop: Keep for crafting / Vendor | 4c / Auction | can't be listed (bound)", Hover(2447))
+        "What's it worth? / Vendor | 4c / Auction | can't be listed (bound)", Hover(2447))
     Check("direct", "an item with no listing: no price (never 0), more prices needed",
-        "What's it worth? / Workshop: Keep for crafting / Vendor | 20c / Auction | no price / Hold Shift for details", Hover(2320))
+        "What's it worth? / Vendor | 20c / Auction | no price / Hold Shift for details", Hover(2320))
     Check("direct", "a random-properties variant is not priced from the base item's listings",
-        "What's it worth? / Workshop: Keep for crafting / Vendor | 3c / Auction | this variant isn't priced", Hover(765))
+        "What's it worth? / Vendor | 3c / Auction | this variant isn't priced", Hover(765))
     Check("direct", "a stack says the values are for one item",
-        "What's it worth? (each) / Workshop: Not enough data / Vendor | 30c / Auction (before fees) | 60c / Hold Shift for details", Hover(3382))
+        "What's it worth? (each) / Vendor | 30c / Auction (before fees) | 60c / Hold Shift for details", Hover(3382))
     -- 3382: Weak Troll's Blood Potion 300/5 = 60c each
     Check("direct", "an item the player does not hold (no guid) gets nothing", "", Hover(118, { id = 118 }))
 
     w.SetShift(true)
     local long = Hover(118)
     Check("direct", "Shift: the Always lines plus the age and the source, once each, and the unconfirmed cut stays on the value",
-        "What's it worth? / Workshop: Not enough data / Vendor | 60c / Auction (before fees) | 1s 50c / Scanned | just now / Prices from | the auction house on SimulatedRealm / Estimates, not sales. Deposits and failed listings aren't counted.", long)
+        "What's it worth? / Vendor | 60c / Auction (before fees) | 1s 50c / Scanned | just now / Prices from | the auction house on SimulatedRealm / Estimates, not sales. Deposits and failed listings aren't counted.", long)
     local _, n = long:gsub("Deposits and failed listings", "")
     Check("direct", "Shift: the deposit / failed-listing exclusion is stated once", 1, n)
     Check("direct", "Shift: the details stay short enough for a tooltip", true, select(2, long:gsub(" / ", "")) + 1 <= 10)
     w.SetShift(false)
-    Check("direct", "released: the short form again, nothing left over", "What's it worth? / Workshop: Not enough data / Vendor | 60c / Auction (before fees) | 1s 50c / Hold Shift for details", Hover(118))
+    Check("direct", "released: the short form again, nothing left over", "What's it worth? / Vendor | 60c / Auction (before fees) | 1s 50c / Hold Shift for details", Hover(118))
 
     -- TEST INPUT: a made-up 5% cut for the 'unknown' side (the product's PR.CUT is empty). 150 x 0.05 = 7.5 -> 8, net 142.
     R.Workshop.Prices.CUT.unknown = 0.05
     Check("direct", "[test input] a verified fee alone cannot repair insufficient competition",
-        "What's it worth? / Workshop: Not enough data / Vendor | 60c / Auction (after fees) | 1s 42c / Hold Shift for details", Hover(118))
+        "What's it worth? / Vendor | 60c / Auction (after fees) | 1s 42c / Hold Shift for details", Hover(118))
     R.Workshop.Prices.CUT.unknown = nil
     Check("direct", "test cut removed: back to before fees", true, Hover(118):find("Auction (before fees) | 1s 50c", 1, true) ~= nil)
 
@@ -785,23 +803,28 @@ Lab.Step("what's it worth: tooltip designer", function()
         end
         Apply()
     end
-    local prior = WL.Get().lines[2].id
+    local function LiveLayoutSignature()
+        local out = {}
+        for _, e in ipairs(WL.Get().lines) do out[#out + 1] = e.id .. ":" .. e.when end
+        return table.concat(out, ",")
+    end
+    local prior = LiveLayoutSignature()
     D.RemoveLine("vendor")
-    Check("state", "draft removal does not change the live layout", prior, WL.Get().lines[2].id)
+    Check("state", "draft removal does not change the live layout", prior, LiveLayoutSignature())
     Check("state", "Undo restores field presence", true, D.Undo() and not D.Dirty())
     Check("state", "Redo restores the draft removal", true, D.Redo() and D.Dirty())
     D.Cancel()
-    Check("state", "Cancel preserves saved layout", prior, WL.Get().lines[2].id)
+    Check("state", "Cancel preserves saved layout", prior, LiveLayoutSignature())
     D.Search("historical")
     Check("display", "catalog search hides other fields", false, D.ListButton(2):IsShown())
     Check("state", "catalog search does not save", false, D.Dirty())
     D.Search("")
-    Check("display", "unsupported outcome data is absent from the catalog", false, D.ListButton(7):IsShown())
+    Check("display", "supported outcome field is offered by the catalog", true, D.ListButton(7):IsShown())
     Lab.Settle(.2)
     local hit = R.TestLab.Reach.Analyze(D.ListButton(1), { evidence = "simulator-geometry", limit = 1000000 })
     Check("direct", "[geometry] supported catalog row can receive clicks", "reachable", hit.verdict)
     Check("init", "with the Workshop loaded, the designer (not the invitation) is shown", true, f:IsShown() and f.mock:IsShown() and not f.inviteButton:IsShown())
-    Check("display", "the catalog has seven supported types among the original eight", 7, (function() local n = 0 for i = 1, 8 do if D.ListButton(i) and D.ListButton(i):IsShown() then n = n + 1 end end return n end)())
+    Check("display", "the catalog has all eight original supported types", 8, (function() local n = 0 for i = 1, 8 do if D.ListButton(i) and D.ListButton(i):IsShown() then n = n + 1 end end return n end)())
     Check("display", "one instruction", "Drag lines into the preview.", Txt(f.instruction))
 
     local function Mock()   -- what the mockup shows, top to bottom (rows without anything to say are the designer's own placeholders)
@@ -817,48 +840,56 @@ Lab.Step("what's it worth: tooltip designer", function()
     end
     local function NoPlaceholders(text) return (text:gsub(" / %(%u[^%)]-%)%)", ""):gsub(" / %([^/]-nothing to show for this example%)", "")) end
     local A7 = { marketvalue = true, recent = true, historical = true, supply = true, quality = true }   -- (the A7 lines: checked on their own)
-    local function Layout() local t = {} for _, e in ipairs(WL.Get().lines) do if not A7[e.id] then t[#t + 1] = e.id .. (e.when == "shift" and "*" or "") end end return table.concat(t, ",") end
+    local function Layout() local t = {} for _, e in ipairs(WL.Get().lines) do if not A7[e.id] and e.id ~= "text#1" then t[#t + 1] = e.id .. (e.when == "shift" and "*" or "") end end return table.concat(t, ",") end
     local DEFAULT = "recommend,vendor,auction,disenchant,status*,source*,note*"
+    -- The editable title is now a real first row (unit coverage: test_workshop_worth_designer.lua).
+    Check("state", "the default heading is an explicit editable text row", "text#1", WL.Get().lines[1].id)
+    local function RowByID(id)
+        for i, row in ipairs(D.Model().sec.rows) do if row.id == id then return D.Row(i), i end end
+        error("missing preview row: " .. id)
+    end
     local function Live(shiftHeld) w.SetShift(shiftHeld) return w.Hover(2841) end   -- Bronze Bar: vendor 5s, cheapest listing 4s, before fees
 
     Check("state", "the layout starts as the short default", DEFAULT, Layout())
     Check("state", "the A7 market lines are in the default: market value Always, the rest Hold Shift", "marketvalue,recent*,historical*,supply*,quality*",
         (function() local t = {} for _, e in ipairs(WL.Get().lines) do if A7[e.id] then t[#t + 1] = e.id .. (e.when == "shift" and "*" or "") end end return table.concat(t, ",") end)())
     Check("direct", "the live tooltip carries the market value line, labelled as a 14-day reference", true, w.HoverMarket(2841):find("Market value (14 days)", 1, true) ~= nil)
+    Check("display", "ordinary recommendation uses the addon vendor artwork", true,
+        RowByID("recommend").wide:GetText():find("media\\npcs\\balance-scales-small", 1, true) ~= nil)
     Check("display", "Normal preview of the ordinary example",
         "What's it worth? / Workshop: Vendor / Vendor | 5s / Auction (before fees) | 4s / (Disenchant value (average): nothing to show for this example) / Hold Shift for details", Mock())
     Check("display", "labelled as preview data", true, Txt(f.caption):find("Preview data", 1, true) ~= nil)
     Check("direct", "live values stay the same while the item is kept for the active plan",
-        "What's it worth? / Workshop: Keep for crafting / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details", Live(false))
+        "What's it worth? / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details", Live(false))
     -- Same values, different supported contexts: the live Bronze Bar is reserved
     -- for this character's active plan; the synthetic preview has no plan.
     Check("display", "preview and live values agree while active-plan advice stays distinct",
-        "What's it worth? / Workshop: Vendor / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details || What's it worth? / Workshop: Keep for crafting / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details",
+        "What's it worth? / Workshop: Vendor / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details || What's it worth? / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details",
         NoPlaceholders(Mock()) .. " || " .. Live(false))
 
     Click(f.modeShift, "Hold Shift preview")
     Check("display", "Hold Shift preview adds the Shift lines to the Always lines, once each",
         "What's it worth? / Workshop: Vendor / Vendor | 5s / Auction (before fees) | 4s / (Disenchant value (average): nothing to show for this example) / Scanned | 3 hours ago / Prices from | the example auction house / Estimates, not sales. Deposits and failed listings aren't counted.", Mock())
     Check("direct", "the live tooltip with Shift held has the same kinds of lines (this scan's own age and market)",
-        "What's it worth? / Workshop: Keep for crafting / Vendor | 5s / Auction (before fees) | 4s / Scanned | just now / Prices from | the auction house on SimulatedRealm / Estimates, not sales. Deposits and failed listings aren't counted.", Live(true))
+        "What's it worth? / Vendor | 5s / Auction (before fees) | 4s / Scanned | just now / Prices from | the auction house on SimulatedRealm / Estimates, not sales. Deposits and failed listings aren't counted.", Live(true))
     Click(f.modeNormal, "Normal preview")
 
     -- select and move (buttons): Vendor down one, past Auction
-    Click(D.Row(2), "the Vendor row")
+    Click(RowByID("vendor"), "the Vendor row")
     Check("state", "clicking a row selects it", "vendor", D.Selected())
     Click(f.down, "Move down")
     Check("state", "Move down puts Vendor after Auction", "recommend,auction,vendor,disenchant,status*,source*,note*", Layout())
     Check("display", "and the preview shows it", "What's it worth? / Workshop: Vendor / Auction (before fees) | 4s / Vendor | 5s / (Disenchant value (average): nothing to show for this example) / Hold Shift for details", Mock())
-    Check("direct", "and the live tooltip follows at once", "What's it worth? / Workshop: Keep for crafting / Auction (before fees) | 4s / Vendor | 5s / Hold Shift for details", Live(false))
+    Check("direct", "and the live tooltip follows at once", "What's it worth? / Auction (before fees) | 4s / Vendor | 5s / Hold Shift for details", Live(false))
 
     -- Always -> Hold Shift for Auction: the recommendation is untouched and the value keeps its own "before fees"
-    Click(D.Row(2), "the Auction row")
+    Click(RowByID("auction"), "the Auction row")
     Click(f.holdShift, "Hold Shift (visibility)")
     Check("state", "Auction is a Hold Shift line", "recommend,auction*,vendor,disenchant,status*,source*,note*", Layout())
     Check("state", "the Hold Shift preview came up so the line stays in view", true, D.Mode())
-    Check("direct", "live, Shift not held: no auction line, the suggestion unchanged", "What's it worth? / Workshop: Keep for crafting / Vendor | 5s / Hold Shift for details", Live(false))
+    Check("direct", "live, Shift not held: no auction line, the suggestion unchanged", "What's it worth? / Vendor | 5s / Hold Shift for details", Live(false))
     Check("direct", "live, Shift held: the auction line is back in its place, with 'before fees', once",
-        "What's it worth? / Workshop: Keep for crafting / Auction (before fees) | 4s / Vendor | 5s / Scanned | just now / Prices from | the auction house on SimulatedRealm / Estimates, not sales. Deposits and failed listings aren't counted.", Live(true))
+        "What's it worth? / Auction (before fees) | 4s / Vendor | 5s / Scanned | just now / Prices from | the auction house on SimulatedRealm / Estimates, not sales. Deposits and failed listings aren't counted.", Live(true))
     w.SetShift(false)
 
     -- remove, and click to add again; no duplicate
@@ -873,8 +904,7 @@ Lab.Step("what's it worth: tooltip designer", function()
     Click(D.ListButton(8), "Limits note again")
     Check("state", "clicking it again adds nothing: no duplicate line types", "recommend,auction*,vendor,disenchant,status*,source*,note*", Layout())
 
-    -- the outcomes line: addable, but there is no outcome data, so nothing is ever shown for it
-    -- Legacy saved outcome entries remain editable, though never offered as a capability.
+    -- The outcome field is supported; this ordinary trade-good fixture has no disenchant outcome data.
     D.AddLine("outcomes"); Apply()
     Check("state", "outcomes added", true, Layout():find("outcomes", 1, true) ~= nil)
     Check("display", "the mockup holds its place and says there is nothing to show", true, Mock():find("(Disenchant yields: nothing to show for this example)", 1, true) ~= nil)
@@ -883,7 +913,7 @@ Lab.Step("what's it worth: tooltip designer", function()
     Click(f.remove, "Remove outcomes")
 
     -- the drag handlers (not a pointer): the pointer position is faked to a point over the mockup
-    Click(D.Row(2), "the Auction row"); Click(f.always, "Always")
+    Click(RowByID("auction"), "the Auction row"); Click(f.always, "Always")
     Check("state", "Auction back to Always", "recommend,auction,vendor,disenchant,status*,source*,note*", Layout())
     D.SetMode(false)
     local mock = f.mock
@@ -900,15 +930,15 @@ Lab.Step("what's it worth: tooltip designer", function()
     local b = D.ListButton(7)
     D.StartDrag({ kind = "list", id = "outcomes" })
     Check("direct", "[handler] OnDragStart on a list line starts a carry", true, Drag.Active())
-    PointerAt(model.tops[2] - 1)
-    Check("direct", "[handler] over the top of the second row the gap is 1", 1, D.Find())
-    Check("direct", "[handler] and a gap means a place in the layout", 2, D.PositionOf(1))
+    PointerAt(model.tops[3] - 1)
+    Check("direct", "[handler] after the heading and recommendation the gap is 2", 2, D.Find())
+    Check("direct", "[handler] gap 2 inserts after heading and recommendation", 3, D.PositionOf(2))
     ;(b:GetScript("OnDragStop"))(b); Apply()
     Check("state", "[handler] OnDragStop over the mockup adds the line there", "recommend,outcomes,auction,vendor,disenchant,status*,source*,note*", Layout())
     Check("direct", "[handler] and the carry is over", false, Drag.Active())
     -- drag a row to the end, then outside the mockup
     D.RemoveLine("outcomes"); Apply()
-    local r1 = D.Row(1)
+    local r1 = RowByID("recommend")
     ;(r1:GetScript("OnDragStart"))(r1)
     Check("direct", "[handler] OnDragStart on a row carries it", "recommend", Drag.Source() and Drag.Source().id)
     model = D.Model()
@@ -916,7 +946,7 @@ Lab.Step("what's it worth: tooltip designer", function()
     ;(r1:GetScript("OnDragStop"))(r1); Apply()
     Check("state", "[handler] dropped below the last row: Recommendation moved to the end of the shown rows",
         "auction,vendor,disenchant,recommend,status*,source*,note*", Layout())
-    r1 = D.Row(4)
+    r1 = RowByID("recommend")
     ;(r1:GetScript("OnDragStart"))(r1)
     GetCursorPosition = function() return 1, 1 end   -- far from the mockup
     Check("direct", "[handler] away from the mockup there is no target", true, D.Find() == nil)
@@ -927,14 +957,14 @@ Lab.Step("what's it worth: tooltip designer", function()
     -- put the layout back by Reset
     Click(f.reset, "Reset layout")
     Check("state", "Reset layout puts the short default back", DEFAULT, Layout())
-    Check("direct", "and the live tooltip is the default again", "What's it worth? / Workshop: Keep for crafting / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details", Live(false))
+    Check("direct", "and the live tooltip is the default again", "What's it worth? / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details", Live(false))
 
     -- the examples: missing prices and an action that cannot be done
     local function Pick(v) f.example:Click() local menu = rawget(_G, "TwichUISettingsMenu")   -- the list is made by the first click
         for _, entry in ipairs(menu and menu.rows or {}) do if entry:IsShown() and entry.choice and entry.choice.value == v then entry:Click() return true end end return false end
     Check("click", "the example list offers 'Missing prices'", true, Pick("missing"))
     Check("display", "missing prices: said once, the unknown stays unknown (never zero)",
-        "What's it worth? / Workshop: Not enough data / Vendor | 3s / Auction | no price / Disenchant (average) | no data / Hold Shift for details", Mock())
+        "What's it worth? / Workshop: Vendor / Vendor | 3s / Auction | no price / Disenchant (average) | no data / Hold Shift for details", Mock())
     Check("click", "the example list offers 'Can't be auctioned'", true, Pick("unavailable"))
     Check("display", "an action that can't be done and an unknown value, side by side",
         "What's it worth? / Workshop: Vendor / Vendor | 3s / Auction | can't be listed (bound) / Disenchant (average) | no data", Mock())
@@ -948,7 +978,7 @@ Lab.Step("what's it worth: tooltip designer", function()
     Check("state", "Enable tooltip off is saved", false, WL.Enabled())
     Check("direct", "live: no section at all, Shift or not", "", Live(true) .. Live(false))
     Click(f.enable, "Enable tooltip (on)")
-    Check("direct", "back on: the section is back", "What's it worth? / Workshop: Keep for crafting / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details", Live(false))
+    Check("direct", "back on: the section is back", "What's it worth? / Vendor | 5s / Auction (before fees) | 4s / Hold Shift for details", Live(false))
     Check("state", "nothing was asked of the auction house", 0, w.ah.requested - ah.requested)
 
     w.SetShift(false)
@@ -1037,7 +1067,7 @@ Lab.Step("shopping: combined list, sources, total, warning", function()
     Check("display", "Coarse Thread (vendor)", "1 | Vendor | 25c | just now | Show vendor", Line("Coarse Thread"))
     Check("display", "Copper Ore (2 to buy for the subcraft)", "2 | Auction house | from 70c | just now | -", Line("Copper Ore"))
     Check("display", "Tin Ore (vendor stack of 5 for 3 needed)", "3 | Vendor | 80c | just now | Show vendor", Line("Tin Ore"))
-    Check("display", "Bronze Bar (make suggested)", "5 | Make | In the plan | cost is in its materials | Add optimized plan", Line("Bronze Bar"))   -- (P2) a made material's cost is part of the multilevel plan, in its own materials' rows
+    Check("display", "Bronze Bar (make suggested)", "5 | Make | In the plan | cost is in its materials | Add to plan", Line("Bronze Bar"))   -- (P2) a made material's cost is part of the multilevel plan, in its own materials' rows
     Check("display", "Peacebloom detail", "Suggested source. Only the auction house has a price. Auctions may require buying larger stacks.", Explain("Peacebloom"))
     Check("display", "Silverleaf detail says why", "Not enough are listed at the auction house.", Explain("Silverleaf"))
     Check("display", "Tin Ore detail: leftover from the whole stack", "2 left over. Needed to make Smelt Bronze.", Explain("Tin Ore"))

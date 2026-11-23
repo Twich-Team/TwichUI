@@ -19,6 +19,58 @@ local Perf = R.Perf
 -- "!!!TwichUI/", the settings window "TwichUI_Settings/"), where: the function, so a report can name what to read.
 -- every = how often it is expected to run, so a report can tell "runs often" from "runs on demand".
 DX.OPS = {
+    ["workshop.opportunityCallback"]={module="workshop",label="Whole incremental worker callback",kind="work",file="TwichUI_Workshop/OpportunityEngine.lua",where="Engine.Schedule",every="includes source check, work and rescheduling; no scope spans callbacks"},
+    ["workshop.opportunitySource"]={module="workshop",label="Indivisible opportunity source check",kind="work",file="TwichUI_Workshop/OpportunityEngine.lua",where="Engine.Step",every="source validity check within the elapsed batch budget"},
+    ["workshop.opportunities.partialReuses"]={module="workshop",label="Provisional membership arrays reused",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="Engine.Present",every="metadata-only filters during pending calculation"},
+    ["workshop.opportunityRow"]={module="workshop",label="First-use opportunity row construction",kind="work",file="TwichUI_Workshop/ViewOpportunities.lua",where="MakeOppRow",every="bounded viewport pool growth only"},
+    ["workshop.opportunities.catalogBuilds"]={module="workshop",label="Recipe catalog builds",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="Engine.Request",every="new context or catalog only"},
+    ["workshop.opportunities.errors"]={module="workshop",label="Calculation job failures",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.cancelled"]={module="workshop",label="Obsolete calculation jobs cancelled",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.detailUpdates"]={module="workshop",label="Changed selected recipe details",kind="count",file="TwichUI_Workshop/ViewOpportunities.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.cellUpdates"]={module="workshop",label="Changed money cells",kind="count",file="TwichUI_Workshop/ViewOpportunities.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.rowPaints"]={module="workshop",label="Visible row presentations",kind="count",file="TwichUI_Workshop/ViewOpportunities.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.fullInvalidations"]={module="workshop",label="Complete context invalidations",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.partialPublications"]={module="workshop",label="Provisional list publications",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.fullPublications"]={module="workshop",label="Final ranked list publications",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.sorts"]={module="workshop",label="Completed ranking passes",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.batches"]={module="workshop",label="Calculation work slices",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.reused"]={module="workshop",label="Completed estimates reused during catalog reconciliation",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.cacheHits"]={module="workshop",label="Compatible catalog reads",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.invalidations"]={module="workshop",label="Dependent recipes invalidated",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.calculated"]={module="workshop",label="Recipe preparation passes",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunities.crafts"]={module="workshop",label="Actual recipe calculations",kind="count",file="TwichUI_Workshop/OpportunityEngine.lua",where="incremental calculation/presentation",every="bounded opt-in aggregate"},
+    ["workshop.opportunityBatch"]={module="workshop",label="Incremental opportunity work slice",kind="work",file="TwichUI_Workshop/OpportunityEngine.lua",where="Engine.Step",every="requested work only; total/worst synchronous CPU"},
+    ["workshop.opportunityQuestion"]={module="workshop",label="Indivisible estimator service question",kind="work",file="TwichUI_Workshop/Estimate.lua",where="Est.Ask",every="memo misses; no scope spans a coroutine yield"},
+    ["workshop.pricing.completed"]={module="workshop",label="Terminal cold requests measured",kind="count",file="TwichUI_Workshop/Pricing.lua",where="opt-in diagnostics",every="bounded capture aggregate"},
+    ["workshop.pricing.cancelled"]={module="workshop",label="Pending price requests cancelled",kind="count",file="TwichUI_Workshop/Pricing.lua",where="opt-in diagnostics",every="bounded capture aggregate"},
+    ["workshop.pricing.initialVisibleRows"]={module="workshop",label="Initially visible opportunity cohort size",kind="count",file="TwichUI_Workshop/Pricing.lua",where="opt-in diagnostics",every="bounded capture aggregate"},
+    ["workshop.pricing.visibleTruncated"]={module="workshop",label="Visible cohort capped at 128 rows",kind="count",file="TwichUI_Workshop/Pricing.lua",where="opt-in diagnostics",every="bounded capture aggregate"},
+    ["workshop.summary.historyPreemptions"]={module="workshop",label="History validation paused for current prices",kind="count",file="TwichUI_Workshop/Summary.lua",where="opt-in diagnostics",every="bounded capture aggregate"},
+    ["workshop.historyValidate"]={module="workshop",label="Historical partition validation slice",kind="work",file="TwichUI_Workshop/Summary.lua",where="Q.Step",every="explicit historical reads only"},
+    ["workshop.historyLoad"]={module="workshop",label="Historical partition addon load",kind="work",file="TwichUI_Workshop/Summary.lua",where="loadPart",every="explicit historical reads only"},
+    ["workshop.summary.currentDecodes"]={module="workshop",label="Current partition decode starts",kind="count",file="TwichUI_Workshop/Summary.lua",where="loadPart",every="opt-in aggregate"},
+    ["workshop.summary.historyDecodes"]={module="workshop",label="History partition decode starts",kind="count",file="TwichUI_Workshop/Summary.lua",where="loadPart",every="opt-in aggregate"},
+    ["workshop.priceWait"]={module="workshop",label="Usable Market reference wait",kind="wait",file="TwichUI_Workshop/Pricing.lua",where="record completion",every="uncached requests admitted in this capture"},
+    ["workshop.priceSettlementWait"]={module="workshop",label="Market terminal price response wait",kind="wait",file="TwichUI_Workshop/Pricing.lua",where="record completion",every="includes terminal missing"},
+    ["workshop.firstColdPrice"]={module="workshop",label="First cold Market reference",kind="wait",file="TwichUI_Workshop/Pricing.lua",where="completed",every="once per capture"},
+    ["workshop.tenColdPrices"]={module="workshop",label="First ten cold Market references",kind="wait",file="TwichUI_Workshop/Pricing.lua",where="completed",every="once per capture"},
+    ["workshop.firstVisiblePrice"]={module="workshop",label="First initially visible opportunity priced",kind="wait",file="TwichUI_Workshop/Pricing.lua",where="ObserveView",every="once per capture"},
+    ["workshop.tenVisiblePrices"]={module="workshop",label="Ten initially visible opportunities priced",kind="wait",file="TwichUI_Workshop/Pricing.lua",where="ObserveView",every="once per capture if cohort has ten priced rows"},
+    ["workshop.visibleSettled"]={module="workshop",label="Initially visible opportunities settled",kind="wait",file="TwichUI_Workshop/Pricing.lua",where="ObserveView",every="once per capture; includes missing"},
+    ["workshop.opportunitiesSettled"]={module="workshop",label="All known opportunities settled",kind="wait",file="TwichUI_Workshop/Pricing.lua",where="ObserveView",every="once per capture; includes missing"},
+    ["workshop.partitionQueueWait"]={module="workshop",label="Partition queue wait",kind="wait",file="TwichUI_Workshop/Summary.lua",where="startNext",every="queued in this capture"},
+    ["workshop.currentValidationWait"]={module="workshop",label="Current partition validation wall time",kind="wait",file="TwichUI_Workshop/Summary.lua",where="Q.Step completion",every="started in this capture"},
+    ["workshop.historyValidationWait"]={module="workshop",label="History partition validation wall time",kind="wait",file="TwichUI_Workshop/Summary.lua",where="Q.Step completion",every="started in this capture"},
+    ["workshop.pricing.uniquePending"] = {module="workshop",label="New pending identities",kind="count",file="TwichUI_Workshop/Pricing.lua",where="request/completion",every="opt-in aggregate"},
+    ["workshop.pricing.deduplicated"] = {module="workshop",label="Pending queries coalesced",kind="count",file="TwichUI_Workshop/Pricing.lua",where="request/completion",every="opt-in aggregate"},
+    ["workshop.pricing.readerCalls"] = {module="workshop",label="Actual price reader calls",kind="count",file="TwichUI_Workshop/Pricing.lua",where="request/completion",every="opt-in aggregate"},
+    ["workshop.pricing.baseKeys"] = {module="workshop",label="Base identity hashes",kind="count",file="TwichUI_Workshop/Pricing.lua",where="request/completion",every="opt-in aggregate"},
+    ["workshop.pricing.settled"] = {module="workshop",label="Pending identities processed",kind="count",file="TwichUI_Workshop/Pricing.lua",where="request/completion",every="opt-in aggregate"},
+    ["workshop.pricing.notifications"] = {module="workshop",label="Pricing completion refreshes",kind="count",file="TwichUI_Workshop/Pricing.lua",where="request/completion",every="opt-in aggregate"},
+    ["workshop.pricing.fullLists"] = {module="workshop",label="Full Opportunities calculations",kind="count",file="TwichUI_Workshop/Session.lua",where="request/completion",every="opt-in aggregate"},
+    ["workshop.pricingComplete"] = {module="workshop",label="Budgeted price completion slice",kind="work",file="TwichUI_Workshop/Summary.lua",where="Q.Step handoff",every="pending compact transfers; total/worst CPU"},
+    ["workshop.summary.decodeStarts"] = {module="workshop",label="Partition decode starts",kind="count",file="TwichUI_Workshop/Summary.lua",where="loadPart",every="opt-in aggregate"},
+    ["workshop.summary.decodeRepeats"] = {module="workshop",label="Previously validated partition decodes",kind="count",file="TwichUI_Workshop/Summary.lua",where="loadPart",every="opt-in aggregate"},
     ["bugsack.broker.update"] = { module = "bugsack", label = "BugSack broker: current-session count", kind = "hook", file = "modules/BugSackBroker.lua", where = "OnUpdate (hook BugSack.UpdateDisplay)", every = "when BugSack updates its display" },
     ["gathering.evaluate"] = { module = "qol", label = "Gathering target and interaction settings", kind = "evaluate", file = "!!!TwichUI/qol/GatheringSparkles.lua", where = "G.Poll", every = "interaction/nameplate events and every 0.2 seconds while enabled" },
     ["qol.groupFinderZones.row"] = { module = "qol", label = "Group Finder zones: a listing row drawn", kind = "hook", file = "!!!TwichUI/qol/GroupFinderZones.lua", where = "Z.Draw (hook LFGBrowseSearchEntry_Update)", every = "each Group Finder row the game draws or updates, only after the switch was first turned on" },
@@ -68,6 +120,7 @@ DX.OPS = {
     ["pins.minimap.tick"] = { module = "pins", label = "Pins on the minimap, one update", kind = "update", file = "pins/Minimap.lua", where = "Update > Step", every = "10 times a second (25 when rotating) while a pin is eligible" },
     ["pins.ping.tick"] = { module = "pins", label = "A map ping animating, one frame", kind = "update", file = "pins/PingMap.lua", where = "Tick > Step", every = "every frame while a ping shows" },
     ["nav.load"] = { module = "nav", label = "Navigation data addon loaded (first route)", kind = "init", file = "nav/Data.lua", where = "ND.Load > C_AddOns.LoadAddOn", every = "once per session, when the first route is asked for" },
+    ["fishing.economy"] = { module = "fishing", label = "Fishing item valuation batch", kind = "evaluate", file = "TwichUI_Fishing/Economy.lua", where = "Work", every = "deferred batches of at most eight pending item prices" },
     ["fishing.load"] = { module = "fishing", label = "TwichUI Fishing addon loaded", kind = "init", file = "FishingLauncher.lua", where = "L.Load > C_AddOns.LoadAddOn", every = "once per session: at login when a fishing key is bound, or at the first /tui fish" },
     ["fishing.decide"] = { module = "fishing", label = "Fishing key: the next step decided (bags, gear, lure and queue read)", kind = "evaluate", file = "TwichUI_Fishing/Action.lua", where = "PreClick > A.Decide(A.Context())", every = "once per press of the fishing key, out of combat" },
     ["fishing.loot"] = { module = "fishing", label = "Fishing: a loot event attributed (catch, container contents or unrelated)", kind = "update", file = "TwichUI_Fishing/Loot.lua", where = "Lo.OnReady/OnOpened/OnSlotCleared/OnClosed", every = "per loot event while TwichUI Fishing is loaded and on" },
@@ -140,6 +193,8 @@ DX.OPS = {
     ["healer.unitEvent"] = { module = "healer", label = "Healer Watch: a unit event for the watched healer", kind = "event", file = "healer/Watch.lua", where = "OnUnitEvent (its own frame)", every = "per power, health or aura event of that one unit" },
     ["buffback.aura"] = { module = "buffback", label = "Return the Favor: your own aura or cast event", kind = "event", file = "buffback/Watch.lua", where = "OnEvent (its unit frame)", every = "per UNIT_AURA or UNIT_SPELLCAST_SUCCEEDED of yours while it is on" },
     ["buffback.event"] = { module = "buffback", label = "Return the Favor: a game event (zone, combat, target, group)", kind = "event", file = "buffback/Watch.lua", where = "OnEvent (its own frame)", every = "per zone, resting, combat, target, group or spell change while it is on" },
+    ["loot.victory.event"] = { module = "loot", label = "Loot victory: confirmed win relay", kind = "event", file = "loot/Victory.lua", where = "Sync (private event frame)", every = "one confirmed self-win while replacing native winning alerts" },
+    ["loot.victory.tick"] = { module = "loot", label = "Loot victory: one-shot reveal or fade", kind = "update", file = "loot/Victory.lua", where = "Animate / Rest", every = "per frame for 1.75 s celebration and 0.3 s fade; no updates at rest" },
     ["loot.event"] = { module = "loot", label = "Loot Rolls: a loot roll, history or item event", kind = "event", file = "loot/Roll.lua", where = "OnEvent (its own frame)", every = "per group-loot roll event and per item-info event while a card could be showing; nothing while it is off" },
     ["loot.layout"] = { module = "loot", label = "Loot Rolls: the card stack laid out and drawn", kind = "layout", file = "loot/Cards.lua", where = "Layout (local)", every = "when a roll starts, changes or ends, or a setting changes; never per frame" },
     ["loot.tick"] = { module = "loot", label = "Loot Rolls: countdown bars and numbers", kind = "update", file = "loot/Cards.lua", where = "Tick (the stack's OnUpdate)", every = "about 20 times a second, only while a card is counting down or coming in" },
@@ -330,6 +385,10 @@ local G = {
     { "camping.rest.events", "Camping bar: sleeping bag bar events registered", "listeners", "core", Field("CampingRest", "events") },
     { "camping.rest.ticks", "Camping bar: sleeping bag bar clock ticks so far (module count)", "work", "core", Field("CampingRest", "ticks") },
     { "camping.looks", "Camping bar: looks so far (module count)", "work", "core", Field("Camping", "looks") },
+    { "loot.victories", "Loot victories: queued and showing", "state", "core", Field("LootRolls", "victories") },
+    { "loot.retainedDisplays", "Loot rolls: recent presentation snapshots", "cache", "core", Field("LootRolls", "retainedDisplays") },
+    { "loot.victoryPool", "Loot victories: artwork frames made", "pool", "core", Field("LootRolls", "victoryPool") },
+    { "loot.victoryEvents", "Loot victories: native win event relay", "listeners", "core", Field("LootRolls", "victoryEvents") },
     { "loot.events", "Loot Rolls: events registered", "listeners", "core", Field("LootRolls", "events") },
     { "loot.records", "Loot Rolls: roll records held (bounded, this session)", "state", "core", Field("LootRolls", "records") },
     { "loot.cards", "Loot Rolls: card frames made (pool)", "pool", "core", Field("LootRolls", "pool") },
@@ -383,8 +442,19 @@ for _,field in ipairs({"pending","listeners","timers"}) do
 end
 
 -- The gauges a capture reads (groups nil: all), in registration order.
-function DX.GaugeList(groups)
+function DX.GaugeList(groups,ids)
     local out = {}
+    -- A narrow preset can select passive proxies even before its addon loads,
+    -- without competing with unrelated gauges for the unchanged first-40 cap.
+    if ids then
+        for _,id in ipairs(ids)do
+            for _,g in ipairs(Perf.gauges)do
+                if g.id==id and type(g.read)=="function"then out[#out+1]=g;break end
+            end
+            if #out>=40 then break end
+        end
+        return out
+    end
     for _, g in ipairs(Perf.gauges) do
         local wanted = not groups
         if groups then
@@ -394,4 +464,37 @@ function DX.GaugeList(groups)
         if #out >= 40 then break end
     end
     return out
+end
+
+for _,spec in ipairs({
+    {"workshop.currentRawBytes","Current raw bytes","current_bytes","bytes"},
+    {"workshop.historyRawBytes","Historical raw bytes","history_bytes","bytes"},
+    {"workshop.currentDecodedRows","Decoded current rows","decoded_current_rows","count"},
+    {"workshop.historyDecodedRows","Decoded historical rows","decoded_history_rows","count"},
+    {"workshop.cold.parked","Paused historical decoder","parked_history","count"},
+    {"workshop.cold.loadedParts","Loaded current parts","loaded_parts","count"},
+    {"workshop.cold.checkedParts","Validated current parts","checked_parts","count"},
+    {"workshop.cold.historyParts","Loaded historical parts","history_loaded_parts","count"},
+})do
+    local field=spec[3]
+    Perf.Gauge(spec[1],{label=spec[2],kind="cache",group="workshop",builtin=true,unit=spec[4],read=function()
+        local q=R.Workshop and R.Workshop.Summary;local value=q and q.Status()[field]
+        return type(value)=="number" and value or value and 1 or 0
+    end})
+end
+for _,spec in ipairs({{"pending","PendingCount"},{"references","CacheSize"}})do
+    local method=spec[2]
+    Perf.Gauge("workshop.cold."..spec[1],{label="Market "..spec[1],kind="cache",group="workshop",builtin=true,unit="count",read=function()
+        local p=R.Workshop and R.Workshop.Pricing;return p and p[method]()or 0
+    end})
+end
+
+-- Passive even before the Workshop loads. Never starts an engine or reads prices.
+for _,spec in ipairs({{"known","Known recipes"},{"pending","Queued recipes"},{"waiting","Recipes awaiting prices"},
+    {"settled","Settled recipe estimates"},{"retained","Recipe results retained"}})do
+    local key,label=spec[1],spec[2]
+    Perf.Gauge('workshop.opportunities.'..key,{label=label,kind='cache',group='workshop',builtin=true,unit='count',read=function()
+        local w=R.Workshop;local session=w and w.Session
+        return session and session.OpportunityStatus and session.OpportunityStatus()[key]or 0
+    end})
 end

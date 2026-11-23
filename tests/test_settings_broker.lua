@@ -113,7 +113,7 @@ end
 -- The menu (modules/SettingsBrokerMenu.lua): drawn on recorded stand-ins for the game's frames
 ---------------------------------------------------------------------------
 local MENU_FILES = { "chronicle/Style.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua",
-  "modules/SettingsBrokerMenu.lua", "qol/QoL.lua", "qol/Duels.lua", "qol/DeclineInvites.lua", "guildloc/State.lua" }
+  "modules/SpokenReading.lua", "modules/SettingsBrokerMenu.lua", "qol/QoL.lua", "qol/Duels.lua", "qol/DeclineInvites.lua", "guildloc/State.lua" }
 
 local function MenuClient(opts)
   opts = opts or {}
@@ -253,6 +253,91 @@ do
   for k in pairs(c.TwichUIDB) do if tostring(k):lower():find("quietscreen") then saved = true end end
   for k in pairs(c.TwichUIDB.modules or {}) do if tostring(k):lower():find("quietscreen") then saved = true end end
   assert(not saved, "no saved key for it")
+end
+
+-- 12c. The Narrate quests row (modules/SpokenReading.lua): the row exists only while the Spoken addon is loaded with its public
+--      calls and a part installed; a click turns every "What Spoken reads" part on or off through Spoken:SetPartOn; the
+--      menu stays open and the row follows, including a change made on Spoken's own page; a mixed state says Some and a
+--      click turns all on. TwichUI saves nothing for it.
+do
+  local LABEL = "Narrate quests"
+  local function SpokenStub(c, opts)
+    opts = opts or {}
+    local sp = { on = {}, set = {}, handlers = {}, API_VERSION = 1 }
+    local order = opts.parts or { "quests", "gossip", "places", "readables" }
+    for _, k in ipairs(order) do sp.on[k] = true end
+    function sp:IsCompatible(n) return n <= self.API_VERSION end
+    function sp:IterateSources()
+      local i = 0
+      return function() i = i + 1; if order[i] then return order[i], {} end end
+    end
+    function sp:IsPartOn(k) return self.on[k] end
+    if not opts.noSetter then
+      function sp:SetPartOn(k, v)
+        self.set[#self.set + 1] = k .. "=" .. tostring(v)
+        self.on[k] = v and true or false
+        for _, fn in ipairs(self.handlers) do fn(k, v) end
+      end
+    end
+    function sp:RegisterCallback(ev, fn) assert(ev == "PART_SWITCHED"); self.handlers[#self.handlers + 1] = fn end
+    c.Spoken = sp
+    return sp
+  end
+  local function Shown(c) local _, rows = OpenMenu(c); return rows[LABEL] and rows[LABEL].shown end
+
+  -- not loaded, too old for the calls, or with nothing installed: no row
+  local c = MenuClient()
+  assert(not Shown(c), "no row without Spoken")
+  c.TwichUI.SettingsBrokerMenu.Close()
+  SpokenStub(c, { noSetter = true })
+  assert(not Shown(c), "no row when Spoken has no SetPartOn")
+  c.TwichUI.SettingsBrokerMenu.Close()
+  SpokenStub(c, { parts = {} })
+  assert(not Shown(c), "no row with no part installed")
+  c.TwichUI.SettingsBrokerMenu.Close()
+
+  -- Spoken loads after TwichUI: the row is there the next time the menu opens
+  local sp = SpokenStub(c)
+  local menu, rows = OpenMenu(c)
+  local row = rows[LABEL]
+  assert(row.shown and row.enabled and row.note.text == "On" and row.fill.shown, "the row appears, On, with everything on")
+  assert(row.scripts.OnEnter, "and has a tooltip")
+  assert(#sp.handlers == 1, "it listens to Spoken once")
+  c.TwichUI.SettingsBrokerMenu.Close(); OpenMenu(c)
+  assert(#sp.handlers == 1, "and not again when the menu reopens")
+
+  Click(row)
+  assert(#sp.set == 4 and sp.set[1] == "quests=false" and sp.set[4] == "readables=false", "one click turns every part off")
+  assert(menu.shown and row.note.text == "Off" and not row.fill.shown, "the menu stays open and says Off")
+  Click(row)
+  assert(sp.on.quests and sp.on.gossip and sp.on.places and sp.on.readables and row.note.text == "On", "and one click turns them all on")
+
+  -- one turned off on Spoken's own page: Some, and a click turns all on, setting only the one that differs
+  sp:SetPartOn("places", false)
+  assert(row.note.text == "Some" and not row.fill.shown, "a part turned off elsewhere: the row follows and says Some")
+  sp.set = {}
+  Click(row)
+  assert(#sp.set == 1 and sp.set[1] == "places=true" and row.note.text == "On", "a click on Some turns all on, touching only what was off")
+
+  -- all turned off on Spoken's page
+  for _, k in ipairs({ "quests", "gossip", "places", "readables" }) do sp:SetPartOn(k, false) end
+  assert(row.note.text == "Off", "all turned off elsewhere: Off")
+
+  local saved = false
+  for k in pairs(c.TwichUIDB) do if tostring(k):lower():find("spoken") then saved = true end end
+  for k in pairs(c.TwichUIDB.modules or {}) do if tostring(k):lower():find("spoken") then saved = true end end
+  assert(not saved, "TwichUI saves nothing for it")
+
+  -- a part that fails does not stop the others
+  local sp2 = SpokenStub(c)
+  local real = sp2.SetPartOn
+  function sp2:SetPartOn(k, v) if k == "gossip" then error("boom") end return real(self, k, v) end
+  c.geterrorhandler = function() return function() end end
+  assert(c.TwichUI.SpokenReading.Set(false) == true, "Set reports Spoken present")
+  assert(not sp2.on.quests and sp2.on.gossip and not sp2.on.places and not sp2.on.readables, "the other parts still changed")
+  assert(c.TwichUI.SpokenReading.State() == "some", "and the state says Some")
+  c.Spoken = nil
+  assert(c.TwichUI.SpokenReading.Set(true) == false and c.TwichUI.SpokenReading.State() == nil, "with Spoken gone nothing happens")
 end
 
 -- 13. Guild Locations: the radios go through the core; never from Off; greyed with the reason; held; outside a guild.

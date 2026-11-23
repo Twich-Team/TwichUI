@@ -44,6 +44,7 @@ PF.ACCOUNT = {
         guideAuto = true,         -- whether each character's RestedXP guide was hidden by TwichUI: a record per character
         guideTracker = true,      -- the quest tracker Visibility each profile had before the guide set it to Mouseover: a record, not a choice
         restockAck = true,        -- your confirmation that vendor restocking may buy without asking: no profile change may give it
+        flightAck = true,         -- automatic-flight consent belongs to this account, never to a copied/switched profile
         mapToolsIntro = true,     -- that the map tool bar's once-only note was seen: a record, not a choice
         navTravel = true,         -- each character's Hearthstone bind point, for navigation: a record per character
         cozyBagOffer = true,      -- each character's Cozy Sleeping Bag offer record (card shown, button hidden, bag got): a record per character

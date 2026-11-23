@@ -22,6 +22,7 @@ F.Store = S
 
 S.DEFAULTS = {
     enabled = true,
+    economy = { enabled = true, method = "market", vendor = false, perHour = true, provisional = true },
     gear = { manage = true, pole = false, outfit = false, restoreOnEnd = true, combatWeapons = true },
     lure = { auto = true, preferred = false, alternative = false, early = 0, warn = 60 },
     containers = { mode = "queue", openWithKey = true, minFree = 1 },
@@ -62,6 +63,7 @@ end
 
 S.CHECK = {
     enabled = Bool,
+    economy = { enabled = Bool, method = OneOf("market", "recent", "historical", "min"), vendor = Bool, perHour = Bool, provisional = Bool },
     gear = { manage = Bool, pole = Id, outfit = Name, restoreOnEnd = Bool, combatWeapons = Bool },
     lure = { auto = Bool, preferred = Id, alternative = Bool, early = Range(0, 600), warn = Range(0, 600) },
     containers = { mode = OneOf("queue", "auto", "off"), openWithKey = Bool, minFree = Range(0, 10) },
@@ -75,7 +77,7 @@ S.CHECK = {
         extra = Names, ellesmere = Bool },
     castbar = { enabled = Bool, scale = Range(0.6, 1.6), x = Range(-2000, 2000), y = Range(-2000, 2000) },
     list = { enabled = Bool, scale = Range(0.6, 1.6), x = Range(-2000, 2000), y = Range(-2000, 2000),
-        sort = OneOf("count", "recent", "name"), rows = Range(3, 12), value = OneOf("show", "hide") },
+        sort = OneOf("count", "recent", "name", "value"), rows = Range(3, 12), value = OneOf("show", "hide") },
     toast = { enabled = Bool, scale = Range(0.6, 1.6), x = Range(-2000, 2000), y = Range(-2000, 2000), hold = Range(1, 10) },
     journal = { summary = Bool, scale = Range(0.6, 1.4), x = Range(-2000, 2000), y = Range(-2000, 2000) },
 }

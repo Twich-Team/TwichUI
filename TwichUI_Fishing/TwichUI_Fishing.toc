@@ -28,6 +28,7 @@ Loot.lua
 Action.lua
 # The read-only interface later stages use, and the diagnostics
 Api.lua
+Economy.lua
 # Start-up, events and /tui fish
 Main.lua
 # Stage 2, Fishing Mode: what the heads-up pieces share (artwork in media\, built by tools/make_fishing_art.py)
@@ -51,3 +52,5 @@ Journal.lua
 JournalUI.lua
 # Fishing Mode itself: presentations, on and off, recovery, and its /tui fish words
 Present.lua
+# Current-market estimates through the existing presentation interfaces
+EconomyPresent.lua

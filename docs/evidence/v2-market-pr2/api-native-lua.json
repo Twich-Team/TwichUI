@@ -1,0 +1,93 @@
+{
+  "credential_kind": "companion",
+  "synthetic": true,
+  "real_game": false,
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "mode": "Linux native staging; not installed Windows acceptance",
+  "variants": 129,
+  "native_calls": [
+    {
+      "elapsed_ms": 80.66721,
+      "ready": false,
+      "retry_after": 5
+    },
+    {
+      "elapsed_ms": 22.338373,
+      "ready": false,
+      "retry_after": 5
+    },
+    {
+      "download_bytes": 51700,
+      "elapsed_ms": 6251.620337,
+      "ready": true,
+      "requests": 129
+    },
+    {
+      "download_bytes": 0,
+      "elapsed_ms": 34.174155999999996,
+      "ready": true,
+      "requests": 1
+    }
+  ],
+  "total_seconds": 6.6618864230003965,
+  "mandatory_archive": false,
+  "no_change_http_304": true,
+  "no_change_game_mtime_preserved": null,
+  "production_lua_market_passed": true,
+  "native_binary_sha256": "7ae0ad01cc4fa53594c9903bb62738195cd93bb82d1e1ed53b0cfbd56213b4d9",
+  "source_sha256": {
+    "backend/market/workshop_summary.py": "735425ed693faaa6790c21a3c16626e770d2f01d6569fd8328a89da2d54cf743",
+    "backend/market/bridge_api.py": "17d08e1812ab6d66a492396ccbd07539b286b1e28effdac2d279cca7fadf5652",
+    "desktop/core/src/workshop_summary.rs": "372b1a9fa710b7152c9e99fe05e1ac5120302261960e703bd6fc1c08c3fc6957",
+    "desktop/core/src/client.rs": "733bfa70e5de15fd0102e390a44b6cfc97718d0a90949caa203efd3022bf8b3e",
+    "contracts/workshop-summary/v1/manifest.schema.json": "bbddcc1d038e3c5528b2e45b699e69d15d834e2e1670883bbfb482fb908e0c92",
+    "contracts/workshop-summary/v1/row.schema.json": "8b1f1d49547bf27f4ec88a6230fe049a391a93288923d97144710fe9e585d538",
+    "contracts/workshop-summary/v2/manifest.schema.json": "1ef98bcd3d2dc132270066cd3a86b82fb2f6e69b288113f949249ae21d0e005e",
+    "contracts/workshop-summary/v2/row.schema.json": "e81bcc681567b8951224c4230f4f3ec285121d6fca4ad7f134ae945671f2d4d4",
+    "contracts/workshop-summary/v2/addon-source.txt": "001bdd958fe1d923669f69987a962e185a64f102f79b72449c45cfde90959ad3",
+    "contracts/workshop-summary/v3/manifest.schema.json": "6ba4f2de41c8e91c311789a99c2b27228f9c01cab659df78c202b8658c28f88f",
+    "desktop/core/examples/workshop_smoke.rs": "fce803354ad0e914326de8aab8e0900291aa216cbe96a1790529e100125953a6"
+  },
+  "game_consumption": "pending actual Forever",
+  "paired_addon_commit": "c70566f3a83cfe9da49402b57aa4e614e3c13140",
+  "addon_source_sha256": {
+    "TwichUI_Workshop/Summary.lua": "1168efa03ac1fa8be44d80eb7c3150bfa0424aec18ff6e31c500ea7634543f79",
+    "TwichUI_Workshop/SummarySchema.lua": "0caef462952e78ccb39d22b8bda14497b8d97731f679c0b331b6748d710c9931",
+    "TwichUI_Workshop/BridgeCodec.lua": "dd994aa52e3dec2071134c6823707bc05c716474af069a2ff86f257fd73d928f",
+    "TwichUI_Workshop/Bridge.lua": "e80c27b2640bba041c6c9f4d390b68c5390481101e971e8bfaff2be77b3ae73d",
+    "TwichUI_Workshop/auction/ViewMarket.lua": "d81fc75d8a01676962df4e0c58ccd564938fbeb02f2ebe4f8de0eb77d8af6349",
+    "tests/test_workshop_auction_market_summary.lua": "8be37d6368e2e7ceb9d7f2c00df7d4abd53ffc782d0faf8026c2d7231fdd718e"
+  },
+  "negotiated_contract": 3,
+  "paired_addon_dirty": false,
+  "http_request_count": 132,
+  "lua_result": {
+    "all_parts_compile_execute_ms": 3,
+    "current_bytes": 14632,
+    "current_queries_retained_kib": 145,
+    "declared_parts": 64,
+    "decoded_rows": 2,
+    "enumerated_items": 128,
+    "enumeration_and_validation_ms": 43,
+    "explicit_history_ms": 1,
+    "generation": "17b429f1ad80cafa5336dc0d0c0c12c3c0291ae497a8dd5b6178d238861acb91",
+    "header_retained_kib": 106,
+    "header_validation_ms": 29,
+    "history_bytes": 307,
+    "history_bytes_before_history": 0,
+    "history_loads": 1,
+    "largest_part_load_us": 2875,
+    "largest_validation_callback_us": 4385,
+    "loaded_parts": 65,
+    "lookup_1000_us": 5359,
+    "raw_bytes": 32195,
+    "raw_bytes_before_history": 31888,
+    "real_game": false,
+    "records": 129,
+    "retained_kib": 148,
+    "root_compile_us": 114,
+    "root_execute_us": 1,
+    "sampled_peak_kib": 858,
+    "synthetic": true
+  }
+}
