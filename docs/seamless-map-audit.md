@@ -4,6 +4,16 @@ V2 follow-up: [Map Diagnostics](map-diagnostics.md) and
 [Map Visual Test Lab / hybrid pipeline evaluation](map-visual-lab.md). These
 extend this audit; the original 322-pass/1-failure baseline below is preserved.
 
+Current asset blockers remain precise: Fargodeep needs current-client WMO group
+geometry, minimap file references and their verified continent transform; no
+local CASC/DB2 data supplies these here. The three omitted edited pictures are
+`MapCaveMend/215101`, twice in the continent-0 rectangle
+`[-1008,-4028,-556,-3653]` and once in the continent-1 rectangle
+`[-6429,-2051,-6244,-1841]` (pinned `CaveMinimap.lua`, lines 41 and 244).
+Replacing an edited picture with raw numeric 215101 would require proving its
+crop/rotation/content equivalence, which is unavailable; no guessed replacement
+or retail geometry was added.
+
 Baseline: `main` / `1a3d9eb`. Open PRs #91, #98, #117, #127, #131,
 #133–#136 were reviewed for overlap; none changes the seamless map. No other
 branch is integrated. Reference: OpenMap

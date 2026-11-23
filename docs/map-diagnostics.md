@@ -65,7 +65,7 @@ summaries retain six. This does not increase the 96 KiB report limit.
 | `redaction` | Explicit coordinate disclosure and excluded information |
 | `description`, `stopReason`, `durationSeconds` | Player's untrusted description and actual bounded capture lifecycle |
 | `current.view` | Native/host map, renderer readiness, current/pending zoom, limits, viewport, UI scale, animation/combat/deferred state; optional center/anchor/host position |
-| `current.artwork` | Production layer order, alpha/visibility, city layers and mask availability |
+| `current.artwork` | Production layer order, alpha/visibility, selected zone IDs (up to 32), city layers and mask availability |
 | `current.terrain`, `current.interiors` | Pool/active/pending counts, sampled file IDs, failures, budget, alpha, crops/rotation and optional world rectangles |
 | `current.cave`, `current.dungeon`, `current.markers` | Cave/floor context and marker counters/coordinate source; no marker labels or player locations |
 | `events`, `eventTotals` | Ordered significant events, sequence and relative time; coalesced repeated states counted separately |

@@ -8,14 +8,17 @@ return function(t, path)
         end
     end
     local scenes = {}
+    local drawRank = { BACKGROUND = 0, BORDER = 1, ARTWORK = 2, OVERLAY = 3, HIGHLIGHT = 4 }
     t.tidy(); t.closeMap(); t.openMap(1429); MXP.Set("smooth", false)
     local function Bounds(obj)
+        if obj.allPoints == MA.Root() then return 0, 0, 1, 1 end
         local p = obj.point
         if not p or p[1] ~= "TOPLEFT" or p[2] ~= MA.Root() or not obj.width or not obj.height then return nil end
         local W, H = MW.Size()
         return p[4] / W, -p[5] / H, (p[4] + obj.width) / W, (-p[5] + obj.height) / H
     end
     local function Asset(obj)
+        if obj.fill then return { color = obj.fill } end
         if type(obj.tex) == "number" then return { fileId = obj.tex } end
         if type(obj.tex) == "string" then
             local relative = obj.tex:match("Interface\\AddOns\\!!!TwichUI\\(.+)")
@@ -34,11 +37,14 @@ return function(t, path)
     local function Snapshot(id, label)
         t.Tick(); t.Tick()
         local u0, v0, u1, v1 = MV.ViewRect()
-        local scene = { id = id, label = label, width = 900, height = 600,
+        local scene = { id = id, label = label, width = t.VIEW.w, height = t.VIEW.h,
             view = { u0 = u0, v0 = v0, u1 = u1, v1 = v1 }, textures = {},
             metadata = { syntheticGeography = true, nativeMap = MV.MapID(), view = MV.Diagnostic(true),
                 terrain = R.MapDetail.Diagnostic(true), interiors = R.MapPictures.Diagnostic(true), cave = R.MapCaves.Snapshot(),
                 limitation = "Synthetic native API fixture; texture IDs such as 900000 are synthetic, not client artwork identifiers." } }
+        local W, H = MW.Size()
+        assert(math.abs(scene.width / scene.height - (u1 - u0) * W / ((v1 - v0) * H)) < 1e-6,
+            "exported pixels preserve the production viewport aspect")
         for _, obj in ipairs(t.OBJECTS) do
             if obj.kind == "CreateTexture" then
                 local l, top, r, bottom = Bounds(obj)
@@ -47,6 +53,7 @@ return function(t, path)
                 if l and alpha > 0.001 and a then
                     a.u0, a.v0, a.u1, a.v1, a.alpha, a.level = l, top, r, bottom, alpha, level
                     a.rotation, a.sublayer = obj.rotation or 0, obj.subLayer or 0
+                    a.drawLayer = obj.drawLayer or "ARTWORK"
                     a.order = #scene.textures + 1
                     a.texCoord = obj.coord or { 0, 1, 0, 1 }
                     a.tint, a.filter, a.masks = obj.color or { 1, 1, 1 }, "linear", {}
@@ -65,6 +72,7 @@ return function(t, path)
         end
         table.sort(scene.textures, function(a, b)
             if a.level ~= b.level then return a.level < b.level end
+            if drawRank[a.drawLayer] ~= drawRank[b.drawLayer] then return drawRank[a.drawLayer] < drawRank[b.drawLayer] end
             if a.sublayer ~= b.sublayer then return a.sublayer < b.sublayer end
             return a.order < b.order
         end)

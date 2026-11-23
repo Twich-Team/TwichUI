@@ -20,6 +20,8 @@ MAX_SCENES = 96
 MAX_TEXTURES = 2048
 MAX_SCENE_PIXELS = 4_194_304
 MAX_TOTAL_PIXELS = 96_000_000
+MAX_DECODED_PIXELS = 32_000_000  # <=128 MB of retained RGBA sources, independent of destination budgets
+DRAW_LAYERS = {"BACKGROUND": 0, "BORDER": 1, "ARTWORK": 2, "OVERLAY": 3, "HIGHLIGHT": 4}
 
 
 class LabError(ValueError):
@@ -63,6 +65,7 @@ class Assets:
         self.loaded = {}
         self.used = {}
         self.missing = set()
+        self.decoded_pixels = 0
         self.own_root = own_root.resolve() if own_root else None
         if manifest:
             data = load_json(manifest)
@@ -127,7 +130,11 @@ class Assets:
         with Image.open(path) as raw:
             if raw.width * raw.height > 16_777_216:
                 raise LabError(f"asset {key} exceeds decode size limit")
+            pixels = raw.width * raw.height
+            if self.decoded_pixels + pixels > MAX_DECODED_PIXELS:
+                raise LabError("cumulative decoded source pixel budget exceeded; split the gallery or use smaller sources")
             picture = raw.convert("RGBA")
+        self.decoded_pixels += pixels
         self.loaded[key] = picture
         self.used[key] = {"sha256": digest, "provenance": provenance[:512], "kind": kind,
                           "width": picture.width, "height": picture.height}
@@ -250,7 +257,9 @@ def composite_scene(scene, assets, debug=False):
     view = rect(scene["view"])
     image = Image.new("RGBA", size, (0, 0, 0, 0))
     missing, visible = set(), 0
-    ordered = sorted(enumerate(scene["textures"]), key=lambda pair: (pair[1].get("level", 0), pair[1].get("sublevel", pair[1].get("sublayer", 0)), pair[1].get("order", pair[0])))
+    ordered = sorted(enumerate(scene["textures"]), key=lambda pair: (pair[1].get("level", 0),
+        DRAW_LAYERS.get(pair[1].get("drawLayer", "ARTWORK"), 2),
+        pair[1].get("sublevel", pair[1].get("sublayer", 0)), pair[1].get("order", pair[0])))
     for index, texture in ordered:
         if not texture.get("shown", True) or texture.get("alpha", 1) <= 0:
             continue
@@ -319,6 +328,9 @@ def compare_images(before, after):
     changed = ImageChops.lighter(ImageChops.lighter(channels[0], channels[1]), ImageChops.lighter(channels[2], channels[3]))
     hist = changed.histogram()
     pixels = before.width * before.height
+    # Alpha differences still contribute to the metrics below. The displayed
+    # difference must be opaque even when only RGB changed between opaque views.
+    difference.putalpha(255)
     return {"comparable": True, "changedPixels": pixels - hist[0],
             "changedFraction": round((pixels - hist[0]) / pixels, 6),
             "meanChannelDifference": round(sum(i * n for c in channels for i, n in enumerate(c.histogram())) / (pixels * 4), 6)}, difference

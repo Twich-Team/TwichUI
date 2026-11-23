@@ -150,6 +150,8 @@ local function StateKey(s)
     local v, t, i, c, a = s.view, s.terrain, s.interiors, s.cave, s.artwork
     local layer = {}
     for _, l in ipairs(a.layers or {}) do layer[#layer + 1] = l.kind .. ":" .. math.floor((l.alpha or 0) * 4) end
+    for _, l in ipairs(a.zoneLayers or {}) do layer[#layer + 1] = "zone:" .. l.mapId end
+    for _, l in ipairs(a.cityLayers or {}) do layer[#layer + 1] = "city:" .. l.mapId end
     return table.concat({ tostring(v.nativeMap), tostring(v.ready), tostring(t.showing), tostring(i.active), tostring(c.surfaced), table.concat(layer, ",") }, "/")
 end
 local function Track(event)
@@ -300,7 +302,8 @@ function MC.Report(kind, rec)
     lines[#lines + 1] = "Texture/layer summary: " .. J.Encode({ terrain = { tiles = out.current.terrain.tiles, requested = out.current.terrain.requested,
         alpha = out.current.terrain.alpha, failedIds = out.current.terrain.failedIds },
         interiors = { active = out.current.interiors.active, pending = out.current.interiors.pending, failures = out.current.interiors.failures },
-        layers = out.current.artwork.layers, cities = out.current.artwork.cityLayers, cave = out.current.cave })
+        layers = out.current.artwork.layers, zones = out.current.artwork.zoneLayers,
+        cities = out.current.artwork.cityLayers, cave = out.current.cave })
     lines[#lines + 1] = "Performance: " .. J.Encode(out.performance)
     lines[#lines + 1] = "Truncation: " .. J.Encode(out.truncation) .. "; quick timeline omits " .. math.max(0, #out.events - 24) .. " older events."
     lines[#lines + 1] = "Evidence-supported causes: use observed findings above; heuristic findings require confirmation. No speculative diagnosis is asserted."

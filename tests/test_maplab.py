@@ -129,6 +129,26 @@ class Compositor(unittest.TestCase):
         self.manifest.write_text(json.dumps({"schema": 1, "assets": self.assets}))
         with self.assertRaisesRegex(render.LabError, "escapes cache"): render.Assets(self.manifest).get("red")
 
+    def test_cumulative_decoded_source_budget(self):
+        previous = render.MAX_DECODED_PIXELS
+        try:
+            render.MAX_DECODED_PIXELS = 300
+            assets = render.Assets(self.manifest)
+            assets.get("red")
+            assets.get("red")  # a cached reference does not spend the budget twice
+            with self.assertRaisesRegex(render.LabError, "cumulative decoded"):
+                assets.get("blue")
+            self.assertEqual(assets.decoded_pixels, 256)
+        finally:
+            render.MAX_DECODED_PIXELS = previous
+
+    def test_color_veil_respects_native_draw_layer_order(self):
+        foreground = self.texture("red", drawLayer="ARTWORK", order=1)
+        background = self.texture("unused", color=[0, 0, 1, 1], drawLayer="BACKGROUND", order=99)
+        image, report = self.draw([foreground, background])
+        self.assertEqual(image.getpixel((8, 8)), (255, 0, 0, 255))
+        self.assertEqual(report["missingAssets"], [])
+
     def test_actual_owned_mask_is_resolved_and_hash_recorded(self):
         assets = render.Assets(own_root=REPO / "!!!TwichUI")
         key = "!!!TwichUI/media/textures/map-feather-round.tga"
@@ -153,6 +173,7 @@ class Compositor(unittest.TestCase):
         self.assertEqual(result["changedFraction"], 1)
         self.assertGreater(result["meanChannelDifference"], 100)
         self.assertIsNotNone(difference)
+        self.assertEqual(difference.getpixel((8, 8))[3], 255, "RGB differences are visibly opaque")
         a = self.scene([self.texture("red")], metadata={"sequence": "test"})
         b = self.scene([self.texture("red")], metadata={"sequence": "test"}); b["id"] = "second"
         b["textures"][0]["alpha"] = 0
@@ -179,6 +200,9 @@ class Contracts(unittest.TestCase):
         self.assertFalse(request["replay"]["nativeClientConfirmed"])
         self.assertTrue(state["provenance"]["partial"])
         self.assertEqual(state["scenes"][0]["textures"][0]["fileId"], 123)
+        self.assertIn("parent-layer fades are unknown", " ".join(state["provenance"]["limitations"]))
+        data["synthetic"] = True
+        self.assertTrue(diagnostics.import_report(data)[1]["provenance"]["synthetic"])
         render.validate_export(state)
 
     def test_withheld_geometry_and_wrong_schema_refused(self):

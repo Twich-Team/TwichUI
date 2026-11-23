@@ -29,6 +29,7 @@ return function(t)
   assert(report.schema == 1 and report.kind == "twichui-map-diagnostics" and report.current.view.available, "self-contained schema and disabled-map state")
   assert(report.redaction.playerPosition == "never queried" and not json:find("Rich Hale", 1, true), "no player identifiers")
   assert(report.current.view.nativeMap ~= nil and report.current.view.viewportWidth ~= nil, "unavailable values explicit")
+  assert(type(report.current.artwork.zoneLayers) == "table", "selected production zone identities are exported")
   assert(#quick < 12288 and #json <= M.MAX_BYTES, "bounded report size")
   assert(not R.MapTrace and not M.Recording() and requests == 0, "snapshot requires no background work")
   local startClock = CLOCK
@@ -94,6 +95,17 @@ return function(t)
     report.id = "MAP1-synthetic-example-1"
     report.synthetic = true
     local f = assert(io.open(MAP_DIAGNOSTIC_JSON_PATH, "w")); f:write(J.Encode(report)); f:close()
+  end
+  if MAPLAB_DIAGNOSTIC_FILE then
+    t.openMap(1429)
+    R.MapExplorePrefs.Set("smooth", false)
+    R.MapExplorePrefs.Set("detail", true)
+    local u, v = t.WorldOf(1429, 0.5, 0.5)
+    MV.GlideTo(u, v, 48); t.Tick(); t.Tick()
+    M.Capture({ coordinates = true, description = "Synthetic selected-detail import fixture" })
+    local _, selected = M.Report("detailed")
+    selected.synthetic, selected.id = true, "MAP1-synthetic-maplab-import"
+    local f = assert(io.open(MAPLAB_DIAGNOSTIC_FILE, "w")); f:write(J.Encode(selected, 17)); f:close()
   end
   print("MAP DIAGNOSTICS PASSED: schema, deterministic export, ring bounds, chunk join, combat, lifecycle, anomaly evidence, UI")
 end

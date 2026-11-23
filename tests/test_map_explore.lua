@@ -35,7 +35,8 @@ local function Obj()
     if k == "GetScript" then return function(s, n) return s.scripts[n] end end
     if k == "HookScript" then return function(s, n, fn) s.hooks[n] = s.hooks[n] or {}; table.insert(s.hooks[n], fn) end end
     if k == "SetPoint" then return function(s, ...) s.point = { ... } end end
-    if k == "ClearAllPoints" then return function(s) s.point = nil end end
+    if k == "ClearAllPoints" then return function(s) s.point, s.allPoints = nil, nil end end
+    if k == "SetAllPoints" then return function(s, parent) s.allPoints = parent or s.parent end end
     if k == "SetSize" then return function(s, w, h) s.width, s.height = w, h end end
     if k == "SetWidth" then return function(s, v) s.width = v end end
     if k == "SetHeight" then return function(s, v) s.height = v end end
@@ -48,6 +49,7 @@ local function Obj()
     if k == "SetFrameLevel" then return function(s, v) s.level = v end end
     if k == "GetFrameLevel" then return function(s) return s.level or 5 end end
     if k == "SetTexture" then return function(s, v) s.tex = v; s.binds = (s.binds or 0) + 1 end end
+    if k == "SetColorTexture" then return function(s, ...) s.fill = { ... }; s.tex = nil end end
     if k == "SetRotation" then return function(s, v) s.rotation = v end end
     if k == "SetDrawLayer" then return function(s, layer, sub) s.drawLayer, s.subLayer = layer, sub or 0 end end
     if k == "SetTexCoord" then return function(s, ...) s.coord = { ... } end end

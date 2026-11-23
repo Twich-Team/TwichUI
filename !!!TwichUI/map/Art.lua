@@ -414,7 +414,7 @@ function MA.City(id) return cities[id] end
 
 function MA.Diagnostic()
     local out = MA.Snapshot()
-    out.layers, out.cityLayers = {}, {}
+    out.layers, out.cityLayers, out.zoneLayers = {}, {}, {}
     for _, key in ipairs({ "world", "cont", "zone" }) do
         local f = frames and frames[key]
         out.layers[#out.layers + 1] = { kind = key, shown = f and f:IsShown() or false,
@@ -425,6 +425,13 @@ function MA.Diagnostic()
             level = c.frame:GetFrameLevel(), interior = c.pictures ~= nil } end
     end
     table.sort(out.cityLayers, function(a, b) return a.mapId < b.mapId end)
+    for _, z in ipairs(zoneList) do
+        if z.shown then out.zoneLayers[#out.zoneLayers + 1] = { mapId = z.id, loaded = z.loaded, built = z.built,
+            alpha = frames.zone:GetAlpha(), level = frames.zone:GetFrameLevel() } end
+    end
+    table.sort(out.zoneLayers, function(a, b) return a.mapId < b.mapId end)
+    out.zoneLayersOmitted = math.max(0, #out.zoneLayers - 32)
+    while #out.zoneLayers > 32 do table.remove(out.zoneLayers) end
     out.masks = { zone = "thin feather", continent = "wide feather", city = "round feather", territory = false }
     return out
 end

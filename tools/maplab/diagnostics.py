@@ -48,15 +48,18 @@ def import_report(data):
     if width < 16 or height < 16 or width * height > 4_194_304:
         raise LabError("diagnostic viewport exceeds supported image budget")
     textures = []
+    unknown_parent_alpha = False
     for row in current.get("terrain", {}).get("textures", [])[:128]:
         if not row.get("bounds"):
             continue
+        unknown_parent_alpha |= "effectiveAlpha" not in row
         textures.append({"fileId": row.get("fileId"), "bounds": rect(row["bounds"]),
                          "alpha": finite(row.get("effectiveAlpha", row.get("alpha", 1)), "terrain alpha"), "shown": row.get("shown", True),
-                         "level": current.get("terrain", {}).get("level", 6)})
+                         "level": row.get("level", current.get("terrain", {}).get("level", 6))})
     for row in current.get("interiors", {}).get("pictures", [])[:128]:
         if not row.get("bounds"):
             continue
+        unknown_parent_alpha |= "effectiveAlpha" not in row
         textures.append({"fileId": row.get("fileId"), "bounds": rect(row["bounds"]),
                          "alpha": finite(row.get("effectiveAlpha", row.get("alpha", 1)), "interior alpha"), "shown": row.get("shown", True),
                          "rotation": finite(row.get("angleRadians", 0), "interior angle"),
@@ -72,7 +75,7 @@ def import_report(data):
                "replay": {"nativeClientConfirmed": False, "fullMapReplay": False,
                           "reason": "No captured native map-API fixture is available; replaying these map IDs against synthetic bounds would invent geography."}}
     exported = {"schema": 1, "provenance": {"source": "Map Diagnostics production-selected texture rectangles",
-                "synthetic": False, "partial": True, "reportId": request["reportId"],
+                "synthetic": data.get("synthetic") is True, "partial": True, "reportId": request["reportId"],
                 "limitations": ["Only selected detail rectangles retained in this diagnostic schema are rendered.",
                     "Painted base art, missing/omitted picture records and complete native map geometry are not reconstructed.",
                     "Older reports without explicit interior frame levels use relative terrain/interior order 6/8.",
@@ -80,4 +83,8 @@ def import_report(data):
                 "scenes": [{"id": "diagnostic-selected-detail", "label": "Captured selected detail (partial reproduction)",
                     "width": width, "height": height, "view": dict(zip(("u0", "v0", "u1", "v1"), bounds)),
                     "textures": textures, "metadata": {"reportId": request["reportId"], "partial": True}}]}
+    if unknown_parent_alpha:
+        exported["provenance"]["limitations"].append(
+            "Texture-local alpha is used where effectiveAlpha is absent; parent-layer fades are unknown and the preview may be too opaque.")
+    exported["provenance"]["limitations"].append("Uncaptured vertex tint and complete masks may change native appearance.")
     return request, exported
