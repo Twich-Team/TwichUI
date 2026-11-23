@@ -476,6 +476,7 @@ W.Toggle = Win.Toggle
 function W.Suspend()
     if W.suspended then return end
     W.suspended = true
+    if W.MerchantReview then W.MerchantReview.Stop() end
     if W.AuctionUI then W.AuctionUI.Hide() end
     if W.Compact then W.Compact.Hide() end
     Win.Hide()
@@ -499,6 +500,7 @@ function W.Resume()
     W.suspended = nil
     if not W.Active() then return end
     if W.Bridge and W.Bridge.RecognizeSummary then W.Bridge.RecognizeSummary() end
+    if W.MerchantReview then W.MerchantReview.Start() end
     if W.Watch then W.Watch.Start() end
     if W.Bank then W.Bank.Start() end
     if W.WorthTip then W.WorthTip.Start() end
