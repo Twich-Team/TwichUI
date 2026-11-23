@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
 import zipfile
 from unittest import mock
@@ -298,8 +299,51 @@ class Evidence(unittest.TestCase):
     def test_measurement_records_cpu_memory_and_propagates_failure(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'metrics.json'
-            result = subprocess.run([sys.executable, '-B', str(REPO / 'tools/measure_command.py'), str(path), '--',
-                                     sys.executable, '-c', 'import time; end=time.process_time()+.4\nwhile time.process_time()<end: pass\nraise SystemExit(7)'])
+            ready, sampled = Path(tmp) / 'ready', Path(tmp) / 'sampled'
+            child = textwrap.dedent(f"""
+                import time
+                from pathlib import Path
+                Path({str(ready)!r}).touch()
+                deadline = time.monotonic() + 20
+                while not Path({str(sampled)!r}).exists():
+                    if time.monotonic() > deadline:
+                        raise SystemExit(19)
+                    time.sleep(.005)
+                end = time.process_time() + .4
+                while time.process_time() < end:
+                    pass
+                raise SystemExit(7)
+            """)
+            # RSS sampling is explicitly a lower bound: a child can finish while
+            # the wrapper is descheduled, even after .4 seconds of child CPU.
+            # Keep this fixture alive until a REAL positive sample is observed.
+            # Force a launch delay longer than its old CPU loop to exercise that
+            # scheduling race deterministically, without changing telemetry.
+            harness = Path(tmp) / 'measure_fixture.py'
+            harness.write_text(textwrap.dedent(f"""
+                import importlib.util
+                from pathlib import Path
+                import sys
+                import time
+                spec = importlib.util.spec_from_file_location('measure', {str(REPO / 'tools/measure_command.py')!r})
+                measure = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(measure)
+                original_sample = measure.tree_sample
+                def observed_sample(root, cpu):
+                    rss = original_sample(root, cpu)
+                    if rss > 0 and Path({str(ready)!r}).exists():
+                        Path({str(sampled)!r}).touch()
+                    return rss
+                measure.tree_sample = observed_sample
+                original_launch = measure.subprocess.Popen
+                def delayed_launch(*args, **kwargs):
+                    proc = original_launch(*args, **kwargs)
+                    time.sleep(.6)
+                    return proc
+                measure.subprocess.Popen = delayed_launch
+                raise SystemExit(measure.main([{str(path)!r}, '--', sys.executable, '-c', {child!r}]))
+            """))
+            result = subprocess.run([sys.executable, '-B', str(harness)], timeout=30)
             self.assertEqual(result.returncode, 7)
             report = json.loads(path.read_text())
             self.assertEqual(report['exit_code'], 7)
