@@ -145,7 +145,14 @@ class Assets:
                 raise LabError(f"asset {key} has no provenance")
             kind = record.get("kind", "local-client-artwork")
             if kind == "local-client-artwork" and str(record.get("fileId")) != key:
-                raise LabError(f"client asset {key} requires a matching fileId provenance record")
+                # Original schema-1 collectors bound numeric keys to identical
+                # .blp filenames without repeating fileId. Accept that validated
+                # legacy identity, never a conflicting explicit ID or a generic
+                # unvalidated image cache posing as client artwork.
+                legacy_key = (self.validation and self.validation.get("legacy")
+                              and record.get("fileId") is None)
+                if not legacy_key:
+                    raise LabError(f"client asset {key} requires a matching fileId provenance record")
         else:
             self.missing.add(key)
             return None

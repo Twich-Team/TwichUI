@@ -211,3 +211,8 @@ collector handoff are documented in [seamless map composition](seamless-map-comp
 The corrected expanded input, 71-camera composition profile, native city repair
 and private continent experiments are documented in
 [expanded-artwork results](seamless-map-expanded-artwork.md).
+
+For the final bounded regional pass, `--scenario-set regional-polish-v1` exports
+15 preset views at zoom 4/8/8.1/12/24. See the final regional-polish section of
+[expanded-artwork results](seamless-map-expanded-artwork.md) for actual comparisons,
+missing-input limits and the owned mathematical mask generator.

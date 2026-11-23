@@ -278,6 +278,22 @@ class ClientContracts(unittest.TestCase):
             self.assertEqual(assets.validation["status"], "success")
             self.assertEqual(assets.get("123").getpixel((0, 0)), (128, 64, 32, 255))
 
+    def test_original_legacy_cache_decodes_without_a_new_file_id_field(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); data, current, raw = fixture_bundle()
+            record = dict(current["assets"]["123"])
+            for key in ("fileId", "header", "sourceCKey"): record.pop(key)
+            legacy = dict(schema=1, clientBuild=data["clientBuild"], product=data["product"], assets={"123": record}, missing=[])
+            (root / "123.blp").write_bytes(raw)
+            path = root / "manifest.json"; path.write_text(json.dumps(legacy))
+            assets = render.Assets(path)
+            self.assertTrue(assets.validation["legacy"])
+            self.assertEqual(assets.get("123").getpixel((0, 0)), (128, 64, 32, 255))
+            legacy["assets"]["123"]["fileId"] = 124
+            path.write_text(json.dumps(legacy))
+            with self.assertRaisesRegex(render.LabError, "matching fileId"):
+                render.Assets(path).get("123")
+
     def test_bundle_integrity_schema_build_and_metadata_mismatches(self):
         cases = {
             "schema": lambda d, m: m.update(schema=99),

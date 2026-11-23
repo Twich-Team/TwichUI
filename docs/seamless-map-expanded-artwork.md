@@ -237,3 +237,89 @@ Private artifacts: `test-output/map-expanded-baseline/index.html`,
 `test-output/map-composition-regional-v4/index.html`,
 `test-output/map-composition-integrated-city/report.json`, and
 `test-output/maplab-expanded-input/pixel-decode-validation.json`.
+
+## Final regional polish: Redridge edge
+
+The follow-up keeps the renderer, zoom transitions, biome colors and earlier
+cave/city/NPC work. One reviewed Redridge **right** edge now blends more softly
+into the actual regional painting underneath it. Only that edge changes: left,
+top and bottom retain THIN. Source RGB, UVs, positions, draw order and opacity
+policy are unchanged. All fifteen camera exports match baseline after replacing
+the one mask identity; texture counts are identical.
+
+This uses one original **mathematical** 256x256 BGRA mask (262,162 bytes), not
+Blizzard-derived artwork. `python3 tools/make_map_feather_art.py --check` verifies
+its deterministic bytes. The same generator reproduces existing THIN exactly
+at its old parameter. Header/format match that already-shipped asset. No new
+rendering layer, texture region, mask slot, updater or profiling engine is added.
+It runs inside existing `map.art.update`; diagnostics expose `edgeFeather` and
+`edgeFeatherReason` per zone. Exact build/art/canvas/carrier guards retain THIN
+for unreviewed sources or missing owned artwork. Unexplored **hide** also retains
+THIN because it can remove the neighbor painting; show/dim switch immediately.
+
+The source study found **94.4–94.5% mean other-regional alpha** beneath the changed
+band at 8.1/12; approximately 88% of changed pixels have alpha at least .85 and
+none are parent-only. Broader left/top/right softening was rejected because it
+widens blurry parent gaps. Riverglades-bottom softening was also rejected: its
+changed band has no regional painting underneath. Badlands' own source edges
+already have transparent native feathers. No global tint/brightness changes or
+source-frame expansion was applied.
+
+Fixed `regional-polish-v1` cameras cover central Eastern Kingdoms, the Badlands
+boundary and the southern green/yellow boundary at **4, 8, 8.1, 12 and 24**:
+
+```sh
+python3 tools/maplab/run.py --client-bundle /private/part-01.zip \
+  --client-bundle /private/part-02.zip --client-bundle /private/part-03.zip \
+  --scenario-set regional-polish-v1 --output test-output/regional --strict
+```
+
+The mentioned new native screenshot was not attached. These are fixed regional
+presets approximating the described area, not an exact recovered camera.
+Primary directly inspected actual production before/after PNGs and a seam crop.
+Central camera changed pixels: **891 at 4, 3,518 at 8, 3,600 at 8.1, 4,114 at 12,
+zero at 24**. The improvement is deliberately small and boundary-local; terrain
+and zone interiors retain their appearance. Native acceptance is still pending.
+
+The original same-build cache supplied 50 additional detail/interior files for
+these new cameras. Both build/product, all eight mandatory table hashes,
+numeric sources/reveal/minimap data and 1,119 overlapping asset hashes match.
+The private supplement retains **schema-1 provenance limitations** instead of
+claiming fresh CKeys. A genuine legacy pixel-decoder regression (the original
+collector did not repeat `fileId`) was reproduced and fixed; conflicting declared
+IDs still fail. Source collections remain untouched and private.
+
+Fourteen of fifteen before/after views have all visible artwork. The Badlands
+24 preset is explicitly partial: **204569, 204611, 204651, 204691, 204731** are
+uncollected terrain tiles, not confirmed missing client artwork. The original
+1738-file cache alone has 55 absent inputs for these new cameras. Both complete
+15-view runs therefore correctly exit nonzero under strict mode; before/after
+with the supplement take **99.024943 / 84.619719 s**. Offline timings are not
+native performance comparisons. Source counts and missing IDs remain visible.
+
+The giant continent letters are baked into both parent paintings and extend
+outside all available neighboring zone frames. Clean removal cannot be achieved
+with this small edge fix; smudging, blank fills, exaggerated underpainting and
+the rejected private background replacement were not enabled. The remaining
+Riverglades/green-yellow gaps also expose parent art; wider fades would worsen
+them. Two faint Redridge padding discrepancies do not explain these large seams,
+and the production UV algorithm matches Forever's native provider, so no
+unverified texture-layout override was introduced.
+
+Private matching screenshots: `test-output/map-regional-after/comparisons.html`
+(all three cameras/five zooms), `central-eastern-8.1-comparison.png`, and
+`seam-closeup.png` in the same directory. The baseline is addon `6717e3a`.
+Relevant native check: pan across Redridge's eastern frame toward Riverglades,
+zoom 4→8→12→24 and toggle show/dim/hide. Confirm subtle smoothing without a new
+blurred gap, unchanged roads/detail and the expected hide-mode fallback. Use
+`/tui mapdiag` for unexpected results. No native client was controlled here.
+
+Regional final gate: `./tests/run.sh feature navigation --profile cloud --jobs 2`
+passes **106 modules / zero failures**, including **95 Python cases**, 311 Lua
+syntax checks plus runner scripts and simulator smoke, in **70.204039 s**;
+source fingerprint unchanged. Focused regional source/lifecycle tests pass 75
+assertions, existing city-cover tests 345, and four deterministic owned-art tests
+pass. The strict central 4/8/12/24 subset passes with zero missing assets in
+22.443 s. Cloud/offline checks do not establish native acceptance. The prior
+324-pass/one-unrelated-Welcome-Back full-suite evidence and original 322/1
+baseline remain; no unrelated tests were changed or full suite repeated.
