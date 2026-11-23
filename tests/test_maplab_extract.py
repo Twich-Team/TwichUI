@@ -52,14 +52,26 @@ class Extract(unittest.TestCase):
         self.ids = [123, 124]
         self.original_game = {p.relative_to(self.wow): p.read_bytes() for p in self.wow.rglob("*") if p.is_file()}
     def tearDown(self): self.temp.cleanup()
-    def run_collect(self, storage, destination=None, asset_request=None):
-        with patch.object(collect, "read_tables", return_value=({}, {"fixture": {"sha256": "0" * 64}})), \
-             patch.object(collect, "model", return_value=({947: {"id": 947}}, {}, lambda *a: (0, 0))), \
+    def run_collect(self, storage, destination=None, asset_request=None, default_catalog=False, use_default_output=False,
+                    model_maps=None, link_rows=None, sources=None):
+        with patch.object(collect, "read_tables", return_value=({}, sources or {"fixture": {"sha256": "0" * 64}})), \
+             patch.object(collect, "model", return_value=(model_maps or {947: {"id": 947}}, {}, lambda *a: (0, 0))), \
+             patch.object(collect.clientdata, "map_links", return_value=link_rows or [], create=True), \
              patch.object(collect, "minimap", return_value={"0": [], "1": []}), \
              patch.object(collect, "scenarios", return_value=[]), \
-             patch.object(collect, "candidate_ids", side_effect=lambda *a: self.ids), contextlib.redirect_stdout(io.StringIO()):
-            return collect.collect(self.wow, destination or self.output, storage_factory=lambda *a, **k: storage,
-                                   asset_request=asset_request)
+             patch.object(collect, "candidate_ids", side_effect=lambda *a: self.ids), contextlib.redirect_stdout(io.StringIO()) as capture:
+            result = collect.collect(self.wow, None if use_default_output else destination or self.output,
+                                     storage_factory=lambda *a, **k: storage, asset_request=asset_request,
+                                     default_catalog=default_catalog)
+        self.last_stdout = capture.getvalue()
+        return result
+
+    def bundled_kit(self, request):
+        kit = self.root / "feedback-kit"; kit.mkdir(exist_ok=True)
+        for name in collect.NUMERIC_SOURCES:
+            path = kit / name; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes((REPO / name).read_bytes())
+        (kit / "maplab-asset-request.json").write_bytes(bundle.json_bytes(request))
+        return kit
     def request(self, **changes):
         data = dict(schema=1, kind="twichui-maplab-asset-request", clientBuild="1.60.1.71037", product="wowf",
                     numericSources=collect.numeric_sources(), fileIds=[125, 126],
@@ -107,6 +119,76 @@ class Extract(unittest.TestCase):
         self.assertEqual(manifest["settings"]["assetRequest"], identity)
         self.assertEqual(bundle.validate_manifest(manifest, folder / "assets", client)["status"], "success")
 
+    def test_bundled_request_is_automatic_and_feedback_output_is_unmistakable(self):
+        _, request = self.request(); kit = self.bundled_kit(request)
+        storage = Storage({125: blp(3), 126: blp(4)})
+        with patch.object(collect, "REPO", kit):
+            paths = self.run_collect(storage, use_default_output=True)
+        expected = bundle.digest(bundle.json_bytes(request))
+        self.assertEqual(storage.reads, [125, 126])
+        self.assertIn(kit / "test-output/maplab-feedback-input", paths[0].parents)
+        self.assertEqual(paths[0].name, f"TwichUI-map-art-feedback-{expected[:12]}.zip")
+        self.assertIn("FEEDBACK ARTWORK REQUEST (bundled)", self.last_stdout)
+        self.assertIn(f"count=2 sha256={expected}", self.last_stdout)
+        self.assertIn("FEEDBACK SCOPE VALIDATED: build=1.60.1.71037 product=wowf requested=2 available=2 missing=0", self.last_stdout)
+        pointer = json.loads((kit / "test-output/maplab-feedback-input/current.json").read_text())
+        self.assertEqual(pointer["assetRequest"]["sha256"], expected)
+        with zipfile.ZipFile(paths[0]) as archive:
+            client = json.loads(archive.read("client.json")); manifest = json.loads(archive.read("assets/manifest.json"))
+        self.assertEqual(client["assetRequest"]["sha256"], expected)
+        self.assertEqual(manifest["settings"]["scenarioCatalog"], "production-lua-asset-request-v1")
+
+    def test_explicit_request_overrides_bundled_and_default_catalog_is_deliberate_optout(self):
+        _, bundled = self.request(); kit = self.bundled_kit(bundled)
+        explicit, request = self.request(fileIds=[127, 128])
+        storage = Storage({127: blp(5), 128: blp(6)})
+        with patch.object(collect, "REPO", kit):
+            paths = self.run_collect(storage, asset_request=explicit)
+        self.assertEqual(storage.reads, [127, 128]); self.assertIn("(explicit)", self.last_stdout)
+        self.assertIn(bundle.digest(bundle.json_bytes(request))[:12], paths[0].name)
+        # Even an obsolete bundled build can be consciously bypassed for normal updates.
+        bundled["clientBuild"] = "1.60.1.70000"
+        (kit / "maplab-asset-request.json").write_bytes(bundle.json_bytes(bundled))
+        storage = Storage({123: blp(), 124: blp(2)})
+        with patch.object(collect, "REPO", kit):
+            paths = self.run_collect(storage, default_catalog=True, use_default_output=True)
+            with self.assertRaisesRegex(collect.ClientInputError, "not both"):
+                collect.select_asset_request(explicit, default_catalog=True)
+        self.assertEqual(storage.reads, [123, 124]); self.assertIn("DEFAULT CATALOG", self.last_stdout)
+        self.assertIn(kit / "test-output/maplab-client-input", paths[0].parents)
+        self.assertEqual(paths[0].name, "TwichUI-map-art.zip")
+
+    def test_bundled_mismatch_or_invalid_data_never_falls_back_to_default_catalog(self):
+        self.run_collect(Storage({123: blp(), 124: blp(2)}))
+        before = (self.output / "current.json").read_bytes()
+        for changes in ({"clientBuild": "1.60.1.70000"}, {"product": "other"}, {"schema": 99}):
+            _, request = self.request(**changes); kit = self.bundled_kit(request)
+            storage = Storage({123: blp(), 124: blp(2), 125: blp(3), 126: blp(4)})
+            with patch.object(collect, "REPO", kit), self.assertRaises(collect.ClientInputError):
+                self.run_collect(storage)
+            self.assertEqual(storage.reads, []); self.assertTrue(storage.closed)
+            self.assertEqual((self.output / "current.json").read_bytes(), before)
+
+    def test_normal_kit_default_and_launcher_share_python_scope_resolution(self):
+        _, request = self.request(); kit = self.bundled_kit(request)
+        (kit / "maplab-asset-request.json").unlink()
+        storage = Storage({123: blp(), 124: blp(2)})
+        with patch.object(collect, "REPO", kit):
+            self.assertEqual(collect.select_asset_request(), (None, "default-catalog"))
+            paths = self.run_collect(storage)
+        self.assertEqual(paths[0].name, "TwichUI-map-art.zip"); self.assertIn("request=none", self.last_stdout)
+        launcher = (REPO / "tools/maplab/Collect-Map-Art.cmd").read_text()
+        self.assertIn('if exist "maplab-asset-request.json"', launcher)
+        self.assertIn("--default-catalog", launcher)
+        self.assertIn("py -3 tools\\maplab\\collect.py %*", launcher)
+        self.assertIn("python tools\\maplab\\collect.py %*", launcher)
+        self.assertNotIn("--asset-request maplab-asset-request.json", launcher, "launcher must not override explicit CLI selection")
+        conflict = subprocess.run([sys.executable, "-S", str(REPO / "tools/maplab/collect.py"),
+                                   "--make-kit", str(self.root / "conflict.zip"), "--asset-request", "unused.json", "--default-catalog"],
+                                  capture_output=True, text=True, timeout=10)
+        self.assertEqual(conflict.returncode, 2); self.assertIn("not allowed with", conflict.stderr)
+        self.assertFalse((self.root / "conflict.zip").exists())
+
     def test_asset_request_rejects_old_build_product_and_numeric_data_before_texture_reads(self):
         self.run_collect(Storage({123: blp(), 124: blp(2)}))
         prior = (self.output / "current.json").read_bytes()
@@ -124,7 +206,8 @@ class Extract(unittest.TestCase):
                  dict(fileIds=[126, 125]), dict(fileIds=[125, 125]), dict(fileIds=[True]), dict(fileIds=[1.5]),
                  dict(fileIds=[0]), dict(fileIds=[2**32]), dict(fileIds=list(range(1, 2050))),
                  dict(fileIds=[r"C:\\game\\texture.blp"]), dict(path="../outside"), dict(provenance={}),
-                 dict(clientBuild="unknown"), dict(product="../game")]
+                 dict(clientBuild="unknown"), dict(product="../game"),
+                 *[dict(includeNativeHighlights=value) for value in (1, "true", None, {}, [])]]
         for changes in cases:
             with self.subTest(changes=str(changes)[:100]):
                 path, _ = self.request(**changes)
@@ -138,8 +221,67 @@ class Extract(unittest.TestCase):
         path.write_bytes(b" " * (128 * 1024 + 1))
         with self.assertRaisesRegex(collect.ClientInputError, "128 KiB"): collect.read_asset_request(path)
 
+    def test_optional_native_highlights_union_reviewed_file_ids_not_atlas_or_conditions(self):
+        request_path, _ = self.request(fileIds=[125, 130], includeNativeHighlights=True)
+        maps = {947: dict(id=947, highlight=dict(fileId=123, atlasId=0)),
+                1429: dict(id=1429, highlight=dict(fileId=130, atlasId=8000)),
+                1436: dict(id=1436, highlight=dict(fileId=0, atlasId=9000))}
+        def link(rid, child, condition, file_id, atlas_id):
+            return dict(id=rid, parentMapId=947, childMapId=child, playerConditionId=condition,
+                        overrideHighlightFileId=file_id, overrideHighlightAtlasId=atlas_id,
+                        orderIndex=0, flags=0, uiMin=[0, 0], uiMax=[1, 1])
+        links = [link(1, 1429, 0, 131, 0), link(2, 1429, 55, 132, 0), link(3, 1436, 0, 0, 9001)]
+        storage = Storage({fid: blp(fid % 255) for fid in (123, 125, 130, 131)})
+        source = dict(fileId=2030690, optional=True, status="available", layout="fixture", tableHash="fixture")
+        self.run_collect(storage, asset_request=request_path, model_maps=maps, link_rows=links,
+                         sources={"UiMapLink": source})
+        folder, manifest, _ = self.version(); client = json.loads((folder / "client.json").read_text())
+        self.assertEqual(storage.reads, [123, 125, 130, 131])
+        self.assertEqual(manifest["candidateTextureIds"], storage.reads)
+        self.assertEqual(client["mapLinks"], links, "raw condition/rectangle metadata is retained without activation")
+        derived = manifest["settings"]["nativeHighlights"]
+        self.assertEqual(derived["fileIds"], [123, 130, 131]); self.assertEqual(derived["additionalCount"], 2)
+        self.assertEqual(derived["directRequestedCount"], 2); self.assertEqual(derived["unionCount"], 4)
+        self.assertEqual(derived["conditionalLinkIdsIgnored"], [2]); self.assertEqual(derived["linkTable"], source)
+        self.assertEqual([item["atlasId"] for item in derived["atlasOnlyUnsupported"]], [9000, 9001])
+        self.assertEqual(client["assetRequest"]["count"], 4)
+        self.assertEqual(client["assetRequest"]["derivedHighlightCount"], 3)
+        self.assertIn("atlas-only unsupported=2", self.last_stdout)
+        self.assertEqual(bundle.validate_manifest(manifest, folder / "assets", client)["status"], "success")
+
+    def test_native_highlights_false_preserves_explicit_set_and_missing_metadata_is_not_guessed(self):
+        maps = {947: dict(id=947, highlight=dict(fileId=130, atlasId=0))}
+        request_path, _ = self.request(includeNativeHighlights=False)
+        storage = Storage({125: blp(), 126: blp(2), 130: blp(3)})
+        self.run_collect(storage, asset_request=request_path, model_maps=maps)
+        self.assertEqual(storage.reads, [125, 126])
+        self.assertNotIn("nativeHighlights", self.version()[1]["settings"])
+        request_path, _ = self.request(includeNativeHighlights=True)
+        storage = Storage({125: blp(), 126: blp(2)})
+        with self.assertRaisesRegex(collect.ClientInputError, "highlight fields unavailable"):
+            self.run_collect(storage, asset_request=request_path)
+        self.assertEqual(storage.reads, []); self.assertTrue(storage.closed)
+
+    def test_native_highlight_union_is_bounded_and_missing_payload_is_partial(self):
+        maps = {947: dict(id=947, highlight=dict(fileId=3000, atlasId=0))}
+        request_path, _ = self.request(fileIds=list(range(1, 2049)), includeNativeHighlights=True)
+        storage = Storage({3000: blp()})
+        with self.assertRaisesRegex(collect.ClientInputError, "2048"):
+            self.run_collect(storage, asset_request=request_path, model_maps=maps)
+        self.assertEqual(storage.reads, [])
+        self.run_collect(Storage({123: blp(), 124: blp(2)}))
+        prior = (self.output / "current.json").read_bytes()
+        request_path, _ = self.request(includeNativeHighlights=True)
+        storage = Storage({125: blp(), 126: blp(2)})
+        self.run_collect(storage, asset_request=request_path, model_maps=maps)
+        self.assertEqual(storage.reads, [125, 126, 3000])
+        self.assertEqual((self.output / "current.json").read_bytes(), prior)
+        _, manifest, _ = self.version("latest.json")
+        self.assertEqual(manifest["validation"]["status"], "partial")
+        self.assertEqual(manifest["missing"][0]["fileId"], 3000)
+
     def test_asset_request_source_kit_embeds_only_validated_data_and_runs_without_site_packages(self):
-        path, request = self.request()
+        path, request = self.request(includeNativeHighlights=True)
         kit = collect.make_kit(self.root / "request-kit.zip", path)
         with zipfile.ZipFile(kit) as archive:
             self.assertEqual(json.loads(archive.read("maplab-asset-request.json")), request)
@@ -153,6 +295,19 @@ class Extract(unittest.TestCase):
         self.assertEqual(process.returncode, 0, process.stderr)
         with zipfile.ZipFile(self.root / "second-kit.zip") as archive:
             self.assertEqual(json.loads(archive.read("maplab-asset-request.json")), request)
+        # The exact double-click/default scope resolver also works from source-only
+        # kits without site packages: repacking auto-retains the bundled request.
+        auto = subprocess.run([sys.executable, "-S", str(unpacked / "tools/maplab/collect.py"),
+                               "--make-kit", str(self.root / "auto-kit.zip")], capture_output=True, text=True, timeout=10)
+        self.assertEqual(auto.returncode, 0, auto.stderr)
+        with zipfile.ZipFile(self.root / "auto-kit.zip") as archive:
+            self.assertEqual(json.loads(archive.read("maplab-asset-request.json")), request)
+        normal = subprocess.run([sys.executable, "-S", str(unpacked / "tools/maplab/collect.py"),
+                                 "--make-kit", str(self.root / "normal-kit.zip"), "--default-catalog"],
+                                capture_output=True, text=True, timeout=10)
+        self.assertEqual(normal.returncode, 0, normal.stderr)
+        with zipfile.ZipFile(self.root / "normal-kit.zip") as archive:
+            self.assertNotIn("maplab-asset-request.json", archive.namelist())
         bad, _ = self.request(schema=99)
         with self.assertRaises(collect.ClientInputError): collect.make_kit(self.root / "bad-kit.zip", bad)
         self.assertFalse((self.root / "bad-kit.zip").exists(), "invalid request cannot leave a misleading kit")

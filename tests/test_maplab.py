@@ -201,6 +201,23 @@ class Compositor(unittest.TestCase):
 
 
 class Contracts(unittest.TestCase):
+    def test_highlight_request_is_explicit_and_still_uses_lua_file_ids(self):
+        from collect import numeric_sources, read_asset_request
+        state = {"provenance": {"synthetic": False, "product": "wowf", "clientBuild": "1.60.1.71037",
+                                "numericSources": numeric_sources()},
+                 "scenes": [{"textures": [{"fileId": 123}], "metadata": {"baseCandidates": [
+                     {"textures": [{"fileId": 456}, {"fileId": 123}]}]}}]}
+        normal = maprun.artwork_request(state)
+        requested = maprun.artwork_request(state, True)
+        self.assertNotIn("includeNativeHighlights", normal)
+        self.assertTrue(requested["includeNativeHighlights"])
+        self.assertEqual(requested["fileIds"], [123, 456], "derived IDs are resolved on the gaming PC, not guessed in Python")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "request.json"; path.write_text(json.dumps(requested))
+            self.assertEqual(read_asset_request(path), requested)
+        state["provenance"]["synthetic"] = True
+        self.assertIsNone(maprun.artwork_request(state, True))
+
     def test_focused_gallery_selection_rejects_unknown_scene(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -18,6 +18,7 @@ import sys
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "tools/navbake"))
 import db2
+import casc
 import wowfiles
 
 TABLES = {
@@ -30,6 +31,9 @@ TABLES = {
     "WorldMapOverlay": (1134579, 0x9A196494, 0x1D740E72),
     "WorldMapOverlayTile": (1957212, 0x2C843422, 0xAC599725),
 }
+# Optional technical metadata: never turn an unavailable new table into a
+# requirement for previously collected schema-1 client inputs.
+OPTIONAL_TABLES = {"UiMapLink": (2030690, 0x712A46E6, 0x5578EDE9)}
 
 
 class ClientInputError(ValueError):
@@ -37,7 +41,7 @@ class ClientInputError(ValueError):
 
 
 def schema(table, name):
-    _, layout, table_hash = TABLES[name]
+    _, layout, table_hash = (TABLES if name in TABLES else OPTIONAL_TABLES)[name]
     if table.layout_hash != layout or table.table_hash != table_hash:
         raise ClientInputError(f"Unsupported {name} schema: layout {table.layout_hash:08X}, table {table.table_hash:08X}; no columns guessed")
 
@@ -53,6 +57,27 @@ def read_tables(storage):
         tables[name] = table
         provenance[name] = dict(fileId=file_id, sha256=hashlib.sha256(raw).hexdigest(),
                                 layout=f"{table.layout_hash:08X}", tableHash=f"{table.table_hash:08X}")
+    for name, (file_id, _, _) in OPTIONAL_TABLES.items():
+        info = dict(fileId=file_id, optional=True, status="unavailable")
+        provenance[name] = info
+        try:
+            raw = storage.read(file_id)
+            if raw is None:
+                info["reason"] = "Optional local table is not stored or is encrypted"
+                continue
+            if len(raw) > 32 * 1024 * 1024: raise ClientInputError("Optional local table exceeds 32 MiB")
+            info["sha256"] = hashlib.sha256(raw).hexdigest()
+            table = db2.DB2(raw)
+            info.update(layout=f"{table.layout_hash:08X}", tableHash=f"{table.table_hash:08X}")
+            schema(table, name)
+            # Validate the raw shape before describing optional metadata as available.
+            list(_link_rows(table))
+            tables[name] = table
+            info["status"] = "available"
+        except (casc.CascError, OSError) as error:
+            info["reason"] = "Optional local table unavailable: " + type(error).__name__
+        except (ClientInputError, db2.DB2Error, struct.error, IndexError, TypeError, ValueError) as error:
+            info.update(status="unsupported", reason="Optional table was not interpreted: " + str(error)[:160])
     return tables, provenance
 
 
@@ -80,6 +105,44 @@ def related_rows(table):
             if old in seen:
                 rid, columns = next(rows)
                 yield rid, columns, seen[old]
+
+
+def unsigned(value, label):
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 0xffffffff:
+        raise ClientInputError("Invalid numeric " + label)
+    return value
+
+
+def _link_rows(table):
+    """Raw layout-712A46E6 fields, not native highlight-placement rectangles."""
+    count = 0
+    for rid, c in table.rows():
+        count += 1
+        if count > 16384 or not isinstance(c, (list, tuple)) or len(c) != 10:
+            raise ClientInputError("Optional UiMapLink row shape/count differs from reviewed schema")
+        lo, hi = floats(c[0], 2), floats(c[1], 2)
+        if max(map(abs, lo + hi)) > 1e6:
+            raise ClientInputError("Optional UiMapLink coordinates exceed numeric bounds")
+        if isinstance(c[4], bool) or not isinstance(c[4], int) or not -(2**31) <= c[4] <= 0xffffffff:
+            raise ClientInputError("Invalid numeric UiMapLink order")
+        yield dict(id=unsigned(rid, "UiMapLink ID"), parentMapId=unsigned(c[3], "parent map ID"),
+            childMapId=unsigned(c[5], "child map ID"), orderIndex=c[4], playerConditionId=unsigned(c[6], "player condition ID"),
+            overrideHighlightFileId=unsigned(c[7], "highlight file ID"), overrideHighlightAtlasId=unsigned(c[8], "highlight atlas member ID"),
+            flags=unsigned(c[9], "UiMapLink flags"), uiMin=lo, uiMax=hi)
+
+
+def map_links(tables, maps):
+    """Optional numeric links for offline study; conditional records stay explicit.
+
+    UiMin/UiMax are link-selection rectangles, NOT verified highlight bounds.
+    Atlas IDs identify UiTextureAtlasMember records, not SetAtlas name strings.
+    """
+    table = tables.get("UiMapLink")
+    if table is None: return []
+    schema(table, "UiMapLink")
+    rows = [row for row in _link_rows(table) if row["parentMapId"] in maps and row["childMapId"] in maps]
+    if len(rows) > 4096: raise ClientInputError("Supported UiMapLink metadata exceeds 4096 records")
+    return sorted(rows, key=lambda row: (row["parentMapId"], row["orderIndex"], row["id"]))
 
 
 def model(tables):
@@ -113,7 +176,11 @@ def model(tables):
             if ui in art_of and art_of[ui] != c[1]:
                 raise ClientInputError("Ambiguous phase-zero map artwork")
             art_of[ui] = c[1]
-    styles = {rid: c[2] for rid, c in tables["UiMapArt"].rows()}
+    styles, highlights = {}, {}
+    for rid, c in tables["UiMapArt"].rows():
+        if len(c) != 3: raise ClientInputError("UiMapArt shape differs from reviewed schema")
+        styles[rid] = c[2]
+        highlights[rid] = dict(fileId=unsigned(c[0], "map highlight file ID"), atlasId=unsigned(c[1], "map highlight atlas member ID"))
     layers = {}
     for _, c, foreign in related_rows(tables["UiMapArtStyleLayer"]):
         if c[0] == 0:
@@ -141,7 +208,8 @@ def model(tables):
         cols, rows = math.ceil(width / tw), math.ceil(height / th)
         if cols * rows > 256 or any((r, c) not in tiles for r in range(rows) for c in range(cols)):
             raise ClientInputError(f"Incomplete base-art tile grid for map {ui}")
-        row = dict(m, art=art, layer=layer, files=[tiles[(r, c)] for r in range(rows) for c in range(cols)])
+        row = dict(m, art=art, layer=layer, files=[tiles[(r, c)] for r in range(rows) for c in range(cols)],
+                   highlight=highlights[art])
         if ui == 947:
             row["world"] = [0, 1, 0, 1]
         else:

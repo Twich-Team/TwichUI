@@ -5,6 +5,10 @@ if not exist "tools\maplab\collect.py" (
   popd
   pushd "%~dp0\..\.."
 )
+if exist "maplab-asset-request.json" (
+  echo FEEDBACK KIT: a bundled artwork request was detected and is selected unless explicitly overridden.
+  echo An explicit --asset-request overrides it; --default-catalog deliberately selects normal updates.
+)
 where py >nul 2>nul
 if errorlevel 1 (
   python tools\maplab\collect.py %*

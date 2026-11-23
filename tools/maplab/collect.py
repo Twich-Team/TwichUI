@@ -22,6 +22,7 @@ import uuid
 import zipfile
 
 from clientdata import ClientInputError, REPO, candidate_ids, minimap, model, read_tables, scenarios
+import clientdata
 import casc
 import db2
 from bundle import (BundleError, LOCALE, MAX_ASSETS, MAX_BYTES, MAX_TEXTURE_BYTES, SCHEMA,
@@ -50,7 +51,7 @@ def read_asset_request(path, client_build=None, product=None):
                              parse_constant=lambda _: (_ for _ in ()).throw(ClientInputError("Invalid asset-request JSON number")))
     except (json.JSONDecodeError, UnicodeError, RecursionError) as error:
         raise ClientInputError("Malformed asset-request JSON") from error
-    allowed = {"schema", "kind", "clientBuild", "product", "numericSources", "fileIds", "provenance"}
+    allowed = {"schema", "kind", "clientBuild", "product", "numericSources", "fileIds", "provenance", "includeNativeHighlights"}
     if not isinstance(request, dict) or set(request) - allowed:
         raise ClientInputError("Asset request must contain only reviewed data fields")
     if type(request.get("schema")) is not int or request["schema"] != 1 or request.get("kind") != "twichui-maplab-asset-request":
@@ -69,11 +70,71 @@ def read_asset_request(path, client_build=None, product=None):
         raise ClientInputError("Asset request requires 1..2048 sorted unique uint32 file IDs")
     if "provenance" in request and (not isinstance(request["provenance"], str) or not request["provenance"].strip() or len(request["provenance"]) > 512):
         raise ClientInputError("Asset-request provenance must be a bounded technical description")
+    if "includeNativeHighlights" in request and type(request["includeNativeHighlights"]) is not bool:
+        raise ClientInputError("includeNativeHighlights must be a JSON boolean")
     if client_build is not None and build != client_build:
-        raise ClientInputError("Asset request client build differs from installed CASC; regenerate it for the updated client")
+        raise ClientInputError(f"Asset request build {build} differs from installed CASC {client_build}; regenerate it for the updated client; no default fallback")
     if product is not None and requested_product != product:
-        raise ClientInputError("Asset request product differs from the selected installed product")
+        raise ClientInputError(f"Asset request product {requested_product} differs from selected product {product}; no default fallback")
     return request
+
+
+def select_asset_request(explicit=None, default_catalog=False):
+    """An extracted feedback kit must not silently collect the normal catalog.
+
+    Only the kit's fixed root request is implicit; current working-directory
+    files are never probed. Explicit selection wins; opting out is deliberate.
+    Invalid/mismatched bundled requests fail validation rather than fall back.
+    """
+    if explicit is not None and default_catalog:
+        raise ClientInputError("Choose --asset-request or --default-catalog, not both")
+    if explicit is not None: return Path(explicit), "explicit"
+    if default_catalog: return None, "default-catalog"
+    bundled = REPO / "maplab-asset-request.json"
+    if bundled.exists() or bundled.is_symlink(): return bundled, "bundled"
+    return None, "default-catalog"
+
+
+def native_highlight_candidates(maps, links, sources):
+    """Conservative source IDs only; this does not activate or place any mask."""
+    if not isinstance(maps, dict) or not 1 <= len(maps) <= 2000 or not isinstance(links, list) or len(links) > 8192:
+        raise ClientInputError("Native highlight metadata exceeds reviewed shape/count limits")
+    ids, map_refs, link_refs, atlas_only, conditional = set(), [], [], [], []
+    def identity(value):
+        return type(value) is int and 0 <= value <= 0xffffffff
+    for mid in sorted(maps):
+        row = maps[mid]
+        highlight = row.get("highlight") if isinstance(row, dict) else None
+        if not isinstance(highlight, dict) or not identity(highlight.get("fileId")) or not identity(highlight.get("atlasId")):
+            raise ClientInputError("Native highlight fields unavailable or invalid; use an updated collector kit, never guessed texture IDs")
+        fid, atlas = highlight["fileId"], highlight["atlasId"]
+        if fid or atlas: map_refs.append(dict(mapId=mid, fileId=fid, atlasId=atlas))
+        if fid: ids.add(fid)
+        elif atlas: atlas_only.append(dict(source="UiMapArt", mapId=mid, atlasId=atlas,
+                                          reason="atlas member ID is not a texture file-data ID; resolution unsupported"))
+    for row in links:
+        if not isinstance(row, dict) or not all(identity(row.get(key)) for key in
+            ("id", "parentMapId", "childMapId", "playerConditionId", "overrideHighlightFileId", "overrideHighlightAtlasId")):
+            raise ClientInputError("Native map-link highlight metadata is invalid")
+        if row["parentMapId"] not in maps or row["childMapId"] not in maps:
+            raise ClientInputError("Native highlight link refers to an unsupported map")
+        if row["playerConditionId"] != 0:
+            conditional.append(row["id"]); continue
+        fid, atlas = row["overrideHighlightFileId"], row["overrideHighlightAtlasId"]
+        if fid or atlas:
+            link_refs.append(dict(linkId=row["id"], parentMapId=row["parentMapId"], childMapId=row["childMapId"],
+                                  fileId=fid, atlasId=atlas, playerConditionId=0))
+        if fid: ids.add(fid)
+        elif atlas: atlas_only.append(dict(source="UiMapLink", linkId=row["id"], atlasId=atlas,
+                                          reason="atlas member ID is not a texture file-data ID; resolution unsupported"))
+    source = sources.get("UiMapLink", {"optional": True, "status": "unavailable", "reason": "UiMapLink metadata not supplied by this kit"})
+    return sorted(ids), dict(enabled=True, derivation="reviewed UiMapArt.HighlightFileDataID and unconditional UiMapLink.OverrideHighlightFileDataID",
+        selection="all supported modeled maps; candidate extraction only, not native highlight activation or placement",
+        fileIds=sorted(ids), mapReferences=map_refs, linkReferences=link_refs,
+        conditionalLinkIdsIgnored=sorted(conditional), atlasOnlyUnsupported=atlas_only, linkTable=source,
+        limitations=["Atlas member IDs are never treated as file-data IDs.",
+                     "Nonzero link player conditions are not activated or extracted as override candidates.",
+                     "Link rectangles and highlight placement remain unverified against native APIs."])
 
 
 def installation(selected, requested_product=None):
@@ -106,8 +167,9 @@ def installation(selected, requested_product=None):
                            ". Run again with --product followed by the desired listed product")
 
 
-def make_kit(output, asset_request=None):
+def make_kit(output, asset_request=None, default_catalog=False):
     """Small reusable source-only handoff; never includes private artwork."""
+    asset_request, _ = select_asset_request(asset_request, default_catalog)
     request = read_asset_request(asset_request) if asset_request else None
     names = ["tools/maplab/collect.py", "tools/maplab/clientdata.py", "tools/maplab/bundle.py",
              "tools/maplab/README.md", "tools/maplab/Collect-Map-Art.cmd", "tools/navbake/casc.py",
@@ -236,9 +298,10 @@ def build_diff(previous, manifest, reused, fresh_reads):
             "freshReads": fresh_reads, "missing": len(manifest["missing"])}
 
 
-def collect(wow, output, product=None, storage_factory=casc.Storage, asset_request=None):
+def collect(wow, output=None, product=None, storage_factory=casc.Storage, asset_request=None, default_catalog=False):
+    asset_request, request_source = select_asset_request(asset_request, default_catalog)
     wow, product = installation(wow, product)
-    output = output.resolve()
+    output = (output or REPO / "test-output" / ("maplab-feedback-input" if asset_request else "maplab-client-input")).resolve()
     if output == wow or output.is_relative_to(wow): raise ClientInputError("Output must be outside the game installation")
     try:
         relative = output.relative_to(REPO.resolve())
@@ -258,12 +321,20 @@ def collect(wow, output, product=None, storage_factory=casc.Storage, asset_reque
     print(f"Selected installed product: {product}", flush=True)
     storage = storage_factory(str(wow), product=product)
     try:
+        print(f"Installed client: build={storage.version} product={product}", flush=True)
+        if asset_request:
+            print(f"Collection scope: FEEDBACK ARTWORK REQUEST ({request_source}); no default-catalog fallback", flush=True)
         request = read_asset_request(asset_request, storage.version, product) if asset_request else None
+        if request:
+            print(f"Request: build={request['clientBuild']} product={request['product']} count={len(request['fileIds'])} sha256={digest(json_bytes(request))}", flush=True)
+        else:
+            print(f"Collection scope: DEFAULT CATALOG; build={storage.version} product={product}; request=none", flush=True)
         tables, sources = read_tables(storage)
         maps, reveal, world_point = model(tables)
+        links = clientdata.map_links(tables, maps) if callable(getattr(clientdata, "map_links", None)) else []
         data = dict(schema=1, kind="twichui-maplab-client-input", synthetic=False,
             clientBuild=storage.version, product=product, maps=sorted(maps.values(), key=lambda m: m["id"]),
-            minimap=minimap(storage), reveal=reveal, scenarios=scenarios(maps, world_point), tables=sources,
+            minimap=minimap(storage), reveal=reveal, scenarios=scenarios(maps, world_point), tables=sources, mapLinks=links,
             numericSources=numeric_sources(),
             provenance="Local Forever CASC; table-derived API adapter, not native API capture",
             limitations=["Rectangle lookup cannot reproduce native zone shapes, phases or conditional artwork.",
@@ -271,6 +342,14 @@ def collect(wow, output, product=None, storage_factory=casc.Storage, asset_reque
                 "City/WMO picture geometry remains the production pinned numeric data (1.60.1.70245), pending native alignment acceptance.",
                 LOCALE["limitation"], "Private local artwork bundle; no redistribution rights inferred."])
         ids = request["fileIds"] if request else sorted(set(candidate_ids(data, world_point)))
+        highlight_derivation = None
+        if request and request.get("includeNativeHighlights") is True:
+            extras, highlight_derivation = native_highlight_candidates(maps, links, sources)
+            direct_count = len(ids)
+            ids = sorted(set(ids) | set(extras))
+            highlight_derivation.update(directRequestedCount=direct_count, additionalCount=len(ids) - direct_count,
+                                        unionCount=len(ids))
+            print(f"Native highlight candidates: {len(extras)} source file IDs, {len(ids) - direct_count} additional; union={len(ids)}; atlas-only unsupported={len(highlight_derivation['atlasOnlyUnsupported'])}", flush=True)
         if not ids or len(ids) > MAX_ASSETS or any(isinstance(v, bool) or not isinstance(v, int) or not 0 < v <= 0xffffffff for v in ids):
             raise ClientInputError("Candidate input must contain 1..2048 valid texture IDs")
         data["candidateTextureIds"] = ids
@@ -279,6 +358,9 @@ def collect(wow, output, product=None, storage_factory=casc.Storage, asset_reque
             request_identity = dict(schema=1, sha256=digest(json_bytes(request)), count=len(ids),
                 provenance=request.get("provenance", "Explicit production-Lua artwork request; provenance description unavailable"))
             data["assetRequest"] = request_identity
+            if highlight_derivation:
+                request_identity.update(includeNativeHighlights=True, directRequestedCount=len(request["fileIds"]),
+                                        derivedHighlightCount=len(highlight_derivation["fileIds"]))
         print(f"Forever {storage.version}: {len(maps)} map records, {len(ids)} candidate textures", flush=True)
         # Directory-local staging makes version publication atomic on the same filesystem.
         stage_parent = output if not zipped else output.parent
@@ -325,6 +407,8 @@ def collect(wow, output, product=None, storage_factory=casc.Storage, asset_reque
                               transferPartBytes=PART_BYTES, scenarioCatalog="booty-bay-undercity-zone-border-v1", nativeApiCaptured=False),
                 redistribution="Private local debugging input only; do not commit or publish")
             if request_identity: manifest["settings"]["assetRequest"] = request_identity
+            if request_identity: manifest["settings"]["scenarioCatalog"] = "production-lua-asset-request-v1"
+            if highlight_derivation: manifest["settings"]["nativeHighlights"] = highlight_derivation
             validation = validate_manifest(manifest, assets, data)
             manifest["validation"] = validation
             if validation["status"] == "failure":
@@ -332,12 +416,14 @@ def collect(wow, output, product=None, storage_factory=casc.Storage, asset_reque
             (assets / "manifest.json").write_bytes(json_bytes(manifest))
             update = build_diff(previous, manifest, reused, fresh_reads)
             update.update(status=validation["status"], cacheWarning=cache_warning or False)
+            if request_identity: update["assetRequest"] = request_identity
             if zipped:
                 outputs = pack(folder, output)
             else:
                 identity = digest(json_bytes(manifest))
                 build_label = re.sub(r"[^A-Za-z0-9_.-]", "_", str(storage.version))[:80]
                 version_name = f"{build_label}-{identity[:16]}"
+                if request_identity: version_name = f"{build_label}-feedback-{request_identity['sha256'][:12]}-{identity[:16]}"
                 versions = output / "versions"; versions.mkdir(exist_ok=True)
                 if versions.is_symlink(): raise ClientInputError("Versions directory must not be a symlink")
                 destination = versions / version_name
@@ -361,17 +447,22 @@ def collect(wow, output, product=None, storage_factory=casc.Storage, asset_reque
                         version_name += "-repair-" + uuid.uuid4().hex[:8]
                         destination = versions / version_name
                 if not valid_existing:
-                    staged_outputs = pack(folder, folder / "TwichUI-map-art.zip")
+                    zip_name = (f"TwichUI-map-art-feedback-{request_identity['sha256'][:12]}.zip"
+                                if request_identity else "TwichUI-map-art.zip")
+                    staged_outputs = pack(folder, folder / zip_name)
                     os.rename(folder, destination)
                     outputs = [destination / path.name for path in staged_outputs]
                 pointer = dict(schema=1, version="versions/" + version_name, clientBuild=storage.version,
                                manifestSha256=identity, status=validation["status"],
                                bundles=[path.relative_to(output).as_posix() for path in outputs])
+                if request_identity: pointer["assetRequest"] = request_identity
                 atomic_json(output / "latest.json", pointer)
                 if validation["status"] == "success": atomic_json(output / "current.json", pointer)
                 else: print("PARTIAL: previous successful current.json retained; latest.json points to the inspectable partial version.")
                 atomic_json(output / "latest-update.json", update)
             print(f"Prepared {len(records)} textures ({total / 1048576:.1f} MiB), {len(missing)} unavailable; validation={validation['status']}")
+            if request_identity:
+                print(f"FEEDBACK SCOPE VALIDATED: build={storage.version} product={product} requested={len(ids)} available={len(records)} missing={len(missing)} requestSha256={request_identity['sha256']}; status={validation['status']}")
             print(f"Update: build {update['previousBuild']} -> {update['currentBuild']}; reused {reused}, fresh {update['freshReads']}, added {len(update['added'])}, changed {len(update['changed'])}, removed {len(update['removed'])}")
             for target in outputs: print(f"PRIVATE INPUT: {target} ({target.stat().st_size / 1048576:.1f} MiB)")
             print("Return only these ZIP files through the existing private channel. No automatic upload occurs.")
@@ -383,15 +474,17 @@ def collect(wow, output, product=None, storage_factory=casc.Storage, asset_reque
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--wow", type=Path, help="_forever_ or installation root; omitted opens a folder picker")
-    parser.add_argument("--output", type=Path, default=REPO / "test-output/maplab-client-input", help="reusable output directory (recommended), or a new explicit .zip")
+    parser.add_argument("--output", type=Path, help="reusable directory, or new .zip; default feedback/normal cache follows selected scope")
     parser.add_argument("--product", help="override automatic selection with an installed .build.info product")
     parser.add_argument("--make-kit", type=Path, help="make a reusable source-only gaming-PC handoff ZIP")
-    parser.add_argument("--asset-request", type=Path, help="optional exact production-Lua artwork ID request JSON for this client build")
+    scope = parser.add_mutually_exclusive_group()
+    scope.add_argument("--asset-request", type=Path, help="explicit exact artwork request; overrides a request bundled in this kit")
+    scope.add_argument("--default-catalog", action="store_true", help="explicitly ignore a bundled request and collect the normal catalog")
     args = parser.parse_args()
     try:
         if args.make_kit:
             if args.wow: raise ClientInputError("Source-kit creation does not use a game installation")
-            print(make_kit(args.make_kit, args.asset_request)); return 0
+            print(make_kit(args.make_kit, args.asset_request, args.default_catalog)); return 0
         if args.wow is None:
             try:
                 import tkinter
@@ -403,7 +496,7 @@ def main():
                 raise ClientInputError("Folder picker unavailable; run again with --wow followed by the installation path") from error
             if not chosen: print("Cancelled; no artwork collected."); return 0
             args.wow = Path(chosen)
-        collect(args.wow, args.output, args.product, asset_request=args.asset_request)
+        collect(args.wow, args.output, args.product, asset_request=args.asset_request, default_catalog=args.default_catalog)
         return 0
     except (OSError, ValueError, casc.CascError, db2.DB2Error) as error:
         print(f"maplab collector: {error}", file=sys.stderr); return 2

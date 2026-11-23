@@ -95,6 +95,15 @@ def fixture_input():
     return data, point
 
 
+def fixture_links():
+    # Forever layout 712A46E6: raw UI min/max, inline ID and parent, order,
+    # child, player condition, highlight file/atlas overrides, flags.
+    table = Table([(1, [[bits(.1), bits(.2)], [bits(.7), bits(.9)], 1, 1415, 0, 1429, 0, 7654321, 0, 0]),
+                   (2, [[bits(.1), bits(.2)], [bits(.7), bits(.9)], 2, 1415, 1, 1436, 99, 7654322, 123, 1])])
+    _, table.layout_hash, table.table_hash = cd.OPTIONAL_TABLES["UiMapLink"]
+    return table
+
+
 def fixture_bundle(missing=False):
     """Complete schema-2 transport with explicit synthetic pixel provenance."""
     data, _ = fixture_input()
@@ -150,6 +159,67 @@ class ClientContracts(unittest.TestCase):
         maps, _, _ = cd.model(fixture_tables())
         self.assertEqual((maps[1429]["xN"], maps[1429]["yW"], maps[1429]["W"], maps[1429]["H"]),
                          (-7000, 3000, 6000, 4000))
+
+    def test_native_highlight_ids_are_typed_raw_map_art_fields(self):
+        tables = fixture_tables()
+        rid, columns = tables["UiMapArt"].data[3]
+        tables["UiMapArt"].data[3] = (rid, [7654321, 4321, columns[2]])
+        maps, _, _ = cd.model(tables)
+        self.assertEqual(maps[1434]["highlight"], {"fileId": 7654321, "atlasId": 4321})
+        self.assertEqual(maps[947]["highlight"], {"fileId": 0, "atlasId": 0})
+        data, _ = fixture_input(); data["maps"] = list(maps.values())
+        ci.write_tables(data)
+        for invalid in (True, -1, 1.5, "7654321", 2**32):
+            with self.subTest(invalid=invalid):
+                tables["UiMapArt"].data[3] = (rid, [invalid, 0, columns[2]])
+                with self.assertRaises(cd.ClientInputError): cd.model(tables)
+                data["maps"][3]["highlight"] = {"fileId": invalid, "atlasId": 0}
+                with self.assertRaises(ci.LabError): ci.write_tables(data)
+
+    def test_optional_links_preserve_raw_conditional_metadata_without_inferring_bounds(self):
+        tables = fixture_tables(); tables["UiMapLink"] = fixture_links()
+        maps, _, _ = cd.model(tables)
+        links = cd.map_links(tables, maps)
+        self.assertEqual(len(links), 2)
+        self.assertEqual(links[0]["overrideHighlightFileId"], 7654321)
+        self.assertEqual(links[1]["playerConditionId"], 99, "conditional links are metadata, not automatically selected artwork")
+        self.assertEqual(links[1]["overrideHighlightAtlasId"], 123)
+        self.assertAlmostEqual(links[0]["uiMin"][0], .1, places=6)
+        data, _ = fixture_input(); data["mapLinks"] = links
+        data["tables"]["UiMapLink"] = dict(fileId=2030690, layout="712A46E6", tableHash="5578EDE9",
+            sha256="a" * 64, optional=True, status="available")
+        ci.write_tables(data)
+        data["tables"]["UiMapLink"]["layout"] = "00000000"
+        with self.assertRaisesRegex(ci.LabError, "Optional client-table schema"): ci.write_tables(data)
+        self.assertEqual(cd.map_links(fixture_tables(), maps), [])
+        tables["UiMapLink"].layout_hash = 0
+        with self.assertRaisesRegex(cd.ClientInputError, "Unsupported UiMapLink"): cd.map_links(tables, maps)
+
+    def test_optional_table_missing_or_unsupported_does_not_make_legacy_metadata_mandatory(self):
+        self.assertEqual(len(cd.TABLES), 8)
+        mandatory = fixture_tables(); raw_files, decoded = {}, {}
+        for name, (file_id, layout, table_hash) in cd.TABLES.items():
+            table = mandatory[name]; table.layout_hash, table.table_hash = layout, table_hash
+            raw_files[file_id] = name.encode(); decoded[name.encode()] = table
+        class Storage:
+            def read(self, key): return raw_files.get(key)
+        with patch.object(cd.db2, "DB2", side_effect=lambda raw: decoded[raw]):
+            tables, sources = cd.read_tables(Storage())
+            self.assertNotIn("UiMapLink", tables)
+            self.assertEqual(sources["UiMapLink"]["status"], "unavailable")
+            self.assertEqual(len(tables), 8)
+            raw_files[2030690] = b"owned optional rows"; decoded[b"owned optional rows"] = fixture_links()
+            tables, sources = cd.read_tables(Storage())
+            self.assertEqual(sources["UiMapLink"]["status"], "available")
+            self.assertEqual(len(cd.map_links(tables, cd.model(tables)[0])), 2)
+            decoded[b"owned optional rows"].layout_hash = 0
+            tables, sources = cd.read_tables(Storage())
+            self.assertEqual(sources["UiMapLink"]["status"], "unsupported")
+            self.assertNotIn("UiMapLink", tables)
+        data, _ = fixture_input()
+        for m in data["maps"]: m.pop("highlight", None)
+        self.assertNotIn("UiMapLink", data["tables"])
+        ci.write_tables(data)  # The exact older bundle shape remains accepted.
 
     def test_unknown_schema_and_conflicting_assignments_refused(self):
         bad = type("BadSchema", (), {"layout_hash": 0, "table_hash": 0})()

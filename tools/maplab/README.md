@@ -24,7 +24,8 @@ root in the folder picker. The selected folder and its two nearest parents are
 checked for `.build.info`/`Data`; product selection uses installed metadata,
 including the active build. An ambiguous installation reports valid `--product`
 values. Do not guess an unlisted product. The default destination is this kit's
-`test-output/maplab-client-input`, outside all addon packages. Explicit paths do
+`test-output/maplab-client-input` for a normal kit, or
+`test-output/maplab-feedback-input` when a request is bundled, outside all addon packages. Explicit paths do
 not require a graphical session. Native Windows folder-picker/command-file
 operation still needs owner acceptance; fixture tests exercise the Python logic.
 
@@ -128,19 +129,66 @@ Codex can include that request in the existing source kit:
 python3 tools/maplab/collect.py --make-kit test-output/TwichUI-map-feedback-kit.zip --asset-request test-output/map-feedback/asset-request.json
 ```
 
-After extracting that kit, use this PowerShell command with your actual path:
+After extracting that kit, **double-click Collect-Map-Art.cmd** and choose the
+installed client. The bundled `maplab-asset-request.json` is used automatically;
+no flag or manual file-ID selection is needed. Or use this PowerShell command:
 
 ```powershell
-py -3 tools/maplab/collect.py --wow "D:\Games\World of Warcraft\_forever_" --output "test-output\maplab-feedback-input" --asset-request maplab-asset-request.json
+py -3 tools/maplab/collect.py --wow "D:\Games\World of Warcraft\_forever_"
 ```
 
-Share every printed ZIP part. The same request can reuse verified source assets
+The collector prints `FEEDBACK ARTWORK REQUEST (bundled)`, exact installed and
+requested build/product, requested count and full request SHA-256. Successful
+directory output is named **`TwichUI-map-art-feedback-<request-hash>[-part].zip`**,
+with the same identity in its pointer, update summary, `client.json` and manifest.
+Share those newly printed feedback ZIPs, rather than old `TwichUI-map-art-01.zip`
+files. A `FEEDBACK SCOPE VALIDATED` summary reports available/missing counts and
+validation status; partial results remain explicitly partial.
+
+Priority is an explicit `--asset-request path` first, the fixed request bundled
+at the extracted kit root second, then the default catalog if neither exists.
+An explicit request can override a bundled request. A malformed request or exact
+build/product mismatch **fails without silently collecting the default catalog**.
+No arbitrary current-directory request files are searched.
+
+The same request can reuse verified source assets
 in a directory cache. A different installed build/product or changed numeric data
 is rejected before texture reads; regenerate the request from the updated lab
 input instead of editing it. Changes to the requested set can mark files removed
 **from the new bundle**, which does not prove the client deleted those assets.
-Omit `--asset-request` for the normal update workflow above. There is no second
-extractor or automatic upload.
+For later normal updates using this same feedback kit, pass **`--default-catalog`**
+to deliberately ignore its bundled request. Kits without a bundled request keep
+the normal default behavior. `--asset-request` and `--default-catalog` cannot be
+combined. Repacking a feedback kit preserves its request unless the same opt-out
+is given. There is no second extractor or automatic upload.
+
+### Optional native highlight inputs
+
+A generated schema-1 request may include **`"includeNativeHighlights": true`**.
+This is a strict JSON boolean, not a string or numeric switch. With that flag,
+the same collector adds actual `UiMapArt.HighlightFileDataID` values for supported
+modeled maps and `UiMapLink.OverrideHighlightFileDataID` candidates whose
+`playerConditionId` is zero. It unions/deduplicates them with the request's direct
+file IDs under the existing 2,048-file / 128 MiB limits. No IDs are guessed.
+An omitted/false flag preserves the existing candidate set.
+
+The private manifest records the derived source file IDs, contributing map/link
+IDs, direct/additional/union counts, optional link-table provenance and skipped
+conditional links. `client.json` also preserves the raw reviewed map-link
+metadata and each map's `{fileId, atlasId}` highlight references. Optional link
+tables can be unavailable or have an unsupported layout; their status is retained
+without guessing columns. Atlas-only references are reported under
+`settings.nativeHighlights.atlasOnlyUnsupported`: **atlas member IDs are never
+treated as texture file-data IDs**. Missing raw highlight payloads are ordinary
+missing-file records and make the input partial.
+
+This gathers private source candidates for offline investigation. It does not
+activate player conditions, interpret link flags as active native state, certify
+native highlight placement, infer land/coast/city masks or change production
+rendering. A successful raw-file validation does not claim atlas-only inputs
+were resolved or that a complete geographic-mask solution exists. Existing
+exact build/product/numeric-source checks still apply, including to requests
+automatically selected from a source kit.
 
 ## Inspect in Codex/the offline lab
 

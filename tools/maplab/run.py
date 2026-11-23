@@ -71,7 +71,7 @@ def production_export(client=None, scenario_set="default"):
                                         "stdoutTail": process.stdout.splitlines()[-3:]}
 
 
-def artwork_request(state):
+def artwork_request(state, include_native_highlights=False):
     """Exact numeric handoff from the reviewed Lua export, never guessed IDs."""
     source = state.get("provenance", {})
     if source.get("synthetic") is not False or not source.get("product") or not source.get("numericSources"):
@@ -100,9 +100,12 @@ def artwork_request(state):
                 ids.add(value)
     if not 1 <= len(ids) <= 2048:
         raise LabError("Artwork request exceeds the collector's 2048-texture budget; select fewer scenes")
-    return dict(schema=1, kind="twichui-maplab-asset-request", clientBuild=source["clientBuild"],
+    request = dict(schema=1, kind="twichui-maplab-asset-request", clientBuild=source["clientBuild"],
                 product=source["product"], numericSources=source["numericSources"], fileIds=sorted(ids),
                 provenance="Production Lua selected textures and inactive native zone bases; exact-build offline feedback input, not native replay")
+    if include_native_highlights:
+        request["includeNativeHighlights"] = True
+    return request
 
 
 def transition_checks(scenes):
@@ -221,7 +224,7 @@ def run_inner(args):
         if set(selected) - known:
             raise LabError("Unknown scene IDs: " + ", ".join(sorted(set(selected) - known)))
         state["scenes"] = [scene for scene in state["scenes"] if scene["id"] in selected]
-    requested_artwork = artwork_request(state)
+    requested_artwork = artwork_request(state, getattr(args, "request_native_highlights", False))
     output.mkdir(parents=True, exist_ok=True)
     if request:
         (output / "diagnostic-scenario.json").write_text(json.dumps(request, indent=2, sort_keys=True), encoding="utf-8")
@@ -313,6 +316,7 @@ def parser():
     p.add_argument("--all", action="store_true", help="export the complete bounded production-Lua scenario catalog")
     p.add_argument("--scenario-set", choices=("default", "feedback-v1"), default="default", help="versioned production-Lua camera catalog; feedback-v1 requires a client bundle")
     p.add_argument("--scene", action="append", help="render only this exact exported scene ID; repeat for a focused comparison")
+    p.add_argument("--request-native-highlights", action="store_true", help="include schema-verified native highlight candidates in the generated private artwork request; requires collector 2.2+")
     p.add_argument("--client-bundle", action="append", type=Path, help="private collect.py ZIP part; repeat for all parts")
     p.add_argument("--state", type=Path, help="existing production render-state JSON")
     p.add_argument("--assets", type=Path, help="local SHA-256 asset manifest")

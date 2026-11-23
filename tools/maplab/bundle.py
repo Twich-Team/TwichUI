@@ -12,7 +12,7 @@ import struct
 
 SCHEMA = 2
 TOOL_NAME = "twichui-maplab-collector"
-TOOL_VERSION = "2.1.0"
+TOOL_VERSION = "2.2.0"
 MAX_TEXTURE_BYTES = 16 * 1024 * 1024
 MAX_ASSETS = 2048
 MAX_BYTES = 128 * 1024 * 1024

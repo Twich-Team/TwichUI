@@ -10,7 +10,7 @@ import stat
 import zipfile
 
 from render import LabError, load_json
-from clientdata import TABLES
+from clientdata import TABLES, OPTIONAL_TABLES, unsigned
 from bundle import validate_manifest
 
 
@@ -97,6 +97,14 @@ def _write_tables(data, path):
         entry = data.get("tables", {}).get(name, {})
         if (entry.get("fileId"), entry.get("layout"), entry.get("tableHash")) != (file_id, f"{layout:08X}", f"{table_hash:08X}"):
             raise LabError("Collector schema provenance differs from reviewed Forever definitions")
+    for name, (file_id, layout, table_hash) in OPTIONAL_TABLES.items():
+        entry = data.get("tables", {}).get(name)
+        if entry is None: continue  # Existing supplied bundles predate optional highlight metadata.
+        if not isinstance(entry, dict) or entry.get("fileId") != file_id or entry.get("optional") is not True or entry.get("status") not in ("available", "unavailable", "unsupported"):
+            raise LabError("Invalid optional client-table provenance")
+        if entry["status"] == "available" and ((entry.get("layout"), entry.get("tableHash")) != (f"{layout:08X}", f"{table_hash:08X}")
+            or not isinstance(entry.get("sha256"), str) or not re.fullmatch(r"[a-f0-9]{64}", entry["sha256"])):
+            raise LabError("Optional client-table schema/hash differs from reviewed Forever definitions")
     maps = data.get("maps")
     if not isinstance(maps, list) or not 7 <= len(maps) <= 2000:
         raise LabError("Invalid client map input count")
@@ -118,6 +126,12 @@ def _write_tables(data, path):
         if m["id"] <= 0 or m["parent"] < 0 or m["type"] not in (1, 2, 3) or m["art"] <= 0:
             raise LabError("Invalid client map identity/type")
         parents[mid] = m["parent"]
+        highlight = m.get("highlight")
+        if "highlight" in m:
+            if not isinstance(highlight, dict) or set(highlight) != {"fileId", "atlasId"}:
+                raise LabError("Invalid native highlight metadata")
+            for value in highlight.values():
+                unsigned(value, "native highlight ID")
         if mid != 947 and (m.get("W", 0) <= 0 or m.get("H", 0) <= 0 or m.get("cont", -1) < 0):
             raise LabError("Client map is missing positive continent-yard geometry")
         values += [number(m.get("cont", -1), True)]
@@ -137,6 +151,30 @@ def _write_tables(data, path):
             if ancestor in chain or ancestor not in parents or len(chain) >= 4:
                 raise LabError("Client map ancestry is missing, cyclic or exceeds the renderer's supported depth")
             chain.add(ancestor); ancestor = parents[ancestor]
+    if "mapLinks" in data:
+        links = data["mapLinks"]
+        if not isinstance(links, list) or len(links) > 4096:
+            raise LabError("Invalid optional map-link count")
+        if links and data.get("tables", {}).get("UiMapLink", {}).get("status") != "available":
+            raise LabError("Map links require reviewed available UiMapLink provenance")
+        link_ids = set()
+        integer_keys = {"id", "parentMapId", "childMapId", "orderIndex", "playerConditionId",
+                        "overrideHighlightFileId", "overrideHighlightAtlasId", "flags"}
+        for link in links:
+            if not isinstance(link, dict) or set(link) != integer_keys | {"uiMin", "uiMax"}:
+                raise LabError("Invalid optional map-link shape")
+            for key in integer_keys:
+                if type(link[key]) is not int: raise LabError("Map-link identifiers must be integers")
+                number(link[key], True, 2**32 - 1)
+                if link[key] < (-(2**31) if key == "orderIndex" else 0):
+                    raise LabError("Invalid optional map-link identifier")
+            if link["id"] in link_ids or link["parentMapId"] not in seen or link["childMapId"] not in seen:
+                raise LabError("Duplicate map link or unsupported map ancestry")
+            link_ids.add(link["id"])
+            for key in ("uiMin", "uiMax"):
+                if not isinstance(link[key], list) or len(link[key]) != 2:
+                    raise LabError("Invalid raw map-link coordinates")
+                for value in link[key]: number(value, limit=1e6)
     count = 0
     for cont, tiles in data.get("minimap", {}).items():
         if cont not in ("0", "1") or not isinstance(tiles, list) or len(tiles) > 4096:
