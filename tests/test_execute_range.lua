@@ -58,6 +58,9 @@ local function Client(providerFirst)
             local t = { parent = self, layer = layer, sublevel = sublevel }
             self.textures[#self.textures + 1] = t
             function t:SetColorTexture(...) self.color = {...} end
+            function t:SetTexture(file) self.file = file; return true end
+            function t:SetVertexColor(...) self.tint = {...} end
+            function t:SetTexCoord(...) self.coords = {...} end
             function t:SetAlpha(alpha) self.alpha = alpha end
             function t:ClearAllPoints() check(not (c.combat and self.parent.protected), 'protected region layout deferred') end
             function t:SetPoint(point, bar, relative, x, y) self.point,self.bar,self.relative,self.x,self.y = point,bar,relative,x,y end
@@ -104,6 +107,75 @@ local function Client(providerFirst)
     return c,C,D,R.ExecuteRangeEllesmere
 end
 
+-- Fill geometry uses actual provider coordinates, including reverse/vertical fill.
+do
+    local c,C,D = Client(false)
+    local plate = c.Plate('nameplate1'); D.Refresh()
+    local bar = plate.health
+    local marker,edge,fill = bar.textures[1],bar.textures[2],bar.textures[6]
+    C.Set('threshold',25); C.Set('appearance','zone')
+    near(fill.w,50); near(fill.h,24); near(fill.x,0)
+    check(fill.alpha == .25 and marker.alpha == 0 and edge.alpha == 0,'restrained zone above threshold')
+    for _,threshold in ipairs({1,20,35,100}) do
+        C.Set('threshold',threshold); near(fill.w,bar.w*threshold/100)
+    end
+    C.Set('threshold',25)
+    local healthGetter = c.UnitHealth
+    c.UnitHealth = function() error('unavailable provider health') end
+    D.Refresh(); check(fill.alpha > 0,'zone never reads health')
+    C.Set('appearance','marker'); check(marker.alpha == .7,'legacy marker never reads health')
+    c.UnitHealth = healthGetter
+    C.Set('appearance','markerZoneEdge')
+    check(marker.alpha == .7 and fill.alpha == .25 and edge.alpha == 0,'combined above range')
+    c.health.nameplate1 = 25; c.Fire('UNIT_HEALTH','nameplate1')
+    check(edge.alpha == .65,'combined active edge at threshold')
+    C.Set('appearance','markerZone'); check(edge.alpha == 0 and marker.alpha == .7 and fill.alpha > 0)
+    C.Set('color','80336699'); C.Set('opacity',60)
+    near(fill.tint[1],.2); near(fill.tint[2],.4); near(fill.tint[3],.6); near(fill.tint[4],128/255); near(fill.alpha,.6)
+    c.TwichUI.MenuStyle = { StatusBars = { Resolve = function(id) if id == 'Soft grain' then return 'registered-grain' end end } }
+    C.Set('texture','Soft grain'); check(fill.file == 'registered-grain','registered texture resolved')
+    C.Set('texture','Missing'); check(fill.file == 'Interface\\Buttons\\WHITE8X8' and C.Get('texture') == 'Missing','unavailable texture retained with flat fallback')
+    for _,pair in ipairs({{'color','invalid'},{'opacity',101},{'opacity',-1},{'opacity',.5},{'texture','bad/path'},{'texture','bad\\path'},{'texture',string.rep('a',129)}}) do
+        check(not C.Set(pair[1],pair[2]),'reject malformed fill preference')
+    end
+    C.Set('appearance','highlight')
+    near(fill.w,50); check(marker.alpha == 0 and edge.alpha == 0,'active filled portion at threshold')
+    c.health.nameplate1 = 10; c.Fire('UNIT_HEALTH','nameplate1'); near(fill.w,20)
+    c.health.nameplate1 = 26; c.Fire('UNIT_HEALTH','nameplate1'); check(fill.alpha == 0,'health recovery clears active fill')
+    c.health.nameplate1 = 0; c.Fire('UNIT_HEALTH','nameplate1'); check(fill.alpha == 0,'dead unit not highlighted')
+    c.health.nameplate1 = {secret=true}; c.Fire('UNIT_HEALTH','nameplate1'); check(fill.alpha == 0,'secret health not highlighted')
+    C.Set('appearance','zone'); check(fill.alpha > 0,'zone needs no health')
+    bar:SetReverseFill(true); near(fill.x,150); near(fill.w,50)
+    bar:SetOrientation('VERTICAL'); near(fill.y,18); near(fill.h,6); near(fill.w,200)
+    bar:Resize(90,80); near(fill.y,60); near(fill.h,20); near(fill.w,90)
+    bar:SetReverseFill(false); near(fill.y,0); near(fill.h,20)
+    -- Scale is inherited, not multiplied into provider-local geometry.
+    bar.scale = 1.75; D.Refresh(); near(fill.h,20)
+    local total = #bar.textures
+    for _=1,10 do C.Set('appearance','highlight'); C.Set('appearance','markerZoneEdge') end
+    check(#bar.textures == total and total == 6,'style changes reuse one fill')
+    c.EllesmereNameplates_NS.plates.nameplate1 = nil; c.bases.nameplate1 = nil
+    c.Fire('NAME_PLATE_UNIT_REMOVED','nameplate1'); check(fill.alpha == 0,'removal clears fill')
+    c.Plate('nameplate2',plate); c.health.nameplate2 = 80; C.Set('appearance','highlight'); D.Refresh()
+    check(fill.alpha == 0,'recycled bar cannot retain previous active health')
+    c.health.nameplate2 = 5; c.Fire('UNIT_HEALTH','nameplate2'); near(fill.h,4)
+    c.Enable(false); check(fill.alpha == 0,'disabled cleans fill')
+    local target = c.Frame('Button',nil,true); target.attribute = 'target'
+    target.Health = c.Frame('StatusBar',target,true); c.EllesmereUIUnitFrames_Target = target
+    c.health.target = 15; c.Enable(true); C.Set('appearance','highlight')
+    local tf,te = target.Health.textures[6],target.Health.textures[2]
+    near(tf.w,30)
+    c.combat = true; c.health.target = 10; c.Fire('UNIT_HEALTH','target')
+    check(tf.alpha == 0 and te.alpha == .65 and select(5,D.Status()),'protected changed fill uses safe legacy edge')
+    c.health.target = 26; c.Fire('UNIT_HEALTH','target'); check(tf.alpha == 0 and te.alpha == 0,'fallback clears on recovery')
+    c.combat = false; c.health.target = 10; c.Fire('PLAYER_REGEN_ENABLED'); near(tf.w,20)
+    check(tf.alpha > 0 and te.alpha == 0,'safe layout restores filled highlight')
+    c.Enable(false)
+    -- Shared preview renderer neither discovers providers nor persists settings.
+    local sample = c.Frame(); local decoration = D.CreateDecoration(sample)
+    D.Preview(decoration,300,30,.1); near(decoration.fill.w,30)
+    check(not c.TwichUIDB.modules.executeRange,'sample does not enable feature')
+end
 for _, providerFirst in ipairs({ false, true }) do
     local c,C,D,E = Client(providerFirst)
     local target = c.Frame('Button', nil, true); target.attribute = 'target'
@@ -152,7 +224,7 @@ for _, providerFirst in ipairs({ false, true }) do
     c.Fire('NAME_PLATE_UNIT_REMOVED','nameplate1'); check(pm.alpha == 0,'removal after provider deletes registry')
     c.pending = function(unit) c.Plate(unit,plate) end
     c.Fire('NAME_PLATE_UNIT_ADDED','nameplate2'); c.Flush()
-    check(pm.alpha > 0 and #plate.health.textures == 5,'pool reuse keeps exactly one overlay set')
+    check(pm.alpha > 0 and #plate.health.textures == 6,'pool reuse keeps exactly one overlay set')
     plate.nameplate.namePlateUnitToken = 'nameplate3'
     plate:UpdateHealthValues(); check(pm.alpha == 0,'provider token swap hides old occupant on same update')
     plate.nameplate.namePlateUnitToken = 'nameplate2'; plate:UpdateHealthValues(); D.Refresh(); check(pm.alpha > 0)
@@ -190,7 +262,7 @@ do
     local target = c.Frame('Button',nil,true); target.attribute = 'target'
     target.Health = c.Frame('StatusBar',target,true); c.EllesmereUIUnitFrames_Target = target
     c.combat = true; D.Refresh(); check(#target.Health.textures == 0,'first protected target attachment waits out combat')
-    c.combat = false; c.Fire('PLAYER_REGEN_ENABLED'); check(#target.Health.textures == 5,'protected target attaches after combat')
+    c.combat = false; c.Fire('PLAYER_REGEN_ENABLED'); check(#target.Health.textures == 6,'protected target attaches after combat')
     -- No unbounded accumulation when a provider continually replaces its bars.
     for _ = 1,140 do target.Health = c.Frame('StatusBar',target,true); D.Refresh() end
     check(#target.Health.textures == 0,'retired-provider bar allocation has a hard cap')

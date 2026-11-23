@@ -65,11 +65,17 @@ function E.Geometry(bar)
 end
 -- Never compare, format, persist or perform arithmetic with restricted health.
 -- The marker remains useful when the client withholds health from addon Lua.
-function E.InRange(unit, threshold)
+function E.HealthFraction(unit)
     if not UnitHealth or not UnitHealthMax then return end
     local health, maximum = UnitHealth(unit), UnitHealthMax(unit)
     if not E.Plain(health) or not E.Plain(maximum) then return end
     if type(health) ~= "number" or type(maximum) ~= "number" or health ~= health or maximum ~= maximum
         or health < 0 or maximum <= 0 or health > maximum or maximum == math.huge then return end
-    return health > 0 and health / maximum <= threshold / 100
+    return health / maximum
+end
+
+function E.InRange(unit, threshold)
+    local fraction = E.HealthFraction(unit)
+    if fraction == nil then return end
+    return fraction > 0 and fraction <= threshold / 100
 end
