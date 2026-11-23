@@ -316,7 +316,7 @@ def run_inner(args):
 def parser():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--all", action="store_true", help="export the complete bounded production-Lua scenario catalog")
-    p.add_argument("--scenario-set", choices=("default", "feedback-v1", "composition-v1", "regional-polish-v1"), default="default", help="versioned production-Lua camera catalog; regional profiles require a client bundle")
+    p.add_argument("--scenario-set", choices=("default", "feedback-v1", "composition-v1", "regional-polish-v1", "polish-v1"), default="default", help="versioned production-Lua camera catalog; regional profiles require a client bundle")
     p.add_argument("--scene", action="append", help="render only this exact exported scene ID; repeat for a focused comparison")
     p.add_argument("--request-native-highlights", action="store_true", help="include schema-verified native highlight candidates in the generated private artwork request; requires collector 2.2+")
     p.add_argument("--client-bundle", action="append", type=Path, help="private collect.py ZIP part; repeat for all parts")

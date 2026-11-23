@@ -108,7 +108,9 @@ return function(t, path)
     if t.CLIENT then
         MXP.Set("unexplored", "show")
         local profile = os.getenv("TWICHUI_MAPLAB_SCENARIO_SET")
-        if profile == "regional-polish-v1" then
+        if profile == "polish-v1" then
+            assert(loadfile(REPO .. "tools/maplab/polish.lua"))()(t, Snapshot)
+        elseif profile == "regional-polish-v1" then
             assert(loadfile(REPO .. "tools/maplab/regional.lua"))()(t, Snapshot)
         elseif profile == "feedback-v1" or profile == "composition-v1" then
             assert(loadfile(REPO .. "tools/maplab/feedback.lua"))()(t, Snapshot)
@@ -129,7 +131,8 @@ return function(t, path)
     end
     assert(os.getenv("TWICHUI_MAPLAB_SCENARIO_SET") ~= "feedback-v1"
         and os.getenv("TWICHUI_MAPLAB_SCENARIO_SET") ~= "composition-v1"
-        and os.getenv("TWICHUI_MAPLAB_SCENARIO_SET") ~= "regional-polish-v1", "regional camera profiles need actual client table input")
+        and os.getenv("TWICHUI_MAPLAB_SCENARIO_SET") ~= "regional-polish-v1"
+        and os.getenv("TWICHUI_MAPLAB_SCENARIO_SET") ~= "polish-v1", "regional camera profiles need actual client table input")
     At("world", "Synthetic world overview", 0.5, 0.5, 1)
     local u, v = t.WorldOf(1429, 0.5, 0.5)
     for _, z in ipairs({ 12, 20, 24, 28, 32, 36, 40, 48 }) do
