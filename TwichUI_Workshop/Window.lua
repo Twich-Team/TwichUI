@@ -46,7 +46,7 @@ local EVENTS = {
     TRADE_SKILL_SHOW = "read", TRADE_SKILL_LIST_UPDATE = "read", TRADE_SKILL_DATA_SOURCE_CHANGED = "read",
     PLAYER_REGEN_ENABLED = "read",
     MERCHANT_SHOW = "merchant", MERCHANT_UPDATE = "merchant",
-    BAG_UPDATE_DELAYED = "draw", GET_ITEM_INFO_RECEIVED = "draw",
+    BAG_UPDATE_DELAYED = "draw", GET_ITEM_INFO_RECEIVED = "draw", ITEM_DATA_LOAD_RESULT = "draw",
     MODIFIER_STATE_CHANGED = "modifier",
     SKILL_LINES_CHANGED = "draw",
     AUCTION_HOUSE_SHOW = "draw", AUCTION_HOUSE_CLOSED = "draw", AUCTION_HOUSE_DISABLED = "draw",
@@ -365,8 +365,8 @@ local function Build()
             if row and row:IsShown() then row:ShowTip() end   -- Shift pressed or released while over a row: the other tooltip
         elseif kind then
             if event=='PLAYER_REGEN_ENABLED'then S.RetryOpportunities()end
-            if event=='GET_ITEM_INFO_RECEIVED'and type(a)=='number'then S.ItemsChanged({[a]=true});UI.itemInfoRevision=(UI.itemInfoRevision or 0)+1 end
-            if event=="GET_ITEM_INFO_RECEIVED" and mode=="advisor" and UI.Advisor then UI.Advisor.ItemReady(a,b) end
+            if (event=='GET_ITEM_INFO_RECEIVED' or event=='ITEM_DATA_LOAD_RESULT')and type(a)=='number'then S.ItemsChanged({[a]=true});UI.itemInfoRevision=(UI.itemInfoRevision or 0)+1 end
+            if (event=="GET_ITEM_INFO_RECEIVED" or event=="ITEM_DATA_LOAD_RESULT") and mode=="advisor" and UI.Advisor then UI.Advisor.ItemReady(a,b) end
             if event == "BAG_UPDATE_DELAYED" then W.Strategy.Bump(); dirtyBags = true end   -- what is owned changed: plans are worked out again
             Schedule(kind)
         end

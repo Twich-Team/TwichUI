@@ -377,9 +377,10 @@ local function MakeMaterialRow(parent)
     row.TipLeave = function() if GameTooltip then GameTooltip:Hide() end end
     row.fill = function(self, m)
         self.item, self.made, self.madeRange, self.row = m.item, m.made, m.madeRange, m
-        local name, icon = O.ItemFacts(m.item)
+        local name, icon, quality = O.ItemFacts(m.item)
         self.icon:SetTexture(icon or UI.ICON_BLANK)
         self.name:SetText(name or ("Item " .. m.item))
+        UI.ItemQuality(self.name, quality)
         self.name:ClearAllPoints()
         if m.note then
             self.name:SetPoint("TOPLEFT", self.iconFrame, "TOPRIGHT", 9, 1)

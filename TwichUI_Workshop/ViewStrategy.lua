@@ -79,7 +79,14 @@ local function MakeRow(parent)
         end
         local _, icon = O.ItemFacts(d.item or 0)
         self.icon:SetTexture(icon or UI.ICON_BLANK)
-        self.title:SetText(d.title or "")
+        local title = d.title or ""
+        -- Buy/collect rows end in an actual material name; Craft steps name recipes.
+        if kind ~= "step" and d.item then
+            local name, _, quality = O.ItemFacts(d.item)
+            name = name or UI.ItemName(d.item)
+            if title:sub(-#name) == name then title = title:sub(1, #title - #name) .. UI.QualityText(name, quality) end
+        end
+        self.title:SetText(title)
         self.detail:SetText(d.detail or "")
         self.right:SetText(d.right or "")
         UI.Paint(self.right, K[TONE[d.tone] or "text"])

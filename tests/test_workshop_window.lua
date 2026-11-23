@@ -39,7 +39,7 @@ local c = MIClient("Rich", {
       fr.SetFrameStrata = function() end
       fr.SetMotionScriptsWhileDisabled = function() end
       fr.CreateTexture = function(s) local t = MIFake("Texture", s); t.SetColorTexture = function() end t.SetVertexColor = function() end t.SetTexCoord = function() end t.SetTexture = function(x, v) x.texture = v end return t end
-      fr.CreateFontString = function(s) local t = MIFake("FontString", s); t.SetFont = function() return true end t.SetJustifyV = function() end t.SetWordWrap = function() end t.SetTextColor = function() end return t end
+      fr.CreateFontString = function(s) local t = MIFake("FontString", s); t.SetFont = function() return true end t.SetJustifyV = function() end t.SetWordWrap = function() end t.SetTextColor = function(self, r, g, b) self.qualityColor = { r, g, b } end return t end
       Press.Instrument(fr, name)   -- last, so it replaces the no-op EnableMouse above with one that records
       if name then cl[name] = fr end
       return fr
@@ -72,7 +72,7 @@ c.Enum = { CraftingReagentType = { Modifying = 0, Basic = 1, Finishing = 2, Auto
 c.C_Item = {
   GetItemCount = function(id) return g.bags[id] end,
   GetItemInfoInstant = function(id) return id, "a", "b", "", 5000 + id end,
-  GetItemInfo = function(id) return g.names[id] end,
+  GetItemInfo = function(id) return g.names[id], nil, g.quality and g.quality[id] end,
   RequestLoadItemDataByID = function() end,
 }
 c.InCombatLockdown = function() return false end
@@ -140,6 +140,36 @@ end
 local qrow = Win.Lists().queue.rows[1]
 Check(qrow:IsShown() and qrow.name:GetText() == "Healing Potion")
 local detail = Win.Craft().detail
+-- Source-grounded quality enum values from Forever ItemQualitiesDocumentation.
+-- Actual row fill, delayed metadata event, narrow width and recycled item reset.
+do
+  local oldAfter = c.C_Timer.After
+  c.C_Timer.After = function(_, fn) fn() end
+  c.C_Item.GetItemQualityColor = function(q) return q / 16, .5, .75 end
+  local mat = Win.Lists().mats.rows[1]
+  local need = mat.need:GetText()
+  for _, width in ipairs({ 480, 180 }) do
+    mat:SetWidth(width)
+    for q = 0, 8 do
+      g.quality = { [10] = q }
+      Fire("GET_ITEM_INFO_RECEIVED", 10, true)
+      Same(mat.name.qualityColor[1], q/16, "delayed quality updates material name")
+      Same(mat.need:GetText(), need, "quality cannot change quantity")
+      Same(qrow.name:GetText(), "Healing Potion", "recipe label stays unchanged")
+    end
+    local fill = mat.fill
+    g.quality = {}
+    fill(mat, { item = 11, need = 1 })
+    Same(mat.name.qualityColor[1], W.UI.K.text[1], "recycled unknown item resets color")
+    g.quality = { [10] = 4 }
+    Fire("ITEM_DATA_LOAD_RESULT", 10, true)
+    Same(mat.name.qualityColor[1], .25, "alternate metadata event refreshes names")
+  end
+  g.quality = nil
+  c.C_Item.GetItemQualityColor = nil
+  Fire("GET_ITEM_INFO_RECEIVED", 10, true)
+  c.C_Timer.After = oldAfter
+end
 Same(detail.name:GetText(), "Healing Potion", "the first queued craft's details are shown")
 Same(detail.prof:GetText(), "Alchemy", "with its profession")
 Check(qrow.line:GetText() == "1 craft - makes 1-2", qrow.line:GetText())

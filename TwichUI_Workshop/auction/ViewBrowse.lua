@@ -89,8 +89,7 @@ Detail = function(p)
     local item = chosen.item
     d:LayoutSummary(chosen.source=="live")
     d.name:SetText(chosen.info.name)
-    local quality=ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[chosen.info.quality or 1]
-    if quality then d.name:SetTextColor(quality.r,quality.g,quality.b) else UI.Paint(d.name,UI.K.text) end
+    UI.ItemQuality(d.name, chosen.info.quality)
     d.pic.tex:SetTexture(chosen.info.icon or UI.ICON_BLANK)
     d.kind:SetText((chosen.info.category or "Category unavailable") .. (chosen.info.sub and " · " .. chosen.info.sub or ""))
     d.track.text:SetText(AD.Tracked()[item] and "Untrack" or "Track")
@@ -324,8 +323,7 @@ local function MakeRow(parent)
         self.unit:ClearAllPoints();self.unit:SetPoint("RIGHT",-116+shift,6)
         self.name:ClearAllPoints();self.name:SetPoint("TOPLEFT",50,-10);self.name:SetPoint("RIGHT",-274+shift,0)
         self.pic.tex:SetTexture(data.info.icon or UI.ICON_BLANK); self.name:SetText(data.info.name)
-        local quality=ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[data.info.quality or 1]
-        if quality then self.name:SetTextColor(quality.r,quality.g,quality.b) else UI.Paint(self.name,UI.K.text) end
+        UI.ItemQuality(self.name, data.info.quality)
         self.qty:SetText(data.qty and tostring(data.qty) or "—")
         self.unit:SetText(Money(data.unit)); self.total:SetText(data.source=="live" and
             (data.total and Money(data.total) or data.bid and ("Bid "..Money(data.bid)) or "—") or
