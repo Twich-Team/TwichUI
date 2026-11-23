@@ -41,6 +41,7 @@ jobs:
           for deb in ./*.deb; do dpkg-deb -x "$deb" "$deps/root"; done
           ln -s "$deps/root/usr/bin/bwrap" "$deps/bin/bwrap"
           ln -s "$deps/root/usr/bin/rsync" "$deps/bin/rsync"
+          ln -s "$deps/root/usr/bin/luac5.1" "$deps/bin/luac5.1"
           python3 - "$deps" <<'PY'
           import pathlib, shlex, sys
           d=pathlib.Path(sys.argv[1]); root=d/'root'
