@@ -39,6 +39,7 @@ MXP.GROUPS = {
 }
 
 local function Valid(key, value)
+    if issecretvalue and issecretvalue(value) then return false end
     local d = DEFAULTS[key]
     if d == nil then return false end
     if type(d) == "boolean" then return type(value) == "boolean" end
@@ -50,7 +51,7 @@ MXP.Valid = Valid
 
 local function Saved()
     local ui = TwichUIDB and TwichUIDB.ui
-    local t = ui and ui.mapExplore
+    local t = type(ui) == "table" and ui.mapExplore
     return type(t) == "table" and t or nil
 end
 

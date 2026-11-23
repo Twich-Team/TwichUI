@@ -22,8 +22,10 @@ c.debugprofilestop = function() return os.clock() * 1000 end
 -- Frames: every method exists; scripts and hooks are kept so a test can fire them
 ---------------------------------------------------------------------------
 local FRAMES = {}
+local OBJECTS = {}
 local function Obj()
   local o = { shown = true, scripts = {}, hooks = {}, masks = {} }
+  OBJECTS[#OBJECTS + 1] = o
   return setmetatable(o, { __index = function(t, k)
     if k == "Show" then return function(s) s.shown = true end end
     if k == "Hide" then return function(s) s.shown = false end end
@@ -45,7 +47,8 @@ local function Obj()
     if k == "GetAlpha" then return function(s) return s.alpha or 1 end end
     if k == "SetFrameLevel" then return function(s, v) s.level = v end end
     if k == "GetFrameLevel" then return function(s) return s.level or 5 end end
-    if k == "SetTexture" then return function(s, v) s.tex = v end end
+    if k == "SetTexture" then return function(s, v) s.tex = v; s.binds = (s.binds or 0) + 1 end end
+    if k == "SetRotation" then return function(s, v) s.rotation = v end end
     if k == "SetTexCoord" then return function(s, ...) s.coord = { ... } end end
     if k == "SetVertexColor" then return function(s, r, g, b) s.color = { r, g, b } end end
     if k == "AddMaskTexture" then return function(s, m) s.masks[#s.masks + 1] = m end end
@@ -231,6 +234,18 @@ SC.st = { scale = 1, cx = 0.5, cy = 0.5 }
 SC.cursor = { x = 0, y = 0 }
 SC.calls = { instant = 0, clicks = 0, pans = 0 }
 WMF.ScrollContainer = SC
+local nativeBase, nativeExploration, nativeQuest = Obj(), Obj(), Obj()
+WMF.detailLayerPool = {}
+-- Use the same object-only iterator contract as the native frame pool.
+WMF.detailLayerPool.EnumerateActive = function()
+  local done = false
+  return function() if not done then done = true return nativeBase end end
+end
+rawset(WMF, "EnumeratePinsByTemplate", function(_, template)
+  assert(template == "MapExplorationPinTemplate", "only replacement artwork is enumerated")
+  local done = false
+  return function() if not done then done = true return nativeExploration end end
+end)
 WMF.NavBar = Obj()
 WMF.mapID, WMF.providers, WMF.clicks = 1429, {}, {}
 WMF.shown = false
@@ -405,7 +420,7 @@ EXPLORED[1429] = { { textureWidth = 200, textureHeight = 150, offsetX = 100, off
 for _, f in ipairs({ "chronicle/Style.lua", "FrameLook.lua", "modules/Borders.lua", "modules/MenuStyle.lua", "modules/SpellMenu.lua", "modules/Media.lua",
   "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Map.lua", "pins/Ping.lua", "pins/Pulse.lua", "pins/PingMap.lua", "pins/MapTools.lua",
   "nav/Prefs.lua", "nav/Data.lua", "nav/Route.lua", "nav/Journey.lua", "nav/Nav.lua", "nav/Paint.lua", "nav/MapTrail.lua",
-  "map/Prefs.lua", "map/Data.lua", "map/ViewMath.lua", "map/World.lua", "map/View.lua", "map/Art.lua", "map/Detail.lua",
+  "map/Prefs.lua", "map/Data.lua", "map/ViewMath.lua", "map/World.lua", "map/Pictures.lua", "map/View.lua", "map/Art.lua", "map/Detail.lua",
   "map/Controls.lua", "map/Caves.lua", "map/Places.lua", "map/DungeonView.lua", "diag/Diagnostics.lua", "diag/Map.lua" }) do
   local chunk = assert(loadfile(ROOT .. f)); setfenv(chunk, c); chunk("!!!TwichUI", {})
 end
@@ -418,6 +433,10 @@ local VM, MXP, MW, MV, MA, MD, MC, MCV, MPL, DV = R.MapViewMath, R.MapExplorePre
 local PN, PM, T = R.Pins, R.PinsMap, R.MapTools
 assert(R.MapExploreData and R.MapExploreData.reveal and R.MapExploreData.minimap, "the real data loads")
 R.MapExploreData = DATA
+R.MapExploreLocalData = {
+  caves = { { 0, -1700, -2700, -1500, -2400, { 91001, -1600, -2550, 128, 0.7, 1, 0 } } },
+  cities = { [1455] = { 0, 1000, -1500, 2000, 0, { 92001, 1500, -750, 256, 0.3, 1, 0 } } },
+}
 local opened = {}
 R.PinsEditor = { OpenNew = function(map, x, y, party, name) opened[#opened + 1] = { map = map, x = x, y = y, party = party, name = name } end,
   Close = function() end, IsOpen = function() return false end }
@@ -509,6 +528,7 @@ do
   assert(SC.blizzardWheel == 1 and not MV.Installed() and not MA.Built(), "off: the game's own map, nothing of ours")
   R:SetEnabled("mapExplore", true)
   assert(MV.Installed() and MV.Active() and MA.Built(), "on: the stitched map comes up on the open map")
+  assert(not nativeBase.shown and not nativeExploration.shown and nativeQuest.shown, "native painting hidden, quest pins retained")
   assert(SC.CalculateScrollExtentsAtScale ~= origExtents and SC.mouseWheelZoomMode == c.MAP_CANVAS_MOUSE_WHEEL_ZOOM_BEHAVIOR_NONE, "its limits and wheel")
   assert(SC.baseScale == 0, "panning allowed at every zoom")
   local _, _, z = view()
@@ -516,6 +536,7 @@ do
   R:SetEnabled("mapExplore", false)
   assert(SC.CalculateScrollExtentsAtScale == origExtents and SC.mouseWheelZoomMode == 2 and SC.baseScale == Fit(), "off: all put back")
   assert(not MA.Root().shown, "the painting hidden")
+  assert(nativeBase.shown and nativeExploration.shown and nativeQuest.shown, "native painting restored on disable")
   c.LOADED.OpenMap = true
   R:SetEnabled("mapExplore", true)
   assert(not MV.Installed() and MV.Blocker() == "OpenMap", "stays off while OpenMap is loaded")
@@ -1013,4 +1034,11 @@ do
   print("15 report ok")
 end
 
+local cases = assert(loadfile(TESTS .. "map_seamless_cases.lua"))()
+cases({ c = c, R = R, VM = VM, MV = MV, MW = MW, MA = MA, MD = MD, MCV = MCV, MXP = MXP,
+  SC = SC, WMF = WMF, VIEW = VIEW, FRAMES = FRAMES, OBJECTS = OBJECTS, nativeBase = nativeBase, nativeExploration = nativeExploration,
+  nativeQuest = nativeQuest, Tick = Tick, Run = Run, Running = Running, settle = settle, tidy = tidy,
+  pointAt = pointAt, wheel = wheel, press = press, release = release, WorldOf = WorldOf, Obj = Obj,
+  Providers = Providers, openMap = openMap, closeMap = closeMap, MAPS = MAPS,
+  SetCombat = function(value) COMBAT = value end })
 print("MAP EXPLORE PASSED")

@@ -30,6 +30,9 @@ local function Snapshot()
         D.Flag(a.built), a.zones or 0, a.zonesBuilt or 0, a.shown or 0, a.loaded or 0, a.loads or 0, a.unloads or 0, a.cities or 0, a.textures or 0)
     Line("terrain detail: showing %s, %d tiles, %d textures made, %d pooled, continents decoded %d, too many to show %d",
         D.Flag(d.showing), d.tiles or 0, d.made or 0, d.pooled or 0, d.continents or 0, d.tooMany or 0)
+    local interior = R.MapPictures and R.MapPictures.Snapshot() or {}
+    Line("interior pictures: %d active, %d pooled, %d made; detail textures awaiting load: %d; terrain binds: %d, rejected files: %d",
+        interior.active or 0, interior.pooled or 0, interior.made or 0, interior.pending or 0, d.binds or 0, d.failed or 0)
     Line("places: %d known, %d shown, %d markers made, names shown %d; clicks %d, travel %d, menus %d, shortcuts passed on %d",
         p.places or 0, p.shown or 0, p.pool or 0, p.labels or 0, p.clicks or 0, p.travels or 0, p.menus or 0, p.forwarded or 0)
     Line("caves: %d known; one surfaced: %s; surfaced %d times; floor changes %d; dungeon maps: open %s, opened %d, pins refused %d",

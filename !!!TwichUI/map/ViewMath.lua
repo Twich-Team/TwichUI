@@ -22,7 +22,10 @@ local function Clamp(v, lo, hi)
 end
 VM.Clamp = Clamp
 
-local function Finite(v) return type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge end
+local function Finite(v)
+    if issecretvalue and issecretvalue(v) then return false end
+    return type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge
+end
 VM.Finite = Finite
 
 ---------------------------------------------------------------------------

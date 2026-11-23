@@ -18,7 +18,7 @@ local SURFACE = { 0.18, 0.45 }   -- share of the view's width a cave's map takes
 local BAR_FROM = 0.6             -- how far surfaced before its bar shows
 local VEIL = 0.65
 local FILL = 0.9
-local LEVEL = 7                  -- over the canvas's own level (the painting 2 to 5, terrain detail 6)
+local LEVEL = 9                  -- above underground city artwork/interiors (7/8), below native markers
 
 local groups                     -- the caves: { id, name, cont, floors, u0, v0, u1, v1 }
 local layer, veil, tiles = nil, nil, {}
@@ -26,6 +26,7 @@ local current, strength, drawn = nil, 0, nil
 local barKey                     -- what the bar shows now (redrawn only when that changes)
 local floorOf = {}               -- [cave id] = the floor chosen this session
 local stats = { surfaced = 0, floorChanges = 0 }
+local pictures
 
 local function Groups()
     if groups then return groups end
@@ -53,6 +54,22 @@ local function Groups()
     for _, g in ipairs(groups) do
         table.sort(g.floors, function(a, b) return a.order < b.order or (a.order == b.order and a.id < b.id) end)
     end
+    -- WMO minimap pictures cover mines/tunnels with no verified painted micro map.
+    local data = R.MapExploreLocalData
+    for i, c in ipairs(data and data.caves or {}) do
+        local u0, v0, u1, v1 = MW.YardsRect(c[1], c[2], c[3], c[4], c[5])
+        if u0 then
+            groups[#groups + 1] = { id = "wmo:" .. i, name = "Underground area", cont = c[1],
+                floors = { { name = "Interior", pictures = c } }, u0 = u0, v0 = v0, u1 = u1, v1 = v1 }
+        end
+    end
+    -- Prefer a dedicated micro map, then the smallest interior on overlapping bounds.
+    table.sort(groups, function(a, b)
+        local ap, bp = a.floors[1].pictures ~= nil, b.floors[1].pictures ~= nil
+        if ap ~= bp then return not ap end
+        local aa, ba = (a.u1 - a.u0) * (a.v1 - a.v0), (b.u1 - b.u0) * (b.v1 - b.v0)
+        return aa < ba or aa == ba and a.id < b.id
+    end)
     return groups
 end
 MCV.Groups = Groups
@@ -74,11 +91,19 @@ function MCV.FillZoomAt(u, v)
     if not MXP.Get("caves") then return nil end
     local g = At(u, v)
     if not g then return nil end
-    return MV.RectZoom(g.u0, g.v0, g.u1, g.v1) * FILL
+    local zoom = MV.RectZoom(g.u0, g.v0, g.u1, g.v1)
+    return zoom and zoom * FILL or nil
 end
 
 function MCV.Surfaced() return current ~= nil and strength >= 0.5 end
 function MCV.Current() return current, current and (floorOf[current.id] or 1) or nil, strength end
+
+-- Computed from this view, independent of listener registration order.
+function MCV.StrengthAt(u0, v0, u1, v1)
+    if not MXP.Get("caves") or (R.MapDungeonView and R.MapDungeonView.IsOpen()) then return nil, 0 end
+    local g = At((u0 + u1) / 2, (v0 + v1) / 2)
+    return g, g and VM.Fade((g.u1 - g.u0) / (u1 - u0), SURFACE[1], SURFACE[2]) or 0
+end
 
 local function Layer()
     if layer then return layer end
@@ -90,6 +115,7 @@ local function Layer()
     veil:SetAllPoints(root)
     veil:SetColorTexture(0.04, 0.03, 0.02, 1)
     for i = 1, 12 do tiles[i] = layer:CreateTexture(nil, "ARTWORK") end
+    if R.MapPictures then pictures = R.MapPictures.Create(layer) end
     return layer
 end
 
@@ -97,6 +123,13 @@ end
 local function Draw(g, n)
     local L = Layer()
     local fl = g.floors[n]
+    if fl.pictures then
+        for _, tex in ipairs(tiles) do R.MapPictures.Forget(tex); tex:SetTexture(nil); tex:Hide() end
+        R.MapPictures.Set(pictures, fl.pictures)
+        drawn = g.id .. ":" .. n
+        return
+    end
+    if pictures then R.MapPictures.Set(pictures, nil) end
     local W, H = MW.Size()
     local root = R.MapArt.Root()
     local ux, vy = (fl.u1 - fl.u0) * W / ART_W, (fl.v1 - fl.v0) * H / ART_H   -- world pixels per art pixel
@@ -105,6 +138,7 @@ local function Draw(g, n)
         local px0, py0 = col * TILE, row * TILE
         local pw, ph = math.min(TILE, ART_W - px0), math.min(TILE, ART_H - py0)
         local tex = tiles[i]
+        if R.MapPictures then R.MapPictures.Forget(tex) end
         tex:SetTexture(fl.tiles[i])
         tex:SetTexCoord(0, pw / TILE, 0, ph / TILE)
         tex:ClearAllPoints()
@@ -118,9 +152,13 @@ end
 local function Sink()
     if layer then
         layer:Hide()
-        for _, t in ipairs(tiles) do t:SetTexture(nil) t:Hide() end
+        for _, t in ipairs(tiles) do
+            if R.MapPictures then R.MapPictures.Forget(t) end
+            t:SetTexture(nil); t:Hide()
+        end
     end
     current, strength, drawn, barKey = nil, 0, nil, nil
+    if pictures then R.MapPictures.Set(pictures, nil) end
     if R.MapControls then R.MapControls.HideContext("cave") end
 end
 MCV.Sink = Sink
@@ -131,7 +169,8 @@ local function Bar(g)
     local n = floorOf[g.id] or 1
     MC.ShowContext("cave", {
         title = g.name, sub = "Cave map",
-        note = "Your arrow is the game's own; which floor you are on isn't known.",
+        note = g.floors[1].pictures and "Interior minimap artwork; overlapping rooms are shown together."
+            or "Your arrow is the game's own; which floor you are on isn't known.",
         floors = #g.floors, floor = n, floorName = g.floors[n].name,
         onPrev = function() MCV.SetFloor(n - 1) end,
         onNext = function() MCV.SetFloor(n + 1) end,
@@ -146,8 +185,7 @@ end
 function MCV.Update()
     if not (MV.Ready() and MXP.Get("caves")) or (R.MapDungeonView and R.MapDungeonView.IsOpen()) then Sink() return end
     local u0, v0, u1, v1 = MV.ViewRect()
-    local g = At((u0 + u1) / 2, (v0 + v1) / 2)
-    local s = g and VM.Fade((g.u1 - g.u0) / (u1 - u0), SURFACE[1], SURFACE[2]) or 0
+    local g, s = MCV.StrengthAt(u0, v0, u1, v1)
     if s <= 0.02 then Sink() return end
     if current ~= g then
         Sink()
@@ -161,7 +199,12 @@ function MCV.Update()
     L:SetFrameLevel(MV.ArtLevel(LEVEL))
     L:Show()
     veil:SetAlpha(VEIL * s)
-    for _, t in ipairs(tiles) do t:SetAlpha(s) end
+    if not g.floors[n].pictures then
+        for _, t in ipairs(tiles) do
+            if R.MapPictures then R.MapPictures.Show(t, s) else t:SetAlpha(s) end
+        end
+    end
+    if pictures then R.MapPictures.Update(pictures, u0, v0, u1, v1, s) end
     if s >= BAR_FROM then
         if barKey ~= g.id .. ":" .. n then
             barKey = g.id .. ":" .. n
@@ -174,7 +217,7 @@ function MCV.Update()
 end
 
 function MCV.SetFloor(n)
-    if not current or not n or n < 1 or n > #current.floors then return false end
+    if not current or not VM.Finite(n) or n % 1 ~= 0 or n < 1 or n > #current.floors then return false end
     floorOf[current.id] = n
     stats.floorChanges = stats.floorChanges + 1
     MCV.Update()

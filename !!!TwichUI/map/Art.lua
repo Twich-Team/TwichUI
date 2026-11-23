@@ -39,6 +39,36 @@ local zoneList, cityList = {}, {}
 local built = false
 local clock = 0
 local stats = { zonesBuilt = 0, textures = 0, loads = 0, unloads = 0, layouts = 0 }
+local nativeHidden = {}
+
+-- Only the painting we replace: never hide player/quest/third-party pins or the quest log.
+-- Native exploration pins otherwise sit thousands of levels above our close detail.
+function MA.SyncNative(replace)
+    if InCombatLockdown and InCombatLockdown() then return end
+    local map = WorldMapFrame
+    if not map then return end
+    local live = {}
+    if map.detailLayerPool then
+        for frame in map.detailLayerPool:EnumerateActive() do live[frame] = true end
+    end
+    if map.EnumeratePinsByTemplate then
+        for pin in map:EnumeratePinsByTemplate("MapExplorationPinTemplate") do live[pin] = true end
+    end
+    if not replace then
+        for frame, wasShown in pairs(nativeHidden) do
+            if live[frame] then frame:SetShown(wasShown) end
+            nativeHidden[frame] = nil
+        end
+        return
+    end
+    for frame in pairs(nativeHidden) do
+        if not live[frame] then nativeHidden[frame] = nil end
+    end
+    for frame in pairs(live) do
+        if nativeHidden[frame] == nil then nativeHidden[frame] = frame:IsShown() and true or false end
+        frame:Hide()
+    end
+end
 
 local function Pow2(n)
     local p = 16
@@ -221,7 +251,7 @@ function MA.Build()
             local okArt, art = pcall(C_Map.GetMapArtID, m.id)
             local okExp, explored = pcall(C_MapExplorationInfo.GetExploredMapTextures, m.id)
             local hasPieces = (okArt and #Reveal(art) > 0) or (okExp and type(explored) == "table" and #explored > 0)
-            if hasPieces then
+            if hasPieces and not MW.IsCity(m.id) then
                 zones[m.id] = z
                 zoneList[#zoneList + 1] = z
             else
@@ -230,6 +260,15 @@ function MA.Build()
                 z.frame:SetAllPoints(root)
                 z.frame:EnableMouse(false)
                 z.tex = BaseArt(z.frame, m.id, ROUND, false) or {}
+                local localData = R.MapExploreLocalData
+                local interior = localData and localData.cities[m.id]
+                if interior and R.MapPictures then
+                    z.interior = CreateFrame("Frame", nil, z.frame)
+                    z.interior:SetAllPoints(z.frame)
+                    z.interior:EnableMouse(false)
+                    z.pictures = R.MapPictures.Create(z.interior)
+                    R.MapPictures.Set(z.pictures, interior)
+                end
                 z.frame:Hide()
                 cities[m.id] = z
                 cityList[#cityList + 1] = z
@@ -250,7 +289,11 @@ function MA.SetLevels()
     frames.world:SetFrameLevel(base + LEVEL.world)
     frames.cont:SetFrameLevel(base + LEVEL.cont)
     frames.zone:SetFrameLevel(base + LEVEL.zone)
-    for _, c in ipairs(cityList) do c.frame:SetFrameLevel(base + LEVEL.city) end
+    for _, c in ipairs(cityList) do
+        -- The underground city plan must cover the surface terrain, including at its feathered edges.
+        c.frame:SetFrameLevel(base + (c.interior and 7 or LEVEL.city))
+        if c.interior then c.interior:SetFrameLevel(c.frame:GetFrameLevel() + 1) end
+    end
 end
 
 -- Lays the root out for the map underneath: world pixels to its canvas units. Returns whether it could.
@@ -273,7 +316,15 @@ function MA.Host() return host and host.id or nil end
 
 function MA.SetShown(on)
     if root then root:SetShown(on and true or false) end
-    if not on then host = nil end
+    if not on then
+        host = nil
+        for _, z in ipairs(zoneList) do
+            if z.built then Load(z, false) end
+        end
+        for _, c in ipairs(cityList) do
+            if c.pictures then R.MapPictures.Clear(c.pictures) end
+        end
+    end
 end
 
 -- The view: u0..u1, v0..v1 (world, normalized) and the zoom (1: the whole world fits). fitZoom(id): a map's whole-map zoom.
@@ -311,6 +362,11 @@ function MA.SetView(u0, v0, u1, v1, zoom, fitZoom)
         local inView = c.r >= u0 and c.l <= u1 and c.b >= v0 and c.t <= v1
         c.frame:SetShown(a > 0.01 and inView)
         c.frame:SetAlpha(a)
+        if c.pictures then
+            local prefs = R.MapExplorePrefs
+            local mix = prefs.Get("detail") and VM.Fade(zoom, 20, 36) * math.min(0.5, prefs.Get("detailStrength") / 100) or 0
+            R.MapPictures.Update(c.pictures, u0, v0, u1, v1, inView and a > 0.01 and mix or 0)
+        end
     end
 end
 
@@ -332,11 +388,15 @@ function MA.RefreshExplored()
 end
 
 -- Whether a world point is over a city drawn here (the deepest zoom goes a little further there).
-function MA.CityAt(u, v)
+function MA.CityAt(u, v, navigation)
+    local best
     for _, c in ipairs(cityList) do
-        if u >= c.l and u <= c.r and v >= c.t and v <= c.b then return c.id end
+        local inset = navigation and MW.IsCity(c.id) and 0.2 or 0
+        local du, dv = (c.r - c.l) * inset, (c.b - c.t) * inset
+        if u >= c.l + du and u <= c.r - du and v >= c.t + dv and v <= c.b - dv and (not best or c.area < best.area
+            or c.area == best.area and c.id < best.id) then best = c end
     end
-    return nil
+    return best and best.id or nil
 end
 
 -- Read only, for /tui diagnostics and the tests.
