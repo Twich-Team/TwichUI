@@ -836,6 +836,8 @@ do
   Check(restricted.text:find("secret", 1, true), "secret never inspected")
   local result = TL.ProgressCapture(ids, "TRADE_SKILL_ITEM_CRAFTED_RESULT", { itemID = 20, quantity = 2, operationID = 7, name = "Private" })
   Check(result.text:find("quantity=2", 1, true) and not result.text:find("Private", 1, true), "allowlisted result fields")
+  local invalid = TL.ProgressCapture(ids, "TRADE_SKILL_CRAFT_BEGIN", 0/0, math.huge, -math.huge)
+  Check(not invalid.text:find(":nan", 1, true) and not invalid.text:find(":inf", 1, true), "nonfinite identifiers omitted")
   local positional = TL.ProgressCapture(ids, "TRADE_SKILL_ITEM_CRAFTED_RESULT", 20, 2, 7)
   Check(positional.text:find("RESULT(3)", 1, true), "unexpected positional shape preserved without reinterpretation")
   local log = { sent, ok, result, restricted, positional }

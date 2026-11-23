@@ -94,4 +94,4 @@ active=true;M.Start();eq(eventFrame.events.MERCHANT_SHOW,true)
 plan.rows[1].qty=4;live[1].numAvailable=-1
 M.Refresh(true);eq(M.Stats().shown,true);eq(TwichUIWorkshopMerchantQuote.quote.rows[1].qty,4)
 M.Stop();flush();eq(M.Stats().shown,false)
-print('Workshop merchant review: live-only quotes, bounds and cleanup passed')
+print('PASSED Workshop merchant review: live-only quotes, bounds and cleanup passed')

@@ -14,7 +14,7 @@ local function Combat() return InCombatLockdown and InCombatLockdown() and true 
 local function Secret(v) return issecretvalue and issecretvalue(v) end
 local function Number(v)
     if Secret(v) or type(v) ~= "number" then return nil end
-    if v == v and v >= 0 and v <= 2147483647 and v == math.floor(v) then return v end
+    if TL.Reference.Finite(v) and v >= 0 and v <= 2147483647 and v == math.floor(v) then return v end
 end
 local function IsRecipe(id)
     if not Number(id) or not (C_TradeSkillUI and C_TradeSkillUI.GetRecipeInfo) then return nil end
