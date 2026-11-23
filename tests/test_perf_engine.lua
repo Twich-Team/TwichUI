@@ -202,6 +202,17 @@ assert(c.LOADS == 0 and Has(c.printed[#c.printed], "not loaded"), "status does n
 assert(R.DiagnosticsLauncher.Load() == true and c.LOADS == 1)
 local DX = R.Diagnostics
 assert(DX and DX.DB(), "loaded, with its saved variables")
+-- The final Market layout has eight current and four history slots per bank.
+for _, bank in ipairs({"A", "B"}) do
+  for slot=0,7 do assert(DX.Collect.OURS["TwichUI_MarketCurrentContainer"..bank..("%02d"):format(slot)], "current container attribution") end
+  for slot=0,3 do assert(DX.Collect.OURS["TwichUI_MarketHistoryContainer"..bank..("%02d"):format(slot)], "history container attribution") end
+end
+assert(not DX.Collect.OURS.TwichUI_MarketCurrentContainerA08 and not DX.Collect.OURS.TwichUI_MarketHistoryContainerB04, "container attribution stays bounded")
+for name, amount in pairs({TwichUI_MarketCurrentContainerA07=70,TwichUI_MarketCurrentContainerB07=80,
+  TwichUI_MarketHistoryContainerA03=30,TwichUI_MarketHistoryContainerB03=40,
+  TwichUI_MarketCurrentContainerA08=9999,TwichUI_MarketHistoryContainerB04=9999}) do
+  c.LOADED[name]=true;MEM[name]=amount
+end
 assert(DX.State() == "stopped" and not DX.Recording(), "stopped until started")
 assert(DX.prefs.badge == true and DX.Merge({ a = true }, nil).a == true and DX.Merge({ a = true }, { a = false }).a == false
   and DX.Merge({ n = 5 }, { n = "x" }).n == 5, "defaults kept, a saved false kept, a wrong type refused")
@@ -326,6 +337,7 @@ local sp = rec.frames.spikes[1]
 assert(sp.dt == 80 and sp.core == 60 and #sp.before == 5 and #sp.after == 5, "a long frame keeps its neighbours")
 assert(rec.frames.p50 >= 16 and rec.frames.p50 <= 16 * 1.19 + 0.01, "the median frame interval, approximate (log bucket)")
 assert(rec.memory[1].core == 1000 and rec.memory[#rec.memory].core == 1300, "memory read at the start and the stop")
+assert(rec.memory[1].summaryparts==220 and rec.memory[#rec.memory].summaryparts==220, "memory includes current slot 07 in both banks and unchanged history slot 03, excluding out-of-range slots")
 assert(rec.timeline.n >= 4, "a bucket per second")
 local manual
 for _, m in ipairs(rec.markers) do if m.kind == "manual" then manual = m end end

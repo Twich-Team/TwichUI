@@ -90,3 +90,13 @@ The complete cloud simulator catalog is attempted in a separate read-only CI
 job using the pinned unmodified simulator. Failure to obtain its existing
 namespace sandbox is a verification blocker, not permission to bypass it.
 No real-client frame/GC acceptance is claimed.
+
+
+The final diagnostics aggregate enumerates all eight current slots per bank
+for memory totals and addon/error attribution. Slots07 in both banks and
+history03 remain included; current08/history04 remain outside the domain.
+The focused regression fails against the original two-slot enumeration and
+passes after the metadata correction. Per-call CPU scopes were already valid.
+The existing sampler interval is unchanged; no new timer or Workshop load is
+introduced. Offline benchmark heap measurements already included every Lua
+allocation and are unaffected by this diagnostics-only correction.
