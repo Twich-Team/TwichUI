@@ -17,8 +17,8 @@ jobs:
     # This owner-authorized release checkpoint does not add a full simulator
     # campaign to ordinary Workshop PRs. Future certifications use dispatch.
     if: github.event_name == 'workflow_dispatch' || github.head_ref == 'feature/market-containers-13'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 100
+    runs-on: ubuntu-22.04
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -26,8 +26,11 @@ jobs:
           persist-credentials: false
       - name: Require the existing simulator sandbox without changing host security
         run: |
-          unshare -Ur true
-          mkdir -p /mnt/c
+          test "$(id -u)" -ne 0
+          unshare --user --map-current-user true
+          if [ -r /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          fi
       - name: Prepare user-owned offline Lua and sandbox dependencies
         shell: bash
         run: |
@@ -62,7 +65,17 @@ jobs:
           bash tools/simlab/setup.sh
           echo "SIMLAB_INSTALL=$WOWSIM_LAB" >> "$GITHUB_ENV"
       - name: Run unchanged full discovery, simulator catalogs and negative controls
-        run: bash tests/run.sh full --profile cloud --jobs 2 --sim-jobs 1 --measure
+        shell: bash
+        run: |
+          # Provision the existing fixed sandbox path only in this disposable
+          # runner's private mount namespace; never use root or alter security.
+          unshare --user --map-current-user --mount --keep-caps sh -ec '
+            test "$(id -u)" -ne 0
+            mount -t tmpfs -o size=1m,mode=0755 tmpfs /mnt
+            mkdir /mnt/c
+            # Drop setup capabilities before the unchanged Bubblewrap launcher.
+            exec setpriv --inh-caps=-all --ambient-caps=-all -- "$@"
+          ' sh bash tests/run.sh full --profile cloud --jobs 2 --sim-jobs 1 --measure
       - name: Preserve passing and failed evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
