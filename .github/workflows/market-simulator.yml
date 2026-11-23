@@ -14,6 +14,9 @@ permissions:
 
 jobs:
   full-cloud:
+    # This owner-authorized release checkpoint does not add a full simulator
+    # campaign to ordinary Workshop PRs. Future certifications use dispatch.
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'feature/market-containers-13'
     runs-on: ubuntu-24.04
     timeout-minutes: 100
     steps:
