@@ -16,6 +16,7 @@ end
 local function Hide(record)
     if not record then return end
     Alpha(record.marker, 0)
+    Alpha(record.fill, 0)
     for _, texture in ipairs(record.edges) do Alpha(texture, 0) end
     record.active, record.shown, record.pending = false, false, false
 end
@@ -49,6 +50,7 @@ local function Paint(record)
     if record.w ~= w or record.h ~= h or record.orientation ~= orientation
         or record.reverse ~= reverse or record.threshold ~= threshold then
         if not LayoutAllowed(bar) then Hide(record); record.pending = true; return end
+        record.fx, record.fy, record.fw, record.fh = nil, nil, nil, nil
         local x, y, mw, mh = C.Marker(w, h, orientation, reverse, threshold)
         Place(record.marker, bar, x, y, mw, mh)
         local edge = math.min(1, w / 2, h / 2)
@@ -59,12 +61,75 @@ local function Paint(record)
         record.w, record.h, record.orientation, record.reverse, record.threshold = w, h, orientation, reverse, threshold
     end
     record.pending = false
-    local appearance = C.Get("appearance")
-    Alpha(record.marker, appearance == "active" and 0 or 0.7)
-    local active = appearance ~= "marker" and E.InRange(record.unit, threshold)
-    record.healthUnavailable = active == nil and appearance ~= "marker"
-    for _, texture in ipairs(record.edges) do Alpha(texture, active and 0.65 or 0) end
-    record.active, record.shown = active == true, true
+    local _, edge, _, highlight = C.Style(C.Get("appearance"))
+    local fraction
+    if edge or highlight then fraction = E.HealthFraction(record.unit) end
+    D.Decorate(record, w, h, orientation, reverse, fraction, LayoutAllowed(bar))
+    record.shown = true
+end
+-- Shared by live verified bars and the Settings-owned static sample. No provider
+-- texture, value or frame is written. The fill is below our marker and edges.
+function D.Decorate(record, w, h, orientation, reverse, fraction, layoutAllowed)
+    local marker, edge, zone, highlight = C.Style(C.Get("appearance"))
+    local threshold = C.Get("threshold") / 100
+    local active = fraction ~= nil and fraction > 0 and fraction <= threshold
+    record.healthUnavailable = (edge or highlight) and fraction == nil
+    Alpha(record.marker, marker and 0.7 or 0)
+    for _, texture in ipairs(record.edges) do Alpha(texture, edge and active and 0.65 or 0) end
+    record.active = active
+    local amount = zone and threshold or (highlight and active and fraction or 0)
+    if amount <= 0 then Alpha(record.fill, 0); return end
+    local x, y, fw, fh = C.Region(w, h, orientation, reverse, amount)
+    if record.fx ~= x or record.fy ~= y or record.fw ~= fw or record.fh ~= fh then
+        if not layoutAllowed then
+            -- Preserve unchanged marker/edge while a protected fill needs layout.
+            Alpha(record.fill, 0); record.pending = true
+            -- Use the established active edge instead of a stale filled fraction.
+            if highlight and active then for _, texture in ipairs(record.edges) do Alpha(texture, 0.65) end end
+            return
+        end
+        Place(record.fill, record.bar, x, y, fw, fh)
+        if orientation == "HORIZONTAL" then
+            record.fill:SetTexCoord(reverse and 1 - amount or 0, reverse and 1 or amount, 0, 1)
+        else
+            record.fill:SetTexCoord(0, 1, reverse and 0 or 1 - amount, reverse and amount or 1)
+        end
+        record.fx, record.fy, record.fw, record.fh = x, y, fw, fh
+    end
+    local color, texture = C.Get("color"), C.Get("texture")
+    local media = R.MenuStyle and R.MenuStyle.StatusBars
+    local file = media and media.Resolve(texture) or [[Interface\Buttons\WHITE8X8]]
+    file = file or [[Interface\Buttons\WHITE8X8]]
+    if record.fillColor ~= color or record.fillFile ~= file then
+        if record.fill:SetTexture(file) == false then record.fill:SetTexture([[Interface\Buttons\WHITE8X8]]) end
+        record.fill:SetVertexColor(tonumber(color:sub(3,4),16)/255, tonumber(color:sub(5,6),16)/255,
+            tonumber(color:sub(7,8),16)/255, tonumber(color:sub(1,2),16)/255)
+        record.fillColor, record.fillFile = color, file
+    end
+    Alpha(record.fill, C.Get("opacity") / 100)
+end
+function D.CreateDecoration(bar)
+    local record = { bar = bar, edges = {} }
+    record.marker = bar:CreateTexture(nil, "OVERLAY", nil, 1)
+    record.marker:SetColorTexture(0.83, 0.65, 0.32, 1)
+    for i = 1, 4 do
+        record.edges[i] = bar:CreateTexture(nil, "OVERLAY", nil, 1)
+        record.edges[i]:SetColorTexture(0.85, 0.47, 0.28, 1)
+    end
+    record.fill = bar:CreateTexture(nil, "OVERLAY", nil, 0)
+    Hide(record)
+    return record
+end
+function D.Preview(record, w, h, fraction)
+    local x,y,mw,mh = C.Marker(w,h,"HORIZONTAL",false,C.Get("threshold"))
+    Place(record.marker, record.bar, x,y,mw,mh)
+    local edge = math.min(1,w/2,h/2)
+    Place(record.edges[1],record.bar,0,0,w,edge)
+    Place(record.edges[2],record.bar,0,h-edge,w,edge)
+    Place(record.edges[3],record.bar,0,edge,edge,math.max(0.01,h-edge*2))
+    Place(record.edges[4],record.bar,w-edge,edge,edge,math.max(0.01,h-edge*2))
+    D.Decorate(record,w,h,"HORIZONTAL",false,fraction,true)
+
 end
 local function RefreshRecord(record)
     -- Provider changes may invalidate fields while their own callbacks run.
@@ -99,19 +164,9 @@ local function Attach(unit, bar, owner)
     local record = records[bar]
     if not record then
         if count >= MAX_BARS or not LayoutAllowed(bar) then return end
-        record = { bar = bar, owner = owner, unit = unit, edges = {}, invalid = true }
+        record = D.CreateDecoration(bar)
+        record.owner, record.unit, record.invalid = owner, unit, true
         records[bar], count = record, count + 1
-        -- Same bar layer, below EUI's health text, child absorb bars and border.
-        -- These regions have no mouse handlers or secure attributes.
-        record.marker = bar:CreateTexture(nil, "OVERLAY", nil, 1)
-        Alpha(record.marker, 0)
-        record.marker:SetColorTexture(0.83, 0.65, 0.32, 1)
-        for i = 1, 4 do
-            record.edges[i] = bar:CreateTexture(nil, "OVERLAY", nil, 1)
-            Alpha(record.edges[i], 0)
-            record.edges[i]:SetColorTexture(0.85, 0.47, 0.28, 1)
-        end
-        Hide(record)
         Observe(record)
         record.invalid = false
     end
@@ -219,4 +274,8 @@ R.Profiles.OnChange(D.Invalidate) -- Duplicate changes profile identity without 
 -- Bounded retained resources, read only while diagnostics asks. No timed hot-path scope.
 if R.Perf and R.Perf.Gauge then
     R.Perf.Gauge("execute.bars", { label = "Execute range observed bars", unit = "count", kind = "pool", read = function() return count end })
+end
+
+if R.MenuStyle and R.MenuStyle.StatusBars then
+    R.MenuStyle.StatusBars.Subscribe(function() D.Refresh() end)
 end
