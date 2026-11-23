@@ -516,14 +516,14 @@ K.Page({
         K.Card({
             title = "Who to watch", icon = "healerWatch",
             compact = true,
-            help = "Information only: never sends a message, says whether to pull or acts for you. Your healer choice lasts for this session and group. More about this explains automatic selection, leaving the group and unavailable readings.",
+            help = "Monitoring is informational and never decides whether to pull. Hover the live panel for optional messages about yourself; only clicking a choice attempts to send it. Your healer choice lasts for this session and group.",
             what = "Choose the healer whose mana you want to follow.",
             summary = function()
                 if not On() then return "Off." end
                 local text = WatchingText()
                 return text .. DOT .. ScopeLabel()
             end,
-            consequence = "Information only: no messages or actions. Your choice lasts for this session and group.",
+            consequence = "Monitoring is informational. Hover the live panel for optional messages about yourself; only choosing one sends it. Your healer choice lasts for this session and group.",
             inline = true,
             details = {
                 { "How is the healer found?", "If you chose someone, it watches them. Otherwise it watches the one member of your group whose role is set to Healer (in the group finder, a role check or the unit menu). If no one, or more than one, has that role, it asks you to choose. It never guesses from class, spells or gear." },
@@ -532,7 +532,7 @@ K.Page({
             },
         })
         main = K.Toggle("healerWatch", "Show Healer Watch",
-            "On: the panel shows where it applies (five-player dungeons unless you choose otherwise), for the healer chosen below. Off: no panel, and nothing is listened for. It reads only that one player's mana, life and auras and what they say in the channels you choose; it never sends anything.")
+            "On: the panel shows where it applies (five-player dungeons unless you choose otherwise), for the healer chosen below. Off: no panel, and nothing is listened for. It reads only that one player's mana, life and auras and what they say in the channels you choose; monitoring never sends anything. Hover the live panel for optional self-status messages; only a chosen message attempts to send.")
         K.Status("Watching",
             function() return (WatchingText()) end,
             function()
@@ -659,7 +659,7 @@ K.Page({
             summary = function()
                 return table.concat({ Label("preset"), ("%d%%"):format(hw.Get("scale")), ("opacity %d%%"):format(hw.Get("opacity")) }, DOT)
             end,
-            consequence = "The panel never takes clicks, so it can't get in the way of the world; only the handle in Move it does. Motion is off unless you turn it on, and Notifications' Reduced motion turns it off again.",
+            consequence = "The live panel passes clicks through. Hover reveals optional self-status messages; click a message to send it to your group. This is unavailable during combat or chat restrictions. Move it has its own handle. Visual motion respects Reduced motion.",
         })
         Pick("preset", "Layout", "Compact: a small flask, the name, the mana and a bar, with a status line. Minimal: the mana with small marks. Artwork: a larger flask with the mana beneath. Choosing one sets the size and parts that suit it; you can change any of them afterwards.",
             nil, nil, nil, function(v)

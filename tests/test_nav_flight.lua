@@ -39,7 +39,11 @@ local function Frame(o)
 end
 
 R_ = nil
-local R = { Nav = {}, NavPrefs = {}, NavTravel = {} }
+local profileApply, profileChanged
+local R = { Nav = {}, NavPrefs = {}, NavTravel = {}, Profiles = {
+  OnApply = function(_, _, fn) profileApply = fn end,
+  OnChange = function(fn) profileChanged = fn end,
+} }
 TwichUI = R
 function R:On(ev, fn) listeners[ev] = fn end
 function R:Off(ev, fn) if listeners[ev] == fn then listeners[ev] = nil end end
@@ -183,6 +187,30 @@ do
   listeners.TAXIMAP_CLOSED()
   assert(FL.Diagnostics().taken == 2 and FL.Diagnostics().skipped > 5, "counted")
   print("3 automatic ok")
+end
+
+-- Pending work belongs to the opening/profile that authorized it, even if the
+-- replacement profile has the same preferences and account acknowledgement.
+do
+  local function PendingThen(label, change)
+    now = now + 100; taken = {}
+    listeners.TAXIMAP_OPENED(1)
+    change()
+    Advance(0.5)
+    assert(#taken == 0, label .. ": an abandoned opening cannot take a flight")
+    assert(FL.Acknowledged(), label .. ": account authorization remains intact")
+    listeners.TAXIMAP_CLOSED()
+  end
+  PendingThen("profile apply", function()
+    if profileApply then profileApply() else for _, fn in ipairs(subs) do fn("prefs") end end
+  end)
+  PendingThen("profile duplicate", function() if profileChanged then profileChanged("duplicate") end end)
+  PendingThen("off and back on before the delay", function() Set("autoFlight", false); Set("autoFlight", true) end)
+  -- A new opening may still use the existing guards; no new action or retry API.
+  now = now + 100; taken = {}; listeners.TAXIMAP_OPENED(1); Advance(0.5)
+  assert(#taken == 1 and taken[1] == 5, "a fresh authorized opening still takes only its selected point")
+  listeners.TAXIMAP_CLOSED()
+  print("3b stale openings cancelled")
 end
 
 -- 4. A refusal, and turning it off

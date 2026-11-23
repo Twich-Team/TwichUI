@@ -4,8 +4,8 @@ An opt-in panel showing one healer's measured mana, confirmed drinking, and rece
 `!!!TwichUI/healer/`. Settings: `TwichUI_Settings/pages/HealerWatch.lua`. Diagnostics: `!!!TwichUI/diag/HealerWatch.lua`.
 Art: `tools/make_healer_watch_art.py`. Tests: `tests/test_healer_watch.lua`, `tests/test_healer_watch_settings.lua`.
 
-It informs and nothing more. It never sends a chat or addon message, never says whether the group is ready or safe to
-pull, and never casts, targets or acts. It is off until turned on, and it applies in five-player dungeons unless you
+Monitoring is informational and never sends a message automatically, says whether the group is ready or safe to
+pull, casts or targets. Hovering the live panel opens optional self-status choices; only an explicit choice attempts a group chat message. It is off until turned on, and it applies in five-player dungeons unless you
 choose otherwise.
 
 Nothing here has been seen in the game. "Verified" below means either read from the Forever UI source
@@ -156,7 +156,7 @@ Defaults:
 - a thin blackened-bronze frame and a faint inner shadow on the bar;
 - no panel background and no motion.
 
-The panel takes no clicks, with two exceptions: the handle in **Move it**, and a click on the panel while it reads "Choose a healer", which opens a quick-select menu drawn in the look of TwichUI's data bar menus (`healer/Picker.lua`, with the background and border set under Menu appearance; the game's `MenuUtil` context menu is only a fallback): Automatic, you, and each group member, the one with the Healer role marked. It closes on a click elsewhere, Esc, or a change of group. Choosing only changes who is watched. The moment a healer is watched, it is click-through again. The fade and the three-breath pulse on
+The panel takes no clicks, with two exceptions: the handle in **Move it**, and a click on the panel while it reads "Choose a healer", which opens a quick-select menu drawn in the look of TwichUI's data bar menus (`healer/Picker.lua`, with the background and border set under Menu appearance; the game's `MenuUtil` context menu is only a fallback): Automatic, you, and each group member, the one with the Healer role marked. It closes on a click elsewhere, Esc, or a change of group. Choosing only changes who is watched. The moment a healer is watched, clicks pass through again. A separate motion-only hover surface offers four optional messages about the player: Drinking, Out of mana, Need a moment and Ready. Hover sends nothing; clicking one attempts a single message. It never describes the watched healer. Party, raid and instance-group routing follows the current group; solo, combat, unavailable APIs and chat lockdown are refused locally. A three-second local interval limits repeated selections. A chat API call is not a delivery confirmation; there is no queue or retry. The menu closes when the panel hides, the group/profile changes, the picker/preview opens or combat begins. The fade and the three-breath pulse on
 entering critical are opt-in and are turned off by Notifications' Reduced motion.
 
 ## Preview, scenarios and diagnostics

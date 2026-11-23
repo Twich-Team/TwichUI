@@ -100,6 +100,7 @@ function SettingsClient(opts)
     "hazard/Config.lua", "hazard/Rules.lua", "hazard/Alerts.lua",
     "targetart/Config.lua", "targetart/Ellesmere.lua", "targetart/Display.lua",
     "classportrait/Config.lua", "classportrait/Art.lua", "classportrait/Display.lua",
+    "execute/Config.lua", "execute/Ellesmere.lua", "execute/Display.lua",
     "modules/RestedXPSkin.lua", "modules/RestedXPTimers.lua", "qol/QoL.lua", "qol/Summons.lua", "qol/Resurrect.lua", "qol/ReleasePvP.lua",
     "qol/Duels.lua", "qol/QuickKeybind.lua", "qol/LootSparkles.lua", "qol/GroupFinderZones.lua", "qol/GatheringSparkles.lua", "qol/GatheringSparklesDisplay.lua", "qol/GuideWaypoint.lua", "markers/Markers.lua", "markers/Keys.lua", "markers/Bar.lua",
     "pins/Pins.lua", "pins/Sync.lua", "pins/Look.lua", "pins/Map.lua", "pins/Minimap.lua", "pins/Editor.lua", "pins/Window.lua",
