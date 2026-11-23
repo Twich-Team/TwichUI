@@ -49,6 +49,14 @@ function M.Quote(plan, listings, state)
         q.reason = 'Queue needs are pending or bag counts are unknown. Refresh when ready.'
         return q
     end
+    -- Unknown owned intermediates can overstate their children's demand even
+    -- when the root material summary reports no unknown bag counts.
+    for _, r in ipairs(plan.rows or {}) do
+        if r.line and r.line.countsUnknown or r.kind == 'buy' and W.Count(r.have) == nil then
+            q.reason = 'Some material or intermediate bag counts are unknown. Refresh when readable.'
+            return q
+        end
+    end
     local needs = {}
     for _, r in ipairs(plan.rows or {}) do
         local id, qty = Int(r.item, 1, W.MAX_ID), Int(r.qty, 1, W.MAX_ID)

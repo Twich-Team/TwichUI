@@ -22,7 +22,8 @@ and updates pending plans; bag, merchant,
 money and item metadata events refresh the quote, coalesced into one callback.
 Queue changes use the planner's existing notifications. Bag events invalidate nested
 material plans even while the main Workshop window is hidden. Refresh quote re-reads
-everything. Pending plans/unknown bag counts do not reuse old need estimates.
+everything. Pending plans and unknown root/nested/intermediate bag counts do not reuse
+old need estimates or quote unverified outstanding needs.
 Close/Escape dismiss for the visit. Merchant close/combat/Workshop suspension
 clear rows and invalidate pending redraws; resume registers only owned work.
 No preferences or behavior of Vendor Restock are changed. No saved data added.

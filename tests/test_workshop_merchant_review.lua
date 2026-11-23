@@ -41,7 +41,7 @@ GetMerchantItemID = function(i) return live[i].id end
 C_MerchantFrame = { GetItemInfo = function(i) return live[i] end }
 GetMerchantItemCostInfo = function() return 0 end
 BuyMerchantItem = function() error('No purchase API may be called by a quote') end
-local plan = { rows = {{kind='buy',item=10,qty=5},{kind='buy',item=11,qty=3},{kind='buy',item=12,qty=2},{kind='buy',item=13,qty=4},{kind='make',item=14,qty=9}} }
+local plan = { rows = {{kind='buy',have=0,item=10,qty=5},{kind='buy',have=0,item=11,qty=3},{kind='buy',have=0,item=12,qty=2},{kind='buy',have=0,item=13,qty=4},{kind='make',item=14,qty=9}} }
 local state = 'ready'
 W.Session = { ShoppingPlan = function() return plan, {}, state end }
 local bumped = 0
@@ -73,6 +73,9 @@ q=M.Quote(plan,M.Read(),state);eq(q.rows[1].qty,0)
 -- Pending needs and unknown bags do not quote old plans.
 eq(#M.Quote(plan,M.Read(),'planning').rows,0)
 plan.unknownBags=1;eq(#M.Quote(plan,M.Read(),'ready').rows,0);plan.unknownBags=0
+-- Unknown nested ownership (including a made intermediate) refuses the whole quote.
+plan.rows[1].have=nil;eq(#M.Quote(plan,M.Read(),'ready').rows,0);plan.rows[1].have=0
+plan.rows[5].line={countsUnknown=true};eq(#M.Quote(plan,M.Read(),'ready').rows,0);plan.rows[5].line=nil
 -- Secret or missing money metadata refuses quote for that listing.
 issecretvalue=function(v) return v == 'SECRET' end
 live[1].price='SECRET';eq(M.Read()[10].eligible,false);live[1].price=5
@@ -83,7 +86,7 @@ local original=C_MerchantFrame.GetItemInfo
 C_MerchantFrame.GetItemInfo=function(i) guid='other';return original(i) end
 guid='original';eq(M.Read(),nil);C_MerchantFrame.GetItemInfo=original
 -- Rows are capped and truncation explicit.
-local big={rows={}};for i=1,520 do big.rows[i]={kind='buy',item=i,qty=1} end
+local big={rows={}};for i=1,520 do big.rows[i]={kind='buy',have=0,item=i,qty=1} end
 q=M.Quote(big,{},'ready');eq(#q.rows,512);eq(q.truncated,true)
 -- Close/combat/consent and cancellation invalidate scheduled callbacks.
 local eventFrame=frames[1]
