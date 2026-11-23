@@ -5,6 +5,7 @@ local UI, O, S = W.UI, W.Observe, W.Session
 local M = { LIMIT = 512 }
 W.MerchantReview = M
 local frame, events, pending, generation, dismissed = nil, nil, false, 0, false
+local Schedule
 local MAX_MONEY = 9007199254740991
 local function Int(v, lo, hi) return W.Int(v, lo, hi) end
 local function Open()
@@ -30,7 +31,8 @@ function M.Read()
         id, t = ok and Int(id, 1, W.MAX_ID), ok and W.Plain(t)
         if id and type(t) == 'table' and not out[id] then
             local price, stack, stock = Int(t.price, 0, W.MAX_ID), Int(t.stackCount, 1, W.MAX_QTY), Int(t.numAvailable, -1, W.MAX_ID)
-            local moneyOnly = W.Plain(t.hasExtendedCost) == false and W.Plain(t.currencyID) == nil and Int(costs, 0, W.MAX_ID) == 0
+            local currencyKnown = not (issecretvalue and issecretvalue(t.currencyID))
+            local moneyOnly = currencyKnown and W.Plain(t.hasExtendedCost) == false and W.Plain(t.currencyID) == nil and Int(costs, 0, W.MAX_ID) == 0
             out[id] = { price = price, stack = stack, stock = stock,
                 eligible = moneyOnly and W.Plain(t.isPurchasable) == true and price ~= nil and stack ~= nil and stock ~= nil }
         end
@@ -137,15 +139,18 @@ local function Build()
     local refresh = UI.Button(frame, 'Refresh quote', 110, 'secondary', function() M.Refresh(true) end)
     refresh:SetPoint('BOTTOMRIGHT', -14, 8)
     UISpecialFrames[#UISpecialFrames + 1] = 'TwichUIWorkshopMerchantQuote'
-    frame:SetScript('OnHide', function() dismissed = true end)
+    frame:SetScript('OnHide', function() dismissed = true; M.Hide() end)
 end
 function M.Hide()
     generation, pending = generation + 1, false
+    if W.Strategy and W.Strategy.Listen then W.Strategy.Listen(Schedule, false) end
     if frame then frame:Hide(); frame.list:SetData({}); frame.quote = nil end
 end
 function M.Refresh(explicit)
     if dismissed and not explicit then return end
+    if explicit then dismissed = false end
     if not Open() then M.Hide(); return end
+    if W.Strategy and W.Strategy.Listen then W.Strategy.Listen(Schedule, true) end
     local listings = M.Read()
     if not listings then M.Hide(); return end
     local plan, _, state = S.ShoppingPlan()
@@ -163,7 +168,7 @@ function M.Refresh(explicit)
     frame:Show()
     if R.FitToScreen then R.FitToScreen(frame) end
 end
-local function Schedule()
+Schedule = function()
     if pending or dismissed or not Open() then return end
     pending = true
     local mine = generation
@@ -179,11 +184,13 @@ function M.Start()
         events:SetScript('OnEvent', function(_, event)
             if event == 'MERCHANT_CLOSED' or event == 'PLAYER_REGEN_DISABLED' then M.Hide(); return end
             if event == 'MERCHANT_SHOW' then dismissed = false end
+            -- Nested make materials are not all represented in Session.PlanKey's
+            -- root bag signature; invalidate the planner even with Workshop hidden.
+            if event == 'BAG_UPDATE_DELAYED' and W.Strategy then W.Strategy.Bump() end
             Schedule()
         end)
     end
     if not W.Active() then return end
-    if W.Strategy and W.Strategy.Listen then W.Strategy.Listen(Schedule, true) end
     for _, e in ipairs({ 'MERCHANT_SHOW', 'MERCHANT_UPDATE', 'MERCHANT_CLOSED', 'BAG_UPDATE_DELAYED',
         'PLAYER_MONEY', 'GET_ITEM_INFO_RECEIVED', 'ITEM_DATA_LOAD_RESULT', 'PLAYER_REGEN_DISABLED' }) do events:RegisterEvent(e) end
     Schedule()
@@ -191,7 +198,6 @@ end
 function M.Stop()
     M.Hide()
     if events then events:UnregisterAllEvents() end
-    if W.Strategy and W.Strategy.Listen then W.Strategy.Listen(Schedule, false) end
 end
 function M.Stats() return { shown = frame and frame:IsShown() or false, built = frame ~= nil } end
 M.Start()

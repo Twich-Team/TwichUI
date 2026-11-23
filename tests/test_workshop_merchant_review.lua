@@ -44,7 +44,8 @@ BuyMerchantItem = function() error('No purchase API may be called by a quote') e
 local plan = { rows = {{kind='buy',item=10,qty=5},{kind='buy',item=11,qty=3},{kind='buy',item=12,qty=2},{kind='buy',item=13,qty=4},{kind='make',item=14,qty=9}} }
 local state = 'ready'
 W.Session = { ShoppingPlan = function() return plan, {}, state end }
-W.Strategy = { Listen = function(fn,on) listeners[fn] = on and true or nil end }
+local bumped = 0
+W.Strategy = { Bump = function() bumped = bumped + 1 end, Listen = function(fn,on) listeners[fn] = on and true or nil end }
 W.Observe = { ItemFacts = function(id) return 'Material '..id, 134400, 2 end }
 W.UI = { K = {text={},textDim={},bronzeText={}}, ICON_BLANK=134400, Init=function() end, Panel=function() end,
     Text=function() return fake() end, Button=function() return fake() end, Money=tostring,
@@ -75,6 +76,7 @@ plan.unknownBags=1;eq(#M.Quote(plan,M.Read(),'ready').rows,0);plan.unknownBags=0
 -- Secret or missing money metadata refuses quote for that listing.
 issecretvalue=function(v) return v == 'SECRET' end
 live[1].price='SECRET';eq(M.Read()[10].eligible,false);live[1].price=5
+live[1].currencyID='SECRET';eq(M.Read()[10].eligible,false);live[1].currencyID=nil
 live[1].hasExtendedCost=nil;eq(M.Read()[10].eligible,false);live[1].hasExtendedCost=false
 -- Merchant identity changed during live read: no quote.
 local original=C_MerchantFrame.GetItemInfo
@@ -85,6 +87,7 @@ local big={rows={}};for i=1,520 do big.rows[i]={kind='buy',item=i,qty=1} end
 q=M.Quote(big,{},'ready');eq(#q.rows,512);eq(q.truncated,true)
 -- Close/combat/consent and cancellation invalidate scheduled callbacks.
 local eventFrame=frames[1]
+eventFrame.scripts.OnEvent(eventFrame,'BAG_UPDATE_DELAYED');eq(bumped,1);flush()
 eventFrame.scripts.OnEvent(eventFrame,'MERCHANT_UPDATE')
 shown=false;eventFrame.scripts.OnEvent(eventFrame,'MERCHANT_CLOSED');flush();eq(M.Stats().shown,false)
 shown=true;combat=true;eq(M.Read(),nil);combat=false;held=true;eq(M.Read(),nil);held=false
@@ -94,4 +97,5 @@ active=true;M.Start();eq(eventFrame.events.MERCHANT_SHOW,true)
 plan.rows[1].qty=4;live[1].numAvailable=-1
 M.Refresh(true);eq(M.Stats().shown,true);eq(TwichUIWorkshopMerchantQuote.quote.rows[1].qty,4)
 M.Stop();flush();eq(M.Stats().shown,false)
+shown=false;M.Start();flush();eq(next(listeners),nil);M.Stop()
 print('PASSED Workshop merchant review: live-only quotes, bounds and cleanup passed')

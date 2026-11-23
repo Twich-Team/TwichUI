@@ -17,9 +17,11 @@ exceed outstanding demand. A remainder stays unquoted. Capacity is explicitly
 unverified and insufficient/unknown money is shown. This is an estimate, never
 spending authorization; there are no selected purchase controls in this fallback.
 
-The existing planner's completion listener updates pending plans; bag, merchant,
+An owned planner completion listener exists only during an active merchant review
+and updates pending plans; bag, merchant,
 money and item metadata events refresh the quote, coalesced into one callback.
-Queue changes use the planner's existing notifications. Refresh quote re-reads
+Queue changes use the planner's existing notifications. Bag events invalidate nested
+material plans even while the main Workshop window is hidden. Refresh quote re-reads
 everything. Pending plans/unknown bag counts do not reuse old need estimates.
 Close/Escape dismiss for the visit. Merchant close/combat/Workshop suspension
 clear rows and invalidate pending redraws; resume registers only owned work.
