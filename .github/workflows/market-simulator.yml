@@ -80,7 +80,7 @@ jobs:
           export SIMLAB_UI_SOURCE="$reference"
           export WOWSIM_LAB="$RUNNER_TEMP/market-simulator-install"
           bash tools/simlab/setup.sh
-          echo "SIMLAB_INSTALL=$WOWSIM_LAB" >> "$GITHUB_ENV"
+          echo "WOWSIM_INSTALL=$WOWSIM_LAB" >> "$GITHUB_ENV"
           echo "WOWSIM_LAB=$WOWSIM_LAB" >> "$GITHUB_ENV"
       - name: Run unchanged full discovery, simulator catalogs and negative controls
         shell: bash
