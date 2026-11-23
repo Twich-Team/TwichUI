@@ -65,6 +65,7 @@ jobs:
           export WOWSIM_LAB="$RUNNER_TEMP/market-simulator-install"
           bash tools/simlab/setup.sh
           echo "SIMLAB_INSTALL=$WOWSIM_LAB" >> "$GITHUB_ENV"
+          echo "WOWSIM_LAB=$WOWSIM_LAB" >> "$GITHUB_ENV"
       - name: Run unchanged full discovery, simulator catalogs and negative controls
         shell: bash
         run: |
@@ -76,7 +77,10 @@ jobs:
             mkdir /mnt/c
             # Drop setup capabilities before the unchanged Bubblewrap launcher.
             exec setpriv --inh-caps=-all --ambient-caps=-all -- "$@"
-          ' sh bash tests/run.sh full --profile cloud --jobs 2 --sim-jobs 1 --measure
+          ' sh bash -ec '
+            bash tools/simlab/sim.sh --help
+            exec bash tests/run.sh full --profile cloud --jobs 2 --sim-jobs 1 --measure
+          '
       - name: Preserve passing and failed evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
