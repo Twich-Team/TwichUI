@@ -194,7 +194,7 @@ Each note is preserved in wording below. The proposed status and effort are plan
 | F19 | Remove last name from chat | 5 | Research/refinement | S/M | Clarify whether realm suffix vs actual displayed surname; avoid mangling names |
 | F20 | Reminder Behaviors | 6 | Clarify / extend existing reminders | M | Define behavior examples and distinguish from outputs such as action glow |
 | F21 | Talent builder | 6 | Large concept / feasibility | L | Avoid unrestricted talent/spell automation; specify planner UX and game API |
-| F22 | Enhanced dispel indicators | 5 | Candidate / API feasibility | M | Healer usability, overlap with other addon visuals, combat-safe signals |
+| F22 | Dispel Indicator Studio | 5 | Architecture & design proposed; runtime deferred | L / phased | [Research, mockups and staged plan](design/f22/README.md): premium preset-first Simple mode and advanced WYSIWYG layers for EllesmereUI Player, Target, Party and Raid; capability-gated friendly cleanse / hostile purge, bounded motion, combat-safe native integration and Execute Range coexistence |
 | F23 | Prayer of Mending tracker | 5 | Candidate / API feasibility | S/M | Spell-specific observation; confirm Forever mechanics and secure UI limits |
 | F24 | TUI Does it Die? | 6 | Concept — clarify | ? | Keep idea name; define intended inputs/outputs before estimate |
 | F25 | Naowh: Smart Reminders | 6 | Research concept | M/L | Capture inspirational behaviors; implement distinct value, not clone |
