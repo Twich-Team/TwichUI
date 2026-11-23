@@ -107,7 +107,8 @@ return function(t, path)
     end
     if t.CLIENT then
         MXP.Set("unexplored", "show")
-        if os.getenv("TWICHUI_MAPLAB_SCENARIO_SET") == "feedback-v1" then
+        local profile = os.getenv("TWICHUI_MAPLAB_SCENARIO_SET")
+        if profile == "feedback-v1" or profile == "composition-v1" then
             assert(loadfile(REPO .. "tools/maplab/feedback.lua"))()(t, Snapshot)
         else
             for _, s in ipairs(t.CLIENT.scenes) do
@@ -124,7 +125,8 @@ return function(t, path)
         local f = assert(io.open(path, "w")); f:write(R.DiagnosticsKit.Json.Encode(result, 17)); f:close()
         return
     end
-    assert(os.getenv("TWICHUI_MAPLAB_SCENARIO_SET") ~= "feedback-v1", "feedback-v1 needs actual client table input")
+    assert(os.getenv("TWICHUI_MAPLAB_SCENARIO_SET") ~= "feedback-v1"
+        and os.getenv("TWICHUI_MAPLAB_SCENARIO_SET") ~= "composition-v1", "regional camera profiles need actual client table input")
     At("world", "Synthetic world overview", 0.5, 0.5, 1)
     local u, v = t.WorldOf(1429, 0.5, 0.5)
     for _, z in ipairs({ 12, 20, 24, 28, 32, 36, 40, 48 }) do

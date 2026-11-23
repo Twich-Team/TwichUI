@@ -1,5 +1,9 @@
 # Seamless map composition: evidence and next input
 
+The corrected expanded bundle has now arrived and validates successfully. See
+[expanded-artwork results and native city repair](seamless-map-expanded-artwork.md).
+The earlier unchanged-input evidence below is preserved as checkpoint history.
+
 This checkpoint fixes the artwork handoff and adds a private, source-aware
 composition experiment. **Production composition is still unfinished.** The
 experiment improves some shore/river joins, but does not remove continent titles,

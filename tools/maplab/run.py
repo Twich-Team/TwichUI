@@ -297,7 +297,9 @@ def run_inner(args):
         report["nativeReference"] = {"source": "owner-provided screenshot; not captured by this tool",
             "sha256": hashlib.sha256((output / "native-reference.png").read_bytes()).hexdigest(),
             "reportId": request.get("reportId") if request else False}
-    (output / "render-state.json").write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
+    # Dense machine data: whitespace alone can push the bounded regional
+    # catalog over our 8 MiB re-import limit. Keep that input limit unchanged.
+    (output / "render-state.json").write_text(json.dumps(state, separators=(",", ":"), sort_keys=True), encoding="utf-8")
     if requested_artwork:
         (output / "asset-request.json").write_text(json.dumps(requested_artwork, indent=2, sort_keys=True), encoding="utf-8")
         report["assetRequest"] = {"file": "asset-request.json", "count": len(requested_artwork["fileIds"]),
@@ -314,7 +316,7 @@ def run_inner(args):
 def parser():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--all", action="store_true", help="export the complete bounded production-Lua scenario catalog")
-    p.add_argument("--scenario-set", choices=("default", "feedback-v1"), default="default", help="versioned production-Lua camera catalog; feedback-v1 requires a client bundle")
+    p.add_argument("--scenario-set", choices=("default", "feedback-v1", "composition-v1"), default="default", help="versioned production-Lua camera catalog; regional profiles require a client bundle")
     p.add_argument("--scene", action="append", help="render only this exact exported scene ID; repeat for a focused comparison")
     p.add_argument("--request-native-highlights", action="store_true", help="include schema-verified native highlight candidates in the generated private artwork request; requires collector 2.2+")
     p.add_argument("--client-bundle", action="append", type=Path, help="private collect.py ZIP part; repeat for all parts")

@@ -207,3 +207,7 @@ AI assistants should inspect the gallery images, then use production texture IDs
 
 Source-aware composition experiments, current artwork gaps and the corrected
 collector handoff are documented in [seamless map composition](seamless-map-composition.md).
+
+The corrected expanded input, 71-camera composition profile, native city repair
+and private continent experiments are documented in
+[expanded-artwork results](seamless-map-expanded-artwork.md).

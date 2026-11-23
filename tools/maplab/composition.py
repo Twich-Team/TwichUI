@@ -43,6 +43,7 @@ VERSION = "1.0.0"
 # camera subsets, so selecting a different gallery cannot recolor an old view.
 BORDER_TARGET_RGB = [143.0780239367152, 112.49565621920298, 46.957604929170046]
 CALIBRATED_BASE_PIXELS = {
+    1414: "d43f120f487eb23d9c70cc83663d1775b138f3e119a5f83e101da3f6aa598b31",
     1415: "ae6486160dba6ac6521c798736ca1373ee950b9d01767ae2a4dbe3025dae7b25",
     1420: "bec3ad2b2ca5c3d90024135edb6fb54fd12b94b970aa5904558e7c6947254249",
     1429: "ca1d7eb10a5f3e1854bcf5f489b766475308c290713eebab6053260fdba72f7f",
@@ -112,7 +113,7 @@ def source_masks(alpha, exclusions=(), frame=28, reach=65, band=50, core=36):
     # Never claim another source mask is authoritative land classification.
     return {"territory": territory.astype(np.float32), "core": core_mask.astype(np.float32),
             "band": band_mask.astype(np.float32), "distance": outside.astype(np.float32),
-            "support": a}
+            "support": a, "availability": (frame_keep * allowed).astype(np.float32)}
 
 
 def border_grade(image, band_mask, core_mask, target):
@@ -212,24 +213,155 @@ def on_view(values, bounds, scene):
         Image.Resampling.BILINEAR, fillcolor=0), dtype=np.float32)
 
 
-def ownership_masks(items, scene):
+def ownership_masks(items, scene, extended=False, coasts=None):
     claims, cores = {}, {}
+    coarse_land, registered = projected_coasts(scene, coasts or {})
+    extended = extended and bool(registered)
+    availability = {}
     for mid, item in items.items():
         support = on_view(item["masks"]["territory"], item["bounds"], scene)
+        if extended:
+            available = on_view(item["masks"]["availability"], item["bounds"], scene) * coarse_land
+            support = np.maximum(support, available)
+            availability[mid] = support
         distance = on_view(item["masks"]["distance"], item["bounds"], scene)
         core = on_view(item["masks"]["core"], item["bounds"], scene)
-        claims[mid] = support * np.exp(-np.minimum(distance, 160) / 28)
+        claims[mid] = support * np.exp(-np.minimum(distance, 700 if extended else 160) / 28)
         cores[mid] = core
     result = {}
     total = sum(claims.values()) if claims else np.zeros((scene["height"], scene["width"]), dtype=np.float32)
     for mid, claim in claims.items():
         others = np.maximum.reduce([c for k, c in cores.items() if k != mid]) if len(cores) > 1 else np.zeros_like(claim)
         # Share overlap; another zone's strong core remains exclusively its own.
-        result[mid] = claim / np.maximum(total, 1) * (1 - others)
+        # Normalize relative distance without letting another source cancel this
+        # source's frame fade. Each final claim remains <= its own availability.
+        result[mid] = claim / np.maximum(total, 1e-30 if extended else 1) * (availability[mid] if extended else 1) * (1 - others)
     return result
 
 
-def run(client, manifest, state_path, scene_ids, output, rejected_title_study=False):
+COAST_PIXEL_SHA256 = {
+    1414: "28f61c55d1620e5977f1015010db3788ff770384be15105d81543ff6dd537bca",
+    1415: "bfd185a502378607bfb5474e62e22bbe017be8173a2b7860baf74501ddd2bbba",
+}
+COAST_CHECK_POINTS = {
+    1415: [(370, 253), (398, 349), (397, 508), (446, 637), (637, 422), (592, 249)],
+    1414: [(387, 70), (474, 70), (430, 111), (382, 354), (631, 332), (549, 637)],
+}
+
+
+def filled_outline(image, source_size):
+    """Private registered outline RGB, not opaque alpha or generic land colors.
+
+    The reviewed native continent outlines have square POT storage but use only
+    the map-aspect top portion. Registration is source-to-source, not proof of
+    C_Map.GetMapHighlightInfo display geometry.
+    """
+    if image.width != image.height or source_size != (1002, 668):
+        raise LabError("registered continent outline dimensions differ")
+    rgb = np.asarray(image.convert("RGB"))
+    intensity = np.max(rgb, axis=2)
+    used_height = round(image.width * source_size[1] / source_size[0])
+    cropped = Image.fromarray(intensity).crop((0, 0, image.width, used_height))
+    ring = ndimage.binary_closing(np.asarray(cropped) > 8, iterations=2)
+    land = ndimage.binary_fill_holes(ring)
+    if not .05 < float(np.mean(land)) < .4:
+        raise LabError("native outline does not form the reviewed bounded silhouette")
+    mask = Image.fromarray((land * 255).astype(np.uint8)).resize(source_size, Image.Resampling.BILINEAR)
+    soft = np.asarray(mask.filter(ImageFilter.GaussianBlur(1.5)), dtype=np.float32) / 255
+    return soft, dict(storageSize=list(image.size), crop=[0, 0, image.width, used_height],
+        rgbOutlineThreshold=8, filledFraction=round(float(np.mean(land)), 6),
+        placement="Empirical source-canvas aspect registration; native API display bounds remain unavailable",
+        limitations="Coarse source outline; native zone/island/water detail retained above; interior water holes not authoritative")
+
+
+def source_coasts(data, assets, output):
+    result, evidence = {}, {}
+    for mid in (1414, 1415):
+        base, m = base_canvas(data, mid, assets); calibrated(base, mid)
+        highlight = m.get("highlight", {})
+        if highlight.get("atlasId") or not highlight.get("fileId"):
+            raise LabError("registered native outline metadata unavailable")
+        image = assets.get(str(highlight["fileId"]))
+        if image is None or hashlib.sha256(image.tobytes()).hexdigest() != COAST_PIXEL_SHA256[mid]:
+            raise LabError("registered native outline source pixels differ")
+        mask, details = filled_outline(image, base.size)
+        # Independent approximate coast points were authored on the native base
+        # review grid before the highlight was inspected. They are not API proof.
+        intensity = np.max(np.asarray(image)[..., :3], axis=2)
+        ring = np.asarray(Image.fromarray(intensity).crop(tuple(details["crop"])).resize(base.size)) > 8
+        distance = ndimage.distance_transform_edt(~ring)
+        samples = [round(float(distance[y, x]), 4) for x, y in COAST_CHECK_POINTS[mid]]
+        details.update(fileId=highlight["fileId"], pixelSha256=COAST_PIXEL_SHA256[mid],
+            alphaExtrema=list(image.getchannel("A").getextrema()), checkPoints=COAST_CHECK_POINTS[mid],
+            sourceCoastCheckDistancePixels=samples, nativeApiGeometryVerified=False)
+        result[mid] = dict(mask=mask, files=set(m["files"]))
+        evidence[str(mid)] = details
+        Image.fromarray(np.rint(mask * 255).astype(np.uint8)).save(output / f"{mid}-registered-coast.png")
+        ink = np.asarray(Image.fromarray(intensity).crop(tuple(details["crop"])).resize(base.size), dtype=np.float32)
+        outline = Image.new("RGBA", base.size, (250, 30, 240, 0)); outline.putalpha(Image.fromarray(np.rint(np.clip(ink / 64, 0, 1) * 255).astype(np.uint8)))
+        review = base.copy();review.alpha_composite(outline);review.save(output / f"{mid}-source-registration.png")
+        assets.release_sources()
+    return result, evidence
+
+
+def projected_coasts(scene, coasts):
+    coarse_land = np.zeros((scene["height"], scene["width"]), np.float32)
+    registered = []
+    for mid, coast in coasts.items():
+        tiles = [t for t in scene["textures"] if t.get("fileId") in coast["files"]]
+        if not tiles: continue
+        bounds = dict(u0=min(t["u0"] for t in tiles), v0=min(t["v0"] for t in tiles),
+                      u1=max(t["u1"] for t in tiles), v1=max(t["v1"] for t in tiles))
+        coarse_land = np.maximum(coarse_land, on_view(coast["mask"], bounds, scene));registered.append(mid)
+    return coarse_land, registered
+
+
+def regional_paper(scene, items, coasts=None):
+    """Owned mathematical paper; uncertain map-frame gaps stay unhached.
+
+    Painted-support and conservative art rectangles are NOT declared land masks.
+    No RGB classifier, highlight rescaling or invented geographic features.
+    """
+    width, height = scene["width"], scene["height"]
+    context = np.zeros((height, width), np.float32)
+    uncertain = np.zeros_like(context)
+    for item in items.values():
+        context = np.maximum(context, on_view(item["masks"]["territory"], item["bounds"], scene))
+        uncertain = np.maximum(uncertain, on_view(np.ones((2, 2), np.float32), item["bounds"], scene))
+    uncertain = ndimage.gaussian_filter(uncertain, 12)
+    coarse_land, registered = projected_coasts(scene, coasts or {})
+    weight = np.maximum(context, coarse_land) if registered else np.maximum(context, uncertain * .35)
+    view = scene["view"]; yy, xx = np.indices(context.shape)
+    wx = (view["u0"] + (xx + .5) / width * (view["u1"] - view["u0"])) * 1002
+    wy = (view["v0"] + (yy + .5) / height * (view["v1"] - view["v0"])) * 668
+    grain = (np.sin(wx * 1.618 + wy * .73) + np.sin(wx * 4.414 - wy * 2.17)
+             + np.sin(wx * .31 + wy * .61) * 1.7) * 1.1
+    sea = np.array([145, 151, 140], np.float32)
+    paper = np.array([184, 155, 105], np.float32)
+    rgb = sea * (1 - weight[..., None]) + paper * weight[..., None] + grain[..., None]
+    # Fine engraved strokes only outside all selected map rectangles; gaps of
+    # uncertain geography are plain paper rather than invented open water.
+    phase = wy * 14 + np.sin(wx * .8) * .55
+    lines = np.maximum(0, 1 - np.abs(np.sin(phase)) * 12)
+    breaks = smooth((np.sin(wx * 2.3 + wy * .3) + .3) * 2)
+    rgb -= (lines * breaks * (1 - np.maximum(coarse_land, context) if registered else 1 - uncertain) * 8)[..., None]
+    rgba = np.empty((height, width, 4), np.uint8)
+    rgba[..., :3] = np.clip(np.rint(rgb), 0, 255).astype(np.uint8); rgba[..., 3] = 255
+    return Image.fromarray(rgba), dict(source="TwichUI mathematical paper/grain/fine strokes", opaque=True,
+        geography="Painted-support context and conservative selected-art rectangles; not semantic land/ocean",
+        registeredSourceContinents=registered, nativeApiHighlightGeometryVerified=False,
+        coarseLandPixels=int(np.count_nonzero(coarse_land > .5)),
+        unpaintedSourceLandPixels=int(np.count_nonzero((coarse_land > .5) & (context < .01))),
+        uncertainFramePixels=int(np.count_nonzero((uncertain > .5) & (context < .01))))
+
+
+def overlay_file_ids(data, selected):
+    """Replace overlay carriers only; retain production native-base ROI repairs."""
+    art_by_map = {m["id"]: m["art"] for m in data["maps"]}
+    return {fid for mid in selected for piece in data["reveal"].get(str(art_by_map[mid]), []) for fid in piece[4]}
+
+
+def run(client, manifest, state_path, scene_ids, output, rejected_title_study=False, regional_backdrop=False, extended_base_claims=False):
     started = time.perf_counter()
     data, manifest_data, state = load_json(client), load_json(manifest), load_json(state_path)
     write_tables(data); validate_export(state)
@@ -237,6 +369,8 @@ def run(client, manifest, state_path, scene_ids, output, rejected_title_study=Fa
         raise LabError("authored prototype calibration requires matching reviewed Forever1.60.1.71037 inputs")
     validation = validate_manifest(manifest_data, manifest.parent, data)
     if validation["status"] == "failure": raise LabError("source bundle failed validation")
+    if extended_base_claims and not regional_backdrop: raise LabError("extended base claims require regional backdrop mode")
+    if regional_backdrop and validation["status"] != "success": raise LabError("regional composition requires a verified complete source bundle")
     if not scene_ids or len(scene_ids) > 12 or len(set(scene_ids)) != len(scene_ids): raise LabError("one to twelve distinct scenes required")
     scenes = [s for s in state["scenes"] if s["id"] in scene_ids]
     if any(s.get("metadata", {}).get("art", {}).get("unexploredMode") != "show" for s in scenes):
@@ -257,24 +391,44 @@ def run(client, manifest, state_path, scene_ids, output, rejected_title_study=Fa
         dependencies=dict(Pillow=PILLOW_VERSION, numpy=np.__version__, scipy=SCIPY_VERSION),
         settings=dict(frameSourcePixels=28, territoryReachSourcePixels=65,
             bandSourcePixels=50, coreSourcePixels=36, fixedBorderTargetRgb=BORDER_TARGET_RGB,
-            boundarySampleProvenance="Equal-zone mean of calibrated1420/1429/1431/1434/1436 source-alpha border bands"))
+            boundarySampleProvenance="Equal-zone mean of calibrated1420/1429/1431/1434/1436 source-alpha border bands", regionalBackdrop=bool(regional_backdrop), extendedBaseClaims=bool(extended_base_claims)))
     # Only process zones that production Lua selected for one of these scenes.
     selected = {c["mapId"] for s in scenes for c in s["metadata"].get("baseCandidates", [])}
-    prepared = {}
-    for mid in sorted(selected & EXCLUSIONS.keys()):
-        base, overlay, ids = assemble(data, mid, assets)
-        calibrated(base, mid)
-        masks = source_masks(overlay.getchannel("A"), EXCLUSIONS[mid])
-        prepared[mid] = dict(base=base, overlay=overlay, masks=masks, ids=ids)
-        assets.release_sources()
+    prepared, skipped = {}, {}
+    maps_by_id = {m["id"]: m for m in data["maps"]}
+    requested = selected if regional_backdrop else selected & EXCLUSIONS.keys()
+    if len(requested) > 48: raise LabError("private composition exceeds48source zones")
     target = np.array(BORDER_TARGET_RGB, dtype=np.float32)
-    for mid, item in prepared.items():
-        item["graded"], grade = border_grade(item["overlay"], item["masks"]["band"], item["masks"]["core"], target)
-        for key in ("territory", "core", "band"):
-            Image.fromarray(np.rint(item["masks"][key] * 255).astype(np.uint8)).save(output / f"{mid}-{key}.png")
-        item["graded"].save(output / f"{mid}-graded-overlay.png")
-        report["sourceZones"][str(mid)] = dict(sourceIds=item["ids"], authoredExclusions=EXCLUSIONS[mid], grade=grade,
-            classification="native painted support with authored label/frame exclusions, not complete geography")
+    for mid in sorted(requested):
+        if mid not in maps_by_id or not data["reveal"].get(str(maps_by_id[mid]["art"])):
+            skipped[mid] = "no reviewed native overlay support"; continue
+        try:
+            base, overlay, ids = assemble(data, mid, assets)
+        except LabError as error:
+            if not regional_backdrop: raise
+            skipped[mid] = str(error); assets.release_sources(); continue
+        if mid in CALIBRATED_BASE_PIXELS: calibrated(base, mid)
+        masks = source_masks(overlay.getchannel("A"), EXCLUSIONS.get(mid, []), reach=65 if mid in EXCLUSIONS else 28)
+        graded, grade = border_grade(overlay, masks["band"], masks["core"], target)
+        compact = {}
+        for key, values in masks.items():
+            small = image_float(values).resize((256, 171), Image.Resampling.BILINEAR)
+            compact[key] = np.asarray(small, dtype=np.float32)
+            if key in ("territory", "core", "band"):
+                Image.fromarray(np.rint(np.clip(compact[key], 0, 1) * 255).astype(np.uint8)).save(output / f"{mid}-{key}.png")
+        prepared[mid] = dict(base=base, graded=graded, masks=compact, ids=ids)
+        graded.save(output / f"{mid}-graded-overlay.png")
+        report["sourceZones"][str(mid)] = dict(sourceIds=ids, authoredExclusions=EXCLUSIONS.get(mid, []), grade=grade,
+            classification="native painted support with shared claims; not complete land/ocean geography",
+            authoredCalibration=mid in CALIBRATED_BASE_PIXELS, territoryReachSourcePixels=65 if mid in EXCLUSIONS else 28)
+        assets.release_sources()
+    report["skippedZones"] = skipped
+    coasts = {}
+    if regional_backdrop:
+        try:
+            coasts, report["sourceCoastRegistration"] = source_coasts(data, assets, output)
+        except LabError as error:
+            report["sourceCoastRegistration"] = {"status": "unavailable; native parent retained", "reason": str(error)}
     parent, parent_map = base_canvas(data, 1415, assets)
     calibrated(parent, 1415)
     cleaned_parent, title_mask, title = parent_label_field(parent)
@@ -298,11 +452,25 @@ def run(client, manifest, state_path, scene_ids, output, rejected_title_study=Fa
             if mid not in prepared: continue
             geometry = selected_underpaints(scene, {mid: None})[0]
             items[mid] = dict(prepared[mid], bounds=geometry, alpha=record["alpha"])
-        claims = ownership_masks(items, scene)
+        unsafe = [r["mapId"] for r in scene["metadata"].get("baseCandidates", []) if r["mapId"] not in items]
+        if regional_backdrop and (unsafe or not coasts):
+            items = {}  # Fail closed to the complete native rendering for this scene.
+        claims = ownership_masks(items, scene, extended_base_claims, coasts)
         candidate["textures"] = []
-        overlay_ids = {fid for item in items.values() for fid in item["ids"]}
+        overlay_ids = overlay_file_ids(data, items)
         styles = {}
-        zone_level = next(f["level"] for f in scene["metadata"]["art"]["layers"] if f["kind"] == "zone")
+        layer_rows = scene["metadata"]["art"]["layers"]
+        zone_layer = next(f for f in layer_rows if f["kind"] == "zone")
+        zone_level = zone_layer["level"]
+        backdrop_mix = float(smooth((zone_layer["alpha"] - .1) / .65)) if regional_backdrop and items and not unsafe and coasts else 0
+        paper_stats = {"enabled": False, "fallbackUnprocessedZones": unsafe}
+        if backdrop_mix > 0:
+            paper, paper_stats = regional_paper(scene, items, coasts)
+            paper_stats.update(enabled=True, mix=backdrop_mix, parentArtwork="Muted/replaced as a whole; no text pixel repair")
+            key = "composition-owned-paper"; assets.loaded[key] = paper
+            parent_level = min(f["level"] for f in layer_rows if f["kind"] in ("world", "cont"))
+            candidate["textures"].append(dict(asset=key, **scene["view"], alpha=1, level=parent_level, drawLayer="BACKGROUND", sublayer=-8))
+        parent_levels = {f["level"] for f in layer_rows if f["kind"] in ("world", "cont")}
         for t in scene["textures"]:
             if t.get("fileId") in overlay_ids and t.get("level") == zone_level:
                 for mid, item in items.items():
@@ -311,6 +479,7 @@ def run(client, manifest, state_path, scene_ids, output, rejected_title_study=Fa
                             sublayer=t.get("sublayer", 0), order=t.get("order", 0))
                 continue
             tex = copy.deepcopy(t)
+            if tex.get("level") in parent_levels: tex["alpha"] *= 1 - backdrop_mix
             fid = tex.get("fileId")
             if fid in parent_tiles:
                 key = "composition-parent:" + str(fid);assets.loaded[key] = parent_tiles[fid]
@@ -348,7 +517,7 @@ def run(client, manifest, state_path, scene_ids, output, rejected_title_study=Fa
                 maskPixelSha256=hashlib.sha256(claims[mid].tobytes()).hexdigest(),
                 maximum=float(np.max(claims[mid])), units="normalized claim; source-alpha support, not semantic land") for mid in items},
             maximumCombinedOwnership=float(np.max(sum(claims.values()))) if claims else 0,
-            acceptance="unreviewed private prototype"))
+            regionalBackdrop=paper_stats, acceptance="unreviewed private prototype"))
     report["sources"] = assets.used
     report["seconds"] = round(time.perf_counter() - started, 6)
     report["status"] = "partial" if any(s["partial"] for s in report["scenes"]) else "source-complete-experiment"
@@ -372,10 +541,12 @@ def main():
     p.add_argument("--client-input", type=Path, required=True);p.add_argument("--assets", type=Path, required=True)
     p.add_argument("--state", type=Path, required=True);p.add_argument("--scene", action="append", required=True)
     p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--extended-base-claims", action="store_true", help="private shared base paint across registered coarse land; requires regional backdrop")
+    p.add_argument("--regional-backdrop", action="store_true", help="private all-selected-zone composition over owned opaque paper; native fallback when source coverage is incomplete")
     p.add_argument("--rejected-title-study", action="store_true", help="apply rejected parent pixel-repair experiment for inspection only; default OFF")
     a = p.parse_args()
     try:
-        r = run(a.client_input, a.assets, a.state, a.scene, a.output, a.rejected_title_study)
+        r = run(a.client_input, a.assets, a.state, a.scene, a.output, a.rejected_title_study, a.regional_backdrop, a.extended_base_claims)
         print(f"Private composition: {len(r['scenes'])} scenes, {r['seconds']:.3f}s; {r['status']}; runtime disabled")
         return 0
     except (OSError, ValueError, KeyError, TypeError) as error:

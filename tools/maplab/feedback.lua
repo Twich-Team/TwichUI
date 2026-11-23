@@ -28,6 +28,11 @@ return function(t, snapshot)
             View(s.id, s.label, u, v, s.zoom)
         end
     end
+    -- Keep feedback-v1's 62 cameras fixed. The composition profile adds a fine
+    -- city handoff course at the same client-table camera, including deep LOD.
+    if os.getenv("TWICHUI_MAPLAB_SCENARIO_SET") == "composition-v1" then
+        Map(1458, "undercity-handoff", .5, .5, { 12, 14, 16, 18, 20, 22, 24, 36, 48 })
+    end
     for _, item in ipairs({ { "cave:40", "jasperlode" }, { "cave:5", "skull-rock" } }) do
         local g = assert(R.MapCaves.Get(item[1]), "feedback cave is in production numeric data")
         local u, v = (g.u0 + g.u1) / 2, (g.v0 + g.v1) / 2
