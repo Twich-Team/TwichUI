@@ -358,13 +358,17 @@ local function MakeRestedXP(c, opts)
       row.text.lines = (opts.rowLines and opts.rowLines[n]) or 1
     end
   end
-  function RXP.RenderFrame(themeUpdate, isLoading)   -- GuideWindow.lua addon.RenderFrame
+  function RXP:UpdateTheme(skipMenu, skipGuideReload)   -- GuideWindow.lua addon:UpdateTheme (v4.11.39)
     local name = RXP.settings.profile.activeTheme
     RXP.activeTheme = RXP.themes[name] or RXP.themes["RXP Blue"]
     RXP.colors, RXP.font = RXP.activeTheme, RXP.activeTheme.font
     RXP.renders = RXP.renders + 1
-    for _, f in pairs(RXP.enabledFrames) do if f.UpdateVisuals then f:UpdateVisuals(true) end end
-    if RXP.currentGuide and not isLoading then
+    for _, f in pairs(RXP.enabledFrames) do
+      -- (a Fake answers any name with a no-op: only a method the frame was given counts)
+      local draw = rawget(f, "UpdateSubTheme") or rawget(f, "UpdateVisuals")
+      if draw then draw(f, true) end
+    end
+    if RXP.currentGuide and not skipGuideReload then
       RXP.LoadRows()
       csf.UpdateText()
       frame.BottomFrame.UpdateFrame()
@@ -395,10 +399,10 @@ local function MakeRestedXP(c, opts)
     arrow.text = arrow:CreateFontString()
     arrow.text:SetFont(ORIGIN, 9, "OUTLINE")
     arrow:SetSize(32, 32)
-    function arrow:UpdateVisuals()
+    function arrow:UpdateSubTheme()   -- map.lua: the picture, from the theme's texture path
       self.texture:SetTexture(RXP.activeTheme.texturePath .. "rxp_navigation_arrow-1")
     end
-    arrow:UpdateVisuals()
+    arrow:UpdateSubTheme()
     RXP.arrowFrame = arrow
     RXP.enabledFrames.arrowFrame = arrow
     RXP.themes["RXP Gold"].displayName = "RXP Gold"
@@ -482,6 +486,50 @@ do
 end
 
 ---------------------------------------------------------------------------
+-- RestedXP v4.11.39 moved its theme refresh from RenderFrame to UpdateTheme. A RestedXP with only the old name is
+-- reported as unsupported (nothing hooked, nothing changed); one with the new name is integrated.
+---------------------------------------------------------------------------
+do
+  local c = Boot({ db = { modules = { restedxpSkin = true } } })
+  local R = Start(c)
+  local S = R.RestedXPSkin
+  local RXP = MakeRestedXP(c)
+  RXP.UpdateTheme = nil   -- v4.11.22: RenderFrame only
+  function RXP.RenderFrame() end
+  RestedXPLoads(c, RXP)
+  assert(S.Status().code == "unsupported", S.Status().code)
+  assert(c.hookCount == 0 and RXP.settings.profile.activeTheme == "RXP Blue", "nothing hooked or changed")
+  assert(S.UseTheme() == false, "no theme is chosen in a RestedXP it can't refresh")
+end
+
+---------------------------------------------------------------------------
+-- RestedXP's Preview Changes (enableThemeLiveReload) off: it draws a chosen theme only at the next load. Said so, not
+-- left as "another theme"; and the theme carries the border colour its item and target windows are drawn with.
+---------------------------------------------------------------------------
+do
+  local c = Boot({ db = { modules = { restedxpSkin = true } } })
+  local R = Start(c)
+  local S = R.RestedXPSkin
+  local RXP = MakeRestedXP(c)
+  RestedXPLoads(c, RXP)
+  local theme = RXP.themes.TwichUI
+  assert(S.Look.Set("borderColor", "ff336699") and S.Look.Set("borderOpacity", 100)); FlushTimers()
+  assert(S.UseTheme())
+  assert(S.Status().code == "active" and S.Status().previewOff == false)
+  assert(theme.borderColor and near(theme.borderColor[1], 0x33 / 255) and near(theme.borderColor[3], 0x99 / 255)
+    and theme.borderColor[4] == 1, "the theme's own border colour follows the look")
+  RXP.settings.profile.enableThemeLiveReload = false
+  RXP.activeTheme = RXP.themes["RXP Blue"]   -- what RestedXP does with Preview Changes off: nothing until a reload
+  assert(S.Status().code == "preview-off", S.Status().code)
+  RXP.settings.profile.enableThemeLiveReload = true
+  RXP:UpdateTheme(true)
+  assert(S.Status().code == "active", "drawn once RestedXP picks it up")
+  RXP.settings.profile.activeTheme = "RXP Gold"; RXP:UpdateTheme(true)
+  RXP.settings.profile.enableThemeLiveReload = false
+  assert(S.Status().code == "theme-not-selected", "another theme chosen is still just that")
+end
+
+---------------------------------------------------------------------------
 -- TwichUI first, RestedXP after (the usual order); a theme is registered once; not selected on its own.
 ---------------------------------------------------------------------------
 do
@@ -497,7 +545,7 @@ do
     "texturePath", "headerTexture", "font", "bgTextures", "edges" }) do
     assert(theme[key] ~= nil, "the theme carries " .. key .. ", so RestedXP fills nothing in")
   end
-  assert(c.hookCount == 4, "RenderFrame, UpdateText, UpdateGuideFontSize and the window's SetScale are hooked: " .. c.hookCount)
+  assert(c.hookCount == 4, "UpdateTheme, UpdateText, UpdateGuideFontSize and the window's SetScale are hooked: " .. c.hookCount)
   assert(RXP.settings.profile.activeTheme == "RXP Blue", "RestedXP's own choice is respected at login")
   assert(S.Status().code == "theme-not-selected")
   assert(RXP.frame.BottomFrame.backdropInfo == RXP.frame.backdrop.edge, "nothing drawn on")
@@ -618,7 +666,7 @@ do
   assert(S.Snapshot().waitingCombat == false)
   -- RestedXP's own refresh in combat is not drawn on either
   c.COMBAT = true
-  RXP.RenderFrame(true)
+  RXP:UpdateTheme(true)
   assert(Ours(RXP, RXP.frame.BottomFrame) == false, "RestedXP drew its own; left alone in combat")
   c.COMBAT = false
   c.FireEvent("PLAYER_REGEN_ENABLED"); FlushTimers()
@@ -700,7 +748,7 @@ do
   local RXP = MakeRestedXP(c)
   RestedXPLoads(c, RXP)
   RXP.settings.profile.activeTheme = "RXP Gold"   -- the theme the player had
-  RXP.RenderFrame(true)
+  RXP:UpdateTheme(true)
   local goldPlain = RXP.frame.CurrentStepFrame.framePool[1].elements[1].text
   goldPlain:SetTextColor(1, 0.9, 0.7)
   local frameCount, themeObject
@@ -750,7 +798,7 @@ do
   local calls = RXP.frame.BottomFrame.backdropCalls
   S.Look.Set("bgOpacity", 33)
   FlushTimers()
-  RXP.RenderFrame(true)
+  RXP:UpdateTheme(true)
   RXP.frame.CurrentStepFrame.UpdateText()
   assert(Ours(RXP, RXP.frame.BottomFrame) == false, "off means off")
   assert(#TIMERS == 0)
@@ -769,7 +817,7 @@ do
 
   -- the player picks another theme in RestedXP's options
   RXP.settings.profile.activeTheme = "RXP Gold"
-  RXP.RenderFrame(true)
+  RXP:UpdateTheme(true)
   assert(S.Status().code == "theme-not-selected")
   for _, f in ipairs(Frames(RXP)) do assert(not Ours(RXP, f), "stepped aside") end
   RXP.frame.CurrentStepFrame.UpdateText()
@@ -781,27 +829,27 @@ do
   assert(RXP.settings.profile.activeTheme == "RXP Gold", "RestedXP's choice is never taken back by a settings change")
   -- choosing it again in RestedXP brings it back
   RXP.settings.profile.activeTheme = "TwichUI"
-  RXP.RenderFrame(true)
+  RXP:UpdateTheme(true)
   assert(Ours(RXP, RXP.frame.BottomFrame) and S.Status().code == "active")
 
   -- RestedXP switches its own profile (another profile, another theme), then back
   local old = RXP.settings.profile
   RXP.settings.profile = { activeTheme = "RXP Blue", guideFontSize = 9 }
-  RXP.RenderFrame(true)
+  RXP:UpdateTheme(true)
   assert(not Ours(RXP, RXP.frame.BottomFrame), "the other profile's theme is respected")
   RXP.settings.profile = old
-  RXP.RenderFrame(true)
+  RXP:UpdateTheme(true)
   assert(Ours(RXP, RXP.frame.BottomFrame), "and ours returns with its profile")
 
   -- v2 guide window (beta): only the theme's colours reach it; its frames aren't drawn on
   RXP.V2 = true
   assert(S.Status().code == "v2-window")
-  RXP.RenderFrame(true)
+  RXP:UpdateTheme(true)
   assert(not Ours(RXP, RXP.frame.BottomFrame), "no frame is finished while v2 is on")
   S.Look.Set("bgColor", "ff302010"); FlushTimers()
   assert(RXP.converts >= 1, "a theme change asks RestedXP to convert the theme for v2")
   RXP.V2 = false
-  RXP.RenderFrame(true)
+  RXP:UpdateTheme(true)
   assert(Ours(RXP, RXP.frame.BottomFrame))
 end
 
@@ -824,7 +872,7 @@ do
   c.EUIRestedxPCache.rxpLayout = "DEFAULT"
   assert(S.Status().code == "theme-not-selected" and S.UseTheme())
   c.EUIRestedxPCache.rxpLayout = "FRAMELESS"
-  RXP.RenderFrame(true)   -- the other skin starts drawing again: ours steps aside
+  RXP:UpdateTheme(true)   -- the other skin starts drawing again: ours steps aside
   assert(not Ours(RXP, RXP.frame.BottomFrame) and S.Status().code == "conflict")
   -- LiteTweaks
   c.EUIRestedxPCache = nil
@@ -935,7 +983,7 @@ do
   local made, owned = #c.made, S.Snapshot().owned
   local hooks = c.hookCount
   for i = 1, 100 do
-    RXP.RenderFrame(true)
+    RXP:UpdateTheme(true)
     RXP.frame.CurrentStepFrame.UpdateText()
     RXP.UpdateGuideFontSize()
     if i % 10 == 0 then S.Look.Set("bgOpacity", 20 + i % 70); S.Text.Set("bodyColor", ("ff%02x%02x%02x"):format(i, i, 200)); FlushTimers() end
@@ -991,7 +1039,7 @@ do
 
   -- RestedXP sets the textures again on its refresh: they stay hidden, with no polling
   f.GuideName.icon:SetTexture("rxp/logo"); f.GuideName.classIcon:SetTexture("rxp/MAGE")
-  RXP.RenderFrame(true)
+  RXP:UpdateTheme(true)
   assert(header.icon.shown == false and header.classIcon.shown == false, "still hidden after RestedXP's refresh")
   assert(#TIMERS == 0, "nothing polls")
 
@@ -1041,7 +1089,7 @@ do
   assert(select(3, Anchor(f.ScrollFrame, 1)) == -5, "the list's own frame is where RestedXP put it (its scroll range depends on it)")
   assert(select(3, Anchor(bar, 1)) == -16, "the arrows sit clear of the header")
   local made = #c.made
-  RXP.RenderFrame(true)   -- RestedXP puts its own art back; ours returns
+  RXP:UpdateTheme(true)   -- RestedXP puts its own art back; ours returns
   assert(bar.thumb.file == WHITE and bar.ScrollUpButton.Normal.file:find("UI-ScrollBar", 1, true), "slim again after RestedXP's refresh")
   assert(#c.made == made, "no second bar or texture")
 
@@ -1079,7 +1127,7 @@ do
   local before = { card:GetHeight(), el1:GetHeight(), f.CurrentStepFrame:GetHeight(), select(3, Anchor(el1, 1)), row:GetHeight(), select(3, Anchor(row, 1)) }
   for _ = 1, 10 do
     RXP.frame.CurrentStepFrame.UpdateText()
-    RXP.RenderFrame(true)
+    RXP:UpdateTheme(true)
     RXP.UpdateGuideFontSize()
   end
   FlushTimers()
@@ -1110,7 +1158,7 @@ do
   RXP.activeSteps[3] = nil
   RXP.frame.CurrentStepFrame.UpdateText()
   RXP.LoadRows(); RXP.frame.BottomFrame.UpdateFrame()   -- RestedXP resets the list fonts on a guide load
-  RXP.RenderFrame(true)
+  RXP:UpdateTheme(true)
   assert(rows[1].text.font[2] == 14, "list fonts put back after a guide is loaded again")
 
   -- back to RestedXP's: every string, including the ones with the old size
@@ -1279,8 +1327,8 @@ do
   assert(bar.thumb:GetWidth() == 5 and near(bar.thumb.vertex[4], 0.5), "a thin thumb at half strength")
   assert(bar.ScrollUpButton.Normal.file == "rxp/ScrollUpButtonNormal", "RestedXP's own files are left in place under the fade")
   local made = #c.made
-  RXP.RenderFrame(true)
-  RXP.RenderFrame(true)
+  RXP:UpdateTheme(true)
+  RXP:UpdateTheme(true)
   assert(#c.made == made, "no icon or strip is made twice")
   assert(near(bar.ScrollUpButton.Normal.alpha, 0), "still faded after RestedXP's refresh")
   S.Text.Set("tintScrollbar", false); FlushTimers(); FlushTimers()
@@ -1309,9 +1357,9 @@ do
   row.scripts.OnLeave(row)
   -- a guide load gives the rows new handlers; they are wrapped once, around the new one
   RXP.LoadRows()
-  RXP.RenderFrame(true)
+  RXP:UpdateTheme(true)
   local wrapped = row.scripts.OnEnter
-  RXP.RenderFrame(true)
+  RXP:UpdateTheme(true)
   assert(row.scripts.OnEnter == wrapped, "wrapped once, not again on every pass")
   row:SetAlpha(0.5)
   row.scripts.OnEnter(row)
@@ -1328,7 +1376,7 @@ do
   local p2, _, _, x2, y2 = f.BottomFrame:GetPoint(2)
   assert(p1 == "TOPLEFT" and y1 == -3, "the top is RestedXP's")
   assert(p2 == "BOTTOMRIGHT" and x2 == -3 and y2 == 20, "the bottom edge is the footer's top: " .. tostring(y2))
-  RXP.RenderFrame(true)
+  RXP:UpdateTheme(true)
   assert(select(5, f.BottomFrame:GetPoint(2)) == 20 and f.BottomFrame:GetNumPoints() == 2, "and stays there")
 
   -- the menu button and resize handle can be hidden; the string takes the room they kept
@@ -1346,7 +1394,7 @@ do
   assert(footer.shown == true and footer.text.shown ~= false and select(5, f.BottomFrame:GetPoint(2)) == 20, "one button brings it back")
   S.Text.Set("showResizeHandle", false); FlushTimers(); FlushTimers()
   f.TimersShow(true); f.TimersShow(false)   -- RestedXP's timers change strength only
-  RXP.RenderFrame(true)
+  RXP:UpdateTheme(true)
   assert(footer.cog.shown == false and footer.icon.shown == false, "still hidden after RestedXP's timers and refresh")
   S.Text.Set("showCog", true); S.Text.Set("showResizeHandle", true); FlushTimers(); FlushTimers()
   assert(footer.cog.shown == true and footer.icon.shown == true, "back")
@@ -1362,10 +1410,10 @@ do
   assert(rows[2].alpha == 1 and rows[1].alpha == 1, "the rows keep RestedXP's own strength; the container carries the fade")
   -- RestedXP's timers hide and show those three themselves: a hidden one stays hidden, and a restored one is faded
   f.TimersShow(true)
-  RXP.RenderFrame(true)
+  RXP:UpdateTheme(true)
   assert(footer.cog.alpha == 0 and footer.text.alpha == 0 and footer.icon.alpha == 0, "a timer's footer is left alone")
   f.TimersShow(false)
-  RXP.RenderFrame(true)
+  RXP:UpdateTheme(true)
   assert(near(footer.cog.alpha, 0.65) and near(footer.text.alpha, 0.7 * 0.65), "and faded again when the timer ends")
   S.Text.Set("futureFade", 0); FlushTimers(); FlushTimers()
   assert(f.BottomFrame.alpha == 1 and footer.alpha == 1 and footer.cog.alpha == 1, "0 is RestedXP's own")
@@ -1373,7 +1421,7 @@ do
   assert(near(f.BottomFrame.alpha, 0.4) and near(footer.cog.alpha, 0.4), "the strength is the setting")
   S.Text.Set("futureFade", 35); FlushTimers(); FlushTimers()
   local made2 = #c.made
-  for _ = 1, 10 do RXP.RenderFrame(true); RXP.frame.CurrentStepFrame.UpdateText() end
+  for _ = 1, 10 do RXP:UpdateTheme(true); RXP.frame.CurrentStepFrame.UpdateText() end
   assert(#c.made == made2 and near(f.BottomFrame.alpha, 0.65), "repeated passes change nothing")
 
   -- the title can be hidden: a slim strip is left (it is still the window's handle and menu), and with
@@ -1384,7 +1432,7 @@ do
   assert(header:GetHeight() == 14, "a slim strip: " .. header:GetHeight())
   assert(header.backdropInfo == nil, "no background or border either")
   assert(not header.twichBevel.top.shown and not header.twichBevel.bottom.shown, "nor highlight lines")
-  RXP.RenderFrame(true)
+  RXP:UpdateTheme(true)
   assert(header.backdropInfo == nil, "and RestedXP's own repaint is taken off again")
   S.Text.Set("showTitle", true); FlushTimers(); FlushTimers()
   assert(Ours(RXP, header), "back with the title")
@@ -1444,7 +1492,7 @@ do
   assert(texture.file == OWN, "RestedXP's own for its theme when chosen: " .. tostring(texture.file))
   S.Text.Set("arrowShape", "bronze"); FlushTimers()
   assert(texture.file == BRONZE)
-  RXP.RenderFrame(true)
+  RXP:UpdateTheme(true)
   assert(texture.file == BRONZE, "kept through RestedXP's refresh")
   assert(arrow:GetWidth() == 32 and text.font[2] == 9 and text.shown ~= false, "RestedXP's own size and string")
   assert(near(texture.vertex[1], 1) and near(texture.vertex[4], 1), "untinted")
@@ -1452,10 +1500,10 @@ do
   -- shape: another theme's pointer, kept through RestedXP's own refreshes
   S.Text.Set("arrowShape", "RXP Gold"); FlushTimers()
   assert(texture.file == "y/rxp_navigation_arrow-1", "another theme's pointer: " .. tostring(texture.file))
-  RXP.RenderFrame(true)
+  RXP:UpdateTheme(true)
   assert(texture.file == "y/rxp_navigation_arrow-1", "kept after RestedXP's refresh")
-  arrow:UpdateVisuals()
-  assert(texture.file == "y/rxp_navigation_arrow-1", "and after its own UpdateVisuals")
+  arrow:UpdateSubTheme()
+  assert(texture.file == "y/rxp_navigation_arrow-1", "and after its own UpdateSubTheme")
   S.Text.Set("arrowShape", "v2:RXP Blue V2"); FlushTimers()
   assert(texture.file == "v2/rxp_navigation_arrow-1", "a v2 pointer")
   S.Text.Set("arrowShape", "eui-chevron"); FlushTimers()
@@ -1495,7 +1543,7 @@ do
 
   -- nothing is made or set again by repeated passes
   local made, sets = #c.made, texture.textureSets or 0
-  for _ = 1, 10 do RXP.RenderFrame(true); RXP.frame.CurrentStepFrame.UpdateText() end
+  for _ = 1, 10 do RXP:UpdateTheme(true); RXP.frame.CurrentStepFrame.UpdateText() end
   assert(#c.made == made and arrow:GetWidth() == 48 and text.font[2] == 18, "stable")
 
   -- combat: held until it ends
@@ -1892,7 +1940,7 @@ do
   -- RestedXP not asked to lay the cards out again: the strip itself puts its text back
   Show(RXP, steps[59])
   assert(tab.text.text == "Step 59/100 (59%)")
-  RXP.currentGuide = nil   -- RenderFrame then lays no card out
+  RXP.currentGuide = nil   -- UpdateTheme then lays no card out
   c.TwichUIDB.modules.restedxpSkin = false
   S.OnSwitch(); FlushTimers()
   assert(tab.text.text == "Step 59", "RestedXP's own text again: " .. tostring(tab.text.text))
