@@ -26,8 +26,9 @@ local function Snapshot()
     Line("wheel zooms: %d; glides: %d; map underneath followed: %d times, waited for combat %d; clicks: %d; drags from TwichUI's buttons: %d of %d presses",
         v.wheel or 0, v.glides or 0, v.switches or 0, v.waits or 0, v.clicks or 0, v.dragged or 0, v.pressed or 0)
     Line("way back: %d views; map frames known: %d; resizes kept: %d", v.back or 0, v.frames or 0, v.resized or 0)
-    Line("painting: built %s; zones %d (made %d, in view %d, files set %d; loads %d, let go %d); cities %d; textures %d",
-        D.Flag(a.built), a.zones or 0, a.zonesBuilt or 0, a.shown or 0, a.loaded or 0, a.loads or 0, a.unloads or 0, a.cities or 0, a.textures or 0)
+    Line("painting: built %s; zones %d (made %d, in view %d, files set %d; loads %d, let go %d); cities %d (%d plans bound, %d textures); textures made %d",
+        D.Flag(a.built), a.zones or 0, a.zonesBuilt or 0, a.shown or 0, a.loaded or 0, a.loads or 0, a.unloads or 0,
+        a.cities or 0, a.citiesLoaded or 0, a.cityTexturesBound or 0, a.textures or 0)
     Line("terrain detail: showing %s, %d tiles, %d textures made, %d pooled, continents decoded %d, too many to show %d",
         D.Flag(d.showing), d.tiles or 0, d.made or 0, d.pooled or 0, d.continents or 0, d.tooMany or 0)
     local interior = R.MapPictures and R.MapPictures.Snapshot() or {}

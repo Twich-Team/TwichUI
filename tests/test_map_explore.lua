@@ -150,6 +150,10 @@ local CLIENT
 if MAPLAB_CLIENT_TABLES then
   CLIENT = assert(loadfile(REPO .. "tools/maplab/client.lua"))()(MAPLAB_CLIENT_TABLES)
   MAPS = CLIENT.maps
+  -- Build identity comes from the validated local client input, not the
+  -- unrelated harness client's default. Date/interface are not captured there.
+  local version, build = CLIENT.build:match("^(%d+%.%d+%.%d+)%.(%d+)$")
+  if version then c.GetBuildInfo = function() return version, build end end
 end
 local function Cont(id) local m = MAPS[id]; return m.mapType == 2 and id or Cont(m.parent) end
 local function YardsToMap(id, wx, wy) local m = MAPS[id]; return (m.yW - wy) / m.W, (m.xN - wx) / m.H end
@@ -810,9 +814,21 @@ do
   -- the continents' painting with a wide soft edge; cities with a round one
   local city = MA.City(1455)
   assert(city and #city.tex == 12 and city.tex[1].masks[1].tex:find("round"), "a city's own map, round-feathered")
+  assert(not city.loaded and MA.Snapshot().cityTexturesBound == 0, "offscreen city plans bind no native art")
+  for _, tex in ipairs(city.tex) do assert(tex.tex == nil and tex.twFile, "city geometry retains lazy source identity") end
   local cu, cv = WorldOf(1455, 0.5, 0.5)
   MV.GlideTo(cu, cv, MV.FitZoom(1455) * 0.4); Tick()
   assert(near(city.frame.alpha, 1), "city plan leads before the surrounding zone banner is magnified")
+  assert(city.loaded and MA.Snapshot().cityTexturesBound == 12, "visible city binds its complete plan")
+  local cityBinds = city.tex[1].binds
+  for _ = 1, 5 do MA.SetView(city.l, city.t, city.r, city.b, MV.FitZoom(1455) * .4, MV.FitZoom) end
+  assert(city.tex[1].binds == cityBinds, "unchanged city selection never rebinds its files")
+  MA.SetShown(false)
+  assert(not city.loaded and MA.Snapshot().cityTexturesBound == 0, "map close releases city bindings")
+  for _, tex in ipairs(city.tex) do assert(tex.tex == nil, "closed city holds no native texture files") end
+  MA.SetShown(true)
+  MA.SetView(city.l, city.t, city.r, city.b, MV.FitZoom(1455) * .4, MV.FitZoom)
+  assert(city.loaded and #city.tex == 12 and city.tex[1].tex == city.tex[1].twFile, "reopen reuses city geometry and source IDs")
   local inside = city.interior
   city.interior = nil -- exercise the surface-city guard with the shared city geometry
   local previous = 1

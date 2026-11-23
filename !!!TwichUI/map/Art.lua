@@ -38,7 +38,7 @@ local zones, cities = {}, {}       -- [id] = { id, l, r, t, b, area, built, load
 local zoneList, cityList = {}, {}
 local built = false
 local clock = 0
-local stats = { zonesBuilt = 0, textures = 0, loads = 0, unloads = 0, layouts = 0 }
+local stats = { zonesBuilt = 0, textures = 0, loads = 0, unloads = 0, layouts = 0, cityLoads = 0, cityUnloads = 0 }
 local nativeHidden = {}
 
 -- Only the painting we replace: never hide player/quest/third-party pins or the quest log.
@@ -218,6 +218,101 @@ local function Load(z, on)
     if on then stats.loads = stats.loads + 1 else stats.unloads = stats.unloads + 1 end
 end
 
+-- City plans used to bind every city's files at the first map opening, even
+-- with all their frames hidden. Keep geometry/owned masks, bind only a visible
+-- plan, and release files when it leaves the view or the map closes.
+local function LoadCity(c, on)
+    if c.loaded == on then return end
+    c.loaded = on
+    for _, tex in ipairs(c.tex) do tex:SetTexture(on and tex.twFile or nil) end
+    if on then stats.cityLoads = stats.cityLoads + 1 else stats.cityUnloads = stats.cityUnloads + 1 end
+end
+
+-- Reviewed on Forever 1.60.1.71037: Tirisfal's explored overlay carries an
+-- Undercity scroll outside the city's plan. Its native base has intact terrain
+-- beneath it. Reveal only that base ROI, through our existing owned wide mask,
+-- as the city takes over. No edited game pixels, invented geography or mask UVs.
+-- The exact build/art/carrier checks fail back to the original artwork.
+local function CityCover(c)
+    if c.id ~= 1458 or c.coverAttempted then return end
+    c.coverAttempted = true
+    local ok, version, build = pcall(GetBuildInfo)
+    if not ok or version ~= "1.60.1" or tostring(build) ~= "71037" then c.coverReason = "unreviewed-client"; return end
+    local z, p = zones[1420], Place(1420)
+    local artOK, artID = pcall(C_Map.GetMapArtID, 1420)
+    if not (z and z.built and p and artOK and artID == 2126 and p.art.w == 1002 and p.art.h == 668
+        and p.art.tw == 256 and p.art.th == 256) then c.coverReason = "unreviewed-art"; return end
+    local piece
+    for _, e in ipairs(z.tex) do
+        if e.tex.twFile == 7958244 then piece = e.piece; break end
+    end
+    local filesOK, files = pcall(C_Map.GetMapArtLayerTextures, 1420, 1)
+    if not (piece and piece.x == 463 and piece.y == 361 and piece.w == 320 and piece.h == 256
+        and piece.files[2] == 7958245 and filesOK and type(files) == "table" and #files == 12) then
+        c.coverReason = "source-unavailable"; return
+    end
+    local x0, y0, x1, y1 = 480, 470, 758, 558
+    local expected = { 7958258, 7958259, 7958251, 7958252 }
+    local regions = {}
+    for row = 1, 2 do
+        for col = 1, 2 do
+            local x, y = math.max(x0, col * 256), math.max(y0, row * 256)
+            local right, bottom = math.min(x1, (col + 1) * 256), math.min(y1, (row + 1) * 256)
+            local file = files[row * 4 + col + 1]
+            if file ~= expected[#regions + 1] then c.coverReason = "source-unavailable"; return end
+            regions[#regions + 1] = { x, y, right, bottom, col * 256, row * 256, file }
+        end
+    end
+    local mask = frames.zone:CreateMaskTexture()
+    mask:SetTexture(WIDE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    Put(mask, p.left + x0 * p.sx, p.top + y0 * p.sy, (x1 - x0) * p.sx, (y1 - y0) * p.sy)
+    c.cover = { tex = {}, piece = piece, loaded = false, alpha = 0 }
+    for _, box in ipairs(regions) do
+        local tex = frames.zone:CreateTexture(nil, "ARTWORK", nil, 2)
+        tex.twFile = box[7]
+        tex:SetTexCoord((box[1] - box[5]) / 256, (box[3] - box[5]) / 256,
+            (box[2] - box[6]) / 256, (box[4] - box[6]) / 256)
+        Put(tex, p.left + box[1] * p.sx, p.top + box[2] * p.sy, (box[3] - box[1]) * p.sx, (box[4] - box[2]) * p.sy)
+        tex:AddMaskTexture(mask)
+        tex:Hide()
+        c.cover.tex[#c.cover.tex + 1] = tex
+        stats.textures = stats.textures + 1
+    end
+    c.coverReason = "native-base-roi"
+end
+
+local function UpdateCityCover(c, alpha)
+    if alpha > 0 then CityCover(c) end
+    local cover = c.cover
+    if not cover then return end
+    local mode = Mode()
+    if cover.failed or (not cover.piece.explored and mode == "hide") then alpha = 0 end
+    local on = alpha > 0.01
+    if cover.loaded ~= on then
+        cover.loaded = on
+        for _, tex in ipairs(cover.tex) do
+            if tex:SetTexture(on and tex.twFile or nil) == false and on then
+                cover.failed = true
+                c.coverReason = "texture-rejected"
+                if R.MapTrace then R.MapTrace("texture-failure", tex.twFile, "city-cover-rejected") end
+            end
+        end
+        if cover.failed and on then
+            cover.loaded, alpha, on = false, 0, false
+            for _, tex in ipairs(cover.tex) do tex:SetTexture(nil) end
+        end
+    end
+    local k = not cover.piece.explored and mode == "dim" and DIM or 1
+    alpha = on and alpha or 0
+    if cover.alpha == alpha and cover.tint == k then return end
+    cover.alpha, cover.tint = alpha, k
+    for _, tex in ipairs(cover.tex) do
+        tex:SetAlpha(cover.alpha)
+        tex:SetVertexColor(k, k, k)
+        tex:SetShown(on)
+    end
+end
+
 ---------------------------------------------------------------------------
 -- Building, laying out, following the view
 ---------------------------------------------------------------------------
@@ -259,7 +354,7 @@ function MA.Build()
                 z.frame = CreateFrame("Frame", nil, root)
                 z.frame:SetAllPoints(root)
                 z.frame:EnableMouse(false)
-                z.tex = BaseArt(z.frame, m.id, ROUND, false) or {}
+                z.tex = BaseArt(z.frame, m.id, ROUND, true) or {}
                 local localData = R.MapExploreLocalData
                 local interior = localData and localData.cities[m.id]
                 if interior and R.MapPictures then
@@ -322,6 +417,8 @@ function MA.SetShown(on)
             if z.built then Load(z, false) end
         end
         for _, c in ipairs(cityList) do
+            LoadCity(c, false)
+            UpdateCityCover(c, 0)
             if c.pictures then R.MapPictures.Clear(c.pictures) end
         end
     end
@@ -364,7 +461,10 @@ function MA.SetView(u0, v0, u1, v1, zoom, fitZoom)
     for _, c in ipairs(cityList) do
         local a = CityAlpha(c, zoom, fitZoom)
         local inView = c.r >= u0 and c.l <= u1 and c.b >= v0 and c.t <= v1
-        c.frame:SetShown(a > 0.01 and inView)
+        local visible = a > 0.01 and inView
+        LoadCity(c, visible)
+        UpdateCityCover(c, visible and a or 0)
+        c.frame:SetShown(visible)
         c.frame:SetAlpha(a)
         if c.pictures then
             local prefs = R.MapExplorePrefs
@@ -387,6 +487,11 @@ function MA.RefreshExplored()
                 if now[e.piece.key] then e.piece.explored = true end
             end
             Dress(z)
+        end
+    end
+    for _, c in ipairs(cityList) do
+        if c.cover then
+            UpdateCityCover(c, root:IsShown() and c.frame:IsShown() and c.frame:GetAlpha() or 0)
         end
     end
 end
@@ -417,10 +522,15 @@ end
 
 -- Read only, for /tui diagnostics and the tests.
 function MA.Snapshot()
-    local out = { built = built, zones = #zoneList, cities = #cityList, shown = 0, loaded = 0, host = host and host.id }
+    local out = { built = built, zones = #zoneList, cities = #cityList, shown = 0, loaded = 0, host = host and host.id,
+        citiesLoaded = 0, cityTexturesBound = 0, cityCoverTexturesBound = 0 }
     for _, z in ipairs(zoneList) do
         if z.shown then out.shown = out.shown + 1 end
         if z.loaded then out.loaded = out.loaded + 1 end
+    end
+    for _, c in ipairs(cityList) do
+        if c.loaded then out.citiesLoaded = out.citiesLoaded + 1; out.cityTexturesBound = out.cityTexturesBound + #c.tex end
+        if c.cover and c.cover.loaded then out.cityCoverTexturesBound = out.cityCoverTexturesBound + #c.cover.tex end
     end
     for k, v in pairs(stats) do out[k] = v end
     return out
@@ -439,7 +549,9 @@ function MA.Diagnostic()
     end
     for _, c in ipairs(cityList) do
         if c.frame:IsShown() then out.cityLayers[#out.cityLayers + 1] = { mapId = c.id, alpha = c.frame:GetAlpha(),
-            level = c.frame:GetFrameLevel(), interior = c.pictures ~= nil } end
+            level = c.frame:GetFrameLevel(), interior = c.pictures ~= nil, loaded = c.loaded, textures = #c.tex,
+            nativeBaseCover = { status = c.coverReason or "not-needed", textures = c.cover and #c.cover.tex or 0,
+                alpha = c.cover and c.cover.alpha or 0, failed = c.cover and c.cover.failed or false } } end
     end
     table.sort(out.cityLayers, function(a, b) return a.mapId < b.mapId end)
     for _, z in ipairs(zoneList) do
