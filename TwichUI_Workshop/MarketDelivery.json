@@ -23,5 +23,10 @@
   "prepared_current_version": 1,
   "prepared_current_partitions": 32,
   "prepared_current_part_bytes": 4194304,
-  "prepared_current_total_bytes": 33554432
+  "prepared_current_total_bytes": 33554432,
+  "container_packaging_version": 1,
+  "container_codec": "raw-deflate-base64",
+  "container_block_bytes": 524288,
+  "current_containers": 2,
+  "history_containers": 4
 }
