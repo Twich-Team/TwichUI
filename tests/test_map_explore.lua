@@ -810,6 +810,21 @@ do
   -- the continents' painting with a wide soft edge; cities with a round one
   local city = MA.City(1455)
   assert(city and #city.tex == 12 and city.tex[1].masks[1].tex:find("round"), "a city's own map, round-feathered")
+  local cu, cv = WorldOf(1455, 0.5, 0.5)
+  MV.GlideTo(cu, cv, MV.FitZoom(1455) * 0.4); Tick()
+  assert(near(city.frame.alpha, 1), "city plan leads before the surrounding zone banner is magnified")
+  local inside = city.interior
+  city.interior = nil -- exercise the surface-city guard with the shared city geometry
+  local previous = 1
+  for i = 0, 20 do
+    local u = city.r - (city.r - city.l) * (0.16 - i * 0.01)
+    local cover = MA.SurfaceCityCover(u, cv, 48)
+    assert(cover >= 0 and cover <= previous + 1e-8 and previous - cover < 0.11, "surface-city exit blends continuously")
+    previous = cover
+  end
+  assert(previous == 0 and MA.SurfaceCityCover(cu, cv, 48) == 1, "surface city keeps its central painted blend")
+  city.interior = inside
+  MA.SetLevels()
   print("7 painting ok")
 end
 
@@ -840,6 +855,22 @@ do
     end
   end
   assert(checked == snap.tiles, "every tile shown checked")
+  local u, v = WorldOf(1429, 0.5, 0.5)
+  local strength = MXP.Get("detailStrength")
+  MXP.Set("detailStrength", 100)
+  local previous = 0.7
+  for zoom = 36, 48 do
+    MV.GlideTo(u, v, zoom); Tick()
+    local a = MD.Snapshot().alpha
+    assert(a >= previous - 1e-8 and a - previous < 0.04 and a <= 1, "deep terrain takeover is continuous and bounded")
+    previous = a
+  end
+  assert(near(previous, 1), "complete close terrain occludes magnified painting labels")
+  for _, cap in ipairs({ 50, 70 }) do
+    MXP.Set("detailStrength", cap); MV.GlideTo(u, v, 48); Tick()
+    assert(near(MD.Snapshot().alpha, cap / 100), "explicit saved strength remains the maximum")
+  end
+  MXP.Set("detailStrength", strength)
   MXP.Set("detail", false)
   Tick()
   assert(not MD.Showing(), "off: cleared")

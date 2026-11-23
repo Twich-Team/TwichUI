@@ -167,6 +167,8 @@ return function(t)
 
   -- More than 80 valid tiles in a tall viewport: fade toward the painting before the cap.
   local tiles, added = MD.Tiles(0), {}
+  local savedStrength = MXP.Get("detailStrength")
+  MXP.Set("detailStrength", 70) -- explicit old blend cap remains honored at every budget boundary
   for col = 20, 50 do for row = 20, 50 do
     local key = col * 64 + row
     if not tiles[key] then tiles[key] = 950000 + key; added[#added + 1] = key end
@@ -185,6 +187,7 @@ return function(t)
     end
   end
   assert(over and partial, "dense course crosses both budget fade and cap")
+  MXP.Set("detailStrength", savedStrength)
   for _, key in ipairs(added) do tiles[key] = nil end
   VIEW.w, VIEW.h = 1000, 666; t.Providers("OnCanvasSizeChanged"); t.Tick()
 

@@ -14,6 +14,8 @@ local MD = {}
 R.MapDetail = MD
 
 local FADE = { 20, 36 }               -- zoom (1: the whole world) where the detail comes in
+local DEEP = { 36, 48 }               -- stop magnified painting labels showing through close terrain
+local PAINTED_MIX = 0.7               -- keep the established illustrated blend at intermediate zoom
 local MAX_TILES = 80
 local MARGIN = 0.1
 local LEVEL = 6                       -- over the canvas's own level (the stitched painting is 2 to 5)
@@ -111,9 +113,15 @@ local function Update()
     stats.updates = stats.updates + 1
     if not (MV.Ready() and MXP.Get("detail")) then Clear() return end
     local _, _, zoom = MV.View()
-    local a = VM.Fade(zoom, FADE[1], FADE[2]) * MXP.Get("detailStrength") / 100
+    local maximum = MXP.Get("detailStrength") / 100
+    local a = VM.Fade(zoom, FADE[1], FADE[2]) * math.min(PAINTED_MIX, maximum)
     if a <= 0.01 then Clear() return end
     local u0, v0, u1, v1 = MV.ViewRect()
+    local deep = VM.Fade(zoom, DEEP[1], DEEP[2])
+    if deep > 0 and maximum > a then
+        local cover = R.MapArt.SurfaceCityCover((u0 + u1) / 2, (v0 + v1) / 2, zoom)
+        a = a + (maximum - a) * deep * (1 - cover)
+    end
     local caveStrength = 0
     if R.MapCaves then local _, s = R.MapCaves.StrengthAt(u0, v0, u1, v1); caveStrength = s end
     a = a * (1 - caveStrength)
@@ -219,6 +227,7 @@ end
 function MD.Diagnostic(coordinates)
     local out = MD.Snapshot()
     out.budget, out.strength, out.fadeFrom, out.fadeTo, out.level = MAX_TILES, MXP.Get("detailStrength"), FADE[1], FADE[2], LEVEL
+    out.deepFadeFrom, out.deepFadeTo, out.paintedMix = DEEP[1], DEEP[2], PAINTED_MIX
     out.textures, out.failedIds = {}, {}
     local keys = {}; for key in pairs(used) do keys[#keys + 1] = key end; table.sort(keys)
     for _, key in ipairs(keys) do

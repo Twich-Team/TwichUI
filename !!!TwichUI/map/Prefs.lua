@@ -18,7 +18,7 @@ local DEFAULTS = {
     unexplored = "dim",      -- the zones' areas you haven't explored: "show", "dim" or "hide"
     -- detail
     detail = true,           -- the game's own minimap pictures over the map when zoomed in close
-    detailStrength = 70,     -- how strongly, in percent
+    detailStrength = 100,    -- maximum at deep zoom; intermediate zoom keeps the painted blend
     -- places
     caves = true, dungeons = true, travel = true,
     labels = true,           -- names beside places when zoomed in (never where they would overlap)

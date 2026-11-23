@@ -24,7 +24,7 @@ local TEX = R.PATH .. [[media\textures\]]
 local THIN, WIDE, ROUND = TEX .. "map-feather-thin", TEX .. "map-feather-wide", TEX .. "map-feather-round"
 local CONT_FADE = { 1.4, 2.4 }     -- zoom (1: the whole world fits) where continents come in over the world
 local ZONE_FADE = { 2.6, 4.5 }     -- ... and the zones' pieces over the continents
-local CITY_FADE = { 0.35, 0.7 }    -- share of a city's own whole-map zoom where it comes in
+local CITY_FADE = { 0.2, 0.4 }     -- city plan takes over before enlarged zone banners cover its streets
 local LOADED = 16                  -- zones that keep their files while out of view
 local MARGIN = 0.15                -- of the view, beyond each edge, where zones are made ready
 local DIM = 0.55                   -- an unexplored piece's brightness with "dimmed"
@@ -328,6 +328,11 @@ function MA.SetShown(on)
 end
 
 -- The view: u0..u1, v0..v1 (world, normalized) and the zoom (1: the whole world fits). fitZoom(id): a map's whole-map zoom.
+local function CityAlpha(c, zoom, fitZoom)
+    local fit = fitZoom(c.id)
+    return fit and VM.Fade(zoom, fit * CITY_FADE[1], fit * CITY_FADE[2]) or 0
+end
+
 function MA.SetView(u0, v0, u1, v1, zoom, fitZoom)
     if not built then return end
     frames.cont:SetAlpha(VM.Fade(zoom, CONT_FADE[1], CONT_FADE[2]))
@@ -357,8 +362,7 @@ function MA.SetView(u0, v0, u1, v1, zoom, fitZoom)
         for i = 1, math.min(#idle, loaded - LOADED) do Load(idle[i], false) end
     end
     for _, c in ipairs(cityList) do
-        local fit = fitZoom(c.id)
-        local a = fit and VM.Fade(zoom, fit * CITY_FADE[1], fit * CITY_FADE[2]) or 0
+        local a = CityAlpha(c, zoom, fitZoom)
         local inView = c.r >= u0 and c.l <= u1 and c.b >= v0 and c.t <= v1
         c.frame:SetShown(a > 0.01 and inView)
         c.frame:SetAlpha(a)
@@ -397,6 +401,18 @@ function MA.CityAt(u, v, navigation)
             or c.area == best.area and c.id < best.id) then best = c end
     end
     return best and best.id or nil
+end
+
+-- Surface-city plans stay legible while outdoor terrain takes over at deep
+-- zoom. A spatial fade avoids an opacity jump when the view center leaves a
+-- city's rectangle. Derive intro from this view, independent of listener order.
+function MA.SurfaceCityCover(u, v, zoom)
+    local id = MA.CityAt(u, v)
+    local c = id and cities[id]
+    if not c or c.interior or not MW.IsCity(c.id) then return 0 end
+    local edge = math.min((u - c.l) / (c.r - c.l), (c.r - u) / (c.r - c.l),
+        (v - c.t) / (c.b - c.t), (c.b - v) / (c.b - c.t))
+    return VM.Fade(edge, 0, 0.15) * CityAlpha(c, zoom, R.MapView.FitZoom)
 end
 
 -- Read only, for /tui diagnostics and the tests.

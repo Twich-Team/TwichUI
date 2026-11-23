@@ -61,7 +61,9 @@ zoom. Off, everything is put back and the map is shown whole.
 ## Terrain detail, caves, dungeons, places
 
 - **Terrain detail** (`map/Detail.lua`): the client's minimap pictures of each terrain tile (Forever's own WDTs), in their
-  real places, faded in from zoom 20 to 36 up to "Detail strength" (70%). At most 80 tiles have textures. Dense views fade
+  real places, faded in from zoom 20 to 36 with at most a 70% painted blend, then gradually taking over from zoom 36 to
+  48 up to "Detail strength" (100% by default). Explicit saved strengths remain honored. Surface-city plans retain
+  their illustrated blend; underground city plans draw above terrain. At most 80 tiles have textures. Dense views fade
   back toward the painting before that budget. Underground city plans/interior pictures draw over the surface; terrain
   fades proportionally as a cave surfaces. Asynchronous detail textures retain the painting until ready, then fade in;
   a missing resource stops polling after 10 seconds and may be checked again on a later view change.
@@ -109,7 +111,7 @@ python3 -I tools/mapdata/build.py --wow "/path/to/World of Warcraft" [--report r
 
 - `modules.mapExplore` (off). Takes effect at once.
 - `ui.mapExplore` (profile; shared as the "World map" group): `maxZoom` 16-192 (48), `wheelStep` 10-50% (25), `smooth` (on),
-  `controls` (on), `unexplored` show/dim/hide (dim), `detail` (on), `detailStrength` 20-100% (70), `caves`, `dungeons`,
+  `controls` (on), `unexplored` show/dim/hide (dim), `detail` (on), `detailStrength` 20-100% (100), `caves`, `dungeons`,
   `travel`, `labels` (on), `iconSize` 70-150% (100), `iconOpacity` 40-100% (100).
 - Never saved: the view, the way back, a cave's floor, an open dungeon map.
 
