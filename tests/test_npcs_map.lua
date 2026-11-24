@@ -112,6 +112,13 @@ rawset(sc, "GetCursorPosition", function() return 0, 0 end)
 WMF.ScrollContainer = sc
 WMF.shown = true
 c.WorldMapFrame = WMF
+-- Model WORLD_MAP_OPEN and reject direct addon calls to the native setter.
+-- This checks the API boundary, not the client engine's taint behavior.
+local nativeSetMapID = WMF.SetMapID
+rawset(WMF, "SetMapID", function()
+  error("addon must request WORLD_MAP_OPEN instead of tainting the native map ID")
+end)
+c.C_Map.OpenWorldMap = function(id) nativeSetMapID(WMF, id) end
 
 -- Actual native host and seamless camera can differ until View's deliberate settle delay ends.
 -- Map.lua must react to its existing view notification without switching the host itself.
@@ -196,12 +203,12 @@ for p in pairs(WMF.providers) do p:OnCanvasScaleChanged() end
 d = drawn()
 assert(math.abs(d[1].scale - 1) < 1e-6)
 -- a continent shows none; Stormwind itself shows its own
-WMF:SetMapID(1415)
+nativeSetMapID(WMF, 1415)
 assert(NMAP.Used() == 0, "never on a continent")
-WMF:SetMapID(1453)
+nativeSetMapID(WMF, 1453)
 d = drawn()
 assert(d[2] and not d[1], "on Stormwind: its own NPCs, not Elwynn's")
-WMF:SetMapID(1429)
+nativeSetMapID(WMF, 1429)
 
 -- choices redraw an open map
 NP.Set("trainerClass", "all")
@@ -309,7 +316,7 @@ assert(#NS.Entries() == before - 1 and not drawn()[1] and drawn()[2], "only that
 ---------------------------------------------------------------------------
 -- 4. Seamless eligibility follows the camera now; entry opacity never moves a plaque.
 ---------------------------------------------------------------------------
-WMF:SetMapID(1415)
+nativeSetMapID(WMF, 1415)
 seamless.ready = true
 ViewChanged()
 assert(NMAP.Used() == 0, "a genuine continent overview stays uncluttered")
@@ -344,7 +351,7 @@ Npc(9, 1429, 0.55, 0.5, { innkeeper = true })
 assert(drawn()[4].alpha == 1 and drawn()[9].alpha == 0, "only the newly eligible entry fades")
 assert(NMAP.Snapshot().projections > projectionsBefore, "a source-list change invalidates cached candidates")
 FadeStep(0.18)
-WMF:SetMapID(1429)
+nativeSetMapID(WMF, 1429)
 assert(drawn()[4].alpha == 1 and NMAP.Snapshot().fading == 0, "host handoff preserves existing marker opacity")
 assert(math.abs(drawn()[4].mx - 0.2) < 1e-8, "host handoff projects the same world place into its new canvas")
 rawset(WMF, "GetCanvasZoomPercent", function() return 1 end)
@@ -405,7 +412,7 @@ WMF.shown = true; ViewChanged()
 assert(drawn()[3] and drawn()[3].alpha == 0, "reopening can start a clean entry cycle")
 seamless.target = 1415; ViewChanged()
 assert(NMAP.Used() == 0 and NMAP.Snapshot().fading == 0, "zooming back to overview cancels entry work")
-seamless.ready = false; WMF:SetMapID(1429)
+seamless.ready = false; nativeSetMapID(WMF, 1429)
 ViewChanged("off")
 assert(drawn()[4] and drawn()[4].alpha == 1, "turning seamless off immediately preserves normal native-map NPCs")
 rawset(WMF, "GetCanvasZoomPercent", function() return 0 / 0 end)

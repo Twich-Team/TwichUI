@@ -43,7 +43,9 @@ never moves your character, starts a flight or a ride, casts, or talks to anyone
 **How it touches the game's map** (as OpenMap does; approved): a data provider; hooks on the scroll container's wheel and
 press and on its zoom-level set-up (`baseScale` lowered so it pans at every zoom); its `CalculateScrollExtentsAtScale`
 replaced while installed (the original put back when off); its wheel zoom mode set to none while the stitched map shows;
-its own `InstantPanAndZoom` to place the view; `SetMapID` to follow the view, never in combat. Writing those values from an
+its own `InstantPanAndZoom` to place the view; `C_Map.OpenWorldMap` to follow the view, never in combat. The API delivers the synchronous
+`WORLD_MAP_OPEN` event so Blizzard owns the map ID assignment; directly calling `SetMapID` taints the ID returned to
+native quest-pin refreshes and can block `SetPassThroughButtons`. Writing those values from an
 addon taints them, as any zoom addon's do; whether that matters anywhere in combat is for the game to show. Maps that
 aren't part of the world (battlegrounds, Zephras Isle, which the world map doesn't place) are the game's own, with its own
 zoom. Off, everything is put back and the map is shown whole.

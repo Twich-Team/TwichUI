@@ -273,7 +273,7 @@ function V.Activate(e)
     pending = { token = mine, map = e.map, snapshot = snapshot }
     stats.navigations = stats.navigations + 1
     -- once: the map announces itself (OnMapChanged) and the replay follows; nothing here tries again
-    local ok = pcall(WorldMapFrame.SetMapID, WorldMapFrame, e.map)
+    local ok = pcall(C_Map.OpenWorldMap, e.map)
     if not ok then
         pending = nil
         Say("That map couldn't be opened.")

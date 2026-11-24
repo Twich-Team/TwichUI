@@ -551,7 +551,7 @@ function NMAP.Locate(e)
     end
     pending = { token = mine, map = e.m, entry = e }
     -- once: the map announces itself (OnMapChanged) and the ring follows; nothing here tries again
-    local ok = pcall(WorldMapFrame.SetMapID, WorldMapFrame, e.m)
+    local ok = pcall(C_Map.OpenWorldMap, e.m)
     if not ok then
         if token == mine then reveal, pending = nil, nil end
         Notice("That map couldn't be opened.")

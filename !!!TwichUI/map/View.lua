@@ -17,7 +17,7 @@
 -- How it touches the game's map (as OpenMap does, approved for this): a data provider; hooks on the scroll container's
 -- wheel and press and on its zoom-level set-up (panning allowed at every zoom: baseScale); its scroll limits replaced
 -- while installed (the original put back when off), so the view can go anywhere on the world whatever map is underneath;
--- its wheel zoom mode set to none while the stitched map shows; its own InstantPanAndZoom to place the view; SetMapID to
+-- its wheel zoom mode set to none while the stitched map shows; its own InstantPanAndZoom to place the view; C_Map.OpenWorldMap to
 -- follow the view, never in combat (it waits). Maps that aren't part of the world (a battleground, Zephras Isle) are the
 -- game's own, with its own wheel zoom. Off, everything is put back and the map is shown whole.
 -- While OpenMap is loaded this stays off (MV.Blocker); nothing of OpenMap's is called or changed.
@@ -41,7 +41,7 @@ local provider
 local installed, hooked = false, false
 local active = false             -- the map underneath is part of the world, and the stitched painting is on it
 local switching = false
-local switchView                -- authoritative world camera while native SetMapID rebuilds its canvas
+local switchView                -- authoritative world camera while native map event rebuilds its canvas
 local savedWheel, origExtents
 local anim, driver
 local follower, stillFor = nil, 0
@@ -429,7 +429,8 @@ function MV.ShowMap(id)
     if not (installed and Shown()) then return false, "closed" end
     if InCombat() then return false, "combat" end
     if Ready() then MV.Remember("map") end
-    local ok = pcall(map.SetMapID, map, id)
+    local ok = pcall(C_Map.OpenWorldMap, id)
+    ok = ok and map:GetMapID() == id
     return ok, not ok and "failed" or nil
 end
 
@@ -497,13 +498,15 @@ local function Switch(target)
     local u, v, zoom = MV.View()
     switchView = { u = u, v = v, zoom = zoom }
     switching = true
-    local ok, err = pcall(map.SetMapID, map, target)
-    if not ok then
+    -- Let Blizzard set its map ID from WORLD_MAP_OPEN. A direct SetMapID call
+    -- taints the ID later returned to the native quest-pin refresh.
+    local ok, err = pcall(C_Map.OpenWorldMap, target)
+    if not ok or map:GetMapID() ~= target then
         switching, switchView = false, nil
-        if R.Fault then R.Fault("map switch", err) end
+        if not ok and R.Fault then R.Fault("map switch", err) end
         return false
     end
-    -- SetMapID synchronously notifies providers before the new canvas has our
+    -- WORLD_MAP_OPEN synchronously notifies providers before the new canvas has our
     -- world camera. Keep their geometry stable, then publish one restored view.
     switching = false
     if active then ShowWorld(u, v, zoom) end

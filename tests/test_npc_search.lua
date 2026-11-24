@@ -211,6 +211,13 @@ rawset(WMF, "RemoveCanvasClickHandler", function(s, fn) s.clicks[fn] = nil end)
 rawset(WMF, "AddCursorHandler", function() end)
 rawset(WMF, "RemoveCursorHandler", function() end)
 c.WorldMapFrame = WMF
+-- Model WORLD_MAP_OPEN and reject direct addon calls to the native setter.
+-- This checks the API boundary, not the client engine's taint behavior.
+local nativeSetMapID = WMF.SetMapID
+rawset(WMF, "SetMapID", function()
+  error("addon must request WORLD_MAP_OPEN instead of tainting the native map ID")
+end)
+c.C_Map.OpenWorldMap = function(id) nativeSetMapID(WMF, id) end
 local function deliver(id)
   WMF.mapID = id; WMF.waitingFor = nil
   for p in pairs(WMF.providers) do p:OnMapChanged() end

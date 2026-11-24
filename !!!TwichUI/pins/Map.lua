@@ -13,8 +13,8 @@
 --     changed) or one click after Place a pin; every other click carries on to the map as before. Ctrl-
 --     click stays the game's waypoint, and the player's own waypoint is changed only by clicking a pin
 --     (which selects it and sets the waypoint there) or by Set waypoint. A click opens the pin editor: nothing is made, and nothing sent, until it is saved.
--- TwichUI never opens or closes the world map itself (opening it from addon code can leave it unable to
--- do some things in combat); Show on map moves an open map, or waits for the player to open it.
+-- Show on map moves an open map through C_Map.OpenWorldMap (the native WORLD_MAP_OPEN event),
+-- or waits for the player to open it. Never call SetMapID directly: its tainted ID reaches native quest pins.
 
 local R = TwichUI
 local PN = R.Pins
@@ -355,7 +355,7 @@ local function ApplyFocus()
     local f = focus
     focus = nil
     if not (f and f.untilTime > GetTime() and MapOpen()) then return end
-    if WorldMapFrame:GetMapID() ~= f.map then WorldMapFrame:SetMapID(f.map) end
+    if WorldMapFrame:GetMapID() ~= f.map then C_Map.OpenWorldMap(f.map) end
     PN.Select(f.token)
 end
 
@@ -366,7 +366,7 @@ function PM.ShowOnMap(e)
     if not ok then Notice(why) return false end
     local pin = PN.Fresh(e)
     if MapOpen() and installed then
-        if WorldMapFrame:GetMapID() ~= pin.map then WorldMapFrame:SetMapID(pin.map) end
+        if WorldMapFrame:GetMapID() ~= pin.map then C_Map.OpenWorldMap(pin.map) end
         PN.Select(e.token)
         PM.Layout()
     else
